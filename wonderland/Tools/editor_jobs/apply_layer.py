@@ -103,7 +103,34 @@ def job():
         batches += 1
         instances += len(rows)
 
-    RESULT.update({"pass": spec["pass"], "actors": placed, "batches": batches, "instances": instances})
+    # Floating props: AWonderlandHoverProp carries its own hover component (an instance cannot).
+    hovers = 0
+    for spec_hover in spec.get("hovers", []):
+        mesh = _load(spec_hover["mesh"], cache)
+        material = _load(_material_path(spec_hover["material"]), cache)
+        pitch, yaw, roll = spec_hover.get("rot", [0.0, 0.0, 0.0])
+        prop = eas.spawn_actor_from_class(unreal.WonderlandHoverProp, unreal.Vector(*spec_hover["loc"]), unreal.Rotator(roll=roll, pitch=pitch, yaw=yaw))
+        prop.set_editor_property("mesh", mesh)
+        prop.set_editor_property("mesh_path", mesh.get_path_name())
+        prop.set_editor_property("material", material)
+        prop.set_editor_property("material_path", material.get_path_name())
+        prop.set_actor_scale3d(unreal.Vector(*spec_hover.get("scale", [1.0, 1.0, 1.0])))
+        hover = prop.get_editor_property("hover")
+        hover.set_editor_property("amplitude_uu", spec_hover.get("amp", 40.0))
+        hover.set_editor_property("period_seconds", spec_hover.get("period", 8.0))
+        hover.set_editor_property("sway_deg", spec_hover.get("sway", 4.0))
+        hover.set_editor_property("phase", spec_hover.get("phase", -1.0))
+        component = prop.get_editor_property("mesh_component")
+        if component is not None:
+            component.set_static_mesh(mesh)
+            component.set_material(0, material)
+            component.set_collision_profile_name("NoCollision")
+        prop.set_actor_label("%s_%s" % (spec["pass"], spec_hover["id"]))
+        prop.set_folder_path(folder)
+        prop.set_editor_property("tags", list(base_tags))
+        hovers += 1
+
+    RESULT.update({"pass": spec["pass"], "actors": placed, "batches": batches, "instances": instances, "hovers": hovers})
     yield 0.5
     if SAVE:
         RESULT["saved"] = bool(unreal.EditorLoadingAndSavingUtils.save_map(ues.get_editor_world(), MAP))
