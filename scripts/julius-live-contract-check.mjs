@@ -227,6 +227,45 @@ const MISSION_RESEARCH = Object.freeze({
   }),
 });
 
+/**
+ * WHICH PAID-RUN LANE A MISSION MAY CLAIM, because priority is an authorisation
+ * too.
+ *
+ * Every paid run of `julius-first-live-mission.yml` waits in one queue for the
+ * one paid provider slot (`scripts/julius-paid-slot.mjs`), ordered by lane:
+ * `qualification`, then `qualification-repair`, then `lab`, then `regression`.
+ * A lane typed at dispatch is only a claim. If it were also the grant, a lab
+ * experiment could buy qualification priority by typing the word, and the
+ * queue's order would be whatever the last person to dispatch wanted it to be.
+ *
+ * So the grant lives here, beside the ceilings, against each mission's own
+ * accounting namespace. A namespace absent from this table may claim `lab` and
+ * nothing else — the same default posture as the ceilings: a new mission is an
+ * experiment until someone writes down that it is more. The missions that
+ * already have a paid history are `regression` when they run again.
+ *
+ * This is a vocabulary check, not a budget: it grants no money and no reach.
+ */
+const PAID_LANES = Object.freeze(['qualification', 'qualification-repair', 'lab', 'regression']);
+const DEFAULT_LANES = Object.freeze(['lab']);
+const MISSION_LANES = Object.freeze({
+  'julius-first-live': Object.freeze(['regression']),
+  'julius-live-mission-2': Object.freeze(['regression']),
+  'julius-live-mission-3': Object.freeze(['regression']),
+  'julius-live-mission-4': Object.freeze(['regression']),
+  'julius-live-mission-5': Object.freeze(['regression']),
+  // THE FORMAL CONTINUOUS-WORKER QUALIFICATION, and the only mission that may
+  // take the head of the queue. `qualification-repair` is its paid rerun after a
+  // repair, which still outranks every lab experiment.
+  'julius-continuous-1': Object.freeze(['qualification', 'qualification-repair']),
+});
+
+/** The lanes THIS contract may claim, by its own declared namespace. */
+const lanesFor = (namespace) =>
+  (typeof namespace === 'string' && Object.hasOwn(MISSION_LANES, namespace))
+    ? MISSION_LANES[namespace]
+    : DEFAULT_LANES;
+
 /** The research grant that applies to THIS contract, by its own namespace. */
 const researchGrantFor = (namespace) =>
   (typeof namespace === 'string' && Object.hasOwn(MISSION_RESEARCH, namespace))
@@ -238,9 +277,17 @@ const refuse = (problem) => problems.push(problem);
 
 const path = process.argv[2];
 if (!path) {
-  process.stderr.write('usage: julius-live-contract-check.mjs <contract.json>\n');
+  process.stderr.write('usage: julius-live-contract-check.mjs <contract.json> [--lane <lane>]\n');
   process.exit(2);
 }
+/**
+ * `--lane` is OPTIONAL, and absent means "no lane is being claimed" — a dry run
+ * that will never enter the paid queue. A PRESENT lane must be a word of the
+ * vocabulary and one this mission is granted; an empty value is a malformed
+ * claim, not an absent one.
+ */
+const laneAt = process.argv.indexOf('--lane');
+const claimedLane = laneAt === -1 ? null : (process.argv[laneAt + 1] ?? '');
 
 let contract;
 try {
@@ -283,6 +330,15 @@ if (!Array.isArray(criteria) || criteria.length === 0) {
  * than to the most permissive entry.
  */
 const namespace = typeof contract.markerNamespace === 'string' ? contract.markerNamespace : null;
+
+if (claimedLane !== null) {
+  const granted = lanesFor(namespace);
+  if (!PAID_LANES.includes(claimedLane)) {
+    refuse(`lane "${claimedLane}" is not a paid-run lane (${PAID_LANES.join(', ')})`);
+  } else if (!granted.includes(claimedLane)) {
+    refuse(`lane "${claimedLane}" is not granted to ${namespace ?? 'a mission with no declared namespace'}; it may claim ${granted.join(', ')}`);
+  }
+}
 const { spendUsd: MAX_SPEND_USD, repairCycles: MAX_REPAIR_CYCLES } = ceilingsFor(namespace);
 
 const limits = contract.limits;
@@ -419,6 +475,7 @@ out(`  acceptance criteria: ${Array.isArray(criteria) ? criteria.length : 0} (${
 out(`  spend ceiling: ${limits?.spendUsd ?? 'MISSING'} USD`);
 out(`  architect output ceiling: ${limits?.architectMaxOutputTokens ?? 'default (connector)'} of ${ARCHITECT_OUTPUT_TOKEN_RESERVATION} reserved`);
 out(`  repair ceiling: ${limits?.repairCycles ?? 'MISSING'} cycle(s)`);
+out(`  paid-run lanes: ${lanesFor(namespace).join(', ')}${claimedLane === null ? '' : ` (claimed: ${claimedLane})`}`);
 out(`  research: ${research === undefined
   ? 'NONE — every ask is refused research_not_authorized'
   : `${Array.isArray(research.allowances) ? research.allowances.length : 0} allowance(s) for ${Array.isArray(research.roles) ? research.roles.join(', ') : 'no role'}`}`);
