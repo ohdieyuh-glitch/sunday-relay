@@ -148,6 +148,11 @@ const MISSION_LIMITS = Object.freeze({
   // divides into floors, the shared pool and the repair reserve, not a founder
   // cost ceiling. Refresh it to funded capacity before the paid run.
   'julius-live-mission-6': Object.freeze({ spendUsd: 60, repairCycles: 3 }),
+  // Auxiliary lab evaluation A, 2026-09-12: the first NEW evaluation of the
+  // live evaluation lab, not a canonical mission. Two dependency-ordered deliverables on a three-file slice,
+  // a stale note to reconcile and one rule the architect must decide. Sized
+  // like the continuous qualification; a bound, not a forecast.
+  'julius-lab-eval-1': Object.freeze({ spendUsd: 60, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
@@ -246,6 +251,26 @@ const MISSION_RESEARCH = Object.freeze({
    * in the workspace. Enough to check a rule; not enough to browse.
    */
   'julius-live-mission-6': Object.freeze({
+    roles: Object.freeze(['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER']),
+    allowances: Object.freeze([
+      Object.freeze({
+        source: 'web',
+        capabilities: Object.freeze(['read_item']),
+        hosts: Object.freeze(['nodejs.org']),
+      }),
+    ]),
+    missionBudget: Object.freeze({ maxRetrievals: 6, maxBytes: 400_000 }),
+    roleBudget: Object.freeze({ maxRetrievals: 2, maxBytes: 200_000 }),
+  }),
+  /**
+   * AUXILIARY LAB EVALUATION A. The same shape as the qualification's grant:
+   * one source, one read capability, one host, three slots, two retrievals
+   * each. The host is the Node documentation, because the one syntax rule the
+   * slice must obey — erasable TypeScript under Node's own type stripping —
+   * is documented there and nowhere in the workspace. Enough to check a rule;
+   * not enough to browse.
+   */
+  'julius-lab-eval-1': Object.freeze({
     roles: Object.freeze(['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER']),
     allowances: Object.freeze([
       Object.freeze({
