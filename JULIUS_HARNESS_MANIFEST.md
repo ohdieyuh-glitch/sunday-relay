@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **176 production files** across 20/20 subsystems (2 roots, 139 traced, 20 not composed by the live root, 15 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **177 production files** across 20/20 subsystems (2 roots, 140 traced, 20 not composed by the live root, 15 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -49,7 +49,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 11 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 0 |
 | other | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 2 | 2 |
-| persistence (src/relay/persistence/) | kernel (src/relay/mission/julius/) | 20 | 12 |
+| persistence (src/relay/persistence/) | kernel (src/relay/mission/julius/) | 21 | 12 |
 | Relay↔Julius port (src/relay/integration/julius/) | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | 2 | 1 |
 | Relay↔Julius port (src/relay/integration/julius/) | kernel (src/relay/mission/julius/) | 1 | 1 |
 | Relay↔Julius port (src/relay/integration/julius/) | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 1 | 1 |
@@ -107,7 +107,7 @@ The provider-neutral kernel: mission states and the transition table, tasks, evi
 | `src/relay/mission/julius/julius-runtime-ports.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-state-path.ts` | traced | `src/relay/mission/julius/index.ts` |
-| `src/relay/persistence/julius-brain-postgres.ts` | not composed by the live root | — |
+| `src/relay/persistence/julius-brain-postgres.ts` | traced | `src/relay/persistence/julius-python-postgres.ts` |
 | `src/relay/shared/llmops/brain-memory.ts` | traced | `src/relay/mission/evidence/evidence-brain-link.ts` |
 | `src/relay/shared/llmops/llmops-contracts.ts` | traced | `src/relay/shared/llmops/brain-memory.ts` |
 | `src/relay/shared/llmops/spend-citation.ts` | traced | `src/relay/shared/llmops/llmops-contracts.ts` |
@@ -338,6 +338,7 @@ PostgreSQL authority for Julius: the repositories bound to the runtime ports, th
 | `src/relay/persistence/julius-event-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
 | `src/relay/persistence/julius-lifecycle-postgres.ts` | not composed by the live root | — |
 | `src/relay/persistence/julius-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
+| `src/relay/persistence/julius-python-postgres.ts` | not composed by the live root | — |
 | `src/relay/persistence/julius-read-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
 | `src/relay/persistence/julius-recovery-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
 | `src/relay/persistence/julius-repair-postgres.ts` | not composed by the live root | — |
@@ -439,6 +440,7 @@ Production Julius modules that implement a Julius port but are not reached from 
 | `src/relay/mission/julius/julius-python-contracts.ts` | the governed Python execution tool: request, C.A.R.D. authorisation, untrusted-output parsing and proposal→Brain-draft conversion; not yet composed by the live root, and the executor sandbox image has no Python |
 | `src/relay/mission/julius/julius-python-service.ts` | the governed Python execution tool: request → authorise → run → atomic settlement into the Project Brain, cancellation and disconnection; not yet composed by the live root |
 | `src/relay/workspace/julius-tools/python-runner.ts` | the local host runner for governed Python executions (scrubbed environment, tree kill, bounded hashed redacted streams, content-addressed artifacts, interpreter probing); not composed by the live root, which routes tool effects through the independent executor |
+| `src/relay/persistence/julius-python-postgres.ts` | durable governed Python executions (migration 025) whose settlement commits the execution state and its Project Brain records in one transaction; proven across processes, a server restart, cross-process cancellation and a crashed host by scripts/julius-brain-python-flow-drill.ts; not yet composed by the live root |
 | `src/relay/persistence/julius-brain-postgres.ts` | Project Brain v2: the durable PostgreSQL store (migration 024), proven by scripts/julius-project-brain-drill.ts across separate processes and a server restart; not yet composed by the live root |
 
 ## External packages observed

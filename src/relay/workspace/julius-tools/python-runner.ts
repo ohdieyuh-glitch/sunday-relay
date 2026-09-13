@@ -57,6 +57,8 @@ export interface NodeJuliusPythonRunnerConfig {
   readonly keepSandbox?: boolean;
   /** A runaway stream beyond this multiple of the retained limit ends the execution. */
   readonly runawayOutputFactor?: number;
+  /** Observability: the interpreter's process id, once spawned. */
+  readonly onSpawn?: (input: { readonly executionId: string; readonly pid: number }) => void;
 }
 
 /** The SDK shipped in this repository, found the way migrations are found. */
@@ -200,6 +202,7 @@ export class NodeJuliusPythonRunner implements JuliusPythonRunnerPort {
         shell: false,
       });
 
+      if (child.pid !== undefined) this.config.onSpawn?.({ executionId: request.executionId, pid: child.pid });
       let termination: JuliusPythonTermination = 'EXITED';
       const end = (reason: JuliusPythonTermination) => {
         if (termination !== 'EXITED') return;
