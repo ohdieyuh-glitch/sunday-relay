@@ -1,0 +1,296 @@
+{
+  "capturedWith": "julius-task-contract.v1",
+  "what": "Task contract rows exactly as julius_task_contracts stored them before contract terms were extended: a mission seed (revision 1, DRAFT), the revision locked from it (revision 2, LOCKED) and a second task's revision still at DRAFT. Every digest below was computed by the code that wrote the rows.",
+  "missionTerms": {
+    "runId": "run:lab-eval-2-legacy",
+    "taskId": "run:lab-eval-2-legacy:build",
+    "missionContractRevision": 1,
+    "objective": "Add a deterministic slug helper to the workspace and prove it with its test.",
+    "requirements": [
+      "slug output is lower-case ASCII joined by single hyphens",
+      "empty input yields an empty slug"
+    ],
+    "constraints": [
+      "add no dependency",
+      "do not edit the test file"
+    ],
+    "acceptanceCriteria": [
+      {
+        "id": "criterion-slug",
+        "text": "slug(\"A  B\") returns \"a-b\".",
+        "blocking": true
+      },
+      {
+        "id": "criterion-tests",
+        "text": "the workspace test command exits zero.",
+        "blocking": true
+      },
+      {
+        "id": "criterion-style",
+        "text": "the helper is documented.",
+        "blocking": false
+      }
+    ],
+    "filesInScope": [
+      "src/slug.ts"
+    ],
+    "filesOutOfScope": [
+      "package.json",
+      "src/slug.test.ts"
+    ],
+    "spendUsd": 20,
+    "repairCycles": 3,
+    "requiredEvidence": [
+      "DIFF",
+      "TEST"
+    ]
+  },
+  "seededDraft": {
+    "contractId": "contract:run:lab-eval-2-legacy:build",
+    "runId": "run:lab-eval-2-legacy",
+    "taskId": "run:lab-eval-2-legacy:build",
+    "missionContractRevision": 1,
+    "contractRevision": 1,
+    "objective": "Add a deterministic slug helper to the workspace and prove it with its test.",
+    "responsibilityBoundary": "Implement the mission objective within the files in scope, and produce the evidence required below. Reviewing, releasing and deciding acceptance belong to other roles.",
+    "requiredInputs": [
+      "the locked task contract",
+      "the accepted plan",
+      "requirement: slug output is lower-case ASCII joined by single hyphens",
+      "requirement: empty input yields an empty slug"
+    ],
+    "expectedOutputs": [
+      "a unified diff of the change",
+      "the output of every required check"
+    ],
+    "inScope": [
+      "src/slug.ts"
+    ],
+    "outOfScope": [
+      "package.json",
+      "src/slug.test.ts"
+    ],
+    "blockingAcceptanceCriteria": [
+      {
+        "criterionId": "criterion-slug",
+        "statement": "slug(\"A  B\") returns \"a-b\".",
+        "requiredEvidenceTypes": [
+          "DIFF",
+          "TEST"
+        ]
+      },
+      {
+        "criterionId": "criterion-tests",
+        "statement": "the workspace test command exits zero.",
+        "requiredEvidenceTypes": [
+          "DIFF",
+          "TEST"
+        ]
+      }
+    ],
+    "requiredEvidence": [
+      "DIFF",
+      "TEST"
+    ],
+    "requiredChecks": [],
+    "permittedPaths": [
+      "src/slug.ts"
+    ],
+    "prohibitedActions": [
+      "violating the mission constraint: add no dependency",
+      "violating the mission constraint: do not edit the test file",
+      "writing to package.json",
+      "writing to src/slug.test.ts"
+    ],
+    "dependencyTaskIds": [],
+    "reviewCriteria": [
+      "Does the change satisfy every blocking acceptance criterion, each shown by the required evidence?",
+      "Did the change stay inside the permitted paths, leaving the out-of-scope ones untouched?",
+      "Are the mission constraints respected?"
+    ],
+    "failureConditions": [
+      "a blocking acceptance criterion is not satisfied",
+      "required evidence is absent",
+      "a path outside the permitted scope was written"
+    ],
+    "repairRules": [
+      "a repair round addresses the recorded findings and does not widen the change",
+      "at most 3 repair round(s) are authorised"
+    ],
+    "budget": {
+      "ceilingUsdMicros": 20000000,
+      "maxRepairRounds": 3
+    },
+    "stoppingCondition": "Stop when every blocking acceptance criterion is satisfied with its required evidence, when the authorised repair rounds are spent, or when the mission budget is exhausted.",
+    "state": "DRAFT",
+    "bindingDigest": null,
+    "lockedAt": null,
+    "lockedByEvaluatorId": null
+  },
+  "seededDraftDigest": "sha256:a9fcab780bdd070c618aaedf1a0eca67477a11a619bffae81b5c0ff24950f7cf",
+  "lockedRevision": {
+    "contractId": "contract:run:lab-eval-2-legacy:build",
+    "runId": "run:lab-eval-2-legacy",
+    "taskId": "run:lab-eval-2-legacy:build",
+    "missionContractRevision": 1,
+    "contractRevision": 2,
+    "objective": "Add a deterministic slug helper to the workspace and prove it with its test.",
+    "responsibilityBoundary": "Implement src/slug.ts only; the test file is the specification and is not edited.",
+    "requiredInputs": [
+      "the locked task contract",
+      "the accepted plan",
+      "requirement: slug output is lower-case ASCII joined by single hyphens",
+      "requirement: empty input yields an empty slug"
+    ],
+    "expectedOutputs": [
+      "a unified diff of the change",
+      "the output of every required check"
+    ],
+    "inScope": [
+      "src/slug.ts"
+    ],
+    "outOfScope": [
+      "package.json",
+      "src/slug.test.ts"
+    ],
+    "blockingAcceptanceCriteria": [
+      {
+        "criterionId": "criterion-slug",
+        "statement": "slug(\"A  B\") returns \"a-b\".",
+        "requiredEvidenceTypes": [
+          "DIFF",
+          "TEST"
+        ]
+      },
+      {
+        "criterionId": "criterion-tests",
+        "statement": "the workspace test command exits zero.",
+        "requiredEvidenceTypes": [
+          "DIFF",
+          "TEST"
+        ]
+      }
+    ],
+    "requiredEvidence": [
+      "DIFF",
+      "TEST"
+    ],
+    "requiredChecks": [
+      "node --test src/slug.test.ts"
+    ],
+    "permittedPaths": [
+      "src/slug.ts"
+    ],
+    "prohibitedActions": [
+      "editing src/slug.test.ts",
+      "adding a dependency"
+    ],
+    "dependencyTaskIds": [],
+    "reviewCriteria": [
+      "Does slug() collapse runs of whitespace into one hyphen?",
+      "Is the empty-input case handled without throwing?"
+    ],
+    "failureConditions": [
+      "a blocking acceptance criterion is not satisfied",
+      "required evidence is absent",
+      "a path outside the permitted scope was written"
+    ],
+    "repairRules": [
+      "a repair round addresses the recorded findings and does not widen the change",
+      "at most 3 repair round(s) are authorised"
+    ],
+    "budget": {
+      "ceilingUsdMicros": 20000000,
+      "maxRepairRounds": 3
+    },
+    "stoppingCondition": "Stop when every blocking acceptance criterion is satisfied with its required evidence, when the authorised repair rounds are spent, or when the mission budget is exhausted.",
+    "state": "LOCKED",
+    "bindingDigest": "sha256:28bfdb9f2619255921b890c53c5b20b4259e56ed6e8ebe247edaec65e3f3f841",
+    "lockedAt": "2026-09-10T21:18:26.026Z",
+    "lockedByEvaluatorId": "independent-reviewer-hermes"
+  },
+  "pendingDraft": {
+    "contractId": "contract:run:lab-eval-2-legacy:build-2",
+    "runId": "run:lab-eval-2-legacy",
+    "taskId": "run:lab-eval-2-legacy:build-2",
+    "missionContractRevision": 1,
+    "contractRevision": 2,
+    "objective": "Add a deterministic slug helper to the workspace and prove it with its test.",
+    "responsibilityBoundary": "Implement the mission objective within the files in scope, and produce the evidence required below. Reviewing, releasing and deciding acceptance belong to other roles.",
+    "requiredInputs": [
+      "the locked task contract",
+      "the accepted plan",
+      "requirement: slug output is lower-case ASCII joined by single hyphens",
+      "requirement: empty input yields an empty slug"
+    ],
+    "expectedOutputs": [
+      "a unified diff of the change",
+      "the output of every required check"
+    ],
+    "inScope": [
+      "src/slug.ts"
+    ],
+    "outOfScope": [
+      "package.json",
+      "src/slug.test.ts"
+    ],
+    "blockingAcceptanceCriteria": [
+      {
+        "criterionId": "criterion-slug",
+        "statement": "slug(\"A  B\") returns \"a-b\".",
+        "requiredEvidenceTypes": [
+          "DIFF",
+          "TEST"
+        ]
+      },
+      {
+        "criterionId": "criterion-tests",
+        "statement": "the workspace test command exits zero.",
+        "requiredEvidenceTypes": [
+          "DIFF",
+          "TEST"
+        ]
+      }
+    ],
+    "requiredEvidence": [
+      "DIFF",
+      "TEST"
+    ],
+    "requiredChecks": [
+      "node --test src/slug.test.ts"
+    ],
+    "permittedPaths": [
+      "src/slug.ts"
+    ],
+    "prohibitedActions": [
+      "violating the mission constraint: add no dependency",
+      "violating the mission constraint: do not edit the test file",
+      "writing to package.json",
+      "writing to src/slug.test.ts"
+    ],
+    "dependencyTaskIds": [],
+    "reviewCriteria": [
+      "Does the change satisfy every blocking acceptance criterion, each shown by the required evidence?",
+      "Did the change stay inside the permitted paths, leaving the out-of-scope ones untouched?",
+      "Are the mission constraints respected?"
+    ],
+    "failureConditions": [
+      "a blocking acceptance criterion is not satisfied",
+      "required evidence is absent",
+      "a path outside the permitted scope was written"
+    ],
+    "repairRules": [
+      "a repair addresses only the recorded findings"
+    ],
+    "budget": {
+      "ceilingUsdMicros": 20000000,
+      "maxRepairRounds": 3
+    },
+    "stoppingCondition": "Stop when every blocking acceptance criterion is satisfied with its required evidence, when the authorised repair rounds are spent, or when the mission budget is exhausted.",
+    "state": "DRAFT",
+    "bindingDigest": null,
+    "lockedAt": null,
+    "lockedByEvaluatorId": null
+  },
+  "pendingDraftDigest": "sha256:963c6a7f17fbe8d8e07b3a5cd0238b3302e9b4c13676de9f1dbf6d1d6432cf2c"
+}
