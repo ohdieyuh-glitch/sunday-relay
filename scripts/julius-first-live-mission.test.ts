@@ -2561,3 +2561,183 @@ describe('every fact the peer telemetry writes reaches the exported bundle', () 
     }
   });
 });
+
+/* =============================================== research observation preflight */
+
+/**
+ * THE RESEARCH A CONTRACT GRANTS IS OBSERVED BEFORE THE RUN, OR THE RUN DOES NOT START.
+ *
+ * `julius-continuous-1` grants research to all three slots, and this workflow
+ * never set `JULIUS_RESEARCH_OBSERVED_BACKENDS` — so Live Reach refused every
+ * governed retrieval and the paid qualification could still complete, proving
+ * the opposite of what it was specified to demonstrate. The repair is a
+ * preflight that MAKES the observation through Relay's own bounded fetch and
+ * exports exactly one claim line. These cases hold its shape: where it sits,
+ * that a dry run gets it too, what it may write into `$GITHUB_ENV`, and that the
+ * evidence bundle keeps what it saw by allowlist rather than by copying a log.
+ */
+describe('the research a contract grants is observed before the run, through Relay’s own fetch', () => {
+  const OBSERVE = "'Preflight: observe the research the contract grants, through Relay''s own bounded fetch'";
+  const stepBlock = (name: string): string => {
+    const start = workflow.indexOf(`- name: ${name}`);
+    expect(start, `step "${name}" must exist`).toBeGreaterThan(-1);
+    const rest = workflow.slice(start);
+    const end = rest.indexOf('\n      - ', 1);
+    return end < 0 ? rest : rest.slice(0, end);
+  };
+  const at = (name: string): number => workflow.indexOf(`- name: ${name}`);
+  const CLAIM_GRAMMAR = '^JULIUS_RESEARCH_OBSERVED_BACKENDS=[a-z_]+:[a-z_]+(,[a-z_]+:[a-z_]+)*$';
+
+  it('exists once, after the build and the contract check, before role resolution and every paid step', () => {
+    expect(workflow.split(`- name: ${OBSERVE}`).length - 1, 'exactly one observation step').toBe(1);
+    const observe = at(OBSERVE);
+    expect(at('Build the executor, the preflight probe and the live entrypoint'), 'the bundle it runs must already exist')
+      .toBeGreaterThan(-1);
+    expect(at('Build the executor, the preflight probe and the live entrypoint')).toBeLessThan(observe);
+    expect(at("'Preflight: the Mission Contract is valid and bounded'")).toBeGreaterThan(-1);
+    expect(at("'Preflight: the Mission Contract is valid and bounded'")).toBeLessThan(observe);
+    for (const later of [
+      "'Preflight: all three roles resolve to the expected models, nothing dispatched'",
+      "'Record that a paid mission was attempted (before any provider can be reached)'",
+      "'LIVE: run the first real Julius mission'",
+    ]) {
+      expect(at(later), later).toBeGreaterThan(observe);
+    }
+  });
+
+  it('runs on a dry run too: no `if:`, no confirm_live, no provider secret', () => {
+    const step = stepBlock(OBSERVE);
+    expect(step, 'preflight must prove this for free').not.toMatch(/\n\s*if:/u);
+    expect(step).not.toContain('confirm_live');
+    expect(step, 'observing a public host needs no credential').not.toContain('secrets.');
+  });
+
+  it('invokes the built entrypoint’s observe-research on the dispatched contract, and fails the job on a non-zero exit', () => {
+    const script = stepScript(OBSERVE);
+    const invocations = script.split('\n').filter((line) => line.includes('julius-live-mission.cjs') && !line.trim().startsWith('test -f'));
+    expect(invocations.length).toBe(1);
+    expect(invocations[0]).toContain('node dist-relay-bridge/julius-live-mission.cjs observe-research --contract "$CONTRACT"');
+    expect(invocations[0], 'it must never be able to start a run').not.toMatch(/ run |--confirm-live/u);
+    expect(invocations[0]).toContain('tee research-observation.log');
+    expect(script).toContain('status=${PIPESTATUS[0]}');
+    expect(script).toMatch(/if \[ "\$status" -ne 0 \]; then[\s\S]*?exit 1/u);
+  });
+
+  it('writes exactly one thing to $GITHUB_ENV: the anchored claim line, and only when there is exactly one', () => {
+    const script = stepScript(OBSERVE);
+    const writes = workflow.split('\n').filter((line) => line.includes('GITHUB_ENV') && !line.trim().startsWith('#'));
+    expect(writes.length, 'this workflow writes $GITHUB_ENV in one place only').toBe(1);
+    expect(writes[0].trim()).toBe('grep -E "$claim" research-observation.log >> "$GITHUB_ENV"');
+    expect(script, 'and that place is this step').toContain(writes[0].trim());
+    expect(script).toContain(`claim='${CLAIM_GRAMMAR}'`);
+    expect(script, 'the write is conditional on a count of exactly one')
+      .toMatch(/if \[ "\$count" = '1' \]; then\s*\n\s*grep -E "\$claim" research-observation\.log >> "\$GITHUB_ENV"/u);
+  });
+
+  /**
+   * THE STEP, RUN. A shape assertion cannot tell a write of the one claim line
+   * from a write of the whole log; running the real script body with only the
+   * entrypoint stubbed can.
+   */
+  describe('the step, run against a stubbed entrypoint', () => {
+    const INVOCATION = 'node dist-relay-bridge/julius-live-mission.cjs observe-research --contract "$CONTRACT"';
+    const BUILT_GUARD = "test -f dist-relay-bridge/julius-live-mission.cjs || { echo 'entrypoint_not_built' >&2; exit 1; }";
+    const runStep = (stdout: string, exit: number): { code: number; env: string } => {
+      const dir = mkdtempSync(join(realpathSync(tmpdir()), 'julius-observe-'));
+      const stubOut = join(dir, 'stub.out');
+      const githubEnv = join(dir, 'github.env');
+      writeFileSync(stubOut, stdout);
+      writeFileSync(githubEnv, '');
+      const original = stepScript(OBSERVE);
+      expect(original).toContain(INVOCATION);
+      expect(original).toContain(BUILT_GUARD);
+      const script = original
+        .replace(BUILT_GUARD, 'true')
+        .replace(INVOCATION, '{ cat "$STUB_OUT"; exit "$STUB_EXIT"; }');
+      let code = 0;
+      try {
+        execFileSync('bash', ['-c', script], {
+          cwd: dir, stdio: 'ignore',
+          env: {
+            ...process.env,
+            CONTRACT: 'contract.json',
+            STUB_OUT: stubOut.replace(/\\/gu, '/'),
+            STUB_EXIT: String(exit),
+            GITHUB_ENV: githubEnv.replace(/\\/gu, '/'),
+          },
+        });
+      } catch (error) {
+        code = (error as { status?: number }).status ?? 1;
+      }
+      return { code, env: readFileSync(githubEnv, 'utf8') };
+    };
+    const ROW = 'research_observation source=web capability=read_item host=www.postgresql.org backend=relay_http_fetch result=observed\n';
+    const CLAIM = 'JULIUS_RESEARCH_OBSERVED_BACKENDS=relay_http_fetch:read_item\n';
+
+    it('exports the one claim line and nothing else', () => {
+      const result = runStep(`${ROW}research_observation_summary observed=1 of=1\n${CLAIM}`, 0);
+      expect(result.code).toBe(0);
+      expect(result.env).toBe(CLAIM);
+    }, 30_000);
+
+    it('fails the job when the entrypoint fails closed, and exports nothing', () => {
+      const result = runStep(`${ROW.replace('result=observed', 'result=unreachable')}research_unobservable: nothing\n`, 1);
+      expect(result.code).not.toBe(0);
+      expect(result.env).toBe('');
+    }, 30_000);
+
+    it('exports nothing for a contract that grants no research, and passes', () => {
+      const result = runStep('research_not_granted: the contract has no research clause, so there is nothing to observe.\n', 0);
+      expect(result.code).toBe(0);
+      expect(result.env).toBe('');
+    }, 30_000);
+
+    it('MUTATION: a line outside the claim grammar never reaches the job environment', () => {
+      const result = runStep(`${CLAIM}NODE_OPTIONS=--require=/tmp/x\nJULIUS_RESEARCH_OBSERVED_BACKENDS=relay_http_fetch:read_item BASH_ENV=/tmp/x\n`, 0);
+      expect(result.code).toBe(0);
+      expect(result.env).toBe(CLAIM);
+    }, 30_000);
+
+    it('MUTATION: two claim lines are refused rather than both exported', () => {
+      const result = runStep(`${CLAIM}JULIUS_RESEARCH_OBSERVED_BACKENDS=relay_rss_fetch:read_feed\n`, 0);
+      expect(result.code).not.toBe(0);
+      expect(result.env).toBe('');
+    }, 30_000);
+
+    it('MUTATION: an exit-0 output with neither a claim nor the not-granted line is refused', () => {
+      const result = runStep(`${ROW}research_observation_summary observed=1 of=1\n`, 0);
+      expect(result.code).not.toBe(0);
+      expect(result.env).toBe('');
+    }, 30_000);
+  });
+
+  it('the evidence bundle keeps the observation by allowlist, and never copies the log', () => {
+    const collect = stepScript('Collect the redacted validation evidence');
+    expect(collect).toMatch(/grep -E '[^']+' research-observation\.log \\\s*\n\s*> julius-live-evidence\/research-observation\.txt 2>\/dev\/null \|\| true/u);
+    expect(collect, 'a raw log is never copied').not.toMatch(/cp\s+\S*research-observation\.log/u);
+  });
+
+  it('the evidence allowlist admits every shape the entrypoint prints, and nothing with a tail', () => {
+    const collect = stepScript('Collect the redacted validation evidence');
+    const pattern = /grep -E '([^']+)' research-observation\.log/u.exec(collect)?.[1] ?? '';
+    expect(pattern).not.toBe('');
+    const kept = new RegExp(pattern, 'u');
+    for (const line of [
+      'research_observation source=web capability=read_item host=www.postgresql.org backend=relay_http_fetch result=observed',
+      'research_observation source=github capability=search host=*.github.com backend=relay_github_public result=unconfigured',
+      'research_observation_summary observed=1 of=2',
+      'JULIUS_RESEARCH_OBSERVED_BACKENDS=relay_http_fetch:read_item,relay_github_public:search',
+      'research_not_granted: the contract has no research clause, so there is nothing to observe.',
+      'research_unobservable: no backend was observed serving any of the 3 research probe(s) the contract grants; refusing to dispatch a mission whose research would all be refused.',
+    ]) {
+      expect(kept.test(line), line).toBe(true);
+    }
+    for (const line of [
+      'research_observation source=web capability=read_item host=www.postgresql.org backend=relay_http_fetch result=observed Authorization: Bearer abc',
+      'research_not_granted: sk-ant-ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+      'JULIUS_RESEARCH_OBSERVED_BACKENDS=relay_http_fetch:read_item OPENAI_API_KEY=x',
+    ]) {
+      expect(kept.test(line), line).toBe(false);
+    }
+  });
+});

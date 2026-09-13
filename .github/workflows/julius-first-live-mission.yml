@@ -530,6 +530,57 @@ jobs:
       - name: 'Preflight: the Mission Contract is valid and bounded'
         run: node scripts/julius-live-contract-check.mjs "$CONTRACT"
 
+      # THE RESEARCH A CONTRACT GRANTS IS INERT UNTIL SOMEONE OBSERVES IT SERVED.
+      #
+      # Live Reach refuses a capability no backend has been OBSERVED serving, and
+      # that observation arrives through `JULIUS_RESEARCH_OBSERVED_BACKENDS` —
+      # which this workflow never set. Every mission granted research therefore
+      # ran with every ask refused `capability_unavailable`, and could still
+      # complete: a paid qualification proving the opposite of what it was
+      # dispatched to show.
+      #
+      # NOT A LITERAL IN `env:`. An observation is an operator's to make, not a
+      # contract's and not this file's; a hard-coded value would be the workflow
+      # vouching for a reach nobody looked at. So it is MADE, here, by the
+      # entrypoint's `observe-research`: one side-effect-free GET per granted
+      # host, through Relay's own bounded fetch and network policy, the same path
+      # the retrieval will take. No model provider is contacted, which is why it
+      # runs on a dry run too — preflight must prove this for free.
+      #
+      # FAIL CLOSED. A contract granting research of which nothing was observed
+      # exits non-zero and stops the job before the paid step can exist. A
+      # contract granting none prints `research_not_granted` and exports nothing.
+      #
+      # ONE LINE, AND ONLY IF IT IS EXACTLY ONE. `$GITHUB_ENV` is interpreted by
+      # the runner for every later step, so nothing but the one anchored,
+      # closed-alphabet claim line may reach it: never the log, never a second
+      # match, never a line the grammar does not fully describe.
+      - name: 'Preflight: observe the research the contract grants, through Relay''s own bounded fetch'
+        run: |
+          set -uo pipefail
+          test -f dist-relay-bridge/julius-live-mission.cjs || { echo 'entrypoint_not_built' >&2; exit 1; }
+          set +e
+          node dist-relay-bridge/julius-live-mission.cjs observe-research --contract "$CONTRACT" 2>&1 | tee research-observation.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "research_observation_failed: the entrypoint exited $status" >&2
+            exit 1
+          fi
+          claim='^JULIUS_RESEARCH_OBSERVED_BACKENDS=[a-z_]+:[a-z_]+(,[a-z_]+:[a-z_]+)*$'
+          count=$(grep -cE "$claim" research-observation.log || true)
+          if [ "$count" = '1' ]; then
+            grep -E "$claim" research-observation.log >> "$GITHUB_ENV"
+            echo 'research observation exported to every later step'
+          elif [ "$count" = '0' ] && grep -qx 'research_not_granted: .*' research-observation.log; then
+            echo 'no research granted; nothing exported'
+          else
+            # Exit 0 with research granted always prints one claim. Anything else
+            # is an output this step does not understand, and it is not guessed at.
+            echo "research_observation_unexported: $count claim line(s)" >&2
+            exit 1
+          fi
+
       - name: 'Preflight: all three roles resolve to the expected models, nothing dispatched'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -719,6 +770,12 @@ jobs:
               node scripts/julius-live-evidence.mjs "$log" > "julius-live-evidence/${log%.log}.evidence.txt" || true
             fi
           done
+          # WHAT RESEARCH WAS OBSERVED BEFORE THE RUN, by the same allowlist rule:
+          # only the exact grammar `observe-research` prints — five closed fields
+          # per probe, the summary, the claim, and its two fixed refusals — so a
+          # bundle can say why a research ask was or was not servable.
+          grep -E '^(research_observation source=[a-z]+ capability=[a-z_]+ host=[a-z0-9*.-]+ backend=[a-z_]+ result=(observed|unreachable|throttled|unauthenticated|unconfigured)|research_observation_summary observed=[0-9]+ of=[0-9]+|JULIUS_RESEARCH_OBSERVED_BACKENDS=[a-z_]+:[a-z_]+(,[a-z_]+:[a-z_]+)*|research_not_granted: the contract has no research clause, so there is nothing to observe\.|research_unobservable: no backend was observed serving any of the [0-9]+ research probe\(s\) the contract grants; refusing to dispatch a mission whose research would all be refused\.)$' research-observation.log \
+            > julius-live-evidence/research-observation.txt 2>/dev/null || true
 
           # Only safe columns, from one script the `first-live-topology` job also
           # runs against a freshly migrated database — dry runs #1 and #2 uploaded
