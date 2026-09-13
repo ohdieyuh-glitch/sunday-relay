@@ -168,6 +168,35 @@ export function pendingSegmentFor(
   return waiting.length === 1 ? waiting[0]! : null;
 }
 
+/**
+ * THE SEGMENT A TASK YIELDED TO, or null when it did not yield.
+ *
+ * A dispatch that ends at a barrier is not finished work: it said so, and Julius
+ * minted the segment that carries it on. That continuation is the only task that
+ * can hold the unit's finished work, so it is the one that is reviewed. The
+ * yielded dispatch itself is judged through it — accepted when its continuation
+ * is, live while its continuation is (`effectivelyAcceptedTaskIds`,
+ * `canStillBeAccepted`). Qualification attempt 3 (run 34766115321) reviewed
+ * every yielded dispatch as if it were finished, sent each one to repair, and so
+ * ran a repair round AND a continuation for all ten pauses: two lines of work on
+ * one deliverable, every time a worker asked a question.
+ *
+ * FOUND BY ID, from the chain the id shape already guarantees. A unit's segments
+ * chain from its root (`juliusSegmentLineageRootOf`): the root is segment 1, and
+ * a barrier on segment `n` mints `n + 1`. A dispatch yields once and only the
+ * newest segment can run, so segment `n + 1` exists exactly when segment `n`
+ * yielded. The row must also carry the continuation's full contract
+ * (`isJuliusSegmentOf`), so an impostor id links nothing.
+ */
+export function juliusYieldContinuationOf(subject: JuliusTask, tasks: readonly JuliusTask[]): JuliusTask | null {
+  const root = juliusSegmentLineageRootOf(subject, tasks);
+  const segment = subject.taskId === root.taskId ? 1 : segmentNumberOf(subject.taskId);
+  if (segment === 0) return null;
+  const continuationId = juliusSegmentTaskId(root.taskId, segment + 1);
+  const continuation = tasks.find((row) => row.taskId === continuationId);
+  return continuation !== undefined && isJuliusSegmentOf(root, continuation) ? continuation : null;
+}
+
 /** The `n` in `segment:<subject>:<n>:task`, or 0 for anything else. */
 export function segmentNumberOf(taskId: string): number {
   const match = /^segment:.+:([1-9]\d*):task$/u.exec(taskId);

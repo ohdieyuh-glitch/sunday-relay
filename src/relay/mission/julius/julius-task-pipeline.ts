@@ -45,7 +45,7 @@ import { challengeJuliusTaskContract, evaluateJuliusBindingCurrency, evaluateJul
 import { evaluateJuliusRelease } from './julius-release-runtime';
 import { REVIEW_TASK_ATTEMPTS, boundStageForRole, reviewStageOf, workStageOf, type JuliusReviewStage } from './julius-review-stage';
 import {
-  juliusSegmentLineageRootOf, juliusSegmentTaskId, nextSegmentNumber, pendingSegmentFor, routeIsBarrier,
+  juliusSegmentLineageRootOf, juliusSegmentTaskId, juliusYieldContinuationOf, nextSegmentNumber, pendingSegmentFor, routeIsBarrier,
   sanitizeJuliusSegmentState,
 } from './julius-segment-lineage';
 import {
@@ -225,6 +225,8 @@ export interface JuliusPipelineRequest {
 export type JuliusTaskOutcome =
   | { readonly kind: 'COMPLETED'; readonly taskId: string; readonly workerId: string; readonly duplicate: boolean; readonly decision: JuliusVerificationDecision }
   | { readonly kind: 'REVIEW_SCHEDULED'; readonly taskId: string; readonly reviewTaskId: string }
+  /** The dispatch ended at a barrier: not reviewed, because its continuation carries the work. */
+  | { readonly kind: 'YIELDED'; readonly taskId: string; readonly workerId: string; readonly continuationTaskId: string }
   | { readonly kind: 'REPAIR_SCHEDULED'; readonly taskId: string; readonly repairTaskId: string; readonly round: number }
   | { readonly kind: 'RETRY'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null }
   | { readonly kind: 'FAILED'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null }
@@ -1736,19 +1738,32 @@ async function driveResearchCheckpoint(input: {
     missionId: task.missionId,
     parentTaskId: segmentRoot.taskId,
     /**
-     * BLOCKED ON THE SUBJECT ITSELF, which is the only edge there is when no
-     * second worker is involved. It releases through `evaluateJuliusRelease`
-     * exactly as every other dependency does: when the yielded segment is
-     * SUCCEEDED and effectively accepted, and never while it is halted or
-     * being repaired. No new pause primitive, and nothing that depends on a
-     * model agreeing to wait.
+     * CREATED RUNNABLE, BECAUSE NOTHING IS LEFT TO WAIT FOR. The research was
+     * served above, before this task could exist, so the only thing the
+     * continuation depended on — the subject having yielded, SUCCEEDED — is
+     * already true when Julius creates it, exactly as a review or a repair is.
+     *
+     * It used to wait BLOCKED on the subject's ACCEPTANCE, which meant the
+     * yielded dispatch had to be reviewed before its own continuation could run.
+     * A dispatch that stopped to ask is unfinished by its own account, so its
+     * review asked for repair every time: qualification attempt 3 (run
+     * 34766115321) left all five research continuations BLOCKED behind repairs
+     * of the half-done work they were supposed to finish. A yielded dispatch is
+     * no longer reviewed (`verifyExecutedTask`); this segment is, when it ends.
+     *
+     * The edge stays recorded as the dependency it is, and the claim query's
+     * second gate still requires it SUCCEEDED. The answer is written to the
+     * Project Brain in the next statement; a second runtime claiming this row
+     * between the two writes would compile its context without it, and the live
+     * path runs one loop per run, which is the condition that makes that
+     * window empty.
      */
     dependencyIds: [subjectTaskId],
     requiredEvidenceTypes: task.requiredEvidenceTypes,
     taskType: task.taskType,
     role: task.role,
     ordinal: task.ordinal + 2,
-    state: 'BLOCKED',
+    state: 'RUNNABLE',
   };
   const created = await deps.store.addTask({
     commandId: `segment:${continuation.taskId}`,
@@ -2290,7 +2305,10 @@ export async function resumeUnverifiedTasks(input: {
   );
   const stranded = tasks.filter((task) => task.state === 'SUCCEEDED'
     && !decided.has(task.taskId)
-    && !pendingReviewSubjects.has(task.taskId));
+    && !pendingReviewSubjects.has(task.taskId)
+    // A yielded dispatch is undecided on purpose, not stranded: its continuation
+    // carries the verification it would otherwise be missing.
+    && juliusYieldContinuationOf(task, tasks) === null);
   if (stranded.length === 0) return [];
 
   const outcomes: JuliusTaskOutcome[] = [];
@@ -2365,6 +2383,32 @@ async function verifyExecutedTask(input: {
    * DECIDE branch, and the rule it applies is unchanged.
    */
   const reviewSatisfied = reviewCompleted || task.role === 'INDEPENDENT_REVIEWER';
+
+  /**
+   * A DISPATCH THAT YIELDED IS NOT FINISHED WORK, AND IS NOT JUDGED AS IF IT WERE.
+   *
+   * It ended at a barrier — it asked the architect, or asked Julius to read
+   * something — and Julius minted the segment that carries it on. Reviewing it
+   * here asked a reviewer whether half the work was the whole of it, and the
+   * answer is always no. Qualification attempt 3 (run 34766115321) did exactly
+   * that for all ten of its pauses: each review sent the yielded dispatch to
+   * REPAIR while its continuation also ran, so every question a worker asked
+   * forked the deliverable into two lines of work, and the fork is where most of
+   * that run's 15 repair tasks came from.
+   *
+   * The review obligation passes to the continuation, and through it to the
+   * unit's last segment: that is the task that ends without yielding, and its
+   * review sees the whole unit's work. The yielded dispatch is accepted exactly
+   * when its continuation is (`effectivelyAcceptedTaskIds`), so completion and
+   * release need no second rule. Replays and resumed verifications reach this
+   * branch from the durable rows, not from a flag on this call.
+   */
+  if (task.role !== 'INDEPENDENT_REVIEWER') {
+    const continuation = juliusYieldContinuationOf(task, tasks);
+    if (continuation !== null) {
+      return { kind: 'YIELDED', taskId: task.taskId, workerId: input.workerId, continuationTaskId: continuation.taskId };
+    }
+  }
 
   /**
    * A REVIEWER'S VERDICT IS ABOUT THE TASK IT REVIEWED, and treating it as a
