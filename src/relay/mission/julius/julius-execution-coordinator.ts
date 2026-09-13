@@ -49,6 +49,57 @@ const successDiagnostics=(request:JuliusExecutionRequest,result:JuliusProviderRe
   contractBindingDigest:request.contract===undefined?null:request.contract.binding.bindingDigest,
  }));
 };
+/**
+ * THE DECLARED DEADLINE, ENFORCED — by Julius, not by the adapter it describes.
+ *
+ * `JuliusWorker.timeoutMs` was read in exactly one place:
+ * `JuliusWorkerRegistry.register`, which checks it is a positive integer and
+ * never consults it again. Every adapter bounds ITSELF — the OpenAI client's
+ * `timeout`, the hosted runner's abort timer, `runHermesReview`'s window — so
+ * the declared number was a MIRROR of adapter behaviour, true only for as long
+ * as each adapter's own timer kept working. Nothing stood behind it. A worker
+ * whose timer never fires, or whose promise never settles, held the dispatch
+ * open until the lease expired and took the job's wall clock with it.
+ *
+ * This is that missing layer, and only that layer: it does not replace an
+ * adapter's own deadline and must never be reached on a healthy run, because
+ * every adapter is configured to stop first. Reaching it is itself the finding.
+ *
+ * TWO MECHANISMS, BECAUSE ONE IS NOT ENOUGH. The signal is forwarded so a
+ * well-behaved adapter is told to stop and can release what it holds; the race
+ * is what actually returns, because an adapter that ignores the signal is
+ * precisely the case this exists for. The abandoned promise gets a `catch` so
+ * its eventual rejection cannot surface as an unhandled rejection minutes after
+ * the task has already failed.
+ */
+class JuliusWorkerDeadlineExceeded extends Error{
+ constructor(readonly declaredTimeoutMs:number){super('worker_deadline_exceeded');this.name='JuliusWorkerDeadlineExceeded';}
+}
+async function dispatchWithinDeadline<T>(
+ declaredTimeoutMs:number,
+ externalSignal:AbortSignal|undefined,
+ run:(signal:AbortSignal)=>Promise<T>,
+):Promise<T>{
+ const controller=new AbortController();
+ const forward=():void=>controller.abort();
+ externalSignal?.addEventListener('abort',forward,{once:true});
+ let timer:ReturnType<typeof setTimeout>|undefined;
+ const running=run(controller.signal);
+ try{
+  return await Promise.race([
+   running,
+   new Promise<never>((_resolve,reject)=>{
+    timer=setTimeout(()=>{controller.abort();reject(new JuliusWorkerDeadlineExceeded(declaredTimeoutMs));},declaredTimeoutMs);
+   }),
+  ]);
+ }finally{
+  if(timer!==undefined)clearTimeout(timer);
+  externalSignal?.removeEventListener('abort',forward);
+  // The race may have abandoned it. Nothing reads the result; this only stops
+  // a later rejection from arriving with no listener.
+  void running.catch(()=>{});
+ }
+}
 export interface JuliusExecutionClaim { readonly runId:string;readonly projectId:string;readonly taskId:string;readonly leaseOwner:string;readonly leaseGeneration:number;readonly task:JuliusTask;readonly capability:string;readonly contextId:string; }
 export interface JuliusResourceRequest { readonly usdMicros:number;readonly inputTokens:number;readonly outputTokens:number;readonly toolCalls:number;readonly runtimeMs:number; }
 export interface JuliusResourceReservation { readonly reservationId:string;readonly state:'RESERVED'|'DENIED';readonly denialReason:string|null; }
@@ -162,10 +213,31 @@ export class JuliusExecutionCoordinator {
      * answer still charges what the answer cost.
      */
     let answered:JuliusProviderResult|null=null;
+    /** Set when the dispatch is handed to the router, so a deadline cut can say
+     *  how long the worker actually ran beside the limit it declared. */
+    let dispatchedAtMs=Date.now();
     try{
       if(request.signal?.aborted)throw new JuliusDispatchError('CANCELLED',false,'Dispatch was cancelled.');
       await this.event(request,'worker.dispatched',{workerId:worker.workerId});
-      const result=await this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,taskType:request.taskType,signal:request.signal,...(request.allocation===undefined?{}:{allocation:request.allocation}),...(request.contract===undefined?{}:{contract:request.contract})});
+      dispatchedAtMs=Date.now();
+      // THE WORKER'S OWN DECLARED NUMBER, never a literal here. A second
+      // opinion about how long a worker may take is how declared and operative
+      // deadlines came to differ by 160 s once already.
+      /**
+       * EVERY STEP THAT TOUCHES MISSION STATE IS BELOW THIS AWAIT, and that
+       * ordering is what makes a late result harmless rather than a rule
+       * forbidding one.
+       *
+       * `persistEvidence`, `acceptResult` and `commit` are reached only by
+       * falling through a dispatch that RESOLVED inside the deadline. A promise
+       * that settles afterwards has already lost the race, so nothing reads it:
+       * it cannot create evidence, cannot be accepted as a result, and cannot
+       * settle a reservation the catch below has already released. A guard
+       * asserting the same thing would bind nothing — and would not survive the
+       * one edit that could actually break this, which is moving a line above
+       * the await. `julius-worker-deadline.test.ts` pins the ordering instead.
+       */
+      const result=await dispatchWithinDeadline(worker.timeoutMs,request.signal,(signal)=>this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,taskType:request.taskType,signal,...(request.allocation===undefined?{}:{allocation:request.allocation}),...(request.contract===undefined?{}:{contract:request.contract})}));
       answered=result;
       const evidence=normalizedEvidence(request.claim,worker,result);
       await this.ports.persistEvidence({claim:request.claim,worker,evidence});
@@ -175,7 +247,23 @@ export class JuliusExecutionCoordinator {
       return{status:'COMPLETED',workerId:worker.workerId,duplicate:receipt.duplicate,...(result.contractProposal===undefined?{}:{contractProposal:result.contractProposal}),...(result.guidanceRequest===undefined?{}:{guidanceRequest:result.guidanceRequest}),...(result.guidance===undefined?{}:{guidance:result.guidance}),
       ...(result.segmentResume===undefined?{}:{segmentResume:result.segmentResume}),
       ...(result.researchAsks===undefined?{}:{researchAsks:result.researchAsks})};
-    }catch(error){const failure=error instanceof JuliusDispatchError?error:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Execution boundary failed.');const reported=reportedUsdMicros(answered);
+    }catch(error){
+     /**
+      * A DEADLINE CUT IS RETRYABLE, AND ITS HOLD IS NOT FREED.
+      *
+      * `runtimeStarted: true` is the literal truth and it is load-bearing: the
+      * release below frees the reservation only when nothing can have been
+      * spent, and a dispatch cut mid-flight had already reached a provider.
+      * Reporting it as a clean nothing would hand the mission that money a
+      * second time. The declared deadline travels beside the elapsed time so
+      * the row says WHICH limit was reached rather than merely that one was —
+      * and reaching this limit at all means an adapter outlived its own timer,
+      * which is the finding, not the remedy.
+      */
+     const boundary=error instanceof JuliusWorkerDeadlineExceeded
+      ? new JuliusDispatchError('TIMEOUT',true,'Worker exceeded the deadline it declares.','worker_deadline_exceeded',{timedOut:true,runtimeStarted:true,timeoutMs:error.declaredTimeoutMs,elapsedMs:Date.now()-dispatchedAtMs})
+      : error;
+     const failure=boundary instanceof JuliusDispatchError?boundary:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Execution boundary failed.');const reported=reportedUsdMicros(answered);
      const billed=reported??(typeof failure.diagnostics?.costUsdMicros==='number'?failure.diagnostics.costUsdMicros:null);
      // A provider that ANSWERED ran, whatever the diagnostics say about it.
      await this.ports.release({claim:request.claim,reservationId:reservation.reservationId,reason:failure.code,usdMicros:billed,spendUnknown:billed===null&&(answered!==null||failure.diagnostics?.runtimeStarted===true)});
