@@ -148,6 +148,18 @@ describe('the wildcard does exactly what it says', () => {
   });
 });
 
+describe('the authorized URL is the one a fetch can carry', () => {
+  it('drops the fragment, which is never sent, and keeps everything that is', () => {
+    const verdict = authorizeJuliusResearch({
+      request: request({ reference: 'https://docs.python.org/3/library/asyncio-task.html?x=1#asyncio.timeout' }),
+      policy: policy(),
+      ledger: emptyJuliusResearchLedger('mission-1'),
+    });
+    expect(verdict.ok && verdict.url).toBe('https://docs.python.org/3/library/asyncio-task.html?x=1');
+    expect(verdict.ok && verdict.host).toBe('docs.python.org');
+  });
+});
+
 describe('the host an ask reached for is recorded as a name and nothing else', () => {
   it.each([
     ['https://www.postgresql.org/docs/current/app-psql.html', 'www.postgresql.org'],
