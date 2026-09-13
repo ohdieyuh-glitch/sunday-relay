@@ -1,5 +1,5 @@
 /**
- * A SECOND CODER REPAIR REACHES THE EXECUTOR.
+ * A SECOND CODER REPAIR REACHES THE EXECUTOR, AND A REFUSAL SAYS WHAT IT WAS.
  *
  * Paid qualification 34757974058 (main 2110e2c5) failed at its second coder
  * repair, `repair:repair:run:5408584e00ffb49fd1c011a1:build:1:task:2:task`,
@@ -7,7 +7,9 @@
  * base-revision effect's invocation id was 70 characters; the executor composes
  * `invocationId:dispatchGeneration:sandboxId` with the invocation id as the
  * sandbox id, got 143, and refused it past its 128-character identifier ceiling
- * (`INVALID_REQUEST:execution_envelope_invalid:executionIdentity`).
+ * (`INVALID_REQUEST:execution_envelope_invalid:executionIdentity`). The durable
+ * row read WORKER_EXECUTION_FAILURE with no class, because the client's refusal
+ * was an untyped Error.
  *
  * These proofs drive the REAL executor client (`RemoteExecutorControlPlane`)
  * inside the REAL shell port (`createExecutorShellPort`) against a stand-in
@@ -18,11 +20,13 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { JuliusDispatchError, safeReviewDiagnostics } from '../../src/relay/mission/julius';
 import { parseExecutorExecutionEnvelope } from '../../src/relay/workspace/julius-tools/execution-envelope';
 import { EXECUTOR_IDENTIFIER_MAX_LENGTH } from '../../src/relay/workspace/julius-tools/executor-schema';
 import { RemoteExecutorControlPlane } from '../../src/relay/workspace/julius-tools/remote-executor-control-plane';
 import {
   EXECUTOR_INVOCATION_ID_MAX_LENGTH,
+  classifyExecutorRefusal,
   createExecutorShellPort,
   executorInvocationId,
 } from './executor-effects';
@@ -91,8 +95,8 @@ const baseEffect = (taskId: string) => ({
   invocationKey: `${taskId}:base`, command: 'git rev-parse HEAD', timeoutMs: 15_000,
 });
 
-const failureOf = async (promise: Promise<unknown>): Promise<Error> => {
-  try { await promise; } catch (error) { if (error instanceof Error) return error; throw error; }
+const failureOf = async (promise: Promise<unknown>): Promise<JuliusDispatchError> => {
+  try { await promise; } catch (error) { if (error instanceof JuliusDispatchError) return error; throw error; }
   throw new Error('expected the effect to fail');
 };
 
@@ -166,7 +170,61 @@ describe('the invocation id is bounded, and unchanged wherever it already fit', 
       expect(seen.refused, taskId).toEqual([]);
       expect(seen.accepted, taskId).toHaveLength(1);
       expect(seen.accepted[0]!.length).toBeLessThanOrEqual(EXECUTOR_IDENTIFIER_MAX_LENGTH);
-      expect(failure.message).toBe('TERMINAL_FAILURE:stand_in_stops_after_validation');
+      expect(failure.failureClass).toBe('executor_terminal_failure');
     }
+  });
+});
+
+/* ------------------------------------------------------------ 2. the refusal is named */
+
+describe('a refused tool effect is recorded as what it was', () => {
+  it('the paid run\'s refusal, had the id still been unbounded, is executor_identity_invalid on the base step', async () => {
+    // The refusal the paid run received, answered to the port itself for any identity at all.
+    vi.stubGlobal('fetch', vi.fn(async (_url: URL | string, init?: RequestInit) => {
+      const operation = new Headers(init?.headers).get('x-julius-operation');
+      if (operation !== 'execute') return new Response(JSON.stringify({ value: {} }), { status: 200 });
+      return new Response(JSON.stringify({ error: 'INVALID_REQUEST:execution_envelope_invalid:executionIdentity' }), { status: 400 });
+    }));
+    const failure = await failureOf(livePort().run(baseEffect(FAILED_TASK)));
+    expect(failure.code).toBe('WORKER_EXECUTION_FAILURE');
+    expect(failure.retryable, 'classification changes the record, not the orchestration').toBe(false);
+    expect(failure.failureClass).toBe('executor_identity_invalid');
+    expect(failure.diagnostics).toMatchObject({ executorStep: 'base', executorRefusal: 'executor_identity_invalid', executorRefusalField: 'execution_identity' });
+    expect(failure.safeMessage).not.toContain('INVALID_REQUEST');
+  });
+
+  it.each([
+    ['EXECUTOR_UNAVAILABLE', 'executor_unavailable', null],
+    ['EXECUTOR_UNAVAILABLE:INVALID_REQUEST:execution_envelope_identity_mismatch', 'executor_identity_invalid', 'execution_identity'],
+    ['EXECUTOR_UNAVAILABLE:INVALID_REQUEST:execution_envelope_invalid:taskId', 'executor_request_invalid', 'task_id'],
+    ['EXECUTOR_UNAVAILABLE:INVALID_REQUEST:execution_envelope_expired', 'executor_request_invalid', null],
+    ['EXECUTOR_UNAVAILABLE:internal', 'executor_unavailable', null],
+    ['executor_authorization_refused', 'executor_authorization_refused', null],
+    ['executor_scope_not_held:execute', 'executor_scope_refused', null],
+    ['executor_identity_conflict', 'executor_identity_conflict', null],
+    ['STARTED_UNKNOWN_OUTCOME', 'executor_outcome_unknown', null],
+    ['SECURITY_FAILURE:executor_attestation_missing', 'executor_security_failure', null],
+    ['TERMINAL_FAILURE:sandbox_gone', 'executor_terminal_failure', null],
+    ['executor_response_malformed', 'executor_response_invalid', null],
+    ['something nobody anticipated', 'executor_refused_unclassified', null],
+  ] as const)('%s → %s', (message, refusal, field) => {
+    expect(classifyExecutorRefusal(new Error(message))).toEqual({ refusal, field });
+  });
+
+  it('the durable diagnostics keep the class, the step and the field, and nothing else the executor said', () => {
+    const kept = safeReviewDiagnostics({ executorStep: 'test', executorRefusal: 'executor_request_invalid', executorRefusalField: 'task_id' });
+    expect(kept).toMatchObject({ executorStep: 'test', executorRefusal: 'executor_request_invalid', executorRefusalField: 'task_id' });
+    const refusedValues = safeReviewDiagnostics({ executorStep: 'rm -rf /', executorRefusal: 'INVALID_REQUEST:execution_envelope_invalid:executionIdentity', executorRefusalField: 'Bearer abc' });
+    expect(refusedValues).toMatchObject({ executorStep: null, executorRefusal: null, executorRefusalField: null });
+  });
+
+  it('a claim that was never recorded is named too, before anything is requested', async () => {
+    const port = createExecutorShellPort({
+      pool: { query: async () => ({ rows: [] }) } as never, tools: {} as never, settlement: {} as never, client: {} as never,
+      claims: { claimFor: () => null }, tenantId: 't', callerId: 'c', policyRevision: 'r', executionId: 'e', workspaceSourceRef: 'HEAD',
+    });
+    const failure = await failureOf(port.run(baseEffect(`${RUN}:build`)));
+    expect(failure.failureClass).toBe('executor_claim_missing');
+    expect(failure.diagnostics).toMatchObject({ executorStep: 'base', executorRefusal: 'executor_claim_missing' });
   });
 });

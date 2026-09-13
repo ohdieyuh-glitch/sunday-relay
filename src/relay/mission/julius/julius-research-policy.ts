@@ -274,6 +274,31 @@ export function juliusResearchHostMatches(pattern: string, host: string): boolea
   return h.length > suffix.length + 1 && h.endsWith(`.${suffix}`);
 }
 
+/**
+ * THE HOST A WORKER ASKED FOR, IN THE ONE SHAPE SAFE TO RECORD.
+ *
+ * Paid run 34757974058 recorded four research refusals with no reason and no
+ * target, so nobody could say whether the workers asked for a host the mission
+ * never granted or Relay refused one it had. The durable row now names the host
+ * the ask reached for, and ONLY the host: a path or a query is the worker's own
+ * text and can carry anything, while the host is the part of a reference the
+ * allowlist decides on. It is read exactly as `authorizeJuliusResearch` reads
+ * it, so the recorded host is the one the policy compared.
+ *
+ * NULL WHEN THERE IS NO NAME: an unparsable reference or an address literal.
+ * Unknown is not a host, and an address is not a name.
+ */
+export function juliusResearchRequestedHost(reference: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(reference);
+  } catch {
+    return null;
+  }
+  const host = normalizeHost(url.hostname);
+  return isHostName(host) ? host : null;
+}
+
 /* ------------------------------------------------------------ sealing */
 
 const FINGERPRINT_OF = (draft: JuliusResearchPolicyDraft): string => contentFingerprint(JSON.stringify([
