@@ -75,7 +75,7 @@ import {
   type ReviewPacket,
 } from '../hermes-reviewer';
 import { UNKNOWN_USAGE, type HermesUsage } from '../reviewer-harness/hermes/runner';
-import { REVIEW_TRANSIENT_REASK_BACKOFF_MS, REVIEW_TRANSIENT_REASK_LIMIT, reviewerReaskWithinDeadline } from '../reviewer-deadline';
+import { REVIEW_TRANSIENT_REASK_BACKOFF_MS, REVIEW_TRANSIENT_REASK_LIMIT, REVIEW_TRANSIENT_REASK_SHAPES, reviewerReaskWithinDeadline } from '../reviewer-deadline';
 import type { ShellEffectPort } from './executor-effects';
 
 /* ------------------------------------------------------------- handoffs */
@@ -1652,10 +1652,11 @@ export function createLiveHermesReviewerAdapter(input: {
        *
        * ONLY the shapes where an answer ARRIVED in the wrong shape. A timeout,
        * a 503, a refused credential, a process that died and an oversized
-       * output are not shape defects: three are already retryable at the task
-       * level and the rest need a human or a smaller request, and re-asking
-       * would spend for nothing. `review_output_too_large` is deliberately
-       * excluded — a runaway answer asked again is a second runaway answer.
+       * output are not shape defects: the first two are answers that never
+       * arrived and take the bounded transient re-ask below, the rest need a
+       * human or a smaller request, and re-asking would spend for nothing.
+       * `review_output_too_large` is deliberately excluded — a runaway answer
+       * asked again is a second runaway answer.
        */
       let reviewAttempts = 0;
       let reviewCorrection: string | undefined;
@@ -1666,7 +1667,10 @@ export function createLiveHermesReviewerAdapter(input: {
        * `review_service_unavailable` is `retryable: true` and a review stage
        * gets ONE pipeline attempt, so on the live path the retryable shape
        * reached a pipeline with nothing left to spend on it and a single 429
-       * ended the mission. The pipeline's rule stands — a second task attempt
+       * ended the mission. `review_timeout` is the same gap, and the one the
+       * paid record actually shows: both of the last two COMPLETED missions had
+       * a first review attempt time out and a second ask complete it (see
+       * `REVIEW_TRANSIENT_REASK_SHAPES`). The pipeline's rule stands — a second task attempt
        * is a blind retry — and this is not one: the answer never arrived, the
        * adapter asks once more after a short backoff, and only when the
        * declared deadline still holds a whole review after what the first ask
@@ -1696,7 +1700,7 @@ export function createLiveHermesReviewerAdapter(input: {
           const remedy = reviewCorrectionFor(outcome.shape);
           if (remedy !== null) { reviewCorrection = remedy; reviewReaskShape = outcome.shape; continue; }
         }
-        if (outcome.shape === 'review_service_unavailable' && transientReasks < transientReaskLimit && dispatch.signal?.aborted !== true) {
+        if (REVIEW_TRANSIENT_REASK_SHAPES.has(outcome.shape) && transientReasks < transientReaskLimit && dispatch.signal?.aborted !== true) {
           const decision = reviewerReaskWithinDeadline({ deadlineMs: input.config.timeoutMs, consumedMs, backoffMs: REVIEW_TRANSIENT_REASK_BACKOFF_MS });
           if (decision.allowed) {
             transientReasks += 1;

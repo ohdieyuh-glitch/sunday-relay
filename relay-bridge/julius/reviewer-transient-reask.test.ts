@@ -21,6 +21,7 @@ import { loadHermesConfig, reviewDiagnostics, type HermesConfig, type HermesOutc
 import {
   REVIEW_TRANSIENT_REASK_BACKOFF_MS,
   REVIEW_TRANSIENT_REASK_LIMIT,
+  REVIEW_TRANSIENT_REASK_SHAPES,
   resolveReviewerDeadline,
   reviewerOperativeTimeoutMs,
   reviewerReaskWithinDeadline,
@@ -284,5 +285,86 @@ describe('the live reviewer adapter re-asks a transient status once, inside the 
     const result = await r.dispatch() as { diagnostics: Record<string, unknown> };
     expect(result.diagnostics.reviewAttempts).toBe(1);
     expect(result.diagnostics.reviewReaskShape).toBeNull();
+  });
+});
+
+/** A first ask the ENGINE ended on its own per-request timeout after `elapsedMs`. */
+const timedOut = (elapsedMs: number, instants?: { startedAt: string; completedAt: string }): HermesOutcome => ({
+  kind: 'review_incomplete',
+  safeMessage: 'The Hermes reviewer timed out.',
+  shape: 'review_timeout',
+  diagnostics: reviewDiagnostics({
+    transport: 'local', shape: 'review_timeout', outcome: 'failed', provider: 'xai', requestedModel: 'grok-build-0.1',
+    processExitCode: 1, timedOut: true, processStarted: true, exitObserved: true, elapsedMs,
+  }),
+  startedAt: instants?.startedAt ?? iso(0),
+  completedAt: instants?.completedAt ?? iso(elapsedMs),
+});
+
+/**
+ * THE MEASURED CASE. Paid run 34529874100 (Mission 5): `build:review` attempt 1
+ * died after 94 200 ms — the engine's own 90 s request timeout, well inside
+ * Relay's 480 112 ms window — and attempt 2 COMPLETED in under 209 s. Paid run
+ * 34470535718 (Mission 4): `plan:review` attempt 1 was cut by Relay itself at
+ * 400 093 ms and attempt 2 COMPLETED in 381 880 ms. Both missions completed only
+ * because the pipeline then granted a second task attempt, and
+ * `REVIEW_TASK_ATTEMPTS = 1` removes it. The re-ask is that second ask, bounded.
+ */
+const ENGINE_TIMEOUT_MS = 94_200;
+
+describe('the live reviewer adapter re-asks an engine-side timeout once, under the same arithmetic', () => {
+  it('the policy names exactly the two shapes an answer can fail to arrive under', () => {
+    expect([...REVIEW_TRANSIENT_REASK_SHAPES].sort()).toEqual(['review_service_unavailable', 'review_timeout']);
+  });
+
+  it('a timeout the engine raised early, with a whole review still in the window, is re-asked once and the review SUCCEEDS', async () => {
+    const r = rig([timedOut(ENGINE_TIMEOUT_MS), APPROVED]);
+    const result = await r.dispatch() as { status: string; diagnostics: Record<string, unknown> };
+    expect(result.status).toBe('SUCCEEDED');
+    expect(r.calls, 'asked twice, not three times').toHaveLength(2);
+    expect(r.sleeps, 'one backoff, the policy length').toEqual([REVIEW_TRANSIENT_REASK_BACKOFF_MS]);
+    expect(r.calls[1]!.config.timeoutMs, 'the second run got the REMAINING window').toBe(DEADLINE - ENGINE_TIMEOUT_MS - REVIEW_TRANSIENT_REASK_BACKOFF_MS);
+    expect(r.calls[1]!.config.timeoutMs, 'and that window still holds a whole review').toBeGreaterThanOrEqual(FLOOR);
+    expect(result.diagnostics.reviewAttempts).toBe(2);
+    expect(result.diagnostics.reviewReaskShape).toBe('review_timeout');
+    expect(safeReviewDiagnostics(result.diagnostics)?.reviewReaskShape).toBe('review_timeout');
+  });
+
+  it("a timeout that consumed the declared window is Relay's own cut, and is never re-asked", async () => {
+    const r = rig([timedOut(DEADLINE), APPROVED]);
+    const failure = await failureOf(r.dispatch());
+    expect(r.calls, 'asked once').toHaveLength(1);
+    expect(r.sleeps).toEqual([]);
+    expect(failure.code).toBe('TIMEOUT');
+    expect(failure.retryable, 'the shape keeps its classification; the pipeline decides what to do with it').toBe(true);
+    expect(failure.failureClass).toBe('review_timeout');
+    expect(failure.diagnostics?.reviewAttempts).toBe(1);
+    expect(failure.diagnostics?.reviewReaskShape).toBeNull();
+  });
+
+  it('a timeout raised too late for a whole review to fit is not re-asked either — the floor decides, not the cause', async () => {
+    const tooLate = DEADLINE - REVIEW_TRANSIENT_REASK_BACKOFF_MS - FLOOR + 1;
+    const r = rig([timedOut(tooLate), APPROVED]);
+    const failure = await failureOf(r.dispatch());
+    expect(r.calls).toHaveLength(1);
+    expect(r.sleeps).toEqual([]);
+    expect(failure.failureClass).toBe('review_timeout');
+    expect(failure.diagnostics?.reviewReaskShape).toBeNull();
+  });
+
+  it('the two transient shapes share ONE re-ask: a 503 followed by an engine timeout is final', async () => {
+    const r = rig([transient(20_000), timedOut(20_000), APPROVED]);
+    const failure = await failureOf(r.dispatch());
+    expect(r.calls, 'exactly two calls were bought').toHaveLength(2);
+    expect(failure.failureClass).toBe('review_timeout');
+    expect(failure.diagnostics?.reviewAttempts).toBe(2);
+    expect(failure.diagnostics?.reviewReaskShape, 'the record names the shape that bought the second call').toBe('review_service_unavailable');
+  });
+
+  it('a timeout whose duration cannot be established is not re-asked — unknown is not zero', async () => {
+    const r = rig([timedOut(5_000, { startedAt: 'not-a-time', completedAt: iso(5_000) }), APPROVED]);
+    const failure = await failureOf(r.dispatch());
+    expect(r.calls).toHaveLength(1);
+    expect(failure.failureClass).toBe('review_timeout');
   });
 });

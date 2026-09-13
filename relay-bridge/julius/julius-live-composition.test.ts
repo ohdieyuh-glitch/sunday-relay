@@ -28,7 +28,7 @@ import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
 import { JULIUS_PARTICIPATION_CHANNELS, JULIUS_PARTICIPATION_MARKER, JuliusDispatchError, safeFailureClass, safeReviewDiagnostics, sanitizeJuliusResearchAsks } from '../../src/relay/mission/julius';
 import { compileHostedEnvelope } from '../hosted-coding-agent/hosted-envelope';
 import type { HostedQueryFn, HostedRunInput, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
-import { buildReviewPrompt, loadHermesConfig, reviewDiagnostics, runHermesReview, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
+import { buildReviewPrompt, loadHermesConfig, reviewDiagnostics, runHermesReview, type HermesConfig, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
 import { UNKNOWN_USAGE } from '../reviewer-harness/hermes/runner';
 import { runRemoteHermesReview, type RemoteHermesConfig } from '../hermes-remote-review';
 import { JULIUS_REVIEW_STAGES, repairTaskTypeFor, reviewChargeFor, reviewStageOf } from '../../src/relay/mission/julius';
@@ -195,17 +195,56 @@ function hangingReviewer(
     child.kill = () => { child.emit('close', null); return true; };
     return child as never;
   }) as never;
-  return async (input: { packet: ReviewPacket }): Promise<HermesOutcome> => {
+  return async (input: { packet: ReviewPacket; config: HermesConfig }): Promise<HermesOutcome> => {
     log.order.push('reviewer');
     packets.push(input.packet);
     const hangs = call < hangFirst;
     call += 1;
-    return runHermesReview({
+    const outcome = await runHermesReview({
       packet: input.packet,
       // Milliseconds instead of the production three minutes: what is being
       // proven is the ORDER of events, not the duration of one.
       config: { ...loadHermesConfig(LIVE_ENV as never), timeoutMs: 30, killGraceMs: 10 },
       spawnImpl: hangs ? spawnHanging : spawnEmitting(answer),
+    });
+    /**
+     * COMPRESSED TIME, KEPT FAITHFUL. In production the window that cut this
+     * child and the deadline the adapter declared are ONE number, so a hang
+     * consumes the whole declared window. Here the runner was given 30 ms while
+     * the adapter still declares the operative deadline, and the adapter's
+     * bounded transient re-ask reads consumed time off the outcome's own two
+     * instants — so a 30 ms cut would read as an early engine-side death with
+     * a whole review still in the window, which is not what a hang is. The
+     * instants are restated to say what the runner did: it held the declared
+     * window open until Relay closed it.
+     */
+    if (hangs && outcome.kind === 'review_incomplete') {
+      return { ...outcome, completedAt: new Date(Date.parse(outcome.startedAt) + input.config.timeoutMs).toISOString() };
+    }
+    return outcome;
+  };
+}
+
+/**
+ * A reviewer whose ENGINE ends the first ask on its own request deadline —
+ * early, well inside Relay's window — and answers on the next. The child prints
+ * the engine's own timeout preamble, verbatim from Hermes v0.18.2, and exits 0,
+ * so the outcome is classified by `isEngineReportedTimeout` on the real runner
+ * rather than hand-built. Paid run 34529874100's `build:review` is this case:
+ * dead after 94 200 ms, COMPLETED on the next ask.
+ */
+const ENGINE_TIMEOUT_PREAMBLE = 'API call failed after 0 retries: request timed out\n';
+function engineTimeoutReviewer(log: FakeLog, packets: ReviewPacket[], timesOutFirst: number, answer: string) {
+  let call = 0;
+  return async (input: { packet: ReviewPacket }): Promise<HermesOutcome> => {
+    log.order.push('reviewer');
+    packets.push(input.packet);
+    const timesOut = call < timesOutFirst;
+    call += 1;
+    return runHermesReview({
+      packet: input.packet,
+      config: { ...loadHermesConfig(LIVE_ENV as never), timeoutMs: 1_000, killGraceMs: 10 },
+      spawnImpl: spawnEmitting(timesOut ? ENGINE_TIMEOUT_PREAMBLE : answer),
     });
   };
 }
@@ -294,6 +333,7 @@ function liveResolution(overrides: {
   reviewerTexts?: readonly string[];
   /** How many reviewer dispatches hang until Relay's window closes on them. */
   reviewerHangsFirst?: number;
+  reviewerEngineTimesOutFirst?: number;
 }) {
   const log: FakeLog = { order: [] };
   const prompts: string[] = [];
@@ -309,7 +349,9 @@ function liveResolution(overrides: {
     runners: {
       architect: (overrides.architect ?? fakeArchitect(log)) as never,
       coder: fakeCoder(log, prompts) as never,
-      reviewer: (overrides.reviewerHangsFirst !== undefined
+      reviewer: (overrides.reviewerEngineTimesOutFirst !== undefined
+        ? engineTimeoutReviewer(log, packets, overrides.reviewerEngineTimesOutFirst, APPROVING_REVIEW)
+        : overrides.reviewerHangsFirst !== undefined
         ? hangingReviewer(log, packets, overrides.reviewerHangsFirst, APPROVING_REVIEW)
         : overrides.reviewerTexts !== undefined
           ? textReviewer(log, packets, overrides.reviewerTexts)
@@ -524,12 +566,13 @@ async function driveLiveMission(
   architect?: () => Promise<GptRunOutcome>,
   reviewerTexts?: readonly string[],
   reviewerHangsFirst?: number,
+  reviewerEngineTimesOutFirst?: number,
 ) {
   const memory = createJuliusMemoryStore();
   // Not narrowed to JuliusRuntimeStore: the drive loop runs the recovery sweep,
   // and the memory store is the recovery driver as well as the store.
   const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
-  const fakes = liveResolution({ verdicts, contexts: handoffs.contexts, architect, reviewerTexts, reviewerHangsFirst });
+  const fakes = liveResolution({ verdicts, contexts: handoffs.contexts, architect, reviewerTexts, reviewerHangsFirst, reviewerEngineTimesOutFirst });
   expect(fakes.resolution.ok).toBe(true);
   seedMissionRun(memory);
   const runtime = assembleLiveJuliusRuntime({
@@ -803,6 +846,42 @@ describe('a full mission drive with Julius in control', () => {
       }
     }
   });
+
+  it('a reviewer the ENGINE timed out early is asked once more inside the same dispatch, and the mission completes', async () => {
+    /**
+     * THE MEASURED CASE, END TO END. Paid run 34529874100 (Mission 5):
+     * `build:review` attempt 1 died after 94 200 ms on the engine's own 90 s
+     * request timeout, inside a 480 112 ms window, and attempt 2 COMPLETED in
+     * under 209 s. That mission completed because the pipeline still granted a
+     * second task attempt. Under `REVIEW_TASK_ATTEMPTS = 1` it does not, so the
+     * same event would end a mission after the coder had already spent — unless
+     * the adapter asks once more itself. This drives the REAL runner over a
+     * child that prints the engine's own timeout preamble and exits 0, so the
+     * classification is the production one, and then waits out the real
+     * policy backoff, which is why this case carries its own timeout.
+     */
+    const { memory, outcome, fakes } = await driveLiveMission(['approved'], undefined, undefined, undefined, undefined, 1);
+    expect(outcome.state).toBe('COMPLETED');
+    // Three asks for two dispatches: the plan review asked twice inside ONE dispatch, the build review once.
+    expect(fakes.log.order.filter((step) => step === 'reviewer')).toHaveLength(3);
+    // The pipeline never saw a failure: no retry was scheduled, nothing failed.
+    expect(memory.events().filter((event) => event.type === 'retry.scheduled')).toHaveLength(0);
+    expect(memory.events().filter((event) => event.type === 'task.failed')).toHaveLength(0);
+    expect(memory.taskRow('plan-1:review')?.state).toBe('SUCCEEDED');
+    // The durable row says both: two calls, and the shape that bought the second.
+    const rows = memory.events()
+      .filter((event) => event.taskId === 'plan-1:review')
+      .map((event) => event.facts as Record<string, unknown>)
+      .filter((facts) => facts.diag_reviewAttempts !== undefined);
+    expect(rows.length, 'the dispatch row carries the reviewer diagnostics').toBeGreaterThanOrEqual(1);
+    expect(rows.map((facts) => facts.diag_reviewAttempts)).toContain(2);
+    expect(rows.map((facts) => facts.diag_reviewReaskShape)).toContain('review_timeout');
+    // And neither packet carried Relay's telemetry about the first ask.
+    for (const packet of fakes.packets) {
+      const rendered = JSON.stringify(packet).toLowerCase();
+      for (const word of ['timed out', 'timeout', 'sigterm', 'review_timeout']) expect(rendered).not.toContain(word);
+    }
+  }, 30_000);
 
   it('and the same rig still fails when the reviewer answers unreadably', async () => {
     // The control. Without it the case above proves only that a fixture can be
@@ -1936,22 +2015,34 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
 
   it('a failure that is NOT a shape defect is never CORRECTED', async () => {
     // A timeout and a refused credential describe an answer that did not
-    // arrive, and no instruction can fix either: the timeout is retryable at
-    // the TASK level and the credential needs a person. Re-asking inside the
-    // dispatch would spend for nothing.
-    for (const [kind, body, status] of [
-      ['timed out', { runId: 'run-live', status: 'timed_out', failureKind: 'timed_out' }, 200],
-      ['dead credential', { failureKind: 'authentication_failed' }, 401],
-    ] as const) {
-      let calls = 0;
-      const fetchImpl = vi.fn(async () => {
-        calls += 1;
-        return calls === 1 && status === 200 ? jsonRes({ accepted: true, runId: 'run-live' }) : jsonRes(body, status);
-      });
-      const failure = await resultFrom(fetchImpl)
+    // arrive, and no instruction can fix either. The credential needs a person
+    // and is asked exactly once.
+    {
+      const deadCredential = vi.fn(async () => jsonRes({ failureKind: 'authentication_failed' }, 401));
+      const failure = await resultFrom(deadCredential)
         .then(() => { throw new Error('the dispatch was expected to fail'); })
         .catch((error: unknown) => error as { diagnostics?: Record<string, unknown> });
-      expect(failure.diagnostics?.reviewAttempts, `${kind} is asked exactly once`).toBe(1);
+      expect(failure.diagnostics?.reviewAttempts, 'dead credential is asked exactly once').toBe(1);
+    }
+    // A TIMEOUT USED TO BE ON THAT ONCE-LIST, on the reasoning that it was
+    // "retryable at the TASK level". The attempt ceiling for a review is now
+    // ONE, and the paid record (runs 34470535718 and 34529874100) shows a first
+    // review attempt timing out and the next ask completing it in both of the
+    // last two COMPLETED missions. So an early timeout is the other transient
+    // shape: re-asked once inside the same declared deadline — proven with the
+    // arithmetic in reviewer-transient-reask.test.ts — never CORRECTED, and a
+    // service that times out again is final, with both calls on the record.
+    {
+      // The service accepts every start (POST) and reports every poll (GET) timed out.
+      const timesOutTwice = vi.fn(async (_url: unknown, init?: { method?: string }) => init?.method === 'POST'
+        ? jsonRes({ accepted: true, runId: 'run-live' })
+        : jsonRes({ runId: 'run-live', status: 'timed_out', failureKind: 'timed_out' }, 200));
+      const failure = await resultFrom(timesOutTwice)
+        .then(() => { throw new Error('the dispatch was expected to fail'); })
+        .catch((error: unknown) => error as { failureClass?: string | null; diagnostics?: Record<string, unknown> });
+      expect(failure.diagnostics?.reviewAttempts, 'an early timeout is re-asked exactly once, never more').toBe(2);
+      expect(failure.diagnostics?.reviewReaskShape).toBe('review_timeout');
+      expect(failure.failureClass).toBe('review_timeout');
     }
     // A 503 USED TO BE ON THAT LIST, on the reasoning that it was "already
     // retryable at the TASK level, where the attempt ceiling governs". The
