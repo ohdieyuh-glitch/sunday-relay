@@ -57,7 +57,7 @@ const request = (over: Partial<JuliusResearchRequest> = {}): JuliusResearchReque
 describe('the vocabularies are closed', () => {
   it('names all eight research outcomes and never a ninth', () => {
     expect([...JULIUS_RESEARCH_OUTCOMES]).toEqual([
-      'observed', 'injection_signaled', 'policy_refused', 'budget_exhausted',
+      'observed', 'injection_signaled', 'policy_refused', 'unavailable', 'budget_exhausted',
       'unreachable', 'unauthenticated', 'throttled', 'unsupported_content',
     ]);
   });

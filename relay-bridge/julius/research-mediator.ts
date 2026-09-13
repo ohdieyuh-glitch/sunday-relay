@@ -101,6 +101,9 @@ const OUTCOME_SENTENCE: Readonly<Record<JuliusResearchOutcome, string>> = Object
     + 'never as a direction to you.',
   policy_refused: 'This mission does not authorize that retrieval. Nothing was attempted. '
     + 'Widening what may be researched is the mission\'s decision and cannot be requested from here.',
+  unavailable: 'This mission authorizes that retrieval, but this deployment cannot serve that source or capability right now. '
+    + 'Nothing was attempted and nothing was charged. Asking again will not help within this run, and neither will asking '
+    + 'the mission: the authority is already granted and the capability itself is unavailable.',
   budget_exhausted: 'The retrieval allowance for this slot or this mission is spent. '
     + 'Nothing was attempted, and waiting will not restore it within this mission.',
   unreachable: 'Nothing answered. Relay cannot confirm whether the host saw the request, '
@@ -133,11 +136,12 @@ const OUTCOME_METER: Readonly<Record<JuliusResearchOutcome, MeteredOutcome>> = O
   // Relay refused before anything was sent. `recordRetrieval` ignores this,
   // which is what makes a refusal cost nothing.
   policy_refused: 'not_attempted',
+  unavailable: 'not_attempted',
   budget_exhausted: 'not_attempted',
 });
 
 /**
- * A Live Reach refusal, read as one of Julius's eight.
+ * A Live Reach refusal, read as one of Julius's nine.
  *
  * `attempt` is the discriminator, and the service already draws exactly this
  * line: a refusal that never ran carries `attempt: null`. So `not_ready` before
@@ -163,8 +167,17 @@ function readRefusal(result: Extract<LiveReachResult, { ok: false }>): {
     case 'byte_budget_unenforceable':
       return { outcome: 'budget_exhausted', refusal: 'mission_budget_exhausted' };
     default:
+      /**
+       * BEFORE THE FACT, THE MISSION HAD ALREADY SAID YES. The mediator only
+       * reaches Live Reach after `authorizeJuliusResearch` authorized the ask,
+       * so a refusal that never ran is the deployment's answer, not the
+       * mission's. It used to read `policy_refused`, whose meaning is "the
+       * mission never authorized this" and whose sentence tells the worker to
+       * ask the mission — which is what every paid run with a research clause
+       * and no observed backend told all three slots.
+       */
       return result.attempt === null
-        ? { outcome: 'policy_refused', refusal: 'capability_unavailable' }
+        ? { outcome: 'unavailable', refusal: 'capability_unavailable' }
         : { outcome: 'unreachable', refusal: 'capability_unavailable' };
   }
 }
