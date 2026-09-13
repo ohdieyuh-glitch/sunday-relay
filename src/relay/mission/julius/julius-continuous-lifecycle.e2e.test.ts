@@ -1383,3 +1383,47 @@ describe('34 - retrieved content is data, and the mission state proves it', () =
     expect(factsOf(harness, 'checkpoint.verdict')[0]!.outcomes).toBe('injection_signaled');
   });
 });
+
+/**
+ * A PROVIDER THAT NEVER RECOVERS ENDS THE MISSION IN A BOUNDED NUMBER OF CALLS.
+ *
+ * Money must never be a substitute for correctness, and a paid run that keeps
+ * re-asking a provider which has refused for good is exactly that substitution:
+ * it spends until the job is killed and then records nothing useful. These pin
+ * the bound at the pipeline's own numbers — a task's attempt ceiling, and ONE
+ * attempt for a review — and pin that the mission ends visibly short of
+ * completion rather than looping, whatever the failure's class.
+ */
+describe('13 — a provider hard failure surfaces explicitly and never loops', () => {
+  const dispatchesOf = (harness: JuliusHarness, adapterId: string, taskId: string): number =>
+    harness.adapters.get(adapterId)!.dispatches.filter((dispatch) => dispatch.taskId === taskId).length;
+
+  it('a coder whose provider refuses its credential every time: one call, FAILED, not retried, not completed', async () => {
+    const harness = build({ coderScript: [{ kind: 'fail', code: 'AUTH_CONFIGURATION' }] });
+    await drain(harness, 60);
+    expect(dispatchesOf(harness, CODER.adapterId, 'build-1'), 'a refused credential is never re-asked').toBe(1);
+    expect(harness.store.taskRow('build-1')!.state).toBe('FAILED');
+    expect(factsOf(harness, 'task.failed').some((facts) => facts.code === 'AUTH_CONFIGURATION'), 'the class is on the record').toBe(true);
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run!.state).not.toBe('COMPLETED');
+  });
+
+  it('a coder whose provider is rate limited FOREVER: retried to the attempt ceiling and no further', async () => {
+    const harness = build({ coderScript: [{ kind: 'fail', code: 'RATE_LIMIT' }] });
+    await drain(harness, 60);
+    const calls = dispatchesOf(harness, CODER.adapterId, 'build-1');
+    expect(calls, 'a transient class is bounded by the task attempt ceiling, not by the tick budget').toBe(3);
+    expect(harness.store.taskRow('build-1')!.state).toBe('FAILED');
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run!.state).not.toBe('COMPLETED');
+  });
+
+  it('a reviewer whose provider refuses: the review is asked ONCE and the plan is never accepted around it', async () => {
+    const harness = build({ reviewerScript: [{ kind: 'fail', code: 'AUTH_CONFIGURATION' }] });
+    await drain(harness, 60);
+    expect(dispatchesOf(harness, REVIEWER.adapterId, 'plan-1:review')).toBe(1);
+    expect(dispatchesOf(harness, CODER.adapterId, 'build-1'), 'no build without a completed plan review').toBe(0);
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run!.state).not.toBe('COMPLETED');
+  });
+});

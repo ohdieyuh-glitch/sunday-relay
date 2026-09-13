@@ -34,6 +34,10 @@ set -euo pipefail
 # BOTH DEADLINES ARE REQUIRED, because their ORDER is the invariant this script
 # now enforces and a missing one would silently switch the enforcement off.
 : "${HERMES_REQUEST_TIMEOUT_SECONDS:?missing HERMES_REQUEST_TIMEOUT_SECONDS}"
+# The isolation proof below runs the command the review runs, and that command
+# names the model. A proof run with a different model or none would be a proof
+# about a neighbouring invocation.
+: "${RELAY_HERMES_MODEL:?missing RELAY_HERMES_MODEL}"
 # RELAY'S OWN WINDOW IS NO LONGER AN ENVIRONMENT VARIABLE. It is derived below
 # by scripts/julius-reviewer-deadline.mjs, the same derivation the bridge uses
 # for both the Hermes transport and the reviewer worker's declared deadline.
@@ -145,17 +149,25 @@ chmod 0600 "$HERMES_PROFILE_HOME/.hermes/.env"
 # process lifecycle, so a window Relay closes itself is diagnosable whether or
 # not the engine got its word in first.
 #
-# ONLY THE TWO SECTIONS BELOW ARE WRITTEN. The model and the provider stay on
-# Julius's command line, where they already are: this file must not become a
-# second place that decides who reviews.
-cat > "$HERMES_PROFILE_HOME/.hermes/config.yaml" <<CONFIG
-providers:
-  ${HERMES_PROVIDER}:
-    request_timeout_seconds: ${HERMES_REQUEST_TIMEOUT_SECONDS}
-    stale_timeout_seconds: ${HERMES_REQUEST_TIMEOUT_SECONDS}
-agent:
-  api_max_retries: 0
-CONFIG
+# THE PROFILE IS ALSO WHERE READ-ONLY LIVES, because nothing else carries it.
+#
+# This file used to write only the deadline and `api_max_retries`. Measured
+# against this pinned Hermes, with that profile and the flags `runHermesReview`
+# passes, `hermes -z --safe-mode` handed the reviewer terminal, write_file,
+# patch, execute_code, delegate_task and web tools, with every approval
+# auto-granted by one-shot mode. `--safe-mode` keeps plugins, shell hooks and
+# MCP servers out; it does not stop the one-shot path reading this profile's
+# toolsets, and the profile named none. The reviewer harness has always
+# disabled every toolset in its own profile; the paid profile now carries the
+# same settings, rendered by `scripts/julius-reviewer-isolation.mjs` from one
+# list that a test holds equal to the harness's.
+#
+# The model and the provider still stay on Julius's command line, where they
+# already are: this file must not become a second place that decides who
+# reviews. It names the provider only to give that provider its deadline.
+node scripts/julius-reviewer-isolation.mjs config "$HERMES_PROVIDER" "$HERMES_REQUEST_TIMEOUT_SECONDS" \
+  > "$HERMES_PROFILE_HOME/.hermes/config.yaml" || {
+  echo 'hermes_reviewer_profile_refused' >&2; exit 1; }
 chmod 0600 "$HERMES_PROFILE_HOME/.hermes/config.yaml"
 
 # AND THE ORDER IS CHECKED, NOT ASSUMED. If the engine's worst case does not fit
@@ -228,15 +240,64 @@ if [ "${resolved_timeout%%.*}" != "$HERMES_REQUEST_TIMEOUT_SECONDS" ]; then
   echo "hermes_request_timeout_not_resolvable_for_provider:$HERMES_PROVIDER" >&2
   exit 1
 fi
-# THE SAME SIX LINES, KEPT WHERE THE BUNDLE CAN READ THEM.
+
+# AND THE REVIEWER'S ISOLATION IS PROVEN ON THE PATH THE REVIEW TAKES.
+#
+# A profile that says "no tools" is a hope about how Hermes reads it. This runs
+# the wrapper above, which runs the real `hermes -z`, with the flags
+# `runHermesReview` passes, from an empty scratch directory, under exactly the
+# environment Julius gives the reviewer child: `PATH` and `HOME`, which the
+# wrapper then points at the profile. Two variables are added and nothing else.
+# `PYTHONPATH` loads `.github/julius-live-hermes-isolation/sitecustomize.py`,
+# which closes the network and, when Hermes asks its agent for a conversation,
+# writes down what that agent was built with and returns instead of asking a
+# model. `RELAY_REVIEWER_ISOLATION_RECORD` says where to write it.
+#
+# `scripts/julius-reviewer-isolation.mjs verify` then refuses the job unless the
+# agent held no tool and no toolset, `--safe-mode` took effect, no shell hook
+# was registered, each provider call gets one attempt, and the provider and
+# model are the ones configured with this deadline on both timeouts. Hermes's
+# exit status is not the judge: a run that never built an agent writes a record
+# saying so, and that record is refused.
+#
+# Nothing here reaches a provider: every name lookup and connection raises, and
+# the guard proves that it does before Hermes starts. It runs after the pinned
+# install and before the mission, so a refusal costs a job and never money.
+#
+# THE RECORDER EXISTS FOR THIS COMMAND ONLY. A recorder that reached the paid
+# review would itself be a patched agent, so it is kept away from everything the
+# review uses. It is copied into a fresh directory that is neither the profile
+# nor the wrapper's; the record is written beside it; both directories are
+# removed whatever the verdict. The wrapper above names neither variable, and
+# Julius spawns it with PATH and HOME only, so the review has no path to the
+# copy even while it exists. The recorder also does nothing unless its record
+# variable is set.
+isolation_hook_source="$(pwd -P)/.github/julius-live-hermes-isolation/sitecustomize.py"
+[ -f "$isolation_hook_source" ] || { echo 'hermes_reviewer_isolation_proof_missing' >&2; exit 1; }
+isolation_dir="$(mktemp -d)"
+isolation_cwd="$(mktemp -d)"
+mkdir "$isolation_dir/hook"
+cp "$isolation_hook_source" "$isolation_dir/hook/sitecustomize.py"
+( cd "$isolation_cwd" && exec env -i PATH="$PATH" HOME="$HOME" \
+    PYTHONPATH="$isolation_dir/hook" RELAY_REVIEWER_ISOLATION_RECORD="$isolation_dir/record.json" \
+    "$HERMES_WRAPPER_DIR/hermes" -z 'Relay reviewer isolation proof: the network is closed and no model is asked.' \
+    --safe-mode --usage-file "$isolation_cwd/relay-hermes-usage.json" \
+    -m "$RELAY_HERMES_MODEL" --provider "$HERMES_PROVIDER" ) >/dev/null 2>&1 || true
+reviewer_isolation="$(node scripts/julius-reviewer-isolation.mjs verify "$isolation_dir/record.json" \
+  "$HERMES_PROVIDER" "$RELAY_HERMES_MODEL" "$HERMES_REQUEST_TIMEOUT_SECONDS")" || {
+  rm -rf "$isolation_dir" "$isolation_cwd"
+  echo 'hermes_reviewer_isolation_refused' >&2; exit 1; }
+rm -rf "$isolation_dir" "$isolation_cwd"
+# THE SAME LINES, KEPT WHERE THE BUNDLE CAN READ THEM.
 #
 # Run 34311556047's evidence could not say which reviewer binary ran, under
 # which profile, or with which deadlines — those facts existed only in the
 # step log, which is not the artifact anyone reads a paid failure out of.
 # Every line is already printed to that public log and none of them is or
-# contains a credential: paths, a version string, a mode, two integers, and the
-# word REGISTERED. The evidence step copies this file into the bundle, where
-# the two credential scans see it like everything else.
+# contains a credential: paths, a version string, a mode, integers, the word
+# REGISTERED, and the isolation proof's counts. The evidence step copies this
+# file into the bundle, where the two credential scans see it like everything
+# else.
 HERMES_BOOTSTRAP_EVIDENCE=${HERMES_BOOTSTRAP_EVIDENCE:-/tmp/julius-hermes-bootstrap.evidence.txt}
 {
   echo "hermes_executable=$HERMES_WRAPPER_DIR/hermes (wraps $HERMES_BIN)"
@@ -245,6 +306,7 @@ HERMES_BOOTSTRAP_EVIDENCE=${HERMES_BOOTSTRAP_EVIDENCE:-/tmp/julius-hermes-bootst
   echo "hermes_profile=$HERMES_PROFILE_HOME (mode $(stat -c '%a' "$HERMES_PROFILE_HOME"))"
   echo "hermes_credential=REGISTERED"
   echo "hermes_request_timeout_seconds=$HERMES_REQUEST_TIMEOUT_SECONDS (resolved by hermes itself)"
+  echo "$reviewer_isolation"
   echo "relay_reviewer_window_ms=$RELAY_HERMES_TIMEOUT_MS (basis ${deadline_basis}, floor ${deadline_floor_ms}ms, analytical ${worst_case_ms}ms)"
 } | tee "$HERMES_BOOTSTRAP_EVIDENCE"
 chmod 0644 "$HERMES_BOOTSTRAP_EVIDENCE"

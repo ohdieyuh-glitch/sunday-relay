@@ -45,13 +45,14 @@ import { challengeJuliusTaskContract, evaluateJuliusBindingCurrency, evaluateJul
 import { evaluateJuliusRelease } from './julius-release-runtime';
 import { REVIEW_TASK_ATTEMPTS, boundStageForRole, reviewStageOf, workStageOf, type JuliusReviewStage } from './julius-review-stage';
 import {
-  juliusSegmentLineageRootOf, juliusSegmentTaskId, nextSegmentNumber, routeIsBarrier,
+  juliusSegmentLineageRootOf, juliusSegmentTaskId, nextSegmentNumber, pendingSegmentFor, routeIsBarrier,
   sanitizeJuliusSegmentState,
 } from './julius-segment-lineage';
 import {
   JULIUS_CHECKPOINT_LIMITS,
-  guidanceSubjectTaskId, issueJuliusGuidance, juliusCheckpointId, juliusGuidanceId, juliusGuidanceTaskId,
-  juliusResearchCheckpointId,
+  guidanceSubjectTaskId, isJuliusGuidanceHandoffEntryId, issueJuliusGuidance, juliusCheckpointId,
+  juliusGuidanceHandoffEntryId, juliusGuidanceId, juliusGuidanceTaskId,
+  juliusResearchCheckpointId, renderJuliusGuidanceHandoff,
   recordJuliusCheckpoint, routeJuliusCheckpoint, sanitizeJuliusGuidanceProposal, sanitizeJuliusGuidanceRequest,
   type JuliusCheckpointOrigin,
 } from './julius-continuous-lifecycle';
@@ -704,7 +705,7 @@ export async function runClaimedTask(
    * packet was handed nothing MEASURED, which is not the same as being handed
    * nothing, so it stays unknown rather than becoming zero.
    */
-  let handed: { brainRetrievals: number; evidenceInspected: number } | null = null;
+  let handed: { brainRetrievals: number; evidenceInspected: number; guidanceConsumed: number } | null = null;
   if (worker !== null) {
     // WORKER_SELECTED and PROVIDER_SELECTED were declared trajectory kinds
     // that nothing emitted, so an eval could not tell WHICH worker or provider
@@ -788,6 +789,20 @@ export async function runClaimedTask(
     handed = {
       brainRetrievals: snapshot.sourceEntryIds.filter((id) => brainEntryIds.has(id)).length,
       evidenceInspected: snapshot.evidenceIds.length,
+      /**
+       * GUIDANCE THIS PACKET ACTUALLY CARRIED.
+       *
+       * Counted the same way `brainRetrievals` is — off the entries the
+       * compiler ADMITTED, not the entries that existed — so a packet whose
+       * character budget dropped the advice reports that it carried none, which
+       * is the truth about what the worker was shown.
+       *
+       * It stayed UNKNOWN until now for the plainest reason: nothing delivered
+       * guidance to a worker, so nothing could count it. The number is a
+       * consequence of the delivery above rather than a dimension invented to
+       * fill a column.
+       */
+      guidanceConsumed: snapshot.sourceEntryIds.filter(isJuliusGuidanceHandoffEntryId).length,
     };
     /**
      * A REPAIR THAT CANNOT SEE ITS FINDINGS IS NOT A REPAIR.
@@ -1055,6 +1070,20 @@ export async function runClaimedTask(
         await ledger.event('task.failed', {
           taskId: claim.taskId,
           facts: {
+            /**
+             * WHAT THE BOUNDARY SAW, ON THE ROW THAT ENDS THE TASK.
+             *
+             * The coordinator flattened these onto its own `retry.scheduled`
+             * and then had nowhere to put them: its outcome carried the code
+             * and the class alone. So the terminal row — the one a reader opens
+             * first to ask why a paid mission ended — named neither the served
+             * model, nor the response id, nor the tokens, nor what a coder had
+             * already spent before it timed out, while all of it sat one event
+             * earlier under a different type. Spread FIRST so nothing below can
+             * be overwritten by a `diag_` key; the prefix already makes a
+             * collision impossible, and the order says so.
+             */
+            ...(outcome.diagnostics ?? {}),
             code: outcome.code, reasonCode: carryOn.reasonCode, awaitingHuman: carryOn.awaitingHuman,
             // UNKNOWN IS NULL, NOT ABSENT. A reader asking "why did this task
             // fail" must be able to tell "the connector did not classify it"
@@ -1611,22 +1640,38 @@ async function driveResearchCheckpoint(input: {
   if (segmentNumber > segmentCeiling) return refuse('SEGMENT_CEILING_REACHED');
 
   /**
-   * THE CONTINUATION'S ID, DETERMINISTIC AND COMPUTED ONCE.
+   * THE ATTEMPT, WRITTEN BEFORE THE SPEND.
    *
-   * A GUARD THAT WAS WRITTEN HERE AND REMOVED. It compared this id against the
-   * durable task rows to skip a retrieval that had already been served — and it
-   * could never fire, because `nextSegmentNumber` is the highest existing
-   * segment plus one, so the id is new by construction every time. Shipping it
-   * would have meant a comment claiming a protection the code did not provide.
+   * WHAT USED TO HAPPEN HERE. `serve()` is awaited and the `research.retrieved`
+   * rows are appended after it returns; the mediator's own settlement is an
+   * in-process Map that writes nothing durable. So a process that died between
+   * the two had RETRIEVED AND BEEN CHARGED with nothing at all on the record —
+   * and, because the checkpoint is driven once per accepted result and never
+   * re-entered, nothing ever asked again either. The retrieval was paid for,
+   * its answer was lost, the mission carried on without it, and the durable
+   * ledger — rebuilt from rows, and the only budget that survives a restart —
+   * counted one retrieval fewer than were bought. A budget that over-counts is
+   * pessimistic; one that UNDER-counts can be exceeded.
    *
-   * What the crash window between `serve()` and `addTask` actually costs is
-   * stated instead: a process that dies there has retrieved and been charged,
-   * and the restarted process asks again. Both retrievals happened and both are
-   * on the record as `research.retrieved` rows, so the budget counts two — which
-   * is the truth. Making it cost one would require the retrieval itself to be
-   * keyed and deduplicated at the transport, which Live Reach has no identity
-   * for today.
+   * THIS ROW IS THE SCAR. It is written before a socket can exist, so an
+   * attempt with no retrieval beside it is exactly the loss above, visible in
+   * the bundle rather than inferred from a gap nobody can see. It carries the
+   * checkpoint's own id, which is what pairs it with the charges it produced.
+   *
+   * WHAT IT IS NOT. It does not make the retrieval recoverable and it does not
+   * re-ask: this path CANNOT re-enter — the dispatch that asked has ended, and
+   * `driveContinuousLifecycle` runs only on a result that was not a duplicate.
+   * An earlier guard here compared the CONTINUATION's id against the task rows
+   * and was removed because it could never fire; a re-entry guard would be the
+   * same mistake in a new place, because there is no re-entry to guard. What is
+   * repaired is the silence, which was the part that could not be noticed.
    */
+  const attemptKey = checkpoint.checkpointId;
+  await ledger.event('research.attempted', {
+    taskId: subjectTaskId, workerId: input.workerId,
+    facts: { role: task.role, attemptKey, segment: segmentNumber, askCount: asks.length },
+  });
+
   const observations = await deps.research.serve({
     missionId: task.missionId,
     projectId: run.projectId,
@@ -1655,9 +1700,16 @@ async function driveResearchCheckpoint(input: {
       taskId: subjectTaskId, workerId: input.workerId,
       facts: {
         role: task.role,
-        // DETERMINISTIC, so a replayed row is recognisably the same retrieval
-        // rather than a second one.
+        /* PER OBSERVATION, and derived rather than arbitrary so two rows for
+           the same retrieval are recognisable as such by a reader. It does NOT
+           deduplicate: the only consumer folds every row, which is right —
+           where two rows carry one key, two retrievals genuinely happened. */
         requestKey: `${juliusSegmentTaskId(segmentRoot.taskId, segmentNumber)}:${index}`,
+        /* THE ATTEMPT THIS ANSWERS. One key per serve, shared by every
+           observation it produced, so a reader pairs a charge with the attempt
+           that authorised it. An attempt with no row carrying its key is a
+           retrieval that was bought and never accounted for. */
+        attemptKey,
         outcome: observation.outcome,
         counted: observation.outcome === 'observed',
         evidenceId: observation.evidenceId,
@@ -1813,15 +1865,59 @@ async function issueGuidanceFromResult(input: {
   if (issued.outcome === 'REFUSED') return refuse(issued.reasonCode);
 
   const packet = issued.packet;
-  // COUNTS AND IDENTIFIERS, never the advice itself. The packet's own text
-  // travels to the coder the way the plan does — as an artifact the composition
-  // owns — and the ledger records that it existed, under which agreement, and
-  // how much of it there was.
+
+  /**
+   * THE ADVICE REACHES THE WORKER IT WAS WRITTEN FOR.
+   *
+   * IT DID NOT, BEFORE THIS. The packet was stored as an artifact whose only
+   * consumer is the Independent Reviewer — so a mission bought an architect
+   * dispatch, bought a review of its output, and handed the Coding Agent that
+   * asked the question nothing but `brain:segment-resume`, which is what the
+   * coder itself said before it paused. The comment that used to sit here said
+   * the text "travels to the coder the way the plan does"; the plan has a
+   * reader and this did not.
+   *
+   * ON THE CONTINUATION'S OWN CHANNEL, exactly as a research answer travels:
+   * one Project Brain, one redaction path, one provenance record, and no prose
+   * side channel. The dispatch that asked has ended, so the continuation is the
+   * only place an answer can appear.
+   *
+   * UNDELIVERED SAYS SO. Where no segment is waiting — nothing paused on this
+   * subject, or a shape with two waiting segments that nobody has built —
+   * `deliveredTo` is null on the row below rather than absent, so guidance that
+   * reached no one is legible as that instead of as guidance that was read.
+   */
+  /* WAITING ON THIS GUIDANCE TASK, which is the edge the barrier actually is:
+     the continuation depends on the architect's task, not on the coder's, so
+     that it cannot run before the advice exists. Looking for a segment blocked
+     on the SUBJECT would find the research barrier's shape and miss this one. */
+  const waiting = pendingSegmentFor(task.taskId, await deps.store.tasksForRun(run.runId, run.projectId));
+  if (waiting !== null) {
+    await deps.store.appendBrainEntry({
+      runId: run.runId,
+      projectId: run.projectId,
+      taskId: waiting.taskId,
+      workerId: input.workerId,
+      entryId: juliusGuidanceHandoffEntryId(waiting.taskId, packet.revision),
+      kind: 'HANDOFF',
+      safeText: renderJuliusGuidanceHandoff(packet),
+      evidenceIds: [],
+      occurredAt: deps.clock.now(),
+    });
+  }
+
+  // COUNTS AND IDENTIFIERS, never the advice itself. The advice is on the
+  // Project Brain above, where the context compiler redacts it and the packet
+  // records what was handed over; the ledger records that it existed, under
+  // which agreement, how much of it there was, and who it reached.
   await ledger.event('guidance.issued', {
     taskId: subjectTaskId, workerId: input.workerId,
     facts: {
       guidanceId: packet.guidanceId, guidanceRevision: packet.revision,
       guidanceDigest: packet.packetDigest,
+      /* THE WORKER THE ADVICE ACTUALLY REACHED, or null when none was waiting.
+         Absent would be a third state nobody can read. */
+      deliveredTo: waiting === null ? null : waiting.taskId,
       contractRevision: binding.contractRevision, contractBindingDigest: binding.bindingDigest,
       recommendedActions: packet.recommendedActions.length,
       additionalProhibitions: packet.additionalProhibitions.length,
@@ -1934,7 +2030,7 @@ function executionPorts(
    * the only place that knows it; absent for a caller that did not compile one,
    * and absent reads as unknown rather than as zero.
    */
-  handed: { readonly brainRetrievals: number; readonly evidenceInspected: number } | null,
+  handed: { readonly brainRetrievals: number; readonly evidenceInspected: number; readonly guidanceConsumed: number } | null,
 ): JuliusExecutionPorts {
   return {
     reserve: async ({ claim, request, idempotencyKey }) => {
@@ -2045,6 +2141,7 @@ function executionPorts(
           // worker was handed nothing.
           brainRetrievals: handed === null ? null : handed.brainRetrievals,
           evidenceInspected: handed === null ? null : handed.evidenceInspected,
+          guidanceConsumed: handed === null ? null : handed.guidanceConsumed,
           usdMicros,
           // The two halves of the money question, on the same row: what Julius
           // permitted, and what came back — with the basis, so an UNKNOWN

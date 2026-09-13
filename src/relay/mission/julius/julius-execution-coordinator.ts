@@ -100,6 +100,19 @@ async function dispatchWithinDeadline<T>(
   void running.catch(()=>{});
  }
 }
+/**
+ * THE CARRIED DIAGNOSTICS, OR NOTHING AT ALL.
+ *
+ * Absent and empty are different claims. A boundary that reported no
+ * structural facts is not the same as one that reported an empty set, and an
+ * always-present `{}` would also change the shape of every outcome that has
+ * nothing to say — which is most of them, and none of which this repair is
+ * about. So the key appears only when there is something under it.
+ */
+const carriedDiagnostics=(failure:JuliusDispatchError):{diagnostics?:Record<string,string|number|boolean|null>}=>{
+ const flat=flattenDiagnostics(failure.diagnostics);
+ return Object.keys(flat).length===0?{}:{diagnostics:flat};
+};
 export interface JuliusExecutionClaim { readonly runId:string;readonly projectId:string;readonly taskId:string;readonly leaseOwner:string;readonly leaseGeneration:number;readonly task:JuliusTask;readonly capability:string;readonly contextId:string; }
 export interface JuliusResourceRequest { readonly usdMicros:number;readonly inputTokens:number;readonly outputTokens:number;readonly toolCalls:number;readonly runtimeMs:number; }
 export interface JuliusResourceReservation { readonly reservationId:string;readonly state:'RESERVED'|'DENIED';readonly denialReason:string|null; }
@@ -154,7 +167,28 @@ export interface JuliusExecutionRequest { readonly claim:JuliusExecutionClaim;re
  * every existing reader keeps working, and `null` means "not classified",
  * never "fine".
  */
-export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerId:string;readonly duplicate:boolean;/** What the worker proposed for its own task contract, unsanitised. Julius decides. */readonly contractProposal?:unknown;/** A coder's request for architect guidance, unsanitised. */readonly guidanceRequest?:unknown;/** An architect's guidance packet, unsanitised. */readonly guidance?:unknown;/** What a continuation segment resumes from, unsanitised. Julius rebuilds it. */readonly segmentResume?:unknown;/** What a worker of any slot needs Julius to go and look at, unsanitised. */readonly researchAsks?:unknown}|{readonly status:'RETRY'|'FAILED'|'DENIED';readonly code:string;readonly failureClass?:string|null};
+export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerId:string;readonly duplicate:boolean;/** What the worker proposed for its own task contract, unsanitised. Julius decides. */readonly contractProposal?:unknown;/** A coder's request for architect guidance, unsanitised. */readonly guidanceRequest?:unknown;/** An architect's guidance packet, unsanitised. */readonly guidance?:unknown;/** What a continuation segment resumes from, unsanitised. Julius rebuilds it. */readonly segmentResume?:unknown;/** What a worker of any slot needs Julius to go and look at, unsanitised. */readonly researchAsks?:unknown}|{
+ readonly status:'RETRY'|'FAILED'|'DENIED';
+ readonly code:string;
+ readonly failureClass?:string|null;
+ /**
+  * THE FACTS THE BOUNDARY REPORTED, ALREADY FLATTENED AND SAFE, so the caller
+  * that owns the TASK can put them on the row that ends it.
+  *
+  * This arm used to carry the code and the class and nothing else. The
+  * coordinator flattened the adapter's diagnostics onto its OWN event and then
+  * dropped them, so `julius-task-pipeline`'s terminal `task.failed` — the row
+  * written when a run's autonomy declines a retry, and the row a reader opens
+  * first to ask why a paid mission ended — could not name the served model, the
+  * response id, the tokens, or what the coder had already spent before it timed
+  * out. Not by omission: this type gave the pipeline nothing to write.
+  *
+  * `diag_`-prefixed, so it can be spread beside a facts object without any key
+  * of its own colliding. Absent when the boundary reported none, which is not
+  * the same claim as reporting an empty set.
+  */
+ readonly diagnostics?:Record<string,string|number|boolean|null>;
+};
 
 const normalizedEvidence=(claim:JuliusExecutionClaim,worker:JuliusWorker,result:JuliusProviderResult):JuliusEvidence[]=>{
   if(result.workerId!==worker.workerId||result.providerId!==worker.providerId||!result.safeSummary.trim()||!Array.isArray(result.evidence))throw new JuliusDispatchError('INVALID_REQUEST',false,'Provider returned a malformed or mismatched result.');
@@ -187,7 +221,7 @@ export class JuliusExecutionCoordinator {
    * ends the task.
    */
   async execute(request:JuliusExecutionRequest):Promise<JuliusExecutionOutcome>{
-    let worker:JuliusWorker;try{worker=this.router.select({role:request.role,taskType:request.taskType,capability:request.capability,policy:request.policy,excludedWorkerIds:request.excludedWorkerIds});}catch(error){const failure=error instanceof JuliusDispatchError?error:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Worker selection failed.');await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:failure.code==='POLICY_DENIED'?'DENIED':'FAILED',code:failure.code,failureClass:failure.failureClass};}
+    let worker:JuliusWorker;try{worker=this.router.select({role:request.role,taskType:request.taskType,capability:request.capability,policy:request.policy,excludedWorkerIds:request.excludedWorkerIds});}catch(error){const failure=error instanceof JuliusDispatchError?error:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Worker selection failed.');await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:failure.code==='POLICY_DENIED'?'DENIED':'FAILED',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure)};}
     await this.event(request,'worker.selected',{workerId:worker.workerId,providerId:worker.providerId});
     const reservation=await this.ports.reserve({claim:request.claim,worker,request:request.resources,idempotencyKey:`${request.operationId}:budget`});
     if(reservation.state==='DENIED'){await this.event(request,'budget.denied',{reason:reservation.denialReason});return{status:'DENIED',code:'BUDGET_DENIED'};}
@@ -271,7 +305,7 @@ export class JuliusExecutionCoordinator {
       * abandoned and a failure taken at once must leave the same diagnosis
       * behind, or the durable record would explain only the failures that
       * happened to be non-retryable. */
-     if(failure.retryable&&request.policy.automaticRetry){await this.event(request,'retry.scheduled',{code:failure.code,errorRetryable:true,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:'RETRY',code:failure.code,failureClass:failure.failureClass};}await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:'FAILED',code:failure.code,failureClass:failure.failureClass};}
+     if(failure.retryable&&request.policy.automaticRetry){await this.event(request,'retry.scheduled',{code:failure.code,errorRetryable:true,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:'RETRY',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure)};}await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:'FAILED',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure)};}
   }
   /**
    * ON EVERY EVENT, not only the failures. `retry.scheduled` and `task.failed`

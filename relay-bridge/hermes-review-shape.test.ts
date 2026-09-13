@@ -189,8 +189,20 @@ describe('the local reviewer names which failure it was', () => {
       .toBe('review_authentication_failed');
   });
 
+  /**
+   * The property is that an upstream HTTP failure is NAMED rather than falling
+   * through to an unreadable shape. Its example used to be a 503, which also
+   * happened to record the defect: a status that clears by itself read the same
+   * as a provider that is broken. The property is unchanged; the example is now
+   * a status that really is final.
+   */
   it('14. any other upstream HTTP failure is named as one', async () => {
-    expect(await shapeOf({ stdout: 'HTTP 503: upstream unavailable' })).toBe('review_provider_http_error');
+    expect(await shapeOf({ stdout: 'HTTP 500: upstream exploded' })).toBe('review_provider_http_error');
+  });
+
+  it('14b. and a status that clears by itself is named as the retryable one', async () => {
+    expect(await shapeOf({ stdout: 'HTTP 503: upstream unavailable' })).toBe('review_service_unavailable');
+    expect(await shapeOf({ stdout: 'HTTP 429: slow down' })).toBe('review_service_unavailable');
   });
 
   it('15b. a later chunk overflowing is still named, with a prefix already retained', async () => {
@@ -424,13 +436,24 @@ describe('an upstream failure carries the status the provider returned', () => {
       .toEqual({ shape: 'review_authentication_failed', status: 400 });
   });
 
-  it('a rate limit and a server error are upstream errors, with their numbers', async () => {
+  /**
+   * THE NUMBER SURVIVES WHICHEVER CLASS IT LANDS IN — which is the property
+   * this case is about, and it is unchanged. What changed is the class: a rate
+   * limit and a capacity refusal are conditions that clear on their own, and
+   * reading them as a final provider error ended a paid review on a hiccup.
+   */
+  it('a rate limit and a capacity refusal keep their numbers, and clear by themselves', async () => {
     expect(await statusOf('HTTP 429: {"error":"slow down"}'))
-      .toEqual({ shape: 'review_provider_http_error', status: 429 });
+      .toEqual({ shape: 'review_service_unavailable', status: 429 });
+    expect(await statusOf('HTTP 503: {"error":"unavailable"}'))
+      .toEqual({ shape: 'review_service_unavailable', status: 503 });
+  });
+
+  it('a server error keeps its number and stays final', async () => {
     expect(await statusOf('HTTP 500: {"error":"boom"}'))
       .toEqual({ shape: 'review_provider_http_error', status: 500 });
-    expect(await statusOf('HTTP 503: {"error":"unavailable"}'))
-      .toEqual({ shape: 'review_provider_http_error', status: 503 });
+    expect(await statusOf('HTTP 502: {"error":"bad gateway"}'))
+      .toEqual({ shape: 'review_provider_http_error', status: 502 });
   });
 
   it('no status line means null, never a guess and never a zero', async () => {

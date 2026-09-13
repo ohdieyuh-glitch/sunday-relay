@@ -28,7 +28,7 @@ import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
 import { JULIUS_PARTICIPATION_CHANNELS, JULIUS_PARTICIPATION_MARKER, JuliusDispatchError, safeFailureClass, safeReviewDiagnostics, sanitizeJuliusResearchAsks } from '../../src/relay/mission/julius';
 import { compileHostedEnvelope } from '../hosted-coding-agent/hosted-envelope';
 import type { HostedQueryFn, HostedRunInput, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
-import { buildReviewPrompt, loadHermesConfig, reviewDiagnostics, runHermesReview, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
+import { buildReviewPrompt, loadHermesConfig, reviewDiagnostics, runHermesReview, type HermesConfig, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
 import { UNKNOWN_USAGE } from '../reviewer-harness/hermes/runner';
 import { runRemoteHermesReview, type RemoteHermesConfig } from '../hermes-remote-review';
 import { JULIUS_REVIEW_STAGES, repairTaskTypeFor, reviewChargeFor, reviewStageOf } from '../../src/relay/mission/julius';
@@ -43,7 +43,7 @@ import {
   planRef,
 } from './live-workers';
 import {
-  ARCHITECT_WORKER,
+  architectWorker,
   CODER_WORKER,
   reviewerWorker,
   assembleLiveJuliusRuntime,
@@ -126,6 +126,14 @@ function fakeCoder(log: FakeLog, prompts: string[]) {
         reportedTools: ['Read', 'Glob', 'Grep', 'Edit'], toolTargets: [], toolsUsed: ['Edit'], toolInvocations: 3,
         permissionDenials: 0, numTurns: 3, durationMs: 10,
         usage: { inputTokens: 500, outputTokens: 200, totalCostUsd: 0.02, source: 'runtime_reported' },
+        // A COMPLETED run whose stream also reported per-turn usage. The two
+        // are different numbers about different things: the terminal total,
+        // and the floor the turns established on the way there.
+        streamUsage: {
+          messages: 3, abortedMessages: 0,
+          inputTokens: 480, outputTokens: 190,
+          cacheReadInputTokens: 0, cacheCreationInputTokens: 0,
+        },
         resultSubtype: 'success', isError: false, finalText: `done (${SECRET_CANARY})`,
         thinkingBlocksOmitted: 0, unknownMessageCount: 0,
       },
@@ -187,17 +195,56 @@ function hangingReviewer(
     child.kill = () => { child.emit('close', null); return true; };
     return child as never;
   }) as never;
-  return async (input: { packet: ReviewPacket }): Promise<HermesOutcome> => {
+  return async (input: { packet: ReviewPacket; config: HermesConfig }): Promise<HermesOutcome> => {
     log.order.push('reviewer');
     packets.push(input.packet);
     const hangs = call < hangFirst;
     call += 1;
-    return runHermesReview({
+    const outcome = await runHermesReview({
       packet: input.packet,
       // Milliseconds instead of the production three minutes: what is being
       // proven is the ORDER of events, not the duration of one.
       config: { ...loadHermesConfig(LIVE_ENV as never), timeoutMs: 30, killGraceMs: 10 },
       spawnImpl: hangs ? spawnHanging : spawnEmitting(answer),
+    });
+    /**
+     * COMPRESSED TIME, KEPT FAITHFUL. In production the window that cut this
+     * child and the deadline the adapter declared are ONE number, so a hang
+     * consumes the whole declared window. Here the runner was given 30 ms while
+     * the adapter still declares the operative deadline, and the adapter's
+     * bounded transient re-ask reads consumed time off the outcome's own two
+     * instants — so a 30 ms cut would read as an early engine-side death with
+     * a whole review still in the window, which is not what a hang is. The
+     * instants are restated to say what the runner did: it held the declared
+     * window open until Relay closed it.
+     */
+    if (hangs && outcome.kind === 'review_incomplete') {
+      return { ...outcome, completedAt: new Date(Date.parse(outcome.startedAt) + input.config.timeoutMs).toISOString() };
+    }
+    return outcome;
+  };
+}
+
+/**
+ * A reviewer whose ENGINE ends the first ask on its own request deadline —
+ * early, well inside Relay's window — and answers on the next. The child prints
+ * the engine's own timeout preamble, verbatim from Hermes v0.18.2, and exits 0,
+ * so the outcome is classified by `isEngineReportedTimeout` on the real runner
+ * rather than hand-built. Paid run 34529874100's `build:review` is this case:
+ * dead after 94 200 ms, COMPLETED on the next ask.
+ */
+const ENGINE_TIMEOUT_PREAMBLE = 'API call failed after 0 retries: request timed out\n';
+function engineTimeoutReviewer(log: FakeLog, packets: ReviewPacket[], timesOutFirst: number, answer: string) {
+  let call = 0;
+  return async (input: { packet: ReviewPacket }): Promise<HermesOutcome> => {
+    log.order.push('reviewer');
+    packets.push(input.packet);
+    const timesOut = call < timesOutFirst;
+    call += 1;
+    return runHermesReview({
+      packet: input.packet,
+      config: { ...loadHermesConfig(LIVE_ENV as never), timeoutMs: 1_000, killGraceMs: 10 },
+      spawnImpl: spawnEmitting(timesOut ? ENGINE_TIMEOUT_PREAMBLE : answer),
     });
   };
 }
@@ -286,6 +333,7 @@ function liveResolution(overrides: {
   reviewerTexts?: readonly string[];
   /** How many reviewer dispatches hang until Relay's window closes on them. */
   reviewerHangsFirst?: number;
+  reviewerEngineTimesOutFirst?: number;
 }) {
   const log: FakeLog = { order: [] };
   const prompts: string[] = [];
@@ -301,7 +349,9 @@ function liveResolution(overrides: {
     runners: {
       architect: (overrides.architect ?? fakeArchitect(log)) as never,
       coder: fakeCoder(log, prompts) as never,
-      reviewer: (overrides.reviewerHangsFirst !== undefined
+      reviewer: (overrides.reviewerEngineTimesOutFirst !== undefined
+        ? engineTimeoutReviewer(log, packets, overrides.reviewerEngineTimesOutFirst, APPROVING_REVIEW)
+        : overrides.reviewerHangsFirst !== undefined
         ? hangingReviewer(log, packets, overrides.reviewerHangsFirst, APPROVING_REVIEW)
         : overrides.reviewerTexts !== undefined
           ? textReviewer(log, packets, overrides.reviewerTexts)
@@ -516,12 +566,13 @@ async function driveLiveMission(
   architect?: () => Promise<GptRunOutcome>,
   reviewerTexts?: readonly string[],
   reviewerHangsFirst?: number,
+  reviewerEngineTimesOutFirst?: number,
 ) {
   const memory = createJuliusMemoryStore();
   // Not narrowed to JuliusRuntimeStore: the drive loop runs the recovery sweep,
   // and the memory store is the recovery driver as well as the store.
   const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
-  const fakes = liveResolution({ verdicts, contexts: handoffs.contexts, architect, reviewerTexts, reviewerHangsFirst });
+  const fakes = liveResolution({ verdicts, contexts: handoffs.contexts, architect, reviewerTexts, reviewerHangsFirst, reviewerEngineTimesOutFirst });
   expect(fakes.resolution.ok).toBe(true);
   seedMissionRun(memory);
   const runtime = assembleLiveJuliusRuntime({
@@ -795,6 +846,42 @@ describe('a full mission drive with Julius in control', () => {
       }
     }
   });
+
+  it('a reviewer the ENGINE timed out early is asked once more inside the same dispatch, and the mission completes', async () => {
+    /**
+     * THE MEASURED CASE, END TO END. Paid run 34529874100 (Mission 5):
+     * `build:review` attempt 1 died after 94 200 ms on the engine's own 90 s
+     * request timeout, inside a 480 112 ms window, and attempt 2 COMPLETED in
+     * under 209 s. That mission completed because the pipeline still granted a
+     * second task attempt. Under `REVIEW_TASK_ATTEMPTS = 1` it does not, so the
+     * same event would end a mission after the coder had already spent — unless
+     * the adapter asks once more itself. This drives the REAL runner over a
+     * child that prints the engine's own timeout preamble and exits 0, so the
+     * classification is the production one, and then waits out the real
+     * policy backoff, which is why this case carries its own timeout.
+     */
+    const { memory, outcome, fakes } = await driveLiveMission(['approved'], undefined, undefined, undefined, undefined, 1);
+    expect(outcome.state).toBe('COMPLETED');
+    // Three asks for two dispatches: the plan review asked twice inside ONE dispatch, the build review once.
+    expect(fakes.log.order.filter((step) => step === 'reviewer')).toHaveLength(3);
+    // The pipeline never saw a failure: no retry was scheduled, nothing failed.
+    expect(memory.events().filter((event) => event.type === 'retry.scheduled')).toHaveLength(0);
+    expect(memory.events().filter((event) => event.type === 'task.failed')).toHaveLength(0);
+    expect(memory.taskRow('plan-1:review')?.state).toBe('SUCCEEDED');
+    // The durable row says both: two calls, and the shape that bought the second.
+    const rows = memory.events()
+      .filter((event) => event.taskId === 'plan-1:review')
+      .map((event) => event.facts as Record<string, unknown>)
+      .filter((facts) => facts.diag_reviewAttempts !== undefined);
+    expect(rows.length, 'the dispatch row carries the reviewer diagnostics').toBeGreaterThanOrEqual(1);
+    expect(rows.map((facts) => facts.diag_reviewAttempts)).toContain(2);
+    expect(rows.map((facts) => facts.diag_reviewReaskShape)).toContain('review_timeout');
+    // And neither packet carried Relay's telemetry about the first ask.
+    for (const packet of fakes.packets) {
+      const rendered = JSON.stringify(packet).toLowerCase();
+      for (const word of ['timed out', 'timeout', 'sigterm', 'review_timeout']) expect(rendered).not.toContain(word);
+    }
+  }, 30_000);
 
   it('and the same rig still fails when the reviewer answers unreadably', async () => {
     // The control. Without it the case above proves only that a fixture can be
@@ -1354,7 +1441,7 @@ describe('the live mission contract file', () => {
       requiredCapabilities: entry.worker.capabilities,
     })), 'card-test-1');
     expect(request.workers.map((worker) => worker.adapterId)).toEqual([
-      ARCHITECT_WORKER.adapterId, CODER_WORKER.adapterId, 'hermes-local-live',
+      architectWorker({}).adapterId, CODER_WORKER.adapterId, 'hermes-local-live',
     ]);
   });
 });
@@ -1682,10 +1769,13 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
           fetchImpl: fetchImpl as typeof fetch,
         },
       })) as never,
+      // A transient status is re-asked once after a backoff; the proof of that
+      // lives in reviewer-transient-reask.test.ts and nothing here waits it out.
+      sleep: () => Promise.resolve(),
     });
     return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' })
       .then(() => { throw new Error('the dispatch was expected to fail'); })
-      .catch((error: unknown) => error as { code: string; retryable: boolean; failureClass: string | null });
+      .catch((error: unknown) => error as { code: string; retryable: boolean; failureClass: string | null; diagnostics?: Record<string, unknown> });
   };
 
   it('a review the service timed out is a TIMEOUT that may be re-asked, never a process exit', async () => {
@@ -1707,6 +1797,10 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
       expect(failure.failureClass, kind).toBe('review_service_unavailable');
       expect(failure.code).toBe('PROVIDER_UNAVAILABLE');
       expect(failure.retryable, 'capacity clears as runs finish; a drain ends when the deploy lands').toBe(true);
+      // A service still full after the one bounded re-ask is the same failure,
+      // and the record says two calls were bought and why.
+      expect(failure.diagnostics?.reviewAttempts, kind).toBe(2);
+      expect(failure.diagnostics?.reviewReaskShape, kind).toBe('review_service_unavailable');
     }
   });
 
@@ -1817,6 +1911,7 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
         packet: input.packet, config: REMOTE_CFG, runId: 'run-live',
         deps: { now: () => '2026-09-04T00:00:00.000Z', sleep: () => Promise.resolve(), fetchImpl: fetchImpl as typeof fetch },
       })) as never,
+      sleep: () => Promise.resolve(),
     });
     return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
   };
@@ -1918,26 +2013,50 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
     expect(result.status).toBe('SUCCEEDED');
   });
 
-  it('a failure that is NOT a shape defect is never re-asked', async () => {
-    // A timeout, a 503 and a refused credential describe an answer that did not
-    // arrive. Two of them are already retryable at the TASK level, where the
-    // attempt ceiling and the spend budget govern; re-asking here would spend
-    // inside a dispatch for a defect no instruction can fix.
-    for (const [kind, body, status] of [
-      ['timed out', { runId: 'run-live', status: 'timed_out', failureKind: 'timed_out' }, 200],
-      ['capacity', { failureKind: 'capacity_exhausted' }, 503],
-      ['dead credential', { failureKind: 'authentication_failed' }, 401],
-    ] as const) {
-      let calls = 0;
-      const fetchImpl = vi.fn(async () => {
-        calls += 1;
-        return calls === 1 && status === 200 ? jsonRes({ accepted: true, runId: 'run-live' }) : jsonRes(body, status);
-      });
-      const failure = await resultFrom(fetchImpl)
+  it('a failure that is NOT a shape defect is never CORRECTED', async () => {
+    // A timeout and a refused credential describe an answer that did not
+    // arrive, and no instruction can fix either. The credential needs a person
+    // and is asked exactly once.
+    {
+      const deadCredential = vi.fn(async () => jsonRes({ failureKind: 'authentication_failed' }, 401));
+      const failure = await resultFrom(deadCredential)
         .then(() => { throw new Error('the dispatch was expected to fail'); })
         .catch((error: unknown) => error as { diagnostics?: Record<string, unknown> });
-      expect(failure.diagnostics?.reviewAttempts, `${kind} is asked exactly once`).toBe(1);
+      expect(failure.diagnostics?.reviewAttempts, 'dead credential is asked exactly once').toBe(1);
     }
+    // A TIMEOUT USED TO BE ON THAT ONCE-LIST, on the reasoning that it was
+    // "retryable at the TASK level". The attempt ceiling for a review is now
+    // ONE, and the paid record (runs 34470535718 and 34529874100) shows a first
+    // review attempt timing out and the next ask completing it in both of the
+    // last two COMPLETED missions. So an early timeout is the other transient
+    // shape: re-asked once inside the same declared deadline — proven with the
+    // arithmetic in reviewer-transient-reask.test.ts — never CORRECTED, and a
+    // service that times out again is final, with both calls on the record.
+    {
+      // The service accepts every start (POST) and reports every poll (GET) timed out.
+      const timesOutTwice = vi.fn(async (_url: unknown, init?: { method?: string }) => init?.method === 'POST'
+        ? jsonRes({ accepted: true, runId: 'run-live' })
+        : jsonRes({ runId: 'run-live', status: 'timed_out', failureKind: 'timed_out' }, 200));
+      const failure = await resultFrom(timesOutTwice)
+        .then(() => { throw new Error('the dispatch was expected to fail'); })
+        .catch((error: unknown) => error as { failureClass?: string | null; diagnostics?: Record<string, unknown> });
+      expect(failure.diagnostics?.reviewAttempts, 'an early timeout is re-asked exactly once, never more').toBe(2);
+      expect(failure.diagnostics?.reviewReaskShape).toBe('review_timeout');
+      expect(failure.failureClass).toBe('review_timeout');
+    }
+    // A 503 USED TO BE ON THAT LIST, on the reasoning that it was "already
+    // retryable at the TASK level, where the attempt ceiling governs". The
+    // attempt ceiling for a review is now ONE, so the retryable shape reached a
+    // pipeline with nothing left to spend on it and a single 503 ended a paid
+    // mission. It is re-asked once here, inside the same declared deadline —
+    // proven in reviewer-transient-reask.test.ts — and a service still full
+    // after that is final, with both calls on the record.
+    const stillFull = vi.fn(async () => jsonRes({ failureKind: 'capacity_exhausted' }, 503));
+    const failure = await resultFrom(stillFull)
+      .then(() => { throw new Error('the dispatch was expected to fail'); })
+      .catch((error: unknown) => error as { diagnostics?: Record<string, unknown> });
+    expect(failure.diagnostics?.reviewAttempts, 'capacity is re-asked exactly once, never more').toBe(2);
+    expect(failure.diagnostics?.reviewReaskShape).toBe('review_service_unavailable');
   });
 });
 
@@ -2855,7 +2974,7 @@ describe('a coder failure records WHY, in a closed vocabulary, and quotes nothin
  * one hand-maintained array away from the same failure.
  */
 describe('every repair the planner can mint has a registered worker', () => {
-  const registrations = () => [ARCHITECT_WORKER, CODER_WORKER, reviewerWorker('xai')];
+  const registrations = () => [architectWorker({}), CODER_WORKER, reviewerWorker('xai')];
 
   it('the seeded graph\'s two task types can each be repaired by their own role', () => {
     // A repair inherits its subject's ROLE and STAGE, so these are exactly the
@@ -2875,7 +2994,7 @@ describe('every repair the planner can mint has a registered worker', () => {
   it('the Coding Agent does NOT take a plan repair — the shape the paid run minted', () => {
     expect(CODER_WORKER.taskTypes).not.toContain('repair:plan');
     expect(CODER_WORKER.taskTypes).toContain('repair:build');
-    expect(ARCHITECT_WORKER.taskTypes).toContain('repair:plan');
+    expect(architectWorker({}).taskTypes).toContain('repair:plan');
   });
 
   /**
@@ -2901,7 +3020,7 @@ describe('every repair the planner can mint has a registered worker', () => {
   });
 
   it('every work stage a worker may be asked for has exactly one taker', () => {
-    const registrations = [ARCHITECT_WORKER, CODER_WORKER, reviewerWorker('xai')];
+    const registrations = [architectWorker({}), CODER_WORKER, reviewerWorker('xai')];
     // The stages that are WORK rather than review, each with the role that owns
     // it. A repair inherits its subject's role and stage, so the repair of each
     // is the same worker's.
@@ -2925,7 +3044,7 @@ describe('every repair the planner can mint has a registered worker', () => {
     // is a stalled mission rather than a refused one, which is worse: the
     // routability preflight catches an unroutable task, and nothing catches an
     // unreviewable one.
-    const architectGuides = ARCHITECT_WORKER.taskTypes.includes('guidance');
+    const architectGuides = architectWorker({}).taskTypes.includes('guidance');
     const reviewerJudges = reviewerWorker('xai').taskTypes.includes('review:guidance');
     expect(architectGuides, 'the two registrations move together').toBe(reviewerJudges);
   });
@@ -2971,7 +3090,7 @@ describe('the architect revises a rejected plan', () => {
 
   const architectAdapter = (input: { artifacts: ReturnType<typeof createLiveArtifactExchange>; seen: Array<Record<string, unknown>>; snapshot?: JuliusContextSnapshot }) =>
     createLiveArchitectAdapter({
-      worker: ARCHITECT_WORKER,
+      worker: architectWorker({}),
       contexts: { snapshotFor: () => input.snapshot ?? reviewSnapshot('repair:plan-1:1:task') },
       artifacts: input.artifacts,
       config: { liveMode: true, model: 'gpt-5.6-sol', maxOutputTokens: 4_000 } as never,
@@ -3203,7 +3322,7 @@ describe('the architect and the reviewer can ask, through their own answers', ()
 
   const architectFor = (output: unknown, seen: Array<Record<string, unknown>>, taskType = 'plan') => ({
     adapter: createLiveArchitectAdapter({
-      worker: ARCHITECT_WORKER,
+      worker: architectWorker({}),
       contexts: { snapshotFor: () => reviewSnapshot('plan-1') },
       artifacts: (() => { const a = createLiveArtifactExchange(); a.put(planRef('run-live'), JSON.stringify(VALID_PLAN)); return a; })(),
       config: { liveMode: true, model: 'gpt-5.6-sol', maxOutputTokens: 4_000 } as never,
@@ -3359,4 +3478,79 @@ describe('the architect and the reviewer can ask, through their own answers', ()
       expect(result.status).toBe('SUCCEEDED');
     }
   });
+});
+
+/**
+ * A PROVIDER HICCUP MUST NOT END A PAID MISSION.
+ *
+ * `review_service_unavailable` is the retryable shape and the mapping below has
+ * always existed — but until now only `hermes-remote-review.ts` could produce
+ * it, and the live composition runs the LOCAL path. So the reasoning attached
+ * to the retry ("capacity clears as runs finish") governed a shape this adapter
+ * could never see, and a 503 ended the review task for good.
+ */
+describe('the live reviewer adapter treats a transient upstream status as retryable', () => {
+  const reviewerEmitting = (text: string, packets: ReviewPacket[]) => {
+    const log: FakeLog = { order: [] };
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    return createLiveHermesReviewerAdapter({
+      worker: {
+        workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
+        adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
+        taskTypes: ['review:plan'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
+      },
+      contexts: { snapshotFor: () => reviewSnapshot('plan-1:review') },
+      artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: textReviewer(log, packets, [text]) as never,
+    });
+  };
+
+  const failureFor = async (text: string) => {
+    const packets: ReviewPacket[] = [];
+    return reviewerEmitting(text, packets)
+      .dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' })
+      .then(() => null)
+      .catch((error: unknown) => error as { code: string; retryable: boolean; failureClass?: string });
+  };
+
+  it('a 503 fails RETRYABLY, so the mission can ask again instead of dying', async () => {
+    const failure = await failureFor('HTTP 503: service unavailable\n');
+    expect(failure).not.toBeNull();
+    expect(failure!.failureClass).toBe('review_service_unavailable');
+    expect(failure!.code).toBe('PROVIDER_UNAVAILABLE');
+    expect(failure!.retryable, 'capacity clears by itself; this is not a verdict').toBe(true);
+  }, 30_000);
+
+  it('a 429 does too', async () => {
+    const failure = await failureFor('HTTP 429: slow down\n');
+    expect(failure!.failureClass).toBe('review_service_unavailable');
+    expect(failure!.retryable).toBe(true);
+  }, 30_000);
+
+  /**
+   * AND THE FINAL FAILURES STAY FINAL. Making every upstream error retryable
+   * would re-buy reviews against a provider that is genuinely broken — the
+   * opposite defect, and more expensive.
+   */
+  it('a 500 stays final, and a refused credential still needs a human', async () => {
+    const broken = await failureFor('HTTP 500: internal error\n');
+    expect(broken!.failureClass).toBe('review_provider_http_error');
+    expect(broken!.retryable).toBe(false);
+
+    const unauthorised = await failureFor('HTTP 401: unauthorized\n');
+    expect(unauthorised!.code).toBe('AUTH_CONFIGURATION');
+    expect(unauthorised!.retryable).toBe(false);
+  }, 30_000);
+
+  /**
+   * THE STATUS REACHES THE DURABLE ROW EITHER WAY. A retryable classification
+   * that lost the number would trade one opacity for another.
+   */
+  it('carries the provider status into the diagnostics the allowlist admits', async () => {
+    const failure = await failureFor('HTTP 503: service unavailable\n') as unknown as { diagnostics?: Record<string, unknown> };
+    expect(safeReviewDiagnostics(failure.diagnostics)?.providerHttpStatus).toBe(503);
+  }, 30_000);
 });

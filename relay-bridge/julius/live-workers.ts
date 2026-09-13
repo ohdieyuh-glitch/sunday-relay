@@ -75,6 +75,7 @@ import {
   type ReviewPacket,
 } from '../hermes-reviewer';
 import { UNKNOWN_USAGE, type HermesUsage } from '../reviewer-harness/hermes/runner';
+import { REVIEW_TRANSIENT_REASK_BACKOFF_MS, REVIEW_TRANSIENT_REASK_LIMIT, REVIEW_TRANSIENT_REASK_SHAPES, reviewerReaskWithinDeadline } from '../reviewer-deadline';
 import type { ShellEffectPort } from './executor-effects';
 
 /* ------------------------------------------------------------- handoffs */
@@ -355,6 +356,17 @@ const ARCHITECT_REVISION_CHARTER = [
  * behaves as it always has: Julius did not bound this dispatch, and inventing a
  * bound here would be this file deciding a budget it cannot see.
  */
+/** Whether a dispatch's own signal has fired, read through a call so flow analysis cannot cache an answer from before an await. */
+const signalAborted = (signal: AbortSignal | undefined): boolean => signal?.aborted === true;
+
+/** A wait that ends early on the dispatch's own cancellation, so a cut never waits out a backoff. */
+const abortableSleep = (ms: number, signal?: AbortSignal): Promise<void> => new Promise((resolve) => {
+  if (signal?.aborted === true) { resolve(); return; }
+  const onAbort = (): void => { clearTimeout(timer); resolve(); };
+  const timer = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve(); }, ms);
+  signal?.addEventListener('abort', onAbort, { once: true });
+});
+
 const correctionAffordable = (allocation: JuliusDispatchAllocation | undefined): boolean =>
   allocation === undefined || allocation.usdMicros > 0;
 
@@ -438,6 +450,13 @@ const reviewerDiagnostics = (input: {
   readonly diagnostics: HermesReviewDiagnostics | undefined;
   readonly stage: string;
   readonly reviewAttempts: number;
+  /**
+   * WHY A SECOND CALL WAS BOUGHT, as the closed shape token of the answer that
+   * caused it — a correctable shape defect, or `review_service_unavailable`.
+   * `reviewAttempts` says how many calls; this says what the first one was.
+   * Null when the dispatch asked once.
+   */
+  readonly reviewReaskShape: string | null;
   readonly startedAt?: string;
   readonly completedAt?: string;
   readonly usage?: HermesUsage;
@@ -450,6 +469,7 @@ const reviewerDiagnostics = (input: {
     ...observed,
     stage: input.stage,
     reviewAttempts: input.reviewAttempts,
+    reviewReaskShape: input.reviewReaskShape,
     ...(input.startedAt === undefined ? {} : { startedAt: input.startedAt }),
     ...(input.completedAt === undefined ? {} : { completedAt: input.completedAt }),
     elapsedMs: observed?.elapsedMs
@@ -616,6 +636,26 @@ const hostedCoderDiagnostics = (input: {
       ? 'PROVIDER_REPORTED' : 'UNKNOWN',
     inputTokens: observed?.usage.inputTokens ?? null,
     outputTokens: observed?.usage.outputTokens ?? null,
+    /**
+     * AND WHAT THE STREAM SAID BEFORE IT WAS CUT OFF.
+     *
+     * The four columns above come from the runtime's terminal result, which a
+     * run Relay aborts at its own ceiling never reaches. Paid run 34485676189
+     * attempt 1 spent 363 seconds and twelve tool calls and reported null for
+     * every one of them — "we paid and cannot say how much."
+     *
+     * Every assistant turn carried its own usage block the whole time. These
+     * are the sum over the turns actually observed: a FLOOR, never the total,
+     * never a cost, and deliberately named apart so no reader can mistake one
+     * for the other. `costBasis` above is unchanged and still UNKNOWN on these
+     * runs, because a token floor is not a provider's bill.
+     */
+    streamUsageMessages: observed?.streamUsage.messages ?? null,
+    streamAbortedMessages: observed?.streamUsage.abortedMessages ?? null,
+    streamInputTokens: observed?.streamUsage.inputTokens ?? null,
+    streamOutputTokens: observed?.streamUsage.outputTokens ?? null,
+    streamCacheReadInputTokens: observed?.streamUsage.cacheReadInputTokens ?? null,
+    streamCacheCreationInputTokens: observed?.streamUsage.cacheCreationInputTokens ?? null,
   };
 };
 
@@ -627,6 +667,60 @@ const hostedCoderDiagnostics = (input: {
  * only — a closed reason code, booleans, a byte count, and identifiers the
  * provider itself returned. No plan text, no prompt, no provider body.
  */
+/**
+ * EVERY FACT THE PROVIDER'S OWN ANSWER CARRIES, in one place, so that a call
+ * site reports all of them or none.
+ *
+ * `planDiagnostics` takes eighteen optional fields, and six call sites each
+ * chose a subset by hand. Only ONE — the connector-failure path — passed the
+ * whole provider picture. The three refusal sites (unparseable JSON, guidance
+ * invalid, plan invalid) passed no tokens at all, so a plan that was BOUGHT and
+ * then thrown away recorded nothing about what it cost; and both success sites
+ * omitted the elapsed time, the provider's status, the total and reasoning
+ * tokens and the ceiling, so a run that worked left THINNER evidence than one
+ * that failed. That is the wrong way round: the paid proof reads the successful
+ * run.
+ *
+ * Nothing here is new information. Every field was already on the outcome and
+ * already in scope at every site; what was missing was a reason each site could
+ * not quietly report a subset. Spreading one constructor is that reason, and
+ * `architect-diagnostics.test.ts` fails when a site stops doing it.
+ */
+const providerFacts = (
+  outcome: GptRunOutcome,
+  startedAtMs: number,
+  maxOutputTokens: number,
+): {
+  readonly servedModel: string | null;
+  readonly responseId: string | null;
+  readonly providerStatus: string | null;
+  readonly inputTokens: number | null;
+  readonly cachedInputTokens: number | null;
+  readonly outputTokens: number | null;
+  readonly reasoningTokens: number | null;
+  readonly totalTokens: number | null;
+  readonly maxOutputTokens: number;
+  readonly incompleteReason: string | null;
+  readonly elapsedMs: number;
+} => ({
+  // The response is the authority for what answered, never the request.
+  servedModel: outcome.actualModel ?? null,
+  responseId: outcome.responseId ?? null,
+  // A success carries the provider's `status` under its own name; a failure
+  // carries it as `providerStatus`, present only when the provider answered.
+  providerStatus: (outcome.ok ? outcome.status : outcome.providerStatus) ?? null,
+  inputTokens: outcome.usage?.inputTokens ?? null,
+  cachedInputTokens: outcome.usage?.cachedInputTokens ?? null,
+  outputTokens: outcome.usage?.outputTokens ?? null,
+  reasoningTokens: outcome.usage?.reasoningTokens ?? null,
+  totalTokens: outcome.usage?.totalTokens ?? null,
+  // The ceiling in force, so "it ran out" stays a comparison rather than a claim.
+  maxOutputTokens,
+  // A success is by definition not incomplete; null there is the true answer.
+  incompleteReason: outcome.ok ? null : outcome.incompleteReason ?? null,
+  elapsedMs: Date.now() - startedAtMs,
+});
+
 const planDiagnostics = (input: {
   readonly requestedModel: string | null;
   readonly servedModel?: string | null;
@@ -648,6 +742,8 @@ const planDiagnostics = (input: {
   /** Named, so a plan that VALIDATED is a fact rather than the absence of a reason code. */
   readonly outcome?: 'succeeded' | 'failed';
   readonly inputTokens?: number | null;
+  /** Billed at a different rate, so a token count without it is not the cost. */
+  readonly cachedInputTokens?: number | null;
   readonly outputTokens?: number | null;
   /** Reasoning models spend these against the SAME ceiling as visible output. */
   readonly reasoningTokens?: number | null;
@@ -690,6 +786,14 @@ const planDiagnostics = (input: {
    */
   costBasis: 'UNKNOWN',
   inputTokens: input.inputTokens ?? null,
+  /**
+   * CACHED INPUT IS BILLED DIFFERENTLY, and the connector has always read it
+   * (`input_tokens_details.cached_tokens`) into `GptUsage` — where it then
+   * reached no diagnostic at all. A row carrying `inputTokens` alone reports a
+   * quantity at one price when some of it was bought at another, which is a
+   * cost claim nobody can check.
+   */
+  cachedInputTokens: input.cachedInputTokens ?? null,
   outputTokens: input.outputTokens ?? null,
   /**
    * A FAILED CALL WAS STILL BILLED, and until Mission 4's first attempt these
@@ -913,22 +1017,14 @@ export function createLiveArchitectAdapter(input: {
          * before Julius validates, so it never had a verdict to report. */
         const responded = typeof outcome.responseId === 'string' && outcome.responseId.length > 0;
         const failed = planDiagnostics({
-          requestedModel: input.config.model, servedModel: outcome.actualModel ?? null,
-          responseId: outcome.responseId ?? null,
+          // Absent when the call never reached the provider; never zero for a
+          // call that did. `undefined` becomes null in the row, which is the
+          // honest reading of "no answer to report".
+          ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
+          requestedModel: input.config.model,
           jsonParseable: responded ? false : null,
           validationPassed: null,
           attempts,
-          providerStatus: outcome.providerStatus ?? null,
-          totalTokens: outcome.usage?.totalTokens ?? null,
-          elapsedMs: Date.now() - startedAtMs,
-          // Absent when the call never reached the provider; never zero for a
-          // call that did. `undefined` here becomes null in the row, which is
-          // the honest reading of "no answer to report".
-          inputTokens: outcome.usage?.inputTokens ?? null,
-          outputTokens: outcome.usage?.outputTokens ?? null,
-          reasoningTokens: outcome.usage?.reasoningTokens ?? null,
-          maxOutputTokens: input.config.maxOutputTokens,
-          incompleteReason: outcome.incompleteReason ?? null,
         });
         switch (outcome.failureClass) {
           case 'authentication_failed':
@@ -957,8 +1053,8 @@ export function createLiveArchitectAdapter(input: {
         // came back was unusable, which is a different repair from a 500.
         throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'Prompt Architect output was not parseable JSON.', 'unparseable_plan_json',
           planDiagnostics({
-            requestedModel: input.config.model, servedModel: outcome.actualModel,
-            responseId: outcome.responseId, jsonParseable: false, validationPassed: false,
+            ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
+            requestedModel: input.config.model, jsonParseable: false, validationPassed: false,
             outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'), attempts,
           }));
       }
@@ -981,8 +1077,8 @@ export function createLiveArchitectAdapter(input: {
           }
           throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'Prompt Architect guidance failed validation.', 'guidance_validation_failed',
             planDiagnostics({
-              requestedModel: input.config.model, servedModel: outcome.actualModel,
-              responseId: outcome.responseId, jsonParseable: true, validationPassed: false,
+              ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
+              requestedModel: input.config.model, jsonParseable: true, validationPassed: false,
               outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'), attempts,
             }));
         }
@@ -1014,13 +1110,10 @@ export function createLiveArchitectAdapter(input: {
             occurredAt: nowIso(),
           }],
           diagnostics: planDiagnostics({
+            ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
             requestedModel: input.config.model,
-            servedModel: outcome.actualModel ?? null,
-            responseId: outcome.responseId ?? null,
             jsonParseable: true, validationPassed: true, outcome: 'succeeded',
             attempts, outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
-            inputTokens: outcome.usage.inputTokens ?? null,
-            outputTokens: outcome.usage.outputTokens ?? null,
           }),
           usage: {
             inputTokens: outcome.usage.inputTokens ?? undefined,
@@ -1045,8 +1138,8 @@ export function createLiveArchitectAdapter(input: {
          */
         throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Prompt Architect plan failed validation: ${safeClaim(validation.reason, 120)}.`, 'plan_validation_failed',
           planDiagnostics({
-            requestedModel: input.config.model, servedModel: outcome.actualModel,
-            responseId: outcome.responseId, jsonParseable: true, validationPassed: false,
+            ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
+            requestedModel: input.config.model, jsonParseable: true, validationPassed: false,
             validationReasonCode: validation.reasonCode, validationField: validation.reasonField ?? null,
             validationClaimPhrase: validation.reasonClaim ?? null,
             outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'), attempts,
@@ -1094,13 +1187,10 @@ export function createLiveArchitectAdapter(input: {
          * dispatch bought one provider call or two.
          */
         diagnostics: planDiagnostics({
+          ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
           requestedModel: input.config.model,
-          servedModel: outcome.actualModel ?? null,
-          responseId: outcome.responseId ?? null,
           jsonParseable: true, validationPassed: true, outcome: 'succeeded',
           attempts, outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
-          inputTokens: outcome.usage.inputTokens ?? null,
-          outputTokens: outcome.usage.outputTokens ?? null,
         }),
         usage: {
           inputTokens: outcome.usage.inputTokens ?? undefined,
@@ -1396,11 +1486,25 @@ export function createLiveHermesReviewerAdapter(input: {
   readonly config: HermesConfig;
   readonly testCommand: string;
   readonly run?: typeof runHermesReview;
+  /** The backoff before a transient re-ask. Injectable so a proof does not wait it out. */
+  readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  /**
+   * How many transient re-asks one dispatch may buy. `REVIEW_TRANSIENT_REASK_LIMIT`
+   * unless a proof says otherwise; production never passes it. It is an input
+   * so the deadline arithmetic ACROSS re-asks can be observed at all — under
+   * the policy's own limit of one, nothing reads the consumed time after the
+   * one backoff, and an accounting error there would be invisible until the
+   * day the limit changed.
+   */
+  readonly transientReaskLimit?: number;
 }): JuliusProviderAdapter {
   if (!input.config.executable || !input.config.model || !input.config.provider) {
     throw new Error('hermes_reviewer_adapter_requires_live_config');
   }
   const run = input.run ?? runHermesReview;
+  const sleep = input.sleep ?? abortableSleep;
+  const transientReaskLimit = input.transientReaskLimit ?? REVIEW_TRANSIENT_REASK_LIMIT;
+  if (!Number.isSafeInteger(transientReaskLimit) || transientReaskLimit < 0) throw new Error('hermes_reviewer_adapter_reask_limit_invalid');
   return {
     adapterId: input.worker.adapterId,
     async dispatch(dispatch): Promise<JuliusProviderResult> {
@@ -1548,20 +1652,73 @@ export function createLiveHermesReviewerAdapter(input: {
        *
        * ONLY the shapes where an answer ARRIVED in the wrong shape. A timeout,
        * a 503, a refused credential, a process that died and an oversized
-       * output are not shape defects: three are already retryable at the task
-       * level and the rest need a human or a smaller request, and re-asking
-       * would spend for nothing. `review_output_too_large` is deliberately
-       * excluded — a runaway answer asked again is a second runaway answer.
+       * output are not shape defects: the first two are answers that never
+       * arrived and take the bounded transient re-ask below, the rest need a
+       * human or a smaller request, and re-asking would spend for nothing.
+       * `review_output_too_large` is deliberately excluded — a runaway answer
+       * asked again is a second runaway answer.
        */
       let reviewAttempts = 0;
       let reviewCorrection: string | undefined;
+      let reviewReaskShape: string | null = null;
+      /**
+       * ONE BOUNDED RE-ASK FOR A TRANSIENT STATUS, INSIDE THE SAME DEADLINE.
+       *
+       * `review_service_unavailable` is `retryable: true` and a review stage
+       * gets ONE pipeline attempt, so on the live path the retryable shape
+       * reached a pipeline with nothing left to spend on it and a single 429
+       * ended the mission. `review_timeout` is the same gap, and the one the
+       * paid record actually shows: both of the last two COMPLETED missions had
+       * a first review attempt time out and a second ask complete it (see
+       * `REVIEW_TRANSIENT_REASK_SHAPES`). The pipeline's rule stands — a second task attempt
+       * is a blind retry — and this is not one: the answer never arrived, the
+       * adapter asks once more after a short backoff, and only when the
+       * declared deadline still holds a whole review after what the first ask
+       * consumed. The second run is given the REMAINING window, so the adapter
+       * still stops before the deadline Julius enforces around the dispatch.
+       *
+       * The time consumed is read from the runner's own two instants on each
+       * incomplete outcome, and a duration that cannot be established refuses
+       * the re-ask rather than counting as nothing.
+       */
+      let transientReasks = 0;
+      let consumedMs: number | null = 0;
+      let runConfig: HermesConfig = input.config;
       let outcome: HermesOutcome;
       for (;;) {
       reviewAttempts += 1;
-      outcome = await run({ packet: { ...packet, ...(reviewCorrection === undefined ? {} : { correction: reviewCorrection }) }, config: input.config });
-      if (outcome.kind === 'review_incomplete' && reviewAttempts < REVIEW_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)) {
-        const remedy = reviewCorrectionFor(outcome.shape);
-        if (remedy !== null) { reviewCorrection = remedy; continue; }
+      outcome = await run({ packet: { ...packet, ...(reviewCorrection === undefined ? {} : { correction: reviewCorrection }) }, config: runConfig });
+      if (outcome.kind === 'review_incomplete') {
+        const started = Date.parse(outcome.startedAt);
+        const completed = Date.parse(outcome.completedAt);
+        consumedMs = consumedMs !== null && Number.isFinite(started) && Number.isFinite(completed) && completed >= started
+          ? consumedMs + (completed - started)
+          : null;
+      }
+      if (outcome.kind === 'review_incomplete' && correctionAffordable(dispatch.allocation)) {
+        if (reviewAttempts < REVIEW_ATTEMPT_LIMIT) {
+          const remedy = reviewCorrectionFor(outcome.shape);
+          if (remedy !== null) { reviewCorrection = remedy; reviewReaskShape = outcome.shape; continue; }
+        }
+        if (REVIEW_TRANSIENT_REASK_SHAPES.has(outcome.shape) && transientReasks < transientReaskLimit && dispatch.signal?.aborted !== true) {
+          const decision = reviewerReaskWithinDeadline({ deadlineMs: input.config.timeoutMs, consumedMs, backoffMs: REVIEW_TRANSIENT_REASK_BACKOFF_MS });
+          if (decision.allowed) {
+            transientReasks += 1;
+            reviewReaskShape = outcome.shape;
+            await sleep(REVIEW_TRANSIENT_REASK_BACKOFF_MS, dispatch.signal);
+            // A cancellation that landed during the backoff wins: the transient
+            // failure surfaces as it is, and nothing further is bought. Read
+            // through a call, because flow analysis still believes the signal
+            // it checked before the await.
+            if (signalAborted(dispatch.signal)) break;
+            // What the dispatch has consumed so far: what the decision was made
+            // against plus the backoff just waited out — read back off the
+            // decision rather than restated beside it.
+            consumedMs = input.config.timeoutMs - decision.remainingMs;
+            runConfig = { ...input.config, timeoutMs: decision.remainingMs };
+            continue;
+          }
+        }
       }
       break;
       }
@@ -1632,7 +1789,7 @@ export function createLiveHermesReviewerAdapter(input: {
         throw new JuliusDispatchError(
           code, retryable, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.shape,
           reviewerDiagnostics({
-            diagnostics: outcome.diagnostics, stage, reviewAttempts,
+            diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape,
             startedAt: outcome.startedAt, completedAt: outcome.completedAt,
           }),
         );
@@ -1700,7 +1857,7 @@ export function createLiveHermesReviewerAdapter(input: {
          * nowhere at all.
          */
         diagnostics: reviewerDiagnostics({
-          diagnostics: outcome.diagnostics, stage, reviewAttempts,
+          diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape,
           startedAt: outcome.startedAt, completedAt: outcome.completedAt,
           usage: reviewUsage,
         }),
