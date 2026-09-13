@@ -1,0 +1,122 @@
+{
+  "missionId": "mission:julius-live-mission-6",
+  "markerNamespace": "julius-live-mission-6",
+  "projectId": "prj-julius-live-mission-6",
+  "tenantId": "tenant",
+  "objective": "In this workspace, build Julius's learning loop: what a run's own verified repairs teach the rest of the run. An independent review sends work back with a blocking finding, a repair fixes it and a second review accepts the fix, and today the kernel keeps none of it where later work can see: a second repair round is never told what the first was fixing, a finding never leaves OPEN, and a later review that repeats a fixed finding is not recognised. `julius-learning-loop.ts` is a stub whose every exported function throws `learning_loop_not_implemented`. Implement it, and INTEGRATE it so the loop actually runs in the kernel: lineage-complete repair context, resolution of the findings an accepted lineage closed, one Project Brain lesson per resolution, lesson delivery counted on every compiled context, recurrence recognised by an exact key, and a store without finding resolution reported as unable to learn. The operational facts are in `LEARNING_LOOP_BRIEF.md`.\n\nTHIS MISSION BUILDS THE MODULE AND PROVES IT THROUGH THE IN-MEMORY KERNEL. It does not claim that paid runs already learn: the PostgreSQL store gains finding resolution in a later change, and until then a paid run must record that it could not learn.\n\nTHE NEW BEHAVIOUR is specified in `julius-learning-loop.test.ts`, which fails today. THE BEHAVIOUR THAT MUST NOT CHANGE is specified in `julius-learning-loop.existing.test.ts`, which passes today and must pass when you are done. Both drive the real kernel (scheduler, context compiler, verification, repair planner and Project Brain writer) through `julius-runtime-fixtures.ts`.\n\nTHE PLAN MUST FORESEE THE INTERACTION. Before any code is written, the plan must name which existing guarantees resolving a finding touches, how the obvious implementation would break each one, and how the implementation keeps each.",
+  "requirements": [
+    "Implement every exported function of `julius-learning-loop.ts` so each pure case in `julius-learning-loop.test.ts` passes, keeping every exported name, constant and type.",
+    "LINEAGE. A repair round, and the re-review of a repair round, is compiled with every OPEN blocking finding of its repair lineage, root first, and `repair_context_findings_dropped` still refuses a repair that cannot fit them.",
+    "RESOLUTION. When a decision makes a lineage effectively accepted, its OPEN blocking findings become RESOLVED through the store's optional `resolveFindings`, attributed to the accepted repair, and `finding.resolved` is recorded once per finding.",
+    "A VERDICT IS NEVER REWRITTEN. The task that was sent back keeps REPAIR as its current decision, however often the run loop re-verifies finished work.",
+    "LESSONS AND DELIVERY. Each resolution appends `brain:lesson:<findingId>` and records `lesson.recorded`. `context.compiled` carries `lessonsDelivered` and `lessonsWithheld` whenever the run holds a learning entry, and a lesson the budget withholds never refuses a dispatch.",
+    "RECURRENCE. A new blocking finding that repeats a RESOLVED finding of another lineage, by the exact key the brief defines and never by similarity, appends `brain:lesson-not-held:<findingId>` and records `lesson.recurred`.",
+    "A STORE THAT CANNOT RESOLVE. With no `resolveFindings`, a decision that would resolve findings records `learning.unavailable` once for its lineage and learns nothing, and the run still completes.",
+    "REPLAY. A replayed tick or a re-verification writes no second entry, event or status change, and the Project Brain revision counts entries exactly.",
+    "The new event types join `JULIUS_OPERATIONAL_EVENT_TYPES` in `julius-events.ts`. No existing type is renamed or removed.",
+    "NO HIDDEN REASONING IS EVER PERSISTED. Do not write model reasoning, internal monologue or scratchpad text into any exported value, comment, event fact or Project Brain entry.",
+    "After your edits `node --experimental-transform-types --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-learning-loop.existing.test.ts src/relay/mission/julius/julius-learning-loop.test.ts` must exit zero, with no network access and no third-party dependency."
+  ],
+  "constraints": [
+    "Edit only `julius-learning-loop.ts`, `julius-task-pipeline.ts`, `julius-memory-store.ts`, `julius-runtime-ports.ts`, `julius-events.ts` and `julius-verification-runtime.ts`. You have `Read`, `Glob`, `Grep` and `Edit`; you cannot add files or run commands, and you do not need to.",
+    "Every other module in the workspace is the kernel's own code, sliced byte for byte so the specifications run the real thing, and is read-only: `julius-runtime-fixtures.ts`, `julius-run-loop.ts`, `julius-runtime.ts`, `julius-repair-lineage.ts`, `julius-repair-runtime.ts`, `julius-release-runtime.ts`, `julius-context-snapshot.ts`, `julius-review-stage.ts`, `julius-execution-coordinator.ts`, `julius-router.ts`, `julius-policy.ts`, `julius-recovery.ts`, `julius-state-path.ts`, `julius-continuation.ts`, `julius-continuous-lifecycle.ts`, `julius-segment-lineage.ts`, `julius-contract-disposition.ts`, `julius-task-contract.ts`, `julius-cost-accounting.ts`, `julius-allocation-runtime.ts`, `julius-shared-ceiling.ts`, `julius-slot-effort.ts`, `julius-slot-envelope.ts`, `julius-slot-ledger.ts`, `julius-trajectory.ts`, `julius-research-policy.ts`, `julius-research-protocol.ts`, `evidence/index.ts`, `evidence-contracts.ts`, `evidence-normalizer.ts`, `evidence-brain-link.ts`, `live-reach/index.ts`, `live-reach-contracts.ts`, `live-reach-registry.ts`, `live-reach-permissions.ts` and `live-reach-metering.ts`.",
+    "Do not edit either specification or `LEARNING_LOOP_BRIEF.md`, and do not weaken a case to make it pass.",
+    "The specifications run under Node's `--experimental-transform-types` without type-checking, and the repository type-checks the same code with `exactOptionalPropertyTypes`. Event facts are `Record<string, string | number | boolean | null>`. Add no import beyond the workspace's own modules; the sandbox has no `node_modules` and no network.",
+    "Keep `julius-learning-loop.ts` pure: no clock, no network, no randomness and no Node API."
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "criterion-implemented",
+      "text": "Every exported function of `julius-learning-loop.ts` is implemented and the pipeline, memory store, ports and event vocabulary run the loop, with every existing exported name, signature and vocabulary unchanged.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-tests",
+      "text": "`node --experimental-transform-types --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-learning-loop.existing.test.ts src/relay/mission/julius/julius-learning-loop.test.ts` exits zero.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-lineage",
+      "text": "A repair round and its re-review are compiled with every OPEN blocking finding of the lineage, root first, and a repair that cannot fit them is still refused.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-resolution",
+      "text": "An accepted lineage resolves exactly its OPEN blocking findings, attributed to the accepted repair, recorded once each; a halted or unrepaired lineage resolves nothing.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-verdicts",
+      "text": "A task that was sent back keeps REPAIR as its current decision after its lineage is accepted, and re-verification never records a new decision for it.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-lessons",
+      "text": "Each resolution leaves one run-level lesson entry, later dispatches are compiled with it, and every compiled context of a run holding learning entries records how many it delivered and withheld.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-recurrence",
+      "text": "A repeat of a RESOLVED finding from another lineage, by exact normalised key, leaves a lesson-not-held entry and a recurrence event; different words are never a repeat.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-unavailable",
+      "text": "A store without `resolveFindings` produces one `learning.unavailable` record per lineage that would have resolved findings, resolves nothing, writes no lesson, and the run completes.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-replay",
+      "text": "Replayed ticks and re-verification write no second learning entry, event or status change, and the Project Brain revision equals the number of entries.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-plan-interaction",
+      "text": "The plan names the existing guarantees resolving a finding touches and how each is kept, and records that as a decision; the plan review verifies this before the build is admitted.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-unweakened",
+      "text": "No specification or brief is edited, no case is weakened, and no existing event type, reason code or vocabulary is renamed or removed.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-scope",
+      "text": "Only the six named files are edited.",
+      "blocking": false
+    }
+  ],
+  "testCommand": "node --experimental-transform-types --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-learning-loop.existing.test.ts src/relay/mission/julius/julius-learning-loop.test.ts",
+  "workspacePath": "/tmp/julius-workspace/tenant/ws",
+  "limits": {
+    "spendUsd": 60,
+    "repairCycles": 3,
+    "architectMaxOutputTokens": 20000
+  },
+  "research": {
+    "roles": [
+      "PROMPT_ARCHITECT",
+      "CODING_AGENT",
+      "INDEPENDENT_REVIEWER"
+    ],
+    "allowances": [
+      {
+        "source": "web",
+        "capabilities": [
+          "read_item"
+        ],
+        "hosts": [
+          "nodejs.org"
+        ]
+      }
+    ],
+    "missionBudget": {
+      "maxRetrievals": 6,
+      "maxBytes": 400000
+    },
+    "roleBudget": {
+      "maxRetrievals": 2,
+      "maxBytes": 200000
+    }
+  }
+}

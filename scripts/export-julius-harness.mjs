@@ -249,6 +249,13 @@ const FILE_RULES = [
   // the compiler it will sit inside: `julius-runtime.ts` and
   // `julius-context-snapshot.ts` are both already here.
   ['src/relay/mission/julius/julius-context-integrity.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  // The learning loop: what a run's own verified repairs leave in that Project
+  // Brain — resolutions, lessons, and the record of a lesson that did not hold.
+  // Seeded as a STUB for official Mission 6 and declared here now, for the same
+  // reason the trust core and the integrity layer are, so the landing that gives
+  // it a caller in the pipeline does not also trip the drift gate. Same subsystem
+  // as the Project Brain it writes to.
+  ['src/relay/mission/julius/julius-learning-loop.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-allocation-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   // Allocation decides what a dispatch MAY spend; this decides what is known
   // about what it DID spend, and on whose authority. Same subsystem: both are
