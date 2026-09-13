@@ -148,3 +148,40 @@ describe('B — the two consumers that were gated on it', () => {
     expect(callers, 'a production composition constructs it').not.toHaveLength(0);
   });
 });
+
+/**
+ * AND A PAID RUN WITHOUT IT DOES NOT START.
+ *
+ * Paid run 34739303313 ran on a main whose store had no reader: every dispatch
+ * was allocated the flat 300 000 µ$ estimate and the Coding Agent stopped at its
+ * own $0.30 ceiling after two turns. Binding the reader fixes that store; these
+ * cases make its ABSENCE a refusal rather than a silent fallback, on both the
+ * preflight and the confirmed-live path, and hold the workflow to the answer.
+ */
+describe('C — no live ledger, no paid run', () => {
+  it('the entrypoint reports BOUND for the production store and UNBOUND for anything without a reader', async () => {
+    const { liveLedgerState } = await import('../julius-live-mission');
+    expect(liveLedgerState(createJuliusPostgresRuntimeStore(pool))).toBe('BOUND');
+    expect(liveLedgerState(createContextAndClaimHandoffs(createJuliusPostgresRuntimeStore(pool)).store), 'the handoff wrapper keeps it').toBe('BOUND');
+    const { timeline: _dropped, ...withoutReader } = createJuliusPostgresRuntimeStore(pool) as unknown as Record<string, unknown>;
+    expect(liveLedgerState(withoutReader)).toBe('UNBOUND');
+    expect(liveLedgerState({ timeline: 'not a function' })).toBe('UNBOUND');
+    expect(liveLedgerState(null)).toBe('UNBOUND');
+  });
+
+  it('preflight blocks on UNBOUND, and the live path refuses the wrapped store before bootstrap', () => {
+    const source = read('relay-bridge/julius-live-mission.ts');
+    expect(source).toContain("out(`  live_ledger: ${ledger}`);");
+    expect(source, 'an unbound ledger is a preflight block').toMatch(/\|\| ledger === 'UNBOUND';/u);
+    const refusal = source.indexOf("if (liveLedgerState(handoffs.store) !== 'BOUND') {");
+    expect(refusal, 'the live path asks the store the runtime will receive').toBeGreaterThan(-1);
+    expect(refusal, 'and asks before the run is bootstrapped').toBeLessThan(source.indexOf('const bootstrapRuns = new JuliusPostgresRepository(pool);'));
+  });
+
+  it('the paid workflow accepts nothing but BOUND before the LIVE step', () => {
+    const workflow = read('.github/workflows/julius-first-live-mission.yml');
+    const check = workflow.indexOf("grep -qx '  live_ledger: BOUND' preflight-roles.log");
+    expect(check).toBeGreaterThan(-1);
+    expect(check).toBeLessThan(workflow.indexOf("- name: 'LIVE: run the first real Julius mission'"));
+  });
+});

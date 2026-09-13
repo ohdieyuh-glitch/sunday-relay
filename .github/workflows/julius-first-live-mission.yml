@@ -843,6 +843,11 @@ jobs:
           grep -q 'architect=gpt-5.6-sol' preflight-roles.log || { echo 'architect_model_unexpected' >&2; exit 1; }
           grep -q 'coder=claude-fable-5' preflight-roles.log || { echo 'coding_model_unexpected' >&2; exit 1; }
           grep -q 'reviewer=xai/grok-build-0.1' preflight-roles.log || { echo 'reviewer_model_unexpected' >&2; exit 1; }
+          # THE LIVE LEDGER IS BOUND, OR THE PAID RUN DOES NOT START. Without it every
+          # dispatch is allocated a flat estimate (paid run 34739303313: a $0.30
+          # coder stopped after two turns). The entrypoint prints the answer from
+          # the store it will actually use; nothing but BOUND is accepted.
+          grep -qx '  live_ledger: BOUND' preflight-roles.log || { echo 'live_ledger_unbound: allocation would fall back to a flat estimate' >&2; exit 1; }
           for name in OPENAI_API_KEY ANTHROPIC_API_KEY DATABASE_URL JULIUS_EXECUTOR_ENDPOINT JULIUS_SCOPED_CREDENTIALS EXECUTOR_KEY_ID JULIUS_PUBLIC_KEY_PATH JULIUS_CALLER_ID; do
             grep -q "^  $name: SET$" preflight-roles.log || { echo "preflight_variable_not_set:$name" >&2; exit 1; }
           done

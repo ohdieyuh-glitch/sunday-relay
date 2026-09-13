@@ -219,6 +219,20 @@ const registryBackends = (): ReadonlyMap<string, readonly LiveReachCapability[]>
   return byId;
 };
 
+/**
+ * WHETHER A STORE CAN SERVE ITS OWN LEDGER.
+ *
+ * Both consumers of the per-slot money ledger — allocation v3 and the research
+ * mediator's durable meter — are bound only when the store carries a `timeline`
+ * reader, and silently fall back when it does not. A paid run must never start
+ * on that fallback, so the entrypoint asks this of the store in preflight and
+ * again of the store the runtime will receive.
+ */
+export function liveLedgerState(store: unknown): 'BOUND' | 'UNBOUND' {
+  return store !== null && typeof store === 'object' && typeof (store as { timeline?: unknown }).timeline === 'function'
+    ? 'BOUND' : 'UNBOUND';
+}
+
 export function observedResearchBackends(
   env: Record<string, string | undefined>,
 ): ObservedResearchBackends {
@@ -728,9 +742,28 @@ async function main(argv: readonly string[]): Promise<number> {
   if (executorMissing.length > 0) out(`  BLOCKED executor: missing ${executorMissing.join(', ')}`);
   if (databaseMissing.length > 0) out(`  BLOCKED durable store: missing DATABASE_URL`);
 
+  /**
+   * THE LIVE LEDGER, OR NO PAID RUN.
+   *
+   * Paid run 34739303313 spent its whole mission at 30¢ per dispatch: the live
+   * store exposed no `timeline`, the composition bound none, allocation v3 fell
+   * back to `ESTIMATE_NO_LEDGER`, and the Coding Agent was stopped by its own
+   * $0.30 ceiling after two turns. Nothing said so until the bundle was read.
+   * A paid mission allocated against a flat estimate is not a full-capability
+   * run, so the store this entrypoint will use is asked HERE, before anything is
+   * submitted, whether it can serve its own ledger — and the answer is printed,
+   * so the workflow's preflight step can require it.
+   *
+   * No query is made: the check is whether the composed store carries the
+   * reader both consumers are gated on, not whether the database is reachable.
+   */
+  const ledger = databaseMissing.length > 0 ? 'UNKNOWN' : liveLedgerState(createJuliusPostgresRuntimeStore(new Pool({ connectionString: env.DATABASE_URL })));
+  out(`  live_ledger: ${ledger}`);
+  if (ledger === 'UNBOUND') out('  BLOCKED allocation: the live store serves no timeline, so every dispatch would be allocated a flat estimate');
+
   const preflightBlocked = preflight.problems.some((entry) => entry.role !== 'CODING_AGENT')
     || preflight.problems.some((entry) => entry.role === 'CODING_AGENT' && entry.missing.some((name) => !name.startsWith('executor shell')))
-    || executorMissing.length > 0 || databaseMissing.length > 0;
+    || executorMissing.length > 0 || databaseMissing.length > 0 || ledger === 'UNBOUND';
   if (preflightBlocked) {
     out('RESULT: BLOCKED — nothing was submitted and no provider was contacted.');
     return 1;
@@ -783,6 +816,14 @@ async function main(argv: readonly string[]): Promise<number> {
 
     const baseStore = createJuliusPostgresRuntimeStore(pool);
     const handoffs = createContextAndClaimHandoffs(baseStore);
+    // THE SAME QUESTION ON THE STORE THE RUNTIME WILL ACTUALLY RECEIVE, after the
+    // handoff wrapper: a wrapper that dropped the reader would reintroduce the
+    // flat-estimate fallback past a preflight that passed. Refused before any
+    // run is created and before any provider can be reached.
+    if (liveLedgerState(handoffs.store) !== 'BOUND') {
+      out('RESULT: BLOCKED — live_ledger_unbound: the composed store serves no timeline, so allocation would fall back to a flat estimate. Nothing was submitted and no provider was contacted.');
+      return 1;
+    }
     const executionId = `execution:julius-live:${contract.missionId}`;
     const shell = createExecutorShellPort({
       pool,
