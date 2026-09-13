@@ -270,7 +270,9 @@ export const JULIUS_BRAIN_BODY_SCHEMAS: Readonly<Record<JuliusBrainRecordKind, J
     budget: { type: 'object', nullable: true, fields: { spentUsdMicros: { type: 'number', nullable: true, integer: true, min: 0 }, limitUsdMicros: { type: 'number', nullable: true, integer: true, min: 0 } } },
   },
   REQUIREMENT: {
-    requirementClass: oneOf(['FUNCTIONAL', 'NON_FUNCTIONAL']), statement: str(),
+    // UNCLASSIFIED is a real value, not a default: v1 requirements carry no
+    // class, and a mirror that picked one would be inventing a fact.
+    requirementClass: oneOf(['FUNCTIONAL', 'NON_FUNCTIONAL', 'UNCLASSIFIED']), statement: str(),
     priority: { type: 'string', nullable: true, enum: ['MUST', 'SHOULD', 'COULD'] },
     status: oneOf(['PROPOSED', 'ACTIVE', 'SATISFIED', 'WAIVED']),
   },

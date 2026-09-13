@@ -110,6 +110,8 @@ const DECLARED_NOT_COMPOSED = [
   { path: 'src/relay/mission/julius/julius-brain-store.ts', reason: 'Project Brain v2: the store port and its in-memory semantic model; not yet composed by the live root' },
   { path: 'src/relay/mission/julius/julius-brain-service.ts', reason: 'Project Brain v2: the governed, principal-bound Brain API; not yet composed by the live root' },
   { path: 'src/relay/mission/julius/julius-brain-query.ts', reason: 'Project Brain v2: deterministic, budgeted relevant-context retrieval and the bridge into v1 context entries; not yet composed by the live root' },
+  { path: 'src/relay/mission/julius/julius-brain-export.ts', reason: 'Project Brain v2: the complete, self-verifying, secret-redacting export; safe restore; resume verification; and the scoped, hashed evaluation-context snapshots a Python execution or a future GVE consumes; not yet composed by the live root' },
+  { path: 'src/relay/mission/julius/julius-brain-legacy.ts', reason: 'Project Brain v2: the JuliusBrainWriter decorator that mirrors the live pipeline\'s v1 entries into the typed ledger, and its backfill; a composition root wraps the store with it once the qualification permits wiring changes' },
   { path: 'src/relay/persistence/julius-brain-postgres.ts', reason: 'Project Brain v2: the durable PostgreSQL store (migration 024), proven by scripts/julius-project-brain-drill.ts across separate processes and a server restart; not yet composed by the live root' },
 ];
 
@@ -265,6 +267,8 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-brain-store.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-brain-service.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-brain-query.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  ['src/relay/mission/julius/julius-brain-export.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  ['src/relay/mission/julius/julius-brain-legacy.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/persistence/julius-brain-postgres.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-allocation-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   // Allocation decides what a dispatch MAY spend; this decides what is known

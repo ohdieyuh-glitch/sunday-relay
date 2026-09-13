@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **168 production files** across 20/20 subsystems (2 roots, 138 traced, 14 not composed by the live root, 14 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **170 production files** across 20/20 subsystems (2 roots, 138 traced, 16 not composed by the live root, 14 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -91,6 +91,8 @@ The provider-neutral kernel: mission states and the transition table, tasks, evi
 | --- | --- | --- |
 | `src/relay/mission/julius/index.ts` | traced | `src/relay/persistence/julius-postgres.ts` |
 | `src/relay/mission/julius/julius-brain-contracts.ts` | not composed by the live root | — |
+| `src/relay/mission/julius/julius-brain-export.ts` | not composed by the live root | — |
+| `src/relay/mission/julius/julius-brain-legacy.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-policy.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-projection.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-query.ts` | not composed by the live root | — |
@@ -425,6 +427,8 @@ Production Julius modules that implement a Julius port but are not reached from 
 | `src/relay/mission/julius/julius-brain-store.ts` | Project Brain v2: the store port and its in-memory semantic model; not yet composed by the live root |
 | `src/relay/mission/julius/julius-brain-service.ts` | Project Brain v2: the governed, principal-bound Brain API; not yet composed by the live root |
 | `src/relay/mission/julius/julius-brain-query.ts` | Project Brain v2: deterministic, budgeted relevant-context retrieval and the bridge into v1 context entries; not yet composed by the live root |
+| `src/relay/mission/julius/julius-brain-export.ts` | Project Brain v2: the complete, self-verifying, secret-redacting export; safe restore; resume verification; and the scoped, hashed evaluation-context snapshots a Python execution or a future GVE consumes; not yet composed by the live root |
+| `src/relay/mission/julius/julius-brain-legacy.ts` | Project Brain v2: the JuliusBrainWriter decorator that mirrors the live pipeline's v1 entries into the typed ledger, and its backfill; a composition root wraps the store with it once the qualification permits wiring changes |
 | `src/relay/persistence/julius-brain-postgres.ts` | Project Brain v2: the durable PostgreSQL store (migration 024), proven by scripts/julius-project-brain-drill.ts across separate processes and a server restart; not yet composed by the live root |
 
 ## External packages observed
