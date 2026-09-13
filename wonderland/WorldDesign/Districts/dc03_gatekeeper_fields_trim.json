@@ -1,0 +1,209 @@
+{
+ "pass": "DC03_TRIM",
+ "title": "Gatekeeper Fields: wall blocks, signpost and stacked pedestals sunk (reversible)",
+ "trims": [
+  {
+   "name": "WonderlandInstancedBatch_304",
+   "label": "V2Batch_garden_wall_MI_V2_IvoryStone",
+   "mesh": "SM_garden_wall",
+   "index": 124,
+   "why": "1.8 m garden-wall block beside the visitor, right",
+   "before": [
+    13337.554,
+    -5753.142,
+    0.0,
+    0.0,
+    377.992,
+    0.0,
+    1.185,
+    1.0,
+    0.7
+   ],
+   "after": [
+    13337.554,
+    -5753.142,
+    -100000.0,
+    0.0,
+    377.992,
+    0.0,
+    1.185,
+    1.0,
+    0.7
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_304",
+   "label": "V2Batch_garden_wall_MI_V2_IvoryStone",
+   "mesh": "SM_garden_wall",
+   "index": 125,
+   "why": "garden-wall block behind, left",
+   "before": [
+    14588.352,
+    -4844.685,
+    0.0,
+    0.0,
+    413.99,
+    0.0,
+    1.185,
+    1.0,
+    0.7
+   ],
+   "after": [
+    14588.352,
+    -4844.685,
+    -100000.0,
+    0.0,
+    413.99,
+    0.0,
+    1.185,
+    1.0,
+    0.7
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_293",
+   "label": "V2Batch_signpost_MI_V2_IvoryStone",
+   "mesh": "SM_signpost",
+   "index": 51,
+   "why": "signpost 7 m ahead at the walk's edge",
+   "before": [
+    12984.938,
+    -4274.074,
+    0.0,
+    0.0,
+    126.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ],
+   "after": [
+    12984.938,
+    -4274.074,
+    -100000.0,
+    0.0,
+    126.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_279",
+   "label": "V2Batch_pedestal_finial_MI_V2_IvoryStone",
+   "mesh": "SM_pedestal_finial",
+   "index": 42,
+   "why": "pedestal stacked at the walk's edge, 11 m ahead",
+   "before": [
+    12564.812,
+    -4288.262,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.539,
+    0.539,
+    0.539
+   ],
+   "after": [
+    12564.812,
+    -4288.262,
+    -100000.0,
+    0.0,
+    0.0,
+    0.0,
+    0.539,
+    0.539,
+    0.539
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_279",
+   "label": "V2Batch_pedestal_finial_MI_V2_IvoryStone",
+   "mesh": "SM_pedestal_finial",
+   "index": 122,
+   "why": "a second pedestal on the same spot",
+   "before": [
+    12564.938,
+    -4274.074,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.9,
+    0.9,
+    0.9
+   ],
+   "after": [
+    12564.938,
+    -4274.074,
+    -100000.0,
+    0.0,
+    0.0,
+    0.0,
+    0.9,
+    0.9,
+    0.9
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_184",
+   "label": "V2Batch_gate_finial_ball_MI_V2_Gold",
+   "mesh": "SM_gate_finial_ball",
+   "index": 71,
+   "why": "its ball",
+   "before": [
+    12564.812,
+    -4288.262,
+    75.502,
+    0.0,
+    0.0,
+    0.0,
+    0.324,
+    0.324,
+    0.324
+   ],
+   "after": [
+    12564.812,
+    -4288.262,
+    -99924.498,
+    0.0,
+    0.0,
+    0.0,
+    0.324,
+    0.324,
+    0.324
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_184",
+   "label": "V2Batch_gate_finial_ball_MI_V2_Gold",
+   "mesh": "SM_gate_finial_ball",
+   "index": 185,
+   "why": "the second ball",
+   "before": [
+    12564.938,
+    -4274.074,
+    124.0,
+    0.0,
+    0.0,
+    0.0,
+    0.55,
+    0.55,
+    0.55
+   ],
+   "after": [
+    12564.938,
+    -4274.074,
+    -99876.0,
+    0.0,
+    0.0,
+    0.0,
+    0.55,
+    0.55,
+    0.55
+   ]
+  }
+ ]
+}
