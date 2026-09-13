@@ -614,10 +614,10 @@ export function juliusBrainChainHash(previous: string, sequence: number, recordI
 }
 
 export const juliusBrainRecordId = (brainId: string, idempotencyKey: string): string =>
-  `brec:${juliusBrainSha256(`${brainId} ${idempotencyKey}`).slice(7, 39)}`;
+  `brec:${juliusBrainSha256(`${brainId}\u0000${idempotencyKey}`).slice(7, 39)}`;
 
 export const juliusBrainDerivedEntityId = (brainId: string, kind: JuliusBrainRecordKind, idempotencyKey: string): string =>
-  `${kind.toLowerCase().replace(/_/g, '-')}:${juliusBrainSha256(`${brainId} entity ${idempotencyKey}`).slice(7, 31)}`;
+  `${kind.toLowerCase().replace(/_/g, '-')}:${juliusBrainSha256(`${brainId}\u0000entity\u0000${idempotencyKey}`).slice(7, 31)}`;
 
 /* ------------------------------------------------------------ constructors */
 

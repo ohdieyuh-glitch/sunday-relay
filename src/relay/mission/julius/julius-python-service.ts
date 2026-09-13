@@ -505,7 +505,7 @@ function* settlementSteps(
 export function createJuliusPythonExecutionMemoryStore(brains: JuliusBrainMemoryStore): JuliusPythonExecutionStore {
   const rows = new Map<string, JuliusPythonExecutionRecord>();
   const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-  const key = (projectId: string, idempotencyKey: string) => `${projectId} ${idempotencyKey}`;
+  const key = (projectId: string, idempotencyKey: string) => `${projectId}\u0000${idempotencyKey}`;
   const byKey = new Map<string, string>();
   const owned = (executionId: string, projectId: string) => {
     const row = rows.get(executionId);
