@@ -3,12 +3,13 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import {
-  cardPolicy, createJuliusHarness, seedTaskContractInto, task, verificationPolicy, worker,
+  cardPolicy, createJuliusHarness, scriptedAdapter, seedTaskContractInto, task, verificationPolicy, worker,
   type JuliusHarness,
 } from './julius-runtime-fixtures';
 import { evaluateJuliusGuidanceCurrency, guidanceSubjectTaskId } from './julius-continuous-lifecycle';
 import { boundStageForRole, reviewStageOf, workStageOf } from './julius-review-stage';
 import type { JuliusRunRow } from './julius-runtime-ports';
+import { prepareClaimedTask } from './julius-task-pipeline';
 
 /**
  * THE TWELVE PROOFS OF THE CONTINUOUS THREE-WORKER LIFECYCLE.
@@ -1607,5 +1608,126 @@ describe('36 — the repair bound binds the unit of work, however often it pause
       .map((row) => row.taskId.slice(0, -':review'.length))
       .filter((subject) => ['build-1', 'repair:segment:build-1:2:task:1:task', 'repair:segment:repair:segment:build-1:2:task:1:task:2:task:2:task'].includes(subject));
     expect(reviewedYields, 'and no dispatch that paused was reviewed').toEqual([]);
+  });
+});
+
+/**
+ * PROOF 37 — ATTEMPT 3'S SHAPE, REPLAYED: five guidance pauses, five research
+ * pauses, and a reviewer that refuses every finished build.
+ *
+ * Run 34766115321 spent 32 ticks and $11.87 on this shape. Every pause forked
+ * into a repair and a continuation, every repair after a pause restarted the
+ * count, and the one round limit it reached wrote `run.failed` while the run kept
+ * working. Here the same pauses, in the same mix, meet the three rules together.
+ */
+describe('37 — attempt 3 shape ends at the unit repair bound, with the run FAILED and nothing dispatched after', () => {
+  const ASKS = Object.freeze([{
+    source: 'web', capability: 'read_item',
+    reference: 'https://www.postgresql.org/docs/current/app-psql.html',
+    purpose: 'How psql renders a SQL NULL in unaligned output.',
+  }]);
+  const RESUME = Object.freeze({ completedSoFar: ['wrote the numeric readers'], nextIntent: 'settle the blank text cell' });
+  const servingPort = () => ({
+    async serve(input: Parameters<NonNullable<Parameters<typeof createJuliusHarness>[0]['research']>['serve']>[0]) {
+      return input.asks.map((ask) => ({
+        outcome: 'observed' as const, reference: ask.reference, purpose: ask.purpose,
+        rendered: '<<<RELAY-EVIDENCE\nobserved.\nRELAY-EVIDENCE>>>', detail: 'The source answered.',
+        evidenceId: 'ev-research-1', injectionSignals: [] as readonly string[], mayCorroborate: true,
+      }));
+    },
+  });
+
+  it('five guidance and five research pauses, three authorised rounds: exactly three repairs, no yield reviewed, run FAILED, then silence', async () => {
+    const harness = build({
+      research: servingPort(),
+      maxRepairRounds: 3,
+      architectScript: [
+        { kind: 'succeed', evidence: PLAN_EVIDENCE },
+        { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
+      ],
+    });
+    /**
+     * WHAT EACH DISPATCH DOES, by where it sits in its unit, so the shape is the
+     * same however the loop orders the claims. A round opens by asking the
+     * architect, its second segment asks Julius to read something, and its third
+     * finishes. The build's own chain pauses twice more first, the last time at
+     * the segment ceiling, which mints no continuation and is therefore reviewed.
+     */
+    const coderStep = (taskId: string) => {
+      const segment = /^segment:(.+):(\d+):task$/u.exec(taskId);
+      if (segment === null) return { kind: 'succeed' as const, guidanceRequest: REQUEST };
+      const root = segment[1];
+      const n = segment[2];
+      if (n === '2') return { kind: 'succeed' as const, researchAsks: ASKS, segmentResume: RESUME };
+      if (root === 'build-1' && n === '3') return { kind: 'succeed' as const, guidanceRequest: REQUEST };
+      if (root === 'build-1' && n === '4') return { kind: 'succeed' as const, researchAsks: ASKS, segmentResume: RESUME };
+      return { kind: 'succeed' as const };
+    };
+    const coder = harness.adapters.get(CODER.adapterId)!;
+    harness.adapters.set(CODER.adapterId, {
+      ...coder,
+      async dispatch(input) {
+        coder.dispatches.push({ taskId: input.taskId, contextId: input.contextId });
+        return scriptedAdapter(CODER, [coderStep(input.taskId)]).dispatch(input);
+      },
+    });
+    const reviewer = harness.adapters.get(REVIEWER.adapterId)!;
+    harness.adapters.set(REVIEWER.adapterId, {
+      ...reviewer,
+      async dispatch(input) {
+        const builds = input.taskType === 'review:build' || input.taskType === 'review:repair:build';
+        reviewer.dispatches.push({ taskId: input.taskId, contextId: input.contextId });
+        return scriptedAdapter(REVIEWER, [{ kind: 'succeed', evidence: builds ? FAILED_REVIEW : PASSED_REVIEW }]).dispatch(input);
+      },
+    });
+
+    await drain(harness, 120);
+
+    const checkpoints = factsOf(harness, 'checkpoint.recorded');
+    expect(checkpoints.filter((facts) => facts.trigger === 'GUIDANCE_REQUESTED'), 'five guidance pauses').toHaveLength(5);
+    expect(checkpoints.filter((facts) => facts.trigger === 'RESEARCH_REQUESTED'), 'five research pauses').toHaveLength(5);
+
+    const all = await harness.store.tasksForRun('run-1', 'prj-1');
+    const repairs = all.filter((row) => row.taskId.startsWith('repair:') && row.taskType === 'repair:build');
+    expect(repairs, 'exactly the three rounds the contract authorised, for the whole unit').toHaveLength(3);
+
+    const ids = new Set(all.map((row) => row.taskId));
+    const yielded = all.filter((row) => {
+      const match = /^segment:(.+):(\d+):task$/u.exec(row.taskId);
+      const root = match === null ? row.taskId : match[1]!;
+      const n = match === null ? 1 : Number(match[2]);
+      return ids.has(`segment:${root}:${n + 1}:task`);
+    }).map((row) => row.taskId);
+    expect(yielded.length, 'the pauses that minted continuations').toBeGreaterThan(0);
+    for (const taskId of yielded) {
+      expect(harness.store.taskRow(`${taskId}:review`), `${taskId} paused and is never reviewed`).toBeNull();
+    }
+
+    const failed = harness.store.events().filter((event) => event.type === 'run.failed');
+    expect(failed.map((event) => event.facts.reasonCode), 'the fourth round is refused, once').toEqual(['repair_round_limit']);
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run?.state, 'and the run is FAILED, not READY').toBe('FAILED');
+    expect(harness.store.trajectory().filter((event) => event.kind === 'DISPATCH').length, 'the run did real work before it stopped').toBeGreaterThan(10);
+    const dispatchedAfter = harness.store.trajectory()
+      .filter((event) => event.kind === 'DISPATCH' && event.occurredAt > failed[0]!.occurredAt);
+    expect(dispatchedAfter, 'nothing is dispatched once the run has failed').toEqual([]);
+  });
+});
+
+describe('37b — a task claimed in the same tick as a run-ending halt is refused before admission', () => {
+  it('a claim on a FAILED run is CANCELLED with RUN_TERMINAL and reaches no worker', async () => {
+    const harness = build({});
+    harness.store.seedRun({ ...RUN, runId: 'run-ended', state: 'FAILED' });
+    harness.store.seedTask('run-ended', task({ taskId: 'late-1', ordinal: 0, role: 'CODING_AGENT', taskType: 'build' }));
+    const preflight = await prepareClaimedTask({
+      claim: { taskId: 'late-1', runId: 'run-ended', role: 'CODING_AGENT', taskType: 'build', leaseGeneration: 1, attempt: 0 },
+      policy: cardPolicy({ allowedProviders: [CODER.providerId], capabilities: ['implement'] }),
+      verification: verificationPolicy({ reviewerRequired: true, maxRepairRounds: 2 }),
+      capability: 'implement',
+    }, harness.deps, { projectId: 'prj-1' });
+    expect(preflight.kind).toBe('REFUSED');
+    expect(preflight.kind === 'REFUSED' && preflight.outcome.kind === 'HALTED' && preflight.outcome.reasonCode).toBe('RUN_TERMINAL');
+    expect(harness.store.events().some((event) => event.type === 'task.cancelled' && event.taskId === 'late-1' && event.facts.reasonCode === 'RUN_TERMINAL')).toBe(true);
+    expect(harness.adapters.get(CODER.adapterId)!.dispatches, 'no worker was asked').toHaveLength(0);
   });
 });
