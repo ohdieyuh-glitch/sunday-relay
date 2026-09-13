@@ -1,4 +1,5 @@
 import type { JuliusRecordedDecision, JuliusTask } from './julius-runtime';
+import { juliusYieldContinuationOf } from './julius-segment-lineage';
 
 /**
  * REPAIR LINEAGE — what a repair IS, stated once.
@@ -83,8 +84,9 @@ export function repairRoundsBefore(subject: JuliusTask, tasks: readonly JuliusTa
  *
  * A task is effectively accepted when its CURRENT decision is accepting, or is
  * REPAIR and some SUCCEEDED repair child of it is itself effectively accepted.
- * A HALT, or a REPAIR nobody repaired, is never accepted. Tasks with no
- * decision are not in the result at all.
+ * A HALT, or a REPAIR nobody repaired, is never accepted. A task with no
+ * decision is in the result only when it YIELDED and the segment it yielded to
+ * is itself effectively accepted; any other undecided task is not.
  */
 export function effectivelyAcceptedTaskIds(
   tasks: readonly JuliusTask[],
@@ -106,7 +108,19 @@ export function effectivelyAcceptedTaskIds(
   const accepted = new Set<string>();
   const walk = (taskId: string, walking: Set<string>): boolean => {
     const decision = current.get(taskId);
-    if (decision === undefined) return false;
+    if (decision === undefined) {
+      /**
+       * A YIELDED DISPATCH IS JUDGED THROUGH ITS CONTINUATION. It was never
+       * reviewed, because it was never finished; the segment it yielded to
+       * carries the unit's work, so the dispatch is accepted exactly when that
+       * segment is. Any other undecided task is not accepted.
+       */
+      const subject = byId.get(taskId);
+      const continuation = subject === undefined ? null : juliusYieldContinuationOf(subject, tasks);
+      if (continuation === null || continuation.state !== 'SUCCEEDED' || walking.has(taskId)) return false;
+      walking.add(taskId);
+      return walk(continuation.taskId, walking);
+    }
     if (acceptingActions.includes(decision.action)) return true;
     if (decision.action !== 'REPAIR') return false;
     if (walking.has(taskId)) return false;
@@ -115,5 +129,8 @@ export function effectivelyAcceptedTaskIds(
       .some((child) => child.state === 'SUCCEEDED' && walk(child.taskId, walking));
   };
   for (const taskId of current.keys()) if (walk(taskId, new Set())) accepted.add(taskId);
+  for (const task of tasks) {
+    if (!current.has(task.taskId) && walk(task.taskId, new Set())) accepted.add(task.taskId);
+  }
   return accepted;
 }
