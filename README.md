@@ -6,9 +6,9 @@ Orphan branch. It shares no history with `main` and must never be merged.
 |---|---|
 | branch | `relay/julius-qualification-repair` |
 | base | `9fc999f7491a04977d997e58a67a4bc3ed4a35a5` |
-| head | `999793eefca30e4d433a492d442d77240d168779` |
-| tree | `5aa3515c186a33bc9dcec3aeddb1fa30d82c005f` |
-| commits | 2, authored AND committed by `julius-worker[bot]` |
+| head | `650e81071293051c9429c765d111fa0dc3e9e8b6` |
+| tree | `a35c7b78e5f63be311235c2a77a951f8e8a82632` |
+| commits | 4, authored AND committed by `julius-worker[bot]` |
 
 ## Use
 
@@ -20,4 +20,4 @@ Orphan branch. It shares no history with `main` and must never be merged.
 
 ## What this branch carries
 
-Required by paid qualification attempt 3 (run 34766115321). Attempt 4 is dispatched automatically once this lands.
+Amended in place for PR #268: the Live Lab's repair fan-out fix (parts 1 and 2) added before approval. The PR already exists, so this opener will refuse; the pins record what the founder approves.
