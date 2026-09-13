@@ -123,20 +123,50 @@ describe('the one question it turns on is genuinely outside the workspace', () =
    * NOTHING THE CODER CAN READ STATES THE ANSWER.
    *
    * The module doc used to say the bundle was written by `psql -A -F`, which
-   * hands over the whole inference: in that mode a NULL and an empty string
-   * render alike, so AMBIGUOUS follows without asking anyone. The format is
-   * still specified — unquoted, tab-separated — because the module is specified
-   * to parse that; what is withheld is how the exporter renders a NULL.
+   * hands over the whole inference only to a reader who already knows psql.
+   *
+   * WHAT CHANGED AFTER PAID QUALIFICATION ATTEMPT 3 (run 34766115321). With the
+   * invocation withheld too, the question had no answer reachable under the
+   * grant: the exporter lives in a private repository outside the slice, and
+   * PostgreSQL's own documentation gives OPPOSITE answers for its two ordinary
+   * exporters (`psql` unaligned output and `COPY ... TO` text format). Ten
+   * reviews blocked on a criterion nobody could meet. The founder chose to state
+   * the INVOCATION and nothing about its NULL rendering, so establishing the
+   * answer is now research on the granted host, which is what the grant is for.
+   *
+   * So the contract names the invocation, in exactly one requirement, and NOTHING
+   * visible — the sliced file, the seeded specification, the slice, or the
+   * contract — says how a NULL renders.
    */
-  it('neither the sliced file, the seeded specification nor the contract states how a NULL is rendered', () => {
-    const visible = [
+  it('the contract states the exporter\'s invocation, and nothing visible states how a NULL is rendered', () => {
+    const requirements = contract.requirements as readonly string[];
+    const invocation = requirements.filter((line) => line.includes('psql'));
+    expect(invocation, 'exactly one requirement names the invocation').toHaveLength(1);
+    expect(invocation[0]).toContain("psql -A -F $'\\t' -c \"<query>\"");
+    expect(invocation[0]).toContain('deliberately not stated');
+    expect(invocation[0]).toContain('www.postgresql.org');
+    // The exporter really is invoked that way: the statement is a fact, not a hint.
+    expect(read(EXPORTER)).toMatch(/psql -U "\$PGUSER" -d "\$PGDATABASE" -A -F \$'\\t' -c "\$1"/u);
+
+    const workspace = [
       read(DELIVERABLE),
       readFileSync(join(MISSION_DIR, 'seed', SPEC), 'utf8'),
-      contractSource,
       readFileSync(join(MISSION_DIR, 'slice.txt'), 'utf8'),
     ].join('\n');
     for (const giveaway of ['psql', 'pset', '-A -F', 'unaligned']) {
-      expect(visible.includes(giveaway), `the workspace hands over "${giveaway}"`).toBe(false);
+      expect(workspace.includes(giveaway), `the workspace hands over "${giveaway}"`).toBe(false);
+    }
+    // Read the contract as the worker receives it: decoded strings, not JSON escapes.
+    const decoded = [
+      String(contract.objective),
+      ...(contract.requirements as readonly string[]),
+      ...(contract.constraints as readonly string[]),
+      ...(contract.acceptanceCriteria as readonly { description: string }[]).map((criterion) => criterion.description),
+    ].join('\n');
+    const visible = `${workspace}\n${decoded}`;
+    expect(visible.includes('\\N'), "COPY text format's NULL marker is named").toBe(false);
+    for (const answer of ['pset', 'unaligned', 'null string', 'prints null', 'renders null as', 'null is rendered as', 'null as an empty', 'nothing is printed', 'empty string for null']) {
+      expect(visible.toLowerCase().includes(answer), `something visible states the NULL rendering ("${answer}")`).toBe(false);
     }
   });
 
@@ -310,8 +340,10 @@ describe('the research clause is the shape of the question and nothing wider', (
 
   /**
    * WIDENING THE ROLES BOUGHT NO NEW AUTHORITY. The budget was already three
-   * slots' worth, so the same six retrievals are now reachable by three slots
-   * instead of one. No host, no capability and no retrieval was added.
+   * slots' worth, so the same six retrievals became reachable by three slots
+   * instead of one. No host, no capability and no retrieval was added. After
+   * attempt 3 each slot got three (nine for the mission), still exactly three
+   * slots' worth.
    */
   it('the budget was already sized for every slot', () => {
     expect(clause.roleBudget.maxRetrievals * clause.roles.length)
@@ -325,8 +357,13 @@ describe('the research clause is the shape of the question and nothing wider', (
    * record.
    */
   it('the budget is enough to answer one question and not enough to browse', () => {
-    expect(clause.roleBudget.maxRetrievals).toBeLessThanOrEqual(2);
-    expect(clause.missionBudget.maxRetrievals).toBeLessThanOrEqual(6);
+    // 2 -> 3 per slot after paid qualification attempt 3, where the coder's two
+    // observed reads used its whole allowance and four later asks came back
+    // role_budget_exhausted: one page that turns out to be the wrong page must
+    // not end research. Bytes rose in the same proportion (100 KB per retrieval).
+    expect(clause.roleBudget.maxRetrievals).toBeLessThanOrEqual(3);
+    expect(clause.missionBudget.maxRetrievals).toBeLessThanOrEqual(9);
+    expect(clause.roleBudget.maxBytes / clause.roleBudget.maxRetrievals).toBeLessThanOrEqual(100_000);
     expect(clause.roleBudget.maxRetrievals).toBeLessThan(clause.missionBudget.maxRetrievals);
     expect(clause.roleBudget.maxBytes).toBeLessThanOrEqual(clause.missionBudget.maxBytes);
   });
