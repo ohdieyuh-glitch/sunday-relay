@@ -49,8 +49,9 @@ import type { MeteredOutcome } from '../../src/relay/mission/live-reach';
 /**
  * What a recorded research outcome COST, rebuilt from the durable row.
  *
- * Deliberately conservative: only the two outcomes that provably never left the
- * process — a policy refusal and an exhausted budget — are free. Everything
+ * Deliberately conservative: only the three outcomes that provably never left
+ * the process — a policy refusal, an unavailable capability and an exhausted
+ * budget — are free. Everything
  * else reached something, and a projection that guessed otherwise would let a
  * restarted mission re-spend a budget it had already used. An outcome this
  * build does not recognise is charged rather than ignored, for the same reason.
@@ -58,6 +59,7 @@ import type { MeteredOutcome } from '../../src/relay/mission/live-reach';
 export function meteredFromJuliusOutcome(outcome: unknown): MeteredOutcome {
   switch (outcome) {
     case 'policy_refused':
+    case 'unavailable':
     case 'budget_exhausted':
       return 'not_attempted';
     case 'observed':
