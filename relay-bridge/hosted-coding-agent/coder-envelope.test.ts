@@ -262,7 +262,12 @@ describe('the job budget is shared out, and the shares add up', () => {
 
   it('pins the live mission workflow timeout to JOB_BUDGET_MS', () => {
     const workflow = read('.github/workflows/julius-first-live-mission.yml');
-    const declared = /^\s*timeout-minutes:\s*(\d+)\s*$/m.exec(workflow);
+    // THE PAID JOB'S timeout, not the file's first one: the `paid-slot` admission
+    // job now precedes it with a longer wait bound of its own, and that bound is
+    // not the budget the shares are cut from.
+    const paidJob = workflow.slice(workflow.indexOf('\n  first-live-mission:\n'));
+    expect(paidJob.length, 'the paid job must exist').toBeLessThan(workflow.length);
+    const declared = /^\s*timeout-minutes:\s*(\d+)\s*$/m.exec(paidJob);
     expect(declared).not.toBeNull();
     expect(Number(declared![1]) * 60_000).toBe(JOB_BUDGET_MS_FOR_SHARES);
   });
