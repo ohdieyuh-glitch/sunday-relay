@@ -23,6 +23,40 @@
 export const JULIUS_REVIEW_STAGES = ['plan', 'build', 'guidance', 'repair:plan', 'repair:build', 'repair:guidance'] as const;
 export type JuliusReviewStage = typeof JULIUS_REVIEW_STAGES[number];
 
+/**
+ * THE REVIEW STAGES A MISSION RUNS WHEN NOTHING NEEDS REPAIRING — its normal
+ * path, and the only one anything may budget against.
+ *
+ * DERIVED by removing the repair stages rather than written out, because a
+ * seventh stage added above must appear here or be deliberately excluded, and a
+ * second hand-kept list is how `MAX_REVIEWER_ATTEMPTS` came to describe two
+ * stages long after there were six.
+ *
+ * A repair stage is NOT budgeted here and that is the point: a repair is a new
+ * task Julius creates after a review that SUCCEEDED and asked for changes. It
+ * is not another attempt at the review, and counting it as one would make a
+ * reviewer doing its job look like a reviewer failing at it.
+ */
+export const JULIUS_NORMAL_REVIEW_STAGES: readonly JuliusReviewStage[] =
+  Object.freeze(JULIUS_REVIEW_STAGES.filter((stage) => !stage.startsWith('repair:')));
+
+/**
+ * ONE PIPELINE ATTEMPT PER REVIEW STAGE, AND NO AUTOMATIC SECOND.
+ *
+ * The generic `MAX_TASK_ATTEMPTS` gives every task three, which for a review is
+ * three provider calls against the same packet, the same engine deadline and
+ * the same prompt. The reviewer's observed failure is a request that outran the
+ * engine's per-request timeout; repeating it verbatim reaches the same wall, so
+ * the second and third attempts buy nothing and spend the job's reviewer share
+ * doing it. That is a blind retry, which this system does not do.
+ *
+ * WHAT THIS DOES NOT REDUCE: the review itself. The reviewer keeps its full
+ * deadline, its bounded in-adapter correction, its tools and its evidence
+ * depth — one attempt is a whole review, not a shorter one. Transient provider
+ * noise is the adapter's business and stays inside this same declared deadline.
+ */
+export const REVIEW_TASK_ATTEMPTS = 1;
+
 /** `review:<stage>` → stage. Anything else is null — an unknown stage is not a guess. */
 export function reviewStageOf(taskType: string): JuliusReviewStage | null {
   if (!taskType.startsWith('review:')) return null;

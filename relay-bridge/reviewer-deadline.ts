@@ -36,8 +36,14 @@
  * which of the two produced the answer.
  */
 
-/** Bumped when the derivation changes, so a recorded deadline stays readable. */
-export const REVIEWER_DEADLINE_POLICY_VERSION = 'julius-reviewer-deadline.v1' as const;
+import {
+  JULIUS_NORMAL_REVIEW_STAGES, REVIEW_TASK_ATTEMPTS,
+} from '../src/relay/mission/julius/julius-review-stage';
+
+/** Bumped when the derivation changes, so a recorded deadline stays readable.
+ *  v2: the request count and the attempt ceiling are derived rather than
+ *  asserted, and both changed when they were. */
+export const REVIEWER_DEADLINE_POLICY_VERSION = 'julius-reviewer-deadline.v2' as const;
 
 /**
  * A DURATION SOMEBODY ACTUALLY WATCHED, with the run that produced it.
@@ -103,7 +109,28 @@ export const RECORDED_REVIEWER_OBSERVATIONS: readonly ReviewerDurationObservatio
  */
 export const JOB_BUDGET_MS = 120 * 60_000;
 export const REVIEWER_JOB_SHARE_MS = 50 * 60_000;
-export const MAX_REVIEWER_ATTEMPTS = 6;
+
+/**
+ * WHAT THE RUNTIME ACTUALLY SPENDS, not a number beside it.
+ *
+ * This read `6`, described in its own comment as "the retry ceiling on
+ * `review:plan` plus the one on `review:build`" — two stages, three attempts
+ * each. By then the reviewer registered SIX stages, nothing outside this file
+ * and its mirror ever consulted the constant, and the ceiling that really
+ * bounded attempts was `MAX_TASK_ATTEMPTS` in the pipeline. So the denominator
+ * of the affordability check described a system that had not existed for some
+ * time, and the check passed because of it.
+ *
+ * It is now the product of the two numbers the dispatch path enforces: the
+ * review stages a normal mission runs, and the attempts the pipeline grants
+ * each one. Change either and this moves, because it is the same value.
+ *
+ * REPAIR STAGES ARE DELIBERATELY OUT. A repair is a new task created after a
+ * review that SUCCEEDED and asked for changes; it carries its own review, with
+ * its own ceiling, and budgeting it here would price the healthy path for the
+ * unhealthy one.
+ */
+export const MAX_REVIEWER_ATTEMPTS = JULIUS_NORMAL_REVIEW_STAGES.length * REVIEW_TASK_ATTEMPTS;
 
 /** Multiplied onto the floor. 0.2 = twenty per cent of slack above the worst thing seen. */
 export const REVIEWER_DEADLINE_HEADROOM_RATIO = 0.2;
@@ -123,11 +150,74 @@ export interface ReviewerAnalyticalModel {
   readonly engineOverheadMs: number;
 }
 
-export const DEFAULT_ANALYTICAL_MODEL: ReviewerAnalyticalModel = {
-  requestTimeoutSeconds: 90,
-  requestsPerReview: 2,
+/** The per-request deadline the bootstrap writes into the engine's profile.
+ *  `reviewer-deadline.test.ts` holds the workflow to this exact number. */
+export const REVIEWER_REQUEST_TIMEOUT_SECONDS = 90;
+
+/**
+ * THE FIXED LOCAL STARTUP BEFORE A PROVIDER IS CONTACTED, MEASURED.
+ *
+ * ~18 s against the real binary (v0.18.2), provider-free, and the same cold or
+ * warm — which is also how "the first attempt always fails" was falsified as a
+ * cold-start story.
+ *
+ * IT IS NOT `engineOverheadMs`, AND THE DIFFERENCE IS DELIBERATE. That number
+ * is a conservative envelope for everything around the requests; this one is
+ * the piece somebody actually watched. The inference below subtracts wall clock
+ * that was certainly NOT spent waiting on a provider, so it must use the
+ * measurement: subtracting the larger padding would credit the engine with time
+ * it may never have taken and understate the request count, which is the error
+ * this whole derivation exists to end.
+ */
+export const MEASURED_ENGINE_STARTUP_MS = 18_000;
+
+/**
+ * HOW MANY UPSTREAM REQUESTS A REVIEW REALLY MAKES — as a FLOOR, read off the
+ * durations we have watched.
+ *
+ * This was asserted as `2`, and paid Mission 4 falsifies it. Its `review:plan`
+ * attempt 2 COMPLETED in 381 880 ms at a commit where the bootstrap wrote
+ * `request_timeout_seconds: 90` and `api_max_retries: 0` into the engine
+ * profile, with an isolated `HERMES_HOME` that leaves the model no toolset at
+ * all. Two requests can account for at most `18 000 + 2 x 90 000 = 198 000 ms`.
+ * The review took nearly twice that, so it made at least five.
+ *
+ * Nothing noticed because the understatement hid behind the observation that
+ * should have exposed it: `analyticalWorstCaseMs` came to 360 000, BELOW the
+ * 400 093 ms high water, so `basis` was `OBSERVED_CENSORED` and the analytical
+ * number never bound anything.
+ *
+ * A FLOOR, NEVER THE COUNT. A bundle cannot say how many requests a review
+ * issued — the engine does not report it and `-z` prints nothing until the end.
+ * What a duration proves is a minimum, and a censored duration proves a minimum
+ * too, so both kinds count. Anything beyond that stays unknown.
+ */
+export function impliedRequestsPerReview(
+  requestTimeoutSeconds: number = REVIEWER_REQUEST_TIMEOUT_SECONDS,
+  observations: readonly ReviewerDurationObservation[] = RECORDED_REVIEWER_OBSERVATIONS,
+  startupMs: number = MEASURED_ENGINE_STARTUP_MS,
+): number {
+  const perRequestMs = requestTimeoutSeconds * 1000;
+  if (!Number.isFinite(perRequestMs) || perRequestMs <= 0) throw new Error('invalid_request_timeout');
+  let floor = 1;
+  for (const observation of observations) {
+    const waiting = observation.elapsedMs - startupMs;
+    if (waiting <= 0) continue;
+    floor = Math.max(floor, Math.ceil(waiting / perRequestMs));
+  }
+  return floor;
+}
+
+export const DEFAULT_ANALYTICAL_MODEL: ReviewerAnalyticalModel = Object.freeze({
+  requestTimeoutSeconds: REVIEWER_REQUEST_TIMEOUT_SECONDS,
+  requestsPerReview: impliedRequestsPerReview(),
+  /**
+   * The conservative envelope around the requests — spawn, profile load,
+   * teardown and whatever the engine does between calls. Retained as the
+   * padding it has always been, and explicitly NOT the measured startup above.
+   */
   engineOverheadMs: 180_000,
-};
+});
 
 export type ReviewerDeadlineBasis =
   /** The analytical model was the largest input; no observation exceeded it. */
@@ -142,6 +232,13 @@ export interface ReviewerDeadline {
   /** The one number every consumer uses. Milliseconds. */
   readonly operativeTimeoutMs: number;
   readonly analyticalWorstCaseMs: number;
+  /**
+   * The request-count FLOOR the analytical worst case was built on, carried in
+   * the result so the bootstrap can bound the engine with the same number
+   * instead of computing `x 2` of its own — which is what it did, and what made
+   * its ordering check pass with 300 s of margin that did not exist.
+   */
+  readonly requestsPerReview: number;
   /** Largest duration ever observed, or null when nothing has been recorded. */
   readonly observedHighWaterMs: number | null;
   /** True when the high water came from a cut-off run, so it is a lower bound. */
@@ -231,6 +328,7 @@ export function resolveReviewerDeadline(input: {
     policyVersion: REVIEWER_DEADLINE_POLICY_VERSION,
     operativeTimeoutMs: withHeadroomMs,
     analyticalWorstCaseMs,
+    requestsPerReview: model.requestsPerReview,
     observedHighWaterMs: highWater.ms,
     observedHighWaterCensored: highWater.censored,
     floorMs,

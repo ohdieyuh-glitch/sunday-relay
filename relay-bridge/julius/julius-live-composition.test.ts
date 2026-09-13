@@ -644,7 +644,7 @@ describe('a full mission drive with Julius in control', () => {
    * The reviewer is the REAL runner over a child that never writes and never
    * exits, so this is the same code path the paid run took.
    */
-  it('a reviewer that hangs on every attempt exhausts its ceiling and leaves the build BLOCKED', async () => {
+  it('a reviewer that hangs is asked ONCE and leaves the build BLOCKED', async () => {
     const { memory, outcome, fakes } = await driveLiveMission(
       ['approved'], undefined, undefined, undefined, Number.MAX_SAFE_INTEGER,
     );
@@ -656,17 +656,23 @@ describe('a full mission drive with Julius in control', () => {
     expect(memory.taskRow('build-1:review'), 'and so there is no build review').toBeNull();
 
     /**
-     * THREE ATTEMPTS, AND ONLY THREE — the exact ledger the paid bundle holds.
+     * ONE ATTEMPT, AND ONLY ONE.
      *
-     * `failures.tsv` from run 34311556047 shows THREE `julius.retry.scheduled`
-     * rows and then one `julius.task.failed`: the coordinator classifies each
-     * retryable error as it happens, and the pipeline's own autonomy rule is
-     * what refuses the fourth ask. Retryable is permission to re-ask, never a
-     * licence to spend without one.
+     * This read THREE, matching `failures.tsv` from run 34311556047. A review
+     * now gets a single pipeline attempt, because the reviewer's failure is a
+     * request that outran the engine's own per-request deadline and the second
+     * and third asks reach the same wall with the same packet — three paid
+     * cuts instead of one, and no more information.
+     *
+     * The coordinator still writes ONE `retry.scheduled`: its job is to
+     * classify the ERROR, and a timeout genuinely is retryable. Whether the run
+     * carries on is `decideJuliusContinuation`'s, and it declines — the same
+     * division that already let a SUPERVISED run stop on a retryable error. The
+     * terminal `task.failed` below is the authority on what actually happened.
      */
     const scheduled = memory.events().filter((event) => event.type === 'retry.scheduled');
-    expect(scheduled).toHaveLength(3);
-    expect(fakes.log.order.filter((step) => step === 'reviewer')).toHaveLength(3);
+    expect(scheduled).toHaveLength(1);
+    expect(fakes.log.order.filter((step) => step === 'reviewer')).toHaveLength(1);
     for (const event of scheduled) {
       const facts = event.facts as Record<string, unknown>;
       // TIMEOUT STAYS RETRYABLE. It describes an answer that did not arrive,
@@ -687,12 +693,14 @@ describe('a full mission drive with Julius in control', () => {
      * provider calls made INSIDE one dispatch. Both are on the row now, and
      * they answer different questions.
      */
-    expect(scheduled.map((event) => (event.facts as Record<string, unknown>).attempt)).toEqual([1, 2, 3]);
-    // It rides every event, not only the failures: a second ask that happened
-    // must be visible from the dispatch row too, not only from its outcome.
+    expect(scheduled.map((event) => (event.facts as Record<string, unknown>).attempt)).toEqual([1]);
+    // It rides every event, not only the failures: the ask that happened must
+    // be visible from the dispatch row too, not only from its outcome. There is
+    // one now, and the row still says which it was rather than leaving a reader
+    // to infer it.
     const dispatched = memory.events().filter((event) => event.type === 'worker.dispatched'
       && event.taskId === 'plan-1:review');
-    expect(dispatched.map((event) => (event.facts as Record<string, unknown>).attempt)).toEqual([1, 2, 3]);
+    expect(dispatched.map((event) => (event.facts as Record<string, unknown>).attempt)).toEqual([1]);
 
     const failed = memory.events().filter((event) => event.type === 'task.failed')
       .find((event) => event.taskId === 'plan-1:review')!;
@@ -703,16 +711,18 @@ describe('a full mission drive with Julius in control', () => {
     /**
      * AND THE PROCESS FACTS SURVIVE TO THE DURABLE ROW.
      *
-     * This is the half the paid bundle was missing. Three rows that read
+     * This is the half the paid bundle was missing, and it matters MORE now
+     * that there is one attempt rather than three: a row reading
      * `timed_out=true, bytes=0, no exit code` cannot say whether the provider
      * was slow, unreachable, or never asked — Hermes prints a one-shot review
      * in a single write at the end, so zero bytes is what an in-flight review
-     * and a dead one both look like. These columns are the difference.
+     * and a dead one both look like. These columns are the difference, and the
+     * single ask has to carry all of it.
      */
-    // ON THE DISPATCH ROWS, which is where the bundle reads them: the terminal
+    // ON THE DISPATCH ROW, which is where the bundle reads it: the terminal
     // `task.failed` is the pipeline's own autonomy decision and carries the
     // reason code, not the worker's telemetry. `worker-diagnostics.tsv` selects
-    // exactly the rows that have a transport, which is these three.
+    // exactly the rows that have a transport.
     const dispatch = scheduled.map((event) => event.facts as Record<string, unknown>);
     for (const attempt of dispatch) {
       expect(attempt.diag_processStarted).toBe(true);
@@ -734,31 +744,50 @@ describe('a full mission drive with Julius in control', () => {
     }
   });
 
-  it('a reviewer that hangs once and then answers still completes the run', async () => {
-    // Paid run 34306850331, the control: its first plan review timed out too,
-    // its second answered, and the mission COMPLETED. A retry is only worth
-    // having if it can actually recover, and this is that half.
+  /**
+   * THE CASE THIS REPLACES, AND WHY THE TRADE WAS MADE.
+   *
+   * This read "a reviewer that hangs once and then answers still completes the
+   * run", after paid run 34306850331: its first plan review timed out, its
+   * second answered, and the mission COMPLETED. That recovery is real and it is
+   * what a pipeline-level retry buys.
+   *
+   * It is given up deliberately. The retry that recovered 34306850331 is the
+   * same retry that spent three paid cuts on 34311556047 without learning
+   * anything, and the two are indistinguishable in advance: the packet, the
+   * prompt, the engine and its per-request deadline are identical on the second
+   * ask. What replaces it is a deadline large enough that the first ask should
+   * not have to be lucky — 756 000 ms rather than 480 112 — plus the reviewer's
+   * own bounded in-adapter correction, which handles a malformed answer inside
+   * this one dispatch and is untouched.
+   */
+  it('a reviewer that hangs once is not asked again, and the run fails honestly', async () => {
     const { memory, outcome, fakes } = await driveLiveMission(
       ['approved'], undefined, undefined, undefined, 1,
     );
 
-    expect(outcome.state).toBe('COMPLETED');
-    expect(memory.taskRow('plan-1:review')?.state).toBe('SUCCEEDED');
-    expect(memory.taskRow('build-1')?.state).toBe('SUCCEEDED');
-    expect(memory.events().filter((event) => event.type === 'retry.scheduled')).toHaveLength(1);
-    // Four reviewer dispatches: the hung plan review, its retry, and the build
-    // review — the retry is a fresh dispatch, never a resumed one.
-    expect(fakes.log.order.filter((step) => step === 'reviewer')).toHaveLength(3);
+    expect(outcome.state, 'one ask, and it did not answer').toBe('FAILED');
+    expect(memory.taskRow('plan-1:review')?.state).toBe('FAILED');
+    // The safety property is unchanged and is the reason this is acceptable: a
+    // reviewer that did not answer never becomes a build that ran.
+    expect(memory.taskRow('build-1')?.state).toBe('BLOCKED');
+    expect(fakes.log.order.filter((step) => step === 'reviewer')).toHaveLength(1);
+    const failed = memory.events().filter((event) => event.type === 'task.failed')
+      .find((event) => event.taskId === 'plan-1:review')!;
+    expect((failed.facts as Record<string, unknown>).reasonCode).toBe('RETRY_ATTEMPTS_EXHAUSTED');
   });
 
-  it('the retried review is asked the same question, never one that mentions the timeout', async () => {
+  it('no review is ever asked a question that mentions the timeout', async () => {
     // A timeout is Relay's fact about its own window, not feedback on a plan.
     // Feeding it back would turn an infrastructure failure into a correction
     // the reviewer is asked to act on.
+    //
+    // This case was written around a RETRIED review — "asked the same question"
+    // — and the retry is gone. The invariant it was protecting is not: every
+    // packet the reviewer is ever handed must be free of Relay's own telemetry,
+    // and that is now asserted over all of them rather than over a pair.
     const { fakes } = await driveLiveMission(['approved'], undefined, undefined, undefined, 1);
-    const planReviews = fakes.packets.filter((packet) => packet.unifiedDiff.length === 0);
-    expect(planReviews.length).toBeGreaterThanOrEqual(2);
-    expect(planReviews[1]).toEqual(planReviews[0]);
+    expect(fakes.packets.length, 'the reviewer must have been asked at all').toBeGreaterThanOrEqual(1);
     for (const packet of fakes.packets) {
       const rendered = JSON.stringify(packet);
       for (const word of ['timed out', 'timeout', 'SIGTERM', 'review_timeout']) {
