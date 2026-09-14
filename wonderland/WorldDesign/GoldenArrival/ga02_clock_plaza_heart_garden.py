@@ -28,6 +28,7 @@ import random
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+KIT = json.loads((HERE.parent / "Skyline" / "kit_modules.json").read_text(encoding="utf-8"))["modules"]
 PASS = "GA02"
 GROUND = -14.0
 V2 = "/Game/WonderlandV2/"
@@ -108,6 +109,15 @@ def build():
         actors.append({"id": id_, "mesh": MESH[mesh], "loc": [round(v, 2) for v in loc], "rot": [0.0, round(yaw, 2), 0.0],
                        "scale": [round(v, 4) for v in s], "materials": materials, "collision": collision})
 
+    def plant(batch, kind, petal, loc, yaw, scale=1.0, leaf="MI_V2_LeafMid"):
+        """FL03: one forge flower bed run (GAP 19); every part and material is its own batch."""
+        module = {"daisy": "WL_Flower_Daisy_Run", "lavender": "WL_Flower_Lavender_Run", "rose": "WL_Flower_Rose_Run"}[kind]
+        for part in KIT[module]["parts"]:
+            material = petal if part["part"] == "petal" else (leaf if part["part"] == "leaf" else part["material"])
+            key = "%s_%s_%s" % (kind, part["part"], material.split("_")[-1])
+            MESH[key] = part["mesh"]
+            instance("%s_%s" % (batch, key), key, material, loc, scale, yaw)
+
     def instance(batch_id, mesh, material, loc, scale, yaw, collides=False, cast_shadow=True):
         s = [scale] * 3 if isinstance(scale, (int, float)) else list(scale)
         b = batches.setdefault(batch_id, {"id": batch_id, "mesh": MESH[mesh], "material": material, "instances": [],
@@ -184,11 +194,20 @@ def build():
     ring(430.0, 24)
 
     # A flower ring in the planting band between the basin ring and the paving.
-    for k in range(18):
-        ang = math.radians(360.0 * k / 18 + 10.0)
-        x, y = cx + 360.0 * math.cos(ang), cy + 360.0 * math.sin(ang)
-        material = ["MI_V2_PetalPink", "MI_V2_PetalRose", "MI_V2_PetalViolet"][k % 3]
-        instance("BasinBlooms_" + material.split("_")[-1], "blossom", material, (x, y, GROUND), rng.uniform(0.55, 0.7), rng.uniform(0, 360))
+    # FL03 (2026-09-13): 18 blossom clusters read as colour pads round the fountain; 20 flower runs laid round the ring,
+    # turned along it, violet / pink / rose, fill the band.
+    # FL03b: one ring at scale 1.0 read lower and sparser than the clusters it replaced. Two rings now: tall lavender and
+    # roses against the basin (r 3.35 m, x1.35), daisies and roses at the gold edge (r 3.95 m, x1.15).
+    for radius, count, scale, kinds in ((335.0, 18, 1.35, [("lavender", "MI_V2_PetalViolet"), ("rose", "MI_V2_RosePink"),
+                                                          ("lavender", "MI_V2_PetalViolet"), ("rose", "MI_V2_RoseRed")]),
+                                        (395.0, 22, 1.15, [("daisy", "MI_V2_PetalPink"), ("rose", "MI_V2_RosePink"),
+                                                          ("daisy", "MI_V2_PetalViolet"), ("daisy", "MI_V2_PetalWhite")])):
+        for k in range(count):
+            ang = math.radians(360.0 * (k + 0.5) / count)
+            x, y = cx + radius * math.cos(ang), cy + radius * math.sin(ang)
+            kind, petal = kinds[k % len(kinds)]
+            plant("BasinFlowers", kind, petal, (x, y, GROUND), math.degrees(ang) + 90.0, scale,
+                  leaf="MI_V2_LeafDark" if k % 2 else "MI_V2_LeafMid")
 
     # Benches facing the fountain, and rose-glass lamps around the rim.
     for k, ang in enumerate((45.0, 135.0, 225.0, 315.0)):
@@ -259,10 +278,13 @@ def build():
                     if pick == 0:
                         instance("HeartRoseBush", "rose_bush", "MI_V2_LeafMid", (wx, wy, GROUND), rng.uniform(0.38, 0.46), rng.uniform(0, 360))
                     elif pick == 1:
-                        instance("HeartGroundBlooms", "ground_blooms", "MI_V2_PetalRose", (wx, wy, GROUND), rng.uniform(0.7, 0.85), rng.uniform(0, 360))
+                        # FL03: ground blooms read as cushions; a short daisy run
+                        plant("HeartFlowers", "daisy", "MI_V2_PetalPink", (wx, wy, GROUND), rng.uniform(0, 360), rng.uniform(0.62, 0.72))
                     else:
+                        # FL03: SM_rose_bloom read as bowls; a short rose run
                         material = "MI_V2_RoseRed" if pick == 2 else "MI_V2_RosePink"
-                        instance("HeartRoses_" + material.split("_")[-1], "rose_bloom", material, (wx, wy, GROUND), rng.uniform(0.5, 0.62), rng.uniform(0, 360))
+                        plant("HeartFlowers", "rose", material, (wx, wy, GROUND), rng.uniform(0, 360), rng.uniform(0.62, 0.72),
+                              leaf="MI_V2_LeafDark")
 
     # Rose trellis arches over the path, each crowned with a gold heart.
     trellis_scale = 0.62
