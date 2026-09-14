@@ -1,7 +1,7 @@
 {
  "schema": "wonderland-kit-modules/1",
  "kit_version": "1.0.0",
- "generated_utc": "2026-09-13T19:15:00+00:00",
+ "generated_utc": "2026-09-13T22:35:56+00:00",
  "radius_ladder_uu": {
   "XL": 680.0,
   "L": 460.0,
@@ -6076,6 +6076,183 @@
      "part": "stone_dark",
      "mesh": "/Game/WonderlandV2/Kit/palace/WL_Palace_Dome_Grand_stone_dark.WL_Palace_Dome_Grand_stone_dark",
      "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Ground_Flagstone_A": {
+   "family": "paving",
+   "group": "paving",
+   "role": "detail",
+   "height": 5.89,
+   "radius": 200.0,
+   "size": [
+    400.0,
+    400.0,
+    5.89
+   ],
+   "bbox_min": [
+    -200.0,
+    -200.0,
+    0.0
+   ],
+   "bbox_max": [
+    200.0,
+    200.0,
+    5.89
+   ],
+   "tris": 1720,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 200.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 5.89,
+     "rung": null,
+     "radius": 200.0
+    }
+   },
+   "parts": [
+    {
+     "part": "moss",
+     "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_moss.WL_Ground_Flagstone_A_moss",
+     "material": "MI_V2_Moss"
+    },
+    {
+     "part": "paving",
+     "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving.WL_Ground_Flagstone_A_paving",
+     "material": "MI_V2_PlazaCream"
+    },
+    {
+     "part": "paving_shade",
+     "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_shade.WL_Ground_Flagstone_A_paving_shade",
+     "material": "MI_V2_PlazaShade"
+    },
+    {
+     "part": "paving_warm",
+     "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_warm.WL_Ground_Flagstone_A_paving_warm",
+     "material": "MI_V2_PlazaWarm"
+    }
+   ]
+  },
+  "WL_Ground_Flagstone_B": {
+   "family": "paving",
+   "group": "paving",
+   "role": "detail",
+   "height": 5.9,
+   "radius": 200.0,
+   "size": [
+    400.0,
+    400.0,
+    5.9
+   ],
+   "bbox_min": [
+    -200.0,
+    -200.0,
+    0.0
+   ],
+   "bbox_max": [
+    200.0,
+    200.0,
+    5.9
+   ],
+   "tris": 1916,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 200.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 5.9,
+     "rung": null,
+     "radius": 200.0
+    }
+   },
+   "parts": [
+    {
+     "part": "moss",
+     "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_moss.WL_Ground_Flagstone_B_moss",
+     "material": "MI_V2_Moss"
+    },
+    {
+     "part": "paving",
+     "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving.WL_Ground_Flagstone_B_paving",
+     "material": "MI_V2_PlazaCream"
+    },
+    {
+     "part": "paving_shade",
+     "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_shade.WL_Ground_Flagstone_B_paving_shade",
+     "material": "MI_V2_PlazaShade"
+    },
+    {
+     "part": "paving_warm",
+     "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_warm.WL_Ground_Flagstone_B_paving_warm",
+     "material": "MI_V2_PlazaWarm"
+    }
+   ]
+  },
+  "WL_Ground_Flagstone_C": {
+   "family": "paving",
+   "group": "paving",
+   "role": "detail",
+   "height": 5.88,
+   "radius": 200.0,
+   "size": [
+    400.0,
+    400.0,
+    5.88
+   ],
+   "bbox_min": [
+    -200.0,
+    -200.0,
+    0.0
+   ],
+   "bbox_max": [
+    200.0,
+    200.0,
+    5.88
+   ],
+   "tris": 1804,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 200.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 5.88,
+     "rung": null,
+     "radius": 200.0
+    }
+   },
+   "parts": [
+    {
+     "part": "moss",
+     "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_moss.WL_Ground_Flagstone_C_moss",
+     "material": "MI_V2_Moss"
+    },
+    {
+     "part": "paving",
+     "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving.WL_Ground_Flagstone_C_paving",
+     "material": "MI_V2_PlazaCream"
+    },
+    {
+     "part": "paving_shade",
+     "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_shade.WL_Ground_Flagstone_C_paving_shade",
+     "material": "MI_V2_PlazaShade"
+    },
+    {
+     "part": "paving_warm",
+     "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_warm.WL_Ground_Flagstone_C_paving_warm",
+     "material": "MI_V2_PlazaWarm"
     }
    ]
   },

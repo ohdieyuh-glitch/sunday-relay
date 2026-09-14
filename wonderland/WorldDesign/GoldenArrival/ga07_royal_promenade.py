@@ -38,7 +38,9 @@ KERB = V2 + "Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone"
 _KIT = json.loads((HERE.parent / "Skyline" / "kit_modules.json").read_text(encoding="utf-8"))["modules"]
 MEDALLION = [(part["part"], part["mesh"], part["material"]) for part in _KIT["WL_Ground_Plaza_Medallion"]["parts"]]
 
-PLAZA_BASE = 12.8
+# MQ02 (2026-09-13) laid the plaza in flagstone fields 5.0-5.9 cm proud on a 12.3 datum: the plaza ornament is
+# re-laid on the stone tops (was 12.8 on the V2 slabs).
+PLAZA_BASE = 18.3
 LANE_EDGE = 372.0
 LANE_Y = (-1320.0, 820.0)
 BAND_YS = [-1120.0 + 480.0 * k for k in range(5)]     # -1120 .. 800, every 4.8 m
@@ -105,7 +107,8 @@ def build():
             inst(key, KERB, material, cx + radius * math.cos(a), cy + radius * math.sin(a), z,
                  math.degrees(a) + 90.0, chord / 120.0, width / 36.2, height / 28.2)
 
-    medallions = [(0.0, 700.0, PLAZA_BASE, 300.0), (0.0, 1650.0, _path_top(1650.0) - 0.3, 190.0),
+    medallions = [(0.0, 570.0, PLAZA_BASE, 250.0),       # inside MQ02's top stone patch (y 300..840)
+                   (0.0, 1650.0, _path_top(1650.0) - 0.3, 190.0),
                   (0.0, 2050.0, _path_top(2050.0) - 0.3, 190.0)]   # flags are level 1300-2200 (9.1 +/- 0.4)
     for (cx, cy, z, R) in medallions:
         ring("MedallionGold", "MI_V2_Gold", cx, cy, z, R, 16.0, 2.2)
