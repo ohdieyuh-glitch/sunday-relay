@@ -1,7 +1,7 @@
 {
  "schema": "wonderland-kit-modules/1",
  "kit_version": "1.0.0",
- "generated_utc": "2026-09-14T01:17:41+00:00",
+ "generated_utc": "2026-09-14T02:05:23+00:00",
  "radius_ladder_uu": {
   "XL": 680.0,
   "L": 460.0,
@@ -6260,24 +6260,24 @@
    "family": "flowers",
    "group": "flowers",
    "role": "detail",
-   "height": 37.46,
-   "radius": 70.81,
+   "height": 34.19,
+   "radius": 68.06,
    "size": [
-    140.92,
-    49.59,
-    37.46
+    132.83,
+    59.54,
+    34.19
    ],
    "bbox_min": [
-    -70.81,
-    -25.44,
+    -68.06,
+    -30.83,
     0.0
    ],
    "bbox_max": [
-    70.11,
-    24.15,
-    37.46
+    64.77,
+    28.71,
+    34.19
    ],
-   "tris": 5055,
+   "tris": 6564,
    "sockets": {
     "bottom": {
      "kind": "ground",
@@ -6308,24 +6308,24 @@
    "family": "flowers",
    "group": "flowers",
    "role": "detail",
-   "height": 52.14,
-   "radius": 69.8,
+   "height": 44.67,
+   "radius": 67.66,
    "size": [
-    133.9,
-    43.02,
-    52.14
+    134.94,
+    43.81,
+    44.67
    ],
    "bbox_min": [
-    -69.8,
-    -20.42,
+    -67.28,
+    -20.79,
     0.0
    ],
    "bbox_max": [
-    64.1,
-    22.6,
-    52.14
+    67.66,
+    23.02,
+    44.67
    ],
-   "tris": 7352,
+   "tris": 6730,
    "sockets": {
     "bottom": {
      "kind": "ground",
@@ -6351,24 +6351,24 @@
    "family": "flowers",
    "group": "flowers",
    "role": "detail",
-   "height": 38.95,
-   "radius": 66.71,
+   "height": 31.46,
+   "radius": 66.42,
    "size": [
-    128.56,
-    44.52,
-    38.95
+    125.41,
+    47.22,
+    31.46
    ],
    "bbox_min": [
-    -61.85,
-    -23.14,
+    -58.99,
+    -23.52,
     0.0
    ],
    "bbox_max": [
-    66.71,
-    21.38,
-    38.95
+    66.42,
+    23.7,
+    31.46
    ],
-   "tris": 2086,
+   "tris": 3288,
    "sockets": {
     "bottom": {
      "kind": "ground",
@@ -6387,6 +6387,165 @@
      "part": "petal",
      "mesh": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Rose_Run_petal.WL_Flower_Rose_Run_petal",
      "material": "MI_V2_PetalPink"
+    }
+   ]
+  },
+  "WL_Mushroom_Toadstool": {
+   "family": "mushrooms",
+   "group": "mushrooms",
+   "role": "hero",
+   "height": 664.32,
+   "radius": 267.8,
+   "size": [
+    535.6,
+    535.6,
+    664.32
+   ],
+   "bbox_min": [
+    -267.8,
+    -267.8,
+    0.0
+   ],
+   "bbox_max": [
+    267.8,
+    267.8,
+    664.32
+   ],
+   "tris": 3196,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 78.0
+    }
+   },
+   "parts": [
+    {
+     "part": "mush_cap",
+     "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_cap.WL_Mushroom_Toadstool_mush_cap",
+     "material": "MI_V2_MushRed"
+    },
+    {
+     "part": "mush_gill",
+     "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_gill.WL_Mushroom_Toadstool_mush_gill",
+     "material": "MI_V2_MushCream"
+    },
+    {
+     "part": "mush_spot",
+     "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_spot.WL_Mushroom_Toadstool_mush_spot",
+     "material": "MI_V2_PetalWhite"
+    },
+    {
+     "part": "mush_stem",
+     "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_stem.WL_Mushroom_Toadstool_mush_stem",
+     "material": "MI_V2_MushStem"
+    }
+   ]
+  },
+  "WL_Mushroom_Button": {
+   "family": "mushrooms",
+   "group": "mushrooms",
+   "role": "hero",
+   "height": 325.1,
+   "radius": 124.1,
+   "size": [
+    247.2,
+    247.7,
+    325.1
+   ],
+   "bbox_min": [
+    -123.6,
+    -123.6,
+    0.0
+   ],
+   "bbox_max": [
+    123.6,
+    124.1,
+    325.1
+   ],
+   "tris": 2208,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 40.0
+    }
+   },
+   "parts": [
+    {
+     "part": "mush_cap",
+     "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_cap.WL_Mushroom_Button_mush_cap",
+     "material": "MI_V2_MushRed"
+    },
+    {
+     "part": "mush_gill",
+     "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_gill.WL_Mushroom_Button_mush_gill",
+     "material": "MI_V2_MushCream"
+    },
+    {
+     "part": "mush_spot",
+     "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_spot.WL_Mushroom_Button_mush_spot",
+     "material": "MI_V2_PetalWhite"
+    },
+    {
+     "part": "mush_stem",
+     "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_stem.WL_Mushroom_Button_mush_stem",
+     "material": "MI_V2_MushStem"
+    }
+   ]
+  },
+  "WL_Mushroom_Tall": {
+   "family": "mushrooms",
+   "group": "mushrooms",
+   "role": "hero",
+   "height": 767.11,
+   "radius": 185.4,
+   "size": [
+    370.8,
+    370.8,
+    767.11
+   ],
+   "bbox_min": [
+    -185.4,
+    -185.4,
+    0.0
+   ],
+   "bbox_max": [
+    185.4,
+    185.4,
+    767.11
+   ],
+   "tris": 2700,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 55.0
+    }
+   },
+   "parts": [
+    {
+     "part": "mush_cap",
+     "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_cap.WL_Mushroom_Tall_mush_cap",
+     "material": "MI_V2_MushRed"
+    },
+    {
+     "part": "mush_gill",
+     "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_gill.WL_Mushroom_Tall_mush_gill",
+     "material": "MI_V2_MushCream"
+    },
+    {
+     "part": "mush_spot",
+     "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_spot.WL_Mushroom_Tall_mush_spot",
+     "material": "MI_V2_PetalWhite"
+    },
+    {
+     "part": "mush_stem",
+     "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_stem.WL_Mushroom_Tall_mush_stem",
+     "material": "MI_V2_MushStem"
     }
    ]
   },

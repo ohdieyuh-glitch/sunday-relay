@@ -99,8 +99,8 @@
    "collision": "block"
   },
   {
-   "id": "Mushroom_RedTall",
-   "mesh": "/Game/WonderlandV2/Mushrooms/Medium/SM_mushroom_medium.SM_mushroom_medium",
+   "id": "Mushroom_RedTall_mush_cap",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_cap.WL_Mushroom_Toadstool_mush_cap",
    "loc": [
     1120.0,
     860.0,
@@ -119,11 +119,80 @@
    "materials": [
     "MI_V2_MushRed"
    ],
+   "collision": "none"
+  },
+  {
+   "id": "Mushroom_RedTall_mush_gill",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_gill.WL_Mushroom_Toadstool_mush_gill",
+   "loc": [
+    1120.0,
+    860.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    1.1,
+    1.1,
+    1.1
+   ],
+   "materials": [
+    "MI_V2_MushCream"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "Mushroom_RedTall_mush_spot",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_spot.WL_Mushroom_Toadstool_mush_spot",
+   "loc": [
+    1120.0,
+    860.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    1.1,
+    1.1,
+    1.1
+   ],
+   "materials": [
+    "MI_V2_PetalWhite"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "Mushroom_RedTall_mush_stem",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_stem.WL_Mushroom_Toadstool_mush_stem",
+   "loc": [
+    1120.0,
+    860.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    1.1,
+    1.1,
+    1.1
+   ],
+   "materials": [
+    "MI_V2_MushStem"
+   ],
    "collision": "block"
   },
   {
-   "id": "Mushroom_RedLow",
-   "mesh": "/Game/WonderlandV2/Mushrooms/Medium/SM_mushroom_medium.SM_mushroom_medium",
+   "id": "Mushroom_RedLow_mush_cap",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_cap.WL_Mushroom_Toadstool_mush_cap",
    "loc": [
     1320.0,
     420.0,
@@ -142,11 +211,80 @@
    "materials": [
     "MI_V2_MushRed"
    ],
+   "collision": "none"
+  },
+  {
+   "id": "Mushroom_RedLow_mush_gill",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_gill.WL_Mushroom_Toadstool_mush_gill",
+   "loc": [
+    1320.0,
+    420.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    110.0,
+    0.0
+   ],
+   "scale": [
+    0.85,
+    0.85,
+    0.85
+   ],
+   "materials": [
+    "MI_V2_MushCream"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "Mushroom_RedLow_mush_spot",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_spot.WL_Mushroom_Toadstool_mush_spot",
+   "loc": [
+    1320.0,
+    420.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    110.0,
+    0.0
+   ],
+   "scale": [
+    0.85,
+    0.85,
+    0.85
+   ],
+   "materials": [
+    "MI_V2_PetalWhite"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "Mushroom_RedLow_mush_stem",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_stem.WL_Mushroom_Toadstool_mush_stem",
+   "loc": [
+    1320.0,
+    420.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    110.0,
+    0.0
+   ],
+   "scale": [
+    0.85,
+    0.85,
+    0.85
+   ],
+   "materials": [
+    "MI_V2_MushStem"
+   ],
    "collision": "block"
   },
   {
-   "id": "Mushroom_Cream",
-   "mesh": "/Game/WonderlandV2/Mushrooms/Medium/SM_mushroom_medium.SM_mushroom_medium",
+   "id": "Mushroom_Cream_mush_cap",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_cap.WL_Mushroom_Tall_mush_cap",
    "loc": [
     1430.0,
     2150.0,
@@ -158,18 +296,87 @@
     0.0
    ],
    "scale": [
-    1.0,
-    1.0,
-    1.0
+    0.9,
+    0.9,
+    0.9
+   ],
+   "materials": [
+    "MI_V2_MushPurple"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "Mushroom_Cream_mush_gill",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_gill.WL_Mushroom_Tall_mush_gill",
+   "loc": [
+    1430.0,
+    2150.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    200.0,
+    0.0
+   ],
+   "scale": [
+    0.9,
+    0.9,
+    0.9
    ],
    "materials": [
     "MI_V2_MushCream"
    ],
+   "collision": "none"
+  },
+  {
+   "id": "Mushroom_Cream_mush_spot",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_spot.WL_Mushroom_Tall_mush_spot",
+   "loc": [
+    1430.0,
+    2150.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    200.0,
+    0.0
+   ],
+   "scale": [
+    0.9,
+    0.9,
+    0.9
+   ],
+   "materials": [
+    "MI_V2_PetalWhite"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "Mushroom_Cream_mush_stem",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_stem.WL_Mushroom_Tall_mush_stem",
+   "loc": [
+    1430.0,
+    2150.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    200.0,
+    0.0
+   ],
+   "scale": [
+    0.9,
+    0.9,
+    0.9
+   ],
+   "materials": [
+    "MI_V2_MushStem"
+   ],
    "collision": "block"
   },
   {
-   "id": "Mushroom_SmallA",
-   "mesh": "/Game/WonderlandV2/Mushrooms/Small/SM_mushroom_small.SM_mushroom_small",
+   "id": "Mushroom_SmallA_mush_cap",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_cap.WL_Mushroom_Button_mush_cap",
    "loc": [
     780.0,
     430.0,
@@ -191,8 +398,77 @@
    "collision": "none"
   },
   {
-   "id": "Mushroom_SmallB",
-   "mesh": "/Game/WonderlandV2/Mushrooms/Small/SM_mushroom_small.SM_mushroom_small",
+   "id": "Mushroom_SmallA_mush_gill",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_gill.WL_Mushroom_Button_mush_gill",
+   "loc": [
+    780.0,
+    430.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    15.0,
+    0.0
+   ],
+   "scale": [
+    1.4,
+    1.4,
+    1.4
+   ],
+   "materials": [
+    "MI_V2_MushCream"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "Mushroom_SmallA_mush_spot",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_spot.WL_Mushroom_Button_mush_spot",
+   "loc": [
+    780.0,
+    430.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    15.0,
+    0.0
+   ],
+   "scale": [
+    1.4,
+    1.4,
+    1.4
+   ],
+   "materials": [
+    "MI_V2_PetalWhite"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "Mushroom_SmallA_mush_stem",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_stem.WL_Mushroom_Button_mush_stem",
+   "loc": [
+    780.0,
+    430.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    15.0,
+    0.0
+   ],
+   "scale": [
+    1.4,
+    1.4,
+    1.4
+   ],
+   "materials": [
+    "MI_V2_MushStem"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "Mushroom_SmallB_mush_cap",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_cap.WL_Mushroom_Button_mush_cap",
    "loc": [
     880.0,
     1020.0,
@@ -210,6 +486,75 @@
    ],
    "materials": [
     "MI_V2_MushRed"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "Mushroom_SmallB_mush_gill",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_gill.WL_Mushroom_Button_mush_gill",
+   "loc": [
+    880.0,
+    1020.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    75.0,
+    0.0
+   ],
+   "scale": [
+    1.1,
+    1.1,
+    1.1
+   ],
+   "materials": [
+    "MI_V2_MushCream"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "Mushroom_SmallB_mush_spot",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_spot.WL_Mushroom_Button_mush_spot",
+   "loc": [
+    880.0,
+    1020.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    75.0,
+    0.0
+   ],
+   "scale": [
+    1.1,
+    1.1,
+    1.1
+   ],
+   "materials": [
+    "MI_V2_PetalWhite"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "Mushroom_SmallB_mush_stem",
+   "mesh": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_stem.WL_Mushroom_Button_mush_stem",
+   "loc": [
+    880.0,
+    1020.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    75.0,
+    0.0
+   ],
+   "scale": [
+    1.1,
+    1.1,
+    1.1
+   ],
+   "materials": [
+    "MI_V2_MushStem"
    ],
    "collision": "none"
   }

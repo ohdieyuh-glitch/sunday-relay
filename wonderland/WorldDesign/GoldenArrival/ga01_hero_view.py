@@ -118,11 +118,21 @@ def build():
         instance("HeartRoses", "rose_bloom", "MI_V2_RoseRed", (wx, wy, heart[2] + lz), rng.uniform(0.42, 0.55), rng.uniform(0, 360))
 
     # 4. GIANT MUSHROOMS FRAMING THE LEFT, clear of the plaza (x <= 657) and the side garden gate.
-    actors.append(actor("Mushroom_RedTall", "mush_medium", (1120.0, 860.0, GROUND), ["MI_V2_MushRed"], 1.1, yaw=30.0))
-    actors.append(actor("Mushroom_RedLow", "mush_medium", (1320.0, 420.0, GROUND), ["MI_V2_MushRed"], 0.85, yaw=110.0))
-    actors.append(actor("Mushroom_Cream", "mush_medium", (1430.0, 2150.0, GROUND), ["MI_V2_MushCream"], 1.0, yaw=200.0))
-    actors.append(actor("Mushroom_SmallA", "mush_small", (780.0, 430.0, GROUND), ["MI_V2_MushRed"], 1.4, yaw=15.0, collision="none"))
-    actors.append(actor("Mushroom_SmallB", "mush_small", (880.0, 1020.0, GROUND), ["MI_V2_MushRed"], 1.1, yaw=75.0, collision="none"))
+    # MU01 (2026-09-13): the forge's mushrooms (GAP 20) -- cap, gills, spots and stalk as separate materials -- where
+    # SM_mushroom_medium / SM_mushroom_small painted cap and stalk in one material. Same places, same sizes (the
+    # toadstool is the medium's 5.2 m cap, the button the small's 2.4 m); only the stalk collides.
+    def mushroom(id_, module, loc, scale, yaw, cap_material="MI_V2_MushRed"):
+        for part in KIT[module]["parts"]:
+            MESH.setdefault(part["mesh"], part["mesh"])
+            material = cap_material if part["part"] == "mush_cap" else part["material"]
+            collision = "block" if (part["part"] == "mush_stem" and module != "WL_Mushroom_Button") else "none"
+            actors.append(actor("%s_%s" % (id_, part["part"]), part["mesh"], loc, [material], scale, yaw=yaw, collision=collision))
+
+    mushroom("Mushroom_RedTall", "WL_Mushroom_Toadstool", (1120.0, 860.0, GROUND), 1.1, 30.0)
+    mushroom("Mushroom_RedLow", "WL_Mushroom_Toadstool", (1320.0, 420.0, GROUND), 0.85, 110.0)
+    mushroom("Mushroom_Cream", "WL_Mushroom_Tall", (1430.0, 2150.0, GROUND), 0.9, 200.0, cap_material="MI_V2_MushPurple")
+    mushroom("Mushroom_SmallA", "WL_Mushroom_Button", (780.0, 430.0, GROUND), 1.4, 15.0)
+    mushroom("Mushroom_SmallB", "WL_Mushroom_Button", (880.0, 1020.0, GROUND), 1.1, 75.0)
 
     # 5. FLOWER BEDS ON THE PATH'S STONE EDGING, both sides, from the plaza to the gate steps.
     # FL01 (2026-09-13): the edging was SM_flower_cluster blobs every 58 cm, which read as pink and violet cushions
