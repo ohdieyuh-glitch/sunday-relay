@@ -108,8 +108,8 @@ def build():
                  math.degrees(a) + 90.0, chord / 120.0, width / 36.2, height / 28.2)
 
     medallions = [(0.0, 570.0, PLAZA_BASE, 250.0),       # inside MQ02's top stone patch (y 300..840)
-                   (0.0, 1650.0, _path_top(1650.0) - 0.3, 190.0),
-                  (0.0, 2050.0, _path_top(2050.0) - 0.3, 190.0)]   # flags are level 1300-2200 (9.1 +/- 0.4)
+                  (0.0, 1650.0, 15.2, 190.0),        # on MQ02's garden-path stones (datum 9.0, tops up to 14.9)
+                  (0.0, 2050.0, 15.2, 190.0)]
     for (cx, cy, z, R) in medallions:
         ring("MedallionGold", "MI_V2_Gold", cx, cy, z, R, 16.0, 2.2)
         for rr in (R - 26.0, R - 44.0, R - 62.0):

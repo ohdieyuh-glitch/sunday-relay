@@ -12,6 +12,8 @@ proud in three tints over a moss bed) laid over the plaza slabs (tops z 12-13, c
   CENTRE        x -200..+200: three patches from y -1500 to -360; then the PORTAL APRON, y -360..+300, left as the old
                 slabs so the portal's rune rings (r 2.41 m at the origin, 5 cm proud) stay clear, framed by a gold course
                 along its edges; then one patch from +300 to +840, turned 90 degrees so its courses run the long way.
+  GARDEN PATH   x -200..+200 from y 1040 to 2240, where the path is level (flag tops z 9): three patches on a 9.0
+                datum between the retaining walls; beyond 2250 the path climbs 0.9 m and keeps its flags.
 Patch variants (A/B/C) and 180-degree turns alternate so no two neighbours repeat. Every patch is one instance of
 four batches (three stone tints and the moss bed), no collision -- the slabs under them carry the walk.
 
@@ -34,6 +36,8 @@ APRON = (-200.0, 200.0, -360.0, 300.0)
 TOP_PATCH = (300.0, 840.0)
 VARIANTS = ("WL_Ground_Flagstone_A", "WL_Ground_Flagstone_B", "WL_Ground_Flagstone_C")
 KERB = "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone"
+PATH_Y0, PATH_Y1, PATH_PATCHES, PATH_DATUM = 1040.0, 2240.0, 3, 9.0
+PATH_STONE_TOP = PATH_DATUM + 5.9       # GA07 lays its path medallions here
 
 
 def build():
@@ -86,7 +90,14 @@ def build():
     strip(ax0 + inset, ay1 - inset, ax1 - inset, ay1 - inset)
     strip(ax0 + inset, ay0 + inset, ax0 + inset, ay1 - inset)
     strip(ax1 - inset, ay0 + inset, ax1 - inset, ay1 - inset)
-    return {"pass": PASS, "title": "Arrival plaza laid in flagstone fields; portal apron framed in gold",
+    # THE LEVEL GARDEN PATH (census 278: flags x +/-170, tops z 9 from y 1000 to 2250, then the path climbs).
+    # One column of three patches between the retaining walls (x +/-250), clear of GA07's gold borders at x +/-222.
+    for k in range(PATH_PATCHES):
+        y = PATH_Y0 + (PATH_Y1 - PATH_Y0) / PATH_PATCHES * (k + 0.5)
+        for part in KIT[VARIANTS[(k + 2) % 3]]["parts"]:
+            inst(part["mesh"], part["material"], 0.0, y, PATH_DATUM, 180.0 * (k % 2), 1.0, (PATH_Y1 - PATH_Y0) / PATH_PATCHES / 400.0, 1.0)
+        placed.append([0.0, round(y), "path"])
+    return {"pass": PASS, "title": "Arrival plaza and the level garden path laid in flagstone fields; portal apron framed in gold",
             "folder": "Wonderland/Authored/MQ02", "tags": ["V2_Arrival"], "actors": [], "batches": list(batches.values()),
             "patches": placed}
 
