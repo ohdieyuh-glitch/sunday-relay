@@ -23,6 +23,7 @@ import random
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+KIT = json.loads((HERE.parent / "Skyline" / "kit_modules.json").read_text(encoding="utf-8"))["modules"]
 PASS = "GA04"
 GROUND = -14.0
 V2 = "/Game/WonderlandV2/"
@@ -53,6 +54,10 @@ RONDEL_Y, RONDEL_R = -4000.0, 560.0
 
 def build():
     rng = random.Random(20260913 + 4)
+    # FL02: the forge flower bed runs (GAP 19), registered under short keys
+    for module in ("WL_Flower_Daisy_Run", "WL_Flower_Lavender_Run", "WL_Flower_Rose_Run"):
+        for part in KIT[module]["parts"]:
+            MESH["%s_%s" % (module.replace("WL_Flower_", "").replace("_Run", "").lower(), part["part"])] = part["mesh"]
     actors, batches = [], {}
 
     def actor(id_, mesh, loc, materials, scale=1.0, yaw=0.0, collision="block"):
@@ -67,6 +72,13 @@ def build():
                                      "collides": collides, "cast_shadow": True, "affect_df": collides})
         b["instances"].append([round(loc[0], 1), round(loc[1], 1), round(loc[2], 2), 0.0, round(yaw, 1), 0.0,
                                round(s[0], 3), round(s[1], 3), round(s[2], 3)])
+
+    def plant(batch, kind, petal, loc, yaw, scale=1.0, leaf="MI_V2_LeafMid"):
+        """One flower bed run: every part as its own batch; the petal takes `petal`."""
+        module = {"daisy": "WL_Flower_Daisy_Run", "lavender": "WL_Flower_Lavender_Run", "rose": "WL_Flower_Rose_Run"}[kind]
+        for part in KIT[module]["parts"]:
+            material = petal if part["part"] == "petal" else (leaf if part["part"] == "leaf" else part["material"])
+            instance(batch, "%s_%s" % (kind, part["part"]), material, loc, scale, yaw)
 
     # ------------------------------------------------------------ the golden rear gate
     arch_y = -6150.0
@@ -121,11 +133,22 @@ def build():
 
     # ------------------------------------------------------------ the rondel's flower bed and topiaries
     actor("Rondel_BedRing", "ring_base", (0.0, RONDEL_Y, GROUND), ["MI_V2_IvoryStone"], (1.05, 1.05, 0.55), collision="block")
-    for k in range(14):
-        ang = 2.0 * math.pi * k / 14.0
-        r = rng.uniform(60.0, 210.0)
-        material = ["MI_V2_PetalPink", "MI_V2_PetalRose", "MI_V2_PetalViolet", "MI_V2_RoseRed"][k % 4]
-        instance("RondelBlooms", "blossom", material, (r * math.cos(ang), RONDEL_Y + r * math.sin(ang), GROUND + 30.0), rng.uniform(0.6, 0.8), rng.uniform(0, 360))
+    # FL02 (2026-09-13): the bed was 14 blossom clusters -- colour pads. Six flower runs round the ring, turned along
+    # it, and a rose run across the centre, on the ring base's top (42 cm).
+    ring_top = GROUND + 76.8 * 0.55 - 2.0
+    # FL02b: seven runs left the 5 m bed mostly bare stone. Concentric rings of runs fill it: 11 at r 2.2 m, 8 at 1.5 m,
+    # 4 at 0.8 m and a rose run across the centre, turned along their rings, violet outside, pink and red within.
+    kinds = [("daisy", "MI_V2_PetalViolet"), ("lavender", "MI_V2_PetalViolet"), ("rose", "MI_V2_RosePink"),
+             ("daisy", "MI_V2_PetalPink"), ("rose", "MI_V2_RoseRed"), ("lavender", "MI_V2_PetalViolet")]
+    n = 0
+    for radius, count, scale in ((222.0, 11, 1.05), (150.0, 8, 1.1), (80.0, 4, 1.15)):
+        for k in range(count):
+            ang = 2.0 * math.pi * (k + 0.5 * (count % 2)) / count
+            kind, petal = kinds[n % len(kinds)]
+            plant("RondelFlowers", kind, petal, (radius * math.cos(ang), RONDEL_Y + radius * math.sin(ang), ring_top),
+                  math.degrees(ang) + 90.0, scale, leaf="MI_V2_LeafDark" if n % 2 else "MI_V2_LeafMid")
+            n += 1
+    plant("RondelFlowers", "rose", "MI_V2_RosePink", (0.0, RONDEL_Y, ring_top), 0.0, 1.2)
     for k, ang in enumerate((45.0, 135.0, 225.0, 315.0)):
         x = (RONDEL_R + 120.0) * math.cos(math.radians(ang))
         yy = RONDEL_Y + (RONDEL_R + 120.0) * math.sin(math.radians(ang))
@@ -138,12 +161,15 @@ def build():
         if abs(y - RONDEL_Y) > RONDEL_R + 200.0:
             for side in (1.0, -1.0):
                 x = side * rng.uniform(420.0, 470.0)
-                base, blooms = (("bed_base0", "bed_blooms0") if k % 2 == 0 else ("bed_base2", "bed_blooms2"))
-                material = ["MI_V2_PetalPink", "MI_V2_PetalViolet", "MI_V2_RoseRed", "MI_V2_PetalRose"][(k + (0 if side > 0 else 1)) % 4]
-                yaw = 90.0 + rng.uniform(-8, 8)
-                instance("BorderBeds", base, "MI_V2_Soil", (x, y, GROUND), 1.0, yaw)
-                instance("BorderBlooms", blooms, material, (x, y, GROUND), 1.0, yaw)
-                instance("BorderLavender", "lavender", "MI_V2_Lavender", (x + side * 110.0, y + 60.0, GROUND), rng.uniform(1.0, 1.25), rng.uniform(0, 360))
+                # FL02: bed pads and paper-blade lavender heads replaced by two flower runs side by side
+                kind, petal = [("daisy", "MI_V2_PetalViolet"), ("rose", "MI_V2_RosePink"), ("daisy", "MI_V2_PetalPink"),
+                               ("rose", "MI_V2_RoseRed")][(k + (0 if side > 0 else 1)) % 4]
+                yaw = 90.0 + rng.uniform(-6, 6)
+                # FL02b: a bed of four runs (2 x 2), ~2.4 x 1.2 m, so a border reads as planted beds, not lone clumps
+                for (dx, dy, bed_kind, bed_petal) in ((-28.0, -62.0, kind, petal), (-28.0, 62.0, "lavender", "MI_V2_PetalViolet"),
+                                                      (28.0, -62.0, "lavender", "MI_V2_PetalViolet"), (28.0, 62.0, kind, petal)):
+                    plant("BorderFlowers", bed_kind, bed_petal, (x + side * dx, y + dy, GROUND), yaw, rng.uniform(1.1, 1.25),
+                          leaf="MI_V2_LeafDark" if bed_kind == "lavender" else "MI_V2_LeafMid")
         y += 260.0
         k += 1
     y = -5700.0
