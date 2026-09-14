@@ -13,6 +13,8 @@
 #                                                  hash of its position: paving laid stone by stone
 #   Macro / MacroScale / MacroVary                 a low-frequency world map (~60 m) breaks repetition in albedo and
 #                                                  roughness across a plaza or a wall
+# A/B mq1 (2026-09-13) tuned: gold roughness x1.5 (polished gold reflected the shade as a brown mirror), ivory normal
+# 1.8 / detail 0.8 (walls read as plaster), limestone normal 1.3 / detail 0.55.
 # Globals: TEX_DIR (the generated PNGs), FORCE (rebuild the master and instances).
 import json
 import os
@@ -28,24 +30,24 @@ TINT_GAIN = 0.92 / 0.72
 
 # V2 instance -> (HD family, HD overrides). Everything not overridden is copied from the V2 instance.
 PLAN = {
-    "MI_V2_PlazaCream": ("limestone", {"TexScale": 0.0025}),
-    "MI_V2_PlazaWarm": ("limestone", {"TexScale": 0.0025}),
-    "MI_V2_PlazaGrey": ("limestone", {"TexScale": 0.0025}),
-    "MI_V2_PlazaShade": ("limestone", {"TexScale": 0.0025}),
-    "MI_V2_PathStone": ("limestone", {"TexScale": 0.0025}),
-    "MI_V2_PathWarm": ("limestone", {"TexScale": 0.0025}),
-    "MI_V2_PathPale": ("limestone", {"TexScale": 0.0025}),
+    "MI_V2_PlazaCream": ("limestone", {"TexScale": 0.0025, "NormalStrength": 1.3, "DetailStrength": 0.55}),
+    "MI_V2_PlazaWarm": ("limestone", {"TexScale": 0.0025, "NormalStrength": 1.3, "DetailStrength": 0.55}),
+    "MI_V2_PlazaGrey": ("limestone", {"TexScale": 0.0025, "NormalStrength": 1.3, "DetailStrength": 0.55}),
+    "MI_V2_PlazaShade": ("limestone", {"TexScale": 0.0025, "NormalStrength": 1.3, "DetailStrength": 0.55}),
+    "MI_V2_PathStone": ("limestone", {"TexScale": 0.0025, "NormalStrength": 1.3, "DetailStrength": 0.55}),
+    "MI_V2_PathWarm": ("limestone", {"TexScale": 0.0025, "NormalStrength": 1.3, "DetailStrength": 0.55}),
+    "MI_V2_PathPale": ("limestone", {"TexScale": 0.0025, "NormalStrength": 1.3, "DetailStrength": 0.55}),
     "MI_V2_Kerb": ("limestone", {"TexScale": 0.003}),
-    "MI_V2_MarbleBlush": ("ivory", {"TexScale": 0.004}),
-    "MI_V2_MarbleCool": ("ivory", {"TexScale": 0.004}),
+    "MI_V2_MarbleBlush": ("ivory", {"TexScale": 0.004, "NormalStrength": 1.8, "DetailStrength": 0.8}),
+    "MI_V2_MarbleCool": ("ivory", {"TexScale": 0.004, "NormalStrength": 1.8, "DetailStrength": 0.8}),
     "MI_V2_Cobble": ("cobble", {"TexScale": 0.0018, "NormalStrength": 1.2}),
     "MI_V2_CobbleHero": ("cobble", {"TexScale": 0.0018, "NormalStrength": 1.2}),
-    "MI_V2_IvoryStone": ("ivory", {"TexScale": 0.004}),
-    "MI_V2_MarblePale": ("ivory", {"TexScale": 0.004}),
+    "MI_V2_IvoryStone": ("ivory", {"TexScale": 0.004, "NormalStrength": 1.8, "DetailStrength": 0.8}),
+    "MI_V2_MarblePale": ("ivory", {"TexScale": 0.004, "NormalStrength": 1.8, "DetailStrength": 0.8}),
     "MI_V2_Stone": ("limestone", {"TexScale": 0.003}),
-    "MI_V2_Gold": ("gold", {"TexScale": 0.006, "Roughness": 1.0, "RoughVary": 1.0, "Metallic": 1.0, "Specular": 0.5,
+    "MI_V2_Gold": ("gold", {"TexScale": 0.006, "Roughness": 1.5, "RoughVary": 1.0, "Metallic": 1.0, "Specular": 0.5,
                             "NormalStrength": 0.6, "DetailStrength": 0.1, "InstVary": 0.03, "InstWarm": 0.015, "MacroVary": 0.02}),
-    "MI_V2_GoldAged": ("gold", {"TexScale": 0.006, "Roughness": 1.3, "RoughVary": 1.0, "Metallic": 0.9, "Specular": 0.5,
+    "MI_V2_GoldAged": ("gold", {"TexScale": 0.006, "Roughness": 1.7, "RoughVary": 1.0, "Metallic": 0.9, "Specular": 0.5,
                                 "NormalStrength": 0.8, "DetailStrength": 0.1, "InstVary": 0.04, "InstWarm": 0.02}),
     "MI_V2_RoofRose": ("roof", {"TexScale": 0.004}),
     "MI_V2_RoofLilac": ("roof", {"TexScale": 0.004}),
