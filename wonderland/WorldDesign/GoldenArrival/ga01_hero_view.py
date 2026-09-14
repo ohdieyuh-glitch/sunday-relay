@@ -37,6 +37,8 @@ MESH = {
     "lavender_heads": "/Game/WonderlandV2/Vegetation/Flowers/SM_lavender_heads.SM_lavender_heads",
 }
 GROUND = -14.0
+# the forge kit snapshot (flower bed runs, FL01)
+KIT = json.loads((Path(__file__).resolve().parent.parent / "Skyline" / "kit_modules.json").read_text(encoding="utf-8"))["modules"]
 KERB_TOP = 33.6
 PIER_HEIGHT = 650.0
 ARCH_BOTTOM_LOCAL = 694.0 - 135.0   # the crest's lowest point at scale 1
@@ -123,19 +125,36 @@ def build():
     actors.append(actor("Mushroom_SmallB", "mush_small", (880.0, 1020.0, GROUND), ["MI_V2_MushRed"], 1.1, yaw=75.0, collision="none"))
 
     # 5. FLOWER BEDS ON THE PATH'S STONE EDGING, both sides, from the plaza to the gate steps.
-    palette = ["MI_V2_RosePink", "MI_V2_PetalViolet", "MI_V2_PetalRose", "MI_V2_RosePink", "MI_V2_Lavender"]
-    y = 980.0
+    # FL01 (2026-09-13): the edging was SM_flower_cluster blobs every 58 cm, which read as pink and violet cushions
+    # ("flowers should not read as flat color clusters"). It is now planted with the forge's flower bed runs (GAP 19):
+    # 1.2 m runs of daisies, lavender and roses, each flower its own petals on its own stem, laid end to end along
+    # the kerb tops in a repeating daisy / lavender / rose rhythm, petal colours violet-led as the Bible's beds.
+    runs = [("WL_Flower_Daisy_Run", "MI_V2_PetalViolet"), ("WL_Flower_Lavender_Run", "MI_V2_Lavender"),
+            ("WL_Flower_Rose_Run", "MI_V2_RosePink"), ("WL_Flower_Daisy_Run", "MI_V2_PetalPink"),
+            ("WL_Flower_Lavender_Run", "MI_V2_PetalViolet"), ("WL_Flower_Rose_Run", "MI_V2_RoseRed")]
+    y = 1040.0
     k = 0
-    while y <= 2880.0:
+    while y <= 2840.0:
         for side in (1.0, -1.0):
-            material = palette[(k + (0 if side > 0 else 2)) % len(palette)]
-            x = side * rng.uniform(246.0, 262.0)
-            instance("EdgeFlowers_" + material.split("_")[-1], "flower_cluster", material, (x, y + rng.uniform(-12, 12), KERB_TOP),
-                     rng.uniform(0.5, 0.68), rng.uniform(0, 360))
+            module, petal = runs[(k + (0 if side > 0 else 3)) % len(runs)]
+            x = side * rng.uniform(250.0, 258.0)
+            yaw = 90.0 + rng.choice((0.0, 180.0)) + rng.uniform(-3.0, 3.0)
+            for part in KIT[module]["parts"]:
+                key = "FL_%s_%s_%s" % (module.replace("WL_Flower_", "").replace("_Run", ""), part["part"],
+                                       (petal if part["part"] == "petal" else part["material"]).split("_")[-1])
+                MESH.setdefault(part["mesh"], part["mesh"])
+                material = petal if part["part"] == "petal" else ("MI_V2_LeafDark" if (k % 2) else part["material"]) \
+                    if part["part"] == "leaf" else part["material"]
+                instance(key, part["mesh"], material, (x, y + rng.uniform(-6, 6), KERB_TOP - 1.0), rng.uniform(0.95, 1.1), yaw,
+                         cast_shadow=True, collides=False)
             if k % 3 == 1:
-                instance("EdgeLavender", "lavender_heads", "MI_V2_Lavender", (side * rng.uniform(270.0, 290.0), y + 20.0, GROUND),
-                         rng.uniform(0.9, 1.2), rng.uniform(0, 360))
-        y += 58.0
+                # beside the wall's foot: a lavender run where SM_lavender_heads read as white paper blades (FL01a)
+                for part in KIT["WL_Flower_Lavender_Run"]["parts"]:
+                    material = "MI_V2_Lavender" if part["part"] == "petal" else "MI_V2_LeafDark"
+                    MESH.setdefault(part["mesh"], part["mesh"])
+                    instance("FL_WallLavender_%s" % part["part"], part["mesh"], material, (side * rng.uniform(290.0, 305.0), y + 20.0, GROUND),
+                             rng.uniform(0.9, 1.1), 90.0 + rng.uniform(-6.0, 6.0), cast_shadow=True, collides=False)
+        y += 118.0
         k += 1
 
     return {
