@@ -1,0 +1,395 @@
+{
+ "pass": "MQ04",
+ "title": "Heart Garden walk to the palace laid in flagstone fields",
+ "folder": "Wonderland/Authored/MQ04",
+ "tags": [
+  "V2_Garden"
+ ],
+ "actors": [],
+ "batches": [
+  {
+   "id": "MQ04_Flagstone_C_moss_Moss",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_moss.WL_Ground_Flagstone_C_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     12.5,
+     7135.8,
+     19.0,
+     0.0,
+     80.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ],
+    [
+     237.5,
+     8412.8,
+     19.0,
+     0.0,
+     260.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "MQ04_Flagstone_C_paving_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving.WL_Ground_Flagstone_C_paving",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     12.5,
+     7135.8,
+     19.0,
+     0.0,
+     80.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ],
+    [
+     237.5,
+     8412.8,
+     19.0,
+     0.0,
+     260.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "MQ04_Flagstone_C_paving_shade_PlazaShade",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_shade.WL_Ground_Flagstone_C_paving_shade",
+   "material": "MI_V2_PlazaShade",
+   "instances": [
+    [
+     12.5,
+     7135.8,
+     19.0,
+     0.0,
+     80.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ],
+    [
+     237.5,
+     8412.8,
+     19.0,
+     0.0,
+     260.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "MQ04_Flagstone_C_paving_warm_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_warm.WL_Ground_Flagstone_C_paving_warm",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     12.5,
+     7135.8,
+     19.0,
+     0.0,
+     80.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ],
+    [
+     237.5,
+     8412.8,
+     19.0,
+     0.0,
+     260.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "MQ04_Flagstone_A_moss_Moss",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_moss.WL_Ground_Flagstone_A_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     87.5,
+     7561.5,
+     19.0,
+     0.0,
+     260.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ],
+    [
+     312.5,
+     8838.5,
+     19.0,
+     0.0,
+     80.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "MQ04_Flagstone_A_paving_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving.WL_Ground_Flagstone_A_paving",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     87.5,
+     7561.5,
+     19.0,
+     0.0,
+     260.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ],
+    [
+     312.5,
+     8838.5,
+     19.0,
+     0.0,
+     80.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "MQ04_Flagstone_A_paving_shade_PlazaShade",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_shade.WL_Ground_Flagstone_A_paving_shade",
+   "material": "MI_V2_PlazaShade",
+   "instances": [
+    [
+     87.5,
+     7561.5,
+     19.0,
+     0.0,
+     260.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ],
+    [
+     312.5,
+     8838.5,
+     19.0,
+     0.0,
+     80.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "MQ04_Flagstone_A_paving_warm_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_warm.WL_Ground_Flagstone_A_paving_warm",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     87.5,
+     7561.5,
+     19.0,
+     0.0,
+     260.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ],
+    [
+     312.5,
+     8838.5,
+     19.0,
+     0.0,
+     80.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "MQ04_Flagstone_B_moss_Moss",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_moss.WL_Ground_Flagstone_B_moss",
+   "material": "MI_V2_Moss",
+   "instances": [
+    [
+     162.5,
+     7987.2,
+     19.0,
+     0.0,
+     80.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ],
+    [
+     387.5,
+     9264.2,
+     19.0,
+     0.0,
+     260.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "MQ04_Flagstone_B_paving_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving.WL_Ground_Flagstone_B_paving",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     162.5,
+     7987.2,
+     19.0,
+     0.0,
+     80.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ],
+    [
+     387.5,
+     9264.2,
+     19.0,
+     0.0,
+     260.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "MQ04_Flagstone_B_paving_shade_PlazaShade",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_shade.WL_Ground_Flagstone_B_paving_shade",
+   "material": "MI_V2_PlazaShade",
+   "instances": [
+    [
+     162.5,
+     7987.2,
+     19.0,
+     0.0,
+     80.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ],
+    [
+     387.5,
+     9264.2,
+     19.0,
+     0.0,
+     260.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "MQ04_Flagstone_B_paving_warm_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_warm.WL_Ground_Flagstone_B_paving_warm",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     162.5,
+     7987.2,
+     19.0,
+     0.0,
+     80.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ],
+    [
+     387.5,
+     9264.2,
+     19.0,
+     0.0,
+     260.0,
+     0.0,
+     1.0914,
+     0.7,
+     1.0
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  }
+ ]
+}
