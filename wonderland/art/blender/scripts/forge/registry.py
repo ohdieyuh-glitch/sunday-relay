@@ -25,7 +25,7 @@ now impossible to do it for the builder and not for the validator.
 """
 
 from . import weathering as WX
-from .families import (civic, details, gardens, ground, hero, market,
+from .families import (civic, details, flowers, gardens, ground, hero, market,
                        objects, palace, paving, roofscape, sky, stairs, thresholds,
                        towers, walls, water)
 
@@ -48,6 +48,7 @@ FAMILIES = (
     ("objects", objects),
     ("palace", palace),
     ("paving", paving),
+    ("flowers", flowers),
 )
 
 #: The weathered variants, and the ONE list of them.

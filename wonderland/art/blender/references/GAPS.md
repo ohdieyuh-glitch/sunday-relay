@@ -366,3 +366,17 @@ However good its material, a plaza of it reads as one tinted sheet.
 paving -- courses of stones in running bond (course depths 36-56 cm, stones 34-72 cm), every stone a chamfered block
 of its own height (5.0-5.9 cm) and chamfer, three tints in a loose checker (~40% dark), 1.6 cm joints over a moss
 bed. No collision: the paving under it carries the walk.
+
+## GAP 19 — the flower beds were colour, not flowers
+
+**What the Bible and the quality reference show:** beds made of flowers -- daisies round a gold eye, lavender spikes,
+roses among dark leaves, spilling over the stone. The founder (2026-09-13): "Flowers should not read as flat color
+clusters."
+
+**What the world had.** SM_flower_cluster: a rounded blob in a petal material, laid every 58 cm along the path kerbs
+-- a row of pink and violet cushions.
+
+**Answered by** `families/flowers.py`: 1.2 m bed runs of daisies (38, ten petal blades round a gold eye), lavender
+(30 spikes of seven florets) and roses (22 blooms of three nested, turned cups), each flower on its own stem, height
+and lean over low fine leaf clumps; `petal` is a batch material so one mesh plants any colour. First planted at
+3-4.5 cm blooms and the beds read mostly green; now 5.5-8 cm (Wonderland scale, not botanical).

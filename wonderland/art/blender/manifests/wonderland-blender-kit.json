@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-13T22:35:56+00:00",
+  "generated_utc": "2026-09-14T01:45:29+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -22,9 +22,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 111,
+        "n": 114,
         "min": 0.153,
-        "median": 0.846,
+        "median": 0.86,
         "max": 1.0,
         "unknown": 0
       }
@@ -36,9 +36,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 111,
+        "n": 114,
         "min": 0.0,
-        "median": 0.37,
+        "median": 0.369,
         "max": 1.0,
         "unknown": 0
       }
@@ -50,7 +50,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 111,
+        "n": 114,
         "min": 0.557,
         "median": 1.0,
         "max": 1.0,
@@ -64,9 +64,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 111,
+        "n": 114,
         "min": 0.0,
-        "median": 0.976,
+        "median": 0.982,
         "max": 1.0,
         "unknown": 0
       }
@@ -78,7 +78,7 @@
       "provenance": "declared",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 111,
+        "n": 114,
         "min": 0.0,
         "median": 0.0,
         "max": 0.7,
@@ -92,9 +92,9 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 108,
+        "n": 111,
         "min": 0.083,
-        "median": 0.675,
+        "median": 0.64,
         "max": 0.917,
         "unknown": 3
       }
@@ -106,7 +106,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 111,
+        "n": 114,
         "min": 0.05,
         "median": 0.5,
         "max": 0.7,
@@ -197,6 +197,18 @@
       "unreal": "MI_V2_Lawn",
       "use": "the sward on a floating island: the ground a castle foot stands on"
     },
+    "leaf": {
+      "unreal": "MI_V2_LeafMid",
+      "use": "leaf clumps and stems under a bed of flowers"
+    },
+    "petal": {
+      "unreal": "MI_V2_PetalPink",
+      "use": "petal blades, lavender florets, rose cups"
+    },
+    "petal_centre": {
+      "unreal": "MI_V2_LeafGold",
+      "use": "a daisy's gold eye"
+    },
     "moss": {
       "unreal": "MI_V2_Moss",
       "use": "the moss bed under a flagstone field's joints"
@@ -207,9 +219,9 @@
     }
   },
   "counts": {
-    "assets": 111,
-    "meshes": 355,
-    "triangles": 457382,
+    "assets": 114,
+    "meshes": 362,
+    "triangles": 473964,
     "by_role": {
       "foot": 5,
       "body": 14,
@@ -218,7 +230,7 @@
       "threshold": 10,
       "screen": 11,
       "span": 5,
-      "detail": 20,
+      "detail": 23,
       "route": 11,
       "terrace": 17,
       "hero": 6
@@ -36673,6 +36685,827 @@
         }
       },
       "part_count": 4
+    },
+    {
+      "asset_id": "WL_Flower_Daisy_Run",
+      "kit_version": "1.0.0",
+      "family": "flowers",
+      "family_group": "flowers",
+      "category": "prop",
+      "silhouette_role": "detail",
+      "note": "1.2 m bed run of 38 daisies (ten petal blades round a gold eye, each on its own stem, height and lean) rising out of leaf clumps; petal colour is the batch's material",
+      "districts": [
+        "royal_garden",
+        "plaza",
+        "cloister",
+        "tea_terrace",
+        "grove"
+      ],
+      "params": {
+        "length_m": 1.2,
+        "flowers": 38
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 34.19,
+      "bbox_min_uu": [
+        -68.06,
+        -30.83,
+        0.0
+      ],
+      "bbox_max_uu": [
+        64.77,
+        28.71,
+        34.19
+      ],
+      "size_uu": [
+        132.83,
+        59.54,
+        34.19
+      ],
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 0.837,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.33,
+        "ceremonial_residential": 0.7
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        69.2,
+        68.78,
+        65.9,
+        49.3,
+        58.1,
+        59.22,
+        59.43,
+        67.12,
+        67.08,
+        66.59,
+        61.78,
+        60.12
+      ],
+      "radius_uu": 68.06,
+      "tris_total": 6564,
+      "tri_budget": 12000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": false,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 60.0,
+          "rung": null,
+          "note": "planted on a bed, a kerb top or a planter's soil"
+        }
+      ],
+      "parts": {
+        "leaf": {
+          "verts": 694,
+          "faces": 564,
+          "tris": 1016,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -68.06,
+            -22.83,
+            0.0
+          ],
+          "bbox_max_uu": [
+            64.77,
+            19.54,
+            27.88
+          ],
+          "size_uu": [
+            132.83,
+            42.36,
+            27.88
+          ],
+          "height_m": 0.2788,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 564,
+            "shells": 54,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 33,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            69.2,
+            68.78,
+            65.9,
+            60.98,
+            49.3,
+            58.1,
+            55.25,
+            51.16,
+            47.16,
+            58.88,
+            56.36,
+            54.43
+          ],
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Flower_Daisy_Run_leaf",
+          "glb": "exports\\glb\\WL_Flower_Daisy_Run_leaf.glb",
+          "fbx": "exports\\fbx\\WL_Flower_Daisy_Run_leaf.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.6806309223175049,
+              0,
+              -0.19535323977470398
+            ],
+            "max_yup": [
+              0.6476742029190063,
+              0.27876994013786316,
+              0.2282567024230957
+            ],
+            "bytes": 46568
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 27.87699317932129
+          }
+        },
+        "petal": {
+          "verts": 2990,
+          "faces": 2280,
+          "tris": 4560,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PetalPink"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -64.54,
+            -30.83,
+            11.01
+          ],
+          "bbox_max_uu": [
+            57.96,
+            28.71,
+            34.19
+          ],
+          "size_uu": [
+            122.5,
+            59.53,
+            23.17
+          ],
+          "height_m": 0.2317,
+          "base_z_uu": 11.014,
+          "normals": {
+            "faces": 2280,
+            "shells": 380,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            42.65,
+            56.7,
+            58.13,
+            59.43,
+            58.88,
+            67.12,
+            67.08,
+            66.59,
+            65.73,
+            61.78,
+            60.12,
+            29.64
+          ],
+          "material": "MI_V2_PetalPink",
+          "mesh_name": "WL_Flower_Daisy_Run_petal",
+          "glb": "exports\\glb\\WL_Flower_Daisy_Run_petal.glb",
+          "fbx": "exports\\fbx\\WL_Flower_Daisy_Run_petal.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PetalPink"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.6454219818115234,
+              0.11014445871114731,
+              -0.2870509624481201
+            ],
+            "max_yup": [
+              0.5795660018920898,
+              0.341865211725235,
+              0.3082691431045532
+            ],
+            "bytes": 320496
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 11.014446258544922,
+            "stored_z_max": 34.186519622802734
+          }
+        },
+        "petal_centre": {
+          "verts": 570,
+          "faces": 570,
+          "tris": 988,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafGold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -57.97,
+            -24.3,
+            13.65
+          ],
+          "bbox_max_uu": [
+            52.49,
+            20.56,
+            29.38
+          ],
+          "size_uu": [
+            110.46,
+            44.86,
+            15.73
+          ],
+          "height_m": 0.1573,
+          "base_z_uu": 13.651,
+          "normals": {
+            "faces": 570,
+            "shells": 38,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            43.02,
+            52.65,
+            52.84,
+            51.58,
+            48.49,
+            60.56,
+            60.47,
+            52.1,
+            58.35,
+            58.29,
+            55.66,
+            33.44
+          ],
+          "material": "MI_V2_LeafGold",
+          "mesh_name": "WL_Flower_Daisy_Run_petal_centre",
+          "glb": "exports\\glb\\WL_Flower_Daisy_Run_petal_centre.glb",
+          "fbx": "exports\\fbx\\WL_Flower_Daisy_Run_petal_centre.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafGold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.5797357559204102,
+              0.1365068107843399,
+              -0.20559649169445038
+            ],
+            "max_yup": [
+              0.5248734354972839,
+              0.29379692673683167,
+              0.2429809868335724
+            ],
+            "bytes": 52016
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 13.650681495666504,
+            "stored_z_max": 29.37969207763672
+          }
+        }
+      },
+      "part_count": 3
+    },
+    {
+      "asset_id": "WL_Flower_Lavender_Run",
+      "kit_version": "1.0.0",
+      "family": "flowers",
+      "family_group": "flowers",
+      "category": "prop",
+      "silhouette_role": "detail",
+      "note": "1.2 m bed run of 30 lavender spikes (seven florets up a leaning stem) out of low leaf clumps",
+      "districts": [
+        "royal_garden",
+        "plaza",
+        "tea_terrace",
+        "grove"
+      ],
+      "params": {
+        "length_m": 1.2,
+        "spikes": 30
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 44.67,
+      "bbox_min_uu": [
+        -67.28,
+        -20.79,
+        0.0
+      ],
+      "bbox_max_uu": [
+        67.66,
+        23.02,
+        44.67
+      ],
+      "size_uu": [
+        134.94,
+        43.81,
+        44.67
+      ],
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 0.918,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.287,
+        "ceremonial_residential": 0.7
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        68.14,
+        65.14,
+        52.31,
+        57.17,
+        57.6,
+        57.73,
+        58.17,
+        58.76,
+        58.92,
+        58.46,
+        54.26,
+        54.26
+      ],
+      "radius_uu": 67.66,
+      "tris_total": 6730,
+      "tri_budget": 12000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": false,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 60.0,
+          "rung": null,
+          "note": "planted on a bed, a kerb top or a planter's soil"
+        }
+      ],
+      "parts": {
+        "leaf": {
+          "verts": 578,
+          "faces": 474,
+          "tris": 850,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -67.28,
+            -20.22,
+            0.0
+          ],
+          "bbox_max_uu": [
+            67.66,
+            22.24,
+            43.6
+          ],
+          "size_uu": [
+            134.95,
+            42.46,
+            43.6
+          ],
+          "height_m": 0.436,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 474,
+            "shells": 44,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 30,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            68.14,
+            65.14,
+            44.8,
+            13.6,
+            55.49,
+            49.72,
+            37.57,
+            11.97,
+            58.27,
+            53.27,
+            41.6,
+            53.64
+          ],
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Flower_Lavender_Run_leaf",
+          "glb": "exports\\glb\\WL_Flower_Lavender_Run_leaf.glb",
+          "fbx": "exports\\fbx\\WL_Flower_Lavender_Run_leaf.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.6728194952011108,
+              0,
+              -0.2224494367837906
+            ],
+            "max_yup": [
+              0.6766414642333984,
+              0.4360390603542328,
+              0.20216920971870422
+            ],
+            "bytes": 39144
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 43.603904724121094
+          }
+        },
+        "petal": {
+          "verts": 3360,
+          "faces": 2940,
+          "tris": 5880,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PetalPink"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -57.23,
+            -20.79,
+            9.59
+          ],
+          "bbox_max_uu": [
+            52.58,
+            23.02,
+            44.67
+          ],
+          "size_uu": [
+            109.8,
+            43.81,
+            35.08
+          ],
+          "height_m": 0.3508,
+          "base_z_uu": 9.592,
+          "normals": {
+            "faces": 2940,
+            "shells": 210,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            53.04,
+            57.17,
+            57.6,
+            57.73,
+            58.17,
+            58.31,
+            58.76,
+            58.92,
+            58.92,
+            54.25,
+            54.26,
+            54.26
+          ],
+          "material": "MI_V2_PetalPink",
+          "mesh_name": "WL_Flower_Lavender_Run_petal",
+          "glb": "exports\\glb\\WL_Flower_Lavender_Run_petal.glb",
+          "fbx": "exports\\fbx\\WL_Flower_Lavender_Run_petal.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PetalPink"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.5722720623016357,
+              0.09591899812221527,
+              -0.23021839559078217
+            ],
+            "max_yup": [
+              0.5257642865180969,
+              0.4466712772846222,
+              0.2078980654478073
+            ],
+            "bytes": 412908
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 9.591899871826172,
+            "stored_z_max": 44.66712951660156
+          }
+        }
+      },
+      "part_count": 2
+    },
+    {
+      "asset_id": "WL_Flower_Rose_Run",
+      "kit_version": "1.0.0",
+      "family": "flowers",
+      "family_group": "flowers",
+      "category": "prop",
+      "silhouette_role": "detail",
+      "note": "1.2 m bed run of 22 roses (three nested, turned petal cups) among a deep leaf mound",
+      "districts": [
+        "royal_garden",
+        "plaza",
+        "cloister",
+        "tea_terrace"
+      ],
+      "params": {
+        "length_m": 1.2,
+        "roses": 22
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 31.46,
+      "bbox_min_uu": [
+        -58.99,
+        -23.52,
+        0.0
+      ],
+      "bbox_max_uu": [
+        66.42,
+        23.7,
+        31.46
+      ],
+      "size_uu": [
+        125.41,
+        47.22,
+        31.46
+      ],
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.413,
+        "ceremonial_residential": 0.7
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        67.35,
+        59.05,
+        67.01,
+        64.68,
+        60.69,
+        49.34,
+        48.84,
+        54.28,
+        58.12,
+        57.39,
+        55.53,
+        48.85
+      ],
+      "radius_uu": 66.42,
+      "tris_total": 3288,
+      "tri_budget": 8000,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": false,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 60.0,
+          "rung": null,
+          "note": "planted on a bed, a kerb top or a planter's soil"
+        }
+      ],
+      "parts": {
+        "leaf": {
+          "verts": 352,
+          "faces": 336,
+          "tris": 560,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -58.99,
+            -17.14,
+            0.0
+          ],
+          "bbox_max_uu": [
+            66.42,
+            17.22,
+            13.75
+          ],
+          "size_uu": [
+            125.41,
+            34.36,
+            13.75
+          ],
+          "height_m": 0.1375,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 336,
+            "shells": 16,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            67.35,
+            67.35,
+            67.35,
+            59.05,
+            67.01,
+            52.07,
+            10.85,
+            56.63,
+            64.68,
+            49.33,
+            60.69,
+            44.89
+          ],
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Flower_Rose_Run_leaf",
+          "glb": "exports\\glb\\WL_Flower_Rose_Run_leaf.glb",
+          "fbx": "exports\\fbx\\WL_Flower_Rose_Run_leaf.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.5898992419242859,
+              0,
+              -0.17217952013015747
+            ],
+            "max_yup": [
+              0.6641788482666016,
+              0.13752256333827972,
+              0.17141109704971313
+            ],
+            "bytes": 25616
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 13.752256393432617
+          }
+        },
+        "petal": {
+          "verts": 1540,
+          "faces": 1276,
+          "tris": 2728,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PetalPink"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -54.36,
+            -23.52,
+            13.3
+          ],
+          "bbox_max_uu": [
+            56.3,
+            23.7,
+            31.46
+          ],
+          "size_uu": [
+            110.66,
+            47.22,
+            18.16
+          ],
+          "height_m": 0.1816,
+          "base_z_uu": 13.303,
+          "normals": {
+            "faces": 1276,
+            "shells": 88,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            43.82,
+            49.34,
+            48.84,
+            51.93,
+            54.28,
+            51.71,
+            58.12,
+            56.05,
+            57.39,
+            53.52,
+            50.73,
+            46.12
+          ],
+          "material": "MI_V2_PetalPink",
+          "mesh_name": "WL_Flower_Rose_Run_petal",
+          "glb": "exports\\glb\\WL_Flower_Rose_Run_petal.glb",
+          "fbx": "exports\\fbx\\WL_Flower_Rose_Run_petal.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PetalPink"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.5436344742774963,
+              0.1330295205116272,
+              -0.23703548312187195
+            ],
+            "max_yup": [
+              0.5629677772521973,
+              0.31464120745658875,
+              0.23516523838043213
+            ],
+            "bytes": 126940
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 13.30295181274414,
+            "stored_z_max": 31.464120864868164
+          }
+        }
+      },
+      "part_count": 2
     },
     {
       "asset_id": "WL_Wall_Curtain_Run__aged",

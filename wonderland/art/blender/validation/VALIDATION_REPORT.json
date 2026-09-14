@@ -1,5 +1,5 @@
 {
-  "checked_assets": 111,
+  "checked_assets": 114,
   "failures": 0,
   "material_check": "59 MI_V2_* names parsed from materials_v2.py",
   "per_asset": {
@@ -105,6 +105,9 @@
     "WL_Ground_Flagstone_A": [],
     "WL_Ground_Flagstone_B": [],
     "WL_Ground_Flagstone_C": [],
+    "WL_Flower_Daisy_Run": [],
+    "WL_Flower_Lavender_Run": [],
+    "WL_Flower_Rose_Run": [],
     "WL_Wall_Curtain_Run__aged": [],
     "WL_Wall_Mural_Tower__ruined": [],
     "WL_Tower_Base_Buttressed__aged": [],
@@ -135,6 +138,7 @@
     "objects",
     "palace",
     "paving",
+    "flowers",
     "variants"
   ],
   "mesh_hashes": {
@@ -664,6 +668,19 @@
       "paving": "54d382cf11ea62a76190710119d19705246c65041ba33aa05ea2eef3fbcac0b9",
       "paving_shade": "71a50c9a9c0fde49014f4f29314344e46d9a29f95167dc934526db3505aa3cd3",
       "paving_warm": "37fbeca38e6d6bf18724a882add7874401e81740199285f14e97834385011e1b"
+    },
+    "WL_Flower_Daisy_Run": {
+      "leaf": "0767e0f746c9d274388f2e9141ecaf3d7e822b40d51ae0c7864da447e236cc04",
+      "petal": "082b5174463ec52096e69208087a8e140f71c68821e5f51bdb0c69953807403d",
+      "petal_centre": "628dc7dc8fd88c5783aeb9aadc28d3981486c62ff96d271a82e2284ca116f9d3"
+    },
+    "WL_Flower_Lavender_Run": {
+      "leaf": "d39481c1a9523dcbc8688873cbfaf27b159013dd414470d7ba0e5ce1f42b6c63",
+      "petal": "51677932fbecd6e5b6f4de12c6de0d66acd786a63ea4565b0d05539b96861d2e"
+    },
+    "WL_Flower_Rose_Run": {
+      "leaf": "4651532f70297f69645e518ddad1c473e561676807dea275018decf29c9f25a1",
+      "petal": "f62577f622e6df0535404a3f1d2ce7b283ebddf9e5457703c43cb1337e900a12"
     },
     "WL_Wall_Curtain_Run__aged": {
       "stone": "3e34a655658a4cdf79504a8cebfff2158e5f65b1152f5b8dd0084de428e63d5a",

@@ -321,6 +321,20 @@ MATERIALS = {
         "unreal": "MI_V2_Lawn", "rgb": (0.18, 0.25, 0.12),
         "metallic": 0.0, "roughness": 0.86, "emissive": 0.0,
         "use": "the sward on a floating island: the ground a castle foot stands on"},
+    # FLOWERS (families/flowers.py): leaf clumps and stems, petal blades, daisy eyes. `petal` is a default -- a layer
+    # plants a violet, white or rose bed by giving that batch MI_V2_PetalViolet / PetalWhite / RosePink.
+    "leaf": {
+        "unreal": "MI_V2_LeafMid", "rgb": (0.18, 0.32, 0.13),
+        "metallic": 0.0, "roughness": 0.66, "emissive": 0.0,
+        "use": "leaf clumps and stems under a bed of flowers"},
+    "petal": {
+        "unreal": "MI_V2_PetalPink", "rgb": (0.90, 0.52, 0.68),
+        "metallic": 0.0, "roughness": 0.62, "emissive": 0.0,
+        "use": "petal blades, lavender florets, rose cups"},
+    "petal_centre": {
+        "unreal": "MI_V2_LeafGold", "rgb": (0.50, 0.41, 0.16),
+        "metallic": 0.0, "roughness": 0.62, "emissive": 0.0,
+        "use": "a daisy's gold eye"},
     # MOSS in the joints of a flagstone field (families/paving.py): MI_V2_Moss is the world's own moss, so the
     # joints read dark and green instead of showing the old slab under them.
     "moss": {
