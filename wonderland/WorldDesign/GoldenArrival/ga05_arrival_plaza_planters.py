@@ -21,6 +21,7 @@ import random
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+KIT = json.loads((HERE.parent / "Skyline" / "kit_modules.json").read_text(encoding="utf-8"))["modules"]
 PLAZA_TOP = 12.0
 V2 = "/Game/WonderlandV2/"
 MESH = {
@@ -55,18 +56,25 @@ def build():
             actor("Planter%s%d" % (side, k), "planter", (sx, py, PLAZA_TOP), ["MI_V2_IvoryStone"], planter_scale)
             # A gold lip on the planter's plaza-facing edge.
             actor("Planter%s%d_GoldLip" % (side, k), "kerb", (sx - math.copysign(84.0, sx), py, top - 6.0), ["MI_V2_Gold"], (2.9, 0.35, 0.4), yaw=90.0, collision="none")
-            for j, dy in enumerate((-110.0, 0.0, 110.0)):
-                # Violet-led, as the Bible's beds are (VISUAL_AUTHORITY.md): two violet beds to one pink.
-                bloom_material = ["MI_V2_PetalViolet", "MI_V2_PetalPink", "MI_V2_PetalViolet"][(j + k) % 3]
-                instance("PlanterBlooms", "blooms0" if j % 2 == 0 else "blooms3", bloom_material, (sx, py + dy, top - 18.0), (0.72, 0.62, 0.9), 90.0 + rng.uniform(-6, 6))
-            # GA05a planted SM_lavender_heads here: heads with no stems read as white spikes floating
-            # half a metre over the soil. Blossom clusters sit on the soil and carry the lavender tone.
-            for j in range(3):
-                material = "MI_V2_PetalViolet" if (j + k) % 2 == 0 else "MI_V2_PetalPink"
-                instance("PlanterBlossom", "blossom", material, (sx + math.copysign(40.0, sx), py - 120.0 + j * 120.0, top - 12.0), rng.uniform(0.4, 0.48), rng.uniform(0, 360))
-            for j in range(5):
-                material = "MI_V2_RoseRed" if j % 2 else "MI_V2_RosePink"
-                instance("PlanterRoses", "rose_bloom", material, (sx - math.copysign(30.0, sx) + rng.uniform(-20, 20), py - 140.0 + j * 70.0, top - 30.0), rng.uniform(0.42, 0.55), rng.uniform(0, 360))
+            # FL01 (2026-09-13): planted with the forge's flower bed runs (GAP 19) where SM_flower_bed_blooms, blossom
+            # clusters and SM_rose_bloom read as colour pads and bowls.
+            # FL01c: at soil level and in two rows the planters read nearly empty from the hero camera, and MI_V2_Lavender
+            # washed to white in full sun. Three rows now, raised to the rim and 30% taller so the planting mounds over
+            # it; lavender takes the deeper violet.
+            rows = [(sx - math.copysign(44.0, sx), [("WL_Flower_Daisy_Run", "MI_V2_PetalViolet"), ("WL_Flower_Daisy_Run", "MI_V2_PetalPink"),
+                                                   ("WL_Flower_Daisy_Run", "MI_V2_PetalViolet")]),
+                    (sx, [("WL_Flower_Rose_Run", "MI_V2_RosePink"), ("WL_Flower_Lavender_Run", "MI_V2_PetalViolet"),
+                          ("WL_Flower_Rose_Run", "MI_V2_RoseRed" if k % 2 else "MI_V2_RosePink")]),
+                    (sx + math.copysign(40.0, sx), [("WL_Flower_Lavender_Run", "MI_V2_PetalViolet"), ("WL_Flower_Rose_Run", "MI_V2_RoseRed"),
+                                                    ("WL_Flower_Lavender_Run", "MI_V2_PetalViolet")])]
+            for r_i, (row_x, row) in enumerate(rows):
+                for j, (module, petal) in enumerate(row):
+                    for part in KIT[module]["parts"]:
+                        MESH.setdefault(part["mesh"], part["mesh"])
+                        material = petal if part["part"] == "petal" else ("MI_V2_LeafDark" if part["part"] == "leaf" and (j + r_i) % 2 else part["material"])
+                        key = "Planter_%s_%s_%s" % (module.replace("WL_Flower_", "").replace("_Run", ""), part["part"], material.split("_")[-1])
+                        instance(key, part["mesh"], material, (row_x, py - 114.0 + j * 114.0 + (r_i - 1) * 20.0, top - 3.0),
+                                 [0.95, 0.9, 1.3], 90.0 + rng.uniform(-3, 3))
 
     return {"pass": "GA05", "title": "Arrival plaza planters: flowers beside the visitor, central lane clear",
             "folder": "Wonderland/Authored/GA05", "tags": ["V2_Arrival"], "actors": actors, "batches": list(batches.values())}
