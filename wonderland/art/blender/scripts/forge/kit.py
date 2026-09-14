@@ -321,6 +321,23 @@ MATERIALS = {
         "unreal": "MI_V2_Lawn", "rgb": (0.18, 0.25, 0.12),
         "metallic": 0.0, "roughness": 0.86, "emissive": 0.0,
         "use": "the sward on a floating island: the ground a castle foot stands on"},
+    # MUSHROOMS (families/mushrooms.py): cap, gills, spots and stalk are separate materials (founder, 2026-09-13).
+    "mush_cap": {
+        "unreal": "MI_V2_MushRed", "rgb": (0.58, 0.24, 0.20),
+        "metallic": 0.0, "roughness": 0.54, "emissive": 0.0,
+        "use": "a mushroom's cap: the rose dome (MAT03 turned MushRed rose)"},
+    "mush_gill": {
+        "unreal": "MI_V2_MushCream", "rgb": (0.86, 0.78, 0.64),
+        "metallic": 0.0, "roughness": 0.56, "emissive": 0.0,
+        "use": "the pale underside and gill ribs"},
+    "mush_spot": {
+        "unreal": "MI_V2_PetalWhite", "rgb": (0.92, 0.90, 0.84),
+        "metallic": 0.0, "roughness": 0.62, "emissive": 0.0,
+        "use": "white spots raised on the cap"},
+    "mush_stem": {
+        "unreal": "MI_V2_MushStem", "rgb": (0.84, 0.76, 0.64),
+        "metallic": 0.0, "roughness": 0.66, "emissive": 0.0,
+        "use": "the stalk, its bulb and its skirt"},
     # FLOWERS (families/flowers.py): leaf clumps and stems, petal blades, daisy eyes. `petal` is a default -- a layer
     # plants a violet, white or rose bed by giving that batch MI_V2_PetalViolet / PetalWhite / RosePink.
     "leaf": {

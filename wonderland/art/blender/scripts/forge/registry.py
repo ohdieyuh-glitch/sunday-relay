@@ -26,7 +26,7 @@ now impossible to do it for the builder and not for the validator.
 
 from . import weathering as WX
 from .families import (civic, details, flowers, gardens, ground, hero, market,
-                       objects, palace, paving, roofscape, sky, stairs, thresholds,
+                       mushrooms, objects, palace, paving, roofscape, sky, stairs, thresholds,
                        towers, walls, water)
 
 #: (group name, module). Group name reaches the manifest as `family_group` and
@@ -49,6 +49,7 @@ FAMILIES = (
     ("palace", palace),
     ("paving", paving),
     ("flowers", flowers),
+    ("mushrooms", mushrooms),
 )
 
 #: The weathered variants, and the ONE list of them.

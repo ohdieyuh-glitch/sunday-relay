@@ -380,3 +380,16 @@ clusters."
 (30 spikes of seven florets) and roses (22 blooms of three nested, turned cups), each flower on its own stem, height
 and lean over low fine leaf clumps; `petal` is a batch material so one mesh plants any colour. First planted at
 3-4.5 cm blooms and the beds read mostly green; now 5.5-8 cm (Wonderland scale, not botanical).
+
+## GAP 20 — a mushroom was one material from cap to ground
+
+**What the reference shows:** caps over pale stalks, pale gills under the cap, white spots on it. The founder
+(2026-09-13): "Mushrooms should have believable cap/stem material separation."
+
+**What the world had.** SM_mushroom_medium and SM_mushroom_small are single-slot meshes: one material painted the
+cap, its underside and the stalk.
+
+**Answered by** `families/mushrooms.py`: WL_Mushroom_Toadstool (5.2 m cap, 6.5 m), WL_Mushroom_Button (2.4 m, 3.2 m),
+WL_Mushroom_Tall (3.6 m cap, 7.6 m) in four parts -- mush_cap (a closed dome shell with a rolled rim), mush_gill (a
+pale underside disc and radial ribs), mush_spot (raised spots along the dome's normal), mush_stem (bulb, waist,
+flare, drooping skirt).

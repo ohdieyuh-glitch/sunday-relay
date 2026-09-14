@@ -1,5 +1,5 @@
 {
-  "checked_assets": 114,
+  "checked_assets": 117,
   "failures": 0,
   "material_check": "59 MI_V2_* names parsed from materials_v2.py",
   "per_asset": {
@@ -108,6 +108,9 @@
     "WL_Flower_Daisy_Run": [],
     "WL_Flower_Lavender_Run": [],
     "WL_Flower_Rose_Run": [],
+    "WL_Mushroom_Toadstool": [],
+    "WL_Mushroom_Button": [],
+    "WL_Mushroom_Tall": [],
     "WL_Wall_Curtain_Run__aged": [],
     "WL_Wall_Mural_Tower__ruined": [],
     "WL_Tower_Base_Buttressed__aged": [],
@@ -139,6 +142,7 @@
     "palace",
     "paving",
     "flowers",
+    "mushrooms",
     "variants"
   ],
   "mesh_hashes": {
@@ -681,6 +685,24 @@
     "WL_Flower_Rose_Run": {
       "leaf": "4651532f70297f69645e518ddad1c473e561676807dea275018decf29c9f25a1",
       "petal": "f62577f622e6df0535404a3f1d2ce7b283ebddf9e5457703c43cb1337e900a12"
+    },
+    "WL_Mushroom_Toadstool": {
+      "mush_cap": "45d13aabaa5b8557bbe32ea20f009522c78ae6360cd32d49194e194298ac5ef0",
+      "mush_gill": "0260a804b042d1013fb33fad3c782384af7632593b2e83f8852791f7c6ccdd19",
+      "mush_spot": "fa77bdde60be4bc1b015bde67236dbc1c283d22130881708b08b953bccb48dbe",
+      "mush_stem": "935bc1d3f90872872dcb6d6645c5d99e14e52eb83c69fd080227e216c1166e61"
+    },
+    "WL_Mushroom_Button": {
+      "mush_cap": "0a90304331495b0649e023860bd3adaaed1ce556cfa3eb7a1533070ebfb78eab",
+      "mush_gill": "14955abb3c538604030e84e18dbcb5aca423a28d01b437993a17118a7bb8af3c",
+      "mush_spot": "c39b94b5bb824508adfc8d87744deaf1251ad43ab30727d2c6975a3780bca246",
+      "mush_stem": "b3b66c5cee0982862507d69e2e625a7a76c96aef202343f9f515a8371b3762a1"
+    },
+    "WL_Mushroom_Tall": {
+      "mush_cap": "ec1e4d66788a56606b26130e934066102bb5ba96627214bb7229dbf7a646bea2",
+      "mush_gill": "d56fafc80f704dcf3c154d66c6081865d9f33a75a05ed791cb0010cafc687eb4",
+      "mush_spot": "43a6a4edfcb351a560aa3d9b3ef2e93874334fba8fb5fa6536539c23fd0d94de",
+      "mush_stem": "d9b749e68b4993ea339dcd37e6988b5ebeef74ca381ba6e887f9a355b1bce6ef"
     },
     "WL_Wall_Curtain_Run__aged": {
       "stone": "3e34a655658a4cdf79504a8cebfff2158e5f65b1152f5b8dd0084de428e63d5a",

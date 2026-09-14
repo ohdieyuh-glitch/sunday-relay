@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-14T01:45:29+00:00",
+  "generated_utc": "2026-09-14T02:05:23+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -22,9 +22,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 114,
+        "n": 117,
         "min": 0.153,
-        "median": 0.86,
+        "median": 0.846,
         "max": 1.0,
         "unknown": 0
       }
@@ -36,9 +36,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 114,
+        "n": 117,
         "min": 0.0,
-        "median": 0.369,
+        "median": 0.358,
         "max": 1.0,
         "unknown": 0
       }
@@ -50,7 +50,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 114,
+        "n": 117,
         "min": 0.557,
         "median": 1.0,
         "max": 1.0,
@@ -64,9 +64,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 114,
+        "n": 117,
         "min": 0.0,
-        "median": 0.982,
+        "median": 0.985,
         "max": 1.0,
         "unknown": 0
       }
@@ -78,7 +78,7 @@
       "provenance": "declared",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 114,
+        "n": 117,
         "min": 0.0,
         "median": 0.0,
         "max": 0.7,
@@ -92,7 +92,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 111,
+        "n": 114,
         "min": 0.083,
         "median": 0.64,
         "max": 0.917,
@@ -106,7 +106,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 114,
+        "n": 117,
         "min": 0.05,
         "median": 0.5,
         "max": 0.7,
@@ -197,6 +197,22 @@
       "unreal": "MI_V2_Lawn",
       "use": "the sward on a floating island: the ground a castle foot stands on"
     },
+    "mush_cap": {
+      "unreal": "MI_V2_MushRed",
+      "use": "a mushroom's cap: the rose dome (MAT03 turned MushRed rose)"
+    },
+    "mush_gill": {
+      "unreal": "MI_V2_MushCream",
+      "use": "the pale underside and gill ribs"
+    },
+    "mush_spot": {
+      "unreal": "MI_V2_PetalWhite",
+      "use": "white spots raised on the cap"
+    },
+    "mush_stem": {
+      "unreal": "MI_V2_MushStem",
+      "use": "the stalk, its bulb and its skirt"
+    },
     "leaf": {
       "unreal": "MI_V2_LeafMid",
       "use": "leaf clumps and stems under a bed of flowers"
@@ -219,9 +235,9 @@
     }
   },
   "counts": {
-    "assets": 114,
-    "meshes": 362,
-    "triangles": 473964,
+    "assets": 117,
+    "meshes": 374,
+    "triangles": 482068,
     "by_role": {
       "foot": 5,
       "body": 14,
@@ -233,7 +249,7 @@
       "detail": 23,
       "route": 11,
       "terrace": 17,
-      "hero": 6
+      "hero": 9
     },
     "legal_tower_stacks_up_to_3_bodies": 865,
     "rung_coverage": {
@@ -37506,6 +37522,1230 @@
         }
       },
       "part_count": 2
+    },
+    {
+      "asset_id": "WL_Mushroom_Toadstool",
+      "kit_version": "1.0.0",
+      "family": "mushrooms",
+      "family_group": "mushrooms",
+      "category": "landmark",
+      "silhouette_role": "hero",
+      "note": "5.2 m toadstool: rose cap with a rolled rim, pale gills and ribs under it, white spots, a pale stalk with a bulb and a drooping skirt -- four parts, four materials",
+      "districts": [
+        "mushroom_grove",
+        "royal_garden",
+        "plaza",
+        "tea_terrace",
+        "grove"
+      ],
+      "params": {
+        "cap_radius_m": 2.6,
+        "height_m": 6.5,
+        "spots": 26,
+        "gill_ribs": 48
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 664.32,
+      "bbox_min_uu": [
+        -267.8,
+        -267.8,
+        0.0
+      ],
+      "bbox_max_uu": [
+        267.8,
+        267.8,
+        664.32
+      ],
+      "size_uu": [
+        535.6,
+        535.6,
+        664.32
+      ],
+      "style": {
+        "slender_broad": 0.634,
+        "low_monumental": 0.308,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.23,
+        "ceremonial_residential": 0.05
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        81.9,
+        52.9,
+        52.9,
+        52.9,
+        46.0,
+        46.0,
+        87.4,
+        46.92,
+        262.6,
+        267.8,
+        249.01,
+        195.98
+      ],
+      "radius_uu": 267.8,
+      "tris_total": 3196,
+      "tri_budget": 14000,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 78.0,
+          "rung": null,
+          "note": "the stalk's bulb on the ground"
+        }
+      ],
+      "parts": {
+        "mush_cap": {
+          "verts": 482,
+          "faces": 520,
+          "tris": 960,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_MushRed"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -267.8,
+            -267.8,
+            484.8
+          ],
+          "bbox_max_uu": [
+            267.8,
+            267.8,
+            650.0
+          ],
+          "size_uu": [
+            535.6,
+            535.6,
+            165.2
+          ],
+          "height_m": 1.652,
+          "base_z_uu": 484.8,
+          "normals": {
+            "faces": 520,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            267.8,
+            195.0,
+            255.6,
+            255.6,
+            242.5,
+            242.5,
+            221.02,
+            221.02,
+            191.66,
+            191.66,
+            155.0,
+            111.65
+          ],
+          "material": "MI_V2_MushRed",
+          "mesh_name": "WL_Mushroom_Toadstool_mush_cap",
+          "glb": "exports\\glb\\WL_Mushroom_Toadstool_mush_cap.glb",
+          "fbx": "exports\\fbx\\WL_Mushroom_Toadstool_mush_cap.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_MushRed"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2.677999973297119,
+              4.8480000495910645,
+              -2.677999973297119
+            ],
+            "max_yup": [
+              2.677999973297119,
+              6.5,
+              2.677999973297119
+            ],
+            "bytes": 25528
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 484.8000183105469,
+            "stored_z_max": 650.0
+          }
+        },
+        "mush_gill": {
+          "verts": 458,
+          "faces": 396,
+          "tris": 720,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_MushCream"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -241.07,
+            -241.07,
+            488.49
+          ],
+          "bbox_max_uu": [
+            241.07,
+            241.07,
+            519.44
+          ],
+          "size_uu": [
+            482.14,
+            482.14,
+            30.95
+          ],
+          "height_m": 0.3095,
+          "base_z_uu": 488.49,
+          "normals": {
+            "faces": 396,
+            "shells": 49,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 49,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            239.2,
+            239.2,
+            239.2,
+            239.2,
+            53.72,
+            53.72,
+            53.72,
+            241.08,
+            241.08,
+            241.08,
+            241.08,
+            239.88
+          ],
+          "material": "MI_V2_MushCream",
+          "mesh_name": "WL_Mushroom_Toadstool_mush_gill",
+          "glb": "exports\\glb\\WL_Mushroom_Toadstool_mush_gill.glb",
+          "fbx": "exports\\fbx\\WL_Mushroom_Toadstool_mush_gill.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_MushCream"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2.4107210636138916,
+              4.884899616241455,
+              -2.4107210636138916
+            ],
+            "max_yup": [
+              2.4107208251953125,
+              5.194350719451904,
+              2.4107210636138916
+            ],
+            "bytes": 54004
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 488.4899597167969,
+            "stored_z_max": 519.43505859375
+          }
+        },
+        "mush_spot": {
+          "verts": 572,
+          "faces": 780,
+          "tris": 1040,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PetalWhite"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -240.38,
+            -230.45,
+            529.79
+          ],
+          "bbox_max_uu": [
+            249.58,
+            213.03,
+            664.32
+          ],
+          "size_uu": [
+            489.96,
+            443.48,
+            134.53
+          ],
+          "height_m": 1.3453,
+          "base_z_uu": 529.788,
+          "normals": {
+            "faces": 780,
+            "shells": 26,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            267.77,
+            256.87,
+            249.63,
+            242.6,
+            229.35,
+            216.03,
+            207.5,
+            195.98,
+            181.43,
+            157.19,
+            130.27,
+            109.8
+          ],
+          "material": "MI_V2_PetalWhite",
+          "mesh_name": "WL_Mushroom_Toadstool_mush_spot",
+          "glb": "exports\\glb\\WL_Mushroom_Toadstool_mush_spot.glb",
+          "fbx": "exports\\fbx\\WL_Mushroom_Toadstool_mush_spot.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PetalWhite"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2.403841495513916,
+              5.297878742218018,
+              -2.130270004272461
+            ],
+            "max_yup": [
+              2.4957659244537354,
+              6.643157482147217,
+              2.3044967651367188
+            ],
+            "bytes": 36944
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 529.7879028320312,
+            "stored_z_max": 664.3157348632812
+          }
+        },
+        "mush_stem": {
+          "verts": 242,
+          "faces": 242,
+          "tris": 476,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_MushStem"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -87.4,
+            -87.4,
+            0.0
+          ],
+          "bbox_max_uu": [
+            87.4,
+            87.4,
+            514.96
+          ],
+          "size_uu": [
+            174.8,
+            174.8,
+            514.96
+          ],
+          "height_m": 5.1496,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 242,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            81.9,
+            52.9,
+            52.9,
+            52.9,
+            52.9,
+            46.0,
+            46.0,
+            46.0,
+            87.4,
+            46.92,
+            46.92,
+            62.1
+          ],
+          "material": "MI_V2_MushStem",
+          "mesh_name": "WL_Mushroom_Toadstool_mush_stem",
+          "glb": "exports\\glb\\WL_Mushroom_Toadstool_mush_stem.glb",
+          "fbx": "exports\\fbx\\WL_Mushroom_Toadstool_mush_stem.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_MushStem"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.8740000128746033,
+              0,
+              -0.8740000128746033
+            ],
+            "max_yup": [
+              0.8740000128746033,
+              5.149600028991699,
+              0.8740000128746033
+            ],
+            "bytes": 15460
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 514.9600219726562
+          }
+        }
+      },
+      "part_count": 4
+    },
+    {
+      "asset_id": "WL_Mushroom_Button",
+      "kit_version": "1.0.0",
+      "family": "mushrooms",
+      "family_group": "mushrooms",
+      "category": "landmark",
+      "silhouette_role": "hero",
+      "note": "2.4 m button mushroom: round cap, gills, spots, pale stalk",
+      "districts": [
+        "mushroom_grove",
+        "royal_garden",
+        "plaza",
+        "tea_terrace",
+        "grove"
+      ],
+      "params": {
+        "cap_radius_m": 1.2,
+        "height_m": 3.2,
+        "spots": 12,
+        "gill_ribs": 28
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 325.1,
+      "bbox_min_uu": [
+        -123.6,
+        -123.6,
+        0.0
+      ],
+      "bbox_max_uu": [
+        123.6,
+        124.1,
+        325.1
+      ],
+      "size_uu": [
+        247.2,
+        247.7,
+        325.1
+      ],
+      "style": {
+        "slender_broad": 0.612,
+        "low_monumental": 0.083,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.23,
+        "ceremonial_residential": 0.05
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        42.0,
+        27.6,
+        27.6,
+        27.6,
+        24.0,
+        24.0,
+        22.8,
+        22.8,
+        123.6,
+        124.16,
+        112.95,
+        79.9
+      ],
+      "radius_uu": 124.1,
+      "tris_total": 2208,
+      "tri_budget": 14000,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": false,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 40.0,
+          "rung": null,
+          "note": "the stalk's bulb on the ground"
+        }
+      ],
+      "parts": {
+        "mush_cap": {
+          "verts": 482,
+          "faces": 520,
+          "tris": 960,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_MushRed"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -123.6,
+            -123.6,
+            227.6
+          ],
+          "bbox_max_uu": [
+            123.6,
+            123.6,
+            320.0
+          ],
+          "size_uu": [
+            247.2,
+            247.2,
+            92.4
+          ],
+          "height_m": 0.924,
+          "base_z_uu": 227.6,
+          "normals": {
+            "faces": 520,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            123.6,
+            90.0,
+            117.97,
+            117.97,
+            111.92,
+            111.92,
+            102.01,
+            102.01,
+            88.46,
+            88.46,
+            71.54,
+            51.53
+          ],
+          "material": "MI_V2_MushRed",
+          "mesh_name": "WL_Mushroom_Button_mush_cap",
+          "glb": "exports\\glb\\WL_Mushroom_Button_mush_cap.glb",
+          "fbx": "exports\\fbx\\WL_Mushroom_Button_mush_cap.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_MushRed"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.2359999418258667,
+              2.2760000228881836,
+              -1.2359999418258667
+            ],
+            "max_yup": [
+              1.2359999418258667,
+              3.200000047683716,
+              1.2359999418258667
+            ],
+            "bytes": 25604
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 227.60000610351562,
+            "stored_z_max": 320.0
+          }
+        },
+        "mush_gill": {
+          "verts": 298,
+          "faces": 276,
+          "tris": 480,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_MushCream"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -114.57,
+            -114.57,
+            229.52
+          ],
+          "bbox_max_uu": [
+            114.57,
+            114.57,
+            243.93
+          ],
+          "size_uu": [
+            229.14,
+            229.14,
+            14.41
+          ],
+          "height_m": 0.1441,
+          "base_z_uu": 229.52,
+          "normals": {
+            "faces": 276,
+            "shells": 29,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 29,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            110.4,
+            110.4,
+            110.4,
+            110.4,
+            28.1,
+            28.1,
+            28.1,
+            114.57,
+            114.57,
+            114.57,
+            114.57,
+            114.02
+          ],
+          "material": "MI_V2_MushCream",
+          "mesh_name": "WL_Mushroom_Button_mush_gill",
+          "glb": "exports\\glb\\WL_Mushroom_Button_mush_gill.glb",
+          "fbx": "exports\\fbx\\WL_Mushroom_Button_mush_gill.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_MushCream"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.1456892490386963,
+              2.2952001094818115,
+              -1.1456892490386963
+            ],
+            "max_yup": [
+              1.1456892490386963,
+              2.4393279552459717,
+              1.1456892490386963
+            ],
+            "bytes": 37200
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 229.52000427246094,
+            "stored_z_max": 243.93280029296875
+          }
+        },
+        "mush_spot": {
+          "verts": 264,
+          "faces": 360,
+          "tris": 480,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PetalWhite"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -109.91,
+            -106.18,
+            252.96
+          ],
+          "bbox_max_uu": [
+            105.65,
+            124.1,
+            325.1
+          ],
+          "size_uu": [
+            215.56,
+            230.28,
+            72.14
+          ],
+          "height_m": 0.7214,
+          "base_z_uu": 252.957,
+          "normals": {
+            "faces": 360,
+            "shells": 12,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            124.16,
+            121.7,
+            116.82,
+            112.95,
+            108.66,
+            98.58,
+            94.7,
+            81.74,
+            79.2,
+            72.2,
+            47.58,
+            45.71
+          ],
+          "material": "MI_V2_PetalWhite",
+          "mesh_name": "WL_Mushroom_Button_mush_spot",
+          "glb": "exports\\glb\\WL_Mushroom_Button_mush_spot.glb",
+          "fbx": "exports\\fbx\\WL_Mushroom_Button_mush_spot.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PetalWhite"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.099070429801941,
+              2.5295650959014893,
+              -1.2409799098968506
+            ],
+            "max_yup": [
+              1.0564963817596436,
+              3.2509548664093018,
+              1.0618226528167725
+            ],
+            "bytes": 17704
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 252.95651245117188,
+            "stored_z_max": 325.0954895019531
+          }
+        },
+        "mush_stem": {
+          "verts": 146,
+          "faces": 168,
+          "tris": 288,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_MushStem"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -42.0,
+            -42.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            42.0,
+            42.0,
+            241.52
+          ],
+          "size_uu": [
+            84.0,
+            84.0,
+            241.52
+          ],
+          "height_m": 2.4152,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 168,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            42.0,
+            27.6,
+            27.6,
+            27.6,
+            27.6,
+            24.0,
+            24.0,
+            24.0,
+            22.8,
+            22.8,
+            22.8,
+            32.4
+          ],
+          "material": "MI_V2_MushStem",
+          "mesh_name": "WL_Mushroom_Button_mush_stem",
+          "glb": "exports\\glb\\WL_Mushroom_Button_mush_stem.glb",
+          "fbx": "exports\\fbx\\WL_Mushroom_Button_mush_stem.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_MushStem"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.41999998688697815,
+              0,
+              -0.41999998688697815
+            ],
+            "max_yup": [
+              0.41999998688697815,
+              2.4151999950408936,
+              0.41999998688697815
+            ],
+            "bytes": 9592
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 241.52000427246094
+          }
+        }
+      },
+      "part_count": 4
+    },
+    {
+      "asset_id": "WL_Mushroom_Tall",
+      "kit_version": "1.0.0",
+      "family": "mushrooms",
+      "family_group": "mushrooms",
+      "category": "landmark",
+      "silhouette_role": "hero",
+      "note": "3.6 m cap on a 7.6 m stalk: a shallow cap over a tall pale stalk with a skirt",
+      "districts": [
+        "mushroom_grove",
+        "royal_garden",
+        "plaza",
+        "tea_terrace",
+        "grove"
+      ],
+      "params": {
+        "cap_radius_m": 1.8,
+        "height_m": 7.6,
+        "spots": 16,
+        "gill_ribs": 40
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 767.11,
+      "bbox_min_uu": [
+        -185.4,
+        -185.4,
+        0.0
+      ],
+      "bbox_max_uu": [
+        185.4,
+        185.4,
+        767.11
+      ],
+      "size_uu": [
+        370.8,
+        370.8,
+        767.11
+      ],
+      "style": {
+        "slender_broad": 0.429,
+        "low_monumental": 0.353,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.23,
+        "ceremonial_residential": 0.05
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        57.75,
+        34.5,
+        34.5,
+        34.5,
+        30.0,
+        30.0,
+        30.0,
+        28.5,
+        57.0,
+        57.0,
+        186.02,
+        166.52
+      ],
+      "radius_uu": 185.4,
+      "tris_total": 2700,
+      "tri_budget": 14000,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 55.0,
+          "rung": null,
+          "note": "the stalk's bulb on the ground"
+        }
+      ],
+      "parts": {
+        "mush_cap": {
+          "verts": 482,
+          "faces": 520,
+          "tris": 960,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_MushRed"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -185.4,
+            -185.4,
+            656.4
+          ],
+          "bbox_max_uu": [
+            185.4,
+            185.4,
+            760.0
+          ],
+          "size_uu": [
+            370.8,
+            370.8,
+            103.6
+          ],
+          "height_m": 1.036,
+          "base_z_uu": 656.4,
+          "normals": {
+            "faces": 520,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            181.8,
+            185.4,
+            176.95,
+            176.95,
+            167.89,
+            167.89,
+            153.02,
+            153.02,
+            132.68,
+            132.68,
+            107.31,
+            77.3
+          ],
+          "material": "MI_V2_MushRed",
+          "mesh_name": "WL_Mushroom_Tall_mush_cap",
+          "glb": "exports\\glb\\WL_Mushroom_Tall_mush_cap.glb",
+          "fbx": "exports\\fbx\\WL_Mushroom_Tall_mush_cap.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_MushRed"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.8539999723434448,
+              6.564000129699707,
+              -1.8539999723434448
+            ],
+            "max_yup": [
+              1.8539999723434448,
+              7.599999904632568,
+              1.8539999723434448
+            ],
+            "bytes": 25536
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 656.4000244140625,
+            "stored_z_max": 760.0
+          }
+        },
+        "mush_gill": {
+          "verts": 394,
+          "faces": 348,
+          "tris": 624,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_MushCream"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -165.6,
+            -165.6,
+            658.72
+          ],
+          "bbox_max_uu": [
+            165.6,
+            165.6,
+            680.15
+          ],
+          "size_uu": [
+            331.2,
+            331.2,
+            21.42
+          ],
+          "height_m": 0.2142,
+          "base_z_uu": 658.723,
+          "normals": {
+            "faces": 348,
+            "shells": 41,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 41,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            165.6,
+            165.6,
+            165.6,
+            165.6,
+            34.99,
+            34.99,
+            34.99,
+            164.7,
+            164.7,
+            164.7,
+            164.7,
+            163.87
+          ],
+          "material": "MI_V2_MushCream",
+          "mesh_name": "WL_Mushroom_Tall_mush_gill",
+          "glb": "exports\\glb\\WL_Mushroom_Tall_mush_gill.glb",
+          "fbx": "exports\\fbx\\WL_Mushroom_Tall_mush_gill.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_MushCream"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.656000018119812,
+              6.587230205535889,
+              -1.656000018119812
+            ],
+            "max_yup": [
+              1.656000018119812,
+              6.8014655113220215,
+              1.656000018119812
+            ],
+            "bytes": 47272
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 658.7230224609375,
+            "stored_z_max": 680.1465454101562
+          }
+        },
+        "mush_spot": {
+          "verts": 352,
+          "faces": 480,
+          "tris": 640,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PetalWhite"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -167.06,
+            -181.64,
+            681.48
+          ],
+          "bbox_max_uu": [
+            147.87,
+            180.9,
+            767.11
+          ],
+          "size_uu": [
+            314.93,
+            362.54,
+            85.63
+          ],
+          "height_m": 0.8563,
+          "base_z_uu": 681.484,
+          "normals": {
+            "faces": 480,
+            "shells": 16,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            186.02,
+            181.94,
+            171.84,
+            166.52,
+            160.41,
+            154.53,
+            147.26,
+            137.63,
+            132.21,
+            113.46,
+            83.27,
+            78.13
+          ],
+          "material": "MI_V2_PetalWhite",
+          "mesh_name": "WL_Mushroom_Tall_mush_spot",
+          "glb": "exports\\glb\\WL_Mushroom_Tall_mush_spot.glb",
+          "fbx": "exports\\fbx\\WL_Mushroom_Tall_mush_spot.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PetalWhite"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.6706252098083496,
+              6.814841270446777,
+              -1.809020757675171
+            ],
+            "max_yup": [
+              1.4787036180496216,
+              7.671097278594971,
+              1.816419005393982
+            ],
+            "bytes": 23040
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 681.484130859375,
+            "stored_z_max": 767.1097412109375
+          }
+        },
+        "mush_stem": {
+          "verts": 242,
+          "faces": 242,
+          "tris": 476,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_MushStem"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -57.75,
+            -57.75,
+            0.0
+          ],
+          "bbox_max_uu": [
+            57.75,
+            57.75,
+            677.28
+          ],
+          "size_uu": [
+            115.5,
+            115.5,
+            677.28
+          ],
+          "height_m": 6.7728,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 242,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            57.75,
+            34.5,
+            34.5,
+            34.5,
+            34.5,
+            30.0,
+            30.0,
+            30.0,
+            28.5,
+            57.0,
+            57.0,
+            40.5
+          ],
+          "material": "MI_V2_MushStem",
+          "mesh_name": "WL_Mushroom_Tall_mush_stem",
+          "glb": "exports\\glb\\WL_Mushroom_Tall_mush_stem.glb",
+          "fbx": "exports\\fbx\\WL_Mushroom_Tall_mush_stem.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_MushStem"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.5774999856948853,
+              0,
+              -0.5774999856948853
+            ],
+            "max_yup": [
+              0.5774999856948853,
+              6.772799968719482,
+              0.5774999856948853
+            ],
+            "bytes": 15704
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 677.2799682617188
+          }
+        }
+      },
+      "part_count": 4
     },
     {
       "asset_id": "WL_Wall_Curtain_Run__aged",
