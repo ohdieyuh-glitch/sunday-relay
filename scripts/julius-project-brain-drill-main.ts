@@ -6,7 +6,7 @@ import { runProjectBrainDrill } from './julius-project-brain-drill';
 
 runProjectBrainDrill({
   argv: process.argv.slice(2),
-  databaseUrl: process.env.DATABASE_URL,
+  databaseUrl: process.env.JULIUS_BRAIN_DATABASE_URL,
   restartCommand: process.env.JULIUS_BRAIN_DRILL_RESTART,
   self: process.argv[1]!,
 }).then((code) => { process.exitCode = code; }, (error: unknown) => {

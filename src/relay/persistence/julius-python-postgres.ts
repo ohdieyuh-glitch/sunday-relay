@@ -32,7 +32,7 @@ export class JuliusPythonExecutionPostgresStore implements JuliusPythonExecution
 
   async create(record: JuliusPythonExecutionRecord): Promise<{ readonly created: boolean; readonly record: JuliusPythonExecutionRecord }> {
     const inserted = await this.pool.query(
-      `INSERT INTO relay_wonderland.julius_python_executions(execution_id,project_id,brain_id,mission_id,run_id,task_id,idempotency_key,request_digest,script_hash,state,host_instance_id,requested_at,started_at,completed_at,version,record)
+      `INSERT INTO julius_brain.python_executions(execution_id,project_id,brain_id,mission_id,run_id,task_id,idempotency_key,request_digest,script_hash,state,host_instance_id,requested_at,started_at,completed_at,version,record)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb)
        ON CONFLICT(project_id,idempotency_key) DO NOTHING`,
       [record.executionId, record.projectId, record.brainId, record.missionId, record.runId, record.taskId, record.idempotencyKey, record.requestDigest,
@@ -42,14 +42,14 @@ export class JuliusPythonExecutionPostgresStore implements JuliusPythonExecution
       throw error;
     });
     if (inserted.rowCount === 1) return { created: true, record };
-    const existing = await this.pool.query('SELECT record FROM relay_wonderland.julius_python_executions WHERE project_id=$1 AND idempotency_key=$2', [record.projectId, record.idempotencyKey]);
+    const existing = await this.pool.query('SELECT record FROM julius_brain.python_executions WHERE project_id=$1 AND idempotency_key=$2', [record.projectId, record.idempotencyKey]);
     const stored = parsed<JuliusPythonExecutionRecord>(existing.rows[0].record);
     if (stored.requestDigest !== record.requestDigest) throw new Error('julius_python_idempotency_conflict');
     return { created: false, record: stored };
   }
 
   async load(executionId: string, projectId: string): Promise<JuliusPythonExecutionRecord | null> {
-    const result = await this.pool.query('SELECT record FROM relay_wonderland.julius_python_executions WHERE execution_id=$1 AND project_id=$2', [executionId, projectId]);
+    const result = await this.pool.query('SELECT record FROM julius_brain.python_executions WHERE execution_id=$1 AND project_id=$2', [executionId, projectId]);
     return result.rows[0] ? parsed<JuliusPythonExecutionRecord>(result.rows[0].record) : null;
   }
 
@@ -93,7 +93,7 @@ export class JuliusPythonExecutionPostgresStore implements JuliusPythonExecution
 
   async listInFlight(input: { readonly startedBefore: string; readonly limit: number }): Promise<readonly JuliusPythonExecutionRecord[]> {
     const result = await this.pool.query(
-      `SELECT record FROM relay_wonderland.julius_python_executions WHERE state IN('RUNNING','CANCEL_REQUESTED') AND started_at<$1 ORDER BY started_at LIMIT $2`,
+      `SELECT record FROM julius_brain.python_executions WHERE state IN('RUNNING','CANCEL_REQUESTED') AND started_at<$1 ORDER BY started_at LIMIT $2`,
       [input.startedBefore, Math.max(1, Math.min(input.limit, 1_000))],
     );
     return result.rows.map((row) => parsed<JuliusPythonExecutionRecord>(row.record));
@@ -102,13 +102,13 @@ export class JuliusPythonExecutionPostgresStore implements JuliusPythonExecution
   /* -------------------------------------------------------------- private */
 
   private async lock(client: Queryable, executionId: string, projectId: string): Promise<JuliusPythonExecutionRecord | null> {
-    const result = await client.query('SELECT record FROM relay_wonderland.julius_python_executions WHERE execution_id=$1 AND project_id=$2 FOR UPDATE', [executionId, projectId]);
+    const result = await client.query('SELECT record FROM julius_brain.python_executions WHERE execution_id=$1 AND project_id=$2 FOR UPDATE', [executionId, projectId]);
     return result.rows[0] ? parsed<JuliusPythonExecutionRecord>(result.rows[0].record) : null;
   }
 
   private async write(client: Queryable, record: JuliusPythonExecutionRecord): Promise<void> {
     const updated = await client.query(
-      `UPDATE relay_wonderland.julius_python_executions SET state=$3,host_instance_id=$4,started_at=$5,completed_at=$6,version=$7,record=$8::jsonb
+      `UPDATE julius_brain.python_executions SET state=$3,host_instance_id=$4,started_at=$5,completed_at=$6,version=$7,record=$8::jsonb
         WHERE execution_id=$1 AND project_id=$2 AND version=$9`,
       [record.executionId, record.projectId, record.state, record.hostInstanceId, record.startedAt, record.completedAt, record.version, JSON.stringify(record), record.version - 1],
     );

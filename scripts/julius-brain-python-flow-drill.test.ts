@@ -25,7 +25,7 @@ suite('the Brain + Python drill across processes', () => {
     url.pathname = `/${database}`;
     // The npm script builds the drill and runs it, as the other drills' tests do.
     const out = await run('npm', ['run', '--silent', 'julius:brain:python-drill'], {
-      env: { ...process.env, DATABASE_URL: url.toString() }, timeout: 900_000, maxBuffer: 32 * 1024 * 1024, shell: process.platform === 'win32',
+      env: { ...process.env, JULIUS_BRAIN_DATABASE_URL: url.toString() }, timeout: 900_000, maxBuffer: 32 * 1024 * 1024, shell: process.platform === 'win32',
     }).catch((error: { stdout?: string; stderr?: string }) => { throw new Error(`drill failed:\n${error.stdout ?? ''}\n${error.stderr ?? ''}`); });
     expect(out.stdout).toContain('JULIUS BRAIN + PYTHON DRILL VERIFIED');
     const report = JSON.parse(out.stdout.slice(0, out.stdout.lastIndexOf('JULIUS BRAIN + PYTHON DRILL')));

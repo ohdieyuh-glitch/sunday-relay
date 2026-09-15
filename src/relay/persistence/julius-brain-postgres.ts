@@ -30,7 +30,8 @@ import {
 } from '../mission/julius/julius-brain-store';
 
 /**
- * THE DURABLE PROJECT BRAIN.
+ * THE DURABLE PROJECT BRAIN, in its dedicated database (`julius_brain`
+ * schema; see `julius-brain-database.ts`).
  *
  * ONE LOCK, ONE TRANSACTION, ONE PLANNER. A commit takes the Brain row with
  * `FOR UPDATE`, which serialises every writer of that Brain in every process
@@ -66,7 +67,7 @@ const parsed = <T>(value: unknown): T => (typeof value === 'string' ? JSON.parse
  */
 export async function commitJuliusBrainGroupWithin(client: Queryable, input: JuliusBrainGroupCommitInput): Promise<JuliusBrainGroupCommitResult> {
   const brainRow = await client.query(
-    'SELECT identity,head_sequence,head_chain_hash FROM relay_wonderland.julius_brains WHERE brain_id=$1 AND project_id=$2 FOR UPDATE',
+    'SELECT identity,head_sequence,head_chain_hash FROM julius_brain.brains WHERE brain_id=$1 AND project_id=$2 FOR UPDATE',
     [input.brainId, input.projectId],
   );
   if (brainRow.rows.length === 0) {
@@ -80,13 +81,13 @@ export async function commitJuliusBrainGroupWithin(client: Queryable, input: Jul
   for (let round = 0; round < 3; round += 1) {
     const needed = juliusBrainPlanDependencies(brain.brainId, drafts, entities);
     if (needed.length === 0) break;
-    const found = await client.query('SELECT entity_id,state FROM relay_wonderland.julius_brain_entities WHERE brain_id=$1 AND entity_id=ANY($2::text[])', [brain.brainId, needed]);
+    const found = await client.query('SELECT entity_id,state FROM julius_brain.entities WHERE brain_id=$1 AND entity_id=ANY($2::text[])', [brain.brainId, needed]);
     const byId = new Map(found.rows.map((row) => [String(row.entity_id), parsed<JuliusBrainEntityState>(row.state)]));
     for (const id of needed) entities.set(id, byId.get(id) ?? null);
   }
   const keys = [...new Set(drafts.map((draft) => draft.idempotencyKey).filter((key): key is string => typeof key === 'string'))];
   const hits = await client.query(
-    'SELECT idempotency_key,record_id,fingerprint,entity_id,entity_version,sequence,kind FROM relay_wonderland.julius_brain_records WHERE brain_id=$1 AND idempotency_key=ANY($2::text[])',
+    'SELECT idempotency_key,record_id,fingerprint,entity_id,entity_version,sequence,kind FROM julius_brain.records WHERE brain_id=$1 AND idempotency_key=ANY($2::text[])',
     [brain.brainId, keys],
   );
   const idempotency = new Map<string, JuliusBrainIdempotencyHit | null>(keys.map((key) => [key, null]));
@@ -99,7 +100,7 @@ export async function commitJuliusBrainGroupWithin(client: Queryable, input: Jul
   const grantUsage = new Map<string, number>();
   for (const group of input.groups) {
     if (group.grant === null || grantUsage.has(group.grant.grantId)) continue;
-    const usage = await client.query('SELECT count(*) AS n FROM relay_wonderland.julius_brain_records WHERE brain_id=$1 AND grant_id=$2', [brain.brainId, group.grant.grantId]);
+    const usage = await client.query('SELECT count(*) AS n FROM julius_brain.records WHERE brain_id=$1 AND grant_id=$2', [brain.brainId, group.grant.grantId]);
     grantUsage.set(group.grant.grantId, num(usage.rows[0]?.n ?? 0));
   }
   const plan = planJuliusBrainGroups({ brain, head, recordedAt: input.recordedAt, groups: input.groups, entities, idempotency, grantUsage });
@@ -107,7 +108,7 @@ export async function commitJuliusBrainGroupWithin(client: Queryable, input: Jul
   if (plan.records.length > 0) {
     await persistJuliusBrainRows(client, input.projectId, plan.records, plan.entities);
     const moved = await client.query(
-      'UPDATE relay_wonderland.julius_brains SET head_sequence=$3,head_chain_hash=$4 WHERE brain_id=$1 AND project_id=$2 AND head_sequence=$5',
+      'UPDATE julius_brain.brains SET head_sequence=$3,head_chain_hash=$4 WHERE brain_id=$1 AND project_id=$2 AND head_sequence=$5',
       [input.brainId, input.projectId, plan.head.sequence, plan.head.chainHash, head.sequence],
     );
     if (moved.rowCount !== 1) throw new Error('julius_brain_head_moved_under_lock');
@@ -118,7 +119,7 @@ export async function commitJuliusBrainGroupWithin(client: Queryable, input: Jul
 async function persistJuliusBrainRows(client: Queryable, projectId: string, records: readonly JuliusBrainRecord[], entities: readonly JuliusBrainEntityState[]): Promise<void> {
   for (const record of records) {
     await client.query(
-      `INSERT INTO relay_wonderland.julius_brain_records(brain_id,project_id,sequence,record_id,entity_id,entity_version,kind,op,idempotency_key,fingerprint,content_hash,chain_hash,principal_kind,principal_id,grant_id,mission_id,run_id,task_id,record,occurred_at,recorded_at)
+      `INSERT INTO julius_brain.records(brain_id,project_id,sequence,record_id,entity_id,entity_version,kind,op,idempotency_key,fingerprint,content_hash,chain_hash,principal_kind,principal_id,grant_id,mission_id,run_id,task_id,record,occurred_at,recorded_at)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb,$20,$21)`,
       [record.brainId, projectId, record.sequence, record.recordId, record.entityId, record.entityVersion, record.kind, record.op, record.idempotencyKey,
         record.fingerprint, record.contentHash, record.chainHash, record.principal.kind, record.principal.id, record.principal.grantId,
@@ -126,7 +127,7 @@ async function persistJuliusBrainRows(client: Queryable, projectId: string, reco
     );
     for (const link of record.links) {
       await client.query(
-        `INSERT INTO relay_wonderland.julius_brain_links(brain_id,project_id,sequence,source_entity_id,relation,target_entity_id,target_version)
+        `INSERT INTO julius_brain.links(brain_id,project_id,sequence,source_entity_id,relation,target_entity_id,target_version)
          VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
         [record.brainId, projectId, record.sequence, record.entityId, link.relation, link.target, link.targetVersion],
       );
@@ -134,7 +135,7 @@ async function persistJuliusBrainRows(client: Queryable, projectId: string, reco
   }
   for (const state of entities) {
     await client.query(
-      `INSERT INTO relay_wonderland.julius_brain_entities(brain_id,project_id,entity_id,kind,version,lifecycle,status,mission_id,task_id,created_sequence,updated_sequence,state)
+      `INSERT INTO julius_brain.entities(brain_id,project_id,entity_id,kind,version,lifecycle,status,mission_id,task_id,created_sequence,updated_sequence,state)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb)
        ON CONFLICT(brain_id,entity_id) DO UPDATE SET version=EXCLUDED.version,lifecycle=EXCLUDED.lifecycle,status=EXCLUDED.status,
          updated_sequence=EXCLUDED.updated_sequence,state=EXCLUDED.state`,
@@ -151,29 +152,30 @@ export class JuliusBrainPostgresStore implements JuliusBrainStore {
   async createBrain(identity: JuliusBrainIdentity): Promise<{ readonly created: boolean; readonly brain: JuliusBrainIdentity }> {
     const errors = validateJuliusBrainIdentity(identity);
     if (errors.length > 0) throw new Error(`julius_brain_identity_invalid:${errors.join('; ')}`);
+    await this.pool.query('INSERT INTO julius_brain.projects(project_id) VALUES($1) ON CONFLICT DO NOTHING', [identity.projectId]);
     const inserted = await this.pool.query(
-      `INSERT INTO relay_wonderland.julius_brains(brain_id,project_id,title,schema_version,created_by,created_at,identity,head_sequence,head_chain_hash)
+      `INSERT INTO julius_brain.brains(brain_id,project_id,title,schema_version,created_by,created_at,identity,head_sequence,head_chain_hash)
        VALUES($1,$2,$3,$4,$5::jsonb,$6,$7::jsonb,0,$8) ON CONFLICT(brain_id) DO NOTHING`,
       [identity.brainId, identity.projectId, identity.title, identity.schemaVersion, JSON.stringify(identity.createdBy), identity.createdAt, JSON.stringify(identity), juliusBrainGenesisHash(identity.brainId)],
     );
     if (inserted.rowCount === 1) return { created: true, brain: identity };
-    const existing = await this.pool.query('SELECT project_id,identity FROM relay_wonderland.julius_brains WHERE brain_id=$1', [identity.brainId]);
+    const existing = await this.pool.query('SELECT project_id,identity FROM julius_brain.brains WHERE brain_id=$1', [identity.brainId]);
     if (existing.rows[0]?.project_id !== identity.projectId) throw new Error('julius_brain_id_taken');
     return { created: false, brain: parsed<JuliusBrainIdentity>(existing.rows[0].identity) };
   }
 
   async loadBrain(brainId: string, projectId: string): Promise<JuliusBrainIdentity | null> {
-    const result = await this.pool.query('SELECT identity FROM relay_wonderland.julius_brains WHERE brain_id=$1 AND project_id=$2', [brainId, projectId]);
+    const result = await this.pool.query('SELECT identity FROM julius_brain.brains WHERE brain_id=$1 AND project_id=$2', [brainId, projectId]);
     return result.rows[0] ? parsed<JuliusBrainIdentity>(result.rows[0].identity) : null;
   }
 
   async listBrains(projectId: string): Promise<readonly JuliusBrainIdentity[]> {
-    const result = await this.pool.query('SELECT identity FROM relay_wonderland.julius_brains WHERE project_id=$1 ORDER BY brain_id', [projectId]);
+    const result = await this.pool.query('SELECT identity FROM julius_brain.brains WHERE project_id=$1 ORDER BY brain_id', [projectId]);
     return result.rows.map((row) => parsed<JuliusBrainIdentity>(row.identity));
   }
 
   async head(brainId: string, projectId: string): Promise<JuliusBrainHead | null> {
-    const result = await this.pool.query('SELECT head_sequence,head_chain_hash FROM relay_wonderland.julius_brains WHERE brain_id=$1 AND project_id=$2', [brainId, projectId]);
+    const result = await this.pool.query('SELECT head_sequence,head_chain_hash FROM julius_brain.brains WHERE brain_id=$1 AND project_id=$2', [brainId, projectId]);
     return result.rows[0] ? { sequence: num(result.rows[0].head_sequence), chainHash: String(result.rows[0].head_chain_hash) } : null;
   }
 
@@ -195,7 +197,7 @@ export class JuliusBrainPostgresStore implements JuliusBrainStore {
     if (query.entityId !== undefined) { values.push(query.entityId); where += ` AND entity_id=$${values.length}`; }
     if (query.kinds !== undefined) { values.push([...query.kinds]); where += ` AND kind=ANY($${values.length}::text[])`; }
     values.push(limit + 1);
-    const result = await this.pool.query(`SELECT record FROM relay_wonderland.julius_brain_records WHERE ${where} ORDER BY sequence LIMIT $${values.length}`, values);
+    const result = await this.pool.query(`SELECT record FROM julius_brain.records WHERE ${where} ORDER BY sequence LIMIT $${values.length}`, values);
     const rows = result.rows.map((row) => parsed<JuliusBrainRecord>(row.record));
     return { records: rows.slice(0, limit), hasMore: rows.length > limit };
   }
@@ -217,7 +219,7 @@ export class JuliusBrainPostgresStore implements JuliusBrainStore {
     if (filter.afterEntityId !== undefined) add((i) => `entity_id COLLATE "C">$${i}`, filter.afterEntityId);
     values.push(Math.max(1, Math.min(filter.limit ?? JULIUS_BRAIN_READ_LIMIT, JULIUS_BRAIN_READ_LIMIT)));
     const result = await this.pool.query(
-      `SELECT state FROM relay_wonderland.julius_brain_entities WHERE ${where} ORDER BY entity_id COLLATE "C" LIMIT $${values.length}`, values,
+      `SELECT state FROM julius_brain.entities WHERE ${where} ORDER BY entity_id COLLATE "C" LIMIT $${values.length}`, values,
     );
     return result.rows.map((row) => parsed<JuliusBrainEntityState>(row.state));
   }
@@ -229,8 +231,9 @@ export class JuliusBrainPostgresStore implements JuliusBrainStore {
     if (!verification.ok) return { outcome: 'REFUSED', reasonCode: 'ledger_invalid', detail: verification.problems.slice(0, 8).join('; ') };
     const projection = projectJuliusBrain(identity.brainId, records);
     return this.transaction<JuliusBrainRestoreResult>(async (client) => {
+      await client.query('INSERT INTO julius_brain.projects(project_id) VALUES($1) ON CONFLICT DO NOTHING', [identity.projectId]);
       const inserted = await client.query(
-        `INSERT INTO relay_wonderland.julius_brains(brain_id,project_id,title,schema_version,created_by,created_at,identity,head_sequence,head_chain_hash)
+        `INSERT INTO julius_brain.brains(brain_id,project_id,title,schema_version,created_by,created_at,identity,head_sequence,head_chain_hash)
          VALUES($1,$2,$3,$4,$5::jsonb,$6,$7::jsonb,$8,$9) ON CONFLICT(brain_id) DO NOTHING`,
         [identity.brainId, identity.projectId, identity.title, identity.schemaVersion, JSON.stringify(identity.createdBy), identity.createdAt, JSON.stringify(identity), projection.head.sequence, projection.head.chainHash],
       );

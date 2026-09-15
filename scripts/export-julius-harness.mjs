@@ -122,10 +122,12 @@ const DECLARED_NOT_COMPOSED = [
   { path: 'src/relay/mission/julius/julius-python-service.ts', reason: 'the governed Python execution tool: request → authorise → run → atomic settlement into the Project Brain, cancellation and disconnection; not yet composed by the live root' },
   { path: 'src/relay/workspace/julius-tools/python-runner.ts', reason: 'the local host runner for governed Python executions (scrubbed environment, tree kill, bounded hashed redacted streams, content-addressed artifacts, interpreter probing); not composed by the live root, which routes tool effects through the independent executor' },
   { path: 'src/relay/workspace/julius-tools/python-environments.ts', reason: 'explicit Python environments: a spec-hash-named virtualenv installed offline from a declared wheelhouse with exact pins, verified by probe and locked; never the base interpreter; not yet composed by the live root' },
-  { path: 'src/relay/persistence/julius-python-postgres.ts', reason: 'durable governed Python executions (migration 025) whose settlement commits the execution state and its Project Brain records in one transaction; proven across processes, a server restart, cross-process cancellation and a crashed host by scripts/julius-brain-python-flow-drill.ts; not yet composed by the live root' },
+  { path: 'src/relay/persistence/julius-python-postgres.ts', reason: 'durable governed Python executions (julius_brain.python_executions, in the dedicated Project Brain database) whose settlement commits the execution state and its Project Brain records in one transaction; proven across processes, a server restart, cross-process cancellation and a crashed host by scripts/julius-brain-python-flow-drill.ts; not yet composed by the live root' },
+  { path: 'src/relay/persistence/julius-brain-database.ts', reason: 'Project Brain v2: the dedicated Brain database — its own julius_brain migration chain, refusal of a database that holds the Julius runtime schema, the environment identity that keeps development from opening production, and the current-chain check every user of the Brain makes; not yet composed by the live root' },
+  { path: 'src/relay/persistence/julius-brain-content-postgres.ts', reason: 'Project Brain v2: artifact bytes in the Brain database (julius_brain.content), content addressed and re-hashed on every read, so the bytes a record names are as durable as the record; not yet composed by the live root' },
   { path: 'src/relay/persistence/julius-brain-legacy-postgres.ts', reason: 'Project Brain v2: v1 julius_brain_entries rows read back as the appends that wrote them, and the one normalisation (stored kind, timestamptz instant) the mirror and the backfill share so they never conflict; not yet composed by the live root' },
   { path: 'relay-bridge/julius/project-brain-binding.ts', reason: 'Project Brain v2: the PREPARED live binding (bootstrap + resume verification + v1 backfill, the mirroring writer, state-mode typed context appended after v1 context, checkpoint) for steps 1-5 of docs/JULIUS_BRAIN_LIVE_INTEGRATION_PLAN.md; deliberately not composed until the continuous-worker qualification passes' },
-  { path: 'src/relay/persistence/julius-brain-postgres.ts', reason: 'Project Brain v2: the durable PostgreSQL store (migration 024), proven by scripts/julius-project-brain-drill.ts across separate processes and a server restart; not yet composed by the live root' },
+  { path: 'src/relay/persistence/julius-brain-postgres.ts', reason: 'Project Brain v2: the durable PostgreSQL store in the dedicated Project Brain database (julius_brain schema), proven by scripts/julius-project-brain-drill.ts across separate processes and a server restart; not yet composed by the live root' },
 ];
 
 /** Directories the trace does not enter. Crossing edges are reported, never hidden. */
@@ -295,6 +297,8 @@ const FILE_RULES = [
   ['src/relay/workspace/julius-tools/python-environments.ts', 'TOOLS'],
   ['src/relay/persistence/julius-python-postgres.ts', 'PERSISTENCE'],
   ['src/relay/persistence/julius-brain-legacy-postgres.ts', 'PERSISTENCE'],
+  ['src/relay/persistence/julius-brain-database.ts', 'PERSISTENCE'],
+  ['src/relay/persistence/julius-brain-content-postgres.ts', 'PERSISTENCE'],
   ['relay-bridge/julius/project-brain-binding.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/persistence/julius-brain-postgres.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-allocation-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],

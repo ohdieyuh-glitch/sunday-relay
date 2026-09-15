@@ -12,7 +12,7 @@ import { selectJuliusBrainEntitiesForMode } from '../src/relay/mission/julius/ju
 import { createJuliusBrainMemoryStore, readAllJuliusBrainEntities, readAllJuliusBrainRecords } from '../src/relay/mission/julius/julius-brain-store';
 import { LocalJuliusBrainContentStore } from '../src/relay/persistence/julius-brain-content-store';
 import { JuliusBrainPostgresStore } from '../src/relay/persistence/julius-brain-postgres';
-import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
+import { migrateJuliusBrainDatabase } from '../src/relay/persistence/julius-brain-database';
 
 /**
  * THE ARCHIVE IMPORT, ON A REAL POSTGRESQL. `JULIUS_REAL_POSTGRES=1` with
@@ -36,8 +36,7 @@ async function freshDatabase(label: string): Promise<string> {
 
 async function prepared(url: string, max = 8) {
   const pool = new Pool({ connectionString: url, max });
-  await new TransactionalWonderlandDatabase(pool).migrate();
-  await pool.query('INSERT INTO relay_wonderland.projects(project_id) VALUES($1) ON CONFLICT DO NOTHING', [PROJECT]);
+  await migrateJuliusBrainDatabase(pool, { environment: 'test' });
   const store = new JuliusBrainPostgresStore(pool);
   await createJuliusProjectBrainService({ store, clock: { now: () => '2026-09-15T10:00:00.000Z' } }).initialize({ brainId: BRAIN, projectId: PROJECT, title: 'Julius', principal: JULIUS });
   return { pool, store };
@@ -82,7 +81,7 @@ suite('the paid-run archive import on a real PostgreSQL', () => {
         store: new JuliusBrainPostgresStore(racer), brainId: BRAIN, projectId: PROJECT, archive, content, recordedAt: '2026-09-15T10:00:00.000Z',
       })));
       expect(results.map((result) => result.outcome).sort()).toEqual(['ALREADY_IMPORTED', 'ALREADY_IMPORTED', 'ALREADY_IMPORTED', 'ALREADY_IMPORTED', 'ALREADY_IMPORTED', 'IMPORTED']);
-      const stored = await pools[0]!.query('SELECT count(*)::int AS n FROM relay_wonderland.julius_brain_records WHERE brain_id=$1', [BRAIN]);
+      const stored = await pools[0]!.query('SELECT count(*)::int AS n FROM julius_brain.records WHERE brain_id=$1', [BRAIN]);
       const planned = planJuliusPaidRunArchiveImport(archive, { contentHash: `sha256:${'0'.repeat(64)}`, byteSize: 1, storageRef: 'x' }).drafts.length;
       expect(stored.rows[0].n).toBe(planned);
     } finally { await Promise.all(pools.map((racer) => racer.end())); }
@@ -109,7 +108,7 @@ suite('the paid-run archive import on a real PostgreSQL', () => {
       expect(refused).toMatchObject({ outcome: 'REFUSED', reasonCode: 'entity_already_exists' });
       expect((refused as { group: number }).group).toBeGreaterThan(0);
       expect(await store.head(BRAIN, PROJECT)).toEqual(head);
-      const count = async () => (await pool.query('SELECT count(*)::int AS n FROM relay_wonderland.julius_brain_records WHERE brain_id=$1', [BRAIN])).rows[0].n as number;
+      const count = async () => (await pool.query('SELECT count(*)::int AS n FROM julius_brain.records WHERE brain_id=$1', [BRAIN])).rows[0].n as number;
       expect(await count()).toBe(head!.sequence);
 
       // The next attempt holds no conflicting id, and every one of its records lands.

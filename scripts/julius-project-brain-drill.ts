@@ -13,7 +13,7 @@ import { readAllJuliusBrainEntities, readAllJuliusBrainRecords, type JuliusBrain
 import { verifyJuliusBrainLedger } from '../src/relay/mission/julius/julius-brain-projection';
 import { JuliusBrainPostgresStore } from '../src/relay/persistence/julius-brain-postgres';
 import { LocalJuliusBrainContentStore, type JuliusBrainContentStore } from '../src/relay/persistence/julius-brain-content-store';
-import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
+import { assertJuliusBrainDatabase, migrateJuliusBrainDatabase } from '../src/relay/persistence/julius-brain-database';
 
 /**
  * THE PROJECT BRAIN DURABILITY DRILL.
@@ -30,7 +30,7 @@ import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonder
  * without `JULIUS_BRAIN_DRILL_RESTART` the attestation says "process restart
  * only", because that is what happened.
  *
- *   DATABASE_URL=… node dist-relay-bridge/julius-project-brain-drill.cjs [--artifacts <dir>]
+ *   JULIUS_BRAIN_DATABASE_URL=… node dist-relay-bridge/julius-project-brain-drill.cjs [--artifacts <dir>]
  */
 
 export const BRAIN_DRILL = Object.freeze({
@@ -201,7 +201,7 @@ export async function runProjectBrainDrill(input: { readonly argv: readonly stri
   const artifactsFlag = input.argv.indexOf('--artifacts');
   const artifactsRoot = artifactsFlag >= 0 ? input.argv[artifactsFlag + 1]! : mkdtempSync(join(tmpdir(), 'julius-brain-cas-'));
   if (!input.databaseUrl) {
-    process.stderr.write('julius_project_brain_drill_requires_database_url: set DATABASE_URL to a PostgreSQL this drill may write to\n');
+    process.stderr.write('julius_project_brain_drill_requires_database_url: set JULIUS_BRAIN_DATABASE_URL to a dedicated Project Brain PostgreSQL this drill may write to\n');
     return 2;
   }
   const content = new LocalJuliusBrainContentStore(artifactsRoot);
@@ -209,8 +209,7 @@ export async function runProjectBrainDrill(input: { readonly argv: readonly stri
   if (mode === 'write') {
     const pool = new Pool({ connectionString: input.databaseUrl });
     try {
-      await new TransactionalWonderlandDatabase(pool).migrate();
-      await pool.query('INSERT INTO relay_wonderland.projects(project_id) VALUES($1) ON CONFLICT DO NOTHING', [BRAIN_DRILL.projectId]);
+      await migrateJuliusBrainDatabase(pool, { environment: 'test' });
       const store = new JuliusBrainPostgresStore(pool);
       if ((await store.head(BRAIN_DRILL.brainId, BRAIN_DRILL.projectId)) !== null) {
         process.stderr.write('julius_project_brain_drill_database_not_fresh\n');
@@ -227,6 +226,7 @@ export async function runProjectBrainDrill(input: { readonly argv: readonly stri
   if (mode === 'read') {
     const pool = new Pool({ connectionString: input.databaseUrl });
     try {
+      await assertJuliusBrainDatabase(pool, { environment: 'test' });
       process.stdout.write(`${JSON.stringify({ mode, summary: await summariseBrain(new JuliusBrainPostgresStore(pool), content) })}\n`);
       return 0;
     } finally {
@@ -234,7 +234,7 @@ export async function runProjectBrainDrill(input: { readonly argv: readonly stri
     }
   }
 
-  const env = { ...process.env, DATABASE_URL: input.databaseUrl };
+  const env = { ...process.env, JULIUS_BRAIN_DATABASE_URL: input.databaseUrl };
   const a = await runProcess(process.execPath, [input.self, 'write', '--artifacts', artifactsRoot], { env, timeout: 300_000 });
   const written = JSON.parse(a.stdout.trim().split('\n').at(-1)!).summary as BrainDrillSummary;
   const startBefore = await postmasterStart(input.databaseUrl);

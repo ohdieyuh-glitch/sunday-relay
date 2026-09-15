@@ -11,7 +11,7 @@ import { createJuliusProjectBrainService } from '../src/relay/mission/julius/jul
 import { createJuliusBrainMemoryStore, readAllJuliusBrainEntities, readAllJuliusBrainRecords } from '../src/relay/mission/julius/julius-brain-store';
 import { LocalJuliusBrainContentStore } from '../src/relay/persistence/julius-brain-content-store';
 import { JuliusBrainPostgresStore } from '../src/relay/persistence/julius-brain-postgres';
-import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
+import { assertJuliusBrainDatabase, migrateJuliusBrainDatabase } from '../src/relay/persistence/julius-brain-database';
 import { BRAIN_DRILL, steppingClock, summariseBrain, writeBrainScenario } from './julius-project-brain-drill';
 
 /**
@@ -41,8 +41,7 @@ async function freshDatabase(label: string): Promise<string> {
 
 async function migrated(url: string): Promise<Pool> {
   const pool = new Pool({ connectionString: url, max: 16 });
-  await new TransactionalWonderlandDatabase(pool).migrate();
-  await pool.query('INSERT INTO relay_wonderland.projects(project_id) VALUES($1) ON CONFLICT DO NOTHING', [BRAIN_DRILL.projectId]);
+  await migrateJuliusBrainDatabase(pool, { environment: 'test' });
   return pool;
 }
 
@@ -53,9 +52,10 @@ suite('Project Brain on a real PostgreSQL', () => {
   it('migrates once, and migrating again applies nothing', async () => {
     const pool = await migrated(await freshDatabase('mig'));
     try {
-      await new TransactionalWonderlandDatabase(pool).migrate();
-      const applied = await new TransactionalWonderlandDatabase(pool).appliedMigrationVersions();
-      expect(applied.has('024_julius_project_brain')).toBe(true);
+      const again = await migrateJuliusBrainDatabase(pool, { environment: 'test' });
+      expect(again.applied).toEqual([]);
+      expect(again.migrations).toEqual(['001_julius_brain_ledger', '002_julius_brain_python_executions', '003_julius_brain_content']);
+      expect((await assertJuliusBrainDatabase(pool, { environment: 'test' })).databaseId).toBe(again.databaseId);
     } finally { await pool.end(); }
   }, 120_000);
 
@@ -105,7 +105,7 @@ suite('Project Brain on a real PostgreSQL', () => {
       expect(receipts.filter((outcome) => outcome === 'APPENDED')).toHaveLength(1);
       expect(receipts.filter((outcome) => outcome === 'DUPLICATE')).toHaveLength(7);
 
-      const count = await pool.query('SELECT count(*)::int AS n FROM relay_wonderland.julius_brain_records WHERE brain_id=$1', [brainId]);
+      const count = await pool.query('SELECT count(*)::int AS n FROM julius_brain.records WHERE brain_id=$1', [brainId]);
       expect(count.rows[0].n).toBe(10);
       expect((await julius.verify()).ok).toBe(true);
     } finally { await pool.end(); }
@@ -124,8 +124,8 @@ suite('Project Brain on a real PostgreSQL', () => {
         julius.draft('CONSTRAINT', { statement: 'token=abcdefghijklmnop', status: 'ACTIVE' }, { key: 'b', scope: { missionId } }),
       ]);
       expect(result).toMatchObject({ outcome: 'REFUSED', index: 1, reasonCode: 'credential_shaped_content' });
-      for (const table of ['julius_brain_records', 'julius_brain_entities', 'julius_brain_links']) {
-        expect((await pool.query(`SELECT count(*)::int AS n FROM relay_wonderland.${table}`)).rows[0].n, table).toBe(0);
+      for (const table of ['records', 'entities', 'links']) {
+        expect((await pool.query(`SELECT count(*)::int AS n FROM julius_brain.${table}`)).rows[0].n, table).toBe(0);
       }
       expect(await store.head(brainId, projectId)).toMatchObject({ sequence: 0 });
     } finally { await pool.end(); }
@@ -153,7 +153,7 @@ suite('Project Brain on a real PostgreSQL', () => {
     const url = await freshDatabase('drill');
     // The npm script builds the drill and runs it, as the other drills' tests do.
     const out = await run('npm', ['run', '--silent', 'julius:brain:drill'], {
-      env: { ...process.env, DATABASE_URL: url }, timeout: 600_000, maxBuffer: 16 * 1024 * 1024, shell: process.platform === 'win32',
+      env: { ...process.env, JULIUS_BRAIN_DATABASE_URL: url }, timeout: 600_000, maxBuffer: 16 * 1024 * 1024, shell: process.platform === 'win32',
     }).catch((error: { stdout?: string; stderr?: string }) => { throw new Error(`drill failed:\n${error.stdout ?? ''}\n${error.stderr ?? ''}`); });
     expect(out.stdout).toContain('JULIUS PROJECT BRAIN DURABILITY VERIFIED');
     const report = JSON.parse(out.stdout.slice(0, out.stdout.lastIndexOf('JULIUS PROJECT BRAIN')));

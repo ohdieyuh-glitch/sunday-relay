@@ -10,7 +10,7 @@ import { readAllJuliusBrainEntities } from '../src/relay/mission/julius/julius-b
 import { JuliusBrainPostgresStore } from '../src/relay/persistence/julius-brain-postgres';
 import { LocalJuliusBrainContentStore } from '../src/relay/persistence/julius-brain-content-store';
 import { JuliusPythonExecutionPostgresStore } from '../src/relay/persistence/julius-python-postgres';
-import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
+import { migrateJuliusBrainDatabase } from '../src/relay/persistence/julius-brain-database';
 import { NodeJuliusPythonRunner, discoverJuliusPythonExecutable, resolveJuliusPythonSdkRoot } from '../src/relay/workspace/julius-tools/python-runner';
 import { FLOW, flowPythonService, flowRequest, latencyDataset, runBrainPythonMissionFlow, summariseBrainPythonFlow, type BrainPythonFlowSummary } from './julius-brain-python-flow';
 
@@ -25,7 +25,7 @@ import { FLOW, flowPythonService, flowRequest, latencyDataset, runBrainPythonMis
  *   H2  hosts a long execution and crashes; the orphaned interpreter must end
  *       itself; R, another process, must settle it DISCONNECTED — never rerun
  *
- *   DATABASE_URL=… node dist-relay-bridge/julius-brain-python-flow-drill.cjs
+ *   JULIUS_BRAIN_DATABASE_URL=… node dist-relay-bridge/julius-brain-python-flow-drill.cjs
  */
 
 const run = promisify(execFile);
@@ -87,8 +87,7 @@ export async function runBrainPythonFlowDrill(input: { readonly argv: readonly s
   if (mode === 'write') {
     const { pool, brains, executions } = stores(input.databaseUrl);
     try {
-      await new TransactionalWonderlandDatabase(pool).migrate();
-      await pool.query('INSERT INTO relay_wonderland.projects(project_id) VALUES($1) ON CONFLICT DO NOTHING', [FLOW.projectId]);
+      await migrateJuliusBrainDatabase(pool, { environment: 'test' });
       const python = discoverJuliusPythonExecutable();
       const sdkRoot = resolveJuliusPythonSdkRoot();
       if (python === null || sdkRoot === null) { process.stderr.write('drill_requires_python\n'); return 2; }
@@ -123,7 +122,7 @@ export async function runBrainPythonFlowDrill(input: { readonly argv: readonly s
   }
 
   /* ---------------------------------------------------------- orchestrate */
-  const env = { ...process.env, DATABASE_URL: input.databaseUrl };
+  const env = { ...process.env, JULIUS_BRAIN_DATABASE_URL: input.databaseUrl };
   const child = (args: string[]) => run(process.execPath, [input.self, ...args, '--artifacts', artifacts], { env, timeout: 600_000, maxBuffer: 32 * 1024 * 1024 });
   const postmaster = async () => { const pool = new Pool({ connectionString: input.databaseUrl, max: 1 }); try { return String((await pool.query('SELECT pg_postmaster_start_time()::text AS t')).rows[0].t); } finally { await pool.end(); } };
   const report: Record<string, unknown> = {};
