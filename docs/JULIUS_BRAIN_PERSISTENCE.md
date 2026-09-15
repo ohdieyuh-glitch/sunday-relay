@@ -2,10 +2,14 @@
 
 **Status**
 
-- **Architecture:** decided by the founder on 2026-09-15.
-- **Security contract:** drafted here, with **no vendor chosen**.
-- **Deployment proposal:** due after the continuous-worker qualification passes,
-  and before any live wiring. It must satisfy this contract.
+- **Architecture:** decided by the founder on 2026-09-15, and **locked**.
+- **Database contract, Brain-unavailable semantics, GitHub-hosted access model
+  and temporary carry:** accepted by the founder on 2026-09-15.
+- **Vendor:** none chosen.
+- **Deployment proposal:** due after the continuous-worker qualification passes
+  and before any live wiring. It compares concrete options against this
+  contract; its required content is at the end of this document.
+- **Nothing is provisioned, deployed, pushed or wired.**
 
 > Project Brain remembers. Julius acts and decides. Python computes. GVE
 > proves. **PostgreSQL persists. Exports carry and recover.**
@@ -159,7 +163,24 @@ service** (see item 11). The service authenticates callers:
 
   It then issues a **run-scoped session**: one project, one mission, one run,
   the Julius write grant for that run, and an expiry no later than the job
-  timeout.
+  timeout. **The run is the workflow run and its attempt** from the verified
+  token (`workflow:<run_id>/<run_attempt>`), never a Julius run id the client
+  names. Julius run ids repeat across attempts of one mission contract.
+- **The service enforces every one of these, on every call.** A faulty or
+  compromised client cannot widen any of them by querying differently:
+
+  | Dimension | Enforced from |
+  |---|---|
+  | run identity | the verified token (`workflow:<run_id>/<run_attempt>`) |
+  | environment identity | the token's protected environment, and the database identity |
+  | mission identity | the session, bound at issue |
+  | state mode | the run's declared policy, selected server-side |
+  | allowed record kinds | the principal's write grant |
+  | retrieval scope | mode selection, then the read grant |
+  | mutation scope | the session's run and mission, and the domain policy |
+  | expiry | the session, never beyond the job |
+
+  The raw store is never exposed.
 - **Operators** use the bridge's existing operator credential. It never reaches
   a browser.
 - **Browsers** use `Relay-Session`: read-only and project-scoped.
@@ -403,6 +424,54 @@ by acceptance tests.
 7. **Rotation:** credential rotation without downtime.
 8. **Identity:** development configuration refuses the production Brain, and the
    reverse.
+
+## What the deployment proposal must contain
+
+Required by the founder (2026-09-15). The proposal compares concrete options
+against this contract, and a vendor is not asked for before that comparison
+exists.
+
+**Database**
+- placement
+- PostgreSQL version
+- HA model
+- backups
+- PITR
+- encryption at rest
+- TLS
+- migration process
+- connection limits and pooling
+- expected latency from GitHub-hosted runners
+
+**Brain service**
+- where it runs
+- GitHub OIDC verification
+- principal construction
+- per-run and session expiry
+- state-mode enforcement
+- authorization model
+- audit logging
+- rate limits
+- failure semantics
+
+**Operations**
+- RPO
+- RTO
+- retention
+- protected environments
+- development, staging and production isolation
+- monitoring
+- restore drills
+- estimated monthly cost
+
+**Security**
+- no long-lived database credential on GitHub runners
+- least privilege
+- production cannot be opened with development configuration
+- no direct public database exposure unless explicitly justified
+- append-only protections remain database-enforced
+
+Then: only the decisions that actually need the founder.
 
 ## Decisions the proposal will ask for
 

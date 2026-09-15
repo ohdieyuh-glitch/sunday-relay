@@ -159,8 +159,12 @@ temporary archive tables ──(adapter, written against the final archive)─�
 
 **Every imported record carries:**
 
-- **Scope:** `{missionId, runId, taskId}`. The run id is `juliusRunId`, or
-  `workflow:<id>/<attempt>` when there is none.
+- **Scope:** `{missionId, runId, taskId}`. The run id is **always**
+  `workflow:<id>/<attempt>`, never `juliusRunId`, which is kept as a fact.
+  The Julius run id is derived from the mission contract, so it repeats across
+  paid attempts. In Formal's archive, one Julius run id spans three workflow
+  runs, and task, evidence, finding and v1 Brain entry ids repeat between them.
+  Scoped by it, three attempts would be one run to every state mode.
 - **Provenance:** `run_observed`, with `commit = acceptedMainSha` and
   `externalRef = julius-paid-run-archive:<run>/<attempt>#<section>/<id>`.
 - **Principal:** `JULIUS julius:archive-importer`.
@@ -222,6 +226,40 @@ with the real paid run 34739303313 imported, FRESH admits none of it.
 - **Cold connection:** on PostgreSQL the selection is the same.
 - **LEARNING** admits exactly the archived finding when asked for findings, and
   archived evidence only once it is verified.
+
+## Formal's archive (`julius-paid-run-archive.v1`) against this contract
+
+This is a read-only inspection as of 2026-09-15: `origin/main` `ad03df90` and the
+local `julius_archive` database, with four qualification attempts archived.
+**The archive is not frozen**, and the adapter is not written.
+`research.tsv` carries 17 columns in two attempts and 21 in the other two.
+
+**What already agrees:**
+- **Identity** is the workflow run and attempt.
+- **State mode** is recorded as FRESH, with its basis.
+- **Cost honesty:** unknown settlements carry no amount (54 UNKNOWN, 25
+  PROVIDER_REPORTED).
+- **Credentials** are refused at archive time.
+
+**What the adapter must not paper over.** These points are for the Formal lane,
+when they freeze:
+
+| Section | Archive carries | Contract needs | Honest handling until agreed |
+|---|---|---|---|
+| findings | `finding_id, blocking, status, claim` | taskId, severity, evidence ids, occurredAt | severity and task Unknown; **no time exists**, so either the export contract admits an Unknown time or Formal adds `created_at` |
+| evidence | `evidence_id, evidence_type, status, safe_summary, occurred_at` | taskId, artifactRef, integrityHash | null (Unknown) |
+| reviews | `decisions.tsv`: `decision_id, task_id, action, reason_code, occurred_at` | evidence ids, summary | none, and "Unknown — the archive recorded no rationale" |
+| repairs | no table; repair tasks carry a parent task | finding ids, round, state | derived only from repair tasks, with finding links Unknown |
+| tool invocations | `invocation_id, tool_id, state, requested_at` | taskId, completedAt | null |
+| usage | `budget.tsv` settlements: role, amount, basis, estimate | provider, model, tokens | null. Tokens exist only per dispatch in `worker-diagnostics.tsv`, and are not joined by guess |
+| events | `failures`, `budget`, `contract-events`, `research`, `participation` (sequenced); `trajectory` (no sequence) | sequence | trajectory rows need an explicit ordering rule |
+| all tables | `psql -A` text, where NULL and `''` are indistinguishable; times like `2026-09-13 11:10:45.942+00` | null vs value; ISO time | `''` becomes Unknown, never an empty value; times are normalised explicitly |
+
+**Already fixed on this branch:**
+- Brain run ids are the workflow run and attempt. In the archive, one Julius run
+  id spans three workflow runs, and task, evidence, finding and v1 entry ids
+  repeat between attempts.
+- The tool evidence vocabulary (`COMMAND_EXECUTION` and the rest) is mapped.
 
 ## Migrating paid history into the Brain
 

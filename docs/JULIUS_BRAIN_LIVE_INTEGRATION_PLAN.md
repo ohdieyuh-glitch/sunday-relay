@@ -77,6 +77,11 @@ entity would carry governance out of the service. The service must:
 - **Construct the Brain client.** Normally this is the remote client of the
   Brain service, authenticated with the job's OIDC token. The binding gets:
   - `runs`: the runtime store, the run's own authority;
+  - `brainRunIdFor`: `workflow:<GITHUB_RUN_ID>/<GITHUB_RUN_ATTEMPT>`. This is
+    **required, with no default**. The Julius run id repeats across attempts
+    of one mission contract. The Brain run id is the identity every mirrored
+    record, typed-context selection and state-mode policy uses, and it is the
+    same identity the archive importer uses;
   - `legacyEntries`: `readJuliusLegacyBrainAppends(runtimePool, …)`;
   - `onReport`: writes into the run's timeline and evidence.
 - **Call `binding.bootstrap({ runId })` after `bootstrap.submit`.** The answer
@@ -243,6 +248,8 @@ items 1–17). The host runner never serves live Julius.
   mediator, so the pipeline is not edited unless the post-qualification lane
   explicitly permits it.
 - **Startup:** call `recoverDisconnected()`.
+- **Run identity:** a Python request's `runId`, and its state-mode policy, carry
+  the **Brain** run id (workflow run and attempt), never the Julius run id.
 
 **Proof:**
 - The isolation proof in real-infra evals.
