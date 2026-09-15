@@ -326,6 +326,16 @@ function main(argv) {
     }
     let bundleDir = option(argv, 'bundle');
     let scratch = null;
+    /**
+     * A RE-RUN'S ARTIFACT CANNOT BE CHOSEN BY ATTEMPT. `gh run download` has no
+     * attempt selector, so for a run with more than one attempt the bundle it
+     * fetches may belong to a different attempt than the metadata recorded,
+     * archiving one attempt's evidence under another's key. Refuse, and ask for
+     * the bundle downloaded for that attempt.
+     */
+    if (bundleDir === undefined && (attempt !== undefined || meta.workflow_run_attempt > 1)) {
+      throw new Error(`archive_attempt_artifact_ambiguous: workflow run ${runId} attempt ${meta.workflow_run_attempt} needs --bundle <dir> downloaded for that attempt`);
+    }
     if (bundleDir === undefined) {
       scratch = mkdtempSync(join(tmpdir(), 'julius-archive-'));
       gh(['run', 'download', runId, '-R', REPO, '-n', ARTIFACT, '-D', scratch]);
