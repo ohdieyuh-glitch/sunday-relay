@@ -7,6 +7,8 @@ import { describe, expect, it } from 'vitest';
 import { paidRunArchive } from '../src/relay/mission/julius/julius-brain-archive-fixtures';
 import { importJuliusPaidRunArchive, juliusArchiveEntityId, planJuliusPaidRunArchiveImport } from '../src/relay/mission/julius/julius-brain-archive-import';
 import { juliusPrincipal } from '../src/relay/mission/julius/julius-brain-contracts';
+import { juliusBrainDraftFromLegacy } from '../src/relay/mission/julius/julius-brain-legacy';
+import { juliusRunOpenedBody, juliusRunOpenedEntityId } from '../src/relay/mission/julius/julius-brain-preservation';
 import { createJuliusProjectBrainService } from '../src/relay/mission/julius/julius-brain-service';
 import { selectJuliusBrainEntitiesForMode } from '../src/relay/mission/julius/julius-brain-state-modes';
 import { createJuliusBrainMemoryStore, readAllJuliusBrainEntities, readAllJuliusBrainRecords } from '../src/relay/mission/julius/julius-brain-store';
@@ -83,8 +85,34 @@ suite('the paid-run archive import on a real PostgreSQL', () => {
       expect(results.map((result) => result.outcome).sort()).toEqual(['ALREADY_IMPORTED', 'ALREADY_IMPORTED', 'ALREADY_IMPORTED', 'ALREADY_IMPORTED', 'ALREADY_IMPORTED', 'IMPORTED']);
       const stored = await pools[0]!.query('SELECT count(*)::int AS n FROM julius_brain.records WHERE brain_id=$1', [BRAIN]);
       const planned = planJuliusPaidRunArchiveImport(archive, { contentHash: `sha256:${'0'.repeat(64)}`, byteSize: 1, storageRef: 'x' }).drafts.length;
-      expect(stored.rows[0].n).toBe(planned);
+      // Every planned record, and the one recovery record that says how the attempt arrived.
+      expect(stored.rows[0].n).toBe(planned + 1);
     } finally { await Promise.all(pools.map((racer) => racer.end())); }
+  }, 180_000);
+
+  it('reconciliation with a live attempt, and the run guard, hold on PostgreSQL', async () => {
+    const url = await freshDatabase('reconcile');
+    const { pool, store } = await prepared(url, 4);
+    const content = new LocalJuliusBrainContentStore(mkdtempSync(join(tmpdir(), 'jbarch-reconcile-')));
+    const attempt = 'workflow:34739303313/1';
+    try {
+      const julius = (await createJuliusProjectBrainService({ store, clock: { now: () => '2026-09-15T10:00:00.000Z' } }).open({ brainId: BRAIN, projectId: PROJECT, principal: JULIUS }))!;
+      await julius.create('TRACE', juliusRunOpenedBody({ brainRunId: attempt, juliusRunId: 'run:julius-live-4', missionId: 'mission:julius-live-4', acceptedMainSha: '0845c593aa1ef2b7d1c4e8f6a09b3c2d5e7f8a91' }), {
+        key: juliusRunOpenedEntityId(attempt), entityId: juliusRunOpenedEntityId(attempt), scope: { missionId: 'mission:julius-live-4', runId: attempt },
+      });
+      const append = { runId: 'run:julius-live-4', projectId: PROJECT, taskId: 'plan-1', workerId: 'julius', entryId: 'brain:decision:plan-1:ACCEPT:TASK_VERIFIED', kind: 'DECISION' as const, safeText: 'ACCEPT (TASK_VERIFIED): accepted', evidenceIds: [], occurredAt: '2026-09-13T05:45:00.000Z' };
+      expect((await julius.commit([juliusBrainDraftFromLegacy({ append, missionId: 'mission:julius-live-4', brainRunId: attempt })])).outcome).toBe('COMMITTED');
+
+      const importArchive = () => importJuliusPaidRunArchive({ store, brainId: BRAIN, projectId: PROJECT, archive: paidRunArchive(), content, recordedAt: '2026-09-15T10:00:00.000Z' });
+      expect(await importArchive()).toMatchObject({ outcome: 'IMPORTED', reconciliation: { mode: 'RECONCILED', preservationBefore: 'PARTIALLY_PRESERVED' }, represented: { reviewsByLiveMirror: 1, entriesByLiveMirror: 1 } });
+      const decisions = await pool.query("SELECT count(*)::int AS n FROM julius_brain.entities WHERE brain_id=$1 AND kind='DECISION' AND state->'scope'->>'runId'=$2", [BRAIN, attempt]);
+      expect(decisions.rows[0].n).toBe(2);
+      expect(await importArchive()).toMatchObject({ outcome: 'ALREADY_IMPORTED', appended: 0 });
+
+      const counted = await pool.query('SELECT count(*)::int AS n FROM julius_brain.records WHERE brain_id=$1 AND run_id=$2', [BRAIN, attempt]);
+      expect(await store.commitGroup({ brainId: BRAIN, projectId: PROJECT, recordedAt: '2026-09-15T10:00:00.000Z', groups: [], runGuard: { runId: attempt, recordCount: counted.rows[0].n - 1 } }))
+        .toMatchObject({ outcome: 'REFUSED', reasonCode: 'run_changed' });
+    } finally { await pool.end(); }
   }, 180_000);
 
   it('an archive spanning several commit groups arrives whole or not at all', async () => {
@@ -113,8 +141,8 @@ suite('the paid-run archive import on a real PostgreSQL', () => {
 
       // The next attempt holds no conflicting id, and every one of its records lands.
       const second = await importJuliusPaidRunArchive({ store, brainId: BRAIN, projectId: PROJECT, archive: large(2), content, recordedAt: '2026-09-15T10:00:00.000Z' });
-      expect(second).toMatchObject({ outcome: 'IMPORTED', appended: planned, duplicates: 0 });
-      expect(await count()).toBe(head!.sequence + planned);
+      expect(second).toMatchObject({ outcome: 'IMPORTED', appended: planned + 1, duplicates: 0 });
+      expect(await count()).toBe(head!.sequence + planned + 1);
     } finally { await pool.end(); }
   }, 300_000);
 });

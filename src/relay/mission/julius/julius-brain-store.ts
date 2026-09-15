@@ -78,6 +78,13 @@ export interface JuliusBrainGroupCommitInput {
   readonly projectId: string;
   readonly recordedAt: string;
   readonly groups: readonly JuliusBrainCommitGroup[];
+  /**
+   * Refuse (`run_changed`) unless exactly this many records are scoped to this
+   * run when the commit takes the Brain lock. A caller that planned from a read
+   * of one run — a reconciliation — commits only if that run did not change in
+   * between; other runs writing to the same Brain do not disturb it.
+   */
+  readonly runGuard?: { readonly runId: string; readonly recordCount: number };
 }
 
 export type JuliusBrainGroupCommitResult =
@@ -197,6 +204,10 @@ export function createJuliusBrainMemoryStore(): JuliusBrainMemoryStore {
   function commitGroupSync(input: JuliusBrainGroupCommitInput): JuliusBrainGroupCommitResult {
     const row = owned(input.brainId, input.projectId);
     if (row === null) return { outcome: 'REFUSED', index: 0, group: 0, reasonCode: 'brain_not_found', detail: `${input.brainId} is not a Brain of ${input.projectId}.` };
+    if (input.runGuard !== undefined) {
+      const count = row.records.filter((record) => record.scope.runId === input.runGuard!.runId).length;
+      if (count !== input.runGuard.recordCount) return { outcome: 'REFUSED', index: 0, group: 0, reasonCode: 'run_changed', detail: `${input.runGuard.runId} holds ${count} records, not the ${input.runGuard.recordCount} planned from.` };
+    }
     const groups = copy(input.groups);
     const allDrafts = groups.flatMap((group) => group.drafts);
     const entities = new Map<string, JuliusBrainEntityState | null>();

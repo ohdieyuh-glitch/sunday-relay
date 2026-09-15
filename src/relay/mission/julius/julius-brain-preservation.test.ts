@@ -75,9 +75,10 @@ describe('run preservation, derived from durable evidence', () => {
   it('records an archive import wrote are not live evidence, and a recovery is listed without making a run PRESERVED', async () => {
     const { store, julius, derive } = await brain();
     expect((await importJuliusPaidRunArchive({ store, brainId: BRAIN, projectId: PROJECT, archive: paidRunArchive(), content, recordedAt: '2026-09-15T12:00:00.000Z' })).outcome).toBe('IMPORTED');
+    // The import's own recovery trace is listed; a recovery trace a worker wrote would not be.
     const recovery = juliusArchiveRecoveryEntityId(RUN, paidRunArchive().integrity.contentHash);
-    await julius.create('TRACE', { traceClass: 'RECOVERY', summary: 'reconstructed from archive', facts: { mode: 'RECONSTRUCTED' } }, { key: recovery, entityId: recovery, scope: { missionId: MISSION, runId: RUN } });
     const derived = await derive();
-    expect(derived).toMatchObject({ status: 'NOT_PRESERVED', evidence: { liveRecords: 0, recoveries: [{ entityId: recovery, facts: { mode: 'RECONSTRUCTED' } }] } });
+    expect(derived).toMatchObject({ status: 'NOT_PRESERVED', evidence: { liveRecords: 0, recoveries: [{ entityId: recovery, facts: { mode: 'RECONSTRUCTED', preservationBefore: 'NOT_PRESERVED' } }] } });
+    expect(julius).toBeDefined();
   });
 });

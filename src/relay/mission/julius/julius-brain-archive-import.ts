@@ -13,10 +13,11 @@ import {
   type JuliusBrainRecordKind,
 } from './julius-brain-contracts';
 import { juliusVerificationDecisionKey, parseJuliusV1DecisionEntryId } from './julius-brain-legacy';
-import type { JuliusBrainCommitGroup, JuliusBrainReceipt } from './julius-brain-projection';
+import { deriveJuliusBrainRunPreservation, juliusArchiveRecoveryEntityId, juliusRunOpenedEntityId, type JuliusBrainPreservationStatus, type JuliusBrainRunPreservation } from './julius-brain-preservation';
+import type { JuliusBrainCommitGroup, JuliusBrainEntityState, JuliusBrainReceipt } from './julius-brain-projection';
 import { juliusStringsOf, scanJuliusSecrets } from './julius-brain-secrets';
 import { JULIUS_ARCHIVE_EXTERNAL_REF_PREFIX, JULIUS_BRAIN_STATE_MODES, type JuliusBrainStateMode } from './julius-brain-state-modes';
-import type { JuliusBrainStore } from './julius-brain-store';
+import { readAllJuliusBrainEntities, readAllJuliusBrainRecords, type JuliusBrainStore } from './julius-brain-store';
 
 /**
  * THE PAID-RUN ARCHIVE → PROJECT BRAIN IMPORT BOUNDARY.
@@ -64,6 +65,27 @@ import type { JuliusBrainStore } from './julius-brain-store';
  * twice — as a review, and as the v1 Brain entry the runtime wrote for it
  * (`brain:decision:<task>:<action>:<reason>`). The review is imported; the
  * entry is counted as represented by it, never recorded again.
+ *
+ * RECONCILED WITH WHAT THE LIVE RUN ALREADY PRESERVED. The same workflow
+ * attempt may already be in the Brain through the live mirror. Before anything
+ * is written, the attempt's preservation is derived from the Brain
+ * (`julius-brain-preservation.ts`):
+ *
+ *   PRESERVED            the import is refused: the live history is complete,
+ *                        and an archive copy would record it twice
+ *   PARTIALLY_PRESERVED  RECONCILED: every archive fact the live mirror already
+ *                        recorded (a v1 entry by id; a verification decision by
+ *                        task, verdict and reason) is linked, not recorded
+ *                        again, and only what is missing is added
+ *   NOT_PRESERVED        RECONSTRUCTED: the whole attempt is imported
+ *
+ * A history that contradicts the live one is refused, not merged: an open
+ * marker whose mission, Julius run or accepted main disagrees with the export's
+ * identity; a v1 entry the live run holds that the export does not list; a seal
+ * that counted a different number of entries. Every recovery leaves a
+ * Julius-written RECOVERY trace — mode, prior status, what was added and what
+ * was already represented, linked to the live records it relied on — and a
+ * repeated recovery writes nothing.
  */
 
 export const JULIUS_PAID_RUN_ARCHIVE_EXPORT_FORMAT = 'julius-paid-run-archive-export.v1' as const;
@@ -525,8 +547,6 @@ export function planJuliusPaidRunArchiveImport(
   options: {
     readonly represented?: JuliusArchiveRepresented;
     readonly heldArtifacts?: ReadonlyMap<string, { readonly storageRef: string; readonly byteSize: number }>;
-    /** Appended to every record's external reference, e.g. `recovery=PARTIALLY_PRESERVED`. */
-    readonly provenanceNote?: string;
   } = {},
 ): JuliusArchiveImportPlan {
   const { identity } = archive;
@@ -542,11 +562,10 @@ export function planJuliusPaidRunArchiveImport(
   };
   countUnknown('identity', identity);
 
-  const note = options.provenanceNote === undefined ? '' : `|${options.provenanceNote}`;
   const provenance = (section: string, sourceId: string, extra: { provider?: string | null; model?: string | null; tool?: string | null; sourceRef?: string | null }) =>
     juliusBrainProvenance('run_observed', {
       commit: identity.acceptedMainSha,
-      externalRef: clip(`${JULIUS_ARCHIVE_EXTERNAL_REF_PREFIX}${runKey}#${section}/${sourceId}${extra.sourceRef ? `|source=${extra.sourceRef}` : ''}${note}`, 2_048),
+      externalRef: clip(`${JULIUS_ARCHIVE_EXTERNAL_REF_PREFIX}${runKey}#${section}/${sourceId}${extra.sourceRef ? `|source=${extra.sourceRef}` : ''}`, 2_048),
       provider: extra.provider ?? null, model: extra.model ?? null, tool: extra.tool ?? null,
     });
   const add = (kind: JuliusBrainRecordKind, section: JuliusArchiveEntitySection, sourceId: string, body: JuliusBrainBody, entry: {
@@ -775,6 +794,8 @@ export interface JuliusArchiveContentPort {
   put(content: Uint8Array): Promise<{ readonly contentHash: string; readonly byteSize: number; readonly storageRef: string }>;
 }
 
+export type JuliusArchiveReconciliationMode = 'RECONSTRUCTED' | 'RECONCILED';
+
 export type JuliusArchiveImportResult =
   | {
     readonly outcome: 'IMPORTED' | 'ALREADY_IMPORTED';
@@ -782,9 +803,46 @@ export type JuliusArchiveImportResult =
     readonly appended: number; readonly duplicates: number;
     readonly counts: JuliusArchiveImportPlan['counts']; readonly accounting: JuliusArchiveImportPlan['accounting'];
     readonly represented: JuliusArchiveImportPlan['represented']; readonly unknownFields: number;
+    readonly reconciliation: { readonly mode: JuliusArchiveReconciliationMode; readonly preservationBefore: JuliusBrainPreservationStatus; readonly recoveryEntityId: string } | null;
   }
   | { readonly outcome: 'REJECTED'; readonly reasonCode: 'archive_invalid' | 'unsupported_export_version' | 'not_an_archive_export' | 'artifact_bytes_mismatch' | 'identity_mismatch'; readonly errors: readonly string[] }
+  | { readonly outcome: 'REFUSED'; readonly reasonCode: 'attempt_already_preserved' | 'conflicting_history'; readonly detail: string; readonly conflicts: readonly string[]; readonly preservation: JuliusBrainRunPreservation }
   | { readonly outcome: 'REFUSED'; readonly reasonCode: string; readonly detail: string; readonly group: number; readonly index: number };
+
+const LEGACY_REF = /^julius_brain_entries:[^#]*#(.+)$/;
+
+/** What the live mirror recorded for this attempt, as the planner's `represented` sets, with the entities behind them. */
+export function juliusArchiveLiveRepresentation(entities: readonly JuliusBrainEntityState[], brainRunId: string): JuliusArchiveRepresented & { readonly byEntryId: ReadonlyMap<string, JuliusBrainEntityState> } {
+  const byEntryId = new Map<string, JuliusBrainEntityState>();
+  const decisionKeys = new Set<string>();
+  for (const state of entities) {
+    if (state.scope.runId !== brainRunId || !state.entityId.startsWith(`legacy:${brainRunId}:`) || state.createdBy.kind !== 'JULIUS') continue;
+    const entryId = LEGACY_REF.exec(state.provenance.externalRef ?? '')?.[1];
+    if (entryId === undefined) continue;
+    byEntryId.set(entryId, state);
+    const decision = parseJuliusV1DecisionEntryId(entryId);
+    if (decision !== null) decisionKeys.add(juliusVerificationDecisionKey(decision.taskId, decision.action, decision.reasonCode));
+  }
+  return { entryIds: new Set(byEntryId.keys()), decisionKeys, byEntryId };
+}
+
+/** Where the export contradicts what the live run recorded about the same attempt. Empty when it does not. */
+export function juliusArchiveHistoryConflicts(archive: JuliusPaidRunArchiveExport, preservation: JuliusBrainRunPreservation, live: ReturnType<typeof juliusArchiveLiveRepresentation>): string[] {
+  const conflicts: string[] = [];
+  const { identity } = archive;
+  const opened = preservation.evidence.opened;
+  if (opened !== null) {
+    if (opened.missionId !== null && opened.missionId !== identity.missionId) conflicts.push(`the live run opened for mission ${opened.missionId}; the export is for ${identity.missionId}`);
+    if (opened.juliusRunId !== null && identity.juliusRunId !== null && opened.juliusRunId !== identity.juliusRunId) conflicts.push(`the live run was Julius run ${opened.juliusRunId}; the export says ${identity.juliusRunId}`);
+    if (opened.acceptedMainSha !== null && opened.acceptedMainSha !== identity.acceptedMainSha) conflicts.push(`the live run executed ${opened.acceptedMainSha}; the export says ${identity.acceptedMainSha}`);
+  }
+  const listed = new Set(archive.brainEntries.map((item) => item.entryId));
+  const unlisted = [...live.entryIds].filter((entryId) => !listed.has(entryId)).sort();
+  if (unlisted.length > 0) conflicts.push(`the live run holds v1 entr${unlisted.length === 1 ? 'y' : 'ies'} the export does not list: ${unlisted.slice(0, 8).join(', ')}`);
+  const sealed = preservation.evidence.sealed;
+  if (sealed !== null && sealed.expectedEntries !== archive.brainEntries.length) conflicts.push(`the live run sealed ${sealed.expectedEntries} v1 entries; the export lists ${archive.brainEntries.length}`);
+  return conflicts;
+}
 
 const GROUP_SIZE = 400;
 const sha256OfBytes = (bytes: Uint8Array): string => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
@@ -834,14 +892,71 @@ export async function importJuliusPaidRunArchive(input: {
   if (!check.ok) return { outcome: 'REJECTED', reasonCode: check.reasonCode, errors: check.errors };
   const importer = input.importer ?? JULIUS_ARCHIVE_IMPORTER;
   if (importer.kind !== 'JULIUS') return { outcome: 'REJECTED', reasonCode: 'archive_invalid', errors: ['importer: archived history enters the Brain only under Julius'] };
-  if (input.archive.identity.projectId !== input.projectId) {
-    return { outcome: 'REJECTED', reasonCode: 'identity_mismatch', errors: [`identity.projectId: the export is for ${input.archive.identity.projectId}, not ${input.projectId}`] };
+  const { archive } = input;
+  if (archive.identity.projectId !== input.projectId) {
+    return { outcome: 'REJECTED', reasonCode: 'identity_mismatch', errors: [`identity.projectId: the export is for ${archive.identity.projectId}, not ${input.projectId}`] };
   }
-  const held = await holdJuliusArchiveArtifacts(input.archive, input.content, input.artifactBytes);
-  if (!held.ok) return { outcome: 'REJECTED', reasonCode: 'artifact_bytes_mismatch', errors: held.errors };
-  const stored = await input.content.put(new TextEncoder().encode(canonicalJuliusBrainJson(input.archive)));
-  const plan = planJuliusPaidRunArchiveImport(input.archive, stored, { heldArtifacts: held.held });
-  return commitJuliusArchivePlan({ store: input.store, brainId: input.brainId, projectId: input.projectId, recordedAt: input.recordedAt, principal: importer, plan, archiveContentHash: input.archive.integrity.contentHash });
+
+  // What the Brain already holds of this attempt decides what may be added — before a single byte is stored.
+  const brainRunId = juliusArchiveBrainRunId(archive.identity);
+  for (let attempt = 1; ; attempt += 1) {
+    const records = await readAllJuliusBrainRecords(input.store, input.brainId, input.projectId);
+    const entities = await readAllJuliusBrainEntities(input.store, input.brainId, input.projectId);
+    const preservation = deriveJuliusBrainRunPreservation({ brainId: input.brainId, brainRunId, records, entities });
+    if (preservation.status === 'PRESERVED') {
+      return { outcome: 'REFUSED', reasonCode: 'attempt_already_preserved', detail: `${brainRunId} was preserved by the live run; an archive copy would record it twice`, conflicts: [], preservation };
+    }
+    const live = juliusArchiveLiveRepresentation(entities, brainRunId);
+    const conflicts = juliusArchiveHistoryConflicts(archive, preservation, live);
+    if (conflicts.length > 0) {
+      return { outcome: 'REFUSED', reasonCode: 'conflicting_history', detail: `the export is not the history the live run recorded for ${brainRunId}`, conflicts, preservation };
+    }
+    const mode: JuliusArchiveReconciliationMode = preservation.status === 'PARTIALLY_PRESERVED' ? 'RECONCILED' : 'RECONSTRUCTED';
+
+    const held = await holdJuliusArchiveArtifacts(archive, input.content, input.artifactBytes);
+    if (!held.ok) return { outcome: 'REJECTED', reasonCode: 'artifact_bytes_mismatch', errors: held.errors };
+    const stored = await input.content.put(new TextEncoder().encode(canonicalJuliusBrainJson(archive)));
+    const plan = planJuliusPaidRunArchiveImport(archive, stored, { represented: live, heldArtifacts: held.held });
+
+    // The recovery itself is a record: what was done, on what basis, relying on which live records.
+    const recoveryEntityId = juliusArchiveRecoveryEntityId(brainRunId, archive.integrity.contentHash);
+    const reliedOn = [...live.byEntryId.values()].map((state) => state.entityId).sort().slice(0, 48);
+    const openedId = juliusRunOpenedEntityId(brainRunId);
+    const recovery: JuliusBrainDraft = {
+      kind: 'TRACE', op: 'CREATE', entityId: recoveryEntityId, expectedVersion: 0,
+      body: {
+        traceClass: 'RECOVERY',
+        summary: clip(`${mode === 'RECONCILED' ? 'Reconciled' : 'Reconstructed'} ${brainRunId} from the paid-run archive: ${plan.drafts.length} record(s) added, ${plan.represented.entriesByLiveMirror + plan.represented.reviewsByLiveMirror} fact(s) already held by the live run`, 8_000),
+        facts: {
+          mode, preservationBefore: preservation.status, brainRunId, archiveContentHash: archive.integrity.contentHash,
+          archiveSchemaVersion: clip(archive.source.archiveSchemaVersion, 512), added: plan.drafts.length, liveRecordsBefore: preservation.evidence.liveRecords,
+          representedEntriesByLiveMirror: plan.represented.entriesByLiveMirror, representedReviewsByLiveMirror: plan.represented.reviewsByLiveMirror,
+          representedEntriesByReview: plan.represented.entriesByReview, importer: JULIUS_ARCHIVE_IMPORTER_VERSION,
+        },
+      },
+      links: [
+        { relation: 'DERIVED_FROM', target: plan.anchorEntityId, targetVersion: null },
+        ...(entities.some((state) => state.entityId === openedId) ? [{ relation: 'RELATES_TO' as const, target: openedId, targetVersion: null }] : []),
+        ...reliedOn.map((target) => ({ relation: 'RELATES_TO' as const, target, targetVersion: null })),
+      ],
+      scope: { missionId: archive.identity.missionId, runId: brainRunId, taskId: null },
+      retention: 'DURABLE', confidence: null, sensitivity: 'INTERNAL',
+      provenance: juliusBrainProvenance('run_observed', { commit: archive.identity.acceptedMainSha, externalRef: `${JULIUS_ARCHIVE_EXTERNAL_REF_PREFIX}${plan.runKey}#recovery` }),
+      idempotencyKey: recoveryEntityId,
+      occurredAt: null,
+    };
+    const result = await commitJuliusArchivePlan({
+      store: input.store, brainId: input.brainId, projectId: input.projectId, recordedAt: input.recordedAt, principal: importer,
+      plan, archiveContentHash: archive.integrity.contentHash, extraDrafts: [recovery],
+      // Only if this attempt still holds exactly what the reconciliation was planned from.
+      runGuard: { runId: brainRunId, recordCount: records.filter((record) => record.scope.runId === brainRunId).length },
+    });
+    // The attempt changed between the read and the commit: plan again from what it holds now, once.
+    if (result.outcome === 'REFUSED' && result.reasonCode === 'run_changed' && attempt < 2) continue;
+    return result.outcome === 'IMPORTED' || result.outcome === 'ALREADY_IMPORTED'
+      ? { ...result, reconciliation: { mode, preservationBefore: preservation.status, recoveryEntityId } }
+      : result;
+  }
 }
 
 /** One atomic commit of a plan (and any extra drafts that must land with it). */
@@ -849,13 +964,14 @@ export async function commitJuliusArchivePlan(input: {
   readonly store: JuliusBrainStore; readonly brainId: string; readonly projectId: string; readonly recordedAt: string;
   readonly principal: JuliusBrainPrincipal; readonly plan: JuliusArchiveImportPlan; readonly archiveContentHash: string;
   readonly extraDrafts?: readonly JuliusBrainDraft[];
+  readonly runGuard?: { readonly runId: string; readonly recordCount: number };
 }): Promise<JuliusArchiveImportResult> {
   const { plan } = input;
   const all = [...plan.drafts, ...(input.extraDrafts ?? [])];
   const groups: JuliusBrainCommitGroup[] = [];
   for (let start = 0; start < all.length; start += GROUP_SIZE) groups.push({ principal: input.principal, grant: null, drafts: all.slice(start, start + GROUP_SIZE) });
   // ONE commit, many groups: the whole run arrives or none of it does.
-  const result = await input.store.commitGroup({ brainId: input.brainId, projectId: input.projectId, recordedAt: input.recordedAt, groups });
+  const result = await input.store.commitGroup({ brainId: input.brainId, projectId: input.projectId, recordedAt: input.recordedAt, groups, runGuard: input.runGuard });
   if (result.outcome === 'REFUSED') return { outcome: 'REFUSED', reasonCode: result.reasonCode, detail: result.detail, group: result.group, index: result.index };
   const receipts: JuliusBrainReceipt[] = result.receipts.flat();
   const appended = receipts.filter((receipt) => receipt.outcome === 'APPENDED').length;
@@ -863,5 +979,6 @@ export async function commitJuliusArchivePlan(input: {
     outcome: appended === 0 ? 'ALREADY_IMPORTED' : 'IMPORTED',
     runKey: plan.runKey, brainRunId: plan.brainRunId, archiveContentHash: input.archiveContentHash, anchorEntityId: plan.anchorEntityId,
     appended, duplicates: receipts.length - appended, counts: plan.counts, accounting: plan.accounting, represented: plan.represented, unknownFields: plan.unknownFields,
+    reconciliation: null,
   };
 }

@@ -75,6 +75,14 @@ export async function commitJuliusBrainGroupWithin(client: Queryable, input: Jul
   }
   const brain = parsed<JuliusBrainIdentity>(brainRow.rows[0].identity);
   const head: JuliusBrainHead = { sequence: num(brainRow.rows[0].head_sequence), chainHash: String(brainRow.rows[0].head_chain_hash) };
+  if (input.runGuard !== undefined) {
+    // Under the Brain row lock, so no writer of this Brain can add to the run between this count and the commit.
+    const counted = await client.query('SELECT count(*)::int AS n FROM julius_brain.records WHERE brain_id=$1 AND run_id=$2', [brain.brainId, input.runGuard.runId]);
+    const count = num(counted.rows[0]?.n ?? 0);
+    if (count !== input.runGuard.recordCount) {
+      return { outcome: 'REFUSED', index: 0, group: 0, reasonCode: 'run_changed', detail: `${input.runGuard.runId} holds ${count} records, not the ${input.runGuard.recordCount} planned from.` };
+    }
+  }
   const drafts = input.groups.flatMap((group) => group.drafts);
 
   const entities = new Map<string, JuliusBrainEntityState | null>();
