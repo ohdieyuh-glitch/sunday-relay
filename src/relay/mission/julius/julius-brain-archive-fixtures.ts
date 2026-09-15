@@ -41,6 +41,8 @@ export function paidRunArchiveBody(overrides: { attempt?: number; mutate?: (body
       stateMode: 'FRESH', stateModeBasis: 'GitHub-hosted job with a freshly migrated disposable PostgreSQL',
       outcome: 'FAILED', outcomeReason: 'coder_cost_exceeded after 3 ticks', startedAt: at(4, 12), endedAt: at(7, 48), unknown: [],
     },
+    // What cost-accounting.tsv claims; checked against the usage items below.
+    accounting: { knownUsdMicros: 369044, estimatedUsdMicros: 41200, unknownComponents: 2, components: 3, unknown: [] },
     tasks: [
       { taskId: 'plan-1', taskType: 'plan', role: 'PROMPT_ARCHITECT', workerId: null, state: 'SUCCEEDED', ordinal: 0, parentTaskId: null, dependencyIds: [], unknown: ['workerId'] },
       { taskId: 'plan-1:review', taskType: 'review:plan', role: 'INDEPENDENT_REVIEWER', workerId: null, state: 'SUCCEEDED', ordinal: 1, parentTaskId: 'plan-1', dependencyIds: null, unknown: ['dependencyIds', 'workerId'] },

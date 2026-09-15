@@ -38,6 +38,8 @@
     "julius:brain:drill": "npm run julius:brain:drill:build --silent && node dist-relay-bridge/julius-project-brain-drill.cjs",
     "julius:brain:python-drill:build": "esbuild scripts/julius-brain-python-flow-drill-main.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-brain-python-flow-drill.cjs --external:pg --log-level=warning",
     "julius:brain:python-drill": "npm run julius:brain:python-drill:build --silent && node dist-relay-bridge/julius-brain-python-flow-drill.cjs",
+    "julius:archive:conformance:build": "esbuild scripts/julius-archive-export-conformance-main.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-archive-export-conformance.cjs --log-level=warning",
+    "julius:archive:conformance": "npm run julius:archive:conformance:build --silent && node dist-relay-bridge/julius-archive-export-conformance.cjs",
     "julius:brain:schema:export": "esbuild scripts/export-julius-brain-schema.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/export-julius-brain-schema.cjs --log-level=warning && node dist-relay-bridge/export-julius-brain-schema.cjs",
     "relay:julius:preflight": "npm run relay:julius:preflight:build --silent && node dist-relay-bridge/julius-live-preflight.cjs",
     "julius:review-currency": "node scripts/julius-review-currency.mjs",

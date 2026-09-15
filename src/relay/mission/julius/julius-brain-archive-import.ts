@@ -171,6 +171,19 @@ export type JuliusArchiveArtifact = Unknowns<'name' | 'contentType' | 'byteSize'
   readonly contentHash: string; readonly storageRef: string | null;
 };
 
+/**
+ * What the source says the run cost, as totals. Every total is checked against
+ * the usage items: a claim that does not sum is refused, never believed. A total
+ * the source does not provide is null and listed Unknown; `estimatedUsdMicros`
+ * null and not listed means no component carried an estimate.
+ */
+export type JuliusArchiveAccountingClaim = Unknowns<'knownUsdMicros' | 'estimatedUsdMicros' | 'unknownComponents' | 'components'> & {
+  readonly knownUsdMicros: number | null;
+  readonly estimatedUsdMicros: number | null;
+  readonly unknownComponents: number | null;
+  readonly components: number | null;
+};
+
 export const JULIUS_ARCHIVE_SECTIONS = ['tasks', 'research', 'evidence', 'findings', 'reviews', 'repairs', 'usage', 'brainEntries', 'events', 'toolInvocations', 'artifacts'] as const;
 export type JuliusArchiveSection = typeof JULIUS_ARCHIVE_SECTIONS[number];
 
@@ -179,6 +192,7 @@ export interface JuliusPaidRunArchiveExportBody {
   readonly exportedAt: string;
   readonly source: { readonly archiveId: string; readonly archiveSchemaVersion: string; readonly exporterVersion: string };
   readonly identity: JuliusPaidRunArchiveIdentity;
+  readonly accounting: JuliusArchiveAccountingClaim;
   readonly tasks: readonly JuliusArchiveTask[];
   readonly research: readonly JuliusArchiveResearch[];
   readonly evidence: readonly JuliusArchiveEvidence[];
@@ -192,18 +206,18 @@ export interface JuliusPaidRunArchiveExportBody {
   readonly artifacts: readonly JuliusArchiveArtifact[];
 }
 
-export type JuliusArchiveHashedPart = 'identity' | JuliusArchiveSection;
+export type JuliusArchiveHashedPart = 'identity' | 'accounting' | JuliusArchiveSection;
 
 export interface JuliusPaidRunArchiveExport extends JuliusPaidRunArchiveExportBody {
   readonly integrity: {
-    /** sha256 of the identity and of each section, as canonical JSON. */
+    /** sha256 of the identity, the accounting claim and each section, as canonical JSON. */
     readonly sectionHashes: Readonly<Record<JuliusArchiveHashedPart, string>>;
     /** sha256 over the canonical export without `integrity`. */
     readonly contentHash: string;
   };
 }
 
-const HASHED_PARTS: readonly JuliusArchiveHashedPart[] = ['identity', ...JULIUS_ARCHIVE_SECTIONS];
+const HASHED_PARTS: readonly JuliusArchiveHashedPart[] = ['identity', 'accounting', ...JULIUS_ARCHIVE_SECTIONS];
 
 /** For the exporter: seal a body with its identity, section and content hashes. Any runtime can reproduce these. */
 export function sealJuliusPaidRunArchiveExport(body: JuliusPaidRunArchiveExportBody): JuliusPaidRunArchiveExport {
@@ -227,6 +241,10 @@ const IDENTITY_SPEC: ObjectSpec = {
   missionId: req('id'), missionLabel: opt('shortText'), campaignId: opt('shortText'), projectId: req('id'), classification: opt('shortText'),
   acceptedMainSha: req('sha40'), stateMode: req(JULIUS_BRAIN_STATE_MODES), stateModeBasis: opt('text'),
   outcome: req(['COMPLETED', 'FAILED', 'CANCELLED', 'UNKNOWN']), outcomeReason: opt('text'), startedAt: opt('iso'), endedAt: opt('iso'),
+};
+
+const ACCOUNTING_SPEC: ObjectSpec = {
+  knownUsdMicros: opt('count'), estimatedUsdMicros: opt('count'), unknownComponents: opt('count'), components: opt('count'),
 };
 
 const SECTION_SPECS: Readonly<Record<JuliusArchiveSection, { readonly idField: string; readonly fields: ObjectSpec }>> = {
@@ -275,7 +293,7 @@ const SECTION_SPECS: Readonly<Record<JuliusArchiveSection, { readonly idField: s
   } },
 };
 
-const EXPORT_KEYS = ['format', 'exportedAt', 'source', 'identity', ...JULIUS_ARCHIVE_SECTIONS, 'integrity'];
+const EXPORT_KEYS = ['format', 'exportedAt', 'source', 'identity', 'accounting', ...JULIUS_ARCHIVE_SECTIONS, 'integrity'];
 const SOURCE_KEYS = ['archiveId', 'archiveSchemaVersion', 'exporterVersion'];
 const FORMAT_FAMILY = /^julius-paid-run-archive-export\.v(\d+)$/;
 const isPlainObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -375,6 +393,7 @@ export function checkJuliusPaidRunArchiveExport(archive: unknown): JuliusArchive
     for (const key of Object.keys(archive.source)) if (!SOURCE_KEYS.includes(key)) errors.push(`source.${key}: not part of the contract`);
   }
   checkObject(archive.identity, IDENTITY_SPEC, 'identity', errors);
+  checkObject(archive.accounting, ACCOUNTING_SPEC, 'accounting', errors);
   for (const section of JULIUS_ARCHIVE_SECTIONS) {
     const items = archive[section];
     if (!Array.isArray(items)) { errors.push(`${section}: a list`); continue; }
@@ -387,7 +406,7 @@ export function checkJuliusPaidRunArchiveExport(archive: unknown): JuliusArchive
   const { integrity, ...body } = typed;
   if (!isPlainObject(integrity) || !isPlainObject(integrity.sectionHashes)) errors.push('integrity: sectionHashes and contentHash');
   else {
-    if (Object.keys(integrity.sectionHashes).sort().join() !== [...HASHED_PARTS].sort().join()) errors.push('integrity.sectionHashes: exactly the identity and every section');
+    if (Object.keys(integrity.sectionHashes).sort().join() !== [...HASHED_PARTS].sort().join()) errors.push('integrity.sectionHashes: exactly the identity, the accounting claim and every section');
     for (const part of HASHED_PARTS) {
       if (integrity.sectionHashes[part] !== juliusBrainSha256(canonicalJuliusBrainJson(typed[part]))) errors.push(`integrity.sectionHashes.${part}: does not match`);
     }
@@ -433,6 +452,41 @@ export function checkJuliusPaidRunArchiveExport(archive: unknown): JuliusArchive
   typed.events.forEach((item, i) => ref('tasks', item.taskId, `events[${i}].taskId`));
   typed.toolInvocations.forEach((item, i) => { ref('tasks', item.taskId, `toolInvocations[${i}].taskId`); refs('artifacts', item.artifactRefs, `toolInvocations[${i}].artifactRefs`); });
 
+  // A claimed total must be what the usage items sum to.
+  const summed = juliusArchiveUsageTotals(typed.usage);
+  const claimed = typed.accounting;
+  for (const field of ['knownUsdMicros', 'estimatedUsdMicros', 'unknownComponents', 'components'] as const) {
+    const listedUnknown = claimed.unknown.includes(field);
+    if (listedUnknown) continue;
+    if (claimed[field] !== summed[field]) errors.push(`accounting.${field}: the export claims ${String(claimed[field])}; its usage sums to ${String(summed[field])}`);
+  }
+
+  // A history that contradicts itself is not a history.
+  const { identity } = typed;
+  if (identity.startedAt !== null && identity.endedAt !== null && Date.parse(identity.endedAt) < Date.parse(identity.startedAt)) errors.push('identity.endedAt: before startedAt');
+  const runEnding = (type: string) => /(^|\.)run\.(failed|completed|cancelled)$/.exec(type)?.[2]?.toUpperCase() ?? null;
+  typed.events.forEach((item, i) => {
+    const ending = runEnding(item.eventType);
+    if (ending !== null && identity.outcome !== 'UNKNOWN' && ending !== identity.outcome) errors.push(`events[${i}]: ${item.eventType} contradicts identity.outcome ${identity.outcome}`);
+  });
+  typed.research.forEach((item, i) => {
+    if (item.disposition === 'REFUSED' && (item.bytes !== null || item.digest !== null || item.deliveryRange !== null)) errors.push(`research[${i}]: a REFUSED request records no delivered bytes, digest or range`);
+  });
+  typed.toolInvocations.forEach((item, i) => {
+    if (item.requestedAt !== null && item.completedAt !== null && Date.parse(item.completedAt) < Date.parse(item.requestedAt)) errors.push(`toolInvocations[${i}].completedAt: before requestedAt`);
+  });
+
+  // A reference to another workflow run or attempt inside this attempt's export.
+  const runRef = /(?:workflow:|archive:)(\d{1,20})\/(\d{1,5})(?![0-9])/g;
+  const scanRuns = (value: unknown, at: string) => {
+    for (const text of juliusStringsOf(value)) {
+      for (const match of text.matchAll(runRef)) {
+        if (match[1] !== identity.workflowRunId || Number(match[2]) !== identity.workflowRunAttempt) errors.push(`${at}: references workflow run ${match[1]} attempt ${match[2]}, not this export's ${identity.workflowRunId} attempt ${identity.workflowRunAttempt}`);
+      }
+    }
+  };
+  for (const section of JULIUS_ARCHIVE_SECTIONS) (typed[section] as readonly unknown[]).forEach((item, i) => scanRuns(item, `${section}[${i}]`));
+
   // Credential-shaped content is refused where it is, not discovered later by the planner.
   const scan = (value: unknown, at: string) => {
     const shapes = scanJuliusSecrets(juliusStringsOf(value).join('\n')).shapes;
@@ -442,6 +496,19 @@ export function checkJuliusPaidRunArchiveExport(archive: unknown): JuliusArchive
   scan(typed.source, 'source');
   for (const section of JULIUS_ARCHIVE_SECTIONS) (typed[section] as readonly unknown[]).forEach((item, i) => scan(item, `${section}[${i}]`));
   return errors.length === 0 ? { ok: true } : { ok: false, reasonCode: 'archive_invalid', errors: errors.slice(0, 50) };
+}
+
+/** What a set of usage items sums to, with Unknown kept separate from zero. */
+export function juliusArchiveUsageTotals(usage: readonly JuliusArchiveUsage[]): { readonly knownUsdMicros: number; readonly estimatedUsdMicros: number | null; readonly unknownComponents: number; readonly components: number } {
+  let knownUsdMicros = 0;
+  let estimatedUsdMicros: number | null = null;
+  let unknownComponents = 0;
+  for (const item of usage) {
+    if (item.costBasis === 'PROVIDER_REPORTED' || item.costBasis === 'MEASURED_FROM_USAGE') knownUsdMicros += item.usdMicros ?? 0;
+    else if (item.costBasis === 'UNKNOWN') unknownComponents += 1;
+    if (item.estimatedUsdMicros !== null) estimatedUsdMicros = (estimatedUsdMicros ?? 0) + item.estimatedUsdMicros;
+  }
+  return { knownUsdMicros, estimatedUsdMicros, unknownComponents, components: usage.length };
 }
 
 /** The errors, or [] when the export is valid. */
@@ -489,6 +556,9 @@ const EVIDENCE_CLASS: Readonly<Record<string, string>> = {
   SECURITY_SCAN: 'COMMAND_EXECUTION', TOOL_RECEIPT: 'COMMAND_EXECUTION', REVIEW_FINDING: 'REVIEW', ARTIFACT: 'ARTIFACT_RESULT', DIFF: 'ARTIFACT_RESULT',
   COMMAND_EXECUTION: 'COMMAND_EXECUTION', TEST_RESULT: 'TEST_RESULT', BUILD_RESULT: 'COMMAND_EXECUTION', STATIC_ANALYSIS: 'COMMAND_EXECUTION', FILE_MUTATION: 'ARTIFACT_RESULT',
 };
+/** Every evidence type a runtime vocabulary names. Anything else imports as OBSERVATION and is flagged by the conformance kit. */
+export const JULIUS_ARCHIVE_KNOWN_EVIDENCE_TYPES: readonly string[] = Object.keys(EVIDENCE_CLASS);
+
 /** Repair outcomes the runtime records; anything else — or nothing — is UNKNOWN, never guessed. */
 const REPAIR_STATUS: Readonly<Record<string, string>> = { SCHEDULED: 'REQUESTED', ACTIVE: 'IN_PROGRESS', VERIFIED: 'VERIFIED', FAILED: 'REJECTED', CANCELLED: 'ABANDONED' };
 const REPAIR_VERIFICATION: Readonly<Record<string, string>> = { VERIFIED: 'PASSED', FAILED: 'FAILED', SCHEDULED: 'NOT_RUN', ACTIVE: 'NOT_RUN' };
@@ -705,16 +775,11 @@ export function planJuliusPaidRunArchiveImport(
     }, { taskId: item.taskId, occurredAt: item.occurredAt, links: [{ relation: 'RELATES_TO', target: research, targetVersion: null }] });
   }
 
-  let knownUsdMicros = 0;
-  let estimatedUsdMicros: number | null = null;
-  let unknownComponents = 0;
   const unknownText = (value: number | null) => (value === null ? 'Unknown' : String(value));
+  countUnknown('accounting', archive.accounting);
   for (const item of archive.usage) {
     countUnknown('usage', item);
     const known = item.costBasis === 'PROVIDER_REPORTED' || item.costBasis === 'MEASURED_FROM_USAGE';
-    if (known) knownUsdMicros += item.usdMicros ?? 0;
-    else unknownComponents += item.costBasis === 'UNKNOWN' ? 1 : 0;
-    if (item.estimatedUsdMicros !== null) estimatedUsdMicros = (estimatedUsdMicros ?? 0) + item.estimatedUsdMicros;
     add('EVIDENCE', 'usage', item.componentId, {
       evidenceClass: 'MEASUREMENT', claim: clip(`spend of ${item.role}${item.taskId ? ` on ${item.taskId}` : ''}`, 8_000),
       summary: clip(`${item.costBasis}: ${item.usdMicros === null ? 'amount Unknown' : `${item.usdMicros} µ$`}; requests ${unknownText(item.requests)}; tokens ${unknownText(item.inputTokens)} in / ${unknownText(item.outputTokens)} out`, 8_000),
@@ -726,7 +791,9 @@ export function planJuliusPaidRunArchiveImport(
       juliusEvidenceId: null,
     }, { taskId: item.taskId, occurredAt: item.occurredAt, provider: item.provider, model: item.model });
   }
-  const accounting = { knownUsdMicros, knownIsFloor: unknownComponents > 0, estimatedUsdMicros, unknownComponents, components: archive.usage.length };
+  const totals = juliusArchiveUsageTotals(archive.usage);
+  const { knownUsdMicros, estimatedUsdMicros, unknownComponents } = totals;
+  const accounting = { knownUsdMicros, knownIsFloor: unknownComponents > 0, estimatedUsdMicros, unknownComponents, components: totals.components };
   add('EVIDENCE', 'accounting', runKey, {
     evidenceClass: 'MEASUREMENT', claim: `what paid run ${runKey} cost`,
     summary: `known ${knownUsdMicros} µ$${unknownComponents > 0 ? ` (a floor: ${unknownComponents} component(s) reported no amount)` : ''}; estimated ${estimatedUsdMicros ?? 'none'} µ$, never added to the known total`,
@@ -852,6 +919,25 @@ const sha256OfBytes = (bytes: Uint8Array): string => `sha256:${createHash('sha25
  * Bytes are optional — an archive may hold only references — but bytes that
  * are supplied and do not match are refused, never stored beside the claim.
  */
+/** Bytes supplied for an export's artifacts, checked against the digest and size it declares. An artifact with no bytes is not checked. */
+export function verifyJuliusArchiveArtifactBytes(
+  archive: Pick<JuliusPaidRunArchiveExport, 'artifacts'>,
+  bytesFor: (artifactId: string) => Uint8Array | null,
+): { readonly errors: readonly string[]; readonly verified: readonly { readonly artifactId: string; readonly bytes: Uint8Array }[]; readonly withoutBytes: readonly string[] } {
+  const errors: string[] = [];
+  const verified: { artifactId: string; bytes: Uint8Array }[] = [];
+  const withoutBytes: string[] = [];
+  archive.artifacts.forEach((item, i) => {
+    const bytes = bytesFor(item.artifactId);
+    if (bytes === null) { withoutBytes.push(item.artifactId); return; }
+    const digest = sha256OfBytes(bytes);
+    if (digest !== item.contentHash) errors.push(`artifacts[${i}]: the supplied bytes hash to ${digest}, not ${item.contentHash}`);
+    else if (item.byteSize !== null && item.byteSize !== bytes.byteLength) errors.push(`artifacts[${i}]: the supplied bytes are ${bytes.byteLength} bytes, not ${item.byteSize}`);
+    else verified.push({ artifactId: item.artifactId, bytes });
+  });
+  return { errors, verified, withoutBytes };
+}
+
 export async function holdJuliusArchiveArtifacts(
   archive: JuliusPaidRunArchiveExport,
   content: JuliusArchiveContentPort,
@@ -859,16 +945,7 @@ export async function holdJuliusArchiveArtifacts(
 ): Promise<{ readonly ok: true; readonly held: ReadonlyMap<string, { readonly storageRef: string; readonly byteSize: number }> } | { readonly ok: false; readonly errors: readonly string[] }> {
   const held = new Map<string, { storageRef: string; byteSize: number }>();
   if (bytesFor === undefined) return { ok: true, held };
-  const errors: string[] = [];
-  const verified: { artifactId: string; bytes: Uint8Array }[] = [];
-  archive.artifacts.forEach((item, i) => {
-    const bytes = bytesFor(item.artifactId);
-    if (bytes === null) return;
-    const digest = sha256OfBytes(bytes);
-    if (digest !== item.contentHash) errors.push(`artifacts[${i}]: the supplied bytes hash to ${digest}, not ${item.contentHash}`);
-    else if (item.byteSize !== null && item.byteSize !== bytes.byteLength) errors.push(`artifacts[${i}]: the supplied bytes are ${bytes.byteLength} bytes, not ${item.byteSize}`);
-    else verified.push({ artifactId: item.artifactId, bytes });
-  });
+  const { errors, verified } = verifyJuliusArchiveArtifactBytes(archive, bytesFor);
   if (errors.length > 0) return { ok: false, errors };
   for (const item of verified) {
     const stored = await content.put(item.bytes);

@@ -148,7 +148,7 @@ describe('paid-run archive export v1 → Project Brain', () => {
       .toEqual(['integrity.sectionHashes.evidence: does not match', 'integrity.contentHash: does not match the export']);
     expect(errorsOf({ ...archive, exportedAt: '2026-09-16T09:00:00.000Z' })).toEqual(['integrity.contentHash: does not match the export']);
     const { tasks: _tasks, ...hashesWithoutTasks } = archive.integrity.sectionHashes;
-    expect(errorsOf({ ...archive, integrity: { ...archive.integrity, sectionHashes: hashesWithoutTasks } })).toContain('integrity.sectionHashes: exactly the identity and every section');
+    expect(errorsOf({ ...archive, integrity: { ...archive.integrity, sectionHashes: hashesWithoutTasks } })).toContain('integrity.sectionHashes: exactly the identity, the accounting claim and every section');
 
     // A project the import was not asked for.
     expect(await importArchive(archive, { projectId: 'prj-other' })).toMatchObject({ outcome: 'REJECTED', reasonCode: 'identity_mismatch' });
@@ -193,7 +193,7 @@ describe('paid-run archive export v1 → Project Brain', () => {
     expect(leak).toMatchObject({ outcome: 'REJECTED', errors: ['evidence[0]: credential-shaped content (provider-key)'] });
     expect(JSON.stringify(leak)).not.toContain(token);
     expect(errorsOf(resealed((body) => ({ ...body, usage: body.usage.map((item) => (item.componentId === 'usage-coder' ? { ...item, usdMicros: null, unknown: [...item.unknown, 'usdMicros'].sort() } : item)) }))))
-      .toEqual(['usage[2]: PROVIDER_REPORTED requires usdMicros']);
+      .toEqual(['usage[2]: PROVIDER_REPORTED requires usdMicros', 'accounting.knownUsdMicros: the export claims 369044; its usage sums to 0']);
     expect(errorsOf(resealed((body) => ({ ...body, usage: body.usage.map((item) => (item.componentId === 'usage-architect' ? { ...item, usdMicros: 0, unknown: ['estimatedUsdMicros'] } : item)) }))))
       .toEqual(['usage[0]: UNKNOWN basis cannot carry usdMicros']);
     expect(await store.head(BRAIN, PROJECT)).toMatchObject({ sequence: 0 });
