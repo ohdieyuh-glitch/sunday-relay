@@ -8,7 +8,8 @@
 - **Vendor:** none chosen.
 - **Deployment proposal:** due after the continuous-worker qualification passes
   and before any live wiring. It compares concrete options against this
-  contract; its required content is at the end of this document.
+  contract, scored with `docs/JULIUS_BRAIN_PRODUCTION_EVALUATION.md`; its
+  required content is at the end of this document.
 - **Nothing is provisioned, deployed, pushed or wired.**
 
 > Project Brain remembers. Julius acts and decides. Python computes. GVE
@@ -59,7 +60,8 @@ is disposable in a paid run, and it never holds the Brain.
 | **Immutable.** The database itself refuses UPDATE, DELETE and TRUNCATE of records, links and artifact bytes. Brains, entities, executions and projects are never deleted. A head never rolls back, and an identity never changes. | migration `004_julius_brain_immutability` | same |
 | **Least privilege.** The owner migrates. The service appends and advances heads, and cannot delete, rewrite, disable the guard or migrate. The reader only reads. | `julius-brain-roles.ts` | `scripts/julius-brain-roles-postgres.test.ts`, which runs the whole Brain + Python flow as the service role |
 | **Artifact bytes are as durable as their records.** | `julius_brain.content`, `PostgresJuliusBrainContentStore` | database test: dedupe, in-place tamper refused, corruption refused on read |
-| **Unavailability has a defined answer.** A FRESH run proceeds, unpreserved. A run that needs prior state does not start. The binding detaches, and *preserved* is claimed only when true. | `relay-bridge/julius/project-brain-binding.ts` | `project-brain-binding.test.ts` |
+| **Unavailability has a defined answer.** A FRESH run proceeds, unpreserved. A run that needs prior state does not start, and mid-run has the dispatch refused rather than acting on less. The binding detaches, and *preserved* is claimed only when true. Every failure is classified, and nothing stands in for the Brain. | `julius-brain-failure-model.ts`, `relay-bridge/julius/project-brain-binding.ts` | `julius-brain-failure-model.test.ts`, `project-brain-binding.test.ts`, `scripts/julius-brain-failure-postgres.test.ts` |
+| **The controlled service's access state is durable and auditable.** A spent token stays spent and a bound state mode stays bound across restarts and between processes; every decision is hash-chained; a rewrite is exposed. | `julius-brain-access.ts`, `julius-brain-access-postgres.ts`, migration `006` | `julius-brain-access-security.test.ts`, `scripts/julius-brain-access-postgres.test.ts` |
 | **The temporary carry.** An HMAC-sealed, lineage-checked export with its artifact bytes, plus a journal that permits destroying disposable state only after upload is confirmed. | `julius-brain-carry.ts` | `julius-brain-carry.test.ts` |
 
 Connection strings stay separate. The Brain uses `JULIUS_BRAIN_DATABASE_URL`;
@@ -155,8 +157,19 @@ contract (`julius-brain-access.ts`, `julius-brain-access.test.ts`).
   the service's environment, the mission, and the state mode fixed at first
   registration. Any non-FRESH mode needs an operator grant.
 - **Per-call authorization:** other run or mission, mode switch, protected kind,
-  out-of-scope mutation, raw store, expiry.
-- **Server-side retrieval**, and an audit trail without secrets.
+  out-of-scope mutation, a revision of another run's entity, an artifact the
+  bound mode does not admit, raw store, expiry.
+- **Server-side retrieval.**
+- **Durable access state** (migration 006): a spent token stays spent, and an
+  attempt's registered mode stays bound, across service restarts and between
+  concurrent service processes.
+- **A hash-chained audit** without secrets. An edited, removed, inserted or
+  reordered decision is detected, and a truncated tail is detected against an
+  anchor. An audit that cannot be written is a refusal.
+- **Binding:** a service bound to a database of another environment refuses to
+  start.
+- **Proofs:** `julius-brain-access-security.test.ts`,
+  `scripts/julius-brain-access-postgres.test.ts`.
 
 **Must:** **no GitHub-hosted runner holds a Brain database credential.**
 Julius, wherever it runs, reaches the Brain through a **controlled Brain
@@ -366,7 +379,31 @@ and both retention windows.
   is reconciled without duplicate facts, one never preserved is reconstructed.
   Every recovery is recorded.
 
-**Not yet built:** service-level retry and circuit breaking; the
+**The failure model** (`julius-brain-failure-model.ts`, proven in memory and
+by `scripts/julius-brain-failure-postgres.test.ts`) classifies what failed and
+whether it may have applied, and decides by mode and phase:
+
+| Failure | Classified from | Outcome | Retry |
+|---|---|---|---|
+| service unavailable | the service transport (503, or no answer) | 503 not applied; otherwise unknown | yes |
+| database unavailable | ECONNREFUSED, ENOTFOUND, 57P03, 08001 | not applied | yes |
+| database read-only | 25006 | not applied | yes |
+| TLS validation failure | certificate codes; an unencrypted production connection | not applied | **never** |
+| transaction timeout | 57014, 55P03, 25P03, 40001, 40P01 | not applied (rolled back) | yes |
+| partial network loss | 57P01, 08006, ECONNRESET, a connection lost mid-call | **unknown**: read the Brain again first | after reconciling |
+| OIDC unavailable | the identity-token port | not applied | yes |
+| session lost or expired | the service's refusal | not applied | one renewal, same attempt and mode |
+
+| Phase | FRESH | CONTINUATION, LEARNING, REGRESSION |
+|---|---|---|
+| open (before the run) | proceed without the Brain, NOT_PRESERVED | refuse the run |
+| context read (during it) | continue on v1 context | **refuse the dispatch**: the context reader throws |
+| mirror | continue; preservation at risk | continue; preservation at risk |
+| seal | NOT_PRESERVED unless the Brain shows otherwise | the same |
+
+Never, in any row, does other memory stand in for the Brain.
+
+**Not yet built:** the deployed service's retry loop and circuit breaker; the
 `python.run` unavailable reason; the routes' unavailable answer.
 
 ### 11. GitHub-hosted paid runs: direct or through a controlled service
@@ -445,6 +482,11 @@ by acceptance tests.
 7. **Rotation:** credential rotation without downtime.
 8. **Identity:** development configuration refuses the production Brain, and the
    reverse.
+9. **Access state:** the security suite's refusals hold over the deployed
+   transport; a token replayed after a service restart is refused; the audit
+   chain verifies against an anchor kept outside the database.
+10. **Failure drills:** every row of section D of
+    `docs/JULIUS_BRAIN_PRODUCTION_EVALUATION.md`, produced on the deployment.
 
 ## What the deployment proposal must contain
 

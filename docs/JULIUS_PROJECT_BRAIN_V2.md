@@ -143,6 +143,7 @@ Formal's archive tables ──(Formal's adapter)──▶ julius-paid-run-archiv
 | repairs | id, round, target task, repair task, reason, outcome, finding ids, time |
 | usage | component, task, role, provider, model, requests, tokens, amount, cost basis, estimate, time |
 | brainEntries | the v1 Brain entry ids the run wrote: kind, worker, task, revision, time (never content) |
+| accounting | the run's cost totals as the source states them: known, estimated, unknown components, count |
 | events | event id, sequence (optional), type, task, time, scalar facts |
 | toolInvocations | id, task, tool, execution type, state, result, requested and completed, artifact refs |
 | artifacts | id, name, content type, size, content hash, storage ref |
@@ -154,10 +155,30 @@ Formal's archive tables ──(Formal's adapter)──▶ julius-paid-run-archiv
 - a malformed `unknown` list;
 - an identity or section hash, or the content hash, that does not match. The
   accepted main, state mode and attempt are all bound by the identity hash;
-- duplicate ids, or references that do not resolve;
+- duplicate ids, references that do not resolve, or a reference to another
+  workflow run or attempt;
 - a reported cost with no amount, or an UNKNOWN cost carrying one;
+- `accounting` totals that are not what the usage items sum to;
+- a history that contradicts itself: an outcome its own ending event
+  contradicts, a run ending before it starts, a refused request recording
+  delivered bytes, a tool call completing before it was requested;
 - supplied artifact bytes that do not match their digest;
 - credential-shaped content.
+
+**The conformance kit** (`julius-brain-archive-conformance.ts`) lets whoever
+produces exports prove one before anything is imported:
+
+- a verdict (CONFORMANT, NOT_CONFORMANT, UNSUPPORTED_VERSION, NOT_AN_EXPORT)
+  and findings by check. Evidence types no runtime vocabulary names are
+  warnings; Unknown counts are notes;
+- given a Brain, what importing it would do there;
+- 33 catalogued cases applied to any valid export: 31 corruptions each must
+  refuse, and 2 unusual but valid values each must accept. A case with nothing
+  to corrupt is NOT_APPLICABLE, never a pass.
+
+`npm run julius:archive:conformance -- <export.json> [--artifact id=file] --cases`,
+or `--self-test`. The note for the Formal lane is
+`docs/JULIUS_BRAIN_FORMAL_COORDINATION.md`.
 
 ### Translation
 
@@ -223,6 +244,8 @@ A live attempt leaves durable evidence written by Julius
 - the open marker's mission, Julius run or accepted main disagrees with the
   export;
 - the live run holds a v1 entry the export does not list;
+- the live run holds an entry the export lists, as another kind, or under
+  another task the export knows (an Unknown task contradicts nothing);
 - the seal counted a different number of entries.
 
 **Every recovery is recorded.** It writes a RECOVERY trace: mode, prior status,
@@ -287,9 +310,21 @@ with the real paid run 34739303313 imported, FRESH admits none of it.
 ## Formal's archive (`julius-paid-run-archive.v1`) against this contract
 
 This is a read-only inspection as of 2026-09-15: `origin/main` `ad03df90` and the
-local `julius_archive` database, with four qualification attempts archived.
-**The archive is not frozen**, and the adapter is not written: `research.tsv`
-carries 17 columns in two attempts and 21 in the other two.
+local `julius_archive` database, with five attempts archived. **The archive is
+not frozen**, and the adapter is not written. Under one `archive_version`,
+`research.tsv` carries 17, 21 and 34 columns, `worker-diagnostics.tsv` 86, 87
+and 90, and `participation.tsv` 23 and 28.
+
+**The shape-drift diagnostic** (`scripts/julius-archive-shape-drift.ts`) reports
+this, read-only, against a recorded baseline
+(`scripts/julius-archive-known-shapes.json`):
+- catalog drift;
+- every column set per dump, with its fingerprint and changes;
+- the shapes each label covers;
+- the cells that cannot be told NULL from empty (11,036).
+
+Every report begins `COMPATIBILITY: NOT ESTABLISHED`:
+`JULIUS_ARCHIVE_CONTAINER=julius-postgres npm run julius:archive:shape-drift -- --known scripts/julius-archive-known-shapes.json`.
 
 **What already agrees:**
 - **Identity** is the workflow run and attempt.
@@ -350,6 +385,13 @@ asks Formal to change its tables:
 | Archive export contract, import, state modes (domain) | `npx vitest run src/relay/mission/julius/julius-brain-archive-import.test.ts src/relay/mission/julius/julius-brain-state-modes.test.ts` |
 | Preservation status, reconciliation with the live mirror, recovery under every state mode | `npx vitest run src/relay/mission/julius/julius-brain-preservation.test.ts src/relay/mission/julius/julius-brain-archive-reconciliation.test.ts` |
 | The Brain service access contract (OIDC, sessions, per-call authorization, audit) | `npx vitest run src/relay/mission/julius/julius-brain-access.test.ts` |
+| Brain service security, one threat at a time (wrong repository, workflow, environment or attempt; replay, expiry, future tokens; mode escalation; cross-mission; foreign artifacts; protected and run-less mutation; audit tampering; expired sessions; development binding) | `npx vitest run src/relay/mission/julius/julius-brain-access-security.test.ts` |
+| Access state on PostgreSQL as the service role: restart, concurrent processes, no rewrite, owner tampering exposed, no token stored | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-access-postgres.test.ts` |
+| Export conformance kit and its CLI | `npx vitest run src/relay/mission/julius/julius-brain-archive-conformance.test.ts scripts/julius-archive-export-conformance.test.ts` |
+| Archive shape drift (read-only), in memory and on PostgreSQL | `npx vitest run scripts/julius-archive-shape-drift.test.ts`; `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-archive-shape-drift-postgres.test.ts` |
+| Recovery under adversarial histories, crashes and races | `npx vitest run src/relay/mission/julius/julius-brain-archive-adversarial.test.ts`; on PostgreSQL (kills a commit mid-transaction; restarts the server when `JULIUS_BRAIN_DRILL_RESTART` is set — run alone): `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-archive-recovery-postgres.test.ts` |
+| The failure model: classification, decisions, the session client | `npx vitest run src/relay/mission/julius/julius-brain-failure-model.test.ts` |
+| Failure drills on PostgreSQL: unavailable, read-only, timeouts, TLS, partial network loss, restart and expiry mid-session | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-failure-postgres.test.ts` (the server must offer TLS) |
 | State modes with a real interpreter | `npx vitest run src/relay/workspace/julius-tools/python-state-modes.test.ts` |
 | Archive import on PostgreSQL: parity, cold read, 6-way concurrent import, reconciliation and run guard, multi-group atomicity | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-archive-postgres.test.ts` |
 | Prepared live binding (bootstrap, mirror, typed context, seal and derived preservation) | `npx vitest run relay-bridge/julius/project-brain-binding.test.ts`; on PostgreSQL with the live v1 repositories: `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-live-binding-postgres.test.ts` |
@@ -382,6 +424,9 @@ unchanged by this branch. See `docs/JULIUS_BRAIN_PERSISTENCE.md`.
 - `004_julius_brain_immutability`: the database refuses to change history.
 - `005_julius_brain_unknown_occurrence`: a record's occurrence time may be
   Unknown (NULL); when the Brain recorded it never is.
+- `006_julius_brain_access`: the Brain service's access state. It holds token
+  claims by digest, attempt registrations, sessions by token digest, and the
+  hash-chained audit. All four are append-only.
 
 ## Not yet done (the private-beta gaps)
 
@@ -402,16 +447,25 @@ unchanged by this branch. See `docs/JULIUS_BRAIN_PERSISTENCE.md`.
    dedicated persistent PostgreSQL. The code-side rules are enforced and proven:
    dedicated, identified, encrypted, current, immutable, least privilege.
    The Brain service's access contract is written and proven locally
-   (`julius-brain-access.ts`: OIDC verification, sessions bound to one attempt,
-   mission and mode, per-call authorization, server-side retrieval, audit).
-   Nothing is provisioned or deployed. The deployment proposal and its
-   acceptance tests come after the qualification, per
-   `docs/JULIUS_BRAIN_PERSISTENCE.md`.
+   (`julius-brain-access.ts`):
+   - OIDC verification;
+   - sessions bound to one attempt, mission and mode, with the mode durable
+     across restarts;
+   - per-call authorization, including artifact reads and mutation targets;
+   - server-side retrieval;
+   - a hash-chained audit.
+
+   The failure model decides what a run does when any of it fails
+   (`julius-brain-failure-model.ts`). Nothing is provisioned or deployed. The
+   deployment proposal comes after the qualification, per
+   `docs/JULIUS_BRAIN_PERSISTENCE.md`, scored against
+   `docs/JULIUS_BRAIN_PRODUCTION_EVALUATION.md`.
 6. **Semantic retrieval.** Evaluated and available; on the labelled fixture
    no candidate beat the keyword baseline on MRR, so it is not adopted.
-7. **The archive adapter.** The import contract is built and proven; the
-   adapter from the Formal lane's archive tables is not, because that schema is
-   temporary. Written against its final shape.
+7. **The archive exporter.** The import contract and its conformance kit are
+   built and proven. The exporter from the Formal lane's archive is theirs to
+   provide or freeze, emitting `julius-paid-run-archive-export.v1`; the Brain
+   depends on nothing else (`docs/JULIUS_BRAIN_FORMAL_COORDINATION.md`).
 8. **Windows venvs.** The host names its pid for liveness because a venv
    `python.exe` is a redirector; crash-orphan termination was proven with the
    system interpreter, not inside a venv.

@@ -52,8 +52,10 @@ proposal that satisfies every item of the contract in
 - controlled service vs direct access;
 - development isolation, operational complexity.
 
-No vendor is chosen before the contract is agreed. The proposal must also pass
-that document's acceptance tests before step 1 goes live.
+No vendor is chosen before the contract is agreed. Candidates are scored with
+`docs/JULIUS_BRAIN_PRODUCTION_EVALUATION.md`: its MUST rows are gates, and its
+failure drills run on the candidate. The proposal must also pass the
+persistence document's acceptance tests before step 1 goes live.
 
 **The Brain service is part of that proposal.** GitHub-hosted runners never hold
 a Brain database credential, so a live Julius run reaches the Brain through a
@@ -70,8 +72,10 @@ entity would carry governance out of the service. The service must:
   mode-selected context, seal, resume, archive import.
 
 **The access contract already exists, locally and proven:**
-`julius-brain-access.ts`. The proposal decides where it runs and how it is
-deployed, not what it enforces.
+`julius-brain-access.ts`, with durable access state (migration 006), a
+hash-chained audit, and `julius-brain-session-client.ts` for the run's side.
+The proposal decides where it runs and how it is deployed, not what it
+enforces.
 
 ## Step 1 — Brain persistence and bootstrap
 
@@ -95,6 +99,10 @@ deployed, not what it enforces.
     `proceed` is true, meaning a FRESH run, which the Brain only adds to. A
     CONTINUATION, LEARNING or REGRESSION run refuses to start.
   - After a non-READY answer the binding is detached.
+  - Mid-run, for a run that requires prior state, the context reader throws
+    `JuliusBrainRequiredStateUnavailableError` when that state cannot be read
+    whole. The dispatch fails closed rather than acting on v1 context alone.
+    Every failure carries its classification (`julius-brain-failure-model.ts`).
 - **At the end of the run:** call `binding.seal({ runId })`. It records how
   many of the run's v1 entries the Brain holds with the right content, then
   checkpoints, and returns the preservation **derived from the Brain**:
@@ -146,9 +154,11 @@ The spread keeps `timeline`, so the ledger-bound check still sees it.
 **Paid history** follows "Migrating paid history into the Brain" in
 `JULIUS_PROJECT_BRAIN_V2.md`:
 
-1. Write the adapter from the Formal lane's **final** archive tables to
-   `julius-paid-run-archive-export.v1`, read-only against `julius-postgres`.
-   Coordinate its shape with the Formal lane when they freeze the archive.
+1. The Formal lane provides or freezes an exporter emitting
+   `julius-paid-run-archive-export.v1` (`docs/JULIUS_BRAIN_FORMAL_COORDINATION.md`).
+   Every export passes `npm run julius:archive:conformance -- <export> --cases`
+   before it is imported. The archive's label is never evidence of its shape;
+   `npm run julius:archive:shape-drift` reports what is physically there.
 2. Seal, then import one attempt per commit. Imports go **through the Brain
    service**, never from a runner holding a database credential. The import
    derives the attempt's preservation first:
