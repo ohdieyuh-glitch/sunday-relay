@@ -14,10 +14,10 @@ WHAT THEY FOLLOW -- the founder's two reference sheets of 2026-09-15, which repl
   FROST (blue, ice spikes, a wink and a smile) and BLOSSOM (pink, a bob of hair and a gold flower).
   GPT 6 Astra wears AURUM -- the skin closest to the first frame's hooded, curled, gold, happy-eyed Astra.
 
-  JHINN AI AGENTS are the full-body figures with the periwinkle-blue crystalline spectral lower body.
+  JHINN AI AGENTS are the full-body figures with the imported cyan crystalline spectral lower soul.
   Claude Code Fable 5 is the winged one: a white bob under a gold tiara, warm eyes, lavender hands, a gold key
   pendant and chains, tall layered crystal wings. The Jhin canon (WorldDesign/PRODUCTION_ORDER.md) is kept: an
-  imported agent's lower body is cyan-blue crystalline, so its crystal carries cyan glints through the periwinkle.
+  imported agent's lower body is immutably cyan-blue crystalline, deepening toward periwinkle, with pale glints.
 
 HOW BOXES BECOME THAT. Chunky helmets are rounded-cube superellipsoids tiled in big blocks with visible seams.
 Translucent crystal is approximated with glowing facet tiles laid with gaps -- the world shows between them --
@@ -455,13 +455,13 @@ def build_fable():
     fig.material("visor", "lit", VISOR)
     fig.material("lilac", "lit", (0.70, 0.66, 0.96))
     fig.material("eye", "glow", (1.0, 0.80, 0.36), 5.0)
-    # The spectral lower body: periwinkle crystal with the imported-agent cyan glinting through it (canon).
-    fig.material("deep", "glow", (0.36, 0.42, 1.0), 1.3)
-    fig.material("base", "glow", (0.52, 0.60, 1.0), 1.6)
-    fig.material("cyan", "glow", (0.36, 0.86, 1.0), 2.2)
+    # The spectral lower soul: the imported-agent cyan crystalline (canon, immutable), deepening to periwinkle, pale glints.
+    fig.material("deep", "glow", (0.20, 0.46, 1.0), 1.3)
+    fig.material("base", "glow", (0.28, 0.76, 1.0), 1.6)
+    fig.material("cyan", "glow", (0.66, 0.96, 1.0), 2.2)
     fig.material("wing", "glow", (0.46, 0.50, 1.0), 1.25)
     fig.material("wingpale", "glow", (0.74, 0.74, 1.0), 1.9)
-    fig.material("halo", "glow", (0.45, 0.58, 1.0), 0.8)
+    fig.material("halo", "glow", (0.30, 0.72, 1.0), 0.8)
 
     fig.part("body", "-", (0.0, 0.0, 48.0), "none")
     fig.part("head", "body", (0.0, 0.0, 61.0), "head")

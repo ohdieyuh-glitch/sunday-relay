@@ -120,6 +120,15 @@ def job():
     except Exception as error:
         emit("close portrait skipped:", error)
     RESULT["boom_arm_length"] = arm
+    # A wide front shot: the Dog and both companions framed between the two panels.
+    if boom is not None and arm is not None:
+        boom.set_editor_property("target_arm_length", arm * 1.35)
+        controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-12.0, yaw=rot.yaw + 180.0))
+        yield 1.5
+        shot("zc_02c_front_wide.png")
+        boom.set_editor_property("target_arm_length", max(arm * 0.62, 220.0))
+        controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-6.0, yaw=rot.yaw + 180.0))
+        yield 1.0
 
     # ------------------------------------------------------------------ all three terminals
     L.focus_game_viewport()
@@ -171,6 +180,25 @@ def job():
            moved_cm=round(moved, 1), frames=after, capture=walk)
     yield 2.0
     shot("zc_06_after_walk_idle.png")
+
+    # ------------------------------------------------------------------ where they float, seen from the play camera
+    # Three follow offsets side by side from behind the Dog, so the placement is chosen from what a player sees.
+    controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-10.0, yaw=pawn.get_actor_rotation().yaw))
+    RESULT["offset_trials"] = []
+    for label, llm_offset, agent_offset in (("current", (-40.0, -135.0), (-40.0, 140.0)),
+                                            ("ahead", (30.0, -150.0), (30.0, 150.0)),
+                                            ("ahead_wide", (60.0, -170.0), (60.0, 170.0))):
+        for body, (ox, oy) in zip(bodies, (llm_offset, agent_offset)):
+            if body:
+                body.set_editor_property("follow_offset", unreal.Vector(ox, oy, 0.0))
+                body.snap_to_target()
+        yield 2.5
+        RESULT["offset_trials"].append({"label": label, "capture": shot("zc_07_offset_%s.png" % label)})
+    for body, (ox, oy) in zip(bodies, ((-40.0, -135.0), (-40.0, 140.0))):
+        if body:
+            body.set_editor_property("follow_offset", unreal.Vector(ox, oy, 0.0))
+            body.snap_to_target()
+    yield 1.0
 
     # ------------------------------------------------------------------ what the two embodiments cost (gate item 10)
     # A/B on the same view: both bodies shown and ticking, then hidden with tick off, three times each, so drift in
