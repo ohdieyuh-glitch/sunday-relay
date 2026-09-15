@@ -1,0 +1,1036 @@
+{
+  "format": "julius-archive-known-shapes.v1",
+  "recordedFrom": "5 run(s): 34753589938/1, 34757974058/1, 34766115321/1, 34774471909/1, 34995797200/1",
+  "catalog": {
+    "fingerprint": "sha256:9a6be4be547789e49967f02eb55ed647f57a3ae4086d701d0d8b205186442e39",
+    "tables": [
+      {
+        "schema": "paid_runs",
+        "table": "files",
+        "columns": [
+          {
+            "name": "workflow_run_id",
+            "type": "bigint",
+            "nullable": false
+          },
+          {
+            "name": "workflow_run_attempt",
+            "type": "integer",
+            "nullable": false
+          },
+          {
+            "name": "path",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "sha256",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "bytes",
+            "type": "bigint",
+            "nullable": false
+          },
+          {
+            "name": "kind",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "table_status",
+            "type": "text",
+            "nullable": true
+          },
+          {
+            "name": "columns",
+            "type": "jsonb",
+            "nullable": true
+          },
+          {
+            "name": "malformed_rows",
+            "type": "integer",
+            "nullable": true
+          },
+          {
+            "name": "content",
+            "type": "text",
+            "nullable": true
+          }
+        ]
+      },
+      {
+        "schema": "paid_runs",
+        "table": "runs",
+        "columns": [
+          {
+            "name": "workflow_run_id",
+            "type": "bigint",
+            "nullable": false
+          },
+          {
+            "name": "workflow_run_attempt",
+            "type": "integer",
+            "nullable": false
+          },
+          {
+            "name": "repository",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "display_title",
+            "type": "text",
+            "nullable": true
+          },
+          {
+            "name": "mission",
+            "type": "text",
+            "nullable": true
+          },
+          {
+            "name": "lane",
+            "type": "text",
+            "nullable": true
+          },
+          {
+            "name": "mode",
+            "type": "text",
+            "nullable": true
+          },
+          {
+            "name": "dispatch_key",
+            "type": "text",
+            "nullable": true
+          },
+          {
+            "name": "classification",
+            "type": "text",
+            "nullable": true
+          },
+          {
+            "name": "campaign_id",
+            "type": "text",
+            "nullable": true
+          },
+          {
+            "name": "accepted_main_sha",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "julius_run_id",
+            "type": "text",
+            "nullable": true
+          },
+          {
+            "name": "julius_mission_id",
+            "type": "text",
+            "nullable": true
+          },
+          {
+            "name": "julius_final_state",
+            "type": "text",
+            "nullable": true
+          },
+          {
+            "name": "conclusion",
+            "type": "text",
+            "nullable": true
+          },
+          {
+            "name": "failed_steps",
+            "type": "jsonb",
+            "nullable": false
+          },
+          {
+            "name": "run_created_at",
+            "type": "timestamp with time zone",
+            "nullable": true
+          },
+          {
+            "name": "run_updated_at",
+            "type": "timestamp with time zone",
+            "nullable": true
+          },
+          {
+            "name": "execution_mode",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "state_mode",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "state_mode_basis",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "artifact_name",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "artifact_digest",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "file_count",
+            "type": "integer",
+            "nullable": false
+          },
+          {
+            "name": "total_bytes",
+            "type": "bigint",
+            "nullable": false
+          },
+          {
+            "name": "null_rendering",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "receipt_markdown",
+            "type": "text",
+            "nullable": true
+          },
+          {
+            "name": "archive_version",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "imported_at",
+            "type": "timestamp with time zone",
+            "nullable": false
+          }
+        ]
+      },
+      {
+        "schema": "paid_runs",
+        "table": "table_rows",
+        "columns": [
+          {
+            "name": "workflow_run_id",
+            "type": "bigint",
+            "nullable": false
+          },
+          {
+            "name": "workflow_run_attempt",
+            "type": "integer",
+            "nullable": false
+          },
+          {
+            "name": "source_file",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "row_number",
+            "type": "integer",
+            "nullable": false
+          },
+          {
+            "name": "row",
+            "type": "jsonb",
+            "nullable": false
+          }
+        ]
+      }
+    ]
+  },
+  "files": {
+    "budget.tsv": [
+      {
+        "fingerprint": "sha256:893c69deebe819161f7e59dadf1e6f40f566a6b23c01c4a09141b6b0ae3e4a11",
+        "columns": [
+          "run_id",
+          "sequence",
+          "task_id",
+          "event_type",
+          "role",
+          "allocated_usd_micros",
+          "allocation_basis",
+          "share_usd_micros",
+          "remaining_usd_micros",
+          "allocation_policy",
+          "settled_usd_micros",
+          "cost_basis",
+          "estimated_usd_micros",
+          "reason",
+          "slot_refusal",
+          "reservation_id",
+          "occurred_at"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "capability-proofs.tsv": [
+      {
+        "fingerprint": "sha256:b80be62c0b8fb5e3d0ad500aa032ce7797bee476d8bccf1349bcd035ea2057b3",
+        "columns": [
+          "capability",
+          "drill",
+          "outcome",
+          "steps",
+          "infrastructure",
+          "exercised_path",
+          "exercised_digest",
+          "transcript",
+          "recorded_at"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "contract-events.tsv": [
+      {
+        "fingerprint": "sha256:06e7f899665e0677759aaa3bb72aec1b6fa3f7dd4d1823f85d766d120f42c173",
+        "columns": [
+          "run_id",
+          "sequence",
+          "task_id",
+          "event_type",
+          "reason_code",
+          "disposition",
+          "evaluator_id",
+          "evidence_count",
+          "evidence_ids",
+          "contract_task_id",
+          "contract_id",
+          "contract_revision",
+          "binding_digest",
+          "recorded_revision",
+          "current_revision",
+          "review_revision",
+          "implementation_revision",
+          "role",
+          "occurred_at"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "cost-accounting.tsv": [
+      {
+        "fingerprint": "sha256:e02791cd927365b380201f27c4689b5546dffe6ead342a123b277663e89c3f08",
+        "columns": [
+          "role",
+          "components",
+          "known_usd_micros",
+          "estimated_usd_micros",
+          "unknown_components",
+          "estimated_components"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "decisions.tsv": [
+      {
+        "fingerprint": "sha256:bd685fe9446192a23f8b3180a4ec22ea40ecfe61e647350a4dcba26b6f1b2404",
+        "columns": [
+          "decision_id",
+          "task_id",
+          "action",
+          "reason_code",
+          "occurred_at"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "effort.tsv": [
+      {
+        "fingerprint": "sha256:9dfcf0331cbcc5ff960f2c73d9c86f39289c1d14edaa1b490e68a17dfcc188b1",
+        "columns": [
+          "run_id",
+          "sequence",
+          "task_id",
+          "role",
+          "task_type",
+          "input_tokens",
+          "output_tokens",
+          "reasoning_tokens",
+          "tool_calls",
+          "research_calls",
+          "active_ms",
+          "provider_calls",
+          "brain_retrievals",
+          "guidance_consumed",
+          "evidence_inspected",
+          "allocated_usd_micros",
+          "settled_usd_micros",
+          "settlement_basis",
+          "evidence_generated",
+          "repair_rounds",
+          "guidance_generated",
+          "reviewer_verdicts",
+          "effort_version",
+          "occurred_at"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "evidence.tsv": [
+      {
+        "fingerprint": "sha256:646d69faae48a7873123bf170b4b2ca778ca343132ae044b8e7927487638c082",
+        "columns": [
+          "evidence_id",
+          "evidence_type",
+          "status",
+          "safe_summary",
+          "occurred_at"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "failures.tsv": [
+      {
+        "fingerprint": "sha256:aee747ceef0bbdaa8c7c42d842a147bf0c6b09039530effceba763f310bbdbc0",
+        "columns": [
+          "run_id",
+          "sequence",
+          "task_id",
+          "role",
+          "event_type",
+          "julius_code",
+          "failure_class",
+          "error_retryable",
+          "reason_code",
+          "recovery_action",
+          "occurred_at"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "findings.tsv": [
+      {
+        "fingerprint": "sha256:08218601d0f90a9d76056e5ba42e2be49e7baa8799afe8cf6e38f60f76248f50",
+        "columns": [
+          "finding_id",
+          "blocking",
+          "status",
+          "claim"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "participation.tsv": [
+      {
+        "fingerprint": "sha256:e75a50430aca8141ef6bf7e1b596205bea0be0d12d1227212ec874a1f44c46e1",
+        "columns": [
+          "run_id",
+          "sequence",
+          "task_id",
+          "event_type",
+          "checkpoint_id",
+          "trigger",
+          "origin",
+          "checkpoint_sequence",
+          "evidence_count",
+          "route",
+          "reason_code",
+          "would_have_routed",
+          "stage",
+          "guidance_id",
+          "guidance_revision",
+          "guidance_digest",
+          "delivered_to",
+          "recommended_actions",
+          "additional_prohibitions",
+          "reference_count",
+          "contract_revision",
+          "contract_binding_digest",
+          "occurred_at"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      },
+      {
+        "fingerprint": "sha256:89e9077d9300340bf31167e7ffc09a09cc3e6274db58824cffc47d1b4f89e8f0",
+        "columns": [
+          "run_id",
+          "sequence",
+          "task_id",
+          "event_type",
+          "checkpoint_id",
+          "trigger",
+          "origin",
+          "checkpoint_sequence",
+          "evidence_count",
+          "route",
+          "reason_code",
+          "would_have_routed",
+          "stage",
+          "guidance_id",
+          "guidance_revision",
+          "guidance_digest",
+          "delivered_to",
+          "recommended_actions",
+          "additional_prohibitions",
+          "reference_count",
+          "contract_revision",
+          "contract_binding_digest",
+          "continuation_task_id",
+          "research_outcomes",
+          "handoff_entry_id",
+          "provenance_entry_id",
+          "delivered_chars",
+          "occurred_at"
+        ],
+        "firstSeen": "34995797200/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "project-brain.tsv": [
+      {
+        "fingerprint": "sha256:4b8cd86b7a566daa9b2591d401252e8d40c70b92aed7b24a467efe3c8a284eb0",
+        "columns": [
+          "entry_id",
+          "entry_kind",
+          "worker_id",
+          "task_id",
+          "revision",
+          "created_at"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "research.tsv": [
+      {
+        "fingerprint": "sha256:85f6a7a810f09318e33a16d01ad84800c79bb663ea7dcc24ea34a40a06b59d44",
+        "columns": [
+          "run_id",
+          "sequence",
+          "task_id",
+          "event_type",
+          "role",
+          "request_key",
+          "attempt_key",
+          "ask_count",
+          "attempt_guard",
+          "outcome",
+          "counted",
+          "evidence_id",
+          "injection_signals",
+          "segment",
+          "reason_code",
+          "stage",
+          "occurred_at"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      },
+      {
+        "fingerprint": "sha256:1a06b72562f5d277a675cbeaae7215f9aea611d5cabcbb5116c58704ca0036d2",
+        "columns": [
+          "run_id",
+          "sequence",
+          "task_id",
+          "event_type",
+          "role",
+          "request_key",
+          "attempt_key",
+          "ask_count",
+          "attempt_guard",
+          "outcome",
+          "counted",
+          "evidence_id",
+          "injection_signals",
+          "segment",
+          "reason_code",
+          "reach_refusal",
+          "requested_source",
+          "requested_capability",
+          "requested_host",
+          "stage",
+          "occurred_at"
+        ],
+        "firstSeen": "34766115321/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      },
+      {
+        "fingerprint": "sha256:97b6b490114c062e9034fc8bfa285f5043d809d426775b1f6a9ccb6181a4134e",
+        "columns": [
+          "run_id",
+          "sequence",
+          "task_id",
+          "event_type",
+          "role",
+          "request_key",
+          "attempt_key",
+          "ask_count",
+          "attempt_guard",
+          "outcome",
+          "counted",
+          "evidence_id",
+          "injection_signals",
+          "segment",
+          "reason_code",
+          "reach_refusal",
+          "requested_source",
+          "requested_capability",
+          "requested_host",
+          "bytes",
+          "bytes_recorded",
+          "ask_ordinal",
+          "resource_path",
+          "mechanism",
+          "content_digest",
+          "readable_chars",
+          "delivered_from",
+          "delivered_chars",
+          "delivery_cut",
+          "delivery_anchor",
+          "handoff_task_id",
+          "handoff_entry_id",
+          "stage",
+          "occurred_at"
+        ],
+        "firstSeen": "34995797200/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "runs.tsv": [
+      {
+        "fingerprint": "sha256:a351c5008b6cab4839bcbdffbd274a4bbe14de6fdf6cea9812cb335968923386",
+        "columns": [
+          "run_id",
+          "mission_id",
+          "state",
+          "card_revision",
+          "created_at",
+          "updated_at"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "sessions.tsv": [
+      {
+        "fingerprint": "sha256:cfb5d1555da2bf5e7d6f5553ef541f31d8f26472b1e8d33cb983b17ff4e051c4",
+        "columns": [
+          "execution_id",
+          "mission_id",
+          "project_id",
+          "player_id",
+          "agent_id",
+          "state"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "task-contracts.tsv": [
+      {
+        "fingerprint": "sha256:381b39f2f9403d4b8e75646303e2342e05e563395bb9f4d65d3bdeec7ff5dd59",
+        "columns": [
+          "contract_id",
+          "contract_revision",
+          "task_id",
+          "state",
+          "binding_digest",
+          "locked_at",
+          "locked_by_evaluator_id",
+          "created_at"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "tasks.tsv": [
+      {
+        "fingerprint": "sha256:b0311e3d157fb49921c908404e84b2bf59e4543403a4ece1453e35844c2d73f5",
+        "columns": [
+          "task_id",
+          "task_type",
+          "role",
+          "state",
+          "ordinal",
+          "parent_task_id"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "tool-invocations.tsv": [
+      {
+        "fingerprint": "sha256:c1950b87163ecab81bd22b561e8c614e3f4a85b97e8cdd00e2000faa166132e3",
+        "columns": [
+          "invocation_id",
+          "tool_id",
+          "state",
+          "requested_at"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "trajectory.tsv": [
+      {
+        "fingerprint": "sha256:5ff5b96717260b4f252beba6de9c876db978049167fca0405b13b6ec55ebffd6",
+        "columns": [
+          "event_kind",
+          "task_id",
+          "worker_id",
+          "provider_id",
+          "outcome",
+          "usd_micros",
+          "duration_ms",
+          "input_tokens",
+          "output_tokens",
+          "safe_facts",
+          "occurred_at"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ],
+    "worker-diagnostics.tsv": [
+      {
+        "fingerprint": "sha256:e01b876306a3b47e5ac9ceee6fa8da95781061dd7ef0254f93c99dfb409f4ace",
+        "columns": [
+          "run_id",
+          "sequence",
+          "task_id",
+          "role",
+          "stage",
+          "transport",
+          "provider",
+          "served_model",
+          "process_exit_code",
+          "timed_out",
+          "output_bytes_observed",
+          "output_byte_limit",
+          "output_truncated",
+          "json_detected",
+          "json_parseable",
+          "review_object_count",
+          "verdict_present",
+          "verdict_valid",
+          "summary_present",
+          "failure_shape",
+          "provider_http_status",
+          "service_http_status",
+          "process_started",
+          "process_pid_observed",
+          "first_output_observed",
+          "first_output_after_ms",
+          "elapsed_ms",
+          "timeout_ms",
+          "exit_observed",
+          "signal_sent",
+          "cleanup_completed",
+          "provider_request_started",
+          "packet_bytes",
+          "requested_model",
+          "response_id",
+          "validation_passed",
+          "validation_reason_code",
+          "validation_field",
+          "validation_claim_phrase",
+          "plan_attempts",
+          "review_attempts",
+          "review_reask_shape",
+          "dispatch_attempt",
+          "result_subtype",
+          "is_error",
+          "failure_reason",
+          "num_turns",
+          "tool_use_count",
+          "permission_denials",
+          "implementation_present",
+          "cost_usd_micros",
+          "cost_ceiling_usd_micros",
+          "cost_source",
+          "runtime_started",
+          "outcome",
+          "started_at",
+          "completed_at",
+          "contract_revision",
+          "contract_binding_digest",
+          "cost_basis",
+          "estimated_cost_usd_micros",
+          "input_tokens",
+          "cached_input_tokens",
+          "output_tokens",
+          "provider_status",
+          "incomplete_reason",
+          "reasoning_tokens",
+          "max_output_tokens",
+          "total_tokens",
+          "stream_usage_messages",
+          "stream_aborted_messages",
+          "stream_input_tokens",
+          "stream_output_tokens",
+          "stream_cache_read_input_tokens",
+          "stream_cache_creation_input_tokens",
+          "participation_present",
+          "participation_readable",
+          "participation_refusal",
+          "participation_asked_guidance",
+          "participation_asked_research",
+          "participation_asked_resume",
+          "evidence_count",
+          "event_type",
+          "julius_code",
+          "retryable",
+          "occurred_at"
+        ],
+        "firstSeen": "34753589938/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      },
+      {
+        "fingerprint": "sha256:e11c322b1ef8c745624aee25ad96556b052d07d7adc9b47bca63520c38549356",
+        "columns": [
+          "run_id",
+          "sequence",
+          "task_id",
+          "role",
+          "stage",
+          "transport",
+          "provider",
+          "served_model",
+          "process_exit_code",
+          "timed_out",
+          "output_bytes_observed",
+          "output_byte_limit",
+          "output_truncated",
+          "json_detected",
+          "json_parseable",
+          "review_object_count",
+          "verdict_present",
+          "verdict_valid",
+          "summary_present",
+          "failure_shape",
+          "provider_http_status",
+          "service_http_status",
+          "process_started",
+          "process_pid_observed",
+          "first_output_observed",
+          "first_output_after_ms",
+          "elapsed_ms",
+          "timeout_ms",
+          "exit_observed",
+          "signal_sent",
+          "cleanup_completed",
+          "provider_request_started",
+          "packet_bytes",
+          "requested_model",
+          "response_id",
+          "validation_passed",
+          "validation_reason_code",
+          "validation_field",
+          "validation_claim_phrase",
+          "plan_attempts",
+          "review_attempts",
+          "review_reask_shape",
+          "engine_api_calls",
+          "dispatch_attempt",
+          "result_subtype",
+          "is_error",
+          "failure_reason",
+          "num_turns",
+          "tool_use_count",
+          "permission_denials",
+          "implementation_present",
+          "cost_usd_micros",
+          "cost_ceiling_usd_micros",
+          "cost_source",
+          "runtime_started",
+          "outcome",
+          "started_at",
+          "completed_at",
+          "contract_revision",
+          "contract_binding_digest",
+          "cost_basis",
+          "estimated_cost_usd_micros",
+          "input_tokens",
+          "cached_input_tokens",
+          "output_tokens",
+          "provider_status",
+          "incomplete_reason",
+          "reasoning_tokens",
+          "max_output_tokens",
+          "total_tokens",
+          "stream_usage_messages",
+          "stream_aborted_messages",
+          "stream_input_tokens",
+          "stream_output_tokens",
+          "stream_cache_read_input_tokens",
+          "stream_cache_creation_input_tokens",
+          "participation_present",
+          "participation_readable",
+          "participation_refusal",
+          "participation_asked_guidance",
+          "participation_asked_research",
+          "participation_asked_resume",
+          "evidence_count",
+          "event_type",
+          "julius_code",
+          "retryable",
+          "occurred_at"
+        ],
+        "firstSeen": "34757974058/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      },
+      {
+        "fingerprint": "sha256:349f8e05525ea0a831d425ff58d724a98ad351f115dffb45932006113bed7349",
+        "columns": [
+          "run_id",
+          "sequence",
+          "task_id",
+          "role",
+          "stage",
+          "transport",
+          "provider",
+          "served_model",
+          "process_exit_code",
+          "timed_out",
+          "output_bytes_observed",
+          "output_byte_limit",
+          "output_truncated",
+          "json_detected",
+          "json_parseable",
+          "review_object_count",
+          "verdict_present",
+          "verdict_valid",
+          "summary_present",
+          "failure_shape",
+          "provider_http_status",
+          "service_http_status",
+          "process_started",
+          "process_pid_observed",
+          "first_output_observed",
+          "first_output_after_ms",
+          "elapsed_ms",
+          "timeout_ms",
+          "exit_observed",
+          "signal_sent",
+          "cleanup_completed",
+          "provider_request_started",
+          "packet_bytes",
+          "requested_model",
+          "response_id",
+          "validation_passed",
+          "validation_reason_code",
+          "validation_field",
+          "validation_claim_phrase",
+          "plan_attempts",
+          "review_attempts",
+          "review_reask_shape",
+          "engine_api_calls",
+          "executor_step",
+          "executor_refusal",
+          "executor_refusal_field",
+          "dispatch_attempt",
+          "result_subtype",
+          "is_error",
+          "failure_reason",
+          "num_turns",
+          "tool_use_count",
+          "permission_denials",
+          "implementation_present",
+          "cost_usd_micros",
+          "cost_ceiling_usd_micros",
+          "cost_source",
+          "runtime_started",
+          "outcome",
+          "started_at",
+          "completed_at",
+          "contract_revision",
+          "contract_binding_digest",
+          "cost_basis",
+          "estimated_cost_usd_micros",
+          "input_tokens",
+          "cached_input_tokens",
+          "output_tokens",
+          "provider_status",
+          "incomplete_reason",
+          "reasoning_tokens",
+          "max_output_tokens",
+          "total_tokens",
+          "stream_usage_messages",
+          "stream_aborted_messages",
+          "stream_input_tokens",
+          "stream_output_tokens",
+          "stream_cache_read_input_tokens",
+          "stream_cache_creation_input_tokens",
+          "participation_present",
+          "participation_readable",
+          "participation_refusal",
+          "participation_asked_guidance",
+          "participation_asked_research",
+          "participation_asked_resume",
+          "evidence_count",
+          "event_type",
+          "julius_code",
+          "retryable",
+          "occurred_at"
+        ],
+        "firstSeen": "34774471909/1",
+        "labels": [
+          "julius-paid-run-archive.v1"
+        ]
+      }
+    ]
+  }
+}
