@@ -14,6 +14,8 @@ wrap-around distances), one per surface family, each ALBEDO + NORMAL + ROUGHNESS
   ivory      wall stone: fine sandstone grain, very soft mottling, low relief
   roof       fish-scale tiles in offset rows, each scale its own tone, a shadow under every overlap
   gold       polished metal: near-flat normal with fine directional scratches, roughness 0.18-0.40 with smudges
+  ashlar     castle wall stone laid in courses (MQ05): running-bond blocks, fine joints with chamfered arrises the
+             sun can find, every block its own tone and a whisper of tilt; clean, pale, no grime
   macro      one 1024 px low-frequency map (R: brightness, G: roughness) laid at ~60 m to break repetition
 
 Albedos are NEUTRAL like the V2 set (the instance's BaseColor tint carries the colour): the linear mean is scaled to
@@ -240,6 +242,72 @@ def gold(n, rng):
     return alb, normal_from_height(height, 3.0), rough, mean
 
 
+def ashlar(n, rng, courses=8):
+    """Coursed ashlar (MQ05). One tile holds `courses` courses; laid at 4 m (TexScale 0.0025) a course is 50 cm and a
+    block 0.8-1.7 m. Image rows are world height under the wall projections, so courses run along image x. Every
+    course is cut into 3 or 4 blocks whose joints never sit within a fifth of a block of the joints below. Joints are
+    ~1.2 cm, a touch darker and rougher than the face; each block rises to its face over a ~2.5 cm chamfer, takes
+    its own tone (+/-4.5%), warmth and a slight tilt, and carries the ivory grain. Tiles in x by construction (block
+    lengths sum to the tile, offsets wrap) and in y (whole courses)."""
+    ch = n // courses
+    jw, cw = 3.0, 13.0                                   # joint half-width, chamfer width (px)
+    grain = spectral(n, 1.4, rng, lo=60.0)
+    fine = spectral(n, 1.9, rng, lo=12.0, hi=60.0)
+    mottle = spectral(n, 2.8, rng, lo=2.0, hi=16.0)
+    height = np.zeros((n, n))
+    lum = np.zeros((n, n))
+    tone = np.ones((n, n))
+    rough = np.zeros((n, n))
+    xs = np.arange(n)
+    prev_edges = None
+    for r in range(courses):
+        for _attempt in range(40):
+            k = int(rng.integers(3, 5))
+            w = rng.uniform(0.75, 1.25, k)
+            lengths = np.round(w / w.sum() * n).astype(int)
+            lengths[-1] = n - lengths[:-1].sum()
+            offset = int(rng.integers(0, n))
+            edges = (offset + np.concatenate([[0], np.cumsum(lengths)[:-1]])) % n
+            if prev_edges is None:
+                break
+            gap = np.abs(edges[:, None] - prev_edges[None, :])
+            gap = np.minimum(gap, n - gap)
+            if gap.min() > n / (k * 5.0):
+                break
+        prev_edges = edges
+        rel = (xs[:, None] - edges[None, :]) % n           # px from each block's start
+        bid = np.argmin(np.where(rel < lengths[None, :], rel, n + 1), axis=1)   # the block each column is in
+        start = edges[bid]
+        pos = (xs - start) % n
+        blen = lengths[bid].astype(float)
+        dx = np.minimum(pos, blen - pos)                    # px to the nearest vertical joint
+        fu = pos / blen
+        y0, y1 = r * ch, (r + 1) * ch if r < courses - 1 else n
+        yy = np.arange(y0, y1)[:, None] - y0
+        dy = np.minimum(yy + 0.5, (y1 - y0) - yy - 0.5)
+        fv = (yy + 0.5) / (y1 - y0)
+        d = np.minimum(dx[None, :], dy)
+        joint = 1.0 - smoothstep(jw - 1.0, jw + 1.0, d)
+        edge = smoothstep(jw, jw + cw, d)
+        u_tone = rng.uniform(-1, 1, k)[bid][None, :]
+        u_warm = rng.uniform(-1, 1, k)[bid][None, :]
+        u_rough = rng.uniform(-1, 1, k)[bid][None, :]
+        tilt_a = rng.uniform(-1, 1, k)[bid][None, :]
+        tilt_b = rng.uniform(-1, 1, k)[bid][None, :]
+        sl = (slice(y0, y1), slice(None))
+        height[sl] = 0.55 * edge + 0.020 * (tilt_a * (fu[None, :] - 0.5) + tilt_b * (fv - 0.5)) * edge
+        lum[sl] = (0.87 * (1.0 + 0.045 * u_tone)) * (0.955 + 0.045 * edge) * (1.0 - 0.20 * joint)
+        tone[sl] = 1.0 + 0.012 * u_warm
+        rough[sl] = 0.64 + 0.05 * u_rough + 0.16 * joint
+    height += 0.010 * grain + 0.016 * fine
+    lum += 0.018 * grain + 0.022 * fine + 0.015 * mottle
+    tone += 0.006 * mottle
+    warm = np.stack([tone * 1.006, np.ones_like(tone), (2.0 - tone) * 0.992], axis=-1)
+    alb, mean = neutral_albedo(lum, warm)
+    rough = np.clip(rough + 0.04 * grain + 0.03 * mottle, 0, 1)
+    return alb, normal_from_height(height, 12.0), rough, mean
+
+
 def macro(n, rng):
     a = spectral(n, 3.0, rng, lo=1.0, hi=10.0)
     b = spectral(n, 3.0, rng, lo=1.0, hi=10.0)
@@ -247,7 +315,9 @@ def macro(n, rng):
     return rgb
 
 
-FAMILIES = {"limestone": limestone, "cobble": cobble, "ivory": ivory, "roof": roof, "gold": gold}
+FAMILIES = {"limestone": limestone, "cobble": cobble, "ivory": ivory, "roof": roof, "gold": gold, "ashlar": ashlar}
+# seed order: the MQ01 sets and macro first, so adding a family never changes a texture already imported
+SEED_ORDER = ["limestone", "cobble", "ivory", "roof", "gold", "macro", "ashlar"]
 
 
 def main():
@@ -258,7 +328,7 @@ def main():
     side = os.path.join(out, "hd_textures.json")
     record = json.load(open(side)) if os.path.exists(side) else {"target_mean": TARGET_MEAN, "families": {}}
     for k, fam in enumerate(sorted(set(only))):
-        rng = np.random.default_rng(SEED + 101 * (list(FAMILIES) + ["macro"]).index(fam))
+        rng = np.random.default_rng(SEED + 101 * SEED_ORDER.index(fam))
         if fam == "macro":
             png(os.path.join(out, "T_HD_macro.png"), macro(1024, rng))
             record["families"]["macro"] = {"size": 1024}

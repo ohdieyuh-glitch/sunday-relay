@@ -14,7 +14,7 @@ WHAT THIS LAYER ADDS.
              crumpled gold with dark blotches, and the doors doubled the gold behind it (pvscreen).
   FORECOURT  plaza paving from the palace walkway to the dais, flanking ivory columns with gold
              finials, flower urns, and and nothing hung across the court (see the note in build()).
-  THE WALL   gold cornice trims across the arcade, climbing vines and roses along its base.
+  THE WALL   gold cornice trims across the arcade and roses along its base.
 
 MEASURED INPUTS. obstacles_palace.json (arcade r 912 at (300, 10769) z 0..1142; facade panels at
 y 10817 z 714..1785; gold-finial pedestals at (67, 9559), (130, 9527), (720, 9423)); ground z -14;
@@ -113,11 +113,9 @@ def build():
     for k, z in enumerate((ARCADE_TOP - 18.0, GROUND + 700.0)):
         actor("CorniceGold%d" % k, "kerb", (AXIS_X, WALL_Y - 12.0, z), ["MI_V2_Gold"], (14.9, 0.7, 0.8), collision="none")
 
-    # ---------------------------------------------------------------- vines and roses on the wall
-    for k, vx in enumerate((-470.0, 60.0, 540.0, 1070.0)):
-        if abs(vx - AXIS_X) < 450.0:
-            continue                                  # keep the portal clear
-        actor("Vine%d" % k, "vine_wall", (vx, WALL_Y - 30.0, GROUND + 40.0), ["MI_V2_LeafMid"], (1.3, 1.0, 1.9), collision="none")
+    # ---------------------------------------------------------------- roses along the wall
+    # No SM_vine_wall: at this scale its leaf clusters read as chains of bright green balls against the wall's
+    # coursed stone (mq05b, 2026-09-15). The rose bushes along the base stay.
     x = AXIS_X - 880.0
     while x <= AXIS_X + 880.0:
         if abs(x - AXIS_X) > 470.0:
@@ -147,7 +145,7 @@ def build():
     # NO LANTERN SWAG. GA03a hung SM_lantern_swag across the court: at this scale its lanterns are
     # solid gold drums at head height and they blocked the portal from every approach camera.
 
-    return {"pass": PASS, "title": "Palace entrance: gold filigree screen on a dais, forecourt paving, columns, urns, gold cornices, vines, roses",
+    return {"pass": PASS, "title": "Palace entrance: gold filigree screen on a dais, forecourt paving, columns, urns, gold cornices, roses",
             "folder": "Wonderland/Authored/GA03", "tags": ["V2_Castle"], "actors": actors, "batches": list(batches.values())}
 
 
