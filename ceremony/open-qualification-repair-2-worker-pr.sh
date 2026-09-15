@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Opens EXACTLY ONE pull request for the frozen reviewer-failure-truth candidate,
+# Opens EXACTLY ONE pull request for the frozen qualification-repair-2 candidate,
 # authored by the julius-worker GitHub App.
 #
 # Run this once, in the Codespace that holds JULIUS_WORKER_APP_PEM.
@@ -16,17 +16,17 @@
 set -euo pipefail
 
 REPO='ohdieyuh-glitch/sunday-relay'
-BRANCH='relay/julius-reviewer-failure-truth'
-BASE='8afb872d7a9e91569d9cb70457773bef887a5c56'
-HEAD='628527d3b8dacef33c4af199ff2d703cd2996a5d'
-TREE='e68d2922d9f825b935b6b851c365797e0c4e7724'
-COMMITS=1
+BRANCH='relay/julius-qualification-repair-2'
+BASE='44fd503a72993a34cd73c5cf948021cab4349218'
+HEAD='3a6c58d6f5944df141d4976204cb097cbc4e31e5'
+TREE='f4342e832ac72a146ce10730995374930d0bad82'
+COMMITS=4
 WORKER='julius-worker[bot]'
 # RESOLVED AGAINST THE SCRIPT, NOT THE WORKING DIRECTORY. The README says to run
 # this as `bash ceremony/open-...-pr.sh` from the repository root, where a bare
 # filename resolves to `./PR_BODY_...md` and is not there. Same class of fault as
 # the inline-Python trap: a runbook that does not match its own script.
-BODY_FILE="${PR_BODY_FILE:-$(dirname "$0")/PR_BODY_REVIEWER_FAILURE_TRUTH.md}"
+BODY_FILE="${PR_BODY_FILE:-$(dirname "$0")/PR_BODY_QUALIFICATION_REPAIR_2.md}"
 
 APP_ID="${JULIUS_WORKER_APP_ID:-${1:-}}"
 [ -n "$APP_ID" ] || { echo 'need the julius-worker App ID: export JULIUS_WORKER_APP_ID=<id> (or pass it as $1)' >&2; exit 2; }
