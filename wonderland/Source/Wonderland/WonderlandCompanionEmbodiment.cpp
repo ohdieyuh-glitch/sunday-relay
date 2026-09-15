@@ -272,7 +272,22 @@ void AWonderlandCompanionEmbodiment::Tick(float DeltaSeconds)
 	const APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
 	if (Pawn != nullptr)
 	{
-		const FVector Target = DesiredLocation(Pawn);
+		FVector Target = DesiredLocation(Pawn);
+		// OUT OF THE WALLS. Swept from the Dog's chest to where the companion's body would float, on the camera
+		// channel -- the same geometry that stops the follow camera -- so beside a wall or down a narrow lane the
+		// companion draws in toward the Dog instead of hovering inside the stone. The Dog itself never blocks.
+		if (UWorld* SweepWorld = GetWorld())
+		{
+			const FVector BodyLift(0.0, 0.0, BodyClearanceHeightUU);
+			FCollisionQueryParams Query(SCENE_QUERY_STAT(WonderlandCompanionFollow), false, this);
+			Query.AddIgnoredActor(Pawn);
+			FHitResult Hit;
+			if (SweepWorld->SweepSingleByChannel(Hit, Pawn->GetActorLocation(), Target + BodyLift, FQuat::Identity, ECC_Camera,
+				FCollisionShape::MakeSphere(BodyClearanceRadiusUU), Query) && !Hit.bStartPenetrating)
+			{
+				Target = Hit.Location - BodyLift;
+			}
+		}
 		FVector Location = GetActorLocation();
 		FRotator Facing = GetActorRotation();
 		if (!bHasSnapped || FVector::DistSquared(Location, Target) > FMath::Square(SnapDistanceUU))

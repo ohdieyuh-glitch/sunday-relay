@@ -33,6 +33,13 @@ import random
 
 VOXEL_UU = 2.5
 
+# DAYLIGHT EMISSIVE. Wonderland is lit by a physically based sun and exposed for it, so an unlit surface of
+# strength 2 is two candela per square metre -- black beside sunlit ivory (measured in PIE, 2026-09-15: every
+# glow part rendered black; a probe at x1/x30/x300/x3000 read correctly from x3000). Strengths below are authored
+# on a 0..10 artistic scale and multiplied by
+# this at write time; `--glow-scale` overrides it for exposure probes.
+GLOW_SCALE = 4000.0
+
 
 def normalise(v):
     length = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) or 1.0
@@ -201,6 +208,8 @@ class Figure:
             "voxel %.3f" % VOXEL_UU,
         ]
         for name, kind, rgb, strength in self.materials:
+            if kind == "glow":
+                strength *= GLOW_SCALE
             lines.append("material %s %s %.4f %.4f %.4f %.3f" % (name, kind, rgb[0], rgb[1], rgb[2], strength))
         for name, parent, pivot, motion, a, b in self.parts:
             extra = "" if a is None else (" %.3f" % a) + ("" if b is None else " %.3f" % b)
@@ -276,7 +285,7 @@ def build_ghost(skin_name, display):
     fig.material("pale", "glow", skin["pale"], 2.3)
     fig.material("gem", "glow", skin["gem"], 2.6)
     fig.material("wing", "glow", tuple(0.55 * w + 0.45 * b for w, b in zip(skin["wing"], skin["base"])), 1.35)
-    fig.material("halo", "add", skin["halo"], 0.9)
+    fig.material("halo", "glow", skin["halo"], 0.8)
     if skin_name == "blossom":
         fig.material("hair", "lit", (0.97, 0.80, 0.87))
 
@@ -452,7 +461,7 @@ def build_fable():
     fig.material("cyan", "glow", (0.36, 0.86, 1.0), 2.2)
     fig.material("wing", "glow", (0.46, 0.50, 1.0), 1.25)
     fig.material("wingpale", "glow", (0.74, 0.74, 1.0), 1.9)
-    fig.material("halo", "add", (0.45, 0.58, 1.0), 0.85)
+    fig.material("halo", "glow", (0.45, 0.58, 1.0), 0.8)
 
     fig.part("body", "-", (0.0, 0.0, 48.0), "none")
     fig.part("head", "body", (0.0, 0.0, 61.0), "head")
@@ -595,7 +604,11 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--out", default=os.path.join(here, "..", "Companions"))
+    parser.add_argument("--glow-scale", type=float, default=None, help="override GLOW_SCALE (exposure probes)")
     args = parser.parse_args()
+    global GLOW_SCALE
+    if args.glow_scale is not None:
+        GLOW_SCALE = args.glow_scale
     os.makedirs(args.out, exist_ok=True)
     outputs = [
         (lambda: build_ghost("aurum", "GPT 6 Astra"), "GPT6Astra.wlvox"),

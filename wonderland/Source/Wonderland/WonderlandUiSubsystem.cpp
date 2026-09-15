@@ -26,10 +26,10 @@ namespace
 	// and the Julius terminal's side lists (which start at 0.708), one at each edge, the LLM Companion's on
 	// the left under the HUD. Console variables, read every layout pass, so the panels can be placed in PIE.
 	TAutoConsoleVariable<FString> CVarCompanionPanelLeft(
-		TEXT("wl.Companion.PanelLeft"), TEXT("0.016 0.505 0.262 0.690"),
+		TEXT("wl.Companion.PanelLeft"), TEXT("0.016 0.487 0.262 0.700"),
 		TEXT("Anchors of the LLM Companion terminal: minX minY maxX maxY, fractions of the viewport."));
 	TAutoConsoleVariable<FString> CVarCompanionPanelRight(
-		TEXT("wl.Companion.PanelRight"), TEXT("0.738 0.505 0.984 0.690"),
+		TEXT("wl.Companion.PanelRight"), TEXT("0.738 0.487 0.984 0.700"),
 		TEXT("Anchors of the Jhinn AI Agent terminal: minX minY maxX maxY, fractions of the viewport."));
 
 	FAnchors ParseAnchors(const FString& Text, const FAnchors& Fallback)
@@ -147,15 +147,13 @@ void UWonderlandUiSubsystem::MountCompanionTerminals()
 	TSharedPtr<SWonderlandCompanionTerminal> Agent;
 	SAssignNew(Llm, SWonderlandCompanionTerminal)
 		.Title(Settings->LlmCompanionName)
-		.ClassLine(TEXT("LLM COMPANION · IMPORTED · PREVIEW"))
-		.Intro(TEXT("The LLM companion built for Wonderland."))
+		.Intro(TEXT("The LLM companion built\nfor Wonderland."))
 		.Accent(WonderlandUi::Srgb(0xF4, 0xF7, 0xFF))
 		.OnSubmit_Lambda([WeakThis](const FString& Text) { if (WeakThis.IsValid()) { WeakThis->HandleCompanionSubmit(0, Text); } })
 		.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
 	SAssignNew(Agent, SWonderlandCompanionTerminal)
 		.Title(Settings->AgentName)
-		.ClassLine(TEXT("JHINN AI AGENT · IMPORTED · PREVIEW"))
-		.Intro(TEXT("The AI coding agent built for Wonderland."))
+		.Intro(TEXT("The AI coding agent built\nfor Wonderland."))
 		.Accent(WonderlandUi::Srgb(0x5C, 0xDB, 0xFF))
 		.OnSubmit_Lambda([WeakThis](const FString& Text) { if (WeakThis.IsValid()) { WeakThis->HandleCompanionSubmit(1, Text); } })
 		.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
@@ -164,13 +162,13 @@ void UWonderlandUiSubsystem::MountCompanionTerminals()
 	CompanionLayer = SNew(SConstraintCanvas)
 		.Visibility(EVisibility::SelfHitTestInvisible)
 		+ SConstraintCanvas::Slot()
-		.Anchors(TAttribute<FAnchors>::CreateLambda([]() { return ParseAnchors(CVarCompanionPanelLeft.GetValueOnGameThread(), FAnchors(0.016f, 0.505f, 0.262f, 0.690f)); }))
+		.Anchors(TAttribute<FAnchors>::CreateLambda([]() { return ParseAnchors(CVarCompanionPanelLeft.GetValueOnGameThread(), FAnchors(0.016f, 0.487f, 0.262f, 0.700f)); }))
 		.Offset(FMargin(0.0f))
 		[
 			Llm.ToSharedRef()
 		]
 		+ SConstraintCanvas::Slot()
-		.Anchors(TAttribute<FAnchors>::CreateLambda([]() { return ParseAnchors(CVarCompanionPanelRight.GetValueOnGameThread(), FAnchors(0.738f, 0.505f, 0.984f, 0.690f)); }))
+		.Anchors(TAttribute<FAnchors>::CreateLambda([]() { return ParseAnchors(CVarCompanionPanelRight.GetValueOnGameThread(), FAnchors(0.738f, 0.487f, 0.984f, 0.700f)); }))
 		.Offset(FMargin(0.0f))
 		[
 			Agent.ToSharedRef()
