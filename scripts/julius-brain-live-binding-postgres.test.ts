@@ -82,7 +82,7 @@ suite('the prepared live Project Brain binding on a real PostgreSQL', () => {
       const handle = (await createJuliusProjectBrainService({ store: new JuliusBrainPostgresStore(brainPool), clock }).open({ brainId: binding.brainId, projectId: PROJECT, principal: juliusPrincipal('JULIUS', 'julius') }))!;
       const requirement = await handle.create('REQUIREMENT', { requirementClass: 'FUNCTIONAL', statement: 'Every admission is evidenced', priority: 'MUST', status: 'ACTIVE' }, { key: 'req', scope: { missionId: 'mission' } });
       expect(requirement.outcome).toBe('COMMITTED');
-      expect(await binding.checkpoint('drive ended COMPLETED')).toBe('COMMITTED');
+      expect(await binding.seal({ runId: RUN })).toMatchObject({ outcome: 'SEALED', preservation: { status: 'PRESERVED', evidence: { sealed: { expectedEntries: 2, writtenEntries: 2 } } } });
     } finally { await pool.end(); await brainPool.end(); }
 
     // A restarted process.
@@ -100,6 +100,7 @@ suite('the prepared live Project Brain binding on a real PostgreSQL', () => {
       const typed = entries.slice(v1.length);
       expect(typed).toHaveLength(3);
       expect(typed.every((entry) => entry.entryId.startsWith('brain2:') && !entry.entryId.includes('legacy:'))).toBe(true);
+      expect(await binding.preservation({ runId: RUN })).toMatchObject({ outcome: 'DERIVED', preservation: { status: 'PRESERVED' } });
       expect(reports.filter((report) => report.event === 'CONTEXT').map((report) => report.event === 'CONTEXT' && [report.mode, report.withheld])).toEqual(Array(3).fill(['FRESH', null]));
     } finally { await cold.end(); await coldBrain.end(); }
   }, 180_000);

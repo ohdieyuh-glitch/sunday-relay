@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { paidRunArchive } from '../../src/relay/mission/julius/julius-brain-archive-fixtures';
 import { importJuliusPaidRunArchive, juliusArchiveEntityId } from '../../src/relay/mission/julius/julius-brain-archive-import';
-import { juliusPrincipal } from '../../src/relay/mission/julius/julius-brain-contracts';
+import { juliusPrincipal, juliusWorkerPrincipal } from '../../src/relay/mission/julius/julius-brain-contracts';
 import { juliusBrainDraftFromLegacy } from '../../src/relay/mission/julius/julius-brain-legacy';
 import { createJuliusProjectBrainService } from '../../src/relay/mission/julius/julius-brain-service';
 import { createJuliusBrainMemoryStore, readAllJuliusBrainEntities, type JuliusBrainStore } from '../../src/relay/mission/julius/julius-brain-store';
@@ -177,7 +177,7 @@ describe('the prepared live Project Brain binding (not composed)', () => {
     const down = (): JuliusBrainStore => {
       const store = createJuliusBrainMemoryStore();
       const fail = async () => { throw new Error('connect ECONNREFUSED 10.0.0.5:5432'); };
-      return { ...store, createBrain: fail, loadBrain: fail, head: fail, commitGroup: fail };
+      return { ...store, createBrain: fail, loadBrain: fail, head: fail, commit: fail, commitGroup: fail, records: fail, entities: fail };
     };
     const fresh = harness({ store: down() });
     fresh.table.seed(append('seed:objective', 'OBJECTIVE', 'Implement the trust core'));
@@ -186,12 +186,10 @@ describe('the prepared live Project Brain binding (not composed)', () => {
     // Detached: v1 exactly as it was, and nothing pretends to have reached the Brain.
     expect(await binding.wrapWriter(fresh.table.writer).appendBrainEntry(append('brain:decision:1', 'DECISION', 'ACCEPT'))).toBe(true);
     expect(await binding.wrapContextReader(fresh.table.reader).brainEntriesForRun(RUN, PROJECT)).toEqual(await fresh.table.reader.brainEntriesForRun(RUN));
-    expect(await binding.checkpoint('drive ended')).toBe('NOT_ATTEMPTED');
-    expect(binding.preservation()).toEqual({
-      bootstrap: 'UNAVAILABLE', mirrorsWritten: 0, mirrorsNotWritten: 1, checkpoint: 'NOT_ATTEMPTED', preserved: false,
-      reasons: ['bootstrap UNAVAILABLE', '1 v1 entry was not written to the Brain', 'checkpoint NOT_ATTEMPTED'],
-    });
-    expect(fresh.reports.map((report) => report.event)).toEqual(['BRAIN_UNAVAILABLE', 'MIRROR', 'CONTEXT', 'CONTEXT', 'CONTEXT', 'CHECKPOINT']);
+    expect(await binding.seal({ runId: RUN })).toEqual({ outcome: 'NOT_SEALED', reason: 'BRAIN_DETACHED', detail: null });
+    // Nothing can be read, so nothing — least of all PRESERVED — can be claimed.
+    expect(await binding.preservation({ runId: RUN })).toEqual({ outcome: 'UNREADABLE', detail: 'connect ECONNREFUSED 10.0.0.5:5432' });
+    expect(fresh.reports.map((report) => report.event)).toEqual(['BRAIN_UNAVAILABLE', 'MIRROR', 'CONTEXT', 'CONTEXT', 'CONTEXT', 'SEAL']);
 
     const learning = harness({ store: down(), stateModeFor: (run, brainRunId) => ({ mode: 'LEARNING', missionId: run.missionId, runId: brainRunId, learnFrom: { runIds: null, kinds: ['FINDING'], requireVerified: true } }) });
     expect(await learning.bind().bootstrap({ runId: RUN })).toMatchObject({ outcome: 'UNAVAILABLE', requirement: 'REQUIRED', proceed: false });
@@ -207,28 +205,83 @@ describe('the prepared live Project Brain binding (not composed)', () => {
     await expect(harness({ runs: new Map() }).bind().bootstrap({ runId: RUN })).rejects.toThrow('julius_live_brain_run_not_found');
   });
 
-  it('preserved is claimed only after a verified bootstrap, every mirror written, and a committed checkpoint', async () => {
-    const flaky = createJuliusBrainMemoryStore();
+  it('PRESERVED is derived from the Brain: a verified open, every v1 entry held with its content, and a checkpoint covering the seal', async () => {
+    const h = harness();
+    h.table.seed(append('seed:objective', 'OBJECTIVE', 'Implement the trust core'));
+    const binding = h.bind();
+    await binding.bootstrap({ runId: RUN });
+    await binding.wrapWriter(h.table.writer).appendBrainEntry(append('brain:decision:build-1:ACCEPT:TASK_VERIFIED', 'DECISION', 'ACCEPT'));
+    const sealed = await binding.seal({ runId: RUN });
+    if (sealed.outcome !== 'SEALED') throw new Error(JSON.stringify(sealed));
+    expect(sealed.preservation).toMatchObject({
+      brainRunId: ATTEMPT, status: 'PRESERVED', reasons: [],
+      evidence: { opened: { juliusRunId: RUN, missionId: MISSION }, sealed: { expectedEntries: 2, writtenEntries: 2, missingEntries: 0 }, checkpoint: { matches: true }, recoveries: [] },
+    });
+    // Any process can read the same answer back from the Brain alone.
+    expect(await h.bind().preservation({ runId: RUN })).toEqual({ outcome: 'DERIVED', preservation: sealed.preservation });
+    // A restart of the same attempt replays its open; it is not a second, different run.
+    expect(await h.bind().bootstrap({ runId: RUN })).toMatchObject({ outcome: 'READY', created: false });
+    // The same attempt identity opened against a different accepted main is not this run's history.
+    const other = createLiveJuliusProjectBrainBinding({
+      store: h.store, clock, projectId: PROJECT, title: 'Julius', runs: { loadRun: async () => runRow(RUN) }, legacyEntries: async () => [],
+      brainRunIdFor: () => ATTEMPT, acceptedMainShaFor: () => 'f'.repeat(40),
+    });
+    expect(await other.bootstrap({ runId: RUN })).toMatchObject({ outcome: 'REFUSED', proceed: true });
+  });
+
+  it('a failed final checkpoint cannot claim PRESERVED', async () => {
+    const memory = createJuliusBrainMemoryStore();
+    // The checkpoint's commit fails; everything else commits.
+    const store: JuliusBrainStore = { ...memory, commit: async (input) => { if (input.drafts.some((draft) => draft.kind === 'CHECKPOINT')) throw new Error('terminating connection due to administrator command'); return memory.commit(input); } };
+    const h = harness({ store });
+    const binding = h.bind();
+    await binding.bootstrap({ runId: RUN });
+    await binding.wrapWriter(h.table.writer).appendBrainEntry(append('brain:decision:build-1:ACCEPT:TASK_VERIFIED', 'DECISION', 'ACCEPT'));
+    expect(await binding.seal({ runId: RUN })).toEqual({ outcome: 'NOT_SEALED', reason: 'UNAVAILABLE', detail: 'terminating connection due to administrator command' });
+    const read = await binding.preservation({ runId: RUN });
+    expect(read).toMatchObject({ outcome: 'DERIVED', preservation: { status: 'PARTIALLY_PRESERVED', evidence: { sealed: { missingEntries: 0 }, checkpoint: null }, reasons: ['no checkpoint was committed for the run'] } });
+  });
+
+  it('a v1 write that never reached the Brain, or reached it with other content, cannot claim PRESERVED', async () => {
+    const memory = createJuliusBrainMemoryStore();
     let up = true;
-    const outage = () => { if (!up) throw new Error('terminating connection due to administrator command'); };
-    const store: JuliusBrainStore = {
-      ...flaky,
-      commit: async (input) => { outage(); return flaky.commit(input); },
-      commitGroup: async (input) => { outage(); return flaky.commitGroup(input); },
-    };
+    const store: JuliusBrainStore = { ...memory, commit: async (input) => { if (!up) throw new Error('connection terminated'); return memory.commit(input); } };
     const h = harness({ store });
     const binding = h.bind();
     await binding.bootstrap({ runId: RUN });
     const writer = binding.wrapWriter(h.table.writer);
-    await writer.appendBrainEntry(append('brain:decision:1', 'DECISION', 'ACCEPT'));
-    expect(await binding.checkpoint('drive ended COMPLETED')).toBe('COMMITTED');
-    expect(binding.preservation()).toMatchObject({ bootstrap: 'READY', mirrorsWritten: 1, mirrorsNotWritten: 0, checkpoint: 'COMMITTED', preserved: true, reasons: [] });
-
-    // The Brain goes away mid-run: the v1 write still succeeds, the mirror does not, and nothing claims otherwise.
+    await writer.appendBrainEntry(append('brain:decision:build-1:REPAIR:BLOCKING_FINDINGS', 'DECISION', 'REPAIR'));
+    // The Brain goes away for one write: v1 still has it, the Brain does not.
     up = false;
-    expect(await writer.appendBrainEntry(append('brain:decision:2', 'DECISION', 'REPAIR'))).toBe(true);
-    expect(await binding.checkpoint('drive ended FAILED')).toBe('UNAVAILABLE');
-    expect(binding.preservation()).toMatchObject({ mirrorsWritten: 1, mirrorsNotWritten: 1, checkpoint: 'UNAVAILABLE', preserved: false });
+    expect(await writer.appendBrainEntry(append('brain:decision:build-1:ACCEPT:TASK_VERIFIED', 'DECISION', 'ACCEPT'))).toBe(true);
+    up = true;
+    // And one v1 row whose content the Brain holds differently (a mirror of an older text).
+    h.table.rows.push({ ...append('brain:guidance-request:build-1', 'HANDOFF', 'use the ledger'), occurredAt: '2026-09-15T10:00:00.000Z' });
+    const handle = (await createJuliusProjectBrainService({ store: memory, clock }).open({ brainId: binding.brainId, projectId: PROJECT, principal: juliusPrincipal('JULIUS', 'julius') }))!;
+    await handle.commit([juliusBrainDraftFromLegacy({ append: append('brain:guidance-request:build-1', 'HANDOFF', 'use the old path'), missionId: MISSION, brainRunId: ATTEMPT })]);
+
+    const sealed = await binding.seal({ runId: RUN });
+    if (sealed.outcome !== 'SEALED') throw new Error(JSON.stringify(sealed));
+    expect(sealed.preservation).toMatchObject({
+      status: 'PARTIALLY_PRESERVED', evidence: { sealed: { expectedEntries: 3, writtenEntries: 1, missingEntries: 2 }, checkpoint: { matches: true } },
+      reasons: ["2 of the run's 3 v1 entries did not reach the Brain"],
+    });
+    const seal = (await readAllJuliusBrainEntities(memory, binding.brainId, PROJECT)).find((state) => state.entityId === `run-sealed:${ATTEMPT}`)!;
+    expect((seal.body.facts as { missingEntryIds: string }).missingEntryIds).toBe('brain:decision:build-1:ACCEPT:TASK_VERIFIED,brain:guidance-request:build-1');
+  });
+
+  it('evidence a lesser principal wrote is not evidence', async () => {
+    const h = harness();
+    const binding = h.bind();
+    await binding.bootstrap({ runId: RUN });
+    const coder = (await createJuliusProjectBrainService({ store: h.store, clock }).open({ brainId: binding.brainId, projectId: PROJECT, principal: juliusWorkerPrincipal('coder', 'CODING_AGENT') }))!;
+    const forged = await coder.create('TRACE', { traceClass: 'LIFECYCLE', summary: 'sealed, trust me', facts: { expectedEntries: 0, writtenEntries: 0 } }, { key: 'forged-seal', entityId: `run-sealed:${ATTEMPT}`, scope: { missionId: MISSION, runId: ATTEMPT } });
+    expect(forged.outcome).toBe('COMMITTED');
+    // Julius cannot seal over it, and the forged record never counts.
+    expect(await binding.seal({ runId: RUN })).toMatchObject({ outcome: 'NOT_SEALED', reason: 'SEAL_REFUSED' });
+    const read = await binding.preservation({ runId: RUN });
+    expect(read).toMatchObject({ outcome: 'DERIVED', preservation: { status: 'PARTIALLY_PRESERVED', evidence: { sealed: null } } });
+    expect(read.outcome === 'DERIVED' && read.preservation.reasons).toContain('a run-sealed record exists that Julius did not write; it is not evidence');
   });
 
   it('two paid attempts of one mission contract are two Brain runs, though their Julius run and v1 entry ids are identical', async () => {
@@ -262,13 +315,14 @@ describe('the prepared live Project Brain binding (not composed)', () => {
     await expect(harness({ store, brainRunId: 'not a valid id' }).bind().bootstrap({ runId: RUN })).rejects.toThrow('julius_live_brain_run_id_invalid');
   });
 
-  it('a checkpoint pins the verified state the next bootstrap verifies against', async () => {
+  it('the seal checkpoint pins the verified state the next bootstrap verifies against; a run never bootstrapped cannot be sealed', async () => {
     const h = harness();
     const binding = h.bind();
     h.table.seed(append('seed:objective', 'OBJECTIVE', 'Implement the trust core'));
     await binding.bootstrap({ runId: RUN });
-    expect(await binding.checkpoint('drive ended COMPLETED')).toBe('COMMITTED');
+    expect(await binding.seal({ runId: RUN })).toMatchObject({ outcome: 'SEALED', preservation: { status: 'PRESERVED' } });
     expect(await h.bind().bootstrap({ runId: RUN })).toEqual({ outcome: 'READY', created: false, requirement: 'ADDITIVE', proceed: true });
-    expect(await harness().bind().checkpoint('no brain yet')).toBe('REFUSED');
+    expect(await harness().bind().seal({ runId: RUN })).toEqual({ outcome: 'NOT_SEALED', reason: 'NOT_BOOTSTRAPPED', detail: null });
+    expect(await harness().bind().preservation({ runId: RUN })).toMatchObject({ outcome: 'DERIVED', preservation: { status: 'NOT_PRESERVED' } });
   });
 });

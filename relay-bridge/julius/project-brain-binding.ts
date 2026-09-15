@@ -1,11 +1,20 @@
-import { isJuliusBrainId, juliusPrincipal, juliusWorkerPrincipal } from '../../src/relay/mission/julius/julius-brain-contracts';
+import { canonicalJuliusBrainJson, isJuliusBrainId, juliusPrincipal, juliusWorkerPrincipal } from '../../src/relay/mission/julius/julius-brain-contracts';
 import { resumeJuliusBrain } from '../../src/relay/mission/julius/julius-brain-export';
-import { backfillJuliusBrainFromLegacy, createJuliusBrainMirroringWriter, type JuliusBrainMirrorReport } from '../../src/relay/mission/julius/julius-brain-legacy';
+import { backfillJuliusBrainFromLegacy, createJuliusBrainMirroringWriter, juliusBrainDraftFromLegacy, type JuliusBrainMirrorReport } from '../../src/relay/mission/julius/julius-brain-legacy';
+import {
+  deriveJuliusBrainRunPreservation,
+  juliusRunOpenedBody,
+  juliusRunOpenedEntityId,
+  juliusRunPreservedCheckpointLabel,
+  juliusRunSealedBody,
+  juliusRunSealedEntityId,
+  type JuliusBrainRunPreservation,
+} from '../../src/relay/mission/julius/julius-brain-preservation';
 import type { JuliusBrainEntityState } from '../../src/relay/mission/julius/julius-brain-projection';
 import { juliusBrainContextAsEntries } from '../../src/relay/mission/julius/julius-brain-query';
 import { createJuliusProjectBrainService, defaultJuliusBrainReadGrant, type JuliusBrainHandle } from '../../src/relay/mission/julius/julius-brain-service';
 import { compileJuliusBrainContextForMode, type JuliusBrainStateModePolicy } from '../../src/relay/mission/julius/julius-brain-state-modes';
-import { readAllJuliusBrainEntities, type JuliusBrainStore } from '../../src/relay/mission/julius/julius-brain-store';
+import { readAllJuliusBrainEntities, readAllJuliusBrainRecords, type JuliusBrainStore } from '../../src/relay/mission/julius/julius-brain-store';
 import type { JuliusBrainEntry, JuliusWorkerRole } from '../../src/relay/mission/julius/julius-runtime';
 import type { JuliusBrainAppend, JuliusBrainWriter, JuliusClock, JuliusRunRow, JuliusRunWriter, JuliusRuntimeReader } from '../../src/relay/mission/julius/julius-runtime-ports';
 import { juliusLegacyAppendAsStored } from '../../src/relay/persistence/julius-brain-legacy-postgres';
@@ -31,7 +40,10 @@ import { juliusLegacyAppendAsStored } from '../../src/relay/persistence/julius-b
  *                      run's STATE MODE admits — appended after v1's own entries
  *                      so the v1 compiler, which stops at the first entry that
  *                      overflows, always drops v2 before anything it had before
- *   checkpoint         pin the verified state at the end of a drive
+ *   seal               at the end of a drive: record how many of the run's v1
+ *                      entries the Brain holds with the right content, then
+ *                      checkpoint — and answer the run's preservation, derived
+ *                      from the Brain (`julius-brain-preservation.ts`)
  *
  * THE BRAIN RUN IS NAMED BY THE COMPOSITION ROOT, NEVER DEFAULTED. The Julius
  * run id is derived from the mission contract and repeats across paid attempts;
@@ -50,11 +62,13 @@ import { juliusLegacyAppendAsStored } from '../../src/relay/persistence/julius-b
  * CONTINUATION, LEARNING or REGRESSION run exists to use prior state, so the
  * Brain is REQUIRED and the run must not start. Either way the binding DETACHES
  * for the rest of the run — no mirror into a Brain it could not verify or reach,
- * no typed context — and `preservation()` says the run is NOT preserved. The
- * paid-run archive import is how such a run reaches the Brain later.
+ * no typed context, no seal — so the run's derived preservation can never be
+ * PRESERVED. The paid-run archive recovery is how such a run reaches the Brain
+ * later.
  *
- * PRESERVED IS A FACT, NOT AN INTENTION: only a verified bootstrap, every
- * mirror written, and a committed checkpoint make `preserved: true`.
+ * PRESERVED IS A FACT READ FROM THE BRAIN, NOT A COUNTER IN THIS PROCESS: a
+ * verified bootstrap (`run-opened`), every v1 entry held with the right content
+ * (`run-sealed`), and a checkpoint that covers the seal and re-derives.
  *
  * TYPED CONTEXT IS ALL OR NOTHING PER ROLE. If the budget would cut the
  * mission's authority, the role gets none of the v2 entries and the refusal
@@ -75,14 +89,14 @@ export type JuliusLiveBrainBootstrap =
   | { readonly outcome: 'REFUSED'; readonly problems: readonly string[]; readonly requirement: JuliusBrainRequirement; readonly proceed: boolean }
   | { readonly outcome: 'UNAVAILABLE'; readonly detail: string; readonly requirement: JuliusBrainRequirement; readonly proceed: boolean };
 
-export interface JuliusLiveBrainPreservation {
-  readonly bootstrap: 'NOT_RUN' | JuliusLiveBrainBootstrap['outcome'];
-  readonly mirrorsWritten: number;
-  readonly mirrorsNotWritten: number;
-  readonly checkpoint: 'NOT_RUN' | 'COMMITTED' | 'REFUSED' | 'UNAVAILABLE' | 'NOT_ATTEMPTED';
-  readonly preserved: boolean;
-  readonly reasons: readonly string[];
-}
+export type JuliusLiveBrainSeal =
+  | { readonly outcome: 'SEALED'; readonly preservation: JuliusBrainRunPreservation }
+  | { readonly outcome: 'NOT_SEALED'; readonly reason: 'BRAIN_DETACHED' | 'NOT_BOOTSTRAPPED' | 'SEAL_REFUSED' | 'UNAVAILABLE'; readonly detail: string | null };
+
+export type JuliusLiveBrainPreservationRead =
+  | { readonly outcome: 'DERIVED'; readonly preservation: JuliusBrainRunPreservation }
+  /** The Brain could not be read: nothing can be claimed, least of all PRESERVED. */
+  | { readonly outcome: 'UNREADABLE'; readonly detail: string };
 
 export function juliusProjectBrainIdFor(projectId: string): string {
   const brainId = `brain:${projectId}`;
@@ -102,7 +116,7 @@ export type JuliusLiveBrainReport =
     readonly withheld: null | 'AUTHORITY_TRUNCATED' | 'RUN_NOT_FOUND' | `STATE_MODE_REFUSED:${string}` | 'FAILED' | 'BRAIN_DETACHED';
     readonly detail: string | null;
   }
-  | { readonly event: 'CHECKPOINT'; readonly label: string; readonly outcome: 'COMMITTED' | 'REFUSED' | 'UNAVAILABLE' | 'NOT_ATTEMPTED'; readonly detail: string | null };
+  | { readonly event: 'SEAL'; readonly runId: string; readonly outcome: JuliusLiveBrainSeal['outcome']; readonly status: JuliusBrainRunPreservation['status'] | null; readonly detail: string | null };
 
 export interface LiveJuliusProjectBrainBinding {
   readonly brainId: string;
@@ -110,8 +124,8 @@ export interface LiveJuliusProjectBrainBinding {
   bootstrap(input: { readonly runId: string }): Promise<JuliusLiveBrainBootstrap>;
   wrapWriter(inner: JuliusBrainWriter): JuliusBrainWriter;
   wrapContextReader(inner: Pick<JuliusRuntimeReader, 'brainEntriesForRun'>): Pick<JuliusRuntimeReader, 'brainEntriesForRun'>;
-  checkpoint(label: string): Promise<JuliusLiveBrainPreservation['checkpoint']>;
-  preservation(): JuliusLiveBrainPreservation;
+  seal(input: { readonly runId: string }): Promise<JuliusLiveBrainSeal>;
+  preservation(input: { readonly runId: string }): Promise<JuliusLiveBrainPreservationRead>;
 }
 
 export function createLiveJuliusProjectBrainBinding(deps: {
@@ -124,6 +138,8 @@ export function createLiveJuliusProjectBrainBinding(deps: {
   readonly legacyEntries: (runId: string, projectId: string) => Promise<readonly JuliusBrainAppend[]>;
   /** The Brain run this Julius run is: for a paid run, its workflow run and attempt. Required — there is no safe default. */
   readonly brainRunIdFor: (run: JuliusRunRow) => string;
+  /** The accepted main commit the run executes, recorded when the run is opened; null when not known here. */
+  readonly acceptedMainShaFor?: (run: JuliusRunRow) => string | null;
   readonly stateModeFor?: (run: JuliusRunRow, brainRunId: string) => JuliusBrainStateModePolicy;
   readonly contextBudgetCharacters?: number;
   readonly onReport?: (report: JuliusLiveBrainReport) => void;
@@ -139,20 +155,13 @@ export function createLiveJuliusProjectBrainBinding(deps: {
     return id;
   };
   const firstLine = (error: unknown) => (error instanceof Error ? error.message.split('\n')[0]!.slice(0, 300) : 'unknown');
-  const state = {
-    bootstrap: 'NOT_RUN' as JuliusLiveBrainPreservation['bootstrap'],
-    detached: false,
-    mirrorsWritten: 0,
-    mirrorsNotWritten: 0,
-    checkpoint: 'NOT_RUN' as JuliusLiveBrainPreservation['checkpoint'],
-  };
-  const report = (value: JuliusLiveBrainReport) => {
-    if (value.event === 'MIRROR') {
-      if (value.outcome === 'MIRRORED' || value.outcome === 'DUPLICATE') state.mirrorsWritten += 1;
-      else state.mirrorsNotWritten += 1;
-    }
-    deps.onReport?.(value);
-  };
+  const state = { bootstrapped: false, detached: false };
+  const report = (value: JuliusLiveBrainReport) => deps.onReport?.(value);
+  const derive = async (brainRunId: string): Promise<JuliusBrainRunPreservation> => deriveJuliusBrainRunPreservation({
+    brainId, brainRunId,
+    records: await readAllJuliusBrainRecords(deps.store, brainId, deps.projectId),
+    entities: await readAllJuliusBrainEntities(deps.store, brainId, deps.projectId),
+  });
 
   let handle: JuliusBrainHandle | null = null;
   const open = async (): Promise<JuliusBrainHandle | null> => {
@@ -184,7 +193,6 @@ export function createLiveJuliusProjectBrainBinding(deps: {
         if (!created) {
           const resume = await resumeJuliusBrain(deps.store, brainId, deps.projectId);
           if (resume.status !== 'VERIFIED') {
-            state.bootstrap = 'REFUSED';
             state.detached = true;
             report({ event: 'BOOTSTRAP_REFUSED', brainId, runId, problems: resume.problems, requirement });
             return { outcome: 'REFUSED', problems: resume.problems, requirement, proceed };
@@ -193,12 +201,22 @@ export function createLiveJuliusProjectBrainBinding(deps: {
         const target = (await open())!;
         const entries = (await deps.legacyEntries(runId, deps.projectId)).map(juliusLegacyAppendAsStored);
         const backfill = await backfillJuliusBrainFromLegacy({ handle: target, missionId: run.missionId, brainRunId, entries });
-        state.mirrorsNotWritten += backfill.refused.length;
-        state.bootstrap = 'READY';
+        // Durable evidence that this run opened against a VERIFIED Brain. A restart of the same attempt replays it.
+        const openedId = juliusRunOpenedEntityId(brainRunId);
+        const opened = await target.create('TRACE', juliusRunOpenedBody({ brainRunId, juliusRunId: run.runId, missionId: run.missionId, acceptedMainSha: deps.acceptedMainShaFor?.(run) ?? null }), {
+          key: openedId, entityId: openedId, scope: { missionId: run.missionId, runId: brainRunId },
+        });
+        if (opened.outcome === 'REFUSED') {
+          // The same attempt identity, opened before with different facts: not this run's history to extend.
+          state.detached = true;
+          const problems = [`run ${brainRunId} was opened before with different facts (${opened.reasonCode})`];
+          report({ event: 'BOOTSTRAP_REFUSED', brainId, runId, problems, requirement });
+          return { outcome: 'REFUSED', problems, requirement, proceed };
+        }
+        state.bootstrapped = true;
         report({ event: 'BOOTSTRAPPED', brainId, runId, created, mirrored: backfill.mirrored, duplicates: backfill.duplicates, refused: backfill.refused.length });
         return { outcome: 'READY', created, requirement, proceed: true };
       } catch (error) {
-        state.bootstrap = 'UNAVAILABLE';
         state.detached = true;
         report({ event: 'BRAIN_UNAVAILABLE', brainId, runId, detail: firstLine(error), requirement });
         return { outcome: 'UNAVAILABLE', detail: firstLine(error), requirement, proceed };
@@ -273,39 +291,48 @@ export function createLiveJuliusProjectBrainBinding(deps: {
       };
     },
 
-    async checkpoint(label) {
-      if (state.detached) {
-        state.checkpoint = 'NOT_ATTEMPTED';
-        report({ event: 'CHECKPOINT', label, outcome: 'NOT_ATTEMPTED', detail: 'brain_detached' });
-        return 'NOT_ATTEMPTED';
-      }
+    async seal({ runId }) {
+      const refuse = (reason: 'BRAIN_DETACHED' | 'NOT_BOOTSTRAPPED' | 'SEAL_REFUSED' | 'UNAVAILABLE', detail: string | null): JuliusLiveBrainSeal => {
+        report({ event: 'SEAL', runId, outcome: 'NOT_SEALED', status: null, detail: detail ?? reason });
+        return { outcome: 'NOT_SEALED', reason, detail };
+      };
+      if (state.detached) return refuse('BRAIN_DETACHED', null);
+      if (!state.bootstrapped) return refuse('NOT_BOOTSTRAPPED', null);
       try {
-        const target = await open();
-        if (target === null) {
-          state.checkpoint = 'REFUSED';
-          report({ event: 'CHECKPOINT', label, outcome: 'REFUSED', detail: 'brain_not_found' });
-          return 'REFUSED';
-        }
-        const result = await target.checkpoint(label);
-        state.checkpoint = result.outcome;
-        report({ event: 'CHECKPOINT', label, outcome: result.outcome, detail: result.outcome === 'REFUSED' ? `${result.reasonCode}: ${result.detail}` : null });
-        return result.outcome;
+        const run = await deps.runs.loadRun(runId, deps.projectId);
+        if (run === null) throw new Error('julius_live_brain_run_not_found');
+        const brainRunId = brainRunOf(run);
+        const target = (await open())!;
+        // Every v1 entry the run wrote, as the Brain must hold it: same id, same kind, same content, this run.
+        const expected = (await deps.legacyEntries(runId, deps.projectId)).map(juliusLegacyAppendAsStored)
+          .map((append) => ({ entryId: append.entryId, draft: juliusBrainDraftFromLegacy({ append, missionId: run.missionId, brainRunId }) }));
+        const held = new Map((await readAllJuliusBrainEntities(deps.store, brainId, deps.projectId)).map((entity) => [entity.entityId, entity]));
+        const missing = expected.filter(({ draft }) => {
+          const entity = held.get(draft.entityId!);
+          return entity === undefined || entity.kind !== draft.kind || entity.scope.runId !== brainRunId || canonicalJuliusBrainJson(entity.body) !== canonicalJuliusBrainJson(draft.body);
+        });
+        const sealedId = juliusRunSealedEntityId(brainRunId);
+        const sealed = await target.create('TRACE', juliusRunSealedBody({
+          brainRunId, expectedEntries: expected.length, writtenEntries: expected.length - missing.length, missingEntryIds: missing.map((item) => item.entryId),
+        }), { key: sealedId, entityId: sealedId, scope: { missionId: run.missionId, runId: brainRunId } });
+        if (sealed.outcome === 'REFUSED') return refuse('SEAL_REFUSED', `${sealed.reasonCode}: ${sealed.detail}`);
+        await target.checkpoint(juliusRunPreservedCheckpointLabel(brainRunId));
+        const preservation = await derive(brainRunId);
+        report({ event: 'SEAL', runId, outcome: 'SEALED', status: preservation.status, detail: preservation.reasons.join('; ') || null });
+        return { outcome: 'SEALED', preservation };
       } catch (error) {
-        state.checkpoint = 'UNAVAILABLE';
-        report({ event: 'CHECKPOINT', label, outcome: 'UNAVAILABLE', detail: firstLine(error) });
-        return 'UNAVAILABLE';
+        return refuse('UNAVAILABLE', firstLine(error));
       }
     },
 
-    preservation() {
-      const reasons: string[] = [];
-      if (state.bootstrap !== 'READY') reasons.push(`bootstrap ${state.bootstrap}`);
-      if (state.mirrorsNotWritten > 0) reasons.push(`${state.mirrorsNotWritten} v1 entr${state.mirrorsNotWritten === 1 ? 'y was' : 'ies were'} not written to the Brain`);
-      if (state.checkpoint !== 'COMMITTED') reasons.push(`checkpoint ${state.checkpoint}`);
-      return {
-        bootstrap: state.bootstrap, mirrorsWritten: state.mirrorsWritten, mirrorsNotWritten: state.mirrorsNotWritten,
-        checkpoint: state.checkpoint, preserved: reasons.length === 0, reasons,
-      };
+    async preservation({ runId }) {
+      try {
+        const run = await deps.runs.loadRun(runId, deps.projectId);
+        if (run === null) throw new Error('julius_live_brain_run_not_found');
+        return { outcome: 'DERIVED', preservation: await derive(brainRunOf(run)) };
+      } catch (error) {
+        return { outcome: 'UNREADABLE', detail: firstLine(error) };
+      }
     },
   };
 }

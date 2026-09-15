@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **187 production files** across 20/20 subsystems (2 roots, 141 traced, 31 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **188 production files** across 20/20 subsystems (2 roots, 141 traced, 32 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -44,7 +44,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 15 | 4 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 7 | 1 |
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 2 | 0 |
-| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 23 | 7 |
+| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 24 | 7 |
 | live composition (relay-bridge/julius/) | other | 5 | 3 |
 | live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 12 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 0 |
@@ -99,6 +99,7 @@ The provider-neutral kernel: mission states and the transition table, tasks, evi
 | `src/relay/mission/julius/julius-brain-export.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-legacy.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-policy.ts` | not composed by the live root | — |
+| `src/relay/mission/julius/julius-brain-preservation.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-projection.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-query.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-retrieval.ts` | not composed by the live root | — |
@@ -449,6 +450,7 @@ Production Julius modules that implement a Julius port but are not reached from 
 | `src/relay/mission/julius/julius-brain-legacy.ts` | Project Brain v2: the JuliusBrainWriter decorator that mirrors the live pipeline's v1 entries into the typed ledger, and its backfill; a composition root wraps the store with it once the qualification permits wiring changes |
 | `src/relay/mission/julius/julius-brain-archive-import.ts` | Project Brain v2: the translation boundary from the temporary paid-run archive export (julius-paid-run-archive-export.v1) to canonical Brain records — validated, sealed-hash checked, atomic, idempotent, provenance-preserving; not yet composed |
 | `src/relay/mission/julius/julius-brain-state-modes.ts` | Project Brain v2: FRESH / CONTINUATION / LEARNING / REGRESSION retrieval authority over retained Brain state; not yet composed by the live root |
+| `src/relay/mission/julius/julius-brain-preservation.ts` | Project Brain v2: whether a run is PRESERVED, PARTIALLY_PRESERVED or NOT_PRESERVED, derived only from durable Julius-written evidence in the Brain (run-opened, run-sealed, a re-deriving checkpoint covering the seal); not yet composed by the live root |
 | `src/relay/mission/julius/julius-brain-carry.ts` | Project Brain v2: the TEMPORARY carry between disposable jobs until the dedicated Brain database exists — an HMAC-sealed, lineage-checked export with its artifact bytes, and the journal that claims preserved only after the upload is confirmed; a stopgap, never the persistence architecture; not composed |
 | `src/relay/mission/julius/julius-brain-api.ts` | Project Brain v2: the transport-agnostic API contract for a future editable Brain UI and the bridge — overview with per-caller editability, history, provenance, context, governed user edits, export; not yet mounted |
 | `src/relay/mission/julius/julius-brain-environment.ts` | Project Brain v2: evaluation sessions — the scoped snapshot, grants and submission checks a future GVE environment uses; not yet composed |
