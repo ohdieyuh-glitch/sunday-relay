@@ -33,6 +33,35 @@ import type { JuliusBrainAppend, JuliusBrainWriter } from './julius-runtime-port
  * and dressing prose up as a typed finding would claim fields nobody observed.
  */
 
+/**
+ * ONE VERIFICATION DECISION, WHICHEVER PATH RECORDED IT. The runtime writes a
+ * v1 Brain entry for every verification decision as
+ * `brain:decision:<taskId>:<action>:<reasonCode>` (`julius-task-pipeline.ts`),
+ * and the paid-run archive exports the decision itself (target task, verdict,
+ * reason). Both reduce to this key, so a decision reached by the live mirror
+ * and by an archive import is recognised as the same logical fact.
+ */
+export const juliusVerificationDecisionKey = (taskId: string, action: string, reasonCode: string): string =>
+  `verification-decision:${taskId}:${action}:${reasonCode}`;
+
+const DECISION_ENTRY_PREFIX = 'brain:decision:';
+
+/**
+ * A v1 decision entry id, read from the right: the action and reason code are
+ * closed tokens without `:`, the task id before them may contain `:`. Anything
+ * that does not fit that grammar is not a decision entry — null, never a guess.
+ */
+export function parseJuliusV1DecisionEntryId(entryId: string): { readonly taskId: string; readonly action: string; readonly reasonCode: string } | null {
+  if (!entryId.startsWith(DECISION_ENTRY_PREFIX)) return null;
+  const parts = entryId.slice(DECISION_ENTRY_PREFIX.length).split(':');
+  if (parts.length < 3) return null;
+  const reasonCode = parts.pop()!;
+  const action = parts.pop()!;
+  const taskId = parts.join(':');
+  if (!/^[A-Z][A-Z_]{0,31}$/.test(action) || !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(reasonCode) || taskId.length === 0) return null;
+  return { taskId, action, reasonCode };
+}
+
 export function juliusBrainLegacyKey(brainRunId: string, entryId: string): string {
   const plain = `legacy:${brainRunId}:${entryId}`;
   return isJuliusBrainId(plain) ? plain : `legacy:${brainRunId}:h-${juliusBrainSha256(entryId).slice(7, 39)}`;

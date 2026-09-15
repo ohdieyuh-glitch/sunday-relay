@@ -757,7 +757,8 @@
           "IMPLEMENTED",
           "VERIFIED",
           "REJECTED",
-          "ABANDONED"
+          "ABANDONED",
+          "UNKNOWN"
         ],
         "maxLength": 512
       },
@@ -771,7 +772,8 @@
         "enum": [
           "NOT_RUN",
           "PASSED",
-          "FAILED"
+          "FAILED",
+          "UNKNOWN"
         ],
         "maxLength": 512
       },

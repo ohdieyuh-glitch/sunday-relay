@@ -331,8 +331,10 @@ export const JULIUS_BRAIN_BODY_SCHEMAS: Readonly<Record<JuliusBrainRecordKind, J
     statement: str(), blocking: bool, status: oneOf(['OPEN', 'RESOLVED', 'DISMISSED', 'STALE']), juliusFindingId: nstr(SHORT),
   },
   REPAIR: {
-    reason: str(), status: oneOf(['REQUESTED', 'IN_PROGRESS', 'IMPLEMENTED', 'VERIFIED', 'REJECTED', 'ABANDONED']),
-    implementation: nstr(), verification: oneOf(['NOT_RUN', 'PASSED', 'FAILED']),
+    // UNKNOWN, as for a finding's severity: an imported repair whose outcome was
+    // never recorded must not be declared abandoned, or its verification not run.
+    reason: str(), status: oneOf(['REQUESTED', 'IN_PROGRESS', 'IMPLEMENTED', 'VERIFIED', 'REJECTED', 'ABANDONED', 'UNKNOWN']),
+    implementation: nstr(), verification: oneOf(['NOT_RUN', 'PASSED', 'FAILED', 'UNKNOWN']),
     reviewerDisposition: { type: 'string', nullable: true, enum: ['PENDING', 'ACCEPTED', 'REJECTED'] },
     resultingState: nstr(), juliusRepairId: nstr(SHORT),
   },

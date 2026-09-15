@@ -94,7 +94,7 @@ suite('the paid-run archive import on a real PostgreSQL', () => {
     // 1,200 more timeline events: well past one 400-draft group.
     const large = (attempt: number) => paidRunArchive({ attempt, mutate: (body) => ({
       ...body,
-      events: [...body.events, ...Array.from({ length: 1_200 }, (_, i) => ({ sequence: 5 + i, eventType: 'tool.progress', taskId: 'build-1', occurredAt: body.events[3]!.occurredAt, facts: { step: i } }))],
+      events: [...body.events, ...Array.from({ length: 1_200 }, (_, i) => ({ eventId: `progress-${i}`, sequence: 5 + i, eventType: 'tool.progress', taskId: 'build-1', occurredAt: body.events[3]!.occurredAt, facts: { step: i }, unknown: [] as 'sequence'[] }))],
     }) });
     try {
       const first = large(1);
@@ -102,7 +102,7 @@ suite('the paid-run archive import on a real PostgreSQL', () => {
       expect(planned).toBeGreaterThan(1_200);
       // Something already holds the id of the LAST event, so the refusal lands in the final group.
       const julius = (await createJuliusProjectBrainService({ store, clock: { now: () => '2026-09-15T10:00:00.000Z' } }).open({ brainId: BRAIN, projectId: PROJECT, principal: JULIUS }))!;
-      await julius.create('CONSTRAINT', { statement: 'squatting', status: 'ACTIVE' }, { key: 'squat', entityId: juliusArchiveEntityId(first.run, 'events', '1204') });
+      await julius.create('CONSTRAINT', { statement: 'squatting', status: 'ACTIVE' }, { key: 'squat', entityId: juliusArchiveEntityId(first.identity, 'events', 'progress-1199') });
       const head = await store.head(BRAIN, PROJECT);
       const refused = await importJuliusPaidRunArchive({ store, brainId: BRAIN, projectId: PROJECT, archive: first, content, recordedAt: '2026-09-15T10:00:00.000Z' });
       expect(refused).toMatchObject({ outcome: 'REFUSED', reasonCode: 'entity_already_exists' });

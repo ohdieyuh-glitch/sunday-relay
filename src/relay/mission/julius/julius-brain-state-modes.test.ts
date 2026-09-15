@@ -76,7 +76,7 @@ describe('state modes — retention is not retrieval authority', () => {
     // A fuzzy search WOULD surface the archive if the mode did not stand in the way…
     const query = 'coder ESTIMATE_NO_LEDGER allocation stopped before implementing';
     const retriever = createJuliusBrainKeywordRetriever();
-    expect(juliusBrainSemanticCandidates({ retriever, query, entities, grant: request.grant, missionId: MISSION, limit: 5 })).toContain(juliusArchiveEntityId(paidRunArchive().run, 'findings', 'f-budget'));
+    expect(juliusBrainSemanticCandidates({ retriever, query, entities, grant: request.grant, missionId: MISSION, limit: 5 })).toContain(juliusArchiveEntityId(paidRunArchive().identity, 'findings', 'f-budget'));
     // …and under FRESH it cannot.
     const freshOnly = selection.admitted.map((item) => item.entity);
     expect(juliusBrainSemanticCandidates({ retriever, query, entities: freshOnly, grant: request.grant, missionId: MISSION, limit: 5 }).filter((id) => archived.includes(id))).toEqual([]);
@@ -100,7 +100,7 @@ describe('state modes — retention is not retrieval authority', () => {
   it('LEARNING: only the selected kinds from the named run, and only verified evidence when required', async () => {
     const { store, julius, archived } = await brainWithHistory();
     const entities = await readAllJuliusBrainEntities(store, BRAIN, PROJECT);
-    const run = paidRunArchive().run;
+    const run = paidRunArchive().identity;
     const finding = juliusArchiveEntityId(run, 'findings', 'f-budget');
     const failedTest = juliusArchiveEntityId(run, 'evidence', 'ev-build');
     const strict: JuliusBrainStateModePolicy = { mode: 'LEARNING', missionId: MISSION, runId: CURRENT_RUN, learnFrom: { runIds: [ARCHIVED_RUN], kinds: ['FINDING', 'EVIDENCE'], requireVerified: true } };
@@ -108,9 +108,11 @@ describe('state modes — retention is not retrieval authority', () => {
     if (selected.outcome !== 'SELECTED') throw new Error(selected.detail);
     const learned = selected.admitted.filter((item) => item.admission === 'LEARNED').map((item) => item.entity.entityId);
     expect(learned).toEqual([finding]);
-    expect(selected.excluded.UNVERIFIED).toBe(7);
+    const archivedOf = (kind: string) => entities.filter((state) => archived.includes(state.entityId) && state.kind === kind).length;
+    // Every archived piece of evidence is UNVERIFIED: an archive grants no trust.
+    expect(selected.excluded.UNVERIFIED).toBe(archivedOf('EVIDENCE'));
     // Every other archived kind, plus the mission's run-less HANDOFF: considered, and not learnable.
-    expect(selected.excluded.NOT_LEARNABLE).toBe(archived.length - 8 + 1);
+    expect(selected.excluded.NOT_LEARNABLE).toBe(archived.length - archivedOf('EVIDENCE') - archivedOf('FINDING') + 1);
     expect(selected.excluded.PRIOR_RUN_STATE).toBe(2);
 
     // Once the reviewer verifies the archived test evidence, strict LEARNING admits it.
@@ -137,7 +139,7 @@ describe('state modes — retention is not retrieval authority', () => {
     expect(view.baseline!.map((state) => state.entityId).sort()).toEqual([...archived].sort());
     for (const id of archived) expect(view.context.items.map((item) => item.entityId)).not.toContain(id);
 
-    const finding = juliusArchiveEntityId(paidRunArchive().run, 'findings', 'f-budget');
+    const finding = juliusArchiveEntityId(paidRunArchive().identity, 'findings', 'f-budget');
     const state = entities.find((candidate) => candidate.entityId === finding)!;
     expect((await julius.revise(finding, { ...state.body, status: 'RESOLVED' }, { key: 'resolve-archived-finding', expectedVersion: 1 })).outcome).toBe('COMMITTED');
     expect(compileJuliusBrainContextForMode(await readAllJuliusBrainEntities(store, BRAIN, PROJECT), request, policy)).toMatchObject({ outcome: 'REFUSED', reasonCode: 'regression_baseline_moved' });
@@ -159,7 +161,7 @@ describe('state modes — retention is not retrieval authority', () => {
 
   it('a snapshot carries no edge into state the mode withholds', async () => {
     const { store, julius, ids } = await brainWithHistory();
-    const finding = juliusArchiveEntityId(paidRunArchive().run, 'findings', 'f-budget');
+    const finding = juliusArchiveEntityId(paidRunArchive().identity, 'findings', 'f-budget');
     // A prior run's judgment pointing AT an admitted authority record, and a current-run record pointing at the archive.
     const prior = ok(await julius.create('EVIDENCE', {
       evidenceClass: 'OBSERVATION', claim: 'the constraint was unworkable last time', summary: 'prior run', status: 'FAILED', verification: 'UNVERIFIED', data: {}, juliusEvidenceId: null,

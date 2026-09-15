@@ -68,7 +68,7 @@ suite('Project Brain database roles', () => {
           expect(summary.resume).toBe('VERIFIED');
           expect(summary.executions.map((row) => row.state)).toEqual(['SUCCEEDED', 'SUCCEEDED', 'SUCCEEDED']);
         }
-        const imported = await importJuliusPaidRunArchive({ store: brains, brainId: FLOW.brainId, projectId: FLOW.projectId, archive: paidRunArchive(), content, recordedAt: '2026-09-15T09:00:00.000Z' });
+        const imported = await importJuliusPaidRunArchive({ store: brains, brainId: FLOW.brainId, projectId: FLOW.projectId, archive: paidRunArchive({ mutate: (body) => ({ ...body, identity: { ...body.identity, projectId: FLOW.projectId } }) }), content, recordedAt: '2026-09-15T09:00:00.000Z' });
         if (python === null) expect(imported.outcome).toBe('REFUSED'); // no Brain exists without the flow
         else expect(imported.outcome).toBe('IMPORTED');
 

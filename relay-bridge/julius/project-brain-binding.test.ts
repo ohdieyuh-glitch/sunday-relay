@@ -124,7 +124,7 @@ describe('the prepared live Project Brain binding (not composed)', () => {
     // A run that declares LEARNING from the archived run is handed its finding.
     const learning = harness({ store: h.store, stateModeFor: (run, brainRunId) => ({ mode: 'LEARNING', missionId: run.missionId, runId: brainRunId, learnFrom: { runIds: [ARCHIVED_RUN], kinds: ['FINDING'], requireVerified: false } }) });
     const learned = await learning.bind().wrapContextReader(h.table.reader).brainEntriesForRun(RUN, PROJECT);
-    const finding = juliusArchiveEntityId(paidRunArchive().run, 'findings', 'f-budget');
+    const finding = juliusArchiveEntityId(paidRunArchive().identity, 'findings', 'f-budget');
     expect(learned.filter((entry) => entry.entryId === `brain2:${finding}:v1`)).toHaveLength(3);
   });
 
