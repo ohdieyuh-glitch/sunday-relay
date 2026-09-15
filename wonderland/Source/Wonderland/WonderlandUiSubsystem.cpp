@@ -7,13 +7,55 @@
 #include "Framework/Application/SlateApplication.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "HAL/IConsoleManager.h"
+#include "Widgets/Layout/SConstraintCanvas.h"
+#include "WonderlandCompanionSubsystem.h"
+#include "WonderlandCompanionTerminal.h"
 #include "WonderlandLiveTerminal.h"
 #include "WonderlandTravel.h"
+#include "WonderlandUiStyle.h"
 #include "WonderlandUsageHudWidget.h"
 #include "WonderlandUsagePreview.h"
 #include "WonderlandWorldMap.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandUi, Log, All);
+
+namespace
+{
+	// WHERE THE COMPANION TERMINALS SIT, as viewport anchors "minX minY maxX maxY". Between the HUD's readout
+	// and the Julius terminal's side lists (which start at 0.708), one at each edge, the LLM Companion's on
+	// the left under the HUD. Console variables, read every layout pass, so the panels can be placed in PIE.
+	TAutoConsoleVariable<FString> CVarCompanionPanelLeft(
+		TEXT("wl.Companion.PanelLeft"), TEXT("0.016 0.505 0.262 0.690"),
+		TEXT("Anchors of the LLM Companion terminal: minX minY maxX maxY, fractions of the viewport."));
+	TAutoConsoleVariable<FString> CVarCompanionPanelRight(
+		TEXT("wl.Companion.PanelRight"), TEXT("0.738 0.505 0.984 0.690"),
+		TEXT("Anchors of the Jhinn AI Agent terminal: minX minY maxX maxY, fractions of the viewport."));
+
+	FAnchors ParseAnchors(const FString& Text, const FAnchors& Fallback)
+	{
+		TArray<FString> Parts;
+		Text.ParseIntoArrayWS(Parts);
+		if (Parts.Num() != 4)
+		{
+			return Fallback;
+		}
+		float Values[4];
+		for (int32 Index = 0; Index < 4; ++Index)
+		{
+			if (!FCString::IsNumeric(*Parts[Index]))
+			{
+				return Fallback;
+			}
+			Values[Index] = FMath::Clamp(FCString::Atof(*Parts[Index]), 0.0f, 1.0f);
+		}
+		if (Values[2] <= Values[0] || Values[3] <= Values[1])
+		{
+			return Fallback;
+		}
+		return FAnchors(Values[0], Values[1], Values[2], Values[3]);
+	}
+}
 
 void UWonderlandUiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -75,16 +117,127 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 		UsageHud->SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
 		UsageHud->SetAlignmentInViewport(FVector2D(0.0, 0.0));
 		UsageHud->SetPositionInViewport(FVector2D(30.0, 22.0), true);
-		UsageHud->SetDesiredSizeInViewport(FVector2D(400.0, 470.0));
+		// Thirty units taller with the white LLM Companion meter: its third readout row takes that height,
+		// so the art is drawn at the size it always was rather than shrinking to make room.
+		const UWonderlandUsageHudSettings* HudSettings = GetDefault<UWonderlandUsageHudSettings>();
+		const bool bThreeMeters = HudSettings != nullptr && HudSettings->bShowLlmCompanionMeter;
+		UsageHud->SetDesiredSizeInViewport(FVector2D(400.0, bThreeMeters ? 500.0 : 470.0));
 		++UsageHudCreations;
 	}
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI attached to %s (usage HUD %s%s, Ctrl+T terminal, M map)"),
-		*Controller->GetName(), UsageHud != nullptr ? TEXT("on screen") : TEXT("FAILED"), bPreview ? TEXT(", DEVELOPMENT PREVIEW reading") : TEXT(""));
+	MountCompanionTerminals();
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI attached to %s (usage HUD %s%s, %d companion terminals, Ctrl+T terminal, M map)"),
+		*Controller->GetName(), UsageHud != nullptr ? TEXT("on screen") : TEXT("FAILED"), bPreview ? TEXT(", DEVELOPMENT PREVIEW reading") : TEXT(""),
+		CompanionTerminals.Num());
+}
+
+void UWonderlandUiSubsystem::MountCompanionTerminals()
+{
+	ULocalPlayer* LocalPlayer = GetLocalPlayer<ULocalPlayer>();
+	if (CompanionLayer.IsValid() || !UWonderlandCompanionSubsystem::IsPreviewEnabled()
+		|| LocalPlayer == nullptr || LocalPlayer->ViewportClient == nullptr)
+	{
+		return;
+	}
+	const UWonderlandCompanionPreviewSettings* Settings = GetDefault<UWonderlandCompanionPreviewSettings>();
+	const TWeakObjectPtr<UWonderlandUiSubsystem> WeakThis(this);
+
+	// Each panel's accent is the colour its embodiment glows in: starlight for the LLM Companion, and the
+	// imported-agent cyan-blue for the Jhinn -- the canon colour that says it came from outside Wonderland.
+	TSharedPtr<SWonderlandCompanionTerminal> Llm;
+	TSharedPtr<SWonderlandCompanionTerminal> Agent;
+	SAssignNew(Llm, SWonderlandCompanionTerminal)
+		.Title(Settings->LlmCompanionName)
+		.ClassLine(TEXT("LLM COMPANION · IMPORTED · PREVIEW"))
+		.Intro(TEXT("The LLM companion built for Wonderland."))
+		.Accent(WonderlandUi::Srgb(0xF4, 0xF7, 0xFF))
+		.OnSubmit_Lambda([WeakThis](const FString& Text) { if (WeakThis.IsValid()) { WeakThis->HandleCompanionSubmit(0, Text); } })
+		.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
+	SAssignNew(Agent, SWonderlandCompanionTerminal)
+		.Title(Settings->AgentName)
+		.ClassLine(TEXT("JHINN AI AGENT · IMPORTED · PREVIEW"))
+		.Intro(TEXT("The AI coding agent built for Wonderland."))
+		.Accent(WonderlandUi::Srgb(0x5C, 0xDB, 0xFF))
+		.OnSubmit_Lambda([WeakThis](const FString& Text) { if (WeakThis.IsValid()) { WeakThis->HandleCompanionSubmit(1, Text); } })
+		.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
+	CompanionTerminals = {Llm, Agent};
+
+	CompanionLayer = SNew(SConstraintCanvas)
+		.Visibility(EVisibility::SelfHitTestInvisible)
+		+ SConstraintCanvas::Slot()
+		.Anchors(TAttribute<FAnchors>::CreateLambda([]() { return ParseAnchors(CVarCompanionPanelLeft.GetValueOnGameThread(), FAnchors(0.016f, 0.505f, 0.262f, 0.690f)); }))
+		.Offset(FMargin(0.0f))
+		[
+			Llm.ToSharedRef()
+		]
+		+ SConstraintCanvas::Slot()
+		.Anchors(TAttribute<FAnchors>::CreateLambda([]() { return ParseAnchors(CVarCompanionPanelRight.GetValueOnGameThread(), FAnchors(0.738f, 0.505f, 0.984f, 0.690f)); }))
+		.Offset(FMargin(0.0f))
+		[
+			Agent.ToSharedRef()
+		];
+	// Above the HUD's layer, below the terminal (50) and the map (60): furniture, like the HUD.
+	LocalPlayer->ViewportClient->AddViewportWidgetForPlayer(LocalPlayer, CompanionLayer.ToSharedRef(), 20);
+}
+
+void UWonderlandUiSubsystem::UnmountCompanionTerminals()
+{
+	ULocalPlayer* LocalPlayer = GetLocalPlayer<ULocalPlayer>();
+	if (CompanionLayer.IsValid() && LocalPlayer != nullptr && LocalPlayer->ViewportClient != nullptr)
+	{
+		LocalPlayer->ViewportClient->RemoveViewportWidgetForPlayer(LocalPlayer, CompanionLayer.ToSharedRef());
+	}
+	CompanionLayer.Reset();
+	CompanionTerminals.Reset();
+}
+
+void UWonderlandUiSubsystem::HandleCompanionSubmit(int32 Index, const FString& Text)
+{
+	if (!CompanionTerminals.IsValidIndex(Index) || !CompanionTerminals[Index].IsValid())
+	{
+		return;
+	}
+	const TSharedPtr<SWonderlandCompanionTerminal>& Panel = CompanionTerminals[Index];
+	// Recorded as the visitor's own line and marked unsent: nothing is imported, and a companion that
+	// answered anyway would be inventing one.
+	Panel->AddLine(TEXT("You"), Text, false);
+	Panel->AddLine(FString(), FString::Printf(TEXT("Not sent: %s is not imported into this world yet."), *Panel->GetTitle()), true);
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI companion terminal %d line recorded, not sent (nothing imported): %d characters"), Index, Text.Len());
+}
+
+FString UWonderlandUiSubsystem::GetCompanionTerminalTitle(int32 Index) const
+{
+	return CompanionTerminals.IsValidIndex(Index) && CompanionTerminals[Index].IsValid() ? CompanionTerminals[Index]->GetTitle() : FString();
+}
+
+int32 UWonderlandUiSubsystem::GetCompanionTerminalLineCount(int32 Index) const
+{
+	return CompanionTerminals.IsValidIndex(Index) && CompanionTerminals[Index].IsValid() ? CompanionTerminals[Index]->GetLineCount() : 0;
+}
+
+FString UWonderlandUiSubsystem::GetCompanionTerminalInputText(int32 Index) const
+{
+	return CompanionTerminals.IsValidIndex(Index) && CompanionTerminals[Index].IsValid() ? CompanionTerminals[Index]->GetInputText() : FString();
+}
+
+bool UWonderlandUiSubsystem::FocusCompanionTerminal(int32 Index)
+{
+	if (Open == EOverlay::None || !CompanionTerminals.IsValidIndex(Index) || !CompanionTerminals[Index].IsValid() || !FSlateApplication::IsInitialized())
+	{
+		return false;
+	}
+	const TSharedPtr<SWidget> Focus = CompanionTerminals[Index]->GetFocusTarget();
+	if (!Focus.IsValid())
+	{
+		return false;
+	}
+	FSlateApplication::Get().SetKeyboardFocus(Focus, EFocusCause::SetDirectly);
+	return true;
 }
 
 void UWonderlandUiSubsystem::Detach()
 {
 	CloseOverlay();
+	UnmountCompanionTerminals();
 	if (APlayerController* Controller = BoundController.Get())
 	{
 		if (UiInput != nullptr)
