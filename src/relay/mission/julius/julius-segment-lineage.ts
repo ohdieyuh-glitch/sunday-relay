@@ -197,6 +197,24 @@ export function juliusYieldContinuationOf(subject: JuliusTask, tasks: readonly J
   return continuation !== undefined && isJuliusSegmentOf(root, continuation) ? continuation : null;
 }
 
+/**
+ * THE WORK A REVIEW IS ABOUT — the parent of the review's own lineage head.
+ *
+ * A reviewer that paused to have Julius read something continues in
+ * `segment:<review>:<n>:task`, and that continuation's parent is the review that
+ * paused, not the work under review. Reading the reviewed work off the
+ * dispatch's own parent bound the continuation's verdict to the REVIEW:
+ * reproduced on the peer-channel branch, a researched review's finding was
+ * recorded against `plan-1:review` and never reached the plan. Null for a task
+ * that is not a reviewer's, or whose head names no parent.
+ */
+export function juliusReviewedWorkOf(review: JuliusTask, tasks: readonly JuliusTask[]): JuliusTask | null {
+  if (review.role !== 'INDEPENDENT_REVIEWER') return null;
+  const head = juliusSegmentLineageRootOf(review, tasks);
+  if (head.parentTaskId === null) return null;
+  return tasks.find((row) => row.taskId === head.parentTaskId) ?? null;
+}
+
 /** The `n` in `segment:<subject>:<n>:task`, or 0 for anything else. */
 export function segmentNumberOf(taskId: string): number {
   const match = /^segment:.+:([1-9]\d*):task$/u.exec(taskId);
@@ -278,17 +296,18 @@ export function sanitizeJuliusSegmentState(value: unknown): Omit<JuliusCoderSegm
 export type JuliusCheckpointRoute = JuliusCheckpointRouting['route'];
 
 /**
- * `REQUIRE_CONTRACT_REVISION` belongs here and was missing entirely, which was
- * the more serious half of the same mistake. The contract the coder is working
- * under is the thing being changed; work produced past that point is bound to a
- * revision that is about to stop being current, which is exactly the stale
- * binding the contract lock exists to make impossible.
+ * `HOLD_FOR_DISAGREEMENT` is here and `RECORD_DISAGREEMENT` is not. A material
+ * challenge — the work breaks its terms, is unsafe, misses what it was for —
+ * means work produced past it may be built on something about to be judged
+ * wrong; a non-material one is argued while the work proceeds. (The route this
+ * replaced, `REQUIRE_CONTRACT_REVISION`, sent every challenge straight to the
+ * revision model; a challenge now opens a disagreement Julius resolves.)
  */
 export const JULIUS_BARRIER_ROUTES: readonly JuliusCheckpointRoute[] = Object.freeze([
   'REQUEST_GUIDANCE',
   'REQUEST_REVIEW',
   'REQUIRE_REPAIR',
-  'REQUIRE_CONTRACT_REVISION',
+  'HOLD_FOR_DISAGREEMENT',
   // Julius goes and looks. No worker is scheduled, and the asking worker still
   // stops — an observation that arrives after the code was written is a
   // citation, not research.

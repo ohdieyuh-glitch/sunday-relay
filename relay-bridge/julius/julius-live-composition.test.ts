@@ -25,7 +25,7 @@ import {
   type JuliusRuntimeStore,
 } from '../../src/relay/mission/julius';
 import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
-import { JULIUS_PARTICIPATION_CHANNELS, JULIUS_PARTICIPATION_MARKER, JuliusDispatchError, RESEARCH_AUTHORITY_NOT_STATED, noJuliusResearch, safeFailureClass, safeReviewDiagnostics, sanitizeJuliusResearchAsks, sealJuliusResearchPolicy } from '../../src/relay/mission/julius';
+import { JULIUS_PARTICIPATION_CHANNELS, JULIUS_PARTICIPATION_MARKER, JuliusDispatchError, RESEARCH_AUTHORITY_NOT_STATED, noJuliusResearch, safeFailureClass, safeReviewDiagnostics, juliusReviewEscalationGuidance, sanitizeJuliusResearchAsks, sanitizeJuliusReviewVerdict, sealJuliusResearchPolicy } from '../../src/relay/mission/julius';
 import { compileHostedEnvelope } from '../hosted-coding-agent/hosted-envelope';
 import type { HostedQueryFn, HostedRunInput, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
 import { buildReviewPrompt, loadHermesConfig, reviewDiagnostics, runHermesReview, type HermesConfig, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
@@ -2628,9 +2628,13 @@ describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispat
     // this assertion is a LEAK check — a new key on this result is exactly what
     // it exists to catch — and because the plan review's record must carry no
     // more than the build review's does.
-    expect(Object.keys(result).sort()).toEqual(['diagnostics', 'evidence', 'providerId', 'safeSummary', 'status', 'usage', 'workerId']);
+    // `reviewVerdict` is the review in Julius's vocabulary, built from the
+    // parser's already-redacted summary and findings and rebuilt again by the
+    // domain's allowlist before any of it is written.
+    expect(Object.keys(result).sort()).toEqual(['diagnostics', 'evidence', 'providerId', 'reviewVerdict', 'safeSummary', 'status', 'usage', 'workerId']);
     expect(JSON.stringify(result.diagnostics), 'and it quotes no part of the plan it read')
       .not.toContain(VALID_PLAN.objectiveSummary);
+    expect(JSON.stringify(result.reviewVerdict), 'nor does the verdict').not.toContain(VALID_PLAN.objectiveSummary);
   });
 
   /**
@@ -3461,9 +3465,80 @@ describe('the architect and the reviewer can ask, through their own answers', ()
      * field means but not that its answer may carry it would have nowhere to
      * put one.
      */
-    expect(prompt).toContain('"researchAsks":[{"source":string,"capability":string,"reference":string,"purpose":string}]}');
+    expect(prompt).toContain('"researchAsks":[{"source":string,"capability":string,"reference":string,"purpose":string}],');
+    expect(prompt).toContain('"escalation":null|{"verdict":"challenge"|"block","category":string,"target":"work"|"plan"|"guidance"|"contract","claim":string}}');
     expect(prompt).toContain('Julius decides whether this mission is authorised');
     expect(prompt).toContain('At most 3 per answer');
+  });
+
+  /* ------------------------------------------ the reviewer's canonical verdict */
+
+  /**
+   * THE LIVE REVIEWER SPEAKS JULIUS'S VOCABULARY. Through the real Hermes
+   * adapter with a scripted engine: the adapter carries a `reviewVerdict` the
+   * domain can read, and the evidence it has always written is unchanged, so
+   * Julius's stricter-of rule has both halves.
+   */
+  const reviewedWith = async (body: Record<string, unknown>) => {
+    const packets: ReviewPacket[] = [];
+    const result = await reviewerFor(JSON.stringify({
+      verdict: 'approved', summary: 'The plan is sound.', findings: [],
+      requirementsChecked: [{ requirement: 'AC-1', status: 'passed', evidence: 'diff reviewed' }],
+      ...body,
+    }), packets).dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    return { result, prompt: buildReviewPrompt(packets[0]!) };
+  };
+
+  it('tells the reviewer it may escalate, in the words of the domain', async () => {
+    const { prompt } = await reviewedWith({});
+    expect(prompt).toContain(juliusReviewEscalationGuidance());
+  });
+
+  it('a clean approval continues, and its evidence is what it always was', async () => {
+    const { result } = await reviewedWith({});
+    expect(sanitizeJuliusReviewVerdict(result.reviewVerdict)).toMatchObject({ ok: true, declaration: { verdict: 'CONTINUE', warnings: [] } });
+    expect(result.evidence.map((item) => (item as { status: string }).status)).toEqual(['PASSED']);
+  });
+
+  it('minor findings on approved work are WARNINGS, retained instead of dropped', async () => {
+    const { result } = await reviewedWith({
+      findings: [
+        { findingId: 'F-1', severity: 'minor', requirement: 'AC-1', explanation: 'The error message names the wrong flag.', evidence: 'plan step 3', category: 'weak_evidence' },
+        { findingId: 'F-2', severity: 'informational', requirement: 'AC-1', explanation: 'Consider a helper.', evidence: 'plan step 4' },
+      ],
+    });
+    const reading = sanitizeJuliusReviewVerdict(result.reviewVerdict);
+    expect(reading).toMatchObject({ ok: true, declaration: { verdict: 'WARNING' } });
+    if (!reading.ok) return;
+    expect(reading.declaration.warnings).toEqual([{ category: 'weak_evidence', claim: 'AC-1: The error message names the wrong flag.' }]);
+    expect(result.evidence.map((item) => (item as { status: string }).status), 'still an approval').toEqual(['PASSED']);
+  });
+
+  it('changes_required is REPAIR_REQUIRED, as before', async () => {
+    const { result } = await reviewedWith({
+      verdict: 'changes_required',
+      findings: [{ findingId: 'F-1', severity: 'blocking', requirement: 'AC-1', explanation: 'NULL renders wrongly.', evidence: 'plan step 2', category: 'missed_acceptance_criterion' }],
+    });
+    expect(sanitizeJuliusReviewVerdict(result.reviewVerdict)).toMatchObject({ ok: true, declaration: { verdict: 'REPAIR_REQUIRED', category: 'missed_acceptance_criterion' } });
+    expect(result.evidence.every((item) => (item as { status: string }).status === 'FAILED')).toBe(true);
+  });
+
+  it('a challenge and a block reach Julius as written', async () => {
+    const challenged = await reviewedWith({
+      escalation: { verdict: 'challenge', category: 'contract_drift', target: 'plan', claim: 'The plan writes outside the permitted paths.' },
+    });
+    expect(sanitizeJuliusReviewVerdict(challenged.result.reviewVerdict))
+      .toMatchObject({ ok: true, declaration: { verdict: 'CHALLENGE', category: 'contract_drift', target: 'PLAN' } });
+    const blocked = await reviewedWith({
+      escalation: { verdict: 'block', category: 'unsafe_implementation', claim: 'The plan deletes the production table.' },
+    });
+    expect(sanitizeJuliusReviewVerdict(blocked.result.reviewVerdict)).toMatchObject({ ok: true, declaration: { verdict: 'BLOCK' } });
+  });
+
+  it('a reviewer escalating VERIFIED is carried, and the DOMAIN refuses it by name', async () => {
+    const { result } = await reviewedWith({ escalation: { verdict: 'verified', category: 'contract_drift', claim: 'All good.' } });
+    expect(result.reviewVerdict).toBeDefined();
+    expect(sanitizeJuliusReviewVerdict(result.reviewVerdict)).toEqual({ ok: false, reasonCode: 'peer_response_mints_julius_only_outcome' });
   });
 
   /* ------------------------------------- what each worker is told it may ask */

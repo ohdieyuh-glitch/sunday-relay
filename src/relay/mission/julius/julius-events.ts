@@ -88,6 +88,13 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * illegal attempt is visible rather than silently dropped. The request's
   * state is a fold over these rows; nothing else stores it. */
  'peer.request.opened','peer.request.transitioned','peer.request.refused',
+ /* THE REVIEWER'S CANONICAL VERDICT. `declared` is what the reviewer said,
+  * rebuilt from an allowlist; `refused` is a declaration Julius would not read —
+  * a Julius-only outcome, a mission-owned term, an unknown word — with the
+  * reason; `applied` is the verdict Julius acted on (the stricter of the
+  * declaration and the evidence) and the route it took. A declaration from a
+  * dispatch that paused to research is kept and never applied. */
+ 'review.verdict.declared','review.verdict.refused','review.verdict.applied',
  /* PERSISTENT-WORKER EFFORT. One row per completed dispatch, carrying what the
   * provider actually reported and NOTHING inferred — an unreported token count
   * is null here rather than the zero the budget path substitutes, because a

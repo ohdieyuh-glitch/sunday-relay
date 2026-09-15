@@ -161,6 +161,8 @@ export type ScriptedOutcome =
     readonly segmentResume?: unknown;
     /** What this worker needs Julius to go and look at. Unsanitised, for the same reason. */
     readonly researchAsks?: unknown;
+    /** A reviewer's canonical verdict. Unsanitised, for the same reason. */
+    readonly reviewVerdict?: unknown;
   }
   /** `costUsdMicros` is what the boundary billed before it failed, as its diagnostics would carry. */
   | {
@@ -169,6 +171,8 @@ export type ScriptedOutcome =
     readonly costUsdMicros?: number;
     /** Whether the provider runtime launched — the difference between spending nothing and spending an unknown amount. */
     readonly runtimeStarted?: boolean;
+    /** The error text the boundary raised — a test may make it hostile, to prove none of it is recorded. */
+    readonly message?: string;
   }
   | { readonly kind: 'malformed' };
 
@@ -202,7 +206,7 @@ export function scriptedAdapter(
       index += 1;
       if (step.kind === 'fail') {
         throw new JuliusDispatchError(
-          step.code, step.code === 'RATE_LIMIT' || step.code === 'TIMEOUT', 'Scripted provider failure.', undefined,
+          step.code, step.code === 'RATE_LIMIT' || step.code === 'TIMEOUT', step.message ?? 'Scripted provider failure.', undefined,
           step.costUsdMicros === undefined && step.runtimeStarted === undefined
             ? undefined
             : {
@@ -229,6 +233,7 @@ export function scriptedAdapter(
         ...(step.guidance === undefined ? {} : { guidance: step.guidance }),
         ...(step.segmentResume === undefined ? {} : { segmentResume: step.segmentResume }),
         ...(step.researchAsks === undefined ? {} : { researchAsks: step.researchAsks }),
+        ...(step.reviewVerdict === undefined ? {} : { reviewVerdict: step.reviewVerdict }),
       };
       return result;
     },

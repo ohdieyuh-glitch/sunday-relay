@@ -222,8 +222,9 @@ export function recordJuliusCheckpoint(input: {
  *
  *   CONTINUE         seen, nothing to answer
  *   WARNING          recorded for the record; does not interrupt
- *   CHALLENGE        the contract itself is in question — routes to the
- *                    revision model, never to a silent amendment
+ *   CHALLENGE        a recorded disagreement with the work, the plan, the
+ *                    guidance or the terms — Julius opens a disagreement and
+ *                    resolves it; it never revises the contract by itself
  *   REPAIR_REQUIRED  the work is wrong and must be redone under the same terms
  *   BLOCK            it must not continue at all
  */
@@ -258,6 +259,29 @@ export const JULIUS_CHALLENGE_CATEGORIES = [
   'unsupported_completion_claim',
 ] as const;
 export type JuliusChallengeCategory = (typeof JULIUS_CHALLENGE_CATEGORIES)[number];
+
+/**
+ * WHICH CHALLENGES STOP DEPENDENT WORK.
+ *
+ * A challenge is a recorded disagreement, not a repair order, and most do not
+ * need the mission to wait: a thin test or a weak citation can be argued while
+ * the work proceeds. These are the categories that, if the reviewer is right,
+ * mean the work cannot be accepted as it stands — it breaks its terms, misses
+ * what it was for, is unsafe, regresses, claims a completion it has not earned,
+ * or rests on guidance nobody can support. Julius holds dependent work on these
+ * until the disagreement is resolved, and on nothing else.
+ */
+export const JULIUS_MATERIAL_CHALLENGE_CATEGORIES: readonly JuliusChallengeCategory[] = Object.freeze([
+  'contract_drift',
+  'missed_acceptance_criterion',
+  'unsafe_implementation',
+  'regression',
+  'unsupported_completion_claim',
+  'unsupported_guidance',
+]);
+
+export const juliusChallengeIsMaterial = (value: JuliusChallengeCategory | null): boolean =>
+  value !== null && JULIUS_MATERIAL_CHALLENGE_CATEGORIES.includes(value);
 
 export interface JuliusCheckpointVerdictRecord {
   readonly verdictId: string;
@@ -350,8 +374,8 @@ export function recordJuliusCheckpointVerdict(input: {
  * `CONTINUE` and `WARNING` map to NOTHING. A reviewer that saw nothing wrong
  * has not decided a task, and minting an ACCEPT from a WARNING would let the
  * checkpoint path complete a mission the verification path never verified.
- * `CHALLENGE` maps to nothing either: it is a question about the CONTRACT, and
- * the answer is a reviewed revision, not a task decision.
+ * `CHALLENGE` maps to nothing either: it opens a disagreement, and what Julius
+ * decides is the disagreement's resolution, not the challenge.
  */
 export function juliusDecisionForVerdict(verdict: JuliusCheckpointVerdict): JuliusDecisionAction | null {
   if (verdict === 'REPAIR_REQUIRED') return 'REPAIR';
@@ -750,7 +774,15 @@ export type JuliusCheckpointRouting =
   | { readonly route: 'REQUEST_GUIDANCE'; readonly role: JuliusWorkerRole; readonly reasonCode: string }
   | { readonly route: 'REQUEST_REVIEW'; readonly role: JuliusWorkerRole; readonly reasonCode: string }
   | { readonly route: 'REQUIRE_REPAIR'; readonly reasonCode: string }
-  | { readonly route: 'REQUIRE_CONTRACT_REVISION'; readonly reasonCode: string }
+  /**
+   * A CHALLENGE IS A DISAGREEMENT, NOT AN AMENDMENT. Julius opens one and
+   * resolves it; the contract is revised only if the resolution needs a
+   * mission-owned term to change. HOLD when the challenged issue is material —
+   * nothing that depends on it may proceed until it is resolved — and RECORD
+   * otherwise, when the work carries on beside the argument.
+   */
+  | { readonly route: 'HOLD_FOR_DISAGREEMENT'; readonly reasonCode: string }
+  | { readonly route: 'RECORD_DISAGREEMENT'; readonly reasonCode: string }
   /**
    * JULIUS GOES AND LOOKS, on behalf of the slot that asked.
    *
@@ -802,10 +834,12 @@ export function routeJuliusCheckpoint(input: {
       return { route: 'REQUIRE_REPAIR', reasonCode: verdict.reasonCode };
     }
     if (verdict.verdict === 'CHALLENGE') {
-      // A CHALLENGE AGAINST A LOCKED CONTRACT IS THE REVISION MODEL'S ENTRY
-      // POINT, and against a draft it is the existing pre-lock challenge. Both
-      // end at a reviewed revision; neither amends anything here.
-      return { route: 'REQUIRE_CONTRACT_REVISION', reasonCode: verdict.reasonCode };
+      // NEVER A REVISION BY ITSELF. It used to route straight to the revision
+      // model, which would have let a reviewer's objection move the terms the
+      // coder is bound by before anyone answered it.
+      return juliusChallengeIsMaterial(verdict.category)
+        ? { route: 'HOLD_FOR_DISAGREEMENT', reasonCode: verdict.reasonCode }
+        : { route: 'RECORD_DISAGREEMENT', reasonCode: verdict.reasonCode };
     }
     // CONTINUE and WARNING both continue. A WARNING is recorded and does not
     // interrupt — that is what makes it different from a CHALLENGE, and why a

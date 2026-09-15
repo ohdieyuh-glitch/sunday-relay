@@ -71,6 +71,7 @@ import {
 import { DEFAULT_HOSTED_LIMITS, hostedLimitsForAllocation, type HostedLimits } from '../hosted-coding-agent/hosted-envelope';
 import type { HostedObservation } from '../hosted-coding-agent/hosted-observation';
 import {
+  hermesReviewVerdict,
   runHermesReview,
   type HermesConfig,
   type HermesOutcome,
@@ -1893,6 +1894,13 @@ export function createLiveHermesReviewerAdapter(input: {
          * door the other two slots have.
          */
         ...(outcome.result.researchAsks === undefined ? {} : { researchAsks: outcome.result.researchAsks }),
+        /**
+         * WHAT THE REVIEWER CONCLUDED, IN JULIUS'S VOCABULARY. The evidence above
+         * stays exactly as it was — Julius takes the stricter of the two — so a
+         * reviewer's WARNING is retained where it used to be dropped, and a
+         * challenge or a block can be said at all.
+         */
+        reviewVerdict: hermesReviewVerdict(outcome.result),
         safeSummary: `Independent Hermes review completed: verdict ${outcome.result.verdict}, ${outcome.result.findings.length} findings (${blocking.length} blocking), served model ${safeClaim(outcome.servedModel ?? 'unknown', 80)}.`,
         evidence,
         /**

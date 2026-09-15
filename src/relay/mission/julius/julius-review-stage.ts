@@ -237,5 +237,11 @@ export function reviewChargeFor(stage: JuliusReviewStage): JuliusReviewCharge {
  * anything that is not a review task.
  */
 export function reviewSubjectTaskId(taskId: string): string | null {
+  // A REVIEW THAT PAUSED TO RESEARCH continues as `segment:<review>:<n>:task`,
+  // and the continuation is still a review of the same subject — it must find
+  // the same artifacts, or a researched guidance review is refused for lacking
+  // the packet it was judging.
+  const segment = /^segment:(.+):[1-9]\d*:task$/u.exec(taskId);
+  if (segment !== null) return reviewSubjectTaskId(segment[1]!);
   return taskId.endsWith(':review') ? taskId.slice(0, -':review'.length) : null;
 }

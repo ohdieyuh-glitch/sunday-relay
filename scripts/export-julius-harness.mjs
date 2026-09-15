@@ -274,6 +274,9 @@ const FILE_RULES = [
   // a request is audit of the task graph, never a way around it.
   ['src/relay/mission/julius/julius-peer-channel.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-peer-runtime.ts', 'TASK GRAPH / SCHEDULER'],
+  // The reviewer's canonical verdict, the stricter-of rule and the route Julius
+  // takes: the Independent Reviewer's vocabulary, owned by its subsystem.
+  ['src/relay/mission/julius/julius-review-verdict.ts', 'INDEPENDENT REVIEWER'],
   // How many run-loop ticks a mission's own structure permits. The scheduler's
   // account of how much it may dispatch, counted from the task graph it owns.
   ['src/relay/mission/julius/julius-tick-budget.ts', 'TASK GRAPH / SCHEDULER'],
