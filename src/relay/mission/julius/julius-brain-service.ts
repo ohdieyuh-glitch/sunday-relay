@@ -2,6 +2,7 @@ import {
   JULIUS_BRAIN_RECORD_KINDS,
   JULIUS_BRAIN_SCHEMA_VERSION,
   juliusBrainProvenance,
+  juliusBrainSha256,
   juliusBrainScope,
   type JuliusBrainBody,
   type JuliusBrainDraft,
@@ -246,9 +247,10 @@ function createHandle(ctx: {
       const verification = verifyJuliusBrainLedger(brain.brainId, records, materialised);
       // A checkpoint pins a state that was VERIFIED, never one merely read.
       if (!verification.ok) return { outcome: 'REFUSED', index: 0, reasonCode: 'ledger_invalid', detail: verification.problems.slice(0, 4).join('; ') };
+      // The label is free text; the key is derived from it, so any label makes a valid key.
       return commit([draft('CHECKPOINT', {
         label, throughSequence: verification.head.sequence, stateHash: verification.stateHash, entityCount: materialised.length,
-      }, { key: `checkpoint:${label}:${verification.head.sequence}` })]);
+      }, { key: `checkpoint:${juliusBrainSha256(label).slice(7, 31)}:${verification.head.sequence}` })]);
     },
 
     async entities(filter = {}) {
