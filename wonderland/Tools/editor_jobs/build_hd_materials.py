@@ -45,9 +45,12 @@ PLAN = {
     "MI_V2_IvoryStone": ("ivory", {"TexScale": 0.004, "NormalStrength": 3.0, "DetailStrength": 1.2}),
     "MI_V2_MarblePale": ("ivory", {"TexScale": 0.004, "NormalStrength": 3.0, "DetailStrength": 1.2}),
     "MI_V2_Stone": ("limestone", {"TexScale": 0.003}),
-    "MI_V2_Gold": ("gold", {"TexScale": 0.006, "Roughness": 2.0, "RoughVary": 1.0, "Metallic": 0.9, "Specular": 0.5,
+    # MQ06 (2026-09-15, tune_material_instances.py, record in evidence/2026-09-15-MQ06): at TexScale 0.006 and RoughVary
+    # 1.0 the gold's smudge band put rough, dark 10-80 cm blotches on every broad gold face; 0.016 / 0.3 / 0.55 reads as
+    # clean polished metal. The world's MI_V2_Gold / MI_V2_GoldAged carry the tuned values; this plan matches them.
+    "MI_V2_Gold": ("gold", {"TexScale": 0.016, "Roughness": 0.55, "RoughVary": 0.3, "Metallic": 0.9, "Specular": 0.5,
                             "NormalStrength": 0.6, "DetailStrength": 0.1, "InstVary": 0.03, "InstWarm": 0.015, "MacroVary": 0.02}),
-    "MI_V2_GoldAged": ("gold", {"TexScale": 0.006, "Roughness": 2.2, "RoughVary": 1.0, "Metallic": 0.85, "Specular": 0.5,
+    "MI_V2_GoldAged": ("gold", {"TexScale": 0.016, "Roughness": 0.66, "RoughVary": 0.35, "Metallic": 0.85, "Specular": 0.5,
                                 "NormalStrength": 0.8, "DetailStrength": 0.1, "InstVary": 0.04, "InstWarm": 0.02}),
     "MI_V2_RoofRose": ("roof", {"TexScale": 0.004}),
     "MI_V2_RoofLilac": ("roof", {"TexScale": 0.004}),

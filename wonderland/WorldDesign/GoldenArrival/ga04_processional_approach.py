@@ -6,8 +6,8 @@ arrival wall (y ~-1700) ran a 43 m lawn between hedge rows that flare from x +/-
 no path, no light, no flowers -- a strip of grass leading to the world's front door.
 
 WHAT THIS LAYER ADDS.
-  GOLDEN GATE  the garden arch cast in gold over the rear gate, crowned with a gold heart, so the
-               corridor opens and closes with the same golden arch (GA01 put one at the garden).
+  GOLDEN GATE  a polished gold rose garden arch over the rear gate (GA04b, the kit's WL_Arch_Garden_Rose), so the
+               corridor opens and closes with the same golden arch (GA01 puts one at the garden).
   AVENUE       a 4.8 m paved processional avenue with stone kerbs, from outside the rear gate to
                the arrival apron.
   RONDEL       halfway, the avenue widens into a round flower bed ringed by paving and spiral
@@ -25,6 +25,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 KIT = json.loads((HERE.parent / "Skyline" / "kit_modules.json").read_text(encoding="utf-8"))["modules"]
 PASS = "GA04"
+REAR_ARCH_SCALE = 1.5
 GROUND = -14.0
 V2 = "/Game/WonderlandV2/"
 MESH = {
@@ -81,9 +82,19 @@ def build():
             instance(batch, "%s_%s" % (kind, part["part"]), material, loc, scale, yaw)
 
     # ------------------------------------------------------------ the golden rear gate
+    # GA04b (2026-09-15, AR01 series): the world's stone garden arch cast in gold at 1.1x with a heart crown read as a
+    # crumpled ring of gold blocks with dark blotches (goldA). It is now the same polished gold rose garden arch as
+    # GA01c's garden gate (WL_Arch_Garden_Rose), so the corridor still opens and closes with one golden arch. At 1.5x
+    # (9.4 m wide, 13.5 m tall) its columns stand outside the generator's ivory gate piers (x +/-300, y -6000), which
+    # frame the path inside it; at 1.2x the columns merged with the piers (ga04b). The columns collide.
     arch_y = -6150.0
-    actor("RearGate_GoldArch", "garden_arch", (0.0, arch_y, GROUND), ["MI_V2_Gold"], 1.1, collision="none")
-    actor("RearGate_HeartCrown", "finial_heart", (0.0, arch_y, GROUND + 723.0 * 1.1 - 12.0), ["MI_V2_Gold"], 1.7, collision="none")
+    for part in KIT["WL_Arch_Garden_Rose"]["parts"]:
+        if part["part"] == "veg_anchor":
+            continue
+        key = "RearGate_Arch_%s" % part["part"]
+        batches[key] = {"id": key, "mesh": part["mesh"], "material": "MI_V2_Gold", "collides": part["part"] == "stone",
+                        "cast_shadow": True, "affect_df": part["part"] == "stone",
+                        "instances": [[0.0, arch_y, GROUND, 0.0, 0.0, 0.0, REAR_ARCH_SCALE, REAR_ARCH_SCALE, REAR_ARCH_SCALE]]}
 
     # ------------------------------------------------------------ avenue and rondel paving
     slabs = ["slab0", "slab3", "slab6"]

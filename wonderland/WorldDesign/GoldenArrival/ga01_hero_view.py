@@ -84,18 +84,18 @@ def build():
 
     # 2. THE GOLDEN GATE INTO THE GARDEN, at the head of the approach steps, in front of the rose arch.
     #    GA01a tried piers plus the filigree crest: the crest is 18 cm of gold lace and vanished at the
-    #    hero camera's 34 m. The reference's gate is a SOLID gold arch, so this is the world's own
-    #    stone garden arch (820 wide, 724 tall, 120 deep) cast in gold, crowned with a gold heart.
-    arch_y, arch_scale = 3200.0, 1.0
-    actors.append(actor("GardenGate_GoldArch", "garden_arch", (0.0, arch_y, GROUND), ["MI_V2_Gold"], arch_scale, collision="none"))
-    actors.append(actor("GardenGate_HeartCrown", "finial_heart", (0.0, arch_y, GROUND + 724.0 * arch_scale - 10.0), ["MI_V2_Gold"], 1.5, collision="none"))
-    # A rose garland over the arch's crown: pink and red blooms on a shallow curve above the opening.
-    for k in range(17):
-        u = -1.0 + 2.0 * k / 16.0
-        gx = u * 330.0
-        gz = GROUND + 560.0 + 130.0 * (1.0 - u * u)
-        material = "MI_V2_RoseRed" if k % 3 == 0 else "MI_V2_RosePink"
-        instance("GateGarland_" + material.split("_")[-1], "rose_bloom", material, (gx, arch_y - 70.0, gz), rng.uniform(0.55, 0.75), rng.uniform(0, 360))
+    #    hero camera's 34 m. GA01b cast the world's stone garden arch in gold with a gold heart crown and a rose
+    #    garland: at walking distance its rustic voussoirs read as a crumpled ring of gold blocks (arch0, pvg).
+    #    GA01c (2026-09-15, AR01 series): the forge's rose garden arch (WL_Arch_Garden_Rose, families/thresholds.py) at
+    #    1.2x -- 7.5 m wide, 10.8 m to its pointed crown, a 6.5 m opening -- every part in polished gold (MQ06 tune),
+    #    its columns standing outside the path's kerb walls (x +/-250). The columns collide.
+    arch_y, arch_scale = 3200.0, 1.2
+    for part in KIT["WL_Arch_Garden_Rose"]["parts"]:
+        if part["part"] == "veg_anchor":
+            continue
+        key = "GardenGate_Arch_%s" % part["part"]
+        batches[key] = {"id": key, "mesh": part["mesh"], "material": "MI_V2_Gold", "instances": [[0.0, arch_y, GROUND, 0.0, 0.0, 0.0, arch_scale, arch_scale, arch_scale]],
+                        "collides": part["part"] == "stone", "cast_shadow": True, "affect_df": part["part"] == "stone"}
 
     # 3. A HEART TOPIARY THE VISITOR CAN SEE: right of the path, past the gate, facing the arrival.
     #    GA01a stood it behind the gate's right pier facing down the path: seen edge-on and hidden.
