@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **185 production files** across 20/20 subsystems (2 roots, 141 traced, 29 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **186 production files** across 20/20 subsystems (2 roots, 141 traced, 30 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -93,6 +93,7 @@ The provider-neutral kernel: mission states and the transition table, tasks, evi
 | `src/relay/mission/julius/index.ts` | traced | `src/relay/persistence/julius-postgres.ts` |
 | `src/relay/mission/julius/julius-brain-api.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-archive-import.ts` | not composed by the live root | — |
+| `src/relay/mission/julius/julius-brain-carry.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-contracts.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-environment.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-export.ts` | not composed by the live root | — |
@@ -447,6 +448,7 @@ Production Julius modules that implement a Julius port but are not reached from 
 | `src/relay/mission/julius/julius-brain-legacy.ts` | Project Brain v2: the JuliusBrainWriter decorator that mirrors the live pipeline's v1 entries into the typed ledger, and its backfill; a composition root wraps the store with it once the qualification permits wiring changes |
 | `src/relay/mission/julius/julius-brain-archive-import.ts` | Project Brain v2: the translation boundary from the temporary paid-run archive export (julius-paid-run-archive-export.v1) to canonical Brain records — validated, sealed-hash checked, atomic, idempotent, provenance-preserving; not yet composed |
 | `src/relay/mission/julius/julius-brain-state-modes.ts` | Project Brain v2: FRESH / CONTINUATION / LEARNING / REGRESSION retrieval authority over retained Brain state; not yet composed by the live root |
+| `src/relay/mission/julius/julius-brain-carry.ts` | Project Brain v2: the TEMPORARY carry between disposable jobs until the dedicated Brain database exists — an HMAC-sealed, lineage-checked export with its artifact bytes, and the journal that claims preserved only after the upload is confirmed; a stopgap, never the persistence architecture; not composed |
 | `src/relay/mission/julius/julius-brain-api.ts` | Project Brain v2: the transport-agnostic API contract for a future editable Brain UI and the bridge — overview with per-caller editability, history, provenance, context, governed user edits, export; not yet mounted |
 | `src/relay/mission/julius/julius-brain-environment.ts` | Project Brain v2: evaluation sessions — the scoped snapshot, grants and submission checks a future GVE environment uses; not yet composed |
 | `src/relay/mission/julius/julius-brain-retrieval.ts` | Project Brain v2: the optional fuzzy retrieval tier — a typed retriever interface, a keyword baseline, BM25/trigram/fusion candidates and the eval that adopts a candidate only on measured marginal value; not yet composed by the live root |
