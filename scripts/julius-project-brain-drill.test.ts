@@ -54,7 +54,7 @@ suite('Project Brain on a real PostgreSQL', () => {
     try {
       const again = await migrateJuliusBrainDatabase(pool, { environment: 'test' });
       expect(again.applied).toEqual([]);
-      expect(again.migrations).toEqual(['001_julius_brain_ledger', '002_julius_brain_python_executions', '003_julius_brain_content']);
+      expect(again.migrations).toEqual(['001_julius_brain_ledger', '002_julius_brain_python_executions', '003_julius_brain_content', '004_julius_brain_immutability']);
       expect((await assertJuliusBrainDatabase(pool, { environment: 'test' })).databaseId).toBe(again.databaseId);
     } finally { await pool.end(); }
   }, 120_000);

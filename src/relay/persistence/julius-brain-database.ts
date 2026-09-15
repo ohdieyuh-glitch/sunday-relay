@@ -16,6 +16,11 @@ import type { Pool, PoolClient } from 'pg';
  *   IDENTIFIED  the database records the environment it serves, fixed at first
  *               migration, and every open names the environment it expects —
  *               development configuration cannot open a production Brain;
+ *   ENCRYPTED   production — migration and use alike — refuses a connection
+ *               that is not TLS, with no way to opt out; any other environment
+ *               may require it too (`requireTls`). Verifying the server's
+ *               identity (CA, hostname) is the connection's configuration; this
+ *               refuses the connection that was never encrypted at all;
  *   CURRENT     code opens only a database whose applied migrations are exactly
  *               the chain it knows: pending migrations are refused (migrate
  *               first), and a database migrated by NEWER code is refused (an
@@ -39,6 +44,7 @@ export const JULIUS_BRAIN_MIGRATIONS = [
   migration('001_julius_brain_ledger.sql'),
   migration('002_julius_brain_python_executions.sql'),
   migration('003_julius_brain_content.sql'),
+  migration('004_julius_brain_immutability.sql'),
 ] as const;
 
 export function juliusBrainMigrationVersion(sql: string): string | null {
@@ -63,6 +69,12 @@ async function appliedVersions(client: Pick<PoolClient, 'query'>): Promise<strin
   if (!(await schemaExists(client, JULIUS_BRAIN_SCHEMA))) return [];
   const result = await client.query<{ version: string }>('SELECT version FROM julius_brain.schema_migrations ORDER BY version');
   return result.rows.map((row) => String(row.version));
+}
+
+async function refuseUnencrypted(client: Pick<PoolClient, 'query'>, environment: JuliusBrainDatabaseEnvironment, requireTls: boolean | undefined): Promise<void> {
+  if (environment !== 'production' && requireTls !== true) return;
+  const tls = await client.query<{ ssl: boolean }>('SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()');
+  if (tls.rows[0]?.ssl !== true) throw new Error('julius_brain_database_connection_not_encrypted');
 }
 
 async function refuseShared(client: Pick<PoolClient, 'query'>): Promise<void> {
@@ -90,11 +102,12 @@ function refuseNewer(applied: readonly string[], known: readonly string[]): void
 }
 
 /** Bring a dedicated Brain database to the current chain, fixing its environment on first use. */
-export async function migrateJuliusBrainDatabase(pool: Pool, input: { readonly environment: JuliusBrainDatabaseEnvironment }): Promise<JuliusBrainDatabaseIdentity & { readonly applied: readonly string[] }> {
+export async function migrateJuliusBrainDatabase(pool: Pool, input: { readonly environment: JuliusBrainDatabaseEnvironment; readonly requireTls?: boolean }): Promise<JuliusBrainDatabaseIdentity & { readonly applied: readonly string[] }> {
   if (!JULIUS_BRAIN_ENVIRONMENTS.includes(input.environment)) throw new Error('julius_brain_environment_invalid');
   const known = knownVersions();
   const client = await pool.connect();
   try {
+    await refuseUnencrypted(client, input.environment, input.requireTls);
     await client.query('SELECT pg_advisory_lock($1::bigint)', [MIGRATION_LOCK_KEY]);
     try {
       await refuseShared(client);
@@ -119,10 +132,11 @@ export async function migrateJuliusBrainDatabase(pool: Pool, input: { readonly e
 }
 
 /** What a process that only USES the Brain checks before its first read or write. Never migrates. */
-export async function assertJuliusBrainDatabase(pool: Pool, input: { readonly environment: JuliusBrainDatabaseEnvironment }): Promise<JuliusBrainDatabaseIdentity> {
+export async function assertJuliusBrainDatabase(pool: Pool, input: { readonly environment: JuliusBrainDatabaseEnvironment; readonly requireTls?: boolean }): Promise<JuliusBrainDatabaseIdentity> {
   const known = knownVersions();
   const client = await pool.connect();
   try {
+    await refuseUnencrypted(client, input.environment, input.requireTls);
     await refuseShared(client);
     const applied = await appliedVersions(client);
     if (applied.length === 0) throw new Error('julius_brain_database_not_migrated');
