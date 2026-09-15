@@ -69,6 +69,10 @@ class SdkTestCase(unittest.TestCase):
 
 
 class ReadTests(SdkTestCase):
+    def test_withheld_edges_is_unknown_when_not_reported(self):
+        self.assertIsNone(brain.withheld_edges())
+        self.assertIsNone(brain.state_mode())
+
     def test_reads_only_the_granted_snapshot(self):
         self.assertEqual(brain.get_objective().get("statement"), "Measure latency")
         self.assertEqual([c.entity_id for c in brain.get_constraints()], ["constraint:1"])

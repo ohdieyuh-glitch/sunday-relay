@@ -98,6 +98,13 @@ def state_mode():
     return copy.deepcopy(_session.current().context.get("stateMode"))
 
 
+def withheld_edges():
+    """How many links and inbound edges were removed from this snapshot because
+    they named an entity the snapshot does not hold. None when Julius did not
+    report it (an older snapshot), never a guessed zero."""
+    return _session.current().context.get("withheldEdges")
+
+
 def inputs():
     """The JSON inputs Julius passed to this execution (a deep copy)."""
     import copy

@@ -8,8 +8,8 @@ import { importJuliusPaidRunArchive } from '../../mission/julius/julius-brain-ar
 import { juliusPrincipal, juliusWorkerPrincipal } from '../../mission/julius/julius-brain-contracts';
 import { juliusBrainSchemaDocument } from '../../mission/julius/julius-brain-schema-document';
 import { createJuliusProjectBrainService } from '../../mission/julius/julius-brain-service';
-import type { JuliusBrainStateModePolicy } from '../../mission/julius/julius-brain-state-modes';
-import { createJuliusBrainMemoryStore } from '../../mission/julius/julius-brain-store';
+import { pinJuliusBrainRegressionBaseline, type JuliusBrainStateModePolicy } from '../../mission/julius/julius-brain-state-modes';
+import { createJuliusBrainMemoryStore, readAllJuliusBrainEntities } from '../../mission/julius/julius-brain-store';
 import { JULIUS_PYTHON_DEFAULT_LIMITS, JULIUS_PYTHON_REQUEST_FORMAT, type JuliusPythonExecutionRequest } from '../../mission/julius/julius-python-contracts';
 import { createJuliusPythonExecutionMemoryStore, createJuliusPythonExecutionService } from '../../mission/julius/julius-python-service';
 import { cardPolicy } from '../../mission/julius/julius-runtime-fixtures';
@@ -46,9 +46,11 @@ suite('Python under state modes', () => {
     await julius.create('EVIDENCE', {
       evidenceClass: 'OBSERVATION', claim: 'the objective was unreachable last run', summary: 'prior run', status: 'FAILED', verification: 'UNVERIFIED', data: {}, juliusEvidenceId: null,
     }, { key: 'prior-contradiction', scope: { missionId: MISSION, runId: 'run:julius-live-4:prev' }, links: [{ relation: 'CONTRADICTS', target: objective.receipts[0]!.entityId, targetVersion: null }] });
+    const inner = new NodeJuliusPythonRunner({ sandboxRoot: mkdtempSync(join(tmpdir(), 'jpy-mode-sbx-')), sdkRoot: sdkRoot!, content });
+    const runs = { count: 0 };
     const python_ = createJuliusPythonExecutionService({
       store: createJuliusPythonExecutionMemoryStore(brains), brains,
-      runner: new NodeJuliusPythonRunner({ sandboxRoot: mkdtempSync(join(tmpdir(), 'jpy-mode-sbx-')), sdkRoot: sdkRoot!, content }),
+      runner: { run: (input, signal) => { runs.count += 1; return inner.run(input, signal); } },
       environments: new StaticJuliusPythonEnvironmentRegistry(new Map([['system-python', python!]])),
       secrets: { has: () => false, resolve: async () => null },
       policies: { cardFor: async () => cardPolicy({ capabilities: ['python', 'process'], network: false }) },
@@ -60,14 +62,14 @@ suite('Python under state modes', () => {
       return {
         format: JULIUS_PYTHON_REQUEST_FORMAT, executionId: `exec-mode-${counter}`, idempotencyKey: `exec-mode-${counter}`, brainId: BRAIN, projectId: PROJECT,
         missionId: MISSION, runId: CURRENT_RUN, taskId: 'task-now', requestedBy: juliusWorkerPrincipal('coder', 'CODING_AGENT'), purpose: 'look for prior findings',
-        script: { kind: 'INLINE', source: 'from julius import brain, result\nresult.set({"findings": [f.get("statement") for f in brain.findings()], "objective": brain.get_objective().get("statement"), "contradictedBy": brain.get_objective().contradicted_by(), "mode": brain.state_mode()})\n' },
+        script: { kind: 'INLINE', source: 'from julius import brain, result\nresult.set({"findings": [f.get("statement") for f in brain.findings()], "objective": brain.get_objective().get("statement"), "contradictedBy": brain.get_objective().contradicted_by(), "withheld": brain.withheld_edges(), "mode": brain.state_mode()})\n' },
         argv: [], inputs: {}, files: [],
         brainRead: { kinds: ['OBJECTIVE', 'FINDING', 'EVIDENCE'], taskScoped: false, includeHistory: false, stateMode },
         brainWrite: { kinds: ['TRACE'], maxRecords: 1 }, environment: { environmentId: 'system-python', requirements: [] }, network: { mode: 'DENY' }, secrets: [],
         limits: { ...JULIUS_PYTHON_DEFAULT_LIMITS, timeoutMs: 30_000 }, requestedAt: clock.now(), ...overrides,
       };
     };
-    return { python: python_, request, julius };
+    return { python: python_, request, julius, brains, runs };
   }
 
   it('FRESH: the archived run exists in the Brain and is absent from the interpreter\'s world', async () => {
@@ -75,10 +77,11 @@ suite('Python under state modes', () => {
     const record = await service.execute(request({ mode: 'FRESH', missionId: MISSION, runId: CURRENT_RUN }));
     expect(record.outcome?.stderr?.text).toBe('');
     expect(record.state).toBe('SUCCEEDED');
-    const value = record.outcome!.structured.value as { findings: string[]; objective: string; contradictedBy: string[]; mode: { mode: string; excluded: Record<string, number> } };
+    const value = record.outcome!.structured.value as { findings: string[]; objective: string; contradictedBy: string[]; withheld: number; mode: { mode: string; excluded: Record<string, number> } };
     expect(value.findings).toEqual([]);
     expect(value.objective).toBe('Implement the trust core');
     expect(value.contradictedBy).toEqual([]);
+    expect(value.withheld).toBeGreaterThanOrEqual(1);
     expect(value.mode.mode).toBe('FRESH');
     expect(value.mode.excluded.PRIOR_RUN_STATE).toBeGreaterThan(0);
     expect((await julius.entities({ kinds: ['FINDING'] }))).toHaveLength(1);
@@ -96,6 +99,26 @@ suite('Python under state modes', () => {
     const record = await service.execute(request({ mode: 'LEARNING', missionId: MISSION, runId: CURRENT_RUN, learnFrom: { runIds: ['run:julius-live-4:1'], kinds: ['FINDING'], requireVerified: false } }));
     expect(record.state).toBe('SUCCEEDED');
     expect((record.outcome!.structured.value as { findings: string[] }).findings).toEqual(['The coder was granted the ESTIMATE_NO_LEDGER allocation and stopped before implementing.']);
+  }, 60_000);
+
+  it('a mode the Brain refuses settles DENIED, recorded, with no process started', async () => {
+    const { python: service, request, julius, brains, runs } = await setup();
+    // A regression baseline pinned, then moved.
+    const baseline = pinJuliusBrainRegressionBaseline(await readAllJuliusBrainEntities(brains, BRAIN, PROJECT), 'run:julius-live-4:1');
+    const finding = (await julius.entities({ kinds: ['FINDING'] }))[0]!;
+    const revised = await julius.revise(finding.entityId, { ...finding.body, status: 'RESOLVED' }, { key: 'move-baseline', expectedVersion: finding.version });
+    expect(revised.outcome).toBe('COMMITTED');
+    const moved = await service.execute(request({ mode: 'REGRESSION', missionId: MISSION, runId: CURRENT_RUN, baseline }));
+    expect(moved).toMatchObject({ state: 'DENIED', outcome: { reasonCode: 'STATE_MODE_REFUSED:regression_baseline_moved' } });
+
+    // A "live" run that takes the archived run's id.
+    const archivedRun = 'run:julius-live-4:1';
+    const reused = await service.execute(request({ mode: 'FRESH', missionId: MISSION, runId: archivedRun }, { runId: archivedRun }));
+    expect(reused).toMatchObject({ state: 'DENIED', outcome: { reasonCode: 'STATE_MODE_REFUSED:current_run_is_archived_history' } });
+
+    expect(runs.count).toBe(0);
+    const recorded = (await julius.current('PYTHON_EXECUTION')).filter((state) => [moved.executionId, reused.executionId].includes(String(state.body.executionId)));
+    expect(recorded.map((state) => state.body.state)).toEqual(['DENIED', 'DENIED']);
   }, 60_000);
 
   it('a mode that names another mission or run is refused before anything runs', async () => {
