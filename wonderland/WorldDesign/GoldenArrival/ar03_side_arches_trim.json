@@ -1,0 +1,180 @@
+{
+ "pass": "AR03_TRIM",
+ "title": "Side arches: six crumpled generator garden arches (four floating) sunk (reversible)",
+ "trims": [
+  {
+   "name": "WonderlandInstancedBatch_104",
+   "label": "V2Batch_garden_arch_stone_MI_V2_IvoryStone",
+   "mesh": "SM_garden_arch_stone",
+   "index": 1,
+   "why": "Clock Plaza east gate under the giant mushroom",
+   "before": [
+    2300.0,
+    5400.0,
+    0.0,
+    0.0,
+    90.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "after": [
+    2300.0,
+    5400.0,
+    -100000.0,
+    0.0,
+    90.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_104",
+   "label": "V2Batch_garden_arch_stone_MI_V2_IvoryStone",
+   "mesh": "SM_garden_arch_stone",
+   "index": 2,
+   "why": "Clock Plaza west gate under the giant mushroom",
+   "before": [
+    -2300.0,
+    5400.0,
+    0.0,
+    0.0,
+    90.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "after": [
+    -2300.0,
+    5400.0,
+    -100000.0,
+    0.0,
+    90.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_104",
+   "label": "V2Batch_garden_arch_stone_MI_V2_IvoryStone",
+   "mesh": "SM_garden_arch_stone",
+   "index": 3,
+   "why": "arrival garden east side gate, floating 2 m over the flank walk apron",
+   "before": [
+    2650.0,
+    400.0,
+    220.0,
+    0.0,
+    90.0,
+    0.0,
+    0.95,
+    0.95,
+    0.95
+   ],
+   "after": [
+    2650.0,
+    400.0,
+    -99780.0,
+    0.0,
+    90.0,
+    0.0,
+    0.95,
+    0.95,
+    0.95
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_104",
+   "label": "V2Batch_garden_arch_stone_MI_V2_IvoryStone",
+   "mesh": "SM_garden_arch_stone",
+   "index": 4,
+   "why": "arrival garden west side gate, floating 2 m over the flank walk apron",
+   "before": [
+    -2650.0,
+    400.0,
+    220.0,
+    0.0,
+    90.0,
+    0.0,
+    0.95,
+    0.95,
+    0.95
+   ],
+   "after": [
+    -2650.0,
+    400.0,
+    -99780.0,
+    0.0,
+    90.0,
+    0.0,
+    0.95,
+    0.95,
+    0.95
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_301",
+   "label": "V2Batch_garden_arch_stone_MI_V2_IvoryStone",
+   "mesh": "SM_garden_arch_stone",
+   "index": 5,
+   "why": "south-west terrace gate, floating 2.3 m over the lawn",
+   "before": [
+    -2803.677,
+    -1709.8746,
+    220.0,
+    0.0,
+    -58.6223,
+    0.0,
+    0.9,
+    0.9,
+    0.9
+   ],
+   "after": [
+    -2803.677,
+    -1709.8746,
+    -99780.0,
+    0.0,
+    -58.6223,
+    0.0,
+    0.9,
+    0.9,
+    0.9
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_301",
+   "label": "V2Batch_garden_arch_stone_MI_V2_IvoryStone",
+   "mesh": "SM_garden_arch_stone",
+   "index": 9,
+   "why": "palace forecourt east gate, floating 2.3 m over the lawn",
+   "before": [
+    1224.7096,
+    9321.3555,
+    220.0,
+    0.0,
+    92.9729,
+    0.0,
+    0.9,
+    0.9,
+    0.9
+   ],
+   "after": [
+    1224.7096,
+    9321.3555,
+    -99780.0,
+    0.0,
+    92.9729,
+    0.0,
+    0.9,
+    0.9,
+    0.9
+   ]
+  }
+ ]
+}
