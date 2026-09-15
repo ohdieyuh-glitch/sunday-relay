@@ -133,6 +133,9 @@ const deaf = (): { adapter: JuliusProviderAdapter; signals: AbortSignal[] } => {
 const facts = (rows: readonly Record<string, unknown>[], type: string): Record<string, unknown> =>
   rows.filter(row => row.type === type).at(-1) ?? {};
 
+/** Whole-millisecond wall clock against a finer timer: the only slack these bounds allow. */
+const CLOCK_GRANULARITY_MS = 1;
+
 describe('1–4 · a worker that outlives its declared deadline is cut', () => {
   it('1 · the dispatch ends as a retryable TIMEOUT rather than hanging', async () => {
     const { adapter } = deaf();
@@ -150,7 +153,11 @@ describe('1–4 · a worker that outlives its declared deadline is cut', () => {
     expect(row.diag_timeoutMs).toBe(40);
     expect(row.diag_timedOut).toBe(true);
     expect(typeof row.diag_elapsedMs).toBe('number');
-    expect(row.diag_elapsedMs as number).toBeGreaterThanOrEqual(40);
+    // ONE MILLISECOND OF CLOCK GRANULARITY, NOT A LOOSER BOUND. `Date.now()` is
+    // whole milliseconds while the timer runs on a finer monotonic clock, so a
+    // 40 ms timer can read as 39 elapsed. Verify Relay on PR #269 failed once
+    // exactly so and passed on re-run. Anything earlier is still refused.
+    expect(row.diag_elapsedMs as number).toBeGreaterThanOrEqual(40 - CLOCK_GRANULARITY_MS);
   }, 30_000);
 
   it('3 · the hold is NOT freed as if nothing had been spent', async () => {
@@ -232,7 +239,7 @@ describe('8–9 · the number comes from the worker', () => {
       await h.coordinator.execute(request);
       const elapsed = Date.now() - startedAt;
       expect(facts(h.rows, 'retry.scheduled').diag_timeoutMs, `declared ${declared}`).toBe(declared);
-      expect(elapsed, `declared ${declared} must actually bound the wait`).toBeGreaterThanOrEqual(declared);
+      expect(elapsed, `declared ${declared} must actually bound the wait`).toBeGreaterThanOrEqual(declared - CLOCK_GRANULARITY_MS);
     }
   }, 30_000);
 
