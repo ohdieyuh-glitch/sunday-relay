@@ -107,6 +107,141 @@ the tool's proposals, one transaction).
   reaches the Brain; a host that vanished is settled DISCONNECTED and never
   rerun.
 
+## Paid-run history: the archive import boundary
+
+Paid runs are being archived by the Formal lane into a **temporary** schema in
+the local `julius-postgres`. That schema is not the Brain's and will change.
+The Brain never reads it. It reads one importer-owned, versioned export
+contract, and only the adapter that produces that contract changes when the
+archive does (`julius-brain-archive-import.ts`).
+
+```
+temporary archive tables ──(adapter, written against the final archive)──▶
+  julius-paid-run-archive-export.v1  (sealed: per-section hashes + content hash)
+    ──validate──▶ plan (pure translation) ──▶ ONE group commit ──▶ Project Brain
+```
+
+**The contract.**
+
+- **Run identity:** `workflowRunId` (digits), `workflowRunAttempt`,
+  `acceptedMainSha` (40 hex), `missionId`, `campaignId`, `juliusRunId`,
+  `projectId`, `stateMode`, `classification`, the times, `outcome` and
+  `outcomeReason`.
+- **Sections:** tasks, evidence, reviews, findings, repairs, research, usage,
+  timeline events, tool invocations, and artifact refs/hashes.
+
+**Validation refuses:**
+
+- a section or content hash that does not match;
+- duplicate ids, or references to ids the export does not hold;
+- non-ISO times;
+- dishonest cost: a reported basis without an amount, or `UNKNOWN` carrying
+  one;
+- credential-shaped content, reported with its location.
+
+**Translation.**
+
+| Archive | Brain record |
+|---|---|
+| the export's own bytes | ARTIFACT (content-addressed), the anchor every record `DERIVED_FROM` |
+| run | TRACE `LIFECYCLE`, facts carry the full identity and the archive hash |
+| artifacts | ARTIFACT; `archive-ref:` when the Brain does not hold the bytes |
+| tasks | TRACE `WORKER_ACTION` |
+| evidence | EVIDENCE, class mapped, **UNVERIFIED** (nothing re-verified it) |
+| reviews | DECISION `VERIFICATION`; a missing rationale says Unknown |
+| findings | FINDING `REVIEWER_FINDING`; a missing severity is `UNKNOWN` |
+| repairs | REPAIR, status mapped, `REPAIRS` links to findings |
+| research | RESEARCH |
+| usage | EVIDENCE `MEASUREMENT`, cost basis preserved |
+| run accounting | EVIDENCE: a known total that is a **floor** when any component is unknown; estimates reported, never added |
+| timeline events | TRACE, class by event type; scalar facts, dropped facts counted |
+| tool invocations | TRACE `TOOL_INVOCATION` |
+
+**Every imported record carries:**
+
+- **Scope:** `{missionId, runId, taskId}`. The run id is `juliusRunId`, or
+  `workflow:<id>/<attempt>` when there is none.
+- **Provenance:** `run_observed`, with `commit = acceptedMainSha` and
+  `externalRef = julius-paid-run-archive:<run>/<attempt>#<section>/<id>`.
+- **Principal:** `JULIUS julius:archive-importer`.
+- **Idempotency key:** `archive:<run>/<attempt>:<section>:<id>`.
+
+**What that gives the import:**
+
+- **Idempotent.** A re-import is `ALREADY_IMPORTED`.
+- **Attempts are distinct runs.** Attempt 2 imports alongside attempt 1.
+- **A changed history under the same identity is refused.** A re-sealed export
+  with different content is refused with `idempotency_key_conflict`.
+- **Atomic.** The whole run arrives in one commit (groups of 400 inside it) or
+  none of it does.
+
+## State modes: retention is not retrieval authority
+
+A paid run can live in the Brain permanently — in history, in exports, in
+audits — and still be unavailable to a run that must not be shaped by it. A
+read grant says what a principal may see. A state mode says what **this run**
+may draw on (`julius-brain-state-modes.ts`).
+
+| Mode | Admits besides the current run and run-less authority (mission, objective, active requirements, criteria, constraints, prohibitions) |
+|---|---|
+| FRESH | nothing |
+| CONTINUATION | the mission's run-less state and the runs it names in `resumes` |
+| LEARNING | from the named runs (or all), only the named learnable kinds, ACTIVE, and verified when `requireVerified` |
+| REGRESSION | nothing; the pinned baseline run is returned **separately** for comparison, never as guidance, and refused if it moved |
+
+**Selection:**
+
+- Selection is by scope. Other missions are always excluded.
+- Every exclusion is counted by reason: `PRIOR_RUN_STATE`,
+  `MISSION_LEVEL_STATE`, `OTHER_MISSION`, `NOT_LEARNABLE`, `UNVERIFIED`,
+  `NOT_ACTIVE`.
+- The policy is hashed. A policy naming a run id that imported archive history
+  holds is refused (`current_run_is_archived_history`), because the current
+  run is admitted whole.
+
+**Python obeys the same selection.** `brainRead.stateMode` must name the
+request's own mission and run. The snapshot records
+`{mode, policyHash, excluded}`, the SDK exposes it as `brain.state_mode()`, and
+`PYTHON_EXECUTION.stateMode` records the mode.
+
+**A snapshot holds no edge to an entity it does not hold.** Links and inbound
+edges pointing outside are removed and counted (`withheldEdges`). Otherwise a
+withheld prior run's `CONTRADICTS` would reach the script as
+`contradicted_by()`.
+
+**The proof** (`julius-brain-state-modes.test.ts`,
+`python-state-modes.test.ts`, `scripts/julius-brain-archive-postgres.test.ts`):
+with the real paid run 34739303313 imported, FRESH admits none of it.
+
+- **Worker context:** none of it appears.
+- **Keyword retrieval:** it finds the archived finding over the whole Brain, and
+  nothing over the FRESH set.
+- **Real interpreter:** `brain.findings()` is empty and `contradicted_by()` is
+  empty. The same script with no mode sees both.
+- **Retained:** the archive is still in history and in the export.
+- **Cold connection:** on PostgreSQL the selection is the same.
+- **LEARNING** admits exactly the archived finding when asked for findings, and
+  archived evidence only once it is verified.
+
+## Migrating paid history into the Brain
+
+1. **Freeze the source.** The Formal lane's archive schema is temporary. Write
+   the adapter (archive rows → `julius-paid-run-archive-export.v1`) only against
+   its final shape, and run it read-only against `julius-postgres`.
+2. **Seal each run** with `sealJuliusPaidRunArchiveExport`. Archive the sealed
+   export bytes alongside the archive, since they are the anchor artifact.
+3. **Import one run per commit** with `importJuliusPaidRunArchive`, into the
+   project's Brain, under the importer principal. `REJECTED` lists every
+   located error. Fix the adapter, not the export.
+4. **Verify.**
+   - Run `verifyJuliusBrainLedger` over the result.
+   - Re-import: expect `ALREADY_IMPORTED`.
+   - Compare the import's `accounting` against the paid-run ledger (the known
+     total is a floor whenever a component was unknown).
+5. **Nothing imported is guidance by default.** Every live run declares its
+   state mode. Qualification and lab evaluations run FRESH, and LEARNING must
+   name what it learns from.
+
 ## Proofs and how to run them
 
 | Proof | Command |
@@ -116,6 +251,9 @@ the tool's proposals, one transaction).
 | Integrated mission, in memory, real Python | `npx vitest run scripts/julius-brain-python-flow.test.ts` |
 | PostgreSQL store, contention, restore, process A/B drill | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-project-brain-drill.test.ts` |
 | Brain + Python across processes, restart, cross-process cancel, host crash | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npm run julius:brain:python-drill` |
+| Archive import, state modes (domain) | `npx vitest run src/relay/mission/julius/julius-brain-archive-import.test.ts src/relay/mission/julius/julius-brain-state-modes.test.ts` |
+| State modes with a real interpreter | `npx vitest run src/relay/workspace/julius-tools/python-state-modes.test.ts` |
+| Archive import on PostgreSQL: parity, cold read, 6-way concurrent import, multi-group atomicity | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-archive-postgres.test.ts` |
 
 Set `JULIUS_BRAIN_DRILL_RESTART` (e.g. `docker restart <container>`) to also
 restart the PostgreSQL server between processes; a restart is reported only
@@ -135,12 +273,16 @@ when `pg_postmaster_start_time()` actually moved.
    continuous-worker qualification lands.
 2. **Production isolation for Python.** The executor sandbox image has no
    Python and the Docker path runs bash only; `python.run` is not in
-   `JuliusToolId`. Hostile-code isolation requires that path.
+   `JuliusToolId`. Hostile-code isolation requires that path. The design and
+   its gate: `docs/JULIUS_PYTHON_ISOLATION_DESIGN.md`.
 3. **Budget.** The service reserves and commits tool budget through
    `JuliusBudgetPort` when given one; the live ledger is not yet passed in.
 4. **Bridge routes.** `handleJuliusBrainApi` is not mounted in `relay-bridge`.
 5. **Semantic retrieval.** Evaluated and available; on the labelled fixture
    no candidate beat the keyword baseline on MRR, so it is not adopted.
-6. **Windows venvs.** The host names its pid for liveness because a venv
+6. **The archive adapter.** The import contract is built and proven; the
+   adapter from the Formal lane's archive tables is not, because that schema is
+   temporary. Written against its final shape.
+7. **Windows venvs.** The host names its pid for liveness because a venv
    `python.exe` is a redirector; crash-orphan termination was proven with the
    system interpreter, not inside a venv.
