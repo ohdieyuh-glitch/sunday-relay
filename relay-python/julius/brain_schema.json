@@ -716,7 +716,8 @@
           "LOW",
           "MEDIUM",
           "HIGH",
-          "CRITICAL"
+          "CRITICAL",
+          "UNKNOWN"
         ],
         "maxLength": 512
       },
@@ -853,6 +854,7 @@
       },
       "byteSize": {
         "type": "number",
+        "nullable": true,
         "integer": true,
         "min": 0
       },
@@ -935,6 +937,16 @@
         "type": "string",
         "nullable": true,
         "maxLength": 512
+      },
+      "stateMode": {
+        "type": "string",
+        "nullable": true,
+        "enum": [
+          "FRESH",
+          "CONTINUATION",
+          "LEARNING",
+          "REGRESSION"
+        ]
       },
       "requestedBy": {
         "type": "string",

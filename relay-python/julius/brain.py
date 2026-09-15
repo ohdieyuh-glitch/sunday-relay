@@ -87,6 +87,17 @@ def execution_id():
     return _session.current().execution_id
 
 
+def state_mode():
+    """The state mode this snapshot was selected under, as Julius recorded it.
+
+    ``{"mode": ..., "policyHash": ..., "excluded": {...}}``, or None when no mode
+    was applied. ``excluded`` counts prior state withheld from this execution by
+    reason — what a FRESH analysis was deliberately not allowed to see.
+    """
+    import copy
+    return copy.deepcopy(_session.current().context.get("stateMode"))
+
+
 def inputs():
     """The JSON inputs Julius passed to this execution (a deep copy)."""
     import copy

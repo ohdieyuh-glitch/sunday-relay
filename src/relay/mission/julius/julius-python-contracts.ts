@@ -15,6 +15,7 @@ import {
 } from './julius-brain-contracts';
 import { JULIUS_BRAIN_OBSERVATION_KINDS, type JuliusBrainWriteGrant } from './julius-brain-policy';
 import { containsJuliusSecret } from './julius-brain-secrets';
+import { validateJuliusBrainStateModePolicy, type JuliusBrainStateModePolicy } from './julius-brain-state-modes';
 import { evaluateJuliusPolicy, type JuliusCardPolicy, type JuliusPolicyDecision } from './julius-policy';
 
 /**
@@ -101,7 +102,15 @@ export interface JuliusPythonExecutionRequest {
   readonly argv: readonly string[];
   readonly inputs: JuliusBrainJson;
   readonly files: readonly JuliusPythonFileGrant[];
-  readonly brainRead: { readonly kinds: readonly JuliusBrainRecordKind[]; readonly taskScoped: boolean; readonly includeHistory: boolean };
+  readonly brainRead: {
+    readonly kinds: readonly JuliusBrainRecordKind[]; readonly taskScoped: boolean; readonly includeHistory: boolean;
+    /**
+     * Which prior state this execution may draw on. When present it must name
+     * this execution's mission and run; absent means grant-only (no mode), and
+     * the snapshot records that too.
+     */
+    readonly stateMode?: JuliusBrainStateModePolicy | null;
+  };
   readonly brainWrite: { readonly kinds: readonly JuliusBrainRecordKind[]; readonly maxRecords: number };
   readonly environment: { readonly environmentId: string; readonly requirements: readonly JuliusPythonRequirement[] };
   readonly network: JuliusPythonNetworkPolicy;
@@ -146,6 +155,12 @@ export function validateJuliusPythonRequest(request: JuliusPythonExecutionReques
   }
   if (request.files.length > 64) errors.push('files: at most 64');
   for (const kind of request.brainRead.kinds) if (!(JULIUS_BRAIN_RECORD_KINDS as readonly string[]).includes(kind)) errors.push(`brainRead.kinds: unknown ${kind}`);
+  const mode = request.brainRead.stateMode ?? null;
+  if (mode !== null) {
+    errors.push(...validateJuliusBrainStateModePolicy(mode).map((error) => `brainRead.stateMode.${error}`));
+    if (mode.missionId !== request.missionId) errors.push('brainRead.stateMode.missionId: must be this execution\'s mission');
+    if (request.runId === null || mode.runId !== request.runId) errors.push('brainRead.stateMode.runId: must be this execution\'s run');
+  }
   for (const kind of request.brainWrite.kinds) if (!JULIUS_BRAIN_OBSERVATION_KINDS.includes(kind)) errors.push(`brainWrite.kinds: ${kind} is not an observation kind`);
   if (!Number.isSafeInteger(request.brainWrite.maxRecords) || request.brainWrite.maxRecords < 0) errors.push('brainWrite.maxRecords: invalid');
   id(request.environment.environmentId, 'environment.environmentId');

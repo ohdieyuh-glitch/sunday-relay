@@ -276,16 +276,24 @@ export interface JuliusBrainEvaluationContext {
   readonly consumerRunId: string;
   readonly createdAt: string;
   readonly entities: readonly JuliusBrainEntityState[];
+  /**
+   * The state mode the entities were selected under, or null when the caller
+   * applied none. Hashed with everything else, so a consumer can prove which
+   * prior state was withheld from it.
+   */
+  readonly stateMode: { readonly mode: string; readonly policyHash: string; readonly excluded: Readonly<Record<string, number>> } | null;
   readonly snapshotHash: string;
 }
 
 export function createJuliusBrainEvaluationContext(input: {
   readonly brainId: string;
+  /** Already selected by a state mode when `stateMode` is given; the grant still applies on top. */
   readonly entities: readonly JuliusBrainEntityState[];
   readonly head: JuliusBrainHead;
   readonly grant: JuliusBrainReadGrant;
   readonly consumerRunId: string;
   readonly createdAt: string;
+  readonly stateMode?: JuliusBrainEvaluationContext['stateMode'];
 }): JuliusBrainEvaluationContext {
   if (input.grant.brainId !== input.brainId) throw new Error('julius_brain_snapshot_grant_brain_mismatch');
   const entities = input.entities
@@ -295,6 +303,7 @@ export function createJuliusBrainEvaluationContext(input: {
   const content = {
     format: JULIUS_BRAIN_EVALUATION_CONTEXT_FORMAT, brainId: input.brainId, grant: input.grant,
     throughSequence: input.head.sequence, consumerRunId: input.consumerRunId, createdAt: input.createdAt, entities,
+    stateMode: input.stateMode ?? null,
   };
   return { ...content, snapshotHash: juliusBrainSha256(canonicalJuliusBrainJson(content)) };
 }

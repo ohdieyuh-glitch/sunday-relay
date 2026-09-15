@@ -112,6 +112,8 @@ const DECLARED_NOT_COMPOSED = [
   { path: 'src/relay/mission/julius/julius-brain-query.ts', reason: 'Project Brain v2: deterministic, budgeted relevant-context retrieval and the bridge into v1 context entries; not yet composed by the live root' },
   { path: 'src/relay/mission/julius/julius-brain-export.ts', reason: 'Project Brain v2: the complete, self-verifying, secret-redacting export; safe restore; resume verification; and the scoped, hashed evaluation-context snapshots a Python execution or a future GVE consumes; not yet composed by the live root' },
   { path: 'src/relay/mission/julius/julius-brain-legacy.ts', reason: 'Project Brain v2: the JuliusBrainWriter decorator that mirrors the live pipeline\'s v1 entries into the typed ledger, and its backfill; a composition root wraps the store with it once the qualification permits wiring changes' },
+  { path: 'src/relay/mission/julius/julius-brain-archive-import.ts', reason: 'Project Brain v2: the translation boundary from the temporary paid-run archive export (julius-paid-run-archive-export.v1) to canonical Brain records — validated, sealed-hash checked, atomic, idempotent, provenance-preserving; not yet composed' },
+  { path: 'src/relay/mission/julius/julius-brain-state-modes.ts', reason: 'Project Brain v2: FRESH / CONTINUATION / LEARNING / REGRESSION retrieval authority over retained Brain state; not yet composed by the live root' },
   { path: 'src/relay/mission/julius/julius-brain-api.ts', reason: 'Project Brain v2: the transport-agnostic API contract for a future editable Brain UI and the bridge — overview with per-caller editability, history, provenance, context, governed user edits, export; not yet mounted' },
   { path: 'src/relay/mission/julius/julius-brain-environment.ts', reason: 'Project Brain v2: evaluation sessions — the scoped snapshot, grants and submission checks a future GVE environment uses; not yet composed' },
   { path: 'src/relay/mission/julius/julius-brain-retrieval.ts', reason: 'Project Brain v2: the optional fuzzy retrieval tier — a typed retriever interface, a keyword baseline, BM25/trigram/fusion candidates and the eval that adopts a candidate only on measured marginal value; not yet composed by the live root' },
@@ -145,6 +147,7 @@ const EXCLUDED_FILES = [
 
 /** Kernel dependants that are neither reached nor declared, and why they stay out. */
 const KERNEL_DEPENDANT_EXCLUSIONS = [
+  { path: 'src/relay/mission/julius/julius-brain-archive-fixtures.ts', reason: 'a paid-run archive export fixture shaped after lab run 34739303313, used only by the archive-import and state-mode tests; nothing composes it' },
   { path: 'src/relay/workspace/julius-tools/node-tool-adapter.ts', reason: 'the local in-process tool adapter (bounded host filesystem + /bin/bash). Since #208 every tool effect goes through the independent executor control plane and the live harness has no import through which this adapter could arrive; it survives for the offline tooling audit and its tests' },
 ];
 
@@ -281,6 +284,8 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-brain-schema-document.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-brain-retrieval.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-brain-api.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  ['src/relay/mission/julius/julius-brain-archive-import.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  ['src/relay/mission/julius/julius-brain-state-modes.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-brain-environment.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-python-contracts.ts', 'TOOLS'],
   ['src/relay/mission/julius/julius-python-service.ts', 'TOOLS'],

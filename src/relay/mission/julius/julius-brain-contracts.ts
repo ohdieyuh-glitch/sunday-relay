@@ -320,7 +320,9 @@ export const JULIUS_BRAIN_BODY_SCHEMAS: Readonly<Record<JuliusBrainRecordKind, J
   },
   FINDING: {
     findingClass: oneOf(['DEFECT', 'AMBIGUITY', 'RISK', 'INCONSISTENCY', 'REVIEWER_FINDING', 'UNRESOLVED_ISSUE']),
-    severity: oneOf(['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL']),
+    // UNKNOWN is a real value: an imported finding whose source recorded no
+    // severity must not be given one.
+    severity: oneOf(['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL', 'UNKNOWN']),
     statement: str(), blocking: bool, status: oneOf(['OPEN', 'RESOLVED', 'DISMISSED', 'STALE']), juliusFindingId: nstr(SHORT),
   },
   REPAIR: {
@@ -335,7 +337,8 @@ export const JULIUS_BRAIN_BODY_SCHEMAS: Readonly<Record<JuliusBrainRecordKind, J
   },
   ARTIFACT: {
     artifactClass: oneOf(JULIUS_BRAIN_ARTIFACT_CLASSES), name: str(SHORT), contentType: str(SHORT),
-    byteSize: { type: 'number', integer: true, min: 0 },
+    // Null when only a reference and hash are known (an archived artifact whose bytes this Brain does not hold).
+    byteSize: { type: 'number', nullable: true, integer: true, min: 0 },
     contentHash: { type: 'string', pattern: JULIUS_BRAIN_SHA256_PATTERN },
     storageRef: str(2_048), commit: nstr(SHORT),
   },
@@ -352,6 +355,8 @@ export const JULIUS_BRAIN_BODY_SCHEMAS: Readonly<Record<JuliusBrainRecordKind, J
     // relaunched, and never reported as anything it cannot be shown to be.
     state: oneOf(['SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED', 'DENIED', 'DISCONNECTED']),
     reasonCode: nstr(SHORT),
+    /** The state mode its Brain snapshot was selected under; null when none was applied. */
+    stateMode: { type: 'string', nullable: true, enum: ['FRESH', 'CONTINUATION', 'LEARNING', 'REGRESSION'] },
     requestedBy: str(SHORT),
     purpose: str(2_048),
     scriptHash: { type: 'string', pattern: JULIUS_BRAIN_SHA256_PATTERN },

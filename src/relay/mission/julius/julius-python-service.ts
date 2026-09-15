@@ -5,9 +5,10 @@ import {
   type JuliusBrainDraft,
   type JuliusBrainPrincipal,
 } from './julius-brain-contracts';
-import { createJuliusBrainEvaluationContext, juliusPrincipalLabel } from './julius-brain-export';
+import { createJuliusBrainEvaluationContext, juliusPrincipalLabel, type JuliusBrainEvaluationContext } from './julius-brain-export';
+import { selectJuliusBrainEntitiesForMode } from './julius-brain-state-modes';
 import type { JuliusBrainReadGrant } from './julius-brain-policy';
-import type { JuliusBrainCommitGroup, JuliusBrainRefusal } from './julius-brain-projection';
+import type { JuliusBrainCommitGroup, JuliusBrainEntityState, JuliusBrainRefusal } from './julius-brain-projection';
 import { redactJuliusSecretsDeep } from './julius-brain-secrets';
 import { readAllJuliusBrainEntities, type JuliusBrainGroupCommitResult, type JuliusBrainMemoryStore, type JuliusBrainStore } from './julius-brain-store';
 import type { JuliusPolicyDecision, JuliusCardPolicy } from './julius-policy';
@@ -191,6 +192,7 @@ export function createJuliusPythonExecutionService(deps: JuliusPythonServiceDeps
     kind: 'PYTHON_EXECUTION', op: 'CREATE', entityId: juliusPythonExecutionEntityId(request.executionId), expectedVersion: 0,
     body: {
       executionId: request.executionId, state: outcome.state, reasonCode: outcome.reasonCode,
+      stateMode: request.brainRead.stateMode?.mode ?? null,
       requestedBy: juliusPrincipalLabel(request.requestedBy).slice(0, 512), purpose: request.purpose,
       scriptHash: juliusPythonScriptHash(request.script), requestDigest: juliusPythonRequestDigest(request), inputsHash: juliusPythonInputsHash(request),
       contextSnapshotHash: outcome.contextSnapshotHash, environmentId: request.environment.environmentId,
@@ -297,6 +299,22 @@ export function createJuliusPythonExecutionService(deps: JuliusPythonServiceDeps
       if (!authorization.allowed) {
         return settleWithoutRun(request, ['REQUESTED'], baseOutcome('DENIED', { reasonCode: authorization.reasonCode, detail: authorization.detail }), environment);
       }
+      // THE STATE MODE, BEFORE ANYTHING IS SPENT. What this execution may draw on
+      // is decided here; a refusal (a moved regression baseline) runs nothing.
+      const snapshotHead = (await deps.brains.head(request.brainId, request.projectId))!;
+      const allEntities = await readAllJuliusBrainEntities(deps.brains, request.brainId, request.projectId);
+      const modePolicy = request.brainRead.stateMode ?? null;
+      let modeEntities: readonly JuliusBrainEntityState[] = allEntities;
+      let modeRecord: JuliusBrainEvaluationContext['stateMode'] = null;
+      if (modePolicy !== null) {
+        const selection = selectJuliusBrainEntitiesForMode(allEntities, modePolicy);
+        if (selection.outcome === 'REFUSED') {
+          return settleWithoutRun(request, ['REQUESTED'], baseOutcome('DENIED', { reasonCode: `STATE_MODE_REFUSED:${selection.reasonCode}`, detail: selection.detail }), environment);
+        }
+        // REGRESSION's baseline is comparison material and is handed over with the rest; FRESH, CONTINUATION and LEARNING hand over only what they admitted.
+        modeEntities = [...selection.admitted.map((item) => item.entity), ...(selection.baseline ?? [])];
+        modeRecord = { mode: selection.mode, policyHash: selection.policyHash, excluded: selection.excluded as Record<string, number> };
+      }
       const reservationId = `python:${request.projectId}:${request.executionId}`;
       if (deps.budget !== undefined) {
         // The ledger is per run; an execution outside a run has nothing to charge against.
@@ -331,15 +349,14 @@ export function createJuliusPythonExecutionService(deps: JuliusPythonServiceDeps
       const visibleEntityIds = new Set<string>();
       const secretValues: string[] = [];
       try {
-        const head = (await deps.brains.head(request.brainId, request.projectId))!;
         const readGrant: JuliusBrainReadGrant = {
           grantId: `python-read:${request.executionId}`, brainId: request.brainId, kinds: request.brainRead.kinds,
           missionIds: [request.missionId], taskIds: request.brainRead.taskScoped ? [request.taskId] : null,
           includeHistory: request.brainRead.includeHistory, includeRestricted: false,
         };
         const context = createJuliusBrainEvaluationContext({
-          brainId: request.brainId, entities: await readAllJuliusBrainEntities(deps.brains, request.brainId, request.projectId),
-          head, grant: readGrant, consumerRunId: request.executionId, createdAt: startedAt,
+          brainId: request.brainId, entities: modeEntities,
+          head: snapshotHead, grant: readGrant, consumerRunId: request.executionId, createdAt: startedAt, stateMode: modeRecord,
         });
         contextSnapshotHash = context.snapshotHash;
         for (const state of context.entities) visibleEntityIds.add(state.entityId);

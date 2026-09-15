@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **181 production files** across 20/20 subsystems (2 roots, 140 traced, 24 not composed by the live root, 15 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **183 production files** across 20/20 subsystems (2 roots, 141 traced, 25 not composed by the live root, 15 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -91,6 +91,7 @@ The provider-neutral kernel: mission states and the transition table, tasks, evi
 | --- | --- | --- |
 | `src/relay/mission/julius/index.ts` | traced | `src/relay/persistence/julius-postgres.ts` |
 | `src/relay/mission/julius/julius-brain-api.ts` | not composed by the live root | — |
+| `src/relay/mission/julius/julius-brain-archive-import.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-contracts.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-environment.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-export.ts` | not composed by the live root | — |
@@ -102,6 +103,7 @@ The provider-neutral kernel: mission states and the transition table, tasks, evi
 | `src/relay/mission/julius/julius-brain-schema-document.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-secrets.ts` | traced | `src/relay/mission/julius/julius-brain-projection.ts` |
 | `src/relay/mission/julius/julius-brain-service.ts` | not composed by the live root | — |
+| `src/relay/mission/julius/julius-brain-state-modes.ts` | traced | `src/relay/mission/julius/julius-brain-archive-import.ts` |
 | `src/relay/mission/julius/julius-brain-store.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-context-integrity.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-context-snapshot.ts` | traced | `src/relay/mission/julius/index.ts` |
@@ -402,6 +404,7 @@ C.A.R.D. roles resolved to live adapters — fail closed, naming every missing v
 - **fixtures** — `src/relay/mission/julius/julius-runtime-fixtures.ts`: a complete deterministic Julius deployment in memory — scripted adapters, stepping clock, counting ids — exported by the kernel barrel for tests; the live composition has no import through which a scripted adapter could arrive. Reached only via `src/relay/mission/julius/index.ts`.
 - **test harness** — `src/relay/mission/julius/julius-fault-injection.ts`: wraps a store so a named method throws on its Nth call — the chaos instrument the recovery scenarios use; no production caller. Reached only via `src/relay/mission/julius/index.ts`.
 - **fake** — `src/relay/connectors/gpt-architect/fake-architect.ts`: the deterministic offline fake of the GPT architect, exported by the connector barrel for the suite and Demo Simulation; the live worker binds runGptArchitect only. Reached only via `src/relay/connectors/gpt-architect/index.ts`, `src/relay/connectors/gpt-architect/index.ts`.
+- **legacy local execution** — `src/relay/mission/julius/julius-brain-archive-fixtures.ts`: a paid-run archive export fixture shaped after lab run 34739303313, used only by the archive-import and state-mode tests; nothing composes it.
 - **legacy local execution** — `src/relay/workspace/julius-tools/node-tool-adapter.ts`: the local in-process tool adapter (bounded host filesystem + /bin/bash). Since #208 every tool effect goes through the independent executor control plane and the live harness has no import through which this adapter could arrive; it survives for the offline tooling audit and its tests.
 - **pre-Julius schema** — `001_wonderland_runtime.sql`, `002_wonderland_outbox.sql`, `003_wonderland_budget_reservations.sql`, `004_wonderland_ratings.sql`, `005_wonderland_inventory.sql`, `006_wonderland_eval_runtime.sql`, `007_wonderland_provider_operations.sql`, `008_wonderland_swarm_scheduler.sql`, `009_wonderland_gve_runs.sql`, `010_wonderland_hidden_fixtures.sql`, `017_gauntlet_command.sql` under `src/relay/persistence/wonderland-migrations/`: registered by the same migration runner and applied in order before the Julius migrations; Julius tables reference `relay_wonderland.projects`, `mission_contracts` and `budget_reservations` defined there, and 017 is the Gauntlet Loop's own storage, deliberately not Julius's.
 
@@ -440,6 +443,8 @@ Production Julius modules that implement a Julius port but are not reached from 
 | `src/relay/mission/julius/julius-brain-query.ts` | Project Brain v2: deterministic, budgeted relevant-context retrieval and the bridge into v1 context entries; not yet composed by the live root |
 | `src/relay/mission/julius/julius-brain-export.ts` | Project Brain v2: the complete, self-verifying, secret-redacting export; safe restore; resume verification; and the scoped, hashed evaluation-context snapshots a Python execution or a future GVE consumes; not yet composed by the live root |
 | `src/relay/mission/julius/julius-brain-legacy.ts` | Project Brain v2: the JuliusBrainWriter decorator that mirrors the live pipeline's v1 entries into the typed ledger, and its backfill; a composition root wraps the store with it once the qualification permits wiring changes |
+| `src/relay/mission/julius/julius-brain-archive-import.ts` | Project Brain v2: the translation boundary from the temporary paid-run archive export (julius-paid-run-archive-export.v1) to canonical Brain records — validated, sealed-hash checked, atomic, idempotent, provenance-preserving; not yet composed |
+| `src/relay/mission/julius/julius-brain-state-modes.ts` | Project Brain v2: FRESH / CONTINUATION / LEARNING / REGRESSION retrieval authority over retained Brain state; not yet composed by the live root |
 | `src/relay/mission/julius/julius-brain-api.ts` | Project Brain v2: the transport-agnostic API contract for a future editable Brain UI and the bridge — overview with per-caller editability, history, provenance, context, governed user edits, export; not yet mounted |
 | `src/relay/mission/julius/julius-brain-environment.ts` | Project Brain v2: evaluation sessions — the scoped snapshot, grants and submission checks a future GVE environment uses; not yet composed |
 | `src/relay/mission/julius/julius-brain-retrieval.ts` | Project Brain v2: the optional fuzzy retrieval tier — a typed retriever interface, a keyword baseline, BM25/trigram/fusion candidates and the eval that adopts a candidate only on measured marginal value; not yet composed by the live root |
