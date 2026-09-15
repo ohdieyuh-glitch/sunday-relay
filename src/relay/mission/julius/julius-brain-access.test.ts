@@ -2,11 +2,12 @@ import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import {
+  createJuliusBrainAccessMemoryState,
   createJuliusBrainAccessService,
   GITHUB_ACTIONS_OIDC_ISSUER,
+  verifyJuliusBrainAuditChain,
   verifyJuliusBrainOidcToken,
   type JuliusBrainAccessPolicy,
-  type JuliusBrainAuditEvent,
   type JuliusBrainJwk,
   type JuliusBrainStateModeGrant,
 } from './julius-brain-access';
@@ -47,12 +48,12 @@ const fresh = (runId = 'workflow:35000000000/1'): JuliusBrainStateModePolicy => 
 
 function service(environment: 'production' | 'development' = 'production', grants: JuliusBrainStateModeGrant[] = []) {
   let now = START * 1000;
-  const audit: JuliusBrainAuditEvent[] = [];
+  const state = createJuliusBrainAccessMemoryState();
   const access = createJuliusBrainAccessService({
-    brainId: BRAIN, environment, policy: POLICY, jwks: () => JWKS, grants: () => grants,
-    clock: { now: () => new Date(now).toISOString() }, audit: (event) => audit.push(event),
+    brainId: BRAIN, environment, binding: { databaseEnvironment: environment }, policy: POLICY, jwks: () => JWKS, grants: () => grants,
+    clock: { now: () => new Date(now).toISOString() }, state,
   });
-  return { access, audit, advance: (ms: number) => { now += ms; } };
+  return { access, audit: state.audit, state, advance: (ms: number) => { now += ms; } };
 }
 
 describe('the controlled Brain service access contract', () => {
@@ -83,29 +84,29 @@ describe('the controlled Brain service access contract', () => {
     expect(refused(token({ run_attempt: '0' }))).toBe('token_claim_refused:run_attempt');
   });
 
-  it('issues a session bound to the verified attempt; replay, other environments, foreign runs and unauthorised modes are refused', () => {
+  it('issues a session bound to the verified attempt; replay, other environments, foreign runs and unauthorised modes are refused', async () => {
     const grantPolicy: JuliusBrainStateModePolicy = { mode: 'LEARNING', missionId: MISSION, runId: 'workflow:35000000001/1', learnFrom: { runIds: ['workflow:34739303313/1'], kinds: ['FINDING'], requireVerified: false } };
     const { access, audit } = service('production', [{ brainRunId: 'workflow:35000000001/1', missionId: MISSION, policyHash: juliusBrainStateModePolicyHash(grantPolicy) }]);
     const value = token();
-    const issued = access.issueSession({ token: value, projectId: PROJECT, missionId: MISSION, stateMode: fresh() });
+    const issued = await access.issueSession({ token: value, projectId: PROJECT, missionId: MISSION, stateMode: fresh() });
     if (!issued.ok) throw new Error(issued.detail);
     expect(issued.session).toMatchObject({ brainRunId: 'workflow:35000000000/1', environment: 'production', principal: { kind: 'JULIUS', id: 'julius:workflow:35000000000/1' }, expiresAt: '2026-09-15T15:00:00.000Z' });
 
-    const reason = (input: Parameters<typeof access.issueSession>[0]) => { const result = access.issueSession(input); return result.ok ? 'issued' : result.reasonCode; };
-    expect(reason({ token: value, projectId: PROJECT, missionId: MISSION, stateMode: fresh() })).toBe('token_replayed');
-    expect(reason({ token: token({ environment: 'julius-dev' }), projectId: PROJECT, missionId: MISSION, stateMode: fresh() })).toBe('environment_mismatch');
+    const reason = async (input: Parameters<typeof access.issueSession>[0]) => { const result = await access.issueSession(input); return result.ok ? 'issued' : result.reasonCode; };
+    expect(await reason({ token: value, projectId: PROJECT, missionId: MISSION, stateMode: fresh() })).toBe('token_replayed');
+    expect(await reason({ token: token({ environment: 'julius-dev' }), projectId: PROJECT, missionId: MISSION, stateMode: fresh() })).toBe('environment_mismatch');
     // The client cannot name the run: a policy for any run but the token's is refused.
-    expect(reason({ token: token(), projectId: PROJECT, missionId: MISSION, stateMode: fresh('workflow:34739303313/1') })).toBe('state_mode_not_for_this_run');
+    expect(await reason({ token: token(), projectId: PROJECT, missionId: MISSION, stateMode: fresh('workflow:34739303313/1') })).toBe('state_mode_not_for_this_run');
     // Prior state needs an operator grant for exactly this run, mission and policy.
-    expect(reason({ token: token({ run_id: '35000000002' }), projectId: PROJECT, missionId: MISSION, stateMode: { ...grantPolicy, runId: 'workflow:35000000002/1' } })).toBe('state_mode_not_authorized');
-    expect(reason({ token: token({ run_id: '35000000001' }), projectId: PROJECT, missionId: MISSION, stateMode: grantPolicy })).toBe('issued');
+    expect(await reason({ token: token({ run_id: '35000000002' }), projectId: PROJECT, missionId: MISSION, stateMode: { ...grantPolicy, runId: 'workflow:35000000002/1' } })).toBe('state_mode_not_authorized');
+    expect(await reason({ token: token({ run_id: '35000000001' }), projectId: PROJECT, missionId: MISSION, stateMode: grantPolicy })).toBe('issued');
     // Once an attempt registered FRESH, no later token for it may change the mode, the mission or the project.
-    expect(reason({ token: token(), projectId: PROJECT, missionId: MISSION, stateMode: { ...grantPolicy, runId: 'workflow:35000000000/1' } })).toBe('state_mode_not_authorized');
+    expect(await reason({ token: token(), projectId: PROJECT, missionId: MISSION, stateMode: { ...grantPolicy, runId: 'workflow:35000000000/1' } })).toBe('state_mode_not_authorized');
     const { access: granted } = service('production', [{ brainRunId: 'workflow:35000000000/1', missionId: MISSION, policyHash: juliusBrainStateModePolicyHash({ ...grantPolicy, runId: 'workflow:35000000000/1' }) }]);
-    expect(granted.issueSession({ token: token(), projectId: PROJECT, missionId: MISSION, stateMode: fresh() }).ok).toBe(true);
-    const switched = granted.issueSession({ token: token(), projectId: PROJECT, missionId: MISSION, stateMode: { ...grantPolicy, runId: 'workflow:35000000000/1' } });
+    expect((await granted.issueSession({ token: token(), projectId: PROJECT, missionId: MISSION, stateMode: fresh() })).ok).toBe(true);
+    const switched = await granted.issueSession({ token: token(), projectId: PROJECT, missionId: MISSION, stateMode: { ...grantPolicy, runId: 'workflow:35000000000/1' } });
     expect(switched.ok ? 'issued' : switched.reasonCode).toBe('run_registration_mismatch');
-    expect(reason({ token: token(), projectId: 'prj-other', missionId: MISSION, stateMode: fresh() })).toBe('run_registration_mismatch');
+    expect(await reason({ token: token(), projectId: 'prj-other', missionId: MISSION, stateMode: fresh() })).toBe('run_registration_mismatch');
 
     // Audited, without a single token.
     expect(audit.map((event) => `${event.action}:${event.reasonCode ?? ''}`)).toEqual([
@@ -114,11 +115,12 @@ describe('the controlled Brain service access contract', () => {
     ]);
     expect(JSON.stringify(audit)).not.toContain(value.split('.')[2]!);
     expect(JSON.stringify(audit)).not.toContain(issued.sessionToken);
+    expect(verifyJuliusBrainAuditChain(audit).ok).toBe(true);
   });
 
-  it('a faulty client cannot read another run, switch its mode, write protected or foreign records, reuse an expired session, or cross environments', () => {
+  it('a faulty client cannot read another run, switch its mode, write protected or foreign records, reuse an expired session, or cross environments', async () => {
     const { access, audit, advance } = service('production');
-    const issued = access.issueSession({ token: token(), projectId: PROJECT, missionId: MISSION, stateMode: fresh() });
+    const issued = await access.issueSession({ token: token(), projectId: PROJECT, missionId: MISSION, stateMode: fresh() });
     if (!issued.ok) throw new Error(issued.detail);
     const session = issued.sessionToken;
     const draft = (patch: Partial<JuliusBrainDraft>): JuliusBrainDraft => ({
@@ -126,31 +128,31 @@ describe('the controlled Brain service access contract', () => {
       retention: 'DURABLE', confidence: null, sensitivity: 'INTERNAL', provenance: { source: 'run_observed', provider: null, model: null, tool: null, commit: null, externalRef: null, executionId: null },
       idempotencyKey: 'k', occurredAt: null, ...patch,
     });
-    const call = (value: Parameters<typeof access.authorize>[0]['call'], sessionToken = session) => { const result = access.authorize({ sessionToken, call: value }); return result.ok ? 'allowed' : result.reasonCode; };
+    const call = async (value: Parameters<typeof access.authorize>[0]['call'], sessionToken = session) => { const result = await access.authorize({ sessionToken, call: value }); return result.ok ? 'allowed' : result.reasonCode; };
 
-    expect(call({ type: 'READ_CONTEXT' })).toBe('allowed');
-    expect(call({ type: 'READ_CONTEXT', runId: 'workflow:34739303313/1' })).toBe('other_run');
-    expect(call({ type: 'READ_CONTEXT', missionId: 'mission:other' })).toBe('other_mission');
-    expect(call({ type: 'READ_CONTEXT', stateMode: { mode: 'LEARNING', missionId: MISSION, runId: 'workflow:35000000000/1', learnFrom: { runIds: null, kinds: ['FINDING'], requireVerified: false } } })).toBe('state_mode_is_bound');
-    expect(call({ type: 'WRITE', drafts: [draft({})] })).toBe('allowed');
-    expect(call({ type: 'WRITE', drafts: [draft({ kind: 'MISSION' })] })).toBe('kind_not_permitted');
-    expect(call({ type: 'WRITE', drafts: [draft({ kind: 'CHECKPOINT' })] })).toBe('kind_not_permitted');
-    expect(call({ type: 'WRITE', drafts: [draft({}), draft({ scope: { missionId: MISSION, runId: 'workflow:34739303313/1', taskId: null } })] })).toBe('mutation_out_of_scope');
+    expect(await call({ type: 'READ_CONTEXT' })).toBe('allowed');
+    expect(await call({ type: 'READ_CONTEXT', runId: 'workflow:34739303313/1' })).toBe('other_run');
+    expect(await call({ type: 'READ_CONTEXT', missionId: 'mission:other' })).toBe('other_mission');
+    expect(await call({ type: 'READ_CONTEXT', stateMode: { mode: 'LEARNING', missionId: MISSION, runId: 'workflow:35000000000/1', learnFrom: { runIds: null, kinds: ['FINDING'], requireVerified: false } } })).toBe('state_mode_is_bound');
+    expect(await call({ type: 'WRITE', drafts: [draft({})] })).toBe('allowed');
+    expect(await call({ type: 'WRITE', drafts: [draft({ kind: 'MISSION' })] })).toBe('kind_not_permitted');
+    expect(await call({ type: 'WRITE', drafts: [draft({ kind: 'CHECKPOINT' })] })).toBe('kind_not_permitted');
+    expect(await call({ type: 'WRITE', drafts: [draft({}), draft({ scope: { missionId: MISSION, runId: 'workflow:34739303313/1', taskId: null } })] })).toBe('mutation_out_of_scope');
     // Mission authority is run-less; a run session cannot write it, whatever the kind.
-    expect(call({ type: 'WRITE', drafts: [draft({ kind: 'CONSTRAINT', scope: { missionId: MISSION, runId: null, taskId: null } })] })).toBe('mutation_out_of_scope');
-    expect(call({ type: 'SEAL', runId: 'workflow:34739303313/1' })).toBe('other_run');
-    expect(call({ type: 'RAW_STORE', operation: 'SELECT * FROM julius_brain.records' })).toBe('raw_store_not_exposed');
-    expect(call({ type: 'READ_CONTEXT' }, 'a-guessed-session-token')).toBe('session_unknown');
+    expect(await call({ type: 'WRITE', drafts: [draft({ kind: 'CONSTRAINT', scope: { missionId: MISSION, runId: null, taskId: null } })] })).toBe('mutation_out_of_scope');
+    expect(await call({ type: 'SEAL', runId: 'workflow:34739303313/1' })).toBe('other_run');
+    expect(await call({ type: 'RAW_STORE', operation: 'SELECT * FROM julius_brain.records' })).toBe('raw_store_not_exposed');
+    expect(await call({ type: 'READ_CONTEXT' }, 'a-guessed-session-token')).toBe('session_unknown');
 
     // A development session is not a production session.
     const dev = service('development');
-    const devIssued = dev.access.issueSession({ token: token({ environment: 'julius-dev' }), projectId: PROJECT, missionId: MISSION, stateMode: fresh() });
+    const devIssued = await dev.access.issueSession({ token: token({ environment: 'julius-dev' }), projectId: PROJECT, missionId: MISSION, stateMode: fresh() });
     if (!devIssued.ok) throw new Error(devIssued.detail);
-    expect(call({ type: 'READ_CONTEXT' }, devIssued.sessionToken)).toBe('session_unknown');
+    expect(await call({ type: 'READ_CONTEXT' }, devIssued.sessionToken)).toBe('session_unknown');
 
     // Expiry is the session's; nothing the client sends extends it.
     advance(POLICY.sessionTtlMs);
-    expect(call({ type: 'READ_CONTEXT' })).toBe('session_expired');
+    expect(await call({ type: 'READ_CONTEXT' })).toBe('session_expired');
     expect(audit.filter((event) => event.action === 'CALL_REFUSED').map((event) => event.reasonCode)).toEqual([
       'other_run', 'other_mission', 'state_mode_is_bound', 'kind_not_permitted', 'kind_not_permitted', 'mutation_out_of_scope', 'mutation_out_of_scope',
       'other_run', 'raw_store_not_exposed', 'session_unknown', 'session_unknown', 'session_expired',
@@ -167,7 +169,7 @@ describe('the controlled Brain service access contract', () => {
     const julius = (await brains.open({ brainId: BRAIN, projectId: PROJECT, principal: juliusPrincipal('JULIUS', 'julius') }))!;
     await julius.create('OBJECTIVE', { statement: 'Implement the trust core', successMeasure: null }, { key: 'objective', scope: { missionId: MISSION } });
     const { access } = service('production');
-    const issued = access.issueSession({ token: token(), projectId: PROJECT, missionId: MISSION, stateMode: fresh() });
+    const issued = await access.issueSession({ token: token(), projectId: PROJECT, missionId: MISSION, stateMode: fresh() });
     if (!issued.ok) throw new Error(issued.detail);
     const view = access.context(issued.session, await readAllJuliusBrainEntities(store, BRAIN, PROJECT), { role: 'CODING_AGENT', budgetCharacters: 50_000 })!;
     expect(view.items.map((item) => item.text).join('\n')).toContain('Implement the trust core');

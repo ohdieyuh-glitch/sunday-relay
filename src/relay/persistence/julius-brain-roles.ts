@@ -43,6 +43,8 @@ export function juliusBrainRoleGrants(input: { readonly database: string; readon
     `GRANT UPDATE (head_sequence, head_chain_hash) ON julius_brain.brains TO ${service}`,
     `GRANT SELECT, INSERT ON julius_brain.records, julius_brain.links, julius_brain.content TO ${service}`,
     `GRANT SELECT, INSERT, UPDATE ON julius_brain.entities, julius_brain.python_executions TO ${service}`,
+    // The access state is append-only for the service: claims, registrations, sessions and audit are inserted and read, never changed.
+    `GRANT SELECT, INSERT ON julius_brain.access_token_claims, julius_brain.access_registrations, julius_brain.access_sessions, julius_brain.access_audit TO ${service}`,
 
     `GRANT SELECT ON ALL TABLES IN SCHEMA julius_brain TO ${reader}`,
   ];

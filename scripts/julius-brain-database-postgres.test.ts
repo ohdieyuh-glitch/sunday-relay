@@ -19,7 +19,7 @@ import { JuliusBrainPostgresStore } from '../src/relay/persistence/julius-brain-
 const enabled = (process.env.JULIUS_REAL_INFRA === '1' || process.env.JULIUS_REAL_POSTGRES === '1') && (process.env.DATABASE_URL ?? '') !== '';
 const suite = enabled ? describe : describe.todo;
 
-const CHAIN = ['001_julius_brain_ledger', '002_julius_brain_python_executions', '003_julius_brain_content', '004_julius_brain_immutability', '005_julius_brain_unknown_occurrence'];
+const CHAIN = ['001_julius_brain_ledger', '002_julius_brain_python_executions', '003_julius_brain_content', '004_julius_brain_immutability', '005_julius_brain_unknown_occurrence', '006_julius_brain_access'];
 
 async function freshDatabase(label: string): Promise<string> {
   const name = `jbdb${label}${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;

@@ -1,10 +1,16 @@
 import { createHash, createPublicKey, randomBytes, verify } from 'node:crypto';
 
-import { juliusPrincipal, type JuliusBrainDraft, type JuliusBrainPrincipal, type JuliusBrainRecordKind } from './julius-brain-contracts';
+import { canonicalJuliusBrainJson, juliusBrainSha256, juliusPrincipal, type JuliusBrainDraft, type JuliusBrainPrincipal, type JuliusBrainRecordKind } from './julius-brain-contracts';
 import type { JuliusBrainEntityState } from './julius-brain-projection';
 import type { JuliusBrainContextView } from './julius-brain-query';
 import { defaultJuliusBrainReadGrant } from './julius-brain-service';
-import { compileJuliusBrainContextForMode, juliusBrainStateModePolicyHash, validateJuliusBrainStateModePolicy, type JuliusBrainStateModePolicy } from './julius-brain-state-modes';
+import {
+  compileJuliusBrainContextForMode,
+  juliusBrainStateModePolicyHash,
+  selectJuliusBrainEntitiesForMode,
+  validateJuliusBrainStateModePolicy,
+  type JuliusBrainStateModePolicy,
+} from './julius-brain-state-modes';
 
 /**
  * THE CONTROLLED BRAIN SERVICE'S ACCESS CONTRACT — LOCAL, NOT DEPLOYED.
@@ -18,29 +24,36 @@ import { compileJuliusBrainContextForMode, juliusBrainStateModePolicyHash, valid
  *   run identity         `workflow:<run_id>/<run_attempt>` from the verified
  *                        token — never a run id the client names
  *   environment          the token's protected environment, mapped by policy,
- *                        must be the service's own; a development session is
- *                        unknown to a production service
+ *                        must be the service's own, and the service must be
+ *                        bound to a Brain database of that same environment
  *   mission identity     bound when the attempt first registers
  *   state mode           bound when the attempt first registers — a later
- *                        session cannot change it — and anything but FRESH
- *                        needs an operator grant naming the run and policy
+ *                        session, even after a service restart, cannot change
+ *                        it — and anything but FRESH needs an operator grant
+ *                        naming the run and policy
  *   write kinds          an allowlist; mission authority is never written by
  *                        a run
  *   retrieval scope      selected server-side under the bound mode
- *   mutation scope       every draft must be scoped to the session's run and
- *                        mission
+ *   artifact reads       only an artifact an entity admitted under the bound
+ *                        mode references
+ *   mutation scope       every draft scoped to the session's run and mission;
+ *                        a revision or retirement only of an entity the
+ *                        service resolved to that run and mission
  *   expiry               the session's, never refreshed by the client
- *   replay               a token id (jti) is accepted once
+ *   replay               a token id is accepted once, durably
  *   raw store            never exposed
  *
- * Every decision — issued, refused, allowed — is audited without the token.
- * Transport, key fetching and storage are deployment; this is what they must
- * enforce, runnable and proven.
+ * Token claims, registrations and sessions live behind a state port, so a
+ * service restart forgets nothing that protects the Brain. Every decision —
+ * issued, refused, allowed — is appended to a hash-chained audit before it takes
+ * effect, without any token; an audit that cannot be written is a refusal.
  */
 
 export const GITHUB_ACTIONS_OIDC_ISSUER = 'https://token.actions.githubusercontent.com';
 const CLOCK_SKEW_SECONDS = 60;
 const MAX_TOKEN_AGE_SECONDS = 15 * 60;
+
+export type JuliusBrainServiceEnvironment = 'development' | 'test' | 'production';
 
 export interface JuliusBrainAccessPolicy {
   readonly audience: string;
@@ -51,7 +64,7 @@ export interface JuliusBrainAccessPolicy {
   readonly ref: string;
   readonly allowedEvents: readonly string[];
   /** Protected GitHub environment name → the Brain environment it may reach. */
-  readonly environments: Readonly<Record<string, 'development' | 'test' | 'production'>>;
+  readonly environments: Readonly<Record<string, JuliusBrainServiceEnvironment>>;
   readonly sessionTtlMs: number;
 }
 
@@ -70,7 +83,8 @@ export type JuliusBrainAccessRefusal =
   | 'token_malformed' | 'token_algorithm_refused' | 'token_key_unknown' | 'token_signature_invalid' | 'token_issuer_refused' | 'token_audience_refused'
   | 'token_expired' | 'token_not_yet_valid' | 'token_too_old' | 'token_claim_refused' | 'token_replayed'
   | 'environment_mismatch' | 'state_mode_invalid' | 'state_mode_not_for_this_run' | 'state_mode_not_authorized' | 'run_registration_mismatch'
-  | 'session_unknown' | 'session_expired' | 'other_run' | 'other_mission' | 'state_mode_is_bound' | 'kind_not_permitted' | 'mutation_out_of_scope' | 'raw_store_not_exposed';
+  | 'session_unknown' | 'session_expired' | 'other_run' | 'other_mission' | 'state_mode_is_bound' | 'kind_not_permitted' | 'mutation_out_of_scope'
+  | 'mutation_target_unresolved' | 'artifact_not_admitted' | 'raw_store_not_exposed';
 
 /** An RSA public key as the issuer publishes it (JWKS). */
 export interface JuliusBrainJwk { readonly kty: string; readonly kid?: string; readonly n?: string; readonly e?: string; readonly alg?: string; readonly use?: string }
@@ -149,7 +163,7 @@ export interface JuliusBrainRunSession {
   readonly brainRunId: string;
   readonly projectId: string;
   readonly missionId: string;
-  readonly environment: 'development' | 'test' | 'production';
+  readonly environment: JuliusBrainServiceEnvironment;
   readonly policy: JuliusBrainStateModePolicy;
   readonly policyHash: string;
   /** Server-constructed; the client never names a principal. */
@@ -163,9 +177,20 @@ export type JuliusBrainServiceCall =
   | { readonly type: 'READ_CONTEXT'; readonly runId?: string; readonly missionId?: string; readonly stateMode?: JuliusBrainStateModePolicy }
   | { readonly type: 'WRITE'; readonly drafts: readonly JuliusBrainDraft[] }
   | { readonly type: 'SEAL'; readonly runId: string }
+  | { readonly type: 'READ_ARTIFACT'; readonly contentHash: string }
   | { readonly type: 'RAW_STORE'; readonly operation: string };
 
-export interface JuliusBrainAuditEvent {
+/** What the service resolved, server-side, about the entities a call touches. The client supplies none of it. */
+export interface JuliusBrainCallFacts {
+  /** For WRITE: the current scope of every entity a non-CREATE draft targets. */
+  readonly targets?: ReadonlyMap<string, { readonly runId: string | null; readonly missionId: string | null }>;
+  /** For READ_ARTIFACT: the Brain's entities, from which the bound mode's admissions are selected. */
+  readonly entities?: readonly JuliusBrainEntityState[];
+}
+
+/* -------------------------------------------------------------- the audit */
+
+export interface JuliusBrainAuditEntry {
   readonly at: string;
   readonly action: 'SESSION_ISSUED' | 'SESSION_REFUSED' | 'CALL_ALLOWED' | 'CALL_REFUSED';
   readonly sessionId: string | null;
@@ -174,32 +199,121 @@ export interface JuliusBrainAuditEvent {
   readonly reasonCode: JuliusBrainAccessRefusal | null;
 }
 
+/** An audit entry as chained: each one commits to the one before it. */
+export interface JuliusBrainAuditEvent extends JuliusBrainAuditEntry {
+  readonly sequence: number;
+  readonly previousHash: string | null;
+  readonly hash: string;
+}
+
+export const JULIUS_BRAIN_AUDIT_GENESIS = null;
+
+export function chainJuliusBrainAuditEvent(previous: Pick<JuliusBrainAuditEvent, 'sequence' | 'hash'> | null, entry: JuliusBrainAuditEntry): JuliusBrainAuditEvent {
+  const unhashed = {
+    at: entry.at, action: entry.action, sessionId: entry.sessionId, brainRunId: entry.brainRunId, call: entry.call, reasonCode: entry.reasonCode,
+    sequence: (previous?.sequence ?? 0) + 1, previousHash: previous?.hash ?? JULIUS_BRAIN_AUDIT_GENESIS,
+  };
+  return { ...unhashed, hash: juliusBrainSha256(canonicalJuliusBrainJson(unhashed)) };
+}
+
+/**
+ * Whether an audit is the chain it claims to be. Detects an edited, removed,
+ * inserted or reordered event anywhere in the chain; removal of the newest
+ * events is detected only against an anchor (a head recorded elsewhere).
+ */
+export function verifyJuliusBrainAuditChain(events: readonly JuliusBrainAuditEvent[], anchor?: { readonly sequence: number; readonly hash: string }): { readonly ok: boolean; readonly problems: readonly string[] } {
+  const problems: string[] = [];
+  let previous: JuliusBrainAuditEvent | null = null;
+  for (const event of events) {
+    const expected = chainJuliusBrainAuditEvent(previous, event);
+    if (event.sequence !== expected.sequence) problems.push(`event ${event.sequence}: out of sequence (expected ${expected.sequence})`);
+    else if (event.previousHash !== expected.previousHash) problems.push(`event ${event.sequence}: does not follow event ${expected.sequence - 1}`);
+    else if (event.hash !== expected.hash) problems.push(`event ${event.sequence}: its content does not match its hash`);
+    if (problems.length > 0) break;
+    previous = event;
+  }
+  if (problems.length === 0 && anchor !== undefined) {
+    const at = events.find((event) => event.sequence === anchor.sequence);
+    if (at === undefined) problems.push(`the anchored event ${anchor.sequence} is missing`);
+    else if (at.hash !== anchor.hash) problems.push(`event ${anchor.sequence}: does not match the anchor`);
+  }
+  return { ok: problems.length === 0, problems };
+}
+
+/* ------------------------------------------------------------ durable state */
+
+export interface JuliusBrainAccessRegistration {
+  readonly brainRunId: string;
+  readonly projectId: string;
+  readonly missionId: string;
+  readonly policyHash: string;
+  readonly environment: JuliusBrainServiceEnvironment;
+  readonly registeredAt: string;
+}
+
+/** What must survive a service restart. Every method is atomic against concurrent callers. */
+export interface JuliusBrainAccessStatePort {
+  /** True the first time this token digest is claimed; false ever after. Only the digest is kept, never the token or its id. */
+  claimToken(tokenDigest: string, expiresAt: string): Promise<boolean>;
+  /** Registers the attempt if it is not registered, and returns the registration that holds either way. */
+  register(registration: JuliusBrainAccessRegistration): Promise<JuliusBrainAccessRegistration>;
+  /** Sessions are kept by the digest of their token, never the token. */
+  putSession(tokenDigest: string, session: JuliusBrainRunSession): Promise<void>;
+  getSession(tokenDigest: string): Promise<JuliusBrainRunSession | null>;
+  /** Chains the entry after the current head and appends it. */
+  appendAudit(entry: JuliusBrainAuditEntry): Promise<JuliusBrainAuditEvent>;
+  readAudit(): Promise<readonly JuliusBrainAuditEvent[]>;
+}
+
+export function createJuliusBrainAccessMemoryState(): JuliusBrainAccessStatePort & { readonly audit: JuliusBrainAuditEvent[] } {
+  const claims = new Map<string, string>();
+  const registrations = new Map<string, JuliusBrainAccessRegistration>();
+  const sessions = new Map<string, JuliusBrainRunSession>();
+  const audit: JuliusBrainAuditEvent[] = [];
+  return {
+    audit,
+    async claimToken(digest, expiresAt) { if (claims.has(digest)) return false; claims.set(digest, expiresAt); return true; },
+    async register(registration) { const held = registrations.get(registration.brainRunId); if (held !== undefined) return held; registrations.set(registration.brainRunId, registration); return registration; },
+    async putSession(digest, session) { sessions.set(digest, session); },
+    async getSession(digest) { return sessions.get(digest) ?? null; },
+    async appendAudit(entry) { const event = chainJuliusBrainAuditEvent(audit.at(-1) ?? null, entry); audit.push(event); return event; },
+    async readAudit() { return [...audit]; },
+  };
+}
+
+/* ---------------------------------------------------------------- the service */
+
 /** An operator's authorisation for a run to use prior state: exactly this run, mission and mode policy. */
 export interface JuliusBrainStateModeGrant { readonly brainRunId: string; readonly missionId: string; readonly policyHash: string }
 
+export type JuliusBrainAccessResult<T> = { readonly ok: true } & T | { readonly ok: false; readonly reasonCode: JuliusBrainAccessRefusal; readonly detail: string };
+
 export function createJuliusBrainAccessService(deps: {
   readonly brainId: string;
-  readonly environment: 'development' | 'test' | 'production';
+  readonly environment: JuliusBrainServiceEnvironment;
+  /** The environment the Brain database this service is bound to records (as `assertJuliusBrainDatabase` verified it). */
+  readonly binding: { readonly databaseEnvironment: JuliusBrainServiceEnvironment };
   readonly policy: JuliusBrainAccessPolicy;
   readonly jwks: () => { readonly keys: readonly JuliusBrainJwk[] };
   readonly grants: () => readonly JuliusBrainStateModeGrant[];
   readonly clock: { now(): string };
-  readonly audit: (event: JuliusBrainAuditEvent) => void;
+  readonly state: JuliusBrainAccessStatePort;
 }) {
-  const sessions = new Map<string, JuliusBrainRunSession>();
-  const seenTokens = new Map<string, number>();
-  const registrations = new Map<string, { readonly projectId: string; readonly missionId: string; readonly policyHash: string }>();
+  // A service is never bound to a Brain of another environment: a production service over a development database refuses to exist.
+  if (deps.binding.databaseEnvironment !== deps.environment) {
+    throw new Error(`julius_brain_access_binding_mismatch: a ${deps.environment} service bound to a ${deps.binding.databaseEnvironment} Brain database`);
+  }
   const nowIso = () => deps.clock.now();
   const nowSeconds = () => Math.floor(Date.parse(nowIso()) / 1000);
 
-  const refuseIssue = (reasonCode: JuliusBrainAccessRefusal, detail: string, brainRunId: string | null) => {
-    deps.audit({ at: nowIso(), action: 'SESSION_REFUSED', sessionId: null, brainRunId, call: null, reasonCode });
+  const refuseIssue = async (reasonCode: JuliusBrainAccessRefusal, detail: string, brainRunId: string | null) => {
+    await deps.state.appendAudit({ at: nowIso(), action: 'SESSION_REFUSED', sessionId: null, brainRunId, call: null, reasonCode });
     return { ok: false as const, reasonCode, detail };
   };
 
   return {
-    issueSession(input: { readonly token: string; readonly projectId: string; readonly missionId: string; readonly stateMode: JuliusBrainStateModePolicy }):
-      { readonly ok: true; readonly sessionToken: string; readonly session: JuliusBrainRunSession } | { readonly ok: false; readonly reasonCode: JuliusBrainAccessRefusal; readonly detail: string } {
+    async issueSession(input: { readonly token: string; readonly projectId: string; readonly missionId: string; readonly stateMode: JuliusBrainStateModePolicy }):
+      Promise<JuliusBrainAccessResult<{ readonly sessionToken: string; readonly session: JuliusBrainRunSession }>> {
       const verified = verifyJuliusBrainOidcToken({ token: input.token, jwks: deps.jwks(), policy: deps.policy, nowSeconds: nowSeconds() });
       if (!verified.ok) return refuseIssue(verified.reasonCode, verified.detail, null);
       const { claims } = verified;
@@ -207,22 +321,23 @@ export function createJuliusBrainAccessService(deps: {
       if (deps.policy.environments[claims.environment] !== deps.environment) {
         return refuseIssue('environment_mismatch', `environment ${claims.environment} does not reach a ${deps.environment} Brain`, brainRunId);
       }
-      for (const [jti, exp] of seenTokens) if (exp + CLOCK_SKEW_SECONDS <= nowSeconds()) seenTokens.delete(jti);
-      if (seenTokens.has(claims.jti)) return refuseIssue('token_replayed', 'this token was already exchanged', brainRunId);
-      seenTokens.set(claims.jti, claims.exp);
+      // Consumed once, durably, before anything else is decided: a refused exchange still spends the token.
+      if (!(await deps.state.claimToken(sha256Hex(`${GITHUB_ACTIONS_OIDC_ISSUER}|${claims.jti}`), new Date(claims.exp * 1000).toISOString()))) {
+        return refuseIssue('token_replayed', 'this token was already exchanged', brainRunId);
+      }
 
       const policy = input.stateMode;
-      if (validateJuliusBrainStateModePolicy(policy).length > 0) return refuseIssue('state_mode_invalid', validateJuliusBrainStateModePolicy(policy).join('; '), brainRunId);
+      const invalid = validateJuliusBrainStateModePolicy(policy);
+      if (invalid.length > 0) return refuseIssue('state_mode_invalid', invalid.join('; '), brainRunId);
       if (policy.runId !== brainRunId || policy.missionId !== input.missionId) return refuseIssue('state_mode_not_for_this_run', `the policy names ${policy.runId} of ${policy.missionId}`, brainRunId);
       const policyHash = juliusBrainStateModePolicyHash(policy);
       if (policy.mode !== 'FRESH' && !deps.grants().some((grant) => grant.brainRunId === brainRunId && grant.missionId === input.missionId && grant.policyHash === policyHash)) {
         return refuseIssue('state_mode_not_authorized', `${policy.mode} needs an operator grant for ${brainRunId}`, brainRunId);
       }
-      const registered = registrations.get(brainRunId);
-      if (registered !== undefined && (registered.projectId !== input.projectId || registered.missionId !== input.missionId || registered.policyHash !== policyHash)) {
-        return refuseIssue('run_registration_mismatch', `${brainRunId} is registered with another project, mission or state mode`, brainRunId);
+      const registered = await deps.state.register({ brainRunId, projectId: input.projectId, missionId: input.missionId, policyHash, environment: deps.environment, registeredAt: nowIso() });
+      if (registered.projectId !== input.projectId || registered.missionId !== input.missionId || registered.policyHash !== policyHash || registered.environment !== deps.environment) {
+        return refuseIssue('run_registration_mismatch', `${brainRunId} is registered with another project, mission, state mode or environment`, brainRunId);
       }
-      registrations.set(brainRunId, { projectId: input.projectId, missionId: input.missionId, policyHash });
 
       const sessionToken = randomBytes(32).toString('base64url');
       const issuedAt = nowIso();
@@ -231,16 +346,17 @@ export function createJuliusBrainAccessService(deps: {
         environment: deps.environment, policy, policyHash, principal: juliusPrincipal('JULIUS', `julius:${brainRunId}`), writeKinds: JULIUS_BRAIN_RUN_WRITE_KINDS,
         issuedAt, expiresAt: new Date(Date.parse(issuedAt) + deps.policy.sessionTtlMs).toISOString(),
       };
-      sessions.set(sha256Hex(sessionToken), session);
-      deps.audit({ at: issuedAt, action: 'SESSION_ISSUED', sessionId: session.sessionId, brainRunId, call: null, reasonCode: null });
+      await deps.state.putSession(sha256Hex(sessionToken), session);
+      // The token is handed over only once the issuance is audited.
+      await deps.state.appendAudit({ at: issuedAt, action: 'SESSION_ISSUED', sessionId: session.sessionId, brainRunId, call: null, reasonCode: null });
       return { ok: true, sessionToken, session };
     },
 
-    authorize(input: { readonly sessionToken: string; readonly call: JuliusBrainServiceCall }):
-      { readonly ok: true; readonly session: JuliusBrainRunSession } | { readonly ok: false; readonly reasonCode: JuliusBrainAccessRefusal; readonly detail: string } {
-      const session = sessions.get(sha256Hex(input.sessionToken)) ?? null;
-      const refuse = (reasonCode: JuliusBrainAccessRefusal, detail: string) => {
-        deps.audit({ at: nowIso(), action: 'CALL_REFUSED', sessionId: session?.sessionId ?? null, brainRunId: session?.brainRunId ?? null, call: input.call.type, reasonCode });
+    async authorize(input: { readonly sessionToken: string; readonly call: JuliusBrainServiceCall; readonly facts?: JuliusBrainCallFacts }):
+      Promise<JuliusBrainAccessResult<{ readonly session: JuliusBrainRunSession }>> {
+      const session = await deps.state.getSession(sha256Hex(input.sessionToken));
+      const refuse = async (reasonCode: JuliusBrainAccessRefusal, detail: string) => {
+        await deps.state.appendAudit({ at: nowIso(), action: 'CALL_REFUSED', sessionId: session?.sessionId ?? null, brainRunId: session?.brainRunId ?? null, call: input.call.type, reasonCode });
         return { ok: false as const, reasonCode, detail };
       };
       if (session === null) return refuse('session_unknown', 'no such session in this service');
@@ -249,7 +365,7 @@ export function createJuliusBrainAccessService(deps: {
       const { call } = input;
       switch (call.type) {
         case 'RAW_STORE':
-          return refuse('raw_store_not_exposed', call.operation);
+          return refuse('raw_store_not_exposed', call.operation.slice(0, 80));
         case 'READ_CONTEXT':
           if (call.runId !== undefined && call.runId !== session.brainRunId) return refuse('other_run', call.runId);
           if (call.missionId !== undefined && call.missionId !== session.missionId) return refuse('other_mission', call.missionId);
@@ -258,14 +374,28 @@ export function createJuliusBrainAccessService(deps: {
         case 'SEAL':
           if (call.runId !== session.brainRunId) return refuse('other_run', call.runId);
           break;
+        case 'READ_ARTIFACT': {
+          const entities = input.facts?.entities;
+          if (entities === undefined) return refuse('artifact_not_admitted', 'the service did not resolve what this session may see');
+          const selection = selectJuliusBrainEntitiesForMode(entities, session.policy);
+          if (selection.outcome !== 'SELECTED') return refuse('artifact_not_admitted', selection.detail);
+          const visible = [...selection.admitted.map((item) => item.entity), ...(selection.baseline ?? [])];
+          if (!visible.some((state) => state.kind === 'ARTIFACT' && state.body.contentHash === call.contentHash)) return refuse('artifact_not_admitted', `${call.contentHash.slice(0, 23)}… is referenced by nothing this session's mode admits`);
+          break;
+        }
         case 'WRITE':
           for (const [index, draft] of call.drafts.entries()) {
             if (!session.writeKinds.includes(draft.kind)) return refuse('kind_not_permitted', `drafts[${index}]: ${draft.kind}`);
             if (draft.scope.runId !== session.brainRunId || draft.scope.missionId !== session.missionId) return refuse('mutation_out_of_scope', `drafts[${index}]: scoped to ${draft.scope.runId ?? 'no run'} of ${draft.scope.missionId ?? 'no mission'}`);
+            if (draft.op !== 'CREATE') {
+              const target = draft.entityId === null ? undefined : input.facts?.targets?.get(draft.entityId);
+              if (target === undefined) return refuse('mutation_target_unresolved', `drafts[${index}]: ${draft.op} of an entity the service did not resolve`);
+              if (target.runId !== session.brainRunId || target.missionId !== session.missionId) return refuse('mutation_out_of_scope', `drafts[${index}]: ${draft.op} of an entity of ${target.runId ?? 'no run'}`);
+            }
           }
           break;
       }
-      deps.audit({ at: nowIso(), action: 'CALL_ALLOWED', sessionId: session.sessionId, brainRunId: session.brainRunId, call: call.type, reasonCode: null });
+      await deps.state.appendAudit({ at: nowIso(), action: 'CALL_ALLOWED', sessionId: session.sessionId, brainRunId: session.brainRunId, call: call.type, reasonCode: null });
       return { ok: true, session };
     },
 
