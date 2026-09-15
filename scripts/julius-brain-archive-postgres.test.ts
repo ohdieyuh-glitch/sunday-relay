@@ -5,7 +5,7 @@ import { Pool } from 'pg';
 import { describe, expect, it } from 'vitest';
 
 import { paidRunArchive } from '../src/relay/mission/julius/julius-brain-archive-fixtures';
-import { importJuliusPaidRunArchive, planJuliusPaidRunArchiveImport } from '../src/relay/mission/julius/julius-brain-archive-import';
+import { importJuliusPaidRunArchive, juliusArchiveEntityId, planJuliusPaidRunArchiveImport } from '../src/relay/mission/julius/julius-brain-archive-import';
 import { juliusPrincipal } from '../src/relay/mission/julius/julius-brain-contracts';
 import { createJuliusProjectBrainService } from '../src/relay/mission/julius/julius-brain-service';
 import { selectJuliusBrainEntitiesForMode } from '../src/relay/mission/julius/julius-brain-state-modes';
@@ -87,4 +87,35 @@ suite('the paid-run archive import on a real PostgreSQL', () => {
       expect(stored.rows[0].n).toBe(planned);
     } finally { await Promise.all(pools.map((racer) => racer.end())); }
   }, 180_000);
+
+  it('an archive spanning several commit groups arrives whole or not at all', async () => {
+    const url = await freshDatabase('large');
+    const { pool, store } = await prepared(url, 2);
+    const content = new LocalJuliusBrainContentStore(mkdtempSync(join(tmpdir(), 'jbarch-large-')));
+    // 1,200 more timeline events: well past one 400-draft group.
+    const large = (attempt: number) => paidRunArchive({ attempt, mutate: (body) => ({
+      ...body,
+      events: [...body.events, ...Array.from({ length: 1_200 }, (_, i) => ({ sequence: 5 + i, eventType: 'tool.progress', taskId: 'build-1', occurredAt: body.events[3]!.occurredAt, facts: { step: i } }))],
+    }) });
+    try {
+      const first = large(1);
+      const planned = planJuliusPaidRunArchiveImport(first, { contentHash: `sha256:${'0'.repeat(64)}`, byteSize: 1, storageRef: 'x' }).drafts.length;
+      expect(planned).toBeGreaterThan(1_200);
+      // Something already holds the id of the LAST event, so the refusal lands in the final group.
+      const julius = (await createJuliusProjectBrainService({ store, clock: { now: () => '2026-09-15T10:00:00.000Z' } }).open({ brainId: BRAIN, projectId: PROJECT, principal: JULIUS }))!;
+      await julius.create('CONSTRAINT', { statement: 'squatting', status: 'ACTIVE' }, { key: 'squat', entityId: juliusArchiveEntityId(first.run, 'events', '1204') });
+      const head = await store.head(BRAIN, PROJECT);
+      const refused = await importJuliusPaidRunArchive({ store, brainId: BRAIN, projectId: PROJECT, archive: first, content, recordedAt: '2026-09-15T10:00:00.000Z' });
+      expect(refused).toMatchObject({ outcome: 'REFUSED', reasonCode: 'entity_already_exists' });
+      expect((refused as { group: number }).group).toBeGreaterThan(0);
+      expect(await store.head(BRAIN, PROJECT)).toEqual(head);
+      const count = async () => (await pool.query('SELECT count(*)::int AS n FROM relay_wonderland.julius_brain_records WHERE brain_id=$1', [BRAIN])).rows[0].n as number;
+      expect(await count()).toBe(head!.sequence);
+
+      // The next attempt holds no conflicting id, and every one of its records lands.
+      const second = await importJuliusPaidRunArchive({ store, brainId: BRAIN, projectId: PROJECT, archive: large(2), content, recordedAt: '2026-09-15T10:00:00.000Z' });
+      expect(second).toMatchObject({ outcome: 'IMPORTED', appended: planned, duplicates: 0 });
+      expect(await count()).toBe(head!.sequence + planned);
+    } finally { await pool.end(); }
+  }, 300_000);
 });
