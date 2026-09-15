@@ -2,9 +2,12 @@
 
 #include "Misc/DateTime.h"
 
+// UNIQUE NAMES, NOT JUST FILE-LOCAL ONES. The module builds as one unity translation unit, where every
+// anonymous namespace is the same namespace: a helper called Seg or Known here collided with the generated
+// canonical shapes' Seg and the usage files' Known on the first engine build (2026-09-15).
 namespace
 {
-	FWonderlandSwooshSegment Seg(float C1X, float C1Y, float C2X, float C2Y, float EX, float EY)
+	FWonderlandSwooshSegment CompanionSegment(float C1X, float C1Y, float C2X, float C2Y, float EX, float EY)
 	{
 		FWonderlandSwooshSegment Out;
 		Out.Control1X = C1X; Out.Control1Y = C1Y;
@@ -13,7 +16,7 @@ namespace
 		return Out;
 	}
 
-	FWonderlandFigure Known(double Value)
+	FWonderlandFigure CompanionKnownFigure(double Value)
 	{
 		FWonderlandFigure Figure;
 		Figure.bKnown = true;
@@ -31,10 +34,10 @@ const FWonderlandUsageSwoosh& WonderlandCompanionHud::LlmCompanionSwoosh()
 		// joined where the blue's are, so each white cubic sits against its blue counterpart.
 		S.StartX = 0.380155f;
 		S.StartY = 0.602795f;
-		S.Segments.Add(Seg(0.347060f, 0.634225f, 0.298108f, 0.641252f, 0.258718f, 0.617244f));
-		S.Segments.Add(Seg(0.214134f, 0.590039f, 0.193594f, 0.534613f, 0.198790f, 0.484093f));
-		S.Segments.Add(Seg(0.203844f, 0.435630f, 0.233697f, 0.386875f, 0.282276f, 0.372188f));
-		S.Segments.Add(Seg(0.465626f, 0.316532f, 0.667399f, 0.338014f, 0.849294f, 0.388541f));
+		S.Segments.Add(CompanionSegment(0.347060f, 0.634225f, 0.298108f, 0.641252f, 0.258718f, 0.617244f));
+		S.Segments.Add(CompanionSegment(0.214134f, 0.590039f, 0.193594f, 0.534613f, 0.198790f, 0.484093f));
+		S.Segments.Add(CompanionSegment(0.203844f, 0.435630f, 0.233697f, 0.386875f, 0.282276f, 0.372188f));
+		S.Segments.Add(CompanionSegment(0.465626f, 0.316532f, 0.667399f, 0.338014f, 0.849294f, 0.388541f));
 		// As wide as the slimmed blue where they run together, then a longer, finer taper than the
 		// blue's blunt end: the companion stroke finishes in a point, which is where the glint sits.
 		S.TailWidth = 0.011200f;
@@ -84,13 +87,13 @@ FWonderlandUsageMeter WonderlandCompanionHud::PreviewMeter(float Percent)
 	const double Capacity = 100.0;
 	const double Remaining = FMath::Clamp(static_cast<double>(FMath::IsFinite(Percent) ? Percent : 0.0f), 0.0, 100.0);
 	FWonderlandUsageMeter Meter;
-	Meter.CapacityUnits = Known(Capacity);
-	Meter.UsedUnits = Known(Capacity - Remaining);
-	Meter.RemainingUnits = Known(Remaining);
-	Meter.ReferenceCapacityUnits = Known(Capacity);
-	Meter.CapacitySpan = Known(1.0);
-	Meter.FillFraction = Known((Capacity - Remaining) / Capacity);
-	Meter.RemainingFraction = Known(Remaining / Capacity);
+	Meter.CapacityUnits = CompanionKnownFigure(Capacity);
+	Meter.UsedUnits = CompanionKnownFigure(Capacity - Remaining);
+	Meter.RemainingUnits = CompanionKnownFigure(Remaining);
+	Meter.ReferenceCapacityUnits = CompanionKnownFigure(Capacity);
+	Meter.CapacitySpan = CompanionKnownFigure(1.0);
+	Meter.FillFraction = CompanionKnownFigure((Capacity - Remaining) / Capacity);
+	Meter.RemainingFraction = CompanionKnownFigure(Remaining / Capacity);
 	Meter.Status = EWonderlandUsageStatus::Available;
 	Meter.Provenance = EWonderlandProvenance::Simulated;
 	Meter.bSimulated = true;

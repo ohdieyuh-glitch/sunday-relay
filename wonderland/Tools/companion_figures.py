@@ -1,25 +1,27 @@
-"""Generate the two companion preview figures for AWonderlandCompanionEmbodiment.
+"""Generate the companion preview figures for AWonderlandCompanionEmbodiment.
 
-WHAT THESE ARE. The founder asked (2026-09-15) to SEE an imported LLM Companion and an imported Jhinn AI
-Agent floating beside the Relay Dog before any import is wired. Each companion's body is a list of boxes in
-the `wlvox 1` text format (Source/Wonderland/WonderlandCompanionFigure.h), which the embodiment reads at
-spawn and builds from engine cubes. No asset is created: the figures live in wonderland/Companions/ and can
-be regenerated and reloaded in PIE with `wl.Companion.Reload`, no compile needed.
+WHAT THESE ARE. The founder asked (2026-09-15) to SEE imported companions floating beside the Relay Dog before
+any import is wired. Each body is a list of boxes in the `wlvox 1` text format
+(Source/Wonderland/WonderlandCompanionFigure.h), read at spawn and built from engine cubes. No asset is created:
+the figures live in wonderland/Companions/ and are regenerated and reloaded in PIE with `wl.Companion.Reload`.
 
-WHAT THEY FOLLOW. The founder's concept frame for the two mascot skins, and the Jhin canon in
-WorldDesign/PRODUCTION_ORDER.md: a Jhin is ivory with a dark visor, warm glowing eyes and a spectral lower
-body, and an IMPORTED agent's lower body is the immutable cyan-blue crystalline colour. So:
+WHAT THEY FOLLOW -- the founder's two reference sheets of 2026-09-15, which replace the first concept frame:
 
-  GPT 6 Astra (LLM Companion) -- a small hooded sprite with a curled cap and a gold star, happy ^ ^ eyes,
-  ice-crystal wings and a STARLIGHT wisp: white, the colour of its HUD meter. It is not a Jhin and does not
-  wear the imported-agent colour.
+  LLM COMPANIONS are the small chibi GHOSTS: a chunky ivory helmet with a black face and glowing eyes, a gem on
+  the brow, a little armoured body with a chest gem, small crystal wings, and a translucent crystal ghost tail
+  in the companion's own colour, with hexagonal gems floating round it. Four skins are on the sheet and all four
+  are generated: AURUM (gold, curled horns, happy eyes), EMBER (red, crystal flames, glowing square eyes),
+  FROST (blue, ice spikes, a wink and a smile) and BLOSSOM (pink, a bob of hair and a gold flower).
+  GPT 6 Astra wears AURUM -- the skin closest to the first frame's hooded, curled, gold, happy-eyed Astra.
 
-  Claude Code Fable 5 (Jhinn AI Agent, imported) -- a taller crowned figure with warm gold eyes, big lavender
-  crystal wings, a gold pendant and the CYAN-BLUE CRYSTALLINE spectral lower body.
+  JHINN AI AGENTS are the full-body figures with the periwinkle-blue crystalline spectral lower body.
+  Claude Code Fable 5 is the winged one: a white bob under a gold tiara, warm eyes, lavender hands, a gold key
+  pendant and chains, tall layered crystal wings. The Jhin canon (WorldDesign/PRODUCTION_ORDER.md) is kept: an
+  imported agent's lower body is cyan-blue crystalline, so its crystal carries cyan glints through the periwinkle.
 
-WHY TILES AND NOT A GRID. A strict voxel grid reads as a block game. Small faceted tiles laid on ellipsoids
-and tubes, each turned to face out of the surface, give the sculpted, crumpled-crystal look of the concept
-while staying boxes the engine can instance. Everything is seeded, so a regeneration is byte-identical.
+HOW BOXES BECOME THAT. Chunky helmets are rounded-cube superellipsoids tiled in big blocks with visible seams.
+Translucent crystal is approximated with glowing facet tiles laid with gaps -- the world shows between them --
+over an additive core, in three tones per colour. Everything is seeded, so a regeneration is byte-identical.
 
 Usage:  python wonderland/Tools/companion_figures.py [--out DIR]
 """
@@ -37,10 +39,37 @@ def normalise(v):
     return (v[0] / length, v[1] / length, v[2] / length)
 
 
+def cross(a, b):
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def spow(t, e):
+    return math.copysign(abs(t) ** e, t)
+
+
 def aim(direction):
     """Pitch and yaw (degrees) that turn a box's local +X toward `direction`, the way FVector::Rotation does."""
     x, y, z = normalise(direction)
     return math.degrees(math.atan2(z, math.hypot(x, y))), math.degrees(math.atan2(y, x))
+
+
+def lerp3(a, b, t):
+    return tuple(a[i] + (b[i] - a[i]) * t for i in range(3))
+
+
+def polyline_at(spine, s):
+    """Point and unit tangent at arc fraction s of a polyline."""
+    lengths = [0.0]
+    for i in range(1, len(spine)):
+        lengths.append(lengths[-1] + math.dist(spine[i], spine[i - 1]))
+    total = lengths[-1] or 1.0
+    target = max(0.0, min(1.0, s)) * total
+    i = 1
+    while i < len(spine) - 1 and lengths[i] < target:
+        i += 1
+    span = (lengths[i] - lengths[i - 1]) or 1.0
+    w = (target - lengths[i - 1]) / span
+    return lerp3(spine[i - 1], spine[i], w), normalise(tuple(spine[i][n] - spine[i - 1][n] for n in range(3)))
 
 
 class Figure:
@@ -66,73 +95,97 @@ class Figure:
         self.boxes.append((part, material, centre, size, (pitch, yaw, roll)))
 
     # ------------------------------------------------------------- primitives
-    def tile_ellipsoid(self, part, material, centre, radii, tile, depth, keep=None, jitter=0.18, lat=(-90.0, 90.0), inflate=1.0):
-        """Tiles over an ellipsoid; `keep(normal, point)` may reject a tile (a face opening, a cut)."""
+    def superellipsoid(self, part, material_for, centre, radii, n, tile, depth, keep=None, gap=0.10, lat=(-90.0, 90.0)):
+        """Big seamed blocks over a rounded cube (n ~ 3) or a soft ellipsoid (n = 2).
+        Each tile is sized from the local spacing of the parameterisation, so flat faces stay covered."""
         cx, cy, cz = centre
-        rx, ry, rz = radii
-        mean = (rx + ry + rz) / 3.0
+        a, b, c = radii
+        e = 2.0 / n
+        mean = (a + b + c) / 3.0
         rings = max(3, int(round(math.radians(lat[1] - lat[0]) * mean / tile)))
+        d_phi = math.radians(lat[1] - lat[0]) / rings
+
+        def surface(phi, theta):
+            ux, uy, uz = math.cos(phi) * math.cos(theta), math.cos(phi) * math.sin(theta), math.sin(phi)
+            return (a * spow(ux, e), b * spow(uy, e), c * spow(uz, e))
+
         for ring in range(rings + 1):
-            phi = math.radians(lat[0] + (lat[1] - lat[0]) * ring / rings)
-            around = max(1, int(round(2.0 * math.pi * math.cos(phi) * mean / tile)))
-            offset = self.rng.random() * 2.0 * math.pi
+            phi = math.radians(lat[0]) + d_phi * ring
+            around = max(4, int(round(2.0 * math.pi * max(math.cos(phi), 0.15) * mean / tile)))
+            d_theta = 2.0 * math.pi / around
+            offset = (ring % 2) * d_theta * 0.5
             for k in range(around):
-                theta = offset + 2.0 * math.pi * k / around
-                ux, uy, uz = math.cos(phi) * math.cos(theta), math.cos(phi) * math.sin(theta), math.sin(phi)
-                point = (cx + rx * ux * inflate, cy + ry * uy * inflate, cz + rz * uz * inflate)
-                normal = normalise((ux / rx, uy / ry, uz / rz))
+                theta = offset + d_theta * k
+                px, py, pz = surface(phi, theta)
+                normal = normalise((spow(px / a, n - 1) / a, spow(py / b, n - 1) / b, spow(pz / c, n - 1) / c))
+                point = (cx + px, cy + py, cz + pz)
                 if keep is not None and not keep(normal, point):
                     continue
-                j = 1.0 + (self.rng.random() - 0.5) * 2.0 * jitter
+                along = math.dist(surface(phi, theta + d_theta), (px, py, pz))
+                up = math.dist(surface(min(phi + d_phi, math.pi / 2), theta), (px, py, pz))
+                sy = min(max(along * (1.0 - gap) * 1.08, 0.5), tile * 2.2)
+                sz = min(max(up * (1.0 - gap) * 1.08, 0.5), tile * 2.2)
                 pitch, yaw = aim(normal)
-                roll = (self.rng.random() - 0.5) * 14.0
-                self.box(part, material, point, (depth, tile * 1.08 * j, tile * 1.12 * (2.0 - j)), pitch, yaw, roll)
+                material = material_for(normal, point) if callable(material_for) else material_for
+                self.box(part, material, point, (depth, sy, sz), pitch, yaw, (self.rng.random() - 0.5) * 4.0)
 
-    def tube(self, part_for, material_for, spine, radius_for, tile, depth, twist=0.0):
-        """Rings of tiles around a polyline spine. `part_for(s)`, `material_for(s, k)`, `radius_for(s)` take arc fraction s."""
+    def tube(self, part_for, material_for, spine, radius_for, tile, depth, twist=0.0, size_scale=1.0, jitter=0.0):
+        """Rings of tiles around a polyline spine; part_for(s), material_for(s, k), radius_for(s) take arc fraction s."""
         lengths = [0.0]
         for i in range(1, len(spine)):
             lengths.append(lengths[-1] + math.dist(spine[i], spine[i - 1]))
         total = lengths[-1] or 1.0
-        s_step = tile / total
         s = 0.0
+        ring = 0
         while s <= 1.0 + 1e-6:
-            target = s * total
-            i = 1
-            while i < len(spine) - 1 and lengths[i] < target:
-                i += 1
-            span = (lengths[i] - lengths[i - 1]) or 1.0
-            w = (target - lengths[i - 1]) / span
-            p0, p1 = spine[i - 1], spine[i]
-            centre = tuple(p0[a] + (p1[a] - p0[a]) * w for a in range(3))
-            tangent = normalise(tuple(p1[a] - p0[a] for a in range(3)))
+            centre, tangent = polyline_at(spine, s)
             helper = (0.0, 0.0, 1.0) if abs(tangent[2]) < 0.9 else (1.0, 0.0, 0.0)
             u = normalise(cross(tangent, helper))
             v = cross(tangent, u)
             r = radius_for(s)
             around = max(3, int(round(2.0 * math.pi * r / tile)))
-            phase = twist * s * 2.0 * math.pi
+            phase = twist * s * 2.0 * math.pi + (ring % 2) * math.pi / around
+            step = min(tile, 2.0 * math.pi * r / around) if r > 0.5 else tile
             for k in range(around):
-                a = phase + 2.0 * math.pi * k / around
-                normal = tuple(math.cos(a) * u[n] + math.sin(a) * v[n] for n in range(3))
+                ang = phase + 2.0 * math.pi * k / around
+                normal = tuple(math.cos(ang) * u[n] + math.sin(ang) * v[n] for n in range(3))
                 point = tuple(centre[n] + normal[n] * r for n in range(3))
+                if jitter:
+                    point = tuple(point[n] + (self.rng.random() - 0.5) * jitter for n in range(3))
                 pitch, yaw = aim(normal)
-                size = max(tile * (0.55 + 0.45 * r / max(radius_for(0.0), 0.01)), 0.35)
-                self.box(part_for(s), material_for(s, k), point, (depth, size * 1.1, size * 1.15), pitch, yaw, (self.rng.random() - 0.5) * 20.0)
-            s += s_step
+                size = max(step, 0.35) * size_scale
+                material = material_for(s, k)
+                if material is None:
+                    continue
+                self.box(part_for(s), material, point, (depth, size * 1.05, tile * size_scale * 1.1), pitch, yaw, (self.rng.random() - 0.5) * 10.0)
+            s += tile * 0.92 / total
+            ring += 1
 
-    def shard(self, part, material, root, direction, length, width, thickness, roll=0.0):
-        """A long crystal shard from `root` along `direction`: local X is the length."""
+    def blade(self, part, material, root, direction, length, width, thickness, roll=0.0):
+        """A long flat box from `root` along `direction`: local X is the length."""
         d = normalise(direction)
         centre = tuple(root[n] + d[n] * length * 0.5 for n in range(3))
         pitch, yaw = aim(d)
         self.box(part, material, centre, (length, width, thickness), pitch, yaw, roll)
 
-    def hex_crystal(self, part, material, centre, axis, radius, thickness):
+    def hex_gem(self, part, material, centre, axis, radius, thickness):
         """Three flat bars turned 0, 60 and 120 degrees about one axis read as a hexagonal gem."""
         pitch, yaw = aim(axis)
         for turn in (0.0, 60.0, 120.0):
             self.box(part, material, centre, (thickness, radius * 1.732, radius), pitch, yaw, turn)
+
+    def diamond(self, part, frame, gem, centre, facing, size):
+        """A gold rotated-square frame with a glowing gem set in it, facing along `facing`."""
+        pitch, yaw = aim(facing)
+        f = normalise(facing)
+        helper = (0.0, 0.0, 1.0) if abs(f[2]) < 0.9 else (1.0, 0.0, 0.0)
+        right = normalise(cross(helper, f))
+        up = cross(f, right)
+        bar = size * 0.72
+        for sx, sz in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
+            mid = tuple(centre[n] + (right[n] * sx + up[n] * sz) * size * 0.25 for n in range(3))
+            self.box(part, frame, mid, (0.8, bar, size * 0.16), pitch, yaw, 45.0 * sx * sz)
+        self.box(part, gem, tuple(centre[n] + f[n] * 0.25 for n in range(3)), (0.9, size * 0.42, size * 0.42), pitch, yaw, 45.0)
 
     def sparkle(self, part, material, centre, size):
         """A four-point star: two crossed thin bars, facing forward."""
@@ -157,217 +210,374 @@ class Figure:
                 lines.append("box %s %s %.3f %.3f %.3f %.3f %.3f %.3f" % (part, material, c[0], c[1], c[2], s[0], s[1], s[2]))
             else:
                 lines.append("box %s %s %.3f %.3f %.3f %.3f %.3f %.3f %.2f %.2f %.2f" % (part, material, c[0], c[1], c[2], s[0], s[1], s[2], r[0], r[1], r[2]))
-        assert len(self.boxes) <= 6000 and len(self.parts) <= 48 and len(self.materials) <= 12
+        assert len(self.boxes) <= 6000 and len(self.parts) <= 48 and len(self.materials) <= 12, (len(self.boxes), len(self.parts), len(self.materials))
         with open(path, "w", encoding="utf-8", newline="\n") as handle:
             handle.write("\n".join(lines) + "\n")
         return len(self.boxes), len(self.parts), len(self.materials)
 
 
-def cross(a, b):
-    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+IVORY = (0.86, 0.83, 0.76)
+GOLD = (0.93, 0.60, 0.16)
+VISOR = (0.006, 0.006, 0.009)
 
 
-def spiral_tail(fig, parent, top, height, top_radius, segments, glow, core, sweep=(-3.0, 5.0), turns=0.85):
-    """A spectral wisp: a spiral spine from `top` down to a point, split into tail parts for the travelling sway."""
-    tx, ty, tz = top
-    spine = []
-    for i in range(33):
-        s = i / 32.0
-        swirl = turns * 2.0 * math.pi * s
-        spine.append((tx + sweep[0] * math.sin(math.pi * s) + 1.6 * s * math.cos(swirl),
-                      ty + sweep[1] * math.sin(1.3 * math.pi * s) * s + 1.6 * s * math.sin(swirl),
-                      tz - height * s))
+def crystal_tail(fig, parent, spine, radius_at, segments, tones, halo, density=0.82):
+    """A translucent crystal ghost tail: facet tiles with gaps in three tones over an additive core."""
     for k in range(segments):
-        s = (k + 0.5) / segments
-        idx = min(int(s * 32), 32)
-        fig.part("tail%d" % k, parent, spine[idx], "tail", k, segments)
+        centre, _ = polyline_at(spine, (k + 0.5) / segments)
+        fig.part("tail%d" % k, parent, centre, "tail", k, segments)
 
     def part_for(s):
         return "tail%d" % min(int(s * segments), segments - 1)
 
-    def radius_for(s):
-        return max(top_radius * (1.0 - s) ** 1.25, 0.35)
+    deep, base, pale = tones
 
-    fig.tube(part_for, lambda s, k: glow, spine, radius_for, tile=1.7, depth=0.55, twist=0.35)
-    # A brighter core, so the wisp has a body of light and not only a shell.
-    for i in range(0, 30, 2):
-        s = i / 32.0
-        p = spine[i]
-        r = radius_for(s) * 0.55
-        fig.box(part_for(s), core, p, (r * 1.2, r * 1.2, 1.8), 0.0, fig.rng.random() * 90.0, 0.0)
-    return spine
+    def tone(s, k):
+        h = (k * 7 + int(s * 40) * 3) % 11
+        if h in (0, 5):
+            return pale
+        if h in (2, 7, 9):
+            return deep
+        return base
+
+    fig.tube(part_for, tone, spine, radius_at, tile=1.9, depth=0.7, twist=0.25, size_scale=density, jitter=0.35)
+    # The inner light, so the crystal glows from inside rather than being only a skin.
+    steps = 22
+    for i in range(steps):
+        s = i / (steps - 1)
+        centre, tangent = polyline_at(spine, s)
+        r = radius_at(s) * 0.62
+        pitch, yaw = aim(tangent)
+        fig.box(part_for(s), halo, centre, (2.2, r * 1.5, r * 1.5), pitch, yaw, fig.rng.random() * 90.0)
 
 
-# ============================================================================ GPT 6 Astra
-def build_astra():
-    fig = Figure("GPT 6 Astra -- LLM Companion", seed=6061)
-    fig.material("ivory", "lit", (0.86, 0.82, 0.74))
-    fig.material("gold", "lit", (0.92, 0.56, 0.12))
-    fig.material("visor", "lit", (0.008, 0.008, 0.011))
-    fig.material("eye", "glow", (1.0, 0.42, 0.08), 7.0)
-    fig.material("ice", "glow", (0.55, 0.80, 1.0), 2.2)
-    fig.material("starlight", "glow", (0.84, 0.92, 1.0), 2.6)
-    fig.material("halo", "add", (0.35, 0.60, 1.0), 0.9)
+# ============================================================================ LLM COMPANION GHOSTS
+GHOST_SKINS = {
+    "aurum":   dict(deep=(0.95, 0.50, 0.05), base=(1.0, 0.74, 0.18), pale=(1.0, 0.93, 0.58), gem=(1.0, 0.80, 0.22),
+                    eye=(1.0, 0.88, 0.56), wing=(1.0, 0.95, 0.84), halo=(1.0, 0.62, 0.12)),
+    "ember":   dict(deep=(0.80, 0.05, 0.02), base=(1.0, 0.20, 0.07), pale=(1.0, 0.56, 0.32), gem=(1.0, 0.08, 0.05),
+                    eye=(1.0, 0.66, 0.24), wing=(1.0, 0.84, 0.86), halo=(1.0, 0.18, 0.06)),
+    "frost":   dict(deep=(0.18, 0.40, 1.0), base=(0.42, 0.66, 1.0), pale=(0.80, 0.91, 1.0), gem=(0.45, 0.74, 1.0),
+                    eye=(1.0, 0.90, 0.62), wing=(0.76, 0.88, 1.0), halo=(0.30, 0.55, 1.0)),
+    "blossom": dict(deep=(0.90, 0.28, 0.60), base=(1.0, 0.50, 0.78), pale=(1.0, 0.84, 0.93), gem=(1.0, 0.34, 0.64),
+                    eye=(1.0, 0.92, 0.84), wing=(1.0, 0.88, 0.94), halo=(1.0, 0.40, 0.72)),
+}
 
-    fig.part("body", "-", (0.0, 0.0, 30.0), "none")
-    fig.part("head", "body", (0.0, 0.0, 40.0), "head")
-    fig.part("eyes", "head", (10.6, 0.0, 46.0), "blink")
-    fig.part("cap", "head", (-2.0, 0.0, 56.0), "none")
-    fig.part("wingL", "body", (-6.5, -5.5, 35.0), "wing", -1)
-    fig.part("wingR", "body", (-6.5, 5.5, 35.0), "wing", 1)
-    fig.part("orbit", "body", (0.0, 0.0, 36.0), "orbit", 16.0)
 
-    # THE HOOD: an ivory shell open at the front, the opening rimmed in gold.
-    head_c, head_r = (0.0, 0.0, 46.0), (11.0, 12.0, 12.2)
-    fig.tile_ellipsoid("head", "ivory", head_c, head_r, tile=2.3, depth=1.1,
-                       keep=lambda n, p: not (n[0] > 0.52 and abs(p[2] - 45.5) < 10.5))
-    for i in range(46):
-        t = 2.0 * math.pi * i / 46
-        y, z = 9.3 * math.cos(t), 45.3 + 9.6 * math.sin(t)
-        x = head_r[0] * math.sqrt(max(0.0, 1.0 - (y / head_r[1]) ** 2 - ((z - head_c[2]) / head_r[2]) ** 2)) + 0.4
-        pitch, yaw = aim((1.0, y * 0.08, (z - 45.3) * 0.08))
-        fig.box("head", "gold", (x, y, z), (1.2, 1.9, 1.5), pitch, yaw, math.degrees(t))
-    # THE FACE: a dark glossy screen set back in the opening.
-    fig.tile_ellipsoid("head", "visor", (2.2, 0.0, 45.4), (8.6, 9.0, 8.9), tile=1.7, depth=0.9,
-                       keep=lambda n, p: n[0] > 0.18)
-    # HAPPY EYES, ^ ^: arches of warm light.
-    for side in (-1.0, 1.0):
-        for i in range(9):
-            t = -1.0 + 2.0 * i / 8
-            y = side * 3.9 + 2.5 * t
-            z = 45.6 + 1.9 * (1.0 - t * t)
-            slope = -math.degrees(math.atan(3.8 * t / 2.5))
-            fig.box("eyes", "eye", (10.55 - 0.2 * t * t, y, z), (0.6, 1.25, 0.72), 0.0, 0.0, slope)
+def build_ghost(skin_name, display):
+    skin = GHOST_SKINS[skin_name]
+    fig = Figure("%s -- LLM Companion (%s ghost)" % (display, skin_name), seed=sum(ord(ch) * (i + 1) for i, ch in enumerate(skin_name)))
+    fig.material("ivory", "lit", IVORY)
+    fig.material("gold", "lit", GOLD)
+    fig.material("visor", "lit", VISOR)
+    fig.material("eye", "glow", skin["eye"], 5.0)
+    fig.material("deep", "glow", skin["deep"], 1.3)
+    fig.material("base", "glow", skin["base"], 1.7)
+    fig.material("pale", "glow", skin["pale"], 2.3)
+    fig.material("gem", "glow", skin["gem"], 2.6)
+    fig.material("wing", "glow", tuple(0.55 * w + 0.45 * b for w, b in zip(skin["wing"], skin["base"])), 1.35)
+    fig.material("halo", "add", skin["halo"], 0.9)
+    if skin_name == "blossom":
+        fig.material("hair", "lit", (0.97, 0.80, 0.87))
 
-    # THE CURLED CAP: a tapering tube up and back from the crown, then curling forward, a gold band at its base.
-    cap_spine = [(-2.0, 0.0, 54.0), (-4.5, 0.0, 59.5), (-8.5, 0.0, 63.5), (-12.5, 0.0, 65.0), (-15.0, 0.0, 63.0), (-14.5, 0.0, 60.0)]
-    fig.tube(lambda s: "cap", lambda s, k: "gold" if 0.06 < s < 0.13 else "ivory", cap_spine,
-             lambda s: max(6.2 * (1.0 - s) ** 1.1, 0.5), tile=1.9, depth=1.0, twist=0.1)
-    star = (-14.2, 0.0, 58.4)
-    fig.box("cap", "gold", star, (1.0, 1.0, 5.2))
-    fig.box("cap", "gold", star, (1.0, 5.2, 1.0))
-    fig.box("cap", "gold", star, (1.0, 2.6, 2.6), 0.0, 0.0, 45.0)
-    fig.box("cap", "starlight", (star[0] + 0.6, star[1], star[2]), (0.4, 1.2, 1.2), 0.0, 0.0, 45.0)
+    fig.part("body", "-", (0.0, 0.0, 28.0), "none")
+    fig.part("head", "body", (0.0, 0.0, 35.0), "head")
+    fig.part("eyes", "head", (8.6, 0.0, 40.0), "blink")
+    fig.part("wingL", "body", (-4.2, -4.0, 31.0), "wing", -1)
+    fig.part("wingR", "body", (-4.2, 4.0, 31.0), "wing", 1)
+    fig.part("orbit", "body", (0.0, 0.0, 26.0), "orbit", 14.0)
 
-    # THE SHOULDERS AND CAPE, with a gold collar.
-    fig.tile_ellipsoid("body", "ivory", (0.0, 0.0, 30.5), (7.4, 9.0, 6.6), tile=2.1, depth=1.0)
+    # THE HELMET: a rounded cube of big seamed ivory blocks, open at the front in a rounded rectangle.
+    hc, hr, hn = (0.0, 0.0, 41.0), (9.2, 10.4, 9.8), 2.7
+    face_w, face_h, face_z = 8.1, 6.9, 40.0
+
+    def in_face(p, grow=0.0):
+        return (abs(p[1]) / (face_w + grow)) ** 4 + (abs(p[2] - face_z) / (face_h + grow)) ** 4 < 1.0
+
+    fig.superellipsoid("head", "ivory", hc, hr, hn, tile=2.9, depth=1.9, gap=0.14,
+                       keep=lambda nrm, p: not (nrm[0] > 0.1 and in_face(p)))
+
+    def front_x(y, z, inset=0.0):
+        inner = 1.0 - (abs(y) / hr[1]) ** hn - (abs(z - hc[2]) / hr[2]) ** hn
+        return hc[0] + hr[0] * max(inner, 0.0) ** (1.0 / hn) - inset
+
+    # The rim: a ring of chunky blocks standing proud of the helmet round the face.
     for i in range(30):
         t = 2.0 * math.pi * i / 30
-        p = (6.6 * math.cos(t), 8.1 * math.sin(t), 35.2)
-        pitch, yaw = aim((math.cos(t), math.sin(t), 0.25))
-        fig.box("body", "gold", p, (1.0, 1.8, 1.2), pitch, yaw, 0.0)
+        y = spow(math.cos(t), 0.5) * (face_w + 1.0)
+        z = face_z + spow(math.sin(t), 0.5) * (face_h + 1.0)
+        x = front_x(y, z) + 0.5
+        pitch, yaw = aim((1.0, y * 0.05, (z - face_z) * 0.05))
+        fig.box("head", "ivory", (x, y, z), (2.1, 2.3, 2.3), pitch, yaw, 0.0)
+    # The face: a black screen set back inside the rim, gently domed.
+    y = -face_w
+    while y <= face_w + 1e-6:
+        z = face_z - face_h
+        while z <= face_z + face_h + 1e-6:
+            if in_face((0.0, y, z), -0.2):
+                x = hc[0] + hr[0] - 1.9 - 0.012 * (y * y + (z - face_z) ** 2)
+                fig.box("head", "visor", (x, y, z), (0.8, 1.62, 1.62), 0.0, 0.0, 0.0)
+            z += 1.5
+        y += 1.5
+    visor_x = hc[0] + hr[0] - 1.4
+
+    # THE EYES, per skin.
+    def arch(side, z0, width, height, down=False):
+        for i in range(9):
+            t = -1.0 + 2.0 * i / 8
+            yy = side * 3.4 + width * t
+            zz = z0 + (-1.0 if down else 1.0) * height * (1.0 - t * t)
+            slope = math.degrees(math.atan(2.0 * height * t / width)) * (1.0 if down else -1.0)
+            fig.box("eyes", "eye", (visor_x - 0.012 * (yy * yy), yy, zz), (0.7, 1.45, 1.6), 0.0, 0.0, slope)
+
+    if skin_name in ("aurum", "blossom"):
+        arch(-1.0, 38.8, 2.6, 2.2)
+        arch(1.0, 38.8, 2.6, 2.2)
+    elif skin_name == "ember":
+        for side in (-1.0, 1.0):
+            fig.box("eyes", "eye", (visor_x, side * 3.4, 40.0), (0.6, 2.8, 3.2))
+            fig.box("eyes", "eye", (visor_x, side * 3.4, 40.0), (0.6, 3.4, 2.5))
+    else:
+        arch(-1.0, 39.6, 2.1, 1.7)                              # the closed, winking eye
+        fig.box("eyes", "eye", (visor_x, 3.4, 40.6), (0.6, 2.5, 2.9))   # the open one
+        fig.box("eyes", "eye", (visor_x, 3.4, 40.6), (0.6, 3.0, 2.2))
+        for i in range(7):                                     # the smile
+            t = -1.0 + 2.0 * i / 6
+            fig.box("eyes", "eye", (visor_x, 1.6 * t, 35.9 - 0.9 * (1.0 - t * t)), (0.6, 0.9, 0.7), 0.0, 0.0, math.degrees(math.atan(1.1 * t)))
+
+    # THE BROW GEM.
+    gem_z = face_z + face_h + 2.1
+    fig.diamond("head", "gold", "gem", (front_x(0.0, gem_z) + 0.9, 0.0, gem_z), (1.0, 0.0, 0.45), 4.2)
+
+    # THE SKIN'S CROWNING FEATURE.
+    if skin_name == "aurum":
+        for side in (-1.0, 1.0):
+            spine = [(-0.8, side * 6.2, 48.5), (-1.2, side * 8.0, 53.5), (-2.2, side * 10.8, 57.0), (-3.6, side * 14.4, 57.6),
+                     (-4.6, side * 16.8, 55.0), (-4.2, side * 16.6, 51.6), (-2.8, side * 14.8, 50.2)]
+            fig.tube(lambda s: "head", lambda s, k: "gold" if (0.16 < s < 0.22 or 0.52 < s < 0.57) else "ivory", spine,
+                     lambda s: max(3.3 * (1.0 - 0.72 * s), 0.8), tile=2.0, depth=1.2, size_scale=0.95)
+    elif skin_name == "ember":
+        fig.part("flames", "head", (-1.0, 0.0, 50.0), "twinkle", 0.3)
+        for i, (y0, lean, height) in enumerate(((-5.5, -0.5, 11.0), (-2.2, -0.2, 15.5), (1.4, 0.2, 13.0), (4.6, 0.5, 10.0), (0.0, 0.0, 8.0))):
+            spine = [(-1.0 - i * 0.4, y0, 48.0), (-2.0, y0 + lean * 3.0, 48.0 + height * 0.45), (-3.6, y0 + lean * 5.0 + 1.5, 48.0 + height * 0.8), (-5.5, y0 + lean * 6.0 + 3.0, 48.0 + height)]
+            fig.tube(lambda s: "flames", lambda s, k: "pale" if s > 0.75 else ("base" if (k + i) % 3 else "deep"), spine,
+                     lambda s: max(3.0 * (1.0 - s) ** 0.9, 0.35), tile=1.7, depth=0.7, size_scale=0.85, jitter=0.3)
+    elif skin_name == "frost":
+        spikes = ((0.0, 62.0, 15.0), (-32.0, 52.0, 14.0), (32.0, 52.0, 14.0), (-62.0, 36.0, 13.0), (62.0, 36.0, 13.0),
+                  (-92.0, 18.0, 11.5), (92.0, 18.0, 11.5), (-118.0, 4.0, 9.5), (118.0, 4.0, 9.5), (-16.0, 78.0, 12.0), (16.0, 78.0, 12.0),
+                  (180.0, 50.0, 12.5), (-150.0, 38.0, 12.0), (150.0, 38.0, 12.0), (-45.0, 20.0, 9.0), (45.0, 20.0, 9.0))
+        for i, (az, el, length) in enumerate(spikes):
+            d = (math.cos(math.radians(el)) * math.cos(math.radians(az)) * 0.45 - 0.45, math.cos(math.radians(el)) * math.sin(math.radians(az)), math.sin(math.radians(el)))
+            root = (hc[0] - 1.0 + d[0] * 6.0, d[1] * 8.0, hc[2] + 4.0 + d[2] * 5.0)
+            for layer, (w, mat) in enumerate(((3.8, "deep"), (2.6, "base"), (1.2, "pale"))):
+                fig.blade("head", mat, root, d, length * (1.0 - 0.12 * layer), w, 0.9 + 0.3 * layer, roll=i * 30.0)
+    else:
+        fig.superellipsoid("head", "hair", (-0.9, 0.0, 42.0), (9.9, 11.8, 10.6), 2.6, tile=2.3, depth=1.4, gap=0.08,
+                           keep=lambda nrm, p: not (nrm[0] > 0.05 and in_face(p, 0.8)) and p[2] > 32.5)
+        for i in range(8):
+            yy = -6.3 + 1.8 * i
+            fig.box("head", "hair", (front_x(yy, 47.0) + 0.9, yy, 47.2 - 0.25 * abs(yy)), (1.5, 2.0, 4.4), 0.0, 0.0, (i - 3.5) * 5.0)
+        for side in (-1.0, 1.0):
+            fig.box("head", "hair", (3.0, side * 11.0, 36.5), (4.2, 2.2, 10.0), 0.0, 0.0, side * 8.0)
+        flower = (front_x(7.0, 49.0) - 0.5, 7.2, 49.8)
+        for k in range(5):
+            ang = 72.0 * k
+            fig.box("head", "gold", (flower[0] + 0.3, flower[1] + 1.6 * math.cos(math.radians(ang)), flower[2] + 1.6 * math.sin(math.radians(ang))), (0.8, 1.9, 1.3), 0.0, 20.0, ang)
+        fig.box("head", "gem", (flower[0] + 0.8, flower[1], flower[2]), (0.8, 1.2, 1.2), 0.0, 20.0, 45.0)
+
+    # THE LITTLE BODY: a rounded ivory chest, a gold collar, shoulder plates, small arms and hands, a chest gem.
+    fig.superellipsoid("body", "ivory", (0.0, 0.0, 27.8), (4.9, 6.4, 4.8), 2.6, tile=2.2, depth=1.3, gap=0.1)
+    for i in range(22):
+        t = 2.0 * math.pi * i / 22
+        pitch, yaw = aim((math.cos(t), math.sin(t), 0.2))
+        fig.box("body", "gold", (5.0 * math.cos(t), 6.4 * math.sin(t), 32.1), (1.0, 1.6, 1.2), pitch, yaw, 0.0)
     for side in (-1.0, 1.0):
-        fig.tile_ellipsoid("body", "ivory", (1.5, side * 9.4, 28.5), (2.7, 2.6, 4.2), tile=1.6, depth=0.8)
-        fig.box("body", "gold", (1.6, side * 9.6, 24.8), (2.6, 2.6, 0.9))
+        fig.box("body", "ivory", (0.3, side * 6.9, 30.4), (4.2, 3.2, 2.3), 0.0, 0.0, side * -18.0)
+        fig.box("body", "gold", (0.3, side * 7.6, 29.3), (4.3, 1.6, 0.6), 0.0, 0.0, side * -18.0)
+        fig.tube(lambda s: "body", lambda s, k: "ivory", [(0.4, side * 7.4, 29.0), (1.8, side * 7.8, 26.2), (3.2, side * 7.0, 24.2)],
+                 lambda s: 1.5, tile=1.5, depth=0.9)
+        fig.box("body", "ivory", (3.8, side * 6.6, 23.6), (2.4, 2.2, 2.2))
+    if skin_name == "blossom":
+        fig.diamond("body", "gold", "gem", (5.6, 0.0, 28.2), (1.0, 0.0, 0.1), 3.4)
+        fig.box("body", "gem", (6.1, -0.55, 28.8), (0.8, 1.3, 1.3), 0.0, 0.0, 45.0)
+        fig.box("body", "gem", (6.1, 0.55, 28.8), (0.8, 1.3, 1.3), 0.0, 0.0, 45.0)
+    else:
+        fig.diamond("body", "gold", "gem", (5.6, 0.0, 28.2), (1.0, 0.0, 0.1), 3.4)
 
-    # ICE-CRYSTAL WINGS: two fans of shards behind the shoulders.
+    # SMALL CRYSTAL WINGS: four feathers a side fanning up and out, a gold clasp at the root.
     for side, part in ((-1.0, "wingL"), (1.0, "wingR")):
-        root = (-6.5, side * 5.5, 35.0)
-        for i in range(7):
-            up = math.radians(8.0 + 12.0 * i)
-            direction = (-0.45, side * math.cos(up), math.sin(up) + 0.15)
-            fig.shard(part, "ice", root, direction, 7.5 + 5.0 * math.sin(math.pi * (i + 0.5) / 7), 1.7, 0.7, roll=side * 12.0)
-        for i in range(4):
-            down = math.radians(-35.0 + 11.0 * i)
-            direction = (-0.5, side * math.cos(down), math.sin(down))
-            fig.shard(part, "ice", (root[0], root[1], root[2] - 2.0), direction, 5.5 + 1.2 * i, 1.4, 0.6, roll=side * -10.0)
+        root = (-4.2, side * 4.0, 31.0)
+        for i, (up, length) in enumerate(((6.0, 8.0), (28.0, 11.5), (50.0, 13.0), (72.0, 10.5))):
+            d = (-0.45, side * math.cos(math.radians(up)), math.sin(math.radians(up)))
+            fig.blade(part, "wing", root, d, length, 2.9, 0.7, roll=side * 25.0)
+            fig.blade(part, "pale", root, d, length * 0.55, 1.0, 0.8, roll=side * 25.0)
+        fig.box(part, "gold", root, (1.6, 1.6, 1.6), 0.0, 45.0, 45.0)
 
-    # THE STARLIGHT WISP.
-    spiral_tail(fig, "body", (0.0, 0.0, 25.0), 25.0, 6.6, 8, "starlight", "halo", sweep=(-3.5, 4.5), turns=0.9)
+    # THE CRYSTAL GHOST TAIL: an S that curls up at its tip.
+    spine = [(0.0, 0.0, 25.0), (-0.6, 1.4, 21.0), (-1.6, 3.8, 16.6), (-2.2, 4.8, 12.2), (-2.0, 3.2, 8.2), (-1.2, -0.4, 5.2),
+             (-0.4, -3.6, 3.4), (0.3, -5.8, 3.0), (0.7, -7.0, 4.4), (0.6, -6.8, 6.2)]
 
-    # HEX CRYSTALS in orbit and FOUR-POINT SPARKLES around it.
+    def radius_at(s):
+        profile = ((0.0, 5.6), (0.22, 4.9), (0.45, 3.4), (0.65, 2.1), (0.85, 1.0), (1.0, 0.45))
+        for (s0, r0), (s1, r1) in zip(profile, profile[1:]):
+            if s <= s1:
+                return r0 + (r1 - r0) * (s - s0) / (s1 - s0)
+        return profile[-1][1]
+
+    crystal_tail(fig, "body", spine, radius_at, 8, ("deep", "base", "pale"), "halo")
+
+    # HEXAGONAL GEMS in orbit, and sparkles near the tail.
     for i in range(5):
-        a = 2.0 * math.pi * i / 5 + 0.4
-        centre = (19.0 * math.cos(a), 19.0 * math.sin(a), 30.0 + 9.0 * math.sin(2.1 * a))
-        fig.hex_crystal("orbit", "ice", centre, (math.cos(a + 1.0), math.sin(a + 1.0), 0.6), 1.5, 0.45)
-    for i, (x, y, z) in enumerate(((6.0, -16.0, 52.0), (4.0, 17.0, 44.0), (7.0, -14.0, 22.0), (3.0, 15.0, 13.0), (5.0, -9.0, 62.0))):
+        a = 2.0 * math.pi * i / 5 + 0.7
+        centre = (15.0 * math.cos(a), 15.5 * math.sin(a), 20.0 + 11.0 * math.sin(1.9 * a + 0.4))
+        fig.hex_gem("orbit", "gem" if i % 2 else "base", centre, (math.cos(a + 1.2), math.sin(a + 1.2), 0.5), 1.8, 0.5)
+    for i, (x, y, z) in enumerate(((3.0, -9.0, 14.0), (2.0, 8.0, 9.0), (4.0, -5.5, 5.0), (1.0, 10.0, 18.0))):
         name = "spark%d" % i
-        fig.part(name, "body", (x, y, z), "twinkle", i / 5.0)
-        fig.sparkle(name, "starlight", (x, y, z), 2.6)
+        fig.part(name, "body", (x, y, z), "twinkle", i / 4.0)
+        fig.sparkle(name, "pale", (x, y, z), 1.8)
     return fig
 
 
-# ============================================================================ Claude Code Fable 5
+# ============================================================================ JHINN AI AGENT: CLAUDE CODE FABLE 5
 def build_fable():
     fig = Figure("Claude Code Fable 5 -- Jhinn AI Agent (imported)", seed=5150)
-    fig.material("ivory", "lit", (0.86, 0.82, 0.74))
-    fig.material("gold", "lit", (0.92, 0.56, 0.12))
-    fig.material("visor", "lit", (0.008, 0.008, 0.011))
-    fig.material("eye", "glow", (1.0, 0.72, 0.30), 6.0)
-    # THE IMPORTED-AGENT COLOUR (canon, immutable): cyan-blue crystalline, never throat-chakra blue.
-    fig.material("imported", "glow", (0.25, 0.85, 1.0), 2.8)
-    fig.material("importedhalo", "add", (0.20, 0.70, 1.0), 0.9)
-    fig.material("lavender", "glow", (0.62, 0.45, 1.0), 2.3)
-    fig.material("lilac", "lit", (0.72, 0.62, 0.95))
+    fig.material("ivory", "lit", IVORY)
+    fig.material("gold", "lit", GOLD)
+    fig.material("visor", "lit", VISOR)
+    fig.material("lilac", "lit", (0.70, 0.66, 0.96))
+    fig.material("eye", "glow", (1.0, 0.80, 0.36), 5.0)
+    # The spectral lower body: periwinkle crystal with the imported-agent cyan glinting through it (canon).
+    fig.material("deep", "glow", (0.36, 0.42, 1.0), 1.3)
+    fig.material("base", "glow", (0.52, 0.60, 1.0), 1.6)
+    fig.material("cyan", "glow", (0.36, 0.86, 1.0), 2.2)
+    fig.material("wing", "glow", (0.46, 0.50, 1.0), 1.25)
+    fig.material("wingpale", "glow", (0.74, 0.74, 1.0), 1.9)
+    fig.material("halo", "add", (0.45, 0.58, 1.0), 0.85)
 
-    fig.part("body", "-", (0.0, 0.0, 38.0), "none")
-    fig.part("head", "body", (0.0, 0.0, 50.0), "head")
-    fig.part("eyes", "head", (9.6, 0.0, 57.0), "blink")
-    fig.part("wingL", "body", (-6.0, -5.0, 48.0), "wing", -1)
-    fig.part("wingR", "body", (-6.0, 5.0, 48.0), "wing", 1)
-    fig.part("orbit", "body", (0.0, 0.0, 44.0), "orbit", -12.0)
+    fig.part("body", "-", (0.0, 0.0, 48.0), "none")
+    fig.part("head", "body", (0.0, 0.0, 61.0), "head")
+    fig.part("eyes", "head", (5.5, 0.0, 65.0), "blink")
+    fig.part("wingL", "body", (-3.6, -3.2, 55.0), "wing", -1)
+    fig.part("wingR", "body", (-3.6, 3.2, 55.0), "wing", 1)
+    fig.part("orbit", "body", (0.0, 0.0, 34.0), "orbit", -11.0)
 
-    # THE HEAD: a tall ivory hood open at the front, a dark visor inside.
-    head_c, head_r = (0.0, 0.0, 57.0), (9.6, 10.2, 11.6)
-    fig.tile_ellipsoid("head", "ivory", head_c, head_r, tile=2.1, depth=1.0,
-                       keep=lambda n, p: not (n[0] > 0.5 and abs(p[2] - 56.5) < 8.8))
-    fig.tile_ellipsoid("head", "visor", (1.8, 0.0, 56.3), (7.6, 8.2, 8.0), tile=1.6, depth=0.9,
-                       keep=lambda n, p: n[0] > 0.16)
+    # THE HEAD: a black face under a white bob, a gold tiara.
+    fig.superellipsoid("head", "visor", (0.0, 0.0, 65.4), (4.6, 4.6, 5.4), 2.2, tile=1.4, depth=0.9, gap=0.02)
+    yy = -3.9
+    while yy <= 3.9 + 1e-6:
+        zz = 60.8
+        while zz <= 68.2 + 1e-6:
+            if (yy / 4.1) ** 2 + ((zz - 64.6) / 4.2) ** 2 < 1.0:
+                fig.box("head", "visor", (5.1 - 0.05 * yy * yy - 0.03 * (zz - 64.6) ** 2, yy, zz), (0.7, 1.12, 1.12))
+            zz += 1.0
+        yy += 1.0
+    hair_c, hair_r = (-0.7, 0.0, 66.2), (5.9, 6.4, 6.6)
+    fig.superellipsoid("head", "ivory", hair_c, hair_r, 2.7, tile=1.8, depth=1.2, gap=0.1,
+                       keep=lambda nrm, p: p[2] > 60.2 and not (nrm[0] > 0.0 and abs(p[1]) < 4.3 and p[2] < 67.8))
+    for i in range(7):
+        yy = -3.6 + 1.2 * i
+        fig.box("head", "ivory", (5.4 - 0.04 * yy * yy, yy, 68.2 - 0.1 * abs(yy)), (1.3, 1.25, 2.4), 0.0, 0.0, (i - 3) * 3.0)
     for side in (-1.0, 1.0):
-        for dy in (-0.7, 0.7):
-            for dz in (-1.1, 0.0, 1.1):
-                if abs(dy) > 0.5 and abs(dz) > 1.0:
-                    continue
-                fig.box("eyes", "eye", (9.55, side * 3.3 + dy, 57.0 + dz), (0.6, 1.3, 1.25))
-
-    # THE CROWN: a gold band and a rising row of spires, the tallest at the front, cyan gems at their tips.
-    for i in range(34):
-        t = 2.0 * math.pi * i / 34
-        p = (8.2 * math.cos(t), 8.7 * math.sin(t), 66.2)
-        pitch, yaw = aim((math.cos(t), math.sin(t), 0.1))
-        fig.box("head", "gold", p, (1.0, 1.7, 1.8), pitch, yaw, 0.0)
-    for i, deg in enumerate((-70.0, -45.0, -22.0, 0.0, 22.0, 45.0, 70.0)):
+        for j in range(3):
+            fig.box("head", "ivory", (2.8 - j * 1.6, side * (5.0 + 0.3 * j), 63.2), (1.6, 1.3, 6.4 - j * 0.8), 0.0, 0.0, side * 4.0)
+    for side in (-1.0, 1.0):
+        fig.box("eyes", "eye", (5.55, side * 1.9, 65.0), (0.6, 1.7, 1.15), 0.0, 0.0, side * 12.0)
+    # The tiara.
+    for i in range(22):
+        t = math.radians(-110.0 + 220.0 * i / 21)
+        pitch, yaw = aim((math.cos(t), math.sin(t), 0.3))
+        fig.box("head", "gold", (hair_c[0] + 5.2 * math.cos(t), 5.6 * math.sin(t), 71.3 + 0.5 * math.cos(t)), (0.7, 1.0, 0.9), pitch, yaw, 0.0)
+    for deg, height, tip in ((0.0, 6.5, "gem"), (-26.0, 4.2, "gold"), (26.0, 4.2, "gold"), (-52.0, 2.8, "gold"), (52.0, 2.8, "gold")):
         t = math.radians(deg)
-        h = 9.5 - abs(deg) / 70.0 * 5.0
-        base = (8.0 * math.cos(t), 8.5 * math.sin(t), 67.0)
-        fig.box("head", "gold", (base[0], base[1], base[2] + h * 0.5), (1.1, 1.1, h), 0.0, math.degrees(t), 0.0)
-        fig.box("head", "imported", (base[0], base[1], base[2] + h + 0.6), (1.2, 1.2, 1.2), 0.0, math.degrees(t) + 45.0, 45.0)
+        base = (hair_c[0] + 5.1 * math.cos(t), 5.5 * math.sin(t), 71.6 + 0.5 * math.cos(t))
+        steps = max(int(height / 0.8), 2)
+        for k in range(steps):
+            s = k / (steps - 1)
+            size = 1.5 * (1.0 - s) + 0.35
+            fig.box("head", "gold", (base[0], base[1], base[2] + height * s), (size * 0.7, size, size), 0.0, deg, 45.0)
+        if tip == "gem":
+            fig.box("head", "cyan", (base[0] + 0.3, base[1], base[2] + 2.0), (0.8, 1.5, 1.5), 0.0, 0.0, 45.0)
+        else:
+            fig.box("head", "gold", (base[0], base[1], base[2] + height + 0.4), (0.8, 0.8, 0.8), 0.0, deg + 45.0, 45.0)
 
-    # THE TORSO AND ARMS, with the gold pendant.
-    fig.tile_ellipsoid("body", "ivory", (0.0, 0.0, 41.0), (6.2, 7.6, 8.4), tile=2.0, depth=1.0)
-    for i in range(18):
-        t = -1.0 + 2.0 * i / 17
-        fig.box("body", "gold", (6.4 - 1.2 * t * t, 4.2 * t, 45.5 - 2.6 * (1.0 - t * t)), (0.8, 0.9, 0.9))
-    fig.box("body", "gold", (6.9, 0.0, 40.5), (1.0, 2.2, 3.4))
-    fig.box("body", "imported", (7.5, 0.0, 40.8), (0.6, 1.1, 1.1), 0.0, 0.0, 45.0)
+    # THE BODY: a slender ivory torso, lilac neck and waist, a gold neckline and the gold key pendant.
+    fig.tube(lambda s: "body", lambda s, k: "lilac", [(0.0, 0.0, 57.6), (0.2, 0.0, 61.0)], lambda s: 1.4, tile=1.2, depth=0.8)
+    fig.superellipsoid("body", "ivory", (0.0, 0.0, 51.5), (3.9, 4.9, 6.6), 2.5, tile=1.8, depth=1.1, gap=0.08,
+                       keep=lambda nrm, p: p[2] > 46.8)
+    fig.superellipsoid("body", "lilac", (0.0, 0.0, 45.8), (3.4, 4.2, 2.6), 2.2, tile=1.6, depth=0.9, gap=0.08)
+    for i in range(9):
+        t = -1.0 + 2.0 * i / 8
+        fig.box("body", "gold", (3.9 - 0.8 * t * t, 3.4 * t, 56.4 - 2.8 * (1.0 - abs(t))), (0.7, 0.8, 0.8), 0.0, 0.0, 45.0)
+    key_x = 4.6
+    for k in range(8):
+        a = 2.0 * math.pi * k / 8
+        fig.box("body", "gold", (key_x, 0.95 * math.cos(a), 52.2 + 0.95 * math.sin(a)), (0.6, 0.7, 0.7), 0.0, 0.0, math.degrees(a))
+    fig.box("body", "gold", (key_x, 0.0, 49.1), (0.6, 0.55, 4.6))
+    fig.box("body", "gold", (key_x, 0.6, 47.4), (0.6, 0.9, 0.5))
+    fig.box("body", "gold", (key_x, 0.6, 48.3), (0.6, 0.7, 0.5))
+    # Shoulders, and the arms: the right lowered along the body, the left reaching out and down, lilac hands.
     for side in (-1.0, 1.0):
-        fig.tile_ellipsoid("body", "ivory", (0.0, side * 8.2, 46.5), (3.2, 3.2, 3.0), tile=1.7, depth=0.9)
-        arm = [(0.0, side * 8.8, 45.0), (2.0, side * 12.5, 40.0), (4.0, side * 16.0, 35.5)]
-        fig.tube(lambda s: "body", lambda s, k: "gold" if s > 0.82 else "ivory", arm, lambda s: 2.1 - 0.7 * s, tile=1.6, depth=0.8)
+        fig.superellipsoid("body", "ivory", (0.0, side * 5.6, 56.2), (2.0, 2.2, 1.7), 2.4, tile=1.3, depth=0.8, gap=0.08)
+        fig.box("body", "gold", (0.2, side * 6.4, 55.0), (3.4, 1.0, 0.5), 0.0, 0.0, side * -25.0)
+    arms = {1.0: [(0.0, 6.0, 55.4), (0.5, 8.2, 49.2), (1.5, 9.4, 43.6), (2.0, 9.8, 41.6)],
+            -1.0: [(0.0, -6.0, 55.4), (0.8, -11.2, 51.6), (1.8, -16.0, 48.2), (2.2, -18.0, 47.2)]}
+    for side, spine in arms.items():
+        fig.tube(lambda s: "body", lambda s, k: "ivory" if s < 0.45 else "lilac", spine, lambda s: 1.25 - 0.35 * s, tile=1.2, depth=0.8)
+        hand = spine[-1]
+        fig.box("body", "lilac", hand, (1.4, 1.6, 2.2), 0.0, 0.0, side * 20.0)
+        fig.box("body", "gold", lerp3(spine[-2], spine[-1], 0.1), (1.2, 1.6, 0.5), 0.0, 0.0, side * 20.0)
+        if side < 0:
+            for f in range(4):
+                fig.box("body", "lilac", (hand[0] + 0.9, hand[1] - 0.9 - 0.2 * f, hand[2] - 1.3 + 0.7 * f), (0.5, 1.9, 0.45), 0.0, 0.0, -40.0 + 14.0 * f)
 
-    # THE WINGS: a tall upper fan and a shorter lower one of lavender crystal, lilac edges for form in daylight.
+    # THE HIPS: armoured ivory plates flaring over the crystal, gold chains draped across them.
+    for i in range(14):
+        t = 2.0 * math.pi * i / 14
+        d = (math.cos(t), math.sin(t), -0.35)
+        pitch, yaw = aim((d[0], d[1], 0.0))
+        fig.box("body", "ivory", (4.4 * math.cos(t), 5.2 * math.sin(t), 42.4), (1.0, 2.9, 5.2), pitch + 18.0, yaw, 0.0)
+        fig.box("body", "gold", (4.9 * math.cos(t), 5.8 * math.sin(t), 39.8), (0.6, 2.7, 0.5), pitch + 18.0, yaw, 0.0)
+    for drop, z0 in ((1.6, 44.4), (2.6, 42.4)):
+        for i in range(13):
+            t = -1.0 + 2.0 * i / 12
+            fig.box("body", "gold", (4.8 - 0.5 * t * t, 4.6 * t, z0 - drop * (1.0 - t * t)), (0.5, 0.6, 0.6), 0.0, 0.0, 45.0)
+
+    # THE WINGS: three tiers of long rectangular crystal panes fanning up and back.
     for side, part in ((-1.0, "wingL"), (1.0, "wingR")):
-        root = (-6.0, side * 5.0, 48.0)
-        for i in range(10):
-            up = math.radians(5.0 + 9.5 * i)
-            direction = (-0.55, side * math.cos(up), math.sin(up) + 0.25)
-            length = 14.0 + 13.0 * math.sin(math.pi * (i + 0.6) / 10)
-            fig.shard(part, "lavender" if i % 3 else "lilac", root, direction, length, 2.4, 0.8, roll=side * 16.0)
-            tip = tuple(root[n] + normalise(direction)[n] * length for n in range(3))
-            fig.box(part, "lavender", tip, (1.3, 1.3, 1.3), 0.0, 45.0, 45.0)
-        for i in range(6):
-            down = math.radians(-58.0 + 10.0 * i)
-            direction = (-0.6, side * math.cos(down), math.sin(down))
-            fig.shard(part, "lavender" if i % 2 else "lilac", (root[0], root[1], root[2] - 5.0), direction, 10.0 + 1.6 * i, 2.0, 0.7, roll=side * -14.0)
+        root = (-3.6, side * 3.2, 55.0)
+        tiers = (((52.0, 22.0), (62.0, 29.0), (72.0, 35.0), (82.0, 38.0), (92.0, 36.0), (102.0, 30.0), (112.0, 22.0)),
+                 ((18.0, 19.0), (30.0, 24.0), (42.0, 27.0)),
+                 ((-30.0, 11.0), (-14.0, 15.0), (2.0, 18.0), (12.0, 17.0)))
+        for tier, blades in enumerate(tiers):
+            for up, length in blades:
+                d = (-0.55 - 0.08 * tier, side * math.cos(math.radians(up)) * 0.9, math.sin(math.radians(up)))
+                d = normalise(d)
+                panes = 4 if length > 18 else 3
+                for pane in range(panes):
+                    start = tuple(root[n] + d[n] * (length * pane / panes + 0.5) for n in range(3))
+                    material = "wingpale" if (pane == panes - 1 and (int(up) + pane) % 2 == 0) else "wing"
+                    fig.blade(part, material, start, d, length / panes - 0.7, 3.2, 0.6, roll=side * 18.0)
+        fig.box(part, "gold", root, (1.4, 1.4, 1.4), 0.0, 45.0, 45.0)
 
-    # THE IMPORTED SPECTRAL LOWER BODY: a flared crystalline skirt that becomes the wisp.
-    spiral_tail(fig, "body", (0.0, 0.0, 33.5), 33.0, 8.6, 10, "imported", "importedhalo", sweep=(-4.0, -5.0), turns=0.75)
+    # THE SPECTRAL LOWER BODY: a skirt of crystal flaring under the plates and curling to a point.
+    spine = [(0.0, 0.0, 41.0), (-0.4, 0.4, 35.0), (-1.4, 1.4, 28.0), (-2.4, 1.0, 21.0), (-2.4, -1.6, 14.0), (-1.4, -4.6, 8.4),
+             (0.0, -6.6, 4.8), (1.2, -7.6, 3.4), (1.8, -7.9, 5.0), (1.6, -7.3, 6.8)]
 
-    # HEX CRYSTALS in orbit, cyan and lavender.
-    for i in range(6):
-        a = 2.0 * math.pi * i / 6 + 0.25
-        centre = (22.0 * math.cos(a), 22.0 * math.sin(a), 36.0 + 11.0 * math.sin(1.7 * a))
-        fig.hex_crystal("orbit", "imported" if i % 2 else "lavender", centre, (math.cos(a + 0.8), math.sin(a + 0.8), 0.5), 1.8, 0.5)
+    def radius_at(s):
+        profile = ((0.0, 7.0), (0.10, 8.2), (0.30, 6.6), (0.50, 4.4), (0.70, 2.4), (0.88, 1.0), (1.0, 0.45))
+        for (s0, r0), (s1, r1) in zip(profile, profile[1:]):
+            if s <= s1:
+                return r0 + (r1 - r0) * (s - s0) / (s1 - s0)
+        return profile[-1][1]
+
+    crystal_tail(fig, "body", spine, radius_at, 10, ("deep", "base", "cyan"), "halo", density=0.92)
+
+    # Floating crystal cubes.
+    for i in range(8):
+        a = 2.0 * math.pi * i / 8 + 0.3
+        centre = (13.0 * math.cos(a), 14.0 * math.sin(a), 16.0 + 16.0 * ((i * 37) % 10) / 10.0)
+        size = 1.3 + 0.6 * ((i * 53) % 7) / 7.0
+        fig.box("orbit", "cyan" if i % 3 == 0 else "base", centre, (size, size, size), 30.0 * i, 45.0 + 17.0 * i, 20.0 * i)
     return fig
 
 
@@ -377,7 +587,15 @@ def main():
     parser.add_argument("--out", default=os.path.join(here, "..", "Companions"))
     args = parser.parse_args()
     os.makedirs(args.out, exist_ok=True)
-    for build, file_name in ((build_astra, "GPT6Astra.wlvox"), (build_fable, "ClaudeCodeFable5.wlvox")):
+    outputs = [
+        (lambda: build_ghost("aurum", "GPT 6 Astra"), "GPT6Astra.wlvox"),
+        (lambda: build_ghost("aurum", "Aurum"), "LlmGhostAurum.wlvox"),
+        (lambda: build_ghost("ember", "Ember"), "LlmGhostEmber.wlvox"),
+        (lambda: build_ghost("frost", "Frost"), "LlmGhostFrost.wlvox"),
+        (lambda: build_ghost("blossom", "Blossom"), "LlmGhostBlossom.wlvox"),
+        (build_fable, "ClaudeCodeFable5.wlvox"),
+    ]
+    for build, file_name in outputs:
         boxes, parts, materials = build().write(os.path.join(args.out, file_name))
         print("%-24s %5d boxes  %2d parts  %2d materials" % (file_name, boxes, parts, materials))
 
