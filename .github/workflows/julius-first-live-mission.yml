@@ -1149,13 +1149,40 @@ jobs:
           fi
           echo 'evidence scan clean (shapes and exact values)'
 
+      # THE PAID-RUN ARCHIVE'S EXPORT. This job's PostgreSQL is disposable and
+      # dies with the runner whatever step runs next, so this artifact is the
+      # only copy of the run's state. It is the export the local importer
+      # (`scripts/julius-paid-run-archive.mjs import --run <id>`) reads into the
+      # durable `julius-postgres` archive; 90 days, not 14, so an import is not
+      # a race.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        id: evidence_upload
         if: always()
         with:
           name: julius-live-evidence
           path: julius-live-evidence
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 90
+
+      # PRESERVED, OR SAID NOT TO BE. An upload of nothing still succeeds
+      # (`if-no-files-found: ignore`, and the credential refusal above deletes
+      # the directory rather than upload it), so success of the step alone is
+      # not preservation. The line names which it was, in the log and the job
+      # summary, before teardown.
+      - name: "Archive export: say whether this run's state was preserved"
+        if: always()
+        env:
+          UPLOAD_OUTCOME: ${{ steps.evidence_upload.outcome }}
+        run: |
+          set -uo pipefail
+          if [ "$UPLOAD_OUTCOME" = 'success' ] && [ -f julius-live-evidence/tasks.tsv ]; then
+            echo "PAID_RUN_ARCHIVE_EXPORTED artifact=julius-live-evidence retention_days=90 workflow_run_id=$GITHUB_RUN_ID workflow_run_attempt=$GITHUB_RUN_ATTEMPT" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            evidence=absent
+            [ -d julius-live-evidence ] && evidence=present_without_tasks
+            echo "PAID_RUN_ARCHIVE_FAILED upload_outcome=${UPLOAD_OUTCOME:-unknown} evidence=$evidence workflow_run_id=$GITHUB_RUN_ID workflow_run_attempt=$GITHUB_RUN_ATTEMPT" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::error title=PAID_RUN_ARCHIVE_FAILED::this run's state was NOT preserved; the disposable database is destroyed with the job"
+          fi
 
       # -------------------------------------------------------------- CLEANUP
 
