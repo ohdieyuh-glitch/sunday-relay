@@ -7,6 +7,7 @@
 #
 # Rules kept: zc_ prefix, no saves, no map edits, never Escape unless a panel is open, and it ends its own PIE.
 import os
+import time
 
 SHOTS = os.path.join(os.path.dirname(CHANNEL), "captures", "zc")
 L = unreal.WonderlandUiTestLibrary
@@ -102,13 +103,9 @@ def job():
            selected=str(ui.get_brain_selected_surface()), capture=shot("zc_brain_05_mission_context.png"))
 
     # ---------------------------------------------------------------- Ctrl+T from the panel, and back
-    L.set_key_held("LeftControl", True)
-    yield 0.12
-    L.set_key_held("T", True)
-    yield 0.12
-    L.set_key_held("T", False)
-    yield 0.08
-    L.set_key_held("LeftControl", False)
+    # A panel holds UI-only input, so the chord must carry its modifier ON THE KEY EVENT: press_key(.., True),
+    # not held keys. Held keys are for the game's own chord, which a panel never sees (measured 2026-09-15).
+    L.press_key("T", True)
     yield 0.7
     record("B06", "Ctrl+T over the Project Brain switches to the terminal and its companions",
            ui.is_live_terminal_open() and not ui.is_project_brain_open() and ui.are_companion_terminals_on_screen() and ui.get_overlays_in_viewport() == 1,
@@ -125,6 +122,34 @@ def job():
     record("B07", "B closes it again, and the proposal survived the reopen",
            reopened and not ui.is_project_brain_open() and ui.get_overlays_in_viewport() == 0,
            reopened=reopened, open_after=ui.is_project_brain_open(), overlays=ui.get_overlays_in_viewport())
+
+    # ---------------------------------------------------------------- what the frame costs to draw
+    # Same A/B as the companions (zc_companion_proof.py): open and shut three times each on the same view, so
+    # drift in the world's own frame rate averages out. Frame rates only compare with the editor in front.
+    samples = {"open": [], "shut": []}
+    for _ in range(3):
+        for state in ("open", "shut"):
+            if ui.is_project_brain_open() != (state == "open"):
+                L.focus_game_viewport()
+                L.press_key("B", False)
+            yield 1.5
+            f0, t0 = unreal.SystemLibrary.get_frame_count(), time.time()
+            yield 4.0
+            samples[state].append((unreal.SystemLibrary.get_frame_count() - f0) / (time.time() - t0))
+    if ui.is_project_brain_open():
+        L.press_key("B", False)
+        yield 0.5
+    fps_open = sum(samples["open"]) / max(len(samples["open"]), 1)
+    fps_shut = sum(samples["shut"]) / max(len(samples["shut"]), 1)
+    ms_open = 1000.0 / fps_open if fps_open > 0 else None
+    ms_shut = 1000.0 / fps_shut if fps_shut > 0 else None
+    RESULT["perf"] = {"fps_open": round(fps_open, 2), "fps_shut": round(fps_shut, 2),
+                      "ms_open": None if ms_open is None else round(ms_open, 2),
+                      "ms_shut": None if ms_shut is None else round(ms_shut, 2),
+                      "cost_ms": None if (ms_open is None or ms_shut is None) else round(ms_open - ms_shut, 2),
+                      "samples": samples}
+    record("B08", "the Project Brain frame costs under 10% of the frame (A/B, open vs shut)",
+           fps_shut > 0 and fps_open >= 0.9 * fps_shut, **RESULT["perf"])
 
     les.editor_request_end_play()
     yield (lambda: ues.get_game_world() is None, 60)
