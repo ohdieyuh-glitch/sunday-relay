@@ -119,6 +119,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Companion")
 	float SnapDistanceUU = 1800.0f;
 
+	/** Radius of the sphere kept clear of walls around the companion's body, uu. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Companion")
+	float BodyClearanceRadiusUU = 38.0f;
+
+	/** Height of the body's centre above the figure origin (its tail tip), where the wall sweep aims, uu. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Companion")
+	float BodyClearanceHeightUU = 80.0f;
+
 private:
 	/** A part's animation state. Parallel to PartPivots; plain data, never serialised. */
 	struct FPartMotion

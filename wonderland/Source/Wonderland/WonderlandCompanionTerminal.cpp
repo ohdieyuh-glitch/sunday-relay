@@ -1,20 +1,32 @@
 #include "WonderlandCompanionTerminal.h"
 
 #include "Framework/Application/SlateApplication.h"
+#include "HAL/IConsoleManager.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
+#include "WonderlandPixelText.h"
 #include "WonderlandUiStyle.h"
 
+namespace
+{
+	// Named for this file alone: the module is one unity translation unit (see WonderlandCompanionHud.cpp).
+	TAutoConsoleVariable<float> CVarCompanionTerminalTitleCell(
+		TEXT("wl.Companion.TitleCell"), 3.4f,
+		TEXT("Slate units per cell of the companion terminal titles' pixel type."));
+
+	// The frame's gold is warmer and brighter than the Julius window's hairline: in the founder's frame these panels
+	// sit at the screen's edge over bright stone and carry a heavy amber border.
+	FLinearColor CompanionFrameGold(float Alpha = 1.0f) { return WonderlandUi::Srgb(0xE3, 0xA5, 0x3E, Alpha); }
+	FLinearColor CompanionTitleGold() { return WonderlandUi::Srgb(0xF4, 0xAA, 0x3E); }
+}
+
 SWonderlandCompanionTerminal::SWonderlandCompanionTerminal()
-	// Darker and more opaque than the Julius window, which sits over the lower third: a companion terminal
-	// sits over bright stone and sky at the screen's edge and must read as a black console there.
-	: WindowBrush(WonderlandUi::Srgb(5, 6, 9, 0.90f), 9.0f, WonderlandUi::Gold(0.78f), 1.5f)
-	, InputBrush(WonderlandUi::Srgb(2, 3, 5, 0.94f), 5.0f, WonderlandUi::GoldDim(), 1.0f)
-	, DividerBrush(WonderlandUi::GoldDim(), 0.0f)
+	: FrameBrush(WonderlandUi::Srgb(4, 4, 6, 0.93f), 8.0f, CompanionFrameGold(), 2.5f)
+	, RuleBrush(CompanionFrameGold(0.9f), 0.0f)
 {
 }
 
@@ -31,122 +43,118 @@ void SWonderlandCompanionTerminal::Construct(const FArguments& InArgs)
 	InputStyle.SetBackgroundImageNormal(NoBackground)
 		.SetBackgroundImageHovered(NoBackground)
 		.SetBackgroundImageFocused(NoBackground)
-		.SetFont(WonderlandUi::Mono(10))
+		.SetFont(WonderlandUi::Mono(11))
 		.SetForegroundColor(FSlateColor(WonderlandUi::Cream()))
 		.SetFocusedForegroundColor(FSlateColor(WonderlandUi::Cream()))
-		.SetPadding(FMargin(4.0f, 3.0f));
+		.SetPadding(FMargin(2.0f, 3.0f));
 
 	SAssignNew(Log, SVerticalBox);
 	RebuildLog();
 
-	// The title is set in the terminal's monospace, weighted by a one-pixel shadow in its own gold: the
-	// engine carries no bold monospace, and a sans title would stop the panel reading as a CLI.
-	const FSlateFontInfo TitleFont = WonderlandUi::Mono(16);
+	const TAttribute<float> TitleCell = TAttribute<float>::CreateLambda([]() { return CVarCompanionTerminalTitleCell.GetValueOnGameThread(); });
+	FSlateFontInfo IntroFont = WonderlandUi::Mono(12);
+	IntroFont.LetterSpacing = 90;
+	const FSlateFontInfo RowFont = WonderlandUi::Mono(11);
+
 	ChildSlot
 	[
 		SNew(SBorder)
-		.BorderImage(&WindowBrush)
-		.Padding(FMargin(14.0f, 10.0f, 14.0f, 10.0f))
+		.BorderImage(&FrameBrush)
+		.Padding(FMargin(2.5f))
 		[
 			SNew(SVerticalBox)
+			// THE TITLE: the chevron and the name in gold pixel type, WAITING at the right.
 			+ SVerticalBox::Slot()
 			.AutoHeight()
+			.Padding(16.0f, 14.0f, 14.0f, 0.0f)
 			[
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot()
 				.AutoWidth()
 				.VAlign(VAlign_Center)
-				.Padding(0.0f, 0.0f, 9.0f, 0.0f)
+				.Padding(0.0f, 0.0f, 12.0f, 0.0f)
 				[
-					SNew(STextBlock)
-					.Text(INVTEXT(">"))
-					.Font(TitleFont)
-					.ColorAndOpacity(WonderlandUi::Gold())
-					.ShadowOffset(FVector2D(1.0f, 0.0f))
-					.ShadowColorAndOpacity(WonderlandUi::Gold())
+					SNew(SWonderlandPixelText)
+					.Text(TEXT(">"))
+					.CellSize(TitleCell)
+					.Color(CompanionTitleGold())
 				]
 				+ SHorizontalBox::Slot()
 				.FillWidth(1.0f)
+				.HAlign(HAlign_Left)
 				.VAlign(VAlign_Center)
 				[
-					SNew(STextBlock)
-					.Text(FText::FromString(Title.ToUpper()))
-					.Font(TitleFont)
-					.ColorAndOpacity(WonderlandUi::Gold())
-					.ShadowOffset(FVector2D(1.0f, 0.0f))
-					.ShadowColorAndOpacity(WonderlandUi::Gold())
-					.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+					SNew(SWonderlandPixelText)
+					.Text(Title.ToUpper())
+					.CellSize(TitleCell)
+					.Color(CompanionTitleGold())
 				]
 				+ SHorizontalBox::Slot()
 				.AutoWidth()
-				.VAlign(VAlign_Center)
-				.Padding(10.0f, 0.0f, 6.0f, 0.0f)
-				[
-					SNew(STextBlock)
-					.Text(FText::FromString(TEXT("●")))
-					.Font(WonderlandUi::Mono(8))
-					.ColorAndOpacity(Accent)
-				]
-				+ SHorizontalBox::Slot()
-				.AutoWidth()
-				.VAlign(VAlign_Center)
+				.VAlign(VAlign_Top)
+				.Padding(10.0f, 1.0f, 0.0f, 0.0f)
 				[
 					SNew(STextBlock)
 					.Text(INVTEXT("WAITING"))
-					.Font(WonderlandUi::Sans(9, true, 120))
-					.ColorAndOpacity(WonderlandUi::Gold())
+					.Font(WonderlandUi::Mono(10))
+					.ColorAndOpacity(CompanionFrameGold())
 				]
 			]
+			// THE COMPANION'S LINE, in wide cream capitals.
 			+ SVerticalBox::Slot()
 			.AutoHeight()
-			.Padding(0.0f, 1.0f, 0.0f, 0.0f)
-			[
-				SNew(STextBlock)
-				.Text(FText::FromString(InArgs._ClassLine))
-				.Font(WonderlandUi::Mono(8))
-				.ColorAndOpacity(WonderlandUi::Dim())
-			]
-			+ SVerticalBox::Slot()
-			.AutoHeight()
-			.Padding(0.0f, 8.0f, 0.0f, 0.0f)
+			.Padding(16.0f, 13.0f, 14.0f, 0.0f)
 			[
 				SNew(STextBlock)
 				.Text(FText::FromString(InArgs._Intro.ToUpper()))
-				.Font(WonderlandUi::Mono(10))
+				.Font(IntroFont)
 				.ColorAndOpacity(WonderlandUi::Cream())
-				.AutoWrapText(true)
+				.LineHeightPercentage(1.2f)
 			]
+			// THE LOG: open until a line is recorded.
 			+ SVerticalBox::Slot()
 			.FillHeight(1.0f)
-			.Padding(0.0f, 6.0f, 0.0f, 7.0f)
+			.Padding(16.0f, 8.0f, 14.0f, 6.0f)
 			[
 				Log.ToSharedRef()
 			]
+			// THE RULE, edge to edge inside the frame.
 			+ SVerticalBox::Slot()
 			.AutoHeight()
 			[
-				SNew(SBorder)
-				.BorderImage(&InputBrush)
-				.Padding(FMargin(9.0f, 1.0f, 10.0f, 1.0f))
+				SNew(SBox)
+				.HeightOverride(1.5f)
+				[
+					SNew(SBorder)
+					.BorderImage(&RuleBrush)
+					.Padding(0.0f)
+				]
+			]
+			// THE COMMAND LINE: chevron and input, then Send and its chord ruled off at the right.
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			[
+				SNew(SBox)
+				.HeightOverride(38.0f)
 				[
 					SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot()
 					.AutoWidth()
 					.VAlign(VAlign_Center)
+					.Padding(16.0f, 0.0f, 6.0f, 0.0f)
 					[
 						SNew(STextBlock)
 						.Text(INVTEXT(">"))
-						.Font(WonderlandUi::Mono(11))
-						.ColorAndOpacity(WonderlandUi::Gold())
+						.Font(WonderlandUi::Mono(12))
+						.ColorAndOpacity(WonderlandUi::Cream())
 					]
 					+ SHorizontalBox::Slot()
 					.FillWidth(1.0f)
 					.VAlign(VAlign_Center)
-					.Padding(6.0f, 0.0f, 8.0f, 0.0f)
+					.Padding(0.0f, 0.0f, 8.0f, 0.0f)
 					[
 						SAssignNew(Input, SEditableTextBox)
 						.Style(&InputStyle)
-						.HintText(FText::FromString(FString::Printf(TEXT("Message %s"), *Title)))
 						.ClearKeyboardFocusOnCommit(false)
 						.RevertTextOnEscape(false)
 						.SelectAllTextWhenFocused(false)
@@ -155,35 +163,34 @@ void SWonderlandCompanionTerminal::Construct(const FArguments& InArgs)
 					+ SHorizontalBox::Slot()
 					.AutoWidth()
 					.VAlign(VAlign_Fill)
-					.Padding(0.0f, 5.0f, 0.0f, 5.0f)
 					[
 						SNew(SBox)
-						.WidthOverride(1.0f)
+						.WidthOverride(1.5f)
 						[
 							SNew(SBorder)
-							.BorderImage(&DividerBrush)
+							.BorderImage(&RuleBrush)
 							.Padding(0.0f)
 						]
 					]
 					+ SHorizontalBox::Slot()
 					.AutoWidth()
 					.VAlign(VAlign_Center)
-					.Padding(11.0f, 0.0f, 0.0f, 0.0f)
+					.Padding(16.0f, 0.0f, 0.0f, 0.0f)
 					[
 						SNew(STextBlock)
 						.Text(INVTEXT("Send"))
-						.Font(WonderlandUi::Sans(10, true))
+						.Font(RowFont)
 						.ColorAndOpacity(WonderlandUi::Cream())
 					]
 					+ SHorizontalBox::Slot()
 					.AutoWidth()
 					.VAlign(VAlign_Center)
-					.Padding(9.0f, 0.0f, 0.0f, 0.0f)
+					.Padding(14.0f, 0.0f, 16.0f, 0.0f)
 					[
 						SNew(STextBlock)
 						.Text(INVTEXT("Ctrl+Enter"))
-						.Font(WonderlandUi::Mono(9))
-						.ColorAndOpacity(WonderlandUi::Dim())
+						.Font(RowFont)
+						.ColorAndOpacity(WonderlandUi::Cream())
 					]
 				]
 			]
@@ -198,19 +205,6 @@ void SWonderlandCompanionTerminal::RebuildLog()
 		return;
 	}
 	Log->ClearChildren();
-	if (Lines.Num() == 0)
-	{
-		Log->AddSlot()
-		.AutoHeight()
-		[
-			SNew(STextBlock)
-			.Text(FText::FromString(FString::Printf(TEXT("Not connected. %s is not imported into this world yet."), *Title)))
-			.Font(WonderlandUi::Mono(9))
-			.ColorAndOpacity(WonderlandUi::Dim())
-			.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
-		];
-		return;
-	}
 	for (int32 Index = FMath::Max(0, Lines.Num() - 2); Index < Lines.Num(); ++Index)
 	{
 		const FLine& Line = Lines[Index];
@@ -225,7 +219,7 @@ void SWonderlandCompanionTerminal::RebuildLog()
 			[
 				SNew(STextBlock)
 				.Text(FText::FromString(Line.Speaker.IsEmpty() ? FString() : Line.Speaker + TEXT(":")))
-				.Font(WonderlandUi::Mono(9))
+				.Font(WonderlandUi::Mono(10))
 				.ColorAndOpacity(Accent)
 			]
 			+ SHorizontalBox::Slot()
@@ -234,7 +228,7 @@ void SWonderlandCompanionTerminal::RebuildLog()
 			[
 				SNew(STextBlock)
 				.Text(FText::FromString(Line.Text))
-				.Font(WonderlandUi::Mono(9))
+				.Font(WonderlandUi::Mono(10))
 				.ColorAndOpacity(Line.bDim ? WonderlandUi::Dim() : WonderlandUi::Cream())
 				.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
 			]

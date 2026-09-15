@@ -48,6 +48,10 @@ def job():
     yield (lambda: ues.get_game_world() is None, 1800)
     if FIGURE_DIR:
         console("wl.Companion.FigureDir " + FIGURE_DIR)
+    # The editor's own background-throttle hook, for this session only (nothing is written to settings). It does not
+    # make background frame rates comparable with foreground ones -- see WonderlandUiTestLibrary.h -- but it keeps
+    # the viewport drawing while the captures are taken.
+    RESULT["throttle_hook"] = bool(L.set_background_throttle_suspended(True))
     les.editor_request_begin_play()
     yield (lambda: ues.get_game_world() is not None, 240)
     yield (lambda: unreal.GameplayStatics.get_player_pawn(ues.get_game_world(), 0) is not None, 120)
@@ -56,7 +60,8 @@ def job():
     pawn = unreal.GameplayStatics.get_player_pawn(world, 0)
     controller = unreal.GameplayStatics.get_player_controller(world, 0)
     ui = L.get_ui(world)
-    companions = next((c for c in unreal.ObjectIterator(unreal.WonderlandCompanionSubsystem) if c.get_world() == world), None)
+    subsystems = [c for c in unreal.ObjectIterator(unreal.WonderlandCompanionSubsystem)]
+    companions = next((c for c in subsystems if c.get_world() == world), None) or next((c for c in subsystems if c.get_embodiment_count() > 0), None)
     RESULT["pawn_class"] = pawn.get_class().get_name()
     L.focus_game_viewport()
     yield 0.5
@@ -87,8 +92,8 @@ def job():
     frames = [side_of(b) if b else None for b in bodies]
     RESULT["frames"] = frames
     record("C02", "the LLM Companion floats on the Dog's left and the Jhinn AI Agent on its right, both beside it",
-           all(frames) and frames[0][1] < -60.0 and frames[1][1] > 60.0 and all(math.hypot(f[0], f[1]) < 320.0 for f in frames),
-           llm=frames[0], agent=frames[1] if len(frames) > 1 else None)
+           len(frames) == 2 and all(frames) and frames[0][1] < -60.0 and frames[1][1] > 60.0 and all(math.hypot(f[0], f[1]) < 320.0 for f in frames),
+           frames=frames)
 
     # ------------------------------------------------------------------ HUD and panels
     record("C03", "usage HUD on screen once", ui.is_usage_hud_on_screen() and ui.get_usage_hud_creations() == 1,
@@ -103,6 +108,18 @@ def job():
     controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-6.0, yaw=rot.yaw + 180.0))
     yield 2.5
     shot("zc_02_front_portrait.png")
+    # A closer portrait on a shorter boom, restored afterwards. Read through the property the Dog class exposes;
+    # a pawn without a boom simply skips this shot.
+    boom, arm = None, None
+    try:
+        boom = pawn.get_editor_property("camera_boom")
+        arm = boom.get_editor_property("target_arm_length")
+        boom.set_editor_property("target_arm_length", max(arm * 0.62, 220.0))
+        yield 1.5
+        shot("zc_02b_front_close.png")
+    except Exception as error:
+        emit("close portrait skipped:", error)
+    RESULT["boom_arm_length"] = arm
 
     # ------------------------------------------------------------------ all three terminals
     L.focus_game_viewport()
@@ -133,6 +150,8 @@ def job():
     shot("zc_04_companion_line_not_sent.png")
     ui.close_overlay()
     yield 0.5
+    if boom is not None and arm is not None:
+        boom.set_editor_property("target_arm_length", arm)
 
     # ------------------------------------------------------------------ following
     controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-10.0, yaw=rot.yaw))
@@ -148,13 +167,44 @@ def job():
     moved = (pawn.get_actor_location() - p0).length()
     after = [side_of(b) if b else None for b in bodies]
     record("C07", "after a walk both companions are still beside the Dog",
-           moved > 100.0 and all(after) and all(math.hypot(f[0], f[1]) < 360.0 for f in after),
-           moved_cm=round(moved, 1), llm=after[0], agent=after[1] if len(after) > 1 else None, capture=walk)
+           moved > 100.0 and len(after) == 2 and all(after) and all(math.hypot(f[0], f[1]) < 360.0 for f in after),
+           moved_cm=round(moved, 1), frames=after, capture=walk)
     yield 2.0
     shot("zc_06_after_walk_idle.png")
 
+    # ------------------------------------------------------------------ what the two embodiments cost (gate item 10)
+    # A/B on the same view: both bodies shown and ticking, then hidden with tick off, three times each, so drift in
+    # the world's own frame rate averages out. Frame rates are only comparable with the editor in the foreground
+    # (editor_jobs/README.md); the foreground state is not visible to a job, so the numbers say what they are.
+    live = [b for b in bodies if b]
+    components = [len(b.get_components_by_class(unreal.InstancedStaticMeshComponent)) for b in live]
+    samples = {"visible": [], "hidden": []}
+    for rep_index in range(3):
+        for state in ("visible", "hidden"):
+            for b in live:
+                b.set_actor_hidden_in_game(state == "hidden")
+                b.set_actor_tick_enabled(state == "visible")
+            yield 1.5
+            f0, t0 = unreal.SystemLibrary.get_frame_count(), time.time()
+            yield 4.0
+            samples[state].append((unreal.SystemLibrary.get_frame_count() - f0) / (time.time() - t0))
+    for b in live:
+        b.set_actor_hidden_in_game(False)
+        b.set_actor_tick_enabled(True)
+    fps_visible = sum(samples["visible"]) / max(len(samples["visible"]), 1)
+    fps_hidden = sum(samples["hidden"]) / max(len(samples["hidden"]), 1)
+    ms_visible = 1000.0 / fps_visible if fps_visible > 0 else None
+    ms_hidden = 1000.0 / fps_hidden if fps_hidden > 0 else None
+    RESULT["perf"] = {"fps_visible": round(fps_visible, 2), "fps_hidden": round(fps_hidden, 2),
+                      "ms_visible": None if ms_visible is None else round(ms_visible, 2), "ms_hidden": None if ms_hidden is None else round(ms_hidden, 2),
+                      "cost_ms": None if (ms_visible is None or ms_hidden is None) else round(ms_visible - ms_hidden, 2),
+                      "samples": samples, "instanced_components": components, "boxes": [b.get_box_count() for b in live]}
+    record("P01", "the two embodiments cost under 10% of the frame (A/B, visible vs hidden)",
+           fps_hidden > 0 and fps_visible >= 0.9 * fps_hidden, **RESULT["perf"])
+
     les.editor_request_end_play()
     yield (lambda: ues.get_game_world() is None, 60)
+    L.set_background_throttle_suspended(False)
     RESULT["passed"] = sum(1 for t in tests if t["pass"])
     RESULT["failed"] = [t["id"] for t in tests if not t["pass"]]
     RESULT["status"] = "done"

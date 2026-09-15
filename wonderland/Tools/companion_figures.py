@@ -33,6 +33,13 @@ import random
 
 VOXEL_UU = 2.5
 
+# DAYLIGHT EMISSIVE. Wonderland is lit by a physically based sun and exposed for it, so an unlit surface of
+# strength 2 is two candela per square metre -- black beside sunlit ivory (measured in PIE, 2026-09-15: every
+# glow part rendered black; a probe at x1/x30/x300/x3000 read correctly from x3000). Strengths below are authored
+# on a 0..10 artistic scale and multiplied by
+# this at write time; `--glow-scale` overrides it for exposure probes.
+GLOW_SCALE = 4000.0
+
 
 def normalise(v):
     length = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) or 1.0
@@ -201,6 +208,8 @@ class Figure:
             "voxel %.3f" % VOXEL_UU,
         ]
         for name, kind, rgb, strength in self.materials:
+            if kind == "glow":
+                strength *= GLOW_SCALE
             lines.append("material %s %s %.4f %.4f %.4f %.3f" % (name, kind, rgb[0], rgb[1], rgb[2], strength))
         for name, parent, pivot, motion, a, b in self.parts:
             extra = "" if a is None else (" %.3f" % a) + ("" if b is None else " %.3f" % b)
@@ -276,7 +285,7 @@ def build_ghost(skin_name, display):
     fig.material("pale", "glow", skin["pale"], 2.3)
     fig.material("gem", "glow", skin["gem"], 2.6)
     fig.material("wing", "glow", tuple(0.55 * w + 0.45 * b for w, b in zip(skin["wing"], skin["base"])), 1.35)
-    fig.material("halo", "add", skin["halo"], 0.9)
+    fig.material("halo", "glow", skin["halo"], 0.8)
     if skin_name == "blossom":
         fig.material("hair", "lit", (0.97, 0.80, 0.87))
 
@@ -308,7 +317,7 @@ def build_ghost(skin_name, display):
         z = face_z + spow(math.sin(t), 0.5) * (face_h + 1.0)
         x = front_x(y, z) + 0.5
         pitch, yaw = aim((1.0, y * 0.05, (z - face_z) * 0.05))
-        fig.box("head", "ivory", (x, y, z), (2.1, 2.3, 2.3), pitch, yaw, 0.0)
+        fig.box("head", "ivory", (x + 0.3, y, z), (2.6, 2.6, 2.6), pitch, yaw, 0.0)
     # The face: a black screen set back inside the rim, gently domed.
     y = -face_w
     while y <= face_w + 1e-6:
@@ -347,7 +356,7 @@ def build_ghost(skin_name, display):
 
     # THE BROW GEM.
     gem_z = face_z + face_h + 2.1
-    fig.diamond("head", "gold", "gem", (front_x(0.0, gem_z) + 0.9, 0.0, gem_z), (1.0, 0.0, 0.45), 4.2)
+    fig.diamond("head", "gold", "gem", (front_x(0.0, gem_z) + 1.1, 0.0, gem_z + 0.3), (1.0, 0.0, 0.45), 5.0)
 
     # THE SKIN'S CROWNING FEATURE.
     if skin_name == "aurum":
@@ -452,7 +461,7 @@ def build_fable():
     fig.material("cyan", "glow", (0.36, 0.86, 1.0), 2.2)
     fig.material("wing", "glow", (0.46, 0.50, 1.0), 1.25)
     fig.material("wingpale", "glow", (0.74, 0.74, 1.0), 1.9)
-    fig.material("halo", "add", (0.45, 0.58, 1.0), 0.85)
+    fig.material("halo", "glow", (0.45, 0.58, 1.0), 0.8)
 
     fig.part("body", "-", (0.0, 0.0, 48.0), "none")
     fig.part("head", "body", (0.0, 0.0, 61.0), "head")
@@ -473,13 +482,23 @@ def build_fable():
         yy += 1.0
     hair_c, hair_r = (-0.7, 0.0, 66.2), (5.9, 6.4, 6.6)
     fig.superellipsoid("head", "ivory", hair_c, hair_r, 2.7, tile=1.8, depth=1.2, gap=0.1,
-                       keep=lambda nrm, p: p[2] > 60.2 and not (nrm[0] > 0.0 and abs(p[1]) < 4.3 and p[2] < 67.8))
-    for i in range(7):
-        yy = -3.6 + 1.2 * i
-        fig.box("head", "ivory", (5.4 - 0.04 * yy * yy, yy, 68.2 - 0.1 * abs(yy)), (1.3, 1.25, 2.4), 0.0, 0.0, (i - 3) * 3.0)
+                       keep=lambda nrm, p: p[2] > 66.0 and not (nrm[0] > 0.0 and abs(p[1]) < 4.3 and p[2] < 67.8))
+    # THE BOB, as strands: blocks hanging from the crown to the chin all round the back and sides, straight
+    # bangs across the brow, so it reads as hair and not as a helmet.
+    for k in range(26):
+        az = math.radians(48.0 + (360.0 - 96.0) * k / 25)
+        length = 8.6 + 0.9 * math.sin(k * 1.7)
+        top = (hair_c[0] + 6.1 * math.cos(az), 6.7 * math.sin(az), 70.4)
+        centre = (top[0], top[1], top[2] - length * 0.5)
+        pitch, yaw = aim((math.cos(az), math.sin(az), 0.0))
+        fig.box("head", "ivory", centre, (1.5, 1.85, length), pitch - 6.0, yaw, 0.0)
+    for i in range(9):
+        yy = -4.4 + 1.1 * i
+        drop = 3.0 + 0.35 * ((i * 5) % 3)
+        fig.box("head", "ivory", (5.5 - 0.045 * yy * yy, yy, 70.4 - drop * 0.5), (1.4, 1.2, drop), -8.0, 0.0, (i - 4) * 2.0)
     for side in (-1.0, 1.0):
         for j in range(3):
-            fig.box("head", "ivory", (2.8 - j * 1.6, side * (5.0 + 0.3 * j), 63.2), (1.6, 1.3, 6.4 - j * 0.8), 0.0, 0.0, side * 4.0)
+            fig.box("head", "ivory", (3.6 - j * 1.4, side * (5.2 + 0.35 * j), 64.4), (1.6, 1.4, 8.4 - j * 0.9), 0.0, 0.0, side * 3.0)
     for side in (-1.0, 1.0):
         fig.box("eyes", "eye", (5.55, side * 1.9, 65.0), (0.6, 1.7, 1.15), 0.0, 0.0, side * 12.0)
     # The tiara.
@@ -585,7 +604,11 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--out", default=os.path.join(here, "..", "Companions"))
+    parser.add_argument("--glow-scale", type=float, default=None, help="override GLOW_SCALE (exposure probes)")
     args = parser.parse_args()
+    global GLOW_SCALE
+    if args.glow_scale is not None:
+        GLOW_SCALE = args.glow_scale
     os.makedirs(args.out, exist_ok=True)
     outputs = [
         (lambda: build_ghost("aurum", "GPT 6 Astra"), "GPT6Astra.wlvox"),
