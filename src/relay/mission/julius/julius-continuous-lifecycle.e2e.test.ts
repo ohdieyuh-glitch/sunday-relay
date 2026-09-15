@@ -462,7 +462,10 @@ describe('7 — guidance cannot alter locked scope or acceptance criteria', () =
     expect(factsOf(harness, 'guidance.issued'), 'nothing was issued').toEqual([]);
     const refused = factsOf(harness, 'guidance.refused');
     expect(refused).toHaveLength(1);
-    expect(refused[0]!.reasonCode).toBe('guidance_shape_refused');
+    // Refused BY NAME since the peer channel's authority guard: a packet that
+    // reaches for a contract term is not a malformed packet, and the record says
+    // which of the two it was.
+    expect(refused[0]!.reasonCode).toBe('peer_response_mutates_protected_term');
     // The locked terms are exactly what the reviewer accepted.
     expect(locked!.state).toBe('LOCKED');
     expect(locked!.inScope).not.toContain('the whole repository');

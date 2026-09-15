@@ -81,6 +81,13 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * attempt with no retrieval beside it is a retrieval nobody can vouch for, and
   * Julius refuses rather than replays it. */
  'research.attempted',
+ /* THE PEER CHANNEL. Every exchange between sustained workers as an audited
+  * request: who asked whom, for what, what answered it and how Julius closed
+  * it. `peer.request.refused` is a request the channel would not open — a
+  * direction no rule permits, a party that is not a peer — written so an
+  * illegal attempt is visible rather than silently dropped. The request's
+  * state is a fold over these rows; nothing else stores it. */
+ 'peer.request.opened','peer.request.transitioned','peer.request.refused',
  /* PERSISTENT-WORKER EFFORT. One row per completed dispatch, carrying what the
   * provider actually reported and NOTHING inferred — an unreported token count
   * is null here rather than the zero the budget path substitutes, because a

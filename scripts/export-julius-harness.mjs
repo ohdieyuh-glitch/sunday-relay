@@ -269,6 +269,11 @@ const FILE_RULES = [
   // it is the coordinator's account of when work stops, and filing it under the
   // Coding Agent would read as that slot owning its own barrier.
   ['src/relay/mission/julius/julius-segment-lineage.ts', 'TASK GRAPH / SCHEDULER'],
+  // The peer channel: who may address whom, the request ledger and the peers'
+  // derived states. The coordinator's, because Julius mediates every exchange and
+  // a request is audit of the task graph, never a way around it.
+  ['src/relay/mission/julius/julius-peer-channel.ts', 'TASK GRAPH / SCHEDULER'],
+  ['src/relay/mission/julius/julius-peer-runtime.ts', 'TASK GRAPH / SCHEDULER'],
   // How many run-loop ticks a mission's own structure permits. The scheduler's
   // account of how much it may dispatch, counted from the task graph it owns.
   ['src/relay/mission/julius/julius-tick-budget.ts', 'TASK GRAPH / SCHEDULER'],

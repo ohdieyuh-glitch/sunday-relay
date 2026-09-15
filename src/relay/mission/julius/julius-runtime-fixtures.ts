@@ -285,6 +285,8 @@ export function createJuliusHarness(input: {
   readonly config?: Partial<JuliusRunLoopConfig>;
   readonly owner?: string;
   readonly capabilityFor?: (task: { taskId: string; taskType: string; role: string }) => string;
+  /** The execution attempt peer requests are named under; absent, the local scope. */
+  readonly executionScope?: string;
 }): JuliusHarness {
   const store = createJuliusMemoryStore();
   const clock = createSteppingClock();
@@ -312,6 +314,7 @@ export function createJuliusHarness(input: {
     // THE MEMORY STORE IS ALSO THE TIMELINE READER, so the harness exercises
     // the real projected slot ledger rather than the rounds fallback.
     timeline: store,
+    ...(input.executionScope === undefined ? {} : { executionScope: input.executionScope }),
     owner: input.owner ?? 'worker-a',
     contextCharacterBudget: 4_000,
   };

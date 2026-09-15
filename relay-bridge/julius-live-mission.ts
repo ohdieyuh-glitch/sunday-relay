@@ -255,6 +255,22 @@ const registryBackends = (): ReadonlyMap<string, readonly LiveReachCapability[]>
  * on that fallback, so the entrypoint asks this of the store in preflight and
  * again of the store the runtime will receive.
  */
+/**
+ * THE EXECUTION ATTEMPT THIS PROCESS IS, as Julius names peer requests under it.
+ *
+ * A live mission's run id is derived from its contract, so qualification
+ * attempts 1-3 all ran as the same run id. Peer requests named from the run
+ * alone would then collide wherever two attempts are read together — the
+ * paid-run archive, a receipt, a Project Brain import. GitHub's run id and
+ * attempt separate them; a process with neither is a local drill and says so.
+ * Digits only, so nothing an environment carries can reach an id but a number.
+ */
+export function liveExecutionScope(env: Record<string, string | undefined>): string {
+  const runId = env.GITHUB_RUN_ID ?? '';
+  const attempt = env.GITHUB_RUN_ATTEMPT ?? '';
+  return /^[0-9]{1,20}$/u.test(runId) && /^[0-9]{1,4}$/u.test(attempt) ? `gh-${runId}.${attempt}` : 'local';
+}
+
 export function liveLedgerState(store: unknown): 'BOUND' | 'UNBOUND' {
   return store !== null && typeof store === 'object' && typeof (store as { timeline?: unknown }).timeline === 'function'
     ? 'BOUND' : 'UNBOUND';
@@ -939,6 +955,7 @@ async function main(argv: readonly string[]): Promise<number> {
       cardRevision,
       spendCeilingUsdMicros: Math.round((contract.limits?.spendUsd ?? 5) * 1_000_000),
       maxRepairRounds: contract.limits?.repairCycles ?? 1,
+      executionScope: liveExecutionScope(env),
       ...(researchClause === undefined ? {} : {
         researchPolicyFor: researchPolicyOf,
         researchProbes: observed.probes,
@@ -964,6 +981,7 @@ async function main(argv: readonly string[]): Promise<number> {
     });
     out(`  tick budget: planned=${tickBudget.plannedTicks} hard_max=${tickBudget.hardMaxTicks} ${tickBudget.reason} override=${tickOverride.override ?? 'none'} version=${tickBudget.version}`);
     out(`  wall clock deadline: ${wallClockDeadline(env)}`);
+    out(`  peer execution scope: ${liveExecutionScope(env)}`);
     const outcome = await driveJuliusRunToTerminal({
       loop: runtime.loop, store: handoffs.store,
       runId: submitted.runId, projectId: contract.projectId,
