@@ -51,9 +51,9 @@ on:
         required: false
         default: ''
       max_ticks:
-        description: 'Hard ceiling on Julius run-loop ticks.'
+        description: 'Julius counts its tick allowance from the mission''s own structure. "derived" uses it; a whole number can only tighten it.'
         required: false
-        default: '24'
+        default: 'derived'
       hermes_ref:
         description: 'Hermes Agent commit SHA (40 hex) to install for the Independent Reviewer. Immutable pins only.'
         required: false
@@ -432,23 +432,32 @@ jobs:
           # Runs FIRST, before any build, container or credential exists, so a
           # malformed dispatch costs nothing and cannot reach a provider.
           #
-          # The bounds: the seeded task graph is plan → review → build → review
-          # and, with the one permitted repair, → repair → review. Six tasks,
-          # each needing a claim tick plus an advance, so a run that completes
-          # cannot do so in fewer than about eight. Below MIN the mission would
-          # be paid for and then cut off before it could finish; above MAX the
-          # ceiling stops being a ceiling. MAX equals the entrypoint's own
-          # default, so this input can only ever tighten Julius's bound.
+          # THE ALLOWANCE IS JULIUS'S TO COUNT. The entrypoint derives it from the
+          # mission's own structure (planJuliusTickBudget: units, repair rounds,
+          # segment ceiling, guidance and review obligations), prints it before
+          # the first dispatch, and fails the run with the numbers if it is ever
+          # exhausted. The ceiling used to be a fixed 32, sized for a
+          # six-task graph; qualification attempt 4 (run 34774471909) hit it at
+          # 44 of 120 minutes with the run still inside every contract bound.
+          # This input can only TIGHTEN that allowance (the drive takes the
+          # smaller), so it needs no upper bound here. The floor stays: below
+          # eight ticks even the smallest mission is paid for and then cut off.
           MIN_TICKS=8
-          MAX_ALLOWED=32
           case "$MAX_TICKS" in
-            ''|*[!0-9]*)
-              echo "max_ticks_not_an_integer: '$MAX_TICKS'" >&2; exit 1;;
+            derived) ;;
+            ''|*[!0-9]*|0*)
+              echo "max_ticks_not_an_integer: '$MAX_TICKS' is neither \"derived\" nor a whole number" >&2; exit 1;;
+            *)
+              if [ "${#MAX_TICKS}" -gt 6 ] || [ "$MAX_TICKS" -lt "$MIN_TICKS" ]; then
+                echo "max_ticks_out_of_range: $MAX_TICKS is below $MIN_TICKS or not a tick count" >&2
+                exit 1
+              fi;;
           esac
-          if [ "$MAX_TICKS" -lt "$MIN_TICKS" ] || [ "$MAX_TICKS" -gt "$MAX_ALLOWED" ]; then
-            echo "max_ticks_out_of_range: $MAX_TICKS is outside [$MIN_TICKS, $MAX_ALLOWED]" >&2
-            exit 1
-          fi
+          # WHEN THE WALL CLOCK STARTED, for the deadline the live entrypoint
+          # prints. Taken here, seconds after the job began, so the printed
+          # deadline is that much later than the runner's real one. A step
+          # output, read by name in the live step, never a job-wide variable.
+          echo "job_started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           # `confirm_live` is compared for exact equality by the live step's
           # `if:`; anything else is a dry run. Saying so here makes a typo
           # visible instead of silently producing a free run the operator
@@ -940,6 +949,7 @@ jobs:
           # and holds Read/Glob/Grep.
           RELAY_HERMES_EXECUTABLE: /tmp/julius-hermes-bin/hermes
           MAX_TICKS: ${{ inputs.max_ticks }}
+          JULIUS_JOB_STARTED_AT: ${{ steps.inputs_gate.outputs.job_started_at }}
         run: |
           set -uo pipefail
           # The bundle was built in an earlier step and is invoked directly,
@@ -1139,13 +1149,40 @@ jobs:
           fi
           echo 'evidence scan clean (shapes and exact values)'
 
+      # THE PAID-RUN ARCHIVE'S EXPORT. This job's PostgreSQL is disposable and
+      # dies with the runner whatever step runs next, so this artifact is the
+      # only copy of the run's state. It is the export the local importer
+      # (`scripts/julius-paid-run-archive.mjs import --run <id>`) reads into the
+      # durable `julius-postgres` archive; 90 days, not 14, so an import is not
+      # a race.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        id: evidence_upload
         if: always()
         with:
           name: julius-live-evidence
           path: julius-live-evidence
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 90
+
+      # PRESERVED, OR SAID NOT TO BE. An upload of nothing still succeeds
+      # (`if-no-files-found: ignore`, and the credential refusal above deletes
+      # the directory rather than upload it), so success of the step alone is
+      # not preservation. The line names which it was, in the log and the job
+      # summary, before teardown.
+      - name: "Archive export: say whether this run's state was preserved"
+        if: always()
+        env:
+          UPLOAD_OUTCOME: ${{ steps.evidence_upload.outcome }}
+        run: |
+          set -uo pipefail
+          if [ "$UPLOAD_OUTCOME" = 'success' ] && [ -f julius-live-evidence/tasks.tsv ]; then
+            echo "PAID_RUN_ARCHIVE_EXPORTED artifact=julius-live-evidence retention_days=90 workflow_run_id=$GITHUB_RUN_ID workflow_run_attempt=$GITHUB_RUN_ATTEMPT" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            evidence=absent
+            [ -d julius-live-evidence ] && evidence=present_without_tasks
+            echo "PAID_RUN_ARCHIVE_FAILED upload_outcome=${UPLOAD_OUTCOME:-unknown} evidence=$evidence workflow_run_id=$GITHUB_RUN_ID workflow_run_attempt=$GITHUB_RUN_ATTEMPT" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::error title=PAID_RUN_ARCHIVE_FAILED::this run's state was NOT preserved; the disposable database is destroyed with the job"
+          fi
 
       # -------------------------------------------------------------- CLEANUP
 

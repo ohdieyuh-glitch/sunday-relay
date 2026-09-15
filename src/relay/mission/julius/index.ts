@@ -47,3 +47,4 @@ export * from './julius-research-protocol';
 export * from './julius-slot-ledger';
 export * from './julius-shared-ceiling';
 export * from './julius-slot-report';
+export * from './julius-tick-budget';

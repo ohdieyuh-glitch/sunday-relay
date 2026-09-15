@@ -38,8 +38,16 @@ import {
   type JuliusProviderAdapter,
   type JuliusRuntimeStore,
   type JuliusVerificationPolicy,
+  JULIUS_DEFAULT_MAX_CODER_SEGMENTS,
+  MAX_TASK_ATTEMPTS,
+  juliusTickAllowance,
+  planJuliusTickBudget,
+  planRunStatePath,
+  type JuliusTickBudget,
   type JuliusWorker,
+  type JuliusWorkerRole,
   noJuliusResearch,
+  type JuliusResearchLedger,
   type JuliusResearchPolicy,
 } from '../../src/relay/mission/julius';
 import { createJuliusResearchMediator, juliusResearchPortFrom } from './research-mediator';
@@ -103,6 +111,38 @@ import type { runHermesReview } from '../hermes-reviewer';
  * beyond this would mean raising the reservation, deliberately, here.
  */
 export const ARCHITECT_OUTPUT_TOKEN_RESERVATION = 20_000;
+
+/**
+ * HOW MANY CHARACTERS OF MISSION CONTEXT EACH SLOT'S PACKET MAY COMPILE.
+ *
+ * THE ARCHITECT AND THE CODER: 200,000. Room for the page a worker asked for,
+ * beside everything else it is owed. 24,000 was the whole packet, and
+ * qualification attempt 4 (run 34774471909) compiled up to 10,130 characters of
+ * mission context before any research, so a served page could never fit beside
+ * it. The research resume is bounded at 160,000
+ * (`JULIUS_RESEARCH_ASK_LIMITS.renderedChars`), and 200,000 holds it with
+ * the largest context attempt 4 compiled, three times over. Neither slot's
+ * packet goes through argv:
+ *   - the architect's is an HTTPS request body;
+ *   - the hosted SDK writes the coder's prompt to the child's stdin
+ *     (`--input-format stream-json`, @anthropic-ai/claude-agent-sdk 0.3.220,
+ *     sdk.mjs:108 and sdk.mjs:136).
+ *
+ * THE INDEPENDENT REVIEWER: 24,000, unchanged. Its prompt reaches Hermes as a
+ * single `-z` argument, and Linux refuses any argv string over 131,072 bytes
+ * at exec, before a provider is asked. Nothing the reviewer is owed needs more:
+ *   - research answers are scoped to the continuation that asked;
+ *   - the served-page trail is a line per read;
+ *   - its mission text is cut to 8,000 characters by the packet builder.
+ * Keeping the ceiling where it was keeps the reviewer's argv exactly as large
+ * as it was. Attempts 3 and 4 measured at most 54,797 bytes.
+ *
+ * A budget is a ceiling, not a size: a packet with nothing extra to carry
+ * compiles exactly as before.
+ */
+export function liveContextCharacterBudget(role: JuliusWorkerRole): number {
+  return role === 'INDEPENDENT_REVIEWER' ? 24_000 : 200_000;
+}
 import {
   createLiveArchitectAdapter,
   createLiveHermesReviewerAdapter,
@@ -457,6 +497,55 @@ export interface LiveJuliusRuntime {
  * expired leases before it claims, cannot be built from a store that has lost
  * it.
  */
+/**
+ * THE RESEARCH SPEND, READ BACK FROM A RUN'S OWN ROWS — bytes included.
+ *
+ * A left fold of `recordJuliusResearch` over the run's `research.retrieved`
+ * rows: the same function the live path charges with, so the two readers cannot
+ * disagree, and a restarted process replays to the same position because the
+ * rows ARE the position.
+ *
+ * THE BYTE COUNT IS READ, NOT INVENTED. This projection used to pass
+ * `bytes: null` for every row because the row carried none. Paid qualification
+ * attempt 4 (run 34774471909) then refused every research ask after the first
+ * as `byte_budget_unenforceable`: one read per mission, and the three-per-slot
+ * allowance unusable. The row now records `bytes` beside `bytesRecorded: true`.
+ *
+ * A ROW WITHOUT A RECORDED COUNT IS UNKNOWN SPEND, NEVER ZERO. A row written
+ * before the count existed, or one whose count is not a non-negative integer,
+ * is replayed as unsized, so a byte budget over it says it cannot be enforced —
+ * the fail-closed answer — rather than letting the next read through under a
+ * number that looks measured.
+ */
+export async function projectDurableJuliusResearchLedger(
+  reader: JuliusTimelineReader,
+  request: Pick<JuliusResearchRequest, 'missionId' | 'runId' | 'projectId'>,
+): Promise<JuliusResearchLedger> {
+  let ledger = emptyJuliusResearchLedger(request.missionId);
+  let sinceSequence = 0;
+  for (;;) {
+    const page = await reader.timeline({
+      runId: request.runId, projectId: request.projectId, sinceSequence, limit: 500,
+    });
+    for (const entry of page.entries) {
+      sinceSequence = Math.max(sinceSequence, entry.sequence);
+      if (entry.type !== 'research.retrieved') continue;
+      const role = entry.facts.role;
+      if (typeof role !== 'string' || !isJuliusResearchRole(role)) continue;
+      const recorded = entry.facts.bytesRecorded === true;
+      const bytes = entry.facts.bytes;
+      ledger = recordJuliusResearch(ledger, role, {
+        source: 'web',
+        outcome: meteredFromJuliusOutcome(entry.facts.outcome),
+        bytes: recorded && typeof bytes === 'number' && Number.isSafeInteger(bytes) && bytes >= 0 ? bytes : null,
+        at: entry.occurredAt,
+      });
+    }
+    if (page.entries.length === 0 || !page.hasMore) break;
+  }
+  return ledger;
+}
+
 export function createContextAndClaimHandoffs<S extends JuliusRuntimeStore>(store: S): {
   readonly store: S;
   readonly contexts: CompiledContextSource;
@@ -644,34 +733,8 @@ export function assembleLiveJuliusRuntime(options: {
        */
       ...(typeof (options.store as { timeline?: unknown }).timeline === 'function'
         ? {
-          durableLedger: async (request: JuliusResearchRequest) => {
-            const reader = options.store as unknown as JuliusTimelineReader;
-            let ledger = emptyJuliusResearchLedger(request.missionId);
-            let sinceSequence = 0;
-            for (;;) {
-              const page = await reader.timeline({
-                runId: request.runId, projectId: request.projectId, sinceSequence, limit: 500,
-              });
-              for (const entry of page.entries) {
-                sinceSequence = Math.max(sinceSequence, entry.sequence);
-                if (entry.type !== 'research.retrieved') continue;
-                const role = entry.facts.role;
-                if (typeof role !== 'string' || !isJuliusResearchRole(role)) continue;
-                ledger = recordJuliusResearch(ledger, role, {
-                  source: 'web',
-                  outcome: meteredFromJuliusOutcome(entry.facts.outcome),
-                  // The row does not carry a byte count, and a projection must
-                  // not invent one. Null is "not measured", which is exactly
-                  // what makes a byte budget report itself unenforceable rather
-                  // than silently pass.
-                  bytes: null,
-                  at: entry.occurredAt,
-                });
-              }
-              if (page.entries.length === 0 || !page.hasMore) break;
-            }
-            return ledger;
-          },
+          durableLedger: (request: JuliusResearchRequest) =>
+            projectDurableJuliusResearchLedger(options.store as unknown as JuliusTimelineReader, request),
         }
         : {}),
       // READINESS, NOT AUTHORITY. Handed through unchanged; the mission's own
@@ -690,7 +753,7 @@ export function assembleLiveJuliusRuntime(options: {
       ? { timeline: options.store as unknown as JuliusTimelineReader }
       : {}),
     owner: options.owner ?? 'julius-live-mission',
-    contextCharacterBudget: 24_000,
+    contextCharacterBudget: liveContextCharacterBudget,
   };
   const policies: JuliusPolicySource = {
     async policyFor() { return { card, verification }; },
@@ -716,6 +779,28 @@ export interface DriveOutcome {
    * reporting an unexplained stall.
    */
   readonly haltCause: string | null;
+  /**
+   * THE TICK ACCOUNT, when the drive was bounded by the mission's structure
+   * (`verification` given): what was planned, what the run added, what it
+   * consumed, and whether the allowance ran out. Null for a drive bounded only
+   * by a bare `maxTicks`.
+   */
+  readonly tickAccount: DriveTickAccount | null;
+}
+
+export interface DriveTickAccount {
+  readonly plannedTicks: number;
+  readonly hardMaxTicks: number;
+  /** The allowance in force when the drive ended: planned plus what the run added, capped, then tightened by any override. */
+  readonly allowance: number;
+  readonly ticksConsumed: number;
+  readonly ticksRemaining: number;
+  readonly beyondMainPath: number;
+  readonly retries: number;
+  /** An operator's `maxTicks`, which may only tighten the allowance. Null when none was given. */
+  readonly override: number | null;
+  readonly reason: string;
+  readonly exhausted: boolean;
 }
 
 /**
@@ -732,9 +817,24 @@ export async function driveJuliusRunToTerminal(input: {
   readonly store: JuliusRuntimeStore & JuliusRecoveryDriver;
   readonly runId: string;
   readonly projectId: string;
+  /**
+   * With a verification policy, the allowance is DERIVED from the run's own
+   * structure (`planJuliusTickBudget`) and `maxTicks` can only tighten it.
+   * Without one, `maxTicks` alone bounds the drive, as it always has.
+   */
+  readonly verification?: JuliusVerificationPolicy;
   readonly maxTicks?: number;
 }): Promise<DriveOutcome> {
   const maxTicks = input.maxTicks ?? 32;
+  const override = input.verification !== undefined && input.maxTicks !== undefined ? input.maxTicks : null;
+  const budget = input.verification === undefined ? null : await liveTickBudgetFor({
+    store: input.store, runId: input.runId, projectId: input.projectId, verification: input.verification,
+  });
+  let retries = 0;
+  let account: Omit<DriveTickAccount, 'ticksConsumed' | 'ticksRemaining' | 'exhausted'> | null = null;
+  const accountAt = (consumed: number, exhausted: boolean): DriveTickAccount | null => (account === null ? null : {
+    ...account, ticksConsumed: consumed, ticksRemaining: Math.max(0, account.allowance - consumed), exhausted,
+  });
   const terminal = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
   const stallCause = async (state: string): Promise<string | null> => {
     if (state !== 'VERIFYING') return null;
@@ -744,21 +844,39 @@ export async function driveJuliusRunToTerminal(input: {
       : `completion requires every task's current verification decision to be effectively accepted; this run's durable history holds these non-ACCEPT decisions (a REPAIR may already be superseded through its repair lineage): ${nonAccept.map((decision) => `${decision.action}(${decision.reasonCode})`).join(', ')}`;
   };
   let lastState = 'UNKNOWN';
-  for (let tick = 1; tick <= maxTicks; tick += 1) {
+  for (let tick = 1; budget !== null || tick <= maxTicks; tick += 1) {
+    if (budget !== null) {
+      const now = juliusTickAllowance({
+        budget, tasks: await input.store.tasksForRun(input.runId, input.projectId), retries,
+      });
+      account = {
+        plannedTicks: budget.plannedTicks, hardMaxTicks: budget.hardMaxTicks,
+        allowance: override === null ? now.allowance : Math.min(now.allowance, override),
+        beyondMainPath: now.beyondMainPath, retries: now.retries, override, reason: budget.reason,
+      };
+      if (tick > account.allowance) {
+        return failForTickBudget({ input, consumed: tick - 1, account: accountAt(tick - 1, true)! });
+      }
+    }
     // THE SWEEP IS THE KERNEL'S. This driver used to call `recover` before
     // every tick, which made a store-level guarantee depend on one composition
     // root remembering to make it — and it passed the default limit of 100
     // where `tick` passes the claim limit, so the bound the comments advertised
     // was not the bound the live path applied. `tick` sweeps first now.
     const report = await input.loop.tick({ projectId: input.projectId });
+    retries += report.outcomes.filter((outcome) => outcome.kind === 'RETRY').length;
     const run = await input.store.loadRun(input.runId, input.projectId);
     lastState = run?.state ?? 'UNKNOWN';
-    if (run !== null && terminal.has(run.state)) return { state: run.state, ticks: tick, stalled: false, haltCause: null };
+    if (run !== null && terminal.has(run.state)) {
+      return { state: run.state, ticks: tick, stalled: false, haltCause: null, tickAccount: accountAt(tick, false) };
+    }
     if (report.claimed === 0) {
       const advance = await input.loop.advanceRun(input.runId, input.projectId);
       const after = await input.store.loadRun(input.runId, input.projectId);
       lastState = after?.state ?? lastState;
-      if (after !== null && terminal.has(after.state)) return { state: after.state, ticks: tick, stalled: false, haltCause: null };
+      if (after !== null && terminal.has(after.state)) {
+        return { state: after.state, ticks: tick, stalled: false, haltCause: null, tickAccount: accountAt(tick, false) };
+      }
       /**
        * A RESUMED VERIFICATION IS PROGRESS, even when the run state did not
        * move. `advanceRun` runs any verification the run is owed — the window a
@@ -769,9 +887,89 @@ export async function driveJuliusRunToTerminal(input: {
        * one step from finishing.
        */
       if (advance === null || (!advance.changed && advance.resumedVerifications === 0)) {
-        return { state: lastState, ticks: tick, stalled: true, haltCause: await stallCause(lastState) };
+        return { state: lastState, ticks: tick, stalled: true, haltCause: await stallCause(lastState), tickAccount: accountAt(tick, false) };
       }
     }
   }
-  return { state: lastState, ticks: maxTicks, stalled: true, haltCause: await stallCause(lastState) };
+  return { state: lastState, ticks: maxTicks, stalled: true, haltCause: await stallCause(lastState), tickAccount: null };
+}
+
+/**
+ * THE TICK BUDGET FOR A SUBMITTED RUN, from its seeded work units and the
+ * verification policy the runtime was assembled with. One derivation, read by
+ * the drive that enforces it and by the entrypoint that prints it before any
+ * provider is asked.
+ */
+export async function liveTickBudgetFor(input: {
+  readonly store: JuliusRuntimeStore;
+  readonly runId: string;
+  readonly projectId: string;
+  readonly verification: JuliusVerificationPolicy;
+}): Promise<JuliusTickBudget> {
+  return planJuliusTickBudget({
+    units: (await input.store.tasksForRun(input.runId, input.projectId))
+      .filter((task) => task.parentTaskId === null && !task.taskType.startsWith('review:'))
+      .map((task) => task.role),
+    repairRounds: input.verification.maxRepairRounds,
+    segmentCeiling: input.verification.maxCoderSegments ?? JULIUS_DEFAULT_MAX_CODER_SEGMENTS,
+    reviewerRequired: input.verification.reviewerRequired,
+    taskAttempts: MAX_TASK_ATTEMPTS,
+  });
+}
+
+/**
+ * THE ALLOWANCE RAN OUT, AND THE RUN SAYS SO.
+ *
+ * Attempt 4 stopped at its ceiling with the run row READY and nothing on the
+ * ledger, so the evidence could only show a run that had stopped. The run now
+ * moves to FAILED along a legal path, and a `run.failed` row carries the
+ * numbers: planned, allowance, consumed, what the run added, the hard maximum
+ * and any override. If the move cannot be made, the state is reported as it
+ * stands and no failure is claimed.
+ */
+async function failForTickBudget(args: {
+  readonly input: { readonly store: JuliusRuntimeStore & JuliusRecoveryDriver; readonly runId: string; readonly projectId: string };
+  readonly consumed: number;
+  readonly account: DriveTickAccount;
+}): Promise<DriveOutcome> {
+  const { input, account } = args;
+  const reasonCode = 'tick_budget_exhausted';
+  const safeSummary = `The run consumed its whole tick allowance (${String(account.allowance)} of a planned ${String(account.plannedTicks)}, hard maximum ${String(account.hardMaxTicks)}) without reaching a terminal state.`;
+  let current = await input.store.loadRun(input.runId, input.projectId);
+  for (let attempt = 0; attempt < 3 && current !== null && !['COMPLETED', 'FAILED', 'CANCELLED'].includes(current.state); attempt += 1) {
+    const path = planRunStatePath(current.state, 'FAILED');
+    if (path.length === 0) break;
+    try {
+      for (const [index, step] of path.entries()) {
+        const last = index === path.length - 1;
+        current = await input.store.transition({
+          commandId: `tick-budget:${input.runId}:${String(current.version)}:${step}`,
+          runId: input.runId, projectId: input.projectId, expectedVersion: current.version, to: step,
+          reasonCode: last ? reasonCode : 'PASSED_THROUGH',
+          safeSummary: last ? safeSummary : `Run passed through ${step} on the way to FAILED.`,
+          evidenceIds: [], occurredAt: new Date().toISOString(),
+        });
+      }
+    } catch {
+      current = await input.store.loadRun(input.runId, input.projectId);
+    }
+  }
+  const state = current?.state ?? 'UNKNOWN';
+  if (state === 'FAILED') {
+    await input.store.appendEvent({
+      eventId: `event:${randomUUID()}`, runId: input.runId, projectId: input.projectId, type: 'run.failed',
+      taskId: null, workerId: null, correlationId: `tick-budget:${input.runId}`, causationId: null,
+      occurredAt: new Date().toISOString(),
+      facts: {
+        reasonCode, plannedTicks: account.plannedTicks, allowance: account.allowance, ticksConsumed: args.consumed,
+        hardMaxTicks: account.hardMaxTicks, beyondMainPath: account.beyondMainPath, retries: account.retries,
+        override: account.override, tickBudgetReason: account.reason,
+      },
+    });
+  }
+  return {
+    state, ticks: args.consumed, stalled: state !== 'FAILED',
+    haltCause: state === 'FAILED' ? `${reasonCode}: ${safeSummary}` : null,
+    tickAccount: account,
+  };
 }
