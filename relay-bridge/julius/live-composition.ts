@@ -38,6 +38,12 @@ import {
   type JuliusProviderAdapter,
   type JuliusRuntimeStore,
   type JuliusVerificationPolicy,
+  JULIUS_DEFAULT_MAX_CODER_SEGMENTS,
+  MAX_TASK_ATTEMPTS,
+  juliusTickAllowance,
+  planJuliusTickBudget,
+  planRunStatePath,
+  type JuliusTickBudget,
   type JuliusWorker,
   type JuliusWorkerRole,
   noJuliusResearch,
@@ -773,6 +779,28 @@ export interface DriveOutcome {
    * reporting an unexplained stall.
    */
   readonly haltCause: string | null;
+  /**
+   * THE TICK ACCOUNT, when the drive was bounded by the mission's structure
+   * (`verification` given): what was planned, what the run added, what it
+   * consumed, and whether the allowance ran out. Null for a drive bounded only
+   * by a bare `maxTicks`.
+   */
+  readonly tickAccount: DriveTickAccount | null;
+}
+
+export interface DriveTickAccount {
+  readonly plannedTicks: number;
+  readonly hardMaxTicks: number;
+  /** The allowance in force when the drive ended: planned plus what the run added, capped, then tightened by any override. */
+  readonly allowance: number;
+  readonly ticksConsumed: number;
+  readonly ticksRemaining: number;
+  readonly beyondMainPath: number;
+  readonly retries: number;
+  /** An operator's `maxTicks`, which may only tighten the allowance. Null when none was given. */
+  readonly override: number | null;
+  readonly reason: string;
+  readonly exhausted: boolean;
 }
 
 /**
@@ -789,9 +817,24 @@ export async function driveJuliusRunToTerminal(input: {
   readonly store: JuliusRuntimeStore & JuliusRecoveryDriver;
   readonly runId: string;
   readonly projectId: string;
+  /**
+   * With a verification policy, the allowance is DERIVED from the run's own
+   * structure (`planJuliusTickBudget`) and `maxTicks` can only tighten it.
+   * Without one, `maxTicks` alone bounds the drive, as it always has.
+   */
+  readonly verification?: JuliusVerificationPolicy;
   readonly maxTicks?: number;
 }): Promise<DriveOutcome> {
   const maxTicks = input.maxTicks ?? 32;
+  const override = input.verification !== undefined && input.maxTicks !== undefined ? input.maxTicks : null;
+  const budget = input.verification === undefined ? null : await liveTickBudgetFor({
+    store: input.store, runId: input.runId, projectId: input.projectId, verification: input.verification,
+  });
+  let retries = 0;
+  let account: Omit<DriveTickAccount, 'ticksConsumed' | 'ticksRemaining' | 'exhausted'> | null = null;
+  const accountAt = (consumed: number, exhausted: boolean): DriveTickAccount | null => (account === null ? null : {
+    ...account, ticksConsumed: consumed, ticksRemaining: Math.max(0, account.allowance - consumed), exhausted,
+  });
   const terminal = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
   const stallCause = async (state: string): Promise<string | null> => {
     if (state !== 'VERIFYING') return null;
@@ -801,21 +844,39 @@ export async function driveJuliusRunToTerminal(input: {
       : `completion requires every task's current verification decision to be effectively accepted; this run's durable history holds these non-ACCEPT decisions (a REPAIR may already be superseded through its repair lineage): ${nonAccept.map((decision) => `${decision.action}(${decision.reasonCode})`).join(', ')}`;
   };
   let lastState = 'UNKNOWN';
-  for (let tick = 1; tick <= maxTicks; tick += 1) {
+  for (let tick = 1; budget !== null || tick <= maxTicks; tick += 1) {
+    if (budget !== null) {
+      const now = juliusTickAllowance({
+        budget, tasks: await input.store.tasksForRun(input.runId, input.projectId), retries,
+      });
+      account = {
+        plannedTicks: budget.plannedTicks, hardMaxTicks: budget.hardMaxTicks,
+        allowance: override === null ? now.allowance : Math.min(now.allowance, override),
+        beyondMainPath: now.beyondMainPath, retries: now.retries, override, reason: budget.reason,
+      };
+      if (tick > account.allowance) {
+        return failForTickBudget({ input, consumed: tick - 1, account: accountAt(tick - 1, true)! });
+      }
+    }
     // THE SWEEP IS THE KERNEL'S. This driver used to call `recover` before
     // every tick, which made a store-level guarantee depend on one composition
     // root remembering to make it — and it passed the default limit of 100
     // where `tick` passes the claim limit, so the bound the comments advertised
     // was not the bound the live path applied. `tick` sweeps first now.
     const report = await input.loop.tick({ projectId: input.projectId });
+    retries += report.outcomes.filter((outcome) => outcome.kind === 'RETRY').length;
     const run = await input.store.loadRun(input.runId, input.projectId);
     lastState = run?.state ?? 'UNKNOWN';
-    if (run !== null && terminal.has(run.state)) return { state: run.state, ticks: tick, stalled: false, haltCause: null };
+    if (run !== null && terminal.has(run.state)) {
+      return { state: run.state, ticks: tick, stalled: false, haltCause: null, tickAccount: accountAt(tick, false) };
+    }
     if (report.claimed === 0) {
       const advance = await input.loop.advanceRun(input.runId, input.projectId);
       const after = await input.store.loadRun(input.runId, input.projectId);
       lastState = after?.state ?? lastState;
-      if (after !== null && terminal.has(after.state)) return { state: after.state, ticks: tick, stalled: false, haltCause: null };
+      if (after !== null && terminal.has(after.state)) {
+        return { state: after.state, ticks: tick, stalled: false, haltCause: null, tickAccount: accountAt(tick, false) };
+      }
       /**
        * A RESUMED VERIFICATION IS PROGRESS, even when the run state did not
        * move. `advanceRun` runs any verification the run is owed — the window a
@@ -826,9 +887,89 @@ export async function driveJuliusRunToTerminal(input: {
        * one step from finishing.
        */
       if (advance === null || (!advance.changed && advance.resumedVerifications === 0)) {
-        return { state: lastState, ticks: tick, stalled: true, haltCause: await stallCause(lastState) };
+        return { state: lastState, ticks: tick, stalled: true, haltCause: await stallCause(lastState), tickAccount: accountAt(tick, false) };
       }
     }
   }
-  return { state: lastState, ticks: maxTicks, stalled: true, haltCause: await stallCause(lastState) };
+  return { state: lastState, ticks: maxTicks, stalled: true, haltCause: await stallCause(lastState), tickAccount: null };
+}
+
+/**
+ * THE TICK BUDGET FOR A SUBMITTED RUN, from its seeded work units and the
+ * verification policy the runtime was assembled with. One derivation, read by
+ * the drive that enforces it and by the entrypoint that prints it before any
+ * provider is asked.
+ */
+export async function liveTickBudgetFor(input: {
+  readonly store: JuliusRuntimeStore;
+  readonly runId: string;
+  readonly projectId: string;
+  readonly verification: JuliusVerificationPolicy;
+}): Promise<JuliusTickBudget> {
+  return planJuliusTickBudget({
+    units: (await input.store.tasksForRun(input.runId, input.projectId))
+      .filter((task) => task.parentTaskId === null && !task.taskType.startsWith('review:'))
+      .map((task) => task.role),
+    repairRounds: input.verification.maxRepairRounds,
+    segmentCeiling: input.verification.maxCoderSegments ?? JULIUS_DEFAULT_MAX_CODER_SEGMENTS,
+    reviewerRequired: input.verification.reviewerRequired,
+    taskAttempts: MAX_TASK_ATTEMPTS,
+  });
+}
+
+/**
+ * THE ALLOWANCE RAN OUT, AND THE RUN SAYS SO.
+ *
+ * Attempt 4 stopped at its ceiling with the run row READY and nothing on the
+ * ledger, so the evidence could only show a run that had stopped. The run now
+ * moves to FAILED along a legal path, and a `run.failed` row carries the
+ * numbers: planned, allowance, consumed, what the run added, the hard maximum
+ * and any override. If the move cannot be made, the state is reported as it
+ * stands and no failure is claimed.
+ */
+async function failForTickBudget(args: {
+  readonly input: { readonly store: JuliusRuntimeStore & JuliusRecoveryDriver; readonly runId: string; readonly projectId: string };
+  readonly consumed: number;
+  readonly account: DriveTickAccount;
+}): Promise<DriveOutcome> {
+  const { input, account } = args;
+  const reasonCode = 'tick_budget_exhausted';
+  const safeSummary = `The run consumed its whole tick allowance (${String(account.allowance)} of a planned ${String(account.plannedTicks)}, hard maximum ${String(account.hardMaxTicks)}) without reaching a terminal state.`;
+  let current = await input.store.loadRun(input.runId, input.projectId);
+  for (let attempt = 0; attempt < 3 && current !== null && !['COMPLETED', 'FAILED', 'CANCELLED'].includes(current.state); attempt += 1) {
+    const path = planRunStatePath(current.state, 'FAILED');
+    if (path.length === 0) break;
+    try {
+      for (const [index, step] of path.entries()) {
+        const last = index === path.length - 1;
+        current = await input.store.transition({
+          commandId: `tick-budget:${input.runId}:${String(current.version)}:${step}`,
+          runId: input.runId, projectId: input.projectId, expectedVersion: current.version, to: step,
+          reasonCode: last ? reasonCode : 'PASSED_THROUGH',
+          safeSummary: last ? safeSummary : `Run passed through ${step} on the way to FAILED.`,
+          evidenceIds: [], occurredAt: new Date().toISOString(),
+        });
+      }
+    } catch {
+      current = await input.store.loadRun(input.runId, input.projectId);
+    }
+  }
+  const state = current?.state ?? 'UNKNOWN';
+  if (state === 'FAILED') {
+    await input.store.appendEvent({
+      eventId: `event:${randomUUID()}`, runId: input.runId, projectId: input.projectId, type: 'run.failed',
+      taskId: null, workerId: null, correlationId: `tick-budget:${input.runId}`, causationId: null,
+      occurredAt: new Date().toISOString(),
+      facts: {
+        reasonCode, plannedTicks: account.plannedTicks, allowance: account.allowance, ticksConsumed: args.consumed,
+        hardMaxTicks: account.hardMaxTicks, beyondMainPath: account.beyondMainPath, retries: account.retries,
+        override: account.override, tickBudgetReason: account.reason,
+      },
+    });
+  }
+  return {
+    state, ticks: args.consumed, stalled: state !== 'FAILED',
+    haltCause: state === 'FAILED' ? `${reasonCode}: ${safeSummary}` : null,
+    tickAccount: account,
+  };
 }

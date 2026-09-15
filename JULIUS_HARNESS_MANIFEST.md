@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **159 production files** across 20/20 subsystems (2 roots, 137 traced, 7 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **160 production files** across 20/20 subsystems (2 roots, 138 traced, 7 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -31,6 +31,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | kernel (src/relay/mission/julius/) | 1 | 0 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 1 | 1 |
 | connectors (gpt-architect, prompt-architect contracts) | other | 2 | 0 |
+| entrypoint (relay-bridge/julius-live-mission.ts) | bridge provider stacks (hosted Claude, Hermes, redaction) | 1 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | connectors (gpt-architect, prompt-architect contracts) | 1 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | executor + tool substrate (src/relay/workspace/julius-tools/) | 2 | 1 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | kernel (src/relay/mission/julius/) | 1 | 0 |
@@ -54,7 +55,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | Relay↔Julius port (src/relay/integration/julius/) | kernel (src/relay/mission/julius/) | 1 | 1 |
 | Relay↔Julius port (src/relay/integration/julius/) | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 1 | 1 |
 
-- **entrypoint (relay-bridge/julius-live-mission.ts)** depends on: connectors (gpt-architect, prompt-architect contracts); executor + tool substrate (src/relay/workspace/julius-tools/); kernel (src/relay/mission/julius/); live composition (relay-bridge/julius/); other; persistence (src/relay/persistence/); Relay↔Julius port (src/relay/integration/julius/).
+- **entrypoint (relay-bridge/julius-live-mission.ts)** depends on: bridge provider stacks (hosted Claude, Hermes, redaction); connectors (gpt-architect, prompt-architect contracts); executor + tool substrate (src/relay/workspace/julius-tools/); kernel (src/relay/mission/julius/); live composition (relay-bridge/julius/); other; persistence (src/relay/persistence/); Relay↔Julius port (src/relay/integration/julius/).
 - **live composition (relay-bridge/julius/)** depends on: bridge provider stacks (hosted Claude, Hermes, redaction); connectors (gpt-architect, prompt-architect contracts); executor + tool substrate (src/relay/workspace/julius-tools/); kernel (src/relay/mission/julius/); other; persistence (src/relay/persistence/); Relay↔Julius port (src/relay/integration/julius/).
 - **bridge provider stacks (hosted Claude, Hermes, redaction)** depends on: connectors (gpt-architect, prompt-architect contracts); kernel (src/relay/mission/julius/); other.
 - **kernel (src/relay/mission/julius/)** depends on: other.
@@ -115,6 +116,7 @@ One claimed task all the way through: policy, budget reservation, context compil
 | `src/relay/mission/julius/julius-segment-lineage.ts` | traced | `src/relay/mission/julius/julius-repair-lineage.ts` |
 | `src/relay/mission/julius/julius-task-contract.ts` | traced | `src/relay/mission/julius/julius-continuous-lifecycle.ts` |
 | `src/relay/mission/julius/julius-task-pipeline.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-tick-budget.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-worker-participation.ts` | traced | `src/relay/mission/julius/index.ts` |
 
 ### 04 C.A.R.D. POLICY

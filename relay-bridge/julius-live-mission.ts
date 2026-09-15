@@ -60,8 +60,35 @@ import {
   assembleLiveJuliusRuntime,
   createContextAndClaimHandoffs,
   driveJuliusRunToTerminal,
+  liveTickBudgetFor,
   resolveLiveWorkers,
 } from './julius/live-composition';
+import { JOB_BUDGET_MS } from './reviewer-deadline';
+
+/**
+ * WHEN THE JOB'S WALL CLOCK RUNS OUT, as far as this process can know it: the
+ * moment the workflow recorded at its dispatch-input gate, plus the job budget
+ * the workflow's own timeout mirrors. The gate runs a few tens of seconds after
+ * the job starts, so the real deadline is that much EARLIER than printed.
+ * UNKNOWN when the moment was not recorded. Printed, never enforced: the
+ * runner's timeout is the stop.
+ */
+function wallClockDeadline(env: Record<string, string | undefined>): string {
+  const started = Date.parse(env.JULIUS_JOB_STARTED_AT ?? '');
+  return Number.isFinite(started) ? new Date(started + JOB_BUDGET_MS).toISOString() : 'UNKNOWN';
+}
+
+/**
+ * AN OPERATOR MAY TIGHTEN THE TICK ALLOWANCE, NEVER LOOSEN IT. `derived` or
+ * absent means the allowance Julius counts from the mission's own structure.
+ * Anything else must be a positive whole number, and the drive applies it as
+ * a minimum with that allowance.
+ */
+function tickOverrideOf(value: string | null): { readonly ok: true; readonly override: number | undefined } | { readonly ok: false } {
+  if (value === null || value === 'derived') return { ok: true, override: undefined };
+  if (!/^[1-9][0-9]{0,5}$/u.test(value)) return { ok: false };
+  return { ok: true, override: Number(value) };
+}
 import { noJuliusResearch, sealJuliusResearchPolicy, type JuliusResearchPolicy } from '../src/relay/mission/julius';
 import {
   LIVE_REACH_ACTION_CAPABILITIES,
@@ -692,6 +719,8 @@ async function main(argv: readonly string[]): Promise<number> {
     out(`The contract file could not be read: ${option('contract')}`);
     return 2;
   }
+  const tickOverride = tickOverrideOf(option('max-ticks'));
+  if (!tickOverride.ok) { out(`max_ticks_invalid: '${option('max-ticks') ?? ''}' is neither "derived" nor a positive whole number`); return 2; }
   const parsedContract = parseLiveMissionContract(rawContract);
   if (!parsedContract.ok) { out(`Mission Contract refused: ${parsedContract.problem}`); return 2; }
   const contract = parsedContract.contract;
@@ -925,10 +954,21 @@ async function main(argv: readonly string[]): Promise<number> {
         out(`    ${row.source}/${row.capability}: ${row.readiness}${row.readiness === 'ready' ? '' : ' — retrieval will be refused'}`);
       }
     }
+    /* THE ALLOWANCE, SAID BEFORE THE FIRST DISPATCH: counted from this run's
+       seeded units and the verification policy it was assembled with, so the
+       evidence shows what the mission was permitted before it shows what it
+       used. Qualification attempt 4 stopped at a ceiling of 32 fixed for a
+       six-task graph, with the run still inside every bound its contract set. */
+    const tickBudget = await liveTickBudgetFor({
+      store: handoffs.store, runId: submitted.runId, projectId: contract.projectId, verification: runtime.verification,
+    });
+    out(`  tick budget: planned=${tickBudget.plannedTicks} hard_max=${tickBudget.hardMaxTicks} ${tickBudget.reason} override=${tickOverride.override ?? 'none'} version=${tickBudget.version}`);
+    out(`  wall clock deadline: ${wallClockDeadline(env)}`);
     const outcome = await driveJuliusRunToTerminal({
       loop: runtime.loop, store: handoffs.store,
       runId: submitted.runId, projectId: contract.projectId,
-      maxTicks: Number(option('max-ticks') ?? '32'),
+      verification: runtime.verification,
+      ...(tickOverride.override === undefined ? {} : { maxTicks: tickOverride.override }),
     });
 
     const tasks = await handoffs.store.tasksForRun(submitted.runId, contract.projectId);
@@ -937,6 +977,10 @@ async function main(argv: readonly string[]): Promise<number> {
     const decisions = await handoffs.store.decisionsForRun(submitted.runId, contract.projectId);
     out(`RESULT: ${outcome.state}${outcome.stalled ? ' (stalled before terminal state)' : ''} after ${outcome.ticks} ticks`);
     if (outcome.haltCause !== null) out(`  cause: ${outcome.haltCause}`);
+    if (outcome.tickAccount !== null) {
+      const ticks = outcome.tickAccount;
+      out(`  ticks: consumed=${ticks.ticksConsumed} allowance=${ticks.allowance} remaining=${ticks.ticksRemaining} beyond_main_path=${ticks.beyondMainPath} retries=${ticks.retries} exhausted=${ticks.exhausted ? 'yes' : 'no'}`);
+    }
     out(`  run: ${submitted.runId}`);
     for (const task of tasks) out(`  task ${task.taskId} [${task.role}/${task.taskType}] → ${task.state}`);
     for (const item of evidence) out(`  evidence ${item.evidenceId} [${item.type}/${item.status}] ${item.safeSummary}`);
