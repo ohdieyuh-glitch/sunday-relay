@@ -215,6 +215,14 @@ export interface JuliusResearchResult {
    * the right thing to tell a worker and the wrong thing to be all a record says.
    */
   readonly reachRefusal: LiveReachRefusal | null;
+  /**
+   * THE BYTES THIS REQUEST CHARGED TO THE LEDGER, exactly as it was charged, or
+   * null when nothing was measured. The durable row must carry this number:
+   * paid qualification attempt 4 (run 34774471909) rebuilt every past read as
+   * unsized because the row had no byte count, and a byte-budgeted mission then
+   * refused all ten asks after its first read as `byte_budget_unenforceable`.
+   */
+  readonly bytes: number | null;
   readonly events: readonly LiveReachEvent[];
   /** The slot ledger AFTER this request. The caller owns the storage. */
   readonly ledger: JuliusResearchLedger;
@@ -339,6 +347,7 @@ export function createJuliusResearchMediator(
         host: juliusResearchRequestedHost(request.reference),
       },
       reachRefusal: parts.reachRefusal ?? null,
+      bytes: parts.bytes ?? null,
       events: parts.events ?? [],
       ledger,
     };
@@ -477,6 +486,7 @@ export function juliusResearchPortFrom(mediator: JuliusResearchMediator): Julius
           refusal: observed.refusal,
           reachRefusal: result.reachRefusal,
           requested: result.requested,
+          bytes: result.bytes,
         });
       }
       return observations;

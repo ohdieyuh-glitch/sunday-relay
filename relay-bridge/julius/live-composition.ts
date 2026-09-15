@@ -40,6 +40,7 @@ import {
   type JuliusVerificationPolicy,
   type JuliusWorker,
   noJuliusResearch,
+  type JuliusResearchLedger,
   type JuliusResearchPolicy,
 } from '../../src/relay/mission/julius';
 import { createJuliusResearchMediator, juliusResearchPortFrom } from './research-mediator';
@@ -457,6 +458,55 @@ export interface LiveJuliusRuntime {
  * expired leases before it claims, cannot be built from a store that has lost
  * it.
  */
+/**
+ * THE RESEARCH SPEND, READ BACK FROM A RUN'S OWN ROWS — bytes included.
+ *
+ * A left fold of `recordJuliusResearch` over the run's `research.retrieved`
+ * rows: the same function the live path charges with, so the two readers cannot
+ * disagree, and a restarted process replays to the same position because the
+ * rows ARE the position.
+ *
+ * THE BYTE COUNT IS READ, NOT INVENTED. This projection used to pass
+ * `bytes: null` for every row because the row carried none. Paid qualification
+ * attempt 4 (run 34774471909) then refused every research ask after the first
+ * as `byte_budget_unenforceable`: one read per mission, and the three-per-slot
+ * allowance unusable. The row now records `bytes` beside `bytesRecorded: true`.
+ *
+ * A ROW WITHOUT A RECORDED COUNT IS UNKNOWN SPEND, NEVER ZERO. A row written
+ * before the count existed, or one whose count is not a non-negative integer,
+ * is replayed as unsized, so a byte budget over it says it cannot be enforced —
+ * the fail-closed answer — rather than letting the next read through under a
+ * number that looks measured.
+ */
+export async function projectDurableJuliusResearchLedger(
+  reader: JuliusTimelineReader,
+  request: Pick<JuliusResearchRequest, 'missionId' | 'runId' | 'projectId'>,
+): Promise<JuliusResearchLedger> {
+  let ledger = emptyJuliusResearchLedger(request.missionId);
+  let sinceSequence = 0;
+  for (;;) {
+    const page = await reader.timeline({
+      runId: request.runId, projectId: request.projectId, sinceSequence, limit: 500,
+    });
+    for (const entry of page.entries) {
+      sinceSequence = Math.max(sinceSequence, entry.sequence);
+      if (entry.type !== 'research.retrieved') continue;
+      const role = entry.facts.role;
+      if (typeof role !== 'string' || !isJuliusResearchRole(role)) continue;
+      const recorded = entry.facts.bytesRecorded === true;
+      const bytes = entry.facts.bytes;
+      ledger = recordJuliusResearch(ledger, role, {
+        source: 'web',
+        outcome: meteredFromJuliusOutcome(entry.facts.outcome),
+        bytes: recorded && typeof bytes === 'number' && Number.isSafeInteger(bytes) && bytes >= 0 ? bytes : null,
+        at: entry.occurredAt,
+      });
+    }
+    if (page.entries.length === 0 || !page.hasMore) break;
+  }
+  return ledger;
+}
+
 export function createContextAndClaimHandoffs<S extends JuliusRuntimeStore>(store: S): {
   readonly store: S;
   readonly contexts: CompiledContextSource;
@@ -644,34 +694,8 @@ export function assembleLiveJuliusRuntime(options: {
        */
       ...(typeof (options.store as { timeline?: unknown }).timeline === 'function'
         ? {
-          durableLedger: async (request: JuliusResearchRequest) => {
-            const reader = options.store as unknown as JuliusTimelineReader;
-            let ledger = emptyJuliusResearchLedger(request.missionId);
-            let sinceSequence = 0;
-            for (;;) {
-              const page = await reader.timeline({
-                runId: request.runId, projectId: request.projectId, sinceSequence, limit: 500,
-              });
-              for (const entry of page.entries) {
-                sinceSequence = Math.max(sinceSequence, entry.sequence);
-                if (entry.type !== 'research.retrieved') continue;
-                const role = entry.facts.role;
-                if (typeof role !== 'string' || !isJuliusResearchRole(role)) continue;
-                ledger = recordJuliusResearch(ledger, role, {
-                  source: 'web',
-                  outcome: meteredFromJuliusOutcome(entry.facts.outcome),
-                  // The row does not carry a byte count, and a projection must
-                  // not invent one. Null is "not measured", which is exactly
-                  // what makes a byte budget report itself unenforceable rather
-                  // than silently pass.
-                  bytes: null,
-                  at: entry.occurredAt,
-                });
-              }
-              if (page.entries.length === 0 || !page.hasMore) break;
-            }
-            return ledger;
-          },
+          durableLedger: (request: JuliusResearchRequest) =>
+            projectDurableJuliusResearchLedger(options.store as unknown as JuliusTimelineReader, request),
         }
         : {}),
       // READINESS, NOT AUTHORITY. Handed through unchanged; the mission's own

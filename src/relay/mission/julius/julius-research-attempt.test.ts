@@ -474,6 +474,8 @@ describe('E — a refused ask\'s row says why and at what', () => {
     for (const [fact, column] of [
       ['reasonCode', 'reason_code'], ['reachRefusal', 'reach_refusal'], ['requestedSource', 'requested_source'],
       ['requestedCapability', 'requested_capability'], ['requestedHost', 'requested_host'],
+      // The bytes the ledger was charged, and that they were recorded: the research budget is rebuilt from these.
+      ['bytes', 'bytes'], ['bytesRecorded', 'bytes_recorded'],
     ] as const) {
       expect(query, `${fact} must reach research.tsv as ${column}`).toContain(`'facts'->>'${fact}' AS ${column},`);
     }

@@ -336,6 +336,13 @@ export interface JuliusResearchObservationRecord {
   /** Live Reach's own refusal, when Live Reach ran and refused; the mapping to `refusal` loses it. */
   readonly reachRefusal?: LiveReachRefusal | null;
   readonly requested?: JuliusResearchRequestedClass;
+  /**
+   * THE BYTES THE MEDIATOR CHARGED FOR THIS OBSERVATION, or null when nothing
+   * was measured. Never rendered to a worker. The durable ledger is rebuilt from
+   * this number, so a port that omits it leaves the row unsized — which a byte
+   * budget reports as unenforceable rather than treating as free.
+   */
+  readonly bytes?: number | null;
 }
 
 /**

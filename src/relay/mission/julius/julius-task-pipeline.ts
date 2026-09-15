@@ -1722,6 +1722,17 @@ async function driveResearchCheckpoint(input: {
         requestedSource: observation.requested?.source ?? null,
         requestedCapability: observation.requested?.capability ?? null,
         requestedHost: observation.requested?.host ?? null,
+        /* THE BYTES CHARGED, AND THAT THEY WERE RECORDED. The research ledger is
+           rebuilt from these rows. Paid qualification attempt 4 (run
+           34774471909) wrote rows with no byte count, so every past read came
+           back unsized and a byte-budgeted mission refused all ten asks after
+           its first. `bytesRecorded` separates "this row says nothing was
+           measured" (null) from a row written before the count existed, which a
+           reader must treat as unknown historical spend, never as zero. */
+        bytes: typeof observation.bytes === 'number' && Number.isSafeInteger(observation.bytes) && observation.bytes >= 0
+          ? observation.bytes
+          : null,
+        bytesRecorded: true,
         /* THE LAST FIVE: WHY, AND AT WHAT. Paid run 34757974058 wrote four
            refusals with an empty reason and no target, so a worker asking for
            a host the mission never granted and Relay refusing one it had were
