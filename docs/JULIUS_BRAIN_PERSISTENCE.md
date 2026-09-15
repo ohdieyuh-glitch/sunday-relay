@@ -146,6 +146,18 @@ convenience. The candidate shapes are:
 
 ### 2. How Julius authenticates
 
+**Already built locally and proven, not deployed:** the service's access
+contract (`julius-brain-access.ts`, `julius-brain-access.test.ts`).
+- **Token verification:** OIDC with RS256 only; issuer keys by id; issuer,
+  audience, time and age checks; pinned repository, owner, workflow, ref,
+  event and environment claims; single-use token ids.
+- **Session binding:** each session is bound to the verified workflow attempt,
+  the service's environment, the mission, and the state mode fixed at first
+  registration. Any non-FRESH mode needs an operator grant.
+- **Per-call authorization:** other run or mission, mode switch, protected kind,
+  out-of-scope mutation, raw store, expiry.
+- **Server-side retrieval**, and an audit trail without secrets.
+
 **Must:** **no GitHub-hosted runner holds a Brain database credential.**
 Julius, wherever it runs, reaches the Brain through a **controlled Brain
 service** (see item 11). The service authenticates callers:
@@ -342,8 +354,17 @@ and both retention windows.
   every write is idempotent by key.
 - **Alerts** on unavailability and on unpreserved runs.
 
-**Already enforced:** the binding's READY, REFUSED and UNAVAILABLE outcomes;
-ADDITIVE vs REQUIRED; detach; `preservation()`.
+**Already enforced:**
+- **Binding outcomes:** READY, REFUSED and UNAVAILABLE; ADDITIVE vs REQUIRED;
+  detach.
+- **Preservation is derived from durable evidence** (`julius-brain-preservation.ts`):
+  PRESERVED only with a verified open, every v1 entry held with its content,
+  and a checkpoint covering the seal. Otherwise PARTIALLY_PRESERVED or
+  NOT_PRESERVED, with reasons. An unreadable Brain answers UNREADABLE, never
+  PRESERVED.
+- **Recovery reconciles with it:** a preserved attempt is refused, a partial one
+  is reconciled without duplicate facts, one never preserved is reconstructed.
+  Every recovery is recorded.
 
 **Not yet built:** service-level retry and circuit breaking; the
 `python.run` unavailable reason; the routes' unavailable answer.

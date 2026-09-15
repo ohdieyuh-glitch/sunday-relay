@@ -67,7 +67,11 @@ entity would carry governance out of the service. The service must:
 - **apply state-mode selection server-side**, so retrieval authority holds even
   against a faulty client;
 - **expose handle-level operations:** bootstrap, commit as a session principal,
-  mode-selected context, checkpoint, resume, archive import.
+  mode-selected context, seal, resume, archive import.
+
+**The access contract already exists, locally and proven:**
+`julius-brain-access.ts`. The proposal decides where it runs and how it is
+deployed, not what it enforces.
 
 ## Step 1 — Brain persistence and bootstrap
 
@@ -91,8 +95,12 @@ entity would carry governance out of the service. The service must:
     `proceed` is true, meaning a FRESH run, which the Brain only adds to. A
     CONTINUATION, LEARNING or REGRESSION run refuses to start.
   - After a non-READY answer the binding is detached.
-- **At the end of the run:** record `binding.preservation()` in the run's
-  evidence. **Never report the run as preserved unless it says so.**
+- **At the end of the run:** call `binding.seal({ runId })`. It records how
+  many of the run's v1 entries the Brain holds with the right content, then
+  checkpoints, and returns the preservation **derived from the Brain**:
+  PRESERVED, PARTIALLY_PRESERVED or NOT_PRESERVED, with reasons. Record that in
+  the run's evidence. **Never report the run as preserved unless the derived
+  status says so.** An unreadable Brain is UNREADABLE, never PRESERVED.
 - **Preflight:** `assertJuliusBrainDatabase(production)` runs **in the Brain
   service**, over TLS. Runner preflight checks the service's health and its own
   OIDC exchange, not a database.
@@ -141,21 +149,31 @@ The spread keeps `timeline`, so the ledger-bound check still sees it.
 1. Write the adapter from the Formal lane's **final** archive tables to
    `julius-paid-run-archive-export.v1`, read-only against `julius-postgres`.
    Coordinate its shape with the Formal lane when they freeze the archive.
-2. Seal, then import one run per commit. Imports go **through the Brain
-   service**, never from a runner holding a database credential. An archive
-   import is also how a run that was unpreserved at the time reaches the Brain
-   later.
+2. Seal, then import one attempt per commit. Imports go **through the Brain
+   service**, never from a runner holding a database credential. The import
+   derives the attempt's preservation first:
+   - a preserved attempt is refused;
+   - a partially preserved one is **reconciled**: what the live mirror recorded
+     is linked, not recorded again;
+   - one never preserved is **reconstructed**.
 
-   **Open rule, to decide at step 2:** one workflow attempt must not reach the
-   Brain as two representations. The live mirror writes `legacy:<attempt>:…`;
-   the archive import writes `archive:<attempt>:…`. Both are the same attempt
-   identity, so importing an attempt that was already mirrored, even partially,
-   would record its decisions twice. The importer must first check for mirrored
-   records of the attempt. Then it either:
-   - refuses, when the attempt was preserved; or
-   - reconciles explicitly, linking and never duplicating, when it was not.
+   A history that contradicts the live run is refused. The mirror/recovery
+   rule below is now built and proven
+   (`julius-brain-archive-reconciliation.test.ts`).
 
-   Nothing decides this silently.
+   **The mirror/recovery rule (accepted 2026-09-15, built and proven).** One
+   workflow attempt never reaches the Brain as two representations, even though
+   the live mirror writes `legacy:<attempt>:…` and the import writes
+   `archive:<attempt>:…`.
+   - **Refusals:** a fully preserved attempt is refused. A history that
+     contradicts the live run (mission, Julius run, accepted main, unlisted
+     live entries, seal count) is refused.
+   - **Reconciliation:** a partial attempt is reconciled. Live v1 entries and
+     verification decisions are matched deterministically and linked, not
+     recorded again.
+   - **Guarantees:** every recovery is recorded as a RECOVERY trace. A repeat is
+     a no-op. A commit guarded by the attempt's record count re-plans if the
+     attempt changed in between.
 3. Run `verifyJuliusBrainLedger`.
 4. Re-import: expect `ALREADY_IMPORTED`.
 5. Reconcile `accounting` against the paid-run ledger.
@@ -234,8 +252,8 @@ ids.
 
 - **Start:** `binding.bootstrap` already verifies the ledger and the last
   checkpoint.
-- **End of drive:** call `binding.checkpoint(label)` after
-  `driveJuliusRunToTerminal`.
+- **End of drive:** call `binding.seal({ runId })` after
+  `driveJuliusRunToTerminal` (step 1).
 - **Across paid runs:** nothing extra. The Brain is in its durable database and
   the runtime database is disposable. Only while the temporary carry is in use
   does a job restore and re-export, per the carry journal (step 1).

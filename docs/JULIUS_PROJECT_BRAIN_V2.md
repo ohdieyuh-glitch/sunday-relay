@@ -109,75 +109,132 @@ the tool's proposals, one transaction).
 
 ## Paid-run history: the archive import boundary
 
-Paid runs are being archived by the Formal lane into a **temporary** schema in
-the local `julius-postgres`. That schema is not the Brain's and will change.
-The Brain never reads it. It reads one importer-owned, versioned export
-contract, and only the adapter that produces that contract changes when the
-archive does (`julius-brain-archive-import.ts`).
+Paid runs are archived by the Formal lane into a **temporary** schema of its
+own. The Brain never reads that schema. What crosses is one versioned, typed,
+self-hashed JSON document per workflow attempt,
+`julius-paid-run-archive-export.v1` (`julius-brain-archive-import.ts`). An
+adapter on Formal's side produces it; only that adapter follows their tables.
 
 ```
-temporary archive tables ──(adapter, written against the final archive)──▶
-  julius-paid-run-archive-export.v1  (sealed: per-section hashes + content hash)
-    ──validate──▶ plan (pure translation) ──▶ ONE group commit ──▶ Project Brain
+Formal's archive tables ──(Formal's adapter)──▶ julius-paid-run-archive-export.v1
+   ──strict validation──▶ preservation of the attempt ──▶ refuse | reconcile | reconstruct
+   ──▶ plan (pure translation) ──▶ ONE guarded group commit ──▶ Project Brain
 ```
 
-**The contract.**
+### The contract
 
-- **Run identity:** `workflowRunId` (digits), `workflowRunAttempt`,
-  `acceptedMainSha` (40 hex), `missionId`, `campaignId`, `juliusRunId`,
-  `projectId`, `stateMode`, `classification`, the times, `outcome` and
-  `outcomeReason`.
-- **Sections:** tasks, evidence, reviews, findings, repairs, research, usage,
-  timeline events, tool invocations, and artifact refs/hashes.
+**Null, empty and Unknown are explicit.**
+- **Never `''`.** Every string is non-empty, because a source that cannot tell
+  NULL from `''` must decide which it means.
+- **Unknown is listed.** Each item names, in `unknown`, the nullable fields
+  whose null means "not recorded". A null not listed means "recorded as absent".
+- **Lists.** A list is `[]` when recorded empty, and null (listed) when Unknown.
 
-**Validation refuses:**
+**Sections:**
 
-- a section or content hash that does not match;
-- duplicate ids, or references to ids the export does not hold;
-- non-ISO times;
-- dishonest cost: a reported basis without an amount, or `UNKNOWN` carrying
-  one;
-- credential-shaped content, reported with its location.
+| Section | What it carries (nullable where the source may not know) |
+|---|---|
+| identity | workflow run id and attempt; repository; Julius run id (provenance only); mission id and label; campaign; project; classification; accepted main SHA; state mode and basis; outcome and reason; start and end |
+| tasks | task id, type, role, worker, state, ordinal, parent, dependency ids |
+| research | request key, attempt key, ordinal, role, task, host, path, bytes, digest, delivery range, handoff ref, SERVED/REFUSED/UNKNOWN, refusal reason, purpose, evidence, time |
+| evidence | id, task, type, status, source verification, summary, artifact refs, integrity hash, time |
+| findings | id, task, severity (only where recorded), blocking, status, claim, rationale, evidence ids (only where recorded), time |
+| reviews | id, reviewer, verdict, target task, reason code, rationale, evidence ids, source ref, time |
+| repairs | id, round, target task, repair task, reason, outcome, finding ids, time |
+| usage | component, task, role, provider, model, requests, tokens, amount, cost basis, estimate, time |
+| brainEntries | the v1 Brain entry ids the run wrote: kind, worker, task, revision, time (never content) |
+| events | event id, sequence (optional), type, task, time, scalar facts |
+| toolInvocations | id, task, tool, execution type, state, result, requested and completed, artifact refs |
+| artifacts | id, name, content type, size, content hash, storage ref |
 
-**Translation.**
+**Refused before anything is written:**
+- another version of the format (`unsupported_export_version`), or another
+  format (`not_an_archive_export`);
+- a missing, extra, mistyped or empty field, with its location;
+- a malformed `unknown` list;
+- an identity or section hash, or the content hash, that does not match. The
+  accepted main, state mode and attempt are all bound by the identity hash;
+- duplicate ids, or references that do not resolve;
+- a reported cost with no amount, or an UNKNOWN cost carrying one;
+- supplied artifact bytes that do not match their digest;
+- credential-shaped content.
+
+### Translation
+
+The translation invents nothing.
 
 | Archive | Brain record |
 |---|---|
 | the export's own bytes | ARTIFACT (content-addressed), the anchor every record `DERIVED_FROM` |
-| run | TRACE `LIFECYCLE`, facts carry the full identity and the archive hash |
-| artifacts | ARTIFACT; `archive-ref:` when the Brain does not hold the bytes |
+| identity | TRACE `LIFECYCLE`, facts carry the full identity and archive hash |
+| artifacts | ARTIFACT: verified bytes held `cas://`, otherwise `archive-ref:` |
 | tasks | TRACE `WORKER_ACTION` |
-| evidence | EVIDENCE, class mapped, **UNVERIFIED** (nothing re-verified it) |
+| evidence | EVIDENCE, class mapped from both runtime vocabularies, **always UNVERIFIED** |
 | reviews | DECISION `VERIFICATION`; a missing rationale says Unknown |
-| findings | FINDING `REVIEWER_FINDING`; a missing severity is `UNKNOWN` |
-| repairs | REPAIR, status mapped, `REPAIRS` links to findings |
-| research | RESEARCH |
+| findings | FINDING `REVIEWER_FINDING`; severity `UNKNOWN` when not recorded; rationale appended to the claim when recorded |
+| repairs | REPAIR; status and verification `UNKNOWN` when the outcome was not recorded |
+| research | RESEARCH, plus a companion TRACE carrying the delivery facts (bytes, digest, range, disposition) |
 | usage | EVIDENCE `MEASUREMENT`, cost basis preserved |
-| run accounting | EVIDENCE: a known total that is a **floor** when any component is unknown; estimates reported, never added |
-| timeline events | TRACE, class by event type; scalar facts, dropped facts counted |
-| tool invocations | TRACE `TOOL_INVOCATION` |
+| run accounting | EVIDENCE: the known total is a **floor** while any component is unknown |
+| brainEntries | TRACE "written; content not archived", unless a review or the live mirror already represents it |
+| events / tools | TRACE, with Unknown fields listed |
+| (import report) | EVIDENCE `MEASUREMENT`: the complete Unknown-by-field breakdown and what was already represented |
+
+**Unknown times stay Unknown.** A record whose time was not recorded has
+`occurredAt: null` (migration 005).
 
 **Every imported record carries:**
-
-- **Scope:** `{missionId, runId, taskId}`. The run id is **always**
-  `workflow:<id>/<attempt>`, never `juliusRunId`, which is kept as a fact.
-  The Julius run id is derived from the mission contract, so it repeats across
-  paid attempts. In Formal's archive, one Julius run id spans three workflow
-  runs, and task, evidence, finding and v1 Brain entry ids repeat between them.
-  Scoped by it, three attempts would be one run to every state mode.
-- **Provenance:** `run_observed`, with `commit = acceptedMainSha` and
+- **Scope:** the run is **always** `workflow:<id>/<attempt>`. The Julius run id
+  repeats across attempts, so it is a fact only.
+- **Provenance:** `commit` is the accepted main;
   `externalRef = julius-paid-run-archive:<run>/<attempt>#<section>/<id>`.
 - **Principal:** `JULIUS julius:archive-importer`.
 - **Idempotency key:** `archive:<run>/<attempt>:<section>:<id>`.
 
-**What that gives the import:**
+### One attempt, one history: preservation and reconciliation
 
-- **Idempotent.** A re-import is `ALREADY_IMPORTED`.
-- **Attempts are distinct runs.** Attempt 2 imports alongside attempt 1.
-- **A changed history under the same identity is refused.** A re-sealed export
-  with different content is refused with `idempotency_key_conflict`.
-- **Atomic.** The whole run arrives in one commit (groups of 400 inside it) or
-  none of it does.
+A live attempt leaves durable evidence written by Julius
+(`julius-brain-preservation.ts`):
+- **`run-opened:<run>`**, after bootstrap verified the Brain;
+- **`run-sealed:<run>`**, counting how many of the run's v1 entries the Brain
+  holds with the right content, and naming which are missing;
+- **a `run-preserved:<run>` checkpoint.**
+
+| Status | Derived when |
+|---|---|
+| PRESERVED | opened, sealed with nothing missing, and a checkpoint covering the seal that re-derives from the ledger |
+| PARTIALLY_PRESERVED | some live evidence exists, but not all of the above |
+| NOT_PRESERVED | nothing of the live run is durable |
+
+**What does not count:**
+- A marker a worker or tool wrote.
+- Records an import wrote.
+- A recovery. It is listed beside the status and never makes a run PRESERVED.
+
+**The import derives the attempt's status first:**
+
+| Before | Import |
+|---|---|
+| PRESERVED | refused (`attempt_already_preserved`); nothing written |
+| PARTIALLY_PRESERVED | **RECONCILED**. Live v1 entries (by id) and verification decisions (by task, verdict, reason) are linked, not recorded again; only the missing history is added |
+| NOT_PRESERVED | **RECONSTRUCTED** in full |
+
+**Refused as `conflicting_history`:**
+- the open marker's mission, Julius run or accepted main disagrees with the
+  export;
+- the live run holds a v1 entry the export does not list;
+- the seal counted a different number of entries.
+
+**Every recovery is recorded.** It writes a RECOVERY trace: mode, prior status,
+what was added and what was already represented, linked to the export and to
+the live records it relied on.
+
+**Guarantees:**
+- **Idempotent.** Repeating a recovery writes nothing.
+- **No overwrite.** A different history of the same attempt is refused.
+- **Deterministic.** The commit carries a run guard: the attempt's record count
+  when the plan was made, checked under the Brain row lock. A write to the same
+  attempt in between makes the import plan again.
 
 ## State modes: retention is not retrieval authority
 
@@ -231,54 +288,52 @@ with the real paid run 34739303313 imported, FRESH admits none of it.
 
 This is a read-only inspection as of 2026-09-15: `origin/main` `ad03df90` and the
 local `julius_archive` database, with four qualification attempts archived.
-**The archive is not frozen**, and the adapter is not written.
-`research.tsv` carries 17 columns in two attempts and 21 in the other two.
+**The archive is not frozen**, and the adapter is not written: `research.tsv`
+carries 17 columns in two attempts and 21 in the other two.
 
 **What already agrees:**
 - **Identity** is the workflow run and attempt.
 - **State mode** is recorded as FRESH, with its basis.
-- **Cost honesty:** unknown settlements carry no amount (54 UNKNOWN, 25
-  PROVIDER_REPORTED).
+- **Cost honesty:** unknown settlements carry no amount.
 - **Credentials** are refused at archive time.
 
-**What the adapter must not paper over.** These points are for the Formal lane,
-when they freeze:
+**How the export represents what the archive does not record.** Nothing here
+asks Formal to change its tables:
 
-| Section | Archive carries | Contract needs | Honest handling until agreed |
-|---|---|---|---|
-| findings | `finding_id, blocking, status, claim` | taskId, severity, evidence ids, occurredAt | severity and task Unknown; **no time exists**, so either the export contract admits an Unknown time or Formal adds `created_at` |
-| evidence | `evidence_id, evidence_type, status, safe_summary, occurred_at` | taskId, artifactRef, integrityHash | null (Unknown) |
-| reviews | `decisions.tsv`: `decision_id, task_id, action, reason_code, occurred_at` | evidence ids, summary | none, and "Unknown — the archive recorded no rationale" |
-| repairs | no table; repair tasks carry a parent task | finding ids, round, state | derived only from repair tasks, with finding links Unknown |
-| tool invocations | `invocation_id, tool_id, state, requested_at` | taskId, completedAt | null |
-| usage | `budget.tsv` settlements: role, amount, basis, estimate | provider, model, tokens | null. Tokens exist only per dispatch in `worker-diagnostics.tsv`, and are not joined by guess |
-| events | `failures`, `budget`, `contract-events`, `research`, `participation` (sequenced); `trajectory` (no sequence) | sequence | trajectory rows need an explicit ordering rule |
-| all tables | `psql -A` text, where NULL and `''` are indistinguishable; times like `2026-09-13 11:10:45.942+00` | null vs value; ISO time | `''` becomes Unknown, never an empty value; times are normalised explicitly |
-
-**Already fixed on this branch:**
-- Brain run ids are the workflow run and attempt. In the archive, one Julius run
-  id spans three workflow runs, and task, evidence, finding and v1 entry ids
-  repeat between attempts.
-- The tool evidence vocabulary (`COMMAND_EXECUTION` and the rest) is mapped.
+| Section | Archive carries today | In the export |
+|---|---|---|
+| findings | `finding_id, blocking, status, claim` | task, severity, rationale, evidence ids and time listed Unknown |
+| evidence | `evidence_id, evidence_type, status, safe_summary, occurred_at` | task, artifact refs, integrity hash, source verification listed Unknown |
+| reviews | `decision_id, task_id, action, reason_code, occurred_at` | reviewer, rationale Unknown; evidence ids `[]` only if recorded as none |
+| repairs | no table; repair tasks carry a parent task | an item only where a repair is recorded; finding ids, reason and outcome Unknown otherwise |
+| tool invocations | `invocation_id, tool_id, state, requested_at` | task, execution type, result, completion Unknown |
+| usage | settlements: role, amount, basis, estimate | provider, model, requests, tokens Unknown (never joined by guess from diagnostics) |
+| events | sequenced event dumps; `trajectory` has no sequence | `eventId` for every row; `sequence` Unknown for trajectory |
+| brainEntries | `project-brain.tsv`: entry id, kind, worker, task, revision, time | as recorded; content is never exported |
+| all tables | `psql -A` text: NULL and `''` indistinguishable; times like `2026-09-13 11:10:45.942+00` | the adapter must decide: `''` is refused at the boundary; times must be ISO |
 
 ## Migrating paid history into the Brain
 
-1. **Freeze the source.** The Formal lane's archive schema is temporary. Write
-   the adapter (archive rows → `julius-paid-run-archive-export.v1`) only against
-   its final shape, and run it read-only against `julius-postgres`.
-2. **Seal each run** with `sealJuliusPaidRunArchiveExport`. Archive the sealed
-   export bytes alongside the archive, since they are the anchor artifact.
-3. **Import one run per commit** with `importJuliusPaidRunArchive`, into the
-   project's Brain, under the importer principal. `REJECTED` lists every
-   located error. Fix the adapter, not the export.
+1. **Wait for the freeze.** Formal's archive is temporary. Their adapter
+   produces `julius-paid-run-archive-export.v1` against its final shape. The
+   Brain never reads their tables.
+2. **Seal each attempt** with `sealJuliusPaidRunArchiveExport`, and keep the
+   sealed bytes: they are the anchor artifact.
+3. **Import each attempt** with `importJuliusPaidRunArchive`. It refuses a
+   preserved attempt, reconciles a partial one, and reconstructs one never
+   preserved.
+   - `REJECTED` lists every located error: fix the adapter, not the export.
+   - `conflicting_history` means the export is not the live run's history:
+     investigate, do not force.
 4. **Verify.**
-   - Run `verifyJuliusBrainLedger` over the result.
+   - Run `verifyJuliusBrainLedger`.
    - Re-import: expect `ALREADY_IMPORTED`.
-   - Compare the import's `accounting` against the paid-run ledger (the known
-     total is a floor whenever a component was unknown).
+   - Read the import report's Unknown-by-field breakdown.
+   - Compare `accounting` with the paid-run ledger (a floor while any component
+     is unknown).
 5. **Nothing imported is guidance by default.** Every live run declares its
-   state mode. Qualification and lab evaluations run FRESH, and LEARNING must
-   name what it learns from.
+   state mode. Qualification and lab evaluations run FRESH, and LEARNING names
+   what it learns from.
 
 ## Proofs and how to run them
 
@@ -292,10 +347,12 @@ when they freeze:
 | The dedicated database: dedicated, identified, encrypted, current, concurrent migration, immutable, artifact bytes | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-database-postgres.test.ts` (the server must offer TLS) |
 | Least-privilege roles, running the whole Brain + Python flow as the service role | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-roles-postgres.test.ts` (a server role that may create roles) |
 | The temporary carry: seal, open, lineage, rollback, journal | `npx vitest run src/relay/mission/julius/julius-brain-carry.test.ts` |
-| Archive import, state modes (domain) | `npx vitest run src/relay/mission/julius/julius-brain-archive-import.test.ts src/relay/mission/julius/julius-brain-state-modes.test.ts` |
+| Archive export contract, import, state modes (domain) | `npx vitest run src/relay/mission/julius/julius-brain-archive-import.test.ts src/relay/mission/julius/julius-brain-state-modes.test.ts` |
+| Preservation status, reconciliation with the live mirror, recovery under every state mode | `npx vitest run src/relay/mission/julius/julius-brain-preservation.test.ts src/relay/mission/julius/julius-brain-archive-reconciliation.test.ts` |
+| The Brain service access contract (OIDC, sessions, per-call authorization, audit) | `npx vitest run src/relay/mission/julius/julius-brain-access.test.ts` |
 | State modes with a real interpreter | `npx vitest run src/relay/workspace/julius-tools/python-state-modes.test.ts` |
-| Archive import on PostgreSQL: parity, cold read, 6-way concurrent import, multi-group atomicity | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-archive-postgres.test.ts` |
-| Prepared live binding (bootstrap, mirror, typed context, checkpoint) | `npx vitest run relay-bridge/julius/project-brain-binding.test.ts`; on PostgreSQL with the live v1 repositories: `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-live-binding-postgres.test.ts` |
+| Archive import on PostgreSQL: parity, cold read, 6-way concurrent import, reconciliation and run guard, multi-group atomicity | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-archive-postgres.test.ts` |
+| Prepared live binding (bootstrap, mirror, typed context, seal and derived preservation) | `npx vitest run relay-bridge/julius/project-brain-binding.test.ts`; on PostgreSQL with the live v1 repositories: `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-live-binding-postgres.test.ts` |
 
 In the tests, `DATABASE_URL` names a **server** to create throwaway databases on.
 The drills themselves write only to `JULIUS_BRAIN_DATABASE_URL`, never to the
@@ -323,6 +380,8 @@ unchanged by this branch. See `docs/JULIUS_BRAIN_PERSISTENCE.md`.
   database, because settlement is one transaction with the Brain.
 - `003_julius_brain_content`: artifact bytes, content addressed.
 - `004_julius_brain_immutability`: the database refuses to change history.
+- `005_julius_brain_unknown_occurrence`: a record's occurrence time may be
+  Unknown (NULL); when the Brain recorded it never is.
 
 ## Not yet done (the private-beta gaps)
 
@@ -342,9 +401,11 @@ unchanged by this branch. See `docs/JULIUS_BRAIN_PERSISTENCE.md`.
 5. **The production Brain database and its service.** The home is decided: a
    dedicated persistent PostgreSQL. The code-side rules are enforced and proven:
    dedicated, identified, encrypted, current, immutable, least privilege.
-   Nothing is provisioned. The deployment proposal, the controlled Brain
-   service (OIDC, run-scoped sessions, server-side principals and state modes)
-   and its acceptance tests come after the qualification, per
+   The Brain service's access contract is written and proven locally
+   (`julius-brain-access.ts`: OIDC verification, sessions bound to one attempt,
+   mission and mode, per-call authorization, server-side retrieval, audit).
+   Nothing is provisioned or deployed. The deployment proposal and its
+   acceptance tests come after the qualification, per
    `docs/JULIUS_BRAIN_PERSISTENCE.md`.
 6. **Semantic retrieval.** Evaluated and available; on the labelled fixture
    no candidate beat the keyword baseline on MRR, so it is not adopted.
