@@ -103,6 +103,18 @@ def job():
     controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-6.0, yaw=rot.yaw + 180.0))
     yield 2.5
     shot("zc_02_front_portrait.png")
+    # A closer portrait on a shorter boom, restored afterwards. Read through the property the Dog class exposes;
+    # a pawn without a boom simply skips this shot.
+    boom, arm = None, None
+    try:
+        boom = pawn.get_editor_property("camera_boom")
+        arm = boom.get_editor_property("target_arm_length")
+        boom.set_editor_property("target_arm_length", max(arm * 0.62, 220.0))
+        yield 1.5
+        shot("zc_02b_front_close.png")
+    except Exception as error:
+        emit("close portrait skipped:", error)
+    RESULT["boom_arm_length"] = arm
 
     # ------------------------------------------------------------------ all three terminals
     L.focus_game_viewport()
@@ -133,6 +145,8 @@ def job():
     shot("zc_04_companion_line_not_sent.png")
     ui.close_overlay()
     yield 0.5
+    if boom is not None and arm is not None:
+        boom.set_editor_property("target_arm_length", arm)
 
     # ------------------------------------------------------------------ following
     controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-10.0, yaw=rot.yaw))
