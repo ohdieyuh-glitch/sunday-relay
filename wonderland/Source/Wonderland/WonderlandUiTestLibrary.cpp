@@ -53,7 +53,9 @@ namespace
 		return FKey();
 	}
 
-	FWonderlandFigure Known(double Value)
+	// Not `Known`: WonderlandUsagePreview.cpp has one with the same signature, and a unity build puts both in one
+	// translation unit, where file-local names are not local at all.
+	FWonderlandFigure KnownTestFigure(double Value)
 	{
 		FWonderlandFigure Figure;
 		Figure.bKnown = true;
@@ -79,13 +81,13 @@ namespace
 		Meter.TierId = KnownText(TierId);
 		Meter.TierLabel = KnownText(TierLabel);
 		Meter.UnitLabel = KnownText(TEXT("WONDER"));
-		Meter.CapacityUnits = Known(Capacity);
-		Meter.UsedUnits = Known(Spent);
-		Meter.RemainingUnits = Known(Capacity - Spent);
-		Meter.ReferenceCapacityUnits = Known(Reference);
-		Meter.CapacitySpan = Known(Capacity / Reference);
-		Meter.FillFraction = Known(Spent / Capacity);
-		Meter.RemainingFraction = Known((Capacity - Spent) / Capacity);
+		Meter.CapacityUnits = KnownTestFigure(Capacity);
+		Meter.UsedUnits = KnownTestFigure(Spent);
+		Meter.RemainingUnits = KnownTestFigure(Capacity - Spent);
+		Meter.ReferenceCapacityUnits = KnownTestFigure(Reference);
+		Meter.CapacitySpan = KnownTestFigure(Capacity / Reference);
+		Meter.FillFraction = KnownTestFigure(Spent / Capacity);
+		Meter.RemainingFraction = KnownTestFigure((Capacity - Spent) / Capacity);
 		Meter.Status = EWonderlandUsageStatus::Available;
 		Meter.Provenance = EWonderlandProvenance::Simulated;
 		Meter.bSimulated = true;

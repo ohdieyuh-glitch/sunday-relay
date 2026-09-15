@@ -30,6 +30,7 @@
 
 class APlayerController;
 class SWidget;
+class SWonderlandCompanionTerminal;
 class SWonderlandLiveTerminal;
 class SWonderlandWorldMap;
 class UInputComponent;
@@ -90,6 +91,31 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
 	bool TeleportToSelected();
 
+	/**
+	 * COMPANION TERMINALS (development preview, WonderlandCompanionSubsystem.h). Furniture like the HUD: mounted
+	 * once per controller while the companion preview is on, below the terminal and the map. They take typing
+	 * only while a panel holds UI input -- in play, the world has the keys. 0 is the LLM Companion's, 1 the
+	 * Jhinn AI Agent's.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	int32 GetCompanionTerminalCount() const { return CompanionTerminals.Num(); }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool AreCompanionTerminalsOnScreen() const { return CompanionLayer.IsValid() && CompanionTerminals.Num() > 0; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString GetCompanionTerminalTitle(int32 Index) const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	int32 GetCompanionTerminalLineCount(int32 Index) const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString GetCompanionTerminalInputText(int32 Index) const;
+
+	/** Give a companion terminal's command line the keyboard. False unless a panel currently holds UI input. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool FocusCompanionTerminal(int32 Index);
+
 private:
 	enum class EOverlay : uint8 { None, Terminal, Map };
 
@@ -101,7 +127,13 @@ private:
 	void HandleTerminalSubmit(const FString& Text);
 	void HandleTravel(FName DestinationId);
 	void ApplyOverlayInput(bool bOverlayOpen, TSharedPtr<SWidget> Focus);
+	void MountCompanionTerminals();
+	void UnmountCompanionTerminals();
+	void HandleCompanionSubmit(int32 Index, const FString& Text);
 	UWorld* PlayerWorld() const;
+
+	TArray<TSharedPtr<SWonderlandCompanionTerminal>> CompanionTerminals;
+	TSharedPtr<SWidget> CompanionLayer;
 
 	TWeakObjectPtr<APlayerController> BoundController;
 

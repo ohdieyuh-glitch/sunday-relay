@@ -126,9 +126,25 @@ private:
 		FSlateWindowElementList& OutDrawElements,
 		int32 LayerId) const;
 
+	/**
+	 * A four-point glint in render space, drawn at the white arc's leading tip. The LLM Companion's
+	 * embodiment travels in starlight; its meter ends in one point of it.
+	 */
+	void PaintGlint(
+		const FVector2f& Centre,
+		float Radius,
+		const FLinearColor& Colour,
+		const FGeometry& AllottedGeometry,
+		FSlateWindowElementList& OutDrawElements,
+		int32 LayerId) const;
+
+	/** Build (or rebuild, when a tuning variable moved) the samplers for the current composition. */
+	void EnsureSamplers();
+
 	/** The readout, rebuilt with the bands: exactly what the web HUD prints for the same reading. */
 	FString CompoundFigure;
 	FString SingleFigure;
+	FString CompanionFigure;
 
 	/**
 	 * Each meter's fullness as the reading states it (RemainingFraction), e.g. "100%". Empty when the
@@ -136,14 +152,42 @@ private:
 	 */
 	FString CompoundPercent;
 	FString SinglePercent;
+	FString CompanionPercent;
 
 	/** The held reading is the development preview (WonderlandUsagePreview.h): its unit figures are not usage. */
 	bool bPreviewReading = false;
 	FString ProvenanceLine;
 	FString ReasonLine;
 
+	/**
+	 * A meter whose remainder is the whole track. Its head band is not painted: the head's bright tone is
+	 * nearly white on every channel, and on a full meter it read as the end of the stroke fading out
+	 * (founder, 2026-09-15: "the blue bar must be fully blue").
+	 */
+	bool bCompoundFull = false;
+	bool bSingleFull = false;
+	bool bCompanionFull = false;
+
 	FWonderlandMeterBands CompoundBands;
 	FWonderlandMeterBands SingleBands;
+
+	/**
+	 * THE THIRD, WHITE METER -- a development preview composition (WonderlandCompanionHud.h), drawn only
+	 * when UWonderlandUsageHudSettings::bShowLlmCompanionMeter is set. The edge and glow bands are the same
+	 * spine at wider half-widths, painted underneath so white holds its shape on ivory stone and cloud.
+	 */
+	bool bShowCompanionMeter = false;
+	FWonderlandMeterBands CompanionBands;
+	FWonderlandMeterBands CompanionEdgeBands;
+	FWonderlandMeterBands CompanionGlowBands;
+	bool bCompanionTipVisible = false;
+	FVector2D CompanionTip = FVector2D::ZeroVector;
+
+	/** The tuning the samplers were last built with, so a console change rebuilds them exactly once. */
+	float BuiltSingleWidthScale = -1.0f;
+	float BuiltCompanionEdge = -1.0f;
+	float BuiltCompanionGlow = -1.0f;
+	bool bBuiltWithCompanion = false;
 
 	/**
 	 * The samplers, built once.
@@ -155,4 +199,7 @@ private:
 	 */
 	TUniquePtr<FWonderlandSwooshSampler> CompoundSampler;
 	TUniquePtr<FWonderlandSwooshSampler> SingleSampler;
+	TUniquePtr<FWonderlandSwooshSampler> CompanionSampler;
+	TUniquePtr<FWonderlandSwooshSampler> CompanionEdgeSampler;
+	TUniquePtr<FWonderlandSwooshSampler> CompanionGlowSampler;
 };

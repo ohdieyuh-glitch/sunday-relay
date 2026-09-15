@@ -51,6 +51,14 @@ struct FWonderlandUsagePreviewState
 	/** Blue, the arc behind it: the Single AI Agent channel. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Preview", meta = (ClampMin = "0", ClampMax = "100"))
 	float SingleAgentPercent = 100.0f;
+
+	/**
+	 * White, nested beside the blue: the imported LLM Companion (founder, 2026-09-15). Preview-only --
+	 * the usage contract has no LLM Companion channel yet, so this figure is the only thing that can
+	 * fill the white arc, and it is drawn only when UWonderlandUsageHudSettings::bShowLlmCompanionMeter is set.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Preview", meta = (ClampMin = "0", ClampMax = "100"))
+	float LlmCompanionPercent = 100.0f;
 };
 
 UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Wonderland Usage HUD"))
@@ -64,6 +72,15 @@ public:
 
 	UPROPERTY(Config, EditAnywhere, Category = "Source", meta = (EditCondition = "UsageSource == EWonderlandUsageSource::DevelopmentPreview"))
 	FWonderlandUsagePreviewState Preview;
+
+	/**
+	 * Draw the third, white LLM Companion arc beside the blue one, with the blue slimmed to make room
+	 * (WonderlandCompanionHud.h). Off, the HUD is exactly the approved two-meter instrument. On, the white
+	 * arc shows a figure only while the held reading is the development preview; under a real authority
+	 * it draws its track and no percentage, because nobody reports LLM Companion usage yet.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Composition")
+	bool bShowLlmCompanionMeter = false;
 };
 
 namespace WonderlandUsagePreview
