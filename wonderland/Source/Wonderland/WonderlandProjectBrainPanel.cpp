@@ -10,6 +10,7 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SConstraintCanvas.h"
 #include "Widgets/Layout/SScaleBox.h"
+#include "Widgets/Layout/SSpacer.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SLeafWidget.h"
 #include "Widgets/Text/STextBlock.h"
@@ -137,23 +138,28 @@ public:
 
 		// Halos round the glass panels: stacked outlines, fading outward, so each panel glows past its edge.
 		++Layer;
+		static const FSlateRoundedBoxBrush Halos[4] = {
+			FSlateRoundedBoxBrush(FLinearColor::Transparent, 16.0f, Violet(0.160f), 2.5f),
+			FSlateRoundedBoxBrush(FLinearColor::Transparent, 19.5f, Violet(0.125f), 2.5f),
+			FSlateRoundedBoxBrush(FLinearColor::Transparent, 23.0f, Violet(0.090f), 2.5f),
+			FSlateRoundedBoxBrush(FLinearColor::Transparent, 26.5f, Violet(0.055f), 2.5f),
+		};
 		for (const FRect& Rect : {Panel1, Panel2, Panel3, Panel4})
 		{
 			for (int32 Ring = 0; Ring < 4; ++Ring)
 			{
 				const float Grow = 2.0f + 3.5f * Ring;
-				const FSlateRoundedBoxBrush Halo(FLinearColor::Transparent, 14.0f + Grow, Violet(0.16f - 0.035f * Ring), 2.5f);
 				const FVector2f Min = At(Size, Rect.X0, Rect.Y0) - FVector2f(Grow, Grow);
 				const FVector2f Max = At(Size, Rect.X1, Rect.Y1) + FVector2f(Grow, Grow);
 				FSlateDrawElement::MakeBox(OutDrawElements, Layer, AllottedGeometry.ToPaintGeometry(Max - Min, FSlateLayoutTransform(Min)),
-					&Halo, ESlateDrawEffect::None, FLinearColor::White);
+					&Halos[Ring], ESlateDrawEffect::None, FLinearColor::White);
 			}
 		}
 
 		// The connectors: a glow pass, the line, a dot where it leaves the panel, and a mote of light travelling in.
 		++Layer;
 		static const FSlateRoundedBoxBrush Dot(FLinearColor::White, 10000.0f);
-		for (int32 Index = 0; Index < UE_ARRAY_COUNT(Connectors); ++Index)
+		for (int32 Index = 0; Index < static_cast<int32>(UE_ARRAY_COUNT(Connectors)); ++Index)
 		{
 			const FConnector& C = Connectors[Index];
 			const FVector2f P0 = At(Size, C.FromX, C.FromY);
