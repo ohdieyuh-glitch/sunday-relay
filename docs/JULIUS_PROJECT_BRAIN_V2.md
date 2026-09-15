@@ -250,21 +250,41 @@ with the real paid run 34739303313 imported, FRESH admits none of it.
 | Python with real processes (15), SDK (11), pinned venv (3) | `npx vitest run src/relay/workspace/julius-tools/python-` |
 | Integrated mission, in memory, real Python | `npx vitest run scripts/julius-brain-python-flow.test.ts` |
 | PostgreSQL store, contention, restore, process A/B drill | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-project-brain-drill.test.ts` |
-| Brain + Python across processes, restart, cross-process cancel, host crash | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npm run julius:brain:python-drill` |
+| Brain + Python across processes, restart, cross-process cancel, host crash | `JULIUS_BRAIN_DATABASE_URL=… npm run julius:brain:python-drill` (a dedicated Brain database) |
+| The dedicated database: dedicated, identified, encrypted, current, concurrent migration, immutable, artifact bytes | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-database-postgres.test.ts` (the server must offer TLS) |
+| Least-privilege roles, running the whole Brain + Python flow as the service role | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-roles-postgres.test.ts` (a server role that may create roles) |
+| The temporary carry: seal, open, lineage, rollback, journal | `npx vitest run src/relay/mission/julius/julius-brain-carry.test.ts` |
 | Archive import, state modes (domain) | `npx vitest run src/relay/mission/julius/julius-brain-archive-import.test.ts src/relay/mission/julius/julius-brain-state-modes.test.ts` |
 | State modes with a real interpreter | `npx vitest run src/relay/workspace/julius-tools/python-state-modes.test.ts` |
 | Archive import on PostgreSQL: parity, cold read, 6-way concurrent import, multi-group atomicity | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-archive-postgres.test.ts` |
 | Prepared live binding (bootstrap, mirror, typed context, checkpoint) | `npx vitest run relay-bridge/julius/project-brain-binding.test.ts`; on PostgreSQL with the live v1 repositories: `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-live-binding-postgres.test.ts` |
 
+In the tests, `DATABASE_URL` names a **server** to create throwaway databases on.
+The drills themselves write only to `JULIUS_BRAIN_DATABASE_URL`, never to the
+runtime's `DATABASE_URL`.
+
 Set `JULIUS_BRAIN_DRILL_RESTART` (e.g. `docker restart <container>`) to also
 restart the PostgreSQL server between processes; a restart is reported only
 when `pg_postmaster_start_time()` actually moved.
 
-## Schema changes
+## Schema: a dedicated database
 
-- `024_julius_project_brain.sql`: `julius_brains`, `julius_brain_records`,
-  `julius_brain_links`, `julius_brain_entities`. Nothing cascades.
-- `025_julius_python_executions.sql`: `julius_python_executions`.
+The Brain lives in a dedicated PostgreSQL database, never the Julius runtime
+database. It has its own schema `julius_brain` and its own migration chain in
+`src/relay/persistence/julius-brain-migrations/`, applied by
+`migrateJuliusBrainDatabase`. The runtime chain (`wonderland-migrations/`) is
+unchanged by this branch. See `docs/JULIUS_BRAIN_PERSISTENCE.md`.
+
+- `001_julius_brain_ledger`:
+  - `schema_migrations` and `database_identity` (environment);
+  - the `projects` registry;
+  - `brains`, `records`, `links`, `entities`.
+
+  Nothing cascades.
+- `002_julius_brain_python_executions`: `python_executions`, in the same
+  database, because settlement is one transaction with the Brain.
+- `003_julius_brain_content`: artifact bytes, content addressed.
+- `004_julius_brain_immutability`: the database refuses to change history.
 
 ## Not yet done (the private-beta gaps)
 
@@ -281,11 +301,18 @@ when `pg_postmaster_start_time()` actually moved.
 3. **Budget.** The service reserves and commits tool budget through
    `JuliusBudgetPort` when given one; the live ledger is not yet passed in.
 4. **Bridge routes.** `handleJuliusBrainApi` is not mounted in `relay-bridge`.
-5. **Semantic retrieval.** Evaluated and available; on the labelled fixture
+5. **The production Brain database and its service.** The home is decided: a
+   dedicated persistent PostgreSQL. The code-side rules are enforced and proven:
+   dedicated, identified, encrypted, current, immutable, least privilege.
+   Nothing is provisioned. The deployment proposal, the controlled Brain
+   service (OIDC, run-scoped sessions, server-side principals and state modes)
+   and its acceptance tests come after the qualification, per
+   `docs/JULIUS_BRAIN_PERSISTENCE.md`.
+6. **Semantic retrieval.** Evaluated and available; on the labelled fixture
    no candidate beat the keyword baseline on MRR, so it is not adopted.
-6. **The archive adapter.** The import contract is built and proven; the
+7. **The archive adapter.** The import contract is built and proven; the
    adapter from the Formal lane's archive tables is not, because that schema is
    temporary. Written against its final shape.
-7. **Windows venvs.** The host names its pid for liveness because a venv
+8. **Windows venvs.** The host names its pid for liveness because a venv
    `python.exe` is a redirector; crash-orphan termination was proven with the
    system interpreter, not inside a venv.

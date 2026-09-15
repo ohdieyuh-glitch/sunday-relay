@@ -11,13 +11,21 @@ is active.
 Function names are the anchors. Line numbers drift, so find each seam by name
 at rebase time.
 
+## Where the Brain lives (decided 2026-09-15)
+
+**A dedicated persistent PostgreSQL**, never the Julius runtime database. The
+architecture, the three separated persistence concerns, and the infrastructure
+and security contract are in `docs/JULIUS_BRAIN_PERSISTENCE.md`. The
+self-verifying export is backup, portability and disaster recovery. As a
+**temporary** carry between disposable jobs it is approved only until the
+database exists.
+
 ## What landing the branch alone would change
 
-Nothing is composed. **But migrations 024 and 025 are registered in
-`WONDERLAND_MIGRATIONS`**, and the live entrypoint calls `migrate()`, so every
-live database would gain the Brain and Python tables. They would be empty and
-unreferenced. It is still a schema change to the qualification runtime, so it
-too waits for the gate.
+**Nothing in any runtime database.** The Brain has its own schema and migration
+chain, and `wonderland-postgres.ts` is byte-identical to base. The runtime
+chain creates no Brain table (held by a static test). Brain tables exist only
+where `migrateJuliusBrainDatabase` is run against a dedicated database.
 
 ## Step 0 — refresh
 
@@ -32,42 +40,84 @@ too waits for the gate.
    Brain, Python, archive and binding tests; the harness gate; the four-pass
    typecheck; the repository boundary scanner.
 
+## Step 0.5 — the production Brain database proposal (a gate)
+
+Before any live wiring, return to the founder with a concrete deployment
+proposal that satisfies every item of the contract in
+`docs/JULIUS_BRAIN_PERSISTENCE.md`:
+
+- placement, authentication, credential scoping;
+- network boundary, encryption, backup, restore;
+- migrations, pooling, failure behaviour;
+- controlled service vs direct access;
+- development isolation, operational complexity.
+
+No vendor is chosen before the contract is agreed. The proposal must also pass
+that document's acceptance tests before step 1 goes live.
+
+**The Brain service is part of that proposal.** GitHub-hosted runners never hold
+a Brain database credential, so a live Julius run reaches the Brain through a
+controlled service that verifies GitHub OIDC tokens and issues run-scoped
+sessions. The binding is store-agnostic, but **the remote contract is not the
+raw `JuliusBrainStore`**. A client that could name any principal or read any
+entity would carry governance out of the service. The service must:
+
+- **bind principals server-side:** the session's run, and the principals that
+  run may act as;
+- **apply state-mode selection server-side**, so retrieval authority holds even
+  against a faulty client;
+- **expose handle-level operations:** bootstrap, commit as a session principal,
+  mode-selected context, checkpoint, resume, archive import.
+
 ## Step 1 — Brain persistence and bootstrap
 
 **Seam: `relay-bridge/julius-live-mission.ts` `main()`**, using the prepared
 `createLiveJuliusProjectBrainBinding` (`relay-bridge/julius/project-brain-binding.ts`).
 
-- **Construct** `JuliusBrainPostgresStore(pool)` right after the pool is created
-  and migrated. Then build the binding:
-  - `runs` is the runtime store;
-  - `legacyEntries` is `readJuliusLegacyBrainAppends(pool, …)`;
-  - `onReport` writes into the run's timeline and evidence.
-- **Call `binding.bootstrap({ runId })` after `bootstrap.submit`.**
-  `julius_brains.project_id` references the project row the seed creates.
-  `REFUSED` (ledger or checkpoint does not verify) refuses the start, the same
-  way the ledger-bound check does.
-- **Preflight** (`scripts/julius-live-preflight.ts`): add the Brain and Python
-  tables to its required-tables list.
+- **Construct the Brain client.** Normally this is the remote client of the
+  Brain service, authenticated with the job's OIDC token. The binding gets:
+  - `runs`: the runtime store, the run's own authority;
+  - `legacyEntries`: `readJuliusLegacyBrainAppends(runtimePool, …)`;
+  - `onReport`: writes into the run's timeline and evidence.
+- **Call `binding.bootstrap({ runId })` after `bootstrap.submit`.** The answer
+  decides whether the run may start:
+  - READY: proceed.
+  - REFUSED (the Brain does not verify) or UNAVAILABLE: proceed only when
+    `proceed` is true, meaning a FRESH run, which the Brain only adds to. A
+    CONTINUATION, LEARNING or REGRESSION run refuses to start.
+  - After a non-READY answer the binding is detached.
+- **At the end of the run:** record `binding.preservation()` in the run's
+  evidence. **Never report the run as preserved unless it says so.**
+- **Preflight:** `assertJuliusBrainDatabase(production)` runs **in the Brain
+  service**, over TLS. Runner preflight checks the service's health and its own
+  OIDC exchange, not a database.
 - **Harness:** remove each file that becomes reachable from
   `DECLARED_NOT_COMPOSED`, and regenerate.
 
-**⚠ Decision needed first: where the Brain lives.** The paid-run database is a
-per-job container, deleted at cleanup. A Brain inside it is lost after every
-run. Two options:
+**Only if live wiring must precede the database — the temporary carry:**
 
-| Option | Shape | Trade-off |
-|---|---|---|
-| **A. Carry** | export at cleanup (`exportJuliusBrain`) as a workflow artifact; `restoreJuliusBrainFromExport` + bundle hash check before bootstrap | no new infrastructure; artifacts expire; one lane at a time |
-| **B. Durable home** | a persistent PostgreSQL for the Brain; the rest of the live runtime stays per-job | the Brain is actually durable; one more secret and service |
-
-**Recommendation:** B is the authority. A can serve as the bridge until B
-exists. The binding takes a store, so either option works without changing it.
+- The job runs a Brain in its **own disposable dedicated database**. That is a
+  second database in the job's container, never the runtime database.
+- It follows the carry journal (`julius-brain-carry.ts`):
+  1. Open the prior sealed carry against the rollback floor.
+  2. Restore.
+  3. Run.
+  4. Checkpoint and export.
+  5. Seal.
+  6. Verify the read-back.
+  7. Upload.
+  8. Confirm the stored digest.
+- Disposable state is destroyed only when the journal says preserved.
+- The rollback floor and the carry key live where jobs cannot rewrite them.
+- This is removed from the live path when the database exists.
 
 **Proof:**
 - Bootstrap twice: `created: true`, then VERIFIED with `created: false`.
 - A tampered head is refused.
-- `npm run julius:brain:drill` in real-infra.
-- Preflight identity passes.
+- The unavailability rules hold: FRESH proceeds unpreserved, CONTINUATION
+  refuses.
+- `npm run julius:brain:drill` against a dedicated database.
+- The deployment acceptance tests in `JULIUS_BRAIN_PERSISTENCE.md`.
 
 ## Step 2 — mirror live writes, import paid history
 
@@ -85,7 +135,11 @@ The spread keeps `timeline`, so the ledger-bound check still sees it.
 
 1. Write the adapter from the Formal lane's **final** archive tables to
    `julius-paid-run-archive-export.v1`, read-only against `julius-postgres`.
-2. Seal, then import one run per commit.
+   Coordinate its shape with the Formal lane when they freeze the archive.
+2. Seal, then import one run per commit. Imports go **through the Brain
+   service**, never from a runner holding a database credential. An archive
+   import is also how a run that was unpreserved at the time reaches the Brain
+   later.
 3. Run `verifyJuliusBrainLedger`.
 4. Re-import: expect `ALREADY_IMPORTED`.
 5. Reconcile `accounting` against the paid-run ledger.
@@ -166,8 +220,9 @@ ids.
   checkpoint.
 - **End of drive:** call `binding.checkpoint(label)` after
   `driveJuliusRunToTerminal`.
-- **Across paid runs:** under option A, export at cleanup (next to the evidence
-  upload) and restore before bootstrap. Under option B, nothing extra.
+- **Across paid runs:** nothing extra. The Brain is in its durable database and
+  the runtime database is disposable. Only while the temporary carry is in use
+  does a job restore and re-export, per the carry journal (step 1).
 - **CONTINUATION** is a `stateMode` clause naming `resumes`. The resumed runs
   must exist in the Brain.
 
@@ -226,8 +281,10 @@ items 1–17). The host runner never serves live Julius.
 
 ## Step 9 — bridge API routes
 
-`relay-bridge/server.ts` mounts no Julius routes and holds no pool. Add a pool
-dependency and a route block for `handleJuliusBrainApi`.
+`relay-bridge/server.ts` mounts no Julius routes and holds no pool. Mount
+`handleJuliusBrainApi` in the Brain service (the bridge, if the proposal places
+the service there). Its pool is the Brain database's **service role** over TLS.
+Read routes answer "unavailable" when the database is down, never empty data.
 
 **⚠ Naming:** `brainStore` is already Relay's v1 `BrainMemoryStore`. Name the
 new dependency `juliusProjectBrain`.
@@ -254,6 +311,11 @@ Add to `julius-real-infra.yml` (none of these run in any workflow today):
 - `npm run julius:brain:python-drill`
 - `scripts/julius-brain-archive-postgres.test.ts`
 - `scripts/julius-brain-live-binding-postgres.test.ts`
+- `scripts/julius-brain-database-postgres.test.ts`, which needs a TLS-enabled
+  server
+- `scripts/julius-brain-roles-postgres.test.ts`
+- the deployment acceptance tests (OIDC policy, network probe, restore drills,
+  unavailability drill)
 - the Python isolation proof
 - `relay:persistence:recovery-drill`
 
@@ -265,7 +327,8 @@ with logical commits.
 | Work | Blocked on |
 |---|---|
 | Rebase, landing, every step above | the continuous-worker qualification gate |
-| Where the Brain lives (step 1) | a founder decision: carry or durable home |
+| Live Brain wiring (step 1) | the production database proposal (step 0.5) being accepted, and its acceptance tests |
+| The Brain service with OIDC and server-side governance | the proposal: where it runs, the protected environment |
 | The paid-history adapter (step 2) | the Formal lane's archive schema becoming final |
 | Typed evidence decorators (step 4) | the rebase, so they are written against current row shapes |
 | Building the container Python runner (step 6) | the qualification gate, because it changes the executor image, script and adapter the qualification runtime uses |
