@@ -145,6 +145,17 @@ The spread keeps `timeline`, so the ledger-bound check still sees it.
    service**, never from a runner holding a database credential. An archive
    import is also how a run that was unpreserved at the time reaches the Brain
    later.
+
+   **Open rule, to decide at step 2:** one workflow attempt must not reach the
+   Brain as two representations. The live mirror writes `legacy:<attempt>:…`;
+   the archive import writes `archive:<attempt>:…`. Both are the same attempt
+   identity, so importing an attempt that was already mirrored, even partially,
+   would record its decisions twice. The importer must first check for mirrored
+   records of the attempt. Then it either:
+   - refuses, when the attempt was preserved; or
+   - reconciles explicitly, linking and never duplicating, when it was not.
+
+   Nothing decides this silently.
 3. Run `verifyJuliusBrainLedger`.
 4. Re-import: expect `ALREADY_IMPORTED`.
 5. Reconcile `accounting` against the paid-run ledger.
