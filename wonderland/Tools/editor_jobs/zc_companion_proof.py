@@ -101,8 +101,11 @@ def job():
     record("C03", "usage HUD on screen once", ui.is_usage_hud_on_screen() and ui.get_usage_hud_creations() == 1,
            creations=ui.get_usage_hud_creations())
     titles = [str(ui.get_companion_terminal_title(i)) for i in range(ui.get_companion_terminal_count())]
-    record("C04", "both companion terminals are on screen with their presentation names",
-           ui.are_companion_terminals_on_screen() and titles == ["GPT 6 Astra", "Claude Code Fable 5"], titles=titles)
+    # The three consoles are one instrument (founder, 2026-09-15): mounted at attach, shown only with Ctrl+T.
+    record("C04", "the companion terminals are mounted and hidden until the Julius terminal is up",
+           ui.get_companion_terminal_count() == 2 and titles == ["GPT 6 Astra", "Claude Code Fable 5"]
+           and not ui.are_companion_terminals_on_screen(),
+           titles=titles, on_screen=ui.are_companion_terminals_on_screen())
     shot("zc_01_gameplay_behind.png")
 
     # ------------------------------------------------------------------ the portrait: camera in front of the Dog
@@ -160,7 +163,11 @@ def job():
            focused=focused, typed=typed, lines=lines)
     shot("zc_04_companion_line_not_sent.png")
     ui.close_overlay()
-    yield 0.5
+    yield 0.6
+    record("C06b", "closing the Julius terminal takes both companion terminals with it",
+           not ui.is_live_terminal_open() and not ui.are_companion_terminals_on_screen() and ui.get_companion_terminal_count() == 2,
+           terminal=ui.is_live_terminal_open(), companions=ui.are_companion_terminals_on_screen(),
+           capture=shot("zc_04b_terminals_gone.png"))
     if boom is not None and arm is not None:
         boom.set_editor_property("target_arm_length", arm)
 
