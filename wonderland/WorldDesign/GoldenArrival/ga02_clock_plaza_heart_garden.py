@@ -132,29 +132,25 @@ def build():
     slabs = ["slab0", "slab3", "slab6"]
     materials = ["MI_V2_PlazaCream"] * 6 + ["MI_V2_PlazaWarm"] * 3 + ["MI_V2_PlazaGrey"]
     n = int(PLAZA_R // cell) + 1
-    # The lawn's small plantings stay where they are and get a stone ring planter each, so the
-    # paving runs up to a planter instead of stopping in a ragged hole (GA02a left 64 holes).
-    planters = []
-    for (ox, oy, orad, zmin, zmax, mesh) in obstacles:
-        # Upright plantings only (zmax >= 60): flat ground flowers sit happily on paving. A walk test
-        # found six planters plus the cone topiaries jamming the Dog on the plaza's east side.
-        if math.hypot(ox - cx, oy - cy) < PLAZA_R - 60 and 60 <= zmax < 200 and zmin < 80 and orad < 180 and mesh not in ("SM_garden_urn",):
-            planters.append((ox, oy))
-    kept_planters = []
-    for (px, py) in planters:
-        if all(math.hypot(px - qx, py - qy) > 150 for (qx, qy) in kept_planters):
-            kept_planters.append((px, py))
-    for k, (px, py) in enumerate(kept_planters):
-        # Walk-through decoration: a 32 cm stone ring is a trip hazard, not a wall.
-        instance("PlazaPlanterRings", "ring_base", "MI_V2_IvoryStone", (px, py, GROUND), (0.36, 0.36, 0.42), rng.uniform(0, 360), collides=False)
+    # MQ07 (2026-09-15): GA02b gave each small generator planting on the lawn a stone ring and paved round it with a
+    # 1.5 m clearance -- 12 holes. FL04 then replaced those plantings with flower beds standing in the holes, and from
+    # the plaza (survey sv1, top-down cp0) the floor read as two ragged fans of loose slabs on a lawn. The generator's
+    # four rose cone topiaries stood in the paving ring as well and cut 2 m holes in it (mq07off3: 91 of ~136 slabs).
+    # All of them are gone from the plaza -- FL04 sinks its beds inside it without replanting; mq07 trims the cones, two
+    # topiary balls and two rose bushes -- and the courses run whole round the fountain. The cones are not re-planted:
+    # outside the rim the diagonals hold the plaza's urns and the east-west axis leads to the side gates (AR03), and the
+    # court keeps its urns, benches, lamps, basin flowers and clock towers.
+    TRIMMED = ("SM_topiary_cone_roses", "SM_flower_cluster", "SM_blossom_cluster", "SM_ground_blooms", "SM_ground_flowers",
+               "SM_lavender_heads", "SM_topiary_ball", "SM_rose_bush")
+    obstacles = [o for o in obstacles if not (o[5] in TRIMMED and math.hypot(o[0] - cx, o[1] - cy) < PLAZA_R + 50.0)]
 
     def solid_clear(x, y, radius, margin):
         for (ox, oy, orad, zmin, zmax, mesh) in obstacles:
             if zmin > 150 or zmax < 200:
-                continue      # low plantings sit in planters or on paving; raised pieces do not touch the ground
+                continue      # raised pieces do not touch the ground; the plaza's low plantings are gone (MQ07)
             if math.hypot(x - ox, y - oy) < orad * 0.72 + radius + margin:
                 return False
-        return all(math.hypot(x - px, y - py) > 92 + radius for (px, py) in kept_planters)
+        return True
 
     # CONCENTRIC COURSES, not a grid. GA02a/b laid a square grid and from above it read as scattered
     # tiles on a lawn; a round plaza is laid in rings, each slab turned to face the fountain.

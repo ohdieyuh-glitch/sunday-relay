@@ -29,6 +29,9 @@ SINK_UU = 100000.0
 # where a generator cluster stood ON PAVING, it is sunk and not replanted -- a bed on the stone reads as dropped
 # there (hg4: two beds on the arrival plaza, one on its medallion). The arrival plaza has GA05's planters.
 NO_BEDS = [(-660.0, 660.0, -1600.0, 900.0)]
+# MQ07 (2026-09-15): nor inside the Clock Plaza's paved round (r 10.5 m about (0, 54 m)), whose courses now run whole;
+# its planting is GA02's basin rings and the four rose cones.
+NO_BEDS_CIRCLES = [(0.0, 5400.0, 1050.0)]
 RUNS = {"daisy": "WL_Flower_Daisy_Run", "lavender": "WL_Flower_Lavender_Run", "rose": "WL_Flower_Rose_Run"}
 
 
@@ -78,7 +81,7 @@ def build():
         lead = blooms[0] if blooms else group[0]
         tr = lead["transform"]
         x, y, yaw = tr[0], tr[1], tr[4]
-        if any(x0 <= x <= x1 and y0 <= y <= y1 for (x0, x1, y0, y1) in NO_BEDS):
+        if any(x0 <= x <= x1 and y0 <= y <= y1 for (x0, x1, y0, y1) in NO_BEDS) or                 any(math.hypot(x - qx, y - qy) < qr for (qx, qy, qr) in NO_BEDS_CIRCLES):
             continue                                  # sunk, not replanted: it stood on paving (hg4)
         base = tr[2] - 1.0 if blooms else lead["zmin"] + 6.0
         size = max(g["radius"] for g in group)
