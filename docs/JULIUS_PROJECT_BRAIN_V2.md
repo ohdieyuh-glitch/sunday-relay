@@ -254,6 +254,7 @@ with the real paid run 34739303313 imported, FRESH admits none of it.
 | Archive import, state modes (domain) | `npx vitest run src/relay/mission/julius/julius-brain-archive-import.test.ts src/relay/mission/julius/julius-brain-state-modes.test.ts` |
 | State modes with a real interpreter | `npx vitest run src/relay/workspace/julius-tools/python-state-modes.test.ts` |
 | Archive import on PostgreSQL: parity, cold read, 6-way concurrent import, multi-group atomicity | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-archive-postgres.test.ts` |
+| Prepared live binding (bootstrap, mirror, typed context, checkpoint) | `npx vitest run relay-bridge/julius/project-brain-binding.test.ts`; on PostgreSQL with the live v1 repositories: `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-live-binding-postgres.test.ts` |
 
 Set `JULIUS_BRAIN_DRILL_RESTART` (e.g. `docker restart <container>`) to also
 restart the PostgreSQL server between processes; a restart is reported only
@@ -267,10 +268,12 @@ when `pg_postmaster_start_time()` actually moved.
 
 ## Not yet done (the private-beta gaps)
 
-1. **Composition.** The live root does not yet mirror v1 writes
-   (`createJuliusBrainMirroringWriter`), compile v2 context for workers, or
-   expose `python.run` to worker turns. Deliberately deferred until the
-   continuous-worker qualification lands.
+1. **Composition.** The live root does not yet mirror v1 writes, compile v2
+   context for workers, or expose `python.run` to worker turns. Deliberately
+   deferred until the continuous-worker qualification lands. The binding for
+   steps 1-5 is prepared and proven but not composed
+   (`relay-bridge/julius/project-brain-binding.ts`); the exact sequence is
+   `docs/JULIUS_BRAIN_LIVE_INTEGRATION_PLAN.md`.
 2. **Production isolation for Python.** The executor sandbox image has no
    Python and the Docker path runs bash only; `python.run` is not in
    `JuliusToolId`. Hostile-code isolation requires that path. The design and
