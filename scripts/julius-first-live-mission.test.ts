@@ -156,10 +156,19 @@ describe('the paid stage is gated, and the unpaid stage cannot pay', () => {
     expect(liveStep()).toContain('--confirm-live');
   });
 
-  it('the live step bounds the run loop with a finite tick ceiling', () => {
+  /**
+   * THE BOUND IS DERIVED, AND STILL FINITE. The default used to be a literal
+   * tick count; it is now "derived", and the drive counts the allowance from
+   * the mission's structure with a hard maximum it never passes.
+   */
+  it('the live step bounds the run loop with the allowance Julius derives, which an input can only tighten', () => {
     expect(liveStep(), 'an unbounded run loop can spend until the budget stops it')
       .toMatch(/--max-ticks/u);
-    expect(workflow, 'max_ticks must have a finite default').toMatch(/max_ticks:[\s\S]*?default:\s*'\d+'/u);
+    expect(workflow, 'max_ticks defaults to the derived allowance').toMatch(/max_ticks:[\s\S]*?default:\s*'derived'/u);
+    expect(read('src/relay/mission/julius/julius-tick-budget.ts'), 'the derived allowance never passes the hard maximum')
+      .toContain('Math.min(input.budget.hardMaxTicks, input.budget.plannedTicks + beyond + retries)');
+    expect(read('relay-bridge/julius/live-composition.ts'), 'an exhausted allowance fails the run with its numbers')
+      .toContain("const reasonCode = 'tick_budget_exhausted';");
   });
 
   it('the preflight role-resolution step never passes --confirm-live', () => {
@@ -1336,6 +1345,30 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
     expect(output).toContain('julius_exit=0');
   });
 
+  /**
+   * THE TICK ACCOUNT REACHES THE BUNDLE. Attempt 4's evidence could say only
+   * "stalled after 32 ticks"; what the mission was permitted, what it used and
+   * when its wall clock ran out are now lines of their own, closed tokens and
+   * numbers only, and a line that strays from that shape is withheld.
+   */
+  it('keeps the tick budget, the wall-clock deadline and the tick account, and nothing shaped otherwise', () => {
+    const kept = [
+      '  tick budget: planned=73 hard_max=1729 units=PROMPT_ARCHITECT,CODING_AGENT repair_rounds=3 segment_ceiling=4 reviewer=required attempts=3 override=none version=julius-tick-budget.v1',
+      '  wall clock deadline: 2026-09-13T20:25:20.000Z',
+      '  wall clock deadline: UNKNOWN',
+      '  ticks: consumed=47 allowance=73 remaining=26 beyond_main_path=0 retries=0 exhausted=no',
+      'RESULT: FAILED after 73 ticks',
+    ];
+    const output = buildEvidence([
+      ...kept,
+      '  tick budget: planned=73 hard_max=1729 units=PROMPT_ARCHITECT reason=whatever the worker said',
+      '  ticks: consumed=47 allowance=73 note=free text',
+    ].join('\n'));
+    for (const line of kept) expect(output, line).toContain(line);
+    expect(output).not.toContain('whatever the worker said');
+    expect(output).not.toContain('note=free text');
+  });
+
   it('keeps the failure outcomes — the runs that most need evidence', () => {
     // A paid mission that is BLOCKED or crashes must state its outcome in its
     // own artifact; the first cut of the allowlist kept only success shapes.
@@ -1530,18 +1563,42 @@ describe('F9 — dispatch inputs are validated before anything is built', () => 
     }
   });
 
-  it('refuses a tick count outside the bounds, in both directions', () => {
-    expect(runGate({ ...base, MAX_TICKS: '7' }), 'below the floor the run is cut off after being paid for').not.toBe(0);
-    expect(runGate({ ...base, MAX_TICKS: '33' }), 'above the ceiling the bound stops bounding').not.toBe(0);
-    expect(runGate({ ...base, MAX_TICKS: '10000' })).not.toBe(0);
+  /**
+   * REWRITTEN AFTER QUALIFICATION ATTEMPT 4 (run 34774471909). The gate used to
+   * refuse anything above MAX_ALLOWED=32, a ceiling sized for a six-task graph
+   * that stopped a run still inside every contract bound. The allowance is now
+   * Julius's to derive and print; this input can only tighten it, because the
+   * drive takes the smaller of the two, so the gate keeps a floor and a shape.
+   */
+  it('accepts "derived", and a whole-number tightening at or above the floor', () => {
+    expect(runGate({ ...base, MAX_TICKS: 'derived' }), 'the derived allowance is the default').toBe(0);
     expect(runGate({ ...base, MAX_TICKS: '8' }), 'the floor itself is allowed').toBe(0);
-    expect(runGate({ ...base, MAX_TICKS: '32' }), 'the ceiling itself is allowed').toBe(0);
+    expect(runGate({ ...base, MAX_TICKS: '33' }), 'a number above the derivation cannot loosen it, only fail to tighten it').toBe(0);
+    expect(runGate({ ...base, MAX_TICKS: '999999' })).toBe(0);
   });
 
-  it('cannot exceed the entrypoint\u2019s own default bound', () => {
-    // `driveJuliusRunToTerminal` defaults to 32 ticks, so the input may only
-    // ever tighten Julius's bound, never loosen it.
-    expect(gate()).toContain('MAX_ALLOWED=32');
+  it('refuses a count below the floor, a leading zero, and a number too long to be a tick count', () => {
+    expect(runGate({ ...base, MAX_TICKS: '7' }), 'below the floor the run is cut off after being paid for').not.toBe(0);
+    expect(runGate({ ...base, MAX_TICKS: '08' }), 'the entrypoint reads no leading zero, so the gate must not pass one').not.toBe(0);
+    expect(runGate({ ...base, MAX_TICKS: '1000000' })).not.toBe(0);
+    expect(runGate({ ...base, MAX_TICKS: 'Derived' })).not.toBe(0);
+  });
+
+  it('has no fixed ceiling of its own: the drive derives the allowance and an override only tightens it', () => {
+    expect(gate()).not.toContain('MAX_ALLOWED');
+    const composition = read('relay-bridge/julius/live-composition.ts');
+    expect(composition, 'the override is applied as a minimum').toContain('Math.min(now.allowance, override)');
+    const entrypoint = readFileSync(resolve(ROOT, 'relay-bridge/julius-live-mission.ts'), 'latin1');
+    expect(entrypoint, 'the live drive itself is bounded by the mission structure')
+      .toMatch(/driveJuliusRunToTerminal\(\{[^}]*\n\s*verification: runtime\.verification,/u);
+    expect(entrypoint, 'and the allowance is printed before the first dispatch').toContain('tick budget: planned=');
+  });
+
+  it('records when the wall clock started as a step output, and the live step reads it by name', () => {
+    const outFile = join(mkdtempSync(join(tmpdir(), 'julius-gate-started-')), 'out.txt');
+    expect(runGate({ ...base, GITHUB_OUTPUT: outFile })).toBe(0);
+    expect(readFileSync(outFile, 'utf8')).toMatch(/^job_started_at=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/mu);
+    expect(workflow.slice(workflow.indexOf("- name: 'LIVE: run the first real Julius mission'"))).toContain('JULIUS_JOB_STARTED_AT: ${{ steps.inputs_gate.outputs.job_started_at }}');
   });
 
   it('refuses a mistyped confirmation instead of silently running a dry run', () => {

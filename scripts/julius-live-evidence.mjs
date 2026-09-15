@@ -40,6 +40,11 @@ const ALLOWED = [
   /^RESULT: [A-Z_]+( at bootstrap)? — .+$/u,
   /^JULIUS LIVE MISSION crashed: .+$/u,
   /^  cause: .+$/u,
+  // The tick account: what the mission's structure permitted, before the first
+  // dispatch, and what the run consumed. Closed tokens and numbers only.
+  /^  tick budget: planned=\d+ hard_max=\d+ units=[A-Za-z_,]+ repair_rounds=\d+ segment_ceiling=\d+ reviewer=(required|not_required) attempts=\d+ override=(none|\d+) version=julius-tick-budget\.v1$/u,
+  /^  wall clock deadline: (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z|UNKNOWN)$/u,
+  /^  ticks: consumed=\d+ allowance=\d+ remaining=\d+ beyond_main_path=\d+ retries=\d+ exhausted=(yes|no)$/u,
   /^Run [\w:.-]+ accepted in state [A-Z_]+; driving the Julius run loop\.$/u,
   /^  run: [\w:.-]+$/u,
   /^  task [\w:.-]+ \[[\w:.-]+\/[\w:.-]+\] → [A-Z_]+$/u,

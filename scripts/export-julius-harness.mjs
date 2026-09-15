@@ -269,6 +269,9 @@ const FILE_RULES = [
   // it is the coordinator's account of when work stops, and filing it under the
   // Coding Agent would read as that slot owning its own barrier.
   ['src/relay/mission/julius/julius-segment-lineage.ts', 'TASK GRAPH / SCHEDULER'],
+  // How many run-loop ticks a mission's own structure permits. The scheduler's
+  // account of how much it may dispatch, counted from the task graph it owns.
+  ['src/relay/mission/julius/julius-tick-budget.ts', 'TASK GRAPH / SCHEDULER'],
   // What a worker may ask Julius to look at, and what it receives back. Sits
   // with the lifecycle vocabulary rather than with evidence: the ASK is a
   // checkpoint and the ANSWER arrives as a continuation, both of which are the
