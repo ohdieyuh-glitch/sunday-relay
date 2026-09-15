@@ -906,6 +906,15 @@ export function juliusArchiveHistoryConflicts(archive: JuliusPaidRunArchiveExpor
   const listed = new Set(archive.brainEntries.map((item) => item.entryId));
   const unlisted = [...live.entryIds].filter((entryId) => !listed.has(entryId)).sort();
   if (unlisted.length > 0) conflicts.push(`the live run holds v1 entr${unlisted.length === 1 ? 'y' : 'ies'} the export does not list: ${unlisted.slice(0, 8).join(', ')}`);
+  // The same entry id must be the same entry: its kind and, where the export knows it, its task. Unknown contradicts nothing.
+  for (const item of archive.brainEntries) {
+    const state = live.byEntryId.get(item.entryId);
+    if (state === undefined) continue;
+    const facts = (state.body as { facts?: Record<string, unknown> }).facts;
+    const liveKind = state.kind === 'TRACE' && typeof facts?.v1Kind === 'string' ? facts.v1Kind : state.kind;
+    if (liveKind !== item.kind) conflicts.push(`v1 entry ${item.entryId} is a ${liveKind} in the live run; the export says ${item.kind}`);
+    if (!item.unknown.includes('taskId') && item.taskId !== state.scope.taskId) conflicts.push(`v1 entry ${item.entryId} belongs to task ${state.scope.taskId ?? 'none'} in the live run; the export says ${item.taskId ?? 'none'}`);
+  }
   const sealed = preservation.evidence.sealed;
   if (sealed !== null && sealed.expectedEntries !== archive.brainEntries.length) conflicts.push(`the live run sealed ${sealed.expectedEntries} v1 entries; the export lists ${archive.brainEntries.length}`);
   return conflicts;
