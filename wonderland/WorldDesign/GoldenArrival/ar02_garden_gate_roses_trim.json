@@ -1,0 +1,35 @@
+{
+ "pass": "AR02_TRIM",
+ "title": "Garden gate: the generator's blossom-bulb floral arch behind the gold arch sunk (reversible)",
+ "trims": [
+  {
+   "name": "StaticMeshActor_7",
+   "label": "Corridor_FloralArch",
+   "mesh": "SM_floral_arch",
+   "index": null,
+   "why": "floral arch of speckled blossom bulbs 4 m behind the gold garden arch",
+   "before": [
+    0.0,
+    3600.0,
+    80.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    1.1
+   ],
+   "after": [
+    0.0,
+    3600.0,
+    -99920.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    1.1
+   ]
+  }
+ ]
+}

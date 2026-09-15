@@ -5,6 +5,8 @@
 # that is not the recorded one, and REVERT = True puts every before back. SAVE = False previews.
 # The founder may be editing the map: a save refuses when the map had unsaved changes before this job
 # (MAP_WAS_DIRTY_OK = True for this session's own preview).
+# A trim with "index": null names a plain generator ACTOR by object name; its nine floats are the actor's location,
+# rotation (pitch, yaw, roll) and scale, held to the same before/after rule (AR02, 2026-09-15).
 import json
 
 SPEC = globals().get("SPEC")
@@ -30,9 +32,29 @@ def job():
     by_label = {a.get_name(): a for a in batches}
     by_label.update({"label:" + a.get_actor_label(): a for a in batches})
     grouped = {}
+    actor_trims = [t for t in spec["trims"] if t.get("index") is None]
     for t in spec["trims"]:
+        if t.get("index") is None:
+            continue
         grouped.setdefault(t.get("name") or ("label:" + t["label"]), []).append(t)
     changed, refused = 0, []
+    if actor_trims:
+        by_name = {a.get_name(): a for a in eas.get_all_level_actors()}
+        for t in actor_trims:
+            a = by_name.get(t["name"])
+            if a is None:
+                refused.append("%s: actor not found" % t["name"])
+                continue
+            loc, rot, sc = a.get_actor_location(), a.get_actor_rotation(), a.get_actor_scale3d()
+            have = [loc.x, loc.y, loc.z, rot.pitch, rot.yaw, rot.roll, sc.x, sc.y, sc.z]
+            if max(abs(x - y) for x, y in zip(have, t[source])) > TOL:
+                refused.append("%s is %s, expected %s" % (t["name"], [round(v, 2) for v in have], t[source]))
+                continue
+            v = [float(x) for x in t[target]]
+            a.modify()
+            a.set_actor_location_and_rotation(unreal.Vector(v[0], v[1], v[2]), unreal.Rotator(roll=v[5], pitch=v[3], yaw=v[4]), False, True)
+            a.set_actor_scale3d(unreal.Vector(v[6], v[7], v[8]))
+            changed += 1
     for label, trims in grouped.items():
         batch = by_label.get(label)
         if batch is None:

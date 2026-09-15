@@ -1,0 +1,21 @@
+{
+ "rows": [
+  {
+   "name": "StaticMeshActor_7",
+   "label": "Corridor_FloralArch",
+   "mesh": "SM_floral_arch",
+   "index": null,
+   "transform": [
+    0.0,
+    3600.0,
+    80.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    1.1
+   ]
+  }
+ ]
+}
