@@ -58,7 +58,8 @@ export interface JuliusBrainApiEntity {
   readonly confidence: number | null;
   readonly createdBy: JuliusBrainPrincipal;
   readonly updatedBy: JuliusBrainPrincipal;
-  readonly updatedAt: string;
+  /** null: Unknown. */
+  readonly updatedAt: string | null;
   readonly supersededBy: string | null;
   readonly contradictedBy: readonly string[];
   readonly editable: boolean;

@@ -19,7 +19,7 @@ import { JuliusBrainPostgresStore } from '../src/relay/persistence/julius-brain-
 const enabled = (process.env.JULIUS_REAL_INFRA === '1' || process.env.JULIUS_REAL_POSTGRES === '1') && (process.env.DATABASE_URL ?? '') !== '';
 const suite = enabled ? describe : describe.todo;
 
-const CHAIN = ['001_julius_brain_ledger', '002_julius_brain_python_executions', '003_julius_brain_content', '004_julius_brain_immutability'];
+const CHAIN = ['001_julius_brain_ledger', '002_julius_brain_python_executions', '003_julius_brain_content', '004_julius_brain_immutability', '005_julius_brain_unknown_occurrence'];
 
 async function freshDatabase(label: string): Promise<string> {
   const name = `jbdb${label}${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
@@ -107,10 +107,13 @@ suite('the dedicated Project Brain database', () => {
       await refused('DELETE FROM julius_brain.projects', 'julius_brain_immutable: DELETE on projects');
       await refused('UPDATE julius_brain.brains SET head_sequence=head_sequence-1', 'a Brain head never moves backwards');
       await refused(`UPDATE julius_brain.brains SET identity=jsonb_set(identity,'{title}','"renamed"')`, 'a Brain identity never changes');
+      // An Unknown occurrence time is stored as NULL and reads back as null.
+      expect((await julius.create('CONSTRAINT', { statement: 'time unknown', status: 'ACTIVE' }, { key: 'unknown-time', scope: { missionId: 'mission:x' }, occurredAt: null })).outcome).toBe('COMMITTED');
+      expect((await pool.query("SELECT count(*)::int AS n FROM julius_brain.records WHERE occurred_at IS NULL")).rows[0].n).toBe(1);
       // What the store itself does still works, and the ledger still verifies.
       expect((await julius.create('CONSTRAINT', { statement: 'three', status: 'ACTIVE' }, { key: 'three', scope: { missionId: 'mission:x' } })).outcome).toBe('COMMITTED');
       expect((await julius.verify()).ok).toBe(true);
-      expect((await store.head('brain:prj-immutable', 'prj-immutable'))!.sequence).toBe(3);
+      expect((await store.head('brain:prj-immutable', 'prj-immutable'))!.sequence).toBe(4);
     });
   }, 120_000);
 

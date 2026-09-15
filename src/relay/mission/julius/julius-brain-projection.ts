@@ -67,8 +67,10 @@ export interface JuliusBrainEntityState {
   readonly recordIds: readonly string[];
   readonly createdSequence: number;
   readonly updatedSequence: number;
-  readonly createdAt: string;
-  readonly updatedAt: string;
+  /** When the first record's content happened; null when Unknown. */
+  readonly createdAt: string | null;
+  /** When the latest record's content happened; null when Unknown. */
+  readonly updatedAt: string | null;
   readonly createdBy: JuliusBrainPrincipal;
   readonly updatedBy: JuliusBrainPrincipal;
   readonly lifecycle: JuliusBrainLifecycle;
@@ -357,7 +359,8 @@ export function applyJuliusBrainRecord(access: JuliusBrainEntityAccess, record: 
     recordIds: [...(current?.recordIds ?? []), record.recordId],
     createdSequence: current?.createdSequence ?? record.sequence,
     updatedSequence: record.sequence,
-    createdAt: current?.createdAt ?? record.occurredAt,
+    // `current ? … :` rather than `??`: an Unknown creation time stays Unknown, never replaced by a later one.
+    createdAt: current ? current.createdAt : record.occurredAt,
     updatedAt: record.occurredAt,
     createdBy: current?.createdBy ?? record.principal,
     updatedBy: record.principal,

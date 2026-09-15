@@ -174,7 +174,12 @@ export interface JuliusBrainDraft {
   readonly provenance: JuliusBrainProvenance;
   /** Deterministic per source. The same key with the same content is a replay. */
   readonly idempotencyKey: string;
-  readonly occurredAt: string;
+  /**
+   * When what the record describes happened, or null when that was never
+   * recorded — an archived finding with no time is Unknown, never stamped with
+   * the run's end or the moment it was imported. `recordedAt` is always known.
+   */
+  readonly occurredAt: string | null;
 }
 
 export interface JuliusBrainRecord extends JuliusBrainDraft {
@@ -490,7 +495,7 @@ export function validateJuliusBrainDraft(draft: JuliusBrainDraft): string[] {
     if (!Number.isSafeInteger(draft.expectedVersion) || draft.expectedVersion < 1) errors.push('expectedVersion: must be the current version');
   }
   if (!isJuliusBrainId(draft.idempotencyKey)) errors.push('idempotencyKey: invalid');
-  if (!isIso(draft.occurredAt)) errors.push('occurredAt: must be an ISO timestamp');
+  if (draft.occurredAt !== null && !isIso(draft.occurredAt)) errors.push('occurredAt: must be an ISO timestamp or null (Unknown)');
   if (!(JULIUS_BRAIN_RETENTION as readonly string[]).includes(draft.retention)) errors.push('retention: unknown');
   if (!(JULIUS_BRAIN_SENSITIVITY as readonly string[]).includes(draft.sensitivity)) errors.push('sensitivity: unknown');
   if (draft.confidence !== null && (typeof draft.confidence !== 'number' || !Number.isFinite(draft.confidence) || draft.confidence < 0 || draft.confidence > 1)) {

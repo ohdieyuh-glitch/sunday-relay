@@ -129,4 +129,28 @@ describe('Project Brain export', () => {
     expect(verifyJuliusBrainEvaluationContext(JSON.parse(JSON.stringify(context)))).toBe(true);
     expect(verifyJuliusBrainEvaluationContext({ ...context, entities: context.entities.slice(1) })).toBe(false);
   });
+
+  it('an occurrence time that was never recorded stays Unknown through commit, revision, verification, export and restore', async () => {
+    const store = createJuliusBrainMemoryStore();
+    const service = createJuliusProjectBrainService({ store, clock: { now: () => '2026-09-15T12:00:00.000Z' } });
+    await service.initialize({ brainId: BRAIN, projectId: PROJECT, title: 'Unknown times', principal: JULIUS });
+    const julius = (await service.open({ brainId: BRAIN, projectId: PROJECT, principal: JULIUS }))!;
+    const id = ok(await julius.create('FINDING', { findingClass: 'REVIEWER_FINDING', severity: 'UNKNOWN', statement: 'recorded without a time', blocking: false, status: 'OPEN', juliusFindingId: null }, { key: 'f', scope: { missionId: MISSION }, occurredAt: null }));
+    expect(await julius.create('FINDING', { findingClass: 'RISK', severity: 'LOW', statement: 'x', blocking: false, status: 'OPEN', juliusFindingId: null }, { key: 'bad', scope: { missionId: MISSION }, occurredAt: 'last tuesday' }))
+      .toMatchObject({ outcome: 'REFUSED', reasonCode: 'invalid_draft' });
+    const created = (await julius.entity(id))!;
+    expect([created.createdAt, created.updatedAt]).toEqual([null, null]);
+    const revised = await julius.revise(id, { ...created.body, status: 'RESOLVED' }, { key: 'f-resolved', expectedVersion: 1, occurredAt: '2026-09-15T13:00:00.000Z' });
+    expect(revised.outcome).toBe('COMMITTED');
+    // The resolution's time is known; the finding's own creation time is still Unknown, not borrowed from it.
+    expect(await julius.entity(id)).toMatchObject({ createdAt: null, updatedAt: '2026-09-15T13:00:00.000Z' });
+    expect((await julius.history()).records.map((record) => record.occurredAt)).toEqual([null, '2026-09-15T13:00:00.000Z']);
+    expect((await julius.verify()).ok).toBe(true);
+
+    const bundle = (await exportJuliusBrain({ store, brainId: BRAIN, projectId: PROJECT, exportedBy: JULIUS, exportedAt: '2026-09-15T14:00:00.000Z' }))!;
+    expect(renderJuliusBrainExportMarkdown(bundle)).toContain('| Unknown |');
+    const restored = createJuliusBrainMemoryStore();
+    expect(await restoreJuliusBrainFromExport(restored, JSON.parse(JSON.stringify(bundle)))).toMatchObject({ outcome: 'RESTORED' });
+    expect(await readAllJuliusBrainEntities(restored, BRAIN, PROJECT)).toEqual(await readAllJuliusBrainEntities(store, BRAIN, PROJECT));
+  });
 });

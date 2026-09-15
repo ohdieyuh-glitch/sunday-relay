@@ -65,7 +65,8 @@ export interface JuliusBrainWriteOptions {
   readonly retention?: JuliusBrainRetention;
   readonly sensitivity?: JuliusBrainSensitivity;
   readonly provenance?: JuliusBrainProvenance;
-  readonly occurredAt?: string;
+  /** Omitted: now. null: the time is Unknown. */
+  readonly occurredAt?: string | null;
 }
 
 export const juliusLink = (relation: JuliusBrainLinkRelation, target: string, targetVersion: number | null = null): JuliusBrainLink =>
@@ -106,7 +107,7 @@ export interface JuliusBrainProvenanceView {
   readonly versions: readonly {
     readonly recordId: string; readonly sequence: number; readonly entityVersion: number; readonly op: string;
     readonly principal: JuliusBrainPrincipal; readonly provenance: JuliusBrainProvenance;
-    readonly occurredAt: string; readonly recordedAt: string; readonly contentHash: string; readonly chainHash: string;
+    readonly occurredAt: string | null; readonly recordedAt: string; readonly contentHash: string; readonly chainHash: string;
   }[];
   /** What this entity was derived from, transitively (depth-bounded). */
   readonly derivation: readonly { readonly relation: JuliusBrainLinkRelation; readonly from: string; readonly to: string; readonly depth: number; readonly lifecycle: JuliusBrainLifecycle | 'UNREADABLE' | 'MISSING' }[];
@@ -129,7 +130,7 @@ export interface JuliusBrainHandle {
   draft(kind: JuliusBrainRecordKind, body: JuliusBrainBody, options: JuliusBrainWriteOptions): JuliusBrainDraft;
   create(kind: JuliusBrainRecordKind, body: JuliusBrainBody, options: JuliusBrainWriteOptions): Promise<JuliusBrainWriteResult>;
   revise(entityId: string, body: JuliusBrainBody, options: JuliusBrainWriteOptions & { readonly expectedVersion: number }): Promise<JuliusBrainWriteResult>;
-  retire(entityId: string, input: { readonly reason: string; readonly disposition: JuliusBrainRetirementDisposition; readonly expectedVersion: number; readonly key: string; readonly occurredAt?: string }): Promise<JuliusBrainWriteResult>;
+  retire(entityId: string, input: { readonly reason: string; readonly disposition: JuliusBrainRetirementDisposition; readonly expectedVersion: number; readonly key: string; readonly occurredAt?: string | null }): Promise<JuliusBrainWriteResult>;
   /** A new entity of the same kind that SUPERSEDES `entityId` (pinned to the version the caller read). */
   supersede(entityId: string, expectedVersion: number, body: JuliusBrainBody, options: JuliusBrainWriteOptions): Promise<JuliusBrainWriteResult>;
   checkpoint(label: string): Promise<JuliusBrainWriteResult>;
@@ -193,7 +194,7 @@ function createHandle(ctx: {
     sensitivity: options.sensitivity ?? 'INTERNAL',
     provenance: options.provenance ?? juliusBrainProvenance(defaultSource(principal)),
     idempotencyKey: options.key,
-    occurredAt: options.occurredAt ?? ctx.clock.now(),
+    occurredAt: options.occurredAt !== undefined ? options.occurredAt : ctx.clock.now(),
   });
 
   const commit = (drafts: readonly JuliusBrainDraft[]) => store.commit({

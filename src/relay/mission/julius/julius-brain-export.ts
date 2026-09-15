@@ -49,8 +49,8 @@ export interface JuliusBrainExportEntity {
   readonly confidence: number | null;
   readonly createdBy: string;
   readonly updatedBy: string;
-  readonly createdAt: string;
-  readonly updatedAt: string;
+  readonly createdAt: string | null;
+  readonly updatedAt: string | null;
   readonly supersededBy: string | null;
   readonly retirement: JuliusBrainEntityState['retirement'];
   readonly links: JuliusBrainEntityState['links'];
@@ -92,7 +92,7 @@ export interface JuliusBrainExportBundle {
   };
   readonly timeline: readonly {
     readonly sequence: number; readonly recordId: string; readonly entityId: string; readonly kind: JuliusBrainRecordKind;
-    readonly op: string; readonly entityVersion: number; readonly principal: string; readonly occurredAt: string; readonly recordedAt: string;
+    readonly op: string; readonly entityVersion: number; readonly principal: string; readonly occurredAt: string | null; readonly recordedAt: string;
   }[];
   readonly records: readonly JuliusBrainRecord[];
   readonly entities: readonly JuliusBrainEntityState[];
@@ -255,7 +255,7 @@ export function renderJuliusBrainExportMarkdown(bundle: JuliusBrainExportBundle)
   section('Python executions', bundle.sections.pythonExecutions, ['executionId', 'state', 'scriptHash', 'exitCode', 'durationMs', 'network', 'structuredOutput', 'redactions']);
   section('Checkpoints', bundle.sections.checkpoints, ['label', 'throughSequence', 'stateHash']);
   out.push('', '## Timeline', '', '| # | kind | op | entity | by | occurred |', '|---|---|---|---|---|---|');
-  for (const row of bundle.timeline) out.push(`| ${row.sequence} | ${row.kind} | ${row.op} v${row.entityVersion} | \`${row.entityId}\` | ${row.principal} | ${row.occurredAt} |`);
+  for (const row of bundle.timeline) out.push(`| ${row.sequence} | ${row.kind} | ${row.op} v${row.entityVersion} | \`${row.entityId}\` | ${row.principal} | ${row.occurredAt ?? 'Unknown'} |`);
   return `${out.join('\n')}\n`;
 }
 
