@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **186 production files** across 20/20 subsystems (2 roots, 141 traced, 30 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **187 production files** across 20/20 subsystems (2 roots, 141 traced, 31 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -344,6 +344,7 @@ PostgreSQL authority for Julius: the repositories bound to the runtime ports, th
 | `src/relay/persistence/julius-brain-database.ts` | not composed by the live root | — |
 | `src/relay/persistence/julius-brain-kinds.ts` | traced | `src/relay/persistence/julius-postgres.ts` |
 | `src/relay/persistence/julius-brain-legacy-postgres.ts` | not composed by the live root | — |
+| `src/relay/persistence/julius-brain-roles.ts` | not composed by the live root | — |
 | `src/relay/persistence/julius-context-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
 | `src/relay/persistence/julius-contract-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `src/relay/persistence/julius-event-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
@@ -460,6 +461,7 @@ Production Julius modules that implement a Julius port but are not reached from 
 | `src/relay/persistence/julius-python-postgres.ts` | durable governed Python executions (julius_brain.python_executions, in the dedicated Project Brain database) whose settlement commits the execution state and its Project Brain records in one transaction; proven across processes, a server restart, cross-process cancellation and a crashed host by scripts/julius-brain-python-flow-drill.ts; not yet composed by the live root |
 | `src/relay/persistence/julius-brain-database.ts` | Project Brain v2: the dedicated Brain database — its own julius_brain migration chain, refusal of a database that holds the Julius runtime schema, the environment identity that keeps development from opening production, and the current-chain check every user of the Brain makes; not yet composed by the live root |
 | `src/relay/persistence/julius-brain-content-postgres.ts` | Project Brain v2: artifact bytes in the Brain database (julius_brain.content), content addressed and re-hashed on every read, so the bytes a record names are as durable as the record; not yet composed by the live root |
+| `src/relay/persistence/julius-brain-roles.ts` | Project Brain v2: least-privilege grants for the dedicated Brain database (owner migrates; the service appends and advances heads but cannot delete, rewrite, disable the immutability guard or migrate; the reader only reads), proven by scripts/julius-brain-roles-postgres.test.ts; applied by provisioning, not composed |
 | `src/relay/persistence/julius-brain-legacy-postgres.ts` | Project Brain v2: v1 julius_brain_entries rows read back as the appends that wrote them, and the one normalisation (stored kind, timestamptz instant) the mirror and the backfill share so they never conflict; not yet composed by the live root |
 | `relay-bridge/julius/project-brain-binding.ts` | Project Brain v2: the PREPARED live binding (bootstrap + resume verification + v1 backfill, the mirroring writer, state-mode typed context appended after v1 context, checkpoint) for steps 1-5 of docs/JULIUS_BRAIN_LIVE_INTEGRATION_PLAN.md; deliberately not composed until the continuous-worker qualification passes |
 | `src/relay/persistence/julius-brain-postgres.ts` | Project Brain v2: the durable PostgreSQL store in the dedicated Project Brain database (julius_brain schema), proven by scripts/julius-project-brain-drill.ts across separate processes and a server restart; not yet composed by the live root |
