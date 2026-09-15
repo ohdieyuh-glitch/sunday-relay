@@ -182,13 +182,14 @@ describe('the prepared live Project Brain binding (not composed)', () => {
     const fresh = harness({ store: down() });
     fresh.table.seed(append('seed:objective', 'OBJECTIVE', 'Implement the trust core'));
     const binding = fresh.bind();
-    expect(await binding.bootstrap({ runId: RUN })).toEqual({ outcome: 'UNAVAILABLE', detail: 'connect ECONNREFUSED 10.0.0.5:5432', requirement: 'ADDITIVE', proceed: true });
+    const unreachable = { failureClass: 'DATABASE_UNAVAILABLE', outcome: 'NOT_APPLIED', retryable: true, code: null };
+    expect(await binding.bootstrap({ runId: RUN })).toEqual({ outcome: 'UNAVAILABLE', detail: 'connect ECONNREFUSED 10.0.0.5:5432', failure: unreachable, requirement: 'ADDITIVE', proceed: true });
     // Detached: v1 exactly as it was, and nothing pretends to have reached the Brain.
     expect(await binding.wrapWriter(fresh.table.writer).appendBrainEntry(append('brain:decision:1', 'DECISION', 'ACCEPT'))).toBe(true);
     expect(await binding.wrapContextReader(fresh.table.reader).brainEntriesForRun(RUN, PROJECT)).toEqual(await fresh.table.reader.brainEntriesForRun(RUN));
     expect(await binding.seal({ runId: RUN })).toEqual({ outcome: 'NOT_SEALED', reason: 'BRAIN_DETACHED', detail: null });
     // Nothing can be read, so nothing — least of all PRESERVED — can be claimed.
-    expect(await binding.preservation({ runId: RUN })).toEqual({ outcome: 'UNREADABLE', detail: 'connect ECONNREFUSED 10.0.0.5:5432' });
+    expect(await binding.preservation({ runId: RUN })).toEqual({ outcome: 'UNREADABLE', detail: 'connect ECONNREFUSED 10.0.0.5:5432', failure: unreachable });
     expect(fresh.reports.map((report) => report.event)).toEqual(['BRAIN_UNAVAILABLE', 'MIRROR', 'CONTEXT', 'CONTEXT', 'CONTEXT', 'SEAL']);
 
     const learning = harness({ store: down(), stateModeFor: (run, brainRunId) => ({ mode: 'LEARNING', missionId: run.missionId, runId: brainRunId, learnFrom: { runIds: null, kinds: ['FINDING'], requireVerified: true } }) });
@@ -203,6 +204,59 @@ describe('the prepared live Project Brain binding (not composed)', () => {
 
     // The runtime store is the run's authority: no run, no bootstrap at all.
     await expect(harness({ runs: new Map() }).bind().bootstrap({ runId: RUN })).rejects.toThrow('julius_live_brain_run_not_found');
+  });
+
+  it('mid-run failure: a FRESH dispatch keeps its v1 context; a dispatch that requires prior state it cannot read is refused, with nothing standing in', async () => {
+    const memory = createJuliusBrainMemoryStore();
+    let up = true;
+    const guard = <A extends unknown[], R>(fn: (...args: A) => Promise<R>) => async (...args: A): Promise<R> => { if (!up) throw Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:5442'), { code: 'ECONNREFUSED' }); return fn(...args); };
+    const flaky: JuliusBrainStore = {
+      createBrain: guard((identity) => memory.createBrain(identity)), loadBrain: guard((b, p) => memory.loadBrain(b, p)), listBrains: guard((p) => memory.listBrains(p)),
+      head: guard((b, p) => memory.head(b, p)), commit: guard((input) => memory.commit(input)), commitGroup: guard((input) => memory.commitGroup(input)),
+      records: guard((b, p, q) => memory.records(b, p, q)), entities: guard((b, p, f) => memory.entities(b, p, f)), restore: guard((i, r) => memory.restore(i, r)),
+    };
+    const learningFor: Parameters<typeof createLiveJuliusProjectBrainBinding>[0]['stateModeFor'] = (run, brainRunId) => ({ mode: 'LEARNING', missionId: run.missionId, runId: brainRunId, learnFrom: { runIds: null, kinds: ['FINDING'], requireVerified: false } });
+    const unreachable = { failureClass: 'DATABASE_UNAVAILABLE', outcome: 'NOT_APPLIED', retryable: true, code: 'ECONNREFUSED' };
+
+    // FRESH: the Brain goes away after bootstrap; the dispatch gets v1 exactly, and the failure is classified.
+    const fresh = harness({ store: flaky });
+    fresh.table.seed(append('seed:objective', 'OBJECTIVE', 'Implement the trust core'));
+    const freshBinding = fresh.bind();
+    expect((await freshBinding.bootstrap({ runId: RUN })).outcome).toBe('READY');
+    up = false;
+    expect(await freshBinding.wrapContextReader(fresh.table.reader).brainEntriesForRun(RUN, PROJECT)).toEqual(await fresh.table.reader.brainEntriesForRun(RUN));
+    expect(fresh.reports.filter((report) => report.event === 'CONTEXT')).toEqual(ROLES.map((role) => expect.objectContaining({ role, withheld: 'FAILED', failure: unreachable })));
+    up = true;
+
+    // LEARNING: the same failure refuses the dispatch; v1 alone is not its context.
+    const learning = harness({ store: flaky, stateModeFor: learningFor });
+    const learningBinding = learning.bind();
+    expect((await learningBinding.bootstrap({ runId: RUN })).outcome).toBe('READY');
+    up = false;
+    const refused = await learningBinding.wrapContextReader(learning.table.reader).brainEntriesForRun(RUN, PROJECT).catch((error: unknown) => error);
+    expect(refused).toMatchObject({ name: 'JuliusBrainRequiredStateUnavailableError', mode: 'LEARNING', failure: unreachable });
+    expect(learning.reports.filter((report) => report.event === 'CONTEXT')).toEqual(ROLES.map((role) => expect.objectContaining({ role, mode: 'LEARNING', withheld: 'FAILED', dispatchRefused: true })));
+    up = true;
+    // Back up: the next dispatch gets its context.
+    expect(await learningBinding.wrapContextReader(learning.table.reader).brainEntriesForRun(RUN, PROJECT)).toEqual([]);
+
+    // Detached at bootstrap, or a mode the Brain refuses, or context that cannot be given whole: refused too.
+    up = false;
+    const detached = harness({ store: flaky, stateModeFor: learningFor });
+    const detachedBinding = detached.bind();
+    expect(await detachedBinding.bootstrap({ runId: RUN })).toMatchObject({ outcome: 'UNAVAILABLE', proceed: false, failure: unreachable });
+    await expect(detachedBinding.wrapContextReader(detached.table.reader).brainEntriesForRun(RUN, PROJECT)).rejects.toThrow(/LEARNING run cannot act without its prior state/);
+    up = true;
+    const baselineless = harness({ stateModeFor: (run, brainRunId) => ({ mode: 'REGRESSION', missionId: run.missionId, runId: brainRunId, baseline: { runId: 'workflow:34739303313/1', entityCount: 9, throughSequence: 9, snapshotHash: `sha256:${'0'.repeat(64)}` } }) });
+    const regression = baselineless.bind();
+    await regression.bootstrap({ runId: RUN });
+    await expect(regression.wrapContextReader(baselineless.table.reader).brainEntriesForRun(RUN, PROJECT)).rejects.toThrow(/regression_baseline_moved|REGRESSION run cannot act/);
+    const tight = harness({ budget: 10, stateModeFor: (run, brainRunId) => ({ mode: 'CONTINUATION', missionId: run.missionId, runId: brainRunId, resumes: ['workflow:34999999999/1'] }) });
+    const tightBinding = tight.bind();
+    await tightBinding.bootstrap({ runId: RUN });
+    const handle = (await createJuliusProjectBrainService({ store: tight.store, clock }).open({ brainId: tightBinding.brainId, projectId: PROJECT, principal: juliusPrincipal('JULIUS', 'julius') }))!;
+    await handle.create('CONSTRAINT', { statement: 'A constraint far longer than ten characters', status: 'ACTIVE' }, { key: 'c', scope: { missionId: MISSION } });
+    await expect(tightBinding.wrapContextReader(tight.table.reader).brainEntriesForRun(RUN, PROJECT)).rejects.toThrow(/CONTINUATION run cannot act/);
   });
 
   it('PRESERVED is derived from the Brain: a verified open, every v1 entry held with its content, and a checkpoint covering the seal', async () => {
@@ -237,7 +291,7 @@ describe('the prepared live Project Brain binding (not composed)', () => {
     const binding = h.bind();
     await binding.bootstrap({ runId: RUN });
     await binding.wrapWriter(h.table.writer).appendBrainEntry(append('brain:decision:build-1:ACCEPT:TASK_VERIFIED', 'DECISION', 'ACCEPT'));
-    expect(await binding.seal({ runId: RUN })).toEqual({ outcome: 'NOT_SEALED', reason: 'UNAVAILABLE', detail: 'terminating connection due to administrator command' });
+    expect(await binding.seal({ runId: RUN })).toEqual({ outcome: 'NOT_SEALED', reason: 'UNAVAILABLE', detail: 'terminating connection due to administrator command', failure: { failureClass: 'NETWORK_PARTIAL', outcome: 'UNKNOWN', retryable: true, code: null } });
     const read = await binding.preservation({ runId: RUN });
     expect(read).toMatchObject({ outcome: 'DERIVED', preservation: { status: 'PARTIALLY_PRESERVED', evidence: { sealed: { missingEntries: 0 }, checkpoint: null }, reasons: ['no checkpoint was committed for the run'] } });
   });
