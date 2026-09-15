@@ -32,6 +32,10 @@ class APlayerController;
 class SWidget;
 class SWonderlandCompanionTerminal;
 class SWonderlandLiveTerminal;
+class SWonderlandProjectBrainPanel;
+class UTexture2D;
+class UWonderlandProjectBrainSubsystem;
+struct FSlateBrush;
 class SWonderlandWorldMap;
 class UInputComponent;
 class UWonderlandUsageHudWidget;
@@ -91,17 +95,37 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
 	bool TeleportToSelected();
 
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	void ToggleProjectBrain();
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool IsProjectBrainOpen() const;
+
+	/** Inspect one Project Brain surface, or NAME_None to close the inspector. False when the panel is shut. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool SelectBrainSurface(FName SurfaceId);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FName GetBrainSelectedSurface() const;
+
+	/** Propose a line on the selected surface, exactly as its input box does. False unless the surface is yours. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool ProposeToSelectedBrainSurface(const FString& Text);
+
 	/**
-	 * COMPANION TERMINALS (development preview, WonderlandCompanionSubsystem.h). Furniture like the HUD: mounted
-	 * once per controller while the companion preview is on, below the terminal and the map. They take typing
-	 * only while a panel holds UI input -- in play, the world has the keys. 0 is the LLM Companion's, 1 the
+	 * COMPANION TERMINALS (development preview, WonderlandCompanionSubsystem.h). Mounted once per controller while
+	 * the companion preview is on, and SHOWN WITH THE JULIUS LIVE TERMINAL: Ctrl+T brings the three consoles up
+	 * together and takes them away together (founder, 2026-09-15), because they are one instrument -- the Compound
+	 * Agent's terminal and the companions beside it -- rather than three panels that happen to overlap. They take
+	 * typing only while a panel holds UI input -- in play, the world has the keys. 0 is the LLM Companion's, 1 the
 	 * Jhinn AI Agent's.
 	 */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	int32 GetCompanionTerminalCount() const { return CompanionTerminals.Num(); }
 
+	/** Mounted AND showing, which now means the Julius live terminal is open. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
-	bool AreCompanionTerminalsOnScreen() const { return CompanionLayer.IsValid() && CompanionTerminals.Num() > 0; }
+	bool AreCompanionTerminalsOnScreen() const { return CompanionLayer.IsValid() && CompanionTerminals.Num() > 0 && IsLiveTerminalOpen(); }
 
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	FString GetCompanionTerminalTitle(int32 Index) const;
@@ -117,19 +141,21 @@ public:
 	bool FocusCompanionTerminal(int32 Index);
 
 private:
-	enum class EOverlay : uint8 { None, Terminal, Map };
+	enum class EOverlay : uint8 { None, Terminal, Map, Brain };
 
 	void HandlePlayerControllerChanged(APlayerController* NewController);
 	void Attach(APlayerController* Controller);
 	void Detach();
 	void OpenOverlay(EOverlay Which);
 	void RefreshMap();
+	void RefreshBrain();
 	void HandleTerminalSubmit(const FString& Text);
 	void HandleTravel(FName DestinationId);
 	void ApplyOverlayInput(bool bOverlayOpen, TSharedPtr<SWidget> Focus);
 	void MountCompanionTerminals();
 	void UnmountCompanionTerminals();
 	void HandleCompanionSubmit(int32 Index, const FString& Text);
+	UWonderlandProjectBrainSubsystem* Brain() const;
 	UWorld* PlayerWorld() const;
 
 	TArray<TSharedPtr<SWonderlandCompanionTerminal>> CompanionTerminals;
@@ -145,6 +171,14 @@ private:
 
 	TSharedPtr<SWonderlandLiveTerminal> Terminal;
 	TSharedPtr<SWonderlandWorldMap> WorldMap;
+	TSharedPtr<SWonderlandProjectBrainPanel> BrainPanel;
+
+	/** The Project Brain hologram, imported from wonderland/UiArt at attach. A transient texture, never an asset. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> BrainArt;
+
+	TSharedPtr<FSlateBrush> BrainArtBrush;
+	FDelegateHandle BrainChangedHandle;
 	EOverlay Open = EOverlay::None;
 	bool bOverlayIgnoresInput = false;
 	int32 OverlaysInViewport = 0;

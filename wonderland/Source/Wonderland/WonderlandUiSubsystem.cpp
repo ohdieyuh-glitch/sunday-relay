@@ -1,17 +1,23 @@
 #include "WonderlandUiSubsystem.h"
 
 #include "Components/InputComponent.h"
+#include "Engine/GameInstance.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "Framework/Application/SlateApplication.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "Engine/Texture2D.h"
 #include "HAL/IConsoleManager.h"
+#include "ImageUtils.h"
+#include "Misc/Paths.h"
 #include "Widgets/Layout/SConstraintCanvas.h"
 #include "WonderlandCompanionSubsystem.h"
 #include "WonderlandCompanionTerminal.h"
 #include "WonderlandLiveTerminal.h"
+#include "WonderlandProjectBrain.h"
+#include "WonderlandProjectBrainPanel.h"
 #include "WonderlandTravel.h"
 #include "WonderlandUiStyle.h"
 #include "WonderlandUsageHudWidget.h"
@@ -31,6 +37,12 @@ namespace
 	TAutoConsoleVariable<FString> CVarCompanionPanelRight(
 		TEXT("wl.Companion.PanelRight"), TEXT("0.738 0.487 0.984 0.700"),
 		TEXT("Anchors of the Jhinn AI Agent terminal: minX minY maxX maxY, fractions of the viewport."));
+
+	// The Project Brain hologram: a PNG read at attach, never an asset -- the world's art lane owns Content, and
+	// this panel is a development preview. With no file the frame draws without the brain and says nothing false.
+	TAutoConsoleVariable<FString> CVarBrainArtPath(
+		TEXT("wl.Brain.ArtPath"), TEXT(""),
+		TEXT("Absolute path of the Project Brain hologram PNG. Empty uses <project>/UiArt/ProjectBrainHologram.png."));
 
 	FAnchors ParseAnchors(const FString& Text, const FAnchors& Fallback)
 	{
@@ -101,7 +113,32 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 	UiInput->Priority = 100;
 	UiInput->BindKey(FInputChord(EKeys::T, false, true, false, false), IE_Pressed, this, &UWonderlandUiSubsystem::ToggleLiveTerminal);
 	UiInput->BindKey(EKeys::M, IE_Pressed, this, &UWonderlandUiSubsystem::ToggleWorldMap);
+	UiInput->BindKey(EKeys::B, IE_Pressed, this, &UWonderlandUiSubsystem::ToggleProjectBrain);
 	Controller->PushInputComponent(UiInput);
+
+	// The Project Brain hologram, read once per attach. A missing file is a drawn frame without a brain, logged
+	// plainly: a panel that silently lost its centrepiece is the failure this project keeps paying for.
+	FString ArtPath = CVarBrainArtPath.GetValueOnGameThread();
+	if (ArtPath.IsEmpty())
+	{
+		ArtPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::ProjectDir(), TEXT("UiArt"), TEXT("ProjectBrainHologram.png")));
+	}
+	BrainArt = FImageUtils::ImportFileAsTexture2D(ArtPath);
+	if (BrainArt != nullptr)
+	{
+		BrainArtBrush = MakeShared<FSlateBrush>();
+		BrainArtBrush->SetResourceObject(BrainArt);
+		BrainArtBrush->ImageSize = FVector2D(BrainArt->GetSizeX(), BrainArt->GetSizeY());
+		BrainArtBrush->DrawAs = ESlateBrushDrawType::Image;
+	}
+	else
+	{
+		UE_LOG(LogWonderlandUi, Warning, TEXT("WLUI Project Brain hologram not read from %s; the panel draws without it"), *ArtPath);
+	}
+	if (UWonderlandProjectBrainSubsystem* BrainSubsystem = Brain())
+	{
+		BrainChangedHandle = BrainSubsystem->OnBrainChanged.AddUObject(this, &UWonderlandUiSubsystem::RefreshBrain);
+	}
 
 	// Before the HUD exists, so its first paint already shows the configured source. With the source
 	// set to JuliusUsageAuthority this applies nothing and the HUD shows what the authority reports.
@@ -159,8 +196,10 @@ void UWonderlandUiSubsystem::MountCompanionTerminals()
 		.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
 	CompanionTerminals = {Llm, Agent};
 
+	// THE THREE CONSOLES ARE ONE INSTRUMENT. Ctrl+T raises the Julius terminal and these two with it, and takes
+	// all three away together (founder, 2026-09-15). Mounted once; shown with the terminal.
 	CompanionLayer = SNew(SConstraintCanvas)
-		.Visibility(EVisibility::SelfHitTestInvisible)
+		.Visibility_Lambda([WeakThis]() { return WeakThis.IsValid() && WeakThis->IsLiveTerminalOpen() ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; })
 		+ SConstraintCanvas::Slot()
 		.Anchors(TAttribute<FAnchors>::CreateLambda([]() { return ParseAnchors(CVarCompanionPanelLeft.GetValueOnGameThread(), FAnchors(0.016f, 0.487f, 0.262f, 0.700f)); }))
 		.Offset(FMargin(0.0f))
@@ -173,7 +212,7 @@ void UWonderlandUiSubsystem::MountCompanionTerminals()
 		[
 			Agent.ToSharedRef()
 		];
-	// Above the HUD's layer, below the terminal (50) and the map (60): furniture, like the HUD.
+	// Above the HUD's layer, below the terminal (50), the map (60) and the Project Brain (58).
 	LocalPlayer->ViewportClient->AddViewportWidgetForPlayer(LocalPlayer, CompanionLayer.ToSharedRef(), 20);
 }
 
@@ -219,7 +258,8 @@ FString UWonderlandUiSubsystem::GetCompanionTerminalInputText(int32 Index) const
 
 bool UWonderlandUiSubsystem::FocusCompanionTerminal(int32 Index)
 {
-	if (Open == EOverlay::None || !CompanionTerminals.IsValidIndex(Index) || !CompanionTerminals[Index].IsValid() || !FSlateApplication::IsInitialized())
+	// Only while the Julius terminal is up: that is when these panels are on screen at all.
+	if (Open != EOverlay::Terminal || !CompanionTerminals.IsValidIndex(Index) || !CompanionTerminals[Index].IsValid() || !FSlateApplication::IsInitialized())
 	{
 		return false;
 	}
@@ -249,8 +289,16 @@ void UWonderlandUiSubsystem::Detach()
 		UsageHud->RemoveFromParent();
 		UsageHud = nullptr;
 	}
+	if (UWonderlandProjectBrainSubsystem* BrainSubsystem = Brain())
+	{
+		BrainSubsystem->OnBrainChanged.Remove(BrainChangedHandle);
+	}
+	BrainChangedHandle.Reset();
 	Terminal.Reset();
 	WorldMap.Reset();
+	BrainPanel.Reset();
+	BrainArtBrush.Reset();
+	BrainArt = nullptr;
 	BoundController.Reset();
 	UsageHudCreations = 0;
 }
@@ -314,6 +362,42 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 		Panel = Terminal;
 		Focus = Terminal->GetFocusTarget();
 	}
+	else if (Which == EOverlay::Brain)
+	{
+		if (!BrainPanel.IsValid())
+		{
+			// Created once and kept, like the terminal: proposals made in this session are still there on reopen.
+			SAssignNew(BrainPanel, SWonderlandProjectBrainPanel)
+				.HologramBrush(BrainArtBrush.IsValid() ? BrainArtBrush.Get() : nullptr)
+				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
+				.OnRequestTerminal_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Terminal); } })
+				.OnRequestMap_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Map); } })
+				.OnPropose_Lambda([WeakThis](FName SurfaceId, const FString& Text)
+				{
+					if (WeakThis.IsValid())
+					{
+						if (UWonderlandProjectBrainSubsystem* BrainSubsystem = WeakThis->Brain())
+						{
+							BrainSubsystem->Propose(SurfaceId, Text);
+						}
+					}
+				})
+				.OnReview_Lambda([WeakThis](FName SurfaceId, int32 LineIndex, bool bAccept)
+				{
+					if (WeakThis.IsValid())
+					{
+						if (UWonderlandProjectBrainSubsystem* BrainSubsystem = WeakThis->Brain())
+						{
+							BrainSubsystem->Review(SurfaceId, LineIndex, bAccept);
+						}
+					}
+				});
+		}
+		RefreshBrain();
+		Panel = BrainPanel;
+		Focus = BrainPanel;
+		ZOrder = 58;
+	}
 	else
 	{
 		if (!WorldMap.IsValid())
@@ -334,7 +418,7 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 	Open = Which;
 	ApplyOverlayInput(true, Focus);
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI open %s (panels in viewport: %d)"),
-		Which == EOverlay::Terminal ? TEXT("live terminal") : TEXT("world map"), OverlaysInViewport);
+		Which == EOverlay::Terminal ? TEXT("live terminal") : (Which == EOverlay::Brain ? TEXT("project brain") : TEXT("world map")), OverlaysInViewport);
 }
 
 void UWonderlandUiSubsystem::CloseOverlay()
@@ -344,9 +428,15 @@ void UWonderlandUiSubsystem::CloseOverlay()
 		return;
 	}
 	const EOverlay Closing = Open;
-	TSharedPtr<SWidget> Panel = Closing == EOverlay::Terminal
-		? StaticCastSharedPtr<SWidget>(Terminal)
-		: StaticCastSharedPtr<SWidget>(WorldMap);
+	TSharedPtr<SWidget> Panel = StaticCastSharedPtr<SWidget>(WorldMap);
+	if (Closing == EOverlay::Terminal)
+	{
+		Panel = StaticCastSharedPtr<SWidget>(Terminal);
+	}
+	else if (Closing == EOverlay::Brain)
+	{
+		Panel = StaticCastSharedPtr<SWidget>(BrainPanel);
+	}
 	ULocalPlayer* LocalPlayer = GetLocalPlayer<ULocalPlayer>();
 	if (LocalPlayer != nullptr && LocalPlayer->ViewportClient != nullptr && Panel.IsValid())
 	{
@@ -356,7 +446,7 @@ void UWonderlandUiSubsystem::CloseOverlay()
 	Open = EOverlay::None;
 	ApplyOverlayInput(false, nullptr);
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI close %s (panels in viewport: %d)"),
-		Closing == EOverlay::Terminal ? TEXT("live terminal") : TEXT("world map"), OverlaysInViewport);
+		Closing == EOverlay::Terminal ? TEXT("live terminal") : (Closing == EOverlay::Brain ? TEXT("project brain") : TEXT("world map")), OverlaysInViewport);
 }
 
 void UWonderlandUiSubsystem::ApplyOverlayInput(bool bOverlayOpen, TSharedPtr<SWidget> Focus)
@@ -452,6 +542,62 @@ void UWonderlandUiSubsystem::RefreshMap()
 		Notice = TEXT("No developed place has an arrival point in this world yet.");
 	}
 	WorldMap->Refresh(Stops, Current, PlayerXY, bHasPlayer, Notice);
+}
+
+UWonderlandProjectBrainSubsystem* UWonderlandUiSubsystem::Brain() const
+{
+	const APlayerController* Controller = BoundController.Get();
+	UGameInstance* Instance = Controller != nullptr ? Controller->GetGameInstance() : nullptr;
+	return Instance != nullptr ? Instance->GetSubsystem<UWonderlandProjectBrainSubsystem>() : nullptr;
+}
+
+void UWonderlandUiSubsystem::ToggleProjectBrain()
+{
+	if (Open == EOverlay::Brain)
+	{
+		CloseOverlay();
+	}
+	else
+	{
+		OpenOverlay(EOverlay::Brain);
+	}
+}
+
+bool UWonderlandUiSubsystem::IsProjectBrainOpen() const
+{
+	return Open == EOverlay::Brain;
+}
+
+void UWonderlandUiSubsystem::RefreshBrain()
+{
+	if (!BrainPanel.IsValid())
+	{
+		return;
+	}
+	// THE PANEL NEVER HOLDS THE RECORD. It takes a copy of the subsystem's presentation model every time the
+	// model moves, and owns nothing between refreshes.
+	const UWonderlandProjectBrainSubsystem* BrainSubsystem = Brain();
+	BrainPanel->Refresh(BrainSubsystem != nullptr ? BrainSubsystem->GetModel() : FWonderlandBrainModel());
+}
+
+bool UWonderlandUiSubsystem::SelectBrainSurface(FName SurfaceId)
+{
+	if (Open != EOverlay::Brain || !BrainPanel.IsValid())
+	{
+		return false;
+	}
+	BrainPanel->Select(SurfaceId);
+	return SurfaceId.IsNone() || BrainPanel->GetSelected() == SurfaceId;
+}
+
+FName UWonderlandUiSubsystem::GetBrainSelectedSurface() const
+{
+	return BrainPanel.IsValid() ? BrainPanel->GetSelected() : NAME_None;
+}
+
+bool UWonderlandUiSubsystem::ProposeToSelectedBrainSurface(const FString& Text)
+{
+	return Open == EOverlay::Brain && BrainPanel.IsValid() && BrainPanel->ProposeToSelected(Text);
 }
 
 void UWonderlandUiSubsystem::HandleTerminalSubmit(const FString& Text)
