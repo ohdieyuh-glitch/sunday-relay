@@ -237,16 +237,32 @@ const clip = (value: string, max: number) => (value.length <= max ? value : `${v
 
 export const juliusArchiveRunKey = (run: Pick<JuliusPaidRunArchiveRun, 'workflowRunId' | 'workflowRunAttempt'>): string => `${run.workflowRunId}/${run.workflowRunAttempt}`;
 
-/** The Brain run id every imported record is scoped to — what a state mode keys on. */
-export const juliusArchiveBrainRunId = (run: JuliusPaidRunArchiveRun): string =>
-  run.juliusRunId ?? `workflow:${juliusArchiveRunKey(run)}`;
+/**
+ * The Brain run id every imported record is scoped to — what a state mode keys
+ * on. ALWAYS THE WORKFLOW RUN AND ITS ATTEMPT, NEVER THE JULIUS RUN ID: the
+ * Julius run id is derived from the mission contract, so every paid attempt of
+ * one contract carries the same one (in the paid-run archive, `run:5408584e…`
+ * spans three workflow runs, and task, evidence, finding and v1 Brain entry
+ * ids repeat between them). Scoped by it, three attempts would be one run to
+ * CONTINUATION, LEARNING and REGRESSION. The Julius run id stays a fact.
+ */
+export const juliusArchiveBrainRunId = (run: Pick<JuliusPaidRunArchiveRun, 'workflowRunId' | 'workflowRunAttempt'>): string =>
+  `workflow:${juliusArchiveRunKey(run)}`;
 
 export const juliusArchiveEntityId = (run: JuliusPaidRunArchiveRun, section: JuliusArchiveSection | 'run' | 'export' | 'accounting', sourceId: string): string =>
   `archive:${juliusArchiveRunKey(run)}:${section}:${safeId(sourceId)}`;
 
+/**
+ * Both evidence vocabularies the runtime writes: the verification runtime's
+ * (`JULIUS_EVIDENCE_TYPES`) and the tool layer's (`JuliusToolEvidenceType`).
+ * The paid-run archive carries both — `COMMAND_EXECUTION` rows are tool
+ * evidence. A type in neither is kept as OBSERVATION with its source type in
+ * `data.sourceType`, never guessed into a class.
+ */
 const EVIDENCE_CLASS: Readonly<Record<string, string>> = {
   TEST: 'TEST_RESULT', COMMAND: 'COMMAND_EXECUTION', BUILD: 'COMMAND_EXECUTION', LINT: 'COMMAND_EXECUTION', TYPECHECK: 'COMMAND_EXECUTION',
   SECURITY_SCAN: 'COMMAND_EXECUTION', TOOL_RECEIPT: 'COMMAND_EXECUTION', REVIEW_FINDING: 'REVIEW', ARTIFACT: 'ARTIFACT_RESULT', DIFF: 'ARTIFACT_RESULT',
+  COMMAND_EXECUTION: 'COMMAND_EXECUTION', TEST_RESULT: 'TEST_RESULT', BUILD_RESULT: 'COMMAND_EXECUTION', STATIC_ANALYSIS: 'COMMAND_EXECUTION', FILE_MUTATION: 'ARTIFACT_RESULT',
 };
 const SEVERITIES = ['INFO', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const REPAIR_STATUS: Readonly<Record<string, string>> = { SCHEDULED: 'REQUESTED', ACTIVE: 'IN_PROGRESS', VERIFIED: 'VERIFIED', FAILED: 'REJECTED', CANCELLED: 'ABANDONED' };

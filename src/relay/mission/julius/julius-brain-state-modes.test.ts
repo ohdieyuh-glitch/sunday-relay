@@ -18,7 +18,7 @@ import { createJuliusBrainMemoryStore, readAllJuliusBrainEntities, type JuliusBr
 const BRAIN = 'brain:julius';
 const PROJECT = 'prj-julius-live-4';
 const MISSION = 'mission:julius-live-4';
-const ARCHIVED_RUN = 'run:julius-live-4:1';
+const ARCHIVED_RUN = 'workflow:34739303313/1';
 const PREVIOUS_RUN = 'run:julius-live-4:prev';
 const CURRENT_RUN = 'run:julius-live-4:now';
 const JULIUS = juliusPrincipal('JULIUS', 'julius');

@@ -96,7 +96,7 @@ suite('Python under state modes', () => {
 
   it('LEARNING: the same archived finding is available when the policy names it', async () => {
     const { python: service, request } = await setup();
-    const record = await service.execute(request({ mode: 'LEARNING', missionId: MISSION, runId: CURRENT_RUN, learnFrom: { runIds: ['run:julius-live-4:1'], kinds: ['FINDING'], requireVerified: false } }));
+    const record = await service.execute(request({ mode: 'LEARNING', missionId: MISSION, runId: CURRENT_RUN, learnFrom: { runIds: ['workflow:34739303313/1'], kinds: ['FINDING'], requireVerified: false } }));
     expect(record.state).toBe('SUCCEEDED');
     expect((record.outcome!.structured.value as { findings: string[] }).findings).toEqual(['The coder was granted the ESTIMATE_NO_LEDGER allocation and stopped before implementing.']);
   }, 60_000);
@@ -104,7 +104,7 @@ suite('Python under state modes', () => {
   it('a mode the Brain refuses settles DENIED, recorded, with no process started', async () => {
     const { python: service, request, julius, brains, runs } = await setup();
     // A regression baseline pinned, then moved.
-    const baseline = pinJuliusBrainRegressionBaseline(await readAllJuliusBrainEntities(brains, BRAIN, PROJECT), 'run:julius-live-4:1');
+    const baseline = pinJuliusBrainRegressionBaseline(await readAllJuliusBrainEntities(brains, BRAIN, PROJECT), 'workflow:34739303313/1');
     const finding = (await julius.entities({ kinds: ['FINDING'] }))[0]!;
     const revised = await julius.revise(finding.entityId, { ...finding.body, status: 'RESOLVED' }, { key: 'move-baseline', expectedVersion: finding.version });
     expect(revised.outcome).toBe('COMMITTED');
@@ -112,7 +112,7 @@ suite('Python under state modes', () => {
     expect(moved).toMatchObject({ state: 'DENIED', outcome: { reasonCode: 'STATE_MODE_REFUSED:regression_baseline_moved' } });
 
     // A "live" run that takes the archived run's id.
-    const archivedRun = 'run:julius-live-4:1';
+    const archivedRun = 'workflow:34739303313/1';
     const reused = await service.execute(request({ mode: 'FRESH', missionId: MISSION, runId: archivedRun }, { runId: archivedRun }));
     expect(reused).toMatchObject({ state: 'DENIED', outcome: { reasonCode: 'STATE_MODE_REFUSED:current_run_is_archived_history' } });
 

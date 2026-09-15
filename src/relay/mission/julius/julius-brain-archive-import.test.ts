@@ -54,7 +54,7 @@ describe('paid-run archive → Project Brain', () => {
     const entities = await readAllJuliusBrainEntities(store, BRAIN, PROJECT);
     expect(entities).toHaveLength(result.appended);
     for (const state of entities) {
-      expect(state.scope).toMatchObject({ missionId: 'mission:julius-live-4', runId: 'run:julius-live-4:1' });
+      expect(state.scope).toMatchObject({ missionId: 'mission:julius-live-4', runId: 'workflow:34739303313/1' });
       expect(state.provenance.commit).toBe('0845c593aa1ef2b7d1c4e8f6a09b3c2d5e7f8a91');
       expect(state.provenance.externalRef).toMatch(/^julius-paid-run-archive:34739303313\/1#/);
       expect(state.createdBy).toEqual(juliusPrincipal('JULIUS', 'julius:archive-importer'));
@@ -84,8 +84,14 @@ describe('paid-run archive → Project Brain', () => {
     const again = await importArchive(JSON.parse(JSON.stringify(paidRunArchive())));
     expect(again).toMatchObject({ outcome: 'ALREADY_IMPORTED', appended: 0 });
     expect(await store.head(BRAIN, PROJECT)).toEqual(head);
+    // The same mission contract, so the same Julius run id — and still another Brain run.
     const second = await importArchive(paidRunArchive({ attempt: 2 }));
-    expect(second).toMatchObject({ outcome: 'IMPORTED', brainRunId: 'run:julius-live-4:2' });
+    expect(paidRunArchive({ attempt: 2 }).run.juliusRunId).toBe(paidRunArchive().run.juliusRunId);
+    expect(second).toMatchObject({ outcome: 'IMPORTED', brainRunId: 'workflow:34739303313/2' });
+    const lifecycles = (await readAllJuliusBrainEntities(store, BRAIN, PROJECT)).filter((state) => state.kind === 'TRACE' && state.body.traceClass === 'LIFECYCLE');
+    expect(lifecycles.map((state) => [state.scope.runId, (state.body.facts as { juliusRunId: string }).juliusRunId]).sort()).toEqual([
+      ['workflow:34739303313/1', 'run:julius-live-4'], ['workflow:34739303313/2', 'run:julius-live-4'],
+    ]);
     expect((await readAllJuliusBrainEntities(store, BRAIN, PROJECT)).length).toBe((first.outcome === 'IMPORTED' ? first.appended : 0) * 2);
   });
 

@@ -18,7 +18,7 @@ export function paidRunArchiveBody(overrides: { attempt?: number; mutate?: (body
     archive: { archiveId: 'julius-postgres/paid-run-archive', archiveSchemaVersion: 'temporary-archive.draft-1' },
     run: {
       workflowRunId: '34739303313', workflowRunAttempt: attempt, acceptedMainSha: '0845c593aa1ef2b7d1c4e8f6a09b3c2d5e7f8a91',
-      missionId: 'mission:julius-live-4', campaignId: 'lab-eval-a', juliusRunId: `run:julius-live-4:${attempt}`, projectId: 'prj-julius-live-4',
+      missionId: 'mission:julius-live-4', campaignId: 'lab-eval-a', juliusRunId: 'run:julius-live-4', projectId: 'prj-julius-live-4',
       stateMode: 'FRESH', classification: 'LAB_EVAL', startedAt: at(4, 12), endedAt: at(7, 48), outcome: 'FAILED',
       outcomeReason: 'coder_cost_exceeded after 3 ticks',
     },

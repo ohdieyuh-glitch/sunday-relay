@@ -39,6 +39,7 @@ function bind(brain: Pool, runtime: Pool, reports: JuliusLiveBrainReport[]) {
     store: new JuliusBrainPostgresStore(brain), clock, projectId: PROJECT, title: 'Julius',
     runs: new JuliusPostgresRepository(runtime),
     legacyEntries: (runId, projectId) => readJuliusLegacyBrainAppends(runtime, runId, projectId),
+    brainRunIdFor: () => 'workflow:35000000001/1',
     onReport: (report) => reports.push(report),
   });
 }

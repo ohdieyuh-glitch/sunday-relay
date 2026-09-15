@@ -6,7 +6,7 @@ import { importJuliusPaidRunArchive, juliusArchiveEntityId } from '../../src/rel
 import { juliusPrincipal } from '../../src/relay/mission/julius/julius-brain-contracts';
 import { juliusBrainDraftFromLegacy } from '../../src/relay/mission/julius/julius-brain-legacy';
 import { createJuliusProjectBrainService } from '../../src/relay/mission/julius/julius-brain-service';
-import { createJuliusBrainMemoryStore, type JuliusBrainStore } from '../../src/relay/mission/julius/julius-brain-store';
+import { createJuliusBrainMemoryStore, readAllJuliusBrainEntities, type JuliusBrainStore } from '../../src/relay/mission/julius/julius-brain-store';
 import { compileJuliusContext, type JuliusBrainEntry, type JuliusTask, type JuliusWorker } from '../../src/relay/mission/julius/julius-runtime';
 import type { JuliusBrainAppend, JuliusRunRow } from '../../src/relay/mission/julius/julius-runtime-ports';
 import { brainKindFromStored, brainKindToStored } from '../../src/relay/persistence/julius-brain-kinds';
@@ -14,8 +14,11 @@ import { createLiveJuliusProjectBrainBinding, juliusProjectBrainIdFor, type Juli
 
 const PROJECT = 'prj-julius-live-4';
 const MISSION = 'mission:julius-live-4';
-const RUN = 'run:julius-live-4:now';
-const ARCHIVED_RUN = 'run:julius-live-4:1';
+/** The Julius run id: derived from the mission contract, so every paid attempt of it has this one. */
+const RUN = 'run:julius-live-4';
+/** The Brain run of the attempt under test: its workflow run and attempt. */
+const ATTEMPT = 'workflow:35000000000/1';
+const ARCHIVED_RUN = 'workflow:34739303313/1';
 const clock = { now: () => '2026-09-15T12:00:00.000Z' };
 const ROLES = ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'] as const;
 
@@ -40,15 +43,16 @@ function v1Table() {
 const append = (entryId: string, kind: JuliusBrainAppend['kind'], safeText: string, occurredAt = '2026-09-15T10:00:00.000Z'): JuliusBrainAppend =>
   ({ runId: RUN, projectId: PROJECT, taskId: null, workerId: 'julius', entryId, kind, safeText, evidenceIds: [], occurredAt });
 
-function harness(options: { store?: JuliusBrainStore; runs?: Map<string, JuliusRunRow>; budget?: number; stateModeFor?: Parameters<typeof createLiveJuliusProjectBrainBinding>[0]['stateModeFor'] } = {}) {
+function harness(options: { store?: JuliusBrainStore; runs?: Map<string, JuliusRunRow>; budget?: number; brainRunId?: string; stateModeFor?: Parameters<typeof createLiveJuliusProjectBrainBinding>[0]['stateModeFor'] } = {}) {
   const store = options.store ?? createJuliusBrainMemoryStore();
   const table = v1Table();
-  const runs = options.runs ?? new Map([[RUN, runRow(RUN)], [ARCHIVED_RUN, runRow(ARCHIVED_RUN)]]);
+  const runs = options.runs ?? new Map([[RUN, runRow(RUN)]]);
   const reports: JuliusLiveBrainReport[] = [];
   const bind = () => createLiveJuliusProjectBrainBinding({
     store, clock, projectId: PROJECT, title: 'Julius',
     runs: { loadRun: async (runId) => runs.get(runId) ?? null },
     legacyEntries: async (runId) => table.rows.filter((row) => row.runId === runId),
+    brainRunIdFor: () => options.brainRunId ?? ATTEMPT,
     contextBudgetCharacters: options.budget, stateModeFor: options.stateModeFor,
     onReport: (report) => reports.push(report),
   });
@@ -92,7 +96,7 @@ describe('the prepared live Project Brain binding (not composed)', () => {
 
     // Without the normalisation, the same entry under the same key is a different history — refused.
     const handle = (await createJuliusProjectBrainService({ store: h.store, clock }).open({ brainId: juliusProjectBrainIdFor(PROJECT), projectId: PROJECT, principal: juliusPrincipal('JULIUS', 'julius') }))!;
-    expect(await handle.commit([juliusBrainDraftFromLegacy({ append: objective, missionId: MISSION })])).toMatchObject({ outcome: 'REFUSED', reasonCode: 'idempotency_key_conflict' });
+    expect(await handle.commit([juliusBrainDraftFromLegacy({ append: objective, missionId: MISSION, brainRunId: ATTEMPT })])).toMatchObject({ outcome: 'REFUSED', reasonCode: 'idempotency_key_conflict' });
   });
 
   it('typed context is FRESH by default: after v1, per role, without the run\'s own mirrors, and without the archived run', async () => {
@@ -118,7 +122,7 @@ describe('the prepared live Project Brain binding (not composed)', () => {
     expect((context[0] as { excluded: Record<string, number> }).excluded.PRIOR_RUN_STATE).toBeGreaterThan(0);
 
     // A run that declares LEARNING from the archived run is handed its finding.
-    const learning = harness({ store: h.store, stateModeFor: (run) => ({ mode: 'LEARNING', missionId: run.missionId, runId: run.runId, learnFrom: { runIds: [ARCHIVED_RUN], kinds: ['FINDING'], requireVerified: false } }) });
+    const learning = harness({ store: h.store, stateModeFor: (run, brainRunId) => ({ mode: 'LEARNING', missionId: run.missionId, runId: brainRunId, learnFrom: { runIds: [ARCHIVED_RUN], kinds: ['FINDING'], requireVerified: false } }) });
     const learned = await learning.bind().wrapContextReader(h.table.reader).brainEntriesForRun(RUN, PROJECT);
     const finding = juliusArchiveEntityId(paidRunArchive().run, 'findings', 'f-budget');
     expect(learned.filter((entry) => entry.entryId === `brain2:${finding}:v1`)).toHaveLength(3);
@@ -152,12 +156,12 @@ describe('the prepared live Project Brain binding (not composed)', () => {
     expect(await binding.wrapContextReader(tight.table.reader).brainEntriesForRun(RUN, PROJECT)).toEqual([]);
     expect(tight.reports.filter((report) => report.event === 'CONTEXT').map((report) => report.event === 'CONTEXT' && report.withheld)).toEqual(['AUTHORITY_TRUNCATED', 'AUTHORITY_TRUNCATED', 'AUTHORITY_TRUNCATED']);
 
-    // A live run under an archived run's id.
-    const reused = harness();
+    // A live run claiming an archived attempt's identity.
+    const reused = harness({ brainRunId: ARCHIVED_RUN });
     const reusedBinding = reused.bind();
     await reusedBinding.bootstrap({ runId: RUN });
     await importJuliusPaidRunArchive({ store: reused.store, brainId: reusedBinding.brainId, projectId: PROJECT, archive: paidRunArchive(), content, recordedAt: clock.now() });
-    await reusedBinding.wrapContextReader(reused.table.reader).brainEntriesForRun(ARCHIVED_RUN, PROJECT);
+    await reusedBinding.wrapContextReader(reused.table.reader).brainEntriesForRun(RUN, PROJECT);
     expect(reused.reports.filter((report) => report.event === 'CONTEXT').map((report) => report.event === 'CONTEXT' && report.withheld)).toEqual(Array(3).fill('STATE_MODE_REFUSED:current_run_is_archived_history'));
 
     // An unknown run, and a Brain that cannot be read: v1 exactly as it was.
@@ -189,14 +193,14 @@ describe('the prepared live Project Brain binding (not composed)', () => {
     });
     expect(fresh.reports.map((report) => report.event)).toEqual(['BRAIN_UNAVAILABLE', 'MIRROR', 'CONTEXT', 'CONTEXT', 'CONTEXT', 'CHECKPOINT']);
 
-    const learning = harness({ store: down(), stateModeFor: (run) => ({ mode: 'LEARNING', missionId: run.missionId, runId: run.runId, learnFrom: { runIds: null, kinds: ['FINDING'], requireVerified: true } }) });
+    const learning = harness({ store: down(), stateModeFor: (run, brainRunId) => ({ mode: 'LEARNING', missionId: run.missionId, runId: brainRunId, learnFrom: { runIds: null, kinds: ['FINDING'], requireVerified: true } }) });
     expect(await learning.bind().bootstrap({ runId: RUN })).toMatchObject({ outcome: 'UNAVAILABLE', requirement: 'REQUIRED', proceed: false });
 
     // A Brain that does not verify is detached the same way.
     const sound = harness();
     await sound.bind().bootstrap({ runId: RUN });
     const lying: JuliusBrainStore = { ...sound.store, head: async (brainId, projectId) => { const head = await sound.store.head(brainId, projectId); return head && { ...head, chainHash: `sha256:${'f'.repeat(64)}` }; } };
-    const continuation = harness({ store: lying, stateModeFor: (run) => ({ mode: 'CONTINUATION', missionId: run.missionId, runId: run.runId, resumes: ['run:julius-live-4:prev'] }) });
+    const continuation = harness({ store: lying, stateModeFor: (run, brainRunId) => ({ mode: 'CONTINUATION', missionId: run.missionId, runId: brainRunId, resumes: ['workflow:34999999999/1'] }) });
     expect(await continuation.bind().bootstrap({ runId: RUN })).toMatchObject({ outcome: 'REFUSED', requirement: 'REQUIRED', proceed: false });
 
     // The runtime store is the run's authority: no run, no bootstrap at all.
@@ -225,6 +229,37 @@ describe('the prepared live Project Brain binding (not composed)', () => {
     expect(await writer.appendBrainEntry(append('brain:decision:2', 'DECISION', 'REPAIR'))).toBe(true);
     expect(await binding.checkpoint('drive ended FAILED')).toBe('UNAVAILABLE');
     expect(binding.preservation()).toMatchObject({ mirrorsWritten: 1, mirrorsNotWritten: 1, checkpoint: 'UNAVAILABLE', preserved: false });
+  });
+
+  it('two paid attempts of one mission contract are two Brain runs, though their Julius run and v1 entry ids are identical', async () => {
+    const store = createJuliusBrainMemoryStore();
+    const entryId = 'brain:decision:run:julius-live-4:build-1:1';
+    // Each attempt has its own disposable runtime database, and so its own v1 table.
+    const first = harness({ store, brainRunId: 'workflow:35000000000/1' });
+    const firstBinding = first.bind();
+    await firstBinding.bootstrap({ runId: RUN });
+    expect(await firstBinding.wrapWriter(first.table.writer).appendBrainEntry(append(entryId, 'DECISION', 'REPAIR: the admission tests fail'))).toBe(true);
+    const second = harness({ store, brainRunId: 'workflow:35000000000/2' });
+    const secondBinding = second.bind();
+    await secondBinding.bootstrap({ runId: RUN });
+    expect(await secondBinding.wrapWriter(second.table.writer).appendBrainEntry(append(entryId, 'DECISION', 'ACCEPT: the admission tests pass'))).toBe(true);
+    for (const h of [first, second]) expect(h.reports.filter((report) => report.event === 'MIRROR').map((report) => report.event === 'MIRROR' && report.outcome)).toEqual(['MIRRORED']);
+    const decisions = (await readAllJuliusBrainEntities(store, juliusProjectBrainIdFor(PROJECT), PROJECT)).filter((state) => state.kind === 'DECISION');
+    expect(decisions.map((state) => [state.scope.runId, state.body.statement]).sort()).toEqual([
+      ['workflow:35000000000/1', 'REPAIR: the admission tests fail'], ['workflow:35000000000/2', 'ACCEPT: the admission tests pass'],
+    ]);
+
+    // FRESH attempt 2 is not shaped by attempt 1…
+    const fresh = await secondBinding.wrapContextReader(second.table.reader).brainEntriesForRun(RUN, PROJECT);
+    expect(JSON.stringify(fresh)).not.toContain('REPAIR: the admission tests fail');
+    expect((second.reports.filter((report) => report.event === 'CONTEXT')[0] as { excluded: Record<string, number> }).excluded.PRIOR_RUN_STATE).toBeGreaterThanOrEqual(1);
+    // …and a CONTINUATION of attempt 1 is, by name.
+    const resumed = harness({ store, brainRunId: 'workflow:35000000000/2', stateModeFor: (run, brainRunId) => ({ mode: 'CONTINUATION', missionId: run.missionId, runId: brainRunId, resumes: ['workflow:35000000000/1'] }) });
+    const continued = await resumed.bind().wrapContextReader(second.table.reader).brainEntriesForRun(RUN, PROJECT);
+    expect(continued.some((entry) => entry.text.includes('REPAIR: the admission tests fail'))).toBe(true);
+
+    // A Brain run id the root cannot name is a configuration error, not a guess.
+    await expect(harness({ store, brainRunId: 'not a valid id' }).bind().bootstrap({ runId: RUN })).rejects.toThrow('julius_live_brain_run_id_invalid');
   });
 
   it('a checkpoint pins the verified state the next bootstrap verifies against', async () => {

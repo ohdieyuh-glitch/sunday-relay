@@ -33,6 +33,12 @@ import { juliusLegacyAppendAsStored } from '../../src/relay/persistence/julius-b
  *                      overflows, always drops v2 before anything it had before
  *   checkpoint         pin the verified state at the end of a drive
  *
+ * THE BRAIN RUN IS NAMED BY THE COMPOSITION ROOT, NEVER DEFAULTED. The Julius
+ * run id is derived from the mission contract and repeats across paid attempts;
+ * `brainRunIdFor` supplies the identity the Brain scopes and namespaces the run
+ * by — for a paid run, `workflow:<GITHUB_RUN_ID>/<GITHUB_RUN_ATTEMPT>`, the same
+ * identity the paid-run archive importer uses — so attempt 2 is never attempt 1.
+ *
  * THE DEFAULT STATE MODE IS FRESH. v1 context is already run-scoped (the port
  * reads one run's entries), so FRESH is today's semantics: a run is shaped by
  * its own state and its mission's authority, never by an earlier run. Anything
@@ -116,7 +122,9 @@ export function createLiveJuliusProjectBrainBinding(deps: {
   readonly runs: Pick<JuliusRunWriter, 'loadRun'>;
   /** The run's v1 entries as appends (`readJuliusLegacyBrainAppends` on PostgreSQL). */
   readonly legacyEntries: (runId: string, projectId: string) => Promise<readonly JuliusBrainAppend[]>;
-  readonly stateModeFor?: (run: JuliusRunRow) => JuliusBrainStateModePolicy;
+  /** The Brain run this Julius run is: for a paid run, its workflow run and attempt. Required — there is no safe default. */
+  readonly brainRunIdFor: (run: JuliusRunRow) => string;
+  readonly stateModeFor?: (run: JuliusRunRow, brainRunId: string) => JuliusBrainStateModePolicy;
   readonly contextBudgetCharacters?: number;
   readonly onReport?: (report: JuliusLiveBrainReport) => void;
 }): LiveJuliusProjectBrainBinding {
@@ -124,7 +132,12 @@ export function createLiveJuliusProjectBrainBinding(deps: {
   const service = createJuliusProjectBrainService({ store: deps.store, clock: deps.clock });
   const julius = juliusPrincipal('JULIUS', 'julius');
   const budget = deps.contextBudgetCharacters ?? JULIUS_LIVE_BRAIN_DEFAULT_CONTEXT_BUDGET;
-  const stateModeFor = deps.stateModeFor ?? ((run: JuliusRunRow): JuliusBrainStateModePolicy => ({ mode: 'FRESH', missionId: run.missionId, runId: run.runId }));
+  const stateModeFor = deps.stateModeFor ?? ((run: JuliusRunRow, brainRunId: string): JuliusBrainStateModePolicy => ({ mode: 'FRESH', missionId: run.missionId, runId: brainRunId }));
+  const brainRunOf = (run: JuliusRunRow): string => {
+    const id = deps.brainRunIdFor(run);
+    if (!isJuliusBrainId(id)) throw new Error('julius_live_brain_run_id_invalid');
+    return id;
+  };
   const firstLine = (error: unknown) => (error instanceof Error ? error.message.split('\n')[0]!.slice(0, 300) : 'unknown');
   const state = {
     bootstrap: 'NOT_RUN' as JuliusLiveBrainPreservation['bootstrap'],
@@ -163,7 +176,8 @@ export function createLiveJuliusProjectBrainBinding(deps: {
       // The runtime store is the run's own authority; if it is unreachable there is no run to bootstrap.
       const run = await deps.runs.loadRun(runId, deps.projectId);
       if (run === null) throw new Error('julius_live_brain_run_not_found');
-      const requirement = juliusBrainRequirementFor(stateModeFor(run));
+      const brainRunId = brainRunOf(run);
+      const requirement = juliusBrainRequirementFor(stateModeFor(run, brainRunId));
       const proceed = requirement === 'ADDITIVE';
       try {
         const { created } = await service.initialize({ brainId, projectId: deps.projectId, title: deps.title, principal: julius });
@@ -178,7 +192,7 @@ export function createLiveJuliusProjectBrainBinding(deps: {
         }
         const target = (await open())!;
         const entries = (await deps.legacyEntries(runId, deps.projectId)).map(juliusLegacyAppendAsStored);
-        const backfill = await backfillJuliusBrainFromLegacy({ handle: target, missionId: run.missionId, entries });
+        const backfill = await backfillJuliusBrainFromLegacy({ handle: target, missionId: run.missionId, brainRunId, entries });
         state.mirrorsNotWritten += backfill.refused.length;
         state.bootstrap = 'READY';
         report({ event: 'BOOTSTRAPPED', brainId, runId, created, mirrored: backfill.mirrored, duplicates: backfill.duplicates, refused: backfill.refused.length });
@@ -199,7 +213,8 @@ export function createLiveJuliusProjectBrainBinding(deps: {
           const target = await open();
           if (target === null) return null;
           const run = await deps.runs.loadRun(append.runId, append.projectId);
-          return { handle: target, missionId: run?.missionId ?? null };
+          if (run === null) return null;
+          return { handle: target, missionId: run.missionId, brainRunId: brainRunOf(run) };
         },
         onMirror: (value) => report({ event: 'MIRROR', ...value }),
       });
@@ -225,9 +240,10 @@ export function createLiveJuliusProjectBrainBinding(deps: {
               for (const role of JULIUS_LIVE_BRAIN_CONTEXT_ROLES) report({ event: 'CONTEXT', ...base, role, withheld: 'RUN_NOT_FOUND', detail: null });
               return v1;
             }
-            const policy = stateModeFor(run);
+            const brainRunId = brainRunOf(run);
+            const policy = stateModeFor(run, brainRunId);
             // v1 already carries this run's own entries; their mirrors would say it twice.
-            const entities = (await entitiesNow()).filter((state) => !(state.entityId.startsWith('legacy:') && state.scope.runId === runId));
+            const entities = (await entitiesNow()).filter((state) => !(state.entityId.startsWith('legacy:') && state.scope.runId === brainRunId));
             for (const role of JULIUS_LIVE_BRAIN_CONTEXT_ROLES) {
               const view = compileJuliusBrainContextForMode(entities, {
                 taskId: null, role, grant: defaultJuliusBrainReadGrant(juliusWorkerPrincipal(`julius-live:${role}`, role), brainId),

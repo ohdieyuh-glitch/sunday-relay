@@ -52,7 +52,7 @@ async function mirroredRun() {
   const inner = { appendBrainEntry: harness.store.appendBrainEntry };
   const mirror = createJuliusBrainMirroringWriter({
     inner: { appendBrainEntry: async (append) => { v1Appends.push(append); return inner.appendBrainEntry(append); } },
-    resolve: async (append) => (append.projectId === 'prj-1' ? { handle, missionId: 'msn-1' } : null),
+    resolve: async (append) => (append.projectId === 'prj-1' ? { handle, missionId: 'msn-1', brainRunId: 'workflow:1/1' } : null),
     onMirror: (report) => reports.push(report),
   });
   (harness.store as { appendBrainEntry: typeof mirror.appendBrainEntry }).appendBrainEntry = mirror.appendBrainEntry;
@@ -68,12 +68,12 @@ describe('the v1 Brain writes of a real run, mirrored into the typed ledger', ()
     const v1 = (await harness.store.brainEntriesForRun('run-1', 'prj-1')).filter((entry) => entry.entryId.startsWith('brain:decision:'));
     expect(v1.length).toBeGreaterThan(0);
     const mirrored = await handle.current('DECISION');
-    expect(mirrored.map((state) => state.entityId).sort()).toEqual(v1.map((entry) => `legacy:${entry.entryId}`).sort());
+    expect(mirrored.map((state) => state.entityId).sort()).toEqual(v1.map((entry) => `legacy:workflow:1/1:${entry.entryId}`).sort());
     for (const state of mirrored) {
       expect(state.body.decisionClass).toBe('VERIFICATION');
-      expect(state.scope).toMatchObject({ missionId: 'msn-1', runId: 'run-1' });
+      expect(state.scope).toMatchObject({ missionId: 'msn-1', runId: 'workflow:1/1' });
       expect(state.scope.taskId).not.toBeNull();
-      expect(state.provenance.externalRef).toMatch(/^julius_brain_entries:brain:decision:/);
+      expect(state.provenance.externalRef).toMatch(/^julius_brain_entries:run-1#brain:decision:/);
     }
     expect(reports.every((report) => report.outcome === 'MIRRORED' && report.v1Written)).toBe(true);
     expect((await handle.verify()).ok).toBe(true);
@@ -91,7 +91,7 @@ describe('the v1 Brain writes of a real run, mirrored into the typed ledger', ()
   it('a refused mirror is reported and never fails the v1 write', async () => {
     const { handle } = await mirroredRun();
     const reports: JuliusBrainMirrorReport[] = [];
-    const writer = createJuliusBrainMirroringWriter({ inner: { appendBrainEntry: async () => true }, resolve: async () => ({ handle, missionId: null }), onMirror: (report) => reports.push(report) });
+    const writer = createJuliusBrainMirroringWriter({ inner: { appendBrainEntry: async () => true }, resolve: async () => ({ handle, missionId: null, brainRunId: 'workflow:1/1' }), onMirror: (report) => reports.push(report) });
     const append: JuliusBrainAppend = { runId: 'run-1', projectId: 'prj-1', taskId: null, workerId: 'w', entryId: 'brain:guidance-request:t1', kind: 'HANDOFF', safeText: 'use token=abcdefghijklmnop please', evidenceIds: [], occurredAt: '2026-09-13T10:00:00Z' };
     expect(await writer.appendBrainEntry(append)).toBe(true);
     expect(reports).toEqual([{ entryId: append.entryId, v1Written: true, outcome: 'REFUSED', detail: expect.stringContaining('credential_shaped_content') }]);
@@ -110,12 +110,15 @@ describe('the v1 Brain writes of a real run, mirrored into the typed ledger', ()
       { ...base, taskId: null, entryId: 'seed-req', kind: 'REQUIREMENT', safeText: 'Exit 0.' },
       { ...base, taskId: 't3', entryId: 'v1-finding', kind: 'FINDING', safeText: 'Something off.' },
     ];
-    expect(await backfillJuliusBrainFromLegacy({ handle, missionId: 'msn-1', entries })).toEqual({ mirrored: 5, duplicates: 0, refused: [] });
-    expect(await backfillJuliusBrainFromLegacy({ handle, missionId: 'msn-1', entries })).toEqual({ mirrored: 0, duplicates: 5, refused: [] });
+    expect(await backfillJuliusBrainFromLegacy({ handle, missionId: 'msn-1', brainRunId: 'workflow:1/1', entries })).toEqual({ mirrored: 5, duplicates: 0, refused: [] });
+    expect(await backfillJuliusBrainFromLegacy({ handle, missionId: 'msn-1', brainRunId: 'workflow:1/1', entries })).toEqual({ mirrored: 0, duplicates: 5, refused: [] });
+    // Another paid attempt of the same contract repeats every v1 entry id: it is another run, not a duplicate.
+    expect(await backfillJuliusBrainFromLegacy({ handle, missionId: 'msn-1', brainRunId: 'workflow:1/2', entries })).toEqual({ mirrored: 5, duplicates: 0, refused: [] });
     const byId = new Map((await handle.entities()).map((state) => [state.entityId, state]));
-    expect(byId.get('legacy:brain:research-answer:t1')!.body).toMatchObject({ handoffClass: 'RESEARCH_ANSWER', fromRole: 'JULIUS', toRole: 'UNKNOWN' });
-    expect(byId.get('legacy:brain:guidance-answer:t2:r1')!.body).toMatchObject({ handoffClass: 'ARCHITECT_TO_CODER' });
-    expect(byId.get('legacy:seed-req')!.body).toMatchObject({ requirementClass: 'UNCLASSIFIED', priority: null });
-    expect(byId.get('legacy:v1-finding')!.kind).toBe('TRACE');
+    expect(byId.get('legacy:workflow:1/1:brain:research-answer:t1')!.body).toMatchObject({ handoffClass: 'RESEARCH_ANSWER', fromRole: 'JULIUS', toRole: 'UNKNOWN' });
+    expect(byId.get('legacy:workflow:1/1:brain:guidance-answer:t2:r1')!.body).toMatchObject({ handoffClass: 'ARCHITECT_TO_CODER' });
+    expect(byId.get('legacy:workflow:1/1:seed-req')!.body).toMatchObject({ requirementClass: 'UNCLASSIFIED', priority: null });
+    expect(byId.get('legacy:workflow:1/1:v1-finding')!.kind).toBe('TRACE');
+    expect(byId.get('legacy:workflow:1/2:v1-finding')!.scope.runId).toBe('workflow:1/2');
   });
 });
