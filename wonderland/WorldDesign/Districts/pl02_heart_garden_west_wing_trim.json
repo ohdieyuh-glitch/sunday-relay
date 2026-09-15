@@ -1,0 +1,180 @@
+{
+ "pass": "PL02_TRIM",
+ "title": "Heart Garden west: tree, hedges and shrub inside the palace wing's footprint sunk (reversible)",
+ "trims": [
+  {
+   "name": "WonderlandInstancedBatch_122",
+   "label": "V2Batch_tree_mature_trunk_MI_V2_Bark",
+   "mesh": "SM_tree_mature_trunk",
+   "index": 5,
+   "why": "mature tree trunk inside the footprint",
+   "before": [
+    -2050.0,
+    7400.0,
+    -3.5,
+    0.0,
+    93.0,
+    0.0,
+    0.863,
+    0.863,
+    0.863
+   ],
+   "after": [
+    -2050.0,
+    7400.0,
+    -100003.5,
+    0.0,
+    93.0,
+    0.0,
+    0.863,
+    0.863,
+    0.863
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_117",
+   "label": "V2Batch_canopy_large_MI_V2_LeafMid",
+   "mesh": "SM_canopy_large",
+   "index": 3,
+   "why": "its canopy",
+   "before": [
+    -2050.0,
+    7400.0,
+    1121.5,
+    0.0,
+    132.0,
+    0.0,
+    0.9,
+    0.9,
+    0.9
+   ],
+   "after": [
+    -2050.0,
+    7400.0,
+    -98878.5,
+    0.0,
+    132.0,
+    0.0,
+    0.9,
+    0.9,
+    0.9
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_91",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "mesh": "SM_hedge_mass",
+   "index": 19,
+   "why": "hedge mass",
+   "before": [
+    -2000.0,
+    6600.0,
+    0.0,
+    0.0,
+    275.0,
+    0.0,
+    1.25,
+    1.25,
+    1.25
+   ],
+   "after": [
+    -2000.0,
+    6600.0,
+    -100000.0,
+    0.0,
+    275.0,
+    0.0,
+    1.25,
+    1.25,
+    1.25
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_92",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "mesh": "SM_hedge_mass",
+   "index": 16,
+   "why": "hedge mass",
+   "before": [
+    -1850.0,
+    7600.0,
+    0.0,
+    0.0,
+    312.0,
+    0.0,
+    1.25,
+    1.25,
+    1.25
+   ],
+   "after": [
+    -1850.0,
+    7600.0,
+    -100000.0,
+    0.0,
+    312.0,
+    0.0,
+    1.25,
+    1.25,
+    1.25
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_91",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "mesh": "SM_hedge_mass",
+   "index": 20,
+   "why": "hedge mass",
+   "before": [
+    -1700.0,
+    8500.0,
+    0.0,
+    0.0,
+    349.0,
+    0.0,
+    1.25,
+    1.25,
+    1.25
+   ],
+   "after": [
+    -1700.0,
+    8500.0,
+    -100000.0,
+    0.0,
+    349.0,
+    0.0,
+    1.25,
+    1.25,
+    1.25
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_269",
+   "label": "V2Batch_shrub_flowering_MI_V2_LeafMid",
+   "mesh": "SM_shrub_flowering",
+   "index": 35,
+   "why": "flowering shrub",
+   "before": [
+    -3343.375,
+    8632.199,
+    0.0,
+    0.0,
+    870.0,
+    0.0,
+    0.927,
+    0.927,
+    0.927
+   ],
+   "after": [
+    -3343.375,
+    8632.199,
+    -100000.0,
+    0.0,
+    870.0,
+    0.0,
+    0.927,
+    0.927,
+    0.927
+   ]
+  }
+ ]
+}
