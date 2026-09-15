@@ -64,7 +64,7 @@ suite('the prepared live Project Brain binding on a real PostgreSQL', () => {
       await pool.query('UPDATE relay_wonderland.julius_runs SET project_brain_revision=1 WHERE run_id=$1', [RUN]);
 
       const binding = bind(brainPool, pool, reports);
-      expect(await binding.bootstrap({ runId: RUN })).toEqual({ outcome: 'READY', created: true });
+      expect(await binding.bootstrap({ runId: RUN })).toEqual({ outcome: 'READY', created: true, requirement: 'ADDITIVE', proceed: true });
       expect(reports.at(-1)).toMatchObject({ event: 'BOOTSTRAPPED', mirrored: 1, refused: 0 });
 
       // Through the live repository: a domain kind the table stores as another, microseconds and an offset the table does not keep.
@@ -89,7 +89,7 @@ suite('the prepared live Project Brain binding on a real PostgreSQL', () => {
     const coldBrain = new Pool({ connectionString: brainUrl, max: 2 });
     try {
       const binding = bind(coldBrain, cold, reports);
-      expect(await binding.bootstrap({ runId: RUN })).toEqual({ outcome: 'READY', created: false });
+      expect(await binding.bootstrap({ runId: RUN })).toEqual({ outcome: 'READY', created: false, requirement: 'ADDITIVE', proceed: true });
       expect(reports.at(-1)).toMatchObject({ event: 'BOOTSTRAPPED', mirrored: 0, duplicates: 2, refused: 0 });
 
       const reader = new JuliusReadPostgresRepository(cold);

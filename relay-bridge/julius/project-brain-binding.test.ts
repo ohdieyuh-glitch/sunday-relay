@@ -63,8 +63,8 @@ describe('the prepared live Project Brain binding (not composed)', () => {
     // The bootstrap seed writes v1 rows with SQL, past the writer port.
     h.table.seed(append('seed:objective', 'OBJECTIVE', 'Implement the trust core'));
     h.table.seed(append('seed:acceptance', 'REQUIREMENT', 'Admission tests pass'));
-    expect(await h.bind().bootstrap({ runId: RUN })).toEqual({ outcome: 'READY', created: true });
-    expect(await h.bind().bootstrap({ runId: RUN })).toEqual({ outcome: 'READY', created: false });
+    expect(await h.bind().bootstrap({ runId: RUN })).toEqual({ outcome: 'READY', created: true, requirement: 'ADDITIVE', proceed: true });
+    expect(await h.bind().bootstrap({ runId: RUN })).toEqual({ outcome: 'READY', created: false, requirement: 'ADDITIVE', proceed: true });
     expect(h.reports.filter((report) => report.event === 'BOOTSTRAPPED')).toMatchObject([
       { created: true, mirrored: 2, duplicates: 0, refused: 0 },
       { created: false, mirrored: 0, duplicates: 2, refused: 0 },
@@ -73,7 +73,7 @@ describe('the prepared live Project Brain binding (not composed)', () => {
     // A store whose head no longer matches its ledger.
     const lying: JuliusBrainStore = { ...h.store, head: async (brainId, projectId) => { const head = await h.store.head(brainId, projectId); return head && { ...head, chainHash: `sha256:${'f'.repeat(64)}` }; } };
     const refused = harness({ store: lying });
-    expect(await refused.bind().bootstrap({ runId: RUN })).toMatchObject({ outcome: 'REFUSED', problems: ['stored head differs from the ledger head'] });
+    expect(await refused.bind().bootstrap({ runId: RUN })).toMatchObject({ outcome: 'REFUSED', problems: ['stored head differs from the ledger head'], requirement: 'ADDITIVE', proceed: true });
   });
 
   it('the mirror returns the v1 answer unchanged and builds the same draft the backfill does, so the two never conflict', async () => {
@@ -87,7 +87,7 @@ describe('the prepared live Project Brain binding (not composed)', () => {
     expect(await writer.appendBrainEntry(objective)).toBe(false);
     expect(h.reports.filter((report) => report.event === 'MIRROR').map((report) => report.event === 'MIRROR' && [report.v1Written, report.outcome])).toEqual([[true, 'MIRRORED'], [false, 'DUPLICATE']]);
 
-    expect(await h.bind().bootstrap({ runId: RUN })).toEqual({ outcome: 'READY', created: false });
+    expect(await h.bind().bootstrap({ runId: RUN })).toEqual({ outcome: 'READY', created: false, requirement: 'ADDITIVE', proceed: true });
     expect(h.reports.at(-1)).toMatchObject({ event: 'BOOTSTRAPPED', mirrored: 0, duplicates: 1, refused: 0 });
 
     // Without the normalisation, the same entry under the same key is a different history — refused.
@@ -169,13 +169,71 @@ describe('the prepared live Project Brain binding (not composed)', () => {
     expect(broken.reports.map((report) => report.event === 'CONTEXT' && report.withheld)).toEqual([...Array(3).fill('FAILED'), ...Array(3).fill('RUN_NOT_FOUND')]);
   });
 
+  it('an unreachable Brain: a FRESH run may proceed unpreserved; a run that needs prior state may not start', async () => {
+    const down = (): JuliusBrainStore => {
+      const store = createJuliusBrainMemoryStore();
+      const fail = async () => { throw new Error('connect ECONNREFUSED 10.0.0.5:5432'); };
+      return { ...store, createBrain: fail, loadBrain: fail, head: fail, commitGroup: fail };
+    };
+    const fresh = harness({ store: down() });
+    fresh.table.seed(append('seed:objective', 'OBJECTIVE', 'Implement the trust core'));
+    const binding = fresh.bind();
+    expect(await binding.bootstrap({ runId: RUN })).toEqual({ outcome: 'UNAVAILABLE', detail: 'connect ECONNREFUSED 10.0.0.5:5432', requirement: 'ADDITIVE', proceed: true });
+    // Detached: v1 exactly as it was, and nothing pretends to have reached the Brain.
+    expect(await binding.wrapWriter(fresh.table.writer).appendBrainEntry(append('brain:decision:1', 'DECISION', 'ACCEPT'))).toBe(true);
+    expect(await binding.wrapContextReader(fresh.table.reader).brainEntriesForRun(RUN, PROJECT)).toEqual(await fresh.table.reader.brainEntriesForRun(RUN));
+    expect(await binding.checkpoint('drive ended')).toBe('NOT_ATTEMPTED');
+    expect(binding.preservation()).toEqual({
+      bootstrap: 'UNAVAILABLE', mirrorsWritten: 0, mirrorsNotWritten: 1, checkpoint: 'NOT_ATTEMPTED', preserved: false,
+      reasons: ['bootstrap UNAVAILABLE', '1 v1 entry was not written to the Brain', 'checkpoint NOT_ATTEMPTED'],
+    });
+    expect(fresh.reports.map((report) => report.event)).toEqual(['BRAIN_UNAVAILABLE', 'MIRROR', 'CONTEXT', 'CONTEXT', 'CONTEXT', 'CHECKPOINT']);
+
+    const learning = harness({ store: down(), stateModeFor: (run) => ({ mode: 'LEARNING', missionId: run.missionId, runId: run.runId, learnFrom: { runIds: null, kinds: ['FINDING'], requireVerified: true } }) });
+    expect(await learning.bind().bootstrap({ runId: RUN })).toMatchObject({ outcome: 'UNAVAILABLE', requirement: 'REQUIRED', proceed: false });
+
+    // A Brain that does not verify is detached the same way.
+    const sound = harness();
+    await sound.bind().bootstrap({ runId: RUN });
+    const lying: JuliusBrainStore = { ...sound.store, head: async (brainId, projectId) => { const head = await sound.store.head(brainId, projectId); return head && { ...head, chainHash: `sha256:${'f'.repeat(64)}` }; } };
+    const continuation = harness({ store: lying, stateModeFor: (run) => ({ mode: 'CONTINUATION', missionId: run.missionId, runId: run.runId, resumes: ['run:julius-live-4:prev'] }) });
+    expect(await continuation.bind().bootstrap({ runId: RUN })).toMatchObject({ outcome: 'REFUSED', requirement: 'REQUIRED', proceed: false });
+
+    // The runtime store is the run's authority: no run, no bootstrap at all.
+    await expect(harness({ runs: new Map() }).bind().bootstrap({ runId: RUN })).rejects.toThrow('julius_live_brain_run_not_found');
+  });
+
+  it('preserved is claimed only after a verified bootstrap, every mirror written, and a committed checkpoint', async () => {
+    const flaky = createJuliusBrainMemoryStore();
+    let up = true;
+    const outage = () => { if (!up) throw new Error('terminating connection due to administrator command'); };
+    const store: JuliusBrainStore = {
+      ...flaky,
+      commit: async (input) => { outage(); return flaky.commit(input); },
+      commitGroup: async (input) => { outage(); return flaky.commitGroup(input); },
+    };
+    const h = harness({ store });
+    const binding = h.bind();
+    await binding.bootstrap({ runId: RUN });
+    const writer = binding.wrapWriter(h.table.writer);
+    await writer.appendBrainEntry(append('brain:decision:1', 'DECISION', 'ACCEPT'));
+    expect(await binding.checkpoint('drive ended COMPLETED')).toBe('COMMITTED');
+    expect(binding.preservation()).toMatchObject({ bootstrap: 'READY', mirrorsWritten: 1, mirrorsNotWritten: 0, checkpoint: 'COMMITTED', preserved: true, reasons: [] });
+
+    // The Brain goes away mid-run: the v1 write still succeeds, the mirror does not, and nothing claims otherwise.
+    up = false;
+    expect(await writer.appendBrainEntry(append('brain:decision:2', 'DECISION', 'REPAIR'))).toBe(true);
+    expect(await binding.checkpoint('drive ended FAILED')).toBe('UNAVAILABLE');
+    expect(binding.preservation()).toMatchObject({ mirrorsWritten: 1, mirrorsNotWritten: 1, checkpoint: 'UNAVAILABLE', preserved: false });
+  });
+
   it('a checkpoint pins the verified state the next bootstrap verifies against', async () => {
     const h = harness();
     const binding = h.bind();
     h.table.seed(append('seed:objective', 'OBJECTIVE', 'Implement the trust core'));
     await binding.bootstrap({ runId: RUN });
     expect(await binding.checkpoint('drive ended COMPLETED')).toBe('COMMITTED');
-    expect(await h.bind().bootstrap({ runId: RUN })).toEqual({ outcome: 'READY', created: false });
+    expect(await h.bind().bootstrap({ runId: RUN })).toEqual({ outcome: 'READY', created: false, requirement: 'ADDITIVE', proceed: true });
     expect(await harness().bind().checkpoint('no brain yet')).toBe('REFUSED');
   });
 });
