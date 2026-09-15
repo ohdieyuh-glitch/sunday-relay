@@ -12,7 +12,13 @@ import {
   renderJuliusResearchResume,
   resolveJuliusResearchDisagreement,
   sanitizeJuliusResearchAsks,
+  extractJuliusReadableText,
+  juliusResearchAnchorList,
+  juliusResearchDeliverySentence,
+  juliusResearchFragment,
+  planJuliusResearchDelivery,
   type JuliusResearchClaim,
+  type JuliusResearchDelivery,
   type JuliusResearchObservationRecord,
 } from './julius-research-protocol';
 import {
@@ -139,17 +145,28 @@ describe('the answer reaches the worker as data, and says what it could not fit'
     expect(text).not.toContain('<<<RELAY-EVIDENCE');
   });
 
-  it('says when an observation did not fit instead of cutting one silently', () => {
+  /**
+   * REWRITTEN AFTER QUALIFICATION ATTEMPT 4 (run 34774471909). This used to
+   * pin the renderer DROPPING an oversize observation and telling the worker it
+   * was "in the durable evidence record". The mediator keeps no such record, the
+   * page dropped was the one the mission needed, and the worker's re-ask hit the
+   * same wall. An observation that cannot fit now keeps its head in place and
+   * says its text is absent; one that fits is whole.
+   */
+  it('keeps an observation that did not fit in place and says its text is absent, never where it is not', () => {
     const huge = observation({ rendered: 'x'.repeat(JULIUS_RESEARCH_ASK_LIMITS.renderedChars) });
     const text = renderJuliusResearchResume({
       version: 'julius-research-ask.v1',
       askedAtCheckpointId: 'cp-1',
       observations: [observation(), huge],
     });
-    expect(text).toContain('1 further observation(s) did not fit');
-    expect(text).toContain('durable evidence record');
+    expect(text).toContain('THE TEXT OF THIS PAGE IS NOT IN THIS PACKET');
+    expect(text).toContain('1 fetched page(s) above arrived without their text');
+    expect(text).not.toContain('durable evidence record');
+    expect(text.split('— OBSERVED for:').length - 1, 'both observations keep their heads').toBe(2);
     // The one that fit is whole, not a prefix of a longer thing.
     expect(text).toContain('RELAY-EVIDENCE>>>');
+    expect(text.length).toBeLessThanOrEqual(JULIUS_RESEARCH_ASK_LIMITS.renderedChars + 2_000);
   });
 });
 
@@ -416,5 +433,128 @@ describe('a worker is told the research its mission authorises, from the sealed 
   it('a prompt handed no policy says so, rather than claiming NONE about a contract nobody read', () => {
     expect(RESEARCH_AUTHORITY_NOT_STATED).toContain('not stated to this dispatch');
     expect(RESEARCH_AUTHORITY_NOT_STATED).not.toContain('NONE');
+  });
+});
+
+/**
+ * QUALIFICATION ATTEMPT 4 (run 34774471909): Julius served the psql reference
+ * and the Prompt Architect received none of it. These pin what a worker is now
+ * handed from a page, and what Julius says about it.
+ */
+describe('delivery: what of a retrieved page reaches the worker, and the numbers that say so', () => {
+  const html = [
+    '<!doctype html><html><head><title>psql</title><meta name="viewport" content="width=device-width">',
+    '<script>var hidden = "script text";</script><style>.x{color:red}</style></head><body>',
+    '<!-- a comment nobody renders --><nav><a href="/">Home</a></nav>',
+    '<h1 id="APP-PSQL">psql</h1><p>psql is a terminal&nbsp;front-end &amp; more.</p>',
+    '<dl><dt id="APP-PSQL-META-COMMAND-PSET-NULL"><code>null</code></dt>',
+    '<dd><p>Sets the string to be printed in place of a null value.</p></dd>',
+    '<a name="legacy-anchor"></a><p>Legacy section &#39;quoted&#39; text&#0;here.</p></dl></body></html>',
+  ].join('\n');
+
+  it('reads prose out of markup: no scripts, styles, comments or tags, entities decoded, one line per block', () => {
+    const readable = extractJuliusReadableText(html);
+    expect(readable.markup).toBe(true);
+    for (const absent of ['script text', 'color:red', 'a comment nobody renders', '<p>', '&amp;', '&nbsp;']) {
+      expect(readable.text, absent).not.toContain(absent);
+    }
+    expect(readable.text).toContain('psql is a terminal front-end & more.');
+    expect(readable.text).toContain('Legacy section \'quoted\' texthere.');
+    expect(readable.text.split('\n')).toContain('Sets the string to be printed in place of a null value.');
+  });
+
+  it('places every section anchor where its section begins, and a meta name is not a section', () => {
+    const readable = extractJuliusReadableText(html);
+    const ids = readable.anchors.map((anchor) => anchor.id);
+    expect(ids).toEqual(['APP-PSQL', 'APP-PSQL-META-COMMAND-PSET-NULL', 'legacy-anchor']);
+    const at = (id: string) => readable.text.slice(readable.anchors.find((anchor) => anchor.id === id)!.offset);
+    expect(at('APP-PSQL-META-COMMAND-PSET-NULL').startsWith('null\nSets the string')).toBe(true);
+    expect(at('legacy-anchor').startsWith('Legacy section')).toBe(true);
+  });
+
+  it('passes a body that is not markup through unchanged, and a numeric NUL cannot forge an anchor', () => {
+    const plain = '{"null": "printed as nothing"}';
+    expect(extractJuliusReadableText(plain)).toEqual({ text: plain, anchors: [], markup: false });
+    const forged = extractJuliusReadableText('<p>x&#0;0&#0;y</p><p id="real">z</p>');
+    expect(forged.anchors.map((anchor) => anchor.id)).toEqual(['real']);
+    expect(forged.text).toBe('x0y\nz');
+  });
+
+  it('reads a section anchor from a reference, and nothing that could not be one', () => {
+    expect(juliusResearchFragment('https://www.postgresql.org/docs/current/app-psql.html#APP-PSQL-META-COMMAND-PSET-NULL'))
+      .toBe('APP-PSQL-META-COMMAND-PSET-NULL');
+    expect(juliusResearchFragment('https://www.postgresql.org/docs/current/app-psql.html')).toBeNull();
+    expect(juliusResearchFragment('https://x.example/#')).toBeNull();
+    expect(juliusResearchFragment('https://x.example/#%22%3E%3Cscript%3E')).toBeNull();
+    expect(juliusResearchFragment('not a url#frag')).toBeNull();
+  });
+
+  it('hands a page over whole when it fits, whatever section was named', () => {
+    const readable = extractJuliusReadableText(html);
+    expect(planJuliusResearchDelivery({ readable, fragment: 'legacy-anchor', allowanceChars: 10_000 }))
+      .toEqual({ from: 0, chars: readable.text.length, anchor: null, cut: false });
+  });
+
+  it('cuts a page that does not fit from the named section, else from the top, and says it cut', () => {
+    const readable = extractJuliusReadableText(html);
+    const anchor = readable.anchors.find((item) => item.id === 'APP-PSQL-META-COMMAND-PSET-NULL')!;
+    expect(planJuliusResearchDelivery({ readable, fragment: 'APP-PSQL-META-COMMAND-PSET-NULL', allowanceChars: 20 }))
+      .toEqual({ from: anchor.offset, chars: 20, anchor: 'APP-PSQL-META-COMMAND-PSET-NULL', cut: true });
+    // A worker's lowercase spelling still finds the page's own section.
+    expect(planJuliusResearchDelivery({ readable, fragment: 'app-psql-meta-command-pset-null', allowanceChars: 20 }).anchor)
+      .toBe('APP-PSQL-META-COMMAND-PSET-NULL');
+    expect(planJuliusResearchDelivery({ readable, fragment: 'NO-SUCH-SECTION', allowanceChars: 20 }))
+      .toEqual({ from: 0, chars: 20, anchor: null, cut: true });
+    const last = readable.anchors.find((item) => item.id === 'legacy-anchor')!;
+    const tail = planJuliusResearchDelivery({ readable, fragment: 'legacy-anchor', allowanceChars: 20 });
+    expect(tail.from).toBe(last.offset);
+    expect(tail.from + tail.chars).toBeLessThanOrEqual(readable.text.length);
+  });
+
+  it('bounds the anchors offered for a re-ask', () => {
+    const readable = extractJuliusReadableText(html);
+    expect(juliusResearchAnchorList(readable, 1_000)).toEqual(['APP-PSQL', 'APP-PSQL-META-COMMAND-PSET-NULL', 'legacy-anchor']);
+    expect(juliusResearchAnchorList(readable, 12)).toEqual(['APP-PSQL']);
+    // UNSEEN FIRST: past what was delivered comes before what the worker already has.
+    const cutAt = readable.anchors.find((item) => item.id === 'APP-PSQL-META-COMMAND-PSET-NULL')!.offset;
+    expect(juliusResearchAnchorList(readable, 1_000, cutAt)).toEqual(['APP-PSQL-META-COMMAND-PSET-NULL', 'legacy-anchor', 'APP-PSQL']);
+    expect(juliusResearchAnchorList(readable, 40, cutAt)).toEqual(['APP-PSQL-META-COMMAND-PSET-NULL']);
+  });
+
+  const delivery = (over: Partial<JuliusResearchDelivery> = {}): JuliusResearchDelivery => ({
+    fetchedBytes: 269_680, contentDigest: 'sha256:abc', mechanism: 'relay_http_fetch',
+    readableChars: 126_212, deliveredFrom: 0, deliveredChars: 126_212, anchor: null, cut: false, anchors: [],
+    ...over,
+  });
+
+  it('says a whole page is whole, with its bytes, backend and digest', () => {
+    const sentence = juliusResearchDeliverySentence(delivery());
+    expect(sentence).toContain('DELIVERED WHOLE: all 126212 readable characters');
+    expect(sentence).toContain('269680 bytes fetched by relay_http_fetch');
+    expect(sentence).toContain('sha256:abc');
+    expect(juliusResearchDeliverySentence(delivery({ fetchedBytes: null }))).toContain('an unreported number of bytes');
+  });
+
+  it('says exactly which characters an excerpt holds, that the rest was not shown, and how to reach it', () => {
+    const sentence = juliusResearchDeliverySentence(delivery({
+      deliveredFrom: 75_000, deliveredChars: 20_000, cut: true, anchor: 'APP-PSQL-META-COMMAND-PSET-NULL',
+      anchors: ['APP-PSQL', 'APP-PSQL-META-COMMAND-PSET-NULL'],
+    }));
+    expect(sentence).toContain('EXCERPT: characters 75001–95000 of 126212 readable characters, starting at section #APP-PSQL-META-COMMAND-PSET-NULL');
+    expect(sentence).toContain('Everything outside that range was NOT shown to you.');
+    expect(sentence).toContain('#APP-PSQL #APP-PSQL-META-COMMAND-PSET-NULL');
+  });
+
+  it('puts the delivery sentence beside the fence, never inside it', () => {
+    const text = renderJuliusResearchResume({
+      version: 'julius-research-ask.v1', askedAtCheckpointId: 'cp-1',
+      observations: [{
+        outcome: 'observed', reference: 'https://www.postgresql.org/docs/current/app-psql.html', purpose: 'NULL rendering.',
+        rendered: '<<<RELAY-EVIDENCE\nnull\nRELAY-EVIDENCE>>>', detail: 'The source answered.', evidenceId: 'ev-1',
+        injectionSignals: [], mayCorroborate: true, delivery: delivery(),
+      }],
+    });
+    expect(text.indexOf('DELIVERED WHOLE')).toBeGreaterThan(-1);
+    expect(text.indexOf('DELIVERED WHOLE')).toBeLessThan(text.indexOf('<<<RELAY-EVIDENCE'));
   });
 });
