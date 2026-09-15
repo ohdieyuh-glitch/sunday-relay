@@ -1,6 +1,6 @@
 {
  "pass": "GA03",
- "title": "Palace entrance: gold portal with doors on a dais, forecourt paving, columns, urns, gold cornices, vines, roses",
+ "title": "Palace entrance: gold filigree screen on a dais, forecourt paving, columns, urns, gold cornices, vines, roses",
  "folder": "Wonderland/Authored/GA03",
  "tags": [
   "V2_Castle"
@@ -53,12 +53,12 @@
    "collision": "block"
   },
   {
-   "id": "PortalArch",
-   "mesh": "/Game/WonderlandV2/Architecture/Garden/SM_garden_arch_stone.SM_garden_arch_stone",
+   "id": "PassageShadow",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
    "loc": [
     300.0,
-    10480.0,
-    28.0
+    10545.0,
+    144.0
    ],
    "rot": [
     0.0,
@@ -66,83 +66,14 @@
     0.0
    ],
    "scale": [
-    1.5,
-    1.5,
-    1.5
+    9.44,
+    0.8287,
+    37.305
    ],
    "materials": [
-    "MI_V2_Gold"
+    "MI_V2_WindowDark"
    ],
    "collision": "none"
-  },
-  {
-   "id": "PortalCrown",
-   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_finial_heart.SM_gate_finial_heart",
-   "loc": [
-    300.0,
-    10480.0,
-    1092.5
-   ],
-   "rot": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "scale": [
-    2.2,
-    2.2,
-    2.2
-   ],
-   "materials": [
-    "MI_V2_Gold"
-   ],
-   "collision": "none"
-  },
-  {
-   "id": "DoorLeft",
-   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_leaf.SM_gate_leaf",
-   "loc": [
-    -68.0,
-    10582.0,
-    28.0
-   ],
-   "rot": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "scale": [
-    0.92,
-    1.0,
-    1.35
-   ],
-   "materials": [
-    "MI_V2_Gold"
-   ],
-   "collision": "block"
-  },
-  {
-   "id": "DoorRight",
-   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_leaf.SM_gate_leaf",
-   "loc": [
-    668.0,
-    10582.0,
-    28.0
-   ],
-   "rot": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "scale": [
-    -0.92,
-    1.0,
-    1.35
-   ],
-   "materials": [
-    "MI_V2_Gold"
-   ],
-   "collision": "block"
   },
   {
    "id": "ColumnL",
@@ -376,6 +307,69 @@
   }
  ],
  "batches": [
+  {
+   "id": "Screen_gold",
+   "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Screen_gold.WL_Gatehouse_Screen_gold",
+   "material": "MI_V2_Gold",
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "instances": [
+    [
+     300.0,
+     10500.0,
+     28.0,
+     0.0,
+     0.0,
+     0.0,
+     1.2,
+     1.2,
+     1.2
+    ]
+   ]
+  },
+  {
+   "id": "Screen_gold_aged",
+   "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Screen_gold_aged.WL_Gatehouse_Screen_gold_aged",
+   "material": "MI_V2_GoldAged",
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "instances": [
+    [
+     300.0,
+     10500.0,
+     28.0,
+     0.0,
+     0.0,
+     0.0,
+     1.2,
+     1.2,
+     1.2
+    ]
+   ]
+  },
+  {
+   "id": "Screen_stone",
+   "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Screen.WL_Gatehouse_Screen",
+   "material": "MI_V2_IvoryStone",
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": true,
+   "instances": [
+    [
+     300.0,
+     10500.0,
+     28.0,
+     0.0,
+     0.0,
+     0.0,
+     1.2,
+     1.2,
+     1.2
+    ]
+   ]
+  },
   {
    "id": "UrnBlooms",
    "mesh": "/Game/WonderlandV2/Vegetation/Flowers/SM_blossom_cluster.SM_blossom_cluster",

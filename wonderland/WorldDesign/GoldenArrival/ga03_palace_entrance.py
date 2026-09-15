@@ -6,8 +6,12 @@ WHAT WAS THERE. The heart garden path ended on a lawn in front of a blank white 
 no gold. The corridor's destination looked like the back of a building.
 
 WHAT THIS LAYER ADDS.
-  PORTAL     the world's garden arch cast in gold at 1.5x in front of the arcade, closed gold doors
-             inside it, a gold heart crown, on a low dais with steps.
+  PORTAL     the forge's gold filigree screen (WL_Gatehouse_Screen, GAP 16: two 4.3 x 8.6 m lattice
+             leaves between stone piers with gold pinnacles, an ogee crown with heart finials) at 1.2x
+             on a low dais with steps, against the arcade.
+             GA03b (2026-09-15): it replaces GA03a's garden arch cast in gold at 1.5x, its heart crown
+             and the closed gold doors inside it. At that scale the arch's rustic blocks read as
+             crumpled gold with dark blotches, and the doors doubled the gold behind it (pvscreen).
   FORECOURT  plaza paving from the palace walkway to the dais, flanking ivory columns with gold
              finials, flower urns, and and nothing hung across the court (see the note in build()).
   THE WALL   gold cornice trims across the arcade, climbing vines and roses along its base.
@@ -23,6 +27,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PASS = "GA03"
+KIT = json.loads((HERE.parent / "Skyline" / "kit_modules.json").read_text(encoding="utf-8"))["modules"]
 GROUND = -14.0
 V2 = "/Game/WonderlandV2/"
 MESH = {
@@ -75,15 +80,22 @@ def build():
     actor("DaisSteps", "path_steps", (AXIS_X, WALL_Y - 190.0 - 370.0 * 0.52 - 272.0 * 0.9, GROUND), ["MI_V2_PlazaCream"], (1.6, 0.9, 0.75))
 
     # ---------------------------------------------------------------- the gold portal
-    arch_scale = 1.5
-    arch_y = WALL_Y - 60.0 * arch_scale - 30.0
-    actor("PortalArch", "garden_arch", (AXIS_X, arch_y, dais_top), ["MI_V2_Gold"], arch_scale, collision="none")
-    actor("PortalCrown", "finial_heart", (AXIS_X, arch_y, dais_top + 723.0 * arch_scale - 20.0), ["MI_V2_Gold"], 2.2, collision="none")
-    # Closed gold doors between the arch and the wall: two leaves hinged at the jambs.
-    leaf_scale = (0.92, 1.0, 1.35)
-    door_y = WALL_Y - 18.0
-    actor("DoorLeft", "gate_leaf", (AXIS_X - 368.0, door_y, dais_top), ["MI_V2_Gold"], leaf_scale, yaw=0.0)
-    actor("DoorRight", "gate_leaf", (AXIS_X + 368.0, door_y, dais_top), ["MI_V2_Gold"], (-leaf_scale[0], leaf_scale[1], leaf_scale[2]), yaw=0.0)
+    # The screen's piers (base 1.86 m at 1.2x, centres x +/-618) stay inside the dais (x +/-720, y 10218..10602)
+    # and clear the ivory columns' round bases at (+/-780, 10340). Its ivy anchor strips are flat green boxes
+    # meant for a vine pass, so they are left out (a stretched SM_vine_wall on the piers read as a green sausage, ga03b).
+    screen_scale, screen_y = 1.2, 10500.0
+    for part in KIT["WL_Gatehouse_Screen"]["parts"]:
+        if part["part"] == "veg_anchor":
+            continue
+        key = "Screen_%s" % part["part"]
+        batches[key] = {"id": key, "mesh": part["mesh"], "material": part["material"], "collides": part["part"] == "stone",
+                        "cast_shadow": True, "affect_df": part["part"] == "stone",
+                        "instances": [[AXIS_X, screen_y, dais_top, 0.0, 0.0, 0.0, screen_scale, screen_scale, screen_scale]]}
+    # The passage behind the leaves: the arcade wall shows through the lattice as flat cream and the gold is lost
+    # against it (ga03b), so a shadowed recess stands between the leaves and the wall, as an open gate would show.
+    leaves_w, leaves_h = (4.30 * 2.0 + 0.84) * 100.0 * screen_scale, 8.60 * 100.0 * screen_scale
+    actor("PassageShadow", "kerb", (AXIS_X, screen_y + 45.0, dais_top + 105.0 * screen_scale - 10.0), ["MI_V2_WindowDark"],
+          (leaves_w / 120.0, 30.0 / 36.2, (leaves_h + 20.0) / 28.2), collision="none")
 
     # ---------------------------------------------------------------- columns and urns
     for side, dx in (("L", -780.0), ("R", 780.0)):
@@ -135,7 +147,7 @@ def build():
     # NO LANTERN SWAG. GA03a hung SM_lantern_swag across the court: at this scale its lanterns are
     # solid gold drums at head height and they blocked the portal from every approach camera.
 
-    return {"pass": PASS, "title": "Palace entrance: gold portal with doors on a dais, forecourt paving, columns, urns, gold cornices, vines, roses",
+    return {"pass": PASS, "title": "Palace entrance: gold filigree screen on a dais, forecourt paving, columns, urns, gold cornices, vines, roses",
             "folder": "Wonderland/Authored/GA03", "tags": ["V2_Castle"], "actors": actors, "batches": list(batches.values())}
 
 
