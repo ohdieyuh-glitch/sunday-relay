@@ -1,0 +1,528 @@
+{
+ "pass": "PL01_TRIM",
+ "title": "Heart Garden east: flat castle blocks inside the palace wing's footprint sunk (reversible)",
+ "trims": [
+  {
+   "name": "WonderlandInstancedBatch_1069",
+   "label": "V2Batch_castle_hall_MI_V2_MarblePale",
+   "mesh": "SM_castle_hall",
+   "index": 9,
+   "why": "connect hall under the SKY04 tower",
+   "before": [
+    2643.432,
+    8741.554,
+    0.0,
+    0.0,
+    153.403,
+    0.0,
+    0.84,
+    0.84,
+    0.84
+   ],
+   "after": [
+    2643.432,
+    8741.554,
+    -100000.0,
+    0.0,
+    153.403,
+    0.0,
+    0.84,
+    0.84,
+    0.84
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_1313",
+   "label": "SKY04_SKY04_Tower_Mid_Fluted_IvoryStone",
+   "mesh": "WL_Tower_Mid_Fluted",
+   "index": 0,
+   "why": "SKY04 fluted tower on that hall",
+   "before": [
+    2643.0,
+    8742.0,
+    757.5,
+    0.0,
+    333.4,
+    0.0,
+    0.55,
+    0.55,
+    0.55
+   ],
+   "after": [
+    2643.0,
+    8742.0,
+    -99242.5,
+    0.0,
+    333.4,
+    0.0,
+    0.55,
+    0.55,
+    0.55
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_1314",
+   "label": "SKY04_SKY04_Spire_Needle_gold_Gold",
+   "mesh": "WL_Spire_Needle_gold",
+   "index": 0,
+   "why": "its gold needle tip",
+   "before": [
+    2643.0,
+    8742.0,
+    1681.5,
+    0.0,
+    333.4,
+    0.0,
+    0.55,
+    0.55,
+    0.55
+   ],
+   "after": [
+    2643.0,
+    8742.0,
+    -98318.5,
+    0.0,
+    333.4,
+    0.0,
+    0.55,
+    0.55,
+    0.55
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_1315",
+   "label": "SKY04_SKY04_Spire_Needle_roof_RoofRose",
+   "mesh": "WL_Spire_Needle_roof",
+   "index": 0,
+   "why": "its needle roof",
+   "before": [
+    2643.0,
+    8742.0,
+    1681.5,
+    0.0,
+    333.4,
+    0.0,
+    0.55,
+    0.55,
+    0.55
+   ],
+   "after": [
+    2643.0,
+    8742.0,
+    -98318.5,
+    0.0,
+    333.4,
+    0.0,
+    0.55,
+    0.55,
+    0.55
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_1316",
+   "label": "SKY04_SKY04_Spire_Needle_IvoryStone",
+   "mesh": "WL_Spire_Needle",
+   "index": 0,
+   "why": "its needle base",
+   "before": [
+    2643.0,
+    8742.0,
+    1681.5,
+    0.0,
+    333.4,
+    0.0,
+    0.55,
+    0.55,
+    0.55
+   ],
+   "after": [
+    2643.0,
+    8742.0,
+    -98318.5,
+    0.0,
+    333.4,
+    0.0,
+    0.55,
+    0.55,
+    0.55
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_1069",
+   "label": "V2Batch_castle_hall_MI_V2_MarblePale",
+   "mesh": "SM_castle_hall",
+   "index": 10,
+   "why": "second connect hall",
+   "before": [
+    2361.876,
+    9079.805,
+    0.0,
+    0.0,
+    153.403,
+    0.0,
+    0.437,
+    0.437,
+    0.437
+   ],
+   "after": [
+    2361.876,
+    9079.805,
+    -100000.0,
+    0.0,
+    153.403,
+    0.0,
+    0.437,
+    0.437,
+    0.437
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_149",
+   "label": "V2Batch_castle_arcade_MI_V2_IvoryStone",
+   "mesh": "SM_castle_arcade",
+   "index": 0,
+   "why": "arcade across the block",
+   "before": [
+    2400.0,
+    9070.0,
+    0.0,
+    0.0,
+    17.0,
+    0.0,
+    1.6,
+    1.6,
+    1.6
+   ],
+   "after": [
+    2400.0,
+    9070.0,
+    -100000.0,
+    0.0,
+    17.0,
+    0.0,
+    1.6,
+    1.6,
+    1.6
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_150",
+   "label": "V2Batch_facade_panel_MI_V2_IvoryStone",
+   "mesh": "SM_facade_panel",
+   "index": 0,
+   "why": "facade panel",
+   "before": [
+    2000.0,
+    9098.0,
+    420.0,
+    0.0,
+    17.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "after": [
+    2000.0,
+    9098.0,
+    -99580.0,
+    0.0,
+    17.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_150",
+   "label": "V2Batch_facade_panel_MI_V2_IvoryStone",
+   "mesh": "SM_facade_panel",
+   "index": 1,
+   "why": "facade panel",
+   "before": [
+    2400.0,
+    9098.0,
+    420.0,
+    0.0,
+    17.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "after": [
+    2400.0,
+    9098.0,
+    -99580.0,
+    0.0,
+    17.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_150",
+   "label": "V2Batch_facade_panel_MI_V2_IvoryStone",
+   "mesh": "SM_facade_panel",
+   "index": 2,
+   "why": "facade panel",
+   "before": [
+    2800.0,
+    9098.0,
+    420.0,
+    0.0,
+    17.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "after": [
+    2800.0,
+    9098.0,
+    -99580.0,
+    0.0,
+    17.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_1067",
+   "label": "V2Batch_facade_panel_MI_V2_MarblePale",
+   "mesh": "SM_facade_panel",
+   "index": 16,
+   "why": "facade panel",
+   "before": [
+    2969.14,
+    8966.539,
+    300.0,
+    0.0,
+    153.403,
+    0.0,
+    1.203,
+    1.203,
+    1.203
+   ],
+   "after": [
+    2969.14,
+    8966.539,
+    -99700.0,
+    0.0,
+    153.403,
+    0.0,
+    1.203,
+    1.203,
+    1.203
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_1058",
+   "label": "V2Batch_column_ornate_MI_V2_IvoryStone",
+   "mesh": "SM_column_ornate",
+   "index": 44,
+   "why": "lone ornate column",
+   "before": [
+    2769.701,
+    9159.221,
+    0.0,
+    0.0,
+    153.403,
+    0.0,
+    0.72,
+    0.72,
+    0.72
+   ],
+   "after": [
+    2769.701,
+    9159.221,
+    -100000.0,
+    0.0,
+    153.403,
+    0.0,
+    0.72,
+    0.72,
+    0.72
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_1063",
+   "label": "V2Batch_gate_finial_ball_MI_V2_Gold",
+   "mesh": "SM_gate_finial_ball",
+   "index": 44,
+   "why": "its gold ball",
+   "before": [
+    2835.948,
+    9126.051,
+    960.0,
+    0.0,
+    153.403,
+    0.0,
+    0.9,
+    0.9,
+    0.9
+   ],
+   "after": [
+    2835.948,
+    9126.051,
+    -99040.0,
+    0.0,
+    153.403,
+    0.0,
+    0.9,
+    0.9,
+    0.9
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_1062",
+   "label": "V2Batch_balustrade_MI_V2_GoldAged",
+   "mesh": "SM_balustrade",
+   "index": 91,
+   "why": "roof balustrade",
+   "before": [
+    2338.482,
+    8894.241,
+    700.0,
+    0.0,
+    243.403,
+    0.0,
+    3.024,
+    3.024,
+    3.024
+   ],
+   "after": [
+    2338.482,
+    8894.241,
+    -99300.0,
+    0.0,
+    243.403,
+    0.0,
+    3.024,
+    3.024,
+    3.024
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_1062",
+   "label": "V2Batch_balustrade_MI_V2_GoldAged",
+   "mesh": "SM_balustrade",
+   "index": 92,
+   "why": "roof balustrade",
+   "before": [
+    2490.745,
+    8436.604,
+    700.0,
+    0.0,
+    333.403,
+    0.0,
+    3.024,
+    3.024,
+    3.024
+   ],
+   "after": [
+    2490.745,
+    8436.604,
+    -99300.0,
+    0.0,
+    333.403,
+    0.0,
+    3.024,
+    3.024,
+    3.024
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_1062",
+   "label": "V2Batch_balustrade_MI_V2_GoldAged",
+   "mesh": "SM_balustrade",
+   "index": 93,
+   "why": "roof balustrade",
+   "before": [
+    2948.383,
+    8588.866,
+    700.0,
+    0.0,
+    423.403,
+    0.0,
+    3.024,
+    3.024,
+    3.024
+   ],
+   "after": [
+    2948.383,
+    8588.866,
+    -99300.0,
+    0.0,
+    423.403,
+    0.0,
+    3.024,
+    3.024,
+    3.024
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_1057",
+   "label": "V2Batch_garden_arch_stone_MI_V2_IvoryStone",
+   "mesh": "SM_garden_arch_stone",
+   "index": 44,
+   "why": "roof garden arch",
+   "before": [
+    2937.8,
+    8903.946,
+    640.0,
+    0.0,
+    153.403,
+    0.0,
+    0.346,
+    0.346,
+    0.346
+   ],
+   "after": [
+    2937.8,
+    8903.946,
+    -99360.0,
+    0.0,
+    153.403,
+    0.0,
+    0.346,
+    0.346,
+    0.346
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_91",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "mesh": "SM_hedge_mass",
+   "index": 18,
+   "why": "hedge mass inside the footprint",
+   "before": [
+    2000.0,
+    6600.0,
+    0.0,
+    0.0,
+    185.0,
+    0.0,
+    1.25,
+    1.25,
+    1.25
+   ],
+   "after": [
+    2000.0,
+    6600.0,
+    -100000.0,
+    0.0,
+    185.0,
+    0.0,
+    1.25,
+    1.25,
+    1.25
+   ]
+  }
+ ]
+}
