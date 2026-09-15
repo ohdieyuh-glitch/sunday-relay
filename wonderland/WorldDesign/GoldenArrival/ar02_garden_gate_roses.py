@@ -18,19 +18,18 @@ springing and the crown (radius 3.37 m, centres 0.67 m past the axis). Rotations
 from horizontal; roll -90 puts its stems to -Y (the south face) at yaw 0 (probe 434).
 """
 import json
-import math
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "Districts"))
 import courtkit as K  # noqa: E402
+import rose_arch  # noqa: E402
 
 PASS = "AR02"
 KIT = json.loads((HERE.parent / "Skyline" / "kit_modules.json").read_text(encoding="utf-8"))["modules"]
 CENSUS = HERE / "ar02_floral_arch_census_2026-09-15.json"
 ARCH_X, ARCH_Y, GROUND, S = 0.0, 3200.0, -14.0, 1.2          # GA01c's gold rose arch
-HALF_SPAN, SPRING, RISE = 2.7 * 100 * S, 4.9 * 100 * S, 3.3 * 100 * S
 COLUMN_FACE, BAND_FACE = 34.0, 44.0                          # cm from the arch plane to the face the roses sit on
 RUN_S = 1.1                                                  # a rose run is 1.25 m long at 1x
 TRIM = [("StaticMeshActor_7", None, "floral arch of speckled blossom bulbs 4 m behind the gold garden arch")]
@@ -53,36 +52,10 @@ def build_layer():
             b["instances"].append([round(x, 1), round(y, 1), round(z, 1), round(pitch, 1), round(yaw, 1), round(roll, 1),
                                    scale, scale, scale])
 
-    # the two-centred arc through the springing (x = HALF_SPAN, z = 0) and the crown (x = 0, z = RISE)
-    radius = (HALF_SPAN ** 2 + RISE ** 2) / (2.0 * HALF_SPAN)
-    centre = HALF_SPAN - radius                               # on the far side of the axis
-    a_top = math.acos(-centre / radius)
-    # two staggered rows per face (ar02a: one row read as a thin chain): the second half a run along, 12 cm further
-    # out and a little smaller, so the climber reads as a full rose rather than a line of blooms
-    for face, sgn_y in (("south", -1.0), ("north", 1.0)):
-        for side in (-1.0, 1.0):
-            for row, (lead, out, scale) in enumerate(((0.5, 0.0, RUN_S), (1.0, 12.0, RUN_S * 0.85))):
-                # up the column: runs along +Z, stems out of the face
-                z = GROUND + 40.0 + run_len * lead                # a run's origin is its middle (bbox x -59..66)
-                while z < GROUND + SPRING - run_len * 0.3:
-                    roll = -90.0 if sgn_y < 0 else 90.0
-                    run(ARCH_X + side * (HALF_SPAN + (9.0 if row else -9.0)), ARCH_Y + sgn_y * (COLUMN_FACE + out), z, 90.0, 0.0, roll, scale)
-                    z += run_len
-                # along the band from the springing to the crown
-                arc = run_len * lead
-                while True:
-                    a = arc / radius
-                    if a > a_top - 0.02:
-                        break
-                    px = centre + radius * math.cos(a)            # distance from the axis
-                    pz = radius * math.sin(a)
-                    tangent_up = 90.0 - math.degrees(a)          # the band's angle above horizontal, heading to the crown
-                    if side > 0:                                  # east half: the run heads toward -X
-                        yaw, roll = 180.0, (90.0 if sgn_y < 0 else -90.0)
-                    else:                                         # west half: toward +X
-                        yaw, roll = 0.0, (-90.0 if sgn_y < 0 else 90.0)
-                    run(ARCH_X + side * px, ARCH_Y + sgn_y * (BAND_FACE + out), GROUND + SPRING + pz, tangent_up, yaw, roll, scale)
-                    arc += run_len
+    # two staggered rows per face (ar02a: one row read as a thin chain), the geometry shared with GA02 (rose_arch.py)
+    for (x, y, z, pitch, yaw, roll, scale) in rose_arch.climbing_runs(ARCH_X, ARCH_Y, GROUND, S, 0.0, run_s=RUN_S,
+                                                                     column_face=COLUMN_FACE, band_face=BAND_FACE):
+        run(x, y, z, pitch, yaw, roll, scale)
     return {"pass": PASS, "title": "Golden garden gate climbed by forge roses on both faces",
             "folder": "Wonderland/Authored/AR02", "tags": ["V2_Garden"], "actors": [], "batches": list(batches.values()),
             "runs": k[0]}

@@ -12,7 +12,7 @@ CLOCK PLAZA -> HEART GARDEN -> PALACE):
                 flower ring at the basin, benches, rose-glass lamps, and a pair of ivory clock
                 towers with gold dials and pink roofs marking the way on to the palace.
   HEART GARDEN  four heart-shaped parterres (clipped box border, roses inside) either side of the
-                palace path, three rose trellis arches over the path crowned with gold hearts,
+                palace path, three stone rose arches climbed by roses over the path (HG01),
                 heart topiaries at the palace end, and lamps along the walk.
 
 MEASURED INPUTS. Ground z -14 across the court and garden (PIE probe); the palace path is one
@@ -26,6 +26,8 @@ import json
 import math
 import random
 from pathlib import Path
+
+import rose_arch
 
 HERE = Path(__file__).resolve().parent
 KIT = json.loads((HERE.parent / "Skyline" / "kit_modules.json").read_text(encoding="utf-8"))["modules"]
@@ -282,18 +284,32 @@ def build():
                         plant("HeartFlowers", "rose", material, (wx, wy, GROUND), rng.uniform(0, 360), rng.uniform(0.62, 0.72),
                               leaf="MI_V2_LeafDark")
 
-    # Rose trellis arches over the path, each crowned with a gold heart.
-    trellis_scale = 0.62
-    for k, s in enumerate((0.1, 0.45, 0.8)):
-        x, y = along(s, 0.0)
-        actor("HeartArch%d" % k, "trellis", (x, y, GROUND), ["MI_V2_PetalRose"], trellis_scale, yaw=across_yaw, collision="none")
-        actor("HeartArch%d_Crown" % k, "finial_heart", (x, y, GROUND + 620.0 * trellis_scale - 6.0), ["MI_V2_Gold"], 1.25, yaw=across_yaw, collision="none")
-        for g in range(9):
-            u = -1.0 + 2.0 * g / 8.0
-            gx, gy = along(s, u * 280.0)
-            gz = GROUND + 290.0 + 70.0 * (1.0 - u * u)
-            material = "MI_V2_RoseRed" if g % 2 else "MI_V2_RosePink"
-            instance("ArchGarland_" + material.split("_")[-1], "rose_bloom", material, (gx, gy, gz), rng.uniform(0.45, 0.6), rng.uniform(0, 360))
+    # Rose arches over the path. GA02a-c stood SM_floral_arch_trellis at 0.62x crowned with a gold heart and hung a
+    # garland of rose blooms: at walking distance a thin pink wire hoop on pink block feet with cup blooms hanging like
+    # lamps (heart garden survey hg1, 2026-09-15). HG01 (2026-09-15): the forge's rose garden arch (WL_Arch_Garden_Rose)
+    # at 0.85x -- 4.6 m span, 7 m tall -- in ivory stone with its gold finial, climbed by forge rose runs on both faces
+    # (rose_arch.py, AR02's climber), so the Heart Garden walk passes under three rose arches. The gold arches stay the
+    # corridor's gates (GA01c, GA04b); these are garden stone. Columns collide; the roses do not.
+    arch_scale = 0.85
+    for k, s_ in enumerate((0.1, 0.45, 0.8)):
+        x, y = along(s_, 0.0)
+        for part in KIT["WL_Arch_Garden_Rose"]["parts"]:
+            if part["part"] == "veg_anchor":
+                continue
+            key = "HeartRoseArch_%s" % part["part"]
+            material = "MI_V2_Gold" if part["part"] == "gold" else "MI_V2_IvoryStone"
+            b = batches.setdefault(key, {"id": key, "mesh": part["mesh"], "material": material, "instances": [],
+                                         "collides": part["part"] == "stone", "cast_shadow": True, "affect_df": part["part"] == "stone"})
+            b["instances"].append([round(x, 1), round(y, 1), GROUND, 0.0, round(across_yaw, 1), 0.0, arch_scale, arch_scale, arch_scale])
+        for j, (rx, ry, rz, rp, ryaw, rr, rs) in enumerate(rose_arch.climbing_runs(x, y, GROUND, arch_scale, across_yaw, run_s=0.95)):
+            petal = "MI_V2_RoseRed" if (j + k) % 3 == 1 else "MI_V2_RosePink"
+            leaf = "MI_V2_LeafDark" if j % 2 else "MI_V2_LeafMid"
+            for part in KIT["WL_Flower_Rose_Run"]["parts"]:
+                material = petal if part["part"] == "petal" else leaf
+                key = "HeartArchRoses_%s_%s" % (part["part"], material.replace("MI_V2_", ""))
+                b = batches.setdefault(key, {"id": key, "mesh": part["mesh"], "material": material, "instances": [],
+                                             "collides": False, "cast_shadow": True, "affect_df": False})
+                b["instances"].append([round(rx, 1), round(ry, 1), round(rz, 1), round(rp, 1), round(ryaw, 1), round(rr, 1), rs, rs, rs])
 
     # Heart topiaries at the palace end, broad faces turned to the approaching visitor.
     for side, offset in (("L", 560.0), ("R", -560.0)):
