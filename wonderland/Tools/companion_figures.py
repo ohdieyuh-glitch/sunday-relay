@@ -308,7 +308,7 @@ def build_ghost(skin_name, display):
         z = face_z + spow(math.sin(t), 0.5) * (face_h + 1.0)
         x = front_x(y, z) + 0.5
         pitch, yaw = aim((1.0, y * 0.05, (z - face_z) * 0.05))
-        fig.box("head", "ivory", (x, y, z), (2.1, 2.3, 2.3), pitch, yaw, 0.0)
+        fig.box("head", "ivory", (x + 0.3, y, z), (2.6, 2.6, 2.6), pitch, yaw, 0.0)
     # The face: a black screen set back inside the rim, gently domed.
     y = -face_w
     while y <= face_w + 1e-6:
@@ -347,7 +347,7 @@ def build_ghost(skin_name, display):
 
     # THE BROW GEM.
     gem_z = face_z + face_h + 2.1
-    fig.diamond("head", "gold", "gem", (front_x(0.0, gem_z) + 0.9, 0.0, gem_z), (1.0, 0.0, 0.45), 4.2)
+    fig.diamond("head", "gold", "gem", (front_x(0.0, gem_z) + 1.1, 0.0, gem_z + 0.3), (1.0, 0.0, 0.45), 5.0)
 
     # THE SKIN'S CROWNING FEATURE.
     if skin_name == "aurum":
@@ -473,13 +473,23 @@ def build_fable():
         yy += 1.0
     hair_c, hair_r = (-0.7, 0.0, 66.2), (5.9, 6.4, 6.6)
     fig.superellipsoid("head", "ivory", hair_c, hair_r, 2.7, tile=1.8, depth=1.2, gap=0.1,
-                       keep=lambda nrm, p: p[2] > 60.2 and not (nrm[0] > 0.0 and abs(p[1]) < 4.3 and p[2] < 67.8))
-    for i in range(7):
-        yy = -3.6 + 1.2 * i
-        fig.box("head", "ivory", (5.4 - 0.04 * yy * yy, yy, 68.2 - 0.1 * abs(yy)), (1.3, 1.25, 2.4), 0.0, 0.0, (i - 3) * 3.0)
+                       keep=lambda nrm, p: p[2] > 66.0 and not (nrm[0] > 0.0 and abs(p[1]) < 4.3 and p[2] < 67.8))
+    # THE BOB, as strands: blocks hanging from the crown to the chin all round the back and sides, straight
+    # bangs across the brow, so it reads as hair and not as a helmet.
+    for k in range(26):
+        az = math.radians(48.0 + (360.0 - 96.0) * k / 25)
+        length = 8.6 + 0.9 * math.sin(k * 1.7)
+        top = (hair_c[0] + 6.1 * math.cos(az), 6.7 * math.sin(az), 70.4)
+        centre = (top[0], top[1], top[2] - length * 0.5)
+        pitch, yaw = aim((math.cos(az), math.sin(az), 0.0))
+        fig.box("head", "ivory", centre, (1.5, 1.85, length), pitch - 6.0, yaw, 0.0)
+    for i in range(9):
+        yy = -4.4 + 1.1 * i
+        drop = 3.0 + 0.35 * ((i * 5) % 3)
+        fig.box("head", "ivory", (5.5 - 0.045 * yy * yy, yy, 70.4 - drop * 0.5), (1.4, 1.2, drop), -8.0, 0.0, (i - 4) * 2.0)
     for side in (-1.0, 1.0):
         for j in range(3):
-            fig.box("head", "ivory", (2.8 - j * 1.6, side * (5.0 + 0.3 * j), 63.2), (1.6, 1.3, 6.4 - j * 0.8), 0.0, 0.0, side * 4.0)
+            fig.box("head", "ivory", (3.6 - j * 1.4, side * (5.2 + 0.35 * j), 64.4), (1.6, 1.4, 8.4 - j * 0.9), 0.0, 0.0, side * 3.0)
     for side in (-1.0, 1.0):
         fig.box("eyes", "eye", (5.55, side * 1.9, 65.0), (0.6, 1.7, 1.15), 0.0, 0.0, side * 12.0)
     # The tiara.
