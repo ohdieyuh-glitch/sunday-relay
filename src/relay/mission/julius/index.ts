@@ -51,3 +51,4 @@ export * from './julius-tick-budget';
 export * from './julius-peer-channel';
 export * from './julius-peer-runtime';
 export * from './julius-review-verdict';
+export * from './julius-disagreement';

@@ -570,7 +570,13 @@ readonly guidance?:unknown;
   * Julius rebuilds it from an allowlist, refuses any Julius-only outcome by
   * name, and decides the consequence itself. Ignored from any other slot.
   */
- readonly reviewVerdict?:unknown;}
+ readonly reviewVerdict?:unknown;
+ /**
+  * THE ARCHITECT'S ONE ANSWER TO A DISAGREEMENT — concede, or maintain with
+  * evidence — unsanitised. Julius rebuilds it from an allowlist and decides what
+  * follows. Read only from a rebuttal task.
+  */
+ readonly rebuttal?:unknown;}
 /**
  * WHAT JULIUS TELLS AN ADAPTER, and nothing more.
  *

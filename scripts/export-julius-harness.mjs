@@ -277,6 +277,9 @@ const FILE_RULES = [
   // The reviewer's canonical verdict, the stricter-of rule and the route Julius
   // takes: the Independent Reviewer's vocabulary, owned by its subsystem.
   ['src/relay/mission/julius/julius-review-verdict.ts', 'INDEPENDENT REVIEWER'],
+  // Disagreement between the architect and the reviewer: opened, bounded and
+  // resolved by Julius, so it belongs to the coordinator, not to either peer.
+  ['src/relay/mission/julius/julius-disagreement.ts', 'TASK GRAPH / SCHEDULER'],
   // How many run-loop ticks a mission's own structure permits. The scheduler's
   // account of how much it may dispatch, counted from the task graph it owns.
   ['src/relay/mission/julius/julius-tick-budget.ts', 'TASK GRAPH / SCHEDULER'],

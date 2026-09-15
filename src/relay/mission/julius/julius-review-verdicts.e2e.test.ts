@@ -341,8 +341,17 @@ describe('P9 (verdict half) — a CHALLENGE is recorded, never revises the contr
       subjectTaskId: 'build-1', carrierTaskId: 'build-1:review', mandatory: true, pausedTaskIds: 'deploy-1',
     });
     expect(String(challenge!.evidenceIds).length, 'it cites the review').toBeGreaterThan(0);
-    expect(decisionsOn(harness, 'build-1'), 'no decision while it is unresolved').toEqual([]);
-    expect(harness.store.taskRow('deploy-1')!.state).toBe('BLOCKED');
+    // Nothing serves a rebuttal in this graph, so Julius resolves the
+    // disagreement at once by its own rule — the challenge stands — and only
+    // then decides the work. Nothing was decided, and nothing downstream ran,
+    // before that resolution existed.
+    const resolvedAt = log(harness).findIndex((event) => event.type === 'disagreement.resolved');
+    expect(log(harness)[resolvedAt]!.facts).toMatchObject({ resolution: 'CHALLENGE_UPHELD', resolutionBasis: 'REBUTTAL_UNROUTABLE' });
+    const firstDecision = log(harness).findIndex((event) => event.type === 'verification.decided' && event.taskId === 'build-1');
+    expect(firstDecision, 'no decision while it was unresolved').toBeGreaterThan(resolvedAt);
+    expect(decisionsOn(harness, 'build-1').map((facts) => facts.action)).toEqual(['REPAIR']);
+    expect(log(harness).some((event) => event.type === 'task.claimed' && event.taskId === 'deploy-1'
+      && log(harness).indexOf(event) < resolvedAt)).toBe(false);
     expect(await harness.store.loadTaskContract({ projectId: 'prj-1', taskId: 'build-1' })).toEqual(before);
     expect(await harness.store.taskContractRevisions({ projectId: 'prj-1', taskId: 'build-1' })).toHaveLength(1);
     expect(log(harness).some((event) => event.type === 'contract.challenged' || event.type === 'contract.proposed')).toBe(false);

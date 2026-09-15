@@ -163,6 +163,8 @@ export type ScriptedOutcome =
     readonly researchAsks?: unknown;
     /** A reviewer's canonical verdict. Unsanitised, for the same reason. */
     readonly reviewVerdict?: unknown;
+    /** An architect's rebuttal to a disagreement. Unsanitised, for the same reason. */
+    readonly rebuttal?: unknown;
   }
   /** `costUsdMicros` is what the boundary billed before it failed, as its diagnostics would carry. */
   | {
@@ -234,6 +236,7 @@ export function scriptedAdapter(
         ...(step.segmentResume === undefined ? {} : { segmentResume: step.segmentResume }),
         ...(step.researchAsks === undefined ? {} : { researchAsks: step.researchAsks }),
         ...(step.reviewVerdict === undefined ? {} : { reviewVerdict: step.reviewVerdict }),
+        ...(step.rebuttal === undefined ? {} : { rebuttal: step.rebuttal }),
       };
       return result;
     },

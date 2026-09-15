@@ -43,6 +43,11 @@ import { planJuliusRepair } from './julius-repair-runtime';
 import { juliusWorkUnitRootOf, repairLineageRootOf, repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
 import { foldJuliusPeerRequests, guardJuliusPeerResponse, juliusPeerIdsThatFit, type JuliusPeerLedgerEntry } from './julius-peer-channel';
 import {
+  advanceJuliusDisagreement, foldJuliusDisagreements, juliusDisagreementOpenedFacts, juliusDisagreementStepFacts,
+  juliusRebuttalReviewTaskId, juliusRebuttalTaskId, openJuliusDisagreement, sanitizeJuliusRebuttal,
+  type JuliusDisagreement, type JuliusDisagreementStep,
+} from './julius-disagreement';
+import {
   JULIUS_LOCAL_EXECUTION_SCOPE, juliusPeerPartyForRole, moveJuliusPeerRequest, openJuliusPeerRequestOnLedger, readJuliusPeerLedger,
   type JuliusPeerRuntimeContext,
 } from './julius-peer-runtime';
@@ -1226,7 +1231,12 @@ export async function runClaimedTask(
     });
   }
 
-  /* ------------------------------------------- 3c. what the reviewer concluded */
+  /* ------------------------------------------- 3c. what the architect answered */
+  if (!outcome.duplicate && task.role === 'PROMPT_ARCHITECT' && task.taskType === 'rebuttal') {
+    await recordRebuttal({ deps, run, ledger, task, workerId: outcome.workerId, value: outcome.rebuttal });
+  }
+
+  /* ------------------------------------------- 3d. what the reviewer concluded */
   if (!outcome.duplicate && task.role === 'INDEPENDENT_REVIEWER' && outcome.reviewVerdict !== undefined) {
     await recordReviewVerdictDeclaration({ ledger, task, workerId: outcome.workerId, value: outcome.reviewVerdict });
   }
@@ -2613,7 +2623,7 @@ async function recordReviewVerdictDeclaration(input: {
 
 interface AppliedReviewVerdict {
   readonly verdict: string | null;
-  readonly route: JuliusReviewRoute;
+  readonly route: JuliusReviewRoute | 'RE_REVIEW';
   readonly category: string | null;
 }
 
@@ -2626,7 +2636,7 @@ async function readVerdictLedger(deps: JuliusPipelineDependencies, run: JuliusRu
     const page = await deps.timeline.timeline({ runId: run.runId, projectId: run.projectId, sinceSequence, limit: 500 });
     for (const entry of page.entries) {
       sinceSequence = Math.max(sinceSequence, entry.sequence);
-      if (entry.type.startsWith('review.verdict.') || entry.type.startsWith('peer.')) {
+      if (entry.type.startsWith('review.verdict.') || entry.type.startsWith('peer.') || entry.type.startsWith('disagreement.')) {
         rows.push({ type: entry.type, facts: entry.facts, taskId: entry.taskId });
       }
     }
@@ -2652,6 +2662,7 @@ async function applyReviewVerdict(input: {
   readonly tasks: readonly JuliusTask[];
   readonly evidence: readonly JuliusEvidence[];
   readonly policy: JuliusVerificationPolicy;
+  readonly request: JuliusPipelineRequest;
   readonly workerId: string;
 }): Promise<AppliedReviewVerdict> {
   const { deps, run, ledger, review, reviewed } = input;
@@ -2665,6 +2676,25 @@ async function applyReviewVerdict(input: {
   const route = juliusReviewRoute({ verdict: effective.verdict, category });
   const citations = reviewEvidence.map((item) => item.evidenceId);
   const firstApplication = !rows.some((row) => row.type === 'review.verdict.applied' && row.facts.reviewTaskId === review.taskId);
+
+  /**
+   * THE RE-REVIEW OF A REBUTTAL RECORDS NO FINDING AND OPENS NO CHALLENGE. Its
+   * verdict is the disagreement's last word; a challenge raised here would be
+   * the second turn the bound exists to refuse.
+   */
+  if (reviewed.role === 'PROMPT_ARCHITECT' && reviewed.taskType === 'rebuttal') {
+    if (firstApplication) {
+      await ledger.event('review.verdict.applied', {
+        taskId: reviewed.taskId, workerId: input.workerId,
+        facts: {
+          reviewTaskId: review.taskId, reviewedTaskId: reviewed.taskId, verdict: effective.verdict,
+          declared: effective.declared, derived: effective.derived, source: effective.source, category,
+          target: null, route: 'RE_REVIEW', warningsRetained: 0, warningsPromoted: 0, challengeRequestId: null,
+        },
+      });
+    }
+    return { verdict: effective.verdict, route: 'RE_REVIEW', category };
+  }
 
   const record = async (finding: {
     readonly findingId: string; readonly severity: 'MEDIUM' | 'HIGH' | 'CRITICAL'; readonly category: string;
@@ -2735,7 +2765,14 @@ async function applyReviewVerdict(input: {
         mandatory: route === 'HOLD', pausedTaskIds: route === 'HOLD' ? paused.ids : [], pausedTaskCount: route === 'HOLD' ? paused.total : 0,
         announce: true, workerId: input.workerId,
       });
-      if (opened.outcome === 'OPENED') challengeRequestId = opened.request.requestId;
+      if (opened.outcome === 'OPENED') {
+        challengeRequestId = opened.request.requestId;
+        await openDisagreementFor({
+          deps, run, ledger, request: input.request, review, reviewed, tasks: input.tasks, evidence: input.evidence,
+          declaration, material: route === 'HOLD', challengeRequestId, citations,
+          paused: route === 'HOLD' ? paused : { ids: [], total: 0 }, workerId: input.workerId,
+        });
+      }
     }
   }
 
@@ -2752,6 +2789,392 @@ async function applyReviewVerdict(input: {
     });
   }
   return { verdict: effective.verdict, route, category };
+}
+
+/* ------------------------------------------------------------ disagreement */
+
+/** Who Julius attributes a verification to when a resolved disagreement, not a worker, caused it. */
+export const JULIUS_DISAGREEMENT_RESOLVER = 'julius-disagreement-resolution' as const;
+
+async function disagreementsOf(deps: JuliusPipelineDependencies, run: JuliusRunRow): Promise<readonly JuliusDisagreement[]> {
+  return foldJuliusDisagreements(await readVerdictLedger(deps, run));
+}
+
+/**
+ * MOVE A DISAGREEMENT ONE LEGAL STEP, OR WRITE NOTHING.
+ *
+ * The step is checked against the record's current state before it is written,
+ * so a replayed tick — or a second attempt at a rebuttal or a re-review — is
+ * refused by the record rather than appended. A step that resolves it is
+ * followed by `disagreement.resolved` and by the peer requests it closes.
+ */
+async function stepDisagreement(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly disagreement: JuliusDisagreement;
+  readonly step: JuliusDisagreementStep;
+  readonly workerId: string;
+  readonly extraFacts?: Record<string, string | number | boolean | null>;
+}): Promise<JuliusDisagreement> {
+  const { deps, run, ledger, disagreement } = input;
+  const at = deps.clock.now();
+  const moved = advanceJuliusDisagreement(disagreement, input.step, at);
+  if (moved.outcome === 'REFUSED') return disagreement;
+  await ledger.event('disagreement.step', {
+    taskId: disagreement.subjectTaskId, workerId: input.workerId,
+    facts: { ...juliusDisagreementStepFacts(disagreement.disagreementId, input.step, at), ...(input.extraFacts ?? {}) },
+  });
+  if (moved.resolved) {
+    const resolved = moved.disagreement;
+    await ledger.event('disagreement.resolved', {
+      taskId: resolved.subjectTaskId, workerId: input.workerId,
+      facts: {
+        disagreementId: resolved.disagreementId, subjectTaskId: resolved.subjectTaskId, material: resolved.material,
+        resolution: resolved.resolution, resolutionBasis: resolved.resolutionBasis,
+        architectPosition: resolved.architectPosition, rebuttalTaskId: resolved.rebuttalTaskId, reReviewTaskId: resolved.reReviewTaskId,
+        resolvedAt: resolved.resolvedAt,
+      },
+    });
+    const peers = peerContextFor(deps, run, ledger);
+    const close = { to: 'RESOLVED' as const, from: ['OPEN', 'ANSWERED'] as const, transitionCode: resolved.resolution!, responseRef: resolved.disagreementId, causeRef: resolved.disagreementId, taskId: resolved.subjectTaskId, workerId: input.workerId, firstWrite: true };
+    await moveJuliusPeerRequest(peers, { ...close, from: [...close.from], kind: resolved.target === 'WORK' ? 'CHALLENGE' : 'EVIDENCE_CHALLENGE', anchor: resolved.reviewTaskId });
+    if (resolved.rebuttalTaskId !== null) {
+      await moveJuliusPeerRequest(peers, { ...close, from: [...close.from], kind: 'REBUTTAL_REQUEST', anchor: resolved.rebuttalTaskId });
+    }
+  }
+  return moved.disagreement;
+}
+
+/**
+ * A CHALLENGE BECOMES A DISAGREEMENT, and the architect is asked once.
+ *
+ * The rebuttal is a TASK — claimed, dispatched and settled like any other — so
+ * it is bounded by the same machinery as all work and survives a restart. It is
+ * proven routable first, together with its re-review: a rebuttal nobody can
+ * write, or a maintained position nobody can re-review, would hold the work
+ * forever, so an unroutable rebuttal is resolved at once by Julius's rule — the
+ * challenge stands, because nothing answered it.
+ */
+async function openDisagreementFor(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly request: JuliusPipelineRequest;
+  readonly review: JuliusTask;
+  readonly reviewed: JuliusTask;
+  readonly tasks: readonly JuliusTask[];
+  readonly evidence: readonly JuliusEvidence[];
+  readonly declaration: JuliusReviewVerdictDeclaration;
+  readonly material: boolean;
+  readonly challengeRequestId: string;
+  readonly citations: readonly string[];
+  readonly paused: { readonly ids: readonly string[]; readonly total: number };
+  readonly workerId: string;
+}): Promise<void> {
+  const { deps, run, ledger, review, reviewed } = input;
+  const contractTaskId = juliusContractSubjectTaskId(reviewed, input.tasks);
+  const contract = contractTaskId === null ? null : await deps.store.loadTaskContract({ projectId: run.projectId, taskId: contractTaskId });
+  const binding = contract === null ? null : juliusTaskContractBinding(contract);
+  const opened = openJuliusDisagreement({
+    executionScope: deps.executionScope ?? JULIUS_LOCAL_EXECUTION_SCOPE,
+    missionId: run.missionId,
+    subjectTaskId: reviewed.taskId,
+    reviewTaskId: review.taskId,
+    challengeRequestId: input.challengeRequestId,
+    material: input.material,
+    category: input.declaration.category ?? 'review',
+    target: input.declaration.target ?? 'WORK',
+    reviewerPosition: input.declaration.claim,
+    reviewerEvidenceIds: juliusPeerIdsThatFit(input.citations).ids,
+    codingAgentEvidenceIds: juliusPeerIdsThatFit(input.evidence.filter((item) => item.taskId === reviewed.taskId).map((item) => item.evidenceId)).ids,
+    contractBindingDigest: binding?.bindingDigest ?? null,
+    openedAt: deps.clock.now(),
+  });
+  if (opened.outcome === 'REFUSED') {
+    // FAIL CLOSED: the challenge request stays open, so a material hold stays in
+    // place and the run says why rather than proceeding past an argument.
+    await ledger.event('disagreement.refused', {
+      taskId: reviewed.taskId, workerId: input.workerId, facts: { reviewTaskId: review.taskId, reasonCode: opened.reasonCode },
+    });
+    return;
+  }
+  let disagreement = opened.disagreement;
+  await ledger.event('disagreement.opened', {
+    taskId: reviewed.taskId, workerId: input.workerId, facts: juliusDisagreementOpenedFacts(disagreement),
+  });
+
+  const routable = (taskType: string, role: JuliusWorkerRole): boolean => {
+    const capability = input.request.capabilityFor?.({ taskId: juliusRebuttalTaskId(review.taskId), taskType, role });
+    if (capability === undefined) return true;
+    return deps.router.eligibleWorkerIds({ role, taskType, capability, policy: input.request.policy }).length > 0;
+  };
+  if (!routable('rebuttal', 'PROMPT_ARCHITECT') || !routable('review:rebuttal', 'INDEPENDENT_REVIEWER')) {
+    await stepDisagreement({ deps, run, ledger, disagreement, step: { kind: 'REBUTTAL_UNROUTABLE' }, workerId: input.workerId });
+    return;
+  }
+
+  const rebuttalTaskId = juliusRebuttalTaskId(review.taskId);
+  const created = await deps.store.addTask({
+    commandId: `rebuttal:${rebuttalTaskId}`, runId: run.runId, projectId: run.projectId,
+    task: {
+      taskId: rebuttalTaskId, missionId: reviewed.missionId, parentTaskId: reviewed.taskId,
+      // The review that raised the challenge has SUCCEEDED, so the rebuttal can run now.
+      dependencyIds: [review.taskId], requiredEvidenceTypes: [],
+      taskType: 'rebuttal', role: 'PROMPT_ARCHITECT', ordinal: review.ordinal + 1, state: 'RUNNABLE',
+    },
+  });
+  if (!created) return;
+  disagreement = await stepDisagreement({ deps, run, ledger, disagreement, step: { kind: 'REBUTTAL_SCHEDULED', rebuttalTaskId }, workerId: input.workerId });
+
+  const entryId = `brain:disagreement-challenge:${rebuttalTaskId}`;
+  await deps.store.appendBrainEntry({
+    runId: run.runId, projectId: run.projectId, taskId: rebuttalTaskId, workerId: input.workerId, entryId, kind: 'HANDOFF',
+    safeText: [
+      `DISAGREEMENT ${disagreement.disagreementId}`,
+      `THE INDEPENDENT REVIEWER CHALLENGES THE ${disagreement.target} OF ${reviewed.taskId} (${disagreement.category}; ${disagreement.material ? 'dependent work is held until this is resolved' : 'the work proceeds while it is argued'}).`,
+      `REVIEWER'S POSITION: ${disagreement.reviewerPosition}`,
+      'ANSWER ONCE. Your result carries "rebuttal": {"position": "CONCEDES" or "MAINTAINS", "argument": one paragraph, "evidence": [{"locator": where, "claim": what it shows}], "missionTermsMustChange": true or false}.',
+      'A position you MAINTAIN must cite evidence, and it will be re-reviewed independently. There is no second rebuttal.',
+      'You cannot change the contract, the objective, the acceptance criteria, the budget or the permissions here. If your position needs a mission-owned term to change, say so with "missionTermsMustChange": Julius will escalate rather than decide.',
+    ].join('\n'),
+    evidenceIds: disagreement.reviewerEvidenceIds, occurredAt: deps.clock.now(),
+  });
+  await openJuliusPeerRequestOnLedger(peerContextFor(deps, run, ledger), {
+    kind: 'REBUTTAL_REQUEST', anchor: rebuttalTaskId,
+    sourceRole: 'JULIUS', targetRole: 'PROMPT_ARCHITECT',
+    reason: 'Julius asks the Prompt Architect for its one rebuttal to a reviewer challenge.',
+    subjectTaskId: reviewed.taskId, carrierTaskId: rebuttalTaskId,
+    contextRefs: [entryId, disagreement.disagreementId, input.challengeRequestId], evidenceIds: disagreement.reviewerEvidenceIds,
+    contractBindingDigest: disagreement.contractBindingDigest,
+    mandatory: disagreement.material, pausedTaskIds: input.paused.ids, pausedTaskCount: input.paused.total,
+    announce: true, workerId: input.workerId,
+  });
+}
+
+/** The disagreement a rebuttal task (or a continuation of one) answers. */
+function disagreementForRebuttal(
+  disagreements: readonly JuliusDisagreement[],
+  task: JuliusTask,
+  tasks: readonly JuliusTask[],
+): JuliusDisagreement | undefined {
+  const head = juliusSegmentLineageRootOf(task, tasks).taskId;
+  if (juliusRebuttalReviewTaskId(head) === null) return undefined;
+  return disagreements.find((item) => item.rebuttalTaskId === head);
+}
+
+/**
+ * THE ARCHITECT'S ANSWER, ON THE RECORD BEFORE ANYTHING ACTS ON IT. Refused by
+ * name when unusable — including one that MAINTAINS with nothing to cite — and
+ * a refused answer is an answer Julius could not use, which the disagreement
+ * resolves on.
+ */
+async function recordRebuttal(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly task: JuliusTask;
+  readonly workerId: string;
+  readonly value: unknown;
+}): Promise<void> {
+  const { deps, run, ledger, task } = input;
+  const tasks = await deps.store.tasksForRun(run.runId, run.projectId);
+  const disagreement = disagreementForRebuttal(await disagreementsOf(deps, run), task, tasks);
+  if (disagreement === undefined || disagreement.status !== 'AWAITING_REBUTTAL' || disagreement.rebuttalTaskId === null) return;
+  const reading = input.value === undefined ? null : sanitizeJuliusRebuttal(input.value);
+  if (reading !== null && reading.ok) {
+    await moveJuliusPeerRequest(peerContextFor(deps, run, ledger), {
+      kind: 'REBUTTAL_REQUEST', anchor: disagreement.rebuttalTaskId, to: 'ANSWERED', from: ['OPEN'],
+      responseRef: task.taskId, causeRef: `${task.taskId}:rebuttal`, taskId: disagreement.subjectTaskId, workerId: input.workerId, firstWrite: true,
+    });
+  }
+  await stepDisagreement({
+    deps, run, ledger, disagreement, workerId: input.workerId,
+    step: { kind: 'REBUTTAL', rebuttal: reading !== null && reading.ok ? reading.rebuttal : null },
+    extraFacts: { rebuttalRefusal: reading === null ? 'rebuttal_absent' : reading.ok ? null : reading.reasonCode },
+  });
+}
+
+/** Julius's closing decision on a rebuttal task: the task was answered, whichever position stood. */
+async function closeRebuttalTask(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly request: JuliusPipelineRequest;
+  readonly task: JuliusTask;
+  readonly disagreement: JuliusDisagreement | undefined;
+  readonly workerId: string;
+}): Promise<JuliusVerificationDecision> {
+  const { deps, run, ledger, task, disagreement } = input;
+  const reasonCode = disagreement === undefined ? 'DISAGREEMENT_ABSENT' : 'DISAGREEMENT_REBUTTAL_RECEIVED';
+  const decision: JuliusVerificationDecision = {
+    action: 'ACCEPT', reasonCode, evidenceIds: [],
+    safeSummary: disagreement === undefined
+      ? 'No disagreement names this rebuttal; Julius closed the task.'
+      : `Rebuttal received; Julius resolved the disagreement ${disagreement.resolution ?? 'UNRESOLVED'} (${disagreement.resolutionBasis ?? 'no basis'}).`,
+  };
+  const recorded = await deps.store.appendDecision({
+    decisionId: deps.ids.next('decision'), runId: run.runId, taskId: task.taskId,
+    policyRevision: input.request.verification.revision,
+    idempotencyKey: `${task.taskId}:${decision.action}:${decision.reasonCode}`,
+    occurredAt: deps.clock.now(), decision, releaseTaskIds: [],
+  });
+  if (recorded) {
+    await ledger.event('verification.decided', {
+      taskId: task.taskId, workerId: input.workerId,
+      facts: {
+        action: decision.action, reasonCode, criteriaSatisfied: 0, criteriaMissing: 0, missionCompletable: false, released: 0,
+        disagreementId: disagreement?.disagreementId ?? null, resolution: disagreement?.resolution ?? null,
+      },
+    });
+  }
+  return decision;
+}
+
+/** After a resolution, the held work is decided now rather than on the next idle sweep. */
+async function verifyHeldWork(
+  input: Parameters<typeof verifyExecutedTask>[0] & { readonly tasks: readonly JuliusTask[] },
+  disagreement: JuliusDisagreement,
+): Promise<JuliusTaskOutcome | null> {
+  if (!disagreement.material || disagreement.status !== 'RESOLVED') return null;
+  const decisions = await input.deps.store.decisionsForRun(input.run.runId, input.run.projectId);
+  if (decisions.some((item) => item.taskId === disagreement.subjectTaskId)) return null;
+  const subject = (await input.deps.store.tasksForRun(input.run.runId, input.run.projectId)).find((item) => item.taskId === disagreement.subjectTaskId);
+  if (subject === undefined || subject.state !== 'SUCCEEDED') return null;
+  return verifyExecutedTask({ ...input, task: subject, workerId: JULIUS_DISAGREEMENT_RESOLVER, duplicate: false });
+}
+
+async function settleRebuttal(input: Parameters<typeof verifyExecutedTask>[0] & { readonly tasks: readonly JuliusTask[] }): Promise<JuliusTaskOutcome> {
+  const { deps, run, ledger, task } = input;
+  let disagreement = disagreementForRebuttal(await disagreementsOf(deps, run), task, input.tasks);
+  // AN ANSWER THAT NEVER ARRIVED IS AN ANSWER JULIUS CANNOT USE.
+  if (disagreement !== undefined && disagreement.status === 'AWAITING_REBUTTAL') {
+    disagreement = await stepDisagreement({
+      deps, run, ledger, disagreement, workerId: input.workerId,
+      step: { kind: 'REBUTTAL', rebuttal: null }, extraFacts: { rebuttalRefusal: 'rebuttal_absent' },
+    });
+  }
+  if (disagreement !== undefined && disagreement.status === 'AWAITING_RE_REVIEW') {
+    const reReviewTaskId = `${juliusSegmentLineageRootOf(task, input.tasks).taskId}:review`;
+    if (disagreement.reReviewTaskId === null) {
+      const created = await deps.store.addTask({
+        commandId: `review:${reReviewTaskId}`, runId: run.runId, projectId: run.projectId,
+        task: {
+          taskId: reReviewTaskId, missionId: task.missionId, parentTaskId: task.taskId, dependencyIds: [task.taskId],
+          requiredEvidenceTypes: ['REVIEW_FINDING'], taskType: 'review:rebuttal', role: 'INDEPENDENT_REVIEWER',
+          ordinal: task.ordinal + 1, state: 'RUNNABLE',
+        },
+      });
+      if (created) {
+        disagreement = await stepDisagreement({ deps, run, ledger, disagreement, step: { kind: 'RE_REVIEW_SCHEDULED', reReviewTaskId }, workerId: input.workerId });
+        const entryId = `brain:disagreement-rebuttal:${reReviewTaskId}`;
+        await deps.store.appendBrainEntry({
+          runId: run.runId, projectId: run.projectId, taskId: reReviewTaskId, workerId: input.workerId, entryId, kind: 'HANDOFF',
+          safeText: [
+            `DISAGREEMENT ${disagreement.disagreementId} — RE-REVIEW`,
+            `You challenged the ${disagreement.target} of ${disagreement.subjectTaskId} (${disagreement.category}): ${disagreement.reviewerPosition}`,
+            `THE PROMPT ARCHITECT MAINTAINS ITS POSITION: ${disagreement.architectArgument ?? ''}`,
+            ...disagreement.architectEvidence.map((item) => `EVIDENCE: ${item.locator} — ${item.claim}`),
+            'Judge the evidence independently. CONTINUE (or WARNING) accepts the architect\'s position; anything stricter maintains your challenge. This is the last word on this disagreement: a challenge raised here opens no second one.',
+          ].join('\n'),
+          evidenceIds: disagreement.reviewerEvidenceIds, occurredAt: deps.clock.now(),
+        });
+        await openJuliusPeerRequestOnLedger(peerContextFor(deps, run, ledger), {
+          kind: 'REVIEW_REQUEST', anchor: reReviewTaskId, sourceRole: 'JULIUS', targetRole: 'INDEPENDENT_REVIEWER',
+          reason: 'Julius requires an independent re-review of the architect\'s maintained position.',
+          subjectTaskId: task.taskId, carrierTaskId: reReviewTaskId, contextRefs: [entryId, disagreement.disagreementId],
+          mandatory: true, pausedTaskIds: [disagreement.subjectTaskId], pausedTaskCount: 1, announce: true, workerId: input.workerId,
+        });
+      }
+    }
+    return { kind: 'REVIEW_SCHEDULED', taskId: task.taskId, reviewTaskId: reReviewTaskId };
+  }
+  const decision = await closeRebuttalTask({ deps, run, ledger, request: input.request, task, disagreement, workerId: input.workerId });
+  const held = disagreement === undefined ? null : await verifyHeldWork(input, disagreement);
+  return held ?? { kind: 'COMPLETED', taskId: task.taskId, workerId: input.workerId, duplicate: input.duplicate, decision };
+}
+
+async function settleReReview(
+  input: Parameters<typeof verifyExecutedTask>[0] & { readonly tasks: readonly JuliusTask[]; readonly rebuttalTask: JuliusTask; readonly verdict: string | null },
+): Promise<JuliusTaskOutcome> {
+  const { deps, run, ledger, task } = input;
+  const reviewHead = juliusSegmentLineageRootOf(task, input.tasks).taskId;
+  let disagreement = disagreementForRebuttal(await disagreementsOf(deps, run), input.rebuttalTask, input.tasks);
+  if (disagreement !== undefined && disagreement.status === 'AWAITING_RE_REVIEW' && disagreement.reReviewTaskId === reviewHead) {
+    disagreement = await stepDisagreement({ deps, run, ledger, disagreement, step: { kind: 'RE_REVIEW', verdict: input.verdict }, workerId: input.workerId });
+  }
+  const peers = peerContextFor(deps, run, ledger);
+  const verdictEvidence = (await deps.store.evidenceForRun(run.runId, run.projectId)).find((item) => item.taskId === task.taskId && item.type === 'REVIEW_FINDING');
+  await moveJuliusPeerRequest(peers, {
+    kind: 'REVIEW_REQUEST', anchor: reviewHead, to: 'ANSWERED', from: ['OPEN'], responseRef: verdictEvidence?.evidenceId ?? task.taskId,
+    causeRef: `${task.taskId}:verdict`, taskId: input.rebuttalTask.taskId, workerId: input.workerId, firstWrite: true,
+  });
+  if (disagreement?.status === 'RESOLVED') {
+    await moveJuliusPeerRequest(peers, {
+      kind: 'REVIEW_REQUEST', anchor: reviewHead, to: 'RESOLVED', from: ['ANSWERED'], transitionCode: `DISAGREEMENT_${disagreement.resolution!}`,
+      causeRef: disagreement.disagreementId, taskId: input.rebuttalTask.taskId, workerId: input.workerId, firstWrite: true,
+    });
+  }
+  const decision = await closeRebuttalTask({ deps, run, ledger, request: input.request, task: input.rebuttalTask, disagreement, workerId: input.workerId });
+  const held = disagreement === undefined ? null : await verifyHeldWork(input, disagreement);
+  return held ?? { kind: 'COMPLETED', taskId: task.taskId, workerId: input.workerId, duplicate: input.duplicate, decision };
+}
+
+/**
+ * THE RESOLVED MATERIAL DISAGREEMENTS ABOUT THIS WORK, APPLIED.
+ *
+ * Only material ones: a challenge that did not hold the work was argued beside
+ * a decision already made, and its resolution is on the record rather than
+ * reopening that decision. The upheld finding is idempotent by the review's id.
+ */
+async function disagreementRulingFor(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly subject: JuliusTask;
+  readonly evidence: readonly JuliusEvidence[];
+  readonly workerId: string;
+}): Promise<{ readonly recorded: boolean; readonly halt: { readonly reasonCode: string; readonly evidenceIds: readonly string[]; readonly safeSummary: string } | null }> {
+  const { deps, run, ledger, subject } = input;
+  const known = new Set(input.evidence.map((item) => item.evidenceId));
+  const resolved = (await disagreementsOf(deps, run))
+    .filter((item) => item.material && item.status === 'RESOLVED' && item.subjectTaskId === subject.taskId);
+  let recorded = false;
+  let halt: { reasonCode: string; evidenceIds: readonly string[]; safeSummary: string } | null = null;
+  for (const disagreement of resolved) {
+    const citations = disagreement.reviewerEvidenceIds.filter((id) => known.has(id));
+    if (disagreement.resolution === 'ESCALATED') {
+      halt = {
+        reasonCode: 'DISAGREEMENT_ESCALATED', evidenceIds: citations,
+        safeSummary: `The architect's position requires a mission-owned term to change; Julius escalated disagreement ${disagreement.disagreementId} to the mission owner and halted this work.`,
+      };
+    } else if (disagreement.resolution === 'CHALLENGE_UPHELD' && disagreement.resolutionBasis === 'RE_REVIEW_BLOCKED') {
+      halt = {
+        reasonCode: 'REVIEW_BLOCKED', evidenceIds: citations,
+        safeSummary: `The independent re-review of disagreement ${disagreement.disagreementId} blocked this work; Julius halted it.`,
+      };
+    }
+    if (disagreement.resolution === 'CHALLENGE_UPHELD' && citations.length > 0) {
+      const findingId = `finding:disagreement:${disagreement.reviewTaskId}`;
+      const written = await deps.store.recordFinding({
+        projectId: run.projectId,
+        finding: {
+          findingId, runId: run.runId, taskId: subject.taskId, reviewerWorkerId: input.workerId,
+          severity: 'HIGH', category: disagreement.category,
+          claim: `Challenge upheld (${disagreement.resolutionBasis ?? 'no basis'}): ${disagreement.reviewerPosition}`,
+          criterionId: null, evidenceIds: citations, blocking: true, status: 'OPEN', createdAt: deps.clock.now(),
+        },
+      });
+      if (written) {
+        recorded = true;
+        await ledger.event('finding.recorded', {
+          taskId: subject.taskId, workerId: input.workerId,
+          facts: { findingId, evidenceId: citations[0]!, blocking: true, category: disagreement.category, disagreementId: disagreement.disagreementId },
+        });
+      }
+    }
+  }
+  return { recorded, halt };
 }
 
 /** The id of an unresolved, mandatory challenge against this unit of work, or null. */
@@ -2935,6 +3358,16 @@ async function verifyExecutedTask(input: {
   }
 
   /**
+   * A REBUTTAL IS SETTLED BY ITS DISAGREEMENT, NEVER BY THE EVALUATOR. Reviewed
+   * and repaired like ordinary work, a maintained rebuttal the re-review
+   * disagreed with would be sent to repair — and the argument would go round
+   * again. It gets exactly one re-review, and then Julius resolves it.
+   */
+  if (task.role === 'PROMPT_ARCHITECT' && task.taskType === 'rebuttal') {
+    return settleRebuttal({ ...input, tasks });
+  }
+
+  /**
    * A REVIEWER'S VERDICT IS ABOUT THE TASK IT REVIEWED, and treating it as a
    * verdict about ITSELF schedules the repair on the wrong task.
    *
@@ -3011,8 +3444,13 @@ async function verifyExecutedTask(input: {
    */
   const applied = reviewedTask === null ? null : await applyReviewVerdict({
     deps, run, ledger, review: task, reviewed: reviewedTask, tasks, evidence,
-    policy: input.request.verification, workerId: input.workerId,
+    policy: input.request.verification, request: input.request, workerId: input.workerId,
   });
+
+  // THE ONE RE-REVIEW OF A MAINTAINED POSITION resolves its disagreement.
+  if (reviewedTask !== null && reviewedTask.taskType === 'rebuttal' && reviewedTask.role === 'PROMPT_ARCHITECT') {
+    return settleReReview({ ...input, tasks, rebuttalTask: reviewedTask, verdict: applied?.verdict ?? null });
+  }
 
   /**
    * A MATERIAL CHALLENGE HOLDS THE WORK. Read from the ledger, not from this
@@ -3031,6 +3469,14 @@ async function verifyExecutedTask(input: {
     return { kind: 'HELD', taskId: task.taskId, reasonCode: 'MATERIAL_CHALLENGE_UNRESOLVED', requestId: held };
   }
 
+  /**
+   * WHAT A RESOLVED DISAGREEMENT MEANS FOR THIS WORK. An upheld material
+   * challenge becomes a blocking finding, so the evaluator repairs the work; an
+   * escalation, or a re-review that blocked, halts it; the architect's position
+   * upheld changes nothing, and the work is judged on its evidence.
+   */
+  const ruling = await disagreementRulingFor({ deps, run, ledger, subject, evidence, workerId: input.workerId });
+
   const evaluated = evaluateJuliusVerification({
     task: subject,
     evidence,
@@ -3038,7 +3484,7 @@ async function verifyExecutedTask(input: {
     // The findings the reviewer just recorded are read back, because
     // `findings` was loaded before this task ran and a decision made without
     // them would be a decision about a review that had not happened yet.
-    findings: reviewedTask === null ? findings : await deps.store.findingsForRun(run.runId, run.projectId),
+    findings: reviewedTask === null && !ruling.recorded ? findings : await deps.store.findingsForRun(run.runId, run.projectId),
     policy: input.request.verification,
     reviewCompleted: reviewSatisfied,
     allTasks: tasks,
@@ -3049,17 +3495,15 @@ async function verifyExecutedTask(input: {
    * blocking finding as a reason to repair; a reviewer that said the work must
    * not continue is not asking for another attempt at it.
    */
-  const action = applied?.route === 'HALT' && evaluated.action === 'DECIDE'
+  const halt = applied?.route === 'HALT'
     ? {
-      ...evaluated,
-      missionCompletable: false,
-      decision: {
-        action: 'HALT' as const,
-        reasonCode: 'REVIEW_BLOCKED',
-        evidenceIds: evidence.filter((item) => item.taskId === task.taskId).map((item) => item.evidenceId),
-        safeSummary: `The independent reviewer blocked this work (${applied.category ?? 'uncategorised'}); Julius halted it.`,
-      },
+      reasonCode: 'REVIEW_BLOCKED',
+      evidenceIds: evidence.filter((item) => item.taskId === task.taskId).map((item) => item.evidenceId),
+      safeSummary: `The independent reviewer blocked this work (${applied.category ?? 'uncategorised'}); Julius halted it.`,
     }
+    : ruling.halt;
+  const action = halt !== null && evaluated.action === 'DECIDE'
+    ? { ...evaluated, missionCompletable: false, decision: { action: 'HALT' as const, ...halt } }
     : evaluated;
 
   /* ------------------------------------------------- a review is required */

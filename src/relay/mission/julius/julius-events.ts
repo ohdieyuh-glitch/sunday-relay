@@ -95,6 +95,13 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * declaration and the evidence) and the route it took. A declaration from a
   * dispatch that paused to research is kept and never applied. */
  'review.verdict.declared','review.verdict.refused','review.verdict.applied',
+ /* DISAGREEMENT. `opened` is the record — subject, both positions' evidence,
+  * the binding — and `step` is each move it makes: the rebuttal scheduled, the
+  * architect's answer, the re-review scheduled and its verdict. `resolved`
+  * names the resolution and its basis. The record's state is a fold over
+  * `opened` and `step`; `refused` is a challenge that could not be opened as
+  * one, which leaves its hold in place rather than dropping it. */
+ 'disagreement.opened','disagreement.step','disagreement.resolved','disagreement.refused',
  /* PERSISTENT-WORKER EFFORT. One row per completed dispatch, carrying what the
   * provider actually reported and NOTHING inferred — an unreported token count
   * is null here rather than the zero the budget path substitutes, because a
