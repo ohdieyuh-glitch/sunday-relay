@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { paidRunArchive } from './julius-brain-archive-fixtures';
 import { importJuliusPaidRunArchive, juliusArchiveEntityId } from './julius-brain-archive-import';
 import { juliusPrincipal } from './julius-brain-contracts';
-import { exportJuliusBrain } from './julius-brain-export';
+import { createJuliusBrainEvaluationContext, exportJuliusBrain } from './julius-brain-export';
 import { createJuliusBrainKeywordRetriever, juliusBrainSemanticCandidates } from './julius-brain-retrieval';
 import { createJuliusProjectBrainService, defaultJuliusBrainReadGrant } from './julius-brain-service';
 import {
@@ -123,7 +123,7 @@ describe('state modes — retention is not retrieval authority', () => {
 
     const view = compileJuliusBrainContextForMode(await readAllJuliusBrainEntities(store, BRAIN, PROJECT), request, strict);
     if ('outcome' in view) throw new Error(view.detail);
-    expect(view.priorState.learned.sort()).toEqual([failedTest, finding].sort());
+    expect([...view.priorState.learned].sort()).toEqual([failedTest, finding].sort());
   });
 
   it('REGRESSION: the pinned baseline is handed over for comparison, never as guidance, and refused once it moves', async () => {
@@ -141,6 +141,51 @@ describe('state modes — retention is not retrieval authority', () => {
     const state = entities.find((candidate) => candidate.entityId === finding)!;
     expect((await julius.revise(finding, { ...state.body, status: 'RESOLVED' }, { key: 'resolve-archived-finding', expectedVersion: 1 })).outcome).toBe('COMMITTED');
     expect(compileJuliusBrainContextForMode(await readAllJuliusBrainEntities(store, BRAIN, PROJECT), request, policy)).toMatchObject({ outcome: 'REFUSED', reasonCode: 'regression_baseline_moved' });
+  });
+
+  it('a live run cannot take the id of an archived run, under any mode', async () => {
+    const { store } = await brainWithHistory();
+    const entities = await readAllJuliusBrainEntities(store, BRAIN, PROJECT);
+    const policies: JuliusBrainStateModePolicy[] = [
+      { mode: 'FRESH', missionId: MISSION, runId: ARCHIVED_RUN },
+      { mode: 'CONTINUATION', missionId: MISSION, runId: ARCHIVED_RUN, resumes: [PREVIOUS_RUN] },
+      { mode: 'LEARNING', missionId: MISSION, runId: ARCHIVED_RUN, learnFrom: { runIds: null, kinds: ['FINDING'], requireVerified: false } },
+      { mode: 'REGRESSION', missionId: MISSION, runId: ARCHIVED_RUN, baseline: pinJuliusBrainRegressionBaseline(entities, PREVIOUS_RUN) },
+    ];
+    for (const policy of policies) {
+      expect(selectJuliusBrainEntitiesForMode(entities, policy)).toMatchObject({ outcome: 'REFUSED', reasonCode: 'current_run_is_archived_history' });
+    }
+  });
+
+  it('a snapshot carries no edge into state the mode withholds', async () => {
+    const { store, julius, ids } = await brainWithHistory();
+    const finding = juliusArchiveEntityId(paidRunArchive().run, 'findings', 'f-budget');
+    // A prior run's judgment pointing AT an admitted authority record, and a current-run record pointing at the archive.
+    const prior = ok(await julius.create('EVIDENCE', {
+      evidenceClass: 'OBSERVATION', claim: 'the constraint was unworkable last time', summary: 'prior run', status: 'FAILED', verification: 'UNVERIFIED', data: {}, juliusEvidenceId: null,
+    }, { key: 'prior-contradiction', scope: { missionId: MISSION, runId: PREVIOUS_RUN }, links: [{ relation: 'CONTRADICTS', target: ids.constraint, targetVersion: null }] }));
+    const current = ok(await julius.create('OPEN_QUESTION', { question: 'Does the archived finding still apply?', blocking: false, status: 'OPEN', answer: null }, {
+      key: 'current-link', scope: { missionId: MISSION, runId: CURRENT_RUN }, links: [{ relation: 'RELATES_TO', target: finding, targetVersion: null }],
+    }));
+    const entities = await readAllJuliusBrainEntities(store, BRAIN, PROJECT);
+    expect(entities.find((state) => state.entityId === ids.constraint)!.inbound.map((edge) => edge.source)).toContain(prior);
+
+    const selection = selectJuliusBrainEntitiesForMode(entities, { mode: 'FRESH', missionId: MISSION, runId: CURRENT_RUN });
+    if (selection.outcome !== 'SELECTED') throw new Error(selection.detail);
+    const snapshot = createJuliusBrainEvaluationContext({
+      brainId: BRAIN, entities: selection.admitted.map((item) => item.entity), head: (await store.head(BRAIN, PROJECT))!, grant: request.grant,
+      consumerRunId: 'exec-edges', createdAt: '2026-09-15T12:00:00.000Z', stateMode: { mode: selection.mode, policyHash: selection.policyHash, excluded: selection.excluded },
+    });
+    const held = new Set(snapshot.entities.map((state) => state.entityId));
+    expect(held.has(ids.constraint) && held.has(current)).toBe(true);
+    for (const state of snapshot.entities) {
+      for (const link of state.links) expect(held.has(link.target)).toBe(true);
+      for (const edge of state.inbound) expect(held.has(edge.source)).toBe(true);
+    }
+    expect(snapshot.entities.find((state) => state.entityId === ids.constraint)!.inbound).toEqual([]);
+    expect(snapshot.withheldEdges).toBeGreaterThanOrEqual(2);
+    expect(JSON.stringify(snapshot)).not.toContain(prior);
+    expect(JSON.stringify(snapshot)).not.toContain(finding);
   });
 
   it('refuses a policy that does not say what it means', async () => {

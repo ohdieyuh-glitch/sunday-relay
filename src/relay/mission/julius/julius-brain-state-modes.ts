@@ -32,6 +32,9 @@ import { compileJuliusBrainContext, type JuliusBrainContextRequest, type JuliusB
  * packet can prove which prior state was — and was not — available to it.
  */
 
+/** Every record the paid-run archive importer writes carries an external reference with this prefix. */
+export const JULIUS_ARCHIVE_EXTERNAL_REF_PREFIX = 'julius-paid-run-archive:';
+
 export const JULIUS_BRAIN_STATE_MODES = ['FRESH', 'CONTINUATION', 'LEARNING', 'REGRESSION'] as const;
 export type JuliusBrainStateMode = typeof JULIUS_BRAIN_STATE_MODES[number];
 
@@ -128,6 +131,12 @@ export function validateJuliusBrainStateModePolicy(policy: JuliusBrainStateModeP
 export function selectJuliusBrainEntitiesForMode(entities: readonly JuliusBrainEntityState[], policy: JuliusBrainStateModePolicy): JuliusBrainModeResult {
   const errors = validateJuliusBrainStateModePolicy(policy);
   if (errors.length > 0) return { outcome: 'REFUSED', reasonCode: 'invalid_state_mode_policy', detail: errors.join('; ') };
+  // The current run is admitted whole, so it must be a live run: a run id that
+  // imported history already holds would carry that history in as its own.
+  const archived = entities.find((state) => state.scope.runId === policy.runId && (state.provenance.externalRef ?? '').startsWith(JULIUS_ARCHIVE_EXTERNAL_REF_PREFIX));
+  if (archived !== undefined) {
+    return { outcome: 'REFUSED', reasonCode: 'current_run_is_archived_history', detail: `run ${policy.runId} is imported archive history (${archived.entityId}); a live run takes a new run id.` };
+  }
 
   let baseline: JuliusBrainEntityState[] | null = null;
   if (policy.mode === 'REGRESSION') {

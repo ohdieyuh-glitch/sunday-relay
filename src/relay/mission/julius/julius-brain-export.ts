@@ -282,6 +282,12 @@ export interface JuliusBrainEvaluationContext {
    * prior state was withheld from it.
    */
   readonly stateMode: { readonly mode: string; readonly policyHash: string; readonly excluded: Readonly<Record<string, number>> } | null;
+  /**
+   * A snapshot holds no edge to an entity it does not hold. Links and inbound
+   * edges naming anything outside were removed, and counted here: an edge from
+   * a withheld prior run would otherwise carry its id and its judgment in.
+   */
+  readonly withheldEdges: number;
   readonly snapshotHash: string;
 }
 
@@ -296,14 +302,22 @@ export function createJuliusBrainEvaluationContext(input: {
   readonly stateMode?: JuliusBrainEvaluationContext['stateMode'];
 }): JuliusBrainEvaluationContext {
   if (input.grant.brainId !== input.brainId) throw new Error('julius_brain_snapshot_grant_brain_mismatch');
-  const entities = input.entities
+  const selected = input.entities
     .filter((state) => juliusBrainReadable({ grant: input.grant, kind: state.kind, scope: state.scope, sensitivity: state.sensitivity }))
     .filter((state) => input.grant.includeHistory || state.lifecycle === 'ACTIVE')
     .sort((a, b) => (a.entityId < b.entityId ? -1 : a.entityId > b.entityId ? 1 : 0));
+  const held = new Set(selected.map((state) => state.entityId));
+  let withheldEdges = 0;
+  const entities = selected.map((state) => {
+    const links = state.links.filter((link) => held.has(link.target));
+    const inbound = state.inbound.filter((edge) => held.has(edge.source));
+    withheldEdges += state.links.length - links.length + state.inbound.length - inbound.length;
+    return { ...state, links, inbound };
+  });
   const content = {
     format: JULIUS_BRAIN_EVALUATION_CONTEXT_FORMAT, brainId: input.brainId, grant: input.grant,
     throughSequence: input.head.sequence, consumerRunId: input.consumerRunId, createdAt: input.createdAt, entities,
-    stateMode: input.stateMode ?? null,
+    stateMode: input.stateMode ?? null, withheldEdges,
   };
   return { ...content, snapshotHash: juliusBrainSha256(canonicalJuliusBrainJson(content)) };
 }

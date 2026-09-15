@@ -40,7 +40,12 @@ suite('Python under state modes', () => {
     const imported = await importJuliusPaidRunArchive({ store: brains, brainId: BRAIN, projectId: PROJECT, archive: paidRunArchive(), content, recordedAt: clock.now() });
     expect(imported.outcome).toBe('IMPORTED');
     const julius = (await service.open({ brainId: BRAIN, projectId: PROJECT, principal: juliusPrincipal('JULIUS', 'julius') }))!;
-    await julius.create('OBJECTIVE', { statement: 'Implement the trust core', successMeasure: null }, { key: 'objective', scope: { missionId: MISSION } });
+    const objective = await julius.create('OBJECTIVE', { statement: 'Implement the trust core', successMeasure: null }, { key: 'objective', scope: { missionId: MISSION } });
+    if (objective.outcome !== 'COMMITTED') throw new Error(objective.detail);
+    // A prior run's judgment against the objective: an edge a FRESH interpreter must not be handed.
+    await julius.create('EVIDENCE', {
+      evidenceClass: 'OBSERVATION', claim: 'the objective was unreachable last run', summary: 'prior run', status: 'FAILED', verification: 'UNVERIFIED', data: {}, juliusEvidenceId: null,
+    }, { key: 'prior-contradiction', scope: { missionId: MISSION, runId: 'run:julius-live-4:prev' }, links: [{ relation: 'CONTRADICTS', target: objective.receipts[0]!.entityId, targetVersion: null }] });
     const python_ = createJuliusPythonExecutionService({
       store: createJuliusPythonExecutionMemoryStore(brains), brains,
       runner: new NodeJuliusPythonRunner({ sandboxRoot: mkdtempSync(join(tmpdir(), 'jpy-mode-sbx-')), sdkRoot: sdkRoot!, content }),
@@ -55,7 +60,7 @@ suite('Python under state modes', () => {
       return {
         format: JULIUS_PYTHON_REQUEST_FORMAT, executionId: `exec-mode-${counter}`, idempotencyKey: `exec-mode-${counter}`, brainId: BRAIN, projectId: PROJECT,
         missionId: MISSION, runId: CURRENT_RUN, taskId: 'task-now', requestedBy: juliusWorkerPrincipal('coder', 'CODING_AGENT'), purpose: 'look for prior findings',
-        script: { kind: 'INLINE', source: 'from julius import brain, result\nresult.set({"findings": [f.get("statement") for f in brain.findings()], "objective": brain.get_objective().get("statement"), "mode": brain.state_mode()})\n' },
+        script: { kind: 'INLINE', source: 'from julius import brain, result\nresult.set({"findings": [f.get("statement") for f in brain.findings()], "objective": brain.get_objective().get("statement"), "contradictedBy": brain.get_objective().contradicted_by(), "mode": brain.state_mode()})\n' },
         argv: [], inputs: {}, files: [],
         brainRead: { kinds: ['OBJECTIVE', 'FINDING', 'EVIDENCE'], taskScoped: false, includeHistory: false, stateMode },
         brainWrite: { kinds: ['TRACE'], maxRecords: 1 }, environment: { environmentId: 'system-python', requirements: [] }, network: { mode: 'DENY' }, secrets: [],
@@ -70,14 +75,20 @@ suite('Python under state modes', () => {
     const record = await service.execute(request({ mode: 'FRESH', missionId: MISSION, runId: CURRENT_RUN }));
     expect(record.outcome?.stderr?.text).toBe('');
     expect(record.state).toBe('SUCCEEDED');
-    const value = record.outcome!.structured.value as { findings: string[]; objective: string; mode: { mode: string; excluded: Record<string, number> } };
+    const value = record.outcome!.structured.value as { findings: string[]; objective: string; contradictedBy: string[]; mode: { mode: string; excluded: Record<string, number> } };
     expect(value.findings).toEqual([]);
     expect(value.objective).toBe('Implement the trust core');
+    expect(value.contradictedBy).toEqual([]);
     expect(value.mode.mode).toBe('FRESH');
     expect(value.mode.excluded.PRIOR_RUN_STATE).toBeGreaterThan(0);
     expect((await julius.entities({ kinds: ['FINDING'] }))).toHaveLength(1);
     const execution = (await julius.current('PYTHON_EXECUTION')).find((state) => state.body.executionId === record.executionId)!;
     expect(execution.body.stateMode).toBe('FRESH');
+
+    // Without a mode, the same script is handed the prior run's evidence and its edge: exactly what FRESH withheld.
+    const unmoded = await service.execute(request(null));
+    expect(unmoded.state).toBe('SUCCEEDED');
+    expect((unmoded.outcome!.structured.value as { contradictedBy: string[] }).contradictedBy).toHaveLength(1);
   }, 60_000);
 
   it('LEARNING: the same archived finding is available when the policy names it', async () => {

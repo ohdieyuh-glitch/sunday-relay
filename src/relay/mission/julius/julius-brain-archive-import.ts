@@ -13,7 +13,7 @@ import {
 } from './julius-brain-contracts';
 import type { JuliusBrainCommitGroup, JuliusBrainReceipt } from './julius-brain-projection';
 import { juliusStringsOf, scanJuliusSecrets } from './julius-brain-secrets';
-import { JULIUS_BRAIN_STATE_MODES, type JuliusBrainStateMode } from './julius-brain-state-modes';
+import { JULIUS_ARCHIVE_EXTERNAL_REF_PREFIX, JULIUS_BRAIN_STATE_MODES, type JuliusBrainStateMode } from './julius-brain-state-modes';
 import type { JuliusBrainStore } from './julius-brain-store';
 
 /**
@@ -296,7 +296,7 @@ export function planJuliusPaidRunArchiveImport(archive: JuliusPaidRunArchiveExpo
   const drafts: JuliusBrainDraft[] = [];
   const counts: Partial<Record<JuliusBrainRecordKind, number>> = {};
   const provenance = (section: string, sourceId: string, extra: { provider?: string | null; model?: string | null; tool?: string | null } = {}) =>
-    juliusBrainProvenance('run_observed', { commit: run.acceptedMainSha, externalRef: clip(`julius-paid-run-archive:${runKey}#${section}/${sourceId}`, 2_048), ...extra });
+    juliusBrainProvenance('run_observed', { commit: run.acceptedMainSha, externalRef: clip(`${JULIUS_ARCHIVE_EXTERNAL_REF_PREFIX}${runKey}#${section}/${sourceId}`, 2_048), ...extra });
   const add = (kind: JuliusBrainRecordKind, section: JuliusArchiveSection | 'run' | 'export' | 'accounting', sourceId: string, body: JuliusBrainBody, options: { taskId?: string | null; links?: readonly JuliusBrainLink[]; occurredAt: string; provider?: string | null; model?: string | null; tool?: string | null; entityId?: string }) => {
     const entityId = options.entityId ?? juliusArchiveEntityId(run, section, sourceId);
     const fromExport = entityId === anchorEntityId ? [] : [{ relation: 'DERIVED_FROM' as const, target: anchorEntityId, targetVersion: null }];
