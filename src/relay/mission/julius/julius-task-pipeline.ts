@@ -198,8 +198,13 @@ export interface JuliusPipelineDependencies {
   readonly timeline?: JuliusTimelineReader;
   /** Whoever holds the lease. Recorded on every event for attribution. */
   readonly owner: string;
-  /** Context budget in characters. Compiling is bounded, never open-ended. */
-  readonly contextCharacterBudget: number;
+  /**
+   * Context budget in characters. Compiling is bounded, never open-ended. A
+   * function sets it per role: a worker that reads a served page needs room
+   * for it, and a worker whose packet travels a bounded transport must not be
+   * given room it cannot carry.
+   */
+  readonly contextCharacterBudget: number | ((role: JuliusWorkerRole) => number);
 }
 
 export interface JuliusPipelineRequest {
@@ -746,7 +751,9 @@ export async function runClaimedTask(
       task,
       worker,
       entries: [...brain, ...priorFindings.map((finding) => findingEntryFor(task, finding))],
-      maxCharacters: deps.contextCharacterBudget,
+      maxCharacters: typeof deps.contextCharacterBudget === 'function'
+        ? deps.contextCharacterBudget(worker.role)
+        : deps.contextCharacterBudget,
       missionContractRevision: run.missionContractRevision,
       cardRevision: run.cardRevision,
       projectBrainRevision: run.projectBrainRevision,
@@ -859,17 +866,24 @@ export async function runClaimedTask(
       return { kind: 'FAILED', taskId: claim.taskId, code: 'INVALID_REQUEST', failureClass: 'context_not_persisted' };
     }
     contextId = persistedContextId;
+    /* DID THE ANSWER ARRIVE. Null when this task is not a research continuation;
+       otherwise whether the compiled packet really holds the answer entry — the
+       last link between "Julius served a page" and "the worker was given it". */
+    const researchAnswerId = `brain:research-answer:${task.taskId}`;
+    const researchAnswerIncluded = brain.some((entry) => entry.entryId === researchAnswerId)
+      ? snapshot.sourceEntryIds.includes(researchAnswerId)
+      : null;
     await ledger.event('context.compiled', {
       taskId: task.taskId, workerId: worker.workerId,
       facts: {
         contextId, characterCount: snapshot.characterCount, truncated: snapshot.truncated,
-        redactionCount: snapshot.redactionCount, contentHash: snapshot.contentHash,
+        redactionCount: snapshot.redactionCount, contentHash: snapshot.contentHash, researchAnswerIncluded,
       },
     });
     await ledger.trajectory('CONTEXT_COMPILED', {
       taskId: task.taskId, workerId: worker.workerId, contextId,
       policyRevision: request.policy.revision,
-      facts: { characterCount: snapshot.characterCount, truncated: snapshot.truncated, redactionCount: snapshot.redactionCount, contentHash: snapshot.contentHash },
+      facts: { characterCount: snapshot.characterCount, truncated: snapshot.truncated, redactionCount: snapshot.redactionCount, contentHash: snapshot.contentHash, researchAnswerIncluded },
     });
   }
 
@@ -1697,7 +1711,14 @@ async function driveResearchCheckpoint(input: {
    * host and was refused by it still spent something, and pretending otherwise
    * is how a budget is exceeded while every individual read looks free.
    */
+  const continuationTaskId = juliusSegmentTaskId(segmentRoot.taskId, segmentNumber);
+  const handoffEntryId = `brain:research-answer:${continuationTaskId}`;
+  const provenanceEntryId = `brain:research-served:${continuationTaskId}`;
+  const count = (value: unknown): number | null =>
+    (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null);
+  const served = observations.filter((observation) => observation.delivery !== null && observation.delivery !== undefined);
   for (const [index, observation] of observations.entries()) {
+    const delivery = observation.delivery ?? null;
     await ledger.event('research.retrieved', {
       taskId: subjectTaskId, workerId: input.workerId,
       facts: {
@@ -1733,6 +1754,26 @@ async function driveResearchCheckpoint(input: {
           ? observation.bytes
           : null,
         bytesRecorded: true,
+        askOrdinal: index,
+        resourcePath: observation.requested?.path ?? null,
+        mechanism: delivery?.mechanism ?? null,
+        contentDigest: delivery?.contentDigest ?? null,
+        readableChars: count(delivery?.readableChars),
+        deliveredFrom: count(delivery?.deliveredFrom),
+        deliveredChars: count(delivery?.deliveredChars),
+        deliveryCut: delivery === null ? null : delivery.cut,
+        deliveryAnchor: delivery?.anchor ?? null,
+        handoffTaskId: continuationTaskId,
+        handoffEntryId,
+        /* WHICH PAGE, WHAT CAME BACK, AND WHERE IT WENT. Qualification attempt 4
+           (run 34774471909) served one page and its row could not say which page
+           of the host it was, how much of it existed, or whether any of it reached
+           the worker — none had: the text was dropped before the packet. The path
+           (no query, no fragment, token-shaped segments scrubbed), the backend
+           that answered, the digest of the body Relay kept, how many readable
+           characters it held and which were handed over, the section a cut
+           started at, and the continuation and Brain entry the answer rides. Null
+           where nothing was retrieved. No page text is ever on this row. */
         /* THE LAST FIVE: WHY, AND AT WHAT. Paid run 34757974058 wrote four
            refusals with an empty reason and no target, so a worker asking for
            a host the mission never granted and Relay refusing one it had were
@@ -1745,7 +1786,7 @@ async function driveResearchCheckpoint(input: {
   }
 
   const continuation: JuliusTask = {
-    taskId: juliusSegmentTaskId(segmentRoot.taskId, segmentNumber),
+    taskId: continuationTaskId,
     missionId: task.missionId,
     parentTaskId: segmentRoot.taskId,
     /**
@@ -1800,7 +1841,7 @@ async function driveResearchCheckpoint(input: {
       projectId: run.projectId,
       taskId: continuation.taskId,
       workerId: input.workerId,
-      entryId: `brain:research-answer:${continuation.taskId}`,
+      entryId: handoffEntryId,
       kind: 'HANDOFF',
       safeText: [
         resume === null
@@ -1818,6 +1859,37 @@ async function driveResearchCheckpoint(input: {
       ),
       occurredAt: deps.clock.now(),
     });
+
+    /**
+     * THE TRAIL A REVIEWER CAN CHECK A CITATION AGAINST.
+     *
+     * The answer above reaches only the continuation that asked. A reviewer
+     * later told "the source is the psql reference" had nothing to hold that
+     * against: attempt 4's reviewer could only observe that no WHERE was
+     * recorded. This entry is Julius's own record of each page it served —
+     * slot, host and path, bytes, digest, what was handed over and to which
+     * task — run-wide, so every later packet, the reviewer's included, carries
+     * it. It holds no page text and no worker text, and it is written under the
+     * same guard as the answer, so a replayed tick adds nothing.
+     */
+    if (served.length > 0) {
+      await deps.store.appendBrainEntry({
+        runId: run.runId,
+        projectId: run.projectId,
+        taskId: null,
+        workerId: input.workerId,
+        entryId: provenanceEntryId,
+        kind: 'EVIDENCE',
+        safeText: served.map((observation) => juliusResearchServedLine({
+          role: task.role,
+          checkpointId: checkpoint.checkpointId,
+          continuationTaskId,
+          observation,
+        })).join('\n'),
+        evidenceIds: served.flatMap((observation) => (observation.evidenceId === null ? [] : [observation.evidenceId])),
+        occurredAt: deps.clock.now(),
+      });
+    }
   }
 
   await ledger.event('checkpoint.verdict', {
@@ -1825,6 +1897,9 @@ async function driveResearchCheckpoint(input: {
     facts: {
       checkpointId: checkpoint.checkpointId, route: routing.route, reasonCode: routing.reasonCode,
       continuationTaskId: created ? continuation.taskId : null,
+      handoffEntryId: created ? handoffEntryId : null,
+      provenanceEntryId: created && served.length > 0 ? provenanceEntryId : null,
+      deliveredChars: served.reduce((total, observation) => total + (count(observation.delivery?.deliveredChars) ?? 0), 0),
       barrier: true,
       segment: segmentNumber,
       asks: asks.length,
@@ -3355,3 +3430,28 @@ const findingEntryFor = (task: JuliusTask, finding: JuliusReviewerFinding): Juli
   allowedRoles: [task.role],
   sensitivity: 'INTERNAL',
 });
+
+/**
+ * ONE LINE OF JULIUS'S RESEARCH RECORD, as a later packet carries it.
+ * Numbers and identifiers only: the host and scrubbed path, never the query,
+ * fragment, purpose or any text of the page.
+ */
+export function juliusResearchServedLine(input: {
+  readonly role: string;
+  readonly checkpointId: string;
+  readonly continuationTaskId: string;
+  readonly observation: JuliusResearchObservationRecord;
+}): string {
+  const { observation } = input;
+  const delivery = observation.delivery;
+  if (delivery === null || delivery === undefined) throw new Error('research_served_line_without_delivery');
+  const host = observation.requested?.host ?? null;
+  const where = host === null ? 'an unparseable reference' : `https://${host}${observation.requested?.path ?? ''}`;
+  const bytes = delivery.fetchedBytes === null ? 'an unreported number of bytes' : `${String(delivery.fetchedBytes)} bytes`;
+  const handed = delivery.cut
+    ? `characters ${String(delivery.deliveredFrom + 1)}–${String(delivery.deliveredFrom + delivery.deliveredChars)} of ${String(delivery.readableChars)}`
+    : `all ${String(delivery.readableChars)} readable characters`;
+  return `RESEARCH SERVED (Julius's record, no page text): the ${input.role} asked at ${input.checkpointId} for ${where}; `
+    + `${observation.outcome}; ${bytes} fetched by ${delivery.mechanism ?? 'an unreported backend'}; body ${delivery.contentDigest}; `
+    + `${handed} handed to ${input.continuationTaskId}.`;
+}

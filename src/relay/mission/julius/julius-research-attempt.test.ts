@@ -455,16 +455,24 @@ describe('E — a refused ask\'s row says why and at what', () => {
     }
   });
 
-  it('19. no part of the worker\'s reference beyond its host, and not its purpose, reaches the row', async () => {
+  /**
+   * THE PATH IS RECORDED SINCE QUALIFICATION ATTEMPT 4 (run 34774471909), whose
+   * one served read could not be identified from its host alone. The row carries
+   * the path the port reduced (no query, no fragment, token-shaped segments
+   * scrubbed), and still never the reference as written or the purpose.
+   */
+  it('19. the row carries the port\'s reduced path, and never the reference as written or its purpose', async () => {
     const harness = build({
       research: refusingPort({
         refusal: 'host_not_allowed', reachRefusal: null,
-        requested: { source: 'web', capability: 'read_item', host: 'docs.python.org' },
+        requested: { source: 'web', capability: 'read_item', host: 'docs.python.org', path: '/3/library/asyncio-task.html' },
       }),
     });
     await drain(harness);
-    const row = JSON.stringify(factsOf(harness, 'research.retrieved'));
-    expect(row).not.toContain('asyncio-task');
+    const rows = factsOf(harness, 'research.retrieved');
+    expect(rows[0]?.resourcePath).toBe('/3/library/asyncio-task.html');
+    const row = JSON.stringify(rows);
+    expect(row).not.toContain(ASKS[0]!.reference);
     expect(row).not.toContain(ASKS[0]!.purpose);
   });
 
@@ -476,8 +484,50 @@ describe('E — a refused ask\'s row says why and at what', () => {
       ['requestedCapability', 'requested_capability'], ['requestedHost', 'requested_host'],
       // The bytes the ledger was charged, and that they were recorded: the research budget is rebuilt from these.
       ['bytes', 'bytes'], ['bytesRecorded', 'bytes_recorded'],
+      // Which page, what came back and where it went: the delivery provenance.
+      ['askOrdinal', 'ask_ordinal'], ['resourcePath', 'resource_path'], ['mechanism', 'mechanism'],
+      ['contentDigest', 'content_digest'], ['readableChars', 'readable_chars'], ['deliveredFrom', 'delivered_from'],
+      ['deliveredChars', 'delivered_chars'], ['deliveryCut', 'delivery_cut'], ['deliveryAnchor', 'delivery_anchor'],
+      ['handoffTaskId', 'handoff_task_id'], ['handoffEntryId', 'handoff_entry_id'],
     ] as const) {
       expect(query, `${fact} must reach research.tsv as ${column}`).toContain(`'facts'->>'${fact}' AS ${column},`);
     }
+  });
+});
+
+/**
+ * THE LAST LINK, AND ITS NEGATIVE. Qualification attempt 4 (run 34774471909)
+ * served a page, and nothing on the record could say whether the continuation's
+ * packet held it — it did not. `context.compiled` now answers for a research
+ * continuation: true when the answer entry is in the packet, false when the
+ * compiler had to leave it out, and null for a task that is not one.
+ */
+describe('F — the record says whether the answer reached the continuation packet', () => {
+  const answering = (rendered: string) => ({
+    async serve(input: Parameters<NonNullable<ServePort>['serve']>[0]) {
+      return input.asks.map((ask) => ({
+        outcome: 'observed' as const, reference: ask.reference, purpose: ask.purpose,
+        rendered, detail: 'The source answered.', evidenceId: 'ev-research-1', injectionSignals: [], mayCorroborate: true,
+      }));
+    },
+  });
+  const compiledFor = (harness: JuliusHarness) => harness.store.events()
+    .filter((event) => event.type === 'context.compiled')
+    .map((event) => ({ taskId: String(event.taskId), included: event.facts.researchAnswerIncluded, truncated: event.facts.truncated }));
+
+  it('21. an answer that fits is recorded as included; tasks that are not continuations record null', async () => {
+    const harness = build({ research: answering('<<<RELAY-EVIDENCE\nshort.\nRELAY-EVIDENCE>>>') });
+    await drain(harness);
+    const rows = compiledFor(harness);
+    expect(rows.filter((row) => /^segment:.+:[0-9]+:task$/u.test(row.taskId)).map((row) => row.included)).toEqual([true]);
+    expect(rows.filter((row) => !/^segment:.+:[0-9]+:task$/u.test(row.taskId)).every((row) => row.included === null)).toBe(true);
+  });
+
+  it('22. an answer the compiler could not fit is recorded as NOT included, never assumed delivered', async () => {
+    // The rig compiles 4,000 characters; this answer alone is 6,000.
+    const harness = build({ research: answering(`<<<RELAY-EVIDENCE\n${'x'.repeat(6_000)}\nRELAY-EVIDENCE>>>`) });
+    await drain(harness);
+    const continuation = compiledFor(harness).filter((row) => /^segment:.+:[0-9]+:task$/u.test(row.taskId));
+    expect(continuation.map((row) => [row.included, row.truncated])).toEqual([[false, true]]);
   });
 });

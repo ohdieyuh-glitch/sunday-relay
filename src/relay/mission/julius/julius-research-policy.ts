@@ -299,6 +299,32 @@ export function juliusResearchRequestedHost(reference: string): string | null {
   return isHostName(host) ? host : null;
 }
 
+/**
+ * WHICH PAGE OF A HOST AN ASK REACHED FOR, as a record may hold it.
+ *
+ * The URL parser's own pathname — dot segments resolved, percent-encoding as
+ * the parser leaves it — with no query and no fragment, which are where a
+ * credential or a worker's free text would ride. A segment shaped like a token
+ * (24 or more letters, digits, `-` or `_`, with both a letter and a digit)
+ * is replaced, and the whole is bounded, so a path can identify a page without
+ * ever becoming a place a secret is kept. Null when the reference is not a URL.
+ */
+export function juliusResearchRequestedPath(reference: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(reference);
+  } catch {
+    return null;
+  }
+  const scrubbed = url.pathname
+    .split('/')
+    .map((segment) => (/^[A-Za-z0-9_-]{24,}$/u.test(segment) && /[A-Za-z]/u.test(segment) && /[0-9]/u.test(segment)
+      ? '[REDACTED]'
+      : segment))
+    .join('/');
+  return scrubbed.length > 200 ? `${scrubbed.slice(0, 199)}…` : scrubbed;
+}
+
 /* ------------------------------------------------------------ sealing */
 
 const FINGERPRINT_OF = (draft: JuliusResearchPolicyDraft): string => contentFingerprint(JSON.stringify([
@@ -542,6 +568,12 @@ export interface JuliusResearchRequest {
   /** What the worker is trying to find out. Recorded with the evidence. */
   readonly purpose: string;
   readonly requestedAt: string;
+  /**
+   * How many readable characters of the page may be handed to the worker, set
+   * by whoever shares one packet between several asks. Absent means the whole
+   * packet for this one page. Never an authority: it bounds delivery only.
+   */
+  readonly deliveryChars?: number;
 }
 
 export type JuliusResearchAuthorization =

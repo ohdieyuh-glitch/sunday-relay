@@ -31,6 +31,21 @@ describe('Julius authoritative kernel', () => {
     ] });
     expect(packet.sourceEntryIds).toEqual(['objective']); expect(JSON.stringify(packet)).not.toContain('do-not-leak'); expect(JSON.stringify(packet)).not.toContain('review only');
   });
+  /**
+   * QUALIFICATION ATTEMPT 4 (run 34774471909). An entry too large for the
+   * budget used to END the packet, dropping every entry after it as well; a
+   * served page could take the rest of a worker's context with it. It is now
+   * skipped alone, and the packet still says it is incomplete.
+   */
+  it('skips an entry too large for the budget without dropping the entries after it', () => {
+    const packet = compileJuliusContext({ missionId: 'mission-1', task: task('build'), worker, maxCharacters: 60, entries: [
+      { entryId: 'objective', kind: 'OBJECTIVE', text: 'Implement durable scheduling', taskIds: [], allowedRoles: ['CODING_AGENT'], sensitivity: 'INTERNAL' },
+      { entryId: 'page', kind: 'HANDOFF', text: 'x'.repeat(500), taskIds: ['build'], allowedRoles: ['CODING_AGENT'], sensitivity: 'INTERNAL' },
+      { entryId: 'constraint', kind: 'CONSTRAINT', text: 'Edit one module only', taskIds: [], allowedRoles: ['CODING_AGENT'], sensitivity: 'INTERNAL' },
+    ] });
+    expect(packet.sourceEntryIds).toEqual(['objective', 'constraint']);
+    expect(packet.truncated).toBe(true);
+  });
   it('requires evidence and Julius acceptance before mission completion', () => {
     const succeeded = { ...task('build'), state: 'SUCCEEDED' as const };
     expect(verifyTask(succeeded, [], 0).action).toBe('HALT');

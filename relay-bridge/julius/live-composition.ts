@@ -39,6 +39,7 @@ import {
   type JuliusRuntimeStore,
   type JuliusVerificationPolicy,
   type JuliusWorker,
+  type JuliusWorkerRole,
   noJuliusResearch,
   type JuliusResearchLedger,
   type JuliusResearchPolicy,
@@ -104,6 +105,38 @@ import type { runHermesReview } from '../hermes-reviewer';
  * beyond this would mean raising the reservation, deliberately, here.
  */
 export const ARCHITECT_OUTPUT_TOKEN_RESERVATION = 20_000;
+
+/**
+ * HOW MANY CHARACTERS OF MISSION CONTEXT EACH SLOT'S PACKET MAY COMPILE.
+ *
+ * THE ARCHITECT AND THE CODER: 200,000. Room for the page a worker asked for,
+ * beside everything else it is owed. 24,000 was the whole packet, and
+ * qualification attempt 4 (run 34774471909) compiled up to 10,130 characters of
+ * mission context before any research, so a served page could never fit beside
+ * it. The research resume is bounded at 160,000
+ * (`JULIUS_RESEARCH_ASK_LIMITS.renderedChars`), and 200,000 holds it with
+ * the largest context attempt 4 compiled, three times over. Neither slot's
+ * packet goes through argv:
+ *   - the architect's is an HTTPS request body;
+ *   - the hosted SDK writes the coder's prompt to the child's stdin
+ *     (`--input-format stream-json`, @anthropic-ai/claude-agent-sdk 0.3.220,
+ *     sdk.mjs:108 and sdk.mjs:136).
+ *
+ * THE INDEPENDENT REVIEWER: 24,000, unchanged. Its prompt reaches Hermes as a
+ * single `-z` argument, and Linux refuses any argv string over 131,072 bytes
+ * at exec, before a provider is asked. Nothing the reviewer is owed needs more:
+ *   - research answers are scoped to the continuation that asked;
+ *   - the served-page trail is a line per read;
+ *   - its mission text is cut to 8,000 characters by the packet builder.
+ * Keeping the ceiling where it was keeps the reviewer's argv exactly as large
+ * as it was. Attempts 3 and 4 measured at most 54,797 bytes.
+ *
+ * A budget is a ceiling, not a size: a packet with nothing extra to carry
+ * compiles exactly as before.
+ */
+export function liveContextCharacterBudget(role: JuliusWorkerRole): number {
+  return role === 'INDEPENDENT_REVIEWER' ? 24_000 : 200_000;
+}
 import {
   createLiveArchitectAdapter,
   createLiveHermesReviewerAdapter,
@@ -714,7 +747,7 @@ export function assembleLiveJuliusRuntime(options: {
       ? { timeline: options.store as unknown as JuliusTimelineReader }
       : {}),
     owner: options.owner ?? 'julius-live-mission',
-    contextCharacterBudget: 24_000,
+    contextCharacterBudget: liveContextCharacterBudget,
   };
   const policies: JuliusPolicySource = {
     async policyFor() { return { card, verification }; },

@@ -139,7 +139,8 @@ export function compileJuliusContext(input: { missionId: string; task: JuliusTas
     (entry.taskIds.length === 0 || entry.taskIds.includes(input.task.taskId)));
   const blocks: { kind: JuliusBrainEntry['kind']; text: string }[] = []; const sourceEntryIds: string[] = []; let used = 0;
   for (const entry of relevant) { const sanitized = entry.text.replace(/(?:api[_-]?key|token|secret)\s*[=:]\s*\S+/gi, '$1=[REDACTED]');
-    if (used + sanitized.length > input.maxCharacters) break; blocks.push({ kind: entry.kind, text: sanitized }); sourceEntryIds.push(entry.entryId); used += sanitized.length; }
+    // SKIP, NEVER STOP: one entry too large for the budget used to end the packet, taking every entry after it too.
+    if (used + sanitized.length > input.maxCharacters) continue; blocks.push({ kind: entry.kind, text: sanitized }); sourceEntryIds.push(entry.entryId); used += sanitized.length; }
   return { missionId: input.missionId, taskId: input.task.taskId, workerId: input.worker.workerId, sourceEntryIds, blocks, truncated: sourceEntryIds.length < relevant.length };
 }
 
