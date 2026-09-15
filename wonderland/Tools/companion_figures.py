@@ -40,6 +40,11 @@ VOXEL_UU = 2.5
 # this at write time; `--glow-scale` overrides it for exposure probes.
 GLOW_SCALE = 4000.0
 
+# THE SHELL'S MATERIAL KIND. "lit" is the engine's plain lit shape material; "rim" is the V1 master
+# (/Game/Wonderland/Materials/M_WLMaster, instanced-mesh capable) with a fresnel rim -- ivory reads more like
+# porcelain and gold more like gold. `--shell-kind` switches it for a material A/B in PIE.
+SHELL_KIND = "lit"
+
 
 def normalise(v):
     length = math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]) or 1.0
@@ -90,6 +95,8 @@ class Figure:
 
     # ---------------------------------------------------------------- records
     def material(self, name, kind, rgb, strength=1.0):
+        if kind == "lit" and name in ("ivory", "gold", "lilac", "hair"):
+            kind = SHELL_KIND
         self.materials.append((name, kind, rgb, strength))
 
     def part(self, name, parent, pivot, motion="none", a=None, b=None):
@@ -605,10 +612,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--out", default=os.path.join(here, "..", "Companions"))
     parser.add_argument("--glow-scale", type=float, default=None, help="override GLOW_SCALE (exposure probes)")
+    parser.add_argument("--shell-kind", choices=("lit", "rim"), default=None, help="override SHELL_KIND (material A/B)")
     args = parser.parse_args()
-    global GLOW_SCALE
+    global GLOW_SCALE, SHELL_KIND
     if args.glow_scale is not None:
         GLOW_SCALE = args.glow_scale
+    if args.shell_kind is not None:
+        SHELL_KIND = args.shell_kind
     os.makedirs(args.out, exist_ok=True)
     outputs = [
         (lambda: build_ghost("aurum", "GPT 6 Astra"), "GPT6Astra.wlvox"),

@@ -13,6 +13,8 @@ import os
 import time
 
 FIGURE_DIR = "C:/dev/iwonder/wonderland-companions/wonderland/Companions"
+# The same figures with ivory and gold on the V1 rim master instead of the plain lit shape material.
+RIM_DIR = "C:/Users/Kaisi/AppData/Local/Temp/claude/C--Users-Kaisi/92e62278-8c7b-402e-8938-bd7e61b380ed/scratchpad/shell_rim"
 TAG = "zc"
 SHOTS = os.path.join(os.path.dirname(CHANNEL), "captures", TAG)
 L = unreal.WonderlandUiTestLibrary
@@ -199,6 +201,21 @@ def job():
             body.set_editor_property("follow_offset", unreal.Vector(ox, oy, 0.0))
             body.snap_to_target()
     yield 1.0
+
+    # ------------------------------------------------------------------ shell material A/B, close and in front
+    if RIM_DIR and os.path.isdir(RIM_DIR):
+        controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-6.0, yaw=pawn.get_actor_rotation().yaw + 180.0))
+        if boom is not None and arm is not None:
+            boom.set_editor_property("target_arm_length", max(arm * 0.62, 220.0))
+        for label, directory in (("rim", RIM_DIR), ("lit", FIGURE_DIR)):
+            unreal.SystemLibrary.execute_console_command(world, "wl.Companion.FigureDir " + directory)
+            unreal.SystemLibrary.execute_console_command(world, "wl.Companion.Reload")
+            yield 3.0
+            RESULT.setdefault("shell_ab", []).append({"label": label, "capture": shot("zc_08_shell_%s.png" % label)})
+        if boom is not None and arm is not None:
+            boom.set_editor_property("target_arm_length", arm)
+        controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-10.0, yaw=pawn.get_actor_rotation().yaw))
+        yield 1.5
 
     # ------------------------------------------------------------------ what the two embodiments cost (gate item 10)
     # A/B on the same view: both bodies shown and ticking, then hidden with tick off, three times each, so drift in
