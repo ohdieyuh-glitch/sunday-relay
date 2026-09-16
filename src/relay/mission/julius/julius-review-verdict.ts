@@ -51,10 +51,30 @@ export const JULIUS_REVIEW_VERDICT_LIMITS = Object.freeze({
   claimChars: 400,
   warnings: 8,
   warningClaimChars: 240,
+  resolutions: 16,
+  findingIdChars: 200,
 });
 
 export interface JuliusReviewWarning {
   readonly category: JuliusChallengeCategory | null;
+  readonly claim: string;
+}
+
+/**
+ * WHAT A RE-REVIEW SAYS ABOUT A FINDING IT RAISED BEFORE.
+ *
+ * A repair changes code; only the reviewer can say whether the problem it was
+ * raised about is gone. So a re-review names each finding it was asked about
+ * and answers RESOLVED, OPEN (still there) or SUPERSEDED (the problem changed
+ * shape and a new finding replaces it). Silence resolves nothing: a finding the
+ * reviewer does not mention stays exactly where it was.
+ */
+export const JULIUS_FINDING_RESOLUTIONS = ['RESOLVED', 'OPEN', 'SUPERSEDED'] as const;
+export type JuliusFindingResolution = (typeof JULIUS_FINDING_RESOLUTIONS)[number];
+
+export interface JuliusReviewResolution {
+  readonly findingId: string;
+  readonly status: JuliusFindingResolution;
   readonly claim: string;
 }
 
@@ -67,6 +87,8 @@ export interface JuliusReviewVerdictDeclaration {
   readonly target: JuliusChallengeTarget | null;
   readonly claim: string;
   readonly warnings: readonly JuliusReviewWarning[];
+  /** What this review says about findings it was asked to re-judge. Empty resolves nothing. */
+  readonly resolutions: readonly JuliusReviewResolution[];
 }
 
 export type JuliusReviewVerdictReading =
@@ -147,11 +169,33 @@ export function sanitizeJuliusReviewVerdict(value: unknown): JuliusReviewVerdict
     warnings.push(Object.freeze({ category: named, claim }));
   }
 
+  const rawResolutions = source.resolutions ?? [];
+  if (!Array.isArray(rawResolutions) || rawResolutions.length > JULIUS_REVIEW_VERDICT_LIMITS.resolutions) {
+    return { ok: false, reasonCode: 'review_verdict_resolutions_invalid' };
+  }
+  const resolutions: JuliusReviewResolution[] = [];
+  for (const item of rawResolutions) {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) return { ok: false, reasonCode: 'review_verdict_resolutions_invalid' };
+    const entry = item as Record<string, unknown>;
+    const findingId = typeof entry.findingId === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:@+-]*$/u.test(entry.findingId)
+      && entry.findingId.length <= JULIUS_REVIEW_VERDICT_LIMITS.findingIdChars ? entry.findingId : null;
+    const word = typeof entry.status === 'string' ? entry.status.trim().toUpperCase() : '';
+    const resolutionClaim = safeLine(entry.claim, JULIUS_REVIEW_VERDICT_LIMITS.warningClaimChars);
+    if (findingId === null || !(JULIUS_FINDING_RESOLUTIONS as readonly string[]).includes(word) || resolutionClaim === null) {
+      return { ok: false, reasonCode: 'review_verdict_resolutions_invalid' };
+    }
+    if (resolutions.some((existing) => existing.findingId === findingId)) {
+      // TWO ANSWERS ABOUT ONE FINDING IS NO ANSWER.
+      return { ok: false, reasonCode: 'review_verdict_resolutions_conflict' };
+    }
+    resolutions.push(Object.freeze({ findingId, status: word as JuliusFindingResolution, claim: resolutionClaim }));
+  }
+
   return {
     ok: true,
     declaration: Object.freeze({
       version: JULIUS_REVIEW_VERDICT_VERSION, verdict, category: named, target, claim,
-      warnings: Object.freeze(warnings),
+      warnings: Object.freeze(warnings), resolutions: Object.freeze(resolutions),
     }),
   };
 }
@@ -243,6 +287,8 @@ export function juliusReviewVerdictFacts(
     claim: declaration.claim,
     warningCount: declaration.warnings.length,
     warnings: JSON.stringify(declaration.warnings),
+    resolutionCount: declaration.resolutions.length,
+    resolutions: JSON.stringify(declaration.resolutions),
   };
 }
 
@@ -251,9 +297,13 @@ export function juliusReviewVerdictFromFacts(
   facts: Readonly<Record<string, string | number | boolean | null>>,
 ): JuliusReviewVerdictDeclaration | null {
   let warnings: unknown = [];
-  try { warnings = typeof facts.warnings === 'string' ? JSON.parse(facts.warnings) : []; } catch { return null; }
+  let resolutions: unknown = [];
+  try {
+    warnings = typeof facts.warnings === 'string' ? JSON.parse(facts.warnings) : [];
+    resolutions = typeof facts.resolutions === 'string' ? JSON.parse(facts.resolutions) : [];
+  } catch { return null; }
   const reading = sanitizeJuliusReviewVerdict({
-    verdict: facts.verdict, category: facts.category, target: facts.target, claim: facts.claim, warnings,
+    verdict: facts.verdict, category: facts.category, target: facts.target, claim: facts.claim, warnings, resolutions,
   });
   return reading.ok ? reading.declaration : null;
 }
@@ -282,6 +332,7 @@ export function juliusReviewEscalationGuidance(): string {
     `  "target": for a challenge, one of ${JULIUS_CHALLENGE_TARGETS.map((target) => target.toLowerCase()).join(', ')}`,
     `  "claim": what is wrong, in one sentence of at most ${JULIUS_REVIEW_VERDICT_LIMITS.claimChars} characters`,
     'Ordinary problems in the work are findings, not escalations: "changes_required" with blocking findings already sends the work to repair.',
+    'WHEN YOU RE-REVIEW A REPAIR you are also asked about the findings you raised before. They are listed in your packet with their ids. For each one answer in "resolutions": {"findingId", "status": "RESOLVED" | "OPEN" | "SUPERSEDED", "claim"}. RESOLVED means the evidence shows the problem is gone; OPEN means it is still there; SUPERSEDED means the problem changed shape and your new finding replaces it. A finding you do not mention stays exactly as it was: changed code never resolves anything by itself.',
     'You never declare work verified, complete or accepted. Only Julius does, and an escalation that says so is refused.',
   ].join('\n');
 }

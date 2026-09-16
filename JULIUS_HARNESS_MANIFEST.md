@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **165 production files** across 20/20 subsystems (2 roots, 143 traced, 7 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **167 production files** across 20/20 subsystems (2 roots, 145 traced, 7 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -182,6 +182,7 @@ The judgement role: the Hermes reviewer process runner in an isolated profile, p
 | `relay-bridge/reviewer-harness/hermes/hermes-provider.ts` | traced | `relay-bridge/reviewer-harness/hermes/isolated-profile.ts` |
 | `relay-bridge/reviewer-harness/hermes/isolated-profile.ts` | traced | `relay-bridge/reviewer-harness/hermes/runner.ts` |
 | `relay-bridge/reviewer-harness/hermes/runner.ts` | traced | `relay-bridge/hermes-reviewer.ts` |
+| `src/relay/mission/julius/julius-finding-lifecycle.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-review-stage.ts` | traced | `src/relay/mission/julius/julius-task-contract.ts` |
 | `src/relay/mission/julius/julius-review-verdict.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 
@@ -272,6 +273,7 @@ A repair round planned from reviewer findings and a REPAIR decision, bounded by 
 | production source | role | reached from |
 | --- | --- | --- |
 | `src/relay/mission/julius/julius-repair-lineage.ts` | traced | `src/relay/mission/julius/julius-runtime.ts` |
+| `src/relay/mission/julius/julius-repair-round.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-repair-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 
 ### 15 RECOVERY / CONTINUATION

@@ -64,6 +64,13 @@ import {
   type JuliusReviewRoute, type JuliusReviewVerdictDeclaration,
 } from './julius-review-verdict';
 import {
+  foldJuliusFindings, juliusFindingTransitionFacts, moveJuliusFinding,
+  type JuliusFindingLife, type JuliusFindingMove,
+} from './julius-finding-lifecycle';
+import {
+  juliusRepairRoundDiff, juliusRepairRoundEntryId, renderJuliusRepairRoundDiff,
+} from './julius-repair-round';
+import {
   JULIUS_CHECKPOINT_LIMITS,
   guidanceSubjectTaskId, isJuliusGuidanceHandoffEntryId, issueJuliusGuidance, juliusCheckpointId,
   JULIUS_GUIDANCE_AUTHORITATIVE_HEADING, JULIUS_GUIDANCE_PROPOSED_HEADING,
@@ -2652,7 +2659,14 @@ interface AppliedReviewVerdict {
   readonly category: string | null;
 }
 
-/** Every row the review verdict and the channel read, or none when no timeline is bound. */
+/**
+ * Every row the verdict, the channel, the disagreement and the finding
+ * projections read, or none when no timeline is bound.
+ *
+ * `finding.` belongs here and was missing: without it every finding folded as
+ * OPEN however many times it had been addressed, so a repair re-addressed it on
+ * every round and a reviewer answering "still open" was refused as a repeat.
+ */
 async function readVerdictLedger(deps: JuliusPipelineDependencies, run: JuliusRunRow): Promise<readonly JuliusPeerLedgerEntry[]> {
   if (deps.timeline === undefined) return [];
   const rows: JuliusPeerLedgerEntry[] = [];
@@ -2661,7 +2675,8 @@ async function readVerdictLedger(deps: JuliusPipelineDependencies, run: JuliusRu
     const page = await deps.timeline.timeline({ runId: run.runId, projectId: run.projectId, sinceSequence, limit: 500 });
     for (const entry of page.entries) {
       sinceSequence = Math.max(sinceSequence, entry.sequence);
-      if (entry.type.startsWith('review.verdict.') || entry.type.startsWith('peer.') || entry.type.startsWith('disagreement.')) {
+      if (entry.type.startsWith('review.verdict.') || entry.type.startsWith('peer.')
+        || entry.type.startsWith('disagreement.') || entry.type.startsWith('finding.')) {
         rows.push({ type: entry.type, facts: entry.facts, taskId: entry.taskId });
       }
     }
@@ -2738,7 +2753,10 @@ async function applyReviewVerdict(input: {
     if (recorded) {
       await ledger.event('finding.recorded', {
         taskId: reviewed.taskId, workerId: input.workerId,
-        facts: { findingId: finding.findingId, evidenceId: citations[0]!, blocking: finding.blocking, category: finding.category },
+        facts: {
+          findingId: finding.findingId, evidenceId: citations[0]!, blocking: finding.blocking,
+          category: finding.category, reviewTaskId: review.taskId,
+        },
       });
     }
   };
@@ -2801,6 +2819,20 @@ async function applyReviewVerdict(input: {
     }
   }
 
+  /**
+   * WHAT THIS REVIEW SAYS ABOUT THE FINDINGS IT RAISED BEFORE. Applied after the
+   * new findings exist, so a supersession can name the one that replaces it.
+   */
+  const resolutions = firstApplication
+    ? await applyFindingResolutions({
+      deps, run, ledger, review, reviewed, declaration, tasks: input.tasks,
+      findings: await deps.store.findingsForRun(run.runId, run.projectId),
+      newFindingIds: reviewEvidence.filter((item) => item.type === 'REVIEW_FINDING' && item.status === 'FAILED')
+        .map((item) => `finding:${item.evidenceId}`),
+      workerId: input.workerId,
+    })
+    : { applied: 0, refused: 0 };
+
   if (firstApplication) {
     await ledger.event('review.verdict.applied', {
       taskId: reviewed.taskId, workerId: input.workerId,
@@ -2810,6 +2842,7 @@ async function applyReviewVerdict(input: {
         category, target: fromDeclaration ? declaration?.target ?? null : null, route,
         warningsRetained: declaration?.warnings.length ?? 0, warningsPromoted: promoted,
         challengeRequestId,
+        findingsResolved: resolutions.applied, findingResolutionsRefused: resolutions.refused,
       },
     });
   }
@@ -2910,6 +2943,139 @@ async function deliverAcceptedGuidance(input: {
       revision, proposalEntryId: proposal.entryId,
     },
   });
+}
+
+/* --------------------------------------------------------- finding lifecycle */
+
+/** Every finding in this run, with the life the ledger gives it. */
+async function findingLivesOf(
+  deps: JuliusPipelineDependencies,
+  run: JuliusRunRow,
+  findings: readonly JuliusReviewerFinding[],
+): Promise<readonly JuliusFindingLife[]> {
+  return foldJuliusFindings(findings, await readVerdictLedger(deps, run));
+}
+
+/** Write one legal move, or nothing. The record refuses what the runtime would have refused. */
+async function moveFinding(input: {
+  readonly ledger: RuntimeLedger;
+  readonly deps: JuliusPipelineDependencies;
+  readonly life: JuliusFindingLife;
+  readonly move: JuliusFindingMove;
+  readonly workerId: string;
+  readonly reviewTaskId?: string | null;
+  readonly repairTaskId?: string | null;
+  readonly supersededByFindingId?: string | null;
+}): Promise<boolean> {
+  const at = input.deps.clock.now();
+  const transition = {
+    findingId: input.life.findingId, move: input.move, at,
+    reviewTaskId: input.reviewTaskId ?? null,
+    repairTaskId: input.repairTaskId ?? null,
+    supersededByFindingId: input.supersededByFindingId ?? null,
+  };
+  if (moveJuliusFinding(input.life, transition).outcome !== 'MOVED') return false;
+  await input.ledger.event('finding.transitioned', {
+    taskId: input.life.taskId, workerId: input.workerId, facts: juliusFindingTransitionFacts(transition),
+  });
+  return true;
+}
+
+/**
+ * A REPAIR THAT SUCCEEDED HAS ADDRESSED ITS FINDINGS — and addressed is not
+ * resolved. The claim is that someone acted, which is a fact about the run; the
+ * reviewer's re-review is the only thing that can say it worked.
+ */
+async function markFindingsAddressed(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly repair: JuliusTask;
+  readonly tasks: readonly JuliusTask[];
+  readonly findings: readonly JuliusReviewerFinding[];
+  readonly workerId: string;
+}): Promise<void> {
+  const repaired = input.repair.parentTaskId;
+  if (repaired === null) return;
+  // The unit, not just the round it repairs: a second round addresses the
+  // finding the first one was raised for as well as any raised since.
+  const unit = repairLineageRootOf(input.repair, input.tasks).taskId;
+  for (const life of await findingLivesOf(input.deps, input.run, input.findings)) {
+    if ((life.taskId !== repaired && life.taskId !== unit) || life.state !== 'OPEN') continue;
+    await moveFinding({
+      ledger: input.ledger, deps: input.deps, life, move: 'REPAIR_SUCCEEDED',
+      workerId: input.workerId, repairTaskId: input.repair.taskId,
+    });
+  }
+}
+
+/**
+ * WHAT THE RE-REVIEW SAID ABOUT EACH FINDING, applied to the findings it was
+ * actually asked about.
+ *
+ * A resolution naming a finding that belongs to other work, or one the review
+ * was not asked to judge, is refused rather than applied: a reviewer may end
+ * its own findings about the work in front of it and no others. Silence is not
+ * a resolution — a finding nobody mentions keeps its state.
+ */
+async function applyFindingResolutions(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly review: JuliusTask;
+  readonly reviewed: JuliusTask;
+  readonly tasks: readonly JuliusTask[];
+  readonly declaration: JuliusReviewVerdictDeclaration | null;
+  readonly findings: readonly JuliusReviewerFinding[];
+  readonly newFindingIds: readonly string[];
+  readonly workerId: string;
+}): Promise<{ readonly applied: number; readonly refused: number }> {
+  if (input.declaration === null || input.declaration.resolutions.length === 0) return { applied: 0, refused: 0 };
+  const lives = await findingLivesOf(input.deps, input.run, input.findings);
+  /**
+   * THE FINDINGS THIS REVIEW MAY END: the ones raised about the work it is
+   * re-reviewing, and about the unit that work belongs to.
+   *
+   * Repairs nest — round two's parent is round one — so a reviewer answering
+   * "is the original problem fixed?" is answering about a finding recorded
+   * against the lineage's root. Anything outside this unit is another review's
+   * to end.
+   */
+  const subjects = new Set([
+    input.reviewed.taskId,
+    input.reviewed.parentTaskId ?? input.reviewed.taskId,
+    repairLineageRootOf(input.reviewed, input.tasks).taskId,
+  ]);
+  let applied = 0;
+  let refused = 0;
+  for (const resolution of input.declaration.resolutions) {
+    const life = lives.find((item) => item.findingId === resolution.findingId);
+    if (life === undefined || !subjects.has(life.taskId)) {
+      await input.ledger.event('review.verdict.refused', {
+        taskId: input.reviewed.taskId, workerId: input.workerId,
+        facts: {
+          reviewTaskId: input.review.taskId, reasonCode: 'review_resolution_names_a_foreign_finding',
+          findingId: resolution.findingId,
+        },
+      });
+      refused += 1;
+      continue;
+    }
+    const move: JuliusFindingMove = resolution.status === 'RESOLVED'
+      ? 'REVIEWER_RESOLVED'
+      : resolution.status === 'SUPERSEDED' ? 'REVIEWER_SUPERSEDED' : 'REVIEWER_MAINTAINED';
+    const moved = await moveFinding({
+      ledger: input.ledger, deps: input.deps, life, move, workerId: input.workerId,
+      reviewTaskId: input.review.taskId,
+      // A SUPERSESSION NAMES ITS REPLACEMENT: the finding this same review
+      // raised. Without exactly one, the claim cannot be recorded truthfully
+      // and the finding stays where it is.
+      supersededByFindingId: input.newFindingIds.length === 1 ? input.newFindingIds[0]! : null,
+    });
+    if (moved) applied += 1;
+    else refused += 1;
+  }
+  return { applied, refused };
 }
 
 /* ------------------------------------------------------------ disagreement */
@@ -3556,7 +3722,9 @@ async function verifyExecutedTask(input: {
       if (recorded) {
         await ledger.event('finding.recorded', {
           taskId: reviewedTask.taskId, workerId: item.workerId,
-          facts: { findingId: `finding:${item.evidenceId}`, evidenceId: item.evidenceId, blocking: true },
+          // THE REVIEW THAT RAISED IT, so the finding's life has an origin and a
+          // re-review can be matched to the judgement it is revisiting.
+          facts: { findingId: `finding:${item.evidenceId}`, evidenceId: item.evidenceId, blocking: true, reviewTaskId: task.taskId },
         });
         await ledger.trajectory('FINDING', {
           taskId: reviewedTask.taskId, workerId: item.workerId,
@@ -3606,6 +3774,15 @@ async function verifyExecutedTask(input: {
    * upheld changes nothing, and the work is judged on its evidence.
    */
   const ruling = await disagreementRulingFor({ deps, run, ledger, subject, evidence, workerId: input.workerId });
+
+  /**
+   * A REPAIR THAT SUCCEEDED HAS ADDRESSED THE FINDINGS IT EXISTS FOR — and that
+   * is all it has done. The reviewer's re-review is the only thing that resolves
+   * one; this row is what makes "someone acted" distinguishable from "it worked".
+   */
+  if (task.taskType.startsWith('repair:') && reviewedTask === null) {
+    await markFindingsAddressed({ deps, run, ledger, repair: task, tasks, findings, workerId: input.workerId });
+  }
 
   const evaluated = evaluateJuliusVerification({
     task: subject,
@@ -3660,6 +3837,50 @@ async function verifyExecutedTask(input: {
       },
     });
     await ledger.event('review.started', { taskId: reviewTaskId, facts: { reviewsTaskId: task.taskId, created } });
+
+    /**
+     * WHAT THE REVIEWER REJECTED, WHAT THE REPAIR CLAIMS, AND WHAT ACTUALLY
+     * MOVED — bounded, structured, and scoped to this review alone.
+     *
+     * A re-review used to be handed the repair's evidence and asked whether
+     * prior findings were resolved, without being shown what it had rejected or
+     * what changed. It answered from a memory it does not have.
+     */
+    if (created && task.taskType.startsWith('repair:') && task.parentTaskId !== null) {
+      /**
+       * EVERY OUTSTANDING FINDING OF THE UNIT, not of the last round.
+       *
+       * Repairs nest: round two repairs round one, so its parent is a repair
+       * rather than the work. Reading findings off the parent alone would hide
+       * the finding the whole lineage exists to answer from the reviewer being
+       * asked whether it is answered.
+       */
+      const lineageRoot = repairLineageRootOf(task, tasks).taskId;
+      const lives = (await findingLivesOf(deps, run, await deps.store.findingsForRun(run.runId, run.projectId)))
+        .filter((life) => (life.taskId === lineageRoot || life.taskId === task.parentTaskId)
+          && life.state !== 'RESOLVED' && life.state !== 'SUPERSEDED');
+      const diff = juliusRepairRoundDiff({
+        repairTaskId: task.taskId,
+        repairedTaskId: task.parentTaskId,
+        // `repairRoundsBefore` counts this round's own task, so it IS the round.
+        round: repairRoundsBefore(task, tasks),
+        findings: lives,
+        evidence: evidence.map((item) => ({ taskId: item.taskId, type: item.type, status: item.status, safeSummary: item.safeSummary })),
+        repairSummary: evidence.filter((item) => item.taskId === task.taskId).at(-1)?.safeSummary ?? null,
+      });
+      await deps.store.appendBrainEntry({
+        runId: run.runId, projectId: run.projectId, taskId: reviewTaskId, workerId: input.workerId,
+        entryId: juliusRepairRoundEntryId(reviewTaskId), kind: 'FINDING',
+        safeText: renderJuliusRepairRoundDiff(diff), evidenceIds: [], occurredAt: deps.clock.now(),
+      });
+      await ledger.event('review.started', {
+        taskId: reviewTaskId,
+        facts: {
+          reviewsTaskId: task.taskId, created: false, repairRoundDiff: true, round: diff.round,
+          findingsToAnswer: diff.findings.length, gainedEvidence: diff.gainedTypes.length, lostEvidence: diff.lostTypes.length,
+        },
+      });
+    }
     /**
      * JULIUS ASKS THE REVIEWER, ON THE RECORD. The review task is the carrier;
      * the request names the work that cannot start until Julius decides on what

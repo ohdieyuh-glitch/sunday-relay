@@ -280,6 +280,13 @@ const FILE_RULES = [
   // Disagreement between the architect and the reviewer: opened, bounded and
   // resolved by Julius, so it belongs to the coordinator, not to either peer.
   ['src/relay/mission/julius/julius-disagreement.ts', 'TASK GRAPH / SCHEDULER'],
+  // A finding's life from raised to resolved. The REVIEWER's, because only the
+  // reviewer that raised a finding may end it: a repair moves it to ADDRESSED
+  // and no further, and no amount of changed code resolves anything by itself.
+  ['src/relay/mission/julius/julius-finding-lifecycle.ts', 'INDEPENDENT REVIEWER'],
+  // What changed between a rejected round and the repair of it, bounded for the
+  // re-review that must judge whether the findings are actually answered.
+  ['src/relay/mission/julius/julius-repair-round.ts', 'REPAIR'],
   // How many run-loop ticks a mission's own structure permits. The scheduler's
   // account of how much it may dispatch, counted from the task graph it owns.
   ['src/relay/mission/julius/julius-tick-budget.ts', 'TASK GRAPH / SCHEDULER'],

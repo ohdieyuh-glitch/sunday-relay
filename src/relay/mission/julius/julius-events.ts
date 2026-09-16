@@ -107,6 +107,12 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * `opened` and `step`; `refused` is a challenge that could not be opened as
   * one, which leaves its hold in place rather than dropping it. */
  'disagreement.opened','disagreement.step','disagreement.resolved','disagreement.refused',
+ /* A FINDING'S LIFE. Findings were recorded OPEN and stayed OPEN forever, so a
+  * mission could complete with its record still saying the problem was there.
+  * Each row is one legal move: a repair that SUCCEEDED addressed it, or the
+  * reviewer that raised it resolved, maintained or superseded it. Only a
+  * reviewer's own answer reaches RESOLVED; changed code never does. */
+ 'finding.transitioned',
  /* PERSISTENT-WORKER EFFORT. One row per completed dispatch, carrying what the
   * provider actually reported and NOTHING inferred — an unreported token count
   * is null here rather than the zero the budget path substitutes, because a
