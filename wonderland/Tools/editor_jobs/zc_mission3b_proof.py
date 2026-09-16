@@ -72,12 +72,20 @@ def job():
     yield 5.0
     world = ues.get_game_world()
     controller = unreal.GameplayStatics.get_player_controller(world, 0)
-    mission = next((m for m in unreal.ObjectIterator(unreal.WonderlandMissionSubsystem)
-                    if m.get_beat_count() > 0), None)
+    # PICK THE LIVE ONE. get_beat_count() is a constant on every instance, so it discriminates nothing --
+    # and with the new canon there is no orb at rest to find either. The strip is the tell: it is mounted
+    # only for the controller this subsystem actually attached to, so a subsystem left over from an earlier
+    # PIE session does not have one. Driving a dead subsystem is why S08 saw 45 frames and zero events.
+    live = [m for m in unreal.ObjectIterator(unreal.WonderlandMissionSubsystem)
+            if m.is_mission_strip_on_screen()]
+    mission = live[0] if live else next(
+        (m for m in unreal.ObjectIterator(unreal.WonderlandMissionSubsystem) if m.get_beat_count() > 0), None)
+    RESULT["subsystems_seen"] = len(list(unreal.ObjectIterator(unreal.WonderlandMissionSubsystem)))
+    RESULT["subsystems_live"] = len(live)
     for cmd in ("t.MaxFPS 0", "Slate.bAllowThrottling 0", "r.VSync 0"):
         unreal.SystemLibrary.execute_console_command(world, cmd)
     yield 0.5
-    say("pie up, mission=%s" % (mission is not None))
+    say("pie up, mission=%s live=%d of %d" % (mission is not None, RESULT["subsystems_live"], RESULT["subsystems_seen"]))
 
     def to_screen(at):
         try:
