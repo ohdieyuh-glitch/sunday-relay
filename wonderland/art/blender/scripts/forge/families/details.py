@@ -434,8 +434,63 @@ def detail_banner_blade(f):
         tri_budget=2500, nanite=False, collision=False)
 
 
+def detail_wall_lantern(f):
+    """A gold lantern on a scrolled wall bracket: 1.9 m, projecting 0.8 m. Lit amber glass in a hexagonal cage.
+
+    BOARD_2 "Lanterns & Lights": the reference's street light is not a post but a lantern held off a wall at door
+    height, gold, glazed, glowing -- the warm point that says a building is lived in. The back plate is flat at
+    y = 0 and the arm projects +Y; the lantern hangs from the arm's end.
+    """
+    g = f.part("gold")
+    gl = f.part("glass")
+    ARM_Z = 1.24                    # the drop finial reaches z = 0 (the kit's ground-datum rule)
+    OUT = 0.80
+    # back plate and arm with a scroll under it
+    g.lathe([(0.0, 0.0), (0.16, 0.0), (0.18, 0.03), (0.12, 0.07), (0.0, 0.09)], segments=14, smooth=True,
+            matrix=M.xform((0.0, 0.0, ARM_Z), (-90.0, 0.0, 0.0)))
+    g.sweep([(0.0, 0.06, ARM_Z), (0.0, OUT, ARM_Z)], 0.028, sides=10, smooth=True, cap=True)
+    # the scroll holds the arm from ABOVE: below it, it ran into the lantern's cap (first preview)
+    scroll = [(0.0, 0.05, ARM_Z + 0.42), (0.0, 0.22, ARM_Z + 0.36), (0.0, 0.40, ARM_Z + 0.16), (0.0, 0.52, ARM_Z + 0.02)]
+    g.sweep(scroll, [0.022, 0.021, 0.020, 0.018], sides=8, smooth=True, cap=True)
+    g.lathe([(0.0, 0.0), (0.08, 0.0), (0.08, 0.03), (0.0, 0.05)], segments=12, smooth=True,
+            matrix=M.xform((0.0, 0.0, ARM_Z + 0.42), (-90.0, 0.0, 0.0)))
+    g.lathe([(0.0, -0.07), (0.06, -0.04), (0.07, 0.0), (0.06, 0.04), (0.0, 0.07)], segments=10, smooth=True,
+            matrix=M.xform((0.0, OUT + 0.05, ARM_Z)))
+    # hanger
+    cx, cy = 0.0, OUT - 0.18
+    g.sweep([(cx, cy, ARM_Z - 0.02), (cx, cy, ARM_Z - 0.20)], 0.012, sides=6, smooth=False, cap=True)
+    TOP, BOT, R = ARM_Z - 0.26, ARM_Z - 0.96, 0.20
+    # cap: a gold dome with a finial ring
+    g.lathe([(0.0, TOP + 0.20), (0.05, TOP + 0.19), (0.10, TOP + 0.14), (0.20, TOP + 0.06), (0.26, TOP), (0.0, TOP)],
+            segments=6, smooth=False, matrix=M.xform((cx, cy, 0.0), (0.0, 0.0, 30.0)))
+    g.lathe([(0.03, -0.04), (0.06, -0.04), (0.06, 0.04), (0.03, 0.04)], segments=8, smooth=True, cap_bottom=False,
+            cap_top=False, matrix=M.xform((cx, cy, TOP + 0.25), (90.0, 0.0, 0.0)))
+    # the lit glass: a hexagonal lantern body, widest at the top
+    gl.lathe([(0.0, BOT + 0.06), (R * 0.82, BOT + 0.06), (R, TOP - 0.02), (0.0, TOP - 0.02)], segments=6, smooth=False,
+             matrix=M.xform((cx, cy, 0.0), (0.0, 0.0, 30.0)))
+    # the cage: six gold posts on the glass's corners, a top and a bottom ring
+    for k in range(6):
+        a = math.radians(60.0 * k)
+        g.sweep([(cx + math.cos(a) * R * 0.84, cy + math.sin(a) * R * 0.84, BOT + 0.05),
+                 (cx + math.cos(a) * R * 1.02, cy + math.sin(a) * R * 1.02, TOP - 0.01)], 0.014, sides=6, smooth=False,
+                cap=True)
+    g.lathe([(R * 0.78, BOT), (R * 0.92, BOT), (R * 0.92, BOT + 0.07), (R * 0.78, BOT + 0.07)], segments=6, smooth=False,
+            cap_bottom=True, cap_top=True, matrix=M.xform((cx, cy, 0.0), (0.0, 0.0, 30.0)))
+    # the base: an inverted gold bell and a drop finial
+    g.lathe([(0.0, BOT - 0.28), (0.03, BOT - 0.24), (0.05, BOT - 0.14), (0.12, BOT - 0.06), (R * 0.92, BOT), (0.0, BOT)],
+            segments=12, smooth=True, matrix=M.xform((cx, cy, 0.0)))
+    return K.ModuleSpec(
+        "WL_Detail_Wall_Lantern", "lantern", "prop", "detail",
+        f.emit("WL_Detail_Wall_Lantern"),
+        [K.Socket("back", ARM_Z, 0.16, "bridge_end", "the plate is flat at y = 0; the arm projects +Y; the drop finial is lowest")],
+        districts=("city", "plaza", "market", "tea_terrace", "clock", "cloister"),
+        note="gold wall lantern: plate, arm with scroll, hexagonal lit glass in a gold cage, domed cap, drop finial",
+        params={"arm_z_m": ARM_Z, "projection_m": OUT},
+        tri_budget=1500, nanite=False, collision=False)
+
+
 BUILDERS = (
     detail_balustrade_run, detail_newel_urn, detail_screen_filigree,
     detail_balcony_bracket, detail_pinnacle_grand, detail_oriel_bay,
-    detail_window_arched, detail_banner_blade,
+    detail_window_arched, detail_banner_blade, detail_wall_lantern,
 )

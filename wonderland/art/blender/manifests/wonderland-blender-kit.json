@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-16T20:55:29+00:00",
+  "generated_utc": "2026-09-16T21:21:01+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -22,9 +22,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 122,
+        "n": 123,
         "min": 0.153,
-        "median": 0.848,
+        "median": 0.846,
         "max": 1.0,
         "unknown": 0
       }
@@ -36,7 +36,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 122,
+        "n": 123,
         "min": 0.0,
         "median": 0.353,
         "max": 1.0,
@@ -50,7 +50,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 122,
+        "n": 123,
         "min": 0.557,
         "median": 1.0,
         "max": 1.0,
@@ -64,9 +64,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 122,
+        "n": 123,
         "min": 0.0,
-        "median": 0.982,
+        "median": 0.976,
         "max": 1.0,
         "unknown": 0
       }
@@ -78,7 +78,7 @@
       "provenance": "declared",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 122,
+        "n": 123,
         "min": 0.0,
         "median": 0.0,
         "max": 0.7,
@@ -92,9 +92,9 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 119,
+        "n": 120,
         "min": 0.083,
-        "median": 0.633,
+        "median": 0.64,
         "max": 0.917,
         "unknown": 3
       }
@@ -106,7 +106,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 122,
+        "n": 123,
         "min": 0.05,
         "median": 0.5,
         "max": 0.7,
@@ -235,9 +235,9 @@
     }
   },
   "counts": {
-    "assets": 122,
-    "meshes": 391,
-    "triangles": 501622,
+    "assets": 123,
+    "meshes": 393,
+    "triangles": 502310,
     "by_role": {
       "foot": 5,
       "body": 14,
@@ -246,7 +246,7 @@
       "threshold": 10,
       "screen": 11,
       "span": 5,
-      "detail": 27,
+      "detail": 28,
       "route": 11,
       "terrace": 17,
       "hero": 10
@@ -31803,6 +31803,255 @@
         }
       },
       "part_count": 3
+    },
+    {
+      "asset_id": "WL_Detail_Wall_Lantern",
+      "kit_version": "1.0.0",
+      "family": "lantern",
+      "family_group": "details",
+      "category": "prop",
+      "silhouette_role": "detail",
+      "note": "gold wall lantern: plate, arm with scroll, hexagonal lit glass in a gold cage, domed cap, drop finial",
+      "districts": [
+        "city",
+        "plaza",
+        "market",
+        "tea_terrace",
+        "clock",
+        "cloister"
+      ],
+      "params": {
+        "arm_z_m": 1.24,
+        "projection_m": 0.8
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 174.0,
+      "bbox_min_uu": [
+        -22.52,
+        -0.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        22.52,
+        91.66,
+        174.0
+      ],
+      "size_uu": [
+        45.04,
+        91.66,
+        174.0
+      ],
+      "style": {
+        "slender_broad": 0.463,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.68,
+        "ceremonial_residential": 0.7
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        67.0,
+        80.4,
+        80.4,
+        80.4,
+        80.4,
+        80.4,
+        88.0,
+        82.0,
+        91.68,
+        85.0,
+        21.17,
+        23.25
+      ],
+      "radius_uu": 91.66,
+      "tris_total": 688,
+      "tri_budget": 1500,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": false,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "back",
+          "kind": "bridge_end",
+          "z_uu": 124.0,
+          "radius_uu": 16.0,
+          "rung": null,
+          "note": "the plate is flat at y = 0; the arm projects +Y; the drop finial is lowest"
+        }
+      ],
+      "parts": {
+        "glass": {
+          "verts": 14,
+          "faces": 18,
+          "tris": 24,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_GlassAmber"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -17.32,
+            42.0,
+            34.0
+          ],
+          "bbox_max_uu": [
+            17.32,
+            82.0,
+            96.0
+          ],
+          "size_uu": [
+            34.64,
+            40.0,
+            62.0
+          ],
+          "height_m": 0.62,
+          "base_z_uu": 34.0,
+          "normals": {
+            "faces": 18,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            78.4,
+            78.4,
+            78.4,
+            78.4,
+            78.4,
+            78.4,
+            78.4,
+            78.4,
+            78.4,
+            78.4,
+            78.4,
+            82.0
+          ],
+          "material": "MI_V2_GlassAmber",
+          "mesh_name": "WL_Detail_Wall_Lantern_glass",
+          "glb": "exports\\glb\\WL_Detail_Wall_Lantern_glass.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Wall_Lantern_glass.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_GlassAmber"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.17320509254932404,
+              0.3400000035762787,
+              -0.8199999928474426
+            ],
+            "max_yup": [
+              0.17320509254932404,
+              0.9599999785423279,
+              -0.42000001668930054
+            ],
+            "bytes": 2844
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 34.0,
+            "stored_z_max": 96.0
+          }
+        },
+        "gold": {
+          "verts": 364,
+          "faces": 360,
+          "tris": 664,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -22.52,
+            -0.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            22.52,
+            91.66,
+            174.0
+          ],
+          "size_uu": [
+            45.03,
+            91.66,
+            174.0
+          ],
+          "height_m": 1.74,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 360,
+            "shells": 16,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            67.0,
+            80.4,
+            80.4,
+            80.4,
+            80.4,
+            80.4,
+            88.0,
+            82.0,
+            91.68,
+            85.0,
+            21.17,
+            23.25
+          ],
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Detail_Wall_Lantern_gold",
+          "glb": "exports\\glb\\WL_Detail_Wall_Lantern_gold.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Wall_Lantern_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.22516661882400513,
+              0,
+              -0.9165740013122559
+            ],
+            "max_yup": [
+              0.22516661882400513,
+              1.7400000095367432,
+              6.818472453318236e-09
+            ],
+            "bytes": 32828
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 174.0
+          }
+        }
+      },
+      "part_count": 2
     },
     {
       "asset_id": "WL_Hero_GreatSpire",
