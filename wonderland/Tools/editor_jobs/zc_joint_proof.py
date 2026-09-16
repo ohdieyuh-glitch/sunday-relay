@@ -112,6 +112,16 @@ def job():
                contract=mission.is_orb_in_world() if mission else None,
                capture=shot("zc_joint_00_empty.png"))
 
+        def facing_error(from_at, to_at):
+            """Angle, degrees, between the Dog's forward and the direction to the Contract, in plan."""
+            fwd = pawn.get_actor_forward_vector()
+            to_x, to_y = float(to_at.x) - float(from_at.x), float(to_at.y) - float(from_at.y)
+            span = math.hypot(to_x, to_y)
+            if span < 1.0:
+                return None
+            dot = (float(fwd.x) * to_x + float(fwd.y) * to_y) / span
+            return round(math.degrees(math.acos(max(-1.0, min(1.0, dot)))), 1)
+
         def companion_clearance(from_at, to_at, bodies):
             """Perpendicular distance, uu, from each companion to the Dog->Contract line, in plan.
 
@@ -199,6 +209,10 @@ def job():
                 "anchor": [round(anchor.x, 2), round(anchor.y, 2), round(anchor.z, 2)] if anchor else None,
                 "pawn": [round(pawn_at.x, 1), round(pawn_at.y, 1), round(pawn_at.z, 1)],
                 "body_z": round(float(body.get_world_location().z), 1) if body is not None else None,
+                # WHICH WAY THE DOG IS ACTUALLY TURNED. The beam is aimed at the crystal by its own
+                # component, so verification looks right whichever way the body happens to face -- which is
+                # exactly why this has to be measured separately from the beam.
+                "faces_work_deg": facing_error(pawn_at, at) if here else None,
                 "beam_on": beam_on,
                 "beam_end": [round(v, 1) for v in beam_end] if beam_end else None,
                 "beam_miss_uu": beam_miss,
@@ -441,17 +455,36 @@ def job():
         for beat, name in (("independent_reviewer", "review"), ("repairing", "repair")):
             mission.set_beat_by_id(beat)
             yield 1.6
-            for tag, dyaw, pitch, arm in (("near", 26.0, -9.0, 330.0), ("wide", -32.0, -15.0, 720.0)):
+            # THE ARM STAYS SHORT. Pulling it back to 720 for a wide shot put the camera INSIDE a giant
+            # mushroom cap: Wonderland's authored scenery has no collision, so the spring arm does not do
+            # what a spring arm is for and slides straight through it. The frame was solid pink.
+            #
+            # That frame PASSED the composition check, because both subjects projected inside it -- a point
+            # projects perfectly well through a mushroom. It is the beam lesson in a third costume: "in
+            # frame" and "can be seen" are different assertions, and only looking settles the second.
+            for tag, dyaw, pitch, arm in (("near", 18.0, -8.0, 300.0), ("step", -22.0, -12.0, 430.0)):
                 if boom is not None:
                     boom.set_editor_property("target_arm_length", arm)
-                pawn_now = pawn.get_actor_location()
-                contract_at = mission.get_orb_location()
-                dog_at = body.get_world_location() if body is not None else pawn_now
-                middle = unreal.Vector((dog_at.x + contract_at.x) * 0.5,
-                                       (dog_at.y + contract_at.y) * 0.5,
-                                       (dog_at.z + contract_at.z) * 0.5)
-                look = unreal.MathLibrary.find_look_at_rotation(pawn_now, middle)
-                controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=pitch, yaw=look.yaw + dyaw))
+
+                # AIM, THEN CHECK, THEN STRAIGHTEN IF THE STEP-AROUND LOST SOMETHING. The offset exists to
+                # get the Jhinn out of the way, so it is worth having -- but not at the price of the shot.
+                def aim(offset):
+                    pawn_now = pawn.get_actor_location()
+                    contract_at = mission.get_orb_location()
+                    dog_at = body.get_world_location() if body is not None else pawn_now
+                    middle = unreal.Vector((dog_at.x + contract_at.x) * 0.5,
+                                           (dog_at.y + contract_at.y) * 0.5,
+                                           (dog_at.z + contract_at.z) * 0.5)
+                    look = unreal.MathLibrary.find_look_at_rotation(pawn_now, middle)
+                    controller.set_control_rotation(
+                        unreal.Rotator(roll=0.0, pitch=pitch, yaw=look.yaw + offset))
+
+                aim(dyaw)
+                yield 0.3
+                _, dog_ok = in_frame(body.get_world_location() if body is not None else pawn.get_actor_location())
+                _, work_ok = in_frame(mission.get_orb_location())
+                if not (dog_ok and work_ok):
+                    aim(0.0)
                 # Several frames at one angle, so a CYCLE can be read rather than a pose.
                 for step in range(4):
                     yield 0.55
@@ -482,6 +515,27 @@ def job():
                missing=[[w["beat"], w["angle"], w["step"]] for w in work_portrait if not w["both_in_frame"]])
         mission.set_beat_by_id("idle")
         yield 0.6
+
+        # ---------------------------------------------------------------- the Dog addresses the work
+        # THE FOUNDER ASKED THAT REVIEW READ AS CHECKING THE WORK. A Dog that raises a magnifying glass while
+        # facing the flowerbed is not checking the work, however correct its prop and its label are -- and both
+        # of those already pass. Nothing in either lane currently turns the body toward the Contract: the beam
+        # aims itself, so verification looks right whichever way the Dog happens to be standing, and that is
+        # what hid this.
+        #
+        # Sixty degrees is generous on purpose. It is not "square on", it is "addressing it rather than ignoring
+        # it" -- a threshold a person would agree with from the frame.
+        addressed = [f for f in frames
+                     if f["beat"] in ("independent_reviewer", "review_challenge", "repair_required", "repairing")
+                     and f.get("faces_work_deg") is not None]
+        facing = [f["faces_work_deg"] for f in addressed]
+        RESULT["facing"] = {"samples": len(addressed),
+                            "mean_deg": round(sum(facing) / len(facing), 1) if facing else None,
+                            "worst_deg": max(facing) if facing else None,
+                            "within_60": sum(1 for v in facing if v <= 60.0)}
+        record("J16", "the Dog turns to address the work it is checking or repairing",
+               len(addressed) > 0 and RESULT["facing"]["within_60"] >= int(len(addressed) * 0.8),
+               **RESULT["facing"])
 
         # ---------------------------------------------------------------- a portrait of the beam
         # THE PLAYER'S CAMERA SITS BEHIND THE DOG, and VERIFYING plants the Dog facing the contract -- so the
