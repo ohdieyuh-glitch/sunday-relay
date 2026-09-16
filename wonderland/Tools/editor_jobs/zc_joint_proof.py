@@ -435,6 +435,17 @@ def job():
         #
         # So: aim at the MIDPOINT of the Dog and the Contract, so the arm puts the camera behind the player
         # with both in front of it, and step around the Jhinn with a small offset instead of a reversal.
+        # WHERE THE DOG IS, WITHOUT TRUSTING A HANDLE TO OUTLIVE THE RUN. The cached Body component went
+        # stale part-way through the portrait -- "SceneComponent: Internal Error - ObjectInstance is null!"
+        # -- and took the whole job down with it, which costs a PIE session rather than a check.
+        def dog_point():
+            try:
+                if body is not None:
+                    return body.get_world_location()
+            except Exception:
+                pass
+            return pawn.get_actor_location()
+
         boom = pawn.get_component_by_class(unreal.SpringArmComponent)
         arm_was = float(boom.target_arm_length) if boom is not None else None
 
@@ -477,7 +488,7 @@ def job():
                 def aim(offset):
                     pawn_now = pawn.get_actor_location()
                     contract_at = mission.get_orb_location()
-                    dog_at = body.get_world_location() if body is not None else pawn_now
+                    dog_at = dog_point()
                     middle = unreal.Vector((dog_at.x + contract_at.x) * 0.5,
                                            (dog_at.y + contract_at.y) * 0.5,
                                            (dog_at.z + contract_at.z) * 0.5)
@@ -487,14 +498,14 @@ def job():
 
                 aim(dyaw)
                 yield 0.3
-                _, dog_ok = in_frame(body.get_world_location() if body is not None else pawn.get_actor_location())
+                _, dog_ok = in_frame(dog_point())
                 _, work_ok = in_frame(mission.get_orb_location())
                 if not (dog_ok and work_ok):
                     aim(0.0)
                 # Several frames at one angle, so a CYCLE can be read rather than a pose.
                 for step in range(4):
                     yield 0.55
-                    dog_px, dog_seen = in_frame(body.get_world_location() if body is not None else pawn_now)
+                    dog_px, dog_seen = in_frame(dog_point())
                     work_px, work_seen = in_frame(mission.get_orb_location())
                     work_portrait.append({
                         "beat": beat, "angle": tag, "step": step,
