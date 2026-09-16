@@ -119,7 +119,7 @@ def build():
             candidates.append((need, room, x, y))
     candidates.sort()
 
-    placed, towers, batches = [], [], kit.Batches(PASS)
+    placed, towers, batches = [], [], kit.Batches(PASS, tinted=True)
     used_recent = []
     for need, room, x, y in candidates:
         if len(towers) >= MAX_TOWERS:

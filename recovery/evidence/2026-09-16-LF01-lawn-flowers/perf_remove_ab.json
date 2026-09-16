@@ -1,0 +1,46 @@
+{
+ "name": "p99_lf01_perf",
+ "started": "2026-09-16 05:56:07",
+ "status": "done",
+ "rounds": [
+  {
+   "pass_actors": 84,
+   "on": {
+    "LanternLaneCam27": 46.11,
+    "SW_Colonnade45": 32.51,
+    "WorldCam12": 79.79
+   },
+   "off": {
+    "LanternLaneCam27": 48.72,
+    "SW_Colonnade45": 31.41,
+    "WorldCam12": 76.13
+   },
+   "off_again": {
+    "LanternLaneCam27": 46.66,
+    "SW_Colonnade45": 30.13,
+    "WorldCam12": 75.93
+   }
+  },
+  {
+   "pass_actors": 84,
+   "on": {
+    "LanternLaneCam27": 46.05,
+    "SW_Colonnade45": 31.03,
+    "WorldCam12": 77.15
+   },
+   "off": {
+    "LanternLaneCam27": 48.11,
+    "SW_Colonnade45": 31.42,
+    "WorldCam12": 78.1
+   },
+   "off_again": {
+    "LanternLaneCam27": 46.92,
+    "SW_Colonnade45": 32.02,
+    "WorldCam12": 78.19
+   }
+  }
+ ],
+ "finished": "2026-09-16 05:59:52",
+ "seconds": 224.86,
+ "log": ""
+}

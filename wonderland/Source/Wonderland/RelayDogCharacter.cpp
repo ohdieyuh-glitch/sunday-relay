@@ -1218,6 +1218,29 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	}
 	const RelayDogMission::FStageOverlay Overlay = Mission.Update(MissionIn);
 
+	// FACING. An act done at the work is done facing it. This takes the wheel from the movement component
+	// only while such an act is running -- orient-to-movement is restored the moment it ends, because a Dog
+	// that walks sideways for the rest of the session would be a far worse bug than one that reads a book
+	// side-on. It also lets REVIEW walk its circle tangentially while still looking inward at the contract,
+	// which is what circling something to examine it actually looks like.
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		const bool bWantFace = Overlay.bFaceContract && Overlay.Weight > 0.35f;
+		if (bWantFace)
+		{
+			Move->bOrientRotationToMovement = false;
+			const float Want = GetActorRotation().Yaw + MissionIn.ContractYawDeg;
+			const FRotator Now = GetActorRotation();
+			// Eased, not snapped: a body turning to look is a movement, and a snap would read as a glitch.
+			SetActorRotation(FRotator(Now.Pitch,
+				FMath::FInterpTo(Now.Yaw, Want, DeltaSeconds, 3.2f), Now.Roll));
+		}
+		else if (!Move->bOrientRotationToMovement)
+		{
+			Move->bOrientRotationToMovement = true;
+		}
+	}
+
 	if (Overlay.bOrbit)
 	{
 		const float Bearing = GetActorRotation().Yaw + Overlay.OrbitBearingDeg;
@@ -1609,23 +1632,31 @@ void ARelayDogCharacter::BuildMissionProps()
 	// ---------------------------------------------------------------- the magnifying glass (REVIEW)
 	// A rim, a stubby handle and a lens. On the RIGHT forearm, which is the arm the table brings up to the
 	// eye at -34 degrees; the left stays down, because one hand holds a glass and the other does not.
+	// SMALL, AND HELD OUT TO ONE SIDE. The first version was a disc centred on the body, and from the play
+	// camera it sat directly over the crystal -- the instrument hid the object it was inspecting, which is
+	// the one thing a magnifying glass must not do. It is now a little over half the size, offset to the
+	// working side, and carried on a handle long enough to read as held rather than worn.
+	const double LensY = 22.0 * U;
 	TArray<FTransform> Rim;
 	const int32 RimSides = 10;
 	for (int32 i = 0; i < RimSides; ++i)
 	{
 		const double A = 2.0 * PI * i / RimSides;
-		Rim.Add(DogPropBox(FVector(6.0 * U + FMath::Cos(A) * 26.0 * U, FMath::Sin(A) * 26.0 * U, -40.0 * U),
-			FVector(9.0 * U, 9.0 * U, 6.0 * U), FRotator(0.0, FMath::RadiansToDegrees(A), 0.0)));
+		Rim.Add(DogPropBox(FVector(8.0 * U + FMath::Cos(A) * 15.0 * U, LensY + FMath::Sin(A) * 15.0 * U, -46.0 * U),
+			FVector(7.0 * U, 7.0 * U, 5.0 * U), FRotator(0.0, FMath::RadiansToDegrees(A), 0.0)));
 	}
-	Rim.Add(DogPropBox(FVector(6.0 * U, 0.0, -13.0 * U), FVector(7.0 * U, 7.0 * U, 30.0 * U)));
+	// the handle, from the hand out to the rim
+	Rim.Add(DogPropBox(FVector(8.0 * U, LensY * 0.45, -22.0 * U), FVector(6.0 * U, 6.0 * U, 34.0 * U),
+		FRotator(0.0, 0.0, -26.0)));
 	USceneComponent* LensHand = ArmRight.Forearm != nullptr ? ArmRight.Forearm.Get() : BodyRoot.Get();
 	LensMesh = MakePropMesh(TEXT("MissionLensRim"), LensHand, false, Rim, FLinearColor(0.72f, 0.58f, 0.24f), LensMid);
 
 	TArray<FTransform> Glass;
-	Glass.Add(DogPropBox(FVector(6.0 * U, 0.0, -40.0 * U), FVector(44.0 * U, 44.0 * U, 2.0 * U)));
-	// The lens catches the light, so an inspection reads as looking rather than as holding a hoop.
-	LensGlassMesh = MakePropMesh(TEXT("MissionLensGlass"), LensHand, true, Glass,
-		FLinearColor(0.55f, 0.78f, 0.86f), LensGlassMid);
+	Glass.Add(DogPropBox(FVector(8.0 * U, LensY, -46.0 * U), FVector(25.0 * U, 25.0 * U, 2.0 * U)));
+	// LIT, NOT EMISSIVE. A glowing disc is an opaque bright plate and draws the eye harder than the thing
+	// being examined; a lit pale glass still catches the light without competing with the contract.
+	LensGlassMesh = MakePropMesh(TEXT("MissionLensGlass"), LensHand, false, Glass,
+		FLinearColor(0.58f, 0.80f, 0.88f), LensGlassMid);
 
 	// ---------------------------------------------------------------- the beam (VERIFYING)
 	// ONE unit cube, stretched along X between the chest and the contract every frame. A beam has to be a

@@ -1,0 +1,177 @@
+{
+ "name": "a12_lights",
+ "started": "2026-09-16 04:00:01",
+ "status": "done",
+ "lights": [
+  {
+   "label": "V2_Sun",
+   "class": "DirectionalLight",
+   "DirectionalLightComponent": {
+    "intensity": 70000.0,
+    "light_color": [
+     255,
+     255,
+     255
+    ],
+    "cast_shadows": true,
+    "affects_world": true,
+    "indirect_lighting_intensity": 1.0,
+    "volumetric_scattering_intensity": 1.0,
+    "atmosphere_sun_light": true,
+    "use_temperature": true,
+    "temperature": 5200.0,
+    "rot": [
+     -52.0,
+     -11.0
+    ]
+   }
+  },
+  {
+   "label": "V2_GroundBounce",
+   "class": "DirectionalLight",
+   "DirectionalLightComponent": {
+    "intensity": 2400.0,
+    "light_color": [
+     214,
+     244,
+     238
+    ],
+    "cast_shadows": false,
+    "affects_world": true,
+    "indirect_lighting_intensity": 1.0,
+    "volumetric_scattering_intensity": 0.0,
+    "atmosphere_sun_light": false,
+    "use_temperature": false,
+    "temperature": 6500.0,
+    "rot": [
+     90.0,
+     0.0
+    ]
+   }
+  },
+  {
+   "label": "V2_CanopyFill",
+   "class": "DirectionalLight",
+   "DirectionalLightComponent": {
+    "intensity": 9000.0,
+    "light_color": [
+     220,
+     236,
+     214
+    ],
+    "cast_shadows": false,
+    "affects_world": true,
+    "indirect_lighting_intensity": 1.0,
+    "volumetric_scattering_intensity": 0.0,
+    "atmosphere_sun_light": false,
+    "use_temperature": false,
+    "temperature": 6500.0,
+    "rot": [
+     -18.0,
+     169.0
+    ]
+   }
+  },
+  {
+   "label": "V2_CanopyFill2",
+   "class": "DirectionalLight",
+   "DirectionalLightComponent": {
+    "intensity": 9000.0,
+    "light_color": [
+     236,
+     232,
+     220
+    ],
+    "cast_shadows": false,
+    "affects_world": true,
+    "indirect_lighting_intensity": 1.0,
+    "volumetric_scattering_intensity": 0.0,
+    "atmosphere_sun_light": false,
+    "use_temperature": false,
+    "temperature": 6500.0,
+    "rot": [
+     -14.0,
+     49.0
+    ]
+   }
+  },
+  {
+   "label": "V2_SkyAtmosphere",
+   "class": "SkyAtmosphere"
+  },
+  {
+   "label": "V2_SkyLight",
+   "class": "SkyLight",
+   "SkyLightComponent": {
+    "intensity": 2.0,
+    "light_color": [
+     255,
+     255,
+     255
+    ],
+    "cast_shadows": true,
+    "lower_hemisphere_color": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "affects_world": true,
+    "indirect_lighting_intensity": 1.0,
+    "volumetric_scattering_intensity": 1.0,
+    "rot": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  {
+   "label": "V2_Clouds",
+   "class": "VolumetricCloud"
+  },
+  {
+   "label": "V2_HeightFog",
+   "class": "ExponentialHeightFog",
+   "ExponentialHeightFogComponent": {
+    "fog_inscattering_luminance": [
+     0.74,
+     0.8,
+     0.92
+    ],
+    "fog_density": 0.009,
+    "rot": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  {
+   "label": "V2_PortalLight",
+   "class": "PointLight",
+   "PointLightComponent": {
+    "intensity": 8000.0,
+    "light_color": [
+     255,
+     108,
+     176
+    ],
+    "cast_shadows": false,
+    "affects_world": true,
+    "indirect_lighting_intensity": 1.0,
+    "volumetric_scattering_intensity": 1.0,
+    "use_temperature": false,
+    "temperature": 6500.0,
+    "rot": [
+     0.0,
+     0.0
+    ]
+   }
+  },
+  {
+   "label": "V2_PostProcess",
+   "class": "PostProcessVolume"
+  }
+ ],
+ "finished": "2026-09-16 04:00:01",
+ "seconds": 0.06,
+ "log": ""
+}

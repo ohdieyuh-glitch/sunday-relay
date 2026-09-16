@@ -1,0 +1,85 @@
+# SD01 -- the city streets get planted (2026-09-16)
+
+SC01/LOOK02 fixed the city streets being grey. This fixes them being EMPTY: the Bible's streets overflow with
+flowers, and ours had nothing between the paving and the walls.
+
+## Where, measured
+
+`street_census.json` (street_census.py, new): 600 street tiles, 9.3 km of street. A tile edge with no other tile
+beyond it is a REAL street edge (against a building base or a lawn); an edge that meets another tile is a seam.
+Dressing goes on real edges only -- 619 of them -- which keeps every street's middle clear.
+
+## What -- four previews, and the frames chose
+
+| preview | pieces | result |
+|---|---|---|
+| sd01a | forge flower runs on the paving | invisible: a run is a low strip under a metre long |
+| sd01b | raised flower beds 1.5x, spiral topiary, rose bushes | visible, but the bloom mesh reads as purple lettuce |
+| sd01c | same, world-wide | patchy; a lamp stood in the middle of a bed |
+| **sd01d/e** | **GA05's hero planter** -- the ivory trough with a gold lip, three rows of flower runs raised to the rim | reads as a real Wonderland planter |
+
+The streets now speak the corridor's language -- the one planting in the world already proven from a camera --
+instead of inventing a weaker one.
+
+## Clearance, measured twice
+
+Pieces are placed by geometry, so some land on columns, benches or doorways. Every candidate is tested two ways,
+because each test is blind where the other sees:
+
+- `probe_site_clear.py` box overlap in the editor world -- catches walls and actors, but is BLIND TO BATCHES,
+  which have no editor collision;
+- distance against `city_props.json`, a census of 10,104 props of which 9,291 are batch instances -- balustrades,
+  columns, gates, lamps, benches. Linear props (balustrades, hedges) are capped at 80 uu, because a bounds-diagonal
+  disc around a 4 m balustrade excluded 160 of one district's 180 pieces, most of them beds that belonged in front
+  of it. Gates, steps, columns and trees keep their full footprint.
+
+Lamps are placed WITHOUT collision: a lamp you walk through is a small flaw, one that blocks a doorway nobody
+checked is a traversal bug, and traversal is a protected system.
+
+Final: 778 pieces and 222 lamps world-wide, 473 candidates dropped for clearance, 9,054 instances in batches.
+
+## Three bugs the frames and counts caught
+
+- **A lamp in a flower bed.** Edge midpoints got both. Lamps now stand at corners.
+- **Two lamps shoulder to shoulder** at every corner two edges share. One lamp per 9 m now.
+- **Site ids drifted.** They were sequential, so skipping one duplicate lamp shifted every later id and the
+  clearance answers stopped matching their candidates -- beds halved from 778 to 432 on a change that only touched
+  lamps. Ids are positions now; a position cannot drift when a different piece is filtered.
+
+## Cost (`perf_ab.json`)
+
+All 20 SD01 passes (260 batch actors) hidden and shown in PIE from three cameras, 8 s per state:
+
+| camera | visible | hidden | visible again |
+|---|---|---|---|
+| SW_PlazaHero41 | 17.8 fps | 17.6 | 16.7 |
+| South_FacadeRow36 | 29.6 | 30.0 | 30.1 |
+| WorldCam12 (overview) | 14.1 | 14.5 | 14.0 |
+
+**Within noise at every camera**: the visible and visible-again runs differ from each other by as much as either
+differs from hidden. The absolute numbers are NOT comparable to earlier beta_tour figures (22-46 fps): this ran
+with the editor behind other windows, and the HUD mini-map (a scene capture at 8 Hz) had just been merged. Only
+the relative A/B is evidence.
+
+## Cost, settled by removal (`perf_remove_ab.json`)
+
+A second session measured SD01 at +6 ms (frame baseline ~34 -> ~40 ms), against perf_ab's "within noise". Both were
+suspect -- perf_ab only HIDES actors, and the cross-session number spans several merges -- so `perf_remove_ab.py`
+(new) DESTROYS all 260 SD01 actors in the PIE copy and measures median frame time on, off, and off-again, twice:
+
+| camera | round 0: on / off / off again | round 1: on / off / off again |
+|---|---|---|
+| SW_PlazaHero41 | 45.7 / 44.4 / 50.0 ms | 54.7 / 54.7 / 57.3 |
+| South_FacadeRow36 | 25.6 / 25.8 / 27.9 | 30.0 / 29.8 / 29.8 |
+| WorldCam12 | 51.6 / 54.0 / 57.8 | 62.2 / 61.6 / 62.8 |
+
+**SD01 costs nothing measurable**: on minus off is 0 to +1.3 ms, inside an off-vs-off-again noise floor of 2-6 ms.
+What DOES move is time: every camera is ~9 ms slower in round 1 than round 0 whatever SD01 is doing -- the laptop
+heating up. That drift is the size of the cross-session +6 ms, which is why comparing across sessions blamed SD01.
+
+The first attempt (`perf_remove_THROTTLED_invalid.json`) read exactly 333 ms -- 3 fps -- at every camera, on and off.
+It measured the editor's background throttle, not the scene. The job now suspends the throttle and marks any window
+over 250 ms INVALID rather than reporting it.
+
+`sd01e.jpg`: SW plaza now has one lamp and a planter packed with flowers; the hero camera and the world view are
+unchanged. Map saved.

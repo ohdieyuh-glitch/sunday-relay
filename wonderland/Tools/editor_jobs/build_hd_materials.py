@@ -57,6 +57,10 @@ PLAN = {
     "MI_V2_RoofPink": ("roof", {"TexScale": 0.004}),
     "MI_V2_RoofBlue": ("roof", {"TexScale": 0.004}),
     "MI_V2_RoofNavy": ("roof", {"TexScale": 0.004}),
+    # MQ09 (2026-09-16) BUILT, JUDGED AND REJECTED: the lawns on the grass family read softer and flatter than the V2
+    # lawn texture they replaced, whose directional blade streaks already read as grass up close. No lawn entry here,
+    # on purpose -- apply_hd_materials.py applies EVERY twin it finds by default, so a plan entry would quietly bring
+    # the rejected grass back. Evidence: recovery/evidence/2026-09-16-MQ09-grass.
 }
 HD_DEFAULTS = {"NormalStrength": 1.0, "DetailScale": 4.0, "DetailStrength": 0.35, "InstVary": 0.08, "InstWarm": 0.03,
                "InstRoughVary": 0.10, "MacroScale": 0.00016, "MacroVary": 0.07}

@@ -1,0 +1,62 @@
+{
+ "name": "g00_perf_sd01",
+ "started": "2026-09-16 04:37:59",
+ "status": "done",
+ "pass_actors": 260,
+ "cameras": {
+  "SW_PlazaHero41": [
+   {
+    "state": "visible",
+    "fps": 17.8,
+    "ms": 56.07
+   },
+   {
+    "state": "hidden",
+    "fps": 17.6,
+    "ms": 56.87
+   },
+   {
+    "state": "visible_again",
+    "fps": 16.7,
+    "ms": 59.85
+   }
+  ],
+  "South_FacadeRow36": [
+   {
+    "state": "visible",
+    "fps": 29.6,
+    "ms": 33.82
+   },
+   {
+    "state": "hidden",
+    "fps": 30.0,
+    "ms": 33.35
+   },
+   {
+    "state": "visible_again",
+    "fps": 30.1,
+    "ms": 33.25
+   }
+  ],
+  "WorldCam12": [
+   {
+    "state": "visible",
+    "fps": 14.1,
+    "ms": 71.12
+   },
+   {
+    "state": "hidden",
+    "fps": 14.5,
+    "ms": 68.76
+   },
+   {
+    "state": "visible_again",
+    "fps": 14.0,
+    "ms": 71.65
+   }
+  ]
+ },
+ "finished": "2026-09-16 04:39:48",
+ "seconds": 109.01,
+ "log": ""
+}

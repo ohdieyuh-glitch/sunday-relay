@@ -104,6 +104,9 @@ def job():
         batch.set_editor_property("cast_shadow", spec_batch.get("cast_shadow", True))
         batch.set_editor_property("collides", spec_batch.get("collides", False))
         batch.set_editor_property("affect_distance_field_lighting", spec_batch.get("affect_df", False))
+        if spec_batch.get("cull_distance"):
+            # Optional: a batch that only matters close up stops drawing past this range (uu). Absent means never.
+            batch.set_editor_property("cull_distance", float(spec_batch["cull_distance"]))
         flat = []
         for row in rows:
             flat.extend(float(v) for v in row)

@@ -87,7 +87,7 @@ def build():
     rng = random.Random(20260913 + 104)
     occ = _architecture_occluders()
     hovers_none, actors = [], []
-    batches = kit.Batches(PASS)
+    batches = kit.Batches(PASS, tinted=True)
     blocks = CITY["blocks"]
 
     # ---------------------------------------------------------------- hall spires

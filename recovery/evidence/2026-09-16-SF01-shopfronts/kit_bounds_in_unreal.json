@@ -1,0 +1,84 @@
+{
+ "name": "z00_kb",
+ "started": "2026-09-16 07:17:40",
+ "status": "done",
+ "bounds": {
+  "WL_House_Shopfront_glass": {
+   "min": [
+    -289.5,
+    -94.3,
+    72.0
+   ],
+   "max": [
+    289.5,
+    -86.3,
+    202.0
+   ]
+  },
+  "WL_House_Shopfront_gold": {
+   "min": [
+    -293.5,
+    -125.0,
+    289.5
+   ],
+   "max": [
+    293.5,
+    -118.6,
+    330.5
+   ]
+  },
+  "WL_House_Shopfront_stone": "missing",
+  "WL_House_Shopfront_stone_dark": {
+   "min": [
+    -298.0,
+    -52.5,
+    34.0
+   ],
+   "max": [
+    298.0,
+    -10.5,
+    229.0
+   ]
+  },
+  "WL_Market_Awning_metal": {
+   "min": [
+    -320.0,
+    -233.3,
+    192.5
+   ],
+   "max": [
+    320.0,
+    1.9,
+    263.5
+   ]
+  },
+  "WL_Market_Awning_roof": {
+   "min": [
+    -320.0,
+    -256.0,
+    199.0
+   ],
+   "max": [
+    240.0,
+    0.0,
+    261.0
+   ]
+  },
+  "WL_Market_Awning_roof_alt": {
+   "min": [
+    -240.0,
+    -256.0,
+    199.0
+   ],
+   "max": [
+    320.0,
+    0.0,
+    261.0
+   ]
+  },
+  "WL_Market_Awning_stone": "missing"
+ },
+ "finished": "2026-09-16 07:17:40",
+ "seconds": 0.06,
+ "log": ""
+}

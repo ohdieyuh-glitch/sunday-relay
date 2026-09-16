@@ -272,6 +272,13 @@ namespace RelayDogMission
 		Out.ArmStrideKeep = 1.0f - (1.0f - S.ArmStrideKeep) * W;
 		Out.HipDeg = S.HipDeg * W;
 
+		// ---------------------------------------------------------------- the facing
+		// Derived from the act's own row rather than a new column: a beam is aimed at the contract, a lens
+		// is held up to look at it, and a correction is made to it. All three are done AT the work, so all
+		// three face it. Reading and painting do not -- they circle, and a walker faces its walk.
+		Out.bFaceContract = In.bHasContract
+			&& (Now.bBeamsTheContract || Now.bCorrects || Now.Prop == EWonderlandDogProp::MagnifyingGlass);
+
 		// ---------------------------------------------------------------- the orbit
 		// A REAL WALK, not a slide: this returns a bearing and the character moves along it, so the stride
 		// system solves the gait and the Dog genuinely circles the contract. It yields to the player at

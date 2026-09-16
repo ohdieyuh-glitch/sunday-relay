@@ -1,0 +1,34 @@
+{
+ "lights": {
+  "V2_SkyAtmosphere": {
+   "component": "SkyAtmosphereComponent",
+   "before": {
+    "aerial_pespective_view_distance_scale": 1.0
+   },
+   "after": {
+    "aerial_pespective_view_distance_scale": 6.0
+   }
+  },
+  "V2_HeightFog": {
+   "component": "ExponentialHeightFogComponent",
+   "before": {
+    "fog_density": 0.009,
+    "fog_inscattering_luminance": [
+     0.74,
+     0.8,
+     0.92
+    ],
+    "start_distance": 4000.0
+   },
+   "after": {
+    "fog_density": 0.009,
+    "fog_inscattering_luminance": [
+     0.74,
+     0.8,
+     0.92
+    ],
+    "start_distance": 4000.0
+   }
+  }
+ }
+}

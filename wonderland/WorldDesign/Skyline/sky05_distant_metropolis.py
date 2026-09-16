@@ -112,7 +112,7 @@ def build():
     spellings = [(s, h) for s, h in kit.spellings(3) if s[-1] not in BROAD]
     needles = [c for c in spellings if kit.MODULES[c[0][-1]]["role"] == "needle"]
     crowns = [c for c in spellings if kit.MODULES[c[0][-1]]["role"] == "crown"]
-    batches = kit.Batches(PASS)
+    batches = kit.Batches(PASS, tinted=True)
     towers, bridges, placed = [], [], []
 
     centres = []

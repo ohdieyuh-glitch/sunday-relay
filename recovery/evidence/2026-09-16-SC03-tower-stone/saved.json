@@ -1,0 +1,34 @@
+{
+ "name": "zn00_save_sc03",
+ "started": "2026-09-16 08:10:46",
+ "status": "done",
+ "saved": {
+  "MI_V2_AshlarCeramic": {
+   "saved": true,
+   "BaseColor": [
+    0.98,
+    0.9,
+    1.08
+   ]
+  },
+  "MI_V2_AshlarIvoryStone": {
+   "saved": true,
+   "BaseColor": [
+    1.0,
+    0.8,
+    0.8
+   ]
+  },
+  "MI_V2_AshlarMarblePale": {
+   "saved": true,
+   "BaseColor": [
+    1.0,
+    0.9,
+    0.72
+   ]
+  }
+ },
+ "finished": "2026-09-16 08:10:47",
+ "seconds": 1.11,
+ "log": ""
+}
