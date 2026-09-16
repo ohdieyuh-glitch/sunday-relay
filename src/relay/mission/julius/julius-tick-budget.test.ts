@@ -117,17 +117,62 @@ const unitOf = (task: JuliusTask, byId: ReadonlyMap<string, JuliusTask>): string
 const dispatched = (tasks: readonly JuliusTask[]) =>
   tasks.filter((task) => task.state === 'SUCCEEDED' || task.state === 'FAILED');
 
+describe('P12/P13 — a disagreement is paid for, and cannot manufacture capacity', () => {
+  const budget = planJuliusTickBudget(CONTINUOUS_1);
+  const base: JuliusTask[] = [
+    { taskId: 'build-1', missionId: 'm', parentTaskId: null, dependencyIds: [], requiredEvidenceTypes: [], taskType: 'build', role: 'CODING_AGENT', ordinal: 0, state: 'SUCCEEDED' },
+    { taskId: 'build-1:review', missionId: 'm', parentTaskId: 'build-1', dependencyIds: [], requiredEvidenceTypes: [], taskType: 'review:build', role: 'INDEPENDENT_REVIEWER', ordinal: 1, state: 'SUCCEEDED' },
+  ];
+  const disagreement = (index: number): JuliusTask[] => [
+    { taskId: `rebuttal:build-${String(index)}:review:task`, missionId: 'm', parentTaskId: 'build-1', dependencyIds: [], requiredEvidenceTypes: [], taskType: 'rebuttal', role: 'PROMPT_ARCHITECT', ordinal: 2, state: 'SUCCEEDED' },
+    { taskId: `rebuttal:build-${String(index)}:review:task:review`, missionId: 'm', parentTaskId: `rebuttal:build-${String(index)}:review:task`, dependencyIds: [], requiredEvidenceTypes: [], taskType: 'review:rebuttal', role: 'INDEPENDENT_REVIEWER', ordinal: 3, state: 'SUCCEEDED' },
+  ];
+
+  it('an argument that happened buys exactly its two dispatches, and one that did not buys nothing', () => {
+    expect(juliusTickAllowance({ budget, tasks: base, retries: 0 }))
+      .toEqual({ allowance: 73, beyondMainPath: 0, disagreementTicks: 0, retries: 0 });
+    expect(juliusTickAllowance({ budget, tasks: [...base, ...disagreement(1)], retries: 0 }))
+      .toEqual({ allowance: 75, beyondMainPath: 2, disagreementTicks: 2, retries: 0 });
+  });
+
+  it('the plan itself never grows: an argument is conditional work, priced only when it exists', () => {
+    expect(budget.plannedTicks).toBe(73);
+    expect(budget.reason).toContain('disagreement=one_rebuttal_one_re_review_per_review');
+  });
+
+  it('repeating the argument cannot buy unbounded ticks: the hard maximum caps it', () => {
+    const many = [...base, ...Array.from({ length: 4_000 }, (_, index) => disagreement(index)).flat()];
+    const allowance = juliusTickAllowance({ budget, tasks: many, retries: 0 });
+    expect(allowance.beyondMainPath).toBeGreaterThan(budget.hardMaxTicks);
+    expect(allowance.allowance, 'and the allowance stops at the hard maximum').toBe(budget.hardMaxTicks);
+  });
+
+  it('the hard maximum counts one rebuttal and one re-review per review, and no more', () => {
+    // Reviewer not required: a challenge has nowhere to come from, so the
+    // disagreement term is zero rather than assumed.
+    const unreviewed = planJuliusTickBudget({ ...CONTINUOUS_1, reviewerRequired: false });
+    expect(unreviewed.reason).toContain('disagreement=unreachable');
+    const architectOnly = planJuliusTickBudget({ ...CONTINUOUS_1, units: ['PROMPT_ARCHITECT'], repairRounds: 0, segmentCeiling: 1, taskAttempts: 1 });
+    // One lineage, one segment, one review: 1 + 1 dispatches, plus the two the
+    // one review may cost if it challenges, plus the settling advance.
+    expect(architectOnly.hardMaxTicks).toBe(1 + 1 + 2 + 1);
+  });
+});
+
 describe('the derivation', () => {
-  it('counts julius-continuous-1: 73 planned, 1729 at the hard maximum, with its reason in closed tokens', () => {
+  it('counts julius-continuous-1: 73 planned, 3457 at the hard maximum, with its reason in closed tokens', () => {
     const budget = planJuliusTickBudget(CONTINUOUS_1);
     // Architect: (3+1) lineages x (4 segments + 1 review) = 20.
     // Coder: (3+1) x (4 segments + 4 guidance + 4 guidance reviews + 1 review) = 52.
     // Plus the advance that settles the run.
+    // THE PLAN IS UNCHANGED by disagreement: an argument is never the main path.
     expect(budget.plannedTicks).toBe(20 + 52 + 1);
-    // Every path: architect 4 x (4 + 4 review segments) = 32; coder
-    // 4 x (4 + 4 x (4 guidance lineages x (4 + 4)) + 4) = 544; x 3 attempts, + 1.
-    expect(budget.hardMaxTicks).toBe((32 + 544) * 3 + 1);
-    expect(budget.reason).toBe('units=PROMPT_ARCHITECT,CODING_AGENT repair_rounds=3 segment_ceiling=4 reviewer=required attempts=3');
+    // Every path: architect 4 x (4 + 4 review segments + 2 per review it may
+    // challenge) = 64; coder 4 x (4 + 4 x (4 guidance lineages x (4 + 4)) + 4 +
+    // 2 per review) = 1088; x 3 attempts, + 1. Each review may challenge once,
+    // and one challenge costs exactly one rebuttal and one re-review.
+    expect(budget.hardMaxTicks).toBe((64 + 1088) * 3 + 1);
+    expect(budget.reason).toBe('units=PROMPT_ARCHITECT,CODING_AGENT repair_rounds=3 segment_ceiling=4 reviewer=required attempts=3 disagreement=one_rebuttal_one_re_review_per_review');
     expect(budget.version).toBe('julius-tick-budget.v1');
   });
 
@@ -155,7 +200,7 @@ describe('attempt 4 (run 34774471909): the old ceiling stopped a run the structu
   it('consumed 32 ticks, one per dispatch, with 41 of its 73 still allowed and nothing beyond the main path', () => {
     expect(dispatched(tasks)).toHaveLength(32);
     const now = juliusTickAllowance({ budget, tasks, retries: 0 });
-    expect(now).toEqual({ allowance: 73, beyondMainPath: 0, retries: 0 });
+    expect(now).toEqual({ allowance: 73, beyondMainPath: 0, disagreementTicks: 0, retries: 0 });
     expect(now.allowance - 32, 'the ticks the old ceiling took away').toBe(41);
   });
 
@@ -203,7 +248,7 @@ describe('the allowance grows only for legitimate work the main path does not co
   it('a review that paused for research adds its continuation', () => {
     const review = 'segment:run:R:plan:3:task:review';
     expect(juliusTickAllowance({ budget, retries: 0, tasks: extra([[`segment:${review}:2:task`, 'review:plan', 'INDEPENDENT_REVIEWER', 'RUNNABLE', review]]) }))
-      .toEqual({ allowance: 74, beyondMainPath: 1, retries: 0 });
+      .toEqual({ allowance: 74, beyondMainPath: 1, disagreementTicks: 0, retries: 0 });
   });
 
   it('a guidance task that paused for research adds its continuation', () => {
@@ -217,7 +262,7 @@ describe('the allowance grows only for legitimate work the main path does not co
   });
 
   it('a retried attempt adds the tick it cost', () => {
-    expect(juliusTickAllowance({ budget, tasks: base, retries: 2 })).toEqual({ allowance: 75, beyondMainPath: 0, retries: 2 });
+    expect(juliusTickAllowance({ budget, tasks: base, retries: 2 })).toEqual({ allowance: 75, beyondMainPath: 0, disagreementTicks: 0, retries: 2 });
   });
 
   it('nothing extends past the hard maximum, and a malformed count adds nothing', () => {

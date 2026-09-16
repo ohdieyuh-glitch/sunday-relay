@@ -157,6 +157,13 @@ describe('the live composition and the peer protocol', () => {
     expect(requests.find((request) => request.kind === 'REBUTTAL_REQUEST')).toMatchObject({
       sourceRole: 'JULIUS', targetRole: 'PROMPT_ARCHITECT', status: 'RESOLVED', transitionCode: 'ARCHITECT_UPHELD',
     });
+    // THE ARGUMENT IS PAID FOR, AND THE PAYMENT IS VISIBLE. Two dispatches —
+    // the one rebuttal and the one re-review — counted beyond the planned path
+    // and named as disagreement work in the drive's own account.
+    expect(outcome.tickAccount).toMatchObject({ disagreementTicks: 2, exhausted: false });
+    expect(outcome.tickAccount!.allowance).toBe(outcome.tickAccount!.plannedTicks + outcome.tickAccount!.beyondMainPath + outcome.tickAccount!.retries);
+    expect(outcome.tickAccount!.beyondMainPath).toBeGreaterThanOrEqual(2);
+
     const decisions = await memory.decisionsForRun(RUN, PROJECT);
     expect(decisions.filter((row) => row.taskId === 'build-1').map((row) => row.action), 'the work was accepted, not repaired').toEqual(['ACCEPT']);
     expect((await memory.tasksForRun(RUN, PROJECT)).some((task) => task.taskId.startsWith('repair:'))).toBe(false);

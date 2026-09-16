@@ -811,6 +811,8 @@ export interface DriveTickAccount {
   readonly ticksConsumed: number;
   readonly ticksRemaining: number;
   readonly beyondMainPath: number;
+  /** Of those, the dispatches that exist because a peer disagreed: one rebuttal, one re-review. */
+  readonly disagreementTicks: number;
   readonly retries: number;
   /** An operator's `maxTicks`, which may only tighten the allowance. Null when none was given. */
   readonly override: number | null;
@@ -867,7 +869,8 @@ export async function driveJuliusRunToTerminal(input: {
       account = {
         plannedTicks: budget.plannedTicks, hardMaxTicks: budget.hardMaxTicks,
         allowance: override === null ? now.allowance : Math.min(now.allowance, override),
-        beyondMainPath: now.beyondMainPath, retries: now.retries, override, reason: budget.reason,
+        beyondMainPath: now.beyondMainPath, disagreementTicks: now.disagreementTicks,
+        retries: now.retries, override, reason: budget.reason,
       };
       if (tick > account.allowance) {
         return failForTickBudget({ input, consumed: tick - 1, account: accountAt(tick - 1, true)! });
@@ -977,7 +980,8 @@ async function failForTickBudget(args: {
       occurredAt: new Date().toISOString(),
       facts: {
         reasonCode, plannedTicks: account.plannedTicks, allowance: account.allowance, ticksConsumed: args.consumed,
-        hardMaxTicks: account.hardMaxTicks, beyondMainPath: account.beyondMainPath, retries: account.retries,
+        hardMaxTicks: account.hardMaxTicks, beyondMainPath: account.beyondMainPath,
+        disagreementTicks: account.disagreementTicks, retries: account.retries,
         override: account.override, tickBudgetReason: account.reason,
       },
     });
