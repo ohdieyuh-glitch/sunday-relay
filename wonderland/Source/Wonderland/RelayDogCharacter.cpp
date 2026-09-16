@@ -33,7 +33,9 @@ namespace RelayDogReadTuning
 	TAutoConsoleVariable<float> CVarBookOpen(TEXT("wl.Dog.Read.BookOpen"), 28.0f, TEXT("Degrees each half of the open book rises from flat."));
 	TAutoConsoleVariable<float> CVarBookScale(TEXT("wl.Dog.Read.BookScale"), 1.3f, TEXT("Size of the open book and its turning page."));
 	TAutoConsoleVariable<float> CVarLeafCurl(TEXT("wl.Dog.Read.LeafCurl"), 40.0f, TEXT("Degrees the outer half of a turning page trails its inner half at mid-turn."));
-	TAutoConsoleVariable<float> CVarLeafGlow(TEXT("wl.Dog.Read.LeafGlow"), 3.0f, TEXT("Brightness of the turning page, as a fraction of the Dog's glow exposure."));
+	// 1.2, not 3: at 3 the gold page tonemapped to a pale yellow that vanished against the white Dog in the filmed mission;
+	// at 1.2 it stays a saturated gold turning over the white pages (zc_camera_test, 2026-09-16).
+	TAutoConsoleVariable<float> CVarLeafGlow(TEXT("wl.Dog.Read.LeafGlow"), 1.2f, TEXT("Brightness of the turning page, as a fraction of the Dog's glow exposure."));
 	TAutoConsoleVariable<float> CVarHoldPitch(TEXT("wl.Dog.Read.HoldPitch"), 78.0f, TEXT("Holding (left) arm: shoulder pitch forward."));
 	TAutoConsoleVariable<float> CVarHoldRoll(TEXT("wl.Dog.Read.HoldRoll"), 14.0f, TEXT("Holding arm: shoulder roll outward."));
 	TAutoConsoleVariable<float> CVarHoldElbow(TEXT("wl.Dog.Read.HoldElbow"), 72.0f, TEXT("Holding arm: elbow bend."));
