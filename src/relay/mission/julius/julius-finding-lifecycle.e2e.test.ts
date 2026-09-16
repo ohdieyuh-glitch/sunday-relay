@@ -221,6 +221,39 @@ describe('P9/P10 — a re-review resolves the finding it was asked about, by ide
     expect(refusals.map((row) => row.facts.reasonCode)).toContain('review_resolution_names_a_foreign_finding');
     expect((await theFinding(foreign)).state, 'the real finding was untouched by the false claim').toBe('ADDRESSED');
   });
+
+  it('nor one that EXISTS but belongs to another unit: a finding is not resolvable by whoever names it first', async () => {
+    // A finding that is real, open, and about the PLAN — not about the build
+    // this re-review was asked to judge. A rule that only refuses ids nobody
+    // ever issued refuses nothing worth refusing.
+    const elsewhere = build({
+      reviewer: [
+        PASS, REJECT,
+        verdict({
+          verdict: 'CONTINUE', claim: 'Fine.',
+          resolutions: [{ findingId: 'finding:about-the-plan', status: 'RESOLVED', claim: 'Not mine to end.' }],
+        }),
+      ],
+    });
+    // Far enough for the plan to have produced the evidence a finding must cite.
+    await drain(elsewhere, 3);
+    const planEvidence = (await elsewhere.store.evidenceForRun('run-1', 'prj-1')).find((item) => item.taskId === 'plan-1');
+    expect(planEvidence, 'the plan ran').not.toBeUndefined();
+    expect(await elsewhere.store.recordFinding({
+      projectId: 'prj-1',
+      finding: {
+        findingId: 'finding:about-the-plan', runId: 'run-1', taskId: 'plan-1', reviewerWorkerId: 'reviewer',
+        severity: 'HIGH', category: 'review', claim: 'The plan never named the NULL case.', blocking: false,
+        criterionId: null, evidenceIds: [planEvidence!.evidenceId], status: 'OPEN', createdAt: '2026-09-16T00:00:00.000Z',
+      },
+    })).toBe(true);
+    await drain(elsewhere);
+    const refused = rows(elsewhere).filter((row) => row.type === 'review.verdict.refused'
+      && row.facts.reasonCode === 'review_resolution_names_a_foreign_finding');
+    expect(refused.map((row) => row.facts.findingId)).toEqual(['finding:about-the-plan']);
+    const other = (await lives(elsewhere)).find((life) => life.findingId === 'finding:about-the-plan');
+    expect(other!.state, 'and it is still open, because nobody who could end it has').toBe('OPEN');
+  });
 });
 
 describe('P11 — the re-review is shown a bounded diff of what changed', () => {

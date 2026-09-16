@@ -118,6 +118,11 @@ describe('the accepted architecture comes back from the rows alone', () => {
     expect(foldJuliusArchitecture(JSON.parse(JSON.stringify(rows)))).toEqual(second);
     expect(juliusNextArchitectureRevision(rows)).toBe(3);
     expect(juliusNextArchitectureRevision([])).toBe(1);
+    // A PROPOSED revision nobody accepted still USED its number: handing that
+    // number to the next proposal would put two pictures on one row id.
+    const proposed = [...rows, { type: 'architecture.recorded', facts: { ...juliusArchitectureFacts(second), revision: 3, status: 'PROPOSED' } }];
+    expect(foldJuliusArchitecture(proposed), 'and it governs nothing').toEqual(second);
+    expect(juliusNextArchitectureRevision(proposed)).toBe(4);
     expect(foldJuliusArchitecture([])).toBeNull();
   });
 

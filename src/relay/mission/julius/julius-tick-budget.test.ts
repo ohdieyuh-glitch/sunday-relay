@@ -135,6 +135,26 @@ describe('P12/P13 — a disagreement is paid for, and cannot manufacture capacit
       .toEqual({ allowance: 75, beyondMainPath: 2, disagreementTicks: 2, architectureTicks: 0, retries: 0 });
   });
 
+  const consultation = (index: number): JuliusTask[] => [
+    { taskId: `architecture:arch:IMPLEMENTATION_DRIFT:r1:build-${String(index)}:task`, missionId: 'm', parentTaskId: 'build-1', dependencyIds: [], requiredEvidenceTypes: [], taskType: 'architecture', role: 'PROMPT_ARCHITECT', ordinal: 2, state: 'SUCCEEDED' },
+    { taskId: `architecture:arch:IMPLEMENTATION_DRIFT:r1:build-${String(index)}:task:review`, missionId: 'm', parentTaskId: `architecture:arch:IMPLEMENTATION_DRIFT:r1:build-${String(index)}:task`, dependencyIds: [], requiredEvidenceTypes: [], taskType: 'review:architecture', role: 'INDEPENDENT_REVIEWER', ordinal: 3, state: 'SUCCEEDED' },
+  ];
+
+  it('a consultation that happened buys exactly its two dispatches, and one that did not buys nothing', () => {
+    expect(juliusTickAllowance({ budget, tasks: [...base, ...consultation(1)], retries: 0 }))
+      .toEqual({ allowance: 75, beyondMainPath: 2, disagreementTicks: 0, architectureTicks: 2, retries: 0 });
+    // Drift and an argument are priced separately, and each only when it exists.
+    expect(juliusTickAllowance({ budget, tasks: [...base, ...consultation(1), ...disagreement(1)], retries: 0 }))
+      .toEqual({ allowance: 77, beyondMainPath: 4, disagreementTicks: 2, architectureTicks: 2, retries: 0 });
+  });
+
+  it('consulting the architect cannot buy unbounded ticks either', () => {
+    const many = [...base, ...Array.from({ length: 4_000 }, (_, index) => consultation(index)).flat()];
+    const allowance = juliusTickAllowance({ budget, tasks: many, retries: 0 });
+    expect(allowance.beyondMainPath).toBeGreaterThan(budget.hardMaxTicks);
+    expect(allowance.allowance, 'and the allowance stops at the hard maximum').toBe(budget.hardMaxTicks);
+  });
+
   it('the plan itself never grows: an argument is conditional work, priced only when it exists', () => {
     expect(budget.plannedTicks).toBe(73);
     expect(budget.reason).toContain('disagreement=one_rebuttal_one_re_review_per_review');
