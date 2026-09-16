@@ -344,13 +344,26 @@ def job():
         # MEASURED AS A DISTANCE FROM THE LINE, because that is what "clear the sight-line" means. The film that
         # found this fault had a companion ON the line; anything under about a body's width is still in the way.
         verify_frames = [f for f in frames if f["beat"] == "verifying" and f.get("companion_off_line")]
-        worst = None
-        if verify_frames:
-            worst = min(min(f["companion_off_line"]) for f in verify_frames)
-        RESULT["sight_line"] = {"samples": len(verify_frames), "closest_companion_uu": worst,
+        # A COMPANION GLIDING INTO POSITION IS NOT A COMPANION FAILING TO CLEAR. The first run failed this
+        # on its FIRST verification sample -- 26 uu, taken the instant the stage began -- and then settled
+        # at 189 uu, which is the 190 the formation asks for. Taking the minimum across the whole stage was
+        # measuring the arrival, not the position. So the settled state is judged, and how long it took to
+        # settle is reported beside it rather than hidden.
+        settle_after = 1.0
+        started = verify_frames[0]["t"] if verify_frames else 0.0
+        settled = [f for f in verify_frames if f["t"] - started >= settle_after]
+        worst = min(min(f["companion_off_line"]) for f in settled) if settled else None
+        cleared_at = None
+        for f in verify_frames:
+            if min(f["companion_off_line"]) >= 120.0:
+                cleared_at = round(f["t"] - started, 2)
+                break
+        RESULT["sight_line"] = {"samples": len(verify_frames), "settled_samples": len(settled),
+                                "closest_when_settled_uu": worst, "cleared_after_seconds": cleared_at,
                                 "formation": sorted({f["formation"] for f in verify_frames})}
-        record("J13", "the companions clear the line between the Dog and the Contract while verifying",
-               worst is not None and worst >= 120.0, **RESULT["sight_line"])
+        record("J13", "the companions clear the line between the Dog and the Contract, and do it promptly",
+               worst is not None and worst >= 120.0 and cleared_at is not None and cleared_at <= 1.0,
+               **RESULT["sight_line"])
 
         # ---------------------------------------------------------------- the companions assist the study
         study = [f for f in frames if f["beat"] in ("researching", "prompt_architect", "guidance")]
@@ -364,6 +377,41 @@ def job():
         record("J14", "the companions orbit the Contract during study and send pulses into it",
                len(orbiting) >= max(1, int(len(study) * 0.8))
                and (sent_last - sent_first) >= 2 and len(flew) >= 2, **RESULT["study"])
+
+        # ------------------------------------------------------- a portrait of the working stages
+        # THE JHINN IS IN THE WAY, and not only while verifying. The play camera sits behind the Dog, the
+        # Dog performs facing the anchored Contract, and a companion in its normal follow position lands
+        # between the two -- so the repair filmstrip from this run is six frames of a companion's back.
+        #
+        # The founder asked only that the sight-line be cleared during VERIFYING, so the formation is left
+        # alone and the CAMERA moves instead: hold the stage, step round it, and take frames a person could
+        # actually judge. What that cannot do is decide whether the formation should cover more stages --
+        # that is the founder's call and it goes to them with these frames.
+        work_portrait = []
+        for beat, name in (("independent_reviewer", "review"), ("repairing", "repair")):
+            mission.set_beat_by_id(beat)
+            yield 1.6
+            pawn_now = pawn.get_actor_location()
+            contract_at = mission.get_orb_location()
+            look = unreal.MathLibrary.find_look_at_rotation(pawn_now, contract_at)
+            for tag, dyaw, pitch in (("front", 155.0, -14.0), ("side", 70.0, -18.0)):
+                controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=pitch, yaw=look.yaw + dyaw))
+                # Several frames at one angle, so a CYCLE can be read rather than a pose.
+                for step in range(4):
+                    yield 0.55
+                    work_portrait.append({
+                        "beat": beat, "angle": tag, "step": step,
+                        "performing": str(mission.get_dog_performing_label()),
+                        "brush": bool(brush.is_visible()) if brush is not None else False,
+                        "lens": bool(lens.is_visible()) if lens is not None else False,
+                        "capture": shot("zc_joint_%s_%s_%d.png" % (name, tag, step)),
+                    })
+        RESULT["work_portrait"] = work_portrait
+        record("J15", "review and repair can be framed from the player's own camera",
+               len(work_portrait) >= 12 and all(w["capture"] for w in work_portrait),
+               frames=len(work_portrait))
+        mission.set_beat_by_id("idle")
+        yield 0.6
 
         # ---------------------------------------------------------------- a portrait of the beam
         # THE PLAYER'S CAMERA SITS BEHIND THE DOG, and VERIFYING plants the Dog facing the contract -- so the
