@@ -1,0 +1,368 @@
+/* ==========================================================================
+   WONDER WEB — the in-world browser.
+
+   Palette is surface-owned (`--rww-*`), which is the established shape in this
+   repository: the shared token sheet carries what must not differ between
+   surfaces, and each surface carries its own colour. Wonder Web is the one
+   surface that is deliberately NOT periwinkle — the founder's reference is a
+   single saturated yellow on black, and that contrast is the identity of the
+   in-world browser.
+
+   Every chrome element in the reference is the same yellow. There is no second
+   accent, no gradient and no shadow colour: the design reads as one drawn line
+   on an unlit ground, and adding a second hue would break it.
+   ========================================================================== */
+
+.rww {
+  --rww-ink: #05050a;
+  --rww-line: #ffd400;
+  --rww-line-dim: rgba(255, 212, 0, 0.45);
+  --rww-line-faint: rgba(255, 212, 0, 0.16);
+  --rww-text: #ffd400;
+  --rww-radius: 20px;
+  --rww-radius-sm: 10px;
+
+  /* Peer presence dots. Tokens, assigned by the domain, never inline hex. */
+  --wonder-dot-amber: #f5b800;
+  --wonder-dot-violet: #a855f7;
+  --wonder-dot-azure: #3b9eff;
+  --wonder-dot-rose: #ff4d8d;
+  --wonder-dot-jade: #3ddc97;
+  --wonder-dot-coral: #ff7a45;
+
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--rww-ink);
+  border: 2px solid var(--rww-line);
+  border-radius: var(--rww-radius);
+  overflow: hidden;
+  font-family: var(--font-display, 'Inter', system-ui, sans-serif);
+  color: var(--rww-text);
+}
+
+/* ------------------------------------------------------------- title bar */
+
+.rww__titlebar {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  padding: 10px 14px 0;
+  border-bottom: 2px solid var(--rww-line);
+}
+
+.rww__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 10px;
+  flex: 0 0 auto;
+}
+
+.rww__mark {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+}
+
+.rww__wordmark {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* ----------------------------------------------------------------- tabs */
+
+.rww__tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.rww__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.rww__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  background: transparent;
+  color: var(--rww-text);
+  border: 2px solid var(--rww-line-dim);
+  border-bottom: none;
+  border-radius: var(--rww-radius-sm) var(--rww-radius-sm) 0 0;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  /* The active tab joins the content area, so its own bottom edge is erased
+     by sitting 2px lower than the strip's border. */
+  margin-bottom: -2px;
+}
+
+.rww__tab:hover {
+  border-color: var(--rww-line);
+}
+
+.rww__tab--active {
+  border-color: var(--rww-line);
+  background: var(--rww-ink);
+}
+
+.rww__tab--observer {
+  /* A peer's tab is an observation. It reads as present, not as operable. */
+  opacity: 0.82;
+}
+
+.rww__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--rww-line);
+  flex: 0 0 auto;
+}
+
+.rww__dot--reconnecting {
+  opacity: 0.45;
+}
+
+.rww__tab-add {
+  padding: 9px 16px;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.rww__window-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 10px;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.rww__winbtn {
+  background: none;
+  border: none;
+  color: var(--rww-text);
+  cursor: pointer;
+  padding: 2px;
+  line-height: 1;
+  display: flex;
+}
+
+/* -------------------------------------------------------------- toolbar */
+
+.rww__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 2px solid var(--rww-line);
+}
+
+.rww__navbtn {
+  background: none;
+  border: none;
+  color: var(--rww-text);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  border-radius: 6px;
+}
+
+.rww__navbtn[disabled] {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.rww__navbtn:not([disabled]):hover {
+  background: var(--rww-line-faint);
+}
+
+.rww__address {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 7px 16px;
+  border: 2px solid var(--rww-line);
+  border-radius: 999px;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.rww__address-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------- viewport */
+
+.rww__viewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--rww-ink);
+  overflow: hidden;
+}
+
+.rww__frame {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: var(--rww-ink);
+  display: block;
+}
+
+.rww__idle-mark {
+  width: min(230px, 40%);
+  height: auto;
+  opacity: 0.95;
+}
+
+.rww__state {
+  max-width: 46ch;
+  text-align: center;
+  padding: 24px;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+}
+
+.rww__state-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.rww__state-detail {
+  font-size: 13px;
+  line-height: 1.55;
+  opacity: 0.8;
+}
+
+.rww__state--failed .rww__state-title {
+  /* Failure is still drawn in the one accent — the reference has no red — but
+     it is boxed so it cannot be mistaken for an ordinary resting state. */
+  border: 2px solid var(--rww-line);
+  border-radius: var(--rww-radius-sm);
+  padding: 6px 14px;
+}
+
+/* ------------------------------------------------------------- terminal */
+
+.rww__terminal {
+  border-top: 2px solid var(--rww-line);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.rww__terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 16px;
+}
+
+.rww__terminal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.rww__terminal-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+
+.rww__terminal-clear {
+  background: none;
+  border: none;
+  color: var(--rww-text);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.rww__terminal-divider {
+  width: 2px;
+  height: 18px;
+  background: var(--rww-line-dim);
+}
+
+.rww__terminal-body {
+  padding: 4px 16px 16px;
+  font-family: var(--font-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 12.5px;
+  line-height: 1.6;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.rww__terminal-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.rww__terminal-line--runtime {
+  opacity: 0.78;
+}
+
+.rww__prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rww__cursor {
+  display: inline-block;
+  width: 9px;
+  height: 16px;
+  background: var(--rww-line);
+  animation: rww-blink 1.1s steps(1, end) infinite;
+}
+
+@keyframes rww-blink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rww__cursor {
+    animation: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .rww__wordmark { display: none; }
+  .rww__toolbar { flex-wrap: wrap; }
+  .rww__address { order: 3; flex-basis: 100%; }
+}
