@@ -208,6 +208,24 @@ def job():
            len(gallery) == len(GALLERY) and not missed,
            states=len(gallery), frames_each=FRAMES_PER_BEAT, missed=missed)
 
+    # ---------------------------------------------------------------- somewhere else in the world
+    # ONE SPOT IS NOT THE WORLD. The placement was measured where PIE starts; the Dog walks corridors with
+    # kerb flowers and bed runs close in on both sides, so the orb gets photographed again after a walk.
+    mission.set_beat_by_id("coding_agent")
+    yield 0.6
+    walked_from = pawn.get_actor_location() if pawn else None
+    L.focus_game_viewport()
+    L.set_key_held("W", True)
+    yield 2.2
+    L.set_key_held("W", False)
+    yield 1.2
+    moved = float((pawn.get_actor_location() - walked_from).length()) if walked_from else 0.0
+    walk_at = mission.get_orb_location()
+    RESULT["after_walk"] = {"moved_uu": round(moved, 1), "screen": to_screen(walk_at),
+                            "capture": shot("zc_mission_walk.png")}
+    record("M08", "the orb is still readable somewhere else in the world",
+           moved > 200.0 and RESULT["after_walk"]["capture"] is not None, **RESULT["after_walk"])
+
     # ---------------------------------------------------------------- what it costs
     actor = next((a for a in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.WonderlandMissionOrb)), None)
     samples = {"visible": [], "hidden": []}

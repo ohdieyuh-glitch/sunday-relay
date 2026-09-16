@@ -1,13 +1,13 @@
 # PIE job: where the Mission Contract Orb should stand, and how big, measured FROM THE PLAY CAMERA.
 #
 # The first filming of the seventeen states proved the beats and lost the orb: at its built size and offset
-# it sat behind the Dog's own leg and a foreground prop, about 34 px across, with each of the seven spine
-# steps roughly two pixels. Every one of those numbers is a property of the camera the player actually
-# looks through, so guessing at them from an editor viewport is how the last two rounds were spent.
+# it sat behind the Dog's own back leg and a foreground prop. (The 34 px I first estimated was wrong --
+# it measures 137 px. Size was never the defect; standing inside the Dog's silhouette was.) Both are
+# properties of the camera the player looks through, not of an editor viewport.
 #
 # For each candidate placement this reports three things and decides nothing:
 #   - where the orb lands on screen, and how many pixels tall it is there;
-#   - whether the camera can SEE it, by tracing from the camera to the core and to the top of the spine;
+#   - a trace from the camera to the core and the spine, WHICH DOES NOT WORK HERE and says why in place;
 #   - a frame, so the numbers can be checked against a picture.
 #
 # Rules kept: zc_ prefix, no saves, no map edits, never Escape unless a panel is open, and it ends its own PIE.
@@ -86,8 +86,17 @@ def job():
         top_px = to_screen(top)
         pixels = abs(top_px[1] - foot_px[1]) if (foot_px and top_px) else None
 
-        # CAN THE CAMERA SEE IT. Two traces, because an orb whose core is visible over a wall while its
-        # spine is hidden is an orb whose progression cannot be read.
+        # DO NOT TRUST THIS FIELD, and it is kept only because a reader will otherwise re-derive it.
+        #
+        # It returned True for all nine trials on 2026-09-15, including two where the orb is plainly hidden
+        # in the frame -- behind the Dog's back leg, and behind the LLM Companion. The reason is structural:
+        # the things most likely to stand in front of the orb in this world are the ones built NOT TO
+        # COLLIDE. The companion embodiments disable collision on the actor and on every instanced
+        # component, and so does the orb; hover props are the same. A visibility trace passes straight
+        # through all of them, so it can only ever report world geometry.
+        #
+        # Occlusion here is decided by LOOKING AT THE CAPTURES. The numbers below size the orb; the picture
+        # says whether anything is in front of it.
         seen = {}
         if camera is not None:
             eye = camera.get_camera_location()

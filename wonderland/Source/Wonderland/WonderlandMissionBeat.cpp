@@ -76,7 +76,7 @@ namespace
 	/* ---------------------------------------------------------------- waiting on a person */
 	// SLOW AND DIM ON PURPOSE. A checkpoint is the orb breathing rather than working, so a glance across
 	// the garden tells you the mission stopped for you and not for a machine.
-	{ MBeat::WaitingCheckpoint, TEXT("WAITING · CHECKPOINT"), TEXT("The mission is paused at a checkpoint, waiting for you."),
+	{ MBeat::WaitingCheckpoint, TEXT("WAITING / CHECKPOINT"), TEXT("The mission is paused at a checkpoint, waiting for you."),
 	  MPhase::IndependentReview, MAccent::AwaitingInput, MChakra::None, false, true, false,
 	  TEXT("task.paused"),
 	  TEXT(""),
@@ -115,7 +115,7 @@ namespace
 	  TEXT(""),
 	  { 0.18f, 2.0f, 4.0f, 0.60f, 0.25f, 0.0f, 1.00f, 1.10f } },
 
-	{ MBeat::ApprovalContinue, TEXT("APPROVAL · CONTINUE"), TEXT("The gate cleared. Work resumes where it paused."),
+	{ MBeat::ApprovalContinue, TEXT("APPROVAL / CONTINUE"), TEXT("The gate cleared. Work resumes where it paused."),
 	  MPhase::Verifying, MAccent::Unobserved, MChakra::None, false, false, false,
 	  TEXT(""),
 	  TEXT("`task.paused` opens a human gate and nothing in the catalogue reports it being CLEARED. Binding "
@@ -140,7 +140,7 @@ namespace
 
 	// A FINISH THAT SNAPS READS AS A FAILURE (WonderlandJuliusState.h says the same of the Settle
 	// transition). The crown settles slowly and stays bright.
-	{ MBeat::CompleteVerified, TEXT("COMPLETE · VERIFIED"), TEXT("The contract was met and the result was verified."),
+	{ MBeat::CompleteVerified, TEXT("COMPLETE / VERIFIED"), TEXT("The contract was met and the result was verified."),
 	  MPhase::Complete, MAccent::Unobserved, MChakra::Crown, true, false, true,
 	  TEXT("run.verified, run.completed"),
 	  TEXT(""),
