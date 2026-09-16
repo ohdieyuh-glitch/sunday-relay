@@ -17,6 +17,7 @@
 #include "Widgets/SLeafWidget.h"
 #include "Widgets/Text/STextBlock.h"
 #include "WonderlandCompanionSubsystem.h"
+#include "WonderlandDogPerformance.h"
 #include "WonderlandMissionFixture.h"
 #include "WonderlandMissionOrb.h"
 #include "WonderlandPixelText.h"
@@ -372,12 +373,13 @@ void UWonderlandMissionSubsystem::MountStrip()
 						: FString(TEXT("no fixture"));
 					const FName MissionId = Mission->GetFoldMissionId();
 					return FText::FromString(FString::Printf(
-						TEXT("DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION   |   MISSION %s · EVENT %s (%s) · STATE %s · %s %d/%d   |   %s"),
+						TEXT("DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION   |   MISSION %s · EVENT %s (%s) · STATE %s · %s %d/%d · DOG %s%s   |   %s"),
 						MissionId.IsNone() ? TEXT("none") : *MissionId.ToString(),
 						Mission->GetLastEventType().IsNone() ? TEXT("-") : *Mission->GetLastEventType().ToString(),
 						*Mission->GetLastEventVerdict(),
 						*Mission->GetBeatPhase(Mission->GetBeatId()),
 						*Mission->GetChakraName(), Mission->GetChakraStep(), WonderlandChakraSteps,
+						*Mission->GetDogActLabel(), Mission->IsContractAnchored() ? TEXT(" · ANCHORED") : TEXT(""),
 						*Where));
 				})
 			]
@@ -434,8 +436,20 @@ void UWonderlandMissionSubsystem::ShowBeat(EWonderlandMissionBeat Wanted)
 			// A NEW TASK STARTS AT RED. The contract that just arrived carries nothing from the last one,
 			// so the progression is cleared before the first beat lands on it.
 			Body->ResetProgression();
+			Body->ReleaseAnchor();
 		}
 		Body->SetBeat(Beat);
+
+		// ---------------------------------------------------------------- it becomes a place
+		// ANCHORED FOR THE WHOLE MISSION, not per performance. The founder's four performances need the
+		// contract to hold still -- you cannot circle a point that moves with you, and "face the contract"
+		// is degenerate when it is always straight ahead. But anchoring and releasing per stage would make
+		// it slide every time the mission passed through research or a handoff, so the anchor is taken at
+		// the first PERFORMED act and held until the mission ends.
+		if (!Body->IsAnchored() && WonderlandDogActForBeat(Beat) != EWonderlandDogAct::None)
+		{
+			Body->AnchorHere();
+		}
 	}
 }
 
@@ -538,6 +552,23 @@ float UWonderlandMissionSubsystem::GetOrbHeightUU() const
 {
 	const AWonderlandMissionOrb* Body = Orb.Get();
 	return Body != nullptr ? Body->GetOrbHeightUU() : 0.0f;
+}
+
+bool UWonderlandMissionSubsystem::IsContractAnchored() const
+{
+	const AWonderlandMissionOrb* Body = Orb.Get();
+	return Body != nullptr && Body->IsAnchored();
+}
+
+FVector UWonderlandMissionSubsystem::GetContractAnchor() const
+{
+	const AWonderlandMissionOrb* Body = Orb.Get();
+	return Body != nullptr && Body->IsAnchored() ? Body->GetAnchorPoint() : FVector::ZeroVector;
+}
+
+FString UWonderlandMissionSubsystem::GetDogActLabel() const
+{
+	return WonderlandDogActName(WonderlandDogActForBeat(Beat));
 }
 
 float UWonderlandMissionSubsystem::GetContractManifest() const

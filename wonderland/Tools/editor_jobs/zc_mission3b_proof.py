@@ -182,8 +182,11 @@ def job():
             manifested_at = mission.get_last_event_type()
         seen_steps.append(step)
         at = mission.get_orb_location()
+        anchor = mission.get_contract_anchor() if mission.is_contract_anchored() else None
         frames.append({"i": index, "beat": str(mission.get_beat_id()), "step": step,
                        "event": str(mission.get_last_event_type()), "contract": bool(here),
+                       "dog": str(mission.get_dog_act_label()),
+                       "anchor": [round(anchor.x, 2), round(anchor.y, 2), round(anchor.z, 2)] if anchor else None,
                        "screen": to_screen(at) if here else None,
                        "capture": shot("zc_m3b_%03d.png" % index)})
         index += 1
@@ -196,12 +199,40 @@ def job():
            started and peak == 7 and len(frames) > 10,
            started=started, frames=len(frames), peak_chakra=peak, first_event=str(manifested_at))
 
+    # ---------------------------------------------------------------- it became a place, and held still
+    # THE CHECK THE ANIMATION LANE DEPENDS ON. An orbit is only an orbit if the thing being orbited stays
+    # put: the frames above are sampled while the mission runs, so an anchored contract's world location
+    # must be identical across every one of them. A contract still pinned to the pawn's yaw frame would
+    # drift here the moment the Dog turned, and the Dog's "circle" would read as a chase.
+    anchored_seen = [f for f in frames if f.get("anchor")]
+    spread = 0.0
+    if len(anchored_seen) > 1:
+        xs = [a["anchor"][0] for a in anchored_seen]
+        ys = [a["anchor"][1] for a in anchored_seen]
+        zs = [a["anchor"][2] for a in anchored_seen]
+        spread = max(max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs))
+    RESULT["anchor"] = {"frames_anchored": len(anchored_seen), "spread_uu": round(spread, 2),
+                        "first": anchored_seen[0]["anchor"] if anchored_seen else None,
+                        "anchored_at_event": anchored_seen[0]["event"] if anchored_seen else None}
+    record("S08b", "the contract anchors once and does not move while the Dog does",
+           len(anchored_seen) > 8 and spread < 1.0, **RESULT["anchor"])
+
     # ---------------------------------------------------------------- and it went away again
     yield 1.0
     record("S09", "when the mission finished the contract was dismissed",
            not mission.is_orb_in_world() and mission.get_contracts_manifested() >= 1,
            contract=mission.is_orb_in_world(), manifested=mission.get_contracts_manifested(),
            capture=shot("zc_m3b_zz_dismissed.png"))
+
+    # ---------------------------------------------------------------- no handoff performance
+    # The founder removed the Relay Dog's handoff animation. The mission still HAS handoff beats -- Julius's
+    # own semantics are untouched -- so the proof is that those beats resolve to no act rather than that the
+    # beat disappeared.
+    handoff_frames = [f for f in frames if f["beat"] == "handoff"]
+    handoff_acts = sorted({f["dog"] for f in handoff_frames})
+    record("S09b", "handoff happens, and the Dog performs nothing for it",
+           len(handoff_frames) > 0 and handoff_acts == ["NONE"],
+           handoff_frames=len(handoff_frames), acts=handoff_acts)
 
     # ---------------------------------------------------------------- what it costs
     # The simulator is a ticker reading a table, so this measures the contract AND the adapter together

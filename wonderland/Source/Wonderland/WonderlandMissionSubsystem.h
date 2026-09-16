@@ -218,6 +218,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	bool IsMissionStripOnScreen() const { return MissionStrip.IsValid(); }
 
+	/** True once the contract has stopped following and become a place the Dog performs around. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	bool IsContractAnchored() const;
+
+	/** Where the contract is holding, world space. Zero when nothing is anchored. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FVector GetContractAnchor() const;
+
+	/** What the Relay Dog should be performing for the current beat, e.g. "PLANNING". */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString GetDogActLabel() const;
+
 	AWonderlandMissionOrb* GetOrb() const;
 
 private:

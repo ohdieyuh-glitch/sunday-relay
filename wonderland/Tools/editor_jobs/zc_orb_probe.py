@@ -16,18 +16,22 @@ import os
 SHOTS = os.path.join(os.path.dirname(CHANNEL), "captures", "zc")
 L = unreal.WonderlandUiTestLibrary
 
-# Forward (X) and right (Y) in the pawn's yaw frame, and a uniform scale. The built placement is first, so
-# the report always contains the thing it is being compared against.
+# Forward (X), right (Y), HEIGHT above the floor, and a uniform scale. The built placement is first, so the
+# report always contains the thing it is being compared against.
+#
+# THE GROUND ANSWER DOES NOT TRANSFER. (125, 80) was measured for a dais sitting on the flagstones, where
+# nothing else lives; the contract now FLOATS at 122 uu, which is the Jhinn's chest height, and the Jhinn
+# stands at Y=+110. The old winner puts a crystal directly in front of a companion. These trials are about
+# getting clear of BOTH companions in the air rather than clear of the Dog on the floor.
 CANDIDATES = [
-    ("built", 62.0, -30.0, 1.0),
-    ("near_left", 70.0, -95.0, 1.6),
-    ("near_right", 70.0, 95.0, 1.6),
-    ("ahead", 130.0, 0.0, 1.6),
-    ("ahead_left", 125.0, -80.0, 1.6),
-    ("ahead_right", 125.0, 80.0, 1.6),
-    ("ahead_left_big", 125.0, -80.0, 2.2),
-    ("wide_left", 95.0, -140.0, 2.2),
-    ("far_ahead_big", 190.0, -60.0, 2.6),
+    ("ground_era", 125.0, 80.0, 122.0, 1.0),
+    ("forward_right", 210.0, 60.0, 135.0, 1.35),
+    ("forward_centre", 215.0, 0.0, 150.0, 1.35),
+    ("high_right", 130.0, 85.0, 205.0, 1.3),
+    ("high_left", 130.0, -85.0, 205.0, 1.3),
+    ("far_forward", 280.0, 30.0, 150.0, 1.7),
+    ("wide_right_high", 150.0, 175.0, 170.0, 1.5),
+    ("over_the_dog", 60.0, 0.0, 230.0, 1.3),
 ]
 
 
@@ -45,8 +49,9 @@ def job():
     yield 5.0
     world = ues.get_game_world()
     controller = unreal.GameplayStatics.get_player_controller(world, 0)
-    mission = next((m for m in unreal.ObjectIterator(unreal.WonderlandMissionSubsystem)
-                    if m.get_beat_count() > 0 and m.is_orb_in_world()), None)
+    live = [m for m in unreal.ObjectIterator(unreal.WonderlandMissionSubsystem)
+            if m.is_mission_strip_on_screen()]
+    mission = live[0] if live else None
     if mission is None:
         RESULT["status"] = "error"
         RESULT["error"] = "no mission subsystem with an orb in the world"
@@ -72,7 +77,21 @@ def job():
 
     camera = unreal.GameplayStatics.get_player_camera_manager(world, 0)
 
-    for name, forward, right, scale in CANDIDATES:
+    # A CONTRACT ONLY EXISTS WHILE A TASK RUNS, so the probe has to start one before it can measure it.
+    mission.set_beat_by_id("coding_agent")
+    yield 1.2
+
+    orb_actor = next((a for a in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.WonderlandMissionOrb)), None)
+    if orb_actor is None:
+        RESULT["status"] = "error"
+        RESULT["error"] = "no contract manifested; nothing to place"
+        return
+
+    for name, forward, right, height, scale in CANDIDATES:
+        try:
+            orb_actor.set_editor_property("float_height_uu", height)
+        except Exception as exc:
+            RESULT.setdefault("height_error", str(exc))
         mission.set_orb_follow_offset(forward, right)
         mission.set_orb_scale(scale)
         # The follow snaps on an offset change; a beat's motion still needs a moment to settle.
@@ -113,17 +132,18 @@ def job():
         ok = L.capture_game_viewport(path)
         good = ok is True or (isinstance(ok, tuple) and ok and ok[0])
 
-        trial = {"name": name, "forward": forward, "right": right, "scale": scale,
+        trial = {"name": name, "forward": forward, "right": right, "height": height, "scale": scale,
                  "height_uu": round(height, 1), "foot_px": foot_px, "top_px": top_px,
                  "pixels_tall": None if pixels is None else round(pixels, 1),
                  "pixels_per_step": None if pixels is None else round(pixels / 9.0, 2),
                  "seen": seen, "capture": path if good else None}
         RESULT["trials"].append(trial)
-        emit(name, "TRIAL", "offset %.0f,%.0f scale %.1f" % (forward, right, scale), trial)
+        emit(name, "TRIAL", "offset %.0f,%.0f h%.0f scale %.1f" % (forward, right, height, scale), trial)
 
     # Leave it as it was found, so a probe never changes what the next job sees.
-    mission.set_orb_follow_offset(62.0, -30.0)
+    mission.set_orb_follow_offset(125.0, 80.0)
     mission.set_orb_scale(1.0)
+    mission.set_beat_by_id("idle")
 
     les.editor_request_end_play()
     yield (lambda: ues.get_game_world() is None, 60)
