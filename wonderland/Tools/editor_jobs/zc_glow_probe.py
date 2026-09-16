@@ -66,7 +66,7 @@ def job():
     controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-6.0, yaw=pawn.get_actor_rotation().yaw + 180.0))
     try:
         boom = pawn.get_editor_property("camera_boom")
-        boom.set_editor_property("target_arm_length", 260.0)
+        boom.set_editor_property("target_arm_length", 260.0, unreal.PropertyAccessChangeNotifyMode.NEVER)
     except Exception as error:
         emit("boom unchanged:", error)
     yield 2.5

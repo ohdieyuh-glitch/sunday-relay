@@ -46,7 +46,7 @@ def job():
             for tag, dyaw, pitch, arm in (("above", 0.0, -62.0, 1100.0), ("behind", 0.0, -14.0, 520.0),
                                           ("left", 90.0, -14.0, 520.0), ("front", 180.0, -14.0, 520.0),
                                           ("right", -90.0, -14.0, 520.0)):
-                boom.set_editor_property("target_arm_length", arm)
+                boom.set_editor_property("target_arm_length", arm, unreal.PropertyAccessChangeNotifyMode.NEVER)
                 controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=pitch, yaw=yaw + dyaw))
                 yield 0.8
                 path = os.path.join(SHOTS, "%s_%s.png" % (site, tag))
@@ -54,7 +54,7 @@ def job():
                 entry["files"].append(path)
             shots[site] = entry
             unreal.log_warning("WLSITESURVEY %s %s" % (site, entry["report"]))
-        boom.set_editor_property("target_arm_length", arm_was)
+        boom.set_editor_property("target_arm_length", arm_was, unreal.PropertyAccessChangeNotifyMode.NEVER)
         RESULT["status"] = "done"
     finally:
         try:

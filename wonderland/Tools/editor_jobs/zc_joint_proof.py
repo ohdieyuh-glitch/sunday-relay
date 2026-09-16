@@ -484,7 +484,7 @@ def job():
             # game ships is the rig that works in the world the game ships.
             for tag, dyaw, pitch, arm in (("near", 15.0, -14.0, 420.0), ("step", -25.0, -22.0, 500.0)):
                 if boom is not None:
-                    boom.set_editor_property("target_arm_length", arm)
+                    boom.set_editor_property("target_arm_length", arm, unreal.PropertyAccessChangeNotifyMode.NEVER)
 
                 # AIM, THEN CHECK, THEN STRAIGHTEN IF THE STEP-AROUND LOST SOMETHING. The offset exists to
                 # get the Jhinn out of the way, so it is worth having -- but not at the price of the shot.
@@ -520,7 +520,7 @@ def job():
                         "capture": shot("zc_joint_%s_%s_%d.png" % (name, tag, step)),
                     })
         if boom is not None and arm_was is not None:
-            boom.set_editor_property("target_arm_length", arm_was)
+            boom.set_editor_property("target_arm_length", arm_was, unreal.PropertyAccessChangeNotifyMode.NEVER)
         RESULT["work_portrait"] = work_portrait
 
         # THE CHECK IS THE COMPOSITION, NOT THE FILE COUNT. "Sixteen captures exist" is true of sixteen

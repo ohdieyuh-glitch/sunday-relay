@@ -20,6 +20,10 @@ import os
 import time
 
 L = unreal.WonderlandUiTestLibrary
+# CAMERA WRITES SEND NO CHANGE NOTIFICATION. A notified property write on the play pawn in PIE re-runs its construction
+# (measured 2026-09-16, zc_book_bisect): the Blueprint joints are rebuilt, the Dog keeps posing the old ones, and its book is
+# re-parented from the Body to the capsule -- over its head or on the floor in the film, never in the game.
+QUIET = unreal.PropertyAccessChangeNotifyMode.NEVER
 H = unreal.WonderlandHudTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "mission_experience")
 SCENARIOS = globals().get("SCENARIOS") or ["D", "A", "B", "C"]
@@ -42,6 +46,13 @@ FRAME_WIDTH = int(globals().get("FRAME_WIDTH") or 1600)
 # Dog's circle and sees it side-on as it walks round, with the Contract and the companions above it in frame.
 # Straight behind the Dog, the first film saw a white back, no book, and only the companions' feet at the top edge.
 CAMERA_ARM = 440.0
+# TWO FRAMINGS, blended (zc_camera_test, 2026-09-16). Filmed from high behind at one distance, the Dog's head hid its open
+# book and the turning page, the Dog stood on the Julius terminal's top edge and the companions left the top of the frame.
+# While the Dog reads the camera is close and low behind it, looking over its shoulder at the pages; while the companions
+# work it is wider, so their orbit, pulses and beams and the Contract stay in shot. (arm, socket y, socket z, pitch)
+READ_FRAMING = tuple(globals().get("READ_FRAMING") or (380.0, 40.0, 60.0, -8.0))
+WORK_FRAMING = tuple(globals().get("WORK_FRAMING") or (560.0, 40.0, 80.0, -6.0))
+FRAMING_BLEND = float(globals().get("FRAMING_BLEND") or 0.06)
 CAMERA_PITCH = float(globals().get("CAMERA_PITCH") or -12.0)
 AIM_DROP_UU = float(globals().get("AIM_DROP_UU") or 0.0)
 ROLE_NAMES = ["julius", "architect", "coder", "reviewer"]
@@ -110,9 +121,9 @@ def job():
         leaf = next((c for c in scene if c.get_name().startswith("MissionBookTurningPage")), None)
         boom = pawn.get_component_by_class(unreal.SpringArmComponent)
         arm_was = float(boom.target_arm_length) if boom is not None else None
-        if boom is not None:
-            boom.set_editor_property("target_arm_length", CAMERA_ARM)
-        RESULT["camera"] = {"arm": CAMERA_ARM, "arm_was": arm_was, "pitch": CAMERA_PITCH}
+        socket_was = boom.socket_offset if boom is not None else None
+        RESULT["camera"] = {"read_framing": READ_FRAMING, "work_framing": WORK_FRAMING, "blend": FRAMING_BLEND,
+                            "arm_was": arm_was}
         L.focus_game_viewport()
         yield 1.0
 
@@ -143,6 +154,7 @@ def job():
             console(world, "slomo %.3f" % SLOMO)
             last_tick = time.time()
             yaw = controller.get_control_rotation().yaw
+            framing = list(WORK_FRAMING)
             aim = None
             frames = []
             index = 0
@@ -161,7 +173,12 @@ def job():
                         want += VERIFY_YAW_OFFSET
                     delta = (want - yaw + 180.0) % 360.0 - 180.0
                     yaw += delta * 0.08
-                controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=CAMERA_PITCH, yaw=yaw))
+                target = READ_FRAMING if (book is not None and book.is_visible()) else WORK_FRAMING
+                framing = [a + (b - a) * FRAMING_BLEND for a, b in zip(framing, target)]
+                if boom is not None:
+                    boom.set_editor_property("target_arm_length", framing[0], QUIET)
+                    boom.set_editor_property("socket_offset", unreal.Vector(0.0, framing[1], framing[2]), QUIET)
+                controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=framing[3], yaw=yaw))
 
                 path = os.path.join(folder, "f_%05d.jpg" % index)
                 ok = H.capture_viewport_jpeg(path, FRAME_WIDTH, 86)
@@ -249,7 +266,8 @@ def job():
             yield 0.5
 
         if boom is not None and arm_was is not None:
-            boom.set_editor_property("target_arm_length", arm_was)
+            boom.set_editor_property("target_arm_length", arm_was, QUIET)
+            boom.set_editor_property("socket_offset", socket_was, QUIET)
         RESULT["passed"] = sum(1 for t in tests if t["pass"])
         RESULT["failed"] = [t["id"] for t in tests if not t["pass"]]
         RESULT["status"] = "done"

@@ -119,7 +119,7 @@ def job():
     try:
         boom = pawn.get_editor_property("camera_boom")
         arm = boom.get_editor_property("target_arm_length")
-        boom.set_editor_property("target_arm_length", max(arm * 0.62, 220.0))
+        boom.set_editor_property("target_arm_length", max(arm * 0.62, 220.0), unreal.PropertyAccessChangeNotifyMode.NEVER)
         yield 1.5
         shot("zc_02b_front_close.png")
     except Exception as error:
@@ -127,11 +127,11 @@ def job():
     RESULT["boom_arm_length"] = arm
     # A wide front shot: the Dog and both companions framed between the two panels.
     if boom is not None and arm is not None:
-        boom.set_editor_property("target_arm_length", arm * 1.35)
+        boom.set_editor_property("target_arm_length", arm * 1.35, unreal.PropertyAccessChangeNotifyMode.NEVER)
         controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-12.0, yaw=rot.yaw + 180.0))
         yield 1.5
         shot("zc_02c_front_wide.png")
-        boom.set_editor_property("target_arm_length", max(arm * 0.62, 220.0))
+        boom.set_editor_property("target_arm_length", max(arm * 0.62, 220.0), unreal.PropertyAccessChangeNotifyMode.NEVER)
         controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-6.0, yaw=rot.yaw + 180.0))
         yield 1.0
 
@@ -169,7 +169,7 @@ def job():
            terminal=ui.is_live_terminal_open(), companions=ui.are_companion_terminals_on_screen(),
            capture=shot("zc_04b_terminals_gone.png"))
     if boom is not None and arm is not None:
-        boom.set_editor_property("target_arm_length", arm)
+        boom.set_editor_property("target_arm_length", arm, unreal.PropertyAccessChangeNotifyMode.NEVER)
 
     # ------------------------------------------------------------------ following
     controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-10.0, yaw=rot.yaw))
@@ -199,13 +199,13 @@ def job():
                                             ("ahead_wide", (60.0, -170.0), (60.0, 170.0))):
         for body, (ox, oy) in zip(bodies, (llm_offset, agent_offset)):
             if body:
-                body.set_editor_property("follow_offset", unreal.Vector(ox, oy, 0.0))
+                body.set_editor_property("follow_offset", unreal.Vector(ox, oy, 0.0), unreal.PropertyAccessChangeNotifyMode.NEVER)
                 body.snap_to_target()
         yield 2.5
         RESULT["offset_trials"].append({"label": label, "capture": shot("zc_07_offset_%s.png" % label)})
     for body, (ox, oy) in zip(bodies, ((-40.0, -135.0), (-40.0, 140.0))):
         if body:
-            body.set_editor_property("follow_offset", unreal.Vector(ox, oy, 0.0))
+            body.set_editor_property("follow_offset", unreal.Vector(ox, oy, 0.0), unreal.PropertyAccessChangeNotifyMode.NEVER)
             body.snap_to_target()
     yield 1.0
 
@@ -213,14 +213,14 @@ def job():
     if RIM_DIR and os.path.isdir(RIM_DIR):
         controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-6.0, yaw=pawn.get_actor_rotation().yaw + 180.0))
         if boom is not None and arm is not None:
-            boom.set_editor_property("target_arm_length", max(arm * 0.62, 220.0))
+            boom.set_editor_property("target_arm_length", max(arm * 0.62, 220.0), unreal.PropertyAccessChangeNotifyMode.NEVER)
         for label, directory in (("rim", RIM_DIR), ("lit", FIGURE_DIR)):
             unreal.SystemLibrary.execute_console_command(world, "wl.Companion.FigureDir " + directory)
             unreal.SystemLibrary.execute_console_command(world, "wl.Companion.Reload")
             yield 3.0
             RESULT.setdefault("shell_ab", []).append({"label": label, "capture": shot("zc_08_shell_%s.png" % label)})
         if boom is not None and arm is not None:
-            boom.set_editor_property("target_arm_length", arm)
+            boom.set_editor_property("target_arm_length", arm, unreal.PropertyAccessChangeNotifyMode.NEVER)
         controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-10.0, yaw=pawn.get_actor_rotation().yaw))
         yield 1.5
 

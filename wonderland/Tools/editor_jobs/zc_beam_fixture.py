@@ -34,7 +34,7 @@ def job():
         for spec in RUNS:
             run, slow, letter, terminal = spec[:4]
             extra = spec[4] if len(spec) > 4 else ""
-            boom.set_editor_property("target_arm_length", 440.0 if extra == "arm" else arm_was)
+            boom.set_editor_property("target_arm_length", 440.0 if extra == "arm" else arm_was, unreal.PropertyAccessChangeNotifyMode.NEVER)
             mission.stop_fixture()
             mission.set_joined_in(False, False)
             mission.set_beat_by_id("idle")
@@ -70,7 +70,7 @@ def job():
                 if not mission.is_fixture_running() and not mission.is_orb_in_world() and len(samples) > 5:
                     break
             unreal.SystemLibrary.execute_console_command(world, "slomo 1")
-            boom.set_editor_property("target_arm_length", arm_was)
+            boom.set_editor_property("target_arm_length", arm_was, unreal.PropertyAccessChangeNotifyMode.NEVER)
             RESULT[run] = samples
             RESULT[run + "_summary"] = {
                 "verifying": sum(1 for s in samples if s[1] == "verifying"),
