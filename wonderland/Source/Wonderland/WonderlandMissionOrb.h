@@ -1,26 +1,33 @@
-// WONDERLAND — THE MISSION CONTRACT ORB. What the Relay Dog is carrying, set down on the ground.
+// WONDERLAND — THE MISSION CONTRACT. A floating crystal that exists only while a task is being executed.
 //
-// THE FOUNDER'S SHAPE, 2026-09-15: SMALL, and GROUND-POSITIONED — not floating on the Carry-On. So this is
-// a thing at the Dog's feet that the Dog walks with, the way a lamp travels with the person holding it,
-// and the mission it represents is read off the ground rather than off the Dog's back.
+// THE FOUNDER'S CANON, 2026-09-16, WHICH REPLACES THE PHASE 3 GROUND DAIS:
 //
-// WHAT IT IS MADE OF, and why it reads at a glance:
+//   IT IS NOT FURNITURE. A Mission Contract does not exist because someone spawned into Wonderland, and it
+//   does not trail the player around while they explore. It is MANIFESTED by a task being executed —
+//   through Julius, through a Jhinn AI Agent, or through an LLM Companion that is actually participating —
+//   and it is gone again when no task is running. The world is empty of contracts most of the time, and
+//   that emptiness is the point: seeing one means something is happening.
 //
-//   A DAIS on the floor, turning. The turn is the mission moving: forward while work advances, BACKWARDS
-//   through a repair, and stopped dead on a block. Nobody has to be told that; it is how things move.
+//   IT FLOATS. A small, glowing, diamond-cut crystal in the air beside the player, not a plate on the
+//   floor. Red at the moment a task begins, then climbing the chakra as the mission advances.
 //
-//   A SPINE OF SEVEN rising from it, one per chakra, in the metaphor's own arrangement: root at the base,
-//   crown at the top. Steps the task has reached burn in their own colour; steps ahead sit dark on a matte
-//   collar that is always there, so the set stays COUNTABLE — "four of seven" — rather than a colour a
-//   viewer has to remember the order of. Seven around the ring was tried first and rejected offline: from
-//   any one camera only four of them face you, which is no way to count.
+// WHAT IT IS MADE OF, from the founder's reference:
 //
-//   A CORE above it, in the colour of the step the task has reached, bobbing and pulsing. Its pulse is the
-//   tempo of the work: fast and shallow while coding, slow and deep while waiting on a person.
+//   THE CRYSTAL — an eight-sided bipyramid, taller than it is wide, glowing in the colour of the step the
+//   task has reached. This is the whole silhouette; everything else is trim on it.
 //
-// IT RESETS PER TASK. MissionStart advances the colour to Root, which drops whatever the last task climbed
-// to. A progression that carried over between tasks would be a progress bar for the session, and the
-// founder asked for one per task.
+//   THE FRAME — ivory-gold, LIT rather than glowing, so the crystal reads as a made object held in a
+//   setting rather than as a floating light. A spire above, a point below, caps at the four equator
+//   corners, and a girdle around the waist.
+//
+//   THE STAR — a small white flare at the heart, where the frame's axes cross.
+//
+//   THE ORBIT — one thin ring sweeping round it, leaning, turning with the mission. The turn is the
+//   mission moving: forward while work advances, BACKWARDS through a repair, stopped dead on a block.
+//
+//   THE MOTES — a few sparks drifting round the crystal, in its colour.
+//
+// IT RESETS PER TASK. A new Mission Contract starts at Root and drops whatever the last one climbed to.
 //
 // NO COLLISION, NO NAVIGATION, NO INPUT — the same rules the companions keep. It cannot block the Dog, a
 // camera trace, or a travel landing.
@@ -63,24 +70,25 @@ public:
 	/** Show a beat. The chakra folds: a beat that holds keeps the step the task already reached. */
 	void SetBeat(EWonderlandMissionBeat Beat);
 
-	/** Put the progression back to nothing, as a new task does. */
+	/** Put the progression back to nothing, as a new Mission Contract does. */
 	void ResetProgression();
 
 	/**
-	 * Uniform scale on the whole orb. Everything it is built from is relative, so this grows the dais, the
-	 * spine and the core together, and leaves the floor trace alone.
-	 *
-	 * IT EXISTS BECAUSE "SMALL" AND "LEGIBLE" FIGHT. Measured from the play camera on 2026-09-15, the orb
-	 * at its built size covers about 34 px, which puts each of the seven spine steps at roughly two pixels
-	 * — not a progression anybody can count. A probe trials sizes from the camera that actually matters.
+	 * How far the contract has manifested, 0..1. A contract does not blink into existence: it draws itself
+	 * in over MaterialiseSeconds when a task starts, and fades back out when the task is done. Driven from
+	 * outside so the owner decides WHEN, and the actor only decides what that looks like.
 	 */
+	void SetManifest(float Target);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	float GetManifest() const { return Manifest; }
+
+	/** True once the fade-out has finished and the owner may destroy this actor. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	bool IsFullyDismissed() const { return ManifestTarget <= 0.0f && Manifest <= 0.001f; }
+
 	void SetOrbScale(float Scale);
-
-	/** Move where it stands in the pawn's yaw frame, uu. Snaps, so a probe sees the new place at once. */
 	void SetFollowOffset(float Forward, float Right);
-
-	/** How tall the whole orb stands, uu, at its current scale: floor to the top of the core. */
-	float GetOrbHeightUU() const;
 
 	EWonderlandMissionBeat GetBeat() const { return Beat; }
 	EWonderlandChakra GetChakra() const { return Chakra; }
@@ -95,61 +103,46 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	int32 GetBoxCount() const { return BoxCount; }
 
+	/** How tall the crystal stands, uu, at its current scale. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	float GetOrbHeightUU() const;
+
 	/**
-	 * Where the dais sits, in the pawn's yaw frame: X forward, Y right, uu. Z is ignored -- it meets the floor.
+	 * Where it hangs, in the pawn's yaw frame: X forward, Y right, uu.
 	 *
-	 * MEASURED FROM THE PLAY CAMERA, 2026-09-15, not chosen. Nine placements were trialled in PIE and
-	 * looked at. Forward-and-right wins for one reason: the Dog's own back leg eats anything near its
-	 * centre line, the LLM Companion floats at Y=-88 and hides anything to the left, and the Jhinn at
-	 * Y=+110 is far enough out to leave a clear lane at +80. Straight ahead (130, 0) vanishes behind the
-	 * Dog; wide left (95, -140) vanishes behind the LLM Companion even at 2.2x.
+	 * MEASURED FROM THE PLAY CAMERA, 2026-09-15. Forward-and-right is the one clear lane: the Dog's own
+	 * body eats anything near its centre line, and the LLM Companion floats at Y=-88 and hides the left.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
 	FVector FollowOffset = FVector(125.0, 80.0, 0.0);
 
-	/**
-	 * How big the orb is built, as a multiple. 1.6 puts it at 80 uu: above the kerb line (28 uu), under the
-	 * garden bench (117) and the urn (202), and about the Dog's own body height, so it reads as the Dog's
-	 * object rather than as scenery or as a rival for the eye. Wonderland's props are large -- a waymarker
-	 * lamp is 9.7 m -- and anything placed at human scale here disappears.
-	 *
-	 * MORE SCALE IS NOT THE LEVER. The trials showed 2.6x bought no more readable steps than 2.2x once the
-	 * orb had been pushed past the Dog; clearing the silhouette is what buys pixels.
-	 */
+	/** Height of the crystal's heart above the floor, uu. Clearly airborne, near the Dog's eyeline. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	float BuiltScale = 1.6f;
+	float FloatHeightUU = 122.0f;
 
-	/** Radius of the turning dais on the floor, uu. */
+	/** Half-height of the crystal, uu: the distance from its heart to the tip of a pyramid. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	float DaisRadiusUU = 24.0f;
+	float CrystalHalfHeightUU = 28.0f;
 
-	/** Height of the root step above the floor, uu. */
+	/** Half-width of the crystal at its waist, uu. Narrower than it is tall, as a cut stone is. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	float SpineBaseUU = 5.0f;
+	float CrystalHalfWidthUU = 15.0f;
 
-	/** Rise from one step to the next, uu. */
+	/** Uniform scale over the whole contract. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	float SpinePitchUU = 3.8f;
+	float BuiltScale = 1.0f;
 
-	/** Width of a step, uu. */
+	/** Time constant of the follow, seconds. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	float SpineWidthUU = 7.4f;
-
-	/** Height of the core's centre above the floor, uu. Clear of the spine, so it reads as floating. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	float CoreHeightUU = 42.0f;
-
-	/** Radius of the core, uu. Small: this is a held thing, not a monument -- the whole orb stands 50 uu. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	float CoreRadiusUU = 8.0f;
-
-	/** Time constant of the follow, seconds. Slower than a companion: a thing on the ground has weight. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	float FollowLagSeconds = 0.45f;
+	float FollowLagSeconds = 0.42f;
 
 	/** Farther than this from the follow position and it snaps rather than glides: a teleport. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
 	float SnapDistanceUU = 1800.0f;
+
+	/** Seconds to draw itself in when a task starts, and to fade out when one ends. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
+	float MaterialiseSeconds = 0.55f;
 
 	/**
 	 * What an unlit colour is multiplied by to read against a physically-based Wonderland afternoon.
@@ -157,16 +150,6 @@ public:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
 	float GlowExposure = 4000.0f;
-
-	/**
-	 * How dim a step the task has not reached sits, as a fraction of a lit one.
-	 *
-	 * THE RESPONSE IS STEEP, not linear: the Phase 1 probe found x1, x30 and x300 all read as black in
-	 * daylight and x3000 as readable, so this lands deliberately between -- dim but present. If it reads
-	 * as black anyway the matte collar behind it still carries the count, which is why the collar exists.
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	float UnreachedPipFraction = 0.30f;
 
 	/** Seconds to ease from one beat's motion to the next. A beat that asks for a person CUTS instead. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
@@ -183,37 +166,35 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Wonderland|Mission")
 	TObjectPtr<USceneComponent> Root;
 
-	/** Turns. The dais and the seven pips hang from this. */
+	/** Hovers and turns. The crystal, the frame and the star hang from this. */
 	UPROPERTY(VisibleAnywhere, Category = "Wonderland|Mission")
-	TObjectPtr<USceneComponent> DaisRoot;
+	TObjectPtr<USceneComponent> CrystalRoot;
 
-	/** Bobs and jitters. The core and its band hang from this. */
+	/** Turns the other way and leans, so the ring reads as sweeping round rather than carried. */
 	UPROPERTY(VisibleAnywhere, Category = "Wonderland|Mission")
-	TObjectPtr<USceneComponent> CoreRoot;
+	TObjectPtr<USceneComponent> RingRoot;
 
-	/** Turns the other way, so the band reads as held rather than carried. */
+	/** Drifts on its own clock. */
 	UPROPERTY(VisibleAnywhere, Category = "Wonderland|Mission")
-	TObjectPtr<USceneComponent> BandRoot;
+	TObjectPtr<USceneComponent> MoteRoot;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> Meshes;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInstanceDynamic> DaisMid;
+	TObjectPtr<UMaterialInstanceDynamic> CrystalMid;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInstanceDynamic> CoreMid;
+	TObjectPtr<UMaterialInstanceDynamic> FrameMid;
 
 	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInstanceDynamic> BandMid;
+	TObjectPtr<UMaterialInstanceDynamic> StarMid;
 
-	/** The matte collars behind the seven. One colour, never repainted: they are the countable set. */
 	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInstanceDynamic> SpineMid;
+	TObjectPtr<UMaterialInstanceDynamic> RingMid;
 
-	/** One per chakra, in order. Each keeps its own colour for the life of the orb; only brightness moves. */
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<UMaterialInstanceDynamic>> PipMids;
+	TObjectPtr<UMaterialInstanceDynamic> MoteMid;
 
 	TWeakObjectPtr<APlayerController> FollowController;
 
@@ -226,9 +207,12 @@ private:
 
 	/** Accumulated, and wrapped: an angle has no rest pose to be computed from. */
 	float SpinDegrees = 0.0f;
-	float BandDegrees = 0.0f;
+	float RingDegrees = 0.0f;
 	float Phase = 0.0f;
+	float Manifest = 0.0f;
+	float ManifestTarget = 1.0f;
 	int32 BoxCount = 0;
+	bool bHasManifested = false;
 	bool bHasSnapped = false;
 	bool bBuilt = false;
 };

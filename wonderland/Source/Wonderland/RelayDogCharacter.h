@@ -207,7 +207,39 @@ protected:
 	 *  in RelayDogStride, where stairs are provable without one. */
 	float TraceFootGround(float ForwardUU, float LateralUU) const;
 
+	/**
+	 * HOW OFTEN JULIUS BLINKS, seconds between blinks on average.
+	 *
+	 * THE FOUNDER, 2026-09-16: "the dog does not frequently blink he just stares". The LLM Companion and
+	 * the Jhinn blink because their figure files give their eye parts a `blink` motion; the Dog's eyes are
+	 * generated joints with no motion at all, so they were simply held open forever. A staring Compound
+	 * Agent reads as switched off next to two companions that are visibly alive.
+	 *
+	 * Faster than the companions' 5.2 s on purpose -- this is the agent the player is wearing, seen close
+	 * and constantly, and at the companions' rate it still reads as a stare.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Relay Dog|Face")
+	float BlinkPeriodSeconds = 3.2f;
+
+	/** How long an eye is shut, seconds. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Relay Dog|Face")
+	float BlinkCloseSeconds = 0.13f;
+
+	/** How far an eye squashes at the bottom of a blink. Not zero: a voxel eye that vanishes reads as a hole. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Relay Dog|Face")
+	float BlinkSquash = 0.10f;
+
 private:
+	/**
+	 * The eye scale at a moment, 1 open and BlinkSquash shut.
+	 *
+	 * COMPUTED ABSOLUTELY FROM THE CLOCK, like every other pose in this class: nothing accumulates, so a
+	 * long frame or a paused editor cannot leave the Dog with one eye shut. The interval is jittered from
+	 * the blink's own index rather than kept fixed, because a perfectly regular blink reads as a machine,
+	 * and every fourth one is a double -- which is what real blinking mostly is.
+	 */
+	float EyeScaleAt(float TimeSeconds) const;
+
 	RelayDogStride::FDogAnimator Animator;
 
 	UPROPERTY(Transient)
@@ -218,6 +250,14 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<USceneComponent> TailPivot = nullptr;
+
+	/** dog_canon's eyeLeft / eyeRight. OPTIONAL, unlike the limbs: a Dog generated before the eyes were
+	 *  joints still walks, and says so once rather than refusing to bind. */
+	UPROPERTY(Transient)
+	TObjectPtr<USceneComponent> EyeLeftPivot = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USceneComponent> EyeRightPivot = nullptr;
 
 	UPROPERTY(Transient)
 	FRelayDogLeg LegLeft;

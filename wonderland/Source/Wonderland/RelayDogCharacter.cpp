@@ -29,6 +29,8 @@ namespace
 	const TCHAR* const PivotShinLeft = TEXT("Pivot_shinLeft");
 	const TCHAR* const PivotShinRight = TEXT("Pivot_shinRight");
 	const TCHAR* const PivotTail = TEXT("Pivot_tail");
+	const TCHAR* const PivotEyeLeft = TEXT("Pivot_eyeLeft");
+	const TCHAR* const PivotEyeRight = TEXT("Pivot_eyeRight");
 
 	USceneComponent* FindPivot(AActor* Actor, const TCHAR* Name)
 	{
@@ -145,6 +147,16 @@ bool ARelayDogCharacter::BindJoints()
 	BodyRoot = FindPivot(this, PivotBody);
 	HeadPivot = FindPivot(this, PivotHead);
 	TailPivot = FindPivot(this, PivotTail);
+	// THE EYES ARE OPTIONAL, unlike every limb below. They were generated as joints later than the rest,
+	// so a Dog built by an older dog_v2 has none -- and a Compound Agent that cannot blink should still
+	// walk. Missing eyes are said once, at Verbose, rather than failing the bind.
+	EyeLeftPivot = FindPivot(this, PivotEyeLeft);
+	EyeRightPivot = FindPivot(this, PivotEyeRight);
+	if (EyeLeftPivot == nullptr || EyeRightPivot == nullptr)
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("WLDOG no eye pivots (%s/%s); Julius will not blink"),
+			PivotEyeLeft, PivotEyeRight);
+	}
 	ArmLeft.Shoulder = FindPivot(this, PivotArmLeft);
 	ArmLeft.Forearm = FindPivot(this, PivotForearmLeft);
 	ArmRight.Shoulder = FindPivot(this, PivotArmRight);
@@ -996,6 +1008,47 @@ void ARelayDogCharacter::BeginPlay()
 	}
 }
 
+float ARelayDogCharacter::EyeScaleAt(float TimeSeconds) const
+{
+	const float Period = FMath::Max(BlinkPeriodSeconds, 0.25f);
+	const float Close = FMath::Max(BlinkCloseSeconds, 0.02f);
+
+	// Which blink window we are in, and where inside it. Both from the clock, so nothing accumulates.
+	const float Index = FMath::FloorToFloat(TimeSeconds / Period);
+	const float Cycle = TimeSeconds - Index * Period;
+
+	// A deterministic hash of the window index, 0..1. The same second always produces the same blink,
+	// which is what lets a proof job photograph one.
+	auto Hash = [](float Seed)
+	{
+		return FMath::Frac(FMath::Sin(Seed * 12.9898f) * 43758.5453f);
+	};
+	const float Roll = Hash(Index);
+
+	// Blink somewhere in the first two thirds of the window, so the gaps vary instead of ticking.
+	const float At = Roll * (Period - Close * 3.0f) * 0.66f;
+	// Every fourth window or so, blink twice -- which is what most real blinking is.
+	const bool bDouble = Hash(Index + 7.0f) < 0.28f;
+
+	auto Shut = [this, Close](float Since)
+	{
+		if (Since < 0.0f || Since >= Close)
+		{
+			return 1.0f;
+		}
+		// Down and back up, with the closed moment at the middle.
+		const float Away = FMath::Abs(Since - Close * 0.5f) / (Close * 0.5f);
+		return FMath::Lerp(FMath::Clamp(BlinkSquash, 0.02f, 1.0f), 1.0f, Away);
+	};
+
+	float Scale = Shut(Cycle - At);
+	if (bDouble)
+	{
+		Scale = FMath::Min(Scale, Shut(Cycle - (At + Close * 1.9f)));
+	}
+	return Scale;
+}
+
 void ARelayDogCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -1005,6 +1058,23 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		// spawned before its own construction script finishes would not.
 		bJointsBound = BindJoints();
 		if (!bJointsBound) return;
+	}
+
+	// ---------------------------------------------------------------- the face
+	// Cheap enough to do before anything else can return early: two scale writes, no allocation, and the
+	// Compound Agent blinking is the difference between a companion and a mannequin.
+	if (EyeLeftPivot != nullptr || EyeRightPivot != nullptr)
+	{
+		const UWorld* BlinkWorld = GetWorld();
+		const float Scale = EyeScaleAt(BlinkWorld != nullptr ? static_cast<float>(BlinkWorld->GetTimeSeconds()) : 0.0f);
+		if (EyeLeftPivot != nullptr)
+		{
+			EyeLeftPivot->SetRelativeScale3D(FVector(1.0, 1.0, Scale));
+		}
+		if (EyeRightPivot != nullptr)
+		{
+			EyeRightPivot->SetRelativeScale3D(FVector(1.0, 1.0, Scale));
+		}
 	}
 
 	// ---------------------------------------------------------------- driving

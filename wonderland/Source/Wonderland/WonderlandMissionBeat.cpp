@@ -48,10 +48,17 @@ namespace
 
 	// HANDOFF HOLDS ITS COLOUR. Work moving between roles is not progress through the task; it is the same
 	// work changing hands, and an orb that stepped forward for it would count the journey twice.
+	// A THIRD GAP, found while building the Phase 3B adapter. This row used to claim `architect.started,
+	// coder.started, review.started` -- but those events are the moments roles BEGIN, which are three other
+	// beats. A handoff is the interval BETWEEN them, and the catalogue has no event for it: Julius reports
+	// that a role started, never that work changed hands. Claiming those three here also made the adapter
+	// ambiguous, because one event type would have resolved to two different beats.
 	{ MBeat::Handoff, TEXT("HANDOFF"), TEXT("Work product is moving between roles. No role is executing."),
 	  MPhase::Handoff, MAccent::Unobserved, MChakra::None, false, false, false,
-	  TEXT("architect.started, coder.started, review.started"),
 	  TEXT(""),
+	  TEXT("Nothing reports work CHANGING HANDS. `architect.started`, `coder.started` and `review.started` "
+	       "report a role BEGINNING, which are three other beats; the interval between them is what this "
+	       "shows, and no event marks it."),
 	  { 0.60f, 6.0f, 1.2f, 1.00f, 0.25f, 0.0f, 1.00f, 1.00f } },
 
 	/* ---------------------------------------------------------------- the three roles */
@@ -236,6 +243,11 @@ bool WonderlandBeatAwaitsAnEvent(EWonderlandMissionBeat Beat)
 	const FWonderlandBeatReading& Reading = WonderlandBeatReading(Beat);
 	// Unobserved is the ABSENCE of a report, so it waits on nothing; it is not a gap in the catalogue.
 	return Beat != EWonderlandMissionBeat::Unobserved && FCString::Strlen(Reading.Events) == 0;
+}
+
+bool WonderlandBeatShowsContract(EWonderlandMissionBeat Beat)
+{
+	return Beat != EWonderlandMissionBeat::Unobserved && Beat != EWonderlandMissionBeat::Idle;
 }
 
 const TCHAR* WonderlandChakraName(EWonderlandChakra Chakra)

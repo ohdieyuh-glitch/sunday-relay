@@ -12,38 +12,57 @@ DEFINE_LOG_CATEGORY_STATIC(LogWonderlandMission, Log, All);
 
 namespace
 {
-	// ENGINE CONTENT ONLY, so the orb needs nothing from the world's Content to be drawn. Both parents are
-	// cleared for instanced static meshes on disk; the glow one is what the companions' eyes already use.
+	// ENGINE CONTENT ONLY, so a contract needs nothing from the world's Content to be drawn. Both parents
+	// are cleared for instanced static meshes on disk; the glow one is what the companions' eyes use.
 	const TCHAR* const MissionOrbLitParent = TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial");
 	const TCHAR* const MissionOrbGlowParent = TEXT("/Engine/EngineDebugMaterials/LevelColorationUnlitMaterial.LevelColorationUnlitMaterial");
 	const TCHAR* const MissionOrbCubePath = TEXT("/Engine/BasicShapes/Cube.Cube");
 
 	/** The engine cube is 100 uu on a side. */
-	FTransform MissionOrbBox(const FVector& Centre, const FVector& SizeUU, float YawDegrees = 0.0f)
+	FTransform MissionOrbBox(const FVector& Centre, const FVector& SizeUU, const FRotator& Turn = FRotator::ZeroRotator)
 	{
-		return FTransform(FRotator(0.0f, YawDegrees, 0.0f), Centre, SizeUU / 100.0f);
+		return FTransform(Turn, Centre, SizeUU / 100.0f);
 	}
 
 	/**
-	 * A hollow ball of cubes. SHELL, NOT SOLID: the inside of a glowing ball is never seen and every cube in
-	 * there is an instance drawn for nobody.
+	 * A HOLLOW BIPYRAMID: two square pyramids base to base, which is the diamond cut in the founder's
+	 * reference. Shell only -- the inside of a glowing stone is never seen, and every cube in there is an
+	 * instance drawn for nobody.
+	 *
+	 * A cell belongs to the surface when it is inside the solid and at least one neighbour is not.
 	 */
-	void MissionOrbBall(TArray<FTransform>& Out, float RadiusUU, float CellUU)
+	void MissionOrbDiamond(TArray<FTransform>& Out, float HalfWidth, float HalfHeight, float Cell)
 	{
-		const int32 Reach = FMath::Max(1, FMath::CeilToInt(RadiusUU / CellUU));
-		const float Outer = RadiusUU;
-		const float Inner = RadiusUU - CellUU * 1.05f;
-		for (int32 X = -Reach; X <= Reach; ++X)
+		const int32 ReachXY = FMath::Max(1, FMath::CeilToInt(HalfWidth / Cell));
+		const int32 ReachZ = FMath::Max(1, FMath::CeilToInt(HalfHeight / Cell));
+		auto Inside = [HalfWidth, HalfHeight, Cell](int32 X, int32 Y, int32 Z)
 		{
-			for (int32 Y = -Reach; Y <= Reach; ++Y)
+			// |x|/w + |y|/w + |z|/h <= 1 is the octahedron; its waist is a square turned on its corner,
+			// which is what gives the reference its facets rather than a cone.
+			const float Fx = FMath::Abs(static_cast<float>(X) * Cell) / HalfWidth;
+			const float Fy = FMath::Abs(static_cast<float>(Y) * Cell) / HalfWidth;
+			const float Fz = FMath::Abs(static_cast<float>(Z) * Cell) / HalfHeight;
+			return (Fx + Fy + Fz) <= 1.0f;
+		};
+		for (int32 X = -ReachXY; X <= ReachXY; ++X)
+		{
+			for (int32 Y = -ReachXY; Y <= ReachXY; ++Y)
 			{
-				for (int32 Z = -Reach; Z <= Reach; ++Z)
+				for (int32 Z = -ReachZ; Z <= ReachZ; ++Z)
 				{
-					const FVector Cell(X * CellUU, Y * CellUU, Z * CellUU);
-					const float D = Cell.Size();
-					if (D <= Outer && D >= Inner)
+					if (!Inside(X, Y, Z))
 					{
-						Out.Add(MissionOrbBox(Cell, FVector(CellUU)));
+						continue;
+					}
+					const bool bSurface =
+						!Inside(X + 1, Y, Z) || !Inside(X - 1, Y, Z) ||
+						!Inside(X, Y + 1, Z) || !Inside(X, Y - 1, Z) ||
+						!Inside(X, Y, Z + 1) || !Inside(X, Y, Z - 1);
+					if (bSurface)
+					{
+						Out.Add(MissionOrbBox(
+							FVector(static_cast<float>(X) * Cell, static_cast<float>(Y) * Cell, static_cast<float>(Z) * Cell),
+							FVector(Cell)));
 					}
 				}
 			}
@@ -68,7 +87,7 @@ AWonderlandMissionOrb::AWonderlandMissionOrb()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = true;
-	// After movement, so the orb settles where the Dog IS this frame rather than where it was.
+	// After movement, so the contract settles where the Dog IS this frame rather than where it was.
 	PrimaryActorTick.TickGroup = TG_PostPhysics;
 	SetCanBeDamaged(false);
 	SetActorEnableCollision(false);
@@ -77,23 +96,23 @@ AWonderlandMissionOrb::AWonderlandMissionOrb()
 	Root->SetMobility(EComponentMobility::Movable);
 	SetRootComponent(Root);
 
-	DaisRoot = CreateDefaultSubobject<USceneComponent>(TEXT("Dais"));
-	DaisRoot->SetMobility(EComponentMobility::Movable);
-	DaisRoot->SetupAttachment(Root);
+	CrystalRoot = CreateDefaultSubobject<USceneComponent>(TEXT("Crystal"));
+	CrystalRoot->SetMobility(EComponentMobility::Movable);
+	CrystalRoot->SetupAttachment(Root);
 
-	CoreRoot = CreateDefaultSubobject<USceneComponent>(TEXT("Core"));
-	CoreRoot->SetMobility(EComponentMobility::Movable);
-	CoreRoot->SetupAttachment(Root);
+	RingRoot = CreateDefaultSubobject<USceneComponent>(TEXT("Ring"));
+	RingRoot->SetMobility(EComponentMobility::Movable);
+	RingRoot->SetupAttachment(CrystalRoot);
 
-	BandRoot = CreateDefaultSubobject<USceneComponent>(TEXT("Band"));
-	BandRoot->SetMobility(EComponentMobility::Movable);
-	BandRoot->SetupAttachment(CoreRoot);
+	MoteRoot = CreateDefaultSubobject<USceneComponent>(TEXT("Motes"));
+	MoteRoot->SetMobility(EComponentMobility::Movable);
+	MoteRoot->SetupAttachment(CrystalRoot);
 }
 
 void AWonderlandMissionOrb::BeginPlay()
 {
 	Super::BeginPlay();
-	SetOrbScale(BuiltScale);
+	SetActorScale3D(FVector(FMath::Clamp(BuiltScale, 0.2f, 6.0f)));
 	Build();
 	Motion = WonderlandBeatReading(Beat).Motion;
 	MotionTarget = Motion;
@@ -107,7 +126,7 @@ UInstancedStaticMeshComponent* AWonderlandMissionOrb::MakeMesh(FName Name, UScen
 	UMaterialInterface* ParentMaterial = LoadObject<UMaterialInterface>(nullptr, bGlow ? MissionOrbGlowParent : MissionOrbLitParent);
 	if (Cube == nullptr)
 	{
-		UE_LOG(LogWonderlandMission, Error, TEXT("WLMISSION no cube mesh at %s; the orb cannot be built"), MissionOrbCubePath);
+		UE_LOG(LogWonderlandMission, Error, TEXT("WLMISSION no cube mesh at %s; the contract cannot be built"), MissionOrbCubePath);
 		return nullptr;
 	}
 	UInstancedStaticMeshComponent* Mesh = NewObject<UInstancedStaticMeshComponent>(this, MakeUniqueObjectName(this, UInstancedStaticMeshComponent::StaticClass(), Name));
@@ -127,7 +146,7 @@ UInstancedStaticMeshComponent* AWonderlandMissionOrb::MakeMesh(FName Name, UScen
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Mesh->SetGenerateOverlapEvents(false);
 	Mesh->SetCanEverAffectNavigation(false);
-	// Light does not cast shadows. A glowing pip that shadowed the ground would be a dark lamp.
+	// Light does not cast shadows. A glowing stone that shadowed the ground would be a dark lamp.
 	Mesh->SetCastShadow(!bGlow);
 	Mesh->SetupAttachment(Parent);
 	Mesh->AddInstances(Instances, false, false, false);
@@ -146,81 +165,142 @@ void AWonderlandMissionOrb::Build()
 	bBuilt = true;
 	Phase = static_cast<float>(GetTypeHash(GetFName()) % 10007u) / 10007.0f;
 
-	// ---------------------------------------------------------------- the dais, on the floor
-	// A ring of short blocks laid flat, each turned to face the centre, so the ring reads as a rim rather
-	// than as twenty-eight cubes that happen to be in a circle.
+	const float Cell = CrystalHalfWidthUU / 5.5f;
+
+	// ---------------------------------------------------------------- the crystal
+	{
+		TArray<FTransform> Stone;
+		MissionOrbDiamond(Stone, CrystalHalfWidthUU, CrystalHalfHeightUU, Cell);
+		MakeMesh(TEXT("MissionCrystal"), CrystalRoot, true, Stone, CrystalMid);
+	}
+
+	// ---------------------------------------------------------------- the frame
+	// LIT, NOT GLOWING, and the reason the contract reads as a made object rather than a floating light:
+	// ivory-gold trim takes the world's own sun, so it has highlights and shade the crystal cannot have.
+	{
+		TArray<FTransform> Frame;
+		const float Bar = Cell * 0.72f;
+		const float Tip = CrystalHalfHeightUU;
+
+		// the spire above and the point below, each a short stack narrowing to a tip
+		for (int32 Side = -1; Side <= 1; Side += 2)
+		{
+			const float Sign = static_cast<float>(Side);
+			for (int32 Step = 0; Step < 4; ++Step)
+			{
+				const float T = static_cast<float>(Step);
+				const float Width = Bar * (1.9f - 0.40f * T);
+				Frame.Add(MissionOrbBox(
+					FVector(0.0f, 0.0f, Sign * (Tip + 1.2f + T * Bar * 1.15f)),
+					FVector(Width, Width, Bar * 1.15f)));
+			}
+		}
+
+		// the spine through the stone, and the girdle round its waist
+		Frame.Add(MissionOrbBox(FVector::ZeroVector, FVector(Bar * 0.9f, Bar * 0.9f, Tip * 2.0f)));
+		const int32 Girdle = 20;
+		for (int32 Index = 0; Index < Girdle; ++Index)
+		{
+			const float Angle = 360.0f * static_cast<float>(Index) / static_cast<float>(Girdle);
+			const float Rad = FMath::DegreesToRadians(Angle);
+			// The waist of an octahedron is a square on its corner, so the girdle follows |x|+|y| = w.
+			const float Cos = FMath::Cos(Rad);
+			const float Sin = FMath::Sin(Rad);
+			const float Shrink = CrystalHalfWidthUU / FMath::Max(FMath::Abs(Cos) + FMath::Abs(Sin), 0.1f);
+			Frame.Add(MissionOrbBox(
+				FVector(Cos * Shrink, Sin * Shrink, 0.0f),
+				FVector(Bar * 0.9f, Bar * 1.6f, Bar * 0.9f), FRotator(0.0f, Angle, 0.0f)));
+		}
+
+		// caps at the four equator corners, where the reference puts its gold clasps
+		for (int32 Corner = 0; Corner < 4; ++Corner)
+		{
+			const float Angle = 90.0f * static_cast<float>(Corner);
+			const float Rad = FMath::DegreesToRadians(Angle);
+			const FVector At(FMath::Cos(Rad) * CrystalHalfWidthUU, FMath::Sin(Rad) * CrystalHalfWidthUU, 0.0f);
+			Frame.Add(MissionOrbBox(At, FVector(Bar * 1.5f), FRotator(0.0f, Angle, 0.0f)));
+			Frame.Add(MissionOrbBox(At * 1.15f, FVector(Bar * 1.0f), FRotator(0.0f, Angle, 0.0f)));
+		}
+		MakeMesh(TEXT("MissionFrame"), CrystalRoot, false, Frame, FrameMid);
+		if (FrameMid != nullptr)
+		{
+			FrameMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.72f, 0.58f, 0.26f));
+		}
+	}
+
+	// ---------------------------------------------------------------- the star at the heart
+	{
+		TArray<FTransform> Star;
+		const float S = Cell * 0.8f;
+		for (int32 Face = 0; Face < 4; ++Face)
+		{
+			const float Angle = 45.0f + 90.0f * static_cast<float>(Face);
+			const float Rad = FMath::DegreesToRadians(Angle);
+			Star.Add(MissionOrbBox(
+				FVector(FMath::Cos(Rad) * CrystalHalfWidthUU * 0.76f, FMath::Sin(Rad) * CrystalHalfWidthUU * 0.76f, 0.0f),
+				FVector(S * 1.1f), FRotator(0.0f, Angle, 0.0f)));
+		}
+		MakeMesh(TEXT("MissionStar"), CrystalRoot, true, Star, StarMid);
+	}
+
+	// ---------------------------------------------------------------- the orbit
 	{
 		TArray<FTransform> Ring;
-		const int32 Segments = 28;
+		const int32 Segments = 40;
+		const float Radius = CrystalHalfWidthUU * 1.65f;
 		for (int32 Index = 0; Index < Segments; ++Index)
 		{
 			const float Angle = 360.0f * static_cast<float>(Index) / static_cast<float>(Segments);
 			const float Rad = FMath::DegreesToRadians(Angle);
 			Ring.Add(MissionOrbBox(
-				FVector(FMath::Cos(Rad) * DaisRadiusUU, FMath::Sin(Rad) * DaisRadiusUU, 1.4f),
-				FVector(3.0f, 6.4f, 2.4f), Angle));
+				FVector(FMath::Cos(Rad) * Radius, FMath::Sin(Rad) * Radius, 0.0f),
+				FVector(Cell * 0.34f, Cell * 0.95f, Cell * 0.34f), FRotator(0.0f, Angle, 0.0f)));
 		}
-		MakeMesh(TEXT("MissionDais"), DaisRoot, true, Ring, DaisMid);
+		MakeMesh(TEXT("MissionOrbit"), RingRoot, true, Ring, RingMid);
 	}
 
-	// ---------------------------------------------------------------- the spine of seven
-	// THE COLLARS FIRST, and always: one lit component holding all seven, so the set can be counted even
-	// when a single step is burning. They are the only part of the progression that never changes.
+	// ---------------------------------------------------------------- the motes
 	{
-		TArray<FTransform> Collars;
-		for (int32 Step = 1; Step <= WonderlandChakraSteps; ++Step)
+		TArray<FTransform> Motes;
+		const int32 Count = 14;
+		for (int32 Index = 0; Index < Count; ++Index)
 		{
-			const float Z = SpineBaseUU + static_cast<float>(Step - 1) * SpinePitchUU;
-			Collars.Add(MissionOrbBox(FVector(0.0f, 0.0f, Z), FVector(SpineWidthUU + 1.6f, SpineWidthUU + 1.6f, 1.5f)));
+			// Spread on a golden angle so they never line up into a visible ring or spiral.
+			const float T = static_cast<float>(Index);
+			const float Angle = FMath::DegreesToRadians(137.5f * T);
+			const float Radius = CrystalHalfWidthUU * (1.5f + 0.09f * FMath::Fmod(T * 3.0f, 7.0f));
+			const float Height = CrystalHalfHeightUU * (FMath::Fmod(T * 0.37f, 1.6f) - 0.8f);
+			const float Size = Cell * (0.30f + 0.10f * FMath::Fmod(T, 3.0f));
+			Motes.Add(MissionOrbBox(
+				FVector(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, Height), FVector(Size)));
 		}
-		MakeMesh(TEXT("MissionSpine"), DaisRoot, false, Collars, SpineMid);
-		if (SpineMid != nullptr)
-		{
-			SpineMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.20f, 0.20f, 0.24f));
-		}
+		MakeMesh(TEXT("MissionMotes"), MoteRoot, true, Motes, MoteMid);
 	}
 
-	// ONE COMPONENT PER STEP, which is what lets each keep its own chakra hue. Seven components is a
-	// rounding error beside the alternative -- per-instance custom data and a material that reads it.
-	PipMids.SetNum(WonderlandChakraSteps);
-	for (int32 Step = 1; Step <= WonderlandChakraSteps; ++Step)
-	{
-		const float Z = SpineBaseUU + static_cast<float>(Step - 1) * SpinePitchUU + 0.9f;
-		TArray<FTransform> Pip;
-		Pip.Add(MissionOrbBox(FVector(0.0f, 0.0f, Z), FVector(SpineWidthUU, SpineWidthUU, 1.9f)));
-		MakeMesh(FName(*FString::Printf(TEXT("MissionPip%d"), Step)), DaisRoot, true, Pip, PipMids[Step - 1]);
-	}
+	UE_LOG(LogWonderlandMission, Log, TEXT("WLMISSION contract built: %d boxes, %d components"), BoxCount, Meshes.Num());
+}
 
-	// ---------------------------------------------------------------- the core
-	{
-		TArray<FTransform> Ball;
-		MissionOrbBall(Ball, CoreRadiusUU, CoreRadiusUU / 2.6f);
-		MakeMesh(TEXT("MissionCore"), CoreRoot, true, Ball, CoreMid);
-	}
+float AWonderlandMissionOrb::GetOrbHeightUU() const
+{
+	return CrystalHalfHeightUU * 2.0f * static_cast<float>(GetActorScale3D().Z);
+}
 
-	// ---------------------------------------------------------------- the contract band
-	// LIT, NOT GLOWING, and the only part of the orb that is: a band of ivory that takes the world's own
-	// light is what keeps this reading as an object in Wonderland rather than as a HUD element in the world.
-	{
-		TArray<FTransform> Band;
-		const int32 Segments = 14;
-		const float BandRadius = CoreRadiusUU * 1.95f;
-		for (int32 Index = 0; Index < Segments; ++Index)
-		{
-			const float Angle = 360.0f * static_cast<float>(Index) / static_cast<float>(Segments);
-			const float Rad = FMath::DegreesToRadians(Angle);
-			Band.Add(MissionOrbBox(
-				FVector(FMath::Cos(Rad) * BandRadius, FMath::Sin(Rad) * BandRadius, 0.0f),
-				FVector(2.6f, 4.8f, 2.6f), Angle));
-		}
-		MakeMesh(TEXT("MissionBand"), BandRoot, false, Band, BandMid);
-		if (BandMid != nullptr)
-		{
-			BandMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.88f, 0.86f, 0.80f));
-		}
-	}
+void AWonderlandMissionOrb::SetOrbScale(float Scale)
+{
+	BuiltScale = FMath::Clamp(Scale, 0.2f, 6.0f);
+	SetActorScale3D(FVector(BuiltScale));
+}
 
-	UE_LOG(LogWonderlandMission, Log, TEXT("WLMISSION orb built: %d boxes, %d components"), BoxCount, Meshes.Num());
+void AWonderlandMissionOrb::SetFollowOffset(float Forward, float Right)
+{
+	FollowOffset = FVector(Forward, Right, 0.0);
+	bHasSnapped = false;
+	SnapToTarget();
+}
+
+void AWonderlandMissionOrb::SetManifest(float Target)
+{
+	ManifestTarget = FMath::Clamp(Target, 0.0f, 1.0f);
 }
 
 void AWonderlandMissionOrb::SetBeat(EWonderlandMissionBeat NewBeat)
@@ -248,44 +328,27 @@ void AWonderlandMissionOrb::ResetProgression()
 	PaintChakra();
 }
 
-void AWonderlandMissionOrb::SetOrbScale(float Scale)
-{
-	SetActorScale3D(FVector(FMath::Clamp(Scale, 0.2f, 6.0f)));
-}
-
-void AWonderlandMissionOrb::SetFollowOffset(float Forward, float Right)
-{
-	FollowOffset = FVector(Forward, Right, 0.0);
-	bHasSnapped = false;
-	SnapToTarget();
-}
-
-float AWonderlandMissionOrb::GetOrbHeightUU() const
-{
-	return (CoreHeightUU + CoreRadiusUU) * static_cast<float>(GetActorScale3D().Z);
-}
-
 void AWonderlandMissionOrb::PaintChakra()
 {
-	const FLinearColor Colour = WonderlandChakraColour(Chakra);
-	const int32 Step = WonderlandChakraStep(Chakra);
-	if (DaisMid != nullptr)
+	// A CONTRACT WITH NO STEP YET IS STILL RED. The founder's canon starts a new Mission Contract at red,
+	// so `None` here means "just manifested, before the first event landed" and shows the root colour
+	// rather than the cold ivory a resting orb used to use.
+	const EWonderlandChakra Showing = Chakra == EWonderlandChakra::None ? EWonderlandChakra::Root : Chakra;
+	const FLinearColor Colour = WonderlandChakraColour(Showing);
+	if (RingMid != nullptr)
 	{
-		// The dais sits under the core rather than beside it, so it burns lower: a rim, not a second lamp.
-		DaisMid->SetVectorParameterValue(TEXT("Color"), Colour * (GlowExposure * 0.34f));
+		RingMid->SetVectorParameterValue(TEXT("Color"), Colour * (GlowExposure * 0.55f * Manifest));
 	}
-	for (int32 Index = 0; Index < PipMids.Num(); ++Index)
+	if (MoteMid != nullptr)
 	{
-		if (PipMids[Index] == nullptr)
-		{
-			continue;
-		}
-		// EVERY PIP KEEPS ITS OWN HUE, ALWAYS. Only how hard it burns says whether the task has got there,
-		// so the seven are recognisable as an ordered set even when only one of them is lit.
-		const FLinearColor Own = WonderlandChakraColour(WonderlandChakraForStep(Index + 1));
-		const bool bReached = (Index + 1) <= Step;
-		const float Burn = bReached ? 1.0f : UnreachedPipFraction;
-		PipMids[Index]->SetVectorParameterValue(TEXT("Color"), Own * (GlowExposure * Burn));
+		MoteMid->SetVectorParameterValue(TEXT("Color"), Colour * (GlowExposure * 0.85f * Manifest));
+	}
+	if (StarMid != nullptr)
+	{
+		// The heart stays near-white whatever the stone is doing, which is what makes it read as a star
+		// inside the crystal rather than as a brighter part of it.
+		StarMid->SetVectorParameterValue(TEXT("Color"),
+			FMath::Lerp(FLinearColor::White, Colour, 0.25f) * (GlowExposure * 1.4f * Manifest));
 	}
 }
 
@@ -306,8 +369,8 @@ FVector AWonderlandMissionOrb::DesiredLocation(const APawn* Pawn) const
 	const FRotator Yaw(0.0f, Pawn->GetActorRotation().Yaw, 0.0f);
 	FVector Wanted = Pawn->GetActorLocation() + Yaw.RotateVector(FVector(FollowOffset.X, FollowOffset.Y, 0.0));
 
-	// GROUND-POSITIONED MEANS MEASURED, not assumed. The pawn's own origin is its centre, not its feet, and
-	// Wonderland's floor rises and falls under it -- so the dais finds the floor by looking for it.
+	// IT FLOATS, BUT IT FLOATS OVER SOMETHING. The height is measured from the floor rather than from the
+	// pawn, so the contract keeps a constant altitude over rising ground instead of sinking into a slope.
 	UWorld* World = GetWorld();
 	if (World != nullptr)
 	{
@@ -318,12 +381,12 @@ FVector AWonderlandMissionOrb::DesiredLocation(const APawn* Pawn) const
 		const FVector To = Wanted - FVector(0.0, 0.0, 420.0);
 		if (World->LineTraceSingleByChannel(Hit, From, To, ECC_WorldStatic, Query))
 		{
-			Wanted.Z = Hit.Location.Z;
+			Wanted.Z = Hit.Location.Z + FloatHeightUU;
 			return Wanted;
 		}
 	}
-	// No floor found: hold the pawn's own height rather than sinking through the world.
-	Wanted.Z = Pawn->GetActorLocation().Z - 42.0;
+	// No floor found: hang at the pawn's own height rather than sinking through the world.
+	Wanted.Z = Pawn->GetActorLocation().Z + (FloatHeightUU - 89.0f);
 	return Wanted;
 }
 
@@ -344,6 +407,14 @@ void AWonderlandMissionOrb::Tick(float DeltaSeconds)
 		Build();
 	}
 
+	// A CONTRACT CLEARS ITS OWN PLACE. Once it has manifested and then been asked to leave, it removes
+	// itself when the fade is finished, so the owner never has to poll for the right moment to destroy it.
+	if (bHasManifested && IsFullyDismissed())
+	{
+		Destroy();
+		return;
+	}
+
 	if (const APawn* Pawn = GetFollowPawn())
 	{
 		const FVector Target = DesiredLocation(Pawn);
@@ -359,7 +430,7 @@ void AWonderlandMissionOrb::Tick(float DeltaSeconds)
 				: 1.0f;
 			SetActorLocation(FMath::Lerp(GetActorLocation(), Target, Alpha));
 		}
-		// The dais never tilts with the Dog. A contract lies flat on the ground.
+		// The crystal never tilts with the Dog. It hangs level in the air.
 		SetActorRotation(FRotator::ZeroRotator);
 	}
 
@@ -369,49 +440,70 @@ void AWonderlandMissionOrb::Tick(float DeltaSeconds)
 
 void AWonderlandMissionOrb::Animate(float TimeSeconds, float DeltaSeconds)
 {
+	// ---------------------------------------------------------------- manifesting
+	const float Rate = MaterialiseSeconds > KINDA_SMALL_NUMBER
+		? 1.0f - FMath::Exp(-DeltaSeconds / MaterialiseSeconds)
+		: 1.0f;
+	const float Before = Manifest;
+	Manifest = FMath::Lerp(Manifest, ManifestTarget, Rate);
+	if (FMath::Abs(Manifest - ManifestTarget) < 0.004f)
+	{
+		Manifest = ManifestTarget;
+	}
+	bHasManifested |= Manifest > 0.5f;
+	if (!FMath::IsNearlyEqual(Manifest, Before, 0.002f))
+	{
+		PaintChakra();
+	}
+
 	const float Blend = BeatBlendSeconds > KINDA_SMALL_NUMBER
 		? 1.0f - FMath::Exp(-DeltaSeconds / BeatBlendSeconds)
 		: 1.0f;
 	MissionOrbEase(Motion, MotionTarget, Blend);
 
 	// ---------------------------------------------------------------- the turn
-	SpinDegrees = FMath::Fmod(SpinDegrees + Motion.SpinRevs * 360.0f * DeltaSeconds, 360.0f);
-	BandDegrees = FMath::Fmod(BandDegrees - Motion.SpinRevs * 210.0f * DeltaSeconds, 360.0f);
-	if (DaisRoot != nullptr)
+	SpinDegrees = FMath::Fmod(SpinDegrees + Motion.SpinRevs * 150.0f * DeltaSeconds, 360.0f);
+	RingDegrees = FMath::Fmod(RingDegrees - Motion.SpinRevs * 330.0f * DeltaSeconds, 360.0f);
+	if (RingRoot != nullptr)
 	{
-		DaisRoot->SetRelativeRotation(FRotator(0.0f, SpinDegrees, 0.0f));
+		// The orbit leans, so a turning ring is legible from the play camera rather than edge-on.
+		RingRoot->SetRelativeRotation(FRotator(24.0f, RingDegrees, 0.0f));
 	}
-	if (BandRoot != nullptr)
+	if (MoteRoot != nullptr)
 	{
-		// The band leans, so a turning ring is legible from the play camera rather than edge-on.
-		BandRoot->SetRelativeRotation(FRotator(18.0f, BandDegrees, 0.0f));
+		MoteRoot->SetRelativeRotation(FRotator(0.0f, -SpinDegrees * 0.6f, 0.0f));
 	}
 
-	// ---------------------------------------------------------------- the float
+	// ---------------------------------------------------------------- the hover
 	// COMPUTED ABSOLUTELY FROM REST, the rule everything in Wonderland that floats keeps: no pose is added
-	// to the last one, so a paused editor, a long frame or a changed beat cannot make the orb drift away.
+	// to the last one, so a paused editor, a long frame or a changed beat cannot make it drift away.
 	const float Wave = FMath::Sin((TimeSeconds / FMath::Max(Motion.BobPeriod, 0.05f) + Phase) * 2.0f * PI);
-	FVector CoreAt(0.0f, 0.0f, CoreHeightUU + Motion.BobUU * Wave);
+	FVector At(0.0f, 0.0f, Motion.BobUU * Wave);
 	if (Motion.JitterUU > KINDA_SMALL_NUMBER)
 	{
 		// Deterministic and absolute: three incommensurate rates, so it never repeats and never accumulates.
-		CoreAt.X += Motion.JitterUU * FMath::Sin((TimeSeconds * 11.3f + Phase * 7.0f));
-		CoreAt.Y += Motion.JitterUU * FMath::Sin((TimeSeconds * 13.7f + Phase * 5.0f));
-		CoreAt.Z += Motion.JitterUU * 0.6f * FMath::Sin((TimeSeconds * 17.1f + Phase * 3.0f));
+		At.X += Motion.JitterUU * FMath::Sin((TimeSeconds * 11.3f + Phase * 7.0f));
+		At.Y += Motion.JitterUU * FMath::Sin((TimeSeconds * 13.7f + Phase * 5.0f));
+		At.Z += Motion.JitterUU * 0.6f * FMath::Sin((TimeSeconds * 17.1f + Phase * 3.0f));
 	}
-	if (CoreRoot != nullptr)
+	if (CrystalRoot != nullptr)
 	{
-		CoreRoot->SetRelativeLocation(CoreAt);
-		CoreRoot->SetRelativeScale3D(FVector(FMath::Max(Motion.CoreScale, 0.05f)));
+		CrystalRoot->SetRelativeLocation(At);
+		CrystalRoot->SetRelativeRotation(FRotator(0.0f, SpinDegrees, 0.0f));
+		// A CONTRACT ARRIVES AND LEAVES BY GROWING, not by appearing. Scale carries the manifest as well as
+		// the colour, because an emissive that merely brightened would pop rather than materialise.
+		const float Grown = FMath::Max(Motion.CoreScale, 0.05f) * FMath::Max(Manifest, 0.001f);
+		CrystalRoot->SetRelativeScale3D(FVector(Grown));
 	}
 
 	// ---------------------------------------------------------------- the pulse
-	if (CoreMid != nullptr)
+	if (CrystalMid != nullptr)
 	{
 		const float Cycle = Motion.PulseHz > KINDA_SMALL_NUMBER
 			? 0.5f * (1.0f - FMath::Cos(TimeSeconds * Motion.PulseHz * 2.0f * PI))
 			: 0.0f;
-		const float Burn = FMath::Max(Motion.Brightness * (1.0f - Motion.PulseDepth * Cycle), 0.0f);
-		CoreMid->SetVectorParameterValue(TEXT("Color"), WonderlandChakraColour(Chakra) * (GlowExposure * Burn));
+		const float Burn = FMath::Max(Motion.Brightness * (1.0f - Motion.PulseDepth * Cycle), 0.0f) * Manifest;
+		const EWonderlandChakra Showing = Chakra == EWonderlandChakra::None ? EWonderlandChakra::Root : Chakra;
+		CrystalMid->SetVectorParameterValue(TEXT("Color"), WonderlandChakraColour(Showing) * (GlowExposure * Burn));
 	}
 }
