@@ -56,7 +56,7 @@ public:
 
 	/** Photographs per second while the map is on screen. */
 	UPROPERTY(Config, EditAnywhere, Category = "Capture", meta = (ClampMin = "1.0", ClampMax = "30.0"))
-	float CaptureHz = 8.0f;
+	float CaptureHz = 4.0f;
 
 	UPROPERTY(Config, EditAnywhere, Category = "Capture", meta = (ClampMin = "128", ClampMax = "1024"))
 	int32 RenderTargetSize = 512;
