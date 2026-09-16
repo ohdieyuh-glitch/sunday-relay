@@ -120,16 +120,35 @@ def job():
     pawn_at = pawn.get_actor_location() if pawn else unreal.Vector()
     flat = ((orb_at.x - pawn_at.x) ** 2 + (orb_at.y - pawn_at.y) ** 2) ** 0.5
     below = pawn_at.z - orb_at.z
+
+    # HOW FAR OFF THE FLOOR, measured rather than argued. "Ground-positioned" is the founder's word and the
+    # whole point of the shape, and the orb's own Z says nothing on its own: this world is full of raised
+    # paving, kerbs and planter edges, so a dais standing correctly on a slab and a dais hovering over the
+    # path have exactly the same Z. Trace down from the dais and ask.
+    #
+    # The floor DOES answer a trace, unlike the companions and the hover props -- it is world static.
+    floor_z = None
+    hit = unreal.SystemLibrary.line_trace_single(
+        world, unreal.Vector(orb_at.x, orb_at.y, orb_at.z + 200.0),
+        unreal.Vector(orb_at.x, orb_at.y, orb_at.z - 400.0),
+        unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [], unreal.DrawDebugTrace.NONE, True)
+    if hit is not None and hit.blocking_hit:
+        floor_z = float(hit.location.z)
+    above_floor = None if floor_z is None else round(orb_at.z - floor_z, 1)
     RESULT["placement"] = {"orb": [orb_at.x, orb_at.y, orb_at.z], "pawn": [pawn_at.x, pawn_at.y, pawn_at.z],
                            "offset": [offset.x, offset.y], "wanted_uu": round(wanted, 1),
                            "flat_uu": round(flat, 1), "below_pawn_uu": round(below, 1),
+                           "floor_z": floor_z, "above_floor_uu": above_floor,
                            "height_uu": round(mission.get_orb_height_uu(), 1) if mission else 0,
                            "boxes": mission.get_orb_box_count() if mission else 0}
     record("M01", "the orb stands where it was told, on the ground, clear of the Dog",
            mission is not None and mission.is_orb_in_world() and mission.get_orb_box_count() > 0
            # where it was told, within the follow's own lag
            and wanted > 0.0 and abs(flat - wanted) < 20.0
-           # ON THE GROUND: the pawn's origin is its centre, so the dais must sit well under it
+           # ON THE GROUND, measured against the floor under the dais rather than against the pawn:
+           # a couple of uu of tolerance for the follow's lag on a slope, and no more.
+           and above_floor is not None and abs(above_floor) < 6.0
+           # and well under the pawn's origin, which is its capsule centre, so it cannot be riding the Dog
            and below > 20.0
            # CLEAR OF THE DOG, which is what stops it reading as carried: further out than the Dog's own
            # body half-width, and not so far it stops being the Dog's object. 60 is half a head width (60)
