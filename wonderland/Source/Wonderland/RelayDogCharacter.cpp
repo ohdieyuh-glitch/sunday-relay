@@ -1474,7 +1474,9 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	}
 	if (Overlay.bBeam && MissionIn.bHasContract && BodyRoot != nullptr)
 	{
-		const FVector Chest = BodyRoot->GetComponentLocation() + GetActorRotation().RotateVector(FVector(18.0, 0.0, 26.0));
+		// The chest is measured from the Dog's centre: the Body's own origin is at its feet, and the beam left from the hip.
+		const FVector Chest = BodyRoot->GetComponentLocation() + FVector(0.0, 0.0, -BodyRestLocation.Z)
+			+ GetActorRotation().RotateVector(FVector(18.0, 0.0, 26.0));
 		DrawVerificationBeam(Chest, ContractWorld, Overlay.BeamWeight, MissionIn.TimeSeconds);
 	}
 	else
@@ -1728,8 +1730,13 @@ void ARelayDogCharacter::PoseBook(bool bInHand, float PageTurn)
 		return;
 	}
 	const double U = FMath::Max(HeadWidthUU, 10.0f) / 60.0;
+	// FROM THE DOG'S CENTRE, NOT THE BODY'S ORIGIN. The Body component's origin sits at the Dog's FEET, 93 uu under the
+	// capsule centre (measured in PIE, 2026-09-16), so "16 up" from it held the book 16 uu off the ground: the founder's
+	// "book on the floor while the Dog reads from nothing". The offsets are now measured from where the capsule centre
+	// is in the body's frame, whatever height that origin happens to be at.
+	const FVector Centre(0.0, 0.0, -BodyRestLocation.Z);
 	BookRoot->SetRelativeLocationAndRotation(
-		FVector(CVarBookFwd.GetValueOnGameThread(), CVarBookRight.GetValueOnGameThread(), CVarBookUp.GetValueOnGameThread()) * U,
+		Centre + FVector(CVarBookFwd.GetValueOnGameThread(), CVarBookRight.GetValueOnGameThread(), CVarBookUp.GetValueOnGameThread()) * U,
 		FRotator(CVarBookTilt.GetValueOnGameThread(), 0.0f, 0.0f));
 
 	// THE HALVES, laid out only when the opening changes. The right half rises Open degrees from flat; the left
