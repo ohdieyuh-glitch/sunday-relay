@@ -33,8 +33,13 @@ WALK = [
     ("complete_verified", 7),
 ]
 
-# Every beat that is a real state, in the order the enum declares them. Photographed one at a time.
+# Every beat that is a real state. Filmed one at a time, in the order a task walks them.
 GALLERY = [b for b, _ in WALK] + ["block", "error"]
+
+# Ten frames over about 1.2 s. Fast enough to read a 2 Hz working pulse, long enough to see a slow one
+# breathe; the 4 Hz error flash aliases at this rate and reads as a flicker, which is what it is.
+FRAMES_PER_BEAT = 10
+FRAME_SPACING = 0.12
 
 
 def job():
@@ -148,28 +153,38 @@ def job():
            asking=sorted(b for b, v in asks.items() if v))
 
     # ---------------------------------------------------------------- the gallery
-    # One frame per state, with the orb's screen position recorded so each can be cropped to the orb later.
+    # A SEQUENCE PER STATE, NOT A STILL. Phase 3 is animation: a spin that reverses through a repair, a
+    # pulse that races while coding and breathes while waiting, a block that stops dead. A contact sheet of
+    # stills would show seventeen coloured orbs and prove none of it, so each state gets a short run of
+    # frames that can be assembled into a loop afterwards.
+    #
+    # The orb's screen position travels with every frame, because the orb is small on purpose and a frame
+    # of the whole garden shows a garden.
     gallery = []
     mission.reset_progression()
     for index, beat in enumerate(GALLERY):
         mission.set_beat_by_id(beat)
-        # Long enough for the motion to ease in and for a slow pulse to be somewhere other than its trough.
-        yield 1.1
-        at = mission.get_orb_location()
-        # Recorded so each frame can be cropped to the orb afterwards: it is small on purpose, and a
-        # contact sheet of seventeen full frames would show seventeen gardens and no orb.
-        try:
-            found, screen = unreal.GameplayStatics.project_world_to_screen(controller, at, False)
-        except Exception as exc:
-            found, screen, RESULT["project_error"] = False, None, str(exc)
-        path = shot("zc_mission_%02d_%s.png" % (index + 1, beat))
+        # Let the motion ease in first (BeatBlendSeconds is 0.35), then sample.
+        yield 0.75
+        frames = []
+        for frame in range(FRAMES_PER_BEAT):
+            at = mission.get_orb_location()
+            try:
+                found, screen = unreal.GameplayStatics.project_world_to_screen(controller, at, False)
+            except Exception as exc:
+                found, screen, RESULT["project_error"] = False, None, str(exc)
+            path = shot("zc_mission_%02d_%s_%02d.png" % (index + 1, beat, frame))
+            frames.append({"capture": path,
+                           "screen": [screen.x, screen.y] if (found and screen is not None) else None})
+            yield FRAME_SPACING
         gallery.append({"beat": beat, "label": mission.get_beat_label(), "step": mission.get_chakra_step(),
-                        "chakra": mission.get_chakra_name(),
-                        "screen": [screen.x, screen.y] if (found and screen is not None) else None, "capture": path})
+                        "chakra": mission.get_chakra_name(), "frames": frames})
     RESULT["gallery"] = gallery
-    record("M06", "every state was photographed in play",
-           len(gallery) == len(GALLERY) and all(g["capture"] for g in gallery),
-           shots=len(gallery), missed=[g["beat"] for g in gallery if not g["capture"]])
+    RESULT["frame_spacing"] = FRAME_SPACING
+    missed = [g["beat"] for g in gallery if not all(f["capture"] for f in g["frames"])]
+    record("M06", "every state was filmed in play, not just photographed",
+           len(gallery) == len(GALLERY) and not missed,
+           states=len(gallery), frames_each=FRAMES_PER_BEAT, missed=missed)
 
     # ---------------------------------------------------------------- what it costs
     actor = next((a for a in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.WonderlandMissionOrb)), None)
