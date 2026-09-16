@@ -4,7 +4,8 @@ import {
   JULIUS_ONLY_OUTCOMES, JULIUS_PEER_REQUEST_KINDS, JULIUS_PEER_REQUEST_RULES, JULIUS_PEER_REQUEST_STATUSES,
   foldJuliusPeerRequests, guardJuliusPeerResponse, juliusGuidanceIsAuthoritative, juliusPeerIdsThatFit,
   juliusPeerRequestId, juliusPeerRequestOpenedFacts, juliusPeerRequestTransitionFacts, juliusResearchContinuationIds,
-  openJuliusPeerRequest, projectJuliusArchitectState, projectJuliusGuidanceState, projectJuliusReviewerState,
+  JULIUS_CODING_AGENT_PEER_STATES, openJuliusPeerRequest, projectJuliusArchitectState, projectJuliusCodingAgentState,
+  projectJuliusGuidanceState, projectJuliusReviewerState,
   transitionJuliusPeerRequest,
   type JuliusPeerRequest,
 } from './julius-peer-channel';
@@ -317,6 +318,83 @@ describe('what each peer is doing is derived, never stored', () => {
       subjectTaskId: 'plan-1', reason: 'The plan contradicts the contract.', evidenceIds: ['evidence:7'],
     }));
     expect(projectJuliusReviewerState({ ...none, tasks: [], requests: [challenge] })).toBe('CHALLENGING');
+  });
+
+  it('the coding agent', () => {
+    const tp = (taskId: string, taskType: string, role: string, state: string, parentTaskId: string | null) =>
+      ({ ...t(taskId, taskType, role, state), parentTaskId });
+    expect(projectJuliusCodingAgentState({ ...none, tasks: [] })).toBe('STANDBY');
+    expect(projectJuliusCodingAgentState({ ...none, tasks: [t('build-1', 'build', 'CODING_AGENT', 'BLOCKED')] })).toBe('WAITING_ON_DEPENDENCY');
+    expect(projectJuliusCodingAgentState({ ...none, tasks: [t('build-1', 'build', 'CODING_AGENT')] })).toBe('IMPLEMENTING');
+    expect(projectJuliusCodingAgentState({ ...none, tasks: [t('build-1', 'build', 'CODING_AGENT', 'ACTIVE')] })).toBe('IMPLEMENTING');
+    // A specialist is implementation work, whatever it is called.
+    expect(projectJuliusCodingAgentState({ ...none, tasks: [t('build-2', 'build', 'SPECIALIST:migrations', 'ACTIVE')] })).toBe('IMPLEMENTING');
+    expect(projectJuliusCodingAgentState({ ...none, tasks: [t('repair:build-1:1:task', 'repair:build', 'CODING_AGENT')] })).toBe('REPAIRING');
+    expect(projectJuliusCodingAgentState({
+      ...none, tasks: [t('build-1', 'build', 'CODING_AGENT', 'SUCCEEDED'), tp('build-1:review', 'review:build', 'INDEPENDENT_REVIEWER', 'RUNNABLE', 'build-1')],
+    })).toBe('HANDING_OFF');
+    // A review of the architect's work is not the coder handing anything off.
+    expect(projectJuliusCodingAgentState({
+      ...none, tasks: [t('plan-1', 'plan', 'PROMPT_ARCHITECT', 'SUCCEEDED'), tp('plan-1:review', 'review:plan', 'INDEPENDENT_REVIEWER', 'RUNNABLE', 'plan-1')],
+    })).toBe('STANDBY');
+    expect(projectJuliusCodingAgentState({ ...none, tasks: [t('build-1', 'build', 'CODING_AGENT', 'FAILED')] })).toBe('BLOCKED');
+    expect(projectJuliusCodingAgentState({ ...none, tasks: [t('build-1', 'build', 'CODING_AGENT', 'SUCCEEDED')] })).toBe('STANDBY');
+
+    // WAITING_ON_GUIDANCE is said by the question, not by the shape of the paused task.
+    const paused = t('segment:build-1:2:task', 'build', 'CODING_AGENT', 'BLOCKED');
+    expect(projectJuliusCodingAgentState({ ...none, tasks: [paused], requests: [opened(question())] })).toBe('WAITING_ON_GUIDANCE');
+    const answered = transitionJuliusPeerRequest(opened(question()), { to: 'ANSWERED', at: 't', responseRef: 'guidance:1' });
+    if (answered.outcome !== 'TRANSITIONED') throw new Error('unreachable');
+    expect(projectJuliusCodingAgentState({ ...none, tasks: [paused], requests: [answered.request] }), 'answered is not accepted').toBe('WAITING_ON_GUIDANCE');
+    const resolved = transitionJuliusPeerRequest(answered.request, { to: 'RESOLVED', at: 't', transitionCode: 'ANSWER_ACCEPTED' });
+    if (resolved.outcome !== 'TRANSITIONED') throw new Error('unreachable');
+    expect(projectJuliusCodingAgentState({ ...none, tasks: [paused], requests: [resolved.request] })).toBe('WAITING_ON_DEPENDENCY');
+    expect(projectJuliusCodingAgentState({
+      ...none, tasks: [{ ...paused, state: 'RUNNABLE' as never }], requests: [resolved.request],
+    }), 'released with its answer, it is implementing again').toBe('IMPLEMENTING');
+    // A question the coder did not ask does not say the coder waits on guidance —
+    // even a row that could never have been opened, read straight off a ledger.
+    const foreign = { ...opened(question()), sourceRole: 'INDEPENDENT_REVIEWER' as never };
+    expect(projectJuliusCodingAgentState({ ...none, tasks: [paused], requests: [foreign] })).toBe('WAITING_ON_DEPENDENCY');
+    const optional = { ...opened(question()), mandatory: false };
+    expect(projectJuliusCodingAgentState({ ...none, tasks: [paused], requests: [optional] }), 'only a mandatory question pauses').toBe('WAITING_ON_DEPENDENCY');
+
+    expect(projectJuliusCodingAgentState({
+      tasks: [t('segment:build-1:2:task', 'build', 'CODING_AGENT')], requests: [],
+      researchContinuationTaskIds: ['segment:build-1:2:task'],
+    })).toBe('RESEARCHING');
+    // A research continuation of the reviewer's is not the coder researching.
+    expect(projectJuliusCodingAgentState({
+      tasks: [t('segment:build-1:review:2:task', 'review:build', 'INDEPENDENT_REVIEWER')], requests: [],
+      researchContinuationTaskIds: ['segment:build-1:review:2:task'],
+    })).toBe('STANDBY');
+  });
+
+  it('the coding agent: precedence names what most constrains the mission, and a JSON round trip changes nothing', () => {
+    const everything = {
+      tasks: [
+        t('segment:build-1:2:task', 'build', 'CODING_AGENT', 'BLOCKED'),
+        t('segment:build-2:2:task', 'build', 'CODING_AGENT'),
+        t('repair:build-3:1:task', 'repair:build', 'CODING_AGENT'),
+        t('build-4', 'build', 'CODING_AGENT', 'ACTIVE'),
+        t('build-5', 'build', 'CODING_AGENT', 'FAILED'),
+      ],
+      requests: [opened(question())],
+      researchContinuationTaskIds: ['segment:build-2:2:task'],
+    };
+    const ladder = [
+      everything,
+      { ...everything, researchContinuationTaskIds: [] },
+      { ...everything, researchContinuationTaskIds: [], requests: [] },
+      { ...everything, researchContinuationTaskIds: [], requests: [], tasks: everything.tasks.filter((item) => !item.taskType.startsWith('repair:')) },
+    ];
+    expect(ladder.map((input) => projectJuliusCodingAgentState(input))).toEqual(['RESEARCHING', 'WAITING_ON_GUIDANCE', 'REPAIRING', 'IMPLEMENTING']);
+    for (const input of ladder) {
+      expect(projectJuliusCodingAgentState(JSON.parse(JSON.stringify(input)))).toBe(projectJuliusCodingAgentState(input));
+    }
+    expect([...JULIUS_CODING_AGENT_PEER_STATES]).toEqual([
+      'STANDBY', 'IMPLEMENTING', 'RESEARCHING', 'WAITING_ON_GUIDANCE', 'REPAIRING', 'HANDING_OFF', 'WAITING_ON_DEPENDENCY', 'BLOCKED',
+    ]);
   });
 
   it('names research continuations from the verdict rows that created them, never from an id shape', () => {

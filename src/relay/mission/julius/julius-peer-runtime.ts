@@ -1,9 +1,9 @@
 import type { JuliusOperationalEventType } from './julius-events';
 import {
   foldJuliusPeerRequests, juliusPeerRequestId, juliusPeerRequestOpenedFacts, juliusPeerRequestTransitionFacts,
-  juliusResearchContinuationIds, openJuliusPeerRequest, projectJuliusArchitectState, projectJuliusReviewerState,
+  juliusResearchContinuationIds, openJuliusPeerRequest, projectJuliusArchitectState, projectJuliusCodingAgentState, projectJuliusReviewerState,
   transitionJuliusPeerRequest,
-  type JuliusArchitectPeerState, type JuliusPeerLedgerEntry, type JuliusPeerParty, type JuliusPeerRequest,
+  type JuliusArchitectPeerState, type JuliusCodingAgentPeerState, type JuliusPeerLedgerEntry, type JuliusPeerParty, type JuliusPeerRequest,
   type JuliusPeerRequestKind, type JuliusPeerRequestOutcome, type JuliusPeerRequestStatus, type JuliusReviewerPeerState,
 } from './julius-peer-channel';
 import type { JuliusTask, JuliusWorkerRole } from './julius-runtime';
@@ -177,6 +177,8 @@ export async function moveJuliusPeerRequest(
 export interface JuliusPeerChannelView {
   readonly requests: readonly JuliusPeerRequest[];
   readonly architect: JuliusArchitectPeerState;
+  /** The implementation peer, derived from the same rows as the other two. */
+  readonly codingAgent: JuliusCodingAgentPeerState;
   readonly reviewer: JuliusReviewerPeerState;
 }
 
@@ -198,5 +200,10 @@ export async function readJuliusPeerChannel(input: {
   if (ledger === null) return null;
   const requests = foldJuliusPeerRequests(ledger);
   const state = { tasks: input.tasks, requests, researchContinuationTaskIds: juliusResearchContinuationIds(ledger) };
-  return { requests, architect: projectJuliusArchitectState(state), reviewer: projectJuliusReviewerState(state) };
+  return {
+    requests,
+    architect: projectJuliusArchitectState(state),
+    codingAgent: projectJuliusCodingAgentState(state),
+    reviewer: projectJuliusReviewerState(state),
+  };
 }

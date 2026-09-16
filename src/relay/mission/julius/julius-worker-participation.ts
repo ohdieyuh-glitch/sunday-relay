@@ -1,3 +1,4 @@
+import { JULIUS_CODER_OBSERVATION_KINDS, JULIUS_CODER_OBSERVATION_LIMITS } from './julius-architecture-drift';
 import { JULIUS_CHECKPOINT_LIMITS, JULIUS_GUIDANCE_LIMITS } from './julius-continuous-lifecycle';
 import {
   JULIUS_RESEARCH_ASK_FIELDS,
@@ -94,6 +95,11 @@ export const JULIUS_PARTICIPATION_CHANNELS = [
    * two; the authority guard refuses a report that claims a completion.
    */
   'report',
+  /**
+   * What a Coding Agent saw the design do under real code, with evidence.
+   * Julius decides whether it is a reason to consult the architect.
+   */
+  'architectureObservations',
 ] as const;
 export type JuliusParticipationChannel = (typeof JULIUS_PARTICIPATION_CHANNELS)[number];
 
@@ -152,6 +158,7 @@ export type JuliusParticipationReading =
       readonly researchAsks?: unknown;
       readonly segmentResume?: unknown;
       readonly report?: unknown;
+      readonly architectureObservations?: unknown;
     };
 
 const ABSENT: JuliusParticipationReading = Object.freeze({ present: false });
@@ -244,6 +251,7 @@ export function readJuliusParticipationBlock(finalText: string | null): JuliusPa
     ...('researchAsks' in source ? { researchAsks: source.researchAsks } : {}),
     ...('segmentResume' in source ? { segmentResume: source.segmentResume } : {}),
     ...('report' in source ? { report: source.report } : {}),
+    ...('architectureObservations' in source ? { architectureObservations: source.architectureObservations } : {}),
   });
 }
 
@@ -282,8 +290,13 @@ export function juliusParticipationProtocol(): string {
     `      Optional: your own account of the work, recorded beside what the independent executor observed. blockedReason is required exactly when the outcome is BLOCKED.`,
     `      You cannot report the work complete or verified — Julius and the independent reviewer decide that, and such a report is refused.`,
     '',
+    `  "architectureObservations": [ { "kind": ${JULIUS_CODER_OBSERVATION_KINDS.map((kind) => `"${kind}"`).join(' | ')}, "subject": string, "claim": string, "evidenceRefs": string[] } ]`,
+    `      Optional, Coding Agent only: what the design in force did under real code, at most ${JULIUS_CODER_OBSERVATION_LIMITS.observations}, each with 1 to ${JULIUS_CODER_OBSERVATION_LIMITS.evidenceRefs} evidence locators.`,
+    `      "subject" up to ${JULIUS_CODER_OBSERVATION_LIMITS.subjectChars} characters — for ASSUMPTION_INVALIDATED, the assumption id from the ARCHITECTURE CONTEXT; "claim" up to ${JULIUS_CODER_OBSERVATION_LIMITS.claimChars}.`,
+    `      You do not change the architecture. Julius decides whether what you saw is a reason to consult the Prompt Architect.`,
+    '',
     'RULES THAT REFUSE THE WHOLE BLOCK, so a request is never half-heard:',
-    '  - the marker more than once, or a key that is not one of the four above;',
+    '  - the marker more than once, or a key that is not one of the five above;',
     '  - any field naming a mission term you do not set — budget, hosts, scope, role, ids, credentials.',
     'Write no reasoning, monologue or scratchpad text into the block. It is a request, and Julius records it.',
   ].join('\n');

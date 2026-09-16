@@ -1,4 +1,6 @@
 import { sanitizeJuliusCodingAgentReport } from './julius-coding-agent';
+import { sanitizeJuliusCoderObservations } from './julius-architecture-drift';
+import { sanitizeJuliusArchitecture } from './julius-architecture-state';
 import { describe, expect, it } from 'vitest';
 import {
   JULIUS_CHECKPOINT_LIMITS,
@@ -350,6 +352,7 @@ describe('what the worker is told is what Julius accepts', () => {
       researchAsks: [ASK],
       segmentResume: { completedSoFar: [], nextIntent: 'continue' },
       report: { outcome: 'PARTIALLY_IMPLEMENTED', summary: 'Half done.', filesTouched: [], testsRun: [], remainingUncertainty: [], blockedReason: null },
+      architectureObservations: [{ kind: 'DEPENDENCY_CHANGED', subject: 'pg', claim: 'NULL renders as a word.', evidenceRefs: ['test/output.txt:3'] }],
     };
     const reading = readJuliusParticipationBlock(block(JSON.stringify(demonstrated)));
     expect(reading).toMatchObject({ readable: true, channels: [...JULIUS_PARTICIPATION_CHANNELS] });
@@ -358,5 +361,11 @@ describe('what the worker is told is what Julius accepts', () => {
     expect(sanitizeJuliusResearchAsks(reading.researchAsks)).toHaveLength(1);
     expect(sanitizeJuliusSegmentState(reading.segmentResume)).not.toBeNull();
     expect(sanitizeJuliusCodingAgentReport(reading.report).ok).toBe(true);
+    const design = sanitizeJuliusArchitecture({
+      value: { components: [{ name: 'normalizer', responsibility: 'Turns a page into rows.' }], boundaries: [], dependencies: [], decisions: [], assumptions: [], openQuestions: [], risks: [] },
+      revision: 1, proposedByTaskId: 'plan-1', recordedAt: 't',
+    });
+    if (!design.ok) throw new Error(design.reasonCode);
+    expect(sanitizeJuliusCoderObservations({ value: reading.architectureObservations, state: design.state }).ok).toBe(true);
   });
 });

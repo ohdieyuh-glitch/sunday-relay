@@ -417,4 +417,21 @@ describe('C6 — what the executor saw is what the record says', () => {
     expect(result.implementation?.report).toEqual(report);
     expect(result.implementation?.providerKind).toBe('generic-scripted');
   });
+
+  it('what the coder saw the design do reaches Julius as written, beside the work — and the adapter records no architecture', async () => {
+    const architectureObservations = [{ kind: 'BOUNDARY_CROSSED', subject: 'JournalReader', claim: 'Had to widen peek().', evidenceRefs: ['src/journal.ts:40'] }];
+    const provider = createScriptedCodingAgentProvider({
+      script: [{ kind: 'completed', finalText: `Done.
+${MARKER}
+${JSON.stringify({ architectureObservations })}` }],
+    });
+    const { adapter } = adapterWith(provider);
+    const result = await adapter.dispatch(DISPATCH) as JuliusProviderResult;
+    expect(result.architectureObservations).toEqual(architectureObservations);
+    expect(result.architecture).toBeUndefined();
+    expect(result.consistency).toBeUndefined();
+    expect(result.status).toBe('SUCCEEDED');
+    // What the executor saw is still the evidence; an observation is not evidence of anything.
+    expect(result.evidence.map((item) => (item as { type: string }).type).sort()).toEqual(['DIFF', 'TEST']);
+  });
 });
