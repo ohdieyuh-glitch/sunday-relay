@@ -129,6 +129,12 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * the architect can refuse to let a completion happen, and can never mint one.
   * `replan.escalated` is a re-plan that would need a mission term to move,
   * which is the user's decision and not the architect's. */
+ /* WORKER AUTHORITY AT THE RESULT BOUNDARY. `evidence.refused` is a claim of a
+  * kind the producing role may not author — a coder's own review finding, a
+  * user approval nobody gave — set aside and named. `worker.channel.refused`
+  * is a channel that belongs to another role: a coder's verdict about its own
+  * work, or a design. Both are refusals ON the record rather than silence. */
+ 'evidence.refused','worker.channel.refused',
  'architecture.trigger.raised','architecture.proposed','architecture.accepted','architecture.unchanged',
  'architecture.assessed','architecture.assessment.refused','architecture.replan.escalated',
  /* PERSISTENT-WORKER EFFORT. One row per completed dispatch, carrying what the
