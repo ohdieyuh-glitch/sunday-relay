@@ -45,6 +45,23 @@ def job():
                 bp = body.get_attach_parent()
                 row["body_parent"] = bp.get_name() if bp is not None else None
             row["names_named_body"] = [n for n in comps if n.lower().startswith("body")]
+            for pivot in ("Pivot_head", "Pivot_forearmLeft", "Pivot_forearmRight", "Pivot_armLeft"):
+                c = comps.get(pivot)
+                row[pivot] = vec(c.get_world_location() - at) if c is not None else None
+            row["cvar_book_up"] = unreal.SystemLibrary.get_console_variable_float_value("wl.Dog.Read.BookUp")
+            for prefix in ("MissionBook_", "MissionBookPages", "MissionBookTurningPage"):
+                mesh = next((c for n, c in comps.items() if n.startswith(prefix) or (prefix == "MissionBook_" and n == "MissionBook")), None)
+                if mesh is None:
+                    row[prefix] = None
+                    continue
+                inst = []
+                for i in range(mesh.get_instance_count()):
+                    got = mesh.get_instance_transform(i, True)
+                    t = got[1] if isinstance(got, tuple) else got
+                    inst.append([vec(t.translation - at), vec(t.scale3d)])
+                row[prefix] = {"visible": bool(mesh.is_visible()), "hidden_in_game": bool(mesh.hidden_in_game),
+                               "parent": mesh.get_attach_parent().get_name() if mesh.get_attach_parent() else None,
+                               "instances": inst}
             rows.append(row)
         RESULT["rows"] = rows
         RESULT["cvars"] = {n: unreal.SystemLibrary.get_console_variable_float_value(n) for n in
