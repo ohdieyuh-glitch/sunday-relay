@@ -11,6 +11,7 @@
 #include "Rendering/DrawElements.h"
 #include "Rendering/SlateRenderer.h"
 #include "Styling/CoreStyle.h"
+#include "Widgets/Layout/SBorder.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
 #include "WonderlandUiStyle.h"
@@ -23,9 +24,12 @@ namespace WonderlandMiniMapDetail
 	TAutoConsoleVariable<int32> CVarCapture(
 		TEXT("wl.MiniMap.Capture"), 1,
 		TEXT("1 photographs the ground for the mini-map; 0 stops the camera and draws the disc without it."));
+	TAutoConsoleVariable<int32> CVarSource(
+		TEXT("wl.MiniMap.Source"), 0,
+		TEXT("0 photographs the ground's BASE COLOUR: unlit, flat, and immune to exposure. 1 photographs the lit final colour under a manual exposure (wl.MiniMap.ExposureBias)."));
 	TAutoConsoleVariable<float> CVarExposureBias(
-		TEXT("wl.MiniMap.ExposureBias"), 0.0f,
-		TEXT("Exposure bias, EV, applied to the mini-map photograph only."));
+		TEXT("wl.MiniMap.ExposureBias"), -14.0f,
+		TEXT("Manual exposure, EV, for the lit photograph (wl.MiniMap.Source 1) only. This world is lit physically, so daylight wants a strongly negative value."));
 	TAutoConsoleVariable<float> CVarHz(
 		TEXT("wl.MiniMap.Hz"), 0.0f,
 		TEXT("Photographs per second, overriding the settings while above zero. For measuring what the rate costs."));
@@ -202,8 +206,20 @@ bool UWonderlandMiniMapDriver::Tick(float DeltaTime)
 			FRotator(-90.0f, 90.0f, 0.0f));
 		Camera->HiddenActors.Reset();
 		Camera->HiddenActors.Add(const_cast<APawn*>(Pawn));
-		Camera->PostProcessSettings.bOverride_AutoExposureBias = true;
-		Camera->PostProcessSettings.AutoExposureBias = WonderlandMiniMapDetail::CVarExposureBias.GetValueOnGameThread();
+		// THE FIRST PHOTOGRAPH WAS A WHITE DISC. A scene capture does not inherit the main view's auto exposure, and
+		// this world is lit physically, so the lit picture saturated completely -- while the proof recorded "photograph
+		// drawn", because it was. Base colour is the default now: a flat, unlit plan of what is built, which is what a
+		// map wants anyway, and it skips the lighting a map does not need. The lit picture remains under a manual
+		// exposure, for comparison.
+		const bool bLit = WonderlandMiniMapDetail::CVarSource.GetValueOnGameThread() == 1;
+		Camera->CaptureSource = bLit ? ESceneCaptureSource::SCS_FinalColorLDR : ESceneCaptureSource::SCS_BaseColor;
+		FPostProcessSettings& Post = Camera->PostProcessSettings;
+		Post.bOverride_AutoExposureMethod = true;
+		Post.AutoExposureMethod = EAutoExposureMethod::AEM_Manual;
+		Post.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
+		Post.AutoExposureApplyPhysicalCameraExposure = false;
+		Post.bOverride_AutoExposureBias = true;
+		Post.AutoExposureBias = WonderlandMiniMapDetail::CVarExposureBias.GetValueOnGameThread();
 		Camera->CaptureSceneDeferred();
 		Frame.CaptureCentreXY = Frame.PlayerXY;
 		Frame.CaptureWidthUU = Settings->CaptureWidthUU;
@@ -257,7 +273,6 @@ void UWonderlandMiniMapDriver::ApplyCaptureSettings()
 	Camera->ProjectionType = ECameraProjectionMode::Orthographic;
 	Camera->OrthoWidth = Settings->CaptureWidthUU;
 	Camera->TextureTarget = Target;
-	Camera->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
 	Camera->bCaptureEveryFrame = false;
 	Camera->bCaptureOnMovement = false;
 	// Kept between photographs so exposure adapts over time instead of starting cold on every one.
@@ -537,21 +552,31 @@ void SWonderlandMiniMap::Construct(const FArguments& InArgs)
 		]
 		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 6.0f, 0.0f, 0.0f)
 		[
-			SNew(STextBlock)
-			.Text_Lambda([this]() { return FText::FromString(GetWorldLine()); })
-			.Font(WonderlandUi::Sans(12, true, 140))
-			.ColorAndOpacity(WonderlandUi::Ivory())
-			.ShadowOffset(FVector2D(0.0, 1.0))
-			.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.75f))
-		]
-		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 1.0f, 0.0f, 0.0f)
-		[
-			SNew(STextBlock)
-			.Text_Lambda([this]() { return FText::FromString(GetRegionLine()); })
-			.Font(WonderlandUi::Sans(9, true, 180))
-			.ColorAndOpacity(WonderlandUi::Gold(0.92f))
-			.ShadowOffset(FVector2D(0.0, 1.0))
-			.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.75f))
+			// A soft dark backing: the first frame put gold lettering straight onto sunlit stone, where it barely read.
+			SNew(SBorder)
+			.BorderImage(&LabelBrush)
+			.Padding(FMargin(12.0f, 3.0f, 12.0f, 4.0f))
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+				[
+					SNew(STextBlock)
+					.Text_Lambda([this]() { return FText::FromString(GetWorldLine()); })
+					.Font(WonderlandUi::Sans(12, true, 140))
+					.ColorAndOpacity(WonderlandUi::Ivory())
+					.ShadowOffset(FVector2D(0.0, 1.0))
+					.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.75f))
+				]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 1.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock)
+					.Text_Lambda([this]() { return FText::FromString(GetRegionLine()); })
+					.Font(WonderlandUi::Sans(9, true, 180))
+					.ColorAndOpacity(WonderlandUi::Gold(0.95f))
+					.ShadowOffset(FVector2D(0.0, 1.0))
+					.ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.75f))
+				]
+			]
 		]
 	];
 }

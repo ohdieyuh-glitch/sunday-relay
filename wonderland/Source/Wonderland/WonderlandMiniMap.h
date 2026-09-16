@@ -230,4 +230,5 @@ public:
 private:
 	TWeakObjectPtr<UWonderlandMiniMapDriver> Driver;
 	TSharedPtr<SWonderlandMiniMapDisc> Disc;
+	FSlateRoundedBoxBrush LabelBrush = FSlateRoundedBoxBrush(FLinearColor(0.02f, 0.025f, 0.045f, 0.55f), 8.0f, FLinearColor::Transparent, 0.0f);
 };
