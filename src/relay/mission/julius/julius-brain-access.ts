@@ -2,6 +2,7 @@ import { createHash, createPublicKey, randomBytes, verify } from 'node:crypto';
 
 import { canonicalJuliusBrainJson, juliusBrainSha256, juliusPrincipal, type JuliusBrainDraft, type JuliusBrainPrincipal, type JuliusBrainRecordKind } from './julius-brain-contracts';
 import type { JuliusBrainOidcKeyStore } from './julius-brain-oidc-keys';
+import type { JuliusBrainOperationClass, JuliusBrainRateLimiter, JuliusBrainRateScope } from './julius-brain-rate-limit';
 import type { JuliusBrainEntityState } from './julius-brain-projection';
 import type { JuliusBrainContextView } from './julius-brain-query';
 import { defaultJuliusBrainReadGrant } from './julius-brain-service';
@@ -85,7 +86,7 @@ export type JuliusBrainAccessRefusal =
   | 'token_expired' | 'token_not_yet_valid' | 'token_too_old' | 'token_claim_refused' | 'token_replayed'
   | 'environment_mismatch' | 'state_mode_invalid' | 'state_mode_not_for_this_run' | 'state_mode_not_authorized' | 'run_registration_mismatch'
   | 'session_unknown' | 'session_expired' | 'other_run' | 'other_mission' | 'state_mode_is_bound' | 'kind_not_permitted' | 'mutation_out_of_scope'
-  | 'mutation_target_unresolved' | 'artifact_not_admitted' | 'raw_store_not_exposed' | 'issuer_keys_unavailable';
+  | 'mutation_target_unresolved' | 'artifact_not_admitted' | 'raw_store_not_exposed' | 'issuer_keys_unavailable' | 'rate_limited';
 
 /** An RSA public key as the issuer publishes it (JWKS). */
 export interface JuliusBrainJwk { readonly kty: string; readonly kid?: string; readonly n?: string; readonly e?: string; readonly alg?: string; readonly use?: string }
@@ -196,7 +197,13 @@ export type JuliusBrainServiceCall =
   | { readonly type: 'WRITE'; readonly drafts: readonly JuliusBrainDraft[] }
   | { readonly type: 'SEAL'; readonly runId: string }
   | { readonly type: 'READ_ARTIFACT'; readonly contentHash: string }
+  | { readonly type: 'RECOVER'; readonly archiveContentHash: string }
   | { readonly type: 'RAW_STORE'; readonly operation: string };
+
+/** What a call costs against the abuse boundary. */
+export const JULIUS_BRAIN_CALL_OPERATION_CLASS: Readonly<Record<JuliusBrainServiceCall['type'], JuliusBrainOperationClass>> = {
+  READ_CONTEXT: 'READ', WRITE: 'WRITE', SEAL: 'WRITE', READ_ARTIFACT: 'ARTIFACT_READ', RECOVER: 'RECOVERY', RAW_STORE: 'ADMIN',
+};
 
 /** What the service resolved, server-side, about the entities a call touches. The client supplies none of it. */
 export interface JuliusBrainCallFacts {
@@ -215,6 +222,10 @@ export interface JuliusBrainAuditEntry {
   readonly brainRunId: string | null;
   readonly call: JuliusBrainServiceCall['type'] | null;
   readonly reasonCode: JuliusBrainAccessRefusal | null;
+  /** For a refused call, the rate-limit scope that refused it; for an allowed one, null. */
+  readonly rateScope?: JuliusBrainRateScope | null;
+  /** True when an admitted operation completed after its session expired (allowed; the next call needs a live session). */
+  readonly afterExpiry?: true;
 }
 
 /** An audit entry as chained: each one commits to the one before it. */
@@ -229,6 +240,9 @@ export const JULIUS_BRAIN_AUDIT_GENESIS = null;
 export function chainJuliusBrainAuditEvent(previous: Pick<JuliusBrainAuditEvent, 'sequence' | 'hash'> | null, entry: JuliusBrainAuditEntry): JuliusBrainAuditEvent {
   const unhashed = {
     at: entry.at, action: entry.action, sessionId: entry.sessionId, brainRunId: entry.brainRunId, call: entry.call, reasonCode: entry.reasonCode,
+    // Optional facts are part of the entry, so they are part of what the hash commits to.
+    ...(entry.rateScope === undefined || entry.rateScope === null ? {} : { rateScope: entry.rateScope }),
+    ...(entry.afterExpiry === undefined ? {} : { afterExpiry: entry.afterExpiry }),
     sequence: (previous?.sequence ?? 0) + 1, previousHash: previous?.hash ?? JULIUS_BRAIN_AUDIT_GENESIS,
   };
   return { ...unhashed, hash: juliusBrainSha256(canonicalJuliusBrainJson(unhashed)) };
@@ -317,6 +331,8 @@ export function createJuliusBrainAccessService(deps: {
   readonly grants: () => readonly JuliusBrainStateModeGrant[];
   readonly clock: { now(): string };
   readonly state: JuliusBrainAccessStatePort;
+  /** The abuse boundary. Without one, calls are unlimited — acceptable locally, never in production. */
+  readonly limits?: JuliusBrainRateLimiter;
 }) {
   // A service is never bound to a Brain of another environment: a production service over a development database refuses to exist.
   if (deps.binding.databaseEnvironment !== deps.environment) {
@@ -382,8 +398,8 @@ export function createJuliusBrainAccessService(deps: {
     async authorize(input: { readonly sessionToken: string; readonly call: JuliusBrainServiceCall; readonly facts?: JuliusBrainCallFacts }):
       Promise<JuliusBrainAccessResult<{ readonly session: JuliusBrainRunSession }>> {
       const session = await deps.state.getSession(sha256Hex(input.sessionToken));
-      const refuse = async (reasonCode: JuliusBrainAccessRefusal, detail: string) => {
-        await deps.state.appendAudit({ at: nowIso(), action: 'CALL_REFUSED', sessionId: session?.sessionId ?? null, brainRunId: session?.brainRunId ?? null, call: input.call.type, reasonCode });
+      const refuse = async (reasonCode: JuliusBrainAccessRefusal, detail: string, rateScope: JuliusBrainRateScope | null = null) => {
+        await deps.state.appendAudit({ at: nowIso(), action: 'CALL_REFUSED', sessionId: session?.sessionId ?? null, brainRunId: session?.brainRunId ?? null, call: input.call.type, reasonCode, ...(rateScope === null ? {} : { rateScope }) });
         return { ok: false as const, reasonCode, detail };
       };
       if (session === null) return refuse('session_unknown', 'no such session in this service');
@@ -421,6 +437,14 @@ export function createJuliusBrainAccessService(deps: {
             }
           }
           break;
+      }
+      // The abuse boundary is the last gate before the call is admitted, and it changes nothing when it refuses.
+      if (deps.limits !== undefined) {
+        const admitted = await deps.limits.admit({
+          principalId: session.principal.id, brainRunId: session.brainRunId, missionId: session.missionId,
+          operationClass: JULIUS_BRAIN_CALL_OPERATION_CLASS[call.type],
+        });
+        if (!admitted.ok) return refuse('rate_limited', `${admitted.operationClass} is limited to ${admitted.limit} per ${admitted.windowMs}ms for this ${admitted.scope.toLowerCase()}; retry in ${admitted.retryAfterMs}ms`, admitted.scope);
       }
       await deps.state.appendAudit({ at: nowIso(), action: 'CALL_ALLOWED', sessionId: session.sessionId, brainRunId: session.brainRunId, call: call.type, reasonCode: null });
       return { ok: true, session };

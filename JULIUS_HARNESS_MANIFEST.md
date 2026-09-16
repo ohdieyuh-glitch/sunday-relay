@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **194 production files** across 20/20 subsystems (2 roots, 143 traced, 36 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **196 production files** across 20/20 subsystems (2 roots, 144 traced, 37 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -99,14 +99,16 @@ The provider-neutral kernel: mission states and the transition table, tasks, evi
 | `src/relay/mission/julius/julius-brain-contracts.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-environment.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-export.ts` | not composed by the live root | — |
-| `src/relay/mission/julius/julius-brain-failure-model.ts` | not composed by the live root | — |
+| `src/relay/mission/julius/julius-brain-failure-model.ts` | traced | `src/relay/mission/julius/julius-brain-retry.ts` |
 | `src/relay/mission/julius/julius-brain-legacy.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-oidc-keys.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-policy.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-preservation.ts` | traced | `src/relay/mission/julius/julius-brain-archive-import.ts` |
 | `src/relay/mission/julius/julius-brain-projection.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-query.ts` | not composed by the live root | — |
+| `src/relay/mission/julius/julius-brain-rate-limit.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-retrieval.ts` | not composed by the live root | — |
+| `src/relay/mission/julius/julius-brain-retry.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-schema-document.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-secrets.ts` | traced | `src/relay/mission/julius/julius-brain-projection.ts` |
 | `src/relay/mission/julius/julius-brain-service.ts` | not composed by the live root | — |
@@ -459,6 +461,8 @@ Production Julius modules that implement a Julius port but are not reached from 
 | `src/relay/mission/julius/julius-brain-archive-import.ts` | Project Brain v2: the translation boundary from the temporary paid-run archive export (julius-paid-run-archive-export.v1) to canonical Brain records — validated, sealed-hash checked, atomic, idempotent, provenance-preserving; not yet composed |
 | `src/relay/mission/julius/julius-brain-state-modes.ts` | Project Brain v2: FRESH / CONTINUATION / LEARNING / REGRESSION retrieval authority over retained Brain state; not yet composed by the live root |
 | `src/relay/mission/julius/julius-brain-archive-conformance.ts` | Project Brain v2: the conformance kit for julius-paid-run-archive-export.v1 - a verdict and categorised findings for any export document, a catalogue of corruptions every conforming exporter must see refused, and what importing it into a given Brain would do; storage-independent, used by the conformance CLI, not composed by the live root |
+| `src/relay/mission/julius/julius-brain-retry.ts` | Project Brain v2: the Brain service retry contract - SAFE_TO_RETRY / RECONCILE_BEFORE_RETRY / DO_NOT_RETRY, bounded jittered backoff over injected time, and a circuit breaker that counts infrastructure failures only (never authorization denials or configuration errors); local and proven, not deployed |
+| `src/relay/mission/julius/julius-brain-rate-limit.ts` | Project Brain v2: the Brain service abuse boundary - per attempt, mission and principal, per operation class, with a store port (in-memory now, durable when the deployment needs exact limits); a refusal mutates nothing and carries its scope; local and proven, not deployed |
 | `src/relay/mission/julius/julius-brain-oidc-keys.ts` | Project Brain v2: the Brain service key-resolution layer - the issuer JWKS fetched through an injected transport, cached by issuer and key id, refreshed when old or when a key id is unknown (rate-limited), refused once staler than its limit, RS256 only, ambiguous key ids refused; provider-neutral, local and proven, not deployed |
 | `src/relay/mission/julius/julius-brain-failure-model.ts` | Project Brain v2: the failure model - classifies a Brain failure from the error (service, database, read-only, TLS, timeout, partial network, OIDC, session) with whether the operation may have applied, and decides by state mode and phase (FRESH proceeds unpreserved; a run requiring prior state is refused; writes continue at risk; never a memory fallback); used by the prepared binding, not composed |
 | `src/relay/mission/julius/julius-brain-session-client.ts` | Project Brain v2: the run side of a Brain service session - per-call authorisation, one renewal with a fresh identity token when a session expired or was forgotten, typed failures otherwise; local and proven, not deployed |

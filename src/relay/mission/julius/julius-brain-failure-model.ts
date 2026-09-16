@@ -34,8 +34,8 @@ import type { JuliusBrainStateMode } from './julius-brain-state-modes';
  */
 
 export const JULIUS_BRAIN_FAILURE_CLASSES = [
-  'SERVICE_UNAVAILABLE', 'DATABASE_UNAVAILABLE', 'DATABASE_READ_ONLY', 'TLS_VALIDATION_FAILED', 'TRANSACTION_TIMEOUT',
-  'NETWORK_PARTIAL', 'OIDC_UNAVAILABLE', 'SESSION_LOST', 'SESSION_EXPIRED', 'ACCESS_REFUSED', 'UNKNOWN',
+  'SERVICE_UNAVAILABLE', 'DATABASE_UNAVAILABLE', 'DATABASE_READ_ONLY', 'TLS_VALIDATION_FAILED', 'SCHEMA_MISMATCH', 'TRANSACTION_TIMEOUT',
+  'NETWORK_PARTIAL', 'OIDC_UNAVAILABLE', 'SESSION_LOST', 'SESSION_EXPIRED', 'RATE_LIMITED', 'ACCESS_REFUSED', 'UNKNOWN',
 ] as const;
 export type JuliusBrainFailureClass = typeof JULIUS_BRAIN_FAILURE_CLASSES[number];
 
@@ -90,7 +90,16 @@ const codeOf = (error: unknown): string | null => {
 };
 const messageOf = (error: unknown): string => (error instanceof Error ? error.message : typeof error === 'string' ? error : '');
 
+const isFailure = (value: unknown): value is JuliusBrainFailure =>
+  typeof value === 'object' && value !== null
+  && (JULIUS_BRAIN_FAILURE_CLASSES as readonly string[]).includes((value as JuliusBrainFailure).failureClass)
+  && ((value as JuliusBrainFailure).outcome === 'NOT_APPLIED' || (value as JuliusBrainFailure).outcome === 'UNKNOWN');
+
 export function classifyJuliusBrainFailure(error: unknown): JuliusBrainFailure {
+  // An error that already carries a classification (a wrapper raised by the retry
+  // runner or the binding) keeps it: re-reading its message would lose the outcome.
+  const carried = (error as { failure?: unknown } | null)?.failure;
+  if (isFailure(carried)) return carried;
   const code = codeOf(error);
   const message = messageOf(error);
   const failure = (failureClass: JuliusBrainFailureClass, outcome: JuliusBrainOutcomeCertainty, retryable: boolean): JuliusBrainFailure => ({ failureClass, outcome, retryable, code });
@@ -100,6 +109,8 @@ export function classifyJuliusBrainFailure(error: unknown): JuliusBrainFailure {
     if (error.reasonCode === 'session_unknown') return { failureClass: 'SESSION_LOST', outcome: 'NOT_APPLIED', retryable: true, code: error.reasonCode };
     // The service could not reach the issuer's keys: an identity failure, not a refusal of this caller.
     if (error.reasonCode === 'issuer_keys_unavailable') return { failureClass: 'OIDC_UNAVAILABLE', outcome: 'NOT_APPLIED', retryable: true, code: error.reasonCode };
+    // Throttled: the call was not made, and the same call is welcome once the window turns.
+    if (error.reasonCode === 'rate_limited') return { failureClass: 'RATE_LIMITED', outcome: 'NOT_APPLIED', retryable: true, code: error.reasonCode };
     return { failureClass: 'ACCESS_REFUSED', outcome: 'NOT_APPLIED', retryable: false, code: error.reasonCode };
   }
   if (error instanceof JuliusBrainOidcUnavailableError) return failure('OIDC_UNAVAILABLE', 'NOT_APPLIED', true);
@@ -110,6 +121,9 @@ export function classifyJuliusBrainFailure(error: unknown): JuliusBrainFailure {
   // The Brain database refusing a connection that is not what production requires is configuration, never retried around.
   if (/julius_brain_database_connection_not_encrypted/.test(message)) return { failureClass: 'TLS_VALIDATION_FAILED', outcome: 'NOT_APPLIED', retryable: false, code: 'julius_brain_database_connection_not_encrypted' };
   if (code !== null && TLS_CODES.has(code)) return failure('TLS_VALIDATION_FAILED', 'NOT_APPLIED', false);
+  // The database is not the one this code knows how to write to. Waiting does not fix it.
+  const schema = /julius_brain_database_(not_dedicated|not_migrated|identity_missing|newer_than_code|migrations_pending|environment_mismatch)/.exec(message);
+  if (schema !== null) return { failureClass: 'SCHEMA_MISMATCH', outcome: 'NOT_APPLIED', retryable: false, code: `julius_brain_database_${schema[1]}` };
   if (/self[- ]signed certificate|unable to verify the first certificate|certificate has expired|Hostname\/IP does not match certificate/i.test(message)) return failure('TLS_VALIDATION_FAILED', 'NOT_APPLIED', false);
 
   switch (code) {
@@ -128,6 +142,8 @@ export function classifyJuliusBrainFailure(error: unknown): JuliusBrainFailure {
   if (code !== null && LOST_ERRNO.has(code)) return failure('NETWORK_PARTIAL', 'UNKNOWN', true);
   if (/Connection terminated unexpectedly|Client has encountered a connection error|connection terminated|terminating connection due to|Query read timeout/i.test(message)) return failure('NETWORK_PARTIAL', 'UNKNOWN', true);
   if (/timeout exceeded when trying to connect|connect ECONNREFUSED|getaddrinfo ENOTFOUND/i.test(message)) return failure('DATABASE_UNAVAILABLE', 'NOT_APPLIED', true);
+  // The breaker refusing a call is the Brain being unreachable, said early.
+  if (/julius_brain_circuit_open/.test(message)) return { failureClass: 'SERVICE_UNAVAILABLE', outcome: 'NOT_APPLIED', retryable: true, code: 'julius_brain_circuit_open' };
   return failure('UNKNOWN', 'UNKNOWN', false);
 }
 
@@ -161,7 +177,7 @@ export function decideJuliusBrainFailure(input: { readonly mode: JuliusBrainStat
   const retry: JuliusBrainFailureDecision['retry'] = !failure.retryable ? 'NONE'
     : failure.failureClass === 'SESSION_EXPIRED' || failure.failureClass === 'SESSION_LOST' ? 'RENEW_SESSION'
       : failure.outcome === 'UNKNOWN' ? 'RECONCILE_THEN_RETRY' : 'RETRY';
-  const alert: JuliusBrainFailureDecision['alert'] = failure.failureClass === 'TLS_VALIDATION_FAILED' ? 'CONFIGURATION'
+  const alert: JuliusBrainFailureDecision['alert'] = failure.failureClass === 'TLS_VALIDATION_FAILED' || failure.failureClass === 'SCHEMA_MISMATCH' ? 'CONFIGURATION'
     : failure.failureClass === 'ACCESS_REFUSED' ? 'SECURITY' : failure.failureClass === 'UNKNOWN' ? 'CONFIGURATION' : 'NONE';
   const base = { failure, retry, memoryFallback: 'NONE' as const, alert };
 
