@@ -34,6 +34,10 @@ public class Wonderland : ModuleRules
 			"SlateCore"
 		});
 
+		// FImageCore::ResizeTo, for the HUD test library's scaled film frames (UWonderlandHudTestLibrary::CaptureViewportJpeg).
+		// FImageView and FImageUtils come through Engine; the resize itself lives in ImageCore and does not.
+		PrivateDependencyModuleNames.Add("ImageCore");
+
 		if (Target.bBuildEditor)
 		{
 			// Editor-only test hooks (WonderlandUiTestLibrary::SetBackgroundThrottleSuspended).

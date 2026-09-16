@@ -181,6 +181,14 @@ namespace WonderlandBrainGlyphs
 			Line(S, {{0.16f, 0.50f}, {0.84f, 0.50f}});
 			Line(S, {{0.16f, 0.72f}, {0.84f, 0.72f}});
 			break;
+		case EWonderlandBrainGlyph::Wallet:
+			// A wallet body with its flap and clasp: read at a glance, and never a coin or a currency sign, because the
+			// HUD must not suggest what kind of money it holds.
+			Line(S, {{0.12f, 0.30f}, {0.80f, 0.30f}, {0.80f, 0.84f}, {0.12f, 0.84f}, {0.12f, 0.30f}});
+			Line(S, {{0.12f, 0.30f}, {0.64f, 0.14f}, {0.70f, 0.30f}});
+			Line(S, {{0.58f, 0.48f}, {0.90f, 0.48f}, {0.90f, 0.68f}, {0.58f, 0.68f}, {0.58f, 0.48f}});
+			Arc(S, 0.68f, 0.58f, 0.03f, 0.0f, 360.0f, 8);
+			break;
 		}
 		return S;
 	}

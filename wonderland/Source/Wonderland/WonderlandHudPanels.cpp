@@ -67,7 +67,7 @@ SWonderlandMissionsPanel::SWonderlandMissionsPanel()
 	, HumanBrush(WonderlandUi::Srgb(44, 34, 12, 0.90f), 6.0f, WonderlandUi::Gold(0.95f), 1.2f)
 	, ButtonNormal(WonderlandUi::Srgb(24, 26, 38, 0.90f), 7.0f, WonderlandUi::Ivory(0.24f), 1.0f)
 	, ButtonHovered(WonderlandUi::Srgb(40, 34, 18, 0.95f), 7.0f, WonderlandUi::Gold(0.90f), 1.2f)
-	, PipUnreached(FLinearColor::Transparent, 8.0f, WonderlandUi::Ivory(0.30f), 1.2f)
+	, PipUnreached(WonderlandUi::Srgb(10, 12, 20, 0.85f), 8.0f, WonderlandUi::Ivory(0.30f), 1.2f)
 {
 	PipLit.Reserve(WonderlandChakraSteps);
 	PipReached.Reserve(WonderlandChakraSteps);
@@ -293,6 +293,7 @@ void SWonderlandMenuPanel::Construct(const FArguments& InArgs)
 	using namespace WonderlandHudPanelLook;
 	OnRequestClose = InArgs._OnRequestClose;
 	OnRequestMap = InArgs._OnRequestMap;
+	OnRequestWallet = InArgs._OnRequestWallet;
 	OnRequestNavigate = InArgs._OnRequestNavigate;
 	ScrimBrush.DrawAs = ESlateBrushDrawType::Image;
 	ScrimBrush.TintColor = FSlateColor(WonderlandUi::MapScrim());
@@ -307,6 +308,7 @@ void SWonderlandMenuPanel::Construct(const FArguments& InArgs)
 	Rows.Add({EWonderlandBrainGlyph::Missions, TEXT("MISSIONS"), TEXT("J"), [this]() { OnRequestNavigate.ExecuteIfBound(EWonderlandNavTarget::Missions); }});
 	Rows.Add({EWonderlandBrainGlyph::Brain, TEXT("PROJECT BRAIN"), TEXT("B"), [this]() { OnRequestNavigate.ExecuteIfBound(EWonderlandNavTarget::Brain); }});
 	Rows.Add({EWonderlandBrainGlyph::Commands, TEXT("COMMAND PRESETS"), TEXT("C"), [this]() { OnRequestNavigate.ExecuteIfBound(EWonderlandNavTarget::Commands); }});
+	Rows.Add({EWonderlandBrainGlyph::Wallet, TEXT("WONDER WEB WALLET"), TEXT("SANDBOX"), [this]() { OnRequestWallet.ExecuteIfBound(); }});
 
 	TSharedRef<SVerticalBox> List = SNew(SVerticalBox);
 	for (const FRow& Row : Rows)

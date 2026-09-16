@@ -95,21 +95,34 @@ void SWonderlandCompanionTerminal::Construct(const FArguments& InArgs)
 				.Padding(10.0f, 1.0f, 0.0f, 0.0f)
 				[
 					SNew(STextBlock)
-					.Text(INVTEXT("WAITING"))
+					.Text_Lambda([this]() { return FText::FromString(Status); })
 					.Font(WonderlandUi::Mono(10))
-					.ColorAndOpacity(CompanionFrameGold())
+					// Waiting in the frame's gold; working in the companion's own colour, so it is plain which is live.
+					.ColorAndOpacity_Lambda([this]() { return FSlateColor(Status == TEXT("WAITING") ? CompanionFrameGold() : Accent); })
 				]
 			]
-			// THE COMPANION'S LINE, in wide cream capitals.
+			// THE COMPANION'S LINE, in wide cream capitals -- while it waits. Taking part, the space goes to its work.
 			+ SVerticalBox::Slot()
 			.AutoHeight()
 			.Padding(16.0f, 13.0f, 14.0f, 0.0f)
 			[
 				SNew(STextBlock)
+				.Visibility_Lambda([this]() { return Status == TEXT("WAITING") ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 				.Text(FText::FromString(InArgs._Intro.ToUpper()))
 				.Font(IntroFont)
 				.ColorAndOpacity(WonderlandUi::Cream())
 				.LineHeightPercentage(1.2f)
+			]
+			// A JOINED COMPANION HERE IS A SIMULATION, and says so first.
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(16.0f, 9.0f, 14.0f, 0.0f)
+			[
+				SNew(STextBlock)
+				.Visibility_Lambda([this]() { return Status == TEXT("WAITING") ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
+				.Text(FText::FromString(TEXT("DEVELOPMENT PREVIEW · SIMULATED /JOIN IN")))
+				.Font(WonderlandUi::Sans(8, true, 140))
+				.ColorAndOpacity(WonderlandUi::Coral())
 			]
 			// THE LOG: open until a line is recorded.
 			+ SVerticalBox::Slot()
@@ -205,7 +218,9 @@ void SWonderlandCompanionTerminal::RebuildLog()
 		return;
 	}
 	Log->ClearChildren();
-	for (int32 Index = FMath::Max(0, Lines.Num() - 2); Index < Lines.Num(); ++Index)
+	// Two lines under the intro while waiting; four while taking part, where the intro gives up its space.
+	const int32 Shown = Status == TEXT("WAITING") ? 2 : 4;
+	for (int32 Index = FMath::Max(0, Lines.Num() - Shown); Index < Lines.Num(); ++Index)
 	{
 		const FLine& Line = Lines[Index];
 		Log->AddSlot()
@@ -239,6 +254,24 @@ void SWonderlandCompanionTerminal::RebuildLog()
 void SWonderlandCompanionTerminal::AddLine(const FString& Speaker, const FString& Text, bool bDim)
 {
 	Lines.Add({Speaker, Text, bDim});
+	RebuildLog();
+}
+
+void SWonderlandCompanionTerminal::SetStatus(const FString& InStatus)
+{
+	if (Status != InStatus)
+	{
+		Status = InStatus;
+		// How many lines show depends on the state, so the log is redrawn with it.
+		RebuildLog();
+	}
+}
+
+void SWonderlandCompanionTerminal::ClearLines()
+{
+	Lines.Reset();
+	LatestActivity.Reset();
+	NarratedBeat = NAME_None;
 	RebuildLog();
 }
 

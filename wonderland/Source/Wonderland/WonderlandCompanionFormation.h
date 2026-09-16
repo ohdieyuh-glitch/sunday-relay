@@ -11,6 +11,13 @@
 //   which reads as assisting the study: contributing energy and information, not attacking it. Elegant,
 //   coordinated, supportive -- and still not blocking the Dog or the Contract.
 //
+// /JOIN IN MAKES THEM PARTICIPANTS (founder, 2026-09-16). A companion that has joined the Mission Contract flies
+// about it for the whole mission and contributes to it -- gathering at preparation, circling with information pulses
+// through research and planning, supporting implementation, a calmer circle through review, assisting a repair --
+// while the Relay Dog performs each stage. Verification still clears the Dog's sight-line, and completion returns
+// every companion to the Dog. Which flight a companion takes, joined or not, is WonderlandCompanionFlightForBeat
+// (WonderlandMissionNarration.h), chosen in the same call as the lines its terminal shows.
+//
 // A TEMPORARY OVERRIDE, NOT A REDESIGN. The measured follow offsets from Phase 1 -- the LLM Companion at
 // Y=-88 and the Jhinn at Y=+110, both established with the founder -- are untouched, and every companion
 // returns to them the moment the stage ends. What this adds is a formation that a STAGE may ask for, for
@@ -32,7 +39,15 @@ enum class EWonderlandCompanionFormation : uint8
 	/** Behind the Dog and out to the sides, off the line between the Dog and the Contract. */
 	ClearTheSightLine,
 	/** A coordinated circle about the Contract, above it, sending pulses into it. */
-	ResearchOrbit
+	ResearchOrbit,
+	/** Joined, preparing or holding: a slow circle about the Contract, not yet contributing. */
+	Gather,
+	/** Joined, implementation: circling and contributing, the Jhinn with an execution beam as well. */
+	SupportOrbit,
+	/** Joined, review: wider and slower, with sparse pulses. */
+	CalmOrbit,
+	/** Joined, repair: close and quick, contributing to the fix. */
+	AssistOrbit
 };
 
 WONDERLAND_API const TCHAR* WonderlandCompanionFormationName(EWonderlandCompanionFormation Formation);
@@ -48,6 +63,10 @@ WONDERLAND_API EWonderlandCompanionFormation WonderlandCompanionFormationForBeat
 /** How the orbit is shaped. Numbers rather than a curve asset, for the same reason the Dog's poses are. */
 struct FWonderlandCompanionOrbit
 {
+	/** False for a flight that only gathers: no pulses and no beam. */
+	bool bContributes = true;
+	/** The Jhinn's execution beam, on for part of each beam cycle. */
+	bool bAgentBeam = false;
 	/** Distance from the Contract, uu. Inside the Dog's own circle so the two read as concentric. */
 	float RadiusUU = 210.0f;
 	/** Height above the Contract's heart, uu. Above the Dog's head, so a companion never masks it. */
@@ -63,3 +82,9 @@ struct FWonderlandCompanionOrbit
 };
 
 WONDERLAND_API const FWonderlandCompanionOrbit& WonderlandCompanionOrbit();
+
+/** The orbit a flight uses. Follow and ClearTheSightLine are not orbits; they return the research orbit unused. */
+WONDERLAND_API FWonderlandCompanionOrbit WonderlandCompanionOrbitFor(EWonderlandCompanionFormation Formation);
+
+/** Whether a flight circles the Contract. */
+WONDERLAND_API bool WonderlandFormationOrbits(EWonderlandCompanionFormation Formation);

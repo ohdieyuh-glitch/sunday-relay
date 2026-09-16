@@ -351,8 +351,12 @@ void SWonderlandMiniMapDisc::Construct(const FArguments& InArgs)
 	Driver = InArgs._Driver;
 	Diameter = InArgs._Diameter;
 	const float R = Diameter * 0.5f;
-	Shadow = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.34f), R, FLinearColor::Transparent, 0.0f);
-	Fill = FSlateRoundedBoxBrush(WonderlandUi::Srgb(8, 10, 18, 0.80f), R, FLinearColor::Transparent, 0.0f);
+	// THE WHITE DISC WAS NEVER THE PHOTOGRAPH. Every draw mode -- including drawing no photograph at all -- came out
+	// solid white, because the compass RING was a rounded-box brush with a TRANSPARENT FILL and a thin outline, and that
+	// brush renders its fill opaque white over everything under it. The N pill, a rounded box with a real fill and an
+	// outline, drew correctly all along. So fills get a real outline in their own colour, and rings are line loops.
+	Shadow = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.34f), R, FLinearColor(0.0f, 0.0f, 0.0f, 0.34f), 1.0f);
+	Fill = FSlateRoundedBoxBrush(WonderlandUi::Srgb(8, 10, 18, 0.80f), R, WonderlandUi::Srgb(8, 10, 18, 0.80f), 1.0f);
 	Ring = FSlateRoundedBoxBrush(FLinearColor::Transparent, R, WonderlandUi::Ivory(0.82f), 1.5f);
 	OuterRing = FSlateRoundedBoxBrush(FLinearColor::Transparent, R, WonderlandUi::Ivory(0.22f), 1.0f);
 	NorthPill = FSlateRoundedBoxBrush(WonderlandUi::Srgb(8, 10, 18, 0.92f), 8.0f, WonderlandUi::Gold(0.70f), 1.0f);
@@ -563,9 +567,23 @@ int32 SWonderlandMiniMapDisc::OnPaint(const FPaintArgs& Args, const FGeometry& A
 		}
 	}
 
-	// ----- the compass ring
-	FSlateDrawElement::MakeBox(OutDrawElements, Layer, Circle(R), &Ring);
-	FSlateDrawElement::MakeBox(OutDrawElements, Layer++, Circle(R + 4.0f), &OuterRing);
+	// ----- the compass ring, as line loops
+	{
+		const auto Loop = [&](float Radius, const FLinearColor& Colour, float Thickness, int32 AtLayer)
+		{
+			TArray<FVector2f> Points;
+			Points.Reserve(97);
+			for (int32 Step = 0; Step <= 96; ++Step)
+			{
+				Points.Add(Polar(Centre, Radius, 360.0f * Step / 96.0f));
+			}
+			FSlateDrawElement::MakeLines(OutDrawElements, AtLayer, AllottedGeometry.ToPaintGeometry(), Points,
+				ESlateDrawEffect::None, Colour, true, Thickness);
+		};
+		Loop(R, WonderlandUi::Ivory(0.82f), 1.5f, Layer);
+		Loop(R + 4.0f, WonderlandUi::Ivory(0.22f), 1.0f, Layer);
+		++Layer;
+	}
 	for (int32 Tick = 0; Tick < 8; ++Tick)
 	{
 		const float A = -90.0f + 45.0f * Tick;

@@ -47,6 +47,22 @@ public:
 	/** Record one line under the intro. The newest two show; older lines scroll away. */
 	void AddLine(const FString& Speaker, const FString& Text, bool bDim);
 
+	/**
+	 * THE STATE AT THE RIGHT OF THE TITLE. WAITING until the companion joins a mission; ACTIVE · JOINED while it takes
+	 * part. The banner under it -- DEVELOPMENT PREVIEW · SIMULATED /JOIN IN -- shows whenever the state is not WAITING,
+	 * because nothing is imported and a joined companion here is a simulation.
+	 */
+	void SetStatus(const FString& InStatus);
+	const FString& GetStatus() const { return Status; }
+
+	/** The activity the newest line was spoken as, e.g. RESEARCHING, and the beat it narrated. */
+	const FString& GetLatestActivity() const { return LatestActivity; }
+	FName GetNarratedBeat() const { return NarratedBeat; }
+	void NoteNarration(const FString& Activity, FName Beat) { LatestActivity = Activity; NarratedBeat = Beat; }
+
+	/** Clear the log, as a new mission does. */
+	void ClearLines();
+
 	/** What should hold keyboard focus when this terminal is being typed into. */
 	TSharedPtr<SWidget> GetFocusTarget() const;
 
@@ -67,6 +83,9 @@ private:
 	FReply HandleInputKeyDown(const FGeometry& Geometry, const FKeyEvent& KeyEvent);
 
 	FString Title;
+	FString Status = TEXT("WAITING");
+	FString LatestActivity;
+	FName NarratedBeat;
 	FLinearColor Accent = FLinearColor::White;
 	FOnSubmit OnSubmit;
 	FSimpleDelegate OnRequestClose;

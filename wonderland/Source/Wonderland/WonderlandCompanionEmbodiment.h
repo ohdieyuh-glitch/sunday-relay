@@ -73,8 +73,28 @@ public:
 	 */
 	void SetFormation(EWonderlandCompanionFormation Formation, const AActor* Contract, int32 Index, int32 Count);
 
+	/**
+	 * WHETHER THIS COMPANION HAS JOINED THE MISSION (simulated /join in), what it contributes as, and the beat its
+	 * flight was chosen for. The beat is kept so a proof can compare it with the beat the companion's terminal last
+	 * narrated -- the two are set in the same call and must never differ.
+	 */
+	void SetParticipation(bool bInJoined, bool bInAgent, const FLinearColor& InAccent, FName InFlightBeat);
+
+	EWonderlandCompanionFormation GetFormation() const { return Formation; }
+
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	FString GetFormationName() const { return WonderlandCompanionFormationName(Formation); }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	bool IsJoined() const { return bJoined; }
+
+	/** The beat this companion's flight was last chosen for. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	FName GetFlightBeat() const { return FlightBeat; }
+
+	/** The Jhinn's execution beam is lit into the Contract right now. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	bool IsBeamOn() const { return bBeamOn; }
 
 	/** How many support pulses this companion has sent into the Contract. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
@@ -205,12 +225,27 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> PulseMid;
 
+	/** The Jhinn's execution beam: a thin lit bar from its hands into the Contract, on for part of each cycle. */
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMeshComponent> BeamMesh;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> BeamMid;
+
+	void AnimateBeam(float TimeSeconds, const FWonderlandCompanionOrbit& Orbit, bool bContributing);
+
 	TArray<FSupportPulse> Pulses;
 	TWeakObjectPtr<const AActor> ContractActor;
 	EWonderlandCompanionFormation Formation = EWonderlandCompanionFormation::Follow;
 	float FormationPhase = 0.0f;
 	float NextPulseAt = -1.0f;
 	int32 PulsesSent = 0;
+	bool bJoined = false;
+	bool bAgent = false;
+	bool bBeamOn = false;
+	FName FlightBeat;
+	FLinearColor ContributionAccent = FLinearColor(0.80f, 0.93f, 1.0f);
+	FLinearColor AppliedPulseAccent = FLinearColor::Black;
 
 	TArray<FPartMotion> Motions;
 	TArray<FGlowMaterial> GlowMaterials;
