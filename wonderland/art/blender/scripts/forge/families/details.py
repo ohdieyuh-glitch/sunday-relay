@@ -336,7 +336,54 @@ def detail_oriel_bay(f):
         params={"width_m": W, "projection_m": D}, tri_budget=6000, collision=True)
 
 
+def detail_window_arched(f):
+    """A cut-stone arched window for a flat wall: 2.1 m wide, 3.2 m tall.
+
+    WHY, measured in the world (2026-09-16): of 748 street-facing ground-level
+    wall faces that nothing stands in front of, 430 had no window at all --
+    castle halls 8 m wide and 9 m tall, blank from the paving to the parapet,
+    in every district. The generator's own window is a flat grid of panes; the
+    reference's is an opening with a real surround, a sill, a keystone and a
+    label moulding over it, and it is that surround's shadow that reads as a
+    window from across a street.
+
+    A clip-on like the balcony and the oriel: a thin surround panel is the
+    flat back at y = 0, the frame stands proud of it, and the glass sits in
+    the recess 6 cm off the panel -- in FRONT of everything behind it, so it
+    can be seen (audit_glass.py).
+    """
+    p = f.part("stone")
+    g = f.part("gold")
+    gl = f.part("glass")
+    W, H_OPEN = 1.40, 2.55
+    PLATE = 0.05
+    D = 0.26
+    Z0 = 0.30
+    jamb = W * 0.16
+    body = H_OPEN - W * 0.5
+    y = PLATE + D * 0.5
+    p.box(W + 0.56, PLATE, Z0 + H_OPEN + 0.42, at=(0.0, PLATE * 0.5, 0.0), chamfer=0.015, centre_z=False)
+    E.window_arched(p, (0.0, y, Z0), W, H_OPEN, depth=D, kind="round", sill=True)
+    gl.box(W - jamb * 2.0, 0.04, body + W * 0.42, at=(0.0, PLATE + 0.03, Z0), centre_z=False)
+    E.arch_band(p, W + 0.56, (W + 0.56) * 0.5, 0.14, 0.09, at=(0.0, PLATE + 0.07, Z0 + body),
+                kind="round", steps=11)
+    for sgn in (-1.0, 1.0):
+        p.box(0.16, 0.14, 0.20, at=(sgn * ((W + 0.56) * 0.5 + 0.045), PLATE + 0.07, Z0 + body - 0.20),
+              chamfer=0.02, centre_z=False)
+    g.box(0.22, D * 1.10, 0.34, at=(0.0, y, Z0 + body + W * 0.5 + jamb * 0.5), chamfer=0.025)
+    return K.ModuleSpec(
+        "WL_Detail_Window_Arched", "window", "prop", "detail",
+        f.emit("WL_Detail_Window_Arched"),
+        [K.Socket("back", 0.0, (W + 0.56) * 0.5, "bridge_end",
+                  "the surround panel's back is flat at y = 0; butt it to any wall")],
+        districts=("city", "hamlet", "tea_terrace", "castle", "clock", "cloister"),
+        note="round-arched window: surround panel, jambs, sill, voussoirs, label moulding, gold keystone, glass in the recess",
+        params={"opening_w_m": W, "opening_h_m": H_OPEN, "sill_z_m": Z0},
+        tri_budget=3000, collision=False, nanite=False)
+
+
 BUILDERS = (
     detail_balustrade_run, detail_newel_urn, detail_screen_filigree,
     detail_balcony_bracket, detail_pinnacle_grand, detail_oriel_bay,
+    detail_window_arched,
 )

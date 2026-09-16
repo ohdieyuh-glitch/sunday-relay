@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-16T17:15:55+00:00",
+  "generated_utc": "2026-09-16T18:25:02+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -22,7 +22,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 117,
+        "n": 118,
         "min": 0.153,
         "median": 0.846,
         "max": 1.0,
@@ -36,7 +36,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 117,
+        "n": 118,
         "min": 0.0,
         "median": 0.358,
         "max": 1.0,
@@ -50,7 +50,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 117,
+        "n": 118,
         "min": 0.557,
         "median": 1.0,
         "max": 1.0,
@@ -64,7 +64,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 117,
+        "n": 118,
         "min": 0.0,
         "median": 0.985,
         "max": 1.0,
@@ -78,7 +78,7 @@
       "provenance": "declared",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 117,
+        "n": 118,
         "min": 0.0,
         "median": 0.0,
         "max": 0.7,
@@ -92,7 +92,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 114,
+        "n": 115,
         "min": 0.083,
         "median": 0.64,
         "max": 0.917,
@@ -106,7 +106,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 117,
+        "n": 118,
         "min": 0.05,
         "median": 0.5,
         "max": 0.7,
@@ -235,9 +235,9 @@
     }
   },
   "counts": {
-    "assets": 117,
-    "meshes": 374,
-    "triangles": 482240,
+    "assets": 118,
+    "meshes": 377,
+    "triangles": 482616,
     "by_role": {
       "foot": 5,
       "body": 14,
@@ -246,7 +246,7 @@
       "threshold": 10,
       "screen": 11,
       "span": 5,
-      "detail": 23,
+      "detail": 24,
       "route": 11,
       "terrace": 17,
       "hero": 9
@@ -31147,6 +31147,335 @@
         }
       },
       "part_count": 4
+    },
+    {
+      "asset_id": "WL_Detail_Window_Arched",
+      "kit_version": "1.0.0",
+      "family": "window",
+      "family_group": "details",
+      "category": "prop",
+      "silhouette_role": "detail",
+      "note": "round-arched window: surround panel, jambs, sill, voussoirs, label moulding, gold keystone, glass in the recess",
+      "districts": [
+        "city",
+        "hamlet",
+        "tea_terrace",
+        "castle",
+        "clock",
+        "cloister"
+      ],
+      "params": {
+        "opening_w_m": 1.4,
+        "opening_h_m": 2.55,
+        "sill_z_m": 0.3
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 327.0,
+      "bbox_min_uu": [
+        -110.5,
+        -1.5,
+        0.0
+      ],
+      "bbox_max_uu": [
+        110.5,
+        37.5,
+        327.0
+      ],
+      "size_uu": [
+        221.0,
+        39.0,
+        327.0
+      ],
+      "style": {
+        "slender_broad": 0.563,
+        "low_monumental": 0.084,
+        "open_solid": 1.0,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.725,
+        "ceremonial_residential": 0.7
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        101.02,
+        101.02,
+        101.02,
+        101.02,
+        101.02,
+        101.02,
+        101.02,
+        112.12,
+        104.41,
+        92.2,
+        92.0,
+        98.13
+      ],
+      "radius_uu": 110.5,
+      "tris_total": 376,
+      "tri_budget": 3000,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": false,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "back",
+          "kind": "bridge_end",
+          "z_uu": 0.0,
+          "radius_uu": 98.0,
+          "rung": null,
+          "note": "the surround panel's back is flat at y = 0; butt it to any wall"
+        }
+      ],
+      "parts": {
+        "glass": {
+          "verts": 8,
+          "faces": 6,
+          "tris": 12,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_GlassAmber"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -47.6,
+            6.0,
+            30.0
+          ],
+          "bbox_max_uu": [
+            47.6,
+            10.0,
+            273.8
+          ],
+          "size_uu": [
+            95.2,
+            4.0,
+            243.8
+          ],
+          "height_m": 2.438,
+          "base_z_uu": 30.0,
+          "normals": {
+            "faces": 6,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            48.64,
+            48.64,
+            48.64,
+            48.64,
+            48.64,
+            48.64,
+            48.64,
+            48.64,
+            48.64,
+            48.64,
+            48.64,
+            48.64
+          ],
+          "material": "MI_V2_GlassAmber",
+          "mesh_name": "WL_Detail_Window_Arched_glass",
+          "glb": "exports\\glb\\WL_Detail_Window_Arched_glass.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Window_Arched_glass.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_GlassAmber"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.47600001096725464,
+              0.30000001192092896,
+              -0.09999999403953552
+            ],
+            "max_yup": [
+              0.47600001096725464,
+              2.73799991607666,
+              -0.05999999865889549
+            ],
+            "bytes": 2320
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 30.000001907348633,
+            "stored_z_max": 273.79998779296875
+          }
+        },
+        "gold": {
+          "verts": 16,
+          "faces": 14,
+          "tris": 28,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -11.0,
+            3.7,
+            279.2
+          ],
+          "bbox_max_uu": [
+            11.0,
+            32.3,
+            313.2
+          ],
+          "size_uu": [
+            22.0,
+            28.6,
+            34.0
+          ],
+          "height_m": 0.34,
+          "base_z_uu": 279.2,
+          "normals": {
+            "faces": 14,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            34.12,
+            34.12,
+            34.12,
+            34.12,
+            34.12,
+            34.12,
+            34.12,
+            34.12,
+            34.12,
+            34.12,
+            34.12,
+            34.12
+          ],
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Detail_Window_Arched_gold",
+          "glb": "exports\\glb\\WL_Detail_Window_Arched_gold.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Window_Arched_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.10999999940395355,
+              2.7919998168945312,
+              -0.3230000138282776
+            ],
+            "max_yup": [
+              0.10999999940395355,
+              3.131999969482422,
+              -0.03700000047683716
+            ],
+            "bytes": 3252
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 279.1999816894531,
+            "stored_z_max": 313.20001220703125
+          }
+        },
+        "stone": {
+          "verts": 184,
+          "faces": 168,
+          "tris": 336,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -110.5,
+            -1.5,
+            0.0
+          ],
+          "bbox_max_uu": [
+            110.5,
+            37.5,
+            327.0
+          ],
+          "size_uu": [
+            221.0,
+            39.0,
+            327.0
+          ],
+          "height_m": 3.27,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 168,
+            "shells": 8,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            101.02,
+            101.02,
+            101.02,
+            101.02,
+            101.02,
+            101.02,
+            101.02,
+            112.12,
+            104.41,
+            92.2,
+            92.0,
+            98.13
+          ],
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Detail_Window_Arched",
+          "glb": "exports\\glb\\WL_Detail_Window_Arched.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Window_Arched.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.1050000190734863,
+              0,
+              -0.375
+            ],
+            "max_yup": [
+              1.1050000190734863,
+              3.2699999809265137,
+              0.014999985694885254
+            ],
+            "bytes": 22468
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 327.0
+          }
+        }
+      },
+      "part_count": 3
     },
     {
       "asset_id": "WL_Hero_GreatSpire",
