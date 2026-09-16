@@ -1,0 +1,586 @@
+{
+ "pass": "VW01",
+ "title": "VW01: view windows through the corridor's hedge wall",
+ "trims": [
+  {
+   "name": "WonderlandInstancedBatch_72",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "mesh": "SM_hedge_mass",
+   "index": 2,
+   "why": "avenue: alternate block, so the hedge has windows",
+   "before": [
+    900.0,
+    -2533.333,
+    0.0,
+    0.0,
+    -90.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ],
+   "after": [
+    900.0,
+    -2533.333,
+    -100000.0,
+    0.0,
+    -90.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_72",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "mesh": "SM_hedge_mass",
+   "index": 4,
+   "why": "avenue: alternate block, so the hedge has windows",
+   "before": [
+    900.0,
+    -3866.667,
+    0.0,
+    0.0,
+    -90.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ],
+   "after": [
+    900.0,
+    -3866.667,
+    -100000.0,
+    0.0,
+    -90.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_72",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "mesh": "SM_hedge_mass",
+   "index": 6,
+   "why": "avenue: alternate block, so the hedge has windows",
+   "before": [
+    900.0,
+    -5200.0,
+    0.0,
+    0.0,
+    -90.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ],
+   "after": [
+    900.0,
+    -5200.0,
+    -100000.0,
+    0.0,
+    -90.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_72",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "mesh": "SM_hedge_mass",
+   "index": 8,
+   "why": "avenue: alternate block, so the hedge has windows",
+   "before": [
+    -900.0,
+    -2533.333,
+    0.0,
+    0.0,
+    -90.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ],
+   "after": [
+    -900.0,
+    -2533.333,
+    -100000.0,
+    0.0,
+    -90.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_72",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "mesh": "SM_hedge_mass",
+   "index": 10,
+   "why": "avenue: alternate block, so the hedge has windows",
+   "before": [
+    -900.0,
+    -3866.667,
+    0.0,
+    0.0,
+    -90.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ],
+   "after": [
+    -900.0,
+    -3866.667,
+    -100000.0,
+    0.0,
+    -90.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_72",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "mesh": "SM_hedge_mass",
+   "index": 12,
+   "why": "avenue: alternate block, so the hedge has windows",
+   "before": [
+    -900.0,
+    -5200.0,
+    0.0,
+    0.0,
+    -90.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ],
+   "after": [
+    -900.0,
+    -5200.0,
+    -100000.0,
+    0.0,
+    -90.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_91",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "mesh": "SM_hedge_mass",
+   "index": 0,
+   "why": "plaza flank: the two nearest the axis, so the midground shows",
+   "before": [
+    560.0,
+    1100.0,
+    60.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "after": [
+    560.0,
+    1100.0,
+    -99940.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_91",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "mesh": "SM_hedge_mass",
+   "index": 2,
+   "why": "plaza flank: the two nearest the axis, so the midground shows",
+   "before": [
+    -940.0,
+    1100.0,
+    60.0,
+    0.0,
+    59.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "after": [
+    -940.0,
+    1100.0,
+    -99940.0,
+    0.0,
+    59.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_91",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "mesh": "SM_hedge_mass",
+   "index": 4,
+   "why": "garden path: alternate block, so the path hedge has windows",
+   "before": [
+    -420.0,
+    2270.0,
+    0.0,
+    0.0,
+    221.0,
+    0.0,
+    0.85,
+    0.85,
+    0.85
+   ],
+   "after": [
+    -420.0,
+    2270.0,
+    -100000.0,
+    0.0,
+    221.0,
+    0.0,
+    0.85,
+    0.85,
+    0.85
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_91",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "mesh": "SM_hedge_mass",
+   "index": 5,
+   "why": "garden path: alternate block, so the path hedge has windows",
+   "before": [
+    -420.0,
+    2910.0,
+    0.0,
+    0.0,
+    303.0,
+    0.0,
+    0.85,
+    0.85,
+    0.85
+   ],
+   "after": [
+    -420.0,
+    2910.0,
+    -100000.0,
+    0.0,
+    303.0,
+    0.0,
+    0.85,
+    0.85,
+    0.85
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_91",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "mesh": "SM_hedge_mass",
+   "index": 6,
+   "why": "garden path: alternate block, so the path hedge has windows",
+   "before": [
+    -420.0,
+    4190.0,
+    60.0,
+    0.0,
+    467.0,
+    0.0,
+    0.85,
+    0.85,
+    0.85
+   ],
+   "after": [
+    -420.0,
+    4190.0,
+    -99940.0,
+    0.0,
+    467.0,
+    0.0,
+    0.85,
+    0.85,
+    0.85
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_91",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "mesh": "SM_hedge_mass",
+   "index": 7,
+   "why": "garden path: alternate block, so the path hedge has windows",
+   "before": [
+    420.0,
+    2270.0,
+    0.0,
+    0.0,
+    41.0,
+    0.0,
+    0.85,
+    0.85,
+    0.85
+   ],
+   "after": [
+    420.0,
+    2270.0,
+    -100000.0,
+    0.0,
+    41.0,
+    0.0,
+    0.85,
+    0.85,
+    0.85
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_91",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "mesh": "SM_hedge_mass",
+   "index": 8,
+   "why": "garden path: alternate block, so the path hedge has windows",
+   "before": [
+    420.0,
+    2910.0,
+    0.0,
+    0.0,
+    123.0,
+    0.0,
+    0.85,
+    0.85,
+    0.85
+   ],
+   "after": [
+    420.0,
+    2910.0,
+    -100000.0,
+    0.0,
+    123.0,
+    0.0,
+    0.85,
+    0.85,
+    0.85
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_91",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "mesh": "SM_hedge_mass",
+   "index": 9,
+   "why": "garden path: alternate block, so the path hedge has windows",
+   "before": [
+    420.0,
+    4190.0,
+    60.0,
+    0.0,
+    287.0,
+    0.0,
+    0.85,
+    0.85,
+    0.85
+   ],
+   "after": [
+    420.0,
+    4190.0,
+    -99940.0,
+    0.0,
+    287.0,
+    0.0,
+    0.85,
+    0.85,
+    0.85
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_91",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "mesh": "SM_hedge_mass",
+   "index": 14,
+   "why": "stands 2.6 m clear of the ground",
+   "before": [
+    -1250.0,
+    2760.0,
+    250.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "after": [
+    -1250.0,
+    2760.0,
+    -99750.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_91",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "mesh": "SM_hedge_mass",
+   "index": 15,
+   "why": "stands 2.6 m clear of the ground",
+   "before": [
+    -600.0,
+    2800.0,
+    250.0,
+    0.0,
+    90.0,
+    0.0,
+    0.8,
+    0.8,
+    0.8
+   ],
+   "after": [
+    -600.0,
+    2800.0,
+    -99750.0,
+    0.0,
+    90.0,
+    0.0,
+    0.8,
+    0.8,
+    0.8
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_92",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "mesh": "SM_hedge_mass",
+   "index": 0,
+   "why": "plaza flank: the two nearest the axis, so the midground shows",
+   "before": [
+    940.0,
+    1100.0,
+    60.0,
+    0.0,
+    33.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "after": [
+    940.0,
+    1100.0,
+    -99940.0,
+    0.0,
+    33.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_92",
+   "label": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "mesh": "SM_hedge_mass",
+   "index": 2,
+   "why": "plaza flank: the two nearest the axis, so the midground shows",
+   "before": [
+    -560.0,
+    1100.0,
+    60.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "after": [
+    -560.0,
+    1100.0,
+    -99940.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_100",
+   "label": "V2Batch_hedge_mass_MI_V2_PetalViolet",
+   "mesh": "SM_hedge_mass",
+   "index": 0,
+   "why": "garden path: alternate block, so the path hedge has windows",
+   "before": [
+    -420.0,
+    3550.0,
+    60.0,
+    0.0,
+    385.0,
+    0.0,
+    0.85,
+    0.85,
+    0.85
+   ],
+   "after": [
+    -420.0,
+    3550.0,
+    -99940.0,
+    0.0,
+    385.0,
+    0.0,
+    0.85,
+    0.85,
+    0.85
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_100",
+   "label": "V2Batch_hedge_mass_MI_V2_PetalViolet",
+   "mesh": "SM_hedge_mass",
+   "index": 1,
+   "why": "garden path: alternate block, so the path hedge has windows",
+   "before": [
+    420.0,
+    3550.0,
+    60.0,
+    0.0,
+    205.0,
+    0.0,
+    0.85,
+    0.85,
+    0.85
+   ],
+   "after": [
+    420.0,
+    3550.0,
+    -99940.0,
+    0.0,
+    205.0,
+    0.0,
+    0.85,
+    0.85,
+    0.85
+   ]
+  }
+ ]
+}
