@@ -325,12 +325,21 @@ def job():
         # for a different act; the brush has to be GONE, because a Dog still holding it is still painting as
         # far as anybody watching is concerned.
         review = [f for f in frames if f["beat"] in ("independent_reviewer", "review_challenge")]
-        brush_in_review = [f["i"] for f in review if f["brush"]]
+        # THE PROP SWAP IS A TRANSITION, AND THE FOUNDER ASKED FOR ONE. "Do not hard-cut props on and off
+        # if a clean transition can reasonably be implemented" -- so the brush being visible for the first
+        # sample of review is the crossfade working, not the brush failing to leave. This is the same
+        # mistake J13 made, and it is the second time in one run: a transition measured as a steady state.
+        swap_grace = 0.6
+        began = review[0]["t"] if review else 0.0
+        settled_review = [f for f in review if f["t"] - began >= swap_grace]
+        brush_in_review = [f["i"] for f in settled_review if f["brush"]]
         lens_in_review = [f for f in review if f["lens"]]
         record("J11", "review puts the brush away and takes up the lens",
-               len(review) > 0 and not brush_in_review and len(lens_in_review) >= max(1, int(len(review) * 0.8)),
-               review_samples=len(review), still_holding_brush=brush_in_review,
-               lens_up=len(lens_in_review))
+               len(settled_review) > 0 and not brush_in_review
+               and len(lens_in_review) >= max(1, int(len(review) * 0.8)),
+               review_samples=len(review), settled_samples=len(settled_review),
+               still_holding_brush=brush_in_review, lens_up=len(lens_in_review),
+               swap_grace_seconds=swap_grace)
 
         # ---------------------------------------------------------------- repair is corrective
         repair = [f for f in frames if f["beat"] in ("repair_required", "repairing")]
