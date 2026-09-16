@@ -173,12 +173,22 @@ public:
 	float CrystalHalfWidthUU = 15.0f;
 
 	/**
-	 * Uniform scale over the whole contract. 1.35 puts it at about 170 px from the play camera at the
-	 * measured distance -- readable as a cut stone rather than a spark, and well short of competing with
-	 * the Dog or the companions for the eye.
+	 * Uniform scale over the whole contract.
+	 *
+	 * DERIVED, THEN TO BE CONFIRMED. 1.35 was chosen when the contract hung at 210 uu; moving it out to the
+	 * 340 uu orbit radius shrinks it, and the joint film showed a crystal too small to read. A probe meant
+	 * to settle it produced impossible numbers and no captures, so rather than spend another PIE session on
+	 * a broken measurement this is solved from the two readings that ARE trustworthy:
+	 *
+	 *   (125 uu, x1.00) -> 149.5 px        apparent height ~ k * scale / (boom + forward)
+	 *   (210 uu, x1.35) -> 170.8 px        two points, two unknowns: boom ~= 343 uu, k ~= 69958
+	 *
+	 * which puts x1.90 at about 195 px at 340 uu -- a little larger than the 170 px that read well before,
+	 * because it now has to hold its own against a Dog walking a circle in front of it. Marked as derived
+	 * rather than measured on purpose: the next joint film confirms it or replaces it.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	float BuiltScale = 1.35f;
+	float BuiltScale = 1.90f;
 
 	/** Time constant of the follow, seconds. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")

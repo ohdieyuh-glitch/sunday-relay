@@ -23,15 +23,16 @@ L = unreal.WonderlandUiTestLibrary
 # nothing else lives; the contract now FLOATS at 122 uu, which is the Jhinn's chest height, and the Jhinn
 # stands at Y=+110. The old winner puts a crystal directly in front of a companion. These trials are about
 # getting clear of BOTH companions in the air rather than clear of the Dog on the floor.
+# THE PLACEMENT IS SETTLED; THE SIZE IS NOT. 340 uu is the orbit radius the animation lane tuned its walk
+# to, so it does not move. What is open is how big the crystal has to be built to read at that distance,
+# which is the debt left over from moving it out from 210.
 CANDIDATES = [
-    ("ground_era", 125.0, 80.0, 122.0, 1.0),
-    ("forward_right", 210.0, 60.0, 135.0, 1.35),
-    ("forward_centre", 215.0, 0.0, 150.0, 1.35),
-    ("high_right", 130.0, 85.0, 205.0, 1.3),
-    ("high_left", 130.0, -85.0, 205.0, 1.3),
-    ("far_forward", 280.0, 30.0, 150.0, 1.7),
-    ("wide_right_high", 150.0, 175.0, 170.0, 1.5),
-    ("over_the_dog", 60.0, 0.0, 230.0, 1.3),
+    ("at_210_x1.35", 210.0, 60.0, 135.0, 1.35),
+    ("at_340_x1.35", 340.0, 40.0, 135.0, 1.35),
+    ("at_340_x1.7", 340.0, 40.0, 135.0, 1.70),
+    ("at_340_x2.1", 340.0, 40.0, 135.0, 2.10),
+    ("at_340_x2.5", 340.0, 40.0, 135.0, 2.50),
+    ("at_340_x2.9", 340.0, 40.0, 135.0, 2.90),
 ]
 
 
@@ -88,6 +89,10 @@ def job():
         return
 
     for name, forward, right, height, scale in CANDIDATES:
+        # THE ANCHOR HAS TO COME OFF BETWEEN TRIALS. A performed beat anchors the contract to a world point,
+        # and an anchored crystal ignores the follow offset entirely -- so a probe that did not release it
+        # would measure the same placement six times and report six identical numbers.
+        orb_actor.release_anchor()
         try:
             orb_actor.set_editor_property("float_height_uu", height)
         except Exception as exc:
