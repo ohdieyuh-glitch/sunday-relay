@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-14T02:05:23+00:00",
+  "generated_utc": "2026-09-16T17:15:55+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -237,7 +237,7 @@
   "counts": {
     "assets": 117,
     "meshes": 374,
-    "triangles": 482068,
+    "triangles": 482240,
     "by_role": {
       "foot": 5,
       "body": 14,
@@ -30750,7 +30750,7 @@
       "family_group": "details",
       "category": "prop",
       "silhouette_role": "detail",
-      "note": "three-sided glazed oriel on a half-round corbel, conical roof, flat back",
+      "note": "three-sided glazed oriel on a half-round corbel: glass between stone posts and mullions, gold transoms, conical roof, flat back",
       "districts": [
         "hamlet",
         "city",
@@ -30800,18 +30800,18 @@
         75.0,
         115.0,
         208.43,
-        190.52,
-        190.52,
-        190.52,
-        190.52,
-        190.52,
+        215.72,
+        215.72,
+        215.72,
+        203.33,
+        213.57,
         229.13,
         229.13,
         76.4,
         103.0
       ],
       "radius_uu": 201.0,
-      "tris_total": 596,
+      "tris_total": 768,
       "tri_budget": 6000,
       "over_budget": false,
       "nanite_recommended": false,
@@ -30843,22 +30843,22 @@
             "UVMap"
           ],
           "bbox_min_uu": [
-            -140.0,
-            6.0,
-            195.0
+            -154.71,
+            0.0,
+            196.0
           ],
           "bbox_max_uu": [
-            140.0,
-            171.0,
-            425.0
+            154.71,
+            180.0,
+            424.0
           ],
           "size_uu": [
-            280.0,
-            165.0,
-            230.0
+            309.42,
+            180.0,
+            228.0
           ],
-          "height_m": 2.3,
-          "base_z_uu": 195.0,
+          "height_m": 2.28,
+          "base_z_uu": 196.0,
           "normals": {
             "faces": 6,
             "shells": 1,
@@ -30868,18 +30868,18 @@
             "zero_normal_faces": 0
           },
           "profile_uu": [
-            190.52,
-            190.52,
-            190.52,
-            190.52,
-            190.52,
-            190.52,
-            190.52,
-            190.52,
-            190.52,
-            190.52,
-            190.52,
-            190.52
+            202.35,
+            202.35,
+            202.35,
+            202.35,
+            202.35,
+            202.35,
+            202.35,
+            202.35,
+            202.35,
+            202.35,
+            202.35,
+            202.35
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Detail_Oriel_Bay_glass",
@@ -30891,27 +30891,27 @@
             ],
             "meshes": 1,
             "min_yup": [
-              -1.399999976158142,
-              1.9500000476837158,
-              -1.7100000381469727
+              -1.5470925569534302,
+              1.9600000381469727,
+              -1.7999999523162842
             ],
             "max_yup": [
-              1.399999976158142,
-              4.25,
-              -0.05999999865889549
+              1.5470925569534302,
+              4.239999771118164,
+              0
             ],
-            "bytes": 2296
+            "bytes": 2292
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": 195.0,
-            "stored_z_max": 425.0
+            "stored_z_min": 196.0,
+            "stored_z_max": 423.9999694824219
           }
         },
         "gold": {
-          "verts": 227,
-          "faces": 238,
-          "tris": 444,
+          "verts": 251,
+          "faces": 256,
+          "tris": 480,
           "degenerate_faces": 0,
           "loose_verts": 0,
           "materials": [
@@ -30922,43 +30922,43 @@
             "UVMap"
           ],
           "bbox_min_uu": [
-            -15.0,
-            47.9,
-            585.0
+            -156.51,
+            12.7,
+            346.8
           ],
           "bbox_max_uu": [
-            15.0,
-            77.9,
+            156.51,
+            186.5,
             640.0
           ],
           "size_uu": [
-            30.0,
-            30.0,
-            55.0
+            313.03,
+            173.8,
+            293.2
           ],
-          "height_m": 0.55,
-          "base_z_uu": 585.0,
+          "height_m": 2.932,
+          "base_z_uu": 346.8,
           "normals": {
-            "faces": 238,
-            "shells": 3,
+            "faces": 256,
+            "shells": 6,
             "inverted_shells": 0,
             "inverted_faces": 0,
             "open_shells": 0,
             "zero_normal_faces": 0
           },
           "profile_uu": [
+            203.33,
+            203.33,
+            203.33,
+            203.33,
+            203.33,
+            203.33,
+            203.33,
+            203.33,
+            203.33,
             77.9,
-            73.9,
-            74.21,
             76.14,
-            75.53,
-            71.26,
-            65.08,
-            69.1,
-            69.9,
-            69.9,
-            65.1,
-            62.9
+            69.9
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Detail_Oriel_Bay_gold",
@@ -30970,20 +30970,20 @@
             ],
             "meshes": 1,
             "min_yup": [
-              -0.15000000596046448,
-              5.849999904632568,
-              -0.7790000438690186
+              -1.5651352405548096,
+              3.4679999351501465,
+              -1.8650000095367432
             ],
             "max_yup": [
-              0.15000000596046448,
+              1.5651354789733887,
               6.400000095367432,
-              -0.4790000021457672
+              -0.1270449310541153
             ],
-            "bytes": 16756
+            "bytes": 19308
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": 585.0,
+            "stored_z_min": 346.79998779296875,
             "stored_z_max": 640.0
           }
         },
@@ -31067,9 +31067,9 @@
           }
         },
         "stone": {
-          "verts": 73,
-          "faces": 76,
-          "tris": 128,
+          "verts": 153,
+          "faces": 144,
+          "tris": 264,
           "degenerate_faces": 0,
           "loose_verts": 0,
           "materials": [
@@ -31097,11 +31097,11 @@
           "height_m": 4.82,
           "base_z_uu": 0.0,
           "normals": {
-            "faces": 76,
-            "shells": 4,
+            "faces": 144,
+            "shells": 10,
             "inverted_shells": 0,
             "inverted_faces": 0,
-            "open_shells": 0,
+            "open_shells": 1,
             "zero_normal_faces": 0
           },
           "profile_uu": [
@@ -31109,13 +31109,13 @@
             75.0,
             115.0,
             208.43,
-            185.17,
-            185.17,
-            185.17,
-            185.17,
-            185.17,
-            185.17,
-            185.17,
+            215.72,
+            215.72,
+            215.72,
+            215.72,
+            215.72,
+            215.72,
+            213.57,
             229.13
           ],
           "material": "MI_V2_IvoryStone",
@@ -31137,7 +31137,7 @@
               4.820000171661377,
               1.2713450193405151
             ],
-            "bytes": 7872
+            "bytes": 17396
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,

@@ -238,6 +238,39 @@ def detail_pinnacle_grand(f):
         params={"subordinates": 4}, tri_budget=9000, collision=True)
 
 
+def _outward(a, b):
+    """The unit normal of plan edge a->b that points away from the wall side (y = 0)."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    n = math.hypot(dx, dy)
+    nx, ny = dy / n, -dx / n
+    mx, my = (a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5
+    if nx * mx + ny * (my - 0.4) < 0.0:            # the plan's middle is inside; point the other way
+        nx, ny = -nx, -ny
+    return nx, ny
+
+
+def _outset(plan, t):
+    """Move a wall-mounted plan's three outer edges out by t (in by -t); the back stays at y = 0.
+
+    Each outer edge is shifted along its normal and neighbouring shifted edges
+    are intersected, so the faces stay parallel to the originals.
+    """
+    lines = []
+    for (a, b) in zip(plan[:-1], plan[1:]):
+        nx, ny = _outward(a, b)
+        lines.append(((a[0] + nx * t, a[1] + ny * t), (b[0] + nx * t, b[1] + ny * t)))
+
+    def meet(l1, l2):
+        (x1, y1), (x2, y2) = l1
+        (x3, y3), (x4, y4) = l2
+        den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+        u = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den
+        return (x1 + u * (x2 - x1), y1 + u * (y2 - y1))
+
+    back = ((-100.0, 0.0), (100.0, 0.0))
+    return [meet(back, lines[0]), meet(lines[0], lines[1]), meet(lines[1], lines[2]), meet(lines[2], back)]
+
+
 def detail_oriel_bay(f):
     """A three-sided glazed oriel on a corbel, for a flat wall. 6.1 m.
 
@@ -252,16 +285,35 @@ def detail_oriel_bay(f):
     gl = f.part("glass")
     W, D = 3.20, 1.85
     H = 6.10
+    SILL, HEAD = 1.95, 4.25
     p.lathe([(0.0, 0.00), (0.75, 0.42), (1.15, 0.95), (1.28, 1.55)],
             segments=12, arc=200.0, matrix=M.xform((0.0, 0.0, 0.0), (0.0, 0.0, -100.0)),
             smooth=True)
     plan = [(-W * 0.5, 0.0), (-W * 0.30, D), (W * 0.30, D), (W * 0.5, 0.0)]
-    p.prism(plan, 3.05, z0=1.55)
-    gplan = [(-W * 0.5 + 0.20, 0.06), (-W * 0.30 + 0.12, D - 0.14),
-             (W * 0.30 - 0.12, D - 0.14), (W * 0.5 - 0.20, 0.06)]
-    gl.prism(gplan, 2.30, z0=1.95)
-    p.box(0.16, D * 0.9, 2.45, at=(0.0, D * 0.55, 1.90), chamfer=0.035,
-          centre_z=False)
+    # THE GLAZING IS ON THE OUTSIDE. The first version drew one solid stone
+    # prism from the corbel to the cornice and put the glass prism INSIDE it,
+    # 0.14-0.20 m in from every face -- so in the world (FD01, 2026-09-16)
+    # every oriel read as a blank grey box on a cone, with no window at all.
+    # Now the stone is an apron below the sill and a frieze above the head,
+    # the glass fills the whole plan between them (5 cm behind the stone
+    # line, so the stone still frames it), and posts and mullions divide it.
+    p.prism(plan, SILL - 1.55, z0=1.55)
+    p.prism(_outset(plan, 0.06), 0.12, z0=SILL - 0.08)
+    p.prism(plan, 4.60 - HEAD, z0=HEAD)
+    gl.prism(_outset(plan, -0.05), HEAD - SILL - 0.02, z0=SILL + 0.01)
+    for (x, y) in plan[1:3]:
+        p.box(0.22, 0.22, HEAD - SILL, at=(x * 0.96, y - 0.09, SILL), chamfer=0.03,
+              centre_z=False)
+    for (a, b) in zip(plan[:-1], plan[1:]):
+        mx, my = (a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5
+        ang = math.degrees(math.atan2(b[1] - a[1], b[0] - a[0]))
+        nx, ny = _outward(a, b)
+        p.box(0.11, 0.10, HEAD - SILL, at=(mx - nx * 0.03, my - ny * 0.03, SILL),
+              rot=(0.0, 0.0, ang), chamfer=0.02, centre_z=False)
+        # a gold transom across each light, two thirds of the way up
+        g.box(math.hypot(b[0] - a[0], b[1] - a[1]) - 0.30, 0.06, 0.07,
+              at=(mx - nx * 0.015, my - ny * 0.015, SILL + (HEAD - SILL) * 0.66),
+              rot=(0.0, 0.0, ang), centre_z=False)
     # NO SEPARATE BACK BAND HERE. One was drawn, 3.50 x 0.20 x 0.22 at 4.60,
     # and it was wholly inside the cornice prism below except for the 6 cm it
     # stuck out BEHIND the mounting plane -- so it contributed nothing but a
@@ -280,7 +332,7 @@ def detail_oriel_bay(f):
         [K.Socket("back", 0.0, W * 0.5, "bridge_end",
                   "the back face is flat at y = 0; butt it to any wall")],
         districts=("hamlet", "city", "tea_terrace", "clock"),
-        note="three-sided glazed oriel on a half-round corbel, conical roof, flat back",
+        note="three-sided glazed oriel on a half-round corbel: glass between stone posts and mullions, gold transoms, conical roof, flat back",
         params={"width_m": W, "projection_m": D}, tri_budget=6000, collision=True)
 
 
