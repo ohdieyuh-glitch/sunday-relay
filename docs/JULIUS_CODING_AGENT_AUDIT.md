@@ -123,6 +123,11 @@ Severity is what the gap can do on a real mission, not how hard it is to fix.
     `unclassified`.
 16. **MEDIUM — a paid session followed by an executor refusal is settled at $0,**
     because the executor error carries no provider cost.
+19. **LOW — a tool count the provider never reported is recorded as zero.** The
+    adapter wrote `toolCalls: toolInvocations ?? 0`, so a provider with no tool
+    count (a Codex-shaped task API) read as a coder that used no tools, and the
+    effort parity reading counted it as measured. Found while building the
+    three-peer proof.
 
 ### Adapter-internal (Claude Code), noted for the live lane
 
@@ -136,7 +141,7 @@ Severity is what the gap can do on a real mission, not how hard it is to fix.
 ## C. The PR 3 boundary
 
 **PR 3 — the Coding Agent as a governed, provider-neutral peer.** Everything
-below is provider-free and provable offline. It closes gaps 1–12 and 14–16.
+below is provider-free and provable offline. It closes gaps 1–12, 14–16 and 19.
 
 1. **Coding Agent provider contract and result authority.** A kernel-level
    provider-neutral request and outcome contract with a typed failure taxonomy;
@@ -162,7 +167,10 @@ below is provider-free and provable offline. It closes gaps 1–12 and 14–16.
    ever writing architecture.
 5. **Swappability and the three-peer proof.** Claude-Code-shaped, Codex-shaped
    and generic Coding Agent fixtures behind the one port, and a provider-free
-   mission exercising all three roles end to end under each.
+   mission exercising all three roles end to end under each — through the live
+   composition root and the production Coding Agent adapter — including a
+   provider failure during a repair, a role reaching for another's authority,
+   and the effort parity reading as an observation that stops nothing.
 
 ### Deliberately NOT in PR 3
 
