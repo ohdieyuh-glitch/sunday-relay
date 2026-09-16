@@ -90,6 +90,38 @@ public:
 	void SetOrbScale(float Scale);
 	void SetFollowOffset(float Forward, float Right);
 
+	/**
+	 * STOP FOLLOWING AND BECOME A PLACE. Takes the follow position once and holds that world location.
+	 *
+	 * WHY THIS EXISTS. The contract used to be pinned in the pawn's YAW frame, which meant it was always
+	 * the same distance dead ahead of the Dog whatever the Dog did -- and the founder's performances need
+	 * the opposite. You cannot walk a circle around a point welded 3 m in front of your nose: the Dog would
+	 * circle and the crystal would circle with it, one radius ahead, which reads as a dog chasing a bauble
+	 * rather than studying a contract. Worse for VERIFYING, where "face the contract" and "track it with
+	 * the head" are degenerate when it is by construction always straight ahead, and the beam becomes a rod
+	 * at a fixed angle every frame forever (lane owner, 2026-09-16).
+	 *
+	 * So while a mission is being PERFORMED the contract is a place in the world, and the Dog moves around
+	 * it. That is what "the Contract is the centre of the activity" has to mean geometrically.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
+	void AnchorHere();
+
+	/** Follow the Dog again. Called when a mission ends, so the next one anchors somewhere new. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
+	void ReleaseAnchor();
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	bool IsAnchored() const { return bAnchored; }
+
+	/** Where it is holding, world space. Meaningless unless IsAnchored. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FVector GetAnchorPoint() const { return AnchorPoint; }
+
+	/** How many times the anchor has been re-taken because the visitor walked away. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	int32 GetLeashBreaks() const { return LeashBreaks; }
+
 	EWonderlandMissionBeat GetBeat() const { return Beat; }
 	EWonderlandChakra GetChakra() const { return Chakra; }
 
@@ -120,9 +152,13 @@ public:
 	 * only one that clears BOTH companions -- high_right and wide_right_high pass straight through the
 	 * Jhinn's crown, and the old ground placement overlaps its tail. Out in front, the crystal is
 	 * silhouetted against the garden instead of against something else that glows.
+	 *
+	 * THE DISTANCE IS THE ORBIT RADIUS. Once anchored this is where the crystal is DROPPED, and the Dog
+	 * then walks around it to read and to paint -- so 340 uu is not a framing choice, it is a 3.4 m circle,
+	 * chosen inside the 3-6 m the animation lane asked for.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	FVector FollowOffset = FVector(210.0, 60.0, 0.0);
+	FVector FollowOffset = FVector(340.0, 40.0, 0.0);
 
 	/** Height of the crystal's heart above the floor, uu. Above the companions rather than among them. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
@@ -151,6 +187,17 @@ public:
 	/** Farther than this from the follow position and it snaps rather than glides: a teleport. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
 	float SnapDistanceUU = 1800.0f;
+
+	/**
+	 * How far the visitor may walk from an anchored contract before it comes after them, uu.
+	 *
+	 * A HARD ANCHOR WOULD BREAK THE OTHER HALF OF THE CANON. The founder asked both that the Contract be
+	 * the centre of the activity AND that it "remains near the Relay Dog during active mission execution";
+	 * a crystal that stayed put while someone wandered off satisfies the first and abandons the second.
+	 * Inside this radius it holds perfectly still, which is every case an orbit or a beam cares about.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
+	float LeashUU = 900.0f;
 
 	/** Seconds to draw itself in when a task starts, and to fade out when one ends. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
@@ -223,6 +270,9 @@ private:
 	float Phase = 0.0f;
 	float Manifest = 0.0f;
 	float ManifestTarget = 1.0f;
+	FVector AnchorPoint = FVector::ZeroVector;
+	int32 LeashBreaks = 0;
+	bool bAnchored = false;
 	int32 BoxCount = 0;
 	bool bHasManifested = false;
 	bool bHasSnapped = false;

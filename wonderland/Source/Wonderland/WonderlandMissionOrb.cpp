@@ -298,6 +298,21 @@ void AWonderlandMissionOrb::SetFollowOffset(float Forward, float Right)
 	SnapToTarget();
 }
 
+void AWonderlandMissionOrb::AnchorHere()
+{
+	const APawn* Pawn = GetFollowPawn();
+	// Taken from the FOLLOW position rather than from wherever the crystal happens to be mid-glide, so the
+	// anchor lands where the placement was measured even if the contract has only just manifested.
+	AnchorPoint = Pawn != nullptr ? DesiredLocation(Pawn) : GetActorLocation();
+	bAnchored = true;
+	UE_LOG(LogWonderlandMission, Log, TEXT("WLMISSION contract anchored at %s"), *AnchorPoint.ToCompactString());
+}
+
+void AWonderlandMissionOrb::ReleaseAnchor()
+{
+	bAnchored = false;
+}
+
 void AWonderlandMissionOrb::SetManifest(float Target)
 {
 	ManifestTarget = FMath::Clamp(Target, 0.0f, 1.0f);
@@ -417,7 +432,20 @@ void AWonderlandMissionOrb::Tick(float DeltaSeconds)
 
 	if (const APawn* Pawn = GetFollowPawn())
 	{
-		const FVector Target = DesiredLocation(Pawn);
+		FVector Target = DesiredLocation(Pawn);
+		if (bAnchored)
+		{
+			// A PLACE, NOT AN ACCESSORY. It holds still while the Dog walks around it, reads at it and
+			// beams at it -- and comes after the visitor only if they leave it behind entirely.
+			const float Strayed = FVector::Dist2D(Pawn->GetActorLocation(), AnchorPoint);
+			if (Strayed > LeashUU)
+			{
+				AnchorPoint = Target;
+				++LeashBreaks;
+				UE_LOG(LogWonderlandMission, Verbose, TEXT("WLMISSION leash broken at %.0f uu; contract re-anchored"), Strayed);
+			}
+			Target = AnchorPoint;
+		}
 		if (!bHasSnapped || FVector::Dist(GetActorLocation(), Target) > SnapDistanceUU)
 		{
 			SetActorLocation(Target);
