@@ -1466,6 +1466,7 @@ export function createJuliusCodingAgentAdapter(input: {
             ...('guidanceRequest' in participation ? { guidanceRequest: participation.guidanceRequest } : {}),
             ...('researchAsks' in participation ? { researchAsks: participation.researchAsks } : {}),
             ...('segmentResume' in participation ? { segmentResume: participation.segmentResume } : {}),
+            ...('architectureObservations' in participation ? { architectureObservations: participation.architectureObservations } : {}),
           }
         : {};
       const changed = workspace.changes.length > 0;
