@@ -150,6 +150,8 @@ def job():
                     "running": bool(mission.is_fixture_running()),
                     "progress": mission.get_fixture_progress(),
                     "dog_beam": bool(beam.is_visible()) if beam is not None else None,
+                    "dog_beam_scale": round(beam.get_world_scale().y, 3) if beam is not None else None,
+                    "dog_beam_name": beam.get_name() if beam is not None else None,
                     "book": bool(book.is_visible()) if book is not None else None,
                     "page_turning": bool(leaf.is_visible()) if leaf is not None else None,
                     "dog_z": round(pawn.get_actor_location().z, 1),
