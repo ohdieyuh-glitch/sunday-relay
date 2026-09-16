@@ -328,6 +328,13 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<class UInstancedStaticMeshComponent> BrushHeadMesh = nullptr;
 
+	/** REVIEW's magnifying glass: a rim, a handle, and a lens that catches the light. */
+	UPROPERTY(Transient)
+	TObjectPtr<class UInstancedStaticMeshComponent> LensMesh = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UInstancedStaticMeshComponent> LensGlassMesh = nullptr;
+
 	UPROPERTY(Transient)
 	TObjectPtr<class UInstancedStaticMeshComponent> BeamMesh = nullptr;
 
@@ -348,6 +355,12 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<class UMaterialInstanceDynamic> BrushHeadMid = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UMaterialInstanceDynamic> LensMid = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UMaterialInstanceDynamic> LensGlassMid = nullptr;
 
 	UPROPERTY(Transient)
 	TObjectPtr<class UMaterialInstanceDynamic> BeamMid = nullptr;

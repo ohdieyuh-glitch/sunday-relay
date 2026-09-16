@@ -74,6 +74,9 @@ namespace RelayDogMission
 		float ShoulderPitchLeftDeg = 0.0f;
 		float ShoulderPitchRightDeg = 0.0f;
 		float ShoulderRollDeg = 0.0f;
+		/** Added to the WORKING arm's roll only -- the repair's lateral drag across the fault, and the
+		 *  page-turning hand sweeping across the book. The holding arm never gets it. */
+		float ShoulderRollExtraDeg = 0.0f;
 		float ElbowDeg = 0.0f;
 
 		/** Added to both hips, so suspended legs hang instead of standing on nothing. */
@@ -83,6 +86,8 @@ namespace RelayDogMission
 		 *  to walk. The caller turns this into movement input; the stride system does the rest. */
 		bool bOrbit = false;
 		float OrbitBearingDeg = 0.0f;
+		/** How fast to walk the circle, as a fraction of the reading pace. An inspection lingers. */
+		float OrbitPace = 1.0f;
 
 		/** Which prop should be in hand, and how far it has faded in. */
 		EWonderlandDogProp Prop = EWonderlandDogProp::None;

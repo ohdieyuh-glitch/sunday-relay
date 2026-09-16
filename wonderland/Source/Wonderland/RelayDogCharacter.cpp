@@ -1165,8 +1165,9 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		const FVector Walk = FRotator(0.0f, Bearing, 0.0f).Vector();
 		if (UCharacterMovementComponent* Move = GetCharacterMovement())
 		{
-			// A study pace, not a patrol: the founder asked for deliberate and thoughtful.
-			Move->MaxWalkSpeed = 132.0f;
+			// A study pace, not a patrol: the founder asked for deliberate and thoughtful. An INSPECTION is
+			// slower again -- it lingers where a study paces -- which is the overlay's own OrbitPace.
+			Move->MaxWalkSpeed = FMath::Max(42.0f, 132.0f * Overlay.OrbitPace);
 		}
 		AddMovementInput(Walk, 1.0f);
 	}
@@ -1309,21 +1310,25 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 				Pose.HeadPitchDeg - Pose.LeanDeg + Overlay.HeadPitchDeg,
 				Pose.HeadYawDeg + Overlay.HeadYawDeg, 0.0f));
 		}
-		auto AddArm = [&Overlay](const FRelayDogArm& Arm, const RelayDogStride::FArmPose& ArmPose, float ExtraPitch)
+		auto AddArm = [&Overlay](const FRelayDogArm& Arm, const RelayDogStride::FArmPose& ArmPose, float ExtraPitch,
+			bool bWorkingArm)
 		{
 			if (Arm.Shoulder != nullptr)
 			{
+				// The extra roll is the working arm's alone: the repair's drag across the fault and the
+				// page-turning sweep. Mirroring it onto the holding arm would undo the two-handedness.
+				const float Roll = Overlay.ShoulderRollDeg + (bWorkingArm ? Overlay.ShoulderRollExtraDeg : 0.0f);
 				Arm.Shoulder->SetRelativeRotation(FRotator(
 					ArmPose.ShoulderDeg + ExtraPitch, 0.0f,
-					(ArmPose.ShoulderYawDeg + Overlay.ShoulderRollDeg) * Arm.SideSign));
+					(ArmPose.ShoulderYawDeg + Roll) * Arm.SideSign));
 			}
 			if (Arm.Forearm != nullptr)
 			{
 				Arm.Forearm->SetRelativeRotation(FRotator(ArmPose.ElbowDeg + Overlay.ElbowDeg, 0.0f, 0.0f));
 			}
 		};
-		AddArm(ArmLeft, Pose.ArmLeft, Overlay.ShoulderPitchLeftDeg);
-		AddArm(ArmRight, Pose.ArmRight, Overlay.ShoulderPitchRightDeg);
+		AddArm(ArmLeft, Pose.ArmLeft, Overlay.ShoulderPitchLeftDeg, false);
+		AddArm(ArmRight, Pose.ArmRight, Overlay.ShoulderPitchRightDeg, true);
 		if (Overlay.HipDeg != 0.0f)
 		{
 			if (LegLeft.Hip != nullptr) LegLeft.Hip->SetRelativeRotation(FRotator(SolvedL.HipDeg + Overlay.HipDeg, 0.0f, 0.0f));
@@ -1336,10 +1341,13 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	// implementation leaves the brush exactly where it was.
 	const bool bBook = Overlay.Prop == EWonderlandDogProp::Book && Overlay.PropWeight > 0.08f;
 	const bool bBrush = Overlay.Prop == EWonderlandDogProp::Paintbrush && Overlay.PropWeight > 0.08f;
+	const bool bLens = Overlay.Prop == EWonderlandDogProp::MagnifyingGlass && Overlay.PropWeight > 0.08f;
 	if (BookMesh != nullptr) BookMesh->SetVisibility(bBook);
 	if (BookPagesMesh != nullptr) BookPagesMesh->SetVisibility(bBook);
 	if (BrushMesh != nullptr) BrushMesh->SetVisibility(bBrush);
 	if (BrushHeadMesh != nullptr) BrushHeadMesh->SetVisibility(bBrush);
+	if (LensMesh != nullptr) LensMesh->SetVisibility(bLens);
+	if (LensGlassMesh != nullptr) LensGlassMesh->SetVisibility(bLens);
 
 	// THE BEAM, from the chest to the contract, for as long as verification runs.
 	if (Overlay.bBeam && MissionIn.bHasContract && BodyRoot != nullptr)
@@ -1523,6 +1531,27 @@ void ARelayDogCharacter::BuildMissionProps()
 	// The tip glows: this is a Wonderland brush painting software into existence, not an easel brush.
 	BrushHeadMesh = MakePropMesh(TEXT("MissionBrushTip"), BrushHand, true, Bristles, FLinearColor(0.95f, 0.72f, 0.28f), BrushHeadMid);
 
+	// ---------------------------------------------------------------- the magnifying glass (REVIEW)
+	// A rim, a stubby handle and a lens. On the RIGHT forearm, which is the arm the table brings up to the
+	// eye at -34 degrees; the left stays down, because one hand holds a glass and the other does not.
+	TArray<FTransform> Rim;
+	const int32 RimSides = 10;
+	for (int32 i = 0; i < RimSides; ++i)
+	{
+		const double A = 2.0 * PI * i / RimSides;
+		Rim.Add(DogPropBox(FVector(6.0 * U + FMath::Cos(A) * 26.0 * U, FMath::Sin(A) * 26.0 * U, -40.0 * U),
+			FVector(9.0 * U, 9.0 * U, 6.0 * U), FRotator(0.0, FMath::RadiansToDegrees(A), 0.0)));
+	}
+	Rim.Add(DogPropBox(FVector(6.0 * U, 0.0, -13.0 * U), FVector(7.0 * U, 7.0 * U, 30.0 * U)));
+	USceneComponent* LensHand = ArmRight.Forearm != nullptr ? ArmRight.Forearm.Get() : BodyRoot.Get();
+	LensMesh = MakePropMesh(TEXT("MissionLensRim"), LensHand, false, Rim, FLinearColor(0.72f, 0.58f, 0.24f), LensMid);
+
+	TArray<FTransform> Glass;
+	Glass.Add(DogPropBox(FVector(6.0 * U, 0.0, -40.0 * U), FVector(44.0 * U, 44.0 * U, 2.0 * U)));
+	// The lens catches the light, so an inspection reads as looking rather than as holding a hoop.
+	LensGlassMesh = MakePropMesh(TEXT("MissionLensGlass"), LensHand, true, Glass,
+		FLinearColor(0.55f, 0.78f, 0.86f), LensGlassMid);
+
 	// ---------------------------------------------------------------- the beam (VERIFYING)
 	// ONE unit cube, stretched along X between the chest and the contract every frame. A beam has to be a
 	// world-space thing rather than a child of a swinging arm, so it hangs off the capsule, not the body.
@@ -1567,25 +1596,32 @@ void ARelayDogCharacter::DrawVerificationBeam(const FVector& FromWorld, const FV
 	// SUSTAINED, NOT PULSED. The founder's note rules out flashes and bursts, so the thickness breathes by a
 	// few per cent and the beam never goes out or restarts -- a held analytical link rather than fire.
 	// Length is exact, so it lands ON the contract instead of through it.
-	const double Breathe = 1.0 + 0.06 * FMath::Sin(2.0 * PI * TimeSeconds / 1.7);
+	// THE FLOOR IS GUARANTEED, and everything weight does happens ABOVE it. That is the founder's rule and
+	// it is the fix for the whole chase: weight modulates pulse and intensity, it never decides whether the
+	// beam is visible. BEAM_FLOOR alone is comfortably past the exposure threshold, so even at the first
+	// frame of a fade-in the beam is daylight-readable.
+	const float BEAM_FLOOR = 2.40f;
+	const float BEAM_RANGE = 1.70f;
+	// SUSTAINED, NOT PULSED. The founder's note rules out flashes and bursts, so the pulse rides on top of
+	// the floor and the beam never goes out, restarts, or reads as a hit.
+	const double Pulse = 1.0 + 0.09 * FMath::Sin(2.0 * PI * TimeSeconds / 1.7);
 	// 17 uu over a 420 uu run. The first version was 86 uu, wider than the Dog's head, which read as a wall
 	// crossing the frame rather than a link between two things. A beam is thin.
-	const double Core = (17.0 * Weight * Breathe) / 100.0;
+	const double Core = (17.0 * Weight * Pulse) / 100.0;
 
 	BeamMesh->SetVisibility(true);
 	BeamMesh->SetWorldLocationAndRotation(FromWorld, Aim);
 	BeamMesh->SetWorldScale3D(FVector(Length / 100.0, Core, Core));
 	if (BeamMid != nullptr)
 	{
-		// THE FLOOR IS THE POINT. At (0.35 + 0.55 * Weight) the effective figure ran x1400 to x3600, so the
-		// beam only crossed into readable above about three-quarters weight and spent its fade-in black.
-		//
-		// AND IT IS SET HARD PAST THE THRESHOLD, not just over it, so the cylinder tonemaps toward white
-		// and reads as light rather than as a painted blue rod. There is no sheath to hide behind: an
-		// opaque one hid the core completely, which is why brightening the core changed nothing for two
-		// passes. One cylinder, emitting hard.
-		BeamMid->SetVectorParameterValue(TEXT("Color"),
-			FLinearColor(0.62f, 0.94f, 1.0f) * (DogGlowExposure * (2.30f + 0.90f * Weight)));
+		// THE SOFT GLOW IS BLOOM, NOT GEOMETRY, and that is deliberate. A dim sheath around a bright core
+		// cannot work here: both are opaque, so the sheath hid the core completely and two passes of
+		// brightening it changed nothing at all. A thin cylinder driven hard past the threshold blooms in
+		// post into exactly the soft cyan halo the founder asked for, and it costs one draw instead of two.
+		// Cyan-white rather than cyan: the core tonemaps toward white and the bloom around it carries the
+		// colour, which is what a magical link looks like and what a flat blue rod never does.
+		const float Intensity = DogGlowExposure * (BEAM_FLOOR + BEAM_RANGE * Weight) * static_cast<float>(Pulse);
+		BeamMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.74f, 0.96f, 1.0f) * Intensity);
 	}
 }
 
