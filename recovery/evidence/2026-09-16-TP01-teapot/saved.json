@@ -1,0 +1,14 @@
+{
+ "name": "zzG30_save_close",
+ "started": "2026-09-16 12:42:57",
+ "status": "done",
+ "tp01_actors": 5,
+ "dirty_maps_before": [
+  "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2"
+ ],
+ "saved_level": true,
+ "dirty_maps_after": [],
+ "finished": "2026-09-16 12:43:04",
+ "seconds": 7.28,
+ "log": ""
+}

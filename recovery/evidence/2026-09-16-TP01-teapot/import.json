@@ -1,0 +1,17 @@
+{
+ "name": "zzE00_import_teapot",
+ "started": "2026-09-16 12:12:49",
+ "status": "done",
+ "planned_parts": 382,
+ "imported_this_run": 5,
+ "already_present": 0,
+ "failed": 0,
+ "stray_materials_deleted": [],
+ "readback_failures": [],
+ "nanite_mismatches": [],
+ "collision_missing": [],
+ "complete": true,
+ "finished": "2026-09-16 12:13:01",
+ "seconds": 12.09,
+ "log": "[kit] imported /Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_enamel\n[kit] imported /Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_glass\n[kit] imported /Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_gold\n[kit] imported /Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_roof\n[kit] imported /Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_veg_anchor\n"
+}

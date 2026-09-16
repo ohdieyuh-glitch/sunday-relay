@@ -1,0 +1,35 @@
+{
+ "pass": "TP01_TRIM",
+ "title": "Tea Terraces: the plaster teapot sunk below the datum (reversible)",
+ "trims": [
+  {
+   "name": "StaticMeshActor_226",
+   "label": "LMTeaTerraces_Teapot",
+   "mesh": "SM_teapot_pavilion",
+   "index": null,
+   "why": "replaced by the porcelain WL_Object_TeapotPavilion at the same position (TP01)",
+   "before": [
+    -14202.8,
+    -8200.0,
+    0.0,
+    0.0,
+    -65.0,
+    0.0,
+    0.42,
+    0.42,
+    0.42
+   ],
+   "after": [
+    -14202.8,
+    -8200.0,
+    -6000.0,
+    0.0,
+    -65.0,
+    0.0,
+    0.42,
+    0.42,
+    0.42
+   ]
+  }
+ ]
+}
