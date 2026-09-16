@@ -89,6 +89,15 @@ namespace RelayDogMission
 		/** How fast to walk the circle, as a fraction of the reading pace. An inspection lingers. */
 		float OrbitPace = 1.0f;
 
+		/**
+		 * TURN THE DOG TO FACE THE CONTRACT. Not tidiness -- an act done AT the work has to be done facing
+		 * it. The research circle ends with the Dog tangential, about 90 degrees off the radius, and
+		 * nothing used to turn it back, so review and repair inherited that stance and held it for their
+		 * whole length. It stayed hidden because the beam aims itself and therefore looked correct however
+		 * the Dog was standing.
+		 */
+		bool bFaceContract = false;
+
 		/** Which prop should be in hand, and how far it has faded in. */
 		EWonderlandDogProp Prop = EWonderlandDogProp::None;
 		float PropWeight = 0.0f;
