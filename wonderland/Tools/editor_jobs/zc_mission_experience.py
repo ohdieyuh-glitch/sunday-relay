@@ -48,6 +48,8 @@ ROLE_NAMES = ["julius", "architect", "coder", "reviewer"]
 SECTIONS = ["PROMPT ARCHITECT", "CODING AGENT", "JULIUS 3.3", "INDEPENDENT REVIEWER"]
 # VERIFICATION IS SHOT FROM THE SIDE: from straight behind, the Dog's head stands between the camera and its own beam.
 VERIFY_YAW_OFFSET = float(globals().get("VERIFY_YAW_OFFSET") or 40.0)
+# The simulation site the founder's command travels to (wl.Mission.Site). None keeps the build's own default.
+SITE = globals().get("SITE")
 DOG_ACT = {
     "mission_start": "MISSION START", "researching": "PLANNING", "prompt_architect": "PLANNING", "guidance": "PLANNING",
     "coding_agent": "IMPLEMENTING", "verifying": "VERIFYING", "independent_reviewer": "REVIEW",
@@ -129,6 +131,9 @@ def job():
             if not ui.is_live_terminal_open():
                 ui.toggle_live_terminal()
             yield 1.0
+            if SITE:
+                console(world, "wl.Mission.Site %s" % SITE)
+            RESULT["site_id"] = SITE or "build default"
             # THE FOUNDER'S OWN PATH (wl.Mission.Scenario): to the simulation site, then the mission, then the terminal.
             started = mission.play_scenario(letter, PACE)
             yield (lambda: mission.is_fixture_running(), 180)

@@ -157,8 +157,10 @@ namespace
 		}));
 
 	// WHERE THE FOUNDER'S PLAY COMMAND STAGES A MISSION (founder, 2026-09-16: "the location you are at is not ideal"): a
-	// travel destination with open ground for the Dog's circle and the companions' orbit.
-	TAutoConsoleVariable<FString> CVarMissionSite(TEXT("wl.Mission.Site"), TEXT("south_meadows"),
+	// travel destination with open ground for the Dog's circle and the companions' orbit. Castle Approach's round paved
+	// plaza, chosen from a survey of four sites in PIE: South Meadows' arrival arch stood in the Dog's circle and hid the
+	// Dog and the Contract for most of a filmed mission; Grand Clock has flower beds against the Dog.
+	TAutoConsoleVariable<FString> CVarMissionSite(TEXT("wl.Mission.Site"), TEXT("castle_approach"),
 		TEXT("Where `wl.Mission.Scenario` plays a mission: a travel destination id (see the world map), or `none` to play it where the Dog stands."));
 
 	FAutoConsoleCommand CmdMissionScenario(
