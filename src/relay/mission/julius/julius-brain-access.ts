@@ -295,6 +295,8 @@ export interface JuliusBrainAccessStatePort {
   /** Chains the entry after the current head and appends it. */
   appendAudit(entry: JuliusBrainAuditEntry): Promise<JuliusBrainAuditEvent>;
   readAudit(): Promise<readonly JuliusBrainAuditEvent[]>;
+  /** The newest audit event's sequence and hash, without reading the chain. */
+  auditHead(): Promise<{ readonly sequence: number; readonly hash: string } | null>;
 }
 
 export function createJuliusBrainAccessMemoryState(): JuliusBrainAccessStatePort & { readonly audit: JuliusBrainAuditEvent[] } {
@@ -310,6 +312,7 @@ export function createJuliusBrainAccessMemoryState(): JuliusBrainAccessStatePort
     async getSession(digest) { return sessions.get(digest) ?? null; },
     async appendAudit(entry) { const event = chainJuliusBrainAuditEvent(audit.at(-1) ?? null, entry); audit.push(event); return event; },
     async readAudit() { return [...audit]; },
+    async auditHead() { const head = audit.at(-1); return head === undefined ? null : { sequence: head.sequence, hash: head.hash }; },
   };
 }
 

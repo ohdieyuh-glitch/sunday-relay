@@ -69,6 +69,12 @@ export class JuliusBrainAccessPostgresState implements JuliusBrainAccessStatePor
     }
   }
 
+  async auditHead(): Promise<{ readonly sequence: number; readonly hash: string } | null> {
+    const result = await this.pool.query<{ sequence: string; hash: string }>('SELECT sequence, hash FROM julius_brain.access_audit ORDER BY sequence DESC LIMIT 1');
+    const row = result.rows[0];
+    return row === undefined ? null : { sequence: Number(row.sequence), hash: row.hash };
+  }
+
   async readAudit(): Promise<readonly JuliusBrainAuditEvent[]> {
     const result = await this.pool.query<{ event: JuliusBrainAuditEvent }>('SELECT event FROM julius_brain.access_audit ORDER BY sequence');
     return result.rows.map((row) => row.event);
