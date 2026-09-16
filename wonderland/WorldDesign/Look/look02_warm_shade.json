@@ -1,0 +1,85 @@
+{
+ "look": "LOOK02",
+ "title": "Warm shade: the fills and the ground bounce stop tinting every shadow cyan-green",
+ "why": "Survey 2026-09-16: every city street reads slate-blue and gritty, while the SAME cobble in sunlight reads cream. The shade is lit by an unshadowed ground bounce tinted cyan (214,244,238), a canopy fill tinted green (220,236,214), and a sky light with a black lower hemisphere. A bounce off pale cream paving is warm. First try (fills + ground bounce only) barely moved the frames: the fills are ~13% of the sun. The dominant shade colour is the SKY LIGHT capturing a sky LOOK01 deliberately boosted toward blue (sky_luminance_factor 1.2/1.4/1.85). Tinting the sky light's own colour warms the ambient it contributes without changing the blue sky the visitor sees. Third try, (255,222,190) on the sky light: the blue was gone but everything went sepia and darker, and the hero corridor lost its brightness -- brown is not the Bible's pastel. The chosen values only neutralise the blue cast, and the sky light's intensity rises slightly to give back the luminance a warm tint removes.",
+ "lights": {
+  "V2_GroundBounce": {
+   "before": {
+    "light_color": [
+     214,
+     244,
+     238
+    ],
+    "intensity": 2400.0
+   },
+   "after": {
+    "light_color": [
+     255,
+     238,
+     220
+    ],
+    "intensity": 3000.0
+   }
+  },
+  "V2_CanopyFill": {
+   "before": {
+    "light_color": [
+     220,
+     236,
+     214
+    ]
+   },
+   "after": {
+    "light_color": [
+     240,
+     238,
+     222
+    ]
+   }
+  },
+  "V2_CanopyFill2": {
+   "before": {
+    "light_color": [
+     236,
+     232,
+     220
+    ]
+   },
+   "after": {
+    "light_color": [
+     250,
+     240,
+     228
+    ]
+   }
+  },
+  "V2_SkyLight": {
+   "before": {
+    "lower_hemisphere_color": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "light_color": [
+     255,
+     255,
+     255
+    ],
+    "intensity": 2.0
+   },
+   "after": {
+    "lower_hemisphere_color": [
+     0.22,
+     0.19,
+     0.17
+    ],
+    "light_color": [
+     255,
+     242,
+     230
+    ],
+    "intensity": 2.25
+   }
+  }
+ }
+}
