@@ -8,6 +8,7 @@ import { foldJuliusArchitecture } from './julius-architecture-state';
 import { juliusArchitectureCheckTaskId, juliusArchitectureTriggerId } from './julius-architecture-drift';
 import { createJuliusMemoryStore } from './julius-memory-store';
 import { readJuliusPeerChannel } from './julius-peer-runtime';
+import { prepareClaimedTask, runClaimedTask, type JuliusPipelineRequest } from './julius-task-pipeline';
 import type { JuliusRunRow } from './julius-runtime-ports';
 
 /**
@@ -337,5 +338,52 @@ describe('P28 — what the Coding Agent is doing is derived from the record, at 
     const states = await walk(harness);
     expect(states.at(-1)).toBe('BLOCKED');
     expect(harness.store.taskRow('build-1')!.state).toBe('FAILED');
+  });
+});
+
+/* ------------------------------------------------------------------ duplicate replay */
+
+describe('P27b — the same result delivered twice is read once', () => {
+  it('a replayed attempt records its implementation and its observations exactly once', async () => {
+    const implementation = {
+      providerKind: 'generic-scripted',
+      workspace: { captured: true, truncated: false, changes: [{ path: 'src/relay/journal.ts', change: 'MODIFIED' }] },
+    };
+    const harness = build({
+      architect: [PLAN_WITH_ARCHITECTURE, CONSULT_ALIGNED, CONSULT_ALIGNED],
+      coder: [{ kind: 'succeed', evidence: BUILD_EVIDENCE, implementation, architectureObservations: [INVALIDATED] }],
+      reviewer: PASSES(6),
+    });
+    // Drive until the build is released and nothing else is waiting to be claimed.
+    for (let index = 0; index < 32 && harness.store.taskRow('build-1')!.state !== 'RUNNABLE'; index += 1) {
+      const report = await harness.loop.tick({ projectId: 'prj-1' });
+      if (report.claimed === 0) await harness.loop.advanceRun('run-1', 'prj-1');
+    }
+    expect(harness.store.taskRow('build-1')!.state).toBe('RUNNABLE');
+
+    const now = harness.clock.now();
+    const [claim] = await harness.store.claimRunnable({
+      owner: harness.deps.owner, now, leaseExpiresAt: new Date(Date.parse(now) + 60_000).toISOString(), limit: 1, projectId: 'prj-1',
+    });
+    expect(claim!.taskId).toBe('build-1');
+    const run = (await harness.store.loadRun('run-1', 'prj-1'))!;
+    const policy = (await harness.policies.policyFor(run))!;
+    const request: JuliusPipelineRequest = {
+      claim: claim!, policy: policy.card, verification: policy.verification,
+      capability: harness.policies.capabilityFor(claim!), capabilityFor: (value) => harness.policies.capabilityFor(value),
+    };
+    const preflight = await prepareClaimedTask(request, harness.deps, { projectId: 'prj-1' });
+    if (preflight.kind !== 'ELIGIBLE') throw new Error(`not eligible: ${preflight.kind}`);
+    const attempt = await harness.store.admitTask({ taskId: 'build-1', owner: harness.deps.owner, leaseGeneration: claim!.leaseGeneration, now: harness.clock.now() });
+    const admitted = { ...request, claim: { ...request.claim, attempt: attempt! } };
+
+    await runClaimedTask(admitted, harness.deps, preflight);
+    // The process delivers the same attempt again — a redelivery after a crash, a retried handler.
+    await runClaimedTask(admitted, harness.deps, preflight).catch(() => undefined);
+
+    const completed = factsOf(harness, 'worker.completed').filter((facts) => facts.duplicate === true);
+    expect(completed.length, 'the replay really was read as a duplicate').toBeGreaterThan(0);
+    expect(rowsOf(harness, 'coder.implementation.recorded').filter((row) => row.taskId === 'build-1')).toHaveLength(1);
+    expect(rowsOf(harness, 'architecture.observed').filter((row) => row.taskId === 'build-1')).toHaveLength(1);
   });
 });
