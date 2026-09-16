@@ -8,7 +8,7 @@ import {
 } from './julius-brain-archive-import';
 
 /**
- * THE FREEZE HANDSHAKE: WHAT EACH SIDE SAYS BEFORE ANY HISTORY MOVES.
+ * THE EXPORT HANDSHAKE: WHAT EACH SIDE SAYS BEFORE ANY HISTORY MOVES.
  *
  * Project Brain never reads the paid-run archive's tables, so the archive's
  * internal shape may keep changing. What must be agreed is the DOCUMENT:
@@ -19,6 +19,12 @@ import {
  *                           importer it expects to be read by
  *   the importer declares   the same format, its own version, the digest of the
  *                           contract it enforces, and the sections it requires
+ *
+ * THE ARCHIVE IS NOT EXPECTED TO STOP MOVING. Every paid run may write another
+ * shape, because the runtime keeps recording more of what happened. Nothing here
+ * asks for a freeze: the exporter says which shape it read, each export repeats
+ * that in `source.archiveSchemaVersion`, and the contract that must hold still is
+ * the DOCUMENT's.
  *
  * `checkJuliusArchiveExportCompatibility` compares them and answers ACCEPTED,
  * ACCEPTED_WITH_GAPS (sections the exporter cannot fill: those facts will be
@@ -45,7 +51,12 @@ export interface JuliusArchiveExporterDeclaration {
   readonly sections: readonly string[];
   /** What the exporter can do beyond the sections: e.g. `artifact-bytes`, `sealed-integrity`, `explicit-nulls`. */
   readonly capabilities: readonly string[];
-  /** Free text: which archive shapes this exporter was built from. Never read as a contract. */
+  /**
+   * Which archive shapes this exporter reads — names, column counts or the
+   * fingerprints the drift diagnostic prints. Provenance, never a contract: the
+   * archive keeps gaining honest facts, so an exporter states the shape it read
+   * rather than waiting for the archive to stop moving.
+   */
   readonly archiveShapes?: readonly string[];
   readonly declaredAt: string;
 }

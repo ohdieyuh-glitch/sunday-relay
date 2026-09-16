@@ -357,9 +357,12 @@ asks Formal to change its tables:
 
 ## Migrating paid history into the Brain
 
-1. **Wait for the freeze.** Formal's archive is temporary. Their adapter
-   produces `julius-paid-run-archive-export.v1` against its final shape. The
-   Brain never reads their tables.
+1. **Do not wait for a freeze.** The Formal lane keeps adding honest facts, so
+   every paid run may write another archive shape (confirmed by that lane on
+   2026-09-15). Their exporter produces `julius-paid-run-archive-export.v1` and
+   **states which shape it read** — in its compatibility declaration and in each
+   export's `source.archiveSchemaVersion`. The Brain never reads their tables,
+   and a shape is provenance, never a contract.
 2. **Seal each attempt** with `sealJuliusPaidRunArchiveExport`, and keep the
    sealed bytes: they are the anchor artifact.
 3. **Import each attempt** with `importJuliusPaidRunArchive`. It refuses a

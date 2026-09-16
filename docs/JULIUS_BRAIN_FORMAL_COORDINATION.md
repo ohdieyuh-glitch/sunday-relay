@@ -8,10 +8,14 @@ branch `local/project-brain-python`, not landed).
 1. **The physical shape changed under the `julius-paid-run-archive.v1` label.**
    That is fine, and **no redesign of the archive is asked for**. It does mean
    the label cannot tell a reader what shape it holds.
-2. **Before live integration, the Formal lane provides — or freezes — an
-   exporter that emits `julius-paid-run-archive-export.v1`**: typed JSON, with
-   explicit nulls. Project Brain reads that document and nothing else. It never
-   reads the archive's tables.
+2. **Before live integration, the Formal lane provides an exporter that emits
+   `julius-paid-run-archive-export.v1`**: typed JSON, with explicit nulls.
+   Project Brain reads that document and nothing else. It never reads the
+   archive's tables.
+   **No freeze is asked for.** That lane confirmed on 2026-09-15 that the
+   archive will keep gaining rows and columns as the runtime records more, so
+   the exporter states which shape it read rather than the archive standing
+   still.
 3. **Historical attempts may truthfully export Unknown.** Where the archive
    never recorded a fact, the export says Unknown, and the import keeps it
    Unknown. Nothing is back-filled by inference.
@@ -29,6 +33,14 @@ shape-drift diagnostic:
 
 Every change so far adds columns; none removes one. Every run carries the same
 `archive_version`.
+
+**And it will keep moving.** The Formal lane reports that PR 1 added
+peer-request, review-verdict and disagreement events, and PR 2 so far adds
+`julius.guidance.delivered` and new `participation.tsv` columns (`proposed_to`,
+`proposal_entry_id`, `delivered_entry_id`). None of that needs a change to the
+export contract — the document's sections are typed by this contract, not by the
+archive's columns, and a new event type or fact travels as it is. Re-run the
+drift diagnostic against a future paid run rather than against attempts 1-5.
 
 The archive also records, truthfully, that its dumps cannot tell NULL from an
 empty string (`psql -A -F tab`). Across the five attempts that leaves

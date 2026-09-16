@@ -115,6 +115,11 @@ export function checkJuliusPaidRunArchiveConformance(archive: unknown, options: 
     }
   });
   if (typed.identity.outcome === 'UNKNOWN') findings.push({ level: 'NOTE', check: 'null-semantics.unknown-value', location: 'identity.outcome', detail: 'the outcome is UNKNOWN, and will stay so' });
+  // The archive keeps moving; what matters is that each export says which shape it was read from.
+  findings.push({
+    level: 'NOTE', check: 'provenance.archive-shape', location: 'source',
+    detail: `read from ${typed.source.archiveId} at shape ${typed.source.archiveSchemaVersion} by ${typed.source.exporterVersion}; a shape is provenance, never a contract`,
+  });
   const unknownBySection: Record<string, number> = { identity: typed.identity.unknown.length, accounting: typed.accounting.unknown.length };
   for (const section of JULIUS_ARCHIVE_SECTIONS) unknownBySection[section] = (typed[section] as readonly { unknown: readonly string[] }[]).reduce((sum, item) => sum + item.unknown.length, 0);
   for (const [section, count] of Object.entries(unknownBySection)) {

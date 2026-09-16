@@ -6,12 +6,13 @@ import {
   JULIUS_ARCHIVE_CONFORMANCE_CASES,
   runJuliusArchiveConformanceCases,
 } from './julius-brain-archive-conformance';
-import { sealJuliusPaidRunArchiveExport } from './julius-brain-archive-import';
+import { importJuliusPaidRunArchive, sealJuliusPaidRunArchiveExport } from './julius-brain-archive-import';
 import { juliusPrincipal } from './julius-brain-contracts';
 import { juliusBrainDraftFromLegacy } from './julius-brain-legacy';
 import { juliusRunOpenedBody, juliusRunOpenedEntityId, juliusRunPreservedCheckpointLabel, juliusRunSealedBody, juliusRunSealedEntityId } from './julius-brain-preservation';
 import { createJuliusProjectBrainService } from './julius-brain-service';
 import { createJuliusBrainMemoryStore, readAllJuliusBrainEntities, readAllJuliusBrainRecords } from './julius-brain-store';
+import { createHash } from 'node:crypto';
 import type { JuliusBrainAppend } from './julius-runtime-ports';
 
 const BRAIN = 'brain:prj-julius-live-4';
@@ -30,7 +31,9 @@ describe('julius-paid-run-archive-export.v1 conformance kit', () => {
       contentHash: paidRunArchive().integrity.contentHash, items: { tasks: 4, evidence: 4, usage: 3, artifacts: 1 },
     });
     expect(report.summary!.unknownFields).toBeGreaterThan(0);
-    expect(report.findings.every((finding) => finding.check === 'null-semantics.unknown-count')).toBe(true);
+    expect(report.findings.every((finding) => finding.check === 'null-semantics.unknown-count' || finding.check === 'provenance.archive-shape')).toBe(true);
+    // Every export says which archive shape it was read from: the archive keeps moving, and the export says where it stood.
+    expect(report.findings).toContainEqual(expect.objectContaining({ level: 'NOTE', check: 'provenance.archive-shape', location: 'source', detail: expect.stringContaining('a shape is provenance, never a contract') }));
     expect(report.brain).toBeNull();
   });
 
@@ -83,6 +86,42 @@ describe('julius-paid-run-archive-export.v1 conformance kit', () => {
     // The source's archive label is provenance: any label, the same verdict.
     const relabelled = sealJuliusPaidRunArchiveExport({ ...paidRunArchiveBody(), source: { ...paidRunArchiveBody().source, archiveSchemaVersion: 'julius-paid-run-archive.v1+34-columns' } });
     expect(checkJuliusPaidRunArchiveConformance(relabelled).verdict).toBe('CONFORMANT');
+  });
+
+  it('facts the archive gains later need no contract change: new event types, new columns and a new verdict travel as they are', async () => {
+    // What the Formal lane reported on 2026-09-15: PR 1 added peer-request, review-verdict and disagreement
+    // events; PR 2 adds julius.guidance.delivered and new participation.tsv columns. None of it is a section.
+    const body = paidRunArchiveBody();
+    const grown = sealJuliusPaidRunArchiveExport({
+      ...body,
+      events: [
+        ...body.events,
+        { eventId: 'participation.tsv#9', sequence: 9, eventType: 'julius.peer.request', taskId: 'plan-1', occurredAt: null, facts: { role: 'PROMPT_ARCHITECT', proposedTo: 'INDEPENDENT_REVIEWER', proposalEntryId: 'brain:proposal:plan-1' }, unknown: ['occurredAt'] },
+        { eventId: 'participation.tsv#10', sequence: 10, eventType: 'julius.guidance.delivered', taskId: 'build-1', occurredAt: null, facts: { deliveredEntryId: 'brain:guidance:build-1', deliveredChars: 812, proposedTo: 'CODING_AGENT' }, unknown: ['occurredAt'] },
+        { eventId: 'participation.tsv#11', sequence: 11, eventType: 'julius.peer.disagreement', taskId: 'build-1', occurredAt: null, facts: { ticks: 2, resolution: null }, unknown: ['occurredAt'] },
+      ],
+      reviews: [...body.reviews, { reviewId: 'rev-peer-1', reviewer: 'architect-1', verdict: 'CHALLENGE', targetTaskId: 'build-1', reasonCode: 'DISAGREEMENT_OPEN', rationale: null, evidenceIds: null, sourceRef: null, occurredAt: null, unknown: ['evidenceIds', 'occurredAt', 'rationale', 'sourceRef'] }],
+      source: { ...body.source, archiveSchemaVersion: 'julius-paid-run-archive.v1 @ participation.tsv+28 research.tsv+34' },
+    });
+    const report = checkJuliusPaidRunArchiveConformance(grown);
+    expect(report.verdict).toBe('CONFORMANT');
+    expect(report.findings.filter((finding) => finding.level === 'ERROR')).toEqual([]);
+    expect(report.findings).toContainEqual(expect.objectContaining({ check: 'provenance.archive-shape', detail: expect.stringContaining('participation.tsv+28') }));
+    expect(runJuliusArchiveConformanceCases(grown).filter((result) => result.result === 'FAIL')).toEqual([]);
+
+    // And they reach the Brain as themselves: the new verdict is a decision, the new events are traces with their facts.
+    const store = createJuliusBrainMemoryStore();
+    const service = createJuliusProjectBrainService({ store, clock: { now: () => '2026-09-15T12:00:00.000Z' } });
+    await service.initialize({ brainId: BRAIN, projectId: PROJECT, title: 'Julius', principal: JULIUS });
+    const content = { put: async (bytes: Uint8Array) => { const hex = createHash('sha256').update(bytes).digest('hex'); return { contentHash: `sha256:${hex}`, byteSize: bytes.byteLength, storageRef: `cas://sha256/${hex}` }; } };
+    expect(await importJuliusPaidRunArchive({ store, brainId: BRAIN, projectId: PROJECT, archive: grown, content, recordedAt: '2026-09-15T12:00:00.000Z' })).toMatchObject({ outcome: 'IMPORTED' });
+    const entities = await readAllJuliusBrainEntities(store, BRAIN, PROJECT);
+    const delivered = entities.find((state) => (state.body.facts as { eventType?: string } | undefined)?.eventType === 'julius.guidance.delivered');
+    expect(delivered?.body.facts).toMatchObject({ deliveredEntryId: 'brain:guidance:build-1', deliveredChars: 812, proposedTo: 'CODING_AGENT' });
+    expect(entities.some((state) => state.kind === 'DECISION' && String(state.body.statement).startsWith('CHALLENGE'))).toBe(true);
+    // A disagreement whose resolution was not recorded stays Unknown, not resolved.
+    const disagreement = entities.find((state) => (state.body.facts as { eventType?: string } | undefined)?.eventType === 'julius.peer.disagreement');
+    expect((disagreement?.body.facts as { resolution?: unknown }).resolution).toBeNull();
   });
 
   it('against a Brain: preservation metadata that contradicts the export is refused; otherwise it says what the import would do', async () => {
