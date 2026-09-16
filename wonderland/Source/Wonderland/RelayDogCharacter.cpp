@@ -32,6 +32,11 @@ namespace
 	const TCHAR* const DogPropLitParent = TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial");
 	const TCHAR* const DogPropGlowParent = TEXT("/Engine/EngineDebugMaterials/LevelColorationUnlitMaterial.LevelColorationUnlitMaterial");
 	const TCHAR* const DogPropCubePath = TEXT("/Engine/BasicShapes/Cube.Cube");
+	/** A BEAM IS ROUND. Built from the cube, the beam was a rectangular bar 86 uu wide over a 420 uu run --
+	 *  wider than the Dog's head and reading as a wall crossing the frame rather than a link between two
+	 *  things. The engine cylinder is 100 uu across and 100 tall on Z, so an instance pitched 90 degrees
+	 *  lays its axis along X and the component's X scale becomes the beam's length. */
+	const TCHAR* const DogPropCylinderPath = TEXT("/Engine/BasicShapes/Cylinder.Cylinder");
 
 	/**
 	 * WHAT AN UNLIT COLOUR HAS TO BE MULTIPLIED BY TO BE SEEN AT ALL.
@@ -1430,13 +1435,15 @@ void ARelayDogCharacter::SetMissionAct(EWonderlandDogAct Act, const AActor* Cont
 }
 
 UInstancedStaticMeshComponent* ARelayDogCharacter::MakePropMesh(FName Name, USceneComponent* Parent, bool bGlow,
-	const TArray<FTransform>& Boxes, const FLinearColor& Colour, TObjectPtr<UMaterialInstanceDynamic>& OutMid)
+	const TArray<FTransform>& Boxes, const FLinearColor& Colour, TObjectPtr<UMaterialInstanceDynamic>& OutMid,
+	const TCHAR* MeshPath)
 {
-	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, DogPropCubePath);
+	const TCHAR* const Path = MeshPath != nullptr ? MeshPath : DogPropCubePath;
+	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, Path);
 	if (Cube == nullptr || Parent == nullptr)
 	{
-		UE_LOG(LogTemp, Error, TEXT("WLDOG no cube at %s; the mission prop %s cannot be built"),
-			DogPropCubePath, *Name.ToString());
+		UE_LOG(LogTemp, Error, TEXT("WLDOG no mesh at %s; the mission prop %s cannot be built"),
+			Path, *Name.ToString());
 		return nullptr;
 	}
 	UInstancedStaticMeshComponent* Built = NewObject<UInstancedStaticMeshComponent>(
@@ -1519,16 +1526,20 @@ void ARelayDogCharacter::BuildMissionProps()
 	// ---------------------------------------------------------------- the beam (VERIFYING)
 	// ONE unit cube, stretched along X between the chest and the contract every frame. A beam has to be a
 	// world-space thing rather than a child of a swinging arm, so it hangs off the capsule, not the body.
-	// TWO CYLINDERS, NOT ONE. A single 10 uu thread was geometrically perfect and photographically absent:
-	// the play camera stands behind a Dog that is FACING the contract, so it looks straight down the beam's
-	// own axis, where a thin rod is a few pixels. A bright core inside a wide dim halo reads as light from
-	// any angle, end-on included.
+	// TWO CYLINDERS, AND THEY ARE ACTUALLY CYLINDERS NOW. A bright core inside a wider, slightly dimmer
+	// sheath reads as light from any angle, end-on included -- which matters because the play camera stands
+	// behind a Dog that is FACING the contract and so looks straight down the beam's own axis.
+	//
+	// BOTH ARE ABOVE THE EXPOSURE THRESHOLD AT ALL TIMES. A halo that is a small fraction of the core's
+	// brightness is not a dim halo under physically-based daylight, it is a black one: anything under about
+	// x3000 renders black rather than faint. So the halo is only a LITTLE below the core, and the weight
+	// modulates a beam that is always emitting rather than deciding whether it emits.
 	TArray<FTransform> Beam;
-	Beam.Add(DogPropBox(FVector(50.0, 0.0, 0.0), FVector(100.0, 100.0, 100.0)));
+	Beam.Add(FTransform(FRotator(90.0, 0.0, 0.0), FVector(50.0, 0.0, 0.0), FVector(1.0, 1.0, 1.0)));
 	BeamMesh = MakePropMesh(TEXT("VerificationBeam"), GetRootComponent(), true, Beam,
-		FLinearColor(0.62f, 0.94f, 1.0f), BeamMid);
+		FLinearColor(0.62f, 0.94f, 1.0f), BeamMid, DogPropCylinderPath);
 	BeamHaloMesh = MakePropMesh(TEXT("VerificationBeamHalo"), GetRootComponent(), true, Beam,
-		FLinearColor(0.20f, 0.52f, 0.86f), BeamHaloMid);
+		FLinearColor(0.20f, 0.52f, 0.86f), BeamHaloMid, DogPropCylinderPath);
 	if (BeamMesh != nullptr)
 	{
 		BeamMesh->SetAbsolute(true, true, true);
@@ -1563,16 +1574,20 @@ void ARelayDogCharacter::DrawVerificationBeam(const FVector& FromWorld, const FV
 	// few per cent and the beam never goes out or restarts -- a held analytical link rather than fire.
 	// Length is exact, so it lands ON the contract instead of through it.
 	const double Breathe = 1.0 + 0.06 * FMath::Sin(2.0 * PI * TimeSeconds / 1.7);
-	const double Core = (34.0 * Weight * Breathe) / 100.0;
-	const double Halo = (86.0 * Weight * (2.0 - Breathe)) / 100.0;
+	// 14 uu inside 34 uu. The first version was 34 inside 86, which at 420 uu long was a bar wider than the
+	// Dog's head: a wall, not a link. A beam is thin.
+	const double Core = (14.0 * Weight * Breathe) / 100.0;
+	const double Halo = (34.0 * Weight * (2.0 - Breathe)) / 100.0;
 
 	BeamMesh->SetVisibility(true);
 	BeamMesh->SetWorldLocationAndRotation(FromWorld, Aim);
 	BeamMesh->SetWorldScale3D(FVector(Length / 100.0, Core, Core));
 	if (BeamMid != nullptr)
 	{
+		// THE FLOOR IS THE POINT. At (0.35 + 0.55 * Weight) the effective figure ran x1400 to x3600, so the
+		// beam only crossed into readable above about three-quarters weight and spent its fade-in black.
 		BeamMid->SetVectorParameterValue(TEXT("Color"),
-			FLinearColor(0.62f, 0.94f, 1.0f) * (DogGlowExposure * (0.35f + 0.55f * Weight)));
+			FLinearColor(0.62f, 0.94f, 1.0f) * (DogGlowExposure * (1.05f + 0.40f * Weight)));
 	}
 	if (BeamHaloMesh != nullptr)
 	{
@@ -1582,10 +1597,10 @@ void ARelayDogCharacter::DrawVerificationBeam(const FVector& FromWorld, const FV
 		BeamHaloMesh->SetWorldScale3D(FVector(Length / 100.0, Halo, Halo));
 		if (BeamHaloMid != nullptr)
 		{
-			// The halo is a fraction of the core's brightness, not a fraction of 1.0 -- it is the same
-			// exposure scale, turned down, so the two read as one beam rather than two objects.
+			// Only a little below the core: far enough to read as a sheath, not so far that it falls under
+			// the exposure threshold and becomes the black slab this whole chase was about.
 			BeamHaloMid->SetVectorParameterValue(TEXT("Color"),
-				FLinearColor(0.20f, 0.52f, 0.86f) * (DogGlowExposure * (0.10f + 0.16f * Weight)));
+				FLinearColor(0.20f, 0.52f, 0.86f) * (DogGlowExposure * (0.80f + 0.30f * Weight)));
 		}
 	}
 }

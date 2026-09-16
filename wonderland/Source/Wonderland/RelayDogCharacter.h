@@ -265,7 +265,7 @@ private:
 	/** Cubes -> one instanced mesh with its own runtime material, parented where it is held. */
 	class UInstancedStaticMeshComponent* MakePropMesh(FName Name, USceneComponent* Parent, bool bGlow,
 		const TArray<FTransform>& Boxes, const FLinearColor& Colour,
-		TObjectPtr<class UMaterialInstanceDynamic>& OutMid);
+		TObjectPtr<class UMaterialInstanceDynamic>& OutMid, const TCHAR* MeshPath = nullptr);
 	/** Point the beam from the Dog's chest at the contract and set its length. */
 	void DrawVerificationBeam(const FVector& FromWorld, const FVector& ToWorld, float Weight, float TimeSeconds);
 
