@@ -41,7 +41,7 @@ describe('run preservation, derived from durable evidence', () => {
   it('nothing durable is NOT_PRESERVED, an open alone is PARTIALLY_PRESERVED, and every reason is named', async () => {
     const { derive, open } = await brain();
     expect(await derive()).toEqual({
-      brainRunId: RUN, status: 'NOT_PRESERVED',
+      brainRunId: RUN, status: 'NOT_PRESERVED', completeness: 'NOT_RECOVERED',
       evidence: { opened: null, sealed: null, checkpoint: null, liveRecords: 0, recoveries: [] },
       reasons: ['the run was never opened against a verified Brain', 'the run was never sealed', 'no checkpoint was committed for the run'],
     });

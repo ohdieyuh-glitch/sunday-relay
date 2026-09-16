@@ -69,9 +69,21 @@ export function juliusRunSealedBody(facts: JuliusRunSealedFacts) {
   };
 }
 
+/**
+ * WHAT THE RUN ACHIEVED WHILE IT RAN, AND WHAT HISTORY HOLDS NOW — two facts,
+ * never one. A run that finished PARTIALLY_PRESERVED stays PARTIALLY_PRESERVED
+ * however completely the archive recovered it afterwards; the recovery is its
+ * own fact beside it.
+ */
+export const JULIUS_BRAIN_COMPLETENESS = ['PRESERVED_LIVE', 'RECOVERED_AFTER_RUN', 'NOT_RECOVERED'] as const;
+export type JuliusBrainCompleteness = typeof JULIUS_BRAIN_COMPLETENESS[number];
+
 export interface JuliusBrainRunPreservation {
   readonly brainRunId: string;
+  /** What the live run achieved. Recovery never changes it. */
   readonly status: JuliusBrainPreservationStatus;
+  /** What the Brain holds of the attempt now, including anything recovered after the run. */
+  readonly completeness: JuliusBrainCompleteness;
   readonly evidence: {
     readonly opened: { readonly sequence: number; readonly juliusRunId: string | null; readonly missionId: string | null; readonly acceptedMainSha: string | null } | null;
     readonly sealed: { readonly sequence: number; readonly expectedEntries: number; readonly writtenEntries: number; readonly missingEntries: number } | null;
@@ -145,5 +157,10 @@ export function deriveJuliusBrainRunPreservation(input: {
 
   const preserved = opened !== null && sealed !== null && sealed.missingEntries === 0 && checkpoint !== null && checkpoint.matches && checkpoint.throughSequence >= sealed.sequence;
   const status: JuliusBrainPreservationStatus = preserved ? 'PRESERVED' : opened !== null || liveRecords > 0 ? 'PARTIALLY_PRESERVED' : 'NOT_PRESERVED';
-  return { brainRunId, status, evidence: { opened, sealed, checkpoint, liveRecords, recoveries }, reasons: preserved ? [] : reasons };
+  // A recovery is history arriving later, never a live run rewritten.
+  const completeness: JuliusBrainCompleteness = preserved ? 'PRESERVED_LIVE' : recoveries.length > 0 ? 'RECOVERED_AFTER_RUN' : 'NOT_RECOVERED';
+  if (completeness === 'RECOVERED_AFTER_RUN') {
+    reasons.push(`the attempt was recovered after the run from the paid-run archive (${recoveries.length} recovery record${recoveries.length === 1 ? '' : 's'}); it was not preserved live`);
+  }
+  return { brainRunId, status, completeness, evidence: { opened, sealed, checkpoint, liveRecords, recoveries }, reasons: preserved ? [] : reasons };
 }
