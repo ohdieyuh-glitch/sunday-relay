@@ -80,6 +80,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	FString GetBeatEvents(FName BeatId) const;
 
+	/**
+	 * What Julius would have to emit for a beat nothing currently reaches. Empty when a real event does.
+	 * Two of the seventeen are in this state; the sentence says which moment is missing and why the
+	 * nearest existing event was NOT used for it.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString GetBeatNotYetEmitted(FName BeatId) const;
+
 	/** The pure fold: what step a beat leaves the progression on, given the step before it. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	int32 GetBeatChakraStep(FName BeatId, int32 PreviousStep) const;

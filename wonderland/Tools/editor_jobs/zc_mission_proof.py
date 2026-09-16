@@ -108,23 +108,35 @@ def job():
     # A DRAWN STATE WITH NO RUNTIME STATE BEHIND IT IS A STATE THAT CANNOT BE WIRED UP. This is the check
     # that keeps Phase 3 honest about Phase 4.
     unbound = []
-    eventless = []
+    silent = []
+    declared_gaps = []
     bindings = {}
     for index in range(mission.get_beat_count() if mission else 0):
-        beat = mission.get_beat_id_at(index)
+        beat = str(mission.get_beat_id_at(index))
         phase = mission.get_beat_phase(beat)
-        accent = mission.get_beat_accent(beat)
-        events = mission.get_beat_events(beat)
-        bindings[str(beat)] = {"phase": phase, "accent": accent, "events": events}
+        events = mission.get_beat_events(beat).strip()
+        gap = mission.get_beat_not_yet_emitted(beat).strip()
+        bindings[beat] = {"phase": phase, "accent": mission.get_beat_accent(beat),
+                          "events": events, "not_yet_emitted": gap}
         if not phase or phase == "Unknown":
-            unbound.append(str(beat))
-        # `unobserved` is the absence of a report and is driven by no event, by design.
-        if str(beat) != "unobserved" and not events.strip():
-            eventless.append(str(beat))
+            unbound.append(beat)
+        # `unobserved` is the absence of a report, so no event drives it and that is not a gap.
+        if beat == "unobserved":
+            continue
+        if events and gap:
+            # Claiming both an event and a gap is a row that has not decided what it is.
+            silent.append(beat + " (claims both)")
+        elif not events and not gap:
+            # A SILENT GAP is the failure: a drawn state with no event and no note saying so would be
+            # wired up in Phase 4 to whatever event was nearest, which is how a visual starts lying.
+            silent.append(beat)
+        elif gap:
+            declared_gaps.append(beat)
     RESULT["bindings"] = bindings
-    record("M02", "every beat resolves to a real Julius phase and names the events that will drive it",
-           mission is not None and not unbound and not eventless,
-           unbound=unbound, eventless=eventless, bound=len(bindings))
+    RESULT["declared_gaps"] = declared_gaps
+    record("M02", "every beat resolves to a real Julius phase, and names either its events or the gap",
+           mission is not None and not unbound and not silent,
+           unbound=unbound, silent=silent, declared_gaps=declared_gaps, bound=len(bindings))
 
     # ---------------------------------------------------------------- the fold, as a pure function
     # Checked WITHOUT touching the orb: the progression is arithmetic on the beat table, so a renderer

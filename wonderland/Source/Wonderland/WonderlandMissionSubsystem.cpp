@@ -393,6 +393,11 @@ FString UWonderlandMissionSubsystem::GetBeatEvents(FName BeatId) const
 	return WonderlandBeatReading(WonderlandBeatFromId(BeatId)).Events;
 }
 
+FString UWonderlandMissionSubsystem::GetBeatNotYetEmitted(FName BeatId) const
+{
+	return WonderlandBeatReading(WonderlandBeatFromId(BeatId)).NotYetEmitted;
+}
+
 int32 UWonderlandMissionSubsystem::GetBeatChakraStep(FName BeatId, int32 PreviousStep) const
 {
 	const EWonderlandChakra Previous = WonderlandChakraForStep(PreviousStep);
