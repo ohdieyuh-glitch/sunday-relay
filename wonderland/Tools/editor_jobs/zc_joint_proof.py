@@ -325,13 +325,24 @@ def job():
         # for a different act; the brush has to be GONE, because a Dog still holding it is still painting as
         # far as anybody watching is concerned.
         review = [f for f in frames if f["beat"] in ("independent_reviewer", "review_challenge")]
-        # THE PROP SWAP IS A TRANSITION, AND THE FOUNDER ASKED FOR ONE. "Do not hard-cut props on and off
-        # if a clean transition can reasonably be implemented" -- so the brush being visible for the first
-        # sample of review is the crossfade working, not the brush failing to leave. This is the same
-        # mistake J13 made, and it is the second time in one run: a transition measured as a steady state.
+        # THE PROP SWAP IS A TRANSITION, AND THE FOUNDER ASKED FOR ONE: "do not hard-cut props on and off
+        # if a clean transition can reasonably be implemented". So the brush still being up for the first
+        # sample of a review is the crossfade working, not the brush failing to leave.
+        #
+        # AND REVIEW HAPPENS TWICE. A mission reviews, sends the work back, repairs, and RE-REVIEWS -- so
+        # the grace has to be per contiguous run rather than once for the whole stage. Allowing it only at
+        # the first occurrence failed on the second review's swap, nine seconds later, and that failure
+        # looked exactly like a real defect until the runs were separated.
         swap_grace = 0.6
-        began = review[0]["t"] if review else 0.0
-        settled_review = [f for f in review if f["t"] - began >= swap_grace]
+        settled_review = []
+        run_start = None
+        previous = None
+        for f in review:
+            if previous is None or f["i"] != previous + 1:
+                run_start = f["t"]
+            previous = f["i"]
+            if f["t"] - run_start >= swap_grace:
+                settled_review.append(f)
         brush_in_review = [f["i"] for f in settled_review if f["brush"]]
         lens_in_review = [f for f in review if f["lens"]]
         record("J11", "review puts the brush away and takes up the lens",
