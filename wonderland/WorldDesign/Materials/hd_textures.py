@@ -16,6 +16,7 @@ wrap-around distances), one per surface family, each ALBEDO + NORMAL + ROUGHNESS
   gold       polished metal: near-flat normal with fine directional scratches, roughness 0.18-0.40 with smudges
   ashlar     castle wall stone laid in courses (MQ05): running-bond blocks, fine joints with chamfered arrises the
              sun can find, every block its own tone and a whisper of tilt; clean, pale, no grime
+  grass      lawn (MQ09) -- generated, applied, judged WORSE than the V2 lawn texture, reverted; kept for reference
   macro      one 1024 px low-frequency map (R: brightness, G: roughness) laid at ~60 m to break repetition
 
 Albedos are NEUTRAL like the V2 set (the instance's BaseColor tint carries the colour): the linear mean is scaled to
@@ -308,6 +309,39 @@ def ashlar(n, rng, courses=8):
     return alb, normal_from_height(height, 12.0), rough, mean
 
 
+def grass(n, rng):
+    """MQ09: lawn that is not a flat plane. The census put lawn at 48% of everything visible in the city, and it read as
+    one uniform green sheet -- the Bible's rejected 'low-detail'. At a ~1.4 m tile this is what a walker sees of grass:
+      BLADES   very fine speckle, light tips over darker bases, so the surface has grain the sun picks out
+      CLUMPS   mid-scale tufts and hollows -- the relief, carried mostly in the normal map
+      PATCHES  large lush and dry areas, dry ones warmer, so a lawn is not one colour across a whole square
+      GAPS     rare dark soil showing between tufts
+      FLOWERS  a sparse sprinkle of pale clover and daisy heads -- the flower-dotted meadow of the boards -- kept small
+               and rare so a tint still reads as its green
+    Neutral like every family: the instance's BaseColor carries the colour, this carries the life."""
+    blades = spectral(n, 0.7, rng, lo=260.0)
+    clumps = spectral(n, 2.1, rng, lo=22.0, hi=110.0)
+    patches = spectral(n, 2.9, rng, lo=1.0, hi=10.0)
+    # FLOWER HEADS AT A SIZE A WALKER CAN SEE. The lawn tiles at ~1.4 m, so 2048 px is ~14 px per cm; a 1.5 cm head is
+    # ~21 px, which is ~48 cycles per tile. The first version sampled heads at 420 cycles -- 3 mm dots, invisible.
+    heads = spectral(n, 0.3, rng, lo=38.0, hi=72.0)
+    gaps = smoothstep(-1.55, -2.35, blades + 0.5 * clumps)
+    flowers = smoothstep(2.15, 2.65, heads) * smoothstep(-0.4, 0.4, clumps)
+    # NO LARGE PATCHES INSIDE THE TILE. The first applied version put 14-140 cm lush/dry patches in a 1.4 m tile, and
+    # at mid-distance they repeated as a plain checkerboard across every lawn (grass_ab.jpg, Lantern Lane). Anything
+    # bigger than a few tufts must come from the world-space macro map (~60 m), which does not repeat. So the patch
+    # field only warms the tone a little, and clumps carry less contrast than before.
+    lum = 0.74 + 0.10 * blades + 0.05 * clumps + 0.008 * patches
+    lum = lum * (1.0 - 0.40 * gaps) + 0.55 * flowers
+    dry = 0.15 * smoothstep(0.2, 1.4, patches)
+    warm = np.stack([1.0 + 0.05 * dry + 0.20 * flowers, np.ones_like(dry) + 0.18 * flowers,
+                     1.0 - 0.07 * dry + 0.16 * flowers], axis=-1)
+    alb, mean = neutral_albedo(np.clip(lum, 0.05, None), warm)
+    height = 0.55 * clumps + 0.30 * blades - 0.6 * gaps + 0.25 * flowers
+    rough = np.clip(0.86 + 0.05 * blades - 0.04 * dry, 0, 1)
+    return alb, normal_from_height(height, 3.2), rough, mean
+
+
 def macro(n, rng):
     a = spectral(n, 3.0, rng, lo=1.0, hi=10.0)
     b = spectral(n, 3.0, rng, lo=1.0, hi=10.0)
@@ -315,9 +349,10 @@ def macro(n, rng):
     return rgb
 
 
-FAMILIES = {"limestone": limestone, "cobble": cobble, "ivory": ivory, "roof": roof, "gold": gold, "ashlar": ashlar}
+FAMILIES = {"limestone": limestone, "cobble": cobble, "ivory": ivory, "roof": roof, "gold": gold, "ashlar": ashlar,
+            "grass": grass}
 # seed order: the MQ01 sets and macro first, so adding a family never changes a texture already imported
-SEED_ORDER = ["limestone", "cobble", "ivory", "roof", "gold", "macro", "ashlar"]
+SEED_ORDER = ["limestone", "cobble", "ivory", "roof", "gold", "macro", "ashlar", "grass"]
 
 
 def main():
