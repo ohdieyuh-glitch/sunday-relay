@@ -56,7 +56,7 @@ import { evaluateJuliusRelease } from './julius-release-runtime';
 import { REVIEW_TASK_ATTEMPTS, boundStageForRole, reviewStageOf, workStageOf, type JuliusReviewStage } from './julius-review-stage';
 import {
   juliusReviewedWorkOf, juliusSegmentLineageRootOf, juliusSegmentTaskId, juliusYieldContinuationOf, nextSegmentNumber, pendingSegmentFor,
-  routeIsBarrier, sanitizeJuliusSegmentState,
+  routeIsBarrier, sanitizeJuliusSegmentState, segmentChildrenOf,
 } from './julius-segment-lineage';
 import {
   juliusEffectiveReviewVerdict, juliusEvidenceReviewVerdict, juliusReviewRoute, juliusReviewVerdictFacts,
@@ -66,7 +66,8 @@ import {
 import {
   JULIUS_CHECKPOINT_LIMITS,
   guidanceSubjectTaskId, isJuliusGuidanceHandoffEntryId, issueJuliusGuidance, juliusCheckpointId,
-  juliusGuidanceHandoffEntryId, juliusGuidanceId, juliusGuidanceTaskId,
+  JULIUS_GUIDANCE_AUTHORITATIVE_HEADING, JULIUS_GUIDANCE_PROPOSED_HEADING,
+  juliusGuidanceHandoffEntryId, juliusGuidanceId, juliusGuidanceProposalEntryId, juliusGuidanceTaskId,
   juliusResearchCheckpointId, renderJuliusGuidanceHandoff,
   recordJuliusCheckpoint, routeJuliusCheckpoint, sanitizeJuliusGuidanceProposal, sanitizeJuliusGuidanceRequest,
   type JuliusCheckpointOrigin,
@@ -1621,6 +1622,10 @@ async function driveContinuousLifecycle(input: {
        * that is the point of making it structural — but a coder that cannot
        * tell it was told nothing is the gap this whole change exists to close.
        */
+      await carryAcceptedGuidanceForward({
+        deps, run, ledger, lineage: [segmentRoot, ...segmentChildrenOf(segmentRoot, tasks)],
+        continuationTaskId: continuation.taskId, workerId: input.workerId,
+      });
       await deps.store.appendBrainEntry({
         runId: run.runId,
         projectId: run.projectId,
@@ -1983,6 +1988,11 @@ async function driveResearchCheckpoint(input: {
      * it. It holds no page text and no worker text, and it is written under the
      * same guard as the answer, so a replayed tick adds nothing.
      */
+    await carryAcceptedGuidanceForward({
+      deps, run, ledger, lineage: [segmentRoot, ...segmentChildrenOf(segmentRoot, tasks)],
+      continuationTaskId: continuation.taskId, workerId: input.workerId,
+    });
+
     if (served.length > 0) {
       await deps.store.appendBrainEntry({
         runId: run.runId,
@@ -2144,24 +2154,37 @@ async function issueGuidanceFromResult(input: {
    * `deliveredTo` is null on the row below rather than absent, so guidance that
    * reached no one is legible as that instead of as guidance that was read.
    */
-  /* WAITING ON THIS GUIDANCE TASK, which is the edge the barrier actually is:
-     the continuation depends on the architect's task, not on the coder's, so
-     that it cannot run before the advice exists. Looking for a segment blocked
-     on the SUBJECT would find the research barrier's shape and miss this one. */
+  /**
+   * A PACKET NOBODY HAS ACCEPTED IS NOT ADVICE YET.
+   *
+   * IT USED TO BE. The packet was written straight onto the waiting
+   * continuation, so a coder released later read it as instruction whatever the
+   * reviewer went on to say — and when the review sent it back, the rejected
+   * packet stayed in that context and the correction arrived beside it. Two
+   * packets, equally actionable, the wrong one first.
+   *
+   * So the proposal is stored against the ARCHITECT'S OWN TASK, under a heading
+   * that says it is not authoritative. `deliverAcceptedGuidance` copies it to the
+   * continuation when Julius accepts the review, and never otherwise. The
+   * continuation cannot run before that decision — it is BLOCKED on this task and
+   * only an accepting decision releases it — so nothing waits longer for the
+   * change, and a rejected packet reaches no one.
+   *
+   * Rejected guidance is NOT erased: this row, the `guidance.issued` row and the
+   * review's own decision stay on the record as provenance.
+   */
+  await deps.store.appendBrainEntry({
+    runId: run.runId,
+    projectId: run.projectId,
+    taskId: task.taskId,
+    workerId: input.workerId,
+    entryId: juliusGuidanceProposalEntryId(task.taskId),
+    kind: 'HANDOFF',
+    safeText: `${JULIUS_GUIDANCE_PROPOSED_HEADING}\n\n${renderJuliusGuidanceHandoff(packet)}`,
+    evidenceIds: [],
+    occurredAt: deps.clock.now(),
+  });
   const waiting = pendingSegmentFor(questionTask.taskId, tasks);
-  if (waiting !== null) {
-    await deps.store.appendBrainEntry({
-      runId: run.runId,
-      projectId: run.projectId,
-      taskId: waiting.taskId,
-      workerId: input.workerId,
-      entryId: juliusGuidanceHandoffEntryId(waiting.taskId, packet.revision),
-      kind: 'HANDOFF',
-      safeText: renderJuliusGuidanceHandoff(packet),
-      evidenceIds: [],
-      occurredAt: deps.clock.now(),
-    });
-  }
 
   // COUNTS AND IDENTIFIERS, never the advice itself. The advice is on the
   // Project Brain above, where the context compiler redacts it and the packet
@@ -2172,9 +2195,11 @@ async function issueGuidanceFromResult(input: {
     facts: {
       guidanceId: packet.guidanceId, guidanceRevision: packet.revision,
       guidanceDigest: packet.packetDigest,
-      /* THE WORKER THE ADVICE ACTUALLY REACHED, or null when none was waiting.
-         Absent would be a third state nobody can read. */
-      deliveredTo: waiting === null ? null : waiting.taskId,
+      /* WHO IT WILL REACH IF JULIUS ACCEPTS IT, or null when nothing is waiting.
+         Delivery itself is `guidance.delivered`, written only on acceptance:
+         "issued" and "authoritative" are different facts and used to be one. */
+      proposedTo: waiting === null ? null : waiting.taskId,
+      proposalEntryId: juliusGuidanceProposalEntryId(task.taskId),
       contractRevision: binding.contractRevision, contractBindingDigest: binding.bindingDigest,
       recommendedActions: packet.recommendedActions.length,
       additionalProhibitions: packet.additionalProhibitions.length,
@@ -2791,6 +2816,102 @@ async function applyReviewVerdict(input: {
   return { verdict: effective.verdict, route, category };
 }
 
+/**
+ * ACCEPTED ADVICE TRAVELS WITH THE UNIT, not with one segment of it.
+ *
+ * A packet is delivered to the continuation that was waiting for it, and a
+ * Project Brain entry reaches the packet of the task it is scoped to and no
+ * other. So a unit that pauses AGAIN — to research, or to ask something else —
+ * ran its next segment without the advice Julius had accepted for it: the
+ * guidance was delivered once and then silently left behind.
+ *
+ * Every accepted packet already delivered to an earlier segment of this lineage
+ * is therefore copied onto each new continuation, under the same authoritative
+ * heading and the same revision, guarded by the entry id so a replay copies
+ * nothing twice. Rejected packets are not carried: they were never delivered.
+ */
+async function carryAcceptedGuidanceForward(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly lineage: readonly JuliusTask[];
+  readonly continuationTaskId: string;
+  readonly workerId: string;
+}): Promise<void> {
+  const { deps, run } = input;
+  const carried = new Set(input.lineage.map((task) => task.taskId));
+  const entries = await deps.store.brainEntriesForRun(run.runId, run.projectId);
+  for (const entry of entries) {
+    if (!isJuliusGuidanceHandoffEntryId(entry.entryId)) continue;
+    if (!entry.taskIds.some((taskId) => carried.has(taskId))) continue;
+    const revision = /:r([1-9]\d*)$/u.exec(entry.entryId);
+    if (revision === null) continue;
+    await deps.store.appendBrainEntry({
+      runId: run.runId, projectId: run.projectId, taskId: input.continuationTaskId, workerId: input.workerId,
+      entryId: juliusGuidanceHandoffEntryId(input.continuationTaskId, Number(revision[1])),
+      kind: 'HANDOFF', safeText: entry.text, evidenceIds: [], occurredAt: deps.clock.now(),
+    });
+  }
+}
+
+/**
+ * HAND AN ACCEPTED PACKET TO THE WORKER THAT ASKED FOR IT.
+ *
+ * The packet is read back from the proposal row the architect's dispatch wrote,
+ * so the text delivered is the text that was reviewed — not a re-render of
+ * something that could have changed. It is written under the authoritative
+ * heading, scoped to the waiting continuation and to nothing else, and guarded
+ * by the brain entry's own id: a replayed decision delivers nothing twice.
+ *
+ * A packet whose review was REJECTED never reaches here. It stays on the record
+ * as the proposal it was.
+ */
+async function deliverAcceptedGuidance(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly tasks: readonly JuliusTask[];
+  /** The architect task Julius accepted: the original guidance, its repair, or a continuation of either. */
+  readonly guidanceTaskId: string;
+  /** The guidance task the question was asked on — the lineage root. */
+  readonly questionTaskId: string;
+  readonly workerId: string;
+  readonly firstWrite: boolean;
+}): Promise<void> {
+  const { deps, run, ledger } = input;
+  if (!input.firstWrite) return;
+  const waiting = pendingSegmentFor(input.questionTaskId, input.tasks);
+  if (waiting === null) return;
+  const entries = await deps.store.brainEntriesForRun(run.runId, run.projectId);
+  const proposal = entries.find((entry) => entry.entryId === juliusGuidanceProposalEntryId(input.guidanceTaskId));
+  if (proposal === undefined) {
+    // Accepted work that produced no readable packet delivers nothing, and says so.
+    await ledger.event('guidance.refused', {
+      taskId: input.questionTaskId, workerId: input.workerId,
+      facts: { reasonCode: 'accepted_guidance_has_no_proposal', stage: 'deliver', guidanceTaskId: input.guidanceTaskId },
+    });
+    return;
+  }
+  const revision = entries.filter((entry) => entry.entryId.startsWith(`brain:guidance-answer:${waiting.taskId}:r`)).length + 1;
+  const packet = proposal.text.startsWith(JULIUS_GUIDANCE_PROPOSED_HEADING)
+    ? proposal.text.slice(JULIUS_GUIDANCE_PROPOSED_HEADING.length).replace(/^\n+/u, '')
+    : proposal.text;
+  const entryId = juliusGuidanceHandoffEntryId(waiting.taskId, revision);
+  await deps.store.appendBrainEntry({
+    runId: run.runId, projectId: run.projectId, taskId: waiting.taskId, workerId: input.workerId,
+    entryId, kind: 'HANDOFF',
+    safeText: `${JULIUS_GUIDANCE_AUTHORITATIVE_HEADING}\n\n${packet}`,
+    evidenceIds: [], occurredAt: deps.clock.now(),
+  });
+  await ledger.event('guidance.delivered', {
+    taskId: input.questionTaskId, workerId: input.workerId,
+    facts: {
+      guidanceTaskId: input.guidanceTaskId, deliveredTo: waiting.taskId, entryId,
+      revision, proposalEntryId: proposal.entryId,
+    },
+  });
+}
+
 /* ------------------------------------------------------------ disagreement */
 
 /** Who Julius attributes a verification to when a resolved disagreement, not a worker, caused it. */
@@ -3253,6 +3374,15 @@ async function settlePeerRequestsForDecision(input: {
   if (guidanceSubjectTaskId(unit.taskId) === null || input.action === 'RETRY') return;
   const question = { ...common, kind: 'GUIDANCE_QUESTION' as const, anchor: unit.taskId };
   if (input.action === 'ACCEPT' || input.action === 'COMPLETE') {
+    /**
+     * ACCEPTANCE IS WHAT MAKES A PACKET AUTHORITATIVE, and this is the only
+     * place a packet reaches the worker that asked.
+     */
+    await deliverAcceptedGuidance({
+      deps: input.deps, run: input.run, ledger: input.ledger, tasks: input.tasks,
+      guidanceTaskId: input.subject.taskId, questionTaskId: unit.taskId, workerId: input.workerId,
+      firstWrite: input.decisionRecorded,
+    });
     const resolved = await moveJuliusPeerRequest(peers, {
       ...question, to: 'RESOLVED', from: ['ANSWERED'], transitionCode: 'ANSWER_ACCEPTED',
     });

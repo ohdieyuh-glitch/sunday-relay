@@ -168,12 +168,19 @@ describe('A — issued guidance lands on the continuation that is waiting for it
     expect(text).toContain('is 8KiB a requirement or an accident?');
   });
 
-  it('3. the row says who the advice reached', async () => {
+  it('3. the row says who the advice is FOR, and a second row says when it reached them', async () => {
+    // A packet is issued as a PROPOSAL and delivered only when Julius accepts
+    // its review, so "who it is for" and "who read it" are two facts on two
+    // rows. They were one, and a packet the reviewer went on to reject had
+    // already been handed over.
     const harness = guidanceRound();
     await drain(harness);
     const issued = factsOf(harness, 'guidance.issued');
     expect(issued).toHaveLength(1);
-    expect(issued[0]!.deliveredTo).toBe('segment:build-1:2:task');
+    expect(issued[0]!.proposedTo).toBe('segment:build-1:2:task');
+    const delivered = factsOf(harness, 'guidance.delivered');
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0]!.deliveredTo).toBe('segment:build-1:2:task');
   });
 
   it('4. and says so as NULL rather than absent when nothing was waiting', async () => {
@@ -196,8 +203,9 @@ describe('A — issued guidance lands on the continuation that is waiting for it
     const issued = factsOf(harness, 'guidance.issued');
     // NOT VACUOUS. A loop over no rows would pass whatever the field did.
     expect(issued, 'the architect did issue guidance').toHaveLength(1);
-    expect(Object.hasOwn(issued[0]!, 'deliveredTo'), 'the field is always present').toBe(true);
-    expect(issued[0]!.deliveredTo, 'and it reached nobody').toBeNull();
+    expect(Object.hasOwn(issued[0]!, 'proposedTo'), 'the field is always present').toBe(true);
+    expect(issued[0]!.proposedTo, 'and it was for nobody').toBeNull();
+    expect(factsOf(harness, 'guidance.delivered'), 'so nothing was delivered').toEqual([]);
     expect((await harness.store.brainEntriesForRun('run-1', 'prj-1'))
       .filter((entry) => isJuliusGuidanceHandoffEntryId(entry.entryId)), 'nothing was handed over').toHaveLength(0);
   });
@@ -362,6 +370,8 @@ describe('D — guidanceConsumed is a measurement now, and only because of the a
     const dump = readFileSync(resolve(import.meta.dirname, '../../../../.github/julius-live-evidence-dump.sh'), 'utf8');
     expect(dump, 'the effort row exports what a worker was shown').toContain("'facts'->>'guidanceConsumed'");
     expect(dump, 'the guidance row exports who it reached').toContain("'facts'->>'deliveredTo'");
+    expect(dump, 'and who it was proposed for before acceptance').toContain("'facts'->>'proposedTo'");
+    expect(dump, 'and the delivery itself is selected').toContain("'julius.guidance.delivered'");
   });
 
   it('20. and it is a consequence of delivery, not a column filled in', () => {
@@ -369,7 +379,10 @@ describe('D — guidanceConsumed is a measurement now, and only because of the a
     // than staying plausible. The one place it comes from is the entry id the
     // delivery writes.
     const source = readFileSync(resolve(import.meta.dirname, 'julius-task-pipeline.ts'), 'utf8');
-    expect(source).toContain('juliusGuidanceHandoffEntryId(waiting.taskId, packet.revision)');
+    // The delivery moved to the accepting decision, and the count still comes
+    // from the entry id that delivery writes.
+    expect(source).toContain('juliusGuidanceHandoffEntryId(waiting.taskId, revision)');
     expect(source).toContain('renderJuliusGuidanceHandoff(packet)');
+    expect(source).toContain('deliverAcceptedGuidance');
   });
 });

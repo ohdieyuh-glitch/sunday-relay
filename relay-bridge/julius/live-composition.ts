@@ -178,7 +178,15 @@ export const architectWorker = (env: Record<string, string | undefined>): Julius
    * refuses a guidance review whose packet it cannot read. Registering earlier
    * would have minted a task whose review could approve something it never saw.
    */
-  capabilities: ['plan'], taskTypes: ['plan', 'repair:plan', 'guidance', 'repair:guidance'],
+  /**
+   * `rebuttal` joins them because the architect can now ANSWER a disagreement.
+   * PR #270 registered none, so Julius proved the rebuttal unroutable and
+   * resolved every live challenge against the architect without asking it —
+   * safe, and not a peer. Registering it here and `review:rebuttal` on the
+   * reviewer are one change: a rebuttal nobody could re-review would leave a
+   * maintained position with no way to be judged.
+   */
+  capabilities: ['plan'], taskTypes: ['plan', 'repair:plan', 'guidance', 'repair:guidance', 'rebuttal'],
   /**
    * RESOLVED, not merely derived. This first read `300_000`, a literal that
    * happened to equal the connector's default; the literal was then replaced by
@@ -244,7 +252,7 @@ export const reviewerWorker = (providerId: string): JuliusWorker => ({
    * reviewer for it.
    */
   taskTypes: [
-    'review:plan', 'review:build', 'review:guidance',
+    'review:plan', 'review:build', 'review:guidance', 'review:rebuttal',
     'review:repair:plan', 'review:repair:build', 'review:repair:guidance',
   ],
   /**

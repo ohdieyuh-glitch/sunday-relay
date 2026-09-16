@@ -82,15 +82,21 @@ function byTask(worker: Parameters<typeof scriptedAdapter>[0], pick: (taskId: st
   return { adapter, dispatches };
 }
 
-async function drive(buildReview: (round: number) => ScriptedOutcome) {
+async function drive(
+  buildReview: (round: number) => ScriptedOutcome,
+  answers: { readonly rebuttal?: unknown; readonly reReview?: ScriptedOutcome } = {},
+) {
   const memory = createJuliusMemoryStore();
   const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
   seed(memory);
   let buildReviews = 0;
-  const architect = byTask(architectWorker({}), () => ({ kind: 'succeed', evidence: PLAN_EVIDENCE, usdMicros: null }));
+  const architect = byTask(architectWorker({}), (_taskId, taskType) => (taskType === 'rebuttal'
+    ? { kind: 'succeed', evidence: PLAN_EVIDENCE, usdMicros: null, ...(answers.rebuttal === undefined ? {} : { rebuttal: answers.rebuttal }) }
+    : { kind: 'succeed', evidence: PLAN_EVIDENCE, usdMicros: null }));
   const coder = byTask(CODER_WORKER, () => ({ kind: 'succeed', evidence: BUILD_EVIDENCE, usdMicros: 100_000 }));
   const reviewer = byTask(REVIEWER_WORKER, (_taskId, taskType) => {
     if (taskType === 'review:plan') return { kind: 'succeed', evidence: PASSED_REVIEW, usdMicros: null };
+    if (taskType === 'review:rebuttal') return answers.reReview ?? { kind: 'succeed', evidence: PASSED_REVIEW, usdMicros: null };
     buildReviews += 1;
     return buildReview(buildReviews);
   });
@@ -113,29 +119,72 @@ async function drive(buildReview: (round: number) => ScriptedOutcome) {
     if (page.entries.length === 0 || !page.hasMore) break;
     sinceSequence = Math.max(...page.entries.map((entry) => entry.sequence));
   }
-  return { outcome, rows, memory, architect };
+  return { outcome, rows, memory, architect, reviewer };
 }
 
 describe('the live composition and the peer protocol', () => {
-  it('a material challenge nobody can rebut yet is resolved by Julius, repaired, and the mission completes', async () => {
-    const { outcome, rows, memory, architect } = await drive((round) => (round === 1
-      ? { kind: 'succeed', evidence: PASSED_REVIEW, usdMicros: null, reviewVerdict: { verdict: 'CHALLENGE', category: 'missed_acceptance_criterion', target: 'work', claim: 'AC-1 is not exercised by any test.' } }
-      : { kind: 'succeed', evidence: PASSED_REVIEW, usdMicros: null }));
+  const CHALLENGE: ScriptedOutcome = {
+    kind: 'succeed', evidence: PASSED_REVIEW, usdMicros: null,
+    reviewVerdict: { verdict: 'CHALLENGE', category: 'missed_acceptance_criterion', target: 'work', claim: 'AC-1 is not exercised by any test.' },
+  };
+  const challengeThenPass = (round: number): ScriptedOutcome => (round === 1 ? CHALLENGE : { kind: 'succeed', evidence: PASSED_REVIEW, usdMicros: null });
+
+  it('the architect answers a live challenge: MAINTAINS with evidence, the reviewer re-reviews once, Julius upholds the architect', async () => {
+    const { outcome, rows, memory, architect, reviewer } = await drive(challengeThenPass, {
+      rebuttal: {
+        position: 'MAINTAINS',
+        argument: 'AC-1 is exercised: the suite asserts the rendered output, not only the exit code.',
+        evidence: [{ locator: 'tests/render.spec.ts:44', claim: 'The assertion covers the rendered field AC-1 names.' }],
+        missionTermsMustChange: false,
+      },
+    });
 
     expect(outcome.state).toBe('COMPLETED');
+    // The architect was actually asked, through the live composition's own
+    // registration: PR #270 could not ask at all.
+    expect(architect.dispatches).toContain('rebuttal:build-1:review:task');
+    expect(reviewer.dispatches, 'and the challenge was judged once more, independently')
+      .toContain('rebuttal:build-1:review:task:review');
     const [disagreement] = foldJuliusDisagreements(rows);
     expect(disagreement).toMatchObject({
       disagreementId: 'disagreement:gh-35000000001.2:build-1:review', material: true,
-      resolution: 'CHALLENGE_UPHELD', resolutionBasis: 'REBUTTAL_UNROUTABLE', rebuttalTaskId: null,
+      architectPosition: 'MAINTAINS', resolution: 'ARCHITECT_UPHELD', resolutionBasis: 'RE_REVIEW_CONTINUED',
+      rebuttalTaskId: 'rebuttal:build-1:review:task', reReviewTaskId: 'rebuttal:build-1:review:task:review',
     });
-    expect(architect.dispatches.some((taskId) => taskId.startsWith('rebuttal:')), 'no rebuttal was dispatched to an architect with no charter for one').toBe(false);
+    expect(disagreement!.architectEvidence.map((item) => item.locator)).toEqual(['tests/render.spec.ts:44']);
     const requests = foldJuliusPeerRequests(rows);
-    expect(requests.length).toBeGreaterThan(0);
     expect(requests.every((request) => request.requestId.includes(':gh-35000000001.2:')), 'every peer id carries the attempt').toBe(true);
-    expect(requests.find((request) => request.kind === 'CHALLENGE')).toMatchObject({ status: 'RESOLVED', transitionCode: 'CHALLENGE_UPHELD', mandatory: true });
+    expect(requests.find((request) => request.kind === 'REBUTTAL_REQUEST')).toMatchObject({
+      sourceRole: 'JULIUS', targetRole: 'PROMPT_ARCHITECT', status: 'RESOLVED', transitionCode: 'ARCHITECT_UPHELD',
+    });
+    const decisions = await memory.decisionsForRun(RUN, PROJECT);
+    expect(decisions.filter((row) => row.taskId === 'build-1').map((row) => row.action), 'the work was accepted, not repaired').toEqual(['ACCEPT']);
+    expect((await memory.tasksForRun(RUN, PROJECT)).some((task) => task.taskId.startsWith('repair:'))).toBe(false);
+  });
+
+  it('a live architect that CONCEDES upholds the challenge, and the work is repaired', async () => {
+    const { outcome, rows, memory, architect } = await drive(challengeThenPass, {
+      rebuttal: { position: 'CONCEDES', argument: 'The reviewer is right: no test covers AC-1.', evidence: [], missionTermsMustChange: false },
+    });
+    expect(outcome.state).toBe('COMPLETED');
+    expect(architect.dispatches).toContain('rebuttal:build-1:review:task');
+    const [disagreement] = foldJuliusDisagreements(rows);
+    expect(disagreement).toMatchObject({ architectPosition: 'CONCEDES', resolution: 'CHALLENGE_UPHELD', resolutionBasis: 'ARCHITECT_CONCEDED', reReviewTaskId: null });
     const decisions = await memory.decisionsForRun(RUN, PROJECT);
     expect(decisions.filter((row) => row.taskId === 'build-1').map((row) => row.action)).toEqual(['REPAIR']);
     expect(decisions.find((row) => row.taskId === 'repair:build-1:1:task')?.action).toBe('ACCEPT');
+  });
+
+  it('a live rebuttal the domain cannot use resolves against the architect, and the mission still finishes', async () => {
+    // MAINTAINS with nothing to cite. The adapter corrects once and then refuses
+    // the dispatch; Julius resolves the disagreement on the challenge it has.
+    const { outcome, rows } = await drive(challengeThenPass, {
+      rebuttal: { position: 'MAINTAINS', argument: 'I am right.', evidence: [], missionTermsMustChange: false },
+    });
+    expect(outcome.state).toBe('COMPLETED');
+    const [disagreement] = foldJuliusDisagreements(rows);
+    expect(disagreement).toMatchObject({ resolution: 'CHALLENGE_UPHELD', architectPosition: null });
+    expect(['REBUTTAL_UNUSABLE', 'REBUTTAL_UNROUTABLE']).toContain(disagreement!.resolutionBasis);
   });
 
   it('a WARNING is retained on the durable record and the mission completes without a repair', async () => {

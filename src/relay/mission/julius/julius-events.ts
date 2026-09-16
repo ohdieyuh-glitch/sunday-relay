@@ -59,6 +59,11 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * recorded only boundaries — a task started, a task ended — and a mission's
   * whole middle was unwritten. */
  'checkpoint.recorded','checkpoint.verdict','guidance.issued','guidance.refused',
+ /* WHEN A PACKET BECAME ADVICE. `guidance.issued` says an architect produced one
+  * and which question it answers; `guidance.delivered` says Julius ACCEPTED it
+  * after review and handed it to the worker that asked. They were one fact, and
+  * a packet the reviewer went on to reject had already been delivered. */
+ 'guidance.delivered',
  /* GOVERNED RESEARCH. `research.refused` is Julius unable to read what a worker
   * asked for; `guidance.deferred` is a worker that asked for two things in one
   * dispatch and got the cheaper one, recorded rather than dropped so the record

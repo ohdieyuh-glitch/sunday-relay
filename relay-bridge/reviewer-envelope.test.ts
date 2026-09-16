@@ -238,6 +238,8 @@ describe('8 · the review itself is not made smaller to fit', () => {
     expect(read('relay-bridge/julius/live-workers.ts')).toContain('const REVIEW_ATTEMPT_LIMIT = 2;');
     // Reviewer depth is untouched in the packet the reviewer is handed: the
     // stage rubric, the findings and the evidence contract are all unchanged.
-    expect(JULIUS_REVIEW_STAGES).toHaveLength(6);
+    // Seven since the disagreement's own stage joined them: plan, build,
+    // guidance, rebuttal and the three repairs. Depth per review is unchanged.
+    expect(JULIUS_REVIEW_STAGES).toHaveLength(7);
   });
 });

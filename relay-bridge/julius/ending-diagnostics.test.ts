@@ -232,7 +232,9 @@ describe('B · 7–8 · no site can report a subset', () => {
     // behavioural proofs cannot cover a seventh site added later, and picking
     // fields by hand is exactly how six sites came to disagree.
     const calls = callBodies(source(), 'planDiagnostics({');
-    expect(calls.length, 'the call sites must still be findable').toBe(6);
+    // Eight since the architect gained a rebuttal branch: its refusal and its
+    // success each report through the same one constructor.
+    expect(calls.length, 'the call sites must still be findable').toBe(8);
     for (const body of calls) {
       expect(body, `a planDiagnostics call omits providerFacts: ${body.slice(0, 80)}`)
         .toContain('...providerFacts(');

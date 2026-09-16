@@ -1005,6 +1005,30 @@ export function renderJuliusGuidanceHandoff(packet: JuliusGuidancePacket): strin
 export const juliusGuidanceHandoffEntryId = (continuationTaskId: string, revision: number): string =>
   `brain:guidance-answer:${continuationTaskId}:r${String(revision)}`;
 
+/**
+ * WHERE A PACKET WAITS WHILE IT IS UNDER REVIEW.
+ *
+ * Scoped to the ARCHITECT'S OWN TASK, not to the worker that asked: a packet
+ * nobody has accepted is not advice yet, and the entry that carries it must not
+ * reach the coder's context merely by existing. Julius copies it to the waiting
+ * continuation — as `juliusGuidanceHandoffEntryId` — when, and only when, it
+ * accepts the review.
+ */
+export const juliusGuidanceProposalEntryId = (guidanceTaskId: string): string =>
+  `brain:guidance-proposed:${guidanceTaskId}`;
+
+/**
+ * THE LABEL THAT SEPARATES ADVICE FROM A PROPOSAL, in the packet text itself.
+ *
+ * A coder reads its context as instructions. Two packets in it — one accepted,
+ * one the reviewer sent back — are equally actionable to a reader that cannot
+ * tell them apart, and the rejected one usually arrived first. Julius delivers
+ * only accepted guidance; where anything else is ever shown, it is shown under
+ * this heading and outside the authoritative instruction.
+ */
+export const JULIUS_GUIDANCE_AUTHORITATIVE_HEADING = 'ACCEPTED GUIDANCE (authoritative — Julius accepted this packet after independent review)';
+export const JULIUS_GUIDANCE_PROPOSED_HEADING = 'PROPOSED GUIDANCE (NOT authoritative — under independent review; do not act on it)';
+
 /** Is this one of them? Used to count what a compiled packet actually carried. */
 export const isJuliusGuidanceHandoffEntryId = (entryId: string): boolean =>
   /^brain:guidance-answer:.+:r[1-9]\d*$/u.test(entryId);
