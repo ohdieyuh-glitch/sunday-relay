@@ -23,6 +23,15 @@ namespace RelayDogMission
 		}
 	}
 
+	float PageTurnProgress(const FReadingPose& Pose, float TimeSeconds)
+	{
+		// ABSOLUTE FROM THE CLOCK, like every other cycle here, so the hand and the page -- which both read
+		// this -- can never drift apart, and a long frame cannot leave a page half over.
+		const float Cycle = FMath::Frac(TimeSeconds * FMath::Max(Pose.TurnHz, 0.01f));
+		const float Frac = FMath::Clamp(Pose.TurnFraction, 0.05f, 0.95f);
+		return Cycle < Frac ? Cycle / Frac : -1.0f;
+	}
+
 	void ArmAnglesFor(const FWonderlandDogActReading& Reading, float& OutPitchDeg, float& OutRollDeg)
 	{
 		// THE TABLE SPEAKS IN THE FOUNDER'S TERMS, this rig does not. "Arms 35 degrees DOWN" is measured
@@ -81,6 +90,10 @@ namespace RelayDogMission
 			/** Applied to the WORKING arm only: the repair's lateral drag, and the page-turning sweep. */
 			float ShoulderRollExtraDeg = 0.0f;
 			float ElbowDeg = 0.0f;
+			/** The working arm's elbow only. */
+			float ElbowExtraDeg = 0.0f;
+			/** 1 keeps the walk's arm swing; reading holds the arms still. */
+			float ArmStrideKeep = 1.0f;
 			float HipDeg = 0.0f;
 		};
 
@@ -158,18 +171,35 @@ namespace RelayDogMission
 			S.ShoulderRollDeg = Roll;
 			S.ElbowDeg = Trail;
 
-			// THE PAGE TURN (PLANNING, RESEARCH). Two hands: the left holds the book still and the RIGHT
-			// sweeps across it, far enough to be seen from the play camera rather than an animator's. It is
-			// a separate motion from the stroke because a page turn is one gesture and a stroke is a rhythm.
+			// THE PAGE TURN (PLANNING, RESEARCH). Two hands, and a pose of their own rather than the table's
+			// arms-out angles: the left comes forward under the book and holds still, and the right carries a
+			// page from the right-hand side to the left in step with the page itself (PageTurnProgress drives
+			// both), then goes back to rest on the new right-hand page. It REPLACES the walk's arm swing.
 			if (R.bTurnsPages)
 			{
-				const float Turn = FMath::Frac(In.TimeSeconds * 0.32f);
-				// Most of the cycle the hand rests on the page; the sweep is quick, as a real one is.
-				const float Sweep = Turn < 0.30f ? FMath::Sin(PI * (Turn / 0.30f)) : 0.0f;
-				S.ShoulderPitchRightDeg -= Sweep * 26.0f;
-				S.ShoulderRollExtraDeg += Sweep * 18.0f;
-				S.ElbowDeg -= Sweep * 22.0f;
-				S.ShoulderPitchLeftDeg = Pitch;                    // the holding hand does not move
+				const FReadingPose& P = In.Reading;
+				const float Progress = PageTurnProgress(P, In.TimeSeconds);
+				float Across = 0.0f;
+				float Lift = 0.0f;
+				if (Progress >= 0.0f)
+				{
+					Across = Smooth(Progress);
+					Lift = FMath::Sin(PI * Progress);
+				}
+				else
+				{
+					// Back to the right-hand page over the first half of the rest.
+					const float Frac = FMath::Clamp(P.TurnFraction, 0.05f, 0.95f);
+					const float Rest = (FMath::Frac(In.TimeSeconds * FMath::Max(P.TurnHz, 0.01f)) - Frac) / (1.0f - Frac);
+					Across = 1.0f - Smooth(Rest * 2.0f);
+				}
+				S.ShoulderPitchLeftDeg = P.HoldPitchDeg;
+				S.ShoulderRollDeg = P.HoldRollDeg;
+				S.ElbowDeg = P.HoldElbowDeg;
+				S.ShoulderPitchRightDeg = P.TurnPitchDeg + Lift * P.SweepPitchDeg;
+				S.ShoulderRollExtraDeg = (P.TurnRollDeg - P.HoldRollDeg) + Across * P.SweepRollDeg;
+				S.ElbowExtraDeg = (P.TurnElbowDeg - P.HoldElbowDeg) + Lift * P.SweepElbowDeg;
+				S.ArmStrideKeep = 0.0f;
 			}
 
 			// THE LENS (REVIEW). The glass comes up to the eye, which is what ArmDownDeg already says at
@@ -197,6 +227,8 @@ namespace RelayDogMission
 			S.ShoulderRollDeg = FMath::Lerp(A.ShoulderRollDeg, B.ShoulderRollDeg, T);
 			S.ShoulderRollExtraDeg = FMath::Lerp(A.ShoulderRollExtraDeg, B.ShoulderRollExtraDeg, T);
 			S.ElbowDeg = FMath::Lerp(A.ElbowDeg, B.ElbowDeg, T);
+			S.ElbowExtraDeg = FMath::Lerp(A.ElbowExtraDeg, B.ElbowExtraDeg, T);
+			S.ArmStrideKeep = FMath::Lerp(A.ArmStrideKeep, B.ArmStrideKeep, T);
 			S.HipDeg = FMath::Lerp(A.HipDeg, B.HipDeg, T);
 			return S;
 		}
@@ -236,6 +268,8 @@ namespace RelayDogMission
 		Out.ShoulderRollDeg = S.ShoulderRollDeg * W;
 		Out.ShoulderRollExtraDeg = S.ShoulderRollExtraDeg * W;
 		Out.ElbowDeg = S.ElbowDeg * W;
+		Out.ElbowExtraDeg = S.ElbowExtraDeg * W;
+		Out.ArmStrideKeep = 1.0f - (1.0f - S.ArmStrideKeep) * W;
 		Out.HipDeg = S.HipDeg * W;
 
 		// ---------------------------------------------------------------- the orbit
@@ -266,6 +300,8 @@ namespace RelayDogMission
 		const bool bSecondHalf = T >= 0.5f;
 		Out.Prop = bSecondHalf ? Now.Prop : Was.Prop;
 		Out.PropWeight = FMath::Abs(T * 2.0f - 1.0f) * W;
+		const bool bReading = Out.Prop == EWonderlandDogProp::Book && (bSecondHalf ? Now.bTurnsPages : Was.bTurnsPages);
+		Out.PageTurn = bReading ? PageTurnProgress(In.Reading, In.TimeSeconds) : -1.0f;
 		return Out;
 	}
 }

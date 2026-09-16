@@ -268,6 +268,8 @@ private:
 		TObjectPtr<class UMaterialInstanceDynamic>& OutMid, const TCHAR* MeshPath = nullptr);
 	/** Point the beam from the Dog's chest at the contract and set its length. */
 	void DrawVerificationBeam(const FVector& FromWorld, const FVector& ToWorld, float Weight, float TimeSeconds);
+	/** Place the open book before the chest, lay out its halves, and turn the page (PageTurn 0..1; negative: none). */
+	void PoseBook(bool bInHand, float PageTurn);
 
 	RelayDogStride::FDogAnimator Animator;
 
@@ -322,6 +324,14 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<class UInstancedStaticMeshComponent> BookPagesMesh = nullptr;
 
+	/** The open book's own frame on the body: X along the spine, Y to the right-hand page, Z out of the pages. */
+	UPROPERTY(Transient)
+	TObjectPtr<class USceneComponent> BookRoot = nullptr;
+
+	/** The page being turned, in two halves so it curls over. Lit from within, so it reads at play distance. */
+	UPROPERTY(Transient)
+	TObjectPtr<class UInstancedStaticMeshComponent> BookLeafMesh = nullptr;
+
 	UPROPERTY(Transient)
 	TObjectPtr<class UInstancedStaticMeshComponent> BrushMesh = nullptr;
 
@@ -349,6 +359,13 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<class UMaterialInstanceDynamic> BookPagesMid = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UMaterialInstanceDynamic> BookLeafMid = nullptr;
+
+	/** The opening the book's halves were last laid out at; negative until the first layout. */
+	float LaidOutBookOpenDeg = -1.0f;
+	float AppliedLeafGlow = -1.0f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<class UMaterialInstanceDynamic> BrushMid = nullptr;

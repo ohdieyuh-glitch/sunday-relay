@@ -4,6 +4,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -279,6 +280,13 @@ void AWonderlandCompanionEmbodiment::SnapToTarget()
 	}
 }
 
+FVector AWonderlandCompanionEmbodiment::ContributionOrigin() const
+{
+	// From the body, not the figure origin: the origin is the tail tip, and light leaving a companion's feet reads as
+	// something dripping from it rather than something it gives.
+	return GetActorLocation() + FVector(0.0, 0.0, BodyClearanceHeightUU * FMath::Max(FigureScale, 0.05f));
+}
+
 FVector AWonderlandCompanionEmbodiment::DesiredLocation(const APawn* Pawn) const
 {
 	const AActor* Contract = ContractActor.Get();
@@ -286,14 +294,16 @@ FVector AWonderlandCompanionEmbodiment::DesiredLocation(const APawn* Pawn) const
 	{
 		const FVector ContractAt = Contract->GetActorLocation();
 		const FWonderlandCompanionOrbit Orbit = WonderlandCompanionOrbitFor(Formation);
-		const UWorld* World = GetWorld();
-		const float Now = World != nullptr ? static_cast<float>(World->GetTimeSeconds()) : 0.0f;
 
 		if (WonderlandFormationOrbits(Formation))
 		{
 			// A CIRCLE ABOUT THE CONTRACT, ABOVE IT. Inside the Dog's own circle so the two read as
 			// concentric rather than as a crowd, and above the Dog's head so a companion never masks it.
-			const float Angle = 2.0f * PI * (Now * Orbit.Revolutions + FormationPhase);
+			//
+			// THE ANGLE IS INTEGRATED, NOT CLOCK x RATE. With `time x revolutions`, changing flight at 35 s from
+			// 0.085 to 0.07 rev/s moved every companion's place on the circle by half a turn in one frame, and the
+			// two flew straight across the circle through each other -- 16 uu apart in the first film.
+			const float Angle = 2.0f * PI * static_cast<float>(FMath::Frac(OrbitTurns) + FormationPhase);
 			const float Rise = Orbit.BobUU * FMath::Sin(Angle * 2.0f);
 			return ContractAt + FVector(FMath::Cos(Angle) * Orbit.RadiusUU,
 			                            FMath::Sin(Angle) * Orbit.RadiusUU,
@@ -331,6 +341,13 @@ void AWonderlandCompanionEmbodiment::Tick(float DeltaSeconds)
 		return;
 	}
 
+	// The orbit's own clock: the rate eases toward the flight's, and the angle is the running sum of it. Every
+	// companion in the same flight integrates the same rate on the same frames, so they stay opposite.
+	const bool bOrbiting = ContractActor.IsValid() && WonderlandFormationOrbits(Formation);
+	const float WantRate = bOrbiting ? WonderlandCompanionOrbitFor(Formation).Revolutions : 0.0f;
+	OrbitRate = FMath::FInterpTo(OrbitRate, WantRate, DeltaSeconds, 1.6f);
+	OrbitTurns += static_cast<double>(OrbitRate) * DeltaSeconds;
+
 	APlayerController* Controller = FollowController.Get();
 	const APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
 	if (Pawn != nullptr)
@@ -344,6 +361,16 @@ void AWonderlandCompanionEmbodiment::Tick(float DeltaSeconds)
 			const FVector BodyLift(0.0, 0.0, BodyClearanceHeightUU);
 			FCollisionQueryParams Query(SCENE_QUERY_STAT(WonderlandCompanionFollow), false, this);
 			Query.AddIgnoredActor(Pawn);
+			// Nor the Contract, nor another companion: an orbit is not a wall, and a companion pulled short by the
+			// crystal it is circling would crowd in toward the Dog on exactly the side the other one is on.
+			if (const AActor* Contract = ContractActor.Get())
+			{
+				Query.AddIgnoredActor(Contract);
+			}
+			for (TActorIterator<AWonderlandCompanionEmbodiment> Other(SweepWorld); Other; ++Other)
+			{
+				Query.AddIgnoredActor(*Other);
+			}
 			FHitResult Hit;
 			if (SweepWorld->SweepSingleByChannel(Hit, Pawn->GetActorLocation(), Target + BodyLift, FQuat::Identity, ECC_Camera,
 				FCollisionShape::MakeSphere(BodyClearanceRadiusUU), Query) && !Hit.bStartPenetrating)
@@ -353,6 +380,31 @@ void AWonderlandCompanionEmbodiment::Tick(float DeltaSeconds)
 		}
 		FVector Location = GetActorLocation();
 		FRotator Facing = GetActorRotation();
+
+		// ROOM FOR EACH OTHER. Flights change together, so two companions can be sent across each other's path --
+		// into an orbit from either side of the Dog, or home again at completion. Whichever is inside the other's
+		// space is steered out of it, and because both do it they part and pass instead of meeting.
+		if (bHasSnapped)
+		{
+			for (TActorIterator<AWonderlandCompanionEmbodiment> Other(GetWorld()); Other; ++Other)
+			{
+				if (*Other == this)
+				{
+					continue;
+				}
+				FVector Apart = Location - Other->GetActorLocation();
+				Apart.Z *= 0.5;
+				const double Gap = Apart.Size();
+				if (Gap < CompanionSpacingUU)
+				{
+					const FVector Away = Gap > 1.0
+						? Apart / Gap
+						: FVector(0.0, FormationPhase < 0.5f ? 1.0 : -1.0, 0.0);
+					Target += Away * ((CompanionSpacingUU - Gap) * 1.5);
+				}
+			}
+		}
+
 		if (!bHasSnapped || FVector::DistSquared(Location, Target) > FMath::Square(SnapDistanceUU))
 		{
 			// A spawn, or a teleport: be there, facing the way the Dog faces, rather than streak across the world.
@@ -368,7 +420,17 @@ void AWonderlandCompanionEmbodiment::Tick(float DeltaSeconds)
 
 			IdleSeconds = Pawn->GetVelocity().Size2D() < 15.0 ? IdleSeconds + DeltaSeconds : 0.0f;
 			double DesiredYaw = Pawn->GetActorRotation().Yaw;
-			if (FaceCameraAfterIdleSeconds >= 0.0f && IdleSeconds >= FaceCameraAfterIdleSeconds && Controller->PlayerCameraManager != nullptr)
+			const AActor* Contract = ContractActor.Get();
+			if (Contract != nullptr && WonderlandFormationOrbits(Formation))
+			{
+				// Circling the Contract, a companion faces it: it is working on it, not escorting the Dog.
+				const FVector ToContract = Contract->GetActorLocation() - Location;
+				if (ToContract.SizeSquared2D() > 1.0)
+				{
+					DesiredYaw = ToContract.Rotation().Yaw;
+				}
+			}
+			else if (FaceCameraAfterIdleSeconds >= 0.0f && IdleSeconds >= FaceCameraAfterIdleSeconds && Controller->PlayerCameraManager != nullptr)
 			{
 				const FVector ToCamera = Controller->PlayerCameraManager->GetCameraLocation() - Location;
 				if (ToCamera.SizeSquared2D() > 1.0)
@@ -521,6 +583,7 @@ void AWonderlandCompanionEmbodiment::AnimatePulses(float TimeSeconds)
 		PulseMesh->SetupAttachment(Root);
 		PulseMesh->RegisterComponent();
 		Pulses.SetNum(4);
+		// A head and two trailing sparks per pulse.
 		// EVERY INSTANCE IS CREATED ONCE, HERE, and afterwards only ever MOVED.
 		//
 		// The first version cleared and re-added the instances every frame, which forces a full render
@@ -529,7 +592,7 @@ void AWonderlandCompanionEmbodiment::AnimatePulses(float TimeSeconds)
 		// An unused pulse is parked at zero scale rather than removed: a scale of nothing costs a matrix
 		// multiply, and a rebuilt buffer costs the frame.
 		TArray<FTransform> Parked;
-		Parked.Init(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), Pulses.Num());
+		Parked.Init(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), Pulses.Num() * PulseSparks);
 		PulseMesh->AddInstances(Parked, false, false, false);
 	}
 
@@ -550,8 +613,11 @@ void AWonderlandCompanionEmbodiment::AnimatePulses(float TimeSeconds)
 			if (Pulses[Index].Started >= 0.0f)
 			{
 				Pulses[Index].Started = -1.0f;
-				PulseMesh->UpdateInstanceTransform(Index,
-					FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, false, false);
+				for (int32 Spark = 0; Spark < PulseSparks; ++Spark)
+				{
+					PulseMesh->UpdateInstanceTransform(Index * PulseSparks + Spark,
+						FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, false, false);
+				}
 			}
 		}
 		PulseMesh->MarkRenderStateDirty();
@@ -571,7 +637,7 @@ void AWonderlandCompanionEmbodiment::AnimatePulses(float TimeSeconds)
 		{
 			if (Pulse.Started < 0.0f)
 			{
-				Pulse.From = GetActorLocation();
+				Pulse.From = ContributionOrigin();
 				Pulse.Started = TimeSeconds;
 				++PulsesSent;
 				break;
@@ -583,28 +649,35 @@ void AWonderlandCompanionEmbodiment::AnimatePulses(float TimeSeconds)
 	for (int32 Index = 0; Index < Pulses.Num(); ++Index)
 	{
 		FSupportPulse& Pulse = Pulses[Index];
-		FTransform Where(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
-		if (Pulse.Started >= 0.0f)
+		const float Along = Pulse.Started >= 0.0f
+			? (TimeSeconds - Pulse.Started) / FMath::Max(Orbit.PulseTravelSeconds, 0.05f)
+			: -1.0f;
+		if (Pulse.Started >= 0.0f && Along >= 1.0f + PulseTrail * (PulseSparks - 1))
 		{
-			const float Along = (TimeSeconds - Pulse.Started) / FMath::Max(Orbit.PulseTravelSeconds, 0.05f);
-			if (Along >= 1.0f)
-			{
-				// It ARRIVES rather than striking: the light reaches the Contract and is simply done.
-				Pulse.Started = -1.0f;
-			}
-			else
-			{
-				// A curve, not a line. It rises out of the companion's hand and settles into the Contract,
-				// which is what makes it read as offering rather than firing.
-				const FVector Straight = FMath::Lerp(Pulse.From, Target, Along);
-				const float Arc = FMath::Sin(Along * PI) * 34.0f;
-				const float Size = FMath::Lerp(5.5f, 2.0f, Along);
-				Where = FTransform(FRotator::ZeroRotator, Straight + FVector(0.0, 0.0, Arc), FVector(Size / 100.0f));
-			}
+			// It ARRIVES rather than striking: the light reaches the Contract, its sparks follow it in, and it is done.
+			Pulse.Started = -1.0f;
 		}
-		if (PulseMesh->IsValidInstance(Index))
+		for (int32 Spark = 0; Spark < PulseSparks; ++Spark)
 		{
-			PulseMesh->UpdateInstanceTransform(Index, Where, true, false, false);
+			FTransform Where(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
+			// Each spark runs the same curve a little behind the one before, so a pulse reads as a travelling light
+			// with a tail at play distance -- a single 5 uu cube, the first version, was three pixels.
+			const float At = Pulse.Started >= 0.0f ? Along - PulseTrail * Spark : -1.0f;
+			if (At >= 0.0f && At < 1.0f)
+			{
+				// A curve, not a line. It rises out of the companion and settles into the Contract, which is what
+				// makes it read as offering rather than firing.
+				const FVector Straight = FMath::Lerp(Pulse.From, Target, At);
+				const float Arc = FMath::Sin(At * PI) * 40.0f;
+				const float Size = FMath::Lerp(15.0f, 6.0f, At) * (Spark == 0 ? 1.0f : (Spark == 1 ? 0.62f : 0.4f));
+				// Turning as it goes, so the voxel light glints instead of sliding.
+				Where = FTransform(FRotator(At * 300.0f, At * 420.0f, 0.0f), Straight + FVector(0.0, 0.0, Arc), FVector(Size / 100.0f));
+			}
+			const int32 Instance = Index * PulseSparks + Spark;
+			if (PulseMesh->IsValidInstance(Instance))
+			{
+				PulseMesh->UpdateInstanceTransform(Instance, Where, true, false, false);
+			}
 		}
 	}
 	// One render-state touch for the whole set, after all four have moved.
@@ -658,7 +731,7 @@ void AWonderlandCompanionEmbodiment::AnimateBeam(float TimeSeconds, const FWonde
 		const float Burst = 1.0f - FMath::Clamp(CyclePhase / 0.9f, 0.0f, 1.0f);
 		BeamMid->SetVectorParameterValue(TEXT("Color"), ContributionAccent * (3600.0f + 2400.0f * Burst));
 	}
-	const FVector From = GetActorLocation() + FVector(0.0, 0.0, 8.0);
+	const FVector From = ContributionOrigin();
 	const FVector To = Contract->GetActorLocation();
 	const FVector Span = To - From;
 	const double Length = Span.Size();
@@ -670,7 +743,8 @@ void AWonderlandCompanionEmbodiment::AnimateBeam(float TimeSeconds, const FWonde
 	}
 	// The unit cube is 100 uu and centred, so the bar sits at the midpoint, turned along the span, X-scaled to length.
 	BeamMesh->SetWorldLocationAndRotation((From + To) * 0.5, Span.Rotation());
-	BeamMesh->SetWorldScale3D(FVector(Length / 100.0, 0.045, 0.045));
+	// Seven uu across: at 4.5 the first film showed a hairline that vanished whenever the bar was not broadside.
+	BeamMesh->SetWorldScale3D(FVector(Length / 100.0, 0.07, 0.07));
 	if (!BeamMesh->IsVisible())
 	{
 		BeamMesh->SetVisibility(true);

@@ -33,9 +33,43 @@
 
 namespace RelayDogMission
 {
+	/**
+	 * THE READING POSE, as numbers the character supplies every frame (from wl.Dog.Read.*), so the look can be
+	 * settled against film in a running editor instead of one rebuild per guess.
+	 *
+	 * The first reading pose raised both arms out to the sides and hung the book off the left forearm, where it
+	 * lay on its side facing the Dog's ribs: no camera could see a page, and nothing on screen turned. Now the
+	 * book is held in front of the chest, open toward the face; the left arm comes forward under it and stays;
+	 * the right arm rests on the right-hand page, carries a page across to the left, and comes back.
+	 */
+	struct FReadingPose
+	{
+		/** The holding (left) arm: forward, a little out, the elbow bent up under the book. */
+		float HoldPitchDeg = 62.0f;
+		float HoldRollDeg = 14.0f;
+		float HoldElbowDeg = 48.0f;
+		/** The turning (right) arm at rest, its hand on the right-hand page. */
+		float TurnPitchDeg = 58.0f;
+		float TurnRollDeg = 16.0f;
+		float TurnElbowDeg = 44.0f;
+		/** How far the hand travels carrying a page: across toward the holding hand, and lifted at mid-turn. */
+		float SweepRollDeg = -34.0f;
+		float SweepPitchDeg = 12.0f;
+		float SweepElbowDeg = 18.0f;
+		/** Turns per second, and the fraction of each cycle the page is actually moving. */
+		float TurnHz = 0.32f;
+		float TurnFraction = 0.34f;
+	};
+
+	/** Where a page is in its turn: 0 lying on the right-hand page, 1 on the left, NEGATIVE between turns. */
+	float PageTurnProgress(const FReadingPose& Pose, float TimeSeconds);
+
 	/** What the world knows this frame. Angles are degrees, in the Dog's own frame. */
 	struct FStageInput
 	{
+		/** The reading pose's numbers. Defaults are the settled look; the character overrides them live. */
+		FReadingPose Reading;
+
 		float DeltaSeconds = 0.0f;
 		/** The world clock. Every cyclic part of a performance is computed ABSOLUTELY from this, like the
 		 *  rest of the Dog, so a long frame or a paused editor cannot leave a limb mid-stroke. */
@@ -78,6 +112,11 @@ namespace RelayDogMission
 		 *  page-turning hand sweeping across the book. The holding arm never gets it. */
 		float ShoulderRollExtraDeg = 0.0f;
 		float ElbowDeg = 0.0f;
+		/** Added to the WORKING arm's elbow only: the turning hand bends differently from the holding one. */
+		float ElbowExtraDeg = 0.0f;
+		/** How much of the WALK's own arm swing to keep, 1 all of it. A hand holding a book open does not swing
+		 *  with the stride, or the book it is under would float free of it. */
+		float ArmStrideKeep = 1.0f;
 
 		/** Added to both hips, so suspended legs hang instead of standing on nothing. */
 		float HipDeg = 0.0f;
@@ -92,6 +131,8 @@ namespace RelayDogMission
 		/** Which prop should be in hand, and how far it has faded in. */
 		EWonderlandDogProp Prop = EWonderlandDogProp::None;
 		float PropWeight = 0.0f;
+		/** While the book is in hand: where the turning page is (PageTurnProgress), negative when none is turning. */
+		float PageTurn = -1.0f;
 
 		/** The verification beam: on only while the act is VerificationBeam, faded by BeamWeight. */
 		bool bBeam = false;

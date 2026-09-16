@@ -23,6 +23,63 @@
 #include "EngineUtils.h"
 #include "Engine/Engine.h"
 
+// THE READING POSE, TUNABLE LIVE. Named, not anonymous: the module is one unity translation unit.
+namespace RelayDogReadTuning
+{
+	TAutoConsoleVariable<float> CVarBookFwd(TEXT("wl.Dog.Read.BookFwd"), 34.0f, TEXT("The open book's spine, forward of the body centre, in head-width sixtieths."));
+	TAutoConsoleVariable<float> CVarBookRight(TEXT("wl.Dog.Read.BookRight"), 0.0f, TEXT("The open book's spine, right of the body centre."));
+	TAutoConsoleVariable<float> CVarBookUp(TEXT("wl.Dog.Read.BookUp"), 2.0f, TEXT("The open book's spine, above the body centre."));
+	TAutoConsoleVariable<float> CVarBookTilt(TEXT("wl.Dog.Read.BookTilt"), 38.0f, TEXT("Degrees the far edge of the book is raised, turning the pages toward the Dog's face."));
+	TAutoConsoleVariable<float> CVarBookOpen(TEXT("wl.Dog.Read.BookOpen"), 20.0f, TEXT("Degrees each half of the open book rises from flat."));
+	TAutoConsoleVariable<float> CVarLeafCurl(TEXT("wl.Dog.Read.LeafCurl"), 34.0f, TEXT("Degrees the outer half of a turning page trails its inner half at mid-turn."));
+	TAutoConsoleVariable<float> CVarLeafGlow(TEXT("wl.Dog.Read.LeafGlow"), 0.9f, TEXT("Brightness of the turning page, as a fraction of the Dog's glow exposure."));
+	TAutoConsoleVariable<float> CVarHoldPitch(TEXT("wl.Dog.Read.HoldPitch"), 62.0f, TEXT("Holding (left) arm: shoulder pitch forward."));
+	TAutoConsoleVariable<float> CVarHoldRoll(TEXT("wl.Dog.Read.HoldRoll"), 14.0f, TEXT("Holding arm: shoulder roll outward."));
+	TAutoConsoleVariable<float> CVarHoldElbow(TEXT("wl.Dog.Read.HoldElbow"), 48.0f, TEXT("Holding arm: elbow bend."));
+	TAutoConsoleVariable<float> CVarTurnPitch(TEXT("wl.Dog.Read.TurnPitch"), 58.0f, TEXT("Turning (right) arm at rest: shoulder pitch forward."));
+	TAutoConsoleVariable<float> CVarTurnRoll(TEXT("wl.Dog.Read.TurnRoll"), 16.0f, TEXT("Turning arm at rest: shoulder roll outward."));
+	TAutoConsoleVariable<float> CVarTurnElbow(TEXT("wl.Dog.Read.TurnElbow"), 44.0f, TEXT("Turning arm at rest: elbow bend."));
+	TAutoConsoleVariable<float> CVarSweepRoll(TEXT("wl.Dog.Read.SweepRoll"), -34.0f, TEXT("Turning arm: roll carried across the book with the page."));
+	TAutoConsoleVariable<float> CVarSweepPitch(TEXT("wl.Dog.Read.SweepPitch"), 12.0f, TEXT("Turning arm: pitch added at mid-turn, lifting the page."));
+	TAutoConsoleVariable<float> CVarSweepElbow(TEXT("wl.Dog.Read.SweepElbow"), 18.0f, TEXT("Turning arm: elbow added at mid-turn."));
+	TAutoConsoleVariable<float> CVarTurnHz(TEXT("wl.Dog.Read.TurnHz"), 0.32f, TEXT("Page turns per second."));
+	TAutoConsoleVariable<float> CVarTurnFraction(TEXT("wl.Dog.Read.TurnFraction"), 0.34f, TEXT("Fraction of each turn cycle the page is moving."));
+
+	RelayDogMission::FReadingPose Pose()
+	{
+		RelayDogMission::FReadingPose P;
+		P.HoldPitchDeg = CVarHoldPitch.GetValueOnGameThread();
+		P.HoldRollDeg = CVarHoldRoll.GetValueOnGameThread();
+		P.HoldElbowDeg = CVarHoldElbow.GetValueOnGameThread();
+		P.TurnPitchDeg = CVarTurnPitch.GetValueOnGameThread();
+		P.TurnRollDeg = CVarTurnRoll.GetValueOnGameThread();
+		P.TurnElbowDeg = CVarTurnElbow.GetValueOnGameThread();
+		P.SweepRollDeg = CVarSweepRoll.GetValueOnGameThread();
+		P.SweepPitchDeg = CVarSweepPitch.GetValueOnGameThread();
+		P.SweepElbowDeg = CVarSweepElbow.GetValueOnGameThread();
+		P.TurnHz = CVarTurnHz.GetValueOnGameThread();
+		P.TurnFraction = CVarTurnFraction.GetValueOnGameThread();
+		return P;
+	}
+
+	/** Page width and spine length of one half, and the thickness of a cover and of a page block. */
+	const double HalfWidth = 26.0;
+	const double SpineLength = 34.0;
+	const double CoverThick = 2.5;
+	const double PageThick = 5.0;
+
+	/** A box lying in a half of the book: `Angle` degrees up from flat on the right (+Y), rotated about the spine. */
+	FTransform HalfBox(double AngleDeg, double AlongY, double OffNormal, const FVector& Size, double U)
+	{
+		const double A = FMath::DegreesToRadians(AngleDeg);
+		const FVector Along(0.0, FMath::Cos(A), FMath::Sin(A));
+		const FVector Normal(0.0, -FMath::Sin(A), FMath::Cos(A));
+		// NEGATIVE ROLL CARRIES +Y UP TOWARD +Z on this rig (measured on the forearms, 2026-09-16: roll -75 put the
+		// right vector at +96.6 Z), so a box turned by -Angle lies along `Along` with its face along `Normal`.
+		return FTransform(FRotator(0.0, 0.0, -AngleDeg), (Along * AlongY + Normal * OffNormal) * U, Size * (U / 100.0));
+	}
+}
+
 namespace
 {
 	// THE MISSION PROPS ARE BUILT, NOT IMPORTED. Engine content only, exactly as the Mission Contract is
@@ -1139,6 +1196,7 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	const UWorld* MissionWorld = GetWorld();
 	MissionIn.TimeSeconds = MissionWorld != nullptr ? static_cast<float>(MissionWorld->GetTimeSeconds()) : 0.0f;
 	MissionIn.bPlayerDriving = bPlayerDroveThisFrame;
+	MissionIn.Reading = RelayDogReadTuning::Pose();
 	bPlayerDroveThisFrame = false;
 
 	FVector ContractWorld = FVector::ZeroVector;
@@ -1169,7 +1227,11 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 			// slower again -- it lingers where a study paces -- which is the overlay's own OrbitPace.
 			Move->MaxWalkSpeed = FMath::Max(42.0f, 132.0f * Overlay.OrbitPace);
 		}
-		AddMovementInput(Walk, 1.0f);
+		// FORCED, because the circle is the performance and not the player. An open overlay -- the live terminal
+		// the founder watches a mission through -- sets the controller to ignore move input, and an unforced
+		// input was silently dropped: for the whole of the first filmed mission the Dog read, painted and
+		// inspected standing on one spot. The player still wins: the orbit is only asked for while nobody steers.
+		AddMovementInput(Walk, 1.0f, true);
 	}
 
 	// ---------------------------------------------------------------- driving
@@ -1313,18 +1375,21 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		auto AddArm = [&Overlay](const FRelayDogArm& Arm, const RelayDogStride::FArmPose& ArmPose, float ExtraPitch,
 			bool bWorkingArm)
 		{
+			// The walk's own arm swing, kept or not: a hand under an open book does not swing with the stride.
+			const float Keep = Overlay.ArmStrideKeep;
 			if (Arm.Shoulder != nullptr)
 			{
 				// The extra roll is the working arm's alone: the repair's drag across the fault and the
 				// page-turning sweep. Mirroring it onto the holding arm would undo the two-handedness.
 				const float Roll = Overlay.ShoulderRollDeg + (bWorkingArm ? Overlay.ShoulderRollExtraDeg : 0.0f);
 				Arm.Shoulder->SetRelativeRotation(FRotator(
-					ArmPose.ShoulderDeg + ExtraPitch, 0.0f,
-					(ArmPose.ShoulderYawDeg + Roll) * Arm.SideSign));
+					ArmPose.ShoulderDeg * Keep + ExtraPitch, 0.0f,
+					(ArmPose.ShoulderYawDeg * Keep + Roll) * Arm.SideSign));
 			}
 			if (Arm.Forearm != nullptr)
 			{
-				Arm.Forearm->SetRelativeRotation(FRotator(ArmPose.ElbowDeg + Overlay.ElbowDeg, 0.0f, 0.0f));
+				Arm.Forearm->SetRelativeRotation(FRotator(
+					ArmPose.ElbowDeg * Keep + Overlay.ElbowDeg + (bWorkingArm ? Overlay.ElbowExtraDeg : 0.0f), 0.0f, 0.0f));
 			}
 		};
 		AddArm(ArmLeft, Pose.ArmLeft, Overlay.ShoulderPitchLeftDeg, false);
@@ -1344,6 +1409,7 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	const bool bLens = Overlay.Prop == EWonderlandDogProp::MagnifyingGlass && Overlay.PropWeight > 0.08f;
 	if (BookMesh != nullptr) BookMesh->SetVisibility(bBook);
 	if (BookPagesMesh != nullptr) BookPagesMesh->SetVisibility(bBook);
+	PoseBook(bBook, Overlay.PageTurn);
 	if (BrushMesh != nullptr) BrushMesh->SetVisibility(bBrush);
 	if (BrushHeadMesh != nullptr) BrushHeadMesh->SetVisibility(bBrush);
 	if (LensMesh != nullptr) LensMesh->SetVisibility(bLens);
@@ -1500,23 +1566,31 @@ void ARelayDogCharacter::BuildMissionProps()
 	const double U = FMath::Max(HeadWidthUU, 10.0f) / 60.0;
 
 	// ---------------------------------------------------------------- the book (PLANNING)
-	// Two covers opened into a V, with a page block between them. Held at the left forearm so the right
-	// arm stays free to turn a page, which is what the reading swing does.
-	USceneComponent* BookHand = ArmLeft.Forearm != nullptr ? ArmLeft.Forearm.Get() : BodyRoot.Get();
-	// HELD OUT, NOT TUCKED IN. The first version sat the book against the forearm, 16 uu forward: the
-	// component reported visible for the whole of PLANNING and the camera -- which stands behind the Dog --
-	// saw the Dog's back. It is now carried further down the forearm and further forward, so it clears the
-	// torso from behind, and half again as large, because a book the reader cannot see is set dressing.
+	// AN OPEN BOOK IN FRONT OF THE CHEST, FACING THE READER. It used to hang off the left forearm, and with the
+	// arms raised to the sides for reading it lay on its side a head-width out to the left with its pages
+	// toward the Dog's ribs: from behind a red slab, from the front a closed block, from nowhere a page.
+	//
+	// So the book has a frame of its own on the body -- X along the spine, Y across to the right-hand page, Z out
+	// of the pages -- placed and tilted toward the face by PoseBook, with the holding hand posed up under it. Its
+	// halves are laid out there too, because how far the book is open is one of the numbers being tuned.
+	BookRoot = NewObject<USceneComponent>(this, MakeUniqueObjectName(this, USceneComponent::StaticClass(), TEXT("MissionBookRoot")));
+	BookRoot->SetupAttachment(BodyRoot != nullptr ? BodyRoot.Get() : GetRootComponent());
+	BookRoot->RegisterComponent();
 	TArray<FTransform> Covers;
-	Covers.Add(DogPropBox(FVector(30.0 * U, -16.0 * U, -48.0 * U), FVector(42.0 * U, 4.0 * U, 32.0 * U), FRotator(0.0, 0.0, -20.0)));
-	Covers.Add(DogPropBox(FVector(30.0 * U, 16.0 * U, -48.0 * U), FVector(42.0 * U, 4.0 * U, 32.0 * U), FRotator(0.0, 0.0, 20.0)));
-	Covers.Add(DogPropBox(FVector(30.0 * U, 0.0, -57.0 * U), FVector(42.0 * U, 9.0 * U, 6.0 * U)));
-	BookMesh = MakePropMesh(TEXT("MissionBook"), BookHand, false, Covers, FLinearColor(0.42f, 0.13f, 0.16f), BookMid);
+	Covers.Init(FTransform::Identity, 3);
+	BookMesh = MakePropMesh(TEXT("MissionBook"), BookRoot, false, Covers, FLinearColor(0.42f, 0.13f, 0.16f), BookMid);
 
 	TArray<FTransform> Pages;
-	Pages.Add(DogPropBox(FVector(30.0 * U, -9.0 * U, -46.0 * U), FVector(38.0 * U, 11.0 * U, 26.0 * U), FRotator(0.0, 0.0, -20.0)));
-	Pages.Add(DogPropBox(FVector(30.0 * U, 9.0 * U, -46.0 * U), FVector(38.0 * U, 11.0 * U, 26.0 * U), FRotator(0.0, 0.0, 20.0)));
-	BookPagesMesh = MakePropMesh(TEXT("MissionBookPages"), BookHand, false, Pages, FLinearColor(0.94f, 0.92f, 0.84f), BookPagesMid);
+	Pages.Init(FTransform::Identity, 2);
+	BookPagesMesh = MakePropMesh(TEXT("MissionBookPages"), BookRoot, false, Pages, FLinearColor(0.94f, 0.92f, 0.84f), BookPagesMid);
+
+	// THE TURNING PAGE. Two halves, so the outer half can trail the inner one and the page curls over rather than
+	// swinging like a door; and lit from within, because at play distance a white page crossing a white page
+	// against a white Dog is invisible, and a page of light turning over in the Dog's hands is unmistakable.
+	TArray<FTransform> Leaf;
+	Leaf.Init(FTransform::Identity, 2);
+	BookLeafMesh = MakePropMesh(TEXT("MissionBookTurningPage"), BookRoot, true, Leaf, FLinearColor(1.0f, 0.93f, 0.72f), BookLeafMid);
+	LaidOutBookOpenDeg = -1.0f;
 
 	// ---------------------------------------------------------------- the paintbrush (IMPLEMENTING)
 	// Handle, gold ferrule, bristle block. On the RIGHT forearm, which is the arm the stroke swings.
@@ -1571,6 +1645,82 @@ void ARelayDogCharacter::BuildMissionProps()
 	{
 		BeamMesh->SetAbsolute(true, true, true);
 	}
+}
+
+void ARelayDogCharacter::PoseBook(bool bInHand, float PageTurn)
+{
+	using namespace RelayDogReadTuning;
+	if (BookRoot == nullptr)
+	{
+		return;
+	}
+	const bool bTurning = bInHand && PageTurn >= 0.0f && PageTurn <= 1.0f;
+	if (BookLeafMesh != nullptr && BookLeafMesh->IsVisible() != bTurning)
+	{
+		BookLeafMesh->SetVisibility(bTurning);
+	}
+	if (!bInHand)
+	{
+		return;
+	}
+	const double U = FMath::Max(HeadWidthUU, 10.0f) / 60.0;
+	BookRoot->SetRelativeLocationAndRotation(
+		FVector(CVarBookFwd.GetValueOnGameThread(), CVarBookRight.GetValueOnGameThread(), CVarBookUp.GetValueOnGameThread()) * U,
+		FRotator(CVarBookTilt.GetValueOnGameThread(), 0.0f, 0.0f));
+
+	// THE HALVES, laid out only when the opening changes. The right half rises Open degrees from flat; the left
+	// half is the same box turned the rest of the way over, (180 - Open), so its face normal points away from the
+	// reader and everything on it is offset the other way along it.
+	const float Open = FMath::Clamp(CVarBookOpen.GetValueOnGameThread(), 0.0f, 80.0f);
+	if (Open != LaidOutBookOpenDeg && BookMesh != nullptr && BookPagesMesh != nullptr
+		&& BookMesh->GetInstanceCount() == 3 && BookPagesMesh->GetInstanceCount() == 2)
+	{
+		LaidOutBookOpenDeg = Open;
+		const FVector CoverSize(SpineLength + 2.0, HalfWidth + 2.0, CoverThick);
+		const FVector PageSize(SpineLength - 2.0, HalfWidth - 1.5, PageThick);
+		BookMesh->UpdateInstanceTransform(0, HalfBox(Open, HalfWidth * 0.5 + 1.0, -CoverThick * 0.5, CoverSize, U), false, false, true);
+		BookMesh->UpdateInstanceTransform(1, HalfBox(180.0 - Open, HalfWidth * 0.5 + 1.0, CoverThick * 0.5, CoverSize, U), false, false, true);
+		BookMesh->UpdateInstanceTransform(2, DogPropBox(FVector(0.0, 0.0, -2.5 * U), FVector((SpineLength + 2.0) * U, 5.0 * U, 4.0 * U)), false, true, true);
+		BookPagesMesh->UpdateInstanceTransform(0, HalfBox(Open, HalfWidth * 0.5, PageThick * 0.5, PageSize, U), false, false, true);
+		BookPagesMesh->UpdateInstanceTransform(1, HalfBox(180.0 - Open, HalfWidth * 0.5, -PageThick * 0.5, PageSize, U), false, true, true);
+	}
+
+	if (!bTurning || BookLeafMesh == nullptr || BookLeafMesh->GetInstanceCount() != 2)
+	{
+		return;
+	}
+	const float Glow = FMath::Max(CVarLeafGlow.GetValueOnGameThread(), 0.0f);
+	if (BookLeafMid != nullptr && Glow != AppliedLeafGlow)
+	{
+		AppliedLeafGlow = Glow;
+		BookLeafMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 0.93f, 0.72f) * (DogGlowExposure * Glow));
+	}
+	// THE TURN. The page leaves the right-hand page, stands up off the spine at mid-turn -- where it is broadside
+	// to a camera beside the Dog, which is where the play camera is while the Dog circles -- and lies down on the
+	// left. Its outer half trails the inner, most at mid-turn, so it curls over instead of swinging like a door.
+	const double P = FMath::Clamp(static_cast<double>(PageTurn), 0.0, 1.0);
+	const double Eased = P * P * (3.0 - 2.0 * P);
+	const double Phi = FMath::Lerp(static_cast<double>(Open), 180.0 - Open, Eased);
+	const double Phi2 = Phi - CVarLeafCurl.GetValueOnGameThread() * FMath::Sin(PI * P);
+	// Resting on the right-hand page at the start and on the left-hand one at the end, through the spine between.
+	const double Lift = (PageThick + 0.6) * FMath::Cos(PI * Eased);
+	const auto AlongAt = [](double Deg)
+	{
+		const double A = FMath::DegreesToRadians(Deg);
+		return FVector(0.0, FMath::Cos(A), FMath::Sin(A));
+	};
+	const auto NormalAt = [](double Deg)
+	{
+		const double A = FMath::DegreesToRadians(Deg);
+		return FVector(0.0, -FMath::Sin(A), FMath::Cos(A));
+	};
+	const FVector LeafScale = FVector(SpineLength - 4.0, HalfWidth * 0.5, 0.8) * (U / 100.0);
+	const FVector Base = NormalAt(Phi) * Lift;
+	BookLeafMesh->UpdateInstanceTransform(0,
+		FTransform(FRotator(0.0, 0.0, -Phi), (Base + AlongAt(Phi) * (HalfWidth * 0.25)) * U, LeafScale), false, false, true);
+	BookLeafMesh->UpdateInstanceTransform(1,
+		FTransform(FRotator(0.0, 0.0, -Phi2), (Base + AlongAt(Phi) * (HalfWidth * 0.5) + AlongAt(Phi2) * (HalfWidth * 0.25)) * U, LeafScale),
+		false, true, true);
 }
 
 void ARelayDogCharacter::DrawVerificationBeam(const FVector& FromWorld, const FVector& ToWorld, float Weight, float TimeSeconds)

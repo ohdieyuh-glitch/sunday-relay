@@ -69,10 +69,13 @@ struct FWonderlandCompanionOrbit
 	bool bAgentBeam = false;
 	/** Distance from the Contract, uu. Inside the Dog's own circle so the two read as concentric. */
 	float RadiusUU = 210.0f;
-	/** Height above the Contract's heart, uu. Above the Dog's head, so a companion never masks it. */
-	float HeightUU = 110.0f;
-	/** Revolutions per second. Slow enough to read as ceremony rather than agitation. */
-	float Revolutions = 0.085f;
+	/** Height of the figure origin above the Contract's heart, uu. The body then rides above the Dog's head, so a
+	 *  companion never masks it -- and low enough that the play camera still has it in frame. At 110, with the
+	 *  crystal already floating 135 up, the first film saw only the companions' feet crossing the top edge. */
+	float HeightUU = 60.0f;
+	/** Revolutions per second. Slow enough to read as ceremony, quick enough to read as flight: at 0.085 a stage of
+	 *  three seconds moved a companion a quarter of the way round, which on film looked like hovering. */
+	float Revolutions = 0.11f;
 	/** How far a companion rises and falls as it goes round, uu. */
 	float BobUU = 16.0f;
 	/** Seconds between one companion's pulses. They are offset so the two never fire together. */
