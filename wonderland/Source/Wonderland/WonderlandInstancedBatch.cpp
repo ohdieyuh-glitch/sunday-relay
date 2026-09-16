@@ -146,6 +146,11 @@ int32 AWonderlandInstancedBatch::BuildInstances()
 	// Before registration, like mobility: the distance-field scene reads this
 	// flag when the primitive is added.
 	Instances->bAffectDistanceFieldLighting = bAffectDistanceFieldLighting;
+	if (CullDistance > 0.0f)
+	{
+		// Instances begin to fade at 80% of the range and are gone by the end of it; zero leaves the batch unculled.
+		Instances->SetCullDistances(FMath::RoundToInt(CullDistance * 0.8f), FMath::RoundToInt(CullDistance));
+	}
 	Instances->RegisterComponent();
 
 	// THE MATERIAL GOES ON AFTER REGISTRATION, and this is the whole reason
@@ -373,6 +378,10 @@ void AWonderlandInstancedBatch::RefreshEditorPreview(bool bRebuild)
 	EditorPreview->SetGenerateOverlapEvents(false);
 	EditorPreview->SetCastShadow(bCastShadow);
 	EditorPreview->bAffectDistanceFieldLighting = bAffectDistanceFieldLighting;
+	if (CullDistance > 0.0f)
+	{
+		EditorPreview->SetCullDistances(FMath::RoundToInt(CullDistance * 0.8f), FMath::RoundToInt(CullDistance));
+	}
 	EditorPreview->RegisterComponent();
 	// After registration, for the reason BuildInstances gives.
 	if (UMaterialInterface* MaterialAsset = ResolveMaterial())

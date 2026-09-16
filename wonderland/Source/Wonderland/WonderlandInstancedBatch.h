@@ -155,6 +155,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Batch")
 	bool bAffectDistanceFieldLighting = true;
 
+	/**
+	 * DISTANCE AT WHICH THE WHOLE BATCH STOPS DRAWING, uu. Zero -- the default, and what every batch had before this
+	 * existed -- means never, so no current batch changes.
+	 *
+	 * It exists for decoration that only matters close up. The GPU Scene culls instances by frustum and occlusion
+	 * but not by distance, so a lawn scattered with small flowers across 1.8 km^2 of lawn would draw every visible
+	 * flower out to the horizon, where each is a sub-pixel speck costing the same as one at your feet. Per instance:
+	 * each fades out between StartCull and CullDistance rather than popping, via the ISM's own instance cull range.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Batch")
+	float CullDistance = 0.0f;
+
 	/** How many instances were actually created. The world proof reads this. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Batch")
 	int32 BuiltInstances = 0;
