@@ -82,6 +82,7 @@ import {
   juliusArchitectureTriggers, juliusConsistencyFacts, juliusConsistencyRoute, sanitizeJuliusConsistency,
   type JuliusArchitectureCompletionGate,
 } from './julius-architecture-drift';
+import { juliusResultChannelPermitted } from './julius-worker-authority';
 import {
   JULIUS_CHECKPOINT_LIMITS,
   guidanceSubjectTaskId, isJuliusGuidanceHandoffEntryId, issueJuliusGuidance, juliusCheckpointId,
@@ -1249,6 +1250,26 @@ export async function runClaimedTask(
       ...(outcome.researchAsks === undefined ? {} : { researchAsks: outcome.researchAsks }),
       ...(outcome.guidance === undefined ? {} : { guidance: outcome.guidance }),
     });
+  }
+
+  /* ------------------------------------------- 3b1. a channel this role has no right to */
+  /**
+   * REFUSED ON THE RECORD, NOT DROPPED IN SILENCE.
+   *
+   * Each role gate below already applies its channel for its own role only.
+   * What none of them did was say when another role sent one: a Coding Agent
+   * returning a verdict about its own work, or a design, left no trace, and a
+   * refusal nobody records reads exactly like a channel nobody used. The gates
+   * are unchanged — this names what they ignore.
+   */
+  if (!outcome.duplicate) {
+    for (const channel of ['reviewVerdict', 'rebuttal', 'architecture', 'consistency'] as const) {
+      if (outcome[channel] === undefined || juliusResultChannelPermitted(task.role, channel)) continue;
+      await ledger.event('worker.channel.refused', {
+        taskId: task.taskId, workerId: outcome.workerId,
+        facts: { channel, role: task.role, taskType: task.taskType, reasonCode: 'channel_not_permitted_for_role' },
+      });
+    }
   }
 
   /* ------------------------------------------- 3b2. the architecture the architect holds */

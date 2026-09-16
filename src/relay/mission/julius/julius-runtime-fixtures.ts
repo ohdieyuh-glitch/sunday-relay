@@ -149,6 +149,8 @@ export type ScriptedOutcome =
   /** `usdMicros: null` reports NO cost — Unknown, which is not zero. */
   | {
     readonly kind: 'succeed';
+    /** What the worker says about its own attempt. Defaults to SUCCEEDED; a worker may report FAILED. */
+    readonly status?: 'SUCCEEDED' | 'FAILED';
     readonly evidence?: readonly Record<string, unknown>[];
     readonly usdMicros?: number | null;
     /** What this worker PROPOSES for its task contract. Unsanitised on purpose — a test may send a hostile shape. */
@@ -225,7 +227,7 @@ export function scriptedAdapter(
         return { workerId: 'someone-else', providerId: target.providerId, status: 'SUCCEEDED', safeSummary: 'x', evidence: [], usage: {} };
       }
       const result: JuliusProviderResult = {
-        workerId: target.workerId, providerId: target.providerId, status: 'SUCCEEDED',
+        workerId: target.workerId, providerId: target.providerId, status: step.status ?? 'SUCCEEDED',
         safeSummary: `${target.role} completed ${input.taskId}.`,
         evidence: step.evidence ?? [{ type: 'TEST', status: 'PASSED', safeSummary: 'Suite passed.' }],
         usage: {
