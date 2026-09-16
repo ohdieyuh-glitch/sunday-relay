@@ -1,0 +1,17 @@
+{
+ "name": "zx00_import_oriel",
+ "started": "2026-09-16 10:19:57",
+ "status": "done",
+ "planned_parts": 374,
+ "imported_this_run": 4,
+ "already_present": 0,
+ "failed": 0,
+ "stray_materials_deleted": [],
+ "readback_failures": [],
+ "nanite_mismatches": [],
+ "collision_missing": [],
+ "complete": true,
+ "finished": "2026-09-16 10:20:01",
+ "seconds": 3.67,
+ "log": "[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Oriel_Bay_glass\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Oriel_Bay_gold\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Oriel_Bay_roof_alt\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Oriel_Bay\n"
+}

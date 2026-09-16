@@ -52,6 +52,8 @@ STOREY_MAX = 2000.0
 BALCONY_FLOOR = 152.0            # local z of the balcony's walking surface
 BALCONY_TOP = 248.0              # local z of the top of its rail
 ORIEL_GLASS_MID = 310.0          # local z of the middle of the oriel's glazing
+ORIEL_TOP = 640.0                # local z of its finial: an oriel reaches 2.6x as high as a balcony, into the gold
+                                 # balustrade bands a balcony stays under (fd01d)
 INTO_WALL = 10.0                 # the back sits this far behind the pane's centre plane
 BALCONY_GAP = 620.0              # along a face, between balcony centres
 ORIEL_GAP = 900.0
@@ -76,12 +78,12 @@ def hash01(*vals):
     return h / 4294967295.0
 
 
-# ORIELS ARE OFF. The first preview (fd01a) put 117 of them up and every one read as a blank grey box on a cone: the
-# forge's WL_Detail_Oriel_Bay draws its glazing prism INSIDE its solid stone prism, so from outside there is no glass
-# at all. The balconies in the same preview read as real balconies. Until the oriel module shows its windows, the faces
-# that would have had one get a balcony, and a third of faces stay plain so the streets keep a rhythm.
-BALCONY_SHARE = 0.65
-ORIEL_SHARE = 0.0
+# ORIELS WERE OFF, THEN FIXED AT SOURCE. The first preview (fd01a) put 117 of them up and every one read as a blank grey
+# box on a cone: the forge's WL_Detail_Oriel_Bay drew its glazing prism INSIDE its solid stone prism. The forge fix
+# (d4ddaac9) puts the glass outside, between posts and mullions under gold transoms, and audit_glass.py now scores
+# every module's visible glass. A third of faces stay plain so the streets keep a rhythm.
+BALCONY_SHARE = 0.45
+ORIEL_SHARE = 0.25
 
 
 def kind_for(fx, fy):
@@ -193,37 +195,47 @@ def main():
                 continue
             nx, ny = it["nx"], it["ny"]
             x, y = it["cx"] - nx * INTO_WALL, it["cy"] - ny * INTO_WALL
-            if kind == BALCONY:
-                z = it["zb"] - BALCONY_FLOOR
-            else:
-                z = (it["zb"] + it["zt"]) * 0.5 - ORIEL_GLASS_MID
-            if it["h"] < 900.0 and any(math.hypot(shops[s][0] - x, shops[s][1] - y) < SHOP_CLEAR for s in around(shg, x, y)):
-                stats["over_a_shop"] += 1
+            # An oriel that a raised prop blocks becomes a balcony if a balcony fits: the gold balustrade bands the
+            # generator runs across second-storey windows stop an oriel's roof but pass over a balcony's rail.
+            fits = None
+            for this in ((kind, BALCONY) if kind == ORIEL else (kind,)):
+                z = it["zb"] - BALCONY_FLOOR if this == BALCONY else (it["zb"] + it["zt"]) * 0.5 - ORIEL_GLASS_MID
+                if it["h"] < 900.0 and any(math.hypot(shops[s][0] - x, shops[s][1] - y) < SHOP_CLEAR for s in around(shg, x, y)):
+                    fits = "over_a_shop"
+                    break
+                px, py, pz = x + nx * FRONT_PROBE, y + ny * FRONT_PROBE, z + 250.0
+                if any(bj != bi and inside_box(buildings[bj], px, py, pz) for bj in around(bg, px, py)):
+                    fits = "another_building_in_front"
+                    break
+                mx, my = x + nx * 120.0, y + ny * 120.0
+                top = BALCONY_TOP if this == BALCONY else ORIEL_TOP
+                if any(math.hypot(raised[j]["x"] - mx, raised[j]["y"] - my) < raised[j]["radius"] + PROP_CLEAR
+                       and raised[j]["zmin"] < z + top - PROP_OVERLAP and raised[j]["zmax"] > z + 40.0
+                       for j in around(rg, mx, my)):
+                    fits = "raised_prop_in_the_way"
+                    continue
+                if any((q[3], q[4]) != (bi, fi) and math.hypot(q[0] - x, q[1] - y) < CORNER_CLEAR and abs(q[2] - z) < 700.0
+                       for q in placed):
+                    fits = "corner_clash"
+                    break
+                fits = this
+                break
+            if fits not in (BALCONY, ORIEL):
+                stats[fits] += 1
                 continue
-            px, py, pz = x + nx * FRONT_PROBE, y + ny * FRONT_PROBE, z + 250.0
-            if any(bj != bi and inside_box(buildings[bj], px, py, pz) for bj in around(bg, px, py)):
-                stats["another_building_in_front"] += 1
-                continue
-            mx, my = x + nx * 120.0, y + ny * 120.0
-            if any(math.hypot(raised[j]["x"] - mx, raised[j]["y"] - my) < raised[j]["radius"] + PROP_CLEAR
-                   and raised[j]["zmin"] < z + BALCONY_TOP - PROP_OVERLAP and raised[j]["zmax"] > z + 40.0 for j in around(rg, mx, my)):
-                stats["raised_prop_in_the_way"] += 1
-                continue
-            if any((q[3], q[4]) != (bi, fi) and math.hypot(q[0] - x, q[1] - y) < CORNER_CLEAR and abs(q[2] - z) < 700.0
-                   for q in placed):
-                stats["corner_clash"] += 1
-                continue
+            if fits != kind:
+                stats["oriel_became_balcony"] += 1
             chosen.append(it)
             placed.append((x, y, z, bi, fi))
             yaw = (math.degrees(math.atan2(ny, nx)) + 90.0) % 360.0
             batches = by_prefix[it["prefix"]]
-            for part in KIT[kind]["parts"]:
-                k = "%s_%s_%s_%s" % (PASS, it["prefix"], "Balcony" if kind == BALCONY else "Oriel", part["part"])
+            for part in KIT[fits]["parts"]:
+                k = "%s_%s_%s_%s" % (PASS, it["prefix"], "Balcony" if fits == BALCONY else "Oriel", part["part"])
                 bt = batches.setdefault(k, {"id": k, "mesh": part["mesh"], "material": part["material"], "instances": [],
                                             "collides": False, "cast_shadow": True, "affect_df": False,
                                             "cull_distance": CULL})
                 bt["instances"].append([round(x, 1), round(y, 1), round(z, 1), 0.0, round(yaw, 1), 0.0, 1.0, 1.0, 1.0])
-            stats["balconies" if kind == BALCONY else "oriels"] += 1
+            stats["balconies" if fits == BALCONY else "oriels"] += 1
     for old in HERE.glob("fd01_*.json"):
         old.unlink()
     for prefix, batches in sorted(by_prefix.items()):

@@ -1,7 +1,7 @@
 {
  "schema": "wonderland-kit-modules/1",
  "kit_version": "1.0.0",
- "generated_utc": "2026-09-14T02:05:23+00:00",
+ "generated_utc": "2026-09-16T17:15:55+00:00",
  "radius_ladder_uu": {
   "XL": 680.0,
   "L": 460.0,
@@ -5457,7 +5457,7 @@
     201.0,
     640.0
    ],
-   "tris": 596,
+   "tris": 768,
    "sockets": {
     "back": {
      "kind": "bridge_end",

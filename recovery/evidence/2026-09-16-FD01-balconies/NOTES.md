@@ -22,3 +22,17 @@ Saving: the first save (09:17, save_map) returned False with no dirty map listed
 the layer was lost. Re-applied on editor 57 and saved with save_current_level (umap 10:05:44).
 
 Open: WL_Detail_Oriel_Bay needs its glazing on the outside of the stone before oriels can join this pass.
+
+## FD01e -- the oriels come back (same day)
+
+Forge fix d4ddaac9 (wonderland-blender-forge): the oriel's glass now fills the plan outside the stone line, between
+corner posts and mullions under gold transoms; the other 116 modules rebuilt hash-identical on Windows bpy, and
+audit_glass.py (4eac2b6d) now scores every module's visible glass (oriel 57%, a closed pane set in a wall shows ~50%).
+The four oriel meshes were re-imported (oriel_import.json: 4 imported, 0 failed).
+
+| preview | what | judgement |
+|---|---|---|
+| fd01d | 45% balcony / 25% oriel faces: 151 balconies, 104 oriels | oriels read as glazed amber bays; several stand through the gold balustrade bands at ~7 m (the prop test used the balcony's height) |
+| fd01e | prop test with the oriel's own 6.4 m top; a blocked oriel becomes a balcony if one fits | 206 balconies + 51 oriels; oriels clear of the bands; kept |
+
+Saved: save_current_level, umap 10:34:38 (saved_fd01e.json).
