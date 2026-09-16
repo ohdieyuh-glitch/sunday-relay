@@ -24,7 +24,8 @@ COURT_TOP = 12.5
 
 
 def build():
-    return arrival_court.build(PASS, AX, AY, YAW, LAWN, COURT_TOP, 20260915 + 204, court_r=430.0,
+    # the walk on (EQ02) leaves the court at -65 degrees, where the district has room: its beds open there too
+    return arrival_court.build(PASS, AX, AY, YAW, LAWN, COURT_TOP, 20260915 + 204, court_r=430.0, openings=((0.0, 35.0), (180.0, 35.0), (-65.0, 30.0)),
                                title="The East Quarter: an arrival court on the cobbled street, framed by a rose arch")
 
 

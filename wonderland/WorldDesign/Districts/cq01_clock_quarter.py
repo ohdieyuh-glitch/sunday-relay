@@ -28,7 +28,8 @@ COURT_D, COURT_R = 400.0, 400.0
 
 
 def build():
-    return arrival_court.build(PASS, AX, AY, YAW, LAWN, COURT_TOP, 20260915 + 202, court_d=COURT_D, court_r=COURT_R,
+    # the walk on (CQ02) leaves the court at +15 degrees, where the district has room: its beds open there too
+    return arrival_court.build(PASS, AX, AY, YAW, LAWN, COURT_TOP, 20260915 + 202, court_d=COURT_D, court_r=COURT_R, openings=((0.0, 35.0), (180.0, 35.0), (15.0, 30.0)),
                                title="Clock Quarter: an arrival court on the cobbles, the columns its gateposts")
 
 

@@ -1,0 +1,248 @@
+{
+ "RG02": {
+  "destination": "royal_gardens",
+  "turn": -45.0,
+  "start": 726,
+  "length": 716,
+  "overlook": [
+   3819.1,
+   9606.2
+  ],
+  "legs": [
+   [
+    726.0,
+    1442.0,
+    0.0
+   ]
+  ],
+  "instances": 189
+ },
+ "CQ02": {
+  "destination": "clock_quarter",
+  "turn": 15.0,
+  "start": 1066,
+  "length": 2246,
+  "overlook": [
+   9861.8,
+   668.8
+  ],
+  "legs": [
+   [
+    1066.0,
+    3312.0,
+    0.0
+   ]
+  ],
+  "instances": 305
+ },
+ "CL02": {
+  "destination": "the_cloister",
+  "turn": 50.0,
+  "start": 726,
+  "length": 1493,
+  "overlook": [
+   7996.7,
+   15450.6
+  ],
+  "legs": [
+   [
+    726.0,
+    1899.0,
+    0.0
+   ],
+   [
+    1899.0,
+    2219.0,
+    12.5
+   ]
+  ],
+  "instances": 251
+ },
+ "EQ02": {
+  "destination": "east_quarter",
+  "turn": -65.0,
+  "start": 686,
+  "length": 1871,
+  "overlook": [
+   17967.7,
+   4355.7
+  ],
+  "legs": [
+   [
+    686.0,
+    998.0,
+    12.5
+   ],
+   [
+    998.0,
+    2037.0,
+    15.3
+   ],
+   [
+    2037.0,
+    2557.0,
+    12.5
+   ]
+  ],
+  "instances": 281
+ },
+ "WW02": {
+  "destination": "west_wood",
+  "turn": -30.0,
+  "start": 726,
+  "length": 2400,
+  "overlook": [
+   -28659.1,
+   2383.1
+  ],
+  "legs": [
+   [
+    726.0,
+    1026.0,
+    12.5
+   ],
+   [
+    1026.0,
+    3126.0,
+    0.0
+   ]
+  ],
+  "instances": 318
+ },
+ "FO02": {
+  "destination": "far_orchards",
+  "turn": 65.0,
+  "start": 726,
+  "length": 2400,
+  "overlook": [
+   17192.7,
+   -21216.1
+  ],
+  "legs": [
+   [
+    726.0,
+    3126.0,
+    0.0
+   ]
+  ],
+  "instances": 312
+ },
+ "ER02": {
+  "destination": "east_reach",
+  "turn": 35.0,
+  "start": 726,
+  "length": 2400,
+  "overlook": [
+   25069.0,
+   8458.5
+  ],
+  "legs": [
+   [
+    726.0,
+    3126.0,
+    0.0
+   ]
+  ],
+  "instances": 312
+ },
+ "TC02": {
+  "destination": "teapot_court",
+  "turn": -35.0,
+  "start": 726,
+  "length": 2400,
+  "overlook": [
+   -14345.9,
+   -6509.4
+  ],
+  "legs": [
+   [
+    726.0,
+    3126.0,
+    0.0
+   ]
+  ],
+  "instances": 312
+ },
+ "CK02": {
+  "destination": "colossal_key",
+  "turn": 0.0,
+  "start": 866,
+  "length": 2400,
+  "overlook": [
+   21584.1,
+   -11011.2
+  ],
+  "legs": [
+   [
+    866.0,
+    966.0,
+    12.5
+   ],
+   [
+    966.0,
+    3266.0,
+    0.0
+   ]
+  ],
+  "instances": 317
+ },
+ "LH02": {
+  "destination": "lantern_hamlets",
+  "turn": 60.0,
+  "start": 726,
+  "length": 2137,
+  "overlook": [
+   -17638.6,
+   5918.5
+  ],
+  "legs": [
+   [
+    726.0,
+    2863.0,
+    0.0
+   ]
+  ],
+  "instances": 293
+ },
+ "SM02": {
+  "destination": "south_meadows",
+  "turn": -15.0,
+  "start": 726,
+  "length": 2400,
+  "overlook": [
+   -2416.8,
+   -22998.2
+  ],
+  "legs": [
+   [
+    726.0,
+    1426.0,
+    12.5
+   ],
+   [
+    1426.0,
+    3126.0,
+    0.0
+   ]
+  ],
+  "instances": 319
+ },
+ "WG02": {
+  "destination": "water_gardens",
+  "turn": -20.0,
+  "start": 726,
+  "length": 1102,
+  "overlook": [
+   -1411.0,
+   -10967.0
+  ],
+  "legs": [
+   [
+    726.0,
+    1828.0,
+    0.0
+   ]
+  ],
+  "instances": 214
+ }
+}

@@ -30,7 +30,8 @@ COURT_TOP = 19.5                         # flush over the raised garden path (19
 
 
 def build():
-    return arrival_court.build(PASS, AX, AY, YAW, LAWN, COURT_TOP, 20260915 + 201,
+    # the walk on (RG02) leaves the court at -45 degrees, where the district has room: its beds open there too
+    return arrival_court.build(PASS, AX, AY, YAW, LAWN, COURT_TOP, 20260915 + 201, openings=((0.0, 35.0), (180.0, 35.0), (-45.0, 30.0)),
                                title="Royal Gardens: an arrival court facing the garden walk, framed by a rose arch")
 
 

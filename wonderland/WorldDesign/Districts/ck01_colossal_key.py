@@ -23,7 +23,8 @@ COURT_TOP, COURT_R = 12.5, 380.0
 
 
 def build():
-    return arrival_court.build(PASS, AX, AY, YAW, LAWN, COURT_TOP, 20261125, court_r=COURT_R,
+    # the walk on (CK02) is the one district that leaves straight ahead, so it uses the court's own front opening
+    return arrival_court.build(PASS, AX, AY, YAW, LAWN, COURT_TOP, 20261125, court_r=COURT_R, openings=((0.0, 35.0), (180.0, 35.0)),
                                title="The Colossal Key: an arrival court framed by a rose arch")
 
 

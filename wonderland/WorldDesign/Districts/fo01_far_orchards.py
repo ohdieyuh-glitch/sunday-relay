@@ -23,7 +23,8 @@ COURT_TOP = 0.0
 
 
 def build():
-    return arrival_court.build(PASS, AX, AY, YAW, LAWN, COURT_TOP, 20261122,
+    # the walk on (FO02) leaves the court at +65 degrees, where the district has room: its beds open there too
+    return arrival_court.build(PASS, AX, AY, YAW, LAWN, COURT_TOP, 20261122, openings=((0.0, 35.0), (180.0, 35.0), (65.0, 30.0)),
                                title="Far Orchards: an arrival court framed by a rose arch")
 
 

@@ -24,7 +24,8 @@ COURT_TOP = 19.5
 
 
 def build():
-    return arrival_court.build(PASS, AX, AY, YAW, LAWN, COURT_TOP, 20260915 + 203,
+    # the walk on (CL02) leaves the court at +50 degrees, where the district has room: its beds open there too
+    return arrival_court.build(PASS, AX, AY, YAW, LAWN, COURT_TOP, 20260915 + 203, openings=((0.0, 35.0), (180.0, 35.0), (50.0, 30.0)),
                                title="The Cloister: an arrival court on the terrace walk, framed by a rose arch")
 
 

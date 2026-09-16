@@ -23,7 +23,8 @@ COURT_TOP = 12.5
 
 
 def build():
-    return arrival_court.build(PASS, AX, AY, YAW, LAWN, COURT_TOP, 20261121,
+    # the walk on (WW02) leaves the court at -30 degrees, where the district has room: its beds open there too
+    return arrival_court.build(PASS, AX, AY, YAW, LAWN, COURT_TOP, 20261121, openings=((0.0, 35.0), (180.0, 35.0), (-30.0, 30.0)),
                                title="West Wood: an arrival court framed by a rose arch")
 
 

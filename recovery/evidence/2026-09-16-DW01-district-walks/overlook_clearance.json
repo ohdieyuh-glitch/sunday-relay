@@ -1,0 +1,633 @@
+{
+ "name": "710_ovl_clear",
+ "started": "2026-09-15 21:24:41",
+ "status": "done",
+ "points": {
+  "RG02|ov|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "RG02|ov|l": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "CxCityNE_Rd001",
+    "RG02_LampPostWalkEndR",
+    "V2_GroundSlab"
+   ]
+  },
+  "RG02|ov|r": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "RG02_LampPostWalkEndL",
+    "V2_GroundSlab"
+   ]
+  },
+  "RG02|beyond|c": {
+   "hits": [
+    [
+     12.0,
+     1.0,
+     "CxCityNE_Rd001"
+    ]
+   ],
+   "blockers": [
+    "CxCityNE_Rd000",
+    "CxCityNE_Rd001",
+    "V2_GroundSlab"
+   ]
+  },
+  "CQ02|ov|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "CQ02|ov|l": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "CQ02_LampPostWalkEndR",
+    "S09_clockyard_Gate7",
+    "V2_GroundSlab"
+   ]
+  },
+  "CQ02|ov|r": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "CQ02_LampPostWalkEndL",
+    "V2_GroundSlab"
+   ]
+  },
+  "CQ02|beyond|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "CL02|ov|c": {
+   "hits": [
+    [
+     321.6,
+     1.0,
+     "DistrictTower_RoyalGardens"
+    ]
+   ],
+   "blockers": [
+    "CxCityNE_Rd006",
+    "CxCityNE_Rd007",
+    "DistrictTower_RoyalGardens",
+    "V2_GroundSlab"
+   ]
+  },
+  "CL02|ov|l": {
+   "hits": [
+    [
+     321.6,
+     1.0,
+     "DistrictTower_RoyalGardens"
+    ]
+   ],
+   "blockers": [
+    "CL02_LampPostWalkEndR",
+    "CxCityNE_Rd006",
+    "CxCityNE_Rd007",
+    "DistrictTower_RoyalGardens",
+    "V2_GroundSlab"
+   ]
+  },
+  "CL02|ov|r": {
+   "hits": [
+    [
+     321.6,
+     1.0,
+     "DistrictTower_RoyalGardens"
+    ]
+   ],
+   "blockers": [
+    "CL02_LampPostWalkEndL",
+    "CxCityNE_Rd006",
+    "CxCityNE_Rd007",
+    "DistrictTower_RoyalGardens",
+    "V2_GroundSlab"
+   ]
+  },
+  "CL02|beyond|c": {
+   "hits": [
+    [
+     723.6,
+     1.0,
+     "DistrictTower_RoyalGardens"
+    ]
+   ],
+   "blockers": [
+    "CxCityNE_Rd007",
+    "DistrictTower_RoyalGardens",
+    "V2_GroundSlab"
+   ]
+  },
+  "EQ02|ov|c": {
+   "hits": [
+    [
+     12.0,
+     1.0,
+     "FillEMC_StC1_005"
+    ]
+   ],
+   "blockers": [
+    "FillEMC_StC1_005",
+    "FillEMC_StC1_006",
+    "V2_GroundSlab"
+   ]
+  },
+  "EQ02|ov|l": {
+   "hits": [
+    [
+     12.0,
+     1.0,
+     "FillEMC_StC1_005"
+    ]
+   ],
+   "blockers": [
+    "EQ02_LampPostWalkEndR",
+    "FillEMC_StC1_005",
+    "FillEMC_StC1_006",
+    "V2_GroundSlab"
+   ]
+  },
+  "EQ02|ov|r": {
+   "hits": [
+    [
+     14.8,
+     1.0,
+     "FillEMC_Q1_1Floor"
+    ]
+   ],
+   "blockers": [
+    "EQ02_LampPostWalkEndL",
+    "FillEMC_Q1_1Floor",
+    "FillEMC_StC1_005",
+    "FillEMC_StC1_006",
+    "V2_GroundSlab"
+   ]
+  },
+  "EQ02|beyond|c": {
+   "hits": [
+    [
+     12.0,
+     1.0,
+     "FillEMC_StC1_006"
+    ]
+   ],
+   "blockers": [
+    "FillEMC_StC1_006",
+    "V2_GroundSlab"
+   ]
+  },
+  "WW02|ov|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "WW02|ov|l": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab",
+    "WW02_LampPostWalkEndR"
+   ]
+  },
+  "WW02|ov|r": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab",
+    "WW02_LampPostWalkEndL"
+   ]
+  },
+  "WW02|beyond|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "FO02|ov|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "FO02|ov|l": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "FO02_LampPostWalkEndR",
+    "V2_GroundSlab"
+   ]
+  },
+  "FO02|ov|r": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "FO02_LampPostWalkEndL",
+    "V2_GroundSlab"
+   ]
+  },
+  "FO02|beyond|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "ER02|ov|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "ER02|ov|l": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "ER02_LampPostWalkEndR",
+    "V2_GroundSlab"
+   ]
+  },
+  "ER02|ov|r": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "ER02_LampPostWalkEndL",
+    "V2_GroundSlab"
+   ]
+  },
+  "ER02|beyond|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "TC02|ov|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "TC02|ov|l": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "TC02_LampPostWalkEndR",
+    "V2_GroundSlab"
+   ]
+  },
+  "TC02|ov|r": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "TC02_LampPostWalkEndL",
+    "V2_GroundSlab"
+   ]
+  },
+  "TC02|beyond|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "CK02|ov|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "CK02|ov|l": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "CK02_LampPostWalkEndR",
+    "V2_GroundSlab"
+   ]
+  },
+  "CK02|ov|r": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "CK02_LampPostWalkEndL",
+    "V2_GroundSlab"
+   ]
+  },
+  "CK02|beyond|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "LH02|ov|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "LH02|ov|l": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "LH02_LampPostWalkEndR",
+    "V2_GroundSlab"
+   ]
+  },
+  "LH02|ov|r": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "LH02_LampPostWalkEndL",
+    "V2_GroundSlab"
+   ]
+  },
+  "LH02|beyond|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "SM02|ov|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "SM02|ov|l": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "SM02_LampPostWalkEndR",
+    "V2_GroundSlab"
+   ]
+  },
+  "SM02|ov|r": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "SM02_LampPostWalkEndL",
+    "V2_GroundSlab"
+   ]
+  },
+  "SM02|beyond|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "WG02|ov|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  },
+  "WG02|ov|l": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab",
+    "WG02_LampPostWalkEndR"
+   ]
+  },
+  "WG02|ov|r": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab",
+    "WG02_LampPostWalkEndL"
+   ]
+  },
+  "WG02|beyond|c": {
+   "hits": [
+    [
+     -14.0,
+     1.0,
+     "V2_GroundSlab"
+    ]
+   ],
+   "blockers": [
+    "V2_GroundSlab"
+   ]
+  }
+ },
+ "finished": "2026-09-15 21:24:41",
+ "seconds": 0.67,
+ "log": ""
+}
