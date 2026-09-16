@@ -1517,7 +1517,7 @@ export function createJuliusCodingAgentAdapter(input: {
           outputTokens: observation.outputTokens ?? undefined,
           usdMicros: observation.costUsdMicros ?? undefined,
           // INVOCATIONS, not distinct tool names.
-          toolCalls: observation.toolInvocations ?? 0,
+          toolCalls: observation.toolInvocations ?? undefined,
           /**
            * `PROVIDER_REPORTED` only when the provider actually reported a figure.
            * Anything else is UNKNOWN, which the ledger holds as an unreleased
