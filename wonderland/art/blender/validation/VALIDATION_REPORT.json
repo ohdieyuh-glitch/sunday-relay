@@ -1,5 +1,5 @@
 {
-  "checked_assets": 123,
+  "checked_assets": 124,
   "failures": 0,
   "material_check": "59 MI_V2_* names parsed from materials_v2.py",
   "per_asset": {
@@ -96,6 +96,7 @@
     "WL_Detail_Window_Arched": [],
     "WL_Detail_Banner_Blade": [],
     "WL_Detail_Wall_Lantern": [],
+    "WL_Detail_Lantern_Hanging": [],
     "WL_Hero_GreatSpire": [],
     "WL_Hero_Gate_Royal": [],
     "WL_Sky_Island_Small": [],
@@ -613,6 +614,10 @@
     "WL_Detail_Wall_Lantern": {
       "glass": "dd9cfcd7d3d2c4f51587d556a01daff68bd2214d72001ca0b20f4aacbc995a87",
       "gold": "74257ceaffe234dc96522f1181ce4374954dfe9a3fae1956d71765074fe69b2d"
+    },
+    "WL_Detail_Lantern_Hanging": {
+      "glass": "8b3558ff2788d747f52b84de83a4295a90dfd62a86246124a00768d3c6ee4a70",
+      "gold": "3a9d9bdc1e799141110e19b6455d44e3088abe17f916e786b5e75a8ddb6d508d"
     },
     "WL_Hero_GreatSpire": {
       "glass": "bcd03302e94403ce72efc9428a539e3c54e0134cf4d737861eaec08b56c60a04",

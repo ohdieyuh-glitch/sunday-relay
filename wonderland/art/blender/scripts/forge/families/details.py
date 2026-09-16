@@ -489,8 +489,51 @@ def detail_wall_lantern(f):
         tri_budget=1500, nanite=False, collision=False)
 
 
+def detail_lantern_hanging(f):
+    """The wall lantern's body without its arm, at 1.6x: a 2 m gold lantern to hang from a post, a beam or a swag.
+
+    For the places a lantern hangs rather than stands off a wall -- the Lantern Hamlets' lanes, the tea terraces'
+    swags, a pavilion's eaves. Same language as WL_Detail_Wall_Lantern (a hexagonal lit body in a gold cage, domed cap,
+    bell base and drop finial), plus a gold ring on top to hang it by. The drop finial is on the datum; the ring's top
+    is the hanging point.
+    """
+    g = f.part("gold")
+    gl = f.part("glass")
+    S = 1.6
+    cx, cy = 0.0, 0.0
+    BOT = 0.28 * S
+    TOP = BOT + 0.70 * S
+    R = 0.20 * S
+    g.lathe([(0.0, TOP + 0.20 * S), (0.05 * S, TOP + 0.19 * S), (0.10 * S, TOP + 0.14 * S), (0.20 * S, TOP + 0.06 * S),
+             (0.26 * S, TOP), (0.0, TOP)], segments=6, smooth=False, matrix=M.xform((cx, cy, 0.0), (0.0, 0.0, 30.0)))
+    g.lathe([(0.0, TOP + 0.18 * S), (0.04 * S, TOP + 0.22 * S), (0.05 * S, TOP + 0.28 * S), (0.0, TOP + 0.30 * S)],
+            segments=10, smooth=True, cap_bottom=False)
+    g.lathe([(0.06 * S, -0.018 * S), (0.10 * S, -0.018 * S), (0.10 * S, 0.018 * S), (0.06 * S, 0.018 * S)], segments=14,
+            smooth=True, cap_bottom=False, cap_top=False, matrix=M.xform((cx, cy, TOP + 0.38 * S), (90.0, 0.0, 0.0)))
+    gl.lathe([(0.0, BOT + 0.06 * S), (R * 0.82, BOT + 0.06 * S), (R, TOP - 0.02 * S), (0.0, TOP - 0.02 * S)], segments=6,
+             smooth=False, matrix=M.xform((cx, cy, 0.0), (0.0, 0.0, 30.0)))
+    for k in range(6):
+        a = math.radians(60.0 * k)
+        g.sweep([(cx + math.cos(a) * R * 0.84, cy + math.sin(a) * R * 0.84, BOT + 0.05 * S),
+                 (cx + math.cos(a) * R * 1.02, cy + math.sin(a) * R * 1.02, TOP - 0.01 * S)], 0.014 * S, sides=6,
+                smooth=False, cap=True)
+    g.lathe([(R * 0.78, BOT), (R * 0.92, BOT), (R * 0.92, BOT + 0.07 * S), (R * 0.78, BOT + 0.07 * S)], segments=6,
+            smooth=False, cap_bottom=True, cap_top=True, matrix=M.xform((cx, cy, 0.0), (0.0, 0.0, 30.0)))
+    g.lathe([(0.0, 0.0), (0.03 * S, 0.04 * S), (0.05 * S, 0.14 * S), (0.12 * S, 0.22 * S), (R * 0.92, BOT), (0.0, BOT)],
+            segments=12, smooth=True)
+    return K.ModuleSpec(
+        "WL_Detail_Lantern_Hanging", "lantern", "prop", "detail",
+        f.emit("WL_Detail_Lantern_Hanging"),
+        [K.Socket("bottom", 0.0, R, "ground", "the drop finial is on the datum; the top ring (z = 2.33 m) is the hanging point")],
+        districts=("hamlet", "plaza", "tea_terrace", "market", "royal_garden"),
+        note="2 m gold hanging lantern: the wall lantern's lit hexagonal body in a gold cage, domed cap, bell base, top ring",
+        params={"scale_of_wall_lantern": S},
+        tri_budget=1500, nanite=False, collision=False)
+
+
 BUILDERS = (
     detail_balustrade_run, detail_newel_urn, detail_screen_filigree,
     detail_balcony_bracket, detail_pinnacle_grand, detail_oriel_bay,
     detail_window_arched, detail_banner_blade, detail_wall_lantern,
+    detail_lantern_hanging,
 )
