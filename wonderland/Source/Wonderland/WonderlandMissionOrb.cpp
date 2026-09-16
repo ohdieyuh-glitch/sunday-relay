@@ -100,7 +100,7 @@ void AWonderlandMissionOrb::BeginPlay()
 }
 
 UInstancedStaticMeshComponent* AWonderlandMissionOrb::MakeMesh(FName Name, USceneComponent* Parent, bool bGlow,
-	const TArray<FTransform>& Instances, UMaterialInstanceDynamic*& OutMid)
+	const TArray<FTransform>& Instances, TObjectPtr<UMaterialInstanceDynamic>& OutMid)
 {
 	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, MissionOrbCubePath);
 	UMaterialInterface* ParentMaterial = LoadObject<UMaterialInterface>(nullptr, bGlow ? MissionOrbGlowParent : MissionOrbLitParent);
@@ -115,7 +115,7 @@ UInstancedStaticMeshComponent* AWonderlandMissionOrb::MakeMesh(FName Name, UScen
 	OutMid = ParentMaterial != nullptr ? UMaterialInstanceDynamic::Create(ParentMaterial, this) : nullptr;
 	if (OutMid != nullptr)
 	{
-		Mesh->SetMaterial(0, OutMid);
+		Mesh->SetMaterial(0, OutMid.Get());
 	}
 	else
 	{
@@ -147,7 +147,7 @@ void AWonderlandMissionOrb::Build()
 
 	// ---------------------------------------------------------------- the dais, on the floor
 	// A ring of short blocks laid flat, each turned to face the centre, so the ring reads as a rim rather
-	// than as twenty-four cubes that happen to be in a circle.
+	// than as twenty-eight cubes that happen to be in a circle.
 	{
 		TArray<FTransform> Ring;
 		const int32 Segments = 28;
@@ -162,22 +162,32 @@ void AWonderlandMissionOrb::Build()
 		MakeMesh(TEXT("MissionDais"), DaisRoot, true, Ring, DaisMid);
 	}
 
-	// ---------------------------------------------------------------- the seven pips
-	// ONE COMPONENT PER PIP, which is what lets each keep its own chakra colour. Seven components is a
+	// ---------------------------------------------------------------- the spine of seven
+	// THE COLLARS FIRST, and always: one lit component holding all seven, so the set can be counted even
+	// when a single step is burning. They are the only part of the progression that never changes.
+	{
+		TArray<FTransform> Collars;
+		for (int32 Step = 1; Step <= WonderlandChakraSteps; ++Step)
+		{
+			const float Z = SpineBaseUU + static_cast<float>(Step - 1) * SpinePitchUU;
+			Collars.Add(MissionOrbBox(FVector(0.0f, 0.0f, Z), FVector(SpineWidthUU + 1.6f, SpineWidthUU + 1.6f, 1.5f)));
+		}
+		MakeMesh(TEXT("MissionSpine"), DaisRoot, false, Collars, SpineMid);
+		if (SpineMid != nullptr)
+		{
+			SpineMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.20f, 0.20f, 0.24f));
+		}
+	}
+
+	// ONE COMPONENT PER STEP, which is what lets each keep its own chakra hue. Seven components is a
 	// rounding error beside the alternative -- per-instance custom data and a material that reads it.
 	PipMids.SetNum(WonderlandChakraSteps);
 	for (int32 Step = 1; Step <= WonderlandChakraSteps; ++Step)
 	{
-		// Clockwise from the front, so the progression runs the way the Dog is facing.
-		const float Angle = -90.0f + 360.0f * static_cast<float>(Step - 1) / static_cast<float>(WonderlandChakraSteps);
-		const float Rad = FMath::DegreesToRadians(Angle);
-		const FVector At(FMath::Cos(Rad) * PipRadiusUU, FMath::Sin(Rad) * PipRadiusUU, 0.0f);
+		const float Z = SpineBaseUU + static_cast<float>(Step - 1) * SpinePitchUU + 0.9f;
 		TArray<FTransform> Pip;
-		Pip.Add(MissionOrbBox(At + FVector(0.0f, 0.0f, 2.2f), FVector(4.4f, 4.4f, 4.4f), Angle));
-		Pip.Add(MissionOrbBox(At + FVector(0.0f, 0.0f, 6.4f), FVector(2.6f, 2.6f, 3.6f), Angle));
-		UMaterialInstanceDynamic* Mid = nullptr;
-		MakeMesh(FName(*FString::Printf(TEXT("MissionPip%d"), Step)), DaisRoot, true, Pip, Mid);
-		PipMids[Step - 1] = Mid;
+		Pip.Add(MissionOrbBox(FVector(0.0f, 0.0f, Z), FVector(SpineWidthUU, SpineWidthUU, 1.9f)));
+		MakeMesh(FName(*FString::Printf(TEXT("MissionPip%d"), Step)), DaisRoot, true, Pip, PipMids[Step - 1]);
 	}
 
 	// ---------------------------------------------------------------- the core
@@ -192,15 +202,15 @@ void AWonderlandMissionOrb::Build()
 	// light is what keeps this reading as an object in Wonderland rather than as a HUD element in the world.
 	{
 		TArray<FTransform> Band;
-		const int32 Segments = 16;
-		const float BandRadius = CoreRadiusUU * 1.55f;
+		const int32 Segments = 14;
+		const float BandRadius = CoreRadiusUU * 1.95f;
 		for (int32 Index = 0; Index < Segments; ++Index)
 		{
 			const float Angle = 360.0f * static_cast<float>(Index) / static_cast<float>(Segments);
 			const float Rad = FMath::DegreesToRadians(Angle);
 			Band.Add(MissionOrbBox(
 				FVector(FMath::Cos(Rad) * BandRadius, FMath::Sin(Rad) * BandRadius, 0.0f),
-				FVector(1.7f, 3.4f, 1.7f), Angle));
+				FVector(2.6f, 4.8f, 2.6f), Angle));
 		}
 		MakeMesh(TEXT("MissionBand"), BandRoot, false, Band, BandMid);
 		if (BandMid != nullptr)

@@ -9,9 +9,11 @@
 //   A DAIS on the floor, turning. The turn is the mission moving: forward while work advances, BACKWARDS
 //   through a repair, and stopped dead on a block. Nobody has to be told that; it is how things move.
 //
-//   SEVEN PIPS around the dais, one per chakra, each in its own colour always. Pips the task has reached
-//   burn; pips ahead of it sit cold. This is the part that makes the progression COUNTABLE — "four of
-//   seven" — instead of a colour a viewer has to remember the order of.
+//   A SPINE OF SEVEN rising from it, one per chakra, in the metaphor's own arrangement: root at the base,
+//   crown at the top. Steps the task has reached burn in their own colour; steps ahead sit dark on a matte
+//   collar that is always there, so the set stays COUNTABLE — "four of seven" — rather than a colour a
+//   viewer has to remember the order of. Seven around the ring was tried first and rejected offline: from
+//   any one camera only four of them face you, which is no way to count.
 //
 //   A CORE above it, in the colour of the step the task has reached, bobbing and pulsing. Its pulse is the
 //   tempo of the work: fast and shallow while coding, slow and deep while waiting on a person.
@@ -83,19 +85,27 @@ public:
 
 	/** Radius of the turning dais on the floor, uu. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	float DaisRadiusUU = 30.0f;
+	float DaisRadiusUU = 24.0f;
 
-	/** Radius the seven pips stand at, uu. */
+	/** Height of the root step above the floor, uu. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	float PipRadiusUU = 41.0f;
+	float SpineBaseUU = 5.0f;
 
-	/** Height of the core's centre above the floor, uu. */
+	/** Rise from one step to the next, uu. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	float CoreHeightUU = 30.0f;
+	float SpinePitchUU = 3.8f;
 
-	/** Radius of the core, uu. Small: this is a held thing, not a monument. */
+	/** Width of a step, uu. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	float CoreRadiusUU = 9.0f;
+	float SpineWidthUU = 7.4f;
+
+	/** Height of the core's centre above the floor, uu. Clear of the spine, so it reads as floating. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
+	float CoreHeightUU = 42.0f;
+
+	/** Radius of the core, uu. Small: this is a held thing, not a monument -- the whole orb stands 50 uu. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
+	float CoreRadiusUU = 8.0f;
 
 	/** Time constant of the follow, seconds. Slower than a companion: a thing on the ground has weight. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
@@ -112,9 +122,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
 	float GlowExposure = 4000.0f;
 
-	/** How dim a pip the task has not reached sits, as a fraction of a lit one. */
+	/**
+	 * How dim a step the task has not reached sits, as a fraction of a lit one.
+	 *
+	 * THE RESPONSE IS STEEP, not linear: the Phase 1 probe found x1, x30 and x300 all read as black in
+	 * daylight and x3000 as readable, so this lands deliberately between -- dim but present. If it reads
+	 * as black anyway the matte collar behind it still carries the count, which is why the collar exists.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	float UnreachedPipFraction = 0.055f;
+	float UnreachedPipFraction = 0.30f;
 
 	/** Seconds to ease from one beat's motion to the next. A beat that asks for a person CUTS instead. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
@@ -125,7 +141,8 @@ private:
 	FVector DesiredLocation(const APawn* Pawn) const;
 	void Animate(float TimeSeconds, float DeltaSeconds);
 	void PaintChakra();
-	UInstancedStaticMeshComponent* MakeMesh(FName Name, USceneComponent* Parent, bool bGlow, const TArray<FTransform>& Instances, UMaterialInstanceDynamic*& OutMid);
+	/** OutMid is a TObjectPtr& because every caller hands it a TObjectPtr member, which will not bind to a raw one. */
+	UInstancedStaticMeshComponent* MakeMesh(FName Name, USceneComponent* Parent, bool bGlow, const TArray<FTransform>& Instances, TObjectPtr<UMaterialInstanceDynamic>& OutMid);
 
 	UPROPERTY(VisibleAnywhere, Category = "Wonderland|Mission")
 	TObjectPtr<USceneComponent> Root;
@@ -153,6 +170,10 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> BandMid;
+
+	/** The matte collars behind the seven. One colour, never repainted: they are the countable set. */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> SpineMid;
 
 	/** One per chakra, in order. Each keeps its own colour for the life of the orb; only brightness moves. */
 	UPROPERTY(Transient)

@@ -85,7 +85,8 @@ namespace
 		{
 			if (!It->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject))
 			{
-				Body(*It);
+				// TObjectIterator dereferences to a POINTER, so one star is still T*.
+				Body(**It);
 			}
 		}
 	}
