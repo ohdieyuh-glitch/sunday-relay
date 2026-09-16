@@ -69,7 +69,7 @@ def main():
         fh.write("file 'f_%05d.jpg'\n" % frames[-1]["i"])
     film = os.path.join(folder, "mission_film.mp4")
     subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", listing,
-                    "-fps_mode", "cfr", "-r", "30", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20",
+                    "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-fps_mode", "cfr", "-r", "30", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "20",
                     "-movflags", "+faststart", film], check=True, cwd=folder)
 
     # ---- key moments: one labelled tile per stage, then the companions home after completion

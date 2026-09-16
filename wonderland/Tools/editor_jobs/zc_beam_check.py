@@ -46,6 +46,11 @@ def job():
         for step in range(6):
             yield 0.5
             read("plain_%d" % step)
+        # AIMED AT THE WORK: from beside and behind the Dog, across it toward the Contract, so the beam is in the frame.
+        controller = unreal.GameplayStatics.get_player_controller(world, 0)
+        look = unreal.MathLibrary.find_look_at_rotation(pawn.get_actor_location(), mission.get_orb_location())
+        controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-10.0, yaw=look.yaw + 35.0))
+        yield 1.0
         L.capture_game_viewport(os.path.join(SHOTS, "zc_beam_check_plain.png"))
 
         if not ui.is_live_terminal_open():

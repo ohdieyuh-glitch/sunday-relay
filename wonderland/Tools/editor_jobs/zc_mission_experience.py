@@ -35,7 +35,8 @@ FILM_FPS = float(globals().get("FILM_FPS") or 20.0)
 # None films the mini-map exactly as the build draws it. The first film forced the fan path, which hid the fact that
 # the default path still drew a white disc.
 MINIMAP_MODE = globals().get("MINIMAP_MODE")
-FRAME_WIDTH = 1280
+# 1600 wide: the Julius terminal's section lines stay readable in the film; native would double the size on disk.
+FRAME_WIDTH = int(globals().get("FRAME_WIDTH") or 1600)
 # THE FILM CAMERA. The stock arm (anything longer slides into Wonderland's collision-free scenery -- see
 # zc_joint_proof J15) turned toward the MIDPOINT of the Dog and the Contract, so the camera stands outside the
 # Dog's circle and sees it side-on as it walks round, with the Contract and the companions above it in frame.
@@ -43,7 +44,12 @@ FRAME_WIDTH = 1280
 CAMERA_ARM = 440.0
 CAMERA_PITCH = float(globals().get("CAMERA_PITCH") or -12.0)
 AIM_DROP_UU = float(globals().get("AIM_DROP_UU") or 0.0)
-STREAM_ROLES = ["julius", "architect", "coder", "reviewer"]
+ROLE_NAMES = ["julius", "architect", "coder", "reviewer"]
+SECTIONS = ["PROMPT ARCHITECT", "CODING AGENT", "JULIUS 3.3", "INDEPENDENT REVIEWER"]
+# VERIFICATION IS SHOT FROM THE SIDE: from straight behind, the Dog's head stands between the camera and its own beam.
+VERIFY_YAW_OFFSET = float(globals().get("VERIFY_YAW_OFFSET") or 40.0)
+# The simulation site the founder's command travels to (wl.Mission.Site). None keeps the build's own default.
+SITE = globals().get("SITE")
 DOG_ACT = {
     "mission_start": "MISSION START", "researching": "PLANNING", "prompt_architect": "PLANNING", "guidance": "PLANNING",
     "coding_agent": "IMPLEMENTING", "verifying": "VERIFYING", "independent_reviewer": "REVIEW",
@@ -58,6 +64,10 @@ STAGE_FLIGHT = {
     "block": "GATHER", "complete_verified": "FOLLOW",
 }
 CONTRIBUTING = {"RESEARCH ORBIT", "SUPPORT ORBIT", "CALM ORBIT", "ASSIST ORBIT"}
+
+
+def vec3(v):
+    return [round(v.x, 1), round(v.y, 1), round(v.z, 1)]
 
 
 def job():
@@ -121,9 +131,17 @@ def job():
             if not ui.is_live_terminal_open():
                 ui.toggle_live_terminal()
             yield 1.0
+            if SITE:
+                console(world, "wl.Mission.Site %s" % SITE)
+            RESULT["site_id"] = SITE or "build default"
+            # THE FOUNDER'S OWN PATH (wl.Mission.Scenario): to the simulation site, then the mission, then the terminal.
+            started = mission.play_scenario(letter, PACE)
+            yield (lambda: mission.is_fixture_running(), 180)
+            if not ui.is_live_terminal_open():
+                ui.toggle_live_terminal()
+            RESULT.setdefault("site", {})[letter] = vec3(pawn.get_actor_location())
             console(world, "slomo %.3f" % SLOMO)
             last_tick = time.time()
-            started = mission.run_scenario(letter, PACE)
             yaw = controller.get_control_rotation().yaw
             aim = None
             frames = []
@@ -139,6 +157,8 @@ def job():
                     aim = mid if aim is None else unreal.Vector(aim.x + (mid.x - aim.x) * 0.08, aim.y + (mid.y - aim.y) * 0.08, mid.z)
                 if aim is not None and math.hypot(aim.x - dog_at.x, aim.y - dog_at.y) > 20.0:
                     want = unreal.MathLibrary.find_look_at_rotation(dog_at, aim).yaw
+                    if str(mission.get_beat_id()) == "verifying":
+                        want += VERIFY_YAW_OFFSET
                     delta = (want - yaw + 180.0) % 360.0 - 180.0
                     yaw += delta * 0.08
                 controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=CAMERA_PITCH, yaw=yaw))
@@ -158,12 +178,12 @@ def job():
                     "dog_beam_scale": round(beam.get_world_scale().y, 3) if beam is not None else None,
                     "dog_beam_name": beam.get_name() if beam is not None else None,
                     "pawn_name": pawn.get_name(),
-                    "stream_shown": bool(ui.is_julius_stream_shown()),
-                    "stream_event": str(ui.get_julius_stream_event()),
-                    "stream_pending": int(ui.get_julius_stream_pending()),
-                    "stream": [{"status": str(ui.get_julius_role_status(r)), "written": int(ui.get_julius_role_written_count(r)),
-                                "kind": str(ui.get_julius_role_latest_kind(r)), "line": str(ui.get_julius_role_latest_line(r))[:80]}
-                               for r in range(4)],
+                    "terminal_open": bool(ui.is_live_terminal_open()),
+                    "role_event": str(ui.get_julius_role_event()),
+                    "roles": [{"status": str(ui.get_julius_role_status(r)), "written": int(ui.get_julius_role_written_count(r)),
+                               "pending": int(ui.get_julius_role_pending(r)),
+                               "kind": str(ui.get_julius_role_latest_kind(r)), "line": str(ui.get_julius_role_latest_line(r))[:80]}
+                              for r in range(4)],
                     "book": bool(book.is_visible()) if book is not None else None,
                     "page_turning": bool(leaf.is_visible()) if leaf is not None else None,
                     "dog_z": round(pawn.get_actor_location().z, 1),
@@ -203,6 +223,12 @@ def job():
                     })
                 frames.append(sample)
                 index += 1
+                # NO FRAMES, NO FILM: a minimized editor window fails every capture silently, and the loop would race
+                # through the whole mission writing nothing. Stop and say so.
+                if index == 30 and not any(f["ok"] for f in frames):
+                    RESULT["error"] = "the first 30 captures all failed -- is the Unreal editor window minimized?"
+                    unreal.log_warning("WLEXPERIENCE %s" % RESULT["error"])
+                    break
                 yield 0.0
                 now = time.time()
                 real_dt = max(now - last_tick, 0.005)
@@ -335,8 +361,8 @@ def judge(letter, frames, started, record):
     roles_seen = {s: sorted({f["julius"]["sections"][s] for f in mission_frames}) for s in ("PROMPT ARCHITECT", "CODING AGENT", "INDEPENDENT REVIEWER")}
     status_ok = all((f["companions"][c]["status"] in ("ACTIVE · JOINED", "JOINED · DONE")) == joined_expected[c]
                     for f in mission_frames[5:] for c in (0, 1))
-    record(letter + "08", "joined terminals are active, the others wait, and the Julius roles progress",
-           status_ok and all("ACTIVE" in v for v in roles_seen.values()),
+    record(letter + "08", "joined terminals are active, the others wait, and every Julius terminal section moves through its work",
+           status_ok and all(len(v) >= 3 for v in roles_seen.values()),
            roles_seen=roles_seen,
            activities=[sorted({f["companions"][c]["activity"] for f in mission_frames}) for c in (0, 1)])
     # --- THE DOG REALLY CIRCLES while it reads. The first film's Dog read on one spot for the whole mission: an
@@ -393,35 +419,36 @@ def judge(letter, frames, started, record):
     lingering = [f["i"] for f in after_end[3:] if any(comp["pulses"] or comp["beam"] for comp in f["companions"])]
     record(letter + "12", "an unjoined companion's terminal stays waiting, and no light is given after completion",
            not silent and not lingering, unjoined_speaking=silent[:8], contributing_after_end=lingering[:8])
-    # --- THE JULIUS STREAM: inside the terminal for the whole mission, on the world's event, never far behind.
-    stream_frames = [f for f in mission_frames if f.get("stream")]
-    off_event = [[f["i"], f["event"], f["stream_event"]] for f in stream_frames
-                 if f["event"] != "None" and f["stream_event"] != f["event"]]
-    record(letter + "13", "the Julius terminal shows the live stream all mission, on the event the world is in",
-           stream_frames and all(f["stream_shown"] for f in stream_frames) and not off_event,
-           stream_frames=len(stream_frames), off_event=off_event[:10])
+    # --- JULIUS AND ITS COMPONENTS, working in the terminal's own four sections, on the world's event.
+    role_frames = [f for f in mission_frames if f.get("roles")]
+    off_event = [[f["i"], f["event"], f["role_event"]] for f in role_frames
+                 if f["event"] != "None" and f["role_event"] != f["event"]]
+    record(letter + "13", "the Julius terminal is open all mission and its four sections work on the event the world is in",
+           role_frames and all(f["terminal_open"] for f in role_frames) and not off_event,
+           role_frames=len(role_frames), off_event=off_event[:10])
 
-    written = {STREAM_ROLES[r]: (stream_frames[-1]["stream"][r]["written"] if stream_frames else 0) for r in range(4)}
-    kinds = {STREAM_ROLES[r]: sorted({f["stream"][r]["kind"] for f in stream_frames} - {""}) for r in range(4)}
+    written = {ROLE_NAMES[r]: (role_frames[-1]["roles"][r]["written"] if role_frames else 0) for r in range(4)}
+    kinds = {ROLE_NAMES[r]: sorted({f["roles"][r]["kind"] for f in role_frames} - {""}) for r in range(4)}
     record(letter + "14", "Julius and all three components write real work: packets, diffs, tests, checks, findings",
            all(v >= 15 for v in written.values())
            and {"Preview"} <= set(kinds["architect"]) and {"DiffAdd", "Pass"} <= set(kinds["coder"])
            and {"CheckDone", "Finding"} <= set(kinds["reviewer"]),
            written=written, kinds=kinds)
 
-    # How much the stream still owed when each event arrived (flushed at once): the pace must keep this small.
-    owed = []
-    for a, b in zip(stream_frames, stream_frames[1:]):
-        if b["stream_event"] != a["stream_event"]:
-            owed.append(a["stream_pending"])
-    total = sum(sum(f2["stream"][r]["written"] for r in range(4)) for f2 in stream_frames[-1:]) if stream_frames else 0
-    record(letter + "15", "the stream keeps up with the world: little is left to flush when the next event arrives",
-           owed and max(owed) <= 4, max_owed=max(owed) if owed else None, owed=owed, total_lines=total, pace=PACE)
+    # How much each role still owed when the next event arrived (written at once): the pace must keep this small.
+    owed = {ROLE_NAMES[r]: [] for r in range(4)}
+    for a, b in zip(role_frames, role_frames[1:]):
+        if b["role_event"] != a["role_event"]:
+            for r in range(4):
+                owed[ROLE_NAMES[r]].append(a["roles"][r]["pending"])
+    worst = {k: max(v) if v else 0 for k, v in owed.items()}
+    record(letter + "15", "every section keeps up with the world: little is left to write at once when the next event arrives",
+           all(v <= 4 for v in worst.values()), max_owed=worst, pace=PACE)
 
     beam_notes = sorted({f.get("beam_note", "") for f in mission_frames if f["beat"] == "verifying"})
     summary["pulses"] = pulses
     summary["beams"] = beams
     summary["dog_swept_deg"] = round(swept, 1)
-    summary["stream_written"] = written
+    summary["role_lines_written"] = written
     summary["beam_notes"] = beam_notes[:6]
     return summary
