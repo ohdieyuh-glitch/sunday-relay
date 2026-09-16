@@ -209,6 +209,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
 	bool ClickNavButton(FName ShortcutId);
 
+	/**
+	 * WHAT SLATE SEES UNDER A TILE. The tile's rectangle, whether pointing is on, who holds mouse capture, whether the
+	 * application is active, and the widget path Slate locates at the tile's centre -- the question a failed pointer
+	 * click leaves open, answered instead of guessed. One "key value" per line.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	FString DiagnoseNavClick(FName ShortcutId);
+
+	/** The tile button's own SimulateClick. Wiring only -- says nothing about whether a pointer can reach the tile. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool SimulateNavTileClick(FName ShortcutId);
+
 	// ---------------------------------------------------------------- the mini-map (WonderlandMiniMap.h)
 
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")

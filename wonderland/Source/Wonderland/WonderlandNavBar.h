@@ -71,6 +71,15 @@ public:
 	/** How many times a tile has been clicked -- by a pointer, not by its key. */
 	int32 GetClickCount(FName Id) const;
 
+	/** The tile's button, for tests that need to name what Slate finds under a point. */
+	TSharedPtr<SButton> GetTileButton(FName Id) const;
+
+	/**
+	 * The button's own SimulateClick: proves the tile is wired to where it leads, and NOTHING about whether a pointer
+	 * can reach it. Tests report it separately from a real pointer click for exactly that reason.
+	 */
+	bool SimulateTileClick(FName Id);
+
 private:
 	FReply HandleClicked(int32 Index);
 

@@ -93,7 +93,13 @@ def job():
         pawn = unreal.GameplayStatics.get_player_pawn(world, 0)
         controller = unreal.GameplayStatics.get_player_controller(world, 0)
         ui = L.get_ui(world)
-        presets = unreal.SubsystemBlueprintLibrary.get_game_instance_subsystem(world, unreal.WonderlandCommandPresetSubsystem)
+        # NOT SubsystemBlueprintLibrary: it is not exposed to Python here, which cost the first run. The presets
+        # live on the PIE game instance, so the instance whose outer is that game instance is the one.
+        game = unreal.GameplayStatics.get_game_instance(world)
+        found = list(unreal.ObjectIterator(unreal.WonderlandCommandPresetSubsystem))
+        owned = [x for x in found if x.get_outer() == game]
+        presets = owned[0] if owned else (found[-1] if found else None)
+        RESULT["presets_found"] = {"instances": len(found), "owned_by_pie": len(owned)}
         live = [m for m in unreal.ObjectIterator(unreal.WonderlandMissionSubsystem) if m.is_mission_strip_on_screen()]
         mission = live[0] if live else None
         for cmd in ("t.MaxFPS 0", "Slate.bAllowThrottling 0", "r.VSync 0"):
