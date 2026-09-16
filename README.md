@@ -4,20 +4,20 @@ Orphan branch. It shares no history with `main` and must never be merged.
 
 | | |
 |---|---|
-| branch | `relay/julius-reviewer-failure-truth` |
-| base | `8afb872d7a9e91569d9cb70457773bef887a5c56` |
-| head | `628527d3b8dacef33c4af199ff2d703cd2996a5d` |
-| tree | `e68d2922d9f825b935b6b851c365797e0c4e7724` |
-| commits | 1, authored AND committed by `julius-worker[bot]` |
+| branch | `relay/julius-peer-channel` |
+| base | `ad03df90c9cb80657b23a0bee4890c17af18a022` |
+| head | `846792dd1132d6b74cc455d3da0b55ee930d2dd0` |
+| tree | `dcda54181ba284395083d1b913a7a5a01a1957fc` |
+| commits | 3, authored AND committed by `julius-worker[bot]` |
 
 ## Use
 
-    git fetch origin ceremony/reviewer-failure-truth-pr
-    git checkout origin/ceremony/reviewer-failure-truth-pr -- ceremony/
+    git fetch origin ceremony/julius-peer-channel-pr
+    git checkout origin/ceremony/julius-peer-channel-pr -- ceremony/
     export JULIUS_WORKER_APP_ID=<the App ID>
     # JULIUS_WORKER_APP_PEM must already be in the shell
-    bash ceremony/open-reviewer-failure-truth-worker-pr.sh
+    bash ceremony/open-julius-peer-channel-worker-pr.sh
 
 ## What this branch carries
 
-Amended in place for PR #265: the stream-watchdog and request-timeout repair added after the zero-cost reproduction. The PR already exists, so this opener will refuse; the pins record what the founder approves.
+Provider-free development for the sustained Prompt Architect and Independent Reviewer: a typed, Julius-audited peer channel; the reviewer's canonical verdicts on the live path; and a bounded Architect-Reviewer disagreement. Three logical commits. No provider was contacted and no qualification semantics changed.
