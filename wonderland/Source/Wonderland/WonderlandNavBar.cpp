@@ -178,6 +178,31 @@ bool SWonderlandNavBar::GetTileAbsoluteRect(FName Id, FSlateRect& OutRect) const
 	return false;
 }
 
+TSharedPtr<SButton> SWonderlandNavBar::GetTileButton(FName Id) const
+{
+	const TArray<FWonderlandNavEntry>& Entries = WonderlandNavEntries();
+	for (int32 Index = 0; Index < Entries.Num(); ++Index)
+	{
+		if (Entries[Index].Id == Id && Buttons.IsValidIndex(Index))
+		{
+			return Buttons[Index];
+		}
+	}
+	return nullptr;
+}
+
+bool SWonderlandNavBar::SimulateTileClick(FName Id)
+{
+	const TSharedPtr<SButton> Button = GetTileButton(Id);
+	if (!Button.IsValid())
+	{
+		return false;
+	}
+	const int32 Before = GetClickCount(Id);
+	Button->SimulateClick();
+	return GetClickCount(Id) > Before;
+}
+
 int32 SWonderlandNavBar::GetClickCount(FName Id) const
 {
 	const TArray<FWonderlandNavEntry>& Entries = WonderlandNavEntries();

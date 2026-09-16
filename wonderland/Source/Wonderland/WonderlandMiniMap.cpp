@@ -26,6 +26,9 @@ namespace WonderlandMiniMapDetail
 	TAutoConsoleVariable<float> CVarExposureBias(
 		TEXT("wl.MiniMap.ExposureBias"), 0.0f,
 		TEXT("Exposure bias, EV, applied to the mini-map photograph only."));
+	TAutoConsoleVariable<float> CVarHz(
+		TEXT("wl.MiniMap.Hz"), 0.0f,
+		TEXT("Photographs per second, overriding the settings while above zero. For measuring what the rate costs."));
 	TAutoConsoleVariable<int32> CVarLumen(
 		TEXT("wl.MiniMap.Lumen"), 0,
 		TEXT("1 lets the mini-map photograph use Lumen. Off by default: it is a second view, and a small one."));
@@ -187,7 +190,8 @@ bool UWonderlandMiniMapDriver::Tick(float DeltaTime)
 	// would run off the edge of the last one.
 	const double Slack = Settings->CaptureWidthUU * 0.5 - Settings->ViewRadiusUU * 1.05;
 	const bool bDue = !Frame.bHasCapture
-		|| Now - LastCaptureSeconds >= 1.0 / FMath::Max(Settings->CaptureHz, 1.0f)
+		|| Now - LastCaptureSeconds >= 1.0 / FMath::Max(WonderlandMiniMapDetail::CVarHz.GetValueOnGameThread() > 0.0f
+			? WonderlandMiniMapDetail::CVarHz.GetValueOnGameThread() : Settings->CaptureHz, 0.5f)
 		|| FVector2D::Distance(Frame.PlayerXY, Frame.CaptureCentreXY) > FMath::Max(Slack, 0.0);
 	if (bDue)
 	{
@@ -259,6 +263,11 @@ void UWonderlandMiniMapDriver::ApplyCaptureSettings()
 	// Kept between photographs so exposure adapts over time instead of starting cold on every one.
 	Camera->bAlwaysPersistRenderingState = true;
 	Camera->LODDistanceFactor = 2.0f;
+	// NOTHING PAST THE PHOTOGRAPH'S OWN CORNERS. The capture looks down from CaptureHeightUU over a square
+	// CaptureWidthUU across, so the farthest thing it can use is a corner of that square on the ground; the city
+	// beyond it -- nine thousand street pieces as of SD01 -- is culled rather than drawn into a view that clips it.
+	Camera->MaxViewDistanceOverride = static_cast<float>(FMath::Sqrt(FMath::Square(Settings->CaptureHeightUU)
+		+ 2.0 * FMath::Square(Settings->CaptureWidthUU * 0.5)) * 1.05);
 
 	// A SMALL SECOND VIEW, AND IT IS DRAWN LIKE ONE. Everything that exists to make a close camera cinematic is off:
 	// it would cost a pass and read as noise at two hundred pixels. Temporal AA is off because the camera jumps

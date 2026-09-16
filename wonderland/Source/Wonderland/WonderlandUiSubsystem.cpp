@@ -14,8 +14,11 @@
 #include "Misc/Paths.h"
 #include "GenericPlatform/GenericApplication.h"
 #include "Input/Events.h"
+#include "Framework/Application/SlateUser.h"
+#include "Widgets/Input/SButton.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SConstraintCanvas.h"
+#include "Widgets/SWindow.h"
 #include "WonderlandCommandPresets.h"
 #include "WonderlandCommandStation.h"
 #include "WonderlandCompanionSubsystem.h"
@@ -921,26 +924,78 @@ bool UWonderlandUiSubsystem::ClickNavButton(FName ShortcutId)
 	const int32 Before = NavBar->GetClickCount(ShortcutId);
 	FSlateApplication& App = FSlateApplication::Get();
 	const FVector2D Centre(Rect.GetCenter());
-	const FVector2D From(App.GetCursorPos());
 	const uint32 User = static_cast<uint32>(App.GetUserIndexForMouse());
 	const TSet<FKey> None;
 	TSet<FKey> Held;
 	Held.Add(EKeys::LeftMouseButton);
 
-	// Travel there, press, release: the three events a hand produces, through the application's own routing.
-	App.SetCursorPos(Centre);
-	App.ProcessMouseMoveEvent(FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, From, None, EKeys::Invalid, 0.0f, FModifierKeysState()));
-	App.ProcessMouseButtonDownEvent(nullptr, FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, Held, EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
-	App.ProcessMouseButtonUpEvent(FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, None, EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
+	// Travel there, press, release: the three events a hand produces, through the application's own routing. The
+	// OS cursor is NOT moved -- Slate hit tests the event's own position, and a test has no business dragging the
+	// founder's real mouse across the screen. The first version did.
+	const bool bMoved = App.ProcessMouseMoveEvent(FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, None, EKeys::Invalid, 0.0f, FModifierKeysState()));
+	const bool bDown = App.ProcessMouseButtonDownEvent(nullptr, FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, Held, EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
+	const bool bUp = App.ProcessMouseButtonUpEvent(FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, None, EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
 
 	const bool bClicked = NavBar->GetClickCount(ShortcutId) > Before;
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI pointer click on %s at (%.0f, %.0f): %s"), *ShortcutId.ToString(), Centre.X, Centre.Y,
-		bClicked ? TEXT("the tile answered") : TEXT("nothing answered"));
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI pointer click on %s at (%.0f, %.0f): %s (move %d, down %d, up %d)"), *ShortcutId.ToString(), Centre.X, Centre.Y,
+		bClicked ? TEXT("the tile answered") : TEXT("nothing answered"), bMoved ? 1 : 0, bDown ? 1 : 0, bUp ? 1 : 0);
 	if (!bClicked)
 	{
+		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI click diagnosis:\n%s"), *DiagnoseNavClick(ShortcutId));
 		StopPointing(true);
 	}
 	return bClicked;
+}
+
+FString UWonderlandUiSubsystem::DiagnoseNavClick(FName ShortcutId)
+{
+	TArray<FString> Lines;
+	if (!NavBar.IsValid() || !FSlateApplication::IsInitialized())
+	{
+		return TEXT("navbar none");
+	}
+	FSlateApplication& App = FSlateApplication::Get();
+	FSlateRect Rect;
+	const bool bRect = NavBar->GetTileAbsoluteRect(ShortcutId, Rect);
+	Lines.Add(FString::Printf(TEXT("tile %d %.1f %.1f %.1f %.1f"), bRect ? 1 : 0, Rect.Left, Rect.Top, Rect.Right - Rect.Left, Rect.Bottom - Rect.Top));
+	Lines.Add(FString::Printf(TEXT("pointing %d"), bPointing ? 1 : 0));
+	Lines.Add(FString::Printf(TEXT("app_active %d"), App.IsActive() ? 1 : 0));
+	Lines.Add(FString::Printf(TEXT("strip_on_screen %d"), IsNavBarOnScreen() ? 1 : 0));
+
+	const TSharedPtr<FSlateUser> Cursor = App.GetCursorUser();
+	const bool bCapture = Cursor.IsValid() && Cursor->HasCapture(FSlateApplicationBase::CursorPointerIndex);
+	const TSharedPtr<SWidget> Captor = Cursor.IsValid() ? Cursor->GetCursorCaptor() : nullptr;
+	Lines.Add(FString::Printf(TEXT("capture %d %s"), bCapture ? 1 : 0, Captor.IsValid() ? *Captor->GetTypeAsString() : TEXT("-")));
+
+	if (bRect)
+	{
+		const FVector2D Centre(Rect.GetCenter());
+		const FWidgetPath Path = App.LocateWindowUnderMouse(Centre, App.GetInteractiveTopLevelWindows(), false, App.GetUserIndexForMouse());
+		const TSharedPtr<SButton> Tile = NavBar->GetTileButton(ShortcutId);
+		bool bTileInPath = false;
+		TArray<FString> Types;
+		for (int32 Index = 0; Index < Path.Widgets.Num(); ++Index)
+		{
+			const TSharedRef<SWidget>& Widget = Path.Widgets[Index].Widget;
+			if (Tile.IsValid() && Widget == Tile.ToSharedRef())
+			{
+				bTileInPath = true;
+			}
+			Types.Add(Widget->GetTypeAsString());
+		}
+		// The leafmost ten are the part that decides who gets the click.
+		const int32 First = FMath::Max(0, Types.Num() - 10);
+		Lines.Add(FString::Printf(TEXT("path_len %d"), Types.Num()));
+		Lines.Add(FString::Printf(TEXT("path_leaf %s"), *FString::Join(TArray<FString>(Types.GetData() + First, Types.Num() - First), TEXT(" > "))));
+		Lines.Add(FString::Printf(TEXT("tile_in_path %d"), bTileInPath ? 1 : 0));
+		Lines.Add(FString::Printf(TEXT("window %s"), Path.IsValid() ? *Path.GetWindow()->GetTitle().ToString() : TEXT("-")));
+	}
+	return FString::Join(Lines, TEXT("\n"));
+}
+
+bool UWonderlandUiSubsystem::SimulateNavTileClick(FName ShortcutId)
+{
+	return IsNavBarOnScreen() && NavBar->SimulateTileClick(ShortcutId);
 }
 
 /* ------------------------------------------------------------------ the HUD furniture */
