@@ -403,6 +403,8 @@ private:
 	FVector BodyRestLocation = FVector::ZeroVector;
 
 	bool bJointsBound = false;
+	/** The body reference was found missing once; said in the log, not every frame. */
+	bool bLoggedBodyLoss = false;
 	bool bLoggedBindFailure = false;
 
 	bool bRunHeld = false;

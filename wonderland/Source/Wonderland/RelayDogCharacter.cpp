@@ -26,24 +26,24 @@
 // THE READING POSE, TUNABLE LIVE. Named, not anonymous: the module is one unity translation unit.
 namespace RelayDogReadTuning
 {
-	TAutoConsoleVariable<float> CVarBookFwd(TEXT("wl.Dog.Read.BookFwd"), 42.0f, TEXT("The open book's spine, forward of the body centre, in head-width sixtieths."));
+	TAutoConsoleVariable<float> CVarBookFwd(TEXT("wl.Dog.Read.BookFwd"), 36.0f, TEXT("The open book's spine, forward of the body centre, in head-width sixtieths."));
 	TAutoConsoleVariable<float> CVarBookRight(TEXT("wl.Dog.Read.BookRight"), 0.0f, TEXT("The open book's spine, right of the body centre."));
-	TAutoConsoleVariable<float> CVarBookUp(TEXT("wl.Dog.Read.BookUp"), -6.0f, TEXT("The open book's spine, above the body centre."));
-	TAutoConsoleVariable<float> CVarBookTilt(TEXT("wl.Dog.Read.BookTilt"), 38.0f, TEXT("Degrees the far edge of the book is raised, turning the pages toward the Dog's face."));
+	TAutoConsoleVariable<float> CVarBookUp(TEXT("wl.Dog.Read.BookUp"), 16.0f, TEXT("The open book's spine, above the body centre."));
+	TAutoConsoleVariable<float> CVarBookTilt(TEXT("wl.Dog.Read.BookTilt"), 52.0f, TEXT("Degrees the far edge of the book is raised, turning the pages toward the Dog's face."));
 	TAutoConsoleVariable<float> CVarBookOpen(TEXT("wl.Dog.Read.BookOpen"), 28.0f, TEXT("Degrees each half of the open book rises from flat."));
 	TAutoConsoleVariable<float> CVarBookScale(TEXT("wl.Dog.Read.BookScale"), 1.3f, TEXT("Size of the open book and its turning page."));
 	TAutoConsoleVariable<float> CVarLeafCurl(TEXT("wl.Dog.Read.LeafCurl"), 40.0f, TEXT("Degrees the outer half of a turning page trails its inner half at mid-turn."));
 	TAutoConsoleVariable<float> CVarLeafGlow(TEXT("wl.Dog.Read.LeafGlow"), 3.0f, TEXT("Brightness of the turning page, as a fraction of the Dog's glow exposure."));
-	TAutoConsoleVariable<float> CVarHoldPitch(TEXT("wl.Dog.Read.HoldPitch"), 62.0f, TEXT("Holding (left) arm: shoulder pitch forward."));
+	TAutoConsoleVariable<float> CVarHoldPitch(TEXT("wl.Dog.Read.HoldPitch"), 78.0f, TEXT("Holding (left) arm: shoulder pitch forward."));
 	TAutoConsoleVariable<float> CVarHoldRoll(TEXT("wl.Dog.Read.HoldRoll"), 14.0f, TEXT("Holding arm: shoulder roll outward."));
-	TAutoConsoleVariable<float> CVarHoldElbow(TEXT("wl.Dog.Read.HoldElbow"), 48.0f, TEXT("Holding arm: elbow bend."));
-	TAutoConsoleVariable<float> CVarTurnPitch(TEXT("wl.Dog.Read.TurnPitch"), 58.0f, TEXT("Turning (right) arm at rest: shoulder pitch forward."));
+	TAutoConsoleVariable<float> CVarHoldElbow(TEXT("wl.Dog.Read.HoldElbow"), 72.0f, TEXT("Holding arm: elbow bend."));
+	TAutoConsoleVariable<float> CVarTurnPitch(TEXT("wl.Dog.Read.TurnPitch"), 74.0f, TEXT("Turning (right) arm at rest: shoulder pitch forward."));
 	TAutoConsoleVariable<float> CVarTurnRoll(TEXT("wl.Dog.Read.TurnRoll"), 16.0f, TEXT("Turning arm at rest: shoulder roll outward."));
-	TAutoConsoleVariable<float> CVarTurnElbow(TEXT("wl.Dog.Read.TurnElbow"), 44.0f, TEXT("Turning arm at rest: elbow bend."));
+	TAutoConsoleVariable<float> CVarTurnElbow(TEXT("wl.Dog.Read.TurnElbow"), 66.0f, TEXT("Turning arm at rest: elbow bend."));
 	TAutoConsoleVariable<float> CVarSweepRoll(TEXT("wl.Dog.Read.SweepRoll"), -34.0f, TEXT("Turning arm: roll carried across the book with the page."));
 	TAutoConsoleVariable<float> CVarSweepPitch(TEXT("wl.Dog.Read.SweepPitch"), 12.0f, TEXT("Turning arm: pitch added at mid-turn, lifting the page."));
 	TAutoConsoleVariable<float> CVarSweepElbow(TEXT("wl.Dog.Read.SweepElbow"), 18.0f, TEXT("Turning arm: elbow added at mid-turn."));
-	TAutoConsoleVariable<float> CVarReadHeadPitch(TEXT("wl.Dog.Read.HeadPitch"), 22.0f, TEXT("Head pitch while reading, degrees down toward the book."));
+	TAutoConsoleVariable<float> CVarReadHeadPitch(TEXT("wl.Dog.Read.HeadPitch"), 30.0f, TEXT("Head pitch while reading, degrees down toward the book."));
 	TAutoConsoleVariable<float> CVarTurnHz(TEXT("wl.Dog.Read.TurnHz"), 0.32f, TEXT("Page turns per second."));
 	TAutoConsoleVariable<float> CVarTurnFraction(TEXT("wl.Dog.Read.TurnFraction"), 0.42f, TEXT("Fraction of each turn cycle the page is moving."));
 
@@ -1170,6 +1170,27 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		// spawned before its own construction script finishes would not.
 		bJointsBound = BindJoints();
 		if (!bJointsBound) return;
+	}
+
+	// THE BODY, KEPT. A long filmed mission (2026-09-16) reached verification with BodyRoot null while every short
+	// probe, and a forced garbage collection, kept it: no beam was drawn, and the book -- attached to the body -- was
+	// left behind where the founder saw it lying. Until whatever takes it is found, the Dog finds its body again the
+	// frame it is missing, says so once in the log, and seats the book back on it.
+	if (BodyRoot == nullptr)
+	{
+		BodyRoot = FindPivot(this, PivotBody);
+		if (!bLoggedBodyLoss)
+		{
+			bLoggedBodyLoss = true;
+			const UWorld* LossWorld = GetWorld();
+			UE_LOG(LogTemp, Warning, TEXT("WLDOG body reference lost at %.2f s (%s); %s"),
+				LossWorld != nullptr ? LossWorld->GetTimeSeconds() : -1.0, WonderlandDogActName(Mission.Performing()),
+				BodyRoot != nullptr ? TEXT("found the Body component again") : TEXT("no Body component on the Dog"));
+		}
+		if (BodyRoot != nullptr && BookRoot != nullptr && BookRoot->GetAttachParent() != BodyRoot)
+		{
+			BookRoot->AttachToComponent(BodyRoot, FAttachmentTransformRules::KeepRelativeTransform);
+		}
 	}
 
 	// ---------------------------------------------------------------- the face

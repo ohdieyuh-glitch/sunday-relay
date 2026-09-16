@@ -358,35 +358,36 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	FName GetCompanionTerminalNarratedBeat(int32 Index) const;
 
-	// ---------------------------------------------------------------- the mission deck (founder, 2026-09-16)
-	// Role index: 0 JULIUS, 1 PROMPT ARCHITECT, 2 CODING AGENT, 3 INDEPENDENT REVIEWER.
+	// ---------------------------------------------------------------- the Julius stream (founder, 2026-09-16)
+	// The live work of Julius and its components INSIDE the Julius terminal. Role: 0 JULIUS, 1 PROMPT ARCHITECT,
+	// 2 CODING AGENT, 3 INDEPENDENT REVIEWER.
 
-	/** The deck is on screen: the terminal is open and showing a simulated mission. */
-	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Deck")
-	bool IsMissionDeckShown() const;
+	/** The terminal is open and its body is showing the live stream of a simulated mission. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
+	bool IsJuliusStreamShown() const;
 
-	/** A console's status, e.g. IMPLEMENTING. */
-	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Deck")
-	FString GetDeckStatus(int32 Role) const;
+	/** What a role is doing now, e.g. IMPLEMENTING, as the stream's status line reads it. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
+	FString GetJuliusRoleStatus(int32 Role) const;
 
-	/** Lines a console has written this mission, including those scrolled away. */
-	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Deck")
-	int32 GetDeckWrittenCount(int32 Role) const;
+	/** Lines a role has written into the stream this mission. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
+	int32 GetJuliusRoleWrittenCount(int32 Role) const;
 
-	/** A console's newest line, and its kind (Log, DiffAdd, Preview, Finding...). */
-	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Deck")
-	FString GetDeckLatestLine(int32 Role) const;
+	/** A role's newest line, and its kind (Log, DiffAdd, Preview, Finding...). */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
+	FString GetJuliusRoleLatestLine(int32 Role) const;
 
-	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Deck")
-	FString GetDeckLatestKind(int32 Role) const;
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
+	FString GetJuliusRoleLatestKind(int32 Role) const;
 
-	/** The mission event whose work a console is writing. Every console takes every event: it must equal the world's. */
-	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Deck")
-	FName GetDeckNarratedEvent(int32 Role) const;
+	/** The mission event the stream is writing. It must equal the world's. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
+	FName GetJuliusStreamEvent() const { return StreamEvent; }
 
-	/** Lines a console still has to write for the current event. */
-	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Deck")
-	int32 GetDeckPendingCount(int32 Role) const;
+	/** Lines the stream still has to write for the current event. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
+	int32 GetJuliusStreamPending() const;
 
 private:
 	enum class EOverlay : uint8 { None, Terminal, Map, Brain, Missions, Commands, Menu, Wallet };
@@ -422,22 +423,22 @@ private:
 	/** The Julius Live Terminal, created once and kept -- at attach, so it can record a mission while it is closed. */
 	void EnsureLiveTerminal();
 
-	/** One deck console's queue: the lines still to write for the current event, and the world time until the next. */
-	struct FDeckFeed
+	/** One line owed to the stream, and whose it is. */
+	struct FStreamEntry
 	{
-		TArray<FWonderlandRoleLine> Pending;
-		float Wait = 0.0f;
-		FName Event;
+		EWonderlandJuliusRole Role = EWonderlandJuliusRole::Julius;
+		FWonderlandRoleLine Line;
 	};
-	void NarrateDeck(FName EventType, bool bNewMission, bool bLlmJoined, bool bJhinnJoined);
-	/** Write everything a console still owes, at once: the world has moved on and the console must not lag it. */
-	void FlushDeckFeed(int32 Role);
-	bool TickDeck(float DeltaSeconds);
-	TSharedPtr<class SWonderlandRoleConsole> DeckConsole(int32 Role) const;
-	FDeckFeed DeckFeeds[WonderlandJuliusRoleCount];
-	TMap<FName, int32> DeckOccurrences;
-	FTSTicker::FDelegateHandle DeckTicker;
-	double DeckWorldSeconds = -1.0;
+	void NarrateStream(FName EventType, bool bNewMission, bool bLlmJoined, bool bJhinnJoined);
+	/** Write everything the stream still owes, at once: the world has moved on and the terminal must not lag it. */
+	void FlushStream();
+	bool TickStream(float DeltaSeconds);
+	TArray<FStreamEntry> StreamPending;
+	float StreamWait = 0.0f;
+	FName StreamEvent;
+	TMap<FName, int32> StreamOccurrences;
+	FTSTicker::FDelegateHandle StreamTicker;
+	double StreamWorldSeconds = -1.0;
 	/**
 	 * A pointer click on one widget: hit tested in that widget's own window, routed down the path found there, and
 	 * only when the widget is really on that path. False when it is not under its own centre. The OS cursor never moves.

@@ -15,6 +15,9 @@ H = unreal.WonderlandHudTestLibrary
 SETTINGS = globals().get("SETTINGS") or {}
 TAG = globals().get("TAG") or "base"
 SLOMO = float(globals().get("SLOMO") or 0.2)
+# Which stage to pose (researching, coding_agent, repairing...) and which views to take; defaults read the book.
+BEAT = globals().get("BEAT") or "researching"
+VIEWS = globals().get("VIEWS")
 SHOTS = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "read_tune", TAG)
 VIEW_W, VIEW_H = 1903.0, 927.0
 
@@ -51,7 +54,7 @@ def job():
         # JOINED, so the companions circle the Contract instead of following at the Dog's shoulders, where they stand
         # exactly between a side camera and the book.
         mission.set_joined_in(True, True)
-        mission.set_beat_by_id("researching")
+        mission.set_beat_by_id(BEAT)
         yield 2.5
         unreal.SystemLibrary.execute_console_command(world, "slomo %.3f" % SLOMO)
 
@@ -72,10 +75,11 @@ def job():
         # at a close arm put the book below the frame. Bearings are where the CAMERA stands, relative to the Dog's
         # facing; the companions follow behind, so front and front-quarter views keep them out of the way.
         socket_was = boom.socket_offset if boom is not None else None
-        for view, bearing, pitch, arm, socket in (("side_right", 90.0, -14.0, 210.0, (0.0, 0.0, 10.0)),
-                                                  ("front_right", 50.0, -16.0, 200.0, (0.0, 0.0, 10.0)),
-                                                  ("front", 0.0, -16.0, 200.0, (0.0, 0.0, 10.0)),
-                                                  ("side_left", -90.0, -14.0, 210.0, (0.0, 0.0, 10.0))):
+        views = VIEWS or [["side_right", 90.0, -14.0, 210.0, [0.0, 0.0, 10.0]],
+                          ["front_right", 50.0, -16.0, 200.0, [0.0, 0.0, 10.0]],
+                          ["front", 0.0, -16.0, 200.0, [0.0, 0.0, 10.0]],
+                          ["side_left", -90.0, -14.0, 210.0, [0.0, 0.0, 10.0]]]
+        for view, bearing, pitch, arm, socket in views:
             dyaw = bearing + 180.0
             if boom is not None:
                 boom.set_editor_property("target_arm_length", arm)
