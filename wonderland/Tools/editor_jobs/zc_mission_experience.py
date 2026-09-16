@@ -23,7 +23,9 @@ L = unreal.WonderlandUiTestLibrary
 H = unreal.WonderlandHudTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "mission_experience")
 SCENARIOS = globals().get("SCENARIOS") or ["D", "A", "B", "C"]
-PACE = float(globals().get("PACE") or 4.0)          # world seconds per mission event
+# SEVEN WORLD SECONDS AN EVENT: long enough for every deck console to write its whole block for that event at a
+# readable pace (WonderlandRoleLineHoldSeconds), so the world never moves on while a console is mid-sentence.
+PACE = float(globals().get("PACE") or 7.0)          # world seconds per mission event
 SLOMO = float(globals().get("SLOMO") or 0.5)        # world time dilation to start from
 # A STEADY FILM WHATEVER THE EDITOR MANAGES. The world is slowed afresh every tick so that each captured frame
 # advances the same world time, 1/FILM_FPS of a second: the second film ran at 1.3 editor frames a second on a laptop
@@ -38,7 +40,11 @@ FRAME_WIDTH = 1280
 # Dog's circle and sees it side-on as it walks round, with the Contract and the companions above it in frame.
 # Straight behind the Dog, the first film saw a white back, no book, and only the companions' feet at the top edge.
 CAMERA_ARM = 440.0
-CAMERA_PITCH = -12.0
+CAMERA_PITCH = float(globals().get("CAMERA_PITCH") or -12.0)
+# THE DECK TAKES THE BOTTOM 38% OF THE SCREEN, so the work is framed in the band above it: the camera looks at a
+# point this far BELOW the Dog-Contract midpoint, which lifts the Dog, the Contract and the companions up the frame.
+AIM_DROP_UU = float(globals().get("AIM_DROP_UU") or 0.0)
+DECK_ROLES = ["julius", "architect", "coder", "reviewer"]
 DOG_ACT = {
     "mission_start": "MISSION START", "researching": "PLANNING", "prompt_architect": "PLANNING", "guidance": "PLANNING",
     "coding_agent": "IMPLEMENTING", "verifying": "VERIFYING", "independent_reviewer": "REVIEW",
@@ -130,7 +136,7 @@ def job():
                 dog_at = pawn.get_actor_location()
                 if mission.is_orb_in_world():
                     orb_at = mission.get_orb_location()
-                    mid = unreal.Vector((dog_at.x + orb_at.x) * 0.5, (dog_at.y + orb_at.y) * 0.5, dog_at.z)
+                    mid = unreal.Vector((dog_at.x + orb_at.x) * 0.5, (dog_at.y + orb_at.y) * 0.5, dog_at.z - AIM_DROP_UU)
                     aim = mid if aim is None else unreal.Vector(aim.x + (mid.x - aim.x) * 0.08, aim.y + (mid.y - aim.y) * 0.08, mid.z)
                 if aim is not None and math.hypot(aim.x - dog_at.x, aim.y - dog_at.y) > 20.0:
                     want = unreal.MathLibrary.find_look_at_rotation(dog_at, aim).yaw
@@ -152,6 +158,12 @@ def job():
                     "dog_beam": bool(beam.is_visible()) if beam is not None else None,
                     "dog_beam_scale": round(beam.get_world_scale().y, 3) if beam is not None else None,
                     "dog_beam_name": beam.get_name() if beam is not None else None,
+                    "pawn_name": pawn.get_name(),
+                    "deck_shown": bool(ui.is_mission_deck_shown()),
+                    "deck": [{"status": str(ui.get_deck_status(r)), "event": str(ui.get_deck_narrated_event(r)),
+                              "written": int(ui.get_deck_written_count(r)), "pending": int(ui.get_deck_pending_count(r)),
+                              "kind": str(ui.get_deck_latest_kind(r)), "line": str(ui.get_deck_latest_line(r))[:80]}
+                             for r in range(4)],
                     "book": bool(book.is_visible()) if book is not None else None,
                     "page_turning": bool(leaf.is_visible()) if leaf is not None else None,
                     "dog_z": round(pawn.get_actor_location().z, 1),
@@ -163,6 +175,16 @@ def job():
                     "pawn": [round(pawn.get_actor_location().x, 1), round(pawn.get_actor_location().y, 1)],
                     "orb": None, "companions": [],
                 }
+                if sample["beat"] == "verifying":
+                    # WHICH BEAM: the one found at the start, or the one on whatever pawn is playing now.
+                    live_pawn = unreal.GameplayStatics.get_player_pawn(world, 0)
+                    fresh = [c for c in live_pawn.get_components_by_class(unreal.SceneComponent) if c.get_name().startswith("VerificationBeam")]
+                    sample["live_pawn"] = live_pawn.get_name()
+                    sample["fresh_beams"] = [[c.get_name(), bool(c.is_visible()), round(c.get_world_scale().y, 3)] for c in fresh]
+                    try:
+                        sample["beam_note"] = str(live_pawn.describe_mission_beam())
+                    except Exception as exc:
+                        sample["beam_note"] = "unavailable: %s" % exc
                 if sample["contract"]:
                     o = mission.get_orb_location()
                     sample["orb"] = [round(o.x, 1), round(o.y, 1), round(o.z, 1)]
@@ -371,7 +393,43 @@ def judge(letter, frames, started, record):
     lingering = [f["i"] for f in after_end[3:] if any(comp["pulses"] or comp["beam"] for comp in f["companions"])]
     record(letter + "12", "an unjoined companion's terminal stays waiting, and no light is given after completion",
            not silent and not lingering, unjoined_speaking=silent[:8], contributing_after_end=lingering[:8])
+    # --- THE DECK: shown for the whole mission, every console on the world's event, and none idle for long.
+    deck_frames = [f for f in mission_frames if f.get("deck")]
+    off_event = []
+    for f in deck_frames:
+        for r, console in enumerate(f["deck"]):
+            if f["event"] != "None" and console["event"] != f["event"]:
+                off_event.append([f["i"], DECK_ROLES[r], f["event"], console["event"]])
+    record(letter + "13", "the Julius deck is on screen and all four consoles take every event the world takes",
+           deck_frames and all(f["deck_shown"] for f in deck_frames) and not off_event,
+           deck_frames=len(deck_frames), off_event=off_event[:10])
+
+    written = {DECK_ROLES[r]: (deck_frames[-1]["deck"][r]["written"] if deck_frames else 0) for r in range(4)}
+    longest_quiet = {}
+    for r in range(4):
+        last_t, last_n, worst = None, None, 0.0
+        for f in deck_frames:
+            n = f["deck"][r]["written"]
+            if last_n is None or n != last_n:
+                if last_t is not None:
+                    worst = max(worst, f["t"] - last_t)
+                last_t, last_n = f["t"], n
+        if deck_frames and last_t is not None:
+            worst = max(worst, deck_frames[-1]["t"] - last_t)
+        longest_quiet[DECK_ROLES[r]] = round(worst, 1)
+    kinds = {DECK_ROLES[r]: sorted({f["deck"][r]["kind"] for f in deck_frames}) for r in range(4)}
+    record(letter + "14", "Julius and all three components write real work: packets, diffs, tests, checks, findings",
+           all(v >= 15 for v in written.values())
+           and {"Preview"} <= set(kinds["architect"]) and {"DiffAdd", "Pass"} <= set(kinds["coder"])
+           and {"CheckDone", "Finding"} <= set(kinds["reviewer"]),
+           written=written, kinds=kinds)
+    record(letter + "15", "no console sits silent for more than two mission events",
+           all(v <= 2.2 * PACE for v in longest_quiet.values()), longest_quiet_world_seconds=longest_quiet, pace=PACE)
+
+    beam_notes = sorted({f.get("beam_note", "") for f in mission_frames if f["beat"] == "verifying"})
     summary["pulses"] = pulses
     summary["beams"] = beams
     summary["dog_swept_deg"] = round(swept, 1)
+    summary["deck_written"] = written
+    summary["beam_notes"] = beam_notes[:6]
     return summary

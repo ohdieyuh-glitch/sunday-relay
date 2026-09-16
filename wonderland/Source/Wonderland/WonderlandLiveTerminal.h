@@ -27,8 +27,10 @@
 #include "Styling/SlateTypes.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/SLeafWidget.h"
+#include "WonderlandRoleScript.h"
 
 class SEditableTextBox;
+class SWonderlandRoleConsole;
 class STextBlock;
 class SVerticalBox;
 
@@ -116,6 +118,16 @@ public:
 	/** A new mission: the simulated rows and section states go back to rest. */
 	void ResetSimulation();
 
+	// ---------------------------------------------------------------- the mission deck (founder, 2026-09-16)
+	// WHILE A SIMULATED MISSION IS SHOWN the window becomes the JULIUS console of a deck along the bottom of the screen,
+	// with PROMPT ARCHITECT to its left and CODING AGENT and INDEPENDENT REVIEWER to its right, each writing its own work
+	// (WonderlandMissionDeck.h). The command line stays under Julius. Outside a simulation the terminal is as it was.
+
+	/** One console of the deck, by role. */
+	TSharedPtr<SWonderlandRoleConsole> GetRoleConsole(EWonderlandJuliusRole Role) const;
+	/** True while the deck replaces the sectioned window. */
+	bool IsDeckShown() const { return bSimulated; }
+
 private:
 	struct FRow
 	{
@@ -148,6 +160,8 @@ private:
 
 	TSharedPtr<SEditableTextBox> Input;
 	TSharedPtr<SVerticalBox> JuliusBody;
+	/** Julius, Prompt Architect, Coding Agent, Independent Reviewer, in EWonderlandJuliusRole order. */
+	TArray<TSharedPtr<SWonderlandRoleConsole>> RoleConsoles;
 	TArray<FRow> JuliusRows;
 
 	FSlateRoundedBoxBrush WindowBrush;

@@ -56,6 +56,8 @@ def job():
                     unreal.SystemLibrary.execute_console_command(world, "slomo %.4f" % max(0.01, min(1.0, (1.0 / 15.0) / dt)))
                 if extra == "slomo_const":
                     unreal.SystemLibrary.execute_console_command(world, "slomo 0.3")
+                if extra == "slomo_capture":
+                    H.capture_viewport_jpeg(os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "beamfx_last.jpg"), 1280, 80)
                 if extra == "capture":
                     H.capture_viewport_jpeg(os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "beamfx_last.jpg"), 1280, 80)
                 if extra == "rotate":

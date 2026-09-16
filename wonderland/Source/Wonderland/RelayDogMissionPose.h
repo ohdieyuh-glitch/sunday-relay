@@ -56,6 +56,8 @@ namespace RelayDogMission
 		float SweepRollDeg = -34.0f;
 		float SweepPitchDeg = 12.0f;
 		float SweepElbowDeg = 18.0f;
+		/** Head pitch while reading, degrees down: the gaze on the pages. */
+		float HeadPitchDeg = 22.0f;
 		/** Turns per second, and the fraction of each cycle the page is actually moving. */
 		float TurnHz = 0.32f;
 		float TurnFraction = 0.34f;
@@ -162,6 +164,9 @@ namespace RelayDogMission
 
 		/** The act actually being performed, which during a handoff is the INHERITED one, not None. */
 		EWonderlandDogAct Performing() const { return Current; }
+		/** The act the mission last reported, before inheritance, and the beam's own fade. For diagnosis. */
+		EWonderlandDogAct ReportedAct() const { return Reported; }
+		float BeamFade() const { return BeamWeight; }
 
 		FStageOverlay Update(const FStageInput& In);
 

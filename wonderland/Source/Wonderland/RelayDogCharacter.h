@@ -165,6 +165,12 @@ public:
 	/** One line naming what the Dog is doing, for the capture log. */
 	FString DescribeState() const;
 
+	/** WHY THE VERIFICATION BEAM IS, OR IS NOT, DRAWN: the act reported and performed, whether the overlay wants a
+	 *  beam and at what fade, whether a Mission Contract was known, and whether the beam was drawn. A filmed mission
+	 *  showed a verifying Dog with no beam while every probe outside the film drew it; this says which condition failed. */
+	UFUNCTION(BlueprintCallable, Category = "Relay Dog|Mission")
+	FString DescribeMissionBeam() const { return LastBeamNote; }
+
 	/** Ground speeds the founder's fingers select, uu/s. The bands come from
 	 *  the arithmetic (Froude on a 48 uu leg: jog 153, run 266, anime 376), so
 	 *  these sit inside them on purpose: default walking-to-jogging pace,
@@ -268,6 +274,8 @@ private:
 		TObjectPtr<class UMaterialInstanceDynamic>& OutMid, const TCHAR* MeshPath = nullptr);
 	/** Point the beam from the Dog's chest at the contract and set its length. */
 	void DrawVerificationBeam(const FVector& FromWorld, const FVector& ToWorld, float Weight, float TimeSeconds);
+	/** Why the beam was or was not drawn on the last frame a beam was wanted or performed. */
+	FString LastBeamNote;
 	/** Place the open book before the chest, lay out its halves, and turn the page (PageTurn 0..1; negative: none). */
 	void PoseBook(bool bInHand, float PageTurn);
 

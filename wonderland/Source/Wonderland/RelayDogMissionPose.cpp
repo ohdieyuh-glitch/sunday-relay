@@ -110,10 +110,11 @@ namespace RelayDogMission
 				S.LiftUU += R.HoverUU * FMath::Sin(2.0f * PI * In.TimeSeconds / Period);
 			}
 
-			// Head tracking is the contract's, not the table's: VERIFYING says headTracksContract, while
+			// Head tracking is the contract's, not the table's: VERIFYING says headTracksContract, and so does
+			// PAINTING (founder, 2026-09-16: the Dog must not look away from the thing it is creating), while
 			// reading looks down at its own pages.
 			S.HeadPitchDeg = R.HeadPitchDeg;
-			if (R.bBeamsTheContract && In.bHasContract)
+			if ((R.bBeamsTheContract || R.Prop == EWonderlandDogProp::Paintbrush) && In.bHasContract)
 			{
 				S.HeadPitchDeg = FMath::Clamp(In.ContractPitchDeg, -38.0f, 38.0f);
 				S.HeadYawDeg = FMath::Clamp(In.ContractYawDeg, -42.0f, 42.0f);
@@ -193,6 +194,7 @@ namespace RelayDogMission
 					const float Rest = (FMath::Frac(In.TimeSeconds * FMath::Max(P.TurnHz, 0.01f)) - Frac) / (1.0f - Frac);
 					Across = 1.0f - Smooth(Rest * 2.0f);
 				}
+				S.HeadPitchDeg = P.HeadPitchDeg;
 				S.ShoulderPitchLeftDeg = P.HoldPitchDeg;
 				S.ShoulderRollDeg = P.HoldRollDeg;
 				S.ElbowDeg = P.HoldElbowDeg;
@@ -202,13 +204,24 @@ namespace RelayDogMission
 				S.ArmStrideKeep = 0.0f;
 			}
 
-			// THE LENS (REVIEW). The glass comes up to the eye, which is what ArmDownDeg already says at
-			// -34, and the head comes down to it -- so the sweep has to be the LENS moving across the work
-			// rather than the whole arm swinging, or it reads as waving rather than looking.
-			if (R.Prop == EWonderlandDogProp::MagnifyingGlass)
+			// ONE WORKING ARM (founder, 2026-09-16). A brush or a lens is held in ONE hand and the other hangs at
+			// the Dog's side. The table's arm angles apply to both shoulders -- the roll is shared -- so the free
+			// arm was raised in a mirror of the working one and the Dog painted with both. The working (right)
+			// arm now carries the whole pose through its own roll and elbow, and the free arm keeps only the walk.
+			if (R.Prop == EWonderlandDogProp::Paintbrush || R.Prop == EWonderlandDogProp::MagnifyingGlass)
 			{
-				S.ShoulderPitchLeftDeg = Pitch;
-				S.ElbowDeg *= 0.35f;
+				S.ShoulderRollExtraDeg += S.ShoulderRollDeg;
+				S.ShoulderRollDeg = 0.0f;
+				S.ElbowExtraDeg += S.ElbowDeg;
+				S.ElbowDeg = 0.0f;
+				S.ShoulderPitchLeftDeg = 0.0f;
+				// THE LENS (REVIEW). The glass comes up to the eye, which is what ArmDownDeg already says at -34,
+				// and the head comes down to it -- so the sweep is the LENS moving across the work rather than the
+				// whole arm swinging, or it reads as waving rather than looking.
+				if (R.Prop == EWonderlandDogProp::MagnifyingGlass)
+				{
+					S.ElbowExtraDeg *= 0.35f;
+				}
 			}
 
 			// A floating Dog whose legs are still standing reads as a bug. They hang, and only while lifted.
@@ -276,8 +289,12 @@ namespace RelayDogMission
 		// Derived from the act's own row rather than a new column: a beam is aimed at the contract, a lens
 		// is held up to look at it, and a correction is made to it. All three are done AT the work, so all
 		// three face it. Reading and painting do not -- they circle, and a walker faces its walk.
+		// PAINTING FACES IT TOO (founder, 2026-09-16): the Dog keeps circling while it implements, but it is
+		// painting the Contract, so it turns to it and walks its circle sideways rather than waving a brush
+		// at the view ahead. Only reading faces its walk -- it is looking at its own book.
 		Out.bFaceContract = In.bHasContract
-			&& (Now.bBeamsTheContract || Now.bCorrects || Now.Prop == EWonderlandDogProp::MagnifyingGlass);
+			&& (Now.bBeamsTheContract || Now.bCorrects || Now.Prop == EWonderlandDogProp::MagnifyingGlass
+				|| Now.Prop == EWonderlandDogProp::Paintbrush);
 
 		// ---------------------------------------------------------------- the orbit
 		// A REAL WALK, not a slide: this returns a bearing and the character moves along it, so the stride
