@@ -365,6 +365,7 @@ private:
 
 	/** The opening the book's halves were last laid out at; negative until the first layout. */
 	float LaidOutBookOpenDeg = -1.0f;
+	float LaidOutBookScale = -1.0f;
 	float AppliedLeafGlow = -1.0f;
 
 	UPROPERTY(Transient)

@@ -237,7 +237,40 @@ void AWonderlandCompanionEmbodiment::SetFormation(EWonderlandCompanionFormation 
 		// companion with a shadow. The phase is per-companion and constant for the stage.
 		FormationPhase = Count > 0 ? static_cast<float>(Index) / static_cast<float>(Count) : 0.0f;
 		NextPulseAt = -1.0f;
+		if (Formation == EWonderlandCompanionFormation::ClearTheSightLine && Contract != nullptr)
+		{
+			bFlankRight = ChooseFlank(Contract);
+		}
 	}
+}
+
+bool AWonderlandCompanionEmbodiment::ChooseFlank(const AActor* Contract) const
+{
+	// Right of the beam when this companion is further right than the other one; each on its own side when there is
+	// no other. Both decide on the same frame from the same positions, so they always choose opposite flanks.
+	const APlayerController* Controller = FollowController.Get();
+	const APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+	if (Pawn == nullptr)
+	{
+		return FollowOffset.Y >= 0.0;
+	}
+	const FVector Along = (Contract->GetActorLocation() - Pawn->GetActorLocation()).GetSafeNormal2D();
+	const FVector Right(-Along.Y, Along.X, 0.0);
+	const double Mine = FVector::DotProduct(GetActorLocation() - Pawn->GetActorLocation(), Right);
+	for (TActorIterator<AWonderlandCompanionEmbodiment> Other(GetWorld()); Other; ++Other)
+	{
+		if (*Other == this)
+		{
+			continue;
+		}
+		const double Theirs = FVector::DotProduct(Other->GetActorLocation() - Pawn->GetActorLocation(), Right);
+		if (FMath::IsNearlyEqual(Mine, Theirs, 1.0))
+		{
+			return FormationPhase >= 0.5f;
+		}
+		return Mine > Theirs;
+	}
+	return Mine >= 0.0;
 }
 
 void AWonderlandCompanionEmbodiment::SetParticipation(bool bInJoined, bool bInAgent, const FLinearColor& InAccent, FName InFlightBeat)
@@ -315,12 +348,14 @@ FVector AWonderlandCompanionEmbodiment::DesiredLocation(const APawn* Pawn) const
 		// contract, so the two agree here, but the beam is what must not be crossed and so the beam is what is used.
 		// NOT BEHIND IT: 150 uu behind the Dog is where the play camera stands, and the first film's verification
 		// shot had the Jhinn's wings filling the corner of the frame, a blur between the viewer and the beam.
+		// THE FLANK IS THE SIDE THE COMPANION IS ALREADY ON (chosen once, in SetFormation), so reaching it never
+		// crosses the beam. Taking it from the follow offset sent the LLM Companion from the Dog's left, where it
+		// follows, across the beam to the right.
 		const FVector Along = (ContractAt - Pawn->GetActorLocation()).GetSafeNormal2D();
-		const FVector Side = FVector::CrossProduct(Along, FVector::UpVector).GetSafeNormal();
-		const float Hand = FollowOffset.Y >= 0.0 ? 1.0f : -1.0f;
+		const FVector Right(-Along.Y, Along.X, 0.0);
 		return Pawn->GetActorLocation()
 			+ Along * 30.0
-			+ Side * (Hand * 250.0)
+			+ Right * (bFlankRight ? 250.0 : -250.0)
 			+ FVector(0.0, 0.0, HoverHeightUU * 0.5);
 	}
 
@@ -358,7 +393,15 @@ void AWonderlandCompanionEmbodiment::Tick(float DeltaSeconds)
 		// OUT OF THE WALLS. Swept from the Dog's chest to where the companion's body would float, on the camera
 		// channel -- the same geometry that stops the follow camera -- so beside a wall or down a narrow lane the
 		// companion draws in toward the Dog instead of hovering inside the stone. The Dog itself never blocks.
-		if (UWorld* SweepWorld = GetWorld())
+		//
+		// AN ORBIT IS SWEPT FROM ITS CENTRE, THE CONTRACT. Swept from the Dog, any planter between the Dog and the far
+		// side of the circle pulled the companion back to the Dog: in the second film they dropped to the ground
+		// 7 uu from it, mid-orbit, and one was pulled onto the verification beam. The sight-line flank is not swept
+		// at all -- pulled in, it would land on exactly the line it exists to keep clear.
+		const bool bOrbitFlight = ContractActor.IsValid() && WonderlandFormationOrbits(Formation);
+		const bool bFlankFlight = ContractActor.IsValid() && Formation == EWonderlandCompanionFormation::ClearTheSightLine;
+		UWorld* SweepWorld = bFlankFlight ? nullptr : GetWorld();
+		if (SweepWorld != nullptr)
 		{
 			const FVector BodyLift(0.0, 0.0, BodyClearanceHeightUU);
 			FCollisionQueryParams Query(SCENE_QUERY_STAT(WonderlandCompanionFollow), false, this);
@@ -374,7 +417,8 @@ void AWonderlandCompanionEmbodiment::Tick(float DeltaSeconds)
 				Query.AddIgnoredActor(*Other);
 			}
 			FHitResult Hit;
-			if (SweepWorld->SweepSingleByChannel(Hit, Pawn->GetActorLocation(), Target + BodyLift, FQuat::Identity, ECC_Camera,
+			const FVector SweepFrom = bOrbitFlight ? ContractActor.Get()->GetActorLocation() : Pawn->GetActorLocation();
+			if (SweepWorld->SweepSingleByChannel(Hit, SweepFrom, Target + BodyLift, FQuat::Identity, ECC_Camera,
 				FCollisionShape::MakeSphere(BodyClearanceRadiusUU), Query) && !Hit.bStartPenetrating)
 			{
 				Target = Hit.Location - BodyLift;
@@ -382,6 +426,22 @@ void AWonderlandCompanionEmbodiment::Tick(float DeltaSeconds)
 		}
 		FVector Location = GetActorLocation();
 		FRotator Facing = GetActorRotation();
+
+		// ROOM FOR THE DOG. In a mission flight nothing should brush past it: a companion whose body would be at the
+		// Dog's height and within its reach is moved straight out from it. (Following, the offsets place a companion
+		// at the Dog's shoulder on purpose, so this is for mission flights only.)
+		if (bHasSnapped && (bOrbitFlight || bFlankFlight))
+		{
+			FVector FromDog = Target - Pawn->GetActorLocation();
+			const double Level = FromDog.Z;
+			FromDog.Z = 0.0;
+			const double Reach = FromDog.Size();
+			if (Reach < DogSpacingUU && Level < 110.0)
+			{
+				const FVector Out = Reach > 1.0 ? FromDog / Reach : FVector(0.0, FormationPhase < 0.5f ? -1.0 : 1.0, 0.0);
+				Target += Out * (DogSpacingUU - Reach);
+			}
+		}
 
 		// ROOM FOR EACH OTHER. Flights change together, so two companions can be sent across each other's path --
 		// into an orbit from either side of the Dog, or home again at completion. Whichever is inside the other's
