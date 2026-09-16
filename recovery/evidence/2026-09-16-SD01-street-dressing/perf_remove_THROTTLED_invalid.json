@@ -1,0 +1,46 @@
+{
+ "name": "l00_perf_remove",
+ "started": "2026-09-16 05:25:43",
+ "status": "done",
+ "rounds": [
+  {
+   "pass_actors": 260,
+   "on": {
+    "SW_PlazaHero41": 333.07,
+    "South_FacadeRow36": 333.49,
+    "WorldCam12": 333.88
+   },
+   "off": {
+    "SW_PlazaHero41": 333.29,
+    "South_FacadeRow36": 333.15,
+    "WorldCam12": 333.23
+   },
+   "off_again": {
+    "SW_PlazaHero41": 334.53,
+    "South_FacadeRow36": 333.48,
+    "WorldCam12": 333.7
+   }
+  },
+  {
+   "pass_actors": 260,
+   "on": {
+    "SW_PlazaHero41": 333.22,
+    "South_FacadeRow36": 333.53,
+    "WorldCam12": 333.38
+   },
+   "off": {
+    "SW_PlazaHero41": 333.4,
+    "South_FacadeRow36": 333.57,
+    "WorldCam12": 333.61
+   },
+   "off_again": {
+    "SW_PlazaHero41": 333.8,
+    "South_FacadeRow36": 333.54,
+    "WorldCam12": 333.63
+   }
+  }
+ ],
+ "finished": "2026-09-16 05:29:27",
+ "seconds": 223.38,
+ "log": ""
+}

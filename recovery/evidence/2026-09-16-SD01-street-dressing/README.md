@@ -61,5 +61,25 @@ differs from hidden. The absolute numbers are NOT comparable to earlier beta_tou
 with the editor behind other windows, and the HUD mini-map (a scene capture at 8 Hz) had just been merged. Only
 the relative A/B is evidence.
 
+## Cost, settled by removal (`perf_remove_ab.json`)
+
+A second session measured SD01 at +6 ms (frame baseline ~34 -> ~40 ms), against perf_ab's "within noise". Both were
+suspect -- perf_ab only HIDES actors, and the cross-session number spans several merges -- so `perf_remove_ab.py`
+(new) DESTROYS all 260 SD01 actors in the PIE copy and measures median frame time on, off, and off-again, twice:
+
+| camera | round 0: on / off / off again | round 1: on / off / off again |
+|---|---|---|
+| SW_PlazaHero41 | 45.7 / 44.4 / 50.0 ms | 54.7 / 54.7 / 57.3 |
+| South_FacadeRow36 | 25.6 / 25.8 / 27.9 | 30.0 / 29.8 / 29.8 |
+| WorldCam12 | 51.6 / 54.0 / 57.8 | 62.2 / 61.6 / 62.8 |
+
+**SD01 costs nothing measurable**: on minus off is 0 to +1.3 ms, inside an off-vs-off-again noise floor of 2-6 ms.
+What DOES move is time: every camera is ~9 ms slower in round 1 than round 0 whatever SD01 is doing -- the laptop
+heating up. That drift is the size of the cross-session +6 ms, which is why comparing across sessions blamed SD01.
+
+The first attempt (`perf_remove_THROTTLED_invalid.json`) read exactly 333 ms -- 3 fps -- at every camera, on and off.
+It measured the editor's background throttle, not the scene. The job now suspends the throttle and marks any window
+over 250 ms INVALID rather than reporting it.
+
 `sd01e.jpg`: SW plaza now has one lamp and a planter packed with flowers; the hero camera and the world view are
 unchanged. Map saved.
