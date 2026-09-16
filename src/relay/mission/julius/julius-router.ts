@@ -576,7 +576,15 @@ readonly guidance?:unknown;
   * evidence — unsanitised. Julius rebuilds it from an allowlist and decides what
   * follows. Read only from a rebuttal task.
   */
- readonly rebuttal?:unknown;}
+ readonly rebuttal?:unknown;
+ /**
+  * THE ARCHITECT'S PICTURE OF THE SYSTEM — components, boundaries,
+  * dependencies, decisions, assumptions, questions and risks — unsanitised.
+  * Julius rebuilds it from an allowlist, refuses one that names a mission-owned
+  * term, and keeps it as ADVISORY state: the Mission Contract stays
+  * authoritative. Read only from a Prompt Architect dispatch.
+  */
+ readonly architecture?:unknown;}
 /**
  * WHAT JULIUS TELLS AN ADAPTER, and nothing more.
  *

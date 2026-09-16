@@ -113,6 +113,14 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * reviewer that raised it resolved, maintained or superseded it. Only a
   * reviewer's own answer reaches RESOLVED; changed code never does. */
  'finding.transitioned',
+ /* THE ARCHITECTURE, AS STATE. `recorded` is a whole bounded revision — the
+  * components, boundaries, dependencies, decisions, assumptions, questions and
+  * risks the architect holds — carried on the row so a reader reconstructs it
+  * without a second store. `refused` is a proposal Julius would not read, by
+  * name. It is ADVISORY: the Mission Contract remains authoritative, and
+  * `architecture.conflicted` records where the two disagree rather than letting
+  * either quietly win. */
+ 'architecture.recorded','architecture.refused','architecture.conflicted',
  /* PERSISTENT-WORKER EFFORT. One row per completed dispatch, carrying what the
   * provider actually reported and NOTHING inferred — an unreported token count
   * is null here rather than the zero the budget path substitutes, because a

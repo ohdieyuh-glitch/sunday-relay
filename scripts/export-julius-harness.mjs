@@ -287,6 +287,12 @@ const FILE_RULES = [
   // What changed between a rejected round and the repair of it, bounded for the
   // re-review that must judge whether the findings are actually answered.
   ['src/relay/mission/julius/julius-repair-round.ts', 'REPAIR'],
+  // The architect's picture of the system as bounded, durable state: components,
+  // boundaries, dependencies, decisions, assumptions, questions and risks. The
+  // PROMPT ARCHITECT's, because it is that slot's own account of the design —
+  // advisory throughout, since the Mission Contract remains authoritative and a
+  // disagreement with it is recorded rather than resolved.
+  ['src/relay/mission/julius/julius-architecture-state.ts', 'PROMPT ARCHITECT'],
   // How many run-loop ticks a mission's own structure permits. The scheduler's
   // account of how much it may dispatch, counted from the task graph it owns.
   ['src/relay/mission/julius/julius-tick-budget.ts', 'TASK GRAPH / SCHEDULER'],

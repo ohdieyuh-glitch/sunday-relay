@@ -71,6 +71,10 @@ import {
   juliusRepairRoundDiff, juliusRepairRoundEntryId, renderJuliusRepairRoundDiff,
 } from './julius-repair-round';
 import {
+  juliusArchitectureConflicts, juliusArchitectureEntryId, juliusArchitectureFacts,
+  juliusNextArchitectureRevision, renderJuliusArchitecture, sanitizeJuliusArchitecture,
+} from './julius-architecture-state';
+import {
   JULIUS_CHECKPOINT_LIMITS,
   guidanceSubjectTaskId, isJuliusGuidanceHandoffEntryId, issueJuliusGuidance, juliusCheckpointId,
   JULIUS_GUIDANCE_AUTHORITATIVE_HEADING, JULIUS_GUIDANCE_PROPOSED_HEADING,
@@ -1237,6 +1241,11 @@ export async function runClaimedTask(
       ...(outcome.researchAsks === undefined ? {} : { researchAsks: outcome.researchAsks }),
       ...(outcome.guidance === undefined ? {} : { guidance: outcome.guidance }),
     });
+  }
+
+  /* ------------------------------------------- 3b2. the architecture the architect holds */
+  if (!outcome.duplicate && task.role === 'PROMPT_ARCHITECT' && outcome.architecture !== undefined) {
+    await recordArchitecture({ deps, run, ledger, task, workerId: outcome.workerId, value: outcome.architecture });
   }
 
   /* ------------------------------------------- 3c. what the architect answered */
@@ -2676,7 +2685,8 @@ async function readVerdictLedger(deps: JuliusPipelineDependencies, run: JuliusRu
     for (const entry of page.entries) {
       sinceSequence = Math.max(sinceSequence, entry.sequence);
       if (entry.type.startsWith('review.verdict.') || entry.type.startsWith('peer.')
-        || entry.type.startsWith('disagreement.') || entry.type.startsWith('finding.')) {
+        || entry.type.startsWith('disagreement.') || entry.type.startsWith('finding.')
+        || entry.type.startsWith('architecture.')) {
         rows.push({ type: entry.type, facts: entry.facts, taskId: entry.taskId });
       }
     }
@@ -2943,6 +2953,94 @@ async function deliverAcceptedGuidance(input: {
       revision, proposalEntryId: proposal.entryId,
     },
   });
+}
+
+/* ------------------------------------------------------------ architecture */
+
+/**
+ * RECORD A REVISION OF THE ARCHITECTURE, AND SAY WHERE IT DISAGREES WITH THE
+ * AGREEMENT.
+ *
+ * Advisory state: recording it changes no term, releases no task and decides
+ * nothing. What it does is make the design answerable — which boundary a change
+ * crosses, what was assumed, what was rejected and why — so drift can be
+ * detected against something other than prose.
+ *
+ * A proposal that names a mission-owned term is refused by the peer authority
+ * guard, under the same rule as a guidance packet that tries. A conflict with
+ * the contract's permitted paths or prohibited actions is RECORDED rather than
+ * resolved: the contract wins until Julius decides otherwise.
+ */
+async function recordArchitecture(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly task: JuliusTask;
+  readonly workerId: string;
+  readonly value: unknown;
+}): Promise<void> {
+  const { deps, run, ledger, task } = input;
+  const rows = await readVerdictLedger(deps, run);
+  const reading = sanitizeJuliusArchitecture({
+    value: input.value,
+    revision: juliusNextArchitectureRevision(rows),
+    proposedByTaskId: task.taskId,
+    recordedAt: deps.clock.now(),
+  });
+  if (!reading.ok) {
+    await ledger.event('architecture.refused', {
+      taskId: task.taskId, workerId: input.workerId, facts: { reasonCode: reading.reasonCode },
+    });
+    return;
+  }
+  const state = reading.state;
+  await ledger.event('architecture.recorded', {
+    taskId: task.taskId, workerId: input.workerId, facts: juliusArchitectureFacts(state),
+  });
+
+  /**
+   * THE ACCEPTED PICTURE, WHERE EVERY WORKER READS IT. Run-wide, so the coder
+   * building against it and the reviewer judging against it see the same
+   * revision, and bounded by the same cap the row is.
+   */
+  await deps.store.appendBrainEntry({
+    runId: run.runId, projectId: run.projectId, taskId: null, workerId: input.workerId,
+    entryId: juliusArchitectureEntryId(state.revision), kind: 'DECISION',
+    safeText: renderJuliusArchitecture(state), evidenceIds: [], occurredAt: deps.clock.now(),
+  });
+
+  /**
+   * WHERE THE DESIGN AND THE AGREEMENT DISAGREE, THE AGREEMENT WINS.
+   *
+   * Compared against the contracts that GOVERN WORK in this run, not against
+   * the architect's own binding. The architect that drafts the terms is bound
+   * by none - `juliusContractSubjectTaskId` returns null for it - so read off
+   * the architect's own task this check would be silently dead at exactly the
+   * moment the architecture is first written, which is the moment it matters.
+   *
+   * A disagreement is RECORDED, never resolved here. Recording moves no term:
+   * the contract stands as written, and changing it goes through contract
+   * revision or the user, never through a picture an architect drew.
+   */
+  const tasks = await deps.store.tasksForRun(run.runId, run.projectId);
+  const subjects: string[] = [];
+  for (const candidate of tasks) {
+    const subject = juliusContractSubjectTaskId(candidate, tasks);
+    if (subject !== null && !subjects.includes(subject)) subjects.push(subject);
+  }
+  for (const contractTaskId of subjects) {
+    const contract = await deps.store.loadTaskContract({ projectId: run.projectId, taskId: contractTaskId });
+    if (contract === null) continue;
+    for (const conflict of juliusArchitectureConflicts(state, contract)) {
+      await ledger.event('architecture.conflicted', {
+        taskId: task.taskId, workerId: input.workerId,
+        facts: {
+          revision: state.revision, kind: conflict.kind, name: conflict.name, detail: conflict.detail,
+          contractTaskId, resolvedBy: 'CONTRACT',
+        },
+      });
+    }
+  }
 }
 
 /* --------------------------------------------------------- finding lifecycle */
