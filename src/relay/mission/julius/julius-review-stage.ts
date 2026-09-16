@@ -27,7 +27,16 @@
  * judgement. It has no repair stage: a rebuttal is never repaired, because the
  * bound is one answer and one re-review, and the argument does not go round.
  */
-export const JULIUS_REVIEW_STAGES = ['plan', 'build', 'guidance', 'rebuttal', 'repair:plan', 'repair:build', 'repair:guidance'] as const;
+/**
+ * `architecture` is the stage where the architect is consulted mid-mission, or
+ * asked before completion whether what was built matches what was designed. Its
+ * review exists for one reason: a revision that changes something material
+ * after the terms are LOCKED is a re-plan, and a re-plan nobody checked is the
+ * architect editing the mission's design on its own authority. Like `rebuttal`
+ * it has no repair stage — the answer is a fresh consultation, not a revision
+ * of the same one.
+ */
+export const JULIUS_REVIEW_STAGES = ['plan', 'build', 'guidance', 'rebuttal', 'architecture', 'repair:plan', 'repair:build', 'repair:guidance'] as const;
 export type JuliusReviewStage = typeof JULIUS_REVIEW_STAGES[number];
 
 /**
@@ -45,7 +54,8 @@ export type JuliusReviewStage = typeof JULIUS_REVIEW_STAGES[number];
  * reviewer doing its job look like a reviewer failing at it.
  */
 export const JULIUS_NORMAL_REVIEW_STAGES: readonly JuliusReviewStage[] =
-  Object.freeze(JULIUS_REVIEW_STAGES.filter((stage) => !stage.startsWith('repair:') && stage !== 'rebuttal'));
+  Object.freeze(JULIUS_REVIEW_STAGES.filter((stage) =>
+    !stage.startsWith('repair:') && stage !== 'rebuttal' && stage !== 'architecture'));
 
 /**
  * THE CONDITIONAL STAGES, NAMED — the ones a healthy mission never runs.
@@ -149,7 +159,7 @@ export type JuliusReviewRequirement = 'plan' | 'diff' | 'guidance';
 export interface JuliusReviewCharge {
   readonly stage: JuliusReviewStage;
   /** What is under judgement. */
-  readonly subject: 'PLAN' | 'IMPLEMENTATION' | 'GUIDANCE' | 'REBUTTAL';
+  readonly subject: 'PLAN' | 'IMPLEMENTATION' | 'GUIDANCE' | 'REBUTTAL' | 'ARCHITECTURE';
   /** Whether prior blocking findings must be shown resolved. */
   readonly repair: boolean;
   /** The questions the reviewer answers, in order. */
@@ -243,6 +253,33 @@ const REBUTTAL_MUST_NOT_DEMAND: readonly string[] = Object.freeze([
   'completed edits that the challenged position does not concern',
 ]);
 
+/**
+ * AN ARCHITECTURE CONSULTATION IS JUDGED ON WHETHER IT IS TRUE AND WHETHER IT
+ * IS THE ARCHITECT'S TO SAY.
+ *
+ * Two different things arrive at this stage: a revised design after the terms
+ * locked, and an assessment of whether the built system matches the design. The
+ * reviewer judges both against the same standard it applies to guidance — is it
+ * supported by evidence, and does it stay inside the authority its author has.
+ */
+const ARCHITECTURE_JUDGES: readonly string[] = Object.freeze([
+  'Is every architectural claim supported by evidence a reader can check, rather than asserted?',
+  'Does a change to the design name what actually moved — an interface, a schema, a dependency, ownership, security, concurrency, persistence or an invariant — rather than a rename or a reformat?',
+  'Does the assessment stay inside the Mission Contract, leaving its objective, criteria, budget, permissions and scope exactly as they are?',
+  'If drift is claimed, is the work it names really the work that drifted?',
+  'Is anything the architect calls aligned actually aligned, on the evidence you were given?',
+]);
+
+/**
+ * An architecture review may not demand the work be redone for a preference:
+ * the architect proposing a different design is not a finding about the code.
+ */
+const ARCHITECTURE_MUST_NOT_DEMAND: readonly string[] = Object.freeze([
+  'a change to a mission term, a budget or a permission',
+  'a completion, a verification or any verdict the reviewer alone may give',
+  'an implementation change justified only by a preference between designs',
+]);
+
 const CHARGES: Readonly<Record<JuliusReviewStage, JuliusReviewCharge>> = Object.freeze({
   'plan': Object.freeze({
     stage: 'plan', subject: 'PLAN', repair: false,
@@ -287,6 +324,17 @@ const CHARGES: Readonly<Record<JuliusReviewStage, JuliusReviewCharge>> = Object.
     stage: 'rebuttal', subject: 'REBUTTAL', repair: false,
     judges: REBUTTAL_JUDGES, mustNotDemand: REBUTTAL_MUST_NOT_DEMAND,
     requires: Object.freeze<JuliusReviewRequirement[]>([]),
+  }),
+  /**
+   * REQUIRES THE PLAN AND NOTHING PROCESS-LOCAL, for the reason the rebuttal
+   * stage requires nothing: the architecture in force, the proposed revision
+   * and the assessment are all durable Project Brain entries in the packet
+   * Julius compiles. A run that restarts mid-consultation can still finish it.
+   */
+  'architecture': Object.freeze({
+    stage: 'architecture', subject: 'ARCHITECTURE', repair: false,
+    judges: ARCHITECTURE_JUDGES, mustNotDemand: ARCHITECTURE_MUST_NOT_DEMAND,
+    requires: Object.freeze<JuliusReviewRequirement[]>(['plan']),
   }),
 });
 

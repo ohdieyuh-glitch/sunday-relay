@@ -48,6 +48,8 @@ import {
 import { validateArchitectPlan, type ArchitectPlanReasonCode } from '../../src/relay/mission/prompt-architect/prompt-architect-plan';
 import { sanitizeJuliusGuidanceProposal } from '../../src/relay/mission/julius/julius-continuous-lifecycle';
 import { sanitizeJuliusRebuttal } from '../../src/relay/mission/julius/julius-disagreement';
+import { sanitizeJuliusArchitecture } from '../../src/relay/mission/julius/julius-architecture-state';
+import { sanitizeJuliusConsistency } from '../../src/relay/mission/julius/julius-architecture-drift';
 import {
   JULIUS_PARTICIPATION_CHANNELS,
   juliusParticipationProtocol,
@@ -56,6 +58,9 @@ import {
 } from '../../src/relay/mission/julius/julius-worker-participation';
 import { ARCHITECT_GUIDANCE_SCHEMA, ARCHITECT_GUIDANCE_SCHEMA_NAME } from '../../src/relay/connectors/gpt-architect/guidance-schema';
 import { ARCHITECT_REBUTTAL_SCHEMA, ARCHITECT_REBUTTAL_SCHEMA_NAME } from '../../src/relay/connectors/gpt-architect/rebuttal-schema';
+import {
+  ARCHITECT_CONSULTATION_SCHEMA, ARCHITECT_CONSULTATION_SCHEMA_NAME,
+} from '../../src/relay/connectors/gpt-architect/architecture-schema';
 import { ARCHITECT_PLAN_SCHEMA, ARCHITECT_PLAN_SCHEMA_NAME } from '../../src/relay/connectors/gpt-architect';
 import {
   RESEARCH_ASKS_FIELD,
@@ -373,6 +378,39 @@ const ARCHITECT_REBUTTAL_CHARTER = [
   'whoever owns the mission rather than deciding it. Claiming it when it is untrue stops the work for',
   'no reason, so use it only when the agreement itself is the problem.',
   'A maintained position is re-reviewed independently once, and then Julius resolves the disagreement.',
+].join(' ');
+
+const ARCHITECT_CONSULTATION_CHARTER = [
+  'You are the Prompt Architect for a Relay mission run by Julius, the mission controller.',
+  'Julius has come BACK to you. Something in the record moved — the design and the agreement disagree, a',
+  'review says its evidence contradicts an assumption you named, a dependency appeared, a repair was',
+  'required for an architectural reason, a coder asked the design a question, a re-plan was proposed, or',
+  'the run is ready to complete and nobody has asked whether what was built matches what was designed.',
+  'The reason is in your mission context, with the ARCHITECTURE entry that is currently in force.',
+  'Answer BOTH halves.',
+  'ARCHITECTURE is the design you hold NOW: components and what each is responsible for, the boundaries a',
+  'change can cross, the dependencies and what you assume about each, the decisions with what you rejected',
+  'and why, the assumptions with whether each still holds, the open questions with who owns them, and the',
+  'risks with their impact and mitigation. State the whole picture, not a diff: Julius records it as a',
+  'revision and computes what moved itself.',
+  'CONSISTENCY is your assessment of whether what was BUILT matches what was DESIGNED.',
+  'ALIGNED means it matches, and then you must name no drift at all.',
+  'DRIFT_NON_BLOCKING means it drifted and the drift does not need fixing — the record says so rather than',
+  'pretending it did not happen.',
+  'DRIFT_REQUIRES_REPAIR means it drifted across a boundary that matters and the named work must be',
+  'repaired. Name the drifting task ids; Julius will not guess which work is wrong.',
+  'REPLAN_REQUIRED means the DESIGN is what is wrong for what has been learned.',
+  'MATERIAL MEANS A BOUNDARY MOVED: an interface, a schema, a dependency, who owns a subsystem, the',
+  'security boundary, the concurrency model, the persistence model or an invariant. A rename, a reformat,',
+  'a comment, a log line or a test-only change is NOT drift. An assessment that demands repair or a',
+  'replan on the strength of a cosmetic change is refused.',
+  'Anything other than ALIGNED must name drift AND cite evidence: a locator a reader can check.',
+  'THE TERMS ARE NOT ON THE TABLE. You may not restate, widen, narrow or replace the objective, the',
+  'acceptance criteria, the scope, the permitted paths, the budget or the permissions, and you may not',
+  'declare any work verified, accepted or complete. The output schema gives you nowhere to put one, and',
+  'Julius refuses an answer that tries. Your assessment can HOLD a completion; it can never make one.',
+  'If your design conflicts with the locked terms, say so in the consistency claim and assess',
+  'REPLAN_REQUIRED. Julius escalates a re-plan that needs a mission term to move rather than applying it.',
 ].join(' ');
 
 const ARCHITECT_REVISION_CHARTER = [
@@ -1015,7 +1053,15 @@ export function createLiveArchitectAdapter(input: {
        * because nobody could answer it.
        */
       const rebutting = dispatch.taskType === 'rebuttal';
-      const priorPlan = revising || guiding || rebutting ? input.artifacts.get(planRef(snapshot.runId)) : null;
+      /**
+       * THE ARCHITECT'S FOURTH JOB: being consulted again. Julius mints an
+       * `architecture` task for one of seven named reasons, and once before a
+       * run may complete. Without this branch the composition would register no
+       * worker for it, every consultation would be recorded unroutable, and the
+       * completion gate would let every run through unasked.
+       */
+      const consulting = dispatch.taskType === 'architecture';
+      const priorPlan = revising || guiding || rebutting || consulting ? input.artifacts.get(planRef(snapshot.runId)) : null;
       if (revising && priorPlan === null) {
         throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'The prior architect plan is not available to this process; a plan revision without it is refused.', 'prior_plan_unavailable');
       }
@@ -1031,7 +1077,9 @@ export function createLiveArchitectAdapter(input: {
       if (guiding && dispatch.contract === undefined) {
         throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'Guidance was dispatched without the locked contract charge; advising against terms this process cannot read is refused.', 'guidance_contract_absent');
       }
-      const roleCharter = rebutting
+      const roleCharter = consulting
+        ? ARCHITECT_CONSULTATION_CHARTER
+        : rebutting
         ? ARCHITECT_REBUTTAL_CHARTER
         : guiding
           ? ARCHITECT_GUIDANCE_CHARTER
@@ -1059,14 +1107,16 @@ export function createLiveArchitectAdapter(input: {
          * `required` — strict mode rejects a schema that adds only the first,
          * and that rejection would arrive on a paid call.
          */
-        schema: rebutting
+        schema: consulting
+          ? { name: ARCHITECT_CONSULTATION_SCHEMA_NAME, schema: withJuliusResearchAsks(ARCHITECT_CONSULTATION_SCHEMA) }
+          : rebutting
           ? { name: ARCHITECT_REBUTTAL_SCHEMA_NAME, schema: withJuliusResearchAsks(ARCHITECT_REBUTTAL_SCHEMA) }
           : guiding
             ? { name: ARCHITECT_GUIDANCE_SCHEMA_NAME, schema: withJuliusResearchAsks(ARCHITECT_GUIDANCE_SCHEMA) }
             : { name: ARCHITECT_PLAN_SCHEMA_NAME, schema: withJuliusResearchAsks(ARCHITECT_PLAN_SCHEMA) },
-        input: rebutting
-          // The challenge itself is a HANDOFF entry Julius scoped to this task,
-          // so it is already in the packet; the plan is context for it.
+        input: consulting || rebutting
+          // The trigger, the challenge and the architecture in force are all
+          // entries Julius compiled into this packet; the plan is context.
           ? guidanceInput(snapshot, dispatch, priorPlan)
           : guiding
           ? guidanceInput(snapshot, dispatch, priorPlan)
@@ -1148,6 +1198,71 @@ export function createLiveArchitectAdapter(input: {
        * still the one the PIPELINE sanitizes: this call is for a legible
        * refusal and a bounded correction, not for authority.
        */
+      if (consulting) {
+        /**
+         * BOTH HALVES ARE VALIDATED BY THE DOMAIN'S OWN SANITIZERS, for the
+         * reason the rebuttal is: one reading of what a usable answer is,
+         * shared with the pipeline that will act on it. A consultation that
+         * demands a repair on the strength of a rename, or that names drift
+         * with nothing to cite, fails here and is corrected once rather than
+         * reaching Julius as an assessment it must hold a completion against.
+         *
+         * The REVISION NUMBER passed here is a placeholder: Julius assigns the
+         * real one from its own ledger. Nothing in the sanitizer's judgement
+         * depends on it, and inventing an authoritative number in an adapter is
+         * exactly the kind of second reading this pattern exists to prevent.
+         */
+        const source = parsed as { architecture?: unknown; consistency?: unknown };
+        const architectureOk = sanitizeJuliusArchitecture({
+          value: source.architecture, revision: 1, proposedByTaskId: dispatch.taskId, recordedAt: nowIso(),
+        }).ok;
+        const consistencyOk = sanitizeJuliusConsistency({ value: source.consistency, revision: 1 }).ok;
+        if (!architectureOk || !consistencyOk) {
+          if (attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)) {
+            correction = 'CORRECTION — your previous answer was REFUSED: it did not form a usable architecture consultation. Answer with exactly one JSON object conforming to the output schema. "architecture" must state the whole design — at least one component, boundary, dependency, decision, assumption, question or risk — and "consistency" must carry an assessment of exactly ALIGNED, DRIFT_NON_BLOCKING, DRIFT_REQUIRES_REPAIR or REPLAN_REQUIRED. ALIGNED must name no drift; anything else must name drift AND cite at least one evidence reference; DRIFT_REQUIRES_REPAIR and REPLAN_REQUIRED must name drift whose kind is a boundary that moved, not a rename or a reformat, and DRIFT_REQUIRES_REPAIR must name the drifting task ids. No field may name a Mission Contract term, and no field may declare work verified, accepted or complete.';
+            continue;
+          }
+          throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'Prompt Architect architecture consultation failed validation.', 'architecture_validation_failed',
+            planDiagnostics({
+              ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
+              requestedModel: input.config.model, jsonParseable: true, validationPassed: false,
+              outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'), attempts,
+            }));
+        }
+        return {
+          workerId: input.worker.workerId,
+          providerId: input.worker.providerId,
+          status: 'SUCCEEDED',
+          /** THE PARSED ANSWER, NOT A SANITISED ONE. Julius decides what it may refuse. */
+          architecture: source.architecture,
+          consistency: source.consistency,
+          ...researchAsksFrom(parsed),
+          safeSummary: `Prompt Architect architecture consultation produced by observed model ${safeClaim(outcome.actualModel ?? 'unknown', 80)} (response ${safeClaim(outcome.responseId ?? 'unknown', 80)}).`,
+          /**
+           * A CONSULTATION IS NOT A DELIVERABLE. What it produces is state and
+           * an assessment, both of which Julius records. The task carries one
+           * ARTIFACT row so the dispatch is accounted for.
+           */
+          evidence: [{
+            type: 'ARTIFACT',
+            status: 'PASSED',
+            safeSummary: `Architecture consultation recorded (${outcome.outputText.length} chars, sha256:${sha256(outcome.outputText).slice(0, 16)}…).`,
+            occurredAt: nowIso(),
+          }],
+          diagnostics: planDiagnostics({
+            ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
+            requestedModel: input.config.model,
+            jsonParseable: true, validationPassed: true, outcome: 'succeeded',
+            attempts, outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
+          }),
+          usage: {
+            inputTokens: outcome.usage.inputTokens ?? undefined,
+            outputTokens: outcome.usage.outputTokens ?? undefined,
+            toolCalls: 0,
+            costBasis: 'UNKNOWN',
+          },
+        };
+      }
       if (rebutting) {
         /**
          * THE DOMAIN'S OWN SANITIZER IS THE VALIDATOR, as it is for guidance:

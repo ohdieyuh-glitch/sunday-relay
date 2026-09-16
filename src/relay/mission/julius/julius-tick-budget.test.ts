@@ -130,9 +130,9 @@ describe('P12/P13 — a disagreement is paid for, and cannot manufacture capacit
 
   it('an argument that happened buys exactly its two dispatches, and one that did not buys nothing', () => {
     expect(juliusTickAllowance({ budget, tasks: base, retries: 0 }))
-      .toEqual({ allowance: 73, beyondMainPath: 0, disagreementTicks: 0, retries: 0 });
+      .toEqual({ allowance: 73, beyondMainPath: 0, disagreementTicks: 0, architectureTicks: 0, retries: 0 });
     expect(juliusTickAllowance({ budget, tasks: [...base, ...disagreement(1)], retries: 0 }))
-      .toEqual({ allowance: 75, beyondMainPath: 2, disagreementTicks: 2, retries: 0 });
+      .toEqual({ allowance: 75, beyondMainPath: 2, disagreementTicks: 2, architectureTicks: 0, retries: 0 });
   });
 
   it('the plan itself never grows: an argument is conditional work, priced only when it exists', () => {
@@ -154,13 +154,15 @@ describe('P12/P13 — a disagreement is paid for, and cannot manufacture capacit
     expect(unreviewed.reason).toContain('disagreement=unreachable');
     const architectOnly = planJuliusTickBudget({ ...CONTINUOUS_1, units: ['PROMPT_ARCHITECT'], repairRounds: 0, segmentCeiling: 1, taskAttempts: 1 });
     // One lineage, one segment, one review: 1 + 1 dispatches, plus the two the
-    // one review may cost if it challenges, plus the settling advance.
-    expect(architectOnly.hardMaxTicks).toBe(1 + 1 + 2 + 1);
+    // one review may cost if it challenges, plus the architect consultations
+    // the run is allowed at most (each with its review), plus the settling
+    // advance.
+    expect(architectOnly.hardMaxTicks).toBe(1 + 1 + 2 + 12 * 2 + 1);
   });
 });
 
 describe('the derivation', () => {
-  it('counts julius-continuous-1: 73 planned, 3457 at the hard maximum, with its reason in closed tokens', () => {
+  it('counts julius-continuous-1: 73 planned, 3529 at the hard maximum, with its reason in closed tokens', () => {
     const budget = planJuliusTickBudget(CONTINUOUS_1);
     // Architect: (3+1) lineages x (4 segments + 1 review) = 20.
     // Coder: (3+1) x (4 segments + 4 guidance + 4 guidance reviews + 1 review) = 52.
@@ -171,8 +173,10 @@ describe('the derivation', () => {
     // challenge) = 64; coder 4 x (4 + 4 x (4 guidance lineages x (4 + 4)) + 4 +
     // 2 per review) = 1088; x 3 attempts, + 1. Each review may challenge once,
     // and one challenge costs exactly one rebuttal and one re-review.
-    expect(budget.hardMaxTicks).toBe((64 + 1088) * 3 + 1);
-    expect(budget.reason).toBe('units=PROMPT_ARCHITECT,CODING_AGENT repair_rounds=3 segment_ceiling=4 reviewer=required attempts=3 disagreement=one_rebuttal_one_re_review_per_review');
+    // Plus the architect consultations the RUN may hold, counted once for the
+    // run rather than per lineage: 12 of them, each with its review, x 3 attempts.
+    expect(budget.hardMaxTicks).toBe((64 + 1088) * 3 + 12 * 2 * 3 + 1);
+    expect(budget.reason).toBe('units=PROMPT_ARCHITECT,CODING_AGENT repair_rounds=3 segment_ceiling=4 reviewer=required attempts=3 disagreement=one_rebuttal_one_re_review_per_review architecture=max_12_consultations_per_run');
     expect(budget.version).toBe('julius-tick-budget.v1');
   });
 
@@ -200,7 +204,7 @@ describe('attempt 4 (run 34774471909): the old ceiling stopped a run the structu
   it('consumed 32 ticks, one per dispatch, with 41 of its 73 still allowed and nothing beyond the main path', () => {
     expect(dispatched(tasks)).toHaveLength(32);
     const now = juliusTickAllowance({ budget, tasks, retries: 0 });
-    expect(now).toEqual({ allowance: 73, beyondMainPath: 0, disagreementTicks: 0, retries: 0 });
+    expect(now).toEqual({ allowance: 73, beyondMainPath: 0, disagreementTicks: 0, architectureTicks: 0, retries: 0 });
     expect(now.allowance - 32, 'the ticks the old ceiling took away').toBe(41);
   });
 
@@ -248,7 +252,7 @@ describe('the allowance grows only for legitimate work the main path does not co
   it('a review that paused for research adds its continuation', () => {
     const review = 'segment:run:R:plan:3:task:review';
     expect(juliusTickAllowance({ budget, retries: 0, tasks: extra([[`segment:${review}:2:task`, 'review:plan', 'INDEPENDENT_REVIEWER', 'RUNNABLE', review]]) }))
-      .toEqual({ allowance: 74, beyondMainPath: 1, disagreementTicks: 0, retries: 0 });
+      .toEqual({ allowance: 74, beyondMainPath: 1, disagreementTicks: 0, architectureTicks: 0, retries: 0 });
   });
 
   it('a guidance task that paused for research adds its continuation', () => {
@@ -262,7 +266,7 @@ describe('the allowance grows only for legitimate work the main path does not co
   });
 
   it('a retried attempt adds the tick it cost', () => {
-    expect(juliusTickAllowance({ budget, tasks: base, retries: 2 })).toEqual({ allowance: 75, beyondMainPath: 0, disagreementTicks: 0, retries: 2 });
+    expect(juliusTickAllowance({ budget, tasks: base, retries: 2 })).toEqual({ allowance: 75, beyondMainPath: 0, disagreementTicks: 0, architectureTicks: 0, retries: 2 });
   });
 
   it('nothing extends past the hard maximum, and a malformed count adds nothing', () => {

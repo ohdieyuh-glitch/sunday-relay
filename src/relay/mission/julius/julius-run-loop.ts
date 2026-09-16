@@ -36,7 +36,10 @@ import { planRunStatePath, transitionIsLegal } from './julius-state-path';
  * runtime shares — two runtimes, one walk of one table.
  */
 export { planRunStatePath, transitionIsLegal };
-import { prepareClaimedTask, resumeUnverifiedTasks, runClaimedTask, type JuliusPipelineDependencies, type JuliusTaskOutcome } from './julius-task-pipeline';
+import {
+  juliusArchitectureGateFor, prepareClaimedTask, resumeUnverifiedTasks, runClaimedTask, serveArchitectureTriggers,
+  type JuliusPipelineDependencies, type JuliusTaskOutcome,
+} from './julius-task-pipeline';
 import { continuationConcurrency } from './julius-continuation';
 import type { JuliusClaimedTask, JuliusRecoveryDriver, JuliusRunRow } from './julius-runtime-ports';
 import { validateJuliusEvent } from './julius-events';
@@ -729,7 +732,49 @@ export class JuliusRunLoop {
       ]);
     }
 
-    const target = targetRunState(tasks, decisions);
+    let target = targetRunState(tasks, decisions);
+
+    /**
+     * THE ARCHITECT IS A PEER FOR THE WHOLE MISSION, NOT ONLY ITS FIRST
+     * MINUTE.
+     *
+     * Julius goes back to it when the record says the design moved, when
+     * evidence contradicts an assumption it named, when a dependency appeared,
+     * when a repair was required for an architectural reason, when a coder
+     * asked the design a question, when a re-plan was proposed — and before a
+     * run may call itself complete. HERE, beside the resume sweep, because
+     * `advanceRun` is the one place that holds the whole run rather than one
+     * task, and it is called exactly when nothing else moved.
+     */
+    const policy = await this.policies.policyFor(run);
+    if (policy !== null) {
+      const consulted = await serveArchitectureTriggers({
+        deps: this.deps, run, policy: policy.card, tasks,
+        completionReady: target.state === 'COMPLETED',
+        capabilityFor: (task) => this.policies.capabilityFor(task),
+      });
+      if (consulted > 0) {
+        [tasks, decisions] = await Promise.all([
+          this.deps.store.tasksForRun(runId, projectId),
+          this.deps.store.decisionsForRun(runId, projectId),
+        ]);
+        target = targetRunState(tasks, decisions);
+      }
+    }
+
+    /**
+     * A COMPLETION THE ARCHITECT SAYS WOULD BE UNTRUE DOES NOT HAPPEN.
+     *
+     * The gate can only HOLD: it cannot accept a task, cannot mint a verdict
+     * and cannot complete a mission. A run that recorded no architecture is not
+     * held at all, and neither is one whose consultation no worker could serve
+     * — a feature nothing opted into must not be able to strand every mission.
+     */
+    if (target.state === 'COMPLETED') {
+      const gate = await juliusArchitectureGateFor(this.deps, run);
+      if (!gate.ok) target = { state: 'VERIFYING', reasonCode: gate.reasonCode };
+    }
+
     // The graph's SHAPE, recorded once per run version so an eval can relate
     // cost and latency to how big the mission actually was. Idempotent by
     // version, so re-advancing writes nothing new.

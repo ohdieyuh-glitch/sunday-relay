@@ -503,7 +503,9 @@ describe('the guidance stages join the review vocabulary rather than bypassing i
   it('a guidance task is reviewable by the ordinary review machinery', () => {
     expect(reviewStageOf('review:guidance')).toBe('guidance');
     expect(reviewStageOf('review:repair:guidance')).toBe('repair:guidance');
-    expect([...JULIUS_REVIEW_STAGES]).toEqual(['plan', 'build', 'guidance', 'rebuttal', 'repair:plan', 'repair:build', 'repair:guidance']);
+    expect([...JULIUS_REVIEW_STAGES]).toEqual([
+      'plan', 'build', 'guidance', 'rebuttal', 'architecture', 'repair:plan', 'repair:build', 'repair:guidance',
+    ]);
   });
 
   it('charges a guidance review with support and scope, and forbids demanding a diff', () => {

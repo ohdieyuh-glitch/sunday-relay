@@ -1,4 +1,5 @@
 import type { JuliusTask, JuliusWorkerRole } from './julius-runtime';
+import { JULIUS_ARCHITECTURE_DRIFT_LIMITS } from './julius-architecture-drift';
 import { juliusSegmentLineageRootOf } from './julius-segment-lineage';
 
 /**
@@ -125,7 +126,21 @@ export function planJuliusTickBudget(input: JuliusTickStructure): JuliusTickBudg
   const everyPath = input.units.reduce(
     (sum, role) => sum + lineages * everyPathLineage(role, segments, rounds, input.reviewerRequired), 0,
   );
-  const hardMax = Math.max(planned, everyPath * attempts + 1);
+  /**
+   * THE ARCHITECT'S CONSULTATIONS ARE A RUN-LEVEL CEILING, NOT A PER-LINEAGE
+   * ONE.
+   *
+   * Julius may go back to the architect for seven named reasons, cause-once per
+   * revision and subject, and never more than `consultations` times in one run
+   * whatever the task graph looks like. Each consultation costs its own
+   * dispatch and, when a reviewer is required, the review of it. Counted once
+   * for the run — multiplying it by lineages would price an argument the
+   * structure cannot have.
+   */
+  const consultations = input.reviewerRequired
+    ? JULIUS_ARCHITECTURE_DRIFT_LIMITS.consultations * 2
+    : JULIUS_ARCHITECTURE_DRIFT_LIMITS.consultations;
+  const hardMax = Math.max(planned, everyPath * attempts + consultations * attempts + 1);
 
   const reason = [
     `units=${input.units.join(',') || 'none'}`,
@@ -135,6 +150,9 @@ export function planJuliusTickBudget(input: JuliusTickStructure): JuliusTickBudg
     `attempts=${String(attempts)}`,
     // A disagreement is conditional work: never planned, always bounded.
     `disagreement=${input.reviewerRequired ? 'one_rebuttal_one_re_review_per_review' : 'unreachable'}`,
+    // An architecture consultation is conditional work too: never planned,
+    // capped for the run rather than per lineage.
+    `architecture=max_${String(JULIUS_ARCHITECTURE_DRIFT_LIMITS.consultations)}_consultations_per_run`,
   ].join(' ');
   return { version: JULIUS_TICK_BUDGET_VERSION, plannedTicks: planned, hardMaxTicks: hardMax, structure, reason };
 }
@@ -146,6 +164,8 @@ export interface JuliusTickAllowance {
   readonly beyondMainPath: number;
   /** Of those, the ones that exist because a peer disagreed. */
   readonly disagreementTicks: number;
+  /** Of those, the ones that exist because Julius went back to the architect. */
+  readonly architectureTicks: number;
   /** Dispatch attempts that failed and were handed back for another try. */
   readonly retries: number;
 }
@@ -154,6 +174,8 @@ const isReview = (task: JuliusTask): boolean => task.taskType.startsWith('review
 const isGuidance = (task: JuliusTask): boolean => task.taskType === 'guidance' || task.taskType === 'repair:guidance';
 /** The two tasks a disagreement can add: the architect's one answer, and the one re-review of it. */
 const isDisagreementWork = (task: JuliusTask): boolean => task.taskType === 'rebuttal' || task.taskType === 'review:rebuttal';
+/** The two tasks one architecture consultation can add: the consultation, and its review. */
+const isArchitectureWork = (task: JuliusTask): boolean => task.taskType === 'architecture' || task.taskType === 'review:architecture';
 
 /**
  * WHAT THE RUN MAY SPEND NOW, recomputed from its own task rows each tick.
@@ -186,10 +208,21 @@ export function juliusTickAllowance(input: {
      * caps the total.
      */
     if (!continuation && isDisagreementWork(task)) beyond += 1;
+    /**
+     * A CONSULTATION THAT ACTUALLY HAPPENED BUYS ITS OWN DISPATCH, and only
+     * because the task exists: a mission that never drifts consults nobody and
+     * adds nothing. Fan-out cannot manufacture capacity — the trigger ledger
+     * refuses a second consultation for the same reason and revision, the run
+     * cap refuses the thirteenth whatever the reason, and the hard maximum
+     * still caps the total.
+     */
+    if (!continuation && isArchitectureWork(task)) beyond += 1;
   }
   const retries = whole(input.retries, 0);
   const allowance = Math.min(input.budget.hardMaxTicks, input.budget.plannedTicks + beyond + retries);
   const disagreementTicks = input.tasks.filter((task) =>
     isDisagreementWork(task) && juliusSegmentLineageRootOf(task, input.tasks).taskId === task.taskId).length;
-  return { allowance, beyondMainPath: beyond, disagreementTicks, retries };
+  const architectureTicks = input.tasks.filter((task) =>
+    isArchitectureWork(task) && juliusSegmentLineageRootOf(task, input.tasks).taskId === task.taskId).length;
+  return { allowance, beyondMainPath: beyond, disagreementTicks, architectureTicks, retries };
 }

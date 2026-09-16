@@ -287,6 +287,11 @@ const FILE_RULES = [
   // What changed between a rejected round and the repair of it, bounded for the
   // re-review that must judge whether the findings are actually answered.
   ['src/relay/mission/julius/julius-repair-round.ts', 'REPAIR'],
+  // When Julius goes back to the architect, what counts as drift worth asking
+  // about, and the final check that can hold a completion. The PROMPT
+  // ARCHITECT's for the same reason the state is: it is that slot's own
+  // account of the design and of whether the built thing still matches it.
+  ['src/relay/mission/julius/julius-architecture-drift.ts', 'PROMPT ARCHITECT'],
   // The architect's picture of the system as bounded, durable state: components,
   // boundaries, dependencies, decisions, assumptions, questions and risks. The
   // PROMPT ARCHITECT's, because it is that slot's own account of the design —

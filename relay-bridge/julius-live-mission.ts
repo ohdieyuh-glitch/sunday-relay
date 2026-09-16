@@ -997,7 +997,7 @@ async function main(argv: readonly string[]): Promise<number> {
     if (outcome.haltCause !== null) out(`  cause: ${outcome.haltCause}`);
     if (outcome.tickAccount !== null) {
       const ticks = outcome.tickAccount;
-      out(`  ticks: consumed=${ticks.ticksConsumed} allowance=${ticks.allowance} remaining=${ticks.ticksRemaining} beyond_main_path=${ticks.beyondMainPath} disagreement=${ticks.disagreementTicks} retries=${ticks.retries} exhausted=${ticks.exhausted ? 'yes' : 'no'}`);
+      out(`  ticks: consumed=${ticks.ticksConsumed} allowance=${ticks.allowance} remaining=${ticks.ticksRemaining} beyond_main_path=${ticks.beyondMainPath} disagreement=${ticks.disagreementTicks} architecture=${ticks.architectureTicks} retries=${ticks.retries} exhausted=${ticks.exhausted ? 'yes' : 'no'}`);
     }
     out(`  run: ${submitted.runId}`);
     for (const task of tasks) out(`  task ${task.taskId} [${task.role}/${task.taskType}] → ${task.state}`);

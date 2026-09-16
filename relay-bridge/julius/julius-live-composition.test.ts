@@ -3039,6 +3039,10 @@ describe('every repair the planner can mint has a registered worker', () => {
       // A rebuttal is the architect's answer to a disagreement. It has no repair
       // stage by design: one answer, one re-review, and then Julius resolves it.
       ['PROMPT_ARCHITECT', 'rebuttal'],
+      // An architecture consultation is Julius going back to the architect
+      // mid-mission, and once before completion. No repair stage either: the
+      // answer to a consultation is a fresh consultation, not a revision of it.
+      ['PROMPT_ARCHITECT', 'architecture'],
       ['CODING_AGENT', 'build'], ['CODING_AGENT', 'repair:build'],
     ] as const;
     for (const [role, taskType] of owners) {

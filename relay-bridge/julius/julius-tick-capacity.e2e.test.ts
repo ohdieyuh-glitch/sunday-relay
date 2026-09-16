@@ -172,8 +172,8 @@ describe('T1 — a mission that legitimately needs more than 32 ticks', () => {
     expect(dispatches, '3 x (4 + 1) plan dispatches and 4 x (4 + 1) build dispatches').toBe(35);
     expect(outcome.ticks, 'three past the old ceiling, one dispatch each').toBe(35);
     expect(outcome.tickAccount).toMatchObject({
-      plannedTicks: 73, hardMaxTicks: 3457, allowance: 73, beyondMainPath: 0, disagreementTicks: 0, retries: 0, override: null, exhausted: false,
-      reason: 'units=PROMPT_ARCHITECT,CODING_AGENT repair_rounds=3 segment_ceiling=4 reviewer=required attempts=3 disagreement=one_rebuttal_one_re_review_per_review',
+      plannedTicks: 73, hardMaxTicks: 3529, allowance: 73, beyondMainPath: 0, disagreementTicks: 0, architectureTicks: 0, retries: 0, override: null, exhausted: false,
+      reason: 'units=PROMPT_ARCHITECT,CODING_AGENT repair_rounds=3 segment_ceiling=4 reviewer=required attempts=3 disagreement=one_rebuttal_one_re_review_per_review architecture=max_12_consultations_per_run',
     });
     expect(outcome.tickAccount!.ticksConsumed).toBe(outcome.ticks);
     expect(outcome.tickAccount!.ticksRemaining).toBe(73 - outcome.ticks);
@@ -194,9 +194,9 @@ describe('T2 — an allowance that runs out ends the run FAILED, with the number
     const failed = timeline.filter((entry) => entry.type === 'run.failed');
     expect(failed).toHaveLength(1);
     expect(failed[0]!.facts).toMatchObject({
-      reasonCode: 'tick_budget_exhausted', plannedTicks: 73, allowance: 20, ticksConsumed: 20, hardMaxTicks: 3457,
+      reasonCode: 'tick_budget_exhausted', plannedTicks: 73, allowance: 20, ticksConsumed: 20, hardMaxTicks: 3529,
       beyondMainPath: 0, retries: 0, override: 20,
-      tickBudgetReason: 'units=PROMPT_ARCHITECT,CODING_AGENT repair_rounds=3 segment_ceiling=4 reviewer=required attempts=3 disagreement=one_rebuttal_one_re_review_per_review',
+      tickBudgetReason: 'units=PROMPT_ARCHITECT,CODING_AGENT repair_rounds=3 segment_ceiling=4 reviewer=required attempts=3 disagreement=one_rebuttal_one_re_review_per_review architecture=max_12_consultations_per_run',
     });
   });
 

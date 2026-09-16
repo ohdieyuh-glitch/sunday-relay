@@ -584,7 +584,14 @@ readonly guidance?:unknown;
   * term, and keeps it as ADVISORY state: the Mission Contract stays
   * authoritative. Read only from a Prompt Architect dispatch.
   */
- readonly architecture?:unknown;}
+ readonly architecture?:unknown;
+ /**
+  * THE ARCHITECT'S ANSWER TO "DOES WHAT WAS BUILT MATCH WHAT WAS DESIGNED?" —
+  * ALIGNED, DRIFT_NON_BLOCKING, DRIFT_REQUIRES_REPAIR or REPLAN_REQUIRED, with
+  * the drift it names and the evidence for it. Unsanitised. An assessment,
+  * never a verdict: it cannot accept a task and cannot complete a mission.
+  */
+ readonly consistency?:unknown;}
 /**
  * WHAT JULIUS TELLS AN ADAPTER, and nothing more.
  *

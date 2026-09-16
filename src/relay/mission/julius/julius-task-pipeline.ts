@@ -71,9 +71,17 @@ import {
   juliusRepairRoundDiff, juliusRepairRoundEntryId, renderJuliusRepairRoundDiff,
 } from './julius-repair-round';
 import {
-  juliusArchitectureConflicts, juliusArchitectureEntryId, juliusArchitectureFacts,
-  juliusNextArchitectureRevision, renderJuliusArchitecture, sanitizeJuliusArchitecture,
+  foldJuliusArchitecture, juliusArchitectureConflicts, juliusArchitectureEntryId, juliusArchitectureFacts,
+  juliusArchitectureMatches, juliusArchitectureProposalEntryId, juliusNextArchitectureRevision,
+  renderJuliusArchitecture, sanitizeJuliusArchitecture,
+  type JuliusArchitectureState,
 } from './julius-architecture-state';
+import {
+  JULIUS_ARCHITECTURE_DRIFT_LIMITS, juliusArchitectureChangeIsMaterial, juliusArchitectureChanges,
+  juliusArchitectureCheckTaskId, juliusArchitectureCompletionGate, juliusArchitectureTriggerFacts,
+  juliusArchitectureTriggers, juliusConsistencyFacts, juliusConsistencyRoute, sanitizeJuliusConsistency,
+  type JuliusArchitectureCompletionGate,
+} from './julius-architecture-drift';
 import {
   JULIUS_CHECKPOINT_LIMITS,
   guidanceSubjectTaskId, isJuliusGuidanceHandoffEntryId, issueJuliusGuidance, juliusCheckpointId,
@@ -1246,6 +1254,11 @@ export async function runClaimedTask(
   /* ------------------------------------------- 3b2. the architecture the architect holds */
   if (!outcome.duplicate && task.role === 'PROMPT_ARCHITECT' && outcome.architecture !== undefined) {
     await recordArchitecture({ deps, run, ledger, task, workerId: outcome.workerId, value: outcome.architecture });
+  }
+
+  /* ------------------------------------------- 3b3. does the built thing match the design */
+  if (!outcome.duplicate && task.role === 'PROMPT_ARCHITECT' && outcome.consistency !== undefined) {
+    await recordConsistency({ deps, run, ledger, task, workerId: outcome.workerId, value: outcome.consistency });
   }
 
   /* ------------------------------------------- 3c. what the architect answered */
@@ -2970,6 +2983,11 @@ async function deliverAcceptedGuidance(input: {
  * guard, under the same rule as a guidance packet that tries. A conflict with
  * the contract's permitted paths or prohibited actions is RECORDED rather than
  * resolved: the contract wins until Julius decides otherwise.
+ *
+ * AFTER THE TERMS LOCK, A MATERIAL CHANGE IS A RE-PLAN. It is PROPOSED, and the
+ * review of the task that proposed it decides whether it becomes the design in
+ * force; one that would need a mission term to move is escalated instead of
+ * applied.
  */
 async function recordArchitecture(input: {
   readonly deps: JuliusPipelineDependencies;
@@ -2981,9 +2999,22 @@ async function recordArchitecture(input: {
 }): Promise<void> {
   const { deps, run, ledger, task } = input;
   const rows = await readVerdictLedger(deps, run);
+  const revision = juliusNextArchitectureRevision(rows);
+  /**
+   * A RE-PLAN LOOP IS BOUNDED. Each revision can mint a consultation and each
+   * consultation can propose a revision, so without a ceiling a mission could
+   * spend itself redesigning. The cap is refused by name, not silently ignored.
+   */
+  if (revision > JULIUS_ARCHITECTURE_DRIFT_LIMITS.revisions) {
+    await ledger.event('architecture.refused', {
+      taskId: task.taskId, workerId: input.workerId,
+      facts: { reasonCode: 'architecture_revision_limit', revision, limit: JULIUS_ARCHITECTURE_DRIFT_LIMITS.revisions },
+    });
+    return;
+  }
   const reading = sanitizeJuliusArchitecture({
     value: input.value,
-    revision: juliusNextArchitectureRevision(rows),
+    revision,
     proposedByTaskId: task.taskId,
     recordedAt: deps.clock.now(),
   });
@@ -2994,33 +3025,13 @@ async function recordArchitecture(input: {
     return;
   }
   const state = reading.state;
-  await ledger.event('architecture.recorded', {
-    taskId: task.taskId, workerId: input.workerId, facts: juliusArchitectureFacts(state),
-  });
 
   /**
-   * THE ACCEPTED PICTURE, WHERE EVERY WORKER READS IT. Run-wide, so the coder
-   * building against it and the reviewer judging against it see the same
-   * revision, and bounded by the same cap the row is.
-   */
-  await deps.store.appendBrainEntry({
-    runId: run.runId, projectId: run.projectId, taskId: null, workerId: input.workerId,
-    entryId: juliusArchitectureEntryId(state.revision), kind: 'DECISION',
-    safeText: renderJuliusArchitecture(state), evidenceIds: [], occurredAt: deps.clock.now(),
-  });
-
-  /**
-   * WHERE THE DESIGN AND THE AGREEMENT DISAGREE, THE AGREEMENT WINS.
-   *
-   * Compared against the contracts that GOVERN WORK in this run, not against
-   * the architect's own binding. The architect that drafts the terms is bound
-   * by none - `juliusContractSubjectTaskId` returns null for it - so read off
-   * the architect's own task this check would be silently dead at exactly the
-   * moment the architecture is first written, which is the moment it matters.
-   *
-   * A disagreement is RECORDED, never resolved here. Recording moves no term:
-   * the contract stands as written, and changing it goes through contract
-   * revision or the user, never through a picture an architect drew.
+   * THE CONTRACTS THAT GOVERN WORK IN THIS RUN, read before anything is
+   * recorded, because whether this revision is a re-plan depends on whether any
+   * of them is LOCKED. Not the architect's own binding: the architect that
+   * drafts the terms is bound by none, so read off its own task this would be
+   * dead at exactly the moment the architecture is first written.
    */
   const tasks = await deps.store.tasksForRun(run.runId, run.projectId);
   const subjects: string[] = [];
@@ -3028,19 +3039,309 @@ async function recordArchitecture(input: {
     const subject = juliusContractSubjectTaskId(candidate, tasks);
     if (subject !== null && !subjects.includes(subject)) subjects.push(subject);
   }
+  const governing: { contractTaskId: string; contract: JuliusTaskContract }[] = [];
   for (const contractTaskId of subjects) {
     const contract = await deps.store.loadTaskContract({ projectId: run.projectId, taskId: contractTaskId });
-    if (contract === null) continue;
-    for (const conflict of juliusArchitectureConflicts(state, contract)) {
-      await ledger.event('architecture.conflicted', {
-        taskId: task.taskId, workerId: input.workerId,
-        facts: {
-          revision: state.revision, kind: conflict.kind, name: conflict.name, detail: conflict.detail,
-          contractTaskId, resolvedBy: 'CONTRACT',
-        },
-      });
-    }
+    if (contract !== null) governing.push({ contractTaskId, contract });
   }
+  const conflicts = governing.flatMap(({ contractTaskId, contract }) =>
+    juliusArchitectureConflicts(state, contract).map((conflict) => ({ contractTaskId, conflict })));
+
+  const previous = foldJuliusArchitecture(rows);
+
+  /**
+   * AN ANSWER THAT SAYS THE SAME THING IS NOT A NEW REVISION.
+   *
+   * A consultation states the WHOLE design rather than a diff, so an architect
+   * that finds nothing to change answers with exactly what is already in force.
+   * Numbering that as a revision would change the id of every trigger that
+   * names the revision, and Julius would consult the architect again about the
+   * same design until the run cap stopped it — which is what the first version
+   * of this did, eight times in one mission. The record says the consultation
+   * happened and that nothing moved.
+   */
+  if (previous !== null && juliusArchitectureMatches(previous, state)) {
+    await ledger.event('architecture.unchanged', {
+      taskId: task.taskId, workerId: input.workerId,
+      facts: { revision: previous.revision, proposedByTaskId: task.taskId },
+    });
+    return;
+  }
+
+  const changes = juliusArchitectureChanges(previous, state);
+  const material = juliusArchitectureChangeIsMaterial(changes);
+  const locked = governing.some((item) => item.contract.state === 'LOCKED');
+  const changeKinds = changes.filter((change) => change.material).map((change) => `${change.kind}:${change.change}`).join(' ');
+
+  /**
+   * A RE-PLAN THAT NEEDS A MISSION TERM TO MOVE IS NOT THE ARCHITECT'S TO MAKE.
+   *
+   * A material revision that conflicts with a LOCKED contract cannot be
+   * validated by a reviewer, because what it asks for is outside what was
+   * agreed. It is escalated as exactly that and recorded as NO REVISION AT ALL:
+   * the design in force does not move, nothing reaches a worker's context, and
+   * changing the agreement stays where it belongs — a contract revision, or the
+   * user.
+   */
+  if (locked && material && conflicts.length > 0) {
+    await ledger.event('architecture.replan.escalated', {
+      taskId: task.taskId, workerId: input.workerId,
+      facts: {
+        revision, reasonCode: 'replan_requires_contract_revision',
+        conflicts: conflicts.length, conflictKinds: conflicts.map((item) => item.conflict.kind).join(' '),
+        changeKinds, contractTaskId: conflicts[0]!.contractTaskId,
+      },
+    });
+    return;
+  }
+
+  const status = locked && material && previous !== null ? 'PROPOSED' : 'IN_FORCE';
+  await ledger.event('architecture.recorded', {
+    taskId: task.taskId, workerId: input.workerId,
+    facts: {
+      ...juliusArchitectureFacts(state), status,
+      materialChanges: changes.filter((change) => change.material).length, changeKinds,
+    },
+  });
+
+  if (status === 'PROPOSED') {
+    await ledger.event('architecture.proposed', {
+      taskId: task.taskId, workerId: input.workerId,
+      facts: { revision, proposedByTaskId: task.taskId, changeKinds, reasonCode: 'material_change_after_lock' },
+    });
+    /**
+     * SCOPED TO THE TASK THAT PROPOSED IT, exactly as a guidance proposal is:
+     * the reviewer judging this consultation reads it, and no coder builds
+     * against a design nobody has accepted.
+     */
+    await deps.store.appendBrainEntry({
+      runId: run.runId, projectId: run.projectId, taskId: task.taskId, workerId: input.workerId,
+      entryId: juliusArchitectureProposalEntryId(task.taskId), kind: 'DECISION',
+      safeText: [
+        `PROPOSED ARCHITECTURE REVISION — NOT IN FORCE. It changes ${changeKinds === '' ? '(nothing material)' : changeKinds} after the terms were locked, and governs nothing unless this consultation is accepted.`,
+        renderJuliusArchitecture(state),
+      ].join('\n'),
+      evidenceIds: [], occurredAt: deps.clock.now(),
+    });
+  } else {
+    /**
+     * THE ACCEPTED PICTURE, WHERE EVERY WORKER READS IT. Run-wide, so the coder
+     * building against it and the reviewer judging against it see the same
+     * revision, and bounded by the same cap the row is.
+     */
+    await deps.store.appendBrainEntry({
+      runId: run.runId, projectId: run.projectId, taskId: null, workerId: input.workerId,
+      entryId: juliusArchitectureEntryId(state.revision), kind: 'DECISION',
+      safeText: renderJuliusArchitecture(state), evidenceIds: [], occurredAt: deps.clock.now(),
+    });
+  }
+
+  /**
+   * WHERE THE DESIGN AND THE AGREEMENT DISAGREE, THE AGREEMENT WINS. Recorded,
+   * never resolved here: the contract stands as written.
+   */
+  for (const { contractTaskId, conflict } of conflicts) {
+    await ledger.event('architecture.conflicted', {
+      taskId: task.taskId, workerId: input.workerId,
+      facts: {
+        revision: state.revision, kind: conflict.kind, name: conflict.name, detail: conflict.detail,
+        contractTaskId, resolvedBy: 'CONTRACT',
+      },
+    });
+  }
+}
+
+/**
+ * A PROPOSED REVISION BECOMES THE DESIGN IN FORCE WHEN ITS CONSULTATION IS
+ * ACCEPTED, AND NOT BEFORE.
+ *
+ * The same rule as an accepted guidance packet, and for the same reason: a
+ * design the reviewer sent back must never be the design the next worker builds
+ * against. Nothing is erased — the proposal row, the recorded revision and the
+ * rejecting decision all stay — but only acceptance writes the run-wide entry.
+ */
+async function acceptProposedArchitecture(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly proposedByTaskIds: readonly string[];
+  readonly acceptedTaskId: string;
+  readonly workerId: string;
+  readonly firstWrite: boolean;
+}): Promise<void> {
+  const { deps, run, ledger } = input;
+  if (!input.firstWrite) return;
+  const rows = await readVerdictLedger(deps, run);
+  const already = new Set(rows.filter((row) => row.type === 'architecture.accepted')
+    .map((row) => (typeof row.facts.revision === 'number' ? row.facts.revision : -1)));
+  for (const row of rows) {
+    if (row.type !== 'architecture.proposed') continue;
+    const proposedBy = typeof row.facts.proposedByTaskId === 'string' ? row.facts.proposedByTaskId : null;
+    const revision = typeof row.facts.revision === 'number' ? row.facts.revision : null;
+    if (proposedBy === null || revision === null) continue;
+    if (!input.proposedByTaskIds.includes(proposedBy) || already.has(revision)) continue;
+    const state = architectureRevisionOf(rows, revision);
+    if (state === null) continue;
+    await ledger.event('architecture.accepted', {
+      taskId: proposedBy, workerId: input.workerId,
+      facts: { revision, proposedByTaskId: proposedBy, acceptedByTaskId: input.acceptedTaskId },
+    });
+    await deps.store.appendBrainEntry({
+      runId: run.runId, projectId: run.projectId, taskId: null, workerId: input.workerId,
+      entryId: juliusArchitectureEntryId(revision), kind: 'DECISION',
+      safeText: renderJuliusArchitecture(state), evidenceIds: [], occurredAt: deps.clock.now(),
+    });
+  }
+}
+
+/** One recorded revision, read back through the same allowlist it was written with. */
+function architectureRevisionOf(
+  rows: readonly JuliusPeerLedgerEntry[], revision: number,
+): JuliusArchitectureState | null {
+  for (const row of rows) {
+    if (row.type !== 'architecture.recorded' || row.facts.revision !== revision) continue;
+    const raw = typeof row.facts.state === 'string' ? row.facts.state : null;
+    if (raw === null) continue;
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw); } catch { continue; }
+    const reading = sanitizeJuliusArchitecture({
+      value: parsed, revision,
+      proposedByTaskId: typeof row.facts.proposedByTaskId === 'string' ? row.facts.proposedByTaskId : '',
+      recordedAt: typeof row.facts.recordedAt === 'string' ? row.facts.recordedAt : '',
+    });
+    if (reading.ok) return reading.state;
+  }
+  return null;
+}
+
+/**
+ * THE ARCHITECT'S ANSWER TO "DOES WHAT WAS BUILT MATCH WHAT WAS DESIGNED?"
+ *
+ * An ASSESSMENT, not a verdict. It cannot accept a task, cannot mint VERIFIED
+ * and cannot complete a mission — the peer authority guard refuses those words
+ * before a field is read. What it can do is refuse to let a completion happen:
+ * DRIFT_REQUIRES_REPAIR and REPLAN_REQUIRED hold the run at the completion gate
+ * with the drift, and the work it names, on the record.
+ */
+async function recordConsistency(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly task: JuliusTask;
+  readonly workerId: string;
+  readonly value: unknown;
+}): Promise<void> {
+  const { deps, run, ledger, task } = input;
+  const rows = await readVerdictLedger(deps, run);
+  const state = foldJuliusArchitecture(rows);
+  if (state === null) {
+    await ledger.event('architecture.assessment.refused', {
+      taskId: task.taskId, workerId: input.workerId, facts: { reasonCode: 'consistency_without_architecture' },
+    });
+    return;
+  }
+  const reading = sanitizeJuliusConsistency({ value: input.value, revision: state.revision });
+  if (!reading.ok) {
+    await ledger.event('architecture.assessment.refused', {
+      taskId: task.taskId, workerId: input.workerId, facts: { reasonCode: reading.reasonCode, revision: state.revision },
+    });
+    return;
+  }
+  const declaration = reading.declaration;
+  /* WORK THIS RUN DOES NOT HOLD IS NOT THIS ARCHITECT'S TO CALL DRIFTED. */
+  const tasks = await deps.store.tasksForRun(run.runId, run.projectId);
+  const known = new Set(tasks.map((item) => item.taskId));
+  const foreign = declaration.driftingTaskIds.filter((taskId) => !known.has(taskId));
+  if (foreign.length > 0) {
+    await ledger.event('architecture.assessment.refused', {
+      taskId: task.taskId, workerId: input.workerId,
+      facts: { reasonCode: 'consistency_names_foreign_work', revision: state.revision, foreign: foreign.join(' ') },
+    });
+    return;
+  }
+  await ledger.event('architecture.assessed', {
+    taskId: task.taskId, workerId: input.workerId,
+    facts: {
+      ...juliusConsistencyFacts(declaration), assessedByTaskId: task.taskId,
+      holdsCompletion: juliusConsistencyRoute(declaration.assessment) === 'REPAIR'
+        || juliusConsistencyRoute(declaration.assessment) === 'REPLAN',
+    },
+  });
+}
+
+/**
+ * GO BACK TO THE ARCHITECT, ONCE PER REASON.
+ *
+ * Julius decides when the architect is consulted. Every trigger is derived from
+ * rows that already exist, raised at most once for the revision and subject it
+ * is about, and capped for the run, so a mission that keeps drifting spends its
+ * budget on the work rather than on being told about it.
+ *
+ * A consultation nobody can serve is RECORDED AND NOT WAITED FOR. The guidance
+ * path learned this on paid run 34037313976: a task minted for a role nothing
+ * serves does not fail, it SITS — RUNNABLE forever, with the mission unable to
+ * complete around it.
+ */
+export async function juliusArchitectureGateFor(
+  deps: JuliusPipelineDependencies, run: JuliusRunRow,
+): Promise<JuliusArchitectureCompletionGate> {
+  if (deps.timeline === undefined) return { ok: true, reasonCode: 'NO_ARCHITECTURE_RECORDED' };
+  return juliusArchitectureCompletionGate({ entries: await readVerdictLedger(deps, run) });
+}
+
+export async function serveArchitectureTriggers(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly policy: JuliusCardPolicy;
+  readonly tasks: readonly JuliusTask[];
+  readonly completionReady: boolean;
+  readonly capabilityFor?: (task: { taskId: string; taskType: string; role: string }) => string;
+}): Promise<number> {
+  const { deps, run } = input;
+  if (deps.timeline === undefined) return 0;
+  const rows = await readVerdictLedger(deps, run);
+  const state = foldJuliusArchitecture(rows);
+  if (state === null) return 0;
+  const candidates = juliusArchitectureTriggers({ state, entries: rows, completionReady: input.completionReady });
+  if (candidates.length === 0) return 0;
+
+  const anchor = input.tasks.find((task) => task.role === 'PROMPT_ARCHITECT') ?? input.tasks[0];
+  if (anchor === undefined) return 0;
+  const ledger = new RuntimeLedger(deps, run, `architecture:${run.runId}`);
+  let served = 0;
+  for (const candidate of candidates) {
+    const taskId = juliusArchitectureCheckTaskId(candidate.triggerId);
+    const capability = input.capabilityFor?.({ taskId, taskType: 'architecture', role: 'PROMPT_ARCHITECT' });
+    const routable = capability === undefined || deps.router.eligibleWorkerIds({
+      role: 'PROMPT_ARCHITECT', taskType: 'architecture', capability, policy: input.policy,
+    }).length > 0;
+    const created = routable
+      ? await deps.store.addTask({
+        commandId: `architecture:${taskId}`,
+        runId: run.runId, projectId: run.projectId,
+        task: {
+          taskId, missionId: run.missionId,
+          parentTaskId: candidate.subjectTaskId,
+          dependencyIds: [], requiredEvidenceTypes: ['ARTIFACT'],
+          taskType: 'architecture', role: 'PROMPT_ARCHITECT',
+          ordinal: anchor.ordinal + 1,
+          // RUNNABLE, because BLOCKED is unreachable by the claim query and only
+          // `appendDecision({releaseTaskIds})` ever moves a task out of it.
+          state: 'RUNNABLE',
+        },
+      })
+      : false;
+    await ledger.event('architecture.trigger.raised', {
+      taskId: candidate.subjectTaskId, workerId: null,
+      facts: {
+        ...juliusArchitectureTriggerFacts(candidate),
+        served: created, servedByTaskId: created ? taskId : null,
+        unroutable: !routable,
+      },
+    });
+    if (created) served += 1;
+  }
+  return served;
 }
 
 /* --------------------------------------------------------- finding lifecycle */
@@ -3632,6 +3933,19 @@ async function settlePeerRequestsForDecision(input: {
         ...common, kind: 'REVIEW_REQUEST', anchor, to: 'RESOLVED', from: ['ANSWERED'], transitionCode: `DECIDED_${input.action}`,
       });
     }
+  }
+
+  /**
+   * A PROPOSED ARCHITECTURE REVISION IS IN FORCE ONLY WHERE ITS CONSULTATION
+   * WAS ACCEPTED — before the guidance rule below returns, because an
+   * architecture consultation is not a guidance task and would never reach it.
+   */
+  if (input.action === 'ACCEPT' || input.action === 'COMPLETE') {
+    await acceptProposedArchitecture({
+      deps: input.deps, run: input.run, ledger: input.ledger,
+      proposedByTaskIds: [input.subject.taskId, juliusSegmentLineageRootOf(input.subject, input.tasks).taskId],
+      acceptedTaskId: input.task.taskId, workerId: input.workerId, firstWrite: input.decisionRecorded,
+    });
   }
 
   const unit = juliusWorkUnitRootOf(input.subject, input.tasks);

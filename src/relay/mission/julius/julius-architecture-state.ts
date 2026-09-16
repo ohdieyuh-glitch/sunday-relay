@@ -358,6 +358,21 @@ const text = (value: unknown): string | null => (typeof value === 'string' && va
  * backup or edited by hand cannot widen what the state may say.
  */
 export function foldJuliusArchitecture(entries: readonly JuliusPeerLedgerEntry[]): JuliusArchitectureState | null {
+  /**
+   * A PROPOSED REVISION IS NOT IN FORCE UNTIL SOMEBODY ACCEPTED IT.
+   *
+   * A revision proposed after the terms were locked, changing something
+   * material, is a re-plan: it waits for the review of the task that proposed
+   * it. Until then the previous revision governs, so a design the reviewer
+   * rejected never becomes the design the coder builds against — the same rule
+   * that keeps rejected guidance out of the coder's authoritative context.
+   */
+  const accepted = new Set<number>();
+  for (const entry of entries) {
+    if (entry.type !== 'architecture.accepted') continue;
+    const revision = typeof entry.facts.revision === 'number' ? entry.facts.revision : null;
+    if (revision !== null) accepted.add(revision);
+  }
   let latest: JuliusArchitectureState | null = null;
   for (const entry of entries) {
     if (entry.type !== 'architecture.recorded') continue;
@@ -366,6 +381,7 @@ export function foldJuliusArchitecture(entries: readonly JuliusPeerLedgerEntry[]
     let parsed: unknown;
     try { parsed = JSON.parse(raw); } catch { continue; }
     const revision = typeof entry.facts.revision === 'number' ? entry.facts.revision : 0;
+    if (text(entry.facts.status) === 'PROPOSED' && !accepted.has(revision)) continue;
     const reading = sanitizeJuliusArchitecture({
       value: parsed,
       revision,
@@ -378,11 +394,25 @@ export function foldJuliusArchitecture(entries: readonly JuliusPeerLedgerEntry[]
   return latest;
 }
 
-/** The next revision number for a run, counted from its own rows. */
+/**
+ * The next revision number for a run, counted from its own rows.
+ *
+ * From EVERY recorded revision, not only the one in force: a proposal the
+ * reviewer rejected still used its number, and handing that number to the next
+ * proposal would put two different pictures on one row id.
+ */
 export function juliusNextArchitectureRevision(entries: readonly JuliusPeerLedgerEntry[]): number {
-  const current = foldJuliusArchitecture(entries);
-  return current === null ? 1 : current.revision + 1;
+  let highest = 0;
+  for (const entry of entries) {
+    if (entry.type !== 'architecture.recorded') continue;
+    const revision = typeof entry.facts.revision === 'number' ? entry.facts.revision : 0;
+    if (revision > highest) highest = revision;
+  }
+  return highest + 1;
 }
+
+/** Where a worker reads a revision that is proposed and not yet in force. */
+export const juliusArchitectureProposalEntryId = (taskId: string): string => `brain:architecture:proposal:${taskId}`;
 
 /** The architecture as a worker reads it: bounded text, ids a peer can name. */
 export function renderJuliusArchitecture(state: JuliusArchitectureState): string {
@@ -406,6 +436,18 @@ export function renderJuliusArchitecture(state: JuliusArchitectureState): string
     ...(state.risks.length === 0 ? ['  (none recorded)'] : state.risks.map((item) => `  ${item.riskId} [${item.impact}]: ${item.risk} — mitigation: ${item.mitigation}`)),
   ];
   return lines.join('\n');
+}
+
+/**
+ * IS THIS THE SAME PICTURE? Identity fields excluded: a revision number, the
+ * task that proposed it and when it was written say nothing about the design.
+ */
+export function juliusArchitectureMatches(a: JuliusArchitectureState, b: JuliusArchitectureState): boolean {
+  const shape = (state: JuliusArchitectureState): string => JSON.stringify({
+    components: state.components, boundaries: state.boundaries, dependencies: state.dependencies,
+    decisions: state.decisions, assumptions: state.assumptions, openQuestions: state.openQuestions, risks: state.risks,
+  });
+  return shape(a) === shape(b);
 }
 
 /** The entry a worker reads the accepted architecture from. */

@@ -121,6 +121,16 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * `architecture.conflicted` records where the two disagree rather than letting
   * either quietly win. */
  'architecture.recorded','architecture.refused','architecture.conflicted',
+ /* THE ARCHITECTURE, WATCHED AND CHECKED. `trigger.raised` is one of the seven
+  * named moments Julius goes back to the architect, cause-once by trigger id.
+  * `proposed` and `accepted` are the post-lock re-plan path: a material change
+  * to locked terms waits for the review of the task that proposed it.
+  * `assessed` is the final consistency check — an ASSESSMENT, never a verdict:
+  * the architect can refuse to let a completion happen, and can never mint one.
+  * `replan.escalated` is a re-plan that would need a mission term to move,
+  * which is the user's decision and not the architect's. */
+ 'architecture.trigger.raised','architecture.proposed','architecture.accepted','architecture.unchanged',
+ 'architecture.assessed','architecture.assessment.refused','architecture.replan.escalated',
  /* PERSISTENT-WORKER EFFORT. One row per completed dispatch, carrying what the
   * provider actually reported and NOTHING inferred — an unreported token count
   * is null here rather than the zero the budget path substitutes, because a
