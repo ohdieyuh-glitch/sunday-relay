@@ -218,6 +218,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	bool IsMissionStripOnScreen() const { return MissionStrip.IsValid(); }
 
+	/** The strip's own box in absolute (desktop) pixels from its last layout, for the HUD's overlap checks. */
+	bool GetMissionStripAbsoluteRect(FSlateRect& OutRect) const;
+
 	/** True once the contract has stopped following and become a place the Dog performs around. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	bool IsContractAnchored() const;
@@ -269,6 +272,8 @@ private:
 	TWeakObjectPtr<APlayerController> BoundController;
 	TWeakObjectPtr<AWonderlandMissionOrb> Orb;
 	TSharedPtr<SWidget> MissionStrip;
+	/** The bar inside the strip's full-viewport canvas: the part that actually takes space. */
+	TSharedPtr<SWidget> MissionStripBar;
 	EWonderlandMissionBeat Beat = EWonderlandMissionBeat::Unobserved;
 	int32 ContractsManifested = 0;
 
