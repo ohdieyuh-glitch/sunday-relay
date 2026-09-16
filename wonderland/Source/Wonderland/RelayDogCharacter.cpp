@@ -1019,14 +1019,20 @@ float ARelayDogCharacter::EyeScaleAt(float TimeSeconds) const
 
 	// A deterministic hash of the window index, 0..1. The same second always produces the same blink,
 	// which is what lets a proof job photograph one.
+	//
+	// THE INDEX IS FOLDED FIRST. It grows without bound over a session, and float sin loses precision on a
+	// large argument -- after long enough the jitter would start to correlate or flatten, and the Dog would
+	// drift back toward the metronome this exists to avoid (lane owner, 2026-09-16).
 	auto Hash = [](float Seed)
 	{
-		return FMath::Frac(FMath::Sin(Seed * 12.9898f) * 43758.5453f);
+		return FMath::Frac(FMath::Sin(FMath::Fmod(Seed, 4096.0f) * 12.9898f) * 43758.5453f);
 	};
 	const float Roll = Hash(Index);
 
 	// Blink somewhere in the first two thirds of the window, so the gaps vary instead of ticking.
-	const float At = Roll * (Period - Close * 3.0f) * 0.66f;
+	// CLAMPED AT ZERO: both figures are EditAnywhere, and a close time past a third of the period would
+	// otherwise put the blink slightly BEFORE its own window and show as a stutter.
+	const float At = FMath::Max(Roll * (Period - Close * 3.0f) * 0.66f, 0.0f);
 	// Every fourth window or so, blink twice -- which is what most real blinking is.
 	const bool bDouble = Hash(Index + 7.0f) < 0.28f;
 
