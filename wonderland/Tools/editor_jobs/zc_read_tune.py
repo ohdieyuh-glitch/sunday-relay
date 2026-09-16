@@ -48,7 +48,9 @@ def job():
         arm_was = float(boom.target_arm_length) if boom is not None else None
 
         mission.stop_fixture()
-        mission.set_joined_in(False, False)
+        # JOINED, so the companions circle the Contract instead of following at the Dog's shoulders, where they stand
+        # exactly between a side camera and the book.
+        mission.set_joined_in(True, True)
         mission.set_beat_by_id("researching")
         yield 2.5
         unreal.SystemLibrary.execute_console_command(world, "slomo %.3f" % SLOMO)
@@ -66,16 +68,24 @@ def job():
                 return None
 
         # One view at a time, each through one whole turn cycle, eight frames a cycle.
-        for view, dyaw, pitch, arm in (("right", -90.0, -8.0, 230.0), ("front", 180.0, -6.0, 230.0),
-                                       ("play", -60.0, -12.0, 440.0)):
+        # CLOSE VIEWS LOOK AT THE CHEST: the game rig's socket offset lifts the camera 135 uu over the Dog's head, which
+        # at a close arm put the book below the frame. Bearings are where the CAMERA stands, relative to the Dog's
+        # facing; the companions follow behind, so front and front-quarter views keep them out of the way.
+        socket_was = boom.socket_offset if boom is not None else None
+        for view, bearing, pitch, arm, socket in (("side_right", 90.0, -14.0, 210.0, (0.0, 0.0, 10.0)),
+                                                  ("front_right", 50.0, -16.0, 200.0, (0.0, 0.0, 10.0)),
+                                                  ("front", 0.0, -16.0, 200.0, (0.0, 0.0, 10.0)),
+                                                  ("side_left", -90.0, -14.0, 210.0, (0.0, 0.0, 10.0))):
+            dyaw = bearing + 180.0
             if boom is not None:
                 boom.set_editor_property("target_arm_length", arm)
+                boom.set_editor_property("socket_offset", unreal.Vector(*socket) if socket is not None else socket_was)
             # Start the view just before a turn begins.
             yield (lambda: (float(unreal.GameplayStatics.get_time_seconds(world)) * hz) % 1.0 > 0.9, 60)
             # Sixteen frames across the turn and a little either side of it: cycle 0.9 round to 0.45. The waits are
             # real seconds, and the world runs at SLOMO.
-            wait = (0.55 / max(hz, 0.05) / SLOMO) / 16.0
-            for step in range(16):
+            wait = (0.55 / max(hz, 0.05) / SLOMO) / 12.0
+            for step in range(12):
                 yaw = pawn.get_actor_rotation().yaw + dyaw
                 controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=pitch, yaw=yaw))
                 yield wait
@@ -89,6 +99,7 @@ def job():
         RESULT["frames"] = frames
         if boom is not None and arm_was is not None:
             boom.set_editor_property("target_arm_length", arm_was)
+            boom.set_editor_property("socket_offset", socket_was)
         RESULT["status"] = "done"
     finally:
         try:

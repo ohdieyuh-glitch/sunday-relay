@@ -175,6 +175,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Companion")
 	float CompanionSpacingUU = 230.0f;
 
+	/** Closest a companion's body may come to the Dog, across the ground, in a mission flight, uu. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Companion")
+	float DogSpacingUU = 150.0f;
+
 private:
 	/** A part's animation state. Parallel to PartPivots; plain data, never serialised. */
 	struct FPartMotion
@@ -222,6 +226,9 @@ private:
 	};
 
 	void AnimatePulses(float TimeSeconds);
+	/** Which flank of the Dog's beam to hold while verifying: the side this companion is already on. */
+	bool ChooseFlank(const AActor* Contract) const;
+	bool bFlankRight = false;
 	/** Where a pulse or the beam leaves the companion: its body, not its figure origin. */
 	FVector ContributionOrigin() const;
 	/** Lights per pulse (a head and its trail), and how far behind each other they run, as a fraction of the path. */

@@ -17,13 +17,18 @@
 import json
 import math
 import os
+import time
 
 L = unreal.WonderlandUiTestLibrary
 H = unreal.WonderlandHudTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "mission_experience")
 SCENARIOS = globals().get("SCENARIOS") or ["D", "A", "B", "C"]
 PACE = float(globals().get("PACE") or 4.0)          # world seconds per mission event
-SLOMO = float(globals().get("SLOMO") or 0.5)        # world time dilation while filming
+SLOMO = float(globals().get("SLOMO") or 0.5)        # world time dilation to start from
+# A STEADY FILM WHATEVER THE EDITOR MANAGES. The world is slowed afresh every tick so that each captured frame
+# advances the same world time, 1/FILM_FPS of a second: the second film ran at 1.3 editor frames a second on a laptop
+# on battery, and under a fixed slow motion that was a slideshow. Slower editor, longer capture, same film.
+FILM_FPS = float(globals().get("FILM_FPS") or 20.0)
 # None films the mini-map exactly as the build draws it. The first film forced the fan path, which hid the fact that
 # the default path still drew a white disc.
 MINIMAP_MODE = globals().get("MINIMAP_MODE")
@@ -112,6 +117,7 @@ def job():
                 ui.toggle_live_terminal()
             yield 1.0
             console(world, "slomo %.3f" % SLOMO)
+            last_tick = time.time()
             started = mission.run_scenario(letter, PACE)
             yaw = controller.get_control_rotation().yaw
             aim = None
@@ -174,6 +180,10 @@ def job():
                 frames.append(sample)
                 index += 1
                 yield 0.0
+                now = time.time()
+                real_dt = max(now - last_tick, 0.005)
+                last_tick = now
+                console(world, "slomo %.4f" % max(0.01, min(1.0, (1.0 / FILM_FPS) / real_dt)))
                 if not sample["running"] and not sample["contract"] and index > 20:
                     if finished_at is None:
                         finished_at = sample["t"]

@@ -26,13 +26,14 @@
 // THE READING POSE, TUNABLE LIVE. Named, not anonymous: the module is one unity translation unit.
 namespace RelayDogReadTuning
 {
-	TAutoConsoleVariable<float> CVarBookFwd(TEXT("wl.Dog.Read.BookFwd"), 34.0f, TEXT("The open book's spine, forward of the body centre, in head-width sixtieths."));
+	TAutoConsoleVariable<float> CVarBookFwd(TEXT("wl.Dog.Read.BookFwd"), 42.0f, TEXT("The open book's spine, forward of the body centre, in head-width sixtieths."));
 	TAutoConsoleVariable<float> CVarBookRight(TEXT("wl.Dog.Read.BookRight"), 0.0f, TEXT("The open book's spine, right of the body centre."));
-	TAutoConsoleVariable<float> CVarBookUp(TEXT("wl.Dog.Read.BookUp"), 2.0f, TEXT("The open book's spine, above the body centre."));
+	TAutoConsoleVariable<float> CVarBookUp(TEXT("wl.Dog.Read.BookUp"), -6.0f, TEXT("The open book's spine, above the body centre."));
 	TAutoConsoleVariable<float> CVarBookTilt(TEXT("wl.Dog.Read.BookTilt"), 38.0f, TEXT("Degrees the far edge of the book is raised, turning the pages toward the Dog's face."));
-	TAutoConsoleVariable<float> CVarBookOpen(TEXT("wl.Dog.Read.BookOpen"), 20.0f, TEXT("Degrees each half of the open book rises from flat."));
-	TAutoConsoleVariable<float> CVarLeafCurl(TEXT("wl.Dog.Read.LeafCurl"), 34.0f, TEXT("Degrees the outer half of a turning page trails its inner half at mid-turn."));
-	TAutoConsoleVariable<float> CVarLeafGlow(TEXT("wl.Dog.Read.LeafGlow"), 0.9f, TEXT("Brightness of the turning page, as a fraction of the Dog's glow exposure."));
+	TAutoConsoleVariable<float> CVarBookOpen(TEXT("wl.Dog.Read.BookOpen"), 28.0f, TEXT("Degrees each half of the open book rises from flat."));
+	TAutoConsoleVariable<float> CVarBookScale(TEXT("wl.Dog.Read.BookScale"), 1.3f, TEXT("Size of the open book and its turning page."));
+	TAutoConsoleVariable<float> CVarLeafCurl(TEXT("wl.Dog.Read.LeafCurl"), 40.0f, TEXT("Degrees the outer half of a turning page trails its inner half at mid-turn."));
+	TAutoConsoleVariable<float> CVarLeafGlow(TEXT("wl.Dog.Read.LeafGlow"), 3.0f, TEXT("Brightness of the turning page, as a fraction of the Dog's glow exposure."));
 	TAutoConsoleVariable<float> CVarHoldPitch(TEXT("wl.Dog.Read.HoldPitch"), 62.0f, TEXT("Holding (left) arm: shoulder pitch forward."));
 	TAutoConsoleVariable<float> CVarHoldRoll(TEXT("wl.Dog.Read.HoldRoll"), 14.0f, TEXT("Holding arm: shoulder roll outward."));
 	TAutoConsoleVariable<float> CVarHoldElbow(TEXT("wl.Dog.Read.HoldElbow"), 48.0f, TEXT("Holding arm: elbow bend."));
@@ -43,7 +44,7 @@ namespace RelayDogReadTuning
 	TAutoConsoleVariable<float> CVarSweepPitch(TEXT("wl.Dog.Read.SweepPitch"), 12.0f, TEXT("Turning arm: pitch added at mid-turn, lifting the page."));
 	TAutoConsoleVariable<float> CVarSweepElbow(TEXT("wl.Dog.Read.SweepElbow"), 18.0f, TEXT("Turning arm: elbow added at mid-turn."));
 	TAutoConsoleVariable<float> CVarTurnHz(TEXT("wl.Dog.Read.TurnHz"), 0.32f, TEXT("Page turns per second."));
-	TAutoConsoleVariable<float> CVarTurnFraction(TEXT("wl.Dog.Read.TurnFraction"), 0.34f, TEXT("Fraction of each turn cycle the page is moving."));
+	TAutoConsoleVariable<float> CVarTurnFraction(TEXT("wl.Dog.Read.TurnFraction"), 0.42f, TEXT("Fraction of each turn cycle the page is moving."));
 
 	RelayDogMission::FReadingPose Pose()
 	{
@@ -1589,7 +1590,7 @@ void ARelayDogCharacter::BuildMissionProps()
 	// against a white Dog is invisible, and a page of light turning over in the Dog's hands is unmistakable.
 	TArray<FTransform> Leaf;
 	Leaf.Init(FTransform::Identity, 2);
-	BookLeafMesh = MakePropMesh(TEXT("MissionBookTurningPage"), BookRoot, true, Leaf, FLinearColor(1.0f, 0.93f, 0.72f), BookLeafMid);
+	BookLeafMesh = MakePropMesh(TEXT("MissionBookTurningPage"), BookRoot, true, Leaf, FLinearColor(1.0f, 0.74f, 0.26f), BookLeafMid);
 	LaidOutBookOpenDeg = -1.0f;
 
 	// ---------------------------------------------------------------- the paintbrush (IMPLEMENTING)
@@ -1672,17 +1673,21 @@ void ARelayDogCharacter::PoseBook(bool bInHand, float PageTurn)
 	// half is the same box turned the rest of the way over, (180 - Open), so its face normal points away from the
 	// reader and everything on it is offset the other way along it.
 	const float Open = FMath::Clamp(CVarBookOpen.GetValueOnGameThread(), 0.0f, 80.0f);
-	if (Open != LaidOutBookOpenDeg && BookMesh != nullptr && BookPagesMesh != nullptr
+	// The book's own size scales its halves and the page; where it is held stays in the Dog's units.
+	const float Scale = FMath::Clamp(CVarBookScale.GetValueOnGameThread(), 0.3f, 3.0f);
+	const double B = U * Scale;
+	if ((Open != LaidOutBookOpenDeg || Scale != LaidOutBookScale) && BookMesh != nullptr && BookPagesMesh != nullptr
 		&& BookMesh->GetInstanceCount() == 3 && BookPagesMesh->GetInstanceCount() == 2)
 	{
 		LaidOutBookOpenDeg = Open;
+		LaidOutBookScale = Scale;
 		const FVector CoverSize(SpineLength + 2.0, HalfWidth + 2.0, CoverThick);
 		const FVector PageSize(SpineLength - 2.0, HalfWidth - 1.5, PageThick);
-		BookMesh->UpdateInstanceTransform(0, HalfBox(Open, HalfWidth * 0.5 + 1.0, -CoverThick * 0.5, CoverSize, U), false, false, true);
-		BookMesh->UpdateInstanceTransform(1, HalfBox(180.0 - Open, HalfWidth * 0.5 + 1.0, CoverThick * 0.5, CoverSize, U), false, false, true);
-		BookMesh->UpdateInstanceTransform(2, DogPropBox(FVector(0.0, 0.0, -2.5 * U), FVector((SpineLength + 2.0) * U, 5.0 * U, 4.0 * U)), false, true, true);
-		BookPagesMesh->UpdateInstanceTransform(0, HalfBox(Open, HalfWidth * 0.5, PageThick * 0.5, PageSize, U), false, false, true);
-		BookPagesMesh->UpdateInstanceTransform(1, HalfBox(180.0 - Open, HalfWidth * 0.5, -PageThick * 0.5, PageSize, U), false, true, true);
+		BookMesh->UpdateInstanceTransform(0, HalfBox(Open, HalfWidth * 0.5 + 1.0, -CoverThick * 0.5, CoverSize, B), false, false, true);
+		BookMesh->UpdateInstanceTransform(1, HalfBox(180.0 - Open, HalfWidth * 0.5 + 1.0, CoverThick * 0.5, CoverSize, B), false, false, true);
+		BookMesh->UpdateInstanceTransform(2, DogPropBox(FVector(0.0, 0.0, -2.5 * B), FVector((SpineLength + 2.0) * B, 5.0 * B, 4.0 * B)), false, true, true);
+		BookPagesMesh->UpdateInstanceTransform(0, HalfBox(Open, HalfWidth * 0.5, PageThick * 0.5, PageSize, B), false, false, true);
+		BookPagesMesh->UpdateInstanceTransform(1, HalfBox(180.0 - Open, HalfWidth * 0.5, -PageThick * 0.5, PageSize, B), false, true, true);
 	}
 
 	if (!bTurning || BookLeafMesh == nullptr || BookLeafMesh->GetInstanceCount() != 2)
@@ -1693,7 +1698,9 @@ void ARelayDogCharacter::PoseBook(bool bInHand, float PageTurn)
 	if (BookLeafMid != nullptr && Glow != AppliedLeafGlow)
 	{
 		AppliedLeafGlow = Glow;
-		BookLeafMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 0.93f, 0.72f) * (DogGlowExposure * Glow));
+		// GOLD, NOT IVORY. An ivory page of light over ivory pages in the hands of a white Dog was measured on film as
+		// a pale shape among pale shapes; the Wonderland gold reads against all three.
+		BookLeafMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 0.74f, 0.26f) * (DogGlowExposure * Glow));
 	}
 	// THE TURN. The page leaves the right-hand page, stands up off the spine at mid-turn -- where it is broadside
 	// to a camera beside the Dog, which is where the play camera is while the Dog circles -- and lies down on the
@@ -1714,12 +1721,12 @@ void ARelayDogCharacter::PoseBook(bool bInHand, float PageTurn)
 		const double A = FMath::DegreesToRadians(Deg);
 		return FVector(0.0, -FMath::Sin(A), FMath::Cos(A));
 	};
-	const FVector LeafScale = FVector(SpineLength - 4.0, HalfWidth * 0.5, 0.8) * (U / 100.0);
+	const FVector LeafScale = FVector(SpineLength - 4.0, HalfWidth * 0.5, 0.8) * (B / 100.0);
 	const FVector Base = NormalAt(Phi) * Lift;
 	BookLeafMesh->UpdateInstanceTransform(0,
-		FTransform(FRotator(0.0, 0.0, -Phi), (Base + AlongAt(Phi) * (HalfWidth * 0.25)) * U, LeafScale), false, false, true);
+		FTransform(FRotator(0.0, 0.0, -Phi), (Base + AlongAt(Phi) * (HalfWidth * 0.25)) * B, LeafScale), false, false, true);
 	BookLeafMesh->UpdateInstanceTransform(1,
-		FTransform(FRotator(0.0, 0.0, -Phi2), (Base + AlongAt(Phi) * (HalfWidth * 0.5) + AlongAt(Phi2) * (HalfWidth * 0.25)) * U, LeafScale),
+		FTransform(FRotator(0.0, 0.0, -Phi2), (Base + AlongAt(Phi) * (HalfWidth * 0.5) + AlongAt(Phi2) * (HalfWidth * 0.25)) * B, LeafScale),
 		false, true, true);
 }
 
