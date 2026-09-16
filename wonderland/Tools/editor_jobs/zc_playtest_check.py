@@ -46,18 +46,26 @@ def job():
 
         # ---- THE LITERAL FOUNDER COMMAND, default pace: it must start D and open the terminal by itself.
         terminal_before = bool(ui.is_live_terminal_open())
+        spawn = pawn.get_actor_location()
         unreal.SystemLibrary.execute_console_command(world, "wl.Mission.Scenario D")
-        yield 3.0
+        yield 0.5
+        waiting_for_site = bool(mission.is_scenario_waiting_for_site())
+        yield (lambda: mission.is_fixture_running(), 90)
+        yield 2.0
+        travel = unreal.get_engine_subsystem(unreal.Object) if False else None
+        arrived = pawn.get_actor_location()
         checks["command_starts_d"] = {"running": bool(mission.is_fixture_running()), "scenario": str(mission.get_scenario()),
+                                      "waited_for_site": waiting_for_site,
+                                      "moved_uu": round(math.dist([spawn.x, spawn.y], [arrived.x, arrived.y]), 0),
+                                      "arrived_at": vec(arrived),
                                       "terminal_was_open": terminal_before, "terminal_open": bool(ui.is_live_terminal_open()),
-                                      "stream_shown": bool(ui.is_julius_stream_shown()),
                                       "joined": [bool(mission.is_llm_companion_joined()), bool(mission.is_jhinn_joined())]}
         # A build without the self-opening command: open the terminal the way a player would, and say so.
         if not ui.is_live_terminal_open():
             ui.toggle_live_terminal()
             checks["command_starts_d"]["opened_by_job"] = True
             yield 1.0
-        checks["command_starts_d"]["stream_shown_after"] = bool(ui.is_julius_stream_shown())
+
         rects = {}
         for line in str(ui.describe_hud_rects()).splitlines():
             parts = line.split()
@@ -95,7 +103,9 @@ def job():
             if beam is not None:
                 s["beam"] = [bool(beam.is_visible()), round(beam.get_world_scale().y, 3)]
             s["beam_note"] = str(pawn.describe_mission_beam())
-            s["stream"] = [str(ui.get_julius_stream_event()), [int(ui.get_julius_role_written_count(r)) for r in range(4)]]
+            s["sections"] = {n: str(ui.get_julius_section_state(n)) for n in ("PROMPT ARCHITECT", "CODING AGENT", "JULIUS 3.3", "INDEPENDENT REVIEWER")}
+            s["roles"] = [[int(ui.get_julius_role_written_count(r)), str(ui.get_julius_role_latest_line(r))[:60]] for r in range(4)]
+            s["role_event"] = str(ui.get_julius_role_event())
             samples.append(s)
             for key, want in (("research", "researching"), ("guidance", "guidance"), ("painting", "coding_agent"),
                               ("review", "independent_reviewer"), ("verifying", "verifying")):
@@ -124,6 +134,13 @@ def job():
         checks["beam"] = {"frames": len(verifying), "lit_frames": sum(1 for x in settled_verify if x.get("beam", [False])[0]),
                           "settled_frames": len(settled_verify),
                           "notes": sorted({x["beam_note"].split(" dt=")[0] for x in settled_verify})[:3]}
+        states = {}
+        for x in samples:
+            for n, v in x.get("sections", {}).items():
+                states.setdefault(n, set()).add(v)
+        checks["sections"] = {n: sorted(v) for n, v in states.items()}
+        checks["role_lines_written"] = samples[-1]["roles"] if samples else None
+        checks["role_event_matches"] = sum(1 for x in samples if x.get("role_event") == str(x.get("event", x.get("role_event"))))
         RESULT["status"] = "done"
     finally:
         try:
