@@ -393,6 +393,11 @@ FString UWonderlandMissionSubsystem::GetBeatEvents(FName BeatId) const
 	return WonderlandBeatReading(WonderlandBeatFromId(BeatId)).Events;
 }
 
+FString UWonderlandMissionSubsystem::GetBeatNotYetEmitted(FName BeatId) const
+{
+	return WonderlandBeatReading(WonderlandBeatFromId(BeatId)).NotYetEmitted;
+}
+
 int32 UWonderlandMissionSubsystem::GetBeatChakraStep(FName BeatId, int32 PreviousStep) const
 {
 	const EWonderlandChakra Previous = WonderlandChakraForStep(PreviousStep);
@@ -402,6 +407,32 @@ int32 UWonderlandMissionSubsystem::GetBeatChakraStep(FName BeatId, int32 Previou
 bool UWonderlandMissionSubsystem::DoesBeatAskForAHuman(FName BeatId) const
 {
 	return WonderlandBeatReading(WonderlandBeatFromId(BeatId)).bAsksForAHuman;
+}
+
+bool UWonderlandMissionSubsystem::SetOrbScale(float Scale)
+{
+	if (AWonderlandMissionOrb* Body = Orb.Get())
+	{
+		Body->SetOrbScale(Scale);
+		return true;
+	}
+	return false;
+}
+
+bool UWonderlandMissionSubsystem::SetOrbFollowOffset(float Forward, float Right)
+{
+	if (AWonderlandMissionOrb* Body = Orb.Get())
+	{
+		Body->SetFollowOffset(Forward, Right);
+		return true;
+	}
+	return false;
+}
+
+float UWonderlandMissionSubsystem::GetOrbHeightUU() const
+{
+	const AWonderlandMissionOrb* Body = Orb.Get();
+	return Body != nullptr ? Body->GetOrbHeightUU() : 0.0f;
 }
 
 bool UWonderlandMissionSubsystem::IsOrbInWorld() const

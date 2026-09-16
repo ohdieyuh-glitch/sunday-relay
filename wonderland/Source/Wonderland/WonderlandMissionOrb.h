@@ -66,6 +66,22 @@ public:
 	/** Put the progression back to nothing, as a new task does. */
 	void ResetProgression();
 
+	/**
+	 * Uniform scale on the whole orb. Everything it is built from is relative, so this grows the dais, the
+	 * spine and the core together, and leaves the floor trace alone.
+	 *
+	 * IT EXISTS BECAUSE "SMALL" AND "LEGIBLE" FIGHT. Measured from the play camera on 2026-09-15, the orb
+	 * at its built size covers about 34 px, which puts each of the seven spine steps at roughly two pixels
+	 * — not a progression anybody can count. A probe trials sizes from the camera that actually matters.
+	 */
+	void SetOrbScale(float Scale);
+
+	/** Move where it stands in the pawn's yaw frame, uu. Snaps, so a probe sees the new place at once. */
+	void SetFollowOffset(float Forward, float Right);
+
+	/** How tall the whole orb stands, uu, at its current scale: floor to the top of the core. */
+	float GetOrbHeightUU() const;
+
 	EWonderlandMissionBeat GetBeat() const { return Beat; }
 	EWonderlandChakra GetChakra() const { return Chakra; }
 

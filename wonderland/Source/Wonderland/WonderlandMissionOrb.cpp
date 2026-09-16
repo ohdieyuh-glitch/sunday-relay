@@ -247,6 +247,23 @@ void AWonderlandMissionOrb::ResetProgression()
 	PaintChakra();
 }
 
+void AWonderlandMissionOrb::SetOrbScale(float Scale)
+{
+	SetActorScale3D(FVector(FMath::Clamp(Scale, 0.2f, 6.0f)));
+}
+
+void AWonderlandMissionOrb::SetFollowOffset(float Forward, float Right)
+{
+	FollowOffset = FVector(Forward, Right, 0.0);
+	bHasSnapped = false;
+	SnapToTarget();
+}
+
+float AWonderlandMissionOrb::GetOrbHeightUU() const
+{
+	return (CoreHeightUU + CoreRadiusUU) * static_cast<float>(GetActorScale3D().Z);
+}
+
 void AWonderlandMissionOrb::PaintChakra()
 {
 	const FLinearColor Colour = WonderlandChakraColour(Chakra);

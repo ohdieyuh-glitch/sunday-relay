@@ -33,8 +33,13 @@ WALK = [
     ("complete_verified", 7),
 ]
 
-# Every beat that is a real state, in the order the enum declares them. Photographed one at a time.
+# Every beat that is a real state. Filmed one at a time, in the order a task walks them.
 GALLERY = [b for b, _ in WALK] + ["block", "error"]
+
+# Ten frames over about 1.2 s. Fast enough to read a 2 Hz working pulse, long enough to see a slow one
+# breathe; the 4 Hz error flash aliases at this rate and reads as a flicker, which is what it is.
+FRAMES_PER_BEAT = 10
+FRAME_SPACING = 0.12
 
 
 def job():
@@ -72,6 +77,20 @@ def job():
         mission = next((m for m in unreal.ObjectIterator(unreal.WonderlandMissionSubsystem)
                         if m.get_beat_count() > 0), None)
 
+    def to_screen(at):
+        """ProjectWorldToScreen hands Python the position ALONE, not (bool, position) as the C++ reads."""
+        try:
+            got = unreal.GameplayStatics.project_world_to_screen(controller, at, False)
+        except Exception as exc:
+            RESULT.setdefault("project_error", str(exc))
+            return None
+        if isinstance(got, tuple):
+            got = got[1] if len(got) > 1 else got[0]
+        try:
+            return [float(got.x), float(got.y)]
+        except AttributeError:
+            return None
+
     # An unfocused editor paces down to ~2.5 fps, which buries a small actor's cost in the sleep.
     for cmd in ("t.MaxFPS 0", "Slate.bAllowThrottling 0", "r.VSync 0"):
         unreal.SystemLibrary.execute_console_command(world, cmd)
@@ -103,23 +122,35 @@ def job():
     # A DRAWN STATE WITH NO RUNTIME STATE BEHIND IT IS A STATE THAT CANNOT BE WIRED UP. This is the check
     # that keeps Phase 3 honest about Phase 4.
     unbound = []
-    eventless = []
+    silent = []
+    declared_gaps = []
     bindings = {}
     for index in range(mission.get_beat_count() if mission else 0):
-        beat = mission.get_beat_id_at(index)
+        beat = str(mission.get_beat_id_at(index))
         phase = mission.get_beat_phase(beat)
-        accent = mission.get_beat_accent(beat)
-        events = mission.get_beat_events(beat)
-        bindings[str(beat)] = {"phase": phase, "accent": accent, "events": events}
+        events = mission.get_beat_events(beat).strip()
+        gap = mission.get_beat_not_yet_emitted(beat).strip()
+        bindings[beat] = {"phase": phase, "accent": mission.get_beat_accent(beat),
+                          "events": events, "not_yet_emitted": gap}
         if not phase or phase == "Unknown":
-            unbound.append(str(beat))
-        # `unobserved` is the absence of a report and is driven by no event, by design.
-        if str(beat) != "unobserved" and not events.strip():
-            eventless.append(str(beat))
+            unbound.append(beat)
+        # `unobserved` is the absence of a report, so no event drives it and that is not a gap.
+        if beat == "unobserved":
+            continue
+        if events and gap:
+            # Claiming both an event and a gap is a row that has not decided what it is.
+            silent.append(beat + " (claims both)")
+        elif not events and not gap:
+            # A SILENT GAP is the failure: a drawn state with no event and no note saying so would be
+            # wired up in Phase 4 to whatever event was nearest, which is how a visual starts lying.
+            silent.append(beat)
+        elif gap:
+            declared_gaps.append(beat)
     RESULT["bindings"] = bindings
-    record("M02", "every beat resolves to a real Julius phase and names the events that will drive it",
-           mission is not None and not unbound and not eventless,
-           unbound=unbound, eventless=eventless, bound=len(bindings))
+    RESULT["declared_gaps"] = declared_gaps
+    record("M02", "every beat resolves to a real Julius phase, and names either its events or the gap",
+           mission is not None and not unbound and not silent,
+           unbound=unbound, silent=silent, declared_gaps=declared_gaps, bound=len(bindings))
 
     # ---------------------------------------------------------------- the fold, as a pure function
     # Checked WITHOUT touching the orb: the progression is arithmetic on the beat table, so a renderer
@@ -148,28 +179,34 @@ def job():
            asking=sorted(b for b, v in asks.items() if v))
 
     # ---------------------------------------------------------------- the gallery
-    # One frame per state, with the orb's screen position recorded so each can be cropped to the orb later.
+    # A SEQUENCE PER STATE, NOT A STILL. Phase 3 is animation: a spin that reverses through a repair, a
+    # pulse that races while coding and breathes while waiting, a block that stops dead. A contact sheet of
+    # stills would show seventeen coloured orbs and prove none of it, so each state gets a short run of
+    # frames that can be assembled into a loop afterwards.
+    #
+    # The orb's screen position travels with every frame, because the orb is small on purpose and a frame
+    # of the whole garden shows a garden.
     gallery = []
     mission.reset_progression()
     for index, beat in enumerate(GALLERY):
         mission.set_beat_by_id(beat)
-        # Long enough for the motion to ease in and for a slow pulse to be somewhere other than its trough.
-        yield 1.1
-        at = mission.get_orb_location()
-        # Recorded so each frame can be cropped to the orb afterwards: it is small on purpose, and a
-        # contact sheet of seventeen full frames would show seventeen gardens and no orb.
-        try:
-            found, screen = unreal.GameplayStatics.project_world_to_screen(controller, at, False)
-        except Exception as exc:
-            found, screen, RESULT["project_error"] = False, None, str(exc)
-        path = shot("zc_mission_%02d_%s.png" % (index + 1, beat))
+        # Let the motion ease in first (BeatBlendSeconds is 0.35), then sample.
+        yield 0.75
+        frames = []
+        for frame in range(FRAMES_PER_BEAT):
+            at = mission.get_orb_location()
+            screen = to_screen(at)
+            path = shot("zc_mission_%02d_%s_%02d.png" % (index + 1, beat, frame))
+            frames.append({"capture": path, "screen": screen})
+            yield FRAME_SPACING
         gallery.append({"beat": beat, "label": mission.get_beat_label(), "step": mission.get_chakra_step(),
-                        "chakra": mission.get_chakra_name(),
-                        "screen": [screen.x, screen.y] if (found and screen is not None) else None, "capture": path})
+                        "chakra": mission.get_chakra_name(), "frames": frames})
     RESULT["gallery"] = gallery
-    record("M06", "every state was photographed in play",
-           len(gallery) == len(GALLERY) and all(g["capture"] for g in gallery),
-           shots=len(gallery), missed=[g["beat"] for g in gallery if not g["capture"]])
+    RESULT["frame_spacing"] = FRAME_SPACING
+    missed = [g["beat"] for g in gallery if not all(f["capture"] for f in g["frames"])]
+    record("M06", "every state was filmed in play, not just photographed",
+           len(gallery) == len(GALLERY) and not missed,
+           states=len(gallery), frames_each=FRAMES_PER_BEAT, missed=missed)
 
     # ---------------------------------------------------------------- what it costs
     actor = next((a for a in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.WonderlandMissionOrb)), None)

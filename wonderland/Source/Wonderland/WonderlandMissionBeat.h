@@ -124,6 +124,18 @@ struct FWonderlandBeatReading
 	bool bTerminal = false;
 	/** The Julius events that will resolve here in Phase 4. Comma separated, in the founder's spelling. */
 	const TCHAR* Events = TEXT("");
+	/**
+	 * WHAT JULIUS WOULD HAVE TO EMIT for this beat, when nothing in the catalogue currently does. Empty for
+	 * every beat a real event already reaches.
+	 *
+	 * A DECLARED GAP, NOT A SILENT ONE. Two of the founder's seventeen have no event behind them: nothing
+	 * reports the gate opened by `task.paused` being CLEARED, and nothing reports that a finished run has
+	 * been acknowledged and the world may rest. Both are states a person watching plainly sees, so they
+	 * stay in the vocabulary — and the gap is written down here rather than hidden by binding them to the
+	 * nearest event that happens to exist, which would make the orb claim a reading it never got. Relay's
+	 * own `JULIUS_ACTIVITY_NOT_YET_EMITTED` keeps the same kind of ledger for the same reason.
+	 */
+	const TCHAR* NotYetEmitted = TEXT("");
 	FWonderlandBeatMotion Motion;
 };
 
@@ -162,3 +174,6 @@ WONDERLAND_API FLinearColor WonderlandChakraColour(EWonderlandChakra Chakra);
 
 /** The name a person reads: "ROOT", "HEART", "CROWN". */
 WONDERLAND_API const TCHAR* WonderlandChakraName(EWonderlandChakra Chakra);
+
+/** True when a beat is real but no Julius event reaches it yet. Two of the seventeen are in this state. */
+WONDERLAND_API bool WonderlandBeatAwaitsAnEvent(EWonderlandMissionBeat Beat);

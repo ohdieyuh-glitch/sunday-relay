@@ -80,6 +80,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	FString GetBeatEvents(FName BeatId) const;
 
+	/**
+	 * What Julius would have to emit for a beat nothing currently reaches. Empty when a real event does.
+	 * Two of the seventeen are in this state; the sentence says which moment is missing and why the
+	 * nearest existing event was NOT used for it.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString GetBeatNotYetEmitted(FName BeatId) const;
+
 	/** The pure fold: what step a beat leaves the progression on, given the step before it. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	int32 GetBeatChakraStep(FName BeatId, int32 PreviousStep) const;
@@ -90,6 +98,17 @@ public:
 	/** True for every beat this build can currently produce. Nothing here is real Julius execution. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	bool IsDevelopmentPreview() const { return true; }
+
+	/** Grow or shrink the orb. For the placement probe; the built-in size is what ships. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
+	bool SetOrbScale(float Scale);
+
+	/** Move the orb in the pawn's yaw frame, uu forward and right. For the placement probe. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
+	bool SetOrbFollowOffset(float Forward, float Right);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	float GetOrbHeightUU() const;
 
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	bool IsOrbInWorld() const;
