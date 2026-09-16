@@ -145,6 +145,42 @@ namespace WonderlandBrainGlyphs
 			Arc(S, 0.5f, 0.62f, 0.30f, 20.0f, 160.0f, 14);
 			Line(S, {{0.5f, 0.18f}, {0.5f, 0.86f}});
 			break;
+		case EWonderlandBrainGlyph::Agent:
+			// A hexagon holding a smaller one: the Compound Agent and the agents it holds.
+			for (float R : {0.40f, 0.18f})
+			{
+				FStroke Hex;
+				for (int32 Corner = 0; Corner <= 6; ++Corner)
+				{
+					const float A = FMath::DegreesToRadians(-90.0f + 60.0f * Corner);
+					Hex.Add(FVector2f(0.5f + FMath::Cos(A) * R, 0.5f + FMath::Sin(A) * R));
+				}
+				S.Add(MoveTemp(Hex));
+			}
+			break;
+		case EWonderlandBrainGlyph::Missions:
+			// A contract on a board: the clipboard of the reference, with its clip and its lines.
+			Line(S, {{0.22f, 0.18f}, {0.78f, 0.18f}, {0.78f, 0.90f}, {0.22f, 0.90f}, {0.22f, 0.18f}});
+			Line(S, {{0.38f, 0.10f}, {0.62f, 0.10f}, {0.62f, 0.24f}, {0.38f, 0.24f}, {0.38f, 0.10f}});
+			Line(S, {{0.34f, 0.44f}, {0.40f, 0.50f}, {0.50f, 0.38f}});
+			Line(S, {{0.56f, 0.44f}, {0.68f, 0.44f}});
+			Line(S, {{0.34f, 0.64f}, {0.40f, 0.70f}, {0.50f, 0.58f}});
+			Line(S, {{0.56f, 0.64f}, {0.68f, 0.64f}});
+			break;
+		case EWonderlandBrainGlyph::Commands:
+			// Three rails with a knob set on each: presets are arrangements, and a slider reads as one.
+			Line(S, {{0.12f, 0.28f}, {0.88f, 0.28f}});
+			Line(S, {{0.12f, 0.50f}, {0.88f, 0.50f}});
+			Line(S, {{0.12f, 0.72f}, {0.88f, 0.72f}});
+			Arc(S, 0.34f, 0.28f, 0.07f, 0.0f, 360.0f, 12);
+			Arc(S, 0.66f, 0.50f, 0.07f, 0.0f, 360.0f, 12);
+			Arc(S, 0.44f, 0.72f, 0.07f, 0.0f, 360.0f, 12);
+			break;
+		case EWonderlandBrainGlyph::Menu:
+			Line(S, {{0.16f, 0.28f}, {0.84f, 0.28f}});
+			Line(S, {{0.16f, 0.50f}, {0.84f, 0.50f}});
+			Line(S, {{0.16f, 0.72f}, {0.84f, 0.72f}});
+			break;
 		}
 		return S;
 	}

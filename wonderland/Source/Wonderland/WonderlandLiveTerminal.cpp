@@ -90,6 +90,8 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 {
 	OnRequestClose = InArgs._OnRequestClose;
 	OnSubmit = InArgs._OnSubmit;
+	OnGetCommandLabel = InArgs._OnGetCommandLabel;
+	CommandSlotCount = FMath::Clamp(InArgs._CommandSlotCount, 1, 9);
 
 	FSlateBrush NoBackground;
 	NoBackground.DrawAs = ESlateBrushDrawType::NoDrawType;
@@ -268,11 +270,20 @@ TSharedRef<SWidget> SWonderlandLiveTerminal::MakeRestingLine(const FString& Text
 TSharedRef<SWidget> SWonderlandLiveTerminal::MakeSideList(bool bLoops)
 {
 	// The founder's frame: loops down the left in gold, sub-agents down the right in coral.
-	static const TCHAR* Loops[] = { TEXT("Gauntlet Loop"), TEXT("Goal Loop"), TEXT("Eval Loop"), TEXT("Unchained") };
+	//
+	// THE LEFT LIST IS THE ACTIVE COMMAND PRESET NOW, not a list. It was a static array of the four loops, which
+	// made the founder's first frame the permanent design; the founder asked for those four to become the DEFAULT
+	// preset instead (2026-09-15). Each row asks for its slot every paint, so arranging commands in the station
+	// changes this list the moment it is saved, with the terminal open or closed.
 	static const TCHAR* Agents[] = { TEXT("Scout-01"), TEXT("Forge-02"), TEXT("Sub-Agent Sync"), TEXT("Reviewer Lock") };
+	if (bLoops)
+	{
+		CommandTexts.Reset();
+	}
 
 	TSharedRef<SVerticalBox> List = SNew(SVerticalBox);
-	for (int32 Index = 0; Index < 4; ++Index)
+	const int32 Rows = bLoops ? CommandSlotCount : 4;
+	for (int32 Index = 0; Index < Rows; ++Index)
 	{
 		const FString Number = FString::FromInt(Index + 1);
 		TSharedPtr<SWidget> Row;
@@ -294,10 +305,18 @@ TSharedRef<SWidget> SWonderlandLiveTerminal::MakeSideList(bool bLoops)
 					.BorderImage(&SlotBrush)
 					.Padding(FMargin(12.0f, 6.0f))
 					[
-						SNew(STextBlock)
-						.Text(FText::FromString(Loops[Index]))
+						SAssignNew(CommandTexts.AddDefaulted_GetRef(), STextBlock)
+						.Text_Lambda([this, Index]()
+						{
+							const FString Label = OnGetCommandLabel.IsBound() ? OnGetCommandLabel.Execute(Index) : FString();
+							return FText::FromString(Label.IsEmpty() ? TEXT("Empty slot") : Label);
+						})
 						.Font(WonderlandUi::Sans(12))
-						.ColorAndOpacity(WonderlandUi::Cream())
+						.ColorAndOpacity_Lambda([this, Index]()
+						{
+							const bool bEmpty = !OnGetCommandLabel.IsBound() || OnGetCommandLabel.Execute(Index).IsEmpty();
+							return FSlateColor(bEmpty ? WonderlandUi::Faint() : WonderlandUi::Cream());
+						})
 					]
 				];
 		}
@@ -460,4 +479,14 @@ void SWonderlandLiveTerminal::HandleCommitted(const FText& Text, ETextCommit::Ty
 	Input->SetText(FText::GetEmpty());
 	OnSubmit.ExecuteIfBound(Trimmed);
 	FSlateApplication::Get().SetKeyboardFocus(Input, EFocusCause::SetDirectly);
+}
+
+FString SWonderlandLiveTerminal::DescribeCommandRows() const
+{
+	TArray<FString> Parts;
+	for (const TSharedPtr<STextBlock>& Text : CommandTexts)
+	{
+		Parts.Add(Text.IsValid() ? Text->GetText().ToString() : FString());
+	}
+	return FString::Join(Parts, TEXT("|"));
 }

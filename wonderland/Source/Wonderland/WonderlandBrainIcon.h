@@ -30,7 +30,12 @@ enum class EWonderlandBrainGlyph : uint8
 	Shield,
 	Check,
 	Link,
-	Brain
+	Brain,
+	// The HUD's bottom shortcuts (WonderlandNavBar.h) draw in the same hand as the Brain's panels.
+	Agent,
+	Missions,
+	Commands,
+	Menu
 };
 
 class WONDERLAND_API SWonderlandBrainIcon : public SLeafWidget

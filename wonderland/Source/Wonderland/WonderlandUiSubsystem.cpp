@@ -12,10 +12,19 @@
 #include "HAL/IConsoleManager.h"
 #include "ImageUtils.h"
 #include "Misc/Paths.h"
+#include "GenericPlatform/GenericApplication.h"
+#include "Input/Events.h"
+#include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SConstraintCanvas.h"
+#include "WonderlandCommandPresets.h"
+#include "WonderlandCommandStation.h"
 #include "WonderlandCompanionSubsystem.h"
 #include "WonderlandCompanionTerminal.h"
+#include "WonderlandHudPanels.h"
 #include "WonderlandLiveTerminal.h"
+#include "WonderlandMiniMap.h"
+#include "WonderlandMissionSubsystem.h"
+#include "WonderlandNavBar.h"
 #include "WonderlandProjectBrain.h"
 #include "WonderlandProjectBrainPanel.h"
 #include "WonderlandTravel.h"
@@ -114,6 +123,12 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 	UiInput->BindKey(FInputChord(EKeys::T, false, true, false, false), IE_Pressed, this, &UWonderlandUiSubsystem::ToggleLiveTerminal);
 	UiInput->BindKey(EKeys::M, IE_Pressed, this, &UWonderlandUiSubsystem::ToggleWorldMap);
 	UiInput->BindKey(EKeys::B, IE_Pressed, this, &UWonderlandUiSubsystem::ToggleProjectBrain);
+	// THE BOTTOM STRIP'S KEYS, the letters its tiles show. INVENTORY's old I is deliberately not bound to anything.
+	UiInput->BindKey(EKeys::J, IE_Pressed, this, &UWonderlandUiSubsystem::ToggleMissions);
+	UiInput->BindKey(EKeys::C, IE_Pressed, this, &UWonderlandUiSubsystem::ToggleCommandStation);
+	UiInput->BindKey(EKeys::Tab, IE_Pressed, this, &UWonderlandUiSubsystem::ToggleMenu);
+	UiInput->BindKey(EKeys::LeftAlt, IE_Pressed, this, &UWonderlandUiSubsystem::BeginPointing);
+	UiInput->BindKey(EKeys::LeftAlt, IE_Released, this, &UWonderlandUiSubsystem::EndPointing);
 	Controller->PushInputComponent(UiInput);
 
 	// The Project Brain hologram, read once per attach. A missing file is a drawn frame without a brain, logged
@@ -162,7 +177,8 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 		++UsageHudCreations;
 	}
 	MountCompanionTerminals();
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI attached to %s (usage HUD %s%s, %d companion terminals, Ctrl+T terminal, M map)"),
+	MountHudFurniture();
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI attached to %s (usage HUD %s%s, %d companion terminals, mini-map and shortcuts mounted; Ctrl+T J B C Tab, M map, hold Alt to point)"),
 		*Controller->GetName(), UsageHud != nullptr ? TEXT("on screen") : TEXT("FAILED"), bPreview ? TEXT(", DEVELOPMENT PREVIEW reading") : TEXT(""),
 		CompanionTerminals.Num());
 }
@@ -275,6 +291,8 @@ bool UWonderlandUiSubsystem::FocusCompanionTerminal(int32 Index)
 void UWonderlandUiSubsystem::Detach()
 {
 	CloseOverlay();
+	StopPointing(true);
+	UnmountHudFurniture();
 	UnmountCompanionTerminals();
 	if (APlayerController* Controller = BoundController.Get())
 	{
@@ -297,6 +315,9 @@ void UWonderlandUiSubsystem::Detach()
 	Terminal.Reset();
 	WorldMap.Reset();
 	BrainPanel.Reset();
+	CommandStation.Reset();
+	MissionsPanel.Reset();
+	MenuPanel.Reset();
 	BrainArtBrush.Reset();
 	BrainArt = nullptr;
 	BoundController.Reset();
@@ -345,6 +366,8 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 	{
 		CloseOverlay();
 	}
+	// A panel opened from a click: the pointer's hold on look input ends here, and the panel sets the input mode.
+	StopPointing(false);
 
 	const TWeakObjectPtr<UWonderlandUiSubsystem> WeakThis(this);
 	TSharedPtr<SWidget> Panel;
@@ -355,7 +378,14 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 		if (!Terminal.IsValid())
 		{
 			// Created once and kept: its log survives closing and reopening.
+			const UWonderlandCommandPresetSubsystem* CommandPresets = Presets();
 			SAssignNew(Terminal, SWonderlandLiveTerminal)
+				.CommandSlotCount(CommandPresets != nullptr ? CommandPresets->GetSlotCount() : GetDefault<UWonderlandCommandSettings>()->QuickSlotCount)
+				.OnGetCommandLabel_Lambda([WeakThis](int32 Slot)
+				{
+					const UWonderlandCommandPresetSubsystem* Source = WeakThis.IsValid() ? WeakThis->Presets() : nullptr;
+					return Source != nullptr ? Source->GetSlotLabel(Slot) : FString();
+				})
 				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
 				.OnSubmit_Lambda([WeakThis](const FString& Text) { if (WeakThis.IsValid()) { WeakThis->HandleTerminalSubmit(Text); } });
 		}
@@ -398,6 +428,46 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 		Focus = BrainPanel;
 		ZOrder = 58;
 	}
+	else if (Which == EOverlay::Commands)
+	{
+		if (!CommandStation.IsValid())
+		{
+			SAssignNew(CommandStation, SWonderlandCommandStation)
+				.Presets(TWeakObjectPtr<UWonderlandCommandPresetSubsystem>(Presets()))
+				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
+				.OnRequestNavigate_Lambda([WeakThis](EWonderlandNavTarget Target) { if (WeakThis.IsValid()) { WeakThis->HandleNavigate(Target); } });
+		}
+		CommandStation->Refresh();
+		Panel = CommandStation;
+		Focus = CommandStation;
+		ZOrder = 58;
+	}
+	else if (Which == EOverlay::Missions)
+	{
+		if (!MissionsPanel.IsValid())
+		{
+			SAssignNew(MissionsPanel, SWonderlandMissionsPanel)
+				.Missions(TWeakObjectPtr<UWonderlandMissionSubsystem>(Missions()))
+				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
+				.OnRequestNavigate_Lambda([WeakThis](EWonderlandNavTarget Target) { if (WeakThis.IsValid()) { WeakThis->HandleNavigate(Target); } });
+		}
+		Panel = MissionsPanel;
+		Focus = MissionsPanel;
+		ZOrder = 58;
+	}
+	else if (Which == EOverlay::Menu)
+	{
+		if (!MenuPanel.IsValid())
+		{
+			SAssignNew(MenuPanel, SWonderlandMenuPanel)
+				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
+				.OnRequestMap_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Map); } })
+				.OnRequestNavigate_Lambda([WeakThis](EWonderlandNavTarget Target) { if (WeakThis.IsValid()) { WeakThis->HandleNavigate(Target); } });
+		}
+		Panel = MenuPanel;
+		Focus = MenuPanel;
+		ZOrder = 58;
+	}
 	else
 	{
 		if (!WorldMap.IsValid())
@@ -417,8 +487,7 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 	++OverlaysInViewport;
 	Open = Which;
 	ApplyOverlayInput(true, Focus);
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI open %s (panels in viewport: %d)"),
-		Which == EOverlay::Terminal ? TEXT("live terminal") : (Which == EOverlay::Brain ? TEXT("project brain") : TEXT("world map")), OverlaysInViewport);
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI open %s (panels in viewport: %d)"), OverlayName(Which), OverlaysInViewport);
 }
 
 void UWonderlandUiSubsystem::CloseOverlay()
@@ -428,15 +497,7 @@ void UWonderlandUiSubsystem::CloseOverlay()
 		return;
 	}
 	const EOverlay Closing = Open;
-	TSharedPtr<SWidget> Panel = StaticCastSharedPtr<SWidget>(WorldMap);
-	if (Closing == EOverlay::Terminal)
-	{
-		Panel = StaticCastSharedPtr<SWidget>(Terminal);
-	}
-	else if (Closing == EOverlay::Brain)
-	{
-		Panel = StaticCastSharedPtr<SWidget>(BrainPanel);
-	}
+	TSharedPtr<SWidget> Panel = OverlayWidget(Closing);
 	ULocalPlayer* LocalPlayer = GetLocalPlayer<ULocalPlayer>();
 	if (LocalPlayer != nullptr && LocalPlayer->ViewportClient != nullptr && Panel.IsValid())
 	{
@@ -445,8 +506,7 @@ void UWonderlandUiSubsystem::CloseOverlay()
 	}
 	Open = EOverlay::None;
 	ApplyOverlayInput(false, nullptr);
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI close %s (panels in viewport: %d)"),
-		Closing == EOverlay::Terminal ? TEXT("live terminal") : (Closing == EOverlay::Brain ? TEXT("project brain") : TEXT("world map")), OverlaysInViewport);
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI close %s (panels in viewport: %d)"), OverlayName(Closing), OverlaysInViewport);
 }
 
 void UWonderlandUiSubsystem::ApplyOverlayInput(bool bOverlayOpen, TSharedPtr<SWidget> Focus)
@@ -686,4 +746,438 @@ bool UWonderlandUiSubsystem::TeleportToSelected()
 	}
 	HandleTravel(Selected);
 	return true;
+}
+
+/* ------------------------------------------------------------------ overlays by name */
+
+const TCHAR* UWonderlandUiSubsystem::OverlayName(EOverlay Which)
+{
+	switch (Which)
+	{
+	case EOverlay::Terminal: return TEXT("live terminal");
+	case EOverlay::Map:      return TEXT("world map");
+	case EOverlay::Brain:    return TEXT("project brain");
+	case EOverlay::Missions: return TEXT("missions");
+	case EOverlay::Commands: return TEXT("command station");
+	case EOverlay::Menu:     return TEXT("menu");
+	default: break;
+	}
+	return TEXT("nothing");
+}
+
+TSharedPtr<SWidget> UWonderlandUiSubsystem::OverlayWidget(EOverlay Which) const
+{
+	switch (Which)
+	{
+	case EOverlay::Terminal: return Terminal;
+	case EOverlay::Map:      return WorldMap;
+	case EOverlay::Brain:    return BrainPanel;
+	case EOverlay::Missions: return MissionsPanel;
+	case EOverlay::Commands: return CommandStation;
+	case EOverlay::Menu:     return MenuPanel;
+	default: break;
+	}
+	return nullptr;
+}
+
+void UWonderlandUiSubsystem::ToggleOverlay(EOverlay Which)
+{
+	if (Open == Which)
+	{
+		CloseOverlay();
+	}
+	else
+	{
+		OpenOverlay(Which);
+	}
+}
+
+void UWonderlandUiSubsystem::ToggleMissions() { ToggleOverlay(EOverlay::Missions); }
+void UWonderlandUiSubsystem::ToggleCommandStation() { ToggleOverlay(EOverlay::Commands); }
+void UWonderlandUiSubsystem::ToggleMenu() { ToggleOverlay(EOverlay::Menu); }
+bool UWonderlandUiSubsystem::IsMissionsOpen() const { return Open == EOverlay::Missions; }
+bool UWonderlandUiSubsystem::IsCommandStationOpen() const { return Open == EOverlay::Commands; }
+bool UWonderlandUiSubsystem::IsMenuOpen() const { return Open == EOverlay::Menu; }
+
+UWonderlandCommandPresetSubsystem* UWonderlandUiSubsystem::Presets() const
+{
+	const APlayerController* Controller = BoundController.Get();
+	UGameInstance* Instance = Controller != nullptr ? Controller->GetGameInstance() : nullptr;
+	return Instance != nullptr ? Instance->GetSubsystem<UWonderlandCommandPresetSubsystem>() : nullptr;
+}
+
+UWonderlandMissionSubsystem* UWonderlandUiSubsystem::Missions() const
+{
+	const ULocalPlayer* LocalPlayer = GetLocalPlayer<ULocalPlayer>();
+	return LocalPlayer != nullptr ? LocalPlayer->GetSubsystem<UWonderlandMissionSubsystem>() : nullptr;
+}
+
+/* ------------------------------------------------------------------ the bottom shortcuts */
+
+void UWonderlandUiSubsystem::HandleNavigate(EWonderlandNavTarget Target)
+{
+	// A shortcut OPENS where it leads; it never closes it. The keys toggle, because a key pressed twice means
+	// "away again", but the strip is only on screen when nothing is open, so a tile has nothing to close.
+	EOverlay Want = EOverlay::Menu;
+	switch (Target)
+	{
+	case EWonderlandNavTarget::Agent:    Want = EOverlay::Terminal; break;
+	case EWonderlandNavTarget::Missions: Want = EOverlay::Missions; break;
+	case EWonderlandNavTarget::Brain:    Want = EOverlay::Brain; break;
+	case EWonderlandNavTarget::Commands: Want = EOverlay::Commands; break;
+	case EWonderlandNavTarget::Menu:     Want = EOverlay::Menu; break;
+	}
+	if (Open != Want)
+	{
+		OpenOverlay(Want);
+	}
+}
+
+bool UWonderlandUiSubsystem::NavigateTo(FName ShortcutId)
+{
+	const FWonderlandNavEntry* Entry = WonderlandFindNavEntry(ShortcutId);
+	if (Entry == nullptr)
+	{
+		return false;
+	}
+	HandleNavigate(Entry->Target);
+	return true;
+}
+
+bool UWonderlandUiSubsystem::IsNavBarOnScreen() const
+{
+	return HudFurniture.IsValid() && NavBar.IsValid() && Open == EOverlay::None;
+}
+
+FString UWonderlandUiSubsystem::GetNavBarLabels() const
+{
+	return NavBar.IsValid() ? NavBar->DescribeLabels() : FString();
+}
+
+int32 UWonderlandUiSubsystem::GetNavClickCount(FName ShortcutId) const
+{
+	return NavBar.IsValid() ? NavBar->GetClickCount(ShortcutId) : 0;
+}
+
+void UWonderlandUiSubsystem::BeginPointing()
+{
+	APlayerController* Controller = BoundController.Get();
+	// Only over the world: a panel already has the cursor, and the strip is not on screen then anyway.
+	if (bPointing || Open != EOverlay::None || Controller == nullptr || !NavBar.IsValid())
+	{
+		return;
+	}
+	FInputModeGameAndUI Mode;
+	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	Mode.SetHideCursorDuringCapture(false);
+	Controller->SetInputMode(Mode);
+	Controller->SetShowMouseCursor(true);
+	// Held, not ignored for good: moving the mouse to a tile must not also swing the camera across the garden.
+	Controller->SetIgnoreLookInput(true);
+	bPointing = true;
+}
+
+void UWonderlandUiSubsystem::EndPointing()
+{
+	StopPointing(true);
+}
+
+void UWonderlandUiSubsystem::StopPointing(bool bRestoreGameInput)
+{
+	if (!bPointing)
+	{
+		return;
+	}
+	bPointing = false;
+	APlayerController* Controller = BoundController.Get();
+	if (Controller == nullptr)
+	{
+		return;
+	}
+	Controller->SetIgnoreLookInput(false);
+	if (bRestoreGameInput)
+	{
+		Controller->SetInputMode(FInputModeGameOnly());
+		Controller->SetShowMouseCursor(false);
+		if (FSlateApplication::IsInitialized())
+		{
+			FSlateApplication::Get().SetAllUserFocusToGameViewport();
+		}
+	}
+}
+
+bool UWonderlandUiSubsystem::ClickNavButton(FName ShortcutId)
+{
+	if (!IsNavBarOnScreen() || !FSlateApplication::IsInitialized())
+	{
+		return false;
+	}
+	BeginPointing();
+	FSlateRect Rect;
+	if (!NavBar->GetTileAbsoluteRect(ShortcutId, Rect))
+	{
+		return false;
+	}
+	const int32 Before = NavBar->GetClickCount(ShortcutId);
+	FSlateApplication& App = FSlateApplication::Get();
+	const FVector2D Centre(Rect.GetCenter());
+	const FVector2D From(App.GetCursorPos());
+	const uint32 User = static_cast<uint32>(App.GetUserIndexForMouse());
+	const TSet<FKey> None;
+	TSet<FKey> Held;
+	Held.Add(EKeys::LeftMouseButton);
+
+	// Travel there, press, release: the three events a hand produces, through the application's own routing.
+	App.SetCursorPos(Centre);
+	App.ProcessMouseMoveEvent(FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, From, None, EKeys::Invalid, 0.0f, FModifierKeysState()));
+	App.ProcessMouseButtonDownEvent(nullptr, FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, Held, EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
+	App.ProcessMouseButtonUpEvent(FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, None, EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
+
+	const bool bClicked = NavBar->GetClickCount(ShortcutId) > Before;
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI pointer click on %s at (%.0f, %.0f): %s"), *ShortcutId.ToString(), Centre.X, Centre.Y,
+		bClicked ? TEXT("the tile answered") : TEXT("nothing answered"));
+	if (!bClicked)
+	{
+		StopPointing(true);
+	}
+	return bClicked;
+}
+
+/* ------------------------------------------------------------------ the HUD furniture */
+
+void UWonderlandUiSubsystem::MountHudFurniture()
+{
+	ULocalPlayer* LocalPlayer = GetLocalPlayer<ULocalPlayer>();
+	APlayerController* Controller = BoundController.Get();
+	if (HudFurniture.IsValid() || LocalPlayer == nullptr || LocalPlayer->ViewportClient == nullptr || Controller == nullptr)
+	{
+		return;
+	}
+	MiniMapDriver = NewObject<UWonderlandMiniMapDriver>(this);
+	MiniMapDriver->Start(Controller);
+
+	const TWeakObjectPtr<UWonderlandUiSubsystem> WeakThis(this);
+	SAssignNew(MiniMap, SWonderlandMiniMap).Driver(TWeakObjectPtr<UWonderlandMiniMapDriver>(MiniMapDriver));
+	SAssignNew(NavBar, SWonderlandNavBar)
+		.OnNavigate_Lambda([WeakThis](EWonderlandNavTarget Target) { if (WeakThis.IsValid()) { WeakThis->HandleNavigate(Target); } })
+		.Pointing_Lambda([WeakThis]() { return WeakThis.IsValid() && WeakThis->IsPointing(); });
+
+	// TWO SAFE ZONES ON ONE LAYER. The top right is the map's and the bottom edge is the strip's; the usage HUD
+	// keeps the top left, the mission strip the top centre, and the terminal suite the whole bottom band while it
+	// is open -- which is why the strip steps aside for any panel rather than learning to share.
+	HudFurniture = SNew(SConstraintCanvas)
+		.Visibility(EVisibility::SelfHitTestInvisible)
+		+ SConstraintCanvas::Slot()
+		.Anchors(FAnchors(1.0f, 0.0f, 1.0f, 0.0f))
+		.Alignment(FVector2D(1.0, 0.0))
+		.AutoSize(true)
+		.Offset(TAttribute<FMargin>::CreateLambda([WeakThis]() { return WeakThis.IsValid() ? WeakThis->MiniMapOffset() : FMargin(-28.0f, 22.0f, 0.0f, 0.0f); }))
+		[
+			SNew(SBox)
+			.Visibility_Lambda([WeakThis]() { return WeakThis.IsValid() && WeakThis->IsMiniMapShown() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+			[
+				MiniMap.ToSharedRef()
+			]
+		]
+		+ SConstraintCanvas::Slot()
+		.Anchors(FAnchors(0.5f, 1.0f, 0.5f, 1.0f))
+		.Alignment(FVector2D(0.5, 1.0))
+		.AutoSize(true)
+		.Offset(FMargin(0.0f, -16.0f, 0.0f, 0.0f))
+		[
+			SNew(SBox)
+			.Visibility_Lambda([WeakThis]() { return WeakThis.IsValid() && WeakThis->Open == EOverlay::None ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; })
+			[
+				NavBar.ToSharedRef()
+			]
+		];
+	// Above the usage HUD (10), below the mission strip (18), the companion consoles (20) and every panel.
+	LocalPlayer->ViewportClient->AddViewportWidgetForPlayer(LocalPlayer, HudFurniture.ToSharedRef(), 12);
+}
+
+void UWonderlandUiSubsystem::UnmountHudFurniture()
+{
+	ULocalPlayer* LocalPlayer = GetLocalPlayer<ULocalPlayer>();
+	if (HudFurniture.IsValid() && LocalPlayer != nullptr && LocalPlayer->ViewportClient != nullptr)
+	{
+		LocalPlayer->ViewportClient->RemoveViewportWidgetForPlayer(LocalPlayer, HudFurniture.ToSharedRef());
+	}
+	HudFurniture.Reset();
+	MiniMap.Reset();
+	NavBar.Reset();
+	if (MiniMapDriver != nullptr)
+	{
+		MiniMapDriver->Stop();
+		MiniMapDriver = nullptr;
+	}
+}
+
+FMargin UWonderlandUiSubsystem::MiniMapOffset() const
+{
+	const float Right = 28.0f;
+	float Top = 22.0f;
+	FSlateRect Strip;
+	const UWonderlandMissionSubsystem* Mission = Missions();
+	if (Mission != nullptr && HudFurniture.IsValid() && MiniMap.IsValid() && Mission->GetMissionStripAbsoluteRect(Strip))
+	{
+		const FGeometry& Canvas = HudFurniture->GetCachedGeometry();
+		const FVector2D CanvasSize(Canvas.GetLocalSize());
+		const FVector2D MapSize(MiniMap->GetDesiredSize());
+		const FVector2D StripTopLeft(Canvas.AbsoluteToLocal(Strip.GetTopLeft()));
+		const FVector2D StripBottomRight(Canvas.AbsoluteToLocal(Strip.GetBottomRight()));
+		const double MapLeft = CanvasSize.X - Right - MapSize.X;
+		// A narrow viewport or a long strip can reach into the map's column. The top right is still the map's, so it
+		// steps down under the strip instead of drawing across it.
+		if (StripBottomRight.X + 16.0 > MapLeft && StripTopLeft.Y < Top + MapSize.Y)
+		{
+			Top = static_cast<float>(StripBottomRight.Y) + 12.0f;
+		}
+	}
+	return FMargin(-Right, Top, 0.0f, 0.0f);
+}
+
+/* ------------------------------------------------------------------ the mini-map, read back */
+
+bool UWonderlandUiSubsystem::IsMiniMapOnScreen() const
+{
+	return HudFurniture.IsValid() && MiniMap.IsValid() && IsMiniMapShown();
+}
+
+FString UWonderlandUiSubsystem::GetMiniMapWorldLine() const
+{
+	return MiniMap.IsValid() ? MiniMap->GetWorldLine() : FString();
+}
+
+FString UWonderlandUiSubsystem::GetMiniMapRegionLine() const
+{
+	return MiniMap.IsValid() ? MiniMap->GetRegionLine() : FString();
+}
+
+int32 UWonderlandUiSubsystem::GetMiniMapCaptureCount() const
+{
+	return MiniMapDriver != nullptr ? MiniMapDriver->GetCaptureCount() : 0;
+}
+
+bool UWonderlandUiSubsystem::IsMiniMapCaptureInWorld() const
+{
+	return MiniMapDriver != nullptr && MiniMapDriver->IsCaptureInWorld();
+}
+
+bool UWonderlandUiSubsystem::DidMiniMapDrawPhotograph() const
+{
+	return MiniMap.IsValid() && MiniMap->GetDisc().IsValid() && MiniMap->GetDisc()->DidDrawCapture();
+}
+
+int32 UWonderlandUiSubsystem::GetMiniMapPaintCount() const
+{
+	return MiniMap.IsValid() && MiniMap->GetDisc().IsValid() ? MiniMap->GetDisc()->GetPaintCount() : 0;
+}
+
+double UWonderlandUiSubsystem::GetMiniMapArrowAngle() const
+{
+	return MiniMap.IsValid() && MiniMap->GetDisc().IsValid() ? MiniMap->GetDisc()->GetDrawnArrowAngleDeg() : 0.0;
+}
+
+double UWonderlandUiSubsystem::GetMiniMapViewAngle() const
+{
+	return MiniMap.IsValid() && MiniMap->GetDisc().IsValid() ? MiniMap->GetDisc()->GetDrawnViewAngleDeg() : 0.0;
+}
+
+double UWonderlandUiSubsystem::GetMiniMapUUPerPixel() const
+{
+	return MiniMap.IsValid() && MiniMap->GetDisc().IsValid() ? MiniMap->GetDisc()->GetDrawnUUPerPixel() : 0.0;
+}
+
+bool UWonderlandUiSubsystem::GetMiniMapMarkerOffset(FName PlaceId, FVector2D& OutOffset) const
+{
+	OutOffset = FVector2D::ZeroVector;
+	return MiniMap.IsValid() && MiniMap->GetDisc().IsValid() && MiniMap->GetDisc()->GetDrawnMarkerOffset(PlaceId, OutOffset);
+}
+
+bool UWonderlandUiSubsystem::IsMiniMapMarkerDrawn(FName PlaceId) const
+{
+	FVector2D Ignored;
+	return GetMiniMapMarkerOffset(PlaceId, Ignored);
+}
+
+FString UWonderlandUiSubsystem::DescribeHudRects() const
+{
+	if (!HudFurniture.IsValid())
+	{
+		return FString();
+	}
+	const FGeometry& Canvas = HudFurniture->GetCachedGeometry();
+	TArray<FString> Lines;
+	Lines.Add(FString::Printf(TEXT("viewport 0 0 %.1f %.1f 1"), Canvas.GetLocalSize().X, Canvas.GetLocalSize().Y));
+	const auto Add = [&Lines, &Canvas](const TCHAR* Name, const FSlateRect& Absolute, bool bShown)
+	{
+		const FVector2D TopLeft(Canvas.AbsoluteToLocal(Absolute.GetTopLeft()));
+		const FVector2D BottomRight(Canvas.AbsoluteToLocal(Absolute.GetBottomRight()));
+		Lines.Add(FString::Printf(TEXT("%s %.1f %.1f %.1f %.1f %d"), Name, TopLeft.X, TopLeft.Y,
+			BottomRight.X - TopLeft.X, BottomRight.Y - TopLeft.Y, bShown ? 1 : 0));
+	};
+	const auto FromGeometry = [&Add](const TCHAR* Name, const FGeometry& Geometry, bool bShown)
+	{
+		// A widget never laid out has no size, and a zero rectangle overlaps nothing -- which would be a pass for
+		// the wrong reason. It is left out, and the check counts what it was given.
+		if (!Geometry.GetLocalSize().IsNearlyZero())
+		{
+			Add(Name, Geometry.GetLayoutBoundingRect(), bShown);
+		}
+	};
+	if (UsageHud != nullptr)
+	{
+		FromGeometry(TEXT("usage_hud"), UsageHud->GetCachedGeometry(), UsageHud->IsInViewport());
+	}
+	FSlateRect Strip;
+	if (const UWonderlandMissionSubsystem* Mission = Missions())
+	{
+		if (Mission->GetMissionStripAbsoluteRect(Strip))
+		{
+			Add(TEXT("mission_strip"), Strip, true);
+		}
+	}
+	if (MiniMap.IsValid())
+	{
+		FromGeometry(TEXT("mini_map"), MiniMap->GetCachedGeometry(), IsMiniMapShown());
+	}
+	if (NavBar.IsValid())
+	{
+		FromGeometry(TEXT("nav_bar"), NavBar->GetCachedGeometry(), Open == EOverlay::None);
+	}
+	for (int32 Index = 0; Index < CompanionTerminals.Num(); ++Index)
+	{
+		if (CompanionTerminals[Index].IsValid())
+		{
+			FromGeometry(Index == 0 ? TEXT("companion_left") : TEXT("companion_right"), CompanionTerminals[Index]->GetCachedGeometry(), AreCompanionTerminalsOnScreen());
+		}
+	}
+	return FString::Join(Lines, TEXT("\n"));
+}
+
+/* ------------------------------------------------------------------ the command station, driven as its buttons drive it */
+
+bool UWonderlandUiSubsystem::SelectCommandSlot(int32 Slot)
+{
+	if (Open != EOverlay::Commands || !CommandStation.IsValid())
+	{
+		return false;
+	}
+	CommandStation->SelectSlot(Slot);
+	return CommandStation->GetSelectedSlot() == Slot;
+}
+
+bool UWonderlandUiSubsystem::EquipCommandToSelectedSlot(FName CommandId)
+{
+	return Open == EOverlay::Commands && CommandStation.IsValid() && CommandStation->EquipToSelectedSlot(CommandId);
+}
+
+FString UWonderlandUiSubsystem::GetCommandStationSlotRows() const
+{
+	return CommandStation.IsValid() ? CommandStation->DescribeSlotRows() : FString();
+}
+
+FString UWonderlandUiSubsystem::GetTerminalCommandRows() const
+{
+	return Terminal.IsValid() ? Terminal->DescribeCommandRows() : FString();
 }

@@ -124,6 +124,10 @@ const CPP_ONLY_STRUCTS: Readonly<Record<string, string>> = {
     'one row of the in-world travel registry in DefaultGame.ini: a developed place the world map may offer and the anchor a visitor arrives at. Unreal-side world authoring; Relay neither sends nor reads a destination.',
   FWonderlandUsagePreviewState:
     'the usage HUD development preview figures in DefaultGame.ini, applied locally through the ordinary usage contract and labelled DEVELOPMENT PREVIEW. Unreal-side configuration; Relay neither sends nor reads it, and a real Julius usage authority replaces it.',
+  FWonderlandCommandDefinition:
+    'one row of the in-world command catalog in DefaultGame.ini: a command the COMMANDS station may offer for a quick slot. Unreal-side presentation authoring for a development preview; no command runs from Wonderland, and Relay neither sends nor reads a catalog row.',
+  FWonderlandCommandLayout:
+    'one arrangement of the quick slots, kept in a local save slot on the visitor\'s machine. Presentation state for the COMMANDS station; Relay neither sends nor reads a layout.',
 };
 
 /**
@@ -138,6 +142,8 @@ const CPP_ONLY_ENUMS: Readonly<Record<string, string>> = {
     'which glyph the in-world map draws for a place. Presentational world-authoring vocabulary, deliberately not part of the contract.',
   EWonderlandUsageSource:
     'which local source feeds the usage HUD in an Unreal build (the Julius usage authority, or the labelled development preview). Engine-side configuration, deliberately not part of the contract.',
+  EWonderlandCommandStatus:
+    'whether the COMMANDS station may offer a catalog row (Offered, or Withheld until the command is built). World-authoring vocabulary, deliberately not part of the contract.',
 };
 
 /**

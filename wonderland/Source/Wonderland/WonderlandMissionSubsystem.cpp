@@ -335,6 +335,7 @@ void UWonderlandMissionSubsystem::Detach()
 			}
 		}
 		MissionStrip.Reset();
+		MissionStripBar.Reset();
 	}
 	BoundController.Reset();
 }
@@ -428,8 +429,24 @@ void UWonderlandMissionSubsystem::MountStrip()
 		[
 			Bar
 		];
+	MissionStripBar = Bar;
 	// Above the usage HUD, below the companion consoles (20) and every panel.
 	LocalPlayer->ViewportClient->AddViewportWidgetForPlayer(LocalPlayer, MissionStrip.ToSharedRef(), 18);
+}
+
+bool UWonderlandMissionSubsystem::GetMissionStripAbsoluteRect(FSlateRect& OutRect) const
+{
+	if (!MissionStripBar.IsValid())
+	{
+		return false;
+	}
+	const FGeometry& Geometry = MissionStripBar->GetCachedGeometry();
+	if (Geometry.GetLocalSize().IsNearlyZero())
+	{
+		return false;
+	}
+	OutRect = Geometry.GetLayoutBoundingRect();
+	return true;
 }
 
 /* ------------------------------------------------------------------ the beat */

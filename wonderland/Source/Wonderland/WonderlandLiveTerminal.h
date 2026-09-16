@@ -29,6 +29,7 @@
 #include "Widgets/SLeafWidget.h"
 
 class SEditableTextBox;
+class STextBlock;
 class SVerticalBox;
 
 /** A numbered hexagon slot, as in the founder's frame. */
@@ -63,10 +64,17 @@ class WONDERLAND_API SWonderlandLiveTerminal : public SCompoundWidget
 {
 public:
 	DECLARE_DELEGATE_OneParam(FOnSubmit, const FString& /*Text*/);
+	DECLARE_DELEGATE_RetVal_OneParam(FString, FOnGetCommandLabel, int32 /*Slot*/);
 
-	SLATE_BEGIN_ARGS(SWonderlandLiveTerminal) {}
+	SLATE_BEGIN_ARGS(SWonderlandLiveTerminal)
+		: _CommandSlotCount(4)
+	{}
 		SLATE_EVENT(FSimpleDelegate, OnRequestClose)
 		SLATE_EVENT(FOnSubmit, OnSubmit)
+		/** How many command rows the left list draws: the preset station's quick slot count. */
+		SLATE_ARGUMENT(int32, CommandSlotCount)
+		/** The command in a quick slot of the active layout, read every paint; empty for an empty slot. */
+		SLATE_EVENT(FOnGetCommandLabel, OnGetCommandLabel)
 	SLATE_END_ARGS()
 
 	SWonderlandLiveTerminal();
@@ -83,6 +91,9 @@ public:
 
 	FString GetInputText() const;
 	int32 GetJuliusRowCount() const { return JuliusRows.Num(); }
+
+	/** The command rows as they read on screen, "|"-joined. */
+	FString DescribeCommandRows() const;
 
 private:
 	struct FRow
@@ -103,6 +114,9 @@ private:
 
 	FSimpleDelegate OnRequestClose;
 	FOnSubmit OnSubmit;
+	FOnGetCommandLabel OnGetCommandLabel;
+	int32 CommandSlotCount = 4;
+	TArray<TSharedPtr<STextBlock>> CommandTexts;
 
 	TSharedPtr<SEditableTextBox> Input;
 	TSharedPtr<SVerticalBox> JuliusBody;

@@ -16,9 +16,15 @@
 //   held when the terminal opened does not keep walking underneath it. Closing hands
 //   control straight back.
 //
+// THE BOTTOM SHORTCUTS AND THE MINI-MAP ARE FURNITURE TOO (founder, 2026-09-15). The mini-map holds the top right
+// and the AGENT · MISSIONS · BRAIN · COMMANDS · MENU strip holds the bottom edge. Both are mounted once, like the
+// usage HUD; the strip steps aside while any panel is open, and the map while a full-screen one is. Their places
+// are safe zones measured against everything else on screen -- DescribeHudRects reports them for exactly that.
+//
 // THE SHORTCUTS LIVE HERE, NOT ON A PAWN. Ctrl+T (terminal) and M (map) are bound on
 // an input component this subsystem pushes onto the player controller, above the
-// pawn's own, and they consume their keys. They therefore work whichever body the
+// pawn's own, and they consume their keys -- as are B (brain), J (missions), C (commands), Tab (menu) and a held Left
+// Alt, which brings the cursor out so the bottom shortcuts can be clicked. They therefore work whichever body the
 // player is wearing — the canonical BP_RelayDog, the hub's dog pawn, a spectator —
 // and survive the pawn being replaced. While a panel is open the panel itself
 // answers Ctrl+T, M and Escape, because UI-only input means the game never sees them.
@@ -37,8 +43,17 @@ class UTexture2D;
 class UWonderlandProjectBrainSubsystem;
 struct FSlateBrush;
 class SWonderlandWorldMap;
+class SWonderlandCommandStation;
+class SWonderlandMenuPanel;
+class SWonderlandMiniMap;
+class SWonderlandMissionsPanel;
+class SWonderlandNavBar;
 class UInputComponent;
+class UWonderlandCommandPresetSubsystem;
+class UWonderlandMiniMapDriver;
+class UWonderlandMissionSubsystem;
 class UWonderlandUsageHudWidget;
+enum class EWonderlandNavTarget : uint8;
 
 UCLASS()
 class WONDERLAND_API UWonderlandUiSubsystem : public ULocalPlayerSubsystem
@@ -140,8 +155,127 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
 	bool FocusCompanionTerminal(int32 Index);
 
+	// ---------------------------------------------------------------- the bottom shortcuts (WonderlandNavBar.h)
+
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	void ToggleMissions();
+
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	void ToggleCommandStation();
+
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	void ToggleMenu();
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool IsMissionsOpen() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool IsCommandStationOpen() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool IsMenuOpen() const;
+
+	/** Go where a shortcut goes, by id ("agent", "missions", "brain", "commands", "menu"). False for an unknown id. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool NavigateTo(FName ShortcutId);
+
+	/** Mounted, and not stepped aside for a panel. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool IsNavBarOnScreen() const;
+
+	/** The strip's labels as its built tiles read them, "|"-joined. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString GetNavBarLabels() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	int32 GetNavClickCount(FName ShortcutId) const;
+
+	/** Held Left Alt: the cursor comes out and look input is held, so the shortcuts can be clicked. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	void BeginPointing();
+
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	void EndPointing();
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool IsPointing() const { return bPointing; }
+
+	/**
+	 * CLICK A SHORTCUT THE WAY A MOUSE DOES. The cursor moves to the tile's centre and a button goes down and up
+	 * through Slate's own hit testing, so whatever is really under that point is what answers -- a tile hidden
+	 * behind something, or not laid out, does not count as clicked. Starts pointing first, as a player must.
+	 * True when that tile registered the click.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool ClickNavButton(FName ShortcutId);
+
+	// ---------------------------------------------------------------- the mini-map (WonderlandMiniMap.h)
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool IsMiniMapOnScreen() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString GetMiniMapWorldLine() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString GetMiniMapRegionLine() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	int32 GetMiniMapCaptureCount() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool IsMiniMapCaptureInWorld() const;
+
+	/** Whether the last paint drew the ground photograph, not just the empty disc. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool DidMiniMapDrawPhotograph() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	int32 GetMiniMapPaintCount() const;
+
+	/** The Dog's arrow as last drawn: screen degrees, 0 = right, 90 = down. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	double GetMiniMapArrowAngle() const;
+
+	/** The camera's view wedge as last drawn, same convention. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	double GetMiniMapViewAngle() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	double GetMiniMapUUPerPixel() const;
+
+	/** A place's marker as last drawn, pixels from the disc centre. False when it was not on the disc. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool GetMiniMapMarkerOffset(FName PlaceId, FVector2D& OutOffset) const;
+
+	/** Whether a place's marker was on the disc at the last paint. The same answer as the return above, for bindings that drop it. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool IsMiniMapMarkerDrawn(FName PlaceId) const;
+
+	/** Every piece of HUD as last laid out, one "name x y w h shown" line each, viewport pixels. For overlap checks. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString DescribeHudRects() const;
+
+	// ---------------------------------------------------------------- the command station (WonderlandCommandStation.h)
+
+	/** Select a quick slot, as clicking its row does. False unless the station is open. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool SelectCommandSlot(int32 Slot);
+
+	/** Equip a command to the selected slot, as its card's button does. False unless the station is open. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool EquipCommandToSelectedSlot(FName CommandId);
+
+	/** The station's slot rows as they read on screen. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString GetCommandStationSlotRows() const;
+
+	/** The Julius terminal's command rows as they read on screen. Empty until the terminal has been opened once. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString GetTerminalCommandRows() const;
+
 private:
-	enum class EOverlay : uint8 { None, Terminal, Map, Brain };
+	enum class EOverlay : uint8 { None, Terminal, Map, Brain, Missions, Commands, Menu };
 
 	void HandlePlayerControllerChanged(APlayerController* NewController);
 	void Attach(APlayerController* Controller);
@@ -157,6 +291,19 @@ private:
 	void HandleCompanionSubmit(int32 Index, const FString& Text);
 	UWonderlandProjectBrainSubsystem* Brain() const;
 	UWorld* PlayerWorld() const;
+	UWonderlandCommandPresetSubsystem* Presets() const;
+	UWonderlandMissionSubsystem* Missions() const;
+	static const TCHAR* OverlayName(EOverlay Which);
+	TSharedPtr<SWidget> OverlayWidget(EOverlay Which) const;
+	void ToggleOverlay(EOverlay Which);
+	void HandleNavigate(EWonderlandNavTarget Target);
+	void MountHudFurniture();
+	void UnmountHudFurniture();
+	void StopPointing(bool bRestoreGameInput);
+	/** The map shows over the world while no full-screen panel covers it. The terminal is not full-screen. */
+	bool IsMiniMapShown() const { return Open == EOverlay::None || Open == EOverlay::Terminal; }
+	/** Top right, unless a long mission strip reaches into that column: then just below the strip. */
+	FMargin MiniMapOffset() const;
 
 	TArray<TSharedPtr<SWonderlandCompanionTerminal>> CompanionTerminals;
 	TSharedPtr<SWidget> CompanionLayer;
@@ -172,6 +319,19 @@ private:
 	TSharedPtr<SWonderlandLiveTerminal> Terminal;
 	TSharedPtr<SWonderlandWorldMap> WorldMap;
 	TSharedPtr<SWonderlandProjectBrainPanel> BrainPanel;
+	TSharedPtr<SWonderlandCommandStation> CommandStation;
+	TSharedPtr<SWonderlandMissionsPanel> MissionsPanel;
+	TSharedPtr<SWonderlandMenuPanel> MenuPanel;
+
+	/** The mini-map and the bottom shortcuts, on one layer above the usage HUD and below every panel. */
+	TSharedPtr<SWidget> HudFurniture;
+	TSharedPtr<SWonderlandMiniMap> MiniMap;
+	TSharedPtr<SWonderlandNavBar> NavBar;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWonderlandMiniMapDriver> MiniMapDriver;
+
+	bool bPointing = false;
 
 	/** The Project Brain hologram, imported from wonderland/UiArt at attach. A transient texture, never an asset. */
 	UPROPERTY(Transient)
