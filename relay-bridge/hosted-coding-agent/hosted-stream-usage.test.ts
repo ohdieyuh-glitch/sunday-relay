@@ -370,7 +370,9 @@ describe('D — a timed-out dispatch carries the floor into its durable diagnost
     // Findings C and E were both this shape: a diagnostic present on one path
     // and absent on the other, discovered only when the missing path was the
     // one that mattered. Both are built by one function; this holds it.
-    const source = readFileSync(join(process.cwd(), 'relay-bridge/julius/live-workers.ts'), 'utf8');
+    // The builder lives with the Claude Code provider now: it is that provider's
+    // account of its own session, behind the Coding Agent port.
+    const source = readFileSync(join(process.cwd(), 'relay-bridge/julius/claude-code-coding-provider.ts'), 'utf8');
     const builders = [...source.matchAll(/hostedCoderDiagnostics\(\{/gu)].length;
     expect(builders, 'the coder diagnostics must come from one builder used by every path').toBeGreaterThan(1);
     for (const column of ['streamUsageMessages', 'streamAbortedMessages', 'streamInputTokens',

@@ -2,6 +2,7 @@ import type { JuliusCardPolicy } from './julius-policy';
 import { flattenDiagnostics, JuliusDispatchError, JuliusProviderRouter, safeReviewDiagnostics, type JuliusDispatchAllocation, type JuliusProviderResult } from './julius-router';
 import type { JuliusEvidence, JuliusTask, JuliusWorker, JuliusWorkerRole } from './julius-runtime';
 import type { JuliusContractReviewCharge } from './julius-task-contract';
+import { juliusEvidenceAuthority, juliusMintedEvidenceId } from './julius-worker-authority';
 
 /** The cost a provider reported on its own result, or null when it reported none. */
 const reportedUsdMicros=(result:JuliusProviderResult|null):number|null=>{
@@ -140,7 +141,7 @@ export interface JuliusExecutionPorts {
    */
   recordEvent(input:{runId:string;projectId:string;taskId:string|null;type:JuliusExecutionEventType;idempotencyKey:string;payload:Record<string,unknown>}):Promise<void>;
 }
-export type JuliusExecutionEventType='worker.selected'|'budget.reserved'|'budget.denied'|'worker.dispatched'|'worker.completed'|'retry.scheduled'|'task.failed';
+export type JuliusExecutionEventType='worker.selected'|'budget.reserved'|'budget.denied'|'worker.dispatched'|'worker.completed'|'retry.scheduled'|'task.failed'|'evidence.refused';
 export interface JuliusExecutionRequest { readonly claim:JuliusExecutionClaim;readonly policy:JuliusCardPolicy;readonly role:JuliusWorkerRole;readonly taskType:string;readonly capability:string;readonly resources:JuliusResourceRequest;readonly operationId:string;readonly signal?:AbortSignal;/** Workers already tried for this task. Additive: omitted behaves exactly as before. */readonly excludedWorkerIds?:readonly string[];/** The execution ceiling Julius reserved for this dispatch, handed to the adapter. Additive. */readonly allocation?:JuliusDispatchAllocation;/** The locked task contract this dispatch runs under, as a review charge. Additive. */readonly contract?:JuliusContractReviewCharge;
  /**
   * WHICH DISPATCH THIS IS — 1, 2 or 3 of the task's attempt ceiling.
@@ -190,9 +191,30 @@ export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerI
  readonly diagnostics?:Record<string,string|number|boolean|null>;
 };
 
-const normalizedEvidence=(claim:JuliusExecutionClaim,worker:JuliusWorker,result:JuliusProviderResult):JuliusEvidence[]=>{
+/**
+ * A piece of evidence a worker reported that Julius will not keep, and why.
+ * The position is the item's place in the result, so the refusal names exactly
+ * which claim it was.
+ */
+interface RefusedEvidence{readonly index:number;readonly evidenceType:string;readonly status:string;readonly reasonCode:string}
+/**
+ * WHAT A RESULT'S EVIDENCE MAY BE, AND WHAT IT IS CALLED.
+ *
+ * The SHAPE is still refused whole — a malformed item fails the dispatch, as it
+ * always has. What changed is AUTHORITY: an item of a type the producing role
+ * may not author is set aside and named, rather than kept. And the id is
+ * Julius's, whatever the worker wrote: position under the producing task and
+ * lease, so a replay writes the same rows and no worker can name another
+ * task's.
+ */
+const normalizedEvidence=(claim:JuliusExecutionClaim,worker:JuliusWorker,result:JuliusProviderResult,role:string):{readonly kept:JuliusEvidence[];readonly refused:RefusedEvidence[]}=>{
   if(result.workerId!==worker.workerId||result.providerId!==worker.providerId||!result.safeSummary.trim()||!Array.isArray(result.evidence))throw new JuliusDispatchError('INVALID_REQUEST',false,'Provider returned a malformed or mismatched result.');
-  return result.evidence.map((raw,index)=>{if(raw===null||typeof raw!=='object')throw new JuliusDispatchError('INVALID_REQUEST',false,'Provider returned malformed evidence.');const value=raw as Record<string,unknown>;if(!['PASSED','FAILED','INCONCLUSIVE'].includes(String(value.status))||typeof value.type!=='string'||typeof value.safeSummary!=='string')throw new JuliusDispatchError('INVALID_REQUEST',false,'Provider returned malformed evidence.');return{evidenceId:String(value.evidenceId??`${claim.taskId}:${claim.leaseGeneration}:${index}`),missionId:claim.task.missionId,taskId:claim.taskId,workerId:worker.workerId,type:value.type as JuliusEvidence['type'],status:value.status as JuliusEvidence['status'],safeSummary:value.safeSummary,artifactRef:typeof value.artifactRef==='string'?value.artifactRef:null,integrityHash:typeof value.integrityHash==='string'?value.integrityHash:null,occurredAt:typeof value.occurredAt==='string'?value.occurredAt:new Date().toISOString()};});
+  const refused:RefusedEvidence[]=[];
+  const kept=result.evidence.map((raw,index)=>{if(raw===null||typeof raw!=='object')throw new JuliusDispatchError('INVALID_REQUEST',false,'Provider returned malformed evidence.');const value=raw as Record<string,unknown>;if(!['PASSED','FAILED','INCONCLUSIVE'].includes(String(value.status))||typeof value.type!=='string'||typeof value.safeSummary!=='string')throw new JuliusDispatchError('INVALID_REQUEST',false,'Provider returned malformed evidence.');
+   const authority=juliusEvidenceAuthority(role,value.type);
+   if(!authority.ok){refused.push({index,evidenceType:value.type.slice(0,64),status:String(value.status),reasonCode:authority.reasonCode});return null;}
+   return{evidenceId:juliusMintedEvidenceId(claim.taskId,claim.leaseGeneration,index),missionId:claim.task.missionId,taskId:claim.taskId,workerId:worker.workerId,type:value.type as JuliusEvidence['type'],status:value.status as JuliusEvidence['status'],safeSummary:value.safeSummary,artifactRef:typeof value.artifactRef==='string'?value.artifactRef:null,integrityHash:typeof value.integrityHash==='string'?value.integrityHash:null,occurredAt:typeof value.occurredAt==='string'?value.occurredAt:new Date().toISOString()};}).filter((item):item is NonNullable<typeof item>=>item!==null);
+  return{kept,refused};
 };
 
 /** One claimed task execution. Julius—not the adapter—owns policy, budget, evidence, result acceptance, and retry semantics. */
@@ -273,7 +295,24 @@ export class JuliusExecutionCoordinator {
        */
       const result=await dispatchWithinDeadline(worker.timeoutMs,request.signal,(signal)=>this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,taskType:request.taskType,signal,...(request.allocation===undefined?{}:{allocation:request.allocation}),...(request.contract===undefined?{}:{contract:request.contract})}));
       answered=result;
-      const evidence=normalizedEvidence(request.claim,worker,result);
+      const screened=normalizedEvidence(request.claim,worker,result,request.role);
+      const evidence=screened.kept;
+      for(const refused of screened.refused){
+       await this.event(request,'evidence.refused',{workerId:worker.workerId,role:request.role,taskType:request.taskType,...refused},String(refused.index));
+      }
+      /**
+       * A WORKER THAT SAYS IT FAILED HAS FAILED THIS ATTEMPT.
+       *
+       * The coordinator never read `status`. The store marked the task FAILED,
+       * verification then minted a review of a FAILED task, and the claim query
+       * never offers one — so the run sat in READY with nothing it could claim.
+       * The attempt ran, so what it cost is charged; what it reported is not
+       * kept, because PASSED evidence from an attempt its own worker called
+       * failed would still count toward a mission's criteria.
+       */
+      if(result.status!=='SUCCEEDED'){
+       throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'The worker reported that its attempt failed.','worker_reported_failure',{runtimeStarted:true});
+      }
       await this.ports.persistEvidence({claim:request.claim,worker,evidence});
       const receipt=await this.ports.acceptResult({claim:request.claim,worker,result,idempotencyKey:`${request.operationId}:result`});
       await this.ports.commit({claim:request.claim,reservationId:reservation.reservationId,result});
@@ -319,5 +358,6 @@ export class JuliusExecutionCoordinator {
    * record. Facts are flat scalars by contract; a number is one. Omitted when
    * the caller did not say, because unknown is not one.
    */
-  private event(request:JuliusExecutionRequest,type:JuliusExecutionEventType,payload:Record<string,unknown>){return this.ports.recordEvent({runId:request.claim.runId,projectId:request.claim.projectId,taskId:request.claim.taskId,type,idempotencyKey:`${request.operationId}:${type}`,payload:typeof request.attempt==='number'?{...payload,attempt:request.attempt}:payload});}
+  /** `suffix` distinguishes several events of one type from one operation — one per refused evidence item. */
+  private event(request:JuliusExecutionRequest,type:JuliusExecutionEventType,payload:Record<string,unknown>,suffix?:string){return this.ports.recordEvent({runId:request.claim.runId,projectId:request.claim.projectId,taskId:request.claim.taskId,type,idempotencyKey:`${request.operationId}:${type}${suffix===undefined?'':`:${suffix}`}`,payload:typeof request.attempt==='number'?{...payload,attempt:request.attempt}:payload});}
 }

@@ -120,6 +120,7 @@ const BOUNDARIES = [
 
 /** Files the trace refuses to enter, by excluded category. Each is reached only through a barrel. */
 const EXCLUDED_FILES = [
+  { path: 'relay-bridge/julius/coding-agent-fixtures.ts', category: 'fixtures', reason: 'deterministic Coding Agent providers — generic scripted and Codex-shaped — and a recording fake executor, for the provider-swappability proofs; nothing on the live path imports it, so no scripted provider can reach a real mission' },
   { path: 'src/relay/mission/julius/julius-runtime-fixtures.ts', category: 'fixtures', reason: 'a complete deterministic Julius deployment in memory — scripted adapters, stepping clock, counting ids — exported by the kernel barrel for tests; the live composition has no import through which a scripted adapter could arrive' },
   { path: 'src/relay/mission/julius/julius-fault-injection.ts', category: 'test harness', reason: 'wraps a store so a named method throws on its Nth call — the chaos instrument the recovery scenarios use; no production caller' },
   { path: 'src/relay/connectors/gpt-architect/fake-architect.ts', category: 'fake', reason: 'the deterministic offline fake of the GPT architect, exported by the connector barrel for the suite and Demo Simulation; the live worker binds runGptArchitect only' },
@@ -298,6 +299,15 @@ const FILE_RULES = [
   // advisory throughout, since the Mission Contract remains authoritative and a
   // disagreement with it is recorded rather than resolved.
   ['src/relay/mission/julius/julius-architecture-state.ts', 'PROMPT ARCHITECT'],
+  // The Coding Agent as a Julius role rather than a provider: the governed
+  // request, the closed provider outcome, and the failure taxonomy that decides
+  // retry versus operator action. The CODING AGENT's, because it is that slot's
+  // contract with whatever implements it.
+  ['src/relay/mission/julius/julius-coding-agent.ts', 'CODING AGENT'],
+  // What each role may author at the result boundary — evidence types and
+  // result channels — and the evidence ids Julius mints. A permission on what a
+  // worker's answer may say, owned with the other permissions.
+  ['src/relay/mission/julius/julius-worker-authority.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   // How many run-loop ticks a mission's own structure permits. The scheduler's
   // account of how much it may dispatch, counted from the task graph it owns.
   ['src/relay/mission/julius/julius-tick-budget.ts', 'TASK GRAPH / SCHEDULER'],
@@ -370,6 +380,10 @@ const FILE_RULES = [
   ['relay-bridge/julius/research-mediator.ts', 'LIVE PROVIDER COMPOSITION'],
   ['relay-bridge/live-reach-service.ts', 'LIVE PROVIDER COMPOSITION'],
   ['relay-bridge/julius/live-workers.ts', 'LIVE PROVIDER COMPOSITION'],
+  // Claude Code as one implementation of the Coding Agent port: how the hosted
+  // session is launched, how its outcomes read, and the structural facts its
+  // observation carries. Replaced wholesale when the provider is swapped.
+  ['relay-bridge/julius/claude-code-coding-provider.ts', 'CODING AGENT'],
   ['relay-bridge/hosted-coding-agent/', 'CODING AGENT'],
   ['relay-bridge/hermes-reviewer.ts', 'INDEPENDENT REVIEWER'],
   // The one derivation that decides how long a review may take, read by the
