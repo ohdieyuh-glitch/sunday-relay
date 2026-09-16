@@ -48,7 +48,7 @@ describe('MISSION START — the floating activation', () => {
   });
 
   it('is not meditation and not grounded', () => {
-    if (presentation.kind !== 'staged') return;
+    if (presentation.kind !== 'staged') throw new Error('expected a staged presentation');
     expect(presentation.locomotion).not.toBe('grounded');
     expect(presentation.animationId).not.toMatch(/medit/i);
   });
@@ -58,7 +58,7 @@ describe('PLANNING — the book, and the orbit', () => {
   const presentation = WONDERLAND_STAGE_PRESENTATION.planning;
 
   it('reads a book while circling the Mission Contract', () => {
-    if (presentation.kind !== 'staged') return;
+    if (presentation.kind !== 'staged') throw new Error('expected a staged presentation');
     expect(presentation.prop).toBe('book');
     // "It should visibly MOVE AROUND the Mission Contract while reading."
     expect(presentation.locomotion).toBe('orbit_contract');
@@ -66,7 +66,7 @@ describe('PLANNING — the book, and the orbit', () => {
   });
 
   it('is reading, never writing', () => {
-    if (presentation.kind !== 'staged') return;
+    if (presentation.kind !== 'staged') throw new Error('expected a staged presentation');
     expect(presentation.intent).toMatch(/read/i);
     expect(presentation.intent).not.toMatch(/writ/i);
   });
@@ -94,7 +94,7 @@ describe('VERIFYING — a sustained beam, not a projectile', () => {
   const presentation = WONDERLAND_STAGE_PRESENTATION.verifying;
 
   it('plants facing the Contract and emits the verification beam', () => {
-    if (presentation.kind !== 'staged') return;
+    if (presentation.kind !== 'staged') throw new Error('expected a staged presentation');
     expect(presentation.locomotion).toBe('planted_facing_contract');
     expect(presentation.emission).toBe('verification_beam');
     expect(presentation.headTracksContract).toBe(true);
@@ -109,7 +109,7 @@ describe('VERIFYING — a sustained beam, not a projectile', () => {
   });
 
   it('describes verification, never damage', () => {
-    if (presentation.kind !== 'staged') return;
+    if (presentation.kind !== 'staged') throw new Error('expected a staged presentation');
     expect(presentation.intent).not.toMatch(/damage|attack|combat|destroy/i);
   });
 });
@@ -154,7 +154,7 @@ describe('HANDOFF — the event survives, the animation does not', () => {
 describe('the Mission Contract exists only during a mission', () => {
   it('is absent before a task begins', () => {
     const none = WONDERLAND_STAGE_PRESENTATION.none;
-    if (none.kind !== 'staged') return;
+    if (none.kind !== 'staged') throw new Error('expected a staged presentation');
     expect(none.contractPresent).toBe(false);
   });
 
