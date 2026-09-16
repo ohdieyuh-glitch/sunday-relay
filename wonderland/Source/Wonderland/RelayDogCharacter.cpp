@@ -1526,27 +1526,21 @@ void ARelayDogCharacter::BuildMissionProps()
 	// ---------------------------------------------------------------- the beam (VERIFYING)
 	// ONE unit cube, stretched along X between the chest and the contract every frame. A beam has to be a
 	// world-space thing rather than a child of a swinging arm, so it hangs off the capsule, not the body.
-	// TWO CYLINDERS, AND THEY ARE ACTUALLY CYLINDERS NOW. A bright core inside a wider, slightly dimmer
-	// sheath reads as light from any angle, end-on included -- which matters because the play camera stands
-	// behind a Dog that is FACING the contract and so looks straight down the beam's own axis.
+	// ONE CYLINDER. It was two -- a bright core inside a wider sheath -- until the frames showed the beam
+	// was still a flat plank however bright the core was set. The reason is that BOTH are OPAQUE: an
+	// opaque sheath hides everything inside it perfectly, so the core was never once on screen and every
+	// adjustment to it changed nothing at all. Layering only reads with translucency, and there is none
+	// here. So the beam is a single thin cylinder, emitting hard enough to tonemap toward white.
 	//
-	// BOTH ARE ABOVE THE EXPOSURE THRESHOLD AT ALL TIMES. A halo that is a small fraction of the core's
-	// brightness is not a dim halo under physically-based daylight, it is a black one: anything under about
-	// x3000 renders black rather than faint. So the halo is only a LITTLE below the core, and the weight
-	// modulates a beam that is always emitting rather than deciding whether it emits.
+	// The halo component is deliberately not built rather than built and hidden, so nobody restores it by
+	// unticking a visibility flag and wonders why the core went away again.
 	TArray<FTransform> Beam;
 	Beam.Add(FTransform(FRotator(90.0, 0.0, 0.0), FVector(50.0, 0.0, 0.0), FVector(1.0, 1.0, 1.0)));
 	BeamMesh = MakePropMesh(TEXT("VerificationBeam"), GetRootComponent(), true, Beam,
 		FLinearColor(0.62f, 0.94f, 1.0f), BeamMid, DogPropCylinderPath);
-	BeamHaloMesh = MakePropMesh(TEXT("VerificationBeamHalo"), GetRootComponent(), true, Beam,
-		FLinearColor(0.20f, 0.52f, 0.86f), BeamHaloMid, DogPropCylinderPath);
 	if (BeamMesh != nullptr)
 	{
 		BeamMesh->SetAbsolute(true, true, true);
-	}
-	if (BeamHaloMesh != nullptr)
-	{
-		BeamHaloMesh->SetAbsolute(true, true, true);
 	}
 }
 
@@ -1574,10 +1568,9 @@ void ARelayDogCharacter::DrawVerificationBeam(const FVector& FromWorld, const FV
 	// few per cent and the beam never goes out or restarts -- a held analytical link rather than fire.
 	// Length is exact, so it lands ON the contract instead of through it.
 	const double Breathe = 1.0 + 0.06 * FMath::Sin(2.0 * PI * TimeSeconds / 1.7);
-	// 14 uu inside 34 uu. The first version was 34 inside 86, which at 420 uu long was a bar wider than the
-	// Dog's head: a wall, not a link. A beam is thin.
-	const double Core = (14.0 * Weight * Breathe) / 100.0;
-	const double Halo = (34.0 * Weight * (2.0 - Breathe)) / 100.0;
+	// 17 uu over a 420 uu run. The first version was 86 uu, wider than the Dog's head, which read as a wall
+	// crossing the frame rather than a link between two things. A beam is thin.
+	const double Core = (17.0 * Weight * Breathe) / 100.0;
 
 	BeamMesh->SetVisibility(true);
 	BeamMesh->SetWorldLocationAndRotation(FromWorld, Aim);
@@ -1586,22 +1579,13 @@ void ARelayDogCharacter::DrawVerificationBeam(const FVector& FromWorld, const FV
 	{
 		// THE FLOOR IS THE POINT. At (0.35 + 0.55 * Weight) the effective figure ran x1400 to x3600, so the
 		// beam only crossed into readable above about three-quarters weight and spent its fade-in black.
+		//
+		// AND IT IS SET HARD PAST THE THRESHOLD, not just over it, so the cylinder tonemaps toward white
+		// and reads as light rather than as a painted blue rod. There is no sheath to hide behind: an
+		// opaque one hid the core completely, which is why brightening the core changed nothing for two
+		// passes. One cylinder, emitting hard.
 		BeamMid->SetVectorParameterValue(TEXT("Color"),
-			FLinearColor(0.62f, 0.94f, 1.0f) * (DogGlowExposure * (1.05f + 0.40f * Weight)));
-	}
-	if (BeamHaloMesh != nullptr)
-	{
-		BeamHaloMesh->SetVisibility(true);
-		BeamHaloMesh->SetWorldLocationAndRotation(FromWorld, Aim);
-		// The halo counter-breathes, so the beam swells and thins without either part blinking.
-		BeamHaloMesh->SetWorldScale3D(FVector(Length / 100.0, Halo, Halo));
-		if (BeamHaloMid != nullptr)
-		{
-			// Only a little below the core: far enough to read as a sheath, not so far that it falls under
-			// the exposure threshold and becomes the black slab this whole chase was about.
-			BeamHaloMid->SetVectorParameterValue(TEXT("Color"),
-				FLinearColor(0.20f, 0.52f, 0.86f) * (DogGlowExposure * (0.80f + 0.30f * Weight)));
-		}
+			FLinearColor(0.62f, 0.94f, 1.0f) * (DogGlowExposure * (2.30f + 0.90f * Weight)));
 	}
 }
 
