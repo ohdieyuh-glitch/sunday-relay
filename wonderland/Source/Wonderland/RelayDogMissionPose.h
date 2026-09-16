@@ -45,19 +45,19 @@ namespace RelayDogMission
 	struct FReadingPose
 	{
 		/** The holding (left) arm: forward, a little out, the elbow bent up under the book. */
-		float HoldPitchDeg = 62.0f;
+		float HoldPitchDeg = 78.0f;
 		float HoldRollDeg = 14.0f;
-		float HoldElbowDeg = 48.0f;
+		float HoldElbowDeg = 72.0f;
 		/** The turning (right) arm at rest, its hand on the right-hand page. */
-		float TurnPitchDeg = 58.0f;
+		float TurnPitchDeg = 74.0f;
 		float TurnRollDeg = 16.0f;
-		float TurnElbowDeg = 44.0f;
+		float TurnElbowDeg = 66.0f;
 		/** How far the hand travels carrying a page: across toward the holding hand, and lifted at mid-turn. */
 		float SweepRollDeg = -34.0f;
 		float SweepPitchDeg = 12.0f;
 		float SweepElbowDeg = 18.0f;
 		/** Head pitch while reading, degrees down: the gaze on the pages. */
-		float HeadPitchDeg = 22.0f;
+		float HeadPitchDeg = 30.0f;
 		/** Turns per second, and the fraction of each cycle the page is actually moving. */
 		float TurnHz = 0.32f;
 		float TurnFraction = 0.34f;
