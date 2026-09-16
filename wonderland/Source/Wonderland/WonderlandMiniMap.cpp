@@ -37,6 +37,9 @@ namespace WonderlandMiniMapDetail
 	TAutoConsoleVariable<int32> CVarDebugRaw(
 		TEXT("wl.MiniMap.DebugRaw"), 0,
 		TEXT("1 also draws the whole raw photograph as a small square in the disc's corner, through a plain image brush: separates 'the capture is wrong' from 'the disc draws it wrong'."));
+	TAutoConsoleVariable<int32> CVarDrawMode(
+		TEXT("wl.MiniMap.DrawMode"), 0,
+		TEXT("How the disc draws the photograph, for isolating a draw path that renders white: 0 rounded box, ignore alpha, draw tint; 1 square image, ignore alpha, draw tint; 2 rounded box, alpha honoured, brush tint; 3 rounded box, ignore alpha, brush tint; 4 textured fan, UVs inside the texture's proxy region; 5 no photograph."));
 	TAutoConsoleVariable<int32> CVarLumen(
 		TEXT("wl.MiniMap.Lumen"), 0,
 		TEXT("1 lets the mini-map photograph use Lumen. Off by default: it is a second view, and a small one."));
@@ -408,15 +411,65 @@ int32 SWonderlandMiniMapDisc::OnPaint(const FPaintArgs& Args, const FGeometry& A
 		const FVector2D Shift = Frame->CaptureCentreXY - Frame->PlayerXY;
 		const double Half = Frame->ViewRadiusUU / Width;
 		const FVector2D Mid(0.5 + Shift.X / Width, 0.5 + Shift.Y / Width);
+		const FLinearColor Tint(0.64f, 0.66f, 0.74f, 0.94f);
+		const FBox2f Region(FVector2f(static_cast<float>(Mid.X - Half), static_cast<float>(Mid.Y - Half)),
+			FVector2f(static_cast<float>(Mid.X + Half), static_cast<float>(Mid.Y + Half)));
+		const int32 Mode = WonderlandMiniMapDetail::CVarDrawMode.GetValueOnGameThread();
 		FSlateBrush Photo = *Source->GetCaptureBrush();
-		Photo.DrawAs = ESlateBrushDrawType::RoundedBox;
-		Photo.OutlineSettings = FSlateBrushOutlineSettings(R);
-		Photo.SetUVRegion(FBox2f(FVector2f(static_cast<float>(Mid.X - Half), static_cast<float>(Mid.Y - Half)),
-			FVector2f(static_cast<float>(Mid.X + Half), static_cast<float>(Mid.Y + Half))));
-		// A scene capture writes coverage, not opacity, into alpha: honoured, the ground would draw see-through.
-		FSlateDrawElement::MakeBox(OutDrawElements, Layer++, Circle(R), &Photo, ESlateDrawEffect::IgnoreTextureAlpha,
-			FLinearColor(0.64f, 0.66f, 0.74f, 0.94f));
-		bDrewCapture = true;
+		Photo.SetUVRegion(Region);
+		if (Mode == 1)
+		{
+			Photo.DrawAs = ESlateBrushDrawType::Image;
+			FSlateDrawElement::MakeBox(OutDrawElements, Layer++, Circle(R), &Photo, ESlateDrawEffect::IgnoreTextureAlpha, Tint);
+			bDrewCapture = true;
+		}
+		else if (Mode == 2 || Mode == 3)
+		{
+			Photo.DrawAs = ESlateBrushDrawType::RoundedBox;
+			Photo.OutlineSettings = FSlateBrushOutlineSettings(R);
+			Photo.TintColor = FSlateColor(Tint);
+			FSlateDrawElement::MakeBox(OutDrawElements, Layer++, Circle(R), &Photo,
+				Mode == 3 ? ESlateDrawEffect::IgnoreTextureAlpha : ESlateDrawEffect::None, FLinearColor::White);
+			bDrewCapture = true;
+		}
+		else if (Mode == 4 && Renderer != nullptr)
+		{
+			const FSlateResourceHandle Handle = Renderer->GetResourceHandle(Photo);
+			const FSlateShaderResourceProxy* Proxy = Handle.GetResourceProxy();
+			const FVector2f Start = Proxy != nullptr ? Proxy->StartUV : FVector2f(0.0f, 0.0f);
+			const FVector2f Span = Proxy != nullptr ? Proxy->SizeUV : FVector2f(1.0f, 1.0f);
+			const FColor Colour = Tint.ToFColor(true);
+			TArray<FSlateVertex> Verts;
+			TArray<SlateIndex> Indices;
+			const auto UvAt = [&](float Ox, float Oy)
+			{
+				const FVector2f Unit(static_cast<float>(Mid.X + Ox * K / Width), static_cast<float>(Mid.Y + Oy * K / Width));
+				return Start + Unit * Span;
+			};
+			Verts.Add(FSlateVertex::Make(Transform, Centre, UvAt(0.0f, 0.0f), Colour));
+			for (int32 Step = 0; Step <= 56; ++Step)
+			{
+				const FVector2f P = Polar(Centre, R, 360.0f * Step / 56.0f);
+				Verts.Add(FSlateVertex::Make(Transform, P, UvAt(P.X - Centre.X, P.Y - Centre.Y), Colour));
+				if (Step > 0)
+				{
+					Indices.Add(0);
+					Indices.Add(static_cast<SlateIndex>(Step));
+					Indices.Add(static_cast<SlateIndex>(Step + 1));
+				}
+			}
+			FSlateDrawElement::MakeCustomVerts(OutDrawElements, Layer++, Handle, Verts, Indices, nullptr, 0, 0, ESlateDrawEffect::IgnoreTextureAlpha);
+			bDrewCapture = true;
+			LastProxyNote = Proxy != nullptr ? FString::Printf(TEXT("proxy start %.3f,%.3f size %.3f,%.3f"), Start.X, Start.Y, Span.X, Span.Y) : FString(TEXT("proxy none"));
+		}
+		else if (Mode == 0)
+		{
+			Photo.DrawAs = ESlateBrushDrawType::RoundedBox;
+			Photo.OutlineSettings = FSlateBrushOutlineSettings(R);
+			// A scene capture writes coverage, not opacity, into alpha: honoured, the ground would draw see-through.
+			FSlateDrawElement::MakeBox(OutDrawElements, Layer++, Circle(R), &Photo, ESlateDrawEffect::IgnoreTextureAlpha, Tint);
+			bDrewCapture = true;
+		}
 
 		if (WonderlandMiniMapDetail::CVarDebugRaw.GetValueOnGameThread() != 0)
 		{

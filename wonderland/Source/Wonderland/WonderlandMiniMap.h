@@ -211,6 +211,10 @@ private:
 	mutable bool bDrewCapture = false;
 	mutable int32 PaintCount = 0;
 	mutable TMap<FName, FVector2D> DrawnMarkers;
+
+public:
+	/** Draw mode 4 only: the render target's resource proxy region, or "proxy none". For isolating the white disc. */
+	mutable FString LastProxyNote;
 };
 
 /** The disc with its two lines of title beneath, as the reference frames it. */

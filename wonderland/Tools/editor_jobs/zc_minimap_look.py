@@ -1,9 +1,13 @@
-# PIE job: one look at the mini-map after the white-disc fix -- a frame per photograph source, and the HUD rects so
-# the disc can be located in the frame and judged by Tools/minimap_pixels.py rather than by "drawn".
+# PIE job: why the mini-map disc draws white. The raw photograph drawn as a plain square image (wl.MiniMap.DebugRaw)
+# is a correct, detailed top-down picture of the garden -- so the capture works and the DISC's draw path does not.
+# This takes one frame per draw mode (wl.MiniMap.DrawMode 0-5), each changing one thing, so the frames and
+# Tools/minimap_pixels.py can say which path renders the render target and which renders white.
 import os
 
 SHOTS = os.path.join(os.path.dirname(CHANNEL), "captures", "zc")
 L = unreal.WonderlandUiTestLibrary
+MODES = {0: "rounded_ignorealpha_drawtint", 1: "square_image", 2: "rounded_alpha_brushtint",
+         3: "rounded_ignorealpha_brushtint", 4: "fan_proxy_uv", 5: "no_photo"}
 
 
 def job():
@@ -21,13 +25,18 @@ def job():
         ui = L.get_ui(world)
         L.focus_game_viewport()
         shots = {}
-        for source, name in ((0, "base"), (1, "lit")):
-            unreal.SystemLibrary.execute_console_command(world, "wl.MiniMap.Source %d" % source)
-            yield 2.5
-            path = os.path.join(SHOTS, "zc_minimap_look_%s.png" % name)
+        unreal.SystemLibrary.execute_console_command(world, "wl.MiniMap.DebugRaw 1")
+        yield 1.5
+        shots["raw_reference"] = os.path.join(SHOTS, "zc_minimap_look_raw.png")
+        L.capture_game_viewport(shots["raw_reference"])
+        unreal.SystemLibrary.execute_console_command(world, "wl.MiniMap.DebugRaw 0")
+        for mode, name in sorted(MODES.items()):
+            unreal.SystemLibrary.execute_console_command(world, "wl.MiniMap.DrawMode %d" % mode)
+            yield 1.5
+            path = os.path.join(SHOTS, "zc_minimap_mode%d_%s.png" % (mode, name))
             L.capture_game_viewport(path)
-            shots[name] = path
-        unreal.SystemLibrary.execute_console_command(world, "wl.MiniMap.Source 0")
+            shots["mode%d_%s" % (mode, name)] = path
+        unreal.SystemLibrary.execute_console_command(world, "wl.MiniMap.DrawMode 0")
         RESULT["shots"] = shots
         RESULT["rects"] = str(ui.describe_hud_rects())
         RESULT["region"] = str(ui.get_mini_map_region_line())
