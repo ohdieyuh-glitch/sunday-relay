@@ -514,16 +514,32 @@ void AWonderlandCompanionEmbodiment::AnimatePulses(float TimeSeconds)
 		PulseMesh->SetupAttachment(Root);
 		PulseMesh->RegisterComponent();
 		Pulses.SetNum(4);
+		// EVERY INSTANCE IS CREATED ONCE, HERE, and afterwards only ever MOVED.
+		//
+		// The first version cleared and re-added the instances every frame, which forces a full render
+		// state rebuild per companion per frame. It stalled a PIE session so badly that the run never got
+		// past its seventh sample and the editor sat at several hundred per cent CPU until it was killed.
+		// An unused pulse is parked at zero scale rather than removed: a scale of nothing costs a matrix
+		// multiply, and a rebuilt buffer costs the frame.
+		TArray<FTransform> Parked;
+		Parked.Init(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), Pulses.Num());
+		PulseMesh->AddInstances(Parked, false, false, false);
 	}
 
 	if (!bShould)
 	{
-		if (PulseMesh->GetInstanceCount() > 0)
+		// Park them rather than clearing: this branch runs every frame for the whole of a mission that is
+		// not a study, and rebuilding an instance buffer every frame is what stalled the first version.
+		for (int32 Index = 0; Index < Pulses.Num(); ++Index)
 		{
-			PulseMesh->ClearInstances();
+			if (Pulses[Index].Started >= 0.0f)
+			{
+				Pulses[Index].Started = -1.0f;
+				PulseMesh->UpdateInstanceTransform(Index,
+					FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, false, false);
+			}
 		}
-		Pulses.Reset();
-		Pulses.SetNum(4);
+		PulseMesh->MarkRenderStateDirty();
 		return;
 	}
 
@@ -549,30 +565,33 @@ void AWonderlandCompanionEmbodiment::AnimatePulses(float TimeSeconds)
 	}
 
 	const FVector Target = Contract->GetActorLocation();
-	TArray<FTransform> Live;
-	for (FSupportPulse& Pulse : Pulses)
+	for (int32 Index = 0; Index < Pulses.Num(); ++Index)
 	{
-		if (Pulse.Started < 0.0f)
+		FSupportPulse& Pulse = Pulses[Index];
+		FTransform Where(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
+		if (Pulse.Started >= 0.0f)
 		{
-			continue;
+			const float Along = (TimeSeconds - Pulse.Started) / FMath::Max(Orbit.PulseTravelSeconds, 0.05f);
+			if (Along >= 1.0f)
+			{
+				// It ARRIVES rather than striking: the light reaches the Contract and is simply done.
+				Pulse.Started = -1.0f;
+			}
+			else
+			{
+				// A curve, not a line. It rises out of the companion's hand and settles into the Contract,
+				// which is what makes it read as offering rather than firing.
+				const FVector Straight = FMath::Lerp(Pulse.From, Target, Along);
+				const float Arc = FMath::Sin(Along * PI) * 34.0f;
+				const float Size = FMath::Lerp(5.5f, 2.0f, Along);
+				Where = FTransform(FRotator::ZeroRotator, Straight + FVector(0.0, 0.0, Arc), FVector(Size / 100.0f));
+			}
 		}
-		const float Along = (TimeSeconds - Pulse.Started) / FMath::Max(Orbit.PulseTravelSeconds, 0.05f);
-		if (Along >= 1.0f)
+		if (PulseMesh->IsValidInstance(Index))
 		{
-			// It ARRIVES rather than striking: the light reaches the Contract and is simply done.
-			Pulse.Started = -1.0f;
-			continue;
+			PulseMesh->UpdateInstanceTransform(Index, Where, true, false, false);
 		}
-		// A curve, not a line. It rises out of the companion's hand and settles into the Contract, which
-		// is what makes it read as offering rather than firing.
-		const FVector Straight = FMath::Lerp(Pulse.From, Target, Along);
-		const float Arc = FMath::Sin(Along * PI) * 34.0f;
-		const float Size = FMath::Lerp(5.5f, 2.0f, Along);
-		Live.Add(FTransform(FRotator::ZeroRotator, Straight + FVector(0.0, 0.0, Arc), FVector(Size / 100.0f)));
 	}
-	PulseMesh->ClearInstances();
-	if (Live.Num() > 0)
-	{
-		PulseMesh->AddInstances(Live, false, false, false);
-	}
+	// One render-state touch for the whole set, after all four have moved.
+	PulseMesh->MarkRenderStateDirty();
 }
