@@ -554,6 +554,28 @@ def job():
                len(addressed) > 0 and RESULT["facing"]["within_60"] >= int(len(addressed) * 0.8),
                **RESULT["facing"])
 
+        # ------------------------------------------------- and it is given ONLY to the acts done at the work
+        # THE COMPANION TO J16, asked for by the lane that implemented the turn -- "the same check during
+        # implementing and planning should expect the Dog NOT to face the contract, which would catch me
+        # over-applying the facing later."
+        #
+        # It is a real distinction and not symmetry for its own sake. A beam is AIMED at the contract, a lens
+        # is HELD UP to it, a correction is MADE to it -- those are done AT the work and face it. Reading
+        # circles the work, and a walker faces its walk; a Dog that slid sideways around a circle while
+        # staring inward would be a worse fault than a Dog that read a book side-on, and a check that only
+        # ever pushed toward MORE facing would never say so.
+        circling = [f for f in frames
+                    if f["beat"] in ("researching", "prompt_architect", "guidance")
+                    and f.get("faces_work_deg") is not None]
+        tangential = [f["faces_work_deg"] for f in circling]
+        RESULT["circling"] = {"samples": len(circling),
+                              "mean_deg": round(sum(tangential) / len(tangential), 1) if tangential else None,
+                              "least_deg": min(tangential) if tangential else None,
+                              "beyond_40": sum(1 for v in tangential if v > 40.0)}
+        record("J17", "the facing is given to the acts done at the work, and withheld from the ones that circle it",
+               len(circling) > 0 and RESULT["circling"]["beyond_40"] >= int(len(circling) * 0.7),
+               **RESULT["circling"])
+
         # ---------------------------------------------------------------- a portrait of the beam
         # THE PLAYER'S CAMERA SITS BEHIND THE DOG, and VERIFYING plants the Dog facing the contract -- so the
         # only view the third person rig can offer of the beam is down its own axis, past the Dog, and (as this
