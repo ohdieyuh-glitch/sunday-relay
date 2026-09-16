@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **164 production files** across 20/20 subsystems (2 roots, 142 traced, 7 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **170 production files** across 20/20 subsystems (2 roots, 148 traced, 7 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -43,9 +43,9 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | executor + tool substrate (src/relay/workspace/julius-tools/) | persistence (src/relay/persistence/) | 1 | 0 |
 | kernel (src/relay/mission/julius/) | other | 5 | 0 |
 | live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 15 | 4 |
-| live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 7 | 1 |
+| live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 9 | 1 |
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 0 |
-| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 13 | 4 |
+| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 16 | 4 |
 | live composition (relay-bridge/julius/) | other | 5 | 3 |
 | live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 11 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 0 |
@@ -148,11 +148,15 @@ The planning role: the provider-neutral plan contract and its validation gate, t
 
 | production source | role | reached from |
 | --- | --- | --- |
+| `src/relay/connectors/gpt-architect/architecture-schema.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `src/relay/connectors/gpt-architect/config.ts` | traced | `src/relay/connectors/gpt-architect/index.ts` |
 | `src/relay/connectors/gpt-architect/gpt-runner.ts` | traced | `src/relay/connectors/gpt-architect/index.ts` |
 | `src/relay/connectors/gpt-architect/guidance-schema.ts` | traced | `src/relay/connectors/gpt-architect/index.ts` |
 | `src/relay/connectors/gpt-architect/index.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `src/relay/connectors/gpt-architect/plan-schema.ts` | traced | `src/relay/connectors/gpt-architect/index.ts` |
+| `src/relay/connectors/gpt-architect/rebuttal-schema.ts` | traced | `relay-bridge/julius/live-workers.ts` |
+| `src/relay/mission/julius/julius-architecture-drift.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
+| `src/relay/mission/julius/julius-architecture-state.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/prompt-architect/prompt-architect-contracts.ts` | traced | `src/relay/mission/prompt-architect/prompt-architect-plan.ts` |
 | `src/relay/mission/prompt-architect/prompt-architect-plan.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 
@@ -181,6 +185,7 @@ The judgement role: the Hermes reviewer process runner in an isolated profile, p
 | `relay-bridge/reviewer-harness/hermes/hermes-provider.ts` | traced | `relay-bridge/reviewer-harness/hermes/isolated-profile.ts` |
 | `relay-bridge/reviewer-harness/hermes/isolated-profile.ts` | traced | `relay-bridge/reviewer-harness/hermes/runner.ts` |
 | `relay-bridge/reviewer-harness/hermes/runner.ts` | traced | `relay-bridge/hermes-reviewer.ts` |
+| `src/relay/mission/julius/julius-finding-lifecycle.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-review-stage.ts` | traced | `src/relay/mission/julius/julius-task-contract.ts` |
 | `src/relay/mission/julius/julius-review-verdict.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 
@@ -271,6 +276,7 @@ A repair round planned from reviewer findings and a REPAIR decision, bounded by 
 | production source | role | reached from |
 | --- | --- | --- |
 | `src/relay/mission/julius/julius-repair-lineage.ts` | traced | `src/relay/mission/julius/julius-runtime.ts` |
+| `src/relay/mission/julius/julius-repair-round.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-repair-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 
 ### 15 RECOVERY / CONTINUATION

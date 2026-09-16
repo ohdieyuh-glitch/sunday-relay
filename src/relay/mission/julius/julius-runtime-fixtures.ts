@@ -165,6 +165,10 @@ export type ScriptedOutcome =
     readonly reviewVerdict?: unknown;
     /** An architect's rebuttal to a disagreement. Unsanitised, for the same reason. */
     readonly rebuttal?: unknown;
+    /** An architect's structured architecture state. Unsanitised, for the same reason. */
+    readonly architecture?: unknown;
+    /** An architect's final consistency assessment. Unsanitised, for the same reason. */
+    readonly consistency?: unknown;
   }
   /** `costUsdMicros` is what the boundary billed before it failed, as its diagnostics would carry. */
   | {
@@ -237,6 +241,8 @@ export function scriptedAdapter(
         ...(step.researchAsks === undefined ? {} : { researchAsks: step.researchAsks }),
         ...(step.reviewVerdict === undefined ? {} : { reviewVerdict: step.reviewVerdict }),
         ...(step.rebuttal === undefined ? {} : { rebuttal: step.rebuttal }),
+        ...(step.architecture === undefined ? {} : { architecture: step.architecture }),
+        ...(step.consistency === undefined ? {} : { consistency: step.consistency }),
       };
       return result;
     },

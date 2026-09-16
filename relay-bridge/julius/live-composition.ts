@@ -178,7 +178,23 @@ export const architectWorker = (env: Record<string, string | undefined>): Julius
    * refuses a guidance review whose packet it cannot read. Registering earlier
    * would have minted a task whose review could approve something it never saw.
    */
-  capabilities: ['plan'], taskTypes: ['plan', 'repair:plan', 'guidance', 'repair:guidance'],
+  /**
+   * `rebuttal` joins them because the architect can now ANSWER a disagreement.
+   * PR #270 registered none, so Julius proved the rebuttal unroutable and
+   * resolved every live challenge against the architect without asking it —
+   * safe, and not a peer. Registering it here and `review:rebuttal` on the
+   * reviewer are one change: a rebuttal nobody could re-review would leave a
+   * maintained position with no way to be judged.
+   */
+  /**
+   * `architecture` joins them because Julius now goes BACK to the architect
+   * mid-mission and before completion. Registering it here and
+   * `review:architecture` on the reviewer are one change, for the reason the
+   * rebuttal pair was: a consultation nobody could review would let a design
+   * change after the terms locked with nothing able to check it.
+   */
+  capabilities: ['plan'],
+  taskTypes: ['plan', 'repair:plan', 'guidance', 'repair:guidance', 'rebuttal', 'architecture'],
   /**
    * RESOLVED, not merely derived. This first read `300_000`, a literal that
    * happened to equal the connector's default; the literal was then replaced by
@@ -244,7 +260,7 @@ export const reviewerWorker = (providerId: string): JuliusWorker => ({
    * reviewer for it.
    */
   taskTypes: [
-    'review:plan', 'review:build', 'review:guidance',
+    'review:plan', 'review:build', 'review:guidance', 'review:rebuttal', 'review:architecture',
     'review:repair:plan', 'review:repair:build', 'review:repair:guidance',
   ],
   /**
@@ -803,6 +819,10 @@ export interface DriveTickAccount {
   readonly ticksConsumed: number;
   readonly ticksRemaining: number;
   readonly beyondMainPath: number;
+  /** Of those, the dispatches that exist because a peer disagreed: one rebuttal, one re-review. */
+  readonly disagreementTicks: number;
+  /** Of those, the dispatches that exist because Julius went back to the architect. */
+  readonly architectureTicks: number;
   readonly retries: number;
   /** An operator's `maxTicks`, which may only tighten the allowance. Null when none was given. */
   readonly override: number | null;
@@ -859,7 +879,9 @@ export async function driveJuliusRunToTerminal(input: {
       account = {
         plannedTicks: budget.plannedTicks, hardMaxTicks: budget.hardMaxTicks,
         allowance: override === null ? now.allowance : Math.min(now.allowance, override),
-        beyondMainPath: now.beyondMainPath, retries: now.retries, override, reason: budget.reason,
+        beyondMainPath: now.beyondMainPath, disagreementTicks: now.disagreementTicks,
+        architectureTicks: now.architectureTicks,
+        retries: now.retries, override, reason: budget.reason,
       };
       if (tick > account.allowance) {
         return failForTickBudget({ input, consumed: tick - 1, account: accountAt(tick - 1, true)! });
@@ -969,7 +991,9 @@ async function failForTickBudget(args: {
       occurredAt: new Date().toISOString(),
       facts: {
         reasonCode, plannedTicks: account.plannedTicks, allowance: account.allowance, ticksConsumed: args.consumed,
-        hardMaxTicks: account.hardMaxTicks, beyondMainPath: account.beyondMainPath, retries: account.retries,
+        hardMaxTicks: account.hardMaxTicks, beyondMainPath: account.beyondMainPath,
+        disagreementTicks: account.disagreementTicks, architectureTicks: account.architectureTicks,
+        retries: account.retries,
         override: account.override, tickBudgetReason: account.reason,
       },
     });

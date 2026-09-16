@@ -167,7 +167,7 @@ export interface JuliusExecutionRequest { readonly claim:JuliusExecutionClaim;re
  * every existing reader keeps working, and `null` means "not classified",
  * never "fine".
  */
-export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerId:string;readonly duplicate:boolean;/** What the worker proposed for its own task contract, unsanitised. Julius decides. */readonly contractProposal?:unknown;/** A coder's request for architect guidance, unsanitised. */readonly guidanceRequest?:unknown;/** An architect's guidance packet, unsanitised. */readonly guidance?:unknown;/** What a continuation segment resumes from, unsanitised. Julius rebuilds it. */readonly segmentResume?:unknown;/** What a worker of any slot needs Julius to go and look at, unsanitised. */readonly researchAsks?:unknown;/** A reviewer's canonical verdict, unsanitised. Julius decides what it means. */readonly reviewVerdict?:unknown;/** An architect's rebuttal to a disagreement, unsanitised. */readonly rebuttal?:unknown}|{
+export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerId:string;readonly duplicate:boolean;/** What the worker proposed for its own task contract, unsanitised. Julius decides. */readonly contractProposal?:unknown;/** A coder's request for architect guidance, unsanitised. */readonly guidanceRequest?:unknown;/** An architect's guidance packet, unsanitised. */readonly guidance?:unknown;/** What a continuation segment resumes from, unsanitised. Julius rebuilds it. */readonly segmentResume?:unknown;/** What a worker of any slot needs Julius to go and look at, unsanitised. */readonly researchAsks?:unknown;/** A reviewer's canonical verdict, unsanitised. Julius decides what it means. */readonly reviewVerdict?:unknown;/** An architect's rebuttal to a disagreement, unsanitised. */readonly rebuttal?:unknown;/** An architect's structured architecture state, unsanitised. Advisory, never the contract. */readonly architecture?:unknown;/** An architect's final architecture consistency assessment, unsanitised. */readonly consistency?:unknown}|{
  readonly status:'RETRY'|'FAILED'|'DENIED';
  readonly code:string;
  readonly failureClass?:string|null;
@@ -282,7 +282,9 @@ export class JuliusExecutionCoordinator {
       ...(result.segmentResume===undefined?{}:{segmentResume:result.segmentResume}),
       ...(result.researchAsks===undefined?{}:{researchAsks:result.researchAsks}),
       ...(result.reviewVerdict===undefined?{}:{reviewVerdict:result.reviewVerdict}),
-      ...(result.rebuttal===undefined?{}:{rebuttal:result.rebuttal})};
+      ...(result.rebuttal===undefined?{}:{rebuttal:result.rebuttal}),
+      ...(result.architecture===undefined?{}:{architecture:result.architecture}),
+      ...(result.consistency===undefined?{}:{consistency:result.consistency})};
     }catch(error){
      /**
       * A DEADLINE CUT IS RETRYABLE, AND ITS HOLD IS NOT FREED.

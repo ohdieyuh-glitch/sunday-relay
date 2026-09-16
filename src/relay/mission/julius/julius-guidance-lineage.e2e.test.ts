@@ -150,11 +150,17 @@ describe('repaired guidance is issued against the question it answers', () => {
     expect(refused, 'no guidance was refused for being written by a repair').toEqual([]);
     const issued = factsOf(harness, 'guidance.issued');
     expect(issued.map((row) => row.taskId)).toEqual(['build-1', 'build-1']);
-    const handoffs = (await harness.store.brainEntriesForRun('run-1', 'prj-1'))
-      .filter((row) => row.entryId.startsWith('brain:guidance-answer:'));
-    expect(handoffs.some((row) => row.text.includes('call the existing reader')),
-      'the corrected advice reached the continuation').toBe(true);
-    expect(issued[1]!.deliveredTo, 'and the row says who it reached').toBe('segment:build-1:2:task');
+    // Issued is a PROPOSAL; delivery is Julius accepting it after review. The
+    // rejected packet was issued and never delivered, so the coder's
+    // continuation holds the correction and nothing else.
+    expect(issued[1]!.proposedTo).toBe('segment:build-1:2:task');
+    const delivered = factsOf(harness, 'guidance.delivered');
+    expect(delivered.map((row) => row.deliveredTo)).toEqual(['segment:build-1:2:task']);
+    const continuation = (await harness.store.brainEntriesForRun('run-1', 'prj-1'))
+      .filter((row) => row.taskIds.includes('segment:build-1:2:task'));
+    const text = continuation.map((row) => row.text).join('\n');
+    expect(text, 'the corrected advice reached the continuation').toContain('call the existing reader');
+    expect(text, 'the rejected advice never did').not.toContain('add a second buffer');
     expect(issued.map((row) => row.guidanceRevision), 'two packets for one question are ordered').toEqual([1, 2]);
     await expectBoundDispatch(harness, 'repair:guidance:build-1:1:task:1:task');
   });
@@ -183,7 +189,8 @@ describe('researched guidance is issued against the question it answers', () => 
     const issued = factsOf(harness, 'guidance.issued');
     expect(issued).toHaveLength(1);
     expect(issued[0]!.taskId).toBe('build-1');
-    expect(issued[0]!.deliveredTo).toBe('segment:build-1:2:task');
+    expect(issued[0]!.proposedTo).toBe('segment:build-1:2:task');
+    expect(factsOf(harness, 'guidance.delivered').map((row) => row.deliveredTo)).toEqual(['segment:build-1:2:task']);
     await expectBoundDispatch(harness, 'segment:guidance:build-1:1:task:2:task');
   });
 });

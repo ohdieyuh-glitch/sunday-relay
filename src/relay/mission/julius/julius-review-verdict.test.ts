@@ -25,7 +25,7 @@ describe('a declaration is rebuilt from an allowlist', () => {
       ok: true,
       declaration: {
         version: 'julius-review-verdict.v1', verdict: 'CHALLENGE', category: 'contract_drift', target: 'PLAN',
-        claim: 'The plan writes outside the paths.', warnings: [],
+        claim: 'The plan writes outside the paths.', warnings: [], resolutions: [],
       },
     });
   });
@@ -44,6 +44,9 @@ describe('a declaration is rebuilt from an allowlist', () => {
     ['warnings that are not a list', { verdict: 'WARNING', claim: 'x', warnings: 'one' }, 'review_verdict_warnings_invalid'],
     ['a warning with an invented category', { verdict: 'WARNING', claim: 'x', warnings: [{ category: 'vibes', claim: 'y' }] }, 'review_verdict_warnings_invalid'],
     ['not an object', 'CONTINUE', 'review_verdict_shape_refused'],
+    ['a resolution with an invented status', { verdict: 'CONTINUE', claim: 'x', resolutions: [{ findingId: 'finding:1', status: 'PROBABLY', claim: 'y' }] }, 'review_verdict_resolutions_invalid'],
+    ['a resolution with no claim', { verdict: 'CONTINUE', claim: 'x', resolutions: [{ findingId: 'finding:1', status: 'RESOLVED' }] }, 'review_verdict_resolutions_invalid'],
+    ['two answers about one finding', { verdict: 'CONTINUE', claim: 'x', resolutions: [{ findingId: 'finding:1', status: 'RESOLVED', claim: 'y' }, { findingId: 'finding:1', status: 'OPEN', claim: 'z' }] }, 'review_verdict_resolutions_conflict'],
   ])('refuses %s by name', (_label, value, reasonCode) => {
     expect(sanitizeJuliusReviewVerdict(value)).toEqual({ ok: false, reasonCode });
   });

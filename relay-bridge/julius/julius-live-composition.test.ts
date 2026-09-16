@@ -3036,6 +3036,13 @@ describe('every repair the planner can mint has a registered worker', () => {
     const owners = [
       ['PROMPT_ARCHITECT', 'plan'], ['PROMPT_ARCHITECT', 'repair:plan'],
       ['PROMPT_ARCHITECT', 'guidance'], ['PROMPT_ARCHITECT', 'repair:guidance'],
+      // A rebuttal is the architect's answer to a disagreement. It has no repair
+      // stage by design: one answer, one re-review, and then Julius resolves it.
+      ['PROMPT_ARCHITECT', 'rebuttal'],
+      // An architecture consultation is Julius going back to the architect
+      // mid-mission, and once before completion. No repair stage either: the
+      // answer to a consultation is a fresh consultation, not a revision of it.
+      ['PROMPT_ARCHITECT', 'architecture'],
       ['CODING_AGENT', 'build'], ['CODING_AGENT', 'repair:build'],
     ] as const;
     for (const [role, taskType] of owners) {
@@ -3381,6 +3388,88 @@ describe('the architect and the reviewer can ask, through their own answers', ()
     const schema = (seen[0]!.schema as { schema: Record<string, unknown> }).schema;
     expect(schema.required).toContain('researchAsks');
     expect(result.researchAsks).toEqual([ASK]);
+  });
+
+  /**
+   * THE THIRD AND FOURTH JOBS, DRIVEN. Until this existed the rebuttal branch
+   * could be deleted and every test still passed: the peer e2e proves the
+   * PROTOCOL with scripted adapters and the parity test proves the SCHEMA, and
+   * neither executes the adapter's own branch. A mutation run found it.
+   */
+  const REBUTTAL = {
+    position: 'MAINTAINS',
+    argument: 'The port signature is untouched, so the boundary the challenge names did not move.',
+    evidence: [{ locator: 'src/relay/mission/julius/julius-runtime-ports.ts:241', claim: 'The signature is unchanged by this work.' }],
+    missionTermsMustChange: false,
+  };
+  const CONSULTATION = {
+    architecture: {
+      components: [{ name: 'normalizer', responsibility: 'Turns a page into rows.' }],
+      boundaries: [{ name: 'JournalReader', kind: 'INTERFACE', contract: 'peek() may return fewer bytes.', locator: 'src/slug.ts' }],
+      dependencies: [], decisions: [],
+      assumptions: [{ assumptionId: 'A-1', claim: 'The boundary is a requirement.', state: 'UNVERIFIED', evidenceRefs: [] }],
+      openQuestions: [], risks: [],
+    },
+    consistency: {
+      assessment: 'ALIGNED', claim: 'What was built matches the design.',
+      drift: [], driftingTaskIds: [], evidenceRefs: [],
+    },
+  };
+
+  it('a rebuttal dispatch is charged, shaped and validated as a rebuttal', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const { adapter } = architectFor(REBUTTAL, seen);
+    const result = await adapter.dispatch({ taskId: 'rebuttal:build-1:review:task', contextId: 'ctx-resume-1', taskType: 'rebuttal' });
+    expect((seen[0]!.schema as { name: string }).name).toBe('relay_prompt_architect_rebuttal');
+    expect(String(seen[0]!.instructions)).toContain('This is your ONE answer to it.');
+    expect(result.rebuttal).toEqual(REBUTTAL);
+    // The dispatch is accounted for, and the argument is not evidence of the work.
+    expect((result.evidence ?? []).map((item) => (item as { type: string }).type)).toEqual(['ARTIFACT']);
+  });
+
+  it('a rebuttal the domain cannot use is refused rather than handed to Julius', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    // MAINTAINS with nothing to cite: the domain's own rule, applied in the adapter.
+    const { adapter } = architectFor({ ...REBUTTAL, evidence: [] }, seen);
+    const refusal = await adapter.dispatch({ taskId: 'rebuttal:build-1:review:task', contextId: 'ctx-resume-1', taskType: 'rebuttal' })
+      .then(() => null, (error: unknown) => error as { failureClass: string | null; safeMessage: string });
+    expect(refusal, 'refused, not handed on').not.toBeNull();
+    expect(refusal!.failureClass).toBe('rebuttal_validation_failed');
+    expect(refusal!.safeMessage).toContain('rebuttal failed validation');
+  });
+
+  it('an architecture consultation is charged, shaped and validated as a consultation', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const { adapter } = architectFor(CONSULTATION, seen);
+    const result = await adapter.dispatch({
+      taskId: 'architecture:arch:PRE_COMPLETION_CHECK:r1:run:task', contextId: 'ctx-resume-1', taskType: 'architecture',
+    });
+    expect((seen[0]!.schema as { name: string }).name).toBe('relay_prompt_architect_architecture');
+    const instructions = String(seen[0]!.instructions);
+    expect(instructions).toContain('Julius has come BACK to you.');
+    expect(instructions, 'materiality is stated, not left to taste').toContain('MATERIAL MEANS A BOUNDARY MOVED');
+    expect(instructions).toContain('can HOLD a completion; it can never make one');
+    expect(result.architecture).toEqual(CONSULTATION.architecture);
+    expect(result.consistency).toEqual(CONSULTATION.consistency);
+    expect((result.evidence ?? []).map((item) => (item as { type: string }).type)).toEqual(['ARTIFACT']);
+  });
+
+  it('a consultation demanding a repair for a rename is refused in the adapter, before Julius must hold anything', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const { adapter } = architectFor({
+      ...CONSULTATION,
+      consistency: {
+        assessment: 'DRIFT_REQUIRES_REPAIR', claim: 'It was renamed.',
+        drift: [{ kind: 'NAMING', name: 'reader', claim: 'Renamed.' }],
+        driftingTaskIds: ['build-1'], evidenceRefs: ['src/slug.ts:1'],
+      },
+    }, seen);
+    const refusal = await adapter.dispatch({
+      taskId: 'architecture:arch:PRE_COMPLETION_CHECK:r1:run:task', contextId: 'ctx-resume-1', taskType: 'architecture',
+    }).then(() => null, (error: unknown) => error as { failureClass: string | null; safeMessage: string });
+    expect(refusal, 'refused, not handed on').not.toBeNull();
+    expect(refusal!.failureClass).toBe('architecture_validation_failed');
+    expect(refusal!.safeMessage).toContain('architecture consultation failed validation');
   });
 
   it('the charter tells the architect what the field is — a field nobody was told about is unused', async () => {

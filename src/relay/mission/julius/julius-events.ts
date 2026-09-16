@@ -59,6 +59,11 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * recorded only boundaries — a task started, a task ended — and a mission's
   * whole middle was unwritten. */
  'checkpoint.recorded','checkpoint.verdict','guidance.issued','guidance.refused',
+ /* WHEN A PACKET BECAME ADVICE. `guidance.issued` says an architect produced one
+  * and which question it answers; `guidance.delivered` says Julius ACCEPTED it
+  * after review and handed it to the worker that asked. They were one fact, and
+  * a packet the reviewer went on to reject had already been delivered. */
+ 'guidance.delivered',
  /* GOVERNED RESEARCH. `research.refused` is Julius unable to read what a worker
   * asked for; `guidance.deferred` is a worker that asked for two things in one
   * dispatch and got the cheaper one, recorded rather than dropped so the record
@@ -102,6 +107,30 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * `opened` and `step`; `refused` is a challenge that could not be opened as
   * one, which leaves its hold in place rather than dropping it. */
  'disagreement.opened','disagreement.step','disagreement.resolved','disagreement.refused',
+ /* A FINDING'S LIFE. Findings were recorded OPEN and stayed OPEN forever, so a
+  * mission could complete with its record still saying the problem was there.
+  * Each row is one legal move: a repair that SUCCEEDED addressed it, or the
+  * reviewer that raised it resolved, maintained or superseded it. Only a
+  * reviewer's own answer reaches RESOLVED; changed code never does. */
+ 'finding.transitioned',
+ /* THE ARCHITECTURE, AS STATE. `recorded` is a whole bounded revision — the
+  * components, boundaries, dependencies, decisions, assumptions, questions and
+  * risks the architect holds — carried on the row so a reader reconstructs it
+  * without a second store. `refused` is a proposal Julius would not read, by
+  * name. It is ADVISORY: the Mission Contract remains authoritative, and
+  * `architecture.conflicted` records where the two disagree rather than letting
+  * either quietly win. */
+ 'architecture.recorded','architecture.refused','architecture.conflicted',
+ /* THE ARCHITECTURE, WATCHED AND CHECKED. `trigger.raised` is one of the seven
+  * named moments Julius goes back to the architect, cause-once by trigger id.
+  * `proposed` and `accepted` are the post-lock re-plan path: a material change
+  * to locked terms waits for the review of the task that proposed it.
+  * `assessed` is the final consistency check — an ASSESSMENT, never a verdict:
+  * the architect can refuse to let a completion happen, and can never mint one.
+  * `replan.escalated` is a re-plan that would need a mission term to move,
+  * which is the user's decision and not the architect's. */
+ 'architecture.trigger.raised','architecture.proposed','architecture.accepted','architecture.unchanged',
+ 'architecture.assessed','architecture.assessment.refused','architecture.replan.escalated',
  /* PERSISTENT-WORKER EFFORT. One row per completed dispatch, carrying what the
   * provider actually reported and NOTHING inferred — an unreported token count
   * is null here rather than the zero the budget path substitutes, because a

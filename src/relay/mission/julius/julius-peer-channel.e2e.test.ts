@@ -254,7 +254,8 @@ describe('P3 — a peer cannot mutate protected contract fields', () => {
     await drain(harness, 12);
     const before = await harness.store.loadTaskContract({ projectId: 'prj-1', taskId: 'build-1' });
     await drain(harness);
-    expect(factsOf(harness, 'guidance.refused').map((facts) => facts.reasonCode)).toEqual(['peer_response_mutates_protected_term']);
+    expect(factsOf(harness, 'guidance.refused').filter((facts) => facts.stage === 'issue').map((facts) => facts.reasonCode))
+      .toEqual(['peer_response_mutates_protected_term']);
     expect(factsOf(harness, 'guidance.issued')).toEqual([]);
     const question = requestsOf(harness).find((request) => request.kind === 'GUIDANCE_QUESTION')!;
     expect(question.responseRef, 'nothing answered the question').toBeNull();
@@ -267,7 +268,8 @@ describe('P4 — a peer cannot mint VERIFIED', () => {
   it.each(['VERIFIED', 'TASK_VERIFIED', 'COMPLETE'])('guidance declaring %s is refused, and the only decisions are Julius\'s', async (outcome) => {
     const harness = build({ coder: GUIDED.coder, architect: [GUIDED.architect![0]!, { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: { ...GUIDANCE, status: outcome } }] });
     await drain(harness);
-    expect(factsOf(harness, 'guidance.refused').map((facts) => facts.reasonCode)).toEqual(['peer_response_mints_julius_only_outcome']);
+    expect(factsOf(harness, 'guidance.refused').filter((facts) => facts.stage === 'issue').map((facts) => facts.reasonCode))
+      .toEqual(['peer_response_mints_julius_only_outcome']);
     // Every decision row was written by the verification evaluator, keyed on a
     // task and a closed action — never on a worker's words.
     for (const decided of events(harness).filter((event) => event.type === 'verification.decided')) {

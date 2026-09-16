@@ -460,7 +460,7 @@ describe('7 — guidance cannot alter locked scope or acceptance criteria', () =
     const locked = await (async () => { await drain(harness); return harness.store.loadTaskContract({ projectId: 'prj-1', taskId: 'build-1' }); })();
 
     expect(factsOf(harness, 'guidance.issued'), 'nothing was issued').toEqual([]);
-    const refused = factsOf(harness, 'guidance.refused');
+    const refused = factsOf(harness, 'guidance.refused').filter((facts) => facts.stage === 'issue');
     expect(refused).toHaveLength(1);
     // Refused BY NAME since the peer channel's authority guard: a packet that
     // reaches for a contract term is not a malformed packet, and the record says
