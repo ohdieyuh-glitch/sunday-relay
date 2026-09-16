@@ -358,19 +358,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	FName GetCompanionTerminalNarratedBeat(int32 Index) const;
 
-	// ---------------------------------------------------------------- the Julius stream (founder, 2026-09-16)
-	// The live work of Julius and its components INSIDE the Julius terminal. Role: 0 JULIUS, 1 PROMPT ARCHITECT,
-	// 2 CODING AGENT, 3 INDEPENDENT REVIEWER.
+	// ---------------------------------------------------------------- Julius's components at work (founder, 2026-09-16)
+	// The Julius Live Terminal is never changed. While a simulated mission runs, Julius and its three components work in
+	// the terminal's own four sections at the same time, each from the same event the Relay Dog performs.
+	// Role: 0 JULIUS, 1 PROMPT ARCHITECT, 2 CODING AGENT, 3 INDEPENDENT REVIEWER.
 
-	/** The terminal is open and its body is showing the live stream of a simulated mission. */
-	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
-	bool IsJuliusStreamShown() const;
-
-	/** What a role is doing now, e.g. IMPLEMENTING, as the stream's status line reads it. */
+	/** What a role is doing now, e.g. IMPLEMENTING: its section's state. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
 	FString GetJuliusRoleStatus(int32 Role) const;
 
-	/** Lines a role has written into the stream this mission. */
+	/** Lines a role has written this mission. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
 	int32 GetJuliusRoleWrittenCount(int32 Role) const;
 
@@ -381,13 +378,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
 	FString GetJuliusRoleLatestKind(int32 Role) const;
 
-	/** The mission event the stream is writing. It must equal the world's. */
+	/** The mission event the roles are working on. It must equal the world's. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
-	FName GetJuliusStreamEvent() const { return StreamEvent; }
+	FName GetJuliusRoleEvent() const { return RoleEvent; }
 
-	/** Lines the stream still has to write for the current event. */
+	/** Lines a role still has to write for the current event. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
-	int32 GetJuliusStreamPending() const;
+	int32 GetJuliusRolePending(int32 Role) const;
 
 private:
 	enum class EOverlay : uint8 { None, Terminal, Map, Brain, Missions, Commands, Menu, Wallet };
@@ -423,22 +420,28 @@ private:
 	/** The Julius Live Terminal, created once and kept -- at attach, so it can record a mission while it is closed. */
 	void EnsureLiveTerminal();
 
-	/** One line owed to the stream, and whose it is. */
-	struct FStreamEntry
+	/** One role's work in progress: its status, the lines it still owes the current event, and when the next is due. */
+	struct FRoleFeed
 	{
-		EWonderlandJuliusRole Role = EWonderlandJuliusRole::Julius;
-		FWonderlandRoleLine Line;
+		FString Status = TEXT("STANDBY");
+		TArray<FWonderlandRoleLine> Pending;
+		float Wait = 0.0f;
+		int32 Written = 0;
+		FWonderlandRoleLine Latest;
+		/** Julius only: a heading waiting to be carried into the row it heads. */
+		FString Heading;
 	};
-	void NarrateStream(FName EventType, bool bNewMission, bool bLlmJoined, bool bJhinnJoined);
-	/** Write everything the stream still owes, at once: the world has moved on and the terminal must not lag it. */
-	void FlushStream();
-	bool TickStream(float DeltaSeconds);
-	TArray<FStreamEntry> StreamPending;
-	float StreamWait = 0.0f;
-	FName StreamEvent;
-	TMap<FName, int32> StreamOccurrences;
-	FTSTicker::FDelegateHandle StreamTicker;
-	double StreamWorldSeconds = -1.0;
+	void NarrateRoles(FName EventType, const FString& ChakraLabel, bool bNewMission, bool bLlmJoined, bool bJhinnJoined);
+	void WriteRoleLine(int32 Role, const FWonderlandRoleLine& Line);
+	/** Write everything a role still owes, at once: the world has moved on and its section must not lag it. */
+	void FlushRole(int32 Role);
+	bool TickRoles(float DeltaSeconds);
+	FRoleFeed RoleFeeds[WonderlandJuliusRoleCount];
+	TMap<FName, int32> RoleOccurrences;
+	FName RoleEvent;
+	FString RoleChakra;
+	FTSTicker::FDelegateHandle RoleTicker;
+	double RoleWorldSeconds = -1.0;
 	/**
 	 * A pointer click on one widget: hit tested in that widget's own window, routed down the path found there, and
 	 * only when the widget is really on that path. False when it is not under its own centre. The OS cursor never moves.
