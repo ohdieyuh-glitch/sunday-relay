@@ -77,6 +77,20 @@ def job():
         mission = next((m for m in unreal.ObjectIterator(unreal.WonderlandMissionSubsystem)
                         if m.get_beat_count() > 0), None)
 
+    def to_screen(at):
+        """ProjectWorldToScreen hands Python the position ALONE, not (bool, position) as the C++ reads."""
+        try:
+            got = unreal.GameplayStatics.project_world_to_screen(controller, at, False)
+        except Exception as exc:
+            RESULT.setdefault("project_error", str(exc))
+            return None
+        if isinstance(got, tuple):
+            got = got[1] if len(got) > 1 else got[0]
+        try:
+            return [float(got.x), float(got.y)]
+        except AttributeError:
+            return None
+
     # An unfocused editor paces down to ~2.5 fps, which buries a small actor's cost in the sleep.
     for cmd in ("t.MaxFPS 0", "Slate.bAllowThrottling 0", "r.VSync 0"):
         unreal.SystemLibrary.execute_console_command(world, cmd)
@@ -181,13 +195,9 @@ def job():
         frames = []
         for frame in range(FRAMES_PER_BEAT):
             at = mission.get_orb_location()
-            try:
-                found, screen = unreal.GameplayStatics.project_world_to_screen(controller, at, False)
-            except Exception as exc:
-                found, screen, RESULT["project_error"] = False, None, str(exc)
+            screen = to_screen(at)
             path = shot("zc_mission_%02d_%s_%02d.png" % (index + 1, beat, frame))
-            frames.append({"capture": path,
-                           "screen": [screen.x, screen.y] if (found and screen is not None) else None})
+            frames.append({"capture": path, "screen": screen})
             yield FRAME_SPACING
         gallery.append({"beat": beat, "label": mission.get_beat_label(), "step": mission.get_chakra_step(),
                         "chakra": mission.get_chakra_name(), "frames": frames})

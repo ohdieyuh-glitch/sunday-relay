@@ -99,6 +99,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	bool IsDevelopmentPreview() const { return true; }
 
+	/** Grow or shrink the orb. For the placement probe; the built-in size is what ships. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
+	bool SetOrbScale(float Scale);
+
+	/** Move the orb in the pawn's yaw frame, uu forward and right. For the placement probe. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
+	bool SetOrbFollowOffset(float Forward, float Right);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	float GetOrbHeightUU() const;
+
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	bool IsOrbInWorld() const;
 
