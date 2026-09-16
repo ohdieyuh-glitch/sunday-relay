@@ -160,6 +160,13 @@ def near_prop(grid, x, y, half):
     return False
 
 
+def beat_at(x, y):
+    """Which piece stands at a position -- 0 and 2 a planter, 1 a spiral, 3 a rose -- as a function of the position only,
+    so no filtering elsewhere can change what a position holds or which clearance answer belongs to it."""
+    h = (round(x) * 73856093) ^ (round(y) * 19349663)
+    return (h & 0x7FFFFFFF) % 4
+
+
 def load_clear():
     """{site id: True/False} from the clearance probe, or None if it has not been run."""
     if not CLEAR_RESULT.exists():
@@ -174,6 +181,14 @@ def load_clear():
     return out
 
 
+def shop_edges():
+    """Edges SF01 put a shopfront on (sf01_edges.json), keyed by tile label and rounded edge centre."""
+    path = HERE / "sf01_edges.json"
+    if not path.exists():
+        return set()
+    return {(label, round(x), round(y)) for (label, x, y) in json.loads(path.read_text(encoding="utf-8"))}
+
+
 def main(prefixes):
     rows = json.loads(CENSUS.read_text(encoding="utf-8"))
     by_prefix = defaultdict(list)
@@ -182,11 +197,12 @@ def main(prefixes):
     out = {}
     clear = load_clear()
     props = prop_grid()
+    shops = shop_edges()
     all_sites = []
     for p in (prefixes or sorted(by_prefix)):
         # a district's edges are tested against EVERY street tile in the city, so a street that crosses a district
         # boundary is not mistaken for two dead ends
-        layer, sites = build(p, by_prefix[p], rows, clear, props)
+        layer, sites = build(p, by_prefix[p], rows, clear, props, shops)
         all_sites.extend(sites)
         (HERE / ("sd01_%s.json" % p.lower())).write_text(json.dumps(layer), encoding="utf-8")
         out[p] = layer["stats"]
@@ -194,7 +210,7 @@ def main(prefixes):
     return out
 
 
-def build(prefix, own, everything, clear=None, props=None):
+def build(prefix, own, everything, clear=None, props=None, shops=frozenset()):
     """One district's dressing: its own tiles' real edges, judged against every street tile in the city.
     Returns (layer, candidate sites). With `clear`, a piece whose site the probe found occupied is left out."""
     own_labels = {t["label"] for t in own}
@@ -207,7 +223,10 @@ def build(prefix, own, everything, clear=None, props=None):
         # IDS ARE POSITIONS, NOT COUNTERS. They were sequential, so skipping one duplicate lamp shifted every later id
         # and the clearance answers stopped lining up with the candidates they were measured for -- beds halved from
         # 778 to 432 on a change that only touched lamps. A position cannot drift when a different piece is filtered.
-        sid = "%s|%s|%d|%d" % (prefix, kind, round(x), round(y))
+        # ...and not by kind either: when the planters on shop edges were skipped, the running bed/spiral/rose
+        # sequence shifted, the same position became a different kind, and 34 more pieces "failed" clearance they had
+        # never been measured for. The piece at a position is now a function of the position alone (see beat_at).
+        sid = "%s|%d|%d" % (prefix, round(x), round(y))
         hx, hy, hz = HALF[kind]
         sites.append([sid, round(x, 1), round(y, 1), hx, hy, hz, round(z + hz + 8.0, 1)])
         if props is not None and near_prop(props, x, y, HALF[kind]):
@@ -234,14 +253,17 @@ def build(prefix, own, everything, clear=None, props=None):
         top = t["top"]
         yaw = math.degrees(math.atan2(along[1], along[0]))
         usable = length - 2.0 * END_MARGIN
-        if usable > BED_SPACING * 0.5:
+        # A SHOP WINDOW IS NOT A PLACE FOR A PLANTER. An edge SF01 gave a shopfront keeps its lamp and loses its
+        # planters, which would otherwise stand between the street and the glass.
+        has_shop = (t["label"], round(cx), round(cy)) in shops
+        if usable > BED_SPACING * 0.5 and not has_shop:
             count = max(1, int(usable // BED_SPACING))
             step = usable / count
             for s in range(count):
                 offset = -usable * 0.5 + step * (s + 0.5)
                 x = cx + along[0] * offset - outward[0] * INSET
                 y = cy + along[1] * offset - outward[1] * INSET
-                beat = k % 4
+                beat = beat_at(x, y)
                 k += 1
                 if beat in (0, 2):
                     if not site("bed", x, y, top):
