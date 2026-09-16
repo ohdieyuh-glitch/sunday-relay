@@ -89,7 +89,7 @@ describe('the Project Brain failure model', () => {
     function world(state: JuliusBrainAccessStatePort = createJuliusBrainAccessMemoryState()) {
       let now = START * 1000;
       const clock = { now: () => new Date(now).toISOString() };
-      const serviceOver = (over: JuliusBrainAccessStatePort) => createJuliusBrainAccessService({ brainId: 'brain:prj-julius-live-4', environment: 'production', binding: { databaseEnvironment: 'production' }, policy: ISSUER.policy, jwks: () => ISSUER.jwks, grants: () => [], clock, state: over });
+      const serviceOver = (over: JuliusBrainAccessStatePort) => createJuliusBrainAccessService({ brainId: 'brain:prj-julius-live-4', environment: 'production', binding: { databaseEnvironment: 'production' }, policy: ISSUER.policy, keys: ISSUER.keys, grants: () => [], clock, state: over });
       let service = serviceOver(state);
       const access: JuliusBrainAccessPort & { down: boolean } = {
         down: false,

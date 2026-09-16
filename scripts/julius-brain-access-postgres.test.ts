@@ -63,7 +63,7 @@ suite('Brain service access state on a real PostgreSQL', () => {
         const identity = await assertJuliusBrainDatabase(pool, { environment: 'test' });
         return createJuliusBrainAccessService({
           brainId: 'brain:prj-julius-live-4', environment: 'test', binding: { databaseEnvironment: identity.environment },
-          policy: { ...ISSUER.policy, environments: { 'julius-paid': 'test' } }, jwks: () => ISSUER.jwks, grants: () => grants,
+          policy: { ...ISSUER.policy, environments: { 'julius-paid': 'test' } }, keys: ISSUER.keys, grants: () => grants,
           clock: { now: () => new Date(now).toISOString() }, state: new JuliusBrainAccessPostgresState(pool),
         });
       };
@@ -71,7 +71,7 @@ suite('Brain service access state on a real PostgreSQL', () => {
 
       // A production service composed over this (test) database refuses to exist.
       const identity = await assertJuliusBrainDatabase(servicePool(), { environment: 'test' });
-      expect(() => createJuliusBrainAccessService({ brainId: 'b', environment: 'production', binding: { databaseEnvironment: identity.environment }, policy: ISSUER.policy, jwks: () => ISSUER.jwks, grants: () => [], clock: { now: () => '' }, state })).toThrow('julius_brain_access_binding_mismatch');
+      expect(() => createJuliusBrainAccessService({ brainId: 'b', environment: 'production', binding: { databaseEnvironment: identity.environment }, policy: ISSUER.policy, keys: ISSUER.keys, grants: () => [], clock: { now: () => '' }, state })).toThrow('julius_brain_access_binding_mismatch');
       await expect(assertJuliusBrainDatabase(servicePool(), { environment: 'production' })).rejects.toThrow();
 
       // Restart: a session, a spent token and a FRESH registration outlive the process that made them.

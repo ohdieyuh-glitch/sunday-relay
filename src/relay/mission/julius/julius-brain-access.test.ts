@@ -11,6 +11,7 @@ import {
   type JuliusBrainJwk,
   type JuliusBrainStateModeGrant,
 } from './julius-brain-access';
+import { staticFixtureKeyStore } from './julius-brain-access-fixtures';
 import { paidRunArchive } from './julius-brain-archive-fixtures';
 import { importJuliusPaidRunArchive } from './julius-brain-archive-import';
 import { juliusPrincipal, type JuliusBrainDraft } from './julius-brain-contracts';
@@ -50,7 +51,7 @@ function service(environment: 'production' | 'development' = 'production', grant
   let now = START * 1000;
   const state = createJuliusBrainAccessMemoryState();
   const access = createJuliusBrainAccessService({
-    brainId: BRAIN, environment, binding: { databaseEnvironment: environment }, policy: POLICY, jwks: () => JWKS, grants: () => grants,
+    brainId: BRAIN, environment, binding: { databaseEnvironment: environment }, policy: POLICY, keys: staticFixtureKeyStore(JWKS), grants: () => grants,
     clock: { now: () => new Date(now).toISOString() }, state,
   });
   return { access, audit: state.audit, state, advance: (ms: number) => { now += ms; } };

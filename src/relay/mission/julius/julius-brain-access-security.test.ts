@@ -47,7 +47,7 @@ function harness(options: { environment?: 'production' | 'development'; grants?:
   const grants = options.grants ?? [];
   let now = START * 1000;
   const clock = { now: () => new Date(now).toISOString() };
-  const build = (env = environment) => createJuliusBrainAccessService({ brainId: BRAIN, environment: env, binding: { databaseEnvironment: env }, policy: ISSUER.policy, jwks: () => ISSUER.jwks, grants: () => grants, clock, state });
+  const build = (env = environment) => createJuliusBrainAccessService({ brainId: BRAIN, environment: env, binding: { databaseEnvironment: env }, policy: ISSUER.policy, keys: ISSUER.keys, grants: () => grants, clock, state });
   let access = build();
   const h = {
     state, grants,
@@ -291,7 +291,7 @@ describe('Brain service security', () => {
   it('a production service with a development binding does not start; development tokens, sessions and registrations do not reach production', async () => {
     const state = createJuliusBrainAccessMemoryState();
     const construct = (environment: 'production' | 'development', databaseEnvironment: 'production' | 'development' | 'test') => () => createJuliusBrainAccessService({
-      brainId: BRAIN, environment, binding: { databaseEnvironment }, policy: ISSUER.policy, jwks: () => ISSUER.jwks, grants: () => [], clock: { now: () => new Date(START * 1000).toISOString() }, state,
+      brainId: BRAIN, environment, binding: { databaseEnvironment }, policy: ISSUER.policy, keys: ISSUER.keys, grants: () => [], clock: { now: () => new Date(START * 1000).toISOString() }, state,
     });
     expect(construct('production', 'development')).toThrow('julius_brain_access_binding_mismatch: a production service bound to a development Brain database');
     expect(construct('production', 'test')).toThrow('julius_brain_access_binding_mismatch');

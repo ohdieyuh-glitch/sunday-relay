@@ -1,6 +1,7 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
 
 import { GITHUB_ACTIONS_OIDC_ISSUER, type JuliusBrainAccessPolicy, type JuliusBrainJwk } from './julius-brain-access';
+import { createJuliusBrainOidcKeyStore, type JuliusBrainOidcKeyStore } from './julius-brain-oidc-keys';
 
 /**
  * A stand-in GitHub Actions OIDC issuer for the access-contract proofs: a fresh
@@ -13,6 +14,15 @@ export const ACCESS_FIXTURE_POLICY: JuliusBrainAccessPolicy = {
   workflowRef: 'ohdieyuh-glitch/sunday-relay/.github/workflows/julius-first-live-mission.yml@refs/heads/main', ref: 'refs/heads/main',
   allowedEvents: ['workflow_dispatch'], environments: { 'julius-paid': 'production', 'julius-dev': 'development' }, sessionTtlMs: 3 * 60 * 60 * 1000,
 };
+
+/** A key store that always answers from one fixed document: for proofs that are not about rotation. */
+export function staticFixtureKeyStore(jwks: { readonly keys: readonly JuliusBrainJwk[] }): JuliusBrainOidcKeyStore {
+  return createJuliusBrainOidcKeyStore({
+    issuers: { [GITHUB_ACTIONS_OIDC_ISSUER]: 'https://token.actions.githubusercontent.com/.well-known/jwks' },
+    fetch: async () => ({ status: 200, body: JSON.stringify(jwks) }),
+    clock: { now: () => new Date().toISOString() },
+  });
+}
 
 export function createAccessFixtureIssuer(startSeconds: number) {
   const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -31,5 +41,5 @@ export function createAccessFixtureIssuer(startSeconds: number) {
     const signingInput = `${b64(header)}.${b64(payload)}`;
     return `${signingInput}.${sign('RSA-SHA256', Buffer.from(signingInput), privateKey).toString('base64url')}`;
   };
-  return { jwks, mint, policy: ACCESS_FIXTURE_POLICY };
+  return { jwks, mint, policy: ACCESS_FIXTURE_POLICY, keys: staticFixtureKeyStore(jwks) };
 }

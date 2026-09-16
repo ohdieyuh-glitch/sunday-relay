@@ -98,6 +98,8 @@ export function classifyJuliusBrainFailure(error: unknown): JuliusBrainFailure {
   if (error instanceof JuliusBrainAccessError) {
     if (error.reasonCode === 'session_expired') return { failureClass: 'SESSION_EXPIRED', outcome: 'NOT_APPLIED', retryable: true, code: error.reasonCode };
     if (error.reasonCode === 'session_unknown') return { failureClass: 'SESSION_LOST', outcome: 'NOT_APPLIED', retryable: true, code: error.reasonCode };
+    // The service could not reach the issuer's keys: an identity failure, not a refusal of this caller.
+    if (error.reasonCode === 'issuer_keys_unavailable') return { failureClass: 'OIDC_UNAVAILABLE', outcome: 'NOT_APPLIED', retryable: true, code: error.reasonCode };
     return { failureClass: 'ACCESS_REFUSED', outcome: 'NOT_APPLIED', retryable: false, code: error.reasonCode };
   }
   if (error instanceof JuliusBrainOidcUnavailableError) return failure('OIDC_UNAVAILABLE', 'NOT_APPLIED', true);

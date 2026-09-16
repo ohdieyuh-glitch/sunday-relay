@@ -195,7 +195,7 @@ suite('the Brain failure model on a real PostgreSQL', () => {
       let now = START * 1000;
       const policy = { ...issuer.policy, environments: { 'julius-paid': 'test' as const } };
       const serviceProcess = () => createJuliusBrainAccessService({
-        brainId: BRAIN, environment: 'test', binding: { databaseEnvironment: 'test' }, policy, jwks: () => issuer.jwks, grants: () => [],
+        brainId: BRAIN, environment: 'test', binding: { databaseEnvironment: 'test' }, policy, keys: issuer.keys, grants: () => [],
         clock: { now: () => new Date(now).toISOString() }, state: new JuliusBrainAccessPostgresState(db.pool()),
       });
       let service = serviceProcess();

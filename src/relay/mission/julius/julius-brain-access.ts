@@ -1,6 +1,7 @@
 import { createHash, createPublicKey, randomBytes, verify } from 'node:crypto';
 
 import { canonicalJuliusBrainJson, juliusBrainSha256, juliusPrincipal, type JuliusBrainDraft, type JuliusBrainPrincipal, type JuliusBrainRecordKind } from './julius-brain-contracts';
+import type { JuliusBrainOidcKeyStore } from './julius-brain-oidc-keys';
 import type { JuliusBrainEntityState } from './julius-brain-projection';
 import type { JuliusBrainContextView } from './julius-brain-query';
 import { defaultJuliusBrainReadGrant } from './julius-brain-service';
@@ -84,12 +85,29 @@ export type JuliusBrainAccessRefusal =
   | 'token_expired' | 'token_not_yet_valid' | 'token_too_old' | 'token_claim_refused' | 'token_replayed'
   | 'environment_mismatch' | 'state_mode_invalid' | 'state_mode_not_for_this_run' | 'state_mode_not_authorized' | 'run_registration_mismatch'
   | 'session_unknown' | 'session_expired' | 'other_run' | 'other_mission' | 'state_mode_is_bound' | 'kind_not_permitted' | 'mutation_out_of_scope'
-  | 'mutation_target_unresolved' | 'artifact_not_admitted' | 'raw_store_not_exposed';
+  | 'mutation_target_unresolved' | 'artifact_not_admitted' | 'raw_store_not_exposed' | 'issuer_keys_unavailable';
 
 /** An RSA public key as the issuer publishes it (JWKS). */
 export interface JuliusBrainJwk { readonly kty: string; readonly kid?: string; readonly n?: string; readonly e?: string; readonly alg?: string; readonly use?: string }
 
 const b64url = (value: string): Buffer | null => (/^[A-Za-z0-9_-]*$/.test(value) ? Buffer.from(value, 'base64url') : null);
+
+/**
+ * The algorithm and key id a token claims, read before anything is verified —
+ * so the right key can be resolved. Nothing here is trusted: the header only
+ * says which key to check the signature against.
+ */
+export function readJuliusBrainTokenHeader(token: string): { readonly ok: true; readonly alg: string; readonly kid: string } | { readonly ok: false; readonly reasonCode: JuliusBrainAccessRefusal; readonly detail: string } {
+  const parts = token.split('.');
+  if (parts.length !== 3) return { ok: false, reasonCode: 'token_malformed', detail: 'not a JWS compact token' };
+  let header: unknown;
+  try { header = JSON.parse(b64url(parts[0]!)?.toString('utf8') ?? 'null'); } catch { return { ok: false, reasonCode: 'token_malformed', detail: 'header is not JSON' }; }
+  if (typeof header !== 'object' || header === null) return { ok: false, reasonCode: 'token_malformed', detail: 'header is not an object' };
+  const { alg, kid } = header as Record<string, unknown>;
+  if (alg !== 'RS256') return { ok: false, reasonCode: 'token_algorithm_refused', detail: `alg ${String(alg)}` };
+  if (typeof kid !== 'string' || kid.length === 0 || kid.length > 256) return { ok: false, reasonCode: 'token_key_unknown', detail: `kid ${String(kid)}` };
+  return { ok: true, alg, kid };
+}
 const sha256Hex = (value: string) => createHash('sha256').update(value).digest('hex');
 
 /** Verify a GitHub Actions OIDC token against the issuer's keys and the policy. Pure but for the clock and keys it is given. */
@@ -294,7 +312,8 @@ export function createJuliusBrainAccessService(deps: {
   /** The environment the Brain database this service is bound to records (as `assertJuliusBrainDatabase` verified it). */
   readonly binding: { readonly databaseEnvironment: JuliusBrainServiceEnvironment };
   readonly policy: JuliusBrainAccessPolicy;
-  readonly jwks: () => { readonly keys: readonly JuliusBrainJwk[] };
+  /** Where the issuer's signing keys come from: cached, rotated and bounded (`julius-brain-oidc-keys.ts`). */
+  readonly keys: JuliusBrainOidcKeyStore;
   readonly grants: () => readonly JuliusBrainStateModeGrant[];
   readonly clock: { now(): string };
   readonly state: JuliusBrainAccessStatePort;
@@ -314,7 +333,15 @@ export function createJuliusBrainAccessService(deps: {
   return {
     async issueSession(input: { readonly token: string; readonly projectId: string; readonly missionId: string; readonly stateMode: JuliusBrainStateModePolicy }):
       Promise<JuliusBrainAccessResult<{ readonly sessionToken: string; readonly session: JuliusBrainRunSession }>> {
-      const verified = verifyJuliusBrainOidcToken({ token: input.token, jwks: deps.jwks(), policy: deps.policy, nowSeconds: nowSeconds() });
+      // The header says which key; the key store says whether the issuer publishes it, refreshing on an unknown id.
+      const header = readJuliusBrainTokenHeader(input.token);
+      if (!header.ok) return refuseIssue(header.reasonCode, header.detail, null);
+      const resolved = await deps.keys.resolve(GITHUB_ACTIONS_OIDC_ISSUER, header.kid);
+      if (!resolved.ok) {
+        const reasonCode: JuliusBrainAccessRefusal = resolved.reasonCode === 'key_unknown' || resolved.reasonCode === 'key_ambiguous' || resolved.reasonCode === 'issuer_unknown' ? 'token_key_unknown' : 'issuer_keys_unavailable';
+        return refuseIssue(reasonCode, resolved.detail, null);
+      }
+      const verified = verifyJuliusBrainOidcToken({ token: input.token, jwks: { keys: [resolved.key] }, policy: deps.policy, nowSeconds: nowSeconds() });
       if (!verified.ok) return refuseIssue(verified.reasonCode, verified.detail, null);
       const { claims } = verified;
       const brainRunId = `workflow:${claims.runId}/${claims.runAttempt}`;
