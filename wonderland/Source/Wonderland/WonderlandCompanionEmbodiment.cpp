@@ -225,6 +225,34 @@ bool AWonderlandCompanionEmbodiment::ReloadFigure()
 	return !FigurePath.IsEmpty() && LoadFigure(FigurePath);
 }
 
+void AWonderlandCompanionEmbodiment::SetFormation(EWonderlandCompanionFormation InFormation,
+	const AActor* Contract, int32 Index, int32 Count)
+{
+	ContractActor = Contract;
+	if (Formation != InFormation)
+	{
+		Formation = InFormation;
+		// Spread around a shared circle rather than stacking: two companions in the same place is one
+		// companion with a shadow. The phase is per-companion and constant for the stage.
+		FormationPhase = Count > 0 ? static_cast<float>(Index) / static_cast<float>(Count) : 0.0f;
+		NextPulseAt = -1.0f;
+		if (Formation != EWonderlandCompanionFormation::ResearchOrbit)
+		{
+			Pulses.Reset();
+		}
+	}
+}
+
+int32 AWonderlandCompanionEmbodiment::GetPulsesInFlight() const
+{
+	int32 Flying = 0;
+	for (const FSupportPulse& Pulse : Pulses)
+	{
+		Flying += Pulse.Started >= 0.0f ? 1 : 0;
+	}
+	return Flying;
+}
+
 void AWonderlandCompanionEmbodiment::SetFollowController(APlayerController* Controller)
 {
 	FollowController = Controller;
@@ -249,6 +277,37 @@ void AWonderlandCompanionEmbodiment::SnapToTarget()
 
 FVector AWonderlandCompanionEmbodiment::DesiredLocation(const APawn* Pawn) const
 {
+	const AActor* Contract = ContractActor.Get();
+	if (Contract != nullptr && Formation != EWonderlandCompanionFormation::Follow)
+	{
+		const FVector ContractAt = Contract->GetActorLocation();
+		const FWonderlandCompanionOrbit& Orbit = WonderlandCompanionOrbit();
+		const UWorld* World = GetWorld();
+		const float Now = World != nullptr ? static_cast<float>(World->GetTimeSeconds()) : 0.0f;
+
+		if (Formation == EWonderlandCompanionFormation::ResearchOrbit)
+		{
+			// A CIRCLE ABOUT THE CONTRACT, ABOVE IT. Inside the Dog's own circle so the two read as
+			// concentric rather than as a crowd, and above the Dog's head so a companion never masks it.
+			const float Angle = 2.0f * PI * (Now * Orbit.Revolutions + FormationPhase);
+			const float Rise = Orbit.BobUU * FMath::Sin(Angle * 2.0f);
+			return ContractAt + FVector(FMath::Cos(Angle) * Orbit.RadiusUU,
+			                            FMath::Sin(Angle) * Orbit.RadiusUU,
+			                            Orbit.HeightUU + Rise);
+		}
+
+		// CLEAR THE SIGHT-LINE. Behind the Dog and out to the side, measured against the line the beam
+		// actually travels rather than against the Dog's facing -- the Dog turns to face the contract, so
+		// the two agree here, but the beam is what must not be crossed and so the beam is what is used.
+		const FVector Along = (ContractAt - Pawn->GetActorLocation()).GetSafeNormal2D();
+		const FVector Side = FVector::CrossProduct(Along, FVector::UpVector).GetSafeNormal();
+		const float Hand = FollowOffset.Y >= 0.0 ? 1.0f : -1.0f;
+		return Pawn->GetActorLocation()
+			- Along * 150.0
+			+ Side * (Hand * 190.0)
+			+ FVector(0.0, 0.0, HoverHeightUU * 0.5);
+	}
+
 	float Radius = 0.0f;
 	float HalfHeight = 0.0f;
 	Pawn->GetSimpleCollisionCylinder(Radius, HalfHeight);
@@ -319,6 +378,7 @@ void AWonderlandCompanionEmbodiment::Tick(float DeltaSeconds)
 	}
 
 	Animate(static_cast<float>(World->GetTimeSeconds()));
+	AnimatePulses(static_cast<float>(World->GetTimeSeconds()));
 }
 
 void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
@@ -405,5 +465,114 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 		{
 			MaterialInstances[Glow.MaterialIndex]->SetVectorParameterValue(Glow.Parameter, Glow.Rest * Pulse);
 		}
+	}
+}
+
+/**
+ * THE SUPPORT PULSES. Small lights that leave a companion and travel into the Contract while the study
+ * is going on -- the founder's "contributing energy and information", and emphatically not shots.
+ *
+ * WHAT KEEPS IT FROM READING AS COMBAT is entirely in the numbers: they are slow (three quarters of a
+ * second to cross), they are rare (one every second and a half per companion, offset so the two never
+ * fire together), they arrive and stop rather than striking, and they travel on a curve that rises
+ * before it falls. A fast straight repeat of the same light would be gunfire with a nicer colour.
+ */
+void AWonderlandCompanionEmbodiment::AnimatePulses(float TimeSeconds)
+{
+	const AActor* Contract = ContractActor.Get();
+	const bool bShould = Formation == EWonderlandCompanionFormation::ResearchOrbit && Contract != nullptr;
+	if (PulseMesh == nullptr)
+	{
+		if (!bShould)
+		{
+			return;
+		}
+		// Built on first use rather than at spawn: a companion that never joins a study never pays for it.
+		UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, CubePath);
+		UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr, GlowParentPath);
+		if (Cube == nullptr)
+		{
+			return;
+		}
+		PulseMesh = NewObject<UInstancedStaticMeshComponent>(this,
+			MakeUniqueObjectName(this, UInstancedStaticMeshComponent::StaticClass(), TEXT("SupportPulse")));
+		PulseMesh->SetMobility(EComponentMobility::Movable);
+		PulseMesh->SetStaticMesh(Cube);
+		PulseMid = Parent != nullptr ? UMaterialInstanceDynamic::Create(Parent, this) : nullptr;
+		if (PulseMid != nullptr)
+		{
+			// An unlit emissive reads as BLACK below about x3000 in this world's daylight exposure; the
+			// companions' own figures carry the same multiplier for the same reason.
+			PulseMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.80f, 0.93f, 1.0f) * 4200.0f);
+			PulseMesh->SetMaterial(0, PulseMid.Get());
+		}
+		PulseMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		PulseMesh->SetGenerateOverlapEvents(false);
+		PulseMesh->SetCanEverAffectNavigation(false);
+		PulseMesh->SetCastShadow(false);
+		PulseMesh->SetAbsolute(true, true, true);
+		PulseMesh->SetupAttachment(Root);
+		PulseMesh->RegisterComponent();
+		Pulses.SetNum(4);
+	}
+
+	if (!bShould)
+	{
+		if (PulseMesh->GetInstanceCount() > 0)
+		{
+			PulseMesh->ClearInstances();
+		}
+		Pulses.Reset();
+		Pulses.SetNum(4);
+		return;
+	}
+
+	const FWonderlandCompanionOrbit& Orbit = WonderlandCompanionOrbit();
+	if (NextPulseAt < 0.0f)
+	{
+		// Offset by the companion's own phase so the two never fire together.
+		NextPulseAt = TimeSeconds + Orbit.PulseEverySeconds * FormationPhase;
+	}
+	if (TimeSeconds >= NextPulseAt)
+	{
+		NextPulseAt = TimeSeconds + Orbit.PulseEverySeconds;
+		for (FSupportPulse& Pulse : Pulses)
+		{
+			if (Pulse.Started < 0.0f)
+			{
+				Pulse.From = GetActorLocation();
+				Pulse.Started = TimeSeconds;
+				++PulsesSent;
+				break;
+			}
+		}
+	}
+
+	const FVector Target = Contract->GetActorLocation();
+	TArray<FTransform> Live;
+	for (FSupportPulse& Pulse : Pulses)
+	{
+		if (Pulse.Started < 0.0f)
+		{
+			continue;
+		}
+		const float Along = (TimeSeconds - Pulse.Started) / FMath::Max(Orbit.PulseTravelSeconds, 0.05f);
+		if (Along >= 1.0f)
+		{
+			// It ARRIVES rather than striking: the light reaches the Contract and is simply done.
+			Pulse.Started = -1.0f;
+			continue;
+		}
+		// A curve, not a line. It rises out of the companion's hand and settles into the Contract, which
+		// is what makes it read as offering rather than firing.
+		const FVector Straight = FMath::Lerp(Pulse.From, Target, Along);
+		const float Arc = FMath::Sin(Along * PI) * 34.0f;
+		const float Size = FMath::Lerp(5.5f, 2.0f, Along);
+		Live.Add(FTransform(FRotator::ZeroRotator, Straight + FVector(0.0, 0.0, Arc), FVector(Size / 100.0f)));
+	}
+	PulseMesh->ClearInstances();
+	if (Live.Num() > 0)
+	{
+		PulseMesh->AddInstances(Live, false, false, false);
 	}
 }

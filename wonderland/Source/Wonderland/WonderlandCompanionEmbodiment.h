@@ -28,6 +28,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "WonderlandCompanionFigure.h"
+#include "WonderlandCompanionFormation.h"
 #include "WonderlandCompanionEmbodiment.generated.h"
 
 class APlayerController;
@@ -59,6 +60,29 @@ public:
 	/** Follow whatever pawn this controller is wearing, now and after it changes. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	void SetFollowController(APlayerController* Controller);
+
+	/**
+	 * Stand where a mission stage needs this companion to stand, for as long as that stage lasts.
+	 *
+	 * A TEMPORARY OVERRIDE, NOT A REPLACEMENT. The measured Phase 1 offset is untouched and is returned
+	 * to the moment the stage ends -- `Follow` is the default and every transition and ending resolves
+	 * there, so a companion cannot be stranded in a formation by a stage that forgot to put it back.
+	 *
+	 * `Index` and `Count` spread the companions around a shared circle rather than stacking them: two
+	 * companions orbiting in the same place is one companion with a shadow.
+	 */
+	void SetFormation(EWonderlandCompanionFormation Formation, const AActor* Contract, int32 Index, int32 Count);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	FString GetFormationName() const { return WonderlandCompanionFormationName(Formation); }
+
+	/** How many support pulses this companion has sent into the Contract. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	int32 GetPulsesSent() const { return PulsesSent; }
+
+	/** How many pulses are in flight right now. Zero outside the research orbit. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	int32 GetPulsesInFlight() const;
 
 	/** Jump to the follow position immediately instead of gliding there. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
@@ -165,6 +189,28 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> MaterialInstances;
+
+	/** One support pulse, travelling from this companion into the Contract. */
+	struct FSupportPulse
+	{
+		FVector From = FVector::ZeroVector;
+		float Started = -1.0f;
+	};
+
+	void AnimatePulses(float TimeSeconds);
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInstancedStaticMeshComponent> PulseMesh;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> PulseMid;
+
+	TArray<FSupportPulse> Pulses;
+	TWeakObjectPtr<const AActor> ContractActor;
+	EWonderlandCompanionFormation Formation = EWonderlandCompanionFormation::Follow;
+	float FormationPhase = 0.0f;
+	float NextPulseAt = -1.0f;
+	int32 PulsesSent = 0;
 
 	TArray<FPartMotion> Motions;
 	TArray<FGlowMaterial> GlowMaterials;

@@ -16,6 +16,8 @@
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SLeafWidget.h"
 #include "Widgets/Text/STextBlock.h"
+#include "WonderlandCompanionEmbodiment.h"
+#include "WonderlandCompanionFormation.h"
 #include "WonderlandCompanionSubsystem.h"
 #include "RelayDogCharacter.h"
 #include "WonderlandDogPerformance.h"
@@ -403,13 +405,14 @@ void UWonderlandMissionSubsystem::MountStrip()
 						: FString(TEXT("no fixture"));
 					const FName MissionId = Mission->GetFoldMissionId();
 					return FText::FromString(FString::Printf(
-						TEXT("DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION   |   MISSION %s · EVENT %s (%s) · STATE %s · %s %d/%d · DOG %s%s   |   %s"),
+						TEXT("DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION   |   MISSION %s · EVENT %s (%s) · STATE %s · %s %d/%d · DOG %s%s · COMPANIONS %s   |   %s"),
 						MissionId.IsNone() ? TEXT("none") : *MissionId.ToString(),
 						Mission->GetLastEventType().IsNone() ? TEXT("-") : *Mission->GetLastEventType().ToString(),
 						*Mission->GetLastEventVerdict(),
 						*Mission->GetBeatPhase(Mission->GetBeatId()),
 						*Mission->GetChakraName(), Mission->GetChakraStep(), WonderlandChakraSteps,
 						*Mission->GetDogActLabel(), Mission->IsContractAnchored() ? TEXT(" · ANCHORED") : TEXT(""),
+						*Mission->GetCompanionFormation(),
 						*Where));
 				})
 			]
@@ -458,6 +461,7 @@ void UWonderlandMissionSubsystem::ShowBeat(EWonderlandMissionBeat Wanted)
 	{
 		DismissContract();
 		TellTheDog();
+		TellTheCompanions();
 		return;
 	}
 	if (AWonderlandMissionOrb* Body = EnsureContract())
@@ -483,6 +487,7 @@ void UWonderlandMissionSubsystem::ShowBeat(EWonderlandMissionBeat Wanted)
 		}
 	}
 	TellTheDog();
+	TellTheCompanions();
 }
 
 FName UWonderlandMissionSubsystem::AdvanceBeat()
@@ -584,6 +589,78 @@ float UWonderlandMissionSubsystem::GetOrbHeightUU() const
 {
 	const AWonderlandMissionOrb* Body = Orb.Get();
 	return Body != nullptr ? Body->GetOrbHeightUU() : 0.0f;
+}
+
+/**
+ * THE SAME BEAT DRIVES THE COMPANIONS. Not a second stream and not their own timer -- one source of stage
+ * truth in the world, so the companions cannot disagree with the Dog about what is happening.
+ */
+void UWonderlandMissionSubsystem::TellTheCompanions()
+{
+	UWonderlandCompanionSubsystem* Companions = GetLocalPlayer<ULocalPlayer>() != nullptr
+		? GetLocalPlayer<ULocalPlayer>()->GetSubsystem<UWonderlandCompanionSubsystem>()
+		: nullptr;
+	if (Companions == nullptr)
+	{
+		return;
+	}
+	const bool bMissionRunning = WonderlandBeatShowsContract(Beat);
+	const EWonderlandCompanionFormation Wanted = bMissionRunning
+		? WonderlandCompanionFormationForBeat(Beat)
+		: EWonderlandCompanionFormation::Follow;
+	const int32 Count = Companions->GetEmbodimentCount();
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		if (AWonderlandCompanionEmbodiment* Body = Companions->GetEmbodiment(Index))
+		{
+			Body->SetFormation(Wanted, bMissionRunning ? Orb.Get() : nullptr, Index, Count);
+		}
+	}
+}
+
+FString UWonderlandMissionSubsystem::GetCompanionFormation() const
+{
+	return WonderlandCompanionFormationName(
+		WonderlandBeatShowsContract(Beat) ? WonderlandCompanionFormationForBeat(Beat)
+		                                  : EWonderlandCompanionFormation::Follow);
+}
+
+int32 UWonderlandMissionSubsystem::GetCompanionPulsesSent() const
+{
+	int32 Sent = 0;
+	if (ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>())
+	{
+		if (UWonderlandCompanionSubsystem* Companions = Player->GetSubsystem<UWonderlandCompanionSubsystem>())
+		{
+			for (int32 Index = 0; Index < Companions->GetEmbodimentCount(); ++Index)
+			{
+				if (const AWonderlandCompanionEmbodiment* Body = Companions->GetEmbodiment(Index))
+				{
+					Sent += Body->GetPulsesSent();
+				}
+			}
+		}
+	}
+	return Sent;
+}
+
+int32 UWonderlandMissionSubsystem::GetCompanionPulsesInFlight() const
+{
+	int32 Flying = 0;
+	if (ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>())
+	{
+		if (UWonderlandCompanionSubsystem* Companions = Player->GetSubsystem<UWonderlandCompanionSubsystem>())
+		{
+			for (int32 Index = 0; Index < Companions->GetEmbodimentCount(); ++Index)
+			{
+				if (const AWonderlandCompanionEmbodiment* Body = Companions->GetEmbodiment(Index))
+				{
+					Flying += Body->GetPulsesInFlight();
+				}
+			}
+		}
+	}
+	return Flying;
 }
 
 bool UWonderlandMissionSubsystem::IsContractAnchored() const

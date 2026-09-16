@@ -230,6 +230,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	FString GetDogActLabel() const;
 
+	/** Where the companions are standing for the current beat, e.g. "RESEARCH ORBIT". */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString GetCompanionFormation() const;
+
+	/** Support pulses sent into the Contract by all companions during study. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	int32 GetCompanionPulsesSent() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	int32 GetCompanionPulsesInFlight() const;
+
 	/**
 	 * What the body is ACTUALLY performing, which during a handoff is the inherited act rather than None.
 	 * Reported through this subsystem so the Dog's own header needs no Blueprint plumbing added to it.
@@ -248,6 +259,8 @@ private:
 	void ShowBeat(EWonderlandMissionBeat Wanted);
 	/** Hand the Relay Dog the act for the current beat, and the contract to perform it around. */
 	void TellTheDog();
+	/** Put the companions where this stage needs them, and take them back afterwards. */
+	void TellTheCompanions();
 	AWonderlandMissionOrb* EnsureContract();
 	void DismissContract();
 	bool StepFixture(float DeltaSeconds);
