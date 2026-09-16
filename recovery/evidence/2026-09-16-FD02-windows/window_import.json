@@ -1,0 +1,17 @@
+{
+ "name": "zz90_import_window",
+ "started": "2026-09-16 11:27:28",
+ "status": "done",
+ "planned_parts": 377,
+ "imported_this_run": 3,
+ "already_present": 0,
+ "failed": 0,
+ "stray_materials_deleted": [],
+ "readback_failures": [],
+ "nanite_mismatches": [],
+ "collision_missing": [],
+ "complete": true,
+ "finished": "2026-09-16 11:27:31",
+ "seconds": 2.63,
+ "log": "[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Window_Arched_glass\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Window_Arched_gold\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Window_Arched\n"
+}

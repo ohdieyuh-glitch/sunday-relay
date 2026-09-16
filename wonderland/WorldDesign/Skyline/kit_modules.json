@@ -1,7 +1,7 @@
 {
  "schema": "wonderland-kit-modules/1",
  "kit_version": "1.0.0",
- "generated_utc": "2026-09-16T17:15:55+00:00",
+ "generated_utc": "2026-09-16T18:25:02+00:00",
  "radius_ladder_uu": {
   "XL": 680.0,
   "L": 460.0,
@@ -5485,6 +5485,54 @@
     {
      "part": "stone",
      "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Oriel_Bay.WL_Detail_Oriel_Bay",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Detail_Window_Arched": {
+   "family": "window",
+   "group": "details",
+   "role": "detail",
+   "height": 327.0,
+   "radius": 110.5,
+   "size": [
+    221.0,
+    39.0,
+    327.0
+   ],
+   "bbox_min": [
+    -110.5,
+    -1.5,
+    0.0
+   ],
+   "bbox_max": [
+    110.5,
+    37.5,
+    327.0
+   ],
+   "tris": 376,
+   "sockets": {
+    "back": {
+     "kind": "bridge_end",
+     "z": 0.0,
+     "rung": null,
+     "radius": 98.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_Arched_glass.WL_Detail_Window_Arched_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_Arched_gold.WL_Detail_Window_Arched_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_Arched.WL_Detail_Window_Arched",
      "material": "MI_V2_IvoryStone"
     }
    ]
