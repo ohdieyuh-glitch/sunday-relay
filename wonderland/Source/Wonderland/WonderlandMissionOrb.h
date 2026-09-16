@@ -95,9 +95,29 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	int32 GetBoxCount() const { return BoxCount; }
 
-	/** Where the dais sits, in the pawn's yaw frame: X forward, Y right, uu. Z is ignored -- it meets the floor. */
+	/**
+	 * Where the dais sits, in the pawn's yaw frame: X forward, Y right, uu. Z is ignored -- it meets the floor.
+	 *
+	 * MEASURED FROM THE PLAY CAMERA, 2026-09-15, not chosen. Nine placements were trialled in PIE and
+	 * looked at. Forward-and-right wins for one reason: the Dog's own back leg eats anything near its
+	 * centre line, the LLM Companion floats at Y=-88 and hides anything to the left, and the Jhinn at
+	 * Y=+110 is far enough out to leave a clear lane at +80. Straight ahead (130, 0) vanishes behind the
+	 * Dog; wide left (95, -140) vanishes behind the LLM Companion even at 2.2x.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	FVector FollowOffset = FVector(62.0, -30.0, 0.0);
+	FVector FollowOffset = FVector(125.0, 80.0, 0.0);
+
+	/**
+	 * How big the orb is built, as a multiple. 1.6 puts it at 80 uu: above the kerb line (28 uu), under the
+	 * garden bench (117) and the urn (202), and about the Dog's own body height, so it reads as the Dog's
+	 * object rather than as scenery or as a rival for the eye. Wonderland's props are large -- a waymarker
+	 * lamp is 9.7 m -- and anything placed at human scale here disappears.
+	 *
+	 * MORE SCALE IS NOT THE LEVER. The trials showed 2.6x bought no more readable steps than 2.2x once the
+	 * orb had been pushed past the Dog; clearing the silhouette is what buys pixels.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
+	float BuiltScale = 1.6f;
 
 	/** Radius of the turning dais on the floor, uu. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")

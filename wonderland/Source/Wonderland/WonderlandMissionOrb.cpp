@@ -93,6 +93,7 @@ AWonderlandMissionOrb::AWonderlandMissionOrb()
 void AWonderlandMissionOrb::BeginPlay()
 {
 	Super::BeginPlay();
+	SetOrbScale(BuiltScale);
 	Build();
 	Motion = WonderlandBeatReading(Beat).Motion;
 	MotionTarget = Motion;
