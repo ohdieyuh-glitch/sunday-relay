@@ -293,6 +293,7 @@ void SWonderlandMenuPanel::Construct(const FArguments& InArgs)
 	using namespace WonderlandHudPanelLook;
 	OnRequestClose = InArgs._OnRequestClose;
 	OnRequestMap = InArgs._OnRequestMap;
+	OnRequestWallet = InArgs._OnRequestWallet;
 	OnRequestNavigate = InArgs._OnRequestNavigate;
 	ScrimBrush.DrawAs = ESlateBrushDrawType::Image;
 	ScrimBrush.TintColor = FSlateColor(WonderlandUi::MapScrim());
@@ -307,6 +308,7 @@ void SWonderlandMenuPanel::Construct(const FArguments& InArgs)
 	Rows.Add({EWonderlandBrainGlyph::Missions, TEXT("MISSIONS"), TEXT("J"), [this]() { OnRequestNavigate.ExecuteIfBound(EWonderlandNavTarget::Missions); }});
 	Rows.Add({EWonderlandBrainGlyph::Brain, TEXT("PROJECT BRAIN"), TEXT("B"), [this]() { OnRequestNavigate.ExecuteIfBound(EWonderlandNavTarget::Brain); }});
 	Rows.Add({EWonderlandBrainGlyph::Commands, TEXT("COMMAND PRESETS"), TEXT("C"), [this]() { OnRequestNavigate.ExecuteIfBound(EWonderlandNavTarget::Commands); }});
+	Rows.Add({EWonderlandBrainGlyph::Wallet, TEXT("WONDER WEB WALLET"), TEXT("SANDBOX"), [this]() { OnRequestWallet.ExecuteIfBound(); }});
 
 	TSharedRef<SVerticalBox> List = SNew(SVerticalBox);
 	for (const FRow& Row : Rows)

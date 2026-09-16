@@ -65,6 +65,7 @@ public:
 	DECLARE_DELEGATE_OneParam(FOnRequestNavigate, EWonderlandNavTarget);
 
 	SLATE_BEGIN_ARGS(SWonderlandMenuPanel) {}
+		SLATE_EVENT(FSimpleDelegate, OnRequestWallet)
 		SLATE_EVENT(FSimpleDelegate, OnRequestClose)
 		SLATE_EVENT(FSimpleDelegate, OnRequestMap)
 		SLATE_EVENT(FOnRequestNavigate, OnRequestNavigate)
@@ -82,6 +83,7 @@ public:
 private:
 	FSimpleDelegate OnRequestClose;
 	FSimpleDelegate OnRequestMap;
+	FSimpleDelegate OnRequestWallet;
 	FOnRequestNavigate OnRequestNavigate;
 	TArray<FString> RowTitles;
 

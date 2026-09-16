@@ -16,6 +16,9 @@
 //   held when the terminal opened does not keep walking underneath it. Closing hands
 //   control straight back.
 //
+// THE WONDER WEB WALLET HEADS THE TOP RIGHT (founder, 2026-09-16): a compact sandbox status above the mini-map, one
+// column, never overlapping it, opening a fuller wallet surface.
+//
 // THE BOTTOM SHORTCUTS AND THE MINI-MAP ARE FURNITURE TOO (founder, 2026-09-15). The mini-map holds the top right
 // and the AGENT · MISSIONS · BRAIN · COMMANDS · MENU strip holds the bottom edge. Both are mounted once, like the
 // usage HUD; the strip steps aside while any panel is open, and the map while a full-screen one is. Their places
@@ -48,11 +51,14 @@ class SWonderlandMenuPanel;
 class SWonderlandMiniMap;
 class SWonderlandMissionsPanel;
 class SWonderlandNavBar;
+class SWonderlandWalletChip;
+class SWonderlandWalletPanel;
 class UInputComponent;
 class UWonderlandCommandPresetSubsystem;
 class UWonderlandMiniMapDriver;
 class UWonderlandMissionSubsystem;
 class UWonderlandUsageHudWidget;
+class UWonderlandWalletSubsystem;
 enum class EWonderlandNavTarget : uint8;
 
 UCLASS()
@@ -286,8 +292,34 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	FString GetTerminalCommandRows() const;
 
+	// ---------------------------------------------------------------- the Wonder Web Wallet (WonderlandWallet.h)
+
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	void ToggleWallet();
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool IsWalletOpen() const;
+
+	/** The compact wallet status is mounted and not stepped aside for a full-screen panel. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool IsWalletOnScreen() const;
+
+	/** The balance, unit and sandbox claim exactly as the chip's built text reads. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString GetWalletDrawnBalance() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString GetWalletDrawnUnit() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString GetWalletDrawnClaim() const;
+
+	/** Click the wallet status the way a pointer does, as ClickNavButton does a shortcut. True when it opened. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool ClickWalletChip();
+
 private:
-	enum class EOverlay : uint8 { None, Terminal, Map, Brain, Missions, Commands, Menu };
+	enum class EOverlay : uint8 { None, Terminal, Map, Brain, Missions, Commands, Menu, Wallet };
 
 	void HandlePlayerControllerChanged(APlayerController* NewController);
 	void Attach(APlayerController* Controller);
@@ -316,6 +348,12 @@ private:
 	bool IsMiniMapShown() const { return Open == EOverlay::None || Open == EOverlay::Terminal; }
 	/** Top right, unless a long mission strip reaches into that column: then just below the strip. */
 	FMargin MiniMapOffset() const;
+	UWonderlandWalletSubsystem* Wallet() const;
+	/**
+	 * A pointer click on one widget: hit tested in that widget's own window, routed down the path found there, and
+	 * only when the widget is really on that path. False when it is not under its own centre. The OS cursor never moves.
+	 */
+	bool RouteClickToWidget(const TSharedPtr<SWidget>& Target, const FString& What);
 
 	TArray<TSharedPtr<SWonderlandCompanionTerminal>> CompanionTerminals;
 	TSharedPtr<SWidget> CompanionLayer;
@@ -339,6 +377,10 @@ private:
 	TSharedPtr<SWidget> HudFurniture;
 	TSharedPtr<SWonderlandMiniMap> MiniMap;
 	TSharedPtr<SWonderlandNavBar> NavBar;
+	TSharedPtr<SWonderlandWalletChip> WalletChip;
+	TSharedPtr<SWonderlandWalletPanel> WalletPanel;
+	/** The wallet above the mini-map: the top-right column as one piece, so its size is known when it is placed. */
+	TSharedPtr<SWidget> TopRightColumn;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UWonderlandMiniMapDriver> MiniMapDriver;

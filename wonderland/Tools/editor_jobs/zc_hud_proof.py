@@ -99,7 +99,10 @@ def job():
         found = list(unreal.ObjectIterator(unreal.WonderlandCommandPresetSubsystem))
         owned = [x for x in found if x.get_outer() == game]
         presets = owned[0] if owned else (found[-1] if found else None)
+        L.focus_game_viewport()
         RESULT["presets_found"] = {"instances": len(found), "owned_by_pie": len(owned)}
+        wallets = [x for x in unreal.ObjectIterator(unreal.WonderlandWalletSubsystem) if x.get_outer() == game]
+        wallet = wallets[0] if wallets else None
         live = [m for m in unreal.ObjectIterator(unreal.WonderlandMissionSubsystem) if m.is_mission_strip_on_screen()]
         mission = live[0] if live else None
         for cmd in ("t.MaxFPS 0", "Slate.bAllowThrottling 0", "r.VSync 0"):
@@ -195,9 +198,43 @@ def job():
         table = rects(ui)
         names, hits, outside = overlaps(table)
         RESULT["overlap_play"] = {"pieces": names, "overlaps": hits, "outside": outside, "rects": {n: list(r[:4]) for n, r in table.items()}}
-        record("H04", "in play the map, the strip, the usage HUD and the mission strip do not touch",
-               set(["mini_map", "nav_bar", "usage_hud", "mission_strip"]).issubset(set(names)) and not hits and not outside,
+        record("H04", "in play the wallet, the map, the strip, the usage HUD and the mission strip do not touch",
+               set(["wallet", "mini_map", "nav_bar", "usage_hud", "mission_strip"]).issubset(set(names)) and not hits and not outside,
                **RESULT["overlap_play"])
+
+        # ------------------------------------------------------------ the Wonder Web Wallet (founder, 2026-09-16)
+        view = table.get("viewport")
+        w = table.get("wallet")
+        m = table.get("mini_map")
+        RESULT["wallet_layout"] = {"wallet": list(w[:4]) if w else None, "mini_map": list(m[:4]) if m else None,
+                                   "viewport": list(view[:4]) if view else None}
+        record("W01", "the wallet is visibly top-right",
+               bool(w and view and w[4] and (w[0] + w[2]) >= view[2] - 60.0 and w[1] <= 60.0 and ui.is_wallet_on_screen()),
+               **RESULT["wallet_layout"])
+        record("W02", "the mini-map sits underneath the wallet, in the same column, without touching it",
+               bool(w and m and m[1] >= w[1] + w[3] and abs((m[0] + m[2] / 2.0) - (w[0] + w[2] / 2.0)) <= 24.0),
+               gap_px=round(m[1] - (w[1] + w[3]), 1) if (w and m) else None,
+               column_offset_px=round((m[0] + m[2] / 2.0) - (w[0] + w[2] / 2.0), 1) if (w and m) else None)
+        drawn = {"balance": str(ui.get_wallet_drawn_balance()), "unit": str(ui.get_wallet_drawn_unit()),
+                 "claim": str(ui.get_wallet_drawn_claim())}
+        RESULT["wallet_drawn"] = drawn
+        record("W03", "the sandbox balance renders correctly: $500.00 USD, as Relay's openSandboxWallet opens it",
+               drawn["balance"] == "$500.00" and drawn["unit"] == "USD"
+               and wallet is not None and int(wallet.get_available_minor()) == 50000, **drawn)
+        record("W07", "the sandbox is never presented as real money",
+               "SANDBOX" in drawn["claim"] and "NOT REAL MONEY" in drawn["claim"]
+               and wallet is not None and not wallet.is_real_money() and str(wallet.get_funding_source()) == "SANDBOX"
+               and "NOT REAL MONEY" in str(wallet.get_honesty_label()),
+               claim=drawn["claim"], label=str(wallet.get_honesty_label()) if wallet else None,
+               funding=str(wallet.get_funding_source()) if wallet else None,
+               real_money=bool(wallet.is_real_money()) if wallet else None)
+        opened = ui.click_wallet_chip()
+        yield 0.8
+        w_shot = shot("zc_hud_wallet_open.png")
+        record("W08", "clicking the wallet opens the fuller wallet surface",
+               bool(opened) and ui.is_wallet_open() and w_shot, clicked=bool(opened), open=bool(ui.is_wallet_open()), capture=w_shot)
+        ui.close_overlay()
+        yield 0.5
 
         # ------------------------------------------------------------ D: click BRAIN
         clicked = ui.click_nav_button("brain")
@@ -243,8 +280,9 @@ def job():
         record("H08", "clicking AGENT raises the terminal suite, which lists the customised preset",
                clicked and ui.is_live_terminal_open() and term_rows == swapped and agent_shot,
                clicked=bool(clicked), terminal_open=bool(ui.is_live_terminal_open()), rows=term_rows, capture=agent_shot)
-        record("H09", "with the terminal suite open the map keeps clear of the companion consoles and the strip is gone",
-               "mini_map" in names and "nav_bar" not in names and not hits and not outside, **RESULT["overlap_terminal"])
+        record("H09", "with the terminal suite open the wallet and map keep clear of the companion consoles and the strip is gone",
+               "mini_map" in names and "wallet" in names and "companion_right" in names and "nav_bar" not in names
+               and not hits and not outside, **RESULT["overlap_terminal"])
         ui.close_overlay()
         yield 0.5
         if presets is not None:

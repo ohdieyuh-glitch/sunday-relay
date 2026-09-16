@@ -35,7 +35,8 @@ enum class EWonderlandBrainGlyph : uint8
 	Agent,
 	Missions,
 	Commands,
-	Menu
+	Menu,
+	Wallet
 };
 
 class WONDERLAND_API SWonderlandBrainIcon : public SLeafWidget

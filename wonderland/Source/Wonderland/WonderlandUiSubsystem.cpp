@@ -35,6 +35,7 @@
 #include "WonderlandUiStyle.h"
 #include "WonderlandUsageHudWidget.h"
 #include "WonderlandUsagePreview.h"
+#include "WonderlandWallet.h"
 #include "WonderlandWorldMap.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandUi, Log, All);
@@ -341,6 +342,7 @@ void UWonderlandUiSubsystem::Detach()
 	CommandStation.Reset();
 	MissionsPanel.Reset();
 	MenuPanel.Reset();
+	WalletPanel.Reset();
 	BrainArtBrush.Reset();
 	BrainArt = nullptr;
 	BoundController.Reset();
@@ -478,11 +480,24 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 		Focus = MissionsPanel;
 		ZOrder = 58;
 	}
+	else if (Which == EOverlay::Wallet)
+	{
+		if (!WalletPanel.IsValid())
+		{
+			SAssignNew(WalletPanel, SWonderlandWalletPanel)
+				.Wallet(TWeakObjectPtr<UWonderlandWalletSubsystem>(Wallet()))
+				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
+		}
+		Panel = WalletPanel;
+		Focus = WalletPanel;
+		ZOrder = 58;
+	}
 	else if (Which == EOverlay::Menu)
 	{
 		if (!MenuPanel.IsValid())
 		{
 			SAssignNew(MenuPanel, SWonderlandMenuPanel)
+				.OnRequestWallet_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Wallet); } })
 				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
 				.OnRequestMap_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Map); } })
 				.OnRequestNavigate_Lambda([WeakThis](EWonderlandNavTarget Target) { if (WeakThis.IsValid()) { WeakThis->HandleNavigate(Target); } });
@@ -783,6 +798,7 @@ const TCHAR* UWonderlandUiSubsystem::OverlayName(EOverlay Which)
 	case EOverlay::Missions: return TEXT("missions");
 	case EOverlay::Commands: return TEXT("command station");
 	case EOverlay::Menu:     return TEXT("menu");
+	case EOverlay::Wallet:   return TEXT("wallet");
 	default: break;
 	}
 	return TEXT("nothing");
@@ -798,6 +814,7 @@ TSharedPtr<SWidget> UWonderlandUiSubsystem::OverlayWidget(EOverlay Which) const
 	case EOverlay::Missions: return MissionsPanel;
 	case EOverlay::Commands: return CommandStation;
 	case EOverlay::Menu:     return MenuPanel;
+	case EOverlay::Wallet:   return WalletPanel;
 	default: break;
 	}
 	return nullptr;
@@ -942,8 +959,29 @@ bool UWonderlandUiSubsystem::ClickNavButton(FName ShortcutId)
 		return false;
 	}
 	const int32 Before = NavBar->GetClickCount(ShortcutId);
+	RouteClickToWidget(NavBar->GetTileButton(ShortcutId), ShortcutId.ToString());
+	const bool bClicked = NavBar->GetClickCount(ShortcutId) > Before;
+	if (!bClicked)
+	{
+		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI click diagnosis:\n%s"), *DiagnoseNavClick(ShortcutId));
+		StopPointing(true);
+	}
+	return bClicked;
+}
+
+bool UWonderlandUiSubsystem::RouteClickToWidget(const TSharedPtr<SWidget>& Target, const FString& What)
+{
+	if (!Target.IsValid() || !FSlateApplication::IsInitialized())
+	{
+		return false;
+	}
+	const FGeometry& Geometry = Target->GetCachedGeometry();
+	if (Geometry.GetLocalSize().IsNearlyZero())
+	{
+		return false;
+	}
 	FSlateApplication& App = FSlateApplication::Get();
-	const FVector2D Centre(Rect.GetCenter());
+	const FVector2D Centre(Geometry.GetLayoutBoundingRect().GetCenter());
 	const uint32 User = static_cast<uint32>(App.GetUserIndexForMouse());
 	const TSet<FKey> None;
 	TSet<FKey> Held;
@@ -956,18 +994,16 @@ bool UWonderlandUiSubsystem::ClickNavButton(FName ShortcutId)
 	// to the strip's own window -- still a real hit test, which a covered or invisible tile would fail -- and the
 	// press and release are routed down the path it finds, exactly as the application routes a hand's click.
 	// The OS cursor is never moved: a test has no business dragging the founder's real mouse across the screen.
-	const TSharedPtr<SWindow> Window = App.FindWidgetWindow(NavBar.ToSharedRef());
-	const TSharedPtr<SButton> Tile = NavBar->GetTileButton(ShortcutId);
-	if (!Window.IsValid() || !Tile.IsValid())
+	const TSharedPtr<SWindow> Window = App.FindWidgetWindow(Target.ToSharedRef());
+	if (!Window.IsValid())
 	{
-		StopPointing(true);
 		return false;
 	}
 	const FWidgetPath Path = WonderlandUiHitTest::PathInWindow(Window.ToSharedRef(), Centre, App.GetUserIndexForMouse());
 	bool bTileUnderPoint = false;
 	for (int32 Index = 0; Index < Path.Widgets.Num(); ++Index)
 	{
-		bTileUnderPoint |= Path.Widgets[Index].Widget == Tile.ToSharedRef();
+		bTileUnderPoint |= Path.Widgets[Index].Widget == Target.ToSharedRef();
 	}
 	bool bDown = false;
 	bool bUp = false;
@@ -978,15 +1014,9 @@ bool UWonderlandUiSubsystem::ClickNavButton(FName ShortcutId)
 		bUp = App.RoutePointerUpEvent(Path, FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, None, EKeys::LeftMouseButton, 0.0f, FModifierKeysState())).IsEventHandled();
 	}
 
-	const bool bClicked = NavBar->GetClickCount(ShortcutId) > Before;
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI pointer click on %s at (%.0f, %.0f): %s (tile under the point %d, down %d, up %d)"), *ShortcutId.ToString(), Centre.X, Centre.Y,
-		bClicked ? TEXT("the tile answered") : TEXT("nothing answered"), bTileUnderPoint ? 1 : 0, bDown ? 1 : 0, bUp ? 1 : 0);
-	if (!bClicked)
-	{
-		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI click diagnosis:\n%s"), *DiagnoseNavClick(ShortcutId));
-		StopPointing(true);
-	}
-	return bClicked;
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI pointer click on %s at (%.0f, %.0f): under the point %d, down %d, up %d"), *What, Centre.X, Centre.Y,
+		bTileUnderPoint ? 1 : 0, bDown ? 1 : 0, bUp ? 1 : 0);
+	return bTileUnderPoint;
 }
 
 FString UWonderlandUiSubsystem::DiagnoseNavClick(FName ShortcutId)
@@ -1073,6 +1103,30 @@ void UWonderlandUiSubsystem::MountHudFurniture()
 
 	const TWeakObjectPtr<UWonderlandUiSubsystem> WeakThis(this);
 	SAssignNew(MiniMap, SWonderlandMiniMap).Driver(TWeakObjectPtr<UWonderlandMiniMapDriver>(MiniMapDriver));
+	SAssignNew(WalletChip, SWonderlandWalletChip)
+		.Wallet(TWeakObjectPtr<UWonderlandWalletSubsystem>(Wallet()))
+		.OnOpen_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Wallet); } })
+		.Pointing_Lambda([WeakThis]() { return WeakThis.IsValid() && WeakThis->IsPointing(); });
+	const bool bShowWallet = GetDefault<UWonderlandWalletHudSettings>()->bShowWallet;
+	// THE TOP RIGHT IS ONE COLUMN: the wallet heads it and the mini-map sits under it, so they can never overlap and
+	// whatever moves the map (a long mission strip) moves the wallet with it.
+	TopRightColumn = SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 0.0f, 0.0f, bShowWallet ? 12.0f : 0.0f)
+		[
+			SNew(SBox)
+			.Visibility(bShowWallet ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed)
+			[
+				WalletChip.ToSharedRef()
+			]
+		]
+		+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+		[
+			SNew(SBox)
+			.Visibility(EVisibility::HitTestInvisible)
+			[
+				MiniMap.ToSharedRef()
+			]
+		];
 	SAssignNew(NavBar, SWonderlandNavBar)
 		.OnNavigate_Lambda([WeakThis](EWonderlandNavTarget Target) { if (WeakThis.IsValid()) { WeakThis->HandleNavigate(Target); } })
 		.Pointing_Lambda([WeakThis]() { return WeakThis.IsValid() && WeakThis->IsPointing(); });
@@ -1089,9 +1143,9 @@ void UWonderlandUiSubsystem::MountHudFurniture()
 		.Offset(TAttribute<FMargin>::CreateLambda([WeakThis]() { return WeakThis.IsValid() ? WeakThis->MiniMapOffset() : FMargin(-28.0f, 22.0f, 0.0f, 0.0f); }))
 		[
 			SNew(SBox)
-			.Visibility_Lambda([WeakThis]() { return WeakThis.IsValid() && WeakThis->IsMiniMapShown() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+			.Visibility_Lambda([WeakThis]() { return WeakThis.IsValid() && WeakThis->IsMiniMapShown() ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; })
 			[
-				MiniMap.ToSharedRef()
+				TopRightColumn.ToSharedRef()
 			]
 		]
 		+ SConstraintCanvas::Slot()
@@ -1120,6 +1174,8 @@ void UWonderlandUiSubsystem::UnmountHudFurniture()
 	HudFurniture.Reset();
 	MiniMap.Reset();
 	NavBar.Reset();
+	WalletChip.Reset();
+	TopRightColumn.Reset();
 	if (MiniMapDriver != nullptr)
 	{
 		MiniMapDriver->Stop();
@@ -1133,11 +1189,12 @@ FMargin UWonderlandUiSubsystem::MiniMapOffset() const
 	float Top = 22.0f;
 	FSlateRect Strip;
 	const UWonderlandMissionSubsystem* Mission = Missions();
-	if (Mission != nullptr && HudFurniture.IsValid() && MiniMap.IsValid() && Mission->GetMissionStripAbsoluteRect(Strip))
+	if (Mission != nullptr && HudFurniture.IsValid() && TopRightColumn.IsValid() && Mission->GetMissionStripAbsoluteRect(Strip))
 	{
 		const FGeometry& Canvas = HudFurniture->GetCachedGeometry();
 		const FVector2D CanvasSize(Canvas.GetLocalSize());
-		const FVector2D MapSize(MiniMap->GetDesiredSize());
+		// The whole column moves together: wallet and mini-map.
+		const FVector2D MapSize(TopRightColumn->GetDesiredSize());
 		const FVector2D StripTopLeft(Canvas.AbsoluteToLocal(Strip.GetTopLeft()));
 		const FVector2D StripBottomRight(Canvas.AbsoluteToLocal(Strip.GetBottomRight()));
 		const double MapLeft = CanvasSize.X - Right - MapSize.X;
@@ -1252,6 +1309,10 @@ FString UWonderlandUiSubsystem::DescribeHudRects() const
 			Add(TEXT("mission_strip"), Strip, true);
 		}
 	}
+	if (WalletChip.IsValid() && GetDefault<UWonderlandWalletHudSettings>()->bShowWallet)
+	{
+		FromGeometry(TEXT("wallet"), WalletChip->GetCachedGeometry(), IsMiniMapShown());
+	}
 	if (MiniMap.IsValid())
 	{
 		FromGeometry(TEXT("mini_map"), MiniMap->GetCachedGeometry(), IsMiniMapShown());
@@ -1296,3 +1357,42 @@ FString UWonderlandUiSubsystem::GetTerminalCommandRows() const
 {
 	return Terminal.IsValid() ? Terminal->DescribeCommandRows() : FString();
 }
+
+/* ------------------------------------------------------------------ the Wonder Web Wallet */
+
+UWonderlandWalletSubsystem* UWonderlandUiSubsystem::Wallet() const
+{
+	const APlayerController* Controller = BoundController.Get();
+	UGameInstance* Instance = Controller != nullptr ? Controller->GetGameInstance() : nullptr;
+	return Instance != nullptr ? Instance->GetSubsystem<UWonderlandWalletSubsystem>() : nullptr;
+}
+
+void UWonderlandUiSubsystem::ToggleWallet() { ToggleOverlay(EOverlay::Wallet); }
+bool UWonderlandUiSubsystem::IsWalletOpen() const { return Open == EOverlay::Wallet; }
+
+bool UWonderlandUiSubsystem::IsWalletOnScreen() const
+{
+	return HudFurniture.IsValid() && WalletChip.IsValid() && IsMiniMapShown() && GetDefault<UWonderlandWalletHudSettings>()->bShowWallet;
+}
+
+FString UWonderlandUiSubsystem::GetWalletDrawnBalance() const { return WalletChip.IsValid() ? WalletChip->GetDrawnBalance() : FString(); }
+FString UWonderlandUiSubsystem::GetWalletDrawnUnit() const { return WalletChip.IsValid() ? WalletChip->GetDrawnUnit() : FString(); }
+FString UWonderlandUiSubsystem::GetWalletDrawnClaim() const { return WalletChip.IsValid() ? WalletChip->GetDrawnClaim() : FString(); }
+
+bool UWonderlandUiSubsystem::ClickWalletChip()
+{
+	if (!IsWalletOnScreen() || Open != EOverlay::None)
+	{
+		return false;
+	}
+	BeginPointing();
+	const int32 Before = WalletChip->GetOpenClicks();
+	RouteClickToWidget(WalletChip->GetButton(), TEXT("wallet"));
+	const bool bClicked = WalletChip->GetOpenClicks() > Before;
+	if (!bClicked)
+	{
+		StopPointing(true);
+	}
+	return bClicked && IsWalletOpen();
+}
+
