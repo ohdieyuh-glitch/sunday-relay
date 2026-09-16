@@ -157,25 +157,40 @@ namespace
 
 	FAutoConsoleCommand CmdMissionScenario(
 		TEXT("wl.Mission.Scenario"),
-		TEXT("Play a full simulated mission with a participation scenario: `wl.Mission.Scenario D 3.0`. A Julius only; B + LLM "
-		     "Companion; C + Jhinn; D + both. No provider is called. DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION."),
+		TEXT("Play a full simulated mission with a participation scenario and open the Julius Live Terminal to watch it: "
+		     "`wl.Mission.Scenario D` (seconds per event optional, default 10). A Julius only; B + LLM Companion; C + Jhinn; "
+		     "D + both. Running it again restarts. No provider is called. DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
 			const FName Letter(Args.Num() > 0 ? *Args[0].ToUpper() : TEXT("D"));
-			const float Pace = Args.Num() > 1 ? FCString::Atof(*Args[1]) : 3.0f;
+			// TEN SECONDS AN EVENT BY DEFAULT: the pace the Julius terminal's stream needs to write each stage's work at
+			// a readable speed (founder playtest, 2026-09-16). A number after the letter still sets it.
+			const float Pace = Args.Num() > 1 ? FCString::Atof(*Args[1]) : 10.0f;
 			ForEachMission([Letter, Pace](UWonderlandMissionSubsystem& Mission)
 			{
-				UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION scenario %s -> %s"), *Letter.ToString(),
-					Mission.RunScenario(Letter, Pace) ? TEXT("running") : TEXT("NO SUCH SCENARIO"));
+				const bool bRunning = Mission.RunScenario(Letter, Pace);
+				UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION scenario %s at %.1f s per event -> %s"), *Letter.ToString(),
+					Pace, bRunning ? TEXT("running") : TEXT("NO SUCH SCENARIO (A, B, C or D)"));
+				// ONE COMMAND TO WATCH IT: the terminal the mission narrates into opens with it.
+				ULocalPlayer* Player = Mission.GetLocalPlayer<ULocalPlayer>();
+				UWonderlandUiSubsystem* Ui = Player != nullptr ? Player->GetSubsystem<UWonderlandUiSubsystem>() : nullptr;
+				if (bRunning && Ui != nullptr && !Ui->IsLiveTerminalOpen())
+				{
+					Ui->ToggleLiveTerminal();
+				}
 			});
 		}));
 
 	FAutoConsoleCommand CmdMissionStop(
 		TEXT("wl.Mission.Stop"),
-		TEXT("Stop the running fixture and let the Mission Contract go."),
+		TEXT("Stop the running fixture and let the Mission Contract go: the world returns to idle and the companions to follow."),
 		FConsoleCommandDelegate::CreateLambda([]()
 		{
-			ForEachMission([](UWonderlandMissionSubsystem& Mission) { Mission.StopFixture(); });
+			ForEachMission([](UWonderlandMissionSubsystem& Mission)
+			{
+				Mission.StopFixture();
+				Mission.SetBeatById(TEXT("idle"));
+			});
 		}));
 
 	FAutoConsoleCommand CmdMissionFixtures(
