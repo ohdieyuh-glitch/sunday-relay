@@ -53,7 +53,14 @@ namespace
 	// beats. A handoff is the interval BETWEEN them, and the catalogue has no event for it: Julius reports
 	// that a role started, never that work changed hands. Claiming those three here also made the adapter
 	// ambiguous, because one event type would have resolved to two different beats.
-	{ MBeat::Handoff, TEXT("HANDOFF"), TEXT("Work product is moving between roles. No role is executing."),
+	// NO DEDICATED PERFORMANCE (founder, 2026-09-15). This beat is an INTERVAL, not a state: the world
+	// continues the stage already in performance, so a handoff arriving mid-implementation keeps the
+	// paintbrush on screen and changes no prop. The Julius event survives; only the scene is withheld,
+	// and MPhase::Handoff stays a member because deleting one to remove a visual would delete an event
+	// to remove a picture. The performance layer simply never selects it -- see WonderlandDogActForBeat.
+	// The old copy said "No role is executing", which contradicted that and was also untrue: during a
+	// handoff the mission is mid-flight and the previous role's work still stands.
+	{ MBeat::Handoff, TEXT("HANDOFF"), TEXT("Work product is moving between roles. The world continues the stage already in performance."),
 	  MPhase::Handoff, MAccent::Unobserved, MChakra::None, false, false, false,
 	  TEXT(""),
 	  TEXT("Nothing reports work CHANGING HANDS. `architect.started`, `coder.started` and `review.started` "

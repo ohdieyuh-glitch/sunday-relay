@@ -27,6 +27,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "RelayDogStride.h"
+#include "RelayDogMissionPose.h"
 
 #include "RelayDogCharacter.generated.h"
 
@@ -106,6 +107,24 @@ public:
 	/** Head width in uu — the canon's unit. dog_v2 builds at 60. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Relay Dog")
 	float HeadWidthUU = 60.0f;
+
+	/**
+	 * WHAT JULIUS IS DOING WITH HIS BODY — the one way in for the mission performance.
+	 *
+	 * Called by UWonderlandMissionSubsystem::ShowBeat, which is the single place that knows both the beat
+	 * and the Mission Contract. `Contract` may be null, and that is not an error: it is how the end of a
+	 * mission is told from a handoff inside one. An act of `None` WITH a contract means "keep performing
+	 * what you are performing" (the founder removed the handoff animation, and this is what removing it
+	 * looks like); an act of `None` with no contract means the mission is over and the Dog goes back to
+	 * being a Dog. See RelayDogMissionPose.h.
+	 *
+	 * The actor rather than a location on purpose: the orbit, the facing and the beam all need where the
+	 * contract is NOW, and a position sampled once goes stale the moment the crystal moves.
+	 */
+	void SetMissionAct(EWonderlandDogAct Act, const AActor* Contract);
+
+	/** What the body is actually performing, which during a handoff is the inherited act, not None. */
+	EWonderlandDogAct PerformingAct() const { return Mission.Performing(); }
 
 	/** Drive the Dog along `Route` with no player. This is how the founder's
 	 *  capture is produced: a scripted, repeatable pass through Golden Arrival
@@ -240,6 +259,16 @@ private:
 	 */
 	float EyeScaleAt(float TimeSeconds) const;
 
+	/** Build the book and the paintbrush once, from engine cubes, the way the Mission Contract is built.
+	 *  Nothing is loaded from the world's Content, so a prop cannot be a missing asset. */
+	void BuildMissionProps();
+	/** Cubes -> one instanced mesh with its own runtime material, parented where it is held. */
+	class UInstancedStaticMeshComponent* MakePropMesh(FName Name, USceneComponent* Parent, bool bGlow,
+		const TArray<FTransform>& Boxes, const FLinearColor& Colour,
+		TObjectPtr<class UMaterialInstanceDynamic>& OutMid);
+	/** Point the beam from the Dog's chest at the contract and set its length. */
+	void DrawVerificationBeam(const FVector& FromWorld, const FVector& ToWorld, float Weight, float TimeSeconds);
+
 	RelayDogStride::FDogAnimator Animator;
 
 	UPROPERTY(Transient)
@@ -270,6 +299,56 @@ private:
 
 	UPROPERTY(Transient)
 	FRelayDogArm ArmRight;
+
+	/* ------------------------------------------------------ the mission performance (founder, 2026-09-15)
+	 *
+	 * Four performances on top of the walk: the Dog floats to activate, reads a book circling the Mission
+	 * Contract, paints the work, then plants and beams the contract while it is verified. The arithmetic is
+	 * in RelayDogMissionPose.h; what lives here is only what needs a world -- where the contract actually
+	 * is, the props in the Dog's hand, and the beam.
+	 *
+	 * IT CANNOT BREAK LOCOMOTION. The overlay is added to the solved pose and is identically zero when no
+	 * mission is running, and the orbit yields the instant a player touches the stick. */
+	RelayDogMission::FPerformer Mission;
+
+	/** The contract, weak: it is manifested and dismissed by the mission subsystem and the Dog must never
+	 *  keep it alive. Null is meaningful -- it is how the end of a mission is told from a handoff. */
+	UPROPERTY(Transient)
+	TWeakObjectPtr<const AActor> MissionContract;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UInstancedStaticMeshComponent> BookMesh = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UInstancedStaticMeshComponent> BookPagesMesh = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UInstancedStaticMeshComponent> BrushMesh = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UInstancedStaticMeshComponent> BrushHeadMesh = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UInstancedStaticMeshComponent> BeamMesh = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UMaterialInstanceDynamic> BookMid = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UMaterialInstanceDynamic> BookPagesMid = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UMaterialInstanceDynamic> BrushMid = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UMaterialInstanceDynamic> BrushHeadMid = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UMaterialInstanceDynamic> BeamMid = nullptr;
+
+	bool bMissionPropsBuilt = false;
+	/** True on any frame the player asked the Dog to move, so the orbit stands down. */
+	bool bPlayerDroveThisFrame = false;
 
 	/** The Body component's authored location, so the pose offsets are applied
 	 *  ON TOP of it rather than replacing it. */

@@ -14,9 +14,28 @@
 #include "InputCoreTypes.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
+#include "UObject/ConstructorHelpers.h"
 
 namespace
 {
+	// THE MISSION PROPS ARE BUILT, NOT IMPORTED. Engine content only, exactly as the Mission Contract is
+	// built (WonderlandMissionOrb.cpp): a book and a paintbrush assembled from the engine cube, in the
+	// Dog's own voxel language. Nothing comes from the world's Content, so a prop can never be a missing
+	// asset in someone's checkout, and there is no placeholder standing in for art that ought to exist.
+	const TCHAR* const DogPropLitParent = TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial");
+	const TCHAR* const DogPropGlowParent = TEXT("/Engine/EngineDebugMaterials/LevelColorationUnlitMaterial.LevelColorationUnlitMaterial");
+	const TCHAR* const DogPropCubePath = TEXT("/Engine/BasicShapes/Cube.Cube");
+
+	/** The engine cube is 100 uu on a side, so a box is a scale of size/100 about a centre. */
+	FTransform DogPropBox(const FVector& Centre, const FVector& SizeUU, const FRotator& Turn = FRotator::ZeroRotator)
+	{
+		return FTransform(Turn, Centre, SizeUU / 100.0);
+	}
+
 	/** dog_canon.JOINTS, as the generator names them on the Blueprint. */
 	const TCHAR* const PivotBody = TEXT("Body");
 	const TCHAR* const PivotHead = TEXT("Pivot_head");
@@ -925,6 +944,9 @@ void ARelayDogCharacter::OnLiveTerminalPressed()
 void ARelayDogCharacter::MoveForwardAxis(float Value)
 {
 	if (Value == 0.0f || Controller == nullptr || bAutoDemo) return;
+	// A PERFORMANCE NEVER FIGHTS THE STICK. Noted here rather than inferred from velocity, because a Dog
+	// pressed against a wall has input and no speed, and the orbit must stand down for that too.
+	bPlayerDroveThisFrame = true;
 	const FRotator YawOnly(0.0f, Controller->GetControlRotation().Yaw, 0.0f);
 	AddMovementInput(FRotationMatrix(YawOnly).GetUnitAxis(EAxis::X), Value);
 }
@@ -934,6 +956,7 @@ void ARelayDogCharacter::MoveBackwardAxis(float Value) { MoveForwardAxis(-Value)
 void ARelayDogCharacter::MoveRightAxis(float Value)
 {
 	if (Value == 0.0f || Controller == nullptr || bAutoDemo) return;
+	bPlayerDroveThisFrame = true;
 	const FRotator YawOnly(0.0f, Controller->GetControlRotation().Yaw, 0.0f);
 	AddMovementInput(FRotationMatrix(YawOnly).GetUnitAxis(EAxis::Y), Value);
 }
@@ -1083,6 +1106,48 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		}
 	}
 
+	// ------------------------------------------------------- the mission performance, part one
+	// Solved HERE, before driving, because an orbit is a real walk: it adds movement input alongside the
+	// player's and the stride system then solves the gait for it. The pose half of the overlay is applied
+	// after the walk is written, at the bottom of this function.
+	BuildMissionProps();
+	RelayDogMission::FStageInput MissionIn;
+	MissionIn.DeltaSeconds = DeltaSeconds;
+	const UWorld* MissionWorld = GetWorld();
+	MissionIn.TimeSeconds = MissionWorld != nullptr ? static_cast<float>(MissionWorld->GetTimeSeconds()) : 0.0f;
+	MissionIn.bPlayerDriving = bPlayerDroveThisFrame;
+	bPlayerDroveThisFrame = false;
+
+	FVector ContractWorld = FVector::ZeroVector;
+	if (const AActor* Contract = MissionContract.Get())
+	{
+		ContractWorld = Contract->GetActorLocation();
+		const FVector Here = GetActorLocation();
+		const FVector ToContract = ContractWorld - Here;
+		const FVector Flat(ToContract.X, ToContract.Y, 0.0);
+		MissionIn.bHasContract = true;
+		MissionIn.ContractDistanceUU = static_cast<float>(Flat.Size());
+		MissionIn.ContractYawDeg = FMath::FindDeltaAngleDegrees(
+			GetActorRotation().Yaw,
+			Flat.IsNearlyZero() ? GetActorRotation().Yaw : FMath::RadiansToDegrees(FMath::Atan2(Flat.Y, Flat.X)));
+		// Negative pitch looks UP, which is where a floating contract is.
+		MissionIn.ContractPitchDeg = -FMath::RadiansToDegrees(
+			FMath::Atan2(ToContract.Z - 40.0, FMath::Max(MissionIn.ContractDistanceUU, 1.0f)));
+	}
+	const RelayDogMission::FStageOverlay Overlay = Mission.Update(MissionIn);
+
+	if (Overlay.bOrbit)
+	{
+		const float Bearing = GetActorRotation().Yaw + Overlay.OrbitBearingDeg;
+		const FVector Walk = FRotator(0.0f, Bearing, 0.0f).Vector();
+		if (UCharacterMovementComponent* Move = GetCharacterMovement())
+		{
+			// A study pace, not a patrol: the founder asked for deliberate and thoughtful.
+			Move->MaxWalkSpeed = 132.0f;
+		}
+		AddMovementInput(Walk, 1.0f);
+	}
+
 	// ---------------------------------------------------------------- driving
 	FVector DesiredVelocity = FVector::ZeroVector;
 	if (!bAutoDemo)
@@ -1201,12 +1266,215 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	WriteArm(ArmLeft, Pose.ArmLeft);
 	WriteArm(ArmRight, Pose.ArmRight);
 
+	// ------------------------------------------------- the mission performance, part two: the pose
+	//
+	// ADDED to what the stride system just wrote, never replacing it. That is what makes the Dog keep its
+	// walk while it circles the contract reading, and it is why a mission cannot break locomotion: every
+	// term below is exactly zero when no mission is running.
+	if (Overlay.Weight > KINDA_SMALL_NUMBER)
+	{
+		if (BodyRoot != nullptr)
+		{
+			// The whole body leaves the ground -- legs are its children, so the feet come with it, which is
+			// the "entire body suspended" in the founder's note rather than a hovering torso on planted feet.
+			BodyRoot->SetRelativeLocation(BodyRestLocation
+				+ FVector(0.0f, Pose.SwayUU, Pose.BobUU - Pose.PelvisDropUU + Overlay.LiftUU));
+		}
+		if (HeadPivot != nullptr)
+		{
+			HeadPivot->SetRelativeRotation(FRotator(
+				Pose.HeadPitchDeg - Pose.LeanDeg + Overlay.HeadPitchDeg,
+				Pose.HeadYawDeg + Overlay.HeadYawDeg, 0.0f));
+		}
+		auto AddArm = [&Overlay](const FRelayDogArm& Arm, const RelayDogStride::FArmPose& ArmPose, float ExtraPitch)
+		{
+			if (Arm.Shoulder != nullptr)
+			{
+				Arm.Shoulder->SetRelativeRotation(FRotator(
+					ArmPose.ShoulderDeg + ExtraPitch, 0.0f,
+					(ArmPose.ShoulderYawDeg + Overlay.ShoulderRollDeg) * Arm.SideSign));
+			}
+			if (Arm.Forearm != nullptr)
+			{
+				Arm.Forearm->SetRelativeRotation(FRotator(ArmPose.ElbowDeg + Overlay.ElbowDeg, 0.0f, 0.0f));
+			}
+		};
+		AddArm(ArmLeft, Pose.ArmLeft, Overlay.ShoulderPitchLeftDeg);
+		AddArm(ArmRight, Pose.ArmRight, Overlay.ShoulderPitchRightDeg);
+		if (Overlay.HipDeg != 0.0f)
+		{
+			if (LegLeft.Hip != nullptr) LegLeft.Hip->SetRelativeRotation(FRotator(SolvedL.HipDeg + Overlay.HipDeg, 0.0f, 0.0f));
+			if (LegRight.Hip != nullptr) LegRight.Hip->SetRelativeRotation(FRotator(SolvedR.HipDeg + Overlay.HipDeg, 0.0f, 0.0f));
+		}
+	}
+
+	// THE PROPS. Exactly one may be in hand, which is the spec's BOOK = PLANNING and BRUSH = IMPLEMENTING
+	// and the test that asserts one stage each. They follow the PERFORMED act, so a handoff arriving mid
+	// implementation leaves the brush exactly where it was.
+	const bool bBook = Overlay.Prop == EWonderlandDogProp::Book && Overlay.PropWeight > 0.08f;
+	const bool bBrush = Overlay.Prop == EWonderlandDogProp::Paintbrush && Overlay.PropWeight > 0.08f;
+	if (BookMesh != nullptr) BookMesh->SetVisibility(bBook);
+	if (BookPagesMesh != nullptr) BookPagesMesh->SetVisibility(bBook);
+	if (BrushMesh != nullptr) BrushMesh->SetVisibility(bBrush);
+	if (BrushHeadMesh != nullptr) BrushHeadMesh->SetVisibility(bBrush);
+
+	// THE BEAM, from the chest to the contract, for as long as verification runs.
+	if (Overlay.bBeam && MissionIn.bHasContract && BodyRoot != nullptr)
+	{
+		const FVector Chest = BodyRoot->GetComponentLocation() + GetActorRotation().RotateVector(FVector(18.0, 0.0, 26.0));
+		DrawVerificationBeam(Chest, ContractWorld, Overlay.BeamWeight, MissionIn.TimeSeconds);
+	}
+	else
+	{
+		DrawVerificationBeam(FVector::ZeroVector, FVector::ZeroVector, 0.0f, MissionIn.TimeSeconds);
+	}
+
 	// One log line per gait change, so a capture can be read against what the
 	// Dog was doing without watching every frame.
 	if (FMath::Abs(SpeedUU - LastLoggedSpeed) > 40.0f)
 	{
 		LastLoggedSpeed = SpeedUU;
 		UE_LOG(LogTemp, Log, TEXT("WLDOG %s"), *DescribeState());
+	}
+}
+
+/* ==================================================================== the mission performance */
+
+void ARelayDogCharacter::SetMissionAct(EWonderlandDogAct Act, const AActor* Contract)
+{
+	MissionContract = Contract;
+	Mission.SetAct(Act, Contract != nullptr);
+	// One line per change, not per frame: a capture can then be read against what the Dog was ASKED to
+	// perform, which is the only way to tell a wrong pose from a wrong act.
+	UE_LOG(LogTemp, Log, TEXT("WLDOG mission act=%s performing=%s contract=%s"),
+		WonderlandDogActName(Act), WonderlandDogActName(Mission.Performing()),
+		Contract != nullptr ? *Contract->GetName() : TEXT("none"));
+}
+
+UInstancedStaticMeshComponent* ARelayDogCharacter::MakePropMesh(FName Name, USceneComponent* Parent, bool bGlow,
+	const TArray<FTransform>& Boxes, const FLinearColor& Colour, TObjectPtr<UMaterialInstanceDynamic>& OutMid)
+{
+	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, DogPropCubePath);
+	if (Cube == nullptr || Parent == nullptr)
+	{
+		UE_LOG(LogTemp, Error, TEXT("WLDOG no cube at %s; the mission prop %s cannot be built"),
+			DogPropCubePath, *Name.ToString());
+		return nullptr;
+	}
+	UInstancedStaticMeshComponent* Built = NewObject<UInstancedStaticMeshComponent>(
+		this, MakeUniqueObjectName(this, UInstancedStaticMeshComponent::StaticClass(), Name));
+	Built->SetMobility(EComponentMobility::Movable);
+	Built->SetStaticMesh(Cube);
+	UMaterialInterface* ParentMaterial = LoadObject<UMaterialInterface>(nullptr, bGlow ? DogPropGlowParent : DogPropLitParent);
+	OutMid = ParentMaterial != nullptr ? UMaterialInstanceDynamic::Create(ParentMaterial, this) : nullptr;
+	if (OutMid != nullptr)
+	{
+		OutMid->SetVectorParameterValue(TEXT("Color"), Colour);
+		Built->SetMaterial(0, OutMid.Get());
+	}
+	else
+	{
+		// LOUD, NOT SILENT: the prop still draws, in the default material, rather than vanishing.
+		UE_LOG(LogTemp, Warning, TEXT("WLDOG no material at %s; %s draws in the default material"),
+			bGlow ? DogPropGlowParent : DogPropLitParent, *Name.ToString());
+	}
+	Built->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Built->SetGenerateOverlapEvents(false);
+	Built->SetCanEverAffectNavigation(false);
+	// A glowing thing that shadowed the ground would be a dark lamp.
+	Built->SetCastShadow(!bGlow);
+	Built->SetupAttachment(Parent);
+	Built->RegisterComponent();
+	for (const FTransform& Box : Boxes)
+	{
+		Built->AddInstance(Box);
+	}
+	Built->SetVisibility(false);
+	return Built;
+}
+
+void ARelayDogCharacter::BuildMissionProps()
+{
+	if (bMissionPropsBuilt)
+	{
+		return;
+	}
+	bMissionPropsBuilt = true;
+
+	// Scaled from the head, which is this rig's unit, so a Dog built at any HeadWidthUU holds a book that
+	// fits its hands rather than one sized for the default.
+	const double U = FMath::Max(HeadWidthUU, 10.0f) / 60.0;
+
+	// ---------------------------------------------------------------- the book (PLANNING)
+	// Two covers opened into a V, with a page block between them. Held at the left forearm so the right
+	// arm stays free to turn a page, which is what the reading swing does.
+	USceneComponent* BookHand = ArmLeft.Forearm != nullptr ? ArmLeft.Forearm.Get() : BodyRoot.Get();
+	TArray<FTransform> Covers;
+	Covers.Add(DogPropBox(FVector(16.0 * U, -11.0 * U, -26.0 * U), FVector(30.0 * U, 3.0 * U, 22.0 * U), FRotator(0.0, 0.0, -18.0)));
+	Covers.Add(DogPropBox(FVector(16.0 * U, 11.0 * U, -26.0 * U), FVector(30.0 * U, 3.0 * U, 22.0 * U), FRotator(0.0, 0.0, 18.0)));
+	Covers.Add(DogPropBox(FVector(16.0 * U, 0.0, -32.0 * U), FVector(30.0 * U, 6.0 * U, 4.0 * U)));
+	BookMesh = MakePropMesh(TEXT("MissionBook"), BookHand, false, Covers, FLinearColor(0.42f, 0.13f, 0.16f), BookMid);
+
+	TArray<FTransform> Pages;
+	Pages.Add(DogPropBox(FVector(16.0 * U, -6.0 * U, -25.0 * U), FVector(27.0 * U, 8.0 * U, 18.0 * U), FRotator(0.0, 0.0, -18.0)));
+	Pages.Add(DogPropBox(FVector(16.0 * U, 6.0 * U, -25.0 * U), FVector(27.0 * U, 8.0 * U, 18.0 * U), FRotator(0.0, 0.0, 18.0)));
+	BookPagesMesh = MakePropMesh(TEXT("MissionBookPages"), BookHand, false, Pages, FLinearColor(0.94f, 0.92f, 0.84f), BookPagesMid);
+
+	// ---------------------------------------------------------------- the paintbrush (IMPLEMENTING)
+	// Handle, gold ferrule, bristle block. On the RIGHT forearm, which is the arm the stroke swings.
+	USceneComponent* BrushHand = ArmRight.Forearm != nullptr ? ArmRight.Forearm.Get() : BodyRoot.Get();
+	TArray<FTransform> Handle;
+	Handle.Add(DogPropBox(FVector(4.0 * U, 0.0, -34.0 * U), FVector(5.0 * U, 5.0 * U, 46.0 * U)));
+	Handle.Add(DogPropBox(FVector(4.0 * U, 0.0, -59.0 * U), FVector(7.0 * U, 7.0 * U, 6.0 * U)));
+	BrushMesh = MakePropMesh(TEXT("MissionBrush"), BrushHand, false, Handle, FLinearColor(0.30f, 0.20f, 0.13f), BrushMid);
+
+	TArray<FTransform> Bristles;
+	Bristles.Add(DogPropBox(FVector(4.0 * U, 0.0, -70.0 * U), FVector(9.0 * U, 9.0 * U, 16.0 * U)));
+	// The tip glows: this is a Wonderland brush painting software into existence, not an easel brush.
+	BrushHeadMesh = MakePropMesh(TEXT("MissionBrushTip"), BrushHand, true, Bristles, FLinearColor(0.95f, 0.72f, 0.28f), BrushHeadMid);
+
+	// ---------------------------------------------------------------- the beam (VERIFYING)
+	// ONE unit cube, stretched along X between the chest and the contract every frame. A beam has to be a
+	// world-space thing rather than a child of a swinging arm, so it hangs off the capsule, not the body.
+	TArray<FTransform> Beam;
+	Beam.Add(DogPropBox(FVector(50.0, 0.0, 0.0), FVector(100.0, 10.0, 10.0)));
+	BeamMesh = MakePropMesh(TEXT("VerificationBeam"), GetRootComponent(), true, Beam,
+		FLinearColor(0.42f, 0.86f, 1.0f), BeamMid);
+	if (BeamMesh != nullptr)
+	{
+		BeamMesh->SetAbsolute(true, true, true);
+	}
+}
+
+void ARelayDogCharacter::DrawVerificationBeam(const FVector& FromWorld, const FVector& ToWorld, float Weight, float TimeSeconds)
+{
+	if (BeamMesh == nullptr)
+	{
+		return;
+	}
+	if (Weight <= KINDA_SMALL_NUMBER)
+	{
+		BeamMesh->SetVisibility(false);
+		return;
+	}
+	const FVector Along = ToWorld - FromWorld;
+	const double Length = Along.Size();
+	if (Length < 1.0)
+	{
+		BeamMesh->SetVisibility(false);
+		return;
+	}
+	BeamMesh->SetVisibility(true);
+	BeamMesh->SetWorldLocationAndRotation(FromWorld, Along.Rotation());
+	// SUSTAINED, NOT PULSED. The founder's note rules out flashes and bursts, so the beam's thickness
+	// breathes by a few per cent and never goes out or restarts -- it reads as a held analytical link
+	// rather than as fire. Length is exact so it lands on the contract instead of through it.
+	const double Breathe = 1.0 + 0.06 * FMath::Sin(2.0 * PI * TimeSeconds / 1.7);
+	const double Thick = (10.0 * Weight * Breathe) / 100.0;
+	BeamMesh->SetWorldScale3D(FVector(Length / 100.0, Thick, Thick));
+	if (BeamMid != nullptr)
+	{
+		BeamMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.42f, 0.86f, 1.0f) * (0.6f + 0.9f * Weight));
 	}
 }
 
