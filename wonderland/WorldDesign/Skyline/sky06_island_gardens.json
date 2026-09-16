@@ -1,0 +1,4620 @@
+{
+ "pass": "SKY06",
+ "title": "Floating islands: hanging gardens under the lip, falls into cloud, lantern rims",
+ "folder": "Wonderland/Authored/SKY06",
+ "tags": [
+  "V2_Skyline"
+ ],
+ "actors": [],
+ "batches": [],
+ "hovers": [
+  {
+   "id": "SKY06_IslandLandmark_Garden0_0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -10496.0,
+    26338.0,
+    13769.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden0_1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -10738.3,
+    27634.1,
+    13769.0
+   ],
+   "rot": [
+    0.0,
+    21.2,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden0_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -11432.4,
+    28755.2,
+    13769.0
+   ],
+   "rot": [
+    0.0,
+    42.4,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden0_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -12484.7,
+    29549.8,
+    13769.0
+   ],
+   "rot": [
+    0.0,
+    63.5,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden0_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -13752.9,
+    29910.7,
+    13769.0
+   ],
+   "rot": [
+    0.0,
+    84.7,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden0_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -15065.9,
+    29789.0,
+    13769.0
+   ],
+   "rot": [
+    0.0,
+    105.9,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden0_6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -16246.3,
+    29201.3,
+    13769.0
+   ],
+   "rot": [
+    0.0,
+    127.1,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden0_7",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -17134.6,
+    28226.8,
+    13769.0
+   ],
+   "rot": [
+    0.0,
+    148.2,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden0_8",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -17610.9,
+    26997.3,
+    13769.0
+   ],
+   "rot": [
+    0.0,
+    169.4,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden0_9",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -17610.9,
+    25678.7,
+    13769.0
+   ],
+   "rot": [
+    0.0,
+    190.6,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden0_10",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -17134.6,
+    24449.2,
+    13769.0
+   ],
+   "rot": [
+    0.0,
+    211.8,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden0_11",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -16246.3,
+    23474.7,
+    13769.0
+   ],
+   "rot": [
+    0.0,
+    232.9,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden0_12",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -15065.9,
+    22887.0,
+    13769.0
+   ],
+   "rot": [
+    0.0,
+    254.1,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden0_13",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -13752.9,
+    22765.3,
+    13769.0
+   ],
+   "rot": [
+    0.0,
+    275.3,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden0_14",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -12484.7,
+    23126.2,
+    13769.0
+   ],
+   "rot": [
+    0.0,
+    296.5,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden0_15",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -11432.4,
+    23920.8,
+    13769.0
+   ],
+   "rot": [
+    0.0,
+    317.6,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden0_16",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -10738.3,
+    25041.9,
+    13769.0
+   ],
+   "rot": [
+    0.0,
+    338.8,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -10160.3,
+    26992.8,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    9.5,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -10585.5,
+    28231.3,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    28.4,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -11389.8,
+    29264.7,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    47.4,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -12486.1,
+    29980.9,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    66.3,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -13755.5,
+    30302.4,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    85.3,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -15060.5,
+    30194.3,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    104.2,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -16259.8,
+    29668.2,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    123.2,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_7",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -17223.2,
+    28781.3,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    142.1,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_8",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -17846.5,
+    27629.7,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    161.1,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_9",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -18062.0,
+    26338.0,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    180.0,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_10",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -17846.5,
+    25046.3,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    198.9,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_11",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -17223.2,
+    23894.7,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    217.9,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_12",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -16259.8,
+    23007.8,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    236.8,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_13",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -15060.5,
+    22481.7,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    255.8,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_14",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -13755.5,
+    22373.6,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    274.7,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_15",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -12486.1,
+    22695.1,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    293.7,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_16",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -11389.8,
+    23411.3,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    312.6,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_17",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -10585.5,
+    24444.7,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    331.6,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Garden1_18",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -10160.3,
+    25683.2,
+    13364.0
+   ],
+   "rot": [
+    0.0,
+    350.5,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Fall0",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "material": "MI_V2_Water",
+   "loc": [
+    -14192.9,
+    23219.9,
+    9764.0
+   ],
+   "rot": [
+    0.0,
+    268.0,
+    0.0
+   ],
+   "scale": [
+    4.5,
+    4.972,
+    146.809
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Fall1",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "material": "MI_V2_Water",
+   "loc": [
+    -14192.9,
+    23219.9,
+    6360.0
+   ],
+   "rot": [
+    0.0,
+    268.0,
+    0.0
+   ],
+   "scale": [
+    3.24,
+    3.58,
+    130.496
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_Fall2",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "material": "MI_V2_Water",
+   "loc": [
+    -14192.9,
+    23219.9,
+    4152.0
+   ],
+   "rot": [
+    0.0,
+    268.0,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.486,
+    97.872
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmark_FallCloud",
+   "mesh": "/Game/WonderlandV2/Sky/SM_cloud_cumulus_b.SM_cloud_cumulus_b",
+   "material": "MI_V2_Cloud",
+   "loc": [
+    -14192.9,
+    23219.9,
+    4104.0
+   ],
+   "rot": [
+    0.0,
+    268.0,
+    0.0
+   ],
+   "scale": [
+    0.825,
+    0.825,
+    0.825
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden0_0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    16519.0,
+    17648.0,
+    13975.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden0_1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    16276.7,
+    18944.1,
+    13975.0
+   ],
+   "rot": [
+    0.0,
+    21.2,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden0_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    15582.6,
+    20065.2,
+    13975.0
+   ],
+   "rot": [
+    0.0,
+    42.4,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden0_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    14530.3,
+    20859.8,
+    13975.0
+   ],
+   "rot": [
+    0.0,
+    63.5,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden0_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    13262.1,
+    21220.7,
+    13975.0
+   ],
+   "rot": [
+    0.0,
+    84.7,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden0_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    11949.1,
+    21099.0,
+    13975.0
+   ],
+   "rot": [
+    0.0,
+    105.9,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden0_6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    10768.7,
+    20511.3,
+    13975.0
+   ],
+   "rot": [
+    0.0,
+    127.1,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden0_7",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    9880.4,
+    19536.8,
+    13975.0
+   ],
+   "rot": [
+    0.0,
+    148.2,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden0_8",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    9404.1,
+    18307.3,
+    13975.0
+   ],
+   "rot": [
+    0.0,
+    169.4,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden0_9",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    9404.1,
+    16988.7,
+    13975.0
+   ],
+   "rot": [
+    0.0,
+    190.6,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden0_10",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    9880.4,
+    15759.2,
+    13975.0
+   ],
+   "rot": [
+    0.0,
+    211.8,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden0_11",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    10768.7,
+    14784.7,
+    13975.0
+   ],
+   "rot": [
+    0.0,
+    232.9,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden0_12",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    11949.1,
+    14197.0,
+    13975.0
+   ],
+   "rot": [
+    0.0,
+    254.1,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden0_13",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    13262.1,
+    14075.3,
+    13975.0
+   ],
+   "rot": [
+    0.0,
+    275.3,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden0_14",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    14530.3,
+    14436.2,
+    13975.0
+   ],
+   "rot": [
+    0.0,
+    296.5,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden0_15",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    15582.6,
+    15230.8,
+    13975.0
+   ],
+   "rot": [
+    0.0,
+    317.6,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden0_16",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    16276.7,
+    16351.9,
+    13975.0
+   ],
+   "rot": [
+    0.0,
+    338.8,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    16854.7,
+    18302.8,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    9.5,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    16429.5,
+    19541.3,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    28.4,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    15625.2,
+    20574.7,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    47.4,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    14528.9,
+    21290.9,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    66.3,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    13259.5,
+    21612.4,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    85.3,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    11954.5,
+    21504.3,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    104.2,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    10755.2,
+    20978.2,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    123.2,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_7",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    9791.8,
+    20091.3,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    142.1,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_8",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    9168.5,
+    18939.7,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    161.1,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_9",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    8953.0,
+    17648.0,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    180.0,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_10",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    9168.5,
+    16356.3,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    198.9,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_11",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    9791.8,
+    15204.7,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    217.9,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_12",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    10755.2,
+    14317.8,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    236.8,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_13",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    11954.5,
+    13791.7,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    255.8,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_14",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    13259.5,
+    13683.6,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    274.7,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_15",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    14528.9,
+    14005.1,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    293.7,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_16",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    15625.2,
+    14721.3,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    312.6,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_17",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    16429.5,
+    15754.7,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    331.6,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Garden1_18",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    16854.7,
+    16993.2,
+    13570.0
+   ],
+   "rot": [
+    0.0,
+    350.5,
+    0.0
+   ],
+   "scale": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Fall0",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "material": "MI_V2_Water",
+   "loc": [
+    10080.7,
+    16379.0,
+    9970.0
+   ],
+   "rot": [
+    0.0,
+    204.0,
+    0.0
+   ],
+   "scale": [
+    4.5,
+    4.972,
+    146.809
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Fall1",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "material": "MI_V2_Water",
+   "loc": [
+    10080.7,
+    16379.0,
+    6566.0
+   ],
+   "rot": [
+    0.0,
+    204.0,
+    0.0
+   ],
+   "scale": [
+    3.24,
+    3.58,
+    130.496
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_Fall2",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "material": "MI_V2_Water",
+   "loc": [
+    10080.7,
+    16379.0,
+    4358.0
+   ],
+   "rot": [
+    0.0,
+    204.0,
+    0.0
+   ],
+   "scale": [
+    2.25,
+    2.486,
+    97.872
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandLandmarkLeft_FallCloud",
+   "mesh": "/Game/WonderlandV2/Sky/SM_cloud_cumulus_b.SM_cloud_cumulus_b",
+   "material": "MI_V2_Cloud",
+   "loc": [
+    10080.7,
+    16379.0,
+    4310.0
+   ],
+   "rot": [
+    0.0,
+    204.0,
+    0.0
+   ],
+   "scale": [
+    0.825,
+    0.825,
+    0.825
+   ],
+   "amp": 157.8,
+   "period": 19.72,
+   "sway": 0.0,
+   "phase": 0.888
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden0_0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -24420.6,
+    22600.0,
+    14865.9
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden0_1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -24477.8,
+    22905.8,
+    14865.9
+   ],
+   "rot": [
+    0.0,
+    21.2,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden0_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -24641.5,
+    23170.2,
+    14865.9
+   ],
+   "rot": [
+    0.0,
+    42.4,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden0_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -24889.7,
+    23357.7,
+    14865.9
+   ],
+   "rot": [
+    0.0,
+    63.5,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden0_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -25188.9,
+    23442.8,
+    14865.9
+   ],
+   "rot": [
+    0.0,
+    84.7,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden0_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -25498.6,
+    23414.1,
+    14865.9
+   ],
+   "rot": [
+    0.0,
+    105.9,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden0_6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -25777.1,
+    23275.4,
+    14865.9
+   ],
+   "rot": [
+    0.0,
+    127.1,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden0_7",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -25986.6,
+    23045.6,
+    14865.9
+   ],
+   "rot": [
+    0.0,
+    148.2,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden0_8",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -26099.0,
+    22755.5,
+    14865.9
+   ],
+   "rot": [
+    0.0,
+    169.4,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden0_9",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -26099.0,
+    22444.5,
+    14865.9
+   ],
+   "rot": [
+    0.0,
+    190.6,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden0_10",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -25986.6,
+    22154.4,
+    14865.9
+   ],
+   "rot": [
+    0.0,
+    211.8,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden0_11",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -25777.1,
+    21924.6,
+    14865.9
+   ],
+   "rot": [
+    0.0,
+    232.9,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden0_12",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -25498.6,
+    21785.9,
+    14865.9
+   ],
+   "rot": [
+    0.0,
+    254.1,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden0_13",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -25188.9,
+    21757.2,
+    14865.9
+   ],
+   "rot": [
+    0.0,
+    275.3,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden0_14",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -24889.7,
+    21842.3,
+    14865.9
+   ],
+   "rot": [
+    0.0,
+    296.5,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden0_15",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -24641.5,
+    22029.8,
+    14865.9
+   ],
+   "rot": [
+    0.0,
+    317.6,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden0_16",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -24477.8,
+    22294.2,
+    14865.9
+   ],
+   "rot": [
+    0.0,
+    338.8,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -24341.4,
+    22754.5,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    9.5,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -24441.7,
+    23046.6,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    28.4,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -24631.4,
+    23290.4,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    47.4,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -24890.0,
+    23459.4,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    66.3,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -25189.5,
+    23535.2,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    85.3,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -25497.4,
+    23509.7,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    104.2,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -25780.3,
+    23385.6,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    123.2,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_7",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -26007.5,
+    23176.4,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    142.1,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_8",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -26154.6,
+    22904.7,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    161.1,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_9",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -26205.4,
+    22600.0,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    180.0,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_10",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -26154.6,
+    22295.3,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    198.9,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_11",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -26007.5,
+    22023.6,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    217.9,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_12",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -25780.3,
+    21814.4,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    236.8,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_13",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -25497.4,
+    21690.3,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    255.8,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_14",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -25189.5,
+    21664.8,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    274.7,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_15",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -24890.0,
+    21740.6,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    293.7,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_16",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -24631.4,
+    21909.6,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    312.6,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_17",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -24441.7,
+    22153.4,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    331.6,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarRight_Garden1_18",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -24341.4,
+    22445.5,
+    14770.4
+   ],
+   "rot": [
+    0.0,
+    350.5,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 134.6,
+   "period": 17.84,
+   "sway": 0.0,
+   "phase": 0.648
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden0_0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    23075.4,
+    22869.0,
+    11946.9
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden0_1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    23018.2,
+    23174.8,
+    11946.9
+   ],
+   "rot": [
+    0.0,
+    21.2,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden0_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    22854.5,
+    23439.2,
+    11946.9
+   ],
+   "rot": [
+    0.0,
+    42.4,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden0_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    22606.3,
+    23626.7,
+    11946.9
+   ],
+   "rot": [
+    0.0,
+    63.5,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden0_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    22307.1,
+    23711.8,
+    11946.9
+   ],
+   "rot": [
+    0.0,
+    84.7,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden0_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    21997.4,
+    23683.1,
+    11946.9
+   ],
+   "rot": [
+    0.0,
+    105.9,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden0_6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    21718.9,
+    23544.4,
+    11946.9
+   ],
+   "rot": [
+    0.0,
+    127.1,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden0_7",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    21509.4,
+    23314.6,
+    11946.9
+   ],
+   "rot": [
+    0.0,
+    148.2,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden0_8",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    21397.0,
+    23024.5,
+    11946.9
+   ],
+   "rot": [
+    0.0,
+    169.4,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden0_9",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    21397.0,
+    22713.5,
+    11946.9
+   ],
+   "rot": [
+    0.0,
+    190.6,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden0_10",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    21509.4,
+    22423.4,
+    11946.9
+   ],
+   "rot": [
+    0.0,
+    211.8,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden0_11",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    21718.9,
+    22193.6,
+    11946.9
+   ],
+   "rot": [
+    0.0,
+    232.9,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden0_12",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    21997.4,
+    22054.9,
+    11946.9
+   ],
+   "rot": [
+    0.0,
+    254.1,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden0_13",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    22307.1,
+    22026.2,
+    11946.9
+   ],
+   "rot": [
+    0.0,
+    275.3,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden0_14",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    22606.3,
+    22111.3,
+    11946.9
+   ],
+   "rot": [
+    0.0,
+    296.5,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden0_15",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    22854.5,
+    22298.8,
+    11946.9
+   ],
+   "rot": [
+    0.0,
+    317.6,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden0_16",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    23018.2,
+    22563.2,
+    11946.9
+   ],
+   "rot": [
+    0.0,
+    338.8,
+    0.0
+   ],
+   "scale": [
+    0.531,
+    0.531,
+    0.531
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    23154.6,
+    23023.5,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    9.5,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    23054.3,
+    23315.6,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    28.4,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    22864.6,
+    23559.4,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    47.4,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    22606.0,
+    23728.4,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    66.3,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    22306.5,
+    23804.2,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    85.3,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    21998.6,
+    23778.7,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    104.2,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    21715.7,
+    23654.6,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    123.2,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_7",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    21488.5,
+    23445.4,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    142.1,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_8",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    21341.4,
+    23173.7,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    161.1,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_9",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    21290.6,
+    22869.0,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    180.0,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_10",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    21341.4,
+    22564.3,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    198.9,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_11",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    21488.5,
+    22292.6,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    217.9,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_12",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    21715.7,
+    22083.4,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    236.8,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_13",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    21998.6,
+    21959.3,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    255.8,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_14",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    22306.5,
+    21933.8,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    274.7,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_15",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    22606.0,
+    22009.6,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    293.7,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_16",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    22864.6,
+    22178.6,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    312.6,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_17",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    23054.3,
+    22422.4,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    331.6,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandFarLeft_Garden1_18",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    23154.6,
+    22714.5,
+    11851.4
+   ],
+   "rot": [
+    0.0,
+    350.5,
+    0.0
+   ],
+   "scale": [
+    0.389,
+    0.389,
+    0.389
+   ],
+   "amp": 124.5,
+   "period": 19.74,
+   "sway": 0.0,
+   "phase": 0.04
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden0_0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -5779.0,
+    37152.0,
+    26053.7
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    0.923,
+    0.923
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden0_1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -5878.4,
+    37683.7,
+    26053.7
+   ],
+   "rot": [
+    0.0,
+    21.2,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    0.923,
+    0.923
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden0_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -6163.2,
+    38143.7,
+    26053.7
+   ],
+   "rot": [
+    0.0,
+    42.4,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    0.923,
+    0.923
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden0_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -6594.9,
+    38469.7,
+    26053.7
+   ],
+   "rot": [
+    0.0,
+    63.5,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    0.923,
+    0.923
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden0_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -7115.2,
+    38617.7,
+    26053.7
+   ],
+   "rot": [
+    0.0,
+    84.7,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    0.923,
+    0.923
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden0_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -7653.8,
+    38567.8,
+    26053.7
+   ],
+   "rot": [
+    0.0,
+    105.9,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    0.923,
+    0.923
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden0_6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -8138.1,
+    38326.7,
+    26053.7
+   ],
+   "rot": [
+    0.0,
+    127.1,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    0.923,
+    0.923
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden0_7",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -8502.5,
+    37926.9,
+    26053.7
+   ],
+   "rot": [
+    0.0,
+    148.2,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    0.923,
+    0.923
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden0_8",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -8697.9,
+    37422.5,
+    26053.7
+   ],
+   "rot": [
+    0.0,
+    169.4,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    0.923,
+    0.923
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden0_9",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -8697.9,
+    36881.5,
+    26053.7
+   ],
+   "rot": [
+    0.0,
+    190.6,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    0.923,
+    0.923
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden0_10",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -8502.5,
+    36377.1,
+    26053.7
+   ],
+   "rot": [
+    0.0,
+    211.8,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    0.923,
+    0.923
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden0_11",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -8138.1,
+    35977.3,
+    26053.7
+   ],
+   "rot": [
+    0.0,
+    232.9,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    0.923,
+    0.923
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden0_12",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -7653.8,
+    35736.2,
+    26053.7
+   ],
+   "rot": [
+    0.0,
+    254.1,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    0.923,
+    0.923
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden0_13",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -7115.2,
+    35686.3,
+    26053.7
+   ],
+   "rot": [
+    0.0,
+    275.3,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    0.923,
+    0.923
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden0_14",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -6594.9,
+    35834.3,
+    26053.7
+   ],
+   "rot": [
+    0.0,
+    296.5,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    0.923,
+    0.923
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden0_15",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -6163.2,
+    36160.3,
+    26053.7
+   ],
+   "rot": [
+    0.0,
+    317.6,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    0.923,
+    0.923
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden0_16",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -5878.4,
+    36620.3,
+    26053.7
+   ],
+   "rot": [
+    0.0,
+    338.8,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    0.923,
+    0.923
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -5641.3,
+    37420.6,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    9.5,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -5815.7,
+    37928.7,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    28.4,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -6145.7,
+    38352.7,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    47.4,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -6595.4,
+    38646.5,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    66.3,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_4",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -7116.2,
+    38778.4,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    85.3,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_5",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -7651.6,
+    38734.1,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    104.2,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_6",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -8143.6,
+    38518.3,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    123.2,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_7",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -8538.9,
+    38154.4,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    142.1,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_8",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -8794.6,
+    37681.9,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    161.1,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_9",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -8883.0,
+    37152.0,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    180.0,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_10",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -8794.6,
+    36622.1,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    198.9,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_11",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -8538.9,
+    36149.6,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    217.9,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_12",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -8143.6,
+    35785.7,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    236.8,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_13",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -7651.6,
+    35569.9,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    255.8,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_14",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -7116.2,
+    35525.6,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    274.7,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_15",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -6595.4,
+    35657.5,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    293.7,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_16",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -6145.7,
+    35951.3,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    312.6,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_17",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -5815.7,
+    36375.3,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    331.6,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Garden1_18",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -5641.3,
+    36883.4,
+    25887.5
+   ],
+   "rot": [
+    0.0,
+    350.5,
+    0.0
+   ],
+   "scale": [
+    0.677,
+    0.677,
+    0.677
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Fall0",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "material": "MI_V2_Water",
+   "loc": [
+    -7667.7,
+    35941.7,
+    23521.6
+   ],
+   "rot": [
+    0.0,
+    251.0,
+    0.0
+   ],
+   "scale": [
+    1.846,
+    2.04,
+    91.755
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Fall1",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "material": "MI_V2_Water",
+   "loc": [
+    -7667.7,
+    35941.7,
+    21394.1
+   ],
+   "rot": [
+    0.0,
+    251.0,
+    0.0
+   ],
+   "scale": [
+    1.329,
+    1.469,
+    81.56
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_Fall2",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "material": "MI_V2_Water",
+   "loc": [
+    -7667.7,
+    35941.7,
+    20014.1
+   ],
+   "rot": [
+    0.0,
+    251.0,
+    0.0
+   ],
+   "scale": [
+    0.923,
+    1.02,
+    61.17
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  },
+  {
+   "id": "SKY06_IslandHigh_FallCloud",
+   "mesh": "/Game/WonderlandV2/Sky/SM_cloud_cumulus_b.SM_cloud_cumulus_b",
+   "material": "MI_V2_Cloud",
+   "loc": [
+    -7667.7,
+    35941.7,
+    20112.9
+   ],
+   "rot": [
+    0.0,
+    251.0,
+    0.0
+   ],
+   "scale": [
+    0.338,
+    0.338,
+    0.338
+   ],
+   "amp": 165.9,
+   "period": 17.51,
+   "sway": 0.0,
+   "phase": 0.084
+  }
+ ]
+}
