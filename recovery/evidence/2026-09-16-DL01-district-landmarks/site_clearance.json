@@ -1,0 +1,475 @@
+{
+ "name": "780_sites",
+ "started": "2026-09-15 22:35:48",
+ "status": "done",
+ "sites": {
+  "RG02|700": {
+   "ground": 12.0,
+   "blockers": [
+    "CxCityNE_Rd000",
+    "CxCityNE_Rd001",
+    "RG02_LampPostWalkEndL",
+    "RG02_LampPostWalkEndR"
+   ],
+   "n": 4
+  },
+  "RG02|1000": {
+   "ground": 12.0,
+   "blockers": [
+    "CxCityNE_Rd000",
+    "CxCityNE_Rd001"
+   ],
+   "n": 2
+  },
+  "RG02|1300": {
+   "ground": 12.0,
+   "blockers": [
+    "CxCityNE_Rd000",
+    "CxCityNE_Rd001"
+   ],
+   "n": 2
+  },
+  "RG02|1700": {
+   "ground": 12.0,
+   "blockers": [
+    "CxCityNE_Rd000",
+    "CxCityNE_Rd001"
+   ],
+   "n": 2
+  },
+  "RG02|2100": {
+   "ground": 12.0,
+   "blockers": [
+    "CxCityNE_Rd000"
+   ],
+   "n": 1
+  },
+  "CQ02|700": {
+   "ground": -14.0,
+   "blockers": [
+    "CQ02_LampPostWalkEndL",
+    "CQ02_LampPostWalkEndR",
+    "CxCityE_B000_1_F0_Door",
+    "DPClockQuarter_Swag"
+   ],
+   "n": 4
+  },
+  "CQ02|1000": {
+   "ground": -14.0,
+   "blockers": [
+    "CQ02_LampPostWalkEndL",
+    "CxCityE_B000_1_F0_Door",
+    "CxCityE_Rd000",
+    "DPClockQuarter_Swag"
+   ],
+   "n": 4
+  },
+  "CQ02|1300": {
+   "ground": -14.0,
+   "blockers": [
+    "CxCityE_Rd000",
+    "DPClockQuarter_Swag"
+   ],
+   "n": 2
+  },
+  "CQ02|1700": {
+   "ground": -14.0,
+   "blockers": [
+    "CxCityE_Rd000"
+   ],
+   "n": 1
+  },
+  "CQ02|2100": {
+   "ground": -14.0,
+   "blockers": [
+    "CxCityE_Rd000"
+   ],
+   "n": 1
+  },
+  "CL02|700": {
+   "ground": 723.6,
+   "blockers": [
+    "CL02_LampPostWalkEndL",
+    "CL02_LampPostWalkEndR",
+    "CxCityNE_Rd006",
+    "CxCityNE_Rd007",
+    "CxCityNE_Rd008",
+    "DistrictTower_RoyalGardens"
+   ],
+   "n": 6
+  },
+  "CL02|1000": {
+   "ground": 723.6,
+   "blockers": [
+    "CxCityNE_Rd006",
+    "CxCityNE_Rd007",
+    "CxCityNE_Rd008",
+    "DistrictTower_RoyalGardens"
+   ],
+   "n": 4
+  },
+  "CL02|1300": {
+   "ground": 723.6,
+   "blockers": [
+    "CxCityNE_Rd006",
+    "CxCityNE_Rd007",
+    "CxCityNE_Rd008",
+    "DistrictTower_RoyalGardens"
+   ],
+   "n": 4
+  },
+  "CL02|1700": {
+   "ground": -14.0,
+   "blockers": [
+    "CxCityNE_Rd007",
+    "CxCityNE_Rd008",
+    "DistrictTower_RoyalGardens"
+   ],
+   "n": 3
+  },
+  "CL02|2100": {
+   "ground": -14.0,
+   "blockers": [
+    "CxCityNE_Rd007",
+    "CxCityNE_Rd008",
+    "DistrictTower_RoyalGardens"
+   ],
+   "n": 3
+  },
+  "EQ02|700": {
+   "ground": 12.0,
+   "blockers": [
+    "EQ02_LampPostWalkEndL",
+    "EQ02_LampPostWalkEndR",
+    "FillEMC_B1_1_2_F0_Door",
+    "FillEMC_B1_1_2_F1_Door",
+    "FillEMC_B1_1_2_F2_Door",
+    "FillEMC_Q1_1Floor",
+    "FillEMC_StC1_005",
+    "FillEMC_StC1_006",
+    "FillEMC_StC1_007"
+   ],
+   "n": 9
+  },
+  "EQ02|1000": {
+   "ground": 12.0,
+   "blockers": [
+    "DPEastReach_Gatehouse",
+    "EQ02_LampPostWalkEndL",
+    "FillEMC_Q0_1Floor",
+    "FillEMC_Q1_1Floor",
+    "FillEMC_StA2_003",
+    "FillEMC_StA2_004",
+    "FillEMC_StC1_005",
+    "FillEMC_StC1_006",
+    "FillEMC_StC1_007"
+   ],
+   "n": 9
+  },
+  "EQ02|1300": {
+   "ground": 12.0,
+   "blockers": [
+    "DPEastReach_Gatehouse",
+    "FillEMC_Q0_1Floor",
+    "FillEMC_Q1_1Floor",
+    "FillEMC_StA2_003",
+    "FillEMC_StA2_004",
+    "FillEMC_StA2_005",
+    "FillEMC_StC1_006",
+    "FillEMC_StC1_007"
+   ],
+   "n": 8
+  },
+  "EQ02|1700": {
+   "ground": 12.0,
+   "blockers": [
+    "DPEastReach_Gatehouse",
+    "FillEMC_Q0_1Floor",
+    "FillEMC_Q1_1Floor",
+    "FillEMC_StA2_003",
+    "FillEMC_StA2_004",
+    "FillEMC_StC1_006",
+    "FillEMC_StC1_007"
+   ],
+   "n": 7
+  },
+  "EQ02|2100": {
+   "ground": 12.0,
+   "blockers": [
+    "DPEastReach_Gatehouse",
+    "FillEMC_Q0_1Floor",
+    "FillEMC_StA2_003",
+    "FillEMC_StA2_004",
+    "FillEMC_StC1_006",
+    "FillEMC_StC1_007"
+   ],
+   "n": 6
+  },
+  "WW02|700": {
+   "ground": -14.0,
+   "blockers": [
+    "WW02_LampPostWalkEndL",
+    "WW02_LampPostWalkEndR"
+   ],
+   "n": 2
+  },
+  "WW02|1000": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "WW02|1300": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "WW02|1700": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "WW02|2100": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "FO02|700": {
+   "ground": -14.0,
+   "blockers": [
+    "FO02_LampPostWalkEndL",
+    "FO02_LampPostWalkEndR"
+   ],
+   "n": 2
+  },
+  "FO02|1000": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "FO02|1300": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "FO02|1700": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "FO02|2100": {
+   "ground": -14.0,
+   "blockers": [
+    "South_ELane08"
+   ],
+   "n": 1
+  },
+  "ER02|700": {
+   "ground": -14.0,
+   "blockers": [
+    "ER02_LampPostWalkEndL",
+    "ER02_LampPostWalkEndR"
+   ],
+   "n": 2
+  },
+  "ER02|1000": {
+   "ground": -14.0,
+   "blockers": [
+    "ER02_LampPostWalkEndL"
+   ],
+   "n": 1
+  },
+  "ER02|1300": {
+   "ground": -14.0,
+   "blockers": [
+    "DPEastReach_Cloister"
+   ],
+   "n": 1
+  },
+  "ER02|1700": {
+   "ground": -14.0,
+   "blockers": [
+    "DPEastReach_Cloister"
+   ],
+   "n": 1
+  },
+  "ER02|2100": {
+   "ground": -14.0,
+   "blockers": [
+    "DPEastReach_Cloister"
+   ],
+   "n": 1
+  },
+  "TC02|700": {
+   "ground": -14.0,
+   "blockers": [
+    "LMTeaTerraces_Teapot",
+    "TC02_LampPostWalkEndL",
+    "TC02_LampPostWalkEndR"
+   ],
+   "n": 3
+  },
+  "TC02|1000": {
+   "ground": -14.0,
+   "blockers": [
+    "LMTeaTerraces_Teapot"
+   ],
+   "n": 1
+  },
+  "TC02|1300": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "TC02|1700": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "TC02|2100": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "CK02|700": {
+   "ground": -14.0,
+   "blockers": [
+    "CK02_LampPostWalkEndL",
+    "CK02_LampPostWalkEndR"
+   ],
+   "n": 2
+  },
+  "CK02|1000": {
+   "ground": -14.0,
+   "blockers": [
+    "CK02_LampPostWalkEndR"
+   ],
+   "n": 1
+  },
+  "CK02|1300": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "CK02|1700": {
+   "ground": -14.0,
+   "blockers": [
+    "LMGatekeeperFields_Key"
+   ],
+   "n": 1
+  },
+  "CK02|2100": {
+   "ground": -14.0,
+   "blockers": [
+    "LMGatekeeperFields_Key"
+   ],
+   "n": 1
+  },
+  "LH02|700": {
+   "ground": -14.0,
+   "blockers": [
+    "CxCityWE_Rd007",
+    "CxCityWE_Rd008",
+    "LH02_LampPostWalkEndL",
+    "LH02_LampPostWalkEndR",
+    "LMLanternHamlets_Lantern10"
+   ],
+   "n": 5
+  },
+  "LH02|1000": {
+   "ground": 12.0,
+   "blockers": [
+    "CxCityWE_Rd007",
+    "CxCityWE_Rd008",
+    "CxCityWE_Rd009",
+    "LH02_LampPostWalkEndL",
+    "LMLanternHamlets_Lantern10"
+   ],
+   "n": 5
+  },
+  "LH02|1300": {
+   "ground": 12.0,
+   "blockers": [
+    "CxCityWE_Rd007",
+    "CxCityWE_Rd008",
+    "CxCityWE_Rd009"
+   ],
+   "n": 3
+  },
+  "LH02|1700": {
+   "ground": 12.0,
+   "blockers": [
+    "CxCityWE_Rd007",
+    "CxCityWE_Rd008",
+    "CxCityWE_Rd009"
+   ],
+   "n": 3
+  },
+  "LH02|2100": {
+   "ground": 12.0,
+   "blockers": [
+    "CxCityWE_Rd008",
+    "CxCityWE_Rd009"
+   ],
+   "n": 2
+  },
+  "SM02|700": {
+   "ground": -14.0,
+   "blockers": [
+    "SM02_LampPostWalkEndL",
+    "SM02_LampPostWalkEndR"
+   ],
+   "n": 2
+  },
+  "SM02|1000": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "SM02|1300": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "SM02|1700": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "SM02|2100": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "WG02|700": {
+   "ground": -14.0,
+   "blockers": [
+    "WG02_LampPostWalkEndL",
+    "WG02_LampPostWalkEndR"
+   ],
+   "n": 2
+  },
+  "WG02|1000": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "WG02|1300": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "WG02|1700": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  },
+  "WG02|2100": {
+   "ground": -14.0,
+   "blockers": [],
+   "n": 0
+  }
+ },
+ "finished": "2026-09-15 22:35:49",
+ "seconds": 0.67,
+ "log": ""
+}
