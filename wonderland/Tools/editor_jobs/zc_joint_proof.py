@@ -462,7 +462,13 @@ def job():
             # That frame PASSED the composition check, because both subjects projected inside it -- a point
             # projects perfectly well through a mushroom. It is the beam lesson in a third costume: "in
             # frame" and "can be seen" are different assertions, and only looking settles the second.
-            for tag, dyaw, pitch, arm in (("near", 18.0, -8.0, 300.0), ("step", -22.0, -12.0, 430.0)):
+            #
+            # AND THE ARM STAYS AT THE LENGTH THE GAME ALREADY USES. Shortening it to 300 for a closer read
+            # buried the camera in a stone step; lengthening it to 720 buried it in the mushroom. The very
+            # first version of this portrait, at the stock 420 and a shallow pitch, framed the Dog cleanly --
+            # its ONLY fault was the yaw. Three rounds of photographing scenery to re-learn that the rig the
+            # game ships is the rig that works in the world the game ships.
+            for tag, dyaw, pitch, arm in (("near", 15.0, -14.0, 420.0), ("step", -25.0, -22.0, 500.0)):
                 if boom is not None:
                     boom.set_editor_property("target_arm_length", arm)
 
