@@ -3,7 +3,7 @@
 The twelve items are from `PRODUCTION_ORDER.md`. An item with no measurement is **not met**. Evidence lives in
 `C:/dev/iwonder/recovery/evidence/<date>-*`. Update this file whenever a measurement changes an item's status.
 
-**Overall (2026-09-15): the corridor and every offered arrival are authored.** Items 3, 4, 7, 9, 11 and 12 are met;
+**Overall (2026-09-16): the corridor and every offered arrival are authored, and every arrival walks on.** Items 3, 4, 7, 9, 11 and 12 are met;
 1, 2, 5, 6, 8 are partly met and 10 (performance) is the founder's call. The hero corridor is strong and the map's
 17 places all arrive on an authored court; what is left is depth behind those courts, the skyline and the islands.
 
@@ -20,14 +20,15 @@ The twelve items are from `PRODUCTION_ORDER.md`. An item with no measurement is 
 | 9 | HUD / terminal / map reliable | **Met** | ui_tests 34/34 after the HUD rebuild (`2026-09-13-HUD-readouts`): usage HUD preview at 100%, Ctrl+T terminal, M map, teleport, PIE restart. |
 | 10 | Performance acceptable on the founder's laptop | **Partly -- playable, not comfortable** | PERF01 (evidence 2026-09-15-PERF01): the founder's own 2.5 h of play in PIE -- median 26.1 fps, p10 ~25, flat across places. Standalone game at 1904x928 -- median 30-40 fps (identical runs vary with laptop power/thermal state), GPU-bound. Hardware vs software Lumen, volumetric clouds and fog: no effect beyond noise. r.ScreenPercentage 75 cuts GPU time 25-35% -- a crispness trade for the founder to decide; not applied. 2026-09-15, after today's twelve arrival courts, the island gardens and the ashlar swap: beta_tour with the editor in the foreground measured 22-46 fps across all 17 places (median about 34), and the island props themselves cost 0.55 ms (35.8 vs 36.5 fps). So the additions have not moved the picture; the open question is still the founder's call on screen percentage and a standalone re-measurement. |
 | 11 | No grey / empty / unfinished district dominates | **Met at every offered arrival (17 of 17)** | 2026-09-15: all 17 destinations now have an authored arrival court (RG01, CQ01, CL01, EQ01, WW01, FO01, ER01, TC01, CK01, LH01, SM01, WG01 with arrival_court.py, plus the five already at the bar). Each court is plaza slabs in courses with a warm edge band, a gold rim, a gold-and-rose medallion, lamps, forge flower-run beds and a rose-climbed stone arch framing what that district actually has; seven arrivals were turned to face a landmark and two anchors were moved off a blocked spot and off a bridge (probe 571). beta_tour 2026-09-15 (evidence 2026-09-15-DISTRICTS-FINAL): 17 of 17 arrive on their anchor at 0 cm, none is a trap, every landing walks 2.7-5.5 m free in all four directions, 22-46 fps foreground. Beyond the courts the districts are still generator content. |
-| 12 | The beta route gives enough world to explore | **Met** | The route is the Golden Arrival corridor (rear gate to palace, walked both ways, 22 legs 0 stuck after the arch passes) plus 17 offered places, each with an authored arrival court and free ground round it (beta_tour 2026-09-15). What it does not yet have is authored depth behind each court: the districts' own streets and gardens are generator content. |
+| 12 | The beta route gives enough world to explore | **Met, and each place now goes somewhere** | The route is the Golden Arrival corridor (rear gate to palace, walked both ways, 22 legs 0 stuck after the arch passes) plus 17 offered places, each with an authored arrival court and free ground round it (beta_tour 2026-09-15). DW01 (2026-09-16, evidence `2026-09-16-DW01-district-walks`) adds the next twenty metres to all twelve district courts: through the court's rose arch, a 4 m paved band with a warm kerb either side, a gold line each side, flower beds down both borders, a lamp pair halfway and at the end, and a round overlook with a gold rim where it stops -- 7 to 24 m of walk, the bearing swept +/-75 degrees off the arrival yaw for the longest run no census solid stands in (straight ahead is blocked in eleven of the twelve). The heights are measured, not assumed: `probe_ground_editor.py` traced the ground under all twelve (426 points) and each walk is cut into runs laid on it -- ground + 14.0 over grass, ground + 0.5 over hard paving -- with a kerb step where runs differ, which is what caught paving hanging 13-20 cm in the air at five courts and buried under a block floor at two. Every terminus checked clear (`probe_walk_clear.py`): none is inside a building, none is a trap. Beyond the overlooks the districts are still generator content. |
 
 ## Biggest gaps, in order
 
-1. **District arrivals (items 11, 12).** Either author each offered destination's arrival to the Golden
-   Arrival bar (a composed court: paving with borders, planting, a framing gate or arch, palace fronts behind,
-   a landmark in view), or withhold it from the map until it is. The founder's standing rule: do not expose
-   unfinished areas as destinations.
+1. **District depth (items 11, 12).** Done: every offered destination arrives on a composed court (RG01-WG01)
+   and walks on from it to an overlook (DW01). Next: what the overlook looks at. Eight of the twelve now end in
+   open district ground with nothing authored in view, so the walk arrives somewhere and then stops again --
+   the overlooks want a reason to be there (a landmark at district scale: the teapot, the key, a topiary figure,
+   a fountain), which is also what item 8 is missing.
 2. **Performance (item 10).** Measure standalone, then cheapest wins first (Lumen software vs hardware RT,
    screen percentage, shadow and fog cost, draw count of 18k always-loaded actors).
 3. **Palace city in the midground (items 2, 8).** Place the palace family where it fills ground-level views.
