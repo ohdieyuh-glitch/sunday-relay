@@ -1,6 +1,6 @@
 {
   "checked_assets": 121,
-  "failures": 2,
+  "failures": 0,
   "material_check": "59 MI_V2_* names parsed from materials_v2.py",
   "per_asset": {
     "WL_Tower_Base_Battered": [],
@@ -102,10 +102,7 @@
     "WL_Object_PocketClock": [],
     "WL_Object_TeapotPavilion": [],
     "WL_Object_TeaCup": [],
-    "WL_Object_TeaSaucer": [
-      "WL_Object_TeaSaucer: footing is at z = 0.050 m, not 0, and it declares no excavation (the kit's ground-datum rule)",
-      "WL_Object_TeaSaucer: socket 'top' is kind 'ground', whose names are bottom -- add it to kit.SOCKET_NAMES if it is a real new join"
-    ],
+    "WL_Object_TeaSaucer": [],
     "WL_Palace_Wing": [],
     "WL_Palace_Pavilion": [],
     "WL_Palace_Dome_Grand": [],
@@ -659,7 +656,7 @@
       "veg_anchor": "756f518f82a7439a9fd323970270071b14ce84f95ce401e3bc3725adace01fb7"
     },
     "WL_Object_TeaSaucer": {
-      "enamel": "d7e61e2587e7ab4b49d23f874fb953d31a0663f94820c8320ddf04f6dd06cc58",
+      "enamel": "0fb533233ad1f4d684d095f390a2d854702d76222db05c00d40e9327290f4362",
       "gold": "b3aa46d58e90f54247a368fba6816d957600b71c1098b20859f730e09ca4b5ae"
     },
     "WL_Palace_Wing": {

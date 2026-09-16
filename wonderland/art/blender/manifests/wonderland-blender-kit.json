@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-16T19:57:07+00:00",
+  "generated_utc": "2026-09-16T19:58:38+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -35109,11 +35109,11 @@
         "manifest": "unreal units (cm)",
         "uu_per_metre": 100.0
       },
-      "height_uu": 61.0,
+      "height_uu": 66.0,
       "bbox_min_uu": [
         -362.0,
         -362.0,
-        5.0
+        0.0
       ],
       "bbox_max_uu": [
         362.0,
@@ -35123,7 +35123,7 @@
       "size_uu": [
         724.0,
         724.0,
-        61.0
+        66.0
       ],
       "style": {
         "slender_broad": 1.0,
@@ -35134,17 +35134,17 @@
         "garden_urban": 0.3,
         "ceremonial_residential": 0.7
       },
-      "base_z_uu": 5.0,
+      "base_z_uu": 0.0,
       "profile_uu": [
         132.0,
         120.0,
         260.0,
+        136.0,
         140.0,
         252.0,
         252.0,
-        252.0,
         330.0,
-        318.0,
+        330.0,
         358.0,
         355.0,
         362.0
@@ -35164,15 +35164,7 @@
           "z_uu": 0.0,
           "radius_uu": 130.0,
           "rung": null,
-          "note": ""
-        },
-        {
-          "name": "top",
-          "kind": "ground",
-          "z_uu": 26.0,
-          "radius_uu": 120.0,
-          "rung": null,
-          "note": "a WL_Object_TeaCup stands in the well"
+          "note": "a WL_Object_TeaCup stands in its well, 0.26 m up"
         }
       ],
       "parts": {
@@ -35192,7 +35184,7 @@
           "bbox_min_uu": [
             -355.0,
             -355.0,
-            5.0
+            0.0
           ],
           "bbox_max_uu": [
             355.0,
@@ -35202,10 +35194,10 @@
           "size_uu": [
             710.0,
             710.0,
-            55.0
+            60.0
           ],
-          "height_m": 0.55,
-          "base_z_uu": 5.0,
+          "height_m": 0.6,
+          "base_z_uu": 0.0,
           "normals": {
             "faces": 704,
             "shells": 1,
@@ -35218,13 +35210,13 @@
             132.0,
             120.0,
             260.0,
+            260.0,
             136.0,
             122.0,
             252.0,
             252.0,
-            252.0,
             330.0,
-            318.0,
+            330.0,
             318.0,
             355.0
           ],
@@ -35239,7 +35231,7 @@
             "meshes": 1,
             "min_yup": [
               -3.549999952316284,
-              0.05000000074505806,
+              0,
               -3.549999952316284
             ],
             "max_yup": [
@@ -35247,11 +35239,11 @@
               0.6000000238418579,
               3.549999952316284
             ],
-            "bytes": 29504
+            "bytes": 29484
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": 5.0,
+            "stored_z_min": 0.0,
             "stored_z_max": 60.000003814697266
           }
         },

@@ -255,7 +255,7 @@ def object_tea_saucer(f):
     en = f.part("enamel")
     g = f.part("gold")
     SEG = 64
-    en.lathe([(0.0, 0.12), (1.20, 0.12), (1.32, 0.05), (2.60, 0.18), (3.30, 0.42), (3.55, 0.56),
+    en.lathe([(0.0, 0.08), (1.20, 0.08), (1.32, 0.0), (2.60, 0.14), (3.30, 0.42), (3.55, 0.56),
               (3.48, 0.60), (3.18, 0.50), (2.52, 0.30), (1.36, 0.22), (1.22, 0.26), (0.0, 0.26)],
              segments=SEG, smooth=True, cap_bottom=True, cap_top=False)
     g.lathe([(3.40, 0.56), (3.58, 0.54), (3.62, 0.62), (3.46, 0.66)], segments=SEG, smooth=True, cap_bottom=False,
@@ -265,7 +265,7 @@ def object_tea_saucer(f):
     return K.ModuleSpec(
         "WL_Object_TeaSaucer", "tea_saucer", "prop", "detail",
         f.emit("WL_Object_TeaSaucer"),
-        [K.Socket("bottom", 0.0, 1.3, "ground"), K.Socket("top", 0.26, 1.2, "ground", "a WL_Object_TeaCup stands in the well")],
+        [K.Socket("bottom", 0.0, 1.3, "ground", "a WL_Object_TeaCup stands in its well, 0.26 m up")],
         districts=("tea_terrace",),
         note="7.2 m porcelain saucer: shallow dish, well, gold well line and gold edge",
         params={"radius_m": 3.62},

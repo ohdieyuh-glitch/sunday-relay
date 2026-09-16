@@ -8635,7 +8635,7 @@
       "data_layer": "V2_Props",
       "nanite_requested": false,
       "collision_requested": true,
-      "height_uu": 61.0,
+      "height_uu": 66.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
       "style": {
@@ -8654,15 +8654,7 @@
           "z_uu": 0.0,
           "radius_uu": 130.0,
           "rung": null,
-          "note": ""
-        },
-        {
-          "name": "top",
-          "kind": "ground",
-          "z_uu": 26.0,
-          "radius_uu": 120.0,
-          "rung": null,
-          "note": "a WL_Object_TeaCup stands in the well"
+          "note": "a WL_Object_TeaCup stands in its well, 0.26 m up"
         }
       ],
       "parts": [
