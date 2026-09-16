@@ -333,7 +333,7 @@ describe('C5 — swap the provider, keep the semantics', () => {
     expect(shapes.generic).toEqual(shapes['claude-code']);
     expect(shapes['claude-code']).toEqual({
       status: 'SUCCEEDED', evidence: ['DIFF:PASSED', 'TEST:PASSED'], channels: [],
-      effects: ['build-1:base', 'build-1:diff', 'build-1:test'],
+      effects: ['build-1:base', 'build-1:status', 'build-1:diff', 'build-1:test'],
     });
   });
 
@@ -355,5 +355,66 @@ describe('C5 — swap the provider, keep the semantics', () => {
     }
     expect(new Set(dispositions.map((item) => JSON.stringify(item))).size).toBe(1);
     expect(dispositions[0]).toEqual({ code: 'RATE_LIMIT', retryable: true, failure: 'RATE_LIMITED' });
+  });
+});
+
+/* --------------------------------------------- the workspace, honestly */
+
+describe('C6 — what the executor saw is what the record says', () => {
+  const MARKER = 'JULIUS_WORKER_PARTICIPATION_V1';
+
+  it('new files are part of the change set and of the diff the reviewer reads', async () => {
+    const provider = createScriptedCodingAgentProvider({ script: [{ kind: 'completed' }] });
+    const shell = createFakeExecutorShell({ status: [' M src/slug.ts', '?? src/slug.test.ts'], untrackedDiff: 'diff --git a/src/slug.test.ts\n+new test\n' });
+    const { adapter } = adapterWith(provider, shell);
+    const result = await adapter.dispatch(DISPATCH) as JuliusProviderResult & { implementation?: { workspace: { changes: unknown[] } } };
+    expect(result.implementation?.workspace).toEqual({
+      captured: true, truncated: false,
+      changes: [{ path: 'src/slug.ts', change: 'MODIFIED' }, { path: 'src/slug.test.ts', change: 'UNTRACKED' }],
+    });
+    const diffCommand = shell.invocations.find((effect) => effect.invocationKey === 'build-1:diff')!.command;
+    expect(diffCommand, 'untracked files are rendered into the diff').toContain('git ls-files --others --exclude-standard');
+    expect(shell.invocations.find((effect) => effect.invocationKey === 'build-1:status')!.command).toBe('git status --porcelain=v1 --untracked-files=all -z');
+    expect((result.evidence as { type: string; status: string; safeSummary: string }[])[0]).toMatchObject({ type: 'DIFF', status: 'PASSED' });
+    expect((result.evidence as { safeSummary: string }[])[0]!.safeSummary).toContain('2 changed path(s), 1 new');
+  });
+
+  it('a session that changed nothing is not PASSED evidence of a change', async () => {
+    const provider = createScriptedCodingAgentProvider({ script: [{ kind: 'completed' }] });
+    const { adapter } = adapterWith(provider, createFakeExecutorShell({ status: [] }));
+    const result = await adapter.dispatch(DISPATCH);
+    const diff = (result.evidence as { type: string; status: string; safeSummary: string }[])[0]!;
+    expect(diff.status).toBe('INCONCLUSIVE');
+    expect(diff.safeSummary).toContain('observed no change');
+  });
+
+  it('a change set the executor could not read is recorded as uncaptured, never as an empty one', async () => {
+    const provider = createScriptedCodingAgentProvider({ script: [{ kind: 'completed' }] });
+    const { adapter } = adapterWith(provider, createFakeExecutorShell({ statusFails: true }));
+    const result = await adapter.dispatch(DISPATCH) as JuliusProviderResult & { implementation?: { workspace: { captured: boolean } } };
+    expect(result.implementation?.workspace.captured).toBe(false);
+    expect((result.evidence as { status: string }[])[0]!.status).toBe('INCONCLUSIVE');
+  });
+
+  it('a diff that could not be captured leaves no stale diff behind for the reviewer', async () => {
+    const provider = createScriptedCodingAgentProvider({ script: [{ kind: 'completed' }] });
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), PLAN);
+    artifacts.put('diff:run-live', 'THE PREVIOUS ROUND\'S DIFF');
+    const adapter = createJuliusCodingAgentAdapter({
+      worker: WORKER, contexts: { snapshotFor: () => snapshot() }, artifacts, projectId: 'prj-live',
+      workspacePath: '/workspace/mission', testCommand: 'npm test', shell: createFakeExecutorShell({ diffFails: true }), provider,
+    });
+    await adapter.dispatch(DISPATCH);
+    expect(artifacts.get('diff:run-live'), 'absent, so the review refuses instead of judging old work').toBeNull();
+  });
+
+  it('the coder\'s report is handed to Julius exactly as written — Julius, not the adapter, refuses what it must', async () => {
+    const report = { outcome: 'COMPLETED', summary: 'Mission complete.', filesTouched: [], testsRun: [], remainingUncertainty: [], blockedReason: null };
+    const provider = createScriptedCodingAgentProvider({ script: [{ kind: 'completed', finalText: `Done.\n${MARKER}\n${JSON.stringify({ report })}` }] });
+    const { adapter } = adapterWith(provider);
+    const result = await adapter.dispatch(DISPATCH) as JuliusProviderResult & { implementation?: { report?: unknown; providerKind: string } };
+    expect(result.implementation?.report).toEqual(report);
+    expect(result.implementation?.providerKind).toBe('generic-scripted');
   });
 });

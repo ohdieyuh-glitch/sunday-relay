@@ -163,6 +163,9 @@ export function createFakeExecutorShell(input: {
   /** Untracked-file content as the no-index diff would print it. */
   readonly untrackedDiff?: string;
   readonly testExitCode?: number;
+  /** The change-set or diff capture fails with a non-zero exit, as a broken git would. */
+  readonly statusFails?: boolean;
+  readonly diffFails?: boolean;
   /** Throw from this step, to model an executor refusal after a paid session. */
   readonly refuse?: 'diff' | 'test' | 'status';
   readonly refusal?: () => Error;
@@ -180,8 +183,12 @@ export function createFakeExecutorShell(input: {
       const step = effect.invocationKey.split(':').pop();
       if (input.refuse !== undefined && step === input.refuse) throw (input.refusal ?? (() => new Error('refused')))();
       if (step === 'base') return answer(effect, 'abc123def\n');
+      if (step === 'diff' && input.diffFails === true) return answer(effect, '', 128);
       if (step === 'diff') return answer(effect, `${input.diff ?? 'diff --git a/src/slug.ts b/src/slug.ts\n+export const slug = 1;\n'}${input.untrackedDiff ?? ''}`);
-      if (step === 'status') return answer(effect, (input.status ?? [' M src/slug.ts']).join('\n'));
+      if (step === 'status') {
+        if (input.statusFails === true) return answer(effect, '', 128);
+        return answer(effect, (input.status ?? [' M src/slug.ts']).map((line) => `${line}${String.fromCharCode(0)}`).join(''));
+      }
       if (step === 'test') return answer(effect, 'tests ran', input.testExitCode ?? 0);
       return answer(effect, '');
     },
