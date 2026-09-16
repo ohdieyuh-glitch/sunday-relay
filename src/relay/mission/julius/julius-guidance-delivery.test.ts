@@ -185,10 +185,15 @@ describe('A — issued guidance lands on the continuation that is waiting for it
 
   it('4. and says so as NULL rather than absent when nothing was waiting', async () => {
     /**
-     * THE SEGMENT CEILING IS REACHED, so the guidance task is created and the
-     * continuation is NOT. The architect then answers a question no worker is
+     * THE GUIDANCE TASK EXISTS AND ITS CONTINUATION DOES NOT. A pause is several
+     * writes; a process that dies after the guidance task is written and before
+     * the continuation is leaves the architect answering a question no worker is
      * waiting on — advice nobody can read, which is a fact about the run. A
      * MISSING field would be a third state a reader cannot tell from either.
+     *
+     * (This used to be reached through the segment ceiling, which minted the
+     * guidance task before checking it. The ceiling is now checked before
+     * anything is bought, so the crash is the honest way to reach the state.)
      */
     const harness = build({
       coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
@@ -196,9 +201,25 @@ describe('A — issued guidance lands on the continuation that is waiting for it
         { kind: 'succeed', evidence: PLAN_EVIDENCE },
         { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
       ],
-      maxCoderSegments: 0,
     });
-    await drain(harness);
+    const addTask = harness.store.addTask.bind(harness.store);
+    let crashed = false;
+    (harness.store as { addTask: typeof addTask }).addTask = async (input) => {
+      if (!crashed && input.commandId.startsWith('segment:')) {
+        crashed = true;
+        throw new Error('process died between the guidance task and its continuation');
+      }
+      return addTask(input);
+    };
+    for (let index = 0; index < 24; index += 1) {
+      let report;
+      try { report = await harness.loop.tick(scope); } catch { continue; }
+      if (report.claimed === 0) {
+        const advance = await harness.loop.advanceRun('run-1', 'prj-1');
+        if (advance === null || (!advance.changed && advance.resumedVerifications === 0)) break;
+      }
+    }
+    expect(crashed, 'the crash window was reached').toBe(true);
 
     const issued = factsOf(harness, 'guidance.issued');
     // NOT VACUOUS. A loop over no rows would pass whatever the field did.
