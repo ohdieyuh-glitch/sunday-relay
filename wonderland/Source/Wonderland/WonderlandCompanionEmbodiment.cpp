@@ -232,7 +232,29 @@ void AWonderlandCompanionEmbodiment::SetFormation(EWonderlandCompanionFormation 
 	ContractActor = Contract;
 	if (Formation != InFormation)
 	{
+		const EWonderlandCompanionFormation Previous = Formation;
 		Formation = InFormation;
+		// HOME ACROSS THE DOG? Each companion clears the verification beam on the side it is already on, which is not
+		// always the side it follows on; flying straight home, both then crossed through the Dog and through each other
+		// in the completion shot (Scenario D film, 2026-09-16: 123 uu apart, 121 from the Dog). So a companion that ends
+		// a mission flight on the wrong side of the Dog is routed round it -- see RouteHome.
+		bRoutingHome = false;
+		const APlayerController* RouteController = FollowController.Get();
+		const APawn* RoutePawn = RouteController != nullptr ? RouteController->GetPawn() : nullptr;
+		if (Formation == EWonderlandCompanionFormation::Follow && Previous != EWonderlandCompanionFormation::Follow
+			&& RoutePawn != nullptr && GetWorld() != nullptr)
+		{
+			const FRotator Heading(0.0, RoutePawn->GetActorRotation().Yaw, 0.0);
+			const double Across = FVector::DotProduct(GetActorLocation() - RoutePawn->GetActorLocation(), Heading.RotateVector(FVector::RightVector));
+			const double HomeSide = FollowOffset.Y >= 0.0 ? 1.0 : -1.0;
+			bRoutingHome = Across * HomeSide < 0.0;
+			RouteStartedAt = static_cast<float>(GetWorld()->GetTimeSeconds());
+			if (bRoutingHome)
+			{
+				UE_LOG(LogWonderlandCompanion, Log, TEXT("WLCOMPANION %s goes home round the %s of the Dog"),
+					*DisplayName, HomeSide > 0.0 ? TEXT("front") : TEXT("back"));
+			}
+		}
 		// Spread around a shared circle rather than stacking: two companions in the same place is one
 		// companion with a shadow. The phase is per-companion and constant for the stage.
 		FormationPhase = Count > 0 ? static_cast<float>(Index) / static_cast<float>(Count) : 0.0f;
@@ -320,6 +342,32 @@ FVector AWonderlandCompanionEmbodiment::ContributionOrigin() const
 	return GetActorLocation() + FVector(0.0, 0.0, BodyClearanceHeightUU * FMath::Max(FigureScale, 0.05f));
 }
 
+FVector AWonderlandCompanionEmbodiment::RouteHome(const APawn* Pawn, const FVector& FollowTarget, float Now)
+{
+	// THE WAY HOME, ROUND THE DOG. The companion that follows on the Dog's right passes in front of it, the one on the
+	// left behind it: when both change sides at once they cross HomeRouteReachUU in front and behind, never meeting, and
+	// neither flies through the Dog. First out to the pass on the side it is on, then across it, then home as usual once
+	// it is well out on its own side -- or after five seconds, whatever happened (a Dog that ran off, a teleport).
+	const FRotator Heading(0.0, Pawn->GetActorRotation().Yaw, 0.0);
+	const FVector Forward = Heading.RotateVector(FVector::ForwardVector);
+	const FVector Right = Heading.RotateVector(FVector::RightVector);
+	const FVector FromDog = GetActorLocation() - Pawn->GetActorLocation();
+	const double Along = FVector::DotProduct(FromDog, Forward);
+	const double Across = FVector::DotProduct(FromDog, Right);
+	const double HomeSide = FollowOffset.Y >= 0.0 ? 1.0 : -1.0;
+	if (Formation != EWonderlandCompanionFormation::Follow || Across * HomeSide > HomeRouteReachUU * 0.55
+		|| Now - RouteStartedAt > 5.0f)
+	{
+		bRoutingHome = false;
+		return FollowTarget;
+	}
+	const double PassAlong = HomeSide * HomeRouteReachUU;
+	const bool bAtThePass = FMath::Abs(Along - PassAlong) < HomeRouteReachUU * 0.35;
+	const double Side = bAtThePass ? HomeSide : (Across >= 0.0 ? 1.0 : -1.0);
+	return Pawn->GetActorLocation() + Forward * PassAlong + Right * (Side * HomeRouteReachUU)
+		+ FVector(0.0, 0.0, FollowTarget.Z - Pawn->GetActorLocation().Z);
+}
+
 FVector AWonderlandCompanionEmbodiment::DesiredLocation(const APawn* Pawn) const
 {
 	const AActor* Contract = ContractActor.Get();
@@ -390,6 +438,10 @@ void AWonderlandCompanionEmbodiment::Tick(float DeltaSeconds)
 	if (Pawn != nullptr)
 	{
 		FVector Target = DesiredLocation(Pawn);
+		if (bRoutingHome)
+		{
+			Target = RouteHome(Pawn, Target, static_cast<float>(World->GetTimeSeconds()));
+		}
 		// OUT OF THE WALLS. Swept from the Dog's chest to where the companion's body would float, on the camera
 		// channel -- the same geometry that stops the follow camera -- so beside a wall or down a narrow lane the
 		// companion draws in toward the Dog instead of hovering inside the stone. The Dog itself never blocks.
