@@ -246,12 +246,31 @@ void AWonderlandCompanionEmbodiment::SetFormation(EWonderlandCompanionFormation 
 
 bool AWonderlandCompanionEmbodiment::ChooseFlank(const AActor* Contract) const
 {
-	// ON ITS OWN FOLLOWING SIDE. The flank used to be whichever side of the beam this companion happened to be further
-	// toward when verification began; when that was not the side it follows the Dog on, completion sent both companions
-	// home across each other and through the Dog (Scenario D film, 2026-09-16: 123 uu apart, 121 from the Dog, in the
-	// completion shot). Flanking on the follow side, the way home is straight in. The two follow sides are opposite, so
-	// the flanks still are; a companion that starts verification on the far side passes over the beam at orbit height.
-	return FollowOffset.Y >= 0.0;
+	// Right of the beam when this companion is further right than the other one; each on its own side when there is
+	// no other. Both decide on the same frame from the same positions, so they always choose opposite flanks.
+	const APlayerController* Controller = FollowController.Get();
+	const APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+	if (Pawn == nullptr)
+	{
+		return FollowOffset.Y >= 0.0;
+	}
+	const FVector Along = (Contract->GetActorLocation() - Pawn->GetActorLocation()).GetSafeNormal2D();
+	const FVector Right(-Along.Y, Along.X, 0.0);
+	const double Mine = FVector::DotProduct(GetActorLocation() - Pawn->GetActorLocation(), Right);
+	for (TActorIterator<AWonderlandCompanionEmbodiment> Other(GetWorld()); Other; ++Other)
+	{
+		if (*Other == this)
+		{
+			continue;
+		}
+		const double Theirs = FVector::DotProduct(Other->GetActorLocation() - Pawn->GetActorLocation(), Right);
+		if (FMath::IsNearlyEqual(Mine, Theirs, 1.0))
+		{
+			return FormationPhase >= 0.5f;
+		}
+		return Mine > Theirs;
+	}
+	return Mine >= 0.0;
 }
 
 void AWonderlandCompanionEmbodiment::SetParticipation(bool bInJoined, bool bInAgent, const FLinearColor& InAccent, FName InFlightBeat)
