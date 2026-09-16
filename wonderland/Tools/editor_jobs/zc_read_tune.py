@@ -82,8 +82,8 @@ def job():
         for view, bearing, pitch, arm, socket in views:
             dyaw = bearing + 180.0
             if boom is not None:
-                boom.set_editor_property("target_arm_length", arm)
-                boom.set_editor_property("socket_offset", unreal.Vector(*socket) if socket is not None else socket_was)
+                boom.set_editor_property("target_arm_length", arm, unreal.PropertyAccessChangeNotifyMode.NEVER)
+                boom.set_editor_property("socket_offset", unreal.Vector(*socket) if socket is not None else socket_was, unreal.PropertyAccessChangeNotifyMode.NEVER)
             # Start the view just before a turn begins.
             yield (lambda: (float(unreal.GameplayStatics.get_time_seconds(world)) * hz) % 1.0 > 0.9, 60)
             # Sixteen frames across the turn and a little either side of it: cycle 0.9 round to 0.45. The waits are
@@ -102,8 +102,8 @@ def job():
                                "dog_head_screen": screen(pawn.get_actor_location() + unreal.Vector(0.0, 0.0, 90.0))})
         RESULT["frames"] = frames
         if boom is not None and arm_was is not None:
-            boom.set_editor_property("target_arm_length", arm_was)
-            boom.set_editor_property("socket_offset", socket_was)
+            boom.set_editor_property("target_arm_length", arm_was, unreal.PropertyAccessChangeNotifyMode.NEVER)
+            boom.set_editor_property("socket_offset", socket_was, unreal.PropertyAccessChangeNotifyMode.NEVER)
         RESULT["status"] = "done"
     finally:
         try:

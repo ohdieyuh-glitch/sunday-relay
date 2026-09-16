@@ -1175,25 +1175,44 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		if (!bJointsBound) return;
 	}
 
-	// THE BODY, KEPT. A long filmed mission (2026-09-16) reached verification with BodyRoot null while every short
-	// probe, and a forced garbage collection, kept it: no beam was drawn, and the book -- attached to the body -- was
-	// left behind where the founder saw it lying. Until whatever takes it is found, the Dog finds its body again the
-	// frame it is missing, says so once in the log, and seats the book back on it.
-	if (BodyRoot == nullptr)
+	// THE RIG, FOUND AGAIN WHEN THE EDITOR REBUILDS IT. A notified property write on the Dog during play in the editor --
+	// a Details panel edit, or a script moving its camera arm -- re-runs its construction: every Blueprint joint is
+	// destroyed and made again under the same name. The Dog went on posing the destroyed joints while the new ones stood
+	// frozen, and the book, carried on the old Body, was handed to the capsule: over the Dog's head, or on the floor
+	// (measured 2026-09-16, zc_book_bisect). Garbage collection nulled the old Body some while later, which is the
+	// "body reference lost" the filmed missions logged. So the joints are bound again the frame they stop being valid --
+	// once per rebuild, not every frame -- and the props are seated back on the new body and the new working hand. The rest
+	// values are the rig's own and are kept: the new joints are made in whatever pose the old ones were caught in.
+	if (!IsValid(BodyRoot) || !IsValid(HeadPivot) || !IsValid(ArmRight.Forearm))
 	{
-		BodyRoot = FindPivot(this, PivotBody);
-		if (!bLoggedBodyLoss)
+		const FVector BodyRest = BodyRestLocation;
+		const FVector HeadRest = HeadInBodyRest;
+		const bool bRebound = BindJoints();
+		BodyRestLocation = BodyRest;
+		HeadInBodyRest = HeadRest;
+		++RigRebuilds;
+		const UWorld* RebuildWorld = GetWorld();
+		UE_LOG(LogTemp, Warning, TEXT("WLDOG rig rebuilt by the editor at %.2f s (%s): %s (rebuild %d)"),
+			RebuildWorld != nullptr ? RebuildWorld->GetTimeSeconds() : -1.0, WonderlandDogActName(Mission.Performing()),
+			bRebound ? TEXT("joints bound again, props seated back on the body and the working hand") : TEXT("the joints could not be bound"),
+			RigRebuilds);
+		if (!bRebound)
 		{
-			bLoggedBodyLoss = true;
-			const UWorld* LossWorld = GetWorld();
-			UE_LOG(LogTemp, Warning, TEXT("WLDOG body reference lost at %.2f s (%s); %s"),
-				LossWorld != nullptr ? LossWorld->GetTimeSeconds() : -1.0, WonderlandDogActName(Mission.Performing()),
-				BodyRoot != nullptr ? TEXT("found the Body component again") : TEXT("no Body component on the Dog"));
+			bJointsBound = false;
+			return;
 		}
-		if (BodyRoot != nullptr && BookRoot != nullptr && BookRoot->GetAttachParent() != BodyRoot)
+		auto Seat = [](USceneComponent* Prop, USceneComponent* Parent)
 		{
-			BookRoot->AttachToComponent(BodyRoot, FAttachmentTransformRules::KeepRelativeTransform);
-		}
+			if (IsValid(Prop) && IsValid(Parent) && Prop->GetAttachParent() != Parent)
+			{
+				Prop->AttachToComponent(Parent, FAttachmentTransformRules::KeepRelativeTransform);
+			}
+		};
+		Seat(BookRoot, BodyRoot);
+		Seat(BrushMesh, ArmRight.Forearm);
+		Seat(BrushHeadMesh, ArmRight.Forearm);
+		Seat(LensMesh, ArmRight.Forearm);
+		Seat(LensGlassMesh, ArmRight.Forearm);
 	}
 
 	// ---------------------------------------------------------------- the face

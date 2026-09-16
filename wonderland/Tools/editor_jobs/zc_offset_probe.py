@@ -39,7 +39,7 @@ def job():
     for label, llm, agent in TRIALS:
         for body, (ox, oy) in zip(bodies, (llm, agent)):
             if body:
-                body.set_editor_property("follow_offset", unreal.Vector(ox, oy, 0.0))
+                body.set_editor_property("follow_offset", unreal.Vector(ox, oy, 0.0), unreal.PropertyAccessChangeNotifyMode.NEVER)
                 body.snap_to_target()
         controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-10.0, yaw=yaw))
         yield 2.5

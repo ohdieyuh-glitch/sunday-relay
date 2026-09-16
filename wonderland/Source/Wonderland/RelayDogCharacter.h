@@ -409,8 +409,8 @@ private:
 	FVector HeadInBodyRest = FVector::ZeroVector;
 
 	bool bJointsBound = false;
-	/** The body reference was found missing once; said in the log, not every frame. */
-	bool bLoggedBodyLoss = false;
+	/** How many times the editor rebuilt the Dog's Blueprint joints during play; each is said once in the log. */
+	int32 RigRebuilds = 0;
 	bool bLoggedBindFailure = false;
 
 	bool bRunHeld = false;
