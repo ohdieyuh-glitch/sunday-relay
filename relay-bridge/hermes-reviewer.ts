@@ -30,6 +30,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { safeText } from './redact';
 import { RESEARCH_AUTHORITY_NOT_STATED, juliusResearchAskFieldGuidance } from '../src/relay/mission/julius/julius-research-protocol';
+import { JULIUS_CHALLENGE_CATEGORIES } from '../src/relay/mission/julius/julius-continuous-lifecycle';
+import { juliusReviewEscalationGuidance } from '../src/relay/mission/julius/julius-review-verdict';
 import type { JuliusReviewCharge, JuliusReviewStage } from '../src/relay/mission/julius/julius-review-stage';
 import type { JuliusContractReviewCharge } from '../src/relay/mission/julius/julius-task-contract';
 import { parseUsageFile, type HermesUsage } from './reviewer-harness/hermes/runner';
@@ -45,6 +47,8 @@ export interface HermesFinding {
   explanation: string;
   evidence: string;
   recommendedAction?: string;
+  /** The reviewer's category for the finding, when it named a Julius challenge category. */
+  category?: string;
 }
 
 export interface HermesReviewResult {
@@ -66,6 +70,14 @@ export interface HermesReviewResult {
    * which is the ordinary case — an empty list never reaches here.
    */
   researchAsks?: unknown;
+  /**
+   * WHAT THE REVIEWER ESCALATED TO JULIUS — a challenge or a block — exactly as
+   * it wrote it. Unsanitised for the reason `researchAsks` is: the domain's
+   * `sanitizeJuliusReviewVerdict` decides what a usable escalation is, and
+   * refuses one that names a Julius-only outcome by name. Absent when the
+   * reviewer escalated nothing, which is the ordinary case.
+   */
+  escalation?: unknown;
 }
 
 export type HermesOutcome =
@@ -1154,7 +1166,8 @@ export function buildReviewPrompt(p: ReviewPacket): string {
     '"requirement":string,"file":string,"line":number,"explanation":string,"evidence":string,',
     '"recommendedAction":string}],',
     '"requirementsChecked":[{"requirement":string,"status":"passed"|"failed"|"uncertain","evidence":string}],',
-    '"researchAsks":[{"source":string,"capability":string,"reference":string,"purpose":string}]}',
+    '"researchAsks":[{"source":string,"capability":string,"reference":string,"purpose":string}],',
+    '"escalation":null|{"verdict":"challenge"|"block","category":string,"target":"work"|"plan"|"guidance"|"contract","claim":string}}',
     '',
     /**
      * THE REVIEWER GETS THE SAME DOOR AS THE OTHER TWO SLOTS.
@@ -1166,6 +1179,13 @@ export function buildReviewPrompt(p: ReviewPacket): string {
      */
     juliusResearchAskFieldGuidance(),
     p.researchAuthority ?? RESEARCH_AUTHORITY_NOT_STATED,
+    '',
+    /**
+     * THE REVIEWER CAN SAY MORE THAN YES OR NO. A dispute about the plan and
+     * "this must not continue" had no field to be said in, so both arrived as
+     * `changes_required` — a repair order for work that was not the problem.
+     */
+    juliusReviewEscalationGuidance(),
     '',
     `MISSION: ${p.missionId}`,
     `MISSION REVISION: ${p.missionRevision ?? '(unversioned)'}`,
@@ -1402,6 +1422,9 @@ export function validateHermesReview(text: string): HermesReviewResult | null {
           explanation: safeText(g.explanation ?? ''),
           evidence: safeText(g.evidence ?? ''),
           recommendedAction: typeof g.recommendedAction === 'string' ? safeText(g.recommendedAction) : undefined,
+          ...(typeof g.category === 'string' && (JULIUS_CHALLENGE_CATEGORIES as readonly string[]).includes(g.category.trim().toLowerCase())
+            ? { category: g.category.trim().toLowerCase() }
+            : {}),
         }];
       })
     : [];
@@ -1424,7 +1447,44 @@ export function validateHermesReview(text: string): HermesReviewResult | null {
   const asks = (o as Record<string, unknown>).researchAsks;
   const researchAsks = asks === undefined || (Array.isArray(asks) && asks.length === 0)
     ? {} : { researchAsks: asks };
-  return { verdict, summary: safeText(o.summary), findings, requirementsChecked, parseRepaired, ...researchAsks };
+  // NULL IS NOT AN ESCALATION, for the same reason an empty ask list is not an ask.
+  const raised = (o as Record<string, unknown>).escalation;
+  const escalation = raised === undefined || raised === null ? {} : { escalation: raised };
+  return { verdict, summary: safeText(o.summary), findings, requirementsChecked, parseRepaired, ...researchAsks, ...escalation };
+}
+
+/**
+ * THE REVIEW IN JULIUS'S VOCABULARY — CONTINUE, WARNING, CHALLENGE,
+ * REPAIR_REQUIRED or BLOCK — for the domain to sanitise and act on.
+ *
+ * An escalation the reviewer wrote is carried as written, so an unusable one is
+ * refused by Julius under its own name rather than silently re-interpreted
+ * here. Otherwise the review's own shape decides: `changes_required` or any
+ * blocking or major finding requires repair (the engine's rule and finding F8's);
+ * minor findings on approved work are WARNINGS, retained rather than dropped;
+ * a clean approval continues. Informational findings are not warnings.
+ */
+export function hermesReviewVerdict(result: HermesReviewResult): Record<string, unknown> {
+  const blocking = result.findings.filter((finding) => finding.severity === 'blocking' || finding.severity === 'major');
+  const warnings = result.findings
+    .filter((finding) => finding.severity === 'minor')
+    .slice(0, 8)
+    .map((finding) => ({
+      category: finding.category ?? null,
+      claim: `${finding.requirement || finding.findingId}: ${finding.explanation}`.slice(0, 240),
+    }));
+  const raised = result.escalation;
+  if (raised !== null && typeof raised === 'object' && !Array.isArray(raised)) {
+    const escalation = raised as Record<string, unknown>;
+    const word = typeof escalation.verdict === 'string' ? escalation.verdict.trim().toUpperCase() : escalation.verdict;
+    return { verdict: word, category: escalation.category, target: escalation.target, claim: escalation.claim, warnings };
+  }
+  if (raised !== undefined) return { verdict: raised, claim: result.summary, warnings };
+  if (result.verdict === 'changes_required' || blocking.length > 0) {
+    return { verdict: 'REPAIR_REQUIRED', category: blocking[0]?.category ?? null, claim: result.summary, warnings };
+  }
+  if (warnings.length > 0) return { verdict: 'WARNING', claim: result.summary, warnings };
+  return { verdict: 'CONTINUE', claim: result.summary, warnings: [] };
 }
 
 export function hasBlockingFinding(r: HermesReviewResult): boolean {

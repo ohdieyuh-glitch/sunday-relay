@@ -88,19 +88,20 @@ describe('a yield is only a barrier when participation is actually required', ()
       { route: 'REQUEST_GUIDANCE', role: 'PROMPT_ARCHITECT', reasonCode: 'x' },
       { route: 'REQUEST_REVIEW', role: 'INDEPENDENT_REVIEWER', reasonCode: 'x' },
       { route: 'REQUIRE_REPAIR', reasonCode: 'x' },
-      { route: 'REQUIRE_CONTRACT_REVISION', reasonCode: 'x' },
+      { route: 'HOLD_FOR_DISAGREEMENT', reasonCode: 'x' },
       { route: 'SERVE_RESEARCH', reasonCode: 'x' },
       { route: 'HALT', reasonCode: 'x' },
       { route: 'CONTINUE', reasonCode: 'x' },
     ];
     const barriers = routes.filter((routing) => routeIsBarrier(routing.route)).map((r) => r.route);
     expect(barriers).toEqual([
-      'REQUEST_GUIDANCE', 'REQUEST_REVIEW', 'REQUIRE_REPAIR', 'REQUIRE_CONTRACT_REVISION',
+      'REQUEST_GUIDANCE', 'REQUEST_REVIEW', 'REQUIRE_REPAIR', 'HOLD_FOR_DISAGREEMENT',
       'SERVE_RESEARCH', 'HALT',
     ]);
     // Every route the router can produce is classified — no route falls through
-    // into "not a barrier" merely because nobody thought about it.
-    expect(routes).toHaveLength(JULIUS_BARRIER_ROUTES.length + 1);
+    // into "not a barrier" merely because nobody thought about it. A recorded
+    // disagreement and CONTINUE are the two that do not stop the work.
+    expect(routes.concat([{ route: 'RECORD_DISAGREEMENT', reasonCode: 'x' }])).toHaveLength(JULIUS_BARRIER_ROUTES.length + 2);
   });
 
   it('an unknown route is not silently treated as safe to continue through', () => {

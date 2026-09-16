@@ -597,6 +597,12 @@ export function assembleLiveJuliusRuntime(options: {
   readonly spendCeilingUsdMicros: number;
   readonly maxRepairRounds: number;
   readonly owner?: string;
+  /**
+   * THE EXECUTION ATTEMPT, for naming peer requests. A mission's run id repeats
+   * across workflow attempts, so the live entrypoint passes the workflow run and
+   * attempt; absent, the pipeline's local scope.
+   */
+  readonly executionScope?: string;
   readonly budget?: JuliusBudgetPort;
   /**
    * How long a claimed task's lease lasts. Ten minutes in production, where a
@@ -752,6 +758,7 @@ export function assembleLiveJuliusRuntime(options: {
     ...(typeof (options.store as { timeline?: unknown }).timeline === 'function'
       ? { timeline: options.store as unknown as JuliusTimelineReader }
       : {}),
+    ...(options.executionScope === undefined ? {} : { executionScope: options.executionScope }),
     owner: options.owner ?? 'julius-live-mission',
     contextCharacterBudget: liveContextCharacterBudget,
   };

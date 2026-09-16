@@ -81,6 +81,27 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * attempt with no retrieval beside it is a retrieval nobody can vouch for, and
   * Julius refuses rather than replays it. */
  'research.attempted',
+ /* THE PEER CHANNEL. Every exchange between sustained workers as an audited
+  * request: who asked whom, for what, what answered it and how Julius closed
+  * it. `peer.request.refused` is a request the channel would not open — a
+  * direction no rule permits, a party that is not a peer — written so an
+  * illegal attempt is visible rather than silently dropped. The request's
+  * state is a fold over these rows; nothing else stores it. */
+ 'peer.request.opened','peer.request.transitioned','peer.request.refused',
+ /* THE REVIEWER'S CANONICAL VERDICT. `declared` is what the reviewer said,
+  * rebuilt from an allowlist; `refused` is a declaration Julius would not read —
+  * a Julius-only outcome, a mission-owned term, an unknown word — with the
+  * reason; `applied` is the verdict Julius acted on (the stricter of the
+  * declaration and the evidence) and the route it took. A declaration from a
+  * dispatch that paused to research is kept and never applied. */
+ 'review.verdict.declared','review.verdict.refused','review.verdict.applied',
+ /* DISAGREEMENT. `opened` is the record — subject, both positions' evidence,
+  * the binding — and `step` is each move it makes: the rebuttal scheduled, the
+  * architect's answer, the re-review scheduled and its verdict. `resolved`
+  * names the resolution and its basis. The record's state is a fold over
+  * `opened` and `step`; `refused` is a challenge that could not be opened as
+  * one, which leaves its hold in place rather than dropping it. */
+ 'disagreement.opened','disagreement.step','disagreement.resolved','disagreement.refused',
  /* PERSISTENT-WORKER EFFORT. One row per completed dispatch, carrying what the
   * provider actually reported and NOTHING inferred — an unreported token count
   * is null here rather than the zero the budget path substitutes, because a

@@ -462,7 +462,10 @@ describe('7 — guidance cannot alter locked scope or acceptance criteria', () =
     expect(factsOf(harness, 'guidance.issued'), 'nothing was issued').toEqual([]);
     const refused = factsOf(harness, 'guidance.refused');
     expect(refused).toHaveLength(1);
-    expect(refused[0]!.reasonCode).toBe('guidance_shape_refused');
+    // Refused BY NAME since the peer channel's authority guard: a packet that
+    // reaches for a contract term is not a malformed packet, and the record says
+    // which of the two it was.
+    expect(refused[0]!.reasonCode).toBe('peer_response_mutates_protected_term');
     // The locked terms are exactly what the reviewer accepted.
     expect(locked!.state).toBe('LOCKED');
     expect(locked!.inScope).not.toContain('the whole repository');
@@ -1532,11 +1535,13 @@ describe('35 — a yield is not verified as finished work; the segment that ends
     });
     await drain(harness, 40);
     expect(harness.store.taskRow('build-1:review'), 'not reviewed by the run').toBeNull();
-    // The resume sweep re-verifies stranded SUCCEEDED work (the finished plan
-    // review counts, as it always has). The dispatch that yielded is not
-    // stranded: the sweep neither reviews nor decides it.
+    // The resume sweep re-verifies stranded SUCCEEDED work. The dispatch that
+    // yielded is not stranded: the sweep neither reviews nor decides it. The
+    // finished plan review is not stranded either — the plan it reviewed is
+    // decided — and no longer re-swept on every idle advance, which is what
+    // this count used to include.
     const advance = await harness.loop.advanceRun('run-1', 'prj-1');
-    expect(advance?.resumedVerifications, 'the finished plan review is swept, and the yielded build is not').toBe(1);
+    expect(advance?.resumedVerifications, 'neither the concluded plan review nor the yielded build is swept').toBe(0);
     expect(harness.store.taskRow('build-1:review'), 'still not reviewed after the resume sweep').toBeNull();
     expect(await decidedTaskIds(harness), 'and still undecided').not.toContain('build-1');
     const run = await harness.store.loadRun('run-1', 'prj-1');

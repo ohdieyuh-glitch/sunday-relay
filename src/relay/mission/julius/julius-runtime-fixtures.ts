@@ -161,6 +161,10 @@ export type ScriptedOutcome =
     readonly segmentResume?: unknown;
     /** What this worker needs Julius to go and look at. Unsanitised, for the same reason. */
     readonly researchAsks?: unknown;
+    /** A reviewer's canonical verdict. Unsanitised, for the same reason. */
+    readonly reviewVerdict?: unknown;
+    /** An architect's rebuttal to a disagreement. Unsanitised, for the same reason. */
+    readonly rebuttal?: unknown;
   }
   /** `costUsdMicros` is what the boundary billed before it failed, as its diagnostics would carry. */
   | {
@@ -169,6 +173,8 @@ export type ScriptedOutcome =
     readonly costUsdMicros?: number;
     /** Whether the provider runtime launched — the difference between spending nothing and spending an unknown amount. */
     readonly runtimeStarted?: boolean;
+    /** The error text the boundary raised — a test may make it hostile, to prove none of it is recorded. */
+    readonly message?: string;
   }
   | { readonly kind: 'malformed' };
 
@@ -202,7 +208,7 @@ export function scriptedAdapter(
       index += 1;
       if (step.kind === 'fail') {
         throw new JuliusDispatchError(
-          step.code, step.code === 'RATE_LIMIT' || step.code === 'TIMEOUT', 'Scripted provider failure.', undefined,
+          step.code, step.code === 'RATE_LIMIT' || step.code === 'TIMEOUT', step.message ?? 'Scripted provider failure.', undefined,
           step.costUsdMicros === undefined && step.runtimeStarted === undefined
             ? undefined
             : {
@@ -229,6 +235,8 @@ export function scriptedAdapter(
         ...(step.guidance === undefined ? {} : { guidance: step.guidance }),
         ...(step.segmentResume === undefined ? {} : { segmentResume: step.segmentResume }),
         ...(step.researchAsks === undefined ? {} : { researchAsks: step.researchAsks }),
+        ...(step.reviewVerdict === undefined ? {} : { reviewVerdict: step.reviewVerdict }),
+        ...(step.rebuttal === undefined ? {} : { rebuttal: step.rebuttal }),
       };
       return result;
     },
@@ -285,6 +293,8 @@ export function createJuliusHarness(input: {
   readonly config?: Partial<JuliusRunLoopConfig>;
   readonly owner?: string;
   readonly capabilityFor?: (task: { taskId: string; taskType: string; role: string }) => string;
+  /** The execution attempt peer requests are named under; absent, the local scope. */
+  readonly executionScope?: string;
 }): JuliusHarness {
   const store = createJuliusMemoryStore();
   const clock = createSteppingClock();
@@ -312,6 +322,7 @@ export function createJuliusHarness(input: {
     // THE MEMORY STORE IS ALSO THE TIMELINE READER, so the harness exercises
     // the real projected slot ledger rather than the rounds fallback.
     timeline: store,
+    ...(input.executionScope === undefined ? {} : { executionScope: input.executionScope }),
     owner: input.owner ?? 'worker-a',
     contextCharacterBudget: 4_000,
   };

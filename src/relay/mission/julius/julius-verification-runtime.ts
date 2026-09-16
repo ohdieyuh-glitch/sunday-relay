@@ -10,7 +10,14 @@ export interface JuliusReviewerFinding{readonly findingId:string;readonly runId:
  * twin of the unroutable repair task that sat RUNNABLE forever on paid run
  * 34037313976. Absent means the default below, never unbounded.
  */
-export interface JuliusVerificationPolicy{readonly revision:string;readonly reviewerRequired:boolean;readonly maxRepairRounds:number;readonly maxCoderSegments?:number;}
+export interface JuliusVerificationPolicy{readonly revision:string;readonly reviewerRequired:boolean;readonly maxRepairRounds:number;readonly maxCoderSegments?:number;
+ /**
+  * THE WARNING CATEGORIES JULIUS TREATS AS BLOCKING. A reviewer's WARNING is
+  * retained and does not interrupt; a warning whose category is named here is
+  * promoted by Julius to a blocking finding, and the work is repaired. Absent or
+  * empty, no warning blocks — the reviewer cannot promote its own.
+  */
+ readonly promotedWarningCategories?:readonly string[];}
 /** Enough for real mid-mission collaboration, far short of a loop. */
 export const JULIUS_DEFAULT_MAX_CODER_SEGMENTS=4;
 export type JuliusVerificationAction={readonly action:'SCHEDULE_REVIEW';readonly role:'INDEPENDENT_REVIEWER'}|{readonly action:'DECIDE';readonly decision:JuliusVerificationDecision;readonly criteriaSatisfied:readonly string[];readonly criteriaMissing:readonly string[];readonly missionCompletable:boolean};

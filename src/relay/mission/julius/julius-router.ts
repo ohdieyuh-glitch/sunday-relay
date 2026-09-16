@@ -563,7 +563,20 @@ readonly guidanceRequest?:unknown;
   * name a host, a budget, a role or a header here however it phrases it.
   */
  readonly researchAsks?:unknown;
-readonly guidance?:unknown;}
+readonly guidance?:unknown;
+ /**
+  * WHAT AN INDEPENDENT REVIEWER CONCLUDED, in the canonical vocabulary —
+  * CONTINUE, WARNING, CHALLENGE, REPAIR_REQUIRED or BLOCK — unsanitised.
+  * Julius rebuilds it from an allowlist, refuses any Julius-only outcome by
+  * name, and decides the consequence itself. Ignored from any other slot.
+  */
+ readonly reviewVerdict?:unknown;
+ /**
+  * THE ARCHITECT'S ONE ANSWER TO A DISAGREEMENT — concede, or maintain with
+  * evidence — unsanitised. Julius rebuilds it from an allowlist and decides what
+  * follows. Read only from a rebuttal task.
+  */
+ readonly rebuttal?:unknown;}
 /**
  * WHAT JULIUS TELLS AN ADAPTER, and nothing more.
  *
