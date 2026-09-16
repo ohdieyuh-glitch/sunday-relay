@@ -376,6 +376,20 @@ export type JuliusArchiveValidation =
   | { readonly ok: true }
   | { readonly ok: false; readonly reasonCode: 'unsupported_export_version' | 'not_an_archive_export' | 'archive_invalid'; readonly errors: readonly string[] };
 
+/**
+ * The digest of the field rules this importer enforces: the export keys, the
+ * identity and accounting specs and every section spec. Two sides on one format
+ * version whose digests differ are reading different rules, and should compare
+ * them before any history moves.
+ */
+export function juliusArchiveContractDigest(): string {
+  return juliusBrainSha256(canonicalJuliusBrainJson({
+    format: JULIUS_PAID_RUN_ARCHIVE_EXPORT_FORMAT, exportKeys: EXPORT_KEYS, sourceKeys: SOURCE_KEYS, hashedParts: HASHED_PARTS,
+    identity: IDENTITY_SPEC, accounting: ACCOUNTING_SPEC,
+    sections: Object.fromEntries(JULIUS_ARCHIVE_SECTIONS.map((section) => [section, SECTION_SPECS[section]])),
+  }));
+}
+
 export function checkJuliusPaidRunArchiveExport(archive: unknown): JuliusArchiveValidation {
   if (!isPlainObject(archive) || typeof archive.format !== 'string') return { ok: false, reasonCode: 'not_an_archive_export', errors: ['format: missing'] };
   if (archive.format !== JULIUS_PAID_RUN_ARCHIVE_EXPORT_FORMAT) {

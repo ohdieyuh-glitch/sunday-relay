@@ -180,6 +180,14 @@ produces exports prove one before anything is imported:
 or `--self-test`. The note for the Formal lane is
 `docs/JULIUS_BRAIN_FORMAL_COORDINATION.md`.
 
+**The freeze handshake** (`julius-brain-export-compatibility.ts`) settles what
+the document is before any history moves: this importer declares its format,
+version, contract digest, required sections and capabilities (`--declare`), and
+an exporter's declaration is answered ACCEPTED, ACCEPTED_WITH_GAPS (sections it
+cannot fill arrive Unknown) or REFUSED (`--compat <declaration.json>`). A
+contract digest is not a version: two sides on one format version whose digests
+differ are reading different field rules.
+
 ### Translation
 
 The translation invents nothing.
@@ -391,6 +399,14 @@ asks Formal to change its tables:
 | Archive shape drift (read-only), in memory and on PostgreSQL | `npx vitest run scripts/julius-archive-shape-drift.test.ts`; `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-archive-shape-drift-postgres.test.ts` |
 | Recovery under adversarial histories, crashes and races | `npx vitest run src/relay/mission/julius/julius-brain-archive-adversarial.test.ts`; on PostgreSQL (kills a commit mid-transaction; restarts the server when `JULIUS_BRAIN_DRILL_RESTART` is set — run alone): `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-archive-recovery-postgres.test.ts` |
 | The failure model: classification, decisions, the session client | `npx vitest run src/relay/mission/julius/julius-brain-failure-model.test.ts` |
+| Issuer key rotation, staleness, algorithm substitution, ambiguous key ids | `npx vitest run src/relay/mission/julius/julius-brain-oidc-keys.test.ts` |
+| Retry classes, bounded jittered backoff, the circuit breaker | `npx vitest run src/relay/mission/julius/julius-brain-retry.test.ts` |
+| The abuse boundary: per attempt, mission and principal, per operation class | `npx vitest run src/relay/mission/julius/julius-brain-rate-limit.test.ts` |
+| The external audit anchor, and an owner rewrite exposed | `npx vitest run src/relay/mission/julius/julius-brain-audit-anchor.test.ts`; on PostgreSQL: `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-audit-anchor-postgres.test.ts` |
+| The service request contract and request idempotency | `npx vitest run src/relay/mission/julius/julius-brain-service-router.test.ts`; durable, on PostgreSQL: `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-service-postgres.test.ts` |
+| Preservation against service failure, seven whole runs | `npx vitest run relay-bridge/julius/project-brain-failure-integration.test.ts` |
+| The fault matrix (27 rows, 11 injected here) | `npx vitest run src/relay/mission/julius/julius-brain-fault-matrix.test.ts` (the table: `docs/JULIUS_BRAIN_FAULT_MATRIX.md`) |
+| The export freeze handshake | `npx vitest run src/relay/mission/julius/julius-brain-export-compatibility.test.ts` |
 | Failure drills on PostgreSQL: unavailable, read-only, timeouts, TLS, partial network loss, restart and expiry mid-session | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-failure-postgres.test.ts` (the server must offer TLS) |
 | State modes with a real interpreter | `npx vitest run src/relay/workspace/julius-tools/python-state-modes.test.ts` |
 | Archive import on PostgreSQL: parity, cold read, 6-way concurrent import, reconciliation and run guard, multi-group atomicity | `JULIUS_REAL_POSTGRES=1 DATABASE_URL=… npx vitest run scripts/julius-brain-archive-postgres.test.ts` |
@@ -427,6 +443,10 @@ unchanged by this branch. See `docs/JULIUS_BRAIN_PERSISTENCE.md`.
 - `006_julius_brain_access`: the Brain service's access state. It holds token
   claims by digest, attempt registrations, sessions by token digest, and the
   hash-chained audit. All four are append-only.
+- `007_julius_brain_service_requests`: what each request id already answered
+  (claimed once, answered once, withdrawn only while unanswered) and, for
+  deployments that want exact limits across processes, the rate-limit
+  counters.
 
 ## Not yet done (the private-beta gaps)
 

@@ -126,13 +126,58 @@ npm run julius:archive:conformance -- <export.json> [--artifact <artifactId>=<fi
 - **Retention is not retrieval.** An imported attempt is visible to a later run
   only under the state mode that run declared.
 
+## The freeze handshake
+
+Before any history moves, the two sides say what they are, in one small
+document each. Nothing about the archive's internal shape appears in it.
+
+This importer's declaration:
+
+```
+npm run julius:archive:conformance -- --declare
+```
+
+```json
+{
+  "format": "julius-paid-run-archive-export-compatibility.v1",
+  "exportFormat": "julius-paid-run-archive-export.v1",
+  "importerVersion": "julius-brain-archive-import.v2",
+  "contractDigest": "sha256:4add2e00f5057db1…",
+  "requiredSections": ["tasks", "research", "evidence", "findings", "reviews", "repairs", "usage", "brainEntries", "events", "toolInvocations", "artifacts"],
+  "requiredCapabilities": ["explicit-nulls", "sealed-integrity"]
+}
+```
+
+The exporter's, in the same format, adds `producer` (name and version),
+`minimumImporterVersion`, the `sections` it can fill, its `capabilities`, and
+optionally `archiveShapes` — free text naming the shapes it was built from,
+never read as a contract.
+
+```
+npm run julius:archive:conformance -- --compat exporter-declaration.json
+```
+
+- **ACCEPTED** — the two agree.
+- **ACCEPTED_WITH_GAPS** — the exporter does not fill some sections. That is
+  fine: those facts arrive Unknown and stay Unknown. The gaps are named.
+- **REFUSED** — another format, another export version, a missing required
+  capability, an unknown section, an importer the exporter outranks, or a
+  different `contractDigest`.
+
+**A contract digest is not a version.** Two sides both on `…export.v1` whose
+digests differ are reading different field rules. The handshake says so before
+an import, rather than after. It is also not a promise: a document still has to
+pass the conformance kit, and the import still refuses anything that
+contradicts the live run.
+
 ## Asked of the Formal lane
 
 1. Say when the exporter exists, or when the archive is frozen and against
    which shape.
-2. Run the conformance kit with `--cases` on at least one export per archived
+2. Send the exporter's compatibility declaration (`--compat` answers it).
+3. Run the conformance kit with `--cases` on at least one export per archived
    shape.
-3. Write down the per-column decision for ambiguous cells.
+4. Write down the per-column decision for ambiguous cells.
 
 Nothing else is asked. Not a table change, not a new column, and not a
 re-run of any paid attempt.

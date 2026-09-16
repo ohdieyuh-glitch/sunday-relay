@@ -403,8 +403,17 @@ whether it may have applied, and decides by mode and phase:
 
 Never, in any row, does other memory stand in for the Brain.
 
-**Not yet built:** the deployed service's retry loop and circuit breaker; the
-`python.run` unavailable reason; the routes' unavailable answer.
+**Built since:** the retry contract and circuit breaker
+(`julius-brain-retry.ts`: SAFE_TO_RETRY / RECONCILE_BEFORE_RETRY /
+DO_NOT_RETRY, bounded jittered backoff, a breaker that counts infrastructure
+failures only), the abuse boundary (`julius-brain-rate-limit.ts`), the issuer
+key layer (`julius-brain-oidc-keys.ts`), the request contract and idempotency
+(`julius-brain-service-api.ts`, `julius-brain-request-log.ts`, migration 007),
+and the external audit anchor (`julius-brain-audit-anchor.ts`).
+
+**Not yet built:** the `python.run` unavailable reason; the routes' unavailable
+answer; the deployed service's own process (hosting, TLS termination, JWKS
+fetching over the network, health endpoints).
 
 ### 11. GitHub-hosted paid runs: direct or through a controlled service
 

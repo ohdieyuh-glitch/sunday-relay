@@ -6,12 +6,15 @@ import {
   type JuliusArchiveConformanceReport,
 } from '../src/relay/mission/julius/julius-brain-archive-conformance';
 import type { JuliusPaidRunArchiveExport } from '../src/relay/mission/julius/julius-brain-archive-import';
+import { checkJuliusArchiveExportCompatibility, juliusArchiveImporterDeclaration } from '../src/relay/mission/julius/julius-brain-export-compatibility';
 
 /**
  * THE EXPORT CONFORMANCE CHECK, FOR WHOEVER PRODUCES EXPORTS.
  *
  *   node dist-relay-bridge/julius-archive-export-conformance.cjs <export.json> [--artifact <artifactId>=<file>]... [--cases]
  *   node dist-relay-bridge/julius-archive-export-conformance.cjs --self-test
+ *   node dist-relay-bridge/julius-archive-export-conformance.cjs --declare
+ *   node dist-relay-bridge/julius-archive-export-conformance.cjs --compat <declaration.json>
  *
  * Reads files only: no database, no network, no Brain. Prints one JSON report.
  *   exit 0  CONFORMANT (and, with --cases, every applicable case passed)
@@ -29,18 +32,26 @@ export interface ConformanceCliIo {
   readonly write: (text: string) => void;
 }
 
-const USAGE = 'usage: julius-archive-export-conformance <export.json> [--artifact <artifactId>=<file>]... [--cases] | --self-test';
+const USAGE = 'usage: julius-archive-export-conformance <export.json> [--artifact <artifactId>=<file>]... [--cases] | --self-test | --declare | --compat <declaration.json>';
 
 export function runArchiveExportConformance(argv: readonly string[], io: ConformanceCliIo): number {
   const fail = (reason: string) => { io.write(`${JSON.stringify({ error: reason, usage: USAGE }, null, 2)}\n`); return 2; };
   let exportPath: string | null = null;
   let withCases = false;
   let selfTest = false;
+  let declare = false;
+  let compatPath: string | null = null;
   const artifacts = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]!;
     if (arg === '--cases') withCases = true;
     else if (arg === '--self-test') selfTest = true;
+    else if (arg === '--declare') declare = true;
+    else if (arg === '--compat') {
+      const path = argv[i += 1];
+      if (path === undefined) return fail('--compat takes a declaration file');
+      compatPath = path;
+    }
     else if (arg === '--artifact') {
       const spec = argv[i += 1];
       const split = spec?.indexOf('=') ?? -1;
@@ -49,6 +60,21 @@ export function runArchiveExportConformance(argv: readonly string[], io: Conform
     } else if (arg.startsWith('--')) return fail(`unknown option ${arg.slice(0, 40)}`);
     else if (exportPath === null) exportPath = arg;
     else return fail('one export at a time');
+  }
+  // What this importer enforces, for the Formal lane to compare its exporter against.
+  if (declare) {
+    if (exportPath !== null || compatPath !== null || selfTest) return fail('--declare takes nothing else');
+    io.write(`${JSON.stringify(juliusArchiveImporterDeclaration(), null, 2)}\n`);
+    return 0;
+  }
+  // The handshake: an exporter's declaration against this importer's.
+  if (compatPath !== null) {
+    if (exportPath !== null || selfTest) return fail('--compat takes nothing else');
+    let declaration: unknown;
+    try { declaration = JSON.parse(io.readText(compatPath)); } catch (error) { return fail(`cannot read ${compatPath}: ${error instanceof Error ? error.message.split('\n')[0]!.slice(0, 200) : 'unknown'}`); }
+    const report = checkJuliusArchiveExportCompatibility(declaration);
+    io.write(`${JSON.stringify({ subject: compatPath, ...report }, null, 2)}\n`);
+    return report.verdict === 'REFUSED' ? 1 : 0;
   }
   if (selfTest === (exportPath !== null)) return fail(selfTest ? '--self-test takes no export' : 'an export file is required');
 

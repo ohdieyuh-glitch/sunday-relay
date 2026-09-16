@@ -35,6 +35,26 @@ describe('julius-archive-export-conformance CLI', () => {
     expect(cli(['export.json', '--artifact', 'no-equals'], { 'export.json': exported }).code).toBe(2);
   });
 
+  it('--declare states what this importer enforces, and --compat answers an exporter declaration', () => {
+    const declared = cli(['--declare']);
+    expect(declared.code).toBe(0);
+    expect(declared.report).toMatchObject({ format: 'julius-paid-run-archive-export-compatibility.v1', exportFormat: 'julius-paid-run-archive-export.v1', requiredCapabilities: ['explicit-nulls', 'sealed-integrity'] });
+
+    const declaration = {
+      format: 'julius-paid-run-archive-export-compatibility.v1', exportFormat: 'julius-paid-run-archive-export.v1',
+      producer: { name: 'julius-paid-run-archive', version: '1.0.0' }, contractDigest: declared.report.contractDigest,
+      minimumImporterVersion: declared.report.importerVersion, sections: declared.report.requiredSections,
+      capabilities: ['explicit-nulls', 'sealed-integrity'], declaredAt: '2026-09-15T12:00:00.000Z',
+    };
+    expect(cli(['--compat', 'declaration.json'], { 'declaration.json': JSON.stringify(declaration) })).toMatchObject({ code: 0, report: { verdict: 'ACCEPTED' } });
+    const gaps = { ...declaration, sections: declaration.sections.filter((section: string) => section !== 'repairs') };
+    expect(cli(['--compat', 'declaration.json'], { 'declaration.json': JSON.stringify(gaps) })).toMatchObject({ code: 0, report: { verdict: 'ACCEPTED_WITH_GAPS', unfilledSections: ['repairs'] } });
+    const drifted = { ...declaration, contractDigest: `sha256:${'0'.repeat(64)}` };
+    expect(cli(['--compat', 'declaration.json'], { 'declaration.json': JSON.stringify(drifted) })).toMatchObject({ code: 1, report: { verdict: 'REFUSED' } });
+    expect(cli(['--compat', 'missing.json']).code).toBe(2);
+    expect(cli(['--declare', '--self-test']).code).toBe(2);
+  });
+
   it('a report never repeats a credential the export carried', () => {
     const token = ['gh', 'p_', 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8'].join('');
     const body = paidRunArchive();

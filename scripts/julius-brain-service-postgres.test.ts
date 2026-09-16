@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { describe, expect, it } from 'vitest';
 
-import { createJuliusBrainAccessService, type JuliusBrainRunSession } from '../src/relay/mission/julius/julius-brain-access';
+import { createJuliusBrainAccessService } from '../src/relay/mission/julius/julius-brain-access';
 import { createAccessFixtureIssuer } from '../src/relay/mission/julius/julius-brain-access-fixtures';
 import { juliusPrincipal, type JuliusBrainDraft } from '../src/relay/mission/julius/julius-brain-contracts';
 import { createJuliusBrainRateLimiter } from '../src/relay/mission/julius/julius-brain-rate-limit';
