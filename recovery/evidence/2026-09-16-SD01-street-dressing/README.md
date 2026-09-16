@@ -46,5 +46,20 @@ Final: 778 pieces and 222 lamps world-wide, 473 candidates dropped for clearance
   clearance answers stopped matching their candidates -- beds halved from 778 to 432 on a change that only touched
   lamps. Ids are positions now; a position cannot drift when a different piece is filtered.
 
+## Cost (`perf_ab.json`)
+
+All 20 SD01 passes (260 batch actors) hidden and shown in PIE from three cameras, 8 s per state:
+
+| camera | visible | hidden | visible again |
+|---|---|---|---|
+| SW_PlazaHero41 | 17.8 fps | 17.6 | 16.7 |
+| South_FacadeRow36 | 29.6 | 30.0 | 30.1 |
+| WorldCam12 (overview) | 14.1 | 14.5 | 14.0 |
+
+**Within noise at every camera**: the visible and visible-again runs differ from each other by as much as either
+differs from hidden. The absolute numbers are NOT comparable to earlier beta_tour figures (22-46 fps): this ran
+with the editor behind other windows, and the HUD mini-map (a scene capture at 8 Hz) had just been merged. Only
+the relative A/B is evidence.
+
 `sd01e.jpg`: SW plaza now has one lamp and a planter packed with flowers; the hero camera and the world view are
 unchanged. Map saved.
