@@ -8,6 +8,8 @@
 #
 # Colours: a light's `light_color` is an 8-bit FColor, so give [r, g, b] in 0..255; any other colour property
 # (`lower_hemisphere_color`, fog colours) is a LinearColor, so give [r, g, b] in 0..1.
+# Not only lights (AP01): an entry may name its "component" class -- SkyAtmosphereComponent, ExponentialHeightFogComponent
+# -- and the same before/after discipline applies to the atmosphere and the fog.
 # Globals: SPEC (path to a Look JSON with a "lights" section), REVERT, SAVE.
 import json
 
@@ -61,9 +63,10 @@ def job():
         if actor is None:
             refused.append("%s: no such actor" % label)
             continue
-        comp = actor.get_component_by_class(unreal.LightComponentBase)
+        comp_class = spec.get("component", "LightComponentBase")
+        comp = actor.get_component_by_class(getattr(unreal, comp_class))
         if comp is None:
-            refused.append("%s: no light component" % label)
+            refused.append("%s: no %s" % (label, comp_class))
             continue
         for prop, want_before in spec[source].items():
             have = _read(comp, prop)
