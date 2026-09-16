@@ -183,9 +183,10 @@ def job():
         seen_steps.append(step)
         at = mission.get_orb_location()
         anchor = mission.get_contract_anchor() if mission.is_contract_anchored() else None
+        performing = str(mission.get_dog_performing_label())
         frames.append({"i": index, "beat": str(mission.get_beat_id()), "step": step,
                        "event": str(mission.get_last_event_type()), "contract": bool(here),
-                       "dog": str(mission.get_dog_act_label()),
+                       "dog": str(mission.get_dog_act_label()), "performing": performing,
                        "anchor": [round(anchor.x, 2), round(anchor.y, 2), round(anchor.z, 2)] if anchor else None,
                        "screen": to_screen(at) if here else None,
                        "capture": shot("zc_m3b_%03d.png" % index)})
@@ -223,6 +224,41 @@ def job():
            not mission.is_orb_in_world() and mission.get_contracts_manifested() >= 1,
            contract=mission.is_orb_in_world(), manifested=mission.get_contracts_manifested(),
            capture=shot("zc_m3b_zz_dismissed.png"))
+
+    # ---------------------------------------------------------------- the body performs the mission
+    # WHAT WAS ASKED FOR, per stage. The mapping is mine; whether the body honoured it is the animation
+    # lane's, and PerformingAct is how the two are told apart.
+    WANTED = {"mission_start": "MISSION START", "prompt_architect": "PLANNING",
+              "coding_agent": "IMPLEMENTING", "verifying": "VERIFYING", "handoff": "NONE"}
+    asked = {}
+    for f in frames:
+        asked.setdefault(f["beat"], set()).add(f["dog"])
+    mismatched = [{"beat": b, "wanted": w, "got": sorted(asked.get(b, []))}
+                  for b, w in WANTED.items() if asked.get(b) and sorted(asked[b]) != [w]]
+    RESULT["acts_asked"] = {k: sorted(v) for k, v in asked.items()}
+    record("S11", "each locked stage asks the Dog for the performance the founder specified",
+           not mismatched and all(b in asked for b in ("mission_start", "prompt_architect", "coding_agent", "verifying")),
+           mismatched=mismatched, seen=sorted(asked))
+
+    # ---------------------------------------------------------------- a handoff inherits, it does not stop
+    # THE DECISION THE ANIMATION LANE MADE, checked from this side: `None` cannot mean "stop", because
+    # handoff lands there and a handoff mid-implementation must keep the brush. The body tells that apart
+    # from a real ending by whether a contract came with the act -- so a handoff DURING a mission must
+    # report an inherited performance, never NONE.
+    inherited = [f for f in frames if f["beat"] == "handoff" and f["contract"]]
+    stopped = [f for f in inherited if f["performing"] == "NONE"]
+    RESULT["handoff_inheritance"] = [{"i": f["i"], "asked": f["dog"], "performing": f["performing"]} for f in inherited]
+    record("S12", "a handoff inherits the performance instead of ending it",
+           len(inherited) > 0 and not stopped,
+           handoffs=len(inherited), stopped=len(stopped),
+           performing=sorted({f["performing"] for f in inherited}))
+
+    # ---------------------------------------------------------------- and an ending really ends it
+    after = [f for f in frames if not f["contract"] and f["i"] > 3]
+    still_going = [f for f in after if f["performing"] not in ("NONE", "NO DOG")]
+    record("S13", "when the mission ends the performance ends with it",
+           len(after) > 0 and not still_going,
+           frames_after=len(after), still_performing=[f["performing"] for f in still_going][:4])
 
     # ---------------------------------------------------------------- no handoff performance
     # The founder removed the Relay Dog's handoff animation. The mission still HAS handoff beats -- Julius's

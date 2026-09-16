@@ -230,6 +230,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	FString GetDogActLabel() const;
 
+	/**
+	 * What the body is ACTUALLY performing, which during a handoff is the inherited act rather than None.
+	 * Reported through this subsystem so the Dog's own header needs no Blueprint plumbing added to it.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString GetDogPerformingLabel() const;
+
 	AWonderlandMissionOrb* GetOrb() const;
 
 private:
@@ -239,6 +246,8 @@ private:
 	void MountStrip();
 	/** Beat in, world out. The one place that decides whether a crystal exists. */
 	void ShowBeat(EWonderlandMissionBeat Wanted);
+	/** Hand the Relay Dog the act for the current beat, and the contract to perform it around. */
+	void TellTheDog();
 	AWonderlandMissionOrb* EnsureContract();
 	void DismissContract();
 	bool StepFixture(float DeltaSeconds);

@@ -17,6 +17,7 @@
 #include "Widgets/SLeafWidget.h"
 #include "Widgets/Text/STextBlock.h"
 #include "WonderlandCompanionSubsystem.h"
+#include "RelayDogCharacter.h"
 #include "WonderlandDogPerformance.h"
 #include "WonderlandMissionFixture.h"
 #include "WonderlandMissionOrb.h"
@@ -282,8 +283,37 @@ void UWonderlandMissionSubsystem::DismissContract()
 	if (AWonderlandMissionOrb* Existing = Orb.Get())
 	{
 		Existing->SetManifest(0.0f);
-		Orb.Reset();
+		Existing->ReleaseAnchor();
+		// THE POINTER IS KEPT THROUGH THE FADE, deliberately. The actor clears it by destroying itself, and
+		// a mission that starts mid-fade revives this crystal instead of spawning a second one beside it.
+		// What ENDS at the mission's end is not the actor but the CONTRACT, and TellTheDog draws that line.
 	}
+}
+
+/**
+ * THE ONE PLACE THE BODY IS TOLD, and the only place that knows both the beat and the crystal.
+ *
+ * THE NULL IS LOAD-BEARING, not tidiness. The Dog's `None` act cannot mean "stop", because handoff lands
+ * there and a handoff mid-implementation must KEEP the brush -- but completion and idle land there too and
+ * need the opposite. The animation layer tells them apart by whether a contract came with the act, which
+ * only works if the contract pointer is live for exactly as long as the mission (lane owner, 2026-09-16).
+ *
+ * So it is bound to the BEAT, not to the actor: the moment a beat stops describing a running task the Dog
+ * is handed nullptr, whether or not the crystal is still fading out of the air. Tying it to the actor
+ * instead would leave the Dog painting through the fade with no way to know it should stop.
+ */
+void UWonderlandMissionSubsystem::TellTheDog()
+{
+	APlayerController* Controller = BoundController.Get();
+	APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+	ARelayDogCharacter* Dog = Cast<ARelayDogCharacter>(Pawn);
+	if (Dog == nullptr)
+	{
+		// Not every body the player can wear is the canonical Dog -- the hub pawn and a spectator are not.
+		return;
+	}
+	const bool bMissionRunning = WonderlandBeatShowsContract(Beat);
+	Dog->SetMissionAct(WonderlandDogActForBeat(Beat), bMissionRunning ? Orb.Get() : nullptr);
 }
 
 void UWonderlandMissionSubsystem::Detach()
@@ -427,6 +457,7 @@ void UWonderlandMissionSubsystem::ShowBeat(EWonderlandMissionBeat Wanted)
 	if (!bShowing)
 	{
 		DismissContract();
+		TellTheDog();
 		return;
 	}
 	if (AWonderlandMissionOrb* Body = EnsureContract())
@@ -451,6 +482,7 @@ void UWonderlandMissionSubsystem::ShowBeat(EWonderlandMissionBeat Wanted)
 			Body->AnchorHere();
 		}
 	}
+	TellTheDog();
 }
 
 FName UWonderlandMissionSubsystem::AdvanceBeat()
@@ -566,6 +598,14 @@ FVector UWonderlandMissionSubsystem::GetContractAnchor() const
 	return Body != nullptr && Body->IsAnchored() ? Body->GetAnchorPoint() : FVector::ZeroVector;
 }
 
+FString UWonderlandMissionSubsystem::GetDogPerformingLabel() const
+{
+	APlayerController* Controller = BoundController.Get();
+	APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+	const ARelayDogCharacter* Dog = Cast<ARelayDogCharacter>(Pawn);
+	return Dog != nullptr ? WonderlandDogActName(Dog->PerformingAct()) : FString(TEXT("NO DOG"));
+}
+
 FString UWonderlandMissionSubsystem::GetDogActLabel() const
 {
 	return WonderlandDogActName(WonderlandDogActForBeat(Beat));
@@ -579,7 +619,9 @@ float UWonderlandMissionSubsystem::GetContractManifest() const
 
 bool UWonderlandMissionSubsystem::IsOrbInWorld() const
 {
-	return Orb.IsValid();
+	// A CONTRACT, NOT AN ACTOR. The crystal outlives the mission by the length of its fade, and during that
+	// half second there is no contract -- which is the same line TellTheDog draws for the Dog.
+	return Orb.IsValid() && WonderlandBeatShowsContract(Beat);
 }
 
 int32 UWonderlandMissionSubsystem::GetOrbBoxCount() const
