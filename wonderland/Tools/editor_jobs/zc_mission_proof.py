@@ -50,8 +50,15 @@ def job():
     RESULT["tests"] = tests
     RESULT["captures"] = []
 
+    def say(line):
+        """Into the EDITOR LOG as it happens. A killed process leaves the log behind and takes the result
+        file with it, so anything only in RESULT is lost exactly when it is most wanted (owner, 2026-09-15:
+        two runs died here and left no record of why)."""
+        unreal.log_warning("WLMISSIONPROOF %s" % line)
+
     def record(tid, name, ok, **detail):
         tests.append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
+        say("%s %s %s" % (tid, "PASS" if ok else "FAIL", detail))
         emit(tid, "PASS" if ok else "FAIL", name, detail)
 
     def shot(name):
@@ -137,10 +144,17 @@ def job():
         # is the accessor, and it hands back a flat tuple: (blocking, initial_overlap, time, distance,
         # location, impact_point, ...). The location is picked by type rather than by index, so a future
         # engine that inserts a field does not silently start reporting the impact point as the floor.
-        parts = unreal.GameplayStatics.break_hit_result(hit)
-        where = next((p for p in parts if isinstance(p, unreal.Vector)), None)
-        if parts and parts[0] and where is not None:
-            floor_z = float(where.z)
+        try:
+            parts = unreal.GameplayStatics.break_hit_result(hit)
+            where = next((p for p in parts if isinstance(p, unreal.Vector)), None)
+            if parts and parts[0] and where is not None:
+                floor_z = float(where.z)
+        except Exception as exc:
+            say("break_hit_result refused: %s" % exc)
+            try:
+                floor_z = float(hit.get_editor_property("location").z)
+            except Exception as exc2:
+                say("get_editor_property refused too: %s" % exc2)
     above_floor = None if floor_z is None else round(orb_at.z - floor_z, 1)
     RESULT["placement"] = {"orb": [orb_at.x, orb_at.y, orb_at.z], "pawn": [pawn_at.x, pawn_at.y, pawn_at.z],
                            "offset": [offset.x, offset.y], "wanted_uu": round(wanted, 1),
@@ -223,6 +237,7 @@ def job():
            mission is not None and {b for b, v in asks.items() if v} == expected_asks,
            asking=sorted(b for b, v in asks.items() if v))
 
+    say("filming %d states, %d frames each" % (len(GALLERY), FRAMES_PER_BEAT))
     # ---------------------------------------------------------------- the gallery
     # A SEQUENCE PER STATE, NOT A STILL. Phase 3 is animation: a spin that reverses through a repair, a
     # pulse that races while coding and breathes while waiting, a block that stops dead. A contact sheet of
@@ -244,6 +259,7 @@ def job():
             path = shot("zc_mission_%02d_%s_%02d.png" % (index + 1, beat, frame))
             frames.append({"capture": path, "screen": screen})
             yield FRAME_SPACING
+        say("filmed %s (%d/%d)" % (beat, index + 1, len(GALLERY)))
         gallery.append({"beat": beat, "label": mission.get_beat_label(), "step": mission.get_chakra_step(),
                         "chakra": mission.get_chakra_name(), "frames": frames})
     RESULT["gallery"] = gallery
