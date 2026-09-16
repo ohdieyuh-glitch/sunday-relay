@@ -423,9 +423,15 @@ def tower_mid_oriel(f):
         p.lathe([(0.0, 3.10), (1.05, 3.55), (1.28, 4.10), (1.20, 4.55)],
                 segments=10, arc=190.0, matrix=m, smooth=False)
         plan = [(0.30, -1.22), (1.55, -0.86), (1.55, 0.86), (0.30, 1.22)]
-        p.prism(plan, 4.60, z0=4.40, matrix=m)
-        g.prism([(0.36, -1.06), (1.42, -0.74), (1.42, 0.74), (0.36, 1.06)],
-                3.55, z0=4.85, matrix=m)
+        # THE GLASS IS ON THE OUTSIDE (audit_glass.py scored this module 0%): the bay was one solid stone prism with
+        # its glazing sealed inside. Now stone is the apron below the sill and the frieze above the head, the glass
+        # fills the plan 4 cm behind the stone line between them, and corner posts and a mullion divide it.
+        p.prism(plan, 0.45, z0=4.40, matrix=m)
+        p.prism(plan, 0.60, z0=8.40, matrix=m)
+        g.prism([(0.30, -1.18), (1.51, -0.83), (1.51, 0.83), (0.30, 1.18)], 3.53, z0=4.86, matrix=m)
+        for (px, py) in ((1.47, -0.84), (1.47, 0.84)):
+            p.box(0.18, 0.18, 3.55, at=(px, py, 4.85), matrix=m, centre_z=False)
+        p.box(0.10, 0.12, 3.55, at=(1.52, 0.0, 4.85), matrix=m, centre_z=False)
         p.lathe([(1.62, 9.00), (1.30, 9.42), (0.0, 10.05)], segments=10,
                 arc=190.0, matrix=m, smooth=True)
     E.string_course(p, 10.60, L * 0.95, run=M.CORNICE_STRING)

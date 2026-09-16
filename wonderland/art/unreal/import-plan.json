@@ -666,10 +666,10 @@
       "excavation_uu": 0.0,
       "mounts_on": null,
       "style": {
-        "slender_broad": 0.631,
+        "slender_broad": 0.634,
         "low_monumental": 0.528,
         "open_solid": 1.0,
-        "gold_stone": 0.409,
+        "gold_stone": 0.308,
         "pristine_aged": 0.0,
         "garden_urban": 0.7,
         "ceremonial_residential": 0.55
@@ -715,7 +715,7 @@
           "asset_path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Oriel",
           "material_instance": "MI_V2_IvoryStone",
           "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_IvoryStone",
-          "triangles": 1670
+          "triangles": 1814
         }
       ]
     },
