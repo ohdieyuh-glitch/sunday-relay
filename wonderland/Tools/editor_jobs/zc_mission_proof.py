@@ -105,17 +105,36 @@ def job():
            strip=mission.is_mission_strip_on_screen() if mission else None)
 
     # ---------------------------------------------------------------- on the ground, at the Dog's feet
-    # THE FOUNDER'S SHAPE, CHECKED AS GEOMETRY: small, on the floor, and beside the Dog rather than on it.
+    # THE FOUNDER'S SHAPE, CHECKED AS GEOMETRY: on the floor, and beside the Dog rather than riding on it.
+    #
+    # IT CHECKS THE FOLLOW AGAINST WHAT IT WAS TOLD, not against a number typed here. The first version of
+    # this test asserted a flat distance under 140 uu, which was nothing but my guess at "beside"; when the
+    # placement was measured properly and moved to (125, 80) -- 148 uu away -- the test failed while the orb
+    # was exactly where it had been put. A bound that has to be edited every time the thing it measures
+    # legitimately changes is not measuring anything. So: read the offset the orb is configured with, and
+    # check the follow actually lands there.
+    orb_actor = next((a for a in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.WonderlandMissionOrb)), None)
+    offset = orb_actor.follow_offset if orb_actor is not None else unreal.Vector()
+    wanted = (offset.x ** 2 + offset.y ** 2) ** 0.5
     orb_at = mission.get_orb_location() if mission else unreal.Vector()
     pawn_at = pawn.get_actor_location() if pawn else unreal.Vector()
     flat = ((orb_at.x - pawn_at.x) ** 2 + (orb_at.y - pawn_at.y) ** 2) ** 0.5
     below = pawn_at.z - orb_at.z
     RESULT["placement"] = {"orb": [orb_at.x, orb_at.y, orb_at.z], "pawn": [pawn_at.x, pawn_at.y, pawn_at.z],
+                           "offset": [offset.x, offset.y], "wanted_uu": round(wanted, 1),
                            "flat_uu": round(flat, 1), "below_pawn_uu": round(below, 1),
+                           "height_uu": round(mission.get_orb_height_uu(), 1) if mission else 0,
                            "boxes": mission.get_orb_box_count() if mission else 0}
-    record("M01", "the orb is on the ground beside the Dog, not floating on the Carry-On",
+    record("M01", "the orb stands where it was told, on the ground, clear of the Dog",
            mission is not None and mission.is_orb_in_world() and mission.get_orb_box_count() > 0
-           and flat < 140.0 and below > 20.0,
+           # where it was told, within the follow's own lag
+           and wanted > 0.0 and abs(flat - wanted) < 20.0
+           # ON THE GROUND: the pawn's origin is its centre, so the dais must sit well under it
+           and below > 20.0
+           # CLEAR OF THE DOG, which is what stops it reading as carried: further out than the Dog's own
+           # body half-width, and not so far it stops being the Dog's object. 60 is half a head width (60)
+           # plus a leg; 260 is about where the companions would be if they drifted.
+           and 60.0 < flat < 260.0,
            **RESULT["placement"])
 
     # ---------------------------------------------------------------- every beat has a Julius future
