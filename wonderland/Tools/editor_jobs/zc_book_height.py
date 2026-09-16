@@ -5,7 +5,7 @@ import os
 
 L = unreal.WonderlandUiTestLibrary
 SHOTS = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "book_height")
-HEIGHTS = globals().get("HEIGHTS") or [0, -15, -30, -75]
+HEIGHTS = globals().get("HEIGHTS") or [-13, -5, -25]
 
 
 def vec(v):
@@ -33,7 +33,7 @@ def job():
         boom = pawn.get_component_by_class(unreal.SpringArmComponent)
         arm_was, socket_was = float(boom.target_arm_length), boom.socket_offset
         boom.set_editor_property("target_arm_length", 320.0)
-        boom.set_editor_property("socket_offset", unreal.Vector(0.0, 0.0, 0.0))
+        boom.set_editor_property("socket_offset", unreal.Vector(0.0, 0.0, 70.0))
         mission.stop_fixture()
         # Reading where it stands: the fixture is not running, so the Dog does not orbit away from the camera.
         mission.set_beat_by_id("researching")
@@ -45,12 +45,23 @@ def job():
             comps = {c.get_name(): c for c in pawn.get_components_by_class(unreal.SceneComponent)}
             at = pawn.get_actor_location()
             root = next((c for n, c in comps.items() if n.startswith("MissionBookRoot")), None)
-            row = {"height": height, "cvar": unreal.SystemLibrary.get_console_variable_float_value("wl.Dog.Read.BookUp"),
+            head = comps.get("Pivot_head")
+            row = {"height": height,
+                   "book_minus_head_z": round(root.get_world_location().z - head.get_world_location().z, 1) if root and head else None, "cvar": unreal.SystemLibrary.get_console_variable_float_value("wl.Dog.Read.BookUp"),
                    "book_root_z": round(root.get_world_location().z - at.z, 1) if root else None,
                    "head_z": round(comps["Pivot_head"].get_world_location().z - at.z, 1) if "Pivot_head" in comps else None,
                    "forearm_l_z": round(comps["Pivot_forearmLeft"].get_world_location().z - at.z, 1) if "Pivot_forearmLeft" in comps else None,
                    "shot": os.path.join(SHOTS, "book_up_%s.png" % str(height).replace("-", "m"))}
             L.capture_game_viewport(row["shot"])
+            # And at the play camera's distance, the whole Dog.
+            boom.set_editor_property("target_arm_length", 440.0)
+            boom.set_editor_property("socket_offset", socket_was)
+            controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-14.0, yaw=pawn.get_actor_rotation().yaw + 180.0 + 60.0))
+            yield 1.0
+            row["play_shot"] = row["shot"].replace(".png", "_play.png")
+            L.capture_game_viewport(row["play_shot"])
+            boom.set_editor_property("target_arm_length", 320.0)
+            boom.set_editor_property("socket_offset", unreal.Vector(0.0, 0.0, 70.0))
             rows.append(row)
         boom.set_editor_property("target_arm_length", arm_was)
         boom.set_editor_property("socket_offset", socket_was)

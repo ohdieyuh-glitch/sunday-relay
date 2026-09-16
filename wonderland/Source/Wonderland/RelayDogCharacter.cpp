@@ -308,7 +308,9 @@ bool ARelayDogCharacter::BindJoints()
 	LegLeft.LateralUU = LegLeft.Hip->GetRelativeLocation().Y;
 	LegRight.LateralUU = LegRight.Hip->GetRelativeLocation().Y;
 	BodyRestLocation = BodyRoot->GetRelativeLocation();
-	HeadInBodyRest = BodyRoot->GetComponentTransform().InverseTransformPosition(HeadPivot->GetComponentLocation());
+	// From the head joint's RELATIVE place, never from world positions: at bind the components' world transforms are not
+	// always updated yet, and one play session measured the head 198.7 uu up the body where the rig puts it at 111.7.
+	HeadInBodyRest = HeadPivot->GetAttachParent() == BodyRoot ? HeadPivot->GetRelativeLocation() : FVector(0.0, 0.0, 111.7);
 
 	const float LegLengthUU = 0.8f * HeadWidthUU;
 	const float ThighUU = (0.8f - 0.5125f) * HeadWidthUU;
@@ -1478,7 +1480,7 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		// THE CHEST, just under the head joint in the body's own frame. Placed from the capsule or from the body's origin,
 		// the beam left from the hip: the Body's origin and the capsule centre were measured at different heights in
 		// different play sessions, the head joint in the body's frame never moves.
-		const FVector Chest = BodyRoot->GetComponentTransform().TransformPosition(FVector(18.0, 0.0, HeadInBodyRest.Z - 14.0));
+		const FVector Chest = BodyRoot->GetComponentTransform().TransformPosition(FVector(18.0, 0.0, HeadJointHeightInBody() - 14.0));
 		DrawVerificationBeam(Chest, ContractWorld, Overlay.BeamWeight, MissionIn.TimeSeconds);
 	}
 	else
@@ -1715,6 +1717,17 @@ void ARelayDogCharacter::BuildMissionProps()
 	}
 }
 
+double ARelayDogCharacter::HeadJointHeightInBody() const
+{
+	// Read live: the head joint's relative place under the body is the rig's own and is never animated (only its
+	// rotation is), so this is where the neck is whatever the capsule and the body's origin are doing.
+	if (HeadPivot != nullptr && BodyRoot != nullptr && HeadPivot->GetAttachParent() == BodyRoot)
+	{
+		return HeadPivot->GetRelativeLocation().Z;
+	}
+	return HeadInBodyRest.Z;
+}
+
 void ARelayDogCharacter::PoseBook(bool bInHand, float PageTurn)
 {
 	using namespace RelayDogReadTuning;
@@ -1737,7 +1750,7 @@ void ARelayDogCharacter::PoseBook(bool bInHand, float PageTurn)
 	// the head in another session, because those two were measured at different heights from one play session to the
 	// next. The head joint in the body's frame is fixed by the rig, so "just under the head, in front of the chest" is
 	// the same place every time. BookUp is now measured from the head joint (negative: below it).
-	const FVector Anchor(0.0, 0.0, HeadInBodyRest.Z);
+	const FVector Anchor(0.0, 0.0, HeadJointHeightInBody());
 	BookRoot->SetRelativeLocationAndRotation(
 		Anchor + FVector(CVarBookFwd.GetValueOnGameThread(), CVarBookRight.GetValueOnGameThread(), CVarBookUp.GetValueOnGameThread()) * U,
 		FRotator(CVarBookTilt.GetValueOnGameThread(), 0.0f, 0.0f));

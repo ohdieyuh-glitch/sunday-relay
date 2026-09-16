@@ -278,6 +278,8 @@ private:
 	FString LastBeamNote;
 	/** Place the open book before the chest, lay out its halves, and turn the page (PageTurn 0..1; negative: none). */
 	void PoseBook(bool bInHand, float PageTurn);
+	/** How far up the body the head joint (the neck) is, read live from its relative place under the Body. */
+	double HeadJointHeightInBody() const;
 
 	RelayDogStride::FDogAnimator Animator;
 
