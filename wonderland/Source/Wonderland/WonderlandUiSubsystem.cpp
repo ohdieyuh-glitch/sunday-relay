@@ -26,7 +26,6 @@
 #include "WonderlandCompanionTerminal.h"
 #include "WonderlandHudPanels.h"
 #include "WonderlandLiveTerminal.h"
-#include "WonderlandJuliusStream.h"
 #include "WonderlandMiniMap.h"
 #include "WonderlandMissionSubsystem.h"
 #include "WonderlandNavBar.h"
@@ -120,10 +119,10 @@ void UWonderlandUiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UWonderlandUiSubsystem::Deinitialize()
 {
-	if (StreamTicker.IsValid())
+	if (RoleTicker.IsValid())
 	{
-		FTSTicker::GetCoreTicker().RemoveTicker(StreamTicker);
-		StreamTicker.Reset();
+		FTSTicker::GetCoreTicker().RemoveTicker(RoleTicker);
+		RoleTicker.Reset();
 	}
 	Detach();
 	if (ULocalPlayer* LocalPlayer = GetLocalPlayer<ULocalPlayer>())
@@ -1421,7 +1420,7 @@ void UWonderlandUiSubsystem::NarrateMissionEvent(FName EventType, EWonderlandMis
 	EnsureLiveTerminal();
 	const bool bEnded = EventType.IsNone();
 
-	// ---- Julius: a row for every event, and the role section it moves
+	// ---- Julius and its three components, each working in its own section of the Julius Live Terminal
 	if (Terminal.IsValid() && !bEnded)
 	{
 		if (bNewMission)
@@ -1429,19 +1428,9 @@ void UWonderlandUiSubsystem::NarrateMissionEvent(FName EventType, EWonderlandMis
 			Terminal->ResetSimulation();
 		}
 		Terminal->SetSimulated(true);
-		const FWonderlandJuliusNarration Julius = WonderlandJuliusNarrationForEvent(EventType);
-		if (*Julius.Section != 0)
-		{
-			Terminal->SetSectionState(Julius.Section, Julius.SectionState, Julius.SectionLine);
-		}
-		Terminal->SetSectionState(TEXT("JULIUS 3.3"), Julius.JuliusState, FString());
-		Terminal->AddJuliusRow(TEXT("Julius"), Julius.Headline,
-			FString::Printf(TEXT("event %s  \u00B7  %s  \u00B7  simulated, no provider called"), *EventType.ToString(), *ChakraLabel));
 		JuliusNarratedEvent = EventType;
 	}
-
-	// ---- the stream: Julius and its three components writing their work, inside the Julius terminal, from this event
-	NarrateStream(EventType, bNewMission, bLlmJoined, bJhinnJoined);
+	NarrateRoles(EventType, ChakraLabel, bNewMission, bLlmJoined, bJhinnJoined);
 
 	// ---- the companions: only a joined one takes part, and it speaks when the stage changes
 	for (int32 Index = 0; Index < CompanionTerminals.Num(); ++Index)
@@ -1475,141 +1464,196 @@ void UWonderlandUiSubsystem::NarrateMissionEvent(FName EventType, EWonderlandMis
 }
 
 // Named, not anonymous: the module is one unity translation unit.
-namespace WonderlandJuliusStreamPacing
+namespace WonderlandRoleFeedDetail
 {
-	TAutoConsoleVariable<float> CVarHoldScale(TEXT("wl.Julius.StreamPace"), 0.6f,
-		TEXT("How long each line of the Julius stream holds before the next, as a multiple of the reading holds: one "
-		     "stream reads a line at a time, so it can move quicker than four consoles would."));
+	/** The section of the Julius Live Terminal each role works in -- the terminal's own four, never new ones. */
+	const TCHAR* SectionFor(EWonderlandJuliusRole Role)
+	{
+		switch (Role)
+		{
+		case EWonderlandJuliusRole::PromptArchitect:     return TEXT("PROMPT ARCHITECT");
+		case EWonderlandJuliusRole::CodingAgent:         return TEXT("CODING AGENT");
+		case EWonderlandJuliusRole::IndependentReviewer: return TEXT("INDEPENDENT REVIEWER");
+		default: break;
+		}
+		return TEXT("JULIUS 3.3");
+	}
+
+	/** One line as a section's single line reads it: a diff as a diff, a test as a test, a packet line as a packet. */
+	FString AsSectionLine(const FWonderlandRoleLine& Line)
+	{
+		using K = EWonderlandRoleLineKind;
+		switch (Line.Kind)
+		{
+		case K::Section:     return FString::Printf(TEXT("[%s]"), *Line.Text);
+		case K::Preview:     return TEXT("| ") + Line.Text;
+		case K::DiffAdd:     return TEXT("+ ") + Line.Text;
+		case K::DiffRemove:  return TEXT("- ") + Line.Text;
+		case K::Pass:        return TEXT("PASS  ") + Line.Text;
+		case K::Fail:        return TEXT("FAIL  ") + Line.Text;
+		case K::CheckDone:   return TEXT("\u25CF ") + Line.Text;
+		case K::CheckOpen:   return TEXT("\u25CB ") + Line.Text;
+		case K::Finding:     return TEXT("! ") + Line.Text;
+		case K::Wait:        return TEXT("\u2026 ") + Line.Text;
+		default: break;
+		}
+		return Line.Text;
+	}
+
+	TAutoConsoleVariable<float> CVarHoldScale(TEXT("wl.Julius.RolePace"), 1.0f,
+		TEXT("How long each line of a role's work holds its section before the next, as a multiple of the reading holds."));
 }
 
-void UWonderlandUiSubsystem::NarrateStream(FName EventType, bool bNewMission, bool bLlmJoined, bool bJhinnJoined)
+void UWonderlandUiSubsystem::NarrateRoles(FName EventType, const FString& ChakraLabel, bool bNewMission, bool bLlmJoined, bool bJhinnJoined)
 {
-	const TSharedPtr<SWonderlandJuliusStream> Stream = Terminal.IsValid() ? Terminal->GetStream() : nullptr;
-	if (!Stream.IsValid())
+	if (!Terminal.IsValid())
 	{
 		return;
 	}
-	if (!StreamTicker.IsValid())
+	if (!RoleTicker.IsValid())
 	{
-		StreamTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UWonderlandUiSubsystem::TickStream));
+		RoleTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UWonderlandUiSubsystem::TickRoles));
 	}
 	if (bNewMission)
 	{
-		StreamOccurrences.Reset();
-		StreamPending.Reset();
-		StreamWait = 0.0f;
-		Stream->Clear();
-	}
-	// THE WORLD HAS MOVED ON. Whatever the stream still owed the last event is written now, so the terminal is never
-	// describing a stage the Relay Dog has left; the mission pace is chosen so this is rarely more than a line or two.
-	FlushStream();
-	StreamEvent = EventType;
-	if (EventType.IsNone())
-	{
-		for (int32 Role = 0; Role < WonderlandJuliusRoleCount; ++Role)
+		RoleOccurrences.Reset();
+		for (FRoleFeed& Feed : RoleFeeds)
 		{
-			const EWonderlandJuliusRole Which = static_cast<EWonderlandJuliusRole>(Role);
-			Stream->SetRoleStatus(Which, WonderlandRoleRestingStatus(Which, true));
+			Feed = FRoleFeed();
 		}
-		return;
 	}
-	const int32 Occurrence = ++StreamOccurrences.FindOrAdd(EventType);
-	// Julius first -- it takes the event and dispatches -- then the component each event hands work to, in the order the
-	// work flows: architecture, code, review. Every status changes now, with the world; the lines follow at reading pace.
+	RoleEvent = EventType;
+	RoleChakra = ChakraLabel;
+	const int32 Occurrence = EventType.IsNone() ? 0 : ++RoleOccurrences.FindOrAdd(EventType);
 	for (int32 Role = 0; Role < WonderlandJuliusRoleCount; ++Role)
 	{
 		const EWonderlandJuliusRole Which = static_cast<EWonderlandJuliusRole>(Role);
+		// THE WORLD HAS MOVED ON. Whatever a role still owed the last event is written now, so no section is ever still
+		// describing a stage the Relay Dog has left.
+		FlushRole(Role);
+		FRoleFeed& Feed = RoleFeeds[Role];
+		if (EventType.IsNone())
+		{
+			Feed.Status = WonderlandRoleRestingStatus(Which, true);
+			Terminal->SetSectionState(WonderlandRoleFeedDetail::SectionFor(Which), Feed.Status, FString());
+			continue;
+		}
 		FWonderlandRoleBlock Block = WonderlandRoleBlockFor(Which, EventType, Occurrence, bLlmJoined, bJhinnJoined);
 		if (!Block.Status.IsEmpty())
 		{
-			Stream->SetRoleStatus(Which, Block.Status);
+			// The state moves with the world, now; the lines follow at reading pace.
+			Feed.Status = Block.Status;
+			Terminal->SetSectionState(WonderlandRoleFeedDetail::SectionFor(Which), Feed.Status, FString());
 		}
-		for (FWonderlandRoleLine& Line : Block.Lines)
-		{
-			StreamPending.Add({Which, MoveTemp(Line)});
-		}
+		Feed.Pending = MoveTemp(Block.Lines);
+		// All four work at once, each in its own section; staggered so they do not change on the same frame.
+		Feed.Wait = 0.2f * Role;
 	}
 }
 
-void UWonderlandUiSubsystem::FlushStream()
+void UWonderlandUiSubsystem::WriteRoleLine(int32 Role, const FWonderlandRoleLine& Line)
 {
-	const TSharedPtr<SWonderlandJuliusStream> Stream = Terminal.IsValid() ? Terminal->GetStream() : nullptr;
-	if (Stream.IsValid())
+	if (!Terminal.IsValid())
 	{
-		for (const FStreamEntry& Entry : StreamPending)
-		{
-			Stream->AddRoleLine(Entry.Role, Entry.Line);
-		}
+		return;
 	}
-	StreamPending.Reset();
-	StreamWait = 0.0f;
+	const EWonderlandJuliusRole Which = static_cast<EWonderlandJuliusRole>(Role);
+	FRoleFeed& Feed = RoleFeeds[Role];
+	++Feed.Written;
+	Feed.Latest = Line;
+	if (Which == EWonderlandJuliusRole::Julius)
+	{
+		// Julius's work is rows in its own section, the way the terminal has always shown Julius; a heading is carried
+		// into the row it heads rather than taking a row of its own.
+		if (Line.Kind == EWonderlandRoleLineKind::Section)
+		{
+			Feed.Heading = Line.Text;
+			return;
+		}
+		const FString Headline = Feed.Heading.IsEmpty() ? Line.Text : FString::Printf(TEXT("%s \u00B7 %s"), *Feed.Heading, *Line.Text);
+		Feed.Heading.Reset();
+		Terminal->AddJuliusRow(TEXT("Julius"), Headline,
+			FString::Printf(TEXT("event %s  \u00B7  %s  \u00B7  simulated, no provider called"), *RoleEvent.ToString(), *RoleChakra));
+		return;
+	}
+	Terminal->SetSectionState(WonderlandRoleFeedDetail::SectionFor(Which), Feed.Status, WonderlandRoleFeedDetail::AsSectionLine(Line));
 }
 
-bool UWonderlandUiSubsystem::TickStream(float DeltaSeconds)
+void UWonderlandUiSubsystem::FlushRole(int32 Role)
 {
-	// ON THE WORLD'S CLOCK, like the fixture and the Dog: slowing the world for a film slows the stream with it, and a
-	// paused world holds it mid-sentence rather than letting it run ahead of the mission.
+	FRoleFeed& Feed = RoleFeeds[Role];
+	for (const FWonderlandRoleLine& Line : Feed.Pending)
+	{
+		WriteRoleLine(Role, Line);
+	}
+	Feed.Pending.Reset();
+	Feed.Wait = 0.0f;
+}
+
+bool UWonderlandUiSubsystem::TickRoles(float DeltaSeconds)
+{
+	// ON THE WORLD'S CLOCK, like the fixture and the Dog: slowing the world slows the terminal with it, and a paused world
+	// holds it mid-sentence rather than letting it run ahead of the mission.
 	const UWorld* World = PlayerWorld();
 	if (World == nullptr)
 	{
-		StreamWorldSeconds = -1.0;
+		RoleWorldSeconds = -1.0;
 		return true;
 	}
 	const double Now = World->GetTimeSeconds();
-	const float Step = StreamWorldSeconds < 0.0 ? 0.0f : FMath::Clamp(static_cast<float>(Now - StreamWorldSeconds), 0.0f, 0.5f);
-	StreamWorldSeconds = Now;
-	if (StreamPending.Num() == 0)
+	const float Step = RoleWorldSeconds < 0.0 ? 0.0f : FMath::Clamp(static_cast<float>(Now - RoleWorldSeconds), 0.0f, 0.5f);
+	RoleWorldSeconds = Now;
+	const float Scale = FMath::Clamp(WonderlandRoleFeedDetail::CVarHoldScale.GetValueOnGameThread(), 0.05f, 4.0f);
+	for (int32 Role = 0; Role < WonderlandJuliusRoleCount; ++Role)
 	{
-		return true;
-	}
-	const TSharedPtr<SWonderlandJuliusStream> Stream = Terminal.IsValid() ? Terminal->GetStream() : nullptr;
-	StreamWait -= Step;
-	while (StreamWait <= 0.0f && StreamPending.Num() > 0)
-	{
-		const FStreamEntry Entry = StreamPending[0];
-		StreamPending.RemoveAt(0);
-		if (Stream.IsValid())
+		FRoleFeed& Feed = RoleFeeds[Role];
+		if (Feed.Pending.Num() == 0)
 		{
-			Stream->AddRoleLine(Entry.Role, Entry.Line);
+			continue;
 		}
-		StreamWait += WonderlandRoleLineHoldSeconds(Entry.Line.Kind)
-			* FMath::Clamp(WonderlandJuliusStreamPacing::CVarHoldScale.GetValueOnGameThread(), 0.05f, 4.0f);
+		Feed.Wait -= Step;
+		while (Feed.Wait <= 0.0f && Feed.Pending.Num() > 0)
+		{
+			const FWonderlandRoleLine Line = Feed.Pending[0];
+			Feed.Pending.RemoveAt(0);
+			WriteRoleLine(Role, Line);
+			Feed.Wait += WonderlandRoleLineHoldSeconds(Line.Kind) * Scale;
+		}
 	}
 	return true;
 }
 
-bool UWonderlandUiSubsystem::IsJuliusStreamShown() const
-{
-	return Terminal.IsValid() && Terminal->IsSimulated() && IsLiveTerminalOpen();
-}
-
 FString UWonderlandUiSubsystem::GetJuliusRoleStatus(int32 Role) const
 {
-	const TSharedPtr<SWonderlandJuliusStream> Stream = Terminal.IsValid() ? Terminal->GetStream() : nullptr;
-	return Stream.IsValid() && Role >= 0 && Role < WonderlandJuliusRoleCount ? Stream->GetRoleStatus(static_cast<EWonderlandJuliusRole>(Role)) : FString();
+	return Role >= 0 && Role < WonderlandJuliusRoleCount ? RoleFeeds[Role].Status : FString();
 }
 
 int32 UWonderlandUiSubsystem::GetJuliusRoleWrittenCount(int32 Role) const
 {
-	const TSharedPtr<SWonderlandJuliusStream> Stream = Terminal.IsValid() ? Terminal->GetStream() : nullptr;
-	return Stream.IsValid() && Role >= 0 && Role < WonderlandJuliusRoleCount ? Stream->GetRoleWrittenCount(static_cast<EWonderlandJuliusRole>(Role)) : 0;
+	return Role >= 0 && Role < WonderlandJuliusRoleCount ? RoleFeeds[Role].Written : 0;
 }
 
 FString UWonderlandUiSubsystem::GetJuliusRoleLatestLine(int32 Role) const
 {
-	const TSharedPtr<SWonderlandJuliusStream> Stream = Terminal.IsValid() ? Terminal->GetStream() : nullptr;
-	return Stream.IsValid() && Role >= 0 && Role < WonderlandJuliusRoleCount ? Stream->GetRoleLatestText(static_cast<EWonderlandJuliusRole>(Role)) : FString();
+	return Role >= 0 && Role < WonderlandJuliusRoleCount ? RoleFeeds[Role].Latest.Text : FString();
 }
 
 FString UWonderlandUiSubsystem::GetJuliusRoleLatestKind(int32 Role) const
 {
-	const TSharedPtr<SWonderlandJuliusStream> Stream = Terminal.IsValid() ? Terminal->GetStream() : nullptr;
-	return Stream.IsValid() && Role >= 0 && Role < WonderlandJuliusRoleCount ? Stream->GetRoleLatestKind(static_cast<EWonderlandJuliusRole>(Role)) : FString();
+	if (Role < 0 || Role >= WonderlandJuliusRoleCount || RoleFeeds[Role].Written == 0)
+	{
+		return FString();
+	}
+	static const TCHAR* const Names[] = { TEXT("Log"), TEXT("Section"), TEXT("Command"), TEXT("Preview"), TEXT("PreviewRule"),
+		TEXT("File"), TEXT("DiffAdd"), TEXT("DiffRemove"), TEXT("Pass"), TEXT("Fail"), TEXT("CheckDone"), TEXT("CheckOpen"),
+		TEXT("Finding"), TEXT("State"), TEXT("Wait") };
+	const int32 Index = static_cast<int32>(RoleFeeds[Role].Latest.Kind);
+	return Index >= 0 && Index < UE_ARRAY_COUNT(Names) ? FString(Names[Index]) : FString();
 }
 
-int32 UWonderlandUiSubsystem::GetJuliusStreamPending() const
+int32 UWonderlandUiSubsystem::GetJuliusRolePending(int32 Role) const
 {
-	return StreamPending.Num();
+	return Role >= 0 && Role < WonderlandJuliusRoleCount ? RoleFeeds[Role].Pending.Num() : 0;
 }
 
 bool UWonderlandUiSubsystem::IsJuliusTerminalSimulated() const

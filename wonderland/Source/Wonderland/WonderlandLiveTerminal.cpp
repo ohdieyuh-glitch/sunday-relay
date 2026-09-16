@@ -11,9 +11,7 @@
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
-#include "WonderlandJuliusStream.h"
 #include "WonderlandUiStyle.h"
-#include "Widgets/SOverlay.h"
 
 /* ------------------------------------------------------------ hex badge */
 
@@ -108,7 +106,6 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 
 	SAssignNew(JuliusBody, SVerticalBox);
 	RebuildJuliusBody();
-	SAssignNew(Stream, SWonderlandJuliusStream);
 
 	const TSharedRef<SWidget> Window =
 		SNew(SBorder)
@@ -130,23 +127,7 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 			+ SVerticalBox::Slot()
 			.FillHeight(1.0f)
 			[
-				// THE SAME BODY, TWO CONTENTS: the role sections at rest, and while a simulated mission is shown the live
-				// stream of Julius and its components. The window around it does not move or grow.
-				SNew(SOverlay)
-				+ SOverlay::Slot()
-				[
-					SNew(SBorder)
-					.BorderImage(FCoreStyle::Get().GetBrush("NoBorder"))
-					.Padding(0.0f)
-					.Visibility_Lambda([this]() { return bSimulated ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; })
-					[
-						Stream.ToSharedRef()
-					]
-				]
-				+ SOverlay::Slot()
-				[
 				SNew(SScrollBox)
-				.Visibility_Lambda([this]() { return bSimulated ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible; })
 				.ScrollBarVisibility(EVisibility::Collapsed)
 				+ SScrollBox::Slot().Padding(0.0f, 0.0f, 0.0f, 5.0f)
 				[
@@ -164,7 +145,6 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 				[
 					MakeSection(TEXT("INDEPENDENT REVIEWER"), TEXT("WAITING"),
 						MakeLiveLine(TEXT("INDEPENDENT REVIEWER"), TEXT("Reviewer: Independent review begins after Julius verification.")))
-				]
 				]
 			]
 			+ SVerticalBox::Slot()

@@ -29,7 +29,6 @@
 #include "Widgets/SLeafWidget.h"
 
 class SEditableTextBox;
-class SWonderlandJuliusStream;
 class STextBlock;
 class SVerticalBox;
 
@@ -117,13 +116,6 @@ public:
 	/** A new mission: the simulated rows and section states go back to rest. */
 	void ResetSimulation();
 
-	/**
-	 * THE LIVE WORK OF THE COMPOUND AGENT (founder, 2026-09-16), shown in this window's body while a simulated mission
-	 * is shown: Julius and its Prompt Architect, Coding Agent and Independent Reviewer in one scrolling stream
-	 * (WonderlandJuliusStream.h). The window itself keeps its place and size; only what is inside it changes.
-	 */
-	TSharedPtr<SWonderlandJuliusStream> GetStream() const { return Stream; }
-
 private:
 	struct FRow
 	{
@@ -156,7 +148,6 @@ private:
 
 	TSharedPtr<SEditableTextBox> Input;
 	TSharedPtr<SVerticalBox> JuliusBody;
-	TSharedPtr<SWonderlandJuliusStream> Stream;
 	TArray<FRow> JuliusRows;
 
 	FSlateRoundedBoxBrush WindowBrush;

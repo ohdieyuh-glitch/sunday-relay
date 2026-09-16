@@ -260,6 +260,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
 	bool RunScenario(FName ScenarioLetter, float SecondsPerEvent = 3.0f);
 
+	/**
+	 * THE FOUNDER'S PLAY COMMAND (wl.Mission.Scenario): take the Dog to the simulation site (wl.Mission.Site, a travel
+	 * destination; "none" plays where the Dog stands), then run the scenario and open the Julius Live Terminal to watch
+	 * it. False only for a letter that is not A, B, C or D. The travel is the map's own, with its fade and its landing.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
+	bool PlayScenario(FName ScenarioLetter, float SecondsPerEvent = 10.0f);
+
+	/** A scenario is waiting for the travel to the simulation site to finish. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	bool IsScenarioWaitingForSite() const { return PendingScenario != NAME_None; }
+
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	FName GetScenario() const { return Scenario; }
 
@@ -337,6 +349,13 @@ private:
 	/** After the last event, hold the finished contract on screen before letting it go. */
 	float FinishHold = 0.0f;
 	FTSTicker::FDelegateHandle PlayTicker;
+	/** A scenario waiting on the travel to the simulation site, its pace, and the world time the travel ended. */
+	FName PendingScenario;
+	float PendingPace = 10.0f;
+	double PendingArrivedAt = -1.0;
+	FTSTicker::FDelegateHandle PendingTicker;
+	bool StepPendingScenario(float DeltaSeconds);
+	void StartScenarioAndWatch(FName ScenarioLetter, float SecondsPerEvent);
 	FDelegateHandle ControllerChangedHandle;
 	bool bLlmJoined = false;
 	bool bJhinnJoined = false;

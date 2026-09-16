@@ -27,6 +27,7 @@
 #include "GameFramework/WorldSettings.h"
 #include "WonderlandMissionOrb.h"
 #include "WonderlandPixelText.h"
+#include "WonderlandTravel.h"
 #include "WonderlandUiStyle.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandMissionUi, Log, All);
@@ -155,11 +156,16 @@ namespace
 			ForEachMission([bLlm, bJhinn](UWonderlandMissionSubsystem& Mission) { Mission.SetJoinedIn(bLlm, bJhinn); });
 		}));
 
+	// WHERE THE FOUNDER'S PLAY COMMAND STAGES A MISSION (founder, 2026-09-16: "the location you are at is not ideal"): a
+	// travel destination with open ground for the Dog's circle and the companions' orbit.
+	TAutoConsoleVariable<FString> CVarMissionSite(TEXT("wl.Mission.Site"), TEXT("south_meadows"),
+		TEXT("Where `wl.Mission.Scenario` plays a mission: a travel destination id (see the world map), or `none` to play it where the Dog stands."));
+
 	FAutoConsoleCommand CmdMissionScenario(
 		TEXT("wl.Mission.Scenario"),
-		TEXT("Play a full simulated mission with a participation scenario and open the Julius Live Terminal to watch it: "
-		     "`wl.Mission.Scenario D` (seconds per event optional, default 10). A Julius only; B + LLM Companion; C + Jhinn; "
-		     "D + both. Running it again restarts. No provider is called. DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION."),
+		TEXT("Play a full simulated mission with a participation scenario at the simulation site (wl.Mission.Site) and open the "
+		     "Julius Live Terminal to watch it: `wl.Mission.Scenario D` (seconds per event optional, default 10). A Julius only; "
+		     "B + LLM Companion; C + Jhinn; D + both. Running it again restarts. No provider is called. DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
 			const FName Letter(Args.Num() > 0 ? *Args[0].ToUpper() : TEXT("D"));
@@ -168,15 +174,9 @@ namespace
 			const float Pace = Args.Num() > 1 ? FCString::Atof(*Args[1]) : 10.0f;
 			ForEachMission([Letter, Pace](UWonderlandMissionSubsystem& Mission)
 			{
-				const bool bRunning = Mission.RunScenario(Letter, Pace);
-				UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION scenario %s at %.1f s per event -> %s"), *Letter.ToString(),
-					Pace, bRunning ? TEXT("running") : TEXT("NO SUCH SCENARIO (A, B, C or D)"));
-				// ONE COMMAND TO WATCH IT: the terminal the mission narrates into opens with it.
-				ULocalPlayer* Player = Mission.GetLocalPlayer<ULocalPlayer>();
-				UWonderlandUiSubsystem* Ui = Player != nullptr ? Player->GetSubsystem<UWonderlandUiSubsystem>() : nullptr;
-				if (bRunning && Ui != nullptr && !Ui->IsLiveTerminalOpen())
+				if (!Mission.PlayScenario(Letter, Pace))
 				{
-					Ui->ToggleLiveTerminal();
+					UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION scenario %s -> NO SUCH SCENARIO (A, B, C or D)"), *Letter.ToString());
 				}
 			});
 		}));
@@ -243,6 +243,12 @@ void UWonderlandMissionSubsystem::Initialize(FSubsystemCollectionBase& Collectio
 void UWonderlandMissionSubsystem::Deinitialize()
 {
 	StopFixture();
+	if (PendingTicker.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(PendingTicker);
+		PendingTicker.Reset();
+	}
+	PendingScenario = NAME_None;
 	Detach();
 	if (ULocalPlayer* LocalPlayer = GetLocalPlayer<ULocalPlayer>())
 	{
@@ -738,6 +744,92 @@ bool UWonderlandMissionSubsystem::RunScenario(FName ScenarioLetter, float Second
 	Scenario = FName(*Letter);
 	SetJoinedIn(Letter == TEXT("B") || Letter == TEXT("D"), Letter == TEXT("C") || Letter == TEXT("D"));
 	return StartFixture(TEXT("full_lifecycle"), SecondsPerEvent);
+}
+
+bool UWonderlandMissionSubsystem::PlayScenario(FName ScenarioLetter, float SecondsPerEvent)
+{
+	const FString Letter = ScenarioLetter.ToString().ToUpper();
+	if (Letter != TEXT("A") && Letter != TEXT("B") && Letter != TEXT("C") && Letter != TEXT("D"))
+	{
+		return false;
+	}
+	// A clean start: whatever was running stops, and the world is idle while the Dog goes to the site.
+	StopFixture();
+	SetBeatById(TEXT("idle"));
+	PendingScenario = NAME_None;
+	if (PendingTicker.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(PendingTicker);
+		PendingTicker.Reset();
+	}
+
+	const FName Site(*CVarMissionSite.GetValueOnGameThread().TrimStartAndEnd());
+	UWorld* World = GetWorld();
+	UWonderlandTravelSubsystem* Travel = World != nullptr ? World->GetSubsystem<UWonderlandTravelSubsystem>() : nullptr;
+	const bool bStayHere = Site.IsNone() || Site == FName(TEXT("none")) || Travel == nullptr
+		|| Travel->GetNearestOfferedDestination(1500.0) == Site;
+	if (!bStayHere)
+	{
+		FText Refusal;
+		if (Travel->RequestTravel(Site, Refusal))
+		{
+			PendingScenario = FName(*Letter);
+			PendingPace = SecondsPerEvent;
+			PendingArrivedAt = -1.0;
+			PendingTicker = FTSTicker::GetCoreTicker().AddTicker(
+				FTickerDelegate::CreateUObject(this, &UWonderlandMissionSubsystem::StepPendingScenario), 0.0f);
+			UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION scenario %s: travelling to the simulation site '%s' first"), *Letter, *Site.ToString());
+			return true;
+		}
+		UE_LOG(LogWonderlandMissionUi, Warning, TEXT("WLMISSION scenario %s: cannot reach the simulation site '%s' (%s); playing it here"),
+			*Letter, *Site.ToString(), *Refusal.ToString());
+	}
+	StartScenarioAndWatch(FName(*Letter), SecondsPerEvent);
+	return true;
+}
+
+bool UWonderlandMissionSubsystem::StepPendingScenario(float DeltaSeconds)
+{
+	UWorld* World = GetWorld();
+	const UWonderlandTravelSubsystem* Travel = World != nullptr ? World->GetSubsystem<UWonderlandTravelSubsystem>() : nullptr;
+	if (PendingScenario == NAME_None || World == nullptr)
+	{
+		PendingTicker.Reset();
+		return false;
+	}
+	if (Travel != nullptr && Travel->IsTravelling())
+	{
+		return true;
+	}
+	// A breath after the landing, so the world around the site has streamed in and the fade has cleared.
+	if (PendingArrivedAt < 0.0)
+	{
+		PendingArrivedAt = World->GetTimeSeconds();
+		return true;
+	}
+	if (World->GetTimeSeconds() - PendingArrivedAt < 1.0)
+	{
+		return true;
+	}
+	const FName Letter = PendingScenario;
+	PendingScenario = NAME_None;
+	PendingTicker.Reset();
+	StartScenarioAndWatch(Letter, PendingPace);
+	return false;
+}
+
+void UWonderlandMissionSubsystem::StartScenarioAndWatch(FName ScenarioLetter, float SecondsPerEvent)
+{
+	const bool bRunning = RunScenario(ScenarioLetter, SecondsPerEvent);
+	UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION scenario %s at %.1f s per event -> %s"), *ScenarioLetter.ToString(),
+		SecondsPerEvent, bRunning ? TEXT("running") : TEXT("did not start"));
+	// ONE COMMAND TO WATCH IT: the terminal the mission narrates into opens with it.
+	ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
+	UWonderlandUiSubsystem* Ui = Player != nullptr ? Player->GetSubsystem<UWonderlandUiSubsystem>() : nullptr;
+	if (bRunning && Ui != nullptr && !Ui->IsLiveTerminalOpen())
+	{
+		Ui->ToggleLiveTerminal();
+	}
 }
 
 FString UWonderlandMissionSubsystem::GetCompanionFlight(int32 Index) const
