@@ -47,6 +47,7 @@ export const JULIUS_BRAIN_MIGRATIONS = [
   migration('004_julius_brain_immutability.sql'),
   migration('005_julius_brain_unknown_occurrence.sql'),
   migration('006_julius_brain_access.sql'),
+  migration('007_julius_brain_service_requests.sql'),
 ] as const;
 
 export function juliusBrainMigrationVersion(sql: string): string | null {

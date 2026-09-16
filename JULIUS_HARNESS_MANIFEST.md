@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **198 production files** across 20/20 subsystems (2 roots, 146 traced, 37 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **202 production files** across 20/20 subsystems (2 roots, 148 traced, 39 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -49,7 +49,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 12 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 0 |
 | other | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 2 | 2 |
-| persistence (src/relay/persistence/) | kernel (src/relay/mission/julius/) | 24 | 13 |
+| persistence (src/relay/persistence/) | kernel (src/relay/mission/julius/) | 27 | 16 |
 | Relay↔Julius port (src/relay/integration/julius/) | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | 2 | 1 |
 | Relay↔Julius port (src/relay/integration/julius/) | kernel (src/relay/mission/julius/) | 1 | 1 |
 | Relay↔Julius port (src/relay/integration/julius/) | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 1 | 1 |
@@ -91,7 +91,7 @@ The provider-neutral kernel: mission states and the transition table, tasks, evi
 | --- | --- | --- |
 | `relay-bridge/julius/project-brain-binding.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/index.ts` | traced | `src/relay/persistence/julius-postgres.ts` |
-| `src/relay/mission/julius/julius-brain-access.ts` | traced | `src/relay/mission/julius/julius-brain-audit-anchor.ts` |
+| `src/relay/mission/julius/julius-brain-access.ts` | traced | `src/relay/mission/julius/julius-brain-service-api.ts` |
 | `src/relay/mission/julius/julius-brain-api.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-archive-conformance.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-archive-import.ts` | not composed by the live root | — |
@@ -100,7 +100,7 @@ The provider-neutral kernel: mission states and the transition table, tasks, evi
 | `src/relay/mission/julius/julius-brain-contracts.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-environment.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-export.ts` | not composed by the live root | — |
-| `src/relay/mission/julius/julius-brain-failure-model.ts` | traced | `src/relay/mission/julius/julius-brain-retry.ts` |
+| `src/relay/mission/julius/julius-brain-failure-model.ts` | traced | `src/relay/mission/julius/julius-brain-service-router.ts` |
 | `src/relay/mission/julius/julius-brain-legacy.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-oidc-keys.ts` | traced | `src/relay/mission/julius/julius-brain-access.ts` |
 | `src/relay/mission/julius/julius-brain-policy.ts` | not composed by the live root | — |
@@ -108,12 +108,15 @@ The provider-neutral kernel: mission states and the transition table, tasks, evi
 | `src/relay/mission/julius/julius-brain-projection.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-query.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-rate-limit.ts` | traced | `src/relay/mission/julius/julius-brain-access.ts` |
+| `src/relay/mission/julius/julius-brain-request-log.ts` | traced | `src/relay/mission/julius/julius-brain-service-router.ts` |
 | `src/relay/mission/julius/julius-brain-retrieval.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-retry.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-schema-document.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-secrets.ts` | traced | `src/relay/mission/julius/julius-brain-projection.ts` |
+| `src/relay/mission/julius/julius-brain-service-api.ts` | not composed by the live root | — |
+| `src/relay/mission/julius/julius-brain-service-router.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-service.ts` | not composed by the live root | — |
-| `src/relay/mission/julius/julius-brain-session-client.ts` | not composed by the live root | — |
+| `src/relay/mission/julius/julius-brain-session-client.ts` | traced | `src/relay/mission/julius/julius-brain-service-router.ts` |
 | `src/relay/mission/julius/julius-brain-state-modes.ts` | traced | `src/relay/mission/julius/julius-brain-archive-import.ts` |
 | `src/relay/mission/julius/julius-brain-store.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-context-integrity.ts` | traced | `src/relay/mission/julius/index.ts` |
@@ -356,6 +359,7 @@ PostgreSQL authority for Julius: the repositories bound to the runtime ports, th
 | `src/relay/persistence/julius-brain-kinds.ts` | traced | `src/relay/persistence/julius-postgres.ts` |
 | `src/relay/persistence/julius-brain-legacy-postgres.ts` | not composed by the live root | — |
 | `src/relay/persistence/julius-brain-roles.ts` | not composed by the live root | — |
+| `src/relay/persistence/julius-brain-service-postgres.ts` | not composed by the live root | — |
 | `src/relay/persistence/julius-context-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
 | `src/relay/persistence/julius-contract-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `src/relay/persistence/julius-event-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
@@ -463,6 +467,9 @@ Production Julius modules that implement a Julius port but are not reached from 
 | `src/relay/mission/julius/julius-brain-archive-import.ts` | Project Brain v2: the translation boundary from the temporary paid-run archive export (julius-paid-run-archive-export.v1) to canonical Brain records — validated, sealed-hash checked, atomic, idempotent, provenance-preserving; not yet composed |
 | `src/relay/mission/julius/julius-brain-state-modes.ts` | Project Brain v2: FRESH / CONTINUATION / LEARNING / REGRESSION retrieval authority over retained Brain state; not yet composed by the live root |
 | `src/relay/mission/julius/julius-brain-archive-conformance.ts` | Project Brain v2: the conformance kit for julius-paid-run-archive-export.v1 - a verdict and categorised findings for any export document, a catalogue of corruptions every conforming exporter must see refused, and what importing it into a given Brain would do; storage-independent, used by the conformance CLI, not composed by the live root |
+| `src/relay/mission/julius/julius-brain-service-api.ts` | Project Brain v2: the Brain service request contract - ten operations, transport-neutral request and response documents, the context the service derives (never one a request names), machine-readable reasons, and no operation that exposes the store; local, not deployed |
+| `src/relay/mission/julius/julius-brain-service-router.ts` | Project Brain v2: the service above the access contract and below any transport - validate, authorize, claim the request id, run an effect that never sees a token, record the answer; an admitted operation finishes and says when it finished past its session; local, not deployed |
+| `src/relay/mission/julius/julius-brain-request-log.ts` | Project Brain v2: request idempotency - the same request id with the same request returns the first answer, another request under that id is refused, and a second caller mid-flight is told so; in-memory and PostgreSQL implementations; local, not deployed |
 | `src/relay/mission/julius/julius-brain-audit-anchor.ts` | Project Brain v2: the external audit anchor - the access audit head published periodically to a sink outside the Brain database (environment, sequences, digests and a timestamp; no mission content), and the verification that exposes a rewritten, rolled-back or reordered audit; vendor-neutral, local sinks only, not deployed |
 | `src/relay/mission/julius/julius-brain-retry.ts` | Project Brain v2: the Brain service retry contract - SAFE_TO_RETRY / RECONCILE_BEFORE_RETRY / DO_NOT_RETRY, bounded jittered backoff over injected time, and a circuit breaker that counts infrastructure failures only (never authorization denials or configuration errors); local and proven, not deployed |
 | `src/relay/mission/julius/julius-brain-rate-limit.ts` | Project Brain v2: the Brain service abuse boundary - per attempt, mission and principal, per operation class, with a store port (in-memory now, durable when the deployment needs exact limits); a refusal mutates nothing and carries its scope; local and proven, not deployed |
@@ -483,6 +490,7 @@ Production Julius modules that implement a Julius port but are not reached from 
 | `src/relay/persistence/julius-python-postgres.ts` | durable governed Python executions (julius_brain.python_executions, in the dedicated Project Brain database) whose settlement commits the execution state and its Project Brain records in one transaction; proven across processes, a server restart, cross-process cancellation and a crashed host by scripts/julius-brain-python-flow-drill.ts; not yet composed by the live root |
 | `src/relay/persistence/julius-brain-database.ts` | Project Brain v2: the dedicated Brain database — its own julius_brain migration chain, refusal of a database that holds the Julius runtime schema, the environment identity that keeps development from opening production, and the current-chain check every user of the Brain makes; not yet composed by the live root |
 | `src/relay/persistence/julius-brain-content-postgres.ts` | Project Brain v2: artifact bytes in the Brain database (julius_brain.content), content addressed and re-hashed on every read, so the bytes a record names are as durable as the record; not yet composed by the live root |
+| `src/relay/persistence/julius-brain-service-postgres.ts` | Project Brain v2: the service request log and rate-limit counters in the Brain database (migration 007) - a request id is claimed by one INSERT, answered once, withdrawn only while unanswered; counters are incremented by one statement that refuses to pass its limit; local, not deployed |
 | `src/relay/persistence/julius-brain-anchor-file.ts` | Project Brain v2: a local append-only file sink for audit anchors (one JSON document per line), for the anchoring proofs and a development deployment; a production sink is whatever the deployment picks, somewhere the database owner cannot rewrite |
 | `src/relay/persistence/julius-brain-access-postgres.ts` | Project Brain v2: the Brain service access state in the Brain database (migration 006) - token claims by digest, attempt registrations, sessions by token digest, and the hash-chained audit, append-only and atomic across service processes; proven by scripts/julius-brain-access-postgres.test.ts; not deployed, not composed |
 | `src/relay/persistence/julius-brain-roles.ts` | Project Brain v2: least-privilege grants for the dedicated Brain database (owner migrates; the service appends and advances heads but cannot delete, rewrite, disable the immutability guard or migrate; the reader only reads), proven by scripts/julius-brain-roles-postgres.test.ts; applied by provisioning, not composed |

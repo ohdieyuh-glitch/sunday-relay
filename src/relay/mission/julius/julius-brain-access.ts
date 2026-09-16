@@ -453,6 +453,11 @@ export function createJuliusBrainAccessService(deps: {
       return { ok: true, session };
     },
 
+    /** The session behind a token, for the service's own resolution before a call is authorized. Reads only: no audit, no limit. */
+    async session(sessionToken: string): Promise<JuliusBrainRunSession | null> {
+      return deps.state.getSession(sha256Hex(sessionToken));
+    },
+
     /** Retrieval, selected here under the session's bound mode: the client names no mode, run or grant. */
     context(session: JuliusBrainRunSession, entities: readonly JuliusBrainEntityState[], request: { readonly role: 'PROMPT_ARCHITECT' | 'CODING_AGENT' | 'INDEPENDENT_REVIEWER'; readonly budgetCharacters: number }): JuliusBrainContextView | null {
       const view = compileJuliusBrainContextForMode(entities, {

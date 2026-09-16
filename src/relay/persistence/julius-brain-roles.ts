@@ -45,6 +45,10 @@ export function juliusBrainRoleGrants(input: { readonly database: string; readon
     `GRANT SELECT, INSERT, UPDATE ON julius_brain.entities, julius_brain.python_executions TO ${service}`,
     // The access state is append-only for the service: claims, registrations, sessions and audit are inserted and read, never changed.
     `GRANT SELECT, INSERT ON julius_brain.access_token_claims, julius_brain.access_registrations, julius_brain.access_sessions, julius_brain.access_audit TO ${service}`,
+    // A request id is claimed, answered once, and may be withdrawn only while it has no answer; the triggers hold that against this role.
+    `GRANT SELECT, INSERT, UPDATE, DELETE ON julius_brain.service_requests TO ${service}`,
+    // Counters are the one mutable thing the service owns: identifiers and numbers, pruned as windows pass.
+    `GRANT SELECT, INSERT, UPDATE, DELETE ON julius_brain.rate_limit_counters TO ${service}`,
 
     `GRANT SELECT ON ALL TABLES IN SCHEMA julius_brain TO ${reader}`,
   ];
