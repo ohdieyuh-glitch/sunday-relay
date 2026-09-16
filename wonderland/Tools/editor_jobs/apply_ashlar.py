@@ -14,7 +14,7 @@
 #   3. points ONLY the castle meshes' batches at them (Material + MaterialPath). Kerbs, benches, balustrades, urns,
 #      tea cups and every kit module keep their materials. Every change is written to RECORD with its before;
 #      REVERT = True restores it.
-# Globals: TEX_DIR, REVERT, RECORD, FORCE (rebuild the instances).
+# Globals: TEX_DIR, REVERT, RECORD, FORCE (rebuild the instances), MESHES (which meshes take the coursing).
 import json
 import os
 
@@ -26,8 +26,12 @@ TEX_DEST = "/Game/WonderlandV2/Textures/HD"
 INST = "/Game/WonderlandV2/Materials/Instances"
 MASTER = "/Game/WonderlandV2/Materials/M_V2_SurfaceHD.M_V2_SurfaceHD"
 TINT_GAIN = 0.92 / 0.72
-CASTLE = ("SM_castle_hall", "SM_facade_panel", "SM_castle_arcade", "SM_castle_tower", "SM_castle_tower_slender",
-          "SM_castle_tower_octagon", "SM_castle_tower_square")
+# MQ05b (2026-09-15): the garden and retaining walls along the corridor are the same smooth ivory (survey sv2, the
+# arrival apron's wall), so they take the coursing too. Turned pieces (balustrades, urns, columns) never do.
+MESHES = globals().get("MESHES", ("SM_castle_hall", "SM_facade_panel", "SM_castle_arcade", "SM_castle_tower",
+                                  "SM_castle_tower_slender", "SM_castle_tower_octagon", "SM_castle_tower_square",
+                                  "SM_garden_wall", "SM_retaining_wall", "SM_castle_bridge"))
+CASTLE = MESHES
 WALLS = ("MI_V2_MarblePale", "MI_V2_MarbleBlush", "MI_V2_MarbleCool", "MI_V2_MarbleShade", "MI_V2_Ceramic", "MI_V2_IvoryStone")
 ASHLAR = {"TexScale": 0.0025, "NormalStrength": 1.0, "DetailStrength": 0.0, "InstVary": 0.05, "InstWarm": 0.02,
           "InstRoughVary": 0.08, "MacroScale": 0.00016, "MacroVary": 0.07, "RoughVary": 0.8, "Metallic": 0.0, "Specular": 0.4}
