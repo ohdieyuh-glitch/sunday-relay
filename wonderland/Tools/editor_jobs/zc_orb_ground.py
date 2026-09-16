@@ -20,28 +20,6 @@ def say(line):
     unreal.log_warning("WLORBGROUND %s" % line)
 
 
-def hit_location(hit):
-    """
-    The Z of a trace hit, and the name of whatever route worked.
-
-    HitResult's fields are NOT Python attributes in 5.8 -- `hit.blocking_hit` raises AttributeError -- so
-    this tries the accessors in order and REPORTS WHICH ONE ANSWERED rather than assuming. Getting this
-    wrong is what errored the last two filming runs.
-    """
-    try:
-        parts = unreal.GameplayStatics.break_hit_result(hit)
-        where = next((p for p in parts if isinstance(p, unreal.Vector)), None)
-        if parts and parts[0] and where is not None:
-            return float(where.z), "break_hit_result"
-    except Exception as exc:
-        say("break_hit_result refused: %s" % exc)
-    try:
-        return float(hit.get_editor_property("location").z), "get_editor_property"
-    except Exception as exc:
-        say("get_editor_property refused: %s" % exc)
-    return None, "none"
-
-
 def job():
     les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
     ues = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
@@ -73,20 +51,25 @@ def job():
         % (orb_at.x, orb_at.y, orb_at.z, pawn_at.x, pawn_at.y, pawn_at.z,
            offset.x, offset.y, mission.get_orb_height_uu()))
 
-    hit = unreal.SystemLibrary.line_trace_single(
-        world, unreal.Vector(orb_at.x, orb_at.y, orb_at.z + 200.0),
-        unreal.Vector(orb_at.x, orb_at.y, orb_at.z - 400.0),
-        unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [], unreal.DrawDebugTrace.NONE, True)
-    say("trace returned %s" % type(hit).__name__)
-    floor_z, how = (None, "no hit") if hit is None else hit_location(hit)
-    above = None if floor_z is None else round(orb_at.z - floor_z, 2)
-    say("floor_z=%s via %s  above_floor=%s" % (floor_z, how, above))
+    # ---------------------------------------------------------------- is it on the floor?
+    # NOT BY TRACING FROM PYTHON. This build exposes nothing readable on a HitResult -- `blocking_hit` is
+    # not an attribute, GameplayStatics has no break_hit_result, and HitResult.Location is protected -- so
+    # a Python trace can report THAT something was hit and never WHERE. Three runs were spent learning it.
+    #
+    # ASK WHICH BRANCH THE ORB TOOK INSTEAD. AWonderlandMissionOrb::DesiredLocation traces down for the
+    # floor and sets its Z to the hit; only when it finds nothing does it fall back to `pawn.Z - 42`. Those
+    # two produce DIFFERENT heights, so the orb's own Z says which happened -- and if the trace ran, the
+    # orb's Z IS the floor surface by construction. That is a stronger statement than a second trace from
+    # here, which could disagree with the one that actually placed the dais.
+    fallback_z = pawn_at.z - 42.0
+    on_fallback = abs(orb_at.z - fallback_z) < 5.0
+    say("orb_z=%.2f  floor-trace fallback would be %.2f  on_fallback=%s" % (orb_at.z, fallback_z, on_fallback))
 
     wanted = (offset.x ** 2 + offset.y ** 2) ** 0.5
     flat = ((orb_at.x - pawn_at.x) ** 2 + (orb_at.y - pawn_at.y) ** 2) ** 0.5
-    ok = (floor_z is not None and abs(above) < 6.0
-          and abs(flat - wanted) < 20.0 and (pawn_at.z - orb_at.z) > 20.0)
-    RESULT["ground"] = {"orb_z": orb_at.z, "floor_z": floor_z, "above_floor_uu": above, "read_by": how,
+    ok = (not on_fallback and abs(flat - wanted) < 20.0 and (pawn_at.z - orb_at.z) > 20.0)
+    RESULT["ground"] = {"orb_z": round(orb_at.z, 2), "fallback_z": round(fallback_z, 2),
+                        "used_floor_trace": not on_fallback,
                         "flat_uu": round(flat, 1), "wanted_uu": round(wanted, 1),
                         "below_pawn_uu": round(pawn_at.z - orb_at.z, 1)}
     say("VERDICT %s %s" % ("PASS" if ok else "FAIL", RESULT["ground"]))

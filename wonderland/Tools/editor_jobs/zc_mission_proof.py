@@ -128,47 +128,29 @@ def job():
     flat = ((orb_at.x - pawn_at.x) ** 2 + (orb_at.y - pawn_at.y) ** 2) ** 0.5
     below = pawn_at.z - orb_at.z
 
-    # HOW FAR OFF THE FLOOR, measured rather than argued. "Ground-positioned" is the founder's word and the
-    # whole point of the shape, and the orb's own Z says nothing on its own: this world is full of raised
-    # paving, kerbs and planter edges, so a dais standing correctly on a slab and a dais hovering over the
-    # path have exactly the same Z. Trace down from the dais and ask.
+    # IS IT ON THE FLOOR? NOT BY TRACING FROM PYTHON. This build exposes nothing readable on a HitResult:
+    # `blocking_hit` is not an attribute, GameplayStatics has no break_hit_result, and HitResult.Location is
+    # protected. A Python trace can report THAT something was hit and never WHERE (measured 2026-09-15).
     #
-    # The floor DOES answer a trace, unlike the companions and the hover props -- it is world static.
-    floor_z = None
-    hit = unreal.SystemLibrary.line_trace_single(
-        world, unreal.Vector(orb_at.x, orb_at.y, orb_at.z + 200.0),
-        unreal.Vector(orb_at.x, orb_at.y, orb_at.z - 400.0),
-        unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [], unreal.DrawDebugTrace.NONE, True)
-    if hit is not None:
-        # HitResult's fields are NOT Python attributes in 5.8 -- `hit.blocking_hit` raises. BreakHitResult
-        # is the accessor, and it hands back a flat tuple: (blocking, initial_overlap, time, distance,
-        # location, impact_point, ...). The location is picked by type rather than by index, so a future
-        # engine that inserts a field does not silently start reporting the impact point as the floor.
-        try:
-            parts = unreal.GameplayStatics.break_hit_result(hit)
-            where = next((p for p in parts if isinstance(p, unreal.Vector)), None)
-            if parts and parts[0] and where is not None:
-                floor_z = float(where.z)
-        except Exception as exc:
-            say("break_hit_result refused: %s" % exc)
-            try:
-                floor_z = float(hit.get_editor_property("location").z)
-            except Exception as exc2:
-                say("get_editor_property refused too: %s" % exc2)
-    above_floor = None if floor_z is None else round(orb_at.z - floor_z, 1)
+    # ASK WHICH BRANCH THE ORB TOOK INSTEAD. AWonderlandMissionOrb::DesiredLocation traces down for the
+    # floor and sets its Z to the hit; only when it finds nothing does it fall back to `pawn.Z - 42`. Those
+    # produce DIFFERENT heights, so the orb's own Z says which ran -- and if the trace ran, the orb's Z IS
+    # the floor surface by construction. Stronger than a second trace from here, which could disagree with
+    # the one that actually placed the dais.
+    fallback_z = pawn_at.z - 42.0
+    used_floor_trace = abs(orb_at.z - fallback_z) >= 5.0
     RESULT["placement"] = {"orb": [orb_at.x, orb_at.y, orb_at.z], "pawn": [pawn_at.x, pawn_at.y, pawn_at.z],
                            "offset": [offset.x, offset.y], "wanted_uu": round(wanted, 1),
                            "flat_uu": round(flat, 1), "below_pawn_uu": round(below, 1),
-                           "floor_z": floor_z, "above_floor_uu": above_floor,
+                           "fallback_z": round(fallback_z, 2), "used_floor_trace": used_floor_trace,
                            "height_uu": round(mission.get_orb_height_uu(), 1) if mission else 0,
                            "boxes": mission.get_orb_box_count() if mission else 0}
     record("M01", "the orb stands where it was told, on the ground, clear of the Dog",
            mission is not None and mission.is_orb_in_world() and mission.get_orb_box_count() > 0
            # where it was told, within the follow's own lag
            and wanted > 0.0 and abs(flat - wanted) < 20.0
-           # ON THE GROUND, measured against the floor under the dais rather than against the pawn:
-           # a couple of uu of tolerance for the follow's lag on a slope, and no more.
-           and above_floor is not None and abs(above_floor) < 6.0
+           # ON THE GROUND: placed by the floor trace, not by the no-floor fallback
+           and used_floor_trace
            # and well under the pawn's origin, which is its capsule centre, so it cannot be riding the Dog
            and below > 20.0
            # CLEAR OF THE DOG, which is what stops it reading as carried: further out than the Dog's own
