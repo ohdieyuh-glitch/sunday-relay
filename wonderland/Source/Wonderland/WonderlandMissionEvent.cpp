@@ -90,6 +90,35 @@ void WonderlandKnownEventTypes(TArray<FName>& Out)
 
 EWonderlandEventVerdict WonderlandApplyEvent(FWonderlandMissionFold& Fold, const FWonderlandMissionEvent& Event)
 {
+	const EWonderlandMissionBeat Candidate = WonderlandBeatForEventType(Event.Type);
+	const bool bStartsAMission = Candidate == EWonderlandMissionBeat::MissionStart;
+
+	if (Event.Sequence <= Fold.Sequence)
+	{
+		++Fold.Stale;
+		return EWonderlandEventVerdict::Stale;
+	}
+
+	// ---------------------------------------------------------------- a finished contract makes way
+	// CHECKED BEFORE THE MISSION-ID GUARD, and that order is the whole point: the NEXT mission has a
+	// different id by definition -- that is what makes it the next mission rather than more of this one.
+	// Checking identity first would reject every second mission as foreign, which is exactly what it did
+	// until a replay of the two-mission fixture caught it.
+	//
+	// The replacement is what makes a new Mission Contract start at red: everything the last one
+	// accumulated goes, and only the counters survive, because they describe the stream and not the mission.
+	if (Fold.bEnded && bStartsAMission)
+	{
+		Fold.MissionId = Event.MissionId;
+		Fold.Sequence = Event.Sequence;
+		Fold.Chakra = WonderlandChakraForBeat(Candidate, EWonderlandChakra::None);
+		Fold.Beat = Candidate;
+		Fold.RepairRounds = Event.RepairRound;
+		Fold.bEnded = WonderlandBeatReading(Candidate).bTerminal;
+		++Fold.Applied;
+		return EWonderlandEventVerdict::Applied;
+	}
+
 	// ---------------------------------------------------------------- whose mission is this
 	// A fold with no mission yet adopts the first one it is given; after that it is that mission's and no
 	// other's. This is the whole of cross-mission isolation, and it is one comparison on purpose.
@@ -103,13 +132,6 @@ EWonderlandEventVerdict WonderlandApplyEvent(FWonderlandMissionFold& Fold, const
 		return EWonderlandEventVerdict::ForeignMission;
 	}
 
-	if (Event.Sequence <= Fold.Sequence)
-	{
-		++Fold.Stale;
-		return EWonderlandEventVerdict::Stale;
-	}
-
-	const EWonderlandMissionBeat Candidate = WonderlandBeatForEventType(Event.Type);
 	const bool bGapOnly = MissionBeatIsGapOnly(Candidate) || Candidate == EWonderlandMissionBeat::Unobserved;
 
 	// An event nothing claims, and which is not a labelled stand-in for a gap, is simply not ours.
@@ -120,20 +142,14 @@ EWonderlandEventVerdict WonderlandApplyEvent(FWonderlandMissionFold& Fold, const
 	}
 
 	// ---------------------------------------------------------------- after an ending
-	// A MISSION THAT ENDED DOES NOT CARRY ON. Two things are still allowed, and only two:
-	//
-	//   THE START OF A NEW CONTRACT, which is accepted by REPLACING the fold rather than continuing it --
-	//   and that replacement is what makes the next mission begin at red with nothing carried over.
-	//
-	//   A SECOND REPORT OF THE SAME ENDING. A real stream sends `run.verified` and then `run.completed`,
-	//   and both mean the mission finished; refusing the second would count an ordinary, correct stream as
-	//   contradicting itself. It is corroboration, not progress, and it moves nothing.
+	// Only one thing is still allowed once a mission has ended and it is not a new contract: A SECOND
+	// REPORT OF THE SAME ENDING. A real stream sends `run.verified` and then `run.completed`, and both mean
+	// the mission finished; refusing the second would count an ordinary, correct stream as contradicting
+	// itself. It is corroboration, not progress, and it moves nothing.
 	//
 	// Everything else is refused, which is the whole of the block rule: `coder.started` after a block would
 	// let a stopped mission carry on showing progress, and that is the one thing a blocked world must not do.
-	const bool bStartsAMission = Candidate == EWonderlandMissionBeat::MissionStart;
-	const bool bRepeatsTheEnding = Candidate == Fold.Beat;
-	if (Fold.bEnded && !bStartsAMission && !bRepeatsTheEnding)
+	if (Fold.bEnded && Candidate != Fold.Beat)
 	{
 		++Fold.RefusedAfterEnding;
 		return EWonderlandEventVerdict::RefusedAfterEnding;
@@ -148,15 +164,6 @@ EWonderlandEventVerdict WonderlandApplyEvent(FWonderlandMissionFold& Fold, const
 
 	// ---------------------------------------------------------------- apply
 	Fold.Sequence = Event.Sequence;
-	if (bStartsAMission && Fold.bEnded)
-	{
-		// A new contract. Everything the last one accumulated goes, except the counters, which describe the
-		// stream rather than the mission.
-		Fold.MissionId = Event.MissionId;
-		Fold.Chakra = EWonderlandChakra::None;
-		Fold.RepairRounds = 0;
-		Fold.bEnded = false;
-	}
 	Fold.Beat = Candidate;
 	Fold.Chakra = WonderlandChakraForBeat(Candidate, Fold.Chakra);
 	Fold.RepairRounds = FMath::Max(Fold.RepairRounds, Event.RepairRound);
