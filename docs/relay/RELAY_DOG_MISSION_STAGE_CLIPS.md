@@ -7,6 +7,16 @@ It is the authoring specification for four locked animations, and it is written
 against the founder direction of 2026-09-15, which is the current canonical
 authority and supersedes earlier Relay Dog mission-animation descriptions.
 
+**The Relay Dog is PROCEDURAL C++, not imported clips.** `RelayDogStride.cpp` is a
+pose solver and `RelayDogCharacter.cpp` drives named scene-component pivots, with
+every pose computed from the clock. So `animationId` below is a **performance
+selector**, not an asset path: `dog_verify_beam` names which procedural
+performance to run. Every other field is substrate-neutral and drives pivots as
+well as it would drive an animation graph. Nothing in this contract assumes an
+imported asset. Procedural is also the better substrate for this specification —
+a cross-faded clip could not hold the verification beam for an arbitrary
+verification duration, and a continuously driven performance can.
+
 The state layer that drives these lives in
 `src/relay/mission/wonderland/wonderland-dog-stage.ts` and is proven by
 `wonderland-dog-stage.test.ts` (25 assertions) and
@@ -143,8 +153,9 @@ during `implementing` keeps the paintbrush on screen, that it triggers no prop
 change and no Contract despawn, and that it falls back to the resting world when
 nothing was playing.
 
-**If you find an existing `carrying_handoff` clip bound in a Blueprint, unbind
-it. Do not delete the underlying activity.** `RELAY_DOG_ACTIVITIES` still
+**There is no `carrying_handoff` clip to unbind** — the Unreal session confirmed
+the worktree contains no clip bindings of any kind. Do not invent one to remove.
+**Do not delete the underlying activity.** `RELAY_DOG_ACTIVITIES` still
 contains `handoff` and `WORKSPACE_ACTIVITY` still maps `carrying_handoff` to it;
 that is deliberate.
 
