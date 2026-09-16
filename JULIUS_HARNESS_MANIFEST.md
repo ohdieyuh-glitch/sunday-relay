@@ -112,7 +112,7 @@ One claimed task all the way through: policy, budget reservation, context compil
 | `src/relay/mission/julius/julius-contract-disposition.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-disagreement.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-execution-coordinator.ts` | traced | `src/relay/mission/julius/index.ts` |
-| `src/relay/mission/julius/julius-peer-channel.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
+| `src/relay/mission/julius/julius-peer-channel.ts` | traced | `src/relay/mission/julius/julius-coding-agent.ts` |
 | `src/relay/mission/julius/julius-peer-runtime.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-release-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-research-protocol.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |

@@ -88,6 +88,12 @@ export const JULIUS_PARTICIPATION_CHANNELS = [
   'guidanceRequest',
   'researchAsks',
   'segmentResume',
+  /**
+   * A Coding Agent's account of its own work — claims, not evidence. Julius
+   * records it beside the change set the executor observed and compares the
+   * two; the authority guard refuses a report that claims a completion.
+   */
+  'report',
 ] as const;
 export type JuliusParticipationChannel = (typeof JULIUS_PARTICIPATION_CHANNELS)[number];
 
@@ -145,6 +151,7 @@ export type JuliusParticipationReading =
       readonly guidanceRequest?: unknown;
       readonly researchAsks?: unknown;
       readonly segmentResume?: unknown;
+      readonly report?: unknown;
     };
 
 const ABSENT: JuliusParticipationReading = Object.freeze({ present: false });
@@ -236,6 +243,7 @@ export function readJuliusParticipationBlock(finalText: string | null): JuliusPa
     ...('guidanceRequest' in source ? { guidanceRequest: source.guidanceRequest } : {}),
     ...('researchAsks' in source ? { researchAsks: source.researchAsks } : {}),
     ...('segmentResume' in source ? { segmentResume: source.segmentResume } : {}),
+    ...('report' in source ? { report: source.report } : {}),
   });
 }
 
@@ -255,7 +263,7 @@ export function juliusParticipationProtocol(): string {
     'If you can finish the work, finish it and say nothing further: no block is the ordinary case.',
     'If you are blocked on something this workspace cannot settle, you may END YOUR TURN and ask.',
     'Asking ends this dispatch. Julius answers, and your work resumes in a later segment with the answer in hand — so ask before you guess, not after.',
-    `To ask, end your final message with the line ${JULIUS_PARTICIPATION_MARKER} followed by exactly one JSON object, once, with one or both of these keys and no others:`,
+    `To ask — or to report — end your final message with the line ${JULIUS_PARTICIPATION_MARKER} followed by exactly one JSON object, once, with any of these keys and no others:`,
     '',
     `  "guidanceRequest": { "question": string, "blockedOn": string[], "attempted": string[], "relevantPaths": string[] }`,
     `      A question for the Prompt Architect about the plan you were given. Not an instruction to it, and not a change to your terms.`,
@@ -270,8 +278,12 @@ export function juliusParticipationProtocol(): string {
     `  "segmentResume": { "completedSoFar": string[], "nextIntent": string }`,
     `      Where to pick your own work up, for the segment that continues it. At most ${JULIUS_SEGMENT_LIMITS.entries} entries of ${JULIUS_SEGMENT_LIMITS.entryChars} characters; nextIntent up to ${JULIUS_SEGMENT_LIMITS.intentChars}.`,
     '',
+    `  "report": { "outcome": "IMPLEMENTED" | "PARTIALLY_IMPLEMENTED" | "BLOCKED" | "NO_CHANGE_NEEDED", "summary": string, "filesTouched": string[], "testsRun": string[], "remainingUncertainty": string[], "blockedReason": string | null }`,
+    `      Optional: your own account of the work, recorded beside what the independent executor observed. blockedReason is required exactly when the outcome is BLOCKED.`,
+    `      You cannot report the work complete or verified — Julius and the independent reviewer decide that, and such a report is refused.`,
+    '',
     'RULES THAT REFUSE THE WHOLE BLOCK, so a request is never half-heard:',
-    '  - the marker more than once, or a key that is not one of the three above;',
+    '  - the marker more than once, or a key that is not one of the four above;',
     '  - any field naming a mission term you do not set — budget, hosts, scope, role, ids, credentials.',
     'Write no reasoning, monologue or scratchpad text into the block. It is a request, and Julius records it.',
   ].join('\n');

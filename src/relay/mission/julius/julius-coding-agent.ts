@@ -1,4 +1,5 @@
 import type { JuliusContextSnapshot } from './julius-context-snapshot';
+import { guardJuliusPeerResponse } from './julius-peer-channel';
 import type { JuliusDispatchAllocation, JuliusErrorCode } from './julius-router';
 import type { JuliusContractReviewCharge } from './julius-task-contract';
 
@@ -383,4 +384,253 @@ export function renderJuliusCodingAgentPrompt(request: JuliusCodingAgentRequest,
     request.protocol.participation,
     request.protocol.researchAuthority,
   ].join('\n\n');
+}
+
+/* ------------------------------------------------ what the workspace shows */
+
+export const JULIUS_WORKSPACE_CHANGE_KINDS = ['MODIFIED', 'ADDED', 'DELETED', 'RENAMED', 'UNTRACKED', 'OTHER'] as const;
+export type JuliusWorkspaceChangeKind = (typeof JULIUS_WORKSPACE_CHANGE_KINDS)[number];
+
+export interface JuliusWorkspaceChange {
+  readonly path: string;
+  readonly change: JuliusWorkspaceChangeKind;
+}
+
+export const JULIUS_WORKSPACE_LIMITS = Object.freeze({
+  /** Paths kept on the record. A change set larger than this is recorded as truncated, never silently cut. */
+  paths: 400,
+  pathChars: 512,
+  /** Paths named in a ledger fact. The full set is counted; only this many are listed. */
+  listedPaths: 20,
+});
+
+const SAFE_PATH = /^[^\u0000-\u001f\u007f]+$/u;
+
+/**
+ * THE CHANGE SET, FROM THE EXECUTOR'S OWN `git status --porcelain=v1 -z
+ * --untracked-files=all`.
+ *
+ * NUL-separated, so a path with spaces or newlines is one path. A rename carries
+ * its source as a second NUL field, which is consumed and not reported as a
+ * change of its own. Untracked files are included — `git diff` alone never saw
+ * them, so a coder whose whole contribution was new files used to look like a
+ * coder who had done nothing.
+ */
+export function parseJuliusWorkspaceStatus(porcelain: string): { readonly changes: readonly JuliusWorkspaceChange[]; readonly truncated: boolean } {
+  const fields = porcelain.split('\u0000');
+  const changes: JuliusWorkspaceChange[] = [];
+  let truncated = false;
+  for (let index = 0; index < fields.length; index += 1) {
+    const field = fields[index]!;
+    if (field.length < 4) continue;
+    const code = field.slice(0, 2);
+    const path = field.slice(3);
+    if (code[0] === 'R' || code[1] === 'R' || code[0] === 'C' || code[1] === 'C') index += 1;
+    if (!SAFE_PATH.test(path) || path.length > JULIUS_WORKSPACE_LIMITS.pathChars) continue;
+    const change: JuliusWorkspaceChangeKind = code === '??' ? 'UNTRACKED'
+      : code.includes('R') ? 'RENAMED'
+        : code.includes('A') ? 'ADDED'
+          : code.includes('D') ? 'DELETED'
+            : code.includes('M') ? 'MODIFIED'
+              : 'OTHER';
+    if (changes.some((existing) => existing.path === path)) continue;
+    if (changes.length >= JULIUS_WORKSPACE_LIMITS.paths) { truncated = true; break; }
+    changes.push(Object.freeze({ path, change }));
+  }
+  return Object.freeze({ changes: Object.freeze(changes), truncated });
+}
+
+/** One glob-ish contract path as a matcher: `**` crosses directories, `*` does not, a bare directory covers what is under it. */
+const pathMatcher = (pattern: string): ((path: string) => boolean) => {
+  const clean = pattern.trim().replace(/^\.\//u, '');
+  if (clean === '' ) return () => false;
+  if (!/[*?]/u.test(clean)) {
+    const base = clean.replace(/\/+$/u, '');
+    return (path) => path === base || path.startsWith(`${base}/`);
+  }
+  const source = clean
+    .replace(/[.+^${}()|[\]\\]/gu, '\\$&')
+    .replace(/\*\*/gu, '\u0000')
+    .replace(/\*/gu, '[^/]*')
+    .replace(/\?/gu, '[^/]')
+    .replace(/\u0000/gu, '.*');
+  const expression = new RegExp(`^${source}$`, 'u');
+  return (path) => expression.test(path);
+};
+
+export const JULIUS_SCOPE_RULES = ['OUTSIDE_PERMITTED_PATHS', 'OUT_OF_SCOPE'] as const;
+export type JuliusScopeRule = (typeof JULIUS_SCOPE_RULES)[number];
+
+export interface JuliusScopeViolation {
+  readonly path: string;
+  readonly rule: JuliusScopeRule;
+}
+
+/**
+ * WHAT THE WORK TOUCHED THAT THE AGREEMENT DID NOT ALLOW.
+ *
+ * The locked contract's `permittedPaths` and out-of-scope paths used to exist
+ * only as prompt text: stated to the coder, stated to the reviewer, and checked
+ * by nothing. A provider told it may edit `src/slug.ts` and editing
+ * `src/persistence/` instead was caught only if a reviewer happened to notice.
+ *
+ * An EMPTY permitted list constrains nothing — the mission did not state a
+ * scope, and inventing one would refuse work nobody forbade. An out-of-scope
+ * path is refused whatever the permitted list says. `prohibitedActions` are
+ * prose and are not checked mechanically here: pretending a sentence is a rule
+ * would be a check that passes by construction.
+ */
+export function juliusScopeViolations(input: {
+  readonly changes: readonly JuliusWorkspaceChange[];
+  readonly permittedPaths: readonly string[];
+  readonly outOfScope: readonly string[];
+}): readonly JuliusScopeViolation[] {
+  const permitted = input.permittedPaths.filter((path) => path.trim() !== '').map(pathMatcher);
+  const excluded = input.outOfScope.filter((path) => path.trim() !== '').map(pathMatcher);
+  const violations: JuliusScopeViolation[] = [];
+  for (const { path } of input.changes) {
+    if (excluded.some((matches) => matches(path))) violations.push(Object.freeze({ path, rule: 'OUT_OF_SCOPE' }));
+    else if (permitted.length > 0 && !permitted.some((matches) => matches(path))) {
+      violations.push(Object.freeze({ path, rule: 'OUTSIDE_PERMITTED_PATHS' }));
+    }
+  }
+  return Object.freeze(violations);
+}
+
+/* ------------------------------------------------- what the coder reports */
+
+export const JULIUS_CODING_AGENT_REPORT_OUTCOMES = ['IMPLEMENTED', 'PARTIALLY_IMPLEMENTED', 'BLOCKED', 'NO_CHANGE_NEEDED'] as const;
+export type JuliusCodingAgentReportOutcome = (typeof JULIUS_CODING_AGENT_REPORT_OUTCOMES)[number];
+
+export const JULIUS_CODING_AGENT_REPORT_LIMITS = Object.freeze({
+  summaryChars: 400,
+  entryChars: 240,
+  filesTouched: 50,
+  testsRun: 20,
+  uncertainty: 10,
+});
+
+/**
+ * THE CODER'S ACCOUNT OF ITS OWN WORK — CLAIMS, NOT EVIDENCE.
+ *
+ * What files it believes it touched and which tests it believes it ran are
+ * recorded as what it SAID, beside what the executor OBSERVED, and the two are
+ * compared rather than one being trusted. What it is uncertain about and why it
+ * is blocked are things only the coder knows, and they are worth the record.
+ *
+ * What it can never say is that the work is done in Julius's sense: the
+ * authority guard refuses an outcome of COMPLETED or VERIFIED, and any field
+ * naming a mission-owned term, before a single field is read.
+ */
+export interface JuliusCodingAgentReport {
+  readonly outcome: JuliusCodingAgentReportOutcome;
+  readonly summary: string;
+  readonly filesTouched: readonly string[];
+  readonly testsRun: readonly string[];
+  readonly remainingUncertainty: readonly string[];
+  readonly blockedReason: string | null;
+}
+
+export type JuliusCodingAgentReportReading =
+  | { readonly ok: true; readonly report: JuliusCodingAgentReport }
+  | { readonly ok: false; readonly reasonCode: string };
+
+const reportLine = (value: unknown, limit: number): string | null => {
+  if (typeof value !== 'string') return null;
+  const cleaned = value.replace(/[\u0000-\u001f\u007f]+/gu, ' ').replace(/\s+/gu, ' ').trim();
+  if (cleaned.length === 0 || cleaned.length > limit) return null;
+  if (/(?:api[_-]?key|authorization|bearer|token|secret|password)\s*[=:]/iu.test(cleaned)) return null;
+  return cleaned;
+};
+
+const reportList = (value: unknown, limit: number): readonly string[] | null => {
+  if (value === undefined || value === null) return Object.freeze([]);
+  if (!Array.isArray(value) || value.length > limit) return null;
+  const out: string[] = [];
+  for (const item of value) {
+    const line = reportLine(item, JULIUS_CODING_AGENT_REPORT_LIMITS.entryChars);
+    if (line === null) return null;
+    if (!out.includes(line)) out.push(line);
+  }
+  return Object.freeze(out);
+};
+
+const REPORT_KEYS: readonly string[] = ['outcome', 'summary', 'filesTouched', 'testsRun', 'remainingUncertainty', 'blockedReason'];
+
+export function sanitizeJuliusCodingAgentReport(value: unknown): JuliusCodingAgentReportReading {
+  const guarded = guardJuliusPeerResponse(value);
+  if (!guarded.ok) return { ok: false, reasonCode: guarded.reasonCode };
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return { ok: false, reasonCode: 'coding_agent_report_shape_refused' };
+  const source = value as Record<string, unknown>;
+  if (Object.keys(source).some((key) => !REPORT_KEYS.includes(key))) return { ok: false, reasonCode: 'coding_agent_report_unknown_field' };
+  const word = typeof source.outcome === 'string' ? source.outcome.trim().toUpperCase() : '';
+  if (!(JULIUS_CODING_AGENT_REPORT_OUTCOMES as readonly string[]).includes(word)) return { ok: false, reasonCode: 'coding_agent_report_outcome_unknown' };
+  const outcome = word as JuliusCodingAgentReportOutcome;
+  const summary = reportLine(source.summary, JULIUS_CODING_AGENT_REPORT_LIMITS.summaryChars);
+  if (summary === null) return { ok: false, reasonCode: 'coding_agent_report_summary_invalid' };
+  const filesTouched = reportList(source.filesTouched, JULIUS_CODING_AGENT_REPORT_LIMITS.filesTouched);
+  const testsRun = reportList(source.testsRun, JULIUS_CODING_AGENT_REPORT_LIMITS.testsRun);
+  const remainingUncertainty = reportList(source.remainingUncertainty, JULIUS_CODING_AGENT_REPORT_LIMITS.uncertainty);
+  if (filesTouched === null || testsRun === null || remainingUncertainty === null) return { ok: false, reasonCode: 'coding_agent_report_list_invalid' };
+  const blockedReason = source.blockedReason === undefined || source.blockedReason === null
+    ? null : reportLine(source.blockedReason, JULIUS_CODING_AGENT_REPORT_LIMITS.entryChars);
+  if (source.blockedReason !== undefined && source.blockedReason !== null && blockedReason === null) {
+    return { ok: false, reasonCode: 'coding_agent_report_blocked_reason_invalid' };
+  }
+  // BLOCKED WITHOUT A REASON IS NOT A REPORT. And a reason on work that is not
+  // blocked is two answers.
+  if (outcome === 'BLOCKED' && blockedReason === null) return { ok: false, reasonCode: 'coding_agent_report_blocked_without_reason' };
+  if (outcome !== 'BLOCKED' && blockedReason !== null) return { ok: false, reasonCode: 'coding_agent_report_reason_without_block' };
+  return {
+    ok: true,
+    report: Object.freeze({ outcome, summary, filesTouched, testsRun, remainingUncertainty, blockedReason }),
+  };
+}
+
+/* --------------------------------------------- the implementation record */
+
+/**
+ * WHAT THE JULIUS SIDE OF THE ADAPTER HANDS THE KERNEL ABOUT ONE DISPATCH.
+ *
+ * `workspace` is what the independent executor observed; `report` is what the
+ * coder said, unsanitised. The kernel reads both, recomputes scope against the
+ * locked contract itself, and never takes the adapter's word for a violation or
+ * its absence.
+ */
+export interface JuliusCodingAgentImplementation {
+  readonly providerKind: string;
+  readonly workspace: {
+    readonly captured: boolean;
+    readonly changes: readonly JuliusWorkspaceChange[];
+    readonly truncated: boolean;
+  };
+  readonly report: unknown;
+}
+
+const PROVIDER_KIND = /^[a-z0-9][a-z0-9._-]{0,63}$/u;
+
+/** Rebuild the adapter's record from an allowlist. Null when it cannot be read at all. */
+export function readJuliusCodingAgentImplementation(value: unknown): JuliusCodingAgentImplementation | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const source = value as Record<string, unknown>;
+  const providerKind = typeof source.providerKind === 'string' && PROVIDER_KIND.test(source.providerKind) ? source.providerKind : null;
+  const workspace = source.workspace;
+  if (providerKind === null || workspace === null || typeof workspace !== 'object' || Array.isArray(workspace)) return null;
+  const ws = workspace as Record<string, unknown>;
+  if (typeof ws.captured !== 'boolean' || !Array.isArray(ws.changes)) return null;
+  const changes: JuliusWorkspaceChange[] = [];
+  let truncated = ws.truncated === true;
+  for (const item of ws.changes) {
+    if (item === null || typeof item !== 'object') return null;
+    const entry = item as Record<string, unknown>;
+    if (typeof entry.path !== 'string' || !SAFE_PATH.test(entry.path) || entry.path.length > JULIUS_WORKSPACE_LIMITS.pathChars) return null;
+    if (typeof entry.change !== 'string' || !(JULIUS_WORKSPACE_CHANGE_KINDS as readonly string[]).includes(entry.change)) return null;
+    if (changes.length >= JULIUS_WORKSPACE_LIMITS.paths) { truncated = true; break; }
+    changes.push(Object.freeze({ path: entry.path, change: entry.change as JuliusWorkspaceChangeKind }));
+  }
+  return Object.freeze({
+    providerKind,
+    workspace: Object.freeze({ captured: ws.captured, changes: Object.freeze(changes), truncated }),
+    report: source.report,
+  });
 }

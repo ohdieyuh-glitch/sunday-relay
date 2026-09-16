@@ -84,7 +84,7 @@ export const juliusMintedEvidenceId = (taskId: string, leaseGeneration: number, 
 /** The optional channels a worker result may carry. */
 export const JULIUS_RESULT_CHANNELS = [
   'contractProposal', 'guidanceRequest', 'guidance', 'segmentResume', 'researchAsks',
-  'reviewVerdict', 'rebuttal', 'architecture', 'consistency', 'architectureObservations',
+  'reviewVerdict', 'rebuttal', 'architecture', 'consistency', 'architectureObservations', 'implementation',
 ] as const;
 export type JuliusResultChannel = (typeof JULIUS_RESULT_CHANNELS)[number];
 
@@ -105,6 +105,7 @@ const CHANNEL_OWNERS: Readonly<Partial<Record<JuliusResultChannel, readonly Juli
   architecture: ['PROMPT_ARCHITECT'],
   consistency: ['PROMPT_ARCHITECT'],
   architectureObservations: ['CODING_AGENT'],
+  implementation: ['CODING_AGENT'],
 });
 
 export function juliusResultChannelPermitted(role: JuliusWorkerRole | string, channel: JuliusResultChannel): boolean {

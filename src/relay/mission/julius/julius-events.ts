@@ -135,6 +135,13 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * is a channel that belongs to another role: a coder's verdict about its own
   * work, or a design. Both are refusals ON the record rather than silence. */
  'evidence.refused','worker.channel.refused',
+ /* THE CODING AGENT'S IMPLEMENTATION, ON THE RECORD. `recorded` is what the
+  * independent executor observed the dispatch change and what the coder said
+  * it did, side by side. `scope.violated` is a changed path the locked
+  * contract did not allow, found by Julius from that change set — the rule used
+  * to exist only as prompt text. `report.refused` is a coder report Julius
+  * would not read, by name. */
+ 'coder.implementation.recorded','coder.scope.violated','coder.report.refused',
  'architecture.trigger.raised','architecture.proposed','architecture.accepted','architecture.unchanged',
  'architecture.assessed','architecture.assessment.refused','architecture.replan.escalated',
  /* PERSISTENT-WORKER EFFORT. One row per completed dispatch, carrying what the

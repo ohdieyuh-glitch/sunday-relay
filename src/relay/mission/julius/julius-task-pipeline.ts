@@ -84,6 +84,9 @@ import {
 } from './julius-architecture-drift';
 import { juliusResultChannelPermitted } from './julius-worker-authority';
 import {
+  JULIUS_WORKSPACE_LIMITS, juliusScopeViolations, readJuliusCodingAgentImplementation, sanitizeJuliusCodingAgentReport,
+} from './julius-coding-agent';
+import {
   JULIUS_CHECKPOINT_LIMITS,
   guidanceSubjectTaskId, isJuliusGuidanceHandoffEntryId, issueJuliusGuidance, juliusCheckpointId,
   JULIUS_GUIDANCE_AUTHORITATIVE_HEADING, JULIUS_GUIDANCE_PROPOSED_HEADING,
@@ -1263,13 +1266,22 @@ export async function runClaimedTask(
    * are unchanged — this names what they ignore.
    */
   if (!outcome.duplicate) {
-    for (const channel of ['reviewVerdict', 'rebuttal', 'architecture', 'consistency'] as const) {
+    for (const channel of ['reviewVerdict', 'rebuttal', 'architecture', 'consistency', 'implementation'] as const) {
       if (outcome[channel] === undefined || juliusResultChannelPermitted(task.role, channel)) continue;
       await ledger.event('worker.channel.refused', {
         taskId: task.taskId, workerId: outcome.workerId,
         facts: { channel, role: task.role, taskType: task.taskType, reasonCode: 'channel_not_permitted_for_role' },
       });
     }
+  }
+
+  /* ------------------------------------------- 3b1b. what the Coding Agent did to the workspace */
+  if (!outcome.duplicate && juliusResultChannelPermitted(task.role, 'implementation') && outcome.implementation !== undefined) {
+    await recordCodingAgentImplementation({
+      deps, run, ledger, task, workerId: outcome.workerId, value: outcome.implementation,
+      leaseGeneration: claim.leaseGeneration,
+      scope: contractCharge === null ? null : { permittedPaths: contractCharge.permittedPaths, outOfScope: contractCharge.outOfScope },
+    });
   }
 
   /* ------------------------------------------- 3b2. the architecture the architect holds */
@@ -2985,6 +2997,105 @@ async function deliverAcceptedGuidance(input: {
     facts: {
       guidanceTaskId: input.guidanceTaskId, deliveredTo: waiting.taskId, entryId,
       revision, proposalEntryId: proposal.entryId,
+    },
+  });
+}
+
+/* ------------------------------------------------------ coding agent work */
+
+/**
+ * RECORD WHAT A CODING AGENT DISPATCH CHANGED, AND HOLD IT TO THE AGREEMENT.
+ *
+ * The locked contract's permitted paths and out-of-scope paths were stated to
+ * the coder and to the reviewer and checked by nothing, so an edit outside them
+ * was caught only if a reviewer happened to notice. Julius now reads the change
+ * set the independent executor observed, recomputes scope against the contract
+ * this dispatch was bound by, and — where the work strayed — writes a FAILED
+ * DIFF evidence row of its own. Verification then routes the task to repair on
+ * that evidence, after the independent review, exactly as it does for a failed
+ * test. The coder's own report sits beside it as CLAIMS: compared with what the
+ * executor saw, never substituted for it.
+ */
+async function recordCodingAgentImplementation(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly task: JuliusTask;
+  readonly workerId: string;
+  readonly value: unknown;
+  readonly leaseGeneration: number;
+  readonly scope: { readonly permittedPaths: readonly string[]; readonly outOfScope: readonly string[] } | null;
+}): Promise<void> {
+  const { deps, run, ledger, task } = input;
+  const implementation = readJuliusCodingAgentImplementation(input.value);
+  if (implementation === null) {
+    await ledger.event('coder.report.refused', {
+      taskId: task.taskId, workerId: input.workerId, facts: { reasonCode: 'coding_agent_implementation_unreadable' },
+    });
+    return;
+  }
+  const changes = implementation.workspace.changes;
+  const violations = input.scope === null ? [] : juliusScopeViolations({ changes, ...input.scope });
+
+  let reportOutcome: string | null = null;
+  let claimedNotObserved: number | null = null;
+  let observedNotClaimed: number | null = null;
+  let uncertainty: number | null = null;
+  let blocked: boolean | null = null;
+  if (implementation.report !== undefined && implementation.report !== null) {
+    const reading = sanitizeJuliusCodingAgentReport(implementation.report);
+    if (!reading.ok) {
+      await ledger.event('coder.report.refused', {
+        taskId: task.taskId, workerId: input.workerId, facts: { reasonCode: reading.reasonCode },
+      });
+    } else {
+      const observed = new Set(changes.map((change) => change.path));
+      const claimed = new Set(reading.report.filesTouched);
+      reportOutcome = reading.report.outcome;
+      claimedNotObserved = [...claimed].filter((path) => !observed.has(path)).length;
+      observedNotClaimed = [...observed].filter((path) => !claimed.has(path)).length;
+      uncertainty = reading.report.remainingUncertainty.length;
+      blocked = reading.report.blockedReason !== null;
+    }
+  }
+
+  const listed = (paths: readonly string[]): string => paths.slice(0, JULIUS_WORKSPACE_LIMITS.listedPaths).join(' ');
+  await ledger.event('coder.implementation.recorded', {
+    taskId: task.taskId, workerId: input.workerId,
+    facts: {
+      providerKind: implementation.providerKind,
+      workspaceCaptured: implementation.workspace.captured,
+      changedPaths: changes.length,
+      untrackedPaths: changes.filter((change) => change.change === 'UNTRACKED').length,
+      changeTruncated: implementation.workspace.truncated,
+      paths: listed(changes.map((change) => change.path)),
+      scopeChecked: input.scope !== null,
+      scopeViolations: violations.length,
+      reportOutcome, claimedNotObserved, observedNotClaimed, uncertainty, blocked,
+    },
+  });
+
+  if (violations.length === 0) return;
+  for (const violation of violations.slice(0, JULIUS_WORKSPACE_LIMITS.listedPaths)) {
+    await ledger.event('coder.scope.violated', {
+      taskId: task.taskId, workerId: input.workerId,
+      facts: { path: violation.path, rule: violation.rule, resolvedBy: 'CONTRACT' },
+    });
+  }
+  /**
+   * JULIUS'S OWN EVIDENCE, NOT THE WORKER'S. The id is under the task and lease
+   * that did the work, so a replay writes nothing twice; the summary names the
+   * paths and the rule, and no worker text.
+   */
+  await deps.store.appendEvidence({
+    runId: run.runId, projectId: run.projectId,
+    idempotencyKey: `${task.taskId}:${String(input.leaseGeneration)}:scope`,
+    evidence: {
+      evidenceId: `${task.taskId}:${String(input.leaseGeneration)}:scope`,
+      missionId: task.missionId, taskId: task.taskId, workerId: input.workerId,
+      type: 'DIFF', status: 'FAILED',
+      safeSummary: `Julius scope check: ${String(violations.length)} changed path(s) the locked contract does not allow — ${listed(violations.map((violation) => `${violation.path} [${violation.rule}]`))}.`.slice(0, 900),
+      artifactRef: null, integrityHash: null, occurredAt: deps.clock.now(),
     },
   });
 }
