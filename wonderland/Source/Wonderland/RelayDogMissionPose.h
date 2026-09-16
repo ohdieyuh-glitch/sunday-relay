@@ -115,10 +115,16 @@ namespace RelayDogMission
 
 	private:
 		EWonderlandDogAct Current = EWonderlandDogAct::None;
+		/** The act being faded OUT of, so one stage descends into the next instead of cutting. Without it,
+		 *  float -> read drops the body 64 uu in a frame: both acts are "performing", so the in/out blend
+		 *  never moves and only the lift's value changes. */
+		EWonderlandDogAct Previous = EWonderlandDogAct::None;
 		/** The act the mission last reported, before the inherit rule was applied. Kept only so the beam
 		 *  can be bound to the reported act while the pose inherits. */
 		EWonderlandDogAct Reported = EWonderlandDogAct::None;
 		float Weight = 0.0f;
+		/** 0 the instant an act changes, 1 once the new one has fully arrived. */
+		float Cross = 1.0f;
 		float BeamWeight = 0.0f;
 	};
 
