@@ -19,6 +19,9 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
+#include "HAL/IConsoleManager.h"
+#include "EngineUtils.h"
+#include "Engine/Engine.h"
 
 namespace
 {
@@ -1340,6 +1343,66 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 
 /* ==================================================================== the mission performance */
 
+namespace
+{
+	/**
+	 * `wl.Dog.Act <none|float|book|paint|beam>` — drive the BODY on its own, with no mission.
+	 *
+	 * DEVELOPMENT PREVIEW, and it says so: this poses the Dog directly and is not Julius doing anything.
+	 * It exists because the body and the meaning are built by two sessions, and a pose that can only be
+	 * reached by folding a real event stream can only be debugged by folding a real event stream. In
+	 * production the acts arrive from UWonderlandMissionSubsystem::ShowBeat and nothing else.
+	 *
+	 * The contract it performs against is whatever Mission Contract is already in the world, so the orbit
+	 * and the beam have a real anchor; with no contract the acts still pose, they simply have nothing to
+	 * walk around. It never invents one -- a contract that existed because a debug command was typed would
+	 * be exactly the fake the founder's canon forbids.
+	 */
+	FAutoConsoleCommand CmdDogAct(
+		TEXT("wl.Dog.Act"),
+		TEXT("Pose the Relay Dog in one mission act: none|float|book|paint|beam. DEVELOPMENT PREVIEW: a drawn pose, not Julius execution."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			if (Args.Num() < 1)
+			{
+				UE_LOG(LogTemp, Display, TEXT("WLDOG usage: wl.Dog.Act <none|float|book|paint|beam>"));
+				return;
+			}
+			const FString Want = Args[0].ToLower();
+			EWonderlandDogAct Act = EWonderlandDogAct::None;
+			if (Want == TEXT("float")) Act = EWonderlandDogAct::FloatingActivation;
+			else if (Want == TEXT("book")) Act = EWonderlandDogAct::ReadingTheBook;
+			else if (Want == TEXT("paint")) Act = EWonderlandDogAct::PaintingTheWork;
+			else if (Want == TEXT("beam")) Act = EWonderlandDogAct::VerificationBeam;
+			else if (Want != TEXT("none"))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("WLDOG no such act '%s'"), *Args[0]);
+				return;
+			}
+			for (const FWorldContext& Context : GEngine->GetWorldContexts())
+			{
+				UWorld* World = Context.World();
+				if (World == nullptr || !World->IsGameWorld())
+				{
+					continue;
+				}
+				const AActor* Contract = nullptr;
+				for (TActorIterator<AActor> It(World); It; ++It)
+				{
+					if (It->GetClass()->GetName().Contains(TEXT("MissionOrb")))
+					{
+						Contract = *It;
+						break;
+					}
+				}
+				for (TActorIterator<ARelayDogCharacter> It(World); It; ++It)
+				{
+					It->SetMissionAct(Act, Contract);
+				}
+			}
+		}));
+}
+
 void ARelayDogCharacter::SetMissionAct(EWonderlandDogAct Act, const AActor* Contract)
 {
 	MissionContract = Contract;
@@ -1409,15 +1472,19 @@ void ARelayDogCharacter::BuildMissionProps()
 	// Two covers opened into a V, with a page block between them. Held at the left forearm so the right
 	// arm stays free to turn a page, which is what the reading swing does.
 	USceneComponent* BookHand = ArmLeft.Forearm != nullptr ? ArmLeft.Forearm.Get() : BodyRoot.Get();
+	// HELD OUT, NOT TUCKED IN. The first version sat the book against the forearm, 16 uu forward: the
+	// component reported visible for the whole of PLANNING and the camera -- which stands behind the Dog --
+	// saw the Dog's back. It is now carried further down the forearm and further forward, so it clears the
+	// torso from behind, and half again as large, because a book the reader cannot see is set dressing.
 	TArray<FTransform> Covers;
-	Covers.Add(DogPropBox(FVector(16.0 * U, -11.0 * U, -26.0 * U), FVector(30.0 * U, 3.0 * U, 22.0 * U), FRotator(0.0, 0.0, -18.0)));
-	Covers.Add(DogPropBox(FVector(16.0 * U, 11.0 * U, -26.0 * U), FVector(30.0 * U, 3.0 * U, 22.0 * U), FRotator(0.0, 0.0, 18.0)));
-	Covers.Add(DogPropBox(FVector(16.0 * U, 0.0, -32.0 * U), FVector(30.0 * U, 6.0 * U, 4.0 * U)));
+	Covers.Add(DogPropBox(FVector(30.0 * U, -16.0 * U, -48.0 * U), FVector(42.0 * U, 4.0 * U, 32.0 * U), FRotator(0.0, 0.0, -20.0)));
+	Covers.Add(DogPropBox(FVector(30.0 * U, 16.0 * U, -48.0 * U), FVector(42.0 * U, 4.0 * U, 32.0 * U), FRotator(0.0, 0.0, 20.0)));
+	Covers.Add(DogPropBox(FVector(30.0 * U, 0.0, -57.0 * U), FVector(42.0 * U, 9.0 * U, 6.0 * U)));
 	BookMesh = MakePropMesh(TEXT("MissionBook"), BookHand, false, Covers, FLinearColor(0.42f, 0.13f, 0.16f), BookMid);
 
 	TArray<FTransform> Pages;
-	Pages.Add(DogPropBox(FVector(16.0 * U, -6.0 * U, -25.0 * U), FVector(27.0 * U, 8.0 * U, 18.0 * U), FRotator(0.0, 0.0, -18.0)));
-	Pages.Add(DogPropBox(FVector(16.0 * U, 6.0 * U, -25.0 * U), FVector(27.0 * U, 8.0 * U, 18.0 * U), FRotator(0.0, 0.0, 18.0)));
+	Pages.Add(DogPropBox(FVector(30.0 * U, -9.0 * U, -46.0 * U), FVector(38.0 * U, 11.0 * U, 26.0 * U), FRotator(0.0, 0.0, -20.0)));
+	Pages.Add(DogPropBox(FVector(30.0 * U, 9.0 * U, -46.0 * U), FVector(38.0 * U, 11.0 * U, 26.0 * U), FRotator(0.0, 0.0, 20.0)));
 	BookPagesMesh = MakePropMesh(TEXT("MissionBookPages"), BookHand, false, Pages, FLinearColor(0.94f, 0.92f, 0.84f), BookPagesMid);
 
 	// ---------------------------------------------------------------- the paintbrush (IMPLEMENTING)
@@ -1436,45 +1503,70 @@ void ARelayDogCharacter::BuildMissionProps()
 	// ---------------------------------------------------------------- the beam (VERIFYING)
 	// ONE unit cube, stretched along X between the chest and the contract every frame. A beam has to be a
 	// world-space thing rather than a child of a swinging arm, so it hangs off the capsule, not the body.
+	// TWO CYLINDERS, NOT ONE. A single 10 uu thread was geometrically perfect and photographically absent:
+	// the play camera stands behind a Dog that is FACING the contract, so it looks straight down the beam's
+	// own axis, where a thin rod is a few pixels. A bright core inside a wide dim halo reads as light from
+	// any angle, end-on included.
 	TArray<FTransform> Beam;
-	Beam.Add(DogPropBox(FVector(50.0, 0.0, 0.0), FVector(100.0, 10.0, 10.0)));
+	Beam.Add(DogPropBox(FVector(50.0, 0.0, 0.0), FVector(100.0, 100.0, 100.0)));
 	BeamMesh = MakePropMesh(TEXT("VerificationBeam"), GetRootComponent(), true, Beam,
-		FLinearColor(0.42f, 0.86f, 1.0f), BeamMid);
+		FLinearColor(0.62f, 0.94f, 1.0f), BeamMid);
+	BeamHaloMesh = MakePropMesh(TEXT("VerificationBeamHalo"), GetRootComponent(), true, Beam,
+		FLinearColor(0.20f, 0.52f, 0.86f), BeamHaloMid);
 	if (BeamMesh != nullptr)
 	{
 		BeamMesh->SetAbsolute(true, true, true);
+	}
+	if (BeamHaloMesh != nullptr)
+	{
+		BeamHaloMesh->SetAbsolute(true, true, true);
 	}
 }
 
 void ARelayDogCharacter::DrawVerificationBeam(const FVector& FromWorld, const FVector& ToWorld, float Weight, float TimeSeconds)
 {
-	if (BeamMesh == nullptr)
+	auto Hide = [this]()
 	{
-		return;
-	}
-	if (Weight <= KINDA_SMALL_NUMBER)
+		if (BeamMesh != nullptr) BeamMesh->SetVisibility(false);
+		if (BeamHaloMesh != nullptr) BeamHaloMesh->SetVisibility(false);
+	};
+	if (BeamMesh == nullptr || Weight <= KINDA_SMALL_NUMBER)
 	{
-		BeamMesh->SetVisibility(false);
+		Hide();
 		return;
 	}
 	const FVector Along = ToWorld - FromWorld;
 	const double Length = Along.Size();
 	if (Length < 1.0)
 	{
-		BeamMesh->SetVisibility(false);
+		Hide();
 		return;
 	}
-	BeamMesh->SetVisibility(true);
-	BeamMesh->SetWorldLocationAndRotation(FromWorld, Along.Rotation());
-	// SUSTAINED, NOT PULSED. The founder's note rules out flashes and bursts, so the beam's thickness
-	// breathes by a few per cent and never goes out or restarts -- it reads as a held analytical link
-	// rather than as fire. Length is exact so it lands on the contract instead of through it.
+	const FRotator Aim = Along.Rotation();
+	// SUSTAINED, NOT PULSED. The founder's note rules out flashes and bursts, so the thickness breathes by a
+	// few per cent and the beam never goes out or restarts -- a held analytical link rather than fire.
+	// Length is exact, so it lands ON the contract instead of through it.
 	const double Breathe = 1.0 + 0.06 * FMath::Sin(2.0 * PI * TimeSeconds / 1.7);
-	const double Thick = (10.0 * Weight * Breathe) / 100.0;
-	BeamMesh->SetWorldScale3D(FVector(Length / 100.0, Thick, Thick));
+	const double Core = (34.0 * Weight * Breathe) / 100.0;
+	const double Halo = (86.0 * Weight * (2.0 - Breathe)) / 100.0;
+
+	BeamMesh->SetVisibility(true);
+	BeamMesh->SetWorldLocationAndRotation(FromWorld, Aim);
+	BeamMesh->SetWorldScale3D(FVector(Length / 100.0, Core, Core));
 	if (BeamMid != nullptr)
 	{
-		BeamMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.42f, 0.86f, 1.0f) * (0.6f + 0.9f * Weight));
+		BeamMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.62f, 0.94f, 1.0f) * (0.7f + 1.1f * Weight));
+	}
+	if (BeamHaloMesh != nullptr)
+	{
+		BeamHaloMesh->SetVisibility(true);
+		BeamHaloMesh->SetWorldLocationAndRotation(FromWorld, Aim);
+		// The halo counter-breathes, so the beam swells and thins without either part blinking.
+		BeamHaloMesh->SetWorldScale3D(FVector(Length / 100.0, Halo, Halo));
+		if (BeamHaloMid != nullptr)
+		{
+			BeamHaloMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.20f, 0.52f, 0.86f) * (0.30f + 0.45f * Weight));
+		}
 	}
 }
 

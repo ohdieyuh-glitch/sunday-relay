@@ -331,6 +331,12 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<class UInstancedStaticMeshComponent> BeamMesh = nullptr;
 
+	/** The beam's outer sheath. A single thin rod is invisible when the camera looks down its own axis --
+	 *  which is exactly where the play camera stands, behind a Dog that is facing the contract. Two
+	 *  cylinders, a bright core inside a wide dim halo, read as light from any angle including end-on. */
+	UPROPERTY(Transient)
+	TObjectPtr<class UInstancedStaticMeshComponent> BeamHaloMesh = nullptr;
+
 	UPROPERTY(Transient)
 	TObjectPtr<class UMaterialInstanceDynamic> BookMid = nullptr;
 
@@ -345,6 +351,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<class UMaterialInstanceDynamic> BeamMid = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UMaterialInstanceDynamic> BeamHaloMid = nullptr;
 
 	bool bMissionPropsBuilt = false;
 	/** True on any frame the player asked the Dog to move, so the orbit stands down. */
