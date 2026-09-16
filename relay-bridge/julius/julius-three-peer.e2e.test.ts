@@ -542,6 +542,11 @@ describe('P32 — a provider failure during a repair fabricates nothing, whichev
     expect(drive.provider.requests.filter((request) => request.identity.taskId === REPAIR)).toHaveLength(2);
     const repairEvidence = (await drive.memory.evidenceForRun(RUN, PROJECT)).filter((row) => row.taskId === REPAIR);
     expect(repairEvidence.map((row) => row.type).sort()).toEqual(['DIFF', 'TEST']);
+    // Julius names evidence by the lease that produced it: the retried attempt's, never the first's.
+    const claims = ofType(drive, 'task.claimed').filter((entry) => entry.taskId === REPAIR);
+    const lastLease = Number(claims.at(-1)!.facts.leaseGeneration);
+    expect(lastLease, 'the retry ran under a new lease').toBeGreaterThan(Number(claims[0]!.facts.leaseGeneration));
+    expect(repairEvidence.map((row) => row.evidenceId).sort()).toEqual([`${REPAIR}:${String(lastLease)}:0`, `${REPAIR}:${String(lastLease)}:1`]);
     // Nothing was addressed on the strength of the failed attempt.
     const retriedAt = retried[0]!.sequence;
     const addressedAt = firstAt(drive, (entry) => entry.type === 'finding.transitioned' && entry.facts.move === 'REPAIR_SUCCEEDED');

@@ -3686,7 +3686,9 @@ async function markFindingsAddressed(input: {
     if ((life.taskId !== repaired && life.taskId !== unit) || life.state !== 'OPEN') continue;
     await moveFinding({
       ledger: input.ledger, deps: input.deps, life, move: 'REPAIR_SUCCEEDED',
-      workerId: input.workerId, repairTaskId: input.repair.taskId,
+      // Named by the repair, not by the pause that finished it: the finding's
+      // repair linkage is the unit of work sent to fix it.
+      workerId: input.workerId, repairTaskId: head.taskId,
     });
   }
 }
@@ -4241,8 +4243,10 @@ async function settlePeerRequestsForDecision(input: {
   const question = { ...common, kind: 'GUIDANCE_QUESTION' as const, anchor: unit.taskId };
   if (input.action === 'ACCEPT' || input.action === 'COMPLETE') {
     /**
-     * ACCEPTANCE IS WHAT MAKES A PACKET AUTHORITATIVE, and this is the only
-     * place a packet reaches the worker that asked.
+     * ACCEPTANCE IS WHAT MAKES A PACKET AUTHORITATIVE, and only an accepted
+     * packet reaches the worker that asked: here, and — if this write was lost
+     * to a crash — at the waiting continuation's own claim, which looks for
+     * the same acceptance (`deliverOwedGuidance`).
      */
     await deliverAcceptedGuidance({
       deps: input.deps, run: input.run, ledger: input.ledger, tasks: input.tasks,

@@ -278,3 +278,75 @@ describe('G7 — an unreadable question is named on the record', () => {
       .toMatchObject({ requestReadable: true, requestReasonCode: null });
   });
 });
+
+describe('G8 — a continuation is handed the answer to ITS question, never another unit\'s', () => {
+  it('two coders ask two questions; each continuation holds exactly its own accepted answer', async () => {
+    const ALPHA = 'use advice ALPHA for the first unit';
+    const BETA = 'use advice BETA for the second unit';
+    const answer = (advice: string): Step => ({ kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: { ...GUIDANCE, recommendedActions: [advice] } });
+    const harness = build({
+      architect: [{ kind: 'succeed', evidence: PLAN_EVIDENCE }, answer(ALPHA), answer(BETA)],
+      coder: [
+        { kind: 'succeed', guidanceRequest: REQUEST },
+        { kind: 'succeed', guidanceRequest: { ...REQUEST, question: 'Should the exporter reuse it too?' } },
+        { kind: 'succeed' }, { kind: 'succeed' },
+      ],
+      reviewer: [PASS, PASS, PASS, PASS, PASS, PASS, PASS],
+    });
+    seedTaskContractInto(harness.store, { runId: 'run-1', projectId: 'prj-1', taskId: 'build-2' });
+    harness.store.seedTask('run-1', task({ taskId: 'build-2', ordinal: 2, role: 'CODING_AGENT', taskType: 'build', state: 'BLOCKED', dependencyIds: ['plan-1'], requiredEvidenceTypes: ['TEST'] }));
+    await drain(harness);
+
+    const continuations = (await tasksOf(harness)).filter((item) => /^segment:build-[12]:2:task$/u.test(item.taskId));
+    expect(continuations.map((item) => item.taskId).sort()).toEqual(['segment:build-1:2:task', 'segment:build-2:2:task']);
+    // Every delivery names the guidance task of the unit it was delivered to.
+    const deliveries = factsOf(harness, 'guidance.delivered');
+    expect(deliveries.length).toBeGreaterThan(0);
+    for (const delivery of deliveries) {
+      const unit = /^segment:(build-[12]):/u.exec(String(delivery.deliveredTo))![1];
+      expect(delivery.guidanceTaskId, `${String(delivery.deliveredTo)} was handed ${String(delivery.guidanceTaskId)}`).toBe(`guidance:${unit}:1:task`);
+    }
+    // And each continuation's packets hold one answer — the one its own question was given.
+    const held = continuations.map((item) => {
+      const packet = packetsFor(harness, item.taskId);
+      return [packet.includes(ALPHA), packet.includes(BETA)];
+    });
+    for (const [alpha, beta] of held) expect(alpha !== beta, 'exactly one of the two answers').toBe(true);
+    expect(held[0]![0], 'and not the same one').not.toBe(held[1]![0]);
+  });
+});
+
+describe('G9 — a second-round repair that pauses addresses the round it repairs', () => {
+  it('the finding raised on the first repair is ADDRESSED by the second repair, whose work finished in a continuation', async () => {
+    const harness = build({
+      coder: [
+        { kind: 'succeed' },
+        { kind: 'succeed' },
+        // The second repair pauses; its continuation finishes it.
+        { kind: 'succeed', guidanceRequest: REQUEST },
+        { kind: 'succeed' },
+      ],
+      // plan, build REJECTED, first repair REJECTED, guidance, the second repair passes.
+      reviewer: [PASS, REJECT, REJECT, PASS, PASS],
+    });
+    await drain(harness);
+
+    const tasks = await tasksOf(harness);
+    const repairs = tasks.filter((item) => item.taskType === 'repair:build' && !item.taskId.startsWith('segment:'));
+    expect(repairs.length, 'two repair rounds').toBe(2);
+    const continuation = tasks.find((item) => item.taskId.startsWith('segment:repair:'));
+    expect(continuation, 'the second repair paused and continued').not.toBeUndefined();
+    const second = tasks.find((item) => item.taskId === continuation!.parentTaskId)!;
+    const findings = await harness.store.findingsForRun('run-1', 'prj-1');
+    const onFirstRepair = findings.filter((finding) => finding.taskId === second.parentTaskId);
+    expect(onFirstRepair.length, 'the first repair\'s review raised a finding').toBeGreaterThan(0);
+    const addressed = factsOf(harness, 'finding.transitioned')
+      .filter((facts) => facts.move === 'REPAIR_SUCCEEDED' && onFirstRepair.some((finding) => finding.findingId === facts.findingId));
+    // Named by the repair, never by the pause that finished it.
+    expect(addressed.map((facts) => facts.repairTaskId), 'addressed by the repair that answered it').toEqual([second.taskId]);
+    const lives = foldJuliusFindings(findings, harness.store.events().map((event) => ({ type: event.type, facts: event.facts, taskId: event.taskId })));
+    for (const life of lives) {
+      expect(life.repairTaskIds.some((id) => id.startsWith('segment:')), `${life.findingId} links repairs, not pauses`).toBe(false);
+    }
+  });
+});
