@@ -218,6 +218,12 @@ def job():
                     })
                 frames.append(sample)
                 index += 1
+                # NO FRAMES, NO FILM: a minimized editor window fails every capture silently, and the loop would race
+                # through the whole mission writing nothing. Stop and say so.
+                if index == 30 and not any(f["ok"] for f in frames):
+                    RESULT["error"] = "the first 30 captures all failed -- is the Unreal editor window minimized?"
+                    unreal.log_warning("WLEXPERIENCE %s" % RESULT["error"])
+                    break
                 yield 0.0
                 now = time.time()
                 real_dt = max(now - last_tick, 0.005)
