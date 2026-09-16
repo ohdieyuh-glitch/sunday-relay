@@ -81,4 +81,114 @@ def object_pocket_clock(f):
         tri_budget=9000, nanite=False, collision=True)
 
 
-BUILDERS = (object_pocket_clock,)
+def _bez3(p0, p1, p2, p3, steps):
+    out = []
+    for i in range(steps + 1):
+        t = i / float(steps)
+        u = 1.0 - t
+        out.append(tuple(u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * c + t * t * t * d
+                         for a, b, c, d in zip(p0, p1, p2, p3)))
+    return out
+
+
+def _body_radius(z, profile):
+    """The body's radius at height z, read off its lathe profile (for things that sit ON the surface)."""
+    for (r0, z0), (r1, z1) in zip(profile[:-1], profile[1:]):
+        if z0 <= z <= z1 and z1 > z0:
+            return r0 + (r1 - r0) * (z - z0) / (z1 - z0)
+    return profile[-1][0]
+
+
+def _surface_tilt(z, profile):
+    """Degrees the body's outward normal at height z tilts UP from horizontal (negative: down)."""
+    for (r0, z0), (r1, z1) in zip(profile[:-1], profile[1:]):
+        if z0 <= z <= z1 and z1 > z0:
+            return math.degrees(math.atan2(-(r1 - r0), (z1 - z0)))
+    return 0.0
+
+
+def object_teapot_pavilion(f):
+    """A 19 m porcelain teapot: the Tea Terraces' landmark, as the Bible draws a teapot.
+
+    WHY (2026-09-16, TeapotCam24): the world's teapot pavilion is a low-poly single-material mesh; it reads as white
+    plaster, and gloss on its material (TEA01) only exposed its facets. The Bible's teapots are porcelain with gold
+    rims and painted roses. This one is SMOOTH (64-segment revolves, swept spout and handle), white enamel, with a
+    gold foot, belly band, shoulder rim, lid rim and knob, a ring of rose medallions above the band, and porthole
+    windows lit from inside -- it is a pavilion.
+
+    Spout toward +Y, handle toward -Y, so the classic silhouette is seen from +X / -X, the kit's front and back.
+    """
+    en = f.part("enamel")
+    g = f.part("gold")
+    rose = f.part("roof")
+    leaf = f.part("veg_anchor")
+    gl = f.part("glass")
+    SEG = 64
+    body = [(5.30, 0.30), (5.70, 0.60), (6.60, 1.30), (7.50, 2.40), (8.20, 3.80), (8.60, 5.40), (8.70, 6.60),
+            (8.50, 8.10), (7.90, 9.60), (6.90, 10.90), (5.80, 11.90), (5.10, 12.40)]
+    en.lathe([(0.0, 0.30)] + body, segments=SEG, smooth=True, cap_bottom=False, cap_top=True)
+    # foot ring
+    g.lathe([(5.05, 0.0), (6.05, 0.0), (6.20, 0.18), (6.00, 0.42), (5.60, 0.64), (5.05, 0.64)], segments=SEG,
+            smooth=True)
+    # belly band: follows the body's widest girth
+    g.lathe([(8.62, 6.10), (8.86, 6.22), (8.92, 6.60), (8.86, 6.98), (8.62, 7.10)], segments=SEG, smooth=True,
+            cap_bottom=False, cap_top=False)
+    # shoulder rim and lid
+    g.lathe([(4.85, 12.30), (5.55, 12.30), (5.75, 12.55), (5.55, 12.85), (4.85, 12.85)], segments=SEG, smooth=True)
+    en.lathe([(5.30, 12.85), (4.70, 13.60), (3.60, 14.60), (2.10, 15.30), (0.90, 15.55), (0.0, 15.60)],
+             segments=SEG, smooth=True, cap_bottom=False)
+    g.lathe([(0.0, 15.50), (0.80, 15.55), (1.05, 15.95), (0.70, 16.35), (0.55, 16.55), (1.00, 17.10),
+             (0.85, 17.75), (0.45, 18.15), (0.0, 18.40)], segments=24, smooth=True, cap_bottom=False)
+    # spout: rises from the belly toward +Y and turns up
+    spout = _bez3((0.0, 7.6, 4.2), (0.0, 11.5, 4.6), (0.0, 12.6, 9.0), (0.0, 14.8, 12.9), 18)
+    radii = [2.10 - 1.35 * (i / 18.0) ** 0.8 for i in range(19)]
+    en.sweep(spout, radii, sides=24, smooth=True, cap=True)
+    tip = _bez3(spout[-2], spout[-2], spout[-1], (0.0, 15.05, 13.25), 3)
+    g.sweep(tip, [0.84, 0.86, 0.88, 0.86], sides=24, smooth=True, cap=True)
+    # handle: a loop on -Y, thickest at its middle
+    handle = _bez3((0.0, -8.2, 10.0), (0.0, -13.8, 11.4), (0.0, -14.2, 3.4), (0.0, -8.4, 3.6), 22)
+    en.sweep(handle, [0.70 + 0.22 * math.sin(math.pi * i / 22.0) for i in range(23)], sides=20, smooth=True, cap=True)
+    for (y, z) in ((-8.15, 10.0), (-8.35, 3.6)):
+        g.lathe([(0.0, -0.18), (1.05, -0.18), (1.10, 0.18), (0.0, 0.18)], segments=24, smooth=True,
+                matrix=M.xform((0.0, y, z), (90.0, 0.0, 0.0)))
+    # rose medallions above the band, clear of the spout and handle roots. Each sits on the surface along the body's
+    # own normal there (the shoulder leans in, so the normal tilts up), and is a rose at a street's distance: a
+    # 2 m cushion of three petal tiers, a pair of leaves.
+    ZR = 8.70
+    rr = _body_radius(ZR, body)
+    tilt = _surface_tilt(ZR, body)
+    for k in range(10):
+        th = 2.0 * math.pi * (k + 0.5) / 10.0
+        deg = math.degrees(th)
+        if min(abs((deg - 90.0 + 180.0) % 360.0 - 180.0), abs((deg - 270.0 + 180.0) % 360.0 - 180.0)) < 24.0:
+            continue
+        x, y = math.cos(th) * (rr - 0.18), math.sin(th) * (rr - 0.18)
+        mat = M.xform((x, y, ZR), (0.0, 90.0 - tilt, deg))
+        rose.lathe([(1.00, 0.0), (1.02, 0.16), (0.86, 0.34), (0.70, 0.36), (0.72, 0.50), (0.52, 0.66), (0.38, 0.66),
+                    (0.36, 0.78), (0.16, 0.90), (0.0, 0.88)], segments=20, smooth=True, cap_bottom=False, matrix=mat)
+        for sgn in (-1.0, 1.0):
+            leaf.lathe([(0.0, -0.45), (0.28, -0.20), (0.30, 0.20), (0.0, 0.50)], segments=8, smooth=True,
+                       matrix=mat @ M.xform((0.10, sgn * 1.15, 0.0), (0.0, 90.0, sgn * 70.0)))
+    # porthole windows, lit, in gold rings, round the lower belly -- set along the body's normal there, which tilts
+    # DOWN (the belly still widens), so the whole disc stands proud of the enamel instead of half sinking into it
+    ZW = 4.20
+    rw = _body_radius(ZW, body)
+    tilt = _surface_tilt(ZW, body)
+    for deg in (0.0, 38.0, 142.0, 180.0, 218.0, 322.0):
+        th = math.radians(deg)
+        x, y = math.cos(th) * (rw - 0.10), math.sin(th) * (rw - 0.10)
+        mat = M.xform((x, y, ZW), (0.0, 90.0 - tilt, deg))
+        gl.lathe([(0.0, 0.00), (0.80, 0.00), (0.80, 0.16), (0.0, 0.22)], segments=24, smooth=False, matrix=mat)
+        g.lathe([(0.80, 0.0), (1.06, 0.0), (1.10, 0.26), (0.88, 0.32), (0.80, 0.24)], segments=24, smooth=True,
+                cap_bottom=False, cap_top=False, matrix=mat)
+    return K.ModuleSpec(
+        "WL_Object_TeapotPavilion", "teapot", "landmark", "hero",
+        f.emit("WL_Object_TeapotPavilion"),
+        [K.Socket("bottom", 0.0, 6.0, "ground", "stands on its gold foot")],
+        districts=("tea_terrace",),
+        note="19 m porcelain teapot pavilion: smooth enamel body, swept spout and handle, gold foot, band, rims and knob, rose medallions, lit portholes",
+        params={"height_m": 18.4, "belly_radius_m": 8.7},
+        tri_budget=40000, nanite=False, collision=True)
+
+
+BUILDERS = (object_pocket_clock, object_teapot_pavilion)

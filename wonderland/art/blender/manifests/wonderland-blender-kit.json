@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-16T18:25:02+00:00",
+  "generated_utc": "2026-09-16T19:03:11+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -22,7 +22,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 118,
+        "n": 119,
         "min": 0.153,
         "median": 0.846,
         "max": 1.0,
@@ -36,7 +36,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 118,
+        "n": 119,
         "min": 0.0,
         "median": 0.358,
         "max": 1.0,
@@ -50,7 +50,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 118,
+        "n": 119,
         "min": 0.557,
         "median": 1.0,
         "max": 1.0,
@@ -64,9 +64,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 118,
+        "n": 119,
         "min": 0.0,
-        "median": 0.985,
+        "median": 0.982,
         "max": 1.0,
         "unknown": 0
       }
@@ -78,7 +78,7 @@
       "provenance": "declared",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 118,
+        "n": 119,
         "min": 0.0,
         "median": 0.0,
         "max": 0.7,
@@ -92,7 +92,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 115,
+        "n": 116,
         "min": 0.083,
         "median": 0.64,
         "max": 0.917,
@@ -106,7 +106,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 118,
+        "n": 119,
         "min": 0.05,
         "median": 0.5,
         "max": 0.7,
@@ -235,9 +235,9 @@
     }
   },
   "counts": {
-    "assets": 118,
-    "meshes": 377,
-    "triangles": 482616,
+    "assets": 119,
+    "meshes": 382,
+    "triangles": 494138,
     "by_role": {
       "foot": 5,
       "body": 14,
@@ -249,7 +249,7 @@
       "detail": 24,
       "route": 11,
       "terrace": 17,
-      "hero": 9
+      "hero": 10
     },
     "legal_tower_stacks_up_to_3_bodies": 865,
     "rung_coverage": {
@@ -34202,6 +34202,487 @@
         }
       },
       "part_count": 2
+    },
+    {
+      "asset_id": "WL_Object_TeapotPavilion",
+      "kit_version": "1.0.0",
+      "family": "teapot",
+      "family_group": "objects",
+      "category": "landmark",
+      "silhouette_role": "hero",
+      "note": "19 m porcelain teapot pavilion: smooth enamel body, swept spout and handle, gold foot, band, rims and knob, rose medallions, lit portholes",
+      "districts": [
+        "tea_terrace"
+      ],
+      "params": {
+        "height_m": 18.4,
+        "belly_radius_m": 8.7
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 1840.0,
+      "bbox_min_uu": [
+        -892.0,
+        -1349.42,
+        0.0
+      ],
+      "bbox_max_uu": [
+        892.0,
+        1577.25,
+        1840.0
+      ],
+      "size_uu": [
+        1784.0,
+        2926.67,
+        1840.0
+      ],
+      "style": {
+        "slender_broad": 0.908,
+        "low_monumental": 0.628,
+        "open_solid": 0.985,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.3,
+        "ceremonial_residential": 0.05
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        660.0,
+        1000.81,
+        1244.4,
+        1335.73,
+        1349.42,
+        1408.72,
+        1461.02,
+        1529.0,
+        1577.25,
+        360.0,
+        105.0,
+        100.0
+      ],
+      "radius_uu": 1577.25,
+      "tris_total": 11522,
+      "tri_budget": 40000,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 600.0,
+          "rung": null,
+          "note": "stands on its gold foot"
+        }
+      ],
+      "parts": {
+        "enamel": {
+          "verts": 2006,
+          "faces": 1965,
+          "tris": 3934,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Ceramic"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -870.0,
+            -1349.42,
+            30.0
+          ],
+          "bbox_max_uu": [
+            870.0,
+            1545.82,
+            1560.0
+          ],
+          "size_uu": [
+            1740.0,
+            2895.24,
+            1530.0
+          ],
+          "height_m": 15.3,
+          "base_z_uu": 30.0,
+          "normals": {
+            "faces": 1965,
+            "shells": 4,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            660.0,
+            944.8,
+            1195.55,
+            1284.22,
+            1347.3,
+            1355.07,
+            1408.72,
+            1434.79,
+            1487.89,
+            1545.82,
+            1448.55,
+            360.0
+          ],
+          "material": "MI_V2_Ceramic",
+          "mesh_name": "WL_Object_TeapotPavilion_enamel",
+          "glb": "exports\\glb\\WL_Object_TeapotPavilion_enamel.glb",
+          "fbx": "exports\\fbx\\WL_Object_TeapotPavilion_enamel.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Ceramic"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -8.699999809265137,
+              0.30000001192092896,
+              -15.458209991455078
+            ],
+            "max_yup": [
+              8.699999809265137,
+              15.600000381469727,
+              13.4942045211792
+            ],
+            "bytes": 106312
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 30.000001907348633,
+            "stored_z_max": 1560.0
+          }
+        },
+        "glass": {
+          "verts": 300,
+          "faces": 432,
+          "tris": 576,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_GlassAmber"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -854.93,
+            -578.38,
+            338.51
+          ],
+          "bbox_max_uu": [
+            854.93,
+            578.38,
+            497.61
+          ],
+          "size_uu": [
+            1709.85,
+            1156.77,
+            159.1
+          ],
+          "height_m": 1.591,
+          "base_z_uu": 338.508,
+          "normals": {
+            "faces": 432,
+            "shells": 6,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            819.7,
+            823.75,
+            828.72,
+            813.26,
+            834.09,
+            841.34,
+            823.89,
+            844.09,
+            848.06,
+            851.12,
+            853.26,
+            854.93
+          ],
+          "material": "MI_V2_GlassAmber",
+          "mesh_name": "WL_Object_TeapotPavilion_glass",
+          "glb": "exports\\glb\\WL_Object_TeapotPavilion_glass.glb",
+          "fbx": "exports\\fbx\\WL_Object_TeapotPavilion_glass.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_GlassAmber"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -8.549251556396484,
+              3.385080099105835,
+              -5.783834457397461
+            ],
+            "max_yup": [
+              8.549251556396484,
+              4.976113796234131,
+              5.783834457397461
+            ],
+            "bytes": 42008
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 338.50799560546875,
+            "stored_z_max": 497.61138916015625
+          }
+        },
+        "gold": {
+          "verts": 2110,
+          "faces": 1822,
+          "tris": 3780,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -892.0,
+            -892.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            892.0,
+            1577.25,
+            1840.0
+          ],
+          "size_uu": [
+            1784.0,
+            2469.25,
+            1840.0
+          ],
+          "height_m": 18.4,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 1822,
+            "shells": 13,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            620.0,
+            858.3,
+            865.08,
+            872.39,
+            892.0,
+            834.81,
+            840.23,
+            1529.0,
+            1577.25,
+            1577.25,
+            105.0,
+            100.0
+          ],
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Object_TeapotPavilion_gold",
+          "glb": "exports\\glb\\WL_Object_TeapotPavilion_gold.glb",
+          "fbx": "exports\\fbx\\WL_Object_TeapotPavilion_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -8.920000076293945,
+              0,
+              -15.772455215454102
+            ],
+            "max_yup": [
+              8.920000076293945,
+              18.399999618530273,
+              8.920000076293945
+            ],
+            "bytes": 128104
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 1840.0
+          }
+        },
+        "roof": {
+          "verts": 1448,
+          "faces": 1440,
+          "tris": 2720,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_RoofRose"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -855.4,
+            -738.2,
+            777.15
+          ],
+          "bbox_max_uu": [
+            855.4,
+            738.2,
+            970.65
+          ],
+          "size_uu": [
+            1710.81,
+            1476.39,
+            193.49
+          ],
+          "height_m": 1.9349,
+          "base_z_uu": 777.152,
+          "normals": {
+            "faces": 1440,
+            "shells": 8,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            860.74,
+            871.51,
+            881.16,
+            877.08,
+            888.59,
+            893.79,
+            897.51,
+            896.42,
+            889.86,
+            869.86,
+            851.06,
+            827.68
+          ],
+          "material": "MI_V2_RoofRose",
+          "mesh_name": "WL_Object_TeapotPavilion_roof",
+          "glb": "exports\\glb\\WL_Object_TeapotPavilion_roof.glb",
+          "fbx": "exports\\fbx\\WL_Object_TeapotPavilion_roof.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_RoofRose"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -8.554049491882324,
+              7.7715229988098145,
+              -7.38197135925293
+            ],
+            "max_yup": [
+              8.554049491882324,
+              9.70646858215332,
+              7.38197135925293
+            ],
+            "bytes": 98888
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 777.1522827148438,
+            "stored_z_max": 970.6468505859375
+          }
+        },
+        "veg_anchor": {
+          "verts": 288,
+          "faces": 384,
+          "tris": 512,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -842.24,
+            -759.92,
+            827.98
+          ],
+          "bbox_max_uu": [
+            842.24,
+            759.92,
+            891.69
+          ],
+          "size_uu": [
+            1684.48,
+            1519.84,
+            63.72
+          ],
+          "height_m": 0.6372,
+          "base_z_uu": 827.977,
+          "normals": {
+            "faces": 384,
+            "shells": 16,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            833.92,
+            833.92,
+            850.82,
+            833.95,
+            833.95,
+            839.25,
+            799.69,
+            852.67,
+            809.27,
+            840.69,
+            840.69,
+            827.08
+          ],
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Object_TeapotPavilion_veg_anchor",
+          "glb": "exports\\glb\\WL_Object_TeapotPavilion_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Object_TeapotPavilion_veg_anchor.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -8.422375679016113,
+              8.27977466583252,
+              -7.599222660064697
+            ],
+            "max_yup": [
+              8.422375679016113,
+              8.916937828063965,
+              7.599222660064697
+            ],
+            "bytes": 25360
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 827.9774780273438,
+            "stored_z_max": 891.6937866210938
+          }
+        }
+      },
+      "part_count": 5
     },
     {
       "asset_id": "WL_Palace_Wing",
