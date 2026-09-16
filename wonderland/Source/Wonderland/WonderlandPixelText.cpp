@@ -68,7 +68,7 @@ void SWonderlandPixelText::Construct(const FArguments& InArgs)
 FVector2D SWonderlandPixelText::ComputeDesiredSize(float) const
 {
 	const float Cell = FMath::Max(CellSize.Get(), 0.5f);
-	const int32 Count = Text.Len();
+	const int32 Count = Text.Get().Len();
 	const float Width = Count > 0 ? (static_cast<float>(Count) * 6.0f - 1.0f + WonderlandPixelFont::CellWidthScale - 1.0f) * Cell : 0.0f;
 	return FVector2D(Width + 2.0f, 7.0f * WonderlandPixelFont::RowPitch * Cell + 3.0f);
 }
@@ -85,9 +85,10 @@ int32 SWonderlandPixelText::OnPaint(const FPaintArgs& Args, const FGeometry& All
 	{
 		const bool bShadow = Pass == 0;
 		const FLinearColor Tint = (bShadow ? ShadowColor : Color) * InWidgetStyle.GetColorAndOpacityTint();
-		for (int32 Index = 0; Index < Text.Len(); ++Index)
+		const FString Line = Text.Get();
+		for (int32 Index = 0; Index < Line.Len(); ++Index)
 		{
-			const uint8* Rows = WonderlandPixelFont::RowsFor(Text[Index]);
+			const uint8* Rows = WonderlandPixelFont::RowsFor(Line[Index]);
 			if (Rows == nullptr)
 			{
 				continue;
