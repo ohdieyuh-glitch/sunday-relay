@@ -10,16 +10,16 @@
     "wonderland/marble/import-marble-world.py (AssetImportTask, the guarded Interchange options, spawn_actor_from_class)"
   ],
   "counts": {
-    "assets": 119,
-    "meshes": 382,
+    "assets": 121,
+    "meshes": 388,
     "missing_sources": 0,
     "nanite_requested": 24,
-    "collision_requested": 78,
+    "collision_requested": 80,
     "by_data_layer": {
       "V2_Arrival": 8,
       "V2_Castle": 26,
       "V2_Garden": 23,
-      "V2_Props": 30,
+      "V2_Props": 32,
       "V2_Skyline": 32
     },
     "by_destination": {
@@ -31,7 +31,7 @@
       "/Game/WonderlandV2/Kit/hero": 2,
       "/Game/WonderlandV2/Kit/market": 6,
       "/Game/WonderlandV2/Kit/mushrooms": 3,
-      "/Game/WonderlandV2/Kit/objects": 2,
+      "/Game/WonderlandV2/Kit/objects": 4,
       "/Game/WonderlandV2/Kit/palace": 3,
       "/Game/WonderlandV2/Kit/paving": 3,
       "/Game/WonderlandV2/Kit/roofscape": 6,
@@ -8543,6 +8543,152 @@
           "material_instance": "MI_V2_LeafMid",
           "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_LeafMid",
           "triangles": 512
+        }
+      ]
+    },
+    {
+      "asset_id": "WL_Object_TeaCup",
+      "family_group": "objects",
+      "variant_of": null,
+      "destination_path": "/Game/WonderlandV2/Kit/objects",
+      "data_layer": "V2_Props",
+      "nanite_requested": false,
+      "collision_requested": true,
+      "height_uu": 262.0,
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "style": {
+        "slender_broad": 0.946,
+        "low_monumental": 0.015,
+        "open_solid": 0.986,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.3,
+        "ceremonial_residential": 0.7
+      },
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 100.0,
+          "rung": null,
+          "note": "stands on its gold foot, or in WL_Object_TeaSaucer's well"
+        }
+      ],
+      "parts": [
+        {
+          "part": "enamel",
+          "mesh_name": "WL_Object_TeaCup_enamel",
+          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Object_TeaCup_enamel.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/objects",
+          "destination_name": "WL_Object_TeaCup_enamel",
+          "asset_path": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel",
+          "material_instance": "MI_V2_Ceramic",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Ceramic",
+          "triangles": 1528
+        },
+        {
+          "part": "gold",
+          "mesh_name": "WL_Object_TeaCup_gold",
+          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Object_TeaCup_gold.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/objects",
+          "destination_name": "WL_Object_TeaCup_gold",
+          "asset_path": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold",
+          "material_instance": "MI_V2_Gold",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Gold",
+          "triangles": 860
+        },
+        {
+          "part": "roof",
+          "mesh_name": "WL_Object_TeaCup_roof",
+          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Object_TeaCup_roof.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/objects",
+          "destination_name": "WL_Object_TeaCup_roof",
+          "asset_path": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof",
+          "material_instance": "MI_V2_RoofRose",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_RoofRose",
+          "triangles": 1632
+        },
+        {
+          "part": "veg_anchor",
+          "mesh_name": "WL_Object_TeaCup_veg_anchor",
+          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Object_TeaCup_veg_anchor.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/objects",
+          "destination_name": "WL_Object_TeaCup_veg_anchor",
+          "asset_path": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor",
+          "material_instance": "MI_V2_LeafMid",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_LeafMid",
+          "triangles": 384
+        }
+      ]
+    },
+    {
+      "asset_id": "WL_Object_TeaSaucer",
+      "family_group": "objects",
+      "variant_of": null,
+      "destination_path": "/Game/WonderlandV2/Kit/objects",
+      "data_layer": "V2_Props",
+      "nanite_requested": false,
+      "collision_requested": true,
+      "height_uu": 61.0,
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.3,
+        "ceremonial_residential": 0.7
+      },
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 130.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "top",
+          "kind": "ground",
+          "z_uu": 26.0,
+          "radius_uu": 120.0,
+          "rung": null,
+          "note": "a WL_Object_TeaCup stands in the well"
+        }
+      ],
+      "parts": [
+        {
+          "part": "enamel",
+          "mesh_name": "WL_Object_TeaSaucer_enamel",
+          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Object_TeaSaucer_enamel.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/objects",
+          "destination_name": "WL_Object_TeaSaucer_enamel",
+          "asset_path": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel",
+          "material_instance": "MI_V2_Ceramic",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Ceramic",
+          "triangles": 1280
+        },
+        {
+          "part": "gold",
+          "mesh_name": "WL_Object_TeaSaucer_gold",
+          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Object_TeaSaucer_gold.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/objects",
+          "destination_name": "WL_Object_TeaSaucer_gold",
+          "asset_path": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold",
+          "material_instance": "MI_V2_Gold",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Gold",
+          "triangles": 768
         }
       ]
     },

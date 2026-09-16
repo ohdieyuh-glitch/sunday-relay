@@ -191,4 +191,85 @@ def object_teapot_pavilion(f):
         tri_budget=40000, nanite=False, collision=True)
 
 
-BUILDERS = (object_pocket_clock, object_teapot_pavilion)
+def _rose_ring(rose, leaf, radius_at, tilt_at, z, count, size, skip=()):
+    """Rose medallions round a revolved body at height z, each on the surface along its normal."""
+    r = radius_at(z)
+    tilt = tilt_at(z)
+    for k in range(count):
+        th = 2.0 * math.pi * (k + 0.5) / count
+        deg = math.degrees(th)
+        if any(abs((deg - a + 180.0) % 360.0 - 180.0) < w for (a, w) in skip):
+            continue
+        mat = M.xform((math.cos(th) * (r - 0.18 * size), math.sin(th) * (r - 0.18 * size), z), (0.0, 90.0 - tilt, deg))
+        rose.lathe([(1.00 * size, 0.0), (1.02 * size, 0.16 * size), (0.86 * size, 0.34 * size), (0.70 * size, 0.36 * size),
+                    (0.72 * size, 0.50 * size), (0.52 * size, 0.66 * size), (0.38 * size, 0.66 * size),
+                    (0.36 * size, 0.78 * size), (0.16 * size, 0.90 * size), (0.0, 0.88 * size)],
+                   segments=16, smooth=True, cap_bottom=False, matrix=mat)
+        for sgn in (-1.0, 1.0):
+            leaf.lathe([(0.0, -0.45 * size), (0.28 * size, -0.20 * size), (0.30 * size, 0.20 * size), (0.0, 0.50 * size)],
+                       segments=8, smooth=True, matrix=mat @ M.xform((0.10 * size, sgn * 1.15 * size, 0.16 * size), (0.0, 90.0, sgn * 70.0)))
+        # 0.16 out along the normal: on a thin cup wall a leaf centred on the surface pokes through into the cup
+
+
+def object_tea_cup(f):
+    """A 2.6 m porcelain teacup: the teapot's companion, and the Bible's tea things at a visitor's scale.
+
+    The world's SM_tea_cup / SM_tea_cup_small are the same faceted plaster as the old teapot. This is a real cup: a
+    thin revolved wall (out, over a gold rim, and down the inside to a well), a gold foot ring, a swept handle on -Y
+    with gold collars, and a band of roses. Open at the top, so from above it is a cup, not a drum.
+    """
+    en = f.part("enamel")
+    g = f.part("gold")
+    rose = f.part("roof")
+    leaf = f.part("veg_anchor")
+    SEG = 48
+    outer = [(0.95, 0.20), (1.05, 0.32), (1.40, 0.80), (1.68, 1.45), (1.84, 2.10), (1.90, 2.48)]
+    inner = [(1.80, 2.48), (1.74, 2.05), (1.58, 1.42), (1.30, 0.84), (0.96, 0.48), (0.0, 0.42)]
+    en.lathe(outer + inner, segments=SEG, smooth=True, cap_bottom=False, cap_top=False)
+    en.lathe([(0.0, 0.20), (0.95, 0.20)], segments=SEG, smooth=False, cap_bottom=False, cap_top=False)
+    g.lathe([(1.78, 2.46), (1.92, 2.46), (1.95, 2.56), (1.85, 2.62), (1.76, 2.56)], segments=SEG, smooth=True,
+            cap_bottom=False, cap_top=False)
+    g.lathe([(0.80, 0.0), (1.12, 0.0), (1.16, 0.12), (1.05, 0.24), (0.80, 0.24)], segments=SEG, smooth=True)
+
+    def radius_at(z):
+        return _body_radius(z, outer)
+
+    def tilt_at(z):
+        return _surface_tilt(z, outer)
+
+    _rose_ring(rose, leaf, radius_at, tilt_at, 1.62, 8, 0.30, skip=((270.0, 30.0),))
+    handle = _bez3((0.0, -1.70, 2.00), (0.0, -2.75, 2.25), (0.0, -2.75, 0.85), (0.0, -1.42, 0.95), 16)
+    en.sweep(handle, [0.13 + 0.05 * math.sin(math.pi * i / 16.0) for i in range(17)], sides=14, smooth=True, cap=True)
+    return K.ModuleSpec(
+        "WL_Object_TeaCup", "tea_cup", "prop", "detail",
+        f.emit("WL_Object_TeaCup"),
+        [K.Socket("bottom", 0.0, 1.0, "ground", "stands on its gold foot, or in WL_Object_TeaSaucer's well")],
+        districts=("tea_terrace",),
+        note="2.6 m porcelain teacup: open thin wall, gold rim and foot, swept handle, a band of roses",
+        params={"height_m": 2.62, "rim_radius_m": 1.95},
+        tri_budget=9000, nanite=False, collision=True)
+
+
+def object_tea_saucer(f):
+    """A 7.2 m porcelain saucer: a shallow dish with a well, a raised gold rim line and a gold edge."""
+    en = f.part("enamel")
+    g = f.part("gold")
+    SEG = 64
+    en.lathe([(0.0, 0.12), (1.20, 0.12), (1.32, 0.05), (2.60, 0.18), (3.30, 0.42), (3.55, 0.56),
+              (3.48, 0.60), (3.18, 0.50), (2.52, 0.30), (1.36, 0.22), (1.22, 0.26), (0.0, 0.26)],
+             segments=SEG, smooth=True, cap_bottom=True, cap_top=False)
+    g.lathe([(3.40, 0.56), (3.58, 0.54), (3.62, 0.62), (3.46, 0.66)], segments=SEG, smooth=True, cap_bottom=False,
+            cap_top=False)
+    g.lathe([(1.22, 0.255), (1.36, 0.215), (1.40, 0.25), (1.26, 0.30)], segments=SEG, smooth=True, cap_bottom=False,
+            cap_top=False)
+    return K.ModuleSpec(
+        "WL_Object_TeaSaucer", "tea_saucer", "prop", "detail",
+        f.emit("WL_Object_TeaSaucer"),
+        [K.Socket("bottom", 0.0, 1.3, "ground"), K.Socket("top", 0.26, 1.2, "ground", "a WL_Object_TeaCup stands in the well")],
+        districts=("tea_terrace",),
+        note="7.2 m porcelain saucer: shallow dish, well, gold well line and gold edge",
+        params={"radius_m": 3.62},
+        tri_budget=6000, nanite=False, collision=True)
+
+
+BUILDERS = (object_pocket_clock, object_teapot_pavilion, object_tea_cup, object_tea_saucer)

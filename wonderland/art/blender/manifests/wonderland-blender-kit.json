@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-16T19:03:11+00:00",
+  "generated_utc": "2026-09-16T19:57:07+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -22,9 +22,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 119,
+        "n": 121,
         "min": 0.153,
-        "median": 0.846,
+        "median": 0.848,
         "max": 1.0,
         "unknown": 0
       }
@@ -36,9 +36,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 119,
+        "n": 121,
         "min": 0.0,
-        "median": 0.358,
+        "median": 0.353,
         "max": 1.0,
         "unknown": 0
       }
@@ -50,7 +50,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 119,
+        "n": 121,
         "min": 0.557,
         "median": 1.0,
         "max": 1.0,
@@ -64,7 +64,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 119,
+        "n": 121,
         "min": 0.0,
         "median": 0.982,
         "max": 1.0,
@@ -78,7 +78,7 @@
       "provenance": "declared",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 119,
+        "n": 121,
         "min": 0.0,
         "median": 0.0,
         "max": 0.7,
@@ -92,9 +92,9 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 116,
+        "n": 118,
         "min": 0.083,
-        "median": 0.64,
+        "median": 0.633,
         "max": 0.917,
         "unknown": 3
       }
@@ -106,7 +106,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 119,
+        "n": 121,
         "min": 0.05,
         "median": 0.5,
         "max": 0.7,
@@ -235,9 +235,9 @@
     }
   },
   "counts": {
-    "assets": 119,
-    "meshes": 382,
-    "triangles": 494138,
+    "assets": 121,
+    "meshes": 388,
+    "triangles": 500590,
     "by_role": {
       "foot": 5,
       "body": 14,
@@ -246,7 +246,7 @@
       "threshold": 10,
       "screen": 11,
       "span": 5,
-      "detail": 24,
+      "detail": 26,
       "route": 11,
       "terrace": 17,
       "hero": 10
@@ -34683,6 +34683,659 @@
         }
       },
       "part_count": 5
+    },
+    {
+      "asset_id": "WL_Object_TeaCup",
+      "kit_version": "1.0.0",
+      "family": "tea_cup",
+      "family_group": "objects",
+      "category": "prop",
+      "silhouette_role": "detail",
+      "note": "2.6 m porcelain teacup: open thin wall, gold rim and foot, swept handle, a band of roses",
+      "districts": [
+        "tea_terrace"
+      ],
+      "params": {
+        "height_m": 2.62,
+        "rim_radius_m": 1.95
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 262.0,
+      "bbox_min_uu": [
+        -195.0,
+        -263.13,
+        0.0
+      ],
+      "bbox_max_uu": [
+        195.0,
+        195.0,
+        262.0
+      ],
+      "size_uu": [
+        390.0,
+        458.13,
+        262.0
+      ],
+      "style": {
+        "slender_broad": 0.946,
+        "low_monumental": 0.015,
+        "open_solid": 0.986,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.3,
+        "ceremonial_residential": 0.7
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        116.0,
+        105.0,
+        96.0,
+        188.92,
+        240.7,
+        251.8,
+        263.13,
+        262.93,
+        258.64,
+        238.44,
+        238.44,
+        195.0
+      ],
+      "radius_uu": 263.13,
+      "tris_total": 4404,
+      "tri_budget": 9000,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 100.0,
+          "rung": null,
+          "note": "stands on its gold foot, or in WL_Object_TeaSaucer's well"
+        }
+      ],
+      "parts": {
+        "enamel": {
+          "verts": 768,
+          "faces": 802,
+          "tris": 1528,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Ceramic"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -190.0,
+            -263.13,
+            20.0
+          ],
+          "bbox_max_uu": [
+            190.0,
+            190.0,
+            248.0
+          ],
+          "size_uu": [
+            380.0,
+            453.13,
+            228.0
+          ],
+          "height_m": 2.28,
+          "base_z_uu": 20.0,
+          "normals": {
+            "faces": 802,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            105.0,
+            96.0,
+            96.0,
+            208.99,
+            240.7,
+            251.8,
+            263.13,
+            262.93,
+            258.64,
+            250.35,
+            223.57,
+            190.0
+          ],
+          "material": "MI_V2_Ceramic",
+          "mesh_name": "WL_Object_TeaCup_enamel",
+          "glb": "exports\\glb\\WL_Object_TeaCup_enamel.glb",
+          "fbx": "exports\\fbx\\WL_Object_TeaCup_enamel.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Ceramic"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.899999976158142,
+              0.20000000298023224,
+              -1.899999976158142
+            ],
+            "max_yup": [
+              1.899999976158142,
+              2.4800000190734863,
+              2.631308078765869
+            ],
+            "bytes": 46864
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 20.0,
+            "stored_z_max": 248.0
+          }
+        },
+        "gold": {
+          "verts": 480,
+          "faces": 386,
+          "tris": 860,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -195.0,
+            -195.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            195.0,
+            195.0,
+            262.0
+          ],
+          "size_uu": [
+            390.0,
+            390.0,
+            262.0
+          ],
+          "height_m": 2.62,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 386,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            116.0,
+            105.0,
+            105.0,
+            105.0,
+            105.0,
+            105.0,
+            105.0,
+            105.0,
+            105.0,
+            105.0,
+            105.0,
+            195.0
+          ],
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Object_TeaCup_gold",
+          "glb": "exports\\glb\\WL_Object_TeaCup_gold.glb",
+          "fbx": "exports\\fbx\\WL_Object_TeaCup_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.9500000476837158,
+              0,
+              -1.9500000476837158
+            ],
+            "max_yup": [
+              1.9500000476837158,
+              2.619999885559082,
+              1.9500000476837158
+            ],
+            "bytes": 28444
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 262.0
+          }
+        },
+        "roof": {
+          "verts": 870,
+          "faces": 864,
+          "tris": 1632,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_RoofRose"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -180.41,
+            -93.88,
+            131.14
+          ],
+          "bbox_max_uu": [
+            180.41,
+            180.41,
+            191.13
+          ],
+          "size_uu": [
+            360.83,
+            274.29,
+            59.99
+          ],
+          "height_m": 0.5999,
+          "base_z_uu": 131.14,
+          "normals": {
+            "faces": 864,
+            "shells": 6,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            170.52,
+            176.77,
+            186.92,
+            191.85,
+            193.06,
+            194.15,
+            191.94,
+            192.09,
+            189.74,
+            186.51,
+            182.86,
+            178.76
+          ],
+          "material": "MI_V2_RoofRose",
+          "mesh_name": "WL_Object_TeaCup_roof",
+          "glb": "exports\\glb\\WL_Object_TeaCup_roof.glb",
+          "fbx": "exports\\fbx\\WL_Object_TeaCup_roof.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_RoofRose"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.8041329383850098,
+              1.311396598815918,
+              -1.8041329383850098
+            ],
+            "max_yup": [
+              1.8041329383850098,
+              1.9113044738769531,
+              0.9388006329536438
+            ],
+            "bytes": 60800
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 131.13966369628906,
+            "stored_z_max": 191.1304473876953
+          }
+        },
+        "veg_anchor": {
+          "verts": 216,
+          "faces": 288,
+          "tris": 384,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -180.71,
+            -109.76,
+            147.73
+          ],
+          "bbox_max_uu": [
+            180.71,
+            180.71,
+            167.6
+          ],
+          "size_uu": [
+            361.43,
+            290.48,
+            19.86
+          ],
+          "height_m": 0.1986,
+          "base_z_uu": 147.735,
+          "normals": {
+            "faces": 288,
+            "shells": 12,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            179.06,
+            179.06,
+            171.32,
+            183.42,
+            166.3,
+            166.3,
+            181.68,
+            182.81,
+            173.21,
+            180.98,
+            180.98,
+            175.99
+          ],
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Object_TeaCup_veg_anchor",
+          "glb": "exports\\glb\\WL_Object_TeaCup_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Object_TeaCup_veg_anchor.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.8071346282958984,
+              1.4773491621017456,
+              -1.8071346282958984
+            ],
+            "max_yup": [
+              1.807134747505188,
+              1.6759692430496216,
+              1.097619652748108
+            ],
+            "bytes": 18948
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 147.7349090576172,
+            "stored_z_max": 167.596923828125
+          }
+        }
+      },
+      "part_count": 4
+    },
+    {
+      "asset_id": "WL_Object_TeaSaucer",
+      "kit_version": "1.0.0",
+      "family": "tea_saucer",
+      "family_group": "objects",
+      "category": "prop",
+      "silhouette_role": "detail",
+      "note": "7.2 m porcelain saucer: shallow dish, well, gold well line and gold edge",
+      "districts": [
+        "tea_terrace"
+      ],
+      "params": {
+        "radius_m": 3.62
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 61.0,
+      "bbox_min_uu": [
+        -362.0,
+        -362.0,
+        5.0
+      ],
+      "bbox_max_uu": [
+        362.0,
+        362.0,
+        66.0
+      ],
+      "size_uu": [
+        724.0,
+        724.0,
+        61.0
+      ],
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.3,
+        "ceremonial_residential": 0.7
+      },
+      "base_z_uu": 5.0,
+      "profile_uu": [
+        132.0,
+        120.0,
+        260.0,
+        140.0,
+        252.0,
+        252.0,
+        252.0,
+        330.0,
+        318.0,
+        358.0,
+        355.0,
+        362.0
+      ],
+      "radius_uu": 362.0,
+      "tris_total": 2048,
+      "tri_budget": 6000,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 130.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "top",
+          "kind": "ground",
+          "z_uu": 26.0,
+          "radius_uu": 120.0,
+          "rung": null,
+          "note": "a WL_Object_TeaCup stands in the well"
+        }
+      ],
+      "parts": {
+        "enamel": {
+          "verts": 642,
+          "faces": 704,
+          "tris": 1280,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Ceramic"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -355.0,
+            -355.0,
+            5.0
+          ],
+          "bbox_max_uu": [
+            355.0,
+            355.0,
+            60.0
+          ],
+          "size_uu": [
+            710.0,
+            710.0,
+            55.0
+          ],
+          "height_m": 0.55,
+          "base_z_uu": 5.0,
+          "normals": {
+            "faces": 704,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            132.0,
+            120.0,
+            260.0,
+            136.0,
+            122.0,
+            252.0,
+            252.0,
+            252.0,
+            330.0,
+            318.0,
+            318.0,
+            355.0
+          ],
+          "material": "MI_V2_Ceramic",
+          "mesh_name": "WL_Object_TeaSaucer_enamel",
+          "glb": "exports\\glb\\WL_Object_TeaSaucer_enamel.glb",
+          "fbx": "exports\\fbx\\WL_Object_TeaSaucer_enamel.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Ceramic"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.549999952316284,
+              0.05000000074505806,
+              -3.549999952316284
+            ],
+            "max_yup": [
+              3.549999952316284,
+              0.6000000238418579,
+              3.549999952316284
+            ],
+            "bytes": 29504
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 5.0,
+            "stored_z_max": 60.000003814697266
+          }
+        },
+        "gold": {
+          "verts": 512,
+          "faces": 384,
+          "tris": 768,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -362.0,
+            -362.0,
+            21.5
+          ],
+          "bbox_max_uu": [
+            362.0,
+            362.0,
+            66.0
+          ],
+          "size_uu": [
+            724.0,
+            724.0,
+            44.5
+          ],
+          "height_m": 0.445,
+          "base_z_uu": 21.5,
+          "normals": {
+            "faces": 384,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            140.0,
+            122.0,
+            126.0,
+            126.0,
+            126.0,
+            126.0,
+            126.0,
+            126.0,
+            358.0,
+            340.0,
+            362.0,
+            346.0
+          ],
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Object_TeaSaucer_gold",
+          "glb": "exports\\glb\\WL_Object_TeaSaucer_gold.glb",
+          "fbx": "exports\\fbx\\WL_Object_TeaSaucer_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.619999885559082,
+              0.2150000035762787,
+              -3.619999885559082
+            ],
+            "max_yup": [
+              3.619999885559082,
+              0.6600000262260437,
+              3.619999885559082
+            ],
+            "bytes": 26504
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 21.5,
+            "stored_z_max": 66.0
+          }
+        }
+      },
+      "part_count": 2
     },
     {
       "asset_id": "WL_Palace_Wing",
