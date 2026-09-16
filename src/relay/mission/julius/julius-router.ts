@@ -496,6 +496,8 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   participationAskedResume:safeNullableBool(v.participationAskedResume),
   /** Whether the coder closed with a report of its own work. Claims, recorded beside what the executor observed. */
   participationAskedReport:safeNullableBool(v.participationAskedReport),
+  /** Whether the coder reported what the design did under real code. */
+  participationAskedObservations:safeNullableBool(v.participationAskedObservations),
  });
 };
 /**
@@ -613,7 +615,14 @@ readonly guidance?:unknown;
   * recomputes scope against the locked contract itself; nothing here is taken
   * as a verdict. Read only from a Coding Agent dispatch.
   */
- readonly implementation?:unknown;}
+ readonly implementation?:unknown;
+ /**
+  * WHAT A CODING AGENT SAW THE DESIGN DO UNDER REAL CODE — an invalidated
+  * assumption, a changed dependency, a crossed boundary, an unsatisfiable design
+  * — unsanitised. Julius decides whether it is a reason to consult the
+  * architect; the coder never writes architecture.
+  */
+ readonly architectureObservations?:unknown;}
 /**
  * WHAT JULIUS TELLS AN ADAPTER, and nothing more.
  *

@@ -724,6 +724,19 @@ export const JULIUS_ARCHITECT_PEER_STATES = [
 ] as const;
 export type JuliusArchitectPeerState = (typeof JULIUS_ARCHITECT_PEER_STATES)[number];
 
+/**
+ * THE CODING AGENT'S STATES, and only the ones a durable fact can establish.
+ *
+ * Deliberately absent: TESTING and CHECKPOINTING. Both happen inside one
+ * dispatch, between two rows, and no durable fact says one is in progress —
+ * a state nothing on the record can establish would be a state invented for a
+ * display.
+ */
+export const JULIUS_CODING_AGENT_PEER_STATES = [
+  'STANDBY', 'IMPLEMENTING', 'RESEARCHING', 'WAITING_ON_GUIDANCE', 'REPAIRING', 'HANDING_OFF', 'WAITING_ON_DEPENDENCY', 'BLOCKED',
+] as const;
+export type JuliusCodingAgentPeerState = (typeof JULIUS_CODING_AGENT_PEER_STATES)[number];
+
 export const JULIUS_REVIEWER_PEER_STATES = [
   'STANDBY', 'OBSERVING', 'RESEARCHING', 'REVIEWING', 'CHALLENGING', 'WAITING_ON_REPAIR', 'REVIEWING_REPAIR', 'FINAL_REVIEW',
 ] as const;
@@ -801,6 +814,47 @@ export function projectJuliusArchitectState(input: JuliusPeerStateInput): Julius
       || (request.kind === 'REPLAN_PROPOSAL' && request.sourceRole === 'PROMPT_ARCHITECT')))) {
     return 'WAITING_ON_EVIDENCE';
   }
+  return 'STANDBY';
+}
+
+/**
+ * WHAT THE CODING AGENT IS DOING, DERIVED — never stored.
+ *
+ * The implementation peer was the one slot with no projection; it appeared only
+ * as an input to the reviewer's. In precedence order, naming the state that most
+ * constrains the mission:
+ *   RESEARCHING           a live coder continuation that exists because it asked to read something
+ *   WAITING_ON_GUIDANCE   a question it asked is paused on and not yet resolved
+ *   REPAIRING             a live repair of coding work
+ *   IMPLEMENTING          live coding work that is not a repair
+ *   HANDING_OFF           its finished work is under independent review
+ *   WAITING_ON_DEPENDENCY coding work is blocked on something that is not its own question
+ *   BLOCKED               coding work failed and nothing live replaces it
+ *   STANDBY               nothing is asked of it
+ *
+ * A live BLOCKED continuation is WAITING_ON_GUIDANCE rather than
+ * WAITING_ON_DEPENDENCY only while its question is OPEN or ANSWERED: the
+ * question, not the task shape, is what says what it waits for.
+ */
+export function projectJuliusCodingAgentState(input: JuliusPeerStateInput): JuliusCodingAgentPeerState {
+  const coding = (task: { readonly role: string }): boolean => task.role === 'CODING_AGENT' || task.role.startsWith('SPECIALIST:');
+  const mine = input.tasks.filter((task) => coding(task) && live(task));
+  const byId = new Map(input.tasks.map((task) => [task.taskId, task]));
+  if (researchContinuationFor('CODING_AGENT', input)) return 'RESEARCHING';
+  if (input.requests.some((request) => request.kind === 'GUIDANCE_QUESTION' && request.sourceRole === 'CODING_AGENT'
+    && request.mandatory && (request.status === 'OPEN' || request.status === 'ANSWERED')
+    && request.pausedTaskIds.some((taskId) => byId.get(taskId)?.state === 'BLOCKED'))) {
+    return 'WAITING_ON_GUIDANCE';
+  }
+  const working = mine.filter((task) => task.state !== 'BLOCKED');
+  if (working.some((task) => task.taskType.startsWith('repair:'))) return 'REPAIRING';
+  if (working.length > 0) return 'IMPLEMENTING';
+  if (input.tasks.some((task) => task.role === 'INDEPENDENT_REVIEWER' && live(task)
+    && task.parentTaskId !== null && coding(byId.get(task.parentTaskId) ?? { role: '' }))) {
+    return 'HANDING_OFF';
+  }
+  if (mine.some((task) => task.state === 'BLOCKED')) return 'WAITING_ON_DEPENDENCY';
+  if (input.tasks.some((task) => coding(task) && task.state === 'FAILED')) return 'BLOCKED';
   return 'STANDBY';
 }
 

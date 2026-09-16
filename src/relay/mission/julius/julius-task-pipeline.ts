@@ -77,7 +77,7 @@ import {
   type JuliusArchitectureState,
 } from './julius-architecture-state';
 import {
-  JULIUS_ARCHITECTURE_DRIFT_LIMITS, juliusArchitectureChangeIsMaterial, juliusArchitectureChanges,
+  JULIUS_ARCHITECTURE_DRIFT_LIMITS, juliusArchitectureChangeIsMaterial, juliusArchitectureChanges, juliusCoderObservationFacts, sanitizeJuliusCoderObservations,
   juliusArchitectureCheckTaskId, juliusArchitectureCompletionGate, juliusArchitectureTriggerFacts,
   juliusArchitectureTriggers, juliusConsistencyFacts, juliusConsistencyRoute, sanitizeJuliusConsistency,
   type JuliusArchitectureCompletionGate,
@@ -1327,7 +1327,7 @@ export async function runClaimedTask(
    * are unchanged — this names what they ignore.
    */
   if (!outcome.duplicate) {
-    for (const channel of ['reviewVerdict', 'rebuttal', 'architecture', 'consistency', 'implementation'] as const) {
+    for (const channel of ['reviewVerdict', 'rebuttal', 'architecture', 'consistency', 'implementation', 'architectureObservations'] as const) {
       if (outcome[channel] === undefined || juliusResultChannelPermitted(task.role, channel)) continue;
       await ledger.event('worker.channel.refused', {
         taskId: task.taskId, workerId: outcome.workerId,
@@ -1343,6 +1343,25 @@ export async function runClaimedTask(
       leaseGeneration: claim.leaseGeneration,
       scope: contractCharge === null ? null : { permittedPaths: contractCharge.permittedPaths, outOfScope: contractCharge.outOfScope },
     });
+  }
+
+  /* ------------------------------------------- 3b1c. what the implementation peer saw the design do */
+  if (!outcome.duplicate && juliusResultChannelPermitted(task.role, 'architectureObservations') && outcome.architectureObservations !== undefined) {
+    const rows = await readVerdictLedger(deps, run);
+    const state = foldJuliusArchitecture(rows);
+    const reading = sanitizeJuliusCoderObservations({ value: outcome.architectureObservations, state });
+    if (!reading.ok) {
+      await ledger.event('architecture.observation.refused', {
+        taskId: task.taskId, workerId: outcome.workerId, facts: { reasonCode: reading.reasonCode },
+      });
+    } else {
+      for (const observation of reading.observations) {
+        await ledger.event('architecture.observed', {
+          taskId: task.taskId, workerId: outcome.workerId,
+          facts: juliusCoderObservationFacts({ observation, revision: state!.revision, observedByRole: task.role }),
+        });
+      }
+    }
   }
 
   /* ------------------------------------------- 3b2. the architecture the architect holds */

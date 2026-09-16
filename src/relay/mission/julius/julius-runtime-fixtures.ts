@@ -173,6 +173,8 @@ export type ScriptedOutcome =
     readonly consistency?: unknown;
     /** A Coding Agent's workspace change set and report. Unsanitised, for the same reason. */
     readonly implementation?: unknown;
+    /** A Coding Agent's observations about the design. Unsanitised, for the same reason. */
+    readonly architectureObservations?: unknown;
   }
   /** `costUsdMicros` is what the boundary billed before it failed, as its diagnostics would carry. */
   | {
@@ -248,6 +250,7 @@ export function scriptedAdapter(
         ...(step.architecture === undefined ? {} : { architecture: step.architecture }),
         ...(step.consistency === undefined ? {} : { consistency: step.consistency }),
         ...(step.implementation === undefined ? {} : { implementation: step.implementation }),
+        ...(step.architectureObservations === undefined ? {} : { architectureObservations: step.architectureObservations }),
       };
       return result;
     },

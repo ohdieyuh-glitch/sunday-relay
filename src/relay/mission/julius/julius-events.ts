@@ -146,6 +146,11 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * to exist only as prompt text. `report.refused` is a coder report Julius
   * would not read, by name. */
  'coder.implementation.recorded','coder.scope.violated','coder.report.refused',
+ /* WHAT THE IMPLEMENTATION PEER SAW. `observed` is one evidenced observation a
+  * Coding Agent made about the design in force; it can raise a consultation
+  * and never a revision. `observation.refused` is a set Julius would not read,
+  * by name. */
+ 'architecture.observed','architecture.observation.refused',
  'architecture.trigger.raised','architecture.proposed','architecture.accepted','architecture.unchanged',
  'architecture.assessed','architecture.assessment.refused','architecture.replan.escalated',
  /* PERSISTENT-WORKER EFFORT. One row per completed dispatch, carrying what the

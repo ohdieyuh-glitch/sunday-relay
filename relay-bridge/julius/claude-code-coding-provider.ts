@@ -123,6 +123,7 @@ export const hostedCoderDiagnostics = (input: {
     participationAskedResearch: asked('researchAsks'),
     participationAskedResume: asked('segmentResume'),
     participationAskedReport: asked('report'),
+    participationAskedObservations: asked('architectureObservations'),
     /** `PROVIDER_REPORTED` requires BOTH the runtime's own attestation and an actual figure. */
     costBasis: observed?.usage.source === 'runtime_reported'
       && observed.usage.totalCostUsd !== null && observed.usage.totalCostUsd !== undefined
