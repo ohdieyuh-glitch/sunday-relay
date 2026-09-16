@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -133,6 +133,41 @@ const deaf = (): { adapter: JuliusProviderAdapter; signals: AbortSignal[] } => {
 const facts = (rows: readonly Record<string, unknown>[], type: string): Record<string, unknown> =>
   rows.filter(row => row.type === type).at(-1) ?? {};
 
+/**
+ * THE DEADLINE BOUNDARY IS PROVEN ON A CLOCK THE TEST OWNS.
+ *
+ * Tests 2 and 8 used to measure real wall time and assert `elapsed >= declared`.
+ * That bound is not something Node promises. A timer is armed at a loop time
+ * truncated to WHOLE milliseconds (`Timeout._idleStart` is always an integer), so
+ * `setTimeout(30)` falls due as early as 29.002 ms after the call — measured
+ * locally over 2,000 timers, the truncation deficit ranged 0–0.998 ms — and
+ * `Date.now()` truncates independently. On Linux CI, where timers fire precisely,
+ * test 8 read 29 twice (runs 35070607489 and 35112610337 attempt 1) and passed on
+ * rerun with nothing changed. Windows masks it: its coarse timers fire late.
+ *
+ * So the boundary is driven, not sampled. The coordinator's own `setTimeout` and
+ * `Date.now` are faked, the deadline timer must be ARMED, must still be PENDING
+ * one millisecond before the declared deadline, and must have FIRED exactly at
+ * it — and the row's elapsed time, read from the coordinator's own clock, is
+ * then exactly the declared number. That is a stronger statement than the one it
+ * replaces: `>=` could not see a deadline that fired late.
+ */
+const onFakeClock = async (body: () => Promise<void>): Promise<void> => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  try {
+    await body();
+  } finally {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  }
+};
+
+/** Let the dispatch reach its race, then prove exactly one deadline timer is armed. */
+const deadlineArmed = async (): Promise<void> => {
+  for (let turn = 0; turn < 100 && vi.getTimerCount() === 0; turn++) await Promise.resolve();
+  expect(vi.getTimerCount(), 'exactly one deadline timer must be armed for the dispatch').toBe(1);
+};
+
 describe('1–4 · a worker that outlives its declared deadline is cut', () => {
   it('1 · the dispatch ends as a retryable TIMEOUT rather than hanging', async () => {
     const { adapter } = deaf();
@@ -141,16 +176,24 @@ describe('1–4 · a worker that outlives its declared deadline is cut', () => {
   }, 30_000);
 
   it('2 · the row names the declared limit and how long the worker actually ran', async () => {
-    const { adapter } = deaf();
-    const h = harness(adapter, 40);
-    await h.coordinator.execute(request);
-    const row = facts(h.rows, 'retry.scheduled');
-    expect(row.failureClass).toBe('worker_deadline_exceeded');
-    // Which limit was reached, not merely that one was.
-    expect(row.diag_timeoutMs).toBe(40);
-    expect(row.diag_timedOut).toBe(true);
-    expect(typeof row.diag_elapsedMs).toBe('number');
-    expect(row.diag_elapsedMs as number).toBeGreaterThanOrEqual(40);
+    await onFakeClock(async () => {
+      const { adapter } = deaf();
+      const h = harness(adapter, 40);
+      const running = h.coordinator.execute(request);
+      await deadlineArmed();
+      await vi.advanceTimersByTimeAsync(40);
+      expect(vi.getTimerCount(), 'the declared deadline must have fired at 40').toBe(0);
+      await running;
+      const row = facts(h.rows, 'retry.scheduled');
+      expect(row.failureClass).toBe('worker_deadline_exceeded');
+      // Which limit was reached, not merely that one was.
+      expect(row.diag_timeoutMs).toBe(40);
+      expect(row.diag_timedOut).toBe(true);
+      expect(typeof row.diag_elapsedMs).toBe('number');
+      // Exactly the declared deadline on the coordinator's own clock — not a
+      // wall-clock sample that millisecond truncation can put one below it.
+      expect(row.diag_elapsedMs).toBe(40);
+    });
   }, 30_000);
 
   it('3 · the hold is NOT freed as if nothing had been spent', async () => {
@@ -225,15 +268,27 @@ describe('8–9 · the number comes from the worker', () => {
     // The mutation this kills: a literal, or one worker's number applied to
     // another. A second opinion about how long a worker may take is how
     // declared and operative deadlines came to differ by 160 s once already.
-    for (const declared of [30, 120]) {
-      const { adapter } = deaf();
-      const h = harness(adapter, declared);
-      const startedAt = Date.now();
-      await h.coordinator.execute(request);
-      const elapsed = Date.now() - startedAt;
-      expect(facts(h.rows, 'retry.scheduled').diag_timeoutMs, `declared ${declared}`).toBe(declared);
-      expect(elapsed, `declared ${declared} must actually bound the wait`).toBeGreaterThanOrEqual(declared);
-    }
+    await onFakeClock(async () => {
+      for (const declared of [30, 120]) {
+        const { adapter } = deaf();
+        const h = harness(adapter, declared);
+        const running = h.coordinator.execute(request);
+        await deadlineArmed();
+
+        // Not a moment early: one millisecond short, the deadline is still pending.
+        await vi.advanceTimersByTimeAsync(declared - 1);
+        expect(vi.getTimerCount(), `declared ${declared} must not cut before its own deadline`).toBe(1);
+
+        // And not a moment late: the next millisecond is exactly when it fires.
+        await vi.advanceTimersByTimeAsync(1);
+        expect(vi.getTimerCount(), `declared ${declared} must cut exactly at its own deadline`).toBe(0);
+
+        expect(await running, `declared ${declared}`).toMatchObject({ status: 'RETRY', code: 'TIMEOUT' });
+        const row = facts(h.rows, 'retry.scheduled');
+        expect(row.diag_timeoutMs, `declared ${declared}`).toBe(declared);
+        expect(row.diag_elapsedMs, `declared ${declared} must actually bound the wait`).toBe(declared);
+      }
+    });
   }, 30_000);
 
   it('9 · the coordinator reads worker.timeoutMs and holds no number of its own', () => {
