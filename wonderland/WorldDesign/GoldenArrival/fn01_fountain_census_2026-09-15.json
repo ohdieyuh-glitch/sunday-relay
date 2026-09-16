@@ -1,0 +1,67 @@
+{
+ "rows": [
+  {
+   "name": "StaticMeshActor_18",
+   "label": "Court_FountainBasin",
+   "mesh": "SM_fountain_basin",
+   "index": null,
+   "transform": [
+    0.0,
+    5400.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "zmin": 0,
+   "zmax": 300,
+   "radius": 297,
+   "material": "MI_V2_IvoryStone"
+  },
+  {
+   "name": "StaticMeshActor_19",
+   "label": "Court_FountainWater",
+   "mesh": "SM_fountain_water",
+   "index": null,
+   "transform": [
+    0.0,
+    5400.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "zmin": 96,
+   "zmax": 102,
+   "radius": 235,
+   "material": "MI_V2_Water"
+  },
+  {
+   "name": "StaticMeshActor_20",
+   "label": "Court_FountainFinial",
+   "mesh": "SM_fountain_finial",
+   "index": null,
+   "transform": [
+    0.0,
+    5400.0,
+    300.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "zmin": 300,
+   "zmax": 464,
+   "radius": 30,
+   "material": "MI_V2_Gold"
+  }
+ ]
+}

@@ -1,0 +1,35 @@
+{
+ "pass": "FN01_TRIM",
+ "title": "Clock Plaza fountain: the water disc raised into the basin (reversible)",
+ "trims": [
+  {
+   "name": "StaticMeshActor_19",
+   "label": "Court_FountainWater",
+   "mesh": "SM_fountain_water",
+   "index": null,
+   "why": "the fountain's water disc, hidden 2 m below the basin rim",
+   "before": [
+    0.0,
+    5400.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "after": [
+    0.0,
+    5400.0,
+    61.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ]
+  }
+ ]
+}
