@@ -382,8 +382,60 @@ def detail_window_arched(f):
         tri_budget=3000, collision=False, nanite=False)
 
 
+def detail_banner_blade(f):
+    """A projecting street banner: gold bracket, scrolled brace, swallowtail blade with a gold emblem. 3.2 m.
+
+    The Bible's streets hang colour off their walls (BOARD_2 "Signs & Banners"): a blade banner stands out from the
+    wall on a gold rod, so it is seen END-ON down the length of a street, which is exactly where a flat facade is not
+    seen at all. The blade lies in the X = 0 plane, projecting along +Y from a flat wall rosette at y = 0.
+
+    Parts: gold (rosette, rod, brace, finial, rings, emblem), roof_alt (the blade), roof (its top stripe). A placement
+    pass may give the blade and stripe any flat pastel instance.
+    """
+    g = f.part("gold")
+    cloth = f.part("roof_alt")
+    stripe = f.part("roof")
+    ROD_Z = 3.00
+    ROD_OUT = 1.40
+    Y0, Y1 = 0.26, 1.18
+    TOP, TAIL, NOTCH = 2.92, 0.0, 0.46
+    T = 0.035
+    g.lathe([(0.0, 0.0), (0.20, 0.0), (0.22, 0.04), (0.14, 0.09), (0.05, 0.12), (0.0, 0.12)], segments=16, smooth=True,
+            matrix=M.xform((0.0, 0.0, ROD_Z), (-90.0, 0.0, 0.0)))
+    g.sweep([(0.0, 0.08, ROD_Z), (0.0, ROD_OUT, ROD_Z)], 0.035, sides=10, smooth=True, cap=True)
+    g.lathe([(0.0, -0.10), (0.07, -0.06), (0.09, 0.0), (0.07, 0.06), (0.0, 0.10)], segments=12, smooth=True,
+            matrix=M.xform((0.0, ROD_OUT + 0.08, ROD_Z)))
+    # the brace hangs the rod from ABOVE: below it, it would run through the top of the blade (first preview)
+    brace = [(0.0, 0.06, ROD_Z + 0.62), (0.0, 0.30, ROD_Z + 0.55), (0.0, 0.62, ROD_Z + 0.26), (0.0, 0.90, ROD_Z + 0.03)]
+    g.sweep(brace, [0.028, 0.026, 0.024, 0.022], sides=8, smooth=True, cap=True)
+    g.lathe([(0.0, 0.0), (0.09, 0.0), (0.09, 0.04), (0.0, 0.06)], segments=12, smooth=True,
+            matrix=M.xform((0.0, 0.0, ROD_Z + 0.62), (-90.0, 0.0, 0.0)))
+    for yy in (Y0 + 0.08, (Y0 + Y1) * 0.5, Y1 - 0.08):
+        g.lathe([(0.045, -0.018), (0.07, -0.018), (0.07, 0.018), (0.045, 0.018)], segments=10, smooth=True,
+                cap_bottom=False, cap_top=False, matrix=M.xform((0.0, yy, ROD_Z - 0.03), (0.0, 90.0, 90.0)))
+    mid = (Y0 + Y1) * 0.5
+    outline = [(Y0, TOP), (Y1, TOP), (Y1, TAIL), (mid, TAIL + NOTCH), (Y0, TAIL)]
+    cloth.prism(outline, T, z0=-T * 0.5, matrix=M.xform((0.0, 0.0, 0.0), (90.0, 0.0, 90.0)))
+    # 6 mm past both blade edges: flush ends shared the blade's side faces and rendered black
+    band = [(Y0 - 0.006, TOP - 0.34), (Y1 + 0.006, TOP - 0.34), (Y1 + 0.006, TOP - 0.20), (Y0 - 0.006, TOP - 0.20)]
+    stripe.prism(band, T + 0.012, z0=-(T + 0.012) * 0.5, matrix=M.xform((0.0, 0.0, 0.0), (90.0, 0.0, 90.0)))
+    for sgn in (-1.0, 1.0):
+        g.lathe([(0.19, 0.0), (0.24, 0.0), (0.24, 0.018), (0.19, 0.018)], segments=20, smooth=True, cap_bottom=False,
+                cap_top=False, matrix=M.xform((sgn * (T * 0.5), mid, 1.62), (0.0, sgn * 90.0, 0.0)))
+        g.lathe([(0.0, 0.0), (0.10, 0.0), (0.10, 0.02), (0.0, 0.03)], segments=12, smooth=True,
+                matrix=M.xform((sgn * (T * 0.5), mid, 1.62), (0.0, sgn * 90.0, 0.0)))
+    return K.ModuleSpec(
+        "WL_Detail_Banner_Blade", "banner", "prop", "detail",
+        f.emit("WL_Detail_Banner_Blade"),
+        [K.Socket("back", ROD_Z, 0.22, "bridge_end", "the rosette is flat at y = 0; the rod projects +Y; blade tails reach z = 0")],
+        districts=("city", "plaza", "market", "tea_terrace", "clock"),
+        note="projecting blade banner on a gold rod with scrolled brace; swallowtail blade, top stripe, gold emblem",
+        params={"rod_z_m": ROD_Z, "projection_m": ROD_OUT},
+        tri_budget=2500, nanite=False, collision=False)
+
+
 BUILDERS = (
     detail_balustrade_run, detail_newel_urn, detail_screen_filigree,
     detail_balcony_bracket, detail_pinnacle_grand, detail_oriel_bay,
-    detail_window_arched,
+    detail_window_arched, detail_banner_blade,
 )

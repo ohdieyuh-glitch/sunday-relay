@@ -1,5 +1,5 @@
 {
-  "checked_assets": 121,
+  "checked_assets": 122,
   "failures": 0,
   "material_check": "59 MI_V2_* names parsed from materials_v2.py",
   "per_asset": {
@@ -94,6 +94,7 @@
     "WL_Detail_Pinnacle_Grand": [],
     "WL_Detail_Oriel_Bay": [],
     "WL_Detail_Window_Arched": [],
+    "WL_Detail_Banner_Blade": [],
     "WL_Hero_GreatSpire": [],
     "WL_Hero_Gate_Royal": [],
     "WL_Sky_Island_Small": [],
@@ -602,6 +603,11 @@
       "glass": "4929636548b666d274b0086089a84bce1f236d88d78f122593435bcb47f9f3db",
       "gold": "7911983699a240a5e86e5190de8bc3b3ed2db0d65716cc402d72a2b6cc3fd88f",
       "stone": "12b0d3356cf63638954f68e5cb94c1224b27c98f8fc482dc714e31427c8180bd"
+    },
+    "WL_Detail_Banner_Blade": {
+      "gold": "e851760c971e5f038cfa57d506e6834303c65f76ad5cde05525935c2a598b683",
+      "roof": "480f7294c1e10f8d40b77a64ad55db690902b0bd4a31471e828bb56453179dc1",
+      "roof_alt": "cbd64734a8f2d489b4fe84da27d1ba2fc23245f018cbb0421e7f12c8117f88f3"
     },
     "WL_Hero_GreatSpire": {
       "glass": "bcd03302e94403ce72efc9428a539e3c54e0134cf4d737861eaec08b56c60a04",
