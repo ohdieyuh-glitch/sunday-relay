@@ -60,26 +60,58 @@ def storeys(stack):
     return rows
 
 
-class Batches:
-    """Instances keyed by mesh + material, the way WonderlandInstancedBatch draws them."""
+# A TOWER IS ONE COLOUR, TOP TO BOTTOM (SC02, 2026-09-16). The skyline census found MI_V2_IvoryStone on about 40% of
+# everything visible above 8 m -- every kit tower in the city pale ivory, so from any raised camera the city read as a
+# field of white pillars, where the boards show castles of pink stone, lavender stone and cream stucco under contrasting
+# cones. So each stacked tower draws one tint for its whole height (a striped tower would be worse than a white one),
+# chosen by a hash of its position -- stable, independent of the order towers are generated in, and unchanged when a
+# neighbour is added or removed. Pink walls take lavender cones and lavender walls take rose ones, so roof and wall
+# always contrast. Weights favour colour; ivory stays as an accent, not the rule.
+TOWER_PALETTE = (
+    (30, {"MI_V2_IvoryStone": "MI_V2_TowerCream"}),
+    (30, {"MI_V2_IvoryStone": "MI_V2_TowerBlush", "MI_V2_RoofRose": "MI_V2_RoofLilac"}),
+    (25, {"MI_V2_IvoryStone": "MI_V2_TowerLavender", "MI_V2_RoofLilac": "MI_V2_RoofRose"}),
+    (15, {}),
+)
 
-    def __init__(self, prefix):
+
+def tower_tint(x, y, palette=TOWER_PALETTE):
+    """The material swaps for the tower standing at (x, y): a pure function of the position."""
+    h = ((int(round(x)) * 73856093) ^ (int(round(y)) * 19349663) ^ 0x5bd1e995) & 0x7FFFFFFF
+    pick = h % sum(w for w, _ in palette)
+    for w, swaps in palette:
+        if pick < w:
+            return swaps
+        pick -= w
+    return {}
+
+
+class Batches:
+    """Instances keyed by mesh + material, the way WonderlandInstancedBatch draws them.
+
+    `tinted=True` colours every stacked tower from TOWER_PALETTE. The default is False, so a layer that has not opted in
+    regenerates byte-identically."""
+
+    def __init__(self, prefix, tinted=False):
         self.prefix = prefix
         self.batches = {}
+        self.tinted = tinted
 
-    def add_module(self, name, x, y, z, yaw, scale):
+    def add_module(self, name, x, y, z, yaw, scale, tint=None):
         for part in MODULES[name]["parts"]:
             mesh_name = part["mesh"].split(".")[-1]
-            key = "%s_%s_%s" % (self.prefix, mesh_name.replace("WL_", ""), part["material"].replace("MI_V2_", ""))
-            b = self.batches.setdefault(key, {"id": key, "mesh": part["mesh"], "material": part["material"], "instances": [],
+            material = (tint or {}).get(part["material"], part["material"])
+            key = "%s_%s_%s" % (self.prefix, mesh_name.replace("WL_", ""), material.replace("MI_V2_", ""))
+            b = self.batches.setdefault(key, {"id": key, "mesh": part["mesh"], "material": material, "instances": [],
                                               "collides": False, "cast_shadow": True, "affect_df": False})
             b["instances"].append([round(x, 1), round(y, 1), round(z, 1), 0.0, round(yaw % 360.0, 1), 0.0,
                                    round(scale, 3), round(scale, 3), round(scale, 3)])
 
     def add_stack(self, stack, x, y, ground_z, yaw, scale):
         top = ground_z
+        tint = tower_tint(x, y) if self.tinted else None
         for name, z in storeys(stack):
-            self.add_module(name, x, y, ground_z + z * scale, yaw, scale)
+            self.add_module(name, x, y, ground_z + z * scale, yaw, scale, tint)
             top = ground_z + (z + MODULES[name]["sockets"]["top"]["z"]) * scale
         return top
 
