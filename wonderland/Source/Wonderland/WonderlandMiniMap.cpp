@@ -10,6 +10,7 @@
 #include "HAL/IConsoleManager.h"
 #include "Rendering/DrawElements.h"
 #include "Rendering/SlateRenderer.h"
+#include "Textures/SlateShaderResource.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/SBoxPanel.h"
@@ -33,6 +34,9 @@ namespace WonderlandMiniMapDetail
 	TAutoConsoleVariable<float> CVarHz(
 		TEXT("wl.MiniMap.Hz"), 0.0f,
 		TEXT("Photographs per second, overriding the settings while above zero. For measuring what the rate costs."));
+	TAutoConsoleVariable<int32> CVarDebugRaw(
+		TEXT("wl.MiniMap.DebugRaw"), 0,
+		TEXT("1 also draws the whole raw photograph as a small square in the disc's corner, through a plain image brush: separates 'the capture is wrong' from 'the disc draws it wrong'."));
 	TAutoConsoleVariable<int32> CVarLumen(
 		TEXT("wl.MiniMap.Lumen"), 0,
 		TEXT("1 lets the mini-map photograph use Lumen. Off by default: it is a second view, and a small one."));
@@ -392,42 +396,35 @@ int32 SWonderlandMiniMapDisc::OnPaint(const FPaintArgs& Args, const FGeometry& A
 	const double K = Frame != nullptr ? Frame->ViewRadiusUU / FMath::Max(R, 1.0f) : 1.0;
 	DrawnUUPerPixel = K;
 	FSlateRenderer* const Renderer = FSlateApplication::IsInitialized() ? FSlateApplication::Get().GetRenderer() : nullptr;
-	const int32 Segments = 56;
 
 	// ----- the photograph, through a round window
-	// A fan of triangles whose UVs place each rim point on the ground it stands over. The window is the geometry,
-	// so there is no mask to author, and the photograph slides under it between captures because the UVs follow the
-	// Dog while the photograph stays where it was taken.
-	if (Frame != nullptr && Frame->bHasPlayer && Frame->bHasCapture && Renderer != nullptr && Source->GetCaptureBrush() != nullptr)
+	// DRAWN AS A ROUNDED BOX WITH A UV REGION -- the path every UMG image with rounded corners takes -- rather than as
+	// a textured triangle fan. The fan came out a uniform white under two different capture sources, which is the draw
+	// path failing, not the photograph. The UV region is the square of ground the disc spans, shifted by how far the
+	// Dog has walked since the photograph was taken, so the ground still slides under the window between captures.
+	if (Frame != nullptr && Frame->bHasPlayer && Frame->bHasCapture && Source->GetCaptureBrush() != nullptr)
 	{
-		const FSlateResourceHandle Handle = Renderer->GetResourceHandle(*Source->GetCaptureBrush());
 		const double Width = FMath::Max(Frame->CaptureWidthUU, 1.0);
 		const FVector2D Shift = Frame->CaptureCentreXY - Frame->PlayerXY;
-		const FColor Tint = FLinearColor(0.64f, 0.66f, 0.74f, 0.94f).ToFColor(true);
-		const auto UvAt = [&](float Ox, float Oy)
-		{
-			return FVector2f(static_cast<float>(0.5 + (Shift.X + Ox * K) / Width), static_cast<float>(0.5 + (Shift.Y + Oy * K) / Width));
-		};
-		TArray<FSlateVertex> Verts;
-		TArray<SlateIndex> Indices;
-		Verts.Reserve(Segments + 2);
-		Indices.Reserve(Segments * 3);
-		Verts.Add(FSlateVertex::Make(Transform, Centre, UvAt(0.0f, 0.0f), Tint));
-		for (int32 Step = 0; Step <= Segments; ++Step)
-		{
-			const float A = 360.0f * Step / Segments;
-			const FVector2f P = Polar(Centre, R, A);
-			Verts.Add(FSlateVertex::Make(Transform, P, UvAt(P.X - Centre.X, P.Y - Centre.Y), Tint));
-			if (Step > 0)
-			{
-				Indices.Add(0);
-				Indices.Add(static_cast<SlateIndex>(Step));
-				Indices.Add(static_cast<SlateIndex>(Step + 1));
-			}
-		}
+		const double Half = Frame->ViewRadiusUU / Width;
+		const FVector2D Mid(0.5 + Shift.X / Width, 0.5 + Shift.Y / Width);
+		FSlateBrush Photo = *Source->GetCaptureBrush();
+		Photo.DrawAs = ESlateBrushDrawType::RoundedBox;
+		Photo.OutlineSettings = FSlateBrushOutlineSettings(R);
+		Photo.SetUVRegion(FBox2f(FVector2f(static_cast<float>(Mid.X - Half), static_cast<float>(Mid.Y - Half)),
+			FVector2f(static_cast<float>(Mid.X + Half), static_cast<float>(Mid.Y + Half))));
 		// A scene capture writes coverage, not opacity, into alpha: honoured, the ground would draw see-through.
-		FSlateDrawElement::MakeCustomVerts(OutDrawElements, Layer++, Handle, Verts, Indices, nullptr, 0, 0, ESlateDrawEffect::IgnoreTextureAlpha);
+		FSlateDrawElement::MakeBox(OutDrawElements, Layer++, Circle(R), &Photo, ESlateDrawEffect::IgnoreTextureAlpha,
+			FLinearColor(0.64f, 0.66f, 0.74f, 0.94f));
 		bDrewCapture = true;
+
+		if (WonderlandMiniMapDetail::CVarDebugRaw.GetValueOnGameThread() != 0)
+		{
+			FSlateBrush Raw = *Source->GetCaptureBrush();
+			Raw.DrawAs = ESlateBrushDrawType::Image;
+			FSlateDrawElement::MakeBox(OutDrawElements, Layer + 20, AllottedGeometry.ToPaintGeometry(FVector2f(64.0f, 64.0f), FSlateLayoutTransform(FVector2f(0.0f, 0.0f))),
+				&Raw, ESlateDrawEffect::IgnoreTextureAlpha, FLinearColor::White);
+		}
 	}
 
 	// ----- crosshair
@@ -441,6 +438,11 @@ int32 SWonderlandMiniMapDisc::OnPaint(const FPaintArgs& Args, const FGeometry& A
 
 	const FSlateBrush* White = FCoreStyle::Get().GetBrush("WhiteBrush");
 	const FSlateResourceHandle WhiteHandle = Renderer != nullptr ? Renderer->GetResourceHandle(*White) : FSlateResourceHandle();
+	// THE WHITE BRUSH LIVES IN AN ATLAS. A UV of (0.5, 0.5) is the middle of the whole atlas page -- some other image,
+	// or nothing -- which is why the first arrow and markers never showed. The engine's own fan (STestSuite) samples
+	// inside the proxy's region, and so does this.
+	const FSlateShaderResourceProxy* WhiteProxy = WhiteHandle.GetResourceProxy();
+	const FVector2f WhiteUV = WhiteProxy != nullptr ? WhiteProxy->StartUV + WhiteProxy->SizeUV * 0.5f : FVector2f(0.5f, 0.5f);
 	const auto Fan = [&](const TArray<FVector2f>& Points, const FLinearColor& Color, int32 AtLayer)
 	{
 		if (Renderer == nullptr || Points.Num() < 3)
@@ -452,7 +454,7 @@ int32 SWonderlandMiniMapDisc::OnPaint(const FPaintArgs& Args, const FGeometry& A
 		TArray<SlateIndex> Indices;
 		for (const FVector2f& P : Points)
 		{
-			Verts.Add(FSlateVertex::Make(Transform, P, FVector2f(0.5f, 0.5f), C));
+			Verts.Add(FSlateVertex::Make(Transform, P, WhiteUV, C));
 		}
 		for (int32 Index = 1; Index + 1 < Points.Num(); ++Index)
 		{
