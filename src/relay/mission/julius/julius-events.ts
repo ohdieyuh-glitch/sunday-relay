@@ -135,6 +135,10 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * is a channel that belongs to another role: a coder's verdict about its own
   * work, or a design. Both are refusals ON the record rather than silence. */
  'evidence.refused','worker.channel.refused',
+ /* WHICH ACCEPTED GUIDANCE A DISPATCH WAS GIVEN, by entry id, recorded with the
+  * compiled context it arrived in. A count on `worker.effort` could not say
+  * which packet a coder acted on. */
+ 'guidance.consumed',
  /* THE CODING AGENT'S IMPLEMENTATION, ON THE RECORD. `recorded` is what the
   * independent executor observed the dispatch change and what the coder said
   * it did, side by side. `scope.violated` is a changed path the locked

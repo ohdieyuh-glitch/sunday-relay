@@ -149,10 +149,13 @@ below is provider-free and provable offline. It closes gaps 1–12 and 14–16.
    (tracked and untracked) through the executor and checks it against the
    locked contract; a violation is FAILED evidence Julius authored. Empty diffs
    are not PASSED; artifacts are keyed per task.
-3. **Guidance on the coder side.** Delivery before release and replay-safe;
-   the ceiling checked before anything is spent; accepted guidance carried into
-   repairs; paused repairs keep their findings; a durable `guidance.consumed`
-   record per dispatch; reason codes for unreadable and refused requests.
+3. **Guidance on the coder side.** A continuation is guaranteed its accepted
+   answer before it runs, even across a crash (delivered at claim when the
+   decision's own delivery was lost, once per packet); the ceiling checked
+   before anything is spent; accepted guidance carried into repairs; paused
+   repairs keep their findings; a durable `guidance.consumed` record per
+   dispatch, and a refusal when the accepted packet would not fit; an
+   unreadable request named on its checkpoint.
 4. **The sustained coder.** A Coding Agent state projection derived only from
    durable facts, and an `architectureObservations` channel through which a
    coder can surface drift evidence into PR #271's consultation path without
@@ -174,6 +177,11 @@ below is provider-free and provable offline. It closes gaps 1–12 and 14–16.
 - **A durable artifact store** for `plan`/`diff`/`test-output` (process-local
   today). PR 3 keys them per task; making them survive a new process is a
   persistence change with its own migration.
+- **Telling the next packet that a pause did not continue** (gap 10, second
+  half). Several refusals — direction, unroutable, in flight, ceiling — end a
+  pause without a continuation, and the half-done dispatch is reviewed as it
+  stands. Each refusal is on the record by name; carrying it into the next
+  worker's context is a protocol change of its own.
 - **Project Brain coupling.** Coder facts are shaped as ledger events and brain
   entries Project Brain can adopt later; no second memory system is introduced.
 
