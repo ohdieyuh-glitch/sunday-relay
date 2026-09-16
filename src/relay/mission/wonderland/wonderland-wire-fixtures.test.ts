@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 
 import { JULIUS_VISUAL_STATES } from './wonderland-julius-state';
 import { JULIUS_MISSION_STATES } from '../julius/julius-runtime';
@@ -49,7 +49,9 @@ describe('the fixture file', () => {
     // `generated/` is gitignored, so fixtures written there vanish on a fresh
     // checkout and the harness reports success over an empty file. The ordering
     // case table lives in the source tree for the same reason.
-    expect(PATH.startsWith('wonderland/')).toBe(true);
+    // The path is built with join(), so on Windows it reads wonderland\Tools\... -- compared in POSIX form, as
+    // wonderland-cpp-parity.test.ts compares its tracked files, or this fails on every Windows checkout.
+    expect(PATH.split(sep).join('/').startsWith('wonderland/')).toBe(true);
     expect(rows.length).toBeGreaterThan(30);
   });
 
