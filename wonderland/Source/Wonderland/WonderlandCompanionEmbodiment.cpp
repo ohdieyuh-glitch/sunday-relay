@@ -310,15 +310,17 @@ FVector AWonderlandCompanionEmbodiment::DesiredLocation(const APawn* Pawn) const
 			                            Orbit.HeightUU + Rise);
 		}
 
-		// CLEAR THE SIGHT-LINE. Behind the Dog and out to the side, measured against the line the beam
-		// actually travels rather than against the Dog's facing -- the Dog turns to face the contract, so
-		// the two agree here, but the beam is what must not be crossed and so the beam is what is used.
+		// CLEAR THE SIGHT-LINE. Flanking the Dog, level with it and well out to either side, measured against
+		// the line the beam actually travels rather than against the Dog's facing -- the Dog turns to face the
+		// contract, so the two agree here, but the beam is what must not be crossed and so the beam is what is used.
+		// NOT BEHIND IT: 150 uu behind the Dog is where the play camera stands, and the first film's verification
+		// shot had the Jhinn's wings filling the corner of the frame, a blur between the viewer and the beam.
 		const FVector Along = (ContractAt - Pawn->GetActorLocation()).GetSafeNormal2D();
 		const FVector Side = FVector::CrossProduct(Along, FVector::UpVector).GetSafeNormal();
 		const float Hand = FollowOffset.Y >= 0.0 ? 1.0f : -1.0f;
 		return Pawn->GetActorLocation()
-			- Along * 150.0
-			+ Side * (Hand * 190.0)
+			+ Along * 30.0
+			+ Side * (Hand * 250.0)
 			+ FVector(0.0, 0.0, HoverHeightUU * 0.5);
 	}
 
