@@ -50,8 +50,15 @@ def job():
     RESULT["tests"] = tests
     RESULT["captures"] = []
 
+    def say(line):
+        """Into the EDITOR LOG as it happens. A killed process leaves the log behind and takes the result
+        file with it, so anything only in RESULT is lost exactly when it is most wanted (owner, 2026-09-15:
+        two runs died here and left no record of why)."""
+        unreal.log_warning("WLMISSIONPROOF %s" % line)
+
     def record(tid, name, ok, **detail):
         tests.append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
+        say("%s %s %s" % (tid, "PASS" if ok else "FAIL", detail))
         emit(tid, "PASS" if ok else "FAIL", name, detail)
 
     def shot(name):
@@ -105,17 +112,51 @@ def job():
            strip=mission.is_mission_strip_on_screen() if mission else None)
 
     # ---------------------------------------------------------------- on the ground, at the Dog's feet
-    # THE FOUNDER'S SHAPE, CHECKED AS GEOMETRY: small, on the floor, and beside the Dog rather than on it.
+    # THE FOUNDER'S SHAPE, CHECKED AS GEOMETRY: on the floor, and beside the Dog rather than riding on it.
+    #
+    # IT CHECKS THE FOLLOW AGAINST WHAT IT WAS TOLD, not against a number typed here. The first version of
+    # this test asserted a flat distance under 140 uu, which was nothing but my guess at "beside"; when the
+    # placement was measured properly and moved to (125, 80) -- 148 uu away -- the test failed while the orb
+    # was exactly where it had been put. A bound that has to be edited every time the thing it measures
+    # legitimately changes is not measuring anything. So: read the offset the orb is configured with, and
+    # check the follow actually lands there.
+    orb_actor = next((a for a in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.WonderlandMissionOrb)), None)
+    offset = orb_actor.follow_offset if orb_actor is not None else unreal.Vector()
+    wanted = (offset.x ** 2 + offset.y ** 2) ** 0.5
     orb_at = mission.get_orb_location() if mission else unreal.Vector()
     pawn_at = pawn.get_actor_location() if pawn else unreal.Vector()
     flat = ((orb_at.x - pawn_at.x) ** 2 + (orb_at.y - pawn_at.y) ** 2) ** 0.5
     below = pawn_at.z - orb_at.z
+
+    # IS IT ON THE FLOOR? NOT BY TRACING FROM PYTHON. This build exposes nothing readable on a HitResult:
+    # `blocking_hit` is not an attribute, GameplayStatics has no break_hit_result, and HitResult.Location is
+    # protected. A Python trace can report THAT something was hit and never WHERE (measured 2026-09-15).
+    #
+    # ASK WHICH BRANCH THE ORB TOOK INSTEAD. AWonderlandMissionOrb::DesiredLocation traces down for the
+    # floor and sets its Z to the hit; only when it finds nothing does it fall back to `pawn.Z - 42`. Those
+    # produce DIFFERENT heights, so the orb's own Z says which ran -- and if the trace ran, the orb's Z IS
+    # the floor surface by construction. Stronger than a second trace from here, which could disagree with
+    # the one that actually placed the dais.
+    fallback_z = pawn_at.z - 42.0
+    used_floor_trace = abs(orb_at.z - fallback_z) >= 5.0
     RESULT["placement"] = {"orb": [orb_at.x, orb_at.y, orb_at.z], "pawn": [pawn_at.x, pawn_at.y, pawn_at.z],
+                           "offset": [offset.x, offset.y], "wanted_uu": round(wanted, 1),
                            "flat_uu": round(flat, 1), "below_pawn_uu": round(below, 1),
+                           "fallback_z": round(fallback_z, 2), "used_floor_trace": used_floor_trace,
+                           "height_uu": round(mission.get_orb_height_uu(), 1) if mission else 0,
                            "boxes": mission.get_orb_box_count() if mission else 0}
-    record("M01", "the orb is on the ground beside the Dog, not floating on the Carry-On",
+    record("M01", "the orb stands where it was told, on the ground, clear of the Dog",
            mission is not None and mission.is_orb_in_world() and mission.get_orb_box_count() > 0
-           and flat < 140.0 and below > 20.0,
+           # where it was told, within the follow's own lag
+           and wanted > 0.0 and abs(flat - wanted) < 20.0
+           # ON THE GROUND: placed by the floor trace, not by the no-floor fallback
+           and used_floor_trace
+           # and well under the pawn's origin, which is its capsule centre, so it cannot be riding the Dog
+           and below > 20.0
+           # CLEAR OF THE DOG, which is what stops it reading as carried: further out than the Dog's own
+           # body half-width, and not so far it stops being the Dog's object. 60 is half a head width (60)
+           # plus a leg; 260 is about where the companions would be if they drifted.
+           and 60.0 < flat < 260.0,
            **RESULT["placement"])
 
     # ---------------------------------------------------------------- every beat has a Julius future
@@ -178,6 +219,7 @@ def job():
            mission is not None and {b for b, v in asks.items() if v} == expected_asks,
            asking=sorted(b for b, v in asks.items() if v))
 
+    say("filming %d states, %d frames each" % (len(GALLERY), FRAMES_PER_BEAT))
     # ---------------------------------------------------------------- the gallery
     # A SEQUENCE PER STATE, NOT A STILL. Phase 3 is animation: a spin that reverses through a repair, a
     # pulse that races while coding and breathes while waiting, a block that stops dead. A contact sheet of
@@ -199,6 +241,7 @@ def job():
             path = shot("zc_mission_%02d_%s_%02d.png" % (index + 1, beat, frame))
             frames.append({"capture": path, "screen": screen})
             yield FRAME_SPACING
+        say("filmed %s (%d/%d)" % (beat, index + 1, len(GALLERY)))
         gallery.append({"beat": beat, "label": mission.get_beat_label(), "step": mission.get_chakra_step(),
                         "chakra": mission.get_chakra_name(), "frames": frames})
     RESULT["gallery"] = gallery

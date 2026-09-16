@@ -177,3 +177,16 @@ WONDERLAND_API const TCHAR* WonderlandChakraName(EWonderlandChakra Chakra);
 
 /** True when a beat is real but no Julius event reaches it yet. Two of the seventeen are in this state. */
 WONDERLAND_API bool WonderlandBeatAwaitsAnEvent(EWonderlandMissionBeat Beat);
+
+/**
+ * WHETHER A MISSION CONTRACT EXISTS AT ALL while this beat is showing.
+ *
+ * THE FOUNDER'S CANON, 2026-09-16: a contract is manifested by a task being EXECUTED, not by a player
+ * being present. So two beats mean no contract -- `Unobserved`, where nothing has been reported, and
+ * `Idle`, where no mission is running -- and every other beat is a task in flight, including the three
+ * endings, which a person needs to see land before the crystal goes.
+ *
+ * It is stated here rather than in the world layer because it is a fact about the VOCABULARY: whether a
+ * beat describes a running task is the same question wherever it is asked.
+ */
+WONDERLAND_API bool WonderlandBeatShowsContract(EWonderlandMissionBeat Beat);

@@ -126,6 +126,11 @@ def job():
     # ---------------------------------------------------------------- what the frame costs to draw
     # Same A/B as the companions (zc_companion_proof.py): open and shut three times each on the same view, so
     # drift in the world's own frame rate averages out. Frame rates only compare with the editor in front.
+    # An unfocused editor paces itself down to about 2.5 fps, which buries a Slate panel's cost in the sleep.
+    # Ask for an unthrottled frame; RESULT says what rate it actually got, so a throttled sample reads as void.
+    for cmd in ("t.MaxFPS 0", "Slate.bAllowThrottling 0", "r.VSync 0"):
+        unreal.SystemLibrary.execute_console_command(world, cmd)
+    yield 0.5
     samples = {"open": [], "shut": []}
     for _ in range(3):
         for state in ("open", "shut"):
@@ -147,7 +152,7 @@ def job():
                       "ms_open": None if ms_open is None else round(ms_open, 2),
                       "ms_shut": None if ms_shut is None else round(ms_shut, 2),
                       "cost_ms": None if (ms_open is None or ms_shut is None) else round(ms_open - ms_shut, 2),
-                      "samples": samples}
+                      "throttled": fps_shut < 10.0, "samples": samples}
     record("B08", "the Project Brain frame costs under 10% of the frame (A/B, open vs shut)",
            fps_shut > 0 and fps_open >= 0.9 * fps_shut, **RESULT["perf"])
 

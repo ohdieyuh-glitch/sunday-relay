@@ -1,8 +1,8 @@
 // WONDERLAND — WHO HOLDS THE MISSION BEAT. One owner per player, beside the companions.
 //
-// It spawns the Mission Contract Orb at the Dog's feet, keeps the beat the orb is drawing, and puts a small
-// strip on screen naming it — because seventeen states are only legible in a screenshot if the screenshot
-// says which one it is.
+// It keeps the beat, puts a small strip on screen naming it, and MANIFESTS A MISSION CONTRACT when — and
+// only when — a beat arrives that describes a task actually being executed. A player standing in Wonderland
+// has no contract; a player whose task is running has one floating beside them.
 //
 // IT IS NOT THE SOURCE OF MISSION TRUTH, and the founder's Phase 4 note says so in as many words: Unreal
 // must never become the thing that decides what a mission is doing. Every beat here arrives from outside —
@@ -17,7 +17,9 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/LocalPlayerSubsystem.h"
+#include "Containers/Ticker.h"
 #include "WonderlandMissionBeat.h"
+#include "WonderlandMissionEvent.h"
 #include "WonderlandMissionSubsystem.generated.h"
 
 class APlayerController;
@@ -99,6 +101,90 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	bool IsDevelopmentPreview() const { return true; }
 
+	/* ------------------------------------------------------------ the deterministic simulation */
+
+	/**
+	 * Play a fixture, one event at a time, into the same door a Julius event will use in Phase 4.
+	 *
+	 * NOTHING IS TYPED BY HAND while this runs. The founder's Phase 3B rule is that the orb stops being
+	 * manually controlled state: a fixture produces events, the fold interprets them, and the world draws
+	 * whatever comes out. False when no fixture has that id.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
+	bool StartFixture(FName FixtureId, float SecondsPerEvent = 1.6f);
+
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
+	void StopFixture();
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	bool IsFixtureRunning() const { return Playing != nullptr; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FName GetFixtureId() const;
+
+	/** How many of the fixture's events have been offered so far. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	int32 GetFixtureProgress() const { return PlayIndex; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	int32 GetFixtureEventCount() const;
+
+	/** The last event type offered, exactly as the stream spelled it. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FName GetLastEventType() const { return LastEventType; }
+
+	/** What the fold did with it: applied, stale, foreign, refused after ending, refused unlabelled gap. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString GetLastEventVerdict() const;
+
+	/** The mission the contract currently belongs to. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FName GetFoldMissionId() const { return Fold.MissionId; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	int32 GetFoldChakraStep() const { return WonderlandChakraStep(Fold.Chakra); }
+
+	/** Beats shown that no Julius event can produce. A non-zero count is how far this runs ahead of the kernel. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	int32 GetFoldSimulatedBeats() const { return Fold.SimulatedBeats; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	int32 GetFoldRefusedAfterEnding() const { return Fold.RefusedAfterEnding; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	int32 GetFoldForeign() const { return Fold.Foreign; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString DescribeFold() const { return WonderlandDescribeFold(Fold); }
+
+	/* ------------------------------------------------------------ the arithmetic proof */
+	//
+	// REPLAY WITHOUT DRAWING. The beat sequence, the chakra sequence and the verdicts are properties of the
+	// event stream and the tables -- so they can be checked with no actor, no PIE camera and no frame. A
+	// renderer bug cannot make these pass, and a table mistake cannot hide behind one.
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	int32 GetFixtureCount() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FName GetFixtureIdAt(int32 Index) const;
+
+	/** The chakra step after each event, comma separated, e.g. "1,1,2,2,2,3". */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString ReplayChakraSteps(FName FixtureId) const;
+
+	/** The beat after each event, comma separated. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString ReplayBeats(FName FixtureId) const;
+
+	/** What the fold did with each event, comma separated. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString ReplayVerdicts(FName FixtureId) const;
+
+	/** The finished fold, as one line. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString ReplaySummary(FName FixtureId) const;
+
 	/** Grow or shrink the orb. For the placement probe; the built-in size is what ships. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
 	bool SetOrbScale(float Scale);
@@ -110,8 +196,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	float GetOrbHeightUU() const;
 
+	/** True while a Mission Contract is manifested. False whenever no task is being executed. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	bool IsOrbInWorld() const;
+
+	/** How many contracts this session has manifested. A second mission increments it. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	int32 GetContractsManifested() const { return ContractsManifested; }
+
+	/** 0 while nothing is executing, rising to 1 as a contract draws itself in. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	float GetContractManifest() const;
 
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	int32 GetOrbBoxCount() const;
@@ -130,10 +225,29 @@ private:
 	void Attach(APlayerController* Controller);
 	void Detach();
 	void MountStrip();
+	/** Beat in, world out. The one place that decides whether a crystal exists. */
+	void ShowBeat(EWonderlandMissionBeat Wanted);
+	AWonderlandMissionOrb* EnsureContract();
+	void DismissContract();
+	bool StepFixture(float DeltaSeconds);
+	void OfferEvent(const FWonderlandMissionEvent& Event);
 
 	TWeakObjectPtr<APlayerController> BoundController;
 	TWeakObjectPtr<AWonderlandMissionOrb> Orb;
 	TSharedPtr<SWidget> MissionStrip;
 	EWonderlandMissionBeat Beat = EWonderlandMissionBeat::Unobserved;
+	int32 ContractsManifested = 0;
+
+	/** The fixture being played, owned by WonderlandMissionFixture.cpp's static table and never by this. */
+	const struct FWonderlandMissionFixture* Playing = nullptr;
+	FWonderlandMissionFold Fold;
+	FName LastEventType;
+	EWonderlandEventVerdict LastVerdict = EWonderlandEventVerdict::Applied;
+	int32 PlayIndex = 0;
+	float PlayClock = 0.0f;
+	float PlaySecondsPerEvent = 1.6f;
+	/** After the last event, hold the finished contract on screen before letting it go. */
+	float FinishHold = 0.0f;
+	FTSTicker::FDelegateHandle PlayTicker;
 	FDelegateHandle ControllerChangedHandle;
 };
