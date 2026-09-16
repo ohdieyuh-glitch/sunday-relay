@@ -19,7 +19,8 @@ public:
 		, _Color(FLinearColor::White)
 		, _ShadowColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.6f))
 	{}
-		SLATE_ARGUMENT(FString, Text)
+		/** An attribute: the companion titles are fixed, the mission strip's label changes every beat. */
+		SLATE_ATTRIBUTE(FString, Text)
 		/** Slate units per cell. A glyph is 5 cells wide and 7 tall, with one cell between glyphs. */
 		SLATE_ATTRIBUTE(float, CellSize)
 		SLATE_ARGUMENT(FLinearColor, Color)
@@ -33,7 +34,7 @@ public:
 		FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 
 private:
-	FString Text;
+	TAttribute<FString> Text;
 	TAttribute<float> CellSize;
 	FLinearColor Color = FLinearColor::White;
 	FLinearColor ShadowColor = FLinearColor::Black;
