@@ -1,0 +1,68 @@
+{
+ "WW03": {
+  "district": "West Wood",
+  "module": "WL_Spire_Cluster",
+  "at": [
+   -28122.9,
+   1933.1
+  ],
+  "site_d": 4026,
+  "actors": 7,
+  "instances": 345
+ },
+ "ER03": {
+  "district": "East Reach",
+  "module": "WL_Arch_Ceremonial",
+  "at": [
+   25523.0,
+   7567.5
+  ],
+  "site_d": 4326,
+  "actors": 7,
+  "instances": 392
+ },
+ "TC03": {
+  "district": "Teapot Court",
+  "module": "WL_Market_Canopy",
+  "at": [
+   -15033.0,
+   -6375.8
+  ],
+  "site_d": 4026,
+  "actors": 19,
+  "instances": 392
+ },
+ "CK03": {
+  "district": "The Colossal Key",
+  "module": "WL_Colonnade_Straight",
+  "at": [
+   21835.0,
+   -10357.7
+  ],
+  "site_d": 4166,
+  "actors": 5,
+  "instances": 392
+ },
+ "SM03": {
+  "district": "South Meadows",
+  "module": "WL_Palace_Pavilion",
+  "at": [
+   -3901.8,
+   -21513.2
+  ],
+  "site_d": 5426,
+  "actors": 9,
+  "instances": 417
+ },
+ "WG03": {
+  "district": "Water Gardens",
+  "module": "WL_Water_Pavilion",
+  "at": [
+   -711.0,
+   -10967.0
+  ],
+  "site_d": 2728,
+  "actors": 10,
+  "instances": 417
+ }
+}

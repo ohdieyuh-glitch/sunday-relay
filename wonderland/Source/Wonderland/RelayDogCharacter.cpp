@@ -33,6 +33,21 @@ namespace
 	const TCHAR* const DogPropGlowParent = TEXT("/Engine/EngineDebugMaterials/LevelColorationUnlitMaterial.LevelColorationUnlitMaterial");
 	const TCHAR* const DogPropCubePath = TEXT("/Engine/BasicShapes/Cube.Cube");
 
+	/**
+	 * WHAT AN UNLIT COLOUR HAS TO BE MULTIPLIED BY TO BE SEEN AT ALL.
+	 *
+	 * LevelColorationUnlitMaterial emits exactly what is set on it, and Wonderland runs physically-based
+	 * daylight exposure, so a colour of about 1.0 is BLACK on screen -- not dim, black. Measured by
+	 * kaisi-92 on 2026-09-15 while building the companions: x1, x30 and x300 all read as black, it begins
+	 * to read at about x3000, and x4000 is comfortable. The Mission Contract's own glow uses the same
+	 * figure, so a glowing thing on the Dog and a glowing thing on the crystal sit at one exposure.
+	 *
+	 * THIS COST FOUR PASSES. The verification beam was geometrically perfect and rendered a black slab,
+	 * which read as an artifact rather than as the beam; widening it only made the black slab wider, and
+	 * a colour-counting check saw FEWER cyan pixels as it grew. Magnitude, not thickness and not framing.
+	 */
+	const float DogGlowExposure = 4000.0f;
+
 	/** The engine cube is 100 uu on a side, so a box is a scale of size/100 about a centre. */
 	FTransform DogPropBox(const FVector& Centre, const FVector& SizeUU, const FRotator& Turn = FRotator::ZeroRotator)
 	{
@@ -1432,7 +1447,8 @@ UInstancedStaticMeshComponent* ARelayDogCharacter::MakePropMesh(FName Name, USce
 	OutMid = ParentMaterial != nullptr ? UMaterialInstanceDynamic::Create(ParentMaterial, this) : nullptr;
 	if (OutMid != nullptr)
 	{
-		OutMid->SetVectorParameterValue(TEXT("Color"), Colour);
+		// A glowing part is emitting, not being lit, so its colour carries the exposure multiplier.
+		OutMid->SetVectorParameterValue(TEXT("Color"), bGlow ? Colour * DogGlowExposure : Colour);
 		Built->SetMaterial(0, OutMid.Get());
 	}
 	else
@@ -1555,7 +1571,8 @@ void ARelayDogCharacter::DrawVerificationBeam(const FVector& FromWorld, const FV
 	BeamMesh->SetWorldScale3D(FVector(Length / 100.0, Core, Core));
 	if (BeamMid != nullptr)
 	{
-		BeamMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.62f, 0.94f, 1.0f) * (0.7f + 1.1f * Weight));
+		BeamMid->SetVectorParameterValue(TEXT("Color"),
+			FLinearColor(0.62f, 0.94f, 1.0f) * (DogGlowExposure * (0.35f + 0.55f * Weight)));
 	}
 	if (BeamHaloMesh != nullptr)
 	{
@@ -1565,7 +1582,10 @@ void ARelayDogCharacter::DrawVerificationBeam(const FVector& FromWorld, const FV
 		BeamHaloMesh->SetWorldScale3D(FVector(Length / 100.0, Halo, Halo));
 		if (BeamHaloMid != nullptr)
 		{
-			BeamHaloMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.20f, 0.52f, 0.86f) * (0.30f + 0.45f * Weight));
+			// The halo is a fraction of the core's brightness, not a fraction of 1.0 -- it is the same
+			// exposure scale, turned down, so the two read as one beam rather than two objects.
+			BeamHaloMid->SetVectorParameterValue(TEXT("Color"),
+				FLinearColor(0.20f, 0.52f, 0.86f) * (DogGlowExposure * (0.10f + 0.16f * Weight)));
 		}
 	}
 }
