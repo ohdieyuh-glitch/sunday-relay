@@ -28,7 +28,7 @@ namespace RelayDogReadTuning
 {
 	TAutoConsoleVariable<float> CVarBookFwd(TEXT("wl.Dog.Read.BookFwd"), 36.0f, TEXT("The open book's spine, forward of the body centre, in head-width sixtieths."));
 	TAutoConsoleVariable<float> CVarBookRight(TEXT("wl.Dog.Read.BookRight"), 0.0f, TEXT("The open book's spine, right of the body centre."));
-	TAutoConsoleVariable<float> CVarBookUp(TEXT("wl.Dog.Read.BookUp"), 16.0f, TEXT("The open book's spine, above the body centre."));
+	TAutoConsoleVariable<float> CVarBookUp(TEXT("wl.Dog.Read.BookUp"), -13.0f, TEXT("The open book's spine, above the head joint (negative: below it, in front of the chest)."));
 	TAutoConsoleVariable<float> CVarBookTilt(TEXT("wl.Dog.Read.BookTilt"), 52.0f, TEXT("Degrees the far edge of the book is raised, turning the pages toward the Dog's face."));
 	TAutoConsoleVariable<float> CVarBookOpen(TEXT("wl.Dog.Read.BookOpen"), 28.0f, TEXT("Degrees each half of the open book rises from flat."));
 	TAutoConsoleVariable<float> CVarBookScale(TEXT("wl.Dog.Read.BookScale"), 1.3f, TEXT("Size of the open book and its turning page."));
@@ -308,6 +308,7 @@ bool ARelayDogCharacter::BindJoints()
 	LegLeft.LateralUU = LegLeft.Hip->GetRelativeLocation().Y;
 	LegRight.LateralUU = LegRight.Hip->GetRelativeLocation().Y;
 	BodyRestLocation = BodyRoot->GetRelativeLocation();
+	HeadInBodyRest = BodyRoot->GetComponentTransform().InverseTransformPosition(HeadPivot->GetComponentLocation());
 
 	const float LegLengthUU = 0.8f * HeadWidthUU;
 	const float ThighUU = (0.8f - 0.5125f) * HeadWidthUU;
@@ -1474,9 +1475,10 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	}
 	if (Overlay.bBeam && MissionIn.bHasContract && BodyRoot != nullptr)
 	{
-		// The chest is measured from the Dog's centre: the Body's own origin is at its feet, and the beam left from the hip.
-		const FVector Chest = BodyRoot->GetComponentLocation() + FVector(0.0, 0.0, -BodyRestLocation.Z)
-			+ GetActorRotation().RotateVector(FVector(18.0, 0.0, 26.0));
+		// THE CHEST, just under the head joint in the body's own frame. Placed from the capsule or from the body's origin,
+		// the beam left from the hip: the Body's origin and the capsule centre were measured at different heights in
+		// different play sessions, the head joint in the body's frame never moves.
+		const FVector Chest = BodyRoot->GetComponentTransform().TransformPosition(FVector(18.0, 0.0, HeadInBodyRest.Z - 14.0));
 		DrawVerificationBeam(Chest, ContractWorld, Overlay.BeamWeight, MissionIn.TimeSeconds);
 	}
 	else
@@ -1730,13 +1732,14 @@ void ARelayDogCharacter::PoseBook(bool bInHand, float PageTurn)
 		return;
 	}
 	const double U = FMath::Max(HeadWidthUU, 10.0f) / 60.0;
-	// FROM THE DOG'S CENTRE, NOT THE BODY'S ORIGIN. The Body component's origin sits at the Dog's FEET, 93 uu under the
-	// capsule centre (measured in PIE, 2026-09-16), so "16 up" from it held the book 16 uu off the ground: the founder's
-	// "book on the floor while the Dog reads from nothing". The offsets are now measured from where the capsule centre
-	// is in the body's frame, whatever height that origin happens to be at.
-	const FVector Centre(0.0, 0.0, -BodyRestLocation.Z);
+	// FROM THE HEAD JOINT, in the body's own frame. Placed from the Body's origin the book lay 16 uu off the ground -- the
+	// founder's "book on the floor while the Dog reads from nothing" -- and placed from the capsule centre it rose above
+	// the head in another session, because those two were measured at different heights from one play session to the
+	// next. The head joint in the body's frame is fixed by the rig, so "just under the head, in front of the chest" is
+	// the same place every time. BookUp is now measured from the head joint (negative: below it).
+	const FVector Anchor(0.0, 0.0, HeadInBodyRest.Z);
 	BookRoot->SetRelativeLocationAndRotation(
-		Centre + FVector(CVarBookFwd.GetValueOnGameThread(), CVarBookRight.GetValueOnGameThread(), CVarBookUp.GetValueOnGameThread()) * U,
+		Anchor + FVector(CVarBookFwd.GetValueOnGameThread(), CVarBookRight.GetValueOnGameThread(), CVarBookUp.GetValueOnGameThread()) * U,
 		FRotator(CVarBookTilt.GetValueOnGameThread(), 0.0f, 0.0f));
 
 	// THE HALVES, laid out only when the opening changes. The right half rises Open degrees from flat; the left

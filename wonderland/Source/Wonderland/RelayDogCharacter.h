@@ -401,6 +401,10 @@ private:
 	/** The Body component's authored location, so the pose offsets are applied
 	 *  ON TOP of it rather than replacing it. */
 	FVector BodyRestLocation = FVector::ZeroVector;
+	/** Where the head joint sits in the Body component's own frame, measured at bind: the anchor the book and the beam's
+	 *  chest are placed from, because it moves with the body and does not depend on where the capsule or the body's
+	 *  origin happen to be. */
+	FVector HeadInBodyRest = FVector::ZeroVector;
 
 	bool bJointsBound = false;
 	/** The body reference was found missing once; said in the log, not every frame. */
