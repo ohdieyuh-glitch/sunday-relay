@@ -67,7 +67,7 @@ SWonderlandMissionsPanel::SWonderlandMissionsPanel()
 	, HumanBrush(WonderlandUi::Srgb(44, 34, 12, 0.90f), 6.0f, WonderlandUi::Gold(0.95f), 1.2f)
 	, ButtonNormal(WonderlandUi::Srgb(24, 26, 38, 0.90f), 7.0f, WonderlandUi::Ivory(0.24f), 1.0f)
 	, ButtonHovered(WonderlandUi::Srgb(40, 34, 18, 0.95f), 7.0f, WonderlandUi::Gold(0.90f), 1.2f)
-	, PipUnreached(FLinearColor::Transparent, 8.0f, WonderlandUi::Ivory(0.30f), 1.2f)
+	, PipUnreached(WonderlandUi::Srgb(10, 12, 20, 0.85f), 8.0f, WonderlandUi::Ivory(0.30f), 1.2f)
 {
 	PipLit.Reserve(WonderlandChakraSteps);
 	PipReached.Reserve(WonderlandChakraSteps);

@@ -236,11 +236,15 @@ void AWonderlandCompanionEmbodiment::SetFormation(EWonderlandCompanionFormation 
 		// companion with a shadow. The phase is per-companion and constant for the stage.
 		FormationPhase = Count > 0 ? static_cast<float>(Index) / static_cast<float>(Count) : 0.0f;
 		NextPulseAt = -1.0f;
-		if (Formation != EWonderlandCompanionFormation::ResearchOrbit)
-		{
-			Pulses.Reset();
-		}
 	}
+}
+
+void AWonderlandCompanionEmbodiment::SetParticipation(bool bInJoined, bool bInAgent, const FLinearColor& InAccent, FName InFlightBeat)
+{
+	bJoined = bInJoined;
+	bAgent = bInAgent;
+	ContributionAccent = InAccent;
+	FlightBeat = InFlightBeat;
 }
 
 int32 AWonderlandCompanionEmbodiment::GetPulsesInFlight() const
@@ -281,11 +285,11 @@ FVector AWonderlandCompanionEmbodiment::DesiredLocation(const APawn* Pawn) const
 	if (Contract != nullptr && Formation != EWonderlandCompanionFormation::Follow)
 	{
 		const FVector ContractAt = Contract->GetActorLocation();
-		const FWonderlandCompanionOrbit& Orbit = WonderlandCompanionOrbit();
+		const FWonderlandCompanionOrbit Orbit = WonderlandCompanionOrbitFor(Formation);
 		const UWorld* World = GetWorld();
 		const float Now = World != nullptr ? static_cast<float>(World->GetTimeSeconds()) : 0.0f;
 
-		if (Formation == EWonderlandCompanionFormation::ResearchOrbit)
+		if (WonderlandFormationOrbits(Formation))
 		{
 			// A CIRCLE ABOUT THE CONTRACT, ABOVE IT. Inside the Dog's own circle so the two read as
 			// concentric rather than as a crowd, and above the Dog's head so a companion never masks it.
@@ -480,7 +484,10 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 void AWonderlandCompanionEmbodiment::AnimatePulses(float TimeSeconds)
 {
 	const AActor* Contract = ContractActor.Get();
-	const bool bShould = Formation == EWonderlandCompanionFormation::ResearchOrbit && Contract != nullptr;
+	const FWonderlandCompanionOrbit FlightOrbit = WonderlandCompanionOrbitFor(Formation);
+	// ONLY A JOINED COMPANION CONTRIBUTES, and only in a flight that contributes. Gathering and holding clear do not.
+	const bool bShould = WonderlandFormationOrbits(Formation) && FlightOrbit.bContributes && Contract != nullptr;
+	AnimateBeam(TimeSeconds, FlightOrbit, bShould);
 	if (PulseMesh == nullptr)
 	{
 		if (!bShould)
@@ -526,6 +533,14 @@ void AWonderlandCompanionEmbodiment::AnimatePulses(float TimeSeconds)
 		PulseMesh->AddInstances(Parked, false, false, false);
 	}
 
+	// Each companion's light is its own colour -- starlight for the LLM Companion, the imported-agent cyan for the
+	// Jhinn -- so it is always readable which companion is contributing what. Set only when it changes.
+	if (PulseMid != nullptr && !AppliedPulseAccent.Equals(ContributionAccent))
+	{
+		PulseMid->SetVectorParameterValue(TEXT("Color"), ContributionAccent * 4200.0f);
+		AppliedPulseAccent = ContributionAccent;
+	}
+
 	if (!bShould)
 	{
 		// Park them rather than clearing: this branch runs every frame for the whole of a mission that is
@@ -543,7 +558,7 @@ void AWonderlandCompanionEmbodiment::AnimatePulses(float TimeSeconds)
 		return;
 	}
 
-	const FWonderlandCompanionOrbit& Orbit = WonderlandCompanionOrbit();
+	const FWonderlandCompanionOrbit& Orbit = FlightOrbit;
 	if (NextPulseAt < 0.0f)
 	{
 		// Offset by the companion's own phase so the two never fire together.
@@ -595,3 +610,71 @@ void AWonderlandCompanionEmbodiment::AnimatePulses(float TimeSeconds)
 	// One render-state touch for the whole set, after all four have moved.
 	PulseMesh->MarkRenderStateDirty();
 }
+
+void AWonderlandCompanionEmbodiment::AnimateBeam(float TimeSeconds, const FWonderlandCompanionOrbit& Orbit, bool bContributing)
+{
+	const AActor* Contract = ContractActor.Get();
+	// THE JHINN'S EXECUTION BEAM: on for a moment in each cycle while it implements or repairs, so it reads as work
+	// being delivered in bursts rather than a laser held on the crystal. The LLM Companion contributes by pulses alone.
+	const float Cycle = 2.4f;
+	const float CyclePhase = FMath::Fmod(TimeSeconds + FormationPhase * Cycle, Cycle);
+	const bool bWant = bContributing && bAgent && Orbit.bAgentBeam && Contract != nullptr && CyclePhase < 0.9f;
+	if (!bWant)
+	{
+		if (BeamMesh != nullptr && BeamMesh->IsVisible())
+		{
+			BeamMesh->SetVisibility(false);
+		}
+		bBeamOn = false;
+		return;
+	}
+	if (BeamMesh == nullptr)
+	{
+		UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, CubePath);
+		UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr, GlowParentPath);
+		if (Cube == nullptr)
+		{
+			return;
+		}
+		BeamMesh = NewObject<UStaticMeshComponent>(this, MakeUniqueObjectName(this, UStaticMeshComponent::StaticClass(), TEXT("ContributionBeam")));
+		BeamMesh->SetMobility(EComponentMobility::Movable);
+		BeamMesh->SetStaticMesh(Cube);
+		BeamMid = Parent != nullptr ? UMaterialInstanceDynamic::Create(Parent, this) : nullptr;
+		if (BeamMid != nullptr)
+		{
+			BeamMesh->SetMaterial(0, BeamMid.Get());
+		}
+		BeamMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		BeamMesh->SetGenerateOverlapEvents(false);
+		BeamMesh->SetCanEverAffectNavigation(false);
+		BeamMesh->SetCastShadow(false);
+		BeamMesh->SetAbsolute(true, true, true);
+		BeamMesh->SetupAttachment(Root);
+		BeamMesh->RegisterComponent();
+	}
+	if (BeamMid != nullptr)
+	{
+		// Brightest at the start of the burst, fading out, with a floor that still reads in daylight (x3000 and up).
+		const float Burst = 1.0f - FMath::Clamp(CyclePhase / 0.9f, 0.0f, 1.0f);
+		BeamMid->SetVectorParameterValue(TEXT("Color"), ContributionAccent * (3600.0f + 2400.0f * Burst));
+	}
+	const FVector From = GetActorLocation() + FVector(0.0, 0.0, 8.0);
+	const FVector To = Contract->GetActorLocation();
+	const FVector Span = To - From;
+	const double Length = Span.Size();
+	if (Length < 10.0)
+	{
+		BeamMesh->SetVisibility(false);
+		bBeamOn = false;
+		return;
+	}
+	// The unit cube is 100 uu and centred, so the bar sits at the midpoint, turned along the span, X-scaled to length.
+	BeamMesh->SetWorldLocationAndRotation((From + To) * 0.5, Span.Rotation());
+	BeamMesh->SetWorldScale3D(FVector(Length / 100.0, 0.045, 0.045));
+	if (!BeamMesh->IsVisible())
+	{
+		BeamMesh->SetVisibility(true);
+	}
+	bBeamOn = true;
+}
+

@@ -95,6 +95,27 @@ public:
 	/** The command rows as they read on screen, "|"-joined. */
 	FString DescribeCommandRows() const;
 
+	// ---------------------------------------------------------------- simulated execution
+	// THE TERMINAL NARRATES A SIMULATED MISSION when one runs (WonderlandMissionNarration.h). While it shows simulated
+	// rows it carries DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION above its sections, so a deterministic fixture
+	// can never be read as a paid Julius run.
+
+	/** Show or hide the simulated-execution banner. */
+	void SetSimulated(bool bInSimulated) { bSimulated = bInSimulated; }
+	bool IsSimulated() const { return bSimulated; }
+
+	/** Move one section: PROMPT ARCHITECT, CODING AGENT, INDEPENDENT REVIEWER (state and line) or JULIUS 3.3 (state). */
+	void SetSectionState(const FString& Section, const FString& State, const FString& Line);
+
+	/** A section's state as it reads now. */
+	FString GetSectionState(const FString& Section) const;
+
+	/** The newest JULIUS 3.3 headline, or empty. */
+	FString GetLatestJuliusHeadline() const { return JuliusRows.Num() > 0 ? JuliusRows.Last().Headline : FString(); }
+
+	/** A new mission: the simulated rows and section states go back to rest. */
+	void ResetSimulation();
+
 private:
 	struct FRow
 	{
@@ -106,6 +127,8 @@ private:
 
 	TSharedRef<SWidget> MakeSection(const FString& Title, const FString& State, TSharedRef<SWidget> Body);
 	TSharedRef<SWidget> MakeRestingLine(const FString& Text);
+	/** A section's line that follows SetSectionState, showing Resting until the section has been moved. */
+	TSharedRef<SWidget> MakeLiveLine(const FString& Section, const FString& Resting);
 	TSharedRef<SWidget> MakeSideList(bool bLoops);
 	void RebuildJuliusBody();
 	void HandleCommitted(const FText& Text, ETextCommit::Type CommitType);
@@ -116,6 +139,11 @@ private:
 	FOnSubmit OnSubmit;
 	FOnGetCommandLabel OnGetCommandLabel;
 	int32 CommandSlotCount = 4;
+	bool bSimulated = false;
+	TMap<FString, FString> SectionStates;
+	TMap<FString, FString> SectionLines;
+	TMap<FString, FString> RestingStates;
+	TMap<FString, FString> RestingLines;
 	TArray<TSharedPtr<STextBlock>> CommandTexts;
 
 	TSharedPtr<SEditableTextBox> Input;

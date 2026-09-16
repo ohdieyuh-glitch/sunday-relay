@@ -237,6 +237,52 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	FString GetCompanionFormation() const;
 
+	/* ------------------------------------------------------------ /join in, simulated (founder, 2026-09-16) */
+
+	/**
+	 * WHO HAS JOINED THE MISSION CONTRACT. A joined companion is an active participant: it flies about the Contract
+	 * and contributes to it while the Relay Dog performs, and its terminal narrates its part. SIMULATED -- nothing is
+	 * imported and /join in is not wired to anything; this is the participation the world will draw when it is.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
+	void SetJoinedIn(bool bLlmCompanion, bool bJhinnAgent);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	bool IsLlmCompanionJoined() const { return bLlmJoined; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	bool IsJhinnJoined() const { return bJhinnJoined; }
+
+	/**
+	 * The founder's four participation scenarios, each a full deterministic lifecycle: A Julius only, B with the LLM
+	 * Companion joined, C with the Jhinn joined, D with both. False for an unknown letter.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
+	bool RunScenario(FName ScenarioLetter, float SecondsPerEvent = 3.0f);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FName GetScenario() const { return Scenario; }
+
+	/** Companion 0 is the LLM Companion, 1 the Jhinn. Its flight, e.g. "SUPPORT ORBIT". */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString GetCompanionFlight(int32 Index) const;
+
+	/** The beat that companion's flight was chosen for. Must equal the beat its terminal last narrated. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FName GetCompanionFlightBeat(int32 Index) const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	bool IsCompanionJoined(int32 Index) const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	bool IsCompanionBeamOn(int32 Index) const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	int32 GetCompanionPulsesInFlightFor(int32 Index) const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FVector GetCompanionLocation(int32 Index) const;
+
 	/** Support pulses sent into the Contract by all companions during study. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	int32 GetCompanionPulsesSent() const;
@@ -264,6 +310,9 @@ private:
 	void TellTheDog();
 	/** Put the companions where this stage needs them, and take them back afterwards. */
 	void TellTheCompanions();
+	/** Narrate one applied event on the Julius terminal and, for joined companions, on theirs. */
+	void TellTheTerminals(FName EventType, bool bBeatChanged, bool bNewMission);
+	class AWonderlandCompanionEmbodiment* Companion(int32 Index) const;
 	AWonderlandMissionOrb* EnsureContract();
 	void DismissContract();
 	bool StepFixture(float DeltaSeconds);
@@ -289,4 +338,7 @@ private:
 	float FinishHold = 0.0f;
 	FTSTicker::FDelegateHandle PlayTicker;
 	FDelegateHandle ControllerChangedHandle;
+	bool bLlmJoined = false;
+	bool bJhinnJoined = false;
+	FName Scenario;
 };

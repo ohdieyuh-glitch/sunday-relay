@@ -143,6 +143,9 @@ def job():
 
         # ---------------------------------------------------------------- film it
         say("running full_lifecycle at %.2f s/event" % PACE)
+        # SIMULATED /JOIN IN FOR BOTH. Since the founder's 2026-09-16 direction a companion orbits and contributes only
+        # when it has joined the Mission Contract; this proof's research-orbit and sight-line checks are about joined ones.
+        mission.set_joined_in(True, True)
         mission.start_fixture("full_lifecycle", PACE)
         frames = []
         index = 0

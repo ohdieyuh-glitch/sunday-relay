@@ -22,6 +22,9 @@
 #include "RelayDogCharacter.h"
 #include "WonderlandDogPerformance.h"
 #include "WonderlandMissionFixture.h"
+#include "WonderlandMissionNarration.h"
+#include "WonderlandUiSubsystem.h"
+#include "GameFramework/WorldSettings.h"
 #include "WonderlandMissionOrb.h"
 #include "WonderlandPixelText.h"
 #include "WonderlandUiStyle.h"
@@ -137,6 +140,33 @@ namespace
 			{
 				UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION fixture %s -> %s"), *Id.ToString(),
 					Mission.StartFixture(Id, Pace) ? TEXT("running") : TEXT("NO SUCH FIXTURE"));
+			});
+		}));
+
+	FAutoConsoleCommand CmdMissionJoin(
+		TEXT("wl.Mission.Join"),
+		TEXT("Simulated /join in for the Mission Contract: `wl.Mission.Join none|llm|jhinn|both`. A joined companion flies about "
+		     "the Contract and contributes to it, and its terminal narrates its part. DEVELOPMENT PREVIEW: nothing is imported."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			const FString Who = Args.Num() > 0 ? Args[0].ToLower() : FString(TEXT("both"));
+			const bool bLlm = Who == TEXT("llm") || Who == TEXT("both");
+			const bool bJhinn = Who == TEXT("jhinn") || Who == TEXT("both");
+			ForEachMission([bLlm, bJhinn](UWonderlandMissionSubsystem& Mission) { Mission.SetJoinedIn(bLlm, bJhinn); });
+		}));
+
+	FAutoConsoleCommand CmdMissionScenario(
+		TEXT("wl.Mission.Scenario"),
+		TEXT("Play a full simulated mission with a participation scenario: `wl.Mission.Scenario D 3.0`. A Julius only; B + LLM "
+		     "Companion; C + Jhinn; D + both. No provider is called. DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			const FName Letter(Args.Num() > 0 ? *Args[0].ToUpper() : TEXT("D"));
+			const float Pace = Args.Num() > 1 ? FCString::Atof(*Args[1]) : 3.0f;
+			ForEachMission([Letter, Pace](UWonderlandMissionSubsystem& Mission)
+			{
+				UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION scenario %s -> %s"), *Letter.ToString(),
+					Mission.RunScenario(Letter, Pace) ? TEXT("running") : TEXT("NO SUCH SCENARIO"));
 			});
 		}));
 
@@ -406,7 +436,7 @@ void UWonderlandMissionSubsystem::MountStrip()
 						: FString(TEXT("no fixture"));
 					const FName MissionId = Mission->GetFoldMissionId();
 					return FText::FromString(FString::Printf(
-						TEXT("DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION   |   MISSION %s · EVENT %s (%s) · STATE %s · %s %d/%d · DOG %s%s · COMPANIONS %s   |   %s"),
+						TEXT("DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION   |   MISSION %s · EVENT %s (%s) · STATE %s · %s %d/%d · DOG %s%s · COMPANIONS %s%s   |   %s"),
 						MissionId.IsNone() ? TEXT("none") : *MissionId.ToString(),
 						Mission->GetLastEventType().IsNone() ? TEXT("-") : *Mission->GetLastEventType().ToString(),
 						*Mission->GetLastEventVerdict(),
@@ -414,6 +444,10 @@ void UWonderlandMissionSubsystem::MountStrip()
 						*Mission->GetChakraName(), Mission->GetChakraStep(), WonderlandChakraSteps,
 						*Mission->GetDogActLabel(), Mission->IsContractAnchored() ? TEXT(" · ANCHORED") : TEXT(""),
 						*Mission->GetCompanionFormation(),
+						Mission->IsLlmCompanionJoined() || Mission->IsJhinnJoined()
+							? *FString::Printf(TEXT(" · SIMULATED /JOIN IN %s"), Mission->IsLlmCompanionJoined() && Mission->IsJhinnJoined()
+								? TEXT("LLM + JHINN") : (Mission->IsLlmCompanionJoined() ? TEXT("LLM") : TEXT("JHINN")))
+							: TEXT(""),
 						*Where));
 				})
 			]
@@ -622,24 +656,121 @@ void UWonderlandMissionSubsystem::TellTheCompanions()
 		return;
 	}
 	const bool bMissionRunning = WonderlandBeatShowsContract(Beat);
-	const EWonderlandCompanionFormation Wanted = bMissionRunning
-		? WonderlandCompanionFormationForBeat(Beat)
-		: EWonderlandCompanionFormation::Follow;
 	const int32 Count = Companions->GetEmbodimentCount();
+	// Joined companions share a circle between themselves, opposite each other, so they never meet.
+	const int32 JoinedCount = (bLlmJoined ? 1 : 0) + (bJhinnJoined ? 1 : 0);
+	int32 JoinedSlot = 0;
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
-		if (AWonderlandCompanionEmbodiment* Body = Companions->GetEmbodiment(Index))
+		AWonderlandCompanionEmbodiment* Body = Companions->GetEmbodiment(Index);
+		if (Body == nullptr)
 		{
-			Body->SetFormation(Wanted, bMissionRunning ? Orb.Get() : nullptr, Index, Count);
+			continue;
 		}
+		const bool bAgent = Index == 1;
+		const bool bJoined = bMissionRunning && (bAgent ? bJhinnJoined : bLlmJoined);
+		// THE SAME BEAT, THE SAME CALL: the flight here and the line on this companion's terminal come from one beat.
+		const EWonderlandCompanionFormation Wanted = bMissionRunning
+			? WonderlandCompanionFlightForBeat(Beat, bJoined, Body->GetFormation())
+			: EWonderlandCompanionFormation::Follow;
+		const int32 Slot = bJoined ? JoinedSlot++ : Index;
+		const int32 Slots = bJoined ? FMath::Max(JoinedCount, 1) : Count;
+		Body->SetFormation(Wanted, bMissionRunning ? Orb.Get() : nullptr, Slot, Slots);
+		// Each companion's contribution is in its own colour: starlight for the LLM Companion, imported cyan for the Jhinn.
+		Body->SetParticipation(bJoined, bAgent, bAgent ? WonderlandUi::Srgb(0x5C, 0xDB, 0xFF) : WonderlandUi::Srgb(0xF4, 0xF7, 0xFF),
+			WonderlandBeatId(Beat));
 	}
 }
 
 FString UWonderlandMissionSubsystem::GetCompanionFormation() const
 {
-	return WonderlandCompanionFormationName(
-		WonderlandBeatShowsContract(Beat) ? WonderlandCompanionFormationForBeat(Beat)
-		                                  : EWonderlandCompanionFormation::Follow);
+	// The flight of the first companion taking part, or the flight every companion is in when none has joined.
+	for (int32 Index = 0; Index < 2; ++Index)
+	{
+		const AWonderlandCompanionEmbodiment* Body = Companion(Index);
+		if (Body != nullptr && Body->IsJoined())
+		{
+			return Body->GetFormationName();
+		}
+	}
+	const AWonderlandCompanionEmbodiment* Any = Companion(0);
+	return Any != nullptr ? Any->GetFormationName() : WonderlandCompanionFormationName(EWonderlandCompanionFormation::Follow);
+}
+
+AWonderlandCompanionEmbodiment* UWonderlandMissionSubsystem::Companion(int32 Index) const
+{
+	const ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
+	const UWonderlandCompanionSubsystem* Companions = Player != nullptr ? Player->GetSubsystem<UWonderlandCompanionSubsystem>() : nullptr;
+	return Companions != nullptr ? Companions->GetEmbodiment(Index) : nullptr;
+}
+
+void UWonderlandMissionSubsystem::SetJoinedIn(bool bLlmCompanion, bool bJhinnAgent)
+{
+	bLlmJoined = bLlmCompanion;
+	bJhinnJoined = bJhinnAgent;
+	UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLMISSION simulated /join in: LLM Companion %s, Jhinn %s"),
+		bLlmJoined ? TEXT("joined") : TEXT("not joined"), bJhinnJoined ? TEXT("joined") : TEXT("not joined"));
+	TellTheCompanions();
+}
+
+bool UWonderlandMissionSubsystem::RunScenario(FName ScenarioLetter, float SecondsPerEvent)
+{
+	const FString Letter = ScenarioLetter.ToString().ToUpper();
+	if (Letter != TEXT("A") && Letter != TEXT("B") && Letter != TEXT("C") && Letter != TEXT("D"))
+	{
+		return false;
+	}
+	Scenario = FName(*Letter);
+	SetJoinedIn(Letter == TEXT("B") || Letter == TEXT("D"), Letter == TEXT("C") || Letter == TEXT("D"));
+	return StartFixture(TEXT("full_lifecycle"), SecondsPerEvent);
+}
+
+FString UWonderlandMissionSubsystem::GetCompanionFlight(int32 Index) const
+{
+	const AWonderlandCompanionEmbodiment* Body = Companion(Index);
+	return Body != nullptr ? Body->GetFormationName() : FString();
+}
+
+FName UWonderlandMissionSubsystem::GetCompanionFlightBeat(int32 Index) const
+{
+	const AWonderlandCompanionEmbodiment* Body = Companion(Index);
+	return Body != nullptr ? Body->GetFlightBeat() : NAME_None;
+}
+
+bool UWonderlandMissionSubsystem::IsCompanionJoined(int32 Index) const
+{
+	const AWonderlandCompanionEmbodiment* Body = Companion(Index);
+	return Body != nullptr && Body->IsJoined();
+}
+
+bool UWonderlandMissionSubsystem::IsCompanionBeamOn(int32 Index) const
+{
+	const AWonderlandCompanionEmbodiment* Body = Companion(Index);
+	return Body != nullptr && Body->IsBeamOn();
+}
+
+int32 UWonderlandMissionSubsystem::GetCompanionPulsesInFlightFor(int32 Index) const
+{
+	const AWonderlandCompanionEmbodiment* Body = Companion(Index);
+	return Body != nullptr ? Body->GetPulsesInFlight() : 0;
+}
+
+FVector UWonderlandMissionSubsystem::GetCompanionLocation(int32 Index) const
+{
+	const AWonderlandCompanionEmbodiment* Body = Companion(Index);
+	return Body != nullptr ? Body->GetActorLocation() : FVector::ZeroVector;
+}
+
+void UWonderlandMissionSubsystem::TellTheTerminals(FName EventType, bool bBeatChanged, bool bNewMission)
+{
+	const ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
+	UWonderlandUiSubsystem* Ui = Player != nullptr ? Player->GetSubsystem<UWonderlandUiSubsystem>() : nullptr;
+	if (Ui == nullptr)
+	{
+		return;
+	}
+	Ui->NarrateMissionEvent(EventType, Beat, FString::Printf(TEXT("%s %d/%d"), *GetChakraName(), GetChakraStep(), WonderlandChakraSteps),
+		bBeatChanged, bNewMission, bLlmJoined, bJhinnJoined);
 }
 
 int32 UWonderlandMissionSubsystem::GetCompanionPulsesSent() const
@@ -807,7 +938,11 @@ void UWonderlandMissionSubsystem::OfferEvent(const FWonderlandMissionEvent& Even
 	// THE WORLD ONLY EVER SEES THE FOLD. It is never handed an event, and never decides what one means.
 	if (LastVerdict == EWonderlandEventVerdict::Applied)
 	{
+		const EWonderlandMissionBeat Before = Beat;
+		const bool bWasRunning = WonderlandBeatShowsContract(Before);
 		ShowBeat(Fold.Beat);
+		// The terminals are told in the same breath as the world, from the beat the world now shows.
+		TellTheTerminals(Event.Type, Before != Beat, !bWasRunning && WonderlandBeatShowsContract(Beat));
 	}
 }
 
@@ -816,6 +951,17 @@ bool UWonderlandMissionSubsystem::StepFixture(float DeltaSeconds)
 	if (Playing == nullptr)
 	{
 		return false;
+	}
+	// THE STORY RUNS ON THE WORLD'S CLOCK. The ticker is real time, but the Dog, the Contract and the companions
+	// animate on world time; under slow motion (a film, or a player pausing) an unscaled fixture would race ahead of
+	// the performance it drives, and terminal and world would stop telling the same story.
+	if (const APlayerController* Controller = BoundController.Get())
+	{
+		if (const UWorld* World = Controller->GetWorld())
+		{
+			const AWorldSettings* Settings = World->GetWorldSettings();
+			DeltaSeconds *= World->IsPaused() ? 0.0f : (Settings != nullptr ? Settings->GetEffectiveTimeDilation() : 1.0f);
+		}
 	}
 	PlayClock += DeltaSeconds;
 
@@ -831,6 +977,7 @@ bool UWonderlandMissionSubsystem::StepFixture(float DeltaSeconds)
 			// Back to rest, which dismisses the contract. This is one of the three beats Julius cannot
 			// emit, and the world taking itself back to idle is exactly the gap that records.
 			ShowBeat(EWonderlandMissionBeat::Idle);
+			TellTheTerminals(NAME_None, true, false);
 			StopFixture();
 		}
 		return true;

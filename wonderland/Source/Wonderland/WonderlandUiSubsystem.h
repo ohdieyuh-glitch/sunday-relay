@@ -59,6 +59,7 @@ class UWonderlandMiniMapDriver;
 class UWonderlandMissionSubsystem;
 class UWonderlandUsageHudWidget;
 class UWonderlandWalletSubsystem;
+enum class EWonderlandMissionBeat : uint8;
 enum class EWonderlandNavTarget : uint8;
 
 UCLASS()
@@ -318,6 +319,43 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
 	bool ClickWalletChip();
 
+	// ---------------------------------------------------------------- simulated mission narration (WonderlandMissionNarration.h)
+
+	/**
+	 * ONE APPLIED MISSION EVENT, told on the terminals. The Julius Live Terminal gets a row for every event and moves
+	 * the role section it names; a JOINED companion's terminal gets a line whenever the stage changes, from the same
+	 * beat its flight was just chosen from. A new mission clears the simulated logs; EventType None means the mission
+	 * has ended and the companions go back to WAITING.
+	 */
+	void NarrateMissionEvent(FName EventType, EWonderlandMissionBeat Beat, const FString& ChakraLabel, bool bBeatChanged,
+		bool bNewMission, bool bLlmJoined, bool bJhinnJoined);
+
+	/** The Julius terminal carries DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool IsJuliusTerminalSimulated() const;
+
+	/** A Julius terminal section's state as it reads: PROMPT ARCHITECT, CODING AGENT, JULIUS 3.3, INDEPENDENT REVIEWER. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString GetJuliusSectionState(const FString& Section) const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString GetJuliusLatestHeadline() const;
+
+	/** The event the Julius terminal last narrated. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FName GetJuliusNarratedEvent() const { return JuliusNarratedEvent; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString GetCompanionTerminalStatus(int32 Index) const;
+
+	/** What the companion's newest line was spoken as, e.g. RESEARCHING. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString GetCompanionTerminalActivity(int32 Index) const;
+
+	/** The beat the companion's terminal last narrated. Must equal its flight beat. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FName GetCompanionTerminalNarratedBeat(int32 Index) const;
+
 private:
 	enum class EOverlay : uint8 { None, Terminal, Map, Brain, Missions, Commands, Menu, Wallet };
 
@@ -349,6 +387,8 @@ private:
 	/** Top right, unless a long mission strip reaches into that column: then just below the strip. */
 	FMargin MiniMapOffset() const;
 	UWonderlandWalletSubsystem* Wallet() const;
+	/** The Julius Live Terminal, created once and kept -- at attach, so it can record a mission while it is closed. */
+	void EnsureLiveTerminal();
 	/**
 	 * A pointer click on one widget: hit tested in that widget's own window, routed down the path found there, and
 	 * only when the widget is really on that path. False when it is not under its own centre. The OS cursor never moves.
@@ -386,6 +426,7 @@ private:
 	TObjectPtr<UWonderlandMiniMapDriver> MiniMapDriver;
 
 	bool bPointing = false;
+	FName JuliusNarratedEvent;
 
 	/** The Project Brain hologram, imported from wonderland/UiArt at attach. A transient texture, never an asset. */
 	UPROPERTY(Transient)

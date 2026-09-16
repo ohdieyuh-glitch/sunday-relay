@@ -36,6 +36,8 @@
 #include "WonderlandUsageHudWidget.h"
 #include "WonderlandUsagePreview.h"
 #include "WonderlandWallet.h"
+#include "WonderlandMissionBeat.h"
+#include "WonderlandMissionNarration.h"
 #include "WonderlandWorldMap.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandUi, Log, All);
@@ -202,6 +204,7 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 	}
 	MountCompanionTerminals();
 	MountHudFurniture();
+	EnsureLiveTerminal();
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI attached to %s (usage HUD %s%s, %d companion terminals, mini-map and shortcuts mounted; Ctrl+T J B C Tab, M map, hold Alt to point)"),
 		*Controller->GetName(), UsageHud != nullptr ? TEXT("on screen") : TEXT("FAILED"), bPreview ? TEXT(", DEVELOPMENT PREVIEW reading") : TEXT(""),
 		CompanionTerminals.Num());
@@ -400,20 +403,7 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 	int32 ZOrder = 50;
 	if (Which == EOverlay::Terminal)
 	{
-		if (!Terminal.IsValid())
-		{
-			// Created once and kept: its log survives closing and reopening.
-			const UWonderlandCommandPresetSubsystem* CommandPresets = Presets();
-			SAssignNew(Terminal, SWonderlandLiveTerminal)
-				.CommandSlotCount(CommandPresets != nullptr ? CommandPresets->GetSlotCount() : GetDefault<UWonderlandCommandSettings>()->QuickSlotCount)
-				.OnGetCommandLabel_Lambda([WeakThis](int32 Slot)
-				{
-					const UWonderlandCommandPresetSubsystem* Source = WeakThis.IsValid() ? WeakThis->Presets() : nullptr;
-					return Source != nullptr ? Source->GetSlotLabel(Slot) : FString();
-				})
-				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
-				.OnSubmit_Lambda([WeakThis](const FString& Text) { if (WeakThis.IsValid()) { WeakThis->HandleTerminalSubmit(Text); } });
-		}
+		EnsureLiveTerminal();
 		Panel = Terminal;
 		Focus = Terminal->GetFocusTarget();
 	}
@@ -1394,5 +1384,114 @@ bool UWonderlandUiSubsystem::ClickWalletChip()
 		StopPointing(true);
 	}
 	return bClicked && IsWalletOpen();
+}
+
+/* ------------------------------------------------------------------ simulated mission narration */
+
+void UWonderlandUiSubsystem::EnsureLiveTerminal()
+{
+	if (Terminal.IsValid())
+	{
+		return;
+	}
+	// Created once and kept: its log survives closing and reopening, and a mission it narrates while closed is there
+	// when it opens.
+	const TWeakObjectPtr<UWonderlandUiSubsystem> WeakThis(this);
+	const UWonderlandCommandPresetSubsystem* CommandPresets = Presets();
+	SAssignNew(Terminal, SWonderlandLiveTerminal)
+		.CommandSlotCount(CommandPresets != nullptr ? CommandPresets->GetSlotCount() : GetDefault<UWonderlandCommandSettings>()->QuickSlotCount)
+		.OnGetCommandLabel_Lambda([WeakThis](int32 Slot)
+		{
+			const UWonderlandCommandPresetSubsystem* Source = WeakThis.IsValid() ? WeakThis->Presets() : nullptr;
+			return Source != nullptr ? Source->GetSlotLabel(Slot) : FString();
+		})
+		.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
+		.OnSubmit_Lambda([WeakThis](const FString& Text) { if (WeakThis.IsValid()) { WeakThis->HandleTerminalSubmit(Text); } });
+}
+
+void UWonderlandUiSubsystem::NarrateMissionEvent(FName EventType, EWonderlandMissionBeat Beat, const FString& ChakraLabel,
+	bool bBeatChanged, bool bNewMission, bool bLlmJoined, bool bJhinnJoined)
+{
+	EnsureLiveTerminal();
+	const bool bEnded = EventType.IsNone();
+
+	// ---- Julius: a row for every event, and the role section it moves
+	if (Terminal.IsValid() && !bEnded)
+	{
+		if (bNewMission)
+		{
+			Terminal->ResetSimulation();
+		}
+		Terminal->SetSimulated(true);
+		const FWonderlandJuliusNarration Julius = WonderlandJuliusNarrationForEvent(EventType);
+		if (*Julius.Section != 0)
+		{
+			Terminal->SetSectionState(Julius.Section, Julius.SectionState, Julius.SectionLine);
+		}
+		Terminal->SetSectionState(TEXT("JULIUS 3.3"), Julius.JuliusState, FString());
+		Terminal->AddJuliusRow(TEXT("Julius"), Julius.Headline,
+			FString::Printf(TEXT("event %s  \u00B7  %s  \u00B7  simulated, no provider called"), *EventType.ToString(), *ChakraLabel));
+		JuliusNarratedEvent = EventType;
+	}
+
+	// ---- the companions: only a joined one takes part, and it speaks when the stage changes
+	for (int32 Index = 0; Index < CompanionTerminals.Num(); ++Index)
+	{
+		const TSharedPtr<SWonderlandCompanionTerminal>& Panel = CompanionTerminals[Index];
+		if (!Panel.IsValid())
+		{
+			continue;
+		}
+		const bool bAgent = Index == 1;
+		const bool bJoined = bAgent ? bJhinnJoined : bLlmJoined;
+		if (bNewMission)
+		{
+			Panel->ClearLines();
+		}
+		if (bEnded || !bJoined)
+		{
+			// Not joined, or the mission is over: it waits, and what it contributed stays in its log.
+			Panel->SetStatus(TEXT("WAITING"));
+			continue;
+		}
+		Panel->SetStatus(Beat == EWonderlandMissionBeat::CompleteVerified ? TEXT("JOINED \u00B7 DONE") : TEXT("ACTIVE \u00B7 JOINED"));
+		if (bBeatChanged || bNewMission)
+		{
+			const FWonderlandCompanionNarration Line = WonderlandCompanionNarrationForBeat(Beat,
+				bAgent ? EWonderlandCompanionKind::JhinnAgent : EWonderlandCompanionKind::LlmCompanion);
+			Panel->AddLine(Line.Activity, Line.Line, false);
+			Panel->NoteNarration(Line.Activity, WonderlandBeatId(Beat));
+		}
+	}
+}
+
+bool UWonderlandUiSubsystem::IsJuliusTerminalSimulated() const
+{
+	return Terminal.IsValid() && Terminal->IsSimulated();
+}
+
+FString UWonderlandUiSubsystem::GetJuliusSectionState(const FString& Section) const
+{
+	return Terminal.IsValid() ? Terminal->GetSectionState(Section) : FString();
+}
+
+FString UWonderlandUiSubsystem::GetJuliusLatestHeadline() const
+{
+	return Terminal.IsValid() ? Terminal->GetLatestJuliusHeadline() : FString();
+}
+
+FString UWonderlandUiSubsystem::GetCompanionTerminalStatus(int32 Index) const
+{
+	return CompanionTerminals.IsValidIndex(Index) && CompanionTerminals[Index].IsValid() ? CompanionTerminals[Index]->GetStatus() : FString();
+}
+
+FString UWonderlandUiSubsystem::GetCompanionTerminalActivity(int32 Index) const
+{
+	return CompanionTerminals.IsValidIndex(Index) && CompanionTerminals[Index].IsValid() ? CompanionTerminals[Index]->GetLatestActivity() : FString();
+}
+
+FName UWonderlandUiSubsystem::GetCompanionTerminalNarratedBeat(int32 Index) const
+{
+	return CompanionTerminals.IsValidIndex(Index) && CompanionTerminals[Index].IsValid() ? CompanionTerminals[Index]->GetNarratedBeat() : NAME_None;
 }
 

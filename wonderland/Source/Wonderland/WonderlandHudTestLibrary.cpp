@@ -1,6 +1,14 @@
 #include "WonderlandHudTestLibrary.h"
 
 #include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
+#include "Framework/Application/SlateApplication.h"
+#include "HAL/FileManager.h"
+#include "ImageCore.h"
+#include "ImageUtils.h"
+#include "Misc/Paths.h"
+#include "Slate/SGameLayerManager.h"
+#include "Widgets/SViewport.h"
 
 #if WITH_EDITOR
 #include "Editor/EditorEngine.h"
@@ -34,3 +42,47 @@ bool UWonderlandHudTestLibrary::RequestPlayInNewWindow(int32 Width, int32 Height
 	return false;
 #endif
 }
+
+bool UWonderlandHudTestLibrary::CaptureViewportJpeg(const FString& FilePath, int32 Width, int32 Quality)
+{
+	if (!FSlateApplication::IsInitialized() || GEngine == nullptr || GEngine->GameViewport == nullptr || FilePath.IsEmpty())
+	{
+		return false;
+	}
+	// The game layer holds the scene AND every widget over it, which is what a person watching sees.
+	TSharedPtr<SWidget> Target;
+	if (TSharedPtr<IGameLayerManager> Layers = GEngine->GameViewport->GetGameLayerManager())
+	{
+		Target = StaticCastSharedPtr<SGameLayerManager>(Layers);
+	}
+	if (!Target.IsValid())
+	{
+		Target = GEngine->GameViewport->GetGameViewportWidget();
+	}
+	if (!Target.IsValid())
+	{
+		return false;
+	}
+	TArray<FColor> Pixels;
+	FIntVector Size;
+	if (!FSlateApplication::Get().TakeScreenshot(Target.ToSharedRef(), Pixels, Size) || Size.X <= 0 || Size.Y <= 0
+		|| Pixels.Num() != Size.X * Size.Y)
+	{
+		return false;
+	}
+	for (FColor& Pixel : Pixels)
+	{
+		Pixel.A = 255;
+	}
+	IFileManager::Get().MakeDirectory(*FPaths::GetPath(FilePath), true);
+	const FImageView View(Pixels.GetData(), Size.X, Size.Y);
+	if (Width > 0 && Width < Size.X)
+	{
+		FImage Scaled;
+		const int32 Height = FMath::Max(1, FMath::RoundToInt(static_cast<double>(Size.Y) * Width / Size.X));
+		FImageCore::ResizeTo(View, Scaled, Width, Height, ERawImageFormat::BGRA8, EGammaSpace::sRGB);
+		return FImageUtils::SaveImageByExtension(*FilePath, Scaled, FMath::Clamp(Quality, 1, 100));
+	}
+	return FImageUtils::SaveImageByExtension(*FilePath, View, FMath::Clamp(Quality, 1, 100));
+}
+

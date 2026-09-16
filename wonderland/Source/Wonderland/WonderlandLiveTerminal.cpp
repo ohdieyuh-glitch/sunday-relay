@@ -114,17 +114,28 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 		[
 			SNew(SVerticalBox)
 			+ SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(2.0f, 0.0f, 0.0f, 4.0f)
+			[
+				// Never a paid run by accident: while simulated rows are showing, the terminal says so first.
+				SNew(STextBlock)
+				.Visibility_Lambda([this]() { return bSimulated ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+				.Text(FText::FromString(TEXT("DEVELOPMENT PREVIEW \u00B7 SIMULATED JULIUS EXECUTION")))
+				.Font(WonderlandUi::Sans(8, true, 140))
+				.ColorAndOpacity(WonderlandUi::Coral())
+			]
+			+ SVerticalBox::Slot()
 			.FillHeight(1.0f)
 			[
 				SNew(SScrollBox)
 				.ScrollBarVisibility(EVisibility::Collapsed)
 				+ SScrollBox::Slot().Padding(0.0f, 0.0f, 0.0f, 5.0f)
 				[
-					MakeSection(TEXT("PROMPT ARCHITECT"), TEXT("WAITING"), MakeRestingLine(TEXT("No activity yet.")))
+					MakeSection(TEXT("PROMPT ARCHITECT"), TEXT("WAITING"), MakeLiveLine(TEXT("PROMPT ARCHITECT"), TEXT("No activity yet.")))
 				]
 				+ SScrollBox::Slot().Padding(0.0f, 0.0f, 0.0f, 5.0f)
 				[
-					MakeSection(TEXT("CODING AGENT"), TEXT("WAITING"), MakeRestingLine(TEXT("No activity yet.")))
+					MakeSection(TEXT("CODING AGENT"), TEXT("WAITING"), MakeLiveLine(TEXT("CODING AGENT"), TEXT("No activity yet.")))
 				]
 				+ SScrollBox::Slot().Padding(0.0f, 0.0f, 0.0f, 5.0f)
 				[
@@ -133,7 +144,7 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 				+ SScrollBox::Slot()
 				[
 					MakeSection(TEXT("INDEPENDENT REVIEWER"), TEXT("WAITING"),
-						MakeRestingLine(TEXT("Reviewer: Independent review begins after Julius verification.")))
+						MakeLiveLine(TEXT("INDEPENDENT REVIEWER"), TEXT("Reviewer: Independent review begins after Julius verification.")))
 				]
 			]
 			+ SVerticalBox::Slot()
@@ -199,6 +210,8 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 
 TSharedRef<SWidget> SWonderlandLiveTerminal::MakeSection(const FString& Title, const FString& State, TSharedRef<SWidget> Body)
 {
+	RestingStates.Add(Title, State);
+	const auto StateNow = [this, Title]() { return GetSectionState(Title); };
 	return SNew(SBorder)
 		.BorderImage(&SectionBrush)
 		.Padding(FMargin(9.0f, 5.0f))
@@ -233,7 +246,7 @@ TSharedRef<SWidget> SWonderlandLiveTerminal::MakeSection(const FString& Title, c
 				.Padding(8.0f, 0.0f, 0.0f, 0.0f)
 				[
 					SNew(STextBlock)
-					.Text(FText::FromString(FString::Printf(TEXT("[%s]"), *State)))
+					.Text_Lambda([StateNow]() { return FText::FromString(FString::Printf(TEXT("[%s]"), *StateNow())); })
 					.Font(WonderlandUi::Mono(9))
 					.ColorAndOpacity(WonderlandUi::Cream())
 				]
@@ -244,9 +257,19 @@ TSharedRef<SWidget> SWonderlandLiveTerminal::MakeSection(const FString& Title, c
 				.VAlign(VAlign_Center)
 				[
 					SNew(STextBlock)
-					.Text(FText::FromString(State))
+					.Text_Lambda([StateNow]() { return FText::FromString(StateNow()); })
 					.Font(WonderlandUi::Sans(9, true, 120))
-					.ColorAndOpacity(WonderlandUi::Gold())
+					// Bright while a role is working, sage when it has finished, the resting gold otherwise.
+					.ColorAndOpacity_Lambda([StateNow]()
+					{
+						const FString Now = StateNow();
+						if (Now == TEXT("DONE") || Now == TEXT("COMPLETE") || Now == TEXT("VERIFIED"))
+						{
+							return FSlateColor(WonderlandUi::Sage());
+						}
+						const bool bResting = Now == TEXT("WAITING") || Now == TEXT("STANDBY");
+						return FSlateColor(bResting ? WonderlandUi::Gold(0.55f) : WonderlandUi::Gold());
+					})
 				]
 			]
 			+ SVerticalBox::Slot()
@@ -490,3 +513,51 @@ FString SWonderlandLiveTerminal::DescribeCommandRows() const
 	}
 	return FString::Join(Parts, TEXT("|"));
 }
+
+TSharedRef<SWidget> SWonderlandLiveTerminal::MakeLiveLine(const FString& Section, const FString& Resting)
+{
+	RestingLines.Add(Section, Resting);
+	return SNew(STextBlock)
+		.Text_Lambda([this, Section, Resting]()
+		{
+			const FString* Line = SectionLines.Find(Section);
+			return FText::FromString(Line != nullptr ? *Line : Resting);
+		})
+		.Font(WonderlandUi::Mono(9))
+		.ColorAndOpacity_Lambda([this, Section]()
+		{
+			return FSlateColor(SectionLines.Contains(Section) ? WonderlandUi::Cream() : WonderlandUi::Dim());
+		})
+		.OverflowPolicy(ETextOverflowPolicy::Ellipsis);
+}
+
+void SWonderlandLiveTerminal::SetSectionState(const FString& Section, const FString& State, const FString& Line)
+{
+	if (!State.IsEmpty())
+	{
+		SectionStates.Add(Section, State);
+	}
+	if (!Line.IsEmpty())
+	{
+		SectionLines.Add(Section, Line);
+	}
+}
+
+FString SWonderlandLiveTerminal::GetSectionState(const FString& Section) const
+{
+	if (const FString* Live = SectionStates.Find(Section))
+	{
+		return *Live;
+	}
+	const FString* Resting = RestingStates.Find(Section);
+	return Resting != nullptr ? *Resting : FString();
+}
+
+void SWonderlandLiveTerminal::ResetSimulation()
+{
+	SectionStates.Reset();
+	SectionLines.Reset();
+	JuliusRows.Reset();
+	RebuildJuliusBody();
+}
+
