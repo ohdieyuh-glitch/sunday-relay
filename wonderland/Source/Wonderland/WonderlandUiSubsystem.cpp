@@ -14,6 +14,7 @@
 #include "Misc/Paths.h"
 #include "GenericPlatform/GenericApplication.h"
 #include "Input/Events.h"
+#include "Input/HittestGrid.h"
 #include "Framework/Application/SlateUser.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Layout/SBox.h"
@@ -37,6 +38,25 @@
 #include "WonderlandWorldMap.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandUi, Log, All);
+
+// Named, not anonymous: the module is one unity translation unit (see WonderlandCompanionHud.cpp).
+namespace WonderlandUiHitTest
+{
+	/**
+	 * What Slate finds at a desktop point inside ONE window, through that window's own hit-test grid -- what
+	 * FSlateApplication::LocateWidgetInWindow does, which is protected. Used so a test click cannot be taken by an
+	 * unrelated editor window the scripted editor happens to rank above the game at the same coordinates.
+	 */
+	FWidgetPath PathInWindow(const TSharedRef<SWindow>& Window, const FVector2D& At, int32 UserIndex)
+	{
+		if (!Window->IsVisible() || !Window->IsScreenspaceMouseWithin(At))
+		{
+			return FWidgetPath();
+		}
+		TArray<FWidgetAndPointer> Hits = Window->GetHittestGrid().GetBubblePath(At, 0.0f, false, UserIndex);
+		return FWidgetPath(MakeArrayView(Hits));
+	}
+}
 
 namespace
 {
@@ -929,16 +949,38 @@ bool UWonderlandUiSubsystem::ClickNavButton(FName ShortcutId)
 	TSet<FKey> Held;
 	Held.Add(EKeys::LeftMouseButton);
 
-	// Travel there, press, release: the three events a hand produces, through the application's own routing. The
-	// OS cursor is NOT moved -- Slate hit tests the event's own position, and a test has no business dragging the
-	// founder's real mouse across the screen. The first version did.
-	const bool bMoved = App.ProcessMouseMoveEvent(FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, None, EKeys::Invalid, 0.0f, FModifierKeysState()));
-	const bool bDown = App.ProcessMouseButtonDownEvent(nullptr, FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, Held, EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
-	const bool bUp = App.ProcessMouseButtonUpEvent(FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, None, EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
+	// HIT TESTED IN THE WINDOW THE STRIP LIVES IN. The first two versions sent the events through the application's
+	// window search, and DiagnoseNavClick showed where they went: at the tile's desktop coordinates the scripted
+	// editor ranks its CONTENT BROWSER window above the PIE viewport, so a 47-deep path of asset tiles took every
+	// click and the strip never saw one. That is the editor's window stacking, not the HUD. So the search is confined
+	// to the strip's own window -- still a real hit test, which a covered or invisible tile would fail -- and the
+	// press and release are routed down the path it finds, exactly as the application routes a hand's click.
+	// The OS cursor is never moved: a test has no business dragging the founder's real mouse across the screen.
+	const TSharedPtr<SWindow> Window = App.FindWidgetWindow(NavBar.ToSharedRef());
+	const TSharedPtr<SButton> Tile = NavBar->GetTileButton(ShortcutId);
+	if (!Window.IsValid() || !Tile.IsValid())
+	{
+		StopPointing(true);
+		return false;
+	}
+	const FWidgetPath Path = WonderlandUiHitTest::PathInWindow(Window.ToSharedRef(), Centre, App.GetUserIndexForMouse());
+	bool bTileUnderPoint = false;
+	for (int32 Index = 0; Index < Path.Widgets.Num(); ++Index)
+	{
+		bTileUnderPoint |= Path.Widgets[Index].Widget == Tile.ToSharedRef();
+	}
+	bool bDown = false;
+	bool bUp = false;
+	if (bTileUnderPoint)
+	{
+		App.RoutePointerMoveEvent(Path, FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, None, EKeys::Invalid, 0.0f, FModifierKeysState()), false);
+		bDown = App.RoutePointerDownEvent(Path, FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, Held, EKeys::LeftMouseButton, 0.0f, FModifierKeysState())).IsEventHandled();
+		bUp = App.RoutePointerUpEvent(Path, FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, None, EKeys::LeftMouseButton, 0.0f, FModifierKeysState())).IsEventHandled();
+	}
 
 	const bool bClicked = NavBar->GetClickCount(ShortcutId) > Before;
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI pointer click on %s at (%.0f, %.0f): %s (move %d, down %d, up %d)"), *ShortcutId.ToString(), Centre.X, Centre.Y,
-		bClicked ? TEXT("the tile answered") : TEXT("nothing answered"), bMoved ? 1 : 0, bDown ? 1 : 0, bUp ? 1 : 0);
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI pointer click on %s at (%.0f, %.0f): %s (tile under the point %d, down %d, up %d)"), *ShortcutId.ToString(), Centre.X, Centre.Y,
+		bClicked ? TEXT("the tile answered") : TEXT("nothing answered"), bTileUnderPoint ? 1 : 0, bDown ? 1 : 0, bUp ? 1 : 0);
 	if (!bClicked)
 	{
 		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI click diagnosis:\n%s"), *DiagnoseNavClick(ShortcutId));
@@ -989,6 +1031,24 @@ FString UWonderlandUiSubsystem::DiagnoseNavClick(FName ShortcutId)
 		Lines.Add(FString::Printf(TEXT("path_leaf %s"), *FString::Join(TArray<FString>(Types.GetData() + First, Types.Num() - First), TEXT(" > "))));
 		Lines.Add(FString::Printf(TEXT("tile_in_path %d"), bTileInPath ? 1 : 0));
 		Lines.Add(FString::Printf(TEXT("window %s"), Path.IsValid() ? *Path.GetWindow()->GetTitle().ToString() : TEXT("-")));
+
+		// And the same point searched only in the strip's own window: what a click routed there would reach.
+		const TSharedPtr<SWindow> Own = App.FindWidgetWindow(NavBar.ToSharedRef());
+		if (Own.IsValid())
+		{
+			const FWidgetPath OwnPath = WonderlandUiHitTest::PathInWindow(Own.ToSharedRef(), Centre, App.GetUserIndexForMouse());
+			bool bTileInOwn = false;
+			TArray<FString> OwnTypes;
+			for (int32 Index = 0; Index < OwnPath.Widgets.Num(); ++Index)
+			{
+				bTileInOwn |= Tile.IsValid() && OwnPath.Widgets[Index].Widget == Tile.ToSharedRef();
+				OwnTypes.Add(OwnPath.Widgets[Index].Widget->GetTypeAsString());
+			}
+			const int32 OwnFirst = FMath::Max(0, OwnTypes.Num() - 8);
+			Lines.Add(FString::Printf(TEXT("own_window %s"), *Own->GetTitle().ToString()));
+			Lines.Add(FString::Printf(TEXT("own_path_leaf %s"), *FString::Join(TArray<FString>(OwnTypes.GetData() + OwnFirst, OwnTypes.Num() - OwnFirst), TEXT(" > "))));
+			Lines.Add(FString::Printf(TEXT("tile_in_own_window_path %d"), bTileInOwn ? 1 : 0));
+		}
 	}
 	return FString::Join(Lines, TEXT("\n"));
 }

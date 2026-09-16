@@ -296,7 +296,12 @@ def job():
         record("H12", "every shortcut key shown on a tile opens its panel", all(keyed.values()), **keyed)
 
         # ------------------------------------------------------------ cost
-        def frame_ms(seconds):
+        # ALTERNATING WINDOWS, NOT ONE ON AND ONE OFF. This laptop drifts several milliseconds a minute as it warms
+        # (measured by the world lane, 2026-09-16), so a single on-then-off pair measures the room temperature. Each
+        # on-window is compared with the mean of the off-windows either side of it.
+        def frame_ms(capture_on, seconds=2.5):
+            unreal.SystemLibrary.execute_console_command(world, "wl.MiniMap.Capture %d" % (1 if capture_on else 0))
+            yield 0.6
             samples = []
             t = 0.0
             while t < seconds:
@@ -304,18 +309,24 @@ def job():
                 samples.append(unreal.GameplayStatics.get_world_delta_seconds(world) * 1000.0)
                 t += 0.05
             samples.sort()
-            RESULT.setdefault("_ms", []).append(samples[len(samples) // 2] if samples else None)
+            RESULT.setdefault("_windows", []).append((capture_on, samples[len(samples) // 2]))
 
         L.focus_game_viewport()
-        yield from frame_ms(3.0)
-        unreal.SystemLibrary.execute_console_command(world, "wl.MiniMap.Capture 0")
-        yield 0.5
-        yield from frame_ms(3.0)
+        for on in (False, True, False, True, False, True, False):
+            yield from frame_ms(on)
         unreal.SystemLibrary.execute_console_command(world, "wl.MiniMap.Capture 1")
-        on_ms, off_ms = RESULT["_ms"]
-        RESULT["cost"] = {"median_frame_ms_with_capture": round(on_ms, 2), "median_frame_ms_without": round(off_ms, 2),
-                          "difference_ms": round(on_ms - off_ms, 2)}
-        record("H13", "the live photograph costs little", on_ms - off_ms < 2.5, **RESULT["cost"])
+        windows = RESULT.pop("_windows")
+        deltas = []
+        for i, (on, ms) in enumerate(windows):
+            if on:
+                deltas.append(ms - (windows[i - 1][1] + windows[i + 1][1]) / 2.0)
+        noise = [abs(windows[i + 2][1] - windows[i][1]) for i in range(0, len(windows) - 2, 2)]
+        RESULT["cost"] = {"windows_median_ms": [[bool(on), round(ms, 2)] for on, ms in windows],
+                          "capture_minus_neighbours_ms": [round(d, 2) for d in deltas],
+                          "mean_cost_ms": round(sum(deltas) / len(deltas), 2),
+                          "off_to_off_drift_ms": [round(n, 2) for n in noise]}
+        record("H13", "the live photograph costs no more than the noise between two windows with it off",
+               RESULT["cost"]["mean_cost_ms"] < max(1.5, max(noise)), **RESULT["cost"])
 
         RESULT["passed"] = sum(1 for t in tests if t["pass"])
         RESULT["failed"] = [t["id"] for t in tests if not t["pass"]]
