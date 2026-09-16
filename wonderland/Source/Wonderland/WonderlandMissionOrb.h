@@ -110,15 +110,23 @@ public:
 	/**
 	 * Where it hangs, in the pawn's yaw frame: X forward, Y right, uu.
 	 *
-	 * MEASURED FROM THE PLAY CAMERA, 2026-09-15. Forward-and-right is the one clear lane: the Dog's own
-	 * body eats anything near its centre line, and the LLM Companion floats at Y=-88 and hides the left.
+	 * MEASURED FROM THE PLAY CAMERA TWICE, and the second answer is not the first.
+	 *
+	 * (125, 80) was measured for a DAIS ON THE FLAGSTONES, where the only thing that could hide it was the
+	 * Dog's own back leg. A floating contract has different neighbours: at 122 uu it hangs at the Jhinn's
+	 * chest, and the Jhinn stands at Y=+110, so the ground answer put a crystal inside a companion.
+	 *
+	 * Eight placements were trialled in the air and looked at. Forward-and-right wins because it is the
+	 * only one that clears BOTH companions -- high_right and wide_right_high pass straight through the
+	 * Jhinn's crown, and the old ground placement overlaps its tail. Out in front, the crystal is
+	 * silhouetted against the garden instead of against something else that glows.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	FVector FollowOffset = FVector(125.0, 80.0, 0.0);
+	FVector FollowOffset = FVector(210.0, 60.0, 0.0);
 
-	/** Height of the crystal's heart above the floor, uu. Clearly airborne, near the Dog's eyeline. */
+	/** Height of the crystal's heart above the floor, uu. Above the companions rather than among them. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	float FloatHeightUU = 122.0f;
+	float FloatHeightUU = 135.0f;
 
 	/** Half-height of the crystal, uu: the distance from its heart to the tip of a pyramid. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
@@ -128,9 +136,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
 	float CrystalHalfWidthUU = 15.0f;
 
-	/** Uniform scale over the whole contract. */
+	/**
+	 * Uniform scale over the whole contract. 1.35 puts it at about 170 px from the play camera at the
+	 * measured distance -- readable as a cut stone rather than a spark, and well short of competing with
+	 * the Dog or the companions for the eye.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
-	float BuiltScale = 1.0f;
+	float BuiltScale = 1.35f;
 
 	/** Time constant of the follow, seconds. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
