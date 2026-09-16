@@ -22,10 +22,23 @@ L = unreal.WonderlandUiTestLibrary
 H = unreal.WonderlandHudTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "mission_experience")
 SCENARIOS = globals().get("SCENARIOS") or ["D", "A", "B", "C"]
-PACE = float(globals().get("PACE") or 3.0)          # world seconds per mission event
+PACE = float(globals().get("PACE") or 4.0)          # world seconds per mission event
 SLOMO = float(globals().get("SLOMO") or 0.5)        # world time dilation while filming
-MINIMAP_MODE = int(globals().get("MINIMAP_MODE") or 4)
+# None films the mini-map exactly as the build draws it. The first film forced the fan path, which hid the fact that
+# the default path still drew a white disc.
+MINIMAP_MODE = globals().get("MINIMAP_MODE")
 FRAME_WIDTH = 1280
+# THE FILM CAMERA. The stock arm (anything longer slides into Wonderland's collision-free scenery -- see
+# zc_joint_proof J15) turned toward the MIDPOINT of the Dog and the Contract, so the camera stands outside the
+# Dog's circle and sees it side-on as it walks round, with the Contract and the companions above it in frame.
+# Straight behind the Dog, the first film saw a white back, no book, and only the companions' feet at the top edge.
+CAMERA_ARM = 440.0
+CAMERA_PITCH = -12.0
+DOG_ACT = {
+    "mission_start": "MISSION START", "researching": "PLANNING", "prompt_architect": "PLANNING", "guidance": "PLANNING",
+    "coding_agent": "IMPLEMENTING", "verifying": "VERIFYING", "independent_reviewer": "REVIEW",
+    "review_challenge": "REVIEW", "repair_required": "REPAIR", "repairing": "REPAIR",
+}
 
 STAGE_FLIGHT = {
     "mission_start": "GATHER", "researching": "RESEARCH ORBIT", "prompt_architect": "RESEARCH ORBIT",
@@ -65,11 +78,21 @@ def job():
         ui = L.get_ui(world)
         live = [m for m in unreal.ObjectIterator(unreal.WonderlandMissionSubsystem) if m.is_mission_strip_on_screen()]
         mission = live[0] if live else None
-        for cmd in ("t.MaxFPS 0", "Slate.bAllowThrottling 0", "r.VSync 0", "wl.MiniMap.DrawMode %d" % MINIMAP_MODE):
+        cmds = ["t.MaxFPS 0", "Slate.bAllowThrottling 0", "r.VSync 0"]
+        if MINIMAP_MODE is not None:
+            cmds.append("wl.MiniMap.DrawMode %d" % int(MINIMAP_MODE))
+        for cmd in cmds:
             console(world, cmd)
+        RESULT["minimap_draw_mode"] = MINIMAP_MODE if MINIMAP_MODE is not None else "build default"
         scene = list(pawn.get_components_by_class(unreal.SceneComponent))
         beam = next((c for c in scene if c.get_name().startswith("VerificationBeam")), None)
-        book = next((c for c in scene if c.get_name().startswith("MissionBook")), None)
+        book = next((c for c in scene if c.get_name() == "MissionBook" or c.get_name().startswith("MissionBook_")), None)
+        leaf = next((c for c in scene if c.get_name().startswith("MissionBookTurningPage")), None)
+        boom = pawn.get_component_by_class(unreal.SpringArmComponent)
+        arm_was = float(boom.target_arm_length) if boom is not None else None
+        if boom is not None:
+            boom.set_editor_property("target_arm_length", CAMERA_ARM)
+        RESULT["camera"] = {"arm": CAMERA_ARM, "arm_was": arm_was, "pitch": CAMERA_PITCH}
         L.focus_game_viewport()
         yield 1.0
 
@@ -91,16 +114,23 @@ def job():
             console(world, "slomo %.3f" % SLOMO)
             started = mission.run_scenario(letter, PACE)
             yaw = controller.get_control_rotation().yaw
+            aim = None
             frames = []
             index = 0
             finished_at = None
             while index < 6000:
-                # A FOLLOWING CAMERA THAT KEEPS THE WORK IN SHOT: behind the Dog, turned gently toward the Contract.
+                # A FOLLOWING CAMERA THAT KEEPS THE WORK IN SHOT: turned gently toward the middle of the Dog and the
+                # Contract, so both -- and the companions circling above -- stay in frame as the Dog walks its ring.
+                dog_at = pawn.get_actor_location()
                 if mission.is_orb_in_world():
-                    want = unreal.MathLibrary.find_look_at_rotation(pawn.get_actor_location(), mission.get_orb_location()).yaw
+                    orb_at = mission.get_orb_location()
+                    mid = unreal.Vector((dog_at.x + orb_at.x) * 0.5, (dog_at.y + orb_at.y) * 0.5, dog_at.z)
+                    aim = mid if aim is None else unreal.Vector(aim.x + (mid.x - aim.x) * 0.08, aim.y + (mid.y - aim.y) * 0.08, mid.z)
+                if aim is not None and math.hypot(aim.x - dog_at.x, aim.y - dog_at.y) > 20.0:
+                    want = unreal.MathLibrary.find_look_at_rotation(dog_at, aim).yaw
                     delta = (want - yaw + 180.0) % 360.0 - 180.0
-                    yaw += delta * 0.06
-                controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=-15.0, yaw=yaw))
+                    yaw += delta * 0.08
+                controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=CAMERA_PITCH, yaw=yaw))
 
                 path = os.path.join(folder, "f_%05d.jpg" % index)
                 ok = H.capture_viewport_jpeg(path, FRAME_WIDTH, 86)
@@ -115,6 +145,8 @@ def job():
                     "progress": mission.get_fixture_progress(),
                     "dog_beam": bool(beam.is_visible()) if beam is not None else None,
                     "book": bool(book.is_visible()) if book is not None else None,
+                    "page_turning": bool(leaf.is_visible()) if leaf is not None else None,
+                    "dog_z": round(pawn.get_actor_location().z, 1),
                     "julius": {"simulated": bool(ui.is_julius_terminal_simulated()),
                                "event": str(ui.get_julius_narrated_event()),
                                "headline": str(ui.get_julius_latest_headline()),
@@ -156,6 +188,8 @@ def job():
             RESULT["scenarios"][letter] = judge(letter, frames, started, record)
             yield 0.5
 
+        if boom is not None and arm_was is not None:
+            boom.set_editor_property("target_arm_length", arm_was)
         RESULT["passed"] = sum(1 for t in tests if t["pass"])
         RESULT["failed"] = [t["id"] for t in tests if not t["pass"]]
         RESULT["status"] = "done"
@@ -271,6 +305,61 @@ def judge(letter, frames, started, record):
            status_ok and all("ACTIVE" in v for v in roles_seen.values()),
            roles_seen=roles_seen,
            activities=[sorted({f["companions"][c]["activity"] for f in mission_frames}) for c in (0, 1)])
+    # --- THE DOG REALLY CIRCLES while it reads. The first film's Dog read on one spot for the whole mission: an
+    # open terminal made the controller ignore move input, and the orbit's input was dropped with the player's.
+    reading = [f for f in mission_frames if f["beat"] in ("researching", "prompt_architect", "guidance") and f["orb"]]
+    swept = 0.0
+    for a, b in zip(reading, reading[1:]):
+        if b["i"] != a["i"] + 1:
+            continue
+        a1 = math.atan2(a["pawn"][1] - a["orb"][1], a["pawn"][0] - a["orb"][0])
+        a2 = math.atan2(b["pawn"][1] - b["orb"][1], b["pawn"][0] - b["orb"][0])
+        swept += abs((math.degrees(a2 - a1) + 180.0) % 360.0 - 180.0)
+    record(letter + "09", "the Dog walks its circle round the Contract while it reads, and pages turn in its hands",
+           swept >= 90.0 and sum(1 for f in reading if f.get("page_turning")) > 0
+           and sum(1 for f in reading if f.get("page_turning") is False) > 0,
+           swept_deg=round(swept, 1), reading_frames=len(reading),
+           page_turning_frames=sum(1 for f in reading if f.get("page_turning")))
+
+    # --- THE DOG PERFORMS THE WORLD'S STAGE: its act names the beat, allowing the half-second cross-fade.
+    wrong_act = []
+    last_beat, since = None, 0
+    for f in mission_frames:
+        since = since + 1 if f["beat"] == last_beat else 0
+        last_beat = f["beat"]
+        want = DOG_ACT.get(f["beat"])
+        if want is not None and since > 8 and f["dog"] != want:
+            wrong_act.append([f["i"], f["beat"], f["dog"]])
+    record(letter + "10", "the Dog's performance is the stage the terminals name", not wrong_act, wrong=wrong_act[:10])
+
+    # --- NOBODY MEETS: companions apart from each other on EVERY frame (transitions included), and a joined
+    # companion never inside the Dog's space.
+    pair_gaps, dog_gaps = [], []
+    for f in frames:
+        a, b = f["companions"][0], f["companions"][1]
+        pair_gaps.append(math.dist(a["at"], b["at"]))
+        for c, comp in enumerate(f["companions"]):
+            if joined_expected[c] and f["contract"] and comp["flight"] in CONTRIBUTING and f.get("dog_z") is not None:
+                dx = comp["at"][0] - f["pawn"][0]
+                dy = comp["at"][1] - f["pawn"][1]
+                # The figure origin is its lowest point; the Dog is about 180 uu tall about its capsule centre.
+                if comp["at"][2] < f["dog_z"] + 120.0:
+                    dog_gaps.append(math.hypot(dx, dy))
+    record(letter + "11", "companions never come within 150 uu of each other, nor into the Dog's space",
+           min(pair_gaps) >= 150.0 and (not dog_gaps or min(dog_gaps) >= 110.0),
+           closest_pair_uu=round(min(pair_gaps), 1), closest_to_dog_uu=round(min(dog_gaps), 1) if dog_gaps else None)
+
+    # --- A COMPANION THAT HAS NOT JOINED SAYS NOTHING, and after completion nobody contributes.
+    silent = []
+    for f in mission_frames:
+        for c, comp in enumerate(f["companions"]):
+            if not joined_expected[c] and (comp["status"] != "WAITING" or comp["pulses"] or comp["beam"]):
+                silent.append([f["i"], c, comp["status"], comp["activity"][:40]])
+    after_end = [f for f in frames if not f["contract"] and f["i"] > (mission_frames[-1]["i"] if mission_frames else 0)]
+    lingering = [f["i"] for f in after_end[3:] if any(comp["pulses"] or comp["beam"] for comp in f["companions"])]
+    record(letter + "12", "an unjoined companion's terminal stays waiting, and no light is given after completion",
+           not silent and not lingering, unjoined_speaking=silent[:8], contributing_after_end=lingering[:8])
     summary["pulses"] = pulses
     summary["beams"] = beams
+    summary["dog_swept_deg"] = round(swept, 1)
     return summary

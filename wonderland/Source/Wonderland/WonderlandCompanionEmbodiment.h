@@ -171,6 +171,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Companion")
 	float BodyClearanceHeightUU = 80.0f;
 
+	/** Closest two companions may come, uu (vertical distance counts half). Whichever is inside steers out. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Companion")
+	float CompanionSpacingUU = 230.0f;
+
 private:
 	/** A part's animation state. Parallel to PartPivots; plain data, never serialised. */
 	struct FPartMotion
@@ -218,6 +222,11 @@ private:
 	};
 
 	void AnimatePulses(float TimeSeconds);
+	/** Where a pulse or the beam leaves the companion: its body, not its figure origin. */
+	FVector ContributionOrigin() const;
+	/** Lights per pulse (a head and its trail), and how far behind each other they run, as a fraction of the path. */
+	static constexpr int32 PulseSparks = 3;
+	static constexpr float PulseTrail = 0.09f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UInstancedStaticMeshComponent> PulseMesh;
@@ -238,6 +247,9 @@ private:
 	TWeakObjectPtr<const AActor> ContractActor;
 	EWonderlandCompanionFormation Formation = EWonderlandCompanionFormation::Follow;
 	float FormationPhase = 0.0f;
+	/** The orbit's running angle, in turns, and the rate it is turning at (eased toward the flight's own). */
+	double OrbitTurns = 0.0;
+	float OrbitRate = 0.0f;
 	float NextPulseAt = -1.0f;
 	int32 PulsesSent = 0;
 	bool bJoined = false;

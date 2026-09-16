@@ -52,31 +52,31 @@ FWonderlandCompanionOrbit WonderlandCompanionOrbitFor(EWonderlandCompanionFormat
 	{
 	case EWonderlandCompanionFormation::Gather:
 		// Arriving and holding: wide, high and slow, and not yet giving anything.
-		Orbit.RadiusUU = 250.0f;
-		Orbit.HeightUU = 125.0f;
-		Orbit.Revolutions = 0.035f;
+		Orbit.RadiusUU = 200.0f;
+		Orbit.HeightUU = 95.0f;
+		Orbit.Revolutions = 0.05f;
 		Orbit.bContributes = false;
 		break;
 	case EWonderlandCompanionFormation::SupportOrbit:
 		// Implementation: a working circle, more often, and the Jhinn's execution beam.
-		Orbit.RadiusUU = 230.0f;
-		Orbit.HeightUU = 100.0f;
-		Orbit.Revolutions = 0.07f;
+		Orbit.RadiusUU = 215.0f;
+		Orbit.HeightUU = 55.0f;
+		Orbit.Revolutions = 0.12f;
 		Orbit.PulseEverySeconds = 1.1f;
 		Orbit.bAgentBeam = true;
 		break;
 	case EWonderlandCompanionFormation::CalmOrbit:
 		// Review is the reviewer's stage: the companions stay present and quiet.
-		Orbit.RadiusUU = 265.0f;
-		Orbit.HeightUU = 135.0f;
-		Orbit.Revolutions = 0.04f;
+		Orbit.RadiusUU = 235.0f;
+		Orbit.HeightUU = 85.0f;
+		Orbit.Revolutions = 0.06f;
 		Orbit.PulseEverySeconds = 2.8f;
 		break;
 	case EWonderlandCompanionFormation::AssistOrbit:
 		// Repair: close in and quick, helping to fix what failed.
-		Orbit.RadiusUU = 205.0f;
-		Orbit.HeightUU = 95.0f;
-		Orbit.Revolutions = 0.08f;
+		Orbit.RadiusUU = 195.0f;
+		Orbit.HeightUU = 50.0f;
+		Orbit.Revolutions = 0.13f;
 		Orbit.PulseEverySeconds = 0.9f;
 		Orbit.bAgentBeam = true;
 		break;

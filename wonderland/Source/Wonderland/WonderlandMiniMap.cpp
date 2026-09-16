@@ -38,8 +38,8 @@ namespace WonderlandMiniMapDetail
 		TEXT("wl.MiniMap.DebugRaw"), 0,
 		TEXT("1 also draws the whole raw photograph as a small square in the disc's corner, through a plain image brush: separates 'the capture is wrong' from 'the disc draws it wrong'."));
 	TAutoConsoleVariable<int32> CVarDrawMode(
-		TEXT("wl.MiniMap.DrawMode"), 0,
-		TEXT("How the disc draws the photograph, for isolating a draw path that renders white: 0 rounded box, ignore alpha, draw tint; 1 square image, ignore alpha, draw tint; 2 rounded box, alpha honoured, brush tint; 3 rounded box, ignore alpha, brush tint; 4 textured fan, UVs inside the texture's proxy region; 5 no photograph."));
+		TEXT("wl.MiniMap.DrawMode"), 4,
+		TEXT("How the disc draws the photograph. 4, the default, is a textured fan with UVs inside the texture's proxy region. The rest are kept for comparison: 0 rounded box, ignore alpha, draw tint; 1 square image, ignore alpha, draw tint; 2 rounded box, alpha honoured, brush tint; 3 rounded box, ignore alpha, brush tint; 5 no photograph."));
 	TAutoConsoleVariable<int32> CVarLumen(
 		TEXT("wl.MiniMap.Lumen"), 0,
 		TEXT("1 lets the mini-map photograph use Lumen. Off by default: it is a second view, and a small one."));
@@ -350,16 +350,10 @@ void SWonderlandMiniMapDisc::Construct(const FArguments& InArgs)
 {
 	Driver = InArgs._Driver;
 	Diameter = InArgs._Diameter;
-	const float R = Diameter * 0.5f;
-	// THE WHITE DISC WAS NEVER THE PHOTOGRAPH. Every draw mode -- including drawing no photograph at all -- came out
-	// solid white, because the compass RING was a rounded-box brush with a TRANSPARENT FILL and a thin outline, and that
-	// brush renders its fill opaque white over everything under it. The N pill, a rounded box with a real fill and an
-	// outline, drew correctly all along. So fills get a real outline in their own colour, and rings are line loops.
-	Shadow = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.34f), R, FLinearColor(0.0f, 0.0f, 0.0f, 0.34f), 1.0f);
-	Fill = FSlateRoundedBoxBrush(WonderlandUi::Srgb(8, 10, 18, 0.80f), R, WonderlandUi::Srgb(8, 10, 18, 0.80f), 1.0f);
-	Ring = FSlateRoundedBoxBrush(FLinearColor::Transparent, R, WonderlandUi::Ivory(0.82f), 1.5f);
-	OuterRing = FSlateRoundedBoxBrush(FLinearColor::Transparent, R, WonderlandUi::Ivory(0.22f), 1.0f);
-	NorthPill = FSlateRoundedBoxBrush(WonderlandUi::Srgb(8, 10, 18, 0.92f), 8.0f, WonderlandUi::Gold(0.70f), 1.0f);
+	// NO ROUNDED-BOX BRUSHES ON THIS DISC. A rounded box whose corner radius is half its size -- a circle -- renders
+	// opaque WHITE here whatever its fill, alpha or outline: drawing no photograph at all (draw mode 5) still gave a
+	// solid white disc, from the backing fill and its shadow, and the N badge was a white dot for the same reason.
+	// Every round shape is a fan of triangles or a line loop instead, the path the arrow and markers always drew right.
 }
 
 bool SWonderlandMiniMapDisc::GetDrawnMarkerOffset(FName PlaceId, FVector2D& OutOffset) const
@@ -395,20 +389,71 @@ int32 SWonderlandMiniMapDisc::OnPaint(const FPaintArgs& Args, const FGeometry& A
 		return AllottedGeometry.ToPaintGeometry(FVector2f(Radius * 2.0f, Radius * 2.0f), FSlateLayoutTransform(Centre - FVector2f(Radius, Radius)));
 	};
 
+	FSlateRenderer* const Renderer = FSlateApplication::IsInitialized() ? FSlateApplication::Get().GetRenderer() : nullptr;
+	const FSlateBrush* White = FCoreStyle::Get().GetBrush("WhiteBrush");
+	const FSlateResourceHandle WhiteHandle = Renderer != nullptr ? Renderer->GetResourceHandle(*White) : FSlateResourceHandle();
+	// THE WHITE BRUSH LIVES IN AN ATLAS. A UV of (0.5, 0.5) is the middle of the whole atlas page -- some other image,
+	// or nothing -- which is why the first arrow and markers never showed. The engine's own fan (STestSuite) samples
+	// inside the proxy's region, and so does this.
+	const FSlateShaderResourceProxy* WhiteProxy = WhiteHandle.GetResourceProxy();
+	const FVector2f WhiteUV = WhiteProxy != nullptr ? WhiteProxy->StartUV + WhiteProxy->SizeUV * 0.5f : FVector2f(0.5f, 0.5f);
+	const auto Fan = [&](const TArray<FVector2f>& Points, const FLinearColor& Color, int32 AtLayer)
+	{
+		if (Renderer == nullptr || Points.Num() < 3)
+		{
+			return;
+		}
+		const FColor C = Color.ToFColor(true);
+		TArray<FSlateVertex> Verts;
+		TArray<SlateIndex> Indices;
+		for (const FVector2f& P : Points)
+		{
+			Verts.Add(FSlateVertex::Make(Transform, P, WhiteUV, C));
+		}
+		for (int32 Index = 1; Index + 1 < Points.Num(); ++Index)
+		{
+			Indices.Add(0);
+			Indices.Add(static_cast<SlateIndex>(Index));
+			Indices.Add(static_cast<SlateIndex>(Index + 1));
+		}
+		FSlateDrawElement::MakeCustomVerts(OutDrawElements, AtLayer, WhiteHandle, Verts, Indices, nullptr, 0, 0);
+	};
+
+	const auto Disc = [&](const FVector2f& At, float Radius, const FLinearColor& Color, int32 AtLayer)
+	{
+		TArray<FVector2f> Points;
+		Points.Reserve(66);
+		Points.Add(At);
+		for (int32 Step = 0; Step <= 64; ++Step)
+		{
+			Points.Add(Polar(At, Radius, 360.0f * Step / 64.0f));
+		}
+		Fan(Points, Color, AtLayer);
+	};
+	const auto Loop = [&](const FVector2f& At, float Radius, const FLinearColor& Colour, float Thickness, int32 AtLayer)
+	{
+		TArray<FVector2f> Points;
+		Points.Reserve(97);
+		for (int32 Step = 0; Step <= 96; ++Step)
+		{
+			Points.Add(Polar(At, Radius, 360.0f * Step / 96.0f));
+		}
+		FSlateDrawElement::MakeLines(OutDrawElements, AtLayer, AllottedGeometry.ToPaintGeometry(), Points,
+			ESlateDrawEffect::None, Colour, true, Thickness);
+	};
+
 	int32 Layer = LayerId;
-	FSlateDrawElement::MakeBox(OutDrawElements, Layer++, Circle(R + 5.0f), &Shadow);
-	FSlateDrawElement::MakeBox(OutDrawElements, Layer++, Circle(R), &Fill);
+	Disc(Centre, R + 5.0f, FLinearColor(0.0f, 0.0f, 0.0f, 0.34f), Layer++);
+	Disc(Centre, R, WonderlandUi::Srgb(8, 10, 18, 0.80f), Layer++);
 
 	const FWonderlandMiniMapFrame* Frame = Source != nullptr ? &Source->GetFrame() : nullptr;
 	const double K = Frame != nullptr ? Frame->ViewRadiusUU / FMath::Max(R, 1.0f) : 1.0;
 	DrawnUUPerPixel = K;
-	FSlateRenderer* const Renderer = FSlateApplication::IsInitialized() ? FSlateApplication::Get().GetRenderer() : nullptr;
 
 	// ----- the photograph, through a round window
-	// DRAWN AS A ROUNDED BOX WITH A UV REGION -- the path every UMG image with rounded corners takes -- rather than as
-	// a textured triangle fan. The fan came out a uniform white under two different capture sources, which is the draw
-	// path failing, not the photograph. The UV region is the square of ground the disc spans, shifted by how far the
-	// Dog has walked since the photograph was taken, so the ground still slides under the window between captures.
+	// A TEXTURED FAN (draw mode 4) whose UVs sit inside the render target's proxy region. They span the square of
+	// ground the disc covers, shifted by how far the Dog has walked since the photograph was taken, so the ground still
+	// slides under the window between captures.
 	if (Frame != nullptr && Frame->bHasPlayer && Frame->bHasCapture && Source->GetCaptureBrush() != nullptr)
 	{
 		const double Width = FMath::Max(Frame->CaptureWidthUU, 1.0);
@@ -493,35 +538,6 @@ int32 SWonderlandMiniMapDisc::OnPaint(const FPaintArgs& Args, const FGeometry& A
 			TArray<FVector2f>{FVector2f(Centre.X, Centre.Y - R), FVector2f(Centre.X, Centre.Y + R)}, ESlateDrawEffect::None, Hair, true, 1.0f);
 	}
 
-	const FSlateBrush* White = FCoreStyle::Get().GetBrush("WhiteBrush");
-	const FSlateResourceHandle WhiteHandle = Renderer != nullptr ? Renderer->GetResourceHandle(*White) : FSlateResourceHandle();
-	// THE WHITE BRUSH LIVES IN AN ATLAS. A UV of (0.5, 0.5) is the middle of the whole atlas page -- some other image,
-	// or nothing -- which is why the first arrow and markers never showed. The engine's own fan (STestSuite) samples
-	// inside the proxy's region, and so does this.
-	const FSlateShaderResourceProxy* WhiteProxy = WhiteHandle.GetResourceProxy();
-	const FVector2f WhiteUV = WhiteProxy != nullptr ? WhiteProxy->StartUV + WhiteProxy->SizeUV * 0.5f : FVector2f(0.5f, 0.5f);
-	const auto Fan = [&](const TArray<FVector2f>& Points, const FLinearColor& Color, int32 AtLayer)
-	{
-		if (Renderer == nullptr || Points.Num() < 3)
-		{
-			return;
-		}
-		const FColor C = Color.ToFColor(true);
-		TArray<FSlateVertex> Verts;
-		TArray<SlateIndex> Indices;
-		for (const FVector2f& P : Points)
-		{
-			Verts.Add(FSlateVertex::Make(Transform, P, WhiteUV, C));
-		}
-		for (int32 Index = 1; Index + 1 < Points.Num(); ++Index)
-		{
-			Indices.Add(0);
-			Indices.Add(static_cast<SlateIndex>(Index));
-			Indices.Add(static_cast<SlateIndex>(Index + 1));
-		}
-		FSlateDrawElement::MakeCustomVerts(OutDrawElements, AtLayer, WhiteHandle, Verts, Indices, nullptr, 0, 0);
-	};
-
 	if (Frame != nullptr && Frame->bHasPlayer)
 	{
 		// ----- places the registry offers, where they stand
@@ -568,22 +584,9 @@ int32 SWonderlandMiniMapDisc::OnPaint(const FPaintArgs& Args, const FGeometry& A
 	}
 
 	// ----- the compass ring, as line loops
-	{
-		const auto Loop = [&](float Radius, const FLinearColor& Colour, float Thickness, int32 AtLayer)
-		{
-			TArray<FVector2f> Points;
-			Points.Reserve(97);
-			for (int32 Step = 0; Step <= 96; ++Step)
-			{
-				Points.Add(Polar(Centre, Radius, 360.0f * Step / 96.0f));
-			}
-			FSlateDrawElement::MakeLines(OutDrawElements, AtLayer, AllottedGeometry.ToPaintGeometry(), Points,
-				ESlateDrawEffect::None, Colour, true, Thickness);
-		};
-		Loop(R, WonderlandUi::Ivory(0.82f), 1.5f, Layer);
-		Loop(R + 4.0f, WonderlandUi::Ivory(0.22f), 1.0f, Layer);
-		++Layer;
-	}
+	Loop(Centre, R, WonderlandUi::Ivory(0.82f), 1.5f, Layer);
+	Loop(Centre, R + 4.0f, WonderlandUi::Ivory(0.22f), 1.0f, Layer);
+	++Layer;
 	for (int32 Tick = 0; Tick < 8; ++Tick)
 	{
 		const float A = -90.0f + 45.0f * Tick;
@@ -598,7 +601,9 @@ int32 SWonderlandMiniMapDisc::OnPaint(const FPaintArgs& Args, const FGeometry& A
 		const FSlateFontInfo Font = WonderlandUi::Sans(9, true);
 		const FVector2f PillSize(18.0f, 16.0f);
 		const FVector2f PillAt(Centre.X - PillSize.X * 0.5f, Centre.Y - R - PillSize.Y * 0.5f);
-		FSlateDrawElement::MakeBox(OutDrawElements, Layer++, AllottedGeometry.ToPaintGeometry(PillSize, FSlateLayoutTransform(PillAt)), &NorthPill);
+		const FVector2f Badge(Centre.X, Centre.Y - R);
+		Disc(Badge, 8.5f, WonderlandUi::Srgb(8, 10, 18, 0.92f), Layer++);
+		Loop(Badge, 8.5f, WonderlandUi::Gold(0.70f), 1.0f, Layer++);
 		FVector2f Measured(9.0f, 12.0f);
 		if (FSlateApplication::IsInitialized())
 		{

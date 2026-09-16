@@ -198,12 +198,6 @@ public:
 private:
 	TWeakObjectPtr<UWonderlandMiniMapDriver> Driver;
 	float Diameter = 196.0f;
-	// No default constructor on a rounded box brush: placeholders here, the real ones sized in Construct.
-	FSlateRoundedBoxBrush Shadow = FSlateRoundedBoxBrush(FLinearColor::Transparent, 1.0f, FLinearColor::Transparent, 0.0f);
-	FSlateRoundedBoxBrush Fill = FSlateRoundedBoxBrush(FLinearColor::Transparent, 1.0f, FLinearColor::Transparent, 0.0f);
-	FSlateRoundedBoxBrush Ring = FSlateRoundedBoxBrush(FLinearColor::Transparent, 1.0f, FLinearColor::Transparent, 0.0f);
-	FSlateRoundedBoxBrush OuterRing = FSlateRoundedBoxBrush(FLinearColor::Transparent, 1.0f, FLinearColor::Transparent, 0.0f);
-	FSlateRoundedBoxBrush NorthPill = FSlateRoundedBoxBrush(FLinearColor::Transparent, 1.0f, FLinearColor::Transparent, 0.0f);
 
 	mutable double DrawnArrowAngleDeg = 0.0;
 	mutable double DrawnViewAngleDeg = 0.0;
