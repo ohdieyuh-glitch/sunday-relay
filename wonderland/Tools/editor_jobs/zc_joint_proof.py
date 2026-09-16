@@ -584,11 +584,29 @@ def job():
         # Rather than guess an angle and spend a PIE session per guess, hold the state and sweep the camera:
         # same moment, same beam, several pitches, and the frames say which one a person could read. Nothing is
         # hidden and nothing is posed -- this is where a player would put their own camera.
+        # AND THE STATE HAS TO BE ESTABLISHED, NOT ASSUMED. This portrait used to stop the fixture and hand
+        # set the beats, which works only while a mission is still considered to be running. When it is not,
+        # ShowBeat hands the Dog a null contract on purpose -- that null is what stops the performance at the
+        # end of a mission -- so the Dog correctly does nothing, the beam is correctly dark, and five
+        # photographs get taken of a Dog standing still. The check then reports a beam failure that is really
+        # a setup failure, in a lane that is not mine.
+        #
+        # So it waits for the beam it intends to photograph, and if it never lights it says THAT, rather than
+        # blaming the beam.
         mission.stop_fixture()
         mission.set_beat_by_id("mission_start")
         yield 0.4
         mission.set_beat_by_id("verifying")
-        yield 1.4
+        yield 1.0
+        waited = 0.0
+        while waited < 3.0 and not (beam is not None and beam.is_visible()):
+            yield 0.25
+            waited += 0.25
+        RESULT["beam_portrait_state"] = {
+            "beam_lit": bool(beam.is_visible()) if beam is not None else False,
+            "contract_for_a_running_mission": bool(mission.is_orb_in_world()),
+            "waited_seconds": round(waited, 2),
+        }
         portrait = []
         pawn_now = pawn.get_actor_location()
         contract_at = mission.get_orb_location()
@@ -614,8 +632,9 @@ def job():
                              "capture": shot("zc_joint_beam_%s.png" % name)})
         RESULT["portrait"] = portrait
         record("J10", "the beam can be framed from the player's own camera",
-               all(p["beam_on"] for p in portrait) and any(p["crystal_px"] for p in portrait),
-               angles=[p["name"] for p in portrait])
+               RESULT["beam_portrait_state"]["beam_lit"]
+               and all(p["beam_on"] for p in portrait) and any(p["crystal_px"] for p in portrait),
+               angles=[p["name"] for p in portrait], **RESULT["beam_portrait_state"])
         mission.set_beat_by_id("idle")
         yield 0.6
 
