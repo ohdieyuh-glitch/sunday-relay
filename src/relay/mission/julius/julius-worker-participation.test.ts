@@ -1,3 +1,4 @@
+import { sanitizeJuliusCodingAgentReport } from './julius-coding-agent';
 import { describe, expect, it } from 'vitest';
 import {
   JULIUS_CHECKPOINT_LIMITS,
@@ -348,6 +349,7 @@ describe('what the worker is told is what Julius accepts', () => {
       guidanceRequest: { question: 'q', blockedOn: [], attempted: [], relevantPaths: [] },
       researchAsks: [ASK],
       segmentResume: { completedSoFar: [], nextIntent: 'continue' },
+      report: { outcome: 'PARTIALLY_IMPLEMENTED', summary: 'Half done.', filesTouched: [], testsRun: [], remainingUncertainty: [], blockedReason: null },
     };
     const reading = readJuliusParticipationBlock(block(JSON.stringify(demonstrated)));
     expect(reading).toMatchObject({ readable: true, channels: [...JULIUS_PARTICIPATION_CHANNELS] });
@@ -355,5 +357,6 @@ describe('what the worker is told is what Julius accepts', () => {
     expect(sanitizeJuliusGuidanceRequest(reading.guidanceRequest)).not.toBeNull();
     expect(sanitizeJuliusResearchAsks(reading.researchAsks)).toHaveLength(1);
     expect(sanitizeJuliusSegmentState(reading.segmentResume)).not.toBeNull();
+    expect(sanitizeJuliusCodingAgentReport(reading.report).ok).toBe(true);
   });
 });

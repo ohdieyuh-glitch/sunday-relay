@@ -494,6 +494,8 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   participationAskedGuidance:safeNullableBool(v.participationAskedGuidance),
   participationAskedResearch:safeNullableBool(v.participationAskedResearch),
   participationAskedResume:safeNullableBool(v.participationAskedResume),
+  /** Whether the coder closed with a report of its own work. Claims, recorded beside what the executor observed. */
+  participationAskedReport:safeNullableBool(v.participationAskedReport),
  });
 };
 /**
@@ -603,7 +605,15 @@ readonly guidance?:unknown;
   * the drift it names and the evidence for it. Unsanitised. An assessment,
   * never a verdict: it cannot accept a task and cannot complete a mission.
   */
- readonly consistency?:unknown;}
+ readonly consistency?:unknown;
+ /**
+  * WHAT A CODING AGENT DISPATCH DID TO THE WORKSPACE, AND WHAT THE CODER SAID
+  * ABOUT IT — assembled by the Julius side of the adapter from the independent
+  * executor's change set and the coder's own report, unsanitised. Julius
+  * recomputes scope against the locked contract itself; nothing here is taken
+  * as a verdict. Read only from a Coding Agent dispatch.
+  */
+ readonly implementation?:unknown;}
 /**
  * WHAT JULIUS TELLS AN ADAPTER, and nothing more.
  *

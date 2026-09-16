@@ -72,6 +72,7 @@ import {
 } from '../hosted-coding-agent/hosted-runner';
 import {
   buildJuliusCodingAgentRequest,
+  parseJuliusWorkspaceStatus,
   juliusCodingAgentFailureClass,
   juliusCodingAgentFailureDisposition,
   renderJuliusCodingAgentContract,
@@ -106,6 +107,12 @@ export interface CompiledContextSource {
 export interface LiveArtifactExchange {
   put(ref: string, text: string): void;
   get(ref: string): string | null;
+  /**
+   * Forget a ref. A coder dispatch clears the run's diff and test output before
+   * it runs, so a capture that fails leaves NOTHING for the reviewer rather
+   * than the previous round's diff beside this round's test.
+   */
+  clear?(ref: string): void;
 }
 
 export const ARTIFACT_TEXT_CAP = 256 * 1024;
@@ -115,6 +122,7 @@ export function createLiveArtifactExchange(): LiveArtifactExchange {
   return {
     put(ref, text) { values.set(ref, text.slice(0, ARTIFACT_TEXT_CAP)); },
     get(ref) { return values.get(ref) ?? null; },
+    clear(ref) { values.delete(ref); },
   };
 }
 
@@ -1355,6 +1363,10 @@ export function createJuliusCodingAgentAdapter(input: {
       if (before.status === 'SUCCEEDED') {
         input.artifacts.put(baseRevisionRef(snapshot.runId), before.stdout.trim());
       }
+      // A STALE DIFF IS WORSE THAN NONE. The refs are per run; clear this
+      // round's before it runs, so a later capture failure is visible as absent.
+      input.artifacts.clear?.(diffRef(snapshot.runId));
+      input.artifacts.clear?.(testOutputRef(snapshot.runId));
 
       const request = buildJuliusCodingAgentRequest({
         snapshot, taskId: dispatch.taskId, taskType: dispatch.taskType ?? 'build', contextId: dispatch.contextId,
@@ -1405,10 +1417,31 @@ export function createJuliusCodingAgentAdapter(input: {
         }
       };
 
+      /**
+       * THE CHANGE SET, AS THE EXECUTOR SAW IT — tracked AND untracked. `git
+       * diff` alone never showed a new file, so a coder whose contribution was
+       * new files looked like one that had done nothing, and a new file outside
+       * the agreement was invisible to everyone. Julius holds the work to the
+       * locked contract from this set.
+       */
+      const status = await afterSession(() => input.shell.run({
+        ...shellScope,
+        invocationKey: `${dispatch.taskId}:status`,
+        command: 'git status --porcelain=v1 --untracked-files=all -z',
+        timeoutMs: 30_000,
+      }));
+      const workspace = status.status === 'SUCCEEDED'
+        ? { captured: true, ...parseJuliusWorkspaceStatus(status.stdout) }
+        : { captured: false, changes: [], truncated: false };
+      /**
+       * THE DIFF THE REVIEWER READS, new files included: each untracked file is
+       * rendered against /dev/null with plain git and a bash loop, so nothing
+       * outside what the executor image already runs is needed.
+       */
       const diff = await afterSession(() => input.shell.run({
         ...shellScope,
         invocationKey: `${dispatch.taskId}:diff`,
-        command: 'git --no-pager diff && git --no-pager diff --stat',
+        command: 'git --no-pager diff || exit 3; git --no-pager diff --stat; git ls-files --others --exclude-standard | while IFS= read -r file; do git --no-pager diff --no-index -- /dev/null "$file"; done; exit 0',
         timeoutMs: 30_000,
       }));
       if (diff.status === 'SUCCEEDED') input.artifacts.put(diffRef(snapshot.runId), diff.stdout);
@@ -1427,27 +1460,45 @@ export function createJuliusCodingAgentAdapter(input: {
        * fail the dispatch: the work is in the diff and the tests already ran.
        */
       const participation = readJuliusParticipationBlock(outcome.finalText);
-      const channels = participation.present && participation.readable
+      const readable = participation.present && participation.readable;
+      const channels = readable
         ? {
             ...('guidanceRequest' in participation ? { guidanceRequest: participation.guidanceRequest } : {}),
             ...('researchAsks' in participation ? { researchAsks: participation.researchAsks } : {}),
             ...('segmentResume' in participation ? { segmentResume: participation.segmentResume } : {}),
           }
         : {};
+      const changed = workspace.changes.length > 0;
       const observation = outcome.observation;
       return {
         workerId: input.worker.workerId,
         providerId: input.worker.providerId,
         status: 'SUCCEEDED',
         ...channels,
+        /**
+         * WHAT HAPPENED TO THE WORKSPACE, AND WHAT THE CODER SAID ABOUT IT, for
+         * Julius to hold to the agreement. The report is handed on unsanitised.
+         */
+        implementation: {
+          providerKind: input.provider.providerKind,
+          workspace,
+          ...(readable && 'report' in participation ? { report: participation.report } : {}),
+        },
         safeSummary: `Coding Agent session completed (${input.provider.providerKind}; observed model ${safeClaim(observation.providerModel ?? 'unknown', 80)}, ${observation.turns ?? 'unknown'} turns); tests ${test.status === 'SUCCEEDED' ? 'passed' : 'failed'} under the independent executor.`,
         evidence: [
           {
             type: 'DIFF',
-            status: diff.status === 'SUCCEEDED' ? 'PASSED' : 'INCONCLUSIVE',
-            safeSummary: diff.status === 'SUCCEEDED'
-              ? `Workspace diff captured by executor invocation ${diff.invocationId} (${diff.stdout.length} chars).`
-              : 'Workspace diff could not be captured by the executor.',
+            /**
+             * PASSED MEANS A CHANGE WAS OBSERVED. A captured diff of nothing was
+             * PASSED, so a session that changed nothing produced the same
+             * evidence as one that did the work.
+             */
+            status: diff.status === 'SUCCEEDED' && workspace.captured && changed ? 'PASSED' : 'INCONCLUSIVE',
+            safeSummary: diff.status !== 'SUCCEEDED' || !workspace.captured
+              ? 'Workspace diff could not be captured by the executor.'
+              : changed
+                ? `Workspace diff captured by executor invocation ${diff.invocationId} (${String(workspace.changes.length)} changed path(s), ${String(workspace.changes.filter((change) => change.change === 'UNTRACKED').length)} new; ${diff.stdout.length} chars).`
+                : `The executor observed no change to the workspace (invocation ${status.invocationId}).`,
             artifactRef: diff.status === 'SUCCEEDED' ? diffRef(snapshot.runId) : null,
             occurredAt: nowIso(),
           },

@@ -310,12 +310,14 @@ function fakeShell(log: FakeLog, invocations: ShellEffectInput[]): ShellEffectPo
   let n = 0;
   return {
     async run(input) {
-      log.order.push(`shell:${input.command.includes('rev-parse') ? 'base' : input.command.includes('diff') ? 'diff' : 'test'}`);
+      log.order.push(`shell:${input.command.includes('rev-parse') ? 'base' : input.command.startsWith('git status') ? 'status' : input.command.includes('diff') ? 'diff' : 'test'}`);
       invocations.push(input);
       n += 1;
+      // The change set the executor reports, NUL-separated as `git status -z` prints it.
       const stdout = input.command.includes('rev-parse') ? 'abc123def\n'
-        : input.command.includes('diff') ? DIFF_TEXT
-          : 'mission-test: 1 passed\n';
+        : input.command.startsWith('git status') ? ` M fixtures/live-validation/normalize.ts${String.fromCharCode(0)}`
+          : input.command.includes('diff') ? DIFF_TEXT
+            : 'mission-test: 1 passed\n';
       return { status: 'SUCCEEDED', exitCode: 0, stdout, stderr: '', invocationId: `fake-invocation-${n}` };
     },
   };
@@ -602,9 +604,9 @@ describe('a full mission drive with Julius in control', () => {
     expect(fakes.log.order[0]).toBe('architect');
     expect(fakes.log.order.indexOf('coder')).toBeGreaterThan(fakes.log.order.indexOf('architect'));
 
-    // Tool effects went through the executor port: base, diff and test.
-    expect(fakes.invocations.map((invocation) => invocation.taskId)).toEqual(['build-1', 'build-1', 'build-1']);
-    expect(fakes.log.order.filter((step) => step.startsWith('shell:'))).toEqual(['shell:base', 'shell:diff', 'shell:test']);
+    // Tool effects went through the executor port: base, the change set, diff and test.
+    expect(fakes.invocations.map((invocation) => invocation.taskId)).toEqual(['build-1', 'build-1', 'build-1', 'build-1']);
+    expect(fakes.log.order.filter((step) => step.startsWith('shell:'))).toEqual(['shell:base', 'shell:status', 'shell:diff', 'shell:test']);
 
     // The reviewer reviewed the CODER'S diff, delivered through Julius-owned
     // artifacts — the coder never called the reviewer.
