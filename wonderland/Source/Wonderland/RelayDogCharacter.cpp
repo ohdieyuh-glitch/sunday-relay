@@ -43,6 +43,7 @@ namespace RelayDogReadTuning
 	TAutoConsoleVariable<float> CVarSweepRoll(TEXT("wl.Dog.Read.SweepRoll"), -34.0f, TEXT("Turning arm: roll carried across the book with the page."));
 	TAutoConsoleVariable<float> CVarSweepPitch(TEXT("wl.Dog.Read.SweepPitch"), 12.0f, TEXT("Turning arm: pitch added at mid-turn, lifting the page."));
 	TAutoConsoleVariable<float> CVarSweepElbow(TEXT("wl.Dog.Read.SweepElbow"), 18.0f, TEXT("Turning arm: elbow added at mid-turn."));
+	TAutoConsoleVariable<float> CVarReadHeadPitch(TEXT("wl.Dog.Read.HeadPitch"), 22.0f, TEXT("Head pitch while reading, degrees down toward the book."));
 	TAutoConsoleVariable<float> CVarTurnHz(TEXT("wl.Dog.Read.TurnHz"), 0.32f, TEXT("Page turns per second."));
 	TAutoConsoleVariable<float> CVarTurnFraction(TEXT("wl.Dog.Read.TurnFraction"), 0.42f, TEXT("Fraction of each turn cycle the page is moving."));
 
@@ -58,6 +59,7 @@ namespace RelayDogReadTuning
 		P.SweepRollDeg = CVarSweepRoll.GetValueOnGameThread();
 		P.SweepPitchDeg = CVarSweepPitch.GetValueOnGameThread();
 		P.SweepElbowDeg = CVarSweepElbow.GetValueOnGameThread();
+		P.HeadPitchDeg = CVarReadHeadPitch.GetValueOnGameThread();
 		P.TurnHz = CVarTurnHz.GetValueOnGameThread();
 		P.TurnFraction = CVarTurnFraction.GetValueOnGameThread();
 		return P;
@@ -1260,7 +1262,9 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 
 	// ---------------------------------------------------------------- driving
 	FVector DesiredVelocity = FVector::ZeroVector;
-	if (!bAutoDemo)
+	// NOT WHILE THE PERFORMANCE WALKS. The player's speed band used to be written straight over the orbit's
+	// study pace, so the Dog circled the Contract at a jog (203 uu/s, logged mid-verification-approach).
+	if (!bAutoDemo && !Overlay.bOrbit)
 	{
 		// The player's speed band, chosen by modifier. Set before the movement
 		// component consumes this frame's input.
@@ -1440,6 +1444,13 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	if (LensGlassMesh != nullptr) LensGlassMesh->SetVisibility(bLens);
 
 	// THE BEAM, from the chest to the contract, for as long as verification runs.
+	if (Overlay.bBeam || Mission.Performing() == EWonderlandDogAct::VerificationBeam)
+	{
+		LastBeamNote = FString::Printf(TEXT("reported=%s performing=%s overlay_beam=%d fade=%.3f weight=%.3f contract=%d body=%d draws=%d dt=%.4f"),
+			WonderlandDogActName(Mission.ReportedAct()), WonderlandDogActName(Mission.Performing()), Overlay.bBeam ? 1 : 0,
+			Mission.BeamFade(), Overlay.BeamWeight, MissionIn.bHasContract ? 1 : 0, BodyRoot != nullptr ? 1 : 0,
+			(Overlay.bBeam && MissionIn.bHasContract && BodyRoot != nullptr) ? 1 : 0, DeltaSeconds);
+	}
 	if (Overlay.bBeam && MissionIn.bHasContract && BodyRoot != nullptr)
 	{
 		const FVector Chest = BodyRoot->GetComponentLocation() + GetActorRotation().RotateVector(FVector(18.0, 0.0, 26.0));

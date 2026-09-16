@@ -34,7 +34,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Containers/Ticker.h"
 #include "Subsystems/LocalPlayerSubsystem.h"
+#include "WonderlandRoleScript.h"
 #include "WonderlandUiSubsystem.generated.h"
 
 class APlayerController;
@@ -356,6 +358,36 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	FName GetCompanionTerminalNarratedBeat(int32 Index) const;
 
+	// ---------------------------------------------------------------- the mission deck (founder, 2026-09-16)
+	// Role index: 0 JULIUS, 1 PROMPT ARCHITECT, 2 CODING AGENT, 3 INDEPENDENT REVIEWER.
+
+	/** The deck is on screen: the terminal is open and showing a simulated mission. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Deck")
+	bool IsMissionDeckShown() const;
+
+	/** A console's status, e.g. IMPLEMENTING. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Deck")
+	FString GetDeckStatus(int32 Role) const;
+
+	/** Lines a console has written this mission, including those scrolled away. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Deck")
+	int32 GetDeckWrittenCount(int32 Role) const;
+
+	/** A console's newest line, and its kind (Log, DiffAdd, Preview, Finding...). */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Deck")
+	FString GetDeckLatestLine(int32 Role) const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Deck")
+	FString GetDeckLatestKind(int32 Role) const;
+
+	/** The mission event whose work a console is writing. Every console takes every event: it must equal the world's. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Deck")
+	FName GetDeckNarratedEvent(int32 Role) const;
+
+	/** Lines a console still has to write for the current event. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Deck")
+	int32 GetDeckPendingCount(int32 Role) const;
+
 private:
 	enum class EOverlay : uint8 { None, Terminal, Map, Brain, Missions, Commands, Menu, Wallet };
 
@@ -389,6 +421,23 @@ private:
 	UWonderlandWalletSubsystem* Wallet() const;
 	/** The Julius Live Terminal, created once and kept -- at attach, so it can record a mission while it is closed. */
 	void EnsureLiveTerminal();
+
+	/** One deck console's queue: the lines still to write for the current event, and the world time until the next. */
+	struct FDeckFeed
+	{
+		TArray<FWonderlandRoleLine> Pending;
+		float Wait = 0.0f;
+		FName Event;
+	};
+	void NarrateDeck(FName EventType, bool bNewMission, bool bLlmJoined, bool bJhinnJoined);
+	/** Write everything a console still owes, at once: the world has moved on and the console must not lag it. */
+	void FlushDeckFeed(int32 Role);
+	bool TickDeck(float DeltaSeconds);
+	TSharedPtr<class SWonderlandRoleConsole> DeckConsole(int32 Role) const;
+	FDeckFeed DeckFeeds[WonderlandJuliusRoleCount];
+	TMap<FName, int32> DeckOccurrences;
+	FTSTicker::FDelegateHandle DeckTicker;
+	double DeckWorldSeconds = -1.0;
 	/**
 	 * A pointer click on one widget: hit tested in that widget's own window, routed down the path found there, and
 	 * only when the widget is really on that path. False when it is not under its own centre. The OS cursor never moves.

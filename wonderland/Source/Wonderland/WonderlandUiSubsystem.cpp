@@ -26,6 +26,7 @@
 #include "WonderlandCompanionTerminal.h"
 #include "WonderlandHudPanels.h"
 #include "WonderlandLiveTerminal.h"
+#include "WonderlandMissionDeck.h"
 #include "WonderlandMiniMap.h"
 #include "WonderlandMissionSubsystem.h"
 #include "WonderlandNavBar.h"
@@ -72,6 +73,14 @@ namespace
 	TAutoConsoleVariable<FString> CVarCompanionPanelRight(
 		TEXT("wl.Companion.PanelRight"), TEXT("0.738 0.487 0.984 0.700"),
 		TEXT("Anchors of the Jhinn AI Agent terminal: minX minY maxX maxY, fractions of the viewport."));
+	// WHILE THE MISSION DECK IS UP the bottom band is Julius's, so the companions' terminals stand in the right-hand
+	// column under the mini-map instead, one above the other, and the world between stays clear.
+	TAutoConsoleVariable<FString> CVarCompanionDeckLeft(
+		TEXT("wl.Companion.DeckLeft"), TEXT("0.806 0.318 0.994 0.463"),
+		TEXT("Anchors of the LLM Companion terminal while the mission deck is shown."));
+	TAutoConsoleVariable<FString> CVarCompanionDeckRight(
+		TEXT("wl.Companion.DeckRight"), TEXT("0.806 0.469 0.994 0.612"),
+		TEXT("Anchors of the Jhinn AI Agent terminal while the mission deck is shown."));
 
 	// The Project Brain hologram: a PNG read at attach, never an asset -- the world's art lane owns Content, and
 	// this panel is a development preview. With no file the frame draws without the brain and says nothing false.
@@ -119,6 +128,11 @@ void UWonderlandUiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UWonderlandUiSubsystem::Deinitialize()
 {
+	if (DeckTicker.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(DeckTicker);
+		DeckTicker.Reset();
+	}
 	Detach();
 	if (ULocalPlayer* LocalPlayer = GetLocalPlayer<ULocalPlayer>())
 	{
@@ -244,13 +258,23 @@ void UWonderlandUiSubsystem::MountCompanionTerminals()
 	CompanionLayer = SNew(SConstraintCanvas)
 		.Visibility_Lambda([WeakThis]() { return WeakThis.IsValid() && WeakThis->IsLiveTerminalOpen() ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; })
 		+ SConstraintCanvas::Slot()
-		.Anchors(TAttribute<FAnchors>::CreateLambda([]() { return ParseAnchors(CVarCompanionPanelLeft.GetValueOnGameThread(), FAnchors(0.016f, 0.487f, 0.262f, 0.700f)); }))
+		.Anchors(TAttribute<FAnchors>::CreateLambda([WeakThis]()
+		{
+			return WeakThis.IsValid() && WeakThis->IsMissionDeckShown()
+				? ParseAnchors(CVarCompanionDeckLeft.GetValueOnGameThread(), FAnchors(0.806f, 0.318f, 0.994f, 0.463f))
+				: ParseAnchors(CVarCompanionPanelLeft.GetValueOnGameThread(), FAnchors(0.016f, 0.487f, 0.262f, 0.700f));
+		}))
 		.Offset(FMargin(0.0f))
 		[
 			Llm.ToSharedRef()
 		]
 		+ SConstraintCanvas::Slot()
-		.Anchors(TAttribute<FAnchors>::CreateLambda([]() { return ParseAnchors(CVarCompanionPanelRight.GetValueOnGameThread(), FAnchors(0.738f, 0.487f, 0.984f, 0.700f)); }))
+		.Anchors(TAttribute<FAnchors>::CreateLambda([WeakThis]()
+		{
+			return WeakThis.IsValid() && WeakThis->IsMissionDeckShown()
+				? ParseAnchors(CVarCompanionDeckRight.GetValueOnGameThread(), FAnchors(0.806f, 0.469f, 0.994f, 0.612f))
+				: ParseAnchors(CVarCompanionPanelRight.GetValueOnGameThread(), FAnchors(0.738f, 0.487f, 0.984f, 0.700f));
+		}))
 		.Offset(FMargin(0.0f))
 		[
 			Agent.ToSharedRef()
@@ -1434,6 +1458,9 @@ void UWonderlandUiSubsystem::NarrateMissionEvent(FName EventType, EWonderlandMis
 		JuliusNarratedEvent = EventType;
 	}
 
+	// ---- the deck: Julius and its three components, each writing its own work from this same event
+	NarrateDeck(EventType, bNewMission, bLlmJoined, bJhinnJoined);
+
 	// ---- the companions: only a joined one takes part, and it speaks when the stage changes
 	for (int32 Index = 0; Index < CompanionTerminals.Num(); ++Index)
 	{
@@ -1463,6 +1490,155 @@ void UWonderlandUiSubsystem::NarrateMissionEvent(FName EventType, EWonderlandMis
 			Panel->NoteNarration(Line.Activity, WonderlandBeatId(Beat));
 		}
 	}
+}
+
+void UWonderlandUiSubsystem::NarrateDeck(FName EventType, bool bNewMission, bool bLlmJoined, bool bJhinnJoined)
+{
+	if (!Terminal.IsValid())
+	{
+		return;
+	}
+	if (!DeckTicker.IsValid())
+	{
+		DeckTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UWonderlandUiSubsystem::TickDeck));
+	}
+	const bool bEnded = EventType.IsNone();
+	if (bNewMission)
+	{
+		DeckOccurrences.Reset();
+		for (int32 Role = 0; Role < WonderlandJuliusRoleCount; ++Role)
+		{
+			DeckFeeds[Role] = FDeckFeed();
+			if (const TSharedPtr<SWonderlandRoleConsole> Console = DeckConsole(Role))
+			{
+				Console->Clear();
+			}
+		}
+	}
+	const int32 Occurrence = bEnded ? 0 : ++DeckOccurrences.FindOrAdd(EventType);
+	for (int32 Role = 0; Role < WonderlandJuliusRoleCount; ++Role)
+	{
+		const TSharedPtr<SWonderlandRoleConsole> Console = DeckConsole(Role);
+		if (!Console.IsValid())
+		{
+			continue;
+		}
+		// THE WORLD HAS MOVED ON. Whatever a console still owed the last event is written now, so no console is ever
+		// describing a stage the Dog has left; the pacing is chosen so this is rarely more than a line.
+		FlushDeckFeed(Role);
+		FDeckFeed& Feed = DeckFeeds[Role];
+		Feed.Event = EventType;
+		const EWonderlandJuliusRole Which = static_cast<EWonderlandJuliusRole>(Role);
+		if (bEnded)
+		{
+			Console->SetStatus(WonderlandRoleRestingStatus(Which, true));
+			continue;
+		}
+		FWonderlandRoleBlock Block = WonderlandRoleBlockFor(Which, EventType, Occurrence, bLlmJoined, bJhinnJoined);
+		if (!Block.Status.IsEmpty())
+		{
+			Console->SetStatus(Block.Status);
+		}
+		Feed.Pending = MoveTemp(Block.Lines);
+		// Staggered, so four consoles taking one event do not write their first lines on the same frame like a printer.
+		Feed.Wait = 0.18f * Role;
+	}
+}
+
+void UWonderlandUiSubsystem::FlushDeckFeed(int32 Role)
+{
+	const TSharedPtr<SWonderlandRoleConsole> Console = DeckConsole(Role);
+	FDeckFeed& Feed = DeckFeeds[Role];
+	if (Console.IsValid())
+	{
+		for (const FWonderlandRoleLine& Line : Feed.Pending)
+		{
+			Console->AddLine(Line);
+		}
+	}
+	Feed.Pending.Reset();
+	Feed.Wait = 0.0f;
+}
+
+bool UWonderlandUiSubsystem::TickDeck(float DeltaSeconds)
+{
+	// ON THE WORLD'S CLOCK, like the fixture and the Dog: slowing the world for a film slows the consoles with it, and a
+	// paused world holds them mid-sentence rather than letting them run ahead of the mission.
+	const UWorld* World = PlayerWorld();
+	if (World == nullptr)
+	{
+		DeckWorldSeconds = -1.0;
+		return true;
+	}
+	const double Now = World->GetTimeSeconds();
+	const float Step = DeckWorldSeconds < 0.0 ? 0.0f : FMath::Clamp(static_cast<float>(Now - DeckWorldSeconds), 0.0f, 0.5f);
+	DeckWorldSeconds = Now;
+	for (int32 Role = 0; Role < WonderlandJuliusRoleCount; ++Role)
+	{
+		FDeckFeed& Feed = DeckFeeds[Role];
+		if (Feed.Pending.Num() == 0)
+		{
+			continue;
+		}
+		const TSharedPtr<SWonderlandRoleConsole> Console = DeckConsole(Role);
+		Feed.Wait -= Step;
+		while (Feed.Wait <= 0.0f && Feed.Pending.Num() > 0)
+		{
+			const FWonderlandRoleLine Line = Feed.Pending[0];
+			Feed.Pending.RemoveAt(0);
+			if (Console.IsValid())
+			{
+				Console->AddLine(Line);
+			}
+			Feed.Wait += WonderlandRoleLineHoldSeconds(Line.Kind);
+		}
+	}
+	return true;
+}
+
+TSharedPtr<SWonderlandRoleConsole> UWonderlandUiSubsystem::DeckConsole(int32 Role) const
+{
+	return Terminal.IsValid() && Role >= 0 && Role < WonderlandJuliusRoleCount
+		? Terminal->GetRoleConsole(static_cast<EWonderlandJuliusRole>(Role)) : nullptr;
+}
+
+bool UWonderlandUiSubsystem::IsMissionDeckShown() const
+{
+	return Terminal.IsValid() && Terminal->IsDeckShown() && IsLiveTerminalOpen();
+}
+
+FString UWonderlandUiSubsystem::GetDeckStatus(int32 Role) const
+{
+	const TSharedPtr<SWonderlandRoleConsole> Console = DeckConsole(Role);
+	return Console.IsValid() ? Console->GetStatus() : FString();
+}
+
+int32 UWonderlandUiSubsystem::GetDeckWrittenCount(int32 Role) const
+{
+	const TSharedPtr<SWonderlandRoleConsole> Console = DeckConsole(Role);
+	return Console.IsValid() ? Console->GetWrittenCount() : 0;
+}
+
+FString UWonderlandUiSubsystem::GetDeckLatestLine(int32 Role) const
+{
+	const TSharedPtr<SWonderlandRoleConsole> Console = DeckConsole(Role);
+	return Console.IsValid() ? Console->GetLatestText() : FString();
+}
+
+FString UWonderlandUiSubsystem::GetDeckLatestKind(int32 Role) const
+{
+	const TSharedPtr<SWonderlandRoleConsole> Console = DeckConsole(Role);
+	return Console.IsValid() ? Console->GetLatestKind() : FString();
+}
+
+FName UWonderlandUiSubsystem::GetDeckNarratedEvent(int32 Role) const
+{
+	return Role >= 0 && Role < WonderlandJuliusRoleCount ? DeckFeeds[Role].Event : NAME_None;
+}
+
+int32 UWonderlandUiSubsystem::GetDeckPendingCount(int32 Role) const
+{
+	return Role >= 0 && Role < WonderlandJuliusRoleCount ? DeckFeeds[Role].Pending.Num() : 0;
 }
 
 bool UWonderlandUiSubsystem::IsJuliusTerminalSimulated() const

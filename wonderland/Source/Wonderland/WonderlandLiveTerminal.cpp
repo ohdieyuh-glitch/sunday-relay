@@ -7,11 +7,49 @@
 #include "Rendering/SlateRenderer.h"
 #include "Widgets/Input/SEditableTextBox.h"
 #include "Widgets/Layout/SBorder.h"
+#include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SConstraintCanvas.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
+#include "WonderlandMissionDeck.h"
 #include "WonderlandUiStyle.h"
+#include "HAL/IConsoleManager.h"
+#include "Widgets/SOverlay.h"
+
+// WHERE THE DECK SITS, as viewport anchors "minX minY maxX maxY": read every layout pass, so it can be placed in PIE.
+// Named, not anonymous: the module is one unity translation unit.
+namespace WonderlandDeckLayout
+{
+	TAutoConsoleVariable<FString> CVarJulius(TEXT("wl.Deck.Julius"), TEXT("0.231 0.618 0.567 0.988"),
+		TEXT("Anchors of the JULIUS console of the mission deck: minX minY maxX maxY."));
+	TAutoConsoleVariable<FString> CVarArchitect(TEXT("wl.Deck.Architect"), TEXT("0.006 0.618 0.225 0.988"),
+		TEXT("Anchors of the PROMPT ARCHITECT console of the mission deck."));
+	TAutoConsoleVariable<FString> CVarCoder(TEXT("wl.Deck.Coder"), TEXT("0.573 0.618 0.792 0.988"),
+		TEXT("Anchors of the CODING AGENT console of the mission deck."));
+	TAutoConsoleVariable<FString> CVarReviewer(TEXT("wl.Deck.Reviewer"), TEXT("0.798 0.618 0.994 0.988"),
+		TEXT("Anchors of the INDEPENDENT REVIEWER console of the mission deck."));
+
+	FAnchors Parse(const TAutoConsoleVariable<FString>& Variable, const FAnchors& Fallback)
+	{
+		TArray<FString> Parts;
+		Variable.GetValueOnGameThread().ParseIntoArrayWS(Parts);
+		if (Parts.Num() != 4)
+		{
+			return Fallback;
+		}
+		float Values[4];
+		for (int32 Index = 0; Index < 4; ++Index)
+		{
+			if (!FCString::IsNumeric(*Parts[Index]))
+			{
+				return Fallback;
+			}
+			Values[Index] = FMath::Clamp(FCString::Atof(*Parts[Index]), 0.0f, 1.0f);
+		}
+		return Values[2] > Values[0] && Values[3] > Values[1] ? FAnchors(Values[0], Values[1], Values[2], Values[3]) : Fallback;
+	}
+}
 
 /* ------------------------------------------------------------ hex badge */
 
@@ -107,6 +145,21 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 	SAssignNew(JuliusBody, SVerticalBox);
 	RebuildJuliusBody();
 
+	for (int32 Index = 0; Index < WonderlandJuliusRoleCount; ++Index)
+	{
+		const EWonderlandJuliusRole Role = static_cast<EWonderlandJuliusRole>(Index);
+		const bool bJulius = Role == EWonderlandJuliusRole::Julius;
+		RoleConsoles.Add(SNew(SWonderlandRoleConsole)
+			.Title(bJulius ? FString(TEXT("JULIUS · MISSION AUTHORITY")) : FString(WonderlandJuliusRoleTitle(Role)))
+			.Subtitle(bJulius ? FString() : FString(TEXT("JULIUS COMPONENT · SIMULATED")))
+			.bFramed(!bJulius)
+			.MaxLines(bJulius ? 20 : 22)
+			.TitleSize(bJulius ? 11 : 9)
+			.LineSize(9));
+	}
+	const auto DeckOnly = [this]() { return bSimulated ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; };
+	const auto ClassicOnly = [this]() { return bSimulated ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible; };
+
 	const TSharedRef<SWidget> Window =
 		SNew(SBorder)
 		.BorderImage(&WindowBrush)
@@ -127,7 +180,19 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 			+ SVerticalBox::Slot()
 			.FillHeight(1.0f)
 			[
+				SNew(SOverlay)
+				+ SOverlay::Slot()
+				[
+					SNew(SBox)
+					.Visibility_Lambda(DeckOnly)
+					[
+						RoleConsoles[static_cast<int32>(EWonderlandJuliusRole::Julius)].ToSharedRef()
+					]
+				]
+				+ SOverlay::Slot()
+				[
 				SNew(SScrollBox)
+				.Visibility_Lambda(ClassicOnly)
 				.ScrollBarVisibility(EVisibility::Collapsed)
 				+ SScrollBox::Slot().Padding(0.0f, 0.0f, 0.0f, 5.0f)
 				[
@@ -145,6 +210,7 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 				[
 					MakeSection(TEXT("INDEPENDENT REVIEWER"), TEXT("WAITING"),
 						MakeLiveLine(TEXT("INDEPENDENT REVIEWER"), TEXT("Reviewer: Independent review begins after Julius verification.")))
+				]
 				]
 			]
 			+ SVerticalBox::Slot()
@@ -186,9 +252,14 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 	ChildSlot
 	[
 		SNew(SConstraintCanvas)
-		// 39.2% wide, 27.3% tall, bottom-centred with a 3.1% margin: the approved web measurement.
+		// 39.2% wide, 27.3% tall, bottom-centred with a 3.1% margin: the approved web measurement. In the deck, the
+		// largest console of the four, in the middle of the bottom band.
 		+ SConstraintCanvas::Slot()
-		.Anchors(FAnchors(0.304f, 0.696f, 0.696f, 0.969f))
+		.Anchors(TAttribute<FAnchors>::CreateLambda([this]()
+		{
+			return bSimulated ? WonderlandDeckLayout::Parse(WonderlandDeckLayout::CVarJulius, FAnchors(0.231f, 0.618f, 0.567f, 0.988f))
+				: FAnchors(0.304f, 0.696f, 0.696f, 0.969f);
+		}))
 		.Offset(FMargin(0.0f))
 		[
 			Window
@@ -197,13 +268,31 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 		.Anchors(FAnchors(0.018f, 0.708f, 0.205f, 0.962f))
 		.Offset(FMargin(0.0f))
 		[
-			MakeSideList(true)
+			SNew(SBox).Visibility_Lambda(ClassicOnly)[ MakeSideList(true) ]
 		]
 		+ SConstraintCanvas::Slot()
 		.Anchors(FAnchors(0.795f, 0.708f, 0.982f, 0.962f))
 		.Offset(FMargin(0.0f))
 		[
-			MakeSideList(false)
+			SNew(SBox).Visibility_Lambda(ClassicOnly)[ MakeSideList(false) ]
+		]
+		+ SConstraintCanvas::Slot()
+		.Anchors(TAttribute<FAnchors>::CreateLambda([]() { return WonderlandDeckLayout::Parse(WonderlandDeckLayout::CVarArchitect, FAnchors(0.006f, 0.618f, 0.225f, 0.988f)); }))
+		.Offset(FMargin(0.0f))
+		[
+			SNew(SBox).Visibility_Lambda(DeckOnly)[ RoleConsoles[static_cast<int32>(EWonderlandJuliusRole::PromptArchitect)].ToSharedRef() ]
+		]
+		+ SConstraintCanvas::Slot()
+		.Anchors(TAttribute<FAnchors>::CreateLambda([]() { return WonderlandDeckLayout::Parse(WonderlandDeckLayout::CVarCoder, FAnchors(0.573f, 0.618f, 0.792f, 0.988f)); }))
+		.Offset(FMargin(0.0f))
+		[
+			SNew(SBox).Visibility_Lambda(DeckOnly)[ RoleConsoles[static_cast<int32>(EWonderlandJuliusRole::CodingAgent)].ToSharedRef() ]
+		]
+		+ SConstraintCanvas::Slot()
+		.Anchors(TAttribute<FAnchors>::CreateLambda([]() { return WonderlandDeckLayout::Parse(WonderlandDeckLayout::CVarReviewer, FAnchors(0.798f, 0.618f, 0.994f, 0.988f)); }))
+		.Offset(FMargin(0.0f))
+		[
+			SNew(SBox).Visibility_Lambda(DeckOnly)[ RoleConsoles[static_cast<int32>(EWonderlandJuliusRole::IndependentReviewer)].ToSharedRef() ]
 		]
 	];
 }
@@ -561,3 +650,9 @@ void SWonderlandLiveTerminal::ResetSimulation()
 	RebuildJuliusBody();
 }
 
+
+TSharedPtr<SWonderlandRoleConsole> SWonderlandLiveTerminal::GetRoleConsole(EWonderlandJuliusRole Role) const
+{
+	const int32 Index = static_cast<int32>(Role);
+	return RoleConsoles.IsValidIndex(Index) ? RoleConsoles[Index] : nullptr;
+}
