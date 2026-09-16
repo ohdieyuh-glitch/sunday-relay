@@ -10,6 +10,7 @@ H = unreal.WonderlandHudTestLibrary
 QUIET = unreal.PropertyAccessChangeNotifyMode.NEVER
 SHOTS = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "camera_test")
 WAIT_BEAT = globals().get("WAIT_BEAT") or "researching"
+PLAN = globals().get("PLAN")
 # (tag, arm, socket y, socket z, pitch, yaw offset from behind the Dog toward the Contract)
 FRAMINGS = globals().get("FRAMINGS") or [
     ("now", 440.0, 55.0, 135.0, -14.0, 0.0),
@@ -49,25 +50,32 @@ def job():
         yield (lambda: mission.is_fixture_running(), 180)
         if not ui.is_live_terminal_open():
             ui.toggle_live_terminal()
-        yield (lambda: str(mission.get_beat_id()) == WAIT_BEAT, 400)
-        yield 3.0
-        unreal.SystemLibrary.execute_console_command(world, "slomo 0.2")
-        for tag, arm, sy, sz, pitch, offset in FRAMINGS:
-            boom.set_editor_property("target_arm_length", arm, QUIET)
-            boom.set_editor_property("socket_offset", unreal.Vector(0.0, sy, sz), QUIET)
-            for n in range(3):
-                dog_at = pawn.get_actor_location()
-                orb_at = mission.get_orb_location()
-                mid = unreal.Vector((dog_at.x + orb_at.x) * 0.5, (dog_at.y + orb_at.y) * 0.5, dog_at.z)
-                yaw = unreal.MathLibrary.find_look_at_rotation(dog_at, mid).yaw + offset
-                controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=pitch, yaw=yaw))
-                yield 0.6
-                path = os.path.join(SHOTS, "%s_%d.jpg" % (tag, n))
-                ok = H.capture_viewport_jpeg(path, 1600, 88)
-                shots.append({"tag": tag, "n": n, "ok": bool(ok), "beat": str(mission.get_beat_id()),
-                              "turning": bool(next((c for c in pawn.get_components_by_class(unreal.SceneComponent)
-                                                    if c.get_name().startswith("MissionBookTurningPage")), None).is_visible())})
-                yield 1.2
+        # PLAN: [(beat to wait for, [(tag, arm, socket y, socket z, pitch, yaw offset, [console commands]), ...]), ...]
+        plan = PLAN or [(WAIT_BEAT, [tuple(f) + ([],) for f in FRAMINGS])]
+        for beat, framings in plan:
+            unreal.SystemLibrary.execute_console_command(world, "slomo 1")
+            yield (lambda: str(mission.get_beat_id()) == beat, 400)
+            yield 3.0
+            unreal.SystemLibrary.execute_console_command(world, "slomo 0.2")
+            for tag, arm, sy, sz, pitch, offset, commands in framings:
+                for command in commands:
+                    unreal.SystemLibrary.execute_console_command(world, command)
+                boom.set_editor_property("target_arm_length", arm, QUIET)
+                boom.set_editor_property("socket_offset", unreal.Vector(0.0, sy, sz), QUIET)
+                for n in range(3):
+                    dog_at = pawn.get_actor_location()
+                    orb_at = mission.get_orb_location()
+                    mid = unreal.Vector((dog_at.x + orb_at.x) * 0.5, (dog_at.y + orb_at.y) * 0.5, dog_at.z)
+                    yaw = unreal.MathLibrary.find_look_at_rotation(dog_at, mid).yaw + offset
+                    controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=pitch, yaw=yaw))
+                    yield 0.6
+                    path = os.path.join(SHOTS, "%s_%d.jpg" % (tag, n))
+                    ok = H.capture_viewport_jpeg(path, 1600, 88)
+                    leaf = next((c for c in pawn.get_components_by_class(unreal.SceneComponent)
+                                 if c.get_name().startswith("MissionBookTurningPage")), None)
+                    shots.append({"tag": tag, "n": n, "ok": bool(ok), "beat": str(mission.get_beat_id()),
+                                  "turning": bool(leaf.is_visible()) if leaf else None})
+                    yield 1.2
         unreal.SystemLibrary.execute_console_command(world, "slomo 1")
         RESULT["status"] = "done"
     finally:
