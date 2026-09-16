@@ -21,7 +21,11 @@ import time
 SHOTS = os.path.join(os.path.dirname(CHANNEL), "captures", "zc")
 L = unreal.WonderlandUiTestLibrary
 
-PACE = 1.1          # seconds per mission event
+# SLOW ENOUGH TO SEE A CIRCLE. At 1.1 s an event the planning stage lasts about a second and a half, in
+# which the Dog sweeps 40 degrees -- an arc, not a circle, and no fault of the animation. A real planning
+# stage lasts minutes; the fixture's pace is a filming artifact, so the film slows down rather than the walk
+# speeding up. J02 asserts the RATE for that reason, which is the part that does not depend on the pace.
+PACE = 3.0          # seconds per mission event
 SAMPLE = 0.25       # seconds between samples
 CAPTURE_EVERY = 2   # capture every Nth sample
 BEAM_TOLERANCE = 45.0   # uu the beam's end may miss the crystal's centre by and still be "landing on" it
@@ -63,13 +67,23 @@ def job():
     yield 0.5
 
     # ---------------------------------------------------------------- the components the renderer uses
-    parts = {}
-    for comp in pawn.get_components_by_class(unreal.SceneComponent):
-        parts[comp.get_name()] = comp
-    beam = parts.get("VerificationBeam")
-    body = parts.get("Body")
-    book = parts.get("MissionBook")
-    brush = parts.get("MissionBrush")
+    # BY PREFIX, NOT BY NAME. Both lanes build these with MakeUniqueObjectName, so the component that
+    # actually exists is "VerificationBeam_0" and an exact match finds nothing -- which is what made the
+    # first run report no beam and no props on a Dog that was visibly carrying them.
+    scene = list(pawn.get_components_by_class(unreal.SceneComponent))
+    RESULT["component_names"] = sorted(c.get_name() for c in scene)
+
+    def part(prefix, exact=False):
+        for c in scene:
+            name = c.get_name()
+            if name == prefix or (not exact and name.startswith(prefix)):
+                return c
+        return None
+
+    beam = part("VerificationBeam")
+    body = part("Body", exact=True)
+    book = part("MissionBook")
+    brush = part("MissionBrush")
     RESULT["components"] = {"beam": beam is not None, "body": body is not None,
                             "book": book is not None, "brush": brush is not None}
     say("components %s" % RESULT["components"])
@@ -86,6 +100,7 @@ def job():
     mission.start_fixture("full_lifecycle", PACE)
     frames = []
     index = 0
+    tail = 5   # keep filming a little past the ending, so J07 has more than one sample to judge
     deadline = time.time() + 120.0
     while time.time() < deadline:
         yield SAMPLE
@@ -126,7 +141,9 @@ def job():
         })
         index += 1
         if not mission.is_fixture_running() and not here:
-            break
+            tail -= 1
+            if tail <= 0:
+                break
     RESULT["frames"] = frames
     say("filmed %d samples" % len(frames))
 
@@ -157,8 +174,16 @@ def job():
     RESULT["circle"] = circle
     # 60 degrees over a planning stage is the least that reads as going round something rather than
     # shifting on the spot; a spread over half the radius is a wander, not a circle.
+    if circle.get("samples", 0) > 2:
+        seconds = max((len(plan) - 1) * SAMPLE, 0.01)
+        circle["seconds"] = round(seconds, 2)
+        circle["sweep_rate_deg_s"] = round(circle.get("swept_deg", 0.0) / seconds, 1)
+        circle["full_circle_seconds"] = round(360.0 / max(circle["sweep_rate_deg_s"], 0.01), 1)
+    # THE RATE IS THE PART THAT DOES NOT DEPEND ON THE FIXTURE'S PACE. A stage of any realistic length
+    # reads as going round something if the Dog would complete a circle in under about twenty seconds; the
+    # radius spread says whether it is a circle or a wander that happens to average out.
     record("J02", "the Dog circles the contract while reading, rather than shuffling beside it",
-           circle.get("swept_deg", 0.0) >= 60.0
+           circle.get("full_circle_seconds", 9e9) <= 20.0
            and circle.get("radius_spread_uu", 9e9) <= circle.get("radius_mean_uu", 1.0) * 0.5,
            **circle)
 
