@@ -104,8 +104,10 @@ def job():
                 hit = unreal.SystemLibrary.line_trace_single(
                     world, eye, target, unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [],
                     unreal.DrawDebugTrace.NONE, True)
-                # A trace that reaches the target unobstructed returns no blocking hit.
-                seen[label] = hit is None or not hit.blocking_hit
+                # LineTraceSingle hands Python the HitResult itself, or None when nothing blocked. Note
+                # that the nine trials all came back None -- the ray from the camera to the orb crossed
+                # nothing collidable even where the frame plainly shows the Dog's leg in the way.
+                seen[label] = hit is None
 
         path = os.path.join(SHOTS, "zc_orbprobe_%s.png" % name)
         ok = L.capture_game_viewport(path)

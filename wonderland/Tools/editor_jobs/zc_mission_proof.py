@@ -132,8 +132,15 @@ def job():
         world, unreal.Vector(orb_at.x, orb_at.y, orb_at.z + 200.0),
         unreal.Vector(orb_at.x, orb_at.y, orb_at.z - 400.0),
         unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [], unreal.DrawDebugTrace.NONE, True)
-    if hit is not None and hit.blocking_hit:
-        floor_z = float(hit.location.z)
+    if hit is not None:
+        # HitResult's fields are NOT Python attributes in 5.8 -- `hit.blocking_hit` raises. BreakHitResult
+        # is the accessor, and it hands back a flat tuple: (blocking, initial_overlap, time, distance,
+        # location, impact_point, ...). The location is picked by type rather than by index, so a future
+        # engine that inserts a field does not silently start reporting the impact point as the floor.
+        parts = unreal.GameplayStatics.break_hit_result(hit)
+        where = next((p for p in parts if isinstance(p, unreal.Vector)), None)
+        if parts and parts[0] and where is not None:
+            floor_z = float(where.z)
     above_floor = None if floor_z is None else round(orb_at.z - floor_z, 1)
     RESULT["placement"] = {"orb": [orb_at.x, orb_at.y, orb_at.z], "pawn": [pawn_at.x, pawn_at.y, pawn_at.z],
                            "offset": [offset.x, offset.y], "wanted_uu": round(wanted, 1),
