@@ -26,6 +26,11 @@ L = unreal.WonderlandUiTestLibrary
 # stage lasts minutes; the fixture's pace is a filming artifact, so the film slows down rather than the walk
 # speeding up. J02 asserts the RATE for that reason, which is the part that does not depend on the pace.
 PACE = 3.0          # seconds per mission event
+# THE FRAME THE PORTRAIT IS MEASURED AGAINST. project_world_to_screen returns a coordinate for points
+# BEHIND the camera too, so "in shot" has to mean inside the frame with room to spare, not merely a
+# number that exists.
+VIEW_W, VIEW_H = 1903.0, 927.0
+MARGIN_PX = 70.0
 SAMPLE = 0.25       # seconds between samples
 CAPTURE_EVERY = 3   # capture every Nth sample. A 3.4 MB PNG is not free and the film is long now.
 BEAM_TOLERANCE = 45.0   # uu the beam's end may miss the crystal's centre by and still be "landing on" it
@@ -399,37 +404,82 @@ def job():
                and (sent_last - sent_first) >= 2 and len(flew) >= 2, **RESULT["study"])
 
         # ------------------------------------------------------- a portrait of the working stages
-        # THE JHINN IS IN THE WAY, and not only while verifying. The play camera sits behind the Dog, the
+        # THE JHINN IS IN THE WAY, and not only while verifying. The play camera sits behind the player, the
         # Dog performs facing the anchored Contract, and a companion in its normal follow position lands
-        # between the two -- so the repair filmstrip from this run is six frames of a companion's back.
+        # between the two -- so the repair filmstrip from the first run is six frames of a companion's back.
         #
         # The founder asked only that the sight-line be cleared during VERIFYING, so the formation is left
-        # alone and the CAMERA moves instead: hold the stage, step round it, and take frames a person could
-        # actually judge. What that cannot do is decide whether the formation should cover more stages --
-        # that is the founder's call and it goes to them with these frames.
+        # alone and the CAMERA moves instead. Moving a camera is honest; moving the companions to flatter the
+        # picture would not be. Whether the formation should cover more stages is the founder's call, and it
+        # goes to them with these frames rather than being decided here.
+        #
+        # THE FIRST VERSION OF THIS PORTRAIT FRAMED NOTHING. It offset the yaw by 155 degrees to step around
+        # the Jhinn, and the pawn's camera is on a SPRING ARM with bUsePawnControlRotation -- so the camera
+        # swung around in FRONT of the player and looked backwards, away from the anchored Contract. Every
+        # frame showed the Dog waving a brush at empty garden. The check passed all sixteen of them, because
+        # it only ever asserted that sixteen files had been written.
+        #
+        # So: aim at the MIDPOINT of the Dog and the Contract, so the arm puts the camera behind the player
+        # with both in front of it, and step around the Jhinn with a small offset instead of a reversal.
+        boom = pawn.get_component_by_class(unreal.SpringArmComponent)
+        arm_was = float(boom.target_arm_length) if boom is not None else None
+
+        def in_frame(at):
+            """Screen position of a world point, and whether it is comfortably inside the frame."""
+            try:
+                got = unreal.GameplayStatics.project_world_to_screen(controller, at, False)
+                if isinstance(got, tuple):
+                    got = got[1] if len(got) > 1 else got[0]
+                x, y = float(got.x), float(got.y)
+            except Exception:
+                return None, False
+            # A point BEHIND the camera still projects to a coordinate, so the margin is not decoration.
+            inside = (MARGIN_PX <= x <= VIEW_W - MARGIN_PX) and (MARGIN_PX <= y <= VIEW_H - MARGIN_PX)
+            return [round(x, 1), round(y, 1)], inside
+
         work_portrait = []
         for beat, name in (("independent_reviewer", "review"), ("repairing", "repair")):
             mission.set_beat_by_id(beat)
             yield 1.6
-            pawn_now = pawn.get_actor_location()
-            contract_at = mission.get_orb_location()
-            look = unreal.MathLibrary.find_look_at_rotation(pawn_now, contract_at)
-            for tag, dyaw, pitch in (("front", 155.0, -14.0), ("side", 70.0, -18.0)):
+            for tag, dyaw, pitch, arm in (("near", 26.0, -9.0, 330.0), ("wide", -32.0, -15.0, 720.0)):
+                if boom is not None:
+                    boom.set_editor_property("target_arm_length", arm)
+                pawn_now = pawn.get_actor_location()
+                contract_at = mission.get_orb_location()
+                dog_at = body.get_world_location() if body is not None else pawn_now
+                middle = unreal.Vector((dog_at.x + contract_at.x) * 0.5,
+                                       (dog_at.y + contract_at.y) * 0.5,
+                                       (dog_at.z + contract_at.z) * 0.5)
+                look = unreal.MathLibrary.find_look_at_rotation(pawn_now, middle)
                 controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=pitch, yaw=look.yaw + dyaw))
                 # Several frames at one angle, so a CYCLE can be read rather than a pose.
                 for step in range(4):
                     yield 0.55
+                    dog_px, dog_seen = in_frame(body.get_world_location() if body is not None else pawn_now)
+                    work_px, work_seen = in_frame(mission.get_orb_location())
                     work_portrait.append({
                         "beat": beat, "angle": tag, "step": step,
                         "performing": str(mission.get_dog_performing_label()),
                         "brush": bool(brush.is_visible()) if brush is not None else False,
                         "lens": bool(lens.is_visible()) if lens is not None else False,
+                        "dog_px": dog_px, "work_px": work_px,
+                        "both_in_frame": bool(dog_seen and work_seen),
                         "capture": shot("zc_joint_%s_%s_%d.png" % (name, tag, step)),
                     })
+        if boom is not None and arm_was is not None:
+            boom.set_editor_property("target_arm_length", arm_was)
         RESULT["work_portrait"] = work_portrait
-        record("J15", "review and repair can be framed from the player's own camera",
-               len(work_portrait) >= 12 and all(w["capture"] for w in work_portrait),
-               frames=len(work_portrait))
+
+        # THE CHECK IS THE COMPOSITION, NOT THE FILE COUNT. "Sixteen captures exist" is true of sixteen
+        # pictures of an empty lawn. What has to hold is that the worker and the work are both in shot,
+        # because the question these frames answer -- does repair read as CORRECTING rather than BUILDING --
+        # cannot be answered from a frame the Contract is not in.
+        framed = [w for w in work_portrait if w["both_in_frame"]]
+        record("J15", "review and repair are framed with BOTH the Dog and the work in shot",
+               len(work_portrait) >= 16 and all(w["capture"] for w in work_portrait)
+               and len(framed) >= int(len(work_portrait) * 0.75),
+               frames=len(work_portrait), both_in_frame=len(framed),
+               missing=[[w["beat"], w["angle"], w["step"]] for w in work_portrait if not w["both_in_frame"]])
         mission.set_beat_by_id("idle")
         yield 0.6
 
