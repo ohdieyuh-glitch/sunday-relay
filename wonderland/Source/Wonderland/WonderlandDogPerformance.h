@@ -1,6 +1,6 @@
 // WONDERLAND — WHAT JULIUS IS DOING WITH HIS BODY. The Relay Dog's mission performance.
 //
-// THE FOUNDER'S CANON, 2026-09-16, WHICH SUPERSEDES THE GENERIC POSES FOR FOUR STAGES:
+// THE FOUNDER'S CANON, 2026-09-16, WHICH SUPERSEDES THE GENERIC POSES FOR THE WORK STAGES:
 //
 //   MISSION START   The Dog FLOATS. Body off the ground and upright, head raised, both forearms reaching
 //                   out and about 35 degrees DOWN -- not hanging, not a T-pose. Chest open, calm, centred,
@@ -17,7 +17,15 @@
 //                   as long as verification lasts. Not a shot, not a burst, not a flicker. Analytical
 //                   rather than destructive -- this is checking, not combat.
 //
-//   HANDOFF         NOTHING. There is deliberately no Relay Dog handoff animation in this design.
+//   REVIEW          A LENS, and a deliberate examination around the work. Checking it, never building
+//                   it. CHALLENGE stays inside this family rather than dropping back to the brush.
+//
+//   REPAIR          FIND THE FAULT, TAKE IT OUT, PUT IT BACK. The brush returns, which is the whole
+//                   difficulty: a repair that merely painted would be implementation wearing another
+//                   label. What separates them is the cycle -- a repair keeps stopping to undo.
+//
+//   HANDOFF         NOTHING OF ITS OWN. There is deliberately no handoff animation, and a handoff
+//                   INHERITS whatever is performing.
 //
 // WHY THIS IS A SEPARATE VOCABULARY FROM EWonderlandDogAnimation.
 //
@@ -27,11 +35,14 @@
 // test for a change that is purely about what Wonderland draws. The founder's own words settle it: world
 // presentation and Julius internal events are separate layers.
 //
-// So the clip vocabulary is left exactly as it is, and this sits ON TOP of it. An act of `None` means
-// "whatever the Dog was already going to do", which is how every unspecified state -- research, repair,
-// review, blocked, waiting, error, completion -- keeps its existing behaviour untouched. Handoff maps to
-// `None`, and that is the whole of removing the handoff animation: nothing is deleted, nothing is broken,
-// and no dedicated pose plays.
+// So the clip vocabulary is left exactly as it is, and this sits ON TOP of it.
+//
+// AND `None` IS NOW ONLY FOR TRANSITIONS. It first covered every unspecified state, which was right
+// while they were unspecified and became wrong the moment they were not: because None inherits, REVIEW
+// inherited IMPLEMENTATION, and the Compound Agent went on painting while its own work was being
+// reviewed. The founder cut the line where it belongs -- a handoff, a checkpoint and a non-terminal
+// approval are TRANSITIONS and may inherit, because nothing about the work has changed; a WORK STAGE
+// may not, because something has.
 //
 // NO PROVIDER DECIDES ANY OF THIS. The act comes from the mission beat, which comes from the fold, which
 // comes from role-shaped events. Whether the work was served by one provider or another changes nothing.
@@ -40,15 +51,27 @@
 #include "CoreMinimal.h"
 #include "WonderlandMissionBeat.h"
 
-/** The four locked performances, plus the absence of one. */
+/**
+ * The locked performances, plus the absence of one.
+ *
+ * `None` MEANS INHERIT, NOT STOP, and the founder's 2026-09-16 decision draws the line: TRANSITIONS may
+ * inherit the act that is running -- a handoff, a checkpoint, an approval that does not end the mission --
+ * because nothing about the work itself has changed. WORK STAGES may not. Review inheriting implementation
+ * left the Compound Agent painting while its own work was being reviewed, which is a sentence about the
+ * mission that was not true.
+ */
 enum class EWonderlandDogAct : uint8
 {
-	/** Keep whatever the Dog is already doing. Every unspecified mission state resolves here. */
+	/** Keep whatever the Dog is already doing. Transitions only. */
 	None,
 	FloatingActivation,
 	ReadingTheBook,
 	PaintingTheWork,
-	VerificationBeam
+	VerificationBeam,
+	/** REVIEW. A lens, and a deliberate examination. Checking the work, never building it. */
+	InspectingTheWork,
+	/** REPAIR. Find the fault, take it out, put it back. Fixing something that failed. */
+	CorrectingTheWork
 };
 
 /** What the Dog is holding. Props fade in and out rather than appearing, so a stage change is a movement. */
@@ -56,7 +79,9 @@ enum class EWonderlandDogProp : uint8
 {
 	None,
 	Book,
-	Paintbrush
+	Paintbrush,
+	/** REVIEW's lens. The one prop whose whole job is to say "looking", not "making". */
+	MagnifyingGlass
 };
 
 /**
@@ -90,6 +115,22 @@ struct FWonderlandDogActReading
 	bool bOrbitsTheContract = false;
 	/** True while a sustained beam runs from the Dog's chest to the contract. */
 	bool bBeamsTheContract = false;
+
+	/**
+	 * READING IS A TWO-HANDED ACT. One hand holds the book and the other turns the pages, because a book
+	 * that sits in a fist is a prop glued to a hand and reads as carrying rather than studying. The page
+	 * turn has to be visible from the play camera, which is a good deal further away than an animator's.
+	 */
+	bool bTurnsPages = false;
+
+	/**
+	 * THE CORRECTIVE CYCLE, for REPAIR: find the fault, take it out, put it back. The brush returns here,
+	 * which is the whole difficulty -- repair must not read as implementation carrying on. The phase length
+	 * is what separates them: a repair keeps stopping to undo, an implementation does not.
+	 */
+	bool bCorrects = false;
+	/** Seconds for one find-erase-repaint cycle. */
+	float CorrectCycleSeconds = 0.0f;
 };
 
 /* ------------------------------------------------------------------ resolvers */
@@ -99,9 +140,9 @@ WONDERLAND_API const FWonderlandDogActReading& WonderlandDogActReading(EWonderla
 /**
  * THE ONE MAPPING, from mission beat to what the body does.
  *
- * Only the four the founder locked resolve to a performance. EVERYTHING ELSE RESOLVES TO `None` ON
- * PURPOSE, including handoff: research, repair, review, blocked, waiting, error and completion keep the
- * behaviour they already had until each is specified in its own right.
+ * Every WORK STAGE resolves to its own performance. Only TRANSITIONS resolve to `None` and inherit --
+ * handoff, checkpoint, and an approval that does not end the mission. An ending resolves to `None` too,
+ * and is told apart from a transition by the contract pointer going null rather than by this table.
  */
 WONDERLAND_API EWonderlandDogAct WonderlandDogActForBeat(EWonderlandMissionBeat Beat);
 

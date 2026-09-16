@@ -6,13 +6,13 @@ namespace
 	using DogProp = EWonderlandDogProp;
 
 	/**
-	 * The four, as one table. Read a row as a sentence: this act looks like THIS, holds THAT, moves the
-	 * body this far, and either walks the contract or beams it.
+	 * Every performance, as one table. Read a row as a sentence: this act looks like THIS, holds THAT,
+	 * moves the body this far, and either walks the contract, beams it, or works at it.
 	 */
 	const FWonderlandDogActReading GDogActs[] = {
 
 	{ DogAct::None, TEXT("NONE"), TEXT("Whatever the Dog was already doing."),
-	  DogProp::None, 0.0f, 0.0f, 4.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false, false },
+	  DogProp::None, 0.0f, 0.0f, 4.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false, false, false, false, 0.0f },
 
 	// THE FOUNDER'S ACTIVATION, and the one most easily got wrong: this is NOT meditation. The body leaves
 	// the ground entirely, upright and open, the head goes UP, and the forearms reach out and about 35
@@ -22,7 +22,7 @@ namespace
 	  DogProp::None,
 	  /* lift */ 64.0f, /* hover */ 5.0f, /* period */ 3.6f,
 	  /* head up */ -26.0f, /* arms down */ 35.0f, /* arms out */ 22.0f,
-	  /* work */ 0.0f, 0.0f, false, false },
+	  /* work */ 0.0f, 0.0f, false, false, false, false, 0.0f },
 
 	// READING, never writing, and MOVING: the Dog circles the contract while it studies. A Dog standing
 	// beside the orb holding a book is the thing the founder specifically did not want.
@@ -31,7 +31,7 @@ namespace
 	  DogProp::Book,
 	  0.0f, 0.0f, 4.0f,
 	  /* head down at the pages */ 22.0f, /* arms forward and a little down */ 18.0f, 10.0f,
-	  /* pages turn */ 5.0f, 0.22f, /* orbits */ true, false },
+	  /* pages turn */ 5.0f, 0.22f, /* orbits */ true, false, /* two hands */ true, false, 0.0f },
 
 	// WORKING, not holding. The swing is the stroke, and it is big enough to read from the play camera.
 	{ DogAct::PaintingTheWork, TEXT("IMPLEMENTING"),
@@ -39,7 +39,7 @@ namespace
 	  DogProp::Paintbrush,
 	  0.0f, 0.0f, 4.0f,
 	  /* head follows the stroke */ 10.0f, -18.0f, 16.0f,
-	  /* strokes */ 34.0f, 0.62f, /* moves while creating */ true, false },
+	  /* strokes */ 34.0f, 0.62f, /* moves while creating */ true, false, false, false, 0.0f },
 
 	// A STANCE AND A BEAM. Still, level, facing the contract, arms forward -- everything about the pose
 	// says holding steady, because the beam is the action and a busy body would fight it.
@@ -48,7 +48,29 @@ namespace
 	  DogProp::None,
 	  0.0f, 1.5f, 5.0f,
 	  /* level */ -4.0f, /* arms forward */ 8.0f, 14.0f,
-	  0.0f, 0.0f, false, /* beams */ true },
+	  0.0f, 0.0f, false, /* beams */ true, false, false, 0.0f },
+
+	// LOOKING, NOT MAKING. The lens comes up to the eye and the head goes down at the work; the walk is
+	// slower than the reading circle, because an inspection lingers where a study paces.
+	{ DogAct::InspectingTheWork, TEXT("REVIEW"),
+	  TEXT("The work is being examined against the contract, not added to."),
+	  DogProp::MagnifyingGlass,
+	  0.0f, 0.0f, 4.0f,
+	  /* head at the work */ 18.0f, /* lens up to the eye */ -34.0f, 8.0f,
+	  /* a slow sweep of the lens */ 12.0f, 0.18f,
+	  /* circles, slowly */ true, false, false, false, 0.0f },
+
+	// THE BRUSH COMES BACK, and that is the whole risk: a repair that merely painted would be
+	// implementation wearing another label. The CYCLE is what separates them -- find, erase, repaint --
+	// so this carries a period, and its stroke is larger and rarer than a build stroke.
+	{ DogAct::CorrectingTheWork, TEXT("REPAIR"),
+	  TEXT("Finding what failed, taking it out, and putting it back."),
+	  DogProp::Paintbrush,
+	  0.0f, 0.0f, 4.0f,
+	  /* head down at the fault */ 16.0f, -22.0f, 12.0f,
+	  /* bigger and slower than a build stroke */ 46.0f, 0.34f,
+	  /* stays at the fault rather than circling */ false, false, false,
+	  /* corrects */ true, /* one find-erase-repaint */ 2.6f },
 	};
 }
 
@@ -67,8 +89,9 @@ EWonderlandDogAct WonderlandDogActForBeat(EWonderlandMissionBeat Beat)
 	case EWonderlandMissionBeat::MissionStart:
 		return EWonderlandDogAct::FloatingActivation;
 
-	// PLANNING IS THE ARCHITECT'S WORK, and guidance is the same work continuing in flight, so the book
-	// stays open through it rather than snapping shut and back.
+	// RESEARCH AND PLANNING ARE BOTH THE BOOK, and guidance is the same study continuing in flight, so it
+	// stays open rather than snapping shut and back.
+	case EWonderlandMissionBeat::Researching:
 	case EWonderlandMissionBeat::PromptArchitectActive:
 	case EWonderlandMissionBeat::Guidance:
 		return EWonderlandDogAct::ReadingTheBook;
@@ -79,12 +102,27 @@ EWonderlandDogAct WonderlandDogActForBeat(EWonderlandMissionBeat Beat)
 	case EWonderlandMissionBeat::Verifying:
 		return EWonderlandDogAct::VerificationBeam;
 
-	// HANDOFF FALLS HERE DELIBERATELY, with everything else. The founder removed the handoff animation,
-	// and this is what removing it looks like: no case, no pose, nothing deleted from the shared clip
-	// vocabulary, and Julius's own handoff events left exactly as they were.
+	// REVIEW DOES NOT INHERIT IMPLEMENTATION (founder, 2026-09-16). These used to fall through to `None`
+	// and therefore keep the brush, which had the Compound Agent painting while its own work was being
+	// reviewed. CHALLENGE stays in the review family rather than dropping back to the brush.
+	case EWonderlandMissionBeat::IndependentReviewerActive:
+	case EWonderlandMissionBeat::ReviewChallenge:
+		return EWonderlandDogAct::InspectingTheWork;
+
+	// REPAIR IS CORRECTIVE, not more implementation. RepairRequired is the moment the fault is named, and
+	// it belongs with the repair rather than with the review that found it.
+	case EWonderlandMissionBeat::RepairRequired:
+	case EWonderlandMissionBeat::Repairing:
+		return EWonderlandDogAct::CorrectingTheWork;
+
+	// WHAT IS LEFT HERE IS TRANSITIONS AND ENDINGS, and nothing else.
 	//
-	// Research, repair, review, blocked, waiting, error and completion are also here ON PURPOSE. They keep
-	// the behaviour they already had until each is specified, rather than being guessed at now.
+	// Handoff, waiting/checkpoint and a non-terminal approval inherit, because nothing about the WORK has
+	// changed -- that is the founder's line, and it is why removing the handoff animation needs no case,
+	// no deletion from the shared clip vocabulary, and no change to Julius's own handoff events.
+	//
+	// Block, error, complete and idle land here too, and are told apart from a transition by the contract
+	// pointer going null rather than by this table: an ending has no contract, so the body stops.
 	default:
 		break;
 	}
@@ -102,6 +140,7 @@ const TCHAR* WonderlandDogPropName(EWonderlandDogProp Prop)
 	{
 	case EWonderlandDogProp::Book:       return TEXT("BOOK");
 	case EWonderlandDogProp::Paintbrush: return TEXT("PAINTBRUSH");
+	case EWonderlandDogProp::MagnifyingGlass: return TEXT("LENS");
 	default: break;
 	}
 	return TEXT("NONE");
