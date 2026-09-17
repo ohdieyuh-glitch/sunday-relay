@@ -1,76 +1,53 @@
 // WONDERLAND — WHAT JULIUS IS DOING WITH HIS BODY. The Relay Dog's mission performance.
 //
-// THE FOUNDER'S CANON, 2026-09-16, WHICH SUPERSEDES THE GENERIC POSES FOR THE WORK STAGES:
+// THE FOUNDER'S CANON, 2026-09-16 (evening), WHICH SUPERSEDES EVERY EARLIER TABLE:
 //
-//   MISSION START   The Dog FLOATS. Body off the ground and upright, head raised, both forearms reaching
-//                   out and about 35 degrees DOWN -- not hanging, not a T-pose. Chest open, calm, centred,
-//                   breathing. Julius activating and entering the Mission Contract. No book, no brush, and
-//                   emphatically not meditating on the floor.
+//   PREPARATION     The Dog MEDITATES and FLOATS above the ground; energy gathers; the Mission Contract appears.
+//   RESEARCH        The Dog circles the Mission Contract READING a book held in its hands: one hand supports it, the
+//                   other turns the pages, and the Dog reads.
+//   IMPLEMENTATION  The Dog circles the Contract PAINTING it: the brush arm works, the free arm rests down naturally.
+//   VERIFICATION    The Dog FLIES UP, stays airborne, aims the verification beam at the Contract and HOLDS it for the
+//                   whole stage; the beam ends when verification ends and the Dog comes down.
+//   REVIEW          A dedicated inspection with a MAGNIFYING GLASS. Never the brush.
+//   REPAIR          IDENTIFY the incorrect section, ERASE it, REPAINT it -- visibly unlike implementation.
+//   COMPLETION      The performance ends; props and effects settle; the Dog returns to normal.
 //
-//   PLANNING        The Dog READS A BOOK, and WALKS AROUND the Mission Contract while reading. Reading,
-//                   never writing. The contract is the centre of the activity, not scenery beside it.
-//
-//   IMPLEMENTING    The Dog PAINTS. Deliberate repeated strokes through the air, working rather than
-//                   holding a brush. The Compound Agent painting the creation into existence.
-//
-//   VERIFYING       The Dog holds a stance and a SUSTAINED BEAM connects it to the Mission Contract, for
-//                   as long as verification lasts. Not a shot, not a burst, not a flicker. Analytical
-//                   rather than destructive -- this is checking, not combat.
-//
-//   REVIEW          A LENS, and a deliberate examination around the work. Checking it, never building
-//                   it. CHALLENGE stays inside this family rather than dropping back to the brush.
-//
-//   REPAIR          FIND THE FAULT, TAKE IT OUT, PUT IT BACK. The brush returns, which is the whole
-//                   difficulty: a repair that merely painted would be implementation wearing another
-//                   label. What separates them is the cycle -- a repair keeps stopping to undo.
-//
-//   HANDOFF         NOTHING OF ITS OWN. There is deliberately no handoff animation, and a handoff
-//                   INHERITS whatever is performing.
+//   HANDOFF         DOES NOT EXIST FOR THE PLAYER. There is no handoff animation, pose, camera beat or label; the world
+//                   withholds the beat (UWonderlandMissionSubsystem) and an act of `None` inherits whatever is performing.
 //
 // WHY THIS IS A SEPARATE VOCABULARY FROM EWonderlandDogAnimation.
 //
-// That enum -- PatrolWalk, WorkScratch, CarryWalk and the rest -- is MIRRORED TO TYPESCRIPT and shared
-// with the website and the CLI, and wonderland-cpp-parity fails if the two drift. `CarryWalk` is the
-// handoff clip, and deleting it to satisfy "no handoff animation" would break the web Dog and the parity
-// test for a change that is purely about what Wonderland draws. The founder's own words settle it: world
-// presentation and Julius internal events are separate layers.
+// That enum -- PatrolWalk, WorkScratch, CarryWalk and the rest -- is MIRRORED TO TYPESCRIPT and shared with the website
+// and the CLI, and wonderland-cpp-parity fails if the two drift. `CarryWalk` is the handoff clip, and deleting it to
+// satisfy "no handoff animation" would break the web Dog and the parity test for a change that is purely about what
+// Wonderland draws. World presentation and Julius internal events are separate layers.
 //
-// So the clip vocabulary is left exactly as it is, and this sits ON TOP of it.
+// `None` IS ONLY FOR TRANSITIONS. A handoff, a checkpoint and a non-terminal approval inherit, because nothing about the
+// work has changed; a WORK STAGE may not, because something has.
 //
-// AND `None` IS NOW ONLY FOR TRANSITIONS. It first covered every unspecified state, which was right
-// while they were unspecified and became wrong the moment they were not: because None inherits, REVIEW
-// inherited IMPLEMENTATION, and the Compound Agent went on painting while its own work was being
-// reviewed. The founder cut the line where it belongs -- a handoff, a checkpoint and a non-terminal
-// approval are TRANSITIONS and may inherit, because nothing about the work has changed; a WORK STAGE
-// may not, because something has.
-//
-// NO PROVIDER DECIDES ANY OF THIS. The act comes from the mission beat, which comes from the fold, which
-// comes from role-shaped events. Whether the work was served by one provider or another changes nothing.
+// NO PROVIDER DECIDES ANY OF THIS. The act comes from the mission beat, which comes from the fold, which comes from
+// role-shaped events.
 #pragma once
 
 #include "CoreMinimal.h"
 #include "WonderlandMissionBeat.h"
 
-/**
- * The locked performances, plus the absence of one.
- *
- * `None` MEANS INHERIT, NOT STOP, and the founder's 2026-09-16 decision draws the line: TRANSITIONS may
- * inherit the act that is running -- a handoff, a checkpoint, an approval that does not end the mission --
- * because nothing about the work itself has changed. WORK STAGES may not. Review inheriting implementation
- * left the Compound Agent painting while its own work was being reviewed, which is a sentence about the
- * mission that was not true.
- */
+/** The performances, plus the absence of one. `None` MEANS INHERIT while a Mission Contract exists. */
 enum class EWonderlandDogAct : uint8
 {
 	/** Keep whatever the Dog is already doing. Transitions only. */
 	None,
+	/** PREPARATION. Meditating, floating, gathering the energy the Contract appears from. */
 	FloatingActivation,
+	/** RESEARCH. Reading the book in its hands while circling the Contract. */
 	ReadingTheBook,
+	/** IMPLEMENTATION. Painting the Contract while circling it. */
 	PaintingTheWork,
+	/** VERIFICATION. Airborne, holding the beam on the Contract. */
 	VerificationBeam,
 	/** REVIEW. A lens, and a deliberate examination. Checking the work, never building it. */
 	InspectingTheWork,
-	/** REPAIR. Find the fault, take it out, put it back. Fixing something that failed. */
+	/** REPAIR. Identify the fault, erase it, repaint it. */
 	CorrectingTheWork
 };
 
@@ -80,57 +57,47 @@ enum class EWonderlandDogProp : uint8
 	None,
 	Book,
 	Paintbrush,
-	/** REVIEW's lens. The one prop whose whole job is to say "looking", not "making". */
-	MagnifyingGlass
+	/** REVIEW's lens, and the repair's IDENTIFY. The one prop whose whole job is to say "looking", not "making". */
+	MagnifyingGlass,
+	/** The repair's ERASE: a flat blade that scrapes the incorrect section away. */
+	Scraper
 };
 
 /**
- * ONE PERFORMANCE, FULLY STATED. Numbers rather than clip names, because there is no rig for these: the
- * Dog is posed joint by joint every frame, so "arms 35 degrees down" has to be a figure.
+ * ONE PERFORMANCE, AS INTENT. The numbers -- lifts, angles, rates -- live in RelayDogMissionPose.h's tuning and in the
+ * character's hand solvers; this row says what the act IS, so the table reads as the founder's list.
  */
 struct FWonderlandDogActReading
 {
 	EWonderlandDogAct Act = EWonderlandDogAct::None;
+	/** The founder's stage name, as the strip shows it: PREPARATION, RESEARCH, ... */
 	const TCHAR* Label = TEXT("NONE");
 	const TCHAR* Meaning = TEXT("Whatever the Dog was already doing.");
 	EWonderlandDogProp Prop = EWonderlandDogProp::None;
 
-	/** How far the body leaves the ground, uu. Zero keeps the Dog walking normally. */
-	float FloatLiftUU = 0.0f;
-	/** Vertical travel either side of the lift, and its period. The float breathes; it is never frozen. */
-	float HoverUU = 0.0f;
-	float HoverPeriod = 4.0f;
-
-	/** Head pitch, degrees. Negative looks UP. */
-	float HeadPitchDeg = 0.0f;
-	/** Shoulder pitch, degrees, measured DOWN from horizontal. 35 is the founder's reach. */
-	float ArmDownDeg = 0.0f;
-	/** How far the arms open outward, degrees. */
-	float ArmOutDeg = 0.0f;
-	/** Amplitude of the working motion in the arms, degrees. A brush stroke; a page turn. */
-	float WorkSwingDeg = 0.0f;
-	float WorkSwingHz = 0.0f;
-
-	/** True while the Dog should walk a slow circle around the Mission Contract. */
-	bool bOrbitsTheContract = false;
-	/** True while a sustained beam runs from the Dog's chest to the contract. */
-	bool bBeamsTheContract = false;
-
-	/**
-	 * READING IS A TWO-HANDED ACT. One hand holds the book and the other turns the pages, because a book
-	 * that sits in a fist is a prop glued to a hand and reads as carrying rather than studying. The page
-	 * turn has to be visible from the play camera, which is a good deal further away than an animator's.
-	 */
-	bool bTurnsPages = false;
-
-	/**
-	 * THE CORRECTIVE CYCLE, for REPAIR: find the fault, take it out, put it back. The brush returns here,
-	 * which is the whole difficulty -- repair must not read as implementation carrying on. The phase length
-	 * is what separates them: a repair keeps stopping to undo, an implementation does not.
-	 */
+	/** Legs crossed, hands on the knees, eyes closed, floating; energy gathers toward the Contract. */
+	bool bMeditates = false;
+	/** The book in both hands: one under it, one turning its pages; the head bowed to it. */
+	bool bReadsTheBook = false;
+	/** Brush strokes with the working hand at the Contract; the other arm hangs. */
+	bool bPaints = false;
+	/** Airborne; both hands aimed at the Contract. */
+	bool bFlies = false;
+	/** The lens held up to the eye, swept slowly across the work. */
+	bool bInspects = false;
+	/** Identify, erase, repaint. */
 	bool bCorrects = false;
-	/** Seconds for one find-erase-repaint cycle. */
-	float CorrectCycleSeconds = 0.0f;
+
+	/** Walk a slow circle about the Contract, facing the way it walks. */
+	bool bOrbitsTheContract = false;
+	/** Fraction of the study pace. An inspection lingers. */
+	float OrbitPace = 1.0f;
+	/** Which side the Contract is kept on while circling: +1 the Dog's left, -1 its right, 0 the working hand's side. */
+	int32 OrbitSide = 0;
+	/** Turn the body to the Contract. Only stationary acts done at the work. */
+	bool bFacesTheContract = false;
+	/** A sustained beam from the Dog's hands to the Contract, for as long as verification lasts. */
+	bool bBeamsTheContract = false;
 };
 
 /* ------------------------------------------------------------------ resolvers */
@@ -138,11 +105,8 @@ struct FWonderlandDogActReading
 WONDERLAND_API const FWonderlandDogActReading& WonderlandDogActReading(EWonderlandDogAct Act);
 
 /**
- * THE ONE MAPPING, from mission beat to what the body does.
- *
- * Every WORK STAGE resolves to its own performance. Only TRANSITIONS resolve to `None` and inherit --
- * handoff, checkpoint, and an approval that does not end the mission. An ending resolves to `None` too,
- * and is told apart from a transition by the contract pointer going null rather than by this table.
+ * THE ONE MAPPING, from mission beat to what the body does. Every WORK STAGE resolves to its own performance; only
+ * TRANSITIONS (handoff, checkpoint, a non-terminal approval) and ENDINGS resolve to `None`, told apart by the contract.
  */
 WONDERLAND_API EWonderlandDogAct WonderlandDogActForBeat(EWonderlandMissionBeat Beat);
 

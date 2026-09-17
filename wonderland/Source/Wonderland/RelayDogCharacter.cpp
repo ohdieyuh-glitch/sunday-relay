@@ -22,48 +22,30 @@
 #include "HAL/IConsoleManager.h"
 #include "EngineUtils.h"
 #include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
+#include "Components/PrimitiveComponent.h"
+#include "Framework/Application/IInputProcessor.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Layout/WidgetPath.h"
+#include "Widgets/SViewport.h"
+#include "WonderlandMissionOrb.h"
 
 // THE READING POSE, TUNABLE LIVE. Named, not anonymous: the module is one unity translation unit.
 namespace RelayDogReadTuning
 {
-	TAutoConsoleVariable<float> CVarBookFwd(TEXT("wl.Dog.Read.BookFwd"), 36.0f, TEXT("The open book's spine, forward of the body centre, in head-width sixtieths."));
-	TAutoConsoleVariable<float> CVarBookRight(TEXT("wl.Dog.Read.BookRight"), 0.0f, TEXT("The open book's spine, right of the body centre."));
-	TAutoConsoleVariable<float> CVarBookUp(TEXT("wl.Dog.Read.BookUp"), -13.0f, TEXT("The open book's spine, above the head joint (negative: below it, in front of the chest)."));
-	TAutoConsoleVariable<float> CVarBookTilt(TEXT("wl.Dog.Read.BookTilt"), 52.0f, TEXT("Degrees the far edge of the book is raised, turning the pages toward the Dog's face."));
+	TAutoConsoleVariable<float> CVarBookFwd(TEXT("wl.Dog.Read.BookFwd"), 30.0f, TEXT("The open book's centre, in front of the neck along the way the Dog's eyes face, in head-width sixtieths."));
+	TAutoConsoleVariable<float> CVarBookRight(TEXT("wl.Dog.Read.BookRight"), 0.0f, TEXT("The open book's centre, to the Dog's right of the neck."));
+	TAutoConsoleVariable<float> CVarBookUp(TEXT("wl.Dog.Read.BookUp"), -24.0f, TEXT("The open book's centre, above the neck (negative: below it, before the chest)."));
+	TAutoConsoleVariable<float> CVarBookTilt(TEXT("wl.Dog.Read.BookTilt"), 50.0f, TEXT("Degrees the far edge of the book is raised, turning the pages toward the Dog's face."));
 	TAutoConsoleVariable<float> CVarBookOpen(TEXT("wl.Dog.Read.BookOpen"), 28.0f, TEXT("Degrees each half of the open book rises from flat."));
 	TAutoConsoleVariable<float> CVarBookScale(TEXT("wl.Dog.Read.BookScale"), 1.3f, TEXT("Size of the open book and its turning page."));
 	TAutoConsoleVariable<float> CVarLeafCurl(TEXT("wl.Dog.Read.LeafCurl"), 40.0f, TEXT("Degrees the outer half of a turning page trails its inner half at mid-turn."));
-	TAutoConsoleVariable<float> CVarLeafGlow(TEXT("wl.Dog.Read.LeafGlow"), 3.0f, TEXT("Brightness of the turning page, as a fraction of the Dog's glow exposure."));
-	TAutoConsoleVariable<float> CVarHoldPitch(TEXT("wl.Dog.Read.HoldPitch"), 78.0f, TEXT("Holding (left) arm: shoulder pitch forward."));
-	TAutoConsoleVariable<float> CVarHoldRoll(TEXT("wl.Dog.Read.HoldRoll"), 14.0f, TEXT("Holding arm: shoulder roll outward."));
-	TAutoConsoleVariable<float> CVarHoldElbow(TEXT("wl.Dog.Read.HoldElbow"), 72.0f, TEXT("Holding arm: elbow bend."));
-	TAutoConsoleVariable<float> CVarTurnPitch(TEXT("wl.Dog.Read.TurnPitch"), 74.0f, TEXT("Turning (right) arm at rest: shoulder pitch forward."));
-	TAutoConsoleVariable<float> CVarTurnRoll(TEXT("wl.Dog.Read.TurnRoll"), 16.0f, TEXT("Turning arm at rest: shoulder roll outward."));
-	TAutoConsoleVariable<float> CVarTurnElbow(TEXT("wl.Dog.Read.TurnElbow"), 66.0f, TEXT("Turning arm at rest: elbow bend."));
-	TAutoConsoleVariable<float> CVarSweepRoll(TEXT("wl.Dog.Read.SweepRoll"), -34.0f, TEXT("Turning arm: roll carried across the book with the page."));
-	TAutoConsoleVariable<float> CVarSweepPitch(TEXT("wl.Dog.Read.SweepPitch"), 12.0f, TEXT("Turning arm: pitch added at mid-turn, lifting the page."));
-	TAutoConsoleVariable<float> CVarSweepElbow(TEXT("wl.Dog.Read.SweepElbow"), 18.0f, TEXT("Turning arm: elbow added at mid-turn."));
-	TAutoConsoleVariable<float> CVarReadHeadPitch(TEXT("wl.Dog.Read.HeadPitch"), 30.0f, TEXT("Head pitch while reading, degrees down toward the book."));
+	// 1.2, not 3: at 3 the gold page tonemapped to a pale yellow that vanished against the white Dog in the filmed mission;
+	// at 1.2 it stays a saturated gold turning over the white pages (zc_camera_test, 2026-09-16).
+	TAutoConsoleVariable<float> CVarLeafGlow(TEXT("wl.Dog.Read.LeafGlow"), 1.2f, TEXT("Brightness of the turning page, as a fraction of the Dog's glow exposure."));
 	TAutoConsoleVariable<float> CVarTurnHz(TEXT("wl.Dog.Read.TurnHz"), 0.32f, TEXT("Page turns per second."));
 	TAutoConsoleVariable<float> CVarTurnFraction(TEXT("wl.Dog.Read.TurnFraction"), 0.42f, TEXT("Fraction of each turn cycle the page is moving."));
 
-	RelayDogMission::FReadingPose Pose()
-	{
-		RelayDogMission::FReadingPose P;
-		P.HoldPitchDeg = CVarHoldPitch.GetValueOnGameThread();
-		P.HoldRollDeg = CVarHoldRoll.GetValueOnGameThread();
-		P.HoldElbowDeg = CVarHoldElbow.GetValueOnGameThread();
-		P.TurnPitchDeg = CVarTurnPitch.GetValueOnGameThread();
-		P.TurnRollDeg = CVarTurnRoll.GetValueOnGameThread();
-		P.TurnElbowDeg = CVarTurnElbow.GetValueOnGameThread();
-		P.SweepRollDeg = CVarSweepRoll.GetValueOnGameThread();
-		P.SweepPitchDeg = CVarSweepPitch.GetValueOnGameThread();
-		P.SweepElbowDeg = CVarSweepElbow.GetValueOnGameThread();
-		P.HeadPitchDeg = CVarReadHeadPitch.GetValueOnGameThread();
-		P.TurnHz = CVarTurnHz.GetValueOnGameThread();
-		P.TurnFraction = CVarTurnFraction.GetValueOnGameThread();
-		return P;
-	}
 
 	/** Page width and spine length of one half, and the thickness of a cover and of a page block. */
 	const double HalfWidth = 26.0;
@@ -149,6 +131,196 @@ namespace
 		return nullptr;
 	}
 }
+
+/* ==================================================================== the limbs, solved in world terms */
+
+namespace RelayDogLimbs
+{
+	namespace
+	{
+		FVector RawTip(const FChain& Chain, const FRotator& Root, const FRotator& Mid)
+		{
+			const FTransform RootXf(Root, Chain.RootRel);
+			const FTransform MidXf(Mid, Chain.MidRel);
+			return RootXf.TransformPosition(MidXf.TransformPosition(Chain.TipLocal));
+		}
+	}
+
+	FRotator RootRotation(const FChain& Chain, const FVector& Angles)
+	{
+		return FRotator(Angles.X * Chain.ForwardSign, 0.0f, Angles.Y * Chain.OutwardSign);
+	}
+
+	FRotator MidRotation(const FChain& Chain, const FVector& Angles)
+	{
+		return FRotator(Angles.Z * Chain.BendSign, 0.0f, 0.0f);
+	}
+
+	FVector Tip(const FChain& Chain, float Forward, float Outward, float Bend)
+	{
+		const FVector Angles(Forward, Outward, Bend);
+		return RawTip(Chain, RootRotation(Chain, Angles), MidRotation(Chain, Angles));
+	}
+
+	float Solve(FChain& Chain, const FVector& TargetInParent, const FVector& Min, const FVector& Max)
+	{
+		// DAMPED LEAST SQUARES, three angles, a numeric Jacobian. Warm-started from last frame's answer so a hand that is
+		// already on the book stays in the same arm shape instead of flipping to the other solution.
+		FVector A = Chain.Solved;
+		const double Lambda2 = 4.0;
+		for (int32 Iteration = 0; Iteration < 12; ++Iteration)
+		{
+			const FVector Now = Tip(Chain, A.X, A.Y, A.Z);
+			const FVector Err = TargetInParent - Now;
+			if (Err.SizeSquared() < 0.09)
+			{
+				break;
+			}
+			const double H = 0.5;
+			const FVector J0 = (Tip(Chain, A.X + H, A.Y, A.Z) - Now) / H;
+			const FVector J1 = (Tip(Chain, A.X, A.Y + H, A.Z) - Now) / H;
+			const FVector J2 = (Tip(Chain, A.X, A.Y, A.Z + H) - Now) / H;
+			// M = J Jt + lambda^2 I, a symmetric 3x3.
+			double M[3][3];
+			const FVector Cols[3] = { J0, J1, J2 };
+			for (int32 Row = 0; Row < 3; ++Row)
+			{
+				for (int32 Col = 0; Col < 3; ++Col)
+				{
+					double Sum = 0.0;
+					for (int32 K = 0; K < 3; ++K)
+					{
+						Sum += Cols[K][Row] * Cols[K][Col];
+					}
+					M[Row][Col] = Sum + (Row == Col ? Lambda2 : 0.0);
+				}
+			}
+			const double Det = M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1])
+				- M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0])
+				+ M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+			if (FMath::Abs(Det) < 1e-9)
+			{
+				break;
+			}
+			const double Inv[3][3] = {
+				{ (M[1][1] * M[2][2] - M[1][2] * M[2][1]) / Det, (M[0][2] * M[2][1] - M[0][1] * M[2][2]) / Det, (M[0][1] * M[1][2] - M[0][2] * M[1][1]) / Det },
+				{ (M[1][2] * M[2][0] - M[1][0] * M[2][2]) / Det, (M[0][0] * M[2][2] - M[0][2] * M[2][0]) / Det, (M[0][2] * M[1][0] - M[0][0] * M[1][2]) / Det },
+				{ (M[1][0] * M[2][1] - M[1][1] * M[2][0]) / Det, (M[0][1] * M[2][0] - M[0][0] * M[2][1]) / Det, (M[0][0] * M[1][1] - M[0][1] * M[1][0]) / Det } };
+			const FVector Y(
+				Inv[0][0] * Err.X + Inv[0][1] * Err.Y + Inv[0][2] * Err.Z,
+				Inv[1][0] * Err.X + Inv[1][1] * Err.Y + Inv[1][2] * Err.Z,
+				Inv[2][0] * Err.X + Inv[2][1] * Err.Y + Inv[2][2] * Err.Z);
+			FVector Step(FVector::DotProduct(J0, Y), FVector::DotProduct(J1, Y), FVector::DotProduct(J2, Y));
+			const double Largest = FMath::Max3(FMath::Abs(Step.X), FMath::Abs(Step.Y), FMath::Abs(Step.Z));
+			if (Largest > 14.0)
+			{
+				Step *= 14.0 / Largest;
+			}
+			A = FVector(
+				FMath::Clamp(A.X + Step.X, Min.X, Max.X),
+				FMath::Clamp(A.Y + Step.Y, Min.Y, Max.Y),
+				FMath::Clamp(A.Z + Step.Z, Min.Z, Max.Z));
+		}
+		Chain.Solved = A;
+		return static_cast<float>((TargetInParent - Tip(Chain, A.X, A.Y, A.Z)).Size());
+	}
+}
+
+namespace RelayDogPoseTuning
+{
+	TAutoConsoleVariable<float> CVarMedLift(TEXT("wl.Dog.Pose.MeditateLift"), 72.0f, TEXT("PREPARATION: how high the meditating Dog floats, uu."));
+	TAutoConsoleVariable<float> CVarMedHipFwd(TEXT("wl.Dog.Pose.MeditateHipForward"), 80.0f, TEXT("PREPARATION: thighs forward, degrees."));
+	TAutoConsoleVariable<float> CVarMedHipOut(TEXT("wl.Dog.Pose.MeditateHipOut"), 34.0f, TEXT("PREPARATION: knees apart, degrees."));
+	TAutoConsoleVariable<float> CVarMedKnee(TEXT("wl.Dog.Pose.MeditateKnee"), 118.0f, TEXT("PREPARATION: shins folded back under, degrees."));
+	TAutoConsoleVariable<float> CVarFlyLift(TEXT("wl.Dog.Pose.FlyLift"), 150.0f, TEXT("VERIFICATION: how high the Dog flies, uu."));
+	TAutoConsoleVariable<float> CVarFlyLean(TEXT("wl.Dog.Pose.FlyLean"), 9.0f, TEXT("VERIFICATION: how far the flying Dog leans into its beam, degrees."));
+	TAutoConsoleVariable<float> CVarFlyHipFwd(TEXT("wl.Dog.Pose.FlyHipForward"), -14.0f, TEXT("VERIFICATION: thighs trailing, degrees."));
+	TAutoConsoleVariable<float> CVarFlyKnee(TEXT("wl.Dog.Pose.FlyKnee"), 40.0f, TEXT("VERIFICATION: knees folded back, degrees."));
+	TAutoConsoleVariable<float> CVarStrokeUp(TEXT("wl.Dog.Pose.StrokeHeight"), 15.0f, TEXT("IMPLEMENTATION: how far a brush stroke travels up and down, uu."));
+	TAutoConsoleVariable<float> CVarStrokeHz(TEXT("wl.Dog.Pose.StrokeHz"), 0.55f, TEXT("IMPLEMENTATION: brush strokes per second."));
+	TAutoConsoleVariable<float> CVarPaintReach(TEXT("wl.Dog.Pose.PaintReach"), 0.82f, TEXT("IMPLEMENTATION: how far out the brush hand reaches, fraction of the arm."));
+	TAutoConsoleVariable<float> CVarLensUp(TEXT("wl.Dog.Pose.LensUp"), 18.0f, TEXT("REVIEW: the lens hand above the neck, uu."));
+	TAutoConsoleVariable<float> CVarLensFwd(TEXT("wl.Dog.Pose.LensForward"), 30.0f, TEXT("REVIEW: the lens hand in front of the neck, uu."));
+	TAutoConsoleVariable<float> CVarScrubHz(TEXT("wl.Dog.Pose.ScrubHz"), 2.4f, TEXT("REPAIR: scraper strokes per second while erasing."));
+	TAutoConsoleVariable<float> CVarRepairIdentify(TEXT("wl.Dog.Pose.RepairIdentify"), 4.0f, TEXT("REPAIR: seconds identifying the fault."));
+	TAutoConsoleVariable<float> CVarRepairErase(TEXT("wl.Dog.Pose.RepairErase"), 5.0f, TEXT("REPAIR: seconds erasing it."));
+	TAutoConsoleVariable<float> CVarRepairRepaint(TEXT("wl.Dog.Pose.RepairRepaint"), 8.0f, TEXT("REPAIR: seconds repainting it."));
+	TAutoConsoleVariable<float> CVarRepairSettle(TEXT("wl.Dog.Pose.RepairSettle"), 3.0f, TEXT("REPAIR: seconds settling afterwards."));
+
+	TAutoConsoleVariable<float> CVarCamArm(TEXT("wl.MissionCam.Arm"), 880.0f, TEXT("Mission camera: distance from the Mission Contract, uu."));
+	TAutoConsoleVariable<float> CVarCamPitch(TEXT("wl.MissionCam.Pitch"), -20.0f, TEXT("Mission camera: the pitch it starts a mission at, degrees."));
+	TAutoConsoleVariable<float> CVarCamDrop(TEXT("wl.MissionCam.FocusDrop"), 40.0f, TEXT("Mission camera: how far below the Contract's heart it turns about, uu."));
+	TAutoConsoleVariable<float> CVarCamLift(TEXT("wl.MissionCam.ScreenLift"), 150.0f, TEXT("Mission camera: how far the Contract sits above the middle of the screen, uu at the focus."));
+	TAutoConsoleVariable<float> CVarCamDrag(TEXT("wl.MissionCam.DragSensitivity"), 0.25f, TEXT("Mission camera: degrees per pixel of left-drag."));
+	TAutoConsoleVariable<float> CVarCamBlend(TEXT("wl.MissionCam.BlendSeconds"), 1.1f, TEXT("Mission camera: seconds to carry the camera to the Contract and back."));
+	TAutoConsoleVariable<int32> CVarCamEnabled(TEXT("wl.MissionCam.Enabled"), 1, TEXT("Mission camera: 1 holds the Mission Contract during a mission, 0 keeps following the Dog."));
+}
+
+/* ==================================================================== the mission camera's mouse */
+
+/**
+ * THE LEFT-DRAG, SEEN BEFORE ANYTHING ELSE SEES IT. During a mission the terminal is usually open, which puts the
+ * controller in UI-only input: the game never hears a mouse button. So the drag is read here, ahead of Slate's routing,
+ * and taken only when the press lands on the world -- a press on the terminal, a companion console or any panel is left
+ * to it. A drag in progress eats its own moves so the ordinary mouse-look cannot also swing the controller.
+ */
+class FRelayDogMissionCameraInput : public IInputProcessor
+{
+public:
+	explicit FRelayDogMissionCameraInput(ARelayDogCharacter* InDog) : Dog(InDog) {}
+
+	virtual void Tick(const float DeltaTime, FSlateApplication& SlateApp, TSharedRef<ICursor> Cursor) override {}
+
+	virtual bool HandleMouseButtonDownEvent(FSlateApplication& SlateApp, const FPointerEvent& MouseEvent) override
+	{
+		ARelayDogCharacter* Owner = Dog.Get();
+		if (Owner == nullptr || MouseEvent.GetEffectingButton() != EKeys::LeftMouseButton)
+		{
+			return false;
+		}
+		bDragging = Owner->BeginMissionCameraDrag(MouseEvent.GetScreenSpacePosition());
+		return bDragging;
+	}
+
+	virtual bool HandleMouseButtonUpEvent(FSlateApplication& SlateApp, const FPointerEvent& MouseEvent) override
+	{
+		if (!bDragging || MouseEvent.GetEffectingButton() != EKeys::LeftMouseButton)
+		{
+			return false;
+		}
+		bDragging = false;
+		if (ARelayDogCharacter* Owner = Dog.Get())
+		{
+			Owner->EndMissionCameraDrag();
+		}
+		return true;
+	}
+
+	virtual bool HandleMouseMoveEvent(FSlateApplication& SlateApp, const FPointerEvent& MouseEvent) override
+	{
+		if (!bDragging)
+		{
+			return false;
+		}
+		ARelayDogCharacter* Owner = Dog.Get();
+		if (Owner == nullptr || !Owner->IsMissionCameraActive())
+		{
+			bDragging = false;
+			return false;
+		}
+		const FVector2D Delta = MouseEvent.GetCursorDelta();
+		const float Sensitivity = RelayDogPoseTuning::CVarCamDrag.GetValueOnGameThread();
+		Owner->OrbitMissionCamera(static_cast<float>(Delta.X) * Sensitivity, -static_cast<float>(Delta.Y) * Sensitivity);
+		return true;
+	}
+
+	virtual const TCHAR* GetDebugName() const override { return TEXT("RelayDogMissionCamera"); }
+
+private:
+	TWeakObjectPtr<ARelayDogCharacter> Dog;
+	bool bDragging = false;
+};
+
 
 ARelayDogCharacter::ARelayDogCharacter()
 {
@@ -311,6 +483,22 @@ bool ARelayDogCharacter::BindJoints()
 	// From the head joint's RELATIVE place, never from world positions: at bind the components' world transforms are not
 	// always updated yet, and one play session measured the head 198.7 uu up the body where the rig puts it at 111.7.
 	HeadInBodyRest = HeadPivot->GetAttachParent() == BodyRoot ? HeadPivot->GetRelativeLocation() : FVector(0.0, 0.0, 111.7);
+
+	// THE RIG'S OWN CONVENTIONS, MEASURED: where the face points, and which way each rotation turns each limb.
+	MeasureFace();
+	ArmChainLeft.BendSign = 1.0f;
+	ArmChainRight.BendSign = 1.0f;
+	LegChainLeft.BendSign = -1.0f;
+	LegChainRight.BendSign = -1.0f;
+	MeasureChain(ArmChainLeft, ArmLeft.Shoulder, ArmLeft.Forearm);
+	MeasureChain(ArmChainRight, ArmRight.Shoulder, ArmRight.Forearm);
+	MeasureChain(LegChainLeft, LegLeft.Hip, LegLeft.Shin);
+	MeasureChain(LegChainRight, LegRight.Hip, LegRight.Shin);
+	UE_LOG(LogTemp, Log, TEXT("WLDOG MEASURED: face %s eyes %s head down %+.0f right %+.0f | arm L reach %.1f tip %s signs %+.0f/%+.0f/%+.0f | arm R reach %.1f tip %s signs %+.0f/%+.0f/%+.0f | leg L signs %+.0f/%+.0f/%+.0f"),
+		*FaceForwardInBody.ToCompactString(), *EyesInHead.ToCompactString(), HeadDownSign, HeadRightSign,
+		ArmChainLeft.Reach, *ArmChainLeft.TipLocal.ToCompactString(), ArmChainLeft.ForwardSign, ArmChainLeft.OutwardSign, ArmChainLeft.BendSign,
+		ArmChainRight.Reach, *ArmChainRight.TipLocal.ToCompactString(), ArmChainRight.ForwardSign, ArmChainRight.OutwardSign, ArmChainRight.BendSign,
+		LegChainLeft.ForwardSign, LegChainLeft.OutwardSign, LegChainLeft.BendSign);
 
 	const float LegLengthUU = 0.8f * HeadWidthUU;
 	const float ThighUU = (0.8f - 0.5125f) * HeadWidthUU;
@@ -1051,12 +1239,15 @@ void ARelayDogCharacter::MoveLeftAxis(float Value) { MoveRightAxis(-Value); }
 
 void ARelayDogCharacter::TurnAxis(float Value)
 {
+	// While the Mission Contract holds the camera, the camera turns only with a left-drag.
+	if (MissionCamWeight > 0.01f) return;
 	if (Value != 0.0f) AddControllerYawInput(Value);
 }
 
 void ARelayDogCharacter::LookUpAxis(float Value)
 {
 	// Inverted, as a camera pitch is: pushing the mouse forward looks down.
+	if (MissionCamWeight > 0.01f) return;
 	if (Value != 0.0f) AddControllerPitchInput(-Value);
 }
 
@@ -1109,6 +1300,12 @@ void ARelayDogCharacter::BeginPlay()
 	SpawnLocation = GetActorLocation();
 	SpawnYaw = GetActorRotation().Yaw;
 	bJointsBound = BindJoints();
+	// THE MISSION CAMERA'S LEFT-DRAG is read ahead of Slate's routing (see FRelayDogMissionCameraInput).
+	if (FSlateApplication::IsInitialized() && GetWorld() != nullptr && GetWorld()->IsGameWorld() && !MissionCamInput.IsValid())
+	{
+		MissionCamInput = MakeShared<FRelayDogMissionCameraInput>(this);
+		FSlateApplication::Get().RegisterInputPreProcessor(MissionCamInput);
+	}
 	if (bAutoDemo && bUseDefaultRoute)
 	{
 		if (bExplorationRoute) BuildExplorationRoute(); else BuildDefaultRoute();
@@ -1221,7 +1418,9 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	if (EyeLeftPivot != nullptr || EyeRightPivot != nullptr)
 	{
 		const UWorld* BlinkWorld = GetWorld();
-		const float Scale = EyeScaleAt(BlinkWorld != nullptr ? static_cast<float>(BlinkWorld->GetTimeSeconds()) : 0.0f);
+		// Shut in meditation, blinking otherwise.
+		const float Scale = FMath::Min(EyeScaleAt(BlinkWorld != nullptr ? static_cast<float>(BlinkWorld->GetTimeSeconds()) : 0.0f),
+			FMath::Lerp(1.0f, 0.12f, FMath::Clamp(LastEyesShut, 0.0f, 1.0f)));
 		if (EyeLeftPivot != nullptr)
 		{
 			EyeLeftPivot->SetRelativeScale3D(FVector(1.0, 1.0, Scale));
@@ -1242,8 +1441,31 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	const UWorld* MissionWorld = GetWorld();
 	MissionIn.TimeSeconds = MissionWorld != nullptr ? static_cast<float>(MissionWorld->GetTimeSeconds()) : 0.0f;
 	MissionIn.bPlayerDriving = bPlayerDroveThisFrame;
-	MissionIn.Reading = RelayDogReadTuning::Pose();
+	{
+		using namespace RelayDogPoseTuning;
+		RelayDogMission::FTuning& Tuning = MissionIn.Tuning;
+		Tuning.MeditateLiftUU = CVarMedLift.GetValueOnGameThread();
+		Tuning.FlyLiftUU = CVarFlyLift.GetValueOnGameThread();
+		Tuning.TurnHz = RelayDogReadTuning::CVarTurnHz.GetValueOnGameThread();
+		Tuning.TurnFraction = RelayDogReadTuning::CVarTurnFraction.GetValueOnGameThread();
+		Tuning.StrokeHz = CVarStrokeHz.GetValueOnGameThread();
+		Tuning.ScrubHz = CVarScrubHz.GetValueOnGameThread();
+		Tuning.Repair.IdentifySeconds = CVarRepairIdentify.GetValueOnGameThread();
+		Tuning.Repair.EraseSeconds = CVarRepairErase.GetValueOnGameThread();
+		Tuning.Repair.RepaintSeconds = CVarRepairRepaint.GetValueOnGameThread();
+		Tuning.Repair.SettleSeconds = CVarRepairSettle.GetValueOnGameThread();
+	}
 	bPlayerDroveThisFrame = false;
+
+	// WHICH SIDE THE WORKING HAND IS ON, measured in the world every frame from where the face and the shoulder are.
+	if (BodyRoot != nullptr && ArmRight.Shoulder != nullptr)
+	{
+		const FTransform BodyXf = BodyRoot->GetComponentTransform();
+		const FVector FaceFwd = BodyXf.TransformVectorNoScale(FaceForwardInBody);
+		const FVector FaceRight = FVector::CrossProduct(BodyXf.GetUnitAxis(EAxis::Z), FaceFwd);
+		WorkingHandSide = FVector::DotProduct(ArmRight.Shoulder->GetComponentLocation() - BodyXf.GetLocation(), FaceRight) >= 0.0 ? 1.0f : -1.0f;
+	}
+	MissionIn.WorkingHandSide = WorkingHandSide;
 
 	FVector ContractWorld = FVector::ZeroVector;
 	if (const AActor* Contract = MissionContract.Get())
@@ -1257,17 +1479,12 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		MissionIn.ContractYawDeg = FMath::FindDeltaAngleDegrees(
 			GetActorRotation().Yaw,
 			Flat.IsNearlyZero() ? GetActorRotation().Yaw : FMath::RadiansToDegrees(FMath::Atan2(Flat.Y, Flat.X)));
-		// Negative pitch looks UP, which is where a floating contract is.
-		MissionIn.ContractPitchDeg = -FMath::RadiansToDegrees(
-			FMath::Atan2(ToContract.Z - 40.0, FMath::Max(MissionIn.ContractDistanceUU, 1.0f)));
 	}
 	const RelayDogMission::FStageOverlay Overlay = Mission.Update(MissionIn);
 
-	// FACING. An act done at the work is done facing it. This takes the wheel from the movement component
-	// only while such an act is running -- orient-to-movement is restored the moment it ends, because a Dog
-	// that walks sideways for the rest of the session would be a far worse bug than one that reads a book
-	// side-on. It also lets REVIEW walk its circle tangentially while still looking inward at the contract,
-	// which is what circling something to examine it actually looks like.
+	// FACING. Only a stationary act done at the work -- hovering to verify, standing at a fault to repair -- turns the
+	// body to the Contract (founder, 2026-09-16: the Dog faces where it walks; the camera holds the Contract). This takes
+	// the wheel from the movement component only while such an act runs, and orient-to-movement returns the moment it ends.
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
 	{
 		const bool bWantFace = Overlay.bFaceContract && Overlay.Weight > 0.35f;
@@ -1425,87 +1642,10 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 
 	// ------------------------------------------------- the mission performance, part two: the pose
 	//
-	// ADDED to what the stride system just wrote, never replacing it. That is what makes the Dog keep its
-	// walk while it circles the contract reading, and it is why a mission cannot break locomotion: every
-	// term below is exactly zero when no mission is running.
-	if (Overlay.Weight > KINDA_SMALL_NUMBER)
-	{
-		if (BodyRoot != nullptr)
-		{
-			// The whole body leaves the ground -- legs are its children, so the feet come with it, which is
-			// the "entire body suspended" in the founder's note rather than a hovering torso on planted feet.
-			BodyRoot->SetRelativeLocation(BodyRestLocation
-				+ FVector(0.0f, Pose.SwayUU, Pose.BobUU - Pose.PelvisDropUU + Overlay.LiftUU));
-		}
-		if (HeadPivot != nullptr)
-		{
-			HeadPivot->SetRelativeRotation(FRotator(
-				Pose.HeadPitchDeg - Pose.LeanDeg + Overlay.HeadPitchDeg,
-				Pose.HeadYawDeg + Overlay.HeadYawDeg, 0.0f));
-		}
-		auto AddArm = [&Overlay](const FRelayDogArm& Arm, const RelayDogStride::FArmPose& ArmPose, float ExtraPitch,
-			bool bWorkingArm)
-		{
-			// The walk's own arm swing, kept or not: a hand under an open book does not swing with the stride.
-			const float Keep = Overlay.ArmStrideKeep;
-			if (Arm.Shoulder != nullptr)
-			{
-				// The extra roll is the working arm's alone: the repair's drag across the fault and the
-				// page-turning sweep. Mirroring it onto the holding arm would undo the two-handedness.
-				const float Roll = Overlay.ShoulderRollDeg + (bWorkingArm ? Overlay.ShoulderRollExtraDeg : 0.0f);
-				Arm.Shoulder->SetRelativeRotation(FRotator(
-					ArmPose.ShoulderDeg * Keep + ExtraPitch, 0.0f,
-					(ArmPose.ShoulderYawDeg * Keep + Roll) * Arm.SideSign));
-			}
-			if (Arm.Forearm != nullptr)
-			{
-				Arm.Forearm->SetRelativeRotation(FRotator(
-					ArmPose.ElbowDeg * Keep + Overlay.ElbowDeg + (bWorkingArm ? Overlay.ElbowExtraDeg : 0.0f), 0.0f, 0.0f));
-			}
-		};
-		AddArm(ArmLeft, Pose.ArmLeft, Overlay.ShoulderPitchLeftDeg, false);
-		AddArm(ArmRight, Pose.ArmRight, Overlay.ShoulderPitchRightDeg, true);
-		if (Overlay.HipDeg != 0.0f)
-		{
-			if (LegLeft.Hip != nullptr) LegLeft.Hip->SetRelativeRotation(FRotator(SolvedL.HipDeg + Overlay.HipDeg, 0.0f, 0.0f));
-			if (LegRight.Hip != nullptr) LegRight.Hip->SetRelativeRotation(FRotator(SolvedR.HipDeg + Overlay.HipDeg, 0.0f, 0.0f));
-		}
-	}
-
-	// THE PROPS. Exactly one may be in hand, which is the spec's BOOK = PLANNING and BRUSH = IMPLEMENTING
-	// and the test that asserts one stage each. They follow the PERFORMED act, so a handoff arriving mid
-	// implementation leaves the brush exactly where it was.
-	const bool bBook = Overlay.Prop == EWonderlandDogProp::Book && Overlay.PropWeight > 0.08f;
-	const bool bBrush = Overlay.Prop == EWonderlandDogProp::Paintbrush && Overlay.PropWeight > 0.08f;
-	const bool bLens = Overlay.Prop == EWonderlandDogProp::MagnifyingGlass && Overlay.PropWeight > 0.08f;
-	if (BookMesh != nullptr) BookMesh->SetVisibility(bBook);
-	if (BookPagesMesh != nullptr) BookPagesMesh->SetVisibility(bBook);
-	PoseBook(bBook, Overlay.PageTurn);
-	if (BrushMesh != nullptr) BrushMesh->SetVisibility(bBrush);
-	if (BrushHeadMesh != nullptr) BrushHeadMesh->SetVisibility(bBrush);
-	if (LensMesh != nullptr) LensMesh->SetVisibility(bLens);
-	if (LensGlassMesh != nullptr) LensGlassMesh->SetVisibility(bLens);
-
-	// THE BEAM, from the chest to the contract, for as long as verification runs.
-	if (Overlay.bBeam || Mission.Performing() == EWonderlandDogAct::VerificationBeam)
-	{
-		LastBeamNote = FString::Printf(TEXT("reported=%s performing=%s overlay_beam=%d fade=%.3f weight=%.3f contract=%d body=%d draws=%d dt=%.4f"),
-			WonderlandDogActName(Mission.ReportedAct()), WonderlandDogActName(Mission.Performing()), Overlay.bBeam ? 1 : 0,
-			Mission.BeamFade(), Overlay.BeamWeight, MissionIn.bHasContract ? 1 : 0, BodyRoot != nullptr ? 1 : 0,
-			(Overlay.bBeam && MissionIn.bHasContract && BodyRoot != nullptr) ? 1 : 0, DeltaSeconds);
-	}
-	if (Overlay.bBeam && MissionIn.bHasContract && BodyRoot != nullptr)
-	{
-		// THE CHEST, just under the head joint in the body's own frame. Placed from the capsule or from the body's origin,
-		// the beam left from the hip: the Body's origin and the capsule centre were measured at different heights in
-		// different play sessions, the head joint in the body's frame never moves.
-		const FVector Chest = BodyRoot->GetComponentTransform().TransformPosition(FVector(18.0, 0.0, HeadJointHeightInBody() - 14.0));
-		DrawVerificationBeam(Chest, ContractWorld, Overlay.BeamWeight, MissionIn.TimeSeconds);
-	}
-	else
-	{
-		DrawVerificationBeam(FVector::ZeroVector, FVector::ZeroVector, 0.0f, MissionIn.TimeSeconds);
-	}
+	// WRITTEN OVER what the stride system just wrote, and identical to it when no mission is running: lift, head, arms
+	// solved onto the book / brush / lens / Contract, legs crossed or trailing, props, the beam, the energy, the repair.
+	ApplyMissionPose(Pose, Overlay, MissionIn, DeltaSeconds);
+	UpdateMissionCamera(DeltaSeconds);
 
 	// One log line per gait change, so a capture can be read against what the
 	// Dog was doing without watching every frame.
@@ -1535,17 +1675,19 @@ namespace
 	 */
 	FAutoConsoleCommand CmdDogAct(
 		TEXT("wl.Dog.Act"),
-		TEXT("Pose the Relay Dog in one mission act: none|float|book|paint|beam. DEVELOPMENT PREVIEW: a drawn pose, not Julius execution."),
+		TEXT("Pose the Relay Dog in one mission act: none|prepare|book|paint|beam|review|repair. DEVELOPMENT PREVIEW: a drawn pose, not Julius execution."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
 			if (Args.Num() < 1)
 			{
-				UE_LOG(LogTemp, Display, TEXT("WLDOG usage: wl.Dog.Act <none|float|book|paint|beam>"));
+				UE_LOG(LogTemp, Display, TEXT("WLDOG usage: wl.Dog.Act <none|prepare|book|paint|beam|review|repair>"));
 				return;
 			}
 			const FString Want = Args[0].ToLower();
 			EWonderlandDogAct Act = EWonderlandDogAct::None;
-			if (Want == TEXT("float")) Act = EWonderlandDogAct::FloatingActivation;
+			if (Want == TEXT("float") || Want == TEXT("prepare")) Act = EWonderlandDogAct::FloatingActivation;
+			else if (Want == TEXT("review")) Act = EWonderlandDogAct::InspectingTheWork;
+			else if (Want == TEXT("repair")) Act = EWonderlandDogAct::CorrectingTheWork;
 			else if (Want == TEXT("book")) Act = EWonderlandDogAct::ReadingTheBook;
 			else if (Want == TEXT("paint")) Act = EWonderlandDogAct::PaintingTheWork;
 			else if (Want == TEXT("beam")) Act = EWonderlandDogAct::VerificationBeam;
@@ -1581,7 +1723,8 @@ namespace
 void ARelayDogCharacter::SetMissionAct(EWonderlandDogAct Act, const AActor* Contract)
 {
 	MissionContract = Contract;
-	Mission.SetAct(Act, Contract != nullptr);
+	const UWorld* ActWorld = GetWorld();
+	Mission.SetAct(Act, Contract != nullptr, ActWorld != nullptr ? static_cast<float>(ActWorld->GetTimeSeconds()) : 0.0f);
 	// One line per change, not per frame: a capture can then be read against what the Dog was ASKED to
 	// perform, which is the only way to tell a wrong pose from a wrong act.
 	UE_LOG(LogTemp, Log, TEXT("WLDOG mission act=%s performing=%s contract=%s"),
@@ -1715,6 +1858,21 @@ void ARelayDogCharacter::BuildMissionProps()
 	LensGlassMesh = MakePropMesh(TEXT("MissionLensGlass"), LensHand, false, Glass,
 		FLinearColor(0.58f, 0.80f, 0.88f), LensGlassMid);
 
+	// ---------------------------------------------------------------- the scraper (REPAIR: erase)
+	// A wooden grip and a flat steel blade, on the working forearm like the brush: the tool that takes the fault out.
+	TArray<FTransform> ScraperGrip;
+	ScraperGrip.Add(DogPropBox(FVector(4.0 * U, 0.0, -40.0 * U), FVector(5.0 * U, 5.0 * U, 26.0 * U)));
+	ScraperMesh = MakePropMesh(TEXT("MissionScraper"), BrushHand, false, ScraperGrip, FLinearColor(0.34f, 0.22f, 0.13f), ScraperMid);
+	TArray<FTransform> ScraperBlade;
+	ScraperBlade.Add(DogPropBox(FVector(4.0 * U, 0.0, -60.0 * U), FVector(3.0 * U, 24.0 * U, 17.0 * U)));
+	ScraperBladeMesh = MakePropMesh(TEXT("MissionScraperBlade"), BrushHand, false, ScraperBlade, FLinearColor(0.66f, 0.68f, 0.72f), ScraperBladeMid);
+
+	// ---------------------------------------------------------------- the energy (PREPARATION)
+	// Motes placed in world space every frame, and the seed of light the Contract grows out of.
+	TArray<FTransform> Motes;
+	Motes.Init(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector(0.01)), 23);
+	EnergyMesh = MakePropMesh(TEXT("MissionEnergy"), GetRootComponent(), true, Motes, FLinearColor(1.0f, 0.80f, 0.42f), EnergyMid);
+
 	// ---------------------------------------------------------------- the beam (VERIFYING)
 	// ONE unit cube, stretched along X between the chest and the contract every frame. A beam has to be a
 	// world-space thing rather than a child of a swinging arm, so it hangs off the capsule, not the body.
@@ -1750,7 +1908,7 @@ double ARelayDogCharacter::HeadJointHeightInBody() const
 void ARelayDogCharacter::PoseBook(bool bInHand, float PageTurn)
 {
 	using namespace RelayDogReadTuning;
-	if (BookRoot == nullptr)
+	if (BookRoot == nullptr || BodyRoot == nullptr)
 	{
 		return;
 	}
@@ -1764,21 +1922,34 @@ void ARelayDogCharacter::PoseBook(bool bInHand, float PageTurn)
 		return;
 	}
 	const double U = FMath::Max(HeadWidthUU, 10.0f) / 60.0;
-	// FROM THE HEAD JOINT, in the body's own frame. Placed from the Body's origin the book lay 16 uu off the ground -- the
-	// founder's "book on the floor while the Dog reads from nothing" -- and placed from the capsule centre it rose above
-	// the head in another session, because those two were measured at different heights from one play session to the
-	// next. The head joint in the body's frame is fixed by the rig, so "just under the head, in front of the chest" is
-	// the same place every time. BookUp is now measured from the head joint (negative: below it).
-	const FVector Anchor(0.0, 0.0, HeadJointHeightInBody());
-	BookRoot->SetRelativeLocationAndRotation(
-		Anchor + FVector(CVarBookFwd.GetValueOnGameThread(), CVarBookRight.GetValueOnGameThread(), CVarBookUp.GetValueOnGameThread()) * U,
-		FRotator(CVarBookTilt.GetValueOnGameThread(), 0.0f, 0.0f));
 
-	// THE HALVES, laid out only when the opening changes. The right half rises Open degrees from flat; the left
-	// half is the same box turned the rest of the way over, (180 - Open), so its face normal points away from the
-	// reader and everything on it is offset the other way along it.
+	// ---------------------------------------------------------------- where the book is: the Dog's own frame
+	// IN FRONT OF THE CHEST, BELOW THE FACE, OPEN TOWARD THE EYES -- measured from the neck along the way the Dog's eyes
+	// actually face, never along an axis this file assumed. The book stays a child of the Body, so it walks, bobs and turns
+	// with the Dog exactly; the hands are then solved onto it (ApplyMissionPose), which is what makes it held.
+	const FTransform BodyXf = BodyRoot->GetComponentTransform();
+	const FVector Up = BodyXf.GetUnitAxis(EAxis::Z);
+	const FVector Fwd = BodyXf.TransformVectorNoScale(FaceForwardInBody).GetSafeNormal();
+	const FVector Right = FVector::CrossProduct(Up, Fwd).GetSafeNormal();
+	const FVector Neck = HeadPivot != nullptr ? HeadPivot->GetComponentLocation() : BodyXf.TransformPosition(FVector(0.0, 0.0, HeadJointHeightInBody()));
+	const FVector Centre = Neck + Fwd * (CVarBookFwd.GetValueOnGameThread() * U) + Right * (CVarBookRight.GetValueOnGameThread() * U)
+		+ Up * (CVarBookUp.GetValueOnGameThread() * U);
+	const double Tilt = FMath::DegreesToRadians(CVarBookTilt.GetValueOnGameThread());
+	// The spine runs away from the reader and up; the pages face back toward the eyes; the right-hand page is on the right.
+	const FVector Spine = (Fwd * FMath::Cos(Tilt) + Up * FMath::Sin(Tilt)).GetSafeNormal();
+	const FVector TowardFace = (Up * FMath::Cos(Tilt) - Fwd * FMath::Sin(Tilt)).GetSafeNormal();
+	FMatrix Basis = FRotationMatrix::MakeFromXY(Spine, Right);
+	if (FVector::DotProduct(Basis.GetUnitAxis(EAxis::Z), TowardFace) < 0.0)
+	{
+		Basis = FRotationMatrix::MakeFromXY(-Spine, Right);
+	}
+	BookRoot->SetWorldLocationAndRotation(Centre, Basis.Rotator());
+	// Which end of the book's X is the end nearer the reader's hands.
+	const double NearEnd = FVector::DotProduct(Basis.GetUnitAxis(EAxis::X), Spine) > 0.0 ? -1.0 : 1.0;
+
+	// THE HALVES, laid out only when the opening changes. The right half rises Open degrees from flat; the left half is the
+	// same box turned the rest of the way over, (180 - Open).
 	const float Open = FMath::Clamp(CVarBookOpen.GetValueOnGameThread(), 0.0f, 80.0f);
-	// The book's own size scales its halves and the page; where it is held stays in the Dog's units.
 	const float Scale = FMath::Clamp(CVarBookScale.GetValueOnGameThread(), 0.3f, 3.0f);
 	const double B = U * Scale;
 	if ((Open != LaidOutBookOpenDeg || Scale != LaidOutBookScale) && BookMesh != nullptr && BookPagesMesh != nullptr
@@ -1795,27 +1966,6 @@ void ARelayDogCharacter::PoseBook(bool bInHand, float PageTurn)
 		BookPagesMesh->UpdateInstanceTransform(1, HalfBox(180.0 - Open, HalfWidth * 0.5, -PageThick * 0.5, PageSize, B), false, true, true);
 	}
 
-	if (!bTurning || BookLeafMesh == nullptr || BookLeafMesh->GetInstanceCount() != 2)
-	{
-		return;
-	}
-	const float Glow = FMath::Max(CVarLeafGlow.GetValueOnGameThread(), 0.0f);
-	if (BookLeafMid != nullptr && Glow != AppliedLeafGlow)
-	{
-		AppliedLeafGlow = Glow;
-		// GOLD, NOT IVORY. An ivory page of light over ivory pages in the hands of a white Dog was measured on film as
-		// a pale shape among pale shapes; the Wonderland gold reads against all three.
-		BookLeafMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 0.74f, 0.26f) * (DogGlowExposure * Glow));
-	}
-	// THE TURN. The page leaves the right-hand page, stands up off the spine at mid-turn -- where it is broadside
-	// to a camera beside the Dog, which is where the play camera is while the Dog circles -- and lies down on the
-	// left. Its outer half trails the inner, most at mid-turn, so it curls over instead of swinging like a door.
-	const double P = FMath::Clamp(static_cast<double>(PageTurn), 0.0, 1.0);
-	const double Eased = P * P * (3.0 - 2.0 * P);
-	const double Phi = FMath::Lerp(static_cast<double>(Open), 180.0 - Open, Eased);
-	const double Phi2 = Phi - CVarLeafCurl.GetValueOnGameThread() * FMath::Sin(PI * P);
-	// Resting on the right-hand page at the start and on the left-hand one at the end, through the spine between.
-	const double Lift = (PageThick + 0.6) * FMath::Cos(PI * Eased);
 	const auto AlongAt = [](double Deg)
 	{
 		const double A = FMath::DegreesToRadians(Deg);
@@ -1826,13 +1976,71 @@ void ARelayDogCharacter::PoseBook(bool bInHand, float PageTurn)
 		const double A = FMath::DegreesToRadians(Deg);
 		return FVector(0.0, -FMath::Sin(A), FMath::Cos(A));
 	};
-	const FVector LeafScale = FVector(SpineLength - 4.0, HalfWidth * 0.5, 0.8) * (B / 100.0);
-	const FVector Base = NormalAt(Phi) * Lift;
-	BookLeafMesh->UpdateInstanceTransform(0,
-		FTransform(FRotator(0.0, 0.0, -Phi), (Base + AlongAt(Phi) * (HalfWidth * 0.25)) * B, LeafScale), false, false, true);
-	BookLeafMesh->UpdateInstanceTransform(1,
-		FTransform(FRotator(0.0, 0.0, -Phi2), (Base + AlongAt(Phi) * (HalfWidth * 0.5) + AlongAt(Phi2) * (HalfWidth * 0.25)) * B, LeafScale),
-		false, true, true);
+	// THE TURN. The page leaves the right-hand page, stands up off the spine at mid-turn and lies down on the left; its outer
+	// half trails the inner, most at mid-turn, so it curls over instead of swinging like a door.
+	auto LeafAt = [&](double Progress, double& OutPhi, double& OutPhi2, FVector& OutBase)
+	{
+		const double P = FMath::Clamp(Progress, 0.0, 1.0);
+		const double Eased = P * P * (3.0 - 2.0 * P);
+		OutPhi = FMath::Lerp(static_cast<double>(Open), 180.0 - Open, Eased);
+		OutPhi2 = OutPhi - CVarLeafCurl.GetValueOnGameThread() * FMath::Sin(PI * P);
+		const double Lift = (PageThick + 0.6) * FMath::Cos(PI * Eased);
+		OutBase = NormalAt(OutPhi) * Lift;
+	};
+	auto LeafEdge = [&](double Progress)
+	{
+		double Phi = 0.0, Phi2 = 0.0;
+		FVector Base = FVector::ZeroVector;
+		LeafAt(Progress, Phi, Phi2, Base);
+		return FVector(NearEnd * SpineLength * 0.30, 0.0, 0.0)
+			+ Base + AlongAt(Phi) * (HalfWidth * 0.5) + AlongAt(Phi2) * (HalfWidth * 0.45) + NormalAt(Phi2) * 2.5;
+	};
+
+	if (bTurning && BookLeafMesh != nullptr && BookLeafMesh->GetInstanceCount() == 2)
+	{
+		const float Glow = FMath::Max(CVarLeafGlow.GetValueOnGameThread(), 0.0f);
+		if (BookLeafMid != nullptr && Glow != AppliedLeafGlow)
+		{
+			AppliedLeafGlow = Glow;
+			BookLeafMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 0.74f, 0.26f) * (DogGlowExposure * Glow));
+		}
+		double Phi = 0.0, Phi2 = 0.0;
+		FVector Base = FVector::ZeroVector;
+		LeafAt(PageTurn, Phi, Phi2, Base);
+		const FVector LeafScale = FVector(SpineLength - 4.0, HalfWidth * 0.5, 0.8) * (B / 100.0);
+		BookLeafMesh->UpdateInstanceTransform(0,
+			FTransform(FRotator(0.0, 0.0, -Phi), (Base + AlongAt(Phi) * (HalfWidth * 0.25)) * B, LeafScale), false, false, true);
+		BookLeafMesh->UpdateInstanceTransform(1,
+			FTransform(FRotator(0.0, 0.0, -Phi2), (Base + AlongAt(Phi) * (HalfWidth * 0.5) + AlongAt(Phi2) * (HalfWidth * 0.25)) * B, LeafScale),
+			false, true, true);
+	}
+
+	// ---------------------------------------------------------------- the grips the hands are solved onto
+	const FTransform BookXf = BookRoot->GetComponentTransform();
+	// Under the left-hand cover, toward the reader's end: the supporting hand.
+	const FVector Support = FVector(NearEnd * SpineLength * 0.28, 0.0, 0.0)
+		+ AlongAt(180.0 - Open) * (HalfWidth * 0.62) + NormalAt(180.0 - Open) * (CoverThick + 3.0);
+	// On the right-hand page's outer corner at rest; along the turning page's edge while it turns; carried back afterwards.
+	const FVector Rest = FVector(NearEnd * SpineLength * 0.30, 0.0, 0.0)
+		+ AlongAt(Open) * (HalfWidth * 0.86) + NormalAt(Open) * (PageThick + 2.0);
+	FVector Turning = Rest;
+	if (bTurning)
+	{
+		Turning = LeafEdge(PageTurn);
+	}
+	else
+	{
+		const UWorld* World = GetWorld();
+		const float Now = World != nullptr ? static_cast<float>(World->GetTimeSeconds()) : 0.0f;
+		const float Hz = FMath::Max(CVarTurnHz.GetValueOnGameThread(), 0.01f);
+		const float Frac = FMath::Clamp(CVarTurnFraction.GetValueOnGameThread(), 0.05f, 0.95f);
+		const float Cycle = FMath::Frac(Now * Hz);
+		const float Back = FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp((Cycle - Frac) / ((1.0f - Frac) * 0.45f), 0.0f, 1.0f));
+		Turning = FMath::Lerp(LeafEdge(1.0), Rest, static_cast<double>(Back));
+	}
+	BookPoints[0] = BookXf.TransformPosition(NormalAt(90.0) * (PageThick * B));
+	BookPoints[1] = BookXf.TransformPosition(Support * B);
+	BookPoints[2] = BookXf.TransformPosition(Turning * B);
 }
 
 void ARelayDogCharacter::DrawVerificationBeam(const FVector& FromWorld, const FVector& ToWorld, float Weight, float TimeSeconds)
@@ -1898,4 +2106,662 @@ FString ARelayDogCharacter::DescribeState() const
 		Pose.LeanDeg, Pose.Stride.ArmsBack,
 		Pose.LegLeft.HipDeg, Pose.LegLeft.KneeDeg, Pose.ArmLeft.ShoulderDeg, Pose.ArmLeft.ElbowDeg,
 		Pose.HeadYawDeg, Pose.HeadPitchDeg, Pose.GaitWeight);
+}
+void ARelayDogCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (MissionCamInput.IsValid() && FSlateApplication::IsInitialized())
+	{
+		FSlateApplication::Get().UnregisterInputPreProcessor(MissionCamInput);
+	}
+	MissionCamInput.Reset();
+	Super::EndPlay(EndPlayReason);
+}
+
+void ARelayDogCharacter::OrbitMissionCamera(float YawDegrees, float PitchDegrees)
+{
+	MissionCamYaw = FRotator::NormalizeAxis(MissionCamYaw + YawDegrees);
+	MissionCamPitch = FMath::Clamp(MissionCamPitch + PitchDegrees, -72.0f, -3.0f);
+}
+
+void ARelayDogCharacter::SetMissionCameraAngles(float YawDegrees, float PitchDegrees)
+{
+	MissionCamYaw = FRotator::NormalizeAxis(YawDegrees);
+	MissionCamPitch = FMath::Clamp(PitchDegrees, -72.0f, -3.0f);
+	bMissionCamLatched = MissionContract.IsValid();
+}
+
+FString ARelayDogCharacter::MissionCameraPressTarget(const FVector2D& ScreenPosition) const
+{
+	if (!FSlateApplication::IsInitialized())
+	{
+		return TEXT("outside");
+	}
+	const UWorld* World = GetWorld();
+	UGameViewportClient* ViewportClient = World != nullptr ? World->GetGameViewport() : nullptr;
+	const TSharedPtr<SViewport> ViewportWidget = ViewportClient != nullptr ? ViewportClient->GetGameViewportWidget() : nullptr;
+	if (!ViewportWidget.IsValid())
+	{
+		return TEXT("outside");
+	}
+	const FGeometry& ViewportGeometry = ViewportWidget->GetTickSpaceGeometry();
+	if (!ViewportGeometry.IsUnderLocation(ScreenPosition))
+	{
+		return TEXT("outside");
+	}
+	FSlateApplication& App = FSlateApplication::Get();
+	TArray<TSharedRef<SWindow>> Windows = App.GetInteractiveTopLevelWindows();
+	const FWidgetPath Path = App.LocateWindowUnderMouse(ScreenPosition, Windows, false);
+	if (!Path.IsValid())
+	{
+		return TEXT("outside");
+	}
+	bool bThroughViewport = false;
+	for (int32 Index = 0; Index < Path.Widgets.Num(); ++Index)
+	{
+		if (&Path.Widgets[Index].Widget.Get() == ViewportWidget.Get())
+		{
+			bThroughViewport = true;
+			break;
+		}
+	}
+	if (!bThroughViewport)
+	{
+		return TEXT("outside");
+	}
+	// THE DEEPEST WIDGET THAT TAKES A HIT. A full-viewport container (the HUD's canvases, the terminal's own layer) is the
+	// world showing through; anything smaller -- a console, a slot, a line of text, a button -- is a panel.
+	const FArrangedWidget& Leaf = Path.Widgets.Last();
+	const FString Type = Leaf.Widget->GetTypeAsString();
+	const FVector2D LeafSize = Leaf.Geometry.GetAbsoluteSize();
+	const FVector2D ViewSize = ViewportGeometry.GetAbsoluteSize();
+	const bool bFullScreen = ViewSize.X > 1.0 && ViewSize.Y > 1.0
+		&& LeafSize.X * LeafSize.Y >= 0.6 * ViewSize.X * ViewSize.Y;
+	if (bFullScreen || Type == TEXT("SViewport") || Type == TEXT("SGameLayerManager"))
+	{
+		return FString();
+	}
+	return Type;
+}
+
+FVector4 ARelayDogCharacter::GetGameViewportScreenRect() const
+{
+	const UWorld* World = GetWorld();
+	UGameViewportClient* ViewportClient = World != nullptr ? World->GetGameViewport() : nullptr;
+	const TSharedPtr<SViewport> ViewportWidget = ViewportClient != nullptr ? ViewportClient->GetGameViewportWidget() : nullptr;
+	if (!ViewportWidget.IsValid())
+	{
+		return FVector4(0.0, 0.0, 0.0, 0.0);
+	}
+	const FGeometry& Geometry = ViewportWidget->GetTickSpaceGeometry();
+	const FVector2D At = Geometry.GetAbsolutePosition();
+	const FVector2D Size = Geometry.GetAbsoluteSize();
+	return FVector4(At.X, At.Y, Size.X, Size.Y);
+}
+
+FString ARelayDogCharacter::DescribeMissionCameraPress(float ScreenX, float ScreenY) const
+{
+	const FString Target = MissionCameraPressTarget(FVector2D(ScreenX, ScreenY));
+	return Target.IsEmpty() ? FString(TEXT("world")) : (Target == TEXT("outside") ? Target : TEXT("ui:") + Target);
+}
+
+bool ARelayDogCharacter::BeginMissionCameraDrag(const FVector2D& ScreenPosition)
+{
+	if (MissionCamWeight < 0.5f || !MissionContract.IsValid())
+	{
+		return false;
+	}
+	const FString Target = MissionCameraPressTarget(ScreenPosition);
+	if (Target == TEXT("outside"))
+	{
+		return false;
+	}
+	if (!Target.IsEmpty())
+	{
+		++MissionCamUiPresses;
+		UE_LOG(LogTemp, Log, TEXT("WLDOG mission camera: left press on %s is the panel's, not a drag"), *Target);
+		return false;
+	}
+	bMissionCamDragging = true;
+	++MissionCamDrags;
+	return true;
+}
+
+void ARelayDogCharacter::EndMissionCameraDrag()
+{
+	if (bMissionCamDragging)
+	{
+		UE_LOG(LogTemp, Log, TEXT("WLDOG mission camera: dragged to yaw %.1f pitch %.1f (drag %d)"), MissionCamYaw, MissionCamPitch, MissionCamDrags);
+	}
+	bMissionCamDragging = false;
+}
+
+bool ARelayDogCharacter::SimulateMissionCameraDrag(float FromX, float FromY, float ToX, float ToY, int32 Steps)
+{
+	if (!FSlateApplication::IsInitialized())
+	{
+		return false;
+	}
+	FSlateApplication& App = FSlateApplication::Get();
+	const uint32 Pointer = FSlateApplicationBase::CursorPointerIndex;
+	TSet<FKey> Held;
+	Held.Add(EKeys::LeftMouseButton);
+	const FVector2D From(FromX, FromY);
+	const FPointerEvent Down(0, Pointer, From, From, Held, EKeys::LeftMouseButton, 0.0f, FModifierKeysState());
+	App.ProcessMouseButtonDownEvent(nullptr, Down);
+	FVector2D Last = From;
+	const int32 Count = FMath::Clamp(Steps, 1, 200);
+	for (int32 Step = 1; Step <= Count; ++Step)
+	{
+		const FVector2D At = FMath::Lerp(From, FVector2D(ToX, ToY), static_cast<float>(Step) / static_cast<float>(Count));
+		const FPointerEvent Move(0, Pointer, At, Last, Held, FKey(), 0.0f, FModifierKeysState());
+		App.ProcessMouseMoveEvent(Move);
+		Last = At;
+	}
+	const FPointerEvent Up(0, Pointer, Last, Last, TSet<FKey>(), EKeys::LeftMouseButton, 0.0f, FModifierKeysState());
+	App.ProcessMouseButtonUpEvent(Up);
+	return true;
+}
+
+void ARelayDogCharacter::UpdateMissionCamera(float DeltaSeconds)
+{
+	using namespace RelayDogPoseTuning;
+	if (CameraBoom == nullptr)
+	{
+		return;
+	}
+	const AActor* Contract = MissionContract.Get();
+	const bool bWant = Contract != nullptr && !bAutoDemo && CVarCamEnabled.GetValueOnGameThread() != 0;
+	if (bWant)
+	{
+		MissionCamFocus = Contract->GetActorLocation() - FVector(0.0, 0.0, CVarCamDrop.GetValueOnGameThread());
+		if (!bMissionCamLatched)
+		{
+			// THE CAMERA STARTS WHERE THE PLAYER WAS LOOKING, so taking the Contract is a glide, not a cut.
+			bMissionCamLatched = true;
+			MissionCamYaw = Controller != nullptr ? Controller->GetControlRotation().Yaw : GetActorRotation().Yaw;
+			MissionCamPitch = FMath::Clamp(CVarCamPitch.GetValueOnGameThread(), -72.0f, -3.0f);
+		}
+	}
+	else
+	{
+		bMissionCamLatched = false;
+		bMissionCamDragging = false;
+	}
+	const float Blend = FMath::Max(CVarCamBlend.GetValueOnGameThread(), 0.05f);
+	MissionCamWeight = FMath::Clamp(MissionCamWeight + (bWant ? 1.0f : -1.0f) * DeltaSeconds / Blend, 0.0f, 1.0f);
+
+	if (MissionCamWeight <= 0.0f)
+	{
+		if (bMissionCamApplied)
+		{
+			// BACK TO THE DOG, exactly as the boom was built for a hand on the mouse.
+			CameraBoom->SetUsingAbsoluteLocation(false);
+			CameraBoom->SetUsingAbsoluteRotation(false);
+			CameraBoom->SetRelativeLocationAndRotation(BoomRestLocation, BoomRestRotation);
+			CameraBoom->TargetArmLength = BoomRestArm;
+			CameraBoom->SocketOffset = BoomRestSocket;
+			CameraBoom->bUsePawnControlRotation = true;
+			CameraBoom->bInheritPitch = true;
+			CameraBoom->bInheritYaw = true;
+			bMissionCamApplied = false;
+		}
+		return;
+	}
+	if (!bMissionCamApplied)
+	{
+		BoomRestArm = CameraBoom->TargetArmLength;
+		BoomRestSocket = CameraBoom->SocketOffset;
+		BoomRestLocation = CameraBoom->GetRelativeLocation();
+		BoomRestRotation = CameraBoom->GetRelativeRotation();
+		CameraBoom->SetUsingAbsoluteLocation(true);
+		CameraBoom->SetUsingAbsoluteRotation(true);
+		CameraBoom->bUsePawnControlRotation = false;
+		bMissionCamApplied = true;
+	}
+	const float S = FMath::SmoothStep(0.0f, 1.0f, MissionCamWeight);
+	const FVector NormalPivot = GetCapsuleComponent()->GetComponentTransform().TransformPosition(BoomRestLocation);
+	const FRotator NormalRot = Controller != nullptr ? Controller->GetControlRotation() : GetActorRotation();
+	const FRotator MissionRot(MissionCamPitch, MissionCamYaw, 0.0f);
+	CameraBoom->SetWorldLocationAndRotation(FMath::Lerp(NormalPivot, MissionCamFocus, static_cast<double>(S)),
+		FQuat::Slerp(NormalRot.Quaternion(), MissionRot.Quaternion(), S));
+	CameraBoom->TargetArmLength = FMath::Lerp(BoomRestArm, CVarCamArm.GetValueOnGameThread(), S);
+	CameraBoom->SocketOffset = FMath::Lerp(BoomRestSocket, FVector(0.0f, 0.0f, -CVarCamLift.GetValueOnGameThread()), S);
+	if (bWant && Controller != nullptr)
+	{
+		// WASD stays relative to what the player sees, and the follow camera picks up at the mission camera's yaw.
+		// Only the yaw: the Dog is never turned by this (it faces where it walks), and the pitch blends on its own.
+		const FRotator Control = Controller->GetControlRotation();
+		Controller->SetControlRotation(FRotator(Control.Pitch, MissionCamYaw, Control.Roll));
+	}
+}
+
+/* ==================================================================== measuring the rig */
+
+void ARelayDogCharacter::MeasureFace()
+{
+	// THE FACE IS WHERE THE EYES ARE. Forward in the Body's frame is the eyes' direction from the neck, flattened.
+	FaceForwardInBody = FVector::ForwardVector;
+	if (HeadPivot != nullptr && EyeLeftPivot != nullptr && EyeRightPivot != nullptr)
+	{
+		auto InHead = [this](const USceneComponent* Eye)
+		{
+			return Eye->GetAttachParent() == HeadPivot
+				? Eye->GetRelativeLocation()
+				: Eye->GetRelativeLocation() - HeadPivot->GetRelativeLocation();
+		};
+		EyesInHead = (InHead(EyeLeftPivot) + InHead(EyeRightPivot)) * 0.5;
+		const FVector Flat(EyesInHead.X, EyesInHead.Y, 0.0);
+		if (!Flat.IsNearlyZero())
+		{
+			FaceForwardInBody = Flat.GetSafeNormal();
+		}
+	}
+	const FVector Look = FVector(FaceForwardInBody.X, FaceForwardInBody.Y, 0.0).GetSafeNormal();
+	const FVector BodyRight = FVector::CrossProduct(FVector::UpVector, FaceForwardInBody).GetSafeNormal();
+	// Which way a positive head pitch turns the gaze, and a positive yaw.
+	HeadDownSign = FRotator(20.0f, 0.0f, 0.0f).RotateVector(Look).Z < 0.0 ? 1.0f : -1.0f;
+	HeadRightSign = FVector::DotProduct(FRotator(0.0f, 20.0f, 0.0f).RotateVector(Look), BodyRight) > 0.0 ? 1.0f : -1.0f;
+}
+
+void ARelayDogCharacter::MeasureChain(RelayDogLimbs::FChain& Chain, const USceneComponent* Root, const USceneComponent* Mid)
+{
+	using namespace RelayDogLimbs;
+	if (Root == nullptr || Mid == nullptr)
+	{
+		return;
+	}
+	const bool bBendForward = Chain.BendSign > 0.0f;
+	Chain.RootRel = Root->GetRelativeLocation();
+	Chain.MidRel = Mid->GetRelativeLocation();
+
+	// THE TIP IS THE FAR END OF WHAT THE MIDDLE JOINT CARRIES: the bounds of its meshes in its own frame, walked to the end
+	// that points away from the joint. The mission props are not the limb, and are skipped.
+	FBox Box(ForceInit);
+	TArray<USceneComponent*> Carried;
+	Mid->GetChildrenComponents(true, Carried);
+	for (USceneComponent* Child : Carried)
+	{
+		const UPrimitiveComponent* Prim = Cast<UPrimitiveComponent>(Child);
+		if (Prim == nullptr || Prim->GetName().StartsWith(TEXT("Mission")) || Prim->GetName().StartsWith(TEXT("Verification")))
+		{
+			continue;
+		}
+		const FTransform InMid = Prim->GetComponentTransform().GetRelativeTransform(Mid->GetComponentTransform());
+		Box += Prim->CalcBounds(InMid).GetBox();
+	}
+	if (Box.IsValid)
+	{
+		const FVector Centre = Box.GetCenter();
+		const FVector Dir = Centre.IsNearlyZero() ? FVector(0.0, 0.0, -1.0) : Centre.GetSafeNormal();
+		const FVector Extent = Box.GetExtent();
+		const double Along = FMath::Abs(Dir.X) * Extent.X + FMath::Abs(Dir.Y) * Extent.Y + FMath::Abs(Dir.Z) * Extent.Z;
+		Chain.TipLocal = Centre + Dir * Along;
+	}
+
+	auto RawTipAt = [&Chain](const FRotator& R, const FRotator& M)
+	{
+		return FTransform(R, Chain.RootRel).TransformPosition(FTransform(M, Chain.MidRel).TransformPosition(Chain.TipLocal));
+	};
+	const FVector Rest = RawTipAt(FRotator::ZeroRotator, FRotator::ZeroRotator);
+	Chain.Reach = static_cast<float>((Rest - Chain.RootRel).Size());
+	const FVector Forward = FaceForwardInBody;
+	// FORWARD: which pitch sign carries the tip toward the face.
+	Chain.ForwardSign = FVector::DotProduct(RawTipAt(FRotator(30.0f, 0.0f, 0.0f), FRotator::ZeroRotator) - Chain.RootRel, Forward)
+		> FVector::DotProduct(RawTipAt(FRotator(-30.0f, 0.0f, 0.0f), FRotator::ZeroRotator) - Chain.RootRel, Forward) ? 1.0f : -1.0f;
+	// OUTWARD: which roll sign carries the tip away from the body's centre line.
+	const FVector PlusRoll = RawTipAt(FRotator(0.0f, 0.0f, 30.0f), FRotator::ZeroRotator);
+	const FVector MinusRoll = RawTipAt(FRotator(0.0f, 0.0f, -30.0f), FRotator::ZeroRotator);
+	Chain.OutwardSign = FVector2D(PlusRoll.X, PlusRoll.Y).Size() > FVector2D(MinusRoll.X, MinusRoll.Y).Size() ? 1.0f : -1.0f;
+	// BEND: which sign folds the tip forward (an elbow) or back (a knee).
+	const double BendPlus = FVector::DotProduct(RawTipAt(FRotator::ZeroRotator, FRotator(40.0f, 0.0f, 0.0f)), Forward);
+	const double BendMinus = FVector::DotProduct(RawTipAt(FRotator::ZeroRotator, FRotator(-40.0f, 0.0f, 0.0f)), Forward);
+	Chain.BendSign = (BendPlus > BendMinus) == bBendForward ? 1.0f : -1.0f;
+	Chain.Solved = FVector(12.0, 6.0, 14.0);
+	Chain.bMeasured = true;
+}
+
+FVector ARelayDogCharacter::GetHandLocation(bool bWorkingHand) const
+{
+	const FRelayDogArm& Arm = bWorkingHand ? ArmRight : ArmLeft;
+	const RelayDogLimbs::FChain& Chain = bWorkingHand ? ArmChainRight : ArmChainLeft;
+	return Arm.Forearm != nullptr ? Arm.Forearm->GetComponentTransform().TransformPosition(Chain.TipLocal) : GetActorLocation();
+}
+
+FVector ARelayDogCharacter::GetBookPoint(int32 Which) const
+{
+	return BookPoints[FMath::Clamp(Which, 0, 2)];
+}
+
+/* ==================================================================== the energy that gathers into the Contract */
+
+void ARelayDogCharacter::DrawEnergy(float Energy, float SecondsIntoAct, float TimeSeconds, const FVector& FromWorld, const FVector& ToWorld)
+{
+	if (EnergyMesh == nullptr)
+	{
+		return;
+	}
+	const bool bOn = Energy > 0.02f && !ToWorld.IsNearlyZero();
+	if (EnergyMesh->IsVisible() != bOn)
+	{
+		EnergyMesh->SetVisibility(bOn);
+	}
+	if (!bOn)
+	{
+		return;
+	}
+	const int32 Count = EnergyMesh->GetInstanceCount();
+	if (Count < 2)
+	{
+		return;
+	}
+	const FVector Axis = ToWorld - FromWorld;
+	const double Length = FMath::Max(Axis.Size(), 1.0);
+	const FVector Dir = Axis / Length;
+	FVector Side = FVector::CrossProduct(Dir, FVector::UpVector);
+	Side = Side.IsNearlyZero() ? FVector::RightVector : Side.GetSafeNormal();
+	const FVector Lift = FVector::CrossProduct(Side, Dir).GetSafeNormal();
+	TArray<FTransform> Placed;
+	Placed.Reserve(Count);
+	// MOTES SPIRAL IN FROM ROUND THE MEDITATING DOG TO WHERE THE CONTRACT WILL BE, and keep feeding it once it is there.
+	const int32 Motes = Count - 1;
+	for (int32 Index = 0; Index < Motes; ++Index)
+	{
+		const float U = FMath::Frac(TimeSeconds / 2.3f + static_cast<float>(Index) * 0.618034f);
+		const float Start = 120.0f + 60.0f * FMath::Frac(static_cast<float>(Index) * 0.37f);
+		const float Angle = FMath::DegreesToRadians(static_cast<float>(Index) * 137.5f + U * 420.0f);
+		const float Radius = Start * (1.0f - U) * (1.0f - U);
+		const float Travel = U * U * (3.0f - 2.0f * U);
+		const FVector Centre = FromWorld + Dir * (Length * Travel);
+		const FVector At = Centre + (Side * FMath::Cos(Angle) + Lift * FMath::Sin(Angle)) * Radius;
+		const float Size = (3.0f + 3.5f * (1.0f - U)) * Energy * FMath::Clamp(U * 8.0f, 0.0f, 1.0f);
+		Placed.Add(FTransform(FRotator(TimeSeconds * 90.0f + Index * 40.0f, TimeSeconds * 70.0f, 0.0f), At, FVector(Size / 100.0f)));
+	}
+	// THE SEED: the gathered energy, bright at the Contract's place, until the Contract has grown out of it.
+	const float Grow = FMath::Clamp(SecondsIntoAct / 3.0f, 0.0f, 1.0f);
+	const float Handover = 1.0f - FMath::SmoothStep(3.0f, 4.2f, SecondsIntoAct);
+	const float Seed = FMath::Max(Grow * Handover, 0.0f) * Energy;
+	Placed.Add(FTransform(FRotator(TimeSeconds * 120.0f, TimeSeconds * 80.0f, 0.0f), ToWorld, FVector((4.0f + 20.0f * Seed) * Seed / 100.0f)));
+	EnergyMesh->BatchUpdateInstancesTransforms(0, Placed, true, true, true);
+	if (EnergyMid != nullptr)
+	{
+		const float Pulse = 0.85f + 0.25f * FMath::Sin(TimeSeconds * 5.0f);
+		EnergyMid->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.0f, 0.80f, 0.42f) * (DogGlowExposure * 1.3f * Pulse));
+	}
+}
+
+/* ==================================================================== the performance, written over the walk */
+
+void ARelayDogCharacter::ApplyMissionPose(const RelayDogStride::FDogPose& Pose, const RelayDogMission::FStageOverlay& O,
+	const RelayDogMission::FStageInput& In, float DeltaSeconds)
+{
+	using namespace RelayDogPoseTuning;
+	using RelayDogMission::ERepairStage;
+	LastEyesShut = O.EyesShut;
+	const float W = O.Weight;
+	const AActor* Contract = MissionContract.Get();
+	const FVector Heart = Contract != nullptr ? Contract->GetActorLocation() : FVector::ZeroVector;
+	const bool bPerforming = W > KINDA_SMALL_NUMBER && BodyRoot != nullptr && ArmChainLeft.bMeasured && ArmChainRight.bMeasured;
+
+	if (bPerforming)
+	{
+		// ---------------------------------------------------------------- the body: lifted, and still while it floats
+		const float Still = FMath::Clamp((O.Meditate + O.Fly) / FMath::Max(W, 0.001f), 0.0f, 1.0f) * W;
+		BodyRoot->SetRelativeLocation(BodyRestLocation + FVector(0.0f, Pose.SwayUU * (1.0f - Still),
+			(Pose.BobUU - Pose.PelvisDropUU) * (1.0f - Still) + O.LiftUU));
+		BodyRoot->SetRelativeRotation(FRotator(Pose.LeanDeg + Pose.Body.PitchDeg + O.Fly * CVarFlyLean.GetValueOnGameThread(),
+			Pose.BodyYawDeg * (1.0f - Still), (Pose.Body.RollDeg + Pose.TurnRollDeg) * (1.0f - Still)));
+	}
+
+	const FTransform BodyXf = BodyRoot != nullptr ? BodyRoot->GetComponentTransform() : GetActorTransform();
+	const FVector Up = BodyXf.GetUnitAxis(EAxis::Z);
+	const FVector Fwd = BodyXf.TransformVectorNoScale(FaceForwardInBody).GetSafeNormal();
+	const FVector Right = FVector::CrossProduct(Up, Fwd).GetSafeNormal();
+	const FVector Neck = HeadPivot != nullptr ? HeadPivot->GetComponentLocation() : BodyXf.TransformPosition(FVector(0.0, 0.0, HeadJointHeightInBody()));
+	const FVector Chest = Neck - Up * 20.0 + Fwd * 6.0;
+	const float Side = WorkingHandSide;
+	const FVector Crown = Heart + FVector(0.0, 0.0, 30.0);
+
+	// ---------------------------------------------------------------- the props
+	const bool bBook = O.Prop == EWonderlandDogProp::Book && O.PropWeight > 0.08f;
+	const bool bBrush = O.Prop == EWonderlandDogProp::Paintbrush && O.PropWeight > 0.08f;
+	const bool bLens = O.Prop == EWonderlandDogProp::MagnifyingGlass && O.PropWeight > 0.08f;
+	const bool bScraper = O.Prop == EWonderlandDogProp::Scraper && O.PropWeight > 0.08f;
+	if (BookMesh != nullptr) BookMesh->SetVisibility(bBook);
+	if (BookPagesMesh != nullptr) BookPagesMesh->SetVisibility(bBook);
+	PoseBook(bBook || O.Read > 0.05f, O.PageTurn);
+	if (BrushMesh != nullptr) BrushMesh->SetVisibility(bBrush);
+	if (BrushHeadMesh != nullptr) BrushHeadMesh->SetVisibility(bBrush);
+	if (LensMesh != nullptr) LensMesh->SetVisibility(bLens);
+	if (LensGlassMesh != nullptr) LensGlassMesh->SetVisibility(bLens);
+	if (ScraperMesh != nullptr) ScraperMesh->SetVisibility(bScraper);
+	if (ScraperBladeMesh != nullptr) ScraperBladeMesh->SetVisibility(bScraper);
+
+	float MissWorking = -1.0f;
+	float MissFree = -1.0f;
+	if (bPerforming)
+	{
+		// ---------------------------------------------------------------- the legs
+		const float LegShare = O.Meditate + O.Fly;
+		auto WriteLeg = [&](FRelayDogLeg& Leg, RelayDogLimbs::FChain& Chain, const RelayDogStride::FLegPose& Walk)
+		{
+			if (Leg.Hip == nullptr || !Chain.bMeasured)
+			{
+				return;
+			}
+			const FVector WalkAngles(Walk.HipDeg * Chain.ForwardSign, 0.0f, -Walk.KneeDeg * Chain.BendSign);
+			FVector Want = WalkAngles;
+			if (LegShare > KINDA_SMALL_NUMBER)
+			{
+				const FVector Meditating(CVarMedHipFwd.GetValueOnGameThread(), CVarMedHipOut.GetValueOnGameThread(), CVarMedKnee.GetValueOnGameThread());
+				const FVector Flying(CVarFlyHipFwd.GetValueOnGameThread(), 4.0f, CVarFlyKnee.GetValueOnGameThread());
+				const FVector Performed = (Meditating * O.Meditate + Flying * O.Fly) / LegShare;
+				Want = FMath::Lerp(WalkAngles, Performed, static_cast<double>(FMath::Clamp(LegShare, 0.0f, 1.0f)));
+			}
+			Leg.Hip->SetRelativeRotation(RelayDogLimbs::RootRotation(Chain, Want));
+			if (Leg.Shin != nullptr)
+			{
+				Leg.Shin->SetRelativeRotation(RelayDogLimbs::MidRotation(Chain, Want));
+			}
+		};
+		WriteLeg(LegLeft, LegChainLeft, Pose.LegLeft);
+		WriteLeg(LegRight, LegChainRight, Pose.LegRight);
+
+		// ---------------------------------------------------------------- the hands' goals, world space
+		const FVector ShoulderW = BodyXf.TransformPosition(ArmChainRight.RootRel);
+		const FVector ShoulderF = BodyXf.TransformPosition(ArmChainLeft.RootRel);
+		const float ReachW = ArmChainRight.Reach;
+		const float ReachF = ArmChainLeft.Reach;
+		auto Hanging = [&](const FVector& Shoulder, float Reach, float SwingDeg, float Out)
+		{
+			const float A = FMath::DegreesToRadians(FMath::Clamp(SwingDeg, -35.0f, 35.0f));
+			return Shoulder + (-Up * FMath::Cos(A) + Fwd * FMath::Sin(A)) * (Reach * 0.95) + Right * (Out * 4.0);
+		};
+		auto Toward = [&](const FVector& From, const FVector& To, float Reach, float Fraction)
+		{
+			return From + (To - From).GetSafeNormal() * (Reach * Fraction);
+		};
+		const float SwingF = Pose.ArmLeft.ShoulderDeg * ArmChainLeft.ForwardSign;
+		const float SwingW = Pose.ArmRight.ShoulderDeg * ArmChainRight.ForwardSign;
+		const FVector FreeRelaxed = Hanging(ShoulderF, ReachF, SwingF * 0.8f, -Side);
+		FVector GoalW = FVector::ZeroVector;
+		FVector GoalF = FVector::ZeroVector;
+		FVector Look = FVector::ZeroVector;
+		float Sum = 0.0f;
+		auto Add = [&](float Share, const FVector& Working, const FVector& Free, const FVector& LookAt)
+		{
+			if (Share <= KINDA_SMALL_NUMBER)
+			{
+				return;
+			}
+			GoalW += Working * Share;
+			GoalF += Free * Share;
+			Look += LookAt * Share;
+			Sum += Share;
+		};
+
+		// PREPARATION: each hand on the knee on its own side.
+		if (O.Meditate > KINDA_SMALL_NUMBER)
+		{
+			auto Knee = [&](const RelayDogLimbs::FChain& Chain)
+			{
+				const FVector Angles(CVarMedHipFwd.GetValueOnGameThread(), CVarMedHipOut.GetValueOnGameThread(), CVarMedKnee.GetValueOnGameThread());
+				return BodyXf.TransformPosition(FTransform(RelayDogLimbs::RootRotation(Chain, Angles), Chain.RootRel).TransformPosition(Chain.MidRel));
+			};
+			const bool bLeftLegOnWorkingSide = FVector::DotProduct(BodyXf.TransformPosition(LegChainLeft.RootRel) - BodyXf.GetLocation(), Right) * Side > 0.0;
+			const FVector KneeW = Knee(bLeftLegOnWorkingSide ? LegChainLeft : LegChainRight) + Up * 7.0 + Fwd * 3.0;
+			const FVector KneeF = Knee(bLeftLegOnWorkingSide ? LegChainRight : LegChainLeft) + Up * 7.0 + Fwd * 3.0;
+			Add(O.Meditate, KneeW, KneeF, Neck + Fwd * 120.0 - Up * 22.0);
+		}
+		// RESEARCH: the supporting hand under the book, the turning hand on the page.
+		if (O.Read > KINDA_SMALL_NUMBER)
+		{
+			// The hand on the Dog's right turns the pages; the book's right-hand page is on that side.
+			const bool bWorkingTurns = Side > 0.0f;
+			Add(O.Read, bWorkingTurns ? BookPoints[2] : BookPoints[1], bWorkingTurns ? BookPoints[1] : BookPoints[2], BookPoints[0]);
+		}
+		// IMPLEMENTATION: the brush hand reaches toward the Contract and strokes; the other arm hangs.
+		FVector BrushGoal = FVector::ZeroVector;
+		if (O.Paint > KINDA_SMALL_NUMBER && Contract != nullptr)
+		{
+			const FVector Reach = ((Heart - ShoulderW).GetSafeNormal() * 0.78 + Right * (Side * 0.22) + Up * 0.12).GetSafeNormal();
+			const FVector Across = FVector::CrossProduct(Reach, Up).GetSafeNormal();
+			const float Phase = 2.0f * PI * O.StrokePhase;
+			BrushGoal = ShoulderW + Reach * (ReachW * CVarPaintReach.GetValueOnGameThread())
+				+ Up * (FMath::Sin(Phase) * CVarStrokeUp.GetValueOnGameThread()) + Across * (FMath::Cos(Phase) * 6.0);
+			Add(O.Paint, BrushGoal, FreeRelaxed, Heart);
+		}
+		// REVIEW: the lens up at the eye on the working side, swept slowly across the work.
+		if (O.Inspect > KINDA_SMALL_NUMBER)
+		{
+			const FVector Lens = Neck + Up * CVarLensUp.GetValueOnGameThread() + Fwd * CVarLensFwd.GetValueOnGameThread()
+				+ Right * (Side * (12.0 + 7.0 * FMath::Sin(2.0f * PI * O.SweepPhase)));
+			Add(O.Inspect, Lens - Up * 6.0, FreeRelaxed, Contract != nullptr ? Heart : Neck + Fwd * 200.0);
+		}
+		// VERIFICATION: both hands aimed at the Contract's heart.
+		if (O.Fly > KINDA_SMALL_NUMBER && Contract != nullptr)
+		{
+			Add(O.Fly, Toward(ShoulderW, Heart, ReachW, 0.94f), Toward(ShoulderF, Heart, ReachF, 0.94f), Heart);
+		}
+		// REPAIR: identify with the lens, erase with the scraper, repaint with the brush, then settle.
+		if (O.Correct > KINDA_SMALL_NUMBER && Contract != nullptr)
+		{
+			FVector Tool = FreeRelaxed;
+			switch (O.Repair.Stage)
+			{
+			case ERepairStage::Identify:
+				Tool = Neck + Up * (CVarLensUp.GetValueOnGameThread() - 4.0) + (Crown - Neck).GetSafeNormal() * CVarLensFwd.GetValueOnGameThread() - Up * 6.0;
+				break;
+			case ERepairStage::Erase:
+			{
+				const FVector Reach = (Crown - ShoulderW).GetSafeNormal();
+				const FVector Across = FVector::CrossProduct(Reach, Up).GetSafeNormal();
+				Tool = ShoulderW + Reach * (ReachW * 0.88) + Across * (FMath::Sin(2.0f * PI * O.ScrubPhase) * 10.0);
+				break;
+			}
+			case ERepairStage::Repaint:
+			{
+				const FVector Reach = ((Crown - ShoulderW).GetSafeNormal() * 0.85 + Up * 0.15).GetSafeNormal();
+				Tool = ShoulderW + Reach * (ReachW * 0.84) + Up * (FMath::Sin(2.0f * PI * O.StrokePhase * 0.7f) * 11.0);
+				break;
+			}
+			default:
+				Tool = Hanging(ShoulderW, ReachW, 8.0f, Side);
+				break;
+			}
+			Add(O.Correct, Tool, FreeRelaxed, Crown);
+		}
+
+		// ---------------------------------------------------------------- the arms, solved
+		auto WriteArm = [&](const FRelayDogArm& Arm, RelayDogLimbs::FChain& Chain, const RelayDogStride::FArmPose& Walk, const FVector& Goal, float& OutMiss)
+		{
+			if (Arm.Shoulder == nullptr || Arm.Forearm == nullptr)
+			{
+				return;
+			}
+			const FVector WalkAngles(Walk.ShoulderDeg * Chain.ForwardSign, Walk.ShoulderYawDeg * Arm.SideSign * Chain.OutwardSign,
+				Walk.ElbowDeg * Chain.BendSign);
+			FVector Want = WalkAngles;
+			if (Sum > KINDA_SMALL_NUMBER)
+			{
+				OutMiss = RelayDogLimbs::Solve(Chain, BodyXf.InverseTransformPosition(Goal / Sum), FVector(-60.0, -25.0, 0.0), FVector(175.0, 125.0, 150.0));
+				Want = FMath::Lerp(WalkAngles, Chain.Solved, static_cast<double>(FMath::Clamp(Sum, 0.0f, 1.0f)));
+			}
+			Arm.Shoulder->SetRelativeRotation(RelayDogLimbs::RootRotation(Chain, Want));
+			Arm.Forearm->SetRelativeRotation(RelayDogLimbs::MidRotation(Chain, Want));
+		};
+		WriteArm(ArmRight, ArmChainRight, Pose.ArmRight, GoalW, MissWorking);
+		WriteArm(ArmLeft, ArmChainLeft, Pose.ArmLeft, GoalF, MissFree);
+
+		// ---------------------------------------------------------------- the head looks at the work
+		if (HeadPivot != nullptr && Sum > KINDA_SMALL_NUMBER)
+		{
+			const FVector HeadRel = HeadPivot->GetRelativeLocation();
+			const FVector Target = BodyXf.InverseTransformPosition(Look / Sum);
+			const FVector WantDir = (Target - (HeadRel + FVector(0.0, 0.0, EyesInHead.Z))).GetSafeNormal();
+			const FVector Face(FaceForwardInBody.X, FaceForwardInBody.Y, 0.0);
+			auto Gaze = [&](const FVector2D& Angles)
+			{
+				return FRotator(Angles.X * HeadDownSign, Angles.Y * HeadRightSign, 0.0f).RotateVector(Face);
+			};
+			FVector2D Angles = HeadLookSolved;
+			for (int32 Iteration = 0; Iteration < 8; ++Iteration)
+			{
+				const FVector Now = Gaze(Angles);
+				const FVector Err = WantDir - Now;
+				if (Err.SizeSquared() < 1e-5)
+				{
+					break;
+				}
+				const FVector Dd = (Gaze(Angles + FVector2D(0.5, 0.0)) - Now) / 0.5;
+				const FVector Dr = (Gaze(Angles + FVector2D(0.0, 0.5)) - Now) / 0.5;
+				const double A11 = Dd.SizeSquared() + 1e-4;
+				const double A22 = Dr.SizeSquared() + 1e-4;
+				const double A12 = FVector::DotProduct(Dd, Dr);
+				const double B1 = FVector::DotProduct(Dd, Err);
+				const double B2 = FVector::DotProduct(Dr, Err);
+				const double Det = A11 * A22 - A12 * A12;
+				if (FMath::Abs(Det) < 1e-12)
+				{
+					break;
+				}
+				Angles.X = FMath::Clamp(Angles.X + FMath::Clamp((A22 * B1 - A12 * B2) / Det, -10.0, 10.0), -40.0, 55.0);
+				Angles.Y = FMath::Clamp(Angles.Y + FMath::Clamp((A11 * B2 - A12 * B1) / Det, -10.0, 10.0), -70.0, 70.0);
+			}
+			HeadLookSolved = Angles;
+			const FVector2D WalkLook((Pose.HeadPitchDeg - Pose.LeanDeg) * HeadDownSign, Pose.HeadYawDeg * HeadRightSign);
+			const FVector2D Final = FMath::Lerp(WalkLook, Angles, FMath::Clamp(Sum, 0.0f, 1.0f));
+			HeadPivot->SetRelativeRotation(FRotator(Final.X * HeadDownSign, Final.Y * HeadRightSign, 0.0f));
+		}
+	}
+
+	// ---------------------------------------------------------------- the beam, from the hands to the Contract's heart
+	if (O.bBeam || Mission.Performing() == EWonderlandDogAct::VerificationBeam)
+	{
+		LastBeamNote = FString::Printf(TEXT("reported=%s performing=%s overlay_beam=%d fade=%.3f weight=%.3f contract=%d body=%d fly=%.2f lift=%.0f"),
+			WonderlandDogActName(Mission.ReportedAct()), WonderlandDogActName(Mission.Performing()), O.bBeam ? 1 : 0,
+			Mission.BeamFade(), O.BeamWeight, Contract != nullptr ? 1 : 0, BodyRoot != nullptr ? 1 : 0, O.Fly, O.LiftUU);
+	}
+	if (O.bBeam && Contract != nullptr && BodyRoot != nullptr)
+	{
+		const FVector Hands = (GetHandLocation(true) + GetHandLocation(false)) * 0.5;
+		const FVector From = O.Fly > 0.3f ? Hands : Chest + Fwd * 18.0;
+		DrawVerificationBeam(From, Heart, O.BeamWeight, In.TimeSeconds);
+	}
+	else
+	{
+		DrawVerificationBeam(FVector::ZeroVector, FVector::ZeroVector, 0.0f, In.TimeSeconds);
+	}
+
+	// ---------------------------------------------------------------- energy, and the Contract's repair
+	DrawEnergy(O.Energy, O.SecondsIntoAct, In.TimeSeconds, Chest + Fwd * 20.0, Heart);
+	if (AWonderlandMissionOrb* Orb = Cast<AWonderlandMissionOrb>(const_cast<AActor*>(Contract)))
+	{
+		Orb->SetRepairState(static_cast<int32>(O.Repair.Stage), O.Repair.Progress, O.Correct);
+	}
+
+	LastPoseNote = FString::Printf(
+		TEXT("act=%s w=%.2f med=%.2f read=%.2f paint=%.2f fly=%.2f inspect=%.2f correct=%.2f lift=%.0f prop=%s face=%d orbit=%d repair=%d:%.2f miss_w=%.1f miss_f=%.1f side=%.0f cam=%.2f turn=%.2f"),
+		WonderlandDogActName(Mission.Performing()), W, O.Meditate, O.Read, O.Paint, O.Fly, O.Inspect, O.Correct, O.LiftUU,
+		WonderlandDogPropName(O.Prop), O.bFaceContract ? 1 : 0, O.bOrbit ? 1 : 0, static_cast<int32>(O.Repair.Stage), O.Repair.Progress,
+		MissWorking, MissFree, WorkingHandSide, MissionCamWeight, O.PageTurn);
 }

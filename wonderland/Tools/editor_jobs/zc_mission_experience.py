@@ -59,6 +59,11 @@ ROLE_NAMES = ["julius", "architect", "coder", "reviewer"]
 SECTIONS = ["PROMPT ARCHITECT", "CODING AGENT", "JULIUS 3.3", "INDEPENDENT REVIEWER"]
 # VERIFICATION IS SHOT FROM THE SIDE: from straight behind, the Dog's head stands between the camera and its own beam.
 VERIFY_YAW_OFFSET = float(globals().get("VERIFY_YAW_OFFSET") or 40.0)
+# WHILE THE COMPANIONS WORK, from a little to one side (zc_camera_test): straight behind, the Contract stood exactly behind
+# the Dog's head and read as a hat; 25 degrees round, it stands beside the Dog with the Jhinn's beam going into it.
+WORK_YAW_OFFSET = float(globals().get("WORK_YAW_OFFSET") or -25.0)
+# Console settings for the film, e.g. a tuning value the next build makes the default.
+EXTRA_COMMANDS = list(globals().get("EXTRA_COMMANDS") or [])
 # The simulation site the founder's command travels to (wl.Mission.Site). None keeps the build's own default.
 SITE = globals().get("SITE")
 DOG_ACT = {
@@ -109,7 +114,8 @@ def job():
         ui = L.get_ui(world)
         live = [m for m in unreal.ObjectIterator(unreal.WonderlandMissionSubsystem) if m.is_mission_strip_on_screen()]
         mission = live[0] if live else None
-        cmds = ["t.MaxFPS 0", "Slate.bAllowThrottling 0", "r.VSync 0"]
+        cmds = ["t.MaxFPS 0", "Slate.bAllowThrottling 0", "r.VSync 0"] + EXTRA_COMMANDS
+        RESULT["extra_commands"] = EXTRA_COMMANDS
         if MINIMAP_MODE is not None:
             cmds.append("wl.MiniMap.DrawMode %d" % int(MINIMAP_MODE))
         for cmd in cmds:
@@ -171,6 +177,8 @@ def job():
                     want = unreal.MathLibrary.find_look_at_rotation(dog_at, aim).yaw
                     if str(mission.get_beat_id()) == "verifying":
                         want += VERIFY_YAW_OFFSET
+                    elif book is None or not book.is_visible():
+                        want += WORK_YAW_OFFSET
                     delta = (want - yaw + 180.0) % 360.0 - 180.0
                     yaw += delta * 0.08
                 target = READ_FRAMING if (book is not None and book.is_visible()) else WORK_FRAMING

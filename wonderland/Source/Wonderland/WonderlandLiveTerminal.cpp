@@ -11,6 +11,8 @@
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
+#include "Widgets/Layout/SWrapBox.h"
+#include "WonderlandJuliusWorkLog.h"
 #include "WonderlandUiStyle.h"
 
 /* ------------------------------------------------------------ hex badge */
@@ -125,26 +127,43 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 				.ColorAndOpacity(WonderlandUi::Coral())
 			]
 			+ SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(2.0f, 0.0f, 0.0f, 4.0f)
+			[
+				MakeActiveNow()
+			]
+			+ SVerticalBox::Slot()
 			.FillHeight(1.0f)
 			[
-				SNew(SScrollBox)
+				// THE SECTIONS GROW DOWNWARD WITH THEIR WORK AND THIS SCROLLS. A wheel over it scrolls back through the
+				// history; the terminal follows the mission's focus again a few seconds after the player lets it be.
+				SAssignNew(Scroll, SScrollBox)
 				.ScrollBarVisibility(EVisibility::Collapsed)
+				.OnUserScrolled_Lambda([this](float)
+				{
+					const double Now = FSlateApplication::Get().GetCurrentTime();
+					if (Now - LastAutoScroll > 1.2)
+					{
+						LastUserScroll = Now;
+					}
+				})
 				+ SScrollBox::Slot().Padding(0.0f, 0.0f, 0.0f, 5.0f)
 				[
-					MakeSection(TEXT("PROMPT ARCHITECT"), TEXT("WAITING"), MakeLiveLine(TEXT("PROMPT ARCHITECT"), TEXT("No activity yet.")))
+					MakeSection(TEXT("PROMPT ARCHITECT"), TEXT("WAITING"), MakeWorkLog(TEXT("PROMPT ARCHITECT"), TEXT("No activity yet.")))
 				]
 				+ SScrollBox::Slot().Padding(0.0f, 0.0f, 0.0f, 5.0f)
 				[
-					MakeSection(TEXT("CODING AGENT"), TEXT("WAITING"), MakeLiveLine(TEXT("CODING AGENT"), TEXT("No activity yet.")))
+					MakeSection(TEXT("CODING AGENT"), TEXT("WAITING"), MakeWorkLog(TEXT("CODING AGENT"), TEXT("No activity yet.")))
 				]
 				+ SScrollBox::Slot().Padding(0.0f, 0.0f, 0.0f, 5.0f)
 				[
-					MakeSection(TEXT("JULIUS 3.3"), TEXT("STANDBY"), JuliusBody.ToSharedRef())
+					MakeSection(TEXT("JULIUS 3.3"), TEXT("STANDBY"),
+						MakeWorkLog(TEXT("JULIUS 3.3"), TEXT("Not connected. Julius execution appears here when Relay is connected.")))
 				]
 				+ SScrollBox::Slot()
 				[
 					MakeSection(TEXT("INDEPENDENT REVIEWER"), TEXT("WAITING"),
-						MakeLiveLine(TEXT("INDEPENDENT REVIEWER"), TEXT("Reviewer: Independent review begins after Julius verification.")))
+						MakeWorkLog(TEXT("INDEPENDENT REVIEWER"), TEXT("Reviewer: Independent review begins after Julius verification.")))
 				]
 			]
 			+ SVerticalBox::Slot()
@@ -450,6 +469,121 @@ void SWonderlandLiveTerminal::AddJuliusRow(const FString& Role, const FString& H
 {
 	JuliusRows.Add({ FDateTime::Now().ToString(TEXT("%H:%M:%S")), Role, Headline, Detail });
 	RebuildJuliusBody();
+	// A row is Julius's own work now: it goes into the JULIUS 3.3 section's log.
+	if (const TSharedPtr<SWonderlandWorkLog> Log = GetWorkLog(TEXT("JULIUS 3.3")))
+	{
+		Log->AddLine(EWonderlandRoleLineKind::Log, Headline);
+	}
+}
+
+TSharedRef<SWidget> SWonderlandLiveTerminal::MakeWorkLog(const FString& Section, const FString& Resting)
+{
+	TSharedPtr<SWonderlandWorkLog> Log;
+	SAssignNew(Log, SWonderlandWorkLog).RestingText(Resting);
+	WorkLogs.Add(Section, Log);
+	return Log.ToSharedRef();
+}
+
+TSharedRef<SWidget> SWonderlandLiveTerminal::MakeActiveNow()
+{
+	// ACTIVE NOW: all four components' states on one line, so it is plain at a glance that they are working at once.
+	static const TCHAR* const Sections[] = { TEXT("JULIUS 3.3"), TEXT("PROMPT ARCHITECT"), TEXT("CODING AGENT"), TEXT("INDEPENDENT REVIEWER") };
+	static const TCHAR* const Short[] = { TEXT("JULIUS"), TEXT("ARCHITECT"), TEXT("CODER"), TEXT("REVIEWER") };
+	TSharedRef<SWrapBox> Strip = SNew(SWrapBox)
+		.UseAllottedSize(true)
+		.InnerSlotPadding(FVector2D(10.0f, 1.0f))
+		.Visibility_Lambda([this]() { return bSimulated ? EVisibility::HitTestInvisible : EVisibility::Collapsed; });
+	Strip->AddSlot()
+	[
+		SNew(STextBlock)
+		.Text(INVTEXT("ACTIVE NOW"))
+		.Font(WonderlandUi::Sans(8, true, 120))
+		.ColorAndOpacity(WonderlandUi::Gold())
+	];
+	for (int32 Index = 0; Index < 4; ++Index)
+	{
+		const FString Section = Sections[Index];
+		const FString Name = Short[Index];
+		auto IsActive = [this, Section]()
+		{
+			const FString State = GetSectionState(Section);
+			return !(State == TEXT("WAITING") || State == TEXT("STANDBY") || State.IsEmpty());
+		};
+		Strip->AddSlot()
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 4.0f, 0.0f)
+			[
+				SNew(STextBlock)
+				.Text(FText::FromString(TEXT("\u25CF")))
+				.Font(WonderlandUi::Mono(7))
+				.ColorAndOpacity_Lambda([IsActive]() { return FSlateColor(IsActive() ? WonderlandUi::Gold() : WonderlandUi::Faint()); })
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			[
+				SNew(STextBlock)
+				.Text_Lambda([this, Section, Name]() { return FText::FromString(FString::Printf(TEXT("%s \u00B7 %s"), *Name, *GetSectionState(Section))); })
+				.Font(WonderlandUi::Mono(8))
+				.ColorAndOpacity_Lambda([IsActive]() { return FSlateColor(IsActive() ? WonderlandUi::Cream() : WonderlandUi::Dim()); })
+			]
+		];
+	}
+	return Strip;
+}
+
+TSharedPtr<SWonderlandWorkLog> SWonderlandLiveTerminal::GetWorkLog(const FString& Section) const
+{
+	const TSharedPtr<SWonderlandWorkLog>* Found = WorkLogs.Find(Section);
+	return Found != nullptr ? *Found : TSharedPtr<SWonderlandWorkLog>();
+}
+
+int32 SWonderlandLiveTerminal::GetSectionLineCount(const FString& Section) const
+{
+	const TSharedPtr<SWonderlandWorkLog> Log = GetWorkLog(Section);
+	return Log.IsValid() ? Log->GetLineCount() : 0;
+}
+
+FString SWonderlandLiveTerminal::DescribeSection(const FString& Section, int32 MaxLines) const
+{
+	const TSharedPtr<SWonderlandWorkLog> Log = GetWorkLog(Section);
+	return Log.IsValid() ? Log->DescribeLines(MaxLines) : FString();
+}
+
+float SWonderlandLiveTerminal::GetScrollOffset() const
+{
+	return Scroll.IsValid() ? Scroll->GetScrollOffset() : 0.0f;
+}
+
+float SWonderlandLiveTerminal::GetScrollOffsetOfEnd() const
+{
+	return Scroll.IsValid() ? Scroll->GetScrollOffsetOfEnd() : 0.0f;
+}
+
+void SWonderlandLiveTerminal::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
+{
+	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+	// KEEP THE WORK IN VIEW: the newest line of the section the mission is focused on, unless the player has just scrolled.
+	if (!Scroll.IsValid() || FocusSection.IsEmpty() || InCurrentTime - LastUserScroll < 6.0)
+	{
+		return;
+	}
+	const TSharedPtr<SWonderlandWorkLog> Log = GetWorkLog(FocusSection);
+	if (!Log.IsValid())
+	{
+		return;
+	}
+	const int32 Serial = Log->GetChangeSerial();
+	if (Serial == FollowedSerial && FocusSection == FollowedSection)
+	{
+		return;
+	}
+	FollowedSerial = Serial;
+	FollowedSection = FocusSection;
+	if (const TSharedPtr<SWidget> Newest = Log->GetNewestWidget())
+	{
+		LastAutoScroll = InCurrentTime;
+		Scroll->ScrollDescendantIntoView(Newest, true, EDescendantScrollDestination::IntoView, 8.0f);
+	}
 }
 
 TSharedPtr<SWidget> SWonderlandLiveTerminal::GetFocusTarget() const
@@ -540,6 +674,10 @@ void SWonderlandLiveTerminal::SetSectionState(const FString& Section, const FStr
 	if (!Line.IsEmpty())
 	{
 		SectionLines.Add(Section, Line);
+		if (const TSharedPtr<SWonderlandWorkLog> Log = GetWorkLog(Section))
+		{
+			Log->AddLine(EWonderlandRoleLineKind::Log, Line);
+		}
 	}
 }
 
@@ -558,6 +696,20 @@ void SWonderlandLiveTerminal::ResetSimulation()
 	SectionStates.Reset();
 	SectionLines.Reset();
 	JuliusRows.Reset();
+	LatestJuliusHeadline.Reset();
 	RebuildJuliusBody();
+	for (const TPair<FString, TSharedPtr<SWonderlandWorkLog>>& Pair : WorkLogs)
+	{
+		if (Pair.Value.IsValid())
+		{
+			Pair.Value->Reset();
+		}
+	}
+	FollowedSerial = -1;
+	LastUserScroll = -100.0;
+	if (Scroll.IsValid())
+	{
+		Scroll->ScrollToStart();
+	}
 }
 

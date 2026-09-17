@@ -461,7 +461,7 @@ void UWonderlandMissionSubsystem::MountStrip()
 					return FText::FromString(FString::Printf(
 						TEXT("DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION   |   MISSION %s · EVENT %s (%s) · STATE %s · %s %d/%d · DOG %s%s · COMPANIONS %s%s   |   %s"),
 						MissionId.IsNone() ? TEXT("none") : *MissionId.ToString(),
-						Mission->GetLastEventType().IsNone() ? TEXT("-") : *Mission->GetLastEventType().ToString(),
+						Mission->GetPresentedEventType().IsNone() ? TEXT("-") : *Mission->GetPresentedEventType().ToString(),
 						*Mission->GetLastEventVerdict(),
 						*Mission->GetBeatPhase(Mission->GetBeatId()),
 						*Mission->GetChakraName(), Mission->GetChakraStep(), WonderlandChakraSteps,
@@ -546,6 +546,12 @@ void UWonderlandMissionSubsystem::ShowBeat(EWonderlandMissionBeat Wanted)
 			// so the progression is cleared before the first beat lands on it.
 			Body->ResetProgression();
 			Body->ReleaseAnchor();
+			// AND IT APPEARS OUT OF THE ENERGY THE RELAY DOG GATHERS (founder, 2026-09-16): the Dog meditates, the energy
+			// gathers where the Contract will be, and the Contract grows out of it a few seconds into preparation.
+			if (Beat == EWonderlandMissionBeat::MissionStart)
+			{
+				Body->ManifestAfter(3.2f);
+			}
 		}
 		Body->SetBeat(Beat);
 
@@ -991,6 +997,8 @@ bool UWonderlandMissionSubsystem::StartFixture(FName FixtureId, float SecondsPer
 	PlayClock = 0.0f;
 	FinishHold = 0.0f;
 	LastEventType = NAME_None;
+	PresentedEventType = NAME_None;
+	WithheldHandoffs = 0;
 	PlaySecondsPerEvent = FMath::Clamp(SecondsPerEvent, 0.05f, 30.0f);
 
 	// A TICKER RATHER THAN AN ACTOR. The simulation is not a thing in the world -- it is a stream being
@@ -1047,6 +1055,17 @@ void UWonderlandMissionSubsystem::OfferEvent(const FWonderlandMissionEvent& Even
 	// THE WORLD ONLY EVER SEES THE FOLD. It is never handed an event, and never decides what one means.
 	if (LastVerdict == EWonderlandEventVerdict::Applied)
 	{
+		// HANDOFF DOES NOT EXIST FOR THE PLAYER (founder, 2026-09-16). The fold has recorded it -- the event is Julius's and
+		// is not deleted -- but the world, the strip and the terminals go on presenting the stage in progress: no banner,
+		// no pose, no camera beat, no terminal handoff, and nothing already performing is interrupted.
+		if (Fold.Beat == EWonderlandMissionBeat::Handoff)
+		{
+			++WithheldHandoffs;
+			UE_LOG(LogWonderlandMissionUi, Verbose, TEXT("WLMISSION %s withheld from the world (handoff %d)"),
+				*Event.Type.ToString(), WithheldHandoffs);
+			return;
+		}
+		PresentedEventType = Event.Type;
 		const EWonderlandMissionBeat Before = Beat;
 		const bool bWasRunning = WonderlandBeatShowsContract(Before);
 		ShowBeat(Fold.Beat);

@@ -58,6 +58,35 @@ enum class EWonderlandRoleLineKind : uint8
 	State,
 	/** Waiting on another component. */
 	Wait,
+
+	// ---- the concurrent workstream (founder, 2026-09-16 evening): work you can watch, not status lines
+
+	/** Not drawn: the section's status changes here, when the component reaches this point of its work. */
+	Status,
+	/** Not drawn: a new piece of work begins; the previous one collapses to its summary line. */
+	Episode,
+	/** Not drawn: what the current piece of work's collapsed summary line says. */
+	Summary,
+	/** "FILE  src/relay/mission/creation-runtime.ts" */
+	CodeFile,
+	/** "174|+|  const grant = ..." -- line number, marker (' ', '+', '-'), code. TYPED. */
+	CodeLine,
+	/** "+4 / -1" */
+	DiffStat,
+	/** Opens an outbound prompt preview box; the text is its target ("CODING AGENT"). */
+	PromptBegin,
+	/** A heading inside the prompt box: Objective, Constraints, Required work. */
+	PromptHeading,
+	/** A line of the prompt. TYPED. */
+	PromptLine,
+	/** Closes the prompt box. */
+	PromptEnd,
+	/** "F-004|MATERIAL|Failure path lacks verification evidence.|creation-runtime.ts:175" */
+	FindingCard,
+	/** Not drawn: hold this many seconds before the next line. */
+	Pause,
+	/** A little space. */
+	Blank,
 };
 
 struct FWonderlandRoleLine
@@ -86,6 +115,12 @@ WONDERLAND_API FString WonderlandRoleRestingStatus(EWonderlandJuliusRole Role, b
 
 /** Seconds of world time a line holds the console before the next one is written. Readable, not instant. */
 WONDERLAND_API float WonderlandRoleLineHoldSeconds(EWonderlandRoleLineKind Kind);
+
+/** True for a line that arrives character by character: code and prompt text. */
+WONDERLAND_API bool WonderlandRoleLineTypes(EWonderlandRoleLineKind Kind);
+
+/** How fast a typed line arrives, characters per second of world time. */
+WONDERLAND_API float WonderlandRoleTypingCharsPerSecond(EWonderlandRoleLineKind Kind);
 
 /** "JULIUS", "PROMPT ARCHITECT", ... */
 WONDERLAND_API const TCHAR* WonderlandJuliusRoleTitle(EWonderlandJuliusRole Role);

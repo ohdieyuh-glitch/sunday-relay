@@ -229,6 +229,13 @@ private:
 	/** Which flank of the Dog's beam to hold while verifying: the side this companion is already on. */
 	bool ChooseFlank(const AActor* Contract) const;
 	bool bFlankRight = false;
+	/** THE WAY HOME, ROUND THE DOG. Set when a mission flight ends with this companion on the other side of the Dog from
+	 *  the one it follows on; while set, the follow target is a pass in front of or behind the Dog instead. */
+	FVector RouteHome(const APawn* Pawn, const FVector& FollowTarget, float Now);
+	bool bRoutingHome = false;
+	float RouteStartedAt = -1.0f;
+	/** How far in front of or behind the Dog the pass goes, and how far out to either side, uu. */
+	static constexpr double HomeRouteReachUU = 220.0;
 	/** Where a pulse or the beam leaves the companion: its body, not its figure origin. */
 	FVector ContributionOrigin() const;
 	/** Lights per pulse (a head and its trail), and how far behind each other they run, as a fraction of the path. */

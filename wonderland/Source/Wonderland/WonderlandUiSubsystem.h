@@ -386,6 +386,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
 	int32 GetJuliusRolePending(int32 Role) const;
 
+	/** Lines written into a Julius terminal section's work log this mission. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
+	int32 GetJuliusSectionLineCount(const FString& Section) const;
+
+	/** A section's newest lines, "\n"-joined: what a proof job reads to know the section shows real work. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
+	FString DescribeJuliusSection(const FString& Section, int32 MaxLines) const;
+
+	/** The section the terminal is keeping in view for the stage the world is in. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
+	FString GetJuliusFocusSection() const;
+
+	/** How many characters a role has typed this mission (code and prompt text arrive character by character). */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Julius")
+	int32 GetJuliusRoleTypedCharacters(int32 Role) const;
+
 private:
 	enum class EOverlay : uint8 { None, Terminal, Map, Brain, Missions, Commands, Menu, Wallet };
 
@@ -430,6 +446,12 @@ private:
 		FWonderlandRoleLine Latest;
 		/** Julius only: a heading waiting to be carried into the row it heads. */
 		FString Heading;
+		/** The line being typed into the section's work log, how far it has got, and how long it is. */
+		int32 TypingLine = INDEX_NONE;
+		float Typed = 0.0f;
+		int32 TypingLength = 0;
+		EWonderlandRoleLineKind TypingKind = EWonderlandRoleLineKind::Log;
+		int32 TypedCharacters = 0;
 	};
 	void NarrateRoles(FName EventType, const FString& ChakraLabel, bool bNewMission, bool bLlmJoined, bool bJhinnJoined);
 	void WriteRoleLine(int32 Role, const FWonderlandRoleLine& Line);
