@@ -9,13 +9,16 @@
 #
 # Relative numbers only. Frame time is the median of per-frame deltas over the window, which a single hitch cannot
 # move the way a mean can.
-# Globals: PASSES (pass ids), CAMERAS (labels), SECONDS, ROUNDS.
+# Globals: PASSES (pass ids), CAMERAS (labels), SECONDS, ROUNDS, WARM.
 import time
 
 PASSES = globals().get("PASSES", [])
 CAMERAS = globals().get("CAMERAS", ["WorldCam12"])
 SECONDS = globals().get("SECONDS", 8.0)
 ROUNDS = globals().get("ROUNDS", 2)
+# WARM: measure every camera once, discarded, before ON. FD03's table showed the order bias this removes: ON is always
+# measured first after PIE starts, so shader and streaming warm-up landed in ON (round 1 +36 ms at one camera).
+WARM = globals().get("WARM", False)
 
 
 def job():
@@ -80,6 +83,8 @@ def _round(ues, row):
             out[cam] = holder["ms"]
         row[state] = out
 
+    if WARM:
+        yield from measure("warm")
     yield from measure("on")
     throttled = [c for c, ms in row["on"].items() if ms is not None and ms > 250.0]
     if throttled:

@@ -1,0 +1,64 @@
+{
+ "name": "zzBQ00_wb01_perf",
+ "started": "2026-09-17 09:39:46",
+ "status": "done",
+ "rounds": [
+  {
+   "pass_actors": 20,
+   "warm": {
+    "City_FillEE54": 27.5,
+    "South_StreetHero34": 29.03,
+    "City_FillNE48": 27.85,
+    "City_FillW52": 59.89
+   },
+   "on": {
+    "City_FillEE54": 27.73,
+    "South_StreetHero34": 28.12,
+    "City_FillNE48": 27.83,
+    "City_FillW52": 60.29
+   },
+   "off": {
+    "City_FillEE54": 31.52,
+    "South_StreetHero34": 28.75,
+    "City_FillNE48": 30.25,
+    "City_FillW52": 59.89
+   },
+   "off_again": {
+    "City_FillEE54": 29.15,
+    "South_StreetHero34": 30.6,
+    "City_FillNE48": 29.34,
+    "City_FillW52": 60.9
+   }
+  },
+  {
+   "pass_actors": 20,
+   "warm": {
+    "City_FillEE54": 29.1,
+    "South_StreetHero34": 29.71,
+    "City_FillNE48": 29.1,
+    "City_FillW52": 59.09
+   },
+   "on": {
+    "City_FillEE54": 30.2,
+    "South_StreetHero34": 30.66,
+    "City_FillNE48": 33.62,
+    "City_FillW52": 58.59
+   },
+   "off": {
+    "City_FillEE54": 27.33,
+    "South_StreetHero34": 31.41,
+    "City_FillNE48": 30.11,
+    "City_FillW52": 59.93
+   },
+   "off_again": {
+    "City_FillEE54": 27.72,
+    "South_StreetHero34": 28.33,
+    "City_FillNE48": 27.75,
+    "City_FillW52": 58.74
+   }
+  }
+ ],
+ "finished": "2026-09-17 09:44:53",
+ "seconds": 306.13,
+ "log": ""
+}
