@@ -242,6 +242,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Relay Dog|Mission Camera")
 	void OrbitMissionCamera(float YawDegrees, float PitchDegrees);
 
+	/** Zoom the mission camera: negative closer, positive further. What the mouse wheel does over the world. */
+	UFUNCTION(BlueprintCallable, Category = "Relay Dog|Mission Camera")
+	void ZoomMissionCamera(float Steps);
+
+	/** The zoom the player has set this mission, 1 unchanged. */
+	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
+	float GetMissionCameraZoom() const { return MissionCamZoom; }
+
 	/** Put the mission camera at this yaw and pitch about the Contract. */
 	UFUNCTION(BlueprintCallable, Category = "Relay Dog|Mission Camera")
 	void SetMissionCameraAngles(float YawDegrees, float PitchDegrees);
@@ -272,6 +280,9 @@ public:
 	/** How many left presses during a mission were left to a panel rather than taken as a drag. */
 	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
 	int32 GetMissionCameraPressesLeftToUi() const { return MissionCamUiPresses; }
+
+	/** True when a press or a wheel at this screen point would land on the world rather than on a panel. */
+	bool IsWorldUnderPointer(const FVector2D& ScreenPosition) const;
 
 	/** Called by the camera's Slate input processor. True when the press starts a drag. */
 	bool BeginMissionCameraDrag(const FVector2D& ScreenPosition);
@@ -444,6 +455,9 @@ private:
 	/** The player has placed the camera by hand this mission: the automatic reframing leaves it where they put it. */
 	bool bMissionCamUserPlaced = false;
 	float MissionCamArmShown = 0.0f;
+	float MissionCamLiftShown = 0.0f;
+	/** The player's mouse-wheel zoom, kept for the mission. */
+	float MissionCamZoom = 1.0f;
 
 	/* ---- the mission camera's state */
 	float MissionCamWeight = 0.0f;

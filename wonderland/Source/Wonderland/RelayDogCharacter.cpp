@@ -255,14 +255,22 @@ namespace RelayDogPoseTuning
 	TAutoConsoleVariable<float> CVarRepairRepaint(TEXT("wl.Dog.Pose.RepairRepaint"), 8.0f, TEXT("REPAIR: seconds repainting it."));
 	TAutoConsoleVariable<float> CVarRepairSettle(TEXT("wl.Dog.Pose.RepairSettle"), 3.0f, TEXT("REPAIR: seconds settling afterwards."));
 
-	TAutoConsoleVariable<float> CVarCamArm(TEXT("wl.MissionCam.Arm"), 540.0f, TEXT("Mission camera: distance from the Mission Contract, uu. Close enough to read the Dog's hands."));
-	TAutoConsoleVariable<float> CVarCamPitch(TEXT("wl.MissionCam.Pitch"), -13.0f, TEXT("Mission camera: the pitch it holds unless the player has dragged it, degrees."));
+	// FRAMED SO THE DOG IS ALWAYS IN SHOT (solved offline, 2026-09-16, against a 75-degree lens and the Julius terminal at its
+	// cap). At 540 uu and 52 degrees round, the Dog -- 340 uu from the Contract -- stood 39 degrees off the lens axis, outside
+	// the frame: the founder saw the Contract alone and the beam arriving from off screen. At 820 uu, 25 degrees round, a
+	// little pitch and the Contract lifted above the middle, the Contract sits centre-top and the whole Dog stands beside it,
+	// about 40% of the screen tall, clear of the terminal.
+	TAutoConsoleVariable<float> CVarCamArm(TEXT("wl.MissionCam.Arm"), 820.0f, TEXT("Mission camera: distance from the Mission Contract, uu. The whole Dog in shot beside it."));
+	TAutoConsoleVariable<float> CVarCamPitch(TEXT("wl.MissionCam.Pitch"), -6.0f, TEXT("Mission camera: the pitch it holds unless the player has dragged it, degrees."));
 	TAutoConsoleVariable<float> CVarCamDrop(TEXT("wl.MissionCam.FocusDrop"), 30.0f, TEXT("Mission camera: how far below the Contract's heart it turns about, uu."));
-	TAutoConsoleVariable<float> CVarCamLift(TEXT("wl.MissionCam.ScreenLift"), 55.0f, TEXT("Mission camera: how far the Contract sits above the middle of the screen, uu at the focus."));
-	TAutoConsoleVariable<float> CVarCamSide(TEXT("wl.MissionCam.SideAngle"), 52.0f, TEXT("Mission camera: how far round the Contract from the Dog it stands, degrees -- a side / three-quarter view."));
+	TAutoConsoleVariable<float> CVarCamLift(TEXT("wl.MissionCam.ScreenLift"), 120.0f, TEXT("Mission camera: how far the Contract sits above the middle of the screen, uu at the focus."));
+	TAutoConsoleVariable<float> CVarCamSide(TEXT("wl.MissionCam.SideAngle"), 25.0f, TEXT("Mission camera: how far round the Contract from the Dog it stands, degrees -- a side / three-quarter view."));
 	TAutoConsoleVariable<float> CVarCamFollow(TEXT("wl.MissionCam.FollowRate"), 1.4f, TEXT("Mission camera: how quickly it drifts round to keep that view, per second. Never a cut."));
-	TAutoConsoleVariable<float> CVarCamFlyArm(TEXT("wl.MissionCam.FlyWiden"), 110.0f, TEXT("Mission camera: how much further out it eases while the Dog is airborne, uu."));
-	TAutoConsoleVariable<float> CVarCamFlyPitch(TEXT("wl.MissionCam.FlyPitch"), -5.0f, TEXT("Mission camera: the pitch it eases toward while the Dog is airborne, degrees."));
+	// VERIFICATION ZOOMS OUT (founder, 2026-09-16: "at the end when it's verifying make sure it zooms out more because I can
+	// barely see the relay dog"): the airborne Dog, its beam, the Contract and the companions standing clear, all in shot.
+	TAutoConsoleVariable<float> CVarCamFlyArm(TEXT("wl.MissionCam.FlyWiden"), 260.0f, TEXT("Mission camera: how much further out it eases while the Dog is airborne, uu."));
+	TAutoConsoleVariable<float> CVarCamFlyPitch(TEXT("wl.MissionCam.FlyPitch"), -9.0f, TEXT("Mission camera: the pitch it eases toward while the Dog is airborne, degrees."));
+	TAutoConsoleVariable<float> CVarCamFlyLift(TEXT("wl.MissionCam.FlyScreenLift"), 20.0f, TEXT("Mission camera: the screen lift it eases toward while the Dog is airborne, uu."));
 	TAutoConsoleVariable<float> CVarCamDrag(TEXT("wl.MissionCam.DragSensitivity"), 0.25f, TEXT("Mission camera: degrees per pixel of left-drag."));
 	TAutoConsoleVariable<float> CVarCamBlend(TEXT("wl.MissionCam.BlendSeconds"), 1.6f, TEXT("Mission camera: seconds to carry the camera to the Contract and back."));
 	TAutoConsoleVariable<int32> CVarCamEnabled(TEXT("wl.MissionCam.Enabled"), 1, TEXT("Mission camera: 1 holds the Mission Contract during a mission, 0 keeps following the Dog."));
@@ -323,6 +331,22 @@ public:
 		const FVector2D Delta = MouseEvent.GetCursorDelta();
 		const float Sensitivity = RelayDogPoseTuning::CVarCamDrag.GetValueOnGameThread();
 		Owner->OrbitMissionCamera(static_cast<float>(Delta.X) * Sensitivity, -static_cast<float>(Delta.Y) * Sensitivity);
+		return true;
+	}
+
+	virtual bool HandleMouseWheelOrGestureEvent(FSlateApplication& SlateApp, const FPointerEvent& InWheelEvent, const FPointerEvent* InGestureEvent) override
+	{
+		// THE WHEEL ZOOMS THE MISSION CAMERA over the world; over a panel it is the panel's.
+		ARelayDogCharacter* Owner = Dog.Get();
+		if (Owner == nullptr || InGestureEvent != nullptr || !Owner->IsMissionCameraActive() || Owner->GetMissionCameraWeight() < 0.5f)
+		{
+			return false;
+		}
+		if (!Owner->IsWorldUnderPointer(InWheelEvent.GetScreenSpacePosition()))
+		{
+			return false;
+		}
+		Owner->ZoomMissionCamera(-InWheelEvent.GetWheelDelta());
 		return true;
 	}
 
@@ -2135,6 +2159,11 @@ void ARelayDogCharacter::OrbitMissionCamera(float YawDegrees, float PitchDegrees
 	MissionCamPitch = FMath::Clamp(MissionCamPitch + PitchDegrees, -72.0f, -3.0f);
 }
 
+void ARelayDogCharacter::ZoomMissionCamera(float Steps)
+{
+	MissionCamZoom = FMath::Clamp(MissionCamZoom * FMath::Pow(1.12f, Steps), 0.45f, 2.2f);
+}
+
 void ARelayDogCharacter::SetMissionCameraAngles(float YawDegrees, float PitchDegrees)
 {
 	MissionCamYaw = FRotator::NormalizeAxis(YawDegrees);
@@ -2209,6 +2238,11 @@ FVector4 ARelayDogCharacter::GetGameViewportScreenRect() const
 	const FVector2D At = Geometry.GetAbsolutePosition();
 	const FVector2D Size = Geometry.GetAbsoluteSize();
 	return FVector4(At.X, At.Y, Size.X, Size.Y);
+}
+
+bool ARelayDogCharacter::IsWorldUnderPointer(const FVector2D& ScreenPosition) const
+{
+	return MissionCameraPressTarget(ScreenPosition).IsEmpty();
 }
 
 FString ARelayDogCharacter::DescribeMissionCameraPress(float ScreenX, float ScreenY) const
@@ -2293,9 +2327,11 @@ void ARelayDogCharacter::UpdateMissionCamera(float DeltaSeconds)
 			// THE CAMERA STARTS WHERE THE PLAYER WAS LOOKING, so taking the Contract is a glide, not a cut.
 			bMissionCamLatched = true;
 			bMissionCamUserPlaced = false;
+			MissionCamZoom = 1.0f;
 			MissionCamYaw = Controller != nullptr ? Controller->GetControlRotation().Yaw : GetActorRotation().Yaw;
 			MissionCamPitch = FMath::Clamp(CVarCamPitch.GetValueOnGameThread(), -72.0f, -3.0f);
 			MissionCamArmShown = CVarCamArm.GetValueOnGameThread();
+			MissionCamLiftShown = CVarCamLift.GetValueOnGameThread();
 		}
 		// ONE CONTINUOUS SHOT (founder, 2026-09-16). The Contract is the pivot and the Dog performs around it; the camera
 		// never cuts, never resets at a stage change, and does not chase the Dog like a follow camera. It drifts round the
@@ -2330,8 +2366,10 @@ void ARelayDogCharacter::UpdateMissionCamera(float DeltaSeconds)
 			const float WantPitch = FMath::Lerp(CVarCamPitch.GetValueOnGameThread(), CVarCamFlyPitch.GetValueOnGameThread(), Fly);
 			MissionCamPitch = FMath::Clamp(FMath::Lerp(MissionCamPitch, WantPitch, 1.0f - FMath::Exp(-DeltaSeconds * 1.2f)), -72.0f, -3.0f);
 		}
-		const float WantArm = CVarCamArm.GetValueOnGameThread() + CVarCamFlyArm.GetValueOnGameThread() * Fly;
-		MissionCamArmShown = FMath::Lerp(MissionCamArmShown, WantArm, 1.0f - FMath::Exp(-DeltaSeconds * 1.2f));
+		const float WantArm = (CVarCamArm.GetValueOnGameThread() + CVarCamFlyArm.GetValueOnGameThread() * Fly) * MissionCamZoom;
+		MissionCamArmShown = FMath::Lerp(MissionCamArmShown, WantArm, 1.0f - FMath::Exp(-DeltaSeconds * 2.0f));
+		const float WantLift = FMath::Lerp(CVarCamLift.GetValueOnGameThread(), CVarCamFlyLift.GetValueOnGameThread(), Fly);
+		MissionCamLiftShown = FMath::Lerp(MissionCamLiftShown, WantLift, 1.0f - FMath::Exp(-DeltaSeconds * 1.2f));
 	}
 	else
 	{
@@ -2384,7 +2422,7 @@ void ARelayDogCharacter::UpdateMissionCamera(float DeltaSeconds)
 	CameraBoom->SetWorldLocationAndRotation(FMath::Lerp(NormalPivot, MissionCamFocus, static_cast<double>(S)),
 		FQuat::Slerp(NormalRot.Quaternion(), MissionRot.Quaternion(), S));
 	CameraBoom->TargetArmLength = FMath::Lerp(BoomRestArm, MissionCamArmShown > 1.0f ? MissionCamArmShown : CVarCamArm.GetValueOnGameThread(), S);
-	CameraBoom->SocketOffset = FMath::Lerp(BoomRestSocket, FVector(0.0f, 0.0f, -CVarCamLift.GetValueOnGameThread()), S);
+	CameraBoom->SocketOffset = FMath::Lerp(BoomRestSocket, FVector(0.0f, 0.0f, -MissionCamLiftShown), S);
 	if (FollowCamera != nullptr)
 	{
 		// The follow camera's own downward tilt would push the Contract off the top of the frame; it eases out with the blend.
