@@ -1,5 +1,5 @@
 {
-  "checked_assets": 128,
+  "checked_assets": 129,
   "failures": 0,
   "material_check": "59 MI_V2_* names parsed from materials_v2.py",
   "per_asset": {
@@ -66,6 +66,7 @@
     "WL_Garden_Overlook": [],
     "WL_Garden_Gate_Threshold": [],
     "WL_Garden_Pavilion_Base": [],
+    "WL_Garden_Grass_Tuft": [],
     "WL_Ground_Kerb_Run": [],
     "WL_Ground_Kerb_Corner": [],
     "WL_Ground_Step_Single": [],
@@ -450,6 +451,9 @@
     "WL_Garden_Pavilion_Base": {
       "stone": "5c5014e7bea200739f1fe68d5a2ec128e1ce194b0a7fcfd44b6564364aaf3e15",
       "stone_dark": "6b5adf54ac8bdb8cfd0665dd76f659771218851f62766a8aa6dfe56a8e4b4d1c"
+    },
+    "WL_Garden_Grass_Tuft": {
+      "leaf": "e69e56f026a422338450b288104073fbc78d37a363b031cb2c7634070586db91"
     },
     "WL_Ground_Kerb_Run": {
       "kerb": "4a55020fcf0a09332bc34d0d8e8c02e21ccbd9938e0825ea6ba9fbc470b70388",

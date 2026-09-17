@@ -514,9 +514,50 @@ def garden_pavilion_base(f):
         tri_budget=12000, collision=True)
 
 
+def garden_grass_tuft(f):
+    """A tuft of grass, 13 blades out of a low leaf clump: what a mown lawn needs at its edge.
+
+    WHY (2026-09-17, material-realism phase). The lawns are the largest surface a player sees -- half the ground in
+    the gameplay cameras' census -- and they read as one flat carpet that stops at the paving on a drawn line. GS01
+    proved this is not a material problem: macro colour breakup and per-instance tone on the lawn instances changed
+    nothing at any camera. What a lawn lacks is EDGE and SILHOUETTE: real blades catching the sun where the grass
+    meets stone. This is one tuft, laid along the lawn edges near the gameplay cameras (about 2.8 km of real
+    lawn/paving edge, so the count is affordable; the open middles stay as they are).
+
+    Blades are 3-sided tapered sweeps, 13-32 cm, leaning out and bending over, each its own height, lean and bend,
+    over a flattened leaf dome that hides where they enter the ground. One `leaf` part, so a batch can plant it in
+    any of the world's lawn greens. Foot on the datum, no collision.
+    """
+    leaf = f.part("leaf")
+    seed = 2310
+    R, BLADES = 0.13, 13
+    leaf.lathe([(0.085, 0.0), (0.075, 0.018), (0.045, 0.030), (0.0, 0.034)], segments=7, smooth=True, cap_bottom=False)
+    for k in range(BLADES):
+        a = math.radians(360.0 * k / BLADES + M.rrange(-12.0, 12.0, k, seed, 1))
+        rr = R * M.rrange(0.15, 1.0, k, seed, 2)
+        x, y = math.cos(a) * rr, math.sin(a) * rr
+        h = M.rrange(0.13, 0.32, k, seed, 3)
+        out = M.rrange(0.20, 0.55, k, seed, 4) * h            # how far the tip leans from the base
+        bend = M.rrange(0.15, 0.40, k, seed, 5)               # the mid point's lean, as a share of the tip's
+        tipx, tipy = x + math.cos(a) * out, y + math.sin(a) * out
+        w = M.rrange(0.009, 0.014, k, seed, 6)
+        leaf.sweep([(x, y, 0.0),
+                    (x + (tipx - x) * bend, y + (tipy - y) * bend, h * 0.58),
+                    (tipx, tipy, h)],
+                   [w, w * 0.62, 0.0015], sides=3, cap=False, smooth=False)
+    return K.ModuleSpec(
+        "WL_Garden_Grass_Tuft", "garden", "prop", "detail",
+        f.emit("WL_Garden_Grass_Tuft"),
+        [K.Socket("bottom", 0.0, R, "ground", "planted on a lawn; scatter along the edge where grass meets stone")],
+        districts=("royal_garden", "plaza", "cloister", "tea_terrace", "grove", "hamlet"),
+        note="grass tuft: %d tapered blades 13-32 cm, leaning and bending out of a 3 cm leaf clump" % BLADES,
+        params={"radius_m": R, "blades": BLADES},
+        tri_budget=400, collision=False, nanite=False)
+
+
 BUILDERS = (
     garden_retaining_run, garden_retaining_corner_in,
     garden_retaining_corner_out, garden_retaining_curved,
     garden_planter_wall, garden_overlook, garden_gate_threshold,
-    garden_pavilion_base,
+    garden_pavilion_base, garden_grass_tuft,
 )

@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-17T16:24:31+00:00",
+  "generated_utc": "2026-09-17T18:45:11+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -22,9 +22,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 128,
+        "n": 129,
         "min": 0.153,
-        "median": 0.845,
+        "median": 0.828,
         "max": 1.0,
         "unknown": 0
       }
@@ -36,9 +36,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 128,
+        "n": 129,
         "min": 0.0,
-        "median": 0.352,
+        "median": 0.35,
         "max": 1.0,
         "unknown": 0
       }
@@ -50,7 +50,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 128,
+        "n": 129,
         "min": 0.557,
         "median": 1.0,
         "max": 1.0,
@@ -64,7 +64,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 128,
+        "n": 129,
         "min": 0.0,
         "median": 0.975,
         "max": 1.0,
@@ -78,7 +78,7 @@
       "provenance": "declared",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 128,
+        "n": 129,
         "min": 0.0,
         "median": 0.0,
         "max": 0.7,
@@ -92,7 +92,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 125,
+        "n": 126,
         "min": 0.083,
         "median": 0.64,
         "max": 0.917,
@@ -106,7 +106,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 128,
+        "n": 129,
         "min": 0.05,
         "median": 0.5,
         "max": 0.7,
@@ -235,9 +235,9 @@
     }
   },
   "counts": {
-    "assets": 128,
-    "meshes": 405,
-    "triangles": 506388,
+    "assets": 129,
+    "meshes": 406,
+    "triangles": 506579,
     "by_role": {
       "foot": 5,
       "body": 14,
@@ -246,7 +246,7 @@
       "threshold": 10,
       "screen": 11,
       "span": 5,
-      "detail": 32,
+      "detail": 33,
       "route": 11,
       "terrace": 17,
       "hero": 11
@@ -20184,6 +20184,176 @@
         }
       },
       "part_count": 2
+    },
+    {
+      "asset_id": "WL_Garden_Grass_Tuft",
+      "kit_version": "1.0.0",
+      "family": "garden",
+      "family_group": "gardens",
+      "category": "prop",
+      "silhouette_role": "detail",
+      "note": "grass tuft: 13 tapered blades 13-32 cm, leaning and bending out of a 3 cm leaf clump",
+      "districts": [
+        "royal_garden",
+        "plaza",
+        "cloister",
+        "tea_terrace",
+        "grove",
+        "hamlet"
+      ],
+      "params": {
+        "radius_m": 0.13,
+        "blades": 13
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 31.89,
+      "bbox_min_uu": [
+        -13.96,
+        -18.54,
+        -0.18
+      ],
+      "bbox_max_uu": [
+        16.6,
+        17.44,
+        31.71
+      ],
+      "size_uu": [
+        30.56,
+        35.98,
+        31.89
+      ],
+      "style": {
+        "slender_broad": 0.77,
+        "low_monumental": 0.0,
+        "open_solid": 0.954,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.408,
+        "ceremonial_residential": 0.7
+      },
+      "base_z_uu": -0.18,
+      "profile_uu": [
+        12.46,
+        4.5,
+        4.5,
+        12.95,
+        12.54,
+        15.59,
+        13.23,
+        12.66,
+        19.51,
+        23.94,
+        23.94,
+        19.07
+      ],
+      "radius_uu": 18.54,
+      "tris_total": 191,
+      "tri_budget": 400,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": false,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 13.0,
+          "rung": null,
+          "note": "planted on a lawn; scatter along the edge where grass meets stone"
+        }
+      ],
+      "parts": {
+        "leaf": {
+          "verts": 139,
+          "faces": 99,
+          "tris": 191,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -13.96,
+            -18.54,
+            -0.18
+          ],
+          "bbox_max_uu": [
+            16.6,
+            17.44,
+            31.71
+          ],
+          "size_uu": [
+            30.56,
+            35.98,
+            31.88
+          ],
+          "height_m": 0.3188,
+          "base_z_uu": -0.176,
+          "normals": {
+            "faces": 99,
+            "shells": 14,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            12.46,
+            4.5,
+            4.5,
+            12.95,
+            12.54,
+            15.59,
+            13.23,
+            12.66,
+            19.51,
+            23.94,
+            23.94,
+            19.07
+          ],
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Garden_Grass_Tuft_leaf",
+          "glb": "exports\\glb\\WL_Garden_Grass_Tuft_leaf.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Grass_Tuft_leaf.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.13960368931293488,
+              -0.0017555718077346683,
+              -0.17435060441493988
+            ],
+            "max_yup": [
+              0.1659524291753769,
+              0.3170652985572815,
+              0.1854390650987625
+            ],
+            "bytes": 13604
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": -0.1755571812391281,
+            "stored_z_max": 31.70652961730957
+          }
+        }
+      },
+      "part_count": 1
     },
     {
       "asset_id": "WL_Ground_Kerb_Run",

@@ -10,15 +10,15 @@
     "wonderland/marble/import-marble-world.py (AssetImportTask, the guarded Interchange options, spawn_actor_from_class)"
   ],
   "counts": {
-    "assets": 128,
-    "meshes": 405,
+    "assets": 129,
+    "meshes": 406,
     "missing_sources": 0,
     "nanite_requested": 24,
     "collision_requested": 81,
     "by_data_layer": {
       "V2_Arrival": 8,
       "V2_Castle": 26,
-      "V2_Garden": 23,
+      "V2_Garden": 24,
       "V2_Props": 39,
       "V2_Skyline": 32
     },
@@ -26,7 +26,7 @@
       "/Game/WonderlandV2/Kit/civic": 6,
       "/Game/WonderlandV2/Kit/details": 13,
       "/Game/WonderlandV2/Kit/flowers": 3,
-      "/Game/WonderlandV2/Kit/gardens": 8,
+      "/Game/WonderlandV2/Kit/gardens": 9,
       "/Game/WonderlandV2/Kit/ground": 8,
       "/Game/WonderlandV2/Kit/hero": 2,
       "/Game/WonderlandV2/Kit/market": 6,
@@ -5104,6 +5104,51 @@
           "material_instance": "MI_V2_Stone",
           "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Stone",
           "triangles": 28
+        }
+      ]
+    },
+    {
+      "asset_id": "WL_Garden_Grass_Tuft",
+      "family_group": "gardens",
+      "variant_of": null,
+      "destination_path": "/Game/WonderlandV2/Kit/gardens",
+      "data_layer": "V2_Garden",
+      "nanite_requested": false,
+      "collision_requested": false,
+      "height_uu": 31.89,
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "style": {
+        "slender_broad": 0.77,
+        "low_monumental": 0.0,
+        "open_solid": 0.954,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.408,
+        "ceremonial_residential": 0.7
+      },
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 13.0,
+          "rung": null,
+          "note": "planted on a lawn; scatter along the edge where grass meets stone"
+        }
+      ],
+      "parts": [
+        {
+          "part": "leaf",
+          "mesh_name": "WL_Garden_Grass_Tuft_leaf",
+          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Garden_Grass_Tuft_leaf.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/gardens",
+          "destination_name": "WL_Garden_Grass_Tuft_leaf",
+          "asset_path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Grass_Tuft_leaf",
+          "material_instance": "MI_V2_LeafMid",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_LeafMid",
+          "triangles": 191
         }
       ]
     },
