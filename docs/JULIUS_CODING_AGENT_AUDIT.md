@@ -153,7 +153,10 @@ below is provider-free and provable offline. It closes gaps 1–12, 14–16 and 
 2. **Scope and evidence honesty.** Julius computes the changed-path set
    (tracked and untracked) through the executor and checks it against the
    locked contract; a violation is FAILED evidence Julius authored. Empty diffs
-   are not PASSED; artifacts are keyed per task.
+   are not PASSED; a dispatch clears the previous diff and test output before it
+   runs, so a failed capture never leaves another round's diff for the reviewer.
+   (Corrected in PR 4: this line first said artifacts were keyed per task. They
+   are still keyed per run; only the clearing shipped.)
 3. **Guidance on the coder side.** A continuation is guaranteed its accepted
    answer before it runs, even across a crash (delivered at claim when the
    decision's own delivery was lost, once per packet); the ceiling checked
@@ -183,7 +186,7 @@ below is provider-free and provable offline. It closes gaps 1–12, 14–16 and 
   whatever the session touches outside the contract is caught and failed after
   the fact.
 - **A durable artifact store** for `plan`/`diff`/`test-output` (process-local
-  today). PR 3 keys them per task; making them survive a new process is a
+  today, and still keyed per run). Keying them per task and making them survive a new process is a
   persistence change with its own migration.
 - **Telling the next packet that a pause did not continue** (gap 10, second
   half). Several refusals — direction, unroutable, in flight, ceiling — end a

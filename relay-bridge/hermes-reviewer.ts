@@ -71,6 +71,18 @@ export interface HermesReviewResult {
    */
   researchAsks?: unknown;
   /**
+   * WHAT THE REVIEWER SAID ABOUT THE FINDINGS IT WAS CHARGED WITH, by id,
+   * exactly as it wrote it.
+   *
+   * The domain charter told reviewers to answer each prior finding in
+   * `resolutions`, and this output schema had no such field — so on the live
+   * path no finding could ever be resolved, and a re-review's silence was the
+   * only answer it could give. Unsanitised for the reason `researchAsks` is:
+   * `sanitizeJuliusReviewVerdict` decides what a usable resolution is. Absent
+   * when the reviewer answered none.
+   */
+  resolutions?: unknown;
+  /**
    * WHAT THE REVIEWER ESCALATED TO JULIUS — a challenge or a block — exactly as
    * it wrote it. Unsanitised for the reason `researchAsks` is: the domain's
    * `sanitizeJuliusReviewVerdict` decides what a usable escalation is, and
@@ -1022,7 +1034,7 @@ export function buildReviewPrompt(p: ReviewPacket): string {
   const rubric = charge.judges.map((question, index) => `(${index + 1}) ${question}`).join(' ');
   const findings = p.priorFindings ?? [];
   const priorFindingsBlock = charge.repair || findings.length > 0
-    ? [`PRIOR BLOCKING FINDINGS (${charge.repair ? 'this review must judge whether each is resolved' : 'for context'}):`,
+    ? [`PRIOR BLOCKING FINDINGS (${charge.repair ? 'this review must judge whether each is resolved, and answer each in "resolutions" by the id shown after REVIEW FINDING; a finding you do not answer is not resolved, and Julius will not accept the repair over it' : 'for context'}):`,
       ...(findings.length > 0 ? findings.map((finding) => `- ${finding}`)
         : ['- (none recorded: this repair was admitted by failed evidence rather than by a reviewer finding, so judge the repaired work and its evidence)']), '']
     : [];
@@ -1166,6 +1178,7 @@ export function buildReviewPrompt(p: ReviewPacket): string {
     '"requirement":string,"file":string,"line":number,"explanation":string,"evidence":string,',
     '"recommendedAction":string}],',
     '"requirementsChecked":[{"requirement":string,"status":"passed"|"failed"|"uncertain","evidence":string}],',
+    '"resolutions":[{"findingId":string,"status":"RESOLVED"|"OPEN"|"SUPERSEDED","claim":string}],',
     '"researchAsks":[{"source":string,"capability":string,"reference":string,"purpose":string}],',
     '"escalation":null|{"verdict":"challenge"|"block","category":string,"target":"work"|"plan"|"guidance"|"contract","claim":string}}',
     '',
@@ -1450,7 +1463,11 @@ export function validateHermesReview(text: string): HermesReviewResult | null {
   // NULL IS NOT AN ESCALATION, for the same reason an empty ask list is not an ask.
   const raised = (o as Record<string, unknown>).escalation;
   const escalation = raised === undefined || raised === null ? {} : { escalation: raised };
-  return { verdict, summary: safeText(o.summary), findings, requirementsChecked, parseRepaired, ...researchAsks, ...escalation };
+  // EMPTY IS NOT AN ANSWER either: no resolutions is a reviewer that answered none.
+  const answered = (o as Record<string, unknown>).resolutions;
+  const resolutions = answered === undefined || answered === null || (Array.isArray(answered) && answered.length === 0)
+    ? {} : { resolutions: answered };
+  return { verdict, summary: safeText(o.summary), findings, requirementsChecked, parseRepaired, ...researchAsks, ...resolutions, ...escalation };
 }
 
 /**
@@ -1473,18 +1490,21 @@ export function hermesReviewVerdict(result: HermesReviewResult): Record<string, 
       category: finding.category ?? null,
       claim: `${finding.requirement || finding.findingId}: ${finding.explanation}`.slice(0, 240),
     }));
+  // Carried on every verdict: what the reviewer said about its findings is not
+  // a property of whether it also escalated or asked for a repair.
+  const resolutions = result.resolutions === undefined ? {} : { resolutions: result.resolutions };
   const raised = result.escalation;
   if (raised !== null && typeof raised === 'object' && !Array.isArray(raised)) {
     const escalation = raised as Record<string, unknown>;
     const word = typeof escalation.verdict === 'string' ? escalation.verdict.trim().toUpperCase() : escalation.verdict;
-    return { verdict: word, category: escalation.category, target: escalation.target, claim: escalation.claim, warnings };
+    return { verdict: word, category: escalation.category, target: escalation.target, claim: escalation.claim, warnings, ...resolutions };
   }
-  if (raised !== undefined) return { verdict: raised, claim: result.summary, warnings };
+  if (raised !== undefined) return { verdict: raised, claim: result.summary, warnings, ...resolutions };
   if (result.verdict === 'changes_required' || blocking.length > 0) {
-    return { verdict: 'REPAIR_REQUIRED', category: blocking[0]?.category ?? null, claim: result.summary, warnings };
+    return { verdict: 'REPAIR_REQUIRED', category: blocking[0]?.category ?? null, claim: result.summary, warnings, ...resolutions };
   }
-  if (warnings.length > 0) return { verdict: 'WARNING', claim: result.summary, warnings };
-  return { verdict: 'CONTINUE', claim: result.summary, warnings: [] };
+  if (warnings.length > 0) return { verdict: 'WARNING', claim: result.summary, warnings, ...resolutions };
+  return { verdict: 'CONTINUE', claim: result.summary, warnings: [], ...resolutions };
 }
 
 export function hasBlockingFinding(r: HermesReviewResult): boolean {

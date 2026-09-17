@@ -37,7 +37,7 @@ import { planRunStatePath, transitionIsLegal } from './julius-state-path';
  */
 export { planRunStatePath, transitionIsLegal };
 import {
-  juliusArchitectureGateFor, prepareClaimedTask, resumeUnverifiedTasks, runClaimedTask, serveArchitectureTriggers,
+  juliusArchitectureGateFor, juliusFindingsGateFor, prepareClaimedTask, resumeUnverifiedTasks, runClaimedTask, serveArchitectureTriggers,
   type JuliusPipelineDependencies, type JuliusTaskOutcome,
 } from './julius-task-pipeline';
 import { continuationConcurrency } from './julius-continuation';
@@ -770,6 +770,21 @@ export class JuliusRunLoop {
      * held at all, and neither is one whose consultation no worker could serve
      * — a feature nothing opted into must not be able to strand every mission.
      */
+    /**
+     * A COMPLETION OVER A FINDING NOBODY RESOLVED DOES NOT HAPPEN EITHER.
+     *
+     * Checked where completion is decided, and wherever a run has stopped for a
+     * generic reason — VERIFYING with every task terminal, BLOCKED because nothing
+     * can progress — so the record names the finding that holds it rather than
+     * the symptom. Like the architecture gate, it can only hold: a run it names
+     * stays in the state it was going to, never COMPLETED.
+     */
+    const generic = (target.state === 'VERIFYING' && target.reasonCode === 'ALL_TASKS_TERMINAL')
+      || (target.state === 'BLOCKED' && target.reasonCode === 'RUN_CANNOT_PROGRESS');
+    if (target.state === 'COMPLETED' || generic) {
+      const findings = await juliusFindingsGateFor(this.deps, run);
+      if (!findings.ok) target = { state: target.state === 'BLOCKED' ? 'BLOCKED' : 'VERIFYING', reasonCode: findings.reasonCode };
+    }
     if (target.state === 'COMPLETED') {
       const gate = await juliusArchitectureGateFor(this.deps, run);
       if (!gate.ok) target = { state: 'VERIFYING', reasonCode: gate.reasonCode };

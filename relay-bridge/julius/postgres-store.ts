@@ -86,7 +86,6 @@ export function createJuliusPostgresRuntimeStore(
     decisionsForRun: reader.decisionsForRun.bind(reader),
     brainEntriesForRun: reader.brainEntriesForRun.bind(reader),
     repairRoundsFor: reader.repairRoundsFor.bind(reader),
-    reviewCompletedFor: reader.reviewCompletedFor.bind(reader),
     activeTaskCount: reader.activeTaskCount.bind(reader),
     executedBindingFor: reader.executedBindingFor.bind(reader),
     recordFinding: findings.recordFinding.bind(findings),

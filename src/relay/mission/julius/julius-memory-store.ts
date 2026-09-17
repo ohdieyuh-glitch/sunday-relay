@@ -830,16 +830,6 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       return [...tasks.values()].filter((task) => task.runId === runId && task.state === 'ACTIVE').length;
     },
 
-    async reviewCompletedFor(taskId, projectId) {
-      const parent = tasks.get(taskId);
-      if (parent === undefined || !inProject(parent.runId, projectId)) return false;
-      // Any INDEPENDENT_REVIEWER child that succeeded, however it was named —
-      // the gauntlet's review phase and the pipeline's `:review` task are both
-      // reviews of the same task and both must count.
-      return [...tasks.values()].some((task) =>
-        task.parentTaskId === taskId && task.role === 'INDEPENDENT_REVIEWER' && task.state === 'SUCCEEDED');
-    },
-
     async executedBindingFor(taskId, projectId) {
       const row = tasks.get(taskId);
       if (row === undefined || !inProject(row.runId, projectId)) return null;

@@ -45,7 +45,7 @@ const capabilityFor = (item: { role: string }) =>
 const PLAN_OK = { kind: 'succeed' as const, evidence: [{ type: 'ARTIFACT', status: 'PASSED', safeSummary: 'Plan written.' }] };
 const BUILD_OK = { kind: 'succeed' as const, evidence: [{ type: 'TEST', status: 'PASSED', safeSummary: 'Suite green.' }] };
 const REVIEW_REJECT = { kind: 'succeed' as const, evidence: [{ type: 'REVIEW_FINDING', status: 'FAILED', safeSummary: 'The plan has no verification strategy.' }] };
-const REVIEW_ACCEPT = { kind: 'succeed' as const, evidence: [{ type: 'REVIEW_FINDING', status: 'PASSED', safeSummary: 'No blocking findings.' }] };
+const REVIEW_ACCEPT = { kind: 'succeed' as const, evidence: [{ type: 'REVIEW_FINDING', status: 'PASSED', safeSummary: 'No blocking findings.' }], answerFindings: 'RESOLVED' as const };
 
 async function drain(loop: JuliusRunLoop, maxTicks = 16): Promise<number> {
   for (let tick = 0; tick < maxTicks; tick += 1) {
@@ -210,6 +210,8 @@ describe('DEFECT 4 — build waits for the plan review, and DEFECT 3 — a rejec
       card: cardPolicy({ allowedProviders: ['openai', 'anthropic', 'hermes'], capabilities: ['plan', 'implement', 'review'], concurrency: 1 }),
       verification: verificationPolicy({ reviewerRequired: true, maxRepairRounds: 3 }),
       capabilityFor,
+      // The restarted workers read the same durable rows, their compiled packets included.
+      store: harness.store,
     });
     const loop = new JuliusRunLoop({ ...resumed.deps, store: harness.store }, resumed.policies, { claimLimit: 10, leaseMs: 60_000 });
     const order: string[] = [];

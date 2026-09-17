@@ -35,7 +35,8 @@ const PASSED_REVIEW = [{ type: 'REVIEW_FINDING', status: 'PASSED', safeSummary: 
 const FAILED_REVIEW = [{ type: 'REVIEW_FINDING', status: 'FAILED', safeSummary: 'The proposed design contradicts the plan.' }];
 const PLAN_EVIDENCE = [{ type: 'ARTIFACT', status: 'PASSED', safeSummary: 'Plan written.' }];
 const BUILD_EVIDENCE = [{ type: 'TEST', status: 'PASSED', safeSummary: 'Suite green.' }];
-const PASS: Step = { kind: 'succeed', evidence: PASSED_REVIEW };
+/** A reviewer that answers, by id, every finding its packet shows it — silence is not resolution. */
+const PASS: Step = { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' };
 const REJECT: Step = { kind: 'succeed', evidence: FAILED_REVIEW };
 
 const ARCHITECTURE = (overrides: Record<string, unknown> = {}) => ({
@@ -154,7 +155,7 @@ const packetsFor = (harness: JuliusHarness, taskId: string): string =>
 const PLAN_WITH = (architecture: unknown): Step => ({ kind: 'succeed', evidence: PLAN_EVIDENCE, architecture });
 const CONSULT = (architecture: unknown, consistency: unknown): Step =>
   ({ kind: 'succeed', evidence: PLAN_EVIDENCE, architecture, consistency });
-const CHECK_TASK = juliusArchitectureCheckTaskId(juliusArchitectureTriggerId('PRE_COMPLETION_CHECK', 1, null));
+const CHECK_TASK = juliusArchitectureCheckTaskId('run-1', juliusArchitectureTriggerId('PRE_COMPLETION_CHECK', 1, null));
 
 describe('P23 — before a run may complete, the architect is asked whether it matches the design', () => {
   it('the consultation is minted, answered ALIGNED, and the run completes', async () => {
@@ -275,7 +276,7 @@ describe('P24 — a design changed after the terms lock waits for the reviewer',
     expect(proposal, 'kept, and labelled').not.toBeUndefined();
     expect(proposal!.text).toContain('NOT IN FORCE');
     expect(proposal!.taskIds).toEqual([CHECK_TASK]);
-    expect(entries.some((entry) => entry.entryId === 'brain:architecture:r2'), 'and it is not run-wide').toBe(false);
+    expect(entries.some((entry) => entry.entryId === 'brain:architecture:run-1:r2'), 'and it is not run-wide').toBe(false);
     expect(packetsFor(harness, 'build-1')).not.toContain('fixed width');
   });
 

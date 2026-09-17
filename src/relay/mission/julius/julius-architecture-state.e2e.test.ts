@@ -37,7 +37,8 @@ const PASSED_REVIEW = [{ type: 'REVIEW_FINDING', status: 'PASSED', safeSummary: 
 const FAILED_REVIEW = [{ type: 'REVIEW_FINDING', status: 'FAILED', safeSummary: 'The plan does not name the boundary case.' }];
 const PLAN_EVIDENCE = [{ type: 'ARTIFACT', status: 'PASSED', safeSummary: 'Plan written.' }];
 const BUILD_EVIDENCE = [{ type: 'TEST', status: 'PASSED', safeSummary: 'Suite green.' }];
-const PASS: Step = { kind: 'succeed', evidence: PASSED_REVIEW };
+/** A reviewer that answers, by id, every finding its packet shows it — silence is not resolution. */
+const PASS: Step = { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' };
 const REJECT: Step = { kind: 'succeed', evidence: FAILED_REVIEW };
 
 const ARCHITECTURE = (responsibility: string) => ({
@@ -149,7 +150,7 @@ describe('P14 — the architecture the architect holds becomes state every worke
     });
 
     const entries = await entriesOf(harness);
-    expect(entries.map((entry) => entry.entryId)).toEqual([juliusArchitectureEntryId(1)]);
+    expect(entries.map((entry) => entry.entryId)).toEqual([juliusArchitectureEntryId('run-1', 1)]);
     expect(entries[0]!.taskIds, 'run-wide, not scoped to a single task').toEqual([]);
 
     // The coder building against it and the reviewer judging against it saw the
@@ -177,7 +178,7 @@ describe('P14 — the architecture the architect holds becomes state every worke
     expect(recorded.map((facts) => facts.revision)).toEqual([1, 2]);
     expect(recorded[1]!.proposedByTaskId, 'the repair proposed it').toBe('repair:plan-1:1:task');
     expect((await entriesOf(harness)).map((entry) => entry.entryId))
-      .toEqual([juliusArchitectureEntryId(1), juliusArchitectureEntryId(2)]);
+      .toEqual([juliusArchitectureEntryId('run-1', 1), juliusArchitectureEntryId('run-1', 2)]);
 
     const inForce = foldJuliusArchitecture(rows(harness));
     expect(inForce!.revision).toBe(2);

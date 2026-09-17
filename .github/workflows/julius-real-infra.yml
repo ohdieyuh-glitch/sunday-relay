@@ -282,6 +282,14 @@ jobs:
         env:
           JULIUS_REAL_POSTGRES: '1'
         run: npx vitest run scripts/julius-live-preflight-identity.test.ts
+      - name: Two runs in one real PostgreSQL never share an architecture identity
+        # `julius_tasks.task_id` and `julius_brain_entries.entry_id` are global primary keys;
+        # the architecture check task and the accepted-architecture entry must carry the run.
+        # A Map cannot hold those constraints, so the in-memory proof alone cannot close this.
+        if: ${{ !cancelled() }}
+        env:
+          JULIUS_REAL_POSTGRES: '1'
+        run: npx vitest run src/relay/persistence/julius-run-scoped-identity.real-postgres.test.ts
       - name: Every evidence query holds against the migrated schema
         # Runs whether or not the preflight passed: the preflight applies the migrations
         # before its executor round trip, so the schema is present at today's failure too.

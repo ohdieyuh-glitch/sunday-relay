@@ -228,7 +228,7 @@ function buildRepairMission() {
         worker: REVIEWER,
         script: [
           { kind: 'succeed', evidence: [{ type: 'REVIEW_FINDING', status: 'FAILED', safeSummary: 'The branch is untested.' }] },
-          { kind: 'succeed', evidence: [{ type: 'REVIEW_FINDING', status: 'PASSED', safeSummary: 'No blocking findings.' }] },
+          { kind: 'succeed', evidence: [{ type: 'REVIEW_FINDING', status: 'PASSED', safeSummary: 'No blocking findings.' }], answerFindings: 'RESOLVED' },
         ],
       },
     ],

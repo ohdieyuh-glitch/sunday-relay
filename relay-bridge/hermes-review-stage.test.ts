@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildReviewPrompt, type ReviewPacket } from './hermes-reviewer';
+import { buildReviewPrompt, hermesReviewVerdict, validateHermesReview, type ReviewPacket } from './hermes-reviewer';
 import { juliusContractReviewCharge, lockJuliusTaskContract, reviewChargeFor, seedJuliusTaskContract } from '../src/relay/mission/julius';
 
 /**
@@ -80,7 +80,7 @@ describe('a REPAIR review', () => {
       priorFindings: ['REVIEW FINDING f-1 [HIGH]: no verification strategy', 'REVIEW FINDING f-2 [HIGH]: scope unbounded'],
     });
     expect(prompt).toContain('THIS IS A REPAIR:PLAN REVIEW');
-    expect(prompt).toContain('PRIOR BLOCKING FINDINGS (this review must judge whether each is resolved)');
+    expect(prompt).toContain('PRIOR BLOCKING FINDINGS (this review must judge whether each is resolved, and answer each in "resolutions"');
     expect(prompt).toContain('- REVIEW FINDING f-1 [HIGH]: no verification strategy');
     expect(prompt).toContain('- REVIEW FINDING f-2 [HIGH]: scope unbounded');
     expect(prompt).toMatch(/Is every prior blocking finding resolved/);
@@ -185,5 +185,33 @@ describe('the locked task contract in the review prompt', () => {
       expect(plan).toContain(absent);
     }
     expect(plan).toMatch(/Do NOT demand, and do NOT penalise the absence of/);
+  });
+});
+
+describe('a REPAIR review can answer the findings it is charged with, and is told what silence costs', () => {
+  const FINDING_TEXT = 'REVIEW FINDING finding:build-1:review:1:0 [HIGH]: NULL renders as the literal word.';
+
+  it('the prompt asks for resolutions by id, in the schema the reviewer answers in', () => {
+    const prompt = buildReviewPrompt({ ...base, stage: 'repair:build', charge: reviewChargeFor('repair:build'), priorFindings: [FINDING_TEXT] });
+    expect(prompt).toContain(FINDING_TEXT);
+    expect(prompt).toContain('answer each in "resolutions" by the id shown after REVIEW FINDING');
+    expect(prompt).toContain('a finding you do not answer is not resolved');
+    expect(prompt).toContain('"resolutions":[{"findingId":string,"status":"RESOLVED"|"OPEN"|"SUPERSEDED","claim":string}]');
+  });
+
+  it('what the reviewer answered reaches Julius on every verdict shape, and an empty answer is no answer', () => {
+    const resolutions = [{ findingId: 'finding:build-1:review:1:0', status: 'RESOLVED', claim: 'The new test asserts the empty field.' }];
+    const written = (extra: Record<string, unknown>) => JSON.stringify({
+      verdict: 'approved', summary: 'The repair holds.', findings: [], requirementsChecked: [], ...extra,
+    });
+    const answered = validateHermesReview(written({ resolutions }))!;
+    expect(answered.resolutions).toEqual(resolutions);
+    expect(hermesReviewVerdict(answered)).toMatchObject({ verdict: 'CONTINUE', resolutions });
+    expect(validateHermesReview(written({ resolutions: [] }))!.resolutions, 'an empty list is not an answer').toBeUndefined();
+    const repairing = validateHermesReview(JSON.stringify({
+      verdict: 'changes_required', summary: 'Still broken.', requirementsChecked: [], resolutions,
+      findings: [{ findingId: 'f2', severity: 'blocking', requirement: 'AC-1', explanation: 'Still broken.', evidence: 'diff' }],
+    }))!;
+    expect(hermesReviewVerdict(repairing)).toMatchObject({ verdict: 'REPAIR_REQUIRED', resolutions });
   });
 });

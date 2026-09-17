@@ -1,6 +1,6 @@
 import type { JuliusRecordedDecision, JuliusTask } from './julius-runtime';
 import { effectivelyAcceptedTaskIds, isJuliusRepairOf } from './julius-repair-lineage';
-import { juliusYieldContinuationOf } from './julius-segment-lineage';
+import { juliusReviewConclusionOf, juliusYieldContinuationOf } from './julius-segment-lineage';
 
 /**
  * RELEASE — the moment work becomes claimable, decided by Julius.
@@ -124,11 +124,13 @@ export function canStillBeAccepted(
        * that would actually have decided it had failed for good — so a
        * dependent waited on an acceptance that could never come.
        */
-      const reviews = kids.filter((kid) => kid.role === 'INDEPENDENT_REVIEWER');
-      answer = reviews.length === 0
-        // No review scheduled yet: verification has not run, and it will.
-        ? true
-        : reviews.some((kid) => live(kid) || kid.state === 'SUCCEEDED');
+      /*
+       * And a review is only a review once it CONCLUDES. A reviewer that paused
+       * for research whose continuation failed produced no verdict, so it cannot
+       * keep the work acceptable any more than a review that failed outright can.
+       */
+      const review = juliusReviewConclusionOf({ taskId }, tasks).conclusion;
+      answer = review === 'NONE' || review === 'CONCLUDED' || review === 'PENDING';
     } else if (decision.action === 'REPAIR') {
       // The SAME lineage rule acceptance itself uses: a child that is merely
       // repair-SHAPED supersedes nothing, so it cannot keep its parent live.

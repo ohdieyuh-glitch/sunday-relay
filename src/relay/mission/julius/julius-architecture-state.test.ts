@@ -4,7 +4,7 @@ import {
   JULIUS_ARCHITECTURE_LIMITS, JULIUS_BOUNDARY_KINDS,
   foldJuliusArchitecture, juliusArchitectureConflicts, juliusArchitectureFacts, juliusNextArchitectureRevision,
   renderJuliusArchitecture, sanitizeJuliusArchitecture,
-  type JuliusArchitectureState,
+  type JuliusArchitectureState, isJuliusArchitectureEntryId, juliusArchitectureEntryId,
 } from './julius-architecture-state';
 import { validateJuliusEvent } from './julius-events';
 
@@ -148,5 +148,14 @@ describe('the accepted architecture comes back from the rows alone', () => {
     expect(rendered).toContain('D-1');
     expect(rendered).toContain('rejected: Add a second buffer');
     expect(rendered).toContain('A-1 [UNVERIFIED]');
+  });
+});
+
+describe('the accepted architecture entry is named by its run', () => {
+  it('two runs\' first revisions are two entries, and only accepted revisions are recognised', () => {
+    expect(juliusArchitectureEntryId('run:aaaa', 1)).not.toBe(juliusArchitectureEntryId('run:bbbb', 1));
+    expect(isJuliusArchitectureEntryId(juliusArchitectureEntryId('run:aaaa', 12))).toBe(true);
+    expect(isJuliusArchitectureEntryId('brain:architecture:proposal:plan-1')).toBe(false);
+    expect(isJuliusArchitectureEntryId('brain:guidance-answer:x:r1')).toBe(false);
   });
 });

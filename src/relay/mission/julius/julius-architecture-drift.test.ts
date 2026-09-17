@@ -5,7 +5,7 @@ import {
   JULIUS_CODER_OBSERVATION_LIMITS, JULIUS_COSMETIC_DRIFT_KINDS, juliusCoderObservationFacts,
   sanitizeJuliusCoderObservations,
   JULIUS_MATERIAL_DRIFT_KINDS, foldJuliusConsistency, juliusArchitectureChangeIsMaterial, juliusArchitectureChanges,
-  juliusArchitectureCompletionGate, juliusArchitectureTriggerFacts, juliusArchitectureTriggerId,
+  juliusArchitectureCheckTaskId, juliusArchitectureCompletionGate, juliusArchitectureTriggerFacts, juliusArchitectureTriggerId,
   juliusArchitectureTriggers, juliusConsistencyFacts, juliusConsistencyRoute, juliusDriftIsMaterial,
   sanitizeJuliusConsistency,
 } from './julius-architecture-drift';
@@ -384,5 +384,24 @@ describe('P26 — what the implementation peer saw can reach the architect, and 
         correlationId: 'c', causationId: null, occurredAt: 't', facts,
       })).not.toThrow();
     }
+  });
+});
+
+describe('P29 — a check task is named by its run, and a check that was not created is not unroutable', () => {
+  it('the same trigger in two runs names two tasks', () => {
+    const trigger = juliusArchitectureTriggerId('PRE_COMPLETION_CHECK', 1, null);
+    expect(juliusArchitectureCheckTaskId('run:aaaa', trigger)).not.toBe(juliusArchitectureCheckTaskId('run:bbbb', trigger));
+    expect(juliusArchitectureCheckTaskId('run:aaaa', trigger)).toBe('architecture:run:aaaa:arch:PRE_COMPLETION_CHECK:r1:run:task');
+  });
+
+  it('only a routing fact passes the gate: not-created holds, and says so', () => {
+    const raised = (facts: Record<string, string | number | boolean | null>) =>
+      row('architecture.trigger.raised', { trigger: 'PRE_COMPLETION_CHECK', revision: 1, triggerId: 'arch:PRE_COMPLETION_CHECK:r1:run', ...facts });
+    expect(juliusArchitectureCompletionGate({ entries: [RECORDED, raised({ served: false, unroutable: true, created: false })] }))
+      .toEqual({ ok: true, reasonCode: 'ARCHITECTURE_CHECK_UNROUTABLE' });
+    expect(juliusArchitectureCompletionGate({ entries: [RECORDED, raised({ served: false, unroutable: false, created: false })] }))
+      .toEqual({ ok: false, reasonCode: 'ARCHITECTURE_CHECK_NOT_CREATED' });
+    expect(juliusArchitectureCompletionGate({ entries: [RECORDED, raised({ served: true, unroutable: false, created: false })] }))
+      .toEqual({ ok: false, reasonCode: 'ARCHITECTURE_CHECK_PENDING' });
   });
 });
