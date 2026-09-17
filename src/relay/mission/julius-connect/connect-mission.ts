@@ -26,6 +26,11 @@ export interface ConnectTaskStep {
   readonly label: string;
   readonly connectorId: string;
   readonly capability: string;
+  /**
+   * WHAT THE RUNTIME SHOULD DO for this step, when the step is real work rather than a deterministic stand-in. The domain
+   * neither performs nor interprets it -- it decides whether the step is allowed and hands this to the runtime that does.
+   */
+  readonly action?: { readonly op: 'navigate' | 'read' | 'search'; readonly url?: string; readonly query?: string };
 }
 
 export interface ConnectTaskTemplate {
@@ -57,7 +62,7 @@ export interface ConnectTask {
  * runtime resolves at this moment, inside the connector runtime). Returns what happened -- never the material.
  */
 export type ConnectStepExecutor = (input: { step: ConnectTaskStep; task: ConnectTask; decision: Extract<CapabilityDecision, { allowed: true }> }) =>
-  { readonly outcome: 'success' | 'failed'; readonly detail: string };
+  { readonly outcome: 'success' | 'failed' | 'pending'; readonly detail: string };
 
 /** The founder's sample: a design task that needs a DEVELOPMENT design-tool connector it does not have yet. */
 export const DESIGN_SYNC_TEMPLATE: ConnectTaskTemplate = Object.freeze({
@@ -92,7 +97,26 @@ export const SOCIAL_POST_TEMPLATE: ConnectTaskTemplate = Object.freeze({
   ],
 });
 
-export const CONNECT_TASK_TEMPLATES: readonly ConnectTaskTemplate[] = Object.freeze([DESIGN_SYNC_TEMPLATE, SOCIAL_POST_TEMPLATE]);
+/**
+ * THE REAL ONE (founder, 2026-09-17: "it should not be a simulation should be real"). Every step here is work a real
+ * browser does on the real internet, and every step goes through the gate first: Julius opens the page, reads it, uses the
+ * site's own search box, and reads what came back. Read-only, on allowlisted hosts, nothing signed into and nothing
+ * bought -- `web.sign_in` and `web.purchase` exist on the connector precisely so the prompt can show they are NOT asked
+ * for.
+ */
+export const WEB_LOOKUP_TEMPLATE: ConnectTaskTemplate = Object.freeze({
+  templateId: 'web-lookup',
+  title: 'Look up design systems on the web',
+  purpose: 'Opening the encyclopaedia entry on design systems, reading it, and searching the site for what else it says about design tokens',
+  steps: [
+    { label: 'Open the encyclopaedia entry', connectorId: 'open-web', capability: 'web.read', action: { op: 'navigate' as const, url: 'https://en.wikipedia.org/wiki/Design_system' } },
+    { label: 'Read the page', connectorId: 'open-web', capability: 'web.read', action: { op: 'read' as const } },
+    { label: 'Search the site for design tokens', connectorId: 'open-web', capability: 'web.search', action: { op: 'search' as const, query: 'design tokens' } },
+    { label: 'Read what the search found', connectorId: 'open-web', capability: 'web.read', action: { op: 'read' as const } },
+  ],
+});
+
+export const CONNECT_TASK_TEMPLATES: readonly ConnectTaskTemplate[] = Object.freeze([DESIGN_SYNC_TEMPLATE, SOCIAL_POST_TEMPLATE, WEB_LOOKUP_TEMPLATE]);
 
 function move(task: ConnectTask, to: JuliusMissionState, reasonCode: string, safeSummary: string, at: string): ConnectTask {
   const transition = transitionMission({
@@ -153,6 +177,12 @@ export function advanceConnectTask(
 
   if (decision.allowed) {
     const result = execute ? execute({ step, task, decision }) : { outcome: 'success' as const, detail: `Julius: ${step.label}.` };
+    // STILL WORKING. Real work takes longer than a tick: the runtime has begun this step and will say how it went. Nothing
+    // is recorded yet -- an unfinished step is not a use -- and the gate is asked again on the next tick, so a connection
+    // revoked while the work is in flight still stops what follows.
+    if (result.outcome === 'pending') {
+      return { state, task };
+    }
     const next = recordCapabilityUse(state, {
       userId: task.userId, projectId: task.projectId, missionId: task.missionId, connectorId: step.connectorId, capability: step.capability,
       decision, outcome: result.outcome, detail: result.detail,

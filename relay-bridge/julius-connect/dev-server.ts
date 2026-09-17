@@ -33,9 +33,9 @@ export function startJuliusConnectDevServer(
   options: Partial<JuliusConnectServiceOptions> = {},
   log: (line: string) => void = () => undefined,
 ): Promise<{ server: Server; service: JuliusConnectService; port: number; close: () => Promise<void> }> {
-  const service = createJuliusConnectService({ userId: 'founder', projectId: 'pixel-canvas', ...options });
   const hosts = (process.env.WONDER_WEB_HOSTS ?? '').split(',').map((host) => host.trim()).filter((host) => host.length > 0);
   const browser: LiveBrowser = createLiveBrowser({ allowHosts: hosts.length > 0 ? hosts : LIVE_BROWSER_HOSTS });
+  const service = createJuliusConnectService({ userId: 'founder', projectId: 'pixel-canvas', browser, ...options });
   const ticker = setInterval(() => service.tick(), TICK_MS);
   const server = createServer((req, res) => {
     const pathname = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;

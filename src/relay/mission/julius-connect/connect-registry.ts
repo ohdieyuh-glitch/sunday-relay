@@ -67,6 +67,17 @@ export const JULIUS_CONNECT_REGISTRY: readonly ConnectorDescriptor[] = Object.fr
     capabilities: [cap('deployments.read', 'Read deployments', 'read'), cap('deployments.create', 'Create deployments', 'write'), cap('team.admin', 'Team administration', 'admin')],
   },
 
+  {
+    // THE ONE REAL CONNECTOR THAT IS BUILT. Not a fixture: Julius really opens these pages, in a real browser, and what
+    // comes back is the site's own. It is safe to have built because of what it cannot do -- only hosts on the runtime's
+    // allowlist, nothing signed into, and the two capabilities that would matter most are never asked for.
+    connectorId: 'open-web', serviceId: 'open-web', displayName: 'The open web (governed browser)', aliases: ['web', 'internet', 'browser'], version: '1.0.0', development: false,
+    routes: [route('browser_computer', 'Nothing to sign into: Julius may open the pages on the allowed list, in a browser you can watch, and only those')],
+    capabilities: [cap('web.read', 'Open and read pages on the allowed list', 'read'), cap('web.search', "Search a site from the site's own box", 'read'),
+      cap('web.act', 'Click links and fill in forms', 'write'), cap('web.sign_in', 'Sign in to a site as you', 'admin'),
+      cap('web.purchase', 'Buy something', 'destructive')],
+  },
+
   /* ---------------------------------------------------- development connectors */
   {
     connectorId: 'dev-figma', serviceId: 'dev-figma', displayName: 'Design Tool (development)', aliases: ['figma-dev', 'design'], version: '1.0.0-dev', development: true,

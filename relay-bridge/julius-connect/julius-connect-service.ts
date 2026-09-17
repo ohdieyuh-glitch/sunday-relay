@@ -22,6 +22,8 @@ import {
 } from '../../src/relay/mission/julius-connect';
 import { fail, ok, relayError, type RelayResult } from '../../src/relay/protocol/errors';
 import { createDevelopmentAuthorizer, createDevelopmentStepExecutor, type DevelopmentAuthorizer } from './development-connectors';
+import type { LiveBrowser } from './live-browser';
+import { createWebStepExecutor } from './web-step-executor';
 import { createDevelopmentCredentialVault, type DevelopmentCredentialVault } from './development-vault';
 
 /**
@@ -47,6 +49,11 @@ export interface JuliusConnectServiceOptions {
   readonly authorizationMs?: number;
   /** The pace of Julius's development task steps. */
   readonly stepMs?: number;
+  /**
+   * The real browser, when this service has one. With it, the `open-web` connector's steps are real work on real sites;
+   * without it, a task that needs it fails honestly rather than pretending to have browsed.
+   */
+  readonly browser?: LiveBrowser;
 }
 
 export interface JuliusConnectServiceView {
@@ -80,7 +87,18 @@ export function createJuliusConnectService(options: JuliusConnectServiceOptions)
   const stepMs = options.stepMs ?? 2400;
   const vault: DevelopmentCredentialVault = createDevelopmentCredentialVault();
   const authorizer: DevelopmentAuthorizer = createDevelopmentAuthorizer(vault);
-  const execute = createDevelopmentStepExecutor(vault);
+  const executeDevelopment = createDevelopmentStepExecutor(vault);
+  const executeWeb = options.browser ? createWebStepExecutor(options.browser) : null;
+  // ONE RUNNER PER KIND OF WORK, chosen by the connector: the development connectors contact nothing, and `open-web` is
+  // a real browser on real sites. Nothing routes a development step into the real browser, or the other way about.
+  const execute: typeof executeDevelopment = (input) => {
+    if (input.step.connectorId !== 'open-web') {
+      return executeDevelopment(input);
+    }
+    return executeWeb
+      ? executeWeb(input)
+      : { outcome: 'failed', detail: 'This service was started without the real browser, so Julius cannot browse.' };
+  };
 
   let state: JuliusConnectState = EMPTY_JULIUS_CONNECT_STATE;
   let tasks: ConnectTask[] = [];

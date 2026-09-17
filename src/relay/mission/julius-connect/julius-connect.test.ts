@@ -5,6 +5,7 @@ import {
   CONNECT_STATES,
   DESIGN_SYNC_TEMPLATE,
   SOCIAL_POST_TEMPLATE,
+  WEB_LOOKUP_TEMPLATE,
   EMPTY_JULIUS_CONNECT_STATE,
   EXTERNAL_CAPABILITY_REQUIRED,
   JULIUS_CONNECT_REGISTRY,
@@ -379,6 +380,62 @@ describe('julius connect: registry and routes', () => {
     expect(task.runState).toBe('COMPLETED');
     // The publish step ran twice through the gate (the caption and the post itself), each use recorded.
     expect(auditAction(state, 'capability.used').filter((e) => e.capability === 'posts.create')).toHaveLength(2);
+  });
+
+  it('the open web is a real connector that is actually built, and is never asked to sign in or buy', () => {
+    const connector = findConnector('open-web')!;
+    // NOT A DEVELOPMENT FIXTURE. This one really works, which is why its route is available where the others' are not.
+    expect(connector.development).toBe(false);
+    expect(chooseConnectRoute(connector)?.route).toBe('browser_computer');
+    expect(chooseConnectRoute(connector)?.available).toBe(true);
+    const asked = ask(EMPTY_JULIUS_CONNECT_STATE, 'open-web', ['web.read', 'web.search', 'web.act']);
+    expect(asked.request.requested).toEqual(['web.read', 'web.search', 'web.act']);
+    // THE TWO THAT MATTER MOST ARE SHOWN, AND NOT ASKED FOR.
+    expect(asked.request.notRequested).toEqual(expect.arrayContaining(['web.sign_in', 'web.purchase']));
+    expect(requestCapabilities(EMPTY_JULIUS_CONNECT_STATE, { userId: USER, projectId: 'project-a', missionId: null, taskId: null, connectorId: 'open-web', capabilities: ['web.purchase'], purpose: 'x' }, clock()).ok).toBe(false);
+  });
+
+  it('Julius browses nothing until the web connection is authorized, and each page it opens is one audited use', () => {
+    let state = EMPTY_JULIUS_CONNECT_STATE;
+    let task = startConnectTask(WEB_LOOKUP_TEMPLATE, { taskId: 'task-w', missionId: 'mission-w', projectId: 'project-a', userId: USER }, clock().at);
+    ({ state, task } = advanceConnectTask(state, task, clock()));
+    expect(task.runState).toBe('BLOCKED');
+    expect(task.blocked?.capabilities).toEqual(['web.read', 'web.search']);
+    expect(auditAction(state, 'capability.used')).toHaveLength(0);
+    const request = state.requests[0];
+    state = must(approveRequest(state, { requestId: request.requestId, userId: USER }, clock()));
+    state = must(completeAuthorization(state, { requestId: request.requestId, outcome: devAuthorized(['web.read', 'web.search']) }, clock()));
+    ({ state, task } = run(state, task, 12));
+    expect(task.runState).toBe('COMPLETED');
+    expect(auditAction(state, 'capability.used').filter((e) => e.capability === 'web.read')).toHaveLength(3);
+    expect(auditAction(state, 'capability.used').filter((e) => e.capability === 'web.search')).toHaveLength(1);
+    // Every step named a real address or a real thing to do on the page.
+    expect(WEB_LOOKUP_TEMPLATE.steps.every((s) => s.action !== undefined)).toBe(true);
+    expect(WEB_LOOKUP_TEMPLATE.steps[0].action?.url).toMatch(/^https:\/\//);
+  });
+
+  it('a step still being worked on records nothing and does not move the task on', () => {
+    let state = EMPTY_JULIUS_CONNECT_STATE;
+    let task = startConnectTask(WEB_LOOKUP_TEMPLATE, { taskId: 'task-p', missionId: 'mission-p', projectId: 'project-a', userId: USER }, clock().at);
+    ({ state, task } = advanceConnectTask(state, task, clock()));
+    const request = state.requests[0];
+    state = must(approveRequest(state, { requestId: request.requestId, userId: USER }, clock()));
+    state = must(completeAuthorization(state, { requestId: request.requestId, outcome: devAuthorized(['web.read', 'web.search']) }, clock()));
+    ({ state, task } = advanceConnectTask(state, task, clock()));
+    ({ state, task } = advanceConnectTask(state, task, clock()));
+    const atCursor = task.cursor;
+    const audited = auditAction(state, 'capability.used').length;
+    // REAL WORK TAKES LONGER THAN A TICK. While it is in flight nothing is recorded and nothing moves on.
+    for (let tick = 0; tick < 4; tick += 1) {
+      ({ state, task } = advanceConnectTask(state, task, clock(), () => ({ outcome: 'pending', detail: 'still working' })));
+    }
+    expect(task.cursor).toBe(atCursor);
+    expect(auditAction(state, 'capability.used')).toHaveLength(audited);
+    expect(task.runState).toBe('EXECUTING');
+    // And when the work finishes, that one step is recorded once.
+    ({ state, task } = advanceConnectTask(state, task, clock(), () => ({ outcome: 'success', detail: 'Julius opened the page.' })));
+    expect(task.cursor).toBe(atCursor + 1);
+    expect(auditAction(state, 'capability.used')).toHaveLength(audited + 1);
   });
 
   it('discovers by what the user says, and never requests admin or destructive capabilities on their behalf', () => {

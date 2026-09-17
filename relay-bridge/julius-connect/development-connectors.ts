@@ -38,6 +38,19 @@ export function createDevelopmentAuthorizer(vault: ConnectCredentialVaultPort): 
       failure = reason;
     },
     authorize({ connector, request }: { connector: ConnectorDescriptor; request: CapabilityRequest; at: string }): AuthorizationOutcome {
+      if (connector.connectorId === 'open-web') {
+        // THE ONE REAL CONNECTOR THAT NEEDS NO PROVIDER. There is nothing to sign into and no secret to hold: the
+        // authorization IS the user saying yes, and the browser is bound by its allowlist either way. Rather than invent a
+        // credential, the reference says plainly that there is none.
+        const { credentialRef } = vault.store({
+          connectorId: connector.connectorId, userId: request.userId,
+          material: 'no-credential: the governed browser signs into nothing', label: 'the open web (no credential)',
+        });
+        return {
+          kind: 'authorized', credentialRef, accountLabel: 'no account · the governed browser, on its allowlist',
+          grantedCapabilities: request.requested, expiresAt: '2099-01-01T00:00:00.000Z',
+        };
+      }
       if (!connector.development) {
         return { kind: 'failed', reason: `${connector.displayName}: no provider integration exists in this build.` };
       }

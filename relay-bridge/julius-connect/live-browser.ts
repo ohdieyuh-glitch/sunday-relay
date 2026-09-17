@@ -64,6 +64,10 @@ export interface LiveBrowser {
   navigate(tabId: string, url: string): Promise<{ ok: true; host: string } | { ok: false; refusal: string }>;
   /** Render this tab at the size of the window it is drawn in, so the page lays itself out for the space it actually has. */
   setViewport(tabId: string, width: number, height: number): Promise<boolean>;
+  /** What the page says, as a person reading it would see: its title and the start of its text. */
+  read(tabId: string): Promise<{ title: string; url: string; text: string } | null>;
+  /** Use the page's OWN search box, the way a person would: type the words into it and submit. */
+  searchOnPage(tabId: string, query: string): Promise<{ ok: true } | { ok: false; refusal: string }>;
   frame(tabId: string, quality?: number): Promise<LiveFrame | null>;
   click(tabId: string, x: number, y: number): Promise<boolean>;
   scroll(tabId: string, deltaY: number): Promise<boolean>;
@@ -146,6 +150,38 @@ export function createLiveBrowser(options: LiveBrowserOptions): LiveBrowser {
       await held.page.setViewportSize(size);
       held.size = size;
       return true;
+    },
+
+    async read(tabId) {
+      const held = pages.get(tabId);
+      if (held === undefined || held.page.isClosed()) {
+        return null;
+      }
+      held.lastUsed = Date.now();
+      const text = await held.page
+        .evaluate(() => (document.body?.innerText ?? '').replace(/\s+/g, ' ').trim().slice(0, 1200))
+        .catch(() => '');
+      return { title: await held.page.title().catch(() => ''), url: held.page.url(), text };
+    },
+
+    async searchOnPage(tabId, query) {
+      const held = pages.get(tabId);
+      if (held === undefined || held.page.isClosed()) {
+        return { ok: false, refusal: 'no page is open on this tab' };
+      }
+      const box = held.page.locator('input[type=search], input[name=q], input[name=search], input[type=text]').first();
+      try {
+        await box.waitFor({ state: 'visible', timeout: 5000 });
+        await box.fill(query);
+        await box.press('Enter');
+        await held.page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => undefined);
+        note(tabId, 'type', hostOf(held.page.url()) ?? '-', `searched the page's own box (${query.length} characters)`);
+        held.lastUsed = Date.now();
+        return { ok: true };
+      } catch (error) {
+        note(tabId, 'error', hostOf(held.page.url()) ?? '-', String(error).slice(0, 160));
+        return { ok: false, refusal: `this page has no search box we could use: ${String(error).slice(0, 100)}` };
+      }
     },
 
     async navigate(tabId, url) {
