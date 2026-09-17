@@ -1015,6 +1015,16 @@ bool UWonderlandUiSubsystem::FocusWonderWebWindow(FName Id)
 		return false;
 	}
 	FocusedWonderWebWindow = Id;
+	// THE WINDOW IN FRONT GETS THE FRAMES. A browser window behind another still moves, at a share of the rate.
+	if (IsBrowserWindow(Id))
+	{
+		const APlayerController* Controller = BoundController.Get();
+		UGameInstance* Instance = Controller != nullptr ? Controller->GetGameInstance() : nullptr;
+		if (UWonderlandWonderWebLiveSubsystem* LiveWeb = Instance != nullptr ? Instance->GetSubsystem<UWonderlandWonderWebLiveSubsystem>() : nullptr)
+		{
+			LiveWeb->SetFront(Id.ToString());
+		}
+	}
 	for (FWonderWebWindow& Window : WonderWebWindows)
 	{
 		if (AWonderlandWonderWebScreen* Screen = Window.Screen.Get())

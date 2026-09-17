@@ -2,8 +2,8 @@
 //
 // FOUNDER DIRECTION (2026-09-17): "when it comes to the wonder web soon it should not be a simulation should be real."
 // And earlier, on the workspace: "Julius will be spawning multiple wonder webs" -- so this holds one real page PER
-// WINDOW, not one page in total. Each window has its own page and its own address; the window whose widget drew most
-// recently gets full frames and the ones behind it fewer, because that is what they are worth.
+// WINDOW, not one page in total. Each window has its own page and its own address; the window in front gets full frames
+// and the ones behind it fewer, because that is what they are worth.
 //
 // WHAT THIS IS. A real browser renders the real page on this machine, inside the Julius Connect runtime
 // (relay-bridge/julius-connect/live-browser.ts), and Wonderland draws the frames it produces and sends back where the
@@ -85,6 +85,11 @@ public:
 	 * is how a window nobody is drawing stops asking for frames.
 	 */
 	void SetViewport(const FString& TabId, FIntPoint Size);
+	/**
+	 * Which window is in front. The one in front is worth full frames and the others a share of that; paint order cannot
+	 * say which it is -- every open window paints -- so the workspace, which knows about focus, says so.
+	 */
+	void SetFront(const FString& TabId);
 	/** Stop drawing and let the runtime close the page. A tab this client only watches is left where it is. */
 	void CloseTab(const FString& TabId);
 
@@ -132,7 +137,7 @@ private:
 	const FWonderWebLivePage* Find(const FString& TabId) const { return Pages.Find(TabId); }
 
 	TMap<FString, FWonderWebLivePage> Pages;
-	/** The tab whose widget drew most recently: the window in front, and the one worth full frames. */
+	/** The window the workspace says is in front, and so the one worth full frames. */
 	FString Front;
 	TArray<FHttpRequestPtr> InFlight;
 	FTSTicker::FDelegateHandle Ticker;

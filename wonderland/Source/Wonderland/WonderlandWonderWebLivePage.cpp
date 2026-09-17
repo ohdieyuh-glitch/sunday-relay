@@ -25,12 +25,7 @@ FVector2D SWonderlandWonderWebLivePage::ComputeDesiredSize(float) const
 
 void SWonderlandWonderWebLivePage::PageRect(const FGeometry& Geometry, FVector2D& OutOffset, float& OutScale) const
 {
-	UWonderlandWonderWebLiveSubsystem* Subsystem = Live.Get();
-	if (Subsystem != nullptr)
-	{
-		// THE PAGE IS THE SHAPE OF THE WINDOW. Asked every time it is drawn, acted on only when it really changes.
-		Subsystem->SetViewport(Tab, FIntPoint(FMath::RoundToInt(Geometry.GetLocalSize().X), FMath::RoundToInt(Geometry.GetLocalSize().Y)));
-	}
+	const UWonderlandWonderWebLiveSubsystem* Subsystem = Live.Get();
 	const FVector2D Frame = Subsystem != nullptr ? FVector2D(Subsystem->GetFrameSize(Tab)) : FVector2D(1200.0, 800.0);
 	const FVector2D Area = Geometry.GetLocalSize();
 	// CONTAIN, NEVER STRETCH: the whole rendered page, in its own proportions.
@@ -43,6 +38,13 @@ int32 SWonderlandWonderWebLivePage::OnPaint(const FPaintArgs& Args, const FGeome
 {
 	FSlateDrawElement::MakeBox(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(), &GroundBrush, ESlateDrawEffect::None, FLinearColor::White);
 	UWonderlandWonderWebLiveSubsystem* Subsystem = Live.Get();
+	if (Subsystem != nullptr)
+	{
+		// WANTED BECAUSE IT IS BEING DRAWN -- frame or no frame, and the shape it is drawn at. This was once done only after
+		// a frame had arrived, which meant a window could never get its first: a slow first page outlived the grace period,
+		// the window stopped asking, and it waited for a frame that nobody would now fetch.
+		Subsystem->SetViewport(Tab, FIntPoint(FMath::RoundToInt(AllottedGeometry.GetLocalSize().X), FMath::RoundToInt(AllottedGeometry.GetLocalSize().Y)));
+	}
 	UTexture2D* Texture = Subsystem != nullptr ? Subsystem->GetFrame(Tab) : nullptr;
 	if (Texture == nullptr)
 	{
