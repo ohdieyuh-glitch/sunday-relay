@@ -454,8 +454,12 @@ private:
 
 	/** How high the Dog is lifted, as a share of VERIFICATION's flight (meditation about half): the camera widens with it. */
 	float LastFlyShare = 0.0f;
-	/** Which way the Dog is travelling round the Contract, +1 or -1, for the camera to stand ahead of it. */
-	float OrbitTravelSign = 1.0f;
+	/**
+	 * Which way the Dog is travelling round the Contract, +1 or -1, for the camera to stand ahead of it. Every act walks
+	 * with the Contract on the Dog's left (the performance table's orbit side, +1), which measures as -1 here -- so it
+	 * starts there, and the camera is already on the right side before the Dog takes its first step.
+	 */
+	float OrbitTravelSign = -1.0f;
 	/** The player has placed the camera by hand this mission: the automatic reframing leaves it where they put it. */
 	bool bMissionCamUserPlaced = false;
 	float MissionCamArmShown = 0.0f;

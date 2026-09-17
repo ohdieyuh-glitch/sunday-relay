@@ -275,6 +275,7 @@ namespace RelayDogPoseTuning
 	TAutoConsoleVariable<float> CVarCamLift(TEXT("wl.MissionCam.ScreenLift"), 0.0f, TEXT("Mission camera: how far the subject sits above the middle of the screen, uu at the focus."));
 	TAutoConsoleVariable<float> CVarCamSide(TEXT("wl.MissionCam.SideAngle"), 95.0f, TEXT("Mission camera: how far round the Contract from the Dog it stands, degrees -- a side view."));
 	TAutoConsoleVariable<float> CVarCamFollow(TEXT("wl.MissionCam.FollowRate"), 1.4f, TEXT("Mission camera: how quickly it drifts round to keep that view, per second. Never a cut."));
+	TAutoConsoleVariable<float> CVarCamMaxTurn(TEXT("wl.MissionCam.MaxTurnRate"), 35.0f, TEXT("Mission camera: the fastest it turns round the Contract, degrees per second -- a little quicker than the Dog walks its circle, never a whip."));
 	// VERIFICATION ZOOMS OUT (founder, 2026-09-16: "at the end when it's verifying make sure it zooms out more because I can
 	// barely see the relay dog ... so I can see everything"). As the Dog rises the camera eases out to 1000 uu and up to
 	// about 420 uu, on the same side: the airborne Dog, its beam, the Contract and both companions all in shot. It widens
@@ -2354,6 +2355,9 @@ void ARelayDogCharacter::UpdateMissionCamera(float DeltaSeconds)
 			bMissionCamLatched = true;
 			bMissionCamUserPlaced = false;
 			MissionCamZoom = 1.0f;
+			// The Dog walks its circle with the Contract on its left; a mission that started from the other sign swung the
+			// camera 120 degrees in under a second the moment the Dog set off (editor 73).
+			OrbitTravelSign = -1.0f;
 			MissionCamYaw = Controller != nullptr ? Controller->GetControlRotation().Yaw : GetActorRotation().Yaw;
 			MissionCamPitch = FMath::Clamp(CVarCamPitch.GetValueOnGameThread(), -72.0f, -3.0f);
 			MissionCamArmShown = CVarCamArm.GetValueOnGameThread();
@@ -2383,7 +2387,11 @@ void ARelayDogCharacter::UpdateMissionCamera(float DeltaSeconds)
 				const float DogAzimuth = FMath::RadiansToDegrees(FMath::Atan2(Radial.Y, Radial.X));
 				const float CameraAzimuth = DogAzimuth + OrbitTravelSign * CVarCamSide.GetValueOnGameThread();
 				const float WantYaw = CameraAzimuth + 180.0f;
-				MissionCamYaw = FRotator::NormalizeAxis(MissionCamYaw + FMath::FindDeltaAngleDegrees(MissionCamYaw, WantYaw) * Ease);
+				// NEVER A WHIP: however far the view it wants is, it turns no faster than this -- a little quicker than the
+				// Dog walks its circle, so it keeps up, and a change of side becomes a pan round the Contract.
+				const float MaxStep = FMath::Max(CVarCamMaxTurn.GetValueOnGameThread(), 1.0f) * DeltaSeconds;
+				const float Step = FMath::Clamp(FMath::FindDeltaAngleDegrees(MissionCamYaw, WantYaw) * Ease, -MaxStep, MaxStep);
+				MissionCamYaw = FRotator::NormalizeAxis(MissionCamYaw + Step);
 			}
 		}
 		// VERIFICATION IS THE SAME SHOT: as the Dog rises the camera eases out and lifts its gaze so both stay in frame.
