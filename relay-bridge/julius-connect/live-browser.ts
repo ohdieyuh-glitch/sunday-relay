@@ -108,6 +108,11 @@ export function createLiveBrowser(options: LiveBrowserOptions): LiveBrowser {
   let opening = 0;
   let lastActivity = Date.now();
   const pages = new Map<string, { page: Page; lastUsed: number; loading: boolean; size: { width: number; height: number } }>();
+  /**
+   * The size a tab has been asked to render at, whether or not it has a page yet. Without this, the first navigate on a
+   * tab renders at the default shape -- the window says how big it is before the page exists, and that request was lost.
+   */
+  const sizes = new Map<string, { width: number; height: number }>();
   const events: LiveBrowserEvent[] = [];
 
   const note = (tabId: string, action: LiveBrowserEvent['action'], host: string, detail: string) => {
@@ -167,7 +172,11 @@ export function createLiveBrowser(options: LiveBrowserOptions): LiveBrowser {
         note(oldest[0], 'close', '-', `closed to make room for ${tabId}`);
       }
       const page = await (await ensureContext()).newPage();
-      pages.set(tabId, { page, lastUsed: Date.now(), loading: false, size: { ...viewport } });
+      const size = sizes.get(tabId) ?? viewport;
+      if (size.width !== viewport.width || size.height !== viewport.height) {
+        await page.setViewportSize(size).catch(() => undefined);
+      }
+      pages.set(tabId, { page, lastUsed: Date.now(), loading: false, size: { ...size } });
       return page;
     } finally {
       opening -= 1;
@@ -207,9 +216,12 @@ export function createLiveBrowser(options: LiveBrowserOptions): LiveBrowser {
         width: Math.max(480, Math.min(2400, Math.round(width))),
         height: Math.max(320, Math.min(1800, Math.round(height))),
       };
+      // REMEMBERED EVEN WITH NO PAGE: a window says its shape before it asks for an address, and the page it opens should
+      // be laid out for that shape from its first paint rather than starting square and being resized after.
+      sizes.set(tabId, size);
       const held = pages.get(tabId);
       if (held === undefined || held.page.isClosed()) {
-        return false;
+        return true;
       }
       if (held.size.width === size.width && held.size.height === size.height) {
         return true;
