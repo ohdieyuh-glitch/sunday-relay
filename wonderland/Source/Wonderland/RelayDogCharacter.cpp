@@ -247,8 +247,9 @@ namespace RelayDogPoseTuning
 	TAutoConsoleVariable<float> CVarStrokeUp(TEXT("wl.Dog.Pose.StrokeHeight"), 15.0f, TEXT("IMPLEMENTATION: how far a brush stroke travels up and down, uu."));
 	TAutoConsoleVariable<float> CVarStrokeHz(TEXT("wl.Dog.Pose.StrokeHz"), 0.55f, TEXT("IMPLEMENTATION: brush strokes per second."));
 	TAutoConsoleVariable<float> CVarPaintReach(TEXT("wl.Dog.Pose.PaintReach"), 0.82f, TEXT("IMPLEMENTATION: how far out the brush hand reaches, fraction of the arm."));
-	TAutoConsoleVariable<float> CVarLensUp(TEXT("wl.Dog.Pose.LensUp"), 18.0f, TEXT("REVIEW: the lens hand above the neck, uu."));
-	TAutoConsoleVariable<float> CVarLensFwd(TEXT("wl.Dog.Pose.LensForward"), 30.0f, TEXT("REVIEW: the lens hand in front of the neck, uu."));
+	TAutoConsoleVariable<float> CVarLensUp(TEXT("wl.Dog.Pose.LensUp"), 18.0f, TEXT("REVIEW: the eye line the lens is held on, above the neck, uu."));
+	TAutoConsoleVariable<float> CVarLensFwd(TEXT("wl.Dog.Pose.LensForward"), 30.0f, TEXT("REVIEW: how far in front of the eye the lens is held, along the line to the work, uu."));
+	TAutoConsoleVariable<float> CVarLensTurn(TEXT("wl.Dog.Pose.LensTurn"), 66.0f, TEXT("REVIEW: the most the lens is turned from straight ahead toward the Contract, degrees -- inside the head's 70, so the eyes can follow it."));
 	TAutoConsoleVariable<float> CVarScrubHz(TEXT("wl.Dog.Pose.ScrubHz"), 2.4f, TEXT("REPAIR: scraper strokes per second while erasing."));
 	TAutoConsoleVariable<float> CVarRepairIdentify(TEXT("wl.Dog.Pose.RepairIdentify"), 4.0f, TEXT("REPAIR: seconds identifying the fault."));
 	TAutoConsoleVariable<float> CVarRepairErase(TEXT("wl.Dog.Pose.RepairErase"), 5.0f, TEXT("REPAIR: seconds erasing it."));
@@ -286,6 +287,17 @@ namespace RelayDogPoseTuning
 	TAutoConsoleVariable<float> CVarCamDrag(TEXT("wl.MissionCam.DragSensitivity"), 0.25f, TEXT("Mission camera: degrees per pixel of left-drag."));
 	TAutoConsoleVariable<float> CVarCamBlend(TEXT("wl.MissionCam.BlendSeconds"), 1.6f, TEXT("Mission camera: seconds to carry the camera to the Contract and back."));
 	TAutoConsoleVariable<int32> CVarCamEnabled(TEXT("wl.MissionCam.Enabled"), 1, TEXT("Mission camera: 1 holds the Mission Contract during a mission, 0 keeps following the Dog."));
+}
+
+/* ==================================================================== the magnifying glass's shape */
+
+namespace RelayDogLensShape
+{
+	/** uu at the default head; the glass reads at play distance and still sits inside the Dog's own silhouette. */
+	const double RimRadius = 19.0;
+	const double RimThickness = 5.0;
+	const double RimDepth = 5.0;
+	const double HandleLength = 22.0;
 }
 
 /* ==================================================================== the mission camera's mouse */
@@ -1456,8 +1468,7 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		Seat(BookRoot, BodyRoot);
 		Seat(BrushMesh, ArmRight.Forearm);
 		Seat(BrushHeadMesh, ArmRight.Forearm);
-		Seat(LensMesh, ArmRight.Forearm);
-		Seat(LensGlassMesh, ArmRight.Forearm);
+		Seat(LensRoot, BodyRoot);
 	}
 
 	// ---------------------------------------------------------------- the face
@@ -1878,33 +1889,64 @@ void ARelayDogCharacter::BuildMissionProps()
 	BrushHeadMesh = MakePropMesh(TEXT("MissionBrushTip"), BrushHand, true, Bristles, FLinearColor(0.95f, 0.72f, 0.28f), BrushHeadMid);
 
 	// ---------------------------------------------------------------- the magnifying glass (REVIEW)
-	// A rim, a stubby handle and a lens. On the RIGHT forearm, which is the arm the table brings up to the
-	// eye at -34 degrees; the left stays down, because one hand holds a glass and the other does not.
-	// SMALL, AND HELD OUT TO ONE SIDE. The first version was a disc centred on the body, and from the play
-	// camera it sat directly over the crystal -- the instrument hid the object it was inspecting, which is
-	// the one thing a magnifying glass must not do. It is now a little over half the size, offset to the
-	// working side, and carried on a handle long enough to read as held rather than worn.
-	const double LensY = 22.0 * U;
-	TArray<FTransform> Rim;
-	const int32 RimSides = 10;
-	for (int32 i = 0; i < RimSides; ++i)
+	// IT READ AS A FLOWER (founder, 2026-09-17: "replace the flower with a magnifying glass"). The old glass was ten
+	// separate gold blocks round a square pale plate, at the end of a handle that ran straight out along the forearm --
+	// the plate facing down the handle: a daisy on its stem. A magnifying glass is the other way about: the handle lies
+	// IN THE PLANE of the lens and runs out from the side of a continuous round rim. So it has a frame of its own
+	// (LensRoot), posed every frame at the working hand with the glass facing along the Dog's line of sight to the work:
+	// X out of the glass, Z up the handle; the rim's centre is a handle and a radius above the hand.
+	LensRoot = NewObject<USceneComponent>(this, MakeUniqueObjectName(this, USceneComponent::StaticClass(), TEXT("MissionLensRoot")));
+	LensRoot->SetupAttachment(BodyRoot != nullptr ? BodyRoot.Get() : GetRootComponent());
+	LensRoot->RegisterComponent();
 	{
-		const double A = 2.0 * PI * i / RimSides;
-		Rim.Add(DogPropBox(FVector(8.0 * U + FMath::Cos(A) * 15.0 * U, LensY + FMath::Sin(A) * 15.0 * U, -46.0 * U),
-			FVector(7.0 * U, 7.0 * U, 5.0 * U), FRotator(0.0, FMath::RadiansToDegrees(A), 0.0)));
-	}
-	// the handle, from the hand out to the rim
-	Rim.Add(DogPropBox(FVector(8.0 * U, LensY * 0.45, -22.0 * U), FVector(6.0 * U, 6.0 * U, 34.0 * U),
-		FRotator(0.0, 0.0, -26.0)));
-	USceneComponent* LensHand = ArmRight.Forearm != nullptr ? ArmRight.Forearm.Get() : BodyRoot.Get();
-	LensMesh = MakePropMesh(TEXT("MissionLensRim"), LensHand, false, Rim, FLinearColor(0.72f, 0.58f, 0.24f), LensMid);
+		using namespace RelayDogLensShape;
+		const double R = RimRadius * U;
+		const double H = HandleLength * U;
+		const double Ring = H + R;
+		// A CONTINUOUS ROUND RIM: 32 short segments laid along the circle, each turned to its tangent and a little longer
+		// than its share of the circumference, so they overlap into one ring rather than a crown of petals.
+		TArray<FTransform> Rim;
+		const int32 RimSides = 32;
+		const double Segment = 2.0 * PI * R / RimSides * 1.35;
+		for (int32 i = 0; i < RimSides; ++i)
+		{
+			const double A = 2.0 * PI * i / RimSides;
+			Rim.Add(DogPropBox(FVector(0.0, FMath::Cos(A) * R, Ring + FMath::Sin(A) * R),
+				FVector(RimDepth * U, Segment, RimThickness * U), FRotator(0.0, 0.0, -(FMath::RadiansToDegrees(A) + 90.0))));
+		}
+		// the collar where the handle meets the rim, and the cap at the end of the handle
+		Rim.Add(DogPropBox(FVector(0.0, 0.0, H - 1.0 * U), FVector(7.0 * U, 7.0 * U, 6.0 * U)));
+		Rim.Add(DogPropBox(FVector(0.0, 0.0, 1.5 * U), FVector(7.5 * U, 7.5 * U, 4.0 * U)));
+		LensMesh = MakePropMesh(TEXT("MissionLensRim"), LensRoot, false, Rim, FLinearColor(0.86f, 0.68f, 0.28f), LensMid);
 
-	TArray<FTransform> Glass;
-	Glass.Add(DogPropBox(FVector(8.0 * U, LensY, -46.0 * U), FVector(25.0 * U, 25.0 * U, 2.0 * U)));
-	// LIT, NOT EMISSIVE. A glowing disc is an opaque bright plate and draws the eye harder than the thing
-	// being examined; a lit pale glass still catches the light without competing with the contract.
-	LensGlassMesh = MakePropMesh(TEXT("MissionLensGlass"), LensHand, false, Glass,
-		FLinearColor(0.58f, 0.80f, 0.88f), LensGlassMid);
+		TArray<FTransform> Grip;
+		Grip.Add(DogPropBox(FVector(0.0, 0.0, H * 0.5), FVector(5.5 * U, 5.5 * U, H - 4.0 * U)));
+		LensHandleMesh = MakePropMesh(TEXT("MissionLensHandle"), LensRoot, false, Grip, FLinearColor(0.30f, 0.20f, 0.13f), LensHandleMid);
+
+		// THE GLASS: a round disc, laid as rows across the inside of the rim. LIT, NOT EMISSIVE -- a glowing disc is an
+		// opaque bright plate that draws the eye harder than the thing being examined.
+		TArray<FTransform> Glass;
+		const double Inner = R - RimThickness * U * 0.4;
+		const int32 Rows = 9;
+		const double RowHeight = 2.0 * Inner / Rows;
+		for (int32 i = 0; i < Rows; ++i)
+		{
+			const double Z = -Inner + (i + 0.5) * RowHeight;
+			const double Width = 2.0 * FMath::Sqrt(FMath::Max(Inner * Inner - Z * Z, 0.0));
+			Glass.Add(DogPropBox(FVector(0.0, 0.0, Ring + Z), FVector(1.5 * U, Width, RowHeight + 0.3 * U)));
+		}
+		LensGlassMesh = MakePropMesh(TEXT("MissionLensGlass"), LensRoot, false, Glass, FLinearColor(0.60f, 0.84f, 0.96f), LensGlassMid);
+
+		// THE GLINT: a small bright streak across the upper part of the glass, on both faces -- what says "glass" at play
+		// distance, where the pale disc alone could be any pale disc.
+		TArray<FTransform> Glint;
+		for (const double Face : { 1.2, -1.2 })
+		{
+			Glint.Add(DogPropBox(FVector(Face * U, -R * 0.32, Ring + R * 0.38), FVector(0.6 * U, 3.0 * U, R * 0.62), FRotator(0.0, 0.0, 40.0)));
+			Glint.Add(DogPropBox(FVector(Face * U, -R * 0.02, Ring + R * 0.55), FVector(0.6 * U, 2.0 * U, R * 0.22), FRotator(0.0, 0.0, 40.0)));
+		}
+		LensGlintMesh = MakePropMesh(TEXT("MissionLensGlint"), LensRoot, true, Glint, FLinearColor(0.42f, 0.46f, 0.50f), LensGlintMid);
+	}
 
 	// ---------------------------------------------------------------- the scraper (REPAIR: erase)
 	// A wooden grip and a flat steel blade, on the working forearm like the brush: the tool that takes the fault out.
@@ -2564,6 +2606,16 @@ FVector ARelayDogCharacter::GetHandLocation(bool bWorkingHand) const
 	return Arm.Forearm != nullptr ? Arm.Forearm->GetComponentTransform().TransformPosition(Chain.TipLocal) : GetActorLocation();
 }
 
+float ARelayDogCharacter::GetMissionLensOffLine() const
+{
+	const AActor* Contract = MissionContract.Get();
+	if (LensCentreShown.IsZero() || Contract == nullptr)
+	{
+		return -1.0f;
+	}
+	return static_cast<float>(FMath::PointDistToLine(LensCentreShown, (Contract->GetActorLocation() - LensEyeShown).GetSafeNormal(), LensEyeShown));
+}
+
 FVector ARelayDogCharacter::GetBookPoint(int32 Which) const
 {
 	return BookPoints[FMath::Clamp(Which, 0, 2)];
@@ -2668,11 +2720,60 @@ void ARelayDogCharacter::ApplyMissionPose(const RelayDogStride::FDogPose& Pose, 
 	PoseBook(bBook || O.Read > 0.05f, O.PageTurn);
 	if (BrushMesh != nullptr) BrushMesh->SetVisibility(bBrush);
 	if (BrushHeadMesh != nullptr) BrushHeadMesh->SetVisibility(bBrush);
-	if (LensMesh != nullptr) LensMesh->SetVisibility(bLens);
-	if (LensGlassMesh != nullptr) LensGlassMesh->SetVisibility(bLens);
+	for (UInstancedStaticMeshComponent* Part : { LensMesh.Get(), LensGlassMesh.Get(), LensHandleMesh.Get(), LensGlintMesh.Get() })
+	{
+		if (Part != nullptr && Part->IsVisible() != bLens)
+		{
+			Part->SetVisibility(bLens);
+		}
+	}
+	// WHERE THE GLASS IS HELD: on the line from the eye to the work, turned from straight ahead toward it as far as the
+	// head can follow, a little to the working side; the glass faces along that line and the handle hangs down in its
+	// plane to the hand. REVIEW examines the Contract's heart, REPAIR's identify the crown it is about to take off.
+	struct FLensHold
+	{
+		FVector Eye;
+		FVector Aim;
+		FVector HandleUp;
+		FVector Centre;
+		FVector Hand;
+	};
+	const double LensU = FMath::Max(HeadWidthUU, 10.0f) / 60.0;
+	auto HoldLens = [&](const FVector& Work, float Sweep) -> FLensHold
+	{
+		FLensHold Hold;
+		Hold.Eye = Neck + Up * CVarLensUp.GetValueOnGameThread();
+		const FVector ToWork = (Work - Hold.Eye).GetSafeNormal();
+		// Round toward the work, but never further than the head can turn to look through it: the Dog walks its circle
+		// with the Contract at its side, so straight at it would be a glass the eyes could not get behind.
+		const FVector Ahead = (Fwd - Up * FVector::DotProduct(Fwd, Up)).GetSafeNormal();
+		const FVector Toward = (ToWork - Up * FVector::DotProduct(ToWork, Up)).GetSafeNormal();
+		const double Between = FMath::Acos(FMath::Clamp(FVector::DotProduct(Ahead, Toward), -1.0, 1.0));
+		const double Turned = FMath::Min(Between, FMath::DegreesToRadians(static_cast<double>(FMath::Clamp(CVarLensTurn.GetValueOnGameThread(), 0.0f, 70.0f))))
+			+ FMath::DegreesToRadians(6.0 * FMath::Sin(2.0 * PI * Sweep));
+		const FVector Sideways = (Toward - Ahead * FVector::DotProduct(Ahead, Toward)).GetSafeNormal();
+		const FVector Level = Sideways.IsNearlyZero() ? Ahead : (Ahead * FMath::Cos(Turned) + Sideways * FMath::Sin(Turned)).GetSafeNormal();
+		const double Rise = FMath::Clamp(FMath::Asin(FMath::Clamp(FVector::DotProduct(ToWork, Up), -1.0, 1.0)), FMath::DegreesToRadians(-35.0), FMath::DegreesToRadians(30.0));
+		const FVector Aim = Level * FMath::Cos(Rise) + Up * FMath::Sin(Rise);
+		Hold.Aim = Aim.IsNearlyZero() ? Fwd : Aim.GetSafeNormal();
+		Hold.HandleUp = (Up - Hold.Aim * FVector::DotProduct(Up, Hold.Aim)).GetSafeNormal();
+		if (Hold.HandleUp.IsNearlyZero())
+		{
+			Hold.HandleUp = Up;
+		}
+		Hold.Centre = Hold.Eye + Hold.Aim * CVarLensFwd.GetValueOnGameThread();
+		Hold.Hand = Hold.Centre - Hold.HandleUp * ((RelayDogLensShape::HandleLength + RelayDogLensShape::RimRadius) * LensU);
+		return Hold;
+	};
+	const FVector LensWork = (O.Correct > O.Inspect) ? Crown : Heart;
+	const FLensHold Lens = HoldLens(Contract != nullptr ? LensWork : Neck + Fwd * 300.0, O.SweepPhase);
 	if (ScraperMesh != nullptr) ScraperMesh->SetVisibility(bScraper);
 	if (ScraperBladeMesh != nullptr) ScraperBladeMesh->SetVisibility(bScraper);
 
+	if (!bLens)
+	{
+		LensCentreShown = FVector::ZeroVector;
+	}
 	float MissWorking = -1.0f;
 	float MissFree = -1.0f;
 	if (bPerforming)
@@ -2768,13 +2869,11 @@ void ARelayDogCharacter::ApplyMissionPose(const RelayDogStride::FDogPose& Pose, 
 			// The painter watches its brush, not the Contract.
 			Add(O.Paint, BrushGoal, FreeRelaxed, BrushGoal + (BrushGoal - ShoulderW).GetSafeNormal() * 40.0);
 		}
-		// REVIEW: the lens up at the eye on the working side, swept slowly across the work.
+		// REVIEW: the glass held up before the eye, on its line to the Contract, swept slowly across the work; the Dog looks
+		// through it, at the Contract beyond.
 		if (O.Inspect > KINDA_SMALL_NUMBER)
 		{
-			const FVector Lens = Neck + Up * CVarLensUp.GetValueOnGameThread() + Fwd * CVarLensFwd.GetValueOnGameThread()
-				+ Right * (Side * (12.0 + 7.0 * FMath::Sin(2.0f * PI * O.SweepPhase)));
-			// The inspector looks through its lens, at whatever is beyond it.
-			Add(O.Inspect, Lens - Up * 6.0, FreeRelaxed, Lens + (Lens - Neck).GetSafeNormal() * 120.0);
+			Add(O.Inspect, Lens.Hand, FreeRelaxed, Lens.Eye + Lens.Aim * 300.0);
 		}
 		// VERIFICATION: both hands aimed at the Contract's heart.
 		if (O.Fly > KINDA_SMALL_NUMBER && Contract != nullptr)
@@ -2788,7 +2887,8 @@ void ARelayDogCharacter::ApplyMissionPose(const RelayDogStride::FDogPose& Pose, 
 			switch (O.Repair.Stage)
 			{
 			case ERepairStage::Identify:
-				Tool = Neck + Up * (CVarLensUp.GetValueOnGameThread() - 4.0) + (Crown - Neck).GetSafeNormal() * CVarLensFwd.GetValueOnGameThread() - Up * 6.0;
+				// The same glass, held the same way, on the crown.
+				Tool = Lens.Hand;
 				break;
 			case ERepairStage::Erase:
 			{
@@ -2833,6 +2933,16 @@ void ARelayDogCharacter::ApplyMissionPose(const RelayDogStride::FDogPose& Pose, 
 		};
 		WriteArm(ArmRight, ArmChainRight, Pose.ArmRight, GoalW, MissWorking);
 		WriteArm(ArmLeft, ArmChainLeft, Pose.ArmLeft, GoalF, MissFree);
+
+		// THE GLASS IS IN THE HAND: its frame is set at wherever the working hand actually is now, facing along the eye's
+		// line to the work, so it is held even while the arm is still arriving.
+		if (bLens && LensRoot != nullptr)
+		{
+			const FVector HandAt = GetHandLocation(true);
+			LensRoot->SetWorldLocationAndRotation(HandAt, FRotationMatrix::MakeFromXZ(Lens.Aim, Lens.HandleUp).Rotator());
+			LensCentreShown = HandAt + Lens.HandleUp * ((RelayDogLensShape::HandleLength + RelayDogLensShape::RimRadius) * LensU);
+			LensEyeShown = Lens.Eye;
+		}
 
 		// ---------------------------------------------------------------- the head looks at the work
 		if (HeadPivot != nullptr && Sum > KINDA_SMALL_NUMBER)

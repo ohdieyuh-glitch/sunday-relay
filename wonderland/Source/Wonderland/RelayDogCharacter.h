@@ -215,6 +215,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Relay Dog|Mission")
 	FString DescribeMissionPose() const { return LastPoseNote; }
 
+	/** The centre of the magnifying glass's lens in the world, or zero when it is put away. */
+	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission")
+	FVector GetMissionLensCentre() const { return LensCentreShown; }
+
+	/** How far the lens centre stands off the line from the Dog's eye to the Contract, uu: small means it looks through it. */
+	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission")
+	float GetMissionLensOffLine() const;
+
 	/** Where a hand is, world space: the tip of the forearm the rig built. */
 	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission")
 	FVector GetHandLocation(bool bWorkingHand) const;
@@ -551,12 +559,24 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<class UInstancedStaticMeshComponent> BrushHeadMesh = nullptr;
 
-	/** REVIEW's magnifying glass: a rim, a handle, and a lens that catches the light. */
+	/**
+	 * REVIEW's magnifying glass has a frame of its own, set every frame at the working hand: X out of the glass toward
+	 * the work, Z up the handle into the rim. Its parts: a round gold rim, a wooden handle, the glass, and a glint.
+	 */
+	UPROPERTY(Transient)
+	TObjectPtr<class USceneComponent> LensRoot = nullptr;
+
 	UPROPERTY(Transient)
 	TObjectPtr<class UInstancedStaticMeshComponent> LensMesh = nullptr;
 
 	UPROPERTY(Transient)
 	TObjectPtr<class UInstancedStaticMeshComponent> LensGlassMesh = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UInstancedStaticMeshComponent> LensHandleMesh = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UInstancedStaticMeshComponent> LensGlintMesh = nullptr;
 
 	UPROPERTY(Transient)
 	TObjectPtr<class UInstancedStaticMeshComponent> BeamMesh = nullptr;
@@ -592,6 +612,16 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<class UMaterialInstanceDynamic> LensGlassMid = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UMaterialInstanceDynamic> LensHandleMid = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UMaterialInstanceDynamic> LensGlintMid = nullptr;
+
+	/** The centre of the magnifying glass's lens last frame, and the eye it is held before; zero when it is put away. */
+	FVector LensCentreShown = FVector::ZeroVector;
+	FVector LensEyeShown = FVector::ZeroVector;
 
 	UPROPERTY(Transient)
 	TObjectPtr<class UMaterialInstanceDynamic> BeamMid = nullptr;
