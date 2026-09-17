@@ -40,18 +40,58 @@ import { juliusContractDisposition, juliusContractDispositionFacts } from './jul
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
 import { JULIUS_DEFAULT_MAX_CODER_SEGMENTS, evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
-import { repairLineageRootOf, repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
+import { juliusWorkUnitRootOf, repairLineageRootOf, repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
+import { foldJuliusPeerRequests, guardJuliusPeerResponse, juliusPeerIdsThatFit, type JuliusPeerLedgerEntry } from './julius-peer-channel';
+import {
+  advanceJuliusDisagreement, foldJuliusDisagreements, juliusDisagreementOpenedFacts, juliusDisagreementStepFacts,
+  juliusRebuttalReviewTaskId, juliusRebuttalTaskId, openJuliusDisagreement, sanitizeJuliusRebuttal,
+  type JuliusDisagreement, type JuliusDisagreementStep,
+} from './julius-disagreement';
+import {
+  JULIUS_LOCAL_EXECUTION_SCOPE, juliusPeerPartyForRole, moveJuliusPeerRequest, openJuliusPeerRequestOnLedger, readJuliusPeerLedger,
+  type JuliusPeerRuntimeContext,
+} from './julius-peer-runtime';
 import { challengeJuliusTaskContract, evaluateJuliusBindingCurrency, evaluateJuliusSharedBinding, juliusContractReviewCharge, juliusTaskContractBinding, lockJuliusTaskContract, mayDispatchUnderContract, reviseJuliusTaskContract, sanitizeJuliusContractProposal, type JuliusTaskContract, type JuliusTaskContractBinding } from './julius-task-contract';
 import { evaluateJuliusRelease } from './julius-release-runtime';
-import { boundStageForRole, reviewStageOf, workStageOf, type JuliusReviewStage } from './julius-review-stage';
+import { REVIEW_TASK_ATTEMPTS, boundStageForRole, reviewStageOf, workStageOf, type JuliusReviewStage } from './julius-review-stage';
 import {
-  juliusSegmentLineageRootOf, juliusSegmentTaskId, nextSegmentNumber, routeIsBarrier,
-  sanitizeJuliusSegmentState,
+  juliusReviewedWorkOf, juliusSegmentLineageRootOf, juliusSegmentSubjectTaskId, juliusSegmentTaskId, juliusYieldContinuationOf, nextSegmentNumber, pendingSegmentFor,
+  routeIsBarrier, sanitizeJuliusSegmentState, segmentChildrenOf,
 } from './julius-segment-lineage';
 import {
+  juliusEffectiveReviewVerdict, juliusEvidenceReviewVerdict, juliusReviewRoute, juliusReviewVerdictFacts,
+  juliusReviewVerdictFromFacts, juliusWarningIsPromoted, sanitizeJuliusReviewVerdict,
+  type JuliusReviewRoute, type JuliusReviewVerdictDeclaration,
+} from './julius-review-verdict';
+import {
+  foldJuliusFindings, juliusFindingTransitionFacts, moveJuliusFinding,
+  type JuliusFindingLife, type JuliusFindingMove,
+} from './julius-finding-lifecycle';
+import {
+  juliusRepairRoundDiff, juliusRepairRoundEntryId, renderJuliusRepairRoundDiff,
+} from './julius-repair-round';
+import {
+  foldJuliusArchitecture, juliusArchitectureConflicts, juliusArchitectureEntryId, juliusArchitectureFacts,
+  juliusArchitectureMatches, juliusArchitectureProposalEntryId, juliusNextArchitectureRevision,
+  renderJuliusArchitecture, sanitizeJuliusArchitecture,
+  type JuliusArchitectureState,
+} from './julius-architecture-state';
+import {
+  JULIUS_ARCHITECTURE_DRIFT_LIMITS, juliusArchitectureChangeIsMaterial, juliusArchitectureChanges, juliusCoderObservationFacts, sanitizeJuliusCoderObservations,
+  juliusArchitectureCheckTaskId, juliusArchitectureCompletionGate, juliusArchitectureTriggerFacts,
+  juliusArchitectureTriggers, juliusConsistencyFacts, juliusConsistencyRoute, sanitizeJuliusConsistency,
+  type JuliusArchitectureCompletionGate,
+} from './julius-architecture-drift';
+import { juliusResultChannelPermitted } from './julius-worker-authority';
+import {
+  JULIUS_WORKSPACE_LIMITS, juliusScopeViolations, readJuliusCodingAgentImplementation, sanitizeJuliusCodingAgentReport,
+} from './julius-coding-agent';
+import {
   JULIUS_CHECKPOINT_LIMITS,
-  guidanceSubjectTaskId, issueJuliusGuidance, juliusCheckpointId, juliusGuidanceId, juliusGuidanceTaskId,
-  juliusResearchCheckpointId,
+  guidanceSubjectTaskId, isJuliusGuidanceHandoffEntryId, issueJuliusGuidance, juliusCheckpointId,
+  JULIUS_GUIDANCE_AUTHORITATIVE_HEADING, JULIUS_GUIDANCE_PROPOSED_HEADING,
+  juliusGuidanceHandoffEntryId, juliusGuidanceId, juliusGuidanceProposalEntryId, juliusGuidanceTaskId,
+  juliusResearchCheckpointId, renderJuliusGuidanceHandoff,
   recordJuliusCheckpoint, routeJuliusCheckpoint, sanitizeJuliusGuidanceProposal, sanitizeJuliusGuidanceRequest,
   type JuliusCheckpointOrigin,
 } from './julius-continuous-lifecycle';
@@ -75,7 +115,7 @@ import {
   type JuliusSharedCeilingPolicy,
 } from './julius-shared-ceiling';
 import type { JuliusTimelineReader } from './julius-runtime-api';
-import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
+import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusEvidence, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
 import { validateJuliusEvent, type JuliusOperationalEvent, type JuliusOperationalEventType } from './julius-events';
 import { validateTrajectoryEvent, type JuliusTrajectoryEvent, type JuliusTrajectoryKind } from './julius-trajectory';
 import {
@@ -110,6 +150,30 @@ import {
  * bounded by {@link MAX_TASK_RECOVERIES} instead, on its own counter.
  */
 export const MAX_TASK_ATTEMPTS = 3;
+
+/**
+ * THE CEILING THIS TASK ACTUALLY GETS — and the one place anything may ask.
+ *
+ * A REVIEW IS NOT RETRIED. `MAX_TASK_ATTEMPTS` gives every task three, which
+ * for a review is three provider calls against the same packet, the same
+ * engine deadline and the same prompt. The reviewer's observed failure mode is
+ * a request that outran the engine's own per-request timeout; repeating it
+ * verbatim reaches the same wall, so the second and third attempts buy nothing
+ * and spend the job's reviewer share doing it.
+ *
+ * This is the number `reviewer-deadline.ts` budgets against, read from here
+ * rather than restated there — `MAX_REVIEWER_ATTEMPTS` was a modelling constant
+ * the dispatch path never consulted, still describing the two review stages
+ * that existed when it was written, and its arithmetic was the only thing
+ * keeping an understated deadline looking affordable.
+ *
+ * A repair after `changes_required` is a NEW task with its own ceiling. It is
+ * not another attempt at the review, and counting it as one would make a
+ * reviewer doing its job indistinguishable from a reviewer failing at it.
+ */
+export function taskAttemptCeiling(taskType: string): number {
+  return reviewStageOf(taskType) === null ? MAX_TASK_ATTEMPTS : REVIEW_TASK_ATTEMPTS;
+}
 
 /**
  * HOW MUCH A TASK IS EXPECTED TO COST.
@@ -171,10 +235,25 @@ export interface JuliusPipelineDependencies {
    * reservation from one settled for less, and the basis it reports says so.
    */
   readonly timeline?: JuliusTimelineReader;
+  /**
+   * THE EXECUTION ATTEMPT THIS RUNTIME IS, for naming peer requests.
+   *
+   * A mission's run id is derived from its contract, so every workflow attempt
+   * of one mission carries the same run id, and an id built from the run alone
+   * would make attempt 4's review request and attempt 5's the same row wherever
+   * the two are read together. The live entrypoint passes the workflow run and
+   * attempt; absent, `JULIUS_LOCAL_EXECUTION_SCOPE`.
+   */
+  readonly executionScope?: string;
   /** Whoever holds the lease. Recorded on every event for attribution. */
   readonly owner: string;
-  /** Context budget in characters. Compiling is bounded, never open-ended. */
-  readonly contextCharacterBudget: number;
+  /**
+   * Context budget in characters. Compiling is bounded, never open-ended. A
+   * function sets it per role: a worker that reads a served page needs room
+   * for it, and a worker whose packet travels a bounded transport must not be
+   * given room it cannot carry.
+   */
+  readonly contextCharacterBudget: number | ((role: JuliusWorkerRole) => number);
 }
 
 export interface JuliusPipelineRequest {
@@ -200,12 +279,20 @@ export interface JuliusPipelineRequest {
 export type JuliusTaskOutcome =
   | { readonly kind: 'COMPLETED'; readonly taskId: string; readonly workerId: string; readonly duplicate: boolean; readonly decision: JuliusVerificationDecision }
   | { readonly kind: 'REVIEW_SCHEDULED'; readonly taskId: string; readonly reviewTaskId: string }
+  /** The dispatch ended at a barrier: not reviewed, because its continuation carries the work. */
+  | { readonly kind: 'YIELDED'; readonly taskId: string; readonly workerId: string; readonly continuationTaskId: string }
   | { readonly kind: 'REPAIR_SCHEDULED'; readonly taskId: string; readonly repairTaskId: string; readonly round: number }
   | { readonly kind: 'RETRY'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null }
   | { readonly kind: 'FAILED'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null }
   | { readonly kind: 'DENIED'; readonly taskId: string; readonly reasonCode: string }
   | { readonly kind: 'APPROVAL_REQUIRED'; readonly taskId: string; readonly operation: string; readonly reasonCode: string }
-  | { readonly kind: 'HALTED'; readonly taskId: string; readonly reasonCode: string; readonly safeSummary: string };
+  | { readonly kind: 'HALTED'; readonly taskId: string; readonly reasonCode: string; readonly safeSummary: string }
+  /**
+   * NO DECISION YET, ON PURPOSE. A material challenge is open against the work,
+   * so Julius neither accepts it — which would release what depends on it — nor
+   * repairs it on a disagreement nobody has resolved.
+   */
+  | { readonly kind: 'HELD'; readonly taskId: string; readonly reasonCode: string; readonly requestId: string };
 
 /* ------------------------------------------------------------- the ledger */
 
@@ -410,8 +497,15 @@ export function juliusContractSubjectTaskId(task: JuliusTask, tasks: readonly Ju
      * LOCKED), records the ordinary binding on its claim, and its own review
      * passes the ordinary shared-binding guard. Not one of those three had to
      * be rebuilt for the new path; this line is what buys them.
+     *
+     * READ OFF THE LINEAGE ROOT, not the dispatch's own id. The repair of a
+     * rejected packet (`repair:guidance:…`) and the continuation of an architect
+     * that paused its answer (`segment:guidance:…`) advise under the same terms
+     * as the guidance task they descend from; matched by id alone they were
+     * architect tasks bound by nothing, dispatched past the gate that refuses
+     * guidance written under unlocked terms.
      */
-    const guided = guidanceSubjectTaskId(worker.taskId);
+    const guided = guidanceSubjectTaskId(rootOf(worker));
     if (guided !== null) {
       const subject = byId.get(guided);
       return subject === undefined ? null : rootOf(subject);
@@ -421,8 +515,11 @@ export function juliusContractSubjectTaskId(task: JuliusTask, tasks: readonly Ju
   };
   const own = subjectOfWorker(task);
   if (own !== null) return own;
-  if (task.role === 'INDEPENDENT_REVIEWER' && task.parentTaskId !== null) {
-    const reviewed = byId.get(task.parentTaskId);
+  if (task.role === 'INDEPENDENT_REVIEWER') {
+    // Through the review's own head: a review that paused to research continues
+    // as a segment whose parent is the review, not the work it judges.
+    const head = byId.get(rootOf(task));
+    const reviewed = head?.parentTaskId === null || head === undefined ? undefined : byId.get(head.parentTaskId);
     if (reviewed !== undefined) return subjectOfWorker(reviewed);
   }
   return null;
@@ -610,6 +707,9 @@ export async function runClaimedTask(
    * agreement is not run, and nothing about retrying it changes the record.
    */
   if (reviewStage !== null && contractCharge !== null && preflight.contractBinding !== null) {
+    // For a review that paused to research, the parent is that review, whose own
+    // claim already passed this comparison against the work — so the check is
+    // transitively the same one.
     const subjectTaskId = task.parentTaskId ?? preflight.contractBinding.taskId;
     const implementation = await deps.store.executedBindingFor(subjectTaskId, run.projectId);
     const shared = evaluateJuliusSharedBinding({ implementation, review: preflight.contractBinding });
@@ -680,7 +780,7 @@ export async function runClaimedTask(
    * packet was handed nothing MEASURED, which is not the same as being handed
    * nothing, so it stays unknown rather than becoming zero.
    */
-  let handed: { brainRetrievals: number; evidenceInspected: number } | null = null;
+  let handed: { brainRetrievals: number; evidenceInspected: number; guidanceConsumed: number } | null = null;
   if (worker !== null) {
     // WORKER_SELECTED and PROVIDER_SELECTED were declared trajectory kinds
     // that nothing emitted, so an eval could not tell WHICH worker or provider
@@ -694,6 +794,20 @@ export async function runClaimedTask(
       taskId: task.taskId, workerId: worker.workerId, providerId: worker.providerId,
       policyRevision: request.policy.revision, outcome: 'SELECTED',
     });
+    /**
+     * A CONTINUATION NEVER RUNS WITHOUT THE ANSWER IT WAITED FOR.
+     *
+     * The decision that accepts a guidance packet releases the waiting
+     * continuation in the same write, and the packet is delivered in the step
+     * AFTER it. A process that died between the two left a RUNNABLE continuation
+     * with no answer — and nothing ever delivered it, because a replayed decision
+     * writes nothing and the waiting task is no longer BLOCKED to be found.
+     * Checked here, where the continuation is about to be dispatched: whatever
+     * Julius accepted for it is delivered now if it was not delivered then.
+     */
+    if (juliusSegmentSubjectTaskId(task.taskId) !== null && task.dependencyIds.some((id) => guidanceSubjectTaskId(id) !== null)) {
+      await deliverOwedGuidance({ deps, run, ledger, task, workerId: worker.workerId });
+    }
     const [evidence, findings, criteria, brain, runTasks] = await Promise.all([
       deps.store.evidenceForRun(run.runId, run.projectId),
       deps.store.findingsForRun(run.runId, run.projectId),
@@ -702,7 +816,10 @@ export async function runClaimedTask(
       // Only a repair RE-REVIEW needs to walk to its parent's parent; every
       // other task's subject is its own parent, and a 300-task run must not
       // pay for a graph copy per dispatch it will not read.
-      task.taskType.startsWith('review:repair:') ? deps.store.tasksForRun(run.runId, run.projectId) : Promise.resolve([] as readonly JuliusTask[]),
+      // A repair's own continuation needs the graph too: its parent is the
+      // repair it continues, and the findings are on the work that repair is for.
+      task.taskType.startsWith('review:repair:') || task.taskType.startsWith('repair:')
+        ? deps.store.tasksForRun(run.runId, run.projectId) : Promise.resolve([] as readonly JuliusTask[]),
     ]);
     /**
      * A REPAIR SEES WHAT IT IS REPAIRING. The findings that admitted a repair
@@ -719,7 +836,9 @@ export async function runClaimedTask(
       task,
       worker,
       entries: [...brain, ...priorFindings.map((finding) => findingEntryFor(task, finding))],
-      maxCharacters: deps.contextCharacterBudget,
+      maxCharacters: typeof deps.contextCharacterBudget === 'function'
+        ? deps.contextCharacterBudget(worker.role)
+        : deps.contextCharacterBudget,
       missionContractRevision: run.missionContractRevision,
       cardRevision: run.cardRevision,
       projectBrainRevision: run.projectBrainRevision,
@@ -764,6 +883,20 @@ export async function runClaimedTask(
     handed = {
       brainRetrievals: snapshot.sourceEntryIds.filter((id) => brainEntryIds.has(id)).length,
       evidenceInspected: snapshot.evidenceIds.length,
+      /**
+       * GUIDANCE THIS PACKET ACTUALLY CARRIED.
+       *
+       * Counted the same way `brainRetrievals` is — off the entries the
+       * compiler ADMITTED, not the entries that existed — so a packet whose
+       * character budget dropped the advice reports that it carried none, which
+       * is the truth about what the worker was shown.
+       *
+       * It stayed UNKNOWN until now for the plainest reason: nothing delivered
+       * guidance to a worker, so nothing could count it. The number is a
+       * consequence of the delivery above rather than a dimension invented to
+       * fill a column.
+       */
+      guidanceConsumed: snapshot.sourceEntryIds.filter(isJuliusGuidanceHandoffEntryId).length,
     };
     /**
      * A REPAIR THAT CANNOT SEE ITS FINDINGS IS NOT A REPAIR.
@@ -793,6 +926,30 @@ export async function runClaimedTask(
       return { kind: 'FAILED', taskId: claim.taskId, code: 'INVALID_REQUEST', failureClass: 'repair_context_findings_dropped' };
     }
     /**
+     * NOR IS A CONTINUATION THAT CANNOT SEE THE ANSWER JULIUS ACCEPTED FOR IT.
+     *
+     * The same character budget that can drop a repair's findings can drop an
+     * accepted guidance packet, and the continuation would then run on exactly
+     * the guess the question existed to prevent — with the record saying the
+     * answer was delivered. Refused for the reason the findings are.
+     */
+    const owedGuidance = brain.filter((entry) => isJuliusGuidanceHandoffEntryId(entry.entryId) && entry.taskIds.includes(task.taskId));
+    const droppedGuidance = owedGuidance.filter((entry) => !snapshot.sourceEntryIds.includes(entry.entryId));
+    if (droppedGuidance.length > 0) {
+      await ledger.event('task.failed', {
+        taskId: task.taskId,
+        facts: {
+          code: 'INVALID_REQUEST', errorRetryable: false, failureClass: 'accepted_guidance_dropped',
+          droppedGuidance: droppedGuidance.length, characterCount: snapshot.characterCount,
+        },
+      });
+      await deps.store.finishTask({
+        taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration,
+        state: 'FAILED', now: deps.clock.now(),
+      });
+      return { kind: 'FAILED', taskId: claim.taskId, code: 'INVALID_REQUEST', failureClass: 'accepted_guidance_dropped' };
+    }
+    /**
      * THE STORE'S ID, NOT THE ONE WE MINTED.
      *
      * `persist` deduplicates on (task_id, worker_id, content_hash), so a RETRY
@@ -818,17 +975,44 @@ export async function runClaimedTask(
       return { kind: 'FAILED', taskId: claim.taskId, code: 'INVALID_REQUEST', failureClass: 'context_not_persisted' };
     }
     contextId = persistedContextId;
+    /* DID THE ANSWER ARRIVE. Null when this task is not a research continuation;
+       otherwise whether the compiled packet really holds the answer entry — the
+       last link between "Julius served a page" and "the worker was given it". */
+    const researchAnswerId = `brain:research-answer:${task.taskId}`;
+    const researchAnswerIncluded = brain.some((entry) => entry.entryId === researchAnswerId)
+      ? snapshot.sourceEntryIds.includes(researchAnswerId)
+      : null;
     await ledger.event('context.compiled', {
       taskId: task.taskId, workerId: worker.workerId,
       facts: {
         contextId, characterCount: snapshot.characterCount, truncated: snapshot.truncated,
-        redactionCount: snapshot.redactionCount, contentHash: snapshot.contentHash,
+        redactionCount: snapshot.redactionCount, contentHash: snapshot.contentHash, researchAnswerIncluded,
       },
     });
+    /**
+     * WHICH ACCEPTED GUIDANCE THIS DISPATCH WAS GIVEN, BY NAME.
+     *
+     * `worker.effort` carried a count, written only when a dispatch completed,
+     * and a carried copy left nothing at all — so no record could say which
+     * packet a coder acted on. Written with the compile, beside the context id,
+     * from the snapshot's own source ids: what was in the packet, not what was
+     * meant to be. A replayed dispatch compiles and records again, and says so
+     * with the same context id.
+     */
+    const consumedGuidance = snapshot.sourceEntryIds.filter(isJuliusGuidanceHandoffEntryId);
+    if (consumedGuidance.length > 0) {
+      await ledger.event('guidance.consumed', {
+        taskId: task.taskId, workerId: worker.workerId,
+        facts: {
+          contextId, attempt: claim.attempt, count: consumedGuidance.length,
+          entryIds: consumedGuidance.join(' ').slice(0, 1_500),
+        },
+      });
+    }
     await ledger.trajectory('CONTEXT_COMPILED', {
       taskId: task.taskId, workerId: worker.workerId, contextId,
       policyRevision: request.policy.revision,
-      facts: { characterCount: snapshot.characterCount, truncated: snapshot.truncated, redactionCount: snapshot.redactionCount, contentHash: snapshot.contentHash },
+      facts: { characterCount: snapshot.characterCount, truncated: snapshot.truncated, redactionCount: snapshot.redactionCount, contentHash: snapshot.contentHash, researchAnswerIncluded },
     });
   }
 
@@ -1023,13 +1207,28 @@ export async function runClaimedTask(
     if (outcome.status === 'RETRY') {
       const carryOn = decideJuliusContinuation(request.policy, {
         kind: 'RETRY', attempt: claim.attempt,
-        maxAttempts: MAX_TASK_ATTEMPTS, errorCode: outcome.code as never,
+        // The ceiling this TASK gets, which for a review is one.
+        maxAttempts: taskAttemptCeiling(claim.taskType), errorCode: outcome.code as never,
       });
       requeue = carryOn.proceed;
       if (!carryOn.proceed) {
         await ledger.event('task.failed', {
           taskId: claim.taskId,
           facts: {
+            /**
+             * WHAT THE BOUNDARY SAW, ON THE ROW THAT ENDS THE TASK.
+             *
+             * The coordinator flattened these onto its own `retry.scheduled`
+             * and then had nowhere to put them: its outcome carried the code
+             * and the class alone. So the terminal row — the one a reader opens
+             * first to ask why a paid mission ended — named neither the served
+             * model, nor the response id, nor the tokens, nor what a coder had
+             * already spent before it timed out, while all of it sat one event
+             * earlier under a different type. Spread FIRST so nothing below can
+             * be overwritten by a `diag_` key; the prefix already makes a
+             * collision impossible, and the order says so.
+             */
+            ...(outcome.diagnostics ?? {}),
             code: outcome.code, reasonCode: carryOn.reasonCode, awaitingHuman: carryOn.awaitingHuman,
             // UNKNOWN IS NULL, NOT ABSENT. A reader asking "why did this task
             // fail" must be able to tell "the connector did not classify it"
@@ -1115,6 +1314,74 @@ export async function runClaimedTask(
       ...(outcome.researchAsks === undefined ? {} : { researchAsks: outcome.researchAsks }),
       ...(outcome.guidance === undefined ? {} : { guidance: outcome.guidance }),
     });
+  }
+
+  /* ------------------------------------------- 3b1. a channel this role has no right to */
+  /**
+   * REFUSED ON THE RECORD, NOT DROPPED IN SILENCE.
+   *
+   * Each role gate below already applies its channel for its own role only.
+   * What none of them did was say when another role sent one: a Coding Agent
+   * returning a verdict about its own work, or a design, left no trace, and a
+   * refusal nobody records reads exactly like a channel nobody used. The gates
+   * are unchanged — this names what they ignore.
+   */
+  if (!outcome.duplicate) {
+    for (const channel of ['reviewVerdict', 'rebuttal', 'architecture', 'consistency', 'implementation', 'architectureObservations'] as const) {
+      if (outcome[channel] === undefined || juliusResultChannelPermitted(task.role, channel)) continue;
+      await ledger.event('worker.channel.refused', {
+        taskId: task.taskId, workerId: outcome.workerId,
+        facts: { channel, role: task.role, taskType: task.taskType, reasonCode: 'channel_not_permitted_for_role' },
+      });
+    }
+  }
+
+  /* ------------------------------------------- 3b1b. what the Coding Agent did to the workspace */
+  if (!outcome.duplicate && juliusResultChannelPermitted(task.role, 'implementation') && outcome.implementation !== undefined) {
+    await recordCodingAgentImplementation({
+      deps, run, ledger, task, workerId: outcome.workerId, value: outcome.implementation,
+      leaseGeneration: claim.leaseGeneration,
+      scope: contractCharge === null ? null : { permittedPaths: contractCharge.permittedPaths, outOfScope: contractCharge.outOfScope },
+    });
+  }
+
+  /* ------------------------------------------- 3b1c. what the implementation peer saw the design do */
+  if (!outcome.duplicate && juliusResultChannelPermitted(task.role, 'architectureObservations') && outcome.architectureObservations !== undefined) {
+    const rows = await readVerdictLedger(deps, run);
+    const state = foldJuliusArchitecture(rows);
+    const reading = sanitizeJuliusCoderObservations({ value: outcome.architectureObservations, state });
+    if (!reading.ok) {
+      await ledger.event('architecture.observation.refused', {
+        taskId: task.taskId, workerId: outcome.workerId, facts: { reasonCode: reading.reasonCode },
+      });
+    } else {
+      for (const observation of reading.observations) {
+        await ledger.event('architecture.observed', {
+          taskId: task.taskId, workerId: outcome.workerId,
+          facts: juliusCoderObservationFacts({ observation, revision: state!.revision, observedByRole: task.role }),
+        });
+      }
+    }
+  }
+
+  /* ------------------------------------------- 3b2. the architecture the architect holds */
+  if (!outcome.duplicate && task.role === 'PROMPT_ARCHITECT' && outcome.architecture !== undefined) {
+    await recordArchitecture({ deps, run, ledger, task, workerId: outcome.workerId, value: outcome.architecture });
+  }
+
+  /* ------------------------------------------- 3b3. does the built thing match the design */
+  if (!outcome.duplicate && task.role === 'PROMPT_ARCHITECT' && outcome.consistency !== undefined) {
+    await recordConsistency({ deps, run, ledger, task, workerId: outcome.workerId, value: outcome.consistency });
+  }
+
+  /* ------------------------------------------- 3c. what the architect answered */
+  if (!outcome.duplicate && task.role === 'PROMPT_ARCHITECT' && task.taskType === 'rebuttal') {
+    await recordRebuttal({ deps, run, ledger, task, workerId: outcome.workerId, value: outcome.rebuttal });
+  }
+
+  /* ------------------------------------------- 3d. what the reviewer concluded */
+  if (!outcome.duplicate && task.role === 'INDEPENDENT_REVIEWER' && outcome.reviewVerdict !== undefined) {
+    await recordReviewVerdictDeclaration({ ledger, task, workerId: outcome.workerId, value: outcome.reviewVerdict });
   }
 
   /* --------------------------------------------------- 4. verification */
@@ -1231,6 +1498,15 @@ async function driveContinuousLifecycle(input: {
       sequence: checkpoint.sequence, evidenceCount: checkpoint.evidenceIds.length,
       contractRevision: binding?.contractRevision ?? null,
       contractBindingDigest: binding?.bindingDigest ?? null,
+      /**
+       * WHETHER THE QUESTION COULD BE READ, and why not. An unreadable request
+       * still reaches the architect — told plainly that it could not be read —
+       * but the record used to say nothing about it, so a paid guidance dispatch
+       * answering an unreadable question was indistinguishable from one
+       * answering a real one.
+       */
+      requestReadable: request !== null,
+      requestReasonCode: request === null ? 'guidance_request_unreadable' : null,
     },
   });
 
@@ -1246,6 +1522,46 @@ async function driveContinuousLifecycle(input: {
     await ledger.event('checkpoint.verdict', {
       taskId: subjectTaskId, workerId: input.workerId,
       facts: { checkpointId: checkpoint.checkpointId, route: routing.route, reasonCode: routing.reasonCode },
+    });
+    return;
+  }
+
+  /**
+   * THE QUESTION IS A PEER REQUEST, AND THE CHANNEL DECIDES WHO MAY ASK IT.
+   *
+   * A guidance question runs Coding Agent → Prompt Architect and nowhere else.
+   * Before the channel, any slot's `guidanceRequest` minted a guidance task once
+   * the contract locked: a reviewer could put a question straight to the
+   * architect it is meant to judge independently — the side channel the peer
+   * protocol exists to close — and the architect's own guidance task could ask
+   * the architect. The direction is checked BEFORE the guidance task exists, so
+   * a refused question mints nothing, and the refusal is written as
+   * `peer.request.refused` rather than dropped.
+   */
+  const peers = peerContextFor(deps, run, ledger);
+  const guidanceTaskId = juliusGuidanceTaskId(subjectTaskId, sequence);
+  const question = {
+    kind: 'GUIDANCE_QUESTION',
+    anchor: guidanceTaskId,
+    sourceRole: juliusPeerPartyForRole(task.role) ?? String(task.role),
+    targetRole: 'PROMPT_ARCHITECT',
+    reason: 'A worker paused its unit of work and asked the Prompt Architect for guidance.',
+    subjectTaskId,
+    carrierTaskId: guidanceTaskId,
+    contextRefs: [`brain:guidance-request:${guidanceTaskId}`],
+    checkpointId: checkpoint.checkpointId,
+    contractBindingDigest: binding?.bindingDigest ?? null,
+    workerId: input.workerId,
+  } as const;
+  const permitted = await openJuliusPeerRequestOnLedger(peers, { ...question, mandatory: true, announce: false });
+  if (permitted.outcome === 'REFUSED') {
+    await openJuliusPeerRequestOnLedger(peers, { ...question, mandatory: true, announce: true });
+    await ledger.event('checkpoint.verdict', {
+      taskId: subjectTaskId, workerId: input.workerId,
+      facts: {
+        checkpointId: checkpoint.checkpointId, route: 'CONTINUE', reasonCode: 'GUIDANCE_DIRECTION_REFUSED',
+        wouldHaveRouted: routing.route, peerRefusal: permitted.reasonCode,
+      },
     });
     return;
   }
@@ -1280,8 +1596,33 @@ async function driveContinuousLifecycle(input: {
     }
   }
 
+  /**
+   * THE CEILING, BEFORE ANYTHING IS BOUGHT.
+   *
+   * The guidance task used to be minted first and the segment ceiling checked
+   * after — so a question asked past the ceiling still bought an architect
+   * dispatch and its review, for an answer no continuation would ever wait for.
+   * A pause that cannot continue is refused here, and nothing is created.
+   */
+  if (routeIsBarrier(routing.route)) {
+    const unitRoot = juliusSegmentLineageRootOf(task, tasks);
+    const nextSegment = nextSegmentNumber(unitRoot, tasks);
+    const ceiling = input.request.verification.maxCoderSegments ?? JULIUS_DEFAULT_MAX_CODER_SEGMENTS;
+    if (nextSegment > ceiling) {
+      await ledger.event('checkpoint.verdict', {
+        taskId: subjectTaskId, workerId: input.workerId,
+        facts: {
+          checkpointId: checkpoint.checkpointId, route: routing.route,
+          reasonCode: 'SEGMENT_CEILING_REACHED', guidanceTaskId: null, created: false,
+          continuationTaskId: null, barrier: true, segment: nextSegment, ceiling,
+        },
+      });
+      return;
+    }
+  }
+
   const guidanceTask: JuliusTask = {
-    taskId: juliusGuidanceTaskId(subjectTaskId, sequence),
+    taskId: guidanceTaskId,
     missionId: task.missionId,
     parentTaskId: subjectTaskId,
     dependencyIds: [],
@@ -1395,18 +1736,21 @@ async function driveContinuousLifecycle(input: {
   // COUNTED AGAINST THE UNIT OF WORK, not against the most recent pause in it.
   const segmentRoot = juliusSegmentLineageRootOf(task, tasks);
   const segmentNumber = nextSegmentNumber(segmentRoot, tasks);
-  const segmentCeiling = input.request.verification.maxCoderSegments ?? JULIUS_DEFAULT_MAX_CODER_SEGMENTS;
-  if (created && routeIsBarrier(routing.route) && segmentNumber > segmentCeiling) {
-    await ledger.event('checkpoint.verdict', {
-      taskId: subjectTaskId, workerId: input.workerId,
-      facts: {
-        checkpointId: checkpoint.checkpointId, route: routing.route,
-        reasonCode: 'SEGMENT_CEILING_REACHED', guidanceTaskId: guidanceTask.taskId, created,
-        continuationTaskId: null, barrier: true, segment: segmentNumber, ceiling: segmentCeiling,
-      },
+  /**
+   * THE QUESTION GOES ON THE RECORD WITH THE WORK IT PAUSES, and only when this
+   * tick minted its carrier — `addTask` is idempotent by command id, so a replay
+   * opens nothing twice. Mandatory exactly when a continuation waits on the
+   * answer; the pause itself is that continuation's dependency edge.
+   */
+  const announceQuestion = async (pausedTaskId: string | null): Promise<void> => {
+    if (!created) return;
+    await openJuliusPeerRequestOnLedger(peers, {
+      ...question,
+      mandatory: pausedTaskId !== null,
+      pausedTaskIds: pausedTaskId === null ? [] : [pausedTaskId],
+      announce: true,
     });
-    return;
-  }
+  };
   if (created && routeIsBarrier(routing.route)) {
     const resume = sanitizeJuliusSegmentState(input.segmentResume);
     const continuation: JuliusTask = {
@@ -1441,6 +1785,10 @@ async function driveContinuousLifecycle(input: {
        * that is the point of making it structural — but a coder that cannot
        * tell it was told nothing is the gap this whole change exists to close.
        */
+      await carryAcceptedGuidanceForward({
+        deps, run, ledger, lineage: [segmentRoot, ...segmentChildrenOf(segmentRoot, tasks)],
+        continuationTaskId: continuation.taskId, workerId: input.workerId,
+      });
       await deps.store.appendBrainEntry({
         runId: run.runId,
         projectId: run.projectId,
@@ -1461,6 +1809,7 @@ async function driveContinuousLifecycle(input: {
     }
   }
 
+  await announceQuestion(continuationTaskId);
   await ledger.event('checkpoint.verdict', {
     taskId: subjectTaskId, workerId: input.workerId,
     facts: {
@@ -1586,22 +1935,38 @@ async function driveResearchCheckpoint(input: {
   if (segmentNumber > segmentCeiling) return refuse('SEGMENT_CEILING_REACHED');
 
   /**
-   * THE CONTINUATION'S ID, DETERMINISTIC AND COMPUTED ONCE.
+   * THE ATTEMPT, WRITTEN BEFORE THE SPEND.
    *
-   * A GUARD THAT WAS WRITTEN HERE AND REMOVED. It compared this id against the
-   * durable task rows to skip a retrieval that had already been served — and it
-   * could never fire, because `nextSegmentNumber` is the highest existing
-   * segment plus one, so the id is new by construction every time. Shipping it
-   * would have meant a comment claiming a protection the code did not provide.
+   * WHAT USED TO HAPPEN HERE. `serve()` is awaited and the `research.retrieved`
+   * rows are appended after it returns; the mediator's own settlement is an
+   * in-process Map that writes nothing durable. So a process that died between
+   * the two had RETRIEVED AND BEEN CHARGED with nothing at all on the record —
+   * and, because the checkpoint is driven once per accepted result and never
+   * re-entered, nothing ever asked again either. The retrieval was paid for,
+   * its answer was lost, the mission carried on without it, and the durable
+   * ledger — rebuilt from rows, and the only budget that survives a restart —
+   * counted one retrieval fewer than were bought. A budget that over-counts is
+   * pessimistic; one that UNDER-counts can be exceeded.
    *
-   * What the crash window between `serve()` and `addTask` actually costs is
-   * stated instead: a process that dies there has retrieved and been charged,
-   * and the restarted process asks again. Both retrievals happened and both are
-   * on the record as `research.retrieved` rows, so the budget counts two — which
-   * is the truth. Making it cost one would require the retrieval itself to be
-   * keyed and deduplicated at the transport, which Live Reach has no identity
-   * for today.
+   * THIS ROW IS THE SCAR. It is written before a socket can exist, so an
+   * attempt with no retrieval beside it is exactly the loss above, visible in
+   * the bundle rather than inferred from a gap nobody can see. It carries the
+   * checkpoint's own id, which is what pairs it with the charges it produced.
+   *
+   * WHAT IT IS NOT. It does not make the retrieval recoverable and it does not
+   * re-ask: this path CANNOT re-enter — the dispatch that asked has ended, and
+   * `driveContinuousLifecycle` runs only on a result that was not a duplicate.
+   * An earlier guard here compared the CONTINUATION's id against the task rows
+   * and was removed because it could never fire; a re-entry guard would be the
+   * same mistake in a new place, because there is no re-entry to guard. What is
+   * repaired is the silence, which was the part that could not be noticed.
    */
+  const attemptKey = checkpoint.checkpointId;
+  await ledger.event('research.attempted', {
+    taskId: subjectTaskId, workerId: input.workerId,
+    facts: { role: task.role, attemptKey, segment: segmentNumber, askCount: asks.length },
+  });
+
   const observations = await deps.research.serve({
     missionId: task.missionId,
     projectId: run.projectId,
@@ -1625,41 +1990,111 @@ async function driveResearchCheckpoint(input: {
    * host and was refused by it still spent something, and pretending otherwise
    * is how a budget is exceeded while every individual read looks free.
    */
+  const continuationTaskId = juliusSegmentTaskId(segmentRoot.taskId, segmentNumber);
+  const handoffEntryId = `brain:research-answer:${continuationTaskId}`;
+  const provenanceEntryId = `brain:research-served:${continuationTaskId}`;
+  const count = (value: unknown): number | null =>
+    (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null);
+  const served = observations.filter((observation) => observation.delivery !== null && observation.delivery !== undefined);
   for (const [index, observation] of observations.entries()) {
+    const delivery = observation.delivery ?? null;
     await ledger.event('research.retrieved', {
       taskId: subjectTaskId, workerId: input.workerId,
       facts: {
         role: task.role,
-        // DETERMINISTIC, so a replayed row is recognisably the same retrieval
-        // rather than a second one.
+        /* PER OBSERVATION, and derived rather than arbitrary so two rows for
+           the same retrieval are recognisable as such by a reader. It does NOT
+           deduplicate: the only consumer folds every row, which is right —
+           where two rows carry one key, two retrievals genuinely happened. */
         requestKey: `${juliusSegmentTaskId(segmentRoot.taskId, segmentNumber)}:${index}`,
+        /* THE ATTEMPT THIS ANSWERS. One key per serve, shared by every
+           observation it produced, so a reader pairs a charge with the attempt
+           that authorised it. An attempt with no row carrying its key is a
+           retrieval that was bought and never accounted for. */
+        attemptKey,
         outcome: observation.outcome,
         counted: observation.outcome === 'observed',
         evidenceId: observation.evidenceId,
         signalled: observation.injectionSignals.length,
         segment: segmentNumber,
+        reasonCode: observation.refusal ?? null,
+        reachRefusal: observation.reachRefusal ?? null,
+        requestedSource: observation.requested?.source ?? null,
+        requestedCapability: observation.requested?.capability ?? null,
+        requestedHost: observation.requested?.host ?? null,
+        /* THE BYTES CHARGED, AND THAT THEY WERE RECORDED. The research ledger is
+           rebuilt from these rows. Paid qualification attempt 4 (run
+           34774471909) wrote rows with no byte count, so every past read came
+           back unsized and a byte-budgeted mission refused all ten asks after
+           its first. `bytesRecorded` separates "this row says nothing was
+           measured" (null) from a row written before the count existed, which a
+           reader must treat as unknown historical spend, never as zero. */
+        bytes: typeof observation.bytes === 'number' && Number.isSafeInteger(observation.bytes) && observation.bytes >= 0
+          ? observation.bytes
+          : null,
+        bytesRecorded: true,
+        askOrdinal: index,
+        resourcePath: observation.requested?.path ?? null,
+        mechanism: delivery?.mechanism ?? null,
+        contentDigest: delivery?.contentDigest ?? null,
+        readableChars: count(delivery?.readableChars),
+        deliveredFrom: count(delivery?.deliveredFrom),
+        deliveredChars: count(delivery?.deliveredChars),
+        deliveryCut: delivery === null ? null : delivery.cut,
+        deliveryAnchor: delivery?.anchor ?? null,
+        handoffTaskId: continuationTaskId,
+        handoffEntryId,
+        /* WHICH PAGE, WHAT CAME BACK, AND WHERE IT WENT. Qualification attempt 4
+           (run 34774471909) served one page and its row could not say which page
+           of the host it was, how much of it existed, or whether any of it reached
+           the worker — none had: the text was dropped before the packet. The path
+           (no query, no fragment, token-shaped segments scrubbed), the backend
+           that answered, the digest of the body Relay kept, how many readable
+           characters it held and which were handed over, the section a cut
+           started at, and the continuation and Brain entry the answer rides. Null
+           where nothing was retrieved. No page text is ever on this row. */
+        /* THE LAST FIVE: WHY, AND AT WHAT. Paid run 34757974058 wrote four
+           refusals with an empty reason and no target, so a worker asking for
+           a host the mission never granted and Relay refusing one it had were
+           the same empty row. Relay's own refusal code, Live Reach's when it
+           ran, and the ask's source, capability and HOST NAME ONLY — never the
+           path, query or purpose, which are the worker's own text. Null where
+           the port did not say: unknown, never a guessed reason. */
       },
     });
   }
 
   const continuation: JuliusTask = {
-    taskId: juliusSegmentTaskId(segmentRoot.taskId, segmentNumber),
+    taskId: continuationTaskId,
     missionId: task.missionId,
     parentTaskId: segmentRoot.taskId,
     /**
-     * BLOCKED ON THE SUBJECT ITSELF, which is the only edge there is when no
-     * second worker is involved. It releases through `evaluateJuliusRelease`
-     * exactly as every other dependency does: when the yielded segment is
-     * SUCCEEDED and effectively accepted, and never while it is halted or
-     * being repaired. No new pause primitive, and nothing that depends on a
-     * model agreeing to wait.
+     * CREATED RUNNABLE, BECAUSE NOTHING IS LEFT TO WAIT FOR. The research was
+     * served above, before this task could exist, so the only thing the
+     * continuation depended on — the subject having yielded, SUCCEEDED — is
+     * already true when Julius creates it, exactly as a review or a repair is.
+     *
+     * It used to wait BLOCKED on the subject's ACCEPTANCE, which meant the
+     * yielded dispatch had to be reviewed before its own continuation could run.
+     * A dispatch that stopped to ask is unfinished by its own account, so its
+     * review asked for repair every time: qualification attempt 3 (run
+     * 34766115321) left all five research continuations BLOCKED behind repairs
+     * of the half-done work they were supposed to finish. A yielded dispatch is
+     * no longer reviewed (`verifyExecutedTask`); this segment is, when it ends.
+     *
+     * The edge stays recorded as the dependency it is, and the claim query's
+     * second gate still requires it SUCCEEDED. The answer is written to the
+     * Project Brain in the next statement; a second runtime claiming this row
+     * between the two writes would compile its context without it, and the live
+     * path runs one loop per run, which is the condition that makes that
+     * window empty.
      */
     dependencyIds: [subjectTaskId],
     requiredEvidenceTypes: task.requiredEvidenceTypes,
     taskType: task.taskType,
     role: task.role,
     ordinal: task.ordinal + 2,
-    state: 'BLOCKED',
+    state: 'RUNNABLE',
   };
   const created = await deps.store.addTask({
     commandId: `segment:${continuation.taskId}`,
@@ -1685,7 +2120,7 @@ async function driveResearchCheckpoint(input: {
       projectId: run.projectId,
       taskId: continuation.taskId,
       workerId: input.workerId,
-      entryId: `brain:research-answer:${continuation.taskId}`,
+      entryId: handoffEntryId,
       kind: 'HANDOFF',
       safeText: [
         resume === null
@@ -1703,6 +2138,42 @@ async function driveResearchCheckpoint(input: {
       ),
       occurredAt: deps.clock.now(),
     });
+
+    /**
+     * THE TRAIL A REVIEWER CAN CHECK A CITATION AGAINST.
+     *
+     * The answer above reaches only the continuation that asked. A reviewer
+     * later told "the source is the psql reference" had nothing to hold that
+     * against: attempt 4's reviewer could only observe that no WHERE was
+     * recorded. This entry is Julius's own record of each page it served —
+     * slot, host and path, bytes, digest, what was handed over and to which
+     * task — run-wide, so every later packet, the reviewer's included, carries
+     * it. It holds no page text and no worker text, and it is written under the
+     * same guard as the answer, so a replayed tick adds nothing.
+     */
+    await carryAcceptedGuidanceForward({
+      deps, run, ledger, lineage: [segmentRoot, ...segmentChildrenOf(segmentRoot, tasks)],
+      continuationTaskId: continuation.taskId, workerId: input.workerId,
+    });
+
+    if (served.length > 0) {
+      await deps.store.appendBrainEntry({
+        runId: run.runId,
+        projectId: run.projectId,
+        taskId: null,
+        workerId: input.workerId,
+        entryId: provenanceEntryId,
+        kind: 'EVIDENCE',
+        safeText: served.map((observation) => juliusResearchServedLine({
+          role: task.role,
+          checkpointId: checkpoint.checkpointId,
+          continuationTaskId,
+          observation,
+        })).join('\n'),
+        evidenceIds: served.flatMap((observation) => (observation.evidenceId === null ? [] : [observation.evidenceId])),
+        occurredAt: deps.clock.now(),
+      });
+    }
   }
 
   await ledger.event('checkpoint.verdict', {
@@ -1710,6 +2181,9 @@ async function driveResearchCheckpoint(input: {
     facts: {
       checkpointId: checkpoint.checkpointId, route: routing.route, reasonCode: routing.reasonCode,
       continuationTaskId: created ? continuation.taskId : null,
+      handoffEntryId: created ? handoffEntryId : null,
+      provenanceEntryId: created && served.length > 0 ? provenanceEntryId : null,
+      deliveredChars: served.reduce((total, observation) => total + (count(observation.delivery?.deliveredChars) ?? 0), 0),
       barrier: true,
       segment: segmentNumber,
       asks: asks.length,
@@ -1752,15 +2226,38 @@ async function issueGuidanceFromResult(input: {
     });
   };
 
-  const subjectTaskId = guidanceSubjectTaskId(task.taskId);
+  const tasks = await deps.store.tasksForRun(run.runId, run.projectId);
+
+  /**
+   * THE QUESTION THIS ANSWERS IS THE UNIT'S, NOT THE DISPATCH'S.
+   *
+   * Two tasks write guidance without the `guidance:<subject>:<n>:task` id: the
+   * REPAIR of a packet Julius rejected, and the CONTINUATION of an architect that
+   * paused its answer to have something read. Both were refused
+   * `guidance_from_a_non_guidance_task` — reproduced on main ad03df90 — so
+   * corrected advice and researched advice could never be issued, and the
+   * coder's continuation was released onto whatever it had been handed first.
+   * The question is the guidance task every repair and every segment of this
+   * work descends from, found by walking both lineages.
+   */
+  const questionTask = juliusWorkUnitRootOf(task, tasks);
+  const subjectTaskId = guidanceSubjectTaskId(questionTask.taskId);
   if (subjectTaskId === null) return refuse('guidance_from_a_non_guidance_task');
+  const sequence = Number(/:([1-9]\d*):task$/u.exec(questionTask.taskId)![1]);
+
+  /**
+   * A PEER PROPOSES; IT DOES NOT DECIDE. Refused by name, at any depth and in
+   * any spelling, before the allowlist rebuild below — which already drops
+   * contract fields at the top level, but under one reason that cannot say
+   * whether the packet was malformed or reached for Julius's authority.
+   */
+  const guarded = guardJuliusPeerResponse(input.guidance);
+  if (!guarded.ok) return refuse(guarded.reasonCode);
 
   const proposal = sanitizeJuliusGuidanceProposal(input.guidance);
   if (proposal === null) return refuse('guidance_shape_refused');
 
-  const contractTaskId = juliusContractSubjectTaskId(
-    task, await deps.store.tasksForRun(run.runId, run.projectId),
-  );
+  const contractTaskId = juliusContractSubjectTaskId(task, tasks);
   const contract = contractTaskId === null
     ? null
     : await deps.store.loadTaskContract({ projectId: run.projectId, taskId: contractTaskId });
@@ -1771,15 +2268,25 @@ async function issueGuidanceFromResult(input: {
   // left to advise under.
   if (binding === null) return refuse('contract_not_locked');
 
-  const match = /:([1-9]\d*):task$/u.exec(task.taskId);
-  const revision = match === null ? 1 : Number(match[1]);
+  /**
+   * MONOTONIC PER SUBJECT, counted from the packets already issued for it. The
+   * question's own number was the revision while one question had one answer;
+   * a corrected answer to the same question would have reused it, and its
+   * handoff — keyed by revision — would have been dropped as a duplicate of the
+   * advice it corrects. Without a readable ledger there is nothing to count, and
+   * the question's number is the honest fallback.
+   */
+  const ledgerRows = await readJuliusPeerLedger(deps.timeline, run);
+  const revision = ledgerRows === null
+    ? sequence
+    : ledgerRows.filter((row) => row.type === 'guidance.issued' && row.taskId === subjectTaskId).length + 1;
   const issued = issueJuliusGuidance({
     guidanceId: juliusGuidanceId(subjectTaskId, revision),
     runId: run.runId,
     taskId: subjectTaskId,
     binding,
     revision,
-    triggeringCheckpointId: juliusCheckpointId(subjectTaskId, revision),
+    triggeringCheckpointId: juliusCheckpointId(subjectTaskId, sequence),
     proposal,
     contractCriterionIds: contract.blockingAcceptanceCriteria.map((criterion) => criterion.criterionId),
     issuedByWorkerId: input.workerId,
@@ -1788,15 +2295,74 @@ async function issueGuidanceFromResult(input: {
   if (issued.outcome === 'REFUSED') return refuse(issued.reasonCode);
 
   const packet = issued.packet;
-  // COUNTS AND IDENTIFIERS, never the advice itself. The packet's own text
-  // travels to the coder the way the plan does — as an artifact the composition
-  // owns — and the ledger records that it existed, under which agreement, and
-  // how much of it there was.
+
+  /**
+   * THE ADVICE REACHES THE WORKER IT WAS WRITTEN FOR.
+   *
+   * IT DID NOT, BEFORE THIS. The packet was stored as an artifact whose only
+   * consumer is the Independent Reviewer — so a mission bought an architect
+   * dispatch, bought a review of its output, and handed the Coding Agent that
+   * asked the question nothing but `brain:segment-resume`, which is what the
+   * coder itself said before it paused. The comment that used to sit here said
+   * the text "travels to the coder the way the plan does"; the plan has a
+   * reader and this did not.
+   *
+   * ON THE CONTINUATION'S OWN CHANNEL, exactly as a research answer travels:
+   * one Project Brain, one redaction path, one provenance record, and no prose
+   * side channel. The dispatch that asked has ended, so the continuation is the
+   * only place an answer can appear.
+   *
+   * UNDELIVERED SAYS SO. Where no segment is waiting — nothing paused on this
+   * subject, or a shape with two waiting segments that nobody has built —
+   * `deliveredTo` is null on the row below rather than absent, so guidance that
+   * reached no one is legible as that instead of as guidance that was read.
+   */
+  /**
+   * A PACKET NOBODY HAS ACCEPTED IS NOT ADVICE YET.
+   *
+   * IT USED TO BE. The packet was written straight onto the waiting
+   * continuation, so a coder released later read it as instruction whatever the
+   * reviewer went on to say — and when the review sent it back, the rejected
+   * packet stayed in that context and the correction arrived beside it. Two
+   * packets, equally actionable, the wrong one first.
+   *
+   * So the proposal is stored against the ARCHITECT'S OWN TASK, under a heading
+   * that says it is not authoritative. `deliverAcceptedGuidance` copies it to the
+   * continuation when Julius accepts the review, and never otherwise. The
+   * continuation cannot run before that decision — it is BLOCKED on this task and
+   * only an accepting decision releases it — so nothing waits longer for the
+   * change, and a rejected packet reaches no one.
+   *
+   * Rejected guidance is NOT erased: this row, the `guidance.issued` row and the
+   * review's own decision stay on the record as provenance.
+   */
+  await deps.store.appendBrainEntry({
+    runId: run.runId,
+    projectId: run.projectId,
+    taskId: task.taskId,
+    workerId: input.workerId,
+    entryId: juliusGuidanceProposalEntryId(task.taskId),
+    kind: 'HANDOFF',
+    safeText: `${JULIUS_GUIDANCE_PROPOSED_HEADING}\n\n${renderJuliusGuidanceHandoff(packet)}`,
+    evidenceIds: [],
+    occurredAt: deps.clock.now(),
+  });
+  const waiting = pendingSegmentFor(questionTask.taskId, tasks);
+
+  // COUNTS AND IDENTIFIERS, never the advice itself. The advice is on the
+  // Project Brain above, where the context compiler redacts it and the packet
+  // records what was handed over; the ledger records that it existed, under
+  // which agreement, how much of it there was, and who it reached.
   await ledger.event('guidance.issued', {
     taskId: subjectTaskId, workerId: input.workerId,
     facts: {
       guidanceId: packet.guidanceId, guidanceRevision: packet.revision,
       guidanceDigest: packet.packetDigest,
+      /* WHO IT WILL REACH IF JULIUS ACCEPTS IT, or null when nothing is waiting.
+         Delivery itself is `guidance.delivered`, written only on acceptance:
+         "issued" and "authoritative" are different facts and used to be one. */
+      proposedTo: waiting === null ? null : waiting.taskId,
+      proposalEntryId: juliusGuidanceProposalEntryId(task.taskId),
       contractRevision: binding.contractRevision, contractBindingDigest: binding.bindingDigest,
       recommendedActions: packet.recommendedActions.length,
       additionalProhibitions: packet.additionalProhibitions.length,
@@ -1806,6 +2372,13 @@ async function issueGuidanceFromResult(input: {
       affectedCriteria: packet.affectedCriterionIds.length,
       unresolvedQuestions: packet.unresolvedQuestions.length,
     },
+  });
+
+  // THE QUESTION HAS AN ANSWER — not yet an accepted one. Julius's decision on
+  // the guidance review resolves it or reopens it.
+  await moveJuliusPeerRequest(peerContextFor(deps, run, ledger), {
+    kind: 'GUIDANCE_QUESTION', anchor: questionTask.taskId, to: 'ANSWERED', from: ['OPEN'],
+    responseRef: packet.guidanceId, causeRef: packet.guidanceId, taskId: subjectTaskId, workerId: input.workerId, firstWrite: true,
   });
 }
 
@@ -1909,7 +2482,7 @@ function executionPorts(
    * the only place that knows it; absent for a caller that did not compile one,
    * and absent reads as unknown rather than as zero.
    */
-  handed: { readonly brainRetrievals: number; readonly evidenceInspected: number } | null,
+  handed: { readonly brainRetrievals: number; readonly evidenceInspected: number; readonly guidanceConsumed: number } | null,
 ): JuliusExecutionPorts {
   return {
     reserve: async ({ claim, request, idempotencyKey }) => {
@@ -2020,6 +2593,7 @@ function executionPorts(
           // worker was handed nothing.
           brainRetrievals: handed === null ? null : handed.brainRetrievals,
           evidenceInspected: handed === null ? null : handed.evidenceInspected,
+          guidanceConsumed: handed === null ? null : handed.guidanceConsumed,
           usdMicros,
           // The two halves of the money question, on the same row: what Julius
           // permitted, and what came back — with the basis, so an UNKNOWN
@@ -2150,13 +2724,27 @@ export async function resumeUnverifiedTasks(input: {
   const decided = new Set(decisions.map((decision) => decision.taskId));
   const pendingReviewSubjects = new Set(
     tasks
-      .filter((task) => task.role === 'INDEPENDENT_REVIEWER' && task.parentTaskId !== null
+      .filter((task) => task.role === 'INDEPENDENT_REVIEWER'
         && (task.state === 'BLOCKED' || task.state === 'RUNNABLE' || task.state === 'ACTIVE'))
-      .map((task) => task.parentTaskId as string),
+      // A researching review is still a pending review of the same work.
+      .map((task) => juliusReviewedWorkOf(task, tasks)?.taskId ?? null)
+      .filter((taskId): taskId is string => taskId !== null),
   );
   const stranded = tasks.filter((task) => task.state === 'SUCCEEDED'
     && !decided.has(task.taskId)
-    && !pendingReviewSubjects.has(task.taskId));
+    /* A REVIEW IS DECIDED WHEN THE WORK IT REVIEWED IS. Decisions are keyed on
+       the work, so a concluded review never appears in `decided` by its own id,
+       and every idle `advanceRun` re-verified every review the run had ever
+       concluded: on main ad03df90 a two-review mission that had COMPLETED wrote
+       18 `verification.decided` rows across nine idle calls, resuming both
+       reviews each time. The crash window this sweep exists for — a review
+       accepted with no decision written — still resumes, because then the work
+       is undecided. */
+    && !(task.role === 'INDEPENDENT_REVIEWER' && decided.has(juliusReviewedWorkOf(task, tasks)?.taskId ?? ''))
+    && !pendingReviewSubjects.has(task.taskId)
+    // A yielded dispatch is undecided on purpose, not stranded: its continuation
+    // carries the verification it would otherwise be missing.
+    && juliusYieldContinuationOf(task, tasks) === null);
   if (stranded.length === 0) return [];
 
   const outcomes: JuliusTaskOutcome[] = [];
@@ -2193,6 +2781,1511 @@ export async function resumeUnverifiedTasks(input: {
 
 /** The identity a resumed verification is attributed to. Never a worker's. */
 export const JULIUS_VERIFICATION_RESUME_WORKER = 'julius-verification-resume' as const;
+
+/**
+ * WHAT THE REVIEWER SAID, ON THE RECORD BEFORE ANYTHING ACTS ON IT.
+ *
+ * Written from the dispatch that produced it and read back by verification,
+ * so a resumed verification applies the same declaration. A declaration Julius
+ * will not read is refused by name and the review is judged on its evidence
+ * alone: a reviewer that wrote VERIFIED buys nothing with the word.
+ */
+async function recordReviewVerdictDeclaration(input: {
+  readonly ledger: RuntimeLedger;
+  readonly task: JuliusTask;
+  readonly workerId: string;
+  readonly value: unknown;
+}): Promise<void> {
+  const reading = sanitizeJuliusReviewVerdict(input.value);
+  if (!reading.ok) {
+    await input.ledger.event('review.verdict.refused', {
+      taskId: input.task.taskId, workerId: input.workerId, facts: { reviewTaskId: input.task.taskId, reasonCode: reading.reasonCode },
+    });
+    return;
+  }
+  await input.ledger.event('review.verdict.declared', {
+    taskId: input.task.taskId, workerId: input.workerId,
+    facts: { reviewTaskId: input.task.taskId, ...juliusReviewVerdictFacts(reading.declaration) },
+  });
+}
+
+interface AppliedReviewVerdict {
+  readonly verdict: string | null;
+  readonly route: JuliusReviewRoute | 'RE_REVIEW';
+  readonly category: string | null;
+}
+
+/**
+ * Every row the verdict, the channel, the disagreement and the finding
+ * projections read, or none when no timeline is bound.
+ *
+ * `finding.` belongs here and was missing: without it every finding folded as
+ * OPEN however many times it had been addressed, so a repair re-addressed it on
+ * every round and a reviewer answering "still open" was refused as a repeat.
+ */
+async function readVerdictLedger(deps: JuliusPipelineDependencies, run: JuliusRunRow): Promise<readonly JuliusPeerLedgerEntry[]> {
+  if (deps.timeline === undefined) return [];
+  const rows: JuliusPeerLedgerEntry[] = [];
+  let sinceSequence = 0;
+  for (;;) {
+    const page = await deps.timeline.timeline({ runId: run.runId, projectId: run.projectId, sinceSequence, limit: 500 });
+    for (const entry of page.entries) {
+      sinceSequence = Math.max(sinceSequence, entry.sequence);
+      if (entry.type.startsWith('review.verdict.') || entry.type.startsWith('peer.')
+        || entry.type.startsWith('disagreement.') || entry.type.startsWith('finding.')
+        || entry.type.startsWith('architecture.')) {
+        rows.push({ type: entry.type, facts: entry.facts, taskId: entry.taskId });
+      }
+    }
+    if (!page.hasMore || page.entries.length === 0) break;
+  }
+  return rows;
+}
+
+/**
+ * APPLY ONE CONCLUDED REVIEW'S VERDICT TO THE WORK IT REVIEWED.
+ *
+ * Every write is keyed on the review task, so a resumed verification of the
+ * same review records nothing twice: findings are idempotent by id, the
+ * challenge request is opened only with the verdict's first application, and
+ * `review.verdict.applied` is written once per review.
+ */
+async function applyReviewVerdict(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly review: JuliusTask;
+  readonly reviewed: JuliusTask;
+  readonly tasks: readonly JuliusTask[];
+  readonly evidence: readonly JuliusEvidence[];
+  readonly policy: JuliusVerificationPolicy;
+  readonly request: JuliusPipelineRequest;
+  readonly workerId: string;
+}): Promise<AppliedReviewVerdict> {
+  const { deps, run, ledger, review, reviewed } = input;
+  const rows = await readVerdictLedger(deps, run);
+  const declaredRow = [...rows].reverse().find((row) => row.type === 'review.verdict.declared' && row.facts.reviewTaskId === review.taskId);
+  const declaration: JuliusReviewVerdictDeclaration | null = declaredRow === undefined ? null : juliusReviewVerdictFromFacts(declaredRow.facts);
+  const reviewEvidence = input.evidence.filter((item) => item.taskId === review.taskId);
+  const effective = juliusEffectiveReviewVerdict(declaration?.verdict ?? null, juliusEvidenceReviewVerdict(reviewEvidence));
+  const fromDeclaration = effective.source === 'DECLARED' || effective.source === 'BOTH';
+  const category = fromDeclaration ? declaration?.category ?? null : null;
+  const route = juliusReviewRoute({ verdict: effective.verdict, category });
+  const citations = reviewEvidence.map((item) => item.evidenceId);
+  const firstApplication = !rows.some((row) => row.type === 'review.verdict.applied' && row.facts.reviewTaskId === review.taskId);
+
+  /**
+   * THE RE-REVIEW OF A REBUTTAL RECORDS NO FINDING AND OPENS NO CHALLENGE. Its
+   * verdict is the disagreement's last word; a challenge raised here would be
+   * the second turn the bound exists to refuse.
+   */
+  if (reviewed.role === 'PROMPT_ARCHITECT' && reviewed.taskType === 'rebuttal') {
+    if (firstApplication) {
+      await ledger.event('review.verdict.applied', {
+        taskId: reviewed.taskId, workerId: input.workerId,
+        facts: {
+          reviewTaskId: review.taskId, reviewedTaskId: reviewed.taskId, verdict: effective.verdict,
+          declared: effective.declared, derived: effective.derived, source: effective.source, category,
+          target: null, route: 'RE_REVIEW', warningsRetained: 0, warningsPromoted: 0, challengeRequestId: null,
+        },
+      });
+    }
+    return { verdict: effective.verdict, route: 'RE_REVIEW', category };
+  }
+
+  const record = async (finding: {
+    readonly findingId: string; readonly severity: 'MEDIUM' | 'HIGH' | 'CRITICAL'; readonly category: string;
+    readonly claim: string; readonly blocking: boolean;
+  }): Promise<void> => {
+    // A finding cites the review that raised it; a review with no evidence row
+    // cannot be cited, and its declaration stays on the ledger instead.
+    if (citations.length === 0) return;
+    const recorded = await deps.store.recordFinding({
+      projectId: run.projectId,
+      finding: {
+        ...finding, runId: run.runId, taskId: reviewed.taskId, reviewerWorkerId: input.workerId,
+        criterionId: null, evidenceIds: citations, status: 'OPEN', createdAt: deps.clock.now(),
+      },
+    });
+    if (recorded) {
+      await ledger.event('finding.recorded', {
+        taskId: reviewed.taskId, workerId: input.workerId,
+        facts: {
+          findingId: finding.findingId, evidenceId: citations[0]!, blocking: finding.blocking,
+          category: finding.category, reviewTaskId: review.taskId,
+        },
+      });
+    }
+  };
+
+  // WARNINGS ARE RETAINED WHATEVER ELSE THE VERDICT SAYS, and promoted only by
+  // Julius's own policy.
+  let promoted = 0;
+  for (const [index, warning] of (declaration?.warnings ?? []).entries()) {
+    const blocking = juliusWarningIsPromoted(warning, input.policy.promotedWarningCategories);
+    if (blocking) promoted += 1;
+    await record({
+      findingId: `finding:warning:${review.taskId}:${String(index)}`, severity: blocking ? 'HIGH' : 'MEDIUM',
+      category: warning.category ?? 'review_warning', claim: warning.claim, blocking,
+    });
+  }
+  if (route === 'REPAIR' && fromDeclaration && effective.derived !== 'REPAIR_REQUIRED' && declaration !== null) {
+    await record({ findingId: `finding:verdict:${review.taskId}`, severity: 'HIGH', category: declaration.category ?? 'review', claim: declaration.claim, blocking: true });
+  }
+  if (route === 'HALT' && declaration !== null && fromDeclaration) {
+    await record({ findingId: `finding:verdict:${review.taskId}`, severity: 'CRITICAL', category: declaration.category ?? 'review', claim: declaration.claim, blocking: true });
+  }
+
+  /**
+   * A CHALLENGE IS A REQUEST TO JULIUS, NEVER A REVISION. Against the work it
+   * is the reviewer's own CHALLENGE; against the plan, the guidance or the terms
+   * it is an EVIDENCE_CHALLENGE about the architect, mediated by Julius. It is
+   * mandatory — pausing the work gated on this unit — exactly when material.
+   */
+  let challengeRequestId: string | null = null;
+  if ((route === 'RECORD' || route === 'HOLD') && declaration !== null) {
+    await record({
+      findingId: `finding:challenge:${review.taskId}`, severity: route === 'HOLD' ? 'HIGH' : 'MEDIUM',
+      category: declaration.category ?? 'review', claim: declaration.claim, blocking: false,
+    });
+    if (firstApplication) {
+      const unitRoot = juliusWorkUnitRootOf(reviewed, input.tasks);
+      const paused = juliusPeerIdsThatFit(input.tasks
+        .filter((row) => row.state === 'BLOCKED' && (row.dependencyIds.includes(reviewed.taskId) || row.dependencyIds.includes(unitRoot.taskId)))
+        .map((row) => row.taskId));
+      const aboutArchitect = declaration.target !== 'WORK';
+      const opened = await openJuliusPeerRequestOnLedger(peerContextFor(deps, run, ledger), {
+        kind: aboutArchitect ? 'EVIDENCE_CHALLENGE' : 'CHALLENGE',
+        anchor: review.taskId,
+        sourceRole: 'INDEPENDENT_REVIEWER', targetRole: 'JULIUS',
+        mediatedFor: aboutArchitect ? 'PROMPT_ARCHITECT' : null,
+        reason: `The independent reviewer challenges the ${String(declaration.target).toLowerCase()} (${String(declaration.category)}).`,
+        subjectTaskId: reviewed.taskId, carrierTaskId: review.taskId,
+        contextRefs: [review.taskId], evidenceIds: juliusPeerIdsThatFit(citations).ids,
+        mandatory: route === 'HOLD', pausedTaskIds: route === 'HOLD' ? paused.ids : [], pausedTaskCount: route === 'HOLD' ? paused.total : 0,
+        announce: true, workerId: input.workerId,
+      });
+      if (opened.outcome === 'OPENED') {
+        challengeRequestId = opened.request.requestId;
+        await openDisagreementFor({
+          deps, run, ledger, request: input.request, review, reviewed, tasks: input.tasks, evidence: input.evidence,
+          declaration, material: route === 'HOLD', challengeRequestId, citations,
+          paused: route === 'HOLD' ? paused : { ids: [], total: 0 }, workerId: input.workerId,
+        });
+      }
+    }
+  }
+
+  /**
+   * WHAT THIS REVIEW SAYS ABOUT THE FINDINGS IT RAISED BEFORE. Applied after the
+   * new findings exist, so a supersession can name the one that replaces it.
+   */
+  const resolutions = firstApplication
+    ? await applyFindingResolutions({
+      deps, run, ledger, review, reviewed, declaration, tasks: input.tasks,
+      findings: await deps.store.findingsForRun(run.runId, run.projectId),
+      newFindingIds: reviewEvidence.filter((item) => item.type === 'REVIEW_FINDING' && item.status === 'FAILED')
+        .map((item) => `finding:${item.evidenceId}`),
+      workerId: input.workerId,
+    })
+    : { applied: 0, refused: 0 };
+
+  if (firstApplication) {
+    await ledger.event('review.verdict.applied', {
+      taskId: reviewed.taskId, workerId: input.workerId,
+      facts: {
+        reviewTaskId: review.taskId, reviewedTaskId: reviewed.taskId,
+        verdict: effective.verdict, declared: effective.declared, derived: effective.derived, source: effective.source,
+        category, target: fromDeclaration ? declaration?.target ?? null : null, route,
+        warningsRetained: declaration?.warnings.length ?? 0, warningsPromoted: promoted,
+        challengeRequestId,
+        findingsResolved: resolutions.applied, findingResolutionsRefused: resolutions.refused,
+      },
+    });
+  }
+  return { verdict: effective.verdict, route, category };
+}
+
+/**
+ * ACCEPTED ADVICE TRAVELS WITH THE UNIT, not with one segment of it.
+ *
+ * A packet is delivered to the continuation that was waiting for it, and a
+ * Project Brain entry reaches the packet of the task it is scoped to and no
+ * other. So a unit that pauses AGAIN — to research, or to ask something else —
+ * ran its next segment without the advice Julius had accepted for it: the
+ * guidance was delivered once and then silently left behind.
+ *
+ * Every accepted packet already delivered to an earlier segment of this lineage
+ * is therefore copied onto each new continuation, under the same authoritative
+ * heading and the same revision, guarded by the entry id so a replay copies
+ * nothing twice. Rejected packets are not carried: they were never delivered.
+ */
+async function carryAcceptedGuidanceForward(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly lineage: readonly JuliusTask[];
+  readonly continuationTaskId: string;
+  readonly workerId: string;
+}): Promise<void> {
+  const { deps, run } = input;
+  const carried = new Set(input.lineage.map((task) => task.taskId));
+  const entries = await deps.store.brainEntriesForRun(run.runId, run.projectId);
+  for (const entry of entries) {
+    if (!isJuliusGuidanceHandoffEntryId(entry.entryId)) continue;
+    if (!entry.taskIds.some((taskId) => carried.has(taskId))) continue;
+    const revision = /:r([1-9]\d*)$/u.exec(entry.entryId);
+    if (revision === null) continue;
+    await deps.store.appendBrainEntry({
+      runId: run.runId, projectId: run.projectId, taskId: input.continuationTaskId, workerId: input.workerId,
+      entryId: juliusGuidanceHandoffEntryId(input.continuationTaskId, Number(revision[1])),
+      kind: 'HANDOFF', safeText: entry.text, evidenceIds: [], occurredAt: deps.clock.now(),
+    });
+  }
+}
+
+/**
+ * HAND AN ACCEPTED PACKET TO THE WORKER THAT ASKED FOR IT.
+ *
+ * The packet is read back from the proposal row the architect's dispatch wrote,
+ * so the text delivered is the text that was reviewed — not a re-render of
+ * something that could have changed. It is written under the authoritative
+ * heading, scoped to the waiting continuation and to nothing else, and guarded
+ * by the brain entry's own id: a replayed decision delivers nothing twice.
+ *
+ * A packet whose review was REJECTED never reaches here. It stays on the record
+ * as the proposal it was.
+ */
+async function deliverAcceptedGuidance(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly tasks: readonly JuliusTask[];
+  /** The architect task Julius accepted: the original guidance, its repair, or a continuation of either. */
+  readonly guidanceTaskId: string;
+  /** The guidance task the question was asked on — the lineage root. */
+  readonly questionTaskId: string;
+  readonly workerId: string;
+  readonly firstWrite: boolean;
+  /** The continuation owed the packet, when the caller already knows it — a claim-time delivery. */
+  readonly waitingTaskId?: string;
+  /** Where the delivery happened: on the accepting decision, or when the continuation was claimed. */
+  readonly deliveredAt?: 'DECISION' | 'CLAIM';
+}): Promise<void> {
+  const { deps, run, ledger } = input;
+  if (!input.firstWrite) return;
+  const waiting = input.waitingTaskId !== undefined
+    ? input.tasks.find((item) => item.taskId === input.waitingTaskId) ?? null
+    : pendingSegmentFor(input.questionTaskId, input.tasks);
+  if (waiting === null) return;
+  const entries = await deps.store.brainEntriesForRun(run.runId, run.projectId);
+  const proposal = entries.find((entry) => entry.entryId === juliusGuidanceProposalEntryId(input.guidanceTaskId));
+  if (proposal === undefined) {
+    // Accepted work that produced no readable packet delivers nothing, and says so.
+    await ledger.event('guidance.refused', {
+      taskId: input.questionTaskId, workerId: input.workerId,
+      facts: { reasonCode: 'accepted_guidance_has_no_proposal', stage: 'deliver', guidanceTaskId: input.guidanceTaskId },
+    });
+    return;
+  }
+  const revision = entries.filter((entry) => entry.entryId.startsWith(`brain:guidance-answer:${waiting.taskId}:r`)).length + 1;
+  const packet = proposal.text.startsWith(JULIUS_GUIDANCE_PROPOSED_HEADING)
+    ? proposal.text.slice(JULIUS_GUIDANCE_PROPOSED_HEADING.length).replace(/^\n+/u, '')
+    : proposal.text;
+  /**
+   * DELIVERED ONCE — THIS PACKET, not any packet. Whichever path reaches it first
+   * (the accepting decision, or the continuation's claim) writes the answer; the
+   * other finds the same text already there and writes nothing. Keyed on the
+   * packet, because a continuation also holds packets CARRIED from earlier
+   * pauses, and those must not stand in for a new answer.
+   */
+  const authoritative = `${JULIUS_GUIDANCE_AUTHORITATIVE_HEADING}\n\n${packet}`;
+  if (entries.some((entry) => isJuliusGuidanceHandoffEntryId(entry.entryId) && entry.taskIds.includes(waiting.taskId) && entry.text === authoritative)) return;
+  const entryId = juliusGuidanceHandoffEntryId(waiting.taskId, revision);
+  await deps.store.appendBrainEntry({
+    runId: run.runId, projectId: run.projectId, taskId: waiting.taskId, workerId: input.workerId,
+    entryId, kind: 'HANDOFF',
+    safeText: authoritative,
+    evidenceIds: [], occurredAt: deps.clock.now(),
+  });
+  await ledger.event('guidance.delivered', {
+    taskId: input.questionTaskId, workerId: input.workerId,
+    facts: {
+      guidanceTaskId: input.guidanceTaskId, deliveredTo: waiting.taskId, entryId,
+      revision, proposalEntryId: proposal.entryId, deliveredAt: input.deliveredAt ?? 'DECISION',
+    },
+  });
+}
+
+/**
+ * WHATEVER JULIUS ACCEPTED FOR A CONTINUATION, DELIVERED BEFORE IT RUNS.
+ *
+ * The accepted architect task is found from the decisions, not from the event
+ * that would have recorded the delivery — the delivery is exactly what may be
+ * missing. The latest ACCEPT or COMPLETE in the guidance task's own unit is the
+ * packet that answered; its proposal is what reaches the coder.
+ */
+async function deliverOwedGuidance(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly task: JuliusTask;
+  readonly workerId: string;
+}): Promise<void> {
+  const { deps, run } = input;
+  const [tasks, decisions] = await Promise.all([
+    deps.store.tasksForRun(run.runId, run.projectId),
+    deps.store.decisionsForRun(run.runId, run.projectId),
+  ]);
+  const byId = new Map(tasks.map((item) => [item.taskId, item]));
+  for (const questionTaskId of input.task.dependencyIds.filter((id) => guidanceSubjectTaskId(id) !== null)) {
+    const accepted = [...decisions].reverse().find((decision) => (decision.action === 'ACCEPT' || decision.action === 'COMPLETE')
+      && byId.has(decision.taskId) && juliusWorkUnitRootOf(byId.get(decision.taskId)!, tasks).taskId === questionTaskId);
+    if (accepted === undefined) continue;
+    await deliverAcceptedGuidance({
+      deps, run, ledger: input.ledger, tasks, guidanceTaskId: accepted.taskId, questionTaskId,
+      workerId: input.workerId, firstWrite: true, waitingTaskId: input.task.taskId, deliveredAt: 'CLAIM',
+    });
+  }
+}
+
+/* ------------------------------------------------------ coding agent work */
+
+/**
+ * RECORD WHAT A CODING AGENT DISPATCH CHANGED, AND HOLD IT TO THE AGREEMENT.
+ *
+ * The locked contract's permitted paths and out-of-scope paths were stated to
+ * the coder and to the reviewer and checked by nothing, so an edit outside them
+ * was caught only if a reviewer happened to notice. Julius now reads the change
+ * set the independent executor observed, recomputes scope against the contract
+ * this dispatch was bound by, and — where the work strayed — writes a FAILED
+ * DIFF evidence row of its own. Verification then routes the task to repair on
+ * that evidence, after the independent review, exactly as it does for a failed
+ * test. The coder's own report sits beside it as CLAIMS: compared with what the
+ * executor saw, never substituted for it.
+ */
+async function recordCodingAgentImplementation(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly task: JuliusTask;
+  readonly workerId: string;
+  readonly value: unknown;
+  readonly leaseGeneration: number;
+  readonly scope: { readonly permittedPaths: readonly string[]; readonly outOfScope: readonly string[] } | null;
+}): Promise<void> {
+  const { deps, run, ledger, task } = input;
+  const implementation = readJuliusCodingAgentImplementation(input.value);
+  if (implementation === null) {
+    await ledger.event('coder.report.refused', {
+      taskId: task.taskId, workerId: input.workerId, facts: { reasonCode: 'coding_agent_implementation_unreadable' },
+    });
+    return;
+  }
+  const changes = implementation.workspace.changes;
+  const violations = input.scope === null ? [] : juliusScopeViolations({ changes, ...input.scope });
+
+  let reportOutcome: string | null = null;
+  let claimedNotObserved: number | null = null;
+  let observedNotClaimed: number | null = null;
+  let uncertainty: number | null = null;
+  let blocked: boolean | null = null;
+  if (implementation.report !== undefined && implementation.report !== null) {
+    const reading = sanitizeJuliusCodingAgentReport(implementation.report);
+    if (!reading.ok) {
+      await ledger.event('coder.report.refused', {
+        taskId: task.taskId, workerId: input.workerId, facts: { reasonCode: reading.reasonCode },
+      });
+    } else {
+      const observed = new Set(changes.map((change) => change.path));
+      const claimed = new Set(reading.report.filesTouched);
+      reportOutcome = reading.report.outcome;
+      claimedNotObserved = [...claimed].filter((path) => !observed.has(path)).length;
+      observedNotClaimed = [...observed].filter((path) => !claimed.has(path)).length;
+      uncertainty = reading.report.remainingUncertainty.length;
+      blocked = reading.report.blockedReason !== null;
+    }
+  }
+
+  const listed = (paths: readonly string[]): string => paths.slice(0, JULIUS_WORKSPACE_LIMITS.listedPaths).join(' ');
+  await ledger.event('coder.implementation.recorded', {
+    taskId: task.taskId, workerId: input.workerId,
+    facts: {
+      providerKind: implementation.providerKind,
+      workspaceCaptured: implementation.workspace.captured,
+      changedPaths: changes.length,
+      untrackedPaths: changes.filter((change) => change.change === 'UNTRACKED').length,
+      changeTruncated: implementation.workspace.truncated,
+      paths: listed(changes.map((change) => change.path)),
+      scopeChecked: input.scope !== null,
+      scopeViolations: violations.length,
+      reportOutcome, claimedNotObserved, observedNotClaimed, uncertainty, blocked,
+    },
+  });
+
+  if (violations.length === 0) return;
+  for (const violation of violations.slice(0, JULIUS_WORKSPACE_LIMITS.listedPaths)) {
+    await ledger.event('coder.scope.violated', {
+      taskId: task.taskId, workerId: input.workerId,
+      facts: { path: violation.path, rule: violation.rule, resolvedBy: 'CONTRACT' },
+    });
+  }
+  /**
+   * JULIUS'S OWN EVIDENCE, NOT THE WORKER'S. The id is under the task and lease
+   * that did the work, so a replay writes nothing twice; the summary names the
+   * paths and the rule, and no worker text.
+   */
+  await deps.store.appendEvidence({
+    runId: run.runId, projectId: run.projectId,
+    idempotencyKey: `${task.taskId}:${String(input.leaseGeneration)}:scope`,
+    evidence: {
+      evidenceId: `${task.taskId}:${String(input.leaseGeneration)}:scope`,
+      missionId: task.missionId, taskId: task.taskId, workerId: input.workerId,
+      type: 'DIFF', status: 'FAILED',
+      safeSummary: `Julius scope check: ${String(violations.length)} changed path(s) the locked contract does not allow — ${listed(violations.map((violation) => `${violation.path} [${violation.rule}]`))}.`.slice(0, 900),
+      artifactRef: null, integrityHash: null, occurredAt: deps.clock.now(),
+    },
+  });
+}
+
+/* ------------------------------------------------------------ architecture */
+
+/**
+ * RECORD A REVISION OF THE ARCHITECTURE, AND SAY WHERE IT DISAGREES WITH THE
+ * AGREEMENT.
+ *
+ * Advisory state: recording it changes no term, releases no task and decides
+ * nothing. What it does is make the design answerable — which boundary a change
+ * crosses, what was assumed, what was rejected and why — so drift can be
+ * detected against something other than prose.
+ *
+ * A proposal that names a mission-owned term is refused by the peer authority
+ * guard, under the same rule as a guidance packet that tries. A conflict with
+ * the contract's permitted paths or prohibited actions is RECORDED rather than
+ * resolved: the contract wins until Julius decides otherwise.
+ *
+ * AFTER THE TERMS LOCK, A MATERIAL CHANGE IS A RE-PLAN. It is PROPOSED, and the
+ * review of the task that proposed it decides whether it becomes the design in
+ * force; one that would need a mission term to move is escalated instead of
+ * applied.
+ */
+async function recordArchitecture(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly task: JuliusTask;
+  readonly workerId: string;
+  readonly value: unknown;
+}): Promise<void> {
+  const { deps, run, ledger, task } = input;
+  const rows = await readVerdictLedger(deps, run);
+  const revision = juliusNextArchitectureRevision(rows);
+  /**
+   * A RE-PLAN LOOP IS BOUNDED. Each revision can mint a consultation and each
+   * consultation can propose a revision, so without a ceiling a mission could
+   * spend itself redesigning. The cap is refused by name, not silently ignored.
+   */
+  if (revision > JULIUS_ARCHITECTURE_DRIFT_LIMITS.revisions) {
+    await ledger.event('architecture.refused', {
+      taskId: task.taskId, workerId: input.workerId,
+      facts: { reasonCode: 'architecture_revision_limit', revision, limit: JULIUS_ARCHITECTURE_DRIFT_LIMITS.revisions },
+    });
+    return;
+  }
+  const reading = sanitizeJuliusArchitecture({
+    value: input.value,
+    revision,
+    proposedByTaskId: task.taskId,
+    recordedAt: deps.clock.now(),
+  });
+  if (!reading.ok) {
+    await ledger.event('architecture.refused', {
+      taskId: task.taskId, workerId: input.workerId, facts: { reasonCode: reading.reasonCode },
+    });
+    return;
+  }
+  const state = reading.state;
+
+  /**
+   * THE CONTRACTS THAT GOVERN WORK IN THIS RUN, read before anything is
+   * recorded, because whether this revision is a re-plan depends on whether any
+   * of them is LOCKED. Not the architect's own binding: the architect that
+   * drafts the terms is bound by none, so read off its own task this would be
+   * dead at exactly the moment the architecture is first written.
+   */
+  const tasks = await deps.store.tasksForRun(run.runId, run.projectId);
+  const subjects: string[] = [];
+  for (const candidate of tasks) {
+    const subject = juliusContractSubjectTaskId(candidate, tasks);
+    if (subject !== null && !subjects.includes(subject)) subjects.push(subject);
+  }
+  const governing: { contractTaskId: string; contract: JuliusTaskContract }[] = [];
+  for (const contractTaskId of subjects) {
+    const contract = await deps.store.loadTaskContract({ projectId: run.projectId, taskId: contractTaskId });
+    if (contract !== null) governing.push({ contractTaskId, contract });
+  }
+  const conflicts = governing.flatMap(({ contractTaskId, contract }) =>
+    juliusArchitectureConflicts(state, contract).map((conflict) => ({ contractTaskId, conflict })));
+
+  const previous = foldJuliusArchitecture(rows);
+
+  /**
+   * AN ANSWER THAT SAYS THE SAME THING IS NOT A NEW REVISION.
+   *
+   * A consultation states the WHOLE design rather than a diff, so an architect
+   * that finds nothing to change answers with exactly what is already in force.
+   * Numbering that as a revision would change the id of every trigger that
+   * names the revision, and Julius would consult the architect again about the
+   * same design until the run cap stopped it — which is what the first version
+   * of this did, eight times in one mission. The record says the consultation
+   * happened and that nothing moved.
+   */
+  if (previous !== null && juliusArchitectureMatches(previous, state)) {
+    await ledger.event('architecture.unchanged', {
+      taskId: task.taskId, workerId: input.workerId,
+      facts: { revision: previous.revision, proposedByTaskId: task.taskId },
+    });
+    return;
+  }
+
+  const changes = juliusArchitectureChanges(previous, state);
+  const material = juliusArchitectureChangeIsMaterial(changes);
+  const locked = governing.some((item) => item.contract.state === 'LOCKED');
+  const changeKinds = changes.filter((change) => change.material).map((change) => `${change.kind}:${change.change}`).join(' ');
+
+  /**
+   * A RE-PLAN THAT NEEDS A MISSION TERM TO MOVE IS NOT THE ARCHITECT'S TO MAKE.
+   *
+   * A material revision that conflicts with a LOCKED contract cannot be
+   * validated by a reviewer, because what it asks for is outside what was
+   * agreed. It is escalated as exactly that and recorded as NO REVISION AT ALL:
+   * the design in force does not move, nothing reaches a worker's context, and
+   * changing the agreement stays where it belongs — a contract revision, or the
+   * user.
+   */
+  if (locked && material && conflicts.length > 0) {
+    await ledger.event('architecture.replan.escalated', {
+      taskId: task.taskId, workerId: input.workerId,
+      facts: {
+        revision, reasonCode: 'replan_requires_contract_revision',
+        conflicts: conflicts.length, conflictKinds: conflicts.map((item) => item.conflict.kind).join(' '),
+        changeKinds, contractTaskId: conflicts[0]!.contractTaskId,
+      },
+    });
+    return;
+  }
+
+  const status = locked && material && previous !== null ? 'PROPOSED' : 'IN_FORCE';
+  await ledger.event('architecture.recorded', {
+    taskId: task.taskId, workerId: input.workerId,
+    facts: {
+      ...juliusArchitectureFacts(state), status,
+      materialChanges: changes.filter((change) => change.material).length, changeKinds,
+    },
+  });
+
+  if (status === 'PROPOSED') {
+    await ledger.event('architecture.proposed', {
+      taskId: task.taskId, workerId: input.workerId,
+      facts: { revision, proposedByTaskId: task.taskId, changeKinds, reasonCode: 'material_change_after_lock' },
+    });
+    /**
+     * SCOPED TO THE TASK THAT PROPOSED IT, exactly as a guidance proposal is:
+     * the reviewer judging this consultation reads it, and no coder builds
+     * against a design nobody has accepted.
+     */
+    await deps.store.appendBrainEntry({
+      runId: run.runId, projectId: run.projectId, taskId: task.taskId, workerId: input.workerId,
+      entryId: juliusArchitectureProposalEntryId(task.taskId), kind: 'DECISION',
+      safeText: [
+        `PROPOSED ARCHITECTURE REVISION — NOT IN FORCE. It changes ${changeKinds === '' ? '(nothing material)' : changeKinds} after the terms were locked, and governs nothing unless this consultation is accepted.`,
+        renderJuliusArchitecture(state),
+      ].join('\n'),
+      evidenceIds: [], occurredAt: deps.clock.now(),
+    });
+  } else {
+    /**
+     * THE ACCEPTED PICTURE, WHERE EVERY WORKER READS IT. Run-wide, so the coder
+     * building against it and the reviewer judging against it see the same
+     * revision, and bounded by the same cap the row is.
+     */
+    await deps.store.appendBrainEntry({
+      runId: run.runId, projectId: run.projectId, taskId: null, workerId: input.workerId,
+      entryId: juliusArchitectureEntryId(state.revision), kind: 'DECISION',
+      safeText: renderJuliusArchitecture(state), evidenceIds: [], occurredAt: deps.clock.now(),
+    });
+  }
+
+  /**
+   * WHERE THE DESIGN AND THE AGREEMENT DISAGREE, THE AGREEMENT WINS. Recorded,
+   * never resolved here: the contract stands as written.
+   */
+  for (const { contractTaskId, conflict } of conflicts) {
+    await ledger.event('architecture.conflicted', {
+      taskId: task.taskId, workerId: input.workerId,
+      facts: {
+        revision: state.revision, kind: conflict.kind, name: conflict.name, detail: conflict.detail,
+        contractTaskId, resolvedBy: 'CONTRACT',
+      },
+    });
+  }
+}
+
+/**
+ * A PROPOSED REVISION BECOMES THE DESIGN IN FORCE WHEN ITS CONSULTATION IS
+ * ACCEPTED, AND NOT BEFORE.
+ *
+ * The same rule as an accepted guidance packet, and for the same reason: a
+ * design the reviewer sent back must never be the design the next worker builds
+ * against. Nothing is erased — the proposal row, the recorded revision and the
+ * rejecting decision all stay — but only acceptance writes the run-wide entry.
+ */
+async function acceptProposedArchitecture(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly proposedByTaskIds: readonly string[];
+  readonly acceptedTaskId: string;
+  readonly workerId: string;
+  readonly firstWrite: boolean;
+}): Promise<void> {
+  const { deps, run, ledger } = input;
+  if (!input.firstWrite) return;
+  const rows = await readVerdictLedger(deps, run);
+  const already = new Set(rows.filter((row) => row.type === 'architecture.accepted')
+    .map((row) => (typeof row.facts.revision === 'number' ? row.facts.revision : -1)));
+  for (const row of rows) {
+    if (row.type !== 'architecture.proposed') continue;
+    const proposedBy = typeof row.facts.proposedByTaskId === 'string' ? row.facts.proposedByTaskId : null;
+    const revision = typeof row.facts.revision === 'number' ? row.facts.revision : null;
+    if (proposedBy === null || revision === null) continue;
+    if (!input.proposedByTaskIds.includes(proposedBy) || already.has(revision)) continue;
+    const state = architectureRevisionOf(rows, revision);
+    if (state === null) continue;
+    await ledger.event('architecture.accepted', {
+      taskId: proposedBy, workerId: input.workerId,
+      facts: { revision, proposedByTaskId: proposedBy, acceptedByTaskId: input.acceptedTaskId },
+    });
+    await deps.store.appendBrainEntry({
+      runId: run.runId, projectId: run.projectId, taskId: null, workerId: input.workerId,
+      entryId: juliusArchitectureEntryId(revision), kind: 'DECISION',
+      safeText: renderJuliusArchitecture(state), evidenceIds: [], occurredAt: deps.clock.now(),
+    });
+  }
+}
+
+/** One recorded revision, read back through the same allowlist it was written with. */
+function architectureRevisionOf(
+  rows: readonly JuliusPeerLedgerEntry[], revision: number,
+): JuliusArchitectureState | null {
+  for (const row of rows) {
+    if (row.type !== 'architecture.recorded' || row.facts.revision !== revision) continue;
+    const raw = typeof row.facts.state === 'string' ? row.facts.state : null;
+    if (raw === null) continue;
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw); } catch { continue; }
+    const reading = sanitizeJuliusArchitecture({
+      value: parsed, revision,
+      proposedByTaskId: typeof row.facts.proposedByTaskId === 'string' ? row.facts.proposedByTaskId : '',
+      recordedAt: typeof row.facts.recordedAt === 'string' ? row.facts.recordedAt : '',
+    });
+    if (reading.ok) return reading.state;
+  }
+  return null;
+}
+
+/**
+ * THE ARCHITECT'S ANSWER TO "DOES WHAT WAS BUILT MATCH WHAT WAS DESIGNED?"
+ *
+ * An ASSESSMENT, not a verdict. It cannot accept a task, cannot mint VERIFIED
+ * and cannot complete a mission — the peer authority guard refuses those words
+ * before a field is read. What it can do is refuse to let a completion happen:
+ * DRIFT_REQUIRES_REPAIR and REPLAN_REQUIRED hold the run at the completion gate
+ * with the drift, and the work it names, on the record.
+ */
+async function recordConsistency(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly task: JuliusTask;
+  readonly workerId: string;
+  readonly value: unknown;
+}): Promise<void> {
+  const { deps, run, ledger, task } = input;
+  const rows = await readVerdictLedger(deps, run);
+  const state = foldJuliusArchitecture(rows);
+  if (state === null) {
+    await ledger.event('architecture.assessment.refused', {
+      taskId: task.taskId, workerId: input.workerId, facts: { reasonCode: 'consistency_without_architecture' },
+    });
+    return;
+  }
+  const reading = sanitizeJuliusConsistency({ value: input.value, revision: state.revision });
+  if (!reading.ok) {
+    await ledger.event('architecture.assessment.refused', {
+      taskId: task.taskId, workerId: input.workerId, facts: { reasonCode: reading.reasonCode, revision: state.revision },
+    });
+    return;
+  }
+  const declaration = reading.declaration;
+  /* WORK THIS RUN DOES NOT HOLD IS NOT THIS ARCHITECT'S TO CALL DRIFTED. */
+  const tasks = await deps.store.tasksForRun(run.runId, run.projectId);
+  const known = new Set(tasks.map((item) => item.taskId));
+  const foreign = declaration.driftingTaskIds.filter((taskId) => !known.has(taskId));
+  if (foreign.length > 0) {
+    await ledger.event('architecture.assessment.refused', {
+      taskId: task.taskId, workerId: input.workerId,
+      facts: { reasonCode: 'consistency_names_foreign_work', revision: state.revision, foreign: foreign.join(' ') },
+    });
+    return;
+  }
+  await ledger.event('architecture.assessed', {
+    taskId: task.taskId, workerId: input.workerId,
+    facts: {
+      ...juliusConsistencyFacts(declaration), assessedByTaskId: task.taskId,
+      holdsCompletion: juliusConsistencyRoute(declaration.assessment) === 'REPAIR'
+        || juliusConsistencyRoute(declaration.assessment) === 'REPLAN',
+    },
+  });
+}
+
+/**
+ * GO BACK TO THE ARCHITECT, ONCE PER REASON.
+ *
+ * Julius decides when the architect is consulted. Every trigger is derived from
+ * rows that already exist, raised at most once for the revision and subject it
+ * is about, and capped for the run, so a mission that keeps drifting spends its
+ * budget on the work rather than on being told about it.
+ *
+ * A consultation nobody can serve is RECORDED AND NOT WAITED FOR. The guidance
+ * path learned this on paid run 34037313976: a task minted for a role nothing
+ * serves does not fail, it SITS — RUNNABLE forever, with the mission unable to
+ * complete around it.
+ */
+export async function juliusArchitectureGateFor(
+  deps: JuliusPipelineDependencies, run: JuliusRunRow,
+): Promise<JuliusArchitectureCompletionGate> {
+  if (deps.timeline === undefined) return { ok: true, reasonCode: 'NO_ARCHITECTURE_RECORDED' };
+  return juliusArchitectureCompletionGate({ entries: await readVerdictLedger(deps, run) });
+}
+
+export async function serveArchitectureTriggers(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly policy: JuliusCardPolicy;
+  readonly tasks: readonly JuliusTask[];
+  readonly completionReady: boolean;
+  readonly capabilityFor?: (task: { taskId: string; taskType: string; role: string }) => string;
+}): Promise<number> {
+  const { deps, run } = input;
+  if (deps.timeline === undefined) return 0;
+  const rows = await readVerdictLedger(deps, run);
+  const state = foldJuliusArchitecture(rows);
+  if (state === null) return 0;
+  const candidates = juliusArchitectureTriggers({ state, entries: rows, completionReady: input.completionReady });
+  if (candidates.length === 0) return 0;
+
+  const anchor = input.tasks.find((task) => task.role === 'PROMPT_ARCHITECT') ?? input.tasks[0];
+  if (anchor === undefined) return 0;
+  const ledger = new RuntimeLedger(deps, run, `architecture:${run.runId}`);
+  let served = 0;
+  for (const candidate of candidates) {
+    const taskId = juliusArchitectureCheckTaskId(candidate.triggerId);
+    const capability = input.capabilityFor?.({ taskId, taskType: 'architecture', role: 'PROMPT_ARCHITECT' });
+    const routable = capability === undefined || deps.router.eligibleWorkerIds({
+      role: 'PROMPT_ARCHITECT', taskType: 'architecture', capability, policy: input.policy,
+    }).length > 0;
+    const created = routable
+      ? await deps.store.addTask({
+        commandId: `architecture:${taskId}`,
+        runId: run.runId, projectId: run.projectId,
+        task: {
+          taskId, missionId: run.missionId,
+          parentTaskId: candidate.subjectTaskId,
+          dependencyIds: [], requiredEvidenceTypes: ['ARTIFACT'],
+          taskType: 'architecture', role: 'PROMPT_ARCHITECT',
+          ordinal: anchor.ordinal + 1,
+          // RUNNABLE, because BLOCKED is unreachable by the claim query and only
+          // `appendDecision({releaseTaskIds})` ever moves a task out of it.
+          state: 'RUNNABLE',
+        },
+      })
+      : false;
+    await ledger.event('architecture.trigger.raised', {
+      taskId: candidate.subjectTaskId, workerId: null,
+      facts: {
+        ...juliusArchitectureTriggerFacts(candidate),
+        served: created, servedByTaskId: created ? taskId : null,
+        unroutable: !routable,
+      },
+    });
+    if (created) served += 1;
+  }
+  return served;
+}
+
+/* --------------------------------------------------------- finding lifecycle */
+
+/** Every finding in this run, with the life the ledger gives it. */
+async function findingLivesOf(
+  deps: JuliusPipelineDependencies,
+  run: JuliusRunRow,
+  findings: readonly JuliusReviewerFinding[],
+): Promise<readonly JuliusFindingLife[]> {
+  return foldJuliusFindings(findings, await readVerdictLedger(deps, run));
+}
+
+/** Write one legal move, or nothing. The record refuses what the runtime would have refused. */
+async function moveFinding(input: {
+  readonly ledger: RuntimeLedger;
+  readonly deps: JuliusPipelineDependencies;
+  readonly life: JuliusFindingLife;
+  readonly move: JuliusFindingMove;
+  readonly workerId: string;
+  readonly reviewTaskId?: string | null;
+  readonly repairTaskId?: string | null;
+  readonly supersededByFindingId?: string | null;
+}): Promise<boolean> {
+  const at = input.deps.clock.now();
+  const transition = {
+    findingId: input.life.findingId, move: input.move, at,
+    reviewTaskId: input.reviewTaskId ?? null,
+    repairTaskId: input.repairTaskId ?? null,
+    supersededByFindingId: input.supersededByFindingId ?? null,
+  };
+  if (moveJuliusFinding(input.life, transition).outcome !== 'MOVED') return false;
+  await input.ledger.event('finding.transitioned', {
+    taskId: input.life.taskId, workerId: input.workerId, facts: juliusFindingTransitionFacts(transition),
+  });
+  return true;
+}
+
+/**
+ * A REPAIR THAT SUCCEEDED HAS ADDRESSED ITS FINDINGS — and addressed is not
+ * resolved. The claim is that someone acted, which is a fact about the run; the
+ * reviewer's re-review is the only thing that can say it worked.
+ */
+async function markFindingsAddressed(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly repair: JuliusTask;
+  readonly tasks: readonly JuliusTask[];
+  readonly findings: readonly JuliusReviewerFinding[];
+  readonly workerId: string;
+}): Promise<void> {
+  // The repair itself, not the last pause of it: a paused repair finishes in a
+  // continuation whose parent is the repair.
+  const head = juliusSegmentLineageRootOf(input.repair, input.tasks);
+  const repaired = head.parentTaskId;
+  if (repaired === null) return;
+  // The unit, not just the round it repairs: a second round addresses the
+  // finding the first one was raised for as well as any raised since.
+  const unit = repairLineageRootOf(head, input.tasks).taskId;
+  for (const life of await findingLivesOf(input.deps, input.run, input.findings)) {
+    if ((life.taskId !== repaired && life.taskId !== unit) || life.state !== 'OPEN') continue;
+    await moveFinding({
+      ledger: input.ledger, deps: input.deps, life, move: 'REPAIR_SUCCEEDED',
+      // Named by the repair, not by the pause that finished it: the finding's
+      // repair linkage is the unit of work sent to fix it.
+      workerId: input.workerId, repairTaskId: head.taskId,
+    });
+  }
+}
+
+/**
+ * WHAT THE RE-REVIEW SAID ABOUT EACH FINDING, applied to the findings it was
+ * actually asked about.
+ *
+ * A resolution naming a finding that belongs to other work, or one the review
+ * was not asked to judge, is refused rather than applied: a reviewer may end
+ * its own findings about the work in front of it and no others. Silence is not
+ * a resolution — a finding nobody mentions keeps its state.
+ */
+async function applyFindingResolutions(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly review: JuliusTask;
+  readonly reviewed: JuliusTask;
+  readonly tasks: readonly JuliusTask[];
+  readonly declaration: JuliusReviewVerdictDeclaration | null;
+  readonly findings: readonly JuliusReviewerFinding[];
+  readonly newFindingIds: readonly string[];
+  readonly workerId: string;
+}): Promise<{ readonly applied: number; readonly refused: number }> {
+  if (input.declaration === null || input.declaration.resolutions.length === 0) return { applied: 0, refused: 0 };
+  const lives = await findingLivesOf(input.deps, input.run, input.findings);
+  /**
+   * THE FINDINGS THIS REVIEW MAY END: the ones raised about the work it is
+   * re-reviewing, and about the unit that work belongs to.
+   *
+   * Repairs nest — round two's parent is round one — so a reviewer answering
+   * "is the original problem fixed?" is answering about a finding recorded
+   * against the lineage's root. Anything outside this unit is another review's
+   * to end.
+   */
+  const reviewedHead = juliusSegmentLineageRootOf(input.reviewed, input.tasks);
+  const subjects = new Set([
+    input.reviewed.taskId,
+    input.reviewed.parentTaskId ?? input.reviewed.taskId,
+    repairLineageRootOf(input.reviewed, input.tasks).taskId,
+    // A repair that paused is reviewed through its last segment; the findings
+    // it answers are on the repair's own subject and lineage.
+    reviewedHead.parentTaskId ?? reviewedHead.taskId,
+    repairLineageRootOf(reviewedHead, input.tasks).taskId,
+  ]);
+  let applied = 0;
+  let refused = 0;
+  for (const resolution of input.declaration.resolutions) {
+    const life = lives.find((item) => item.findingId === resolution.findingId);
+    if (life === undefined || !subjects.has(life.taskId)) {
+      await input.ledger.event('review.verdict.refused', {
+        taskId: input.reviewed.taskId, workerId: input.workerId,
+        facts: {
+          reviewTaskId: input.review.taskId, reasonCode: 'review_resolution_names_a_foreign_finding',
+          findingId: resolution.findingId,
+        },
+      });
+      refused += 1;
+      continue;
+    }
+    const move: JuliusFindingMove = resolution.status === 'RESOLVED'
+      ? 'REVIEWER_RESOLVED'
+      : resolution.status === 'SUPERSEDED' ? 'REVIEWER_SUPERSEDED' : 'REVIEWER_MAINTAINED';
+    const moved = await moveFinding({
+      ledger: input.ledger, deps: input.deps, life, move, workerId: input.workerId,
+      reviewTaskId: input.review.taskId,
+      // A SUPERSESSION NAMES ITS REPLACEMENT: the finding this same review
+      // raised. Without exactly one, the claim cannot be recorded truthfully
+      // and the finding stays where it is.
+      supersededByFindingId: input.newFindingIds.length === 1 ? input.newFindingIds[0]! : null,
+    });
+    if (moved) applied += 1;
+    else refused += 1;
+  }
+  return { applied, refused };
+}
+
+/* ------------------------------------------------------------ disagreement */
+
+/** Who Julius attributes a verification to when a resolved disagreement, not a worker, caused it. */
+export const JULIUS_DISAGREEMENT_RESOLVER = 'julius-disagreement-resolution' as const;
+
+async function disagreementsOf(deps: JuliusPipelineDependencies, run: JuliusRunRow): Promise<readonly JuliusDisagreement[]> {
+  return foldJuliusDisagreements(await readVerdictLedger(deps, run));
+}
+
+/**
+ * MOVE A DISAGREEMENT ONE LEGAL STEP, OR WRITE NOTHING.
+ *
+ * The step is checked against the record's current state before it is written,
+ * so a replayed tick — or a second attempt at a rebuttal or a re-review — is
+ * refused by the record rather than appended. A step that resolves it is
+ * followed by `disagreement.resolved` and by the peer requests it closes.
+ */
+async function stepDisagreement(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly disagreement: JuliusDisagreement;
+  readonly step: JuliusDisagreementStep;
+  readonly workerId: string;
+  readonly extraFacts?: Record<string, string | number | boolean | null>;
+}): Promise<JuliusDisagreement> {
+  const { deps, run, ledger, disagreement } = input;
+  const at = deps.clock.now();
+  const moved = advanceJuliusDisagreement(disagreement, input.step, at);
+  if (moved.outcome === 'REFUSED') return disagreement;
+  await ledger.event('disagreement.step', {
+    taskId: disagreement.subjectTaskId, workerId: input.workerId,
+    facts: { ...juliusDisagreementStepFacts(disagreement.disagreementId, input.step, at), ...(input.extraFacts ?? {}) },
+  });
+  if (moved.resolved) {
+    const resolved = moved.disagreement;
+    await ledger.event('disagreement.resolved', {
+      taskId: resolved.subjectTaskId, workerId: input.workerId,
+      facts: {
+        disagreementId: resolved.disagreementId, subjectTaskId: resolved.subjectTaskId, material: resolved.material,
+        resolution: resolved.resolution, resolutionBasis: resolved.resolutionBasis,
+        architectPosition: resolved.architectPosition, rebuttalTaskId: resolved.rebuttalTaskId, reReviewTaskId: resolved.reReviewTaskId,
+        resolvedAt: resolved.resolvedAt,
+      },
+    });
+    const peers = peerContextFor(deps, run, ledger);
+    const close = { to: 'RESOLVED' as const, from: ['OPEN', 'ANSWERED'] as const, transitionCode: resolved.resolution!, responseRef: resolved.disagreementId, causeRef: resolved.disagreementId, taskId: resolved.subjectTaskId, workerId: input.workerId, firstWrite: true };
+    await moveJuliusPeerRequest(peers, { ...close, from: [...close.from], kind: resolved.target === 'WORK' ? 'CHALLENGE' : 'EVIDENCE_CHALLENGE', anchor: resolved.reviewTaskId });
+    if (resolved.rebuttalTaskId !== null) {
+      await moveJuliusPeerRequest(peers, { ...close, from: [...close.from], kind: 'REBUTTAL_REQUEST', anchor: resolved.rebuttalTaskId });
+    }
+  }
+  return moved.disagreement;
+}
+
+/**
+ * A CHALLENGE BECOMES A DISAGREEMENT, and the architect is asked once.
+ *
+ * The rebuttal is a TASK — claimed, dispatched and settled like any other — so
+ * it is bounded by the same machinery as all work and survives a restart. It is
+ * proven routable first, together with its re-review: a rebuttal nobody can
+ * write, or a maintained position nobody can re-review, would hold the work
+ * forever, so an unroutable rebuttal is resolved at once by Julius's rule — the
+ * challenge stands, because nothing answered it.
+ */
+async function openDisagreementFor(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly request: JuliusPipelineRequest;
+  readonly review: JuliusTask;
+  readonly reviewed: JuliusTask;
+  readonly tasks: readonly JuliusTask[];
+  readonly evidence: readonly JuliusEvidence[];
+  readonly declaration: JuliusReviewVerdictDeclaration;
+  readonly material: boolean;
+  readonly challengeRequestId: string;
+  readonly citations: readonly string[];
+  readonly paused: { readonly ids: readonly string[]; readonly total: number };
+  readonly workerId: string;
+}): Promise<void> {
+  const { deps, run, ledger, review, reviewed } = input;
+  const contractTaskId = juliusContractSubjectTaskId(reviewed, input.tasks);
+  const contract = contractTaskId === null ? null : await deps.store.loadTaskContract({ projectId: run.projectId, taskId: contractTaskId });
+  const binding = contract === null ? null : juliusTaskContractBinding(contract);
+  const opened = openJuliusDisagreement({
+    executionScope: deps.executionScope ?? JULIUS_LOCAL_EXECUTION_SCOPE,
+    missionId: run.missionId,
+    subjectTaskId: reviewed.taskId,
+    reviewTaskId: review.taskId,
+    challengeRequestId: input.challengeRequestId,
+    material: input.material,
+    category: input.declaration.category ?? 'review',
+    target: input.declaration.target ?? 'WORK',
+    reviewerPosition: input.declaration.claim,
+    reviewerEvidenceIds: juliusPeerIdsThatFit(input.citations).ids,
+    codingAgentEvidenceIds: juliusPeerIdsThatFit(input.evidence.filter((item) => item.taskId === reviewed.taskId).map((item) => item.evidenceId)).ids,
+    contractBindingDigest: binding?.bindingDigest ?? null,
+    openedAt: deps.clock.now(),
+  });
+  if (opened.outcome === 'REFUSED') {
+    // FAIL CLOSED: the challenge request stays open, so a material hold stays in
+    // place and the run says why rather than proceeding past an argument.
+    await ledger.event('disagreement.refused', {
+      taskId: reviewed.taskId, workerId: input.workerId, facts: { reviewTaskId: review.taskId, reasonCode: opened.reasonCode },
+    });
+    return;
+  }
+  let disagreement = opened.disagreement;
+  await ledger.event('disagreement.opened', {
+    taskId: reviewed.taskId, workerId: input.workerId, facts: juliusDisagreementOpenedFacts(disagreement),
+  });
+
+  const routable = (taskType: string, role: JuliusWorkerRole): boolean => {
+    const capability = input.request.capabilityFor?.({ taskId: juliusRebuttalTaskId(review.taskId), taskType, role });
+    if (capability === undefined) return true;
+    return deps.router.eligibleWorkerIds({ role, taskType, capability, policy: input.request.policy }).length > 0;
+  };
+  if (!routable('rebuttal', 'PROMPT_ARCHITECT') || !routable('review:rebuttal', 'INDEPENDENT_REVIEWER')) {
+    await stepDisagreement({ deps, run, ledger, disagreement, step: { kind: 'REBUTTAL_UNROUTABLE' }, workerId: input.workerId });
+    return;
+  }
+
+  const rebuttalTaskId = juliusRebuttalTaskId(review.taskId);
+  const created = await deps.store.addTask({
+    commandId: `rebuttal:${rebuttalTaskId}`, runId: run.runId, projectId: run.projectId,
+    task: {
+      taskId: rebuttalTaskId, missionId: reviewed.missionId, parentTaskId: reviewed.taskId,
+      // The review that raised the challenge has SUCCEEDED, so the rebuttal can run now.
+      dependencyIds: [review.taskId], requiredEvidenceTypes: [],
+      taskType: 'rebuttal', role: 'PROMPT_ARCHITECT', ordinal: review.ordinal + 1, state: 'RUNNABLE',
+    },
+  });
+  if (!created) return;
+  disagreement = await stepDisagreement({ deps, run, ledger, disagreement, step: { kind: 'REBUTTAL_SCHEDULED', rebuttalTaskId }, workerId: input.workerId });
+
+  const entryId = `brain:disagreement-challenge:${rebuttalTaskId}`;
+  await deps.store.appendBrainEntry({
+    runId: run.runId, projectId: run.projectId, taskId: rebuttalTaskId, workerId: input.workerId, entryId, kind: 'HANDOFF',
+    safeText: [
+      `DISAGREEMENT ${disagreement.disagreementId}`,
+      `THE INDEPENDENT REVIEWER CHALLENGES THE ${disagreement.target} OF ${reviewed.taskId} (${disagreement.category}; ${disagreement.material ? 'dependent work is held until this is resolved' : 'the work proceeds while it is argued'}).`,
+      `REVIEWER'S POSITION: ${disagreement.reviewerPosition}`,
+      'ANSWER ONCE. Your result carries "rebuttal": {"position": "CONCEDES" or "MAINTAINS", "argument": one paragraph, "evidence": [{"locator": where, "claim": what it shows}], "missionTermsMustChange": true or false}.',
+      'A position you MAINTAIN must cite evidence, and it will be re-reviewed independently. There is no second rebuttal.',
+      'You cannot change the contract, the objective, the acceptance criteria, the budget or the permissions here. If your position needs a mission-owned term to change, say so with "missionTermsMustChange": Julius will escalate rather than decide.',
+    ].join('\n'),
+    evidenceIds: disagreement.reviewerEvidenceIds, occurredAt: deps.clock.now(),
+  });
+  await openJuliusPeerRequestOnLedger(peerContextFor(deps, run, ledger), {
+    kind: 'REBUTTAL_REQUEST', anchor: rebuttalTaskId,
+    sourceRole: 'JULIUS', targetRole: 'PROMPT_ARCHITECT',
+    reason: 'Julius asks the Prompt Architect for its one rebuttal to a reviewer challenge.',
+    subjectTaskId: reviewed.taskId, carrierTaskId: rebuttalTaskId,
+    contextRefs: [entryId, disagreement.disagreementId, input.challengeRequestId], evidenceIds: disagreement.reviewerEvidenceIds,
+    contractBindingDigest: disagreement.contractBindingDigest,
+    mandatory: disagreement.material, pausedTaskIds: input.paused.ids, pausedTaskCount: input.paused.total,
+    announce: true, workerId: input.workerId,
+  });
+}
+
+/** The disagreement a rebuttal task (or a continuation of one) answers. */
+function disagreementForRebuttal(
+  disagreements: readonly JuliusDisagreement[],
+  task: JuliusTask,
+  tasks: readonly JuliusTask[],
+): JuliusDisagreement | undefined {
+  const head = juliusSegmentLineageRootOf(task, tasks).taskId;
+  if (juliusRebuttalReviewTaskId(head) === null) return undefined;
+  return disagreements.find((item) => item.rebuttalTaskId === head);
+}
+
+/**
+ * THE ARCHITECT'S ANSWER, ON THE RECORD BEFORE ANYTHING ACTS ON IT. Refused by
+ * name when unusable — including one that MAINTAINS with nothing to cite — and
+ * a refused answer is an answer Julius could not use, which the disagreement
+ * resolves on.
+ */
+async function recordRebuttal(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly task: JuliusTask;
+  readonly workerId: string;
+  readonly value: unknown;
+}): Promise<void> {
+  const { deps, run, ledger, task } = input;
+  const tasks = await deps.store.tasksForRun(run.runId, run.projectId);
+  const disagreement = disagreementForRebuttal(await disagreementsOf(deps, run), task, tasks);
+  if (disagreement === undefined || disagreement.status !== 'AWAITING_REBUTTAL' || disagreement.rebuttalTaskId === null) return;
+  const reading = input.value === undefined ? null : sanitizeJuliusRebuttal(input.value);
+  if (reading !== null && reading.ok) {
+    await moveJuliusPeerRequest(peerContextFor(deps, run, ledger), {
+      kind: 'REBUTTAL_REQUEST', anchor: disagreement.rebuttalTaskId, to: 'ANSWERED', from: ['OPEN'],
+      responseRef: task.taskId, causeRef: `${task.taskId}:rebuttal`, taskId: disagreement.subjectTaskId, workerId: input.workerId, firstWrite: true,
+    });
+  }
+  await stepDisagreement({
+    deps, run, ledger, disagreement, workerId: input.workerId,
+    step: { kind: 'REBUTTAL', rebuttal: reading !== null && reading.ok ? reading.rebuttal : null },
+    extraFacts: { rebuttalRefusal: reading === null ? 'rebuttal_absent' : reading.ok ? null : reading.reasonCode },
+  });
+}
+
+/** Julius's closing decision on a rebuttal task: the task was answered, whichever position stood. */
+async function closeRebuttalTask(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly request: JuliusPipelineRequest;
+  readonly task: JuliusTask;
+  readonly disagreement: JuliusDisagreement | undefined;
+  readonly workerId: string;
+}): Promise<JuliusVerificationDecision> {
+  const { deps, run, ledger, task, disagreement } = input;
+  const reasonCode = disagreement === undefined ? 'DISAGREEMENT_ABSENT' : 'DISAGREEMENT_REBUTTAL_RECEIVED';
+  const decision: JuliusVerificationDecision = {
+    action: 'ACCEPT', reasonCode, evidenceIds: [],
+    safeSummary: disagreement === undefined
+      ? 'No disagreement names this rebuttal; Julius closed the task.'
+      : `Rebuttal received; Julius resolved the disagreement ${disagreement.resolution ?? 'UNRESOLVED'} (${disagreement.resolutionBasis ?? 'no basis'}).`,
+  };
+  const recorded = await deps.store.appendDecision({
+    decisionId: deps.ids.next('decision'), runId: run.runId, taskId: task.taskId,
+    policyRevision: input.request.verification.revision,
+    idempotencyKey: `${task.taskId}:${decision.action}:${decision.reasonCode}`,
+    occurredAt: deps.clock.now(), decision, releaseTaskIds: [],
+  });
+  if (recorded) {
+    await ledger.event('verification.decided', {
+      taskId: task.taskId, workerId: input.workerId,
+      facts: {
+        action: decision.action, reasonCode, criteriaSatisfied: 0, criteriaMissing: 0, missionCompletable: false, released: 0,
+        disagreementId: disagreement?.disagreementId ?? null, resolution: disagreement?.resolution ?? null,
+      },
+    });
+  }
+  return decision;
+}
+
+/** After a resolution, the held work is decided now rather than on the next idle sweep. */
+async function verifyHeldWork(
+  input: Parameters<typeof verifyExecutedTask>[0] & { readonly tasks: readonly JuliusTask[] },
+  disagreement: JuliusDisagreement,
+): Promise<JuliusTaskOutcome | null> {
+  if (!disagreement.material || disagreement.status !== 'RESOLVED') return null;
+  const decisions = await input.deps.store.decisionsForRun(input.run.runId, input.run.projectId);
+  if (decisions.some((item) => item.taskId === disagreement.subjectTaskId)) return null;
+  const subject = (await input.deps.store.tasksForRun(input.run.runId, input.run.projectId)).find((item) => item.taskId === disagreement.subjectTaskId);
+  if (subject === undefined || subject.state !== 'SUCCEEDED') return null;
+  return verifyExecutedTask({ ...input, task: subject, workerId: JULIUS_DISAGREEMENT_RESOLVER, duplicate: false });
+}
+
+async function settleRebuttal(input: Parameters<typeof verifyExecutedTask>[0] & { readonly tasks: readonly JuliusTask[] }): Promise<JuliusTaskOutcome> {
+  const { deps, run, ledger, task } = input;
+  let disagreement = disagreementForRebuttal(await disagreementsOf(deps, run), task, input.tasks);
+  // AN ANSWER THAT NEVER ARRIVED IS AN ANSWER JULIUS CANNOT USE.
+  if (disagreement !== undefined && disagreement.status === 'AWAITING_REBUTTAL') {
+    disagreement = await stepDisagreement({
+      deps, run, ledger, disagreement, workerId: input.workerId,
+      step: { kind: 'REBUTTAL', rebuttal: null }, extraFacts: { rebuttalRefusal: 'rebuttal_absent' },
+    });
+  }
+  if (disagreement !== undefined && disagreement.status === 'AWAITING_RE_REVIEW') {
+    const reReviewTaskId = `${juliusSegmentLineageRootOf(task, input.tasks).taskId}:review`;
+    if (disagreement.reReviewTaskId === null) {
+      const created = await deps.store.addTask({
+        commandId: `review:${reReviewTaskId}`, runId: run.runId, projectId: run.projectId,
+        task: {
+          taskId: reReviewTaskId, missionId: task.missionId, parentTaskId: task.taskId, dependencyIds: [task.taskId],
+          requiredEvidenceTypes: ['REVIEW_FINDING'], taskType: 'review:rebuttal', role: 'INDEPENDENT_REVIEWER',
+          ordinal: task.ordinal + 1, state: 'RUNNABLE',
+        },
+      });
+      if (created) {
+        disagreement = await stepDisagreement({ deps, run, ledger, disagreement, step: { kind: 'RE_REVIEW_SCHEDULED', reReviewTaskId }, workerId: input.workerId });
+        const entryId = `brain:disagreement-rebuttal:${reReviewTaskId}`;
+        await deps.store.appendBrainEntry({
+          runId: run.runId, projectId: run.projectId, taskId: reReviewTaskId, workerId: input.workerId, entryId, kind: 'HANDOFF',
+          safeText: [
+            `DISAGREEMENT ${disagreement.disagreementId} — RE-REVIEW`,
+            `You challenged the ${disagreement.target} of ${disagreement.subjectTaskId} (${disagreement.category}): ${disagreement.reviewerPosition}`,
+            `THE PROMPT ARCHITECT MAINTAINS ITS POSITION: ${disagreement.architectArgument ?? ''}`,
+            ...disagreement.architectEvidence.map((item) => `EVIDENCE: ${item.locator} — ${item.claim}`),
+            'Judge the evidence independently. CONTINUE (or WARNING) accepts the architect\'s position; anything stricter maintains your challenge. This is the last word on this disagreement: a challenge raised here opens no second one.',
+          ].join('\n'),
+          evidenceIds: disagreement.reviewerEvidenceIds, occurredAt: deps.clock.now(),
+        });
+        await openJuliusPeerRequestOnLedger(peerContextFor(deps, run, ledger), {
+          kind: 'REVIEW_REQUEST', anchor: reReviewTaskId, sourceRole: 'JULIUS', targetRole: 'INDEPENDENT_REVIEWER',
+          reason: 'Julius requires an independent re-review of the architect\'s maintained position.',
+          subjectTaskId: task.taskId, carrierTaskId: reReviewTaskId, contextRefs: [entryId, disagreement.disagreementId],
+          mandatory: true, pausedTaskIds: [disagreement.subjectTaskId], pausedTaskCount: 1, announce: true, workerId: input.workerId,
+        });
+      }
+    }
+    return { kind: 'REVIEW_SCHEDULED', taskId: task.taskId, reviewTaskId: reReviewTaskId };
+  }
+  const decision = await closeRebuttalTask({ deps, run, ledger, request: input.request, task, disagreement, workerId: input.workerId });
+  const held = disagreement === undefined ? null : await verifyHeldWork(input, disagreement);
+  return held ?? { kind: 'COMPLETED', taskId: task.taskId, workerId: input.workerId, duplicate: input.duplicate, decision };
+}
+
+async function settleReReview(
+  input: Parameters<typeof verifyExecutedTask>[0] & { readonly tasks: readonly JuliusTask[]; readonly rebuttalTask: JuliusTask; readonly verdict: string | null },
+): Promise<JuliusTaskOutcome> {
+  const { deps, run, ledger, task } = input;
+  const reviewHead = juliusSegmentLineageRootOf(task, input.tasks).taskId;
+  let disagreement = disagreementForRebuttal(await disagreementsOf(deps, run), input.rebuttalTask, input.tasks);
+  if (disagreement !== undefined && disagreement.status === 'AWAITING_RE_REVIEW' && disagreement.reReviewTaskId === reviewHead) {
+    disagreement = await stepDisagreement({ deps, run, ledger, disagreement, step: { kind: 'RE_REVIEW', verdict: input.verdict }, workerId: input.workerId });
+  }
+  const peers = peerContextFor(deps, run, ledger);
+  const verdictEvidence = (await deps.store.evidenceForRun(run.runId, run.projectId)).find((item) => item.taskId === task.taskId && item.type === 'REVIEW_FINDING');
+  await moveJuliusPeerRequest(peers, {
+    kind: 'REVIEW_REQUEST', anchor: reviewHead, to: 'ANSWERED', from: ['OPEN'], responseRef: verdictEvidence?.evidenceId ?? task.taskId,
+    causeRef: `${task.taskId}:verdict`, taskId: input.rebuttalTask.taskId, workerId: input.workerId, firstWrite: true,
+  });
+  if (disagreement?.status === 'RESOLVED') {
+    await moveJuliusPeerRequest(peers, {
+      kind: 'REVIEW_REQUEST', anchor: reviewHead, to: 'RESOLVED', from: ['ANSWERED'], transitionCode: `DISAGREEMENT_${disagreement.resolution!}`,
+      causeRef: disagreement.disagreementId, taskId: input.rebuttalTask.taskId, workerId: input.workerId, firstWrite: true,
+    });
+  }
+  const decision = await closeRebuttalTask({ deps, run, ledger, request: input.request, task: input.rebuttalTask, disagreement, workerId: input.workerId });
+  const held = disagreement === undefined ? null : await verifyHeldWork(input, disagreement);
+  return held ?? { kind: 'COMPLETED', taskId: task.taskId, workerId: input.workerId, duplicate: input.duplicate, decision };
+}
+
+/**
+ * THE RESOLVED MATERIAL DISAGREEMENTS ABOUT THIS WORK, APPLIED.
+ *
+ * Only material ones: a challenge that did not hold the work was argued beside
+ * a decision already made, and its resolution is on the record rather than
+ * reopening that decision. The upheld finding is idempotent by the review's id.
+ */
+async function disagreementRulingFor(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly subject: JuliusTask;
+  readonly evidence: readonly JuliusEvidence[];
+  readonly workerId: string;
+}): Promise<{ readonly recorded: boolean; readonly halt: { readonly reasonCode: string; readonly evidenceIds: readonly string[]; readonly safeSummary: string } | null }> {
+  const { deps, run, ledger, subject } = input;
+  const known = new Set(input.evidence.map((item) => item.evidenceId));
+  const resolved = (await disagreementsOf(deps, run))
+    .filter((item) => item.material && item.status === 'RESOLVED' && item.subjectTaskId === subject.taskId);
+  let recorded = false;
+  let halt: { reasonCode: string; evidenceIds: readonly string[]; safeSummary: string } | null = null;
+  for (const disagreement of resolved) {
+    const citations = disagreement.reviewerEvidenceIds.filter((id) => known.has(id));
+    if (disagreement.resolution === 'ESCALATED') {
+      halt = {
+        reasonCode: 'DISAGREEMENT_ESCALATED', evidenceIds: citations,
+        safeSummary: `The architect's position requires a mission-owned term to change; Julius escalated disagreement ${disagreement.disagreementId} to the mission owner and halted this work.`,
+      };
+    } else if (disagreement.resolution === 'CHALLENGE_UPHELD' && disagreement.resolutionBasis === 'RE_REVIEW_BLOCKED') {
+      halt = {
+        reasonCode: 'REVIEW_BLOCKED', evidenceIds: citations,
+        safeSummary: `The independent re-review of disagreement ${disagreement.disagreementId} blocked this work; Julius halted it.`,
+      };
+    }
+    if (disagreement.resolution === 'CHALLENGE_UPHELD' && citations.length > 0) {
+      const findingId = `finding:disagreement:${disagreement.reviewTaskId}`;
+      const written = await deps.store.recordFinding({
+        projectId: run.projectId,
+        finding: {
+          findingId, runId: run.runId, taskId: subject.taskId, reviewerWorkerId: input.workerId,
+          severity: 'HIGH', category: disagreement.category,
+          claim: `Challenge upheld (${disagreement.resolutionBasis ?? 'no basis'}): ${disagreement.reviewerPosition}`,
+          criterionId: null, evidenceIds: citations, blocking: true, status: 'OPEN', createdAt: deps.clock.now(),
+        },
+      });
+      if (written) {
+        recorded = true;
+        await ledger.event('finding.recorded', {
+          taskId: subject.taskId, workerId: input.workerId,
+          facts: { findingId, evidenceId: citations[0]!, blocking: true, category: disagreement.category, disagreementId: disagreement.disagreementId },
+        });
+      }
+    }
+  }
+  return { recorded, halt };
+}
+
+/** The id of an unresolved, mandatory challenge against this unit of work, or null. */
+async function materialChallengeHolding(
+  deps: JuliusPipelineDependencies,
+  run: JuliusRunRow,
+  subject: JuliusTask,
+  tasks: readonly JuliusTask[],
+): Promise<string | null> {
+  const rows = await readVerdictLedger(deps, run);
+  if (rows.length === 0) return null;
+  const unit = juliusWorkUnitRootOf(subject, tasks).taskId;
+  const byId = new Map(tasks.map((row) => [row.taskId, row]));
+  const holding = foldJuliusPeerRequests(rows).find((request) => request.mandatory
+    && (request.kind === 'CHALLENGE' || request.kind === 'EVIDENCE_CHALLENGE')
+    && (request.status === 'OPEN' || request.status === 'ANSWERED')
+    && (() => {
+      const challenged = byId.get(request.subjectTaskId);
+      return challenged !== undefined && juliusWorkUnitRootOf(challenged, tasks).taskId === unit;
+    })());
+  return holding?.requestId ?? null;
+}
+
+/**
+ * WHAT A DECISION DOES TO THE REQUESTS IT ANSWERS.
+ *
+ * A reviewer's completion ANSWERS Julius's review request — the verdict is on
+ * the evidence it left — and the decision that follows RESOLVES it, named for
+ * what Julius decided. A RETRY leaves it answered: the review will run again.
+ *
+ * A decision on guidance settles the coder's question: an accepted packet
+ * resolves it; a rejected one REOPENS it, because the answer is still owed and
+ * the coder's continuation is still waiting; a halt resolves it as halted. The
+ * question is found through the unit's root, so the decision on a repair or a
+ * research continuation of the guidance settles the same question.
+ *
+ * Every move is written only when the ledger says it is legal now, so a resumed
+ * verification re-derives the same position and writes nothing twice.
+ */
+async function settlePeerRequestsForDecision(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly task: JuliusTask;
+  readonly subject: JuliusTask;
+  readonly reviewedTask: JuliusTask | null;
+  readonly tasks: readonly JuliusTask[];
+  readonly evidence: readonly { readonly evidenceId: string; readonly taskId: string; readonly type: string }[];
+  readonly action: string;
+  /** The decision's idempotency key: the cause of every move below, applied once. */
+  readonly decisionKey: string;
+  readonly workerId: string;
+  readonly decisionRecorded: boolean;
+}): Promise<void> {
+  const peers = peerContextFor(input.deps, input.run, input.ledger);
+  const common = {
+    taskId: input.subject.taskId, workerId: input.workerId, firstWrite: input.decisionRecorded, causeRef: input.decisionKey,
+  };
+
+  if (input.task.role === 'INDEPENDENT_REVIEWER' && input.reviewedTask !== null) {
+    const anchor = juliusSegmentLineageRootOf(input.task, input.tasks).taskId;
+    const verdictRef = input.evidence.find((item) => item.taskId === input.task.taskId && item.type === 'REVIEW_FINDING')?.evidenceId
+      ?? input.task.taskId;
+    await moveJuliusPeerRequest(peers, {
+      ...common, kind: 'REVIEW_REQUEST', anchor, to: 'ANSWERED', from: ['OPEN'], responseRef: verdictRef,
+      causeRef: `${input.task.taskId}:verdict`,
+    });
+    if (input.action !== 'RETRY') {
+      await moveJuliusPeerRequest(peers, {
+        ...common, kind: 'REVIEW_REQUEST', anchor, to: 'RESOLVED', from: ['ANSWERED'], transitionCode: `DECIDED_${input.action}`,
+      });
+    }
+  }
+
+  /**
+   * A PROPOSED ARCHITECTURE REVISION IS IN FORCE ONLY WHERE ITS CONSULTATION
+   * WAS ACCEPTED — before the guidance rule below returns, because an
+   * architecture consultation is not a guidance task and would never reach it.
+   */
+  if (input.action === 'ACCEPT' || input.action === 'COMPLETE') {
+    await acceptProposedArchitecture({
+      deps: input.deps, run: input.run, ledger: input.ledger,
+      proposedByTaskIds: [input.subject.taskId, juliusSegmentLineageRootOf(input.subject, input.tasks).taskId],
+      acceptedTaskId: input.task.taskId, workerId: input.workerId, firstWrite: input.decisionRecorded,
+    });
+  }
+
+  const unit = juliusWorkUnitRootOf(input.subject, input.tasks);
+  if (guidanceSubjectTaskId(unit.taskId) === null || input.action === 'RETRY') return;
+  const question = { ...common, kind: 'GUIDANCE_QUESTION' as const, anchor: unit.taskId };
+  if (input.action === 'ACCEPT' || input.action === 'COMPLETE') {
+    /**
+     * ACCEPTANCE IS WHAT MAKES A PACKET AUTHORITATIVE, and only an accepted
+     * packet reaches the worker that asked: here, and — if this write was lost
+     * to a crash — at the waiting continuation's own claim, which looks for
+     * the same acceptance (`deliverOwedGuidance`).
+     */
+    await deliverAcceptedGuidance({
+      deps: input.deps, run: input.run, ledger: input.ledger, tasks: input.tasks,
+      guidanceTaskId: input.subject.taskId, questionTaskId: unit.taskId, workerId: input.workerId,
+      firstWrite: input.decisionRecorded,
+    });
+    const resolved = await moveJuliusPeerRequest(peers, {
+      ...question, to: 'RESOLVED', from: ['ANSWERED'], transitionCode: 'ANSWER_ACCEPTED',
+    });
+    // Accepted work that never produced a readable packet closed the question
+    // without answering it, and the record says exactly that.
+    if (resolved.outcome === 'NOT_MOVED') {
+      await moveJuliusPeerRequest(peers, {
+        ...question, to: 'RESOLVED', from: ['OPEN'], transitionCode: 'ACCEPTED_WITHOUT_ANSWER',
+      });
+    }
+    return;
+  }
+  if (input.action === 'REPAIR') {
+    await moveJuliusPeerRequest(peers, { ...question, to: 'OPEN', from: ['ANSWERED'], transitionCode: 'ANSWER_REJECTED' });
+    return;
+  }
+  if (input.action === 'HALT') {
+    await moveJuliusPeerRequest(peers, { ...question, to: 'RESOLVED', from: ['OPEN', 'ANSWERED'], transitionCode: 'ANSWER_HALTED' });
+  }
+}
+
+/** The peer channel's view of one runtime tick: this run, this attempt, this ledger. */
+function peerContextFor(deps: JuliusPipelineDependencies, run: JuliusRunRow, ledger: RuntimeLedger): JuliusPeerRuntimeContext {
+  return {
+    runId: run.runId,
+    projectId: run.projectId,
+    missionId: run.missionId,
+    executionScope: deps.executionScope ?? JULIUS_LOCAL_EXECUTION_SCOPE,
+    now: () => deps.clock.now(),
+    ...(deps.timeline === undefined ? {} : { timeline: deps.timeline }),
+    emit: (type, input) => ledger.event(type, input),
+  };
+}
 
 /* ------------------------------------------------------- the verification */
 
@@ -2233,6 +4326,48 @@ async function verifyExecutedTask(input: {
   const reviewSatisfied = reviewCompleted || task.role === 'INDEPENDENT_REVIEWER';
 
   /**
+   * A DISPATCH THAT YIELDED IS NOT FINISHED WORK, AND IS NOT JUDGED AS IF IT WERE.
+   *
+   * It ended at a barrier — it asked the architect, or asked Julius to read
+   * something — and Julius minted the segment that carries it on. Reviewing it
+   * here asked a reviewer whether half the work was the whole of it, and the
+   * answer is always no. Qualification attempt 3 (run 34766115321) did exactly
+   * that for all ten of its pauses: each review sent the yielded dispatch to
+   * REPAIR while its continuation also ran, so every question a worker asked
+   * forked the deliverable into two lines of work, and the fork is where most of
+   * that run's 15 repair tasks came from.
+   *
+   * The review obligation passes to the continuation, and through it to the
+   * unit's last segment: that is the task that ends without yielding, and its
+   * review sees the whole unit's work. The yielded dispatch is accepted exactly
+   * when its continuation is (`effectivelyAcceptedTaskIds`), so completion and
+   * release need no second rule. Replays and resumed verifications reach this
+   * branch from the durable rows, not from a flag on this call.
+   */
+  /*
+   * AND A REVIEWER THAT PAUSED HAS NOT CONCLUDED. Its dispatch ended at a
+   * research ask; what it said before it looked is kept on the record and never
+   * applied. Reproduced before this: a reviewer that approved and asked to check
+   * a manual had its approval decided at once — the plan accepted and the build
+   * released — while the continuation that read the answer ran later and found
+   * the plan wrong. The verdict that applies is the one written after the answer.
+   */
+  const continuation = juliusYieldContinuationOf(task, tasks);
+  if (continuation !== null) {
+    return { kind: 'YIELDED', taskId: task.taskId, workerId: input.workerId, continuationTaskId: continuation.taskId };
+  }
+
+  /**
+   * A REBUTTAL IS SETTLED BY ITS DISAGREEMENT, NEVER BY THE EVALUATOR. Reviewed
+   * and repaired like ordinary work, a maintained rebuttal the re-review
+   * disagreed with would be sent to repair — and the argument would go round
+   * again. It gets exactly one re-review, and then Julius resolves it.
+   */
+  if (task.role === 'PROMPT_ARCHITECT' && task.taskType === 'rebuttal') {
+    return settleRebuttal({ ...input, tasks });
+  }
+
+  /**
    * A REVIEWER'S VERDICT IS ABOUT THE TASK IT REVIEWED, and treating it as a
    * verdict about ITSELF schedules the repair on the wrong task.
    *
@@ -2250,9 +4385,7 @@ async function verifyExecutedTask(input: {
    * carries the blocking finding recorded above. The repair is then planned
    * for the work, by the same evaluator, with no rule changed.
    */
-  const reviewedTask = task.role === 'INDEPENDENT_REVIEWER' && task.parentTaskId !== null
-    ? tasks.find((item) => item.taskId === task.parentTaskId) ?? null
-    : null;
+  const reviewedTask = juliusReviewedWorkOf(task, tasks);
   const subject = reviewedTask ?? task;
 
   /**
@@ -2270,7 +4403,7 @@ async function verifyExecutedTask(input: {
    * is derived from the evidence id, so a re-run of the same reviewer produces
    * the same finding rather than a second one.
    */
-  if (task.role === 'INDEPENDENT_REVIEWER' && task.parentTaskId !== null) {
+  if (reviewedTask !== null) {
     for (const item of evidence) {
       if (item.taskId !== task.taskId || item.type !== 'REVIEW_FINDING' || item.status !== 'FAILED') continue;
       const recorded = await deps.store.recordFinding({
@@ -2278,7 +4411,7 @@ async function verifyExecutedTask(input: {
         finding: {
           findingId: `finding:${item.evidenceId}`,
           runId: run.runId,
-          taskId: task.parentTaskId,
+          taskId: reviewedTask.taskId,
           reviewerWorkerId: item.workerId,
           severity: 'HIGH',
           category: 'review',
@@ -2292,30 +4425,97 @@ async function verifyExecutedTask(input: {
       });
       if (recorded) {
         await ledger.event('finding.recorded', {
-          taskId: task.parentTaskId, workerId: item.workerId,
-          facts: { findingId: `finding:${item.evidenceId}`, evidenceId: item.evidenceId, blocking: true },
+          taskId: reviewedTask.taskId, workerId: item.workerId,
+          // THE REVIEW THAT RAISED IT, so the finding's life has an origin and a
+          // re-review can be matched to the judgement it is revisiting.
+          facts: { findingId: `finding:${item.evidenceId}`, evidenceId: item.evidenceId, blocking: true, reviewTaskId: task.taskId },
         });
         await ledger.trajectory('FINDING', {
-          taskId: task.parentTaskId, workerId: item.workerId,
+          taskId: reviewedTask.taskId, workerId: item.workerId,
           policyRevision: input.request.verification.revision, outcome: 'BLOCKING',
         });
       }
     }
   }
 
-  const action = evaluateJuliusVerification({
+  /**
+   * THE REVIEWER'S VERDICT, APPLIED — the stricter of what it declared and what
+   * its evidence shows, routed by Julius. Warnings become non-blocking findings,
+   * a challenge becomes a challenge request and never a contract revision, a
+   * required repair becomes a blocking finding, a BLOCK becomes a HALT.
+   */
+  const applied = reviewedTask === null ? null : await applyReviewVerdict({
+    deps, run, ledger, review: task, reviewed: reviewedTask, tasks, evidence,
+    policy: input.request.verification, request: input.request, workerId: input.workerId,
+  });
+
+  // THE ONE RE-REVIEW OF A MAINTAINED POSITION resolves its disagreement.
+  if (reviewedTask !== null && reviewedTask.taskType === 'rebuttal' && reviewedTask.role === 'PROMPT_ARCHITECT') {
+    return settleReReview({ ...input, tasks, rebuttalTask: reviewedTask, verdict: applied?.verdict ?? null });
+  }
+
+  /**
+   * A MATERIAL CHALLENGE HOLDS THE WORK. Read from the ledger, not from this
+   * call, so a resumed verification of the same work is held the same way and
+   * cannot accept it past an argument nobody has settled.
+   */
+  const held = await materialChallengeHolding(deps, run, subject, tasks);
+  if (held !== null) {
+    // The reviewer did answer Julius's request; Julius has not decided on it.
+    if (reviewedTask !== null) {
+      await moveJuliusPeerRequest(peerContextFor(deps, run, ledger), {
+        kind: 'REVIEW_REQUEST', anchor: juliusSegmentLineageRootOf(task, tasks).taskId, to: 'ANSWERED', from: ['OPEN'],
+        responseRef: held, causeRef: `${task.taskId}:verdict`, taskId: subject.taskId, workerId: input.workerId, firstWrite: true,
+      });
+    }
+    return { kind: 'HELD', taskId: task.taskId, reasonCode: 'MATERIAL_CHALLENGE_UNRESOLVED', requestId: held };
+  }
+
+  /**
+   * WHAT A RESOLVED DISAGREEMENT MEANS FOR THIS WORK. An upheld material
+   * challenge becomes a blocking finding, so the evaluator repairs the work; an
+   * escalation, or a re-review that blocked, halts it; the architect's position
+   * upheld changes nothing, and the work is judged on its evidence.
+   */
+  const ruling = await disagreementRulingFor({ deps, run, ledger, subject, evidence, workerId: input.workerId });
+
+  /**
+   * A REPAIR THAT SUCCEEDED HAS ADDRESSED THE FINDINGS IT EXISTS FOR — and that
+   * is all it has done. The reviewer's re-review is the only thing that resolves
+   * one; this row is what makes "someone acted" distinguishable from "it worked".
+   */
+  if (task.taskType.startsWith('repair:') && reviewedTask === null) {
+    await markFindingsAddressed({ deps, run, ledger, repair: task, tasks, findings, workerId: input.workerId });
+  }
+
+  const evaluated = evaluateJuliusVerification({
     task: subject,
     evidence,
     criteria,
     // The findings the reviewer just recorded are read back, because
     // `findings` was loaded before this task ran and a decision made without
     // them would be a decision about a review that had not happened yet.
-    findings: reviewedTask === null ? findings : await deps.store.findingsForRun(run.runId, run.projectId),
+    findings: reviewedTask === null && !ruling.recorded ? findings : await deps.store.findingsForRun(run.runId, run.projectId),
     policy: input.request.verification,
     reviewCompleted: reviewSatisfied,
     allTasks: tasks,
     priorDecisions: decisions,
   });
+  /**
+   * A BLOCK IS A HALT, AND JULIUS WRITES IT. The evaluator would read the
+   * blocking finding as a reason to repair; a reviewer that said the work must
+   * not continue is not asking for another attempt at it.
+   */
+  const halt = applied?.route === 'HALT'
+    ? {
+      reasonCode: 'REVIEW_BLOCKED',
+      evidenceIds: evidence.filter((item) => item.taskId === task.taskId).map((item) => item.evidenceId),
+      safeSummary: `The independent reviewer blocked this work (${applied.category ?? 'uncategorised'}); Julius halted it.`,
+    }
+    : ruling.halt;
+  const action = halt !== null && evaluated.action === 'DECIDE'
+    ? { ...evaluated, missionCompletable: false, decision: { action: 'HALT' as const, ...halt } }
+    : evaluated;
 
   /* ------------------------------------------------- a review is required */
   if (action.action === 'SCHEDULE_REVIEW') {
@@ -2341,6 +4541,73 @@ async function verifyExecutedTask(input: {
       },
     });
     await ledger.event('review.started', { taskId: reviewTaskId, facts: { reviewsTaskId: task.taskId, created } });
+
+    /**
+     * WHAT THE REVIEWER REJECTED, WHAT THE REPAIR CLAIMS, AND WHAT ACTUALLY
+     * MOVED — bounded, structured, and scoped to this review alone.
+     *
+     * A re-review used to be handed the repair's evidence and asked whether
+     * prior findings were resolved, without being shown what it had rejected or
+     * what changed. It answered from a memory it does not have.
+     */
+    if (created && task.taskType.startsWith('repair:') && task.parentTaskId !== null) {
+      /**
+       * EVERY OUTSTANDING FINDING OF THE UNIT, not of the last round.
+       *
+       * Repairs nest: round two repairs round one, so its parent is a repair
+       * rather than the work. Reading findings off the parent alone would hide
+       * the finding the whole lineage exists to answer from the reviewer being
+       * asked whether it is answered.
+       */
+      const repairHead = juliusSegmentLineageRootOf(task, tasks);
+      const lineageRoot = repairLineageRootOf(repairHead, tasks).taskId;
+      const lives = (await findingLivesOf(deps, run, await deps.store.findingsForRun(run.runId, run.projectId)))
+        .filter((life) => (life.taskId === lineageRoot || life.taskId === repairHead.parentTaskId)
+          && life.state !== 'RESOLVED' && life.state !== 'SUPERSEDED');
+      const diff = juliusRepairRoundDiff({
+        repairTaskId: task.taskId,
+        repairedTaskId: task.parentTaskId,
+        // `repairRoundsBefore` counts this round's own task, so it IS the round.
+        round: repairRoundsBefore(task, tasks),
+        findings: lives,
+        evidence: evidence.map((item) => ({ taskId: item.taskId, type: item.type, status: item.status, safeSummary: item.safeSummary })),
+        repairSummary: evidence.filter((item) => item.taskId === task.taskId).at(-1)?.safeSummary ?? null,
+      });
+      await deps.store.appendBrainEntry({
+        runId: run.runId, projectId: run.projectId, taskId: reviewTaskId, workerId: input.workerId,
+        entryId: juliusRepairRoundEntryId(reviewTaskId), kind: 'FINDING',
+        safeText: renderJuliusRepairRoundDiff(diff), evidenceIds: [], occurredAt: deps.clock.now(),
+      });
+      await ledger.event('review.started', {
+        taskId: reviewTaskId,
+        facts: {
+          reviewsTaskId: task.taskId, created: false, repairRoundDiff: true, round: diff.round,
+          findingsToAnswer: diff.findings.length, gainedEvidence: diff.gainedTypes.length, lostEvidence: diff.lostTypes.length,
+        },
+      });
+    }
+    /**
+     * JULIUS ASKS THE REVIEWER, ON THE RECORD. The review task is the carrier;
+     * the request names the work that cannot start until Julius decides on what
+     * was reviewed — every BLOCKED task gated on this unit — and that pause is
+     * the release rule's, which moves nothing out of BLOCKED before an accepting
+     * decision. Opened with the task's own write, so a replay opens nothing.
+     */
+    if (created) {
+      const unitRoot = juliusWorkUnitRootOf(task, tasks);
+      const paused = juliusPeerIdsThatFit(tasks
+        .filter((row) => row.state === 'BLOCKED'
+          && (row.dependencyIds.includes(task.taskId) || row.dependencyIds.includes(unitRoot.taskId)))
+        .map((row) => row.taskId));
+      await openJuliusPeerRequestOnLedger(peerContextFor(deps, run, ledger), {
+        kind: 'REVIEW_REQUEST', anchor: reviewTaskId,
+        sourceRole: 'JULIUS', targetRole: 'INDEPENDENT_REVIEWER',
+        reason: 'Julius requires an independent review of completed work before it is accepted.',
+        subjectTaskId: task.taskId, carrierTaskId: reviewTaskId, contextRefs: [task.taskId],
+        mandatory: true, pausedTaskIds: paused.ids, pausedTaskCount: paused.total,
+        announce: true,
+      });
+    }
     return { kind: 'REVIEW_SCHEDULED', taskId: task.taskId, reviewTaskId };
   }
 
@@ -2550,12 +4817,20 @@ async function verifyExecutedTask(input: {
       criteriaSatisfied: action.criteriaSatisfied.length, criteriaMissing: action.criteriaMissing.length,
       missionCompletable: action.missionCompletable,
       released: release.releasable.length,
+      reviewVerdict: applied?.verdict ?? null,
+      reviewRoute: applied?.route ?? null,
     },
   });
   await ledger.trajectory('VERIFICATION', {
     taskId: subject.taskId, workerId: input.workerId,
     policyRevision: input.request.verification.revision, outcome: decision.action,
     facts: { reasonCode: decision.reasonCode, criteriaMissing: action.criteriaMissing.length },
+  });
+
+  await settlePeerRequestsForDecision({
+    deps, run, ledger, task, subject, reviewedTask, tasks, evidence,
+    action: decision.action, decisionKey: `${subject.taskId}:${decision.action}:${decision.reasonCode}`,
+    workerId: input.workerId, decisionRecorded,
   });
 
   /**
@@ -2647,6 +4922,7 @@ async function scheduleRepair(input: {
   decision: JuliusVerificationDecision;
   tasks: readonly JuliusTask[];
   findings: Awaited<ReturnType<JuliusRuntimeStore['findingsForRun']>>;
+  workerId: string;
 }): Promise<JuliusTaskOutcome> {
   const { deps, run, ledger, task } = input;
   /**
@@ -2736,6 +5012,22 @@ async function scheduleRepair(input: {
   const created = await deps.store.addTask({
     commandId: `repair:${plan.repairId}`, runId: run.runId, projectId: run.projectId, task: plan.task,
   });
+  /**
+   * WHAT JULIUS ACCEPTED FOR THIS WORK IS STILL ACCEPTED WHILE IT IS REPAIRED.
+   *
+   * Carry-forward followed the segment lineage only, and a repair is its own
+   * root — so the round sent to fix the work was the one dispatch of the unit
+   * that could not see the guidance the work was built on. Guarded by the
+   * repair's own write, so a replay carries nothing twice.
+   */
+  if (created) {
+    const unit = juliusWorkUnitRootOf(task, input.tasks).taskId;
+    await carryAcceptedGuidanceForward({
+      deps, run, ledger,
+      lineage: input.tasks.filter((item) => juliusWorkUnitRootOf(item, input.tasks).taskId === unit),
+      continuationTaskId: plan.task.taskId, workerId: input.workerId,
+    });
+  }
   await ledger.event('repair.scheduled', {
     taskId: plan.task.taskId,
     facts: { repairId: plan.repairId, round: plan.round, repairsTaskId: task.taskId, findingCount: plan.findingIds.length, created },
@@ -3146,12 +5438,14 @@ function repairContextFindings(
   tasks: readonly JuliusTask[],
   findings: readonly JuliusReviewerFinding[],
 ): JuliusReviewerFinding[] {
-  const byId = new Map(tasks.map((value) => [value.taskId, value]));
   let subjectId: string | null = null;
-  if (task.taskType.startsWith('repair:')) subjectId = task.parentTaskId;
+  // THE REPAIR, NOT THE PAUSE. A repair that paused continues as
+  // `segment:repair:…`, whose parent is the repair it continues; the findings
+  // are on the work that repair is FOR, one step further up.
+  if (task.taskType.startsWith('repair:')) subjectId = juliusSegmentLineageRootOf(task, tasks).parentTaskId;
   else if (task.taskType.startsWith('review:repair:')) {
-    const repair = task.parentTaskId === null ? undefined : byId.get(task.parentTaskId);
-    subjectId = repair?.parentTaskId ?? null;
+    const repair = juliusReviewedWorkOf(task, tasks) ?? undefined;
+    subjectId = repair === undefined ? null : juliusSegmentLineageRootOf(repair, tasks).parentTaskId;
   }
   if (subjectId === null) return [];
   return findings.filter((finding) => finding.taskId === subjectId && finding.blocking && finding.status === 'OPEN');
@@ -3166,3 +5460,28 @@ const findingEntryFor = (task: JuliusTask, finding: JuliusReviewerFinding): Juli
   allowedRoles: [task.role],
   sensitivity: 'INTERNAL',
 });
+
+/**
+ * ONE LINE OF JULIUS'S RESEARCH RECORD, as a later packet carries it.
+ * Numbers and identifiers only: the host and scrubbed path, never the query,
+ * fragment, purpose or any text of the page.
+ */
+export function juliusResearchServedLine(input: {
+  readonly role: string;
+  readonly checkpointId: string;
+  readonly continuationTaskId: string;
+  readonly observation: JuliusResearchObservationRecord;
+}): string {
+  const { observation } = input;
+  const delivery = observation.delivery;
+  if (delivery === null || delivery === undefined) throw new Error('research_served_line_without_delivery');
+  const host = observation.requested?.host ?? null;
+  const where = host === null ? 'an unparseable reference' : `https://${host}${observation.requested?.path ?? ''}`;
+  const bytes = delivery.fetchedBytes === null ? 'an unreported number of bytes' : `${String(delivery.fetchedBytes)} bytes`;
+  const handed = delivery.cut
+    ? `characters ${String(delivery.deliveredFrom + 1)}–${String(delivery.deliveredFrom + delivery.deliveredChars)} of ${String(delivery.readableChars)}`
+    : `all ${String(delivery.readableChars)} readable characters`;
+  return `RESEARCH SERVED (Julius's record, no page text): the ${input.role} asked at ${input.checkpointId} for ${where}; `
+    + `${observation.outcome}; ${bytes} fetched by ${delivery.mechanism ?? 'an unreported backend'}; body ${delivery.contentDigest}; `
+    + `${handed} handed to ${input.continuationTaskId}.`;
+}

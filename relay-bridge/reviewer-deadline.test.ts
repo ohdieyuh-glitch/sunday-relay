@@ -8,9 +8,9 @@ import {
   resolveReviewerDeadline, reviewerHighWater, reviewerOperativeTimeoutMs,
 } from './reviewer-deadline';
 import { loadHermesConfig } from './hermes-reviewer';
-import { ARCHITECT_WORKER, CODER_WORKER, reviewerWorker } from './julius/live-composition';
+import { architectWorker, CODER_WORKER, reviewerWorker } from './julius/live-composition';
 import { DEFAULT_HOSTED_LIMITS } from './hosted-coding-agent/hosted-envelope';
-import { DEFAULT_TIMEOUT_MS as ARCHITECT_OPERATIVE_TIMEOUT_MS } from '../src/relay/connectors/gpt-architect/config';
+import { architectOperativeTimeoutMs } from '../src/relay/connectors/gpt-architect/config';
 
 // NOT `import.meta`: the bridge tsconfig forbids it, and `npm run typecheck`
 // runs a second pass over relay-bridge that is easy to miss locally.
@@ -45,9 +45,21 @@ describe('the reviewer deadline is derived once and nothing keeps a private copy
    * against a runtime that aborts at 360_000, and the architect restated
    * `300_000` as a second literal beside the connector default it happened to
    * match. A number that agrees by coincidence is one edit from disagreeing.
+   *
+   * THE ARCHITECT ROW WAS ITSELF STILL VACUOUS, and stayed so through this
+   * file's own repair. It compared the declared deadline against
+   * `DEFAULT_TIMEOUT_MS` — the connector's FALLBACK — while the number that
+   * bounds the call is `readGptArchitectConfig(env).timeoutMs`, which
+   * `RELAY_PROMPT_ARCHITECT_TIMEOUT_MS` moves. So it asserted equality under
+   * the empty environment and could never have observed the drift it is named
+   * after. It now resolves both sides from the SAME environment, and
+   * `architect-envelope.test.ts` sweeps environments that actually set the
+   * variable.
    */
   it('declares, for every role, exactly the deadline that role is actually bounded by', () => {
-    expect(ARCHITECT_WORKER.timeoutMs).toBe(ARCHITECT_OPERATIVE_TIMEOUT_MS);
+    const env = { RELAY_PROMPT_ARCHITECT_TIMEOUT_MS: '412000' };
+    expect(architectWorker(env).timeoutMs).toBe(architectOperativeTimeoutMs(env));
+    expect(architectWorker({}).timeoutMs).toBe(architectOperativeTimeoutMs({}));
     expect(CODER_WORKER.timeoutMs).toBe(DEFAULT_HOSTED_LIMITS.maxRuntimeMs);
     expect(reviewerWorker('xai').timeoutMs).toBe(reviewerOperativeTimeoutMs());
   });
@@ -93,17 +105,39 @@ describe('the derivation is deterministic, bounded and says what it is standing 
    * be recovered, so it is a lower bound. Reporting it as a measurement would
    * understate exactly the thing it is evidence of.
    */
-  it('reports a cut-off high water as CENSORED, not as a measurement', () => {
+  /**
+   * THE MODEL NOW DOMINATES, AND THAT IS THE REPAIR. Correcting
+   * `requestsPerReview` from an asserted 2 to the observed floor of 5 raised
+   * `analyticalWorstCaseMs` to 630 000 — above the 400 093 ms high water — so
+   * the default basis is ANALYTICAL. It was `OBSERVED_CENSORED` only because
+   * the model understated the engine, which is precisely how the understatement
+   * stayed invisible: the number that should have exposed it was covering it.
+   *
+   * The censoring rule itself is unchanged and is proven below against a model
+   * small enough for an observation to bind, which is the only arrangement in
+   * which the rule is observable at all.
+   */
+  const TINY_MODEL = { requestTimeoutSeconds: 10, requestsPerReview: 2, engineOverheadMs: 0 } as const;
+
+  it('still reports the cut-off high water, and reports it as a lower bound', () => {
     const deadline = resolveReviewerDeadline();
     expect(deadline.observedHighWaterMs).toBe(400_093);
     expect(deadline.observedHighWaterCensored).toBe(true);
-    expect(deadline.basis).toBe('OBSERVED_CENSORED');
+    expect(deadline.basis, 'the corrected model now exceeds every observation').toBe('ANALYTICAL');
     const censored = RECORDED_REVIEWER_OBSERVATIONS.find(o => o.elapsedMs === 400_093);
     expect(censored?.outcome).toBe('CUT_OFF');
   });
 
+  it('reports a cut-off high water as CENSORED when it is what binds', () => {
+    const deadline = resolveReviewerDeadline({ model: TINY_MODEL });
+    expect(deadline.observedHighWaterMs).toBe(400_093);
+    expect(deadline.observedHighWaterCensored).toBe(true);
+    expect(deadline.basis).toBe('OBSERVED_CENSORED');
+  });
+
   it('says OBSERVED_COMPLETED when the high water is a real measurement', () => {
     const deadline = resolveReviewerDeadline({
+      model: TINY_MODEL,
       observations: RECORDED_REVIEWER_OBSERVATIONS.filter(o => o.outcome === 'COMPLETED'),
     });
     expect(deadline.observedHighWaterMs).toBe(381_880);
@@ -123,9 +157,12 @@ describe('the derivation is deterministic, bounded and says what it is standing 
 
   it('learns from a longer observation instead of ignoring it', () => {
     const longer = resolveReviewerDeadline({
-      observations: [{ runId: 'r', taskId: 't', stage: 'plan', elapsedMs: 410_000, outcome: 'COMPLETED' }],
+      // Longer than the corrected analytical worst case, so the observation is
+      // what binds — the point of the test, at the scale the policy now runs at.
+      observations: [{ runId: 'r', taskId: 't', stage: 'plan', elapsedMs: 700_000, outcome: 'COMPLETED' }],
     });
     expect(longer.operativeTimeoutMs).toBeGreaterThan(resolveReviewerDeadline().operativeTimeoutMs);
+    expect(longer.basis).toBe('OBSERVED_COMPLETED');
   });
 
   /**
@@ -134,10 +171,10 @@ describe('the derivation is deterministic, bounded and says what it is standing 
    */
   it('refuses rather than clamping when the floor cannot fit under the job ceiling', () => {
     expect(() => resolveReviewerDeadline({
-      observations: [{ runId: 'r', taskId: 't', stage: 'plan', elapsedMs: 10 * 60_000, outcome: 'COMPLETED' }],
+      observations: [{ runId: 'r', taskId: 't', stage: 'plan', elapsedMs: 20 * 60_000, outcome: 'COMPLETED' }],
     })).toThrow(ReviewerDeadlineUnsatisfiable);
     try {
-      resolveReviewerDeadline({ observations: [{ runId: 'r', taskId: 't', stage: 'plan', elapsedMs: 10 * 60_000, outcome: 'COMPLETED' }] });
+      resolveReviewerDeadline({ observations: [{ runId: 'r', taskId: 't', stage: 'plan', elapsedMs: 20 * 60_000, outcome: 'COMPLETED' }] });
       expect.unreachable();
     } catch (error) {
       expect((error as Error).message).toContain('reviewer_deadline_unsatisfiable');
@@ -164,7 +201,12 @@ describe('the job is the real ceiling, and the workflow is held to it', () => {
 
   it('pins the live mission workflow timeout to JOB_BUDGET_MS', () => {
     const workflow = read('.github/workflows/julius-first-live-mission.yml');
-    const declared = /^\s*timeout-minutes:\s*(\d+)\s*$/m.exec(workflow);
+    // THE PAID JOB'S timeout, not the file's first one: the `paid-slot` admission
+    // job now precedes it with a longer wait bound of its own, and that bound is
+    // not the budget the shares are cut from.
+    const paidJob = workflow.slice(workflow.indexOf('\n  first-live-mission:\n'));
+    expect(paidJob.length, 'the paid job must exist').toBeLessThan(workflow.length);
+    const declared = /^\s*timeout-minutes:\s*(\d+)\s*$/m.exec(paidJob);
     expect(declared, 'the live mission job must declare a timeout').not.toBeNull();
     expect(Number(declared![1]) * 60_000).toBe(JOB_BUDGET_MS);
   });

@@ -143,7 +143,17 @@ describe('the Wonderland Beta Gate', () => {
     expect(verdictFor(report, 'CODING AGENT'), 'the build task FAILED on coder_cost_exceeded').toBe('FAIL');
     expect(verdictFor(report, 'REPAIR LOOP')).toBe('FAIL');
     expect(verdictFor(report, 'VERIFIED COMPLETION')).toBe('FAIL');
-    expect(verdictFor(report, 'WONDER WEB OUTPUT')).toBe('NOT BUILT');
+    /**
+     * WONDER WEB OUTPUT IS NO LONGER A CONSTANT.
+     *
+     * `src/relay/mission/wonder-web/index.ts` now exists, so the `anyOf` probe
+     * finds the module and the row became the real probe this gate always
+     * intended it to be. FAIL is the honest verdict and not a regression: the
+     * surface is built, this bundle carries no `wonder-web.tsv`, and "we have
+     * the code" was never a pass here. It reaches PASS when a completed run's
+     * output is actually opened and dumped.
+     */
+    expect(verdictFor(report, 'WONDER WEB OUTPUT')).toBe('FAIL');
     expect(report.results.find((row) => row.id === 'CODING AGENT')!.basis,
       'and it says which class stopped it').toContain('coder_cost_exceeded');
   });
@@ -330,7 +340,7 @@ describe('the Wonderland Beta Gate', () => {
     const notPassing = report.results.filter((row) => row.verdict !== 'PASS');
     expect(notPassing.map((row) => `${row.id}: ${row.verdict} — ${row.basis}`),
       'every built capability must have SOME evidence that reaches PASS; a row that cannot is a constant, not a probe')
-      .toEqual([`WONDER WEB OUTPUT: NOT BUILT — ${report.results.find((row) => row.id === 'WONDER WEB OUTPUT')!.basis}`]);
+      .toEqual([`WONDER WEB OUTPUT: FAIL — ${report.results.find((row) => row.id === 'WONDER WEB OUTPUT')!.basis}`]);
     expect(report.gaps.map((row) => row.id), 'and the only gap left is the one nobody has built')
       .toEqual(['WONDER WEB OUTPUT']);
   });

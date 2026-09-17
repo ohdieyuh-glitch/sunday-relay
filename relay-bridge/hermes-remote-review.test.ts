@@ -7,6 +7,7 @@ import {
   runRemoteHermesReview,
   type RemoteHermesConfig,
 } from './hermes-remote-review';
+import { HERMES_TRANSIENT_UPSTREAM_STATUSES } from './hermes-reviewer';
 import type { ReviewPacket } from './hermes-reviewer';
 
 /**
@@ -194,6 +195,33 @@ describe('running a review', () => {
     });
     expect(outcome.kind).toBe('review_incomplete');
     if (outcome.kind === 'review_incomplete') expect(outcome.safeMessage).toContain('503');
+  });
+
+  /**
+   * THE TWO TRANSPORTS AGREE, AND THE LIST IS WHY.
+   *
+   * `HERMES_TRANSIENT_UPSTREAM_STATUSES` is read by both this path and the
+   * local one. Without a case here, the remote side could quietly drop back to
+   * its own literals and only the local path would be held to the shared
+   * answer — which is exactly the drift the shared list exists to stop.
+   */
+  const admissionShapeFor = async (status: number): Promise<string> => {
+    const outcome = await runRemoteHermesReview({
+      packet: PACKET, config, runId: 'run-1',
+      deps: { ...deps, fetchImpl: (() => Promise.resolve(json({ error: 'refused' }, status))) as unknown as typeof fetch },
+    });
+    return outcome.kind === 'review_incomplete' ? outcome.shape : `unexpected:${outcome.kind}`;
+  };
+
+  it('reads every shared transient status as the retryable shape', async () => {
+    expect(HERMES_TRANSIENT_UPSTREAM_STATUSES.length).toBeGreaterThan(0);
+    for (const status of HERMES_TRANSIENT_UPSTREAM_STATUSES) {
+      expect(await admissionShapeFor(status), String(status)).toBe('review_service_unavailable');
+    }
+  });
+
+  it('and leaves a status outside that list final', async () => {
+    expect(await admissionShapeFor(500)).toBe('review_provider_http_error');
   });
 
   it('keeps an unfinished review UNKNOWN rather than calling it failed', async () => {

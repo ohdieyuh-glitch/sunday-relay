@@ -108,9 +108,16 @@ describe('only a human dispatch can start the live mission', () => {
   });
 
   it('runs one LIVE mission at a time and never cancels one in flight', () => {
-    // Dry runs get a per-run group (see the F6 cases); paid runs share one.
+    // REPAIRED, NOT DELETED. This pinned one shared WORKFLOW-level group for
+    // live runs — the arrangement in which GitHub keeps a single pending run
+    // and a third paid dispatch cancels the one waiting. One-at-a-time is now
+    // two lines: the `paid-slot` admission job, and a job-level group on the
+    // paid job itself. Both are asserted here; neither may ever cancel.
+    expect(workflow, 'the workflow-level group is per run, so it can hold no pending paid run')
+      .toMatch(/^concurrency:\s*\n\s*group:\s*julius-first-live-mission-\$\{\{ github\.run_id \}\}\s*\n\s*cancel-in-progress:\s*false/mu);
     expect(workflow, 'two concurrent live missions would race for one workspace and one executor')
-      .toMatch(/concurrency:\s*\n\s*group:\s*julius-first-live-mission-\$\{\{ inputs\.confirm_live == 'RUN LIVE MISSION' && 'live' \|\| github\.run_id \}\}\s*\n\s*cancel-in-progress:\s*false/u);
+      .toMatch(/concurrency:\s*\n\s*group:\s*\$\{\{ inputs\.confirm_live == 'RUN LIVE MISSION' && 'julius-paid-provider-slot' \|\| format\('julius-preflight-\{0\}', github\.run_id\) \}\}\s*\n\s*cancel-in-progress:\s*false/u);
+    expect(workflow, 'nothing in the paid workflow may ever cancel a run').not.toMatch(/cancel-in-progress:\s*true/u);
   });
 
   it('isolates the provider credentials in a dedicated GitHub Environment', () => {
@@ -149,10 +156,19 @@ describe('the paid stage is gated, and the unpaid stage cannot pay', () => {
     expect(liveStep()).toContain('--confirm-live');
   });
 
-  it('the live step bounds the run loop with a finite tick ceiling', () => {
+  /**
+   * THE BOUND IS DERIVED, AND STILL FINITE. The default used to be a literal
+   * tick count; it is now "derived", and the drive counts the allowance from
+   * the mission's structure with a hard maximum it never passes.
+   */
+  it('the live step bounds the run loop with the allowance Julius derives, which an input can only tighten', () => {
     expect(liveStep(), 'an unbounded run loop can spend until the budget stops it')
       .toMatch(/--max-ticks/u);
-    expect(workflow, 'max_ticks must have a finite default').toMatch(/max_ticks:[\s\S]*?default:\s*'\d+'/u);
+    expect(workflow, 'max_ticks defaults to the derived allowance').toMatch(/max_ticks:[\s\S]*?default:\s*'derived'/u);
+    expect(read('src/relay/mission/julius/julius-tick-budget.ts'), 'the derived allowance never passes the hard maximum')
+      .toContain('Math.min(input.budget.hardMaxTicks, input.budget.plannedTicks + beyond + retries)');
+    expect(read('relay-bridge/julius/live-composition.ts'), 'an exhausted allowance fails the run with its numbers')
+      .toContain("const reasonCode = 'tick_budget_exhausted';");
   });
 
   it('the preflight role-resolution step never passes --confirm-live', () => {
@@ -825,6 +841,15 @@ describe('the evidence dump names only tables and columns the migrations create'
       // by definition; a retry the artifact could not show would be a spend
       // nobody could account for.
       'planAttempts', 'reviewAttempts',
+      // And WHICH kind of second review call it was: a correction of a shape
+      // defect, or one transient re-ask inside the same deadline.
+      'reviewReaskShape',
+      // The engine's own call count, on failed reviews too.
+      'engineApiCalls',
+      // What the independent executor refused, for a worker whose tool effect it refused.
+      'executorStep',
+      'executorRefusal',
+      'executorRefusalField',
       // THE ATTEMPT ITSELF. Live Run 3 COMPLETED and produced no rows here at
       // all, because diagnostics were flattened onto the two failure events and
       // onto nothing else. `outcome` is what lets a healthy attempt be filtered
@@ -1320,6 +1345,30 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
     expect(output).toContain('julius_exit=0');
   });
 
+  /**
+   * THE TICK ACCOUNT REACHES THE BUNDLE. Attempt 4's evidence could say only
+   * "stalled after 32 ticks"; what the mission was permitted, what it used and
+   * when its wall clock ran out are now lines of their own, closed tokens and
+   * numbers only, and a line that strays from that shape is withheld.
+   */
+  it('keeps the tick budget, the wall-clock deadline and the tick account, and nothing shaped otherwise', () => {
+    const kept = [
+      '  tick budget: planned=73 hard_max=1729 units=PROMPT_ARCHITECT,CODING_AGENT repair_rounds=3 segment_ceiling=4 reviewer=required attempts=3 override=none version=julius-tick-budget.v1',
+      '  wall clock deadline: 2026-09-13T20:25:20.000Z',
+      '  wall clock deadline: UNKNOWN',
+      '  ticks: consumed=47 allowance=73 remaining=26 beyond_main_path=0 retries=0 exhausted=no',
+      'RESULT: FAILED after 73 ticks',
+    ];
+    const output = buildEvidence([
+      ...kept,
+      '  tick budget: planned=73 hard_max=1729 units=PROMPT_ARCHITECT reason=whatever the worker said',
+      '  ticks: consumed=47 allowance=73 note=free text',
+    ].join('\n'));
+    for (const line of kept) expect(output, line).toContain(line);
+    expect(output).not.toContain('whatever the worker said');
+    expect(output).not.toContain('note=free text');
+  });
+
   it('keeps the failure outcomes — the runs that most need evidence', () => {
     // A paid mission that is BLOCKED or crashes must state its outcome in its
     // own artifact; the first cut of the allowlist kept only success shapes.
@@ -1514,24 +1563,65 @@ describe('F9 — dispatch inputs are validated before anything is built', () => 
     }
   });
 
-  it('refuses a tick count outside the bounds, in both directions', () => {
-    expect(runGate({ ...base, MAX_TICKS: '7' }), 'below the floor the run is cut off after being paid for').not.toBe(0);
-    expect(runGate({ ...base, MAX_TICKS: '33' }), 'above the ceiling the bound stops bounding').not.toBe(0);
-    expect(runGate({ ...base, MAX_TICKS: '10000' })).not.toBe(0);
+  /**
+   * REWRITTEN AFTER QUALIFICATION ATTEMPT 4 (run 34774471909). The gate used to
+   * refuse anything above MAX_ALLOWED=32, a ceiling sized for a six-task graph
+   * that stopped a run still inside every contract bound. The allowance is now
+   * Julius's to derive and print; this input can only tighten it, because the
+   * drive takes the smaller of the two, so the gate keeps a floor and a shape.
+   */
+  it('accepts "derived", and a whole-number tightening at or above the floor', () => {
+    expect(runGate({ ...base, MAX_TICKS: 'derived' }), 'the derived allowance is the default').toBe(0);
     expect(runGate({ ...base, MAX_TICKS: '8' }), 'the floor itself is allowed').toBe(0);
-    expect(runGate({ ...base, MAX_TICKS: '32' }), 'the ceiling itself is allowed').toBe(0);
+    expect(runGate({ ...base, MAX_TICKS: '33' }), 'a number above the derivation cannot loosen it, only fail to tighten it').toBe(0);
+    expect(runGate({ ...base, MAX_TICKS: '999999' })).toBe(0);
   });
 
-  it('cannot exceed the entrypoint\u2019s own default bound', () => {
-    // `driveJuliusRunToTerminal` defaults to 32 ticks, so the input may only
-    // ever tighten Julius's bound, never loosen it.
-    expect(gate()).toContain('MAX_ALLOWED=32');
+  it('refuses a count below the floor, a leading zero, and a number too long to be a tick count', () => {
+    expect(runGate({ ...base, MAX_TICKS: '7' }), 'below the floor the run is cut off after being paid for').not.toBe(0);
+    expect(runGate({ ...base, MAX_TICKS: '08' }), 'the entrypoint reads no leading zero, so the gate must not pass one').not.toBe(0);
+    expect(runGate({ ...base, MAX_TICKS: '1000000' })).not.toBe(0);
+    expect(runGate({ ...base, MAX_TICKS: 'Derived' })).not.toBe(0);
+  });
+
+  it('has no fixed ceiling of its own: the drive derives the allowance and an override only tightens it', () => {
+    expect(gate()).not.toContain('MAX_ALLOWED');
+    const composition = read('relay-bridge/julius/live-composition.ts');
+    expect(composition, 'the override is applied as a minimum').toContain('Math.min(now.allowance, override)');
+    const entrypoint = readFileSync(resolve(ROOT, 'relay-bridge/julius-live-mission.ts'), 'latin1');
+    expect(entrypoint, 'the live drive itself is bounded by the mission structure')
+      .toMatch(/driveJuliusRunToTerminal\(\{[^}]*\n\s*verification: runtime\.verification,/u);
+    expect(entrypoint, 'and the allowance is printed before the first dispatch').toContain('tick budget: planned=');
+  });
+
+  it('records when the wall clock started as a step output, and the live step reads it by name', () => {
+    const outFile = join(mkdtempSync(join(tmpdir(), 'julius-gate-started-')), 'out.txt');
+    expect(runGate({ ...base, GITHUB_OUTPUT: outFile })).toBe(0);
+    expect(readFileSync(outFile, 'utf8')).toMatch(/^job_started_at=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/mu);
+    expect(workflow.slice(workflow.indexOf("- name: 'LIVE: run the first real Julius mission'"))).toContain('JULIUS_JOB_STARTED_AT: ${{ steps.inputs_gate.outputs.job_started_at }}');
   });
 
   it('refuses a mistyped confirmation instead of silently running a dry run', () => {
     expect(runGate({ ...base, CONFIRM_LIVE: 'run live mission' })).not.toBe(0);
     expect(runGate({ ...base, CONFIRM_LIVE: 'RUN LIVE MISSION ' })).not.toBe(0);
-    expect(runGate({ ...base, CONFIRM_LIVE: 'RUN LIVE MISSION' })).toBe(0);
+    // A correctly typed confirmation must also claim a paid-run lane: the queue
+    // orders by it and the contract check holds it to the mission's grant.
+    expect(runGate({ ...base, CONFIRM_LIVE: 'RUN LIVE MISSION', LANE: 'regression' })).toBe(0);
+  });
+
+  it('refuses a paid run that claims no lane, or a lane outside the vocabulary', () => {
+    expect(runGate({ ...base, CONFIRM_LIVE: 'RUN LIVE MISSION' }), 'a paid run with no lane cannot be queued').not.toBe(0);
+    expect(runGate({ ...base, CONFIRM_LIVE: 'RUN LIVE MISSION', LANE: 'urgent' })).not.toBe(0);
+    expect(runGate({ ...base, LANE: 'Lab' }), 'the vocabulary is exact').not.toBe(0);
+    expect(runGate({ ...base }), 'a dry run may claim no lane').toBe(0);
+    expect(runGate({ ...base, LANE: 'lab' }), 'a dry run may claim one').toBe(0);
+  });
+
+  it('refuses a malformed dispatch key, and accepts the shape the dispatch client writes', () => {
+    expect(runGate({ ...base, DISPATCH_KEY: 'short' })).not.toBe(0);
+    expect(runGate({ ...base, DISPATCH_KEY: 'has space in it' })).not.toBe(0);
+    expect(runGate({ ...base, DISPATCH_KEY: 'x'.repeat(97) })).not.toBe(0);
+    expect(runGate({ ...base, DISPATCH_KEY: 'julius-continuous-1@0845c593a8eb#qualification#a1' })).toBe(0);
   });
 
   it('refuses a mutable Hermes ref', () => {
@@ -1545,11 +1635,19 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
   const GATE = "'Gate: no paid mission has been attempted or completed for THIS contract'";
   const ATTEMPT_STEP = "'Record that a paid mission was attempted (before any provider can be reached)'";
 
-  it('live dispatches share one concurrency group; dry runs do not', () => {
-    const group = /concurrency:\s*\n\s*group:\s*(.+)/u.exec(workflow)?.[1] ?? '';
-    expect(group, 'live runs must serialise').toContain("'live'");
-    expect(group, 'dry runs must stay unlimited and parallel').toContain('github.run_id');
-    expect(workflow, 'a live run must never be cancelled mid-flight').toMatch(/cancel-in-progress:\s*false/u);
+  it('live dispatches serialise through admission and one job-level group; dry runs do not', () => {
+    // REPAIRED, NOT DELETED: the property is unchanged — paid runs one at a
+    // time, dry runs unlimited and parallel, nothing cancelled — and it no
+    // longer rests on the workflow-level group that evicted waiting paid runs.
+    const groups = [...workflow.matchAll(/concurrency:\s*\n\s*group:\s*(.+)/gu)].map((match) => match[1]);
+    expect(groups.length, 'one workflow-level group and one on the paid job').toBe(2);
+    expect(groups[0], 'the workflow-level group is per run').toContain('github.run_id');
+    expect(groups[0], 'the workflow-level group must not be the shared live slot').not.toContain("'live'");
+    expect(groups[1], 'paid jobs serialise on one group').toContain("'julius-paid-provider-slot'");
+    expect(groups[1], 'dry runs stay unlimited and parallel').toContain('github.run_id');
+    const cancels = [...workflow.matchAll(/cancel-in-progress:\s*(\S+)/gu)].map((match) => match[1]);
+    expect(cancels.length).toBe(2);
+    expect(cancels.every((value) => value === 'false'), 'a live run must never be cancelled mid-flight').toBe(true);
   });
 
   it('a completed paid run publishes a marker carrying no secret', () => {
@@ -1931,9 +2029,13 @@ describe('the trust gate runs before anything the candidate controls', () => {
   });
 
   it('the verifier is a SEPARATE checkout from the candidate', () => {
-    // Two checkouts, and only the verifier carries a pinned ref and a path.
+    // Two checkouts PER JOB, and only the verifier carries a pinned ref and a
+    // path. The `paid-slot` admission job proves the same commit the same way
+    // before it runs its queue script, so the file holds two pairs.
     const checkouts = workflow.split('- uses: actions/checkout').length - 1;
-    expect(checkouts, 'the candidate and the verifier are two different checkouts').toBe(2);
+    expect(checkouts, 'the candidate and the verifier are two different checkouts, in each of the two jobs').toBe(4);
+    const pinned = workflow.split('ref: f131098cc4e8f35d7231cf2e9693b83c05dab75c').length - 1;
+    expect(pinned, 'each job checks out the pinned verifier exactly once').toBe(2);
     expect(verifierCheckout()).toContain('path: .julius-trusted-verifier');
     expect(verifierCheckout(), 'a token in the verifier checkout would ride into the container')
       .toContain('persist-credentials: false');
@@ -2555,6 +2657,186 @@ describe('every fact the peer telemetry writes reaches the exported bundle', () 
       expect(query, `${file} must select named keys only`).not.toMatch(/->'facts'(?!->>)/u);
       expect(query, `${file} must never select the payload itself`)
         .not.toMatch(/SELECT[^"]*\be\.payload\b\s*(?:,|AS|FROM)/u);
+    }
+  });
+});
+
+/* =============================================== research observation preflight */
+
+/**
+ * THE RESEARCH A CONTRACT GRANTS IS OBSERVED BEFORE THE RUN, OR THE RUN DOES NOT START.
+ *
+ * `julius-continuous-1` grants research to all three slots, and this workflow
+ * never set `JULIUS_RESEARCH_OBSERVED_BACKENDS` — so Live Reach refused every
+ * governed retrieval and the paid qualification could still complete, proving
+ * the opposite of what it was specified to demonstrate. The repair is a
+ * preflight that MAKES the observation through Relay's own bounded fetch and
+ * exports exactly one claim line. These cases hold its shape: where it sits,
+ * that a dry run gets it too, what it may write into `$GITHUB_ENV`, and that the
+ * evidence bundle keeps what it saw by allowlist rather than by copying a log.
+ */
+describe('the research a contract grants is observed before the run, through Relay’s own fetch', () => {
+  const OBSERVE = "'Preflight: observe the research the contract grants, through Relay''s own bounded fetch'";
+  const stepBlock = (name: string): string => {
+    const start = workflow.indexOf(`- name: ${name}`);
+    expect(start, `step "${name}" must exist`).toBeGreaterThan(-1);
+    const rest = workflow.slice(start);
+    const end = rest.indexOf('\n      - ', 1);
+    return end < 0 ? rest : rest.slice(0, end);
+  };
+  const at = (name: string): number => workflow.indexOf(`- name: ${name}`);
+  const CLAIM_GRAMMAR = '^JULIUS_RESEARCH_OBSERVED_BACKENDS=[a-z_]+:[a-z_]+(,[a-z_]+:[a-z_]+)*$';
+
+  it('exists once, after the build and the contract check, before role resolution and every paid step', () => {
+    expect(workflow.split(`- name: ${OBSERVE}`).length - 1, 'exactly one observation step').toBe(1);
+    const observe = at(OBSERVE);
+    expect(at('Build the executor, the preflight probe and the live entrypoint'), 'the bundle it runs must already exist')
+      .toBeGreaterThan(-1);
+    expect(at('Build the executor, the preflight probe and the live entrypoint')).toBeLessThan(observe);
+    expect(at("'Preflight: the Mission Contract is valid and bounded'")).toBeGreaterThan(-1);
+    expect(at("'Preflight: the Mission Contract is valid and bounded'")).toBeLessThan(observe);
+    for (const later of [
+      "'Preflight: all three roles resolve to the expected models, nothing dispatched'",
+      "'Record that a paid mission was attempted (before any provider can be reached)'",
+      "'LIVE: run the first real Julius mission'",
+    ]) {
+      expect(at(later), later).toBeGreaterThan(observe);
+    }
+  });
+
+  it('runs on a dry run too: no `if:`, no confirm_live, no provider secret', () => {
+    const step = stepBlock(OBSERVE);
+    expect(step, 'preflight must prove this for free').not.toMatch(/\n\s*if:/u);
+    expect(step).not.toContain('confirm_live');
+    expect(step, 'observing a public host needs no credential').not.toContain('secrets.');
+  });
+
+  it('invokes the built entrypoint’s observe-research on the dispatched contract, and fails the job on a non-zero exit', () => {
+    const script = stepScript(OBSERVE);
+    const invocations = script.split('\n').filter((line) => line.includes('julius-live-mission.cjs') && !line.trim().startsWith('test -f'));
+    expect(invocations.length).toBe(1);
+    expect(invocations[0]).toContain('node dist-relay-bridge/julius-live-mission.cjs observe-research --contract "$CONTRACT"');
+    expect(invocations[0], 'it must never be able to start a run').not.toMatch(/ run |--confirm-live/u);
+    expect(invocations[0]).toContain('tee research-observation.log');
+    expect(script).toContain('status=${PIPESTATUS[0]}');
+    expect(script).toMatch(/if \[ "\$status" -ne 0 \]; then[\s\S]*?exit 1/u);
+  });
+
+  it('writes exactly one thing to $GITHUB_ENV: the anchored claim line, and only when there is exactly one', () => {
+    const script = stepScript(OBSERVE);
+    const writes = workflow.split('\n').filter((line) => line.includes('GITHUB_ENV') && !line.trim().startsWith('#'));
+    expect(writes.length, 'this workflow writes $GITHUB_ENV in one place only').toBe(1);
+    expect(writes[0].trim()).toBe('grep -E "$claim" research-observation.log >> "$GITHUB_ENV"');
+    expect(script, 'and that place is this step').toContain(writes[0].trim());
+    expect(script).toContain(`claim='${CLAIM_GRAMMAR}'`);
+    expect(script, 'the write is conditional on a count of exactly one')
+      .toMatch(/if \[ "\$count" = '1' \]; then\s*\n\s*grep -E "\$claim" research-observation\.log >> "\$GITHUB_ENV"/u);
+  });
+
+  /**
+   * THE STEP, RUN. A shape assertion cannot tell a write of the one claim line
+   * from a write of the whole log; running the real script body with only the
+   * entrypoint stubbed can.
+   */
+  describe('the step, run against a stubbed entrypoint', () => {
+    const INVOCATION = 'node dist-relay-bridge/julius-live-mission.cjs observe-research --contract "$CONTRACT"';
+    const BUILT_GUARD = "test -f dist-relay-bridge/julius-live-mission.cjs || { echo 'entrypoint_not_built' >&2; exit 1; }";
+    const runStep = (stdout: string, exit: number): { code: number; env: string } => {
+      const dir = mkdtempSync(join(realpathSync(tmpdir()), 'julius-observe-'));
+      const stubOut = join(dir, 'stub.out');
+      const githubEnv = join(dir, 'github.env');
+      writeFileSync(stubOut, stdout);
+      writeFileSync(githubEnv, '');
+      const original = stepScript(OBSERVE);
+      expect(original).toContain(INVOCATION);
+      expect(original).toContain(BUILT_GUARD);
+      const script = original
+        .replace(BUILT_GUARD, 'true')
+        .replace(INVOCATION, '{ cat "$STUB_OUT"; exit "$STUB_EXIT"; }');
+      let code = 0;
+      try {
+        execFileSync('bash', ['-c', script], {
+          cwd: dir, stdio: 'ignore',
+          env: {
+            ...process.env,
+            CONTRACT: 'contract.json',
+            STUB_OUT: stubOut.replace(/\\/gu, '/'),
+            STUB_EXIT: String(exit),
+            GITHUB_ENV: githubEnv.replace(/\\/gu, '/'),
+          },
+        });
+      } catch (error) {
+        code = (error as { status?: number }).status ?? 1;
+      }
+      return { code, env: readFileSync(githubEnv, 'utf8') };
+    };
+    const ROW = 'research_observation source=web capability=read_item host=www.postgresql.org backend=relay_http_fetch result=observed\n';
+    const CLAIM = 'JULIUS_RESEARCH_OBSERVED_BACKENDS=relay_http_fetch:read_item\n';
+
+    it('exports the one claim line and nothing else', () => {
+      const result = runStep(`${ROW}research_observation_summary observed=1 of=1\n${CLAIM}`, 0);
+      expect(result.code).toBe(0);
+      expect(result.env).toBe(CLAIM);
+    }, 30_000);
+
+    it('fails the job when the entrypoint fails closed, and exports nothing', () => {
+      const result = runStep(`${ROW.replace('result=observed', 'result=unreachable')}research_unobservable: nothing\n`, 1);
+      expect(result.code).not.toBe(0);
+      expect(result.env).toBe('');
+    }, 30_000);
+
+    it('exports nothing for a contract that grants no research, and passes', () => {
+      const result = runStep('research_not_granted: the contract has no research clause, so there is nothing to observe.\n', 0);
+      expect(result.code).toBe(0);
+      expect(result.env).toBe('');
+    }, 30_000);
+
+    it('MUTATION: a line outside the claim grammar never reaches the job environment', () => {
+      const result = runStep(`${CLAIM}NODE_OPTIONS=--require=/tmp/x\nJULIUS_RESEARCH_OBSERVED_BACKENDS=relay_http_fetch:read_item BASH_ENV=/tmp/x\n`, 0);
+      expect(result.code).toBe(0);
+      expect(result.env).toBe(CLAIM);
+    }, 30_000);
+
+    it('MUTATION: two claim lines are refused rather than both exported', () => {
+      const result = runStep(`${CLAIM}JULIUS_RESEARCH_OBSERVED_BACKENDS=relay_rss_fetch:read_feed\n`, 0);
+      expect(result.code).not.toBe(0);
+      expect(result.env).toBe('');
+    }, 30_000);
+
+    it('MUTATION: an exit-0 output with neither a claim nor the not-granted line is refused', () => {
+      const result = runStep(`${ROW}research_observation_summary observed=1 of=1\n`, 0);
+      expect(result.code).not.toBe(0);
+      expect(result.env).toBe('');
+    }, 30_000);
+  });
+
+  it('the evidence bundle keeps the observation by allowlist, and never copies the log', () => {
+    const collect = stepScript('Collect the redacted validation evidence');
+    expect(collect).toMatch(/grep -E '[^']+' research-observation\.log \\\s*\n\s*> julius-live-evidence\/research-observation\.txt 2>\/dev\/null \|\| true/u);
+    expect(collect, 'a raw log is never copied').not.toMatch(/cp\s+\S*research-observation\.log/u);
+  });
+
+  it('the evidence allowlist admits every shape the entrypoint prints, and nothing with a tail', () => {
+    const collect = stepScript('Collect the redacted validation evidence');
+    const pattern = /grep -E '([^']+)' research-observation\.log/u.exec(collect)?.[1] ?? '';
+    expect(pattern).not.toBe('');
+    const kept = new RegExp(pattern, 'u');
+    for (const line of [
+      'research_observation source=web capability=read_item host=www.postgresql.org backend=relay_http_fetch result=observed',
+      'research_observation source=github capability=search host=*.github.com backend=relay_github_public result=unconfigured',
+      'research_observation_summary observed=1 of=2',
+      'JULIUS_RESEARCH_OBSERVED_BACKENDS=relay_http_fetch:read_item,relay_github_public:search',
+      'research_not_granted: the contract has no research clause, so there is nothing to observe.',
+      'research_unobservable: no backend was observed serving any of the 3 research probe(s) the contract grants; refusing to dispatch a mission whose research would all be refused.',
+    ]) {
+      expect(kept.test(line), line).toBe(true);
+    }
+    for (const line of [
+      'research_observation source=web capability=read_item host=www.postgresql.org backend=relay_http_fetch result=observed Authorization: Bearer abc',
+      'research_not_granted: sk-ant-FAKETESTNOTREAL',
+      'JULIUS_RESEARCH_OBSERVED_BACKENDS=relay_http_fetch:read_item OPENAI_API_KEY=x',
+    ]) {
+      expect(kept.test(line), line).toBe(false);
     }
   });
 });

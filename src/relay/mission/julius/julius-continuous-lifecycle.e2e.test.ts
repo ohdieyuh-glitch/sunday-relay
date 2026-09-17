@@ -409,7 +409,11 @@ describe('5 — the reviewer receives multiple execution checkpoints, not only t
     expect(reviewed.length, 'more than one review in a single mission').toBeGreaterThan(1);
     expect(reviewed).toContain('plan-1:review');
     expect(reviewed).toContain('guidance:build-1:1:task:review');
-    expect(reviewed).toContain('build-1:review');
+    // THE BUILD IS REVIEWED WHERE IT ENDS. `build-1` stopped to ask, so it is
+    // unfinished by its own account and is not reviewed; its continuation
+    // carries the build to the end and is the review the build gets.
+    expect(reviewed).toContain('segment:build-1:2:task:review');
+    expect(reviewed).not.toContain('build-1:review');
   });
 });
 
@@ -456,9 +460,12 @@ describe('7 — guidance cannot alter locked scope or acceptance criteria', () =
     const locked = await (async () => { await drain(harness); return harness.store.loadTaskContract({ projectId: 'prj-1', taskId: 'build-1' }); })();
 
     expect(factsOf(harness, 'guidance.issued'), 'nothing was issued').toEqual([]);
-    const refused = factsOf(harness, 'guidance.refused');
+    const refused = factsOf(harness, 'guidance.refused').filter((facts) => facts.stage === 'issue');
     expect(refused).toHaveLength(1);
-    expect(refused[0]!.reasonCode).toBe('guidance_shape_refused');
+    // Refused BY NAME since the peer channel's authority guard: a packet that
+    // reaches for a contract term is not a malformed packet, and the record says
+    // which of the two it was.
+    expect(refused[0]!.reasonCode).toBe('peer_response_mutates_protected_term');
     // The locked terms are exactly what the reviewer accepted.
     expect(locked!.state).toBe('LOCKED');
     expect(locked!.inScope).not.toContain('the whole repository');
@@ -1207,23 +1214,28 @@ describe('32 - a replayed drive changes nothing, and the one thing it does is sa
     expect(verdicts[0]!.segment).toBe(2);
   });
 
-  it('never releases the continuation while the segment that asked is unaccepted', async () => {
-    // The barrier under a hostile reviewer: the asking segment's own review
-    // refuses, so it is never effectively accepted and the continuation — which
-    // depends on it — never becomes runnable. An implementation that recorded
-    // the research and carried on would dispatch it here.
+  it('reviews the segment that FINISHED, never the one that stopped to ask, and a hostile verdict still blocks completion', async () => {
+    // Qualification attempt 3 (run 34766115321) reviewed every dispatch that
+    // yielded, sent each one to repair because it was unfinished by its own
+    // account, and ran its continuation as well: two lines of work per question.
+    // Here the asking segment is not reviewed at all; the continuation runs with
+    // the answer, and the hostile reviewer's refusal lands on the continuation,
+    // which is the work that actually ended.
     const harness = build({
       research: countingPort(),
       coderScript: [{ kind: 'succeed', researchAsks: ASKS, segmentResume: RESUME }, { kind: 'succeed' }],
       reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW }, { kind: 'succeed', evidence: FAILED_REVIEW }],
     });
     await drain(harness);
-    const continuation = harness.store.taskRow('segment:build-1:2:task');
-    expect(continuation, 'the continuation was still created').not.toBeNull();
-    expect(continuation!.state, 'and it is still BLOCKED').toBe('BLOCKED');
-    expect(taskIds(harness)).not.toContain('segment:build-1:2:task');
+    expect(taskIds(harness), 'the continuation ran with the answer').toContain('segment:build-1:2:task');
+    expect(harness.store.taskRow('build-1:review'), 'the dispatch that asked is never reviewed').toBeNull();
+    expect(taskIds(harness), 'the continuation is').toContain('segment:build-1:2:task:review');
+    expect(harness.store.taskRow('repair:build-1:1:task'), 'and nothing repairs the unfinished segment').toBeNull();
+    const decided = (await harness.store.decisionsForRun('run-1', 'prj-1')).map((decision) => decision.taskId);
+    expect(decided, 'no decision is ever written about the yielded dispatch').not.toContain('build-1');
+    expect(decided).toContain('segment:build-1:2:task');
     const run = await harness.store.loadRun('run-1', 'prj-1');
-    expect(run?.state, 'and the mission cannot complete around it').not.toBe('COMPLETED');
+    expect(run?.state, 'the refused continuation keeps the mission from completing').not.toBe('COMPLETED');
   });
 });
 
@@ -1381,5 +1393,224 @@ describe('34 - retrieved content is data, and the mission state proves it', () =
     // AND COUNTED, so the record says hostile content was observed.
     expect(factsOf(harness, 'checkpoint.verdict')[0]!.signalled).toBe(1);
     expect(factsOf(harness, 'checkpoint.verdict')[0]!.outcomes).toBe('injection_signaled');
+  });
+});
+
+/**
+ * A PROVIDER THAT NEVER RECOVERS ENDS THE MISSION IN A BOUNDED NUMBER OF CALLS.
+ *
+ * Money must never be a substitute for correctness, and a paid run that keeps
+ * re-asking a provider which has refused for good is exactly that substitution:
+ * it spends until the job is killed and then records nothing useful. These pin
+ * the bound at the pipeline's own numbers — a task's attempt ceiling, and ONE
+ * attempt for a review — and pin that the mission ends visibly short of
+ * completion rather than looping, whatever the failure's class.
+ */
+describe('13 — a provider hard failure surfaces explicitly and never loops', () => {
+  const dispatchesOf = (harness: JuliusHarness, adapterId: string, taskId: string): number =>
+    harness.adapters.get(adapterId)!.dispatches.filter((dispatch) => dispatch.taskId === taskId).length;
+
+  it('a coder whose provider refuses its credential every time: one call, FAILED, not retried, not completed', async () => {
+    const harness = build({ coderScript: [{ kind: 'fail', code: 'AUTH_CONFIGURATION' }] });
+    await drain(harness, 60);
+    expect(dispatchesOf(harness, CODER.adapterId, 'build-1'), 'a refused credential is never re-asked').toBe(1);
+    expect(harness.store.taskRow('build-1')!.state).toBe('FAILED');
+    expect(factsOf(harness, 'task.failed').some((facts) => facts.code === 'AUTH_CONFIGURATION'), 'the class is on the record').toBe(true);
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run!.state).not.toBe('COMPLETED');
+  });
+
+  it('a coder whose provider is rate limited FOREVER: retried to the attempt ceiling and no further', async () => {
+    const harness = build({ coderScript: [{ kind: 'fail', code: 'RATE_LIMIT' }] });
+    await drain(harness, 60);
+    const calls = dispatchesOf(harness, CODER.adapterId, 'build-1');
+    expect(calls, 'a transient class is bounded by the task attempt ceiling, not by the tick budget').toBe(3);
+    expect(harness.store.taskRow('build-1')!.state).toBe('FAILED');
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run!.state).not.toBe('COMPLETED');
+  });
+
+  it('a reviewer whose provider refuses: the review is asked ONCE and the plan is never accepted around it', async () => {
+    const harness = build({ reviewerScript: [{ kind: 'fail', code: 'AUTH_CONFIGURATION' }] });
+    await drain(harness, 60);
+    expect(dispatchesOf(harness, REVIEWER.adapterId, 'plan-1:review')).toBe(1);
+    expect(dispatchesOf(harness, CODER.adapterId, 'build-1'), 'no build without a completed plan review').toBe(0);
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run!.state).not.toBe('COMPLETED');
+  });
+});
+
+/**
+ * PROOF 35 — A YIELD IS NOT VERIFIED AS FINISHED WORK.
+ *
+ * Qualification attempt 3 (run 34766115321) paused ten times, five to ask the
+ * architect and five to ask Julius to read something, and every pause forked the
+ * deliverable: the dispatch that asked was reviewed as if it were finished, sent
+ * to repair because it was not, and its continuation ran as well. These cases
+ * hold the rule that replaces it — the dispatch that yields is never reviewed,
+ * the segment that ends is, and acceptance, liveness and completion reach the
+ * yielded dispatch only through that segment.
+ */
+describe('35 — a yield is not verified as finished work; the segment that ends is', () => {
+  const ASKS = Object.freeze([{
+    source: 'web', capability: 'read_item',
+    reference: 'https://docs.python.org/3/library/asyncio.html',
+    purpose: 'Whether asyncio.timeout exists in the pinned interpreter.',
+  }]);
+  const RESUME = Object.freeze({ completedSoFar: ['read the reader'], nextIntent: 'write the normalizer' });
+  const servingPort = () => ({
+    async serve(input: Parameters<NonNullable<Parameters<typeof createJuliusHarness>[0]['research']>['serve']>[0]) {
+      return input.asks.map((ask) => ({
+        outcome: 'observed' as const, reference: ask.reference, purpose: ask.purpose,
+        rendered: '<<<RELAY-EVIDENCE\nasyncio.timeout landed in 3.11.\nRELAY-EVIDENCE>>>',
+        detail: 'The source answered.', evidenceId: 'ev-research-1',
+        injectionSignals: [] as readonly string[], mayCorroborate: true,
+      }));
+    },
+  });
+  const decidedTaskIds = async (harness: JuliusHarness) =>
+    (await harness.store.decisionsForRun('run-1', 'prj-1')).map((decision) => decision.taskId);
+
+  it('a guidance pause: the build that asked is never reviewed, its continuation is, and the mission COMPLETES', async () => {
+    const harness = build({
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
+      architectScript: [
+        { kind: 'succeed', evidence: PLAN_EVIDENCE },
+        { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
+      ],
+    });
+    await drain(harness);
+    expect(harness.store.taskRow('build-1:review'), 'no review of the dispatch that asked').toBeNull();
+    expect(harness.store.taskRow('segment:build-1:2:task:review'), 'the continuation is reviewed').not.toBeNull();
+    expect(await decidedTaskIds(harness), 'and nothing is decided about the unfinished dispatch').not.toContain('build-1');
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run?.state, 'accepted through its continuation, so the mission completes').toBe('COMPLETED');
+  });
+
+  it('a research pause: the continuation is RUNNABLE at once, carries the answer, and the mission COMPLETES', async () => {
+    const harness = build({
+      research: servingPort(),
+      coderScript: [{ kind: 'succeed', researchAsks: ASKS, segmentResume: RESUME }, { kind: 'succeed' }],
+    });
+    await drain(harness);
+    expect(harness.store.taskRow('build-1:review')).toBeNull();
+    expect(taskIds(harness)).toEqual(expect.arrayContaining(['segment:build-1:2:task', 'segment:build-1:2:task:review']));
+    const answers = (await harness.store.brainEntriesForRun('run-1', 'prj-1')).filter((row) => row.entryId === 'brain:research-answer:segment:build-1:2:task');
+    expect(answers, 'the answer reached the continuation').toHaveLength(1);
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run?.state).toBe('COMPLETED');
+  });
+
+  it('a REPAIR that pauses is accepted through its own continuation, so the refused build is superseded and the mission COMPLETES', async () => {
+    const harness = build({
+      research: servingPort(),
+      coderScript: [
+        { kind: 'succeed' },
+        { kind: 'succeed', researchAsks: ASKS, segmentResume: RESUME },
+        { kind: 'succeed' },
+      ],
+      reviewerScript: [
+        { kind: 'succeed', evidence: PASSED_REVIEW },
+        { kind: 'succeed', evidence: FAILED_REVIEW },
+        { kind: 'succeed', evidence: PASSED_REVIEW },
+      ],
+    });
+    await drain(harness);
+    const decisions = await harness.store.decisionsForRun('run-1', 'prj-1');
+    const current = new Map(decisions.map((decision) => [decision.taskId, decision.action]));
+    expect(current.get('build-1'), 'the build was refused').toBe('REPAIR');
+    expect(current.has('repair:build-1:1:task'), 'the repair that paused is never decided').toBe(false);
+    expect(current.get('segment:repair:build-1:1:task:2:task'), 'its continuation is accepted').toBe('ACCEPT');
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run?.state, 'REPAIR -> repair -> yield -> accepted continuation supersedes the refusal').toBe('COMPLETED');
+  });
+
+  it('a pause whose answer never comes is not stranded work: nothing re-verifies it, and the mission cannot complete', async () => {
+    const harness = build({
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
+      architectScript: [
+        { kind: 'succeed', evidence: PLAN_EVIDENCE },
+        { kind: 'fail', code: 'AUTH_CONFIGURATION' },
+      ],
+    });
+    await drain(harness, 40);
+    expect(harness.store.taskRow('build-1:review'), 'not reviewed by the run').toBeNull();
+    // The resume sweep re-verifies stranded SUCCEEDED work. The dispatch that
+    // yielded is not stranded: the sweep neither reviews nor decides it. The
+    // finished plan review is not stranded either — the plan it reviewed is
+    // decided — and no longer re-swept on every idle advance, which is what
+    // this count used to include.
+    const advance = await harness.loop.advanceRun('run-1', 'prj-1');
+    expect(advance?.resumedVerifications, 'neither the concluded plan review nor the yielded build is swept').toBe(0);
+    expect(harness.store.taskRow('build-1:review'), 'still not reviewed after the resume sweep').toBeNull();
+    expect(await decidedTaskIds(harness), 'and still undecided').not.toContain('build-1');
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run?.state).not.toBe('COMPLETED');
+  });
+
+  it('a pause at the segment ceiling mints no continuation, so THAT dispatch is reviewed as the work it is', async () => {
+    const harness = build({
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      maxRepairRounds: 2,
+    });
+    await drain(harness, 60);
+    const ceiling = factsOf(harness, 'checkpoint.verdict').filter((facts) => facts.reasonCode === 'SEGMENT_CEILING_REACHED');
+    expect(ceiling).toHaveLength(1);
+    // Segments 2..4 yielded and are not reviewed; segment 4's pause hit the
+    // ceiling, minted nothing, and is judged as the last word of the unit.
+    for (const yielded of ['build-1', 'segment:build-1:2:task', 'segment:build-1:3:task']) {
+      expect(harness.store.taskRow(`${yielded}:review`), `${yielded} yielded and is not reviewed`).toBeNull();
+    }
+    expect(harness.store.taskRow('segment:build-1:4:task:review'), 'the segment that could not yield is reviewed').not.toBeNull();
+  });
+});
+
+/**
+ * PROOF 36 — THE REPAIR BOUND BINDS THE UNIT, THROUGH EVERY PAUSE.
+ *
+ * Qualification attempt 3 restarted its repair count at every segment and ran
+ * five chains of up to three rounds under a three-round contract. Here a coder
+ * pauses at the start of every round and a reviewer refuses every finished
+ * segment. The unit gets exactly its authorised rounds, and the next is refused.
+ */
+describe('36 — the repair bound binds the unit of work, however often it paused', () => {
+  const ASKS = Object.freeze([{
+    source: 'web', capability: 'read_item',
+    reference: 'https://docs.python.org/3/library/asyncio.html',
+    purpose: 'Whether asyncio.timeout exists in the pinned interpreter.',
+  }]);
+  const RESUME = Object.freeze({ completedSoFar: ['read the reader'], nextIntent: 'write the normalizer' });
+  const servingPort = () => ({
+    async serve(input: Parameters<NonNullable<Parameters<typeof createJuliusHarness>[0]['research']>['serve']>[0]) {
+      return input.asks.map((ask) => ({
+        outcome: 'observed' as const, reference: ask.reference, purpose: ask.purpose,
+        rendered: '<<<RELAY-EVIDENCE\nobserved.\nRELAY-EVIDENCE>>>', detail: 'The source answered.',
+        evidenceId: 'ev-research-1', injectionSignals: [] as readonly string[], mayCorroborate: true,
+      }));
+    },
+  });
+
+  it('a coder that pauses every round is given exactly maxRepairRounds repairs, then the unit is refused a third', async () => {
+    const pause = { kind: 'succeed' as const, researchAsks: ASKS, segmentResume: RESUME };
+    const finish = { kind: 'succeed' as const };
+    const harness = build({
+      research: servingPort(),
+      maxRepairRounds: 2,
+      coderScript: [pause, finish, pause, finish, pause, finish],
+      reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW }, { kind: 'succeed', evidence: FAILED_REVIEW }],
+    });
+    await drain(harness, 60);
+    const all = await harness.store.tasksForRun('run-1', 'prj-1');
+    const repairs = all.filter((row) => row.taskId.startsWith('repair:') && row.taskType === 'repair:build');
+    expect(repairs.map((row) => row.taskId), 'two repair rounds for the one build, not two per pause').toEqual([
+      'repair:segment:build-1:2:task:1:task',
+      'repair:segment:repair:segment:build-1:2:task:1:task:2:task:2:task',
+    ]);
+    const limit = factsOf(harness, 'run.failed').filter((facts) => facts.reasonCode === 'repair_round_limit');
+    expect(limit, 'and the third round is refused, once').toHaveLength(1);
+    const reviewedYields = all.filter((row) => row.taskId.endsWith(':review'))
+      .map((row) => row.taskId.slice(0, -':review'.length))
+      .filter((subject) => ['build-1', 'repair:segment:build-1:2:task:1:task', 'repair:segment:repair:segment:build-1:2:task:1:task:2:task:2:task'].includes(subject));
+    expect(reviewedYields, 'and no dispatch that paused was reviewed').toEqual([]);
   });
 });

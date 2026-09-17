@@ -100,6 +100,42 @@ const MISSION_LIMITS = Object.freeze({
   // way. Three cycles for the same reason as missions 2 through 4: a repair
   // LINEAGE needs more than one.
   'julius-live-mission-5': Object.freeze({ spendUsd: 30, repairCycles: 3 }),
+  //
+  // THE FIRST CONTINUOUS QUALIFICATION. Smaller than Mission 5 on every axis of
+  // CODE — one pure module of about 200 lines against three integrated files —
+  // and larger on dispatches, which is what actually spends.
+  //
+  // Missions 2 through 5 bought plan → build → review. This one is specified to
+  // buy plan → review → LOCK → build → pause → guidance → review of the
+  // guidance → resume → review, plus a repair round if one is justified. That is
+  // roughly twice the dispatches at a fraction of the per-dispatch surface.
+  //
+  // ARGUED FROM THE TWO PAID DATAPOINTS, not from caution. Mission 4 settled
+  // $1.390954 for one file; Mission 5 settled $5.177120 for three integrated
+  // ones. One file at Mission 4's rate with double the dispatches is on the
+  // order of $3; $25 is a bound with real slack for a run shape nobody has
+  // observed yet, and the evidence bundle will say what it actually cost.
+  // Three cycles for the same reason as every mission before it: a repair
+  // LINEAGE needs more than one.
+  //
+  // $60 IS THIS QUALIFICATION'S NUMBER, NOT JULIUS'S CAP. Set 2026-09-12 on the
+  // founder's written authorization: the three provider accounts held roughly
+  // $20 each, and the founder does not want an internal dollar ceiling whose
+  // purpose is protecting that prepaid credit. A run cannot be charged $60
+  // before a provider refuses, so the provider's balance is the limit that binds.
+  //
+  // `spendUsd` exists here for SCHEMA AND ALLOCATION COMPATIBILITY: the contract
+  // must state a finite figure, and allocation v3 divides it into each slot's
+  // protected floor, the shared pool and the repair reserve. It is not founder
+  // cost protection. BEFORE ANY FUTURE PAID RUN, refresh it to the provider
+  // budget that is actually funded and available at that time; a stale figure
+  // here would starve the allocator or misstate what the mission may draw.
+  //
+  // Nothing that is not money is loosened by it: three repair rounds, one
+  // attempt per review stage and every worker deadline are unchanged, and no
+  // model, participation, research, verification or repair budget is reduced
+  // to preserve unused credit.
+  'julius-continuous-1': Object.freeze({ spendUsd: 60, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
@@ -110,14 +146,148 @@ const ceilingsFor = (namespace) =>
 
 const MAX_ACCEPTANCE_CRITERIA = 12;
 
+/**
+ * RESEARCH AUTHORITY IS GRANTED HERE, PER MISSION, OR IT IS NOT GRANTED.
+ *
+ * The live entrypoint will seal whatever research clause a contract carries —
+ * the domain checks that the allowlist is WELL FORMED, which is a different
+ * question from whether this mission was ever authorised to read the outside
+ * world at all. Without this table a mission document could grant itself the
+ * internet by editing its own file, which is the exact mistake the spend
+ * ceilings above exist to prevent: run 34396331071 refused mission 3's
+ * self-declared 20/3 for the same reason, and the grant belongs here, named,
+ * where raising it is visible.
+ *
+ * THE TABLE IS EMPTY, AND THAT IS THE CURRENT STATE OF THE PRODUCT: no mission
+ * has been authorised to research, every paid mission so far has run with
+ * `noJuliusResearch`, and a contract declaring a `research` clause is refused
+ * until a human writes its grant in here. Authorising one is a deliberate,
+ * reviewable edit naming the mission, the sources, the read capabilities, the
+ * hosts and the retrieval budget — not a side effect of shipping the plumbing.
+ *
+ * A grant is a CEILING, exactly like spendUsd: the contract states what it
+ * wants and this refuses anything the grant does not cover. It never widens a
+ * contract, and it never asserts Relay can reach any of it — reachability is
+ * an operator observation (`JULIUS_RESEARCH_OBSERVED_BACKENDS`) and is a third,
+ * separate fact.
+ */
+const NO_RESEARCH = Object.freeze({
+  roles: Object.freeze([]),
+  allowances: Object.freeze([]),
+  missionBudget: Object.freeze({ maxRetrievals: 0, maxBytes: 0 }),
+  roleBudget: Object.freeze({ maxRetrievals: 0, maxBytes: 0 }),
+});
+const MISSION_RESEARCH = Object.freeze({
+  /**
+   * THE FIRST MISSION GRANTED RESEARCH, AND THE FIRST EVER.
+   *
+   * Every paid mission before this one ran under `noJuliusResearch`. This grant
+   * is the deliberate act that table was built to require: it names the mission,
+   * the source, the read capability, the exact host and the retrieval budget,
+   * and it grants nothing else.
+   *
+   * WHY THIS MISSION AND WHY THIS HOST. The mission turns on one question its
+   * own workspace cannot answer — what the evidence exporter writes for a SQL
+   * NULL — and the authoritative general answer is PostgreSQL's own
+   * documentation of unaligned output. One host, one read capability, no
+   * search: a worker may fetch a documentation page and nothing else.
+   *
+   * ALL THREE ROLES, BECAUSE ALL THREE CAN NOW ASK. This entry first named
+   * only the Coding Agent, on the ground that the Prompt Architect and the
+   * Independent Reviewer answered with fixed schemas and had no channel
+   * through which a research ask could reach Julius. That is no longer true:
+   * their schemas carry `researchAsks` as a required field, so both slots ask
+   * on every turn. Leaving the grant at one role would have refused those asks
+   * `role_not_authorized` while the mission's own charter asks the Architect to
+   * investigate before the contract locks — the mission would have bought a
+   * record proving the opposite of what it set out to demonstrate.
+   *
+   * THE BUDGET IS DELIBERATELY TIGHT, AND WAS ALREADY SIZED FOR THREE. Two
+   * retrievals per slot and six for the mission: exactly three slots' worth,
+   * which is why widening the roles adds no retrieval, no host and no
+   * capability. That is enough to read a page and check a second, and not
+   * enough to browse. A slot that needs more is a slot whose question was not
+   * the one this mission is about, and the refusal will say so on the record.
+   *
+   * IT AUTHORISES NOTHING ELSE. No other mission is named here, so every other
+   * mission still gets `noJuliusResearch`. Adding a second entry is a second
+   * deliberate act.
+   */
+  'julius-continuous-1': Object.freeze({
+    roles: Object.freeze(['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER']),
+    allowances: Object.freeze([
+      Object.freeze({
+        source: 'web',
+        capabilities: Object.freeze(['read_item']),
+        hosts: Object.freeze(['www.postgresql.org']),
+      }),
+    ]),
+    missionBudget: Object.freeze({ maxRetrievals: 9, maxBytes: 900_000 }),
+    roleBudget: Object.freeze({ maxRetrievals: 3, maxBytes: 300_000 }),
+  }),
+});
+
+/**
+ * WHICH PAID-RUN LANE A MISSION MAY CLAIM, because priority is an authorisation
+ * too.
+ *
+ * Every paid run of `julius-first-live-mission.yml` waits in one queue for the
+ * one paid provider slot (`scripts/julius-paid-slot.mjs`), ordered by lane:
+ * `qualification`, then `qualification-repair`, then `lab`, then `regression`.
+ * A lane typed at dispatch is only a claim. If it were also the grant, a lab
+ * experiment could buy qualification priority by typing the word, and the
+ * queue's order would be whatever the last person to dispatch wanted it to be.
+ *
+ * So the grant lives here, beside the ceilings, against each mission's own
+ * accounting namespace. A namespace absent from this table may claim `lab` and
+ * nothing else — the same default posture as the ceilings: a new mission is an
+ * experiment until someone writes down that it is more. The missions that
+ * already have a paid history are `regression` when they run again.
+ *
+ * This is a vocabulary check, not a budget: it grants no money and no reach.
+ */
+const PAID_LANES = Object.freeze(['qualification', 'qualification-repair', 'lab', 'regression']);
+const DEFAULT_LANES = Object.freeze(['lab']);
+const MISSION_LANES = Object.freeze({
+  'julius-first-live': Object.freeze(['regression']),
+  'julius-live-mission-2': Object.freeze(['regression']),
+  'julius-live-mission-3': Object.freeze(['regression']),
+  'julius-live-mission-4': Object.freeze(['regression']),
+  'julius-live-mission-5': Object.freeze(['regression']),
+  // THE FORMAL CONTINUOUS-WORKER QUALIFICATION, and the only mission that may
+  // take the head of the queue. `qualification-repair` is its paid rerun after a
+  // repair, which still outranks every lab experiment.
+  'julius-continuous-1': Object.freeze(['qualification', 'qualification-repair']),
+});
+
+/** The lanes THIS contract may claim, by its own declared namespace. */
+const lanesFor = (namespace) =>
+  (typeof namespace === 'string' && Object.hasOwn(MISSION_LANES, namespace))
+    ? MISSION_LANES[namespace]
+    : DEFAULT_LANES;
+
+/** The research grant that applies to THIS contract, by its own namespace. */
+const researchGrantFor = (namespace) =>
+  (typeof namespace === 'string' && Object.hasOwn(MISSION_RESEARCH, namespace))
+    ? MISSION_RESEARCH[namespace]
+    : NO_RESEARCH;
+
 const problems = [];
 const refuse = (problem) => problems.push(problem);
 
 const path = process.argv[2];
 if (!path) {
-  process.stderr.write('usage: julius-live-contract-check.mjs <contract.json>\n');
+  process.stderr.write('usage: julius-live-contract-check.mjs <contract.json> [--lane <lane>]\n');
   process.exit(2);
 }
+/**
+ * `--lane` is OPTIONAL, and absent means "no lane is being claimed" — a dry run
+ * that will never enter the paid queue. A PRESENT lane must be a word of the
+ * vocabulary and one this mission is granted; an empty value is a malformed
+ * claim, not an absent one.
+ */
+const laneAt = process.argv.indexOf('--lane');
+const claimedLane = laneAt === -1 ? null : (process.argv[laneAt + 1] ?? '');
 
 let contract;
 try {
@@ -160,6 +330,15 @@ if (!Array.isArray(criteria) || criteria.length === 0) {
  * than to the most permissive entry.
  */
 const namespace = typeof contract.markerNamespace === 'string' ? contract.markerNamespace : null;
+
+if (claimedLane !== null) {
+  const granted = lanesFor(namespace);
+  if (!PAID_LANES.includes(claimedLane)) {
+    refuse(`lane "${claimedLane}" is not a paid-run lane (${PAID_LANES.join(', ')})`);
+  } else if (!granted.includes(claimedLane)) {
+    refuse(`lane "${claimedLane}" is not granted to ${namespace ?? 'a mission with no declared namespace'}; it may claim ${granted.join(', ')}`);
+  }
+}
 const { spendUsd: MAX_SPEND_USD, repairCycles: MAX_REPAIR_CYCLES } = ceilingsFor(namespace);
 
 const limits = contract.limits;
@@ -198,6 +377,77 @@ if (limits === undefined || limits === null || typeof limits !== 'object') {
   }
 }
 
+/* ------------------------------------------------------- research authority */
+
+/**
+ * A contract may ask for research. It may not grant itself research.
+ *
+ * Every refusal below names the exact clause that exceeded the grant, because
+ * "research refused" at request time reads like the mission working as
+ * intended rather than like a mission document asking for something nobody
+ * authorised.
+ */
+const research = contract.research;
+if (research !== undefined) {
+  const grant = researchGrantFor(namespace);
+  if (grant === NO_RESEARCH) {
+    refuse(`research is declared but no research grant exists for ${namespace ?? 'a mission with no declared namespace'}; a contract cannot grant itself research authority`);
+  } else if (research === null || typeof research !== 'object' || Array.isArray(research)) {
+    refuse('research must be an object when declared');
+  } else {
+    const roles = Array.isArray(research.roles) ? research.roles : null;
+    if (roles === null) refuse('research.roles must be an array');
+    else for (const role of roles) {
+      if (!grant.roles.includes(role)) refuse(`research.roles names "${role}", which this mission's grant does not cover`);
+    }
+
+    const allowances = Array.isArray(research.allowances) ? research.allowances : null;
+    if (allowances === null) refuse('research.allowances must be an array');
+    else for (const [index, allowance] of allowances.entries()) {
+      if (!allowance || typeof allowance !== 'object') { refuse(`research.allowances[${index}] must be an object`); continue; }
+      const granted = grant.allowances.find((entry) => entry.source === allowance.source);
+      if (granted === undefined) {
+        refuse(`research.allowances[${index}] names source "${allowance.source}", which this mission's grant does not cover`);
+        continue;
+      }
+      const capabilities = Array.isArray(allowance.capabilities) ? allowance.capabilities : [];
+      for (const capability of capabilities) {
+        if (!granted.capabilities.includes(capability)) {
+          refuse(`research.allowances[${index}] asks for "${capability}" on "${allowance.source}", which this mission's grant does not cover`);
+        }
+      }
+      const hosts = Array.isArray(allowance.hosts) ? allowance.hosts : [];
+      for (const host of hosts) {
+        // Exact pattern match against the granted list, deliberately: deciding
+        // whether `*.python.org` is "covered by" some other pattern is host
+        // matching, and a second implementation of host matching in a gate
+        // script is precisely the sort of thing that opens a hole.
+        if (!granted.hosts.includes(String(host).trim().toLowerCase())) {
+          refuse(`research.allowances[${index}] asks for host "${host}" on "${allowance.source}", which is not one of this mission's granted hosts`);
+        }
+      }
+    }
+
+    for (const [name, ceiling] of [['missionBudget', grant.missionBudget], ['roleBudget', grant.roleBudget]]) {
+      const budget = research[name];
+      if (!budget || typeof budget !== 'object') { refuse(`research.${name} must be an object stating maxRetrievals`); continue; }
+      if (!Number.isInteger(budget.maxRetrievals) || budget.maxRetrievals < 0) {
+        refuse(`research.${name}.maxRetrievals must be a non-negative integer`);
+      } else if (budget.maxRetrievals > ceiling.maxRetrievals) {
+        refuse(`research.${name}.maxRetrievals is ${budget.maxRetrievals}, above the ${ceiling.maxRetrievals} this mission is granted`);
+      }
+      if (budget.maxBytes === undefined || budget.maxBytes === null) {
+        // Null is "no byte cap". Permitted only where the grant itself has none.
+        if (ceiling.maxBytes !== null) refuse(`research.${name}.maxBytes must state a byte cap; this mission is granted at most ${ceiling.maxBytes}`);
+      } else if (!Number.isInteger(budget.maxBytes) || budget.maxBytes < 0) {
+        refuse(`research.${name}.maxBytes must be a non-negative integer or null`);
+      } else if (ceiling.maxBytes !== null && budget.maxBytes > ceiling.maxBytes) {
+        refuse(`research.${name}.maxBytes is ${budget.maxBytes}, above the ${ceiling.maxBytes} this mission is granted`);
+      }
+    }
+  }
+}
+
 /* -------------------------------------------------- the workspace is not us */
 
 if (typeof contract.workspacePath === 'string' && contract.workspacePath.trim() !== '') {
@@ -225,6 +475,10 @@ out(`  acceptance criteria: ${Array.isArray(criteria) ? criteria.length : 0} (${
 out(`  spend ceiling: ${limits?.spendUsd ?? 'MISSING'} USD`);
 out(`  architect output ceiling: ${limits?.architectMaxOutputTokens ?? 'default (connector)'} of ${ARCHITECT_OUTPUT_TOKEN_RESERVATION} reserved`);
 out(`  repair ceiling: ${limits?.repairCycles ?? 'MISSING'} cycle(s)`);
+out(`  paid-run lanes: ${lanesFor(namespace).join(', ')}${claimedLane === null ? '' : ` (claimed: ${claimedLane})`}`);
+out(`  research: ${research === undefined
+  ? 'NONE — every ask is refused research_not_authorized'
+  : `${Array.isArray(research.allowances) ? research.allowances.length : 0} allowance(s) for ${Array.isArray(research.roles) ? research.roles.join(', ') : 'no role'}`}`);
 
 if (problems.length > 0) {
   out('CONTRACT REFUSED:');

@@ -19,12 +19,25 @@ name: Julius first live mission
 # so the provider credentials live beside neither ordinary CI nor the
 # repository, and an environment reviewer can be required before it starts.
 #
-# PREFLIGHT ALWAYS RUNS AND CONTACTS NO PROVIDER. Dispatching with an empty
+# PREFLIGHT ALWAYS RUNS AND SPENDS NOTHING. Dispatching with an empty
 # `confirm_live` is the supported way to prove the whole rig — PostgreSQL,
 # migrations, the independent executor, receipt attestation, scoped
-# credentials, the sandbox ceiling, in-sandbox git, the Hermes profile, and
-# that all three roles resolve to the expected models — without spending
-# anything.
+# credentials, the sandbox ceiling, in-sandbox git, the Hermes profile, that
+# all three roles resolve to the expected models, that each provider accepts
+# its credential and serves the pinned model, and that the research the
+# contract grants is reachable — without spending anything. The provider check
+# reads model METADATA only (`GET /v1/models/<id>`), which generates no tokens
+# and bills nothing; no completion is ever requested before the LIVE step.
+
+# THE RUN'S TITLE IS A MACHINE-READABLE CLAIM, parsed by the paid-slot queue.
+#
+# `scripts/julius-paid-slot.mjs` orders every waiting paid run by the lane and
+# key written here, and the dispatch client finds its own run by the key after
+# an ambiguous network failure instead of dispatching a second one. The grammar
+# is exact and whole-string on the reading side, so an input that tried to
+# smuggle a second `mode=` into the title makes the run UNPARSEABLE — which the
+# queue treats as waiting at the lowest priority, never as free.
+run-name: "julius mission=${{ inputs.mission }} lane=${{ inputs.lane != '' && inputs.lane || 'unspecified' }} mode=${{ inputs.confirm_live == 'RUN LIVE MISSION' && 'paid' || 'preflight' }} key=${{ inputs.dispatch_key != '' && inputs.dispatch_key || 'none' }}"
 
 on:
   workflow_dispatch:
@@ -38,9 +51,9 @@ on:
         required: false
         default: ''
       max_ticks:
-        description: 'Hard ceiling on Julius run-loop ticks.'
+        description: 'Julius counts its tick allowance from the mission''s own structure. "derived" uses it; a whole number can only tighten it.'
         required: false
-        default: '24'
+        default: 'derived'
       hermes_ref:
         description: 'Hermes Agent commit SHA (40 hex) to install for the Independent Reviewer. Immutable pins only.'
         required: false
@@ -49,6 +62,14 @@ on:
         description: 'Which bounded mission under .github/julius-missions/ to run. Its contract declares its own durable accounting namespace.'
         required: false
         default: 'julius-first-live'
+      lane:
+        description: 'Paid-run queue lane: qualification, qualification-repair, lab or regression. Required for a paid run and checked against the mission''s grant; may be empty for a preflight.'
+        required: false
+        default: ''
+      dispatch_key:
+        description: 'Idempotency key from scripts/julius-paid-dispatch.mjs ([A-Za-z0-9._@#-], 8-96). A second run carrying the same key refuses itself before it can spend.'
+        required: false
+        default: ''
 
 # READ-ONLY, and every entry is here because a gate needs it. No write scope of
 # any kind, no PAT, and never the coding worker's credential: the trust gates
@@ -66,19 +87,132 @@ permissions:
   issues: read
   statuses: read
 
-# LIVE runs share one group, so two paid missions can never be in flight at
-# once — they would race for the same workspace, executor and database. DRY
-# runs get a group of their own per run, so proving the rig stays unlimited and
-# free. Nothing is ever cancelled mid-flight: a live run holds a durable Julius
-# run and real sandboxes, and killing it halfway leaves both to be reconciled
-# by hand.
+# EVERY RUN GETS A GROUP OF ITS OWN, and that is not a loosening.
+#
+# This used to put every LIVE run in one shared group. GitHub keeps exactly ONE
+# pending run per concurrency group: a third paid dispatch silently CANCELLED
+# the one already waiting, and the group had no notion of priority, so a lab
+# experiment dispatched after the continuous qualification could evict it from
+# the queue with nothing on the record but a grey "cancelled".
+#
+# Serialisation now belongs to the `paid-slot` job below, which waits for the
+# one paid provider slot under an explicit rule (lane, then arrival, then run
+# id), never cancels anything, and never lets a waiting run preempt an admitted
+# one. The paid job keeps a job-level group of its own as a second line. Nothing
+# is ever cancelled mid-flight: a live run holds a durable Julius run and real
+# sandboxes, and killing it halfway leaves both to be reconciled by hand.
 concurrency:
-  group: julius-first-live-mission-${{ inputs.confirm_live == 'RUN LIVE MISSION' && 'live' || github.run_id }}
+  group: julius-first-live-mission-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
+  # ------------------------------------------------------- THE PAID PROVIDER SLOT
+  #
+  # ONE PAID RUN AT A TIME, IN AN ORDER SOMEBODY WROTE DOWN.
+  #
+  # Only a paid dispatch runs this job. It holds no secret, uses no environment
+  # and can reach no provider: it proves the checkout the same way the paid job
+  # does, checks the queue claim is well formed, and then waits in
+  # `scripts/julius-paid-slot.mjs` until no other paid run holds the slot and
+  # this run is first among the waiting under (lane, created at, run id). The
+  # paid job `needs:` it, so nothing that can spend starts before admission.
+  #
+  # A qualification dispatched while a lab run is waiting goes ahead of it; one
+  # dispatched while a lab run is already ADMITTED waits for it to finish.
+  # Waiting runs are never cancelled, and a run carrying a dispatch key some
+  # earlier run already carries refuses itself here without spending.
+  #
+  # The wait is bounded by this job's timeout, below GitHub's six-hour cap for a
+  # hosted job; a run that cannot be admitted in that time says
+  # `paid_slot_wait_exhausted` and has spent nothing.
+  paid-slot:
+    name: paid-slot
+    if: inputs.confirm_live == 'RUN LIVE MISSION'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: 'Make room for the trusted verifier, whatever the candidate shipped'
+        run: rm -rf .julius-trusted-verifier
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: f131098cc4e8f35d7231cf2e9693b83c05dab75c
+          path: .julius-trusted-verifier
+          persist-credentials: false
+
+      # NO CACHE: nothing candidate-controlled is interpreted before trust exists.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
+      # THE SAME GATE, FROM THE SAME PINNED VERIFIER, BEFORE THE QUEUE SCRIPT RUNS.
+      # The admission script is repository content; it is read only after the
+      # commit it came from is proven reviewed, current and not rolled back.
+      - name: 'Gate: admission runs only reviewed, current, not rolled-back code'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          actual="$(git -C .julius-trusted-verifier rev-parse HEAD)"
+          if [ "$actual" != 'f131098cc4e8f35d7231cf2e9693b83c05dab75c' ]; then
+            echo "trusted_verifier_not_at_the_pinned_commit: $actual" >&2
+            exit 1
+          fi
+          node .julius-trusted-verifier/scripts/julius-live-preflight-gates.mjs \
+            "${GITHUB_REPOSITORY}" main "${GITHUB_REF}" "${GITHUB_SHA}"
+
+      # A MALFORMED CLAIM MUST NOT WAIT SIX HOURS TO BE REFUSED. The paid job's
+      # input gate checks all of this again, and the contract checker checks the
+      # lane against the mission's grant; this is the cheap early version, so a
+      # typo fails in seconds instead of occupying a runner in the queue.
+      - name: 'Gate: the paid-run queue claim is well formed'
+        env:
+          LANE: ${{ inputs.lane }}
+          DISPATCH_KEY: ${{ inputs.dispatch_key }}
+          MISSION: ${{ inputs.mission }}
+        run: |
+          set -euo pipefail
+          case "$LANE" in
+            qualification|qualification-repair|lab|regression) ;;
+            *) echo "paid_run_lane_invalid: '$LANE' (a paid run must claim qualification, qualification-repair, lab or regression)" >&2; exit 1;;
+          esac
+          case "$MISSION" in
+            *[!a-z0-9-]*|'') echo "mission_not_a_slug: '$MISSION'" >&2; exit 1;;
+          esac
+          if [ -n "$DISPATCH_KEY" ] && ! printf '%s' "$DISPATCH_KEY" | grep -Eqx '[A-Za-z0-9._@#-]{8,96}'; then
+            echo "dispatch_key_malformed" >&2
+            exit 1
+          fi
+          [ -f ".github/julius-missions/$MISSION/contract.json" ] || {
+            echo "mission_contract_missing: .github/julius-missions/$MISSION/contract.json" >&2; exit 1; }
+          node scripts/julius-live-contract-check.mjs ".github/julius-missions/$MISSION/contract.json" --lane "$LANE"
+
+      - name: 'Admission: wait for the paid provider slot'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/julius-paid-slot.mjs wait --repo "$GITHUB_REPOSITORY" --run-id "$GITHUB_RUN_ID"
+
   first-live-mission:
     name: Preflight, then the live mission
+    # ADMITTED, OR NOT PAID AT ALL. A dry run skips `paid-slot` and proceeds as it
+    # always has; a paid run starts only when admission concluded `success`. A
+    # paid run whose admission failed, was cancelled or refused a duplicate never
+    # reaches a step that could spend.
+    needs: paid-slot
+    if: ${{ !cancelled() && (needs.paid-slot.result == 'success' || (needs.paid-slot.result == 'skipped' && inputs.confirm_live != 'RUN LIVE MISSION')) }}
+    # THE SECOND LINE. With admission correct this group never has a pending
+    # member; if admission were ever wrong, two paid jobs still could not run at
+    # once. Dry runs keep a group of their own.
+    concurrency:
+      group: ${{ inputs.confirm_live == 'RUN LIVE MISSION' && 'julius-paid-provider-slot' || format('julius-preflight-{0}', github.run_id) }}
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     # THE JOB BUDGET IS SHARED OUT, not a taste. It is `JOB_BUDGET_MS` in
     # relay-bridge/reviewer-deadline.ts and a structural test fails if the two
@@ -163,7 +297,18 @@ jobs:
       # generates whether or not Relay is still reading — and the attempt
       # ceiling is untouched, so this changes how long a failure takes to
       # become legible, not what a run may spend.
-      HERMES_REQUEST_TIMEOUT_SECONDS: '90'
+      #
+      # 90 -> 480 AFTER PAID QUALIFICATION 34753589938. The reviewer now holds no
+      # tool, so a review is ONE request that must reason and then write the
+      # whole JSON verdict — not a loop of short tool calls, which is what 90 s
+      # was sized against. That run's first attempt hit this cap and its re-ask
+      # was killed by the engine's 12 s stream-idle watchdog while the model
+      # reasoned in silence. 480 is the longest review ever watched (400 s, cut
+      # off still running) plus a fifth, so one request may last as long as a
+      # whole review has. The bootstrap ties both codex watchdogs to this same
+      # number, and the reviewer deadline is re-derived from it (792 000 ms,
+      # unchanged).
+      HERMES_REQUEST_TIMEOUT_SECONDS: '480'
 
     steps:
       # Pinned to immutable commit SHAs. A mutable tag can be repointed by the
@@ -262,28 +407,57 @@ jobs:
           CONFIRM_LIVE: ${{ inputs.confirm_live }}
           HERMES_REF: ${{ inputs.hermes_ref }}
           MISSION: ${{ inputs.mission }}
+          LANE: ${{ inputs.lane }}
+          DISPATCH_KEY: ${{ inputs.dispatch_key }}
         run: |
           set -euo pipefail
+          # THE QUEUE CLAIM, AGAIN. `paid-slot` already refused a malformed one,
+          # but a dry run never runs `paid-slot`, and this gate must not depend on
+          # another job having run. A paid run must claim a lane; a dry run may
+          # leave it empty. The lane is checked against the mission's GRANT by the
+          # contract check below. Absent reads as empty, the way a dry run with no
+          # lane arrives.
+          LANE="${LANE:-}"
+          DISPATCH_KEY="${DISPATCH_KEY:-}"
+          if [ "$CONFIRM_LIVE" = 'RUN LIVE MISSION' ] && [ -z "$LANE" ]; then
+            echo "paid_run_lane_missing: a paid run must claim a lane" >&2; exit 1
+          fi
+          case "$LANE" in
+            ''|qualification|qualification-repair|lab|regression) ;;
+            *) echo "paid_run_lane_invalid: '$LANE'" >&2; exit 1;;
+          esac
+          if [ -n "$DISPATCH_KEY" ] && ! printf '%s' "$DISPATCH_KEY" | grep -Eqx '[A-Za-z0-9._@#-]{8,96}'; then
+            echo "dispatch_key_malformed" >&2; exit 1
+          fi
           # Runs FIRST, before any build, container or credential exists, so a
           # malformed dispatch costs nothing and cannot reach a provider.
           #
-          # The bounds: the seeded task graph is plan → review → build → review
-          # and, with the one permitted repair, → repair → review. Six tasks,
-          # each needing a claim tick plus an advance, so a run that completes
-          # cannot do so in fewer than about eight. Below MIN the mission would
-          # be paid for and then cut off before it could finish; above MAX the
-          # ceiling stops being a ceiling. MAX equals the entrypoint's own
-          # default, so this input can only ever tighten Julius's bound.
+          # THE ALLOWANCE IS JULIUS'S TO COUNT. The entrypoint derives it from the
+          # mission's own structure (planJuliusTickBudget: units, repair rounds,
+          # segment ceiling, guidance and review obligations), prints it before
+          # the first dispatch, and fails the run with the numbers if it is ever
+          # exhausted. The ceiling used to be a fixed 32, sized for a
+          # six-task graph; qualification attempt 4 (run 34774471909) hit it at
+          # 44 of 120 minutes with the run still inside every contract bound.
+          # This input can only TIGHTEN that allowance (the drive takes the
+          # smaller), so it needs no upper bound here. The floor stays: below
+          # eight ticks even the smallest mission is paid for and then cut off.
           MIN_TICKS=8
-          MAX_ALLOWED=32
           case "$MAX_TICKS" in
-            ''|*[!0-9]*)
-              echo "max_ticks_not_an_integer: '$MAX_TICKS'" >&2; exit 1;;
+            derived) ;;
+            ''|*[!0-9]*|0*)
+              echo "max_ticks_not_an_integer: '$MAX_TICKS' is neither \"derived\" nor a whole number" >&2; exit 1;;
+            *)
+              if [ "${#MAX_TICKS}" -gt 6 ] || [ "$MAX_TICKS" -lt "$MIN_TICKS" ]; then
+                echo "max_ticks_out_of_range: $MAX_TICKS is below $MIN_TICKS or not a tick count" >&2
+                exit 1
+              fi;;
           esac
-          if [ "$MAX_TICKS" -lt "$MIN_TICKS" ] || [ "$MAX_TICKS" -gt "$MAX_ALLOWED" ]; then
-            echo "max_ticks_out_of_range: $MAX_TICKS is outside [$MIN_TICKS, $MAX_ALLOWED]" >&2
-            exit 1
-          fi
+          # WHEN THE WALL CLOCK STARTED, for the deadline the live entrypoint
+          # prints. Taken here, seconds after the job began, so the printed
+          # deadline is that much later than the runner's real one. A step
+          # output, read by name in the live step, never a job-wide variable.
+          echo "job_started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           # `confirm_live` is compared for exact equality by the live step's
           # `if:`; anything else is a dry run. Saying so here makes a typo
           # visible instead of silently producing a free run the operator
@@ -528,7 +702,138 @@ jobs:
         run: ./.github/julius-live-hermes.sh
 
       - name: 'Preflight: the Mission Contract is valid and bounded'
-        run: node scripts/julius-live-contract-check.mjs "$CONTRACT"
+        env:
+          LANE: ${{ inputs.lane }}
+        run: |
+          set -euo pipefail
+          # A claimed lane must be one this mission is granted (see MISSION_LANES
+          # in the checker). No lane claimed — a dry run — checks no lane.
+          if [ -n "$LANE" ]; then
+            node scripts/julius-live-contract-check.mjs "$CONTRACT" --lane "$LANE"
+          else
+            node scripts/julius-live-contract-check.mjs "$CONTRACT"
+          fi
+
+      # THE RESEARCH A CONTRACT GRANTS IS INERT UNTIL SOMEONE OBSERVES IT SERVED.
+      #
+      # Live Reach refuses a capability no backend has been OBSERVED serving, and
+      # that observation arrives through `JULIUS_RESEARCH_OBSERVED_BACKENDS` —
+      # which this workflow never set. Every mission granted research therefore
+      # ran with every ask refused `capability_unavailable`, and could still
+      # complete: a paid qualification proving the opposite of what it was
+      # dispatched to show.
+      #
+      # NOT A LITERAL IN `env:`. An observation is an operator's to make, not a
+      # contract's and not this file's; a hard-coded value would be the workflow
+      # vouching for a reach nobody looked at. So it is MADE, here, by the
+      # entrypoint's `observe-research`: one side-effect-free GET per granted
+      # host, through Relay's own bounded fetch and network policy, the same path
+      # the retrieval will take. No model provider is contacted, which is why it
+      # runs on a dry run too — preflight must prove this for free.
+      #
+      # FAIL CLOSED. A contract granting research of which nothing was observed
+      # exits non-zero and stops the job before the paid step can exist. A
+      # contract granting none prints `research_not_granted` and exports nothing.
+      #
+      # ONE LINE, AND ONLY IF IT IS EXACTLY ONE. `$GITHUB_ENV` is interpreted by
+      # the runner for every later step, so nothing but the one anchored,
+      # closed-alphabet claim line may reach it: never the log, never a second
+      # match, never a line the grammar does not fully describe.
+      - name: 'Preflight: observe the research the contract grants, through Relay''s own bounded fetch'
+        run: |
+          set -uo pipefail
+          test -f dist-relay-bridge/julius-live-mission.cjs || { echo 'entrypoint_not_built' >&2; exit 1; }
+          set +e
+          node dist-relay-bridge/julius-live-mission.cjs observe-research --contract "$CONTRACT" 2>&1 | tee research-observation.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "research_observation_failed: the entrypoint exited $status" >&2
+            exit 1
+          fi
+          claim='^JULIUS_RESEARCH_OBSERVED_BACKENDS=[a-z_]+:[a-z_]+(,[a-z_]+:[a-z_]+)*$'
+          count=$(grep -cE "$claim" research-observation.log || true)
+          if [ "$count" = '1' ]; then
+            grep -E "$claim" research-observation.log >> "$GITHUB_ENV"
+            echo 'research observation exported to every later step'
+          elif [ "$count" = '0' ] && grep -qx 'research_not_granted: .*' research-observation.log; then
+            echo 'no research granted; nothing exported'
+          else
+            # Exit 0 with research granted always prints one claim. Anything else
+            # is an output this step does not understand, and it is not guessed at.
+            echo "research_observation_unexported: $count claim line(s)" >&2
+            exit 1
+          fi
+
+      # EACH PROVIDER ACCEPTS ITS KEY AND SERVES THE PINNED MODEL — CHECKED FOR FREE.
+      #
+      # Before this, a revoked key, an unfunded account's auth refusal or a model
+      # id the provider does not serve surfaced only inside the LIVE step, after
+      # the attempt marker was recorded and often after an earlier worker had
+      # already been paid. Each provider exposes a model-metadata read that
+      # generates nothing and bills nothing, so it is asked here, before the
+      # paid queue can admit the run to spend.
+      #
+      # THE KEY NEVER TOUCHES ARGV OR THE LOG. It reaches curl as a `--config`
+      # file on stdin, written by `printf` — a bash builtin, so no process is
+      # started with the key in its arguments — and only the HTTP status is
+      # kept. No response body is read, stored or printed.
+      #
+      # BALANCE IS UNKNOWN, AND SAYING SO IS THE CHECK. No provider exposes a
+      # spend-free balance query, so this step cannot know whether an account can
+      # afford the mission. It says `provider_balance=UNKNOWN` rather than
+      # implying "sufficient"; an exhausted balance surfaces as a provider refusal
+      # during the run, and the queue report classifies it PROVIDER_BLOCKED.
+      - name: 'Preflight: each provider accepts its credential and serves the pinned model, nothing generated'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+        run: |
+          set -uo pipefail
+          : > provider-readiness.log
+          # $1 provider  $2 model  $3 url  — the curl config (headers) arrives on stdin.
+          #
+          # THE VERDICT IS READ FROM THE RECORD, NOT FROM A SHELL VARIABLE. Each
+          # probe runs at the end of a pipeline, which bash executes in a
+          # subshell, so a `failed=1` set inside it would vanish — and a refused
+          # credential would pass this gate. Every probe writes its result line;
+          # the step fails unless every line says AUTHENTICATED_MODEL_AVAILABLE.
+          probe() {
+            local provider=$1 model=$2 url=$3 config code=000 attempt result
+            config=$(cat)
+            for attempt in 1 2 3; do
+              code=$(printf '%s\n' "$config" | curl -sS -o /dev/null -w '%{http_code}' --max-time 20 --config - "$url" 2>/dev/null) || code=000
+              case "$code" in 000|429|5??) sleep $((attempt * 5));; *) break;; esac
+            done
+            case "$code" in
+              200) result=AUTHENTICATED_MODEL_AVAILABLE;;
+              401|403) result=UNAUTHENTICATED;;
+              404) result=MODEL_NOT_FOUND;;
+              000|429|5??) result=UNREACHABLE;;
+              *) result=UNEXPECTED_STATUS;;
+            esac
+            echo "provider_readiness provider=$provider model=$model http=$code result=$result" | tee -a provider-readiness.log
+          }
+          [ -n "$OPENAI_API_KEY" ] && [ -n "$ANTHROPIC_API_KEY" ] && [ -n "$XAI_API_KEY" ] || {
+            echo 'provider_credentials_missing: a provider key is not set in the julius-live-validation environment' >&2; exit 1; }
+          printf 'header = "Authorization: Bearer %s"\n' "$OPENAI_API_KEY" \
+            | probe openai "$OPENAI_PROMPT_ARCHITECT_MODEL" "https://api.openai.com/v1/models/$OPENAI_PROMPT_ARCHITECT_MODEL"
+          printf 'header = "x-api-key: %s"\nheader = "anthropic-version: 2023-06-01"\n' "$ANTHROPIC_API_KEY" \
+            | probe anthropic "$RELAY_HOSTED_CODING_MODEL" "https://api.anthropic.com/v1/models/$RELAY_HOSTED_CODING_MODEL"
+          if [ "$RELAY_HERMES_PROVIDER" = 'xai' ]; then
+            printf 'header = "Authorization: Bearer %s"\n' "$XAI_API_KEY" \
+              | probe xai "$RELAY_HERMES_MODEL" "https://api.x.ai/v1/models/$RELAY_HERMES_MODEL"
+          else
+            echo "provider_readiness provider=$RELAY_HERMES_PROVIDER model=$RELAY_HERMES_MODEL http=none result=UNCHECKED" | tee -a provider-readiness.log
+          fi
+          echo 'provider_balance=UNKNOWN (no provider exposes a spend-free balance query; exhaustion surfaces as PROVIDER_BLOCKED when a provider refuses)' | tee -a provider-readiness.log
+          probed=$(grep -c '^provider_readiness ' provider-readiness.log || true)
+          ready=$(grep -c '^provider_readiness .* result=AUTHENTICATED_MODEL_AVAILABLE$' provider-readiness.log || true)
+          if [ "$probed" -ne 3 ] || [ "$ready" -ne 3 ]; then
+            echo 'provider_not_ready: at least one provider refused its credential, does not serve the pinned model, or could not be reached; nothing was spent' >&2
+            exit 1
+          fi
 
       - name: 'Preflight: all three roles resolve to the expected models, nothing dispatched'
         env:
@@ -558,6 +863,11 @@ jobs:
           grep -q 'architect=gpt-5.6-sol' preflight-roles.log || { echo 'architect_model_unexpected' >&2; exit 1; }
           grep -q 'coder=claude-fable-5' preflight-roles.log || { echo 'coding_model_unexpected' >&2; exit 1; }
           grep -q 'reviewer=xai/grok-build-0.1' preflight-roles.log || { echo 'reviewer_model_unexpected' >&2; exit 1; }
+          # THE LIVE LEDGER IS BOUND, OR THE PAID RUN DOES NOT START. Without it every
+          # dispatch is allocated a flat estimate (paid run 34739303313: a $0.30
+          # coder stopped after two turns). The entrypoint prints the answer from
+          # the store it will actually use; nothing but BOUND is accepted.
+          grep -qx '  live_ledger: BOUND' preflight-roles.log || { echo 'live_ledger_unbound: allocation would fall back to a flat estimate' >&2; exit 1; }
           for name in OPENAI_API_KEY ANTHROPIC_API_KEY DATABASE_URL JULIUS_EXECUTOR_ENDPOINT JULIUS_SCOPED_CREDENTIALS EXECUTOR_KEY_ID JULIUS_PUBLIC_KEY_PATH JULIUS_CALLER_ID; do
             grep -q "^  $name: SET$" preflight-roles.log || { echo "preflight_variable_not_set:$name" >&2; exit 1; }
           done
@@ -639,6 +949,7 @@ jobs:
           # and holds Read/Glob/Grep.
           RELAY_HERMES_EXECUTABLE: /tmp/julius-hermes-bin/hermes
           MAX_TICKS: ${{ inputs.max_ticks }}
+          JULIUS_JOB_STARTED_AT: ${{ steps.inputs_gate.outputs.job_started_at }}
         run: |
           set -uo pipefail
           # The bundle was built in an earlier step and is invoked directly,
@@ -719,6 +1030,17 @@ jobs:
               node scripts/julius-live-evidence.mjs "$log" > "julius-live-evidence/${log%.log}.evidence.txt" || true
             fi
           done
+          # WHAT RESEARCH WAS OBSERVED BEFORE THE RUN, by the same allowlist rule:
+          # only the exact grammar `observe-research` prints — five closed fields
+          # per probe, the summary, the claim, and its two fixed refusals — so a
+          # bundle can say why a research ask was or was not servable.
+          grep -E '^(research_observation source=[a-z]+ capability=[a-z_]+ host=[a-z0-9*.-]+ backend=[a-z_]+ result=(observed|unreachable|throttled|unauthenticated|unconfigured)|research_observation_summary observed=[0-9]+ of=[0-9]+|JULIUS_RESEARCH_OBSERVED_BACKENDS=[a-z_]+:[a-z_]+(,[a-z_]+:[a-z_]+)*|research_not_granted: the contract has no research clause, so there is nothing to observe\.|research_unobservable: no backend was observed serving any of the [0-9]+ research probe\(s\) the contract grants; refusing to dispatch a mission whose research would all be refused\.)$' research-observation.log \
+            > julius-live-evidence/research-observation.txt 2>/dev/null || true
+          # WHETHER EACH PROVIDER WAS READY, by the same allowlist rule: only the
+          # exact lines the readiness step prints — provider, model, status, result
+          # — and the balance disclaimer. Never a header, never a body.
+          grep -E '^(provider_readiness provider=[a-z]+ model=[A-Za-z0-9._:/-]+ http=([0-9]{3}|none) result=(AUTHENTICATED_MODEL_AVAILABLE|UNAUTHENTICATED|MODEL_NOT_FOUND|UNREACHABLE|UNEXPECTED_STATUS|UNCHECKED)|provider_balance=UNKNOWN .*)$' provider-readiness.log \
+            > julius-live-evidence/provider-readiness.txt 2>/dev/null || true
 
           # Only safe columns, from one script the `first-live-topology` job also
           # runs against a freshly migrated database — dry runs #1 and #2 uploaded
@@ -827,13 +1149,40 @@ jobs:
           fi
           echo 'evidence scan clean (shapes and exact values)'
 
+      # THE PAID-RUN ARCHIVE'S EXPORT. This job's PostgreSQL is disposable and
+      # dies with the runner whatever step runs next, so this artifact is the
+      # only copy of the run's state. It is the export the local importer
+      # (`scripts/julius-paid-run-archive.mjs import --run <id>`) reads into the
+      # durable `julius-postgres` archive; 90 days, not 14, so an import is not
+      # a race.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        id: evidence_upload
         if: always()
         with:
           name: julius-live-evidence
           path: julius-live-evidence
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 90
+
+      # PRESERVED, OR SAID NOT TO BE. An upload of nothing still succeeds
+      # (`if-no-files-found: ignore`, and the credential refusal above deletes
+      # the directory rather than upload it), so success of the step alone is
+      # not preservation. The line names which it was, in the log and the job
+      # summary, before teardown.
+      - name: "Archive export: say whether this run's state was preserved"
+        if: always()
+        env:
+          UPLOAD_OUTCOME: ${{ steps.evidence_upload.outcome }}
+        run: |
+          set -uo pipefail
+          if [ "$UPLOAD_OUTCOME" = 'success' ] && [ -f julius-live-evidence/tasks.tsv ]; then
+            echo "PAID_RUN_ARCHIVE_EXPORTED artifact=julius-live-evidence retention_days=90 workflow_run_id=$GITHUB_RUN_ID workflow_run_attempt=$GITHUB_RUN_ATTEMPT" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            evidence=absent
+            [ -d julius-live-evidence ] && evidence=present_without_tasks
+            echo "PAID_RUN_ARCHIVE_FAILED upload_outcome=${UPLOAD_OUTCOME:-unknown} evidence=$evidence workflow_run_id=$GITHUB_RUN_ID workflow_run_attempt=$GITHUB_RUN_ATTEMPT" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::error title=PAID_RUN_ARCHIVE_FAILED::this run's state was NOT preserved; the disposable database is destroyed with the job"
+          fi
 
       # -------------------------------------------------------------- CLEANUP
 

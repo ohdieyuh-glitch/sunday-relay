@@ -37,6 +37,12 @@ export const HOSTED_FAILURE_REASON_VOCABULARY_VERSION = 'julius-hosted-failure-r
 
 export const HOSTED_FAILURE_REASONS = [
   'rate_limited',
+  /**
+   * The provider account cannot pay for the call. Attempt 5 of the
+   * continuous-worker qualification ended on exactly this, and the classifier
+   * read it as a bad request because the provider sends it as a 400.
+   */
+  'credit_unavailable',
   'context_length_exceeded',
   'content_filtered',
   'provider_overloaded',
@@ -59,6 +65,9 @@ export type HostedFailureReason = (typeof HOSTED_FAILURE_REASONS)[number];
  */
 const PATTERNS: readonly (readonly [RegExp, HostedFailureReason])[] = [
   [/\b429\b|rate[ _-]?limit|too many requests/iu, 'rate_limited'],
+  // BEFORE the 400 rule: credit exhaustion arrives as a 400, and it is not a
+  // malformed request — retrying it buys nothing until someone pays.
+  [/credit balance|insufficient[ _-]?(credit|funds|balance)|billing|payment required|\b402\b|quota (exceeded|exhausted)/iu, 'credit_unavailable'],
   [/context[ _-]?(length|window)|prompt is too long|maximum context|too many tokens/iu, 'context_length_exceeded'],
   [/content[ _-]?(filter|policy)|refus(al|ed) by (the )?(safety|policy)|stop_reason.{0,12}refusal/iu, 'content_filtered'],
   [/\b529\b|overloaded|capacity|try again later/iu, 'provider_overloaded'],

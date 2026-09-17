@@ -137,6 +137,84 @@ export function segmentChildrenOf(subject: JuliusTask, tasks: readonly JuliusTas
     .sort((a, b) => segmentNumberOf(a.taskId) - segmentNumberOf(b.taskId));
 }
 
+/**
+ * THE SEGMENT THAT IS WAITING ON THIS TASK, or null when none is.
+ *
+ * A barrier mints exactly one continuation and leaves it BLOCKED on the task
+ * that must finish first — the SUBJECT for a research pause, the ARCHITECT'S
+ * GUIDANCE TASK for a guidance pause, which is the edge that stops the coder
+ * resuming before the advice exists. Whatever answers the pause has to reach
+ * that continuation, because the dispatch which asked has already ended and the
+ * continuation is the only place an answer can appear.
+ *
+ * IT IS FOUND, NOT COMPUTED. `nextSegmentNumber` gives the number the NEXT
+ * barrier would use, which after the continuation exists is one too high — the
+ * same off-by-construction that made an earlier guard unfireable. Reading the
+ * rows says which segment is actually waiting.
+ *
+ * MORE THAN ONE WAITING SEGMENT IS NOT A CHOICE TO MAKE. A subject pauses once
+ * at a time, so two would mean a shape nobody has built; picking the likelier
+ * one would be Julius guessing which pause an answer belonged to. Null, and the
+ * caller records that nothing could be delivered.
+ */
+export function pendingSegmentFor(
+  blockedOnTaskId: string,
+  tasks: readonly JuliusTask[],
+): JuliusTask | null {
+  const waiting = tasks.filter((item) =>
+    item.state === 'BLOCKED'
+    && item.dependencyIds.includes(blockedOnTaskId)
+    && juliusSegmentSubjectTaskId(item.taskId) !== null);
+  return waiting.length === 1 ? waiting[0]! : null;
+}
+
+/**
+ * THE SEGMENT A TASK YIELDED TO, or null when it did not yield.
+ *
+ * A dispatch that ends at a barrier is not finished work: it said so, and Julius
+ * minted the segment that carries it on. That continuation is the only task that
+ * can hold the unit's finished work, so it is the one that is reviewed. The
+ * yielded dispatch itself is judged through it — accepted when its continuation
+ * is, live while its continuation is (`effectivelyAcceptedTaskIds`,
+ * `canStillBeAccepted`). Qualification attempt 3 (run 34766115321) reviewed
+ * every yielded dispatch as if it were finished, sent each one to repair, and so
+ * ran a repair round AND a continuation for all ten pauses: two lines of work on
+ * one deliverable, every time a worker asked a question.
+ *
+ * FOUND BY ID, from the chain the id shape already guarantees. A unit's segments
+ * chain from its root (`juliusSegmentLineageRootOf`): the root is segment 1, and
+ * a barrier on segment `n` mints `n + 1`. A dispatch yields once and only the
+ * newest segment can run, so segment `n + 1` exists exactly when segment `n`
+ * yielded. The row must also carry the continuation's full contract
+ * (`isJuliusSegmentOf`), so an impostor id links nothing.
+ */
+export function juliusYieldContinuationOf(subject: JuliusTask, tasks: readonly JuliusTask[]): JuliusTask | null {
+  const root = juliusSegmentLineageRootOf(subject, tasks);
+  const segment = subject.taskId === root.taskId ? 1 : segmentNumberOf(subject.taskId);
+  if (segment === 0) return null;
+  const continuationId = juliusSegmentTaskId(root.taskId, segment + 1);
+  const continuation = tasks.find((row) => row.taskId === continuationId);
+  return continuation !== undefined && isJuliusSegmentOf(root, continuation) ? continuation : null;
+}
+
+/**
+ * THE WORK A REVIEW IS ABOUT — the parent of the review's own lineage head.
+ *
+ * A reviewer that paused to have Julius read something continues in
+ * `segment:<review>:<n>:task`, and that continuation's parent is the review that
+ * paused, not the work under review. Reading the reviewed work off the
+ * dispatch's own parent bound the continuation's verdict to the REVIEW:
+ * reproduced on the peer-channel branch, a researched review's finding was
+ * recorded against `plan-1:review` and never reached the plan. Null for a task
+ * that is not a reviewer's, or whose head names no parent.
+ */
+export function juliusReviewedWorkOf(review: JuliusTask, tasks: readonly JuliusTask[]): JuliusTask | null {
+  if (review.role !== 'INDEPENDENT_REVIEWER') return null;
+  const head = juliusSegmentLineageRootOf(review, tasks);
+  if (head.parentTaskId === null) return null;
+  return tasks.find((row) => row.taskId === head.parentTaskId) ?? null;
+}
+
 /** The `n` in `segment:<subject>:<n>:task`, or 0 for anything else. */
 export function segmentNumberOf(taskId: string): number {
   const match = /^segment:.+:([1-9]\d*):task$/u.exec(taskId);
@@ -218,17 +296,18 @@ export function sanitizeJuliusSegmentState(value: unknown): Omit<JuliusCoderSegm
 export type JuliusCheckpointRoute = JuliusCheckpointRouting['route'];
 
 /**
- * `REQUIRE_CONTRACT_REVISION` belongs here and was missing entirely, which was
- * the more serious half of the same mistake. The contract the coder is working
- * under is the thing being changed; work produced past that point is bound to a
- * revision that is about to stop being current, which is exactly the stale
- * binding the contract lock exists to make impossible.
+ * `HOLD_FOR_DISAGREEMENT` is here and `RECORD_DISAGREEMENT` is not. A material
+ * challenge — the work breaks its terms, is unsafe, misses what it was for —
+ * means work produced past it may be built on something about to be judged
+ * wrong; a non-material one is argued while the work proceeds. (The route this
+ * replaced, `REQUIRE_CONTRACT_REVISION`, sent every challenge straight to the
+ * revision model; a challenge now opens a disagreement Julius resolves.)
  */
 export const JULIUS_BARRIER_ROUTES: readonly JuliusCheckpointRoute[] = Object.freeze([
   'REQUEST_GUIDANCE',
   'REQUEST_REVIEW',
   'REQUIRE_REPAIR',
-  'REQUIRE_CONTRACT_REVISION',
+  'HOLD_FOR_DISAGREEMENT',
   // Julius goes and looks. No worker is scheduled, and the asking worker still
   // stops — an observation that arrives after the code was written is a
   // citation, not research.

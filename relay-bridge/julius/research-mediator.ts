@@ -1,19 +1,31 @@
+import { createHash } from 'node:crypto';
+
 import {
+  JULIUS_RESEARCH_ASK_LIMITS,
+  JULIUS_RESEARCH_DELIVERY_LIMITS,
   authorizeJuliusResearch,
   emptyJuliusResearchLedger,
+  extractJuliusReadableText,
+  juliusResearchAnchorList,
+  juliusResearchFragment,
   juliusResearchMayCorroborate,
+  juliusResearchRequestedHost,
+  juliusResearchRequestedPath,
+  planJuliusResearchDelivery,
+  type JuliusResearchDelivery,
   recordJuliusResearch,
   type JuliusResearchLedger,
   type JuliusResearchOutcome,
   type JuliusResearchPolicy,
   type JuliusResearchRefusal,
   type JuliusResearchRequest,
+  type JuliusResearchRequestedClass,
   type JuliusResearchRole,
   type JuliusResearchObservationRecord,
   type JuliusResearchPort,
 } from '../../src/relay/mission/julius';
 import { renderForPrompt, type EvidenceArtifact } from '../../src/relay/mission/evidence';
-import type { MeteredOutcome } from '../../src/relay/mission/live-reach';
+import type { LiveReachRefusal, MeteredOutcome } from '../../src/relay/mission/live-reach';
 import { detectInjectionSignals, redactText } from '../../src/relay/mcp/policy/mcp-sanitize';
 import type { LiveReachEvent, LiveReachResult, LiveReachService } from '../live-reach-service';
 
@@ -195,6 +207,8 @@ export interface JuliusResearchObservation {
   readonly injectionSignals: readonly string[];
   /** Whether this observation may TIP a disagreement between sources. */
   readonly mayCorroborate: boolean;
+  /** What of the page reached the worker, with the numbers that prove it. Null when nothing was retrieved. */
+  readonly delivery: JuliusResearchDelivery | null;
   readonly requestedAt: string;
   readonly completedAt: string;
 }
@@ -205,6 +219,22 @@ export interface JuliusResearchResult {
   readonly artifact: EvidenceArtifact | null;
   /** The connector's own words, redacted and bounded. For operators. */
   readonly diagnostic: string;
+  /** What the ask reached for: closed vocabularies and a host name, never the worker's path or purpose. */
+  readonly requested: JuliusResearchRequestedClass;
+  /**
+   * Live Reach's own refusal when Live Reach ran and refused, else null.
+   * `readRefusal` folds most of these into `capability_unavailable`, which is
+   * the right thing to tell a worker and the wrong thing to be all a record says.
+   */
+  readonly reachRefusal: LiveReachRefusal | null;
+  /**
+   * THE BYTES THIS REQUEST CHARGED TO THE LEDGER, exactly as it was charged, or
+   * null when nothing was measured. The durable row must carry this number:
+   * paid qualification attempt 4 (run 34774471909) rebuilt every past read as
+   * unsized because the row had no byte count, and a byte-budgeted mission then
+   * refused all ten asks after its first read as `byte_budget_unenforceable`.
+   */
+  readonly bytes: number | null;
   readonly events: readonly LiveReachEvent[];
   /** The slot ledger AFTER this request. The caller owns the storage. */
   readonly ledger: JuliusResearchLedger;
@@ -289,9 +319,14 @@ export function createJuliusResearchMediator(
       readonly retryAfter?: string | null;
       /** What Live Reach actually charged, when Live Reach ran at all. */
       readonly charged?: MeteredOutcome;
+      readonly reachRefusal?: LiveReachRefusal;
+      /** The artifact as the worker receives it: the delivered characters only. Defaults to `artifact`. */
+      readonly delivered?: EvidenceArtifact | null;
+      readonly delivery?: JuliusResearchDelivery | null;
     },
   ): Promise<JuliusResearchResult> => {
     const artifact = parts.artifact ?? null;
+    const delivered = parts.delivered ?? artifact;
     const metered = parts.charged ?? OUTCOME_METER[outcome];
     const ledger = recordJuliusResearch(await ledgerForRequest(request), request.role, {
       source: request.source,
@@ -314,14 +349,23 @@ export function createJuliusResearchMediator(
         detail: OUTCOME_SENTENCE[outcome],
         evidenceId: artifact?.evidenceId ?? null,
         // THE ONLY WAY EXTERNAL TEXT REACHES A MODEL.
-        rendered: artifact === null ? null : renderForPrompt(artifact),
+        rendered: delivered === null ? null : renderForPrompt(delivered),
         injectionSignals: artifact?.injectionSignals ?? [],
         mayCorroborate: juliusResearchMayCorroborate(outcome) && artifact !== null,
+        delivery: parts.delivery ?? null,
         requestedAt: request.requestedAt,
         completedAt: deps.now(),
       },
       artifact,
       diagnostic: safeText(parts.diagnostic ?? OUTCOME_SENTENCE[outcome]),
+      requested: {
+        source: request.source,
+        capability: request.capability,
+        host: juliusResearchRequestedHost(request.reference),
+        path: juliusResearchRequestedPath(request.reference),
+      },
+      reachRefusal: parts.reachRefusal ?? null,
+      bytes: parts.bytes ?? null,
       events: parts.events ?? [],
       ledger,
     };
@@ -379,27 +423,76 @@ export function createJuliusResearchMediator(
           events: result.events,
           charged: result.charged,
           retryAfter: result.retryAfter,
+          reachRefusal: result.refusal,
         });
       }
 
       /**
-       * SIGNALS ARE RE-READ HERE, over the text that will actually be rendered.
+       * SIGNALS ARE RE-READ HERE, over the body as fetched.
        *
        * The service already scanned; this scans the same content again rather
        * than trusting the number that came with it. It is cheap, and it means
-       * the decision "may this corroborate" is made from the bytes in front of
-       * the model rather than from a field somebody upstream could have set.
+       * the decision "may this corroborate" is made from the bytes Relay holds
+       * rather than from a field somebody upstream could have set.
        */
+      const readable = extractJuliusReadableText(result.artifact.content);
+      const plan = planJuliusResearchDelivery({
+        readable,
+        fragment: juliusResearchFragment(request.reference),
+        allowanceChars: request.deliveryChars ?? juliusResearchDeliveryShare(1),
+      });
+      // DECODING IS A NEW TEXT, so it is redacted as one: a key hidden behind
+      // entities is invisible to the redactor in the markup and plain in what is
+      // handed over. The injection scan stays on the body as fetched (below).
+      const handedOver = redactText(readable.text.slice(plan.from, plan.from + plan.chars)).text;
+      /* NOT RE-SCANNED AFTER DECODING, measured rather than assumed: the psql
+         reference itself scans clean as fetched and `permission-request` once
+         its tags are gone, which would demote the page a mission needed to an
+         uncorroborating observation. A worker still reads it fenced as data. */
       const signals = detectInjectionSignals(result.artifact.content);
       const observed: JuliusResearchOutcome = signals.length > 0 ? 'injection_signaled' : 'observed';
       const artifact: EvidenceArtifact = signals.length === result.artifact.injectionSignals.length
         ? result.artifact
         : { ...result.artifact, injectionSignals: signals };
 
+      /**
+       * WHAT THE WORKER RECEIVES, and the numbers that say so.
+       *
+       * The body Relay kept is reduced to its readable text and handed over
+       * whole when it fits this ask's share of the packet. Qualification
+       * attempt 4 (run 34774471909) fetched the psql reference, 269,680 bytes,
+       * and rendered the raw HTML into a block whose budget was 24,000
+       * characters; the renderer dropped it and the worker was told to ask
+       * again, which fetched the same wall. When a page does not fit it is cut
+       * from the section the worker named after `#` (the fetch itself never
+       * carries a fragment), or from the top, and the cut is stated beside it
+       * with the anchors that reach the rest. The digest is of the body as kept,
+       * so an operator can re-fetch the page and compare without Relay storing it.
+       */
+      const delivery: JuliusResearchDelivery = {
+        fetchedBytes: Number.isSafeInteger(result.bytes) && result.bytes >= 0 ? result.bytes : null,
+        contentDigest: `sha256:${createHash('sha256').update(artifact.content, 'utf8').digest('hex')}`,
+        mechanism: artifact.attempt.actualBackendId ?? null,
+        readableChars: readable.text.length,
+        deliveredFrom: plan.from,
+        deliveredChars: plan.chars,
+        anchor: plan.anchor,
+        cut: plan.cut,
+        anchors: plan.cut
+          ? juliusResearchAnchorList(readable, JULIUS_RESEARCH_DELIVERY_LIMITS.anchorListChars, plan.from + plan.chars)
+          : [],
+      };
+      const deliveredArtifact: EvidenceArtifact = {
+        ...artifact,
+        content: handedOver,
+      };
+
       return settle(request, observed, {
         refusal: null,
         policyFingerprint: verdict.policyFingerprint,
         artifact,
+        delivered: deliveredArtifact,
+        delivery,
         bytes: result.bytes,
         charged: 'observed',
         events: result.events,
@@ -432,6 +525,9 @@ export function juliusResearchPortFrom(mediator: JuliusResearchMediator): Julius
   return {
     async serve(input) {
       const observations: JuliusResearchObservationRecord[] = [];
+      // ONE PACKET, SHARED EVENLY, so the third page of a checkpoint is never
+      // the one that finds the budget spent.
+      const deliveryChars = juliusResearchDeliveryShare(input.asks.length);
       for (const ask of input.asks) {
         const result = await mediator.research({
           missionId: input.missionId,
@@ -444,6 +540,7 @@ export function juliusResearchPortFrom(mediator: JuliusResearchMediator): Julius
           reference: ask.reference,
           purpose: ask.purpose,
           requestedAt: input.requestedAt,
+          deliveryChars,
         });
         const observed = result.observation;
         observations.push({
@@ -455,9 +552,26 @@ export function juliusResearchPortFrom(mediator: JuliusResearchMediator): Julius
           evidenceId: observed.evidenceId,
           injectionSignals: observed.injectionSignals,
           mayCorroborate: observed.mayCorroborate,
+          // For the durable row only; the resume renders none of these.
+          refusal: observed.refusal,
+          reachRefusal: result.reachRefusal,
+          requested: result.requested,
+          bytes: result.bytes,
+          delivery: observed.delivery,
         });
       }
       return observations;
     },
   };
+}
+
+/**
+ * THE CHARACTERS ONE PAGE MAY OCCUPY when a checkpoint asked for `asks` pages:
+ * an even split of the resume, less what Julius writes around each page. One
+ * page gets 154,000 characters, which carries the psql reference whole.
+ */
+export function juliusResearchDeliveryShare(asks: number): number {
+  const count = Math.max(1, Math.floor(asks));
+  return Math.max(0, Math.floor(JULIUS_RESEARCH_ASK_LIMITS.renderedChars / count)
+    - JULIUS_RESEARCH_DELIVERY_LIMITS.observationOverheadChars);
 }

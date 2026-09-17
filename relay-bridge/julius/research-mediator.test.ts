@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createJuliusResearchMediator, juliusResearchPortFrom } from './research-mediator';
+import { createJuliusResearchMediator, juliusResearchDeliveryShare, juliusResearchPortFrom } from './research-mediator';
 import { createLiveReachService } from '../live-reach-service';
 import type { BackendProbe } from '../../src/relay/mission/live-reach';
 import {
@@ -250,6 +250,80 @@ describe('a host cannot write into a worker through its own headers', () => {
   });
 });
 
+/**
+ * A DOCUMENTATION LINK IS USUALLY CITED WITH ITS ANCHOR, and a fragment is never
+ * sent to the server. Live Reach's URL policy is the MCP endpoint policy, which
+ * refuses any URL carrying one, so a granted page asked for as
+ * `…/app-psql.html#APP-PSQL-META-COMMANDS` came back `policy_refused`, telling
+ * the worker "This mission does not authorize that retrieval" about a host the
+ * mission had granted.
+ */
+describe('a granted page cited with an anchor is read, not refused', () => {
+  it('fetches the page without the fragment and observes it', async () => {
+    const seen: string[] = [];
+    const result = await mediator((url: unknown) => {
+      seen.push(String(url));
+      return Promise.resolve(page('asyncio.timeout landed in 3.11.'));
+    }).research(ask({ reference: 'https://docs.python.org/3/library/asyncio-task.html#asyncio.timeout' }));
+    expect(result.observation.outcome).toBe('observed');
+    expect(result.observation.refusal).toBeNull();
+    expect(seen).toEqual(['https://docs.python.org/3/library/asyncio-task.html']);
+    // What the worker asked for is still what the observation says it answered.
+    expect(result.observation.reference).toBe('https://docs.python.org/3/library/asyncio-task.html#asyncio.timeout');
+  });
+
+  it('keeps the query, which IS sent, and still refuses a host off the allowlist with an anchor', async () => {
+    const seen: string[] = [];
+    const m = mediator((url: unknown) => { seen.push(String(url)); return Promise.resolve(page('ok')); });
+    const queried = await m.research(ask({ reference: 'https://docs.python.org/3/search.html?q=timeout#results' }));
+    expect(queried.observation.outcome).toBe('observed');
+    expect(seen).toEqual(['https://docs.python.org/3/search.html?q=timeout']);
+
+    const offList = await m.research(ask({ reference: 'https://evil.example/x#y' }));
+    expect(offList.observation.refusal).toBe('host_not_allowed');
+    expect(seen).toHaveLength(1);
+  });
+
+  /**
+   * DROPPING THE ANCHOR OPENS NOTHING ELSE. Each control below held before the
+   * fragment was dropped; each is asked again here WITH an anchor, so a later
+   * normalization that did more than drop it would have to get past all of them.
+   */
+  describe('and every other control still holds for an anchored reference', () => {
+    const mustNotFetch = () => { throw new Error('an anchored refusal must not reach the network'); };
+
+    it('a granted name that resolves to a private address is refused by the address layer, uncharged', async () => {
+      const result = await mediator(mustNotFetch, { resolver: { resolve: async () => ['10.0.0.5'] } })
+        .research(ask({ reference: 'https://docs.python.org/3/library/asyncio.html#asyncio.run' }));
+      expect(result.observation.outcome).toBe('policy_refused');
+      expect(result.observation.refusal).toBe('network_policy_refused');
+      expect(result.ledger.byRole.CODING_AGENT.counted).toBe(0);
+    });
+
+    it('a granted page that redirects toward cloud metadata is refused, and the hop is charged', async () => {
+      const result = await mediator(() => Promise.resolve(new Response(null, {
+        status: 302, headers: { location: 'https://169.254.169.254/latest/meta-data#x' },
+      }))).research(ask({ reference: 'https://docs.python.org/3/library/asyncio.html#asyncio.run' }));
+      expect(result.observation.outcome).toBe('policy_refused');
+      expect(result.observation.refusal).toBe('network_policy_refused');
+      expect(result.ledger.byRole.CODING_AGENT.counted).toBe(1);
+    });
+
+    it.each([
+      ['plain http', 'http://docs.python.org/3/library/asyncio.html#asyncio.run', 'scheme_not_allowed'],
+      ['inline credentials', 'https://user:pass@docs.python.org/3/library/asyncio.html#asyncio.run', 'reference_unparsable'],
+      ['an address literal', 'https://127.0.0.1/admin#x', 'host_not_allowed'],
+      ['a lookalike host', 'https://docs.python.org.evil.example/#docs.python.org', 'host_not_allowed'],
+      ['a host carried only in the fragment', 'https://evil.example/#https://docs.python.org/3/', 'host_not_allowed'],
+    ] as const)('%s is still refused before any socket', async (_label, reference, refusal) => {
+      const result = await mediator(mustNotFetch).research(ask({ reference }));
+      expect(result.observation.outcome).toBe('policy_refused');
+      expect(result.observation.refusal).toBe(refusal);
+      expect(juliusMissionResearchMeter(result.ledger).counted).toBe(0);
+    });
+  });
+});
+
 describe('every failure stays its own failure', () => {
   const cases: readonly (readonly [string, () => Response | Promise<Response>, string])[] = [
     ['a 429', () => new Response('slow down', { status: 429, headers: { 'retry-after': '120' } }), 'throttled'],
@@ -431,6 +505,110 @@ describe('the mediator as the domain port', () => {
   });
 });
 
+/**
+ * PAID RUN 34757974058: four research asks came back `policy_refused` in 6–13
+ * ms with an empty reason and no target, so nobody could say whether the
+ * workers asked for a host the mission never granted or Relay refused one it
+ * had. Every wall an ask can hit is driven here through the real mediator and
+ * the real port, and each must reach the pipeline as a DIFFERENT record.
+ */
+describe('a refused ask reaches the record with its reason and its target', () => {
+  const serveOne = async (
+    m: ReturnType<typeof mediator>,
+    over: Partial<{ source: 'web' | 'github'; capability: 'read_item' | 'search'; reference: string; purpose: string }> = {},
+  ) => {
+    const observations = await juliusResearchPortFrom(m).serve({
+      missionId: 'msn-1', projectId: 'prj-1', runId: 'run-1', taskId: 'task-1',
+      role: 'PROMPT_ARCHITECT',
+      asks: [{
+        source: 'web', capability: 'read_item',
+        reference: 'https://docs.python.org/3/library/asyncio.html?q=private-query#frag',
+        purpose: 'a purpose sentence the record must never carry',
+        ...over,
+      }],
+      requestedAt: '2026-09-11T10:00:00.000Z',
+    });
+    expect(observations).toHaveLength(1);
+    return observations[0]!;
+  };
+  const mustNotFetch = () => { throw new Error('must not reach the network'); };
+
+  const walls = [
+    ['a host the mission never granted', { reference: 'https://GitHub.com./owner/repo/blob/main/x.sh' },
+      { outcome: 'policy_refused', refusal: 'host_not_allowed', reachRefusal: null, requested: { source: 'web', capability: 'read_item', host: 'github.com', path: '/owner/repo/blob/main/x.sh' } }],
+    ['a capability the mission never granted', { capability: 'search' },
+      { outcome: 'policy_refused', refusal: 'capability_not_allowed', reachRefusal: null, requested: { source: 'web', capability: 'search', host: 'docs.python.org', path: '/3/library/asyncio.html' } }],
+    ['a source the mission never granted', { source: 'github', reference: 'https://github.com/owner/repo' },
+      { outcome: 'policy_refused', refusal: 'source_not_allowed', reachRefusal: null, requested: { source: 'github', capability: 'read_item', host: 'github.com', path: '/owner/repo' } }],
+    ['a reference that is not a URL', { reference: 'the psql manual' },
+      { outcome: 'policy_refused', refusal: 'reference_unparsable', reachRefusal: null, requested: { source: 'web', capability: 'read_item', host: null, path: null } }],
+    ['plain http', { reference: 'http://docs.python.org/3/' },
+      { outcome: 'policy_refused', refusal: 'scheme_not_allowed', reachRefusal: null, requested: { source: 'web', capability: 'read_item', host: 'docs.python.org', path: '/3/' } }],
+  ] as const;
+
+  it.each(walls)('%s', async (_label, over, expected) => {
+    const record = await serveOne(mediator(mustNotFetch), over);
+    expect({
+      outcome: record.outcome, refusal: record.refusal, reachRefusal: record.reachRefusal, requested: record.requested,
+    }).toEqual(expected);
+  });
+
+  it('a granted host the address layer refused names Live Reach as the wall', async () => {
+    const record = await serveOne(mediator(mustNotFetch, { resolver: { resolve: async () => ['10.0.0.5'] } }));
+    expect(record.outcome).toBe('policy_refused');
+    expect(record.refusal).toBe('network_policy_refused');
+    expect(record.reachRefusal).toBe('network_policy_refused');
+    expect(record.requested).toEqual({ source: 'web', capability: 'read_item', host: 'docs.python.org', path: '/3/library/asyncio.html' });
+  });
+
+  it('a granted ask no backend was observed serving keeps Live Reach\'s own reason', async () => {
+    // The case the mapping folds: to the worker it is `capability_unavailable`,
+    // and without `reachRefusal` the record could not tell it from a mission
+    // allowlist refusal at all, because both read `policy_refused`.
+    const unprobed = createJuliusResearchMediator({
+      policyFor: () => POLICY(),
+      liveReach: createLiveReachService({
+        now: () => '2026-09-11T10:00:00.000Z', nextEvidenceId: () => 'ev-1', fetchImpl: mustNotFetch as unknown as typeof fetch,
+      }),
+      now: () => '2026-09-11T10:00:00.000Z',
+    });
+    const record = await serveOne(unprobed as ReturnType<typeof mediator>);
+    expect(record.outcome).toBe('policy_refused');
+    expect(record.refusal).toBe('capability_unavailable');
+    expect(record.reachRefusal).toBe('not_ready');
+    expect(record.requested).toEqual({ source: 'web', capability: 'read_item', host: 'docs.python.org', path: '/3/library/asyncio.html' });
+  });
+
+  it('an observed ask records no reason and still names its target', async () => {
+    const record = await serveOne(mediator(() => Promise.resolve(page('a page'))), { reference: 'https://docs.python.org/3/library/asyncio.html' });
+    expect([record.outcome, record.refusal, record.reachRefusal]).toEqual(['observed', null, null]);
+    expect(record.refusal).toBeNull();
+    expect(record.reachRefusal).toBeNull();
+    expect(record.requested).toEqual({ source: 'web', capability: 'read_item', host: 'docs.python.org', path: '/3/library/asyncio.html' });
+  });
+
+  /**
+   * THE PATH IS NOW RECORDED, ON PURPOSE. Qualification attempt 4 (run
+   * 34774471909) served one page of www.postgresql.org and nobody could say
+   * which: the host alone does not identify a page. The path identifies it;
+   * the query, the fragment and the purpose still never reach the record, and a
+   * segment shaped like a token is replaced before it can.
+   */
+  it('the recorded target is a host and a path, never the worker\'s query, fragment or purpose', async () => {
+    for (const over of [{}, { reference: 'https://evil.example/secret-path?token-like=abc#frag-ment' }]) {
+      const record = await serveOne(mediator(mustNotFetch, { resolver: { resolve: async () => ['10.0.0.5'] } }), over);
+      const recorded = JSON.stringify([record.refusal, record.reachRefusal, record.requested]);
+      for (const leak of ['private-query', '#frag', 'frag-ment', 'purpose sentence', 'token-like', 'abc']) {
+        expect(recorded, `${leak} must not reach the record`).not.toContain(leak);
+      }
+    }
+    const tokenShaped = await serveOne(mediator(mustNotFetch), { reference: 'https://docs.python.org/share/9f8e7d6c5b4a39281706f5e4d3c2b1a0/page.html' });
+    expect(tokenShaped.requested?.path).toBe('/share/[REDACTED]/page.html');
+    const long = await serveOne(mediator(mustNotFetch), { reference: `https://docs.python.org/${'a'.repeat(400)}` });
+    expect(long.requested?.path?.length).toBe(200);
+  });
+});
+
 describe('the one limit, stated rather than hidden', () => {
   it('forgets a mission\'s retrieval spend across a process, and the cap is therefore per process', async () => {
     // NOT DURABLE, and saying so beats letting an operator discover it from a
@@ -460,5 +638,120 @@ describe('the one limit, stated rather than hidden', () => {
     const m = mediator(() => Promise.resolve(page('ok')), { policy: after });
     const result = await m.research(ask());
     expect(result.observation.policyFingerprint).toBe(before.fingerprint);
+  });
+});
+
+/**
+ * QUALIFICATION ATTEMPT 4 (run 34774471909). The mediator served the psql
+ * reference — 269,680 bytes — rendered the raw HTML, and the resume dropped it
+ * whole. What the mediator now hands over is the page's readable text, sized to
+ * its share, with Julius's own numbers beside it; the durable record keeps the
+ * artifact as fetched.
+ */
+describe('a served page is delivered as readable text, sized to its share, with the numbers that prove it', () => {
+  const doc = [
+    '<!doctype html><html><head><title>psql</title><script>var noise = 1;</script></head><body>',
+    `<p>${'Option reference prose for the unaligned format. '.repeat(40)}</p>`,
+    '<dt id="APP-PSQL-META-COMMAND-PSET-NULL">null</dt>',
+    '<dd><p>Sets the string to be printed in place of a null value. The default is to print nothing.</p></dd>',
+    `<p>${'Trailing reference prose. '.repeat(40)}</p></body></html>`,
+  ].join('\n');
+
+  it('hands a page that fits over whole, as text, with bytes, backend and a sha256 of the body kept', async () => {
+    const { createHash } = await import('node:crypto');
+    const result = await mediator(() => Promise.resolve(page(doc))).research(ask({
+      reference: 'https://docs.python.org/3/app-psql.html',
+    }));
+    expect(result.observation.outcome).toBe('observed');
+    const delivery = result.observation.delivery!;
+    expect(delivery.fetchedBytes).toBe(Buffer.byteLength(doc, 'utf8'));
+    expect(delivery.contentDigest).toBe(`sha256:${createHash('sha256').update(result.artifact!.content, 'utf8').digest('hex')}`);
+    expect(delivery.mechanism).toBe('relay_http_fetch');
+    expect(delivery).toMatchObject({ deliveredFrom: 0, cut: false, anchor: null, anchors: [] });
+    expect(delivery.deliveredChars).toBe(delivery.readableChars);
+    expect(result.observation.rendered).toContain('Sets the string to be printed in place of a null value.');
+    expect(result.observation.rendered, 'markup is not handed to a model').not.toContain('<dd>');
+    expect(result.observation.rendered).not.toContain('var noise');
+    // THE DURABLE ARTIFACT IS THE PAGE AS FETCHED, not the delivery.
+    expect(result.artifact!.content).toContain('<dd>');
+  });
+
+  it('cuts an oversize page from the section the worker named, and never sends the fragment to the host', async () => {
+    const fetched: string[] = [];
+    const fetchImpl = (input: RequestInfo | URL) => {
+      fetched.push(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+      return Promise.resolve(page(doc));
+    };
+    const result = await mediator(fetchImpl).research(ask({
+      reference: 'https://docs.python.org/3/app-psql.html#APP-PSQL-META-COMMAND-PSET-NULL',
+      deliveryChars: 200,
+    }));
+    expect(fetched.every((url) => !url.includes('#')), 'a fragment is never fetched').toBe(true);
+    const delivery = result.observation.delivery!;
+    expect(delivery).toMatchObject({ cut: true, anchor: 'APP-PSQL-META-COMMAND-PSET-NULL', deliveredChars: 200 });
+    expect(delivery.deliveredFrom).toBeGreaterThan(0);
+    expect(delivery.anchors).toContain('APP-PSQL-META-COMMAND-PSET-NULL');
+    expect(result.observation.rendered).toContain('null\nSets the string to be printed in place of a null value.');
+    expect(result.observation.rendered, 'text before the section was not handed over').not.toContain('Option reference prose');
+  });
+
+  it('cuts from the top when no section was named, and the record still says how to reach the rest', async () => {
+    const result = await mediator(() => Promise.resolve(page(doc))).research(ask({
+      reference: 'https://docs.python.org/3/app-psql.html', deliveryChars: 300,
+    }));
+    const delivery = result.observation.delivery!;
+    expect(delivery).toMatchObject({ cut: true, anchor: null, deliveredFrom: 0, deliveredChars: 300 });
+    expect(delivery.anchors).toEqual(['APP-PSQL-META-COMMAND-PSET-NULL']);
+    expect(result.observation.rendered).not.toContain('Sets the string');
+  });
+
+  it('shares one packet evenly between the asks of a checkpoint', async () => {
+    const seen: number[] = [];
+    const inner = mediator(() => Promise.resolve(page(doc)));
+    const spying = { ...inner, research: (request: JuliusResearchRequest) => { seen.push(request.deliveryChars ?? -1); return inner.research(request); } };
+    const reference = 'https://docs.python.org/3/app-psql.html';
+    await juliusResearchPortFrom(spying).serve({
+      missionId: 'msn-1', projectId: 'prj-1', runId: 'run-1', taskId: 'task-1', role: 'CODING_AGENT',
+      asks: [1, 2, 3].map(() => ({ source: 'web' as const, capability: 'read_item' as const, reference, purpose: 'p' })),
+      requestedAt: '2026-09-11T10:00:00.000Z',
+    });
+    expect(seen).toEqual([juliusResearchDeliveryShare(3), juliusResearchDeliveryShare(3), juliusResearchDeliveryShare(3)]);
+    expect(juliusResearchDeliveryShare(1), 'one page may use the whole packet less Julius\'s own words').toBe(149_000);
+    expect(juliusResearchDeliveryShare(3) * 3 + 3 * 11_000).toBeLessThanOrEqual(160_000);
+  });
+
+  it('a refused ask carries no delivery at all', async () => {
+    const result = await mediator(() => { throw new Error('must not fetch'); }).research(ask({ reference: 'https://evil.example/x' }));
+    expect(result.observation.delivery).toBeNull();
+  });
+});
+
+/**
+ * DECODING WRITES NEW TEXT. Markup can hide a key or an instruction behind
+ * entities that neither the redactor nor the injection scan recognise, and the
+ * readable text a worker is handed shows it plainly. Both are applied again to
+ * what is handed over.
+ */
+describe('what decoding reveals is sanitized before a worker reads it', () => {
+  it('redacts a key that was entity-encoded in the markup', async () => {
+    const encoded = FAKE_KEY.replace('-', '&#45;');
+    const result = await mediator(() => Promise.resolve(page(`<html><body><p>token ${encoded} keep it safe</p></body></html>`)))
+      .research(ask());
+    expect(result.artifact?.content, 'the markup itself carried no key-shaped text').not.toContain(FAKE_KEY);
+    expect(result.observation.rendered).not.toContain(FAKE_KEY);
+    expect(result.observation.rendered).toContain('[redacted:');
+  });
+
+  /**
+   * MEASURED ON THE REAL PAGE. app-psql.html scans clean as fetched and trips
+   * `permission-request` once its tags are gone, which would have
+   * demoted the page attempt 4 needed to an uncorroborating observation. The
+   * scan stays on the body as fetched; the page still reaches the worker fenced.
+   */
+  it('does not demote a documentation page because reading it closed up a phrase the markup held apart', async () => {
+    const docs = '<html><body><p>Default privileges that allow <a class="link" href="sql-alter-default-privileges.html" title="ALTER DEFAULT PRIVILEGES">the owner</a> full access are listed.</p></body></html>';
+    const result = await mediator(() => Promise.resolve(page(docs))).research(ask());
+    expect(result.observation.outcome).toBe('observed');
+    expect(result.observation.rendered).toContain('Default privileges that allow the owner full access are listed.');
   });
 });

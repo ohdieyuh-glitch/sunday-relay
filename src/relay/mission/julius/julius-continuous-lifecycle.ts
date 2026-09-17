@@ -222,8 +222,9 @@ export function recordJuliusCheckpoint(input: {
  *
  *   CONTINUE         seen, nothing to answer
  *   WARNING          recorded for the record; does not interrupt
- *   CHALLENGE        the contract itself is in question — routes to the
- *                    revision model, never to a silent amendment
+ *   CHALLENGE        a recorded disagreement with the work, the plan, the
+ *                    guidance or the terms — Julius opens a disagreement and
+ *                    resolves it; it never revises the contract by itself
  *   REPAIR_REQUIRED  the work is wrong and must be redone under the same terms
  *   BLOCK            it must not continue at all
  */
@@ -258,6 +259,29 @@ export const JULIUS_CHALLENGE_CATEGORIES = [
   'unsupported_completion_claim',
 ] as const;
 export type JuliusChallengeCategory = (typeof JULIUS_CHALLENGE_CATEGORIES)[number];
+
+/**
+ * WHICH CHALLENGES STOP DEPENDENT WORK.
+ *
+ * A challenge is a recorded disagreement, not a repair order, and most do not
+ * need the mission to wait: a thin test or a weak citation can be argued while
+ * the work proceeds. These are the categories that, if the reviewer is right,
+ * mean the work cannot be accepted as it stands — it breaks its terms, misses
+ * what it was for, is unsafe, regresses, claims a completion it has not earned,
+ * or rests on guidance nobody can support. Julius holds dependent work on these
+ * until the disagreement is resolved, and on nothing else.
+ */
+export const JULIUS_MATERIAL_CHALLENGE_CATEGORIES: readonly JuliusChallengeCategory[] = Object.freeze([
+  'contract_drift',
+  'missed_acceptance_criterion',
+  'unsafe_implementation',
+  'regression',
+  'unsupported_completion_claim',
+  'unsupported_guidance',
+]);
+
+export const juliusChallengeIsMaterial = (value: JuliusChallengeCategory | null): boolean =>
+  value !== null && JULIUS_MATERIAL_CHALLENGE_CATEGORIES.includes(value);
 
 export interface JuliusCheckpointVerdictRecord {
   readonly verdictId: string;
@@ -350,8 +374,8 @@ export function recordJuliusCheckpointVerdict(input: {
  * `CONTINUE` and `WARNING` map to NOTHING. A reviewer that saw nothing wrong
  * has not decided a task, and minting an ACCEPT from a WARNING would let the
  * checkpoint path complete a mission the verification path never verified.
- * `CHALLENGE` maps to nothing either: it is a question about the CONTRACT, and
- * the answer is a reviewed revision, not a task decision.
+ * `CHALLENGE` maps to nothing either: it opens a disagreement, and what Julius
+ * decides is the disagreement's resolution, not the challenge.
  */
 export function juliusDecisionForVerdict(verdict: JuliusCheckpointVerdict): JuliusDecisionAction | null {
   if (verdict === 'REPAIR_REQUIRED') return 'REPAIR';
@@ -750,7 +774,15 @@ export type JuliusCheckpointRouting =
   | { readonly route: 'REQUEST_GUIDANCE'; readonly role: JuliusWorkerRole; readonly reasonCode: string }
   | { readonly route: 'REQUEST_REVIEW'; readonly role: JuliusWorkerRole; readonly reasonCode: string }
   | { readonly route: 'REQUIRE_REPAIR'; readonly reasonCode: string }
-  | { readonly route: 'REQUIRE_CONTRACT_REVISION'; readonly reasonCode: string }
+  /**
+   * A CHALLENGE IS A DISAGREEMENT, NOT AN AMENDMENT. Julius opens one and
+   * resolves it; the contract is revised only if the resolution needs a
+   * mission-owned term to change. HOLD when the challenged issue is material —
+   * nothing that depends on it may proceed until it is resolved — and RECORD
+   * otherwise, when the work carries on beside the argument.
+   */
+  | { readonly route: 'HOLD_FOR_DISAGREEMENT'; readonly reasonCode: string }
+  | { readonly route: 'RECORD_DISAGREEMENT'; readonly reasonCode: string }
   /**
    * JULIUS GOES AND LOOKS, on behalf of the slot that asked.
    *
@@ -802,10 +834,12 @@ export function routeJuliusCheckpoint(input: {
       return { route: 'REQUIRE_REPAIR', reasonCode: verdict.reasonCode };
     }
     if (verdict.verdict === 'CHALLENGE') {
-      // A CHALLENGE AGAINST A LOCKED CONTRACT IS THE REVISION MODEL'S ENTRY
-      // POINT, and against a draft it is the existing pre-lock challenge. Both
-      // end at a reviewed revision; neither amends anything here.
-      return { route: 'REQUIRE_CONTRACT_REVISION', reasonCode: verdict.reasonCode };
+      // NEVER A REVISION BY ITSELF. It used to route straight to the revision
+      // model, which would have let a reviewer's objection move the terms the
+      // coder is bound by before anyone answered it.
+      return juliusChallengeIsMaterial(verdict.category)
+        ? { route: 'HOLD_FOR_DISAGREEMENT', reasonCode: verdict.reasonCode }
+        : { route: 'RECORD_DISAGREEMENT', reasonCode: verdict.reasonCode };
     }
     // CONTINUE and WARNING both continue. A WARNING is recorded and does not
     // interrupt — that is what makes it different from a CHALLENGE, and why a
@@ -887,3 +921,114 @@ export function guidanceSubjectTaskId(taskId: string): string | null {
   const match = /^guidance:(.+):([1-9]\d*):task$/u.exec(taskId);
   return match === null ? null : match[1]!;
 }
+
+/**
+ * THE ADVICE, AS THE WORKER IT WAS WRITTEN FOR WILL READ IT.
+ *
+ * THE GAP THIS CLOSES. A guidance packet was stored as an artifact and read by
+ * exactly one consumer — the Independent Reviewer, so it could judge the
+ * advice. The Coding Agent it was written FOR was handed nothing: its
+ * continuation resumed carrying `brain:segment-resume`, which is what the coder
+ * itself said before it paused. A mission could buy an architect dispatch and a
+ * review of its output, and the worker that asked the question never saw a word
+ * of the answer. `guidanceConsumed` stayed UNKNOWN for the plainest possible
+ * reason: nothing consumed guidance.
+ *
+ * Research already closed this loop — `renderJuliusResearchResume` puts the
+ * observations on the continuation's own Project Brain channel. This is the
+ * same shape for the other kind of answer, and deliberately so: one channel,
+ * one redaction path, one provenance record, and no prose side channel.
+ *
+ * BOUNDED, AND TRUNCATION SAYS SO. A packet cut silently would leave a coder
+ * reasoning from advice it believes it read in full, which is worse than
+ * shorter advice and much worse than being told.
+ *
+ * IT CARRIES NO AUTHORITY IT DID NOT HAVE. The packet is already refused if it
+ * names a contract term; this renders what survived that refusal, and says in
+ * the text itself that the agreement is elsewhere and unchanged.
+ */
+export const JULIUS_GUIDANCE_HANDOFF_CHARS = 6_000;
+
+export function renderJuliusGuidanceHandoff(packet: JuliusGuidancePacket): string {
+  const header = [
+    `GUIDANCE FROM THE PROMPT ARCHITECT (revision ${String(packet.revision)}, `
+    + `for checkpoint ${packet.triggeringCheckpointId})`,
+    'It is ADVICE. The Mission Contract is unchanged and remains the agreement you are held to;'
+    + ' nothing below may widen it, and a prohibition here only ever narrows what you may do.',
+    '',
+    `SUB-OBJECTIVE: ${packet.subObjective}`,
+  ];
+
+  const sections: { readonly title: string; readonly items: readonly string[] }[] = [
+    { title: 'RECOMMENDED ACTIONS', items: packet.recommendedActions },
+    { title: 'ADDITIONAL PROHIBITIONS (narrowing only)', items: packet.additionalProhibitions },
+    { title: 'RELEVANT REQUIREMENTS', items: packet.relevantRequirements },
+    { title: 'RELEVANT CONSTRAINTS', items: packet.relevantConstraints },
+    { title: 'WHAT THE ARCHITECT FOUND IN THE REPOSITORY', items: packet.repositoryFindings },
+    { title: 'WHAT THE ARCHITECT FOUND AT RUNTIME', items: packet.runtimeFindings },
+    {
+      title: 'REFERENCES',
+      items: packet.references.map((reference) =>
+        `[${reference.kind}/${reference.trust}] ${reference.locator}`),
+    },
+    /* LAST, AND KEPT. What the architect could NOT settle is the part a coder
+       most needs to know it is deciding for itself. */
+    { title: 'STILL UNRESOLVED — the architect could not settle these', items: packet.unresolvedQuestions },
+  ];
+
+  const lines = [...header];
+  let budget = JULIUS_GUIDANCE_HANDOFF_CHARS - header.join('\n').length;
+  let dropped = 0;
+  for (const section of sections) {
+    if (section.items.length === 0) continue;
+    const block = [`${section.title}:`, ...section.items.map((item) => `  - ${item}`)].join('\n');
+    if (block.length > budget) { dropped += section.items.length; continue; }
+    budget -= block.length;
+    lines.push('', block);
+  }
+  if (dropped > 0) {
+    lines.push('', `${String(dropped)} further guidance item(s) did not fit this packet and were not included. `
+      + 'They are in the durable record; ask again for a specific one if you need it.');
+  }
+  return lines.join('\n').trimEnd();
+}
+
+/**
+ * THE ENTRY ID A DELIVERED GUIDANCE PACKET TAKES ON THE CONTINUATION'S BRAIN.
+ *
+ * The REVISION is in the id, and that is the whole point: `appendBrainEntry` is
+ * idempotent per id, so a second packet for the same continuation must be a
+ * different entry or the coder would be handed the first advice forever while
+ * the record said a second was issued. Revisions are monotonic per subject, so
+ * two packets are always ordered and both are readable.
+ */
+export const juliusGuidanceHandoffEntryId = (continuationTaskId: string, revision: number): string =>
+  `brain:guidance-answer:${continuationTaskId}:r${String(revision)}`;
+
+/**
+ * WHERE A PACKET WAITS WHILE IT IS UNDER REVIEW.
+ *
+ * Scoped to the ARCHITECT'S OWN TASK, not to the worker that asked: a packet
+ * nobody has accepted is not advice yet, and the entry that carries it must not
+ * reach the coder's context merely by existing. Julius copies it to the waiting
+ * continuation — as `juliusGuidanceHandoffEntryId` — when, and only when, it
+ * accepts the review.
+ */
+export const juliusGuidanceProposalEntryId = (guidanceTaskId: string): string =>
+  `brain:guidance-proposed:${guidanceTaskId}`;
+
+/**
+ * THE LABEL THAT SEPARATES ADVICE FROM A PROPOSAL, in the packet text itself.
+ *
+ * A coder reads its context as instructions. Two packets in it — one accepted,
+ * one the reviewer sent back — are equally actionable to a reader that cannot
+ * tell them apart, and the rejected one usually arrived first. Julius delivers
+ * only accepted guidance; where anything else is ever shown, it is shown under
+ * this heading and outside the authoritative instruction.
+ */
+export const JULIUS_GUIDANCE_AUTHORITATIVE_HEADING = 'ACCEPTED GUIDANCE (authoritative — Julius accepted this packet after independent review)';
+export const JULIUS_GUIDANCE_PROPOSED_HEADING = 'PROPOSED GUIDANCE (NOT authoritative — under independent review; do not act on it)';
+
+/** Is this one of them? Used to count what a compiled packet actually carried. */
+export const isJuliusGuidanceHandoffEntryId = (entryId: string): boolean =>
+  /^brain:guidance-answer:.+:r[1-9]\d*$/u.test(entryId);

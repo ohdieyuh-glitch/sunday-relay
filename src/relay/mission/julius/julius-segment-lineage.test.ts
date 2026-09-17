@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { isJuliusRepairOf, repairRoundsBefore } from './julius-repair-lineage';
+import { effectivelyAcceptedTaskIds, isJuliusRepairOf, juliusWorkUnitRootOf, repairAncestorsOf, repairRoundsBefore } from './julius-repair-lineage';
+import { canStillBeAccepted } from './julius-release-runtime';
 import {
   JULIUS_BARRIER_ROUTES, isJuliusSegmentOf, juliusSegmentSubjectTaskId, juliusSegmentTaskId,
-  nextSegmentNumber, routeIsBarrier, sanitizeJuliusSegmentState, segmentChildrenOf, segmentNumberOf,
+  juliusYieldContinuationOf, nextSegmentNumber, routeIsBarrier, sanitizeJuliusSegmentState, segmentChildrenOf, segmentNumberOf,
 } from './julius-segment-lineage';
-import type { JuliusTask } from './julius-runtime';
+import type { JuliusRecordedDecision, JuliusTask } from './julius-runtime';
 import type { JuliusCheckpointRouting } from './julius-continuous-lifecycle';
 
 const task = (over: Partial<JuliusTask> & { taskId: string }): JuliusTask => ({
@@ -87,19 +88,20 @@ describe('a yield is only a barrier when participation is actually required', ()
       { route: 'REQUEST_GUIDANCE', role: 'PROMPT_ARCHITECT', reasonCode: 'x' },
       { route: 'REQUEST_REVIEW', role: 'INDEPENDENT_REVIEWER', reasonCode: 'x' },
       { route: 'REQUIRE_REPAIR', reasonCode: 'x' },
-      { route: 'REQUIRE_CONTRACT_REVISION', reasonCode: 'x' },
+      { route: 'HOLD_FOR_DISAGREEMENT', reasonCode: 'x' },
       { route: 'SERVE_RESEARCH', reasonCode: 'x' },
       { route: 'HALT', reasonCode: 'x' },
       { route: 'CONTINUE', reasonCode: 'x' },
     ];
     const barriers = routes.filter((routing) => routeIsBarrier(routing.route)).map((r) => r.route);
     expect(barriers).toEqual([
-      'REQUEST_GUIDANCE', 'REQUEST_REVIEW', 'REQUIRE_REPAIR', 'REQUIRE_CONTRACT_REVISION',
+      'REQUEST_GUIDANCE', 'REQUEST_REVIEW', 'REQUIRE_REPAIR', 'HOLD_FOR_DISAGREEMENT',
       'SERVE_RESEARCH', 'HALT',
     ]);
     // Every route the router can produce is classified — no route falls through
-    // into "not a barrier" merely because nobody thought about it.
-    expect(routes).toHaveLength(JULIUS_BARRIER_ROUTES.length + 1);
+    // into "not a barrier" merely because nobody thought about it. A recorded
+    // disagreement and CONTINUE are the two that do not stop the work.
+    expect(routes.concat([{ route: 'RECORD_DISAGREEMENT', reasonCode: 'x' }])).toHaveLength(JULIUS_BARRIER_ROUTES.length + 2);
   });
 
   it('an unknown route is not silently treated as safe to continue through', () => {
@@ -146,5 +148,120 @@ describe('resume state is rebuilt from an allowlist, never trusted as sent', () 
     });
     expect(sanitized).not.toBeNull();
     expect(Object.keys(sanitized as object).sort()).toEqual(['completedSoFar', 'nextIntent']);
+  });
+});
+
+/**
+ * WHAT A DISPATCH YIELDED TO — the edge that carries its review obligation.
+ * Qualification attempt 3 reviewed every yielded dispatch; the verification now
+ * asks this helper first, and acceptance and liveness follow the edge it names.
+ */
+describe('a yielded dispatch is found by the continuation its barrier minted', () => {
+  it('the root yields to segment 2, and segment n to segment n + 1', () => {
+    const rows = [SUBJECT, seg(2, { state: 'SUCCEEDED' }), seg(3)];
+    expect(juliusYieldContinuationOf(SUBJECT, rows)?.taskId).toBe('segment:build-1:2:task');
+    expect(juliusYieldContinuationOf(rows[1]!, rows)?.taskId).toBe('segment:build-1:3:task');
+    expect(juliusYieldContinuationOf(rows[2]!, rows), 'the newest segment has not yielded').toBeNull();
+  });
+
+  it('a task that never paused has no continuation, and an impostor row names none', () => {
+    expect(juliusYieldContinuationOf(SUBJECT, [SUBJECT])).toBeNull();
+    const impostor = seg(2, { role: 'PROMPT_ARCHITECT' });
+    expect(juliusYieldContinuationOf(SUBJECT, [SUBJECT, impostor]), 'wrong role').toBeNull();
+    const wrongParent = seg(2, { parentTaskId: 'build-9' });
+    expect(juliusYieldContinuationOf(SUBJECT, [SUBJECT, wrongParent]), 'wrong parent').toBeNull();
+  });
+
+  it('a repair is its own unit: its pause continues it, not the task it repairs', () => {
+    const repair = task({ taskId: 'repair:build-1:1:task', parentTaskId: 'build-1', taskType: 'repair:build', state: 'SUCCEEDED' });
+    const repairSegment = task({ taskId: juliusSegmentTaskId('repair:build-1:1:task', 2), parentTaskId: 'repair:build-1:1:task', taskType: 'repair:build' });
+    const rows = [SUBJECT, repair, repairSegment];
+    expect(juliusYieldContinuationOf(repair, rows)?.taskId).toBe('segment:repair:build-1:1:task:2:task');
+    expect(juliusYieldContinuationOf(SUBJECT, rows), 'the repaired build did not yield').toBeNull();
+  });
+});
+
+describe('acceptance and liveness reach a yielded dispatch only through its continuation', () => {
+  const decision = (taskId: string, action: string) => ({
+    decisionId: `d:${taskId}`, runId: 'run-1', taskId, action, reasonCode: 'X', evidenceIds: [], safeSummary: 'x',
+  }) as unknown as JuliusRecordedDecision;
+
+  it('accepted when its continuation is accepted, and not before', () => {
+    const yielded = task({ taskId: 'build-1', state: 'SUCCEEDED' });
+    const continuation = seg(2, { state: 'SUCCEEDED' });
+    const rows = [yielded, continuation];
+    expect(effectivelyAcceptedTaskIds(rows, []).has('build-1'), 'nothing decided yet').toBe(false);
+    expect(effectivelyAcceptedTaskIds(rows, [decision('segment:build-1:2:task', 'REPAIR')]).has('build-1')).toBe(false);
+    expect(effectivelyAcceptedTaskIds(rows, [decision('segment:build-1:2:task', 'ACCEPT')]).has('build-1')).toBe(true);
+    // An undecided task that never yielded is still never accepted.
+    expect(effectivelyAcceptedTaskIds([task({ taskId: 'build-2', state: 'SUCCEEDED' })], []).has('build-2')).toBe(false);
+  });
+
+  it('a REPAIR is superseded by a repair that yielded to an accepted continuation', () => {
+    const build = task({ taskId: 'build-1', state: 'SUCCEEDED' });
+    const repair = task({ taskId: 'repair:build-1:1:task', parentTaskId: 'build-1', taskType: 'repair:build', state: 'SUCCEEDED' });
+    const repairSegment = task({ taskId: juliusSegmentTaskId('repair:build-1:1:task', 2), parentTaskId: 'repair:build-1:1:task', taskType: 'repair:build', state: 'SUCCEEDED' });
+    const accepted = effectivelyAcceptedTaskIds([build, repair, repairSegment], [
+      decision('build-1', 'REPAIR'), decision('segment:repair:build-1:1:task:2:task', 'ACCEPT'),
+    ]);
+    expect(accepted.has('build-1')).toBe(true);
+  });
+
+  it('live while its continuation is waiting or running, dead when the continuation failed', () => {
+    const yielded = task({ taskId: 'build-1', state: 'SUCCEEDED' });
+    expect(canStillBeAccepted([yielded, seg(2, { state: 'BLOCKED' })], [])('build-1')).toBe(true);
+    expect(canStillBeAccepted([yielded, seg(2, { state: 'RUNNABLE' })], [])('build-1')).toBe(true);
+    expect(canStillBeAccepted([yielded, seg(2, { state: 'FAILED' })], [])('build-1'), 'nothing else can ever decide it').toBe(false);
+  });
+});
+
+/**
+ * THE REPAIR BOUND IS THE UNIT'S, WHATEVER PAUSED IN BETWEEN.
+ *
+ * Qualification attempt 3 (run 34766115321) ran five repair chains of up to three
+ * rounds under a three-round contract, because counting stopped at every segment
+ * and a repair of a segment began again at round 1.
+ */
+describe('repair rounds are counted across the whole unit of work, through its pauses', () => {
+  const repairOf = (parent: string, round: number, over: Partial<JuliusTask> = {}): JuliusTask =>
+    task({ taskId: `repair:${parent}:${round}:task`, parentTaskId: parent, taskType: 'repair:build', state: 'SUCCEEDED', ...over });
+  const segmentOf = (root: string, n: number, over: Partial<JuliusTask> = {}): JuliusTask =>
+    task({ taskId: juliusSegmentTaskId(root, n), parentTaskId: root, taskType: root === 'build-1' ? 'build' : 'repair:build', state: 'SUCCEEDED', ...over });
+
+  it('a plain repair chain counts exactly as it always did', () => {
+    const r1 = repairOf('build-1', 1);
+    const r2 = repairOf(r1.taskId, 2);
+    const rows = [SUBJECT, r1, r2];
+    expect(repairRoundsBefore(SUBJECT, [SUBJECT])).toBe(0);
+    expect(repairRoundsBefore(r1, [SUBJECT, r1])).toBe(1);
+    expect(repairRoundsBefore(r2, rows)).toBe(2);
+    expect(juliusWorkUnitRootOf(r2, rows).taskId).toBe('build-1');
+  });
+
+  it('ATTEMPT 3\'S SHAPE: pause, refuse the continuation, repair it, pause, refuse again — one unit, rounds keep counting', () => {
+    // build-1 pauses -> segment 2 is refused -> repair round 1 of segment 2
+    // pauses -> its segment 2 is refused -> repair round 2 of THAT segment.
+    const s2 = segmentOf('build-1', 2);
+    const r1 = repairOf(s2.taskId, 1);
+    const r1s2 = segmentOf(r1.taskId, 2);
+    const r2 = repairOf(r1s2.taskId, 2);
+    const rows = [SUBJECT, s2, r1, r1s2, r2];
+    for (const row of rows) expect(juliusWorkUnitRootOf(row, rows).taskId, `${row.taskId} belongs to build-1`).toBe('build-1');
+    expect(repairRoundsBefore(r1s2, rows), 'the refused continuation of round 1 is already two rounds into the unit').toBe(2);
+    // The old counter, repair ancestors only, would have said 0 and 1 here.
+    expect(repairAncestorsOf(r1s2, rows)).toHaveLength(0);
+  });
+
+  it('pauses alone still spend nothing, and another unit\'s repairs are not this unit\'s', () => {
+    const plan = task({ taskId: 'plan-1', taskType: 'plan', role: 'PROMPT_ARCHITECT' });
+    const planRepair = task({ taskId: 'repair:plan-1:1:task', parentTaskId: 'plan-1', taskType: 'repair:plan', role: 'PROMPT_ARCHITECT' });
+    const rows = [plan, planRepair, SUBJECT, segmentOf('build-1', 2), segmentOf('build-1', 3)];
+    expect(repairRoundsBefore(segmentOf('build-1', 3), rows)).toBe(0);
+    expect(repairRoundsBefore(plan, rows)).toBe(1);
+  });
+
+  it('an impostor repair-shaped row under another parent does not spend this unit\'s rounds', () => {
+    const impostor = task({ taskId: 'repair:build-1:1:task', parentTaskId: 'build-9', taskType: 'repair:build' });
+    expect(repairRoundsBefore(SUBJECT, [SUBJECT, impostor])).toBe(0);
   });
 });

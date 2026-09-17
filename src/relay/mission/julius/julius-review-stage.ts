@@ -20,8 +20,78 @@
  * binding, the shared-binding guard, findings, the repair round and the round
  * ceiling — instead of re-earning each one.
  */
-export const JULIUS_REVIEW_STAGES = ['plan', 'build', 'guidance', 'repair:plan', 'repair:build', 'repair:guidance'] as const;
+/**
+ * `rebuttal` is the disagreement's own stage. When the architect MAINTAINS a
+ * challenged position, the reviewer that raised the challenge judges the
+ * evidence behind it — once — and Julius resolves the disagreement on that
+ * judgement. It has no repair stage: a rebuttal is never repaired, because the
+ * bound is one answer and one re-review, and the argument does not go round.
+ */
+/**
+ * `architecture` is the stage where the architect is consulted mid-mission, or
+ * asked before completion whether what was built matches what was designed. Its
+ * review exists for one reason: a revision that changes something material
+ * after the terms are LOCKED is a re-plan, and a re-plan nobody checked is the
+ * architect editing the mission's design on its own authority. Like `rebuttal`
+ * it has no repair stage — the answer is a fresh consultation, not a revision
+ * of the same one.
+ */
+export const JULIUS_REVIEW_STAGES = ['plan', 'build', 'guidance', 'rebuttal', 'architecture', 'repair:plan', 'repair:build', 'repair:guidance'] as const;
 export type JuliusReviewStage = typeof JULIUS_REVIEW_STAGES[number];
+
+/**
+ * THE REVIEW STAGES A MISSION RUNS WHEN NOTHING NEEDS REPAIRING — its normal
+ * path, and the only one anything may budget against.
+ *
+ * DERIVED by removing the repair stages rather than written out, because a
+ * seventh stage added above must appear here or be deliberately excluded, and a
+ * second hand-kept list is how `MAX_REVIEWER_ATTEMPTS` came to describe two
+ * stages long after there were six.
+ *
+ * A repair stage is NOT budgeted here and that is the point: a repair is a new
+ * task Julius creates after a review that SUCCEEDED and asked for changes. It
+ * is not another attempt at the review, and counting it as one would make a
+ * reviewer doing its job look like a reviewer failing at it.
+ */
+export const JULIUS_NORMAL_REVIEW_STAGES: readonly JuliusReviewStage[] =
+  Object.freeze(JULIUS_REVIEW_STAGES.filter((stage) =>
+    !stage.startsWith('repair:') && stage !== 'rebuttal' && stage !== 'architecture'));
+
+/**
+ * THE CONDITIONAL STAGES, NAMED — the ones a healthy mission never runs.
+ *
+ * A repair review exists because a review asked for changes; a rebuttal review
+ * exists because a reviewer challenged the architect and the architect
+ * maintained its position. Both are real reviewer work, both spend from the same
+ * reviewer share of the job, and neither belongs in the number that prices the
+ * NORMAL path: budgeting them there prices the healthy mission for the unhealthy
+ * one, which is the rule the repair stages were already excluded under.
+ *
+ * WHAT THIS COSTS, said plainly: a mission that argues once runs one review more
+ * than its share was priced for, and one that also repairs runs more again. The
+ * per-review deadline is unchanged; the job's own wall clock absorbs them, and
+ * the drive stops at that deadline with the numbers on the record rather than
+ * overrunning it.
+ */
+export const JULIUS_CONDITIONAL_REVIEW_STAGES: readonly JuliusReviewStage[] =
+  Object.freeze(JULIUS_REVIEW_STAGES.filter((stage) => !JULIUS_NORMAL_REVIEW_STAGES.includes(stage)));
+
+/**
+ * ONE PIPELINE ATTEMPT PER REVIEW STAGE, AND NO AUTOMATIC SECOND.
+ *
+ * The generic `MAX_TASK_ATTEMPTS` gives every task three, which for a review is
+ * three provider calls against the same packet, the same engine deadline and
+ * the same prompt. The reviewer's observed failure is a request that outran the
+ * engine's per-request timeout; repeating it verbatim reaches the same wall, so
+ * the second and third attempts buy nothing and spend the job's reviewer share
+ * doing it. That is a blind retry, which this system does not do.
+ *
+ * WHAT THIS DOES NOT REDUCE: the review itself. The reviewer keeps its full
+ * deadline, its bounded in-adapter correction, its tools and its evidence
+ * depth — one attempt is a whole review, not a shorter one. Transient provider
+ * noise is the adapter's business and stays inside this same declared deadline.
+ */
+export const REVIEW_TASK_ATTEMPTS = 1;
 
 /** `review:<stage>` → stage. Anything else is null — an unknown stage is not a guess. */
 export function reviewStageOf(taskType: string): JuliusReviewStage | null {
@@ -89,7 +159,7 @@ export type JuliusReviewRequirement = 'plan' | 'diff' | 'guidance';
 export interface JuliusReviewCharge {
   readonly stage: JuliusReviewStage;
   /** What is under judgement. */
-  readonly subject: 'PLAN' | 'IMPLEMENTATION' | 'GUIDANCE';
+  readonly subject: 'PLAN' | 'IMPLEMENTATION' | 'GUIDANCE' | 'REBUTTAL' | 'ARCHITECTURE';
   /** Whether prior blocking findings must be shown resolved. */
   readonly repair: boolean;
   /** The questions the reviewer answers, in order. */
@@ -155,6 +225,61 @@ const GUIDANCE_MUST_NOT_DEMAND: readonly string[] = Object.freeze([
 
 const RESOLUTION_JUDGE = 'Is every prior blocking finding resolved, each one addressed rather than argued away?';
 
+/**
+ * A REBUTTAL IS JUDGED ON ITS EVIDENCE, NOT ON WHO SAID IT.
+ *
+ * The reviewer is judging the architect's answer to its OWN challenge, which is
+ * the one review where the reviewer has a position of its own to defend. So the
+ * questions are about what the cited evidence shows, and the last one asks it
+ * to say plainly whether the evidence changes its mind — because Julius resolves
+ * the disagreement on that answer and there is no second round to correct it in.
+ */
+const REBUTTAL_JUDGES: readonly string[] = Object.freeze([
+  'Does the rebuttal answer the challenge that was actually raised, rather than a weaker one?',
+  'Is each cited locator real, relevant and checkable from the mission state you were given?',
+  'Does the cited evidence actually support the maintained position, rather than merely accompanying it?',
+  'Is there evidence against the position that the rebuttal leaves unaddressed?',
+  'Having read the evidence, does your challenge still stand? CONTINUE accepts the architect\'s position; anything stricter maintains your challenge.',
+]);
+
+/**
+ * A rebuttal review may not demand the work: the disagreement may have been
+ * raised about a plan or a packet, and the implementation is not what is being
+ * argued about.
+ */
+const REBUTTAL_MUST_NOT_DEMAND: readonly string[] = Object.freeze([
+  'a second rebuttal from the architect',
+  'a contract amendment applied without a reviewed revision',
+  'completed edits that the challenged position does not concern',
+]);
+
+/**
+ * AN ARCHITECTURE CONSULTATION IS JUDGED ON WHETHER IT IS TRUE AND WHETHER IT
+ * IS THE ARCHITECT'S TO SAY.
+ *
+ * Two different things arrive at this stage: a revised design after the terms
+ * locked, and an assessment of whether the built system matches the design. The
+ * reviewer judges both against the same standard it applies to guidance — is it
+ * supported by evidence, and does it stay inside the authority its author has.
+ */
+const ARCHITECTURE_JUDGES: readonly string[] = Object.freeze([
+  'Is every architectural claim supported by evidence a reader can check, rather than asserted?',
+  'Does a change to the design name what actually moved — an interface, a schema, a dependency, ownership, security, concurrency, persistence or an invariant — rather than a rename or a reformat?',
+  'Does the assessment stay inside the Mission Contract, leaving its objective, criteria, budget, permissions and scope exactly as they are?',
+  'If drift is claimed, is the work it names really the work that drifted?',
+  'Is anything the architect calls aligned actually aligned, on the evidence you were given?',
+]);
+
+/**
+ * An architecture review may not demand the work be redone for a preference:
+ * the architect proposing a different design is not a finding about the code.
+ */
+const ARCHITECTURE_MUST_NOT_DEMAND: readonly string[] = Object.freeze([
+  'a change to a mission term, a budget or a permission',
+  'a completion, a verification or any verdict the reviewer alone may give',
+  'an implementation change justified only by a preference between designs',
+]);
+
 const CHARGES: Readonly<Record<JuliusReviewStage, JuliusReviewCharge>> = Object.freeze({
   'plan': Object.freeze({
     stage: 'plan', subject: 'PLAN', repair: false,
@@ -186,6 +311,31 @@ const CHARGES: Readonly<Record<JuliusReviewStage, JuliusReviewCharge>> = Object.
     judges: Object.freeze([...GUIDANCE_JUDGES, RESOLUTION_JUDGE]), mustNotDemand: GUIDANCE_MUST_NOT_DEMAND,
     requires: Object.freeze<JuliusReviewRequirement[]>(['plan', 'guidance']),
   }),
+  /**
+   * REQUIRES NOTHING FROM THE ARTIFACT EXCHANGE, and that is deliberate. The
+   * challenge, the architect's argument and its citations are all in the packet
+   * Julius compiled for this review, written as durable Project Brain entries
+   * when the disagreement opened and when the rebuttal arrived. A requirement on
+   * a process-local artifact would make a resumed run unable to finish an
+   * argument it had already started — the disagreement would hold the work with
+   * nothing able to release it.
+   */
+  'rebuttal': Object.freeze({
+    stage: 'rebuttal', subject: 'REBUTTAL', repair: false,
+    judges: REBUTTAL_JUDGES, mustNotDemand: REBUTTAL_MUST_NOT_DEMAND,
+    requires: Object.freeze<JuliusReviewRequirement[]>([]),
+  }),
+  /**
+   * REQUIRES THE PLAN AND NOTHING PROCESS-LOCAL, for the reason the rebuttal
+   * stage requires nothing: the architecture in force, the proposed revision
+   * and the assessment are all durable Project Brain entries in the packet
+   * Julius compiles. A run that restarts mid-consultation can still finish it.
+   */
+  'architecture': Object.freeze({
+    stage: 'architecture', subject: 'ARCHITECTURE', repair: false,
+    judges: ARCHITECTURE_JUDGES, mustNotDemand: ARCHITECTURE_MUST_NOT_DEMAND,
+    requires: Object.freeze<JuliusReviewRequirement[]>(['plan']),
+  }),
 });
 
 export function reviewChargeFor(stage: JuliusReviewStage): JuliusReviewCharge {
@@ -203,5 +353,11 @@ export function reviewChargeFor(stage: JuliusReviewStage): JuliusReviewCharge {
  * anything that is not a review task.
  */
 export function reviewSubjectTaskId(taskId: string): string | null {
+  // A REVIEW THAT PAUSED TO RESEARCH continues as `segment:<review>:<n>:task`,
+  // and the continuation is still a review of the same subject — it must find
+  // the same artifacts, or a researched guidance review is refused for lacking
+  // the packet it was judging.
+  const segment = /^segment:(.+):[1-9]\d*:task$/u.exec(taskId);
+  if (segment !== null) return reviewSubjectTaskId(segment[1]!);
   return taskId.endsWith(':review') ? taskId.slice(0, -':review'.length) : null;
 }

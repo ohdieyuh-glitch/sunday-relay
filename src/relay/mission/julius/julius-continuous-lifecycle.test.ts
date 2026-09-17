@@ -408,10 +408,18 @@ describe('routing names an intention and performs none of it', () => {
       .toEqual({ route: 'REQUIRE_REPAIR', reasonCode: 'CRITERION_MISSED' });
   });
 
-  it('a CHALLENGE routes to the revision model, never to an amendment', () => {
+  it('a CHALLENGE opens a disagreement — held when material, recorded otherwise — and never routes to a revision', () => {
     const point = checkpoint();
+    // `verdictFor` names `contract_drift`, which is material.
     expect(route({ checkpoint: point, verdict: verdictFor(point, 'CHALLENGE', 'TERMS_WRONG') }))
-      .toEqual({ route: 'REQUIRE_CONTRACT_REVISION', reasonCode: 'TERMS_WRONG' });
+      .toEqual({ route: 'HOLD_FOR_DISAGREEMENT', reasonCode: 'TERMS_WRONG' });
+    const weak = recordJuliusCheckpointVerdict({
+      verdictId: 'v-weak', checkpoint: point, verdict: 'CHALLENGE', category: 'superficial_test',
+      reviewerWorkerId: 'reviewer', reasonCode: 'THIN_TEST', evidenceIds: ['ev-1'], safeClaim: 'The test asserts nothing.',
+      recordedAt: '2026-09-15T12:00:00.000Z',
+    });
+    if (weak.outcome !== 'RECORDED') throw new Error('unreachable');
+    expect(route({ checkpoint: point, verdict: weak.record })).toEqual({ route: 'RECORD_DISAGREEMENT', reasonCode: 'THIN_TEST' });
   });
 
   it('a WARNING is recorded and does not interrupt', () => {
@@ -495,7 +503,9 @@ describe('the guidance stages join the review vocabulary rather than bypassing i
   it('a guidance task is reviewable by the ordinary review machinery', () => {
     expect(reviewStageOf('review:guidance')).toBe('guidance');
     expect(reviewStageOf('review:repair:guidance')).toBe('repair:guidance');
-    expect([...JULIUS_REVIEW_STAGES]).toEqual(['plan', 'build', 'guidance', 'repair:plan', 'repair:build', 'repair:guidance']);
+    expect([...JULIUS_REVIEW_STAGES]).toEqual([
+      'plan', 'build', 'guidance', 'rebuttal', 'architecture', 'repair:plan', 'repair:build', 'repair:guidance',
+    ]);
   });
 
   it('charges a guidance review with support and scope, and forbids demanding a diff', () => {

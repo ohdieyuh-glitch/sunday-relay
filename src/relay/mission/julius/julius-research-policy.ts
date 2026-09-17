@@ -274,6 +274,57 @@ export function juliusResearchHostMatches(pattern: string, host: string): boolea
   return h.length > suffix.length + 1 && h.endsWith(`.${suffix}`);
 }
 
+/**
+ * THE HOST A WORKER ASKED FOR, IN THE ONE SHAPE SAFE TO RECORD.
+ *
+ * Paid run 34757974058 recorded four research refusals with no reason and no
+ * target, so nobody could say whether the workers asked for a host the mission
+ * never granted or Relay refused one it had. The durable row now names the host
+ * the ask reached for, and ONLY the host: a path or a query is the worker's own
+ * text and can carry anything, while the host is the part of a reference the
+ * allowlist decides on. It is read exactly as `authorizeJuliusResearch` reads
+ * it, so the recorded host is the one the policy compared.
+ *
+ * NULL WHEN THERE IS NO NAME: an unparsable reference or an address literal.
+ * Unknown is not a host, and an address is not a name.
+ */
+export function juliusResearchRequestedHost(reference: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(reference);
+  } catch {
+    return null;
+  }
+  const host = normalizeHost(url.hostname);
+  return isHostName(host) ? host : null;
+}
+
+/**
+ * WHICH PAGE OF A HOST AN ASK REACHED FOR, as a record may hold it.
+ *
+ * The URL parser's own pathname — dot segments resolved, percent-encoding as
+ * the parser leaves it — with no query and no fragment, which are where a
+ * credential or a worker's free text would ride. A segment shaped like a token
+ * (24 or more letters, digits, `-` or `_`, with both a letter and a digit)
+ * is replaced, and the whole is bounded, so a path can identify a page without
+ * ever becoming a place a secret is kept. Null when the reference is not a URL.
+ */
+export function juliusResearchRequestedPath(reference: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(reference);
+  } catch {
+    return null;
+  }
+  const scrubbed = url.pathname
+    .split('/')
+    .map((segment) => (/^[A-Za-z0-9_-]{24,}$/u.test(segment) && /[A-Za-z]/u.test(segment) && /[0-9]/u.test(segment)
+      ? '[REDACTED]'
+      : segment))
+    .join('/');
+  return scrubbed.length > 200 ? `${scrubbed.slice(0, 199)}…` : scrubbed;
+}
+
 /* ------------------------------------------------------------ sealing */
 
 const FINGERPRINT_OF = (draft: JuliusResearchPolicyDraft): string => contentFingerprint(JSON.stringify([
@@ -517,6 +568,12 @@ export interface JuliusResearchRequest {
   /** What the worker is trying to find out. Recorded with the evidence. */
   readonly purpose: string;
   readonly requestedAt: string;
+  /**
+   * How many readable characters of the page may be handed to the worker, set
+   * by whoever shares one packet between several asks. Absent means the whole
+   * packet for this one page. Never an authority: it bounds delivery only.
+   */
+  readonly deliveryChars?: number;
 }
 
 export type JuliusResearchAuthorization =
@@ -657,6 +714,17 @@ export function authorizeJuliusResearch(input: {
       'budget_exhausted',
     );
   }
+
+  /**
+   * THE FRAGMENT IS NOT PART OF WHAT IS FETCHED. A client never sends it, so a
+   * page cited as `…/app-psql.html#APP-PSQL-META-COMMANDS` and the page itself
+   * are the same retrieval. Live Reach's URL policy is the MCP endpoint policy,
+   * which refuses any URL carrying one, so passing the anchor through turned
+   * every anchored documentation link on a granted host into `policy_refused`,
+   * and told the worker the mission had not authorized it. Dropped here, where
+   * the URL the fetch is bound to is decided. The query is sent and is kept.
+   */
+  url.hash = '';
 
   return {
     ok: true,

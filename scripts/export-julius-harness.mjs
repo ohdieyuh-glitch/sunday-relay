@@ -102,7 +102,6 @@ const DECLARED_NOT_COMPOSED = [
   { path: 'src/relay/persistence/julius-lifecycle-postgres.ts', reason: 'durable approvals and lifecycle facts (JuliusLifecycleStore / JuliusApprovalStore) for julius-lifecycle-runtime; the live root does not yet compose an operator lifecycle channel' },
   { path: 'src/relay/persistence/julius-subagent-postgres.ts', reason: 'durable sub-agent grants (JuliusSubagentStore) for julius-subagent-runtime; the live C.A.R.D. policy sets subagents.allowed=false' },
   { path: 'src/relay/persistence/julius-repair-postgres.ts', reason: 'durable repair-cycle scheduling against julius_tasks and julius_repair_cycles; the live root reaches repair through the store aggregate, not this repository' },
-  { path: 'src/relay/persistence/julius-timeline-postgres.ts', reason: 'the safe timeline read from the event ledger (JuliusTimelineReader); a read model no live surface consumes yet' },
   { path: 'src/relay/workspace/julius-tools/registry.ts', reason: 'the default tool catalogue (DEFAULT_JULIUS_TOOL_IDS, createDefaultJuliusToolRegistry); the live root routes tool effects through the executor shell port and does not build a registry' },
   { path: 'src/relay/workspace/julius-tools/local-artifact-store.ts', reason: 'the durable staged→finalized artifact store (StagedArtifactStorePort); the live root uses an in-process artifact exchange, recorded as debt in docs/JULIUS_BETA_READINESS.md' },
 ];
@@ -121,6 +120,7 @@ const BOUNDARIES = [
 
 /** Files the trace refuses to enter, by excluded category. Each is reached only through a barrel. */
 const EXCLUDED_FILES = [
+  { path: 'relay-bridge/julius/coding-agent-fixtures.ts', category: 'fixtures', reason: 'deterministic Coding Agent providers — generic scripted and Codex-shaped — and a recording fake executor, for the provider-swappability proofs; nothing on the live path imports it, so no scripted provider can reach a real mission' },
   { path: 'src/relay/mission/julius/julius-runtime-fixtures.ts', category: 'fixtures', reason: 'a complete deterministic Julius deployment in memory — scripted adapters, stepping clock, counting ids — exported by the kernel barrel for tests; the live composition has no import through which a scripted adapter could arrive' },
   { path: 'src/relay/mission/julius/julius-fault-injection.ts', category: 'test harness', reason: 'wraps a store so a named method throws on its Nth call — the chaos instrument the recovery scenarios use; no production caller' },
   { path: 'src/relay/connectors/gpt-architect/fake-architect.ts', category: 'fake', reason: 'the deterministic offline fake of the GPT architect, exported by the connector barrel for the suite and Demo Simulation; the live worker binds runGptArchitect only' },
@@ -270,11 +270,57 @@ const FILE_RULES = [
   // it is the coordinator's account of when work stops, and filing it under the
   // Coding Agent would read as that slot owning its own barrier.
   ['src/relay/mission/julius/julius-segment-lineage.ts', 'TASK GRAPH / SCHEDULER'],
+  // The peer channel: who may address whom, the request ledger and the peers'
+  // derived states. The coordinator's, because Julius mediates every exchange and
+  // a request is audit of the task graph, never a way around it.
+  ['src/relay/mission/julius/julius-peer-channel.ts', 'TASK GRAPH / SCHEDULER'],
+  ['src/relay/mission/julius/julius-peer-runtime.ts', 'TASK GRAPH / SCHEDULER'],
+  // The reviewer's canonical verdict, the stricter-of rule and the route Julius
+  // takes: the Independent Reviewer's vocabulary, owned by its subsystem.
+  ['src/relay/mission/julius/julius-review-verdict.ts', 'INDEPENDENT REVIEWER'],
+  // Disagreement between the architect and the reviewer: opened, bounded and
+  // resolved by Julius, so it belongs to the coordinator, not to either peer.
+  ['src/relay/mission/julius/julius-disagreement.ts', 'TASK GRAPH / SCHEDULER'],
+  // A finding's life from raised to resolved. The REVIEWER's, because only the
+  // reviewer that raised a finding may end it: a repair moves it to ADDRESSED
+  // and no further, and no amount of changed code resolves anything by itself.
+  ['src/relay/mission/julius/julius-finding-lifecycle.ts', 'INDEPENDENT REVIEWER'],
+  // What changed between a rejected round and the repair of it, bounded for the
+  // re-review that must judge whether the findings are actually answered.
+  ['src/relay/mission/julius/julius-repair-round.ts', 'REPAIR'],
+  // When Julius goes back to the architect, what counts as drift worth asking
+  // about, and the final check that can hold a completion. The PROMPT
+  // ARCHITECT's for the same reason the state is: it is that slot's own
+  // account of the design and of whether the built thing still matches it.
+  ['src/relay/mission/julius/julius-architecture-drift.ts', 'PROMPT ARCHITECT'],
+  // The architect's picture of the system as bounded, durable state: components,
+  // boundaries, dependencies, decisions, assumptions, questions and risks. The
+  // PROMPT ARCHITECT's, because it is that slot's own account of the design —
+  // advisory throughout, since the Mission Contract remains authoritative and a
+  // disagreement with it is recorded rather than resolved.
+  ['src/relay/mission/julius/julius-architecture-state.ts', 'PROMPT ARCHITECT'],
+  // The Coding Agent as a Julius role rather than a provider: the governed
+  // request, the closed provider outcome, and the failure taxonomy that decides
+  // retry versus operator action. The CODING AGENT's, because it is that slot's
+  // contract with whatever implements it.
+  ['src/relay/mission/julius/julius-coding-agent.ts', 'CODING AGENT'],
+  // What each role may author at the result boundary — evidence types and
+  // result channels — and the evidence ids Julius mints. A permission on what a
+  // worker's answer may say, owned with the other permissions.
+  ['src/relay/mission/julius/julius-worker-authority.ts', 'LEASES / BUDGETS / PERMISSIONS'],
+  // How many run-loop ticks a mission's own structure permits. The scheduler's
+  // account of how much it may dispatch, counted from the task graph it owns.
+  ['src/relay/mission/julius/julius-tick-budget.ts', 'TASK GRAPH / SCHEDULER'],
   // What a worker may ask Julius to look at, and what it receives back. Sits
   // with the lifecycle vocabulary rather than with evidence: the ASK is a
   // checkpoint and the ANSWER arrives as a continuation, both of which are the
   // scheduler's. The artifact it produces is classified under evidence, below.
   ['src/relay/mission/julius/julius-research-protocol.ts', 'TASK GRAPH / SCHEDULER'],
+  // How a worker with no output schema reaches the three channels above. It is
+  // a TRANSPORT and it decides nothing: every request it reads is handed on
+  // untouched for the domain sanitizers to refuse. Filed with the lifecycle it
+  // feeds, because what it carries is checkpoints and continuations.
+  ['src/relay/mission/julius/julius-worker-participation.ts', 'TASK GRAPH / SCHEDULER'],
   // The mission's authority over what any worker may retrieve, and each slot's
   // retrieval budget. A PERMISSION with a cap on it, which is exactly this
   // subsystem — the allowlist is mission authority and the budget is the
@@ -334,6 +380,10 @@ const FILE_RULES = [
   ['relay-bridge/julius/research-mediator.ts', 'LIVE PROVIDER COMPOSITION'],
   ['relay-bridge/live-reach-service.ts', 'LIVE PROVIDER COMPOSITION'],
   ['relay-bridge/julius/live-workers.ts', 'LIVE PROVIDER COMPOSITION'],
+  // Claude Code as one implementation of the Coding Agent port: how the hosted
+  // session is launched, how its outcomes read, and the structural facts its
+  // observation carries. Replaced wholesale when the provider is swapped.
+  ['relay-bridge/julius/claude-code-coding-provider.ts', 'CODING AGENT'],
   ['relay-bridge/hosted-coding-agent/', 'CODING AGENT'],
   ['relay-bridge/hermes-reviewer.ts', 'INDEPENDENT REVIEWER'],
   // The one derivation that decides how long a review may take, read by the

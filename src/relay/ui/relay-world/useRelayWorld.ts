@@ -3,7 +3,7 @@ import {
   AQUALA_PRESENCE, CAMERA_FOV, CAMERA_POSITION, CAMERA_TARGET, clamp01,
   dogBeatAt, sampleTrack, sampleVec3, sceneAt, type ScenePosition, type Vec3,
 } from '../landing/choreography';
-import { DogAnimator, type DogState } from '../landing/three/dog-rig';
+import { SteppedDogAnimator, type DogState } from '../landing/three/dog-rig';
 import { chooseDpr, chooseTier, createLandingEngine, type LandingEngine } from '../landing/three/engine';
 import { snapToBeat } from '../landing/useLandingRuntime';
 import type { OnboardingStepId } from '../relay-experience/onboarding';
@@ -112,7 +112,7 @@ export function useRelayWorld(
   const canvasNode = useRef<HTMLCanvasElement | null>(null);
   const scrollNode = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<LandingEngine | null>(null);
-  const animator = useMemo(() => new DogAnimator(), []);
+  const animator = useMemo(() => new SteppedDogAnimator(), []);
   const arrived = useRef(onArrive);
   arrived.current = onArrive;
 
