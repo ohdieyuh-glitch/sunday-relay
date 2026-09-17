@@ -121,6 +121,8 @@ def job():
                 "dog_at": vec(dog.get_actor_location()),
                 "dog_yaw": round(dog.get_actor_rotation().yaw, 1),
                 "hands": [vec(dog.get_hand_location(True)), vec(dog.get_hand_location(False))],
+                "lens": vec(dog.get_mission_lens_centre()) if hasattr(dog, "get_mission_lens_centre") else None,
+                "lens_off_line": round(dog.get_mission_lens_off_line(), 1) if hasattr(dog, "get_mission_lens_off_line") else None,
                 "book": [vec(dog.get_book_point(i)) for i in range(3)],
                 "orb": vec(orb.get_actor_location()) if orb else None,
                 "crown": round(orb.get_crown_scale(), 2) if orb else None,
