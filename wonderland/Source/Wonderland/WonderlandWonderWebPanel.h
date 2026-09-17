@@ -9,8 +9,8 @@
 // whether the terminal takes a keystroke are fields of the `FWonderWebSurface` the Wonder Web subsystem hands it; the
 // widget draws them and forwards clicks to the subsystem, which refuses anything that surface does not allow.
 //
-// It is designed at a fixed 1536 x 1024 and rendered at that resolution onto a window of the workspace's multitasking
-// size (WonderlandWonderWebScreen.h).
+// It is designed at a fixed 1536 x 1024, and the workspace layer draws it scaled to where its glass stands
+// (WonderlandWonderWebScreen.h).
 #pragma once
 
 #include "CoreMinimal.h"
@@ -174,6 +174,8 @@ private:
 	TMap<FName, FVector2D> ControlCentres;
 	TMap<FName, double> ControlSeenAt;
 	double Now = 0.0;
+	/** Frames left before the terminal scrolls to its newest line: new lines must be laid out before the end is known. */
+	int32 ScrollTerminalIn = 0;
 
 	FSlateBrush WindowBrush;
 	FSlateBrush LineBrush;

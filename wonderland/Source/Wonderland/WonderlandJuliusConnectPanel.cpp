@@ -368,6 +368,11 @@ void SWonderlandJuliusConnectPanel::Tick(const FGeometry& AllottedGeometry, cons
 	{
 		Rebuild();
 	}
+	// THE NEWEST LINE IN VIEW: scrolled again once the lines just added have been laid out.
+	if (ScrollTerminalIn > 0 && --ScrollTerminalIn == 0 && TerminalScroll.IsValid())
+	{
+		TerminalScroll->ScrollToEnd();
+	}
 }
 
 void SWonderlandJuliusConnectPanel::Rebuild()
@@ -418,6 +423,7 @@ void SWonderlandJuliusConnectPanel::Rebuild()
 		if (TerminalScroll.IsValid())
 		{
 			TerminalScroll->ScrollToEnd();
+			ScrollTerminalIn = 2;
 		}
 	}
 }
@@ -573,17 +579,17 @@ TSharedRef<SWidget> SWonderlandJuliusConnectPanel::MakeServiceRow(const FJuliusC
 		];
 		Detail->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 		[
-			SNew(SHorizontalBox)
+			SNew(SVerticalBox)
 			.Visibility(Service.Granted.Num() + Service.Denied.Num() > 0 ? EVisibility::Visible : EVisibility::Collapsed)
-			+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 22.0f, 0.0f)
+			+ SVerticalBox::Slot().AutoHeight()
 			[
-				SNew(STextBlock).Font(Mono(17)).ColorAndOpacity(Good())
+				SNew(STextBlock).Font(Mono(17)).ColorAndOpacity(Good()).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
 				.Text(FText::FromString(FString::Printf(TEXT("GRANTED  %s"), *JoinOr(Service.Granted, TEXT("-")))))
 			]
-			+ SHorizontalBox::Slot().FillWidth(1.0f)
+			+ SVerticalBox::Slot().AutoHeight()
 			[
-				SNew(STextBlock).Font(Mono(17)).ColorAndOpacity(Fail(0.9f)).AutoWrapText(true)
-				.Text(FText::FromString(FString::Printf(TEXT("DENIED  %s"), *JoinOr(Service.Denied, TEXT("-")))))
+				SNew(STextBlock).Font(Mono(17)).ColorAndOpacity(Fail(0.9f)).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+				.Text(FText::FromString(FString::Printf(TEXT("DENIED   %s"), *JoinOr(Service.Denied, TEXT("-")))))
 			]
 		];
 		Detail->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
