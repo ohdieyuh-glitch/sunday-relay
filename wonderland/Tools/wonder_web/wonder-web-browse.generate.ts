@@ -50,7 +50,14 @@ interface Tab {
   readonly tabId: string;
   readonly title: string;
   readonly site: string;
+  /** What the address bar reads while the sample page is drawn. Never fetchable. */
   readonly url: string;
+  /**
+   * The real page this tab stands for, loaded only in real mode and only if its host is allowed
+   * (founder, 2026-09-17: "soon it should not be a simulation should be real"). Left out where a real page would need
+   * the founder's own account: a mailbox is theirs to sign into, not ours to pretend at.
+   */
+  readonly real?: string;
   readonly letter: string;
   readonly blocks: readonly Block[];
 }
@@ -66,6 +73,7 @@ const SOCIAL: Tab = {
   title: 'Instagram',
   site: 'Instagram',
   url: 'instagram.com/wonderland.studio',
+  real: 'https://www.instagram.com/',
   letter: 'I',
   blocks: [
     { kind: 'site_bar', brand: 'Instagram', query: 'Search', links: ['Home', 'Explore', 'Reels', 'Messages', 'Profile'] },
@@ -95,6 +103,7 @@ const SEARCH: Tab = {
   title: 'Search',
   site: 'Google',
   url: 'www.google.com/search?q=pixel+canvas+palette+tokens',
+  real: 'https://html.duckduckgo.com/html/?q=pixel+canvas+palette+tokens',
   letter: 'G',
   blocks: [
     { kind: 'site_bar', brand: 'Google', query: 'pixel canvas palette tokens', links: ['All', 'Images', 'Videos', 'News'] },
@@ -129,6 +138,7 @@ const DOCS: Tab = {
   title: 'Design tokens',
   site: 'Docs',
   url: 'docs.wonderstudio.com/brand/design-tokens',
+  real: 'https://en.wikipedia.org/wiki/Design_system',
   letter: 'D',
   blocks: [
     { kind: 'site_bar', brand: 'Wonderland Studio Docs', query: 'Search the docs', links: ['Brand', 'Tools', 'Missions', 'Changelog'] },
@@ -149,6 +159,7 @@ const STORE: Tab = {
   title: 'Cart',
   site: 'Arden Supplies',
   url: 'shop.arden-supplies.com/cart',
+  real: 'https://example.com/',
   letter: 'A',
   blocks: [
     { kind: 'site_bar', brand: 'Arden Supplies', query: 'Search products', links: ['Paper', 'Ink', 'Frames', 'Account', 'Cart (2)'] },
@@ -176,6 +187,10 @@ describe('wonder web browse projection', () => {
     // Every tab is a site with an address and a page; every page starts with the site's own bar, like a website does.
     for (const tab of MODEL.tabs) {
       expect(tab.url).not.toMatch(/^https?:/);
+      // A real address, where there is one, is https and nothing else.
+      if ('real' in tab && tab.real !== undefined) {
+        expect(tab.real).toMatch(/^https:\/\//);
+      }
       expect(tab.blocks[0].kind).toBe('site_bar');
       expect(tab.blocks.length).toBeGreaterThanOrEqual(2);
       expect(tab.letter).toHaveLength(1);
@@ -185,6 +200,10 @@ describe('wonder web browse projection', () => {
     expect(social.url).toContain('instagram.com');
     expect(social.blocks.map((b) => b.kind)).toEqual(['site_bar', 'profile', 'grid', 'post', 'compose', 'footer']);
     expect(social.blocks.find((b) => b.kind === 'post')?.rows?.length).toBe(3);
+    // The founder's example is the one that must also exist for real.
+    expect(social.real).toBe('https://www.instagram.com/');
+    // The mailbox has no real address: signing into an inbox is the person's own step, not something to imitate.
+    expect(MODEL.tabs.find((t) => t.tabId === 'mail')?.real).toBeUndefined();
   });
 
   it('writes the projection', () => {

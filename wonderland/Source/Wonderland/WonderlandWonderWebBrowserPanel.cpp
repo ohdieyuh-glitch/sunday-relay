@@ -1,6 +1,7 @@
 #include "WonderlandWonderWebBrowserPanel.h"
 
 #include "Brushes/SlateRoundedBoxBrush.h"
+#include "SWebBrowser.h"
 #include "Widgets/Images/SImage.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Layout/SBorder.h"
@@ -163,6 +164,10 @@ void SWonderlandWonderWebBrowserPanel::Construct(const FArguments& InArgs)
 										SNew(STextBlock).Font(WonderWebLook::Sans(20)).ColorAndOpacity(WonderWebLook::Line())
 										.Text_Lambda([WeakBrowse]()
 										{
+											if (WeakBrowse.IsValid() && WeakBrowse->IsRealMode() && !WeakBrowse->GetRealUrl().IsEmpty())
+											{
+												return FText::FromString(WeakBrowse->GetRealUrl());
+											}
 											const FWonderWebBrowseTab* Tab = WeakBrowse.IsValid() ? WeakBrowse->GetSelected() : nullptr;
 											return FText::FromString(Tab != nullptr ? Tab->Url : FString(TEXT("wonder.web")));
 										})
@@ -175,7 +180,8 @@ void SWonderlandWonderWebBrowserPanel::Construct(const FArguments& InArgs)
 							// THE SHELL SAYS WHAT THE PAGE IS. The page itself looks like the web; this badge is why that is honest.
 							SNew(SBorder).BorderImage(&BadgeBrush).Padding(FMargin(14.0f, 6.0f))
 							[
-								SNew(STextBlock).Text(INVTEXT("SIMULATED PAGE  ·  NO NETWORK")).Font(WonderWebLook::Sans(15, true, 120)).ColorAndOpacity(WonderWebLook::Line())
+								SNew(STextBlock).Font(WonderWebLook::Sans(15, true, 120)).ColorAndOpacity(WonderWebLook::Line())
+								.Text_Lambda([WeakBrowse]() { return FText::FromString(WeakBrowse.IsValid() ? WeakBrowse->PageLabel() : FString(TEXT("NO PAGES"))); })
 							]
 						]
 					]
@@ -291,6 +297,50 @@ void SWonderlandWonderWebBrowserPanel::Rebuild()
 		TabsSlot->SetContent(MakeTabs());
 	}
 	const FWonderWebBrowseTab* Tab = Browse->GetSelected();
+	// THE REAL WEB, WHEN IT IS ASKED FOR (founder, 2026-09-17). Real mode hands the page area to the engine's browser and
+	// loads the actual address; with it off, nothing is loaded and the sample page is drawn instead.
+	if (Browse->IsRealMode())
+	{
+		const FString Url = Browse->GetRealUrl();
+		if (!WebView.IsValid())
+		{
+			ShownPageKey.Reset();
+			PageBrushes.Reset();
+			SAssignNew(WebView, SWebBrowser)
+				.InitialURL(Url)
+				.ShowControls(false)
+				.ShowAddressBar(false)
+				.ShowErrorMessage(true)
+				.SupportsTransparency(false)
+				.ShowInitialThrobber(true)
+				.BackgroundColor(FColor::White);
+			ShownRealUrl = Url;
+			if (PageSlot.IsValid())
+			{
+				PageSlot->SetContent(WebView.ToSharedRef());
+			}
+		}
+		else if (Url != ShownRealUrl)
+		{
+			ShownRealUrl = Url;
+			if (Url.IsEmpty())
+			{
+				WebView->LoadString(TEXT("<html><body style=\"font:16px sans-serif;color:#8E8E8E;padding:24px\">Nothing loaded: this tab has no real address, or its host is not allowed.</body></html>"), TEXT("about:blank"));
+			}
+			else
+			{
+				WebView->LoadURL(Url);
+			}
+		}
+		return;
+	}
+	if (WebView.IsValid())
+	{
+		// Out of real mode: the browser is dropped, so no page keeps loading behind the sample ones.
+		WebView.Reset();
+		ShownRealUrl.Reset();
+		ShownPageKey.Reset();
+	}
 	// The page is rebuilt when the tab changes, or when Julius's caption or post changes what is on it.
 	const FString Key = FString::Printf(TEXT("%s|%s|%d"), Tab != nullptr ? *Tab->TabId : TEXT("-"), *Browse->GetCaption(), Browse->IsPosted() ? 1 : 0);
 	if (PageSlot.IsValid() && Key != ShownPageKey)

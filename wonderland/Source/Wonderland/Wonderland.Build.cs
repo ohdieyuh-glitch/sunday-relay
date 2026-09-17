@@ -34,6 +34,11 @@ public class Wonderland : ModuleRules
 			"SlateCore"
 		});
 
+		// THE REAL WEB, when Wonder Web is asked for it (founder, 2026-09-17: "soon it should not be a simulation should be
+		// real"). The engine's own Chromium-backed browser, used inside the Wonderland shell; it loads nothing until real
+		// mode is switched on, and only hosts on the allowlist (WonderlandWonderWebBrowse.h).
+		PrivateDependencyModuleNames.Add("WebBrowser");
+
 		// FImageCore::ResizeTo, for the HUD test library's scaled film frames (UWonderlandHudTestLibrary::CaptureViewportJpeg).
 		// FImageView and FImageUtils come through Engine; the resize itself lives in ImageCore and does not.
 		PrivateDependencyModuleNames.Add("ImageCore");

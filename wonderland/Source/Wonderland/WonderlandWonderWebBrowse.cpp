@@ -19,6 +19,13 @@ namespace WonderWebBrowseTuning
 {
 	TAutoConsoleVariable<float> CVarTypeSeconds(TEXT("wl.WonderWeb.Browse.TypeSeconds"), 0.035f,
 		TEXT("Wonder Web browser: seconds between characters while Julius types the caption."));
+	// THE REAL WEB, off until it is asked for. With it on, the page is loaded by the engine's Chromium browser instead of
+	// drawn from the projection, and the shell says LIVE PAGE.
+	TAutoConsoleVariable<int32> CVarReal(TEXT("wl.WonderWeb.Real"), 0,
+		TEXT("Wonder Web browser: 0 draws the sample pages, 1 loads the real ones with the engine's browser (allowlisted hosts only)."));
+	TAutoConsoleVariable<FString> CVarRealHosts(TEXT("wl.WonderWeb.RealHosts"),
+		TEXT("wikipedia.org,en.wikipedia.org,www.wikipedia.org,example.com,www.example.com,instagram.com,www.instagram.com,duckduckgo.com,html.duckduckgo.com"),
+		TEXT("Wonder Web browser: the hosts real mode may load, comma separated. A host not on this list is refused."));
 
 	const TCHAR* SocialTemplate = TEXT("social-post");
 
@@ -105,16 +112,23 @@ bool WonderlandParseWonderWebBrowse(const TSharedPtr<FJsonObject>& Json, FWonder
 		Tab.Title = Str(TabJson, TEXT("title"));
 		Tab.Site = Str(TabJson, TEXT("site"));
 		Tab.Url = Str(TabJson, TEXT("url"));
+		Tab.RealUrl = Str(TabJson, TEXT("real"));
 		Tab.Letter = Str(TabJson, TEXT("letter"));
 		if (Tab.TabId.IsEmpty() || Tab.Title.IsEmpty() || Tab.Url.IsEmpty())
 		{
 			OutProblem = TEXT("a tab has no id, title or address");
 			return false;
 		}
-		// NOT A LIVE ADDRESS: the projection carries site addresses to read, never a scheme to fetch.
+		// NOT A LIVE ADDRESS: what the address bar shows is text to read. The real page a tab stands for is a separate
+		// field, used only in real mode and only when its host is allowed.
 		if (Tab.Url.StartsWith(TEXT("http")))
 		{
-			OutProblem = FString::Printf(TEXT("tab '%s' carries a fetchable address"), *Tab.TabId);
+			OutProblem = FString::Printf(TEXT("tab '%s' carries a fetchable address where its shown address belongs"), *Tab.TabId);
+			return false;
+		}
+		if (!Tab.RealUrl.IsEmpty() && !Tab.RealUrl.StartsWith(TEXT("https://")))
+		{
+			OutProblem = FString::Printf(TEXT("tab '%s' has a real address that is not https"), *Tab.TabId);
 			return false;
 		}
 		const TArray<TSharedPtr<FJsonValue>>* Blocks = nullptr;
@@ -243,6 +257,19 @@ namespace WonderWebBrowseConsole
 			});
 		}));
 
+	FAutoConsoleCommand CmdGo(TEXT("wl.WonderWeb.Go"),
+		TEXT("Load a real page in the Wonder Web browser: `wl.WonderWeb.Go https://en.wikipedia.org/wiki/Wonderland`. Needs wl.WonderWeb.Real 1, and an allowed host."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			const FString Url = Args.Num() > 0 ? Args[0] : FString();
+			ForEachLive([&Url](UWonderlandWonderWebBrowseSubsystem& Browse)
+			{
+				FString Refusal;
+				Say(Browse.Navigate(Url, Refusal) ? FString::Printf(TEXT("WONDER WEB: loading %s for real."), *Url)
+					: FString::Printf(TEXT("WONDER WEB: %s"), *Refusal), !Refusal.IsEmpty());
+			});
+		}));
+
 	FAutoConsoleCommand CmdReset(TEXT("wl.WonderWeb.Browse.Reset"), TEXT("Clear the caption and the simulated post."),
 		FConsoleCommandDelegate::CreateLambda([]()
 		{
@@ -324,9 +351,80 @@ void UWonderlandWonderWebBrowseSubsystem::Changed()
 FString UWonderlandWonderWebBrowseSubsystem::DescribeBrowse() const
 {
 	const FWonderWebBrowseTab* Tab = GetSelected();
-	return FString::Printf(TEXT("loaded=%d tabs=%d tab=%s url=%s caption_len=%d typing=%d posted=%d julius=\"%s\" problem=\"%s\""),
+	return FString::Printf(TEXT("loaded=%d tabs=%d tab=%s url=%s real=%d real_url=%s label=\"%s\" caption_len=%d typing=%d posted=%d julius=\"%s\" problem=\"%s\""),
 		bLoaded ? 1 : 0, Model.Tabs.Num(), Tab != nullptr ? *Tab->TabId : TEXT("-"), Tab != nullptr ? *Tab->Url : TEXT("-"),
+		IsRealMode() ? 1 : 0, RealUrl.IsEmpty() ? TEXT("-") : *RealUrl, *PageLabel(),
 		Caption.Len(), IsJuliusTyping() ? 1 : 0, bPosted ? 1 : 0, *JuliusLine, *Problem);
+}
+
+bool UWonderlandWonderWebBrowseSubsystem::IsRealMode() const
+{
+	return WonderWebBrowseTuning::CVarReal.GetValueOnGameThread() != 0;
+}
+
+bool UWonderlandWonderWebBrowseSubsystem::IsHostAllowed(const FString& Url, FString& OutHost)
+{
+	OutHost.Reset();
+	if (!Url.StartsWith(TEXT("https://")) && !Url.StartsWith(TEXT("http://")))
+	{
+		return false;
+	}
+	FString Rest = Url.RightChop(Url.Find(TEXT("://")) + 3);
+	FString Host = Rest;
+	int32 Slash = INDEX_NONE;
+	if (Rest.FindChar(TEXT('/'), Slash))
+	{
+		Host = Rest.Left(Slash);
+	}
+	Host.Split(TEXT(":"), &Host, nullptr, ESearchCase::CaseSensitive, ESearchDir::FromStart);
+	OutHost = Host.ToLower();
+	TArray<FString> Allowed;
+	WonderWebBrowseTuning::CVarRealHosts.GetValueOnGameThread().ParseIntoArray(Allowed, TEXT(","), true);
+	for (FString Candidate : Allowed)
+	{
+		Candidate.TrimStartAndEndInline();
+		if (!Candidate.IsEmpty() && OutHost == Candidate.ToLower())
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+FString UWonderlandWonderWebBrowseSubsystem::PageLabel() const
+{
+	if (!IsRealMode())
+	{
+		return TEXT("SIMULATED PAGE  ·  NO NETWORK");
+	}
+	FString Host;
+	if (RealUrl.IsEmpty() || !IsHostAllowed(RealUrl, Host))
+	{
+		return TEXT("REAL MODE  ·  NOTHING LOADED");
+	}
+	return FString::Printf(TEXT("LIVE PAGE  ·  %s"), *Host.ToUpper());
+}
+
+bool UWonderlandWonderWebBrowseSubsystem::Navigate(const FString& Url, FString& OutRefusal)
+{
+	FString Host;
+	if (!IsRealMode())
+	{
+		OutRefusal = TEXT("real mode is off: set wl.WonderWeb.Real 1 to load real pages");
+		return false;
+	}
+	if (!IsHostAllowed(Url, Host))
+	{
+		OutRefusal = Host.IsEmpty()
+			? FString::Printf(TEXT("'%s' is not an http(s) address"), *Url)
+			: FString::Printf(TEXT("%s is not on wl.WonderWeb.RealHosts, so it was not loaded"), *Host);
+		return false;
+	}
+	RealUrl = Url;
+	// SAID IN THE LOG, EVERY TIME: a real page was loaded, and which one.
+	UE_LOG(LogWonderWebBrowse, Display, TEXT("WLBROWSE real page loaded: %s"), *RealUrl);
+	Changed();
+	return true;
 }
 
 bool UWonderlandWonderWebBrowseSubsystem::SelectTabIndex(int32 Index)
@@ -336,6 +434,21 @@ bool UWonderlandWonderWebBrowseSubsystem::SelectTabIndex(int32 Index)
 		return Model.Tabs.IsValidIndex(Index);
 	}
 	SelectedTab = Index;
+	// In real mode a tab is the real page it stands for; one with no real address loads nothing and says so.
+	if (IsRealMode())
+	{
+		const FWonderWebBrowseTab* Tab = GetSelected();
+		FString Refusal;
+		if (Tab != nullptr && !Tab->RealUrl.IsEmpty() && !Navigate(Tab->RealUrl, Refusal))
+		{
+			UE_LOG(LogWonderWebBrowse, Warning, TEXT("WLBROWSE %s"), *Refusal);
+			RealUrl.Reset();
+		}
+		else if (Tab != nullptr && Tab->RealUrl.IsEmpty())
+		{
+			RealUrl.Reset();
+		}
+	}
 	Changed();
 	return true;
 }
