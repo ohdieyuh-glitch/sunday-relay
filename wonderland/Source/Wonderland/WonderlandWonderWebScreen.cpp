@@ -14,14 +14,21 @@ namespace WonderWebScreenTuning
 {
 	// A SCREEN IN THE GARDEN, framed by the camera with the world round its edges: about three metres wide, stood a
 	// little over three metres out ahead of where the player is looking and raised above the Dog, the camera held far
-	// enough back that the window fills about two thirds of the view.
+	// enough back that the window fills about half the view. SMALLER THAN THE FIRST CUT, ON PURPOSE (founder, 2026-09-17:
+	// "minimize the wonder web page box just a little bit, because Julius will be spawning multiple wonder webs"): at
+	// 335 uu it filled 60% of the width; at 385 it fills about 52%, and there is world -- and room -- beside it.
 	TAutoConsoleVariable<float> CVarScale(TEXT("wl.WonderWeb.ScreenScale"), 0.2f, TEXT("Wonder Web screen: uu per window pixel (the window is 1536 x 1024)."));
 	TAutoConsoleVariable<float> CVarAhead(TEXT("wl.WonderWeb.ScreenAhead"), 330.0f, TEXT("Wonder Web screen: how far ahead of the Dog it stands, along the player's view, uu."));
 	TAutoConsoleVariable<float> CVarUp(TEXT("wl.WonderWeb.ScreenUp"), 150.0f, TEXT("Wonder Web screen: how high its centre stands above the Dog, uu."));
-	TAutoConsoleVariable<float> CVarViewDistance(TEXT("wl.WonderWeb.ViewDistance"), 335.0f, TEXT("Wonder Web screen: the camera's distance back from the glass, uu."));
-	TAutoConsoleVariable<float> CVarViewSide(TEXT("wl.WonderWeb.ViewSide"), -14.0f, TEXT("Wonder Web screen: the camera's sideways offset, uu; shifts the window across the view clear of the HUD."));
+	TAutoConsoleVariable<float> CVarViewDistance(TEXT("wl.WonderWeb.ViewDistance"), 385.0f, TEXT("Wonder Web screen: the camera's distance back from the glass, uu."));
+	TAutoConsoleVariable<float> CVarViewSide(TEXT("wl.WonderWeb.ViewSide"), -16.0f, TEXT("Wonder Web screen: the camera's sideways offset, uu; shifts the window across the view clear of the HUD."));
 	TAutoConsoleVariable<float> CVarViewLift(TEXT("wl.WonderWeb.ViewLift"), 8.0f, TEXT("Wonder Web screen: the camera's height above the glass's centre, uu."));
 	TAutoConsoleVariable<float> CVarViewFov(TEXT("wl.WonderWeb.ViewFov"), 75.0f, TEXT("Wonder Web screen: the camera's horizontal field of view, degrees."));
+	// LIT LIKE A SCREEN IN SUNLIGHT. The garden is lit physically and its exposure is set for daylight, so a widget's
+	// unlit colour of 1.0 lands almost black: editor 76 drew the whole window as a black slab while its render target held
+	// every yellow line and word. The Dog's glowing props carry the same kind of multiplier (DogGlowExposure). 20000 reads
+	// the yellow and keeps a disabled control visibly faint; 40000 starts to bloom the active tab into a bar.
+	TAutoConsoleVariable<float> CVarBrightness(TEXT("wl.WonderWeb.ScreenBrightness"), 20000.0f, TEXT("Wonder Web screen: how bright the window is drawn in the lit world (a multiplier on its colours)."));
 	TAutoConsoleVariable<float> CVarGrowSeconds(TEXT("wl.WonderWeb.GrowSeconds"), 0.35f, TEXT("Wonder Web screen: seconds to open out or fold away."));
 }
 
@@ -99,6 +106,12 @@ void AWonderlandWonderWebScreen::Tick(float DeltaSeconds)
 	const float Open = FMath::SmoothStep(0.0f, 1.0f, Grow);
 	const float Scale = CVarScale.GetValueOnGameThread();
 	Screen->SetRelativeScale3D(FVector(Scale, Scale, Scale * FMath::Max(Open, 0.02f)));
+	const float Brightness = FMath::Max(CVarBrightness.GetValueOnGameThread(), 1.0f);
+	if (!FMath::IsNearlyEqual(AppliedBrightness, Brightness))
+	{
+		Screen->SetTintColorAndOpacity(FLinearColor(Brightness, Brightness, Brightness, 1.0f));
+		AppliedBrightness = Brightness;
+	}
 	if (!bPresented && Grow <= 0.0f && !IsHidden())
 	{
 		SetActorHiddenInGame(true);
@@ -116,6 +129,7 @@ FVector AWonderlandWonderWebScreen::WindowPixelToWorld(const FVector2D& WindowPi
 
 bool AWonderlandWonderWebScreen::AimAtViewportPixel(APlayerController* Controller, const FVector2D& ViewportPixel)
 {
+	LastAimPixel = FVector2D(-1.0, -1.0);
 	if (Controller == nullptr || !bPresented || Interaction == nullptr)
 	{
 		return false;
@@ -139,6 +153,7 @@ bool AWonderlandWonderWebScreen::AimAtViewportPixel(APlayerController* Controlle
 	const FVector2D Pixel(-Local.Y + Draw.X * Screen->GetPivot().X, -Local.Z + Draw.Y * Screen->GetPivot().Y);
 	const bool bOnGlass = Pixel.X >= 0.0 && Pixel.Y >= 0.0 && Pixel.X <= Draw.X && Pixel.Y <= Draw.Y
 		&& FVector::DotProduct(Hit - Origin, Direction) > 0.0;
+	LastAimPixel = Pixel;
 
 	FHitResult Result;
 	Result.bBlockingHit = bOnGlass;
@@ -194,7 +209,8 @@ bool SWonderlandWonderWebInputLayer::Aim(const FGeometry& MyGeometry, const FPoi
 FReply SWonderlandWonderWebInputLayer::OnMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
 	FSlateApplication::Get().SetKeyboardFocus(SharedThis(this), EFocusCause::Mouse);
-	if (Aim(MyGeometry, MouseEvent))
+	const bool bOnGlass = Aim(MyGeometry, MouseEvent);
+	if (bOnGlass)
 	{
 		if (UWidgetInteractionComponent* Pointer = Screen.IsValid() ? Screen->GetInteraction() : nullptr)
 		{
@@ -202,6 +218,9 @@ FReply SWonderlandWonderWebInputLayer::OnMouseButtonDown(const FGeometry& MyGeom
 			++ForwardedClicks;
 		}
 	}
+	const FVector2D Pixel = Screen.IsValid() ? Screen->GetLastAimPixel() : FVector2D(-1.0, -1.0);
+	UE_LOG(LogTemp, Log, TEXT("WLWEB press at (%.0f, %.0f) -> window pixel (%.0f, %.0f): %s"), MouseEvent.GetScreenSpacePosition().X, MouseEvent.GetScreenSpacePosition().Y,
+		Pixel.X, Pixel.Y, bOnGlass ? TEXT("on the glass") : TEXT("off the glass"));
 	return FReply::Handled();
 }
 
