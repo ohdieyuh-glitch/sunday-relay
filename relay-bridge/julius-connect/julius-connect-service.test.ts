@@ -2,6 +2,7 @@ import { request } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createDevelopmentCredentialVault } from './development-vault';
+import type { LiveBrowser } from './live-browser';
 import { startJuliusConnectDevServer } from './dev-server';
 import { createJuliusConnectService, type JuliusConnectService, type JuliusConnectServiceView } from './julius-connect-service';
 
@@ -127,6 +128,83 @@ describe('julius connect service: the founder playtest chain', () => {
     expect(view.surface.prompt).toBeNull();
     expect(view.surface.services.find((s) => s.connectorId === 'github')).toMatchObject({ state: 'NOT_CONNECTED', stateLabel: 'INTEGRATION NOT BUILT' });
     expect(view.surface.audit[0]).toMatchObject({ action: 'capability.requested', outcome: 'failed' });
+  });
+});
+
+describe('julius connect service: Julius on the real web', () => {
+  /**
+   * A BROWSER THAT REMEMBERS WHAT IT WAS ASKED, and answers slowly, the way a real one does: nothing finishes inside the
+   * tick that started it. Nothing here reaches the network; what is under test is that the service asks for real work in
+   * the right order and only when the gate allows it.
+   */
+  function fakeBrowser(): LiveBrowser & { asked: string[] } {
+    const asked: string[] = [];
+    const later = <T,>(value: T): Promise<T> => new Promise((resolve) => setImmediate(() => resolve(value)));
+    return {
+      asked,
+      navigate: (_tab, url) => { asked.push(`navigate ${url}`); return later({ ok: true as const, host: 'en.wikipedia.org' }); },
+      setViewport: () => later(true),
+      read: () => { asked.push('read'); return later({ title: 'Design system - Wikipedia', url: 'https://en.wikipedia.org/wiki/Design_system', text: 'A design system is a set of standards.' }); },
+      searchOnPage: (_tab, query) => { asked.push(`search ${query}`); return later({ ok: true as const }); },
+      frame: () => later(null),
+      click: () => later(true),
+      scroll: () => later(true),
+      typeText: () => later(true),
+      pressKey: () => later(true),
+      back: () => later(true),
+      close: () => later(undefined),
+      log: () => [],
+      open: () => [],
+      shutdown: () => later(undefined),
+    };
+  }
+
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+  it('asks the founder first, then really browses: open, read, search, read -- each one an audited use', async () => {
+    const clock = manualClock();
+    const browser = fakeBrowser();
+    const service = createJuliusConnectService({ userId: 'founder', projectId: 'pixel-canvas', now: clock.now, browser, authorizationMs: 200, stepMs: 100 });
+    must(service.intent({ intent: 'start_task', templateId: 'web-lookup' }));
+    run(service, clock, 300);
+    // NOTHING WAS BROWSED. The task is blocked on a connection the founder has not given yet.
+    expect(browser.asked).toEqual([]);
+    const prompt = service.view().surface.prompt!;
+    expect(prompt.requested.map((c) => c.capabilityId)).toEqual(['web.read', 'web.search']);
+    expect(prompt.notRequested.map((c) => c.capabilityId)).toEqual(expect.arrayContaining(['web.sign_in', 'web.purchase']));
+
+    must(service.intent({ intent: 'approve', requestId: prompt.requestId }));
+    for (let i = 0; i < 40; i += 1) {
+      run(service, clock, 200);
+      await settle();
+    }
+    expect(browser.asked).toEqual([
+      'navigate https://en.wikipedia.org/wiki/Design_system',
+      'read',
+      'search design tokens',
+      'read',
+    ]);
+    const view = service.view();
+    expect(view.surface.tasks[0]?.runState).toBe('COMPLETED');
+    const used = view.surface.audit.filter((e) => e.action === 'capability.used');
+    expect(used).toHaveLength(4);
+    // The detail is what the page really said, not a stand-in sentence.
+    expect(used.some((e) => e.detail.includes('Design system - Wikipedia'))).toBe(true);
+  });
+
+  it('without a browser, a web task fails honestly rather than pretending it browsed', async () => {
+    const clock = manualClock();
+    const service = createJuliusConnectService({ userId: 'founder', projectId: 'pixel-canvas', now: clock.now, authorizationMs: 200, stepMs: 100 });
+    must(service.intent({ intent: 'start_task', templateId: 'web-lookup' }));
+    run(service, clock, 300);
+    const prompt = service.view().surface.prompt!;
+    must(service.intent({ intent: 'approve', requestId: prompt.requestId }));
+    run(service, clock, 2000);
+    await settle();
+    const failed = service.view().surface.audit.filter((e) => e.action === 'capability.used' && e.outcome === 'failed');
+    expect(failed.length).toBeGreaterThan(0);
+    expect(failed[0].detail).toContain('without the real browser');
+    expect(service.view().surface.tasks[0]?.runState).not.toBe('COMPLETED');
   });
 });
 
