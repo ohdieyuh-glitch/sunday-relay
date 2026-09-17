@@ -456,7 +456,11 @@ export function revokeConnection(state: JuliusConnectState, input: { connectionI
   if (!connection) return fail(relayError('not-found', 'No such connection.', { entityIds: { connectionId: input.connectionId } }));
   if (connection.userId !== input.userId) return fail(relayError('permission-denied', 'Only the connection’s owner can revoke it.'));
   if (connection.state === 'REVOKED') return ok(state);
-  const revoked = moveConnection(connection, 'REVOKED', clock.at, 'Revoked by you. Julius can no longer use it.', { credentialRef: null });
+  // It holds nothing any more: the reference is dropped and every capability it held goes with it (the audit keeps the history).
+  const connector = findConnector(connection.connectorId, registryOf(clock));
+  const revoked = moveConnection(connection, 'REVOKED', clock.at, 'Revoked by you. Julius can no longer use it.', {
+    credentialRef: null, grantedCapabilities: [], deniedCapabilities: connector ? connector.capabilities.map((c) => c.capabilityId) : connection.deniedCapabilities,
+  });
   if (!revoked.ok) return revoked;
   let next = replaceConnection(state, revoked.value);
   next = { ...next, grants: next.grants.map((g) => (g.service === connection.connectionId && !g.revokedAt ? revokeHandle(g, clock.at) : g)) };

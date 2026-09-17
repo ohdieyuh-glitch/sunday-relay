@@ -149,6 +149,7 @@ describe('julius connect: the founder chain', () => {
     const revoked = latestConnection(state, USER, 'dev-figma');
     expect(revoked?.state).toBe('REVOKED');
     expect(revoked?.credentialRef).toBeNull();
+    expect(revoked?.grantedCapabilities).toEqual([]);
     expect(state.grants.every((g) => g.revokedAt !== null)).toBe(true);
     expect(authorizeCapabilityUse(state, { userId: USER, projectId: 'project-a', connectorId: 'dev-figma', capability: 'files.read' }, clock()))
       .toMatchObject({ allowed: false, denial: 'REVOKED' });
