@@ -1490,15 +1490,24 @@ bool UWonderlandUiSubsystem::SimulateWonderWebWindowClick(FName Window, FName Co
 	{
 		bLayerUnderPoint |= Path.Widgets[Index].Widget == StaticCastSharedRef<SWidget>(WonderWebLayer.ToSharedRef());
 	}
+	bool bDown = false;
+	bool bUp = false;
 	if (bLayerUnderPoint)
 	{
 		App.RoutePointerMoveEvent(Path, FPointerEvent(User, Pointer, At, At, TSet<FKey>(), EKeys::Invalid, 0.0f, FModifierKeysState()), false);
-		App.RoutePointerDownEvent(Path, FPointerEvent(User, Pointer, At, At, Held, EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
-		App.RoutePointerUpEvent(Path, FPointerEvent(User, Pointer, At, At, TSet<FKey>(), EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
+		bDown = App.RoutePointerDownEvent(Path, FPointerEvent(User, Pointer, At, At, Held, EKeys::LeftMouseButton, 0.0f, FModifierKeysState())).IsEventHandled();
+		bUp = App.RoutePointerUpEvent(Path, FPointerEvent(User, Pointer, At, At, TSet<FKey>(), EKeys::LeftMouseButton, 0.0f, FModifierKeysState())).IsEventHandled();
+	}
+	// WHAT THE CLICK LANDED ON, leaf first: the proof reads this when a control does not answer.
+	TArray<FString> Leaf;
+	for (int32 Index = Path.Widgets.Num() - 1; Index >= 0 && Leaf.Num() < 6; --Index)
+	{
+		const TSharedRef<SWidget>& Widget = Path.Widgets[Index].Widget;
+		Leaf.Add(FString::Printf(TEXT("%s%s"), *Widget->GetTypeAsString(), Widget->IsHovered() ? TEXT("(hovered)") : TEXT("")));
 	}
 	const bool bReached = WonderWebLayer->GetForwardedClicks() > ClicksBefore;
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web click %s/%s at (%.0f, %.0f): layer under the point %d, %s"), *Window.ToString(), *Control.ToString(), At.X, At.Y,
-		bLayerUnderPoint ? 1 : 0, bReached ? TEXT("reached the glass") : TEXT("did not reach the glass"));
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web click %s/%s at (%.0f, %.0f): layer under the point %d, %s, down %d up %d, path %s"), *Window.ToString(), *Control.ToString(), At.X, At.Y,
+		bLayerUnderPoint ? 1 : 0, bReached ? TEXT("reached the window") : TEXT("did not reach the window"), bDown ? 1 : 0, bUp ? 1 : 0, *FString::Join(Leaf, TEXT(" < ")));
 	return bReached;
 }
 
