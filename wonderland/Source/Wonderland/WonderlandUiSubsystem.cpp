@@ -25,6 +25,8 @@
 #include "WonderlandCompanionSubsystem.h"
 #include "WonderlandCompanionTerminal.h"
 #include "WonderlandHudPanels.h"
+#include "WonderlandJuliusConnect.h"
+#include "WonderlandJuliusConnectPanel.h"
 #include "WonderlandJuliusWorkLog.h"
 #include "WonderlandLiveTerminal.h"
 #include "WonderlandMiniMap.h"
@@ -49,6 +51,23 @@
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandUi, Log, All);
 
 // Named, not anonymous: the module is one unity translation unit (see WonderlandCompanionHud.cpp).
+namespace WonderWebWindowIds
+{
+	const FName Creation(TEXT("creation"));
+	const FName Connections(TEXT("connections"));
+}
+
+namespace WonderWebWorkspaceTuning
+{
+	TAutoConsoleVariable<float> CVarReserveRight(TEXT("wl.WonderWeb.TileReserveRight"), 70.0f,
+		TEXT("Wonder Web workspace: uu kept clear down the view's right side when windows tile, for the wallet and mini-map column."));
+	TAutoConsoleVariable<float> CVarTileGap(TEXT("wl.WonderWeb.TileGap"), 18.0f, TEXT("Wonder Web workspace: uu between tiled windows."));
+	TAutoConsoleVariable<float> CVarLoneSize(TEXT("wl.WonderWeb.LoneSize"), 1.15f, TEXT("Wonder Web workspace: a lone window's size, as a multiple of the multitasking size."));
+	TAutoConsoleVariable<float> CVarExpandedSize(TEXT("wl.WonderWeb.ExpandedSize"), 1.6f, TEXT("Wonder Web workspace: an expanded window's size, as a multiple of the multitasking size."));
+	TAutoConsoleVariable<int32> CVarAutoOpenPrompt(TEXT("wl.JuliusConnect.AutoOpenPrompt"), 1,
+		TEXT("Julius Connect: bring the Connections window forward when Julius starts waiting on the user (1) or not (0)."));
+}
+
 namespace WonderlandUiHitTest
 {
 	/**
@@ -190,6 +209,10 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 	if (UWonderlandProjectBrainSubsystem* BrainSubsystem = Brain())
 	{
 		BrainChangedHandle = BrainSubsystem->OnBrainChanged.AddUObject(this, &UWonderlandUiSubsystem::RefreshBrain);
+	}
+	if (UWonderlandJuliusConnectSubsystem* Connect = JuliusConnect())
+	{
+		JuliusConnectChangedHandle = Connect->OnChanged.AddUObject(this, &UWonderlandUiSubsystem::HandleJuliusConnectChanged);
 	}
 
 	// Before the HUD exists, so its first paint already shows the configured source. With the source
@@ -350,6 +373,11 @@ void UWonderlandUiSubsystem::Detach()
 		BrainSubsystem->OnBrainChanged.Remove(BrainChangedHandle);
 	}
 	BrainChangedHandle.Reset();
+	if (UWonderlandJuliusConnectSubsystem* Connect = JuliusConnect())
+	{
+		Connect->OnChanged.Remove(JuliusConnectChangedHandle);
+	}
+	JuliusConnectChangedHandle.Reset();
 	Terminal.Reset();
 	WorldMap.Reset();
 	BrainPanel.Reset();
@@ -358,12 +386,22 @@ void UWonderlandUiSubsystem::Detach()
 	MenuPanel.Reset();
 	WalletPanel.Reset();
 	WonderWebPanel.Reset();
+	ConnectPanel.Reset();
 	WonderWebLayer.Reset();
-	if (AWonderlandWonderWebScreen* Screen = WonderWebScreen.Get())
+	for (FWonderWebWindow& Window : WonderWebWindows)
 	{
-		Screen->Destroy();
+		if (AWonderlandWonderWebScreen* Screen = Window.Screen.Get())
+		{
+			Screen->Destroy();
+		}
 	}
-	WonderWebScreen.Reset();
+	WonderWebWindows.Reset();
+	if (AWonderlandWonderWebWorkspace* Workspace = WonderWebWorkspace.Get())
+	{
+		Workspace->Destroy();
+	}
+	WonderWebWorkspace.Reset();
+	FocusedWonderWebWindow = NAME_None;
 	BrainArtBrush.Reset();
 	BrainArt = nullptr;
 	BoundController.Reset();
@@ -491,38 +529,51 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 	}
 	else if (Which == EOverlay::WonderWeb)
 	{
-		if (!WonderWebPanel.IsValid())
+		AWonderlandWonderWebWorkspace* Workspace = EnsureWonderWebWorkspace(Controller);
+		if (Workspace == nullptr)
 		{
-			SAssignNew(WonderWebPanel, SWonderlandWonderWebPanel)
-				.WonderWeb(TWeakObjectPtr<UWonderlandWonderWebSubsystem>(WonderWebState()))
-				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
-				// Return to project: out of Wonder Web and back to the project it was opened from.
-				.OnRequestProject_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Brain); } });
-		}
-		AWonderlandWonderWebScreen* Screen = EnsureWonderWebScreen(Controller);
-		if (Screen == nullptr)
-		{
-			UE_LOG(LogWonderlandUi, Warning, TEXT("WLUI wonder web: no screen could be stood in this world"));
+			UE_LOG(LogWonderlandUi, Warning, TEXT("WLUI wonder web: no workspace could be stood in this world"));
 			return;
 		}
-		// WHERE THE PLAYER IS LOOKING, AHEAD OF THE DOG: the screen stands there facing back toward them.
-		const APawn* Pawn = Controller->GetPawn();
-		const float Yaw = Controller->PlayerCameraManager != nullptr ? Controller->PlayerCameraManager->GetCameraRotation().Yaw : Controller->GetControlRotation().Yaw;
-		const FVector Ahead = FRotator(0.0f, Yaw, 0.0f).Vector();
-		const FVector From = Pawn != nullptr ? Pawn->GetActorLocation() : Controller->PlayerCameraManager->GetCameraLocation();
-		const IConsoleVariable* AheadVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.WonderWeb.ScreenAhead"));
-		const IConsoleVariable* UpVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.WonderWeb.ScreenUp"));
-		const FVector Centre = From + Ahead * (AheadVar != nullptr ? AheadVar->GetFloat() : 330.0f) + FVector(0.0, 0.0, UpVar != nullptr ? UpVar->GetFloat() : 150.0f);
-		Screen->Present(WonderWebPanel.ToSharedRef(), Centre, FRotator(0.0f, Yaw + 180.0f, 0.0f));
-		Controller->SetViewTargetWithBlend(Screen, 0.8f, EViewTargetBlendFunction::VTBlend_Cubic);
+		// WHERE THE PLAYER IS LOOKING, AHEAD OF THE DOG: the workspace stands there facing back toward them.
+		Workspace->StandBefore(Controller);
+		if (!WonderWebWindows.ContainsByPredicate([](const FWonderWebWindow& Window) { return Window.bOpen; }))
+		{
+			if (FWonderWebWindow* Creation = EnsureWonderWebWindow(WonderWebWindowIds::Creation))
+			{
+				Creation->bOpen = true;
+				Creation->OpenedOrder = ++WonderWebOpenCounter;
+			}
+		}
+		for (FWonderWebWindow& Window : WonderWebWindows)
+		{
+			if (Window.bOpen)
+			{
+				PresentWonderWebWindow(Window);
+			}
+		}
+		Controller->SetViewTargetWithBlend(Workspace, 0.8f, EViewTargetBlendFunction::VTBlend_Cubic);
 		if (!WonderWebLayer.IsValid())
 		{
 			SAssignNew(WonderWebLayer, SWonderlandWonderWebInputLayer)
-				.Screen(TWeakObjectPtr<AWonderlandWonderWebScreen>(Screen))
 				.Controller(TWeakObjectPtr<APlayerController>(Controller))
+				.GetScreens_Lambda([WeakThis]() { return WeakThis.IsValid() ? WeakThis->OpenWonderWebScreens() : TArray<AWonderlandWonderWebScreen*>(); })
+				.OnFocus_Lambda([WeakThis](AWonderlandWonderWebScreen* Screen) { if (WeakThis.IsValid()) { WeakThis->FocusWonderWebScreen(Screen); } })
 				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
 		}
-		WonderWebLayer->SetScreen(Screen);
+		TileWonderWeb();
+		const FWonderWebWindow* Focused = FindWonderWebWindow(FocusedWonderWebWindow);
+		if (Focused == nullptr || !Focused->bOpen || Focused->bMinimized)
+		{
+			FocusedWonderWebWindow = MostRecentWonderWebWindow(NAME_None);
+		}
+		for (FWonderWebWindow& Window : WonderWebWindows)
+		{
+			if (AWonderlandWonderWebScreen* Screen = Window.Screen.Get())
+			{
+				Screen->SetFocused(Window.Id == FocusedWonderWebWindow);
+			}
+		}
 		Panel = WonderWebLayer;
 		Focus = WonderWebLayer;
 		ZOrder = 40;
@@ -592,11 +643,14 @@ void UWonderlandUiSubsystem::CloseOverlay()
 	Open = EOverlay::None;
 	if (Closing == EOverlay::WonderWeb)
 	{
-		// BACK TO THE WORLD: the screen folds away and the camera glides back to the Dog. Wonder Web's state -- what is
-		// running, the terminal, the picture on the canvas -- stays in its subsystem for next time.
-		if (AWonderlandWonderWebScreen* Screen = WonderWebScreen.Get())
+		// BACK TO THE WORLD: the windows fold away and the camera glides back to the Dog. What each window shows -- what is
+		// running, the connections, Julius's work -- stays in its subsystem, and the set of open windows is kept for next time.
+		for (FWonderWebWindow& Window : WonderWebWindows)
 		{
-			Screen->Dismiss();
+			if (AWonderlandWonderWebScreen* Screen = Window.Screen.Get())
+			{
+				Screen->Dismiss();
+			}
 		}
 		if (APlayerController* Controller = BoundController.Get())
 		{
@@ -712,33 +766,411 @@ UWonderlandWonderWebSubsystem* UWonderlandUiSubsystem::WonderWebState() const
 	return Instance != nullptr ? Instance->GetSubsystem<UWonderlandWonderWebSubsystem>() : nullptr;
 }
 
-AWonderlandWonderWebScreen* UWonderlandUiSubsystem::EnsureWonderWebScreen(APlayerController* Controller)
+UWonderlandJuliusConnectSubsystem* UWonderlandUiSubsystem::JuliusConnect() const
+{
+	const APlayerController* Controller = BoundController.Get();
+	UGameInstance* Instance = Controller != nullptr ? Controller->GetGameInstance() : nullptr;
+	return Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusConnectSubsystem>() : nullptr;
+}
+
+UWonderlandUiSubsystem::FWonderWebWindow* UWonderlandUiSubsystem::FindWonderWebWindow(FName Id)
+{
+	return WonderWebWindows.FindByPredicate([Id](const FWonderWebWindow& Window) { return Window.Id == Id; });
+}
+
+const UWonderlandUiSubsystem::FWonderWebWindow* UWonderlandUiSubsystem::FindWonderWebWindow(FName Id) const
+{
+	return WonderWebWindows.FindByPredicate([Id](const FWonderWebWindow& Window) { return Window.Id == Id; });
+}
+
+AWonderlandWonderWebWorkspace* UWonderlandUiSubsystem::EnsureWonderWebWorkspace(APlayerController* Controller)
 {
 	UWorld* World = Controller != nullptr ? Controller->GetWorld() : nullptr;
-	AWonderlandWonderWebScreen* Screen = WonderWebScreen.Get();
-	if (Screen != nullptr && Screen->GetWorld() == World)
+	AWonderlandWonderWebWorkspace* Workspace = WonderWebWorkspace.Get();
+	if (Workspace != nullptr && Workspace->GetWorld() == World)
 	{
-		return Screen;
+		return Workspace;
 	}
 	if (World == nullptr)
 	{
 		return nullptr;
 	}
 	FActorSpawnParameters Params;
-	Params.Name = MakeUniqueObjectName(World->GetCurrentLevel(), AWonderlandWonderWebScreen::StaticClass(), TEXT("WonderWebScreen"));
+	Params.Name = MakeUniqueObjectName(World->GetCurrentLevel(), AWonderlandWonderWebWorkspace::StaticClass(), TEXT("WonderWebWorkspace"));
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	Params.ObjectFlags |= RF_Transient;
-	Screen = World->SpawnActor<AWonderlandWonderWebScreen>(AWonderlandWonderWebScreen::StaticClass(), FTransform::Identity, Params);
-	WonderWebScreen = Screen;
-	return Screen;
+	Workspace = World->SpawnActor<AWonderlandWonderWebWorkspace>(AWonderlandWonderWebWorkspace::StaticClass(), FTransform::Identity, Params);
+	WonderWebWorkspace = Workspace;
+	return Workspace;
 }
 
-void UWonderlandUiSubsystem::OpenWonderWeb()
+UWonderlandUiSubsystem::FWonderWebWindow* UWonderlandUiSubsystem::EnsureWonderWebWindow(FName Id)
 {
+	APlayerController* Controller = BoundController.Get();
+	if (Controller == nullptr || (Id != WonderWebWindowIds::Creation && Id != WonderWebWindowIds::Connections))
+	{
+		return nullptr;
+	}
+	FWonderWebWindow* Window = FindWonderWebWindow(Id);
+	if (Window == nullptr)
+	{
+		Window = &WonderWebWindows.AddDefaulted_GetRef();
+		Window->Id = Id;
+	}
+	const TWeakObjectPtr<UWonderlandUiSubsystem> WeakThis(this);
+	if (!Window->Content.IsValid())
+	{
+		if (Id == WonderWebWindowIds::Creation)
+		{
+			SAssignNew(WonderWebPanel, SWonderlandWonderWebPanel)
+				.WonderWeb(TWeakObjectPtr<UWonderlandWonderWebSubsystem>(WonderWebState()))
+				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseWonderWebWindow(WonderWebWindowIds::Creation); } })
+				// Return to project: out of Wonder Web and back to the project it was opened from.
+				.OnRequestProject_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Brain); } })
+				.OnRequestMinimize_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->MinimizeWonderWebWindow(WonderWebWindowIds::Creation, true); } })
+				.OnRequestExpand_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->ExpandWonderWebWindow(WonderWebWindowIds::Creation); } })
+				// The window's menu opens Julius Connect beside it: a second window, in context, not a button on the HUD.
+				.OnRequestConnections_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenWonderWebWindow(WonderWebWindowIds::Connections); } });
+			Window->Content = WonderWebPanel;
+			Window->ContentSize = SWonderlandWonderWebPanel::DesignSize();
+			const TWeakObjectPtr<UWonderlandWonderWebSubsystem> WebState(WonderWebState());
+			Window->Chip = SNew(SWonderWebWindowChip)
+				.Title(INVTEXT("PIXEL CANVAS"))
+				.Status_Lambda([WebState]() { return FText::FromString(WebState.IsValid() ? WebState->GetSurface().Viewport.Status : FString(TEXT("-"))); })
+				.StatusColor(FSlateColor(WonderWebLook::Line(0.8f)))
+				.OnRestore_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->MinimizeWonderWebWindow(WonderWebWindowIds::Creation, false); } });
+		}
+		else
+		{
+			SAssignNew(ConnectPanel, SWonderlandJuliusConnectPanel)
+				.Connect(TWeakObjectPtr<UWonderlandJuliusConnectSubsystem>(JuliusConnect()))
+				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseWonderWebWindow(WonderWebWindowIds::Connections); } })
+				.OnRequestMinimize_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->MinimizeWonderWebWindow(WonderWebWindowIds::Connections, true); } })
+				.OnRequestExpand_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->ExpandWonderWebWindow(WonderWebWindowIds::Connections); } });
+			Window->Content = ConnectPanel;
+			Window->ContentSize = SWonderlandJuliusConnectPanel::DesignSize();
+			const TWeakObjectPtr<UWonderlandJuliusConnectSubsystem> ConnectState(JuliusConnect());
+			Window->Chip = SNew(SWonderWebWindowChip)
+				.Title(INVTEXT("JULIUS CONNECT"))
+				.Status_Lambda([ConnectState]()
+				{
+					if (!ConnectState.IsValid() || ConnectState->GetLink() != EJuliusConnectLink::Online)
+					{
+						return INVTEXT("OFFLINE");
+					}
+					const FJuliusConnectSurface& Surface = ConnectState->GetSurface();
+					if (Surface.bHasPrompt)
+					{
+						return INVTEXT("JULIUS NEEDS YOUR APPROVAL");
+					}
+					const FJuliusConnectTask* Task = Surface.CurrentTask();
+					return FText::FromString(Task != nullptr ? FString::Printf(TEXT("JULIUS  ·  %s"), *Task->RunState) : FString(TEXT("NO TASK")));
+				})
+				.StatusColor_Lambda([ConnectState]()
+				{
+					const bool bAsk = ConnectState.IsValid() && ConnectState->GetSurface().bHasPrompt;
+					return FSlateColor(bAsk ? WonderWebLook::Fail() : WonderWebLook::Line(0.8f));
+				})
+				.OnRestore_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->MinimizeWonderWebWindow(WonderWebWindowIds::Connections, false); } });
+		}
+	}
+	// THE WINDOW'S GLASS, in the controller's world, with a virtual user of its own so its keyboard focus is its own.
+	UWorld* World = Controller->GetWorld();
+	AWonderlandWonderWebScreen* Screen = Window->Screen.Get();
+	if (World != nullptr && (Screen == nullptr || Screen->GetWorld() != World))
+	{
+		Screen = World->SpawnActorDeferred<AWonderlandWonderWebScreen>(AWonderlandWonderWebScreen::StaticClass(), FTransform::Identity, nullptr, nullptr,
+			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (Screen != nullptr)
+		{
+			Screen->SetFlags(RF_Transient);
+			Screen->SetVirtualUser(Id == WonderWebWindowIds::Creation ? 7 : 8);
+			Screen->FinishSpawning(FTransform::Identity);
+		}
+		Window->Screen = Screen;
+	}
+	return Window;
+}
+
+void UWonderlandUiSubsystem::PresentWonderWebWindow(FWonderWebWindow& Window)
+{
+	AWonderlandWonderWebScreen* Screen = Window.Screen.Get();
+	if (Screen == nullptr || !Window.Content.IsValid() || !Window.Chip.IsValid())
+	{
+		return;
+	}
+	Screen->Present(Window.Content.ToSharedRef(), Window.ContentSize, Window.Chip.ToSharedRef(), SWonderWebWindowChip::DesignSize(), WonderWebWorkspace.Get());
+	Screen->SetMinimized(Window.bMinimized);
+}
+
+TArray<AWonderlandWonderWebScreen*> UWonderlandUiSubsystem::OpenWonderWebScreens() const
+{
+	TArray<AWonderlandWonderWebScreen*> Screens;
+	for (const FWonderWebWindow& Window : WonderWebWindows)
+	{
+		AWonderlandWonderWebScreen* Screen = Window.Screen.Get();
+		if (Window.bOpen && Screen != nullptr && Screen->IsPresented())
+		{
+			Screens.Add(Screen);
+		}
+	}
+	return Screens;
+}
+
+void UWonderlandUiSubsystem::FocusWonderWebScreen(AWonderlandWonderWebScreen* Screen)
+{
+	for (const FWonderWebWindow& Window : WonderWebWindows)
+	{
+		if (Screen != nullptr && Window.Screen.Get() == Screen)
+		{
+			FocusWonderWebWindow(Window.Id);
+			return;
+		}
+	}
+}
+
+FName UWonderlandUiSubsystem::MostRecentWonderWebWindow(FName Except) const
+{
+	FName Best = NAME_None;
+	int32 BestOrder = -1;
+	for (const FWonderWebWindow& Window : WonderWebWindows)
+	{
+		if (Window.bOpen && !Window.bMinimized && Window.Id != Except && Window.OpenedOrder > BestOrder)
+		{
+			Best = Window.Id;
+			BestOrder = Window.OpenedOrder;
+		}
+	}
+	return Best;
+}
+
+AWonderlandWonderWebScreen* UWonderlandUiSubsystem::FocusedWonderWebScreen() const
+{
+	const FWonderWebWindow* Window = FindWonderWebWindow(FocusedWonderWebWindow);
+	return Window != nullptr && Window->bOpen ? Window->Screen.Get() : nullptr;
+}
+
+bool UWonderlandUiSubsystem::FocusWonderWebWindow(FName Id)
+{
+	const FWonderWebWindow* Target = FindWonderWebWindow(Id);
+	if (Target == nullptr || !Target->bOpen)
+	{
+		return false;
+	}
+	FocusedWonderWebWindow = Id;
+	for (FWonderWebWindow& Window : WonderWebWindows)
+	{
+		if (AWonderlandWonderWebScreen* Screen = Window.Screen.Get())
+		{
+			Screen->SetFocused(Window.Id == Id);
+		}
+	}
+	return true;
+}
+
+bool UWonderlandUiSubsystem::OpenWonderWebWindow(FName Id)
+{
+	FWonderWebWindow* Window = EnsureWonderWebWindow(Id);
+	if (Window == nullptr)
+	{
+		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web: no window called %s"), *Id.ToString());
+		return false;
+	}
+	if (!Window->bOpen)
+	{
+		Window->bOpen = true;
+		Window->OpenedOrder = ++WonderWebOpenCounter;
+	}
+	Window->bMinimized = false;
 	if (Open != EOverlay::WonderWeb)
 	{
 		OpenOverlay(EOverlay::WonderWeb);
 	}
+	else
+	{
+		PresentWonderWebWindow(*Window);
+		TileWonderWeb();
+	}
+	FocusWonderWebWindow(Id);
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web window %s open (%d open)"), *Id.ToString(), OpenWonderWebScreens().Num());
+	return IsWonderWebOpen();
+}
+
+bool UWonderlandUiSubsystem::CloseWonderWebWindow(FName Id)
+{
+	FWonderWebWindow* Window = FindWonderWebWindow(Id);
+	if (Window == nullptr || !Window->bOpen)
+	{
+		return false;
+	}
+	const bool bLast = !WonderWebWindows.ContainsByPredicate([Id](const FWonderWebWindow& Other) { return Other.bOpen && Other.Id != Id; });
+	if (bLast)
+	{
+		// The last window closes the workspace -- and is kept open in the set, so Wonder Web comes back showing it.
+		CloseOverlay();
+		return true;
+	}
+	Window->bOpen = false;
+	Window->bMinimized = false;
+	Window->bExpanded = false;
+	if (AWonderlandWonderWebScreen* Screen = Window->Screen.Get())
+	{
+		Screen->Dismiss();
+	}
+	if (FocusedWonderWebWindow == Id)
+	{
+		FocusWonderWebWindow(MostRecentWonderWebWindow(Id));
+	}
+	TileWonderWeb();
+	return true;
+}
+
+bool UWonderlandUiSubsystem::MinimizeWonderWebWindow(FName Id, bool bMinimize)
+{
+	FWonderWebWindow* Window = FindWonderWebWindow(Id);
+	if (Window == nullptr || !Window->bOpen)
+	{
+		return false;
+	}
+	Window->bMinimized = bMinimize;
+	if (bMinimize)
+	{
+		Window->bExpanded = false;
+	}
+	if (AWonderlandWonderWebScreen* Screen = Window->Screen.Get())
+	{
+		Screen->SetMinimized(bMinimize);
+	}
+	if (bMinimize && FocusedWonderWebWindow == Id)
+	{
+		const FName Next = MostRecentWonderWebWindow(Id);
+		if (!Next.IsNone())
+		{
+			FocusWonderWebWindow(Next);
+		}
+	}
+	else if (!bMinimize)
+	{
+		FocusWonderWebWindow(Id);
+	}
+	TileWonderWeb();
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web window %s %s"), *Id.ToString(), bMinimize ? TEXT("minimized") : TEXT("restored"));
+	return true;
+}
+
+bool UWonderlandUiSubsystem::ExpandWonderWebWindow(FName Id)
+{
+	FWonderWebWindow* Target = FindWonderWebWindow(Id);
+	if (Target == nullptr || !Target->bOpen)
+	{
+		return false;
+	}
+	const bool bExpand = !Target->bExpanded;
+	for (FWonderWebWindow& Window : WonderWebWindows)
+	{
+		Window.bExpanded = false;
+	}
+	Target->bExpanded = bExpand;
+	Target->bMinimized = false;
+	if (AWonderlandWonderWebScreen* Screen = Target->Screen.Get())
+	{
+		Screen->SetMinimized(false);
+	}
+	FocusWonderWebWindow(Id);
+	TileWonderWeb();
+	return true;
+}
+
+void UWonderlandUiSubsystem::TileWonderWeb()
+{
+	using namespace WonderWebWorkspaceTuning;
+	TArray<FWonderWebWindow*> Shown;
+	TArray<FWonderWebWindow*> Folded;
+	for (FWonderWebWindow& Window : WonderWebWindows)
+	{
+		if (Window.bOpen && Window.Screen.IsValid())
+		{
+			(Window.bMinimized ? Folded : Shown).Add(&Window);
+		}
+	}
+	const auto ByOrder = [](const FWonderWebWindow& A, const FWonderWebWindow& B) { return A.OpenedOrder < B.OpenedOrder; };
+	Shown.Sort(ByOrder);
+	Folded.Sort(ByOrder);
+	for (int32 Index = 0; Index < Folded.Num(); ++Index)
+	{
+		Folded[Index]->Screen->SetDockSlot(Index);
+	}
+
+	// THE TILE AREA: the view at the glass, less a margin, less the wallet and mini-map column down the right, less the chip
+	// row along the bottom while anything is minimized.
+	const AWonderlandWonderWebWorkspace* Workspace = WonderWebWorkspace.Get();
+	const FVector2D Half = Workspace != nullptr ? Workspace->HalfView() : FVector2D(295.0, 166.0);
+	const double Margin = 10.0;
+	const double Reserve = FMath::Max(CVarReserveRight.GetValueOnGameThread(), 0.0f);
+	const double Gap = FMath::Max(CVarTileGap.GetValueOnGameThread(), 0.0f);
+	const double ChipRow = Folded.Num() > 0 ? SWonderWebWindowChip::DesignSize().Y * 0.2 + 8.0 : 0.0;
+	const double AreaW = 2.0 * Half.X - 2.0 * Margin - Reserve;
+	const double AreaH = 2.0 * Half.Y - 2.0 * Margin - ChipRow;
+	const double CenterX = -Reserve * 0.5;
+	const double CenterY = ChipRow * 0.5;
+	if (Shown.Num() == 0)
+	{
+		return;
+	}
+	// Every window shares the one multitasking size; its glass at size 1.
+	const FVector2D Base = Shown[0]->Screen->GlassSize() / FMath::Max(Shown[0]->Screen->GetSizeFactor(), 0.01f);
+	auto Fit = [&](double Want, int32 Across, int32 Down)
+	{
+		return static_cast<float>(FMath::Min3(Want, (AreaW - Gap * (Across - 1)) / (Base.X * Across), (AreaH - Gap * (Down - 1)) / (Base.Y * Down)));
+	};
+	const int32 Count = Shown.Num();
+	float Size = 1.0f;
+	TArray<FVector2D> Places;
+	if (Count == 1)
+	{
+		Size = Fit(CVarLoneSize.GetValueOnGameThread(), 1, 1);
+		Places.Add(FVector2D(CenterX, CenterY));
+	}
+	else if (Count == 2)
+	{
+		Size = Fit(1.0, 2, 1);
+		const double Dx = Base.X * Size * 0.5 + Gap * 0.5;
+		Places.Add(FVector2D(CenterX - Dx, CenterY));
+		Places.Add(FVector2D(CenterX + Dx, CenterY));
+	}
+	else
+	{
+		Size = Fit(0.9, 2, 2);
+		const double Dx = Base.X * Size * 0.5 + Gap * 0.5;
+		const double Dy = Base.Y * Size * 0.5 + Gap * 0.5;
+		Places.Add(FVector2D(CenterX - Dx, CenterY + Dy));
+		Places.Add(FVector2D(CenterX + Dx, CenterY + Dy));
+		Places.Add(Count == 3 ? FVector2D(CenterX, CenterY - Dy) : FVector2D(CenterX - Dx, CenterY - Dy));
+		for (int32 Index = 3; Index < Count; ++Index)
+		{
+			Places.Add(Index == 3 ? FVector2D(CenterX + Dx, CenterY - Dy) : FVector2D(CenterX, CenterY));
+		}
+	}
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		AWonderlandWonderWebScreen* Screen = Shown[Index]->Screen.Get();
+		if (Shown[Index]->bExpanded)
+		{
+			// EXPANDED: larger, in the middle of the area, in front of the others.
+			Screen->SetSizeFactor(Fit(CVarExpandedSize.GetValueOnGameThread(), 1, 1));
+			Screen->PlaceAt(FVector2D(CenterX, CenterY));
+		}
+		else
+		{
+			Screen->SetSizeFactor(Size);
+			Screen->PlaceAt(Places[Index]);
+		}
+	}
+}
+
+void UWonderlandUiSubsystem::OpenWonderWeb()
+{
+	OpenWonderWebWindow(WonderWebWindowIds::Creation);
 }
 
 void UWonderlandUiSubsystem::CloseWonderWeb()
@@ -754,12 +1186,31 @@ bool UWonderlandUiSubsystem::IsWonderWebOpen() const
 	return Open == EOverlay::WonderWeb;
 }
 
+void UWonderlandUiSubsystem::HandleJuliusConnectChanged()
+{
+	const UWonderlandJuliusConnectSubsystem* Connect = JuliusConnect();
+	if (Connect == nullptr || !Connect->GetSurface().bHasPrompt || WonderWebWorkspaceTuning::CVarAutoOpenPrompt.GetValueOnGameThread() == 0)
+	{
+		return;
+	}
+	const FString& RequestId = Connect->GetSurface().Prompt.RequestId;
+	// Once per request, and never over another panel the user is in: it is asked again on the next change.
+	if (RequestId == LastPromptRequestId || (Open != EOverlay::None && Open != EOverlay::WonderWeb))
+	{
+		return;
+	}
+	LastPromptRequestId = RequestId;
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI julius connect: Julius is waiting on the user (%s) -- the Connections window comes forward"), *RequestId);
+	OpenWonderWebWindow(WonderWebWindowIds::Connections);
+}
+
 FString UWonderlandUiSubsystem::DescribeWonderWeb() const
 {
-	const AWonderlandWonderWebScreen* Screen = WonderWebScreen.Get();
+	const FWonderWebWindow* Window = FindWonderWebWindow(WonderWebWindowIds::Creation);
+	const AWonderlandWonderWebScreen* Screen = Window != nullptr ? Window->Screen.Get() : nullptr;
 	const APlayerController* Controller = BoundController.Get();
 	const UWonderlandWonderWebSubsystem* State = WonderWebState();
-	const bool bViewing = Controller != nullptr && Screen != nullptr && Controller->GetViewTarget() == Screen;
+	const bool bViewing = Controller != nullptr && WonderWebWorkspace.IsValid() && Controller->GetViewTarget() == WonderWebWorkspace.Get();
 	FString Kind = TEXT("-");
 	FString Access = TEXT("-");
 	bool bInput = false;
@@ -787,12 +1238,62 @@ FString UWonderlandUiSubsystem::DescribeWonderWeb() const
 		WonderWebPanel.IsValid() ? *WonderWebPanel->GetTerminalInput() : TEXT(""), State != nullptr ? *State->GetProblem() : TEXT(""));
 }
 
-FVector2D UWonderlandUiSubsystem::GetWonderWebControlOnScreen(FName Control) const
+FString UWonderlandUiSubsystem::DescribeWonderWebWorkspace() const
 {
-	const AWonderlandWonderWebScreen* Screen = WonderWebScreen.Get();
+	TArray<FString> Rows;
+	for (const FWonderWebWindow& Window : WonderWebWindows)
+	{
+		const AWonderlandWonderWebScreen* Screen = Window.Screen.Get();
+		Rows.Add(FString::Printf(TEXT("%s[open=%d presented=%d min=%d expanded=%d focus=%d size=%.2f shown_size=%.2f offset=%.0f,%.0f gliding=%d]"),
+			*Window.Id.ToString(), Window.bOpen ? 1 : 0, Screen != nullptr && Screen->IsPresented() ? 1 : 0, Window.bMinimized ? 1 : 0, Window.bExpanded ? 1 : 0,
+			Screen != nullptr && Screen->IsFocused() ? 1 : 0, Screen != nullptr ? Screen->GetSizeFactor() : 0.0f, Screen != nullptr ? Screen->GetShownSizeFactor() : 0.0f,
+			Screen != nullptr ? Screen->GetOffset().X : 0.0, Screen != nullptr ? Screen->GetOffset().Y : 0.0, Screen != nullptr && Screen->IsGliding() ? 1 : 0));
+	}
+	FString Connect = TEXT("connect=none");
+	if (const UWonderlandJuliusConnectSubsystem* State = JuliusConnect())
+	{
+		const FJuliusConnectSurface& Surface = State->GetSurface();
+		const FJuliusConnectTask* Task = Surface.CurrentTask();
+		const FJuliusConnectService* Figma = Surface.FindService(TEXT("dev-figma"));
+		static const TCHAR* Links[] = { TEXT("connecting"), TEXT("online"), TEXT("offline") };
+		Connect = FString::Printf(TEXT("link=%s prompt=%s task=%s step=%d/%d blocked=\"%s\" dev_figma=%s scope=%s audit=%d last_audit=\"%s %s %s\" intents=%d"),
+			Links[static_cast<int32>(State->GetLink())], Surface.bHasPrompt ? *Surface.Prompt.RequestId : TEXT("-"),
+			Task != nullptr ? *Task->RunState : TEXT("-"), Task != nullptr ? Task->Progress : 0, Task != nullptr ? Task->Total : 0,
+			Task != nullptr ? *Task->BlockedReason : TEXT(""), Figma != nullptr ? *Figma->State : TEXT("-"),
+			Figma != nullptr ? *FString::Join(Figma->ProjectScope, TEXT(",")) : TEXT("-"), Surface.Audit.Num(),
+			Surface.Audit.Num() > 0 ? *Surface.Audit[0].Action : TEXT("-"), Surface.Audit.Num() > 0 ? *Surface.Audit[0].Capability : TEXT("-"),
+			Surface.Audit.Num() > 0 ? *Surface.Audit[0].Outcome : TEXT("-"), State->GetIntentsSent());
+	}
+	return FString::Printf(TEXT("workspace_open=%d focused=%s windows=%s %s"), IsWonderWebOpen() ? 1 : 0, *FocusedWonderWebWindow.ToString(),
+		*FString::Join(Rows, TEXT(",")), *Connect);
+}
+
+bool UWonderlandUiSubsystem::GetWonderWebWindowPixel(FName Window, FName Control, FVector2D& OutPixel) const
+{
+	const FWonderWebWindow* Found = FindWonderWebWindow(Window);
+	if (Found == nullptr)
+	{
+		return false;
+	}
+	if (Control == TEXT("chip"))
+	{
+		OutPixel = SWonderWebWindowChip::DesignSize() * 0.5;
+		return Found->bMinimized;
+	}
+	if (Window == WonderWebWindowIds::Creation)
+	{
+		return WonderWebPanel.IsValid() && WonderWebPanel->GetControlCentre(Control, OutPixel);
+	}
+	return ConnectPanel.IsValid() && ConnectPanel->GetControlCentre(Control, OutPixel);
+}
+
+FVector2D UWonderlandUiSubsystem::GetWonderWebWindowControlOnScreen(FName Window, FName Control) const
+{
+	const FWonderWebWindow* Found = FindWonderWebWindow(Window);
+	const AWonderlandWonderWebScreen* Screen = Found != nullptr ? Found->Screen.Get() : nullptr;
 	APlayerController* Controller = BoundController.Get();
 	FVector2D WindowPixel;
-	if (Screen == nullptr || Controller == nullptr || !WonderWebPanel.IsValid() || !WonderWebPanel->GetControlCentre(Control, WindowPixel))
+	if (Screen == nullptr || Controller == nullptr || !GetWonderWebWindowPixel(Window, Control, WindowPixel))
 	{
 		return FVector2D(-1.0, -1.0);
 	}
@@ -819,16 +1320,21 @@ FVector2D UWonderlandUiSubsystem::GetWonderWebControlOnScreen(FName Control) con
 	return Geometry.LocalToAbsolute(ViewportPixel / ViewportSize * Geometry.GetLocalSize());
 }
 
-bool UWonderlandUiSubsystem::SimulateWonderWebClick(FName Control)
+FVector2D UWonderlandUiSubsystem::GetWonderWebControlOnScreen(FName Control) const
+{
+	return GetWonderWebWindowControlOnScreen(WonderWebWindowIds::Creation, Control);
+}
+
+bool UWonderlandUiSubsystem::SimulateWonderWebWindowClick(FName Window, FName Control)
 {
 	if (!IsWonderWebOpen() || !FSlateApplication::IsInitialized() || !WonderWebLayer.IsValid())
 	{
 		return false;
 	}
-	const FVector2D At = GetWonderWebControlOnScreen(Control);
+	const FVector2D At = GetWonderWebWindowControlOnScreen(Window, Control);
 	if (At.X < 0.0)
 	{
-		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web click %s: not on screen"), *Control.ToString());
+		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web click %s/%s: not on screen"), *Window.ToString(), *Control.ToString());
 		return false;
 	}
 	FSlateApplication& App = FSlateApplication::Get();
@@ -840,12 +1346,12 @@ bool UWonderlandUiSubsystem::SimulateWonderWebClick(FName Control)
 	// HIT TESTED IN THE LAYER'S OWN WINDOW, as RouteClickToWidget does for the shortcuts: the scripted editor ranks its
 	// Content Browser above the PIE viewport at these desktop coordinates, so the application's window search would hand
 	// the click to an asset tile. Confined to the viewport's window it is still a real hit test and a real route.
-	const TSharedPtr<SWindow> Window = App.FindWidgetWindow(WonderWebLayer.ToSharedRef());
-	if (!Window.IsValid())
+	const TSharedPtr<SWindow> SlateWindow = App.FindWidgetWindow(WonderWebLayer.ToSharedRef());
+	if (!SlateWindow.IsValid())
 	{
 		return false;
 	}
-	const FWidgetPath Path = WonderlandUiHitTest::PathInWindow(Window.ToSharedRef(), At, App.GetUserIndexForMouse());
+	const FWidgetPath Path = WonderlandUiHitTest::PathInWindow(SlateWindow.ToSharedRef(), At, App.GetUserIndexForMouse());
 	bool bLayerUnderPoint = false;
 	for (int32 Index = 0; Index < Path.Widgets.Num(); ++Index)
 	{
@@ -858,18 +1364,24 @@ bool UWonderlandUiSubsystem::SimulateWonderWebClick(FName Control)
 		App.RoutePointerUpEvent(Path, FPointerEvent(User, Pointer, At, At, TSet<FKey>(), EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
 	}
 	const bool bReached = WonderWebLayer->GetForwardedClicks() > ClicksBefore;
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web click %s at (%.0f, %.0f): layer under the point %d, %s"), *Control.ToString(), At.X, At.Y,
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web click %s/%s at (%.0f, %.0f): layer under the point %d, %s"), *Window.ToString(), *Control.ToString(), At.X, At.Y,
 		bLayerUnderPoint ? 1 : 0, bReached ? TEXT("reached the glass") : TEXT("did not reach the glass"));
 	return bReached;
 }
 
+bool UWonderlandUiSubsystem::SimulateWonderWebClick(FName Control)
+{
+	return SimulateWonderWebWindowClick(WonderWebWindowIds::Creation, Control);
+}
+
 bool UWonderlandUiSubsystem::MoveWonderWeb(FName Place)
 {
-	AWonderlandWonderWebScreen* Screen = WonderWebScreen.Get();
+	AWonderlandWonderWebScreen* Screen = FocusedWonderWebScreen();
 	if (Screen == nullptr)
 	{
-		// Not yet stood in this world: stand it (closed) so the place is kept for when it opens.
-		Screen = EnsureWonderWebScreen(BoundController.Get());
+		// Nothing focused yet: the creation window, stood (closed) so the place is kept for when it opens.
+		const FWonderWebWindow* Window = EnsureWonderWebWindow(WonderWebWindowIds::Creation);
+		Screen = Window != nullptr ? Window->Screen.Get() : nullptr;
 	}
 	const bool bMoved = Screen != nullptr && Screen->MoveTo(Place);
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web move to %s: %s"), *Place.ToString(), bMoved ? TEXT("gliding") : TEXT("unknown place"));
@@ -878,34 +1390,29 @@ bool UWonderlandUiSubsystem::MoveWonderWeb(FName Place)
 
 FString UWonderlandUiSubsystem::DescribeWonderWebPlacement() const
 {
-	const AWonderlandWonderWebScreen* Screen = WonderWebScreen.Get();
+	const AWonderlandWonderWebScreen* Screen = FocusedWonderWebScreen();
 	if (Screen == nullptr)
 	{
 		return TEXT("place=none");
 	}
-	return FString::Printf(TEXT("place=%s offset=%.1f,%.1f target=%.1f,%.1f gliding=%d dragging=%d"), *Screen->GetPlace().ToString(),
+	return FString::Printf(TEXT("window=%s place=%s offset=%.1f,%.1f target=%.1f,%.1f gliding=%d dragging=%d"), *FocusedWonderWebWindow.ToString(), *Screen->GetPlace().ToString(),
 		Screen->GetOffset().X, Screen->GetOffset().Y, Screen->GetTargetOffset().X, Screen->GetTargetOffset().Y,
 		Screen->IsGliding() ? 1 : 0, Screen->IsDragging() ? 1 : 0);
 }
 
 bool UWonderlandUiSubsystem::SimulateWonderWebTitleDrag(float DeltaX, float DeltaY, int32 Steps)
 {
-	if (!IsWonderWebOpen() || !FSlateApplication::IsInitialized() || !WonderWebLayer.IsValid() || !WonderWebPanel.IsValid())
+	AWonderlandWonderWebScreen* Screen = FocusedWonderWebScreen();
+	if (!IsWonderWebOpen() || !FSlateApplication::IsInitialized() || !WonderWebLayer.IsValid() || Screen == nullptr)
 	{
 		return false;
 	}
-	// The empty stretch of title bar between the wordmark and the first tab.
-	FVector2D FirstTab;
-	if (!WonderWebPanel->GetControlCentre(TEXT("tab:0"), FirstTab))
-	{
-		return false;
-	}
-	const FVector2D Start = GetWonderWebControlOnScreen(TEXT("tab:0"));
+	// The empty stretch of title bar just left of the window's first tab.
+	const FVector2D Start = GetWonderWebWindowControlOnScreen(FocusedWonderWebWindow, TEXT("tab:0"));
 	if (Start.X < 0.0)
 	{
 		return false;
 	}
-	// Left of MY VIEW by a little over half a tab: bare title bar.
 	const FVector2D From = Start - FVector2D(118.0, 0.0);
 	FSlateApplication& App = FSlateApplication::Get();
 	const TSharedPtr<SWindow> Window = App.FindWidgetWindow(WonderWebLayer.ToSharedRef());
@@ -919,7 +1426,7 @@ bool UWonderlandUiSubsystem::SimulateWonderWebTitleDrag(float DeltaX, float Delt
 	TSet<FKey> Held;
 	Held.Add(EKeys::LeftMouseButton);
 	App.RoutePointerDownEvent(Path, FPointerEvent(User, Pointer, From, From, Held, EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
-	const bool bTaken = WonderWebScreen.IsValid() && WonderWebScreen->IsDragging();
+	const bool bTaken = Screen->IsDragging();
 	FVector2D Last = From;
 	const int32 Count = FMath::Clamp(Steps, 1, 240);
 	for (int32 Step = 1; Step <= Count && bTaken; ++Step)

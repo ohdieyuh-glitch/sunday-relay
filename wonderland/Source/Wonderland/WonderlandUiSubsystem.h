@@ -56,8 +56,11 @@ class SWonderlandNavBar;
 class SWonderlandWalletChip;
 class SWonderlandWonderWebInputLayer;
 class SWonderlandWonderWebPanel;
+class SWonderlandJuliusConnectPanel;
 class AWonderlandWonderWebScreen;
+class AWonderlandWonderWebWorkspace;
 class UWonderlandWonderWebSubsystem;
+class UWonderlandJuliusConnectSubsystem;
 class SWonderlandWalletPanel;
 class UInputComponent;
 class UWonderlandCommandPresetSubsystem;
@@ -309,6 +312,49 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
 	void OpenWonderWeb();
 
+	// ---------------------------------------------------------------- the workspace of windows
+	//
+	// A WORKSPACE, NOT ONE GIANT BROWSER (founder, 2026-09-17). Wonder Web opens as a workspace standing in the garden, and
+	// windows stand in it side by side at a multitasking size: "creation" (the running creation, Pixel Canvas) and
+	// "connections" (Julius Connect). Each is a view under the one Julius -- none holds authority -- and each goes on
+	// working while another is focused or it is minimized. Opening a second window tiles the two; a third tiles three.
+	// Escape (or closing the last window) returns to the world and keeps the set for next time.
+
+	/** Open (or restore and focus) a window: "creation" or "connections". Opens the workspace first when it is closed. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	bool OpenWonderWebWindow(FName Window);
+
+	/** Close one window; closing the last closes the workspace. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	bool CloseWonderWebWindow(FName Window);
+
+	/** Fold a window to its chip along the bottom of the workspace (its work goes on), or restore it. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	bool MinimizeWonderWebWindow(FName Window, bool bMinimize);
+
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	bool FocusWonderWebWindow(FName Window);
+
+	/** Grow the window larger in the middle of the workspace, or back to its tile. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	bool ExpandWonderWebWindow(FName Window);
+
+	/** Lay the open windows out again: one in the middle, two side by side, three in two rows. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	void TileWonderWeb();
+
+	/** Every window's state in the workspace, and Julius Connect's link, prompt and task, as one line. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Wonder Web")
+	FString DescribeWonderWebWorkspace() const;
+
+	/** Click a named control of a named window through the real input path ("connections", "approve"). "chip" clicks a minimized window's chip. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	bool SimulateWonderWebWindowClick(FName Window, FName Control);
+
+	/** Where a named control of a named window stands on screen, in Slate screen space; (-1, -1) when it is not drawn. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Wonder Web")
+	FVector2D GetWonderWebWindowControlOnScreen(FName Window, FName Control) const;
+
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
 	void CloseWonderWeb();
 
@@ -491,8 +537,35 @@ private:
 	/** The map shows over the world while no full-screen panel covers it. The terminal is not full-screen, and Wonder Web stands in the world. */
 	bool IsMiniMapShown() const { return Open == EOverlay::None || Open == EOverlay::Terminal || Open == EOverlay::WonderWeb; }
 	UWonderlandWonderWebSubsystem* WonderWebState() const;
-	/** The screen in the controller's world, spawned the first time Wonder Web opens there. */
-	AWonderlandWonderWebScreen* EnsureWonderWebScreen(APlayerController* Controller);
+	UWonderlandJuliusConnectSubsystem* JuliusConnect() const;
+
+	/** One window of the Wonder Web workspace: what it draws, its chip, and the glass it stands on. */
+	struct FWonderWebWindow
+	{
+		FName Id;
+		TSharedPtr<SWidget> Content;
+		FVector2D ContentSize = FVector2D(1536.0, 1024.0);
+		TSharedPtr<SWidget> Chip;
+		TWeakObjectPtr<AWonderlandWonderWebScreen> Screen;
+		bool bOpen = false;
+		bool bMinimized = false;
+		bool bExpanded = false;
+		int32 OpenedOrder = 0;
+	};
+	FWonderWebWindow* FindWonderWebWindow(FName Id);
+	const FWonderWebWindow* FindWonderWebWindow(FName Id) const;
+	/** The window, its widgets and its glass in the controller's world, made the first time it is asked for. */
+	FWonderWebWindow* EnsureWonderWebWindow(FName Id);
+	AWonderlandWonderWebWorkspace* EnsureWonderWebWorkspace(APlayerController* Controller);
+	void PresentWonderWebWindow(FWonderWebWindow& Window);
+	TArray<AWonderlandWonderWebScreen*> OpenWonderWebScreens() const;
+	void FocusWonderWebScreen(AWonderlandWonderWebScreen* Screen);
+	/** The most recently opened window that is open and not minimized, other than this one. */
+	FName MostRecentWonderWebWindow(FName Except) const;
+	AWonderlandWonderWebScreen* FocusedWonderWebScreen() const;
+	bool GetWonderWebWindowPixel(FName Window, FName Control, FVector2D& OutPixel) const;
+	/** Julius started waiting on the user: the Connections window comes forward. */
+	void HandleJuliusConnectChanged();
 	/** Top right, unless a long mission strip reaches into that column: then just below the strip. */
 	FMargin MiniMapOffset() const;
 	UWonderlandWalletSubsystem* Wallet() const;
@@ -550,10 +623,16 @@ private:
 	TSharedPtr<SWonderlandCommandStation> CommandStation;
 	TSharedPtr<SWonderlandMissionsPanel> MissionsPanel;
 	TSharedPtr<SWonderlandMenuPanel> MenuPanel;
-	/** The window, kept once made like the other panels, so a half-typed command is still there on reopen. */
+	/** The windows, kept once made like the other panels, so a half-typed command is still there on reopen. */
 	TSharedPtr<SWonderlandWonderWebPanel> WonderWebPanel;
+	TSharedPtr<SWonderlandJuliusConnectPanel> ConnectPanel;
 	TSharedPtr<SWonderlandWonderWebInputLayer> WonderWebLayer;
-	TWeakObjectPtr<AWonderlandWonderWebScreen> WonderWebScreen;
+	TArray<FWonderWebWindow> WonderWebWindows;
+	TWeakObjectPtr<AWonderlandWonderWebWorkspace> WonderWebWorkspace;
+	FName FocusedWonderWebWindow;
+	int32 WonderWebOpenCounter = 0;
+	FDelegateHandle JuliusConnectChangedHandle;
+	FString LastPromptRequestId;
 
 	/** The mini-map and the bottom shortcuts, on one layer above the usage HUD and below every panel. */
 	TSharedPtr<SWidget> HudFurniture;
