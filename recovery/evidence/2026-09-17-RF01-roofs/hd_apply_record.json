@@ -1,0 +1,68 @@
+{
+ "MI_V2_RoofBlue": {
+  "before": {
+   "parent": "/Game/WonderlandV2/Materials/Master/M_V2_Surface.M_V2_Surface",
+   "scalars": {
+    "TexScale": 0.007000000216066837,
+    "Roughness": 0.6200000047683716,
+    "RoughVary": 0.6000000238418579,
+    "Metallic": 0.0,
+    "Specular": 0.30000001192092896,
+    "EmissiveStrength": 0.0
+   },
+   "vectors": {
+    "BaseColor": [
+     0.5,
+     0.6000000238418579,
+     0.8199999928474426,
+     1.0
+    ],
+    "Emissive": [
+     0.6600000262260437,
+     0.36000001430511475,
+     1.0,
+     1.0
+    ]
+   },
+   "textures": {
+    "Albedo": "/Game/WonderlandV2/Materials/Textures/T_V2_roof_a.T_V2_roof_a",
+    "Normal": "/Game/WonderlandV2/Materials/Textures/T_V2_roof_n.T_V2_roof_n",
+    "RoughnessMap": "/Game/WonderlandV2/Materials/Textures/T_V2_roof_r.T_V2_roof_r"
+   }
+  },
+  "twin": "MI_V2HD_RoofBlue"
+ },
+ "MI_V2_RoofNavy": {
+  "before": {
+   "parent": "/Game/WonderlandV2/Materials/Master/M_V2_Surface.M_V2_Surface",
+   "scalars": {
+    "TexScale": 0.007000000216066837,
+    "Roughness": 0.6000000238418579,
+    "RoughVary": 0.6000000238418579,
+    "Metallic": 0.0,
+    "Specular": 0.3400000035762787,
+    "EmissiveStrength": 0.0
+   },
+   "vectors": {
+    "BaseColor": [
+     0.46000000834465027,
+     0.46000000834465027,
+     0.7200000286102295,
+     1.0
+    ],
+    "Emissive": [
+     0.6600000262260437,
+     0.36000001430511475,
+     1.0,
+     1.0
+    ]
+   },
+   "textures": {
+    "Albedo": "/Game/WonderlandV2/Materials/Textures/T_V2_roof_a.T_V2_roof_a",
+    "Normal": "/Game/WonderlandV2/Materials/Textures/T_V2_roof_n.T_V2_roof_n",
+    "RoughnessMap": "/Game/WonderlandV2/Materials/Textures/T_V2_roof_r.T_V2_roof_r"
+   }
+  },
+  "twin": "MI_V2HD_RoofNavy"
+ }
+}

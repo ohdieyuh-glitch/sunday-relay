@@ -1,0 +1,15 @@
+{
+ "name": "zzAT00_rf01_hd_roofs",
+ "started": "2026-09-17 06:49:41",
+ "status": "done",
+ "mode": "apply",
+ "changed": [
+  "MI_V2_RoofBlue",
+  "MI_V2_RoofNavy"
+ ],
+ "skipped": [],
+ "record": "C:/dev/iwonder/wonderland-task3/recovery/evidence/2026-09-17-RF01-roofs/hd_apply_record.json",
+ "finished": "2026-09-17 06:50:08",
+ "seconds": 27.13,
+ "log": ""
+}
