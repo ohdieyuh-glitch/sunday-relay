@@ -867,6 +867,7 @@ UWonderlandUiSubsystem::FWonderWebWindow* UWonderlandUiSubsystem::EnsureWonderWe
 			SAssignNew(BrowserPanel, SWonderlandWonderWebBrowserPanel)
 				.Browse(TWeakObjectPtr<UWonderlandWonderWebBrowseSubsystem>(BrowseState()))
 				.Connect(TWeakObjectPtr<UWonderlandJuliusConnectSubsystem>(JuliusConnect()))
+				.Creation(TWeakObjectPtr<UWonderlandWonderWebSubsystem>(WonderWebState()))
 				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseWonderWebWindow(WonderWebWindowIds::Browser); } })
 				.OnRequestMinimize_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->MinimizeWonderWebWindow(WonderWebWindowIds::Browser, true); } })
 				.OnRequestExpand_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->ExpandWonderWebWindow(WonderWebWindowIds::Browser); } });
@@ -1436,12 +1437,16 @@ FString UWonderlandUiSubsystem::DescribeWonderWebWorkspace() const
 		const FJuliusConnectSurface& Surface = State->GetSurface();
 		const FJuliusConnectTask* Task = Surface.CurrentTask();
 		const FJuliusConnectService* Figma = Surface.FindService(TEXT("dev-figma"));
+		const FJuliusConnectService* Social = Surface.FindService(TEXT("dev-social"));
 		static const TCHAR* Links[] = { TEXT("connecting"), TEXT("online"), TEXT("offline") };
-		Connect = FString::Printf(TEXT("link=%s prompt=%s task=%s step=%d/%d blocked=\"%s\" dev_figma=%s scope=%s audit=%d last_audit=\"%s %s %s\" intents=%d"),
+		Connect = FString::Printf(TEXT("link=%s prompt=%s task=%s template=%s step=%d/%d blocked=\"%s\" dev_figma=%s dev_social=%s scope=%s audit=%d last_audit=\"%s %s %s\" intents=%d"),
 			Links[static_cast<int32>(State->GetLink())], Surface.bHasPrompt ? *Surface.Prompt.RequestId : TEXT("-"),
-			Task != nullptr ? *Task->RunState : TEXT("-"), Task != nullptr ? Task->Progress : 0, Task != nullptr ? Task->Total : 0,
+			Task != nullptr ? *Task->RunState : TEXT("-"), Task != nullptr ? *Task->TemplateId : TEXT("-"),
+			Task != nullptr ? Task->Progress : 0, Task != nullptr ? Task->Total : 0,
 			Task != nullptr ? *Task->BlockedReason : TEXT(""), Figma != nullptr ? *Figma->State : TEXT("-"),
-			Figma != nullptr ? *FString::Join(Figma->ProjectScope, TEXT(",")) : TEXT("-"), Surface.Audit.Num(),
+			Social != nullptr ? *Social->State : TEXT("-"),
+			Task != nullptr && Task->TemplateId == TEXT("social-post") && Social != nullptr ? *FString::Join(Social->ProjectScope, TEXT(","))
+				: (Figma != nullptr ? *FString::Join(Figma->ProjectScope, TEXT(",")) : TEXT("-")), Surface.Audit.Num(),
 			Surface.Audit.Num() > 0 ? *Surface.Audit[0].Action : TEXT("-"), Surface.Audit.Num() > 0 ? *Surface.Audit[0].Capability : TEXT("-"),
 			Surface.Audit.Num() > 0 ? *Surface.Audit[0].Outcome : TEXT("-"), State->GetIntentsSent());
 	}

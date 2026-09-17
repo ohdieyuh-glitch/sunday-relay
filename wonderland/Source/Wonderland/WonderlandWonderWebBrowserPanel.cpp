@@ -11,6 +11,7 @@
 #include "Widgets/Text/STextBlock.h"
 #include "WonderlandJuliusConnect.h"
 #include "WonderlandUiStyle.h"
+#include "WonderlandWonderWeb.h"
 #include "WonderlandWonderWebBrowse.h"
 #include "WonderlandWonderWebPanel.h"
 
@@ -39,6 +40,7 @@ void SWonderlandWonderWebBrowserPanel::Construct(const FArguments& InArgs)
 {
 	Browse = InArgs._Browse;
 	Connect = InArgs._Connect;
+	Creation = InArgs._Creation;
 	OnRequestClose = InArgs._OnRequestClose;
 	OnRequestMinimize = InArgs._OnRequestMinimize;
 	OnRequestExpand = InArgs._OnRequestExpand;
@@ -58,6 +60,10 @@ void SWonderlandWonderWebBrowserPanel::Construct(const FArguments& InArgs)
 	SearchBrush = FSlateRoundedBoxBrush(WonderlandUi::Srgb(0xEF, 0xEF, 0xEF), 10.0f, WonderlandUi::Srgb(0xEF, 0xEF, 0xEF), 0.0f);
 	ButtonBrush = FSlateRoundedBoxBrush(WebLook::Blue(), 8.0f, WebLook::Blue(), 0.0f);
 	DividerBrush = FSlateRoundedBoxBrush(WebLook::Hair(), 0.0f, WebLook::Hair(), 0.0f);
+	for (int32 Colour = 0; Colour <= UWonderlandWonderWebSubsystem::PaletteSize; ++Colour)
+	{
+		PaintBrushes.Add(FSlateRoundedBoxBrush(WonderWebCanvasLook::PaintColour(Colour), 2.0f, WonderWebCanvasLook::PaintColour(Colour), 0.0f));
+	}
 
 	TabStyle = FButtonStyle().SetNormal(TabBrush).SetHovered(TabActiveBrush).SetPressed(TabActiveBrush).SetDisabled(TabBrush)
 		.SetNormalPadding(FMargin(0.0f)).SetPressedPadding(FMargin(0.0f));
@@ -355,12 +361,12 @@ TSharedRef<SWidget> SWonderlandWonderWebBrowserPanel::MakePage(const FWonderWebB
 	TSharedRef<SVerticalBox> Column = SNew(SVerticalBox);
 	for (const FWonderWebPageBlock& Block : Tab.Blocks)
 	{
-		// Julius's own post belongs at the top of the profile's posts, where a new post appears.
-		if (Block.Kind == TEXT("post") && Browse.IsValid() && Browse->IsPosted())
+		Column->AddSlot().AutoHeight()[MakeBlock(Block)];
+		// Julius's own post, in view straight under the profile, where a new post appears.
+		if (Block.Kind == TEXT("profile") && Browse.IsValid() && Browse->IsPosted())
 		{
 			Column->AddSlot().AutoHeight()[MakeJuliusPost()];
 		}
-		Column->AddSlot().AutoHeight()[MakeBlock(Block)];
 	}
 	return SAssignNew(PageScroll, SScrollBox).ScrollBarVisibility(EVisibility::Collapsed) + SScrollBox::Slot()[Column];
 }
@@ -749,6 +755,33 @@ TSharedRef<SWidget> SWonderlandWonderWebBrowserPanel::MakeFooter(const FWonderWe
 	];
 }
 
+TSharedRef<SWidget> SWonderlandWonderWebBrowserPanel::MakeCanvasPicture()
+{
+	// THE PICTURE THAT WAS PAINTED, not a stand-in: the cells of the creation's own canvas, as the post's image.
+	const UWonderlandWonderWebSubsystem* Canvas = Creation.Get();
+	if (Canvas == nullptr)
+	{
+		return SNew(SBox).HeightOverride(240.0f)[SNew(SImage).Image(PageTint(TEXT("#C9D6E3")))];
+	}
+	TSharedRef<SUniformGridPanel> Grid = SNew(SUniformGridPanel).SlotPadding(FMargin(1.0f));
+	for (int32 Row = 0; Row < UWonderlandWonderWebSubsystem::CanvasRows; ++Row)
+	{
+		for (int32 Column = 0; Column < UWonderlandWonderWebSubsystem::CanvasColumns; ++Column)
+		{
+			const int32 Index = Row * UWonderlandWonderWebSubsystem::CanvasColumns + Column;
+			const int32 Colour = FMath::Clamp<int32>(Canvas->GetCell(Index), 0, PaintBrushes.Num() - 1);
+			Grid->AddSlot(Column, Row)[SNew(SImage).Image(&PaintBrushes[Colour])];
+		}
+	}
+	return SNew(SBox).HeightOverride(250.0f).Padding(FMargin(0.0f))
+	[
+		SNew(SBorder).BorderImage(PageTint(TEXT("#F4F1E8"))).Padding(FMargin(10.0f))
+		[
+			Grid
+		]
+	];
+}
+
 TSharedRef<SWidget> SWonderlandWonderWebBrowserPanel::MakeJuliusPost()
 {
 	const TWeakObjectPtr<UWonderlandWonderWebBrowseSubsystem> WeakBrowse = Browse;
@@ -777,8 +810,7 @@ TSharedRef<SWidget> SWonderlandWonderWebBrowserPanel::MakeJuliusPost()
 			]
 			+ SVerticalBox::Slot().AutoHeight()
 			[
-				// The picture from Pixel Canvas, as a post's image.
-				SNew(SBox).HeightOverride(260.0f)[SNew(SImage).Image(PageTint(TEXT("#C9D6E3")))]
+				MakeCanvasPicture()
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(16.0f, 12.0f, 16.0f, 4.0f))
 			[

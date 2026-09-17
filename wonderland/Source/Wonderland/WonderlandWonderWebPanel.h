@@ -39,6 +39,23 @@ namespace WonderWebLook
 	inline FSlateFontInfo Mono(int32 Size) { return WonderlandUi::Mono(Size); }
 }
 
+/** Pixel Canvas's palette: the sample creation's own colours, not Wonder Web's. 0 is unpainted. */
+namespace WonderWebCanvasLook
+{
+	inline FLinearColor PaintColour(int32 Index)
+	{
+		switch (Index)
+		{
+		case 1: return WonderlandUi::Srgb(0xFF, 0xD4, 0x00);
+		case 2: return WonderlandUi::Srgb(0x3B, 0x9E, 0xFF);
+		case 3: return WonderlandUi::Srgb(0xFF, 0x4D, 0x8D);
+		case 4: return WonderlandUi::Srgb(0x3D, 0xDC, 0x97);
+		case 5: return WonderlandUi::Srgb(0x1F, 0x1F, 0x2A);
+		default: return WonderlandUi::Srgb(0xF4, 0xF1, 0xE8);
+		}
+	}
+}
+
 /** A control whose drawn centre is reported every frame, so the proof job can click it through the real input path. */
 class WONDERLAND_API SWonderWebProbe : public SCompoundWidget
 {

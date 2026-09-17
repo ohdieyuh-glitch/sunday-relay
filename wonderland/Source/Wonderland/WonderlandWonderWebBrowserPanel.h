@@ -22,6 +22,7 @@ class SBox;
 class SScrollBox;
 class SVerticalBox;
 class UWonderlandWonderWebBrowseSubsystem;
+class UWonderlandWonderWebSubsystem;
 class UWonderlandJuliusConnectSubsystem;
 struct FWonderWebBrowseTab;
 struct FWonderWebPageBlock;
@@ -32,6 +33,8 @@ public:
 	SLATE_BEGIN_ARGS(SWonderlandWonderWebBrowserPanel) {}
 		SLATE_ARGUMENT(TWeakObjectPtr<UWonderlandWonderWebBrowseSubsystem>, Browse)
 		SLATE_ARGUMENT(TWeakObjectPtr<UWonderlandJuliusConnectSubsystem>, Connect)
+		/** The creation, so the post Julius publishes shows the picture that was actually painted. */
+		SLATE_ARGUMENT(TWeakObjectPtr<UWonderlandWonderWebSubsystem>, Creation)
 		SLATE_EVENT(FSimpleDelegate, OnRequestClose)
 		SLATE_EVENT(FSimpleDelegate, OnRequestMinimize)
 		SLATE_EVENT(FSimpleDelegate, OnRequestExpand)
@@ -62,12 +65,15 @@ private:
 	TSharedRef<SWidget> MakeFooter(const FWonderWebPageBlock& Block);
 	/** Julius's post, as the page shows it once it is published. */
 	TSharedRef<SWidget> MakeJuliusPost();
+	/** The picture from Pixel Canvas, drawn as a post's image. */
+	TSharedRef<SWidget> MakeCanvasPicture();
 	TSharedRef<SWidget> Probe(FName Id, TSharedRef<SWidget> Content);
 	/** A brush for a page colour, kept alive as long as the page it belongs to. */
 	const FSlateBrush* PageTint(const FString& Hex, float Corner = 0.0f);
 
 	TWeakObjectPtr<UWonderlandWonderWebBrowseSubsystem> Browse;
 	TWeakObjectPtr<UWonderlandJuliusConnectSubsystem> Connect;
+	TWeakObjectPtr<UWonderlandWonderWebSubsystem> Creation;
 	FSimpleDelegate OnRequestClose;
 	FSimpleDelegate OnRequestMinimize;
 	FSimpleDelegate OnRequestExpand;
@@ -101,4 +107,6 @@ private:
 	FButtonStyle TabActiveStyle;
 	FButtonStyle IconStyle;
 	FButtonStyle WebButtonStyle;
+	/** One brush per Pixel Canvas colour, 0 unpainted. */
+	TArray<FSlateBrush> PaintBrushes;
 };
