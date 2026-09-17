@@ -1,0 +1,12 @@
+{
+ "look": "LOOK04",
+ "title": "A lower sun, so the day rakes across the city instead of shining down it",
+ "why": "Material-realism phase (2026-09-17), the last item on the founder's list: lighting that reveals materials. After the ground, ivory, roofs, gold, glass, plinths, plaster, grass and planting passes, the light was still a 52-degree midday sun: frontal on every facade, with each shadow dropped at its own foot. At 40 degrees the same sun rakes: a balustrade lays its shadow across the lawn at Lantern Lane, facades keep a lit and a shaded side, and the aerial reads with depth between buildings. Brightness is unchanged -- this turns the sun, it does not dim it.",
+ "judged": "9 identical cameras, one session, three states (52 deg; 40 deg; 40 deg with a sharper source). Evidence 2026-09-17-LT02-sun-angle.",
+ "sun": {
+  "actor": "V2_Sun",
+  "before": {"pitch": -52.0, "yaw": -11.0, "light_source_angle": 1.2},
+  "after": {"pitch": -40.0, "yaw": -11.0, "light_source_angle": 0.7},
+  "note": "The source angle goes 1.2 -> 0.7 degrees so a contact shadow has an edge; the sun's own intensity (70,000 lux), colour and every fill light are untouched."
+ }
+}
