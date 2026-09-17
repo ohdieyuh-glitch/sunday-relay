@@ -56,6 +56,15 @@ export interface LiveBrowserEvent {
 
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 
+/**
+ * WHEN THE BROWSER MAY BE SHUT DOWN. Pulled out because getting it wrong took the service down once: between launching
+ * the browser and registering the first page there are no pages at all, and treating that as "nobody wants this" closes
+ * the browser under the call that just started it.
+ */
+export function browserMayShutDown(open: number, opening: number, sinceActivityMs: number, quietMs = 60 * 1000): boolean {
+  return open === 0 && opening === 0 && sinceActivityMs > quietMs;
+}
+
 export function hostOf(url: string): string | null {
   try {
     const parsed = new URL(url);
@@ -95,6 +104,9 @@ export function createLiveBrowser(options: LiveBrowserOptions): LiveBrowser {
 
   let browser: Browser | null = null;
   let context: BrowserContext | null = null;
+  /** How many calls are in the middle of opening a page. A browser with none of these and no pages is one nobody wants. */
+  let opening = 0;
+  let lastActivity = Date.now();
   const pages = new Map<string, { page: Page; lastUsed: number; loading: boolean; size: { width: number; height: number } }>();
   const events: LiveBrowserEvent[] = [];
 
@@ -108,6 +120,7 @@ export function createLiveBrowser(options: LiveBrowserOptions): LiveBrowser {
   };
 
   const ensureContext = async (): Promise<BrowserContext> => {
+    lastActivity = Date.now();
     if (context !== null) {
       return context;
     }
@@ -118,6 +131,14 @@ export function createLiveBrowser(options: LiveBrowserOptions): LiveBrowser {
       // the same site share a process, the renderer count is capped, and nothing loads extensions or background services.
       args: ['--process-per-site', '--renderer-process-limit=4', '--disable-extensions', '--disable-dev-shm-usage', '--disable-background-networking'],
     });
+    // A BROWSER CAN DIE WITHOUT ASKING -- killed by hand, or by the machine running short. When it does, everything held
+    // here is stale, so it is dropped and the next thing anyone asks for starts a fresh one.
+    browser.on('disconnected', () => {
+      note('-', 'error', '-', 'the browser exited; the next request starts a new one');
+      pages.clear();
+      context = null;
+      browser = null;
+    });
     // EPHEMERAL BY DEFAULT: this context keeps cookies only while it lives.
     context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
     context.setDefaultNavigationTimeout(25000);
@@ -125,24 +146,33 @@ export function createLiveBrowser(options: LiveBrowserOptions): LiveBrowser {
   };
 
   const pageFor = async (tabId: string): Promise<Page> => {
+    lastActivity = Date.now();
     const held = pages.get(tabId);
     if (held !== undefined && !held.page.isClosed()) {
       held.lastUsed = Date.now();
       return held.page;
     }
-    // A CAP, NOT A HOPE. The longest-unused page goes so a new one can open: the editor is sharing this machine's memory.
-    while (pages.size >= maxPages) {
-      const oldest = [...pages.entries()].sort((a, b) => a[1].lastUsed - b[1].lastUsed)[0];
-      if (oldest === undefined) {
-        break;
+    // OPENING COUNTS AS USING. Between launching the browser and registering the page there are no pages at all, and the
+    // sweep must not take that for "nobody wants this" and close the browser underneath -- which is exactly what it did.
+    opening += 1;
+    try {
+      // A CAP, NOT A HOPE. The longest-unused page goes so a new one can open: the editor shares this machine's memory.
+      while (pages.size >= maxPages) {
+        const oldest = [...pages.entries()].sort((a, b) => a[1].lastUsed - b[1].lastUsed)[0];
+        if (oldest === undefined) {
+          break;
+        }
+        await oldest[1].page.close().catch(() => undefined);
+        pages.delete(oldest[0]);
+        note(oldest[0], 'close', '-', `closed to make room for ${tabId}`);
       }
-      await oldest[1].page.close().catch(() => undefined);
-      pages.delete(oldest[0]);
-      note(oldest[0], 'close', '-', `closed to make room for ${tabId}`);
+      const page = await (await ensureContext()).newPage();
+      pages.set(tabId, { page, lastUsed: Date.now(), loading: false, size: { ...viewport } });
+      return page;
+    } finally {
+      opening -= 1;
+      lastActivity = Date.now();
     }
-    const page = await (await ensureContext()).newPage();
-    pages.set(tabId, { page, lastUsed: Date.now(), loading: false, size: { ...viewport } });
-    return page;
   };
 
   const sweep = () => {
@@ -154,8 +184,9 @@ export function createLiveBrowser(options: LiveBrowserOptions): LiveBrowser {
         note(tabId, 'close', '-', 'closed after being idle');
       }
     }
-    // NOTHING OPEN MEANS NOTHING RUNNING: with no pages left, the browser itself goes too, and comes back when asked.
-    if (pages.size === 0 && browser !== null) {
+    // NOTHING OPEN MEANS NOTHING RUNNING: with no pages left and nothing being opened, the browser itself goes too, and
+    // comes back when asked. The quiet period matters -- a browser that has just been launched has no pages yet.
+    if (browser !== null && browserMayShutDown(pages.size, opening, now - lastActivity)) {
       const going = browser;
       const goingContext = context;
       browser = null;

@@ -2,7 +2,7 @@ import { request } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { createDevelopmentCredentialVault } from './development-vault';
-import type { LiveBrowser } from './live-browser';
+import { browserMayShutDown, hostOf, type LiveBrowser } from './live-browser';
 import { startJuliusConnectDevServer } from './dev-server';
 import { createJuliusConnectService, type JuliusConnectService, type JuliusConnectServiceView } from './julius-connect-service';
 
@@ -205,6 +205,27 @@ describe('julius connect service: Julius on the real web', () => {
     expect(failed.length).toBeGreaterThan(0);
     expect(failed[0].detail).toContain('without the real browser');
     expect(service.view().surface.tasks[0]?.runState).not.toBe('COMPLETED');
+  });
+});
+
+describe('the live browser: when it may be shut down, and what it will reach', () => {
+  it('never shuts down under a page that is being opened', () => {
+    // THE BUG THIS EXISTS FOR: a browser had just been launched and its first page was not registered yet, so the sweep
+    // saw no pages, closed it, and the navigate that started it failed -- taking the service with it.
+    expect(browserMayShutDown(0, 1, 10 * 60 * 1000)).toBe(false);
+    expect(browserMayShutDown(1, 0, 10 * 60 * 1000)).toBe(false);
+    // Nor straight after activity: a quiet period has to pass first.
+    expect(browserMayShutDown(0, 0, 5 * 1000)).toBe(false);
+    // Nothing open, nothing opening, and quiet for a minute: then it may go.
+    expect(browserMayShutDown(0, 0, 61 * 1000)).toBe(true);
+  });
+
+  it('takes a host only from an http(s) address', () => {
+    expect(hostOf('https://EN.wikipedia.org/wiki/X')).toBe('en.wikipedia.org');
+    expect(hostOf('http://127.0.0.1:8795/x')).toBe('127.0.0.1');
+    expect(hostOf('file:///C:/secrets.txt')).toBeNull();
+    expect(hostOf('javascript:alert(1)')).toBeNull();
+    expect(hostOf('not a url')).toBeNull();
   });
 });
 

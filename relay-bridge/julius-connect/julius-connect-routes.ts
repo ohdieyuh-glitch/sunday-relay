@@ -85,6 +85,23 @@ export async function handleJuliusConnectRoute(req: IncomingMessage, res: Server
 
   // ---------------------------------------------------------------- the real browser
   if (pathname.startsWith(`${JULIUS_CONNECT_ROUTE_PREFIX}browser/`)) {
+    // A BROWSER THAT FAILS ANSWERS THE REQUEST. It is another process doing something the web asked of it; when it goes
+    // wrong the caller is told, and this service -- which also holds every connection and every audit line -- stays up.
+    try {
+      await handleBrowserRoute(req, res, pathname, url, browser);
+    } catch (error) {
+      if (!res.headersSent) {
+        send(res, 502, { ok: false, error: { code: 'unavailable', message: `The browser did not manage it: ${String(error).slice(0, 200)}` } });
+      }
+    }
+    return;
+  }
+
+  await handleRestOfRoute(req, res, service, pathname);
+}
+
+async function handleBrowserRoute(req: IncomingMessage, res: ServerResponse, pathname: string, url: URL, browser?: LiveBrowser): Promise<void> {
+  {
     if (browser === undefined) {
       send(res, 503, { ok: false, error: { code: 'not-found', message: 'This service was started without the live browser.' } });
       return;
@@ -168,7 +185,10 @@ export async function handleJuliusConnectRoute(req: IncomingMessage, res: Server
     send(res, 404, { ok: false, error: { code: 'not-found', message: 'No such browser route.' } });
     return;
   }
+}
 
+/** Everything that is not the browser: the surface, the intents, and the door's own answers. */
+async function handleRestOfRoute(req: IncomingMessage, res: ServerResponse, service: JuliusConnectService, pathname: string): Promise<void> {
   if (pathname === `${JULIUS_CONNECT_ROUTE_PREFIX}surface` && req.method === 'GET') {
     send(res, 200, { ok: true, ...service.view() });
     return;

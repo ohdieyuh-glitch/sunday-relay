@@ -71,6 +71,15 @@ export function startJuliusConnectDevServer(
 }
 
 if (require.main === module) {
+  // A PROMISE NOBODY CAUGHT MUST NOT TAKE THE SERVICE DOWN. This process holds every connection, every grant and every
+  // audit line; a browser that failed in the background is worth a line in the log, not the loss of all of that.
+  process.on('unhandledRejection', (reason) => {
+    console.error(`Julius Connect: something failed in the background and was not caught -- ${String(reason).slice(0, 300)}`);
+  });
+  process.on('uncaughtException', (error) => {
+    console.error(`Julius Connect: uncaught -- ${String(error?.stack ?? error).slice(0, 500)}`);
+  });
+
   const port = Number(process.env.JULIUS_CONNECT_DEV_PORT ?? JULIUS_CONNECT_DEV_PORT);
   startJuliusConnectDevServer(port, {}, (line) => console.log(line)).then(({ port: bound }) => {
     console.log(`JULIUS CONNECT — DEVELOPMENT SERVICE on http://${JULIUS_CONNECT_DEV_HOST}:${bound}/julius-connect/v1/surface`);
