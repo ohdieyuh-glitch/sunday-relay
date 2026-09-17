@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **174 production files** across 20/20 subsystems (2 roots, 152 traced, 7 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **175 production files** across 20/20 subsystems (2 roots, 153 traced, 7 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -42,7 +42,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | executor + tool substrate (src/relay/workspace/julius-tools/) | kernel (src/relay/mission/julius/) | 10 | 8 |
 | executor + tool substrate (src/relay/workspace/julius-tools/) | persistence (src/relay/persistence/) | 1 | 0 |
 | kernel (src/relay/mission/julius/) | other | 5 | 0 |
-| live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 16 | 4 |
+| live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 17 | 4 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 10 | 1 |
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 0 |
 | live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 19 | 4 |
@@ -112,6 +112,7 @@ One claimed task all the way through: policy, budget reservation, context compil
 | `src/relay/mission/julius/julius-contract-disposition.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-disagreement.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-execution-coordinator.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-lease-keeper.ts` | traced | `src/relay/mission/julius/julius-run-loop.ts` |
 | `src/relay/mission/julius/julius-peer-channel.ts` | traced | `src/relay/mission/julius/julius-architecture-state.ts` |
 | `src/relay/mission/julius/julius-peer-runtime.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-release-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |

@@ -133,8 +133,11 @@ Severity is what the gap can do on a real mission, not how hard it is to fix.
 
 17. Coordinator deadline ignores executor time; the abort signal is not
     forwarded; the workspace is not reset between attempts.
+    (PR 5: the worker now declares the attempt — session plus executor steps —
+    and the abort reaches the SDK session. Attempt-scoped workspace attribution
+    is the next boundary.)
 18. The usability gate reads `is_error` only, not the result subtype or
-    `terminal_reason`.
+    `terminal_reason`. (Closed in PR 5 — see section D.)
 
 ---
 
@@ -233,3 +236,45 @@ failure becoming success · architecture mutation by the coder · peer-channel
 bypass · stale continuation · duplicate result replay · task/evidence identity
 collision · cross-mission leakage · permission/scope expansion · provider
 failure class leaking into kernel authority.
+
+---
+
+## D. PR 5 — Coding Agent attempt truth: how an attempt ends, and how long it holds
+
+Audited and reproduced on main `81be9c7c`, provider-free.
+
+1. **A result is a success only when every field says so.** Both Claude Code
+   surfaces decided from `is_error` alone. An error subtype beside
+   `is_error: false`, a `success` with no `is_error`, an unknown subtype, or a
+   `success` that ended with a terminal reason other than `completed` is now
+   refused by one classifier (`claude-code-result-class.v1`), and the durable
+   row carries `resultClass` and `terminalReason`.
+2. **The abort reaches the session.** The Claude provider dropped its signal.
+   It is now connected to the runner's own controller, which the SDK holds. An
+   outside abort ends the coordinator's race at once as `CANCELLED`, with the
+   signal's reason as the class. The adapter runs no executor step after an
+   abort. An abort that lands in the same turn as the result still wins.
+3. **The provider's deadline is not the attempt's.** `CODER_WORKER.timeoutMs`
+   was the session limit, so a session that used its allowance was cut while its
+   tests ran. The worker now declares the session limit plus the executor steps
+   before and after it (`coderAttemptDeadlineMs`). The steps read their bounds
+   from one table, and the job-share proof counts the whole attempt. The coder
+   share is 40 minutes of the unchanged 120-minute job.
+4. **The lease is renewed while the work is real, never past its bound.** The
+   task heartbeat had no production caller, and the live lease (600 s) was
+   shorter than the coder's deadline.
+   - The lease is derived from the registered workers' deadlines plus a
+     settlement allowance.
+   - It is renewed from admission and never renewed past a hold bound.
+   - A renewal the store refuses aborts the dispatch `lease_lost`.
+   - A stuck worker is stopped at the bound.
+   - `finishTask`'s refusal is respected, so a requeue that never happened is
+     not recorded as one.
+
+**Not in PR 5 (next boundaries):**
+- Attempt-scoped workspace and change attribution.
+- The attempt ceiling. `CODER_WORKER.maxRetries` is 1 and never enforced, and
+  plan and build tasks get `MAX_TASK_ATTEMPTS = 3`. Enforcing it reduces live
+  retries; budgeting 3 needs a longer job. Either is a founder decision.
+- Whether the real SDK child process actually stops on abort
+  (LIVE VALIDATION REQUIRED).

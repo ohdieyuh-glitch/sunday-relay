@@ -202,6 +202,7 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-state-path.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-task-pipeline.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-execution-coordinator.ts', 'TASK GRAPH / SCHEDULER'],
+  ['src/relay/mission/julius/julius-lease-keeper.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-policy.ts', 'C.A.R.D. POLICY'],
   ['src/relay/mission/julius/julius-router.ts', 'WORKER REGISTRY / ROUTING'],
   ['src/relay/mission/julius/julius-agent-turn-loop.ts', 'AGENT TURN LOOP'],

@@ -1250,16 +1250,24 @@ export async function runClaimedTask(
         });
       }
     }
-    await deps.store.finishTask({
+    /**
+     * A RETRY IS SCHEDULED ONLY IF THE STORE TOOK IT. `finishTask` refuses a
+     * holder whose lease is gone — reclaimed while this attempt ran, which is
+     * exactly what a lost-lease cancellation is — and its answer was ignored,
+     * so the trajectory said RETRY and the outcome said RETRY for a requeue
+     * that never happened and belonged to someone else's lease.
+     */
+    const finished = await deps.store.finishTask({
       taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration,
       state: 'FAILED', now: deps.clock.now(),
       ...(requeue ? { nextAttemptAt: deps.clock.now() } : {}),
     });
-    await ledger.trajectory(requeue ? 'RETRY' : 'DISPATCH', {
+    const requeued = requeue && finished;
+    await ledger.trajectory(requeued ? 'RETRY' : 'DISPATCH', {
       taskId: claim.taskId, contextId, policyRevision: request.policy.revision, outcome: outcome.code,
       facts: { failureClass: outcome.failureClass ?? null, ...bindingFacts(preflight.contractBinding) },
     });
-    if (requeue) return { kind: 'RETRY', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null };
+    if (requeued) return { kind: 'RETRY', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null };
     if (outcome.status === 'DENIED') return { kind: 'DENIED', taskId: claim.taskId, reasonCode: outcome.code };
     return { kind: 'FAILED', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null };
   }

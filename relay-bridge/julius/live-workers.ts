@@ -89,6 +89,7 @@ import {
 } from '../hermes-reviewer';
 import { UNKNOWN_USAGE, type HermesUsage } from '../reviewer-harness/hermes/runner';
 import { REVIEW_TRANSIENT_REASK_BACKOFF_MS, REVIEW_TRANSIENT_REASK_LIMIT, REVIEW_TRANSIENT_REASK_SHAPES, reviewerReaskWithinDeadline } from '../reviewer-deadline';
+import { CODER_EXECUTOR_STEP_TIMEOUTS_MS } from '../hosted-coding-agent/coder-envelope';
 import type { ShellEffectPort } from './executor-effects';
 
 /* ------------------------------------------------------------- handoffs */
@@ -1374,7 +1375,7 @@ export function createJuliusCodingAgentAdapter(input: {
         ...shellScope,
         invocationKey: `${dispatch.taskId}:base`,
         command: 'git rev-parse HEAD',
-        timeoutMs: 15_000,
+        timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.base,
       });
       if (before.status === 'SUCCEEDED') {
         input.artifacts.put(baseRevisionRef(snapshot.runId), before.stdout.trim());
@@ -1445,7 +1446,7 @@ export function createJuliusCodingAgentAdapter(input: {
         ...shellScope,
         invocationKey: `${dispatch.taskId}:status`,
         command: 'git status --porcelain=v1 --untracked-files=all -z',
-        timeoutMs: 30_000,
+        timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.status,
       }));
       const workspace = status.status === 'SUCCEEDED'
         ? { captured: true, ...parseJuliusWorkspaceStatus(status.stdout) }
@@ -1460,7 +1461,7 @@ export function createJuliusCodingAgentAdapter(input: {
         ...shellScope,
         invocationKey: `${dispatch.taskId}:diff`,
         command: 'git --no-pager diff || exit 3; git --no-pager diff --stat; git ls-files --others --exclude-standard | while IFS= read -r file; do git --no-pager diff --no-index -- /dev/null "$file"; done; exit 0',
-        timeoutMs: 30_000,
+        timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.diff,
       }));
       if (diff.status === 'SUCCEEDED') input.artifacts.put(diffRef(snapshot.runId), diff.stdout);
       stopIfCancelled('test', outcome.observation);
@@ -1468,7 +1469,7 @@ export function createJuliusCodingAgentAdapter(input: {
         ...shellScope,
         invocationKey: `${dispatch.taskId}:test`,
         command: input.testCommand,
-        timeoutMs: 300_000,
+        timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.test,
       }));
       input.artifacts.put(testOutputRef(snapshot.runId), `exit=${test.exitCode ?? 'unknown'}\n${test.stdout}\n${test.stderr}`);
 

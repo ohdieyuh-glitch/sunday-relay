@@ -18,6 +18,7 @@
  * succeeds" as data rather than by reaching into the router.
  */
 
+import type { JuliusLeaseTimers } from './julius-lease-keeper';
 import {
   JuliusProviderHealthRegistry, JuliusProviderRouter, JuliusDispatchError,
   type JuliusDispatchAllocation, type JuliusProviderAdapter, type JuliusProviderResult,
@@ -43,6 +44,53 @@ export function createSteppingClock(startIso = '2026-08-27T00:00:00.000Z', stepM
   return {
     now() { const value = new Date(current).toISOString(); current += stepMs; return value; },
     advance(ms) { current += ms; },
+  };
+}
+
+/**
+ * TIME A TEST MOVES, WITH TIMERS THAT FIRE ONLY WHEN IT DOES.
+ *
+ * `createSteppingClock` advances on every read, which is right for ordering and
+ * wrong for a lease: a renewal cadence can only be proven against a clock that
+ * stands still until the proof moves it, and timers that fall due in order.
+ */
+export interface FakeTime {
+  readonly clock: { now(): string };
+  readonly timers: JuliusLeaseTimers;
+  nowMs(): number;
+  /** Move time forward, firing every timer that falls due on the way, in order. */
+  advance(ms: number): Promise<void>;
+}
+
+const flushMicrotasks = async (): Promise<void> => {
+  for (let index = 0; index < 20; index += 1) await Promise.resolve();
+};
+
+export function createFakeTime(startIso = '2026-09-17T12:00:00.000Z'): FakeTime {
+  let current = Date.parse(startIso);
+  let sequence = 0;
+  const pending = new Map<number, { at: number; callback: () => void }>();
+  return {
+    clock: { now: () => new Date(current).toISOString() },
+    timers: {
+      setTimeout(callback, ms) { sequence += 1; pending.set(sequence, { at: current + ms, callback }); return sequence; },
+      clearTimeout(handle) { pending.delete(handle as number); },
+    },
+    nowMs: () => current,
+    async advance(ms) {
+      const target = current + ms;
+      for (;;) {
+        let next: [number, { at: number; callback: () => void }] | null = null;
+        for (const entry of pending) if (entry[1].at <= target && (next === null || entry[1].at < next[1].at)) next = entry;
+        if (next === null) break;
+        pending.delete(next[0]);
+        current = next[1].at;
+        next[1].callback();
+        await flushMicrotasks();
+      }
+      current = target;
+      await flushMicrotasks();
+    },
   };
 }
 
@@ -393,6 +441,7 @@ export function createJuliusHarness(input: {
   const loop = new JuliusRunLoop(deps, policies, {
     claimLimit: input.config?.claimLimit ?? 10,
     leaseMs: input.config?.leaseMs ?? 60_000,
+    ...(input.config?.leaseRenewal === undefined ? {} : { leaseRenewal: input.config.leaseRenewal }),
   });
 
   return { store, clock, ids, budget, workers: registry, adapters, health, router, deps, loop, policies };

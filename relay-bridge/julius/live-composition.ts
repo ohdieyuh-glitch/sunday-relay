@@ -17,7 +17,7 @@
  * is no partial composition and no fallback worker.
  */
 
-import { DEFAULT_HOSTED_LIMITS } from '../hosted-coding-agent/hosted-envelope';
+import { coderAttemptDeadlineMs } from '../hosted-coding-agent/coder-envelope';
 import { architectOperativeTimeoutMs } from '../../src/relay/connectors/gpt-architect/config';
 import { reviewerOperativeTimeoutMs } from '../reviewer-deadline';
 import { randomUUID } from 'node:crypto';
@@ -26,6 +26,8 @@ import {
   JuliusProviderRouter,
   JuliusRunLoop,
   JuliusWorkerRegistry,
+  juliusLeaseHoldBoundMs,
+  juliusLeaseMsFor,
   fixedResourceEstimate,
   juliusSharedCeilingPolicy,
   type JuliusBudgetPort,
@@ -224,6 +226,15 @@ export const architectWorker = (env: Record<string, string | undefined>): Julius
 export const architectWorstCaseSpendMs = (env: Record<string, string | undefined>): number =>
   architectOperativeTimeoutMs(env) * (architectWorker(env).maxRetries + 1);
 
+/**
+ * WHAT SETTLING A DISPATCH MAY TAKE AFTER THE WORKER ANSWERED: evidence,
+ * acceptance, verification and any research the answer asked Julius to serve
+ * inline, one retrieval at a time. It is the old flat lease, which had to cover
+ * all of that and the dispatch besides; now it covers only what follows the
+ * dispatch, beside a deadline the worker itself declares.
+ */
+export const JULIUS_LIVE_LEASE_SETTLEMENT_ALLOWANCE_MS = 600_000;
+
 export const CODER_WORKER: JuliusWorker = {
   workerId: 'coding-agent-claude-hosted', role: 'CODING_AGENT',
   adapterId: 'claude-agent-sdk-hosted-live', providerId: 'anthropic',
@@ -242,7 +253,14 @@ export const CODER_WORKER: JuliusWorker = {
    * minutes for a coder the runtime kills at six. Same defect as the reviewer's,
    * found by the same structural test, fixed the same way.
    */
-  concurrencyLimit: 1, timeoutMs: DEFAULT_HOSTED_LIMITS.maxRuntimeMs, maxRetries: 1, status: 'AVAILABLE',
+  /**
+   * AND THEN IT WAS WRONG THE OTHER WAY. The session's own limit was declared as
+   * the whole dispatch's, but the dispatch also runs the base read before the
+   * session and the status, diff and test captures after it — so a session that
+   * used its allowance was cut while its tests ran. The worker declares the
+   * ATTEMPT: the session's limit plus the executor steps around it.
+   */
+  concurrencyLimit: 1, timeoutMs: coderAttemptDeadlineMs(), maxRetries: 1, status: 'AVAILABLE',
 };
 
 export const reviewerWorker = (providerId: string): JuliusWorker => ({
@@ -621,8 +639,9 @@ export function assembleLiveJuliusRuntime(options: {
   readonly executionScope?: string;
   readonly budget?: JuliusBudgetPort;
   /**
-   * How long a claimed task's lease lasts. Ten minutes in production, where a
-   * dispatch is a provider call; a drill that must witness a REAL expiry — a
+   * How long a claimed task's lease lasts. In production it is DERIVED — the
+   * longest deadline any registered worker declares plus the settlement
+   * allowance — and renewed while the work is real; a drill that must witness a REAL expiry — a
    * process dying with the lease held and a fresh one reclaiming it off the
    * wall clock — cannot wait that long, and faking `now` would prove the sweep
    * against a clock nobody runs. Stated here so the drill shortens the lease
@@ -782,7 +801,24 @@ export function assembleLiveJuliusRuntime(options: {
     async policyFor() { return { card, verification }; },
     capabilityFor: (task) => (task.role === 'PROMPT_ARCHITECT' ? 'plan' : task.role === 'INDEPENDENT_REVIEWER' ? 'review' : 'implement'),
   };
-  const loop = new JuliusRunLoop(deps, policies, { claimLimit: 4, leaseMs: options.leaseMs ?? 600_000 });
+  /**
+   * THE LEASE FOLLOWS THE WORKERS, AND IS RENEWED WHILE THEY WORK.
+   *
+   * It was a flat 600 000 ms beside a Coding Agent whose attempt now declares
+   * more than that, and nothing renewed it. The lease is derived from the
+   * registered workers' own deadlines, renewed four times per lease from
+   * admission, and never held past the task's bound: every worker of its role
+   * at its deadline, plus the settlement allowance.
+   */
+  const workers = options.entries.map((entry) => entry.worker);
+  const leaseMs = options.leaseMs ?? juliusLeaseMsFor(workers, JULIUS_LIVE_LEASE_SETTLEMENT_ALLOWANCE_MS);
+  const loop = new JuliusRunLoop(deps, policies, {
+    claimLimit: 4, leaseMs,
+    leaseRenewal: {
+      renewEveryMs: Math.max(1, Math.floor(leaseMs / 4)),
+      holdBoundMsFor: (task) => juliusLeaseHoldBoundMs(workers, task, JULIUS_LIVE_LEASE_SETTLEMENT_ALLOWANCE_MS),
+    },
+  });
   return { loop, registry, router, store: options.store, card, verification };
 }
 

@@ -240,7 +240,9 @@ this path writes, so the contract's `repairCycles` ceiling is not durably
 enforced (bounded in practice by idempotent repair task ids and unroutable
 `repair:repair:*` types). F14 — the worst-case adapter chain can exceed the
 600s lease with no heartbeat during dispatch; safe single-process today,
-flagged for the first live run.
+flagged for the first live run. (Closed in PR 5: the live lease is derived from
+the registered workers' deadlines and renewed from admission up to a hold bound;
+see `docs/JULIUS_CODING_AGENT_AUDIT.md` section D.)
 
 ## First live mission rig (2026-09-02)
 

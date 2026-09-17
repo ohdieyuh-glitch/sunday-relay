@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  CODER_EXECUTOR_EFFECT_OVERHEAD_MS, CODER_EXECUTOR_STEP_TIMEOUTS_MS, CODER_POST_SESSION_ALLOWANCE_MS, CODER_PRE_SESSION_ALLOWANCE_MS,
+  coderAttemptDeadlineMs,
   CODER_JOB_SHARE_MS, CODER_TURN_HARD_CEILING, CODER_TURN_HEADROOM_RATIO,
   CODER_RUNTIME_HEADROOM_RATIO, CoderEnvelopeUnsatisfiable, JOB_BUDGET_MS_FOR_SHARES,
   MAX_CODER_ATTEMPTS, RECORDED_CODER_OBSERVATIONS, coderMaxRuntimeMs, coderMaxTurns,
@@ -77,9 +79,27 @@ describe('the turn ceiling the SDK actually receives', () => {
     expect(source).toContain('coderMaxRuntimeMs()');
   });
 
-  it('gives the declared coder worker exactly the runtime that bounds it', () => {
-    expect(CODER_WORKER.timeoutMs).toBe(DEFAULT_HOSTED_LIMITS.maxRuntimeMs);
-    expect(CODER_WORKER.timeoutMs).toBe(coderMaxRuntimeMs());
+  it('gives the declared coder worker the session runtime plus the executor steps around it', () => {
+    // The session stops at its own limit; the attempt the worker declares is
+    // longer by exactly the executor steps, so the evidence always has time.
+    expect(CODER_WORKER.timeoutMs).toBe(DEFAULT_HOSTED_LIMITS.maxRuntimeMs + CODER_PRE_SESSION_ALLOWANCE_MS + CODER_POST_SESSION_ALLOWANCE_MS);
+    expect(CODER_WORKER.timeoutMs).toBe(coderAttemptDeadlineMs());
+    expect(CODER_WORKER.timeoutMs).toBeGreaterThan(coderMaxRuntimeMs());
+  });
+
+  it('reserves every executor step the adapter runs, at the bound the adapter hands the executor', () => {
+    expect(CODER_POST_SESSION_ALLOWANCE_MS).toBe(
+      CODER_EXECUTOR_STEP_TIMEOUTS_MS.status + CODER_EXECUTOR_STEP_TIMEOUTS_MS.diff + CODER_EXECUTOR_STEP_TIMEOUTS_MS.test
+      + 3 * CODER_EXECUTOR_EFFECT_OVERHEAD_MS);
+    expect(CODER_PRE_SESSION_ALLOWANCE_MS).toBe(CODER_EXECUTOR_STEP_TIMEOUTS_MS.base + CODER_EXECUTOR_EFFECT_OVERHEAD_MS);
+    // THE ADAPTER READS THE SAME NUMBERS: no step bound is a literal beside them.
+    const adapter = read('relay-bridge/julius/live-workers.ts');
+    const coder = adapter.slice(adapter.indexOf('export function createJuliusCodingAgentAdapter'));
+    const body = coder.slice(0, coder.indexOf('\nexport function ', 1));
+    expect([...body.matchAll(/timeoutMs:\s*([0-9][0-9_]*)/gu)].map((match) => match[1]), 'a step bound must come from CODER_EXECUTOR_STEP_TIMEOUTS_MS').toEqual([]);
+    for (const step of ['base', 'status', 'diff', 'test'] as const) {
+      expect(body).toContain(`timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.${step}`);
+    }
   });
 });
 
@@ -196,7 +216,8 @@ describe('the derivation is deterministic, bounded and honest about censoring', 
 
   it('learns from a longer observation instead of ignoring it', () => {
     const longer = resolveCoderEnvelope({
-      observations: [{ runId: 'r', taskId: 't', turns: 20, toolCalls: 1, elapsedMs: 400_000, outcome: 'TURNS_EXHAUSTED', costUsdMicros: null }],
+      // A pace that still fits an attempt once its executor steps are reserved beside the session.
+      observations: [{ runId: 'r', taskId: 't', turns: 20, toolCalls: 1, elapsedMs: 380_000, outcome: 'TURNS_EXHAUSTED', costUsdMicros: null }],
     });
     expect(longer.maxTurns).toBeGreaterThan(resolveCoderEnvelope().maxTurns);
   });
@@ -254,10 +275,21 @@ describe('the job budget is shared out, and the shares add up', () => {
       .toBeLessThanOrEqual(JOB_BUDGET_MS_FOR_SHARES);
   });
 
-  it('keeps the coder worst case inside its own share', () => {
+  it('keeps the coder worst case — every attempt at its whole deadline — inside its own share', () => {
     const envelope = resolveCoderEnvelope();
-    expect(envelope.worstCaseRuntimeSpendMs).toBe(envelope.maxRuntimeMs * MAX_CODER_ATTEMPTS);
+    expect(envelope.attemptDeadlineMs).toBe(envelope.maxRuntimeMs + envelope.preSessionAllowanceMs + envelope.postSessionAllowanceMs);
+    expect(envelope.worstCaseRuntimeSpendMs).toBe(envelope.attemptDeadlineMs * MAX_CODER_ATTEMPTS);
     expect(envelope.worstCaseRuntimeSpendMs).toBeLessThanOrEqual(CODER_JOB_SHARE_MS);
+  });
+
+  it('refuses a session that fits the share alone but not with its executor steps', () => {
+    const perAttempt = coderRuntimeHardCeilingMs();
+    // A floor whose session limit fits the per-attempt ceiling by a hair, so only the executor allowance breaks it.
+    const elapsedMs = Math.floor((perAttempt - 1) / (1 + CODER_RUNTIME_HEADROOM_RATIO));
+    expect(Math.ceil(elapsedMs * (1 + CODER_RUNTIME_HEADROOM_RATIO))).toBeLessThanOrEqual(perAttempt);
+    expect(() => resolveCoderEnvelope({
+      observations: [{ runId: 'r', taskId: 't', turns: null, toolCalls: 1, elapsedMs, outcome: 'COMPLETED', costUsdMicros: null }],
+    })).toThrow(CoderEnvelopeUnsatisfiable);
   });
 
   it('pins the live mission workflow timeout to JOB_BUDGET_MS', () => {
