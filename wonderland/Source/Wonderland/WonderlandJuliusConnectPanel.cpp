@@ -471,7 +471,7 @@ TSharedRef<SWidget> SWonderlandJuliusConnectPanel::MakeServices(const FJuliusCon
 	{
 		if (Service.Kind == TEXT("DEVELOPMENT CONNECTOR"))
 		{
-			Column->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)[MakeServiceRow(Service)];
+			Column->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)[MakeServiceRow(Service)];
 		}
 		else if (Service.ConnectionId.IsEmpty())
 		{
@@ -486,7 +486,7 @@ TSharedRef<SWidget> SWonderlandJuliusConnectPanel::MakeServices(const FJuliusCon
 	{
 		Column->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 		[
-			SNew(STextBlock).Font(Sans(16)).ColorAndOpacity(Line(0.6f)).AutoWrapText(true)
+			SNew(STextBlock).Font(Sans(17)).ColorAndOpacity(Line(0.65f)).AutoWrapText(true)
 			.Text(FText::FromString(FString::Printf(TEXT("REAL SERVICES  ·  %s  ·  INTEGRATION NOT BUILT: Julius will not claim to connect them"), *FString::Join(RealServices, TEXT(", ")))))
 		];
 	}
@@ -529,51 +529,59 @@ TSharedRef<SWidget> SWonderlandJuliusConnectPanel::MakeServiceRow(const FJuliusC
 	}
 
 	TSharedRef<SVerticalBox> Detail = SNew(SVerticalBox);
-	Detail->AddSlot().AutoHeight()
-	[
-		SNew(SHorizontalBox)
+	// THE FIRST LINE: the service, its state, how it is reached -- and, for a service with no connection yet, its button.
+	TSharedRef<SHorizontalBox> Heading = SNew(SHorizontalBox)
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
 		[
-			SNew(STextBlock).Text(FText::FromString(Service.DisplayName)).Font(Sans(23, true)).ColorAndOpacity(Line())
+			SNew(STextBlock).Text(FText::FromString(Service.DisplayName)).Font(Sans(24, true)).ColorAndOpacity(Line())
 		]
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
 		[
 			SNew(SBorder).BorderImage(&PillBrush).BorderBackgroundColor(FSlateColor(Colour.CopyWithNewOpacity(0.22f))).Padding(FMargin(12.0f, 4.0f))
 			[
-				SNew(STextBlock).Text(FText::FromString(Service.StateLabel)).Font(Sans(16, true, 110)).ColorAndOpacity(Colour)
+				SNew(STextBlock).Text(FText::FromString(Service.StateLabel)).Font(Sans(18, true, 110)).ColorAndOpacity(Colour)
 			]
 		]
 		+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 		[
-			SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  ·  %s"), *Service.Kind, *Service.RouteLabel))).Font(Sans(14, true, 100)).ColorAndOpacity(Line(0.6f))
-		]
-	];
-	Detail->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
-	[
-		SNew(STextBlock).Font(Sans(17)).ColorAndOpacity(Line(0.9f)).AutoWrapText(true)
-		.Text(FText::FromString(bLive
-			? FString::Printf(TEXT("THIS PROJECT MAY USE  %s"), *JoinOr(Service.ProjectScope, TEXT("nothing")))
-			: (Service.bReachable ? TEXT("Not connected. Julius connects it when a task needs it, or when you ask.") : Service.UnavailableReason)))
-	];
-	if (bLive)
+			SNew(STextBlock).Text(FText::FromString(Service.RouteLabel)).Font(Sans(16, true, 100)).ColorAndOpacity(Line(0.6f))
+		];
+	if (!bLive)
+	{
+		Heading->AddSlot().AutoWidth().VAlign(VAlign_Center)[Buttons];
+	}
+	Detail->AddSlot().AutoHeight()[Heading];
+	if (!bLive && !Service.bReachable)
 	{
 		Detail->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 		[
+			SNew(STextBlock).Font(Sans(17)).ColorAndOpacity(Line(0.7f)).AutoWrapText(true).Text(FText::FromString(Service.UnavailableReason))
+		];
+	}
+	if (bLive)
+	{
+		Detail->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+		[
+			SNew(STextBlock).Font(Sans(20, true)).ColorAndOpacity(Line()).AutoWrapText(true)
+			.Text(FText::FromString(FString::Printf(TEXT("THIS PROJECT MAY USE  %s"), *JoinOr(Service.ProjectScope, TEXT("nothing")))))
+		];
+		Detail->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 20.0f, 0.0f)
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 22.0f, 0.0f)
 			[
-				SNew(STextBlock).Font(Mono(15)).ColorAndOpacity(Good())
+				SNew(STextBlock).Font(Mono(17)).ColorAndOpacity(Good())
 				.Text(FText::FromString(FString::Printf(TEXT("GRANTED  %s"), *JoinOr(Service.Granted, TEXT("-")))))
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.0f)
 			[
-				SNew(STextBlock).Font(Mono(15)).ColorAndOpacity(Fail(0.9f))
+				SNew(STextBlock).Font(Mono(17)).ColorAndOpacity(Fail(0.9f)).AutoWrapText(true)
 				.Text(FText::FromString(FString::Printf(TEXT("DENIED  %s"), *JoinOr(Service.Denied, TEXT("-")))))
 			]
 		];
 		Detail->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 		[
-			SNew(STextBlock).Font(Sans(15)).ColorAndOpacity(Line(0.65f))
+			SNew(STextBlock).Font(Sans(16)).ColorAndOpacity(Line(0.7f)).AutoWrapText(true)
 			.Text_Lambda([Weak, ConnectorId]()
 			{
 				const FJuliusConnectService* Current = Weak.IsValid() ? Weak->GetSurface().FindService(ConnectorId) : nullptr;
@@ -581,15 +589,15 @@ TSharedRef<SWidget> SWonderlandJuliusConnectPanel::MakeServiceRow(const FJuliusC
 				{
 					return FText::GetEmpty();
 				}
-				return FText::FromString(FString::Printf(TEXT("%s  ·  missions %s  ·  health: %s  ·  last activity %s"),
+				return FText::FromString(FString::Printf(TEXT("%s  ·  missions %s  ·  %s  ·  last activity %s"),
 					Current->AccountLabel.IsEmpty() ? TEXT("no account yet") : *Current->AccountLabel, *JoinOr(Current->Missions, TEXT("none")), *Current->HealthDetail,
 					Current->LastActivityAt.IsEmpty() ? TEXT("-") : *ClockOf(Current->LastActivityAt)));
 			})
 		];
+		Detail->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)[Buttons];
 	}
-	Detail->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)[Buttons];
 
-	return SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(18.0f, 12.0f))
+	return SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(18.0f, 10.0f))
 		.BorderBackgroundColor(FSlateColor(bLive ? Colour.CopyWithNewOpacity(0.9f) : Line(0.35f)))
 		[
 			Detail

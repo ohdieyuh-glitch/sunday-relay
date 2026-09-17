@@ -21,6 +21,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Components/WidgetComponent.h"
 #include "Components/WidgetInteractionComponent.h"
 #include "GameFramework/Actor.h"
 #include "Widgets/SCompoundWidget.h"
@@ -28,6 +29,23 @@
 
 class UCameraComponent;
 class UWidgetComponent;
+
+/**
+ * A window's glass: the engine's widget component, able to rebuild its material when its blend mode changes at runtime.
+ *
+ * WHY THE GLASS IS MASKED, NOT TRANSLUCENT (editor 80). A translucent screen writes no depth, and the temporal upscaler
+ * could not tell its history was stale when the text on it changed: a row that had just changed showed its old words
+ * double-exposed under the new ones for over a second. A masked screen is an ordinary surface to it, and still has its
+ * rounded corners.
+ */
+UCLASS()
+class WONDERLAND_API UWonderlandWonderWebGlass : public UWidgetComponent
+{
+	GENERATED_BODY()
+
+public:
+	void RefreshMaterial() { UpdateMaterialInstance(); }
+};
 
 /** The engine's widget interaction, with the pointer's hover re-found on demand rather than only on its own tick. */
 UCLASS()
@@ -174,6 +192,7 @@ private:
 	float Grow = 0.0f;
 	float ChipGrow = 0.0f;
 	float AppliedBrightness = -1.0f;
+	int32 AppliedBlend = -1;
 	float AppliedRedraw = -1.0f;
 	FVector2D Offset = FVector2D::ZeroVector;
 	FVector2D OffsetRate = FVector2D::ZeroVector;

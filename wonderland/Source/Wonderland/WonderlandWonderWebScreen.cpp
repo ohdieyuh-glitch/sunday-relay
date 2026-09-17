@@ -39,16 +39,18 @@ namespace WonderWebScreenTuning
 	// A BACKGROUND WINDOW KEEPS WORKING AND IS DRAWN LESS OFTEN: the focused one every frame, the others a dozen times a
 	// second, a minimized one only as its chip, four times a second.
 	TAutoConsoleVariable<float> CVarBackgroundRedraw(TEXT("wl.WonderWeb.BackgroundRedrawSeconds"), 1.0f / 12.0f, TEXT("Wonder Web window: seconds between redraws of a visible window that is not focused."));
+	TAutoConsoleVariable<int32> CVarGlassBlend(TEXT("wl.WonderWeb.GlassBlend"), 1,
+		TEXT("Wonder Web window glass: 0 translucent (ghosts changed text under the temporal upscaler), 1 masked, 2 opaque."));
 	TAutoConsoleVariable<float> CVarChipRedraw(TEXT("wl.WonderWeb.ChipRedrawSeconds"), 0.25f, TEXT("Wonder Web window: seconds between redraws of a minimized window's chip."));
 
 	UWidgetComponent* MakeGlass(AActor* Owner, USceneComponent* Parent, const TCHAR* Name)
 	{
-		UWidgetComponent* Glass = Owner->CreateDefaultSubobject<UWidgetComponent>(Name);
+		UWidgetComponent* Glass = Owner->CreateDefaultSubobject<UWonderlandWonderWebGlass>(Name);
 		Glass->SetupAttachment(Parent);
 		Glass->SetWidgetSpace(EWidgetSpace::World);
 		Glass->SetPivot(FVector2D(0.5, 0.5));
-		// Transparent, so the text is antialiased and the rounded corners show the garden behind them.
-		Glass->SetBlendMode(EWidgetBlendMode::Transparent);
+		// Masked: an ordinary surface to the temporal upscaler, with the rounded corners still cut out (see UWonderlandWonderWebGlass).
+		Glass->SetBlendMode(EWidgetBlendMode::Masked);
 		Glass->SetTwoSided(false);
 		Glass->SetBackgroundColor(FLinearColor::Transparent);
 		Glass->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -260,6 +262,21 @@ void AWonderlandWonderWebScreen::Tick(float DeltaSeconds)
 	Chip->SetRelativeScale3D(FVector(ChipScale, ChipScale, ChipScale * FMath::Max(ChipOpen, 0.02f)));
 	Chip->SetVisibility(ChipGrow > 0.0f);
 
+	const int32 Blend = FMath::Clamp(CVarGlassBlend.GetValueOnGameThread(), 0, 2);
+	if (Blend != AppliedBlend)
+	{
+		const EWidgetBlendMode Mode = Blend == 0 ? EWidgetBlendMode::Transparent : (Blend == 1 ? EWidgetBlendMode::Masked : EWidgetBlendMode::Opaque);
+		for (UWidgetComponent* Glass : { Screen.Get(), Chip.Get() })
+		{
+			Glass->SetBlendMode(Mode);
+			if (UWonderlandWonderWebGlass* Rebuilt = Cast<UWonderlandWonderWebGlass>(Glass))
+			{
+				Rebuilt->RefreshMaterial();
+			}
+		}
+		AppliedBlend = Blend;
+		AppliedBrightness = -1.0f;
+	}
 	const float Brightness = FMath::Max(CVarBrightness.GetValueOnGameThread(), 1.0f);
 	if (!FMath::IsNearlyEqual(AppliedBrightness, Brightness))
 	{
