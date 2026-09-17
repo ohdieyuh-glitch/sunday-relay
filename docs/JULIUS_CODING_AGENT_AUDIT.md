@@ -315,6 +315,18 @@ at all: they simply appeared inside the next attempt's diff.
    refuses unless the workspace is still exactly the tree that attempt left.
    There is no broad reset anywhere on the path.
 
-**Not in PR 6:** the attempt ceiling (still the founder's decision), and whether
-the executor's real per-effect cost fits the raised snapshot bounds
-(LIVE VALIDATION REQUIRED).
+**Found on the way — the event store's idempotency claim does not hold on
+PostgreSQL.** `JuliusEventPostgresRepository.append` returns `recorded: false`
+when an event id already exists AND the stored payload equals the one it built.
+It compares `JSON.stringify` of both, and `jsonb` does not preserve key order,
+so the comparison never matches and a second append under an existing id is
+always refused with `julius_event_id_conflict` — the in-memory store takes the
+idempotent path, PostgreSQL does not. Attempt records are safe either way (the
+first row stands, which PR 6's real-PostgreSQL proof asserts), but a replay that
+re-mints a deterministic event id would raise rather than no-op. Not fixed here:
+it is the event store's own contract, older than this boundary, and it belongs
+with the store conformance suite that should have caught the divergence.
+
+**Not in PR 6:** the attempt ceiling (still the founder's decision), the event
+store idempotency divergence above, and whether the executor's real per-effect
+cost fits the raised snapshot bounds (LIVE VALIDATION REQUIRED).
