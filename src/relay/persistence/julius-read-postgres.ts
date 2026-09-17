@@ -212,17 +212,6 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
       ? { contractId: facts.contractId, taskId: facts.contractTaskId, contractRevision: facts.contractRevision, bindingDigest: facts.bindingDigest }
       : null;
   }
-
-  async reviewCompletedFor(taskId: string, projectId: string): Promise<boolean> {
-    const result = await this.pool.query(
-      `SELECT 1 FROM relay_wonderland.julius_tasks t
-         JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id
-        WHERE t.parent_task_id=$1 AND r.project_id=$2
-          AND t.role='INDEPENDENT_REVIEWER' AND t.state='SUCCEEDED' LIMIT 1`,
-      [taskId, projectId],
-    );
-    return result.rowCount === 1;
-  }
 }
 
 /**

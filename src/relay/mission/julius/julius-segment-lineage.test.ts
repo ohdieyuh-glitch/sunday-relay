@@ -4,7 +4,7 @@ import { effectivelyAcceptedTaskIds, isJuliusRepairOf, juliusWorkUnitRootOf, rep
 import { canStillBeAccepted } from './julius-release-runtime';
 import {
   JULIUS_BARRIER_ROUTES, isJuliusSegmentOf, juliusSegmentSubjectTaskId, juliusSegmentTaskId,
-  juliusYieldContinuationOf, nextSegmentNumber, routeIsBarrier, sanitizeJuliusSegmentState, segmentChildrenOf, segmentNumberOf,
+  juliusReviewConclusionOf, juliusYieldContinuationOf, nextSegmentNumber, routeIsBarrier, sanitizeJuliusSegmentState, segmentChildrenOf, segmentNumberOf,
 } from './julius-segment-lineage';
 import type { JuliusRecordedDecision, JuliusTask } from './julius-runtime';
 import type { JuliusCheckpointRouting } from './julius-continuous-lifecycle';
@@ -263,5 +263,34 @@ describe('repair rounds are counted across the whole unit of work, through its p
   it('an impostor repair-shaped row under another parent does not spend this unit\'s rounds', () => {
     const impostor = task({ taskId: 'repair:build-1:1:task', parentTaskId: 'build-9', taskType: 'repair:build' });
     expect(repairRoundsBefore(SUBJECT, [SUBJECT, impostor])).toBe(0);
+  });
+});
+
+describe('a review concludes only through its research', () => {
+  const PLAN = task({ taskId: 'plan-1', role: 'PROMPT_ARCHITECT', taskType: 'plan', state: 'SUCCEEDED' });
+  const review = (state: string) => task({ taskId: 'plan-1:review', parentTaskId: 'plan-1', role: 'INDEPENDENT_REVIEWER', taskType: 'review:plan', state: state as never });
+  const research = (n: number, state: string) => task({
+    taskId: juliusSegmentTaskId('plan-1:review', n), parentTaskId: 'plan-1:review', role: 'INDEPENDENT_REVIEWER', taskType: 'review:plan', state: state as never,
+  });
+  const read = (tasks: readonly JuliusTask[]) => juliusReviewConclusionOf(PLAN, tasks);
+
+  it('names each state from the task rows alone', () => {
+    expect(read([PLAN]).conclusion).toBe('NONE');
+    expect(read([PLAN, review('ACTIVE')]).conclusion).toBe('PENDING');
+    expect(read([PLAN, review('SUCCEEDED')])).toEqual({ conclusion: 'CONCLUDED', reviewTaskId: 'plan-1:review', failedSegmentTaskId: null });
+    expect(read([PLAN, review('FAILED')]).conclusion).toBe('FAILED');
+    expect(read([PLAN, review('SUCCEEDED'), research(2, 'BLOCKED')]).conclusion, 'waiting on its research').toBe('PENDING');
+    expect(read([PLAN, review('SUCCEEDED'), research(2, 'SUCCEEDED')]).conclusion, 'researched and concluded').toBe('CONCLUDED');
+    expect(read([PLAN, review('SUCCEEDED'), research(2, 'FAILED')])).toEqual({
+      conclusion: 'RESEARCH_FAILED', reviewTaskId: 'plan-1:review', failedSegmentTaskId: 'segment:plan-1:review:2:task',
+    });
+    expect(read([PLAN, review('SUCCEEDED'), research(2, 'SUCCEEDED'), research(3, 'CANCELLED')]).conclusion, 'the second pause failed').toBe('RESEARCH_FAILED');
+  });
+
+  it('a failed research continuation makes the work unacceptable, so nothing waits on it', () => {
+    const BUILD = task({ taskId: 'build-1', dependencyIds: ['plan-1'], state: 'BLOCKED' });
+    expect(canStillBeAccepted([PLAN, BUILD, review('SUCCEEDED'), research(2, 'FAILED')], [])('plan-1')).toBe(false);
+    expect(canStillBeAccepted([PLAN, BUILD, review('SUCCEEDED'), research(2, 'BLOCKED')], [])('plan-1')).toBe(true);
+    expect(canStillBeAccepted([PLAN, BUILD, review('SUCCEEDED')], [])('plan-1')).toBe(true);
   });
 });

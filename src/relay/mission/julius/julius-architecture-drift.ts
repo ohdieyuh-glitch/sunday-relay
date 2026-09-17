@@ -109,8 +109,20 @@ export const juliusArchitectureTriggerId = (
   subjectTaskId: string | null,
 ): string => `arch:${trigger}:r${String(revision)}:${subjectTaskId ?? 'run'}`;
 
-/** The architect task Julius mints to serve one trigger. */
-export const juliusArchitectureCheckTaskId = (triggerId: string): string => `architecture:${triggerId}:task`;
+/**
+ * THE ARCHITECT TASK JULIUS MINTS TO SERVE ONE TRIGGER — named by the run.
+ *
+ * A trigger id is cause-once WITHIN a run: its ledger is the run's own. A task id
+ * is not: `julius_tasks.task_id` is one key across every run the database has
+ * ever held. Without the run in it, the pre-completion check of every run shared
+ * one id (`architecture:arch:PRE_COMPLETION_CHECK:r1:run:task`), so the second
+ * run in a persistent database could not create its own: the insert found the
+ * first run's row, `served` was recorded false, and the completion gate read that
+ * as "nobody can serve this" and let the run complete unchecked. Reproduced on
+ * main 5c53cb93 with two runs sharing one store.
+ */
+export const juliusArchitectureCheckTaskId = (runId: string, triggerId: string): string =>
+  `architecture:${runId}:${triggerId}:task`;
 
 export interface JuliusArchitectureTriggerCandidate {
   readonly trigger: JuliusArchitectureTrigger;
@@ -528,7 +540,7 @@ export function foldJuliusConsistency(
 
 export type JuliusArchitectureCompletionGate =
   | { readonly ok: true; readonly reasonCode: 'ARCHITECTURE_ALIGNED' | 'ARCHITECTURE_DRIFT_ACCEPTED' | 'NO_ARCHITECTURE_RECORDED' | 'ARCHITECTURE_CHECK_UNROUTABLE' }
-  | { readonly ok: false; readonly reasonCode: 'ARCHITECTURE_CHECK_PENDING' | 'ARCHITECTURE_DRIFT_REQUIRES_REPAIR' | 'ARCHITECTURE_REPLAN_REQUIRED' };
+  | { readonly ok: false; readonly reasonCode: 'ARCHITECTURE_CHECK_PENDING' | 'ARCHITECTURE_CHECK_NOT_CREATED' | 'ARCHITECTURE_DRIFT_REQUIRES_REPAIR' | 'ARCHITECTURE_REPLAN_REQUIRED' };
 
 /**
  * MAY THIS RUN COMPLETE, AS FAR AS THE ARCHITECTURE IS CONCERNED?
@@ -561,11 +573,19 @@ export function juliusArchitectureCompletionGate(input: {
      * never opted into it, which is exactly the failure `GUIDANCE_UNROUTABLE`
      * exists to avoid.
      */
-    const unroutable = input.entries.some((entry) => entry.type === 'architecture.trigger.raised'
+    const unserved = input.entries.filter((entry) => entry.type === 'architecture.trigger.raised'
       && text(entry.facts.trigger) === 'PRE_COMPLETION_CHECK'
       && number(entry.facts.revision) === state.revision
       && entry.facts.served === false);
-    if (unroutable) return { ok: true, reasonCode: 'ARCHITECTURE_CHECK_UNROUTABLE' };
+    /*
+     * UNROUTABLE IS A ROUTING FACT, AND ONLY A ROUTING FACT PASSES THE GATE.
+     * A check nobody could have served is not waited for. A check that WAS
+     * routable and was simply not created — its task id taken, a storage
+     * refusal — is not a reason to believe the design was checked, so it holds
+     * the run and says which of the two it was.
+     */
+    if (unserved.some((entry) => entry.facts.unroutable === true)) return { ok: true, reasonCode: 'ARCHITECTURE_CHECK_UNROUTABLE' };
+    if (unserved.length > 0) return { ok: false, reasonCode: 'ARCHITECTURE_CHECK_NOT_CREATED' };
     return { ok: false, reasonCode: 'ARCHITECTURE_CHECK_PENDING' };
   }
   switch (assessed.assessment) {

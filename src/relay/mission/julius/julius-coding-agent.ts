@@ -1,3 +1,4 @@
+import { isJuliusArchitectureEntryId } from './julius-architecture-state';
 import type { JuliusContextSnapshot } from './julius-context-snapshot';
 import { guardJuliusPeerResponse } from './julius-peer-channel';
 import type { JuliusDispatchAllocation, JuliusErrorCode } from './julius-router';
@@ -207,7 +208,7 @@ export interface JuliusCodingAgentSections {
 }
 
 const ACCEPTED_GUIDANCE_PREFIX = 'brain:guidance-answer:';
-const ARCHITECTURE_PREFIX = 'brain:architecture:r';
+
 const CONTINUATION_PREFIXES: readonly string[] = ['brain:segment-resume:', 'brain:research-answer:', 'brain:research-served:'];
 
 export function juliusCodingAgentSections(snapshot: JuliusContextSnapshot): JuliusCodingAgentSections {
@@ -221,7 +222,7 @@ export function juliusCodingAgentSections(snapshot: JuliusContextSnapshot): Juli
     const entryId = snapshot.packet.sourceEntryIds[index] ?? '';
     const item = Object.freeze({ entryId, kind: block.kind, text: block.text });
     if (entryId.startsWith(ACCEPTED_GUIDANCE_PREFIX)) acceptedGuidance.push(item);
-    else if (entryId.startsWith(ARCHITECTURE_PREFIX)) architecture.push(item);
+    else if (isJuliusArchitectureEntryId(entryId)) architecture.push(item);
     else if (block.kind === 'FINDING') findings.push(item);
     else if (CONTINUATION_PREFIXES.some((prefix) => entryId.startsWith(prefix))) continuation.push(item);
     else missionContext.push(item);

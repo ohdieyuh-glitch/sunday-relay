@@ -450,5 +450,19 @@ export function juliusArchitectureMatches(a: JuliusArchitectureState, b: JuliusA
   return shape(a) === shape(b);
 }
 
-/** The entry a worker reads the accepted architecture from. */
-export const juliusArchitectureEntryId = (revision: number): string => `brain:architecture:r${String(revision)}`;
+/**
+ * THE ENTRY A WORKER READS THE ACCEPTED ARCHITECTURE FROM — named by the run.
+ *
+ * `julius_brain_entries.entry_id` is one key across every run, and a revision
+ * number is only unique within one. `brain:architecture:r1` was therefore the id
+ * of EVERY run's first design: in a persistent database the second run's append
+ * found the first run's row and wrote nothing, so its workers were never shown
+ * the architecture its ledger said was in force.
+ */
+export const juliusArchitectureEntryId = (runId: string, revision: number): string =>
+  `brain:architecture:${runId}:r${String(revision)}`;
+
+/** Whether a brain entry is an accepted architecture revision (never a proposal). */
+export const isJuliusArchitectureEntryId = (entryId: string): boolean =>
+  entryId.startsWith('brain:architecture:') && !entryId.startsWith('brain:architecture:proposal:')
+  && /:r[1-9]\d*$/u.test(entryId);

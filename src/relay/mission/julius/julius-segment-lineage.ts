@@ -317,3 +317,74 @@ export const JULIUS_BARRIER_ROUTES: readonly JuliusCheckpointRoute[] = Object.fr
 
 export const routeIsBarrier = (route: string): boolean =>
   (JULIUS_BARRIER_ROUTES as readonly string[]).includes(route);
+
+/* ------------------------------------------------------ review conclusion */
+
+/**
+ * HAS THIS WORK BEEN REVIEWED — AND IF NOT, WHY NOT.
+ *
+ * A review is concluded when a reviewer's dispatch about this work ended without
+ * yielding, or when every research continuation it yielded to carried it through
+ * to one that did. A review that paused to read something and whose continuation
+ * then FAILED has NOT concluded: what it said before it looked is on the record
+ * and was deliberately never applied, and nothing after it produced a verdict.
+ *
+ * Counting "any reviewer child that succeeded" read that paused dispatch as a
+ * finished review. Reproduced on main 5c53cb93: the reviewer approved-and-asked,
+ * its research continuation failed, and the plan was ACCEPTED with no verdict
+ * applied — the contract locked, the Coding Agent dispatched and paid — before
+ * the run failed on the continuation anyway.
+ *
+ * In precedence order, naming what most decides the work:
+ *   CONCLUDED        a review of it ended, through its research if it had any
+ *   PENDING          a review of it is still running or waiting on research
+ *   RESEARCH_FAILED  a review of it paused for research and the research failed
+ *   FAILED           a review of it failed outright
+ *   NONE             no review of it exists
+ */
+export const JULIUS_REVIEW_CONCLUSIONS = ['CONCLUDED', 'PENDING', 'RESEARCH_FAILED', 'FAILED', 'NONE'] as const;
+export type JuliusReviewConclusion = (typeof JULIUS_REVIEW_CONCLUSIONS)[number];
+
+export interface JuliusReviewConclusionReading {
+  readonly conclusion: JuliusReviewConclusion;
+  /** The review this reading is about: the concluded one, or the one that did not conclude. */
+  readonly reviewTaskId: string | null;
+  /** For RESEARCH_FAILED, the continuation that failed. */
+  readonly failedSegmentTaskId: string | null;
+}
+
+const LIVE_REVIEW_STATES: ReadonlySet<string> = new Set(['RUNNABLE', 'ACTIVE', 'BLOCKED']);
+
+export function juliusReviewConclusionOf(work: Pick<JuliusTask, 'taskId'>, tasks: readonly JuliusTask[]): JuliusReviewConclusionReading {
+  const readings: JuliusReviewConclusionReading[] = [];
+  for (const head of tasks) {
+    if (head.role !== 'INDEPENDENT_REVIEWER' || head.parentTaskId !== work.taskId) continue;
+    let current: JuliusTask = head;
+    const seen = new Set<string>();
+    let reading: JuliusReviewConclusionReading | null = null;
+    while (reading === null) {
+      if (seen.has(current.taskId)) {
+        reading = { conclusion: 'FAILED', reviewTaskId: head.taskId, failedSegmentTaskId: current.taskId };
+        break;
+      }
+      seen.add(current.taskId);
+      if (current.state === 'SUCCEEDED') {
+        const next = juliusYieldContinuationOf(current, tasks);
+        if (next === null) reading = { conclusion: 'CONCLUDED', reviewTaskId: head.taskId, failedSegmentTaskId: null };
+        else current = next;
+      } else if (LIVE_REVIEW_STATES.has(current.state)) {
+        reading = { conclusion: 'PENDING', reviewTaskId: head.taskId, failedSegmentTaskId: null };
+      } else if (current.taskId === head.taskId) {
+        reading = { conclusion: 'FAILED', reviewTaskId: head.taskId, failedSegmentTaskId: null };
+      } else {
+        reading = { conclusion: 'RESEARCH_FAILED', reviewTaskId: head.taskId, failedSegmentTaskId: current.taskId };
+      }
+    }
+    readings.push(reading);
+  }
+  for (const conclusion of JULIUS_REVIEW_CONCLUSIONS) {
+    const found = readings.find((reading) => reading.conclusion === conclusion);
+    if (found !== undefined) return Object.freeze(found);
+  }
+  return Object.freeze({ conclusion: 'NONE', reviewTaskId: null, failedSegmentTaskId: null });
+}

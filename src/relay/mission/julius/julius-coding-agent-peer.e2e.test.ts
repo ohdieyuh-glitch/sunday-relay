@@ -154,10 +154,10 @@ describe('P27 — a coder that sees the design fail under real code says so, and
     const raised = factsOf(harness, 'architecture.trigger.raised');
     expect(raised.find((facts) => facts.trigger === 'CONTRADICTING_EVIDENCE')).toMatchObject({
       triggerId, subjectTaskId: 'build-1', reasonCode: 'coder_observed_assumption_invalidated', served: true,
-      servedByTaskId: juliusArchitectureCheckTaskId(triggerId),
+      servedByTaskId: juliusArchitectureCheckTaskId('run-1', triggerId),
     });
     // Julius, not the coder, minted the consultation — and it is the architect's.
-    const check = harness.store.taskRow(juliusArchitectureCheckTaskId(triggerId))!;
+    const check = harness.store.taskRow(juliusArchitectureCheckTaskId('run-1', triggerId))!;
     expect(check).toMatchObject({ role: 'PROMPT_ARCHITECT', taskType: 'architecture', parentTaskId: 'build-1', state: 'SUCCEEDED' });
     // Consulted before the end of the run: the mid-mission check was assessed before the completion check was raised.
     const log = rows(harness);

@@ -267,7 +267,6 @@ describe('a run id is not an authorization', () => {
       expect(await read).toEqual([]);
     }
     expect(await harness.store.repairRoundsFor('task-1', 'prj-intruder')).toBe(0);
-    expect(await harness.store.reviewCompletedFor('task-1', 'prj-intruder')).toBe(false);
   });
 
   it('is never claimed, executed, or written to', async () => {

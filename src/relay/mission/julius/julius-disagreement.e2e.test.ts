@@ -28,7 +28,8 @@ const capabilityFor = (item: { role: string }) =>
 
 const PASSED_REVIEW = [{ type: 'REVIEW_FINDING', status: 'PASSED', safeSummary: 'No blocking findings.' }];
 const PLAN_EVIDENCE = [{ type: 'ARTIFACT', status: 'PASSED', safeSummary: 'Plan written.' }];
-const PASS: Step = { kind: 'succeed', evidence: PASSED_REVIEW };
+/** A reviewer that answers, by id, every finding its packet shows it — silence is not resolution. */
+const PASS: Step = { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' };
 const PLAN: Step = { kind: 'succeed', evidence: PLAN_EVIDENCE };
 const verdict = (value: Record<string, unknown>): Step => ({ kind: 'succeed', evidence: PASSED_REVIEW, reviewVerdict: value });
 const MATERIAL = verdict({ verdict: 'CHALLENGE', category: 'contract_drift', target: 'plan', claim: 'The plan writes outside the permitted paths.' });

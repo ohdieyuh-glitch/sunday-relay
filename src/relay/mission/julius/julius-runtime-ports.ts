@@ -327,8 +327,6 @@ export interface JuliusRuntimeReader {
   brainEntriesForRun(runId: string, projectId: string): Promise<readonly JuliusBrainEntry[]>;
   /** How many repair rounds this task has already had. Zero, not null. */
   repairRoundsFor(taskId: string, projectId: string): Promise<number>;
-  /** Whether an INDEPENDENT_REVIEWER task for this task has already succeeded. */
-  reviewCompletedFor(taskId: string, projectId: string): Promise<boolean>;
   /**
    * How many of this run's tasks are ACTIVE right now, across every worker.
    *

@@ -112,7 +112,7 @@ One claimed task all the way through: policy, budget reservation, context compil
 | `src/relay/mission/julius/julius-contract-disposition.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-disagreement.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-execution-coordinator.ts` | traced | `src/relay/mission/julius/index.ts` |
-| `src/relay/mission/julius/julius-peer-channel.ts` | traced | `src/relay/mission/julius/julius-coding-agent.ts` |
+| `src/relay/mission/julius/julius-peer-channel.ts` | traced | `src/relay/mission/julius/julius-architecture-state.ts` |
 | `src/relay/mission/julius/julius-peer-runtime.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-release-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-research-protocol.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
@@ -156,7 +156,7 @@ The planning role: the provider-neutral plan contract and its validation gate, t
 | `src/relay/connectors/gpt-architect/plan-schema.ts` | traced | `src/relay/connectors/gpt-architect/index.ts` |
 | `src/relay/connectors/gpt-architect/rebuttal-schema.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `src/relay/mission/julius/julius-architecture-drift.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
-| `src/relay/mission/julius/julius-architecture-state.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
+| `src/relay/mission/julius/julius-architecture-state.ts` | traced | `src/relay/mission/julius/julius-coding-agent.ts` |
 | `src/relay/mission/prompt-architect/prompt-architect-contracts.ts` | traced | `src/relay/mission/prompt-architect/prompt-architect-plan.ts` |
 | `src/relay/mission/prompt-architect/prompt-architect-plan.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 
