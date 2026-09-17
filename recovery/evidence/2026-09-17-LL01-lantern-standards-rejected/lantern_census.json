@@ -1,0 +1,2522 @@
+[
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_202",
+  "label": "LMLanternHamlets_Lantern0",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   -14363.1,
+   9905.8,
+   0.0,
+   0.0,
+   145.85,
+   -0.0,
+   0.666,
+   0.666,
+   0.666
+  ],
+  "bmin": [
+   -14828,
+   9705,
+   0
+  ],
+  "bmax": [
+   -14173,
+   10273,
+   1439
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_203",
+  "label": "LMLanternHamlets_LanternGlass0",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -14363.1,
+   9905.8,
+   0.0,
+   0.0,
+   145.85,
+   -0.0,
+   0.666,
+   0.666,
+   0.666
+  ],
+  "bmin": [
+   -14792,
+   9910,
+   742
+  ],
+  "bmax": [
+   -14462,
+   10240,
+   1128
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_204",
+  "label": "LMLanternHamlets_Lantern1",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   -14974.9,
+   9055.6,
+   0.0,
+   0.0,
+   -125.63,
+   0.0,
+   0.6017,
+   0.6017,
+   0.6017
+  ],
+  "bmin": [
+   -15314,
+   8639,
+   0
+  ],
+  "bmax": [
+   -14793,
+   9228,
+   1300
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_205",
+  "label": "LMLanternHamlets_LanternGlass1",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -14974.9,
+   9055.6,
+   0.0,
+   0.0,
+   -125.63,
+   0.0,
+   0.6017,
+   0.6017,
+   0.6017
+  ],
+  "bmin": [
+   -15283,
+   8672,
+   670
+  ],
+  "bmax": [
+   -14984,
+   8971,
+   1019
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_206",
+  "label": "LMLanternHamlets_Lantern2",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   -14916.5,
+   9225.9,
+   0.0,
+   0.0,
+   54.74,
+   -0.0,
+   0.6126,
+   0.6126,
+   0.6126
+  ],
+  "bmin": [
+   -15102,
+   9051,
+   0
+  ],
+  "bmax": [
+   -14573,
+   9651,
+   1323
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_207",
+  "label": "LMLanternHamlets_LanternGlass2",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -14916.5,
+   9225.9,
+   0.0,
+   0.0,
+   54.74,
+   -0.0,
+   0.6126,
+   0.6126,
+   0.6126
+  ],
+  "bmin": [
+   -14908,
+   9313,
+   682
+  ],
+  "bmax": [
+   -14604,
+   9617,
+   1038
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_208",
+  "label": "LMLanternHamlets_Lantern3",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   -15628.5,
+   8414.1,
+   0.0,
+   0.0,
+   144.15,
+   -0.0,
+   0.5505,
+   0.5505,
+   0.5505
+  ],
+  "bmin": [
+   -16009,
+   8248,
+   0
+  ],
+  "bmax": [
+   -15471,
+   8725,
+   1189
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_209",
+  "label": "LMLanternHamlets_LanternGlass3",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -15628.5,
+   8414.1,
+   0.0,
+   0.0,
+   144.15,
+   -0.0,
+   0.5505,
+   0.5505,
+   0.5505
+  ],
+  "bmin": [
+   -15979,
+   8423,
+   613
+  ],
+  "bmax": [
+   -15705,
+   8697,
+   933
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_210",
+  "label": "LMLanternHamlets_Lantern4",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   -16125.0,
+   8521.4,
+   0.0,
+   0.0,
+   -38.76,
+   0.0,
+   0.5579,
+   0.5579,
+   0.5579
+  ],
+  "bmin": [
+   -16286,
+   8194,
+   0
+  ],
+  "bmax": [
+   -15746,
+   8691,
+   1205
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_211",
+  "label": "LMLanternHamlets_LanternGlass4",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -16125.0,
+   8521.4,
+   0.0,
+   0.0,
+   -38.76,
+   0.0,
+   0.5579,
+   0.5579,
+   0.5579
+  ],
+  "bmin": [
+   -16056,
+   8223,
+   621
+  ],
+  "bmax": [
+   -15777,
+   8502,
+   945
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_212",
+  "label": "LMLanternHamlets_Lantern5",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   -16098.9,
+   7795.7,
+   0.0,
+   0.0,
+   154.15,
+   -0.0,
+   0.6708,
+   0.6708,
+   0.6708
+  ],
+  "bmin": [
+   -16582,
+   7601,
+   0
+  ],
+  "bmax": [
+   -15914,
+   8117,
+   1449
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_213",
+  "label": "LMLanternHamlets_LanternGlass5",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -16098.9,
+   7795.7,
+   0.0,
+   0.0,
+   154.15,
+   -0.0,
+   0.6708,
+   0.6708,
+   0.6708
+  ],
+  "bmin": [
+   -16546,
+   7766,
+   747
+  ],
+  "bmax": [
+   -16226,
+   8086,
+   1136
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_214",
+  "label": "LMLanternHamlets_Lantern6",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   -16889.1,
+   7796.0,
+   0.0,
+   0.0,
+   171.81,
+   -0.0,
+   0.5865,
+   0.5865,
+   0.5865
+  ],
+  "bmin": [
+   -17310,
+   7651,
+   0
+  ],
+  "bmax": [
+   -16750,
+   7968,
+   1267
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_215",
+  "label": "LMLanternHamlets_LanternGlass6",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -16889.1,
+   7796.0,
+   0.0,
+   0.0,
+   171.81,
+   -0.0,
+   0.5865,
+   0.5865,
+   0.5865
+  ],
+  "bmin": [
+   -17281,
+   7710,
+   653
+  ],
+  "bmax": [
+   -17044,
+   7946,
+   993
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_216",
+  "label": "LMLanternHamlets_Lantern7",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   -17263.4,
+   7195.5,
+   0.0,
+   0.0,
+   38.51,
+   -0.0,
+   0.6245,
+   0.6245,
+   0.6245
+  ],
+  "bmin": [
+   -17453,
+   7017,
+   0
+  ],
+  "bmax": [
+   -16848,
+   7573,
+   1349
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_217",
+  "label": "LMLanternHamlets_LanternGlass7",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -17263.4,
+   7195.5,
+   0.0,
+   0.0,
+   38.51,
+   -0.0,
+   0.6245,
+   0.6245,
+   0.6245
+  ],
+  "bmin": [
+   -17195,
+   7228,
+   696
+  ],
+  "bmax": [
+   -16882,
+   7540,
+   1058
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_218",
+  "label": "LMLanternHamlets_Lantern8",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   -17299.5,
+   7055.6,
+   0.0,
+   0.0,
+   135.23,
+   -0.0,
+   0.565,
+   0.565,
+   0.565
+  ],
+  "bmin": [
+   -17665,
+   6883,
+   0
+  ],
+  "bmax": [
+   -17136,
+   7410,
+   1221
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_219",
+  "label": "LMLanternHamlets_LanternGlass8",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -17299.5,
+   7055.6,
+   0.0,
+   0.0,
+   135.23,
+   -0.0,
+   0.565,
+   0.565,
+   0.565
+  ],
+  "bmin": [
+   -17635,
+   7095,
+   629
+  ],
+  "bmax": [
+   -17350,
+   7380,
+   957
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_220",
+  "label": "LMLanternHamlets_Lantern9",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   -18140.3,
+   6606.8,
+   0.0,
+   0.0,
+   -5.05,
+   0.0,
+   0.6937,
+   0.6937,
+   0.6937
+  ],
+  "bmin": [
+   -18299,
+   6429,
+   0
+  ],
+  "bmax": [
+   -17647,
+   6772,
+   1498
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_221",
+  "label": "LMLanternHamlets_LanternGlass9",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -18140.3,
+   6606.8,
+   0.0,
+   0.0,
+   -5.05,
+   0.0,
+   0.6937,
+   0.6937,
+   0.6937
+  ],
+  "bmin": [
+   -17949,
+   6453,
+   773
+  ],
+  "bmax": [
+   -17681,
+   6720,
+   1175
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_222",
+  "label": "LMLanternHamlets_Lantern10",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   -18394.2,
+   6307.5,
+   0.0,
+   0.0,
+   58.81,
+   -0.0,
+   0.615,
+   0.615,
+   0.615
+  ],
+  "bmin": [
+   -18577,
+   6134,
+   0
+  ],
+  "bmax": [
+   -18070,
+   6743,
+   1328
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_223",
+  "label": "LMLanternHamlets_LanternGlass10",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -18394.2,
+   6307.5,
+   0.0,
+   0.0,
+   58.81,
+   -0.0,
+   0.615,
+   0.615,
+   0.615
+  ],
+  "bmin": [
+   -18401,
+   6408,
+   685
+  ],
+  "bmax": [
+   -18100,
+   6709,
+   1042
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_236",
+  "label": "LMMushroomGrove_Lantern0",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   8713.7,
+   -19579.0,
+   0.0,
+   0.0,
+   145.85,
+   -0.0,
+   0.5371,
+   0.5371,
+   0.5371
+  ],
+  "bmin": [
+   8339,
+   -19741,
+   0
+  ],
+  "bmax": [
+   8867,
+   -19283,
+   1160
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_237",
+  "label": "LMMushroomGrove_LanternGlass0",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassTeal"
+  ],
+  "transform": [
+   8713.7,
+   -19579.0,
+   0.0,
+   0.0,
+   145.85,
+   -0.0,
+   0.5371,
+   0.5371,
+   0.5371
+  ],
+  "bmin": [
+   8368,
+   -19575,
+   598
+  ],
+  "bmax": [
+   8634,
+   -19310,
+   910
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_238",
+  "label": "LMMushroomGrove_Lantern1",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   9018.2,
+   -20042.4,
+   0.0,
+   0.0,
+   -125.63,
+   0.0,
+   0.4852,
+   0.4852,
+   0.4852
+  ],
+  "bmin": [
+   8745,
+   -20378,
+   0
+  ],
+  "bmax": [
+   9165,
+   -19903,
+   1048
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_239",
+  "label": "LMMushroomGrove_LanternGlass1",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassTeal"
+  ],
+  "transform": [
+   9018.2,
+   -20042.4,
+   0.0,
+   0.0,
+   -125.63,
+   0.0,
+   0.4852,
+   0.4852,
+   0.4852
+  ],
+  "bmin": [
+   8770,
+   -20352,
+   541
+  ],
+  "bmax": [
+   9011,
+   -20110,
+   822
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_240",
+  "label": "LMMushroomGrove_Lantern2",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   9992.8,
+   -19485.2,
+   0.0,
+   0.0,
+   54.74,
+   -0.0,
+   0.494,
+   0.494,
+   0.494
+  ],
+  "bmin": [
+   9844,
+   -19627,
+   0
+  ],
+  "bmax": [
+   10270,
+   -19142,
+   1067
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_241",
+  "label": "LMMushroomGrove_LanternGlass2",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassTeal"
+  ],
+  "transform": [
+   9992.8,
+   -19485.2,
+   0.0,
+   0.0,
+   54.74,
+   -0.0,
+   0.494,
+   0.494,
+   0.494
+  ],
+  "bmin": [
+   9999,
+   -19415,
+   550
+  ],
+  "bmax": [
+   10245,
+   -19169,
+   837
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_242",
+  "label": "LMMushroomGrove_Lantern3",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   10197.1,
+   -19910.1,
+   0.0,
+   0.0,
+   144.15,
+   -0.0,
+   0.4439,
+   0.4439,
+   0.4439
+  ],
+  "bmin": [
+   9890,
+   -20044,
+   0
+  ],
+  "bmax": [
+   10324,
+   -19659,
+   959
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_243",
+  "label": "LMMushroomGrove_LanternGlass3",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassTeal"
+  ],
+  "transform": [
+   10197.1,
+   -19910.1,
+   0.0,
+   0.0,
+   144.15,
+   -0.0,
+   0.4439,
+   0.4439,
+   0.4439
+  ],
+  "bmin": [
+   9914,
+   -19903,
+   495
+  ],
+  "bmax": [
+   10135,
+   -19682,
+   752
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_244",
+  "label": "LMMushroomGrove_Lantern4",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   10616.8,
+   -19416.0,
+   0.0,
+   0.0,
+   -38.76,
+   0.0,
+   0.4499,
+   0.4499,
+   0.4499
+  ],
+  "bmin": [
+   10487,
+   -19680,
+   0
+  ],
+  "bmax": [
+   10922,
+   -19279,
+   972
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_245",
+  "label": "LMMushroomGrove_LanternGlass4",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassTeal"
+  ],
+  "transform": [
+   10616.8,
+   -19416.0,
+   0.0,
+   0.0,
+   -38.76,
+   0.0,
+   0.4499,
+   0.4499,
+   0.4499
+  ],
+  "bmin": [
+   10672,
+   -19657,
+   501
+  ],
+  "bmax": [
+   10898,
+   -19431,
+   762
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_246",
+  "label": "LMMushroomGrove_Lantern5",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   11559.2,
+   -19754.8,
+   0.0,
+   0.0,
+   154.15,
+   -0.0,
+   0.541,
+   0.541,
+   0.541
+  ],
+  "bmin": [
+   11169,
+   -19912,
+   0
+  ],
+  "bmax": [
+   11709,
+   -19496,
+   1169
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_247",
+  "label": "LMMushroomGrove_LanternGlass5",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassTeal"
+  ],
+  "transform": [
+   11559.2,
+   -19754.8,
+   0.0,
+   0.0,
+   154.15,
+   -0.0,
+   0.541,
+   0.541,
+   0.541
+  ],
+  "bmin": [
+   11199,
+   -19778,
+   603
+  ],
+  "bmax": [
+   11456,
+   -19521,
+   916
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_248",
+  "label": "LMMushroomGrove_Lantern6",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   11685.2,
+   -19367.7,
+   0.0,
+   0.0,
+   171.81,
+   -0.0,
+   0.4729,
+   0.4729,
+   0.4729
+  ],
+  "bmin": [
+   11346,
+   -19485,
+   0
+  ],
+  "bmax": [
+   11798,
+   -19229,
+   1022
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_249",
+  "label": "LMMushroomGrove_LanternGlass6",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassTeal"
+  ],
+  "transform": [
+   11685.2,
+   -19367.7,
+   0.0,
+   0.0,
+   171.81,
+   -0.0,
+   0.4729,
+   0.4729,
+   0.4729
+  ],
+  "bmin": [
+   11369,
+   -19437,
+   527
+  ],
+  "bmax": [
+   11560,
+   -19246,
+   801
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_250",
+  "label": "LMMushroomGrove_Lantern7",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   12227.1,
+   -19581.3,
+   0.0,
+   0.0,
+   38.51,
+   -0.0,
+   0.5036,
+   0.5036,
+   0.5036
+  ],
+  "bmin": [
+   12075,
+   -19725,
+   0
+  ],
+  "bmax": [
+   12562,
+   -19277,
+   1088
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_251",
+  "label": "LMMushroomGrove_LanternGlass7",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassTeal"
+  ],
+  "transform": [
+   12227.1,
+   -19581.3,
+   0.0,
+   0.0,
+   38.51,
+   -0.0,
+   0.5036,
+   0.5036,
+   0.5036
+  ],
+  "bmin": [
+   12282,
+   -19555,
+   561
+  ],
+  "bmax": [
+   12535,
+   -19303,
+   853
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_252",
+  "label": "LMMushroomGrove_Lantern8",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   13107.2,
+   -19334.4,
+   0.0,
+   0.0,
+   135.23,
+   -0.0,
+   0.4557,
+   0.4557,
+   0.4557
+  ],
+  "bmin": [
+   12812,
+   -19474,
+   0
+  ],
+  "bmax": [
+   13239,
+   -19048,
+   984
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_253",
+  "label": "LMMushroomGrove_LanternGlass8",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassTeal"
+  ],
+  "transform": [
+   13107.2,
+   -19334.4,
+   0.0,
+   0.0,
+   135.23,
+   -0.0,
+   0.4557,
+   0.4557,
+   0.4557
+  ],
+  "bmin": [
+   12837,
+   -19302,
+   508
+  ],
+  "bmax": [
+   13066,
+   -19073,
+   772
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_254",
+  "label": "LMMushroomGrove_Lantern9",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   13182.7,
+   -19396.3,
+   0.0,
+   0.0,
+   -5.05,
+   0.0,
+   0.5594,
+   0.5594,
+   0.5594
+  ],
+  "bmin": [
+   13055,
+   -19540,
+   0
+  ],
+  "bmax": [
+   13580,
+   -19263,
+   1208
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_255",
+  "label": "LMMushroomGrove_LanternGlass9",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassTeal"
+  ],
+  "transform": [
+   13182.7,
+   -19396.3,
+   0.0,
+   0.0,
+   -5.05,
+   0.0,
+   0.5594,
+   0.5594,
+   0.5594
+  ],
+  "bmin": [
+   13337,
+   -19521,
+   623
+  ],
+  "bmax": [
+   13553,
+   -19305,
+   948
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_256",
+  "label": "LMMushroomGrove_Lantern10",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   13845.0,
+   -19308.8,
+   0.0,
+   0.0,
+   58.81,
+   -0.0,
+   0.496,
+   0.496,
+   0.496
+  ],
+  "bmin": [
+   13697,
+   -19449,
+   0
+  ],
+  "bmax": [
+   14106,
+   -18958,
+   1071
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_257",
+  "label": "LMMushroomGrove_LanternGlass10",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassTeal"
+  ],
+  "transform": [
+   13845.0,
+   -19308.8,
+   0.0,
+   0.0,
+   58.81,
+   -0.0,
+   0.496,
+   0.496,
+   0.496
+  ],
+  "bmin": [
+   13839,
+   -19228,
+   553
+  ],
+  "bmax": [
+   14082,
+   -18985,
+   840
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_282",
+  "label": "DPRoyalGardens_Swag",
+  "mesh": "SM_lantern_swag",
+  "materials": [
+   "MI_V2_Gold"
+  ],
+  "transform": [
+   7134.8,
+   10986.6,
+   0.0,
+   0.0,
+   -33.0,
+   0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   5697,
+   9990,
+   0
+  ],
+  "bmax": [
+   8573,
+   11983,
+   1250
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_283",
+  "label": "DPRoyalGardens_SwagGlass",
+  "mesh": "SM_lantern_swag_glass",
+  "materials": [
+   "MI_V2_GlassRose"
+  ],
+  "transform": [
+   7134.8,
+   10986.6,
+   0.0,
+   0.0,
+   -33.0,
+   0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   6034,
+   10239,
+   270
+  ],
+  "bmax": [
+   8235,
+   11734,
+   713
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_284",
+  "label": "DPRoyalGardens_Swag",
+  "mesh": "SM_lantern_swag",
+  "materials": [
+   "MI_V2_Gold"
+  ],
+  "transform": [
+   6854.8,
+   8902.9,
+   0.0,
+   0.0,
+   -33.0,
+   0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   5417,
+   7906,
+   0
+  ],
+  "bmax": [
+   8293,
+   9900,
+   1250
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_285",
+  "label": "DPRoyalGardens_SwagGlass",
+  "mesh": "SM_lantern_swag_glass",
+  "materials": [
+   "MI_V2_GlassRose"
+  ],
+  "transform": [
+   6854.8,
+   8902.9,
+   0.0,
+   0.0,
+   -33.0,
+   0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   5754,
+   8155,
+   270
+  ],
+  "bmax": [
+   7955,
+   9651,
+   713
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_291",
+  "label": "DPClockQuarter_Swag",
+  "mesh": "SM_lantern_swag",
+  "materials": [
+   "MI_V2_GoldAged"
+  ],
+  "transform": [
+   21119.3,
+   -1847.7,
+   0.0,
+   0.0,
+   -95.0,
+   0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   20848,
+   -3483,
+   0
+  ],
+  "bmax": [
+   21391,
+   -213,
+   1250
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_292",
+  "label": "DPClockQuarter_SwagGlass",
+  "mesh": "SM_lantern_swag_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   21119.3,
+   -1847.7,
+   0.0,
+   0.0,
+   -95.0,
+   0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   20941,
+   -3117,
+   270
+  ],
+  "bmax": [
+   21298,
+   -579,
+   713
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_293",
+  "label": "DPClockQuarter_Swag",
+  "mesh": "SM_lantern_swag",
+  "materials": [
+   "MI_V2_GoldAged"
+  ],
+  "transform": [
+   9285.8,
+   -1715.8,
+   0.0,
+   0.0,
+   -95.0,
+   0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   9014,
+   -3351,
+   0
+  ],
+  "bmax": [
+   9557,
+   -81,
+   1250
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_294",
+  "label": "DPClockQuarter_SwagGlass",
+  "mesh": "SM_lantern_swag_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   9285.8,
+   -1715.8,
+   0.0,
+   0.0,
+   -95.0,
+   0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   9108,
+   -2985,
+   270
+  ],
+  "bmax": [
+   9464,
+   -447,
+   713
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_305",
+  "label": "DPTeaTerraces_Swag",
+  "mesh": "SM_lantern_swag",
+  "materials": [
+   "MI_V2_Ceramic"
+  ],
+  "transform": [
+   -16894.4,
+   -9754.0,
+   0.0,
+   0.0,
+   120.0,
+   -0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   -17822,
+   -11231,
+   0
+  ],
+  "bmax": [
+   -15967,
+   -8277,
+   1250
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_306",
+  "label": "DPTeaTerraces_SwagGlass",
+  "mesh": "SM_lantern_swag_glass",
+  "materials": [
+   "MI_V2_GlassRose"
+  ],
+  "transform": [
+   -16894.4,
+   -9754.0,
+   0.0,
+   0.0,
+   120.0,
+   -0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   -17587,
+   -10886,
+   270
+  ],
+  "bmax": [
+   -16202,
+   -8622,
+   713
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_307",
+  "label": "DPTeaTerraces_Swag",
+  "mesh": "SM_lantern_swag",
+  "materials": [
+   "MI_V2_Ceramic"
+  ],
+  "transform": [
+   -11127.7,
+   -9542.3,
+   0.0,
+   0.0,
+   120.0,
+   -0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   -12055,
+   -11019,
+   0
+  ],
+  "bmax": [
+   -10200,
+   -8066,
+   1250
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_308",
+  "label": "DPTeaTerraces_SwagGlass",
+  "mesh": "SM_lantern_swag_glass",
+  "materials": [
+   "MI_V2_GlassRose"
+  ],
+  "transform": [
+   -11127.7,
+   -9542.3,
+   0.0,
+   0.0,
+   120.0,
+   -0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   -11821,
+   -10674,
+   270
+  ],
+  "bmax": [
+   -10435,
+   -8410,
+   713
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_322",
+  "label": "DPMushroomGrove_Swag",
+  "mesh": "SM_lantern_swag",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   9700.0,
+   -16800.9,
+   0.0,
+   0.0,
+   -150.0,
+   0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   8223,
+   -17728,
+   0
+  ],
+  "bmax": [
+   11177,
+   -15873,
+   1250
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_323",
+  "label": "DPMushroomGrove_SwagGlass",
+  "mesh": "SM_lantern_swag_glass",
+  "materials": [
+   "MI_V2_GlassTeal"
+  ],
+  "transform": [
+   9700.0,
+   -16800.9,
+   0.0,
+   0.0,
+   -150.0,
+   0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   8568,
+   -17494,
+   270
+  ],
+  "bmax": [
+   10832,
+   -16108,
+   713
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_324",
+  "label": "DPMushroomGrove_Swag",
+  "mesh": "SM_lantern_swag",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   7870.6,
+   -15432.2,
+   0.0,
+   0.0,
+   -150.0,
+   0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   6394,
+   -16360,
+   0
+  ],
+  "bmax": [
+   9347,
+   -14505,
+   1250
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_325",
+  "label": "DPMushroomGrove_SwagGlass",
+  "mesh": "SM_lantern_swag_glass",
+  "materials": [
+   "MI_V2_GlassTeal"
+  ],
+  "transform": [
+   7870.6,
+   -15432.2,
+   0.0,
+   0.0,
+   -150.0,
+   0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   6738,
+   -16125,
+   270
+  ],
+  "bmax": [
+   9003,
+   -14739,
+   713
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_331",
+  "label": "DPLanternHamlets_Swag",
+  "mesh": "SM_lantern_swag",
+  "materials": [
+   "MI_V2_GoldAged"
+  ],
+  "transform": [
+   -18684.1,
+   9112.9,
+   0.0,
+   0.0,
+   64.0,
+   -0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   -19516,
+   7591,
+   0
+  ],
+  "bmax": [
+   -17853,
+   10635,
+   1250
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_332",
+  "label": "DPLanternHamlets_SwagGlass",
+  "mesh": "SM_lantern_swag_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -18684.1,
+   9112.9,
+   0.0,
+   0.0,
+   64.0,
+   -0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   -19301,
+   7943,
+   270
+  ],
+  "bmax": [
+   -18067,
+   10282,
+   713
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_333",
+  "label": "DPLanternHamlets_Swag",
+  "mesh": "SM_lantern_swag",
+  "materials": [
+   "MI_V2_GoldAged"
+  ],
+  "transform": [
+   -14689.7,
+   3159.3,
+   0.0,
+   0.0,
+   64.0,
+   -0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   -15521,
+   1637,
+   0
+  ],
+  "bmax": [
+   -13858,
+   4681,
+   1250
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_334",
+  "label": "DPLanternHamlets_SwagGlass",
+  "mesh": "SM_lantern_swag_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -14689.7,
+   3159.3,
+   0.0,
+   0.0,
+   64.0,
+   -0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   -15307,
+   1990,
+   270
+  ],
+  "bmax": [
+   -14073,
+   4329,
+   713
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_335",
+  "label": "DPLanternHamlets_Swag",
+  "mesh": "SM_lantern_swag",
+  "materials": [
+   "MI_V2_GoldAged"
+  ],
+  "transform": [
+   -6590.1,
+   7219.6,
+   0.0,
+   0.0,
+   64.0,
+   -0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   -7421,
+   5698,
+   0
+  ],
+  "bmax": [
+   -5759,
+   8742,
+   1250
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_336",
+  "label": "DPLanternHamlets_SwagGlass",
+  "mesh": "SM_lantern_swag_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -6590.1,
+   7219.6,
+   0.0,
+   0.0,
+   64.0,
+   -0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   -7207,
+   6050,
+   270
+  ],
+  "bmax": [
+   -5973,
+   8389,
+   713
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_346",
+  "label": "DPNorthReach_Swag",
+  "mesh": "SM_lantern_swag",
+  "materials": [
+   "MI_V2_GoldAged"
+  ],
+  "transform": [
+   -21076.7,
+   20353.5,
+   0.0,
+   0.0,
+   46.0,
+   -0.0,
+   1.1,
+   1.1,
+   1.1
+  ],
+  "bmin": [
+   -22425,
+   18964,
+   0
+  ],
+  "bmax": [
+   -19728,
+   21743,
+   1375
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_347",
+  "label": "DPNorthReach_SwagGlass",
+  "mesh": "SM_lantern_swag_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -21076.7,
+   20353.5,
+   0.0,
+   0.0,
+   46.0,
+   -0.0,
+   1.1,
+   1.1,
+   1.1
+  ],
+  "bmin": [
+   -22099,
+   19298,
+   297
+  ],
+  "bmax": [
+   -20054,
+   21409,
+   785
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_351",
+  "label": "DPEastReach_Swag",
+  "mesh": "SM_lantern_swag",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   21503.0,
+   9127.5,
+   0.0,
+   0.0,
+   -67.0,
+   0.0,
+   1.1,
+   1.1,
+   1.1
+  ],
+  "bmin": [
+   20671,
+   7421,
+   0
+  ],
+  "bmax": [
+   22335,
+   10834,
+   1375
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_352",
+  "label": "DPEastReach_SwagGlass",
+  "mesh": "SM_lantern_swag_glass",
+  "materials": [
+   "MI_V2_GlassViolet"
+  ],
+  "transform": [
+   21503.0,
+   9127.5,
+   0.0,
+   0.0,
+   -67.0,
+   0.0,
+   1.1,
+   1.1,
+   1.1
+  ],
+  "bmin": [
+   20889,
+   7814,
+   297
+  ],
+  "bmax": [
+   22117,
+   10441,
+   785
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_361",
+  "label": "DPSouthMeadows_Swag",
+  "mesh": "SM_lantern_swag",
+  "materials": [
+   "MI_V2_Gold"
+  ],
+  "transform": [
+   3282.2,
+   -16887.5,
+   0.0,
+   0.0,
+   -172.0,
+   0.0,
+   1.1,
+   1.1,
+   1.1
+  ],
+  "bmin": [
+   1487,
+   -17279,
+   0
+  ],
+  "bmax": [
+   5078,
+   -16496,
+   1375
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_362",
+  "label": "DPSouthMeadows_SwagGlass",
+  "mesh": "SM_lantern_swag_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   3282.2,
+   -16887.5,
+   0.0,
+   0.0,
+   -172.0,
+   0.0,
+   1.1,
+   1.1,
+   1.1
+  ],
+  "bmin": [
+   1891,
+   -17156,
+   297
+  ],
+  "bmax": [
+   4674,
+   -16619,
+   785
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_367",
+  "label": "DPWestWood_Swag",
+  "mesh": "SM_lantern_swag",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   -24620.2,
+   4341.2,
+   0.0,
+   0.0,
+   80.0,
+   -0.0,
+   1.1,
+   1.1,
+   1.1
+  ],
+  "bmin": [
+   -25072,
+   2551,
+   0
+  ],
+  "bmax": [
+   -24168,
+   6132,
+   1375
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_368",
+  "label": "DPWestWood_SwagGlass",
+  "mesh": "SM_lantern_swag_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -24620.2,
+   4341.2,
+   0.0,
+   0.0,
+   80.0,
+   -0.0,
+   1.1,
+   1.1,
+   1.1
+  ],
+  "bmin": [
+   -24936,
+   2955,
+   297
+  ],
+  "bmax": [
+   -24304,
+   5728,
+   785
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_393",
+  "label": "Way0246_Lantern",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   -27049.6,
+   12731.6,
+   0.0,
+   0.0,
+   -45.93,
+   0.0,
+   0.52,
+   0.52,
+   0.52
+  ],
+  "bmin": [
+   -27199,
+   12401,
+   0
+  ],
+  "bmax": [
+   -26716,
+   12890,
+   1123
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_394",
+  "label": "Way0246_LanternGlass",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassTeal"
+  ],
+  "transform": [
+   -27049.6,
+   12731.6,
+   0.0,
+   0.0,
+   -45.93,
+   0.0,
+   0.52,
+   0.52,
+   0.52
+  ],
+  "bmin": [
+   -27006,
+   12429,
+   579
+  ],
+  "bmax": [
+   -26744,
+   12691,
+   881
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_395",
+  "label": "Way0258_Lantern",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   -25605.8,
+   -481.4,
+   0.0,
+   0.0,
+   -71.74,
+   0.0,
+   0.52,
+   0.52,
+   0.52
+  ],
+  "bmin": [
+   -25737,
+   -856,
+   0
+  ],
+  "bmax": [
+   -25384,
+   -341,
+   1123
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_396",
+  "label": "Way0258_LanternGlass",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassTeal"
+  ],
+  "transform": [
+   -25605.8,
+   -481.4,
+   0.0,
+   0.0,
+   -71.74,
+   0.0,
+   0.52,
+   0.52,
+   0.52
+  ],
+  "bmin": [
+   -25640,
+   -829,
+   579
+  ],
+  "bmax": [
+   -25406,
+   -594,
+   881
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_397",
+  "label": "Way0264_Lantern",
+  "mesh": "SM_lantern_strange",
+  "materials": [
+   "MI_V2_Bronze"
+  ],
+  "transform": [
+   -30723.5,
+   348.0,
+   0.0,
+   0.0,
+   89.81,
+   -0.0,
+   0.52,
+   0.52,
+   0.52
+  ],
+  "bmin": [
+   -30838,
+   237,
+   0
+  ],
+  "bmax": [
+   -30620,
+   709,
+   1123
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_398",
+  "label": "Way0264_LanternGlass",
+  "mesh": "SM_lantern_strange_glass",
+  "materials": [
+   "MI_V2_GlassTeal"
+  ],
+  "transform": [
+   -30723.5,
+   348.0,
+   0.0,
+   0.0,
+   89.81,
+   -0.0,
+   0.52,
+   0.52,
+   0.52
+  ],
+  "bmin": [
+   -30822,
+   499,
+   579
+  ],
+  "bmax": [
+   -30636,
+   686,
+   881
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_1876",
+  "label": "SW_PlazaSwag0",
+  "mesh": "SM_lantern_swag",
+  "materials": [
+   "MI_V2_GoldAged"
+  ],
+  "transform": [
+   -20606.0,
+   -24316.0,
+   1450.0,
+   0.0,
+   0.0,
+   0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   -22236,
+   -24446,
+   1450
+  ],
+  "bmax": [
+   -18976,
+   -24186,
+   2700
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_1877",
+  "label": "SW_PlazaSwagGlass0",
+  "mesh": "SM_lantern_swag_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -20606.0,
+   -24316.0,
+   1450.0,
+   0.0,
+   0.0,
+   0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   -21874,
+   -24384,
+   1720
+  ],
+  "bmax": [
+   -19338,
+   -24248,
+   2163
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_1878",
+  "label": "SW_PlazaSwag1",
+  "mesh": "SM_lantern_swag",
+  "materials": [
+   "MI_V2_GoldAged"
+  ],
+  "transform": [
+   -20606.0,
+   -24316.0,
+   1450.0,
+   0.0,
+   90.0,
+   -0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   -20736,
+   -25946,
+   1450
+  ],
+  "bmax": [
+   -20476,
+   -22686,
+   2700
+  ]
+ },
+ {
+  "kind": "actor",
+  "name": "StaticMeshActor_1879",
+  "label": "SW_PlazaSwagGlass1",
+  "mesh": "SM_lantern_swag_glass",
+  "materials": [
+   "MI_V2_GlassAmber"
+  ],
+  "transform": [
+   -20606.0,
+   -24316.0,
+   1450.0,
+   0.0,
+   90.0,
+   -0.0,
+   1.0,
+   1.0,
+   1.0
+  ],
+  "bmin": [
+   -20674,
+   -25584,
+   1720
+  ],
+  "bmax": [
+   -20538,
+   -23048,
+   2163
+  ]
+ }
+]
