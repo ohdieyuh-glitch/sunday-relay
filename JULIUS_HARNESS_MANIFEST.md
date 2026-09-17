@@ -177,7 +177,7 @@ The implementation role: one hosted Claude Agent SDK execution behind a pure saf
 | `relay-bridge/julius/coder-workspace.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `src/relay/connectors/claude-code/result-classification.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-observation.ts` |
 | `src/relay/mission/julius/julius-coding-agent.ts` | traced | `src/relay/mission/julius/julius-router.ts` |
-| `src/relay/mission/julius/julius-workspace-attribution.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-workspace-attribution.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 
 ### 08 INDEPENDENT REVIEWER
 

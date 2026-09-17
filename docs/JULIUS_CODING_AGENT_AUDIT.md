@@ -133,9 +133,9 @@ Severity is what the gap can do on a real mission, not how hard it is to fix.
 
 17. Coordinator deadline ignores executor time; the abort signal is not
     forwarded; the workspace is not reset between attempts.
-    (PR 5: the worker now declares the attempt — session plus executor steps —
-    and the abort reaches the SDK session. Attempt-scoped workspace attribution
-    is the next boundary.)
+    (PR 5 closed the first two. PR 6 closed the third — see section E: the
+    workspace is still never reset wholesale, and each attempt now owns what it
+    changed.)
 18. The usability gate reads `is_error` only, not the result subtype or
     `terminal_reason`. (Closed in PR 5 — see section D.)
 
@@ -272,9 +272,49 @@ Audited and reproduced on main `81be9c7c`, provider-free.
      not recorded as one.
 
 **Not in PR 5 (next boundaries):**
-- Attempt-scoped workspace and change attribution.
+- Attempt-scoped workspace and change attribution. (Closed in PR 6 — section E.)
 - The attempt ceiling. `CODER_WORKER.maxRetries` is 1 and never enforced, and
   plan and build tasks get `MAX_TASK_ATTEMPTS = 3`. Enforcing it reduces live
   retries; budgeting 3 needs a longer job. Either is a founder decision.
 - Whether the real SDK child process actually stops on abort
   (LIVE VALIDATION REQUIRED).
+
+---
+
+## E. PR 6 — attempt-scoped workspace truth: which attempt changed what
+
+Audited and reproduced on main `04b2adcf`, provider-free.
+
+**Reproduced:** one workspace serves the whole mission and is never reset, and
+the only change set Julius had was `git status` against HEAD — the sum of every
+attempt, every repair round and every earlier task. So attempt 2 of a build was
+credited with attempt 1's edits and scope-checked against the sum, and an
+attempt that failed before the capture ran left edits that no record mentioned
+at all: they simply appeared inside the next attempt's diff.
+
+1. **Three trees per attempt.** The executor writes the working tree into a
+   TEMPORARY index (seeded from the repository's own, never written back) and
+   records the tree object: `baseTree` (HEAD's), `startTree`, `endTree`. The real
+   index, the staging state and `git status` are untouched, and
+   `claude-code-result-class.v1`'s sibling rule applies here too — only a
+   forty-hex tree id is ever interpolated into a command.
+2. **Attribution.** `inherited` = base → start, `own` = start → end,
+   `cumulative` = base → end. A path can be `own` and not `cumulative`: an
+   attempt that put a file back as HEAD has it changed something and left
+   nothing, which is why the three sets are kept rather than subtracted.
+3. **Failed attempts own what they changed.** The close-out look runs on a
+   failure too, and the record travels on the dispatch error to the kernel.
+   NOT after an abort: PR 5's cancellation rule stands, and the record then says
+   `UNKNOWN` with `uncapturedReason: DISPATCH_CANCELLED`.
+4. **Unknown is never clean.** A missing snapshot is `captured: false` with
+   empty sets and cleanliness `UNKNOWN`; an accepted result whose change set was
+   never read gets Julius's own FAILED DIFF evidence instead of passing as an
+   honest nothing.
+5. **The one undo.** Julius authorises a restore only for a FAILED attempt whose
+   OWN changes its locked contract refused, names both trees, and the executor
+   refuses unless the workspace is still exactly the tree that attempt left.
+   There is no broad reset anywhere on the path.
+
+**Not in PR 6:** the attempt ceiling (still the founder's decision), and whether
+the executor's real per-effect cost fits the raised snapshot bounds
+(LIVE VALIDATION REQUIRED).

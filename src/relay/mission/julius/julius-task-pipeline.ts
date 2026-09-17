@@ -34,7 +34,7 @@
 import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
 import { decideJuliusContinuation } from './julius-continuation';
 import { JuliusExecutionCoordinator, type JuliusExecutionOutcome, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest } from './julius-execution-coordinator';
-import { safeReasonCode, type JuliusProviderRouter } from './julius-router';
+import { safeReasonCode, type JuliusDispatchWorkspace, type JuliusProviderRouter } from './julius-router';
 import { juliusCostComponent } from './julius-cost-accounting';
 import { juliusContractDisposition, juliusContractDispositionFacts } from './julius-contract-disposition';
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
@@ -54,6 +54,12 @@ import {
 import { challengeJuliusTaskContract, evaluateJuliusBindingCurrency, evaluateJuliusSharedBinding, juliusContractReviewCharge, juliusTaskContractBinding, lockJuliusTaskContract, mayDispatchUnderContract, reviseJuliusTaskContract, sanitizeJuliusContractProposal, type JuliusTaskContract, type JuliusTaskContractBinding } from './julius-task-contract';
 import { evaluateJuliusRelease } from './julius-release-runtime';
 import { REVIEW_TASK_ATTEMPTS, boundStageForRole, reviewStageOf, workStageOf, type JuliusReviewStage } from './julius-review-stage';
+import {
+  juliusRestoreRequestFor,
+  juliusWorkspaceCleanliness,
+  readJuliusAttemptWorkspace,
+  type JuliusWorkspaceCleanliness,
+} from './julius-workspace-attribution';
 import {
   juliusReviewedWorkOf, juliusSegmentLineageRootOf, juliusSegmentSubjectTaskId, juliusSegmentTaskId, juliusYieldContinuationOf, nextSegmentNumber, pendingSegmentFor,
   routeIsBarrier, sanitizeJuliusSegmentState, segmentChildrenOf, juliusReviewConclusionOf,
@@ -85,6 +91,7 @@ import {
 import { juliusResultChannelPermitted } from './julius-worker-authority';
 import {
   JULIUS_WORKSPACE_LIMITS, juliusScopeViolations, readJuliusCodingAgentImplementation, sanitizeJuliusCodingAgentReport,
+  type JuliusCodingAgentImplementation,
 } from './julius-coding-agent';
 import {
   JULIUS_CHECKPOINT_LIMITS,
@@ -1131,6 +1138,11 @@ export async function runClaimedTask(
    * quietly try three providers before telling anyone.
    */
   const tried: string[] = [];
+  /**
+   * WHAT THE LAST ATTEMPT LEFT THAT THIS ONE MUST NOT INHERIT. Only a Coding
+   * Agent edits the workspace, so only its dispatches carry the question.
+   */
+  const workspaceUndo = role === 'CODING_AGENT' ? await juliusWorkspaceRestoreFor(deps, run, claim.taskId) : null;
   let outcome: JuliusExecutionOutcome = allocation?.basis === 'EXHAUSTED'
     ? await (async (): Promise<JuliusExecutionOutcome> => {
       await ledger.event('budget.denied', { taskId: claim.taskId, facts: { reason: 'BUDGET_EXHAUSTED', ...allocationFacts(allocation) } });
@@ -1140,6 +1152,7 @@ export async function runClaimedTask(
       claim: executionClaim, policy: request.policy, role, taskType: claim.taskType,
       capability: request.capability, resources, operationId, signal: request.signal,
       attempt: claim.attempt,
+      ...(workspaceUndo === null ? {} : { workspace: workspaceUndo }),
       ...(dispatchAllocation === undefined ? {} : { allocation: dispatchAllocation }),
       ...(contractCharge === null ? {} : { contract: contractCharge }),
     });
@@ -1193,6 +1206,7 @@ export async function runClaimedTask(
       capability: request.capability, resources,
       operationId: `${operationId}:reroute:${tried.length}`,
       attempt: claim.attempt,
+      ...(workspaceUndo === null ? {} : { workspace: workspaceUndo }),
       signal: request.signal, excludedWorkerIds: tried,
       ...(contractCharge === null ? {} : { contract: contractCharge }),
       ...(dispatchAllocation === undefined ? {} : { allocation: dispatchAllocation }),
@@ -1209,6 +1223,32 @@ export async function runClaimedTask(
     // itself is `decideJuliusContinuation`'s. A SUPERVISED run stops on a rate
     // limit and waits for a person, which is what supervised means and what
     // the inherited code — reading only `policy.automaticRetry` — never did.
+    /**
+     * A FAILED ATTEMPT STILL CHANGED THE WORKSPACE, AND IT OWNS WHAT IT CHANGED.
+     *
+     * Recorded before the task is finished, so the facts exist whichever way
+     * this attempt ends and whatever happens to the process next: the next
+     * attempt reads them to know what it inherited, and Julius reads them to
+     * decide whether the edits it refused must be undone first. A cancelled
+     * dispatch collects nothing, and its record says UNKNOWN rather than clean.
+     */
+    if (outcome.implementation !== undefined && juliusResultChannelPermitted(claim.role, 'implementation')) {
+      const failed = readJuliusCodingAgentImplementation(outcome.implementation);
+      if (failed === null) {
+        await ledger.event('coder.report.refused', {
+          taskId: claim.taskId, facts: { reasonCode: 'coding_agent_implementation_unreadable' },
+        });
+      } else {
+        /* The attribution alone: a failed attempt produced no result to review,
+         * so it mints no diff evidence — only the truth about what it changed. */
+        await recordAttemptWorkspace({
+          deps, run, ledger, task, workerId: null,
+          leaseGeneration: claim.leaseGeneration, attempt: claim.attempt, implementation: failed,
+          scope: contractCharge === null ? null : { permittedPaths: contractCharge.permittedPaths, outOfScope: contractCharge.outOfScope },
+        });
+      }
+    }
+
     let requeue = false;
     if (outcome.status === 'RETRY') {
       const carryOn = decideJuliusContinuation(request.policy, {
@@ -1354,7 +1394,7 @@ export async function runClaimedTask(
   if (!outcome.duplicate && juliusResultChannelPermitted(task.role, 'implementation') && outcome.implementation !== undefined) {
     await recordCodingAgentImplementation({
       deps, run, ledger, task, workerId: outcome.workerId, value: outcome.implementation,
-      leaseGeneration: claim.leaseGeneration,
+      leaseGeneration: claim.leaseGeneration, attempt: claim.attempt,
       scope: contractCharge === null ? null : { permittedPaths: contractCharge.permittedPaths, outOfScope: contractCharge.outOfScope },
     });
   }
@@ -3178,6 +3218,129 @@ async function deliverOwedGuidance(input: {
  * test. The coder's own report sits beside it as CLAIMS: compared with what the
  * executor saw, never substituted for it.
  */
+/**
+ * WHICH ATTEMPT CHANGED WHAT — WRITTEN FOR EVERY ATTEMPT, INCLUDING FAILED ONES.
+ *
+ * One workspace serves the whole mission and is never reset, so an attempt's
+ * `git status` was the sum of everything before it: attempt 2 of a build was
+ * credited with attempt 1's edits, and an attempt that failed before the
+ * capture ran left edits that simply appeared inside the next attempt's diff.
+ * The executor now records three trees per attempt and Julius derives what the
+ * attempt INHERITED, what it OWNS and what the mission CARRIES from them.
+ *
+ * UNKNOWN IS NEVER CLEAN. A record with a missing snapshot is `captured:false`
+ * with empty sets, and the cleanliness it reports is `UNKNOWN` — a cancelled
+ * dispatch, which collects no evidence after its abort, lands here truthfully
+ * rather than as a workspace somebody read and found empty.
+ */
+/**
+ * THE ONE UNDO THIS DISPATCH IS AUTHORISED TO DO, read from the durable record
+ * and from nothing else.
+ *
+ * The rule is deliberately narrow, because the alternative — a broad reset — is
+ * how a worker destroys work whose provenance nobody can account for. Julius
+ * asks for an undo only when the LAST recorded attempt of this task FAILED and
+ * its OWN changes broke the locked contract's scope: nothing of that attempt
+ * will ever be reviewed, and leaving its edits makes them the next attempt's
+ * inheritance. Both trees travel with the request, so the adapter can refuse if
+ * the workspace has moved since — which it must, because anything that moved it
+ * is work this record cannot account for.
+ *
+ * It reads the ledger rather than any in-process state, so a restart, a
+ * requeue or another worker entirely reaches the same decision.
+ */
+async function juliusWorkspaceRestoreFor(
+  deps: JuliusPipelineDependencies, run: JuliusRunRow, taskId: string,
+): Promise<JuliusDispatchWorkspace | null> {
+  if (deps.timeline === undefined) return null;
+  let last: { outcome: 'SUCCEEDED' | 'FAILED'; scopeViolations: number; startTree: string | null; endTree: string | null } | null = null;
+  let sinceSequence = 0;
+  for (;;) {
+    const page = await deps.timeline.timeline({ runId: run.runId, projectId: run.projectId, sinceSequence, limit: 500 });
+    for (const entry of page.entries) {
+      sinceSequence = Math.max(sinceSequence, entry.sequence);
+      if (entry.type !== 'coder.attempt.workspace' || entry.taskId !== taskId) continue;
+      const facts = entry.facts;
+      const outcome = facts.attemptOutcome === 'FAILED' ? 'FAILED' as const : 'SUCCEEDED' as const;
+      last = {
+        outcome,
+        scopeViolations: typeof facts.ownScopeViolations === 'number' ? facts.ownScopeViolations : 0,
+        startTree: typeof facts.startTree === 'string' ? facts.startTree : null,
+        endTree: typeof facts.endTree === 'string' ? facts.endTree : null,
+      };
+    }
+    if (!page.hasMore || page.entries.length === 0) break;
+  }
+  const request = juliusRestoreRequestFor({ lastAttempt: last });
+  return request === null ? null : { restoreToTree: request.startTree, expectedTree: request.endTree };
+}
+
+async function recordAttemptWorkspace(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly task: JuliusTask;
+  /** Null on the failure path: the outcome names no worker, and inventing one would misattribute the attempt. */
+  readonly workerId: string | null;
+  readonly leaseGeneration: number;
+  readonly attempt: number | null;
+  readonly implementation: JuliusCodingAgentImplementation;
+  readonly scope: { readonly permittedPaths: readonly string[]; readonly outOfScope: readonly string[] } | null;
+}): Promise<{ readonly ownViolations: number; readonly cleanliness: JuliusWorkspaceCleanliness }> {
+  const { ledger, task, implementation } = input;
+  const attempt = readJuliusAttemptWorkspace(implementation.attempt);
+  const cleanliness = juliusWorkspaceCleanliness(implementation.workspace);
+  const ownViolations = attempt.captured && input.scope !== null
+    ? juliusScopeViolations({ changes: attempt.own, ...input.scope })
+    : [];
+  const listed = (paths: readonly string[]): string => paths.slice(0, JULIUS_WORKSPACE_LIMITS.listedPaths).join(' ');
+
+  await ledger.event('coder.attempt.workspace', {
+    taskId: task.taskId, ...(input.workerId === null ? {} : { workerId: input.workerId }),
+    facts: {
+      attemptOutcome: implementation.attemptOutcome,
+      attempt: input.attempt,
+      leaseGeneration: input.leaseGeneration,
+      captured: attempt.captured,
+      cleanliness,
+      uncapturedReason: attempt.captured ? null : implementation.uncapturedReason,
+      baseTree: attempt.baseTree, startTree: attempt.startTree, endTree: attempt.endTree,
+      ownPaths: attempt.own.length,
+      inheritedPaths: attempt.inherited.length,
+      cumulativePaths: attempt.cumulative.length,
+      ownScopeViolations: ownViolations.length,
+      truncated: attempt.truncated,
+      own: listed(attempt.own.map((change) => change.path)),
+      inherited: listed(attempt.inherited.map((change) => change.path)),
+      restoreOutcome: attempt.restore?.outcome ?? null,
+    },
+  });
+  if (attempt.restore !== null) {
+    await ledger.event('coder.workspace.restored', {
+      taskId: task.taskId, ...(input.workerId === null ? {} : { workerId: input.workerId }),
+      facts: {
+        outcome: attempt.restore.outcome,
+        toTree: attempt.restore.toTree, expectedTree: attempt.restore.expectedTree, observedTree: attempt.restore.observedTree,
+        removed: attempt.restore.removed, restored: attempt.restore.restored,
+        leaseGeneration: input.leaseGeneration, attempt: input.attempt,
+      },
+    });
+  }
+  /**
+   * THE ATTEMPT OWNS WHAT IT CHANGED, in scope or out of it. A failed attempt's
+   * stray edits are named under the attempt that made them rather than left to
+   * turn up under the next one — and they are what Julius reads when it decides
+   * whether the next attempt must begin by undoing them.
+   */
+  for (const violation of ownViolations.slice(0, JULIUS_WORKSPACE_LIMITS.listedPaths)) {
+    await ledger.event('coder.scope.violated', {
+      taskId: task.taskId, ...(input.workerId === null ? {} : { workerId: input.workerId }),
+      facts: { path: violation.path, rule: violation.rule, resolvedBy: 'CONTRACT', attributedTo: 'ATTEMPT', attempt: input.attempt },
+    });
+  }
+  return { ownViolations: ownViolations.length, cleanliness };
+}
+
 async function recordCodingAgentImplementation(input: {
   readonly deps: JuliusPipelineDependencies;
   readonly run: JuliusRunRow;
@@ -3186,6 +3349,7 @@ async function recordCodingAgentImplementation(input: {
   readonly workerId: string;
   readonly value: unknown;
   readonly leaseGeneration: number;
+  readonly attempt?: number | null;
   readonly scope: { readonly permittedPaths: readonly string[]; readonly outOfScope: readonly string[] } | null;
 }): Promise<void> {
   const { deps, run, ledger, task } = input;
@@ -3196,6 +3360,10 @@ async function recordCodingAgentImplementation(input: {
     });
     return;
   }
+  const attribution = await recordAttemptWorkspace({
+    deps, run, ledger, task, workerId: input.workerId, leaseGeneration: input.leaseGeneration,
+    attempt: input.attempt ?? null, implementation, scope: input.scope,
+  });
   const changes = implementation.workspace.changes;
   const violations = input.scope === null ? [] : juliusScopeViolations({ changes, ...input.scope });
 
@@ -3233,15 +3401,40 @@ async function recordCodingAgentImplementation(input: {
       paths: listed(changes.map((change) => change.path)),
       scopeChecked: input.scope !== null,
       scopeViolations: violations.length,
+      ownScopeViolations: attribution.ownViolations,
+      cleanliness: attribution.cleanliness,
       reportOutcome, claimedNotObserved, observedNotClaimed, uncertainty, blocked,
     },
   });
+
+  /**
+   * A WORKSPACE NOBODY COULD READ IS NOT A CLEAN ONE.
+   *
+   * An uncaptured change set is empty because nothing is known, and every rule
+   * that reads it — the scope check, the diff evidence's "no change observed" —
+   * then answers as though the executor had looked and found nothing. Julius
+   * writes its own FAILED evidence instead, so an accepted result can never
+   * rest on a workspace that was never read.
+   */
+  if (attribution.cleanliness === 'UNKNOWN') {
+    await deps.store.appendEvidence({
+      runId: run.runId, projectId: run.projectId,
+      idempotencyKey: `${task.taskId}:${String(input.leaseGeneration)}:workspace`,
+      evidence: {
+        evidenceId: `${task.taskId}:${String(input.leaseGeneration)}:workspace`,
+        missionId: task.missionId, taskId: task.taskId, workerId: input.workerId,
+        type: 'DIFF', status: 'FAILED',
+        safeSummary: 'Julius workspace check: the independent executor did not report a change set for this attempt, so what it changed is UNKNOWN — which is not a clean workspace.',
+        artifactRef: null, integrityHash: null, occurredAt: deps.clock.now(),
+      },
+    });
+  }
 
   if (violations.length === 0) return;
   for (const violation of violations.slice(0, JULIUS_WORKSPACE_LIMITS.listedPaths)) {
     await ledger.event('coder.scope.violated', {
       taskId: task.taskId, workerId: input.workerId,
-      facts: { path: violation.path, rule: violation.rule, resolvedBy: 'CONTRACT' },
+      facts: { path: violation.path, rule: violation.rule, resolvedBy: 'CONTRACT', attributedTo: 'CUMULATIVE', attempt: input.attempt ?? null },
     });
   }
   /**

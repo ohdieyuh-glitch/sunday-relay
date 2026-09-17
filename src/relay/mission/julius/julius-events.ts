@@ -146,6 +146,15 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * to exist only as prompt text. `report.refused` is a coder report Julius
   * would not read, by name. */
  'coder.implementation.recorded','coder.scope.violated','coder.report.refused',
+ /* WHICH ATTEMPT CHANGED WHAT. `attempt.workspace` is the attempt's own three
+  * trees and the change sets between them — what it inherited, what it owns,
+  * what the mission carries — written for a failed attempt as well, because a
+  * failed attempt's edits used to reach the record only by turning up inside
+  * the NEXT attempt's diff. `workspace.restored` is the one undo Julius
+  * authorises: a refused attempt's own edits, and only while the workspace is
+  * still exactly the tree that attempt left. Its refusals carry the same type,
+  * because "Julius did not undo it, and why" is the fact that matters. */
+ 'coder.attempt.workspace','coder.workspace.restored',
  /* WHAT THE IMPLEMENTATION PEER SAW. `observed` is one evidenced observation a
   * Coding Agent made about the design in force; it can raise a consultation
   * and never a revision. `observation.refused` is a set Julius would not read,
