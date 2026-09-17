@@ -477,11 +477,12 @@ void SWonderlandWonderWebInputLayer::Tick(const FGeometry& AllottedGeometry, con
 			Entry.Slot->SetZOrder(Screen->IsFocused() ? 2.0f : 1.0f);
 			Entry.Scaler->SetDPIScale(Scale);
 			Entry.Frame->SetRenderTransform(Open < 0.999f ? TOptional<FSlateRenderTransform>(FSlateRenderTransform(FScale2D(1.0f, FMath::Max(Open, 0.01f)))) : TOptional<FSlateRenderTransform>());
-			// Only a window that has finished opening takes the pointer.
-			const EVisibility Wanted = Open > 0.98f ? EVisibility::Visible : EVisibility::HitTestInvisible;
-			if (Entry.Frame->GetVisibility() != Wanted)
+			// Visible the moment it is drawn -- never toggled through hit-test-invisible while it opens, which left the
+			// window's own widgets out of the hit test once it had opened (editor 84: every click reached the window and
+			// no button in it).
+			if (Entry.Frame->GetVisibility() != EVisibility::Visible)
 			{
-				Entry.Frame->SetVisibility(Wanted);
+				Entry.Frame->SetVisibility(EVisibility::Visible);
 			}
 			// DRAWN AS OFTEN AS IT IS LOOKED AT; worked on regardless.
 			const int32 Retain = Screen->IsFocused() ? 0 : BackgroundFrames;
@@ -517,10 +518,9 @@ void SWonderlandWonderWebInputLayer::Tick(const FGeometry& AllottedGeometry, con
 			Entry.ChipSlot->SetOffset(FMargin(static_cast<float>(Min.X), static_cast<float>(Min.Y), static_cast<float>(Entry.ChipSize.X * Scale), static_cast<float>(Entry.ChipSize.Y * Scale)));
 			Entry.ChipScaler->SetDPIScale(Scale);
 			Entry.ChipFrame->SetRenderTransform(ChipOpen < 0.999f ? TOptional<FSlateRenderTransform>(FSlateRenderTransform(FScale2D(1.0f, FMath::Max(ChipOpen, 0.01f)))) : TOptional<FSlateRenderTransform>());
-			const EVisibility Wanted = ChipOpen > 0.98f ? EVisibility::Visible : EVisibility::HitTestInvisible;
-			if (Entry.ChipFrame->GetVisibility() != Wanted)
+			if (Entry.ChipFrame->GetVisibility() != EVisibility::Visible)
 			{
-				Entry.ChipFrame->SetVisibility(Wanted);
+				Entry.ChipFrame->SetVisibility(EVisibility::Visible);
 			}
 		}
 		else if (Entry.ChipFrame.IsValid() && Entry.ChipFrame->GetVisibility() != EVisibility::Collapsed)
