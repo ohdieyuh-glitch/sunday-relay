@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-17T05:53:33+00:00",
+  "generated_utc": "2026-09-17T16:09:06+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -22,9 +22,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 127,
+        "n": 128,
         "min": 0.153,
-        "median": 0.828,
+        "median": 0.845,
         "max": 1.0,
         "unknown": 0
       }
@@ -36,7 +36,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 127,
+        "n": 128,
         "min": 0.0,
         "median": 0.352,
         "max": 1.0,
@@ -50,7 +50,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 127,
+        "n": 128,
         "min": 0.557,
         "median": 1.0,
         "max": 1.0,
@@ -64,9 +64,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 127,
+        "n": 128,
         "min": 0.0,
-        "median": 0.968,
+        "median": 0.975,
         "max": 1.0,
         "unknown": 0
       }
@@ -78,7 +78,7 @@
       "provenance": "declared",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 127,
+        "n": 128,
         "min": 0.0,
         "median": 0.0,
         "max": 0.7,
@@ -92,7 +92,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 124,
+        "n": 125,
         "min": 0.083,
         "median": 0.64,
         "max": 0.917,
@@ -106,7 +106,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 127,
+        "n": 128,
         "min": 0.05,
         "median": 0.5,
         "max": 0.7,
@@ -235,9 +235,9 @@
     }
   },
   "counts": {
-    "assets": 127,
-    "meshes": 404,
-    "triangles": 506352,
+    "assets": 128,
+    "meshes": 406,
+    "triangles": 506400,
     "by_role": {
       "foot": 5,
       "body": 14,
@@ -246,7 +246,7 @@
       "threshold": 10,
       "screen": 11,
       "span": 5,
-      "detail": 31,
+      "detail": 32,
       "route": 11,
       "terrace": 17,
       "hero": 11
@@ -32952,6 +32952,256 @@
         }
       },
       "part_count": 3
+    },
+    {
+      "asset_id": "WL_Detail_Plinth_Run",
+      "kit_version": "1.0.0",
+      "family": "plinth",
+      "family_group": "details",
+      "category": "prop",
+      "silhouette_role": "detail",
+      "note": "4 m plinth course: 48 cm band 9 cm proud with a chamfered weathering top, darker 8 cm foot strip",
+      "districts": [
+        "city",
+        "castle",
+        "plaza",
+        "hamlet",
+        "clock",
+        "cloister"
+      ],
+      "params": {
+        "length_m": 4.0,
+        "height_m": 0.48,
+        "projection_m": 0.09
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 48.0,
+      "bbox_min_uu": [
+        -200.0,
+        0.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        200.0,
+        11.0,
+        48.0
+      ],
+      "size_uu": [
+        400.0,
+        11.0,
+        48.0
+      ],
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.792,
+        "ceremonial_residential": 0.7
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        200.3,
+        200.3,
+        200.3,
+        200.3,
+        200.3,
+        200.3,
+        200.3,
+        200.3,
+        200.3,
+        200.3,
+        200.2,
+        200.0
+      ],
+      "radius_uu": 200.0,
+      "tris_total": 48,
+      "tri_budget": 200,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": false,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "back",
+          "kind": "bridge_end",
+          "z_uu": 0.0,
+          "radius_uu": 200.0,
+          "rung": null,
+          "note": "flat back at y = 0; butt to a wall's foot; scale in X to any length"
+        }
+      ],
+      "parts": {
+        "stone": {
+          "verts": 12,
+          "faces": 10,
+          "tris": 20,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -200.0,
+            0.0,
+            7.5
+          ],
+          "bbox_max_uu": [
+            200.0,
+            9.0,
+            48.0
+          ],
+          "size_uu": [
+            400.0,
+            9.0,
+            40.5
+          ],
+          "height_m": 0.405,
+          "base_z_uu": 7.5,
+          "normals": {
+            "faces": 10,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            200.2,
+            200.2,
+            200.2,
+            200.2,
+            200.2,
+            200.2,
+            200.2,
+            200.2,
+            200.2,
+            200.2,
+            200.2,
+            200.0
+          ],
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Detail_Plinth_Run",
+          "glb": "exports\\glb\\WL_Detail_Plinth_Run.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Plinth_Run.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2,
+              0.07500000298023224,
+              -0.09000000357627869
+            ],
+            "max_yup": [
+              2,
+              0.47999998927116394,
+              0
+            ],
+            "bytes": 2420
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 7.500000476837158,
+            "stored_z_max": 48.0
+          }
+        },
+        "stone_dark": {
+          "verts": 16,
+          "faces": 14,
+          "tris": 28,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -200.0,
+            0.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            200.0,
+            11.0,
+            8.0
+          ],
+          "size_uu": [
+            400.0,
+            11.0,
+            8.0
+          ],
+          "height_m": 0.08,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 14,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            199.04,
+            200.3,
+            200.3,
+            200.3,
+            200.3,
+            200.3,
+            200.3,
+            200.3,
+            200.3,
+            200.3,
+            200.3,
+            199.04
+          ],
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Detail_Plinth_Run_stone_dark",
+          "glb": "exports\\glb\\WL_Detail_Plinth_Run_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Plinth_Run_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2,
+              0,
+              -0.10999999940395355
+            ],
+            "max_yup": [
+              2,
+              0.07999999821186066,
+              0
+            ],
+            "bytes": 3172
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 8.0
+          }
+        }
+      },
+      "part_count": 2
     },
     {
       "asset_id": "WL_Hero_GreatSpire",

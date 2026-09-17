@@ -1,5 +1,5 @@
 {
-  "checked_assets": 127,
+  "checked_assets": 128,
   "failures": 0,
   "material_check": "59 MI_V2_* names parsed from materials_v2.py",
   "per_asset": {
@@ -99,6 +99,7 @@
     "WL_Detail_Lantern_Hanging": [],
     "WL_Detail_Window_Oculus": [],
     "WL_Detail_Window_LancetPair": [],
+    "WL_Detail_Plinth_Run": [],
     "WL_Hero_GreatSpire": [],
     "WL_Hero_Gate_Royal": [],
     "WL_Sky_Island_Small": [],
@@ -631,6 +632,10 @@
       "glass": "37c5bc9f763020c4337c372f87848f8627647467021d16d288b93d6ef87a13bf",
       "gold": "b5c88010686a0f2d1810d805bdf9b7e1a8ed56370c87e20e98399ae386859599",
       "stone": "7c5a483c6aa4244d67d6e3ff831fba91cf11e7368bfe4312e021673642aa415d"
+    },
+    "WL_Detail_Plinth_Run": {
+      "stone": "3cdace71e79d4692e724759889d0c9a216d6facc4c61051f842c6837a94ca079",
+      "stone_dark": "b43bd9515d7bf8a1544f244457974fda1dba6ea5b6367685b908f2def90f2afc"
     },
     "WL_Hero_GreatSpire": {
       "glass": "bcd03302e94403ce72efc9428a539e3c54e0134cf4d737861eaec08b56c60a04",
