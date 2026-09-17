@@ -1,0 +1,356 @@
+{
+ "pass": "LL02",
+ "title": "Strange lanterns: enchanted brass and luminous jewel glass (materials only)",
+ "swaps": [
+  {
+   "name": "StaticMeshActor_202",
+   "label": "LMLanternHamlets_Lantern0",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_203",
+   "label": "LMLanternHamlets_LanternGlass0",
+   "slot": 0,
+   "before": "MI_V2_GlassAmber",
+   "after": "MI_V2_LanternGlassRose"
+  },
+  {
+   "name": "StaticMeshActor_204",
+   "label": "LMLanternHamlets_Lantern1",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_205",
+   "label": "LMLanternHamlets_LanternGlass1",
+   "slot": 0,
+   "before": "MI_V2_GlassAmber",
+   "after": "MI_V2_LanternGlassLavender"
+  },
+  {
+   "name": "StaticMeshActor_206",
+   "label": "LMLanternHamlets_Lantern2",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_207",
+   "label": "LMLanternHamlets_LanternGlass2",
+   "slot": 0,
+   "before": "MI_V2_GlassAmber",
+   "after": "MI_V2_LanternGlassRose"
+  },
+  {
+   "name": "StaticMeshActor_208",
+   "label": "LMLanternHamlets_Lantern3",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_209",
+   "label": "LMLanternHamlets_LanternGlass3",
+   "slot": 0,
+   "before": "MI_V2_GlassAmber",
+   "after": "MI_V2_LanternGlassLavender"
+  },
+  {
+   "name": "StaticMeshActor_210",
+   "label": "LMLanternHamlets_Lantern4",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_211",
+   "label": "LMLanternHamlets_LanternGlass4",
+   "slot": 0,
+   "before": "MI_V2_GlassAmber",
+   "after": "MI_V2_LanternGlassLavender"
+  },
+  {
+   "name": "StaticMeshActor_212",
+   "label": "LMLanternHamlets_Lantern5",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_213",
+   "label": "LMLanternHamlets_LanternGlass5",
+   "slot": 0,
+   "before": "MI_V2_GlassAmber",
+   "after": "MI_V2_LanternGlassLavender"
+  },
+  {
+   "name": "StaticMeshActor_214",
+   "label": "LMLanternHamlets_Lantern6",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_215",
+   "label": "LMLanternHamlets_LanternGlass6",
+   "slot": 0,
+   "before": "MI_V2_GlassAmber",
+   "after": "MI_V2_LanternGlassLavender"
+  },
+  {
+   "name": "StaticMeshActor_216",
+   "label": "LMLanternHamlets_Lantern7",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_217",
+   "label": "LMLanternHamlets_LanternGlass7",
+   "slot": 0,
+   "before": "MI_V2_GlassAmber",
+   "after": "MI_V2_LanternGlassRose"
+  },
+  {
+   "name": "StaticMeshActor_218",
+   "label": "LMLanternHamlets_Lantern8",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_219",
+   "label": "LMLanternHamlets_LanternGlass8",
+   "slot": 0,
+   "before": "MI_V2_GlassAmber",
+   "after": "MI_V2_LanternGlassRose"
+  },
+  {
+   "name": "StaticMeshActor_220",
+   "label": "LMLanternHamlets_Lantern9",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_221",
+   "label": "LMLanternHamlets_LanternGlass9",
+   "slot": 0,
+   "before": "MI_V2_GlassAmber",
+   "after": "MI_V2_LanternGlassLavender"
+  },
+  {
+   "name": "StaticMeshActor_222",
+   "label": "LMLanternHamlets_Lantern10",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_223",
+   "label": "LMLanternHamlets_LanternGlass10",
+   "slot": 0,
+   "before": "MI_V2_GlassAmber",
+   "after": "MI_V2_LanternGlassRose"
+  },
+  {
+   "name": "StaticMeshActor_236",
+   "label": "LMMushroomGrove_Lantern0",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_237",
+   "label": "LMMushroomGrove_LanternGlass0",
+   "slot": 0,
+   "before": "MI_V2_GlassTeal",
+   "after": "MI_V2_LanternGlassTeal"
+  },
+  {
+   "name": "StaticMeshActor_238",
+   "label": "LMMushroomGrove_Lantern1",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_239",
+   "label": "LMMushroomGrove_LanternGlass1",
+   "slot": 0,
+   "before": "MI_V2_GlassTeal",
+   "after": "MI_V2_LanternGlassTeal"
+  },
+  {
+   "name": "StaticMeshActor_240",
+   "label": "LMMushroomGrove_Lantern2",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_241",
+   "label": "LMMushroomGrove_LanternGlass2",
+   "slot": 0,
+   "before": "MI_V2_GlassTeal",
+   "after": "MI_V2_LanternGlassTeal"
+  },
+  {
+   "name": "StaticMeshActor_242",
+   "label": "LMMushroomGrove_Lantern3",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_243",
+   "label": "LMMushroomGrove_LanternGlass3",
+   "slot": 0,
+   "before": "MI_V2_GlassTeal",
+   "after": "MI_V2_LanternGlassTeal"
+  },
+  {
+   "name": "StaticMeshActor_244",
+   "label": "LMMushroomGrove_Lantern4",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_245",
+   "label": "LMMushroomGrove_LanternGlass4",
+   "slot": 0,
+   "before": "MI_V2_GlassTeal",
+   "after": "MI_V2_LanternGlassTeal"
+  },
+  {
+   "name": "StaticMeshActor_246",
+   "label": "LMMushroomGrove_Lantern5",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_247",
+   "label": "LMMushroomGrove_LanternGlass5",
+   "slot": 0,
+   "before": "MI_V2_GlassTeal",
+   "after": "MI_V2_LanternGlassTeal"
+  },
+  {
+   "name": "StaticMeshActor_248",
+   "label": "LMMushroomGrove_Lantern6",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_249",
+   "label": "LMMushroomGrove_LanternGlass6",
+   "slot": 0,
+   "before": "MI_V2_GlassTeal",
+   "after": "MI_V2_LanternGlassTeal"
+  },
+  {
+   "name": "StaticMeshActor_250",
+   "label": "LMMushroomGrove_Lantern7",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_251",
+   "label": "LMMushroomGrove_LanternGlass7",
+   "slot": 0,
+   "before": "MI_V2_GlassTeal",
+   "after": "MI_V2_LanternGlassTeal"
+  },
+  {
+   "name": "StaticMeshActor_252",
+   "label": "LMMushroomGrove_Lantern8",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_253",
+   "label": "LMMushroomGrove_LanternGlass8",
+   "slot": 0,
+   "before": "MI_V2_GlassTeal",
+   "after": "MI_V2_LanternGlassTeal"
+  },
+  {
+   "name": "StaticMeshActor_254",
+   "label": "LMMushroomGrove_Lantern9",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_255",
+   "label": "LMMushroomGrove_LanternGlass9",
+   "slot": 0,
+   "before": "MI_V2_GlassTeal",
+   "after": "MI_V2_LanternGlassTeal"
+  },
+  {
+   "name": "StaticMeshActor_256",
+   "label": "LMMushroomGrove_Lantern10",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_257",
+   "label": "LMMushroomGrove_LanternGlass10",
+   "slot": 0,
+   "before": "MI_V2_GlassTeal",
+   "after": "MI_V2_LanternGlassTeal"
+  },
+  {
+   "name": "StaticMeshActor_393",
+   "label": "Way0246_Lantern",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_394",
+   "label": "Way0246_LanternGlass",
+   "slot": 0,
+   "before": "MI_V2_GlassTeal",
+   "after": "MI_V2_LanternGlassTeal"
+  },
+  {
+   "name": "StaticMeshActor_395",
+   "label": "Way0258_Lantern",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_396",
+   "label": "Way0258_LanternGlass",
+   "slot": 0,
+   "before": "MI_V2_GlassTeal",
+   "after": "MI_V2_LanternGlassTeal"
+  },
+  {
+   "name": "StaticMeshActor_397",
+   "label": "Way0264_Lantern",
+   "slot": 0,
+   "before": "MI_V2_Bronze",
+   "after": "MI_V2_LanternBrass"
+  },
+  {
+   "name": "StaticMeshActor_398",
+   "label": "Way0264_LanternGlass",
+   "slot": 0,
+   "before": "MI_V2_GlassTeal",
+   "after": "MI_V2_LanternGlassTeal"
+  }
+ ]
+}
