@@ -1,0 +1,525 @@
+{
+ "name": "zzAH00_paving_users",
+ "started": "2026-09-17 05:09:27",
+ "status": "done",
+ "use": {
+  "MI_V2_PlazaShade": [
+   [
+    "B SM_kerb_stone",
+    [
+     224,
+     0.0
+    ]
+   ],
+   [
+    "B SM_terrace_platform",
+    [
+     49,
+     0.0
+    ]
+   ],
+   [
+    "A SM_terrace_platform",
+    [
+     35,
+     53434.734688919016
+    ]
+   ],
+   [
+    "B WL_Ground_Flagstone_B_paving_shade",
+    [
+     12,
+     0.0
+    ]
+   ],
+   [
+    "B WL_Ground_Flagstone_C_paving_shade",
+    [
+     12,
+     0.0
+    ]
+   ],
+   [
+    "B WL_Ground_Flagstone_A_paving_shade",
+    [
+     11,
+     0.0
+    ]
+   ],
+   [
+    "B SM_plaza_slab_0",
+    [
+     7,
+     0.0
+    ]
+   ],
+   [
+    "B SM_plaza_slab_1",
+    [
+     6,
+     0.0
+    ]
+   ],
+   [
+    "B SM_plaza_slab_6",
+    [
+     4,
+     0.0
+    ]
+   ],
+   [
+    "B SM_plaza_slab_3",
+    [
+     4,
+     0.0
+    ]
+   ]
+  ],
+  "MI_V2_PlazaCream": [
+   [
+    "B SM_plaza_slab_0",
+    [
+     1126,
+     0.0
+    ]
+   ],
+   [
+    "B SM_terrace_platform",
+    [
+     388,
+     0.0
+    ]
+   ],
+   [
+    "B SM_garden_arch_stone",
+    [
+     371,
+     0.0
+    ]
+   ],
+   [
+    "B SM_kerb_stone",
+    [
+     266,
+     0.0
+    ]
+   ],
+   [
+    "B SM_plaza_slab_6",
+    [
+     87,
+     0.0
+    ]
+   ],
+   [
+    "B SM_plaza_slab_3",
+    [
+     81,
+     0.0
+    ]
+   ],
+   [
+    "A SM_terrace_platform",
+    [
+     20,
+     1088.3205297631862
+    ]
+   ],
+   [
+    "B SM_side_steps",
+    [
+     16,
+     0.0
+    ]
+   ],
+   [
+    "B WL_Ground_Flagstone_B_paving",
+    [
+     12,
+     0.0
+    ]
+   ],
+   [
+    "B WL_Ground_Flagstone_C_paving",
+    [
+     12,
+     0.0
+    ]
+   ]
+  ],
+  "MI_V2_PlazaWarm": [
+   [
+    "B SM_kerb_stone",
+    [
+     2703,
+     0.0
+    ]
+   ],
+   [
+    "B SM_plaza_slab_0",
+    [
+     517,
+     0.0
+    ]
+   ],
+   [
+    "B SM_terrace_platform",
+    [
+     377,
+     0.0
+    ]
+   ],
+   [
+    "B SM_plaza_slab_3",
+    [
+     42,
+     0.0
+    ]
+   ],
+   [
+    "B SM_plaza_slab_6",
+    [
+     42,
+     0.0
+    ]
+   ],
+   [
+    "B WL_Ground_Flagstone_B_paving_warm",
+    [
+     12,
+     0.0
+    ]
+   ],
+   [
+    "B WL_Ground_Flagstone_C_paving_warm",
+    [
+     12,
+     0.0
+    ]
+   ],
+   [
+    "B WL_Ground_Flagstone_A_paving_warm",
+    [
+     11,
+     0.0
+    ]
+   ],
+   [
+    "A SM_terrace_platform",
+    [
+     6,
+     240.56559360000028
+    ]
+   ],
+   [
+    "B SM_plaza_slab_7",
+    [
+     5,
+     0.0
+    ]
+   ]
+  ],
+  "MI_V2_PlazaGrey": [
+   [
+    "B SM_terrace_platform",
+    [
+     88,
+     0.0
+    ]
+   ],
+   [
+    "B SM_plaza_slab_0",
+    [
+     87,
+     0.0
+    ]
+   ],
+   [
+    "B SM_plaza_slab_3",
+    [
+     29,
+     0.0
+    ]
+   ],
+   [
+    "B SM_plaza_slab_6",
+    [
+     19,
+     0.0
+    ]
+   ],
+   [
+    "B SM_kerb_stone",
+    [
+     8,
+     0.0
+    ]
+   ],
+   [
+    "B SM_plaza_slab_5",
+    [
+     6,
+     0.0
+    ]
+   ],
+   [
+    "A SM_stairs_broad",
+    [
+     5,
+     344.5488745966638
+    ]
+   ],
+   [
+    "B SM_stone_ring_base",
+    [
+     4,
+     0.0
+    ]
+   ],
+   [
+    "B SM_plaza_slab_4",
+    [
+     3,
+     0.0
+    ]
+   ],
+   [
+    "B SM_retaining_wall",
+    [
+     3,
+     0.0
+    ]
+   ]
+  ],
+  "MI_V2_PathStone": [
+   [
+    "A SM_terrace_platform",
+    [
+     69,
+     12109.149763350335
+    ]
+   ],
+   [
+    "B SM_path_flag_0",
+    [
+     35,
+     0.0
+    ]
+   ],
+   [
+    "B SM_path_flag_3",
+    [
+     24,
+     0.0
+    ]
+   ],
+   [
+    "B SM_path_flag_4",
+    [
+     15,
+     0.0
+    ]
+   ],
+   [
+    "B SM_path_flag_1",
+    [
+     13,
+     0.0
+    ]
+   ],
+   [
+    "B SM_path_flag_5",
+    [
+     8,
+     0.0
+    ]
+   ],
+   [
+    "B SM_path_flag_2",
+    [
+     8,
+     0.0
+    ]
+   ],
+   [
+    "A SM_path_steps",
+    [
+     2,
+     25.24905628606481
+    ]
+   ]
+  ],
+  "MI_V2_PathWarm": [
+   [
+    "A SM_terrace_platform",
+    [
+     66,
+     19379.995261086333
+    ]
+   ],
+   [
+    "B SM_path_flag_1",
+    [
+     13,
+     0.0
+    ]
+   ],
+   [
+    "B SM_path_flag_0",
+    [
+     11,
+     0.0
+    ]
+   ],
+   [
+    "B SM_path_flag_4",
+    [
+     10,
+     0.0
+    ]
+   ],
+   [
+    "B SM_path_flag_3",
+    [
+     6,
+     0.0
+    ]
+   ],
+   [
+    "B SM_path_flag_2",
+    [
+     4,
+     0.0
+    ]
+   ],
+   [
+    "B SM_path_flag_5",
+    [
+     3,
+     0.0
+    ]
+   ]
+  ],
+  "MI_V2_PathPale": [
+   [
+    "B SM_path_flag_3",
+    [
+     5,
+     0.0
+    ]
+   ],
+   [
+    "B SM_path_flag_4",
+    [
+     3,
+     0.0
+    ]
+   ],
+   [
+    "B SM_path_flag_2",
+    [
+     3,
+     0.0
+    ]
+   ],
+   [
+    "B SM_path_flag_1",
+    [
+     3,
+     0.0
+    ]
+   ],
+   [
+    "B SM_path_flag_0",
+    [
+     1,
+     0.0
+    ]
+   ],
+   [
+    "B SM_path_flag_5",
+    [
+     1,
+     0.0
+    ]
+   ]
+  ],
+  "MI_V2_Cobble": [
+   [
+    "A SM_terrace_platform",
+    [
+     431,
+     127773.58649542478
+    ]
+   ]
+  ],
+  "MI_V2_CobbleHero": [],
+  "MI_V2_Kerb": [
+   [
+    "B SM_kerb_stone",
+    [
+     4908,
+     0.0
+    ]
+   ]
+  ],
+  "MI_V2_Moss": [
+   [
+    "B SM_garden_lawn",
+    [
+     69,
+     0.0
+    ]
+   ],
+   [
+    "B WL_Ground_Flagstone_B_moss",
+    [
+     12,
+     0.0
+    ]
+   ],
+   [
+    "B WL_Ground_Flagstone_C_moss",
+    [
+     12,
+     0.0
+    ]
+   ],
+   [
+    "B WL_Ground_Flagstone_A_moss",
+    [
+     11,
+     0.0
+    ]
+   ],
+   [
+    "A Cube",
+    [
+     1,
+     9000000.0
+    ]
+   ]
+  ],
+  "MI_V2_Lawn": [
+   [
+    "B SM_garden_lawn",
+    [
+     175,
+     0.0
+    ]
+   ]
+  ],
+  "MI_V2_Meadow": [
+   [
+    "B SM_garden_lawn",
+    [
+     141,
+     0.0
+    ]
+   ]
+  ]
+ },
+ "finished": "2026-09-17 05:09:29",
+ "seconds": 1.7,
+ "log": ""
+}

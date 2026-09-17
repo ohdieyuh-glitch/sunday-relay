@@ -1,0 +1,1400 @@
+{
+ "pass": "GR01",
+ "title": "Terrace-platform paving tiles laid in flagstones (dedicated twins)",
+ "twins": {
+  "MI_V2_PlazaShade": [
+   "MI_V2_GroundFlag_PlazaShade",
+   0.0025
+  ],
+  "MI_V2_PlazaCream": [
+   "MI_V2_GroundFlag_PlazaCream",
+   0.0025
+  ],
+  "MI_V2_PlazaWarm": [
+   "MI_V2_GroundFlag_PlazaWarm",
+   0.0025
+  ],
+  "MI_V2_PathStone": [
+   "MI_V2_GroundFlag_PathStone",
+   0.0033
+  ],
+  "MI_V2_PathWarm": [
+   "MI_V2_GroundFlag_PathWarm",
+   0.0033
+  ]
+ },
+ "swaps": [
+  {
+   "name": "StaticMeshActor_27",
+   "label": "FlankL_EntryApron",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_28",
+   "label": "FlankL_EntryWalk",
+   "slot": 0,
+   "before": "MI_V2_PlazaWarm",
+   "after": "MI_V2_GroundFlag_PlazaWarm"
+  },
+  {
+   "name": "StaticMeshActor_29",
+   "label": "FlankL_Parterre_Walk0",
+   "slot": 0,
+   "before": "MI_V2_PlazaWarm",
+   "after": "MI_V2_GroundFlag_PlazaWarm"
+  },
+  {
+   "name": "StaticMeshActor_30",
+   "label": "FlankL_Parterre_Walk1",
+   "slot": 0,
+   "before": "MI_V2_PlazaWarm",
+   "after": "MI_V2_GroundFlag_PlazaWarm"
+  },
+  {
+   "name": "StaticMeshActor_33",
+   "label": "FlankL_Walk_Paved0",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_34",
+   "label": "FlankL_Walk_Paved1",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_35",
+   "label": "FlankL_Walk_Paved2",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_36",
+   "label": "FlankL_Walk_Paved3",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_37",
+   "label": "FlankL_Walk_Paved4",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_38",
+   "label": "FlankL_Walk_Paved5",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_44",
+   "label": "FlankR_EntryApron",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_45",
+   "label": "FlankR_EntryWalk",
+   "slot": 0,
+   "before": "MI_V2_PlazaWarm",
+   "after": "MI_V2_GroundFlag_PlazaWarm"
+  },
+  {
+   "name": "StaticMeshActor_46",
+   "label": "FlankR_Parterre_Walk0",
+   "slot": 0,
+   "before": "MI_V2_PlazaWarm",
+   "after": "MI_V2_GroundFlag_PlazaWarm"
+  },
+  {
+   "name": "StaticMeshActor_47",
+   "label": "FlankR_Parterre_Walk1",
+   "slot": 0,
+   "before": "MI_V2_PlazaWarm",
+   "after": "MI_V2_GroundFlag_PlazaWarm"
+  },
+  {
+   "name": "StaticMeshActor_50",
+   "label": "FlankR_Walk_Paved0",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_51",
+   "label": "FlankR_Walk_Paved1",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_52",
+   "label": "FlankR_Walk_Paved2",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_53",
+   "label": "FlankR_Walk_Paved3",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_54",
+   "label": "FlankR_Walk_Paved4",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_55",
+   "label": "FlankR_Walk_Paved5",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_969",
+   "label": "South_MarketFloor",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_973",
+   "label": "South_CloisterFloor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_975",
+   "label": "South_WLane00",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_976",
+   "label": "South_WLane01",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_977",
+   "label": "South_WLane02",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_978",
+   "label": "South_WLane03",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_979",
+   "label": "South_WLane04",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_980",
+   "label": "South_WLane05",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_981",
+   "label": "South_WLane06",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_982",
+   "label": "South_WLane07",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_983",
+   "label": "South_WLane08",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1108",
+   "label": "South_WCross0",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1109",
+   "label": "South_WCross1",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1110",
+   "label": "South_WCross2",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1111",
+   "label": "South_WCross3",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1112",
+   "label": "South_WCross4",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1113",
+   "label": "South_WCross5",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1115",
+   "label": "South_ELane00",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1116",
+   "label": "South_ELane01",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1117",
+   "label": "South_ELane02",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1118",
+   "label": "South_ELane03",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1119",
+   "label": "South_ELane04",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1120",
+   "label": "South_ELane05",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1121",
+   "label": "South_ELane06",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1122",
+   "label": "South_ELane07",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1123",
+   "label": "South_ELane08",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1221",
+   "label": "South_ECross0",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1222",
+   "label": "South_ECross1",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1223",
+   "label": "South_ECross2",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1224",
+   "label": "South_ECross3",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1225",
+   "label": "South_ECross4",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1226",
+   "label": "South_ECross5",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1228",
+   "label": "South_X0_00",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1229",
+   "label": "South_X0_01",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1230",
+   "label": "South_X0_02",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1231",
+   "label": "South_X0_03",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1232",
+   "label": "South_X0_04",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1233",
+   "label": "South_X0_05",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1234",
+   "label": "South_X0_06",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1235",
+   "label": "South_X0_07",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1236",
+   "label": "South_X0_08",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1237",
+   "label": "South_X0_09",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1238",
+   "label": "South_X0_10",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1239",
+   "label": "South_X0_11",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1240",
+   "label": "South_X0_12",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1326",
+   "label": "South_X1_00",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1327",
+   "label": "South_X1_01",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1328",
+   "label": "South_X1_02",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1329",
+   "label": "South_X1_03",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1330",
+   "label": "South_X1_04",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1331",
+   "label": "South_X1_05",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1332",
+   "label": "South_X1_06",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1333",
+   "label": "South_X1_07",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1334",
+   "label": "South_X1_08",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1335",
+   "label": "South_X1_09",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1336",
+   "label": "South_X1_10",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1337",
+   "label": "South_X1_11",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1338",
+   "label": "South_X1_12",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1508",
+   "label": "South_X2_00",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1509",
+   "label": "South_X2_01",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1510",
+   "label": "South_X2_02",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1511",
+   "label": "South_X2_03",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1512",
+   "label": "South_X2_04",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1513",
+   "label": "South_X2_05",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1514",
+   "label": "South_X2_06",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1515",
+   "label": "South_X2_07",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1516",
+   "label": "South_X2_08",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1517",
+   "label": "South_X2_09",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1518",
+   "label": "South_X2_10",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1519",
+   "label": "South_X2_11",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1520",
+   "label": "South_X2_12",
+   "slot": 0,
+   "before": "MI_V2_PathStone",
+   "after": "MI_V2_GroundFlag_PathStone"
+  },
+  {
+   "name": "StaticMeshActor_1606",
+   "label": "South_Court0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_1672",
+   "label": "South_Court1Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_1738",
+   "label": "South_Court2Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_1873",
+   "label": "South_ClockForecourt",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_1874",
+   "label": "SW_PlazaFloor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_4472",
+   "label": "SW_Court0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_4473",
+   "label": "SW_Court1Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_4474",
+   "label": "SW_Court2Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  },
+  {
+   "name": "StaticMeshActor_4717",
+   "label": "FillNE_Q0_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_4902",
+   "label": "FillNE_Q0_1Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_5086",
+   "label": "FillNE_Q1_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_5301",
+   "label": "FillNE_Q1_1Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_5522",
+   "label": "FillNE_Q2_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_5679",
+   "label": "FillNE_Q2_1Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_5940",
+   "label": "FillSFW_Q0_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_6097",
+   "label": "FillSFW_Q1_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_6287",
+   "label": "FillSFW_Q2_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_6518",
+   "label": "FillSFE_Q0_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_6721",
+   "label": "FillSFE_Q1_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_6885",
+   "label": "FillSFE_Q2_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_7127",
+   "label": "FillE_Q0_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_7285",
+   "label": "FillE_Q0_1Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_7509",
+   "label": "FillW_Q0_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_7711",
+   "label": "FillW_Q0_1Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_7960",
+   "label": "FillWE_Q0_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_8117",
+   "label": "FillWE_Q0_1Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_8324",
+   "label": "FillEE_Q0_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_8555",
+   "label": "FillSE2_Q0_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_8792",
+   "label": "FillEL_Q0_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_9054",
+   "label": "FillEMN_Q0_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_9212",
+   "label": "FillEMN_Q0_1Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_9369",
+   "label": "FillEMN_Q1_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_9560",
+   "label": "FillEMN_Q1_1Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_9805",
+   "label": "FillEMC_Q0_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_10007",
+   "label": "FillEMC_Q0_1Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_10210",
+   "label": "FillEMC_Q1_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_10373",
+   "label": "FillEMC_Q1_1Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_10579",
+   "label": "FillEMS_Q0_0Floor",
+   "slot": 0,
+   "before": "MI_V2_PlazaShade",
+   "after": "MI_V2_GroundFlag_PlazaShade"
+  },
+  {
+   "name": "StaticMeshActor_10581",
+   "label": "CxCityS_Rd000",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10666",
+   "label": "CxCityS_Rd001",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10667",
+   "label": "CxCityS_Rd002",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10668",
+   "label": "CxCityS_Rd003",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10669",
+   "label": "CxCityS_Rd004",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10754",
+   "label": "CxCityS_Rd005",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10755",
+   "label": "CxCityS_Rd006",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10756",
+   "label": "CxCityS_Rd007",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10757",
+   "label": "CxCityS_Rd008",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10842",
+   "label": "CxCityS_Rd009",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10843",
+   "label": "CxSSW_Rd000",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10886",
+   "label": "CxSSW_Rd001",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10887",
+   "label": "CxSSW_Rd002",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10888",
+   "label": "CxSSW_Rd003",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10889",
+   "label": "CxSSW_Rd004",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10932",
+   "label": "CxSSW_Rd005",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10933",
+   "label": "CxSSW_Rd006",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10934",
+   "label": "CxSSW_Rd007",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10935",
+   "label": "CxCitySW_Rd000",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10978",
+   "label": "CxCitySW_Rd001",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10979",
+   "label": "CxCitySW_Rd002",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10980",
+   "label": "CxCitySW_Rd003",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_10981",
+   "label": "CxCitySW_Rd004",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11024",
+   "label": "CxCitySW_Rd005",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11025",
+   "label": "CxCitySW_Rd006",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11026",
+   "label": "CxCitySW_Rd007",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11027",
+   "label": "CxCitySW_Rd008",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11070",
+   "label": "CxCitySW_Rd009",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11071",
+   "label": "CxCitySW_Rd010",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11072",
+   "label": "CxCityNE_Rd000",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11115",
+   "label": "CxCityNE_Rd001",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11116",
+   "label": "CxCityNE_Rd002",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11117",
+   "label": "CxCityNE_Rd003",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11118",
+   "label": "CxCityNE_Rd004",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11161",
+   "label": "CxCityNE_Rd005",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11162",
+   "label": "CxCityNE_Rd006",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11163",
+   "label": "CxCityNE_Rd007",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11164",
+   "label": "CxCityNE_Rd008",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11207",
+   "label": "CxCityNE_Rd009",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11208",
+   "label": "CxCityNE_Rd010",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11209",
+   "label": "CxCityNE_Rd011",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11210",
+   "label": "CxCityE_Rd000",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11253",
+   "label": "CxCityE_Rd001",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11254",
+   "label": "CxCityE_Rd002",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11255",
+   "label": "CxCityE_Rd003",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11256",
+   "label": "CxCityE_Rd004",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11299",
+   "label": "CxCityE_Rd005",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11300",
+   "label": "CxCityE_Rd006",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11301",
+   "label": "CxCityE_Rd007",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11302",
+   "label": "CxCityE_Rd008",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11345",
+   "label": "CxCityE_Rd009",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11346",
+   "label": "CxCityE_Rd010",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11347",
+   "label": "CxCityE_Rd011",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11348",
+   "label": "CxCityWE_Rd000",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11391",
+   "label": "CxCityWE_Rd001",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11392",
+   "label": "CxCityWE_Rd002",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11393",
+   "label": "CxCityWE_Rd003",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11394",
+   "label": "CxCityWE_Rd004",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11437",
+   "label": "CxCityWE_Rd005",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11438",
+   "label": "CxCityWE_Rd006",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11439",
+   "label": "CxCityWE_Rd007",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11440",
+   "label": "CxCityWE_Rd008",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11483",
+   "label": "CxCityWE_Rd009",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11484",
+   "label": "CxCityWE_Rd010",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11485",
+   "label": "CxCityWE_Rd011",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_11486",
+   "label": "CxCityWE_Rd012",
+   "slot": 0,
+   "before": "MI_V2_PathWarm",
+   "after": "MI_V2_GroundFlag_PathWarm"
+  },
+  {
+   "name": "StaticMeshActor_16398",
+   "label": "GA03_Dais",
+   "slot": 0,
+   "before": "MI_V2_PlazaCream",
+   "after": "MI_V2_GroundFlag_PlazaCream"
+  }
+ ]
+}

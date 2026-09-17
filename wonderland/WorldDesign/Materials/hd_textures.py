@@ -16,6 +16,7 @@ wrap-around distances), one per surface family, each ALBEDO + NORMAL + ROUGHNESS
   gold       polished metal: near-flat normal with fine directional scratches, roughness 0.18-0.40 with smudges
   ashlar     castle wall stone laid in courses (MQ05): running-bond blocks, fine joints with chamfered arrises the
              sun can find, every block its own tone and a whisper of tilt; clean, pale, no grime
+  flagstone  walked paving laid as random-ashlar flagstones with recessed joints (GR01, 2026-09-17)
   grass      lawn (MQ09) -- generated, applied, judged WORSE than the V2 lawn texture, reverted; kept for reference
   macro      one 1024 px low-frequency map (R: brightness, G: roughness) laid at ~60 m to break repetition
 
@@ -309,6 +310,89 @@ def ashlar(n, rng, courses=8):
     return alb, normal_from_height(height, 12.0), rough, mean
 
 
+def flagstone(n, rng, courses=8):
+    """GR01 (2026-09-17): walked paving laid as random-ashlar flagstones -- the city's plazas, sidewalks and paths.
+
+    WHY. The founder's material-realism phase: the terrace-platform tiles under the city's plazas, sidewalks and paths
+    wear the seamless limestone, so a 9 m tile reads as one poured slab -- the 'giant block' look. Paving is laid.
+    Laid at 4 m (TexScale 0.0025) one course is 40-62 cm and a stone 35-120 cm; at a smaller TexScale the same set
+    reads as smaller path setts. Per stone: its own tone (+/-6%), warmth and roughness, a slight tilt, a ~1.5 cm
+    bevelled arris the sun can find, the limestone's fine grain and sparse pits, and a faintly smoother worn centre.
+    Joints ~1 cm, recessed, darker and rougher, with a little dirt settled along their edges. Clean and maintained:
+    no cracks, no moss, no stains. Neutral like every family -- the instance's BaseColor carries the colour.
+    Tiles by construction: course heights and stone lengths each sum to the tile, joint offsets wrap."""
+    jw, cw = 2.6, 8.0                                     # joint half-width, arris width (px; 1 px ~ 2 mm at 4 m)
+    heights = rng.uniform(0.62, 1.45, courses)            # preview 1 (0.80-1.25) read as even tile courses
+    rows = np.round(heights / heights.sum() * n).astype(int)
+    rows[-1] = n - rows[:-1].sum()
+    grain = spectral(n, 1.3, rng, lo=n / 10.0)
+    mid = spectral(n, 1.9, rng, lo=6.0, hi=n / 10.0)
+    mottle = spectral(n, 2.8, rng, lo=1.0, hi=10.0)
+    pits = smoothstep(2.1, 2.9, spectral(n, 0.6, rng, lo=n / 6.0))
+    cloud = spectral(n, 2.2, rng, lo=8.0, hi=48.0)          # stone-sized cloudiness, so a face is not one flat tone
+    nicks = smoothstep(1.9, 2.6, spectral(n, 0.9, rng, lo=n / 18.0, hi=n / 5.0))   # small chips, used only on the arris
+    height = np.zeros((n, n))
+    lum = np.zeros((n, n))
+    tone = np.ones((n, n))
+    rough = np.zeros((n, n))
+    xs = np.arange(n)
+    prev_edges = None
+    y0 = 0
+    for r in range(courses):
+        y1 = y0 + rows[r]
+        for _attempt in range(60):
+            k = int(rng.integers(3, 7))
+            w = rng.uniform(0.40, 1.80, k)
+            lengths = np.round(w / w.sum() * n).astype(int)
+            lengths[-1] = n - lengths[:-1].sum()
+            offset = int(rng.integers(0, n))
+            edges = (offset + np.concatenate([[0], np.cumsum(lengths)[:-1]])) % n
+            if prev_edges is None:
+                break
+            gap = np.abs(edges[:, None] - prev_edges[None, :])
+            gap = np.minimum(gap, n - gap)
+            if gap.min() > 60:                               # no joint within ~12 cm of the joint below
+                break
+        prev_edges = edges
+        rel = (xs[:, None] - edges[None, :]) % n
+        bid = np.argmin(np.where(rel < lengths[None, :], rel, n + 1), axis=1)
+        start = edges[bid]
+        pos = (xs - start) % n
+        blen = lengths[bid].astype(float)
+        dx = np.minimum(pos, blen - pos)
+        fu = pos / blen
+        yy = np.arange(y0, y1)[:, None] - y0
+        dy = np.minimum(yy + 0.5, (y1 - y0) - yy - 0.5)
+        fv = (yy + 0.5) / (y1 - y0)
+        d = np.minimum(dx[None, :], dy)
+        joint = 1.0 - smoothstep(jw - 1.0, jw + 1.0, d)
+        arris = smoothstep(jw, jw + cw, d)
+        dirt = (1.0 - smoothstep(jw, jw + 5.0, d)) * (1.0 - joint)
+        centre = smoothstep(0.15, 0.5, np.minimum(np.minimum(fu, 1.0 - fu)[None, :], np.minimum(fv, 1.0 - fv)))
+        u_tone = rng.uniform(-1, 1, k)[bid][None, :]
+        u_warm = rng.uniform(-1, 1, k)[bid][None, :]
+        u_rough = rng.uniform(-1, 1, k)[bid][None, :]
+        tilt_a = rng.uniform(-1, 1, k)[bid][None, :]
+        tilt_b = rng.uniform(-1, 1, k)[bid][None, :]
+        sl = (slice(y0, y1), slice(None))
+        band = arris * (1.0 - smoothstep(jw + cw, jw + cw + 6.0, d))                  # the arris itself
+        height[sl] = (0.60 * arris + 0.030 * (tilt_a * (fu[None, :] - 0.5) + tilt_b * (fv - 0.5)) * arris
+                      - 0.35 * band * nicks[sl])
+        lum[sl] = ((0.86 * (1.0 + 0.14 * u_tone)) * (0.965 + 0.035 * arris) * (1.0 - 0.34 * joint) * (1.0 - 0.10 * dirt)
+                   - 0.08 * band * nicks[sl])
+        tone[sl] = 1.0 + 0.040 * u_warm + 0.012 * joint
+        rough[sl] = 0.74 + 0.06 * u_rough + 0.18 * joint + 0.05 * dirt - 0.06 * centre
+        y0 = y1
+    height += 0.012 * grain + 0.020 * mid - 0.25 * pits * (height > 0.3)
+    # preview 2 read the cloudiness at 0.040 as stains across stones; variety belongs to the individual stones
+    lum += 0.020 * grain + 0.025 * mid + 0.018 * mottle - 0.10 * pits + 0.016 * cloud
+    tone += 0.005 * mottle
+    warm = np.stack([tone * 1.010, np.ones_like(tone), (2.0 - tone) * 0.988], axis=-1)
+    alb, mean = neutral_albedo(lum, warm)
+    rough = np.clip(rough + 0.04 * grain + 0.03 * mid + 0.10 * pits, 0, 1)
+    return alb, normal_from_height(height, 10.0), rough, mean
+
+
 def grass(n, rng):
     """MQ09: lawn that is not a flat plane. The census put lawn at 48% of everything visible in the city, and it read as
     one uniform green sheet -- the Bible's rejected 'low-detail'. At a ~1.4 m tile this is what a walker sees of grass:
@@ -350,9 +434,9 @@ def macro(n, rng):
 
 
 FAMILIES = {"limestone": limestone, "cobble": cobble, "ivory": ivory, "roof": roof, "gold": gold, "ashlar": ashlar,
-            "grass": grass}
+            "grass": grass, "flagstone": flagstone}
 # seed order: the MQ01 sets and macro first, so adding a family never changes a texture already imported
-SEED_ORDER = ["limestone", "cobble", "ivory", "roof", "gold", "macro", "ashlar", "grass"]
+SEED_ORDER = ["limestone", "cobble", "ivory", "roof", "gold", "macro", "ashlar", "grass", "flagstone"]
 
 
 def main():
