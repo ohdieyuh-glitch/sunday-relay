@@ -1,5 +1,5 @@
 {
-  "checked_assets": 126,
+  "checked_assets": 127,
   "failures": 0,
   "material_check": "59 MI_V2_* names parsed from materials_v2.py",
   "per_asset": {
@@ -108,6 +108,7 @@
     "WL_Object_TeapotPavilion": [],
     "WL_Object_TeaCup": [],
     "WL_Object_TeaSaucer": [],
+    "WL_Object_LanternStandard": [],
     "WL_Palace_Wing": [],
     "WL_Palace_Pavilion": [],
     "WL_Palace_Dome_Grand": [],
@@ -686,6 +687,11 @@
     "WL_Object_TeaSaucer": {
       "enamel": "0fb533233ad1f4d684d095f390a2d854702d76222db05c00d40e9327290f4362",
       "gold": "b3aa46d58e90f54247a368fba6816d957600b71c1098b20859f730e09ca4b5ae"
+    },
+    "WL_Object_LanternStandard": {
+      "glass": "4011371fcdb939d87ec57069c9b6c0ff918836e168645b3dabed2cf71f6fe07e",
+      "gold": "92e3ff7f9614f90233a10ab28ed06d7dba6afb7e4a525392c4a25fd198015d1c",
+      "stone": "79770856e97cf9a31a09e91a173c688c233c5d8bbaa895ca6179c92db12039b2"
     },
     "WL_Palace_Wing": {
       "glass": "6fe648cb3cca42a6a3e83e84f1075ec34aba864a87c59735185177fd287dabd6",

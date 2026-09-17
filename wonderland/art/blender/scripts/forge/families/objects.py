@@ -14,6 +14,7 @@ dial faces +X, the kit's module front, standing on its edge with the case's lowe
 
 import math
 
+from .. import elements as E
 from .. import kit as K
 from .. import mesh as M
 
@@ -272,4 +273,76 @@ def object_tea_saucer(f):
         tri_budget=6000, nanite=False, collision=True)
 
 
-BUILDERS = (object_pocket_clock, object_teapot_pavilion, object_tea_cup, object_tea_saucer)
+def _hanging_lantern(g, gl, at, S):
+    """A glazed gold lantern hanging with its ring's top at `at` (the wall lantern's body at scale S)."""
+    x, y, ztop = at
+    H = (0.28 + 0.70 + 0.30 + 0.14) * S
+    z0 = ztop - H
+    BOT, TOP, R = z0 + 0.28 * S, z0 + 0.98 * S, 0.20 * S
+    m = M.xform((x, y, 0.0), (0.0, 0.0, 30.0))
+    g.lathe([(0.0, TOP + 0.20 * S), (0.05 * S, TOP + 0.19 * S), (0.10 * S, TOP + 0.14 * S), (0.20 * S, TOP + 0.06 * S),
+             (0.26 * S, TOP), (0.0, TOP)], segments=6, smooth=False, matrix=m)
+    g.lathe([(0.0, TOP + 0.18 * S), (0.04 * S, TOP + 0.22 * S), (0.05 * S, TOP + 0.28 * S), (0.0, TOP + 0.30 * S)],
+            segments=10, smooth=True, cap_bottom=False, matrix=M.xform((x, y, 0.0)))
+    g.sweep([(x, y, TOP + 0.28 * S), (x, y, ztop)], 0.012 * S, sides=6, smooth=False, cap=True)
+    gl.lathe([(0.0, BOT + 0.06 * S), (R * 0.82, BOT + 0.06 * S), (R, TOP - 0.02 * S), (0.0, TOP - 0.02 * S)], segments=6,
+             smooth=False, matrix=m)
+    for k in range(6):
+        a = math.radians(60.0 * k)
+        g.sweep([(x + math.cos(a) * R * 0.84, y + math.sin(a) * R * 0.84, BOT + 0.05 * S),
+                 (x + math.cos(a) * R * 1.02, y + math.sin(a) * R * 1.02, TOP - 0.01 * S)], 0.014 * S, sides=6,
+                smooth=False, cap=True)
+    g.lathe([(R * 0.78, BOT), (R * 0.92, BOT), (R * 0.92, BOT + 0.07 * S), (R * 0.78, BOT + 0.07 * S)], segments=6,
+            smooth=False, matrix=m)
+    g.lathe([(0.0, z0), (0.03 * S, z0 + 0.04 * S), (0.05 * S, z0 + 0.14 * S), (0.12 * S, z0 + 0.22 * S), (R * 0.92, BOT),
+             (0.0, BOT)], segments=12, smooth=True, matrix=M.xform((x, y, 0.0)))
+
+
+def object_lantern_standard(f):
+    """A 12 m gold lantern standard: the Lantern Hamlets' landmark, two lit lanterns on scrolled arms.
+
+    WHY (2026-09-16, LanternLaneCam27): the district's 25 'strange lanterns' are bronze bent posts holding beige
+    barrels whose streaked texture reads as rust. The Bible's lantern is gold and glazed. This is the standard a
+    district would raise: a moulded stone plinth, a fluted gold shaft with a collar and a knop, a crown ring carrying
+    two scrolled arms, a glazed gold lantern hanging from each, and a finial.
+    """
+    st = f.part("stone")
+    g = f.part("gold")
+    gl = f.part("glass")
+    SHAFT_R = 0.20
+    # plinth
+    for (w, z, h) in ((1.60, 0.00, 0.30), (1.30, 0.30, 0.22), (1.00, 0.52, 0.60), (1.20, 1.12, 0.16)):
+        st.box(w, w, h, at=(0.0, 0.0, z), chamfer=w * 0.04, centre_z=False)
+    # shaft: base moulding, fluted drum, collar, knop, upper shaft
+    g.lathe([(0.0, 1.28), (0.42, 1.28), (0.42, 1.40), (0.32, 1.52), (0.26, 1.70), (0.0, 1.70)], segments=16, smooth=True)
+    g.lathe([(SHAFT_R * 1.15, 1.70), (SHAFT_R, 2.10), (SHAFT_R * 0.92, 6.40), (SHAFT_R * 0.86, 8.60)],
+            segments=16, smooth=False, cap_bottom=False, cap_top=False)
+    for k in range(8):
+        a = math.radians(45.0 * k)
+        g.box(0.05, 0.05, 6.2, at=(math.cos(a) * SHAFT_R * 0.98, math.sin(a) * SHAFT_R * 0.98, 2.2), centre_z=False)
+    g.lathe([(0.0, 4.80), (0.30, 4.85), (0.34, 5.00), (0.30, 5.15), (0.0, 5.20)], segments=16, smooth=True)
+    g.lathe([(0.0, 8.50), (0.26, 8.55), (0.36, 8.80), (0.26, 9.05), (0.0, 9.10)], segments=16, smooth=True)
+    g.lathe([(SHAFT_R * 0.80, 9.05), (SHAFT_R * 0.70, 11.20)], segments=12, smooth=False, cap_bottom=False)
+    # crown ring and two scrolled arms, each hanging a lantern
+    g.lathe([(0.58, 9.60), (0.66, 9.60), (0.66, 9.72), (0.58, 9.72)], segments=24, smooth=True, cap_bottom=False, cap_top=False)
+    for sgn in (-1.0, 1.0):
+        # the first preview's lanterns were small for a 12 m column: scale 1.8 -> 2.4, arms out to 2.6 m
+        arm = [(0.0, 0.0, 9.20), (sgn * 0.55, 0.0, 9.62), (sgn * 1.10, 0.0, 9.98), (sgn * 1.70, 0.0, 10.14), (sgn * 2.25, 0.0, 10.10), (sgn * 2.60, 0.0, 9.90)]
+        g.sweep(arm, [0.065, 0.06, 0.055, 0.05, 0.045, 0.04], sides=8, smooth=True, cap=True)
+        scroll = [(sgn * 0.20, 0.0, 8.55), (sgn * 0.70, 0.0, 8.85), (sgn * 0.95, 0.0, 9.30), (sgn * 0.80, 0.0, 9.60)]
+        g.sweep(scroll, [0.035, 0.035, 0.03, 0.03], sides=6, smooth=True, cap=True)
+        _hanging_lantern(g, gl, (sgn * 2.60, 0.0, 9.90), 2.4)
+    # finial
+    E.finial(g, (0.0, 0.0, 11.10), 1.10, radius=0.16, gold=g)
+    return K.ModuleSpec(
+        "WL_Object_LanternStandard", "lantern_standard", "landmark", "hero",
+        f.emit("WL_Object_LanternStandard"),
+        [K.Socket("bottom", 0.0, 0.80, "ground", "stands on its stone plinth")],
+        districts=("hamlet", "mushroom_grove", "plaza", "royal_garden"),
+        note="12 m gold lantern standard: stone plinth, fluted gold shaft with knops, two scrolled arms, two glazed lanterns, finial",
+        params={"height_m": 12.2, "arm_reach_m": 2.60},
+        tri_budget=6000, nanite=False, collision=True)
+
+
+BUILDERS = (object_pocket_clock, object_teapot_pavilion, object_tea_cup, object_tea_saucer,
+            object_lantern_standard)

@@ -10,16 +10,16 @@
     "wonderland/marble/import-marble-world.py (AssetImportTask, the guarded Interchange options, spawn_actor_from_class)"
   ],
   "counts": {
-    "assets": 126,
-    "meshes": 401,
+    "assets": 127,
+    "meshes": 404,
     "missing_sources": 0,
     "nanite_requested": 24,
-    "collision_requested": 80,
+    "collision_requested": 81,
     "by_data_layer": {
       "V2_Arrival": 8,
       "V2_Castle": 26,
       "V2_Garden": 23,
-      "V2_Props": 37,
+      "V2_Props": 38,
       "V2_Skyline": 32
     },
     "by_destination": {
@@ -31,7 +31,7 @@
       "/Game/WonderlandV2/Kit/hero": 2,
       "/Game/WonderlandV2/Kit/market": 6,
       "/Game/WonderlandV2/Kit/mushrooms": 3,
-      "/Game/WonderlandV2/Kit/objects": 4,
+      "/Game/WonderlandV2/Kit/objects": 5,
       "/Game/WonderlandV2/Kit/palace": 3,
       "/Game/WonderlandV2/Kit/paving": 3,
       "/Game/WonderlandV2/Kit/roofscape": 6,
@@ -9002,6 +9002,75 @@
           "material_instance": "MI_V2_Gold",
           "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Gold",
           "triangles": 768
+        }
+      ]
+    },
+    {
+      "asset_id": "WL_Object_LanternStandard",
+      "family_group": "objects",
+      "variant_of": null,
+      "destination_path": "/Game/WonderlandV2/Kit/objects",
+      "data_layer": "V2_Props",
+      "nanite_requested": false,
+      "collision_requested": true,
+      "height_uu": 1220.0,
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "style": {
+        "slender_broad": 0.454,
+        "low_monumental": 0.499,
+        "open_solid": 1.0,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.412,
+        "ceremonial_residential": 0.05
+      },
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 80.0,
+          "rung": null,
+          "note": "stands on its stone plinth"
+        }
+      ],
+      "parts": [
+        {
+          "part": "glass",
+          "mesh_name": "WL_Object_LanternStandard_glass",
+          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Object_LanternStandard_glass.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/objects",
+          "destination_name": "WL_Object_LanternStandard_glass",
+          "asset_path": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass",
+          "material_instance": "MI_V2_GlassAmber",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_GlassAmber",
+          "triangles": 48
+        },
+        {
+          "part": "gold",
+          "mesh_name": "WL_Object_LanternStandard_gold",
+          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Object_LanternStandard_gold.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/objects",
+          "destination_name": "WL_Object_LanternStandard_gold",
+          "asset_path": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold",
+          "material_instance": "MI_V2_Gold",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Gold",
+          "triangles": 2142
+        },
+        {
+          "part": "stone",
+          "mesh_name": "WL_Object_LanternStandard",
+          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Object_LanternStandard.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/objects",
+          "destination_name": "WL_Object_LanternStandard",
+          "asset_path": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard",
+          "material_instance": "MI_V2_IvoryStone",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_IvoryStone",
+          "triangles": 112
         }
       ]
     },
