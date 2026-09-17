@@ -25,6 +25,7 @@
 #include "WonderlandCompanionSubsystem.h"
 #include "WonderlandCompanionTerminal.h"
 #include "WonderlandHudPanels.h"
+#include "WonderlandJuliusWorkLog.h"
 #include "WonderlandLiveTerminal.h"
 #include "WonderlandMiniMap.h"
 #include "WonderlandMissionSubsystem.h"
@@ -1429,6 +1430,32 @@ void UWonderlandUiSubsystem::NarrateMissionEvent(FName EventType, EWonderlandMis
 		}
 		Terminal->SetSimulated(true);
 		JuliusNarratedEvent = EventType;
+		// THE SECTION IN VIEW FOLLOWS THE STAGE: the architect's prompt while the Dog reads, the coder's code while it
+		// paints and repairs, the reviewer while it inspects and verifies, Julius at the start and the end.
+		const TCHAR* Focus = TEXT("JULIUS 3.3");
+		switch (Beat)
+		{
+		case EWonderlandMissionBeat::Researching:
+		case EWonderlandMissionBeat::PromptArchitectActive:
+		case EWonderlandMissionBeat::Guidance:
+			Focus = TEXT("PROMPT ARCHITECT");
+			break;
+		case EWonderlandMissionBeat::CodingAgentActive:
+		case EWonderlandMissionBeat::WaitingCheckpoint:
+		case EWonderlandMissionBeat::ApprovalContinue:
+		case EWonderlandMissionBeat::RepairRequired:
+		case EWonderlandMissionBeat::Repairing:
+			Focus = TEXT("CODING AGENT");
+			break;
+		case EWonderlandMissionBeat::IndependentReviewerActive:
+		case EWonderlandMissionBeat::ReviewChallenge:
+		case EWonderlandMissionBeat::Verifying:
+			Focus = TEXT("INDEPENDENT REVIEWER");
+			break;
+		default:
+			break;
+		}
+		Terminal->SetFocusSection(Focus);
 	}
 	NarrateRoles(EventType, ChakraLabel, bNewMission, bLlmJoined, bJhinnJoined);
 
@@ -1528,10 +1555,13 @@ void UWonderlandUiSubsystem::NarrateRoles(FName EventType, const FString& Chakra
 	for (int32 Role = 0; Role < WonderlandJuliusRoleCount; ++Role)
 	{
 		const EWonderlandJuliusRole Which = static_cast<EWonderlandJuliusRole>(Role);
-		// THE WORLD HAS MOVED ON. Whatever a role still owed the last event is written now, so no section is ever still
-		// describing a stage the Relay Dog has left.
-		FlushRole(Role);
 		FRoleFeed& Feed = RoleFeeds[Role];
+		// THE WORLD HAS MOVED ON. A role still working through the last event keeps going -- faster, so it catches up
+		// (TickRoles) -- rather than dumping its code at once; only a runaway backlog is written in one go.
+		if (Feed.Pending.Num() > 24 || EventType.IsNone())
+		{
+			FlushRole(Role);
+		}
 		if (EventType.IsNone())
 		{
 			Feed.Status = WonderlandRoleRestingStatus(Which, true);
@@ -1545,9 +1575,13 @@ void UWonderlandUiSubsystem::NarrateRoles(FName EventType, const FString& Chakra
 			Feed.Status = Block.Status;
 			Terminal->SetSectionState(WonderlandRoleFeedDetail::SectionFor(Which), Feed.Status, FString());
 		}
-		Feed.Pending = MoveTemp(Block.Lines);
+		const bool bWasIdle = Feed.Pending.Num() == 0 && Feed.TypingLine == INDEX_NONE;
+		Feed.Pending.Append(MoveTemp(Block.Lines));
 		// All four work at once, each in its own section; staggered so they do not change on the same frame.
-		Feed.Wait = 0.2f * Role;
+		if (bWasIdle)
+		{
+			Feed.Wait = 0.15f * Role;
+		}
 	}
 }
 
@@ -1559,32 +1593,60 @@ void UWonderlandUiSubsystem::WriteRoleLine(int32 Role, const FWonderlandRoleLine
 	}
 	const EWonderlandJuliusRole Which = static_cast<EWonderlandJuliusRole>(Role);
 	FRoleFeed& Feed = RoleFeeds[Role];
-	++Feed.Written;
-	Feed.Latest = Line;
-	if (Which == EWonderlandJuliusRole::Julius)
+	const FString Section = WonderlandRoleFeedDetail::SectionFor(Which);
+	if (Line.Kind == EWonderlandRoleLineKind::Status)
 	{
-		// Julius's work is rows in its own section, the way the terminal has always shown Julius; a heading is carried
-		// into the row it heads rather than taking a row of its own.
-		if (Line.Kind == EWonderlandRoleLineKind::Section)
-		{
-			Feed.Heading = Line.Text;
-			return;
-		}
-		const FString Headline = Feed.Heading.IsEmpty() ? Line.Text : FString::Printf(TEXT("%s \u00B7 %s"), *Feed.Heading, *Line.Text);
-		Feed.Heading.Reset();
-		Terminal->AddJuliusRow(TEXT("Julius"), Headline,
-			FString::Printf(TEXT("event %s  \u00B7  %s  \u00B7  simulated, no provider called"), *RoleEvent.ToString(), *RoleChakra));
+		// The component's state changes here, as it reaches this point of its work.
+		Feed.Status = Line.Text;
+		Terminal->SetSectionState(Section, Feed.Status, FString());
 		return;
 	}
-	Terminal->SetSectionState(WonderlandRoleFeedDetail::SectionFor(Which), Feed.Status, WonderlandRoleFeedDetail::AsSectionLine(Line));
+	if (Line.Kind == EWonderlandRoleLineKind::Pause)
+	{
+		return;
+	}
+	++Feed.Written;
+	Feed.Latest = Line;
+	const TSharedPtr<SWonderlandWorkLog> WorkLog = Terminal->GetWorkLog(Section);
+	if (!WorkLog.IsValid())
+	{
+		return;
+	}
+	const int32 Typing = WorkLog->AddLine(Line.Kind, Line.Text);
+	if (Typing != INDEX_NONE)
+	{
+		Feed.TypingLine = Typing;
+		Feed.Typed = 0.0f;
+		Feed.TypingLength = WorkLog->GetLineLength(Typing);
+		Feed.TypingKind = Line.Kind;
+	}
+	if (Which == EWonderlandJuliusRole::Julius && Line.Kind != EWonderlandRoleLineKind::Episode && Line.Kind != EWonderlandRoleLineKind::Summary)
+	{
+		// Julius's latest line is still its headline, for the tests that read one.
+		Terminal->NoteJuliusHeadline(Line.Text);
+	}
 }
 
 void UWonderlandUiSubsystem::FlushRole(int32 Role)
 {
 	FRoleFeed& Feed = RoleFeeds[Role];
+	const TSharedPtr<SWonderlandWorkLog> WorkLog = Terminal.IsValid()
+		? Terminal->GetWorkLog(WonderlandRoleFeedDetail::SectionFor(static_cast<EWonderlandJuliusRole>(Role)))
+		: TSharedPtr<SWonderlandWorkLog>();
+	auto FinishTyping = [&Feed, &WorkLog]()
+	{
+		if (Feed.TypingLine != INDEX_NONE && WorkLog.IsValid())
+		{
+			WorkLog->SetReveal(Feed.TypingLine, Feed.TypingLength);
+			Feed.TypedCharacters += FMath::Max(Feed.TypingLength - FMath::FloorToInt(Feed.Typed), 0);
+		}
+		Feed.TypingLine = INDEX_NONE;
+	};
+	FinishTyping();
 	for (const FWonderlandRoleLine& Line : Feed.Pending)
 	{
 		WriteRoleLine(Role, Line);
+		FinishTyping();
 	}
 	Feed.Pending.Reset();
 	Feed.Wait = 0.0f;
@@ -1607,17 +1669,65 @@ bool UWonderlandUiSubsystem::TickRoles(float DeltaSeconds)
 	for (int32 Role = 0; Role < WonderlandJuliusRoleCount; ++Role)
 	{
 		FRoleFeed& Feed = RoleFeeds[Role];
-		if (Feed.Pending.Num() == 0)
+		if (Feed.Pending.Num() == 0 && Feed.TypingLine == INDEX_NONE)
 		{
 			continue;
 		}
-		Feed.Wait -= Step;
-		while (Feed.Wait <= 0.0f && Feed.Pending.Num() > 0)
+		// CATCHING UP, NOT DUMPING: a role with work still queued when the world moves on works faster until it is level.
+		const float Hurry = 1.0f + 0.10f * static_cast<float>(Feed.Pending.Num());
+		float Left = Step * Hurry;
+		const TSharedPtr<SWonderlandWorkLog> WorkLog = Terminal.IsValid()
+			? Terminal->GetWorkLog(WonderlandRoleFeedDetail::SectionFor(static_cast<EWonderlandJuliusRole>(Role)))
+			: TSharedPtr<SWonderlandWorkLog>();
+		int32 Guard = 64;
+		while (Left > 0.0f && Guard-- > 0)
 		{
+			if (Feed.TypingLine != INDEX_NONE)
+			{
+				// TYPING: characters at a readable rate, then the line's own short hold.
+				const float Cps = WonderlandRoleTypingCharsPerSecond(Feed.TypingKind) / Scale;
+				const float Need = (static_cast<float>(Feed.TypingLength) - Feed.Typed) / FMath::Max(Cps, 1.0f);
+				const float Use = FMath::Min(Left, Need);
+				const int32 Before = FMath::FloorToInt(Feed.Typed);
+				Feed.Typed += Use * Cps;
+				Left -= Use;
+				const int32 After = FMath::Min(FMath::FloorToInt(Feed.Typed), Feed.TypingLength);
+				Feed.TypedCharacters += FMath::Max(After - Before, 0);
+				if (WorkLog.IsValid())
+				{
+					WorkLog->SetReveal(Feed.TypingLine, After);
+				}
+				if (Feed.Typed >= static_cast<float>(Feed.TypingLength) - 0.001f)
+				{
+					if (WorkLog.IsValid())
+					{
+						WorkLog->SetReveal(Feed.TypingLine, Feed.TypingLength);
+					}
+					Feed.TypingLine = INDEX_NONE;
+					Feed.Wait = WonderlandRoleLineHoldSeconds(Feed.TypingKind) * Scale;
+				}
+				continue;
+			}
+			if (Feed.Wait > 0.0f)
+			{
+				const float Use = FMath::Min(Left, Feed.Wait);
+				Feed.Wait -= Use;
+				Left -= Use;
+				continue;
+			}
+			if (Feed.Pending.Num() == 0)
+			{
+				break;
+			}
 			const FWonderlandRoleLine Line = Feed.Pending[0];
 			Feed.Pending.RemoveAt(0);
 			WriteRoleLine(Role, Line);
-			Feed.Wait += WonderlandRoleLineHoldSeconds(Line.Kind) * Scale;
+			if (Feed.TypingLine == INDEX_NONE)
+			{
+				Feed.Wait = Line.Kind == EWonderlandRoleLineKind::Pause
+					? static_cast<float>(FCString::Atof(*Line.Text))
+					: WonderlandRoleLineHoldSeconds(Line.Kind) * Scale;
+			}
 		}
 	}
 	return true;
@@ -1646,7 +1756,9 @@ FString UWonderlandUiSubsystem::GetJuliusRoleLatestKind(int32 Role) const
 	}
 	static const TCHAR* const Names[] = { TEXT("Log"), TEXT("Section"), TEXT("Command"), TEXT("Preview"), TEXT("PreviewRule"),
 		TEXT("File"), TEXT("DiffAdd"), TEXT("DiffRemove"), TEXT("Pass"), TEXT("Fail"), TEXT("CheckDone"), TEXT("CheckOpen"),
-		TEXT("Finding"), TEXT("State"), TEXT("Wait") };
+		TEXT("Finding"), TEXT("State"), TEXT("Wait"), TEXT("Status"), TEXT("Episode"), TEXT("Summary"), TEXT("CodeFile"),
+		TEXT("CodeLine"), TEXT("DiffStat"), TEXT("PromptBegin"), TEXT("PromptHeading"), TEXT("PromptLine"), TEXT("PromptEnd"),
+		TEXT("FindingCard"), TEXT("Pause"), TEXT("Blank") };
 	const int32 Index = static_cast<int32>(RoleFeeds[Role].Latest.Kind);
 	return Index >= 0 && Index < UE_ARRAY_COUNT(Names) ? FString(Names[Index]) : FString();
 }
@@ -1654,6 +1766,26 @@ FString UWonderlandUiSubsystem::GetJuliusRoleLatestKind(int32 Role) const
 int32 UWonderlandUiSubsystem::GetJuliusRolePending(int32 Role) const
 {
 	return Role >= 0 && Role < WonderlandJuliusRoleCount ? RoleFeeds[Role].Pending.Num() : 0;
+}
+
+int32 UWonderlandUiSubsystem::GetJuliusSectionLineCount(const FString& Section) const
+{
+	return Terminal.IsValid() ? Terminal->GetSectionLineCount(Section) : 0;
+}
+
+FString UWonderlandUiSubsystem::DescribeJuliusSection(const FString& Section, int32 MaxLines) const
+{
+	return Terminal.IsValid() ? Terminal->DescribeSection(Section, MaxLines) : FString();
+}
+
+FString UWonderlandUiSubsystem::GetJuliusFocusSection() const
+{
+	return Terminal.IsValid() ? Terminal->GetFocusSection() : FString();
+}
+
+int32 UWonderlandUiSubsystem::GetJuliusRoleTypedCharacters(int32 Role) const
+{
+	return Role >= 0 && Role < WonderlandJuliusRoleCount ? RoleFeeds[Role].TypedCharacters : 0;
 }
 
 bool UWonderlandUiSubsystem::IsJuliusTerminalSimulated() const
