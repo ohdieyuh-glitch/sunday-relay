@@ -121,7 +121,7 @@ describe('1 — a result is a success only when every field of it says so', () =
   ];
 
   for (const [name, over, resultClass] of refusedShapes) {
-    it(`${name} is refused, never SUCCEEDED, and reaches no executor step after the base`, async () => {
+    it(`${name} is refused, never SUCCEEDED, and captures the attempt without minting evidence`, async () => {
       const { queryFn } = fakeSdk([init, result(over)]);
       const { adapter, shell, artifacts } = adapterOver(claude(queryFn));
       const refusal = await refusalOf(adapter.dispatch(DISPATCH));
@@ -129,8 +129,12 @@ describe('1 — a result is a success only when every field of it says so', () =
       expect(refusal.retryable).toBe(false);
       expect(refusal.failureClass).toBe('coder_result_untrusted');
       expect(refusal.diagnostics).toMatchObject({ resultClass, implementationPresent: false, runtimeStarted: true });
-      expect(steps(shell)).toEqual(['base']);
+      // The close-out look at the workspace runs — a failed attempt still owns what it
+      // changed — and nothing that would become evidence: no diff artifact, no test run.
+      expect(steps(shell)).toEqual(['base', 'status']);
       expect(artifacts.get(diffRef('run-live'))).toBeNull();
+      expect(artifacts.get(testOutputRef('run-live'))).toBeNull();
+      expect((refusal.implementation as { attemptOutcome: string }).attemptOutcome).toBe('FAILED');
     });
   }
 

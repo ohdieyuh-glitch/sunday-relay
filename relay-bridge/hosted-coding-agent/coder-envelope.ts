@@ -116,8 +116,15 @@ export const MAX_CODER_ATTEMPTS = 2;
  * the attempt's are different numbers, and the second is the first plus these.
  */
 export const CODER_EXECUTOR_STEP_TIMEOUTS_MS = Object.freeze({
-  base: 15_000,
-  status: 30_000,
+  /**
+   * The start of the attempt: HEAD, the committed tree, the working tree, and
+   * the one undo Julius authorises. It reads a temporary index seeded from the
+   * repository's own, so the snapshot is a stat pass and not a rehash — but it
+   * is more work than the single `rev-parse` this used to be.
+   */
+  base: 30_000,
+  /** The close-out: the change set, the tree the attempt leaves, and the three attributions. */
+  status: 45_000,
   diff: 30_000,
   test: 300_000,
 } as const);

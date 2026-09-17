@@ -1,5 +1,5 @@
 import type { JuliusCardPolicy } from './julius-policy';
-import { flattenDiagnostics, JuliusDispatchError, JuliusProviderRouter, safeReviewDiagnostics, type JuliusDispatchAllocation, type JuliusProviderResult } from './julius-router';
+import { flattenDiagnostics, JuliusDispatchError, JuliusProviderRouter, safeReviewDiagnostics, type JuliusDispatchAllocation, type JuliusDispatchWorkspace, type JuliusProviderResult } from './julius-router';
 import type { JuliusEvidence, JuliusTask, JuliusWorker, JuliusWorkerRole } from './julius-runtime';
 import type { JuliusContractReviewCharge } from './julius-task-contract';
 import { juliusEvidenceAuthority, juliusMintedEvidenceId } from './julius-worker-authority';
@@ -179,7 +179,9 @@ export interface JuliusExecutionRequest { readonly claim:JuliusExecutionClaim;re
   * stack rewrote. Adding it before #238 landed would have manufactured a
   * conflict for no gain. Optional, so a caller that omits it behaves exactly
   * as before. */
- readonly attempt?:number; }
+ readonly attempt?:number;
+ /** The one undo Julius authorises before this dispatch starts. Additive; absent means nothing is undone. */
+ readonly workspace?:JuliusDispatchWorkspace; }
 /**
  * `failureClass` is the connector's safe subclass when one is known, already
  * narrowed to a machine token by {@link safeFailureClass}. It is additive:
@@ -207,6 +209,17 @@ export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerI
   * the same claim as reporting an empty set.
   */
  readonly diagnostics?:Record<string,string|number|boolean|null>;
+ /**
+  * WHAT THE FAILED ATTEMPT CHANGED IN THE WORKSPACE, unsanitised.
+  *
+  * A failed attempt still edited the directory, and those edits used to reach
+  * the record only by turning up inside the NEXT attempt's diff — credited to
+  * an attempt that did not make them. The boundary carries the same shape a
+  * completed dispatch returns; the kernel reads it with its own allowlist and
+  * decides what it means. Absent when nothing was observed, which a cancelled
+  * dispatch must not confuse with an empty one.
+  */
+ readonly implementation?:unknown;
 };
 
 /**
@@ -311,7 +324,7 @@ export class JuliusExecutionCoordinator {
        * one edit that could actually break this, which is moving a line above
        * the await. `julius-worker-deadline.test.ts` pins the ordering instead.
        */
-      const result=await dispatchWithinDeadline(worker.timeoutMs,request.signal,(signal)=>this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,taskType:request.taskType,signal,...(request.allocation===undefined?{}:{allocation:request.allocation}),...(request.contract===undefined?{}:{contract:request.contract})}));
+      const result=await dispatchWithinDeadline(worker.timeoutMs,request.signal,(signal)=>this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,taskType:request.taskType,signal,...(request.allocation===undefined?{}:{allocation:request.allocation}),...(request.contract===undefined?{}:{contract:request.contract}),...(request.workspace===undefined?{}:{workspace:request.workspace})}));
       answered=result;
       /**
        * NOTHING FROM A CANCELLED DISPATCH BECOMES MISSION STATE. An abort that
@@ -377,7 +390,10 @@ export class JuliusExecutionCoordinator {
       * abandoned and a failure taken at once must leave the same diagnosis
       * behind, or the durable record would explain only the failures that
       * happened to be non-retryable. */
-     if(failure.retryable&&request.policy.automaticRetry){await this.event(request,'retry.scheduled',{code:failure.code,errorRetryable:true,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:'RETRY',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure)};}await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:'FAILED',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure)};}
+     /* WHAT THE FAILED ATTEMPT CHANGED travels on both endings too: a retry is
+      * exactly where an unrecorded change set becomes the next attempt's. */
+     const carriedImplementation=failure.implementation===undefined?{}:{implementation:failure.implementation};
+     if(failure.retryable&&request.policy.automaticRetry){await this.event(request,'retry.scheduled',{code:failure.code,errorRetryable:true,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:'RETRY',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure),...carriedImplementation};}await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:'FAILED',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure),...carriedImplementation};}
   }
   /**
    * ON EVERY EVENT, not only the failures. `retry.scheduled` and `task.failed`

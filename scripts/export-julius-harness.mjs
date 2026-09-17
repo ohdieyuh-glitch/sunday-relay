@@ -203,6 +203,7 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-task-pipeline.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-execution-coordinator.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-lease-keeper.ts', 'TASK GRAPH / SCHEDULER'],
+  ['src/relay/mission/julius/julius-workspace-attribution.ts', 'CODING AGENT'],
   ['src/relay/mission/julius/julius-policy.ts', 'C.A.R.D. POLICY'],
   ['src/relay/mission/julius/julius-router.ts', 'WORKER REGISTRY / ROUTING'],
   ['src/relay/mission/julius/julius-agent-turn-loop.ts', 'AGENT TURN LOOP'],
@@ -385,6 +386,7 @@ const FILE_RULES = [
   // session is launched, how its outcomes read, and the structural facts its
   // observation carries. Replaced wholesale when the provider is swapped.
   ['relay-bridge/julius/claude-code-coding-provider.ts', 'CODING AGENT'],
+  ['relay-bridge/julius/coder-workspace.ts', 'CODING AGENT'],
   ['relay-bridge/hosted-coding-agent/', 'CODING AGENT'],
   ['src/relay/connectors/claude-code/result-classification.ts', 'CODING AGENT'],
   ['relay-bridge/hermes-reviewer.ts', 'INDEPENDENT REVIEWER'],
