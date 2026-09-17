@@ -225,7 +225,32 @@ describe('C1 — a finding the lifecycle says is unresolved never lets a run com
     const lastReview = harness.store.contexts().filter((snapshot) => snapshot.taskId === 'repair:repair:build-1:1:task:2:task:review').at(-1)!;
     const shown = lastReview.packet.blocks.map((block) => block.text).join('\n');
     expect(shown, 'the first finding, addressed two rounds ago, is still in front of the reviewer').toContain(FINDING_1);
+    // And in front of the repair: the round sent to fix the unit is shown every unresolved finding of it.
+    const lastRepair = harness.store.contexts().filter((snapshot) => snapshot.taskId === 'repair:repair:build-1:1:task:2:task').at(-1)!;
+    const findingsShown = lastRepair.packet.blocks.filter((block) => block.kind === 'FINDING').map((block) => block.text).join('\n');
+    expect(findingsShown, 'the round-one finding is a FINDING the repair is charged with').toContain(FINDING_1);
+    expect(findingsShown).toContain('finding:repair:build-1:1:task:review:1:0');
     expect(await stateOf(harness)).toBe('COMPLETED');
+  });
+
+  it('H. a crash after the silence is refused and before the decision is written: the replay refuses once and decides once', async () => {
+    const harness = harnessWith({ reviewer: [PASS, REJECT, SILENT] });
+    seedMission(harness, 'run-1', '1', false);
+    const append = harness.store.appendDecision.bind(harness.store);
+    let crashed = false;
+    harness.store.appendDecision = async (input) => {
+      if (!crashed && input.taskId === 'repair:build-1:1:task') {
+        crashed = true;
+        throw new Error('process died between the refusal and the decision');
+      }
+      return append(input);
+    };
+    await drain(harness, 'run-1');
+
+    expect(crashed).toBe(true);
+    expect(factsOf(harness, 'review.verdict.refused').filter((facts) => facts.reasonCode === 'review_resolution_missing')).toHaveLength(1);
+    expect((await decisionsOf(harness)).filter((row) => row.startsWith('repair:build-1:1:task:'))).toEqual(['repair:build-1:1:task:HALT:FINDINGS_UNRESOLVED']);
+    expect(await stateOf(harness)).toBe('VERIFYING');
   });
 
   it('H. replayed advances and a restart write no second refusal and move nothing', async () => {
@@ -329,6 +354,29 @@ describe('C3 — a review whose research failed is not a review', () => {
       expect.objectContaining({ reasonCode: 'review_research_continuation_failed', reviewTaskId: 'plan-1:review', failedSegmentTaskId: 'segment:plan-1:review:2:task' }),
     ]);
     expect(await stateOf(harness), 'failed, not waiting on a review that can never come').toBe('FAILED');
+  });
+
+  it('while a review\'s research is still pending, an idle advance neither resumes the work under review nor asks for a second review', async () => {
+    const harness = harnessWith({
+      research: true,
+      reviewer: [
+        { kind: 'succeed', evidence: PASSED_REVIEW, researchAsks: ASKS, segmentResume: { completedSoFar: ['read the plan'], nextIntent: 'judge against the manual' } },
+        PASS, PASS,
+      ],
+    });
+    seedMission(harness, 'run-1', '1', false);
+    // Tick until the reviewer has paused and its research continuation exists, but has not run.
+    for (let index = 0; index < 16 && harness.store.taskRow('segment:plan-1:review:2:task') === null; index += 1) {
+      await harness.loop.tick({ projectId: 'prj-1' });
+    }
+    expect(harness.store.taskRow('segment:plan-1:review:2:task')!.state).toBe('RUNNABLE');
+    const reviewsAsked = () => factsOf(harness, 'review.started').filter((facts) => facts.reviewsTaskId === 'plan-1').length;
+    const before = reviewsAsked();
+
+    const advance = await harness.loop.advanceRun('run-1', 'prj-1');
+    expect(advance!.resumedVerifications, 'a review that is still researching is pending, not stranded').toBe(0);
+    expect(reviewsAsked(), 'and nobody is asked to review the plan again').toBe(before);
+    expect(await decisionsOf(harness)).toEqual([]);
   });
 
   it('a review whose research SUCCEEDED concludes as before, and its researched verdict decides the work', async () => {
