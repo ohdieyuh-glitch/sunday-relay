@@ -11,7 +11,6 @@
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
-#include "Widgets/Layout/SWrapBox.h"
 #include "WonderlandJuliusWorkLog.h"
 #include "WonderlandUiStyle.h"
 
@@ -110,7 +109,7 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 	RebuildJuliusBody();
 
 	const TSharedRef<SWidget> Window =
-		SNew(SBorder)
+		SAssignNew(WindowWidget, SBorder)
 		.BorderImage(&WindowBrush)
 		.Padding(FMargin(10.0f, 9.0f))
 		[
@@ -127,26 +126,12 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 				.ColorAndOpacity(WonderlandUi::Coral())
 			]
 			+ SVerticalBox::Slot()
-			.AutoHeight()
-			.Padding(2.0f, 0.0f, 0.0f, 4.0f)
-			[
-				MakeActiveNow()
-			]
-			+ SVerticalBox::Slot()
 			.FillHeight(1.0f)
 			[
-				// THE SECTIONS GROW DOWNWARD WITH THEIR WORK AND THIS SCROLLS. A wheel over it scrolls back through the
-				// history; the terminal follows the mission's focus again a few seconds after the player lets it be.
-				SAssignNew(Scroll, SScrollBox)
+				// THE SECTIONS ARE SIZED TO FIT: the terminal extends and each section shows only as many of its newest lines
+				// as the terminal can hold, so this never has anything to scroll.
+				SNew(SScrollBox)
 				.ScrollBarVisibility(EVisibility::Collapsed)
-				.OnUserScrolled_Lambda([this](float)
-				{
-					const double Now = FSlateApplication::Get().GetCurrentTime();
-					if (Now - LastAutoScroll > 1.2)
-					{
-						LastUserScroll = Now;
-					}
-				})
 				+ SScrollBox::Slot().Padding(0.0f, 0.0f, 0.0f, 5.0f)
 				[
 					MakeSection(TEXT("PROMPT ARCHITECT"), TEXT("WAITING"), MakeWorkLog(TEXT("PROMPT ARCHITECT"), TEXT("No activity yet.")))
@@ -205,10 +190,11 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 	ChildSlot
 	[
 		SNew(SConstraintCanvas)
-		// 39.2% wide, 27.3% tall, bottom-centred with a 3.1% margin: the approved web measurement.
+		// 39.2% wide, 27.3% tall, bottom-centred with a 3.1% margin: the approved web measurement. It EXTENDS vertically --
+		// same width, same bottom edge -- only while its work needs the room, and never past its limit (see Tick).
 		+ SConstraintCanvas::Slot()
 		.Anchors(FAnchors(0.304f, 0.696f, 0.696f, 0.969f))
-		.Offset(FMargin(0.0f))
+		.Offset_Lambda([this]() { return FMargin(0.0f, -ExtensionShown, 0.0f, 0.0f); })
 		[
 			Window
 		]
@@ -484,53 +470,6 @@ TSharedRef<SWidget> SWonderlandLiveTerminal::MakeWorkLog(const FString& Section,
 	return Log.ToSharedRef();
 }
 
-TSharedRef<SWidget> SWonderlandLiveTerminal::MakeActiveNow()
-{
-	// ACTIVE NOW: all four components' states on one line, so it is plain at a glance that they are working at once.
-	static const TCHAR* const Sections[] = { TEXT("JULIUS 3.3"), TEXT("PROMPT ARCHITECT"), TEXT("CODING AGENT"), TEXT("INDEPENDENT REVIEWER") };
-	static const TCHAR* const Short[] = { TEXT("JULIUS"), TEXT("ARCHITECT"), TEXT("CODER"), TEXT("REVIEWER") };
-	TSharedRef<SWrapBox> Strip = SNew(SWrapBox)
-		.UseAllottedSize(true)
-		.InnerSlotPadding(FVector2D(10.0f, 1.0f))
-		.Visibility_Lambda([this]() { return bSimulated ? EVisibility::HitTestInvisible : EVisibility::Collapsed; });
-	Strip->AddSlot()
-	[
-		SNew(STextBlock)
-		.Text(INVTEXT("ACTIVE NOW"))
-		.Font(WonderlandUi::Sans(8, true, 120))
-		.ColorAndOpacity(WonderlandUi::Gold())
-	];
-	for (int32 Index = 0; Index < 4; ++Index)
-	{
-		const FString Section = Sections[Index];
-		const FString Name = Short[Index];
-		auto IsActive = [this, Section]()
-		{
-			const FString State = GetSectionState(Section);
-			return !(State == TEXT("WAITING") || State == TEXT("STANDBY") || State.IsEmpty());
-		};
-		Strip->AddSlot()
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 4.0f, 0.0f)
-			[
-				SNew(STextBlock)
-				.Text(FText::FromString(TEXT("\u25CF")))
-				.Font(WonderlandUi::Mono(7))
-				.ColorAndOpacity_Lambda([IsActive]() { return FSlateColor(IsActive() ? WonderlandUi::Gold() : WonderlandUi::Faint()); })
-			]
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-			[
-				SNew(STextBlock)
-				.Text_Lambda([this, Section, Name]() { return FText::FromString(FString::Printf(TEXT("%s \u00B7 %s"), *Name, *GetSectionState(Section))); })
-				.Font(WonderlandUi::Mono(8))
-				.ColorAndOpacity_Lambda([IsActive]() { return FSlateColor(IsActive() ? WonderlandUi::Cream() : WonderlandUi::Dim()); })
-			]
-		];
-	}
-	return Strip;
-}
-
 TSharedPtr<SWonderlandWorkLog> SWonderlandLiveTerminal::GetWorkLog(const FString& Section) const
 {
 	const TSharedPtr<SWonderlandWorkLog>* Found = WorkLogs.Find(Section);
@@ -549,41 +488,10 @@ FString SWonderlandLiveTerminal::DescribeSection(const FString& Section, int32 M
 	return Log.IsValid() ? Log->DescribeLines(MaxLines) : FString();
 }
 
-float SWonderlandLiveTerminal::GetScrollOffset() const
+int32 SWonderlandLiveTerminal::GetSectionVisibleRows(const FString& Section) const
 {
-	return Scroll.IsValid() ? Scroll->GetScrollOffset() : 0.0f;
-}
-
-float SWonderlandLiveTerminal::GetScrollOffsetOfEnd() const
-{
-	return Scroll.IsValid() ? Scroll->GetScrollOffsetOfEnd() : 0.0f;
-}
-
-void SWonderlandLiveTerminal::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
-{
-	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
-	// KEEP THE WORK IN VIEW: the newest line of the section the mission is focused on, unless the player has just scrolled.
-	if (!Scroll.IsValid() || FocusSection.IsEmpty() || InCurrentTime - LastUserScroll < 6.0)
-	{
-		return;
-	}
-	const TSharedPtr<SWonderlandWorkLog> Log = GetWorkLog(FocusSection);
-	if (!Log.IsValid())
-	{
-		return;
-	}
-	const int32 Serial = Log->GetChangeSerial();
-	if (Serial == FollowedSerial && FocusSection == FollowedSection)
-	{
-		return;
-	}
-	FollowedSerial = Serial;
-	FollowedSection = FocusSection;
-	if (const TSharedPtr<SWidget> Newest = Log->GetNewestWidget())
-	{
-		LastAutoScroll = InCurrentTime;
-		Scroll->ScrollDescendantIntoView(Newest, true, EDescendantScrollDestination::IntoView, 8.0f);
-	}
+	const TSharedPtr<SWonderlandWorkLog> Log = GetWorkLog(Section);
+	return Log.IsValid() ? Log->GetVisibleRows() : 0;
 }
 
 TSharedPtr<SWidget> SWonderlandLiveTerminal::GetFocusTarget() const
@@ -705,11 +613,91 @@ void SWonderlandLiveTerminal::ResetSimulation()
 			Pair.Value->Reset();
 		}
 	}
-	FollowedSerial = -1;
-	LastUserScroll = -100.0;
-	if (Scroll.IsValid())
-	{
-		Scroll->ScrollToStart();
-	}
+
 }
 
+void SWonderlandLiveTerminal::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
+{
+	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+	// HOW MANY LINES EACH SECTION SHOWS, AND HOW TALL THE TERMINAL IS. The whole viewport is this widget, so its height is
+	// the screen's. The terminal may extend from its approved 27.3% to a hard 42% of the screen; within that, every section
+	// shows at least one line (as in the founder's image), the stage's focus section up to ten, a working section up to
+	// four, Julius up to three -- trimmed back, focus last, until they all fit. Nothing is ever left to scroll.
+	static const TCHAR* const Order[] = { TEXT("PROMPT ARCHITECT"), TEXT("CODING AGENT"), TEXT("JULIUS 3.3"), TEXT("INDEPENDENT REVIEWER") };
+	const float ScreenHeight = static_cast<float>(AllottedGeometry.GetLocalSize().Y);
+	if (ScreenHeight < 100.0f || !WindowWidget.IsValid())
+	{
+		return;
+	}
+	const float BaseHeight = ScreenHeight * (0.969f - 0.696f);
+	ExtensionLimit = ScreenHeight * (0.42f - 0.273f);
+	const float Row = SWonderlandWorkLog::RowHeight;
+
+	// The window's own chrome: its height now, less the bodies inside it.
+	float Bodies = 0.0f;
+	TSharedPtr<SWonderlandWorkLog> Logs[4];
+	for (int32 Index = 0; Index < 4; ++Index)
+	{
+		Logs[Index] = GetWorkLog(Order[Index]);
+		if (Logs[Index].IsValid())
+		{
+			Bodies += Logs[Index]->GetShownHeight();
+		}
+	}
+	const float WindowHeight = static_cast<float>(WindowWidget->GetCachedGeometry().GetLocalSize().Y);
+	const float Chrome = WindowHeight > 1.0f ? FMath::Max(WindowHeight - Bodies, 60.0f) : 200.0f;
+	const int32 Budget = FMath::Max(4, FMath::FloorToInt((BaseHeight + ExtensionLimit - Chrome) / Row));
+
+	int32 Want[4];
+	int32 Sum = 0;
+	for (int32 Index = 0; Index < 4; ++Index)
+	{
+		const FString Section = Order[Index];
+		const FString State = GetSectionState(Section);
+		const bool bResting = State == TEXT("WAITING") || State == TEXT("STANDBY") || State.IsEmpty();
+		int32 Cap = bResting ? 1 : 4;
+		if (Section == TEXT("JULIUS 3.3"))
+		{
+			Cap = bResting ? 1 : 3;
+		}
+		if (Section == FocusSection)
+		{
+			Cap = 10;
+		}
+		const int32 Rows = Logs[Index].IsValid() ? Logs[Index]->GetRowCount() : 1;
+		Want[Index] = FMath::Clamp(Rows, 1, Cap);
+		Sum += Want[Index];
+	}
+	// Trim to the budget: the others first, down to two lines; then everything down to one; the focus section last.
+	for (int32 Floor : { 2, 1 })
+	{
+		for (int32 Pass = 0; Pass < 2 && Sum > Budget; ++Pass)
+		{
+			for (int32 Index = 0; Index < 4 && Sum > Budget; ++Index)
+			{
+				const bool bFocus = FString(Order[Index]) == FocusSection;
+				if ((Pass == 0) == bFocus)
+				{
+					continue;
+				}
+				while (Want[Index] > Floor && Sum > Budget)
+				{
+					--Want[Index];
+					--Sum;
+				}
+			}
+		}
+	}
+	for (int32 Index = 0; Index < 4; ++Index)
+	{
+		if (Logs[Index].IsValid())
+		{
+			Logs[Index]->SetVisibleRows(Want[Index]);
+		}
+	}
+	// THE TERMINAL EXTENDS ONLY AS FAR AS ITS LINES NEED, easing there rather than jumping.
+	const float Needed = Chrome + static_cast<float>(Sum) * Row;
+	const float Target = FMath::Clamp(Needed - BaseHeight, 0.0f, ExtensionLimit);
+	const float Alpha = 1.0f - FMath::Exp(-FMath::Clamp(InDeltaTime, 0.0f, 0.2f) * 5.0f);
+	ExtensionShown = FMath::Abs(Target - ExtensionShown) < 0.5f ? Target : FMath::Lerp(ExtensionShown, Target, Alpha);
+}

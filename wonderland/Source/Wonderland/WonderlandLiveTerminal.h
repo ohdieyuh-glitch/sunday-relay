@@ -122,10 +122,11 @@ public:
 	/** A new mission: the simulated rows and section states go back to rest. */
 	void ResetSimulation();
 
-	// ---------------------------------------------------------------- the concurrent workstream (founder, 2026-09-16 evening)
-	// Each section's body is a work log (WonderlandJuliusWorkLog.h): code typed with line numbers and colours, prompt
-	// previews, checklists, findings. The boxes grow downward with their work and the terminal scrolls, keeping the section
-	// the mission is focused on in view unless the player has just scrolled it themselves. Its place and width never change.
+	// ---------------------------------------------------------------- the four components at work (founder, 2026-09-16)
+	// THE TERMINAL ALWAYS LOOKS LIKE THE FOUNDER'S IMAGE: these four sections, their headers, the message line. Each
+	// section's body is a rolling log of its component's work (WonderlandJuliusWorkLog.h). When there is more to show the
+	// terminal EXTENDS VERTICALLY -- same width, same bottom edge -- to a hard limit, and each section shows as many of its
+	// newest lines as fit; nothing ever has to be scrolled to be seen. The stage's focus section gets the most lines.
 
 	/** A section's work log: PROMPT ARCHITECT, CODING AGENT, JULIUS 3.3 or INDEPENDENT REVIEWER. */
 	TSharedPtr<SWonderlandWorkLog> GetWorkLog(const FString& Section) const;
@@ -138,9 +139,11 @@ public:
 	int32 GetSectionLineCount(const FString& Section) const;
 	FString DescribeSection(const FString& Section, int32 MaxLines) const;
 
-	/** How far the terminal's work has been scrolled, and how far it can be. */
-	float GetScrollOffset() const;
-	float GetScrollOffsetOfEnd() const;
+	/** How far the terminal has extended above its approved height, and its limit, in slate units. */
+	float GetExtension() const { return ExtensionShown; }
+	float GetExtensionLimit() const { return ExtensionLimit; }
+	/** How many rows a section is showing now. */
+	int32 GetSectionVisibleRows(const FString& Section) const;
 
 private:
 	struct FRow
@@ -178,15 +181,12 @@ private:
 
 	TMap<FString, TSharedPtr<SWonderlandWorkLog>> WorkLogs;
 	FString LatestJuliusHeadline;
-	TSharedPtr<SScrollBox> Scroll;
 	FString FocusSection;
-	FString FollowedSection;
-	int32 FollowedSerial = -1;
-	double LastUserScroll = -100.0;
-	double LastAutoScroll = -100.0;
+	/** The window, so its height can be measured; how far it has extended, where it is heading, and its hard limit. */
+	TSharedPtr<SWidget> WindowWidget;
+	float ExtensionShown = 0.0f;
+	float ExtensionLimit = 0.0f;
 	TSharedRef<SWidget> MakeWorkLog(const FString& Section, const FString& Resting);
-	/** The four components' states on one line at the top: simultaneity at a glance. */
-	TSharedRef<SWidget> MakeActiveNow();
 
 	FSlateRoundedBoxBrush WindowBrush;
 	FSlateRoundedBoxBrush SectionBrush;
