@@ -361,6 +361,15 @@ public:
 	bool SimulateWonderWebWindowScroll(FName Window, FName Control, float Delta);
 
 	/**
+	 * Point the Wonder Web window in front at a real address. The first window goes through the shared browse state, which
+	 * is what Julius's story follows; any other window has its own page and is pointed straight at it. Refused, with a
+	 * reason, for a host that is not allowed.
+	 */
+	bool NavigateFocusedBrowser(const FString& Url, FString& OutRefusal);
+	/** True for a Wonder Web window that is a browser: "browser", "browser-2", and so on. */
+	static bool IsBrowserWindow(FName Window);
+
+	/**
 	 * Type into whatever has keyboard focus, as real character events. After a click on the live page that is the page, so
 	 * this types into a real website. What is typed is never logged.
 	 */
@@ -651,7 +660,12 @@ private:
 	/** The windows, kept once made like the other panels, so a half-typed command is still there on reopen. */
 	TSharedPtr<SWonderlandWonderWebPanel> WonderWebPanel;
 	TSharedPtr<SWonderlandJuliusConnectPanel> ConnectPanel;
-	TSharedPtr<SWonderlandWonderWebBrowserPanel> BrowserPanel;
+	/**
+	 * THE BROWSER WINDOWS, one panel each. Founder: "Julius will be spawning multiple wonder webs" -- so browser is not one
+	 * window but as many as are open, each with its own real page in the runtime (WonderlandWonderWebLive.h). The first is
+	 * called "browser" and is the one Julius's own browsing appears in.
+	 */
+	TMap<FName, TSharedPtr<SWonderlandWonderWebBrowserPanel>> BrowserPanels;
 	TSharedPtr<SWonderlandWonderWebInputLayer> WonderWebLayer;
 	TArray<FWonderWebWindow> WonderWebWindows;
 	TWeakObjectPtr<AWonderlandWonderWebWorkspace> WonderWebWorkspace;

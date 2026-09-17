@@ -84,17 +84,16 @@ def job():
         # browser window back in front for it.
         ui.expand_wonder_web_window("browser")
         yield 4.0
-        yield 10.0
+        yield 6.0
         shot("04_julius_opened_the_page", "live=%s" % live.describe_live())
         RESULT["julius_frames"] = int(field(live.describe_live(), "frames") or 0)
         RESULT["julius_following"] = field(live.describe_live(), "following")
         RESULT["julius_url"] = field(live.describe_live(), "live_url")
-        yield 12.0
+        yield 5.0
         shot("05_julius_read_and_searched", "live=%s" % live.describe_live())
-        yield 12.0
-        shot("06_julius_further_on", "live=%s" % live.describe_live())
 
-        # ---- 3. REVOKED MID-TASK: the next step is refused and the run blocks
+        # ---- 3. REVOKED MID-TASK: the next step is refused and the run blocks.
+        # Four real steps take about twenty seconds, so this lands while Julius is still working.
         console("wl.Julius.Connect.Revoke open-web")
         yield 8.0
         RESULT["after_revoke"] = str(ui.describe_wonder_web_workspace())

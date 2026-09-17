@@ -16,7 +16,11 @@ DEFINE_LOG_CATEGORY_STATIC(LogWonderWebLive, Log, All);
 namespace WonderWebLiveTuning
 {
 	TAutoConsoleVariable<float> CVarFps(TEXT("wl.WonderWeb.Live.Fps"), 4.0f,
-		TEXT("Wonder Web Live: frames a second asked of the runtime's browser. One request is in flight at a time, so a slow page simply arrives slower."));
+		TEXT("Wonder Web Live: frames a second asked of the runtime's browser for the window in front. One request is in flight at a time per window, so a slow page simply arrives slower."));
+	TAutoConsoleVariable<float> CVarBackgroundShare(TEXT("wl.WonderWeb.Live.BackgroundShare"), 0.25f,
+		TEXT("Wonder Web Live: the share of the front window's frame rate that the windows behind it get."));
+	TAutoConsoleVariable<float> CVarForgetSeconds(TEXT("wl.WonderWeb.Live.ForgetSeconds"), 2.0f,
+		TEXT("Wonder Web Live: stop asking for a window's frames this long after anything last drew it."));
 	TAutoConsoleVariable<int32> CVarLog(TEXT("wl.WonderWeb.Live.Log"), 0,
 		TEXT("Wonder Web Live: 1 logs every frame that arrives. Addresses and sizes only -- never what was typed."));
 }
@@ -34,10 +38,13 @@ void UWonderlandWonderWebLiveSubsystem::Deinitialize()
 		FTSTicker::GetCoreTicker().RemoveTicker(Ticker);
 		Ticker.Reset();
 	}
-	// A page left open in the runtime is a page still costing memory: say so on the way out.
-	if (!LiveTab.IsEmpty())
+	// A page left open in the runtime is a page still costing memory: say so on the way out, for every window that had one.
+	for (const TPair<FString, FWonderWebLivePage>& Pair : Pages)
 	{
-		SendIntent(FString::Printf(TEXT("{\"op\":\"close\",\"tab\":\"%s\"}"), *LiveTab), TEXT("close"));
+		if (!Pair.Value.bFollowing)
+		{
+			SendIntent(Pair.Key, FString::Printf(TEXT("{\"op\":\"close\",\"tab\":\"%s\"}"), *Pair.Key), TEXT("close"));
+		}
 	}
 	for (const FHttpRequestPtr& Request : InFlight)
 	{
@@ -48,7 +55,7 @@ void UWonderlandWonderWebLiveSubsystem::Deinitialize()
 		}
 	}
 	InFlight.Reset();
-	Frame = nullptr;
+	Pages.Reset();
 	Super::Deinitialize();
 }
 
@@ -65,11 +72,88 @@ FString UWonderlandWonderWebLiveSubsystem::BaseUrl()
 	return Base + TEXT("/julius-connect/v1/browser");
 }
 
+FWonderWebLivePage& UWonderlandWonderWebLiveSubsystem::PageFor(const FString& TabId)
+{
+	return Pages.FindOrAdd(TabId);
+}
+
+UTexture2D* UWonderlandWonderWebLiveSubsystem::GetFrame(const FString& TabId) const
+{
+	const FWonderWebLivePage* Page = Find(TabId);
+	return Page != nullptr ? Page->Frame.Get() : nullptr;
+}
+
+FIntPoint UWonderlandWonderWebLiveSubsystem::GetFrameSize(const FString& TabId) const
+{
+	const FWonderWebLivePage* Page = Find(TabId);
+	return Page != nullptr ? Page->FrameSize : FIntPoint(1200, 800);
+}
+
+FString UWonderlandWonderWebLiveSubsystem::GetLiveUrl(const FString& TabId) const
+{
+	const FWonderWebLivePage* Page = Find(TabId);
+	return Page != nullptr ? Page->Url : FString();
+}
+
+FString UWonderlandWonderWebLiveSubsystem::GetTitle(const FString& TabId) const
+{
+	const FWonderWebLivePage* Page = Find(TabId);
+	return Page != nullptr ? Page->Title : FString();
+}
+
+bool UWonderlandWonderWebLiveSubsystem::IsLoading(const FString& TabId) const
+{
+	const FWonderWebLivePage* Page = Find(TabId);
+	return Page != nullptr && Page->bLoading;
+}
+
+FString UWonderlandWonderWebLiveSubsystem::GetProblem(const FString& TabId) const
+{
+	const FWonderWebLivePage* Page = Find(TabId);
+	return Page != nullptr ? Page->Problem : FString();
+}
+
+bool UWonderlandWonderWebLiveSubsystem::HasFrame(const FString& TabId) const
+{
+	const FWonderWebLivePage* Page = Find(TabId);
+	return Page != nullptr && Page->Frame.IsValid();
+}
+
+bool UWonderlandWonderWebLiveSubsystem::IsFollowing(const FString& TabId) const
+{
+	const FWonderWebLivePage* Page = Find(TabId);
+	return Page != nullptr && Page->bFollowing;
+}
+
+int32 UWonderlandWonderWebLiveSubsystem::GetFrameCount(const FString& TabId) const
+{
+	const FWonderWebLivePage* Page = Find(TabId);
+	return Page != nullptr ? Page->FrameCount : 0;
+}
+
+TArray<FString> UWonderlandWonderWebLiveSubsystem::OpenTabs() const
+{
+	TArray<FString> Tabs;
+	Pages.GetKeys(Tabs);
+	Tabs.Sort();
+	return Tabs;
+}
+
 FString UWonderlandWonderWebLiveSubsystem::DescribeLive() const
 {
-	return FString::Printf(TEXT("live_tab=%s live_url=%s following=%d frames=%d size=%dx%d loading=%d problem=\"%s\""),
-		LiveTab.IsEmpty() ? TEXT("-") : *LiveTab, LiveUrl.IsEmpty() ? TEXT("-") : *LiveUrl, bFollowing ? 1 : 0,
-		FrameCount, FrameSize.X, FrameSize.Y, bLoading ? 1 : 0, *Problem);
+	if (Pages.IsEmpty())
+	{
+		return TEXT("live_pages=0 front=-");
+	}
+	TArray<FString> Rows;
+	for (const FString& TabId : OpenTabs())
+	{
+		const FWonderWebLivePage& Page = Pages[TabId];
+		Rows.Add(FString::Printf(TEXT("%s[url=%s following=%d frames=%d size=%dx%d loading=%d problem=\"%s\"]"),
+			*TabId, Page.Url.IsEmpty() ? TEXT("-") : *Page.Url, Page.bFollowing ? 1 : 0, Page.FrameCount,
+			Page.FrameSize.X, Page.FrameSize.Y, Page.bLoading ? 1 : 0, *Page.Problem));
+	}
+	return FString::Printf(TEXT("live_pages=%d front=%s %s"), Pages.Num(), Front.IsEmpty() ? TEXT("-") : *Front, *FString::Join(Rows, TEXT(" ")));
 }
 
 void UWonderlandWonderWebLiveSubsystem::Navigate(const FString& TabId, const FString& Url)
@@ -78,105 +162,105 @@ void UWonderlandWonderWebLiveSubsystem::Navigate(const FString& TabId, const FSt
 	// CHECKED HERE FIRST. The runtime checks again before it fetches; neither check is the only one.
 	if (!UWonderlandWonderWebBrowseSubsystem::IsHostAllowed(Url, Host))
 	{
-		Problem = Host.IsEmpty()
+		FWonderWebLivePage& Refused = PageFor(TabId);
+		Refused.Problem = Host.IsEmpty()
 			? FString::Printf(TEXT("'%s' is not an http(s) address, so nothing was asked for"), *Url)
 			: FString::Printf(TEXT("%s is not on wl.WonderWeb.RealHosts, so nothing was asked for"), *Host);
-		UE_LOG(LogWonderWebLive, Warning, TEXT("WLLIVE refused: %s"), *Problem);
+		UE_LOG(LogWonderWebLive, Warning, TEXT("WLLIVE refused: %s"), *Refused.Problem);
 		return;
 	}
-	if (!LiveTab.IsEmpty() && LiveTab != TabId)
-	{
-		SendIntent(FString::Printf(TEXT("{\"op\":\"close\",\"tab\":\"%s\"}"), *LiveTab), TEXT("close"));
-	}
-	LiveTab = TabId;
-	LiveUrl = Url;
-	bFollowing = false;
-	Problem.Reset();
-	bLoading = true;
+	FWonderWebLivePage& Page = PageFor(TabId);
+	Page.Url = Url;
+	Page.bFollowing = false;
+	Page.bLoading = true;
+	Page.Problem.Reset();
+	Page.WantedAt = FPlatformTime::Seconds();
 	UE_LOG(LogWonderWebLive, Display, TEXT("WLLIVE navigate %s -> %s"), *TabId, *Url);
 	// The page is opened first, then sized to the window it will be drawn in, then sent to the address: that way it lays
 	// itself out once, for the shape it is actually going to be seen in.
-	SendIntent(FString::Printf(TEXT("{\"op\":\"viewport\",\"tab\":\"%s\",\"width\":%d,\"height\":%d}"), *TabId, Viewport.X, Viewport.Y), TEXT("viewport"));
-	AskedViewport = Viewport;
-	SendIntent(FString::Printf(TEXT("{\"op\":\"navigate\",\"tab\":\"%s\",\"url\":\"%s\"}"), *TabId, *Url), TEXT("navigate"));
+	SendIntent(TabId, FString::Printf(TEXT("{\"op\":\"viewport\",\"tab\":\"%s\",\"width\":%d,\"height\":%d}"), *TabId, Page.Viewport.X, Page.Viewport.Y), TEXT("viewport"));
+	Page.AskedViewport = Page.Viewport;
+	SendIntent(TabId, FString::Printf(TEXT("{\"op\":\"navigate\",\"tab\":\"%s\",\"url\":\"%s\"}"), *TabId, *Url), TEXT("navigate"));
 }
 
 void UWonderlandWonderWebLiveSubsystem::Follow(const FString& TabId)
 {
-	if (LiveTab == TabId && bFollowing)
+	FWonderWebLivePage& Page = PageFor(TabId);
+	if (Page.bFollowing)
 	{
 		return;
 	}
-	// A tab this client opened is its own to close; a tab it is only watching is not.
-	if (!LiveTab.IsEmpty() && LiveTab != TabId && !bFollowing)
-	{
-		SendIntent(FString::Printf(TEXT("{\"op\":\"close\",\"tab\":\"%s\"}"), *LiveTab), TEXT("close"));
-	}
-	LiveTab = TabId;
-	bFollowing = true;
-	bLoading = true;
-	Problem.Reset();
-	Frame = nullptr;
-	FrameCount = 0;
+	Page.bFollowing = true;
+	Page.bLoading = true;
+	Page.Problem.Reset();
+	Page.Frame.Reset();
+	Page.FrameCount = 0;
+	Page.WantedAt = FPlatformTime::Seconds();
 	UE_LOG(LogWonderWebLive, Display, TEXT("WLLIVE watching the tab Julius works in: %s"), *TabId);
 }
 
-void UWonderlandWonderWebLiveSubsystem::SetViewport(FIntPoint Size)
+void UWonderlandWonderWebLiveSubsystem::SetViewport(const FString& TabId, FIntPoint Size)
 {
+	FWonderWebLivePage& Page = PageFor(TabId);
+	// DRAWN MEANS WANTED. A window that stopped being drawn stops asking for frames a second or two later.
+	Page.WantedAt = FPlatformTime::Seconds();
+	Front = TabId;
 	Size.X = FMath::Clamp(Size.X, 480, 2400);
 	Size.Y = FMath::Clamp(Size.Y, 320, 1800);
 	// A few pixels of drift is a window being dragged, not a new layout: only a real change is worth re-rendering for.
-	if (FMath::Abs(Size.X - Viewport.X) < 12 && FMath::Abs(Size.Y - Viewport.Y) < 12)
+	if (FMath::Abs(Size.X - Page.Viewport.X) < 12 && FMath::Abs(Size.Y - Page.Viewport.Y) < 12)
 	{
 		return;
 	}
-	Viewport = Size;
-	if (!LiveTab.IsEmpty() && Viewport != AskedViewport)
+	Page.Viewport = Size;
+	if (Page.Viewport != Page.AskedViewport && !Page.bFollowing)
 	{
-		AskedViewport = Viewport;
-		SendIntent(FString::Printf(TEXT("{\"op\":\"viewport\",\"tab\":\"%s\",\"width\":%d,\"height\":%d}"), *LiveTab, Viewport.X, Viewport.Y), TEXT("viewport"));
+		Page.AskedViewport = Page.Viewport;
+		SendIntent(TabId, FString::Printf(TEXT("{\"op\":\"viewport\",\"tab\":\"%s\",\"width\":%d,\"height\":%d}"), *TabId, Page.Viewport.X, Page.Viewport.Y), TEXT("viewport"));
 	}
 }
 
 void UWonderlandWonderWebLiveSubsystem::CloseTab(const FString& TabId)
 {
-	// Only close what this client opened: the tab Julius works in belongs to Julius.
-	if (!TabId.IsEmpty() && !(bFollowing && TabId == LiveTab))
-	{
-		SendIntent(FString::Printf(TEXT("{\"op\":\"close\",\"tab\":\"%s\"}"), *TabId), TEXT("close"));
-	}
-	if (TabId == LiveTab)
-	{
-		bFollowing = false;
-		LiveTab.Reset();
-		LiveUrl.Reset();
-		Title.Reset();
-		bLoading = false;
-		Frame = nullptr;
-	}
-}
-
-void UWonderlandWonderWebLiveSubsystem::SendClick(double PageX, double PageY)
-{
-	if (LiveTab.IsEmpty())
+	const FWonderWebLivePage* Page = Find(TabId);
+	if (Page == nullptr)
 	{
 		return;
 	}
-	SendIntent(FString::Printf(TEXT("{\"op\":\"click\",\"tab\":\"%s\",\"x\":%.0f,\"y\":%.0f}"), *LiveTab, PageX, PageY), TEXT("click"));
-	bLoading = true;
-}
-
-void UWonderlandWonderWebLiveSubsystem::SendScroll(double DeltaY)
-{
-	if (!LiveTab.IsEmpty())
+	// Only close what this client opened: the tab Julius works in belongs to Julius.
+	if (!Page->bFollowing)
 	{
-		SendIntent(FString::Printf(TEXT("{\"op\":\"scroll\",\"tab\":\"%s\",\"deltaY\":%.0f}"), *LiveTab, DeltaY), TEXT("scroll"));
+		SendIntent(TabId, FString::Printf(TEXT("{\"op\":\"close\",\"tab\":\"%s\"}"), *TabId), TEXT("close"));
+	}
+	Pages.Remove(TabId);
+	if (Front == TabId)
+	{
+		Front.Reset();
 	}
 }
 
-void UWonderlandWonderWebLiveSubsystem::SendText(const FString& Text)
+void UWonderlandWonderWebLiveSubsystem::SendClick(const FString& TabId, double PageX, double PageY)
 {
-	if (LiveTab.IsEmpty() || Text.IsEmpty())
+	FWonderWebLivePage* Page = Pages.Find(TabId);
+	if (Page == nullptr)
+	{
+		return;
+	}
+	SendIntent(TabId, FString::Printf(TEXT("{\"op\":\"click\",\"tab\":\"%s\",\"x\":%.0f,\"y\":%.0f}"), *TabId, PageX, PageY), TEXT("click"));
+	Page->bLoading = true;
+}
+
+void UWonderlandWonderWebLiveSubsystem::SendScroll(const FString& TabId, double DeltaY)
+{
+	if (Pages.Contains(TabId))
+	{
+		SendIntent(TabId, FString::Printf(TEXT("{\"op\":\"scroll\",\"tab\":\"%s\",\"deltaY\":%.0f}"), *TabId, DeltaY), TEXT("scroll"));
+	}
+}
+
+void UWonderlandWonderWebLiveSubsystem::SendText(const FString& TabId, const FString& Text)
+{
+	if (!Pages.Contains(TabId) || Text.IsEmpty())
 	{
 		return;
 	}
@@ -194,27 +278,27 @@ void UWonderlandWonderWebLiveSubsystem::SendText(const FString& Text)
 		}
 	}
 	// NOT LOGGED, EVER. This may be a password; it is the page's business and nobody else's.
-	SendIntent(FString::Printf(TEXT("{\"op\":\"type\",\"tab\":\"%s\",\"text\":\"%s\"}"), *LiveTab, *Escaped), nullptr);
+	SendIntent(TabId, FString::Printf(TEXT("{\"op\":\"type\",\"tab\":\"%s\",\"text\":\"%s\"}"), *TabId, *Escaped), nullptr);
 }
 
-void UWonderlandWonderWebLiveSubsystem::SendKey(const FString& Key)
+void UWonderlandWonderWebLiveSubsystem::SendKey(const FString& TabId, const FString& Key)
 {
-	if (!LiveTab.IsEmpty())
+	if (Pages.Contains(TabId))
 	{
-		SendIntent(FString::Printf(TEXT("{\"op\":\"key\",\"tab\":\"%s\",\"key\":\"%s\"}"), *LiveTab, *Key), TEXT("key"));
+		SendIntent(TabId, FString::Printf(TEXT("{\"op\":\"key\",\"tab\":\"%s\",\"key\":\"%s\"}"), *TabId, *Key), TEXT("key"));
 	}
 }
 
-void UWonderlandWonderWebLiveSubsystem::SendBack()
+void UWonderlandWonderWebLiveSubsystem::SendBack(const FString& TabId)
 {
-	if (!LiveTab.IsEmpty())
+	if (FWonderWebLivePage* Page = Pages.Find(TabId))
 	{
-		SendIntent(FString::Printf(TEXT("{\"op\":\"back\",\"tab\":\"%s\"}"), *LiveTab), TEXT("back"));
-		bLoading = true;
+		SendIntent(TabId, FString::Printf(TEXT("{\"op\":\"back\",\"tab\":\"%s\"}"), *TabId), TEXT("back"));
+		Page->bLoading = true;
 	}
 }
 
-void UWonderlandWonderWebLiveSubsystem::SendIntent(const FString& Body, const TCHAR* What)
+void UWonderlandWonderWebLiveSubsystem::SendIntent(const FString& TabId, const FString& Body, const TCHAR* What)
 {
 	const FString Describe = What != nullptr ? FString(What) : FString(TEXT("type"));
 	const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
@@ -223,25 +307,30 @@ void UWonderlandWonderWebLiveSubsystem::SendIntent(const FString& Body, const TC
 	Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
 	Request->SetContentAsString(Body);
 	Request->SetTimeout(30.0f);
-	Request->OnProcessRequestComplete().BindWeakLambda(this, [this, Describe](FHttpRequestPtr Done, FHttpResponsePtr Response, bool bConnected)
+	Request->OnProcessRequestComplete().BindWeakLambda(this, [this, Describe, TabId](FHttpRequestPtr Done, FHttpResponsePtr Response, bool bConnected)
 	{
 		InFlight.Remove(Done);
+		FWonderWebLivePage* Page = Pages.Find(TabId);
+		if (Page == nullptr)
+		{
+			return;
+		}
 		if (!bConnected || !Response.IsValid())
 		{
 			// NOT NECESSARILY DOWN: a request cancelled as play ends looks the same from here, so this says what is known.
-			Problem = FString::Printf(TEXT("No answer from the Julius Connect runtime, so %s did nothing."), *Describe);
-			bLoading = false;
+			Page->Problem = FString::Printf(TEXT("No answer from the Julius Connect runtime, so %s did nothing."), *Describe);
+			Page->bLoading = false;
 			return;
 		}
 		if (Response->GetResponseCode() >= 400)
 		{
 			// The refusal the runtime gave, shown as it was given: an allowlist is only useful if it is visible.
-			Problem = Response->GetContentAsString().Left(240);
-			bLoading = false;
-			UE_LOG(LogWonderWebLive, Warning, TEXT("WLLIVE %s refused: %s"), *Describe, *Problem);
+			Page->Problem = Response->GetContentAsString().Left(240);
+			Page->bLoading = false;
+			UE_LOG(LogWonderWebLive, Warning, TEXT("WLLIVE %s refused: %s"), *Describe, *Page->Problem);
 			return;
 		}
-		Problem.Reset();
+		Page->Problem.Reset();
 	});
 	InFlight.Add(Request);
 	Request->ProcessRequest();
@@ -249,66 +338,96 @@ void UWonderlandWonderWebLiveSubsystem::SendIntent(const FString& Body, const TC
 
 bool UWonderlandWonderWebLiveSubsystem::Tick(float DeltaSeconds)
 {
-	if (LiveTab.IsEmpty())
+	if (Pages.IsEmpty())
 	{
 		return true;
 	}
-	SinceFrame += DeltaSeconds;
-	const float Period = 1.0f / FMath::Clamp(WonderWebLiveTuning::CVarFps.GetValueOnGameThread(), 0.5f, 20.0f);
-	if (!bFrameInFlight && SinceFrame >= Period)
+	const double Now = FPlatformTime::Seconds();
+	const float Fps = FMath::Clamp(WonderWebLiveTuning::CVarFps.GetValueOnGameThread(), 0.5f, 20.0f);
+	const float Share = FMath::Clamp(WonderWebLiveTuning::CVarBackgroundShare.GetValueOnGameThread(), 0.05f, 1.0f);
+	const double Forget = FMath::Max(WonderWebLiveTuning::CVarForgetSeconds.GetValueOnGameThread(), 0.25f);
+	TArray<FString> Ask;
+	for (TPair<FString, FWonderWebLivePage>& Pair : Pages)
 	{
-		SinceFrame = 0.0f;
-		RequestFrame();
+		FWonderWebLivePage& Page = Pair.Value;
+		// NOBODY IS LOOKING. A window that is not being drawn -- minimized, or closed and not yet cleaned up -- costs the
+		// runtime nothing until it is drawn again.
+		if (Now - Page.WantedAt > Forget)
+		{
+			continue;
+		}
+		Page.SinceFrame += DeltaSeconds;
+		// THE WINDOW IN FRONT IS WORTH MORE. The others still move, at a quarter of the rate by default.
+		const float Period = 1.0f / (Pair.Key == Front ? Fps : FMath::Max(Fps * Share, 0.25f));
+		if (!Page.bFrameInFlight && Page.SinceFrame >= Period)
+		{
+			Page.SinceFrame = 0.0f;
+			Ask.Add(Pair.Key);
+		}
+	}
+	for (const FString& TabId : Ask)
+	{
+		RequestFrame(TabId);
 	}
 	return true;
 }
 
-void UWonderlandWonderWebLiveSubsystem::RequestFrame()
+void UWonderlandWonderWebLiveSubsystem::RequestFrame(const FString& TabId)
 {
-	bFrameInFlight = true;
+	FWonderWebLivePage* Asked = Pages.Find(TabId);
+	if (Asked == nullptr)
+	{
+		return;
+	}
+	Asked->bFrameInFlight = true;
 	const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
-	Request->SetURL(FString::Printf(TEXT("%s/frame?tab=%s"), *BaseUrl(), *LiveTab));
+	Request->SetURL(FString::Printf(TEXT("%s/frame?tab=%s"), *BaseUrl(), *TabId));
 	Request->SetVerb(TEXT("GET"));
 	Request->SetTimeout(20.0f);
-	Request->OnProcessRequestComplete().BindWeakLambda(this, [this](FHttpRequestPtr Done, FHttpResponsePtr Response, bool bConnected)
+	Request->OnProcessRequestComplete().BindWeakLambda(this, [this, TabId](FHttpRequestPtr Done, FHttpResponsePtr Response, bool bConnected)
 	{
 		InFlight.Remove(Done);
-		bFrameInFlight = false;
+		FWonderWebLivePage* Page = Pages.Find(TabId);
+		if (Page == nullptr)
+		{
+			return;
+		}
+		Page->bFrameInFlight = false;
 		if (!bConnected || !Response.IsValid())
 		{
-			Problem = FString::Printf(TEXT("No answer from the Julius Connect runtime at %s — start it, or it is shutting down."), *BaseUrl());
+			Page->Problem = FString::Printf(TEXT("No answer from the Julius Connect runtime at %s — start it, or it is shutting down."), *BaseUrl());
 			return;
 		}
 		if (Response->GetResponseCode() == 404)
 		{
 			// NO PAGE ON THIS TAB YET. Watching a tab Julius has not opened is the normal way this starts, so say that
 			// rather than showing the runtime's own words for it.
-			Problem = bFollowing ? TEXT("Waiting for Julius to open a page.") : TEXT("Nothing is open on this tab yet.");
+			Page->Problem = Page->bFollowing ? TEXT("Waiting for Julius to open a page.") : TEXT("Nothing is open on this tab yet.");
 			return;
 		}
 		if (Response->GetResponseCode() != 200)
 		{
-			Problem = Response->GetContentAsString().Left(240);
+			Page->Problem = Response->GetContentAsString().Left(240);
 			return;
 		}
 		const FString Url = Response->GetHeader(TEXT("X-Wonder-Web-Url"));
 		if (!Url.IsEmpty())
 		{
-			LiveUrl = Url;
+			Page->Url = Url;
 		}
 		const FString Encoded = Response->GetHeader(TEXT("X-Wonder-Web-Title"));
 		if (!Encoded.IsEmpty())
 		{
-			Title = FGenericPlatformHttp::UrlDecode(Encoded);
+			Page->Title = FGenericPlatformHttp::UrlDecode(Encoded);
 		}
-		bLoading = Response->GetHeader(TEXT("X-Wonder-Web-Loading")) == TEXT("1");
-		if (ApplyJpeg(Response->GetContent()))
+		Page->bLoading = Response->GetHeader(TEXT("X-Wonder-Web-Loading")) == TEXT("1");
+		if (ApplyJpeg(*Page, Response->GetContent()))
 		{
-			Problem.Reset();
-			++FrameCount;
+			Page->Problem.Reset();
+			++Page->FrameCount;
 			if (WonderWebLiveTuning::CVarLog.GetValueOnGameThread() != 0)
 			{
-				UE_LOG(LogWonderWebLive, Display, TEXT("WLLIVE frame %d %dx%d %s"), FrameCount, FrameSize.X, FrameSize.Y, *LiveUrl);
+				UE_LOG(LogWonderWebLive, Display, TEXT("WLLIVE %s frame %d %dx%d %s"), *TabId, Page->FrameCount, Page->FrameSize.X, Page->FrameSize.Y, *Page->Url);
 			}
 			OnFrame.Broadcast();
 		}
@@ -317,7 +436,7 @@ void UWonderlandWonderWebLiveSubsystem::RequestFrame()
 	Request->ProcessRequest();
 }
 
-bool UWonderlandWonderWebLiveSubsystem::ApplyJpeg(const TArray<uint8>& Bytes)
+bool UWonderlandWonderWebLiveSubsystem::ApplyJpeg(FWonderWebLivePage& Page, const TArray<uint8>& Bytes)
 {
 	if (Bytes.Num() < 4)
 	{
@@ -327,13 +446,13 @@ bool UWonderlandWonderWebLiveSubsystem::ApplyJpeg(const TArray<uint8>& Bytes)
 	const TSharedPtr<IImageWrapper> Wrapper = Wrappers.CreateImageWrapper(EImageFormat::JPEG);
 	if (!Wrapper.IsValid() || !Wrapper->SetCompressed(Bytes.GetData(), Bytes.Num()))
 	{
-		Problem = TEXT("The runtime sent something that is not a JPEG frame.");
+		Page.Problem = TEXT("The runtime sent something that is not a JPEG frame.");
 		return false;
 	}
 	TArray64<uint8> Raw;
 	if (!Wrapper->GetRaw(ERGBFormat::BGRA, 8, Raw))
 	{
-		Problem = TEXT("The frame could not be decoded.");
+		Page.Problem = TEXT("The frame could not be decoded.");
 		return false;
 	}
 	const int32 Width = Wrapper->GetWidth();
@@ -342,26 +461,27 @@ bool UWonderlandWonderWebLiveSubsystem::ApplyJpeg(const TArray<uint8>& Bytes)
 	{
 		return false;
 	}
-	FrameSize = FIntPoint(Width, Height);
-	if (Frame == nullptr || Frame->GetSizeX() != Width || Frame->GetSizeY() != Height)
+	Page.FrameSize = FIntPoint(Width, Height);
+	if (!Page.Frame.IsValid() || Page.Frame->GetSizeX() != Width || Page.Frame->GetSizeY() != Height)
 	{
-		Frame = UTexture2D::CreateTransient(Width, Height, PF_B8G8R8A8);
-		if (Frame == nullptr)
+		UTexture2D* Texture = UTexture2D::CreateTransient(Width, Height, PF_B8G8R8A8);
+		if (Texture == nullptr)
 		{
 			return false;
 		}
-		Frame->NeverStream = true;
-		Frame->SRGB = true;
-		Frame->Filter = TF_Bilinear;
-		Frame->AddressX = TA_Clamp;
-		Frame->AddressY = TA_Clamp;
-		Frame->UpdateResource();
+		Texture->NeverStream = true;
+		Texture->SRGB = true;
+		Texture->Filter = TF_Bilinear;
+		Texture->AddressX = TA_Clamp;
+		Texture->AddressY = TA_Clamp;
+		Texture->UpdateResource();
+		Page.Frame.Reset(Texture);
 	}
 	// The decoded frame is handed to the render thread and freed there, so the game thread never waits on the copy.
 	uint8* Pixels = static_cast<uint8*>(FMemory::Malloc(Raw.Num()));
 	FMemory::Memcpy(Pixels, Raw.GetData(), Raw.Num());
 	FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, Width, Height);
-	Frame->UpdateTextureRegions(0, 1, Region, Width * 4, 4, Pixels,
+	Page.Frame->UpdateTextureRegions(0, 1, Region, Width * 4, 4, Pixels,
 		[](uint8* Data, const FUpdateTextureRegion2D* Done)
 		{
 			FMemory::Free(Data);

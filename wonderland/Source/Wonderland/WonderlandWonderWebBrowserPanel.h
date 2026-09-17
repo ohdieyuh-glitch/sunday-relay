@@ -37,6 +37,11 @@ public:
 		SLATE_ARGUMENT(TWeakObjectPtr<UWonderlandJuliusConnectSubsystem>, Connect)
 		/** The creation, so the post Julius publishes shows the picture that was actually painted. */
 		SLATE_ARGUMENT(TWeakObjectPtr<UWonderlandWonderWebSubsystem>, Creation)
+		/**
+		 * WHICH WINDOW THIS IS. Julius spawns several Wonder Webs, and each one has its own real page in the runtime, named
+		 * by this. The first window ("browser") is also the one Julius's own browsing is shown in.
+		 */
+		SLATE_ARGUMENT(FString, LiveTab)
 		SLATE_EVENT(FSimpleDelegate, OnRequestClose)
 		SLATE_EVENT(FSimpleDelegate, OnRequestMinimize)
 		SLATE_EVENT(FSimpleDelegate, OnRequestExpand)
@@ -76,12 +81,21 @@ private:
 	/** The picture from Pixel Canvas, drawn as a post's image. */
 	TSharedRef<SWidget> MakeCanvasPicture();
 	TSharedRef<SWidget> Probe(FName Id, TSharedRef<SWidget> Content);
+	/** The site this window is showing: the shared selection in the first window, its own choice in the others. */
+	const FWonderWebBrowseTab* CurrentTab() const;
+	/** True for the first browser window, which is the one Julius's own browsing appears in. */
+	bool IsPrimary() const;
 	/** A brush for a page colour, kept alive as long as the page it belongs to. */
 	const FSlateBrush* PageTint(const FString& Hex, float Corner = 0.0f);
 
 	TWeakObjectPtr<UWonderlandWonderWebBrowseSubsystem> Browse;
 	/** The live browser, for real mode: it holds the frames and takes the input back. */
 	TWeakObjectPtr<UWonderlandWonderWebLiveSubsystem> Live;
+	/** This window's page in the runtime. */
+	FString LiveTab;
+	/** The site this window chose, for every window but the first, which follows the shared selection. */
+	int32 OwnSite = 0;
+	int32 ShownOwnSite = -1;
 	TWeakObjectPtr<UWonderlandJuliusConnectSubsystem> Connect;
 	TWeakObjectPtr<UWonderlandWonderWebSubsystem> Creation;
 	FSimpleDelegate OnRequestClose;

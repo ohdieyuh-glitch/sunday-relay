@@ -12,6 +12,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "UObject/UObjectIterator.h"
 #include "WonderlandJuliusConnect.h"
+#include "WonderlandUiSubsystem.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderWebBrowse, Log, All);
 
@@ -261,16 +262,28 @@ namespace WonderWebBrowseConsole
 		}));
 
 	FAutoConsoleCommand CmdGo(TEXT("wl.WonderWeb.Go"),
-		TEXT("Load a real page in the Wonder Web browser: `wl.WonderWeb.Go https://en.wikipedia.org/wiki/Wonderland`. Needs wl.WonderWeb.Real 1, and an allowed host."),
+		TEXT("Load a real page in the Wonder Web window in front: `wl.WonderWeb.Go https://en.wikipedia.org/wiki/Wonderland`. Needs wl.WonderWeb.Real 1, and an allowed host."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
 			const FString Url = Args.Num() > 0 ? Args[0] : FString();
-			ForEachLive([&Url](UWonderlandWonderWebBrowseSubsystem& Browse)
+			// THE WINDOW IN FRONT, whichever it is. Several Wonder Webs can be open, each on its own page, so the UI decides
+			// where this address lands (UWonderlandUiSubsystem::NavigateFocusedBrowser).
+			int32 Found = 0;
+			for (TObjectIterator<UWonderlandUiSubsystem> It; It; ++It)
 			{
+				if (It->GetWorld() == nullptr || !It->GetWorld()->IsGameWorld())
+				{
+					continue;
+				}
 				FString Refusal;
-				Say(Browse.Navigate(Url, Refusal) ? FString::Printf(TEXT("WONDER WEB: loading %s for real."), *Url)
+				Say(It->NavigateFocusedBrowser(Url, Refusal) ? FString::Printf(TEXT("WONDER WEB: loading %s for real."), *Url)
 					: FString::Printf(TEXT("WONDER WEB: %s"), *Refusal), !Refusal.IsEmpty());
-			});
+				++Found;
+			}
+			if (Found == 0)
+			{
+				Say(TEXT("WONDER WEB: nothing to do -- press Play first."), true);
+			}
 		}));
 
 	FAutoConsoleCommand CmdReset(TEXT("wl.WonderWeb.Browse.Reset"), TEXT("Clear the caption and the simulated post."),
