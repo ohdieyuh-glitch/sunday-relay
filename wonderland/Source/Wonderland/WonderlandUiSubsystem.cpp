@@ -537,6 +537,14 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 		}
 		// WHERE THE PLAYER IS LOOKING, AHEAD OF THE DOG: the workspace stands there facing back toward them.
 		Workspace->StandBefore(Controller);
+		if (!WonderWebLayer.IsValid())
+		{
+			SAssignNew(WonderWebLayer, SWonderlandWonderWebInputLayer)
+				.Controller(TWeakObjectPtr<APlayerController>(Controller))
+				.GetScreens_Lambda([WeakThis]() { return WeakThis.IsValid() ? WeakThis->OpenWonderWebScreens() : TArray<AWonderlandWonderWebScreen*>(); })
+				.OnFocus_Lambda([WeakThis](AWonderlandWonderWebScreen* Screen) { if (WeakThis.IsValid()) { WeakThis->FocusWonderWebScreen(Screen); } })
+				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
+		}
 		if (!WonderWebWindows.ContainsByPredicate([](const FWonderWebWindow& Window) { return Window.bOpen; }))
 		{
 			if (FWonderWebWindow* Creation = EnsureWonderWebWindow(WonderWebWindowIds::Creation))
@@ -553,14 +561,6 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 			}
 		}
 		Controller->SetViewTargetWithBlend(Workspace, 0.8f, EViewTargetBlendFunction::VTBlend_Cubic);
-		if (!WonderWebLayer.IsValid())
-		{
-			SAssignNew(WonderWebLayer, SWonderlandWonderWebInputLayer)
-				.Controller(TWeakObjectPtr<APlayerController>(Controller))
-				.GetScreens_Lambda([WeakThis]() { return WeakThis.IsValid() ? WeakThis->OpenWonderWebScreens() : TArray<AWonderlandWonderWebScreen*>(); })
-				.OnFocus_Lambda([WeakThis](AWonderlandWonderWebScreen* Screen) { if (WeakThis.IsValid()) { WeakThis->FocusWonderWebScreen(Screen); } })
-				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
-		}
 		TileWonderWeb();
 		const FWonderWebWindow* Focused = FindWonderWebWindow(FocusedWonderWebWindow);
 		if (Focused == nullptr || !Focused->bOpen || Focused->bMinimized)
@@ -884,19 +884,16 @@ UWonderlandUiSubsystem::FWonderWebWindow* UWonderlandUiSubsystem::EnsureWonderWe
 				.OnRestore_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->MinimizeWonderWebWindow(WonderWebWindowIds::Connections, false); } });
 		}
 	}
-	// THE WINDOW'S GLASS, in the controller's world, with a virtual user of its own so its keyboard focus is its own.
+	// THE WINDOW'S PLACE, in the controller's world.
 	UWorld* World = Controller->GetWorld();
 	AWonderlandWonderWebScreen* Screen = Window->Screen.Get();
 	if (World != nullptr && (Screen == nullptr || Screen->GetWorld() != World))
 	{
-		Screen = World->SpawnActorDeferred<AWonderlandWonderWebScreen>(AWonderlandWonderWebScreen::StaticClass(), FTransform::Identity, nullptr, nullptr,
-			ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-		if (Screen != nullptr)
-		{
-			Screen->SetFlags(RF_Transient);
-			Screen->SetVirtualUser(Id == WonderWebWindowIds::Creation ? 7 : 8);
-			Screen->FinishSpawning(FTransform::Identity);
-		}
+		FActorSpawnParameters Params;
+		Params.Name = MakeUniqueObjectName(World->GetCurrentLevel(), AWonderlandWonderWebScreen::StaticClass(), *FString::Printf(TEXT("WonderWeb_%s"), *Id.ToString()));
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		Params.ObjectFlags |= RF_Transient;
+		Screen = World->SpawnActor<AWonderlandWonderWebScreen>(AWonderlandWonderWebScreen::StaticClass(), FTransform::Identity, Params);
 		Window->Screen = Screen;
 	}
 	return Window;
@@ -909,8 +906,13 @@ void UWonderlandUiSubsystem::PresentWonderWebWindow(FWonderWebWindow& Window)
 	{
 		return;
 	}
-	Screen->Present(Window.Content.ToSharedRef(), Window.ContentSize, Window.Chip.ToSharedRef(), SWonderWebWindowChip::DesignSize(), WonderWebWorkspace.Get());
+	Screen->Present(Window.ContentSize, SWonderWebWindowChip::DesignSize(), WonderWebWorkspace.Get());
 	Screen->SetMinimized(Window.bMinimized);
+	// Drawn by the workspace layer over where its glass stands.
+	if (WonderWebLayer.IsValid())
+	{
+		WonderWebLayer->Present(Screen, Window.Content.ToSharedRef(), Window.ContentSize, Window.Chip.ToSharedRef(), SWonderWebWindowChip::DesignSize());
+	}
 }
 
 TArray<AWonderlandWonderWebScreen*> UWonderlandUiSubsystem::OpenWonderWebScreens() const
@@ -1432,33 +1434,23 @@ FVector2D UWonderlandUiSubsystem::GetWonderWebWindowControlOnScreen(FName Window
 {
 	const FWonderWebWindow* Found = FindWonderWebWindow(Window);
 	const AWonderlandWonderWebScreen* Screen = Found != nullptr ? Found->Screen.Get() : nullptr;
-	APlayerController* Controller = BoundController.Get();
+	if (Screen == nullptr || !WonderWebLayer.IsValid() || !Found->bOpen)
+	{
+		return FVector2D(-1.0, -1.0);
+	}
+	FSlateRect Rect;
+	if (Control == TEXT("chip"))
+	{
+		return Found->bMinimized && WonderWebLayer->GetWindowRect(Screen, true, Rect) ? Rect.GetCenter() : FVector2D(-1.0, -1.0);
+	}
+	// A control's place in the window's design pixels, onto the window as it is drawn this frame.
 	FVector2D WindowPixel;
-	if (Screen == nullptr || Controller == nullptr || !GetWonderWebWindowPixel(Window, Control, WindowPixel))
+	FVector2D Absolute;
+	if (Found->bMinimized || !GetWonderWebWindowPixel(Window, Control, WindowPixel) || !WonderWebLayer->WindowPixelToAbsolute(Screen, WindowPixel, Absolute))
 	{
 		return FVector2D(-1.0, -1.0);
 	}
-	FVector2D ViewportPixel;
-	if (!Controller->ProjectWorldLocationToScreen(Screen->WindowPixelToWorld(WindowPixel), ViewportPixel, false))
-	{
-		return FVector2D(-1.0, -1.0);
-	}
-	// Viewport pixels to Slate screen space, through the game viewport widget's own geometry.
-	const ULocalPlayer* LocalPlayer = Controller->GetLocalPlayer();
-	UGameViewportClient* ViewportClient = LocalPlayer != nullptr ? LocalPlayer->ViewportClient : nullptr;
-	const TSharedPtr<SViewport> ViewportWidget = ViewportClient != nullptr ? ViewportClient->GetGameViewportWidget() : nullptr;
-	FVector2D ViewportSize;
-	if (!ViewportWidget.IsValid() || ViewportClient == nullptr)
-	{
-		return FVector2D(-1.0, -1.0);
-	}
-	ViewportClient->GetViewportSize(ViewportSize);
-	const FGeometry& Geometry = ViewportWidget->GetTickSpaceGeometry();
-	if (ViewportSize.X <= 0.0 || ViewportSize.Y <= 0.0)
-	{
-		return FVector2D(-1.0, -1.0);
-	}
-	return Geometry.LocalToAbsolute(ViewportPixel / ViewportSize * Geometry.GetLocalSize());
+	return Absolute;
 }
 
 FVector2D UWonderlandUiSubsystem::GetWonderWebControlOnScreen(FName Control) const

@@ -2,7 +2,6 @@
 
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
-#include "Components/WidgetComponent.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
 #include "Framework/Application/SlateApplication.h"
@@ -10,6 +9,9 @@
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "InputCoreTypes.h"
+#include "Slate/SRetainerWidget.h"
+#include "Widgets/Layout/SBox.h"
+#include "Widgets/Layout/SDPIScaler.h"
 #include "WonderlandWonderWebPanel.h"
 
 namespace WonderWebScreenTuning
@@ -18,48 +20,23 @@ namespace WonderWebScreenTuning
 	// ahead of where the player is looking and raised above the Dog, the camera 385 uu back from the glass.
 	//
 	// THE WINDOW SIZE IS A MULTITASKING SIZE (founder, 2026-09-17: "a little smaller ... 2-3 active Wonder Web surfaces
-	// visible simultaneously"): a window's glass is 240 uu wide -- about 40% of the view's width -- so two stand side by side
-	// with garden between them and three tile in two rows. A lone window opens a size larger. The window is still rendered
-	// at its full design resolution; only the glass it is drawn on is smaller.
+	// visible simultaneously"): a window's glass is 240 uu wide at size 1 -- about 40% of the view's width -- and the
+	// workspace tiles the windows in the space the HUD leaves (WonderlandUiSubsystem.cpp, TileWonderWeb).
 	TAutoConsoleVariable<float> CVarWindowWidth(TEXT("wl.WonderWeb.WindowWidth"), 240.0f, TEXT("Wonder Web window: the glass's width at the multitasking size, uu."));
 	TAutoConsoleVariable<float> CVarChipScale(TEXT("wl.WonderWeb.ChipScale"), 0.2f, TEXT("Wonder Web window: uu per chip pixel for a minimized window's chip."));
-	TAutoConsoleVariable<float> CVarResizeSeconds(TEXT("wl.WonderWeb.ResizeSeconds"), 0.16f, TEXT("Wonder Web window: the timescale of growing or shrinking to a new size, seconds."));
 	TAutoConsoleVariable<float> CVarAhead(TEXT("wl.WonderWeb.ScreenAhead"), 330.0f, TEXT("Wonder Web workspace: how far ahead of the Dog it stands, along the player's view, uu."));
 	TAutoConsoleVariable<float> CVarUp(TEXT("wl.WonderWeb.ScreenUp"), 150.0f, TEXT("Wonder Web workspace: how high its centre stands above the Dog, uu."));
 	TAutoConsoleVariable<float> CVarViewDistance(TEXT("wl.WonderWeb.ViewDistance"), 385.0f, TEXT("Wonder Web workspace: the camera's distance back from the glass, uu."));
 	TAutoConsoleVariable<float> CVarViewSide(TEXT("wl.WonderWeb.ViewSide"), -16.0f, TEXT("Wonder Web workspace: the camera's sideways offset, uu."));
 	TAutoConsoleVariable<float> CVarViewLift(TEXT("wl.WonderWeb.ViewLift"), 8.0f, TEXT("Wonder Web workspace: the camera's height above the glass's centre, uu."));
 	TAutoConsoleVariable<float> CVarViewFov(TEXT("wl.WonderWeb.ViewFov"), 75.0f, TEXT("Wonder Web workspace: the camera's horizontal field of view, degrees."));
-	// LIT LIKE A SCREEN IN SUNLIGHT. The garden is exposed for daylight, so an unlit widget colour of 1.0 lands near black
-	// (editor 76); 20000 reads the yellow and keeps a disabled control faint, 40000 blooms the active tab.
-	TAutoConsoleVariable<float> CVarBrightness(TEXT("wl.WonderWeb.ScreenBrightness"), 20000.0f, TEXT("Wonder Web window: how bright it is drawn in the lit world (a multiplier on its colours)."));
 	TAutoConsoleVariable<float> CVarGlideSeconds(TEXT("wl.WonderWeb.GlideSeconds"), 0.18f, TEXT("Wonder Web window: the timescale of its glide to a new place, seconds (critically damped: swift, no overshoot)."));
 	TAutoConsoleVariable<float> CVarEdgeMargin(TEXT("wl.WonderWeb.EdgeMargin"), 10.0f, TEXT("Wonder Web window: how far inside the view's edge a side or corner place keeps the glass, uu."));
 	TAutoConsoleVariable<float> CVarGrowSeconds(TEXT("wl.WonderWeb.GrowSeconds"), 0.3f, TEXT("Wonder Web window: seconds to open out, fold away, minimize or restore."));
-	// A BACKGROUND WINDOW KEEPS WORKING AND IS DRAWN LESS OFTEN: the focused one every frame, the others a dozen times a
-	// second, a minimized one only as its chip, four times a second.
-	TAutoConsoleVariable<float> CVarBackgroundRedraw(TEXT("wl.WonderWeb.BackgroundRedrawSeconds"), 1.0f / 12.0f, TEXT("Wonder Web window: seconds between redraws of a visible window that is not focused."));
-	TAutoConsoleVariable<int32> CVarGlassBlend(TEXT("wl.WonderWeb.GlassBlend"), 1,
-		TEXT("Wonder Web window glass: 0 translucent (ghosts changed text under the temporal upscaler), 1 masked, 2 opaque."));
-	TAutoConsoleVariable<float> CVarChipRedraw(TEXT("wl.WonderWeb.ChipRedrawSeconds"), 0.25f, TEXT("Wonder Web window: seconds between redraws of a minimized window's chip."));
-
-	UWidgetComponent* MakeGlass(AActor* Owner, USceneComponent* Parent, const TCHAR* Name)
-	{
-		UWidgetComponent* Glass = Owner->CreateDefaultSubobject<UWonderlandWonderWebGlass>(Name);
-		Glass->SetupAttachment(Parent);
-		Glass->SetWidgetSpace(EWidgetSpace::World);
-		Glass->SetPivot(FVector2D(0.5, 0.5));
-		// Masked: an ordinary surface to the temporal upscaler, with the rounded corners still cut out (see UWonderlandWonderWebGlass).
-		Glass->SetBlendMode(EWidgetBlendMode::Masked);
-		Glass->SetTwoSided(false);
-		Glass->SetBackgroundColor(FLinearColor::Transparent);
-		Glass->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		Glass->SetGenerateOverlapEvents(false);
-		Glass->SetCastShadow(false);
-		Glass->SetTickWhenOffscreen(true);
-		Glass->PrimaryComponentTick.bTickEvenWhenPaused = true;
-		return Glass;
-	}
+	TAutoConsoleVariable<float> CVarResizeSeconds(TEXT("wl.WonderWeb.ResizeSeconds"), 0.16f, TEXT("Wonder Web window: the timescale of growing or shrinking to a new size, seconds."));
+	// A BACKGROUND WINDOW KEEPS WORKING AND IS DRAWN LESS OFTEN: the focused one every frame, the others once every few.
+	TAutoConsoleVariable<int32> CVarBackgroundRedrawFrames(TEXT("wl.WonderWeb.BackgroundRedrawFrames"), 4,
+		TEXT("Wonder Web window: a window that is not focused is redrawn once every this many frames (1 draws it every frame)."));
 }
 
 /* ==================================================================== the workspace */
@@ -89,8 +66,7 @@ void AWonderlandWonderWebWorkspace::StandBefore(APlayerController* Controller)
 		: (Controller->PlayerCameraManager != nullptr ? Controller->PlayerCameraManager->GetCameraLocation() : FVector::ZeroVector);
 	SetActorLocationAndRotation(From + Ahead * CVarAhead.GetValueOnGameThread() + FVector(0.0, 0.0, CVarUp.GetValueOnGameThread()),
 		FRotator(0.0f, Yaw + 180.0f, 0.0f));
-	// THE CAMERA STANDS IN FRONT OF THE GLASS, on +X, looking back along -X: a widget component's front faces +X and its
-	// pixels run toward -Y (UWidgetComponent::GetLocalHitLocation), which is this camera's right.
+	// THE CAMERA STANDS IN FRONT OF THE GLASS, on +X, looking back along -X: across the view is the anchor's -Y, up is +Z.
 	View->SetRelativeLocationAndRotation(
 		FVector(CVarViewDistance.GetValueOnGameThread(), CVarViewSide.GetValueOnGameThread(), CVarViewLift.GetValueOnGameThread()),
 		FRotator(-FMath::RadiansToDegrees(FMath::Atan2(CVarViewLift.GetValueOnGameThread(), FMath::Max(CVarViewDistance.GetValueOnGameThread(), 1.0f))), 180.0f, 0.0f));
@@ -118,61 +94,26 @@ FVector2D AWonderlandWonderWebWorkspace::HalfView() const
 	return FVector2D(HalfWide, HalfWide / Aspect);
 }
 
-/* ==================================================================== one window */
+/* ==================================================================== one window's place */
 
 AWonderlandWonderWebScreen::AWonderlandWonderWebScreen()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bTickEvenWhenPaused = true;
-
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
-	Screen = WonderWebScreenTuning::MakeGlass(this, Root, TEXT("WonderWebWindow"));
-	Chip = WonderWebScreenTuning::MakeGlass(this, Root, TEXT("WonderWebChip"));
-	Chip->SetVisibility(false);
-
-	Interaction = CreateDefaultSubobject<UWonderlandWonderWebInteraction>(TEXT("WonderWebPointer"));
-	Interaction->SetupAttachment(Root);
-	// The layer supplies where the cursor meets the glass; nothing is traced against the world.
-	Interaction->InteractionSource = EWidgetInteractionSource::Custom;
-	Interaction->bEnableHitTesting = true;
-	Interaction->InteractionDistance = 5000.0f;
-	Interaction->VirtualUserIndex = 7;
-	Interaction->PointerIndex = 0;
-
-	SetActorHiddenInGame(true);
 }
 
-void AWonderlandWonderWebScreen::SetVirtualUser(int32 Index)
+void AWonderlandWonderWebScreen::Present(const FVector2D& WindowSize, const FVector2D& ChipSize, AWonderlandWonderWebWorkspace* InWorkspace)
 {
-	Interaction->VirtualUserIndex = Index;
-}
-
-void AWonderlandWonderWebScreen::Present(const TSharedRef<SWidget>& Window, const FVector2D& WindowSize, const TSharedRef<SWidget>& InChip, const FVector2D& ChipSize,
-	AWonderlandWonderWebWorkspace* InWorkspace)
-{
-	if (Shown != Window)
-	{
-		Screen->SetSlateWidget(Window);
-		Shown = Window;
-	}
-	if (ShownChip != InChip)
-	{
-		Chip->SetSlateWidget(InChip);
-		ShownChip = InChip;
-	}
 	WindowPixels = WindowSize;
 	ChipPixels = ChipSize;
-	Screen->SetDrawSize(WindowSize);
-	Chip->SetDrawSize(ChipSize);
 	Workspace = InWorkspace;
 	if (InWorkspace != nullptr && GetAttachParentActor() != InWorkspace)
 	{
 		AttachToComponent(InWorkspace->GetAnchor(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 	}
 	bPresented = true;
-	SetActorHiddenInGame(false);
-	SetActorTickEnabled(true);
 }
 
 void AWonderlandWonderWebScreen::Dismiss()
@@ -207,10 +148,9 @@ void AWonderlandWonderWebScreen::Tick(float DeltaSeconds)
 	using namespace WonderWebScreenTuning;
 	Super::Tick(DeltaSeconds);
 	const float Seconds = FMath::Max(CVarGrowSeconds.GetValueOnGameThread(), 0.01f);
-	const bool bWindowShown = bPresented && !bMinimized;
-	const bool bChipShown = bPresented && bMinimized;
-	Grow = FMath::Clamp(Grow + (bWindowShown ? 1.0f : -1.0f) * DeltaSeconds / Seconds, 0.0f, 1.0f);
-	ChipGrow = FMath::Clamp(ChipGrow + (bChipShown ? 1.0f : -1.0f) * DeltaSeconds / Seconds, 0.0f, 1.0f);
+	Grow = FMath::Clamp(Grow + ((bPresented && !bMinimized) ? 1.0f : -1.0f) * DeltaSeconds / Seconds, 0.0f, 1.0f);
+	ChipGrow = FMath::Clamp(ChipGrow + ((bPresented && bMinimized) ? 1.0f : -1.0f) * DeltaSeconds / Seconds, 0.0f, 1.0f);
+
 	// THE SIZE, critically damped toward the target like the glide: an expanded window grows, and settles, without bounce.
 	FMath::CriticallyDampedSmoothing(SizeShown, SizeRate, SizeFactor, 0.0f, FMath::Min(DeltaSeconds, 0.1f), FMath::Max(CVarResizeSeconds.GetValueOnGameThread(), 0.02f));
 	if (FMath::IsNearlyEqual(SizeShown, SizeFactor, 0.002f) && FMath::Abs(SizeRate) < 0.05f)
@@ -218,19 +158,12 @@ void AWonderlandWonderWebScreen::Tick(float DeltaSeconds)
 		SizeShown = SizeFactor;
 		SizeRate = 0.0f;
 	}
-	const float Scale = CVarWindowWidth.GetValueOnGameThread() / FMath::Max(static_cast<float>(WindowPixels.X), 1.0f) * SizeShown;
-
-	// It opens out from a line across its middle, like a screen switching on, and folds back the same way.
-	const float Open = FMath::SmoothStep(0.0f, 1.0f, Grow);
-	Screen->SetRelativeScale3D(FVector(Scale, Scale, Scale * FMath::Max(Open, 0.02f)));
-	// MINIMIZED, IT IS NOT DRAWN AT ALL: its work goes on, its presentation stops.
-	Screen->SetVisibility(Grow > 0.0f);
 
 	// THE GLIDE. Critically damped toward the target, in short sub-steps so a slow frame is still a smooth curve.
 	const FVector2D Limit = Reach();
 	if (!bDragging)
 	{
-		// A window on a named place keeps to it as its size changes; one left where it was dragged stays whole in the view.
+		// A window on a named place keeps to it as its size changes; one tiled or dragged stays whole in the view.
 		TargetOffset = bOnGrid ? FVector2D(Cell.X * Limit.X, Cell.Y * Limit.Y)
 			: FVector2D(FMath::Clamp(TargetOffset.X, -Limit.X, Limit.X), FMath::Clamp(TargetOffset.Y, -Limit.Y, Limit.Y));
 	}
@@ -242,60 +175,57 @@ void AWonderlandWonderWebScreen::Tick(float DeltaSeconds)
 		FMath::CriticallyDampedSmoothing(Offset, OffsetRate, TargetOffset, FVector2D::ZeroVector, Slice, Glide);
 		Remaining -= Slice;
 	}
-	// IT ARRIVES, AND THEN IT IS STILL: the last creep of a critically damped glide is what the temporal upscaler smeared
-	// into doubled text on a translucent screen (editor 78). Within two uu and nearly stopped, it lands exactly.
+	// IT ARRIVES, AND THEN IT IS STILL: within two uu and nearly stopped, it lands exactly.
 	if (!bDragging && FVector2D::Distance(Offset, TargetOffset) < 2.0 && OffsetRate.Size() < 30.0)
 	{
 		Offset = TargetOffset;
 		OffsetRate = FVector2D::ZeroVector;
 	}
-	// Across the view is -Y (the camera looks back along -X), up is +Z; the focused window stands a hair nearer, in front.
-	Screen->SetRelativeLocation(FVector(bFocused ? 3.0 : 0.0, -Offset.X, Offset.Y));
+}
 
-	// THE CHIP, along the bottom of the view from the left, while the window is minimized.
-	const FVector2D Half = Workspace.IsValid() ? Workspace->HalfView() : FVector2D(295.0, 166.0);
-	const FVector2D ChipGlass = ChipPixels * CVarChipScale.GetValueOnGameThread();
-	const double Margin = CVarEdgeMargin.GetValueOnGameThread();
-	const float ChipOpen = FMath::SmoothStep(0.0f, 1.0f, ChipGrow);
-	Chip->SetRelativeLocation(FVector(5.0, -(-Half.X + Margin + ChipGlass.X * 0.5 + DockSlot * (ChipGlass.X + 6.0)), -Half.Y + Margin + ChipGlass.Y * 0.5));
-	const float ChipScale = CVarChipScale.GetValueOnGameThread();
-	Chip->SetRelativeScale3D(FVector(ChipScale, ChipScale, ChipScale * FMath::Max(ChipOpen, 0.02f)));
-	Chip->SetVisibility(ChipGrow > 0.0f);
-
-	const int32 Blend = FMath::Clamp(CVarGlassBlend.GetValueOnGameThread(), 0, 2);
-	if (Blend != AppliedBlend)
+bool AWonderlandWonderWebScreen::ProjectGlass(APlayerController* Controller, bool bChip, FVector2D& OutViewportMin, FVector2D& OutViewportMax, float& OutOpen) const
+{
+	using namespace WonderWebScreenTuning;
+	const float Open = bChip ? ChipGrow : Grow;
+	OutOpen = FMath::SmoothStep(0.0f, 1.0f, Open);
+	if (Controller == nullptr || Open <= 0.0f || Root == nullptr)
 	{
-		const EWidgetBlendMode Mode = Blend == 0 ? EWidgetBlendMode::Transparent : (Blend == 1 ? EWidgetBlendMode::Masked : EWidgetBlendMode::Opaque);
-		for (UWidgetComponent* Glass : { Screen.Get(), Chip.Get() })
+		return false;
+	}
+	FVector2D Centre;
+	FVector2D Size;
+	if (!bChip)
+	{
+		const double Width = CVarWindowWidth.GetValueOnGameThread() * SizeShown;
+		Size = FVector2D(Width, Width * WindowPixels.Y / FMath::Max(WindowPixels.X, 1.0));
+		Centre = Offset;
+	}
+	else
+	{
+		// THE CHIP, along the bottom of the view from the left.
+		const FVector2D Half = Workspace.IsValid() ? Workspace->HalfView() : FVector2D(295.0, 166.0);
+		Size = ChipPixels * CVarChipScale.GetValueOnGameThread();
+		const double Margin = CVarEdgeMargin.GetValueOnGameThread();
+		Centre = FVector2D(-Half.X + Margin + Size.X * 0.5 + DockSlot * (Size.X + 6.0), -Half.Y + Margin + Size.Y * 0.5);
+	}
+	const FTransform& Xf = Root->GetComponentTransform();
+	FVector2D Min(TNumericLimits<double>::Max(), TNumericLimits<double>::Max());
+	FVector2D Max(TNumericLimits<double>::Lowest(), TNumericLimits<double>::Lowest());
+	for (int32 Corner = 0; Corner < 4; ++Corner)
+	{
+		const double Across = Centre.X + ((Corner & 1) ? 0.5 : -0.5) * Size.X;
+		const double Up = Centre.Y + ((Corner & 2) ? 0.5 : -0.5) * Size.Y;
+		FVector2D Pixel;
+		if (!Controller->ProjectWorldLocationToScreen(Xf.TransformPosition(FVector(0.0, -Across, Up)), Pixel, false))
 		{
-			Glass->SetBlendMode(Mode);
-			if (UWonderlandWonderWebGlass* Rebuilt = Cast<UWonderlandWonderWebGlass>(Glass))
-			{
-				Rebuilt->RefreshMaterial();
-			}
+			return false;
 		}
-		AppliedBlend = Blend;
-		AppliedBrightness = -1.0f;
+		Min = FVector2D(FMath::Min(Min.X, Pixel.X), FMath::Min(Min.Y, Pixel.Y));
+		Max = FVector2D(FMath::Max(Max.X, Pixel.X), FMath::Max(Max.Y, Pixel.Y));
 	}
-	const float Brightness = FMath::Max(CVarBrightness.GetValueOnGameThread(), 1.0f);
-	if (!FMath::IsNearlyEqual(AppliedBrightness, Brightness))
-	{
-		Screen->SetTintColorAndOpacity(FLinearColor(Brightness, Brightness, Brightness, 1.0f));
-		Chip->SetTintColorAndOpacity(FLinearColor(Brightness, Brightness, Brightness, 1.0f));
-		AppliedBrightness = Brightness;
-	}
-	// DRAWN AS OFTEN AS IT IS LOOKED AT; worked on regardless.
-	const float Redraw = bFocused ? 0.0f : CVarBackgroundRedraw.GetValueOnGameThread();
-	if (!FMath::IsNearlyEqual(AppliedRedraw, Redraw))
-	{
-		Screen->SetRedrawTime(Redraw);
-		Chip->SetRedrawTime(CVarChipRedraw.GetValueOnGameThread());
-		AppliedRedraw = Redraw;
-	}
-	if (!bPresented && Grow <= 0.0f && ChipGrow <= 0.0f && !IsHidden())
-	{
-		SetActorHiddenInGame(true);
-	}
+	OutViewportMin = Min;
+	OutViewportMax = Max;
+	return Max.X > Min.X && Max.Y > Min.Y;
 }
 
 FVector2D AWonderlandWonderWebScreen::Reach() const
@@ -361,7 +291,7 @@ bool AWonderlandWonderWebScreen::RayOnPlane(APlayerController* Controller, const
 		return false;
 	}
 	const FTransform& RootXf = Root->GetComponentTransform();
-	const FPlane Glass(Screen->GetComponentLocation(), RootXf.GetUnitAxis(EAxis::X));
+	const FPlane Glass(RootXf.GetLocation(), RootXf.GetUnitAxis(EAxis::X));
 	if (FMath::IsNearlyZero(FVector::DotProduct(Direction, Glass.GetNormal())))
 	{
 		return false;
@@ -409,94 +339,7 @@ void AWonderlandWonderWebScreen::EndDrag()
 	Cell = FIntPoint(Limit.X > 1.0 ? FMath::RoundToInt(TargetOffset.X / Limit.X) : 0, Limit.Y > 1.0 ? FMath::RoundToInt(TargetOffset.Y / Limit.Y) : 0);
 }
 
-FVector AWonderlandWonderWebScreen::WindowPixelToWorld(const FVector2D& WindowPixel) const
-{
-	const UWidgetComponent* Glass = bMinimized ? Chip.Get() : Screen.Get();
-	const FVector2D Draw = Glass->GetCurrentDrawSize();
-	const FVector2D Pivot = Glass->GetPivot();
-	// The inverse of UWidgetComponent::GetLocalHitLocation: x = -Y + Draw.X * Pivot.X, y = -Z + Draw.Y * Pivot.Y.
-	const FVector Local(0.0, Draw.X * Pivot.X - WindowPixel.X, Draw.Y * Pivot.Y - WindowPixel.Y);
-	return Glass->GetComponentTransform().TransformPosition(Local);
-}
-
-bool AWonderlandWonderWebScreen::HitComponent(const UWidgetComponent* Component, APlayerController* Controller, const FVector2D& ViewportPixel,
-	double& OutDistance, FVector2D& OutPixel, FVector& OutHit) const
-{
-	FVector Origin;
-	FVector Direction;
-	if (Component == nullptr || Controller == nullptr || !Controller->DeprojectScreenPositionToWorld(ViewportPixel.X, ViewportPixel.Y, Origin, Direction))
-	{
-		return false;
-	}
-	const FTransform& Xf = Component->GetComponentTransform();
-	const FPlane Glass(Xf.GetLocation(), Xf.GetUnitAxis(EAxis::X));
-	if (FMath::IsNearlyZero(FVector::DotProduct(Direction, Glass.GetNormal())))
-	{
-		return false;
-	}
-	OutHit = FMath::RayPlaneIntersection(Origin, Direction, Glass);
-	const FVector Local = Xf.InverseTransformPosition(OutHit);
-	const FVector2D Draw = Component->GetCurrentDrawSize();
-	OutPixel = FVector2D(-Local.Y + Draw.X * Component->GetPivot().X, -Local.Z + Draw.Y * Component->GetPivot().Y);
-	OutDistance = FVector::DotProduct(OutHit - Origin, Direction);
-	return OutPixel.X >= 0.0 && OutPixel.Y >= 0.0 && OutPixel.X <= Draw.X && OutPixel.Y <= Draw.Y && OutDistance > 0.0;
-}
-
-bool AWonderlandWonderWebScreen::HitTest(APlayerController* Controller, const FVector2D& ViewportPixel, double& OutDistance, FVector2D& OutPixel) const
-{
-	if (!bPresented)
-	{
-		return false;
-	}
-	FVector Hit;
-	// A window is only hit while it is open enough to be seen; a minimized one is hit on its chip.
-	if (bMinimized)
-	{
-		return ChipGrow > 0.5f && HitComponent(Chip, Controller, ViewportPixel, OutDistance, OutPixel, Hit);
-	}
-	return Grow > 0.5f && HitComponent(Screen, Controller, ViewportPixel, OutDistance, OutPixel, Hit);
-}
-
-bool AWonderlandWonderWebScreen::AimAtViewportPixel(APlayerController* Controller, const FVector2D& ViewportPixel)
-{
-	LastAimPixel = FVector2D(-1.0, -1.0);
-	UWidgetComponent* Glass = bMinimized ? Chip.Get() : Screen.Get();
-	double Distance = 0.0;
-	FVector2D Pixel;
-	FVector Hit;
-	FVector Origin;
-	FVector Direction;
-	if (Interaction == nullptr || Controller == nullptr || !bPresented || !Controller->DeprojectScreenPositionToWorld(ViewportPixel.X, ViewportPixel.Y, Origin, Direction))
-	{
-		return false;
-	}
-	const bool bOnGlass = HitComponent(Glass, Controller, ViewportPixel, Distance, Pixel, Hit);
-	LastAimPixel = Pixel;
-	FHitResult Result;
-	Result.bBlockingHit = bOnGlass;
-	Result.Component = Glass;
-	Result.Location = Hit;
-	Result.ImpactPoint = Hit;
-	Result.Normal = Glass->GetComponentTransform().GetUnitAxis(EAxis::X);
-	Result.ImpactNormal = Result.Normal;
-	Result.TraceStart = Origin;
-	Result.TraceEnd = Origin + Direction * 5000.0;
-	Result.Distance = static_cast<float>(Distance);
-	Interaction->SetCustomHitResult(Result);
-	Interaction->RefreshHover();
-	return bOnGlass;
-}
-
-void AWonderlandWonderWebScreen::AimElsewhere()
-{
-	if (Interaction != nullptr && Interaction->GetHoveredWidgetComponent() != nullptr)
-	{
-		Interaction->SetCustomHitResult(FHitResult());
-		Interaction->RefreshHover();
-	}
-}
-
-/* ==================================================================== the input layer */
+/* ==================================================================== the layer: drawing the windows, and input */
 
 void SWonderlandWonderWebInputLayer::Construct(const FArguments& InArgs)
 {
@@ -505,9 +348,213 @@ void SWonderlandWonderWebInputLayer::Construct(const FArguments& InArgs)
 	OnFocus = InArgs._OnFocus;
 	OnRequestClose = InArgs._OnRequestClose;
 	SetVisibility(EVisibility::Visible);
+	ChildSlot
+	[
+		SAssignNew(Canvas, SConstraintCanvas)
+	];
 }
 
-bool SWonderlandWonderWebInputLayer::ToViewportPixel(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent, FVector2D& OutPixel) const
+void SWonderlandWonderWebInputLayer::Present(AWonderlandWonderWebScreen* Screen, const TSharedRef<SWidget>& Content, const FVector2D& ContentSize,
+	const TSharedRef<SWidget>& Chip, const FVector2D& ChipSize)
+{
+	if (Screen == nullptr || FindEntry(Screen) != nullptr || !Canvas.IsValid())
+	{
+		return;
+	}
+	TUniquePtr<FEntry> Entry = MakeUnique<FEntry>();
+	Entry->Screen = Screen;
+	Entry->ContentSize = ContentSize;
+	Entry->ChipSize = ChipSize;
+	Canvas->AddSlot()
+		.Anchors(FAnchors(0.0f, 0.0f))
+		.Alignment(FVector2D(0.0, 0.0))
+		.AutoSize(false)
+		.Offset(FMargin(0.0f, 0.0f, 1.0f, 1.0f))
+		.ZOrder(1.0f)
+		.Expose(Entry->Slot)
+	[
+		SAssignNew(Entry->Frame, SBox)
+		.Visibility(EVisibility::Collapsed)
+		.RenderTransformPivot(FVector2D(0.5, 0.5))
+		[
+			// The retainer is transparent while the window is focused; behind, it redraws the window only every few frames.
+			SAssignNew(Entry->Retainer, SRetainerWidget)
+			.RenderOnPhase(true)
+			.RenderOnInvalidation(false)
+			.Phase(0)
+			.PhaseCount(1)
+			[
+				SAssignNew(Entry->Scaler, SDPIScaler)
+				.DPIScale(1.0f)
+				[
+					SNew(SBox).WidthOverride(ContentSize.X).HeightOverride(ContentSize.Y)
+					[
+						Content
+					]
+				]
+			]
+		]
+	];
+	Entry->Retainer->SetRetainedRendering(false);
+	Canvas->AddSlot()
+		.Anchors(FAnchors(0.0f, 0.0f))
+		.Alignment(FVector2D(0.0, 0.0))
+		.AutoSize(false)
+		.Offset(FMargin(0.0f, 0.0f, 1.0f, 1.0f))
+		.ZOrder(5.0f)
+		.Expose(Entry->ChipSlot)
+	[
+		SAssignNew(Entry->ChipFrame, SBox)
+		.Visibility(EVisibility::Collapsed)
+		.RenderTransformPivot(FVector2D(0.5, 0.5))
+		[
+			SAssignNew(Entry->ChipScaler, SDPIScaler)
+			.DPIScale(1.0f)
+			[
+				SNew(SBox).WidthOverride(ChipSize.X).HeightOverride(ChipSize.Y)
+				[
+					Chip
+				]
+			]
+		]
+	];
+	Entries.Add(MoveTemp(Entry));
+}
+
+const SWonderlandWonderWebInputLayer::FEntry* SWonderlandWonderWebInputLayer::FindEntry(const AWonderlandWonderWebScreen* Screen) const
+{
+	for (const TUniquePtr<FEntry>& Entry : Entries)
+	{
+		if (Screen != nullptr && Entry->Screen.Get() == Screen)
+		{
+			return Entry.Get();
+		}
+	}
+	return nullptr;
+}
+
+void SWonderlandWonderWebInputLayer::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
+{
+	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+	APlayerController* Player = Controller.Get();
+	FVector2D ViewportSize(0.0, 0.0);
+	if (Player != nullptr)
+	{
+		if (const ULocalPlayer* LocalPlayer = Player->GetLocalPlayer())
+		{
+			if (LocalPlayer->ViewportClient != nullptr)
+			{
+				LocalPlayer->ViewportClient->GetViewportSize(ViewportSize);
+			}
+		}
+	}
+	const FVector2D LocalSize = AllottedGeometry.GetLocalSize();
+	const bool bCanProject = Player != nullptr && ViewportSize.X > 0.0 && ViewportSize.Y > 0.0 && LocalSize.X > 0.0;
+	const int32 BackgroundFrames = FMath::Max(WonderWebScreenTuning::CVarBackgroundRedrawFrames.GetValueOnGameThread(), 1);
+
+	for (const TUniquePtr<FEntry>& Pointer : Entries)
+	{
+		FEntry& Entry = *Pointer;
+		AWonderlandWonderWebScreen* Screen = Entry.Screen.Get();
+		FVector2D ViewportMin;
+		FVector2D ViewportMax;
+		float Open = 0.0f;
+
+		// THE WINDOW, over where its glass stands this frame: the whole rectangle, scaled from its design size, opening out
+		// from a line across its middle.
+		Entry.bShown = bCanProject && Screen != nullptr && Screen->ProjectGlass(Player, false, ViewportMin, ViewportMax, Open) && Open > 0.001f;
+		if (Entry.bShown)
+		{
+			const FVector2D Min = ViewportMin / ViewportSize * LocalSize;
+			const FVector2D Max = ViewportMax / ViewportSize * LocalSize;
+			const float Scale = static_cast<float>((Max.X - Min.X) / FMath::Max(Entry.ContentSize.X, 1.0));
+			const FVector2D Size = Entry.ContentSize * Scale;
+			const FVector2D Centre = (Min + Max) * 0.5;
+			Entry.Min = Centre - Size * 0.5;
+			Entry.Max = Centre + Size * 0.5;
+			Entry.Slot->SetOffset(FMargin(static_cast<float>(Entry.Min.X), static_cast<float>(Entry.Min.Y), static_cast<float>(Size.X), static_cast<float>(Size.Y)));
+			// The focused window is in front of the others.
+			Entry.Slot->SetZOrder(Screen->IsFocused() ? 2.0f : 1.0f);
+			Entry.Scaler->SetDPIScale(Scale);
+			Entry.Frame->SetRenderTransform(Open < 0.999f ? TOptional<FSlateRenderTransform>(FSlateRenderTransform(FScale2D(1.0f, FMath::Max(Open, 0.01f)))) : TOptional<FSlateRenderTransform>());
+			// Only a window that has finished opening takes the pointer.
+			const EVisibility Wanted = Open > 0.98f ? EVisibility::Visible : EVisibility::HitTestInvisible;
+			if (Entry.Frame->GetVisibility() != Wanted)
+			{
+				Entry.Frame->SetVisibility(Wanted);
+			}
+			// DRAWN AS OFTEN AS IT IS LOOKED AT; worked on regardless.
+			const int32 Retain = Screen->IsFocused() ? 0 : BackgroundFrames;
+			if (Retain != Entry.Retained)
+			{
+				if (Retain <= 1)
+				{
+					Entry.Retainer->SetRetainedRendering(false);
+				}
+				else
+				{
+					Entry.Retainer->SetRenderingPhase(0, Retain);
+					Entry.Retainer->SetRetainedRendering(true);
+				}
+				Entry.Retained = Retain;
+			}
+		}
+		else if (Entry.Frame.IsValid() && Entry.Frame->GetVisibility() != EVisibility::Collapsed)
+		{
+			// MINIMIZED OR CLOSED, IT IS NOT DRAWN AT ALL.
+			Entry.Frame->SetVisibility(EVisibility::Collapsed);
+		}
+
+		float ChipOpen = 0.0f;
+		Entry.bChipShown = bCanProject && Screen != nullptr && Screen->ProjectGlass(Player, true, ViewportMin, ViewportMax, ChipOpen) && ChipOpen > 0.001f;
+		if (Entry.bChipShown)
+		{
+			const FVector2D Min = ViewportMin / ViewportSize * LocalSize;
+			const FVector2D Max = ViewportMax / ViewportSize * LocalSize;
+			const float Scale = static_cast<float>((Max.X - Min.X) / FMath::Max(Entry.ChipSize.X, 1.0));
+			Entry.ChipMin = Min;
+			Entry.ChipMax = Min + Entry.ChipSize * Scale;
+			Entry.ChipSlot->SetOffset(FMargin(static_cast<float>(Min.X), static_cast<float>(Min.Y), static_cast<float>(Entry.ChipSize.X * Scale), static_cast<float>(Entry.ChipSize.Y * Scale)));
+			Entry.ChipScaler->SetDPIScale(Scale);
+			Entry.ChipFrame->SetRenderTransform(ChipOpen < 0.999f ? TOptional<FSlateRenderTransform>(FSlateRenderTransform(FScale2D(1.0f, FMath::Max(ChipOpen, 0.01f)))) : TOptional<FSlateRenderTransform>());
+			const EVisibility Wanted = ChipOpen > 0.98f ? EVisibility::Visible : EVisibility::HitTestInvisible;
+			if (Entry.ChipFrame->GetVisibility() != Wanted)
+			{
+				Entry.ChipFrame->SetVisibility(Wanted);
+			}
+		}
+		else if (Entry.ChipFrame.IsValid() && Entry.ChipFrame->GetVisibility() != EVisibility::Collapsed)
+		{
+			Entry.ChipFrame->SetVisibility(EVisibility::Collapsed);
+		}
+	}
+}
+
+bool SWonderlandWonderWebInputLayer::GetWindowRect(const AWonderlandWonderWebScreen* Screen, bool bChip, FSlateRect& OutRect) const
+{
+	const FEntry* Entry = FindEntry(Screen);
+	if (Entry == nullptr || !(bChip ? Entry->bChipShown : Entry->bShown))
+	{
+		return false;
+	}
+	const FGeometry& Geometry = GetTickSpaceGeometry();
+	OutRect = FSlateRect(Geometry.LocalToAbsolute(bChip ? Entry->ChipMin : Entry->Min), Geometry.LocalToAbsolute(bChip ? Entry->ChipMax : Entry->Max));
+	return true;
+}
+
+bool SWonderlandWonderWebInputLayer::WindowPixelToAbsolute(const AWonderlandWonderWebScreen* Screen, const FVector2D& WindowPixel, FVector2D& OutAbsolute) const
+{
+	const FEntry* Entry = FindEntry(Screen);
+	FSlateRect Rect;
+	if (Entry == nullptr || !GetWindowRect(Screen, false, Rect))
+	{
+		return false;
+	}
+	OutAbsolute = Rect.GetTopLeft() + WindowPixel * (Rect.GetSize() / Entry->ContentSize);
+	return true;
+}
+
+bool SWonderlandWonderWebInputLayer::ToViewportPixel(const FGeometry& MyGeometry, const FVector2D& ScreenPosition, FVector2D& OutPixel) const
 {
 	APlayerController* Player = Controller.Get();
 	if (Player == nullptr)
@@ -515,7 +562,7 @@ bool SWonderlandWonderWebInputLayer::ToViewportPixel(const FGeometry& MyGeometry
 		return false;
 	}
 	// Slate units to viewport pixels: the layer fills the game viewport.
-	const FVector2D Local = MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition());
+	const FVector2D Local = MyGeometry.AbsoluteToLocal(ScreenPosition);
 	const FVector2D LocalSize = MyGeometry.GetLocalSize();
 	FVector2D ViewportSize(0.0, 0.0);
 	if (const ULocalPlayer* LocalPlayer = Player->GetLocalPlayer())
@@ -533,42 +580,34 @@ bool SWonderlandWonderWebInputLayer::ToViewportPixel(const FGeometry& MyGeometry
 	return true;
 }
 
-AWonderlandWonderWebScreen* SWonderlandWonderWebInputLayer::AimFrontMost(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
+const SWonderlandWonderWebInputLayer::FEntry* SWonderlandWonderWebInputLayer::EntryAt(const FVector2D& Local, bool& bOutChip) const
 {
-	FVector2D Pixel;
-	if (!GetScreens.IsBound() || !ToViewportPixel(MyGeometry, MouseEvent, Pixel))
+	const auto Inside = [&Local](const FVector2D& Min, const FVector2D& Max) { return Local.X >= Min.X && Local.Y >= Min.Y && Local.X <= Max.X && Local.Y <= Max.Y; };
+	bOutChip = true;
+	for (const TUniquePtr<FEntry>& Entry : Entries)
 	{
-		return nullptr;
-	}
-	const TArray<AWonderlandWonderWebScreen*> Screens = GetScreens.Execute();
-	AWonderlandWonderWebScreen* Best = nullptr;
-	double BestDistance = TNumericLimits<double>::Max();
-	for (AWonderlandWonderWebScreen* Candidate : Screens)
-	{
-		double Distance = 0.0;
-		FVector2D WindowPixel;
-		if (Candidate != nullptr && Candidate->HitTest(Controller.Get(), Pixel, Distance, WindowPixel) && Distance < BestDistance)
+		if (Entry->bChipShown && Inside(Entry->ChipMin, Entry->ChipMax))
 		{
-			Best = Candidate;
-			BestDistance = Distance;
+			return Entry.Get();
 		}
 	}
-	for (AWonderlandWonderWebScreen* Candidate : Screens)
+	bOutChip = false;
+	// The focused window is in front.
+	for (const TUniquePtr<FEntry>& Entry : Entries)
 	{
-		if (Candidate == nullptr)
+		if (Entry->bShown && Entry->Screen.IsValid() && Entry->Screen->IsFocused() && Inside(Entry->Min, Entry->Max))
 		{
-			continue;
-		}
-		if (Candidate == Best)
-		{
-			Candidate->AimAtViewportPixel(Controller.Get(), Pixel);
-		}
-		else
-		{
-			Candidate->AimElsewhere();
+			return Entry.Get();
 		}
 	}
-	return Best;
+	for (const TUniquePtr<FEntry>& Entry : Entries)
+	{
+		if (Entry->bShown && Inside(Entry->Min, Entry->Max))
+		{
+			return Entry.Get();
+		}
+	}
+	return nullptr;
 }
 
 AWonderlandWonderWebScreen* SWonderlandWonderWebInputLayer::FocusedScreen() const
@@ -587,92 +626,69 @@ AWonderlandWonderWebScreen* SWonderlandWonderWebInputLayer::FocusedScreen() cons
 	return nullptr;
 }
 
+FReply SWonderlandWonderWebInputLayer::OnPreviewMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
+{
+	// FIRST, BEFORE THE WINDOW'S OWN WIDGETS: a press focuses the window it lands in. The press itself goes on to them.
+	bool bChip = false;
+	const FEntry* Hit = EntryAt(MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition()), bChip);
+	Pressed = Hit != nullptr ? Hit->Screen : nullptr;
+	if (Hit != nullptr && Hit->Screen.IsValid())
+	{
+		++ForwardedClicks;
+		OnFocus.ExecuteIfBound(Hit->Screen.Get());
+		UE_LOG(LogTemp, Log, TEXT("WLWEB press at (%.0f, %.0f) in %s%s"), MouseEvent.GetScreenSpacePosition().X, MouseEvent.GetScreenSpacePosition().Y,
+			*Hit->Screen->GetName(), bChip ? TEXT(" (chip)") : TEXT(""));
+	}
+	return FReply::Unhandled();
+}
+
 FReply SWonderlandWonderWebInputLayer::OnMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
+	// Reached only when nothing inside a window took the press.
 	FSlateApplication::Get().SetKeyboardFocus(SharedThis(this), EFocusCause::Mouse);
-	AWonderlandWonderWebScreen* Target = AimFrontMost(MyGeometry, MouseEvent);
-	Pressed = Target;
-	if (Target == nullptr)
+	bool bChip = false;
+	const FVector2D Local = MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition());
+	const FEntry* Hit = EntryAt(Local, bChip);
+	AWonderlandWonderWebScreen* Screen = Hit != nullptr ? Hit->Screen.Get() : nullptr;
+	if (Screen != nullptr && !bChip && MouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
-		UE_LOG(LogTemp, Log, TEXT("WLWEB press at (%.0f, %.0f): on no window"), MouseEvent.GetScreenSpacePosition().X, MouseEvent.GetScreenSpacePosition().Y);
-		return FReply::Handled();
+		// TAKEN BY THE TITLE BAR: a left press on the bar's bare space picks the window up. It moves with the pointer until release.
+		const double Scale = (Hit->Max.X - Hit->Min.X) / FMath::Max(Hit->ContentSize.X, 1.0);
+		FVector2D Pixel;
+		if (Local.Y - Hit->Min.Y < SWonderlandWonderWebPanel::TitleBarHeight() * Scale
+			&& ToViewportPixel(MyGeometry, MouseEvent.GetScreenSpacePosition(), Pixel) && Screen->BeginDrag(Controller.Get(), Pixel))
+		{
+			Pressed = Screen;
+			UE_LOG(LogTemp, Log, TEXT("WLWEB title bar of %s taken"), *Screen->GetName());
+			return FReply::Handled().CaptureMouse(SharedThis(this));
+		}
 	}
-	// A press focuses the window it lands on.
-	OnFocus.ExecuteIfBound(Target);
-	// TAKEN BY THE TITLE BAR: a left press on the bar's bare space -- not on a tab, not on a window button -- picks the
-	// window up. It moves with the pointer until release.
-	FVector2D PressPixel;
-	if (!Target->IsMinimized() && MouseEvent.GetEffectingButton() == EKeys::LeftMouseButton
-		&& Target->GetLastAimPixel().Y < SWonderlandWonderWebPanel::TitleBarHeight() && !Target->GetInteraction()->IsOverInteractableWidget()
-		&& ToViewportPixel(MyGeometry, MouseEvent, PressPixel) && Target->BeginDrag(Controller.Get(), PressPixel))
-	{
-		UE_LOG(LogTemp, Log, TEXT("WLWEB title bar taken at window pixel (%.0f, %.0f)"), Target->GetLastAimPixel().X, Target->GetLastAimPixel().Y);
-		return FReply::Handled().CaptureMouse(SharedThis(this));
-	}
-	Target->GetInteraction()->PressPointerKey(MouseEvent.GetEffectingButton());
-	++ForwardedClicks;
-	UE_LOG(LogTemp, Log, TEXT("WLWEB press at (%.0f, %.0f) -> window pixel (%.0f, %.0f) on %s"), MouseEvent.GetScreenSpacePosition().X, MouseEvent.GetScreenSpacePosition().Y,
-		Target->GetLastAimPixel().X, Target->GetLastAimPixel().Y, *Target->GetName());
 	return FReply::Handled();
 }
 
 FReply SWonderlandWonderWebInputLayer::OnMouseButtonUp(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
 	AWonderlandWonderWebScreen* Target = Pressed.Get();
-	Pressed.Reset();
 	if (Target != nullptr && Target->IsDragging())
 	{
 		Target->EndDrag();
+		Pressed.Reset();
 		return FReply::Handled().ReleaseMouseCapture();
 	}
-	FVector2D Pixel;
-	if (Target != nullptr && ToViewportPixel(MyGeometry, MouseEvent, Pixel))
-	{
-		Target->AimAtViewportPixel(Controller.Get(), Pixel);
-		Target->GetInteraction()->ReleasePointerKey(MouseEvent.GetEffectingButton());
-	}
-	return FReply::Handled();
+	Pressed.Reset();
+	return FReply::Unhandled();
 }
 
 FReply SWonderlandWonderWebInputLayer::OnMouseMove(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
 	AWonderlandWonderWebScreen* Target = Pressed.Get();
 	FVector2D Pixel;
-	if (Target != nullptr && Target->IsDragging() && ToViewportPixel(MyGeometry, MouseEvent, Pixel))
+	if (Target != nullptr && Target->IsDragging() && ToViewportPixel(MyGeometry, MouseEvent.GetScreenSpacePosition(), Pixel))
 	{
 		Target->DragTo(Controller.Get(), Pixel);
 		return FReply::Handled();
 	}
-	AimFrontMost(MyGeometry, MouseEvent);
-	return FReply::Handled();
-}
-
-FReply SWonderlandWonderWebInputLayer::OnMouseWheel(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
-{
-	if (AWonderlandWonderWebScreen* Target = AimFrontMost(MyGeometry, MouseEvent))
-	{
-		Target->GetInteraction()->ScrollWheel(MouseEvent.GetWheelDelta());
-	}
-	return FReply::Handled();
-}
-
-bool SWonderlandWonderWebInputLayer::IsEditingKey(const FKey& Key)
-{
-	return Key == EKeys::Enter || Key == EKeys::BackSpace || Key == EKeys::Delete || Key == EKeys::Left || Key == EKeys::Right
-		|| Key == EKeys::Home || Key == EKeys::End || Key == EKeys::Up || Key == EKeys::Down;
-}
-
-FReply SWonderlandWonderWebInputLayer::OnKeyChar(const FGeometry& MyGeometry, const FCharacterEvent& InCharacterEvent)
-{
-	const TCHAR Character = InCharacterEvent.GetCharacter();
-	// Control characters arrive as key downs; only printable text is typed, into the focused window.
-	AWonderlandWonderWebScreen* Target = FocusedScreen();
-	if (Target != nullptr && Character >= 32 && Character != 127)
-	{
-		Target->GetInteraction()->SendKeyChar(FString(1, &Character), InCharacterEvent.IsRepeat());
-		++ForwardedCharacters;
-	}
-	return FReply::Handled();
+	return FReply::Unhandled();
 }
 
 FReply SWonderlandWonderWebInputLayer::OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent)
@@ -699,28 +715,6 @@ FReply SWonderlandWonderWebInputLayer::OnKeyDown(const FGeometry& MyGeometry, co
 			Target->MoveTo(TEXT("center"));
 			return FReply::Handled();
 		}
-	}
-	if (IsEditingKey(Key))
-	{
-		if (Target != nullptr)
-		{
-			Target->GetInteraction()->PressKey(Key, InKeyEvent.IsRepeat());
-		}
-		return FReply::Handled();
-	}
-	// Everything else is left to Slate, so a character key still produces its OnKeyChar.
-	return FReply::Unhandled();
-}
-
-FReply SWonderlandWonderWebInputLayer::OnKeyUp(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent)
-{
-	if (IsEditingKey(InKeyEvent.GetKey()))
-	{
-		if (AWonderlandWonderWebScreen* Target = FocusedScreen())
-		{
-			Target->GetInteraction()->ReleaseKey(InKeyEvent.GetKey());
-		}
-		return FReply::Handled();
 	}
 	return FReply::Unhandled();
 }
