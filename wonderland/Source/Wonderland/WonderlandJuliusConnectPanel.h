@@ -7,7 +7,7 @@
 // and what it plainly does not; Julius's task and why it is blocked; the audit trail; and a prompt with a fixed
 // vocabulary. CONNECT, NOT NOW, REVOKE, RECONNECT and TEST ACCESS send intents; the service decides.
 //
-// Designed at 1536 x 1024, like the creation window, and rendered at that resolution onto the workspace's glass.
+// Designed at 1536 x 1024, like the creation window, and drawn by the workspace layer scaled to where its glass stands.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -73,6 +73,8 @@ private:
 	TMap<FName, FVector2D> ControlCentres;
 	TMap<FName, double> ControlSeenAt;
 	double Now = 0.0;
+	/** Frames left before the terminal scrolls to its newest line: new lines must be laid out before the end is known. */
+	int32 ScrollTerminalIn = 0;
 
 	FSlateBrush WindowBrush;
 	FSlateBrush LineBrush;

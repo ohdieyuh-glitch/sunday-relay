@@ -547,6 +547,11 @@ void SWonderlandWonderWebPanel::Tick(const FGeometry& AllottedGeometry, const do
 	{
 		Rebuild();
 	}
+	// THE NEWEST LINE IN VIEW: scrolled again once the lines just added have been laid out.
+	if (ScrollTerminalIn > 0 && --ScrollTerminalIn == 0 && TerminalScroll.IsValid())
+	{
+		TerminalScroll->ScrollToEnd();
+	}
 }
 
 FString SWonderlandWonderWebPanel::OwnerLabel(const FWonderWebSurface& Surface, const FString& UserId) const
@@ -588,6 +593,7 @@ void SWonderlandWonderWebPanel::Rebuild()
 		if (TerminalScroll.IsValid())
 		{
 			TerminalScroll->ScrollToEnd();
+			ScrollTerminalIn = 2;
 		}
 	}
 }
