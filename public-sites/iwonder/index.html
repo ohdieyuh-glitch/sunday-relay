@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Announce script before first paint, so reveals hide without a flash. -->
+    <script>document.documentElement.classList.add('pw-js');</script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>i.Wonder — Multiplayer open-world AI creation platforms and Compound AI Agents</title>
+    <meta
+      name="description"
+      content="i.Wonder builds multiplayer open-world AI creation platforms and researches, develops and deploys Compound AI Systems and Compound AI Agents. Its flagship platform is Wonderland; its flagship Compound AI Agent is Julius."
+    />
+    <meta name="theme-color" content="#05060a" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="canonical" href="%IWONDER_URL%" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="preload" href="../shared/fonts/newsreader-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="i.Wonder" />
+    <meta property="og:title" content="i.Wonder — AI creation deserves a world" />
+    <meta
+      property="og:description"
+      content="Multiplayer open-world AI creation platforms, and the Compound AI Systems and Compound AI Agents behind them. Home of Wonderland and Julius."
+    />
+    <meta property="og:url" content="%IWONDER_URL%" />
+    <meta property="og:image" content="%IWONDER_URL%og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="i.Wonder — a floating voxel world under construction, with the headline AI creation deserves a world." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="i.Wonder — AI creation deserves a world" />
+    <meta name="twitter:description" content="Multiplayer open-world AI creation platforms, and the Compound AI Systems and Compound AI Agents behind them." />
+    <meta name="twitter:image" content="%IWONDER_URL%og.png" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "i.Wonder Laboratories, Inc.",
+        "alternateName": "i.Wonder",
+        "url": "%IWONDER_URL%",
+        "description": "i.Wonder builds multiplayer open-world AI creation platforms and researches, develops and deploys Compound AI Systems and Compound AI Agents.",
+        "brand": [
+          { "@type": "Brand", "name": "Wonderland" },
+          { "@type": "Brand", "name": "Julius" }
+        ]
+      }
+    </script>
+    <script type="module" src="./main.ts"></script>
+  </head>
+  <body class="iw">
+    <a class="pw-skip" href="#main">Skip to content</a>
+
+    <div class="pw-stage" id="stage" aria-hidden="true"></div>
+
+    <nav class="pw-nav" aria-label="Primary">
+      <a class="pw-wordmark" href="#top" aria-label="i.Wonder — back to top">
+        <span class="pw-wordmark-name">i.Wonder</span>
+        <span class="pw-wordmark-sub pw-label">Laboratories</span>
+      </a>
+      <ul class="pw-nav-links">
+        <li><a class="pw-nav-link" href="#thesis">Thesis</a></li>
+        <li><a class="pw-nav-link" href="#work">The work</a></li>
+        <li><a class="pw-nav-link" href="#wonderland">Wonderland</a></li>
+        <li><a class="pw-nav-link" href="#julius">Julius</a></li>
+        <li><a class="pw-nav-link" href="#brain">Project Brain</a></li>
+      </ul>
+      <a class="pw-cta" href="%APP_URL%" rel="noopener" target="_blank">
+        Enter Wonderland <span class="pw-arrow" aria-hidden="true">↗</span>
+      </a>
+      <button class="pw-menu-button" type="button" aria-controls="pw-sheet" aria-expanded="false">
+        <span class="pw-menu-label">Menu</span><span class="pw-menu-glyph" aria-hidden="true"></span>
+      </button>
+    </nav>
+
+    <div class="pw-sheet" id="pw-sheet" aria-hidden="true" inert>
+      <ol>
+        <li><a href="#thesis">Thesis</a></li>
+        <li><a href="#work">The work</a></li>
+        <li><a href="#wonderland">Wonderland</a></li>
+        <li><a href="#julius">Julius</a></li>
+        <li><a href="#brain">Project Brain</a></li>
+        <li><a href="#principles">Principles</a></li>
+      </ol>
+      <a class="pw-cta" href="%APP_URL%" rel="noopener" target="_blank">
+        Enter Wonderland <span class="pw-arrow" aria-hidden="true">↗</span>
+      </a>
+    </div>
+
+    <div class="pw-page">
+      <header class="iw-hero" id="top" data-scene>
+        <div class="pw-wrap iw-hero-inner">
+          <div class="iw-hero-copy">
+            <p class="pw-label pw-brandmark iw-hero-eyebrow" data-reveal>i.Wonder Laboratories, Inc.</p>
+            <h1 class="pw-display pw-display--xl iw-hero-title" data-reveal style="--pw-delay: 1">
+              AI creation<br />deserves <em>a world.</em>
+            </h1>
+            <p class="pw-lede iw-hero-lede" data-reveal style="--pw-delay: 2">
+              i.Wonder builds multiplayer open-world AI creation platforms — and researches, develops and deploys
+              Compound AI Systems and Compound AI Agents.
+            </p>
+            <div class="pw-actions" data-reveal style="--pw-delay: 3">
+              <a class="pw-cta" href="%APP_URL%" rel="noopener" target="_blank">
+                Enter Wonderland <span class="pw-arrow" aria-hidden="true">↗</span>
+              </a>
+              <a class="pw-ghost" href="#work">See the work <span class="pw-arrow" aria-hidden="true">↓</span></a>
+            </div>
+          </div>
+
+          <div class="iw-stack" data-reveal style="--pw-delay: 4">
+            <ol aria-label="How i.Wonder is structured">
+              <li>
+                <span class="pw-label">Company</span>
+                <span class="iw-stack-name">i.Wonder</span>
+              </li>
+              <li>
+                <span class="pw-label">Flagship platform</span>
+                <span class="iw-stack-name">Wonderland</span>
+              </li>
+              <li>
+                <span class="pw-label">Flagship agent</span>
+                <span class="iw-stack-name">Julius</span>
+              </li>
+            </ol>
+          </div>
+        </div>
+      </header>
+
+      <main id="main">
+        <section class="pw-section iw-thesis" id="thesis" aria-labelledby="thesis-title" data-scene>
+          <div class="pw-wrap">
+            <p class="pw-label pw-eyebrow" data-reveal>01 — Thesis</p>
+            <h2 class="pw-display pw-display--l iw-thesis-title" id="thesis-title" data-reveal>
+              AI creation shouldn’t end when the <em>chat window</em> closes.
+            </h2>
+            <p class="pw-lede iw-thesis-lede" data-reveal>
+              Most AI creation still happens in isolation: one conversation, one agent, a coding tool that forgets the
+              project the moment the session ends. The work is real. Nothing around it lasts.
+            </p>
+
+            <ol class="pw-ledger iw-shift" aria-label="The shift i.Wonder is building toward">
+              <li data-reveal>
+                <span class="pw-label iw-shift-index">01</span>
+                <span class="iw-shift-from"><span class="pw-sr">From </span>Isolated chat boxes</span>
+                <span class="iw-shift-arrow" aria-hidden="true">→</span>
+                <span class="iw-shift-to"><span class="pw-sr">to </span>A shared, persistent world</span>
+              </li>
+              <li data-reveal style="--pw-delay: 1">
+                <span class="pw-label iw-shift-index">02</span>
+                <span class="iw-shift-from"><span class="pw-sr">From </span>Single models</span>
+                <span class="iw-shift-arrow" aria-hidden="true">→</span>
+                <span class="iw-shift-to"><span class="pw-sr">to </span>Compound AI Agents with accountable tiers</span>
+              </li>
+              <li data-reveal style="--pw-delay: 2">
+                <span class="pw-label iw-shift-index">03</span>
+                <span class="iw-shift-from"><span class="pw-sr">From </span>Disconnected coding tools</span>
+                <span class="iw-shift-arrow" aria-hidden="true">→</span>
+                <span class="iw-shift-to"><span class="pw-sr">to </span>Long-lived projects that remember</span>
+              </li>
+            </ol>
+
+            <p class="pw-display pw-display--s iw-thesis-close" data-reveal>
+              Our thesis: AI creation becomes a world — a place where people and Compound AI Agents build, collaborate,
+              compete, create software, and maintain what they make, together, over time.
+            </p>
+          </div>
+        </section>
+
+        <section class="pw-section iw-work" id="work" aria-labelledby="work-title" data-scene>
+          <div class="pw-wrap">
+            <p class="pw-label pw-eyebrow" data-reveal>02 — The work</p>
+            <h2 class="pw-display pw-display--l iw-work-title" id="work-title" data-reveal>
+              Platforms, and the <em>intelligence</em> inside them.
+            </h2>
+
+            <ul class="iw-work-grid" aria-label="What i.Wonder does">
+              <li data-reveal>
+                <span class="pw-label">Build</span>
+                <h3 class="pw-display pw-display--s">Multiplayer open-world AI creation platforms</h3>
+              </li>
+              <li data-reveal style="--pw-delay: 1">
+                <span class="pw-label">Research</span>
+                <h3 class="pw-display pw-display--s">Compound AI</h3>
+              </li>
+              <li data-reveal style="--pw-delay: 2">
+                <span class="pw-label">Develop</span>
+                <h3 class="pw-display pw-display--s">Compound AI Systems</h3>
+              </li>
+              <li data-reveal style="--pw-delay: 3">
+                <span class="pw-label">Deploy</span>
+                <h3 class="pw-display pw-display--s">Compound AI Agents</h3>
+              </li>
+            </ul>
+
+            <ol class="iw-descent" aria-label="i.Wonder and its flagships">
+              <li class="iw-tier" data-reveal>
+                <span class="pw-label iw-tier-role">Company</span>
+                <h3 class="pw-display iw-tier-name">i.Wonder</h3>
+                <p class="pw-body">
+                  Builds multiplayer open-world AI creation platforms. Researches, develops and deploys Compound AI
+                  Systems and Compound AI Agents.
+                </p>
+              </li>
+              <li class="iw-tier" data-reveal>
+                <span class="pw-label iw-tier-role">Flagship platform</span>
+                <h3 class="pw-display iw-tier-name">Wonderland</h3>
+                <p class="pw-body">
+                  The persistent multiplayer open world for AI creation — where that work becomes a place.
+                </p>
+                <a class="pw-ghost" data-external href="%WONDERLAND_URL%" rel="noopener" target="_blank">
+                  Explore Wonderland <span class="pw-arrow" aria-hidden="true">↗</span>
+                </a>
+              </li>
+              <li class="iw-tier" data-reveal>
+                <span class="pw-label iw-tier-role">Flagship agent</span>
+                <h3 class="pw-display iw-tier-name">Julius</h3>
+                <p class="pw-body">
+                  The Compound AI Agent powering creation inside Wonderland.
+                </p>
+                <a class="pw-ghost" href="#julius">Meet Julius <span class="pw-arrow" aria-hidden="true">↓</span></a>
+              </li>
+            </ol>
+          </div>
+        </section>
+
+        <section class="pw-section iw-wonderland" id="wonderland" aria-labelledby="wonderland-title" data-scene>
+          <div class="pw-wrap">
+            <div class="iw-column">
+              <p class="pw-label pw-eyebrow" data-reveal>03 — Flagship platform</p>
+              <h2 class="pw-display iw-product-name" id="wonderland-title" data-reveal>Wonderland</h2>
+              <p class="pw-display pw-display--m iw-product-line" data-reveal>
+                A persistent multiplayer open world for <em>AI creation.</em>
+              </p>
+              <p class="pw-body iw-product-body" data-reveal>
+                Wonderland is an open, persistent world where AI-powered creation and real software development happen
+                in the same place as collaboration, competition and play. Projects don’t reset. Worlds don’t vanish.
+                What you build is still there tomorrow — and so are the people and agents who built it with you.
+              </p>
+
+              <ol class="pw-ledger iw-capabilities">
+                <li data-reveal>
+                  <span class="pw-label">01</span>
+                  <h3>AI-powered creation</h3>
+                  <p>Shape ideas into worlds, objects and experiences with AI as a creative collaborator.</p>
+                </li>
+                <li data-reveal>
+                  <span class="pw-label">02</span>
+                  <h3>Software development</h3>
+                  <p>Real software, built by Compound AI Agents inside the world and verified before it’s called done.</p>
+                </li>
+                <li data-reveal>
+                  <span class="pw-label">03</span>
+                  <h3>Persistent worlds</h3>
+                  <p>Places, projects and progress that outlive the session that created them.</p>
+                </li>
+                <li data-reveal>
+                  <span class="pw-label">04</span>
+                  <h3>Collaboration</h3>
+                  <p>People and agents working in one shared context, with clear roles and a shared memory.</p>
+                </li>
+                <li data-reveal>
+                  <span class="pw-label">05</span>
+                  <h3>Competition</h3>
+                  <p>Challenges that put ideas, builds and agents to the test.</p>
+                </li>
+                <li data-reveal>
+                  <span class="pw-label">06</span>
+                  <h3>Social systems &amp; game mechanics</h3>
+                  <p>Identity, progression and community that give long-lived creation its momentum.</p>
+                </li>
+              </ol>
+
+              <div class="pw-actions iw-product-actions" data-reveal>
+                <a class="pw-cta" href="%WONDERLAND_URL%" rel="noopener" target="_blank">
+                  Explore Wonderland <span class="pw-arrow" aria-hidden="true">↗</span>
+                </a>
+                <a class="pw-ghost" data-external href="%APP_URL%" rel="noopener" target="_blank">
+                  Enter the world <span class="pw-arrow" aria-hidden="true">↗</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="pw-section iw-julius" id="julius" aria-labelledby="julius-title" data-scene>
+          <div class="pw-wrap">
+            <div class="iw-column">
+              <p class="pw-label pw-eyebrow" data-reveal>04 — Flagship Compound AI Agent</p>
+              <h2 class="pw-display iw-product-name" id="julius-title" data-reveal>Julius</h2>
+              <p class="pw-display pw-display--m iw-product-line" data-reveal>
+                One agent. <em>Three permanent tiers.</em>
+              </p>
+              <p class="pw-body iw-product-body" data-reveal>
+                Julius is i.Wonder’s flagship Compound AI Agent and the intelligence inside Wonderland. It is built from
+                three persistent architectural tiers — each a different class of AI technology, each accountable for
+                its own responsibility, all governed by Julius.
+              </p>
+              <ul class="iw-not" aria-label="What Julius is not">
+                <li data-reveal><span class="pw-label">Not</span><span>one monolithic model</span></li>
+                <li data-reveal style="--pw-delay: 1"><span class="pw-label">Not</span><span>a generic multi-agent workspace</span></li>
+                <li data-reveal style="--pw-delay: 2"><span class="pw-label">Not</span><span>tied to any one AI vendor</span></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="iw-julius-depth">
+            <div class="pw-wrap">
+              <figure class="iw-arch" aria-labelledby="arch-caption">
+                <figcaption class="pw-sr" id="arch-caption">
+                  Julius governs three tiers: a Prompt Architect, which is a large language model; a Coding Agent, which
+                  is an agentic coding system; and an Independent Reviewer, which is an independent agent harness or
+                  reviewer runtime. Every tier reads from and writes to Project Brain, Julius’s durable memory.
+                </figcaption>
+
+                <div class="iw-arch-root" data-reveal>
+                  <span class="iw-arch-core" aria-hidden="true"></span>
+                  <span class="pw-label">Compound AI Agent</span>
+                  <span class="iw-arch-name">Julius</span>
+                  <span class="pw-label iw-arch-governs">Governs every tier</span>
+                </div>
+
+                <div class="iw-arch-body">
+                  <div class="iw-arch-branch iw-arch-branch--govern" aria-hidden="true" data-reveal>
+                    <span class="iw-arch-stem"></span>
+                    <span class="iw-arch-rail"><i></i><i></i></span>
+                    <span class="iw-arch-drop"></span>
+                    <span class="iw-arch-drop"></span>
+                    <span class="iw-arch-drop"></span>
+                  </div>
+
+                  <ol class="iw-tiercards">
+                    <li class="iw-tiercard" data-reveal>
+                      <div class="iw-tiercard-head">
+                        <span class="pw-label">Tier 1</span>
+                        <span class="iw-tiercard-slot" aria-hidden="true"></span>
+                      </div>
+                      <h3 class="pw-display iw-tiercard-name">Prompt Architect</h3>
+                      <p class="iw-tiercard-summary">Thinks before anything is built.</p>
+                      <dl class="iw-tiercard-spec">
+                        <div>
+                          <dt class="pw-label">Technology class</dt>
+                          <dd class="iw-tiercard-class">Large Language Model</dd>
+                        </div>
+                        <div>
+                          <dt class="pw-label">Purpose</dt>
+                          <dd>
+                            <ul class="iw-tiercard-roles">
+                              <li>Mission understanding</li>
+                              <li>Reasoning</li>
+                              <li>Architecture</li>
+                              <li>Decomposition</li>
+                              <li>Research</li>
+                              <li>Continuous guidance</li>
+                            </ul>
+                          </dd>
+                        </div>
+                      </dl>
+                      <div class="iw-tiercard-providers" data-providers>
+                        <p class="pw-label">Slot · illustrative LLMs</p>
+                        <ul>
+                          <li>OpenAI GPT / ChatGPT</li>
+                          <li>Anthropic Claude</li>
+                          <li>Google Gemini</li>
+                          <li>xAI Grok</li>
+                          <li>Llama-class models</li>
+                          <li>Other capable LLMs</li>
+                        </ul>
+                      </div>
+                    </li>
+
+                    <li class="iw-tiercard" data-reveal style="--pw-delay: 1">
+                      <div class="iw-tiercard-head">
+                        <span class="pw-label">Tier 2</span>
+                        <span class="iw-tiercard-slot" aria-hidden="true"></span>
+                      </div>
+                      <h3 class="pw-display iw-tiercard-name">Coding Agent</h3>
+                      <p class="iw-tiercard-summary">Builds inside the codebase.</p>
+                      <dl class="iw-tiercard-spec">
+                        <div>
+                          <dt class="pw-label">Technology class</dt>
+                          <dd class="iw-tiercard-class">Agentic coding system</dd>
+                        </div>
+                        <div>
+                          <dt class="pw-label">Purpose</dt>
+                          <dd>
+                            <ul class="iw-tiercard-roles">
+                              <li>Codebase operation</li>
+                              <li>Implementation</li>
+                              <li>Tool use</li>
+                              <li>Tests</li>
+                              <li>Environment interaction</li>
+                            </ul>
+                          </dd>
+                        </div>
+                      </dl>
+                      <div class="iw-tiercard-providers" data-providers>
+                        <p class="pw-label">Slot · illustrative coding agents</p>
+                        <ul>
+                          <li>Claude Code</li>
+                          <li>OpenAI Codex</li>
+                          <li>Devin</li>
+                          <li>OpenCode</li>
+                          <li>Cursor Agent</li>
+                          <li>GitHub Copilot coding agent</li>
+                          <li>Windsurf / Cascade</li>
+                          <li>Other compatible coding agents</li>
+                        </ul>
+                      </div>
+                    </li>
+
+                    <li class="iw-tiercard" data-reveal style="--pw-delay: 2">
+                      <div class="iw-tiercard-head">
+                        <span class="pw-label">Tier 3</span>
+                        <span class="iw-tiercard-slot" aria-hidden="true"></span>
+                      </div>
+                      <h3 class="pw-display iw-tiercard-name">Independent Reviewer</h3>
+                      <p class="iw-tiercard-summary">Answers to the evidence, not to the builder.</p>
+                      <dl class="iw-tiercard-spec">
+                        <div>
+                          <dt class="pw-label">Technology class</dt>
+                          <dd class="iw-tiercard-class">Independent agent harness / reviewer runtime</dd>
+                        </div>
+                        <div>
+                          <dt class="pw-label">Purpose</dt>
+                          <dd>
+                            <ul class="iw-tiercard-roles">
+                              <li>Independent research</li>
+                              <li>Adversarial review</li>
+                              <li>Evidence inspection</li>
+                              <li>Defect discovery</li>
+                              <li>Acceptance verification</li>
+                              <li>Governed review outcomes</li>
+                            </ul>
+                          </dd>
+                        </div>
+                      </dl>
+                      <div class="iw-tiercard-providers" data-providers>
+                        <p class="pw-label">Slot · illustrative harnesses</p>
+                        <ul>
+                          <li>Hermes Agent</li>
+                          <li>Pi Agent</li>
+                          <li>DeepSeek-powered agent harnesses</li>
+                          <li>OpenHands-style runtimes, where compatible</li>
+                          <li>Other independent agent harnesses</li>
+                        </ul>
+                      </div>
+                    </li>
+                  </ol>
+
+                  <div class="iw-arch-branch iw-arch-branch--record" aria-hidden="true" data-reveal>
+                    <span class="iw-arch-drop"></span>
+                    <span class="iw-arch-drop"></span>
+                    <span class="iw-arch-drop"></span>
+                    <span class="iw-arch-rail"><i></i><i></i></span>
+                    <span class="iw-arch-stem"></span>
+                  </div>
+
+                  <a class="iw-arch-brain" href="#brain" data-reveal>
+                    <span class="iw-arch-strata" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+                    <span class="iw-arch-brain-copy">
+                      <span class="pw-label">Every tier reads and writes</span>
+                      <span class="iw-arch-brain-name">Project Brain</span>
+                    </span>
+                    <span class="iw-arch-brain-line">
+                      Julius’s durable memory — the persistent record of what the agent does, decides and proves across a
+                      mission.
+                    </span>
+                    <span class="pw-ghost iw-arch-brain-go">Explore <span class="pw-arrow" aria-hidden="true">↓</span></span>
+                  </a>
+                </div>
+
+                <p class="iw-arch-note">
+                  Named providers are illustrative implementations of each technology class — replaceable, and never
+                  dependencies of Julius. The Independent Reviewer always runs apart from the Coding Agent.
+                </p>
+              </figure>
+
+              <div class="iw-slots">
+                <div class="iw-slots-head">
+                  <h3 class="pw-display pw-display--l" data-reveal>The tiers are permanent. <em>The providers are not.</em></h3>
+                  <p class="pw-body" data-reveal>
+                    Each tier is a persistent slot in Julius’s architecture, defined by its responsibility rather than by
+                    whatever fills it. The three slots belong to Julius; providers are replaceable implementations,
+                    exchanged as better technology arrives.
+                  </p>
+                </div>
+
+                <ul class="iw-slot-list">
+                  <li class="iw-slot" data-reveal data-slot>
+                    <div class="iw-slot-tier">
+                      <span class="pw-label">Tier 1</span>
+                      <span class="iw-slot-name">Prompt Architect</span>
+                    </div>
+                    <div class="iw-slot-socket" aria-hidden="true" data-providers>
+                      <span class="pw-label">Slot · Large Language Model</span>
+                      <span class="iw-slot-current" data-slot-current>GPT</span>
+                    </div>
+                    <ol class="iw-slot-sequence" data-providers aria-label="Example sequence of Prompt Architect providers">
+                      <li data-active="true">GPT</li>
+                      <li>Claude</li>
+                      <li>Gemini</li>
+                      <li>Grok</li>
+                      <li>Another capable LLM</li>
+                    </ol>
+                  </li>
+                  <li class="iw-slot" data-reveal data-slot>
+                    <div class="iw-slot-tier">
+                      <span class="pw-label">Tier 2</span>
+                      <span class="iw-slot-name">Coding Agent</span>
+                    </div>
+                    <div class="iw-slot-socket" aria-hidden="true" data-providers>
+                      <span class="pw-label">Slot · Agentic coding system</span>
+                      <span class="iw-slot-current" data-slot-current>Claude Code</span>
+                    </div>
+                    <ol class="iw-slot-sequence" data-providers aria-label="Example sequence of Coding Agent providers">
+                      <li data-active="true">Claude Code</li>
+                      <li>Codex</li>
+                      <li>Devin</li>
+                      <li>Cursor Agent</li>
+                      <li>Another compatible coding agent</li>
+                    </ol>
+                  </li>
+                  <li class="iw-slot" data-reveal data-slot>
+                    <div class="iw-slot-tier">
+                      <span class="pw-label">Tier 3</span>
+                      <span class="iw-slot-name">Independent Reviewer</span>
+                    </div>
+                    <div class="iw-slot-socket" aria-hidden="true" data-providers>
+                      <span class="pw-label">Slot · Agent harness</span>
+                      <span class="iw-slot-current" data-slot-current>Hermes Agent</span>
+                    </div>
+                    <ol class="iw-slot-sequence" data-providers aria-label="Example sequence of Independent Reviewer providers">
+                      <li data-active="true">Hermes Agent</li>
+                      <li>Pi Agent</li>
+                      <li>A DeepSeek-powered harness</li>
+                      <li>Another independent agent harness</li>
+                    </ol>
+                  </li>
+                </ul>
+              </div>
+
+              <div class="iw-authority">
+                <h3 class="pw-display pw-display--m" data-reveal>What Julius governs.</h3>
+                <ul class="iw-authority-grid">
+                  <li data-reveal><span class="pw-label">01</span>Mission authority</li>
+                  <li data-reveal><span class="pw-label">02</span>Orchestration</li>
+                  <li data-reveal><span class="pw-label">03</span>Dependencies</li>
+                  <li data-reveal><span class="pw-label">04</span>Permissions</li>
+                  <li data-reveal><span class="pw-label">05</span>Budgets</li>
+                  <li data-reveal><span class="pw-label">06</span>Project Brain &amp; context</li>
+                  <li data-reveal><span class="pw-label">07</span>Synthesis</li>
+                  <li data-reveal><span class="pw-label">08</span>Conflict resolution</li>
+                  <li data-reveal><span class="pw-label">09</span>Verification</li>
+                  <li data-reveal><span class="pw-label">10</span>Termination</li>
+                </ul>
+              </div>
+
+              <div class="iw-swarm" data-reveal>
+                <p class="pw-label pw-eyebrow">When justified</p>
+                <h3 class="pw-display pw-display--s">Multi-Agent Swarm</h3>
+                <p class="pw-body">
+                  When the work genuinely calls for it, Julius can open a temporary swarm of specialized Compound AI Agent
+                  clones — bounded, budgeted, and resolved back into one verified result.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="pw-section iw-brain" id="brain" aria-labelledby="brain-title" data-scene>
+          <div class="pw-wrap">
+            <div class="iw-column">
+              <p class="pw-label pw-eyebrow" data-reveal>05 — Compound AI architecture</p>
+              <h2 class="pw-display iw-product-name iw-brain-name" id="brain-title" data-reveal>Project Brain</h2>
+              <p class="pw-display pw-display--m iw-product-line" data-reveal>
+                Julius’s <em>durable memory.</em>
+              </p>
+              <p class="pw-body iw-product-body iw-brain-definition" data-reveal>
+                Project Brain is a persistent record of the actions, decisions, evidence, state and history accumulated
+                by the Compound AI Agent throughout a mission or project.
+              </p>
+              <p class="pw-body iw-brain-kicker" data-reveal>
+                It is the memory and state layer of the agent itself — not notes about a project, but the record every
+                tier reads from and writes to.
+              </p>
+            </div>
+          </div>
+
+          <div class="iw-brain-depth">
+            <div class="pw-wrap">
+              <ul class="iw-brain-questions" aria-label="What Project Brain lets Julius answer at any moment">
+                <li data-reveal>What happened</li>
+                <li data-reveal style="--pw-delay: 1">What is true</li>
+                <li data-reveal style="--pw-delay: 2">What was decided</li>
+                <li data-reveal style="--pw-delay: 3">What remains unresolved</li>
+                <li data-reveal style="--pw-delay: 4">What should happen next</li>
+              </ul>
+
+              <div class="iw-brain-grid">
+                <figure class="iw-record" aria-labelledby="record-caption">
+                  <figcaption class="iw-record-head">
+                    <span class="pw-label" id="record-caption">The record, as Julius writes it</span>
+                    <span class="pw-label iw-record-note">Illustrative</span>
+                  </figcaption>
+                  <ol class="iw-record-list" id="brain-record">
+                    <li>
+                      <span class="iw-record-type">Objective</span>
+                      <span class="iw-record-writer">Prompt Architect</span>
+                      <span class="iw-record-text">Mission defined, with acceptance criteria</span>
+                    </li>
+                    <li>
+                      <span class="iw-record-type">Research</span>
+                      <span class="iw-record-writer">Prompt Architect</span>
+                      <span class="iw-record-text">Architecture options compared; one chosen</span>
+                    </li>
+                    <li>
+                      <span class="iw-record-type">Decision</span>
+                      <span class="iw-record-writer">Julius</span>
+                      <span class="iw-record-text">Approach approved within budget and permissions</span>
+                    </li>
+                    <li>
+                      <span class="iw-record-type">Handoff</span>
+                      <span class="iw-record-writer">Julius</span>
+                      <span class="iw-record-text">Guidance delivered to the Coding Agent</span>
+                    </li>
+                    <li>
+                      <span class="iw-record-type">Action</span>
+                      <span class="iw-record-writer">Coding Agent</span>
+                      <span class="iw-record-text">Changes made; tests run</span>
+                    </li>
+                    <li>
+                      <span class="iw-record-type">Evidence</span>
+                      <span class="iw-record-writer">Coding Agent</span>
+                      <span class="iw-record-text">Results traced back to the claim</span>
+                    </li>
+                    <li>
+                      <span class="iw-record-type">Finding</span>
+                      <span class="iw-record-writer">Independent Reviewer</span>
+                      <span class="iw-record-text">One acceptance criterion not yet met</span>
+                    </li>
+                    <li>
+                      <span class="iw-record-type">Repair</span>
+                      <span class="iw-record-writer">Coding Agent</span>
+                      <span class="iw-record-text">Finding addressed; evidence re-run</span>
+                    </li>
+                    <li>
+                      <span class="iw-record-type">State</span>
+                      <span class="iw-record-writer">Julius</span>
+                      <span class="iw-record-text">Criteria verified; mission complete</span>
+                    </li>
+                  </ol>
+                  <p class="iw-record-persist">
+                    <span class="pw-label">Persists</span>
+                    <span>Nothing is cleared when the mission ends. The next mission begins from this record.</span>
+                  </p>
+                </figure>
+
+                <div class="iw-holds">
+                  <h3 class="pw-display pw-display--m" data-reveal>What it holds.</h3>
+                  <dl class="iw-holds-groups">
+                    <div data-reveal>
+                      <dt class="pw-label">Intent</dt>
+                      <dd>Objectives · Architecture · Requirements · Constraints · Acceptance criteria</dd>
+                    </div>
+                    <div data-reveal>
+                      <dt class="pw-label">Reasoning</dt>
+                      <dd>Research · Decisions</dd>
+                    </div>
+                    <div data-reveal>
+                      <dt class="pw-label">Proof</dt>
+                      <dd>Evidence · Evaluations · Traces · Provenance</dd>
+                    </div>
+                    <div data-reveal>
+                      <dt class="pw-label">Work</dt>
+                      <dd>Handoffs · Findings · Repairs · Important actions taken by Julius</dd>
+                    </div>
+                    <div data-reveal>
+                      <dt class="pw-label">State</dt>
+                      <dd>Mission state · Project state</dd>
+                    </div>
+                  </dl>
+                  <p class="pw-body iw-holds-note" data-reveal>
+                    Not project notes, and not chat history. Project Brain is core Compound AI architecture: the state
+                    that lets Julius keep one coherent understanding of a mission — from the first objective to the last
+                    verified outcome, and into the next.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="pw-section iw-principles" id="principles" aria-labelledby="principles-title" data-scene>
+          <div class="pw-wrap">
+            <p class="pw-label pw-eyebrow" data-reveal>06 — Principles</p>
+            <h2 class="pw-display pw-display--m" id="principles-title" data-reveal>How we build.</h2>
+            <ol class="iw-principle-list">
+              <li data-reveal>
+                <span class="pw-label">01</span>
+                <h3 class="pw-display pw-display--l">Completion is earned, <em>not claimed.</em></h3>
+                <p class="pw-body">Work is finished when independent review and verification say so — not when an agent says it is.</p>
+              </li>
+              <li data-reveal>
+                <span class="pw-label">02</span>
+                <h3 class="pw-display pw-display--l">Architecture over <em>vendors.</em></h3>
+                <p class="pw-body">Tiers are defined by responsibility. The best technology for a tier can change; the tier does not.</p>
+              </li>
+              <li data-reveal>
+                <span class="pw-label">03</span>
+                <h3 class="pw-display pw-display--l">Honest <em>by default.</em></h3>
+                <p class="pw-body">What isn’t known is shown as unknown. What is simulated says so. What is still in development is labelled.</p>
+              </li>
+            </ol>
+          </div>
+        </section>
+
+        <section class="pw-section iw-closing" id="enter" aria-labelledby="enter-title" data-scene>
+          <div class="pw-wrap iw-closing-inner">
+            <h2 class="pw-display pw-display--xl" id="enter-title" data-reveal>
+              Build in a world <em>that remembers.</em>
+            </h2>
+            <p class="pw-lede" data-reveal style="--pw-delay: 1">
+              Wonderland is where i.Wonder’s work becomes a place. It is in active development.
+            </p>
+            <div class="pw-actions" data-reveal style="--pw-delay: 2">
+              <a class="pw-cta" href="%APP_URL%" rel="noopener" target="_blank">
+                Enter Wonderland <span class="pw-arrow" aria-hidden="true">↗</span>
+              </a>
+              <a class="pw-ghost" data-external href="%WONDERLAND_URL%" rel="noopener" target="_blank">
+                Explore Wonderland <span class="pw-arrow" aria-hidden="true">↗</span>
+              </a>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="pw-footer">
+        <div class="pw-wrap">
+          <div class="pw-footer-grid">
+            <div>
+              <a class="pw-wordmark" href="#top"><span class="pw-wordmark-name">i.Wonder</span></a>
+              <p class="pw-body iw-footer-line">
+                Multiplayer open-world AI creation platforms, and the Compound AI Systems and Compound AI Agents behind
+                them.
+              </p>
+            </div>
+            <nav aria-label="Company">
+              <p class="pw-label pw-eyebrow">Company</p>
+              <ul class="pw-footer-nav">
+                <li><a href="#thesis">Thesis</a></li>
+                <li><a href="#work">The work</a></li>
+                <li><a href="#principles">Principles</a></li>
+              </ul>
+            </nav>
+            <nav aria-label="Products">
+              <p class="pw-label pw-eyebrow">Flagships</p>
+              <ul class="pw-footer-nav">
+                <li><a href="%WONDERLAND_URL%" rel="noopener" target="_blank">Wonderland</a></li>
+                <li><a href="#julius">Julius</a></li>
+                <li><a href="#brain">Project Brain</a></li>
+                <li><a href="%APP_URL%" rel="noopener" target="_blank">Enter Wonderland</a></li>
+              </ul>
+            </nav>
+          </div>
+          <div class="pw-footer-legal pw-label">
+            <span class="pw-brandmark">© <span data-year>2026</span> i.Wonder Laboratories, Inc.</span>
+            <span>Wonderland and Julius are products of <span class="pw-brandmark">i.Wonder</span>. Third-party names are trademarks of their owners.</span>
+          </div>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>

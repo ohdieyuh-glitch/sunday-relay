@@ -1,0 +1,617 @@
+/* ==========================================================================
+   Wonderland — the product site.
+
+   Cinematic rather than editorial: a fixed stage where the Relay Dog stands
+   on Wonderland's circle, and chapters that scroll past it. The copy column
+   lives on the left (on portrait, beneath the Dog); the render owns the rest.
+   ========================================================================== */
+
+@import '../shared/base.css';
+
+.pw-stage[data-live='true'] {
+  transition: none;
+}
+
+.wl-column {
+  position: relative;
+  max-width: 580px;
+}
+.wl-section-lede {
+  margin-top: 30px;
+}
+
+/* A left scrim on every chapter: full-bleed, soft, never a card. */
+.wl-world::before,
+.wl-persistent::before,
+.wl-julius::before,
+.wl-card::before,
+.wl-identity::before {
+  content: '';
+  position: absolute;
+  inset: 0 40% 0 0;
+  z-index: -1;
+  background: linear-gradient(90deg, rgba(5, 6, 10, 0.86) 0%, rgba(5, 6, 10, 0.62) 55%, rgba(5, 6, 10, 0) 100%);
+  pointer-events: none;
+}
+
+/* ---- hero --------------------------------------------------------------- */
+.wl-hero {
+  position: relative;
+  min-height: 100svh;
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: clamp(40px, 7vh, 88px);
+}
+.wl-hero-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 48px;
+}
+.wl-hero-copy {
+  position: relative;
+  max-width: 700px;
+}
+.wl-hero-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 26px;
+}
+.wl-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--pw-cream);
+}
+.wl-hero-title {
+  margin-bottom: 30px;
+  font-size: clamp(3.4rem, 8.4vw, 8.8rem);
+  line-height: 0.86;
+}
+.wl-hero-title em {
+  display: block;
+}
+.wl-hero-lede {
+  margin-bottom: 38px;
+  max-width: 44ch;
+}
+
+.wl-hero-aside {
+  position: relative;
+  min-width: 220px;
+  padding-left: 22px;
+  border-left: 1px solid var(--pw-hairline-strong);
+}
+/* The aside sits over the circle's glow; a soft pool of void keeps it legible. */
+.wl-hero-aside::before {
+  content: '';
+  position: absolute;
+  inset: -40px -40px -40px -60px;
+  z-index: -1;
+  background: radial-gradient(closest-side, rgba(5, 6, 10, 0.78), rgba(5, 6, 10, 0));
+  pointer-events: none;
+}
+.wl-hero-aside ul {
+  margin: 14px 0 22px;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+.wl-hero-aside li {
+  font-family: var(--pw-serif);
+  font-size: 19px;
+  letter-spacing: -0.008em;
+  line-height: 1.1;
+}
+.wl-telemetry {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  min-height: 1.3em;
+  color: var(--pw-faint);
+  font-size: 10px;
+}
+.wl-telemetry span {
+  white-space: nowrap;
+}
+
+/* ---- role labels projected from the orbits ------------------------------ */
+.wl-roles-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.wl-role-chip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+/* ---- world -------------------------------------------------------------- */
+.wl-world {
+  padding-bottom: 0;
+}
+.wl-pillars {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 820px;
+  margin: clamp(64px, 10vh, 112px) 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--pw-hairline);
+}
+.wl-pillars li {
+  position: relative;
+  padding: 30px 36px 36px 0;
+  border-bottom: 1px solid var(--pw-hairline);
+}
+.wl-pillars li:nth-child(even) {
+  padding-left: 36px;
+  padding-right: 0;
+  border-left: 1px solid var(--pw-hairline);
+}
+.wl-pillars h3 {
+  margin: 16px 0 12px;
+}
+
+.wl-concept {
+  position: relative;
+  margin: var(--pw-section) 0 0;
+  background: var(--pw-void);
+  /* The drifting image is scaled past its frame; clip it here so the
+     overscan never becomes horizontal scroll on a phone. */
+  overflow: clip;
+}
+.wl-concept picture {
+  display: block;
+  contain: paint;
+  height: clamp(340px, 74vh, 820px);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 16%, #000 80%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 16%, #000 80%, transparent 100%);
+}
+.wl-concept img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 62%;
+  filter: saturate(0.9) brightness(0.9);
+}
+.wl-concept figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 24px;
+  margin-top: 18px;
+}
+.wl-concept-note {
+  color: var(--pw-faint);
+  text-transform: none;
+  letter-spacing: 0.04em;
+}
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .wl-concept img {
+      animation: wl-concept-drift linear both;
+      animation-timeline: view();
+    }
+  }
+}
+@keyframes wl-concept-drift {
+  from { transform: scale(1.12) translateY(-3%); }
+  to { transform: scale(1.12) translateY(3%); }
+}
+
+/* ---- ledgers (persistent, identity) -------------------------------------- */
+.wl-ledger {
+  margin-top: 56px;
+}
+.wl-ledger li {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 24px;
+  align-items: baseline;
+  padding: 22px 0;
+}
+.wl-ledger h3 {
+  margin: 0;
+  font-family: var(--pw-serif);
+  font-size: 1.4rem;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.wl-ledger p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--pw-dim);
+}
+
+/* ---- julius -------------------------------------------------------------- */
+.wl-roles {
+  margin: 56px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--pw-hairline);
+}
+.wl-roles li {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--pw-hairline);
+}
+.wl-roles .pw-label {
+  padding-top: 8px;
+}
+.wl-roles h3 {
+  margin: 0 0 8px;
+}
+
+.wl-julius-detail {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: clamp(48px, 7vw, 120px);
+  margin-top: clamp(120px, 18vh, 200px);
+  padding-top: clamp(64px, 10vh, 120px);
+}
+.wl-julius-detail::before {
+  content: '';
+  position: absolute;
+  inset: 0 calc(-1 * var(--pw-gutter)) calc(-1 * var(--pw-section));
+  z-index: -1;
+  background: linear-gradient(to bottom, rgba(5, 6, 10, 0) 0, rgba(5, 6, 10, 0.9) 90px, var(--pw-void) 180px);
+  pointer-events: none;
+}
+.wl-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.wl-chips .pw-chip {
+  padding: 9px 14px;
+}
+.wl-swarm {
+  display: grid;
+  gap: 28px;
+}
+.wl-swarm-diagram {
+  width: 100%;
+  max-width: 360px;
+  height: auto;
+  overflow: visible;
+}
+.wl-swarm-paths path {
+  stroke: rgba(244, 239, 227, 0.34);
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+}
+.wl-swarm-nodes circle {
+  fill: var(--pw-void);
+  stroke: var(--pw-cream);
+  stroke-width: 1;
+}
+.wl-swarm-nodes .wl-node-main {
+  fill: var(--pw-cream);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .wl-swarm[data-in='true'] .wl-swarm-paths path {
+    animation: wl-flow 2.8s linear infinite;
+  }
+}
+@keyframes wl-flow {
+  to { stroke-dashoffset: -32; }
+}
+
+/* ---- mission ------------------------------------------------------------- */
+.wl-mission-head {
+  max-width: 760px;
+  margin: 0 auto;
+  text-align: center;
+}
+.wl-mission-head .pw-eyebrow {
+  justify-content: center;
+}
+.wl-mission-head .pw-eyebrow::before {
+  display: none;
+}
+.wl-mission-head .pw-lede {
+  margin-left: auto;
+  margin-right: auto;
+}
+.wl-steps {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin: clamp(72px, 12vh, 140px) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.wl-steps::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 5px;
+  height: 1px;
+  background: var(--pw-hairline-strong);
+}
+.wl-steps li {
+  position: relative;
+  padding: 36px 20px 0 0;
+}
+.wl-steps li::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1px solid var(--pw-cream);
+  background: var(--pw-void);
+  transition: background var(--pw-chrome) var(--pw-ease);
+}
+.wl-steps li[data-state='done']::before,
+.wl-steps li[data-state='active']::before {
+  background: var(--pw-cream);
+}
+.wl-steps h3 {
+  margin: 14px 0 6px;
+  font-size: clamp(1.7rem, 2.6vw, 2.6rem);
+  line-height: 1;
+  transition: color var(--pw-chrome) var(--pw-ease);
+}
+.wl-steps li[data-state='next'] h3 {
+  color: var(--pw-faint);
+}
+.wl-step-role {
+  margin: 0 0 14px;
+  color: var(--pw-cream);
+}
+.wl-steps .pw-body {
+  font-size: 14px;
+}
+
+/* ---- C.A.R.D. ----------------------------------------------------------- */
+.wl-card-plate {
+  margin-top: 56px;
+  padding: 26px 28px 22px;
+  border: 1px solid var(--pw-hairline-strong);
+  border-radius: 6px;
+  background: rgba(10, 11, 17, 0.82);
+}
+.wl-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--pw-hairline);
+}
+.wl-card-name {
+  font-family: var(--pw-serif);
+  font-size: 30px;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+.wl-card-fields {
+  margin: 0;
+}
+.wl-card-fields div {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 16px;
+  align-items: baseline;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--pw-hairline);
+}
+.wl-card-fields dd {
+  margin: 0;
+  font-size: 15px;
+  color: var(--pw-cream);
+}
+.wl-card-foot {
+  margin: 18px 0 0;
+  color: var(--pw-faint);
+}
+
+/* ---- enter ---------------------------------------------------------------- */
+.wl-enter {
+  min-height: 100svh;
+  display: flex;
+  align-items: flex-start;
+}
+.wl-enter-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 30px;
+  text-align: center;
+}
+.wl-enter h2 {
+  max-width: 13ch;
+}
+.wl-enter .pw-actions {
+  justify-content: center;
+  margin-top: 10px;
+}
+.wl-footer-line {
+  margin-top: 18px;
+  max-width: 34ch;
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .wl-card-plate {
+    background: rgba(10, 11, 17, 0.6);
+    backdrop-filter: blur(10px);
+  }
+}
+
+/* ---- tablet --------------------------------------------------------------- */
+@media (max-width: 1100px) {
+  .wl-steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 56px;
+  }
+  .wl-steps::before {
+    display: none;
+  }
+  .wl-julius-detail {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- portrait / phone ------------------------------------------------------ */
+@media (max-width: 900px) {
+  .wl-hero-inner {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+  /* The roles are the Julius chapter's subject; on a phone the hero keeps its
+     height for the Dog instead of repeating them. */
+  .wl-hero-aside {
+    display: none;
+  }
+  .wl-hero-copy::before {
+    content: '';
+    position: absolute;
+    inset: -80px calc(-1 * var(--pw-gutter)) -40px;
+    z-index: -1;
+    background: linear-gradient(to top, var(--pw-void) 52%, rgba(5, 6, 10, 0));
+    pointer-events: none;
+  }
+  .wl-hero {
+    padding-bottom: 40px;
+  }
+  .wl-hero-aside {
+    padding-left: 0;
+    padding-top: 18px;
+    border-left: 0;
+    border-top: 1px solid var(--pw-hairline);
+  }
+  .wl-hero-aside ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+  }
+  .wl-hero-aside li {
+    font-size: 16px;
+  }
+
+  .wl-world::before,
+  .wl-persistent::before,
+  .wl-julius::before,
+  .wl-card::before,
+  .wl-identity::before {
+    inset: 34vh 0 0 0;
+    background: linear-gradient(to bottom, rgba(5, 6, 10, 0) 0, rgba(5, 6, 10, 0.9) 18vh, rgba(5, 6, 10, 0.9) 100%);
+  }
+  .wl-world > .pw-wrap,
+  .wl-persistent > .pw-wrap,
+  .wl-julius > .pw-wrap,
+  .wl-card > .pw-wrap,
+  .wl-identity > .pw-wrap {
+    padding-top: 40vh;
+  }
+  .wl-world,
+  .wl-persistent,
+  .wl-julius,
+  .wl-card,
+  .wl-identity {
+    padding-top: 0;
+  }
+
+  .wl-pillars {
+    grid-template-columns: 1fr;
+  }
+  .wl-pillars li,
+  .wl-pillars li:nth-child(even) {
+    padding: 26px 0 30px;
+    border-left: 0;
+  }
+  .wl-concept picture {
+    height: 56vh;
+  }
+  .wl-concept img {
+    object-position: 46% 70%;
+  }
+  .wl-ledger li {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .wl-steps {
+    grid-template-columns: 1fr;
+    row-gap: 0;
+    padding-left: 28px;
+  }
+  .wl-steps::before {
+    display: block;
+    left: 5px;
+    right: auto;
+    top: 6px;
+    bottom: 6px;
+    width: 1px;
+    height: auto;
+  }
+  .wl-steps li {
+    padding: 0 0 36px;
+  }
+  .wl-steps li::before {
+    left: -28px;
+    top: 2px;
+  }
+  .wl-steps h3 {
+    margin-top: 0;
+  }
+  .wl-step-index {
+    display: none;
+  }
+  .wl-mission-head {
+    text-align: left;
+  }
+  .wl-mission-head .pw-eyebrow {
+    justify-content: flex-start;
+  }
+  .wl-mission-head .pw-lede {
+    margin-left: 0;
+  }
+  .wl-card-fields div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .wl-enter {
+    align-items: flex-end;
+  }
+}
+
+/* ---- short phones --------------------------------------------------------
+   On a 667px-tall screen the hero copy alone fills most of the viewport and
+   the Dog has nowhere to stand. The hero is allowed to run slightly past the
+   fold and the type steps down, so the subject keeps its space. */
+@media (max-width: 900px) and (max-height: 760px) {
+  .wl-hero {
+    min-height: max(100svh, 720px);
+  }
+  .wl-hero-title {
+    font-size: clamp(2.6rem, 12vw, 3.2rem);
+    margin-bottom: 20px;
+  }
+  .wl-hero-lede {
+    font-size: 15px;
+    margin-bottom: 26px;
+  }
+  .wl-hero-eyebrow {
+    margin-bottom: 18px;
+  }
+}
