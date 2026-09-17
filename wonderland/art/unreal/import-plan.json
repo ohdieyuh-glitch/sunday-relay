@@ -10,8 +10,8 @@
     "wonderland/marble/import-marble-world.py (AssetImportTask, the guarded Interchange options, spawn_actor_from_class)"
   ],
   "counts": {
-    "assets": 124,
-    "meshes": 395,
+    "assets": 126,
+    "meshes": 401,
     "missing_sources": 0,
     "nanite_requested": 24,
     "collision_requested": 80,
@@ -19,12 +19,12 @@
       "V2_Arrival": 8,
       "V2_Castle": 26,
       "V2_Garden": 23,
-      "V2_Props": 35,
+      "V2_Props": 37,
       "V2_Skyline": 32
     },
     "by_destination": {
       "/Game/WonderlandV2/Kit/civic": 6,
-      "/Game/WonderlandV2/Kit/details": 10,
+      "/Game/WonderlandV2/Kit/details": 12,
       "/Game/WonderlandV2/Kit/flowers": 3,
       "/Game/WonderlandV2/Kit/gardens": 8,
       "/Game/WonderlandV2/Kit/ground": 8,
@@ -8047,6 +8047,144 @@
           "material_instance": "MI_V2_Gold",
           "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Gold",
           "triangles": 432
+        }
+      ]
+    },
+    {
+      "asset_id": "WL_Detail_Window_Oculus",
+      "family_group": "details",
+      "variant_of": null,
+      "destination_path": "/Game/WonderlandV2/Kit/details",
+      "data_layer": "V2_Props",
+      "nanite_requested": false,
+      "collision_requested": false,
+      "height_uu": 192.0,
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "style": {
+        "slender_broad": 0.721,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.81,
+        "ceremonial_residential": 0.7
+      },
+      "sockets": [
+        {
+          "name": "back",
+          "kind": "bridge_end",
+          "z_uu": 0.0,
+          "radius_uu": 85.0,
+          "rung": null,
+          "note": "the ring's back is flat at y = 0; butt it to any wall"
+        }
+      ],
+      "parts": [
+        {
+          "part": "glass",
+          "mesh_name": "WL_Detail_Window_Oculus_glass",
+          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Detail_Window_Oculus_glass.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/details",
+          "destination_name": "WL_Detail_Window_Oculus_glass",
+          "asset_path": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_Oculus_glass",
+          "material_instance": "MI_V2_GlassAmber",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_GlassAmber",
+          "triangles": 96
+        },
+        {
+          "part": "gold",
+          "mesh_name": "WL_Detail_Window_Oculus_gold",
+          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Detail_Window_Oculus_gold.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/details",
+          "destination_name": "WL_Detail_Window_Oculus_gold",
+          "asset_path": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_Oculus_gold",
+          "material_instance": "MI_V2_Gold",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Gold",
+          "triangles": 192
+        },
+        {
+          "part": "stone",
+          "mesh_name": "WL_Detail_Window_Oculus",
+          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Detail_Window_Oculus.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/details",
+          "destination_name": "WL_Detail_Window_Oculus",
+          "asset_path": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_Oculus",
+          "material_instance": "MI_V2_IvoryStone",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_IvoryStone",
+          "triangles": 496
+        }
+      ]
+    },
+    {
+      "asset_id": "WL_Detail_Window_LancetPair",
+      "family_group": "details",
+      "variant_of": null,
+      "destination_path": "/Game/WonderlandV2/Kit/details",
+      "data_layer": "V2_Props",
+      "nanite_requested": false,
+      "collision_requested": false,
+      "height_uu": 345.7,
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "style": {
+        "slender_broad": 0.564,
+        "low_monumental": 0.102,
+        "open_solid": 0.998,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.812,
+        "ceremonial_residential": 0.7
+      },
+      "sockets": [
+        {
+          "name": "back",
+          "kind": "bridge_end",
+          "z_uu": 0.0,
+          "radius_uu": 112.0,
+          "rung": null,
+          "note": "the surround panel's back is flat at y = 0; butt it to any wall"
+        }
+      ],
+      "parts": [
+        {
+          "part": "glass",
+          "mesh_name": "WL_Detail_Window_LancetPair_glass",
+          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Detail_Window_LancetPair_glass.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/details",
+          "destination_name": "WL_Detail_Window_LancetPair_glass",
+          "asset_path": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_LancetPair_glass",
+          "material_instance": "MI_V2_GlassAmber",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_GlassAmber",
+          "triangles": 24
+        },
+        {
+          "part": "gold",
+          "mesh_name": "WL_Detail_Window_LancetPair_gold",
+          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Detail_Window_LancetPair_gold.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/details",
+          "destination_name": "WL_Detail_Window_LancetPair_gold",
+          "asset_path": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_LancetPair_gold",
+          "material_instance": "MI_V2_Gold",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Gold",
+          "triangles": 72
+        },
+        {
+          "part": "stone",
+          "mesh_name": "WL_Detail_Window_LancetPair",
+          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Detail_Window_LancetPair.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/details",
+          "destination_name": "WL_Detail_Window_LancetPair",
+          "asset_path": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_LancetPair",
+          "material_instance": "MI_V2_IvoryStone",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_IvoryStone",
+          "triangles": 404
         }
       ]
     },

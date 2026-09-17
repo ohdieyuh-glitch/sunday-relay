@@ -1,5 +1,5 @@
 {
-  "checked_assets": 124,
+  "checked_assets": 126,
   "failures": 0,
   "material_check": "59 MI_V2_* names parsed from materials_v2.py",
   "per_asset": {
@@ -97,6 +97,8 @@
     "WL_Detail_Banner_Blade": [],
     "WL_Detail_Wall_Lantern": [],
     "WL_Detail_Lantern_Hanging": [],
+    "WL_Detail_Window_Oculus": [],
+    "WL_Detail_Window_LancetPair": [],
     "WL_Hero_GreatSpire": [],
     "WL_Hero_Gate_Royal": [],
     "WL_Sky_Island_Small": [],
@@ -618,6 +620,16 @@
     "WL_Detail_Lantern_Hanging": {
       "glass": "8b3558ff2788d747f52b84de83a4295a90dfd62a86246124a00768d3c6ee4a70",
       "gold": "3a9d9bdc1e799141110e19b6455d44e3088abe17f916e786b5e75a8ddb6d508d"
+    },
+    "WL_Detail_Window_Oculus": {
+      "glass": "7673bd9323bb7d8f1d4166825bfc22322e9e84f07a30431429c041af5da4487b",
+      "gold": "13dd9c64d8fee765c6870bcca36781899076761fcc83857bca6c29fed2c74b15",
+      "stone": "59b792dc69ef8351314dd974f40d389f89c07a3568b240fd2523a4e183d55ef2"
+    },
+    "WL_Detail_Window_LancetPair": {
+      "glass": "37c5bc9f763020c4337c372f87848f8627647467021d16d288b93d6ef87a13bf",
+      "gold": "b5c88010686a0f2d1810d805bdf9b7e1a8ed56370c87e20e98399ae386859599",
+      "stone": "7c5a483c6aa4244d67d6e3ff831fba91cf11e7368bfe4312e021673642aa415d"
     },
     "WL_Hero_GreatSpire": {
       "glass": "bcd03302e94403ce72efc9428a539e3c54e0134cf4d737861eaec08b56c60a04",

@@ -531,9 +531,82 @@ def detail_lantern_hanging(f):
         tri_budget=1500, nanite=False, collision=False)
 
 
+def detail_window_oculus(f):
+    """A round window for a wall: 1.9 m across, a cut-stone ring with four keystones, a gold rim and glass.
+
+    VARIETY, NOT MORE OF THE SAME. The arched window (WL_Detail_Window_Arched) dresses a city's blank walls; repeated
+    over thousands of upper-storey faces it becomes one tile. An oculus is the reference's other window -- the round
+    light high in a gable or a tower -- so a wall's top storey, or a narrow face, reads differently from its ground.
+    The ring's back is flat at y = 0; the lowest keystone is on the datum.
+    """
+    p = f.part("stone")
+    g = f.part("gold")
+    gl = f.part("glass")
+    RO, RI, D = 0.85, 0.55, 0.24
+    KEY = 0.16
+    CZ = RO + 0.11                  # the lowest keystone, turned so its 0.22 m width is vertical, stands on the datum
+    to_wall = M.xform((0.0, 0.0, CZ), (-90.0, 0.0, 0.0))          # revolve axis +Z -> +Y, the wall's normal
+    p.lathe([(RI, 0.0), (RO, 0.0), (RO, D * 0.55), (RO * 0.97, D), (RI * 1.04, D), (RI, D * 0.80), (RI, 0.0)],
+            segments=32, smooth=True, cap_bottom=False, cap_top=False, matrix=to_wall)
+    g.lathe([(RI - 0.035, D * 0.62), (RI + 0.02, D * 0.62), (RI + 0.02, D * 0.86), (RI - 0.035, D * 0.86)], segments=32,
+            smooth=True, cap_bottom=False, cap_top=False, matrix=to_wall)
+    gl.lathe([(0.0, 0.04), (RI, 0.04), (RI, 0.08), (0.0, 0.08)], segments=24, smooth=False, matrix=to_wall)
+    for k in range(4):
+        a = math.radians(90.0 * k)
+        p.box(0.22, D * 1.12, KEY * 2.0, at=(math.cos(a) * RO, D * 0.5, CZ + math.sin(a) * RO), rot=(0.0, -90.0 * k, 0.0),
+              chamfer=0.02)
+    return K.ModuleSpec(
+        "WL_Detail_Window_Oculus", "window", "prop", "detail",
+        f.emit("WL_Detail_Window_Oculus"),
+        [K.Socket("back", 0.0, RO, "bridge_end", "the ring's back is flat at y = 0; butt it to any wall")],
+        districts=("city", "hamlet", "castle", "cloister", "clock"),
+        note="round oculus: cut-stone ring, four keystones, gold inner rim, glass",
+        params={"outer_radius_m": RO, "light_radius_m": RI},
+        tri_budget=2000, collision=False, nanite=False)
+
+
+def detail_window_lancet_pair(f):
+    """Two pointed lancets under one label moulding: 2.3 m wide, 3.3 m tall, a stone mullion and a gold boss.
+
+    The third window of the set (with WL_Detail_Window_Arched and WL_Detail_Window_Oculus), for the city's upper
+    storeys: taller and narrower than the arched window, pointed, paired -- the Gothic rhythm of the reference's
+    castle facades. The surround panel is the flat back at y = 0.
+    """
+    p = f.part("stone")
+    g = f.part("gold")
+    gl = f.part("glass")
+    W, H_OPEN = 0.64, 2.45
+    GAP = 0.94
+    PLATE = 0.05
+    D = 0.24
+    Z0 = 0.26
+    jamb = W * 0.16
+    body = H_OPEN - W * 0.5 * 1.35
+    y = PLATE + D * 0.5
+    PW = GAP + W + 0.66
+    p.box(PW, PLATE, Z0 + H_OPEN + 0.50, at=(0.0, PLATE * 0.5, 0.0), chamfer=0.015, centre_z=False)
+    for sgn in (-1.0, 1.0):
+        x = sgn * GAP * 0.5
+        E.window_arched(p, (x, y, Z0), W, H_OPEN, depth=D, kind="ogee", sill=False)
+        gl.box(W - jamb * 2.0, 0.04, body + W * 0.55, at=(x, PLATE + 0.03, Z0), centre_z=False)
+    p.box(GAP + W * 1.5, D * 1.3, 0.12, at=(0.0, y, Z0 - 0.12), chamfer=0.02, centre_z=False)
+    E.arch_band(p, PW - 0.06, (PW - 0.06) * 0.5 * 1.10, 0.12, 0.08, at=(0.0, PLATE + 0.06, Z0 + body - 0.10),
+                kind="ogee", steps=13)
+    g.lathe([(0.0, -0.08), (0.10, -0.05), (0.12, 0.0), (0.10, 0.05), (0.0, 0.08)], segments=12, smooth=True,
+            matrix=M.xform((0.0, PLATE + 0.10, Z0 + body + W * 0.62), (-90.0, 0.0, 0.0)))
+    return K.ModuleSpec(
+        "WL_Detail_Window_LancetPair", "window", "prop", "detail",
+        f.emit("WL_Detail_Window_LancetPair"),
+        [K.Socket("back", 0.0, PW * 0.5, "bridge_end", "the surround panel's back is flat at y = 0; butt it to any wall")],
+        districts=("city", "castle", "cloister", "clock"),
+        note="paired pointed lancets: surround panel, shared sill, ogee label moulding, gold boss, glass",
+        params={"light_w_m": W, "light_h_m": H_OPEN},
+        tri_budget=3000, collision=False, nanite=False)
+
+
 BUILDERS = (
     detail_balustrade_run, detail_newel_urn, detail_screen_filigree,
     detail_balcony_bracket, detail_pinnacle_grand, detail_oriel_bay,
     detail_window_arched, detail_banner_blade, detail_wall_lantern,
-    detail_lantern_hanging,
+    detail_lantern_hanging, detail_window_oculus, detail_window_lancet_pair,
 )
