@@ -17,6 +17,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createJuliusMemoryStore,
+  juliusPacketTextIn,
   scriptedAdapter,
   seedJuliusTaskContract,
   type JuliusProviderAdapter,
@@ -86,7 +87,11 @@ const segmentOf = (taskId: string): number => {
 };
 
 /** An adapter whose answer is chosen from the task it was handed. */
-function byTask(base: ReturnType<typeof scriptedAdapter>, pick: (taskId: string, taskType: string | undefined) => ScriptedOutcome) {
+function byTask(
+  base: ReturnType<typeof scriptedAdapter>,
+  pick: (taskId: string, taskType: string | undefined) => ScriptedOutcome,
+  packets?: ReturnType<typeof juliusPacketTextIn>,
+) {
   const dispatches: { taskId: string; taskType?: string }[] = [];
   const adapter: JuliusProviderAdapter = {
     adapterId: base.adapterId,
@@ -94,7 +99,7 @@ function byTask(base: ReturnType<typeof scriptedAdapter>, pick: (taskId: string,
       dispatches.push({ taskId: input.taskId, ...(input.taskType === undefined ? {} : { taskType: input.taskType }) });
       const worker = base.adapterId === architectWorker({}).adapterId ? architectWorker({})
         : base.adapterId === CODER_WORKER.adapterId ? CODER_WORKER : REVIEWER_WORKER;
-      return scriptedAdapter(worker, [pick(input.taskId, input.taskType)]).dispatch(input);
+      return scriptedAdapter(worker, [pick(input.taskId, input.taskType)], packets === undefined ? {} : { packetFor: packets }).dispatch(input);
     },
   };
   return { adapter, dispatches };
@@ -130,8 +135,11 @@ async function driveAttemptFourShape(options: { readonly derived: boolean; reado
     const seen = (reviews.get(stage) ?? 0) + 1;
     reviews.set(stage, seen);
     const refusals = stage === 'plan' ? 2 : 3;
-    return { kind: 'succeed', evidence: seen <= refusals ? FAILED_REVIEW : PASSED_REVIEW, usdMicros: null };
-  });
+    // Accepting, it answers by id every finding its packet shows it.
+    return seen <= refusals
+      ? { kind: 'succeed', evidence: FAILED_REVIEW, usdMicros: null }
+      : { kind: 'succeed', evidence: PASSED_REVIEW, usdMicros: null, answerFindings: 'RESOLVED' };
+  }, juliusPacketTextIn(memory));
   const runtime = assembleLiveJuliusRuntime({
     store: handoffs.store,
     entries: [

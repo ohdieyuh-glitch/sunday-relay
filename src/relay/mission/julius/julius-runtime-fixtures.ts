@@ -175,6 +175,13 @@ export type ScriptedOutcome =
     readonly implementation?: unknown;
     /** A Coding Agent's observations about the design. Unsanitised, for the same reason. */
     readonly architectureObservations?: unknown;
+    /**
+     * A reviewer that ANSWERS the findings it is shown, the way a real one reads
+     * them: by the ids in its own compiled packet. Adds a resolution for each to
+     * the declared verdict (a CONTINUE if the step declared none). A step
+     * without it answers nothing — which is the silence Julius refuses.
+     */
+    readonly answerFindings?: 'RESOLVED' | 'OPEN';
   }
   /** `costUsdMicros` is what the boundary billed before it failed, as its diagnostics would carry. */
   | {
@@ -201,6 +208,10 @@ export interface ScriptedAdapter extends JuliusProviderAdapter {
 export function scriptedAdapter(
   target: JuliusWorker,
   script: readonly ScriptedOutcome[],
+  options: {
+    /** The compiled packet text a dispatch was handed, for steps that read it (`answerFindings`). */
+    readonly packetFor?: (dispatch: { readonly taskId: string; readonly contextId: string }) => string | null;
+  } = {},
 ): ScriptedAdapter {
   const dispatches: ScriptedAdapter['dispatches'] = [];
   let index = 0;
@@ -230,6 +241,17 @@ export function scriptedAdapter(
       if (step.kind === 'malformed') {
         return { workerId: 'someone-else', providerId: target.providerId, status: 'SUCCEEDED', safeSummary: 'x', evidence: [], usage: {} };
       }
+      const answered = step.answerFindings === undefined ? [] : findingIdsIn(options.packetFor?.(input) ?? '');
+      const reviewVerdict = answered.length === 0
+        ? step.reviewVerdict
+        : {
+          verdict: 'CONTINUE', claim: 'The findings I raised are answered.',
+          ...(step.reviewVerdict !== null && typeof step.reviewVerdict === 'object' ? step.reviewVerdict as Record<string, unknown> : {}),
+          resolutions: answered.map((findingId) => ({
+            findingId, status: step.answerFindings,
+            claim: step.answerFindings === 'RESOLVED' ? 'The evidence shows the problem is gone.' : 'The problem is still there.',
+          })),
+        };
       const result: JuliusProviderResult = {
         workerId: target.workerId, providerId: target.providerId, status: step.status ?? 'SUCCEEDED',
         safeSummary: `${target.role} completed ${input.taskId}.`,
@@ -245,7 +267,7 @@ export function scriptedAdapter(
         ...(step.guidance === undefined ? {} : { guidance: step.guidance }),
         ...(step.segmentResume === undefined ? {} : { segmentResume: step.segmentResume }),
         ...(step.researchAsks === undefined ? {} : { researchAsks: step.researchAsks }),
-        ...(step.reviewVerdict === undefined ? {} : { reviewVerdict: step.reviewVerdict }),
+        ...(reviewVerdict === undefined ? {} : { reviewVerdict }),
         ...(step.rebuttal === undefined ? {} : { rebuttal: step.rebuttal }),
         ...(step.architecture === undefined ? {} : { architecture: step.architecture }),
         ...(step.consistency === undefined ? {} : { consistency: step.consistency }),
@@ -254,6 +276,26 @@ export function scriptedAdapter(
       };
       return result;
     },
+  };
+}
+
+/** The finding ids a compiled packet shows a reviewer, as a reviewer reads them. */
+function findingIdsIn(packet: string): readonly string[] {
+  const ids = new Set<string>();
+  for (const match of packet.matchAll(/REVIEW FINDING (\S+) \[/gu)) ids.add(match[1]!);
+  for (const match of packet.matchAll(/^ {2}(\S+) \[(?:OPEN|ADDRESSED)[,\]]/gmu)) ids.add(match[1]!);
+  return [...ids];
+}
+
+/** The text of the packet compiled for one dispatch, from a store that keeps snapshots. */
+export function juliusPacketTextIn(
+  store: { contexts(): readonly { readonly contextId: string; readonly taskId: string; readonly packet: { readonly blocks: readonly { readonly text: string }[] } }[] },
+): (dispatch: { readonly taskId: string; readonly contextId: string }) => string | null {
+  return (dispatch) => {
+    // The newest snapshot for this dispatch: a harness restarted over the same
+    // store counts its ids from one again, so an id alone can name an older one.
+    const snapshot = store.contexts().filter((item) => item.contextId === dispatch.contextId && item.taskId === dispatch.taskId).at(-1);
+    return snapshot === undefined ? null : snapshot.packet.blocks.map((block) => block.text).join('\n');
   };
 }
 
@@ -309,8 +351,10 @@ export function createJuliusHarness(input: {
   readonly capabilityFor?: (task: { taskId: string; taskType: string; role: string }) => string;
   /** The execution attempt peer requests are named under; absent, the local scope. */
   readonly executionScope?: string;
+  /** An existing store to run over — a restart of the same durable rows with fresh workers. */
+  readonly store?: JuliusMemoryStore;
 }): JuliusHarness {
-  const store = createJuliusMemoryStore();
+  const store = input.store ?? createJuliusMemoryStore();
   const clock = createSteppingClock();
   const ids = createCountingIds();
   const budget = createMemoryBudget(input.budgetUsdMicros ?? 1_000_000);
@@ -318,7 +362,7 @@ export function createJuliusHarness(input: {
   const adapters = new Map<string, ScriptedAdapter>();
   for (const entry of input.workers) {
     registry.register(entry.worker);
-    adapters.set(entry.worker.adapterId, scriptedAdapter(entry.worker, entry.script));
+    adapters.set(entry.worker.adapterId, scriptedAdapter(entry.worker, entry.script, { packetFor: juliusPacketTextIn(store) }));
   }
   const health = new JuliusProviderHealthRegistry();
   const router = new JuliusProviderRouter(registry, adapters, health);

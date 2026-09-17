@@ -332,7 +332,7 @@ export function juliusReviewEscalationGuidance(): string {
     `  "target": for a challenge, one of ${JULIUS_CHALLENGE_TARGETS.map((target) => target.toLowerCase()).join(', ')}`,
     `  "claim": what is wrong, in one sentence of at most ${JULIUS_REVIEW_VERDICT_LIMITS.claimChars} characters`,
     'Ordinary problems in the work are findings, not escalations: "changes_required" with blocking findings already sends the work to repair.',
-    'WHEN YOU RE-REVIEW A REPAIR you are also asked about the findings you raised before. They are listed in your packet with their ids. For each one answer in "resolutions": {"findingId", "status": "RESOLVED" | "OPEN" | "SUPERSEDED", "claim"}. RESOLVED means the evidence shows the problem is gone; OPEN means it is still there; SUPERSEDED means the problem changed shape and your new finding replaces it. A finding you do not mention stays exactly as it was: changed code never resolves anything by itself.',
+    'WHEN YOU RE-REVIEW A REPAIR you are also asked about the findings you raised before. They are listed in your packet with their ids. For each one answer in "resolutions": {"findingId", "status": "RESOLVED" | "OPEN" | "SUPERSEDED", "claim"}. RESOLVED means the evidence shows the problem is gone; OPEN means it is still there; SUPERSEDED means the problem changed shape and your new finding replaces it. A finding you do not mention is NOT resolved: changed code never resolves anything by itself, and Julius will not accept a repair over a finding its re-review left unanswered.',
     'You never declare work verified, complete or accepted. Only Julius does, and an escalation that says so is refused.',
   ].join('\n');
 }

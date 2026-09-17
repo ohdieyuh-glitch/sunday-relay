@@ -72,7 +72,7 @@ const build = (scripts: Scripts, over: { providers?: typeof PROVIDERS | typeof S
     workers: [
       { worker: workers.architect, script: scripts.architect ?? [{ kind: 'succeed', evidence: PLAN_EVIDENCE }] },
       { worker: workers.coder, script: scripts.coder ?? [{ kind: 'succeed' }] },
-      { worker: workers.reviewer, script: scripts.reviewer ?? [{ kind: 'succeed', evidence: PASSED_REVIEW }] },
+      { worker: workers.reviewer, script: scripts.reviewer ?? [{ kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' }] },
     ],
     card: cardPolicy({
       allowedProviders: [workers.architect.providerId, workers.coder.providerId, workers.reviewer.providerId],
@@ -184,10 +184,10 @@ describe('P1 — a typed peer request opens, is answered and is resolved', () =>
       coder: GUIDED.coder,
       architect: [...GUIDED.architect!, { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: { ...GUIDANCE, recommendedActions: ['peek, then read'] } }],
       reviewer: [
-        { kind: 'succeed', evidence: PASSED_REVIEW },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
         { kind: 'succeed', evidence: FAILED_REVIEW },
-        { kind: 'succeed', evidence: PASSED_REVIEW },
-        { kind: 'succeed', evidence: PASSED_REVIEW },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
       ],
     });
     await drain(harness);
@@ -210,7 +210,7 @@ describe('P2 — an illegal direction is refused, and nothing is minted for it',
     const harness = build({
       coder: [{ kind: 'succeed' }],
       reviewer: [
-        { kind: 'succeed', evidence: PASSED_REVIEW },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
         { kind: 'succeed', evidence: PASSED_REVIEW, guidanceRequest: REQUEST },
       ],
     });
@@ -291,10 +291,10 @@ describe('P5 — a mandatory request really pauses the work it names', () => {
       coder: GUIDED.coder,
       architect: [...GUIDED.architect!, { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE }],
       reviewer: [
-        { kind: 'succeed', evidence: PASSED_REVIEW },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
         { kind: 'succeed', evidence: FAILED_REVIEW },
-        { kind: 'succeed', evidence: PASSED_REVIEW },
-        { kind: 'succeed', evidence: PASSED_REVIEW },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
       ],
     });
     await drain(harness);
@@ -397,10 +397,10 @@ describe('P7 — role semantics survive a provider swap', () => {
         coder: GUIDED.coder,
         architect: [...GUIDED.architect!, { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE }],
         reviewer: [
-          { kind: 'succeed', evidence: PASSED_REVIEW },
+          { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
           { kind: 'succeed', evidence: FAILED_REVIEW },
-          { kind: 'succeed', evidence: PASSED_REVIEW },
-          { kind: 'succeed', evidence: PASSED_REVIEW },
+          { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
+          { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
         ],
       }, { providers });
       await drain(harness);

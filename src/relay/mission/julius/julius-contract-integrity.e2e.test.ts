@@ -57,7 +57,7 @@ const SPECIALIST = worker({
 
 const PLAN_OK = { kind: 'succeed' as const, evidence: [{ type: 'ARTIFACT' as const, status: 'PASSED' as const, safeSummary: 'plan' }] };
 const BUILD_OK = { kind: 'succeed' as const, evidence: [{ type: 'TEST' as const, status: 'PASSED' as const, safeSummary: 'tests pass' }] };
-const REVIEW_ACCEPT = { kind: 'succeed' as const, evidence: [{ type: 'REVIEW_FINDING' as const, status: 'PASSED' as const, safeSummary: 'no blocking findings' }] };
+const REVIEW_ACCEPT = { kind: 'succeed' as const, evidence: [{ type: 'REVIEW_FINDING' as const, status: 'PASSED' as const, safeSummary: 'no blocking findings' }], answerFindings: 'RESOLVED' as const };
 const REVIEW_REJECT = { kind: 'succeed' as const, evidence: [{ type: 'REVIEW_FINDING' as const, status: 'FAILED' as const, safeSummary: 'a blocking finding' }] };
 
 type Script = Parameters<typeof createJuliusHarness>[0]['workers'][number]['script'];

@@ -291,6 +291,14 @@ function fakeReviewer(log: FakeLog, packets: ReviewPacket[], verdicts: Array<'ap
           findingId: `finding-${call}`, severity: 'blocking', requirement: 'AC-1',
           explanation: 'The change does not satisfy AC-1.', evidence: 'diff',
         }],
+        // A compliant reviewer approving a repair answers, by Julius's id, every
+        // prior finding it was shown. Silence would leave them unresolved.
+        ...(verdict === 'approved' && (input.packet.priorFindings ?? []).length > 0 ? {
+          resolutions: (input.packet.priorFindings ?? []).flatMap((text) => {
+            const id = /REVIEW FINDING (\S+) \[/u.exec(text)?.[1];
+            return id === undefined ? [] : [{ findingId: id, status: 'RESOLVED', claim: 'The repaired change satisfies AC-1.' }];
+          }),
+        } : {}),
         requirementsChecked: [{ requirement: 'AC-1', status: verdict === 'approved' ? 'passed' as const : 'failed' as const, evidence: 'diff reviewed' }],
         parseRepaired: false,
       },

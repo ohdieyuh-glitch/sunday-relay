@@ -92,7 +92,7 @@ const build = (input: BuildInput = {}): JuliusHarness => {
     workers: [
       { worker: ARCHITECT, script: input.architectScript ?? [{ kind: 'succeed', evidence: PLAN_EVIDENCE }] },
       { worker: CODER, script: input.coderScript ?? [{ kind: 'succeed' }] },
-      { worker: REVIEWER, script: input.reviewerScript ?? [{ kind: 'succeed', evidence: PASSED_REVIEW }] },
+      { worker: REVIEWER, script: input.reviewerScript ?? [{ kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' }] },
     ],
     card: cardPolicy({
       allowedProviders: [ARCHITECT.providerId, CODER.providerId, REVIEWER.providerId],
@@ -219,10 +219,10 @@ describe('2 — the coder can request additional architect guidance mid-mission'
         { kind: 'succeed', guidanceRequest: REQUEST },
       ],
       reviewerScript: [
-        { kind: 'succeed', evidence: PASSED_REVIEW },  // plan
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },  // plan
         { kind: 'succeed', evidence: FAILED_REVIEW },  // build → repair
-        { kind: 'succeed', evidence: PASSED_REVIEW },
-        { kind: 'succeed', evidence: PASSED_REVIEW },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
       ],
     });
     await drain(harness);
@@ -292,7 +292,7 @@ describe('2b — Julius honours the route it computed, and declines out loud', (
       workers: [
         { worker: worker({ ...ARCHITECT, taskTypes: ['plan', 'repair:plan'] }), script: [{ kind: 'succeed', evidence: PLAN_EVIDENCE }] },
         { worker: CODER, script: [{ kind: 'succeed', guidanceRequest: REQUEST }] },
-        { worker: REVIEWER, script: [{ kind: 'succeed', evidence: PASSED_REVIEW }] },
+        { worker: REVIEWER, script: [{ kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' }] },
       ],
       card: cardPolicy({
         allowedProviders: [ARCHITECT.providerId, CODER.providerId, REVIEWER.providerId],
@@ -431,7 +431,7 @@ describe('6 — the reviewer can force repair during execution', () => {
         // finding. The script's last entry repeats, so this does not depend on
         // whether the build review or the guidance review is claimed first —
         // an ordering assumption is not a property worth testing.
-        { kind: 'succeed', evidence: PASSED_REVIEW },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
         { kind: 'succeed', evidence: FAILED_REVIEW },
       ],
     });
@@ -609,7 +609,7 @@ describe('11 — a worker failure does not silently bypass the reviewer or the a
         { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
       ],
       reviewerScript: [
-        { kind: 'succeed', evidence: PASSED_REVIEW },   // the plan review answers
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },   // the plan review answers
         // and then the reviewer dies permanently. The last entry repeats, so no
         // review after the plan ever succeeds — which is the only way to ask
         // whether a review that did not happen can still count as one.
@@ -619,7 +619,7 @@ describe('11 — a worker failure does not silently bypass the reviewer or the a
     await drain(harness);
     const run = await harness.store.loadRun('run-1', 'prj-1');
     expect(run!.state).not.toBe('COMPLETED');
-    // `reviewCompletedFor` counts only a SUCCEEDED reviewer child, so a review
+    // `juliusReviewConclusionOf` counts only a CONCLUDED reviewer child, so a review
     // that never answered leaves its subject unverified rather than accepted.
     for (const subject of ['guidance:build-1:1:task', 'build-1']) {
       const accepted = harness.store.events().filter((event) => event.type === 'verification.decided'
@@ -857,7 +857,7 @@ describe('30 - a checkpoint is a barrier, not a note taken afterwards', () => {
       coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       // The plan review accepts (so the contract locks); every review after it
       // refuses, which is the guidance review.
-      reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW }, { kind: 'succeed', evidence: FAILED_REVIEW }],
+      reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' }, { kind: 'succeed', evidence: FAILED_REVIEW }],
     });
     await drain(harness);
     const continuation = harness.store.taskRow('segment:build-1:2:task');
@@ -876,7 +876,7 @@ describe('30 - a checkpoint is a barrier, not a note taken afterwards', () => {
   it('a mission with an unreleased continuation cannot reach COMPLETED', async () => {
     const harness = build({
       coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
-      reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW }, { kind: 'succeed', evidence: FAILED_REVIEW }],
+      reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' }, { kind: 'succeed', evidence: FAILED_REVIEW }],
     });
     await drain(harness);
     const run = await harness.store.loadRun('run-1', 'prj-1');
@@ -1052,7 +1052,7 @@ describe('31 - Julius goes and looks before the work that needs the answer', () 
       ],
       reviewerScript: [
         { kind: 'succeed', evidence: PASSED_REVIEW, researchAsks: ASKS, segmentResume: RESUME },
-        { kind: 'succeed', evidence: PASSED_REVIEW },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
       ],
       coderScript: [{ kind: 'succeed', researchAsks: ASKS, segmentResume: RESUME }, { kind: 'succeed' }],
     });
@@ -1224,7 +1224,7 @@ describe('32 - a replayed drive changes nothing, and the one thing it does is sa
     const harness = build({
       research: countingPort(),
       coderScript: [{ kind: 'succeed', researchAsks: ASKS, segmentResume: RESUME }, { kind: 'succeed' }],
-      reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW }, { kind: 'succeed', evidence: FAILED_REVIEW }],
+      reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' }, { kind: 'succeed', evidence: FAILED_REVIEW }],
     });
     await drain(harness);
     expect(taskIds(harness), 'the continuation ran with the answer').toContain('segment:build-1:2:task');
@@ -1510,9 +1510,9 @@ describe('35 — a yield is not verified as finished work; the segment that ends
         { kind: 'succeed' },
       ],
       reviewerScript: [
-        { kind: 'succeed', evidence: PASSED_REVIEW },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
         { kind: 'succeed', evidence: FAILED_REVIEW },
-        { kind: 'succeed', evidence: PASSED_REVIEW },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
       ],
     });
     await drain(harness);
@@ -1597,7 +1597,7 @@ describe('36 — the repair bound binds the unit of work, however often it pause
       research: servingPort(),
       maxRepairRounds: 2,
       coderScript: [pause, finish, pause, finish, pause, finish],
-      reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW }, { kind: 'succeed', evidence: FAILED_REVIEW }],
+      reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' }, { kind: 'succeed', evidence: FAILED_REVIEW }],
     });
     await drain(harness, 60);
     const all = await harness.store.tasksForRun('run-1', 'prj-1');

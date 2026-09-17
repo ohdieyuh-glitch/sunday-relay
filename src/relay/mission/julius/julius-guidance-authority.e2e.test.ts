@@ -120,10 +120,10 @@ const REJECTED_THEN_CORRECTED = {
     { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: guidance(ACCEPTED_ADVICE) },
   ] as Step[],
   reviewer: [
-    { kind: 'succeed', evidence: PASSED_REVIEW },   // the plan
+    { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },   // the plan
     { kind: 'succeed', evidence: FAILED_REVIEW },   // the first packet: rejected
-    { kind: 'succeed', evidence: PASSED_REVIEW },   // the corrected packet
-    { kind: 'succeed', evidence: PASSED_REVIEW },   // the coder's continuation
+    { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },   // the corrected packet
+    { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },   // the coder's continuation
   ] as Step[],
 };
 
@@ -183,7 +183,7 @@ describe('P5 — corrected guidance is reviewed and accepted, and P6 — it surv
         { kind: 'succeed', researchAsks: [{ source: 'web', capability: 'read_item', reference: 'https://example.test/x', purpose: 'check' }], segmentResume: { completedSoFar: ['read the guidance'], nextIntent: 'finish' } },
         { kind: 'succeed' },
       ],
-      reviewer: [...REJECTED_THEN_CORRECTED.reviewer, { kind: 'succeed', evidence: PASSED_REVIEW }],
+      reviewer: [...REJECTED_THEN_CORRECTED.reviewer, { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' }],
       research: true,
     });
     await drain(harness);

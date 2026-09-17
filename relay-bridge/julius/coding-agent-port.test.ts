@@ -61,7 +61,7 @@ function snapshot(): JuliusContextSnapshot {
   const blocks = [
     { entryId: 'brain:objective', kind: 'OBJECTIVE' as const, text: 'OBJECTIVE: normalize the mission label.' },
     { entryId: 'brain:guidance-answer:segment:build-1:2:task:r1', kind: 'HANDOFF' as const, text: 'ACCEPTED GUIDANCE: reuse the existing reader.' },
-    { entryId: 'brain:architecture:r1', kind: 'DECISION' as const, text: 'ACCEPTED ARCHITECTURE (revision 1): JournalReader boundary.' },
+    { entryId: 'brain:architecture:run-live:r1', kind: 'DECISION' as const, text: 'ACCEPTED ARCHITECTURE (revision 1): JournalReader boundary.' },
     { entryId: 'brain:finding:f1', kind: 'FINDING' as const, text: 'REVIEW FINDING: NULL renders as the literal word.' },
     { entryId: 'brain:segment-resume:segment:build-1:2:task', kind: 'HANDOFF' as const, text: 'RESUME: tests written, wiring next.' },
     { entryId: 'brain:decision:plan-1:ACCEPT:TASK_VERIFIED', kind: 'DECISION' as const, text: 'ACCEPT (TASK_VERIFIED): plan accepted.' },
@@ -108,7 +108,7 @@ describe('C1 — a provider is shown a governed request, in sections by authorit
     await adapter.dispatch(DISPATCH);
     const request = provider.requests[0]!;
     expect(request.sections.acceptedGuidance.map((block) => block.entryId)).toEqual(['brain:guidance-answer:segment:build-1:2:task:r1']);
-    expect(request.sections.architecture.map((block) => block.entryId)).toEqual(['brain:architecture:r1']);
+    expect(request.sections.architecture.map((block) => block.entryId)).toEqual(['brain:architecture:run-live:r1']);
     expect(request.sections.findings.map((block) => block.entryId)).toEqual(['brain:finding:f1']);
     expect(request.sections.continuation.map((block) => block.entryId)).toEqual(['brain:segment-resume:segment:build-1:2:task']);
     expect(request.sections.missionContext.map((block) => block.entryId)).toEqual(['brain:objective', 'brain:decision:plan-1:ACCEPT:TASK_VERIFIED']);

@@ -222,6 +222,73 @@ export function foldJuliusFindings(
   return Object.freeze([...byId.values()]);
 }
 
-/** A finding still counts against the work while it is OPEN or merely ADDRESSED. */
-export const juliusFindingIsOutstanding = (life: JuliusFindingLife): boolean =>
-  life.blocking && (life.state === 'OPEN' || life.state === 'ADDRESSED');
+/**
+ * IS THIS FINDING STILL A PROBLEM ON THE RECORD — whether or not it blocks.
+ *
+ *   OPEN        unresolved.
+ *   ADDRESSED   unresolved: someone acted; nobody independent said it worked.
+ *   RESOLVED    resolved.
+ *   SUPERSEDED  resolved ONLY when the replacement it names is a finding the run
+ *               actually recorded. A supersession naming nothing that exists is
+ *               a problem that left the record while looking answered.
+ */
+export function juliusFindingIsUnresolved(life: JuliusFindingLife, lives: readonly JuliusFindingLife[]): boolean {
+  if (life.state === 'OPEN' || life.state === 'ADDRESSED') return true;
+  if (life.state === 'SUPERSEDED') {
+    const replacement = life.supersededByFindingId;
+    return replacement === null || replacement === life.findingId || !lives.some((other) => other.findingId === replacement);
+  }
+  return false;
+}
+
+/** A finding still counts against the work while it blocks and is unresolved. */
+export const juliusFindingIsOutstanding = (life: JuliusFindingLife, lives: readonly JuliusFindingLife[]): boolean =>
+  life.blocking && juliusFindingIsUnresolved(life, lives);
+
+/**
+ * THE FINDING ROWS AS THE LEDGER SAYS THEY ARE — ONE TRUTH.
+ *
+ * A finding row is written once, `OPEN`, and never updated; the ledger is where
+ * its life is. Verification and completion used to read the row, so a finding a
+ * re-review RESOLVED still counted as OPEN on its row, and a finding merely
+ * ADDRESSED counted as nothing at all once the decision moved to the repair.
+ * Every reader of a finding's status now reads this projection: `OPEN` when the
+ * lifecycle says it is unresolved, `RESOLVED` when it is resolved. The row's own
+ * stored status is not consulted.
+ */
+export function juliusEffectiveFindings(
+  findings: readonly JuliusReviewerFinding[],
+  entries: readonly JuliusPeerLedgerEntry[],
+): readonly JuliusReviewerFinding[] {
+  const lives = foldJuliusFindings(findings, entries);
+  const byId = new Map(lives.map((life) => [life.findingId, life]));
+  return Object.freeze(findings.map((finding) => {
+    const life = byId.get(finding.findingId);
+    const unresolved = life === undefined || juliusFindingIsUnresolved(life, lives);
+    return Object.freeze({ ...finding, status: unresolved ? 'OPEN' as const : 'RESOLVED' as const });
+  }));
+}
+
+export type JuliusFindingsCompletionGate =
+  | { readonly ok: true; readonly reasonCode: 'FINDINGS_RESOLVED' }
+  | { readonly ok: false; readonly reasonCode: 'FINDINGS_UNRESOLVED'; readonly findingIds: readonly string[] };
+
+/**
+ * A RUN WITH A BLOCKING FINDING NOBODY RESOLVED DOES NOT COMPLETE.
+ *
+ * Reproduced on main 5c53cb93: a build was rejected, repaired, and re-reviewed by
+ * a reviewer that said nothing about the finding; the repair was accepted, and
+ * the run COMPLETED with the finding still ADDRESSED. The gate can only HOLD —
+ * it accepts nothing, repairs nothing and completes nothing — and it names the
+ * findings it holds for.
+ */
+export function juliusFindingsCompletionGate(input: {
+  readonly findings: readonly JuliusReviewerFinding[];
+  readonly entries: readonly JuliusPeerLedgerEntry[];
+}): JuliusFindingsCompletionGate {
+  const lives = foldJuliusFindings(input.findings, input.entries);
+  const outstanding = lives.filter((life) => juliusFindingIsOutstanding(life, lives)).map((life) => life.findingId);
+  return outstanding.length === 0
+    ? { ok: true, reasonCode: 'FINDINGS_RESOLVED' }
+    : { ok: false, reasonCode: 'FINDINGS_UNRESOLVED', findingIds: Object.freeze(outstanding) };
+}

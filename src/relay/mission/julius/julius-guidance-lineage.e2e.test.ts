@@ -138,10 +138,10 @@ describe('repaired guidance is issued against the question it answers', () => {
       ],
       coder: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       reviewer: [
-        { kind: 'succeed', evidence: PASSED_REVIEW }, // plan
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' }, // plan
         { kind: 'succeed', evidence: FAILED_REVIEW }, // guidance → repair
-        { kind: 'succeed', evidence: PASSED_REVIEW }, // repaired guidance
-        { kind: 'succeed', evidence: PASSED_REVIEW }, // build continuation
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' }, // repaired guidance
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' }, // build continuation
       ],
     });
     await drain(harness);
@@ -177,10 +177,10 @@ describe('researched guidance is issued against the question it answers', () => 
       ],
       coder: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       reviewer: [
-        { kind: 'succeed', evidence: PASSED_REVIEW },
-        { kind: 'succeed', evidence: PASSED_REVIEW },
-        { kind: 'succeed', evidence: PASSED_REVIEW },
-        { kind: 'succeed', evidence: PASSED_REVIEW },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
       ],
     });
     await drain(harness);

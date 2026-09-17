@@ -52,7 +52,7 @@ const build = (scripts: Scripts, over: { promotedWarningCategories?: readonly st
     workers: [
       { worker: ARCHITECT, script: scripts.architect ?? [{ kind: 'succeed', evidence: PLAN_EVIDENCE }] },
       { worker: CODER, script: scripts.coder ?? [{ kind: 'succeed' }] },
-      { worker: REVIEWER, script: scripts.reviewer ?? [{ kind: 'succeed', evidence: PASSED_REVIEW }] },
+      { worker: REVIEWER, script: scripts.reviewer ?? [{ kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' }] },
     ],
     card: cardPolicy({ allowedProviders: ['openai', 'anthropic', 'hermes'], capabilities: ['plan', 'implement', 'review'] }),
     verification: verificationPolicy({
@@ -108,8 +108,8 @@ describe('P8 — reviewer research waits for its answer before the verdict appli
         { kind: 'succeed', evidence: PASSED_REVIEW, researchAsks: ASKS, segmentResume: RESUME },
         // Having read the manual, it finds the plan wrong.
         { kind: 'succeed', evidence: FAILED_REVIEW },
-        { kind: 'succeed', evidence: PASSED_REVIEW },
-        { kind: 'succeed', evidence: PASSED_REVIEW },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
       ],
       architect: [{ kind: 'succeed', evidence: PLAN_EVIDENCE }, { kind: 'succeed', evidence: PLAN_EVIDENCE }],
     });
@@ -137,8 +137,8 @@ describe('P8 — reviewer research waits for its answer before the verdict appli
       reviewer: [
         { kind: 'succeed', evidence: PASSED_REVIEW, researchAsks: ASKS, segmentResume: RESUME },
         { kind: 'succeed', evidence: FAILED_REVIEW },
-        { kind: 'succeed', evidence: PASSED_REVIEW },
-        { kind: 'succeed', evidence: PASSED_REVIEW },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
       ],
       architect: [{ kind: 'succeed', evidence: PLAN_EVIDENCE }, { kind: 'succeed', evidence: PLAN_EVIDENCE }],
     });
@@ -155,9 +155,9 @@ describe('P8 — a researching review of bound work still holds the terms that w
   it('the continuation of a build review is dispatched under the locked contract of the build and decides the build', async () => {
     const harness = build({
       reviewer: [
-        { kind: 'succeed', evidence: PASSED_REVIEW },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
         { kind: 'succeed', evidence: PASSED_REVIEW, researchAsks: ASKS, segmentResume: RESUME },
-        { kind: 'succeed', evidence: PASSED_REVIEW },
+        { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' },
       ],
     });
     await drain(harness);
@@ -174,7 +174,7 @@ describe('P8 — a researching review of bound work still holds the terms that w
 
 /* ------------------------------------------------------------ the canonical verdicts */
 
-const PLAN_PASS: Step = { kind: 'succeed', evidence: PASSED_REVIEW };
+const PLAN_PASS: Step = { kind: 'succeed', evidence: PASSED_REVIEW, answerFindings: 'RESOLVED' };
 const verdict = (value: Record<string, unknown>, evidence = PASSED_REVIEW): Step => ({ kind: 'succeed', evidence, reviewVerdict: value });
 const factsOf = (harness: JuliusHarness, type: string) =>
   log(harness).filter((event) => event.type === type).map((event) => ({ taskId: event.taskId, ...event.facts } as Record<string, unknown>));

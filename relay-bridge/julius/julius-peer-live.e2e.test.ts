@@ -16,6 +16,7 @@ import {
   createJuliusMemoryStore,
   foldJuliusDisagreements,
   foldJuliusPeerRequests,
+  juliusPacketTextIn,
   scriptedAdapter,
   seedJuliusTaskContract,
   type JuliusProviderAdapter,
@@ -70,13 +71,17 @@ function seed(store: ReturnType<typeof createJuliusMemoryStore>): void {
   }]);
 }
 
-function byTask(worker: Parameters<typeof scriptedAdapter>[0], pick: (taskId: string, taskType: string | undefined) => ScriptedOutcome) {
+function byTask(
+  worker: Parameters<typeof scriptedAdapter>[0],
+  pick: (taskId: string, taskType: string | undefined) => ScriptedOutcome,
+  packets?: ReturnType<typeof juliusPacketTextIn>,
+) {
   const dispatches: string[] = [];
   const adapter: JuliusProviderAdapter = {
     adapterId: worker.adapterId,
     async dispatch(input) {
       dispatches.push(input.taskId);
-      return scriptedAdapter(worker, [pick(input.taskId, input.taskType)]).dispatch(input);
+      return scriptedAdapter(worker, [pick(input.taskId, input.taskType)], packets === undefined ? {} : { packetFor: packets }).dispatch(input);
     },
   };
   return { adapter, dispatches };
@@ -99,7 +104,7 @@ async function drive(
     if (taskType === 'review:rebuttal') return answers.reReview ?? { kind: 'succeed', evidence: PASSED_REVIEW, usdMicros: null };
     buildReviews += 1;
     return buildReview(buildReviews);
-  });
+  }, juliusPacketTextIn(memory));
   const runtime = assembleLiveJuliusRuntime({
     store: handoffs.store,
     entries: [
@@ -127,7 +132,8 @@ describe('the live composition and the peer protocol', () => {
     kind: 'succeed', evidence: PASSED_REVIEW, usdMicros: null,
     reviewVerdict: { verdict: 'CHALLENGE', category: 'missed_acceptance_criterion', target: 'work', claim: 'AC-1 is not exercised by any test.' },
   };
-  const challengeThenPass = (round: number): ScriptedOutcome => (round === 1 ? CHALLENGE : { kind: 'succeed', evidence: PASSED_REVIEW, usdMicros: null });
+  // The re-review answers, by id, the findings its packet shows it: silence is not resolution.
+  const challengeThenPass = (round: number): ScriptedOutcome => (round === 1 ? CHALLENGE : { kind: 'succeed', evidence: PASSED_REVIEW, usdMicros: null, answerFindings: 'RESOLVED' });
 
   it('the architect answers a live challenge: MAINTAINS with evidence, the reviewer re-reviews once, Julius upholds the architect', async () => {
     const { outcome, rows, memory, architect, reviewer } = await drive(challengeThenPass, {

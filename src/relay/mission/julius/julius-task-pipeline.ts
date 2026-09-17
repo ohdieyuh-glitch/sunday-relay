@@ -56,7 +56,7 @@ import { evaluateJuliusRelease } from './julius-release-runtime';
 import { REVIEW_TASK_ATTEMPTS, boundStageForRole, reviewStageOf, workStageOf, type JuliusReviewStage } from './julius-review-stage';
 import {
   juliusReviewedWorkOf, juliusSegmentLineageRootOf, juliusSegmentSubjectTaskId, juliusSegmentTaskId, juliusYieldContinuationOf, nextSegmentNumber, pendingSegmentFor,
-  routeIsBarrier, sanitizeJuliusSegmentState, segmentChildrenOf,
+  routeIsBarrier, sanitizeJuliusSegmentState, segmentChildrenOf, juliusReviewConclusionOf,
 } from './julius-segment-lineage';
 import {
   juliusEffectiveReviewVerdict, juliusEvidenceReviewVerdict, juliusReviewRoute, juliusReviewVerdictFacts,
@@ -65,7 +65,7 @@ import {
 } from './julius-review-verdict';
 import {
   foldJuliusFindings, juliusFindingTransitionFacts, moveJuliusFinding,
-  type JuliusFindingLife, type JuliusFindingMove,
+  type JuliusFindingLife, type JuliusFindingMove, juliusEffectiveFindings, juliusFindingIsOutstanding, juliusFindingIsUnresolved, juliusFindingsCompletionGate, type JuliusFindingsCompletionGate
 } from './julius-finding-lifecycle';
 import {
   juliusRepairRoundDiff, juliusRepairRoundEntryId, renderJuliusRepairRoundDiff,
@@ -292,7 +292,13 @@ export type JuliusTaskOutcome =
    * so Julius neither accepts it — which would release what depends on it — nor
    * repairs it on a disagreement nobody has resolved.
    */
-  | { readonly kind: 'HELD'; readonly taskId: string; readonly reasonCode: string; readonly requestId: string };
+  | { readonly kind: 'HELD'; readonly taskId: string; readonly reasonCode: string; readonly requestId: string }
+  /**
+   * NOT REVIEWED, AND NOT GOING TO BE BY THIS REVIEW. The reviewer paused for
+   * research and the research failed, so no verdict exists. Julius neither
+   * accepts the work nor repairs it on a review that never concluded.
+   */
+  | { readonly kind: 'UNREVIEWED'; readonly taskId: string; readonly reasonCode: 'REVIEW_RESEARCH_FAILED'; readonly reviewTaskId: string; readonly failedSegmentTaskId: string };
 
 /* ------------------------------------------------------------- the ledger */
 
@@ -810,7 +816,7 @@ export async function runClaimedTask(
     }
     const [evidence, findings, criteria, brain, runTasks] = await Promise.all([
       deps.store.evidenceForRun(run.runId, run.projectId),
-      deps.store.findingsForRun(run.runId, run.projectId),
+      effectiveFindingsOf(deps, run),
       deps.store.criteriaForRun(run.runId, run.projectId),
       deps.store.brainEntriesForRun(run.runId, run.projectId),
       // Only a repair RE-REVIEW needs to walk to its parent's parent; every
@@ -2983,7 +2989,7 @@ async function applyReviewVerdict(input: {
   const resolutions = firstApplication
     ? await applyFindingResolutions({
       deps, run, ledger, review, reviewed, declaration, tasks: input.tasks,
-      findings: await deps.store.findingsForRun(run.runId, run.projectId),
+      findings: await effectiveFindingsOf(deps, run),
       newFindingIds: reviewEvidence.filter((item) => item.type === 'REVIEW_FINDING' && item.status === 'FAILED')
         .map((item) => `finding:${item.evidenceId}`),
       workerId: input.workerId,
@@ -3411,7 +3417,7 @@ async function recordArchitecture(input: {
      */
     await deps.store.appendBrainEntry({
       runId: run.runId, projectId: run.projectId, taskId: null, workerId: input.workerId,
-      entryId: juliusArchitectureEntryId(state.revision), kind: 'DECISION',
+      entryId: juliusArchitectureEntryId(run.runId, state.revision), kind: 'DECISION',
       safeText: renderJuliusArchitecture(state), evidenceIds: [], occurredAt: deps.clock.now(),
     });
   }
@@ -3468,7 +3474,7 @@ async function acceptProposedArchitecture(input: {
     });
     await deps.store.appendBrainEntry({
       runId: run.runId, projectId: run.projectId, taskId: null, workerId: input.workerId,
-      entryId: juliusArchitectureEntryId(revision), kind: 'DECISION',
+      entryId: juliusArchitectureEntryId(run.runId, revision), kind: 'DECISION',
       safeText: renderJuliusArchitecture(state), evidenceIds: [], occurredAt: deps.clock.now(),
     });
   }
@@ -3590,7 +3596,7 @@ export async function serveArchitectureTriggers(input: {
   const ledger = new RuntimeLedger(deps, run, `architecture:${run.runId}`);
   let served = 0;
   for (const candidate of candidates) {
-    const taskId = juliusArchitectureCheckTaskId(candidate.triggerId);
+    const taskId = juliusArchitectureCheckTaskId(run.runId, candidate.triggerId);
     const capability = input.capabilityFor?.({ taskId, taskType: 'architecture', role: 'PROMPT_ARCHITECT' });
     const routable = capability === undefined || deps.router.eligibleWorkerIds({
       role: 'PROMPT_ARCHITECT', taskType: 'architecture', capability, policy: input.policy,
@@ -3611,12 +3617,21 @@ export async function serveArchitectureTriggers(input: {
         },
       })
       : false;
+    /*
+     * NOT CREATED IS NOT NECESSARILY UNSERVED. A replay after a crash between
+     * the insert and this row finds its own task already there: that trigger IS
+     * served, and saying otherwise would hand the completion gate a false fact.
+     * Only a task this run does not hold is a check that did not happen.
+     */
+    const present = created || (routable && (await deps.store.tasksForRun(run.runId, run.projectId))
+      .some((item) => item.taskId === taskId));
     await ledger.event('architecture.trigger.raised', {
       taskId: candidate.subjectTaskId, workerId: null,
       facts: {
         ...juliusArchitectureTriggerFacts(candidate),
-        served: created, servedByTaskId: created ? taskId : null,
+        served: present, servedByTaskId: present ? taskId : null,
         unroutable: !routable,
+        created,
       },
     });
     if (created) served += 1;
@@ -3625,6 +3640,90 @@ export async function serveArchitectureTriggers(input: {
 }
 
 /* --------------------------------------------------------- finding lifecycle */
+
+/**
+ * THE FINDING ROWS AS THE LEDGER SAYS THEY ARE. The only place the pipeline
+ * reads finding rows, so no decision can read a stored status the lifecycle has
+ * moved past (`juliusEffectiveFindings`).
+ */
+async function effectiveFindingsOf(deps: JuliusPipelineDependencies, run: JuliusRunRow): Promise<readonly JuliusReviewerFinding[]> {
+  return juliusEffectiveFindings(await deps.store.findingsForRun(run.runId, run.projectId), await readVerdictLedger(deps, run));
+}
+
+/** The findings a repair's review is about: on the work, its earlier rounds and its unit. */
+function chargedFindingSubjects(reviewed: JuliusTask, tasks: readonly JuliusTask[]): ReadonlySet<string> {
+  const reviewedHead = juliusSegmentLineageRootOf(reviewed, tasks);
+  return new Set([
+    reviewed.taskId,
+    reviewed.parentTaskId ?? reviewed.taskId,
+    // A repair that paused is reviewed through its last segment; the findings
+    // it answers are on the repair's own subject and lineage.
+    reviewedHead.parentTaskId ?? reviewedHead.taskId,
+    // And every task of the unit: the root, every repair round, every segment.
+    ...unitWorkTaskIds(reviewed, tasks),
+  ]);
+}
+
+/**
+ * THE WORK TASKS OF ONE UNIT — its root, every repair round and every segment of
+ * either — the tasks a finding about this unit can be recorded on.
+ */
+function unitWorkTaskIds(task: JuliusTask, tasks: readonly JuliusTask[]): ReadonlySet<string> {
+  const unit = juliusWorkUnitRootOf(task, tasks).taskId;
+  return new Set(tasks
+    .filter((item) => item.role !== 'INDEPENDENT_REVIEWER' && juliusWorkUnitRootOf(item, tasks).taskId === unit)
+    .map((item) => item.taskId));
+}
+
+/**
+ * THE CHARGED FINDINGS A RE-REVIEW LEFT UNRESOLVED, split by why — and each
+ * silence refused by name, once.
+ */
+async function chargedFindingsOf(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly review: JuliusTask;
+  readonly reviewed: JuliusTask;
+  readonly tasks: readonly JuliusTask[];
+  readonly workerId: string;
+}): Promise<{ readonly silent: readonly JuliusFindingLife[]; readonly maintained: readonly JuliusFindingLife[] }> {
+  const { deps, run } = input;
+  const rows = await readVerdictLedger(deps, run);
+  const lives = foldJuliusFindings(await deps.store.findingsForRun(run.runId, run.projectId), rows);
+  const subjects = chargedFindingSubjects(input.reviewed, input.tasks);
+  /*
+   * A finding THIS review raised is OPEN on the work it reviewed, so the evaluator
+   * already repairs over it: it can only ever fall in `maintained`, which only
+   * overrides an ACCEPT that such a finding already prevents.
+   */
+  const outstanding = lives.filter((life) => subjects.has(life.taskId) && juliusFindingIsOutstanding(life, lives));
+  const silent = outstanding.filter((life) => life.state === 'ADDRESSED');
+  for (const life of silent) {
+    const already = rows.some((row) => row.type === 'review.verdict.refused' && row.facts.reasonCode === 'review_resolution_missing'
+      && row.facts.findingId === life.findingId && row.facts.reviewTaskId === input.review.taskId);
+    if (already) continue;
+    await input.ledger.event('review.verdict.refused', {
+      taskId: input.reviewed.taskId, workerId: input.workerId,
+      facts: { reviewTaskId: input.review.taskId, reasonCode: 'review_resolution_missing', findingId: life.findingId },
+    });
+  }
+  return { silent, maintained: outstanding.filter((life) => life.state !== 'ADDRESSED') };
+}
+
+/**
+ * THE COMPLETION GATE ON FINDINGS, as the run loop asks it. Holds a run whose
+ * blocking findings the lifecycle says are unresolved; with no timeline bound
+ * the lifecycle cannot be read, and an unreadable finding is not a resolved one.
+ */
+export async function juliusFindingsGateFor(
+  deps: JuliusPipelineDependencies, run: JuliusRunRow,
+): Promise<JuliusFindingsCompletionGate> {
+  return juliusFindingsCompletionGate({
+    findings: await deps.store.findingsForRun(run.runId, run.projectId),
+    entries: await readVerdictLedger(deps, run),
+  });
+}
 
 /** Every finding in this run, with the life the ledger gives it. */
 async function findingLivesOf(
@@ -3677,13 +3776,17 @@ async function markFindingsAddressed(input: {
   // The repair itself, not the last pause of it: a paused repair finishes in a
   // continuation whose parent is the repair.
   const head = juliusSegmentLineageRootOf(input.repair, input.tasks);
-  const repaired = head.parentTaskId;
-  if (repaired === null) return;
-  // The unit, not just the round it repairs: a second round addresses the
-  // finding the first one was raised for as well as any raised since.
-  const unit = repairLineageRootOf(head, input.tasks).taskId;
+  if (head.parentTaskId === null) return;
+  /*
+   * THE UNIT, EVERY ROUND OF IT. A repair is shown every unresolved finding of
+   * the work it belongs to, so it addresses every OPEN one — the root's, and
+   * those raised on earlier rounds — not only the round it directly repairs.
+   * Before, a finding raised on round one and answered "still open" by round
+   * two's review was never addressed or shown again by round three.
+   */
+  const unit = unitWorkTaskIds(head, input.tasks);
   for (const life of await findingLivesOf(input.deps, input.run, input.findings)) {
-    if ((life.taskId !== repaired && life.taskId !== unit) || life.state !== 'OPEN') continue;
+    if (!unit.has(life.taskId) || life.state !== 'OPEN') continue;
     await moveFinding({
       ledger: input.ledger, deps: input.deps, life, move: 'REPAIR_SUCCEEDED',
       // Named by the repair, not by the pause that finished it: the finding's
@@ -3725,16 +3828,7 @@ async function applyFindingResolutions(input: {
    * against the lineage's root. Anything outside this unit is another review's
    * to end.
    */
-  const reviewedHead = juliusSegmentLineageRootOf(input.reviewed, input.tasks);
-  const subjects = new Set([
-    input.reviewed.taskId,
-    input.reviewed.parentTaskId ?? input.reviewed.taskId,
-    repairLineageRootOf(input.reviewed, input.tasks).taskId,
-    // A repair that paused is reviewed through its last segment; the findings
-    // it answers are on the repair's own subject and lineage.
-    reviewedHead.parentTaskId ?? reviewedHead.taskId,
-    repairLineageRootOf(reviewedHead, input.tasks).taskId,
-  ]);
+  const subjects = chargedFindingSubjects(input.reviewed, input.tasks);
   let applied = 0;
   let refused = 0;
   for (const resolution of input.declaration.resolutions) {
@@ -4299,14 +4393,20 @@ async function verifyExecutedTask(input: {
   duplicate: boolean;
 }): Promise<JuliusTaskOutcome> {
   const { deps, run, ledger, task } = input;
-  const [tasks, evidence, findings, criteria, decisions, reviewCompleted] = await Promise.all([
+  const [tasks, evidence, findings, criteria, decisions] = await Promise.all([
     deps.store.tasksForRun(run.runId, run.projectId),
     deps.store.evidenceForRun(run.runId, run.projectId),
-    deps.store.findingsForRun(run.runId, run.projectId),
+    effectiveFindingsOf(deps, run),
     deps.store.criteriaForRun(run.runId, run.projectId),
     deps.store.decisionsForRun(run.runId, run.projectId),
-    deps.store.reviewCompletedFor(task.taskId, run.projectId),
   ]);
+  /**
+   * WHETHER THE WORK WAS REVIEWED, read from the task rows — one rule, shared
+   * with the liveness judgement in `canStillBeAccepted`, rather than a store
+   * query that counted any reviewer child that had succeeded.
+   */
+  const review = juliusReviewConclusionOf(task, tasks);
+  const reviewCompleted = review.conclusion === 'CONCLUDED';
 
   /**
    * A REVIEW IS NOT REVIEWED, AND WITHOUT THIS THE CHAIN NEVER ENDS.
@@ -4363,6 +4463,31 @@ async function verifyExecutedTask(input: {
    * disagreed with would be sent to repair — and the argument would go round
    * again. It gets exactly one re-review, and then Julius resolves it.
    */
+  /**
+   * A REVIEW WHOSE RESEARCH FAILED NEVER CONCLUDED, AND DECIDES NOTHING.
+   *
+   * The reviewer asked Julius to read something before judging, and the
+   * continuation that would have judged with the answer failed. What it said
+   * before it looked stays on the record as history; it is not applied, the work
+   * is neither accepted nor repaired on it, nothing that depends on the work is
+   * released, and the reason is written once.
+   */
+  if (task.role !== 'INDEPENDENT_REVIEWER' && review.conclusion === 'RESEARCH_FAILED') {
+    const reviewTaskId = review.reviewTaskId!;
+    const failedSegmentTaskId = review.failedSegmentTaskId!;
+    const recorded = (await readVerdictLedger(deps, run)).some((row) => row.type === 'review.verdict.refused'
+      && row.facts.reasonCode === 'review_research_continuation_failed' && row.facts.reviewTaskId === reviewTaskId);
+    if (!recorded) {
+      await ledger.event('review.verdict.refused', {
+        taskId: task.taskId, workerId: input.workerId,
+        facts: {
+          reviewTaskId, reasonCode: 'review_research_continuation_failed', failedSegmentTaskId,
+        },
+      });
+    }
+    return { kind: 'UNREVIEWED', taskId: task.taskId, reasonCode: 'REVIEW_RESEARCH_FAILED', reviewTaskId, failedSegmentTaskId };
+  }
+
   if (task.role === 'PROMPT_ARCHITECT' && task.taskType === 'rebuttal') {
     return settleRebuttal({ ...input, tasks });
   }
@@ -4480,6 +4605,28 @@ async function verifyExecutedTask(input: {
   const ruling = await disagreementRulingFor({ deps, run, ledger, subject, evidence, workerId: input.workerId });
 
   /**
+   * WHAT A REPAIR'S RE-REVIEW WAS CHARGED WITH, AND WHAT IT LEFT UNANSWERED.
+   *
+   * The review of a repair is asked about the findings the repair exists for —
+   * recorded on the work, on earlier rounds, on the unit. Its resolutions have
+   * just been applied, so a charged finding that is still ADDRESSED is one the
+   * reviewer said nothing about. Silence is not resolution: each is refused by
+   * name, stays unresolved, and the repair is not accepted on its strength.
+   *
+   * WHICHEVER TASK THE VERIFICATION ENTERED THROUGH. A crash between the refusal
+   * and the decision is resumed by verifying the repair ITSELF, not its review;
+   * reading the charge only from the review's side let that resumed verification
+   * accept the repair over the very finding it had just refused. The charge
+   * belongs to the repair's concluded review, found from the task rows.
+   */
+  const chargingReview = reviewedTask !== null
+    ? task
+    : review.conclusion === 'CONCLUDED' ? tasks.find((item) => item.taskId === review.reviewTaskId) ?? null : null;
+  const charged = subject.taskType.startsWith('repair:') && chargingReview !== null && deps.timeline !== undefined
+    ? await chargedFindingsOf({ deps, run, ledger, review: chargingReview, reviewed: subject, tasks, workerId: input.workerId })
+    : { silent: [], maintained: [] };
+
+  /**
    * A REPAIR THAT SUCCEEDED HAS ADDRESSED THE FINDINGS IT EXISTS FOR — and that
    * is all it has done. The reviewer's re-review is the only thing that resolves
    * one; this row is what makes "someone acted" distinguishable from "it worked".
@@ -4495,7 +4642,7 @@ async function verifyExecutedTask(input: {
     // The findings the reviewer just recorded are read back, because
     // `findings` was loaded before this task ran and a decision made without
     // them would be a decision about a review that had not happened yet.
-    findings: reviewedTask === null && !ruling.recorded ? findings : await deps.store.findingsForRun(run.runId, run.projectId),
+    findings: reviewedTask === null && !ruling.recorded && charged.silent.length === 0 ? findings : await effectiveFindingsOf(deps, run),
     policy: input.request.verification,
     reviewCompleted: reviewSatisfied,
     allTasks: tasks,
@@ -4513,9 +4660,39 @@ async function verifyExecutedTask(input: {
       safeSummary: `The independent reviewer blocked this work (${applied.category ?? 'uncategorised'}); Julius halted it.`,
     }
     : ruling.halt;
+  /**
+   * A REPAIR IS NOT ACCEPTED OVER A FINDING NOBODY RESOLVED.
+   *
+   * The evaluator counts findings on the task it decides — the repair — and the
+   * findings a repair answers live on the work it repairs. So a repair whose
+   * re-review left the original finding ADDRESSED was accepted, the work counted
+   * as accepted through it, and the run completed over the open problem.
+   *   silent     the re-review never answered a charged finding: Julius will not
+   *              buy another round on a reviewer's silence, and halts with
+   *              FINDINGS_UNRESOLVED, naming them.
+   *   maintained the re-review said the problem is still there: the next repair
+   *              round is what answers it, exactly as the lifecycle designs.
+   */
+  const unresolved = halt === null && evaluated.action === 'DECIDE' && evaluated.decision.action === 'ACCEPT'
+    ? charged.silent.length > 0
+      ? {
+        action: 'HALT' as const, reasonCode: 'FINDINGS_UNRESOLVED',
+        evidenceIds: [...new Set(charged.silent.flatMap((life) => life.evidenceIds))],
+        safeSummary: `The re-review of this repair did not answer ${String(charged.silent.length)} finding(s) it was charged with (${charged.silent.map((life) => life.findingId).join(', ').slice(0, 300)}); an unanswered finding is not resolved.`,
+      }
+      : charged.maintained.length > 0
+        ? {
+          action: 'REPAIR' as const, reasonCode: 'BLOCKING_FINDINGS',
+          evidenceIds: [...new Set(charged.maintained.flatMap((life) => life.evidenceIds))],
+          safeSummary: `The re-review of this repair says ${String(charged.maintained.length)} finding(s) are still open; another round must answer them.`,
+        }
+        : null
+    : null;
   const action = halt !== null && evaluated.action === 'DECIDE'
     ? { ...evaluated, missionCompletable: false, decision: { action: 'HALT' as const, ...halt } }
-    : evaluated;
+    : unresolved !== null && evaluated.action === 'DECIDE'
+      ? { ...evaluated, missionCompletable: false, decision: unresolved }
+      : evaluated;
 
   /* ------------------------------------------------- a review is required */
   if (action.action === 'SCHEDULE_REVIEW') {
@@ -4559,11 +4736,9 @@ async function verifyExecutedTask(input: {
        * the finding the whole lineage exists to answer from the reviewer being
        * asked whether it is answered.
        */
-      const repairHead = juliusSegmentLineageRootOf(task, tasks);
-      const lineageRoot = repairLineageRootOf(repairHead, tasks).taskId;
-      const lives = (await findingLivesOf(deps, run, await deps.store.findingsForRun(run.runId, run.projectId)))
-        .filter((life) => (life.taskId === lineageRoot || life.taskId === repairHead.parentTaskId)
-          && life.state !== 'RESOLVED' && life.state !== 'SUPERSEDED');
+      const unit = unitWorkTaskIds(task, tasks);
+      const all = await findingLivesOf(deps, run, await effectiveFindingsOf(deps, run));
+      const lives = all.filter((life) => unit.has(life.taskId) && juliusFindingIsUnresolved(life, all));
       const diff = juliusRepairRoundDiff({
         repairTaskId: task.taskId,
         repairedTaskId: task.parentTaskId,
@@ -4705,7 +4880,7 @@ async function verifyExecutedTask(input: {
      * findings by construction.
      */
     const findingIds = challenging
-      ? (await deps.store.findingsForRun(run.runId, run.projectId))
+      ? (await effectiveFindingsOf(deps, run))
         .filter((finding) => finding.taskId === subject.taskId && finding.blocking && finding.status === 'OPEN')
         .map((finding) => finding.findingId)
       : [];
@@ -4884,7 +5059,7 @@ async function verifyExecutedTask(input: {
     // The repair is planned for the SUBJECT — the work — never for the review.
     return scheduleRepair({
       ...input, task: subject, decision, tasks,
-      findings: await deps.store.findingsForRun(run.runId, run.projectId),
+      findings: await effectiveFindingsOf(deps, run),
     });
   }
   if (decision.action === 'ACCEPT' || decision.action === 'COMPLETE') {
@@ -5438,17 +5613,16 @@ function repairContextFindings(
   tasks: readonly JuliusTask[],
   findings: readonly JuliusReviewerFinding[],
 ): JuliusReviewerFinding[] {
-  let subjectId: string | null = null;
-  // THE REPAIR, NOT THE PAUSE. A repair that paused continues as
-  // `segment:repair:…`, whose parent is the repair it continues; the findings
-  // are on the work that repair is FOR, one step further up.
-  if (task.taskType.startsWith('repair:')) subjectId = juliusSegmentLineageRootOf(task, tasks).parentTaskId;
-  else if (task.taskType.startsWith('review:repair:')) {
-    const repair = juliusReviewedWorkOf(task, tasks) ?? undefined;
-    subjectId = repair === undefined ? null : juliusSegmentLineageRootOf(repair, tasks).parentTaskId;
-  }
-  if (subjectId === null) return [];
-  return findings.filter((finding) => finding.taskId === subjectId && finding.blocking && finding.status === 'OPEN');
+  // THE REPAIR, NOT THE PAUSE, AND THE WHOLE UNIT. A repair that paused
+  // continues as `segment:repair:…`; its findings, and every earlier round's
+  // unresolved ones, are on the unit the repair belongs to.
+  let work: JuliusTask | null = null;
+  if (task.taskType.startsWith('repair:')) work = task;
+  else if (task.taskType.startsWith('review:repair:')) work = juliusReviewedWorkOf(task, tasks);
+  if (work === null) return [];
+  const unit = unitWorkTaskIds(work, tasks);
+  // `status` here is the lifecycle's (`juliusEffectiveFindings`): OPEN means unresolved.
+  return findings.filter((finding) => unit.has(finding.taskId) && finding.blocking && finding.status === 'OPEN');
 }
 
 /** A finding as a context entry: scoped to this task and this role, never SECRET, never the reviewer's raw body. */

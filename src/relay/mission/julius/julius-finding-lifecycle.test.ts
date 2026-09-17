@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 import {
   JULIUS_FINDING_MOVES, JULIUS_FINDING_MOVE_RESULTS, JULIUS_FINDING_STATES,
-  foldJuliusFindings, juliusFindingIsOutstanding, juliusFindingLife, juliusFindingTransitionFacts, moveJuliusFinding,
+  foldJuliusFindings, juliusEffectiveFindings, juliusFindingIsOutstanding, juliusFindingIsUnresolved, juliusFindingLife,
+  juliusFindingTransitionFacts, juliusFindingsCompletionGate, moveJuliusFinding,
   type JuliusFindingLife, type JuliusFindingMove,
 } from './julius-finding-lifecycle';
 import { JULIUS_REPAIR_ROUND_LIMITS, juliusRepairRoundDiff, renderJuliusRepairRoundDiff } from './julius-repair-round';
@@ -82,10 +85,10 @@ describe('a finding is recorded open, and only a reviewer ends it', () => {
   });
 
   it('is outstanding while it is open or merely addressed', () => {
-    expect(juliusFindingIsOutstanding(open())).toBe(true);
-    expect(juliusFindingIsOutstanding(moved(open(), 'REPAIR_SUCCEEDED'))).toBe(true);
-    expect(juliusFindingIsOutstanding(moved(moved(open(), 'REPAIR_SUCCEEDED'), 'REVIEWER_RESOLVED'))).toBe(false);
-    expect(juliusFindingIsOutstanding({ ...open(), blocking: false }), 'a warning is not outstanding work').toBe(false);
+    expect(juliusFindingIsOutstanding(open(), [])).toBe(true);
+    expect(juliusFindingIsOutstanding(moved(open(), 'REPAIR_SUCCEEDED'), [])).toBe(true);
+    expect(juliusFindingIsOutstanding(moved(moved(open(), 'REPAIR_SUCCEEDED'), 'REVIEWER_RESOLVED'), [])).toBe(false);
+    expect(juliusFindingIsOutstanding({ ...open(), blocking: false }, []), 'a warning is not outstanding work').toBe(false);
   });
 });
 
@@ -178,5 +181,59 @@ describe('the repair-round comparison is bounded and structural', () => {
       eventId: 'e', runId: 'r', projectId: 'p', type: 'finding.transitioned', taskId: null, workerId: null,
       correlationId: 'c', causationId: null, occurredAt: 't', facts: { ...facts, owner: 'o' },
     })).not.toThrow();
+  });
+});
+
+describe('the lifecycle is the one truth completion reads', () => {
+  const transition = (move: string, over: Record<string, string | null> = {}) => ({
+    type: 'finding.transitioned',
+    facts: { findingId: FINDING.findingId, move, at: 't', reviewTaskId: 'repair:build-1:1:task:review', repairTaskId: 'repair:build-1:1:task', supersededByFindingId: null, ...over },
+    taskId: 'build-1',
+  });
+  const REPLACEMENT: JuliusReviewerFinding = { ...FINDING, findingId: 'finding:evidence-2', evidenceIds: ['evidence-2'] };
+
+  it('OPEN and ADDRESSED are unresolved; RESOLVED is resolved; SUPERSEDED is resolved only when its replacement exists', () => {
+    const addressed = moved(open(), 'REPAIR_SUCCEEDED');
+    const superseded = moved(addressed, 'REVIEWER_SUPERSEDED', { supersededByFindingId: REPLACEMENT.findingId });
+    const replacement = juliusFindingLife(REPLACEMENT, 'repair:build-1:1:task:review');
+    expect(juliusFindingIsUnresolved(open(), [])).toBe(true);
+    expect(juliusFindingIsUnresolved(addressed, [])).toBe(true);
+    expect(juliusFindingIsUnresolved(moved(addressed, 'REVIEWER_RESOLVED'), [])).toBe(false);
+    expect(juliusFindingIsUnresolved(superseded, [superseded, replacement]), 'a replacement the run recorded').toBe(false);
+    expect(juliusFindingIsUnresolved(superseded, [superseded]), 'a replacement nobody recorded').toBe(true);
+    expect(juliusFindingIsOutstanding({ ...addressed, blocking: false }, []), 'a warning never holds a run').toBe(false);
+  });
+
+  it('the projection replaces the stored status with the lifecycle\'s — both directions', () => {
+    const stale = { ...FINDING, status: 'RESOLVED' as const };
+    expect(juliusEffectiveFindings([stale], []).map((row) => row.status), 'a stored RESOLVED the ledger never reached is OPEN').toEqual(['OPEN']);
+    expect(juliusEffectiveFindings([FINDING], [transition('REPAIR_SUCCEEDED')]).map((row) => row.status), 'ADDRESSED is not resolved').toEqual(['OPEN']);
+    expect(juliusEffectiveFindings([FINDING], [transition('REPAIR_SUCCEEDED'), transition('REVIEWER_RESOLVED')]).map((row) => row.status),
+      'a stored OPEN the ledger RESOLVED is RESOLVED').toEqual(['RESOLVED']);
+  });
+
+  it('the completion gate holds for an unresolved blocking finding, names it, and survives a JSON round trip', () => {
+    const entries = [transition('REPAIR_SUCCEEDED')];
+    expect(juliusFindingsCompletionGate({ findings: [FINDING], entries })).toEqual({ ok: false, reasonCode: 'FINDINGS_UNRESOLVED', findingIds: [FINDING.findingId] });
+    expect(juliusFindingsCompletionGate({ findings: JSON.parse(JSON.stringify([FINDING])), entries: JSON.parse(JSON.stringify([...entries, transition('REVIEWER_RESOLVED')])) }))
+      .toEqual({ ok: true, reasonCode: 'FINDINGS_RESOLVED' });
+    // A forged supersession pointing at nothing holds the run.
+    expect(juliusFindingsCompletionGate({ findings: [FINDING], entries: [...entries, transition('REVIEWER_SUPERSEDED', { supersededByFindingId: 'finding:nowhere' })] }).ok).toBe(false);
+    expect(juliusFindingsCompletionGate({ findings: [FINDING, REPLACEMENT], entries: [...entries, transition('REVIEWER_SUPERSEDED', { supersededByFindingId: REPLACEMENT.findingId })] }))
+      .toEqual({ ok: false, reasonCode: 'FINDINGS_UNRESOLVED', findingIds: [REPLACEMENT.findingId] });
+  });
+});
+
+describe('one source of truth, structurally', () => {
+  it('the pipeline reads finding rows only to fold them: no decision can read a stored status the lifecycle moved past', () => {
+    const source = readFileSync(join(__dirname, 'julius-task-pipeline.ts'), 'utf8');
+    const lines = source.split('\n');
+    const reads = lines.flatMap((line, index) => (line.includes('deps.store.findingsForRun(') ? [index] : []));
+    expect(reads.length, 'every raw read is accounted for below').toBe(3);
+    for (const index of reads) {
+      // Each raw read feeds the lifecycle within the same statement: the projection, the fold, or the gate.
+      const window = lines.slice(Math.max(0, index - 2), index + 2).join('\n');
+      expect(window, `line ${String(index + 1)} reads finding rows without the lifecycle`).toMatch(/juliusEffectiveFindings\(|foldJuliusFindings\(|juliusFindingsCompletionGate\(/u);
+    }
   });
 });
