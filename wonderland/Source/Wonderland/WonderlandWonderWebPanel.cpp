@@ -30,21 +30,7 @@ namespace WonderWebCanvasLook
 		if (Token == TEXT("wonder-dot-coral"))  { return WonderlandUi::Srgb(0xFF, 0x7A, 0x45); }
 		return WonderWebLook::Line(0.6f);
 	}
-
-	/** Pixel Canvas's palette: the sample creation's own colours, not Wonder Web's. */
-	inline FLinearColor PaintColour(int32 Index)
-	{
-		switch (Index)
-		{
-		case 1: return WonderlandUi::Srgb(0xFF, 0xD4, 0x00);
-		case 2: return WonderlandUi::Srgb(0x3B, 0x9E, 0xFF);
-		case 3: return WonderlandUi::Srgb(0xFF, 0x4D, 0x8D);
-		case 4: return WonderlandUi::Srgb(0x3D, 0xDC, 0x97);
-		case 5: return WonderlandUi::Srgb(0x1F, 0x1F, 0x2A);
-		default: return WonderlandUi::Srgb(0xF4, 0xF1, 0xE8);
-		}
-	}
-
+	// Pixel Canvas's palette lives in the header now: the browser's post shows the same picture (WonderlandWonderWebPanel.h).
 }
 
 /* ==================================================================== glyphs */

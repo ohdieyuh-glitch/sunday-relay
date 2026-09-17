@@ -80,7 +80,7 @@ def job():
 
         # ---- the mission, as it already runs
         console("wl.Mission.Scenario D")
-        yield 9.0
+        yield 14.0
         shot("01_mission_running", "the accepted mission sequence, untouched")
 
         # ---- Julius's surfaces: the creation, and the browser with its tabs
@@ -100,9 +100,11 @@ def job():
 
         # ---- the founder authorizes it
         click("connections", "approve")
-        yield (lambda: space("dev_social") == "CONNECTED", 12)
+        # The request is satisfied once the connection is authorized: the prompt goes, and the task stops being blocked.
+        yield (lambda: space("prompt") == "-", 15)
+        yield (lambda: space("task") == "EXECUTING", 15)
         yield 1.0
-        shot("05_connected", "dev_social=%s scope=%s" % (space("dev_social"), space("scope")))
+        shot("05_connected", "task=%s step=%s" % (space("task"), space("step")))
 
         # ---- Julius works the page: opens the profile, types the caption, publishes
         yield (lambda: web("typing") == "1" or web("posted") == "1", 25)
@@ -123,6 +125,9 @@ def job():
         yield 1.0
         shot("13_workspace_with_mission", "the mission still running behind the windows")
 
+        # A later mission beat, with the windows still up: Julius's own work and the mission at the same time.
+        yield 12.0
+        shot("13b_mission_beat_later", "the mission moved on while Wonder Web stayed up")
         RESULT["mission_still_running"] = bool(mission.is_fixture_running())
         RESULT["final_browse"] = str(browse.describe_browse())
         RESULT["final_workspace"] = str(ui.describe_wonder_web_workspace())
