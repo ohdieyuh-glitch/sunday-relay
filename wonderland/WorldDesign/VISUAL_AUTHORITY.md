@@ -1,5 +1,10 @@
 # Wonderland visual authority
 
+**World canon (founder directive, 2026-09-17): Wonderland holds three nations -- ICARUS (white), NOCTIS (black) and
+TARTARUS (red) -- around a neutral Golden Arrival. See `CANON/NATIONS.md`; ask `nations.py` which nation a point is
+in. The boards below stay the visual authority for Golden Arrival and for Wonderland's overall style; each nation's
+own palette is in the canon.**
+
 **Current visual authority (founder ruling, 2026-09-13): the GPT Wonderland Bible reference boards.**
 Every visual pass is judged as CURRENT WONDERLAND vs. THE BIBLE BOARDS. Do not tune the world toward
 the Marble image, do not treat its composition as canon, do not use it as a grading target, and do not
