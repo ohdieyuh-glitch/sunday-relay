@@ -1,0 +1,71 @@
+{
+ "name": "zzAW00_ppv_ao",
+ "started": "2026-09-17 07:03:58",
+ "status": "done",
+ "ppv": [
+  {
+   "label": "V2_PostProcess",
+   "unbound": true,
+   "ambient_occlusion_intensity": [
+    "0.5",
+    false
+   ],
+   "ambient_occlusion_radius": [
+    "200.0",
+    false
+   ],
+   "ambient_occlusion_static_fraction": [
+    "1.0",
+    false
+   ],
+   "ambient_occlusion_power": [
+    "2.0",
+    false
+   ],
+   "ambient_occlusion_quality": [
+    "50.0",
+    false
+   ],
+   "ambient_occlusion_fade_out_distance": "n/a",
+   "lumen_scene_lighting_quality": [
+    "1.0",
+    false
+   ],
+   "lumen_final_gather_quality": [
+    "2.0",
+    true
+   ],
+   "lumen_scene_detail": [
+    "2.0",
+    true
+   ],
+   "lumen_scene_view_distance": [
+    "20000.0",
+    false
+   ],
+   "lumen_diffuse_color_boost": [
+    "1.0",
+    false
+   ],
+   "lumen_skylight_leaking": [
+    "0.0",
+    true
+   ],
+   "indirect_lighting_intensity": [
+    "1.0",
+    false
+   ],
+   "lumen_reflection_quality": [
+    "2.0",
+    true
+   ],
+   "dynamic_global_illumination_method": [
+    "<DynamicGlobalIlluminationMethod.LUMEN: 1>",
+    false
+   ]
+  }
+ ],
+ "finished": "2026-09-17 07:03:58",
+ "seconds": 0.06,
+ "log": ""
+}

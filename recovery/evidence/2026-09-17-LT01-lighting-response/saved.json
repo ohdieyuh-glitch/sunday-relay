@@ -1,0 +1,19 @@
+{
+ "name": "zzAX70_look03_save",
+ "started": "2026-09-17 07:09:34",
+ "status": "done",
+ "fills": {
+  "V2_GroundBounce": 2000.0,
+  "V2_CanopyFill": 4500.0,
+  "V2_CanopyFill2": 4500.0,
+  "V2_SkyLight": 2.25
+ },
+ "dirty_maps_before": [
+  "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2"
+ ],
+ "saved_level": true,
+ "dirty_maps_after": [],
+ "finished": "2026-09-17 07:09:38",
+ "seconds": 4.42,
+ "log": ""
+}

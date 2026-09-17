@@ -1,0 +1,40 @@
+{
+ "look": "LOOK03",
+ "title": "Form-revealing fill: the unshadowed fills halved so wall bases, recesses and carved pieces keep their shade",
+ "why": "Material-realism phase (2026-09-17), lighting response. On top of the 70,000 lux sun, LOOK02 left ~21,000 lux of UNSHADOWED directional fill (ground bounce 3,000 + two low canopy fills 9,000 each) that lit every recess, wall base and carved edge evenly, flattening the depth Lumen GI would otherwise give. Two variants at 8 identical cameras (evidence 2026-09-17-LT01): halving (kept) gives pedestals, facades and window recesses light-to-shade form while staying bright; cutting to ~6,500 lux total with a brighter sky light turned the hero pocket clock's shaded dial near-black and the street shade gloomy blue.",
+ "lights": {
+  "V2_GroundBounce": {
+   "before": {
+    "intensity": 3000.0
+   },
+   "after": {
+    "intensity": 2000.0
+   }
+  },
+  "V2_CanopyFill": {
+   "before": {
+    "intensity": 9000.0
+   },
+   "after": {
+    "intensity": 4500.0
+   }
+  },
+  "V2_CanopyFill2": {
+   "before": {
+    "intensity": 9000.0
+   },
+   "after": {
+    "intensity": 4500.0
+   }
+  },
+  "V2_SkyLight": {
+   "before": {
+    "intensity": 2.25
+   },
+   "after": {
+    "intensity": 2.25
+   },
+   "component": "SkyLightComponent"
+  }
+ }
+}
