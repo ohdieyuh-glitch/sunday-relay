@@ -401,10 +401,28 @@ FVector AWonderlandCompanionEmbodiment::DesiredLocation(const APawn* Pawn) const
 		// follows, across the beam to the right.
 		const FVector Along = (ContractAt - Pawn->GetActorLocation()).GetSafeNormal2D();
 		const FVector Right(-Along.Y, Along.X, 0.0);
-		return Pawn->GetActorLocation()
-			+ Along * 30.0
-			+ Right * (bFlankRight ? 250.0 : -250.0)
-			+ FVector(0.0, 0.0, HoverHeightUU * 0.5);
+		const double Side = bFlankRight ? 1.0 : -1.0;
+		// NOR BETWEEN THE VIEWER AND THE DOG (editor 72, 2026-09-17). The mission camera watches verification from
+		// the side, and from there the flank straight out beside the Dog put the LLM Companion squarely in front of
+		// it, covering its legs. So there are two places on this companion's own side of the beam -- straight out
+		// beside the Dog, or back and out, away from the Contract -- and it takes whichever is further off the line
+		// through the Dog to the camera, in front or behind. Both keep it on its own side, so neither crosses the beam;
+		// with the camera behind the Dog, as the play camera stands, it is still straight out to the side.
+		const FVector Beside = Along * 30.0 + Right * (Side * 250.0);
+		const FVector BackAndOut = -Along * 200.0 + Right * (Side * 170.0);
+		FVector Offset = Beside;
+		const APlayerController* Viewer = FollowController.Get();
+		if (Viewer != nullptr && Viewer->PlayerCameraManager != nullptr)
+		{
+			const FVector ToViewer = (Viewer->PlayerCameraManager->GetCameraLocation() - Pawn->GetActorLocation()).GetSafeNormal2D();
+			const double OnLineBeside = FMath::Abs(FVector::DotProduct(Beside.GetSafeNormal2D(), ToViewer));
+			const double OnLineBack = FMath::Abs(FVector::DotProduct(BackAndOut.GetSafeNormal2D(), ToViewer));
+			if (!ToViewer.IsNearlyZero() && OnLineBack + 0.05 < OnLineBeside)
+			{
+				Offset = BackAndOut;
+			}
+		}
+		return Pawn->GetActorLocation() + Offset + FVector(0.0, 0.0, HoverHeightUU * 0.5);
 	}
 
 	float Radius = 0.0f;
