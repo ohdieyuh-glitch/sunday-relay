@@ -25,6 +25,8 @@
     "relay:build": "esbuild src/relay/cli/main.ts --bundle --platform=node --format=cjs --outfile=dist-relay/cli.cjs --banner:js=\"#!/usr/bin/env node\" --log-level=warning",
     "relay:bridge:build": "esbuild relay-bridge/server.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/server.cjs --external:@anthropic-ai/claude-agent-sdk --log-level=warning",
     "relay:bridge": "npm run relay:bridge:build --silent && node dist-relay-bridge/server.cjs",
+    "julius-connect:dev:build": "esbuild relay-bridge/julius-connect/dev-server.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-connect-dev.cjs --log-level=warning",
+    "julius-connect:dev": "npm run julius-connect:dev:build --silent && node dist-relay-bridge/julius-connect-dev.cjs",
     "relay:julius:build": "esbuild relay-bridge/julius-live-mission.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-live-mission.cjs --external:@anthropic-ai/claude-agent-sdk --external:pg --log-level=warning",
     "relay:julius:mission": "npm run relay:julius:build --silent && node dist-relay-bridge/julius-live-mission.cjs",
     "relay:julius:preflight:build": "esbuild scripts/julius-live-preflight.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-live-preflight.cjs --external:pg --log-level=warning",
