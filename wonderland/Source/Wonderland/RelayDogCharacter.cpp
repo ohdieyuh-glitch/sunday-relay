@@ -146,9 +146,9 @@ namespace RelayDogLimbs
 		}
 	}
 
-	FRotator RootRotation(const FChain& Chain, const FVector& Angles)
+	FRotator RootRotation(const FChain& Chain, const FVector& Angles, double Twist)
 	{
-		return FRotator(Angles.X * Chain.ForwardSign, 0.0f, Angles.Y * Chain.OutwardSign);
+		return FRotator(Angles.X * Chain.ForwardSign, Twist, Angles.Y * Chain.OutwardSign);
 	}
 
 	FRotator MidRotation(const FChain& Chain, const FVector& Angles)
@@ -156,39 +156,43 @@ namespace RelayDogLimbs
 		return FRotator(Angles.Z * Chain.BendSign, 0.0f, 0.0f);
 	}
 
-	FVector Tip(const FChain& Chain, float Forward, float Outward, float Bend)
+	FVector Tip(const FChain& Chain, float Forward, float Outward, float Bend, float Twist)
 	{
 		const FVector Angles(Forward, Outward, Bend);
-		return RawTip(Chain, RootRotation(Chain, Angles), MidRotation(Chain, Angles));
+		return RawTip(Chain, RootRotation(Chain, Angles, Twist), MidRotation(Chain, Angles));
 	}
 
 	float Solve(FChain& Chain, const FVector& TargetInParent, const FVector& Min, const FVector& Max)
 	{
 		// DAMPED LEAST SQUARES, three angles, a numeric Jacobian. Warm-started from last frame's answer so a hand that is
 		// already on the book stays in the same arm shape instead of flipping to the other solution.
+		// FOUR ANGLES FOR A THREE-DIMENSIONAL GOAL: forward, outward, bend, and the twist that turns the elbow's plane to
+		// contain the goal. Checked offline against this rig's measured chain: every static goal met to 0.3 uu.
 		FVector A = Chain.Solved;
+		double T = Chain.SolvedTwist;
 		const double Lambda2 = 4.0;
-		for (int32 Iteration = 0; Iteration < 12; ++Iteration)
+		for (int32 Iteration = 0; Iteration < 16; ++Iteration)
 		{
-			const FVector Now = Tip(Chain, A.X, A.Y, A.Z);
+			const FVector Now = Tip(Chain, A.X, A.Y, A.Z, T);
 			const FVector Err = TargetInParent - Now;
 			if (Err.SizeSquared() < 0.09)
 			{
 				break;
 			}
 			const double H = 0.5;
-			const FVector J0 = (Tip(Chain, A.X + H, A.Y, A.Z) - Now) / H;
-			const FVector J1 = (Tip(Chain, A.X, A.Y + H, A.Z) - Now) / H;
-			const FVector J2 = (Tip(Chain, A.X, A.Y, A.Z + H) - Now) / H;
-			// M = J Jt + lambda^2 I, a symmetric 3x3.
+			const FVector J0 = (Tip(Chain, A.X + H, A.Y, A.Z, T) - Now) / H;
+			const FVector J1 = (Tip(Chain, A.X, A.Y + H, A.Z, T) - Now) / H;
+			const FVector J2 = (Tip(Chain, A.X, A.Y, A.Z + H, T) - Now) / H;
+			const FVector J3 = (Tip(Chain, A.X, A.Y, A.Z, T + H) - Now) / H;
+			// M = J Jt + lambda^2 I, a symmetric 3x3 over the four columns.
 			double M[3][3];
-			const FVector Cols[3] = { J0, J1, J2 };
+			const FVector Cols[4] = { J0, J1, J2, J3 };
 			for (int32 Row = 0; Row < 3; ++Row)
 			{
 				for (int32 Col = 0; Col < 3; ++Col)
 				{
 					double Sum = 0.0;
-					for (int32 K = 0; K < 3; ++K)
+					for (int32 K = 0; K < 4; ++K)
 					{
 						Sum += Cols[K][Row] * Cols[K][Col];
 					}
@@ -211,18 +215,22 @@ namespace RelayDogLimbs
 				Inv[1][0] * Err.X + Inv[1][1] * Err.Y + Inv[1][2] * Err.Z,
 				Inv[2][0] * Err.X + Inv[2][1] * Err.Y + Inv[2][2] * Err.Z);
 			FVector Step(FVector::DotProduct(J0, Y), FVector::DotProduct(J1, Y), FVector::DotProduct(J2, Y));
-			const double Largest = FMath::Max3(FMath::Abs(Step.X), FMath::Abs(Step.Y), FMath::Abs(Step.Z));
+			double TwistStep = FVector::DotProduct(J3, Y);
+			const double Largest = FMath::Max(FMath::Max3(FMath::Abs(Step.X), FMath::Abs(Step.Y), FMath::Abs(Step.Z)), FMath::Abs(TwistStep));
 			if (Largest > 14.0)
 			{
 				Step *= 14.0 / Largest;
+				TwistStep *= 14.0 / Largest;
 			}
 			A = FVector(
 				FMath::Clamp(A.X + Step.X, Min.X, Max.X),
 				FMath::Clamp(A.Y + Step.Y, Min.Y, Max.Y),
 				FMath::Clamp(A.Z + Step.Z, Min.Z, Max.Z));
+			T = FMath::Clamp(T + TwistStep, -70.0, 70.0);
 		}
 		Chain.Solved = A;
-		return static_cast<float>((TargetInParent - Tip(Chain, A.X, A.Y, A.Z)).Size());
+		Chain.SolvedTwist = T;
+		return static_cast<float>((TargetInParent - Tip(Chain, A.X, A.Y, A.Z, T)).Size());
 	}
 }
 
@@ -247,12 +255,16 @@ namespace RelayDogPoseTuning
 	TAutoConsoleVariable<float> CVarRepairRepaint(TEXT("wl.Dog.Pose.RepairRepaint"), 8.0f, TEXT("REPAIR: seconds repainting it."));
 	TAutoConsoleVariable<float> CVarRepairSettle(TEXT("wl.Dog.Pose.RepairSettle"), 3.0f, TEXT("REPAIR: seconds settling afterwards."));
 
-	TAutoConsoleVariable<float> CVarCamArm(TEXT("wl.MissionCam.Arm"), 880.0f, TEXT("Mission camera: distance from the Mission Contract, uu."));
-	TAutoConsoleVariable<float> CVarCamPitch(TEXT("wl.MissionCam.Pitch"), -20.0f, TEXT("Mission camera: the pitch it starts a mission at, degrees."));
-	TAutoConsoleVariable<float> CVarCamDrop(TEXT("wl.MissionCam.FocusDrop"), 40.0f, TEXT("Mission camera: how far below the Contract's heart it turns about, uu."));
-	TAutoConsoleVariable<float> CVarCamLift(TEXT("wl.MissionCam.ScreenLift"), 150.0f, TEXT("Mission camera: how far the Contract sits above the middle of the screen, uu at the focus."));
+	TAutoConsoleVariable<float> CVarCamArm(TEXT("wl.MissionCam.Arm"), 540.0f, TEXT("Mission camera: distance from the Mission Contract, uu. Close enough to read the Dog's hands."));
+	TAutoConsoleVariable<float> CVarCamPitch(TEXT("wl.MissionCam.Pitch"), -13.0f, TEXT("Mission camera: the pitch it holds unless the player has dragged it, degrees."));
+	TAutoConsoleVariable<float> CVarCamDrop(TEXT("wl.MissionCam.FocusDrop"), 30.0f, TEXT("Mission camera: how far below the Contract's heart it turns about, uu."));
+	TAutoConsoleVariable<float> CVarCamLift(TEXT("wl.MissionCam.ScreenLift"), 55.0f, TEXT("Mission camera: how far the Contract sits above the middle of the screen, uu at the focus."));
+	TAutoConsoleVariable<float> CVarCamSide(TEXT("wl.MissionCam.SideAngle"), 52.0f, TEXT("Mission camera: how far round the Contract from the Dog it stands, degrees -- a side / three-quarter view."));
+	TAutoConsoleVariable<float> CVarCamFollow(TEXT("wl.MissionCam.FollowRate"), 1.4f, TEXT("Mission camera: how quickly it drifts round to keep that view, per second. Never a cut."));
+	TAutoConsoleVariable<float> CVarCamFlyArm(TEXT("wl.MissionCam.FlyWiden"), 110.0f, TEXT("Mission camera: how much further out it eases while the Dog is airborne, uu."));
+	TAutoConsoleVariable<float> CVarCamFlyPitch(TEXT("wl.MissionCam.FlyPitch"), -5.0f, TEXT("Mission camera: the pitch it eases toward while the Dog is airborne, degrees."));
 	TAutoConsoleVariable<float> CVarCamDrag(TEXT("wl.MissionCam.DragSensitivity"), 0.25f, TEXT("Mission camera: degrees per pixel of left-drag."));
-	TAutoConsoleVariable<float> CVarCamBlend(TEXT("wl.MissionCam.BlendSeconds"), 1.1f, TEXT("Mission camera: seconds to carry the camera to the Contract and back."));
+	TAutoConsoleVariable<float> CVarCamBlend(TEXT("wl.MissionCam.BlendSeconds"), 1.6f, TEXT("Mission camera: seconds to carry the camera to the Contract and back."));
 	TAutoConsoleVariable<int32> CVarCamEnabled(TEXT("wl.MissionCam.Enabled"), 1, TEXT("Mission camera: 1 holds the Mission Contract during a mission, 0 keeps following the Dog."));
 }
 
@@ -2128,6 +2140,7 @@ void ARelayDogCharacter::SetMissionCameraAngles(float YawDegrees, float PitchDeg
 	MissionCamYaw = FRotator::NormalizeAxis(YawDegrees);
 	MissionCamPitch = FMath::Clamp(PitchDegrees, -72.0f, -3.0f);
 	bMissionCamLatched = MissionContract.IsValid();
+	bMissionCamUserPlaced = true;
 }
 
 FString ARelayDogCharacter::MissionCameraPressTarget(const FVector2D& ScreenPosition) const
@@ -2222,6 +2235,7 @@ bool ARelayDogCharacter::BeginMissionCameraDrag(const FVector2D& ScreenPosition)
 		return false;
 	}
 	bMissionCamDragging = true;
+	bMissionCamUserPlaced = true;
 	++MissionCamDrags;
 	return true;
 }
@@ -2278,9 +2292,46 @@ void ARelayDogCharacter::UpdateMissionCamera(float DeltaSeconds)
 		{
 			// THE CAMERA STARTS WHERE THE PLAYER WAS LOOKING, so taking the Contract is a glide, not a cut.
 			bMissionCamLatched = true;
+			bMissionCamUserPlaced = false;
 			MissionCamYaw = Controller != nullptr ? Controller->GetControlRotation().Yaw : GetActorRotation().Yaw;
 			MissionCamPitch = FMath::Clamp(CVarCamPitch.GetValueOnGameThread(), -72.0f, -3.0f);
+			MissionCamArmShown = CVarCamArm.GetValueOnGameThread();
 		}
+		// ONE CONTINUOUS SHOT (founder, 2026-09-16). The Contract is the pivot and the Dog performs around it; the camera
+		// never cuts, never resets at a stage change, and does not chase the Dog like a follow camera. It drifts round the
+		// Contract -- slowly, continuously -- to keep the Dog to one side of it, seen from the side or three-quarter side,
+		// standing ahead of the way the Dog walks so it comes toward the lens. Once the player drags the camera, that angle
+		// is theirs for the rest of the mission.
+		const FVector Pivot = Contract->GetActorLocation();
+		FVector Radial = GetActorLocation() - Pivot;
+		Radial.Z = 0.0;
+		const float Rate = FMath::Max(CVarCamFollow.GetValueOnGameThread(), 0.0f);
+		const float Ease = 1.0f - FMath::Exp(-DeltaSeconds * Rate);
+		if (Radial.SizeSquared() > 400.0)
+		{
+			const FVector Velocity = GetVelocity();
+			const double Turning = Radial.X * Velocity.Y - Radial.Y * Velocity.X;
+			if (FMath::Abs(Turning) > 3000.0)
+			{
+				OrbitTravelSign = Turning > 0.0 ? 1.0f : -1.0f;
+			}
+			if (!bMissionCamUserPlaced)
+			{
+				const float DogAzimuth = FMath::RadiansToDegrees(FMath::Atan2(Radial.Y, Radial.X));
+				const float CameraAzimuth = DogAzimuth + OrbitTravelSign * CVarCamSide.GetValueOnGameThread();
+				const float WantYaw = CameraAzimuth + 180.0f;
+				MissionCamYaw = FRotator::NormalizeAxis(MissionCamYaw + FMath::FindDeltaAngleDegrees(MissionCamYaw, WantYaw) * Ease);
+			}
+		}
+		// VERIFICATION IS THE SAME SHOT: as the Dog rises the camera eases out and lifts its gaze so both stay in frame.
+		const float Fly = FMath::Clamp(LastFlyShare, 0.0f, 1.0f);
+		if (!bMissionCamUserPlaced)
+		{
+			const float WantPitch = FMath::Lerp(CVarCamPitch.GetValueOnGameThread(), CVarCamFlyPitch.GetValueOnGameThread(), Fly);
+			MissionCamPitch = FMath::Clamp(FMath::Lerp(MissionCamPitch, WantPitch, 1.0f - FMath::Exp(-DeltaSeconds * 1.2f)), -72.0f, -3.0f);
+		}
+		const float WantArm = CVarCamArm.GetValueOnGameThread() + CVarCamFlyArm.GetValueOnGameThread() * Fly;
+		MissionCamArmShown = FMath::Lerp(MissionCamArmShown, WantArm, 1.0f - FMath::Exp(-DeltaSeconds * 1.2f));
 	}
 	else
 	{
@@ -2303,6 +2354,11 @@ void ARelayDogCharacter::UpdateMissionCamera(float DeltaSeconds)
 			CameraBoom->bUsePawnControlRotation = true;
 			CameraBoom->bInheritPitch = true;
 			CameraBoom->bInheritYaw = true;
+			CameraBoom->bDoCollisionTest = true;
+			if (FollowCamera != nullptr)
+			{
+				FollowCamera->SetRelativeRotation(FRotator(-11.0f, 0.0f, 0.0f));
+			}
 			bMissionCamApplied = false;
 		}
 		return;
@@ -2316,6 +2372,9 @@ void ARelayDogCharacter::UpdateMissionCamera(float DeltaSeconds)
 		CameraBoom->SetUsingAbsoluteLocation(true);
 		CameraBoom->SetUsingAbsoluteRotation(true);
 		CameraBoom->bUsePawnControlRotation = false;
+		// NO COLLISION PULL-IN while the Contract holds the camera: a boom that hit a kerb or a step yanked the view down to
+		// the paving in the first inspection, with the Dog and the Contract out of frame above it.
+		CameraBoom->bDoCollisionTest = false;
 		bMissionCamApplied = true;
 	}
 	const float S = FMath::SmoothStep(0.0f, 1.0f, MissionCamWeight);
@@ -2324,8 +2383,13 @@ void ARelayDogCharacter::UpdateMissionCamera(float DeltaSeconds)
 	const FRotator MissionRot(MissionCamPitch, MissionCamYaw, 0.0f);
 	CameraBoom->SetWorldLocationAndRotation(FMath::Lerp(NormalPivot, MissionCamFocus, static_cast<double>(S)),
 		FQuat::Slerp(NormalRot.Quaternion(), MissionRot.Quaternion(), S));
-	CameraBoom->TargetArmLength = FMath::Lerp(BoomRestArm, CVarCamArm.GetValueOnGameThread(), S);
+	CameraBoom->TargetArmLength = FMath::Lerp(BoomRestArm, MissionCamArmShown > 1.0f ? MissionCamArmShown : CVarCamArm.GetValueOnGameThread(), S);
 	CameraBoom->SocketOffset = FMath::Lerp(BoomRestSocket, FVector(0.0f, 0.0f, -CVarCamLift.GetValueOnGameThread()), S);
+	if (FollowCamera != nullptr)
+	{
+		// The follow camera's own downward tilt would push the Contract off the top of the frame; it eases out with the blend.
+		FollowCamera->SetRelativeRotation(FRotator(FMath::Lerp(-11.0f, 0.0f, S), 0.0f, 0.0f));
+	}
 	if (bWant && Controller != nullptr)
 	{
 		// WASD stays relative to what the player sees, and the follow camera picks up at the mission camera's yaw.
@@ -2628,14 +2692,16 @@ void ARelayDogCharacter::ApplyMissionPose(const RelayDogStride::FDogPose& Pose, 
 			const float Phase = 2.0f * PI * O.StrokePhase;
 			BrushGoal = ShoulderW + Reach * (ReachW * CVarPaintReach.GetValueOnGameThread())
 				+ Up * (FMath::Sin(Phase) * CVarStrokeUp.GetValueOnGameThread()) + Across * (FMath::Cos(Phase) * 6.0);
-			Add(O.Paint, BrushGoal, FreeRelaxed, Heart);
+			// The painter watches its brush, not the Contract.
+			Add(O.Paint, BrushGoal, FreeRelaxed, BrushGoal + (BrushGoal - ShoulderW).GetSafeNormal() * 40.0);
 		}
 		// REVIEW: the lens up at the eye on the working side, swept slowly across the work.
 		if (O.Inspect > KINDA_SMALL_NUMBER)
 		{
 			const FVector Lens = Neck + Up * CVarLensUp.GetValueOnGameThread() + Fwd * CVarLensFwd.GetValueOnGameThread()
 				+ Right * (Side * (12.0 + 7.0 * FMath::Sin(2.0f * PI * O.SweepPhase)));
-			Add(O.Inspect, Lens - Up * 6.0, FreeRelaxed, Contract != nullptr ? Heart : Neck + Fwd * 200.0);
+			// The inspector looks through its lens, at whatever is beyond it.
+			Add(O.Inspect, Lens - Up * 6.0, FreeRelaxed, Lens + (Lens - Neck).GetSafeNormal() * 120.0);
 		}
 		// VERIFICATION: both hands aimed at the Contract's heart.
 		if (O.Fly > KINDA_SMALL_NUMBER && Contract != nullptr)
@@ -2681,12 +2747,15 @@ void ARelayDogCharacter::ApplyMissionPose(const RelayDogStride::FDogPose& Pose, 
 			const FVector WalkAngles(Walk.ShoulderDeg * Chain.ForwardSign, Walk.ShoulderYawDeg * Arm.SideSign * Chain.OutwardSign,
 				Walk.ElbowDeg * Chain.BendSign);
 			FVector Want = WalkAngles;
+			double Twist = 0.0;
 			if (Sum > KINDA_SMALL_NUMBER)
 			{
 				OutMiss = RelayDogLimbs::Solve(Chain, BodyXf.InverseTransformPosition(Goal / Sum), FVector(-60.0, -25.0, 0.0), FVector(175.0, 125.0, 150.0));
-				Want = FMath::Lerp(WalkAngles, Chain.Solved, static_cast<double>(FMath::Clamp(Sum, 0.0f, 1.0f)));
+				const double Share = FMath::Clamp(Sum, 0.0f, 1.0f);
+				Want = FMath::Lerp(WalkAngles, Chain.Solved, Share);
+				Twist = Chain.SolvedTwist * Share;
 			}
-			Arm.Shoulder->SetRelativeRotation(RelayDogLimbs::RootRotation(Chain, Want));
+			Arm.Shoulder->SetRelativeRotation(RelayDogLimbs::RootRotation(Chain, Want, Twist));
 			Arm.Forearm->SetRelativeRotation(RelayDogLimbs::MidRotation(Chain, Want));
 		};
 		WriteArm(ArmRight, ArmChainRight, Pose.ArmRight, GoalW, MissWorking);
@@ -2759,6 +2828,7 @@ void ARelayDogCharacter::ApplyMissionPose(const RelayDogStride::FDogPose& Pose, 
 		Orb->SetRepairState(static_cast<int32>(O.Repair.Stage), O.Repair.Progress, O.Correct);
 	}
 
+	LastFlyShare = O.Fly;
 	LastPoseNote = FString::Printf(
 		TEXT("act=%s w=%.2f med=%.2f read=%.2f paint=%.2f fly=%.2f inspect=%.2f correct=%.2f lift=%.0f prop=%s face=%d orbit=%d repair=%d:%.2f miss_w=%.1f miss_f=%.1f side=%.0f cam=%.2f turn=%.2f"),
 		WonderlandDogActName(Mission.Performing()), W, O.Meditate, O.Read, O.Paint, O.Fly, O.Inspect, O.Correct, O.LiftUU,

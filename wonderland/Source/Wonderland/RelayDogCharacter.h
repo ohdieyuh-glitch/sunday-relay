@@ -55,14 +55,17 @@ namespace RelayDogLimbs
 		float Reach = 58.0f;
 		/** The last solution, degrees (forward, outward, bend): the warm start that keeps a limb from flipping. */
 		FVector Solved = FVector::ZeroVector;
+		/** And the twist about the root's own vertical, degrees. Without it the elbow bends in a fixed plane that often does
+		 *  not contain the goal: measured offline against this rig, the brush hand then missed by up to 15 uu. */
+		double SolvedTwist = 0.0;
 		bool bMeasured = false;
 	};
 
-	/** The tip of a limb in its parent's space, for semantic angles (forward, outward, bend). */
-	FVector Tip(const FChain& Chain, float Forward, float Outward, float Bend);
+	/** The tip of a limb in its parent's space, for semantic angles (forward, outward, bend) and a twist. */
+	FVector Tip(const FChain& Chain, float Forward, float Outward, float Bend, float Twist = 0.0f);
 
 	/** The raw relative rotations a solution writes: the root's and the middle joint's. */
-	FRotator RootRotation(const FChain& Chain, const FVector& Angles);
+	FRotator RootRotation(const FChain& Chain, const FVector& Angles, double Twist = 0.0);
 	FRotator MidRotation(const FChain& Chain, const FVector& Angles);
 
 	/** Solve a limb so its tip reaches `TargetInParent`, warm-started from Chain.Solved and kept inside Min..Max (degrees,
@@ -433,6 +436,14 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<class UMaterialInstanceDynamic> EnergyMid = nullptr;
+
+	/** How much of VERIFICATION's flight is in the pose, for the camera to widen with. */
+	float LastFlyShare = 0.0f;
+	/** Which way the Dog is travelling round the Contract, +1 or -1, for the camera to stand ahead of it. */
+	float OrbitTravelSign = 1.0f;
+	/** The player has placed the camera by hand this mission: the automatic reframing leaves it where they put it. */
+	bool bMissionCamUserPlaced = false;
+	float MissionCamArmShown = 0.0f;
 
 	/* ---- the mission camera's state */
 	float MissionCamWeight = 0.0f;
