@@ -1,0 +1,64 @@
+{
+ "name": "zzDH95_tg01_perf",
+ "started": "2026-09-17 15:15:26",
+ "status": "done",
+ "rounds": [
+  {
+   "pass_actors": 66,
+   "warm": {
+    "SW_StreetGate46": 56.51,
+    "SW_PlazaHero41": 76.93,
+    "MushroomGroveCam14": 65.86,
+    "HamletCam17": 68.19
+   },
+   "on": {
+    "SW_StreetGate46": 68.08,
+    "SW_PlazaHero41": 79.82,
+    "MushroomGroveCam14": 71.99,
+    "HamletCam17": 71.39
+   },
+   "off": {
+    "SW_StreetGate46": 73.5,
+    "SW_PlazaHero41": 80.96,
+    "MushroomGroveCam14": 71.26,
+    "HamletCam17": 77.65
+   },
+   "off_again": {
+    "SW_StreetGate46": 78.15,
+    "SW_PlazaHero41": 86.35,
+    "MushroomGroveCam14": 71.97,
+    "HamletCam17": 79.82
+   }
+  },
+  {
+   "pass_actors": 66,
+   "warm": {
+    "SW_StreetGate46": 57.06,
+    "SW_PlazaHero41": 71.69,
+    "MushroomGroveCam14": 56.75,
+    "HamletCam17": 52.52
+   },
+   "on": {
+    "SW_StreetGate46": 56.23,
+    "SW_PlazaHero41": 78.14,
+    "MushroomGroveCam14": 55.65,
+    "HamletCam17": 52.35
+   },
+   "off": {
+    "SW_StreetGate46": 56.97,
+    "SW_PlazaHero41": 76.84,
+    "MushroomGroveCam14": 54.21,
+    "HamletCam17": 49.88
+   },
+   "off_again": {
+    "SW_StreetGate46": 56.23,
+    "SW_PlazaHero41": 77.73,
+    "MushroomGroveCam14": 69.68,
+    "HamletCam17": 66.67
+   }
+  }
+ ],
+ "finished": "2026-09-17 15:20:50",
+ "seconds": 323.17,
+ "log": ""
+}
