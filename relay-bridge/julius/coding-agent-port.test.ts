@@ -303,7 +303,7 @@ describe('C5 — swap the provider, keep the semantics', () => {
       reportedTools: ['Read', 'Edit'], toolTargets: [], toolsUsed: ['Edit'], toolInvocations: 4, permissionDenials: 0, numTurns: 3, durationMs: 1,
       usage: { inputTokens: 500, outputTokens: 200, totalCostUsd: 0.02, source: 'runtime_reported' },
       streamUsage: { messages: 3, abortedMessages: 0, inputTokens: 480, outputTokens: 190, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
-      resultSubtype: 'success', isError: false, finalText: 'Implemented the slug.', thinkingBlocksOmitted: 0, unknownMessageCount: 0,
+      resultSubtype: 'success', isError: false, terminalReason: null, finalText: 'Implemented the slug.', thinkingBlocksOmitted: 0, unknownMessageCount: 0,
     },
     envelope: compileHostedEnvelope({ workspacePath: input.workspacePath }), startedAt: 't', completedAt: 't',
   }) as never;

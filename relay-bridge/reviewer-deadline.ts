@@ -103,7 +103,8 @@ export const RECORDED_REVIEWER_OBSERVATIONS: readonly ReviewerDurationObservatio
  */
 /**
  * 90 -> 120 when the coder got a share of its own. The reviewers may burn 50
- * minutes worst case and the coder 30; the architect's own ceiling and the
+ * minutes worst case and the coder 40 (two attempts, each its session plus the
+ * executor steps around it); the architect's own ceiling and the
  * image builds, PostgreSQL, Hermes and the evidence dump need room beside them,
  * and `coder-envelope.test.ts` proves the four add up inside this number.
  */

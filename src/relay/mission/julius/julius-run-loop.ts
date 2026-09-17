@@ -24,6 +24,7 @@
  * bad run cannot spin a worker process.
  */
 
+import { juliusEitherSignal, keepJuliusLease, type JuliusLeaseRenewalPolicy } from './julius-lease-keeper';
 import type { JuliusCardPolicy } from './julius-policy';
 import type { JuliusVerificationPolicy } from './julius-verification-runtime';
 import { missionMayComplete, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
@@ -140,6 +141,14 @@ export interface JuliusRunLoopConfig {
    * fairness policy nobody chose is a fairness policy nobody can reason about.
    */
   readonly perRunShare?: number | null;
+  /**
+   * RENEWAL OF WHAT THIS LOOP HOLDS. With it, an admitted task's lease is
+   * renewed from admission until the task is finished, never past the hold
+   * bound its policy derives, and a lease the store says is gone aborts the
+   * dispatch. Without it a lease lasts exactly `leaseMs` from the claim, which
+   * is right for a proof and wrong for any worker slower than its lease.
+   */
+  readonly leaseRenewal?: JuliusLeaseRenewalPolicy;
 }
 
 /* ------------------------------------------------- the run state decision */
@@ -284,6 +293,10 @@ export class JuliusRunLoop {
     }
     if (!Number.isSafeInteger(config.leaseMs) || config.leaseMs < 1) {
       throw new Error('invalid_julius_lease_ms');
+    }
+    const renewal = config.leaseRenewal;
+    if (renewal !== undefined && (!Number.isSafeInteger(renewal.renewEveryMs) || renewal.renewEveryMs < 1 || renewal.renewEveryMs >= config.leaseMs)) {
+      throw new Error('invalid_julius_lease_renewal_interval');
     }
   }
 
@@ -484,19 +497,46 @@ export class JuliusRunLoop {
         lostLeases += 1;
         continue;
       }
+      /**
+       * THE LEASE IS RENEWED FROM ADMISSION, not trusted from the claim. A task
+       * queued behind another in this tick spent its lease waiting; the first
+       * renewal gives it a whole one before any work starts, and a store that
+       * says the lease is already gone means the task is not run at all.
+       */
+      const renewal = this.config.leaseRenewal;
+      const keeper = renewal === undefined ? null : keepJuliusLease({
+        store: this.deps.store, clock: this.deps.clock,
+        ...(renewal.timers === undefined ? {} : { timers: renewal.timers }),
+        taskId: claim.taskId, owner: this.deps.owner, leaseGeneration: claim.leaseGeneration,
+        leaseMs: this.config.leaseMs, renewEveryMs: renewal.renewEveryMs,
+        holdUntilMs: Date.parse(this.deps.clock.now()) + renewal.holdBoundMsFor(claim),
+      });
+      if (keeper !== null && !(await keeper.renewNow())) {
+        await keeper.stop();
+        lostLeases += 1;
+        continue;
+      }
+
       // COUNTED ONLY ONCE THE TASK IS REALLY RUNNING. Counted before the
       // admission, a lease lost between the two would hold a slot in this
       // run's allowance for work nobody is doing, and the next claim in the
       // same tick would be handed back to make room for it.
       inFlight.set(claim.runId, running + 1);
 
-      outcomes.push(await runClaimedTask({
-        // The claim carried the count BEFORE this admission. Everything
-        // downstream — the retry ceiling, the operation id that makes a
-        // repeated dispatch idempotent, the resource estimate — must read the
-        // attempt actually being run.
-        ...request, claim: { ...claim, attempt },
-      }, this.deps, preflight));
+      // A LOST LEASE ENDS THE DISPATCH, whichever signal fires first.
+      const linked = keeper === null ? null : juliusEitherSignal(signal, keeper.signal);
+      try {
+        outcomes.push(await runClaimedTask({
+          // The claim carried the count BEFORE this admission. Everything
+          // downstream — the retry ceiling, the operation id that makes a
+          // repeated dispatch idempotent, the resource estimate — must read the
+          // attempt actually being run.
+          ...request, ...(linked === null ? {} : { signal: linked.signal }), claim: { ...claim, attempt },
+        }, this.deps, preflight));
+      } finally {
+        linked?.detach();
+        await keeper?.stop();
+      }
     }
 
     /**

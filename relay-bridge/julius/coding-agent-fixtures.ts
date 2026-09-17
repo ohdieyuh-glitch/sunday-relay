@@ -26,6 +26,12 @@ import type { ShellEffectInput, ShellEffectPort, ShellEffectResult } from './exe
 /** One scripted turn of a generic Coding Agent. */
 export type ScriptedCodingAgentStep =
   | { readonly kind: 'completed'; readonly finalText?: string | null; readonly costUsdMicros?: number | null }
+  /**
+   * A LONG SESSION THAT HONOURS ITS SIGNAL: it runs until aborted, then stops
+   * and reports the cancellation, as a cooperative provider must. `started` is
+   * called once the session is under way, so a proof can abort mid-flight.
+   */
+  | { readonly kind: 'runUntilAborted'; readonly started?: () => void; readonly costUsdMicros?: number | null }
   | {
     readonly kind: 'failed';
     readonly failure: JuliusCodingAgentFailure;
@@ -38,6 +44,13 @@ export interface RecordingCodingAgentProvider extends JuliusCodingAgentProvider 
   readonly requests: JuliusCodingAgentRequest[];
 }
 
+/** A fixture provider handed an already-aborted signal launches nothing, as a real one must not. */
+const cancelledBeforeLaunch = (): JuliusCodingAgentProviderOutcome => ({
+  kind: 'failed', failure: 'CANCELLED', runtimeStarted: false, costUsdMicros: null,
+  safeMessage: 'The dispatch was cancelled before the coding provider launched.',
+  providerFailureClass: 'fixture_cancelled_before_launch', diagnostics: {},
+});
+
 /** The plainest possible implementation of the port: a script, and a record of what it was shown. */
 export function createScriptedCodingAgentProvider(input: {
   readonly providerKind?: string;
@@ -48,10 +61,22 @@ export function createScriptedCodingAgentProvider(input: {
   return {
     providerKind: input.providerKind ?? 'generic-scripted',
     requests,
-    async execute(request): Promise<JuliusCodingAgentProviderOutcome> {
+    async execute(request, signal): Promise<JuliusCodingAgentProviderOutcome> {
       requests.push(request);
       const step = input.script[Math.min(index, input.script.length - 1)] ?? { kind: 'completed' as const };
       index += 1;
+      if (signal?.aborted === true) return cancelledBeforeLaunch();
+      if (step.kind === 'runUntilAborted') {
+        await new Promise<void>((resolve) => {
+          signal?.addEventListener('abort', () => resolve(), { once: true });
+          step.started?.();
+        });
+        return {
+          kind: 'failed', failure: 'CANCELLED', runtimeStarted: true, costUsdMicros: step.costUsdMicros ?? null,
+          safeMessage: 'The scripted coding provider stopped when its dispatch was cancelled.',
+          providerFailureClass: 'fixture_cancelled', diagnostics: {},
+        };
+      }
       if (step.kind === 'failed') {
         return {
           kind: 'failed', failure: step.failure, runtimeStarted: step.runtimeStarted ?? true,
@@ -116,8 +141,9 @@ export function createCodexShapedCodingAgentProvider(input: {
     providerKind: 'codex-shaped',
     requests,
     prompts,
-    async execute(request): Promise<JuliusCodingAgentProviderOutcome> {
+    async execute(request, signal): Promise<JuliusCodingAgentProviderOutcome> {
       requests.push(request);
+      if (signal?.aborted === true) return cancelledBeforeLaunch();
       const prompt = input.renderPrompt(request);
       prompts.push(prompt);
       const response = input.respond(prompt, request);

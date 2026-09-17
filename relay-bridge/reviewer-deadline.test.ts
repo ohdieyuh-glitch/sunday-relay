@@ -10,6 +10,7 @@ import {
 import { loadHermesConfig } from './hermes-reviewer';
 import { architectWorker, CODER_WORKER, reviewerWorker } from './julius/live-composition';
 import { DEFAULT_HOSTED_LIMITS } from './hosted-coding-agent/hosted-envelope';
+import { coderAttemptDeadlineMs } from './hosted-coding-agent/coder-envelope';
 import { architectOperativeTimeoutMs } from '../src/relay/connectors/gpt-architect/config';
 
 // NOT `import.meta`: the bridge tsconfig forbids it, and `npm run typecheck`
@@ -60,7 +61,9 @@ describe('the reviewer deadline is derived once and nothing keeps a private copy
     const env = { RELAY_PROMPT_ARCHITECT_TIMEOUT_MS: '412000' };
     expect(architectWorker(env).timeoutMs).toBe(architectOperativeTimeoutMs(env));
     expect(architectWorker({}).timeoutMs).toBe(architectOperativeTimeoutMs({}));
-    expect(CODER_WORKER.timeoutMs).toBe(DEFAULT_HOSTED_LIMITS.maxRuntimeMs);
+    // THE ATTEMPT: the session's runtime plus the executor steps around it.
+    expect(CODER_WORKER.timeoutMs).toBe(coderAttemptDeadlineMs());
+    expect(CODER_WORKER.timeoutMs).toBeGreaterThan(DEFAULT_HOSTED_LIMITS.maxRuntimeMs);
     expect(reviewerWorker('xai').timeoutMs).toBe(reviewerOperativeTimeoutMs());
   });
 

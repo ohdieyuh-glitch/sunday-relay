@@ -7,11 +7,14 @@
  * (init, result) is reported so the adapter can stop honestly.
  */
 
+import { readClaudeCodeErrorFlag, readClaudeCodeTerminalReason } from './result-classification';
+
 export type SafeToolActivity = {
   tool: string;
   /** Sanitized target descriptors (file paths / patterns) — never contents. */
   targets: string[];
 };
+
 
 export interface ParsedStreamState {
   initSeen: boolean;
@@ -21,7 +24,10 @@ export interface ParsedStreamState {
   toolActivity: SafeToolActivity[];
   finalResult: string | null;
   resultSubtype: string | null;
+  /** `is_error` as the runtime sent it. Absent is null, never false. */
   isError: boolean | null;
+  /** `terminal_reason` as a vocabulary member, `unrecognised`, or null when absent. */
+  terminalReason: string | null;
   usage: {
     numTurns: number | null;
     durationMs: number | null;
@@ -54,7 +60,7 @@ const sanitizeToolTargets = (input: unknown): string[] => {
 export function createStreamParser() {
   const state: ParsedStreamState = {
     initSeen: false, sessionId: null, model: null, cwd: null,
-    toolActivity: [], finalResult: null, resultSubtype: null, isError: null,
+    toolActivity: [], finalResult: null, resultSubtype: null, isError: null, terminalReason: null,
     usage: { numTurns: null, durationMs: null, apiDurationMs: null, reportedCostUsd: null },
     unknownRecordCount: 0, malformedLineCount: 0, thinkingBlocksOmitted: 0,
     assistantTextChunks: [],
@@ -102,7 +108,8 @@ export function createStreamParser() {
     }
     if (type === 'result') {
       state.resultSubtype = typeof record.subtype === 'string' ? record.subtype : null;
-      state.isError = record.is_error === true;
+      state.isError = readClaudeCodeErrorFlag(record.is_error);
+      state.terminalReason = readClaudeCodeTerminalReason(record.terminal_reason);
       if (typeof record.result === 'string') state.finalResult = record.result;
       if (typeof record.num_turns === 'number') state.usage.numTurns = record.num_turns;
       if (typeof record.duration_ms === 'number') state.usage.durationMs = record.duration_ms;

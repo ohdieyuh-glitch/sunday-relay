@@ -89,6 +89,7 @@ import {
 } from '../hermes-reviewer';
 import { UNKNOWN_USAGE, type HermesUsage } from '../reviewer-harness/hermes/runner';
 import { REVIEW_TRANSIENT_REASK_BACKOFF_MS, REVIEW_TRANSIENT_REASK_LIMIT, REVIEW_TRANSIENT_REASK_SHAPES, reviewerReaskWithinDeadline } from '../reviewer-deadline';
+import { CODER_EXECUTOR_STEP_TIMEOUTS_MS } from '../hosted-coding-agent/coder-envelope';
 import type { ShellEffectPort } from './executor-effects';
 
 /* ------------------------------------------------------------- handoffs */
@@ -1354,11 +1355,27 @@ export function createJuliusCodingAgentAdapter(input: {
         taskId: dispatch.taskId,
         workerId: input.worker.workerId,
       };
+      /**
+       * NO EFFECT, AND NO EVIDENCE, AFTER AN ABORT. The executor steps are the
+       * only way an attempt's work becomes evidence, so each one first asks
+       * whether the dispatch it belongs to is still running. The coordinator has
+       * already settled a cancelled dispatch; these stop the abandoned promise
+       * from reading the workspace, writing a diff artifact or running the tests
+       * under a claim that may by now be another attempt's.
+       */
+      const stopIfCancelled = (step: 'base' | 'status' | 'diff' | 'test', spent: { readonly costUsdMicros: number | null } | null): void => {
+        if (dispatch.signal?.aborted !== true) return;
+        throw new JuliusDispatchError('CANCELLED', false, 'The dispatch was cancelled; no further executor effect ran.', `coder_cancelled_before_${step}`, {
+          runtimeStarted: spent !== null,
+          ...(spent === null || spent.costUsdMicros === null ? {} : { costUsdMicros: spent.costUsdMicros }),
+        });
+      };
+      stopIfCancelled('base', null);
       const before = await input.shell.run({
         ...shellScope,
         invocationKey: `${dispatch.taskId}:base`,
         command: 'git rev-parse HEAD',
-        timeoutMs: 15_000,
+        timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.base,
       });
       if (before.status === 'SUCCEEDED') {
         input.artifacts.put(baseRevisionRef(snapshot.runId), before.stdout.trim());
@@ -1424,11 +1441,12 @@ export function createJuliusCodingAgentAdapter(input: {
        * the agreement was invisible to everyone. Julius holds the work to the
        * locked contract from this set.
        */
+      stopIfCancelled('status', outcome.observation);
       const status = await afterSession(() => input.shell.run({
         ...shellScope,
         invocationKey: `${dispatch.taskId}:status`,
         command: 'git status --porcelain=v1 --untracked-files=all -z',
-        timeoutMs: 30_000,
+        timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.status,
       }));
       const workspace = status.status === 'SUCCEEDED'
         ? { captured: true, ...parseJuliusWorkspaceStatus(status.stdout) }
@@ -1438,18 +1456,20 @@ export function createJuliusCodingAgentAdapter(input: {
        * rendered against /dev/null with plain git and a bash loop, so nothing
        * outside what the executor image already runs is needed.
        */
+      stopIfCancelled('diff', outcome.observation);
       const diff = await afterSession(() => input.shell.run({
         ...shellScope,
         invocationKey: `${dispatch.taskId}:diff`,
         command: 'git --no-pager diff || exit 3; git --no-pager diff --stat; git ls-files --others --exclude-standard | while IFS= read -r file; do git --no-pager diff --no-index -- /dev/null "$file"; done; exit 0',
-        timeoutMs: 30_000,
+        timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.diff,
       }));
       if (diff.status === 'SUCCEEDED') input.artifacts.put(diffRef(snapshot.runId), diff.stdout);
+      stopIfCancelled('test', outcome.observation);
       const test = await afterSession(() => input.shell.run({
         ...shellScope,
         invocationKey: `${dispatch.taskId}:test`,
         command: input.testCommand,
-        timeoutMs: 300_000,
+        timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.test,
       }));
       input.artifacts.put(testOutputRef(snapshot.runId), `exit=${test.exitCode ?? 'unknown'}\n${test.stdout}\n${test.stderr}`);
 
