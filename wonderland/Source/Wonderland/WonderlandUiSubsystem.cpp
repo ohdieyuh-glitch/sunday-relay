@@ -29,6 +29,7 @@
 #include "WonderlandJuliusConnectPanel.h"
 #include "WonderlandWonderWebBrowse.h"
 #include "WonderlandWonderWebBrowserPanel.h"
+#include "WonderlandWonderWebLive.h"
 #include "WonderlandJuliusWorkLog.h"
 #include "WonderlandLiveTerminal.h"
 #include "WonderlandMiniMap.h"
@@ -58,6 +59,8 @@ namespace WonderWebWindowIds
 	const FName Creation(TEXT("creation"));
 	const FName Connections(TEXT("connections"));
 	const FName Browser(TEXT("browser"));
+	/** How many browser windows may be open at once. Each one is a real page in the runtime, so this is a memory bound. */
+	constexpr int32 MaxBrowsers = 4;
 }
 
 namespace WonderWebWorkspaceTuning
@@ -390,7 +393,7 @@ void UWonderlandUiSubsystem::Detach()
 	WalletPanel.Reset();
 	WonderWebPanel.Reset();
 	ConnectPanel.Reset();
-	BrowserPanel.Reset();
+	BrowserPanels.Reset();
 	WonderWebLayer.Reset();
 	for (FWonderWebWindow& Window : WonderWebWindows)
 	{
@@ -818,7 +821,7 @@ AWonderlandWonderWebWorkspace* UWonderlandUiSubsystem::EnsureWonderWebWorkspace(
 UWonderlandUiSubsystem::FWonderWebWindow* UWonderlandUiSubsystem::EnsureWonderWebWindow(FName Id)
 {
 	APlayerController* Controller = BoundController.Get();
-	if (Controller == nullptr || (Id != WonderWebWindowIds::Creation && Id != WonderWebWindowIds::Connections && Id != WonderWebWindowIds::Browser))
+	if (Controller == nullptr || (Id != WonderWebWindowIds::Creation && Id != WonderWebWindowIds::Connections && !IsBrowserWindow(Id)))
 	{
 		return nullptr;
 	}
@@ -861,17 +864,20 @@ UWonderlandUiSubsystem::FWonderWebWindow* UWonderlandUiSubsystem::EnsureWonderWe
 				.StatusColor(FSlateColor(WonderWebLook::Line(0.8f)))
 				.OnRestore_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->MinimizeWonderWebWindow(WonderWebWindowIds::Creation, false); } });
 		}
-		else if (Id == WonderWebWindowIds::Browser)
+		else if (IsBrowserWindow(Id))
 		{
-			// THE BROWSER: Wonderland's shell outside, ordinary web pages inside (founder, 2026-09-17).
-			SAssignNew(BrowserPanel, SWonderlandWonderWebBrowserPanel)
+			// A BROWSER WINDOW: Wonderland's shell outside, ordinary web pages inside (founder, 2026-09-17). There can be
+			// several, and each has its own page in the runtime, named after the window.
+			TSharedPtr<SWonderlandWonderWebBrowserPanel>& Panel = BrowserPanels.Add(Id);
+			SAssignNew(Panel, SWonderlandWonderWebBrowserPanel)
 				.Browse(TWeakObjectPtr<UWonderlandWonderWebBrowseSubsystem>(BrowseState()))
 				.Connect(TWeakObjectPtr<UWonderlandJuliusConnectSubsystem>(JuliusConnect()))
 				.Creation(TWeakObjectPtr<UWonderlandWonderWebSubsystem>(WonderWebState()))
-				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseWonderWebWindow(WonderWebWindowIds::Browser); } })
-				.OnRequestMinimize_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->MinimizeWonderWebWindow(WonderWebWindowIds::Browser, true); } })
-				.OnRequestExpand_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->ExpandWonderWebWindow(WonderWebWindowIds::Browser); } });
-			Window->Content = BrowserPanel;
+				.LiveTab(Id.ToString())
+				.OnRequestClose_Lambda([WeakThis, Id]() { if (WeakThis.IsValid()) { WeakThis->CloseWonderWebWindow(Id); } })
+				.OnRequestMinimize_Lambda([WeakThis, Id]() { if (WeakThis.IsValid()) { WeakThis->MinimizeWonderWebWindow(Id, true); } })
+				.OnRequestExpand_Lambda([WeakThis, Id]() { if (WeakThis.IsValid()) { WeakThis->ExpandWonderWebWindow(Id); } });
+			Window->Content = Panel;
 			Window->ContentSize = SWonderlandWonderWebBrowserPanel::DesignSize();
 			const TWeakObjectPtr<UWonderlandWonderWebBrowseSubsystem> BrowseWeak(BrowseState());
 			Window->Chip = SNew(SWonderWebWindowChip)
@@ -887,7 +893,7 @@ UWonderlandUiSubsystem::FWonderWebWindow* UWonderlandUiSubsystem::EnsureWonderWe
 						Tab != nullptr ? *Tab->Url : TEXT("-")));
 				})
 				.StatusColor(FSlateColor(WonderWebLook::Line(0.8f)))
-				.OnRestore_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->MinimizeWonderWebWindow(WonderWebWindowIds::Browser, false); } });
+				.OnRestore_Lambda([WeakThis, Id]() { if (WeakThis.IsValid()) { WeakThis->MinimizeWonderWebWindow(Id, false); } });
 		}
 		else
 		{
@@ -1489,15 +1495,17 @@ bool UWonderlandUiSubsystem::GetWonderWebWindowPixel(FName Window, FName Control
 			OutPixel = Point;
 			return true;
 		}
-		return BrowserPanel.IsValid() && BrowserPanel->GetLivePagePoint(Point, OutPixel);
+		const TSharedPtr<SWonderlandWonderWebBrowserPanel>* Panel = BrowserPanels.Find(Window);
+		return Panel != nullptr && Panel->IsValid() && (*Panel)->GetLivePagePoint(Point, OutPixel);
 	}
 	if (Window == WonderWebWindowIds::Creation)
 	{
 		return WonderWebPanel.IsValid() && WonderWebPanel->GetControlCentre(Control, OutPixel);
 	}
-	if (Window == WonderWebWindowIds::Browser)
+	if (IsBrowserWindow(Window))
 	{
-		return BrowserPanel.IsValid() && BrowserPanel->GetControlCentre(Control, OutPixel);
+		const TSharedPtr<SWonderlandWonderWebBrowserPanel>* Panel = BrowserPanels.Find(Window);
+		return Panel != nullptr && Panel->IsValid() && (*Panel)->GetControlCentre(Control, OutPixel);
 	}
 	return ConnectPanel.IsValid() && ConnectPanel->GetControlCentre(Control, OutPixel);
 }
@@ -1649,6 +1657,62 @@ bool UWonderlandUiSubsystem::SimulateWonderWebWindowKey(FName Key)
 	App.ProcessKeyUpEvent(Event);
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web key %s: handled %d"), *Key.ToString(), bDown ? 1 : 0);
 	return bDown;
+}
+
+bool UWonderlandUiSubsystem::IsBrowserWindow(FName Window)
+{
+	if (Window == WonderWebWindowIds::Browser)
+	{
+		return true;
+	}
+	// "browser-2" and up, to a bound: each browser window is a real page in another process.
+	const FString Text = Window.ToString();
+	if (!Text.StartsWith(TEXT("browser-")))
+	{
+		return false;
+	}
+	const int32 Number = FCString::Atoi(*Text.RightChop(8));
+	return Number >= 2 && Number <= WonderWebWindowIds::MaxBrowsers;
+}
+
+bool UWonderlandUiSubsystem::NavigateFocusedBrowser(const FString& Url, FString& OutRefusal)
+{
+	UWonderlandWonderWebBrowseSubsystem* Pages = BrowseState();
+	if (Pages == nullptr)
+	{
+		OutRefusal = TEXT("there are no pages in this build");
+		return false;
+	}
+	// THE WINDOW IN FRONT, if it is a browser at all; otherwise the first one, which is where a lone `Go` should land.
+	const FName Window = IsBrowserWindow(FocusedWonderWebWindow) ? FocusedWonderWebWindow : WonderWebWindowIds::Browser;
+	if (Window == WonderWebWindowIds::Browser)
+	{
+		// The first window goes through the shared browse state: that is what Julius's story and the page label follow.
+		return Pages->Navigate(Url, OutRefusal);
+	}
+	if (!Pages->IsRealMode())
+	{
+		OutRefusal = TEXT("real mode is off: set wl.WonderWeb.Real 1 to load real pages");
+		return false;
+	}
+	FString Host;
+	if (!UWonderlandWonderWebBrowseSubsystem::IsHostAllowed(Url, Host))
+	{
+		OutRefusal = Host.IsEmpty()
+			? FString::Printf(TEXT("'%s' is not an http(s) address"), *Url)
+			: FString::Printf(TEXT("%s is not on wl.WonderWeb.RealHosts, so it was not loaded"), *Host);
+		return false;
+	}
+	const APlayerController* Controller = BoundController.Get();
+	UGameInstance* Instance = Controller != nullptr ? Controller->GetGameInstance() : nullptr;
+	UWonderlandWonderWebLiveSubsystem* LiveWeb = Instance != nullptr ? Instance->GetSubsystem<UWonderlandWonderWebLiveSubsystem>() : nullptr;
+	if (LiveWeb == nullptr)
+	{
+		OutRefusal = TEXT("the live browser is not available in this build");
+		return false;
+	}
+	LiveWeb->Navigate(Window.ToString(), Url);
+	return true;
 }
 
 bool UWonderlandUiSubsystem::SimulateWonderWebClick(FName Control)

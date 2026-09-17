@@ -18,6 +18,8 @@ class WONDERLAND_API SWonderlandWonderWebLivePage : public SLeafWidget
 public:
 	SLATE_BEGIN_ARGS(SWonderlandWonderWebLivePage) {}
 		SLATE_ARGUMENT(TWeakObjectPtr<UWonderlandWonderWebLiveSubsystem>, Live)
+		/** Which window's page this draws. Several Wonder Webs are the point, so nothing here is the only page. */
+		SLATE_ARGUMENT(FString, Tab)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
@@ -37,6 +39,7 @@ public:
 
 private:
 	TWeakObjectPtr<UWonderlandWonderWebLiveSubsystem> Live;
+	FString Tab;
 	/** The brush the frame is drawn through; its texture is replaced as frames arrive. */
 	mutable FSlateBrush FrameBrush;
 	mutable FSlateBrush GroundBrush;

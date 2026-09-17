@@ -7,6 +7,7 @@
 void SWonderlandWonderWebLivePage::Construct(const FArguments& InArgs)
 {
 	Live = InArgs._Live;
+	Tab = InArgs._Tab;
 	SetCanTick(false);
 	bCanSupportFocus = true;
 	FrameBrush.DrawAs = ESlateBrushDrawType::Image;
@@ -19,7 +20,7 @@ void SWonderlandWonderWebLivePage::Construct(const FArguments& InArgs)
 FVector2D SWonderlandWonderWebLivePage::ComputeDesiredSize(float) const
 {
 	const UWonderlandWonderWebLiveSubsystem* Subsystem = Live.Get();
-	return Subsystem != nullptr ? FVector2D(Subsystem->GetFrameSize()) : FVector2D(1200.0, 800.0);
+	return Subsystem != nullptr ? FVector2D(Subsystem->GetFrameSize(Tab)) : FVector2D(1200.0, 800.0);
 }
 
 void SWonderlandWonderWebLivePage::PageRect(const FGeometry& Geometry, FVector2D& OutOffset, float& OutScale) const
@@ -28,9 +29,9 @@ void SWonderlandWonderWebLivePage::PageRect(const FGeometry& Geometry, FVector2D
 	if (Subsystem != nullptr)
 	{
 		// THE PAGE IS THE SHAPE OF THE WINDOW. Asked every time it is drawn, acted on only when it really changes.
-		Subsystem->SetViewport(FIntPoint(FMath::RoundToInt(Geometry.GetLocalSize().X), FMath::RoundToInt(Geometry.GetLocalSize().Y)));
+		Subsystem->SetViewport(Tab, FIntPoint(FMath::RoundToInt(Geometry.GetLocalSize().X), FMath::RoundToInt(Geometry.GetLocalSize().Y)));
 	}
-	const FVector2D Frame = Subsystem != nullptr ? FVector2D(Subsystem->GetFrameSize()) : FVector2D(1200.0, 800.0);
+	const FVector2D Frame = Subsystem != nullptr ? FVector2D(Subsystem->GetFrameSize(Tab)) : FVector2D(1200.0, 800.0);
 	const FVector2D Area = Geometry.GetLocalSize();
 	// CONTAIN, NEVER STRETCH: the whole rendered page, in its own proportions.
 	OutScale = static_cast<float>(FMath::Min(Area.X / FMath::Max(Frame.X, 1.0), Area.Y / FMath::Max(Frame.Y, 1.0)));
@@ -42,7 +43,7 @@ int32 SWonderlandWonderWebLivePage::OnPaint(const FPaintArgs& Args, const FGeome
 {
 	FSlateDrawElement::MakeBox(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(), &GroundBrush, ESlateDrawEffect::None, FLinearColor::White);
 	UWonderlandWonderWebLiveSubsystem* Subsystem = Live.Get();
-	UTexture2D* Texture = Subsystem != nullptr ? Subsystem->GetFrame() : nullptr;
+	UTexture2D* Texture = Subsystem != nullptr ? Subsystem->GetFrame(Tab) : nullptr;
 	if (Texture == nullptr)
 	{
 		return LayerId + 1;
@@ -50,7 +51,7 @@ int32 SWonderlandWonderWebLivePage::OnPaint(const FPaintArgs& Args, const FGeome
 	FVector2D Offset;
 	float Scale = 1.0f;
 	PageRect(AllottedGeometry, Offset, Scale);
-	const FVector2D Size = FVector2D(Subsystem->GetFrameSize()) * Scale;
+	const FVector2D Size = FVector2D(Subsystem->GetFrameSize(Tab)) * Scale;
 	if (FrameBrush.GetResourceObject() != Texture)
 	{
 		FrameBrush.SetResourceObject(Texture);
@@ -64,7 +65,7 @@ int32 SWonderlandWonderWebLivePage::OnPaint(const FPaintArgs& Args, const FGeome
 FReply SWonderlandWonderWebLivePage::OnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event)
 {
 	UWonderlandWonderWebLiveSubsystem* Subsystem = Live.Get();
-	if (Subsystem == nullptr || !Subsystem->HasFrame())
+	if (Subsystem == nullptr || !Subsystem->HasFrame(Tab))
 	{
 		return FReply::Unhandled();
 	}
@@ -73,13 +74,13 @@ FReply SWonderlandWonderWebLivePage::OnMouseButtonDown(const FGeometry& Geometry
 	PageRect(Geometry, Offset, Scale);
 	const FVector2D Local = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
 	const FVector2D Page = (Local - Offset) / FMath::Max(Scale, KINDA_SMALL_NUMBER);
-	const FVector2D Frame = FVector2D(Subsystem->GetFrameSize());
+	const FVector2D Frame = FVector2D(Subsystem->GetFrameSize(Tab));
 	if (Page.X < 0.0 || Page.Y < 0.0 || Page.X > Frame.X || Page.Y > Frame.Y)
 	{
 		// The letterbox around the page is not part of any website: a click there goes nowhere.
 		return FReply::Handled();
 	}
-	Subsystem->SendClick(Page.X, Page.Y);
+	Subsystem->SendClick(Tab, Page.X, Page.Y);
 	// Keyboard focus follows the click, the way it does in a browser: typing then goes to the page.
 	return FReply::Handled().SetUserFocus(SharedThis(this), EFocusCause::Mouse);
 }
@@ -87,11 +88,11 @@ FReply SWonderlandWonderWebLivePage::OnMouseButtonDown(const FGeometry& Geometry
 FReply SWonderlandWonderWebLivePage::OnMouseWheel(const FGeometry& Geometry, const FPointerEvent& Event)
 {
 	UWonderlandWonderWebLiveSubsystem* Subsystem = Live.Get();
-	if (Subsystem == nullptr || !Subsystem->HasFrame())
+	if (Subsystem == nullptr || !Subsystem->HasFrame(Tab))
 	{
 		return FReply::Unhandled();
 	}
-	Subsystem->SendScroll(Event.GetWheelDelta() * -120.0f);
+	Subsystem->SendScroll(Tab, Event.GetWheelDelta() * -120.0f);
 	return FReply::Handled();
 }
 
@@ -104,7 +105,7 @@ FReply SWonderlandWonderWebLivePage::OnKeyChar(const FGeometry& Geometry, const 
 		return FReply::Unhandled();
 	}
 	// WHAT IS TYPED GOES STRAIGHT TO THE PAGE AND IS NEVER KEPT: it may be a password.
-	Subsystem->SendText(FString::Chr(Char));
+	Subsystem->SendText(Tab, FString::Chr(Char));
 	return FReply::Handled();
 }
 
@@ -124,7 +125,7 @@ FReply SWonderlandWonderWebLivePage::OnKeyDown(const FGeometry& Geometry, const 
 		{ EKeys::Home, TEXT("Home") }, { EKeys::End, TEXT("End") } };
 	if (const FString* Key = Keys.Find(Event.GetKey()))
 	{
-		Subsystem->SendKey(*Key);
+		Subsystem->SendKey(Tab, *Key);
 		return FReply::Handled();
 	}
 	return FReply::Unhandled();

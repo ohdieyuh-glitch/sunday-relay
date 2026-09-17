@@ -44,6 +44,7 @@ void SWonderlandWonderWebBrowserPanel::Construct(const FArguments& InArgs)
 	Browse = InArgs._Browse;
 	Connect = InArgs._Connect;
 	Creation = InArgs._Creation;
+	LiveTab = InArgs._LiveTab.IsEmpty() ? FString(TEXT("browser")) : InArgs._LiveTab;
 	if (UWonderlandWonderWebBrowseSubsystem* Pages = Browse.Get())
 	{
 		if (UGameInstance* GameInstance = Pages->GetGameInstance())
@@ -171,12 +172,12 @@ void SWonderlandWonderWebBrowserPanel::Construct(const FArguments& InArgs)
 									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 									[
 										SNew(STextBlock).Font(WonderWebLook::Sans(20)).ColorAndOpacity(WonderWebLook::Line())
-										.Text_Lambda([WeakBrowse, WeakLive = Live]()
+										.Text_Lambda([WeakBrowse, WeakLive = Live, Watched = LiveTab]()
 										{
 											// THE ADDRESS IS THE PAGE'S OWN, wherever it came from: the founder's navigation, or the page Julius opened.
-											if (WeakLive.IsValid() && WeakLive->HasFrame() && !WeakLive->GetLiveUrl().IsEmpty())
+											if (WeakLive.IsValid() && WeakLive->HasFrame(Watched) && !WeakLive->GetLiveUrl(Watched).IsEmpty())
 											{
-												return FText::FromString(WeakLive->GetLiveUrl());
+												return FText::FromString(WeakLive->GetLiveUrl(Watched));
 											}
 											if (WeakBrowse.IsValid() && WeakBrowse->IsRealMode() && !WeakBrowse->GetRealUrl().IsEmpty())
 											{
@@ -195,15 +196,15 @@ void SWonderlandWonderWebBrowserPanel::Construct(const FArguments& InArgs)
 							SNew(SBorder).BorderImage(&BadgeBrush).Padding(FMargin(14.0f, 6.0f))
 							[
 								SNew(STextBlock).Font(WonderWebLook::Sans(15, true, 120)).ColorAndOpacity(WonderWebLook::Line())
-								.Text_Lambda([WeakBrowse, WeakLive = Live]()
+								.Text_Lambda([WeakBrowse, WeakLive = Live, Watched = LiveTab]()
 								{
 									// THE LABEL MATCHES WHAT IS ON SCREEN, always: a live frame means a live page, whoever opened it.
-									if (WeakLive.IsValid() && WeakLive->HasFrame())
+									if (WeakLive.IsValid() && WeakLive->HasFrame(Watched))
 									{
 										FString Host;
-										UWonderlandWonderWebBrowseSubsystem::IsHostAllowed(WeakLive->GetLiveUrl(), Host);
+										UWonderlandWonderWebBrowseSubsystem::IsHostAllowed(WeakLive->GetLiveUrl(Watched), Host);
 										return FText::FromString(FString::Printf(TEXT("LIVE PAGE  ·  %s%s"), *Host.ToUpper(),
-											WeakLive->IsFollowing() ? TEXT("  ·  JULIUS IS BROWSING") : TEXT("")));
+											WeakLive->IsFollowing(Watched) ? TEXT("  ·  JULIUS IS BROWSING") : TEXT("")));
 									}
 									return FText::FromString(WeakBrowse.IsValid() ? WeakBrowse->PageLabel() : FString(TEXT("NO PAGES")));
 								})
@@ -281,7 +282,7 @@ TSharedRef<SWidget> SWonderlandWonderWebBrowserPanel::Probe(FName Id, TSharedRef
 
 bool SWonderlandWonderWebBrowserPanel::GetLivePagePoint(const FVector2D& PagePixel, FVector2D& OutWindowPixel) const
 {
-	if (!LivePage.IsValid() || !Live.IsValid() || !Live->HasFrame())
+	if (!LivePage.IsValid() || !Live.IsValid() || !Live->HasFrame(LiveTab))
 	{
 		return false;
 	}
@@ -292,6 +293,22 @@ bool SWonderlandWonderWebBrowserPanel::GetLivePagePoint(const FVector2D& PagePix
 	const FVector2D Absolute = PageGeometry.LocalToAbsolute(Offset + PagePixel * Scale);
 	OutWindowPixel = GetTickSpaceGeometry().AbsoluteToLocal(Absolute);
 	return true;
+}
+
+bool SWonderlandWonderWebBrowserPanel::IsPrimary() const
+{
+	return LiveTab == TEXT("browser");
+}
+
+const FWonderWebBrowseTab* SWonderlandWonderWebBrowserPanel::CurrentTab() const
+{
+	if (!Browse.IsValid())
+	{
+		return nullptr;
+	}
+	// THE FIRST WINDOW FOLLOWS THE SHARED SELECTION, because that is the one Julius's own story drives. Every other window
+	// is the founder's to point wherever they like.
+	return IsPrimary() ? Browse->GetSelected() : Browse->GetTab(OwnSite);
 }
 
 bool SWonderlandWonderWebBrowserPanel::GetControlCentre(FName Control, FVector2D& OutCentre) const
@@ -319,7 +336,7 @@ void SWonderlandWonderWebBrowserPanel::Tick(const FGeometry& AllottedGeometry, c
 {
 	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
 	Now = InCurrentTime;
-	if (Browse.IsValid() && Browse->GetRevision() != ShownRevision)
+	if (Browse.IsValid() && (Browse->GetRevision() != ShownRevision || OwnSite != ShownOwnSite))
 	{
 		Rebuild();
 	}
@@ -336,7 +353,8 @@ void SWonderlandWonderWebBrowserPanel::Rebuild()
 	{
 		TabsSlot->SetContent(MakeTabs());
 	}
-	const FWonderWebBrowseTab* Tab = Browse->GetSelected();
+	ShownOwnSite = OwnSite;
+	const FWonderWebBrowseTab* Tab = CurrentTab();
 	// THE REAL WEB, WHEN IT IS ASKED FOR (founder, 2026-09-17: "it should not be a simulation should be real"). Real mode
 	// hands the page area to the live page: a real browser on this machine renders the real address, Wonderland draws its
 	// frames, and what the founder does here goes back to it. With real mode off, nothing is loaded and the sample page is
@@ -345,14 +363,15 @@ void SWonderlandWonderWebBrowserPanel::Rebuild()
 	UWonderlandWonderWebLiveSubsystem* LiveWeb = Live.Get();
 	if (Browse->IsRealMode())
 	{
-		const FString Url = Browse->GetRealUrl();
-		const FString TabId = Tab != nullptr ? Tab->TabId : FString(TEXT("page"));
+		// WHERE THIS WINDOW SHOULD BE. The first window follows the shared address, which is what Julius's story and
+		// wl.WonderWeb.Go drive; the others are at whatever site they were pointed at.
+		const FString Url = IsPrimary() ? Browse->GetRealUrl() : (Tab != nullptr ? Tab->RealUrl : FString());
 		if (!LivePage.IsValid())
 		{
 			ShownPageKey.Reset();
 			PageBrushes.Reset();
 			ShownRealUrl.Reset();
-			SAssignNew(LivePage, SWonderlandWonderWebLivePage).Live(Live);
+			SAssignNew(LivePage, SWonderlandWonderWebLivePage).Live(Live).Tab(LiveTab);
 			if (PageSlot.IsValid())
 			{
 				PageSlot->SetContent(
@@ -362,24 +381,24 @@ void SWonderlandWonderWebBrowserPanel::Rebuild()
 					[
 						// WHAT IS HAPPENING, IN PLAIN WORDS: waiting for the first frame, or the reason there is none.
 						SNew(STextBlock).Font(WebLook::Sans(20)).ColorAndOpacity(WebLook::Grey()).Justification(ETextJustify::Center).AutoWrapText(true)
-						.Visibility_Lambda([WeakLive]() { return WeakLive.IsValid() && WeakLive->HasFrame() ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
-						.Text_Lambda([WeakLive]()
+						.Visibility_Lambda([WeakLive, Watched = LiveTab]() { return WeakLive.IsValid() && WeakLive->HasFrame(Watched) ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
+						.Text_Lambda([WeakLive, Watched = LiveTab]()
 						{
 							if (!WeakLive.IsValid())
 							{
 								return INVTEXT("The live browser is not available in this build.");
 							}
-							return FText::FromString(WeakLive->GetProblem().IsEmpty()
-								? FString::Printf(TEXT("Loading %s…"), *WeakLive->GetLiveUrl())
-								: WeakLive->GetProblem());
+							return FText::FromString(WeakLive->GetProblem(Watched).IsEmpty()
+								? FString::Printf(TEXT("Loading %s…"), *WeakLive->GetLiveUrl(Watched))
+								: WeakLive->GetProblem(Watched));
 						})
 					]);
 			}
 		}
-		if (LiveWeb != nullptr && Browse->IsFollowingJulius())
+		if (LiveWeb != nullptr && IsPrimary() && Browse->IsFollowingJulius())
 		{
-			// JULIUS IS DRIVING. The window watches Julius's own tab: it navigates nothing, so what is on screen is the page
-			// Julius was allowed to open, as it opens it.
+			// JULIUS IS DRIVING. The first window watches Julius's own tab: it navigates nothing, so what is on screen is the
+			// page Julius was allowed to open, as it opens it.
 			LiveWeb->Follow(UWonderlandWonderWebBrowseSubsystem::JuliusTab());
 			ShownRealUrl.Reset();
 		}
@@ -388,11 +407,11 @@ void SWonderlandWonderWebBrowserPanel::Rebuild()
 			ShownRealUrl = Url;
 			if (Url.IsEmpty())
 			{
-				LiveWeb->CloseTab(LiveWeb->GetLiveTab());
+				LiveWeb->CloseTab(LiveTab);
 			}
 			else
 			{
-				LiveWeb->Navigate(TabId, Url);
+				LiveWeb->Navigate(LiveTab, Url);
 			}
 		}
 		return;
@@ -403,7 +422,7 @@ void SWonderlandWonderWebBrowserPanel::Rebuild()
 		// behind the sample ones.
 		if (LiveWeb != nullptr)
 		{
-			LiveWeb->CloseTab(LiveWeb->GetLiveTab());
+			LiveWeb->CloseTab(LiveTab);
 		}
 		LivePage.Reset();
 		ShownRealUrl.Reset();
@@ -428,7 +447,9 @@ TSharedRef<SWidget> SWonderlandWonderWebBrowserPanel::MakeTabs()
 	{
 		return Row;
 	}
-	const int32 Selected = Browse->GetSelectedTab();
+	const int32 Selected = IsPrimary() ? Browse->GetSelectedTab() : OwnSite;
+	const TWeakPtr<SWonderlandWonderWebBrowserPanel> WeakSelf = StaticCastSharedRef<SWonderlandWonderWebBrowserPanel>(AsShared());
+	const bool bPrimary = IsPrimary();
 	for (int32 Index = 0; Index < Browse->GetModel().Tabs.Num(); ++Index)
 	{
 		const FWonderWebBrowseTab& Tab = Browse->GetModel().Tabs[Index];
@@ -441,11 +462,21 @@ TSharedRef<SWidget> SWonderlandWonderWebBrowserPanel::MakeTabs()
 					SNew(SButton)
 					.ButtonStyle(bActive ? &TabActiveStyle : &TabStyle)
 					.HAlign(HAlign_Center).VAlign(VAlign_Center)
-					.OnClicked_Lambda([WeakBrowse, Index]()
+					.OnClicked_Lambda([WeakBrowse, WeakSelf, Index, bPrimary]()
 					{
-						if (WeakBrowse.IsValid())
+						if (bPrimary)
 						{
-							WeakBrowse->SelectTabIndex(Index);
+							if (WeakBrowse.IsValid())
+							{
+								WeakBrowse->SelectTabIndex(Index);
+							}
+						}
+						else if (const TSharedPtr<SWonderlandWonderWebBrowserPanel> Self = WeakSelf.Pin())
+						{
+							// THIS WINDOW'S OWN CHOICE. Several Wonder Webs are the point: one window changing site does not
+							// move the others.
+							Self->OwnSite = Index;
+							Self->Rebuild();
 						}
 						return FReply::Handled();
 					})
