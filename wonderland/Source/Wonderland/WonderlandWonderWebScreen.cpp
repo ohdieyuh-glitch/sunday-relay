@@ -14,12 +14,14 @@ namespace WonderWebScreenTuning
 {
 	// A SCREEN IN THE GARDEN, framed by the camera with the world round its edges: about three metres wide, stood a
 	// little over three metres out ahead of where the player is looking and raised above the Dog, the camera held far
-	// enough back that the window fills about two thirds of the view.
+	// enough back that the window fills about half the view. SMALLER THAN THE FIRST CUT, ON PURPOSE (founder, 2026-09-17:
+	// "minimize the wonder web page box just a little bit, because Julius will be spawning multiple wonder webs"): at
+	// 335 uu it filled 60% of the width; at 385 it fills about 52%, and there is world -- and room -- beside it.
 	TAutoConsoleVariable<float> CVarScale(TEXT("wl.WonderWeb.ScreenScale"), 0.2f, TEXT("Wonder Web screen: uu per window pixel (the window is 1536 x 1024)."));
 	TAutoConsoleVariable<float> CVarAhead(TEXT("wl.WonderWeb.ScreenAhead"), 330.0f, TEXT("Wonder Web screen: how far ahead of the Dog it stands, along the player's view, uu."));
 	TAutoConsoleVariable<float> CVarUp(TEXT("wl.WonderWeb.ScreenUp"), 150.0f, TEXT("Wonder Web screen: how high its centre stands above the Dog, uu."));
-	TAutoConsoleVariable<float> CVarViewDistance(TEXT("wl.WonderWeb.ViewDistance"), 335.0f, TEXT("Wonder Web screen: the camera's distance back from the glass, uu."));
-	TAutoConsoleVariable<float> CVarViewSide(TEXT("wl.WonderWeb.ViewSide"), -14.0f, TEXT("Wonder Web screen: the camera's sideways offset, uu; shifts the window across the view clear of the HUD."));
+	TAutoConsoleVariable<float> CVarViewDistance(TEXT("wl.WonderWeb.ViewDistance"), 385.0f, TEXT("Wonder Web screen: the camera's distance back from the glass, uu."));
+	TAutoConsoleVariable<float> CVarViewSide(TEXT("wl.WonderWeb.ViewSide"), -16.0f, TEXT("Wonder Web screen: the camera's sideways offset, uu; shifts the window across the view clear of the HUD."));
 	TAutoConsoleVariable<float> CVarViewLift(TEXT("wl.WonderWeb.ViewLift"), 8.0f, TEXT("Wonder Web screen: the camera's height above the glass's centre, uu."));
 	TAutoConsoleVariable<float> CVarViewFov(TEXT("wl.WonderWeb.ViewFov"), 75.0f, TEXT("Wonder Web screen: the camera's horizontal field of view, degrees."));
 	// LIT LIKE A SCREEN IN SUNLIGHT. The garden is lit physically and its exposure is set for daylight, so a widget's
