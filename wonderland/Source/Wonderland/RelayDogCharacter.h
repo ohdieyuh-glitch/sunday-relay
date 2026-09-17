@@ -250,12 +250,20 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
 	float GetMissionCameraZoom() const { return MissionCamZoom; }
 
+	/** How many degrees the mission camera has lifted its angle to see over something standing in the way, 0 when clear. */
+	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
+	float GetMissionCameraRaise() const { return MissionCamRaise; }
+
+	/** Where the mission camera itself stands in the world, this frame. */
+	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
+	FVector GetMissionCameraLocation() const;
+
 	/** Put the mission camera at this yaw and pitch about the Contract. */
 	UFUNCTION(BlueprintCallable, Category = "Relay Dog|Mission Camera")
 	void SetMissionCameraAngles(float YawDegrees, float PitchDegrees);
 
 	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
-	FRotator GetMissionCameraRotation() const { return FRotator(MissionCamPitch, MissionCamYaw, 0.0f); }
+	FRotator GetMissionCameraRotation() const { return FRotator(MissionCamPitch - MissionCamRaise, MissionCamYaw, 0.0f); }
 
 	/** The point the mission camera turns about, world space. */
 	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
@@ -458,6 +466,12 @@ private:
 	float MissionCamLiftShown = 0.0f;
 	/** The player's mouse-wheel zoom, kept for the mission. */
 	float MissionCamZoom = 1.0f;
+	/** Degrees the camera has lifted its angle to look over a prop between it and the Contract or the Dog. */
+	float MissionCamRaise = 0.0f;
+	/** Seconds the view has been clear, before the lift is let back down. */
+	float MissionCamClearFor = 0.0f;
+	/** True when something solid stands between the camera, at this pitch, and the Contract or the Dog's head. */
+	bool IsMissionCameraBlocked(float PitchDegrees) const;
 
 	/* ---- the mission camera's state */
 	float MissionCamWeight = 0.0f;

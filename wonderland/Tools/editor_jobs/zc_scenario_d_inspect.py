@@ -63,10 +63,42 @@ def job():
 
         for cmd in ("t.MaxFPS 0", "Slate.bAllowThrottling 0", "r.VSync 0"):
             console(cmd)
+        for cmd in (globals().get("CVARS") or []):
+            console(cmd)
+        arm_default = unreal.SystemLibrary.get_console_variable_float_value("wl.MissionCam.Arm")
+        RESULT["arm_default"] = arm_default
         console("wl.Mission.Site %s" % SITE)
         started = mission.play_scenario("D", PACE)
         RESULT["started"] = bool(started)
         yield (lambda: mission.is_fixture_running(), 240)
+
+        def on_screen(orb):
+            # WHERE THE WORK LANDS ON SCREEN, 0..1 from the top-left: the Contract's heart, the Dog's head and feet (the
+            # pose's lift included). The Julius terminal at its cap covers the middle of the bottom 42%.
+            pc = unreal.GameplayStatics.get_player_controller(world, 0)
+            size = unreal.WidgetLayoutLibrary.get_viewport_size(world)
+            if pc is None or size.x < 1:
+                return None
+            lift = 0.0
+            for part in str(dog.describe_mission_pose()).split():
+                if part.startswith("lift="):
+                    try:
+                        lift = float(part[5:])
+                    except ValueError:
+                        pass
+            at = dog.get_actor_location()
+            points = {"contract": orb.get_actor_location() if orb else None,
+                      "dog_head": unreal.Vector(at.x, at.y, at.z + 100.0 + lift),
+                      "dog_feet": unreal.Vector(at.x, at.y, at.z - 75.0 + lift)}
+            out = {}
+            for key, where in points.items():
+                if where is None:
+                    continue
+                got = unreal.GameplayStatics.project_world_to_screen(pc, where, False)
+                if isinstance(got, tuple):
+                    got = got[-1] if got and got[0] is not False else None
+                out[key] = [round(got.x / size.x, 3), round(got.y / size.y, 3)] if got is not None else None
+            return out
 
         def sample():
             orbs = unreal.GameplayStatics.get_all_actors_of_class(world, unreal.WonderlandMissionOrb)
@@ -83,6 +115,9 @@ def job():
                 "beam": str(dog.describe_mission_beam()),
                 "cam_w": round(dog.get_mission_camera_weight(), 2),
                 "cam": [round(dog.get_mission_camera_rotation().pitch, 1), round(dog.get_mission_camera_rotation().yaw, 1)],
+                "cam_at": vec(dog.get_mission_camera_location()) if hasattr(dog, "get_mission_camera_location") else None,
+                "cam_raise": round(dog.get_mission_camera_raise(), 1) if hasattr(dog, "get_mission_camera_raise") else None,
+                "screen": on_screen(orb),
                 "dog_at": vec(dog.get_actor_location()),
                 "dog_yaw": round(dog.get_actor_rotation().yaw, 1),
                 "hands": [vec(dog.get_hand_location(True)), vec(dog.get_hand_location(False))],
@@ -136,7 +171,7 @@ def job():
                         H.capture_viewport_jpeg(path, 1600, 90)
                         entry["files"].append(path)
                         # CLOSER, on the same Contract-anchored camera, to read the hands and the props.
-                        console("wl.MissionCam.Arm 320")
+                        console("wl.MissionCam.Arm %d" % int(arm_default * 0.55))
                         console("slomo 0.6")
                         yield 0.9
                         console("slomo 0.02")
@@ -144,7 +179,7 @@ def job():
                         path = os.path.join(ROOT, "%s_close.jpg" % tag)
                         H.capture_viewport_jpeg(path, 1600, 90)
                         entry["files"].append(path)
-                        console("wl.MissionCam.Arm 540")
+                        console("wl.MissionCam.Arm %d" % int(arm_default))
                         console("slomo 0.6")
                         yield 0.9
                         stills.append(entry)
