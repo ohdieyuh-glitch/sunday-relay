@@ -16,6 +16,10 @@ WHAT. No new asset: the world's own planting meshes, placed the way the boards p
     runs (daisies, lavender, roses -- the boards' planted border), clusters of rose bushes, and flowering shrubs.
   - TOPIARY ACCENTS further apart along the same edge, alternating ball and cone, set back from the border.
   - HEDGES against a building wall that fronts lawn, so a wall meets planting instead of bare grass.
+  - GARDEN GROUPS out in the open, where a lawn is too big for a border to reach it: a topiary with a bed and two
+    rose bushes set around it, one group every GROUP_STEP, never on a grid -- the boards' "placed with intent"
+    rather than a scatter. This is what SW_StreetGate46's bare foreground lawn needed: its paving edge is 20 m away,
+    so the border pass reached nothing there.
 Sizes and materials are read from what the world already uses (city_props measurements, prop_materials.json), so a
 planted border here matches a planted border in the Tea Terrace.
 
@@ -51,6 +55,9 @@ BORDER_OUT = (110.0, 210.0)      # how far onto the lawn the border stands
 ACCENT_OUT = (150.0, 260.0)
 HEDGE_STEP = 520.0               # along a lawn-facing wall
 HEDGE_OUT = 150.0
+GROUP_STEP = 2200.0              # between garden groups in open lawn
+GROUP_CLEAR = 800.0              # a group stands this far from paving: nearer than that the border already plants
+GROUP_SHARE = 0.65               # and not at every step, so the spacing never reads as a grid
 CULL = 12000.0
 
 # mesh -> (radius cm, how many per cluster, scale range). Radii are the medians measured from the world's own
@@ -250,6 +257,37 @@ def main():
                 x = fx + tx * a + nx * HEDGE_OUT
                 y = fy + ty * a + ny * HEDGE_OUT
                 put(HEDGE, x, y, rng)
+
+    # 3. garden groups in open lawn the border cannot reach
+    for (name, cx, cy) in bare:
+        rng = random.Random("%s:group:%s" % (PASS, name))
+        n = int(RANGE // GROUP_STEP)
+        for i in range(-n, n + 1):
+            for j in range(-n, n + 1):
+                if rng.random() > GROUP_SHARE:
+                    continue
+                x = cx + i * GROUP_STEP + rng.uniform(-GROUP_STEP * 0.4, GROUP_STEP * 0.4)
+                y = cy + j * GROUP_STEP + rng.uniform(-GROUP_STEP * 0.4, GROUP_STEP * 0.4)
+                if (x - cx) ** 2 + (y - cy) ** 2 > RANGE * RANGE:
+                    continue
+                b = lawn_at(x, y)
+                if b is None:
+                    stats["group_not_lawn"] += 1
+                    continue
+                if any(_in(paving[k], x, y) or (abs(paving[k]["x"] - x) < paving[k]["hx"] + GROUP_CLEAR
+                                                and abs(paving[k]["y"] - y) < paving[k]["hy"] + GROUP_CLEAR)
+                       for k in F.around(pg, x, y)):
+                    stats["group_near_paving"] += 1
+                    continue
+                if not put(TOPIARY[(i + j) % len(TOPIARY)], x, y, rng):
+                    continue
+                a0 = rng.uniform(0.0, math.tau)
+                put_bed(BEDS[(i + j) % len(BEDS)], x + math.cos(a0) * 320.0, y + math.sin(a0) * 320.0,
+                        round(math.degrees(a0) + 90.0, 1), rng)
+                for k in (1, 2):
+                    a = a0 + math.tau * k / 3.0
+                    put(ROSE, x + math.cos(a) * 300.0, y + math.sin(a) * 300.0, rng)
+                stats["garden_groups"] += 1
 
     for old in HERE.glob("gc01_*.json"):
         old.unlink()

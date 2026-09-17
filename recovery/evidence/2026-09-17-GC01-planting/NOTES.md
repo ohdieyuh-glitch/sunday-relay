@@ -25,9 +25,22 @@ building stands there: most "edges" in a dense quarter are interior joins, not l
   where there was bare grass. This is the boards' border.
 - `SW_TowerCluster42`, `SW_PlazaHero41`: shrubs meet the wall bases and break the empty lawn.
 - `SW_NarrowStreet43`: one shrub at a wall; small but right.
-- `SW_StreetGate46`: almost unchanged -- its huge foreground lawn has no paving edge near it, so nothing was planted
-  there. Still open.
+- `SW_StreetGate46`: almost unchanged at first -- its huge foreground lawn has no paving edge near it, so the border
+  pass reached nothing there. That is what the garden groups below were added for.
 - `City_FillW52` (all paved) and `WorldCam12` (aerial): no change, no noise.
+
+## Second cut: garden groups in the open lawn (also kept)
+A border can only dress ground next to paving, and the emptiest views are empty precisely because no path runs
+through them. So a third rule plants GARDEN GROUPS out in the open: a topiary with a flower-bed run and two rose
+bushes set around it, one group every ~22 m, at 65% of those steps so the spacing never reads as a grid, and only
+where the ground is open lawn. The clearance from paving was 15 m at first, which left a bare ring between the
+border (1-2.6 m out) and the nearest group; at 8 m the ring closes. 27 groups became 45, and the pass 1,014
+instances became 1,111.
+
+`gc02_garden_groups_ab.jpg` and `gc03_groups_closer_to_paths_ab.jpg`: SW_PlazaHero41 and SW_Colonnade45 gain shrub
+masses where there was flat green, SW_StreetGate46 gains a topiary group in its middle distance, and WorldCam12
+(aerial) shows no noise. Its deep foreground lawn is still bare -- a lawn that size wants a designed garden, which is
+a composition decision, not dressing.
 
 ## Performance
 `perf_remove_ab.json`, PIE, same session, WARM window, 140 pass actors destroyed: mean ON 60.4 ms, OFF 62.6,
