@@ -33,9 +33,9 @@ const PASSED_REVIEW = [{ type: 'REVIEW_FINDING', status: 'PASSED', safeSummary: 
 const PLAN_EVIDENCE = [{ type: 'ARTIFACT', status: 'PASSED', safeSummary: 'Plan written.' }];
 const TEST_PASSED = [{ type: 'TEST', status: 'PASSED', safeSummary: 'Suite green.' }];
 
-const lockedContract = () => {
+const lockedContract = (taskId = 'build-1') => {
   const seeded = seedJuliusTaskContract({
-    runId: 'run-1', taskId: 'build-1', missionContractRevision: 1,
+    runId: 'run-1', taskId, missionContractRevision: 1,
     objective: 'Normalize the mission label.', requirements: ['slug'], constraints: [],
     acceptanceCriteria: [{ id: 'criterion-1', text: 'the slug test passes', blocking: true }],
     filesInScope: ['src/a.ts', 'src/b.ts', 'src/c.ts'], filesOutOfScope: ['src/persistence/'],
@@ -81,7 +81,7 @@ const SUCCEEDS = (record: ReturnType<typeof implementation>): Step =>
 const FAILS = (record: ReturnType<typeof implementation>): Step =>
   ({ kind: 'fail', code: 'RATE_LIMIT', runtimeStarted: true, implementation: { ...record, attemptOutcome: 'FAILED' } });
 
-const build = (coder: readonly Step[], store?: JuliusHarness['store']): JuliusHarness => {
+const build = (coder: readonly Step[], store?: JuliusHarness['store'], secondBuild = false): JuliusHarness => {
   const harness = createJuliusHarness({
     workers: [
       { worker: worker({ workerId: 'architect', role: 'PROMPT_ARCHITECT', providerId: 'openai', adapterId: 'architect-adapter', capabilities: ['plan'], taskTypes: ['plan'] }), script: [{ kind: 'succeed', evidence: PLAN_EVIDENCE }] },
@@ -98,6 +98,10 @@ const build = (coder: readonly Step[], store?: JuliusHarness['store']): JuliusHa
     void harness.store.putTaskContract({ projectId: 'prj-1', contract: lockedContract(), occurredAt: '2026-09-16T00:00:00.000Z' });
     harness.store.seedTask('run-1', task({ taskId: 'plan-1', ordinal: 0, role: 'PROMPT_ARCHITECT', taskType: 'plan', requiredEvidenceTypes: ['ARTIFACT'] }));
     harness.store.seedTask('run-1', task({ taskId: 'build-1', ordinal: 1, role: 'CODING_AGENT', taskType: 'build', state: 'BLOCKED', dependencyIds: ['plan-1'], requiredEvidenceTypes: ['TEST'] }));
+    if (secondBuild) {
+      void harness.store.putTaskContract({ projectId: 'prj-1', contract: lockedContract('build-2'), occurredAt: '2026-09-16T00:00:00.000Z' });
+      harness.store.seedTask('run-1', task({ taskId: 'build-2', ordinal: 2, role: 'CODING_AGENT', taskType: 'build', state: 'BLOCKED', dependencyIds: ['plan-1'], requiredEvidenceTypes: ['TEST'] }));
+    }
     harness.store.seedCriteria('run-1', [{ criterionId: 'ac-1', description: 'The slug test passes.', requiredEvidenceTypes: ['TEST'] }]);
   }
   return harness;
@@ -234,6 +238,35 @@ describe('W2 — a failed attempt is scope-checked, and its stray edits are name
     ]);
     const attempts = factsOf(harness, 'coder.attempt.workspace').filter((facts) => facts.taskId === 'build-1');
     expect(attempts[1]).toMatchObject({ attemptOutcome: 'SUCCEEDED', ownPaths: 1, inheritedPaths: 1 });
+  });
+});
+
+describe('W2b — the undo answers for THIS task, and for its LAST attempt', () => {
+  it('a later attempt that stayed in scope withdraws the undo the earlier one earned', async () => {
+    const harness = build([
+      // Attempt 1 strays out of scope; attempt 2 fails inside it; attempt 3 must inherit no undo.
+      FAILS(implementation({ startTree: BASE, endTree: AFTER_ONE, own: ['src/persistence/ledger.ts'] })),
+      FAILS(implementation({ startTree: AFTER_ONE, endTree: AFTER_TWO, own: ['src/a.ts'], inherited: ['src/persistence/ledger.ts'] })),
+      SUCCEEDS(implementation({ startTree: AFTER_TWO, endTree: TREE('3'), own: ['src/b.ts'] })),
+    ]);
+    await drain(harness);
+    const dispatches = dispatchesOf(harness).filter((item) => item.taskId === 'build-1');
+    expect(dispatches[1]!.workspace, 'the refused attempt is undone before attempt 2').toEqual({ restoreToTree: BASE, expectedTree: AFTER_ONE });
+    expect(dispatches[2]!.workspace, 'attempt 2 broke no scope, so there is nothing left to undo').toBeUndefined();
+  });
+
+  it('a refused attempt of one task is never undone under another', async () => {
+    const harness = build([
+      // build-1 strays; build-2 is a different task with its own contract and its own workspace history.
+      FAILS(implementation({ startTree: BASE, endTree: AFTER_ONE, own: ['src/persistence/ledger.ts'] })),
+      SUCCEEDS(implementation({ startTree: BASE, endTree: AFTER_TWO, own: ['src/a.ts'] })),
+      SUCCEEDS(implementation({ startTree: AFTER_TWO, endTree: TREE('3'), own: ['src/b.ts'] })),
+    ], undefined, true);
+    await drain(harness);
+    const other = dispatchesOf(harness).filter((item) => item.taskId === 'build-2');
+    expect(other.length).toBeGreaterThan(0);
+    for (const dispatch of other) expect(dispatch.workspace, 'build-2 inherits no undo from build-1').toBeUndefined();
+    expect(dispatchesOf(harness).filter((item) => item.taskId === 'build-1')[1]!.workspace).toEqual({ restoreToTree: BASE, expectedTree: AFTER_ONE });
   });
 });
 
