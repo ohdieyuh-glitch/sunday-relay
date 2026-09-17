@@ -113,6 +113,14 @@ describe('julius connect service: the founder playtest chain', () => {
     expect(service.intent({ intent: 'dev_set_health', connectionId, to: 'REVOKED' }).ok).toBe(false);
   });
 
+  it('connects by what the user calls it', () => {
+    const service = createJuliusConnectService({ userId: 'founder', projectId: 'pixel-canvas' });
+    const view = must(service.intent({ intent: 'connect', name: 'design tool' }));
+    expect(view.surface.prompt?.connectorId).toBe('dev-figma');
+    expect(service.intent({ intent: 'connect', name: 'nothing like this' }).ok).toBe(false);
+    expect(service.intent({ intent: 'connect', name: '<script>' }).ok).toBe(false);
+  });
+
   it('real services cannot be connected in this build', () => {
     const service = createJuliusConnectService({ userId: 'founder', projectId: 'pixel-canvas' });
     const view = must(service.intent({ intent: 'connect', connectorId: 'github' }));

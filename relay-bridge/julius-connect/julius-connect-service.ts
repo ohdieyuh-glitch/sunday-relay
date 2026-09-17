@@ -6,6 +6,7 @@ import {
   authorizeCapabilityUse,
   completeAuthorization,
   declineRequest,
+  discoverConnectors,
   findConnector,
   needsAuthorization,
   projectConnectionsSurface,
@@ -154,9 +155,16 @@ export function createJuliusConnectService(options: JuliusConnectServiceOptions)
       if (result.ok && connection?.credentialRef) vault.revoke(connection.credentialRef);
       return apply(result);
     },
+    /** "Connect X": by connector id, or by what the user calls it -- Julius works out which connector that is. */
     connect(body) {
-      const connectorId = field(body, 'connectorId');
-      if (!connectorId) return fail(relayError('validation-failed', 'connect needs a connectorId.'));
+      let connectorId = field(body, 'connectorId');
+      const name = typeof body.name === 'string' && /^[A-Za-z0-9 ._-]{1,60}$/.test(body.name) ? body.name : null;
+      if (!connectorId && name) {
+        const found = discoverConnectors(name);
+        if (found.length === 0) return fail(relayError('not-found', `Julius knows no service called "${name}".`));
+        connectorId = found[0].connectorId;
+      }
+      if (!connectorId) return fail(relayError('validation-failed', 'connect needs a connectorId or a name.'));
       const { capabilities, task } = neededFor(connectorId);
       const result = requestCapabilities(state, {
         userId: options.userId, projectId: options.projectId, missionId: task?.missionId ?? null, taskId: task?.taskId ?? null, connectorId, capabilities,
