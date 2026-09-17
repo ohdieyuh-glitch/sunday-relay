@@ -84,15 +84,21 @@ public:
 	/** Write a line of work. Returns an id for a line that TYPES (code, prompt text), else INDEX_NONE. */
 	int32 AddLine(EWonderlandRoleLineKind Kind, const FString& Text);
 
+	/**
+	 * A JULIUS 3.3 row, exactly as the approved terminal draws one: a gold bullet, the time, "Role:", the headline -- and
+	 * the dim sub-line only under the newest row.
+	 */
+	void AddJuliusRow(const FString& Time, const FString& Role, const FString& Headline, const FString& Detail);
+
 	/** How far a typing line has got, in characters; its full length. */
 	void SetReveal(int32 LineId, int32 Chars);
 	int32 GetLineLength(int32 LineId) const;
 
 	/** How many of the newest rows to show. The terminal sets this; the body eases to the height it needs. */
-	void SetVisibleRows(int32 Count) { VisibleRows = FMath::Max(Count, 1); }
+	void SetVisibleRows(int32 Count) { VisibleRows = FMath::Max(Count, 1); UpdateVisibleFrom(); }
 	int32 GetVisibleRows() const { return VisibleRows; }
 	/** Rows written this mission (the resting line counts as one before any are). */
-	int32 GetRowCount() const { return FMath::Max(Rows.Num(), 1); }
+	int32 GetRowCount() const { return FMath::Max(RowSeqs.Num(), 1); }
 	/** The body's height now, and the height it is easing toward, in slate units. */
 	float GetShownHeight() const { return ShownHeight; }
 	float GetTargetHeight() const;
@@ -105,14 +111,23 @@ public:
 	FString DescribeLines(int32 MaxLines) const;
 
 private:
-	/** Add one drawn row (a line can be several: a finding is three). */
-	void AddRow(TSharedRef<SWidget> Row);
+	/** Add one drawn row (a line can be several: a finding is three). Returns its sequence number. */
+	int32 AddRow(TSharedRef<SWidget> Row);
+	void RemoveRow(int32 Seq);
+	void UpdateVisibleFrom();
 	TSharedRef<SWidget> CodeRow(const FString& Number, TCHAR Marker, const FString& Code, TSharedPtr<SWonderlandTypedText>& OutTyper);
 	TSharedRef<SWidget> TextRow(const FString& Text, const FLinearColor& Color, bool bBold = false, float Indent = 0.0f);
 
 	FString RestingText;
 	TSharedPtr<SVerticalBox> Root;
-	TArray<TSharedRef<SWidget>> Rows;
+	/** The rows in order, by sequence number, with the slot widget each sits in. */
+	TArray<int32> RowSeqs;
+	TArray<TSharedRef<SWidget>> RowSlots;
+	int32 NextSeq = 0;
+	/** Rows with a sequence number below this are older than the newest VisibleRows and are collapsed. */
+	int32 VisibleFromSeq = 0;
+	/** The dim sub-line under the newest Julius row, removed when the next row comes. */
+	int32 JuliusDetailSeq = INDEX_NONE;
 	TArray<TSharedPtr<SWonderlandTypedText>> Typers;
 	TArray<FString> Written;
 	FString NewestText;

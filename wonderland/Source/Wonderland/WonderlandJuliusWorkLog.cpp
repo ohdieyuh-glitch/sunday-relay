@@ -249,7 +249,10 @@ void SWonderlandWorkLog::Tick(const FGeometry& AllottedGeometry, const double In
 
 void SWonderlandWorkLog::Reset()
 {
-	Rows.Reset();
+	RowSeqs.Reset();
+	RowSlots.Reset();
+	VisibleFromSeq = 0;
+	JuliusDetailSeq = INDEX_NONE;
 	Typers.Reset();
 	Written.Reset();
 	NewestText.Reset();
@@ -323,30 +326,93 @@ TSharedRef<SWidget> SWonderlandWorkLog::CodeRow(const FString& Number, TCHAR Mar
 		];
 }
 
-void SWonderlandWorkLog::AddRow(TSharedRef<SWidget> Row)
+int32 SWonderlandWorkLog::AddRow(TSharedRef<SWidget> Row)
 {
 	if (!Root.IsValid())
 	{
-		return;
+		return INDEX_NONE;
 	}
-	if (Rows.Num() == 0)
+	if (RowSeqs.Num() == 0)
 	{
 		// The resting line gives way to the first work.
 		Root->ClearChildren();
 	}
-	const int32 Index = Rows.Add(Row);
+	const int32 Seq = NextSeq++;
 	// ONLY THE NEWEST ROWS ARE LAID OUT: older ones collapse, so the body never has to scroll.
-	Root->AddSlot().AutoHeight()
-	[
-		SNew(SBox)
-		.Visibility_Lambda([this, Index]()
+	TSharedRef<SWidget> Wrapper = SNew(SBox)
+		.Visibility_Lambda([this, Seq]()
 		{
-			return Index >= Rows.Num() - VisibleRows ? EVisibility::Visible : EVisibility::Collapsed;
+			return Seq >= VisibleFromSeq ? EVisibility::Visible : EVisibility::Collapsed;
 		})
 		[
 			Row
-		]
+		];
+	Root->AddSlot().AutoHeight()
+	[
+		Wrapper
 	];
+	RowSeqs.Add(Seq);
+	RowSlots.Add(Wrapper);
+	UpdateVisibleFrom();
+	return Seq;
+}
+
+void SWonderlandWorkLog::RemoveRow(int32 Seq)
+{
+	const int32 Index = RowSeqs.IndexOfByKey(Seq);
+	if (Index == INDEX_NONE || !Root.IsValid())
+	{
+		return;
+	}
+	Root->RemoveSlot(RowSlots[Index]);
+	RowSeqs.RemoveAt(Index);
+	RowSlots.RemoveAt(Index);
+	UpdateVisibleFrom();
+}
+
+void SWonderlandWorkLog::UpdateVisibleFrom()
+{
+	VisibleFromSeq = RowSeqs.Num() > VisibleRows ? RowSeqs[RowSeqs.Num() - VisibleRows] : TNumericLimits<int32>::Min();
+}
+
+void SWonderlandWorkLog::AddJuliusRow(const FString& Time, const FString& Role, const FString& Headline, const FString& Detail)
+{
+	// The sub-line belongs to the newest row only, as it always has.
+	if (JuliusDetailSeq != INDEX_NONE)
+	{
+		RemoveRow(JuliusDetailSeq);
+		JuliusDetailSeq = INDEX_NONE;
+	}
+	++LineCount;
+	NewestText = Headline;
+	Written.Add(FString::Printf(TEXT("%s: %s"), *Role, *Headline));
+	AddRow(SNew(SBox)
+		.HeightOverride(RowHeight)
+		.VAlign(VAlign_Center)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 5.0f, 0.0f)
+			[
+				SNew(STextBlock).Text(FText::FromString(TEXT("\u25CF"))).Font(WonderlandUi::Mono(6)).ColorAndOpacity(WonderlandUi::Gold())
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 7.0f, 0.0f)
+			[
+				SNew(STextBlock).Text(FText::FromString(Time)).Font(WonderlandUi::Mono(9)).ColorAndOpacity(WonderlandUi::Gold())
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 5.0f, 0.0f)
+			[
+				SNew(STextBlock).Text(FText::FromString(Role + TEXT(":"))).Font(WonderlandUi::Mono(9)).ColorAndOpacity(WonderlandUi::Gold(0.9f))
+			]
+			+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+			[
+				SNew(STextBlock).Text(FText::FromString(Headline)).Font(WonderlandUi::Mono(9)).ColorAndOpacity(WonderlandUi::Cream())
+				.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+			]
+		]);
+	if (!Detail.IsEmpty())
+	{
+		JuliusDetailSeq = AddRow(TextRow(Detail, WonderlandUi::Dim(), false, 18.0f));
+	}
 }
 
 int32 SWonderlandWorkLog::AddLine(EWonderlandRoleLineKind Kind, const FString& Text)

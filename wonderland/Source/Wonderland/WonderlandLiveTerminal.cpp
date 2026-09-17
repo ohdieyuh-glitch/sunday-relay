@@ -453,12 +453,13 @@ void SWonderlandLiveTerminal::RebuildJuliusBody()
 
 void SWonderlandLiveTerminal::AddJuliusRow(const FString& Role, const FString& Headline, const FString& Detail)
 {
-	JuliusRows.Add({ FDateTime::Now().ToString(TEXT("%H:%M:%S")), Role, Headline, Detail });
-	RebuildJuliusBody();
-	// A row is Julius's own work now: it goes into the JULIUS 3.3 section's log.
-	if (const TSharedPtr<SWonderlandWorkLog> Log = GetWorkLog(TEXT("JULIUS 3.3")))
+	const FString Time = FDateTime::Now().ToString(TEXT("%H:%M:%S"));
+	JuliusRows.Add({ Time, Role, Headline, Detail });
+	LatestJuliusHeadline = Headline;
+	// The JULIUS 3.3 section draws its rows as the approved terminal always has: bullet, time, role, headline, sub-line.
+	if (const TSharedPtr<SWonderlandWorkLog> JuliusLog = GetWorkLog(TEXT("JULIUS 3.3")))
 	{
-		Log->AddLine(EWonderlandRoleLineKind::Log, Headline);
+		JuliusLog->AddJuliusRow(Time, Role, Headline, Detail);
 	}
 }
 
