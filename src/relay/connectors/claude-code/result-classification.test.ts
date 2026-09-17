@@ -11,7 +11,10 @@ import {
   readClaudeCodeErrorFlag,
   readClaudeCodeTerminalReason,
 } from './result-classification';
-import { createStreamParser } from './stream-parser';
+import { createStreamParser, type ParsedStreamState } from './stream-parser';
+import { toObservedRun } from './run-observation-adapter';
+import { normalizeClaudeRun, type NormalizeContext } from './event-normalizer';
+import type { ClaudeRunOutcome } from './process-runner';
 
 /**
  * A RESULT IS A SUCCESS ONLY WHEN EVERY FIELD SAYS SO.
@@ -151,5 +154,47 @@ describe('the local stream parser keeps what the result said', () => {
     expect(state.terminalReason).toBe('max_turns');
     expect(classifyClaudeCodeResult(state)).toBe('MAX_TURNS');
     expect(claudeCodeResultRefused(state)).toBe(true);
+  });
+});
+
+describe('the local surface reads the same classifier: the run record and the event stream', () => {
+  const state = (result: Partial<ParsedStreamState>): ParsedStreamState => ({
+    initSeen: true, sessionId: 's1', model: 'm', cwd: '/w', toolActivity: [], finalResult: 'report',
+    resultSubtype: 'success', isError: false, terminalReason: null,
+    usage: { numTurns: 2, durationMs: 1_000, apiDurationMs: 800, reportedCostUsd: 0.01 },
+    unknownRecordCount: 0, malformedLineCount: 0, thinkingBlocksOmitted: 0, assistantTextChunks: [],
+    ...result,
+  });
+  const run = (parsed: ParsedStreamState): ClaudeRunOutcome => ({
+    parsed, stderr: '', exitCode: 0, signal: null, startedAt: '2026-09-17T12:00:00.000Z', completedAt: '2026-09-17T12:00:01.000Z',
+    durationMs: 1_000, timedOut: false, cancelled: false, outputTruncated: false, termination: 'not_required', redactions: 0,
+  } as ClaudeRunOutcome);
+  const ctx = {
+    projectId: 'prj', runId: 'run', taskId: 'tsk', workspaceId: 'ws', adapterId: 'claude-code', attempt: 1, now: '2026-09-17T12:00:01.000Z',
+  } as unknown as NormalizeContext;
+  const refused: readonly Partial<ParsedStreamState>[] = [
+    { resultSubtype: 'error_max_turns', isError: false },
+    { resultSubtype: 'success', isError: null },
+    { resultSubtype: 'success', isError: false, terminalReason: 'hook_stopped' },
+    { resultSubtype: 'error_invented_later', isError: false },
+  ];
+
+  it('the run record calls a refused result a reported error, and only a success completed', () => {
+    for (const result of refused) {
+      expect(toObservedRun(run(state(result))).termination, JSON.stringify(result)).toBe('reported_error');
+    }
+    expect(toObservedRun(run(state({}))).termination).toBe('completed');
+    expect(toObservedRun(run(state({ terminalReason: 'completed' }))).termination).toBe('completed');
+  });
+
+  it('the event stream says the process failed, and never that a report was created', () => {
+    for (const result of refused) {
+      const kinds = normalizeClaudeRun(ctx, state(result), run(state(result))).map((event) => event.kind);
+      expect(kinds, JSON.stringify(result)).toContain('agent.process_failed');
+      expect(kinds, JSON.stringify(result)).not.toContain('agent.report_created');
+    }
+    const healthy = normalizeClaudeRun(ctx, state({}), run(state({}))).map((event) => event.kind);
+    expect(healthy).toContain('agent.report_created');
+    expect(healthy).not.toContain('agent.process_failed');
   });
 });

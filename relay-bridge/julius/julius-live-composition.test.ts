@@ -32,6 +32,7 @@ import { buildReviewPrompt, loadHermesConfig, reviewDiagnostics, runHermesReview
 import { UNKNOWN_USAGE } from '../reviewer-harness/hermes/runner';
 import { runRemoteHermesReview, type RemoteHermesConfig } from '../hermes-remote-review';
 import { JULIUS_REVIEW_STAGES, repairTaskTypeFor, reviewChargeFor, reviewStageOf } from '../../src/relay/mission/julius';
+import { juliusLeaseHoldBoundMs, juliusLeaseMsFor, type JuliusRunLoopConfig } from '../../src/relay/mission/julius';
 import { DEFAULT_HOSTED_LIMITS, type HostedLimits } from '../hosted-coding-agent/hosted-envelope';
 import {
   createLiveArtifactExchange,
@@ -48,6 +49,7 @@ import {
   CODER_WORKER,
   reviewerWorker,
   assembleLiveJuliusRuntime,
+  JULIUS_LIVE_LEASE_SETTLEMENT_ALLOWANCE_MS,
   createContextAndClaimHandoffs,
   createRunSpendBudget,
   driveJuliusRunToTerminal,
@@ -973,6 +975,31 @@ describe('a full mission drive with Julius in control', () => {
    * asserts the SWEEP ITSELF, through the real drive, rather than trusting a
    * line to stay where it was put.
    */
+  it('the live lease follows the registered workers and is renewed, never a flat 600 s', () => {
+    const memory = createJuliusMemoryStore();
+    const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
+    const fakes = liveResolution({ verdicts: ['approved'], contexts: handoffs.contexts });
+    expect(fakes.resolution.ok).toBe(true);
+    const workers = fakes.resolution.entries.map((entry) => entry.worker);
+    const configOf = (leaseMs?: number): JuliusRunLoopConfig => (assembleLiveJuliusRuntime({
+      store: handoffs.store, entries: fakes.resolution.entries,
+      cardRevision: 'card-test-1', spendCeilingUsdMicros: 5_000_000, maxRepairRounds: 1,
+      ...(leaseMs === undefined ? {} : { leaseMs }),
+    }).loop as unknown as { config: JuliusRunLoopConfig }).config;
+    const config = configOf();
+    // THE LEASE OUTLIVES THE LONGEST DECLARED DISPATCH, settled — not 600 000 ms beside a longer coder.
+    expect(config.leaseMs).toBe(juliusLeaseMsFor(workers, JULIUS_LIVE_LEASE_SETTLEMENT_ALLOWANCE_MS));
+    expect(config.leaseMs).toBeGreaterThan(Math.max(...workers.map((worker) => worker.timeoutMs)));
+    expect(config.leaseMs).toBeGreaterThan(CODER_WORKER.timeoutMs);
+    // AND IT IS RENEWED, inside the lease, up to each role's own bound.
+    expect(config.leaseRenewal).toBeDefined();
+    expect(config.leaseRenewal!.renewEveryMs).toBeLessThan(config.leaseMs);
+    expect(config.leaseRenewal!.holdBoundMsFor({ role: 'CODING_AGENT', taskType: 'build' }))
+      .toBe(juliusLeaseHoldBoundMs(workers, { role: 'CODING_AGENT' }, JULIUS_LIVE_LEASE_SETTLEMENT_ALLOWANCE_MS));
+    // A drill that must witness a real expiry still shortens the lease rather than the truth.
+    expect(configOf(2_000).leaseMs).toBe(2_000);
+  });
+
   it('the live driver runs the recovery sweep, so an abandoned lease is counted', async () => {
     const memory = createJuliusMemoryStore();
     const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);

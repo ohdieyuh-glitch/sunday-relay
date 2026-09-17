@@ -31,7 +31,7 @@ interface Gate { readonly started: Promise<void>; release(): void; readonly abor
  * The scripted coder, with its first dispatch held open like a long session.
  * It honours its signal, as a real provider now must; `deaf` makes it ignore it.
  */
-const holdFirstDispatch = (harness: JuliusHarness, options: { deaf?: boolean } = {}): Gate => {
+const holdFirstDispatch = (harness: JuliusHarness, options: { deaf?: boolean; failWith?: () => Error } = {}): Gate => {
   const inner = harness.adapters.get(CODER.adapterId)!;
   let dispatches = 0;
   let markStarted = (): void => undefined;
@@ -51,6 +51,7 @@ const holdFirstDispatch = (harness: JuliusHarness, options: { deaf?: boolean } =
           }, { once: true });
           markStarted();
         });
+        if (options.failWith !== undefined) throw options.failWith();
       }
       return inner.dispatch(input);
     },
@@ -237,6 +238,59 @@ describe('a stale worker cannot continue', () => {
     for (const expiry of expiries) expect(Date.parse(expiry)).toBeLessThanOrEqual(admittedAt + 3_000);
     // A stopped attempt left no evidence.
     expect(await harness.store.evidenceForRun('run-1', 'prj-1')).toHaveLength(0);
+  });
+});
+
+describe('the keeper belongs to the attempt, and the loop refuses a renewal that could not keep a lease', () => {
+  it('renewal stops when the task is finished: nothing renews a lease the attempt no longer holds', async () => {
+    const { harness, time } = setup();
+    let renewals = 0;
+    const heartbeat = harness.store.heartbeat.bind(harness.store);
+    (harness.store as { heartbeat: typeof heartbeat }).heartbeat = async (input) => { renewals += 1; return heartbeat(input); };
+    const gate = holdFirstDispatch(harness);
+    const a = loopAs(harness, time, 'worker-a', renewal());
+    const ticking = a.tick(scope);
+    await gate.started;
+    await time.advance(1_000);
+    gate.release();
+    const report = await ticking;
+    expect(report.outcomes.map((outcome) => outcome.kind)).toEqual(['COMPLETED']);
+    const atFinish = renewals;
+    expect(atFinish).toBeGreaterThan(1);
+    await time.advance(10_000);
+    expect(renewals, 'a renewal ran after the attempt was finished').toBe(atFinish);
+  });
+
+  it('a run loop refuses a renewal interval that is not shorter than its lease', () => {
+    const { harness } = setup();
+    for (const renewEveryMs of [LEASE_MS, LEASE_MS * 2, 0, 1.5]) {
+      expect(() => new JuliusRunLoop(harness.deps, harness.policies, {
+        claimLimit: 4, leaseMs: LEASE_MS, leaseRenewal: { renewEveryMs, holdBoundMsFor: () => 60_000 },
+      })).toThrow('invalid_julius_lease_renewal_interval');
+    }
+  });
+});
+
+describe('a requeue is recorded only when the store took it', () => {
+  it('a retryable failure from a worker whose lease was reclaimed is not a RETRY: the task belongs to another worker now', async () => {
+    const { harness, time } = setup();
+    const gate = holdFirstDispatch(harness, {
+      failWith: () => new JuliusDispatchError('RATE_LIMIT', true, 'The provider rate limited the stale session.', 'fixture_rate_limited'),
+    });
+    // No renewal on either worker: main's behaviour, where the lease simply lapses.
+    const a = loopAs(harness, time, 'worker-a', null);
+    const b = loopAs(harness, time, 'worker-b', null);
+    const stale = a.tick(scope);
+    await gate.started;
+    await time.advance(5_000);
+    const fresh = await b.tick(scope);
+    expect(fresh.outcomes.map((outcome) => outcome.kind)).toEqual(['COMPLETED']);
+
+    gate.release();
+    const report = await stale;
+    expect(report.outcomes.map((outcome) => outcome.kind)).toEqual(['FAILED']);
+    expect(harness.store.taskRow('task-1')!.state).toBe('SUCCEEDED');
+    expect(harness.store.trajectory().filter((event) => event.kind === 'RETRY'), 'no RETRY row for a requeue the store refused').toHaveLength(0);
   });
 });
 

@@ -246,6 +246,22 @@ describe('2 — the abort reaches the session, and nothing after it is evidence'
     expect(artifacts.get(diffRef('run-live'))).toBeNull();
   });
 
+  it('the provider itself never returns completed for a dispatch aborted as its stream ended', async () => {
+    // The port's own contract, whichever Julius-side adapter reads it.
+    const controller = new AbortController();
+    const { queryFn } = fakeSdk([init, result({})]);
+    const endsThenAborted: typeof runHostedCodingAgent = async (input) => {
+      const outcome = await runHostedCodingAgent({ ...input, onCancel: () => undefined });
+      controller.abort();
+      return outcome;
+    };
+    // A real governed request, captured from the adapter that builds it.
+    const recorder = createScriptedCodingAgentProvider({ script: [{ kind: 'completed' }] });
+    await adapterOver(recorder).adapter.dispatch(DISPATCH);
+    const outcome = await claude(queryFn, endsThenAborted).execute(recorder.requests[0]!, controller.signal);
+    expect(outcome).toMatchObject({ kind: 'failed', failure: 'CANCELLED', runtimeStarted: true, costUsdMicros: 20_000, providerFailureClass: 'coder_cancelled' });
+  });
+
   it('an abort between the executor steps stops the next one', async () => {
     const controller = new AbortController();
     const provider = createScriptedCodingAgentProvider({ script: [{ kind: 'completed' }] });
