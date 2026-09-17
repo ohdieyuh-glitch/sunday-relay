@@ -9,6 +9,12 @@ cameras. A lawn needs EDGE and SILHOUETTE -- blades standing up where the grass 
 WHAT. The forge's WL_Garden_Grass_Tuft (e47bf501): 13 tapered blades, 13-32 cm, out of a low leaf clump. 191 tris,
 no collision, culled at CULL.
 
+WHAT THE GROUND IS. Two things, and the first cut only knew one of them: 385 SM_garden_lawn boxes whose top is at
+z = -2, and ONE 3 km square slab (`V2_GroundSlab`, a Cube in MI_V2_Moss, top at z = -14) that is the world's floor
+and, by the ground census over the gameplay cameras, the single largest surface a player sees. Walking only the
+garden lawns left the Hamlet, the Tea Terrace, the Water Garden and the south bare. Ground is read from
+ground_boxes.json, which finds ground by its MATERIAL whatever mesh carries it.
+
 WHERE, and the mistake that came first. The lawns are a handful of enormous slabs -- 385 boxes over 1.66 km2 -- and
 the first cut planted their BOX edges. Every tuft landed at least 107 m from the lawn cameras and nothing was visible
 at any of them: the lawn a player sees is the MIDDLE of a slab, and the visible boundary is drawn by the paving
@@ -65,11 +71,16 @@ def main():
                "hx": t["len_x"] * 0.5, "hy": t["len_y"] * 0.5, "top": t["top"]} for t in streets]
     paving += [{"label": b["label"], "x": b["x"], "y": b["y"], "yaw": b["yaw"],
                 "hx": b["hx"], "hy": b["hy"], "top": b["zmax"]} for b in terraces]
-    lawns = [b for b in json.loads((TMP / "lawn_census.json").read_text(encoding="utf-8")) if b["mat"] in GRASS]
+    ground = json.loads((TMP / "ground_boxes.json").read_text(encoding="utf-8"))
+    lawns = [b for b in ground if b["mat"] in GRASS and b["mesh"] in ("SM_garden_lawn", "Cube")]
+    buildings = json.loads((TMP / "building_census.json").read_text(encoding="utf-8"))
     cams = [(c[1], c[2]) for c in json.loads(CAMS.read_text(encoding="utf-8"))["cams"]]
     pg = F.grid_of(paving, lambda t: (t["x"], t["y"]))
     sg = F.grid_of(streets, lambda t: (t["x"], t["y"]))
-    lg = F.grid_of(lawns, lambda b: (b["x"], b["y"]))
+    small = [b for b in lawns if b["hx"] < 50000.0]
+    world_floor = [b for b in lawns if b["hx"] >= 50000.0]
+    lg = F.grid_of(small, lambda b: (b["x"], b["y"]))
+    bg = F.grid_of(buildings, lambda b: (b["x"], b["y"]))
     stats = Counter()
     by_prefix = defaultdict(dict)
 
@@ -85,14 +96,20 @@ def main():
                 return t
         return None
 
+    def _in(b, x, y):
+        th = math.radians(b["yaw"])
+        dx, dy = x - b["x"], y - b["y"]
+        lx = dx * math.cos(th) + dy * math.sin(th)
+        ly = -dx * math.sin(th) + dy * math.cos(th)
+        return abs(lx) <= b["hx"] and abs(ly) <= b["hy"]
+
     def lawn_at(x, y):
+        """The grass a tuft would stand on: a garden lawn if there is one here, else the world's own ground slab."""
         for j in F.around(lg, x, y):
-            b = lawns[j]
-            th = math.radians(b["yaw"])
-            dx, dy = x - b["x"], y - b["y"]
-            lx = dx * math.cos(th) + dy * math.sin(th)
-            ly = -dx * math.sin(th) + dy * math.cos(th)
-            if abs(lx) <= b["lx"] * 0.5 and abs(ly) <= b["ly"] * 0.5:
+            if _in(small[j], x, y):
+                return small[j]
+        for b in world_floor:
+            if _in(b, x, y):
                 return b
         return None
 
@@ -137,10 +154,13 @@ def main():
                     if b is None:
                         stats["not_lawn"] += 1
                         continue
-                    if covered(x, y, b["top"] + 5.0) is not None:
+                    if any(F.inside_box(buildings[j], x, y, b["zmax"] + 40.0) for j in F.around(bg, x, y)):
+                        stats["inside_a_building"] += 1
+                        continue
+                    if covered(x, y, b["zmax"] + 5.0) is not None:
                         stats["still_paving"] += 1
                         continue
-                    if not (-5.0 <= t["top"] - b["top"] <= DROP_MAX):
+                    if not (-5.0 <= t["top"] - b["zmax"] <= DROP_MAX):
                         stats["lawn_is_not_below_the_paving"] += 1
                         continue
                     prefix = prefix_at(t, x, y)
@@ -150,7 +170,7 @@ def main():
                         bt = by_prefix[prefix].setdefault(k, {"id": k, "mesh": part["mesh"], "material": b["mat"],
                                                               "instances": [], "collides": False, "cast_shadow": True,
                                                               "affect_df": False, "cull_distance": CULL})
-                        bt["instances"].append([round(x, 1), round(y, 1), round(b["top"], 1), 0.0,
+                        bt["instances"].append([round(x, 1), round(y, 1), round(b["zmax"], 1), 0.0,
                                                 round(rng.uniform(0.0, 360.0), 1), 0.0, sc, sc, sc])
                     stats["tufts"] += 1
     for old in HERE.glob("gt01_*.json"):
