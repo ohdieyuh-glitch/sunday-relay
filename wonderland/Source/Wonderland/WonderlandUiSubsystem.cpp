@@ -836,7 +836,17 @@ UWonderlandUiSubsystem::FWonderWebWindow* UWonderlandUiSubsystem::EnsureWonderWe
 			const TWeakObjectPtr<UWonderlandWonderWebSubsystem> WebState(WonderWebState());
 			Window->Chip = SNew(SWonderWebWindowChip)
 				.Title(INVTEXT("PIXEL CANVAS"))
-				.Status_Lambda([WebState]() { return FText::FromString(WebState.IsValid() ? WebState->GetSurface().Viewport.Status : FString(TEXT("-"))); })
+				.Status_Lambda([WebState]()
+				{
+					if (!WebState.IsValid())
+					{
+						return FText::GetEmpty();
+					}
+					// LIVE WHILE FOLDED: the chip reads the creation as it is now.
+					const FWonderWebSurface& Surface = WebState->GetSurface();
+					return FText::FromString(Surface.Viewport.bRunning ? FString::Printf(TEXT("RUNNING  ·  %d CELLS PAINTED"), WebState->GetPaintedCells())
+						: (Surface.Viewport.Status.IsEmpty() ? FString(TEXT("NOT RUNNING")) : Surface.Viewport.Status.ToUpper()));
+				})
 				.StatusColor(FSlateColor(WonderWebLook::Line(0.8f)))
 				.OnRestore_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->MinimizeWonderWebWindow(WonderWebWindowIds::Creation, false); } });
 		}
