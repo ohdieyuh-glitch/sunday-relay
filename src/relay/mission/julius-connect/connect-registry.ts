@@ -85,6 +85,12 @@ export const JULIUS_CONNECT_REGISTRY: readonly ConnectorDescriptor[] = Object.fr
     capabilities: [cap('db.read', 'Read tables', 'read'), cap('db.write', 'Write rows', 'write'), cap('db.admin', 'Manage roles and schema', 'admin'), cap('db.drop', 'Drop tables', 'destructive')],
   },
   {
+    connectorId: 'dev-social', serviceId: 'dev-social', displayName: 'Social App (development)', aliases: ['social', 'instagram', 'photos'], version: '1.0.0-dev', development: true,
+    routes: [route('browser_computer', 'Sign in once in the governed browser so Julius can post as you (development -- nothing is contacted)')],
+    capabilities: [cap('profile.read', 'Read the profile', 'read'), cap('posts.read', 'Read posts', 'read'), cap('posts.create', 'Publish a post', 'write'),
+      cap('messages.send', 'Send direct messages', 'write'), cap('account.settings', 'Change account settings', 'admin'), cap('posts.delete', 'Delete posts', 'destructive')],
+  },
+  {
     connectorId: 'dev-legacy-portal', serviceId: 'dev-legacy-portal', displayName: 'Supplier Portal (development)', aliases: ['portal', 'legacy'], version: '1.0.0-dev', development: true,
     routes: [route('browser_computer', 'Sign in once so Julius can operate the portal within the approved actions (development -- nothing is contacted)')],
     capabilities: [cap('portal.read', 'Read orders', 'read'), cap('portal.submit', 'Submit forms', 'write'), cap('portal.account_settings', 'Change account settings', 'admin')],

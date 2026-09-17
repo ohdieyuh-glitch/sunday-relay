@@ -74,7 +74,25 @@ export const DESIGN_SYNC_TEMPLATE: ConnectTaskTemplate = Object.freeze({
   ],
 });
 
-export const CONNECT_TASK_TEMPLATES: readonly ConnectTaskTemplate[] = Object.freeze([DESIGN_SYNC_TEMPLATE]);
+/**
+ * THE FOUNDER'S SECOND SAMPLE (2026-09-17): Julius works a real-world-shaped site through the governed browser -- open the
+ * profile, read what is already there, write the caption, publish it, then check it landed. The page in Wonder Web moves
+ * only as these steps are allowed: nothing is published until the browser connection is authorized.
+ */
+export const SOCIAL_POST_TEMPLATE: ConnectTaskTemplate = Object.freeze({
+  templateId: 'social-post',
+  title: 'Post the Pixel Canvas picture to the studio account',
+  purpose: 'Opening the studio profile and publishing one post with the picture from Pixel Canvas',
+  steps: [
+    { label: 'Open the studio profile', connectorId: 'dev-social', capability: 'profile.read' },
+    { label: 'Read the posts already there', connectorId: 'dev-social', capability: 'posts.read' },
+    { label: 'Write the caption', connectorId: 'dev-social', capability: 'posts.create' },
+    { label: 'Publish the post', connectorId: 'dev-social', capability: 'posts.create' },
+    { label: 'Re-read the profile to verify it landed', connectorId: 'dev-social', capability: 'posts.read' },
+  ],
+});
+
+export const CONNECT_TASK_TEMPLATES: readonly ConnectTaskTemplate[] = Object.freeze([DESIGN_SYNC_TEMPLATE, SOCIAL_POST_TEMPLATE]);
 
 function move(task: ConnectTask, to: JuliusMissionState, reasonCode: string, safeSummary: string, at: string): ConnectTask {
   const transition = transitionMission({

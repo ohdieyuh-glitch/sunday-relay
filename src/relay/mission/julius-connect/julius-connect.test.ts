@@ -4,6 +4,7 @@ import {
   CONNECT_EDGES,
   CONNECT_STATES,
   DESIGN_SYNC_TEMPLATE,
+  SOCIAL_POST_TEMPLATE,
   EMPTY_JULIUS_CONNECT_STATE,
   EXTERNAL_CAPABILITY_REQUIRED,
   JULIUS_CONNECT_REGISTRY,
@@ -351,6 +352,32 @@ describe('julius connect: registry and routes', () => {
     expect(github).toMatchObject({ kind: 'REAL SERVICE', stateLabel: 'INTEGRATION NOT BUILT', reachable: false, canConnect: false });
     expect(github.unavailableReason).toContain('not built');
     expect(surface.services.length).toBe(JULIUS_CONNECT_REGISTRY.length);
+  });
+
+  it('the social app is reached through the governed browser, and only read and write capabilities are asked for', () => {
+    const connector = findConnector('dev-social')!;
+    expect(connector.development).toBe(true);
+    expect(chooseConnectRoute(connector)?.route).toBe('browser_computer');
+    const asked = ask(EMPTY_JULIUS_CONNECT_STATE, 'dev-social', ['profile.read', 'posts.read', 'posts.create']);
+    expect(asked.request.requested).toEqual(['profile.read', 'posts.read', 'posts.create']);
+    expect(asked.request.notRequested).toEqual(expect.arrayContaining(['account.settings', 'posts.delete']));
+    expect(asked.request.humanStep).toContain('governed browser');
+  });
+
+  it('nothing is published until the browser connection is authorized', () => {
+    let state = EMPTY_JULIUS_CONNECT_STATE;
+    let task = startConnectTask(SOCIAL_POST_TEMPLATE, { taskId: 'task-s', missionId: 'mission-s', projectId: 'project-a', userId: USER }, clock().at);
+    ({ state, task } = advanceConnectTask(state, task, clock()));
+    expect(task.runState).toBe('BLOCKED');
+    expect(task.blocked?.capabilities).toEqual(['profile.read', 'posts.read', 'posts.create']);
+    expect(auditAction(state, 'capability.used')).toHaveLength(0);
+    const request = state.requests[0];
+    state = must(approveRequest(state, { requestId: request.requestId, userId: USER }, clock()));
+    state = must(completeAuthorization(state, { requestId: request.requestId, outcome: devAuthorized(['profile.read', 'posts.read', 'posts.create']) }, clock()));
+    ({ state, task } = run(state, task, 12));
+    expect(task.runState).toBe('COMPLETED');
+    // The publish step ran twice through the gate (the caption and the post itself), each use recorded.
+    expect(auditAction(state, 'capability.used').filter((e) => e.capability === 'posts.create')).toHaveLength(2);
   });
 
   it('discovers by what the user says, and never requests admin or destructive capabilities on their behalf', () => {

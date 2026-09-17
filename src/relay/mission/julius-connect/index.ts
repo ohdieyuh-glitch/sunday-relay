@@ -66,7 +66,7 @@ export {
 } from './connect-lifecycle';
 export type { AuthorizationOutcome, CapabilityRequestOutcome, ConnectClock } from './connect-lifecycle';
 
-export { CONNECT_TASK_TEMPLATES, DESIGN_SYNC_TEMPLATE, advanceConnectTask, startConnectTask } from './connect-mission';
+export { CONNECT_TASK_TEMPLATES, DESIGN_SYNC_TEMPLATE, SOCIAL_POST_TEMPLATE, advanceConnectTask, startConnectTask } from './connect-mission';
 export type { ConnectStepExecutor, ConnectTask, ConnectTaskStep, ConnectTaskTemplate } from './connect-mission';
 
 export { CONNECTIONS_SURFACE_SCHEMA, assertConnectionsSurfaceIsSafe, projectConnectionsSurface } from './connect-surface';
