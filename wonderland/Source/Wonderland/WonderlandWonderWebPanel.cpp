@@ -496,7 +496,8 @@ TSharedRef<SWidget> SWonderlandWonderWebPanel::Probe(FName Id, TSharedRef<SWidge
 	{
 		if (const TSharedPtr<SWonderlandWonderWebPanel> Self = WeakSelf.Pin())
 		{
-			Self->ControlCentres.Add(Id, Centre);
+			// In the window's own design pixels, however large the window is drawn and wherever it stands.
+			Self->ControlCentres.Add(Id, Self->GetTickSpaceGeometry().AbsoluteToLocal(Centre));
 			Self->ControlSeenAt.Add(Id, Self->Now);
 		}
 	})

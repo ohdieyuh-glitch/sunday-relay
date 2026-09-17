@@ -1,62 +1,34 @@
 // WONDERLAND — WONDER WEB STANDS IN THE WORLD, AS A WORKSPACE OF WINDOWS.
 //
-// "Wonder Web is INSIDE Wonderland" (founder, 2026-09-17). The windows are not pasted over the screen: they stand in the
-// garden ahead of the Relay Dog, the camera glides to them with the world still round their edges, and closing the
-// workspace glides back to the Dog exactly where it was.
+// "Wonder Web is INSIDE Wonderland" (founder, 2026-09-17). The workspace is a frame standing in the garden ahead of the
+// Relay Dog; the camera glides to it with the world still round its edges, and closing it glides back to the Dog.
 //
 // A WORKSPACE, NOT ONE GIANT BROWSER (founder, 2026-09-17: "2-3 active Wonder Web surfaces can be visible simultaneously
 // ... multitasking workspace"). AWonderlandWonderWebWorkspace is the frame: one anchor in the world and the one camera on
-// it. Each AWonderlandWonderWebScreen is one window standing in that frame -- a running creation, Julius Connect, and
-// whatever comes next -- with its own place, size, focus and minimized state. Windows are views under the one Julius; a
-// window never owns authority.
+// it. Each AWonderlandWonderWebScreen is one window's place in that frame -- a running creation, Julius Connect, and
+// whatever comes next -- with its own offset, size, focus and minimized state, gliding and growing on critically damped
+// curves. Windows are views under the one Julius; a window never owns authority.
 //
-// PERFORMANCE: the focused window redraws every frame, a visible background window a dozen times a second, a minimized one
-// only as a small live chip. The work behind a window never pauses for how it is drawn.
+// HOW A WINDOW IS DRAWN (editor 83). Where each window's glass stands is worked out in the world, and the window itself is
+// drawn by Slate exactly over that place, after the frame is rendered. Drawn INTO the world, a window's text went through
+// the temporal upscaler, and every line that changed smeared for most of a second -- on a window that changes every few
+// seconds while Julius works. Drawn over its place, the text is crisp the frame it changes, and the window takes the mouse
+// and keyboard as any Slate widget does. The HUD is never under a window: the workspace tiles around it.
 //
-// USING THEM WITH THE MOUSE AND KEYBOARD. While the workspace is open the UI subsystem holds UI input, like every panel, with
-// an invisible full-viewport layer (SWonderlandWonderWebInputLayer). That layer turns the cursor into a ray, finds the
-// front-most window (or chip) it meets, focuses it on a press, and hands the point to that window's own widget interaction
-// as a custom hit; typing goes to the focused window. Each window has its own virtual Slate user, so one window's keyboard
-// focus can never type into another.
+// PERFORMANCE: the focused window is drawn every frame; a background window through a retainer, a few times a second; a
+// minimized one is not drawn at all -- only its small chip. The work behind a window never pauses for how it is drawn.
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Components/WidgetComponent.h"
-#include "Components/WidgetInteractionComponent.h"
 #include "GameFramework/Actor.h"
+#include "Widgets/Layout/SConstraintCanvas.h"
 #include "Widgets/SCompoundWidget.h"
 #include "WonderlandWonderWebScreen.generated.h"
 
+class SBox;
+class SDPIScaler;
+class SRetainerWidget;
 class UCameraComponent;
-class UWidgetComponent;
-
-/**
- * A window's glass: the engine's widget component, able to rebuild its material when its blend mode changes at runtime.
- *
- * WHY THE GLASS IS MASKED, NOT TRANSLUCENT (editor 80). A translucent screen writes no depth, and the temporal upscaler
- * could not tell its history was stale when the text on it changed: a row that had just changed showed its old words
- * double-exposed under the new ones for over a second. A masked screen is an ordinary surface to it, and still has its
- * rounded corners.
- */
-UCLASS()
-class WONDERLAND_API UWonderlandWonderWebGlass : public UWidgetComponent
-{
-	GENERATED_BODY()
-
-public:
-	void RefreshMaterial() { UpdateMaterialInstance(); }
-};
-
-/** The engine's widget interaction, with the pointer's hover re-found on demand rather than only on its own tick. */
-UCLASS()
-class WONDERLAND_API UWonderlandWonderWebInteraction : public UWidgetInteractionComponent
-{
-	GENERATED_BODY()
-
-public:
-	/** Re-find what is under the pointer now, so a press that follows an aim lands on the widget just aimed at. */
-	void RefreshHover() { SimulatePointerMovement(); }
-};
 
 /** The frame the windows stand in: an anchor in the world and the camera that looks at it. */
 UCLASS()
@@ -83,7 +55,7 @@ private:
 	TObjectPtr<UCameraComponent> View;
 };
 
-/** One Wonder Web window standing in the workspace. */
+/** One Wonder Web window's place in the workspace. */
 UCLASS()
 class WONDERLAND_API AWonderlandWonderWebScreen : public AActor
 {
@@ -92,18 +64,11 @@ class WONDERLAND_API AWonderlandWonderWebScreen : public AActor
 public:
 	AWonderlandWonderWebScreen();
 
-	/** The window's virtual Slate user; set before the actor finishes spawning so its interaction gets a user of its own. */
-	void SetVirtualUser(int32 Index);
-
-	/** Stand this window in the workspace, showing this window widget (and this chip when minimized), and grow it in. */
-	void Present(const TSharedRef<SWidget>& Window, const FVector2D& WindowSize, const TSharedRef<SWidget>& Chip, const FVector2D& ChipSize, AWonderlandWonderWebWorkspace* Workspace);
-	/** Fold it away. It hides itself when it is gone. */
+	/** Stand this window in the workspace at its design size (and its chip's), and open it out. */
+	void Present(const FVector2D& WindowSize, const FVector2D& ChipSize, AWonderlandWonderWebWorkspace* Workspace);
+	/** Fold it away. */
 	void Dismiss();
 	bool IsPresented() const { return bPresented; }
-
-	UWidgetComponent* GetScreen() const { return Screen; }
-	UWidgetComponent* GetChip() const { return Chip; }
-	UWonderlandWonderWebInteraction* GetInteraction() const { return Interaction; }
 
 	// ---------------------------------------------------------------- the window's state in the workspace
 	void SetFocused(bool bInFocused);
@@ -114,26 +79,21 @@ public:
 	/** Which chip slot along the bottom it takes when minimized, from the left. */
 	void SetDockSlot(int32 Slot) { DockSlot = Slot; }
 	/** 1 is the multitasking size; a focused window may be expanded larger. The glass grows or shrinks to it smoothly. */
-	void SetSizeFactor(float Factor) { SizeFactor = FMath::Clamp(Factor, 0.5f, 2.0f); }
+	void SetSizeFactor(float Factor) { SizeFactor = FMath::Clamp(Factor, 0.3f, 2.0f); }
 	float GetSizeFactor() const { return SizeFactor; }
 	/** The size factor as drawn this frame, on its way to the target. */
 	float GetShownSizeFactor() const { return SizeShown; }
-	/** The window's size on the glass, uu, at its current size factor. */
+	/** The window's size on the glass, uu, at its target size factor. */
 	FVector2D GlassSize() const;
+	/** How far open the window (or its chip) is, 0 folded to 1 open. */
+	float GetOpen() const { return Grow; }
+	float GetChipOpen() const { return ChipGrow; }
 
-	// ---------------------------------------------------------------- aiming the pointer at it
 	/**
-	 * Where the pointer's ray at this viewport pixel meets this window's glass (or its chip when minimized): the distance
-	 * along the ray, and the window pixel. False when it misses.
+	 * Where the window's glass (or its chip) stands on the screen this frame, in viewport pixels -- the rectangle its Slate
+	 * window is drawn over -- and how far open it is. False when it cannot be seen.
 	 */
-	bool HitTest(APlayerController* Controller, const FVector2D& ViewportPixel, double& OutDistance, FVector2D& OutPixel) const;
-	/** Point the interaction at the viewport pixel (true), or tell it the pointer is elsewhere (false). */
-	bool AimAtViewportPixel(APlayerController* Controller, const FVector2D& ViewportPixel);
-	void AimElsewhere();
-	/** The world position of a window pixel on the glass. */
-	FVector WindowPixelToWorld(const FVector2D& WindowPixel) const;
-	/** The window pixel the last aim landed on, (-1, -1) before any. */
-	FVector2D GetLastAimPixel() const { return LastAimPixel; }
+	bool ProjectGlass(APlayerController* Controller, bool bChip, FVector2D& OutViewportMin, FVector2D& OutViewportMax, float& OutOpen) const;
 
 	// ---------------------------------------------------------------- moving it
 	// A WONDER WEB GOES WHERE IT IS NEEDED, SWIFTLY AND SMOOTHLY (founder, 2026-09-17): to a named place in the view, one
@@ -161,25 +121,13 @@ private:
 	/** The furthest the glass can go across and up while staying whole in the view. */
 	FVector2D Reach() const;
 	bool RayOnPlane(APlayerController* Controller, const FVector2D& ViewportPixel, FVector2D& OutAcrossUp) const;
-	bool HitComponent(const UWidgetComponent* Component, APlayerController* Controller, const FVector2D& ViewportPixel, double& OutDistance, FVector2D& OutPixel, FVector& OutHit) const;
 
 	UPROPERTY()
 	TObjectPtr<USceneComponent> Root;
 
-	UPROPERTY()
-	TObjectPtr<UWidgetComponent> Screen;
-
-	UPROPERTY()
-	TObjectPtr<UWidgetComponent> Chip;
-
-	UPROPERTY()
-	TObjectPtr<UWonderlandWonderWebInteraction> Interaction;
-
 	TWeakObjectPtr<AWonderlandWonderWebWorkspace> Workspace;
-	TSharedPtr<SWidget> Shown;
-	TSharedPtr<SWidget> ShownChip;
-	FVector2D WindowPixels = FVector2D(1200.0, 800.0);
-	FVector2D ChipPixels = FVector2D(420.0, 64.0);
+	FVector2D WindowPixels = FVector2D(1536.0, 1024.0);
+	FVector2D ChipPixels = FVector2D(560.0, 96.0);
 	bool bPresented = false;
 	bool bFocused = false;
 	bool bMinimized = false;
@@ -187,13 +135,10 @@ private:
 	float SizeFactor = 1.0f;
 	float SizeShown = 1.0f;
 	float SizeRate = 0.0f;
-	/** On a named place of the grid (its offset follows the window's size), rather than left where it was dragged. */
+	/** On a named place of the grid (its offset follows the window's size), rather than tiled or left where it was dragged. */
 	bool bOnGrid = true;
 	float Grow = 0.0f;
 	float ChipGrow = 0.0f;
-	float AppliedBrightness = -1.0f;
-	int32 AppliedBlend = -1;
-	float AppliedRedraw = -1.0f;
 	FVector2D Offset = FVector2D::ZeroVector;
 	FVector2D OffsetRate = FVector2D::ZeroVector;
 	FVector2D TargetOffset = FVector2D::ZeroVector;
@@ -201,13 +146,13 @@ private:
 	FName Place = TEXT("center");
 	bool bDragging = false;
 	FVector2D DragGrip = FVector2D::ZeroVector;
-	FVector2D LastAimPixel = FVector2D(-1.0, -1.0);
 };
 
 /**
- * The invisible layer that owns input while the Wonder Web workspace is open: a click focuses and reaches the front-most
- * window under the pointer, a press on a bare title bar picks that window up, typing goes to the focused window, Ctrl+arrows
- * step it across the view, Escape returns to the world.
+ * The layer that owns the Wonder Web workspace on screen while it is open. It draws every window's Slate content over
+ * the place its glass stands, and its chip when minimized; a press focuses the window it lands in; a press on a window's
+ * bare title bar picks the window up; Ctrl+arrows step the focused window across the view; Escape returns to the world.
+ * Everything inside a window -- its buttons, its text boxes, its scrolling -- is ordinary Slate input.
  */
 class WONDERLAND_API SWonderlandWonderWebInputLayer : public SCompoundWidget
 {
@@ -217,7 +162,7 @@ public:
 
 	SLATE_BEGIN_ARGS(SWonderlandWonderWebInputLayer) {}
 		SLATE_ARGUMENT(TWeakObjectPtr<APlayerController>, Controller)
-		/** Every window standing in the workspace, front to back does not matter: the nearest hit wins. */
+		/** Every window standing in the workspace. */
 		SLATE_EVENT(FGetScreens, GetScreens)
 		SLATE_EVENT(FOnFocus, OnFocus)
 		SLATE_EVENT(FSimpleDelegate, OnRequestClose)
@@ -225,31 +170,61 @@ public:
 
 	void Construct(const FArguments& InArgs);
 
+	/** Draw this window's content (and its chip) over where its glass stands. Once per window; its widgets stay here. */
+	void Present(AWonderlandWonderWebScreen* Screen, const TSharedRef<SWidget>& Content, const FVector2D& ContentSize, const TSharedRef<SWidget>& Chip, const FVector2D& ChipSize);
+	/** The window's (or chip's) rectangle on screen, in Slate absolute space, as drawn this frame. False when not drawn. */
+	bool GetWindowRect(const AWonderlandWonderWebScreen* Screen, bool bChip, FSlateRect& OutRect) const;
+	/** A point in a window's design pixels, in Slate absolute space. */
+	bool WindowPixelToAbsolute(const AWonderlandWonderWebScreen* Screen, const FVector2D& WindowPixel, FVector2D& OutAbsolute) const;
+
+	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 	virtual bool SupportsKeyboardFocus() const override { return true; }
+	virtual FReply OnPreviewMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
 	virtual FReply OnMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
 	virtual FReply OnMouseButtonUp(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
 	virtual FReply OnMouseMove(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
-	virtual FReply OnMouseWheel(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
-	virtual FReply OnKeyChar(const FGeometry& MyGeometry, const FCharacterEvent& InCharacterEvent) override;
 	virtual FReply OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent) override;
-	virtual FReply OnKeyUp(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent) override;
-	virtual FReply OnMouseButtonDoubleClick(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override { return OnMouseButtonDown(MyGeometry, MouseEvent); }
 
-	/** Clicks and characters that reached a window through this layer, for the proof job. */
+	/** Presses that landed in a window, for the proof job. */
 	int32 GetForwardedClicks() const { return ForwardedClicks; }
 	int32 GetForwardedCharacters() const { return ForwardedCharacters; }
 
 private:
-	bool ToViewportPixel(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent, FVector2D& OutPixel) const;
-	/** The front-most window under the pointer, aimed at; every other window is told the pointer is elsewhere. */
-	AWonderlandWonderWebScreen* AimFrontMost(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent);
+	struct FEntry
+	{
+		TWeakObjectPtr<AWonderlandWonderWebScreen> Screen;
+		FVector2D ContentSize = FVector2D(1536.0, 1024.0);
+		FVector2D ChipSize = FVector2D(560.0, 96.0);
+		TSharedPtr<SBox> Frame;
+		TSharedPtr<SDPIScaler> Scaler;
+		TSharedPtr<SRetainerWidget> Retainer;
+		SConstraintCanvas::FSlot* Slot = nullptr;
+		TSharedPtr<SBox> ChipFrame;
+		TSharedPtr<SDPIScaler> ChipScaler;
+		SConstraintCanvas::FSlot* ChipSlot = nullptr;
+		/** Layer-local rectangles as laid out this frame. */
+		FVector2D Min = FVector2D::ZeroVector;
+		FVector2D Max = FVector2D::ZeroVector;
+		FVector2D ChipMin = FVector2D::ZeroVector;
+		FVector2D ChipMax = FVector2D::ZeroVector;
+		bool bShown = false;
+		bool bChipShown = false;
+		int32 Retained = -1;
+	};
+
+	bool ToViewportPixel(const FGeometry& MyGeometry, const FVector2D& ScreenPosition, FVector2D& OutPixel) const;
+	/** The front-most window (or chip) under a layer-local point. */
+	const FEntry* EntryAt(const FVector2D& Local, bool& bOutChip) const;
+	const FEntry* FindEntry(const AWonderlandWonderWebScreen* Screen) const;
 	AWonderlandWonderWebScreen* FocusedScreen() const;
-	static bool IsEditingKey(const FKey& Key);
 
 	TWeakObjectPtr<APlayerController> Controller;
 	FGetScreens GetScreens;
 	FOnFocus OnFocus;
 	FSimpleDelegate OnRequestClose;
+	TSharedPtr<SConstraintCanvas> Canvas;
+	/** Stable addresses: slots and weak pointers refer into these. */
+	TArray<TUniquePtr<FEntry>> Entries;
 	/** The window a press went to, which receives its release and its drag. */
 	TWeakObjectPtr<AWonderlandWonderWebScreen> Pressed;
 	int32 ForwardedClicks = 0;
