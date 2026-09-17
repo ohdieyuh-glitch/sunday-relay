@@ -1,0 +1,30 @@
+{
+ "name": "zzAU60_gd01_apply_g1",
+ "started": "2026-09-17 06:54:43",
+ "status": "done",
+ "applied": {
+  "MI_V2_Gold": {
+   "BaseColor": [
+    1.0,
+    0.74,
+    0.32
+   ],
+   "Roughness": 0.38,
+   "RoughVary": 0.5,
+   "Metallic": 0.95
+  },
+  "MI_V2_GoldAged": {
+   "BaseColor": [
+    0.86,
+    0.63,
+    0.28
+   ],
+   "Roughness": 0.48,
+   "RoughVary": 0.5,
+   "Metallic": 0.9
+  }
+ },
+ "finished": "2026-09-17 06:54:48",
+ "seconds": 5.19,
+ "log": ""
+}
