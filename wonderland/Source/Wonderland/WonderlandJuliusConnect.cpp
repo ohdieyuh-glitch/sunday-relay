@@ -471,6 +471,7 @@ bool WonderlandParseJuliusConnectView(const FString& Body, FJuliusConnectSurface
 		FJuliusConnectTask& Task = Parsed.Tasks.AddDefaulted_GetRef();
 		TArray<TSharedPtr<FJsonObject>> Timeline;
 		if (!Str(Row, TEXT("taskId"), Task.TaskId, OutProblem) || !Str(Row, TEXT("missionId"), Task.MissionId, OutProblem)
+			|| !Str(Row, TEXT("templateId"), Task.TemplateId, OutProblem)
 			|| !Str(Row, TEXT("title"), Task.Title, OutProblem) || !Str(Row, TEXT("runState"), Task.RunState, OutProblem)
 			|| !Str(Row, TEXT("stepLabel"), Task.StepLabel, OutProblem) || !Int(Row, TEXT("progress"), Task.Progress, OutProblem)
 			|| !Int(Row, TEXT("total"), Task.Total, OutProblem) || !Str(Row, TEXT("blockedReason"), Task.BlockedReason, OutProblem, true)

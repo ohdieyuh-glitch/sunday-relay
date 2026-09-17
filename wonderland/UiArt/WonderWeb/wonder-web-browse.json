@@ -1,0 +1,266 @@
+{
+ "schema": "wonderland-wonder-web-browse.v1",
+ "notice": "SAMPLE PAGES · SIMULATED BROWSING · NOTHING IS FETCHED AND NOTHING IS PUBLISHED",
+ "generated": "wonderland/Tools/wonder_web/wonder-web-browse.generate.ts",
+ "tabs": [
+  {
+   "tabId": "social",
+   "title": "Instagram",
+   "site": "Instagram",
+   "url": "instagram.com/wonderland.studio",
+   "letter": "I",
+   "blocks": [
+    {
+     "kind": "site_bar",
+     "brand": "Instagram",
+     "query": "Search",
+     "links": [
+      "Home",
+      "Explore",
+      "Reels",
+      "Messages",
+      "Profile"
+     ]
+    },
+    {
+     "kind": "profile",
+     "title": "wonderland.studio",
+     "subtitle": "Wonderland Studio",
+     "tint": "#E7D8C9",
+     "stats": [
+      "312 posts",
+      "18.4k followers",
+      "280 following"
+     ],
+     "lines": [
+      "Creation studio in Wonderland · NOCTIS",
+      "Pixel Canvas · tools, art and small games",
+      "wonderland.studio/links"
+     ],
+     "button": "Edit profile"
+    },
+    {
+     "kind": "grid",
+     "cells": [
+      "#C9D6E3",
+      "#E7D8C9",
+      "#D9E3C9",
+      "#E3C9D6",
+      "#CFC9E3",
+      "#E3DDC9",
+      "#C9E3DF",
+      "#E0E0E0",
+      "#D2C9E3"
+     ]
+    },
+    {
+     "kind": "post",
+     "title": "wonderland.studio",
+     "meta": "2 hours ago",
+     "tint": "#E7D8C9",
+     "height": 300,
+     "likes": 412,
+     "text": "Pixel Canvas got a palette today. Sixteen by nine, five colours, one very patient dog.",
+     "rows": [
+      {
+       "title": "kai.builds",
+       "snippet": "that yellow is perfect"
+      },
+      {
+       "title": "judith.makes",
+       "snippet": "the grid feels so good to click"
+      },
+      {
+       "title": "tanish.dev",
+       "snippet": "ship it"
+      }
+     ]
+    },
+    {
+     "kind": "compose",
+     "text": "Write a caption…",
+     "button": "Post"
+    },
+    {
+     "kind": "footer",
+     "text": "Meta · About · Help · Press · API · Jobs · Privacy · Terms"
+    }
+   ]
+  },
+  {
+   "tabId": "search",
+   "title": "Search",
+   "site": "Google",
+   "url": "www.google.com/search?q=pixel+canvas+palette+tokens",
+   "letter": "G",
+   "blocks": [
+    {
+     "kind": "site_bar",
+     "brand": "Google",
+     "query": "pixel canvas palette tokens",
+     "links": [
+      "All",
+      "Images",
+      "Videos",
+      "News"
+     ]
+    },
+    {
+     "kind": "results",
+     "meta": "About 12,400 results (0.31 seconds)",
+     "rows": [
+      {
+       "title": "Design tokens — Wonderland Studio docs",
+       "meta": "docs.wonderstudio.com › brand › design-tokens",
+       "snippet": "The five palette colours, their names and where they may be used. Updated today."
+      },
+      {
+       "title": "Palette conventions for pixel grids",
+       "meta": "www.smashingmagazine.com › 2026 › 04 › pixel-palettes",
+       "snippet": "Why five colours is usually enough, and how to pick the fifth."
+      },
+      {
+       "title": "Pixel Canvas (Wonderland) — press kit",
+       "meta": "wonderland.studio › press",
+       "snippet": "Screenshots, logos and the short description, in one archive."
+      },
+      {
+       "title": "Colour tokens in practice - discussion",
+       "meta": "news.ycombinator.com › item",
+       "snippet": "118 comments. \"Tokens are only useful when the names outlive the hex.\""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tabId": "mail",
+   "title": "Inbox",
+   "site": "Mail",
+   "url": "mail.wonderstudio.com/inbox",
+   "letter": "M",
+   "blocks": [
+    {
+     "kind": "site_bar",
+     "brand": "Mail",
+     "query": "Search mail",
+     "links": [
+      "Inbox",
+      "Starred",
+      "Sent",
+      "Drafts",
+      "Archive"
+     ]
+    },
+    {
+     "kind": "list",
+     "title": "Inbox",
+     "meta": "4 unread",
+     "rows": [
+      {
+       "title": "Judith Okafor",
+       "meta": "09:41",
+       "snippet": "Palette sign-off — the five colours look right to me, ship them."
+      },
+      {
+       "title": "Arden Supplies",
+       "meta": "08:02",
+       "snippet": "Your order is ready to place — two items are waiting in your cart."
+      },
+      {
+       "title": "Kai Mensah",
+       "meta": "Yesterday",
+       "snippet": "Press kit — can we post the canvas picture today?"
+      },
+      {
+       "title": "Wonderland Studio",
+       "meta": "Yesterday",
+       "snippet": "Weekly summary: 3 creations, 1 mission, 0 incidents."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "tabId": "docs",
+   "title": "Design tokens",
+   "site": "Docs",
+   "url": "docs.wonderstudio.com/brand/design-tokens",
+   "letter": "D",
+   "blocks": [
+    {
+     "kind": "site_bar",
+     "brand": "Wonderland Studio Docs",
+     "query": "Search the docs",
+     "links": [
+      "Brand",
+      "Tools",
+      "Missions",
+      "Changelog"
+     ]
+    },
+    {
+     "kind": "article",
+     "title": "Design tokens",
+     "subtitle": "Updated today · Brand",
+     "lines": [
+      "The palette is five colours and no more. Four are for drawing; the fifth is the ink everything else sits on.",
+      "A token is named for what it does, never for what it looks like: canvas.ink outlives \"near-black\" the first time the ink changes.",
+      "signal.yellow #FFD400 — the one saturated accent. Buttons, marks, the live line.",
+      "sky.blue #3B9EFF — links, selection, anything cool and secondary.",
+      "rose #FF4D8D — warnings that are not failures.",
+      "jade #3DDC97 — done, connected, healthy.",
+      "canvas.ink #05050A — the ground. Everything above is drawn on it."
+     ]
+    }
+   ]
+  },
+  {
+   "tabId": "store",
+   "title": "Cart",
+   "site": "Arden Supplies",
+   "url": "shop.arden-supplies.com/cart",
+   "letter": "A",
+   "blocks": [
+    {
+     "kind": "site_bar",
+     "brand": "Arden Supplies",
+     "query": "Search products",
+     "links": [
+      "Paper",
+      "Ink",
+      "Frames",
+      "Account",
+      "Cart (2)"
+     ]
+    },
+    {
+     "kind": "cart",
+     "title": "Your cart",
+     "total": "$46.00",
+     "button": "Place order",
+     "rows": [
+      {
+       "title": "Archival print paper, A3",
+       "meta": "Quantity 2",
+       "snippet": "$28.00"
+      },
+      {
+       "title": "Pigment ink, warm black",
+       "meta": "Quantity 1",
+       "snippet": "$18.00"
+      }
+     ],
+     "lines": [
+      "Delivery Thursday 19 September",
+      "Pay on delivery"
+     ]
+    },
+    {
+     "kind": "footer",
+     "text": "Arden Supplies · Returns · Delivery · Contact"
+    }
+   ]
+  }
+ ]
+}
