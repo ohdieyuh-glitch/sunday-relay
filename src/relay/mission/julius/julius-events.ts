@@ -129,6 +129,28 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * the architect can refuse to let a completion happen, and can never mint one.
   * `replan.escalated` is a re-plan that would need a mission term to move,
   * which is the user's decision and not the architect's. */
+ /* WORKER AUTHORITY AT THE RESULT BOUNDARY. `evidence.refused` is a claim of a
+  * kind the producing role may not author — a coder's own review finding, a
+  * user approval nobody gave — set aside and named. `worker.channel.refused`
+  * is a channel that belongs to another role: a coder's verdict about its own
+  * work, or a design. Both are refusals ON the record rather than silence. */
+ 'evidence.refused','worker.channel.refused',
+ /* WHICH ACCEPTED GUIDANCE A DISPATCH WAS GIVEN, by entry id, recorded with the
+  * compiled context it arrived in. A count on `worker.effort` could not say
+  * which packet a coder acted on. */
+ 'guidance.consumed',
+ /* THE CODING AGENT'S IMPLEMENTATION, ON THE RECORD. `recorded` is what the
+  * independent executor observed the dispatch change and what the coder said
+  * it did, side by side. `scope.violated` is a changed path the locked
+  * contract did not allow, found by Julius from that change set — the rule used
+  * to exist only as prompt text. `report.refused` is a coder report Julius
+  * would not read, by name. */
+ 'coder.implementation.recorded','coder.scope.violated','coder.report.refused',
+ /* WHAT THE IMPLEMENTATION PEER SAW. `observed` is one evidenced observation a
+  * Coding Agent made about the design in force; it can raise a consultation
+  * and never a revision. `observation.refused` is a set Julius would not read,
+  * by name. */
+ 'architecture.observed','architecture.observation.refused',
  'architecture.trigger.raised','architecture.proposed','architecture.accepted','architecture.unchanged',
  'architecture.assessed','architecture.assessment.refused','architecture.replan.escalated',
  /* PERSISTENT-WORKER EFFORT. One row per completed dispatch, carrying what the

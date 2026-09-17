@@ -100,6 +100,8 @@ describe('a hosted coder failure is classified, never quoted', () => {
   it('reaches every classified reason from text a provider actually produces', () => {
     const cases: readonly (readonly [string, HostedFailureReason])[] = [
       ['API Error: 429 {"type":"rate_limit_error"}', 'rate_limited'],
+      // The shape Attempt 5 actually ended on: a 400 that is not a bad request.
+      ['API Error: 400 {"type":"invalid_request_error","message":"Your credit balance is too low to access the Anthropic API."}', 'credit_unavailable'],
       ['prompt is too long: 250000 tokens > 200000 maximum', 'context_length_exceeded'],
       ['the response was blocked by the content filter', 'content_filtered'],
       ['API Error: 529 overloaded_error', 'provider_overloaded'],

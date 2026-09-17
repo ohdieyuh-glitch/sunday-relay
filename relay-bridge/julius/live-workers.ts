@@ -23,7 +23,6 @@
  * the store's `persist` and retains each full snapshot under its contextId.
  */
 
-import { classifyHostedFailure } from '../hosted-coding-agent/hosted-failure-reason';
 import { createHash } from 'node:crypto';
 import type { JuliusContractReviewCharge } from '../../src/relay/mission/julius/julius-task-contract';
 import {
@@ -51,10 +50,8 @@ import { sanitizeJuliusRebuttal } from '../../src/relay/mission/julius/julius-di
 import { sanitizeJuliusArchitecture } from '../../src/relay/mission/julius/julius-architecture-state';
 import { sanitizeJuliusConsistency } from '../../src/relay/mission/julius/julius-architecture-drift';
 import {
-  JULIUS_PARTICIPATION_CHANNELS,
   juliusParticipationProtocol,
   readJuliusParticipationBlock,
-  type JuliusParticipationReading,
 } from '../../src/relay/mission/julius/julius-worker-participation';
 import { ARCHITECT_GUIDANCE_SCHEMA, ARCHITECT_GUIDANCE_SCHEMA_NAME } from '../../src/relay/connectors/gpt-architect/guidance-schema';
 import { ARCHITECT_REBUTTAL_SCHEMA, ARCHITECT_REBUTTAL_SCHEMA_NAME } from '../../src/relay/connectors/gpt-architect/rebuttal-schema';
@@ -70,13 +67,18 @@ import {
   withJuliusResearchAsks,
 } from '../../src/relay/mission/julius/julius-research-protocol';
 import {
-  loadHostedQuery,
   runHostedCodingAgent,
   type HostedQueryFn,
-  type HostedRunOutcome,
 } from '../hosted-coding-agent/hosted-runner';
-import { DEFAULT_HOSTED_LIMITS, hostedLimitsForAllocation, type HostedLimits } from '../hosted-coding-agent/hosted-envelope';
-import type { HostedObservation } from '../hosted-coding-agent/hosted-observation';
+import {
+  buildJuliusCodingAgentRequest,
+  parseJuliusWorkspaceStatus,
+  juliusCodingAgentFailureClass,
+  juliusCodingAgentFailureDisposition,
+  renderJuliusCodingAgentContract,
+  type JuliusCodingAgentProvider,
+} from '../../src/relay/mission/julius/julius-coding-agent';
+import { createClaudeCodeCodingAgentProvider } from './claude-code-coding-provider';
 import {
   hermesReviewVerdict,
   runHermesReview,
@@ -105,6 +107,12 @@ export interface CompiledContextSource {
 export interface LiveArtifactExchange {
   put(ref: string, text: string): void;
   get(ref: string): string | null;
+  /**
+   * Forget a ref. A coder dispatch clears the run's diff and test output before
+   * it runs, so a capture that fails leaves NOTHING for the reviewer rather
+   * than the previous round's diff beside this round's test.
+   */
+  clear?(ref: string): void;
 }
 
 export const ARTIFACT_TEXT_CAP = 256 * 1024;
@@ -114,6 +122,7 @@ export function createLiveArtifactExchange(): LiveArtifactExchange {
   return {
     put(ref, text) { values.set(ref, text.slice(0, ARTIFACT_TEXT_CAP)); },
     get(ref) { return values.get(ref) ?? null; },
+    clear(ref) { values.delete(ref); },
   };
 }
 
@@ -583,179 +592,6 @@ const reviewerDiagnostics = (input: {
   };
 };
 
-/**
- * THE FACTS BESIDE A CODER'S ATTEMPT — the SAME facts whether it refused or
- * finished.
- *
- * This used to be built inside the refusal branch, so a hosted session that
- * completed left no diagnostics row at all: no turn count, no tool count, no
- * permission denials, no served model, and — on the one worker that reports a
- * real dollar figure — no `cost_source` saying the figure was the runtime's
- * own. Live Run 3's coder succeeded and its whole lifecycle reached the bundle
- * only as a sentence in `evidence.tsv`.
- *
- * Extracted rather than duplicated on purpose: a fact present on one ending and
- * absent on the other reads as a bug in the record, and two hand-kept copies is
- * how that happens.
- */
-const hostedCoderDiagnostics = (input: {
-  readonly taskType: string | undefined;
-  readonly requestedModel: string | null;
-  readonly observed: HostedObservation | null;
-  readonly limits: HostedLimits;
-  readonly outcome: 'succeeded' | 'failed';
-  /**
-   * The runner's own classification of the error it caught, when it caught one.
-   * It is strictly better evidence than the final text: on
-   * `coder_provider_error_after_init` the runtime threw INSTEAD of finishing,
-   * so the cause is in the thrown error and the final text is whatever the
-   * stream had managed to emit before it.
-   */
-  readonly failureReason?: string | null;
-}): Record<string, unknown> => {
-  const observed = input.observed;
-  /**
-   * WHETHER THE WORKER ASKED, ON BOTH ENDINGS.
-   *
-   * Read here rather than at the call sites so a success and a failure cannot
-   * disagree about it — the same reason this function exists. A dispatch with
-   * no observed final message never gave the worker a place to ask, so every
-   * field below is UNKNOWN rather than false: "did not ask" and "had no way to"
-   * are different facts and one column for both would erase the second.
-   */
-  const participation: JuliusParticipationReading | null =
-    observed === null || observed.finalText === null ? null : readJuliusParticipationBlock(observed.finalText);
-  const asked = (channel: (typeof JULIUS_PARTICIPATION_CHANNELS)[number]): boolean | null =>
-    participation === null ? null
-      : participation.present && participation.readable ? participation.channels.includes(channel)
-        : false;
-  return {
-    /** Stated, so a successful row is never read as a failure nobody classified. */
-    outcome: input.outcome,
-    /**
-     * WHY IT FAILED, in a closed vocabulary — never the runtime's own words.
-     *
-     * Paid Mission 5's rerun stopped six turns into a twenty-six turn envelope
-     * with `is_error: true`, changed nothing, cost $0.885661, and the record
-     * said `coder_provider_error_after_init` and one fixed sentence. Nothing in
-     * any artifact said why, and the cause is now unrecoverable.
-     *
-     * `classifyHostedFailure` MATCHES the runtime's final text and returns a
-     * constant from its own vocabulary; no substring of that text can reach
-     * this row. The fixed sentence in `hosted-runner.ts` stays exactly as it is,
-     * for exactly the reason it gives.
-     *
-     * NULL ON SUCCESS, deliberately: a run that worked has no failure reason,
-     * and classifying a successful summary would read the word "error" in it as
-     * one.
-     */
-    failureReason: input.outcome === 'failed'
-      ? input.failureReason ?? classifyHostedFailure(observed?.finalText ?? null)
-      : null,
-    // THE ROUND THAT SPENT THE MONEY. Fixing this to 'build' made a
-    // repair round's cost refusal indistinguishable from the first
-    // build's in the very artifact that exists to tell them apart.
-    stage: input.taskType === 'repair:build' ? 'repair:build' : 'build',
-    transport: 'hosted',
-    provider: 'anthropic',
-    requestedModel: input.requestedModel,
-    servedModel: observed?.actualModel ?? null,
-    responseId: observed?.sessionId ?? null,
-    numTurns: observed?.numTurns ?? null,
-    // INVOCATIONS, not distinct names: `toolsUsed` deduplicates, so ten
-    // edits and one read would have been reported as 2.
-    toolUseCount: observed?.toolInvocations ?? null,
-    /**
-     * ONLY WHEN A RESULT ARRIVED. `permissionDenials` starts at 0 and is
-     * populated by the result message alone, so reporting it after a
-     * timeout or a cancellation would assert that no denial occurred —
-     * evidence the envelope held — on precisely the runs where the
-     * terminal data never came. `resultSubtype` is null until that
-     * message, which is how this knows.
-     */
-    permissionDenials: observed?.resultSubtype === null || observed === null
-      ? null : observed.permissionDenials,
-    resultSubtype: observed?.resultSubtype ?? null,
-    isError: observed?.isError ?? null,
-    // A COUNT of the runtime's final text, never the text.
-    outputBytesObserved: observed?.finalText === null || observed?.finalText === undefined
-      ? null : Buffer.byteLength(observed.finalText, 'utf8'),
-    /**
-     * AN OBSERVED SUCCESSFUL RESULT, not merely a runtime that started.
-     * `initSeen && isError !== true` is true after a timeout or a
-     * provider exception — `isError` is still null then — so it claimed
-     * an implementation existed on exactly the partial runs these
-     * diagnostics exist to tell apart.
-     */
-    implementationPresent: observed === null || observed.isError === null
-      ? null : observed.isError === false,
-    /**
-     * THE MONEY, BESIDE THE REFUSAL. Paid run 34037313976 was refused for
-     * cost and the amount lived only in a message nothing persisted.
-     * Unknown stays Unknown: a runtime that reported no cost reads null
-     * with `costSource: unavailable`, never zero.
-     */
-    costUsdMicros: observed?.usage.totalCostUsd === null || observed?.usage.totalCostUsd === undefined
-      ? null : Math.round(observed.usage.totalCostUsd * 1_000_000),
-    costCeilingUsdMicros: input.limits.maxCostCents * 10_000,
-    costSource: observed?.usage.source ?? null,
-    /**
-     * DID THE RUNTIME EVER START? A run that never launched billed
-     * nothing; one that launched and was aborted — the timeout, which is
-     * the case a cost is LEAST likely to be reported for, because the
-     * SDK reports cost only in its final result message — billed an
-     * unknown amount. The ledger needs that difference to decide whether
-     * a hand-back may free the hold.
-     */
-    runtimeStarted: observed?.initSeen ?? false,
-    /* ------------------------------- what the worker asked Julius for ---- */
-    participationPresent: participation === null ? null : participation.present,
-    participationReadable: participation === null || !participation.present ? null : participation.readable,
-    participationRefusal: participation !== null && participation.present && !participation.readable
-      ? participation.reasonCode : null,
-    participationAskedGuidance: asked('guidanceRequest'),
-    participationAskedResearch: asked('researchAsks'),
-    participationAskedResume: asked('segmentResume'),
-    /**
-     * HOW THE COST CAME TO BE KNOWN, in the vocabulary all three roles answer
-     * in. `costSource` above is the hosted runtime's own word for itself
-     * (`runtime_reported` / `unavailable`) and says nothing a reviewer or an
-     * architect could also say. This is the one Live Run 3's ledger needed: it
-     * settled one component with a figure and three with nothing, and had no
-     * column to tell "billed $0.61" from "reported nothing".
-     *
-     * `PROVIDER_REPORTED` requires BOTH the runtime's own attestation and an
-     * actual figure. A basis without its number would assert a report nobody
-     * made, and every reader downstream would count the component as accounted
-     * for.
-     */
-    costBasis: observed?.usage.source === 'runtime_reported'
-      && observed.usage.totalCostUsd !== null && observed.usage.totalCostUsd !== undefined
-      ? 'PROVIDER_REPORTED' : 'UNKNOWN',
-    inputTokens: observed?.usage.inputTokens ?? null,
-    outputTokens: observed?.usage.outputTokens ?? null,
-    /**
-     * AND WHAT THE STREAM SAID BEFORE IT WAS CUT OFF.
-     *
-     * The four columns above come from the runtime's terminal result, which a
-     * run Relay aborts at its own ceiling never reaches. Paid run 34485676189
-     * attempt 1 spent 363 seconds and twelve tool calls and reported null for
-     * every one of them — "we paid and cannot say how much."
-     *
-     * Every assistant turn carried its own usage block the whole time. These
-     * are the sum over the turns actually observed: a FLOOR, never the total,
-     * never a cost, and deliberately named apart so no reader can mistake one
-     * for the other. `costBasis` above is unchanged and still UNKNOWN on these
-     * runs, because a token floor is not a provider's bill.
-     */
-    streamUsageMessages: observed?.streamUsage.messages ?? null,
-    streamAbortedMessages: observed?.streamUsage.abortedMessages ?? null,
-    streamInputTokens: observed?.streamUsage.inputTokens ?? null,
-    streamOutputTokens: observed?.streamUsage.outputTokens ?? null,
-    streamCacheReadInputTokens: observed?.streamUsage.cacheReadInputTokens ?? null,
-    streamCacheCreationInputTokens: observed?.streamUsage.cacheCreationInputTokens ?? null,
-  };
-};
 
 /**
  * THE SAFE FACTS BESIDE A PLAN FAILURE.
@@ -1458,45 +1294,247 @@ export function createLiveArchitectAdapter(input: {
 
 /* --------------------------------------------------------- coding agent */
 
-const CODER_CHARTER = [
-  'You are the Coding Agent for a Relay mission run by Julius, the mission controller.',
-  'Implement exactly what the mission context and the architect plan below require, by editing files in this workspace only.',
-  'Do not run commands; verification is executed separately by an independent executor.',
-  'You implement; you do not review or approve your own work, and completion is decided by Julius.',
-].join(' ');
-
 /**
- * THE LOCKED CONTRACT, AS THE CODER'S CHARGE.
- *
- * The same document the independent reviewer will grade against, rendered for
- * the worker that has to satisfy it. It arrives on the dispatch, computed by
- * Julius from the contract its gate proved; the adapter never looks one up,
- * because a worker that chose its own terms would be choosing what it is
- * graded against. Every line is a closed field of the contract — no mission
- * ids, no provider text, no prose of another worker's.
+ * THE LOCKED CONTRACT, AS THE CODER'S CHARGE. Rendered by the domain, so every
+ * coding provider — and the parity test — reads one document.
  */
 export function coderContractBrief(contract: JuliusContractReviewCharge): string {
-  const list = (items: readonly string[], empty: string) => (items.length === 0 ? `    - ${empty}` : items.map((item) => `    - ${item}`).join('\n'));
-  return [
-    '--- TASK CONTRACT (locked; the reviewer grades against exactly this) ---',
-    `  CONTRACT: ${contract.binding.contractId} revision ${contract.binding.contractRevision}`,
-    `  BINDING DIGEST: ${contract.binding.bindingDigest}`,
-    `  ROUND: ${contract.stage}`,
-    `  OBJECTIVE: ${contract.objective}`,
-    `  RESPONSIBILITY BOUNDARY: ${contract.responsibilityBoundary}`,
-    `  IN SCOPE:\n${list(contract.inScope, '(none stated)')}`,
-    `  OUT OF SCOPE:\n${list(contract.outOfScope, '(none)')}`,
-    `  PERMITTED PATHS:\n${list(contract.permittedPaths, '(none stated)')}`,
-    `  PROHIBITED ACTIONS:\n${list(contract.prohibitedActions, '(none)')}`,
-    `  BLOCKING ACCEPTANCE CRITERIA:\n${list(contract.blockingCriteria, '(none stated)')}`,
-    `  REVIEW CRITERIA (what the independent reviewer will check):\n${list(contract.contractReviewCriteria, '(none stated)')}`,
-    `  REQUIRED EVIDENCE: ${contract.requiredEvidence.join(', ') || '(none stated)'}`,
-    `  REQUIRED CHECKS:\n${list(contract.requiredChecks, '(none stated)')}`,
-    `  FAILURE CONDITIONS:\n${list(contract.failureConditions, '(none stated)')}`,
-    `  STOPPING CONDITION: ${contract.stoppingCondition}`,
-  ].join('\n');
+  return renderJuliusCodingAgentContract(contract);
 }
 
+/**
+ * THE JULIUS SIDE OF EVERY CODING AGENT.
+ *
+ * Whatever implements the role — Claude Code today, Codex or Devin tomorrow —
+ * this is the part that does not change when it is swapped, because none of it
+ * is the provider's to decide:
+ *
+ *   - WHAT THE PROVIDER IS SHOWN is a governed request built by the domain from
+ *     the compiled packet, sorted into sections by the authority each part
+ *     carries.
+ *   - WHAT IT CAN SAY BACK is a closed outcome. A provider cannot return
+ *     evidence, a status or a verdict: the port has no field for one.
+ *   - THE EVIDENCE is minted here, from what the independent executor observed
+ *     after the provider stopped — the base revision, the diff, the test.
+ *   - A FAILURE is classified by the provider and DISPOSED OF by the domain's
+ *     taxonomy: transient failures are retryable, operator failures are not,
+ *     and none of them produces a result.
+ *   - WHAT THE WORKER ASKED FOR is read here from its closing text and handed on
+ *     untouched for Julius's sanitizers to refuse.
+ */
+export function createJuliusCodingAgentAdapter(input: {
+  readonly worker: JuliusWorker;
+  readonly contexts: CompiledContextSource;
+  readonly artifacts: LiveArtifactExchange;
+  readonly projectId: string;
+  readonly workspacePath: string;
+  /** The deterministic verification command the mission declares. */
+  readonly testCommand: string;
+  /** Tool effects go through the independent executor, never a local shell. */
+  readonly shell: ShellEffectPort;
+  readonly provider: JuliusCodingAgentProvider;
+  /** The mission's sealed research policy, the same source the mediator decides with. */
+  readonly researchPolicyFor?: ResearchPolicySource;
+}): JuliusProviderAdapter {
+  return {
+    adapterId: input.worker.adapterId,
+    async dispatch(dispatch): Promise<JuliusProviderResult> {
+      const snapshot = requireSnapshot(input.contexts, dispatch.contextId);
+      const plan = input.artifacts.get(planRef(snapshot.runId));
+      if (plan === null) {
+        // The artifact exchange is same-process: after a restart the plan is
+        // gone even though the plan TASK succeeded durably. Implementing without
+        // it would silently downgrade what the mission paid the architect for.
+        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'The architect plan artifact is not available to this process; a resumed run cannot implement without it.');
+      }
+
+      const shellScope = {
+        runId: snapshot.runId,
+        projectId: input.projectId,
+        taskId: dispatch.taskId,
+        workerId: input.worker.workerId,
+      };
+      const before = await input.shell.run({
+        ...shellScope,
+        invocationKey: `${dispatch.taskId}:base`,
+        command: 'git rev-parse HEAD',
+        timeoutMs: 15_000,
+      });
+      if (before.status === 'SUCCEEDED') {
+        input.artifacts.put(baseRevisionRef(snapshot.runId), before.stdout.trim());
+      }
+      // A STALE DIFF IS WORSE THAN NONE. The refs are per run; clear this
+      // round's before it runs, so a later capture failure is visible as absent.
+      input.artifacts.clear?.(diffRef(snapshot.runId));
+      input.artifacts.clear?.(testOutputRef(snapshot.runId));
+
+      const request = buildJuliusCodingAgentRequest({
+        snapshot, taskId: dispatch.taskId, taskType: dispatch.taskType ?? 'build', contextId: dispatch.contextId,
+        workspacePath: input.workspacePath, plan, contract: dispatch.contract, allocation: dispatch.allocation,
+        participationProtocol: juliusParticipationProtocol(),
+        researchAuthority: researchAuthorityFor(input.researchPolicyFor, snapshot.packet.missionId, input.worker.role),
+      });
+      const outcome = await input.provider.execute(request, dispatch.signal);
+
+      if (outcome.kind === 'failed') {
+        /**
+         * THE PROVIDER NAMES THE FAILURE; THE DOMAIN DECIDES WHAT IT MEANS.
+         * The class travels with the code, the money travels with the class, and
+         * nothing about a failure can become a result.
+         */
+        const disposition = juliusCodingAgentFailureDisposition(outcome.failure);
+        throw new JuliusDispatchError(
+          disposition.code, disposition.retryable, safeClaim(outcome.safeMessage, 200),
+          outcome.providerFailureClass ?? juliusCodingAgentFailureClass(outcome.failure),
+          {
+            ...outcome.diagnostics,
+            codingAgentFailure: outcome.failure,
+            operatorActionRequired: disposition.operatorAction,
+            runtimeStarted: outcome.runtimeStarted,
+            ...(outcome.costUsdMicros === null ? {} : { costUsdMicros: outcome.costUsdMicros }),
+          },
+        );
+      }
+
+      /**
+       * A PAID SESSION IS STILL PAID FOR IF WHAT FOLLOWS IT FAILS.
+       *
+       * The diff and the test run through the executor after the provider has
+       * stopped. An executor refusal there used to carry only executor fields,
+       * so the reservation was released at $0 for a session the runtime had
+       * billed. The provider's cost rides on any failure from here on.
+       */
+      const afterSession = async <T,>(step: () => Promise<T>): Promise<T> => {
+        try {
+          return await step();
+        } catch (error) {
+          if (!(error instanceof JuliusDispatchError)) throw error;
+          throw new JuliusDispatchError(error.code, error.retryable, error.safeMessage, error.failureClass, {
+            ...(error.diagnostics ?? {}),
+            runtimeStarted: true,
+            ...(outcome.observation.costUsdMicros === null ? {} : { costUsdMicros: outcome.observation.costUsdMicros }),
+          });
+        }
+      };
+
+      /**
+       * THE CHANGE SET, AS THE EXECUTOR SAW IT — tracked AND untracked. `git
+       * diff` alone never showed a new file, so a coder whose contribution was
+       * new files looked like one that had done nothing, and a new file outside
+       * the agreement was invisible to everyone. Julius holds the work to the
+       * locked contract from this set.
+       */
+      const status = await afterSession(() => input.shell.run({
+        ...shellScope,
+        invocationKey: `${dispatch.taskId}:status`,
+        command: 'git status --porcelain=v1 --untracked-files=all -z',
+        timeoutMs: 30_000,
+      }));
+      const workspace = status.status === 'SUCCEEDED'
+        ? { captured: true, ...parseJuliusWorkspaceStatus(status.stdout) }
+        : { captured: false, changes: [], truncated: false };
+      /**
+       * THE DIFF THE REVIEWER READS, new files included: each untracked file is
+       * rendered against /dev/null with plain git and a bash loop, so nothing
+       * outside what the executor image already runs is needed.
+       */
+      const diff = await afterSession(() => input.shell.run({
+        ...shellScope,
+        invocationKey: `${dispatch.taskId}:diff`,
+        command: 'git --no-pager diff || exit 3; git --no-pager diff --stat; git ls-files --others --exclude-standard | while IFS= read -r file; do git --no-pager diff --no-index -- /dev/null "$file"; done; exit 0',
+        timeoutMs: 30_000,
+      }));
+      if (diff.status === 'SUCCEEDED') input.artifacts.put(diffRef(snapshot.runId), diff.stdout);
+      const test = await afterSession(() => input.shell.run({
+        ...shellScope,
+        invocationKey: `${dispatch.taskId}:test`,
+        command: input.testCommand,
+        timeoutMs: 300_000,
+      }));
+      input.artifacts.put(testOutputRef(snapshot.runId), `exit=${test.exitCode ?? 'unknown'}\n${test.stdout}\n${test.stderr}`);
+
+      /**
+       * WHAT THE WORKER ASKED FOR, HANDED ON EXACTLY AS IT WROTE IT. Julius
+       * sanitises; an adapter that pre-cleaned a request would be deciding what
+       * the domain is allowed to refuse. A block that could not be read does not
+       * fail the dispatch: the work is in the diff and the tests already ran.
+       */
+      const participation = readJuliusParticipationBlock(outcome.finalText);
+      const readable = participation.present && participation.readable;
+      const channels = readable
+        ? {
+            ...('guidanceRequest' in participation ? { guidanceRequest: participation.guidanceRequest } : {}),
+            ...('researchAsks' in participation ? { researchAsks: participation.researchAsks } : {}),
+            ...('segmentResume' in participation ? { segmentResume: participation.segmentResume } : {}),
+            ...('architectureObservations' in participation ? { architectureObservations: participation.architectureObservations } : {}),
+          }
+        : {};
+      const changed = workspace.changes.length > 0;
+      const observation = outcome.observation;
+      return {
+        workerId: input.worker.workerId,
+        providerId: input.worker.providerId,
+        status: 'SUCCEEDED',
+        ...channels,
+        /**
+         * WHAT HAPPENED TO THE WORKSPACE, AND WHAT THE CODER SAID ABOUT IT, for
+         * Julius to hold to the agreement. The report is handed on unsanitised.
+         */
+        implementation: {
+          providerKind: input.provider.providerKind,
+          workspace,
+          ...(readable && 'report' in participation ? { report: participation.report } : {}),
+        },
+        safeSummary: `Coding Agent session completed (${input.provider.providerKind}; observed model ${safeClaim(observation.providerModel ?? 'unknown', 80)}, ${observation.turns ?? 'unknown'} turns); tests ${test.status === 'SUCCEEDED' ? 'passed' : 'failed'} under the independent executor.`,
+        evidence: [
+          {
+            type: 'DIFF',
+            /**
+             * PASSED MEANS A CHANGE WAS OBSERVED. A captured diff of nothing was
+             * PASSED, so a session that changed nothing produced the same
+             * evidence as one that did the work.
+             */
+            status: diff.status === 'SUCCEEDED' && workspace.captured && changed ? 'PASSED' : 'INCONCLUSIVE',
+            safeSummary: diff.status !== 'SUCCEEDED' || !workspace.captured
+              ? 'Workspace diff could not be captured by the executor.'
+              : changed
+                ? `Workspace diff captured by executor invocation ${diff.invocationId} (${String(workspace.changes.length)} changed path(s), ${String(workspace.changes.filter((change) => change.change === 'UNTRACKED').length)} new; ${diff.stdout.length} chars).`
+                : `The executor observed no change to the workspace (invocation ${status.invocationId}).`,
+            artifactRef: diff.status === 'SUCCEEDED' ? diffRef(snapshot.runId) : null,
+            occurredAt: nowIso(),
+          },
+          {
+            type: 'TEST',
+            status: test.status === 'SUCCEEDED' ? 'PASSED' : 'FAILED',
+            safeSummary: `Deterministic test command exited ${test.exitCode ?? 'unknown'} under executor invocation ${test.invocationId}.`,
+            artifactRef: null,
+            occurredAt: nowIso(),
+          },
+        ],
+        diagnostics: { ...observation.diagnostics, codingAgentProvider: input.provider.providerKind },
+        usage: {
+          inputTokens: observation.inputTokens ?? undefined,
+          outputTokens: observation.outputTokens ?? undefined,
+          usdMicros: observation.costUsdMicros ?? undefined,
+          // INVOCATIONS, not distinct tool names.
+          toolCalls: observation.toolInvocations ?? undefined,
+          /**
+           * `PROVIDER_REPORTED` only when the provider actually reported a figure.
+           * Anything else is UNKNOWN, which the ledger holds as an unreleased
+           * reservation rather than a settlement of zero.
+           */
+          costBasis: observation.costBasis,
+        },
+      };
+    },
+  };
+}
+
+/**
+ * THE LIVE CODING AGENT: the Julius side above, with Claude Code behind the port.
+ * The name and the configuration stay, so the composition and every existing
+ * caller are unchanged.
+ */
 export function createLiveHostedCodingAdapter(input: {
   readonly worker: JuliusWorker;
   readonly contexts: CompiledContextSource;
@@ -1517,217 +1555,16 @@ export function createLiveHostedCodingAdapter(input: {
   if (!input.apiKey || !input.requestedModel || !input.workspacePath || !input.testCommand) {
     throw new Error('hosted_coding_adapter_requires_live_config');
   }
-  const run = input.run ?? runHostedCodingAgent;
-  const loadQuery = input.queryLoader ?? loadHostedQuery;
-  return {
-    adapterId: input.worker.adapterId,
-    async dispatch(dispatch): Promise<JuliusProviderResult> {
-      const snapshot = requireSnapshot(input.contexts, dispatch.contextId);
-      const plan = input.artifacts.get(planRef(snapshot.runId));
-      if (plan === null) {
-        // The artifact exchange is same-process: after a restart or in a
-        // second process the plan is gone even though the plan TASK succeeded
-        // durably. Implementing without the plan on a resumed run would be a
-        // silent downgrade of what the mission paid the architect for —
-        // refuse, so the resume fails visibly instead. (Independent review
-        // finding F1; the durable artifact store is the recorded fix.)
-        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'The architect plan artifact is not available to this process; a resumed run cannot implement without it.');
-      }
-
-      const shellScope = {
-        runId: snapshot.runId,
-        projectId: input.projectId,
-        taskId: dispatch.taskId,
-        workerId: input.worker.workerId,
-      };
-      const before = await input.shell.run({
-        ...shellScope,
-        invocationKey: `${dispatch.taskId}:base`,
-        command: 'git rev-parse HEAD',
-        timeoutMs: 15_000,
-      });
-      if (before.status === 'SUCCEEDED') {
-        input.artifacts.put(baseRevisionRef(snapshot.runId), before.stdout.trim());
-      }
-
-      let queryFn: HostedQueryFn;
-      try { queryFn = await loadQuery(); } catch {
-        throw new JuliusDispatchError('AUTH_CONFIGURATION', false, 'The hosted Claude Agent SDK runtime is not installed.');
-      }
-      /**
-       * THE MISSION'S ALLOCATION IS THE EXECUTION LIMIT. Julius reserved
-       * `dispatch.allocation.usdMicros` for this dispatch from the mission
-       * budget; the hosted envelope is limited to exactly that, and the
-       * runtime is told to stop there. With no allocation — a composition
-       * without a policy — the envelope keeps its own conservative default,
-       * which is how paid run 34037313976 was refused at 50 cents of a $20
-       * mission: the limit was nobody's decision. Now it is Julius's.
-       */
-      const limits: HostedLimits = dispatch.allocation === undefined
-        ? DEFAULT_HOSTED_LIMITS
-        : hostedLimitsForAllocation(dispatch.allocation.usdMicros);
-      /**
-       * AN ALLOCATION BELOW ONE CENT BUYS NOTHING AND STILL BILLS.
-       *
-       * The envelope speaks whole cents, so anything under 10,000 micro-dollars
-       * floors to a 0¢ ceiling — and a runtime told to stop at $0 still bills
-       * the turn it takes to notice. Refusing before the dispatch spends
-       * nothing and says exactly why the mission cannot continue.
-       */
-      if (dispatch.allocation !== undefined && limits.maxCostCents < 1) {
-        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false,
-          'The remaining mission budget is below one cent; the hosted Coding Agent was not dispatched.', 'coder_allocation_below_one_cent');
-      }
-      const outcome: HostedRunOutcome = await run({
-        queryFn,
-        prompt: [
-          CODER_CHARTER,
-          '--- MISSION CONTEXT ---',
-          packetText(snapshot),
-          '--- ARCHITECT PLAN ---',
-          plan,
-          // The locked terms, when Julius dispatched under one. Absent only for
-          // a composition that ran the coder without a contract, which the
-          // dispatch gate no longer permits on the live path.
-          ...(dispatch.contract === undefined ? [] : [coderContractBrief(dispatch.contract)]),
-          /**
-           * A CHANNEL NOBODY WAS TOLD ABOUT IS A CHANNEL NOBODY USES, which is
-           * how the continuous lifecycle came to be unreachable on the paid
-           * path. Last, deliberately: it is what to do INSTEAD of guessing, and
-           * it should be the most recent thing read before the work starts.
-           */
-          juliusParticipationProtocol(),
-          // AND WHAT THE MISSION LETS THIS SLOT ASK FOR, right beside the door.
-          researchAuthorityFor(input.researchPolicyFor, snapshot.packet.missionId, input.worker.role),
-        ].join('\n\n'),
-        workspacePath: input.workspacePath,
-        apiKey: input.apiKey,
-        requestedModel: input.requestedModel,
-        limits,
-        now: nowIso,
-      });
-      if (outcome.kind !== 'completed') {
-        /**
-         * THE FACTS BESIDE THE CODER'S REFUSAL.
-         *
-         * Paid Mission #2 recorded `coder_refused` and stopped there — the same
-         * single word `reviewer_review_incomplete` was, on the third worker. An
-         * untrusted result, a runtime that did not honour its envelope and a
-         * cost ceiling are three different repairs, and the runner already knew
-         * which. These are the structural facts its observation actually
-         * carries; nothing is invented to fill a column, and no transcript,
-         * prompt, final text or provider body is among them.
-         */
-        const observed = 'observation' in outcome ? outcome.observation : null;
-        const coderDiagnostics: Record<string, unknown> = hostedCoderDiagnostics({
-          taskType: dispatch.taskType, requestedModel: input.requestedModel,
-          observed, limits, outcome: 'failed',
-          failureReason: 'failureReason' in outcome ? outcome.failureReason ?? null : null,
-        });
-        if (outcome.kind === 'timed_out') throw new JuliusDispatchError('TIMEOUT', true, 'Hosted Coding Agent timed out.', 'coder_timed_out', { ...coderDiagnostics, timedOut: true });
-        if (outcome.kind === 'cancelled') throw new JuliusDispatchError('CANCELLED', false, 'Hosted Coding Agent run was cancelled.', 'coder_cancelled', coderDiagnostics);
-        if (outcome.kind === 'launch_failed') throw new JuliusDispatchError('AUTH_CONFIGURATION', false, `Hosted Coding Agent could not launch: ${safeClaim(outcome.safeMessage, 120)}.`, 'coder_launch_failed', coderDiagnostics);
-        // THE REFUSAL CODE IS THE CLASS. Four causes, four words, instead of one.
-        if (outcome.kind === 'refused') {
-          throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Hosted Coding Agent refused: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.refusalCode, coderDiagnostics);
-        }
-        // Unreachable today: the four kinds above are the whole union. Kept so
-        // a fifth outcome added later fails as a named worker failure rather
-        // than falling through to a success it never earned.
-        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'The hosted Coding Agent returned an unrecognised outcome.', 'coder_outcome_unrecognised', coderDiagnostics);
-      }
-
-      const diff = await input.shell.run({
-        ...shellScope,
-        invocationKey: `${dispatch.taskId}:diff`,
-        command: 'git --no-pager diff && git --no-pager diff --stat',
-        timeoutMs: 30_000,
-      });
-      if (diff.status === 'SUCCEEDED') input.artifacts.put(diffRef(snapshot.runId), diff.stdout);
-      const test = await input.shell.run({
-        ...shellScope,
-        invocationKey: `${dispatch.taskId}:test`,
-        command: input.testCommand,
-        timeoutMs: 300_000,
-      });
-      input.artifacts.put(testOutputRef(snapshot.runId), `exit=${test.exitCode ?? 'unknown'}\n${test.stdout}\n${test.stderr}`);
-
-      const observed = outcome.observation;
-      /**
-       * WHAT THE WORKER ASKED FOR, HANDED ON EXACTLY AS IT WROTE IT.
-       *
-       * Julius sanitises — `sanitizeJuliusGuidanceRequest`,
-       * `sanitizeJuliusResearchAsks`, `sanitizeJuliusSegmentState` — and this
-       * does not, for the reason the architect's `contractProposal` gives one
-       * function above: an adapter that pre-cleaned a request would be deciding
-       * what the domain is allowed to refuse, and a request refused before the
-       * pipeline saw it leaves no `RESEARCH_ASK_UNREADABLE` row behind.
-       *
-       * A BLOCK THAT COULD NOT BE READ DOES NOT FAIL THE DISPATCH. The work is
-       * in the diff and the tests already ran; failing a run over the shape of
-       * its closing message would throw away what it paid for. The refusal is
-       * on the diagnostics instead, where it is exported and readable.
-       */
-      const participation = readJuliusParticipationBlock(observed.finalText);
-      const channels = participation.present && participation.readable
-        ? {
-            ...('guidanceRequest' in participation ? { guidanceRequest: participation.guidanceRequest } : {}),
-            ...('researchAsks' in participation ? { researchAsks: participation.researchAsks } : {}),
-            ...('segmentResume' in participation ? { segmentResume: participation.segmentResume } : {}),
-          }
-        : {};
-      return {
-        workerId: input.worker.workerId,
-        providerId: input.worker.providerId,
-        status: 'SUCCEEDED',
-        ...channels,
-        safeSummary: `Hosted Coding Agent session completed (observed model ${safeClaim(observed.actualModel ?? 'unknown', 80)}, ${observed.numTurns ?? 'unknown'} turns); tests ${test.status === 'SUCCEEDED' ? 'passed' : 'failed'} under the independent executor.`,
-        evidence: [
-          {
-            type: 'DIFF',
-            status: diff.status === 'SUCCEEDED' ? 'PASSED' : 'INCONCLUSIVE',
-            safeSummary: diff.status === 'SUCCEEDED'
-              ? `Workspace diff captured by executor invocation ${diff.invocationId} (${diff.stdout.length} chars).`
-              : 'Workspace diff could not be captured by the executor.',
-            artifactRef: diff.status === 'SUCCEEDED' ? diffRef(snapshot.runId) : null,
-            occurredAt: nowIso(),
-          },
-          {
-            type: 'TEST',
-            status: test.status === 'SUCCEEDED' ? 'PASSED' : 'FAILED',
-            safeSummary: `Deterministic test command exited ${test.exitCode ?? 'unknown'} under executor invocation ${test.invocationId}.`,
-            artifactRef: null,
-            occurredAt: nowIso(),
-          },
-        ],
-        /**
-         * THE SESSION THAT WORKED, ON THE RECORD — the same fields its refusal
-         * has carried since paid Mission #2, from the same builder so the two
-         * cannot drift apart. Live Run 3's coder finished, and its turn count,
-         * tool count, permission denials and served model reached the bundle
-         * only inside a prose sentence.
-         */
-        diagnostics: hostedCoderDiagnostics({
-          taskType: dispatch.taskType, requestedModel: input.requestedModel,
-          observed, limits, outcome: 'succeeded',
-        }),
-        usage: {
-          inputTokens: observed.usage.inputTokens ?? undefined,
-          outputTokens: observed.usage.outputTokens ?? undefined,
-          usdMicros: observed.usage.totalCostUsd === null ? undefined : Math.round(observed.usage.totalCostUsd * 1_000_000),
-          toolCalls: observed.toolsUsed.length,
-          /**
-           * THE ONLY WORKER THAT CAN SAY `PROVIDER_REPORTED`, and only when its
-           * runtime actually reported. Anything else is UNKNOWN, which the
-           * ledger holds as an unreleased reservation rather than a settlement
-           * of zero.
-           */
-          costBasis: observed.usage.source === 'runtime_reported' && observed.usage.totalCostUsd !== null
-            ? 'PROVIDER_REPORTED' : 'UNKNOWN',
-        },
-      };
-    },
-  };
+  return createJuliusCodingAgentAdapter({
+    worker: input.worker, contexts: input.contexts, artifacts: input.artifacts, projectId: input.projectId,
+    workspacePath: input.workspacePath, testCommand: input.testCommand, shell: input.shell,
+    ...(input.researchPolicyFor === undefined ? {} : { researchPolicyFor: input.researchPolicyFor }),
+    provider: createClaudeCodeCodingAgentProvider({
+      apiKey: input.apiKey, requestedModel: input.requestedModel,
+      ...(input.run === undefined ? {} : { run: input.run }),
+      ...(input.queryLoader === undefined ? {} : { queryLoader: input.queryLoader }),
+    }),
+  });
 }
 
 /* -------------------------------------------------- independent reviewer */

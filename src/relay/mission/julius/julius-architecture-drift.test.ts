@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  JULIUS_ARCHITECTURE_DRIFT_LIMITS, JULIUS_ARCHITECTURE_TRIGGERS, JULIUS_COSMETIC_DRIFT_KINDS,
+  JULIUS_ARCHITECTURE_DRIFT_LIMITS, JULIUS_ARCHITECTURE_TRIGGERS, JULIUS_CODER_OBSERVATION_KINDS,
+  JULIUS_CODER_OBSERVATION_LIMITS, JULIUS_COSMETIC_DRIFT_KINDS, juliusCoderObservationFacts,
+  sanitizeJuliusCoderObservations,
   JULIUS_MATERIAL_DRIFT_KINDS, foldJuliusConsistency, juliusArchitectureChangeIsMaterial, juliusArchitectureChanges,
   juliusArchitectureCompletionGate, juliusArchitectureTriggerFacts, juliusArchitectureTriggerId,
   juliusArchitectureTriggers, juliusConsistencyFacts, juliusConsistencyRoute, juliusDriftIsMaterial,
@@ -276,5 +278,111 @@ describe('P22 — the completion gate can only hold, and it is honest about what
     expect(foldJuliusConsistency([])).toBeNull();
     // Through JSON, exactly as a restart would read them.
     expect(foldJuliusConsistency(JSON.parse(JSON.stringify(entries)))!.assessment).toBe('ALIGNED');
+  });
+});
+
+describe('P26 — what the implementation peer saw can reach the architect, and never the architecture', () => {
+  const observed = (kind: string, subject = 'A-1', taskId = 'build-1', revision = 1) =>
+    row('architecture.observed', {
+      revision, kind, subject, claim: 'It did not hold.', evidenceRefs: 'src/journal.ts:40', evidenceRefCount: 1, observedByRole: 'CODING_AGENT',
+    }, taskId);
+
+  it.each([
+    ['ASSUMPTION_INVALIDATED', 'CONTRADICTING_EVIDENCE'],
+    ['DEPENDENCY_CHANGED', 'DEPENDENCY_CHANGE'],
+    ['BOUNDARY_CROSSED', 'IMPLEMENTATION_DRIFT'],
+    ['ARCHITECTURE_UNSATISFIABLE', 'JULIUS_REPLAN_REQUEST'],
+    ['REPLAN_SUGGESTED', 'JULIUS_REPLAN_REQUEST'],
+  ])('%s raises %s, about the work that saw it', (kind, trigger) => {
+    expect(triggersOf([RECORDED, observed(kind)])).toEqual([{
+      trigger, triggerId: juliusArchitectureTriggerId(trigger as never, 1, 'build-1'), revision: 1,
+      subjectTaskId: 'build-1', reasonCode: `coder_observed_${kind.toLowerCase()}`, detail: 'A-1',
+    }]);
+  });
+
+  it('every kind a coder may name reaches a trigger that exists, and the kinds are exactly these', () => {
+    expect([...JULIUS_CODER_OBSERVATION_KINDS]).toEqual([
+      'ASSUMPTION_INVALIDATED', 'DEPENDENCY_CHANGED', 'BOUNDARY_CROSSED', 'ARCHITECTURE_UNSATISFIABLE', 'REPLAN_SUGGESTED',
+    ]);
+    for (const kind of JULIUS_CODER_OBSERVATION_KINDS) {
+      const candidates = triggersOf([RECORDED, observed(kind)]);
+      expect(candidates).toHaveLength(1);
+      expect(JULIUS_ARCHITECTURE_TRIGGERS).toContain(candidates[0]!.trigger);
+    }
+  });
+
+  it('an observation about a design no longer in force, or of a kind nobody defined, raises nothing', () => {
+    expect(triggersOf([RECORDED, observed('BOUNDARY_CROSSED', 'JournalReader', 'build-1', 0)])).toEqual([]);
+    expect(triggersOf([RECORDED, observed('BOUNDARY_CROSSED', 'JournalReader', 'build-1', 2)])).toEqual([]);
+    expect(triggersOf([RECORDED, observed('REWRITE_THE_ARCHITECTURE')])).toEqual([]);
+    expect(triggersOf([RECORDED, row('architecture.observed', { revision: 1, subject: 'A-1' }, 'build-1')])).toEqual([]);
+  });
+
+  it('cause-once: the same work saying the same thing twice consults once; other work saying it consults again', () => {
+    expect(triggersOf([RECORDED, observed('BOUNDARY_CROSSED'), observed('BOUNDARY_CROSSED', 'Other')])).toHaveLength(1);
+    expect(triggersOf([RECORDED, observed('BOUNDARY_CROSSED'), observed('BOUNDARY_CROSSED', 'A-1', 'repair:build-1:1:task')])).toHaveLength(2);
+    const id = juliusArchitectureTriggerId('IMPLEMENTATION_DRIFT', 1, 'build-1');
+    expect(triggersOf([RECORDED, row('architecture.trigger.raised', { triggerId: id }), observed('BOUNDARY_CROSSED')])).toEqual([]);
+  });
+
+  const OBSERVATION = { kind: 'ASSUMPTION_INVALIDATED', subject: 'A-1', claim: 'peek() returned a full page on every read.', evidenceRefs: ['src/journal.ts:40'] };
+  const sanitize = (value: unknown, state: JuliusArchitectureState | null = STATE) => sanitizeJuliusCoderObservations({ value, state });
+
+  it('reads an evidenced observation, and normalises only what cannot change its meaning', () => {
+    const reading = sanitize([
+      { ...OBSERVATION, kind: ' assumption_invalidated ', evidenceRefs: ['src/journal.ts:40', 'src/journal.ts:40'] },
+      { kind: 'DEPENDENCY_CHANGED', subject: 'pg', claim: 'NULL renders as the literal word.', evidenceRefs: ['test/output.txt:12', 'package.json'] },
+    ]);
+    expect(reading).toEqual({
+      ok: true,
+      observations: [
+        OBSERVATION,
+        { kind: 'DEPENDENCY_CHANGED', subject: 'pg', claim: 'NULL renders as the literal word.', evidenceRefs: ['test/output.txt:12', 'package.json'] },
+      ],
+    });
+    expect(JSON.parse(JSON.stringify(reading))).toEqual(reading);
+  });
+
+  it.each([
+    ['a mission term', [{ ...OBSERVATION, permittedPaths: ['src/'] }], 'peer_response_mutates_protected_term'],
+    ['a Julius-only outcome', [{ ...OBSERVATION, status: 'VERIFIED' }], 'peer_response_mints_julius_only_outcome'],
+    ['not a list', OBSERVATION, 'coder_observations_shape_refused'],
+    ['an empty list', [], 'coder_observations_shape_refused'],
+    ['too many', Array.from({ length: JULIUS_CODER_OBSERVATION_LIMITS.observations + 1 }, () => OBSERVATION), 'coder_observations_shape_refused'],
+    ['a bare string', ['the design is wrong'], 'coder_observations_shape_refused'],
+    ['an architecture smuggled in', [{ ...OBSERVATION, components: [{ name: 'x', responsibility: 'y' }] }], 'coder_observations_unknown_field'],
+    ['a revision smuggled in', [{ ...OBSERVATION, revision: 2 }], 'coder_observations_unknown_field'],
+    ['an unknown kind', [{ ...OBSERVATION, kind: 'REVISE_ARCHITECTURE' }], 'coder_observation_kind_unknown'],
+    ['an empty claim', [{ ...OBSERVATION, claim: '   ' }], 'coder_observation_text_invalid'],
+    ['a credential-shaped claim', [{ ...OBSERVATION, claim: 'api_key=abc123 was needed' }], 'coder_observation_text_invalid'],
+    ['an oversized subject', [{ ...OBSERVATION, kind: 'BOUNDARY_CROSSED', subject: 'x'.repeat(JULIUS_CODER_OBSERVATION_LIMITS.subjectChars + 1) }], 'coder_observation_text_invalid'],
+    ['no evidence', [{ ...OBSERVATION, evidenceRefs: [] }], 'coder_observation_unevidenced'],
+    ['evidence that is not a list', [{ ...OBSERVATION, evidenceRefs: 'src/journal.ts:40' }], 'coder_observation_unevidenced'],
+    ['too much evidence', [{ ...OBSERVATION, evidenceRefs: ['a', 'b', 'c', 'd', 'e'] }], 'coder_observation_unevidenced'],
+    ['an empty locator', [{ ...OBSERVATION, evidenceRefs: [''] }], 'coder_observation_unevidenced'],
+    ['an assumption the design never made', [{ ...OBSERVATION, subject: 'A-9' }], 'coder_observation_names_unknown_assumption'],
+  ])('refuses %s, by name', (_label, value, reasonCode) => {
+    expect(sanitize(value)).toEqual({ ok: false, reasonCode });
+  });
+
+  it('an observation with no design in force is refused: there is nothing it can be about', () => {
+    expect(sanitize([OBSERVATION], null)).toEqual({ ok: false, reasonCode: 'coder_observations_without_architecture' });
+  });
+
+  it('the row it becomes is a valid event, and its locators split back exactly', () => {
+    const reading = sanitize([{ ...OBSERVATION, evidenceRefs: ['src/journal.ts:40', 'the suite output, line 12'] }]);
+    if (!reading.ok) throw new Error(reading.reasonCode);
+    const facts = juliusCoderObservationFacts({ observation: reading.observations[0]!, revision: 1, observedByRole: 'CODING_AGENT' });
+    expect(facts).toEqual({
+      revision: 1, kind: 'ASSUMPTION_INVALIDATED', subject: 'A-1', claim: OBSERVATION.claim,
+      evidenceRefs: 'src/journal.ts:40\nthe suite output, line 12', evidenceRefCount: 2, observedByRole: 'CODING_AGENT',
+    });
+    expect(String(facts.evidenceRefs).split('\n')).toEqual(['src/journal.ts:40', 'the suite output, line 12']);
+    for (const type of ['architecture.observed', 'architecture.observation.refused']) {
+      expect(() => validateJuliusEvent({
+        eventId: 'e', runId: 'r', projectId: 'p', type: type as never, taskId: 'build-1', workerId: 'w',
+        correlationId: 'c', causationId: null, occurredAt: 't', facts,
+      })).not.toThrow();
+    }
   });
 });

@@ -220,6 +220,15 @@ export function juliusArchitectureTriggers(input: {
     }
   }
 
+  /* The implementation peer saw the design fail under it, and said so with evidence. */
+  for (const entry of input.entries) {
+    if (entry.type !== 'architecture.observed' || number(entry.facts.revision) !== revision) continue;
+    const kind = text(entry.facts.kind);
+    const trigger = kind === null ? undefined : OBSERVATION_TRIGGERS[kind as JuliusCoderObservationKind];
+    if (trigger === undefined) continue;
+    add(trigger, text(entry.taskId), `coder_observed_${kind!.toLowerCase()}`, text(entry.facts.subject) ?? '(unnamed)');
+  }
+
   /* A coder asked, and a re-plan was asked for. Both are peer requests already. */
   for (const request of foldJuliusPeerRequests(input.entries)) {
     if (request.status !== 'OPEN' && request.status !== 'ANSWERED') continue;
@@ -565,4 +574,121 @@ export function juliusArchitectureCompletionGate(input: {
     case 'DRIFT_REQUIRES_REPAIR': return { ok: false, reasonCode: 'ARCHITECTURE_DRIFT_REQUIRES_REPAIR' };
     default: return { ok: false, reasonCode: 'ARCHITECTURE_REPLAN_REQUIRED' };
   }
+}
+
+/* ------------------------------------------- what the implementation peer saw */
+
+/**
+ * WHAT A CODING AGENT MAY TELL JULIUS ABOUT THE DESIGN, AND NOTHING ELSE.
+ *
+ * The coder is the peer that meets the design against real code first: the
+ * assumption that turns out false, the dependency that behaves differently, the
+ * boundary the work cannot stay inside, the design that cannot be satisfied. It
+ * may SAY so, with evidence, and Julius decides whether that is a reason to go
+ * back to the architect. It may not revise the architecture, propose a
+ * revision or assess consistency — those channels are the architect's, and a
+ * coder that uses them is refused on the record.
+ */
+export const JULIUS_CODER_OBSERVATION_KINDS = [
+  /** An assumption the architecture holds is false in the code. */
+  'ASSUMPTION_INVALIDATED',
+  /** A dependency the design names behaves differently, or another is needed. */
+  'DEPENDENCY_CHANGED',
+  /** The implementation had to cross a boundary the design declares. */
+  'BOUNDARY_CROSSED',
+  /** The work cannot be done inside the current design at all. */
+  'ARCHITECTURE_UNSATISFIABLE',
+  /** The coder believes a different design would serve the contract better. */
+  'REPLAN_SUGGESTED',
+] as const;
+export type JuliusCoderObservationKind = (typeof JULIUS_CODER_OBSERVATION_KINDS)[number];
+
+/** Each observation reaches exactly one of the consultation triggers PR #271 already defines. */
+const OBSERVATION_TRIGGERS: Readonly<Record<JuliusCoderObservationKind, JuliusArchitectureTrigger>> = Object.freeze({
+  ASSUMPTION_INVALIDATED: 'CONTRADICTING_EVIDENCE',
+  DEPENDENCY_CHANGED: 'DEPENDENCY_CHANGE',
+  BOUNDARY_CROSSED: 'IMPLEMENTATION_DRIFT',
+  ARCHITECTURE_UNSATISFIABLE: 'JULIUS_REPLAN_REQUEST',
+  REPLAN_SUGGESTED: 'JULIUS_REPLAN_REQUEST',
+});
+
+export const JULIUS_CODER_OBSERVATION_LIMITS = Object.freeze({ observations: 6, subjectChars: 120, claimChars: 240, evidenceRefs: 4, refChars: 200 });
+
+export interface JuliusCoderObservation {
+  readonly kind: JuliusCoderObservationKind;
+  /** The assumption id, dependency or boundary name it is about. */
+  readonly subject: string;
+  readonly claim: string;
+  readonly evidenceRefs: readonly string[];
+}
+
+export type JuliusCoderObservationReading =
+  | { readonly ok: true; readonly observations: readonly JuliusCoderObservation[] }
+  | { readonly ok: false; readonly reasonCode: string };
+
+const OBSERVATION_KEYS: readonly string[] = ['kind', 'subject', 'claim', 'evidenceRefs'];
+
+/**
+ * READ A CODER'S OBSERVATIONS, OR REFUSE THEM BY NAME.
+ *
+ * The authority guard first, on the raw value. An observation with no evidence
+ * is refused: drift claimed without a locator is a feeling, and a feeling does
+ * not buy an architect. An assumption observation must name an assumption the
+ * architecture in force actually holds.
+ */
+export function sanitizeJuliusCoderObservations(input: {
+  readonly value: unknown;
+  readonly state: JuliusArchitectureState | null;
+}): JuliusCoderObservationReading {
+  const guarded = guardJuliusPeerResponse(input.value);
+  if (!guarded.ok) return { ok: false, reasonCode: guarded.reasonCode };
+  if (!Array.isArray(input.value) || input.value.length === 0 || input.value.length > JULIUS_CODER_OBSERVATION_LIMITS.observations) {
+    return { ok: false, reasonCode: 'coder_observations_shape_refused' };
+  }
+  if (input.state === null) return { ok: false, reasonCode: 'coder_observations_without_architecture' };
+  const observations: JuliusCoderObservation[] = [];
+  for (const item of input.value) {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) return { ok: false, reasonCode: 'coder_observations_shape_refused' };
+    const entry = item as Record<string, unknown>;
+    if (Object.keys(entry).some((key) => !OBSERVATION_KEYS.includes(key))) return { ok: false, reasonCode: 'coder_observations_unknown_field' };
+    const kind = typeof entry.kind === 'string' ? entry.kind.trim().toUpperCase() : '';
+    if (!(JULIUS_CODER_OBSERVATION_KINDS as readonly string[]).includes(kind)) return { ok: false, reasonCode: 'coder_observation_kind_unknown' };
+    const subject = line(entry.subject, JULIUS_CODER_OBSERVATION_LIMITS.subjectChars);
+    const claim = line(entry.claim, JULIUS_CODER_OBSERVATION_LIMITS.claimChars);
+    if (subject === null || claim === null) return { ok: false, reasonCode: 'coder_observation_text_invalid' };
+    if (!Array.isArray(entry.evidenceRefs) || entry.evidenceRefs.length === 0 || entry.evidenceRefs.length > JULIUS_CODER_OBSERVATION_LIMITS.evidenceRefs) {
+      return { ok: false, reasonCode: 'coder_observation_unevidenced' };
+    }
+    const evidenceRefs: string[] = [];
+    for (const ref of entry.evidenceRefs) {
+      const safe = line(ref, JULIUS_CODER_OBSERVATION_LIMITS.refChars);
+      if (safe === null) return { ok: false, reasonCode: 'coder_observation_unevidenced' };
+      if (!evidenceRefs.includes(safe)) evidenceRefs.push(safe);
+    }
+    if (kind === 'ASSUMPTION_INVALIDATED' && !input.state.assumptions.some((assumption) => assumption.assumptionId === subject)) {
+      return { ok: false, reasonCode: 'coder_observation_names_unknown_assumption' };
+    }
+    observations.push(Object.freeze({ kind: kind as JuliusCoderObservationKind, subject, claim, evidenceRefs: Object.freeze(evidenceRefs) }));
+  }
+  return { ok: true, observations: Object.freeze(observations) };
+}
+
+/**
+ * ONE OBSERVATION AS A LEDGER ROW. Locators are joined by newline, which `line`
+ * has already removed from inside each one, so the row splits back exactly.
+ */
+export function juliusCoderObservationFacts(input: {
+  readonly observation: JuliusCoderObservation;
+  readonly revision: number;
+  readonly observedByRole: string;
+}): Record<string, string | number> {
+  return {
+    revision: input.revision,
+    kind: input.observation.kind,
+    subject: input.observation.subject,
+    claim: input.observation.claim,
+    evidenceRefs: input.observation.evidenceRefs.join('\n'),
+    evidenceRefCount: input.observation.evidenceRefs.length,
+    observedByRole: input.observedByRole,
+  };
 }

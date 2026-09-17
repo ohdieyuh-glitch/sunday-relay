@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **170 production files** across 20/20 subsystems (2 roots, 148 traced, 7 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **173 production files** across 20/20 subsystems (2 roots, 151 traced, 7 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -42,10 +42,10 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | executor + tool substrate (src/relay/workspace/julius-tools/) | kernel (src/relay/mission/julius/) | 10 | 8 |
 | executor + tool substrate (src/relay/workspace/julius-tools/) | persistence (src/relay/persistence/) | 1 | 0 |
 | kernel (src/relay/mission/julius/) | other | 5 | 0 |
-| live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 15 | 4 |
+| live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 16 | 4 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 9 | 1 |
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 0 |
-| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 16 | 4 |
+| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 19 | 4 |
 | live composition (relay-bridge/julius/) | other | 5 | 3 |
 | live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 11 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 0 |
@@ -92,7 +92,7 @@ The provider-neutral kernel: mission states and the transition table, tasks, evi
 | --- | --- | --- |
 | `src/relay/mission/julius/index.ts` | traced | `src/relay/persistence/julius-postgres.ts` |
 | `src/relay/mission/julius/julius-context-integrity.ts` | traced | `src/relay/mission/julius/index.ts` |
-| `src/relay/mission/julius/julius-context-snapshot.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-context-snapshot.ts` | traced | `src/relay/mission/julius/julius-coding-agent.ts` |
 | `src/relay/mission/julius/julius-memory-store.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-memory-trust.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-runtime-ports.ts` | traced | `src/relay/mission/julius/index.ts` |
@@ -112,7 +112,7 @@ One claimed task all the way through: policy, budget reservation, context compil
 | `src/relay/mission/julius/julius-contract-disposition.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-disagreement.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-execution-coordinator.ts` | traced | `src/relay/mission/julius/index.ts` |
-| `src/relay/mission/julius/julius-peer-channel.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
+| `src/relay/mission/julius/julius-peer-channel.ts` | traced | `src/relay/mission/julius/julius-coding-agent.ts` |
 | `src/relay/mission/julius/julius-peer-runtime.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-release-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-research-protocol.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
@@ -168,10 +168,12 @@ The implementation role: one hosted Claude Agent SDK execution behind a pure saf
 | --- | --- | --- |
 | `relay-bridge/hosted-coding-agent/coder-envelope.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-envelope.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-envelope.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
-| `relay-bridge/hosted-coding-agent/hosted-failure-reason.ts` | traced | `relay-bridge/julius/live-workers.ts` |
+| `relay-bridge/hosted-coding-agent/hosted-failure-reason.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-observation.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-readiness.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-runner.ts` | traced | `relay-bridge/julius/live-workers.ts` |
+| `relay-bridge/julius/claude-code-coding-provider.ts` | traced | `relay-bridge/julius/live-workers.ts` |
+| `src/relay/mission/julius/julius-coding-agent.ts` | traced | `src/relay/mission/julius/julius-router.ts` |
 
 ### 08 INDEPENDENT REVIEWER
 
@@ -307,6 +309,7 @@ The durable lease protocol (generation fencing, heartbeat, expiry, admission), a
 | `src/relay/mission/julius/julius-slot-effort.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-slot-envelope.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-slot-ledger.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
+| `src/relay/mission/julius/julius-worker-authority.ts` | traced | `src/relay/mission/julius/julius-execution-coordinator.ts` |
 
 ### 17 EVENTS / TRAJECTORIES
 
@@ -389,6 +392,7 @@ C.A.R.D. roles resolved to live adapters — fail closed, naming every missing v
 
 ## Excluded by category
 
+- **fixtures** — `relay-bridge/julius/coding-agent-fixtures.ts`: deterministic Coding Agent providers — generic scripted and Codex-shaped — and a recording fake executor, for the provider-swappability proofs; nothing on the live path imports it, so no scripted provider can reach a real mission. Reached only via nothing.
 - **fixtures** — `src/relay/mission/julius/julius-runtime-fixtures.ts`: a complete deterministic Julius deployment in memory — scripted adapters, stepping clock, counting ids — exported by the kernel barrel for tests; the live composition has no import through which a scripted adapter could arrive. Reached only via `src/relay/mission/julius/index.ts`.
 - **test harness** — `src/relay/mission/julius/julius-fault-injection.ts`: wraps a store so a named method throws on its Nth call — the chaos instrument the recovery scenarios use; no production caller. Reached only via `src/relay/mission/julius/index.ts`.
 - **fake** — `src/relay/connectors/gpt-architect/fake-architect.ts`: the deterministic offline fake of the GPT architect, exported by the connector barrel for the suite and Demo Simulation; the live worker binds runGptArchitect only. Reached only via `src/relay/connectors/gpt-architect/index.ts`, `src/relay/connectors/gpt-architect/index.ts`.

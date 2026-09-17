@@ -1,3 +1,4 @@
+import { JULIUS_CODING_AGENT_FAILURES } from './julius-coding-agent';
 import type { JuliusContractReviewCharge } from './julius-task-contract';
 import { JULIUS_COST_BASES } from './julius-cost-accounting';
 import type{JuliusWorker,JuliusWorkerRegistry,JuliusWorkerRole}from'./julius-runtime';import{workerAllowedByCard,type JuliusCardPolicy}from'./julius-policy';
@@ -79,7 +80,7 @@ export const safeReasonCode=(value:unknown):string|null=>typeof value==='string'
  * not import the mission projection; `hosted-failure-reason.test.ts` fails if
  * the two ever disagree.
  */
-export const JULIUS_HOSTED_FAILURE_REASONS=['rate_limited','context_length_exceeded','content_filtered','provider_overloaded','provider_auth_rejected','provider_bad_request','provider_server_error','stream_interrupted','execution_error','unclassified','no_message'] as const;
+export const JULIUS_HOSTED_FAILURE_REASONS=['rate_limited','credit_unavailable','context_length_exceeded','content_filtered','provider_overloaded','provider_auth_rejected','provider_bad_request','provider_server_error','stream_interrupted','execution_error','unclassified','no_message'] as const;
 export type JuliusHostedFailureReason=(typeof JULIUS_HOSTED_FAILURE_REASONS)[number];
 /**
  * THE CORROBORATING FACTS, NARROWED THE SAME WAY THE CLASS IS.
@@ -337,6 +338,17 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
    * classified answer; the provider's own words never travel.
    */
   failureReason:safeEnum(v.failureReason,JULIUS_HOSTED_FAILURE_REASONS),
+  /**
+   * THE FAILURE JULIUS REASONS ABOUT, from the provider-neutral Coding Agent
+   * taxonomy. `failureReason` above is the hosted runtime's own classification;
+   * this is the class that decided retry versus operator action, and it reads
+   * the same whichever coding provider failed.
+   */
+  codingAgentFailure:safeEnum(v.codingAgentFailure,JULIUS_CODING_AGENT_FAILURES),
+  /** Whether a person has to act before retrying can change the answer — exhausted credit, a rejected key. */
+  operatorActionRequired:safeNullableBool(v.operatorActionRequired),
+  /** Which implementation of the Coding Agent port ran, as a machine token. */
+  codingAgentProvider:safeToken(v.codingAgentProvider),
   /* --- Coding Agent cost, beside a refusal. Paid run 34037313976 was refused
    * for cost and the amount lived only in a message nothing persisted. --- */
   /** The runtime-reported cost in micro-dollars; null when the runtime reported none. */
@@ -482,6 +494,10 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   participationAskedGuidance:safeNullableBool(v.participationAskedGuidance),
   participationAskedResearch:safeNullableBool(v.participationAskedResearch),
   participationAskedResume:safeNullableBool(v.participationAskedResume),
+  /** Whether the coder closed with a report of its own work. Claims, recorded beside what the executor observed. */
+  participationAskedReport:safeNullableBool(v.participationAskedReport),
+  /** Whether the coder reported what the design did under real code. */
+  participationAskedObservations:safeNullableBool(v.participationAskedObservations),
  });
 };
 /**
@@ -591,7 +607,22 @@ readonly guidance?:unknown;
   * the drift it names and the evidence for it. Unsanitised. An assessment,
   * never a verdict: it cannot accept a task and cannot complete a mission.
   */
- readonly consistency?:unknown;}
+ readonly consistency?:unknown;
+ /**
+  * WHAT A CODING AGENT DISPATCH DID TO THE WORKSPACE, AND WHAT THE CODER SAID
+  * ABOUT IT — assembled by the Julius side of the adapter from the independent
+  * executor's change set and the coder's own report, unsanitised. Julius
+  * recomputes scope against the locked contract itself; nothing here is taken
+  * as a verdict. Read only from a Coding Agent dispatch.
+  */
+ readonly implementation?:unknown;
+ /**
+  * WHAT A CODING AGENT SAW THE DESIGN DO UNDER REAL CODE — an invalidated
+  * assumption, a changed dependency, a crossed boundary, an unsatisfiable design
+  * — unsanitised. Julius decides whether it is a reason to consult the
+  * architect; the coder never writes architecture.
+  */
+ readonly architectureObservations?:unknown;}
 /**
  * WHAT JULIUS TELLS AN ADAPTER, and nothing more.
  *

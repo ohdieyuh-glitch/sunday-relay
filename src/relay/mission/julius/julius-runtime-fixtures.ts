@@ -149,6 +149,8 @@ export type ScriptedOutcome =
   /** `usdMicros: null` reports NO cost — Unknown, which is not zero. */
   | {
     readonly kind: 'succeed';
+    /** What the worker says about its own attempt. Defaults to SUCCEEDED; a worker may report FAILED. */
+    readonly status?: 'SUCCEEDED' | 'FAILED';
     readonly evidence?: readonly Record<string, unknown>[];
     readonly usdMicros?: number | null;
     /** What this worker PROPOSES for its task contract. Unsanitised on purpose — a test may send a hostile shape. */
@@ -169,6 +171,10 @@ export type ScriptedOutcome =
     readonly architecture?: unknown;
     /** An architect's final consistency assessment. Unsanitised, for the same reason. */
     readonly consistency?: unknown;
+    /** A Coding Agent's workspace change set and report. Unsanitised, for the same reason. */
+    readonly implementation?: unknown;
+    /** A Coding Agent's observations about the design. Unsanitised, for the same reason. */
+    readonly architectureObservations?: unknown;
   }
   /** `costUsdMicros` is what the boundary billed before it failed, as its diagnostics would carry. */
   | {
@@ -225,7 +231,7 @@ export function scriptedAdapter(
         return { workerId: 'someone-else', providerId: target.providerId, status: 'SUCCEEDED', safeSummary: 'x', evidence: [], usage: {} };
       }
       const result: JuliusProviderResult = {
-        workerId: target.workerId, providerId: target.providerId, status: 'SUCCEEDED',
+        workerId: target.workerId, providerId: target.providerId, status: step.status ?? 'SUCCEEDED',
         safeSummary: `${target.role} completed ${input.taskId}.`,
         evidence: step.evidence ?? [{ type: 'TEST', status: 'PASSED', safeSummary: 'Suite passed.' }],
         usage: {
@@ -243,6 +249,8 @@ export function scriptedAdapter(
         ...(step.rebuttal === undefined ? {} : { rebuttal: step.rebuttal }),
         ...(step.architecture === undefined ? {} : { architecture: step.architecture }),
         ...(step.consistency === undefined ? {} : { consistency: step.consistency }),
+        ...(step.implementation === undefined ? {} : { implementation: step.implementation }),
+        ...(step.architectureObservations === undefined ? {} : { architectureObservations: step.architectureObservations }),
       };
       return result;
     },
