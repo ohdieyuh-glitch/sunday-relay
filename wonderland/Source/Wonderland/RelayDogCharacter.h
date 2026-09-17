@@ -242,12 +242,28 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Relay Dog|Mission Camera")
 	void OrbitMissionCamera(float YawDegrees, float PitchDegrees);
 
+	/** Zoom the mission camera: negative closer, positive further. What the mouse wheel does over the world. */
+	UFUNCTION(BlueprintCallable, Category = "Relay Dog|Mission Camera")
+	void ZoomMissionCamera(float Steps);
+
+	/** The zoom the player has set this mission, 1 unchanged. */
+	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
+	float GetMissionCameraZoom() const { return MissionCamZoom; }
+
+	/** How many degrees the mission camera has lifted its angle to see over something standing in the way, 0 when clear. */
+	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
+	float GetMissionCameraRaise() const { return MissionCamRaise; }
+
+	/** Where the mission camera itself stands in the world, this frame. */
+	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
+	FVector GetMissionCameraLocation() const;
+
 	/** Put the mission camera at this yaw and pitch about the Contract. */
 	UFUNCTION(BlueprintCallable, Category = "Relay Dog|Mission Camera")
 	void SetMissionCameraAngles(float YawDegrees, float PitchDegrees);
 
 	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
-	FRotator GetMissionCameraRotation() const { return FRotator(MissionCamPitch, MissionCamYaw, 0.0f); }
+	FRotator GetMissionCameraRotation() const { return FRotator(MissionCamPitch - MissionCamRaise, MissionCamYaw, 0.0f); }
 
 	/** The point the mission camera turns about, world space. */
 	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
@@ -272,6 +288,9 @@ public:
 	/** How many left presses during a mission were left to a panel rather than taken as a drag. */
 	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
 	int32 GetMissionCameraPressesLeftToUi() const { return MissionCamUiPresses; }
+
+	/** True when a press or a wheel at this screen point would land on the world rather than on a panel. */
+	bool IsWorldUnderPointer(const FVector2D& ScreenPosition) const;
 
 	/** Called by the camera's Slate input processor. True when the press starts a drag. */
 	bool BeginMissionCameraDrag(const FVector2D& ScreenPosition);
@@ -444,6 +463,15 @@ private:
 	/** The player has placed the camera by hand this mission: the automatic reframing leaves it where they put it. */
 	bool bMissionCamUserPlaced = false;
 	float MissionCamArmShown = 0.0f;
+	float MissionCamLiftShown = 0.0f;
+	/** The player's mouse-wheel zoom, kept for the mission. */
+	float MissionCamZoom = 1.0f;
+	/** Degrees the camera has lifted its angle to look over a prop between it and the Contract or the Dog. */
+	float MissionCamRaise = 0.0f;
+	/** Seconds the view has been clear, before the lift is let back down. */
+	float MissionCamClearFor = 0.0f;
+	/** True when something solid stands between the camera, at this pitch, and the Contract or the Dog's head. */
+	bool IsMissionCameraBlocked(float PitchDegrees) const;
 
 	/* ---- the mission camera's state */
 	float MissionCamWeight = 0.0f;
