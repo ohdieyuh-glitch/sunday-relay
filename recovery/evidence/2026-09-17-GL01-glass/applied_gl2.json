@@ -1,0 +1,12 @@
+{
+ "name": "zzAV70_gl01_apply_gl2",
+ "started": "2026-09-17 07:00:41",
+ "status": "done",
+ "done": {
+  "MI_V2_WindowDark": "reparented",
+  "MI_V2_WindowArch": "reparented"
+ },
+ "finished": "2026-09-17 07:01:06",
+ "seconds": 25.88,
+ "log": ""
+}

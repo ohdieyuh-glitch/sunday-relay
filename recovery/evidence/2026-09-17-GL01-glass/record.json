@@ -1,0 +1,62 @@
+{
+ "MI_V2_WindowDark": {
+  "parent": "/Game/WonderlandV2/Materials/Master/M_V2_Surface.M_V2_Surface",
+  "scalars": {
+   "TexScale": 0.00019999999494757503,
+   "Roughness": 0.11999999731779099,
+   "RoughVary": 0.5,
+   "Metallic": 0.0,
+   "Specular": 0.6000000238418579,
+   "EmissiveStrength": 0.0
+  },
+  "vectors": {
+   "BaseColor": [
+    0.10000000149011612,
+    0.14000000059604645,
+    0.20000000298023224,
+    1.0
+   ],
+   "Emissive": [
+    0.6600000262260437,
+    0.36000001430511475,
+    1.0,
+    1.0
+   ]
+  },
+  "textures": {
+   "Albedo": "/Game/WonderlandV2/Materials/Textures/T_V2_plaster_a.T_V2_plaster_a",
+   "Normal": "/Game/WonderlandV2/Materials/Textures/T_V2_plaster_n.T_V2_plaster_n",
+   "RoughnessMap": "/Game/WonderlandV2/Materials/Textures/T_V2_plaster_r.T_V2_plaster_r"
+  }
+ },
+ "MI_V2_WindowArch": {
+  "parent": "/Game/WonderlandV2/Materials/Master/M_V2_Surface.M_V2_Surface",
+  "scalars": {
+   "TexScale": 0.006000000052154064,
+   "Roughness": 0.05999999865889549,
+   "RoughVary": 0.0,
+   "Metallic": 0.0,
+   "Specular": 0.6000000238418579,
+   "EmissiveStrength": 0.0
+  },
+  "vectors": {
+   "BaseColor": [
+    0.10000000149011612,
+    0.14000000059604645,
+    0.20000000298023224,
+    1.0
+   ],
+   "Emissive": [
+    0.6600000262260437,
+    0.36000001430511475,
+    1.0,
+    1.0
+   ]
+  },
+  "textures": {
+   "Albedo": "/Game/WonderlandV2/Materials/Textures/T_V2_plaster_a.T_V2_plaster_a",
+   "Normal": "/Game/WonderlandV2/Materials/Textures/T_V2_plaster_n.T_V2_plaster_n",
+   "RoughnessMap": "/Game/WonderlandV2/Materials/Textures/T_V2_plaster_r.T_V2_plaster_r"
+  }
+ }
+}
