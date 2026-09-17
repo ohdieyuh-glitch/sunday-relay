@@ -88,6 +88,51 @@ def job():
         yield 0.4
         shot("painted", "painted=%s" % field("painted"))
 
+        # ---- it moves: to named places, swiftly and smoothly (founder, 2026-09-17)
+        glides = []
+        RESULT["glides"] = glides
+
+        def placement():
+            parts = dict(p.split("=", 1) for p in str(ui.describe_wonder_web_placement()).split(" ") if "=" in p)
+            return parts
+
+        def glide(place, still):
+            ui.move_wonder_web(place)
+            track = []
+            start = unreal.GameplayStatics.get_real_time_seconds(world)
+            shot_taken = False
+            while True:
+                now = unreal.GameplayStatics.get_real_time_seconds(world) - start
+                parts = placement()
+                track.append([round(now, 3), parts.get("offset"), parts.get("gliding")])
+                if still and not shot_taken and now > 0.09:
+                    path = os.path.join(ROOT, "%02d_glide_%s_mid.jpg" % (len(steps), place))
+                    H.capture_viewport_jpeg(path, 1280, 85)
+                    shot_taken = True
+                if now > 0.9:
+                    break
+                yield 0.0
+            glides.append({"place": place, "track": track, "final": placement()})
+            if still:
+                shot("at_" + place, str(placement()))
+
+        for place, still in (("right", True), ("left", True), ("center", False), ("top-right", True), ("bottom-left", True),
+                             ("top-left", False), ("bottom-right", False), ("center", True)):
+            yield from glide(place, still)
+
+        # dragged by the title bar
+        RESULT["title_drag"] = bool(ui.simulate_wonder_web_title_drag(-220.0, 70.0, 24))
+        yield 0.6
+        shot("dragged", str(placement()))
+        # Ctrl + arrows: a step right, a step up, then Ctrl + Home to the middle
+        keys = []
+        for key, ctrl in (("Right", True), ("Up", True), ("Home", True)):
+            keys.append([key, bool(ui.simulate_wonder_web_key(key, ctrl))])
+            yield 0.7
+            keys.append(str(placement()))
+        RESULT["keys"] = keys
+        shot("keyed_back_to_center", str(placement()))
+
         # ---- the terminal
         click("terminal")
         yield 0.2

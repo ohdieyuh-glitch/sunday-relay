@@ -863,6 +863,101 @@ bool UWonderlandUiSubsystem::SimulateWonderWebClick(FName Control)
 	return bReached;
 }
 
+bool UWonderlandUiSubsystem::MoveWonderWeb(FName Place)
+{
+	AWonderlandWonderWebScreen* Screen = WonderWebScreen.Get();
+	if (Screen == nullptr)
+	{
+		// Not yet stood in this world: stand it (closed) so the place is kept for when it opens.
+		Screen = EnsureWonderWebScreen(BoundController.Get());
+	}
+	const bool bMoved = Screen != nullptr && Screen->MoveTo(Place);
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web move to %s: %s"), *Place.ToString(), bMoved ? TEXT("gliding") : TEXT("unknown place"));
+	return bMoved;
+}
+
+FString UWonderlandUiSubsystem::DescribeWonderWebPlacement() const
+{
+	const AWonderlandWonderWebScreen* Screen = WonderWebScreen.Get();
+	if (Screen == nullptr)
+	{
+		return TEXT("place=none");
+	}
+	return FString::Printf(TEXT("place=%s offset=%.1f,%.1f target=%.1f,%.1f gliding=%d dragging=%d"), *Screen->GetPlace().ToString(),
+		Screen->GetOffset().X, Screen->GetOffset().Y, Screen->GetTargetOffset().X, Screen->GetTargetOffset().Y,
+		Screen->IsGliding() ? 1 : 0, Screen->IsDragging() ? 1 : 0);
+}
+
+bool UWonderlandUiSubsystem::SimulateWonderWebTitleDrag(float DeltaX, float DeltaY, int32 Steps)
+{
+	if (!IsWonderWebOpen() || !FSlateApplication::IsInitialized() || !WonderWebLayer.IsValid() || !WonderWebPanel.IsValid())
+	{
+		return false;
+	}
+	// The empty stretch of title bar between the wordmark and the first tab.
+	FVector2D FirstTab;
+	if (!WonderWebPanel->GetControlCentre(TEXT("tab:0"), FirstTab))
+	{
+		return false;
+	}
+	const FVector2D Start = GetWonderWebControlOnScreen(TEXT("tab:0"));
+	if (Start.X < 0.0)
+	{
+		return false;
+	}
+	// Left of MY VIEW by a little over half a tab: bare title bar.
+	const FVector2D From = Start - FVector2D(118.0, 0.0);
+	FSlateApplication& App = FSlateApplication::Get();
+	const TSharedPtr<SWindow> Window = App.FindWidgetWindow(WonderWebLayer.ToSharedRef());
+	if (!Window.IsValid())
+	{
+		return false;
+	}
+	const FWidgetPath Path = WonderlandUiHitTest::PathInWindow(Window.ToSharedRef(), From, App.GetUserIndexForMouse());
+	const uint32 User = static_cast<uint32>(App.GetUserIndexForMouse());
+	const uint32 Pointer = FSlateApplicationBase::CursorPointerIndex;
+	TSet<FKey> Held;
+	Held.Add(EKeys::LeftMouseButton);
+	App.RoutePointerDownEvent(Path, FPointerEvent(User, Pointer, From, From, Held, EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
+	const bool bTaken = WonderWebScreen.IsValid() && WonderWebScreen->IsDragging();
+	FVector2D Last = From;
+	const int32 Count = FMath::Clamp(Steps, 1, 240);
+	for (int32 Step = 1; Step <= Count && bTaken; ++Step)
+	{
+		const FVector2D At = From + FVector2D(DeltaX, DeltaY) * (static_cast<float>(Step) / static_cast<float>(Count));
+		// Moves go to the layer directly: while it holds the capture, Slate routes them to it wherever the pointer is.
+		const FGeometry& Geometry = WonderWebLayer->GetTickSpaceGeometry();
+		WonderWebLayer->OnMouseMove(Geometry, FPointerEvent(User, Pointer, At, Last, Held, EKeys::Invalid, 0.0f, FModifierKeysState()));
+		Last = At;
+	}
+	if (bTaken)
+	{
+		WonderWebLayer->OnMouseButtonUp(WonderWebLayer->GetTickSpaceGeometry(), FPointerEvent(User, Pointer, Last, Last, TSet<FKey>(), EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
+		App.ReleaseAllPointerCapture();
+	}
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web title drag from (%.0f, %.0f) by (%.0f, %.0f): %s"), From.X, From.Y, DeltaX, DeltaY, bTaken ? TEXT("taken and moved") : TEXT("not taken"));
+	return bTaken;
+}
+
+bool UWonderlandUiSubsystem::SimulateWonderWebKey(FName KeyName, bool bControl)
+{
+	if (!IsWonderWebOpen() || !FSlateApplication::IsInitialized())
+	{
+		return false;
+	}
+	const FKey Key(KeyName);
+	if (!Key.IsValid())
+	{
+		return false;
+	}
+	FSlateApplication& App = FSlateApplication::Get();
+	const FModifierKeysState Modifiers(false, false, bControl, false, false, false, false, false, false);
+	const FKeyEvent Event(Key, Modifiers, 0, false, 0, 0);
+	const bool bHandled = App.ProcessKeyDownEvent(Event);
+	App.ProcessKeyUpEvent(Event);
+	return bHandled;
+}
+
 bool UWonderlandUiSubsystem::SimulateWonderWebTyping(const FString& Text, bool bPressEnter)
 {
 	if (!IsWonderWebOpen() || !FSlateApplication::IsInitialized())
