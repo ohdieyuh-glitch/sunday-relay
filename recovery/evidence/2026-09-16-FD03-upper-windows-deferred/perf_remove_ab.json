@@ -1,0 +1,52 @@
+{
+ "name": "zzS00_fd03_perf",
+ "started": "2026-09-16 22:34:55",
+ "status": "done",
+ "rounds": [
+  {
+   "pass_actors": 184,
+   "on": {
+    "City_FillNE48": 85.71,
+    "South_StreetHero34": 132.63,
+    "City_FillEE54": 102.74,
+    "WorldCam12": 122.42
+   },
+   "off": {
+    "City_FillNE48": 87.88,
+    "South_StreetHero34": 96.55,
+    "City_FillEE54": 72.79,
+    "WorldCam12": 94.28
+   },
+   "off_again": {
+    "City_FillNE48": 75.22,
+    "South_StreetHero34": 76.38,
+    "City_FillEE54": 74.9,
+    "WorldCam12": 94.26
+   }
+  },
+  {
+   "pass_actors": 184,
+   "on": {
+    "City_FillNE48": 76.2,
+    "South_StreetHero34": 88.13,
+    "City_FillEE54": 79.93,
+    "WorldCam12": 97.26
+   },
+   "off": {
+    "City_FillNE48": 69.59,
+    "South_StreetHero34": 74.94,
+    "City_FillEE54": 76.53,
+    "WorldCam12": 107.77
+   },
+   "off_again": {
+    "City_FillNE48": 76.93,
+    "South_StreetHero34": 74.59,
+    "City_FillEE54": 75.71,
+    "WorldCam12": 88.71
+   }
+  }
+ ],
+ "finished": "2026-09-16 22:40:26",
+ "seconds": 331.52,
+ "log": ""
+}

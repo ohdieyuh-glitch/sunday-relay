@@ -23,7 +23,13 @@ its own copy because the first preview (fd02a) showed WIN01's stretched normals 
 and the 12k generator panes it was tuned for must not move; LIT_SHARE of them, by a hash of position, keep the kit's
 warm GlassAmber, so a wall reads as lived in rather than as one repeated tile.
 
-    python facade_windows.py            (writes fd02_<prefix>.json)
+FD03 (--upper) is the same window on the faces FD02 leaves alone because they do not start at street level: upper
+storeys set on a lower block, facade panels and square towers, 3 to 19 m up. Measured: of the street-facing upper faces
+nothing stands in front of, 694 were blank (castle halls 457, facade panels 175, square towers 59). Rows start just
+above the face's own bottom; the in-front test is made at each window's own height.
+
+    python facade_windows.py            (FD02: writes fd02_<prefix>.json)
+    python facade_windows.py --upper    (FD03: writes fd03_<prefix>.json)
 """
 import json
 import math
@@ -41,6 +47,16 @@ TMP = F.TMP
 PASS = "FD02"
 WINDOW = "WL_Detail_Window_Arched"
 WALL_MESHES = ("SM_castle_hall",)
+UPPER_MESHES = ("SM_castle_hall", "SM_facade_panel", "SM_castle_tower_square")
+UPPER_MAX = 2500.0              # an upper face's bottom above the street top; higher than this is skyline, not street
+UPPER_OPENING = 90.0            # an upper row's opening above the face's own bottom
+# FD03 IS A SET, NOT ONE TILE. 2,992 identical arched windows over the upper storeys would read as repetition. Each
+# upper face takes its body window by a hash of the face -- the arched window or a pair of pointed lancets -- and its
+# TOP row, and any face with room for only one column, takes a round oculus (forge 6729007f).
+LANCET = "WL_Detail_Window_LancetPair"
+OCULUS = "WL_Detail_Window_Oculus"
+OCULUS_LIFT = 70.0              # the oculus's centre (0.96 m local) level with the arched window's middle
+MODULE_TAG = {WINDOW: "Arched", LANCET: "Lancet", OCULUS: "Oculus"}
 HALF_W = 110.5                  # half the module's width
 TOP = 327.0                     # its height
 OPENING_Z = 30.0                # local z of the opening's bottom
@@ -58,7 +74,9 @@ GLASS_DARK = "MI_V2_WindowArch"   # its own copy of WindowDark: at 1 x 2 m the s
 CULL = 9000.0
 
 
-def main():
+def main(upper=False):
+    pass_id = "FD03" if upper else PASS
+    meshes = UPPER_MESHES if upper else WALL_MESHES
     streets = json.loads((TMP / "street_census.json").read_text(encoding="utf-8"))
     buildings = json.loads((TMP / "building_census.json").read_text(encoding="utf-8"))
     panes = json.loads((TMP / "pane_census.json").read_text(encoding="utf-8"))["panes"]
@@ -80,15 +98,19 @@ def main():
 
     by_prefix = defaultdict(dict)
     for bi, b in enumerate(buildings):
-        if b["mesh"] not in WALL_MESHES:
+        if b["mesh"] not in meshes:
             continue
         for fi, (nx, ny, fx, fy, half_t) in enumerate(faces_of(b)):
             tile = next((t for t in (street_at(fx + nx * d, fy + ny * d) for d in F.STREET_PROBES) if t), None)
             if tile is None:
                 continue
             top = tile["top"]
-            if b["zmin"] - top > 150.0:
+            rise = b["zmin"] - top
+            if not upper and rise > 150.0:
                 stats["face_not_at_street_level"] += 1
+                continue
+            if upper and not (150.0 < rise <= UPPER_MAX):
+                stats["face_at_street_level_or_skyline"] += 1
                 continue
             has_pane = False
             for j in F.around(pg, fx, fy):
@@ -111,14 +133,24 @@ def main():
             # shops on this wall: their positions along it
             shop_along = [(shops[s][0] - fx) * tx + (shops[s][1] - fy) * ty for s in F.around(shg, fx, fy)
                           if abs((shops[s][0] - fx) * nx + (shops[s][1] - fy) * ny) < 250.0]
-            origins = [top + GROUND_OPENING - OPENING_Z]
+            origins = [(b["zmin"] + UPPER_OPENING if upper else top + GROUND_OPENING) - OPENING_Z]
             z = origins[0] + STOREY + 20.0
+            if upper and origins[0] + TOP + ROOF_CLEAR > b["zmax"]:   # FD02's ground row was applied without this
+                stats["face_too_short"] += 1
+                continue
             while z + TOP + ROOF_CLEAR <= b["zmax"]:
                 origins.append(z)
                 z += STOREY
             stats["faces"] += 1
             prefix = tile["label"].split("_")[0]
+            body_module = WINDOW if (not upper or F.hash01(fx, fy, 53) < 0.5) else LANCET
             for row, oz in enumerate(origins):
+                if not upper:
+                    module = WINDOW
+                elif cols == 1 or (len(origins) >= 3 and row == len(origins) - 1):   # 2-row faces: an oculus on half the wall was not an accent
+                    module = OCULUS
+                else:
+                    module = body_module
                 for off in offsets:
                     x, y = fx + tx * off, fy + ty * off
                     if oz - top < SHOP_TOP and any(abs(a - off) < SHOP_CLEAR for a in shop_along):
@@ -136,31 +168,36 @@ def main():
                         continue
                     yaw = (math.degrees(math.atan2(ny, nx)) + 90.0) % 360.0
                     lit = F.hash01(x, y, oz, 13) < LIT_SHARE
-                    for part in KIT[WINDOW]["parts"]:
+                    wz = oz + (OCULUS_LIFT if module == OCULUS else 0.0)
+                    for part in KIT[module]["parts"]:
                         material = part["material"]
                         key = part["part"]
                         if key == "glass":
                             material = part["material"] if lit else GLASS_DARK
                             key = "glass_lit" if lit else "glass"
-                        k = "%s_%s_Window_%s" % (PASS, prefix, key)
+                        # FD02 keeps its original batch ids (its layers are saved in the map by id)
+                        k = ("%s_%s_Window_%s" % (pass_id, prefix, key) if not upper
+                             else "%s_%s_%s_%s" % (pass_id, prefix, MODULE_TAG[module], key))
                         bt = by_prefix[prefix].setdefault(k, {"id": k, "mesh": part["mesh"], "material": material,
                                                               "instances": [], "collides": False, "cast_shadow": True,
                                                               "affect_df": False, "cull_distance": CULL})
-                        bt["instances"].append([round(x, 1), round(y, 1), round(oz, 1), 0.0, round(yaw, 1), 0.0, 1.0, 1.0, 1.0])
+                        bt["instances"].append([round(x, 1), round(y, 1), round(wz, 1), 0.0, round(yaw, 1), 0.0, 1.0, 1.0, 1.0])
                     stats["windows"] += 1
+                    stats[MODULE_TAG[module]] += 1
                     stats["lit" if lit else "dark"] += 1
-    for old in HERE.glob("fd02_*.json"):
+    stem = pass_id.lower()
+    for old in HERE.glob("%s_*.json" % stem):
         old.unlink()
     for prefix, batches in sorted(by_prefix.items()):
-        layer = {"pass": "%s_%s" % (PASS, prefix),
-                 "title": "FD02 %s: arched windows on blank street-facing castle-hall walls" % prefix,
-                 "tags": ["FD02"], "actors": [], "batches": list(batches.values())}
-        (HERE / ("fd02_%s.json" % prefix.lower())).write_text(json.dumps(layer), encoding="utf-8", newline="\n")
-    return stats, {p: sum(len(b["instances"]) for b in bs.values() if b["id"].endswith("_stone") or b["id"].endswith("Window_" + "stone"))
-                   for p, bs in by_prefix.items()}
+        layer = {"pass": "%s_%s" % (pass_id, prefix),
+                 "title": "%s %s: arched windows on blank street-facing %s walls" % (pass_id, prefix, "upper-storey" if upper else "castle-hall"),
+                 "tags": [pass_id], "actors": [], "batches": list(batches.values())}
+        (HERE / ("%s_%s.json" % (stem, prefix.lower()))).write_text(json.dumps(layer), encoding="utf-8", newline="\n")
+    return stats, {p: sum(len(b["instances"]) for b in bs.values() if b["id"].endswith("_stone")) for p, bs in by_prefix.items()}
 
 
 if __name__ == "__main__":
-    stats, per = main()
+    import sys
+    stats, per = main(upper="--upper" in sys.argv)
     print(dict(stats))
     print(per)

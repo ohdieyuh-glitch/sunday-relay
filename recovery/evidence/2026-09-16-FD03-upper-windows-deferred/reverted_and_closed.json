@@ -1,0 +1,14 @@
+{
+ "name": "zzZ99_close_for_companion",
+ "started": "2026-09-16 22:41:53",
+ "status": "done",
+ "fd03_left": 0,
+ "dirty_maps": [
+  "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2"
+ ],
+ "saved_map": true,
+ "closed": true,
+ "finished": "2026-09-16 22:42:06",
+ "seconds": 13.2,
+ "log": ""
+}
