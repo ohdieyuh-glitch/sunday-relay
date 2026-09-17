@@ -1,0 +1,1340 @@
+{
+ "pass": "OL01_TRIM",
+ "title": "Tea things: the plaster set sunk below the datum (reversible)",
+ "trims": [
+  {
+   "name": "StaticMeshActor_40",
+   "label": "FlankL_TeaPot",
+   "mesh": "SM_tea_pot",
+   "index": null,
+   "why": "replaced by WL_Object_TeapotPavilion at the same place and size (OL01)",
+   "before": [
+    5200.0,
+    1600.0,
+    86.0,
+    0.0,
+    30.0,
+    -0.0,
+    0.55,
+    0.55,
+    0.55
+   ],
+   "after": [
+    5200.0,
+    1600.0,
+    -6000.0,
+    0.0,
+    30.0,
+    -0.0,
+    0.55,
+    0.55,
+    0.55
+   ]
+  },
+  {
+   "name": "StaticMeshActor_41",
+   "label": "FlankL_TeaCupA",
+   "mesh": "SM_tea_cup",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    5320.0,
+    1520.0,
+    86.0,
+    0.0,
+    -40.0,
+    0.0,
+    0.5,
+    0.5,
+    0.5
+   ],
+   "after": [
+    5320.0,
+    1520.0,
+    -6000.0,
+    0.0,
+    -40.0,
+    0.0,
+    0.5,
+    0.5,
+    0.5
+   ]
+  },
+  {
+   "name": "StaticMeshActor_42",
+   "label": "FlankL_TeaCupB",
+   "mesh": "SM_tea_cup_small",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    5090.0,
+    1690.0,
+    86.0,
+    0.0,
+    70.0,
+    -0.0,
+    0.5,
+    0.5,
+    0.5
+   ],
+   "after": [
+    5090.0,
+    1690.0,
+    -6000.0,
+    0.0,
+    70.0,
+    -0.0,
+    0.5,
+    0.5,
+    0.5
+   ]
+  },
+  {
+   "name": "StaticMeshActor_58",
+   "label": "FlankR_TeaPot",
+   "mesh": "SM_tea_pot",
+   "index": null,
+   "why": "replaced by WL_Object_TeapotPavilion at the same place and size (OL01)",
+   "before": [
+    -5200.0,
+    1600.0,
+    86.0,
+    0.0,
+    -30.0,
+    0.0,
+    0.55,
+    0.55,
+    0.55
+   ],
+   "after": [
+    -5200.0,
+    1600.0,
+    -6000.0,
+    0.0,
+    -30.0,
+    0.0,
+    0.55,
+    0.55,
+    0.55
+   ]
+  },
+  {
+   "name": "StaticMeshActor_59",
+   "label": "FlankR_TeaCupA",
+   "mesh": "SM_tea_cup",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -5320.0,
+    1520.0,
+    86.0,
+    0.0,
+    40.0,
+    -0.0,
+    0.5,
+    0.5,
+    0.5
+   ],
+   "after": [
+    -5320.0,
+    1520.0,
+    -6000.0,
+    0.0,
+    40.0,
+    -0.0,
+    0.5,
+    0.5,
+    0.5
+   ]
+  },
+  {
+   "name": "StaticMeshActor_60",
+   "label": "FlankR_TeaCupB",
+   "mesh": "SM_tea_cup_small",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -5090.0,
+    1690.0,
+    86.0,
+    0.0,
+    -70.0,
+    0.0,
+    0.5,
+    0.5,
+    0.5
+   ],
+   "after": [
+    -5090.0,
+    1690.0,
+    -6000.0,
+    0.0,
+    -70.0,
+    0.0,
+    0.5,
+    0.5,
+    0.5
+   ]
+  },
+  {
+   "name": "StaticMeshActor_64",
+   "label": "S15_tea_Pot",
+   "mesh": "SM_tea_pot",
+   "index": null,
+   "why": "replaced by WL_Object_TeapotPavilion at the same place and size (OL01)",
+   "before": [
+    -4543.6,
+    -2771.0,
+    158.5,
+    0.0,
+    -105.2,
+    0.0,
+    1.468,
+    1.468,
+    1.468
+   ],
+   "after": [
+    -4543.6,
+    -2771.0,
+    -6000.0,
+    0.0,
+    -105.2,
+    0.0,
+    1.468,
+    1.468,
+    1.468
+   ]
+  },
+  {
+   "name": "StaticMeshActor_65",
+   "label": "S15_tea_Saucer0",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -4142.7,
+    -2496.7,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ],
+   "after": [
+    -4142.7,
+    -2496.7,
+    -6000.0,
+    0.0,
+    0.0,
+    0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ]
+  },
+  {
+   "name": "StaticMeshActor_66",
+   "label": "S15_tea_Cup0",
+   "mesh": "SM_tea_cup",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -4142.7,
+    -2496.7,
+    32.3,
+    0.0,
+    20.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ],
+   "after": [
+    -4142.7,
+    -2496.7,
+    -6000.0,
+    0.0,
+    20.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ]
+  },
+  {
+   "name": "StaticMeshActor_67",
+   "label": "S15_tea_Saucer1",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -4817.9,
+    -2370.1,
+    0.0,
+    0.0,
+    30.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ],
+   "after": [
+    -4817.9,
+    -2370.1,
+    -6000.0,
+    0.0,
+    30.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ]
+  },
+  {
+   "name": "StaticMeshActor_68",
+   "label": "S15_tea_Cup1",
+   "mesh": "SM_tea_cup_small",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -4817.9,
+    -2370.1,
+    32.3,
+    0.0,
+    50.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ],
+   "after": [
+    -4817.9,
+    -2370.1,
+    -6000.0,
+    0.0,
+    50.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ]
+  },
+  {
+   "name": "StaticMeshActor_69",
+   "label": "S15_tea_Saucer2",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -4944.5,
+    -3045.2,
+    0.0,
+    0.0,
+    60.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ],
+   "after": [
+    -4944.5,
+    -3045.2,
+    -6000.0,
+    0.0,
+    60.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ]
+  },
+  {
+   "name": "StaticMeshActor_70",
+   "label": "S15_tea_Cup2",
+   "mesh": "SM_tea_cup",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -4944.5,
+    -3045.2,
+    32.3,
+    0.0,
+    80.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ],
+   "after": [
+    -4944.5,
+    -3045.2,
+    -6000.0,
+    0.0,
+    80.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ]
+  },
+  {
+   "name": "StaticMeshActor_71",
+   "label": "S15_tea_Saucer3",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -4269.4,
+    -3171.9,
+    0.0,
+    0.0,
+    90.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ],
+   "after": [
+    -4269.4,
+    -3171.9,
+    -6000.0,
+    0.0,
+    90.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ]
+  },
+  {
+   "name": "StaticMeshActor_72",
+   "label": "S15_tea_Cup3",
+   "mesh": "SM_tea_cup_small",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -4269.4,
+    -3171.9,
+    32.3,
+    0.0,
+    110.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ],
+   "after": [
+    -4269.4,
+    -3171.9,
+    -6000.0,
+    0.0,
+    110.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ]
+  },
+  {
+   "name": "StaticMeshActor_73",
+   "label": "S15_tea_Saucer4",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -4142.6,
+    -2496.8,
+    0.0,
+    0.0,
+    120.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ],
+   "after": [
+    -4142.6,
+    -2496.8,
+    -6000.0,
+    0.0,
+    120.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ]
+  },
+  {
+   "name": "StaticMeshActor_74",
+   "label": "S15_tea_Cup4",
+   "mesh": "SM_tea_cup",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -4142.6,
+    -2496.8,
+    32.3,
+    0.0,
+    140.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ],
+   "after": [
+    -4142.6,
+    -2496.8,
+    -6000.0,
+    0.0,
+    140.0,
+    -0.0,
+    1.2478,
+    1.2478,
+    1.2478
+   ]
+  },
+  {
+   "name": "StaticMeshActor_77",
+   "label": "S15_tea_Set0",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -4493.0,
+    -2477.6,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0276,
+    1.0276,
+    1.0276
+   ],
+   "after": [
+    -4493.0,
+    -2477.6,
+    -6000.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0276,
+    1.0276,
+    1.0276
+   ]
+  },
+  {
+   "name": "StaticMeshActor_78",
+   "label": "S15_tea_Set1",
+   "mesh": "SM_tea_cup_small",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -4822.4,
+    -2875.4,
+    0.0,
+    0.0,
+    40.0,
+    -0.0,
+    1.0276,
+    1.0276,
+    1.0276
+   ],
+   "after": [
+    -4822.4,
+    -2875.4,
+    -6000.0,
+    0.0,
+    40.0,
+    -0.0,
+    1.0276,
+    1.0276,
+    1.0276
+   ]
+  },
+  {
+   "name": "StaticMeshActor_79",
+   "label": "S15_tea_Set2",
+   "mesh": "SM_tea_cup",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -4312.7,
+    -2958.9,
+    0.0,
+    0.0,
+    80.0,
+    -0.0,
+    1.0276,
+    1.0276,
+    1.0276
+   ],
+   "after": [
+    -4312.7,
+    -2958.9,
+    -6000.0,
+    0.0,
+    80.0,
+    -0.0,
+    1.0276,
+    1.0276,
+    1.0276
+   ]
+  },
+  {
+   "name": "StaticMeshActor_80",
+   "label": "S15_tea_Set3",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -4497.9,
+    -2476.8,
+    0.0,
+    0.0,
+    120.0,
+    -0.0,
+    1.0276,
+    1.0276,
+    1.0276
+   ],
+   "after": [
+    -4497.9,
+    -2476.8,
+    -6000.0,
+    0.0,
+    120.0,
+    -0.0,
+    1.0276,
+    1.0276,
+    1.0276
+   ]
+  },
+  {
+   "name": "StaticMeshActor_85",
+   "label": "S01_tea_Pot",
+   "mesh": "SM_tea_pot",
+   "index": null,
+   "why": "replaced by WL_Object_TeapotPavilion at the same place and size (OL01)",
+   "before": [
+    -7826.0,
+    -5083.0,
+    181.3,
+    0.0,
+    -30.04,
+    0.0,
+    1.6789,
+    1.6789,
+    1.6789
+   ],
+   "after": [
+    -7826.0,
+    -5083.0,
+    -6000.0,
+    0.0,
+    -30.04,
+    0.0,
+    1.6789,
+    1.6789,
+    1.6789
+   ]
+  },
+  {
+   "name": "StaticMeshActor_86",
+   "label": "S01_tea_Saucer0",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -7267.1,
+    -4700.6,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.4271,
+    1.4271,
+    1.4271
+   ],
+   "after": [
+    -7267.1,
+    -4700.6,
+    -6000.0,
+    0.0,
+    0.0,
+    0.0,
+    1.4271,
+    1.4271,
+    1.4271
+   ]
+  },
+  {
+   "name": "StaticMeshActor_87",
+   "label": "S01_tea_Cup0",
+   "mesh": "SM_tea_cup",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -7267.1,
+    -4700.6,
+    36.9,
+    0.0,
+    20.0,
+    -0.0,
+    1.4271,
+    1.4271,
+    1.4271
+   ],
+   "after": [
+    -7267.1,
+    -4700.6,
+    -6000.0,
+    0.0,
+    20.0,
+    -0.0,
+    1.4271,
+    1.4271,
+    1.4271
+   ]
+  },
+  {
+   "name": "StaticMeshActor_88",
+   "label": "S01_tea_Saucer1",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -8208.3,
+    -4524.1,
+    0.0,
+    0.0,
+    30.0,
+    -0.0,
+    1.4271,
+    1.4271,
+    1.4271
+   ],
+   "after": [
+    -8208.3,
+    -4524.1,
+    -6000.0,
+    0.0,
+    30.0,
+    -0.0,
+    1.4271,
+    1.4271,
+    1.4271
+   ]
+  },
+  {
+   "name": "StaticMeshActor_89",
+   "label": "S01_tea_Cup1",
+   "mesh": "SM_tea_cup_small",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -8208.3,
+    -4524.1,
+    36.9,
+    0.0,
+    50.0,
+    -0.0,
+    1.4271,
+    1.4271,
+    1.4271
+   ],
+   "after": [
+    -8208.3,
+    -4524.1,
+    -6000.0,
+    0.0,
+    50.0,
+    -0.0,
+    1.4271,
+    1.4271,
+    1.4271
+   ]
+  },
+  {
+   "name": "StaticMeshActor_90",
+   "label": "S01_tea_Saucer2",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -8384.9,
+    -5465.3,
+    0.0,
+    0.0,
+    60.0,
+    -0.0,
+    1.4271,
+    1.4271,
+    1.4271
+   ],
+   "after": [
+    -8384.9,
+    -5465.3,
+    -6000.0,
+    0.0,
+    60.0,
+    -0.0,
+    1.4271,
+    1.4271,
+    1.4271
+   ]
+  },
+  {
+   "name": "StaticMeshActor_91",
+   "label": "S01_tea_Cup2",
+   "mesh": "SM_tea_cup",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -8384.9,
+    -5465.3,
+    36.9,
+    0.0,
+    80.0,
+    -0.0,
+    1.4271,
+    1.4271,
+    1.4271
+   ],
+   "after": [
+    -8384.9,
+    -5465.3,
+    -6000.0,
+    0.0,
+    80.0,
+    -0.0,
+    1.4271,
+    1.4271,
+    1.4271
+   ]
+  },
+  {
+   "name": "StaticMeshActor_94",
+   "label": "S01_tea_Set0",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -7755.5,
+    -4674.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.1752,
+    1.1752,
+    1.1752
+   ],
+   "after": [
+    -7755.5,
+    -4674.0,
+    -6000.0,
+    0.0,
+    0.0,
+    0.0,
+    1.1752,
+    1.1752,
+    1.1752
+   ]
+  },
+  {
+   "name": "StaticMeshActor_95",
+   "label": "S01_tea_Set1",
+   "mesh": "SM_tea_cup_small",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -8214.7,
+    -5228.6,
+    0.0,
+    0.0,
+    40.0,
+    -0.0,
+    1.1752,
+    1.1752,
+    1.1752
+   ],
+   "after": [
+    -8214.7,
+    -5228.6,
+    -6000.0,
+    0.0,
+    40.0,
+    -0.0,
+    1.1752,
+    1.1752,
+    1.1752
+   ]
+  },
+  {
+   "name": "StaticMeshActor_133",
+   "label": "C18_tea_Pot",
+   "mesh": "SM_tea_pot",
+   "index": null,
+   "why": "replaced by WL_Object_TeapotPavilion at the same place and size (OL01)",
+   "before": [
+    -20377.7,
+    -8505.8,
+    266.1,
+    0.0,
+    -163.49,
+    0.0,
+    2.4638,
+    2.4638,
+    2.4638
+   ],
+   "after": [
+    -20377.7,
+    -8505.8,
+    -6000.0,
+    0.0,
+    -163.49,
+    0.0,
+    2.4638,
+    2.4638,
+    2.4638
+   ]
+  },
+  {
+   "name": "StaticMeshActor_134",
+   "label": "C18_tea_Saucer0",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -19476.9,
+    -7889.6,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    2.0942,
+    2.0942,
+    2.0942
+   ],
+   "after": [
+    -19476.9,
+    -7889.6,
+    -6000.0,
+    0.0,
+    0.0,
+    0.0,
+    2.0942,
+    2.0942,
+    2.0942
+   ]
+  },
+  {
+   "name": "StaticMeshActor_135",
+   "label": "C18_tea_Cup0",
+   "mesh": "SM_tea_cup",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -19476.9,
+    -7889.6,
+    54.2,
+    0.0,
+    20.0,
+    -0.0,
+    2.0942,
+    2.0942,
+    2.0942
+   ],
+   "after": [
+    -19476.9,
+    -7889.6,
+    -6000.0,
+    0.0,
+    20.0,
+    -0.0,
+    2.0942,
+    2.0942,
+    2.0942
+   ]
+  },
+  {
+   "name": "StaticMeshActor_136",
+   "label": "C18_tea_Saucer1",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -20993.9,
+    -7605.0,
+    0.0,
+    0.0,
+    30.0,
+    -0.0,
+    2.0942,
+    2.0942,
+    2.0942
+   ],
+   "after": [
+    -20993.9,
+    -7605.0,
+    -6000.0,
+    0.0,
+    30.0,
+    -0.0,
+    2.0942,
+    2.0942,
+    2.0942
+   ]
+  },
+  {
+   "name": "StaticMeshActor_137",
+   "label": "C18_tea_Cup1",
+   "mesh": "SM_tea_cup_small",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -20993.9,
+    -7605.0,
+    54.2,
+    0.0,
+    50.0,
+    -0.0,
+    2.0942,
+    2.0942,
+    2.0942
+   ],
+   "after": [
+    -20993.9,
+    -7605.0,
+    -6000.0,
+    0.0,
+    50.0,
+    -0.0,
+    2.0942,
+    2.0942,
+    2.0942
+   ]
+  },
+  {
+   "name": "StaticMeshActor_140",
+   "label": "C18_tea_Set0",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -20264.0,
+    -7846.6,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.7247,
+    1.7247,
+    1.7247
+   ],
+   "after": [
+    -20264.0,
+    -7846.6,
+    -6000.0,
+    0.0,
+    0.0,
+    0.0,
+    1.7247,
+    1.7247,
+    1.7247
+   ]
+  },
+  {
+   "name": "StaticMeshActor_146",
+   "label": "D04_tea_Pot",
+   "mesh": "SM_tea_pot",
+   "index": null,
+   "why": "replaced by WL_Object_TeapotPavilion at the same place and size (OL01)",
+   "before": [
+    -27764.3,
+    -6343.3,
+    289.3,
+    0.0,
+    -108.43,
+    0.0,
+    2.6784,
+    2.6784,
+    2.6784
+   ],
+   "after": [
+    -27764.3,
+    -6343.3,
+    -6000.0,
+    0.0,
+    -108.43,
+    0.0,
+    2.6784,
+    2.6784,
+    2.6784
+   ]
+  },
+  {
+   "name": "StaticMeshActor_147",
+   "label": "D04_tea_Saucer0",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -26792.6,
+    -5678.6,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    2.2766,
+    2.2766,
+    2.2766
+   ],
+   "after": [
+    -26792.6,
+    -5678.6,
+    -6000.0,
+    0.0,
+    0.0,
+    0.0,
+    2.2766,
+    2.2766,
+    2.2766
+   ]
+  },
+  {
+   "name": "StaticMeshActor_148",
+   "label": "D04_tea_Cup0",
+   "mesh": "SM_tea_cup",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -26792.6,
+    -5678.6,
+    58.9,
+    0.0,
+    20.0,
+    -0.0,
+    2.2766,
+    2.2766,
+    2.2766
+   ],
+   "after": [
+    -26792.6,
+    -5678.6,
+    -6000.0,
+    0.0,
+    20.0,
+    -0.0,
+    2.2766,
+    2.2766,
+    2.2766
+   ]
+  },
+  {
+   "name": "StaticMeshActor_149",
+   "label": "D04_tea_Saucer1",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -28429.0,
+    -5371.6,
+    0.0,
+    0.0,
+    30.0,
+    -0.0,
+    2.2766,
+    2.2766,
+    2.2766
+   ],
+   "after": [
+    -28429.0,
+    -5371.6,
+    -6000.0,
+    0.0,
+    30.0,
+    -0.0,
+    2.2766,
+    2.2766,
+    2.2766
+   ]
+  },
+  {
+   "name": "StaticMeshActor_150",
+   "label": "D04_tea_Cup1",
+   "mesh": "SM_tea_cup_small",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -28429.0,
+    -5371.6,
+    58.9,
+    0.0,
+    50.0,
+    -0.0,
+    2.2766,
+    2.2766,
+    2.2766
+   ],
+   "after": [
+    -28429.0,
+    -5371.6,
+    -6000.0,
+    0.0,
+    50.0,
+    -0.0,
+    2.2766,
+    2.2766,
+    2.2766
+   ]
+  },
+  {
+   "name": "StaticMeshActor_152",
+   "label": "D04_tea_Set0",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -27641.6,
+    -5632.3,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.8749,
+    1.8749,
+    1.8749
+   ],
+   "after": [
+    -27641.6,
+    -5632.3,
+    -6000.0,
+    0.0,
+    0.0,
+    0.0,
+    1.8749,
+    1.8749,
+    1.8749
+   ]
+  },
+  {
+   "name": "StaticMeshActor_227",
+   "label": "LMTeaTerraces_Cup",
+   "mesh": "SM_tea_cup",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -13110.8,
+    -7570.0,
+    0.0,
+    0.0,
+    30.0,
+    -0.0,
+    1.008,
+    1.008,
+    1.008
+   ],
+   "after": [
+    -13110.8,
+    -7570.0,
+    -6000.0,
+    0.0,
+    30.0,
+    -0.0,
+    1.008,
+    1.008,
+    1.008
+   ]
+  },
+  {
+   "name": "StaticMeshActor_228",
+   "label": "LMTeaTerraces_Saucer",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -13110.8,
+    -7570.0,
+    0.0,
+    0.0,
+    30.0,
+    -0.0,
+    1.008,
+    1.008,
+    1.008
+   ],
+   "after": [
+    -13110.8,
+    -7570.0,
+    -6000.0,
+    0.0,
+    30.0,
+    -0.0,
+    1.008,
+    1.008,
+    1.008
+   ]
+  },
+  {
+   "name": "StaticMeshActor_419",
+   "label": "Way0396_Saucer",
+   "mesh": "SM_tea_saucer",
+   "index": null,
+   "why": "replaced by WL_Object_TeaSaucer at the same place and size (OL01)",
+   "before": [
+    -10140.3,
+    -2921.8,
+    0.0,
+    0.0,
+    -151.98,
+    0.0,
+    2.3,
+    2.3,
+    2.3
+   ],
+   "after": [
+    -10140.3,
+    -2921.8,
+    -6000.0,
+    0.0,
+    -151.98,
+    0.0,
+    2.3,
+    2.3,
+    2.3
+   ]
+  },
+  {
+   "name": "StaticMeshActor_420",
+   "label": "Way0396_Cup",
+   "mesh": "SM_tea_cup",
+   "index": null,
+   "why": "replaced by WL_Object_TeaCup at the same place and size (OL01)",
+   "before": [
+    -10140.3,
+    -2921.8,
+    30.0,
+    0.0,
+    -111.98,
+    0.0,
+    2.3,
+    2.3,
+    2.3
+   ],
+   "after": [
+    -10140.3,
+    -2921.8,
+    -6000.0,
+    0.0,
+    -111.98,
+    0.0,
+    2.3,
+    2.3,
+    2.3
+   ]
+  }
+ ]
+}

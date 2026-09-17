@@ -1,0 +1,15 @@
+{
+ "name": "zzJ02_tea_census",
+ "started": "2026-09-16 22:10:51",
+ "status": "done",
+ "count": 46,
+ "by_mesh": {
+  "SM_tea_cup": 12,
+  "SM_tea_cup_small": 9,
+  "SM_tea_saucer": 19,
+  "SM_tea_pot": 6
+ },
+ "finished": "2026-09-16 22:10:51",
+ "seconds": 0.06,
+ "log": ""
+}

@@ -1,7 +1,7 @@
 {
  "schema": "wonderland-kit-modules/1",
  "kit_version": "1.0.0",
- "generated_utc": "2026-09-16T19:03:11+00:00",
+ "generated_utc": "2026-09-16T21:21:01+00:00",
  "radius_ladder_uu": {
   "XL": 680.0,
   "L": 460.0,
@@ -484,23 +484,23 @@
    "group": "towers",
    "role": "body",
    "height": 1340.0,
-   "radius": 584.36,
+   "radius": 586.56,
    "size": [
-    1071.12,
-    1046.1,
+    1079.72,
+    1048.3,
     1340.0
    ],
    "bbox_min": [
-    -498.49,
-    -584.36,
+    -503.75,
+    -586.56,
     0.0
    ],
    "bbox_max": [
-    572.63,
+    575.97,
     461.74,
     1340.0
    ],
-   "tris": 1706,
+   "tris": 1850,
    "sockets": {
     "bottom": {
      "kind": "tower",
@@ -5537,6 +5537,97 @@
     }
    ]
   },
+  "WL_Detail_Banner_Blade": {
+   "family": "banner",
+   "group": "details",
+   "role": "detail",
+   "height": 371.0,
+   "radius": 157.0,
+   "size": [
+    44.0,
+    157.0,
+    371.0
+   ],
+   "bbox_min": [
+    -22.0,
+    -0.0,
+    -0.0
+   ],
+   "bbox_max": [
+    22.0,
+    157.0,
+    371.0
+   ],
+   "tris": 888,
+   "sockets": {
+    "back": {
+     "kind": "bridge_end",
+     "z": 300.0,
+     "rung": null,
+     "radius": 22.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Banner_Blade_gold.WL_Detail_Banner_Blade_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Banner_Blade_roof.WL_Detail_Banner_Blade_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "roof_alt",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Banner_Blade_roof_alt.WL_Detail_Banner_Blade_roof_alt",
+     "material": "MI_V2_RoofLilac"
+    }
+   ]
+  },
+  "WL_Detail_Wall_Lantern": {
+   "family": "lantern",
+   "group": "details",
+   "role": "detail",
+   "height": 174.0,
+   "radius": 91.66,
+   "size": [
+    45.04,
+    91.66,
+    174.0
+   ],
+   "bbox_min": [
+    -22.52,
+    -0.0,
+    0.0
+   ],
+   "bbox_max": [
+    22.52,
+    91.66,
+    174.0
+   ],
+   "tris": 688,
+   "sockets": {
+    "back": {
+     "kind": "bridge_end",
+     "z": 124.0,
+     "rung": null,
+     "radius": 16.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Wall_Lantern_glass.WL_Detail_Wall_Lantern_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Wall_Lantern_gold.WL_Detail_Wall_Lantern_gold",
+     "material": "MI_V2_Gold"
+    }
+   ]
+  },
   "WL_Hero_GreatSpire": {
    "family": "hero",
    "group": "hero",
@@ -5973,6 +6064,102 @@
      "part": "veg_anchor",
      "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_veg_anchor.WL_Object_TeapotPavilion_veg_anchor",
      "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Object_TeaCup": {
+   "family": "tea_cup",
+   "group": "objects",
+   "role": "detail",
+   "height": 262.0,
+   "radius": 263.13,
+   "size": [
+    390.0,
+    458.13,
+    262.0
+   ],
+   "bbox_min": [
+    -195.0,
+    -263.13,
+    0.0
+   ],
+   "bbox_max": [
+    195.0,
+    195.0,
+    262.0
+   ],
+   "tris": 4404,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 100.0
+    }
+   },
+   "parts": [
+    {
+     "part": "enamel",
+     "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+     "material": "MI_V2_Ceramic"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Object_TeaSaucer": {
+   "family": "tea_saucer",
+   "group": "objects",
+   "role": "detail",
+   "height": 66.0,
+   "radius": 362.0,
+   "size": [
+    724.0,
+    724.0,
+    66.0
+   ],
+   "bbox_min": [
+    -362.0,
+    -362.0,
+    0.0
+   ],
+   "bbox_max": [
+    362.0,
+    362.0,
+    66.0
+   ],
+   "tris": 2048,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 130.0
+    }
+   },
+   "parts": [
+    {
+     "part": "enamel",
+     "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+     "material": "MI_V2_Ceramic"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+     "material": "MI_V2_Gold"
     }
    ]
   },

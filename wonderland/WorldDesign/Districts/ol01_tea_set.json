@@ -1,0 +1,3610 @@
+{
+ "pass": "OL01",
+ "title": "Tea things: porcelain cups, saucers and pots",
+ "tags": [
+  "OL01"
+ ],
+ "actors": [
+  {
+   "id": "FlankL_TeaPot_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_enamel.WL_Object_TeapotPavilion_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    5200.0,
+    1600.0,
+    84.1
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    0.0925,
+    0.0925,
+    0.0925
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankL_TeaPot_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_glass.WL_Object_TeapotPavilion_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    5200.0,
+    1600.0,
+    84.1
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    0.0925,
+    0.0925,
+    0.0925
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankL_TeaPot_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_gold.WL_Object_TeapotPavilion_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    5200.0,
+    1600.0,
+    84.1
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    0.0925,
+    0.0925,
+    0.0925
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankL_TeaPot_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_roof.WL_Object_TeapotPavilion_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    5200.0,
+    1600.0,
+    84.1
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    0.0925,
+    0.0925,
+    0.0925
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankL_TeaPot_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_veg_anchor.WL_Object_TeapotPavilion_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    5200.0,
+    1600.0,
+    84.1
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    0.0925,
+    0.0925,
+    0.0925
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankL_TeaCupA_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    5320.0,
+    1520.0,
+    84.4
+   ],
+   "rot": [
+    0.0,
+    -40.0,
+    0.0
+   ],
+   "scale": [
+    0.5061,
+    0.5061,
+    0.5061
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankL_TeaCupA_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    5320.0,
+    1520.0,
+    84.4
+   ],
+   "rot": [
+    0.0,
+    -40.0,
+    0.0
+   ],
+   "scale": [
+    0.5061,
+    0.5061,
+    0.5061
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankL_TeaCupA_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    5320.0,
+    1520.0,
+    84.4
+   ],
+   "rot": [
+    0.0,
+    -40.0,
+    0.0
+   ],
+   "scale": [
+    0.5061,
+    0.5061,
+    0.5061
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankL_TeaCupA_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    5320.0,
+    1520.0,
+    84.4
+   ],
+   "rot": [
+    0.0,
+    -40.0,
+    0.0
+   ],
+   "scale": [
+    0.5061,
+    0.5061,
+    0.5061
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankL_TeaCupB_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    5090.0,
+    1690.0,
+    84.3
+   ],
+   "rot": [
+    0.0,
+    70.0,
+    0.0
+   ],
+   "scale": [
+    0.4187,
+    0.4187,
+    0.4187
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankL_TeaCupB_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    5090.0,
+    1690.0,
+    84.3
+   ],
+   "rot": [
+    0.0,
+    70.0,
+    0.0
+   ],
+   "scale": [
+    0.4187,
+    0.4187,
+    0.4187
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankL_TeaCupB_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    5090.0,
+    1690.0,
+    84.3
+   ],
+   "rot": [
+    0.0,
+    70.0,
+    0.0
+   ],
+   "scale": [
+    0.4187,
+    0.4187,
+    0.4187
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankL_TeaCupB_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    5090.0,
+    1690.0,
+    84.3
+   ],
+   "rot": [
+    0.0,
+    70.0,
+    0.0
+   ],
+   "scale": [
+    0.4187,
+    0.4187,
+    0.4187
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankR_TeaPot_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_enamel.WL_Object_TeapotPavilion_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -5200.0,
+    1600.0,
+    84.1
+   ],
+   "rot": [
+    0.0,
+    -30.0,
+    0.0
+   ],
+   "scale": [
+    0.0925,
+    0.0925,
+    0.0925
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankR_TeaPot_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_glass.WL_Object_TeapotPavilion_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -5200.0,
+    1600.0,
+    84.1
+   ],
+   "rot": [
+    0.0,
+    -30.0,
+    0.0
+   ],
+   "scale": [
+    0.0925,
+    0.0925,
+    0.0925
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankR_TeaPot_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_gold.WL_Object_TeapotPavilion_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -5200.0,
+    1600.0,
+    84.1
+   ],
+   "rot": [
+    0.0,
+    -30.0,
+    0.0
+   ],
+   "scale": [
+    0.0925,
+    0.0925,
+    0.0925
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankR_TeaPot_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_roof.WL_Object_TeapotPavilion_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -5200.0,
+    1600.0,
+    84.1
+   ],
+   "rot": [
+    0.0,
+    -30.0,
+    0.0
+   ],
+   "scale": [
+    0.0925,
+    0.0925,
+    0.0925
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankR_TeaPot_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_veg_anchor.WL_Object_TeapotPavilion_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -5200.0,
+    1600.0,
+    84.1
+   ],
+   "rot": [
+    0.0,
+    -30.0,
+    0.0
+   ],
+   "scale": [
+    0.0925,
+    0.0925,
+    0.0925
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankR_TeaCupA_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -5320.0,
+    1520.0,
+    84.4
+   ],
+   "rot": [
+    0.0,
+    40.0,
+    0.0
+   ],
+   "scale": [
+    0.5061,
+    0.5061,
+    0.5061
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankR_TeaCupA_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -5320.0,
+    1520.0,
+    84.4
+   ],
+   "rot": [
+    0.0,
+    40.0,
+    0.0
+   ],
+   "scale": [
+    0.5061,
+    0.5061,
+    0.5061
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankR_TeaCupA_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -5320.0,
+    1520.0,
+    84.4
+   ],
+   "rot": [
+    0.0,
+    40.0,
+    0.0
+   ],
+   "scale": [
+    0.5061,
+    0.5061,
+    0.5061
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankR_TeaCupA_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -5320.0,
+    1520.0,
+    84.4
+   ],
+   "rot": [
+    0.0,
+    40.0,
+    0.0
+   ],
+   "scale": [
+    0.5061,
+    0.5061,
+    0.5061
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankR_TeaCupB_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -5090.0,
+    1690.0,
+    84.3
+   ],
+   "rot": [
+    0.0,
+    -70.0,
+    0.0
+   ],
+   "scale": [
+    0.4187,
+    0.4187,
+    0.4187
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankR_TeaCupB_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -5090.0,
+    1690.0,
+    84.3
+   ],
+   "rot": [
+    0.0,
+    -70.0,
+    0.0
+   ],
+   "scale": [
+    0.4187,
+    0.4187,
+    0.4187
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankR_TeaCupB_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -5090.0,
+    1690.0,
+    84.3
+   ],
+   "rot": [
+    0.0,
+    -70.0,
+    0.0
+   ],
+   "scale": [
+    0.4187,
+    0.4187,
+    0.4187
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "FlankR_TeaCupB_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -5090.0,
+    1690.0,
+    84.3
+   ],
+   "rot": [
+    0.0,
+    -70.0,
+    0.0
+   ],
+   "scale": [
+    0.4187,
+    0.4187,
+    0.4187
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Pot_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_enamel.WL_Object_TeapotPavilion_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -4543.6,
+    -2771.0,
+    153.4
+   ],
+   "rot": [
+    0.0,
+    -105.2,
+    0.0
+   ],
+   "scale": [
+    0.2469,
+    0.2469,
+    0.2469
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Pot_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_glass.WL_Object_TeapotPavilion_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -4543.6,
+    -2771.0,
+    153.4
+   ],
+   "rot": [
+    0.0,
+    -105.2,
+    0.0
+   ],
+   "scale": [
+    0.2469,
+    0.2469,
+    0.2469
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Pot_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_gold.WL_Object_TeapotPavilion_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -4543.6,
+    -2771.0,
+    153.4
+   ],
+   "rot": [
+    0.0,
+    -105.2,
+    0.0
+   ],
+   "scale": [
+    0.2469,
+    0.2469,
+    0.2469
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Pot_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_roof.WL_Object_TeapotPavilion_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -4543.6,
+    -2771.0,
+    153.4
+   ],
+   "rot": [
+    0.0,
+    -105.2,
+    0.0
+   ],
+   "scale": [
+    0.2469,
+    0.2469,
+    0.2469
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Pot_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_veg_anchor.WL_Object_TeapotPavilion_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -4543.6,
+    -2771.0,
+    153.4
+   ],
+   "rot": [
+    0.0,
+    -105.2,
+    0.0
+   ],
+   "scale": [
+    0.2469,
+    0.2469,
+    0.2469
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Saucer0_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -4142.7,
+    -2496.7,
+    -4.3
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    0.8961,
+    0.8961,
+    0.8961
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Saucer0_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -4142.7,
+    -2496.7,
+    -4.3
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    0.8961,
+    0.8961,
+    0.8961
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Cup0_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -4142.7,
+    -2496.7,
+    23.3
+   ],
+   "rot": [
+    0.0,
+    20.0,
+    0.0
+   ],
+   "scale": [
+    1.2626,
+    1.2626,
+    1.2626
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Cup0_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -4142.7,
+    -2496.7,
+    23.3
+   ],
+   "rot": [
+    0.0,
+    20.0,
+    0.0
+   ],
+   "scale": [
+    1.2626,
+    1.2626,
+    1.2626
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Cup0_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -4142.7,
+    -2496.7,
+    23.3
+   ],
+   "rot": [
+    0.0,
+    20.0,
+    0.0
+   ],
+   "scale": [
+    1.2626,
+    1.2626,
+    1.2626
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Cup0_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -4142.7,
+    -2496.7,
+    23.3
+   ],
+   "rot": [
+    0.0,
+    20.0,
+    0.0
+   ],
+   "scale": [
+    1.2626,
+    1.2626,
+    1.2626
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Saucer1_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -4817.9,
+    -2370.1,
+    -4.3
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    1.2243,
+    1.2243,
+    1.2243
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Saucer1_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -4817.9,
+    -2370.1,
+    -4.3
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    1.2243,
+    1.2243,
+    1.2243
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Cup1_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -4817.9,
+    -2370.1,
+    31.8
+   ],
+   "rot": [
+    0.0,
+    50.0,
+    0.0
+   ],
+   "scale": [
+    1.045,
+    1.045,
+    1.045
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Cup1_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -4817.9,
+    -2370.1,
+    31.8
+   ],
+   "rot": [
+    0.0,
+    50.0,
+    0.0
+   ],
+   "scale": [
+    1.045,
+    1.045,
+    1.045
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Cup1_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -4817.9,
+    -2370.1,
+    31.8
+   ],
+   "rot": [
+    0.0,
+    50.0,
+    0.0
+   ],
+   "scale": [
+    1.045,
+    1.045,
+    1.045
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Cup1_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -4817.9,
+    -2370.1,
+    31.8
+   ],
+   "rot": [
+    0.0,
+    50.0,
+    0.0
+   ],
+   "scale": [
+    1.045,
+    1.045,
+    1.045
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Saucer2_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -4944.5,
+    -3045.2,
+    -4.3
+   ],
+   "rot": [
+    0.0,
+    60.0,
+    0.0
+   ],
+   "scale": [
+    1.2242,
+    1.2242,
+    1.2242
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Saucer2_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -4944.5,
+    -3045.2,
+    -4.3
+   ],
+   "rot": [
+    0.0,
+    60.0,
+    0.0
+   ],
+   "scale": [
+    1.2242,
+    1.2242,
+    1.2242
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Cup2_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -4944.5,
+    -3045.2,
+    31.8
+   ],
+   "rot": [
+    0.0,
+    80.0,
+    0.0
+   ],
+   "scale": [
+    1.2626,
+    1.2626,
+    1.2626
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Cup2_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -4944.5,
+    -3045.2,
+    31.8
+   ],
+   "rot": [
+    0.0,
+    80.0,
+    0.0
+   ],
+   "scale": [
+    1.2626,
+    1.2626,
+    1.2626
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Cup2_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -4944.5,
+    -3045.2,
+    31.8
+   ],
+   "rot": [
+    0.0,
+    80.0,
+    0.0
+   ],
+   "scale": [
+    1.2626,
+    1.2626,
+    1.2626
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Cup2_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -4944.5,
+    -3045.2,
+    31.8
+   ],
+   "rot": [
+    0.0,
+    80.0,
+    0.0
+   ],
+   "scale": [
+    1.2626,
+    1.2626,
+    1.2626
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Saucer3_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -4269.4,
+    -3171.9,
+    -4.3
+   ],
+   "rot": [
+    0.0,
+    90.0,
+    0.0
+   ],
+   "scale": [
+    0.8963,
+    0.8963,
+    0.8963
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Saucer3_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -4269.4,
+    -3171.9,
+    -4.3
+   ],
+   "rot": [
+    0.0,
+    90.0,
+    0.0
+   ],
+   "scale": [
+    0.8963,
+    0.8963,
+    0.8963
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Cup3_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -4269.4,
+    -3171.9,
+    23.3
+   ],
+   "rot": [
+    0.0,
+    110.0,
+    0.0
+   ],
+   "scale": [
+    1.045,
+    1.045,
+    1.045
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Cup3_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -4269.4,
+    -3171.9,
+    23.3
+   ],
+   "rot": [
+    0.0,
+    110.0,
+    0.0
+   ],
+   "scale": [
+    1.045,
+    1.045,
+    1.045
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Cup3_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -4269.4,
+    -3171.9,
+    23.3
+   ],
+   "rot": [
+    0.0,
+    110.0,
+    0.0
+   ],
+   "scale": [
+    1.045,
+    1.045,
+    1.045
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Cup3_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -4269.4,
+    -3171.9,
+    23.3
+   ],
+   "rot": [
+    0.0,
+    110.0,
+    0.0
+   ],
+   "scale": [
+    1.045,
+    1.045,
+    1.045
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Set0_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -4493.0,
+    -2477.6,
+    -3.5
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    0.7381,
+    0.7381,
+    0.7381
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Set0_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -4493.0,
+    -2477.6,
+    -3.5
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    0.7381,
+    0.7381,
+    0.7381
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Set1_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -4822.4,
+    -2875.4,
+    -3.5
+   ],
+   "rot": [
+    0.0,
+    40.0,
+    0.0
+   ],
+   "scale": [
+    0.8607,
+    0.8607,
+    0.8607
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Set1_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -4822.4,
+    -2875.4,
+    -3.5
+   ],
+   "rot": [
+    0.0,
+    40.0,
+    0.0
+   ],
+   "scale": [
+    0.8607,
+    0.8607,
+    0.8607
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Set1_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -4822.4,
+    -2875.4,
+    -3.5
+   ],
+   "rot": [
+    0.0,
+    40.0,
+    0.0
+   ],
+   "scale": [
+    0.8607,
+    0.8607,
+    0.8607
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Set1_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -4822.4,
+    -2875.4,
+    -3.5
+   ],
+   "rot": [
+    0.0,
+    40.0,
+    0.0
+   ],
+   "scale": [
+    0.8607,
+    0.8607,
+    0.8607
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Set2_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -4312.7,
+    -2958.9,
+    -3.2
+   ],
+   "rot": [
+    0.0,
+    80.0,
+    0.0
+   ],
+   "scale": [
+    1.0397,
+    1.0397,
+    1.0397
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Set2_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -4312.7,
+    -2958.9,
+    -3.2
+   ],
+   "rot": [
+    0.0,
+    80.0,
+    0.0
+   ],
+   "scale": [
+    1.0397,
+    1.0397,
+    1.0397
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Set2_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -4312.7,
+    -2958.9,
+    -3.2
+   ],
+   "rot": [
+    0.0,
+    80.0,
+    0.0
+   ],
+   "scale": [
+    1.0397,
+    1.0397,
+    1.0397
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S15_tea_Set2_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -4312.7,
+    -2958.9,
+    -3.2
+   ],
+   "rot": [
+    0.0,
+    80.0,
+    0.0
+   ],
+   "scale": [
+    1.0397,
+    1.0397,
+    1.0397
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Pot_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_enamel.WL_Object_TeapotPavilion_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -7826.0,
+    -5083.0,
+    175.4
+   ],
+   "rot": [
+    0.0,
+    -30.04,
+    0.0
+   ],
+   "scale": [
+    0.2824,
+    0.2824,
+    0.2824
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Pot_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_glass.WL_Object_TeapotPavilion_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -7826.0,
+    -5083.0,
+    175.4
+   ],
+   "rot": [
+    0.0,
+    -30.04,
+    0.0
+   ],
+   "scale": [
+    0.2824,
+    0.2824,
+    0.2824
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Pot_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_gold.WL_Object_TeapotPavilion_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -7826.0,
+    -5083.0,
+    175.4
+   ],
+   "rot": [
+    0.0,
+    -30.04,
+    0.0
+   ],
+   "scale": [
+    0.2824,
+    0.2824,
+    0.2824
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Pot_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_roof.WL_Object_TeapotPavilion_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -7826.0,
+    -5083.0,
+    175.4
+   ],
+   "rot": [
+    0.0,
+    -30.04,
+    0.0
+   ],
+   "scale": [
+    0.2824,
+    0.2824,
+    0.2824
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Pot_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_veg_anchor.WL_Object_TeapotPavilion_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -7826.0,
+    -5083.0,
+    175.4
+   ],
+   "rot": [
+    0.0,
+    -30.04,
+    0.0
+   ],
+   "scale": [
+    0.2824,
+    0.2824,
+    0.2824
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Saucer0_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -7267.1,
+    -4700.6,
+    -4.9
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.025,
+    1.025,
+    1.025
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Saucer0_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -7267.1,
+    -4700.6,
+    -4.9
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.025,
+    1.025,
+    1.025
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Cup0_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -7267.1,
+    -4700.6,
+    26.7
+   ],
+   "rot": [
+    0.0,
+    20.0,
+    0.0
+   ],
+   "scale": [
+    1.4439,
+    1.4439,
+    1.4439
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Cup0_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -7267.1,
+    -4700.6,
+    26.7
+   ],
+   "rot": [
+    0.0,
+    20.0,
+    0.0
+   ],
+   "scale": [
+    1.4439,
+    1.4439,
+    1.4439
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Cup0_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -7267.1,
+    -4700.6,
+    26.7
+   ],
+   "rot": [
+    0.0,
+    20.0,
+    0.0
+   ],
+   "scale": [
+    1.4439,
+    1.4439,
+    1.4439
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Cup0_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -7267.1,
+    -4700.6,
+    26.7
+   ],
+   "rot": [
+    0.0,
+    20.0,
+    0.0
+   ],
+   "scale": [
+    1.4439,
+    1.4439,
+    1.4439
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Saucer1_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -8208.3,
+    -4524.1,
+    -4.9
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    1.4001,
+    1.4001,
+    1.4001
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Saucer1_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -8208.3,
+    -4524.1,
+    -4.9
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    1.4001,
+    1.4001,
+    1.4001
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Cup1_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -8208.3,
+    -4524.1,
+    36.4
+   ],
+   "rot": [
+    0.0,
+    50.0,
+    0.0
+   ],
+   "scale": [
+    1.1954,
+    1.1954,
+    1.1954
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Cup1_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -8208.3,
+    -4524.1,
+    36.4
+   ],
+   "rot": [
+    0.0,
+    50.0,
+    0.0
+   ],
+   "scale": [
+    1.1954,
+    1.1954,
+    1.1954
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Cup1_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -8208.3,
+    -4524.1,
+    36.4
+   ],
+   "rot": [
+    0.0,
+    50.0,
+    0.0
+   ],
+   "scale": [
+    1.1954,
+    1.1954,
+    1.1954
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Cup1_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -8208.3,
+    -4524.1,
+    36.4
+   ],
+   "rot": [
+    0.0,
+    50.0,
+    0.0
+   ],
+   "scale": [
+    1.1954,
+    1.1954,
+    1.1954
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Saucer2_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -8384.9,
+    -5465.3,
+    -4.9
+   ],
+   "rot": [
+    0.0,
+    60.0,
+    0.0
+   ],
+   "scale": [
+    1.4001,
+    1.4001,
+    1.4001
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Saucer2_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -8384.9,
+    -5465.3,
+    -4.9
+   ],
+   "rot": [
+    0.0,
+    60.0,
+    0.0
+   ],
+   "scale": [
+    1.4001,
+    1.4001,
+    1.4001
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Cup2_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -8384.9,
+    -5465.3,
+    36.4
+   ],
+   "rot": [
+    0.0,
+    80.0,
+    0.0
+   ],
+   "scale": [
+    1.4439,
+    1.4439,
+    1.4439
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Cup2_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -8384.9,
+    -5465.3,
+    36.4
+   ],
+   "rot": [
+    0.0,
+    80.0,
+    0.0
+   ],
+   "scale": [
+    1.4439,
+    1.4439,
+    1.4439
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Cup2_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -8384.9,
+    -5465.3,
+    36.4
+   ],
+   "rot": [
+    0.0,
+    80.0,
+    0.0
+   ],
+   "scale": [
+    1.4439,
+    1.4439,
+    1.4439
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Cup2_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -8384.9,
+    -5465.3,
+    36.4
+   ],
+   "rot": [
+    0.0,
+    80.0,
+    0.0
+   ],
+   "scale": [
+    1.4439,
+    1.4439,
+    1.4439
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Set0_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -7755.5,
+    -4674.0,
+    -4.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    0.8441,
+    0.8441,
+    0.8441
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Set0_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -7755.5,
+    -4674.0,
+    -4.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    0.8441,
+    0.8441,
+    0.8441
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Set1_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -8214.7,
+    -5228.6,
+    -4.1
+   ],
+   "rot": [
+    0.0,
+    40.0,
+    0.0
+   ],
+   "scale": [
+    0.9847,
+    0.9847,
+    0.9847
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Set1_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -8214.7,
+    -5228.6,
+    -4.1
+   ],
+   "rot": [
+    0.0,
+    40.0,
+    0.0
+   ],
+   "scale": [
+    0.9847,
+    0.9847,
+    0.9847
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Set1_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -8214.7,
+    -5228.6,
+    -4.1
+   ],
+   "rot": [
+    0.0,
+    40.0,
+    0.0
+   ],
+   "scale": [
+    0.9847,
+    0.9847,
+    0.9847
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "S01_tea_Set1_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -8214.7,
+    -5228.6,
+    -4.1
+   ],
+   "rot": [
+    0.0,
+    40.0,
+    0.0
+   ],
+   "scale": [
+    0.9847,
+    0.9847,
+    0.9847
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Pot_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_enamel.WL_Object_TeapotPavilion_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -20377.7,
+    -8505.8,
+    257.4
+   ],
+   "rot": [
+    0.0,
+    -163.49,
+    0.0
+   ],
+   "scale": [
+    0.4145,
+    0.4145,
+    0.4145
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Pot_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_glass.WL_Object_TeapotPavilion_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -20377.7,
+    -8505.8,
+    257.4
+   ],
+   "rot": [
+    0.0,
+    -163.49,
+    0.0
+   ],
+   "scale": [
+    0.4145,
+    0.4145,
+    0.4145
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Pot_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_gold.WL_Object_TeapotPavilion_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -20377.7,
+    -8505.8,
+    257.4
+   ],
+   "rot": [
+    0.0,
+    -163.49,
+    0.0
+   ],
+   "scale": [
+    0.4145,
+    0.4145,
+    0.4145
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Pot_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_roof.WL_Object_TeapotPavilion_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -20377.7,
+    -8505.8,
+    257.4
+   ],
+   "rot": [
+    0.0,
+    -163.49,
+    0.0
+   ],
+   "scale": [
+    0.4145,
+    0.4145,
+    0.4145
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Pot_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_veg_anchor.WL_Object_TeapotPavilion_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -20377.7,
+    -8505.8,
+    257.4
+   ],
+   "rot": [
+    0.0,
+    -163.49,
+    0.0
+   ],
+   "scale": [
+    0.4145,
+    0.4145,
+    0.4145
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Saucer0_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -19476.9,
+    -7889.6,
+    -7.1
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.5041,
+    1.5041,
+    1.5041
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Saucer0_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -19476.9,
+    -7889.6,
+    -7.1
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.5041,
+    1.5041,
+    1.5041
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Cup0_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -19476.9,
+    -7889.6,
+    39.1
+   ],
+   "rot": [
+    0.0,
+    20.0,
+    0.0
+   ],
+   "scale": [
+    2.1191,
+    2.1191,
+    2.1191
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Cup0_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -19476.9,
+    -7889.6,
+    39.1
+   ],
+   "rot": [
+    0.0,
+    20.0,
+    0.0
+   ],
+   "scale": [
+    2.1191,
+    2.1191,
+    2.1191
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Cup0_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -19476.9,
+    -7889.6,
+    39.1
+   ],
+   "rot": [
+    0.0,
+    20.0,
+    0.0
+   ],
+   "scale": [
+    2.1191,
+    2.1191,
+    2.1191
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Cup0_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -19476.9,
+    -7889.6,
+    39.1
+   ],
+   "rot": [
+    0.0,
+    20.0,
+    0.0
+   ],
+   "scale": [
+    2.1191,
+    2.1191,
+    2.1191
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Saucer1_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -20993.9,
+    -7605.0,
+    -7.1
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    2.0547,
+    2.0547,
+    2.0547
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Saucer1_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -20993.9,
+    -7605.0,
+    -7.1
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    2.0547,
+    2.0547,
+    2.0547
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Cup1_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -20993.9,
+    -7605.0,
+    53.4
+   ],
+   "rot": [
+    0.0,
+    50.0,
+    0.0
+   ],
+   "scale": [
+    1.7542,
+    1.7542,
+    1.7542
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Cup1_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -20993.9,
+    -7605.0,
+    53.4
+   ],
+   "rot": [
+    0.0,
+    50.0,
+    0.0
+   ],
+   "scale": [
+    1.7542,
+    1.7542,
+    1.7542
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Cup1_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -20993.9,
+    -7605.0,
+    53.4
+   ],
+   "rot": [
+    0.0,
+    50.0,
+    0.0
+   ],
+   "scale": [
+    1.7542,
+    1.7542,
+    1.7542
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Cup1_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -20993.9,
+    -7605.0,
+    53.4
+   ],
+   "rot": [
+    0.0,
+    50.0,
+    0.0
+   ],
+   "scale": [
+    1.7542,
+    1.7542,
+    1.7542
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Set0_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -20264.0,
+    -7846.6,
+    -5.9
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.2387,
+    1.2387,
+    1.2387
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "C18_tea_Set0_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -20264.0,
+    -7846.6,
+    -5.9
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.2387,
+    1.2387,
+    1.2387
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Pot_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_enamel.WL_Object_TeapotPavilion_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -27764.3,
+    -6343.3,
+    279.9
+   ],
+   "rot": [
+    0.0,
+    -108.43,
+    0.0
+   ],
+   "scale": [
+    0.4505,
+    0.4505,
+    0.4505
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Pot_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_glass.WL_Object_TeapotPavilion_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -27764.3,
+    -6343.3,
+    279.9
+   ],
+   "rot": [
+    0.0,
+    -108.43,
+    0.0
+   ],
+   "scale": [
+    0.4505,
+    0.4505,
+    0.4505
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Pot_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_gold.WL_Object_TeapotPavilion_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -27764.3,
+    -6343.3,
+    279.9
+   ],
+   "rot": [
+    0.0,
+    -108.43,
+    0.0
+   ],
+   "scale": [
+    0.4505,
+    0.4505,
+    0.4505
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Pot_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_roof.WL_Object_TeapotPavilion_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -27764.3,
+    -6343.3,
+    279.9
+   ],
+   "rot": [
+    0.0,
+    -108.43,
+    0.0
+   ],
+   "scale": [
+    0.4505,
+    0.4505,
+    0.4505
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Pot_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_veg_anchor.WL_Object_TeapotPavilion_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -27764.3,
+    -6343.3,
+    279.9
+   ],
+   "rot": [
+    0.0,
+    -108.43,
+    0.0
+   ],
+   "scale": [
+    0.4505,
+    0.4505,
+    0.4505
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Saucer0_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -26792.6,
+    -5678.6,
+    -7.8
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.6351,
+    1.6351,
+    1.6351
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Saucer0_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -26792.6,
+    -5678.6,
+    -7.8
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.6351,
+    1.6351,
+    1.6351
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Cup0_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -26792.6,
+    -5678.6,
+    42.5
+   ],
+   "rot": [
+    0.0,
+    20.0,
+    0.0
+   ],
+   "scale": [
+    2.3038,
+    2.3038,
+    2.3038
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Cup0_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -26792.6,
+    -5678.6,
+    42.5
+   ],
+   "rot": [
+    0.0,
+    20.0,
+    0.0
+   ],
+   "scale": [
+    2.3038,
+    2.3038,
+    2.3038
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Cup0_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -26792.6,
+    -5678.6,
+    42.5
+   ],
+   "rot": [
+    0.0,
+    20.0,
+    0.0
+   ],
+   "scale": [
+    2.3038,
+    2.3038,
+    2.3038
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Cup0_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -26792.6,
+    -5678.6,
+    42.5
+   ],
+   "rot": [
+    0.0,
+    20.0,
+    0.0
+   ],
+   "scale": [
+    2.3038,
+    2.3038,
+    2.3038
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Saucer1_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -28429.0,
+    -5371.6,
+    -7.8
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    2.2337,
+    2.2337,
+    2.2337
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Saucer1_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -28429.0,
+    -5371.6,
+    -7.8
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    2.2337,
+    2.2337,
+    2.2337
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Cup1_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -28429.0,
+    -5371.6,
+    58.1
+   ],
+   "rot": [
+    0.0,
+    50.0,
+    0.0
+   ],
+   "scale": [
+    1.9069,
+    1.9069,
+    1.9069
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Cup1_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -28429.0,
+    -5371.6,
+    58.1
+   ],
+   "rot": [
+    0.0,
+    50.0,
+    0.0
+   ],
+   "scale": [
+    1.9069,
+    1.9069,
+    1.9069
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Cup1_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -28429.0,
+    -5371.6,
+    58.1
+   ],
+   "rot": [
+    0.0,
+    50.0,
+    0.0
+   ],
+   "scale": [
+    1.9069,
+    1.9069,
+    1.9069
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Cup1_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -28429.0,
+    -5371.6,
+    58.1
+   ],
+   "rot": [
+    0.0,
+    50.0,
+    0.0
+   ],
+   "scale": [
+    1.9069,
+    1.9069,
+    1.9069
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Set0_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -27641.6,
+    -5632.3,
+    -6.4
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.3465,
+    1.3465,
+    1.3465
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "D04_tea_Set0_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -27641.6,
+    -5632.3,
+    -6.4
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.3465,
+    1.3465,
+    1.3465
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMTeaTerraces_Cup_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -13110.8,
+    -7570.0,
+    25.7
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    1.0202,
+    1.0202,
+    1.0202
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMTeaTerraces_Cup_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -13110.8,
+    -7570.0,
+    25.7
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    1.0202,
+    1.0202,
+    1.0202
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMTeaTerraces_Cup_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -13110.8,
+    -7570.0,
+    25.7
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    1.0202,
+    1.0202,
+    1.0202
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMTeaTerraces_Cup_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -13110.8,
+    -7570.0,
+    25.7
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    1.0202,
+    1.0202,
+    1.0202
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMTeaTerraces_Saucer_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -13110.8,
+    -7570.0,
+    -3.4
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    0.989,
+    0.989,
+    0.989
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMTeaTerraces_Saucer_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -13110.8,
+    -7570.0,
+    -3.4
+   ],
+   "rot": [
+    0.0,
+    30.0,
+    0.0
+   ],
+   "scale": [
+    0.989,
+    0.989,
+    0.989
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "Way0396_Saucer_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel.WL_Object_TeaSaucer_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -10140.3,
+    -2921.8,
+    -7.9
+   ],
+   "rot": [
+    0.0,
+    -151.98,
+    0.0
+   ],
+   "scale": [
+    2.2344,
+    2.2344,
+    2.2344
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "Way0396_Saucer_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold.WL_Object_TeaSaucer_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -10140.3,
+    -2921.8,
+    -7.9
+   ],
+   "rot": [
+    0.0,
+    -151.98,
+    0.0
+   ],
+   "scale": [
+    2.2344,
+    2.2344,
+    2.2344
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "Way0396_Cup_enamel",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel.WL_Object_TeaCup_enamel",
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "loc": [
+    -10140.3,
+    -2921.8,
+    58.1
+   ],
+   "rot": [
+    0.0,
+    -111.98,
+    0.0
+   ],
+   "scale": [
+    2.3275,
+    2.3275,
+    2.3275
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "Way0396_Cup_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold.WL_Object_TeaCup_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -10140.3,
+    -2921.8,
+    58.1
+   ],
+   "rot": [
+    0.0,
+    -111.98,
+    0.0
+   ],
+   "scale": [
+    2.3275,
+    2.3275,
+    2.3275
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "Way0396_Cup_roof",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof.WL_Object_TeaCup_roof",
+   "materials": [
+    "MI_V2_RoofRose"
+   ],
+   "loc": [
+    -10140.3,
+    -2921.8,
+    58.1
+   ],
+   "rot": [
+    0.0,
+    -111.98,
+    0.0
+   ],
+   "scale": [
+    2.3275,
+    2.3275,
+    2.3275
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "Way0396_Cup_veg_anchor",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor.WL_Object_TeaCup_veg_anchor",
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "loc": [
+    -10140.3,
+    -2921.8,
+    58.1
+   ],
+   "rot": [
+    0.0,
+    -111.98,
+    0.0
+   ],
+   "scale": [
+    2.3275,
+    2.3275,
+    2.3275
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  }
+ ],
+ "batches": []
+}

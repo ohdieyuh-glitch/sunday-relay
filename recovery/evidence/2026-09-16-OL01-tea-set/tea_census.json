@@ -1,0 +1,1336 @@
+[
+ {
+  "name": "StaticMeshActor_40",
+  "label": "FlankL_TeaPot",
+  "mesh": "SM_tea_pot",
+  "transform": [
+   5200.0,
+   1600.0,
+   86.0,
+   0.0,
+   30.0,
+   -0.0,
+   0.55,
+   0.55,
+   0.55
+  ],
+  "bmin": [
+   5048.7,
+   1468.8,
+   84.1
+  ],
+  "bmax": [
+   5324.8,
+   1715.8,
+   254.3
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_41",
+  "label": "FlankL_TeaCupA",
+  "mesh": "SM_tea_cup",
+  "transform": [
+   5320.0,
+   1520.0,
+   86.0,
+   0.0,
+   -40.0,
+   0.0,
+   0.5,
+   0.5,
+   0.5
+  ],
+  "bmin": [
+   5225.6,
+   1393.8,
+   84.4
+  ],
+  "bmax": [
+   5452.3,
+   1614.4,
+   217.0
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_42",
+  "label": "FlankL_TeaCupB",
+  "mesh": "SM_tea_cup_small",
+  "transform": [
+   5090.0,
+   1690.0,
+   86.0,
+   0.0,
+   70.0,
+   -0.0,
+   0.5,
+   0.5,
+   0.5
+  ],
+  "bmin": [
+   5006.7,
+   1606.7,
+   84.3
+  ],
+  "bmax": [
+   5181.9,
+   1796.8,
+   194.0
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_58",
+  "label": "FlankR_TeaPot",
+  "mesh": "SM_tea_pot",
+  "transform": [
+   -5200.0,
+   1600.0,
+   86.0,
+   0.0,
+   -30.0,
+   0.0,
+   0.55,
+   0.55,
+   0.55
+  ],
+  "bmin": [
+   -5351.3,
+   1484.2,
+   84.1
+  ],
+  "bmax": [
+   -5075.2,
+   1731.2,
+   254.3
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_59",
+  "label": "FlankR_TeaCupA",
+  "mesh": "SM_tea_cup",
+  "transform": [
+   -5320.0,
+   1520.0,
+   86.0,
+   0.0,
+   40.0,
+   -0.0,
+   0.5,
+   0.5,
+   0.5
+  ],
+  "bmin": [
+   -5414.4,
+   1425.6,
+   84.4
+  ],
+  "bmax": [
+   -5187.7,
+   1646.2,
+   217.0
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_60",
+  "label": "FlankR_TeaCupB",
+  "mesh": "SM_tea_cup_small",
+  "transform": [
+   -5090.0,
+   1690.0,
+   86.0,
+   0.0,
+   -70.0,
+   0.0,
+   0.5,
+   0.5,
+   0.5
+  ],
+  "bmin": [
+   -5173.3,
+   1583.2,
+   84.3
+  ],
+  "bmax": [
+   -4998.1,
+   1773.3,
+   194.0
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_64",
+  "label": "S15_tea_Pot",
+  "mesh": "SM_tea_pot",
+  "transform": [
+   -4543.6,
+   -2771.0,
+   158.5,
+   0.0,
+   -105.2,
+   0.0,
+   1.468,
+   1.468,
+   1.468
+  ],
+  "bmin": [
+   -4809.3,
+   -3082.3,
+   153.4
+  ],
+  "bmax": [
+   -4256.5,
+   -2380.8,
+   607.7
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_65",
+  "label": "S15_tea_Saucer0",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -4142.7,
+   -2496.7,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   1.2478,
+   1.2478,
+   1.2478
+  ],
+  "bmin": [
+   -4467.1,
+   -2821.1,
+   -4.3
+  ],
+  "bmax": [
+   -3818.3,
+   -2172.3,
+   77.6
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_66",
+  "label": "S15_tea_Cup0",
+  "mesh": "SM_tea_cup",
+  "transform": [
+   -4142.7,
+   -2496.7,
+   32.3,
+   0.0,
+   20.0,
+   -0.0,
+   1.2478,
+   1.2478,
+   1.2478
+  ],
+  "bmin": [
+   -4357.0,
+   -2711.0,
+   28.4
+  ],
+  "bmax": [
+   -3812.3,
+   -2240.2,
+   359.2
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_67",
+  "label": "S15_tea_Saucer1",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -4817.9,
+   -2370.1,
+   0.0,
+   0.0,
+   30.0,
+   -0.0,
+   1.2478,
+   1.2478,
+   1.2478
+  ],
+  "bmin": [
+   -5261.0,
+   -2813.3,
+   -4.3
+  ],
+  "bmax": [
+   -4374.7,
+   -1926.9,
+   77.6
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_68",
+  "label": "S15_tea_Cup1",
+  "mesh": "SM_tea_cup_small",
+  "transform": [
+   -4817.9,
+   -2370.1,
+   32.3,
+   0.0,
+   50.0,
+   -0.0,
+   1.2478,
+   1.2478,
+   1.2478
+  ],
+  "bmin": [
+   -5046.4,
+   -2598.6,
+   28.0
+  ],
+  "bmax": [
+   -4549.2,
+   -2093.8,
+   301.8
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_69",
+  "label": "S15_tea_Saucer2",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -4944.5,
+   -3045.2,
+   0.0,
+   0.0,
+   60.0,
+   -0.0,
+   1.2478,
+   1.2478,
+   1.2478
+  ],
+  "bmin": [
+   -5387.7,
+   -3488.4,
+   -4.3
+  ],
+  "bmax": [
+   -4501.4,
+   -2602.1,
+   77.6
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_70",
+  "label": "S15_tea_Cup2",
+  "mesh": "SM_tea_cup",
+  "transform": [
+   -4944.5,
+   -3045.2,
+   32.3,
+   0.0,
+   80.0,
+   -0.0,
+   1.2478,
+   1.2478,
+   1.2478
+  ],
+  "bmin": [
+   -5138.2,
+   -3238.9,
+   28.4
+  ],
+  "bmax": [
+   -4729.4,
+   -2729.9,
+   359.2
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_71",
+  "label": "S15_tea_Saucer3",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -4269.4,
+   -3171.9,
+   0.0,
+   0.0,
+   90.0,
+   -0.0,
+   1.2478,
+   1.2478,
+   1.2478
+  ],
+  "bmin": [
+   -4593.8,
+   -3496.4,
+   -4.3
+  ],
+  "bmax": [
+   -3945.0,
+   -2847.5,
+   77.6
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_72",
+  "label": "S15_tea_Cup3",
+  "mesh": "SM_tea_cup_small",
+  "transform": [
+   -4269.4,
+   -3171.9,
+   32.3,
+   0.0,
+   110.0,
+   -0.0,
+   1.2478,
+   1.2478,
+   1.2478
+  ],
+  "bmin": [
+   -4498.6,
+   -3379.9,
+   28.0
+  ],
+  "bmax": [
+   -4061.5,
+   -2905.4,
+   301.8
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_73",
+  "label": "S15_tea_Saucer4",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -4142.6,
+   -2496.8,
+   0.0,
+   0.0,
+   120.0,
+   -0.0,
+   1.2478,
+   1.2478,
+   1.2478
+  ],
+  "bmin": [
+   -4585.8,
+   -2940.0,
+   -4.3
+  ],
+  "bmax": [
+   -3699.5,
+   -2053.6,
+   77.6
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_74",
+  "label": "S15_tea_Cup4",
+  "mesh": "SM_tea_cup",
+  "transform": [
+   -4142.6,
+   -2496.8,
+   32.3,
+   0.0,
+   140.0,
+   -0.0,
+   1.2478,
+   1.2478,
+   1.2478
+  ],
+  "bmin": [
+   -4472.8,
+   -2732.4,
+   28.4
+  ],
+  "bmax": [
+   -3907.1,
+   -2181.8,
+   359.2
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_77",
+  "label": "S15_tea_Set0",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -4493.0,
+   -2477.6,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   1.0276,
+   1.0276,
+   1.0276
+  ],
+  "bmin": [
+   -4760.2,
+   -2744.8,
+   -3.5
+  ],
+  "bmax": [
+   -4225.8,
+   -2210.4,
+   63.9
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_78",
+  "label": "S15_tea_Set1",
+  "mesh": "SM_tea_cup_small",
+  "transform": [
+   -4822.4,
+   -2875.4,
+   0.0,
+   0.0,
+   40.0,
+   -0.0,
+   1.0276,
+   1.0276,
+   1.0276
+  ],
+  "bmin": [
+   -5010.6,
+   -3063.6,
+   -3.5
+  ],
+  "bmax": [
+   -4594.8,
+   -2654.2,
+   222.0
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_79",
+  "label": "S15_tea_Set2",
+  "mesh": "SM_tea_cup",
+  "transform": [
+   -4312.7,
+   -2958.9,
+   0.0,
+   0.0,
+   80.0,
+   -0.0,
+   1.0276,
+   1.0276,
+   1.0276
+  ],
+  "bmin": [
+   -4472.2,
+   -3118.5,
+   -3.2
+  ],
+  "bmax": [
+   -4135.5,
+   -2699.2,
+   269.2
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_80",
+  "label": "S15_tea_Set3",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -4497.9,
+   -2476.8,
+   0.0,
+   0.0,
+   120.0,
+   -0.0,
+   1.0276,
+   1.0276,
+   1.0276
+  ],
+  "bmin": [
+   -4862.9,
+   -2841.8,
+   -3.5
+  ],
+  "bmax": [
+   -4133.0,
+   -2111.8,
+   63.9
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_85",
+  "label": "S01_tea_Pot",
+  "mesh": "SM_tea_pot",
+  "transform": [
+   -7826.0,
+   -5083.0,
+   181.3,
+   0.0,
+   -30.04,
+   0.0,
+   1.6789,
+   1.6789,
+   1.6789
+  ],
+  "bmin": [
+   -8287.9,
+   -5436.7,
+   175.4
+  ],
+  "bmax": [
+   -7445.1,
+   -4682.4,
+   695.1
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_86",
+  "label": "S01_tea_Saucer0",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -7267.1,
+   -4700.6,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   1.4271,
+   1.4271,
+   1.4271
+  ],
+  "bmin": [
+   -7638.1,
+   -5071.7,
+   -4.9
+  ],
+  "bmax": [
+   -6896.0,
+   -4329.6,
+   88.8
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_87",
+  "label": "S01_tea_Cup0",
+  "mesh": "SM_tea_cup",
+  "transform": [
+   -7267.1,
+   -4700.6,
+   36.9,
+   0.0,
+   20.0,
+   -0.0,
+   1.4271,
+   1.4271,
+   1.4271
+  ],
+  "bmin": [
+   -7512.2,
+   -4945.7,
+   32.5
+  ],
+  "bmax": [
+   -6889.2,
+   -4407.2,
+   410.8
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_88",
+  "label": "S01_tea_Saucer1",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -8208.3,
+   -4524.1,
+   0.0,
+   0.0,
+   30.0,
+   -0.0,
+   1.4271,
+   1.4271,
+   1.4271
+  ],
+  "bmin": [
+   -8715.2,
+   -5030.9,
+   -4.9
+  ],
+  "bmax": [
+   -7701.5,
+   -4017.2,
+   88.8
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_89",
+  "label": "S01_tea_Cup1",
+  "mesh": "SM_tea_cup_small",
+  "transform": [
+   -8208.3,
+   -4524.1,
+   36.9,
+   0.0,
+   50.0,
+   -0.0,
+   1.4271,
+   1.4271,
+   1.4271
+  ],
+  "bmin": [
+   -8469.7,
+   -4785.4,
+   32.0
+  ],
+  "bmax": [
+   -7901.1,
+   -4208.0,
+   345.2
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_90",
+  "label": "S01_tea_Saucer2",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -8384.9,
+   -5465.3,
+   0.0,
+   0.0,
+   60.0,
+   -0.0,
+   1.4271,
+   1.4271,
+   1.4271
+  ],
+  "bmin": [
+   -8891.8,
+   -5972.2,
+   -4.9
+  ],
+  "bmax": [
+   -7878.1,
+   -4958.5,
+   88.8
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_91",
+  "label": "S01_tea_Cup2",
+  "mesh": "SM_tea_cup",
+  "transform": [
+   -8384.9,
+   -5465.3,
+   36.9,
+   0.0,
+   80.0,
+   -0.0,
+   1.4271,
+   1.4271,
+   1.4271
+  ],
+  "bmin": [
+   -8606.5,
+   -5686.9,
+   32.5
+  ],
+  "bmax": [
+   -8138.9,
+   -5104.7,
+   410.8
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_94",
+  "label": "S01_tea_Set0",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -7755.5,
+   -4674.0,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   1.1752,
+   1.1752,
+   1.1752
+  ],
+  "bmin": [
+   -8061.0,
+   -4979.5,
+   -4.0
+  ],
+  "bmax": [
+   -7449.9,
+   -4368.4,
+   73.1
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_95",
+  "label": "S01_tea_Set1",
+  "mesh": "SM_tea_cup_small",
+  "transform": [
+   -8214.7,
+   -5228.6,
+   0.0,
+   0.0,
+   40.0,
+   -0.0,
+   1.1752,
+   1.1752,
+   1.1752
+  ],
+  "bmin": [
+   -8429.9,
+   -5443.8,
+   -4.1
+  ],
+  "bmax": [
+   -7954.4,
+   -4975.6,
+   253.9
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_133",
+  "label": "C18_tea_Pot",
+  "mesh": "SM_tea_pot",
+  "transform": [
+   -20377.7,
+   -8505.8,
+   266.1,
+   0.0,
+   -163.49,
+   0.0,
+   2.4638,
+   2.4638,
+   2.4638
+  ],
+  "bmin": [
+   -20904.8,
+   -8959.4,
+   257.4
+  ],
+  "bmax": [
+   -19718.9,
+   -8013.2,
+   1020.0
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_134",
+  "label": "C18_tea_Saucer0",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -19476.9,
+   -7889.6,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   2.0942,
+   2.0942,
+   2.0942
+  ],
+  "bmin": [
+   -20021.4,
+   -8434.1,
+   -7.1
+  ],
+  "bmax": [
+   -18932.4,
+   -7345.1,
+   130.3
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_135",
+  "label": "C18_tea_Cup0",
+  "mesh": "SM_tea_cup",
+  "transform": [
+   -19476.9,
+   -7889.6,
+   54.2,
+   0.0,
+   20.0,
+   -0.0,
+   2.0942,
+   2.0942,
+   2.0942
+  ],
+  "bmin": [
+   -19836.6,
+   -8249.3,
+   47.7
+  ],
+  "bmax": [
+   -18922.4,
+   -7459.0,
+   602.9
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_136",
+  "label": "C18_tea_Saucer1",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -20993.9,
+   -7605.0,
+   0.0,
+   0.0,
+   30.0,
+   -0.0,
+   2.0942,
+   2.0942,
+   2.0942
+  ],
+  "bmin": [
+   -21737.7,
+   -8348.8,
+   -7.1
+  ],
+  "bmax": [
+   -20250.1,
+   -6861.2,
+   130.3
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_137",
+  "label": "C18_tea_Cup1",
+  "mesh": "SM_tea_cup_small",
+  "transform": [
+   -20993.9,
+   -7605.0,
+   54.2,
+   0.0,
+   50.0,
+   -0.0,
+   2.0942,
+   2.0942,
+   2.0942
+  ],
+  "bmin": [
+   -21377.4,
+   -7988.6,
+   47.0
+  ],
+  "bmax": [
+   -20543.0,
+   -7141.3,
+   506.6
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_140",
+  "label": "C18_tea_Set0",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -20264.0,
+   -7846.6,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   1.7247,
+   1.7247,
+   1.7247
+  ],
+  "bmin": [
+   -20712.4,
+   -8295.0,
+   -5.9
+  ],
+  "bmax": [
+   -19815.6,
+   -7398.2,
+   107.3
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_146",
+  "label": "D04_tea_Pot",
+  "mesh": "SM_tea_pot",
+  "transform": [
+   -27764.3,
+   -6343.3,
+   289.3,
+   0.0,
+   -108.43,
+   0.0,
+   2.6784,
+   2.6784,
+   2.6784
+  ],
+  "bmin": [
+   -28269.2,
+   -6923.3,
+   279.9
+  ],
+  "bmax": [
+   -27212.1,
+   -5621.8,
+   1108.8
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_147",
+  "label": "D04_tea_Saucer0",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -26792.6,
+   -5678.6,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   2.2766,
+   2.2766,
+   2.2766
+  ],
+  "bmin": [
+   -27384.5,
+   -6270.5,
+   -7.8
+  ],
+  "bmax": [
+   -26200.7,
+   -5086.7,
+   141.6
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_148",
+  "label": "D04_tea_Cup0",
+  "mesh": "SM_tea_cup",
+  "transform": [
+   -26792.6,
+   -5678.6,
+   58.9,
+   0.0,
+   20.0,
+   -0.0,
+   2.2766,
+   2.2766,
+   2.2766
+  ],
+  "bmin": [
+   -27183.6,
+   -6069.6,
+   51.8
+  ],
+  "bmax": [
+   -26189.8,
+   -5210.5,
+   655.4
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_149",
+  "label": "D04_tea_Saucer1",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -28429.0,
+   -5371.6,
+   0.0,
+   0.0,
+   30.0,
+   -0.0,
+   2.2766,
+   2.2766,
+   2.2766
+  ],
+  "bmin": [
+   -29237.6,
+   -6180.2,
+   -7.8
+  ],
+  "bmax": [
+   -27620.4,
+   -4563.1,
+   141.6
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_150",
+  "label": "D04_tea_Cup1",
+  "mesh": "SM_tea_cup_small",
+  "transform": [
+   -28429.0,
+   -5371.6,
+   58.9,
+   0.0,
+   50.0,
+   -0.0,
+   2.2766,
+   2.2766,
+   2.2766
+  ],
+  "bmin": [
+   -28845.9,
+   -5788.6,
+   51.1
+  ],
+  "bmax": [
+   -27938.9,
+   -4867.5,
+   550.7
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_152",
+  "label": "D04_tea_Set0",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -27641.6,
+   -5632.3,
+   0.0,
+   0.0,
+   0.0,
+   0.0,
+   1.8749,
+   1.8749,
+   1.8749
+  ],
+  "bmin": [
+   -28129.1,
+   -6119.7,
+   -6.4
+  ],
+  "bmax": [
+   -27154.2,
+   -5144.8,
+   116.6
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_227",
+  "label": "LMTeaTerraces_Cup",
+  "mesh": "SM_tea_cup",
+  "transform": [
+   -13110.8,
+   -7570.0,
+   0.0,
+   0.0,
+   30.0,
+   -0.0,
+   1.008,
+   1.008,
+   1.008
+  ],
+  "bmin": [
+   -13295.3,
+   -7754.5,
+   -3.2
+  ],
+  "bmax": [
+   -12839.9,
+   -7335.6,
+   264.1
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_228",
+  "label": "LMTeaTerraces_Saucer",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -13110.8,
+   -7570.0,
+   0.0,
+   0.0,
+   30.0,
+   -0.0,
+   1.008,
+   1.008,
+   1.008
+  ],
+  "bmin": [
+   -13468.8,
+   -7928.0,
+   -3.4
+  ],
+  "bmax": [
+   -12752.8,
+   -7212.0,
+   62.7
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_419",
+  "label": "Way0396_Saucer",
+  "mesh": "SM_tea_saucer",
+  "transform": [
+   -10140.3,
+   -2921.8,
+   0.0,
+   0.0,
+   -151.98,
+   0.0,
+   2.3,
+   2.3,
+   2.3
+  ],
+  "bmin": [
+   -10949.1,
+   -3730.6,
+   -7.9
+  ],
+  "bmax": [
+   -9331.4,
+   -2112.9,
+   143.1
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ },
+ {
+  "name": "StaticMeshActor_420",
+  "label": "Way0396_Cup",
+  "mesh": "SM_tea_cup",
+  "transform": [
+   -10140.3,
+   -2921.8,
+   30.0,
+   0.0,
+   -111.98,
+   0.0,
+   2.3,
+   2.3,
+   2.3
+  ],
+  "bmin": [
+   -10626.6,
+   -3534.1,
+   22.8
+  ],
+  "bmax": [
+   -9739.1,
+   -2520.6,
+   632.6
+  ],
+  "materials": [
+   "MI_V2_Ceramic"
+  ]
+ }
+]

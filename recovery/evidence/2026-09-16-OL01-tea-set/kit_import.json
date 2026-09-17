@@ -1,0 +1,17 @@
+{
+ "name": "zzJ00_import_teaset_banner",
+ "started": "2026-09-16 22:10:25",
+ "status": "done",
+ "planned_parts": 401,
+ "imported_this_run": 21,
+ "already_present": 0,
+ "failed": 0,
+ "stray_materials_deleted": [],
+ "readback_failures": [],
+ "nanite_mismatches": [],
+ "collision_missing": [],
+ "complete": true,
+ "finished": "2026-09-16 22:10:51",
+ "seconds": 25.45,
+ "log": "[kit] imported /Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Oriel_glass\n[kit] imported /Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Oriel\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Banner_Blade_gold\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Banner_Blade_roof\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Banner_Blade_roof_alt\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Wall_Lantern_glass\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Wall_Lantern_gold\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Lantern_Hanging_glass\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Lantern_Hanging_gold\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Window_Oculus_glass\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Window_Oculus_gold\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Window_Oculus\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Window_LancetPair_glass\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Window_LancetPair_gold\n[kit] imported /Game/WonderlandV2/Kit/details/WL_Detail_Window_LancetPair\n[kit] imported /Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel\n[kit] imported /Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold\n[kit] imported /Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof\n[kit] imported /Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor\n[kit] imported /Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel\n[kit] imported /Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold\n"
+}
