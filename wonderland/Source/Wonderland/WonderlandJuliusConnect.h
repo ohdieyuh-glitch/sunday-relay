@@ -93,6 +93,8 @@ struct FJuliusConnectTask
 {
 	FString TaskId;
 	FString MissionId;
+	/** Which task this is: a surface can follow one by name (the Wonder Web browser follows social-post). */
+	FString TemplateId;
 	FString Title;
 	FString RunState;
 	FString StepLabel;

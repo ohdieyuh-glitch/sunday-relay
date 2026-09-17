@@ -11,6 +11,7 @@
 #include "Engine/World.h"
 #include "UObject/UObjectIterator.h"
 #include "WonderlandJuliusConnect.h"
+#include "WonderlandWonderWebBrowse.h"
 #include "WonderlandUiSubsystem.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderWeb, Log, All);
@@ -225,6 +226,38 @@ namespace WonderWebConsole
 				const bool bChosen = Web.SelectTab(Index);
 				Say(bChosen ? FString::Printf(TEXT("WONDER WEB: tab %d."), Index) : FString::Printf(TEXT("WONDER WEB: there is no tab %d."), Index), !bChosen);
 			});
+		}));
+
+	// THE FOUNDER'S WEB RUN (2026-09-17): the creation running in one window, Julius's browser with its tabs in another,
+	// and the task that makes Julius work a real-world-shaped site -- which it cannot touch until the browser connection
+	// is authorized, so the Connections window comes forward and asks.
+	FAutoConsoleCommand CmdPlaytestWeb(TEXT("wl.Julius.Playtest.Web"),
+		TEXT("Open the creation window and Julius's browser (5 tabs), and give Julius the task that posts the canvas picture to the studio account."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			const int32 Found = ForEachLive<UWonderlandUiSubsystem>([](UWonderlandUiSubsystem& Ui)
+			{
+				Ui.OpenWonderWebWindow(TEXT("creation"));
+				Ui.OpenWonderWebWindow(TEXT("browser"));
+			});
+			if (Found == 0)
+			{
+				return;
+			}
+			ForEachLive<UWonderlandWonderWebSubsystem>([](UWonderlandWonderWebSubsystem& Web)
+			{
+				if (!Web.Act(EWonderWebAction::OpenSample))
+				{
+					Web.Act(EWonderWebAction::Restart);
+				}
+			});
+			ForEachLive<UWonderlandWonderWebBrowseSubsystem>([](UWonderlandWonderWebBrowseSubsystem& Browse)
+			{
+				Browse.ClearPost();
+				Browse.SelectTab(TEXT("social"));
+			});
+			ForEachLive<UWonderlandJuliusConnectSubsystem>([](UWonderlandJuliusConnectSubsystem& Connect) { Connect.StartTask(TEXT("social-post")); });
+			Say(TEXT("PLAYTEST: Julius's browser is open with five tabs. Julius needs the governed browser connection before it can post -- the Connections window is asking."));
 		}));
 
 	FAutoConsoleCommand CmdMove(TEXT("wl.WonderWeb.Move"),

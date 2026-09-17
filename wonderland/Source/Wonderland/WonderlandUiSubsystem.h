@@ -57,10 +57,12 @@ class SWonderlandWalletChip;
 class SWonderlandWonderWebInputLayer;
 class SWonderlandWonderWebPanel;
 class SWonderlandJuliusConnectPanel;
+class SWonderlandWonderWebBrowserPanel;
 class AWonderlandWonderWebScreen;
 class AWonderlandWonderWebWorkspace;
 class UWonderlandWonderWebSubsystem;
 class UWonderlandJuliusConnectSubsystem;
+class UWonderlandWonderWebBrowseSubsystem;
 class SWonderlandWalletPanel;
 class UInputComponent;
 class UWonderlandCommandPresetSubsystem;
@@ -320,7 +322,7 @@ public:
 	// working while another is focused or it is minimized. Opening a second window tiles the two; a third tiles three.
 	// Escape (or closing the last window) returns to the world and keeps the set for next time.
 
-	/** Open (or restore and focus) a window: "creation" or "connections". Opens the workspace first when it is closed. */
+	/** Open (or restore and focus) a window: "creation", "connections" or "browser". Opens the workspace first when it is closed. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
 	bool OpenWonderWebWindow(FName Window);
 
@@ -538,6 +540,7 @@ private:
 	bool IsMiniMapShown() const { return Open == EOverlay::None || Open == EOverlay::Terminal || Open == EOverlay::WonderWeb; }
 	UWonderlandWonderWebSubsystem* WonderWebState() const;
 	UWonderlandJuliusConnectSubsystem* JuliusConnect() const;
+	UWonderlandWonderWebBrowseSubsystem* BrowseState() const;
 
 	/** One window of the Wonder Web workspace: what it draws, its chip, and the glass it stands on. */
 	struct FWonderWebWindow
@@ -630,6 +633,7 @@ private:
 	/** The windows, kept once made like the other panels, so a half-typed command is still there on reopen. */
 	TSharedPtr<SWonderlandWonderWebPanel> WonderWebPanel;
 	TSharedPtr<SWonderlandJuliusConnectPanel> ConnectPanel;
+	TSharedPtr<SWonderlandWonderWebBrowserPanel> BrowserPanel;
 	TSharedPtr<SWonderlandWonderWebInputLayer> WonderWebLayer;
 	TArray<FWonderWebWindow> WonderWebWindows;
 	TWeakObjectPtr<AWonderlandWonderWebWorkspace> WonderWebWorkspace;

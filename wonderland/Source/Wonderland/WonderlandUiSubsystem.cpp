@@ -27,6 +27,8 @@
 #include "WonderlandHudPanels.h"
 #include "WonderlandJuliusConnect.h"
 #include "WonderlandJuliusConnectPanel.h"
+#include "WonderlandWonderWebBrowse.h"
+#include "WonderlandWonderWebBrowserPanel.h"
 #include "WonderlandJuliusWorkLog.h"
 #include "WonderlandLiveTerminal.h"
 #include "WonderlandMiniMap.h"
@@ -55,6 +57,7 @@ namespace WonderWebWindowIds
 {
 	const FName Creation(TEXT("creation"));
 	const FName Connections(TEXT("connections"));
+	const FName Browser(TEXT("browser"));
 }
 
 namespace WonderWebWorkspaceTuning
@@ -387,6 +390,7 @@ void UWonderlandUiSubsystem::Detach()
 	WalletPanel.Reset();
 	WonderWebPanel.Reset();
 	ConnectPanel.Reset();
+	BrowserPanel.Reset();
 	WonderWebLayer.Reset();
 	for (FWonderWebWindow& Window : WonderWebWindows)
 	{
@@ -773,6 +777,13 @@ UWonderlandJuliusConnectSubsystem* UWonderlandUiSubsystem::JuliusConnect() const
 	return Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusConnectSubsystem>() : nullptr;
 }
 
+UWonderlandWonderWebBrowseSubsystem* UWonderlandUiSubsystem::BrowseState() const
+{
+	const APlayerController* Controller = BoundController.Get();
+	UGameInstance* Instance = Controller != nullptr ? Controller->GetGameInstance() : nullptr;
+	return Instance != nullptr ? Instance->GetSubsystem<UWonderlandWonderWebBrowseSubsystem>() : nullptr;
+}
+
 UWonderlandUiSubsystem::FWonderWebWindow* UWonderlandUiSubsystem::FindWonderWebWindow(FName Id)
 {
 	return WonderWebWindows.FindByPredicate([Id](const FWonderWebWindow& Window) { return Window.Id == Id; });
@@ -807,7 +818,7 @@ AWonderlandWonderWebWorkspace* UWonderlandUiSubsystem::EnsureWonderWebWorkspace(
 UWonderlandUiSubsystem::FWonderWebWindow* UWonderlandUiSubsystem::EnsureWonderWebWindow(FName Id)
 {
 	APlayerController* Controller = BoundController.Get();
-	if (Controller == nullptr || (Id != WonderWebWindowIds::Creation && Id != WonderWebWindowIds::Connections))
+	if (Controller == nullptr || (Id != WonderWebWindowIds::Creation && Id != WonderWebWindowIds::Connections && Id != WonderWebWindowIds::Browser))
 	{
 		return nullptr;
 	}
@@ -849,6 +860,33 @@ UWonderlandUiSubsystem::FWonderWebWindow* UWonderlandUiSubsystem::EnsureWonderWe
 				})
 				.StatusColor(FSlateColor(WonderWebLook::Line(0.8f)))
 				.OnRestore_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->MinimizeWonderWebWindow(WonderWebWindowIds::Creation, false); } });
+		}
+		else if (Id == WonderWebWindowIds::Browser)
+		{
+			// THE BROWSER: Wonderland's shell outside, ordinary web pages inside (founder, 2026-09-17).
+			SAssignNew(BrowserPanel, SWonderlandWonderWebBrowserPanel)
+				.Browse(TWeakObjectPtr<UWonderlandWonderWebBrowseSubsystem>(BrowseState()))
+				.Connect(TWeakObjectPtr<UWonderlandJuliusConnectSubsystem>(JuliusConnect()))
+				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseWonderWebWindow(WonderWebWindowIds::Browser); } })
+				.OnRequestMinimize_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->MinimizeWonderWebWindow(WonderWebWindowIds::Browser, true); } })
+				.OnRequestExpand_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->ExpandWonderWebWindow(WonderWebWindowIds::Browser); } });
+			Window->Content = BrowserPanel;
+			Window->ContentSize = SWonderlandWonderWebBrowserPanel::DesignSize();
+			const TWeakObjectPtr<UWonderlandWonderWebBrowseSubsystem> BrowseWeak(BrowseState());
+			Window->Chip = SNew(SWonderWebWindowChip)
+				.Title(INVTEXT("WONDER WEB"))
+				.Status_Lambda([BrowseWeak]()
+				{
+					if (!BrowseWeak.IsValid())
+					{
+						return INVTEXT("NO PAGES");
+					}
+					const FWonderWebBrowseTab* Tab = BrowseWeak->GetSelected();
+					return FText::FromString(FString::Printf(TEXT("%d TABS  ·  %s"), BrowseWeak->GetModel().Tabs.Num(),
+						Tab != nullptr ? *Tab->Url : TEXT("-")));
+				})
+				.StatusColor(FSlateColor(WonderWebLook::Line(0.8f)))
+				.OnRestore_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->MinimizeWonderWebWindow(WonderWebWindowIds::Browser, false); } });
 		}
 		else
 		{
@@ -1426,6 +1464,10 @@ bool UWonderlandUiSubsystem::GetWonderWebWindowPixel(FName Window, FName Control
 	if (Window == WonderWebWindowIds::Creation)
 	{
 		return WonderWebPanel.IsValid() && WonderWebPanel->GetControlCentre(Control, OutPixel);
+	}
+	if (Window == WonderWebWindowIds::Browser)
+	{
+		return BrowserPanel.IsValid() && BrowserPanel->GetControlCentre(Control, OutPixel);
 	}
 	return ConnectPanel.IsValid() && ConnectPanel->GetControlCentre(Control, OutPixel);
 }
