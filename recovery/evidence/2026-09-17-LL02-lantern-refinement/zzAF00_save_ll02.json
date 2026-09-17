@@ -1,0 +1,19 @@
+{
+ "name": "zzAF00_save_ll02",
+ "started": "2026-09-17 04:55:52",
+ "status": "done",
+ "lantern_materials_now": {
+  "MI_V2_LanternBrass": 25,
+  "MI_V2_LanternGlassRose": 5,
+  "MI_V2_LanternGlassLavender": 6,
+  "MI_V2_LanternGlassTeal": 14
+ },
+ "dirty_maps_before": [
+  "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2"
+ ],
+ "saved_level": true,
+ "dirty_maps_after": [],
+ "finished": "2026-09-17 04:56:00",
+ "seconds": 7.74,
+ "log": ""
+}

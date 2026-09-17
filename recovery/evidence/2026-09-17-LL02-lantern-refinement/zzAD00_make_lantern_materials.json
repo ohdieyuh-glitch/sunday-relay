@@ -1,0 +1,30 @@
+{
+ "name": "zzAD00_make_lantern_materials",
+ "started": "2026-09-17 04:45:10",
+ "status": "done",
+ "materials": {
+  "MI_V2_LanternBrass": {
+   "saved": true,
+   "base": "MI_V2_Gold",
+   "skipped": []
+  },
+  "MI_V2_LanternGlassTeal": {
+   "saved": true,
+   "base": "MI_V2_GlassAmber",
+   "skipped": []
+  },
+  "MI_V2_LanternGlassRose": {
+   "saved": true,
+   "base": "MI_V2_GlassAmber",
+   "skipped": []
+  },
+  "MI_V2_LanternGlassLavender": {
+   "saved": true,
+   "base": "MI_V2_GlassAmber",
+   "skipped": []
+  }
+ },
+ "finished": "2026-09-17 04:45:38",
+ "seconds": 28.01,
+ "log": ""
+}
