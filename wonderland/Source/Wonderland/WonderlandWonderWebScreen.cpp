@@ -29,7 +29,7 @@ namespace WonderWebScreenTuning
 	// every yellow line and word. The Dog's glowing props carry the same kind of multiplier (DogGlowExposure). 20000 reads
 	// the yellow and keeps a disabled control visibly faint; 40000 starts to bloom the active tab into a bar.
 	TAutoConsoleVariable<float> CVarBrightness(TEXT("wl.WonderWeb.ScreenBrightness"), 20000.0f, TEXT("Wonder Web screen: how bright the window is drawn in the lit world (a multiplier on its colours)."));
-	TAutoConsoleVariable<float> CVarGlideSeconds(TEXT("wl.WonderWeb.GlideSeconds"), 0.24f, TEXT("Wonder Web screen: the timescale of its glide to a new place, seconds (critically damped: swift, no overshoot)."));
+	TAutoConsoleVariable<float> CVarGlideSeconds(TEXT("wl.WonderWeb.GlideSeconds"), 0.18f, TEXT("Wonder Web screen: the timescale of its glide to a new place, seconds (critically damped: swift, no overshoot)."));
 	TAutoConsoleVariable<float> CVarEdgeMargin(TEXT("wl.WonderWeb.EdgeMargin"), 12.0f, TEXT("Wonder Web screen: how far inside the view's edge a corner or side place keeps the glass, uu."));
 	TAutoConsoleVariable<float> CVarGrowSeconds(TEXT("wl.WonderWeb.GrowSeconds"), 0.35f, TEXT("Wonder Web screen: seconds to open out or fold away."));
 }
@@ -122,6 +122,14 @@ void AWonderlandWonderWebScreen::Tick(float DeltaSeconds)
 		const float Slice = FMath::Min(Remaining, Glide * 0.4f);
 		FMath::CriticallyDampedSmoothing(Offset, OffsetRate, TargetOffset, FVector2D::ZeroVector, Slice, Glide);
 		Remaining -= Slice;
+	}
+	// IT ARRIVES, AND THEN IT IS STILL. A critically damped glide approaches its target forever; the last creep of a few
+	// uu is what the temporal upscaler smeared into doubled text on a translucent screen (editor 78: sharp mid-glide,
+	// ghosted on arrival). Within two uu and nearly stopped, it lands exactly.
+	if (!bDragging && FVector2D::Distance(Offset, TargetOffset) < 2.0 && OffsetRate.Size() < 30.0)
+	{
+		Offset = TargetOffset;
+		OffsetRate = FVector2D::ZeroVector;
 	}
 	// Across the view is the root's -Y (the camera looks back along -X), up is +Z.
 	Screen->SetRelativeLocation(FVector(0.0, -Offset.X, Offset.Y));
