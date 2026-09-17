@@ -1,0 +1,64 @@
+{
+ "name": "zzCT95_gc01_perf",
+ "started": "2026-09-17 14:08:41",
+ "status": "done",
+ "rounds": [
+  {
+   "pass_actors": 140,
+   "warm": {
+    "SW_PlazaHero41": 63.02,
+    "SW_Colonnade45": 61.68,
+    "South_PlayerClose40": 61.41,
+    "SW_TowerCluster42": 65.54
+   },
+   "on": {
+    "SW_PlazaHero41": 60.88,
+    "SW_Colonnade45": 59.79,
+    "South_PlayerClose40": 62.49,
+    "SW_TowerCluster42": 65.41
+   },
+   "off": {
+    "SW_PlazaHero41": 66.42,
+    "SW_Colonnade45": 60.68,
+    "South_PlayerClose40": 61.67,
+    "SW_TowerCluster42": 71.26
+   },
+   "off_again": {
+    "SW_PlazaHero41": 66.21,
+    "SW_Colonnade45": 62.13,
+    "South_PlayerClose40": 81.56,
+    "SW_TowerCluster42": 57.88
+   }
+  },
+  {
+   "pass_actors": 140,
+   "warm": {
+    "SW_PlazaHero41": 61.46,
+    "SW_Colonnade45": 74.11,
+    "South_PlayerClose40": 74.29,
+    "SW_TowerCluster42": 56.84
+   },
+   "on": {
+    "SW_PlazaHero41": 65.75,
+    "SW_Colonnade45": 55.16,
+    "South_PlayerClose40": 55.5,
+    "SW_TowerCluster42": 58.36
+   },
+   "off": {
+    "SW_PlazaHero41": 64.22,
+    "SW_Colonnade45": 51.88,
+    "South_PlayerClose40": 65.99,
+    "SW_TowerCluster42": 58.55
+   },
+   "off_again": {
+    "SW_PlazaHero41": 67.16,
+    "SW_Colonnade45": 45.23,
+    "South_PlayerClose40": 49.03,
+    "SW_TowerCluster42": 57.3
+   }
+  }
+ ],
+ "finished": "2026-09-17 14:14:04",
+ "seconds": 322.49,
+ "log": ""
+}
