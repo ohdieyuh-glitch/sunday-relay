@@ -228,7 +228,8 @@ void UWonderlandWonderWebLiveSubsystem::SendIntent(const FString& Body, const TC
 		InFlight.Remove(Done);
 		if (!bConnected || !Response.IsValid())
 		{
-			Problem = FString::Printf(TEXT("The Julius Connect runtime is not answering, so %s did nothing."), *Describe);
+			// NOT NECESSARILY DOWN: a request cancelled as play ends looks the same from here, so this says what is known.
+			Problem = FString::Printf(TEXT("No answer from the Julius Connect runtime, so %s did nothing."), *Describe);
 			bLoading = false;
 			return;
 		}
@@ -275,7 +276,7 @@ void UWonderlandWonderWebLiveSubsystem::RequestFrame()
 		bFrameInFlight = false;
 		if (!bConnected || !Response.IsValid())
 		{
-			Problem = FString::Printf(TEXT("The Julius Connect runtime is not running at %s."), *BaseUrl());
+			Problem = FString::Printf(TEXT("No answer from the Julius Connect runtime at %s — start it, or it is shutting down."), *BaseUrl());
 			return;
 		}
 		if (Response->GetResponseCode() != 200)
