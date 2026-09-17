@@ -141,6 +141,17 @@ def job():
         yield 1.0
         shot("12_julius_refused", "task=%s blocked=%s last_audit=%s" % (space("task"), space("blocked"), space("last_audit")))
         RESULT["after_revoke"] = str(ui.describe_wonder_web_workspace())
+        RESULT["hud_rects"] = str(ui.describe_hud_rects())
+
+        # ---- the glass: changed text, 0.35 s later, on a translucent glass and on the masked glass it now uses
+        for blend, label in (("0", "16_ghost_translucent"), ("1", "17_ghost_masked")):
+            console("wl.WonderWeb.GlassBlend " + blend)
+            yield 0.6
+            ui.simulate_wonder_web_window_click("connections", "terminal")
+            ui.simulate_wonder_web_typing("status", True)
+            yield 0.35
+            shot(label, "terminal lines changed 0.35 s ago, glass blend " + blend)
+        console("wl.WonderWeb.GlassBlend 1")
 
         # ---- the workspace itself: minimize A to its chip and restore it; A never stops
         click("creation", "minimize")

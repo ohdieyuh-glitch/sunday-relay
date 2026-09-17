@@ -562,6 +562,10 @@ private:
 	void FocusWonderWebScreen(AWonderlandWonderWebScreen* Screen);
 	/** The most recently opened window that is open and not minimized, other than this one. */
 	FName MostRecentWonderWebWindow(FName Except) const;
+	/** The HUD on screen that windows must not sit under, as viewport fractions (0..1, y down). */
+	TArray<FBox2D> WonderWebHudKeepOut() const;
+	/** The last tile area chosen, as viewport fractions, for the proof job. */
+	FBox2D LastWonderWebTileArea = FBox2D(ForceInit);
 	AWonderlandWonderWebScreen* FocusedWonderWebScreen() const;
 	bool GetWonderWebWindowPixel(FName Window, FName Control, FVector2D& OutPixel) const;
 	/** Julius started waiting on the user: the Connections window comes forward. */

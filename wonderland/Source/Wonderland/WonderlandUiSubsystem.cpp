@@ -59,8 +59,8 @@ namespace WonderWebWindowIds
 
 namespace WonderWebWorkspaceTuning
 {
-	TAutoConsoleVariable<float> CVarReserveRight(TEXT("wl.WonderWeb.TileReserveRight"), 70.0f,
-		TEXT("Wonder Web workspace: uu kept clear down the view's right side when windows tile, for the wallet and mini-map column."));
+	TAutoConsoleVariable<float> CVarHudClearance(TEXT("wl.WonderWeb.HudClearance"), 8.0f,
+		TEXT("Wonder Web workspace: uu kept between a tiled window and the HUD on screen (meters, wallet, mini-map, mission strip)."));
 	TAutoConsoleVariable<float> CVarTileGap(TEXT("wl.WonderWeb.TileGap"), 18.0f, TEXT("Wonder Web workspace: uu between tiled windows."));
 	TAutoConsoleVariable<float> CVarLoneSize(TEXT("wl.WonderWeb.LoneSize"), 1.15f, TEXT("Wonder Web workspace: a lone window's size, as a multiple of the multitasking size."));
 	TAutoConsoleVariable<float> CVarExpandedSize(TEXT("wl.WonderWeb.ExpandedSize"), 1.6f, TEXT("Wonder Web workspace: an expanded window's size, as a multiple of the multitasking size."));
@@ -1081,6 +1081,73 @@ bool UWonderlandUiSubsystem::ExpandWonderWebWindow(FName Id)
 	return true;
 }
 
+TArray<FBox2D> UWonderlandUiSubsystem::WonderWebHudKeepOut() const
+{
+	TArray<FBox2D> Out;
+	if (!HudFurniture.IsValid())
+	{
+		return Out;
+	}
+	const FGeometry& Canvas = HudFurniture->GetCachedGeometry();
+	const FVector2D Size(Canvas.GetLocalSize());
+	if (Size.X <= 1.0 || Size.Y <= 1.0)
+	{
+		return Out;
+	}
+	const auto Add = [&Out, &Canvas, &Size](const FSlateRect& Absolute)
+	{
+		const FVector2D TopLeft(Canvas.AbsoluteToLocal(Absolute.GetTopLeft()));
+		const FVector2D BottomRight(Canvas.AbsoluteToLocal(Absolute.GetBottomRight()));
+		if (!(BottomRight - TopLeft).IsNearlyZero())
+		{
+			Out.Add(FBox2D(TopLeft / Size, BottomRight / Size));
+		}
+	};
+	const auto FromGeometry = [&Add](const FGeometry& Geometry)
+	{
+		if (!Geometry.GetLocalSize().IsNearlyZero())
+		{
+			Add(Geometry.GetLayoutBoundingRect());
+		}
+	};
+	// Everything that stays on screen while the workspace is open: the usage meters, the mission strip, the wallet and
+	// the mini-map, and the companion terminals when they are up.
+	if (UsageHud != nullptr && UsageHud->IsInViewport())
+	{
+		FromGeometry(UsageHud->GetCachedGeometry());
+	}
+	FSlateRect Strip;
+	if (const UWonderlandMissionSubsystem* Mission = Missions())
+	{
+		if (Mission->GetMissionStripAbsoluteRect(Strip))
+		{
+			Add(Strip);
+		}
+	}
+	if (IsMiniMapShown())
+	{
+		if (WalletChip.IsValid() && GetDefault<UWonderlandWalletHudSettings>()->bShowWallet)
+		{
+			FromGeometry(WalletChip->GetCachedGeometry());
+		}
+		if (MiniMap.IsValid())
+		{
+			FromGeometry(MiniMap->GetCachedGeometry());
+		}
+	}
+	if (AreCompanionTerminalsOnScreen())
+	{
+		for (const TSharedPtr<SWonderlandCompanionTerminal>& Companion : CompanionTerminals)
+		{
+			if (Companion.IsValid())
+			{
+				FromGeometry(Companion->GetCachedGeometry());
+			}
+		}
+	}
+	return Out;
+}
+
 void UWonderlandUiSubsystem::TileWonderWeb()
 {
 	using namespace WonderWebWorkspaceTuning;
@@ -1100,71 +1167,135 @@ void UWonderlandUiSubsystem::TileWonderWeb()
 	{
 		Folded[Index]->Screen->SetDockSlot(Index);
 	}
-
-	// THE TILE AREA: the view at the glass, less a margin, less the wallet and mini-map column down the right, less the chip
-	// row along the bottom while anything is minimized.
-	const AWonderlandWonderWebWorkspace* Workspace = WonderWebWorkspace.Get();
-	const FVector2D Half = Workspace != nullptr ? Workspace->HalfView() : FVector2D(295.0, 166.0);
-	const double Margin = 10.0;
-	const double Reserve = FMath::Max(CVarReserveRight.GetValueOnGameThread(), 0.0f);
-	const double Gap = FMath::Max(CVarTileGap.GetValueOnGameThread(), 0.0f);
-	const double ChipRow = Folded.Num() > 0 ? SWonderWebWindowChip::DesignSize().Y * 0.2 + 8.0 : 0.0;
-	const double AreaW = 2.0 * Half.X - 2.0 * Margin - Reserve;
-	const double AreaH = 2.0 * Half.Y - 2.0 * Margin - ChipRow;
-	const double CenterX = -Reserve * 0.5;
-	const double CenterY = ChipRow * 0.5;
 	if (Shown.Num() == 0)
 	{
 		return;
 	}
-	// Every window shares the one multitasking size; its glass at size 1.
-	const FVector2D Base = Shown[0]->Screen->GlassSize() / FMath::Max(Shown[0]->Screen->GetSizeFactor(), 0.01f);
-	auto Fit = [&](double Want, int32 Across, int32 Down)
+
+	// THE WINDOWS NEVER SIT UNDER THE HUD. The meters, the mission strip, the wallet and the mini-map stay on screen over
+	// the workspace (the founder's HUD is not rearranged for it), so the windows tile in the free space the HUD leaves:
+	// either the band below everything along the top, or the column between the left and right HUD. Whichever lets the
+	// windows be largest wins. All in viewport fractions until the last step.
+	const AWonderlandWonderWebWorkspace* Workspace = WonderWebWorkspace.Get();
+	const FVector2D Half = Workspace != nullptr ? Workspace->HalfView() : FVector2D(295.0, 166.0);
+	const IConsoleVariable* SideVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.WonderWeb.ViewSide"));
+	// The camera stands a little to one side of the glass's centre; the middle of the view is that far across.
+	const double ViewAcross = SideVar != nullptr ? -SideVar->GetFloat() : 16.0;
+	const double Gap = FMath::Max(CVarTileGap.GetValueOnGameThread(), 0.0f);
+	const double ClearX = FMath::Max(CVarHudClearance.GetValueOnGameThread(), 0.0f) / (2.0 * Half.X);
+	const double ClearY = FMath::Max(CVarHudClearance.GetValueOnGameThread(), 0.0f) / (2.0 * Half.Y);
+	const double MarginX = 10.0 / (2.0 * Half.X);
+	const double MarginY = 10.0 / (2.0 * Half.Y);
+	const double ChipRow = Folded.Num() > 0 ? (SWonderWebWindowChip::DesignSize().Y * 0.2 + 12.0) / (2.0 * Half.Y) : 0.0;
+	const double Bottom = 1.0 - MarginY - ChipRow;
+	const TArray<FBox2D> KeepOut = WonderWebHudKeepOut();
+
+	TArray<FBox2D> Areas;
+	double BelowTop = MarginY;
+	for (const FBox2D& Box : KeepOut)
 	{
-		return static_cast<float>(FMath::Min3(Want, (AreaW - Gap * (Across - 1)) / (Base.X * Across), (AreaH - Gap * (Down - 1)) / (Base.Y * Down)));
-	};
-	const int32 Count = Shown.Num();
-	float Size = 1.0f;
-	TArray<FVector2D> Places;
-	if (Count == 1)
-	{
-		Size = Fit(CVarLoneSize.GetValueOnGameThread(), 1, 1);
-		Places.Add(FVector2D(CenterX, CenterY));
-	}
-	else if (Count == 2)
-	{
-		Size = Fit(1.0, 2, 1);
-		const double Dx = Base.X * Size * 0.5 + Gap * 0.5;
-		Places.Add(FVector2D(CenterX - Dx, CenterY));
-		Places.Add(FVector2D(CenterX + Dx, CenterY));
-	}
-	else
-	{
-		Size = Fit(0.9, 2, 2);
-		const double Dx = Base.X * Size * 0.5 + Gap * 0.5;
-		const double Dy = Base.Y * Size * 0.5 + Gap * 0.5;
-		Places.Add(FVector2D(CenterX - Dx, CenterY + Dy));
-		Places.Add(FVector2D(CenterX + Dx, CenterY + Dy));
-		Places.Add(Count == 3 ? FVector2D(CenterX, CenterY - Dy) : FVector2D(CenterX - Dx, CenterY - Dy));
-		for (int32 Index = 3; Index < Count; ++Index)
+		if (Box.Min.Y < 0.5)
 		{
-			Places.Add(Index == 3 ? FVector2D(CenterX + Dx, CenterY - Dy) : FVector2D(CenterX, CenterY));
+			BelowTop = FMath::Max(BelowTop, Box.Max.Y + ClearY);
 		}
 	}
+	Areas.Add(FBox2D(FVector2D(MarginX, BelowTop), FVector2D(1.0 - MarginX, Bottom)));
+	double Left = MarginX;
+	double Right = 1.0 - MarginX;
+	for (const FBox2D& Box : KeepOut)
+	{
+		if (Box.Max.X < 0.5)
+		{
+			Left = FMath::Max(Left, Box.Max.X + ClearX);
+		}
+		else if (Box.Min.X > 0.5)
+		{
+			Right = FMath::Min(Right, Box.Min.X - ClearX);
+		}
+	}
+	double Top = MarginY;
+	for (const FBox2D& Box : KeepOut)
+	{
+		if (Box.Max.X > Left && Box.Min.X < Right && Box.Min.Y < 0.5)
+		{
+			Top = FMath::Max(Top, Box.Max.Y + ClearY);
+		}
+	}
+	if (Right > Left && Bottom > Top)
+	{
+		Areas.Add(FBox2D(FVector2D(Left, Top), FVector2D(Right, Bottom)));
+	}
+
+	// Every window shares the one multitasking size; its glass at size 1, in uu.
+	const FVector2D Base = Shown[0]->Screen->GlassSize() / FMath::Max(Shown[0]->Screen->GetSizeFactor(), 0.01f);
+	const auto AreaUu = [&Half](const FBox2D& Area) { return FVector2D((Area.Max.X - Area.Min.X) * 2.0 * Half.X, (Area.Max.Y - Area.Min.Y) * 2.0 * Half.Y); };
+	const auto CentreUu = [&Half, ViewAcross](const FBox2D& Area)
+	{
+		return FVector2D(((Area.Min.X + Area.Max.X) * 0.5 - 0.5) * 2.0 * Half.X + ViewAcross, (0.5 - (Area.Min.Y + Area.Max.Y) * 0.5) * 2.0 * Half.Y);
+	};
+	const auto Fit = [&](const FBox2D& Area, int32 Across, int32 Down, double Want)
+	{
+		const FVector2D Room = AreaUu(Area);
+		return FMath::Min3(Want, (Room.X - Gap * (Across - 1)) / (Base.X * Across), (Room.Y - Gap * (Down - 1)) / (Base.Y * Down));
+	};
+
+	const int32 Count = Shown.Num();
+	const double Want = Count == 1 ? CVarLoneSize.GetValueOnGameThread() : (Count == 2 ? 1.0 : 0.9);
+	double BestSize = -1.0;
+	int32 BestArea = 0;
+	int32 BestAcross = Count;
+	for (int32 AreaIndex = 0; AreaIndex < Areas.Num(); ++AreaIndex)
+	{
+		for (int32 Across = Count; Across >= 1; --Across)
+		{
+			const int32 Down = FMath::DivideAndRoundUp(Count, Across);
+			const double Size = Fit(Areas[AreaIndex], Across, Down, Want);
+			// Fewer rows win a tie: side by side reads as a workspace.
+			if (Size > BestSize + 0.01)
+			{
+				BestSize = Size;
+				BestArea = AreaIndex;
+				BestAcross = Across;
+			}
+		}
+	}
+	const FBox2D& Area = Areas[BestArea];
+	LastWonderWebTileArea = Area;
+	const float Size = static_cast<float>(FMath::Max(BestSize, 0.3));
+	const int32 Down = FMath::DivideAndRoundUp(Count, BestAcross);
+	const FVector2D Centre = CentreUu(Area);
+	const FVector2D Cell(Base.X * Size + Gap, Base.Y * Size + Gap);
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
+		const int32 Row = Index / BestAcross;
+		const int32 InRow = Row < Down - 1 ? BestAcross : Count - BestAcross * (Down - 1);
+		const int32 Column = Index % BestAcross;
+		const FVector2D Place(Centre.X + (Column - (InRow - 1) * 0.5) * Cell.X, Centre.Y + ((Down - 1) * 0.5 - Row) * Cell.Y);
 		AWonderlandWonderWebScreen* Screen = Shown[Index]->Screen.Get();
-		if (Shown[Index]->bExpanded)
+		Screen->SetSizeFactor(Size);
+		Screen->PlaceAt(Place);
+	}
+
+	// EXPANDED: the largest a single window can be in the free space, in the middle of it, in front of the others.
+	for (FWonderWebWindow* Window : Shown)
+	{
+		if (!Window->bExpanded)
 		{
-			// EXPANDED: larger, in the middle of the area, in front of the others.
-			Screen->SetSizeFactor(Fit(CVarExpandedSize.GetValueOnGameThread(), 1, 1));
-			Screen->PlaceAt(FVector2D(CenterX, CenterY));
+			continue;
 		}
-		else
+		double ExpandedSize = -1.0;
+		int32 ExpandedArea = 0;
+		for (int32 AreaIndex = 0; AreaIndex < Areas.Num(); ++AreaIndex)
 		{
-			Screen->SetSizeFactor(Size);
-			Screen->PlaceAt(Places[Index]);
+			const double Candidate = Fit(Areas[AreaIndex], 1, 1, CVarExpandedSize.GetValueOnGameThread());
+			if (Candidate > ExpandedSize)
+			{
+				ExpandedSize = Candidate;
+				ExpandedArea = AreaIndex;
+			}
 		}
+		Window->Screen->SetSizeFactor(static_cast<float>(FMath::Max(ExpandedSize, 0.3)));
+		Window->Screen->PlaceAt(CentreUu(Areas[ExpandedArea]));
 	}
 }
 
@@ -1264,8 +1395,8 @@ FString UWonderlandUiSubsystem::DescribeWonderWebWorkspace() const
 			Surface.Audit.Num() > 0 ? *Surface.Audit[0].Action : TEXT("-"), Surface.Audit.Num() > 0 ? *Surface.Audit[0].Capability : TEXT("-"),
 			Surface.Audit.Num() > 0 ? *Surface.Audit[0].Outcome : TEXT("-"), State->GetIntentsSent());
 	}
-	return FString::Printf(TEXT("workspace_open=%d focused=%s windows=%s %s"), IsWonderWebOpen() ? 1 : 0, *FocusedWonderWebWindow.ToString(),
-		*FString::Join(Rows, TEXT(",")), *Connect);
+	return FString::Printf(TEXT("workspace_open=%d focused=%s tile_area=%.2f,%.2f,%.2f,%.2f windows=%s %s"), IsWonderWebOpen() ? 1 : 0, *FocusedWonderWebWindow.ToString(),
+		LastWonderWebTileArea.Min.X, LastWonderWebTileArea.Min.Y, LastWonderWebTileArea.Max.X, LastWonderWebTileArea.Max.Y, *FString::Join(Rows, TEXT(",")), *Connect);
 }
 
 bool UWonderlandUiSubsystem::GetWonderWebWindowPixel(FName Window, FName Control, FVector2D& OutPixel) const
