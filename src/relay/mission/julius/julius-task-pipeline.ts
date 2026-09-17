@@ -3692,9 +3692,12 @@ async function chargedFindingsOf(input: {
   const rows = await readVerdictLedger(deps, run);
   const lives = foldJuliusFindings(await deps.store.findingsForRun(run.runId, run.projectId), rows);
   const subjects = chargedFindingSubjects(input.reviewed, input.tasks);
-  const outstanding = lives.filter((life) => subjects.has(life.taskId) && juliusFindingIsOutstanding(life, lives)
-    // A finding THIS review raised is new, not one it was charged with.
-    && life.originReviewTaskId !== input.review.taskId);
+  /*
+   * A finding THIS review raised is OPEN on the work it reviewed, so the evaluator
+   * already repairs over it: it can only ever fall in `maintained`, which only
+   * overrides an ACCEPT that such a finding already prevents.
+   */
+  const outstanding = lives.filter((life) => subjects.has(life.taskId) && juliusFindingIsOutstanding(life, lives));
   const silent = outstanding.filter((life) => life.state === 'ADDRESSED');
   for (const life of silent) {
     const already = rows.some((row) => row.type === 'review.verdict.refused' && row.facts.reasonCode === 'review_resolution_missing'
@@ -4609,9 +4612,18 @@ async function verifyExecutedTask(input: {
    * just been applied, so a charged finding that is still ADDRESSED is one the
    * reviewer said nothing about. Silence is not resolution: each is refused by
    * name, stays unresolved, and the repair is not accepted on its strength.
+   *
+   * WHICHEVER TASK THE VERIFICATION ENTERED THROUGH. A crash between the refusal
+   * and the decision is resumed by verifying the repair ITSELF, not its review;
+   * reading the charge only from the review's side let that resumed verification
+   * accept the repair over the very finding it had just refused. The charge
+   * belongs to the repair's concluded review, found from the task rows.
    */
-  const charged = reviewedTask !== null && reviewedTask.taskType.startsWith('repair:') && deps.timeline !== undefined
-    ? await chargedFindingsOf({ deps, run, ledger, review: task, reviewed: reviewedTask, tasks, workerId: input.workerId })
+  const chargingReview = reviewedTask !== null
+    ? task
+    : review.conclusion === 'CONCLUDED' ? tasks.find((item) => item.taskId === review.reviewTaskId) ?? null : null;
+  const charged = subject.taskType.startsWith('repair:') && chargingReview !== null && deps.timeline !== undefined
+    ? await chargedFindingsOf({ deps, run, ledger, review: chargingReview, reviewed: subject, tasks, workerId: input.workerId })
     : { silent: [], maintained: [] };
 
   /**
