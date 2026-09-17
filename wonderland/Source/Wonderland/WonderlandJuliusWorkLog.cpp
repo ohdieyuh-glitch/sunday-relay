@@ -56,18 +56,6 @@ namespace WonderlandWorkLogDetail
 		OutCode = Text.Mid(Second + 1);
 	}
 
-	TSharedRef<SWidget> Plain(const FString& Text, const FLinearColor& Color, const FSlateFontInfo& Font, float Left = 0.0f)
-	{
-		return SNew(SBox)
-			.Padding(FMargin(Left, 0.0f, 0.0f, 0.0f))
-			[
-				SNew(STextBlock)
-				.Text(FText::FromString(Text))
-				.Font(Font)
-				.ColorAndOpacity(Color)
-				.AutoWrapText(true)
-			];
-	}
 }
 
 /* ------------------------------------------------------------ typed text */
@@ -221,404 +209,310 @@ int32 SWonderlandTypedText::OnPaint(const FPaintArgs& Args, const FGeometry& All
 	return LayerId + 1;
 }
 
-/* ------------------------------------------------------------ the work log */
+/* ------------------------------------------------------------ the rolling log */
 
 SWonderlandWorkLog::SWonderlandWorkLog()
-	: PromptBrush(WonderlandUi::Srgb(20, 16, 10, 0.78f), 5.0f, WonderlandUi::Gold(0.55f), 1.0f)
-	, FindingBrush(WonderlandUi::Srgb(26, 10, 9, 0.80f), 5.0f, WonderlandUi::Coral(0.75f), 1.0f)
-	, AddBrush(WonderlandUi::Srgb(0x6F, 0xBF, 0x73, 0.13f), 2.0f)
+	: AddBrush(WonderlandUi::Srgb(0x6F, 0xBF, 0x73, 0.13f), 2.0f)
 	, RemoveBrush(WonderlandUi::Srgb(0xE2, 0x5B, 0x45, 0.14f), 2.0f)
-	, SummaryBrush(WonderlandUi::Srgb(14, 16, 22, 0.70f), 3.0f, WonderlandUi::GoldDim(), 1.0f)
 {
 }
 
 void SWonderlandWorkLog::Construct(const FArguments& InArgs)
 {
 	RestingText = InArgs._RestingText;
+	// THE BODY EASES TO ITS HEIGHT, and shows the newest rows at its foot while it grows or shrinks.
 	ChildSlot
 	[
-		SAssignNew(Root, SVerticalBox)
+		SNew(SBox)
+		.HeightOverride_Lambda([this]() { return FOptionalSize(ShownHeight); })
+		.VAlign(VAlign_Bottom)
+		.Clipping(EWidgetClipping::ClipToBounds)
+		[
+			SAssignNew(Root, SVerticalBox)
+		]
 	];
 	Reset();
 }
 
+float SWonderlandWorkLog::GetTargetHeight() const
+{
+	return static_cast<float>(FMath::Min(GetRowCount(), VisibleRows)) * RowHeight;
+}
+
+void SWonderlandWorkLog::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
+{
+	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+	const float Target = GetTargetHeight();
+	const float Alpha = 1.0f - FMath::Exp(-FMath::Clamp(InDeltaTime, 0.0f, 0.2f) * 7.0f);
+	ShownHeight = FMath::Abs(Target - ShownHeight) < 0.3f ? Target : FMath::Lerp(ShownHeight, Target, Alpha);
+}
+
 void SWonderlandWorkLog::Reset()
 {
-	Episodes.Reset();
-	OpenPrompt.Reset();
+	RowSeqs.Reset();
+	RowSlots.Reset();
+	VisibleFromSeq = 0;
+	JuliusDetailSeq = INDEX_NONE;
 	Typers.Reset();
 	Written.Reset();
-	Newest.Reset();
 	NewestText.Reset();
 	LineCount = 0;
-	++ChangeSerial;
 	if (Root.IsValid())
 	{
 		Root->ClearChildren();
 		Root->AddSlot().AutoHeight()
 		[
-			WonderlandWorkLogDetail::Plain(RestingText, WonderlandUi::Dim(), WonderlandUi::Mono(9))
+			TextRow(RestingText, WonderlandUi::Dim())
 		];
 	}
 }
 
-void SWonderlandWorkLog::EnsureEpisode()
+TSharedRef<SWidget> SWonderlandWorkLog::TextRow(const FString& Text, const FLinearColor& Color, bool bBold, float Indent)
 {
-	if (Episodes.Num() == 0)
-	{
-		BeginEpisode(FString());
-	}
+	return SNew(SBox)
+		.HeightOverride(RowHeight)
+		.VAlign(VAlign_Center)
+		.Padding(FMargin(Indent, 0.0f, 0.0f, 0.0f))
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString(Text))
+			.Font(bBold ? WonderlandUi::Sans(8, true, 80) : WonderlandUi::Mono(9))
+			.ColorAndOpacity(Color)
+			.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+		];
 }
 
-FString SWonderlandWorkLog::EpisodeSummaryText(const FEpisode& Episode) const
+TSharedRef<SWidget> SWonderlandWorkLog::CodeRow(const FString& Number, TCHAR Marker, const FString& Code, TSharedPtr<SWonderlandTypedText>& OutTyper)
 {
-	if (!Episode.Summary.IsEmpty())
-	{
-		return Episode.Summary;
-	}
-	if (Episode.Added > 0 || Episode.Removed > 0)
-	{
-		return FString::Printf(TEXT("%s  +%d / -%d"), Episode.File.IsEmpty() ? TEXT("changes") : *Episode.File, Episode.Added, Episode.Removed);
-	}
-	return TEXT("done");
+	const bool bAdd = Marker == TEXT('+');
+	const bool bRemove = Marker == TEXT('-');
+	static FSlateNoResource NoTint;
+	return SNew(SBox)
+		.HeightOverride(RowHeight)
+		[
+			SNew(SBorder)
+			.BorderImage(bAdd ? static_cast<const FSlateBrush*>(&AddBrush) : (bRemove ? static_cast<const FSlateBrush*>(&RemoveBrush) : static_cast<const FSlateBrush*>(&NoTint)))
+			.Padding(FMargin(0.0f))
+			.VAlign(VAlign_Center)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(SBox)
+					.WidthOverride(26.0f)
+					[
+						SNew(STextBlock)
+						.Text(FText::FromString(Number))
+						.Font(WonderlandUi::Mono(8))
+						.ColorAndOpacity(WonderlandUi::Faint())
+						.Justification(ETextJustify::Right)
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.0f, 0.0f, 4.0f, 0.0f)
+				[
+					SNew(STextBlock)
+					.Text(FText::FromString(FString::Chr(Marker)))
+					.Font(WonderlandUi::Mono(9))
+					.ColorAndOpacity(bAdd ? WonderlandUi::Green() : (bRemove ? WonderlandUi::Coral() : WonderlandUi::Faint()))
+				]
+				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+				[
+					SAssignNew(OutTyper, SWonderlandTypedText)
+					.Text(Code)
+					.Font(WonderlandUi::Mono(9))
+					.Syntax(true)
+				]
+			]
+		];
 }
 
-void SWonderlandWorkLog::BeginEpisode(const FString& Title)
+int32 SWonderlandWorkLog::AddRow(TSharedRef<SWidget> Row)
 {
 	if (!Root.IsValid())
 	{
-		return;
+		return INDEX_NONE;
 	}
-	if (LineCount == 0 && Episodes.Num() == 0)
+	if (RowSeqs.Num() == 0)
 	{
 		// The resting line gives way to the first work.
 		Root->ClearChildren();
 	}
-	OpenPrompt.Reset();
-	// THE WORK BEFORE COLLAPSES, and stays: one line that a click opens again.
-	for (const TSharedPtr<FEpisode>& Previous : Episodes)
-	{
-		Previous->bCollapsed = true;
-	}
-	TSharedPtr<FEpisode> Episode = MakeShared<FEpisode>();
-	Episode->Title = Title;
-	Episodes.Add(Episode);
-	const TWeakPtr<FEpisode> Weak = Episode;
-	const TWeakPtr<FEpisode> Latest = Episode;
-
-	TSharedRef<SVerticalBox> Body = SNew(SVerticalBox)
-		.Visibility_Lambda([Weak]()
+	const int32 Seq = NextSeq++;
+	// ONLY THE NEWEST ROWS ARE LAID OUT: older ones collapse, so the body never has to scroll.
+	TSharedRef<SWidget> Wrapper = SNew(SBox)
+		.Visibility_Lambda([this, Seq]()
 		{
-			const TSharedPtr<FEpisode> Pinned = Weak.Pin();
-			return Pinned.IsValid() && Pinned->bCollapsed ? EVisibility::Collapsed : EVisibility::Visible;
-		});
-	Episode->Body = Body;
-
-	// The header: the title while it is the work in hand; a clickable summary once it is history.
-	Root->AddSlot().AutoHeight().Padding(0.0f, Episodes.Num() > 1 ? 3.0f : 0.0f, 0.0f, 0.0f)
-	[
-		SNew(SBorder)
-		.BorderImage_Lambda([this, Weak]() -> const FSlateBrush*
-		{
-			const TSharedPtr<FEpisode> Pinned = Weak.Pin();
-			static FSlateNoResource None;
-			return Pinned.IsValid() && Pinned->bCollapsed ? static_cast<const FSlateBrush*>(&SummaryBrush) : static_cast<const FSlateBrush*>(&None);
-		})
-		.Padding(FMargin(3.0f, 1.0f))
-		.Visibility_Lambda([Weak]()
-		{
-			const TSharedPtr<FEpisode> Pinned = Weak.Pin();
-			return Pinned.IsValid() && (Pinned->bCollapsed || !Pinned->Title.IsEmpty()) ? EVisibility::Visible : EVisibility::Collapsed;
-		})
-		.OnMouseButtonDown_Lambda([Weak](const FGeometry&, const FPointerEvent&)
-		{
-			if (const TSharedPtr<FEpisode> Pinned = Weak.Pin())
-			{
-				Pinned->bCollapsed = !Pinned->bCollapsed;
-				return FReply::Handled();
-			}
-			return FReply::Unhandled();
+			return Seq >= VisibleFromSeq ? EVisibility::Visible : EVisibility::Collapsed;
 		})
 		[
-			SNew(STextBlock)
-			.Font(WonderlandUi::Sans(8, true, 90))
-			.ColorAndOpacity_Lambda([Weak]()
-			{
-				const TSharedPtr<FEpisode> Pinned = Weak.Pin();
-				return FSlateColor(Pinned.IsValid() && Pinned->bCollapsed ? WonderlandUi::Dim() : WonderlandUi::Gold(0.9f));
-			})
-			.Text_Lambda([this, Weak]()
-			{
-				const TSharedPtr<FEpisode> Pinned = Weak.Pin();
-				if (!Pinned.IsValid())
-				{
-					return FText::GetEmpty();
-				}
-				if (Pinned->bCollapsed)
-				{
-					return FText::FromString(FString::Printf(TEXT("▸ %s  ·  %s"),
-						Pinned->Title.IsEmpty() ? TEXT("EARLIER WORK") : *Pinned->Title, *EpisodeSummaryText(*Pinned)));
-				}
-				return FText::FromString(FString::Printf(TEXT("▾ %s"), *Pinned->Title));
-			})
-		]
-	];
+			Row
+		];
 	Root->AddSlot().AutoHeight()
 	[
-		Body
+		Wrapper
 	];
-	++ChangeSerial;
+	RowSeqs.Add(Seq);
+	RowSlots.Add(Wrapper);
+	UpdateVisibleFrom();
+	return Seq;
 }
 
-void SWonderlandWorkLog::SetEpisodeSummary(const FString& Summary)
+void SWonderlandWorkLog::RemoveRow(int32 Seq)
 {
-	EnsureEpisode();
-	Episodes.Last()->Summary = Summary;
+	const int32 Index = RowSeqs.IndexOfByKey(Seq);
+	if (Index == INDEX_NONE || !Root.IsValid())
+	{
+		return;
+	}
+	Root->RemoveSlot(RowSlots[Index]);
+	RowSeqs.RemoveAt(Index);
+	RowSlots.RemoveAt(Index);
+	UpdateVisibleFrom();
 }
 
-TSharedRef<SWidget> SWonderlandWorkLog::MakeCodeRow(const FString& Number, TCHAR Marker, const FString& Code, TSharedPtr<SWonderlandTypedText>& OutTyper)
+void SWonderlandWorkLog::UpdateVisibleFrom()
 {
-	const bool bAdd = Marker == TEXT('+');
-	const bool bRemove = Marker == TEXT('-');
-	static FSlateNoResource StaticNone;
-	return SNew(SBorder)
-		.BorderImage(bAdd ? static_cast<const FSlateBrush*>(&AddBrush) : (bRemove ? static_cast<const FSlateBrush*>(&RemoveBrush) : static_cast<const FSlateBrush*>(&StaticNone)))
-		.Padding(FMargin(2.0f, 0.0f))
+	VisibleFromSeq = RowSeqs.Num() > VisibleRows ? RowSeqs[RowSeqs.Num() - VisibleRows] : TNumericLimits<int32>::Min();
+}
+
+void SWonderlandWorkLog::AddJuliusRow(const FString& Time, const FString& Role, const FString& Headline, const FString& Detail)
+{
+	// The sub-line belongs to the newest row only, as it always has.
+	if (JuliusDetailSeq != INDEX_NONE)
+	{
+		RemoveRow(JuliusDetailSeq);
+		JuliusDetailSeq = INDEX_NONE;
+	}
+	++LineCount;
+	NewestText = Headline;
+	Written.Add(FString::Printf(TEXT("%s: %s"), *Role, *Headline));
+	AddRow(SNew(SBox)
+		.HeightOverride(RowHeight)
+		.VAlign(VAlign_Center)
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 5.0f, 0.0f)
 			[
-				SNew(SBox)
-				.WidthOverride(28.0f)
-				[
-					SNew(STextBlock)
-					.Text(FText::FromString(Number))
-					.Font(WonderlandUi::Mono(8))
-					.ColorAndOpacity(WonderlandUi::Faint())
-					.Justification(ETextJustify::Right)
-				]
+				SNew(STextBlock).Text(FText::FromString(TEXT("\u25CF"))).Font(WonderlandUi::Mono(6)).ColorAndOpacity(WonderlandUi::Gold())
 			]
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(5.0f, 0.0f, 5.0f, 0.0f)
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 7.0f, 0.0f)
 			[
-				SNew(STextBlock)
-				.Text(FText::FromString(FString::Chr(Marker == TEXT(' ') ? TEXT(' ') : Marker)))
-				.Font(WonderlandUi::Mono(9))
-				.ColorAndOpacity(bAdd ? WonderlandUi::Green() : (bRemove ? WonderlandUi::Coral() : WonderlandUi::Faint()))
+				SNew(STextBlock).Text(FText::FromString(Time)).Font(WonderlandUi::Mono(9)).ColorAndOpacity(WonderlandUi::Gold())
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 5.0f, 0.0f)
+			[
+				SNew(STextBlock).Text(FText::FromString(Role + TEXT(":"))).Font(WonderlandUi::Mono(9)).ColorAndOpacity(WonderlandUi::Gold(0.9f))
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 			[
-				SAssignNew(OutTyper, SWonderlandTypedText)
-				.Text(Code)
-				.Font(WonderlandUi::Mono(9))
-				.Syntax(true)
+				SNew(STextBlock).Text(FText::FromString(Headline)).Font(WonderlandUi::Mono(9)).ColorAndOpacity(WonderlandUi::Cream())
+				.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
 			]
-		];
+		]);
+	if (!Detail.IsEmpty())
+	{
+		JuliusDetailSeq = AddRow(TextRow(Detail, WonderlandUi::Dim(), false, 18.0f));
+	}
 }
 
-TSharedRef<SWidget> SWonderlandWorkLog::MakeLineWidget(EWonderlandRoleLineKind Kind, const FString& Text, TSharedPtr<SWonderlandTypedText>& OutTyper)
+int32 SWonderlandWorkLog::AddLine(EWonderlandRoleLineKind Kind, const FString& Text)
 {
 	using namespace WonderlandWorkLogDetail;
 	using K = EWonderlandRoleLineKind;
-	const FSlateFontInfo MonoFont = WonderlandUi::Mono(9);
+	if (!Root.IsValid())
+	{
+		return INDEX_NONE;
+	}
+	// Lines that direct the feed rather than being drawn.
+	if (Kind == K::Status || Kind == K::Pause || Kind == K::Summary || Kind == K::PromptEnd || Kind == K::PreviewRule || Kind == K::Blank)
+	{
+		return INDEX_NONE;
+	}
+	++LineCount;
+	NewestText = Text;
+	Written.Add(Text);
+
+	TSharedPtr<SWonderlandTypedText> Typer;
 	switch (Kind)
 	{
+	case K::Episode:
 	case K::Section:
-		return SNew(SBox).Padding(FMargin(0.0f, 3.0f, 0.0f, 0.0f))
-			[
-				SNew(STextBlock).Text(FText::FromString(Text)).Font(WonderlandUi::Sans(8, true, 110)).ColorAndOpacity(WonderlandUi::Gold(0.85f))
-			];
+		AddRow(TextRow(TEXT("[") + Text + TEXT("]"), WonderlandUi::Gold(0.85f), true));
+		break;
 	case K::Command:
-		return Plain(TEXT("$ ") + Text, WonderlandUi::Sky(), MonoFont);
+		AddRow(TextRow(TEXT("$ ") + Text, WonderlandUi::Sky()));
+		break;
 	case K::File:
 	case K::CodeFile:
-		return SNew(SBox).Padding(FMargin(0.0f, 3.0f, 0.0f, 1.0f))
-			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
-				[
-					SNew(STextBlock).Text(INVTEXT("FILE")).Font(WonderlandUi::Sans(7, true, 120)).ColorAndOpacity(WonderlandUi::Dim())
-				]
-				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
-				[
-					SNew(STextBlock).Text(FText::FromString(Text)).Font(MonoFont).ColorAndOpacity(WonderlandUi::Ivory()).AutoWrapText(true)
-				]
-			];
+		AddRow(TextRow(TEXT("FILE  ") + Text, WonderlandUi::Ivory()));
+		break;
 	case K::CodeLine:
+	case K::DiffAdd:
+	case K::DiffRemove:
 	{
 		FString Number;
 		TCHAR Marker = TEXT(' ');
 		FString Code;
 		SplitCodeLine(Text, Number, Marker, Code);
-		return MakeCodeRow(Number, Marker, Code, OutTyper);
+		if (Kind == K::DiffAdd) Marker = TEXT('+');
+		if (Kind == K::DiffRemove) Marker = TEXT('-');
+		AddRow(CodeRow(Number, Marker, Code, Typer));
+		break;
 	}
-	case K::DiffAdd:
-		return MakeCodeRow(FString(), TEXT('+'), Text, OutTyper);
-	case K::DiffRemove:
-		return MakeCodeRow(FString(), TEXT('-'), Text, OutTyper);
 	case K::DiffStat:
-		return Plain(Text, WonderlandUi::Green(0.9f), MonoFont, 38.0f);
+		AddRow(TextRow(Text, WonderlandUi::Green(0.9f), false, 34.0f));
+		break;
+	case K::PromptBegin:
+		AddRow(TextRow(TEXT("OUTBOUND PROMPT  →  ") + Text, WonderlandUi::Gold(), true));
+		break;
+	case K::PromptHeading:
+		AddRow(TextRow(Text, WonderlandUi::Gold(0.9f), true, 10.0f));
+		break;
 	case K::Preview:
 	case K::PromptLine:
-		return SNew(SBox).Padding(FMargin(4.0f, 0.0f, 0.0f, 0.0f))
+		AddRow(SNew(SBox)
+			.HeightOverride(RowHeight)
+			.VAlign(VAlign_Center)
+			.Padding(FMargin(10.0f, 0.0f, 0.0f, 0.0f))
 			[
-				SAssignNew(OutTyper, SWonderlandTypedText).Text(Text).Font(MonoFont).Syntax(false).Color(WonderlandUi::Cream())
-			];
-	case K::PromptHeading:
-		return SNew(SBox).Padding(FMargin(4.0f, 3.0f, 0.0f, 0.0f))
-			[
-				SNew(STextBlock).Text(FText::FromString(Text)).Font(WonderlandUi::Sans(8, true, 60)).ColorAndOpacity(WonderlandUi::Gold())
-			];
-	case K::PreviewRule:
-		return SNew(SBox).HeightOverride(4.0f);
+				SAssignNew(Typer, SWonderlandTypedText).Text(Text).Font(WonderlandUi::Mono(9)).Syntax(false).Color(WonderlandUi::Cream())
+			]);
+		break;
 	case K::Pass:
-		return Plain(TEXT("PASS  ") + Text, WonderlandUi::Green(), MonoFont);
+		AddRow(TextRow(TEXT("PASS  ") + Text, WonderlandUi::Green()));
+		break;
 	case K::Fail:
-		return Plain(TEXT("FAIL  ") + Text, WonderlandUi::Coral(), MonoFont);
+		AddRow(TextRow(TEXT("FAIL  ") + Text, WonderlandUi::Coral()));
+		break;
 	case K::CheckDone:
-		return Plain(TEXT("✓ ") + Text, WonderlandUi::Sage(), MonoFont);
+		AddRow(TextRow(TEXT("✓ ") + Text, WonderlandUi::Sage()));
+		break;
 	case K::CheckOpen:
-		return Plain(TEXT("○ ") + Text, WonderlandUi::Dim(), MonoFont);
+		AddRow(TextRow(TEXT("○ ") + Text, WonderlandUi::Dim()));
+		break;
 	case K::Finding:
-		return Plain(TEXT("! ") + Text, WonderlandUi::Coral(), MonoFont);
+		AddRow(TextRow(TEXT("! ") + Text, WonderlandUi::Coral()));
+		break;
 	case K::FindingCard:
 	{
 		TArray<FString> Parts;
 		Text.ParseIntoArray(Parts, TEXT("|"), false);
-		const FString Id = Parts.IsValidIndex(0) ? Parts[0] : FString();
-		const FString Severity = Parts.IsValidIndex(1) ? Parts[1] : FString();
-		const FString Message = Parts.IsValidIndex(2) ? Parts[2] : FString();
-		const FString Where = Parts.IsValidIndex(3) ? Parts[3] : FString();
-		return SNew(SBox).Padding(FMargin(0.0f, 3.0f, 0.0f, 3.0f))
-			[
-				SNew(SBorder)
-				.BorderImage(&FindingBrush)
-				.Padding(FMargin(8.0f, 5.0f))
-				[
-					SNew(SVerticalBox)
-					+ SVerticalBox::Slot().AutoHeight()
-					[
-						SNew(STextBlock)
-						.Text(FText::FromString(FString::Printf(TEXT("FINDING %s   ·   SEVERITY · %s"), *Id, *Severity)))
-						.Font(WonderlandUi::Sans(8, true, 90))
-						.ColorAndOpacity(WonderlandUi::Coral())
-					]
-					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
-					[
-						Plain(Message, WonderlandUi::Cream(), MonoFont)
-					]
-					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
-					[
-						Plain(TEXT("FILE  ") + Where, WonderlandUi::Dim(), WonderlandUi::Mono(8))
-					]
-				]
-			];
-	}
-	case K::State:
-		return Plain(Text, WonderlandUi::Gold(), MonoFont);
-	case K::Wait:
-		return Plain(TEXT("… ") + Text, WonderlandUi::Dim(), MonoFont);
-	case K::Blank:
-		return SNew(SBox).HeightOverride(5.0f);
-	default:
+		AddRow(TextRow(FString::Printf(TEXT("FINDING %s  ·  SEVERITY %s"),
+			Parts.IsValidIndex(0) ? *Parts[0] : TEXT(""), Parts.IsValidIndex(1) ? *Parts[1] : TEXT("")), WonderlandUi::Coral(), true));
+		AddRow(TextRow(Parts.IsValidIndex(2) ? Parts[2] : FString(), WonderlandUi::Cream(), false, 10.0f));
+		AddRow(TextRow(TEXT("FILE  ") + (Parts.IsValidIndex(3) ? Parts[3] : FString()), WonderlandUi::Dim(), false, 10.0f));
 		break;
 	}
-	// Log, and anything this build draws as a plain operational line.
-	return Plain(TEXT("> ") + Text, WonderlandUi::Cream(), MonoFont);
-}
-
-int32 SWonderlandWorkLog::AddLine(EWonderlandRoleLineKind Kind, const FString& Text)
-{
-	using K = EWonderlandRoleLineKind;
-	if (!Root.IsValid())
-	{
-		return INDEX_NONE;
+	case K::State:
+		AddRow(TextRow(Text, WonderlandUi::Gold()));
+		break;
+	case K::Wait:
+		AddRow(TextRow(TEXT("… ") + Text, WonderlandUi::Dim()));
+		break;
+	default:
+		AddRow(TextRow(TEXT("> ") + Text, WonderlandUi::Cream()));
+		break;
 	}
-	// Lines that direct the log rather than being drawn.
-	if (Kind == K::Episode)
-	{
-		BeginEpisode(Text);
-		return INDEX_NONE;
-	}
-	if (Kind == K::Summary)
-	{
-		SetEpisodeSummary(Text);
-		return INDEX_NONE;
-	}
-	if (Kind == K::Status || Kind == K::Pause)
-	{
-		return INDEX_NONE;
-	}
-	EnsureEpisode();
-	FEpisode& Episode = *Episodes.Last();
-
-	if (Kind == K::PromptBegin)
-	{
-		// AN OUTBOUND PROMPT, IN A BOX OF ITS OWN, with who it is for.
-		TSharedPtr<SVerticalBox> Inner;
-		Episode.Body->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 3.0f)
-		[
-			SNew(SBorder)
-			.BorderImage(&PromptBrush)
-			.Padding(FMargin(8.0f, 5.0f))
-			[
-				SAssignNew(Inner, SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight()
-				[
-					SNew(SHorizontalBox)
-					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-					[
-						SNew(STextBlock).Text(INVTEXT("OUTBOUND PROMPT PREVIEW")).Font(WonderlandUi::Sans(8, true, 110)).ColorAndOpacity(WonderlandUi::Gold())
-					]
-					+ SHorizontalBox::Slot().FillWidth(1.0f)
-					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-					[
-						SNew(STextBlock).Text(FText::FromString(TEXT("TARGET · ") + Text)).Font(WonderlandUi::Sans(8, true, 90)).ColorAndOpacity(WonderlandUi::Cream())
-					]
-				]
-			]
-		];
-		OpenPrompt = Inner;
-		Newest = Inner;
-		NewestText = TEXT("PROMPT → ") + Text;
-		Written.Add(NewestText);
-		++LineCount;
-		++ChangeSerial;
-		return INDEX_NONE;
-	}
-	if (Kind == K::PromptEnd)
-	{
-		OpenPrompt.Reset();
-		return INDEX_NONE;
-	}
-
-	if (Kind == K::CodeFile || Kind == K::File)
-	{
-		Episode.File = FPaths::GetCleanFilename(Text);
-	}
-	if (Kind == K::CodeLine || Kind == K::DiffAdd || Kind == K::DiffRemove)
-	{
-		FString Number;
-		TCHAR Marker = TEXT(' ');
-		FString Code;
-		WonderlandWorkLogDetail::SplitCodeLine(Text, Number, Marker, Code);
-		if (Kind == K::DiffAdd) Marker = TEXT('+');
-		if (Kind == K::DiffRemove) Marker = TEXT('-');
-		Episode.Added += Marker == TEXT('+') ? 1 : 0;
-		Episode.Removed += Marker == TEXT('-') ? 1 : 0;
-	}
-
-	TSharedPtr<SWonderlandTypedText> Typer;
-	const TSharedRef<SWidget> Line = MakeLineWidget(Kind, Text, Typer);
-	const bool bInPrompt = OpenPrompt.IsValid() && (Kind == K::PromptLine || Kind == K::PromptHeading || Kind == K::Preview || Kind == K::PreviewRule);
-	(bInPrompt ? OpenPrompt : Episode.Body)->AddSlot().AutoHeight()
-	[
-		Line
-	];
-	Newest = Line;
-	NewestText = Text;
-	Written.Add(Text);
-	++LineCount;
-	++ChangeSerial;
 	if (!Typer.IsValid())
 	{
 		return INDEX_NONE;
@@ -632,7 +526,6 @@ void SWonderlandWorkLog::SetReveal(int32 LineId, int32 Chars)
 	if (Typers.IsValidIndex(LineId) && Typers[LineId].IsValid())
 	{
 		Typers[LineId]->SetReveal(Chars);
-		++ChangeSerial;
 	}
 }
 

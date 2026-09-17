@@ -1607,6 +1607,25 @@ void UWonderlandUiSubsystem::WriteRoleLine(int32 Role, const FWonderlandRoleLine
 	}
 	++Feed.Written;
 	Feed.Latest = Line;
+	if (Which == EWonderlandJuliusRole::Julius)
+	{
+		// JULIUS'S OWN ROWS, as the approved terminal draws them: a heading is carried into the row it heads, and the
+		// newest row says which event it is and that nothing was called.
+		if (Line.Kind == EWonderlandRoleLineKind::Section || Line.Kind == EWonderlandRoleLineKind::Episode)
+		{
+			Feed.Heading = Line.Text;
+			return;
+		}
+		if (Line.Kind == EWonderlandRoleLineKind::Summary)
+		{
+			return;
+		}
+		const FString Headline = Feed.Heading.IsEmpty() ? Line.Text : FString::Printf(TEXT("%s \u00B7 %s"), *Feed.Heading, *Line.Text);
+		Feed.Heading.Reset();
+		Terminal->AddJuliusRow(TEXT("Julius"), Headline,
+			FString::Printf(TEXT("event %s  \u00B7  %s  \u00B7  simulated, no provider called"), *RoleEvent.ToString(), *RoleChakra));
+		return;
+	}
 	const TSharedPtr<SWonderlandWorkLog> WorkLog = Terminal->GetWorkLog(Section);
 	if (!WorkLog.IsValid())
 	{
@@ -1619,11 +1638,6 @@ void UWonderlandUiSubsystem::WriteRoleLine(int32 Role, const FWonderlandRoleLine
 		Feed.Typed = 0.0f;
 		Feed.TypingLength = WorkLog->GetLineLength(Typing);
 		Feed.TypingKind = Line.Kind;
-	}
-	if (Which == EWonderlandJuliusRole::Julius && Line.Kind != EWonderlandRoleLineKind::Episode && Line.Kind != EWonderlandRoleLineKind::Summary)
-	{
-		// Julius's latest line is still its headline, for the tests that read one.
-		Terminal->NoteJuliusHeadline(Line.Text);
 	}
 }
 

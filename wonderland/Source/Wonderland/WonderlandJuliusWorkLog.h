@@ -1,19 +1,18 @@
-// WONDERLAND — WHAT A JULIUS COMPONENT IS DOING, AS WORK YOU CAN WATCH. The body of one section of the Julius Live
-// Terminal (founder, 2026-09-16 evening).
+// WONDERLAND — WHAT A JULIUS COMPONENT IS DOING, IN THE TERMINAL THE FOUNDER APPROVED. The body of one section of the
+// Julius Live Terminal.
 //
-// "I want to visibly WATCH CODE BEING WRITTEN." A section is no longer one line of status: it is a log of the component's
-// actual work -- source code typed line by line with line numbers, colours and +/- markers; an outbound prompt preview in
-// its own box with its target; a review checklist; a finding with its severity and file; commands and test results.
+// THE TERMINAL LOOKS LIKE THE FOUNDER'S IMAGE, ALWAYS (founder, 2026-09-16, repeated with the picture): four sections --
+// PROMPT ARCHITECT, CODING AGENT, JULIUS 3.3, INDEPENDENT REVIEWER -- each a header and its lines, and the message line
+// underneath. No new panels, no strips, no boxes inside boxes. When there is more work to show, the terminal EXTENDS
+// VERTICALLY to a hard limit and each section shows more of its newest lines; it never grows so far that anything has to
+// be scrolled to be seen. Everything stays right there.
 //
-// COMPONENT BOXES ARE CONTENT-DRIVEN AND GROW DOWNWARD (permanent founder rule). This widget takes exactly the height its
-// work needs; the terminal around it scrolls. Nothing is truncated to keep boxes equal: a line too long for the width
-// wraps. When a component moves on to new work its previous EPISODE collapses to one summary line, and a click on that
-// line opens it again -- the full detail stays in the terminal's history.
+// So this is a ROLLING LOG: every line is kept, the newest `VisibleLines` are shown, and the terminal decides how many
+// each section gets (the stage's focus gets the most). The body eases to its new height rather than jumping.
 //
-// INSIDE THE EXISTING TERMINAL ONLY. This is a section's body; the terminal's place, width and four sections are
-// unchanged, and the HUD around it is not touched.
-//
-// DEVELOPMENT PREVIEW. Every line comes from a deterministic fixture (WonderlandRoleScript.h); no provider is called.
+// THE LINES ARE WORK, NOT STATUS: code typed character by character with line numbers, colours and +/- markers; an
+// outbound prompt with its target; checklist items; a finding with its severity and file; commands and test results.
+// DEVELOPMENT PREVIEW -- every line comes from a deterministic fixture (WonderlandRoleScript.h); no provider is called.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -26,8 +25,7 @@ class SVerticalBox;
 
 /**
  * One line of code or prompt text, painted token by token so it can be TYPED: only the first `Reveal` characters are
- * drawn, with a cursor after them while it is typing. Its desired width is the whole line's, so the layout does not move
- * as the characters arrive.
+ * drawn, with a cursor after them while it is typing.
  */
 class WONDERLAND_API SWonderlandTypedText : public SLeafWidget
 {
@@ -67,7 +65,7 @@ private:
 	int32 Reveal = -1;
 };
 
-/** The work log that is one Julius component's section body. */
+/** The rolling log that is one Julius component's section body. */
 class WONDERLAND_API SWonderlandWorkLog : public SCompoundWidget
 {
 public:
@@ -78,66 +76,65 @@ public:
 
 	SWonderlandWorkLog();
 	void Construct(const FArguments& InArgs);
+	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 
 	/** A new mission: everything goes, and the resting line returns. */
 	void Reset();
 
-	/** Begin a new piece of work. The previous one collapses to its summary line, which a click reopens. */
-	void BeginEpisode(const FString& Title);
-
-	/** The summary a collapsed episode shows. Written by the script, or built from the episode's own diff counts. */
-	void SetEpisodeSummary(const FString& Summary);
-
 	/** Write a line of work. Returns an id for a line that TYPES (code, prompt text), else INDEX_NONE. */
 	int32 AddLine(EWonderlandRoleLineKind Kind, const FString& Text);
+
+	/**
+	 * A JULIUS 3.3 row, exactly as the approved terminal draws one: a gold bullet, the time, "Role:", the headline -- and
+	 * the dim sub-line only under the newest row.
+	 */
+	void AddJuliusRow(const FString& Time, const FString& Role, const FString& Headline, const FString& Detail);
 
 	/** How far a typing line has got, in characters; its full length. */
 	void SetReveal(int32 LineId, int32 Chars);
 	int32 GetLineLength(int32 LineId) const;
 
-	/** The widget of the newest line, so the terminal can keep it in view. */
-	TSharedPtr<SWidget> GetNewestWidget() const { return Newest; }
-	/** Bumped each time a line is written or a typing line grows. */
-	int32 GetChangeSerial() const { return ChangeSerial; }
+	/** How many of the newest rows to show. The terminal sets this; the body eases to the height it needs. */
+	void SetVisibleRows(int32 Count) { VisibleRows = FMath::Max(Count, 1); UpdateVisibleFrom(); }
+	int32 GetVisibleRows() const { return VisibleRows; }
+	/** Rows written this mission (the resting line counts as one before any are). */
+	int32 GetRowCount() const { return FMath::Max(RowSeqs.Num(), 1); }
+	/** The body's height now, and the height it is easing toward, in slate units. */
+	float GetShownHeight() const { return ShownHeight; }
+	float GetTargetHeight() const;
+	/** The height of one row. */
+	static constexpr float RowHeight = 14.0f;
 
 	int32 GetLineCount() const { return LineCount; }
-	int32 GetEpisodeCount() const { return Episodes.Num(); }
 	FString GetNewestText() const { return NewestText; }
-	/** Every line written this mission, newest last, "\n"-joined: what a proof job reads. */
+	/** The newest lines written this mission, "\n"-joined: what a proof job reads. */
 	FString DescribeLines(int32 MaxLines) const;
 
 private:
-	struct FEpisode
-	{
-		FString Title;
-		FString Summary;
-		FString File;
-		int32 Added = 0;
-		int32 Removed = 0;
-		bool bCollapsed = false;
-		TSharedPtr<SVerticalBox> Body;
-	};
-
-	TSharedRef<SWidget> MakeLineWidget(EWonderlandRoleLineKind Kind, const FString& Text, TSharedPtr<SWonderlandTypedText>& OutTyper);
-	TSharedRef<SWidget> MakeCodeRow(const FString& Number, TCHAR Marker, const FString& Code, TSharedPtr<SWonderlandTypedText>& OutTyper);
-	void EnsureEpisode();
-	FString EpisodeSummaryText(const FEpisode& Episode) const;
+	/** Add one drawn row (a line can be several: a finding is three). Returns its sequence number. */
+	int32 AddRow(TSharedRef<SWidget> Row);
+	void RemoveRow(int32 Seq);
+	void UpdateVisibleFrom();
+	TSharedRef<SWidget> CodeRow(const FString& Number, TCHAR Marker, const FString& Code, TSharedPtr<SWonderlandTypedText>& OutTyper);
+	TSharedRef<SWidget> TextRow(const FString& Text, const FLinearColor& Color, bool bBold = false, float Indent = 0.0f);
 
 	FString RestingText;
 	TSharedPtr<SVerticalBox> Root;
-	TArray<TSharedPtr<FEpisode>> Episodes;
-	/** While a prompt preview box is open, its lines go inside it. */
-	TSharedPtr<SVerticalBox> OpenPrompt;
+	/** The rows in order, by sequence number, with the slot widget each sits in. */
+	TArray<int32> RowSeqs;
+	TArray<TSharedRef<SWidget>> RowSlots;
+	int32 NextSeq = 0;
+	/** Rows with a sequence number below this are older than the newest VisibleRows and are collapsed. */
+	int32 VisibleFromSeq = 0;
+	/** The dim sub-line under the newest Julius row, removed when the next row comes. */
+	int32 JuliusDetailSeq = INDEX_NONE;
 	TArray<TSharedPtr<SWonderlandTypedText>> Typers;
-	TSharedPtr<SWidget> Newest;
-	FString NewestText;
 	TArray<FString> Written;
+	FString NewestText;
 	int32 LineCount = 0;
-	int32 ChangeSerial = 0;
+	int32 VisibleRows = 1;
+	float ShownHeight = RowHeight;
 
-	FSlateRoundedBoxBrush PromptBrush;
-	FSlateRoundedBoxBrush FindingBrush;
 	FSlateRoundedBoxBrush AddBrush;
 	FSlateRoundedBoxBrush RemoveBrush;
-	FSlateRoundedBoxBrush SummaryBrush;
 };

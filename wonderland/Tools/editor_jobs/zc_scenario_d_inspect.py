@@ -130,39 +130,28 @@ def job():
                         console("slomo 0.02")
                         yield 0.3
                         tag = "%s_%04.1f" % (act_name.lower(), m)
-                        cam_yaw = dog.get_mission_camera_rotation().yaw
                         entry = {"key": key, "t": t, "files": [], "sample": sample()}
-                        for offset in (0.0, 120.0, 240.0):
-                            dog.set_mission_camera_angles(cam_yaw + offset, -18.0)
-                            yield 0.35
-                            path = os.path.join(ROOT, "%s_orbit%03d.jpg" % (tag, int(offset)))
-                            H.capture_viewport_jpeg(path, 1600, 90)
-                            entry["files"].append(path)
-                        dog.set_mission_camera_angles(cam_yaw, -18.0)
-                        # close, from the follow camera: the Dog's front quarter and over its shoulder
-                        console("wl.MissionCam.BlendSeconds 0.02")
-                        console("wl.MissionCam.Enabled 0")
-                        # the camera's blend runs on world time: let a few frames of it pass, then freeze again
-                        console("slomo 0.3")
-                        yield 0.35
+                        # THE SHOT AS THE PLAYER SEES IT: the continuous mission camera, untouched.
+                        path = os.path.join(ROOT, "%s_auto.jpg" % tag)
+                        H.capture_viewport_jpeg(path, 1600, 90)
+                        entry["files"].append(path)
+                        # CLOSER, on the same Contract-anchored camera, to read the hands and the props.
+                        console("wl.MissionCam.Arm 320")
+                        console("slomo 0.6")
+                        yield 0.9
                         console("slomo 0.02")
                         yield 0.2
-                        dog_yaw = dog.get_actor_rotation().yaw
-                        for name, yaw, pitch in (("front", dog_yaw + 180.0 + 55.0, -10.0), ("shoulder", dog_yaw + 25.0, -22.0)):
-                            controller.set_control_rotation(unreal.Rotator(roll=0.0, pitch=pitch, yaw=yaw))
-                            yield 0.45
-                            path = os.path.join(ROOT, "%s_%s.jpg" % (tag, name))
-                            H.capture_viewport_jpeg(path, 1600, 90)
-                            entry["files"].append(path)
-                        console("wl.MissionCam.Enabled 1")
-                        console("slomo 0.3")
-                        yield 0.35
-                        console("wl.MissionCam.BlendSeconds 1.1")
+                        path = os.path.join(ROOT, "%s_close.jpg" % tag)
+                        H.capture_viewport_jpeg(path, 1600, 90)
+                        entry["files"].append(path)
+                        console("wl.MissionCam.Arm 540")
+                        console("slomo 0.6")
+                        yield 0.9
                         stills.append(entry)
                         console("slomo 1")
                         last_sample = 0.0
                 # ---- the founder's left-drag, once, during research
-                if not drag_done and act == "RESEARCH" and "RESEARCH" in stage_started and t - stage_started["RESEARCH"] > 9.0:
+                if not drag_done and "VERIFICATION@16.0" in shot_done:
                     drag_done = True
                     rect = dog.get_game_viewport_screen_rect()
                     x, y, w, h = rect.x, rect.y, rect.z, rect.w
@@ -186,7 +175,7 @@ def job():
                                              "ui_presses": int(dog.get_mission_camera_presses_left_to_ui())}
                     RESULT["drag"] = drag
                     yield 1.0
-                    path = os.path.join(ROOT, "research_after_drag.jpg")
+                    path = os.path.join(ROOT, "after_drag.jpg")
                     H.capture_viewport_jpeg(path, 1600, 90)
                     drag["file"] = path
                 if not mission.is_fixture_running():
