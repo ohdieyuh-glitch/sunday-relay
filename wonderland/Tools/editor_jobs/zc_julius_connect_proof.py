@@ -143,15 +143,15 @@ def job():
         RESULT["after_revoke"] = str(ui.describe_wonder_web_workspace())
         RESULT["hud_rects"] = str(ui.describe_hud_rects())
 
-        # ---- the glass: changed text, 0.35 s later, on a translucent glass and on the masked glass it now uses
-        for blend, label in (("0", "16_ghost_translucent"), ("1", "17_ghost_masked")):
-            console("wl.WonderWeb.GlassBlend " + blend)
-            yield 0.6
-            ui.simulate_wonder_web_window_click("connections", "terminal")
-            ui.simulate_wonder_web_typing("status", True)
-            yield 0.35
-            shot(label, "terminal lines changed 0.35 s ago, glass blend " + blend)
-        console("wl.WonderWeb.GlassBlend 1")
+        # ---- the glass: how long changed text takes to settle on the masked glass
+        ui.simulate_wonder_web_window_click("connections", "terminal")
+        ui.simulate_wonder_web_typing("status", True)
+        start = unreal.GameplayStatics.get_real_time_seconds(world)
+        for at, label in ((0.2, "16_settle_0_2s"), (0.5, "17_settle_0_5s"), (1.0, "18_settle_1_0s")):
+            while unreal.GameplayStatics.get_real_time_seconds(world) - start < at:
+                yield 0.0
+            shot(label, "terminal lines changed %.1f s ago" % at)
+        RESULT["fps_hint"] = str(unreal.GameplayStatics.get_real_time_seconds(world) - start)
 
         # ---- the workspace itself: minimize A to its chip and restore it; A never stops
         click("creation", "minimize")

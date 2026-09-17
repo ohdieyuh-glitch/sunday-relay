@@ -530,23 +530,28 @@ TSharedRef<SWidget> SWonderlandJuliusConnectPanel::MakeServiceRow(const FJuliusC
 
 	TSharedRef<SVerticalBox> Detail = SNew(SVerticalBox);
 	// THE FIRST LINE: the service, its state, how it is reached -- and, for a service with no connection yet, its button.
+	// The name gives way (with an ellipsis) before the state or the button ever does.
 	TSharedRef<SHorizontalBox> Heading = SNew(SHorizontalBox)
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+		+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
 		[
-			SNew(STextBlock).Text(FText::FromString(Service.DisplayName)).Font(Sans(24, true)).ColorAndOpacity(Line())
+			SNew(STextBlock).Text(FText::FromString(Service.DisplayName)).Font(Sans(23, true)).ColorAndOpacity(Line())
+			.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
 		]
-		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, bLive ? 12.0f : 10.0f, 0.0f)
 		[
 			SNew(SBorder).BorderImage(&PillBrush).BorderBackgroundColor(FSlateColor(Colour.CopyWithNewOpacity(0.22f))).Padding(FMargin(12.0f, 4.0f))
 			[
-				SNew(STextBlock).Text(FText::FromString(Service.StateLabel)).Font(Sans(18, true, 110)).ColorAndOpacity(Colour)
+				SNew(STextBlock).Text(FText::FromString(Service.StateLabel)).Font(Sans(17, true, 100)).ColorAndOpacity(Colour)
 			]
-		]
-		+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+		];
+	if (bLive)
+	{
+		Heading->AddSlot().AutoWidth().VAlign(VAlign_Center)
 		[
 			SNew(STextBlock).Text(FText::FromString(Service.RouteLabel)).Font(Sans(16, true, 100)).ColorAndOpacity(Line(0.6f))
 		];
-	if (!bLive)
+	}
+	else
 	{
 		Heading->AddSlot().AutoWidth().VAlign(VAlign_Center)[Buttons];
 	}
@@ -568,6 +573,7 @@ TSharedRef<SWidget> SWonderlandJuliusConnectPanel::MakeServiceRow(const FJuliusC
 		Detail->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 		[
 			SNew(SHorizontalBox)
+			.Visibility(Service.Granted.Num() + Service.Denied.Num() > 0 ? EVisibility::Visible : EVisibility::Collapsed)
 			+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 22.0f, 0.0f)
 			[
 				SNew(STextBlock).Font(Mono(17)).ColorAndOpacity(Good())
@@ -622,9 +628,9 @@ TSharedRef<SWidget> SWonderlandJuliusConnectPanel::MakeRight(const FJuliusConnec
 					SNew(STextBlock).Text(FText::FromString(Prompt.Banner)).Font(Sans(16, true, 130)).ColorAndOpacity(Fail())
 				]
 			]
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+			+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 			[
-				SNew(STextBlock).Text(FText::FromString(Prompt.Kind)).Font(Sans(14, true, 120)).ColorAndOpacity(Line(0.7f))
+				SNew(STextBlock).Text(FText::FromString(Prompt.Kind)).Font(Sans(14, true, 120)).ColorAndOpacity(Line(0.7f)).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
 			]
 		];
 		Card->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
@@ -699,18 +705,18 @@ TSharedRef<SWidget> SWonderlandJuliusConnectPanel::MakeRight(const FJuliusConnec
 		Card->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 12.0f, 0.0f)
+			+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 			[
-				ActionButton(TEXT("approve"), Prompt.bCredentialFlow ? INVTEXT("CONTINUE") : INVTEXT("CONNECT"), true, [Weak]() { if (Weak.IsValid()) { Weak->ApprovePrompt(); } }, 22)
+				ActionButton(TEXT("approve"), Prompt.bCredentialFlow ? INVTEXT("CONTINUE") : INVTEXT("CONNECT"), true, [Weak]() { if (Weak.IsValid()) { Weak->ApprovePrompt(); } }, 21)
 			]
 			+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 12.0f, 0.0f)
 			[
-				ActionButton(TEXT("decline"), INVTEXT("NOT NOW"), false, [Weak]() { if (Weak.IsValid()) { Weak->DeclinePrompt(); } }, 22)
+				ActionButton(TEXT("decline"), INVTEXT("NOT NOW"), false, [Weak]() { if (Weak.IsValid()) { Weak->DeclinePrompt(); } }, 20)
 			]
 			+ SHorizontalBox::Slot().AutoWidth()
 			[
 				ActionButton(TEXT("details"), bShowDetails ? INVTEXT("HIDE DETAILS") : INVTEXT("VIEW DETAILS"), false,
-					[this]() { bShowDetails = !bShowDetails; RightKey.Reset(); ShownRevision = -1; }, 22)
+					[this]() { bShowDetails = !bShowDetails; RightKey.Reset(); ShownRevision = -1; }, 20)
 			]
 		];
 		if (Surface.Setup.Num() > 1)
@@ -767,7 +773,7 @@ TSharedRef<SWidget> SWonderlandJuliusConnectPanel::MakeRight(const FJuliusConnec
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 			[
-				SNew(STextBlock).Font(Sans(17)).ColorAndOpacity(Line(0.85f))
+				SNew(STextBlock).Font(Sans(17)).ColorAndOpacity(Line(0.85f)).AutoWrapText(true)
 				.Text(FText::FromString(bDone ? FString::Printf(TEXT("all %d steps done"), Task->Total)
 					: FString::Printf(TEXT("step %d of %d  ·  %s"), FMath::Min(Task->Progress + 1, Task->Total), Task->Total, *Task->StepLabel)))
 			]
