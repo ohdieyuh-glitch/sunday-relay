@@ -51,6 +51,13 @@ public:
 	 * for the window it is in -- not a differently shaped page squeezed into it.
 	 */
 	void SetViewport(FIntPoint Size);
+	/**
+	 * WATCH A TAB SOMEBODY ELSE IS DRIVING. Julius works in its own tab in the runtime; this points the frames at that tab
+	 * without navigating it, so the founder watches exactly the page Julius is on, as it happens.
+	 */
+	void Follow(const FString& TabId);
+	/** True while the tab being drawn is one this client did not navigate. */
+	bool IsFollowing() const { return bFollowing; }
 	/** Stop drawing and let the runtime close the page. */
 	void CloseTab(const FString& TabId);
 
@@ -103,6 +110,7 @@ private:
 	FIntPoint Viewport = FIntPoint(1200, 800);
 	FIntPoint AskedViewport = FIntPoint(0, 0);
 	bool bLoading = false;
+	bool bFollowing = false;
 	bool bFrameInFlight = false;
 	int32 FrameCount = 0;
 	float SinceFrame = 0.0f;

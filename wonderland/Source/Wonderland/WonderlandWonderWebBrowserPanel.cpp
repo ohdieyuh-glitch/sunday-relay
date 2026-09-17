@@ -171,8 +171,13 @@ void SWonderlandWonderWebBrowserPanel::Construct(const FArguments& InArgs)
 									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 									[
 										SNew(STextBlock).Font(WonderWebLook::Sans(20)).ColorAndOpacity(WonderWebLook::Line())
-										.Text_Lambda([WeakBrowse]()
+										.Text_Lambda([WeakBrowse, WeakLive = Live]()
 										{
+											// THE ADDRESS IS THE PAGE'S OWN, wherever it came from: the founder's navigation, or the page Julius opened.
+											if (WeakLive.IsValid() && WeakLive->HasFrame() && !WeakLive->GetLiveUrl().IsEmpty())
+											{
+												return FText::FromString(WeakLive->GetLiveUrl());
+											}
 											if (WeakBrowse.IsValid() && WeakBrowse->IsRealMode() && !WeakBrowse->GetRealUrl().IsEmpty())
 											{
 												return FText::FromString(WeakBrowse->GetRealUrl());
@@ -190,7 +195,18 @@ void SWonderlandWonderWebBrowserPanel::Construct(const FArguments& InArgs)
 							SNew(SBorder).BorderImage(&BadgeBrush).Padding(FMargin(14.0f, 6.0f))
 							[
 								SNew(STextBlock).Font(WonderWebLook::Sans(15, true, 120)).ColorAndOpacity(WonderWebLook::Line())
-								.Text_Lambda([WeakBrowse]() { return FText::FromString(WeakBrowse.IsValid() ? WeakBrowse->PageLabel() : FString(TEXT("NO PAGES"))); })
+								.Text_Lambda([WeakBrowse, WeakLive = Live]()
+								{
+									// THE LABEL MATCHES WHAT IS ON SCREEN, always: a live frame means a live page, whoever opened it.
+									if (WeakLive.IsValid() && WeakLive->HasFrame())
+									{
+										FString Host;
+										UWonderlandWonderWebBrowseSubsystem::IsHostAllowed(WeakLive->GetLiveUrl(), Host);
+										return FText::FromString(FString::Printf(TEXT("LIVE PAGE  ·  %s%s"), *Host.ToUpper(),
+											WeakLive->IsFollowing() ? TEXT("  ·  JULIUS IS BROWSING") : TEXT("")));
+									}
+									return FText::FromString(WeakBrowse.IsValid() ? WeakBrowse->PageLabel() : FString(TEXT("NO PAGES")));
+								})
 							]
 						]
 					]
@@ -360,7 +376,14 @@ void SWonderlandWonderWebBrowserPanel::Rebuild()
 					]);
 			}
 		}
-		if (LiveWeb != nullptr && Url != ShownRealUrl)
+		if (LiveWeb != nullptr && Browse->IsFollowingJulius())
+		{
+			// JULIUS IS DRIVING. The window watches Julius's own tab: it navigates nothing, so what is on screen is the page
+			// Julius was allowed to open, as it opens it.
+			LiveWeb->Follow(UWonderlandWonderWebBrowseSubsystem::JuliusTab());
+			ShownRealUrl.Reset();
+		}
+		else if (LiveWeb != nullptr && Url != ShownRealUrl)
 		{
 			ShownRealUrl = Url;
 			if (Url.IsEmpty())

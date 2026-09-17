@@ -67,8 +67,8 @@ FString UWonderlandWonderWebLiveSubsystem::BaseUrl()
 
 FString UWonderlandWonderWebLiveSubsystem::DescribeLive() const
 {
-	return FString::Printf(TEXT("live_tab=%s live_url=%s frames=%d size=%dx%d loading=%d problem=\"%s\""),
-		LiveTab.IsEmpty() ? TEXT("-") : *LiveTab, LiveUrl.IsEmpty() ? TEXT("-") : *LiveUrl,
+	return FString::Printf(TEXT("live_tab=%s live_url=%s following=%d frames=%d size=%dx%d loading=%d problem=\"%s\""),
+		LiveTab.IsEmpty() ? TEXT("-") : *LiveTab, LiveUrl.IsEmpty() ? TEXT("-") : *LiveUrl, bFollowing ? 1 : 0,
 		FrameCount, FrameSize.X, FrameSize.Y, bLoading ? 1 : 0, *Problem);
 }
 
@@ -90,6 +90,7 @@ void UWonderlandWonderWebLiveSubsystem::Navigate(const FString& TabId, const FSt
 	}
 	LiveTab = TabId;
 	LiveUrl = Url;
+	bFollowing = false;
 	Problem.Reset();
 	bLoading = true;
 	UE_LOG(LogWonderWebLive, Display, TEXT("WLLIVE navigate %s -> %s"), *TabId, *Url);
@@ -98,6 +99,26 @@ void UWonderlandWonderWebLiveSubsystem::Navigate(const FString& TabId, const FSt
 	SendIntent(FString::Printf(TEXT("{\"op\":\"viewport\",\"tab\":\"%s\",\"width\":%d,\"height\":%d}"), *TabId, Viewport.X, Viewport.Y), TEXT("viewport"));
 	AskedViewport = Viewport;
 	SendIntent(FString::Printf(TEXT("{\"op\":\"navigate\",\"tab\":\"%s\",\"url\":\"%s\"}"), *TabId, *Url), TEXT("navigate"));
+}
+
+void UWonderlandWonderWebLiveSubsystem::Follow(const FString& TabId)
+{
+	if (LiveTab == TabId && bFollowing)
+	{
+		return;
+	}
+	// A tab this client opened is its own to close; a tab it is only watching is not.
+	if (!LiveTab.IsEmpty() && LiveTab != TabId && !bFollowing)
+	{
+		SendIntent(FString::Printf(TEXT("{\"op\":\"close\",\"tab\":\"%s\"}"), *LiveTab), TEXT("close"));
+	}
+	LiveTab = TabId;
+	bFollowing = true;
+	bLoading = true;
+	Problem.Reset();
+	Frame = nullptr;
+	FrameCount = 0;
+	UE_LOG(LogWonderWebLive, Display, TEXT("WLLIVE watching the tab Julius works in: %s"), *TabId);
 }
 
 void UWonderlandWonderWebLiveSubsystem::SetViewport(FIntPoint Size)
@@ -119,12 +140,14 @@ void UWonderlandWonderWebLiveSubsystem::SetViewport(FIntPoint Size)
 
 void UWonderlandWonderWebLiveSubsystem::CloseTab(const FString& TabId)
 {
-	if (!TabId.IsEmpty())
+	// Only close what this client opened: the tab Julius works in belongs to Julius.
+	if (!TabId.IsEmpty() && !(bFollowing && TabId == LiveTab))
 	{
 		SendIntent(FString::Printf(TEXT("{\"op\":\"close\",\"tab\":\"%s\"}"), *TabId), TEXT("close"));
 	}
 	if (TabId == LiveTab)
 	{
+		bFollowing = false;
 		LiveTab.Reset();
 		LiveUrl.Reset();
 		Title.Reset();
