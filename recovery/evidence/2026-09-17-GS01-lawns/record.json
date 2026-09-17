@@ -1,0 +1,92 @@
+{
+ "MI_V2_Lawn": {
+  "parent": "/Game/WonderlandV2/Materials/Master/M_V2_Surface.M_V2_Surface",
+  "scalars": {
+   "TexScale": 0.008999999612569809,
+   "Roughness": 0.8600000143051147,
+   "RoughVary": 0.6000000238418579,
+   "Metallic": 0.0,
+   "Specular": 0.20000000298023224,
+   "EmissiveStrength": 0.0
+  },
+  "vectors": {
+   "BaseColor": [
+    0.27000001072883606,
+    0.3700000047683716,
+    0.14000000059604645,
+    1.0
+   ],
+   "Emissive": [
+    0.6600000262260437,
+    0.36000001430511475,
+    1.0,
+    1.0
+   ]
+  },
+  "textures": {
+   "Albedo": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_a.T_V2_sward_a",
+   "Normal": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_n.T_V2_sward_n",
+   "RoughnessMap": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_r.T_V2_sward_r"
+  }
+ },
+ "MI_V2_Meadow": {
+  "parent": "/Game/WonderlandV2/Materials/Master/M_V2_Surface.M_V2_Surface",
+  "scalars": {
+   "TexScale": 0.008999999612569809,
+   "Roughness": 0.8799999952316284,
+   "RoughVary": 0.6200000047683716,
+   "Metallic": 0.0,
+   "Specular": 0.20000000298023224,
+   "EmissiveStrength": 0.0
+  },
+  "vectors": {
+   "BaseColor": [
+    0.3400000035762787,
+    0.38999998569488525,
+    0.1599999964237213,
+    1.0
+   ],
+   "Emissive": [
+    0.6600000262260437,
+    0.36000001430511475,
+    1.0,
+    1.0
+   ]
+  },
+  "textures": {
+   "Albedo": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_a.T_V2_sward_a",
+   "Normal": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_n.T_V2_sward_n",
+   "RoughnessMap": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_r.T_V2_sward_r"
+  }
+ },
+ "MI_V2_Moss": {
+  "parent": "/Game/WonderlandV2/Materials/Master/M_V2_Surface.M_V2_Surface",
+  "scalars": {
+   "TexScale": 0.008999999612569809,
+   "Roughness": 0.8199999928474426,
+   "RoughVary": 0.6000000238418579,
+   "Metallic": 0.0,
+   "Specular": 0.20000000298023224,
+   "EmissiveStrength": 0.0
+  },
+  "vectors": {
+   "BaseColor": [
+    0.2199999988079071,
+    0.30000001192092896,
+    0.12999999523162842,
+    1.0
+   ],
+   "Emissive": [
+    0.6600000262260437,
+    0.36000001430511475,
+    1.0,
+    1.0
+   ]
+  },
+  "textures": {
+   "Albedo": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_a.T_V2_sward_a",
+   "Normal": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_n.T_V2_sward_n",
+   "RoughnessMap": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_r.T_V2_sward_r"
+  }
+ }
+}

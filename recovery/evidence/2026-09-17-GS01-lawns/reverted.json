@@ -1,0 +1,13 @@
+{
+ "name": "zzBC50_gs01_revert",
+ "started": "2026-09-17 07:24:13",
+ "status": "done",
+ "done": {
+  "MI_V2_Lawn": "restored",
+  "MI_V2_Meadow": "restored",
+  "MI_V2_Moss": "restored"
+ },
+ "finished": "2026-09-17 07:24:33",
+ "seconds": 19.38,
+ "log": ""
+}

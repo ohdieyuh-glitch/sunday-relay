@@ -5,6 +5,7 @@
 # parent that does (M_V2_SurfaceHD), keeps every value and map the instance had, then applies SET.
 # The FULL before state (parent, every scalar, vector and texture) goes to RECORD first; REVERT = True restores it.
 # SAVE = False changes the loaded instances only.
+# SET values: a number (scalar), a list (vector), or a string (a texture's asset path).
 # Globals: NAMES, PARENT (asset path), SET {name: {param: value}}, RECORD, REVERT, SAVE.
 import json
 import os
@@ -70,7 +71,9 @@ def job():
             _apply_values(mel, mi, snap)
             have = [str(p) for p in mel.get_scalar_parameter_names(mi)]
             for k, v in SET.get(name, {}).items():
-                if isinstance(v, (list, tuple)):
+                if isinstance(v, str):
+                    mel.set_material_instance_texture_parameter_value(mi, k, unreal.load_asset(v))   # a texture by asset path
+                elif isinstance(v, (list, tuple)):
                     mel.set_material_instance_vector_parameter_value(mi, k, unreal.LinearColor(*(list(v) + [1.0] * (4 - len(v)))))
                 elif k in have:
                     mel.set_material_instance_scalar_parameter_value(mi, k, float(v))

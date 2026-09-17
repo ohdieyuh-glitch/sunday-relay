@@ -1,0 +1,178 @@
+{
+ "name": "zzBB00_lawn_mis",
+ "started": "2026-09-17 07:20:57",
+ "status": "done",
+ "mis": {
+  "MI_V2_Lawn": {
+   "parent": "M_V2_Surface",
+   "scalars": {
+    "TexScale": 0.009,
+    "Roughness": 0.86,
+    "RoughVary": 0.6,
+    "Metallic": 0.0,
+    "Specular": 0.2,
+    "EmissiveStrength": 0.0
+   },
+   "vectors": {
+    "BaseColor": [
+     0.27,
+     0.37,
+     0.14
+    ],
+    "Emissive": [
+     0.66,
+     0.36,
+     1.0
+    ]
+   },
+   "textures": {
+    "Albedo": "T_V2_sward_a",
+    "Normal": "T_V2_sward_n",
+    "RoughnessMap": "T_V2_sward_r"
+   }
+  },
+  "MI_V2_Meadow": {
+   "parent": "M_V2_Surface",
+   "scalars": {
+    "TexScale": 0.009,
+    "Roughness": 0.88,
+    "RoughVary": 0.62,
+    "Metallic": 0.0,
+    "Specular": 0.2,
+    "EmissiveStrength": 0.0
+   },
+   "vectors": {
+    "BaseColor": [
+     0.34,
+     0.39,
+     0.16
+    ],
+    "Emissive": [
+     0.66,
+     0.36,
+     1.0
+    ]
+   },
+   "textures": {
+    "Albedo": "T_V2_sward_a",
+    "Normal": "T_V2_sward_n",
+    "RoughnessMap": "T_V2_sward_r"
+   }
+  },
+  "MI_V2_Moss": {
+   "parent": "M_V2_Surface",
+   "scalars": {
+    "TexScale": 0.009,
+    "Roughness": 0.82,
+    "RoughVary": 0.6,
+    "Metallic": 0.0,
+    "Specular": 0.2,
+    "EmissiveStrength": 0.0
+   },
+   "vectors": {
+    "BaseColor": [
+     0.22,
+     0.3,
+     0.13
+    ],
+    "Emissive": [
+     0.66,
+     0.36,
+     1.0
+    ]
+   },
+   "textures": {
+    "Albedo": "T_V2_sward_a",
+    "Normal": "T_V2_sward_n",
+    "RoughnessMap": "T_V2_sward_r"
+   }
+  },
+  "MI_V2_Mulch": {
+   "parent": "M_V2_Surface",
+   "scalars": {
+    "TexScale": 0.009,
+    "Roughness": 0.92,
+    "RoughVary": 0.55,
+    "Metallic": 0.0,
+    "Specular": 0.14,
+    "EmissiveStrength": 0.0
+   },
+   "vectors": {
+    "BaseColor": [
+     0.229,
+     0.19,
+     0.125
+    ],
+    "Emissive": [
+     0.66,
+     0.36,
+     1.0
+    ]
+   },
+   "textures": {
+    "Albedo": "T_V2_sward_a",
+    "Normal": "T_V2_sward_n",
+    "RoughnessMap": "T_V2_sward_r"
+   }
+  },
+  "MI_V2_Soil": {
+   "parent": "M_V2_Surface",
+   "scalars": {
+    "TexScale": 0.009,
+    "Roughness": 0.9,
+    "RoughVary": 0.5,
+    "Metallic": 0.0,
+    "Specular": 0.15,
+    "EmissiveStrength": 0.0
+   },
+   "vectors": {
+    "BaseColor": [
+     0.333,
+     0.261,
+     0.207
+    ],
+    "Emissive": [
+     0.66,
+     0.36,
+     1.0
+    ]
+   },
+   "textures": {
+    "Albedo": "T_V2_sward_a",
+    "Normal": "T_V2_sward_n",
+    "RoughnessMap": "T_V2_sward_r"
+   }
+  },
+  "MI_V2_Dirt": {
+   "parent": "M_V2_Surface",
+   "scalars": {
+    "TexScale": 0.009,
+    "Roughness": 0.9,
+    "RoughVary": 0.52,
+    "Metallic": 0.0,
+    "Specular": 0.16,
+    "EmissiveStrength": 0.0
+   },
+   "vectors": {
+    "BaseColor": [
+     0.344,
+     0.283,
+     0.218
+    ],
+    "Emissive": [
+     0.66,
+     0.36,
+     1.0
+    ]
+   },
+   "textures": {
+    "Albedo": "T_V2_sward_a",
+    "Normal": "T_V2_sward_n",
+    "RoughnessMap": "T_V2_sward_r"
+   }
+  }
+ },
+ "finished": "2026-09-17 07:20:58",
+ "seconds": 0.25,
+ "log": ""
+}
