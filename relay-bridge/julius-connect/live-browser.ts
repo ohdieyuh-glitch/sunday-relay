@@ -252,7 +252,11 @@ export function createLiveBrowser(options: LiveBrowserOptions): LiveBrowser {
       if (held === undefined || held.page.isClosed()) {
         return false;
       }
+      // PUT THE POINTER ON THE PAGE FIRST. A wheel is delivered wherever the pointer last was, and after a navigation
+      // that can be a header that does not scroll -- so the page is wheeled from its middle, where a person would.
+      await held.page.mouse.move(Math.round(held.size.width / 2), Math.round(held.size.height / 2)).catch(() => undefined);
       await held.page.mouse.wheel(0, Math.round(deltaY));
+      note(tabId, 'scroll', hostOf(held.page.url()) ?? '-', `${Math.round(deltaY)} pixels`);
       held.lastUsed = Date.now();
       return true;
     },
