@@ -279,6 +279,13 @@ void UWonderlandWonderWebLiveSubsystem::RequestFrame()
 			Problem = FString::Printf(TEXT("No answer from the Julius Connect runtime at %s — start it, or it is shutting down."), *BaseUrl());
 			return;
 		}
+		if (Response->GetResponseCode() == 404)
+		{
+			// NO PAGE ON THIS TAB YET. Watching a tab Julius has not opened is the normal way this starts, so say that
+			// rather than showing the runtime's own words for it.
+			Problem = bFollowing ? TEXT("Waiting for Julius to open a page.") : TEXT("Nothing is open on this tab yet.");
+			return;
+		}
 		if (Response->GetResponseCode() != 200)
 		{
 			Problem = Response->GetContentAsString().Left(240);
