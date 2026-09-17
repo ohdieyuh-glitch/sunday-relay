@@ -327,6 +327,7 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 	OnRequestClose = InArgs._OnRequestClose;
 	OnRequestTerminal = InArgs._OnRequestTerminal;
 	OnRequestMap = InArgs._OnRequestMap;
+	OnRequestWonderWeb = InArgs._OnRequestWonderWeb;
 	OnPropose = InArgs._OnPropose;
 	OnReview = InArgs._OnReview;
 
@@ -472,6 +473,26 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 			SNew(SBorder).BorderImage(&StatusBrush).Padding(FMargin(10.0f, 4.0f))
 			[
 				SNew(STextBlock).Text_Lambda([this]() { return FText::FromString(Model.SourceLine); }).Font(Font("Bold", 8, 160)).ColorAndOpacity(WonderlandUi::Srgb(0xFF, 0xD2, 0x73))
+			]
+		]
+		// WONDER WEB IS OPENED FROM THE PROJECT (founder, 2026-09-17: contextually, never a permanent bottom shortcut): the
+		// project the brain belongs to, and its in-world browser one click or W away.
+		+ SConstraintCanvas::Slot().Anchors(FAnchors(0.47f, 0.084f)).AutoSize(true).Alignment(FVector2D(0.0, 0.0))
+		[
+			SNew(SButton)
+			.ButtonStyle(&ActionStyle)
+			.OnClicked_Lambda([this]() { OnRequestWonderWeb.ExecuteIfBound(); return FReply::Handled(); })
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Text_Lambda([this]() { return FText::FromString(FString::Printf(TEXT("PROJECT  %s"), *Model.ProjectName.ToUpper())); })
+					.Font(Font("Regular", 9, 200)).ColorAndOpacity(Mist())
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(14.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(INVTEXT("OPEN WONDER WEB   W")).Font(Font("Bold", 10, 200)).ColorAndOpacity(WonderlandUi::Srgb(0xFF, 0xD4, 0x00))
+				]
 			]
 		]
 		// The panels.
@@ -966,6 +987,11 @@ FReply SWonderlandProjectBrainPanel::OnKeyDown(const FGeometry& MyGeometry, cons
 	if (Key == EKeys::M)
 	{
 		OnRequestMap.ExecuteIfBound();
+		return FReply::Handled();
+	}
+	if (Key == EKeys::W && Selected.IsNone())
+	{
+		OnRequestWonderWeb.ExecuteIfBound();
 		return FReply::Handled();
 	}
 	if (Key == EKeys::T && InKeyEvent.IsControlDown())

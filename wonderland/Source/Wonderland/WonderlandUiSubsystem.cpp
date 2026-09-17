@@ -40,6 +40,11 @@
 #include "WonderlandMissionBeat.h"
 #include "WonderlandMissionNarration.h"
 #include "WonderlandWorldMap.h"
+#include "WonderlandWonderWeb.h"
+#include "WonderlandWonderWebPanel.h"
+#include "WonderlandWonderWebScreen.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Components/WidgetComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandUi, Log, All);
 
@@ -352,6 +357,13 @@ void UWonderlandUiSubsystem::Detach()
 	MissionsPanel.Reset();
 	MenuPanel.Reset();
 	WalletPanel.Reset();
+	WonderWebPanel.Reset();
+	WonderWebLayer.Reset();
+	if (AWonderlandWonderWebScreen* Screen = WonderWebScreen.Get())
+	{
+		Screen->Destroy();
+	}
+	WonderWebScreen.Reset();
 	BrainArtBrush.Reset();
 	BrainArt = nullptr;
 	BoundController.Reset();
@@ -423,6 +435,7 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
 				.OnRequestTerminal_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Terminal); } })
 				.OnRequestMap_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Map); } })
+				.OnRequestWonderWeb_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::WonderWeb); } })
 				.OnPropose_Lambda([WeakThis](FName SurfaceId, const FString& Text)
 				{
 					if (WeakThis.IsValid())
@@ -475,6 +488,44 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 		Panel = MissionsPanel;
 		Focus = MissionsPanel;
 		ZOrder = 58;
+	}
+	else if (Which == EOverlay::WonderWeb)
+	{
+		if (!WonderWebPanel.IsValid())
+		{
+			SAssignNew(WonderWebPanel, SWonderlandWonderWebPanel)
+				.WonderWeb(TWeakObjectPtr<UWonderlandWonderWebSubsystem>(WonderWebState()))
+				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
+				// Return to project: out of Wonder Web and back to the project it was opened from.
+				.OnRequestProject_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Brain); } });
+		}
+		AWonderlandWonderWebScreen* Screen = EnsureWonderWebScreen(Controller);
+		if (Screen == nullptr)
+		{
+			UE_LOG(LogWonderlandUi, Warning, TEXT("WLUI wonder web: no screen could be stood in this world"));
+			return;
+		}
+		// WHERE THE PLAYER IS LOOKING, AHEAD OF THE DOG: the screen stands there facing back toward them.
+		const APawn* Pawn = Controller->GetPawn();
+		const float Yaw = Controller->PlayerCameraManager != nullptr ? Controller->PlayerCameraManager->GetCameraRotation().Yaw : Controller->GetControlRotation().Yaw;
+		const FVector Ahead = FRotator(0.0f, Yaw, 0.0f).Vector();
+		const FVector From = Pawn != nullptr ? Pawn->GetActorLocation() : Controller->PlayerCameraManager->GetCameraLocation();
+		const IConsoleVariable* AheadVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.WonderWeb.ScreenAhead"));
+		const IConsoleVariable* UpVar = IConsoleManager::Get().FindConsoleVariable(TEXT("wl.WonderWeb.ScreenUp"));
+		const FVector Centre = From + Ahead * (AheadVar != nullptr ? AheadVar->GetFloat() : 330.0f) + FVector(0.0, 0.0, UpVar != nullptr ? UpVar->GetFloat() : 150.0f);
+		Screen->Present(WonderWebPanel.ToSharedRef(), Centre, FRotator(0.0f, Yaw + 180.0f, 0.0f));
+		Controller->SetViewTargetWithBlend(Screen, 0.8f, EViewTargetBlendFunction::VTBlend_Cubic);
+		if (!WonderWebLayer.IsValid())
+		{
+			SAssignNew(WonderWebLayer, SWonderlandWonderWebInputLayer)
+				.Screen(TWeakObjectPtr<AWonderlandWonderWebScreen>(Screen))
+				.Controller(TWeakObjectPtr<APlayerController>(Controller))
+				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
+		}
+		WonderWebLayer->SetScreen(Screen);
+		Panel = WonderWebLayer;
+		Focus = WonderWebLayer;
+		ZOrder = 40;
 	}
 	else if (Which == EOverlay::Wallet)
 	{
@@ -539,6 +590,22 @@ void UWonderlandUiSubsystem::CloseOverlay()
 		--OverlaysInViewport;
 	}
 	Open = EOverlay::None;
+	if (Closing == EOverlay::WonderWeb)
+	{
+		// BACK TO THE WORLD: the screen folds away and the camera glides back to the Dog. Wonder Web's state -- what is
+		// running, the terminal, the picture on the canvas -- stays in its subsystem for next time.
+		if (AWonderlandWonderWebScreen* Screen = WonderWebScreen.Get())
+		{
+			Screen->Dismiss();
+		}
+		if (APlayerController* Controller = BoundController.Get())
+		{
+			if (Controller->GetPawn() != nullptr)
+			{
+				Controller->SetViewTargetWithBlend(Controller->GetPawn(), 0.7f, EViewTargetBlendFunction::VTBlend_Cubic);
+			}
+		}
+	}
 	ApplyOverlayInput(false, nullptr);
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI close %s (panels in viewport: %d)"), OverlayName(Closing), OverlaysInViewport);
 }
@@ -636,6 +703,165 @@ void UWonderlandUiSubsystem::RefreshMap()
 		Notice = TEXT("No developed place has an arrival point in this world yet.");
 	}
 	WorldMap->Refresh(Stops, Current, PlayerXY, bHasPlayer, Notice);
+}
+
+UWonderlandWonderWebSubsystem* UWonderlandUiSubsystem::WonderWebState() const
+{
+	const APlayerController* Controller = BoundController.Get();
+	UGameInstance* Instance = Controller != nullptr ? Controller->GetGameInstance() : nullptr;
+	return Instance != nullptr ? Instance->GetSubsystem<UWonderlandWonderWebSubsystem>() : nullptr;
+}
+
+AWonderlandWonderWebScreen* UWonderlandUiSubsystem::EnsureWonderWebScreen(APlayerController* Controller)
+{
+	UWorld* World = Controller != nullptr ? Controller->GetWorld() : nullptr;
+	AWonderlandWonderWebScreen* Screen = WonderWebScreen.Get();
+	if (Screen != nullptr && Screen->GetWorld() == World)
+	{
+		return Screen;
+	}
+	if (World == nullptr)
+	{
+		return nullptr;
+	}
+	FActorSpawnParameters Params;
+	Params.Name = MakeUniqueObjectName(World->GetCurrentLevel(), AWonderlandWonderWebScreen::StaticClass(), TEXT("WonderWebScreen"));
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	Params.ObjectFlags |= RF_Transient;
+	Screen = World->SpawnActor<AWonderlandWonderWebScreen>(AWonderlandWonderWebScreen::StaticClass(), FTransform::Identity, Params);
+	WonderWebScreen = Screen;
+	return Screen;
+}
+
+void UWonderlandUiSubsystem::OpenWonderWeb()
+{
+	if (Open != EOverlay::WonderWeb)
+	{
+		OpenOverlay(EOverlay::WonderWeb);
+	}
+}
+
+void UWonderlandUiSubsystem::CloseWonderWeb()
+{
+	if (Open == EOverlay::WonderWeb)
+	{
+		CloseOverlay();
+	}
+}
+
+bool UWonderlandUiSubsystem::IsWonderWebOpen() const
+{
+	return Open == EOverlay::WonderWeb;
+}
+
+FString UWonderlandUiSubsystem::DescribeWonderWeb() const
+{
+	const AWonderlandWonderWebScreen* Screen = WonderWebScreen.Get();
+	const APlayerController* Controller = BoundController.Get();
+	const UWonderlandWonderWebSubsystem* State = WonderWebState();
+	const bool bViewing = Controller != nullptr && Screen != nullptr && Controller->GetViewTarget() == Screen;
+	FString Kind = TEXT("-");
+	FString Access = TEXT("-");
+	bool bInput = false;
+	if (State != nullptr)
+	{
+		const FWonderWebSurface& Surface = State->GetSurface();
+		static const TCHAR* Kinds[] = { TEXT("idle"), TEXT("working"), TEXT("creation"), TEXT("failed"), TEXT("observed") };
+		Kind = Kinds[static_cast<int32>(Surface.Viewport.Kind)];
+		if (Surface.Tabs.IsValidIndex(State->GetSelectedTab()))
+		{
+			Access = Surface.Tabs[State->GetSelectedTab()].Access == EWonderWebAccess::Control ? TEXT("control") : TEXT("observe");
+		}
+		bInput = Surface.Terminal.bAcceptsInput;
+	}
+	return FString::Printf(TEXT("open=%d presented=%d hidden=%d view_target=%d loaded=%d frame=%s tab=%d access=%s viewport=%s status=%s running=%d input=%d chrome=%d%d%d%d%d session_lines=%d painted=%d clicks=%d chars=%d terminal_text=\"%s\" problem=\"%s\""),
+		IsWonderWebOpen() ? 1 : 0, Screen != nullptr && Screen->IsPresented() ? 1 : 0, Screen != nullptr && Screen->IsHidden() ? 1 : 0, bViewing ? 1 : 0,
+		State != nullptr && State->IsPreviewLoaded() ? 1 : 0, State != nullptr ? *State->GetFrameName().ToString() : TEXT("-"),
+		State != nullptr ? State->GetSelectedTab() : -1, *Access, *Kind,
+		State != nullptr ? *State->GetSurface().Viewport.Status : TEXT("-"), State != nullptr && State->GetSurface().Viewport.bRunning ? 1 : 0, bInput ? 1 : 0,
+		State != nullptr && State->GetSurface().Chrome.bCanReload ? 1 : 0, State != nullptr && State->GetSurface().Chrome.bCanStop ? 1 : 0,
+		State != nullptr && State->GetSurface().Chrome.bCanRestart ? 1 : 0, State != nullptr && State->GetSurface().Chrome.bCanRebuild ? 1 : 0,
+		State != nullptr && State->GetSurface().Chrome.bCanReturnToProject ? 1 : 0,
+		State != nullptr ? State->GetSessionLines().Num() : 0, State != nullptr ? State->GetPaintedCells() : 0,
+		WonderWebLayer.IsValid() ? WonderWebLayer->GetForwardedClicks() : 0, WonderWebLayer.IsValid() ? WonderWebLayer->GetForwardedCharacters() : 0,
+		WonderWebPanel.IsValid() ? *WonderWebPanel->GetTerminalInput() : TEXT(""), State != nullptr ? *State->GetProblem() : TEXT(""));
+}
+
+FVector2D UWonderlandUiSubsystem::GetWonderWebControlOnScreen(FName Control) const
+{
+	const AWonderlandWonderWebScreen* Screen = WonderWebScreen.Get();
+	APlayerController* Controller = BoundController.Get();
+	FVector2D WindowPixel;
+	if (Screen == nullptr || Controller == nullptr || !WonderWebPanel.IsValid() || !WonderWebPanel->GetControlCentre(Control, WindowPixel))
+	{
+		return FVector2D(-1.0, -1.0);
+	}
+	FVector2D ViewportPixel;
+	if (!Controller->ProjectWorldLocationToScreen(Screen->WindowPixelToWorld(WindowPixel), ViewportPixel, false))
+	{
+		return FVector2D(-1.0, -1.0);
+	}
+	// Viewport pixels to Slate screen space, through the game viewport widget's own geometry.
+	const ULocalPlayer* LocalPlayer = Controller->GetLocalPlayer();
+	UGameViewportClient* ViewportClient = LocalPlayer != nullptr ? LocalPlayer->ViewportClient : nullptr;
+	const TSharedPtr<SViewport> ViewportWidget = ViewportClient != nullptr ? ViewportClient->GetGameViewportWidget() : nullptr;
+	FVector2D ViewportSize;
+	if (!ViewportWidget.IsValid() || ViewportClient == nullptr)
+	{
+		return FVector2D(-1.0, -1.0);
+	}
+	ViewportClient->GetViewportSize(ViewportSize);
+	const FGeometry& Geometry = ViewportWidget->GetTickSpaceGeometry();
+	if (ViewportSize.X <= 0.0 || ViewportSize.Y <= 0.0)
+	{
+		return FVector2D(-1.0, -1.0);
+	}
+	return Geometry.LocalToAbsolute(ViewportPixel / ViewportSize * Geometry.GetLocalSize());
+}
+
+bool UWonderlandUiSubsystem::SimulateWonderWebClick(FName Control)
+{
+	if (!IsWonderWebOpen() || !FSlateApplication::IsInitialized() || !WonderWebLayer.IsValid())
+	{
+		return false;
+	}
+	const FVector2D At = GetWonderWebControlOnScreen(Control);
+	if (At.X < 0.0)
+	{
+		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web click %s: not on screen"), *Control.ToString());
+		return false;
+	}
+	FSlateApplication& App = FSlateApplication::Get();
+	const uint32 Pointer = FSlateApplicationBase::CursorPointerIndex;
+	const int32 ClicksBefore = WonderWebLayer->GetForwardedClicks();
+	TSet<FKey> Held;
+	Held.Add(EKeys::LeftMouseButton);
+	App.ProcessMouseMoveEvent(FPointerEvent(0, Pointer, At, At, TSet<FKey>(), FKey(), 0.0f, FModifierKeysState()));
+	App.ProcessMouseButtonDownEvent(nullptr, FPointerEvent(0, Pointer, At, At, Held, EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
+	App.ProcessMouseButtonUpEvent(FPointerEvent(0, Pointer, At, At, TSet<FKey>(), EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
+	const bool bReached = WonderWebLayer->GetForwardedClicks() > ClicksBefore;
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web click %s at (%.0f, %.0f): %s"), *Control.ToString(), At.X, At.Y, bReached ? TEXT("reached the glass") : TEXT("did not reach the glass"));
+	return bReached;
+}
+
+bool UWonderlandUiSubsystem::SimulateWonderWebTyping(const FString& Text, bool bPressEnter)
+{
+	if (!IsWonderWebOpen() || !FSlateApplication::IsInitialized())
+	{
+		return false;
+	}
+	FSlateApplication& App = FSlateApplication::Get();
+	for (const TCHAR Character : Text)
+	{
+		App.ProcessKeyCharEvent(FCharacterEvent(Character, FModifierKeysState(), 0, false));
+	}
+	if (bPressEnter)
+	{
+		const FKeyEvent Enter(EKeys::Enter, FModifierKeysState(), 0, false, 13, 13);
+		App.ProcessKeyDownEvent(Enter);
+		App.ProcessKeyUpEvent(Enter);
+	}
+	return true;
 }
 
 UWonderlandProjectBrainSubsystem* UWonderlandUiSubsystem::Brain() const
@@ -795,6 +1021,7 @@ const TCHAR* UWonderlandUiSubsystem::OverlayName(EOverlay Which)
 	case EOverlay::Commands: return TEXT("command station");
 	case EOverlay::Menu:     return TEXT("menu");
 	case EOverlay::Wallet:   return TEXT("wallet");
+	case EOverlay::WonderWeb: return TEXT("wonder web");
 	default: break;
 	}
 	return TEXT("nothing");
@@ -811,6 +1038,7 @@ TSharedPtr<SWidget> UWonderlandUiSubsystem::OverlayWidget(EOverlay Which) const
 	case EOverlay::Commands: return CommandStation;
 	case EOverlay::Menu:     return MenuPanel;
 	case EOverlay::Wallet:   return WalletPanel;
+	case EOverlay::WonderWeb: return WonderWebLayer;
 	default: break;
 	}
 	return nullptr;

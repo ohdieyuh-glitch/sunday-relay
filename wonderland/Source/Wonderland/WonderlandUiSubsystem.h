@@ -54,6 +54,10 @@ class SWonderlandMiniMap;
 class SWonderlandMissionsPanel;
 class SWonderlandNavBar;
 class SWonderlandWalletChip;
+class SWonderlandWonderWebInputLayer;
+class SWonderlandWonderWebPanel;
+class AWonderlandWonderWebScreen;
+class UWonderlandWonderWebSubsystem;
 class SWonderlandWalletPanel;
 class UInputComponent;
 class UWonderlandCommandPresetSubsystem;
@@ -295,6 +299,43 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	FString GetTerminalCommandRows() const;
 
+	// ---------------------------------------------------------------- Wonder Web (WonderlandWonderWeb.h)
+	//
+	// THE IN-WORLD BROWSER, OPENED FROM THE PROJECT. A screen stands in the garden ahead of the Dog and the camera glides
+	// to it; the window on it renders the Wonder Web projection and decides nothing. It is a panel like the others --
+	// one at a time, the keyboard its while it is open, Escape or its own close button hands the world back -- but it is
+	// drawn in the world, not over it. DEVELOPMENT PREVIEW: sample projections, a simulated creation, sample peers.
+
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	void OpenWonderWeb();
+
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	void CloseWonderWeb();
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Wonder Web")
+	bool IsWonderWebOpen() const;
+
+	/** The screen standing in the world and the camera on it, as "presented=1 view_target=1 ...". */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Wonder Web")
+	FString DescribeWonderWeb() const;
+
+	/**
+	 * Click a named control of the in-world window ("tab:1", "open-sample", "stop", "cell:20", "close" ...) the way a
+	 * mouse does: real Slate press and release events at the screen position where that control stands in the world, so
+	 * they pass through the input layer, the ray onto the glass and the widget interaction. False when the control is
+	 * not on screen or the click did not reach the glass.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	bool SimulateWonderWebClick(FName Control);
+
+	/** Type into whatever the window has focused, as the keyboard does, and press Enter when asked. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	bool SimulateWonderWebTyping(const FString& Text, bool bPressEnter);
+
+	/** Where a named control of the window stands on screen, in Slate screen space; (-1, -1) when it is not drawn. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Wonder Web")
+	FVector2D GetWonderWebControlOnScreen(FName Control) const;
+
 	// ---------------------------------------------------------------- the Wonder Web Wallet (WonderlandWallet.h)
 
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
@@ -403,7 +444,7 @@ public:
 	int32 GetJuliusRoleTypedCharacters(int32 Role) const;
 
 private:
-	enum class EOverlay : uint8 { None, Terminal, Map, Brain, Missions, Commands, Menu, Wallet };
+	enum class EOverlay : uint8 { None, Terminal, Map, Brain, Missions, Commands, Menu, Wallet, WonderWeb };
 
 	void HandlePlayerControllerChanged(APlayerController* NewController);
 	void Attach(APlayerController* Controller);
@@ -428,8 +469,11 @@ private:
 	void MountHudFurniture();
 	void UnmountHudFurniture();
 	void StopPointing(bool bRestoreGameInput);
-	/** The map shows over the world while no full-screen panel covers it. The terminal is not full-screen. */
-	bool IsMiniMapShown() const { return Open == EOverlay::None || Open == EOverlay::Terminal; }
+	/** The map shows over the world while no full-screen panel covers it. The terminal is not full-screen, and Wonder Web stands in the world. */
+	bool IsMiniMapShown() const { return Open == EOverlay::None || Open == EOverlay::Terminal || Open == EOverlay::WonderWeb; }
+	UWonderlandWonderWebSubsystem* WonderWebState() const;
+	/** The screen in the controller's world, spawned the first time Wonder Web opens there. */
+	AWonderlandWonderWebScreen* EnsureWonderWebScreen(APlayerController* Controller);
 	/** Top right, unless a long mission strip reaches into that column: then just below the strip. */
 	FMargin MiniMapOffset() const;
 	UWonderlandWalletSubsystem* Wallet() const;
@@ -487,6 +531,10 @@ private:
 	TSharedPtr<SWonderlandCommandStation> CommandStation;
 	TSharedPtr<SWonderlandMissionsPanel> MissionsPanel;
 	TSharedPtr<SWonderlandMenuPanel> MenuPanel;
+	/** The window, kept once made like the other panels, so a half-typed command is still there on reopen. */
+	TSharedPtr<SWonderlandWonderWebPanel> WonderWebPanel;
+	TSharedPtr<SWonderlandWonderWebInputLayer> WonderWebLayer;
+	TWeakObjectPtr<AWonderlandWonderWebScreen> WonderWebScreen;
 
 	/** The mini-map and the bottom shortcuts, on one layer above the usage HUD and below every panel. */
 	TSharedPtr<SWidget> HudFurniture;
