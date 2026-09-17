@@ -1,0 +1,15 @@
+{
+ "name": "zzBA20_gr02_swap",
+ "started": "2026-09-17 07:18:09",
+ "status": "done",
+ "changed": [
+  "V2Batch_terrace_platform_MI_V2_PlazaWarm",
+  "V2Batch_terrace_platform_MI_V2_PlazaCream",
+  "V2Batch_terrace_platform_MI_V2_PlazaGrey",
+  "V2Batch_terrace_platform_MI_V2_PlazaShade"
+ ],
+ "refused": [],
+ "finished": "2026-09-17 07:18:11",
+ "seconds": 2.08,
+ "log": ""
+}

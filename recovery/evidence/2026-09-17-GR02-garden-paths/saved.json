@@ -1,0 +1,20 @@
+{
+ "name": "zzBA95_save_gr02",
+ "started": "2026-09-17 07:20:02",
+ "status": "done",
+ "terrace_batches": {
+  "V2Batch_terrace_platform_MI_V2_PlazaWarm": "MI_V2_GroundFlag_PlazaWarm",
+  "V2Batch_terrace_platform_MI_V2_PlazaCream": "MI_V2_GroundFlag_PlazaCream",
+  "V2Batch_terrace_platform_MI_V2_Water": "MI_V2_Water",
+  "V2Batch_terrace_platform_MI_V2_PlazaGrey": "MI_V2_GroundFlag_PlazaGrey",
+  "V2Batch_terrace_platform_MI_V2_PlazaShade": "MI_V2_GroundFlag_PlazaShade"
+ },
+ "dirty_maps_before": [
+  "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2"
+ ],
+ "saved_level": true,
+ "dirty_maps_after": [],
+ "finished": "2026-09-17 07:20:06",
+ "seconds": 4.69,
+ "log": ""
+}

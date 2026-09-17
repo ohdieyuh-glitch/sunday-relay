@@ -1,0 +1,62 @@
+[
+ {
+  "name": "WonderlandInstancedBatch_276",
+  "label": "V2Batch_terrace_platform_MI_V2_PlazaWarm",
+  "material": "MI_V2_PlazaWarm",
+  "instances": 377,
+  "area_m2": 22445,
+  "tags": [
+   "V2_Skyline",
+   "UNREAL_PRODUCTION",
+   "BAND_A"
+  ]
+ },
+ {
+  "name": "WonderlandInstancedBatch_291",
+  "label": "V2Batch_terrace_platform_MI_V2_PlazaCream",
+  "material": "MI_V2_PlazaCream",
+  "instances": 388,
+  "area_m2": 29489,
+  "tags": [
+   "V2_Skyline",
+   "UNREAL_PRODUCTION",
+   "BAND_A"
+  ]
+ },
+ {
+  "name": "WonderlandInstancedBatch_334",
+  "label": "V2Batch_terrace_platform_MI_V2_Water",
+  "material": "MI_V2_Water",
+  "instances": 13,
+  "area_m2": 699,
+  "tags": [
+   "V2_Skyline",
+   "UNREAL_PRODUCTION",
+   "BAND_A"
+  ]
+ },
+ {
+  "name": "WonderlandInstancedBatch_375",
+  "label": "V2Batch_terrace_platform_MI_V2_PlazaGrey",
+  "material": "MI_V2_PlazaGrey",
+  "instances": 88,
+  "area_m2": 5922,
+  "tags": [
+   "V2_Skyline",
+   "UNREAL_PRODUCTION",
+   "BAND_A"
+  ]
+ },
+ {
+  "name": "WonderlandInstancedBatch_376",
+  "label": "V2Batch_terrace_platform_MI_V2_PlazaShade",
+  "material": "MI_V2_PlazaShade",
+  "instances": 49,
+  "area_m2": 1426,
+  "tags": [
+   "V2_Skyline",
+   "UNREAL_PRODUCTION",
+   "BAND_A"
+  ]
+ }
+]

@@ -1,0 +1,322 @@
+{
+ "name": "zzAZ00_path_census",
+ "started": "2026-09-17 07:13:23",
+ "status": "done",
+ "out": {
+  "GroveRoadCam18_500": [
+   [
+    "A Cube|MI_V2_Moss",
+    9000000.0
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Meadow",
+    31775.13523300064
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Lawn",
+    19814.879911695243
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Moss",
+    7497.212041126154
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Mulch",
+    1928.4455935400001
+   ],
+   [
+    "B SM_terrace_platform|MI_V2_PlazaCream",
+    116.41679612560267
+   ]
+  ],
+  "GroveRoadCam18_1200": [
+   [
+    "A Cube|MI_V2_Moss",
+    9000000.0
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Meadow",
+    31775.13523300064
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Lawn",
+    24235.650340010216
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Moss",
+    7497.212041126154
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Mulch",
+    1928.4455935400001
+   ],
+   [
+    "B SM_terrace_platform|MI_V2_PlazaCream",
+    116.41679612560267
+   ]
+  ],
+  "TeapotCam24_500": [
+   [
+    "A Cube|MI_V2_Moss",
+    9000000.0
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Lawn",
+    28642.850089006708
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Meadow",
+    20295.862520126655
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Moss",
+    10938.842457817513
+   ],
+   [
+    "B SM_terrace_platform|MI_V2_PlazaWarm",
+    232.8335922512055
+   ],
+   [
+    "B SM_terrace_platform|MI_V2_PlazaCream",
+    116.41679612560274
+   ]
+  ],
+  "TeapotCam24_1200": [
+   [
+    "A Cube|MI_V2_Moss",
+    9000000.0
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Lawn",
+    25882.107396631473
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Meadow",
+    15228.509283697877
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Moss",
+    10938.842457817513
+   ],
+   [
+    "B SM_terrace_platform|MI_V2_PlazaWarm",
+    302.1901303679798
+   ],
+   [
+    "B SM_terrace_platform|MI_V2_PlazaCream",
+    116.41679612560274
+   ]
+  ],
+  "LanternLaneCam27_500": [
+   [
+    "A Cube|MI_V2_Moss",
+    9000000.0
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Meadow",
+    17656.29381094813
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Moss",
+    13687.86240202049
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Lawn",
+    13613.251694720362
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Mulch",
+    1928.4455935399972
+   ],
+   [
+    "B SM_balustrade|MI_V2_IvoryStone",
+    3.1045463464314897
+   ]
+  ],
+  "LanternLaneCam27_1200": [
+   [
+    "A Cube|MI_V2_Moss",
+    9000000.0
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Moss",
+    13687.86240202049
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Lawn",
+    13613.251694720362
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Meadow",
+    12718.557302531939
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Mulch",
+    1928.4455935399972
+   ],
+   [
+    "B WL_Flower_Daisy_Run_petal|MI_V2_PetalViolet",
+    5.2673735321423365
+   ]
+  ],
+  "PathCam02_500": [
+   [
+    "A Cube|MI_V2_Moss",
+    9000000.0
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Lawn",
+    20801.637048781253
+   ],
+   [
+    "A SM_terrace_platform|MI_V2_IvoryStone",
+    52.2144
+   ],
+   [
+    "A SM_path_steps|MI_V2_PathStone",
+    25.24905628606481
+   ],
+   [
+    "A SM_path_steps|MI_V2_PlazaCream",
+    12.624528143032405
+   ],
+   [
+    "B SM_retaining_wall|MI_V2_AshlarIvoryStone",
+    10.332319004552595
+   ]
+  ],
+  "PathCam02_1200": [
+   [
+    "A Cube|MI_V2_Moss",
+    9000000.0
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Lawn",
+    20801.637048781253
+   ],
+   [
+    "A SM_path_steps|MI_V2_PathStone",
+    25.24905628606481
+   ],
+   [
+    "B SM_retaining_wall|MI_V2_AshlarIvoryStone",
+    13.77642533940346
+   ],
+   [
+    "A SM_path_steps|MI_V2_PlazaCream",
+    12.624528143032405
+   ],
+   [
+    "B SM_kerb_stone|MI_V2_Kerb",
+    5.210370078520646
+   ]
+  ],
+  "BridgeCam32_500": [
+   [
+    "A Cube|MI_V2_Moss",
+    9000000.0
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Lawn",
+    11616.644769926155
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Meadow",
+    10134.70647285755
+   ],
+   [
+    "B SM_terrace_platform|MI_V2_Water",
+    207.84739790865808
+   ],
+   [
+    "B SM_terrace_platform|MI_V2_PlazaWarm",
+    151.25643874453266
+   ],
+   [
+    "B SM_kerb_stone|MI_V2_Kerb",
+    12.178528159962404
+   ]
+  ],
+  "BridgeCam32_1200": [
+   [
+    "A Cube|MI_V2_Moss",
+    9000000.0
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Meadow",
+    26140.902167103843
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Lawn",
+    6829.935824952017
+   ],
+   [
+    "B SM_terrace_platform|MI_V2_Water",
+    207.84739790865808
+   ],
+   [
+    "B SM_terrace_platform|MI_V2_PlazaWarm",
+    151.25643874453266
+   ],
+   [
+    "B SM_terrace_platform|MI_V2_PlazaCream",
+    123.7142026602244
+   ]
+  ],
+  "CloisterCam31_500": [
+   [
+    "A Cube|MI_V2_Moss",
+    9000000.0
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Lawn",
+    43570.09079567261
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Meadow",
+    38777.21675789462
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Moss",
+    31251.232507879642
+   ],
+   [
+    "B SM_terrace_platform|MI_V2_PlazaWarm",
+    153.18561708780098
+   ],
+   [
+    "B SM_terrace_platform|MI_V2_PlazaCream",
+    116.41679612560267
+   ]
+  ],
+  "CloisterCam31_1200": [
+   [
+    "A Cube|MI_V2_Moss",
+    9000000.0
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Meadow",
+    52859.60400279182
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Lawn",
+    39087.554046423
+   ],
+   [
+    "B SM_garden_lawn|MI_V2_Moss",
+    31251.232507879642
+   ],
+   [
+    "B SM_terrace_platform|MI_V2_PlazaWarm",
+    803.4483664929132
+   ],
+   [
+    "B SM_terrace_platform|MI_V2_PlazaShade",
+    43.69384592139088
+   ]
+  ]
+ },
+ "finished": "2026-09-17 07:14:23",
+ "seconds": 60.27,
+ "log": ""
+}
