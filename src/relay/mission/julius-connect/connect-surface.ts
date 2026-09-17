@@ -89,6 +89,8 @@ export interface ConnectionsSurfaceSetupRow {
 export interface ConnectionsSurfaceTask {
   readonly taskId: string;
   readonly missionId: string;
+  /** Which task this is, so a surface can follow it (Wonderland's browser follows `social-post`). */
+  readonly templateId: string;
   readonly title: string;
   readonly runState: string;
   readonly stepLabel: string;
@@ -205,6 +207,7 @@ export function projectConnectionsSurface(
   const tasks: ConnectionsSurfaceTask[] = input.tasks.map((task) => ({
     taskId: task.taskId,
     missionId: task.missionId,
+    templateId: task.templateId,
     title: task.title,
     runState: task.runState,
     stepLabel: task.steps[Math.min(task.cursor, task.steps.length - 1)]?.label ?? '',

@@ -106,6 +106,7 @@ describe('julius connect: the founder chain', () => {
     expect(waitingSurface.prompt?.kind).toBe('DEVELOPMENT CONNECTOR');
     expect(waitingSurface.prompt?.requested.map((c) => c.capabilityId)).toEqual(['files.read', 'design.write']);
     expect(waitingSurface.tasks[0].blockedReason).toBe(EXTERNAL_CAPABILITY_REQUIRED);
+    expect(waitingSurface.tasks[0].templateId).toBe('design-sync');
 
     // 2. Waiting does not spam the user: advancing a blocked task asks nothing new.
     ({ state, task } = run(state, task, 3));
