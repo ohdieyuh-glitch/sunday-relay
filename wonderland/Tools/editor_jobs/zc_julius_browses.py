@@ -78,8 +78,12 @@ def job():
 
         # ---- 2. THE FOUNDER SAYS CONNECT, and Julius browses for real
         console("wl.Julius.Connect.Approve")
-        yield 8.0
+        yield 4.0
         shot("03_connected", "connect=%s" % ui.describe_wonder_web_workspace())
+        # The Connections window came forward with the request; the browsing itself is the thing to watch, so bring the
+        # browser window back in front for it.
+        ui.expand_wonder_web_window("browser")
+        yield 4.0
         yield 10.0
         shot("04_julius_opened_the_page", "live=%s" % live.describe_live())
         RESULT["julius_frames"] = int(field(live.describe_live(), "frames") or 0)
