@@ -166,39 +166,42 @@ void SWonderlandWonderWebBrowserPanel::Construct(const FArguments& InArgs)
 						]
 						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 						[
-							SNew(SBox).HeightOverride(54.0f)
-							[
-								SNew(SBorder).BorderImage(&AddressBrush).Padding(FMargin(20.0f, 0.0f)).VAlign(VAlign_Center)
+							// PROBED, so a proof can click into the address bar the way a person does.
+							Probe(TEXT("address"),
+								SNew(SBox).HeightOverride(54.0f)
 								[
-									SNew(SHorizontalBox)
-									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 14.0f, 0.0f)
+									SNew(SBorder).BorderImage(&AddressBrush).Padding(FMargin(20.0f, 0.0f)).VAlign(VAlign_Center)
 									[
-										SNew(SWonderWebGlyph).Glyph(EWonderWebGlyph::Lock).Size(22.0f).Color(FSlateColor(WonderWebLook::Line())).Thickness(2.2f)
-									]
-									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
-									[
-										// TYPE AN ADDRESS HERE, as in any browser: enter sends this window to it, and a host that is not allowed is
-										// refused with the reason in the page area. It shows the page's own address the rest of the time.
-										SAssignNew(AddressBox, SEditableText).Font(WonderWebLook::Sans(20)).ColorAndOpacity(WonderWebLook::Line())
-										.SelectAllTextWhenFocused(true).ClearKeyboardFocusOnCommit(true)
-										.OnTextCommitted(this, &SWonderlandWonderWebBrowserPanel::OnAddressCommitted)
-										.Text_Lambda([WeakBrowse, WeakLive = Live, Watched = LiveTab]()
-										{
-											// THE ADDRESS IS THE PAGE'S OWN, wherever it came from: the founder's navigation, or the page Julius opened.
-											if (WeakLive.IsValid() && WeakLive->HasFrame(Watched) && !WeakLive->GetLiveUrl(Watched).IsEmpty())
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 14.0f, 0.0f)
+										[
+											SNew(SWonderWebGlyph).Glyph(EWonderWebGlyph::Lock).Size(22.0f).Color(FSlateColor(WonderWebLook::Line())).Thickness(2.2f)
+										]
+										+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+										[
+											// TYPE AN ADDRESS HERE, as in any browser: enter sends this window to it, and a host that is not allowed is
+											// refused with the reason in the page area. It shows the page's own address the rest of the time.
+											SAssignNew(AddressBox, SEditableText).Font(WonderWebLook::Sans(20)).ColorAndOpacity(WonderWebLook::Line())
+											.SelectAllTextWhenFocused(true).ClearKeyboardFocusOnCommit(true)
+											.OnTextCommitted(this, &SWonderlandWonderWebBrowserPanel::OnAddressCommitted)
+											.Text_Lambda([WeakBrowse, WeakLive = Live, Watched = LiveTab]()
 											{
-												return FText::FromString(WeakLive->GetLiveUrl(Watched));
-											}
-											if (WeakBrowse.IsValid() && WeakBrowse->IsRealMode() && !WeakBrowse->GetRealUrl().IsEmpty())
-											{
-												return FText::FromString(WeakBrowse->GetRealUrl());
-											}
-											const FWonderWebBrowseTab* Tab = WeakBrowse.IsValid() ? WeakBrowse->GetSelected() : nullptr;
-											return FText::FromString(Tab != nullptr ? Tab->Url : FString(TEXT("wonder.web")));
-										})
+												// THE ADDRESS IS THE PAGE'S OWN, wherever it came from: the founder's navigation, or the page Julius opened.
+												if (WeakLive.IsValid() && WeakLive->HasFrame(Watched) && !WeakLive->GetLiveUrl(Watched).IsEmpty())
+												{
+													return FText::FromString(WeakLive->GetLiveUrl(Watched));
+												}
+												if (WeakBrowse.IsValid() && WeakBrowse->IsRealMode() && !WeakBrowse->GetRealUrl().IsEmpty())
+												{
+													return FText::FromString(WeakBrowse->GetRealUrl());
+												}
+												const FWonderWebBrowseTab* Tab = WeakBrowse.IsValid() ? WeakBrowse->GetSelected() : nullptr;
+												return FText::FromString(Tab != nullptr ? Tab->Url : FString(TEXT("wonder.web")));
+											})
+										]
 									]
 								]
-							]
+							)
 						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(16.0f, 0.0f, 24.0f, 0.0f)
 						[

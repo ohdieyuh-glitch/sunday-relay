@@ -66,8 +66,14 @@ def job():
 
         console("wl.WonderWeb.Open browser-3")
         yield 4.0
-        # The third window is pointed at the search engine, by its own tab strip.
-        RESULT["clicked_tab_on_third"] = bool(ui.simulate_wonder_web_window_click("browser-3", "tab:search"))
+        # The third window is sent somewhere by its own address bar, the way a person would.
+        # (Not the search tab's own address: that site answers a headless browser with an "are you a bot" page, which is a
+        # true thing about the real web but a poor thing to look at.)
+        RESULT["clicked_address_on_third"] = bool(ui.simulate_wonder_web_window_click("browser-3", "address"))
+        yield 1.5
+        ui.simulate_wonder_web_window_type("en.wikipedia.org/w/index.php?search=design+tokens")
+        yield 2.0
+        ui.simulate_wonder_web_window_key("Enter")
         yield 12.0
         shot("03_three_windows_three_sites", "live=%s" % live.describe_live())
         RESULT["three_pages"] = str(live.describe_live())
@@ -85,6 +91,7 @@ def job():
         if RESULT["clicked_address"]:
             yield 1.5
             ui.simulate_wonder_web_window_type("example.com")
+            yield 0.5
             yield 2.0
             shot("05_typed_an_address", "typed into the second window's address bar")
             ui.simulate_wonder_web_window_key("Enter")

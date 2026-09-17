@@ -204,7 +204,6 @@ void UWonderlandWonderWebLiveSubsystem::SetViewport(const FString& TabId, FIntPo
 	FWonderWebLivePage& Page = PageFor(TabId);
 	// DRAWN MEANS WANTED. A window that stopped being drawn stops asking for frames a second or two later.
 	Page.WantedAt = FPlatformTime::Seconds();
-	Front = TabId;
 	Size.X = FMath::Clamp(Size.X, 480, 2400);
 	Size.Y = FMath::Clamp(Size.Y, 320, 1800);
 	// A few pixels of drift is a window being dragged, not a new layout: only a real change is worth re-rendering for.
@@ -218,6 +217,11 @@ void UWonderlandWonderWebLiveSubsystem::SetViewport(const FString& TabId, FIntPo
 		Page.AskedViewport = Page.Viewport;
 		SendIntent(TabId, FString::Printf(TEXT("{\"op\":\"viewport\",\"tab\":\"%s\",\"width\":%d,\"height\":%d}"), *TabId, Page.Viewport.X, Page.Viewport.Y), TEXT("viewport"));
 	}
+}
+
+void UWonderlandWonderWebLiveSubsystem::SetFront(const FString& TabId)
+{
+	Front = TabId;
 }
 
 void UWonderlandWonderWebLiveSubsystem::CloseTab(const FString& TabId)
