@@ -66,6 +66,14 @@ namespace WonderWebConsole
 			ForEachLive<UWonderlandWonderWebSubsystem>([Index](UWonderlandWonderWebSubsystem& Web) { Web.SelectTab(Index); });
 		}));
 
+	FAutoConsoleCommand CmdMove(TEXT("wl.WonderWeb.Move"),
+		TEXT("Glide the Wonder Web screen to a place in the view: center, left, right, top, bottom, top-left, top-right, bottom-left, bottom-right."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			const FName Place(Args.Num() > 0 ? *Args[0] : TEXT("center"));
+			ForEachLive<UWonderlandUiSubsystem>([Place](UWonderlandUiSubsystem& Ui) { Ui.MoveWonderWeb(Place); });
+		}));
+
 	FAutoConsoleCommand CmdType(TEXT("wl.WonderWeb.Type"),
 		TEXT("Enter a line at the Wonder Web terminal, e.g. `wl.WonderWeb.Type help`. Refused on a peer's tab. Never a shell."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)

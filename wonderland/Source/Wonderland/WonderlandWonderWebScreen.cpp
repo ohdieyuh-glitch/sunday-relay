@@ -29,6 +29,8 @@ namespace WonderWebScreenTuning
 	// every yellow line and word. The Dog's glowing props carry the same kind of multiplier (DogGlowExposure). 20000 reads
 	// the yellow and keeps a disabled control visibly faint; 40000 starts to bloom the active tab into a bar.
 	TAutoConsoleVariable<float> CVarBrightness(TEXT("wl.WonderWeb.ScreenBrightness"), 20000.0f, TEXT("Wonder Web screen: how bright the window is drawn in the lit world (a multiplier on its colours)."));
+	TAutoConsoleVariable<float> CVarGlideSeconds(TEXT("wl.WonderWeb.GlideSeconds"), 0.24f, TEXT("Wonder Web screen: the timescale of its glide to a new place, seconds (critically damped: swift, no overshoot)."));
+	TAutoConsoleVariable<float> CVarEdgeMargin(TEXT("wl.WonderWeb.EdgeMargin"), 12.0f, TEXT("Wonder Web screen: how far inside the view's edge a corner or side place keeps the glass, uu."));
 	TAutoConsoleVariable<float> CVarGrowSeconds(TEXT("wl.WonderWeb.GrowSeconds"), 0.35f, TEXT("Wonder Web screen: seconds to open out or fold away."));
 }
 
@@ -106,6 +108,23 @@ void AWonderlandWonderWebScreen::Tick(float DeltaSeconds)
 	const float Open = FMath::SmoothStep(0.0f, 1.0f, Grow);
 	const float Scale = CVarScale.GetValueOnGameThread();
 	Screen->SetRelativeScale3D(FVector(Scale, Scale, Scale * FMath::Max(Open, 0.02f)));
+
+	// THE GLIDE. Critically damped toward the target, in short sub-steps so a slow frame is still a smooth curve.
+	const FVector2D Limit = Reach();
+	if (!bDragging)
+	{
+		TargetOffset = FVector2D(FMath::Clamp(TargetOffset.X, -Limit.X, Limit.X), FMath::Clamp(TargetOffset.Y, -Limit.Y, Limit.Y));
+	}
+	const float Glide = FMath::Max(CVarGlideSeconds.GetValueOnGameThread(), 0.02f);
+	float Remaining = FMath::Min(DeltaSeconds, 0.25f);
+	while (Remaining > 0.0f)
+	{
+		const float Slice = FMath::Min(Remaining, Glide * 0.4f);
+		FMath::CriticallyDampedSmoothing(Offset, OffsetRate, TargetOffset, FVector2D::ZeroVector, Slice, Glide);
+		Remaining -= Slice;
+	}
+	// Across the view is the root's -Y (the camera looks back along -X), up is +Z.
+	Screen->SetRelativeLocation(FVector(0.0, -Offset.X, Offset.Y));
 	const float Brightness = FMath::Max(CVarBrightness.GetValueOnGameThread(), 1.0f);
 	if (!FMath::IsNearlyEqual(AppliedBrightness, Brightness))
 	{
@@ -116,6 +135,120 @@ void AWonderlandWonderWebScreen::Tick(float DeltaSeconds)
 	{
 		SetActorHiddenInGame(true);
 	}
+}
+
+FVector2D AWonderlandWonderWebScreen::Reach() const
+{
+	using namespace WonderWebScreenTuning;
+	// Half the view at the glass's distance, less half the glass and a margin: the glass stays whole in every place.
+	const double Distance = FMath::Max(CVarViewDistance.GetValueOnGameThread(), 1.0f);
+	const double HalfWide = Distance * FMath::Tan(FMath::DegreesToRadians(CVarViewFov.GetValueOnGameThread() * 0.5));
+	double Aspect = 16.0 / 9.0;
+	if (const UWorld* World = GetWorld())
+	{
+		if (const UGameViewportClient* ViewportClient = World->GetGameViewport())
+		{
+			FVector2D Size;
+			ViewportClient->GetViewportSize(Size);
+			if (Size.Y > 0.0)
+			{
+				Aspect = Size.X / Size.Y;
+			}
+		}
+	}
+	const double HalfHigh = HalfWide / Aspect;
+	const FVector2D Glass = SWonderlandWonderWebPanel::DesignSize() * CVarScale.GetValueOnGameThread() * 0.5;
+	const double Margin = CVarEdgeMargin.GetValueOnGameThread();
+	return FVector2D(FMath::Max(HalfWide - Glass.X - Margin, 0.0), FMath::Max(HalfHigh - Glass.Y - Margin, 0.0));
+}
+
+bool AWonderlandWonderWebScreen::MoveTo(FName InPlace)
+{
+	const FString Name = InPlace.ToString().ToLower();
+	FIntPoint To;
+	if (Name == TEXT("center") || Name == TEXT("centre") || Name == TEXT("middle")) { To = FIntPoint(0, 0); }
+	else if (Name == TEXT("left"))         { To = FIntPoint(-1, 0); }
+	else if (Name == TEXT("right"))        { To = FIntPoint(1, 0); }
+	else if (Name == TEXT("top"))          { To = FIntPoint(0, 1); }
+	else if (Name == TEXT("bottom"))       { To = FIntPoint(0, -1); }
+	else if (Name == TEXT("top-left"))     { To = FIntPoint(-1, 1); }
+	else if (Name == TEXT("top-right"))    { To = FIntPoint(1, 1); }
+	else if (Name == TEXT("bottom-left"))  { To = FIntPoint(-1, -1); }
+	else if (Name == TEXT("bottom-right")) { To = FIntPoint(1, -1); }
+	else { return false; }
+	Cell = To;
+	Place = FName(*Name);
+	bDragging = false;
+	const FVector2D Limit = Reach();
+	TargetOffset = FVector2D(To.X * Limit.X, To.Y * Limit.Y);
+	return true;
+}
+
+void AWonderlandWonderWebScreen::Step(int32 Across, int32 Up)
+{
+	static const TCHAR* Names[3][3] = {
+		{ TEXT("bottom-left"), TEXT("left"), TEXT("top-left") },
+		{ TEXT("bottom"), TEXT("center"), TEXT("top") },
+		{ TEXT("bottom-right"), TEXT("right"), TEXT("top-right") } };
+	const int32 X = FMath::Clamp(Cell.X + FMath::Sign(Across), -1, 1);
+	const int32 Y = FMath::Clamp(Cell.Y + FMath::Sign(Up), -1, 1);
+	MoveTo(Names[X + 1][Y + 1]);
+}
+
+bool AWonderlandWonderWebScreen::RayOnPlane(APlayerController* Controller, const FVector2D& ViewportPixel, FVector2D& OutAcrossUp) const
+{
+	FVector Origin;
+	FVector Direction;
+	if (Controller == nullptr || !Controller->DeprojectScreenPositionToWorld(ViewportPixel.X, ViewportPixel.Y, Origin, Direction))
+	{
+		return false;
+	}
+	const FTransform& RootXf = Root->GetComponentTransform();
+	const FPlane Glass(Screen->GetComponentLocation(), RootXf.GetUnitAxis(EAxis::X));
+	if (FMath::IsNearlyZero(FVector::DotProduct(Direction, Glass.GetNormal())))
+	{
+		return false;
+	}
+	const FVector Local = RootXf.InverseTransformPositionNoScale(FMath::RayPlaneIntersection(Origin, Direction, Glass));
+	OutAcrossUp = FVector2D(-Local.Y, Local.Z);
+	return true;
+}
+
+bool AWonderlandWonderWebScreen::BeginDrag(APlayerController* Controller, const FVector2D& ViewportPixel)
+{
+	FVector2D Held;
+	if (!bPresented || !RayOnPlane(Controller, ViewportPixel, Held))
+	{
+		return false;
+	}
+	bDragging = true;
+	// Where on the glass it was taken hold of, so it moves with the pointer rather than jumping its centre to it.
+	DragGrip = Held - Offset;
+	Place = TEXT("free");
+	return true;
+}
+
+void AWonderlandWonderWebScreen::DragTo(APlayerController* Controller, const FVector2D& ViewportPixel)
+{
+	FVector2D Held;
+	if (bDragging && RayOnPlane(Controller, ViewportPixel, Held))
+	{
+		const FVector2D Limit = Reach();
+		const FVector2D Want = Held - DragGrip;
+		TargetOffset = FVector2D(FMath::Clamp(Want.X, -Limit.X, Limit.X), FMath::Clamp(Want.Y, -Limit.Y, Limit.Y));
+	}
+}
+
+void AWonderlandWonderWebScreen::EndDrag()
+{
+	if (!bDragging)
+	{
+		return;
+	}
+	bDragging = false;
+	// The nearest place on the grid is remembered for the next keyboard step; the glass stays exactly where it was left.
+	const FVector2D Limit = Reach();
+	Cell = FIntPoint(Limit.X > 1.0 ? FMath::RoundToInt(TargetOffset.X / Limit.X) : 0, Limit.Y > 1.0 ? FMath::RoundToInt(TargetOffset.Y / Limit.Y) : 0);
 }
 
 FVector AWonderlandWonderWebScreen::WindowPixelToWorld(const FVector2D& WindowPixel) const
@@ -180,11 +313,10 @@ void SWonderlandWonderWebInputLayer::Construct(const FArguments& InArgs)
 	SetVisibility(EVisibility::Visible);
 }
 
-bool SWonderlandWonderWebInputLayer::Aim(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
+bool SWonderlandWonderWebInputLayer::ToViewportPixel(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent, FVector2D& OutPixel) const
 {
-	AWonderlandWonderWebScreen* Target = Screen.Get();
 	APlayerController* Player = Controller.Get();
-	if (Target == nullptr || Player == nullptr)
+	if (Player == nullptr)
 	{
 		return false;
 	}
@@ -203,13 +335,32 @@ bool SWonderlandWonderWebInputLayer::Aim(const FGeometry& MyGeometry, const FPoi
 	{
 		return false;
 	}
-	return Target->AimAtViewportPixel(Player, Local / LocalSize * ViewportSize);
+	OutPixel = Local / LocalSize * ViewportSize;
+	return true;
+}
+
+bool SWonderlandWonderWebInputLayer::Aim(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
+{
+	AWonderlandWonderWebScreen* Target = Screen.Get();
+	FVector2D Pixel;
+	return Target != nullptr && ToViewportPixel(MyGeometry, MouseEvent, Pixel) && Target->AimAtViewportPixel(Controller.Get(), Pixel);
 }
 
 FReply SWonderlandWonderWebInputLayer::OnMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
 	FSlateApplication::Get().SetKeyboardFocus(SharedThis(this), EFocusCause::Mouse);
 	const bool bOnGlass = Aim(MyGeometry, MouseEvent);
+	// TAKEN BY THE TITLE BAR: a left press on the bar's empty space -- not on a tab, not on a window button -- picks the
+	// screen up. It moves with the pointer until release.
+	AWonderlandWonderWebScreen* Target = Screen.Get();
+	FVector2D PressPixel;
+	if (bOnGlass && Target != nullptr && MouseEvent.GetEffectingButton() == EKeys::LeftMouseButton
+		&& Target->GetLastAimPixel().Y < 96.0 && !Target->GetInteraction()->IsOverInteractableWidget()
+		&& ToViewportPixel(MyGeometry, MouseEvent, PressPixel) && Target->BeginDrag(Controller.Get(), PressPixel))
+	{
+		UE_LOG(LogTemp, Log, TEXT("WLWEB title bar taken at window pixel (%.0f, %.0f)"), Target->GetLastAimPixel().X, Target->GetLastAimPixel().Y);
+		return FReply::Handled().CaptureMouse(SharedThis(this));
+	}
 	if (bOnGlass)
 	{
 		if (UWidgetInteractionComponent* Pointer = Screen.IsValid() ? Screen->GetInteraction() : nullptr)
@@ -226,6 +377,14 @@ FReply SWonderlandWonderWebInputLayer::OnMouseButtonDown(const FGeometry& MyGeom
 
 FReply SWonderlandWonderWebInputLayer::OnMouseButtonUp(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
+	if (AWonderlandWonderWebScreen* Target = Screen.Get())
+	{
+		if (Target->IsDragging())
+		{
+			Target->EndDrag();
+			return FReply::Handled().ReleaseMouseCapture();
+		}
+	}
 	Aim(MyGeometry, MouseEvent);
 	if (UWidgetInteractionComponent* Pointer = Screen.IsValid() ? Screen->GetInteraction() : nullptr)
 	{
@@ -236,6 +395,13 @@ FReply SWonderlandWonderWebInputLayer::OnMouseButtonUp(const FGeometry& MyGeomet
 
 FReply SWonderlandWonderWebInputLayer::OnMouseMove(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
+	AWonderlandWonderWebScreen* Target = Screen.Get();
+	FVector2D Pixel;
+	if (Target != nullptr && Target->IsDragging() && ToViewportPixel(MyGeometry, MouseEvent, Pixel))
+	{
+		Target->DragTo(Controller.Get(), Pixel);
+		return FReply::Handled();
+	}
 	Aim(MyGeometry, MouseEvent);
 	return FReply::Handled();
 }
@@ -280,6 +446,22 @@ FReply SWonderlandWonderWebInputLayer::OnKeyDown(const FGeometry& MyGeometry, co
 	{
 		OnRequestClose.ExecuteIfBound();
 		return FReply::Handled();
+	}
+	// CTRL + ARROWS: one step across the view's grid of places; CTRL + HOME back to the middle.
+	if (InKeyEvent.IsControlDown() && Screen.IsValid())
+	{
+		const int32 Across = Key == EKeys::Left ? -1 : (Key == EKeys::Right ? 1 : 0);
+		const int32 Up = Key == EKeys::Up ? 1 : (Key == EKeys::Down ? -1 : 0);
+		if (Across != 0 || Up != 0)
+		{
+			Screen->Step(Across, Up);
+			return FReply::Handled();
+		}
+		if (Key == EKeys::Home)
+		{
+			Screen->MoveTo(TEXT("center"));
+			return FReply::Handled();
+		}
 	}
 	if (IsEditingKey(Key))
 	{

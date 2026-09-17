@@ -332,6 +332,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
 	bool SimulateWonderWebTyping(const FString& Text, bool bPressEnter);
 
+	/**
+	 * Send the Wonder Web screen gliding to a place in the view: center, left, right, top, bottom, top-left, top-right,
+	 * bottom-left, bottom-right. The way Julius will arrange the Wonder Webs it opens. False for an unknown place.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	bool MoveWonderWeb(FName Place);
+
+	/** The screen's place, offset (across, up, uu), target and whether it is still gliding, as "place=left offset=... target=... gliding=1". */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Wonder Web")
+	FString DescribeWonderWebPlacement() const;
+
+	/** Press and release a key as the keyboard does (e.g. "Right" with Control held), to whatever Wonder Web has focused. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	bool SimulateWonderWebKey(FName KeyName, bool bControl);
+
+	/** Drag the screen by its title bar with real routed pointer events, from its current place by this many screen units. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	bool SimulateWonderWebTitleDrag(float DeltaX, float DeltaY, int32 Steps);
+
 	/** Where a named control of the window stands on screen, in Slate screen space; (-1, -1) when it is not drawn. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Wonder Web")
 	FVector2D GetWonderWebControlOnScreen(FName Control) const;

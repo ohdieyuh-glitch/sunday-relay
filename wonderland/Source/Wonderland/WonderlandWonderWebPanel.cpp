@@ -230,7 +230,9 @@ void SWonderlandWonderWebPanel::Construct(const FArguments& InArgs)
 	PreviewBrush = FSlateRoundedBoxBrush(Line(0.08f), 6.0f, Line(0.30f), 1.0f);
 	ActionBrush = FSlateRoundedBoxBrush(Ink(), 10.0f, Line(0.9f), 2.0f);
 	ActionHoverBrush = FSlateRoundedBoxBrush(Line(0.18f), 10.0f, Line(), 2.0f);
-	PageBrush = FSlateRoundedBoxBrush(WonderlandUi::Srgb(0xFA, 0xF8, 0xF2), 12.0f, Line(0.0f), 0.0f);
+	// A PAGE A SHADE DOWN FROM WHITE, AND CELLS WITH A REAL EDGE: at the screen's daylight brightness every near-white
+	// value lands on the same white, and editor 77 showed the unpainted grid gone into the page.
+	PageBrush = FSlateRoundedBoxBrush(WonderlandUi::Srgb(0xB9, 0xB5, 0xAB), 12.0f, Line(0.0f), 0.0f);
 	CellBrush = FSlateRoundedBoxBrush(WonderWebLook::PaintColour(0), 3.0f, WonderlandUi::Srgb(0xD8, 0xD3, 0xC4), 1.0f);
 	ClearBrush.DrawAs = ESlateBrushDrawType::NoDrawType;
 	DotBrush = FSlateRoundedBoxBrush(FLinearColor::White, 7.0f, FLinearColor::White, 0.0f);
@@ -248,7 +250,8 @@ void SWonderlandWonderWebPanel::Construct(const FArguments& InArgs)
 		.SetNormalPadding(FMargin(0.0f)).SetPressedPadding(FMargin(0.0f));
 	for (int32 i = 0; i <= UWonderlandWonderWebSubsystem::PaletteSize; ++i)
 	{
-		PaintBrushes.Add(FSlateRoundedBoxBrush(WonderWebLook::PaintColour(i), 3.0f, i == 0 ? WonderlandUi::Srgb(0xD8, 0xD3, 0xC4) : WonderWebLook::PaintColour(i) * 0.8f, 1.0f));
+		PaintBrushes.Add(FSlateRoundedBoxBrush(i == 0 ? WonderlandUi::Srgb(0xE4, 0xE0, 0xD6) : WonderWebLook::PaintColour(i), 3.0f,
+			i == 0 ? WonderlandUi::Srgb(0x6E, 0x6A, 0x60) : WonderWebLook::PaintColour(i) * 0.6f, 1.5f));
 	}
 	for (int32 i = 0; i <= UWonderlandWonderWebSubsystem::PaletteSize; ++i)
 	{
