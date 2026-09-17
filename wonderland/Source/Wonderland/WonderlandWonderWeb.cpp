@@ -6,6 +6,7 @@
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "CoreGlobals.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "UObject/UObjectIterator.h"
@@ -26,8 +27,11 @@ namespace WonderWebConsole
 	void Say(const FString& Text, bool bProblem = false)
 	{
 		UE_LOG(LogWonderWeb, Display, TEXT("%s"), *Text);
+		// The editor can have screen messages switched off globally; a command's answer must not vanish with them.
+		GAreScreenMessagesEnabled = true;
 		if (GEngine != nullptr)
 		{
+			GEngine->bEnableOnScreenDebugMessages = true;
 			GEngine->AddOnScreenDebugMessage(INDEX_NONE, 7.0f, bProblem ? FColor(255, 107, 74) : FColor(255, 212, 0), Text);
 		}
 	}
