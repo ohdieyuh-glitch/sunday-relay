@@ -1,6 +1,7 @@
 #include "WonderlandJuliusConnect.h"
 
 #include "Dom/JsonObject.h"
+#include "CoreGlobals.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
@@ -38,8 +39,11 @@ namespace JuliusConnectConsole
 	void Say(const FString& Text, bool bProblem = false)
 	{
 		UE_LOG(LogJuliusConnect, Display, TEXT("%s"), *Text);
+		// The editor can have screen messages switched off globally; a command's answer must not vanish with them.
+		GAreScreenMessagesEnabled = true;
 		if (GEngine != nullptr)
 		{
+			GEngine->bEnableOnScreenDebugMessages = true;
 			GEngine->AddOnScreenDebugMessage(INDEX_NONE, 8.0f, bProblem ? FColor(255, 107, 74) : FColor(255, 212, 0), Text);
 		}
 	}
@@ -700,8 +704,10 @@ void UWonderlandJuliusConnectSubsystem::Announce(const FString& Text, bool bProb
 {
 	// SEEN EVEN WITH NO WINDOW OPEN: a refusal, or an offline service, must not be a line in a panel nobody has open.
 	UE_LOG(LogJuliusConnect, Display, TEXT("%s"), *Text);
+	GAreScreenMessagesEnabled = true;
 	if (GEngine != nullptr)
 	{
+		GEngine->bEnableOnScreenDebugMessages = true;
 		GEngine->AddOnScreenDebugMessage(INDEX_NONE, 8.0f, bProblem ? FColor(255, 107, 74) : FColor(255, 212, 0), Text);
 	}
 }
