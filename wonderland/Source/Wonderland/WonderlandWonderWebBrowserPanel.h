@@ -20,9 +20,10 @@
 
 class SBox;
 class SScrollBox;
-class SWebBrowser;
+class SWonderlandWonderWebLivePage;
 class SVerticalBox;
 class UWonderlandWonderWebBrowseSubsystem;
+class UWonderlandWonderWebLiveSubsystem;
 class UWonderlandWonderWebSubsystem;
 class UWonderlandJuliusConnectSubsystem;
 struct FWonderWebBrowseTab;
@@ -49,6 +50,12 @@ public:
 	/** Where a named control sits, in window pixels, from the last frame it was drawn ("tab:social", "post", "close"). */
 	bool GetControlCentre(FName Control, FVector2D& OutCentre) const;
 
+	/**
+	 * Where a point of the live page is drawn, in window pixels. The page belongs to somebody else's website and has no
+	 * controls this build can name, so this is how a proof reaches a search box or a link on it.
+	 */
+	bool GetLivePagePoint(const FVector2D& PagePixel, FVector2D& OutWindowPixel) const;
+
 private:
 	void Rebuild();
 	TSharedRef<SWidget> MakeTabs();
@@ -73,6 +80,8 @@ private:
 	const FSlateBrush* PageTint(const FString& Hex, float Corner = 0.0f);
 
 	TWeakObjectPtr<UWonderlandWonderWebBrowseSubsystem> Browse;
+	/** The live browser, for real mode: it holds the frames and takes the input back. */
+	TWeakObjectPtr<UWonderlandWonderWebLiveSubsystem> Live;
 	TWeakObjectPtr<UWonderlandJuliusConnectSubsystem> Connect;
 	TWeakObjectPtr<UWonderlandWonderWebSubsystem> Creation;
 	FSimpleDelegate OnRequestClose;
@@ -89,8 +98,12 @@ private:
 	TMap<FName, double> ControlSeenAt;
 	double Now = 0.0;
 
-	/** The engine's real browser, made only while real mode is on and dropped when it goes off. */
-	TSharedPtr<SWebBrowser> WebView;
+	/**
+	 * THE REAL PAGE. Real mode hands the page area to the live page, which draws the frames a real browser renders on this
+	 * machine (WonderlandWonderWebLive.h) and sends back clicks, scrolling and typing. Made when real mode goes on, dropped
+	 * when it goes off, so nothing keeps loading behind the sample pages.
+	 */
+	TSharedPtr<SWonderlandWonderWebLivePage> LivePage;
 	FString ShownRealUrl;
 
 	/** Brushes for the page being drawn; replaced with it. */

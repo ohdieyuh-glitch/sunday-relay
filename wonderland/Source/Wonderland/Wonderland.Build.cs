@@ -35,9 +35,11 @@ public class Wonderland : ModuleRules
 		});
 
 		// THE REAL WEB, when Wonder Web is asked for it (founder, 2026-09-17: "soon it should not be a simulation should be
-		// real"). The engine's own Chromium-backed browser, used inside the Wonderland shell; it loads nothing until real
-		// mode is switched on, and only hosts on the allowlist (WonderlandWonderWebBrowse.h).
-		PrivateDependencyModuleNames.Add("WebBrowser");
+		// real"). NOT the engine's own browser: this install ships CEF's libraries but not UnrealCEFSubProcess.exe, so
+		// SWebBrowser renders an empty page and logs nothing. Instead a real browser renders the page in the Julius Connect
+		// runtime and Wonderland draws its frames -- which is what ImageWrapper is for: decoding them
+		// (WonderlandWonderWebLive.h). It loads nothing until real mode is switched on, and only hosts on the allowlist.
+		PrivateDependencyModuleNames.Add("ImageWrapper");
 
 		// FImageCore::ResizeTo, for the HUD test library's scaled film frames (UWonderlandHudTestLibrary::CaptureViewportJpeg).
 		// FImageView and FImageUtils come through Engine; the resize itself lives in ImageCore and does not.
