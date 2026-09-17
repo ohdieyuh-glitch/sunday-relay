@@ -9,13 +9,15 @@
 // whether the terminal takes a keystroke are fields of the `FWonderWebSurface` the Wonder Web subsystem hands it; the
 // widget draws them and forwards clicks to the subsystem, which refuses anything that surface does not allow.
 //
-// It is designed at a fixed 1536 x 1024, the size the in-world screen renders it at (WonderlandWonderWebScreen.h).
+// It is designed at a fixed 1536 x 1024 and rendered at that resolution onto a window of the workspace's multitasking
+// size (WonderlandWonderWebScreen.h).
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Styling/SlateTypes.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/SLeafWidget.h"
+#include "WonderlandUiStyle.h"
 
 class SBox;
 class SEditableText;
@@ -24,6 +26,44 @@ class SScrollBox;
 class SVerticalBox;
 class UWonderlandWonderWebSubsystem;
 struct FWonderWebSurface;
+
+/** THE WONDER WEB LOOK, shared by every Wonder Web window (the creation view, Julius Connect ...). */
+namespace WonderWebLook
+{
+	/** --rww-line and --rww-ink: one saturated yellow on an unlit black. */
+	inline FLinearColor Line(float A = 1.0f) { return WonderlandUi::Srgb(0xFF, 0xD4, 0x00, A); }
+	inline FLinearColor Ink(float A = 1.0f)  { return WonderlandUi::Srgb(0x05, 0x05, 0x0A, A); }
+	inline FLinearColor Fail(float A = 1.0f) { return WonderlandUi::Srgb(0xFF, 0x6B, 0x4A, A); }
+	inline FLinearColor Good(float A = 1.0f) { return WonderlandUi::Srgb(0x3D, 0xDC, 0x97, A); }
+	inline FSlateFontInfo Sans(int32 Size, bool bBold = false, int32 Spacing = 0) { return WonderlandUi::Sans(Size, bBold, Spacing); }
+	inline FSlateFontInfo Mono(int32 Size) { return WonderlandUi::Mono(Size); }
+}
+
+/** A control whose drawn centre is reported every frame, so the proof job can click it through the real input path. */
+class WONDERLAND_API SWonderWebProbe : public SCompoundWidget
+{
+public:
+	SLATE_BEGIN_ARGS(SWonderWebProbe) {}
+		SLATE_DEFAULT_SLOT(FArguments, Content)
+	SLATE_END_ARGS()
+
+	void Construct(const FArguments& InArgs, TFunction<void(const FVector2D&)> InReport)
+	{
+		Report = MoveTemp(InReport);
+		ChildSlot[InArgs._Content.Widget];
+	}
+
+	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override
+	{
+		if (Report)
+		{
+			Report(AllottedGeometry.GetAbsolutePositionAtCoordinates(FVector2D(0.5, 0.5)));
+		}
+	}
+
+private:
+	TFunction<void(const FVector2D&)> Report;
+};
 
 /** The line icons the window's chrome uses, drawn as strokes in a unit box so they stay crisp at any size. */
 enum class EWonderWebGlyph : uint8
@@ -79,6 +119,11 @@ public:
 		SLATE_ARGUMENT(TWeakObjectPtr<UWonderlandWonderWebSubsystem>, WonderWeb)
 		SLATE_EVENT(FSimpleDelegate, OnRequestClose)
 		SLATE_EVENT(FSimpleDelegate, OnRequestProject)
+		/** The window buttons: fold to a chip, and grow the focused window larger (and back). */
+		SLATE_EVENT(FSimpleDelegate, OnRequestMinimize)
+		SLATE_EVENT(FSimpleDelegate, OnRequestExpand)
+		/** The window's menu: open Julius Connect beside this window. */
+		SLATE_EVENT(FSimpleDelegate, OnRequestConnections)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
@@ -86,6 +131,8 @@ public:
 
 	/** The window's design size; the in-world screen renders it at exactly this. */
 	static FVector2D DesignSize() { return FVector2D(1536.0, 1024.0); }
+	/** The title bar's height from the window's top, in window pixels: a press on its bare space picks the window up. */
+	static float TitleBarHeight() { return 99.0f; }
 
 	/**
 	 * Where a named control sits in the window, in window pixels, from the last frame it was drawn ("tab:0", "close",
@@ -111,6 +158,9 @@ private:
 	TWeakObjectPtr<UWonderlandWonderWebSubsystem> WonderWeb;
 	FSimpleDelegate OnRequestClose;
 	FSimpleDelegate OnRequestProject;
+	FSimpleDelegate OnRequestMinimize;
+	FSimpleDelegate OnRequestExpand;
+	FSimpleDelegate OnRequestConnections;
 
 	int32 ShownRevision = -1;
 	FString ShownSurfaceKey;

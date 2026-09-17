@@ -17,13 +17,8 @@
 #include "WonderlandUiStyle.h"
 #include "WonderlandWonderWeb.h"
 
-namespace WonderWebLook
+namespace WonderWebCanvasLook
 {
-	/** --rww-line and --rww-ink: one saturated yellow on an unlit black. */
-	inline FLinearColor Line(float A = 1.0f) { return WonderlandUi::Srgb(0xFF, 0xD4, 0x00, A); }
-	inline FLinearColor Ink(float A = 1.0f)  { return WonderlandUi::Srgb(0x05, 0x05, 0x0A, A); }
-	inline FLinearColor Fail(float A = 1.0f) { return WonderlandUi::Srgb(0xFF, 0x6B, 0x4A, A); }
-
 	/** The peer dot palette, by the TOKEN the domain assigns (relay-wonder-web.css). */
 	inline FLinearColor Dot(const FString& Token)
 	{
@@ -33,7 +28,7 @@ namespace WonderWebLook
 		if (Token == TEXT("wonder-dot-rose"))   { return WonderlandUi::Srgb(0xFF, 0x4D, 0x8D); }
 		if (Token == TEXT("wonder-dot-jade"))   { return WonderlandUi::Srgb(0x3D, 0xDC, 0x97); }
 		if (Token == TEXT("wonder-dot-coral"))  { return WonderlandUi::Srgb(0xFF, 0x7A, 0x45); }
-		return Line(0.6f);
+		return WonderWebLook::Line(0.6f);
 	}
 
 	/** Pixel Canvas's palette: the sample creation's own colours, not Wonder Web's. */
@@ -50,8 +45,6 @@ namespace WonderWebLook
 		}
 	}
 
-	inline FSlateFontInfo Sans(int32 Size, bool bBold = false, int32 Spacing = 0) { return WonderlandUi::Sans(Size, bBold, Spacing); }
-	inline FSlateFontInfo Mono(int32 Size) { return WonderlandUi::Mono(Size); }
 }
 
 /* ==================================================================== glyphs */
@@ -184,33 +177,6 @@ int32 SWonderWebGlyph::OnPaint(const FPaintArgs& Args, const FGeometry& Allotted
 	return LayerId + 1;
 }
 
-/* ==================================================================== a control whose position is recorded */
-
-class SWonderWebProbe : public SCompoundWidget
-{
-public:
-	SLATE_BEGIN_ARGS(SWonderWebProbe) {}
-		SLATE_DEFAULT_SLOT(FArguments, Content)
-	SLATE_END_ARGS()
-
-	void Construct(const FArguments& InArgs, TFunction<void(const FVector2D&)> InReport)
-	{
-		Report = MoveTemp(InReport);
-		ChildSlot[InArgs._Content.Widget];
-	}
-
-	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override
-	{
-		if (Report)
-		{
-			Report(AllottedGeometry.GetAbsolutePositionAtCoordinates(FVector2D(0.5, 0.5)));
-		}
-	}
-
-private:
-	TFunction<void(const FVector2D&)> Report;
-};
-
 /* ==================================================================== the window */
 
 void SWonderlandWonderWebPanel::Construct(const FArguments& InArgs)
@@ -219,6 +185,9 @@ void SWonderlandWonderWebPanel::Construct(const FArguments& InArgs)
 	WonderWeb = InArgs._WonderWeb;
 	OnRequestClose = InArgs._OnRequestClose;
 	OnRequestProject = InArgs._OnRequestProject;
+	OnRequestMinimize = InArgs._OnRequestMinimize;
+	OnRequestExpand = InArgs._OnRequestExpand;
+	OnRequestConnections = InArgs._OnRequestConnections;
 
 	WindowBrush = FSlateRoundedBoxBrush(Ink(), 22.0f, Line(), 3.0f);
 	LineBrush.DrawAs = ESlateBrushDrawType::Image;
@@ -233,7 +202,7 @@ void SWonderlandWonderWebPanel::Construct(const FArguments& InArgs)
 	// A PAGE A SHADE DOWN FROM WHITE, AND CELLS WITH A REAL EDGE: at the screen's daylight brightness every near-white
 	// value lands on the same white, and editor 77 showed the unpainted grid gone into the page.
 	PageBrush = FSlateRoundedBoxBrush(WonderlandUi::Srgb(0xB9, 0xB5, 0xAB), 12.0f, Line(0.0f), 0.0f);
-	CellBrush = FSlateRoundedBoxBrush(WonderWebLook::PaintColour(0), 3.0f, WonderlandUi::Srgb(0xD8, 0xD3, 0xC4), 1.0f);
+	CellBrush = FSlateRoundedBoxBrush(WonderWebCanvasLook::PaintColour(0), 3.0f, WonderlandUi::Srgb(0xD8, 0xD3, 0xC4), 1.0f);
 	ClearBrush.DrawAs = ESlateBrushDrawType::NoDrawType;
 	DotBrush = FSlateRoundedBoxBrush(FLinearColor::White, 7.0f, FLinearColor::White, 0.0f);
 
@@ -250,8 +219,8 @@ void SWonderlandWonderWebPanel::Construct(const FArguments& InArgs)
 		.SetNormalPadding(FMargin(0.0f)).SetPressedPadding(FMargin(0.0f));
 	for (int32 i = 0; i <= UWonderlandWonderWebSubsystem::PaletteSize; ++i)
 	{
-		PaintBrushes.Add(FSlateRoundedBoxBrush(i == 0 ? WonderlandUi::Srgb(0xE4, 0xE0, 0xD6) : WonderWebLook::PaintColour(i), 3.0f,
-			i == 0 ? WonderlandUi::Srgb(0x6E, 0x6A, 0x60) : WonderWebLook::PaintColour(i) * 0.6f, 1.5f));
+		PaintBrushes.Add(FSlateRoundedBoxBrush(i == 0 ? WonderlandUi::Srgb(0xE4, 0xE0, 0xD6) : WonderWebCanvasLook::PaintColour(i), 3.0f,
+			i == 0 ? WonderlandUi::Srgb(0x6E, 0x6A, 0x60) : WonderWebCanvasLook::PaintColour(i) * 0.6f, 1.5f));
 	}
 	for (int32 i = 0; i <= UWonderlandWonderWebSubsystem::PaletteSize; ++i)
 	{
@@ -300,12 +269,13 @@ void SWonderlandWonderWebPanel::Construct(const FArguments& InArgs)
 							SNew(SHorizontalBox)
 							+ SHorizontalBox::Slot().AutoWidth()
 							[
-								// Minimize and maximize are the reference's, and they do nothing in the world: disabled, not faked.
-								ChromeButton(TEXT("minimize"), EWonderWebGlyph::Minimize, 30.0f, []() { return false; }, []() {})
+								// Minimize folds the window to a chip along the bottom of the workspace; its work goes on.
+								ChromeButton(TEXT("minimize"), EWonderWebGlyph::Minimize, 30.0f, [this]() { return OnRequestMinimize.IsBound(); }, [this]() { OnRequestMinimize.ExecuteIfBound(); })
 							]
 							+ SHorizontalBox::Slot().AutoWidth().Padding(10.0f, 0.0f)
 							[
-								ChromeButton(TEXT("maximize"), EWonderWebGlyph::Maximize, 30.0f, []() { return false; }, []() {})
+								// Maximize grows the window larger in the middle of the workspace, and back again.
+								ChromeButton(TEXT("maximize"), EWonderWebGlyph::Maximize, 30.0f, [this]() { return OnRequestExpand.IsBound(); }, [this]() { OnRequestExpand.ExecuteIfBound(); })
 							]
 							+ SHorizontalBox::Slot().AutoWidth()
 							[
@@ -369,7 +339,8 @@ void SWonderlandWonderWebPanel::Construct(const FArguments& InArgs)
 						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(6.0f, 0.0f, 22.0f, 0.0f)
 						[
-							ChromeButton(TEXT("menu"), EWonderWebGlyph::Dots, 32.0f, []() { return false; }, []() {})
+							// THE MENU OPENS JULIUS CONNECT beside this window: a second window, opened in context.
+							ChromeButton(TEXT("menu"), EWonderWebGlyph::Dots, 32.0f, [this]() { return OnRequestConnections.IsBound(); }, [this]() { OnRequestConnections.ExecuteIfBound(); })
 						]
 					]
 				]
@@ -655,7 +626,7 @@ TSharedRef<SWidget> SWonderlandWonderWebPanel::MakeTabs(const FWonderWebSurface&
 								// A presence dot. Not a rounded box at exactly half its height: that renders as a white square.
 								SNew(SImage)
 								.Image(&DotBrush)
-								.ColorAndOpacity(Dot(Tab.DotColorToken).CopyWithNewOpacity(bReconnecting ? 0.45f : 1.0f))
+								.ColorAndOpacity(WonderWebCanvasLook::Dot(Tab.DotColorToken).CopyWithNewOpacity(bReconnecting ? 0.45f : 1.0f))
 							]
 						]
 					]

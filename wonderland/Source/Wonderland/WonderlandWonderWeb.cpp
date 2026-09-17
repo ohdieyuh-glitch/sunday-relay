@@ -29,8 +29,44 @@ namespace WonderWebConsole
 	}
 
 	FAutoConsoleCommand CmdOpen(TEXT("wl.WonderWeb.Open"),
-		TEXT("Open Wonder Web: a screen stands in the world ahead of the Dog and the camera glides to it. DEVELOPMENT PREVIEW: sample projections, a simulated creation."),
-		FConsoleCommandDelegate::CreateLambda([]() { ForEachLive<UWonderlandUiSubsystem>([](UWonderlandUiSubsystem& Ui) { Ui.OpenWonderWeb(); }); }));
+		TEXT("Open a Wonder Web window in the workspace standing ahead of the Dog: `wl.WonderWeb.Open` (creation), `wl.WonderWeb.Open connections` (Julius Connect). A second window tiles beside the first."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			const FName Window(Args.Num() > 0 ? *Args[0] : TEXT("creation"));
+			ForEachLive<UWonderlandUiSubsystem>([Window](UWonderlandUiSubsystem& Ui) { Ui.OpenWonderWebWindow(Window); });
+		}));
+
+	FAutoConsoleCommand CmdCloseWindow(TEXT("wl.WonderWeb.CloseWindow"), TEXT("Close one Wonder Web window: `wl.WonderWeb.CloseWindow connections`. The last one closes the workspace."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			const FName Window(Args.Num() > 0 ? *Args[0] : TEXT("creation"));
+			ForEachLive<UWonderlandUiSubsystem>([Window](UWonderlandUiSubsystem& Ui) { Ui.CloseWonderWebWindow(Window); });
+		}));
+
+	FAutoConsoleCommand CmdMinimize(TEXT("wl.WonderWeb.Minimize"), TEXT("Fold a window to its chip (its work goes on), or `wl.WonderWeb.Minimize creation 0` to restore it."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			const FName Window(Args.Num() > 0 ? *Args[0] : TEXT("creation"));
+			const bool bMinimize = Args.Num() < 2 || Args[1] != TEXT("0");
+			ForEachLive<UWonderlandUiSubsystem>([Window, bMinimize](UWonderlandUiSubsystem& Ui) { Ui.MinimizeWonderWebWindow(Window, bMinimize); });
+		}));
+
+	FAutoConsoleCommand CmdFocus(TEXT("wl.WonderWeb.Focus"), TEXT("Focus a Wonder Web window: `wl.WonderWeb.Focus connections`."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			const FName Window(Args.Num() > 0 ? *Args[0] : TEXT("creation"));
+			ForEachLive<UWonderlandUiSubsystem>([Window](UWonderlandUiSubsystem& Ui) { Ui.FocusWonderWebWindow(Window); });
+		}));
+
+	FAutoConsoleCommand CmdExpand(TEXT("wl.WonderWeb.Expand"), TEXT("Grow a window larger in the middle of the workspace, or back: `wl.WonderWeb.Expand connections`."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			const FName Window(Args.Num() > 0 ? *Args[0] : TEXT("creation"));
+			ForEachLive<UWonderlandUiSubsystem>([Window](UWonderlandUiSubsystem& Ui) { Ui.ExpandWonderWebWindow(Window); });
+		}));
+
+	FAutoConsoleCommand CmdTile(TEXT("wl.WonderWeb.Tile"), TEXT("Lay the open Wonder Web windows out again: one in the middle, two side by side, three in two rows."),
+		FConsoleCommandDelegate::CreateLambda([]() { ForEachLive<UWonderlandUiSubsystem>([](UWonderlandUiSubsystem& Ui) { Ui.TileWonderWeb(); }); }));
 
 	FAutoConsoleCommand CmdClose(TEXT("wl.WonderWeb.Close"),
 		TEXT("Close Wonder Web and glide back to the Dog. What is running keeps running."),
@@ -67,7 +103,7 @@ namespace WonderWebConsole
 		}));
 
 	FAutoConsoleCommand CmdMove(TEXT("wl.WonderWeb.Move"),
-		TEXT("Glide the Wonder Web screen to a place in the view: center, left, right, top, bottom, top-left, top-right, bottom-left, bottom-right."),
+		TEXT("Glide the focused Wonder Web window to a place in the view: center, left, right, top, bottom, top-left, top-right, bottom-left, bottom-right."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
 			const FName Place(Args.Num() > 0 ? *Args[0] : TEXT("center"));
