@@ -1,6 +1,7 @@
 #include "WonderlandJuliusConnect.h"
 
 #include "Dom/JsonObject.h"
+#include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
 #include "HAL/PlatformTime.h"
@@ -29,71 +30,183 @@ namespace JuliusConnectTuning
 
 namespace JuliusConnectConsole
 {
-	void ForEachLive(TFunctionRef<void(UWonderlandJuliusConnectSubsystem&)> Body)
+	/**
+	 * A COMMAND THAT DOES NOTHING MUST SAY SO, ON SCREEN (founder, 2026-09-17: "commands arent working"). A revoke was
+	 * typed with nothing connected and the Connections window closed: it answered into that window, so the console showed
+	 * nothing at all. Every command now answers in the viewport and in the log.
+	 */
+	void Say(const FString& Text, bool bProblem = false)
 	{
+		UE_LOG(LogJuliusConnect, Display, TEXT("%s"), *Text);
+		if (GEngine != nullptr)
+		{
+			GEngine->AddOnScreenDebugMessage(INDEX_NONE, 8.0f, bProblem ? FColor(255, 107, 74) : FColor(255, 212, 0), Text);
+		}
+	}
+
+	/** An argument as typed, less the punctuation a sentence leaves on the end when a command is copied out of one. */
+	FString Arg(const TArray<FString>& Args, int32 Index, const TCHAR* Fallback)
+	{
+		FString Text = Args.IsValidIndex(Index) ? Args[Index] : FString(Fallback);
+		Text.TrimStartAndEndInline();
+		while (Text.Len() > 0 && FString(TEXT(".,;:!?\"'")).Contains(Text.Right(1)))
+		{
+			Text.LeftChopInline(1);
+		}
+		return Text.IsEmpty() ? FString(Fallback) : Text;
+	}
+
+	/** Everything typed after the command name, cleaned the same way -- "connect design tool" is one name. */
+	FString Rest(const TArray<FString>& Args, const TCHAR* Fallback)
+	{
+		if (Args.Num() == 0)
+		{
+			return FString(Fallback);
+		}
+		TArray<FString> One;
+		One.Add(FString::Join(Args, TEXT(" ")));
+		return Arg(One, 0, Fallback);
+	}
+
+	int32 ForEachLive(TFunctionRef<void(UWonderlandJuliusConnectSubsystem&)> Body)
+	{
+		int32 Found = 0;
 		for (TObjectIterator<UWonderlandJuliusConnectSubsystem> It; It; ++It)
 		{
 			if (!It->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject) && It->GetWorld() != nullptr && It->GetWorld()->IsGameWorld())
 			{
 				Body(**It);
+				++Found;
 			}
 		}
+		if (Found == 0)
+		{
+			Say(TEXT("JULIUS CONNECT: nothing to do -- press Play first (these commands work on the running game)."), true);
+		}
+		return Found;
+	}
+
+	/** What is connected right now, for a command that was asked about something else. */
+	FString Connected(const UWonderlandJuliusConnectSubsystem& Connect)
+	{
+		if (Connect.GetLink() != EJuliusConnectLink::Online)
+		{
+			return FString::Printf(TEXT("the Julius Connect service is not answering (%s)"), *Connect.GetProblem());
+		}
+		TArray<FString> Rows;
+		for (const FJuliusConnectService& Service : Connect.GetSurface().Services)
+		{
+			if (!Service.ConnectionId.IsEmpty())
+			{
+				Rows.Add(FString::Printf(TEXT("%s (%s) = %s"), *Service.DisplayName, *Service.ConnectorId, *Service.StateLabel));
+			}
+		}
+		return Rows.Num() > 0 ? FString::Join(Rows, TEXT("; ")) : FString(TEXT("nothing is connected yet"));
 	}
 
 	FAutoConsoleCommand CmdTask(TEXT("wl.Julius.Task"),
 		TEXT("Give Julius a task that uses external capabilities: `wl.Julius.Task design-sync` (it needs the DEVELOPMENT design-tool connector)."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
-			const FString Template = Args.Num() > 0 ? Args[0] : TEXT("design-sync");
-			ForEachLive([&Template](UWonderlandJuliusConnectSubsystem& Connect) { Connect.StartTask(Template); });
+			const FString Template = Arg(Args, 0, TEXT("design-sync"));
+			ForEachLive([&Template](UWonderlandJuliusConnectSubsystem& Connect)
+			{
+				Connect.StartTask(Template);
+				Say(FString::Printf(TEXT("JULIUS: asked Julius to run %s. It needs a connection this project does not have, so the Connections window comes forward with the request."), *Template));
+			});
 		}));
 
 	FAutoConsoleCommand CmdApprove(TEXT("wl.Julius.Connect.Approve"), TEXT("CONNECT on the authorization Julius is waiting on."),
-		FConsoleCommandDelegate::CreateLambda([]() { ForEachLive([](UWonderlandJuliusConnectSubsystem& Connect) { Connect.ApprovePrompt(); }); }));
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			ForEachLive([](UWonderlandJuliusConnectSubsystem& Connect)
+			{
+				const bool bAsked = Connect.GetSurface().bHasPrompt;
+				Connect.ApprovePrompt();
+				Say(bAsked ? TEXT("JULIUS CONNECT: approved. Julius finishes the connection itself.")
+					: FString::Printf(TEXT("JULIUS CONNECT: Julius is not waiting on you for anything -- %s."), *Connected(Connect)), !bAsked);
+			});
+		}));
 
 	FAutoConsoleCommand CmdDecline(TEXT("wl.Julius.Connect.NotNow"), TEXT("NOT NOW on the authorization Julius is waiting on."),
-		FConsoleCommandDelegate::CreateLambda([]() { ForEachLive([](UWonderlandJuliusConnectSubsystem& Connect) { Connect.DeclinePrompt(); }); }));
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			ForEachLive([](UWonderlandJuliusConnectSubsystem& Connect)
+			{
+				const bool bAsked = Connect.GetSurface().bHasPrompt;
+				Connect.DeclinePrompt();
+				Say(bAsked ? TEXT("JULIUS CONNECT: not now. Nothing was connected, and Julius will not ask again by itself.")
+					: FString::Printf(TEXT("JULIUS CONNECT: Julius is not waiting on you for anything -- %s."), *Connected(Connect)), !bAsked);
+			});
+		}));
 
 	FAutoConsoleCommand CmdConnect(TEXT("wl.Julius.Connect"),
 		TEXT("Ask Julius to connect a service by what you call it: `wl.Julius.Connect design tool`. Julius works out how."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
-			const FString Name = FString::Join(Args, TEXT(" "));
-			ForEachLive([&Name](UWonderlandJuliusConnectSubsystem& Connect) { Connect.Connect(Name); });
+			const FString Name = Rest(Args, TEXT("design tool"));
+			ForEachLive([&Name](UWonderlandJuliusConnectSubsystem& Connect)
+			{
+				Connect.Connect(Name);
+				Say(FString::Printf(TEXT("JULIUS CONNECT: asked Julius to connect '%s'. It works out how, and asks you only for the step that is yours."), *Name));
+			});
 		}));
 
 	FAutoConsoleCommand CmdRevoke(TEXT("wl.Julius.Connect.Revoke"), TEXT("Revoke a connection: `wl.Julius.Connect.Revoke dev-figma`. Julius loses it at once."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
-			const FString Id = Args.Num() > 0 ? Args[0] : TEXT("dev-figma");
-			ForEachLive([&Id](UWonderlandJuliusConnectSubsystem& Connect) { Connect.Revoke(Id); });
+			const FString Id = Rest(Args, TEXT("dev-figma"));
+			ForEachLive([&Id](UWonderlandJuliusConnectSubsystem& Connect)
+			{
+				Say(Connect.Revoke(Id) ? FString::Printf(TEXT("JULIUS CONNECT: revoking %s. Julius loses it at once."), *Id)
+					: FString::Printf(TEXT("JULIUS CONNECT: there is no connection called '%s' -- %s."), *Id, *Connected(Connect)), true);
+			});
 		}));
 
 	FAutoConsoleCommand CmdTest(TEXT("wl.Julius.Connect.Test"), TEXT("Ask the gate whether Julius may use a capability now: `wl.Julius.Connect.Test dev-figma files.read`."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
-			const FString Id = Args.Num() > 0 ? Args[0] : TEXT("dev-figma");
-			const FString Capability = Args.Num() > 1 ? Args[1] : TEXT("files.read");
-			ForEachLive([&Id, &Capability](UWonderlandJuliusConnectSubsystem& Connect) { Connect.TestAccess(Id, Capability); });
+			const FString Id = Arg(Args, 0, TEXT("dev-figma"));
+			const FString Capability = Arg(Args, 1, TEXT("files.read"));
+			ForEachLive([&Id, &Capability](UWonderlandJuliusConnectSubsystem& Connect)
+			{
+				Connect.TestAccess(Id, Capability);
+				Say(FString::Printf(TEXT("JULIUS CONNECT: asking the gate whether Julius may use %s on %s -- the answer lands in the audit."), *Capability, *Id));
+			});
 		}));
 
 	FAutoConsoleCommand CmdHealth(TEXT("wl.Julius.Connect.DevHealth"),
 		TEXT("DEVELOPMENT CONTROL: `wl.Julius.Connect.DevHealth dev-figma RATE_LIMITED` (or UNAVAILABLE, EXPIRED, FAILED, RECONNECT_REQUIRED, CONNECTED)."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
-			const FString Id = Args.Num() > 0 ? Args[0] : TEXT("dev-figma");
-			const FString State = Args.Num() > 1 ? Args[1] : TEXT("CONNECTED");
-			ForEachLive([&Id, &State](UWonderlandJuliusConnectSubsystem& Connect) { Connect.SetHealth(Id, State); });
+			const FString Id = Arg(Args, 0, TEXT("dev-figma"));
+			const FString State = Arg(Args, 1, TEXT("CONNECTED"));
+			ForEachLive([&Id, &State](UWonderlandJuliusConnectSubsystem& Connect)
+			{
+				Say(Connect.SetHealth(Id, State) ? FString::Printf(TEXT("DEVELOPMENT CONTROL: %s -> %s."), *Id, *State.ToUpper())
+					: FString::Printf(TEXT("DEVELOPMENT CONTROL: there is no connection called '%s' -- %s."), *Id, *Connected(Connect)), true);
+			});
 		}));
 
 	FAutoConsoleCommand CmdReset(TEXT("wl.Julius.Connect.Reset"), TEXT("DEVELOPMENT CONTROL: forget every development connection, request and task, and start clean."),
-		FConsoleCommandDelegate::CreateLambda([]() { ForEachLive([](UWonderlandJuliusConnectSubsystem& Connect) { Connect.Reset(); }); }));
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			ForEachLive([](UWonderlandJuliusConnectSubsystem& Connect)
+			{
+				Connect.Reset();
+				Say(TEXT("DEVELOPMENT CONTROL: every development connection, request and task forgotten."));
+			});
+		}));
 
 	FAutoConsoleCommand CmdType(TEXT("wl.Julius.Connect.Type"), TEXT("Enter a line at the Connections terminal: `wl.Julius.Connect.Type connect design tool`."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
 			const FString Line = FString::Join(Args, TEXT(" "));
-			ForEachLive([&Line](UWonderlandJuliusConnectSubsystem& Connect) { Connect.SubmitTerminal(Line); });
+			ForEachLive([&Line](UWonderlandJuliusConnectSubsystem& Connect)
+			{
+				Connect.SubmitTerminal(Line);
+				Say(FString::Printf(TEXT("JULIUS CONNECT terminal: %s (the answer is in the Connections window)"), *Line));
+			});
 		}));
 }
 
@@ -497,6 +610,7 @@ void UWonderlandJuliusConnectSubsystem::Post(const TSharedRef<FJsonObject>& Inte
 		{
 			SetLink(EJuliusConnectLink::Offline, FString::Printf(TEXT("The Julius Connect service is not running at %s."), *BaseUrl()));
 			Say(FString::Printf(TEXT("%s: not sent -- the Julius Connect service is offline. Start it: %s"), *Describe, *StartCommand()), false, true);
+			Announce(FString::Printf(TEXT("JULIUS CONNECT is offline, so %s was not sent. In a Windows terminal -- not this console -- run: %s"), *Describe, *StartCommand()), true);
 			return;
 		}
 		Accept(Response->GetContentAsString(), Response->GetResponseCode(), true, Describe);
@@ -530,6 +644,7 @@ void UWonderlandJuliusConnectSubsystem::Accept(const FString& Body, int32 Status
 		if (!Refusal.IsEmpty())
 		{
 			Say(FString::Printf(TEXT("%s: refused -- %s"), *Describe, *Refusal), false, true);
+			Announce(FString::Printf(TEXT("JULIUS CONNECT refused %s: %s"), *Describe, *Refusal), true);
 		}
 		else if (Status == 200)
 		{
@@ -579,6 +694,16 @@ void UWonderlandJuliusConnectSubsystem::Changed()
 {
 	++Revision;
 	OnChanged.Broadcast();
+}
+
+void UWonderlandJuliusConnectSubsystem::Announce(const FString& Text, bool bProblem) const
+{
+	// SEEN EVEN WITH NO WINDOW OPEN: a refusal, or an offline service, must not be a line in a panel nobody has open.
+	UE_LOG(LogJuliusConnect, Display, TEXT("%s"), *Text);
+	if (GEngine != nullptr)
+	{
+		GEngine->AddOnScreenDebugMessage(INDEX_NONE, 8.0f, bProblem ? FColor(255, 107, 74) : FColor(255, 212, 0), Text);
+	}
 }
 
 void UWonderlandJuliusConnectSubsystem::Say(const FString& Text, bool bTyped, bool bProblem)

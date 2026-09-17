@@ -213,6 +213,8 @@ private:
 	void Accept(const FString& Body, int32 Status, bool bFromIntent, const FString& Describe);
 	void SetLink(EJuliusConnectLink NewLink, const FString& Why);
 	void Say(const FString& Text, bool bTyped = false, bool bProblem = false);
+	/** Say it where it cannot be missed -- the viewport and the log -- for a refusal or an offline service. */
+	void Announce(const FString& Text, bool bProblem) const;
 	void Changed();
 	FString BaseUrl() const;
 
