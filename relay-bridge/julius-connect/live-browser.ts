@@ -29,6 +29,11 @@ export interface LiveBrowserOptions {
   readonly viewport?: { readonly width: number; readonly height: number };
   /** Keep a page after this long without a frame request, to stop a forgotten tab holding memory. */
   readonly idleMs?: number;
+  /**
+   * How many pages may be open at once. A page is worth a couple of hundred megabytes on this machine, and the editor is
+   * sharing it, so the oldest page is closed rather than letting them pile up.
+   */
+  readonly maxPages?: number;
 }
 
 export interface LiveFrame {
@@ -85,6 +90,7 @@ export function createLiveBrowser(options: LiveBrowserOptions): LiveBrowser {
   const allow = new Set(options.allowHosts.map((host) => host.trim().toLowerCase()).filter((host) => host.length > 0));
   const viewport = options.viewport ?? { width: 1200, height: 800 };
   const idleMs = options.idleMs ?? 5 * 60 * 1000;
+  const maxPages = Math.max(1, options.maxPages ?? 4);
   const executablePath = options.executablePath ?? (existsSync(EDGE) ? EDGE : undefined);
 
   let browser: Browser | null = null;
@@ -105,7 +111,13 @@ export function createLiveBrowser(options: LiveBrowserOptions): LiveBrowser {
     if (context !== null) {
       return context;
     }
-    browser = await chromium.launch({ executablePath, headless: true });
+    browser = await chromium.launch({
+      executablePath,
+      headless: true,
+      // FEWER PROCESSES, LESS MEMORY. The editor is sharing this machine, so the browser is asked to be modest: pages of
+      // the same site share a process, the renderer count is capped, and nothing loads extensions or background services.
+      args: ['--process-per-site', '--renderer-process-limit=4', '--disable-extensions', '--disable-dev-shm-usage', '--disable-background-networking'],
+    });
     // EPHEMERAL BY DEFAULT: this context keeps cookies only while it lives.
     context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
     context.setDefaultNavigationTimeout(25000);
@@ -117,6 +129,16 @@ export function createLiveBrowser(options: LiveBrowserOptions): LiveBrowser {
     if (held !== undefined && !held.page.isClosed()) {
       held.lastUsed = Date.now();
       return held.page;
+    }
+    // A CAP, NOT A HOPE. The longest-unused page goes so a new one can open: the editor is sharing this machine's memory.
+    while (pages.size >= maxPages) {
+      const oldest = [...pages.entries()].sort((a, b) => a[1].lastUsed - b[1].lastUsed)[0];
+      if (oldest === undefined) {
+        break;
+      }
+      await oldest[1].page.close().catch(() => undefined);
+      pages.delete(oldest[0]);
+      note(oldest[0], 'close', '-', `closed to make room for ${tabId}`);
     }
     const page = await (await ensureContext()).newPage();
     pages.set(tabId, { page, lastUsed: Date.now(), loading: false, size: { ...viewport } });
@@ -132,7 +154,21 @@ export function createLiveBrowser(options: LiveBrowserOptions): LiveBrowser {
         note(tabId, 'close', '-', 'closed after being idle');
       }
     }
+    // NOTHING OPEN MEANS NOTHING RUNNING: with no pages left, the browser itself goes too, and comes back when asked.
+    if (pages.size === 0 && browser !== null) {
+      const going = browser;
+      const goingContext = context;
+      browser = null;
+      context = null;
+      void goingContext?.close().catch(() => undefined);
+      void going.close().catch(() => undefined);
+    }
   };
+
+  // A FORGOTTEN TAB CLOSES ITSELF. The sweep used to run only when a frame was asked for, which is exactly when a
+  // forgotten tab is not being asked about; on a timer, an abandoned page stops costing memory on its own.
+  const sweeper = setInterval(sweep, 30 * 1000);
+  sweeper.unref?.();
 
   return {
     async setViewport(tabId, width, height) {
@@ -313,6 +349,7 @@ export function createLiveBrowser(options: LiveBrowserOptions): LiveBrowser {
     },
 
     async shutdown() {
+      clearInterval(sweeper);
       for (const [, held] of pages) {
         await held.page.close().catch(() => undefined);
       }
