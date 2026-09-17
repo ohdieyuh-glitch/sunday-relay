@@ -1,0 +1,1989 @@
+{
+  "schema": "wonderland-wonder-web-preview.v1",
+  "notice": "DEVELOPMENT PREVIEW · SAMPLE DATA · SIMULATED CREATION. Every surface below is projectWonderWebSurface output for a simulated creation walked through the Wonder Web lifecycle; no runtime, bridge or peer is connected.",
+  "domain": "src/relay/mission/wonder-web (relay-wonder-web.v1)",
+  "viewerUserId": "sample-viewer",
+  "projectId": "sample-wonderland-project",
+  "myView": {
+    "idle": {
+      "title": "WONDER WEB",
+      "observedAtIso": "2026-09-17T09:00:00.000Z",
+      "viewerUserId": "sample-viewer",
+      "tabs": [
+        {
+          "userId": "sample-viewer",
+          "label": "MY VIEW",
+          "isSelf": true,
+          "isActive": true,
+          "dotColorToken": "wonder-dot-azure",
+          "connectionState": "LIVE",
+          "access": "control"
+        },
+        {
+          "userId": "sample-peer-kai",
+          "label": "KAI",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-judith",
+          "label": "JUDITH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-coral",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-tanish",
+          "label": "TANISH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "RECONNECTING",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-maya",
+          "label": "MAYA",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-rose",
+          "connectionState": "LIVE",
+          "access": "observe"
+        }
+      ],
+      "address": {
+        "display": "wonder.app/project",
+        "secure": true,
+        "creationId": null,
+        "projectId": "sample-wonderland-project"
+      },
+      "viewport": {
+        "kind": "idle",
+        "mark": "wonder-face"
+      },
+      "terminal": {
+        "prompt": "wonder@project:~$",
+        "lines": [],
+        "truncatedFrom": null,
+        "acceptsInput": true,
+        "busy": false
+      },
+      "chrome": {
+        "canGoBack": false,
+        "canGoForward": false,
+        "canReload": false,
+        "canStop": false,
+        "canRestart": false,
+        "canRebuild": false,
+        "canReturnToProject": false
+      },
+      "unavailableReason": null
+    },
+    "created": {
+      "title": "WONDER WEB",
+      "observedAtIso": "2026-09-17T09:00:00.000Z",
+      "viewerUserId": "sample-viewer",
+      "tabs": [
+        {
+          "userId": "sample-viewer",
+          "label": "MY VIEW",
+          "isSelf": true,
+          "isActive": true,
+          "dotColorToken": "wonder-dot-azure",
+          "connectionState": "LIVE",
+          "access": "control"
+        },
+        {
+          "userId": "sample-peer-kai",
+          "label": "KAI",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-judith",
+          "label": "JUDITH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-coral",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-tanish",
+          "label": "TANISH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "RECONNECTING",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-maya",
+          "label": "MAYA",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-rose",
+          "connectionState": "LIVE",
+          "access": "observe"
+        }
+      ],
+      "address": {
+        "display": "wonder.app/project",
+        "secure": true,
+        "creationId": "sample-pixel-canvas",
+        "projectId": "sample-wonderland-project"
+      },
+      "viewport": {
+        "kind": "working",
+        "status": "CREATED",
+        "message": "This creation exists. Nothing has been prepared yet."
+      },
+      "terminal": {
+        "prompt": "wonder@project:~$",
+        "lines": [],
+        "truncatedFrom": null,
+        "acceptsInput": true,
+        "busy": false
+      },
+      "chrome": {
+        "canGoBack": false,
+        "canGoForward": false,
+        "canReload": false,
+        "canStop": false,
+        "canRestart": false,
+        "canRebuild": true,
+        "canReturnToProject": true
+      },
+      "unavailableReason": null
+    },
+    "preparing": {
+      "title": "WONDER WEB",
+      "observedAtIso": "2026-09-17T09:00:00.000Z",
+      "viewerUserId": "sample-viewer",
+      "tabs": [
+        {
+          "userId": "sample-viewer",
+          "label": "MY VIEW",
+          "isSelf": true,
+          "isActive": true,
+          "dotColorToken": "wonder-dot-azure",
+          "connectionState": "LIVE",
+          "access": "control"
+        },
+        {
+          "userId": "sample-peer-kai",
+          "label": "KAI",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-judith",
+          "label": "JUDITH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-coral",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-tanish",
+          "label": "TANISH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "RECONNECTING",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-maya",
+          "label": "MAYA",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-rose",
+          "connectionState": "LIVE",
+          "access": "observe"
+        }
+      ],
+      "address": {
+        "display": "wonder.app/project",
+        "secure": true,
+        "creationId": "sample-pixel-canvas",
+        "projectId": "sample-wonderland-project"
+      },
+      "viewport": {
+        "kind": "working",
+        "status": "PREPARING",
+        "message": "Preparing the sources."
+      },
+      "terminal": {
+        "prompt": "wonder@project:~$",
+        "lines": [
+          {
+            "sequence": 1,
+            "text": "$ wonder prepare",
+            "stream": "build"
+          },
+          {
+            "sequence": 2,
+            "text": "materializing 4 source files into the build root",
+            "stream": "build"
+          }
+        ],
+        "truncatedFrom": null,
+        "acceptsInput": true,
+        "busy": true
+      },
+      "chrome": {
+        "canGoBack": false,
+        "canGoForward": false,
+        "canReload": false,
+        "canStop": false,
+        "canRestart": false,
+        "canRebuild": false,
+        "canReturnToProject": true
+      },
+      "unavailableReason": null
+    },
+    "building_1": {
+      "title": "WONDER WEB",
+      "observedAtIso": "2026-09-17T09:00:00.000Z",
+      "viewerUserId": "sample-viewer",
+      "tabs": [
+        {
+          "userId": "sample-viewer",
+          "label": "MY VIEW",
+          "isSelf": true,
+          "isActive": true,
+          "dotColorToken": "wonder-dot-azure",
+          "connectionState": "LIVE",
+          "access": "control"
+        },
+        {
+          "userId": "sample-peer-kai",
+          "label": "KAI",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-judith",
+          "label": "JUDITH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-coral",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-tanish",
+          "label": "TANISH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "RECONNECTING",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-maya",
+          "label": "MAYA",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-rose",
+          "connectionState": "LIVE",
+          "access": "observe"
+        }
+      ],
+      "address": {
+        "display": "wonder.app/project",
+        "secure": true,
+        "creationId": "sample-pixel-canvas",
+        "projectId": "sample-wonderland-project"
+      },
+      "viewport": {
+        "kind": "working",
+        "status": "BUILDING",
+        "message": "Building."
+      },
+      "terminal": {
+        "prompt": "wonder@project:~$",
+        "lines": [
+          {
+            "sequence": 1,
+            "text": "$ wonder prepare",
+            "stream": "build"
+          },
+          {
+            "sequence": 2,
+            "text": "materializing 4 source files into the build root",
+            "stream": "build"
+          },
+          {
+            "sequence": 3,
+            "text": "$ wonder build",
+            "stream": "build"
+          },
+          {
+            "sequence": 4,
+            "text": "env: {} -- the build inherits no credentials",
+            "stream": "build"
+          }
+        ],
+        "truncatedFrom": null,
+        "acceptsInput": true,
+        "busy": true
+      },
+      "chrome": {
+        "canGoBack": false,
+        "canGoForward": false,
+        "canReload": false,
+        "canStop": false,
+        "canRestart": false,
+        "canRebuild": false,
+        "canReturnToProject": true
+      },
+      "unavailableReason": null
+    },
+    "building_2": {
+      "title": "WONDER WEB",
+      "observedAtIso": "2026-09-17T09:00:00.000Z",
+      "viewerUserId": "sample-viewer",
+      "tabs": [
+        {
+          "userId": "sample-viewer",
+          "label": "MY VIEW",
+          "isSelf": true,
+          "isActive": true,
+          "dotColorToken": "wonder-dot-azure",
+          "connectionState": "LIVE",
+          "access": "control"
+        },
+        {
+          "userId": "sample-peer-kai",
+          "label": "KAI",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-judith",
+          "label": "JUDITH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-coral",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-tanish",
+          "label": "TANISH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "RECONNECTING",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-maya",
+          "label": "MAYA",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-rose",
+          "connectionState": "LIVE",
+          "access": "observe"
+        }
+      ],
+      "address": {
+        "display": "wonder.app/project",
+        "secure": true,
+        "creationId": "sample-pixel-canvas",
+        "projectId": "sample-wonderland-project"
+      },
+      "viewport": {
+        "kind": "working",
+        "status": "BUILDING",
+        "message": "Building."
+      },
+      "terminal": {
+        "prompt": "wonder@project:~$",
+        "lines": [
+          {
+            "sequence": 1,
+            "text": "$ wonder prepare",
+            "stream": "build"
+          },
+          {
+            "sequence": 2,
+            "text": "materializing 4 source files into the build root",
+            "stream": "build"
+          },
+          {
+            "sequence": 3,
+            "text": "$ wonder build",
+            "stream": "build"
+          },
+          {
+            "sequence": 4,
+            "text": "env: {} -- the build inherits no credentials",
+            "stream": "build"
+          },
+          {
+            "sequence": 5,
+            "text": "compiling src/canvas.ts",
+            "stream": "build"
+          },
+          {
+            "sequence": 6,
+            "text": "compiling src/palette.ts",
+            "stream": "build"
+          }
+        ],
+        "truncatedFrom": null,
+        "acceptsInput": true,
+        "busy": true
+      },
+      "chrome": {
+        "canGoBack": false,
+        "canGoForward": false,
+        "canReload": false,
+        "canStop": false,
+        "canRestart": false,
+        "canRebuild": false,
+        "canReturnToProject": true
+      },
+      "unavailableReason": null
+    },
+    "building_3": {
+      "title": "WONDER WEB",
+      "observedAtIso": "2026-09-17T09:00:00.000Z",
+      "viewerUserId": "sample-viewer",
+      "tabs": [
+        {
+          "userId": "sample-viewer",
+          "label": "MY VIEW",
+          "isSelf": true,
+          "isActive": true,
+          "dotColorToken": "wonder-dot-azure",
+          "connectionState": "LIVE",
+          "access": "control"
+        },
+        {
+          "userId": "sample-peer-kai",
+          "label": "KAI",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-judith",
+          "label": "JUDITH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-coral",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-tanish",
+          "label": "TANISH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "RECONNECTING",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-maya",
+          "label": "MAYA",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-rose",
+          "connectionState": "LIVE",
+          "access": "observe"
+        }
+      ],
+      "address": {
+        "display": "wonder.app/project",
+        "secure": true,
+        "creationId": "sample-pixel-canvas",
+        "projectId": "sample-wonderland-project"
+      },
+      "viewport": {
+        "kind": "working",
+        "status": "BUILDING",
+        "message": "Building."
+      },
+      "terminal": {
+        "prompt": "wonder@project:~$",
+        "lines": [
+          {
+            "sequence": 1,
+            "text": "$ wonder prepare",
+            "stream": "build"
+          },
+          {
+            "sequence": 2,
+            "text": "materializing 4 source files into the build root",
+            "stream": "build"
+          },
+          {
+            "sequence": 3,
+            "text": "$ wonder build",
+            "stream": "build"
+          },
+          {
+            "sequence": 4,
+            "text": "env: {} -- the build inherits no credentials",
+            "stream": "build"
+          },
+          {
+            "sequence": 5,
+            "text": "compiling src/canvas.ts",
+            "stream": "build"
+          },
+          {
+            "sequence": 6,
+            "text": "compiling src/palette.ts",
+            "stream": "build"
+          },
+          {
+            "sequence": 7,
+            "text": "bundling assets/canvas.js (5.4 kB)",
+            "stream": "build"
+          },
+          {
+            "sequence": 8,
+            "text": "copying assets/styles.css",
+            "stream": "build"
+          }
+        ],
+        "truncatedFrom": null,
+        "acceptsInput": true,
+        "busy": true
+      },
+      "chrome": {
+        "canGoBack": false,
+        "canGoForward": false,
+        "canReload": false,
+        "canStop": false,
+        "canRestart": false,
+        "canRebuild": false,
+        "canReturnToProject": true
+      },
+      "unavailableReason": null
+    },
+    "building_4": {
+      "title": "WONDER WEB",
+      "observedAtIso": "2026-09-17T09:00:00.000Z",
+      "viewerUserId": "sample-viewer",
+      "tabs": [
+        {
+          "userId": "sample-viewer",
+          "label": "MY VIEW",
+          "isSelf": true,
+          "isActive": true,
+          "dotColorToken": "wonder-dot-azure",
+          "connectionState": "LIVE",
+          "access": "control"
+        },
+        {
+          "userId": "sample-peer-kai",
+          "label": "KAI",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-judith",
+          "label": "JUDITH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-coral",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-tanish",
+          "label": "TANISH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "RECONNECTING",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-maya",
+          "label": "MAYA",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-rose",
+          "connectionState": "LIVE",
+          "access": "observe"
+        }
+      ],
+      "address": {
+        "display": "wonder.app/project",
+        "secure": true,
+        "creationId": "sample-pixel-canvas",
+        "projectId": "sample-wonderland-project"
+      },
+      "viewport": {
+        "kind": "working",
+        "status": "BUILDING",
+        "message": "Building."
+      },
+      "terminal": {
+        "prompt": "wonder@project:~$",
+        "lines": [
+          {
+            "sequence": 1,
+            "text": "$ wonder prepare",
+            "stream": "build"
+          },
+          {
+            "sequence": 2,
+            "text": "materializing 4 source files into the build root",
+            "stream": "build"
+          },
+          {
+            "sequence": 3,
+            "text": "$ wonder build",
+            "stream": "build"
+          },
+          {
+            "sequence": 4,
+            "text": "env: {} -- the build inherits no credentials",
+            "stream": "build"
+          },
+          {
+            "sequence": 5,
+            "text": "compiling src/canvas.ts",
+            "stream": "build"
+          },
+          {
+            "sequence": 6,
+            "text": "compiling src/palette.ts",
+            "stream": "build"
+          },
+          {
+            "sequence": 7,
+            "text": "bundling assets/canvas.js (5.4 kB)",
+            "stream": "build"
+          },
+          {
+            "sequence": 8,
+            "text": "copying assets/styles.css",
+            "stream": "build"
+          },
+          {
+            "sequence": 9,
+            "text": "writing index.html",
+            "stream": "build"
+          },
+          {
+            "sequence": 10,
+            "text": "build finished: exit 0",
+            "stream": "build"
+          }
+        ],
+        "truncatedFrom": null,
+        "acceptsInput": true,
+        "busy": true
+      },
+      "chrome": {
+        "canGoBack": false,
+        "canGoForward": false,
+        "canReload": false,
+        "canStop": false,
+        "canRestart": false,
+        "canRebuild": false,
+        "canReturnToProject": true
+      },
+      "unavailableReason": null
+    },
+    "ready": {
+      "title": "WONDER WEB",
+      "observedAtIso": "2026-09-17T09:00:00.000Z",
+      "viewerUserId": "sample-viewer",
+      "tabs": [
+        {
+          "userId": "sample-viewer",
+          "label": "MY VIEW",
+          "isSelf": true,
+          "isActive": true,
+          "dotColorToken": "wonder-dot-azure",
+          "connectionState": "LIVE",
+          "access": "control"
+        },
+        {
+          "userId": "sample-peer-kai",
+          "label": "KAI",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-judith",
+          "label": "JUDITH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-coral",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-tanish",
+          "label": "TANISH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "RECONNECTING",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-maya",
+          "label": "MAYA",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-rose",
+          "connectionState": "LIVE",
+          "access": "observe"
+        }
+      ],
+      "address": {
+        "display": "wonder.app/project",
+        "secure": true,
+        "creationId": "sample-pixel-canvas",
+        "projectId": "sample-wonderland-project"
+      },
+      "viewport": {
+        "kind": "creation",
+        "creationId": "sample-pixel-canvas",
+        "entrypoint": "index.html",
+        "running": false
+      },
+      "terminal": {
+        "prompt": "wonder@project:~$",
+        "lines": [
+          {
+            "sequence": 1,
+            "text": "$ wonder prepare",
+            "stream": "build"
+          },
+          {
+            "sequence": 2,
+            "text": "materializing 4 source files into the build root",
+            "stream": "build"
+          },
+          {
+            "sequence": 3,
+            "text": "$ wonder build",
+            "stream": "build"
+          },
+          {
+            "sequence": 4,
+            "text": "env: {} -- the build inherits no credentials",
+            "stream": "build"
+          },
+          {
+            "sequence": 5,
+            "text": "compiling src/canvas.ts",
+            "stream": "build"
+          },
+          {
+            "sequence": 6,
+            "text": "compiling src/palette.ts",
+            "stream": "build"
+          },
+          {
+            "sequence": 7,
+            "text": "bundling assets/canvas.js (5.4 kB)",
+            "stream": "build"
+          },
+          {
+            "sequence": 8,
+            "text": "copying assets/styles.css",
+            "stream": "build"
+          },
+          {
+            "sequence": 9,
+            "text": "writing index.html",
+            "stream": "build"
+          },
+          {
+            "sequence": 10,
+            "text": "build finished: exit 0",
+            "stream": "build"
+          }
+        ],
+        "truncatedFrom": null,
+        "acceptsInput": true,
+        "busy": false
+      },
+      "chrome": {
+        "canGoBack": false,
+        "canGoForward": false,
+        "canReload": true,
+        "canStop": false,
+        "canRestart": true,
+        "canRebuild": true,
+        "canReturnToProject": true
+      },
+      "unavailableReason": null
+    },
+    "running": {
+      "title": "WONDER WEB",
+      "observedAtIso": "2026-09-17T09:00:00.000Z",
+      "viewerUserId": "sample-viewer",
+      "tabs": [
+        {
+          "userId": "sample-viewer",
+          "label": "MY VIEW",
+          "isSelf": true,
+          "isActive": true,
+          "dotColorToken": "wonder-dot-azure",
+          "connectionState": "LIVE",
+          "access": "control"
+        },
+        {
+          "userId": "sample-peer-kai",
+          "label": "KAI",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-judith",
+          "label": "JUDITH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-coral",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-tanish",
+          "label": "TANISH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "RECONNECTING",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-maya",
+          "label": "MAYA",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-rose",
+          "connectionState": "LIVE",
+          "access": "observe"
+        }
+      ],
+      "address": {
+        "display": "wonder.app/project",
+        "secure": true,
+        "creationId": "sample-pixel-canvas",
+        "projectId": "sample-wonderland-project"
+      },
+      "viewport": {
+        "kind": "creation",
+        "creationId": "sample-pixel-canvas",
+        "entrypoint": "index.html",
+        "running": true
+      },
+      "terminal": {
+        "prompt": "wonder@project:~$",
+        "lines": [
+          {
+            "sequence": 1,
+            "text": "$ wonder prepare",
+            "stream": "build"
+          },
+          {
+            "sequence": 2,
+            "text": "materializing 4 source files into the build root",
+            "stream": "build"
+          },
+          {
+            "sequence": 3,
+            "text": "$ wonder build",
+            "stream": "build"
+          },
+          {
+            "sequence": 4,
+            "text": "env: {} -- the build inherits no credentials",
+            "stream": "build"
+          },
+          {
+            "sequence": 5,
+            "text": "compiling src/canvas.ts",
+            "stream": "build"
+          },
+          {
+            "sequence": 6,
+            "text": "compiling src/palette.ts",
+            "stream": "build"
+          },
+          {
+            "sequence": 7,
+            "text": "bundling assets/canvas.js (5.4 kB)",
+            "stream": "build"
+          },
+          {
+            "sequence": 8,
+            "text": "copying assets/styles.css",
+            "stream": "build"
+          },
+          {
+            "sequence": 9,
+            "text": "writing index.html",
+            "stream": "build"
+          },
+          {
+            "sequence": 10,
+            "text": "build finished: exit 0",
+            "stream": "build"
+          },
+          {
+            "sequence": 11,
+            "text": "$ wonder run",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 12,
+            "text": "serving index.html from its own origin (simulated in the preview)",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 13,
+            "text": "Pixel Canvas is running",
+            "stream": "runtime"
+          }
+        ],
+        "truncatedFrom": null,
+        "acceptsInput": true,
+        "busy": false
+      },
+      "chrome": {
+        "canGoBack": false,
+        "canGoForward": false,
+        "canReload": true,
+        "canStop": true,
+        "canRestart": false,
+        "canRebuild": true,
+        "canReturnToProject": true
+      },
+      "unavailableReason": null
+    },
+    "stopped": {
+      "title": "WONDER WEB",
+      "observedAtIso": "2026-09-17T09:00:00.000Z",
+      "viewerUserId": "sample-viewer",
+      "tabs": [
+        {
+          "userId": "sample-viewer",
+          "label": "MY VIEW",
+          "isSelf": true,
+          "isActive": true,
+          "dotColorToken": "wonder-dot-azure",
+          "connectionState": "LIVE",
+          "access": "control"
+        },
+        {
+          "userId": "sample-peer-kai",
+          "label": "KAI",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-judith",
+          "label": "JUDITH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-coral",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-tanish",
+          "label": "TANISH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "RECONNECTING",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-maya",
+          "label": "MAYA",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-rose",
+          "connectionState": "LIVE",
+          "access": "observe"
+        }
+      ],
+      "address": {
+        "display": "wonder.app/project",
+        "secure": true,
+        "creationId": "sample-pixel-canvas",
+        "projectId": "sample-wonderland-project"
+      },
+      "viewport": {
+        "kind": "working",
+        "status": "STOPPED",
+        "message": "Stopped. The build is still here."
+      },
+      "terminal": {
+        "prompt": "wonder@project:~$",
+        "lines": [
+          {
+            "sequence": 1,
+            "text": "$ wonder prepare",
+            "stream": "build"
+          },
+          {
+            "sequence": 2,
+            "text": "materializing 4 source files into the build root",
+            "stream": "build"
+          },
+          {
+            "sequence": 3,
+            "text": "$ wonder build",
+            "stream": "build"
+          },
+          {
+            "sequence": 4,
+            "text": "env: {} -- the build inherits no credentials",
+            "stream": "build"
+          },
+          {
+            "sequence": 5,
+            "text": "compiling src/canvas.ts",
+            "stream": "build"
+          },
+          {
+            "sequence": 6,
+            "text": "compiling src/palette.ts",
+            "stream": "build"
+          },
+          {
+            "sequence": 7,
+            "text": "bundling assets/canvas.js (5.4 kB)",
+            "stream": "build"
+          },
+          {
+            "sequence": 8,
+            "text": "copying assets/styles.css",
+            "stream": "build"
+          },
+          {
+            "sequence": 9,
+            "text": "writing index.html",
+            "stream": "build"
+          },
+          {
+            "sequence": 10,
+            "text": "build finished: exit 0",
+            "stream": "build"
+          },
+          {
+            "sequence": 11,
+            "text": "$ wonder run",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 12,
+            "text": "serving index.html from its own origin (simulated in the preview)",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 13,
+            "text": "Pixel Canvas is running",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 14,
+            "text": "$ wonder stop",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 15,
+            "text": "stopped. the build is still here",
+            "stream": "runtime"
+          }
+        ],
+        "truncatedFrom": null,
+        "acceptsInput": true,
+        "busy": false
+      },
+      "chrome": {
+        "canGoBack": false,
+        "canGoForward": false,
+        "canReload": false,
+        "canStop": false,
+        "canRestart": true,
+        "canRebuild": true,
+        "canReturnToProject": true
+      },
+      "unavailableReason": null
+    },
+    "restarted": {
+      "title": "WONDER WEB",
+      "observedAtIso": "2026-09-17T09:00:00.000Z",
+      "viewerUserId": "sample-viewer",
+      "tabs": [
+        {
+          "userId": "sample-viewer",
+          "label": "MY VIEW",
+          "isSelf": true,
+          "isActive": true,
+          "dotColorToken": "wonder-dot-azure",
+          "connectionState": "LIVE",
+          "access": "control"
+        },
+        {
+          "userId": "sample-peer-kai",
+          "label": "KAI",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-judith",
+          "label": "JUDITH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-coral",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-tanish",
+          "label": "TANISH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "RECONNECTING",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-maya",
+          "label": "MAYA",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-rose",
+          "connectionState": "LIVE",
+          "access": "observe"
+        }
+      ],
+      "address": {
+        "display": "wonder.app/project",
+        "secure": true,
+        "creationId": "sample-pixel-canvas",
+        "projectId": "sample-wonderland-project"
+      },
+      "viewport": {
+        "kind": "creation",
+        "creationId": "sample-pixel-canvas",
+        "entrypoint": "index.html",
+        "running": true
+      },
+      "terminal": {
+        "prompt": "wonder@project:~$",
+        "lines": [
+          {
+            "sequence": 1,
+            "text": "$ wonder prepare",
+            "stream": "build"
+          },
+          {
+            "sequence": 2,
+            "text": "materializing 4 source files into the build root",
+            "stream": "build"
+          },
+          {
+            "sequence": 3,
+            "text": "$ wonder build",
+            "stream": "build"
+          },
+          {
+            "sequence": 4,
+            "text": "env: {} -- the build inherits no credentials",
+            "stream": "build"
+          },
+          {
+            "sequence": 5,
+            "text": "compiling src/canvas.ts",
+            "stream": "build"
+          },
+          {
+            "sequence": 6,
+            "text": "compiling src/palette.ts",
+            "stream": "build"
+          },
+          {
+            "sequence": 7,
+            "text": "bundling assets/canvas.js (5.4 kB)",
+            "stream": "build"
+          },
+          {
+            "sequence": 8,
+            "text": "copying assets/styles.css",
+            "stream": "build"
+          },
+          {
+            "sequence": 9,
+            "text": "writing index.html",
+            "stream": "build"
+          },
+          {
+            "sequence": 10,
+            "text": "build finished: exit 0",
+            "stream": "build"
+          },
+          {
+            "sequence": 11,
+            "text": "$ wonder run",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 12,
+            "text": "serving index.html from its own origin (simulated in the preview)",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 13,
+            "text": "Pixel Canvas is running",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 14,
+            "text": "$ wonder stop",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 15,
+            "text": "stopped. the build is still here",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 16,
+            "text": "$ wonder run",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 17,
+            "text": "Pixel Canvas is running again",
+            "stream": "runtime"
+          }
+        ],
+        "truncatedFrom": null,
+        "acceptsInput": true,
+        "busy": false
+      },
+      "chrome": {
+        "canGoBack": false,
+        "canGoForward": false,
+        "canReload": true,
+        "canStop": true,
+        "canRestart": false,
+        "canRebuild": true,
+        "canReturnToProject": true
+      },
+      "unavailableReason": null
+    },
+    "failing": {
+      "title": "WONDER WEB",
+      "observedAtIso": "2026-09-17T09:00:00.000Z",
+      "viewerUserId": "sample-viewer",
+      "tabs": [
+        {
+          "userId": "sample-viewer",
+          "label": "MY VIEW",
+          "isSelf": true,
+          "isActive": true,
+          "dotColorToken": "wonder-dot-azure",
+          "connectionState": "LIVE",
+          "access": "control"
+        },
+        {
+          "userId": "sample-peer-kai",
+          "label": "KAI",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-judith",
+          "label": "JUDITH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-coral",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-tanish",
+          "label": "TANISH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "RECONNECTING",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-maya",
+          "label": "MAYA",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-rose",
+          "connectionState": "LIVE",
+          "access": "observe"
+        }
+      ],
+      "address": {
+        "display": "wonder.app/project",
+        "secure": true,
+        "creationId": "sample-pixel-canvas",
+        "projectId": "sample-wonderland-project"
+      },
+      "viewport": {
+        "kind": "working",
+        "status": "BUILDING",
+        "message": "Building."
+      },
+      "terminal": {
+        "prompt": "wonder@project:~$",
+        "lines": [
+          {
+            "sequence": 1,
+            "text": "$ wonder prepare",
+            "stream": "build"
+          },
+          {
+            "sequence": 2,
+            "text": "materializing 4 source files into the build root",
+            "stream": "build"
+          },
+          {
+            "sequence": 3,
+            "text": "$ wonder build",
+            "stream": "build"
+          },
+          {
+            "sequence": 4,
+            "text": "env: {} -- the build inherits no credentials",
+            "stream": "build"
+          },
+          {
+            "sequence": 5,
+            "text": "compiling src/canvas.ts",
+            "stream": "build"
+          },
+          {
+            "sequence": 6,
+            "text": "compiling src/palette.ts",
+            "stream": "build"
+          },
+          {
+            "sequence": 7,
+            "text": "bundling assets/canvas.js (5.4 kB)",
+            "stream": "build"
+          },
+          {
+            "sequence": 8,
+            "text": "copying assets/styles.css",
+            "stream": "build"
+          },
+          {
+            "sequence": 9,
+            "text": "writing index.html",
+            "stream": "build"
+          },
+          {
+            "sequence": 10,
+            "text": "build finished: exit 0",
+            "stream": "build"
+          },
+          {
+            "sequence": 11,
+            "text": "$ wonder run",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 12,
+            "text": "serving index.html from its own origin (simulated in the preview)",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 13,
+            "text": "Pixel Canvas is running",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 14,
+            "text": "$ wonder stop",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 15,
+            "text": "stopped. the build is still here",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 18,
+            "text": "$ wonder build",
+            "stream": "build"
+          },
+          {
+            "sequence": 19,
+            "text": "src/canvas.ts(42,7): error: 'pallete' is not defined",
+            "stream": "build"
+          }
+        ],
+        "truncatedFrom": null,
+        "acceptsInput": true,
+        "busy": true
+      },
+      "chrome": {
+        "canGoBack": false,
+        "canGoForward": false,
+        "canReload": false,
+        "canStop": false,
+        "canRestart": false,
+        "canRebuild": false,
+        "canReturnToProject": true
+      },
+      "unavailableReason": null
+    },
+    "failed": {
+      "title": "WONDER WEB",
+      "observedAtIso": "2026-09-17T09:00:00.000Z",
+      "viewerUserId": "sample-viewer",
+      "tabs": [
+        {
+          "userId": "sample-viewer",
+          "label": "MY VIEW",
+          "isSelf": true,
+          "isActive": true,
+          "dotColorToken": "wonder-dot-azure",
+          "connectionState": "LIVE",
+          "access": "control"
+        },
+        {
+          "userId": "sample-peer-kai",
+          "label": "KAI",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-judith",
+          "label": "JUDITH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-coral",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-tanish",
+          "label": "TANISH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "RECONNECTING",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-maya",
+          "label": "MAYA",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-rose",
+          "connectionState": "LIVE",
+          "access": "observe"
+        }
+      ],
+      "address": {
+        "display": "wonder.app/project",
+        "secure": true,
+        "creationId": "sample-pixel-canvas",
+        "projectId": "sample-wonderland-project"
+      },
+      "viewport": {
+        "kind": "failed",
+        "creationId": "sample-pixel-canvas",
+        "summary": "The build exited 1.",
+        "phase": "build"
+      },
+      "terminal": {
+        "prompt": "wonder@project:~$",
+        "lines": [
+          {
+            "sequence": 1,
+            "text": "$ wonder prepare",
+            "stream": "build"
+          },
+          {
+            "sequence": 2,
+            "text": "materializing 4 source files into the build root",
+            "stream": "build"
+          },
+          {
+            "sequence": 3,
+            "text": "$ wonder build",
+            "stream": "build"
+          },
+          {
+            "sequence": 4,
+            "text": "env: {} -- the build inherits no credentials",
+            "stream": "build"
+          },
+          {
+            "sequence": 5,
+            "text": "compiling src/canvas.ts",
+            "stream": "build"
+          },
+          {
+            "sequence": 6,
+            "text": "compiling src/palette.ts",
+            "stream": "build"
+          },
+          {
+            "sequence": 7,
+            "text": "bundling assets/canvas.js (5.4 kB)",
+            "stream": "build"
+          },
+          {
+            "sequence": 8,
+            "text": "copying assets/styles.css",
+            "stream": "build"
+          },
+          {
+            "sequence": 9,
+            "text": "writing index.html",
+            "stream": "build"
+          },
+          {
+            "sequence": 10,
+            "text": "build finished: exit 0",
+            "stream": "build"
+          },
+          {
+            "sequence": 11,
+            "text": "$ wonder run",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 12,
+            "text": "serving index.html from its own origin (simulated in the preview)",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 13,
+            "text": "Pixel Canvas is running",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 14,
+            "text": "$ wonder stop",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 15,
+            "text": "stopped. the build is still here",
+            "stream": "runtime"
+          },
+          {
+            "sequence": 18,
+            "text": "$ wonder build",
+            "stream": "build"
+          },
+          {
+            "sequence": 19,
+            "text": "src/canvas.ts(42,7): error: 'pallete' is not defined",
+            "stream": "build"
+          },
+          {
+            "sequence": 20,
+            "text": "build failed: exit 1",
+            "stream": "build"
+          }
+        ],
+        "truncatedFrom": null,
+        "acceptsInput": true,
+        "busy": false
+      },
+      "chrome": {
+        "canGoBack": false,
+        "canGoForward": false,
+        "canReload": false,
+        "canStop": false,
+        "canRestart": false,
+        "canRebuild": true,
+        "canReturnToProject": true
+      },
+      "unavailableReason": null
+    }
+  },
+  "peerViews": {
+    "sample-peer-kai": {
+      "title": "WONDER WEB",
+      "observedAtIso": "2026-09-17T09:00:00.000Z",
+      "viewerUserId": "sample-viewer",
+      "tabs": [
+        {
+          "userId": "sample-viewer",
+          "label": "MY VIEW",
+          "isSelf": true,
+          "isActive": true,
+          "dotColorToken": "wonder-dot-azure",
+          "connectionState": "LIVE",
+          "access": "control"
+        },
+        {
+          "userId": "sample-peer-kai",
+          "label": "KAI",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-judith",
+          "label": "JUDITH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-coral",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-tanish",
+          "label": "TANISH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "RECONNECTING",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-maya",
+          "label": "MAYA",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-rose",
+          "connectionState": "LIVE",
+          "access": "observe"
+        }
+      ],
+      "address": {
+        "display": "wonder.app/project",
+        "secure": true,
+        "creationId": "sample-kai-creation",
+        "projectId": "sample-wonderland-project"
+      },
+      "viewport": {
+        "kind": "observed",
+        "creationId": "sample-kai-creation",
+        "ownerUserId": "sample-peer-kai",
+        "status": "RUNNING"
+      },
+      "terminal": {
+        "prompt": "wonder@project:~$",
+        "lines": [],
+        "truncatedFrom": null,
+        "acceptsInput": false,
+        "busy": false
+      },
+      "chrome": {
+        "canGoBack": false,
+        "canGoForward": false,
+        "canReload": false,
+        "canStop": false,
+        "canRestart": false,
+        "canRebuild": false,
+        "canReturnToProject": true
+      },
+      "unavailableReason": null
+    },
+    "sample-peer-judith": {
+      "title": "WONDER WEB",
+      "observedAtIso": "2026-09-17T09:00:00.000Z",
+      "viewerUserId": "sample-viewer",
+      "tabs": [
+        {
+          "userId": "sample-viewer",
+          "label": "MY VIEW",
+          "isSelf": true,
+          "isActive": true,
+          "dotColorToken": "wonder-dot-azure",
+          "connectionState": "LIVE",
+          "access": "control"
+        },
+        {
+          "userId": "sample-peer-kai",
+          "label": "KAI",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-judith",
+          "label": "JUDITH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-coral",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-tanish",
+          "label": "TANISH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "RECONNECTING",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-maya",
+          "label": "MAYA",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-rose",
+          "connectionState": "LIVE",
+          "access": "observe"
+        }
+      ],
+      "address": {
+        "display": "wonder.app/project",
+        "secure": true,
+        "creationId": "sample-judith-creation",
+        "projectId": "sample-wonderland-project"
+      },
+      "viewport": {
+        "kind": "observed",
+        "creationId": "sample-judith-creation",
+        "ownerUserId": "sample-peer-judith",
+        "status": "BUILDING"
+      },
+      "terminal": {
+        "prompt": "wonder@project:~$",
+        "lines": [],
+        "truncatedFrom": null,
+        "acceptsInput": false,
+        "busy": true
+      },
+      "chrome": {
+        "canGoBack": false,
+        "canGoForward": false,
+        "canReload": false,
+        "canStop": false,
+        "canRestart": false,
+        "canRebuild": false,
+        "canReturnToProject": true
+      },
+      "unavailableReason": null
+    },
+    "sample-peer-tanish": {
+      "title": "WONDER WEB",
+      "observedAtIso": "2026-09-17T09:00:00.000Z",
+      "viewerUserId": "sample-viewer",
+      "tabs": [
+        {
+          "userId": "sample-viewer",
+          "label": "MY VIEW",
+          "isSelf": true,
+          "isActive": true,
+          "dotColorToken": "wonder-dot-azure",
+          "connectionState": "LIVE",
+          "access": "control"
+        },
+        {
+          "userId": "sample-peer-kai",
+          "label": "KAI",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-judith",
+          "label": "JUDITH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-coral",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-tanish",
+          "label": "TANISH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "RECONNECTING",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-maya",
+          "label": "MAYA",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-rose",
+          "connectionState": "LIVE",
+          "access": "observe"
+        }
+      ],
+      "address": {
+        "display": "wonder.app/project",
+        "secure": true,
+        "creationId": "sample-tanish-creation",
+        "projectId": "sample-wonderland-project"
+      },
+      "viewport": {
+        "kind": "observed",
+        "creationId": "sample-tanish-creation",
+        "ownerUserId": "sample-peer-tanish",
+        "status": "READY"
+      },
+      "terminal": {
+        "prompt": "wonder@project:~$",
+        "lines": [],
+        "truncatedFrom": null,
+        "acceptsInput": false,
+        "busy": false
+      },
+      "chrome": {
+        "canGoBack": false,
+        "canGoForward": false,
+        "canReload": false,
+        "canStop": false,
+        "canRestart": false,
+        "canRebuild": false,
+        "canReturnToProject": true
+      },
+      "unavailableReason": null
+    },
+    "sample-peer-maya": {
+      "title": "WONDER WEB",
+      "observedAtIso": "2026-09-17T09:00:00.000Z",
+      "viewerUserId": "sample-viewer",
+      "tabs": [
+        {
+          "userId": "sample-viewer",
+          "label": "MY VIEW",
+          "isSelf": true,
+          "isActive": true,
+          "dotColorToken": "wonder-dot-azure",
+          "connectionState": "LIVE",
+          "access": "control"
+        },
+        {
+          "userId": "sample-peer-kai",
+          "label": "KAI",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-judith",
+          "label": "JUDITH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-coral",
+          "connectionState": "LIVE",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-tanish",
+          "label": "TANISH",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-jade",
+          "connectionState": "RECONNECTING",
+          "access": "observe"
+        },
+        {
+          "userId": "sample-peer-maya",
+          "label": "MAYA",
+          "isSelf": false,
+          "isActive": false,
+          "dotColorToken": "wonder-dot-rose",
+          "connectionState": "LIVE",
+          "access": "observe"
+        }
+      ],
+      "address": {
+        "display": "wonder.app/project",
+        "secure": true,
+        "creationId": "sample-maya-creation",
+        "projectId": "sample-wonderland-project"
+      },
+      "viewport": {
+        "kind": "observed",
+        "creationId": "sample-maya-creation",
+        "ownerUserId": "sample-peer-maya",
+        "status": "FAILED"
+      },
+      "terminal": {
+        "prompt": "wonder@project:~$",
+        "lines": [],
+        "truncatedFrom": null,
+        "acceptsInput": false,
+        "busy": false
+      },
+      "chrome": {
+        "canGoBack": false,
+        "canGoForward": false,
+        "canReload": false,
+        "canStop": false,
+        "canRestart": false,
+        "canRebuild": false,
+        "canReturnToProject": true
+      },
+      "unavailableReason": null
+    }
+  }
+}

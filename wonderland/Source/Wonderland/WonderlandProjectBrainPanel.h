@@ -40,6 +40,8 @@ public:
 		SLATE_EVENT(FSimpleDelegate, OnRequestClose)
 		SLATE_EVENT(FSimpleDelegate, OnRequestTerminal)
 		SLATE_EVENT(FSimpleDelegate, OnRequestMap)
+		/** Open this project's Wonder Web: the in-world browser for what the project built. */
+		SLATE_EVENT(FSimpleDelegate, OnRequestWonderWeb)
 		SLATE_EVENT(FOnPropose, OnPropose)
 		SLATE_EVENT(FOnReview, OnReview)
 	SLATE_END_ARGS()
@@ -78,6 +80,7 @@ private:
 	FSimpleDelegate OnRequestClose;
 	FSimpleDelegate OnRequestTerminal;
 	FSimpleDelegate OnRequestMap;
+	FSimpleDelegate OnRequestWonderWeb;
 	FOnPropose OnPropose;
 	FOnReview OnReview;
 
