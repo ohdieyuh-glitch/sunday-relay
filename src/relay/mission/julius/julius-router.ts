@@ -83,6 +83,12 @@ export const safeReasonCode=(value:unknown):string|null=>typeof value==='string'
 export const JULIUS_HOSTED_FAILURE_REASONS=['rate_limited','credit_unavailable','context_length_exceeded','content_filtered','provider_overloaded','provider_auth_rejected','provider_bad_request','provider_server_error','stream_interrupted','execution_error','unclassified','no_message'] as const;
 export type JuliusHostedFailureReason=(typeof JULIUS_HOSTED_FAILURE_REASONS)[number];
 /**
+ * WHAT A CODING AGENT'S RESULT MESSAGE AMOUNTED TO, read from every field of it
+ * — mirrored from `claude-code-result-class.v1` so the domain's allowlist names
+ * a closed set without importing a connector. A test holds the two equal.
+ */
+export const JULIUS_CODING_AGENT_RESULT_CLASSES=['SUCCESS','NO_RESULT','UNKNOWN_SUBTYPE','REPORTED_ERROR','ERROR_FLAG_UNREPORTED','TERMINAL_REASON_NOT_COMPLETED','BUDGET_STOP','MAX_TURNS','EXECUTION_ERROR','STRUCTURED_OUTPUT_RETRIES_EXHAUSTED'] as const;
+/**
  * THE CORROBORATING FACTS, NARROWED THE SAME WAY THE CLASS IS.
  *
  * A failure class says WHICH boundary broke. It cannot say the exit code, the
@@ -320,6 +326,15 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   /** The runtime's own result subtype, e.g. `success` / `error_max_turns`. */
   resultSubtype:safeToken(v.resultSubtype),
   isError:safeNullableBool(v.isError),
+  /** The runtime's `terminal_reason`, a vocabulary member or `unrecognised`; null when none was sent. */
+  terminalReason:safeToken(v.terminalReason),
+  /**
+   * WHAT THE RESULT AMOUNTED TO, from every field of it. `resultSubtype` and
+   * `isError` are the runtime's words; this is the class that decided whether
+   * the session could be trusted, so a row can show an error subtype beside
+   * `isError: false` and say plainly that it was refused.
+   */
+  resultClass:safeEnum(v.resultClass,JULIUS_CODING_AGENT_RESULT_CLASSES),
   numTurns:safeCount(v.numTurns),
   toolUseCount:safeCount(v.toolUseCount),
   /** Denials the runtime itself recorded — evidence the envelope held. */

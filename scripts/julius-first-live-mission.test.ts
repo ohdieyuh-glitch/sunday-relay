@@ -830,6 +830,8 @@ describe('the evidence dump names only tables and columns the migrations create'
       // The Coding Agent half. Paid Mission #2 recorded `coder_refused`
       // and could not say which of four refusals it was.
       'resultSubtype', 'isError', 'numTurns', 'toolUseCount', 'permissionDenials', 'implementationPresent',
+      // And what the result amounted to: an error subtype beside `isError: false` was trusted.
+      'terminalReason', 'resultClass',
       // The Prompt Architect half. Paid attempt #3 failed here and the artifact
       // could not say which rule refused the plan.
       'requestedModel', 'responseId', 'validationPassed', 'validationReasonCode', 'validationField',

@@ -11,6 +11,7 @@
  * A Codex-shaped or Devin-shaped provider replaces THIS FILE and nothing else.
  */
 
+import { classifyClaudeCodeResult } from '../../src/relay/connectors/claude-code/result-classification';
 import { classifyHostedFailure } from '../hosted-coding-agent/hosted-failure-reason';
 import { DEFAULT_HOSTED_LIMITS, hostedLimitsForAllocation, type HostedLimits } from '../hosted-coding-agent/hosted-envelope';
 import type { HostedObservation } from '../hosted-coding-agent/hosted-observation';
@@ -101,12 +102,23 @@ export const hostedCoderDiagnostics = (input: {
       ? null : observed.permissionDenials,
     resultSubtype: observed?.resultSubtype ?? null,
     isError: observed?.isError ?? null,
+    /** A member of the SDK's vocabulary, `unrecognised`, or null when none was sent. */
+    terminalReason: observed?.terminalReason ?? null,
+    /**
+     * WHAT THE RESULT MESSAGE AMOUNTED TO, read from every field of it. Null
+     * when nothing was observed; `NO_RESULT` when the stream ended without one.
+     */
+    resultClass: observed === null ? null : classifyClaudeCodeResult(observed),
     // A COUNT of the runtime's final text, never the text.
     outputBytesObserved: observed?.finalText === null || observed?.finalText === undefined
       ? null : Buffer.byteLength(observed.finalText, 'utf8'),
-    /** AN OBSERVED SUCCESSFUL RESULT, not merely a runtime that started. */
-    implementationPresent: observed === null || observed.isError === null
-      ? null : observed.isError === false,
+    /**
+     * AN OBSERVED SUCCESSFUL RESULT, not merely a runtime that started — and
+     * not merely `is_error: false` beside an error subtype. Unknown while no
+     * result arrived.
+     */
+    implementationPresent: observed === null || observed.resultSubtype === null
+      ? null : classifyClaudeCodeResult(observed) === 'SUCCESS',
     /** THE MONEY, BESIDE THE REFUSAL. Unknown stays Unknown, never zero. */
     costUsdMicros: observed?.usage.totalCostUsd === null || observed?.usage.totalCostUsd === undefined
       ? null : Math.round(observed.usage.totalCostUsd * 1_000_000),
@@ -206,7 +218,22 @@ export function createClaudeCodeCodingAgentProvider(input: {
   const nowIso = (): string => new Date().toISOString();
   return {
     providerKind: CLAUDE_CODE_PROVIDER_KIND,
-    async execute(request: JuliusCodingAgentRequest): Promise<JuliusCodingAgentProviderOutcome> {
+    async execute(request: JuliusCodingAgentRequest, signal?: AbortSignal): Promise<JuliusCodingAgentProviderOutcome> {
+      /**
+       * A DISPATCH CANCELLED BEFORE LAUNCH LAUNCHES NOTHING. The signal was
+       * dropped at this method's signature, so a deadline cut or a lost lease
+       * aborted Julius's side of the race while the paid session kept editing
+       * the workspace until its own timer fired — and a retry could start a
+       * second session on the same directory beside it.
+       */
+      const cancelledBeforeLaunch = (): JuliusCodingAgentProviderOutcome => ({
+        kind: 'failed', failure: 'CANCELLED', runtimeStarted: false, costUsdMicros: null,
+        safeMessage: 'The dispatch was cancelled before the hosted Coding Agent launched.',
+        providerFailureClass: 'coder_cancelled_before_launch', diagnostics: {},
+      });
+      // Read through a function: the signal changes under an await, and a narrowed property would not.
+      const aborted = (): boolean => signal?.aborted === true;
+      if (aborted()) return cancelledBeforeLaunch();
       let queryFn: HostedQueryFn;
       try { queryFn = await loadQuery(); } catch {
         return {
@@ -231,6 +258,13 @@ export function createClaudeCodeCodingAgentProvider(input: {
           providerFailureClass: 'coder_allocation_below_one_cent', diagnostics: {},
         };
       }
+      if (aborted()) return cancelledBeforeLaunch();
+      /**
+       * THE ABORT REACHES THE SESSION. The runner already hands its own
+       * controller to the SDK; this connects Julius's signal to it, once, and
+       * detaches when the run is over. A second abort is a no-op on both sides.
+       */
+      let detach = (): void => undefined;
       const outcome: HostedRunOutcome = await run({
         queryFn,
         prompt: renderJuliusCodingAgentPrompt(request, JULIUS_CODING_AGENT_CHARTER),
@@ -239,7 +273,32 @@ export function createClaudeCodeCodingAgentProvider(input: {
         requestedModel: input.requestedModel,
         limits,
         now: nowIso,
-      });
+        ...(signal === undefined ? {} : {
+          onCancel: (cancel: () => void): void => {
+            if (signal.aborted) { cancel(); return; }
+            signal.addEventListener('abort', cancel, { once: true });
+            detach = () => signal.removeEventListener('abort', cancel);
+          },
+        }),
+      }).finally(() => detach());
+      /**
+       * AN ABORT THAT ARRIVED AS THE STREAM ENDED STILL ENDS THE DISPATCH.
+       * Whatever the session finished with, the dispatch it belonged to is over,
+       * so it is a cancellation — charged, because the session ran — and never
+       * a completed outcome anything could be minted from.
+       */
+      if (aborted() && outcome.kind === 'completed') {
+        const diagnostics = hostedCoderDiagnostics({
+          taskType: request.identity.taskType, requestedModel: input.requestedModel,
+          observed: outcome.observation, limits, outcome: 'failed', failureReason: null,
+        });
+        return {
+          kind: 'failed', failure: 'CANCELLED', runtimeStarted: true,
+          costUsdMicros: typeof diagnostics.costUsdMicros === 'number' ? diagnostics.costUsdMicros : null,
+          safeMessage: 'Hosted Coding Agent run was cancelled.',
+          providerFailureClass: 'coder_cancelled', diagnostics,
+        };
+      }
 
       const observed = 'observation' in outcome ? outcome.observation : null;
       if (outcome.kind !== 'completed') {

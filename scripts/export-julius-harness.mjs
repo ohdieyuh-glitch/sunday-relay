@@ -385,6 +385,7 @@ const FILE_RULES = [
   // observation carries. Replaced wholesale when the provider is swapped.
   ['relay-bridge/julius/claude-code-coding-provider.ts', 'CODING AGENT'],
   ['relay-bridge/hosted-coding-agent/', 'CODING AGENT'],
+  ['src/relay/connectors/claude-code/result-classification.ts', 'CODING AGENT'],
   ['relay-bridge/hermes-reviewer.ts', 'INDEPENDENT REVIEWER'],
   // The one derivation that decides how long a review may take, read by the
   // Hermes transport and by the reviewer worker's declared deadline alike.

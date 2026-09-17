@@ -181,7 +181,7 @@ function providerFor(
         reportedTools: ['Read', 'Edit'], toolTargets: [], toolsUsed: ['Edit'], toolInvocations: 6, permissionDenials: 0, numTurns: 4, durationMs: 1,
         usage: { inputTokens: 900, outputTokens: 300, totalCostUsd: 0.05, source: 'runtime_reported' },
         streamUsage: { messages: 4, abortedMessages: 0, inputTokens: 880, outputTokens: 290, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 },
-        resultSubtype: 'success', isError: false, finalText: textFor(current!), thinkingBlocksOmitted: 0, unknownMessageCount: 0,
+        resultSubtype: 'success', isError: false, terminalReason: null, finalText: textFor(current!), thinkingBlocksOmitted: 0, unknownMessageCount: 0,
       },
       envelope: compileHostedEnvelope({ workspacePath: input.workspacePath }), startedAt: 't', completedAt: 't',
     }) as never;

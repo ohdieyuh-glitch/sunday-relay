@@ -135,7 +135,7 @@ function fakeCoder(log: FakeLog, prompts: string[]) {
           inputTokens: 480, outputTokens: 190,
           cacheReadInputTokens: 0, cacheCreationInputTokens: 0,
         },
-        resultSubtype: 'success', isError: false, finalText: `done (${SECRET_CANARY})`,
+        resultSubtype: 'success', isError: false, terminalReason: null, finalText: `done (${SECRET_CANARY})`,
         thinkingBlocksOmitted: 0, unknownMessageCount: 0,
       },
       envelope: compileHostedEnvelope({ workspacePath: input.workspacePath }),

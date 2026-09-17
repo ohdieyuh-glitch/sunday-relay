@@ -203,6 +203,10 @@ export async function runClaudeContractVerification(): Promise<{ checks: Contrac
     check('max-turns error is not a trusted report', maxTurns.result.outcome.parsed.isError === true && !maxTurns.result.report.ok);
     const execErr = await invokeScenario(harnessDir, { scenario: 'execution_error' });
     check('execution error is not a trusted report', !execErr.result.report.ok);
+    const flagFalse = await invokeScenario(harnessDir, { scenario: 'error_subtype_flag_false' });
+    check('an error subtype beside is_error:false is not a trusted report', flagFalse.result.outcome.parsed.isError === false && !flagFalse.result.report.ok);
+    const deferred = await invokeScenario(harnessDir, { scenario: 'success_terminal_deferred' });
+    check('a success that ended tool_deferred is not a trusted report', deferred.result.outcome.parsed.terminalReason === 'tool_deferred' && !deferred.result.report.ok);
     const hidden = await invokeScenario(harnessDir, { scenario: 'hidden_reasoning' });
     const hiddenSerialized = JSON.stringify(hidden.result.events);
     check('hidden reasoning omitted and counted', hidden.result.outcome.parsed.thinkingBlocksOmitted > 0 && !hiddenSerialized.includes('SECRET internal'));

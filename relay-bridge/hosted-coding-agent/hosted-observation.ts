@@ -21,6 +21,12 @@
  */
 
 
+import {
+  claudeCodeResultRefusalReason,
+  readClaudeCodeErrorFlag,
+  readClaudeCodeTerminalReason,
+} from '../../src/relay/connectors/claude-code/result-classification';
+
 export interface HostedUsage {
   readonly inputTokens: number | null;
   readonly outputTokens: number | null;
@@ -121,7 +127,14 @@ export interface HostedObservation {
    */
   readonly streamUsage: HostedStreamUsage;
   readonly resultSubtype: string | null;
+  /** `is_error` as the runtime sent it. Absent is null, never false. */
   readonly isError: boolean | null;
+  /**
+   * `terminal_reason`, as a member of the SDK's vocabulary, `unrecognised`, or
+   * null when the runtime sent none. It was never read, so a session that ended
+   * `tool_deferred` or `hook_stopped` under a `success` subtype was trusted.
+   */
+  readonly terminalReason: string | null;
   readonly finalText: string | null;
   /** Hidden reasoning is counted and dropped — never stored, never surfaced. */
   readonly thinkingBlocksOmitted: number;
@@ -133,7 +146,7 @@ const EMPTY: HostedObservation = {
   reportedCwd: null, reportedTools: [], toolTargets: [], toolsUsed: [], toolInvocations: 0,
   permissionDenials: 0, numTurns: null, durationMs: null, usage: UNKNOWN_HOSTED_USAGE,
   streamUsage: NO_HOSTED_STREAM_USAGE,
-  resultSubtype: null, isError: null, finalText: null,
+  resultSubtype: null, isError: null, terminalReason: null, finalText: null,
   thinkingBlocksOmitted: 0, unknownMessageCount: 0,
 };
 
@@ -268,7 +281,8 @@ export function foldHostedMessage(
     return {
       ...state,
       resultSubtype: typeof m.subtype === 'string' ? m.subtype : null,
-      isError: m.is_error === true,
+      isError: readClaudeCodeErrorFlag(m.is_error),
+      terminalReason: readClaudeCodeTerminalReason(m.terminal_reason),
       /**
        * THE REPORT IS READ BY A PARSER, NOT SHOWN TO ANYONE.
        *
@@ -330,8 +344,12 @@ export function hostedStreamIsUsable(
   if (o.resultSubtype === null) {
     return { ok: false, reason: 'the hosted runtime never reported a final result' };
   }
-  if (o.isError === true) {
-    return { ok: false, reason: `the hosted runtime reported ${o.resultSubtype}` };
-  }
+  /**
+   * EVERY FIELD OF THE RESULT MUST SAY SUCCESS, not only `is_error`. An error
+   * subtype beside `is_error: false`, a missing `is_error`, an unknown subtype
+   * or a terminal reason other than `completed` is not a finished session.
+   */
+  const refusal = claudeCodeResultRefusalReason(o);
+  if (refusal !== null) return { ok: false, reason: refusal.replace(/^the runtime/u, 'the hosted runtime') };
   return { ok: true, reason: null };
 }

@@ -1354,6 +1354,22 @@ export function createJuliusCodingAgentAdapter(input: {
         taskId: dispatch.taskId,
         workerId: input.worker.workerId,
       };
+      /**
+       * NO EFFECT, AND NO EVIDENCE, AFTER AN ABORT. The executor steps are the
+       * only way an attempt's work becomes evidence, so each one first asks
+       * whether the dispatch it belongs to is still running. The coordinator has
+       * already settled a cancelled dispatch; these stop the abandoned promise
+       * from reading the workspace, writing a diff artifact or running the tests
+       * under a claim that may by now be another attempt's.
+       */
+      const stopIfCancelled = (step: 'base' | 'status' | 'diff' | 'test', spent: { readonly costUsdMicros: number | null } | null): void => {
+        if (dispatch.signal?.aborted !== true) return;
+        throw new JuliusDispatchError('CANCELLED', false, 'The dispatch was cancelled; no further executor effect ran.', `coder_cancelled_before_${step}`, {
+          runtimeStarted: spent !== null,
+          ...(spent === null || spent.costUsdMicros === null ? {} : { costUsdMicros: spent.costUsdMicros }),
+        });
+      };
+      stopIfCancelled('base', null);
       const before = await input.shell.run({
         ...shellScope,
         invocationKey: `${dispatch.taskId}:base`,
@@ -1424,6 +1440,7 @@ export function createJuliusCodingAgentAdapter(input: {
        * the agreement was invisible to everyone. Julius holds the work to the
        * locked contract from this set.
        */
+      stopIfCancelled('status', outcome.observation);
       const status = await afterSession(() => input.shell.run({
         ...shellScope,
         invocationKey: `${dispatch.taskId}:status`,
@@ -1438,6 +1455,7 @@ export function createJuliusCodingAgentAdapter(input: {
        * rendered against /dev/null with plain git and a bash loop, so nothing
        * outside what the executor image already runs is needed.
        */
+      stopIfCancelled('diff', outcome.observation);
       const diff = await afterSession(() => input.shell.run({
         ...shellScope,
         invocationKey: `${dispatch.taskId}:diff`,
@@ -1445,6 +1463,7 @@ export function createJuliusCodingAgentAdapter(input: {
         timeoutMs: 30_000,
       }));
       if (diff.status === 'SUCCEEDED') input.artifacts.put(diffRef(snapshot.runId), diff.stdout);
+      stopIfCancelled('test', outcome.observation);
       const test = await afterSession(() => input.shell.run({
         ...shellScope,
         invocationKey: `${dispatch.taskId}:test`,

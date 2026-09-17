@@ -76,23 +76,41 @@ const successDiagnostics=(request:JuliusExecutionRequest,result:JuliusProviderRe
 class JuliusWorkerDeadlineExceeded extends Error{
  constructor(readonly declaredTimeoutMs:number){super('worker_deadline_exceeded');this.name='JuliusWorkerDeadlineExceeded';}
 }
+/**
+ * AN ABORT FROM OUTSIDE ENDS THE DISPATCH, not merely asks the adapter to.
+ *
+ * The external signal used to be forwarded and nothing more, so the race kept
+ * waiting on an adapter that ignored it — and a result that arrived after the
+ * abort was persisted, accepted and settled as if nobody had stopped it. The
+ * cut is now part of the race, settled BEFORE the adapter is told, so the
+ * reason recorded is the one that fired: an outside abort is a cancellation, the
+ * deadline is the deadline. Whatever the signal's owner said about why — a lost
+ * lease — travels as the failure class.
+ */
+class JuliusDispatchCancelled extends Error{
+ constructor(readonly reasonCode:string){super('dispatch_cancelled');this.name='JuliusDispatchCancelled';}
+}
+const cancellationReasonOf=(signal:AbortSignal):string=>{
+ const reason:unknown=signal.reason;
+ return typeof reason==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(reason)?reason:'dispatch_cancelled';
+};
 async function dispatchWithinDeadline<T>(
  declaredTimeoutMs:number,
  externalSignal:AbortSignal|undefined,
  run:(signal:AbortSignal)=>Promise<T>,
 ):Promise<T>{
  const controller=new AbortController();
- const forward=():void=>controller.abort();
+ let cut:(error:Error)=>void=()=>undefined;
+ const race=new Promise<never>((_resolve,reject)=>{cut=reject;});
+ // Settle first, then tell the adapter: the reason recorded is the one that fired.
+ // The adapter is told the same reason the record keeps.
+ const forward=():void=>{const reasonCode=cancellationReasonOf(externalSignal!);cut(new JuliusDispatchCancelled(reasonCode));controller.abort(reasonCode);};
  externalSignal?.addEventListener('abort',forward,{once:true});
  let timer:ReturnType<typeof setTimeout>|undefined;
  const running=run(controller.signal);
  try{
-  return await Promise.race([
-   running,
-   new Promise<never>((_resolve,reject)=>{
-    timer=setTimeout(()=>{controller.abort();reject(new JuliusWorkerDeadlineExceeded(declaredTimeoutMs));},declaredTimeoutMs);
-   }),
-  ]);
+  timer=setTimeout(()=>{cut(new JuliusWorkerDeadlineExceeded(declaredTimeoutMs));controller.abort('worker_deadline_exceeded');},declaredTimeoutMs);
+  return await Promise.race([running,race]);
  }finally{
   if(timer!==undefined)clearTimeout(timer);
   externalSignal?.removeEventListener('abort',forward);
@@ -273,7 +291,7 @@ export class JuliusExecutionCoordinator {
      *  how long the worker actually ran beside the limit it declared. */
     let dispatchedAtMs=Date.now();
     try{
-      if(request.signal?.aborted)throw new JuliusDispatchError('CANCELLED',false,'Dispatch was cancelled.');
+      if(request.signal?.aborted)throw new JuliusDispatchError('CANCELLED',false,'Dispatch was cancelled.',cancellationReasonOf(request.signal));
       await this.event(request,'worker.dispatched',{workerId:worker.workerId});
       dispatchedAtMs=Date.now();
       // THE WORKER'S OWN DECLARED NUMBER, never a literal here. A second
@@ -295,6 +313,12 @@ export class JuliusExecutionCoordinator {
        */
       const result=await dispatchWithinDeadline(worker.timeoutMs,request.signal,(signal)=>this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,taskType:request.taskType,signal,...(request.allocation===undefined?{}:{allocation:request.allocation}),...(request.contract===undefined?{}:{contract:request.contract})}));
       answered=result;
+      /**
+       * NOTHING FROM A CANCELLED DISPATCH BECOMES MISSION STATE. An abort that
+       * landed in the same turn the result did is still an abort: what it cost
+       * is charged below, and no evidence, acceptance or settlement follows.
+       */
+      if(request.signal?.aborted===true)throw new JuliusDispatchCancelled(cancellationReasonOf(request.signal));
       const screened=normalizedEvidence(request.claim,worker,result,request.role);
       const evidence=screened.kept;
       for(const refused of screened.refused){
@@ -341,7 +365,10 @@ export class JuliusExecutionCoordinator {
       */
      const boundary=error instanceof JuliusWorkerDeadlineExceeded
       ? new JuliusDispatchError('TIMEOUT',true,'Worker exceeded the deadline it declares.','worker_deadline_exceeded',{timedOut:true,runtimeStarted:true,timeoutMs:error.declaredTimeoutMs,elapsedMs:Date.now()-dispatchedAtMs})
-      : error;
+      /* A CANCELLATION AFTER HANDOFF MAY HAVE BEEN PAID FOR: the hold is kept. */
+      : error instanceof JuliusDispatchCancelled
+       ? new JuliusDispatchError('CANCELLED',false,'Dispatch was cancelled.',error.reasonCode,{runtimeStarted:true,elapsedMs:Date.now()-dispatchedAtMs})
+       : error;
      const failure=boundary instanceof JuliusDispatchError?boundary:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Execution boundary failed.');const reported=reportedUsdMicros(answered);
      const billed=reported??(typeof failure.diagnostics?.costUsdMicros==='number'?failure.diagnostics.costUsdMicros:null);
      // A provider that ANSWERED ran, whatever the diagnostics say about it.

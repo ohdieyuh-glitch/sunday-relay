@@ -1007,7 +1007,7 @@ describe('Q8 — a live Coding Agent can ask, and the ask reaches the mission', 
     observation: {
       ...emptyObservation(),
       initSeen: true, actualModel: 'claude-fable-5', sessionId: 'sess-q8',
-      numTurns: 4, resultSubtype: 'success', isError: false, finalText,
+      numTurns: 4, resultSubtype: 'success', isError: false, terminalReason: null, finalText,
       usage: { inputTokens: 100, outputTokens: 50, totalCostUsd: 0.25, source: 'runtime_reported' },
     },
     envelope: HOSTED_ENVELOPE,

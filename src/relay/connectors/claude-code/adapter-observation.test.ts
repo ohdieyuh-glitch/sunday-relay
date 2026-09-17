@@ -23,8 +23,8 @@ import {
  */
 
 const parsed = (over: Partial<ParsedStreamState> = {}): ParsedStreamState => ({
-  sessionId: 's', model: 'm', cwd: '/w', initSeen: true, isError: false,
-  resultSubtype: null, finalResult: null, toolActivity: [], assistantTextChunks: [],
+  sessionId: 's', model: 'm', cwd: '/w', initSeen: true, isError: false, terminalReason: null,
+  resultSubtype: 'success', finalResult: null, toolActivity: [], assistantTextChunks: [],
   unknownRecordCount: 0, malformedLineCount: 0, thinkingBlocksOmitted: 0,
   usage: { numTurns: 1, durationMs: 1200, apiDurationMs: 900, reportedCostUsd: 0.01 },
   ...over,
