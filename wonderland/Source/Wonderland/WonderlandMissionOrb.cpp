@@ -171,7 +171,40 @@ void AWonderlandMissionOrb::Build()
 	{
 		TArray<FTransform> Stone;
 		MissionOrbDiamond(Stone, CrystalHalfWidthUU, CrystalHalfHeightUU, Cell);
-		MakeMesh(TEXT("MissionCrystal"), CrystalRoot, true, Stone, CrystalMid);
+		// THE CROWN IS ITS OWN PIECE: the section a repair identifies, erases and rebuilds, pivoted at its base.
+		CrownFromUU = CrystalHalfHeightUU * 0.34f;
+		TArray<FTransform> Lower;
+		TArray<FTransform> Crown;
+		for (const FTransform& Box : Stone)
+		{
+			if (Box.GetLocation().Z > CrownFromUU)
+			{
+				FTransform Moved = Box;
+				Moved.AddToTranslation(FVector(0.0f, 0.0f, -CrownFromUU));
+				Crown.Add(Moved);
+			}
+			else
+			{
+				Lower.Add(Box);
+			}
+		}
+		MakeMesh(TEXT("MissionCrystal"), CrystalRoot, true, Lower, CrystalMid);
+		CrownRoot = NewObject<USceneComponent>(this, MakeUniqueObjectName(this, USceneComponent::StaticClass(), TEXT("MissionCrown")));
+		CrownRoot->SetMobility(EComponentMobility::Movable);
+		CrownRoot->SetupAttachment(CrystalRoot);
+		CrownRoot->SetRelativeLocation(FVector(0.0f, 0.0f, CrownFromUU));
+		CrownRoot->RegisterComponent();
+		MakeMesh(TEXT("MissionCrystalCrown"), CrownRoot, true, Crown, CrownMid);
+		TArray<FTransform> Debris;
+		for (int32 Index = 0; Index < 14; ++Index)
+		{
+			Debris.Add(MissionOrbBox(FVector::ZeroVector, FVector(Cell * 0.7f)));
+		}
+		DebrisMesh = MakeMesh(TEXT("MissionCrownDebris"), CrystalRoot, true, Debris, DebrisMid);
+		if (DebrisMesh != nullptr)
+		{
+			DebrisMesh->SetVisibility(false);
+		}
 	}
 
 	// ---------------------------------------------------------------- the frame
@@ -316,6 +349,29 @@ void AWonderlandMissionOrb::ReleaseAnchor()
 void AWonderlandMissionOrb::SetManifest(float Target)
 {
 	ManifestTarget = FMath::Clamp(Target, 0.0f, 1.0f);
+	if (ManifestTarget <= 0.0f)
+	{
+		// A dismissal cancels an appearance still waiting.
+		ManifestDelay = 0.0f;
+	}
+}
+
+void AWonderlandMissionOrb::ManifestAfter(float Seconds)
+{
+	ManifestDelay = FMath::Max(Seconds, 0.0f);
+	ManifestTarget = ManifestDelay > 0.0f ? 0.0f : 1.0f;
+}
+
+void AWonderlandMissionOrb::SetRepairState(int32 Stage, float Progress, float Weight)
+{
+	RepairStage = FMath::Clamp(Stage, 0, 4);
+	RepairProgress = FMath::Clamp(Progress, 0.0f, 1.0f);
+	RepairWeight = FMath::Clamp(Weight, 0.0f, 1.0f);
+}
+
+FVector AWonderlandMissionOrb::GetCrownLocation() const
+{
+	return CrownRoot != nullptr ? CrownRoot->GetComponentLocation() : GetActorLocation();
 }
 
 void AWonderlandMissionOrb::SetBeat(EWonderlandMissionBeat NewBeat)
@@ -424,7 +480,13 @@ void AWonderlandMissionOrb::Tick(float DeltaSeconds)
 
 	// A CONTRACT CLEARS ITS OWN PLACE. Once it has manifested and then been asked to leave, it removes
 	// itself when the fade is finished, so the owner never has to poll for the right moment to destroy it.
-	if (bHasManifested && IsFullyDismissed())
+	// WAITING TO APPEAR: the Dog is gathering the energy this grows from. Held at nothing until the pause is over.
+	if (ManifestDelay > 0.0f)
+	{
+		ManifestDelay = FMath::Max(ManifestDelay - DeltaSeconds, 0.0f);
+		ManifestTarget = ManifestDelay > 0.0f ? 0.0f : 1.0f;
+	}
+	else if (bHasManifested && IsFullyDismissed())
 	{
 		Destroy();
 		return;
@@ -533,5 +595,98 @@ void AWonderlandMissionOrb::Animate(float TimeSeconds, float DeltaSeconds)
 		const float Burn = FMath::Max(Motion.Brightness * (1.0f - Motion.PulseDepth * Cycle), 0.0f) * Manifest;
 		const EWonderlandChakra Showing = Chakra == EWonderlandChakra::None ? EWonderlandChakra::Root : Chakra;
 		CrystalMid->SetVectorParameterValue(TEXT("Color"), WonderlandChakraColour(Showing) * (GlowExposure * Burn));
+		CrystalBurn = Burn;
+	}
+
+	// ---------------------------------------------------------------- the repair, on the crown
+	RepairShown = FMath::FInterpTo(RepairShown, RepairWeight, DeltaSeconds, 4.0f);
+	{
+		const EWonderlandChakra Showing = Chakra == EWonderlandChakra::None ? EWonderlandChakra::Root : Chakra;
+		const FLinearColor Stone = WonderlandChakraColour(Showing) * CrystalBurn;
+		const FLinearColor Fault(1.0f, 0.06f, 0.04f);
+		const FLinearColor Ash(0.22f, 0.20f, 0.20f);
+		const FLinearColor Gold(1.0f, 0.78f, 0.30f);
+		float Scale = 1.0f;
+		FLinearColor Colour = Stone;
+		bool bDebris = false;
+		const float P = RepairProgress;
+		const float Shown = RepairShown;
+		if (Shown > 0.01f)
+		{
+			switch (RepairStage)
+			{
+			case 1:
+			{
+				// IDENTIFY: the incorrect section flickers red, harder the longer it is looked at.
+				const float Flicker = 0.55f + 0.45f * FMath::Sin(TimeSeconds * 15.0f);
+				Colour = FMath::Lerp(Stone, Fault * (0.9f + 1.1f * Flicker), Shown * FMath::Clamp(P * 2.5f, 0.0f, 1.0f));
+				break;
+			}
+			case 2:
+			{
+				// ERASE: it breaks away to nothing, going dark as it goes.
+				const float Gone = FMath::SmoothStep(0.0f, 1.0f, P);
+				Scale = FMath::Lerp(1.0f, 0.02f, Shown * Gone);
+				Colour = FMath::Lerp(Fault * 1.4f, Ash, Gone);
+				bDebris = true;
+				break;
+			}
+			case 3:
+			{
+				// REPAINT: it grows back out of the stone in gold, and takes the chakra's colour as it finishes.
+				const float Grown = FMath::SmoothStep(0.0f, 0.8f, P);
+				Scale = FMath::Lerp(1.0f, FMath::Max(Grown, 0.02f), Shown);
+				Colour = FMath::Lerp(Gold * 2.4f, Stone, FMath::SmoothStep(0.75f, 1.0f, P));
+				break;
+			}
+			case 4:
+			{
+				// SETTLE: whole again, the gold easing back into the stone.
+				Colour = FMath::Lerp(Gold * 1.5f, Stone, P);
+				break;
+			}
+			default:
+				break;
+			}
+		}
+		CrownScaleShown = Scale;
+		if (CrownRoot != nullptr)
+		{
+			CrownRoot->SetRelativeScale3D(FVector(FMath::Max(Scale, 0.001f)));
+		}
+		if (CrownMid != nullptr)
+		{
+			CrownMid->SetVectorParameterValue(TEXT("Color"), Colour * (GlowExposure * (Shown > 0.01f ? FMath::Max(Manifest, 0.2f) : 1.0f)));
+		}
+		if (DebrisMesh != nullptr)
+		{
+			const bool bShowDebris = bDebris && Shown > 0.2f && P > 0.05f;
+			if (DebrisMesh->IsVisible() != bShowDebris)
+			{
+				DebrisMesh->SetVisibility(bShowDebris);
+			}
+			if (bShowDebris)
+			{
+				// The pieces fly out from the crown and fall, fading as the erase finishes.
+				const int32 Count = DebrisMesh->GetInstanceCount();
+				TArray<FTransform> Pieces;
+				Pieces.Reserve(Count);
+				const float Cell = CrystalHalfWidthUU / 5.5f;
+				for (int32 Index = 0; Index < Count; ++Index)
+				{
+					const float Angle = FMath::DegreesToRadians(Index * 137.5f);
+					const float Out = (4.0f + 30.0f * P) * (0.6f + 0.4f * FMath::Frac(Index * 0.37f));
+					const float Fall = P * P * 70.0f * (0.7f + 0.3f * FMath::Frac(Index * 0.61f));
+					const FVector PieceAt(FMath::Cos(Angle) * Out, FMath::Sin(Angle) * Out, CrownFromUU + CrystalHalfHeightUU * 0.3f - Fall);
+					const float Size = Cell * 0.7f * (1.0f - P * 0.6f);
+					Pieces.Add(FTransform(FRotator(Index * 31.0f + TimeSeconds * 200.0f, Index * 47.0f, 0.0f), PieceAt, FVector(Size / 100.0f)));
+				}
+				DebrisMesh->BatchUpdateInstancesTransforms(0, Pieces, false, true, true);
+				if (DebrisMid != nullptr)
+				{
+					DebrisMid->SetVectorParameterValue(TEXT("Color"), FMath::Lerp(Fault, Ash, P) * (GlowExposure * (1.2f - P)));
+				}
+			}
+		}
 	}
 }

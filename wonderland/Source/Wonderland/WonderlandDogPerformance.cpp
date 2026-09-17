@@ -1,85 +1,81 @@
 #include "WonderlandDogPerformance.h"
 
-namespace
+namespace WonderlandDogPerformanceDetail
 {
 	using DogAct = EWonderlandDogAct;
 	using DogProp = EWonderlandDogProp;
 
-	/**
-	 * Every performance, as one table. Read a row as a sentence: this act looks like THIS, holds THAT,
-	 * moves the body this far, and either walks the contract, beams it, or works at it.
-	 */
-	const FWonderlandDogActReading GDogActs[] = {
+	FWonderlandDogActReading Row(DogAct Act, const TCHAR* Label, const TCHAR* Meaning, DogProp Prop)
+	{
+		FWonderlandDogActReading R;
+		R.Act = Act;
+		R.Label = Label;
+		R.Meaning = Meaning;
+		R.Prop = Prop;
+		return R;
+	}
 
-	{ DogAct::None, TEXT("NONE"), TEXT("Whatever the Dog was already doing."),
-	  DogProp::None, 0.0f, 0.0f, 4.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false, false, false, false, 0.0f },
+	/** Every performance, as one table, in the enum's order. Read a row as the founder's sentence for the stage. */
+	const TArray<FWonderlandDogActReading>& Table()
+	{
+		static const TArray<FWonderlandDogActReading> Acts = []
+		{
+			TArray<FWonderlandDogActReading> T;
+			T.Add(Row(DogAct::None, TEXT("NONE"), TEXT("Whatever the Dog was already doing."), DogProp::None));
 
-	// THE FOUNDER'S ACTIVATION, and the one most easily got wrong: this is NOT meditation. The body leaves
-	// the ground entirely, upright and open, the head goes UP, and the forearms reach out and about 35
-	// degrees down -- between hanging and a T-pose, which is the whole shape of the note.
-	{ DogAct::FloatingActivation, TEXT("MISSION START"),
-	  TEXT("Julius is activating and entering the Mission Contract."),
-	  DogProp::None,
-	  /* lift */ 64.0f, /* hover */ 5.0f, /* period */ 3.6f,
-	  /* head up */ -26.0f, /* arms down */ 35.0f, /* arms out */ 22.0f,
-	  /* work */ 0.0f, 0.0f, false, false, false, false, 0.0f },
+			FWonderlandDogActReading Prepare = Row(DogAct::FloatingActivation, TEXT("PREPARATION"),
+				TEXT("Julius meditates and gathers the energy the Mission Contract appears from."), DogProp::None);
+			Prepare.bMeditates = true;
+			T.Add(Prepare);
 
-	// READING, never writing, and MOVING: the Dog circles the contract while it studies. A Dog standing
-	// beside the orb holding a book is the thing the founder specifically did not want.
-	{ DogAct::ReadingTheBook, TEXT("PLANNING"),
-	  TEXT("Studying the mission, understanding the requirements, building the plan."),
-	  DogProp::Book,
-	  0.0f, 0.0f, 4.0f,
-	  /* head down at the pages */ 22.0f, /* arms forward and a little down */ 18.0f, 10.0f,
-	  /* pages turn */ 5.0f, 0.22f, /* orbits */ true, false, /* two hands */ true, false, 0.0f },
+			FWonderlandDogActReading Research = Row(DogAct::ReadingTheBook, TEXT("RESEARCH"),
+				TEXT("Reading the book in its hands, circling the Mission Contract."), DogProp::Book);
+			Research.bReadsTheBook = true;
+			Research.bOrbitsTheContract = true;
+			Research.OrbitPace = 1.0f;
+			Research.OrbitSide = 1;
+			T.Add(Research);
 
-	// WORKING, not holding. The swing is the stroke, and it is big enough to read from the play camera.
-	{ DogAct::PaintingTheWork, TEXT("IMPLEMENTING"),
-	  TEXT("The Compound Agent painting the creation into existence."),
-	  DogProp::Paintbrush,
-	  0.0f, 0.0f, 4.0f,
-	  /* head follows the stroke */ 10.0f, -18.0f, 16.0f,
-	  /* strokes */ 34.0f, 0.62f, /* moves while creating */ true, false, false, false, 0.0f },
+			FWonderlandDogActReading Implement = Row(DogAct::PaintingTheWork, TEXT("IMPLEMENTATION"),
+				TEXT("Painting the creation into existence, circling the Mission Contract."), DogProp::Paintbrush);
+			Implement.bPaints = true;
+			Implement.bOrbitsTheContract = true;
+			Implement.OrbitPace = 0.8f;
+			Implement.OrbitSide = 0;
+			T.Add(Implement);
 
-	// A STANCE AND A BEAM. Still, level, facing the contract, arms forward -- everything about the pose
-	// says holding steady, because the beam is the action and a busy body would fight it.
-	{ DogAct::VerificationBeam, TEXT("VERIFYING"),
-	  TEXT("Checking the work against the Mission Contract."),
-	  DogProp::None,
-	  0.0f, 1.5f, 5.0f,
-	  /* level */ -4.0f, /* arms forward */ 8.0f, 14.0f,
-	  0.0f, 0.0f, false, /* beams */ true, false, false, 0.0f },
+			FWonderlandDogActReading Verify = Row(DogAct::VerificationBeam, TEXT("VERIFICATION"),
+				TEXT("Airborne, holding the verification beam on the Mission Contract."), DogProp::None);
+			Verify.bFlies = true;
+			Verify.bFacesTheContract = true;
+			Verify.bBeamsTheContract = true;
+			T.Add(Verify);
 
-	// LOOKING, NOT MAKING. The lens comes up to the eye and the head goes down at the work; the walk is
-	// slower than the reading circle, because an inspection lingers where a study paces.
-	{ DogAct::InspectingTheWork, TEXT("REVIEW"),
-	  TEXT("The work is being examined against the contract, not added to."),
-	  DogProp::MagnifyingGlass,
-	  0.0f, 0.0f, 4.0f,
-	  /* head at the work */ 18.0f, /* lens up to the eye */ -34.0f, 8.0f,
-	  /* a slow sweep of the lens */ 12.0f, 0.18f,
-	  /* circles, slowly */ true, false, false, false, 0.0f },
+			FWonderlandDogActReading Review = Row(DogAct::InspectingTheWork, TEXT("REVIEW"),
+				TEXT("Examining the work through the lens, not adding to it."), DogProp::MagnifyingGlass);
+			Review.bInspects = true;
+			Review.bOrbitsTheContract = true;
+			Review.OrbitPace = 0.34f;
+			Review.OrbitSide = 0;
+			T.Add(Review);
 
-	// THE BRUSH COMES BACK, and that is the whole risk: a repair that merely painted would be
-	// implementation wearing another label. The CYCLE is what separates them -- find, erase, repaint --
-	// so this carries a period, and its stroke is larger and rarer than a build stroke.
-	{ DogAct::CorrectingTheWork, TEXT("REPAIR"),
-	  TEXT("Finding what failed, taking it out, and putting it back."),
-	  DogProp::Paintbrush,
-	  0.0f, 0.0f, 4.0f,
-	  /* head down at the fault */ 16.0f, -22.0f, 12.0f,
-	  /* bigger and slower than a build stroke */ 46.0f, 0.34f,
-	  /* stays at the fault rather than circling */ false, false, false,
-	  /* corrects */ true, /* one find-erase-repaint */ 2.6f },
-	};
+			FWonderlandDogActReading Repair = Row(DogAct::CorrectingTheWork, TEXT("REPAIR"),
+				TEXT("Identifying the incorrect section, erasing it, and repainting it."), DogProp::Paintbrush);
+			Repair.bCorrects = true;
+			Repair.bFacesTheContract = true;
+			T.Add(Repair);
+			return T;
+		}();
+		return Acts;
+	}
 }
 
 const FWonderlandDogActReading& WonderlandDogActReading(EWonderlandDogAct Act)
 {
+	const TArray<FWonderlandDogActReading>& Acts = WonderlandDogPerformanceDetail::Table();
 	const int32 Index = static_cast<int32>(Act);
-	const int32 Count = UE_ARRAY_COUNT(GDogActs);
 	// TOTAL. An act this build does not know performs as None rather than reading off the end.
-	return GDogActs[(Index >= 0 && Index < Count) ? Index : 0];
+	return Acts[(Index >= 0 && Index < Acts.Num()) ? Index : 0];
 }
 
 EWonderlandDogAct WonderlandDogActForBeat(EWonderlandMissionBeat Beat)
@@ -89,8 +85,7 @@ EWonderlandDogAct WonderlandDogActForBeat(EWonderlandMissionBeat Beat)
 	case EWonderlandMissionBeat::MissionStart:
 		return EWonderlandDogAct::FloatingActivation;
 
-	// RESEARCH AND PLANNING ARE BOTH THE BOOK, and guidance is the same study continuing in flight, so it
-	// stays open rather than snapping shut and back.
+	// RESEARCH AND PLANNING ARE BOTH THE BOOK, and guidance is the same study continuing.
 	case EWonderlandMissionBeat::Researching:
 	case EWonderlandMissionBeat::PromptArchitectActive:
 	case EWonderlandMissionBeat::Guidance:
@@ -102,27 +97,18 @@ EWonderlandDogAct WonderlandDogActForBeat(EWonderlandMissionBeat Beat)
 	case EWonderlandMissionBeat::Verifying:
 		return EWonderlandDogAct::VerificationBeam;
 
-	// REVIEW DOES NOT INHERIT IMPLEMENTATION (founder, 2026-09-16). These used to fall through to `None`
-	// and therefore keep the brush, which had the Compound Agent painting while its own work was being
-	// reviewed. CHALLENGE stays in the review family rather than dropping back to the brush.
+	// REVIEW NEVER INHERITS IMPLEMENTATION. CHALLENGE stays in the review family.
 	case EWonderlandMissionBeat::IndependentReviewerActive:
 	case EWonderlandMissionBeat::ReviewChallenge:
 		return EWonderlandDogAct::InspectingTheWork;
 
-	// REPAIR IS CORRECTIVE, not more implementation. RepairRequired is the moment the fault is named, and
-	// it belongs with the repair rather than with the review that found it.
+	// REPAIR IS CORRECTIVE. RepairRequired is the moment the fault is named, and belongs with the repair.
 	case EWonderlandMissionBeat::RepairRequired:
 	case EWonderlandMissionBeat::Repairing:
 		return EWonderlandDogAct::CorrectingTheWork;
 
-	// WHAT IS LEFT HERE IS TRANSITIONS AND ENDINGS, and nothing else.
-	//
-	// Handoff, waiting/checkpoint and a non-terminal approval inherit, because nothing about the WORK has
-	// changed -- that is the founder's line, and it is why removing the handoff animation needs no case,
-	// no deletion from the shared clip vocabulary, and no change to Julius's own handoff events.
-	//
-	// Block, error, complete and idle land here too, and are told apart from a transition by the contract
-	// pointer going null rather than by this table: an ending has no contract, so the body stops.
+	// TRANSITIONS AND ENDINGS. Handoff, checkpoint and a non-terminal approval inherit; block, error, complete and idle
+	// are told apart by the contract pointer going null.
 	default:
 		break;
 	}
@@ -138,9 +124,10 @@ const TCHAR* WonderlandDogPropName(EWonderlandDogProp Prop)
 {
 	switch (Prop)
 	{
-	case EWonderlandDogProp::Book:       return TEXT("BOOK");
-	case EWonderlandDogProp::Paintbrush: return TEXT("PAINTBRUSH");
+	case EWonderlandDogProp::Book:            return TEXT("BOOK");
+	case EWonderlandDogProp::Paintbrush:      return TEXT("PAINTBRUSH");
 	case EWonderlandDogProp::MagnifyingGlass: return TEXT("LENS");
+	case EWonderlandDogProp::Scraper:         return TEXT("SCRAPER");
 	default: break;
 	}
 	return TEXT("NONE");

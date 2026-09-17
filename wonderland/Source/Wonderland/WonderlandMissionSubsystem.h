@@ -133,6 +133,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	FName GetLastEventType() const { return LastEventType; }
 
+	/**
+	 * The last event the PLAYER was shown: the world, the strip and the terminals all present this one. It differs from
+	 * GetLastEventType only while a handoff has arrived, which the world withholds (founder, 2026-09-16).
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FName GetPresentedEventType() const { return PresentedEventType; }
+
+	/** How many handoffs this mission's fold recorded and the world did not stage. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	int32 GetWithheldHandoffs() const { return WithheldHandoffs; }
+
 	/** What the fold did with it: applied, stale, foreign, refused after ending, refused unlabelled gap. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	FString GetLastEventVerdict() const;
@@ -342,6 +353,8 @@ private:
 	const struct FWonderlandMissionFixture* Playing = nullptr;
 	FWonderlandMissionFold Fold;
 	FName LastEventType;
+	FName PresentedEventType;
+	int32 WithheldHandoffs = 0;
 	EWonderlandEventVerdict LastVerdict = EWonderlandEventVerdict::Applied;
 	int32 PlayIndex = 0;
 	float PlayClock = 0.0f;

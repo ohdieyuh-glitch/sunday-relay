@@ -80,6 +80,31 @@ public:
 	 */
 	void SetManifest(float Target);
 
+	/**
+	 * APPEAR AFTER A PAUSE (founder, 2026-09-16): at a mission's start the Relay Dog meditates and energy gathers, and the
+	 * Contract appears out of it. It holds at nothing for `Seconds` of world time, then draws itself in.
+	 */
+	void ManifestAfter(float Seconds);
+
+	/**
+	 * THE REPAIR, SHOWN ON THE CONTRACT. The crown of the crystal is its own piece: IDENTIFY (1) flickers it red, ERASE (2)
+	 * breaks it away to nothing, REPAINT (3) grows it back in gold, SETTLE (4) returns it to the chakra's colour. Stage 0
+	 * and Weight 0 leave the crystal whole. Driven by the Relay Dog, which performs the same repair at the same moment.
+	 */
+	void SetRepairState(int32 Stage, float Progress, float Weight);
+
+	/** Where the crown sits, world space: what a repair works on. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FVector GetCrownLocation() const;
+
+	/** 0 gone, 1 whole: how much of the crown is there now. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	float GetCrownScale() const { return CrownScaleShown; }
+
+	/** The repair stage the Contract is showing, 0 none. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	int32 GetRepairStage() const { return RepairWeight > 0.01f ? RepairStage : 0; }
+
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	float GetManifest() const { return Manifest; }
 
@@ -264,6 +289,31 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> MoteMid;
+
+	/** The crown of the crystal, pivoted at its base so it shrinks into the stone and grows back out of it. */
+	UPROPERTY(Transient)
+	TObjectPtr<USceneComponent> CrownRoot;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> CrownMid;
+
+	/** The pieces an erased crown breaks into. */
+	UPROPERTY(Transient)
+	TObjectPtr<UInstancedStaticMeshComponent> DebrisMesh;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> DebrisMid;
+
+	int32 RepairStage = 0;
+	float RepairProgress = 0.0f;
+	float RepairWeight = 0.0f;
+	float RepairShown = 0.0f;
+	float CrownScaleShown = 1.0f;
+	float CrownFromUU = 0.0f;
+	/** Seconds of world time left before a delayed manifest begins; zero when none is pending. */
+	float ManifestDelay = 0.0f;
+	/** The crystal's own burn this frame, so the crown can match it when no repair is showing. */
+	float CrystalBurn = 1.0f;
 
 	TWeakObjectPtr<APlayerController> FollowController;
 

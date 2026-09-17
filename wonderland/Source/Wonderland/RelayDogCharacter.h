@@ -33,6 +33,42 @@
 
 class UCameraComponent;
 class USpringArmComponent;
+class FRelayDogMissionCameraInput;
+
+/**
+ * THE LIMBS, SOLVED IN WORLD TERMS. The rig's own conventions -- which roll opens an arm, which pitch bows the head --
+ * were argued three ways in comments and renders and settled by none of them, so nothing here assumes one: each limb is
+ * measured at bind (which sign of each rotation moves its tip forward, outward, or folds it) and then solved so its tip
+ * reaches a point. That is what puts a hand ON the book, the brush AT the Contract, and the lens AT the eye.
+ */
+namespace RelayDogLimbs
+{
+	/** One limb as it hangs: its root on the parent, its middle joint on the root, its tip on the middle, and signs. */
+	struct FChain
+	{
+		FVector RootRel = FVector::ZeroVector;
+		FVector MidRel = FVector::ZeroVector;
+		FVector TipLocal = FVector(0.0, 0.0, -28.0);
+		float ForwardSign = 1.0f;
+		float OutwardSign = 1.0f;
+		float BendSign = 1.0f;
+		float Reach = 58.0f;
+		/** The last solution, degrees (forward, outward, bend): the warm start that keeps a limb from flipping. */
+		FVector Solved = FVector::ZeroVector;
+		bool bMeasured = false;
+	};
+
+	/** The tip of a limb in its parent's space, for semantic angles (forward, outward, bend). */
+	FVector Tip(const FChain& Chain, float Forward, float Outward, float Bend);
+
+	/** The raw relative rotations a solution writes: the root's and the middle joint's. */
+	FRotator RootRotation(const FChain& Chain, const FVector& Angles);
+	FRotator MidRotation(const FChain& Chain, const FVector& Angles);
+
+	/** Solve a limb so its tip reaches `TargetInParent`, warm-started from Chain.Solved and kept inside Min..Max (degrees,
+	 *  forward/outward/bend). Returns how far the tip still misses, uu. */
+	float Solve(FChain& Chain, const FVector& TargetInParent, const FVector& Min, const FVector& Max);
+}
 
 /** One leg's engine-side state: the pivots to write and the ground under it. */
 USTRUCT()
@@ -101,6 +137,7 @@ public:
 	ARelayDogCharacter();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
@@ -170,6 +207,72 @@ public:
 	 *  showed a verifying Dog with no beam while every probe outside the film drew it; this says which condition failed. */
 	UFUNCTION(BlueprintCallable, Category = "Relay Dog|Mission")
 	FString DescribeMissionBeam() const { return LastBeamNote; }
+
+	/** One line of what the performance is doing: act, weights, lift, prop, facing, orbit, hand misses. For proof jobs. */
+	UFUNCTION(BlueprintCallable, Category = "Relay Dog|Mission")
+	FString DescribeMissionPose() const { return LastPoseNote; }
+
+	/** Where a hand is, world space: the tip of the forearm the rig built. */
+	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission")
+	FVector GetHandLocation(bool bWorkingHand) const;
+
+	/** A point on the book, world space: 0 its centre, 1 the supporting hand's grip, 2 the turning hand's goal. */
+	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission")
+	FVector GetBookPoint(int32 Which) const;
+
+	/* ------------------------------------------------------ the mission camera (founder, 2026-09-16)
+	 *
+	 * DURING A MISSION THE CAMERA HOLDS THE CONTRACT, NOT THE DOG. The Mission Contract is the cinematic anchor and the
+	 * Relay Dog performs around it. The existing boom is carried to the Contract (no second camera): HOLD THE LEFT MOUSE
+	 * BUTTON AND DRAG to orbit it -- across turns round the Contract, up and down changes the pitch -- and the angle stays
+	 * where it is let go. It never steers or turns the Dog, and a press on the terminal or any other panel is the panel's. */
+
+	/** True while a Mission Contract holds the camera (fully or blending). */
+	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
+	bool IsMissionCameraActive() const { return MissionCamWeight > KINDA_SMALL_NUMBER; }
+
+	/** 0 following the Dog, 1 holding the Contract. */
+	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
+	float GetMissionCameraWeight() const { return MissionCamWeight; }
+
+	/** Turn the mission camera about the Contract by these degrees (what a left-drag does). */
+	UFUNCTION(BlueprintCallable, Category = "Relay Dog|Mission Camera")
+	void OrbitMissionCamera(float YawDegrees, float PitchDegrees);
+
+	/** Put the mission camera at this yaw and pitch about the Contract. */
+	UFUNCTION(BlueprintCallable, Category = "Relay Dog|Mission Camera")
+	void SetMissionCameraAngles(float YawDegrees, float PitchDegrees);
+
+	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
+	FRotator GetMissionCameraRotation() const { return FRotator(MissionCamPitch, MissionCamYaw, 0.0f); }
+
+	/** The point the mission camera turns about, world space. */
+	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
+	FVector GetMissionCameraFocus() const { return MissionCamFocus; }
+
+	/** What a left press at this screen point (desktop pixels) would be: "world" (the camera drags) or "ui:<widget>". */
+	UFUNCTION(BlueprintCallable, Category = "Relay Dog|Mission Camera")
+	FString DescribeMissionCameraPress(float ScreenX, float ScreenY) const;
+
+	/** The game viewport on the desktop, pixels: (left, top, width, height). For proof jobs aiming a press. */
+	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
+	FVector4 GetGameViewportScreenRect() const;
+
+	/** Drive a real left-button drag through Slate, press to release, in `Steps` moves: the founder's own gesture. */
+	UFUNCTION(BlueprintCallable, Category = "Relay Dog|Mission Camera")
+	bool SimulateMissionCameraDrag(float FromX, float FromY, float ToX, float ToY, int32 Steps);
+
+	/** How many left-drags the mission camera has taken from the mouse this session. */
+	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
+	int32 GetMissionCameraDragCount() const { return MissionCamDrags; }
+
+	/** How many left presses during a mission were left to a panel rather than taken as a drag. */
+	UFUNCTION(BlueprintPure, Category = "Relay Dog|Mission Camera")
+	int32 GetMissionCameraPressesLeftToUi() const { return MissionCamUiPresses; }
+
+	/** Called by the camera's Slate input processor. True when the press starts a drag. */
+	bool BeginMissionCameraDrag(const FVector2D& ScreenPosition);
+	void EndMissionCameraDrag();
 
 	/** Ground speeds the founder's fingers select, uu/s. The bands come from
 	 *  the arithmetic (Froude on a 48 uu leg: jog 153, run 266, anime 376), so
@@ -280,6 +383,72 @@ private:
 	void PoseBook(bool bInHand, float PageTurn);
 	/** How far up the body the head joint (the neck) is, read live from its relative place under the Body. */
 	double HeadJointHeightInBody() const;
+
+	/** Measure a chain from the pivots the rig built. */
+	void MeasureChain(RelayDogLimbs::FChain& Chain, const USceneComponent* Root, const USceneComponent* Mid);
+	/** The Dog's facing, measured from its eyes, and the head's own signs. */
+	void MeasureFace();
+	/** Write the mission pose over the walk: lift, head, arms, legs, props, book, beam, energy, the Contract's repair. */
+	void ApplyMissionPose(const RelayDogStride::FDogPose& Pose, const RelayDogMission::FStageOverlay& Overlay,
+		const RelayDogMission::FStageInput& In, float DeltaSeconds);
+	/** Carry the boom to the Contract while a mission runs, and back to the Dog afterwards. */
+	void UpdateMissionCamera(float DeltaSeconds);
+	/** Draw the energy gathering into the Contract during preparation. */
+	void DrawEnergy(float Energy, float SecondsIntoAct, float TimeSeconds, const FVector& FromWorld, const FVector& ToWorld);
+	/** The widget a press would land on, or empty for the world. */
+	FString MissionCameraPressTarget(const FVector2D& ScreenPosition) const;
+
+	RelayDogLimbs::FChain ArmChainLeft;
+	RelayDogLimbs::FChain ArmChainRight;
+	RelayDogLimbs::FChain LegChainLeft;
+	RelayDogLimbs::FChain LegChainRight;
+	/** The head's forward in the Body's frame (from the eyes), where the eyes sit on the head, and the head's signs. */
+	FVector FaceForwardInBody = FVector::ForwardVector;
+	FVector EyesInHead = FVector(30.0, 0.0, 30.0);
+	float HeadDownSign = 1.0f;
+	float HeadRightSign = 1.0f;
+	/** The head's last look, degrees (down, right). */
+	FVector2D HeadLookSolved = FVector2D::ZeroVector;
+	/** +1 when the working (brush, lens) arm hangs on the Dog's right. */
+	float WorkingHandSide = 1.0f;
+	float LastEyesShut = 0.0f;
+	FString LastPoseNote;
+	/** The book's grips last placed, world space, for proof jobs: centre, supporting grip, turning goal. */
+	FVector BookPoints[3] = { FVector::ZeroVector, FVector::ZeroVector, FVector::ZeroVector };
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UInstancedStaticMeshComponent> ScraperMesh = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UInstancedStaticMeshComponent> ScraperBladeMesh = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UMaterialInstanceDynamic> ScraperMid = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UMaterialInstanceDynamic> ScraperBladeMid = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UInstancedStaticMeshComponent> EnergyMesh = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UMaterialInstanceDynamic> EnergyMid = nullptr;
+
+	/* ---- the mission camera's state */
+	float MissionCamWeight = 0.0f;
+	float MissionCamYaw = 0.0f;
+	float MissionCamPitch = -20.0f;
+	FVector MissionCamFocus = FVector::ZeroVector;
+	bool bMissionCamLatched = false;
+	bool bMissionCamApplied = false;
+	bool bMissionCamDragging = false;
+	int32 MissionCamDrags = 0;
+	int32 MissionCamUiPresses = 0;
+	float BoomRestArm = 380.0f;
+	FVector BoomRestSocket = FVector(0.0f, 55.0f, 135.0f);
+	FVector BoomRestLocation = FVector::ZeroVector;
+	FRotator BoomRestRotation = FRotator::ZeroRotator;
+	TSharedPtr<FRelayDogMissionCameraInput> MissionCamInput;
 
 	RelayDogStride::FDogAnimator Animator;
 
