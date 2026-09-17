@@ -26,8 +26,8 @@ pier, gatehouse or flight of steps set against the wall (city_props): a plinth d
 SEATED ON THE REAL WALL AND GROUND. A census box face is not the wall: cornices, balconies and upper storeys overhang, so
 at its foot a castle hall's wall stands 30-38 cm (local) inside its box and a facade panel's front 56 cm inside. The
 second preview stood courses out in the street like troughs. So each face is seated on its mesh's own cross-section at
-the foot (mesh_sections.py -> wall_sections.json): the course's back goes on the true wall plane, and its span is the
-true wall's length. Heights: the street tile's top, unless a ground trace at the block (wall_contact_probe.py ->
+the foot (mesh_sections.py -> wall_sections.json, via wall_seat.py): the course's back goes on the true wall plane,
+and its span is the true wall's length. Heights: the street tile's top, unless a ground trace at the block (wall_contact_probe.py ->
 wb01_contact.json, run on this generator's own output) found the paving there lower or higher by up to 40 cm / 5 cm.
 
     python wall_plinths.py            (writes wb01_<prefix>.json)
@@ -39,6 +39,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import facade_dressing as F
+import wall_seat as WS
 import street_dressing as SD
 from shopfronts import SHOP_W, faces_of
 
@@ -57,31 +58,13 @@ WALL_MESHES = ("SM_castle_hall", "SM_facade_panel", "SM_castle_tower_square")
 SHOP_HALF = SHOP_W * 0.5 + 10.0
 CULL = 6000.0
 MATERIALS = {"stone": "MI_V2_IvoryStone"}
-SECTIONS = "wall_sections.json"
-SEAT_LEVEL = "5.0"               # the cross-section 5 cm above the mesh's foot
+SEAT_LEVEL = "5.0"               # the cross-section 5 cm above the mesh's foot (wall_seat.py)
 CONTACT = "wb01_contact.json"
 GROUND_MESHES = ("SM_terrace_platform", "Cube")
 GROUND_BAND = (-40.0, 5.0)
 OPENINGS = ("SM_garden_arch_stone", "SM_gate_leaf", "SM_gate_pier", "SM_arch_stone", "SM_gatehouse_district",
             "SM_floral_arch", "SM_side_steps", "SM_path_steps")
 OPENING_MARGIN = 15.0
-
-
-def wall_seats(b, sec):
-    """For each of faces_of(b)'s four faces: (depth of the true wall behind the box face, tangent lo, tangent hi), world
-    cm, from the mesh's cross-section at its foot. Tangent coordinates are measured from the box centre along the same
-    tangent the generator uses (-ny, nx)."""
-    x0, y0, _, x1, y1, _ = sec["bb"]
-    segs = sec["levels"][SEAT_LEVEL]
-    xs = [v for g in segs for v in (g[0], g[2])]
-    ys = [v for g in segs for v in (g[1], g[3])]
-    ox0, ox1, oy0, oy1 = min(xs), max(xs), min(ys), max(ys)
-    cx, cy = (x0 + x1) * 0.5, (y0 + y1) * 0.5
-    sx, sy = b["hx"] / ((x1 - x0) * 0.5), b["hy"] / ((y1 - y0) * 0.5)
-    return [((x1 - ox1) * sx, (oy0 - cy) * sy, (oy1 - cy) * sy),        # +X, tangent +Y
-            ((ox0 - x0) * sx, -(oy1 - cy) * sy, -(oy0 - cy) * sy),      # -X, tangent -Y
-            ((y1 - oy1) * sy, -(ox1 - cx) * sx, -(ox0 - cx) * sx),      # +Y, tangent -X
-            ((oy0 - y0) * sy, (ox0 - cx) * sx, (ox1 - cx) * sx)]        # -Y, tangent +X
 
 
 def block_widths(length, rng):
@@ -120,7 +103,6 @@ def main():
     props = props["rows"] if isinstance(props, dict) else props
     openings = [q for q in props if q["mesh"] in OPENINGS]
     og = F.grid_of(openings, lambda q: (q["x"], q["y"]))
-    sections = json.loads((TMP / SECTIONS).read_text(encoding="utf-8"))
     contact_path = TMP / CONTACT
     contact = json.loads(contact_path.read_text(encoding="utf-8")) if contact_path.exists() else {}
     stats = Counter()
@@ -135,7 +117,7 @@ def main():
     for bi, b in enumerate(buildings):
         if b["mesh"] not in WALL_MESHES:
             continue
-        seats = wall_seats(b, sections[b["mesh"]])
+        seats = WS.seats(b, SEAT_LEVEL)
         for fi, (nx, ny, fx, fy, half_t) in enumerate(faces_of(b)):
             depth, t_lo, t_hi = seats[fi]
             if t_hi - t_lo < MIN_FACE:
