@@ -673,6 +673,8 @@ private:
 	int32 WonderWebOpenCounter = 0;
 	FDelegateHandle JuliusConnectChangedHandle;
 	FString LastPromptRequestId;
+	/** The browsing task a window has already been opened for, so Julius opens one window per task and not one per tick. */
+	FString LastBrowsingTaskId;
 
 	/** The mini-map and the bottom shortcuts, on one layer above the usage HUD and below every panel. */
 	TSharedPtr<SWidget> HudFurniture;

@@ -1387,7 +1387,22 @@ bool UWonderlandUiSubsystem::IsWonderWebOpen() const
 void UWonderlandUiSubsystem::HandleJuliusConnectChanged()
 {
 	const UWonderlandJuliusConnectSubsystem* Connect = JuliusConnect();
-	if (Connect == nullptr || !Connect->GetSurface().bHasPrompt || WonderWebWorkspaceTuning::CVarAutoOpenPrompt.GetValueOnGameThread() == 0)
+	if (Connect == nullptr || WonderWebWorkspaceTuning::CVarAutoOpenPrompt.GetValueOnGameThread() == 0)
+	{
+		return;
+	}
+	// JULIUS OPENS ITS OWN WONDER WEB (founder: "Julius will be spawning multiple wonder webs"). When a task of Julius's
+	// works in the browser, the window it works in comes up by itself -- the founder should not have to know a command to
+	// watch what Julius is doing. Once per task, and never over another panel they are in.
+	const FJuliusConnectTask* Task = Connect->GetSurface().CurrentTask();
+	if (Task != nullptr && Task->TemplateId == TEXT("web-lookup") && Task->TaskId != LastBrowsingTaskId
+		&& (Open == EOverlay::None || Open == EOverlay::WonderWeb))
+	{
+		LastBrowsingTaskId = Task->TaskId;
+		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI julius connect: Julius is browsing (%s) -- a Wonder Web window opens to watch it"), *Task->TaskId);
+		OpenWonderWebWindow(WonderWebWindowIds::Browser);
+	}
+	if (!Connect->GetSurface().bHasPrompt)
 	{
 		return;
 	}
