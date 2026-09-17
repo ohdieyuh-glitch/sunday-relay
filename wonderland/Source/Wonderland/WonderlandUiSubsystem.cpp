@@ -1466,6 +1466,30 @@ bool UWonderlandUiSubsystem::GetWonderWebWindowPixel(FName Window, FName Control
 		OutPixel = SWonderWebWindowChip::DesignSize() * 0.5;
 		return Found->bMinimized;
 	}
+	// A POINT RATHER THAN A CONTROL: "at:760,420" is that place in the window's own pixels, and "page:500,33" that place
+	// in the live page's own pixels. The live page has no named controls -- it is somebody else's website -- so this is how
+	// a proof reaches a search box or a link on it.
+	const FString Text = Control.ToString();
+	if (Text.StartsWith(TEXT("at:")) || Text.StartsWith(TEXT("page:")))
+	{
+		const bool bPage = Text.StartsWith(TEXT("page:"));
+		FString X, Y;
+		if (!Text.RightChop(bPage ? 5 : 3).Split(TEXT(","), &X, &Y))
+		{
+			return false;
+		}
+		const FVector2D Point(FCString::Atod(*X), FCString::Atod(*Y));
+		if (Found->bMinimized)
+		{
+			return false;
+		}
+		if (!bPage)
+		{
+			OutPixel = Point;
+			return true;
+		}
+		return BrowserPanel.IsValid() && BrowserPanel->GetLivePagePoint(Point, OutPixel);
+	}
 	if (Window == WonderWebWindowIds::Creation)
 	{
 		return WonderWebPanel.IsValid() && WonderWebPanel->GetControlCentre(Control, OutPixel);
@@ -1556,6 +1580,74 @@ bool UWonderlandUiSubsystem::SimulateWonderWebWindowClick(FName Window, FName Co
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web click %s/%s at (%.0f, %.0f): layer under the point %d, %s, down %d up %d, path %s"), *Window.ToString(), *Control.ToString(), At.X, At.Y,
 		bLayerUnderPoint ? 1 : 0, bReached ? TEXT("reached the window") : TEXT("did not reach the window"), bDown ? 1 : 0, bUp ? 1 : 0, *FString::Join(Leaf, TEXT(" < ")));
 	return bReached;
+}
+
+bool UWonderlandUiSubsystem::SimulateWonderWebWindowScroll(FName Window, FName Control, float Delta)
+{
+	if (!IsWonderWebOpen() || !FSlateApplication::IsInitialized() || !WonderWebLayer.IsValid())
+	{
+		return false;
+	}
+	const FVector2D At = GetWonderWebWindowControlOnScreen(Window, Control);
+	if (At.X < 0.0)
+	{
+		return false;
+	}
+	FSlateApplication& App = FSlateApplication::Get();
+	const TSharedPtr<SWindow> SlateWindow = App.FindWidgetWindow(WonderWebLayer.ToSharedRef());
+	if (!SlateWindow.IsValid())
+	{
+		return false;
+	}
+	// The same hit test the click takes, for the same reason: the layer's own window, not the whole desktop.
+	const FWidgetPath Path = WonderlandUiHitTest::PathInWindow(SlateWindow.ToSharedRef(), At, App.GetUserIndexForMouse());
+	const FPointerEvent Wheel(static_cast<uint32>(App.GetUserIndexForMouse()), FSlateApplicationBase::CursorPointerIndex,
+		At, At, TSet<FKey>(), EKeys::MouseWheelAxis, Delta, FModifierKeysState());
+	const bool bHandled = App.RouteMouseWheelOrGestureEvent(Path, Wheel, nullptr).IsEventHandled();
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web scroll %s/%s at (%.0f, %.0f) by %.1f: handled %d"),
+		*Window.ToString(), *Control.ToString(), At.X, At.Y, Delta, bHandled ? 1 : 0);
+	return bHandled;
+}
+
+bool UWonderlandUiSubsystem::SimulateWonderWebWindowType(const FString& Text)
+{
+	if (!FSlateApplication::IsInitialized() || Text.IsEmpty())
+	{
+		return false;
+	}
+	FSlateApplication& App = FSlateApplication::Get();
+	const int32 User = App.GetUserIndexForKeyboard();
+	for (const TCHAR Char : Text)
+	{
+		if (Char < 0x20)
+		{
+			continue;
+		}
+		// A real character event to whatever has keyboard focus, which after a click on the page is the page.
+		App.ProcessKeyCharEvent(FCharacterEvent(Char, FModifierKeysState(), User, false));
+	}
+	// WHAT WAS TYPED IS NOT LOGGED, only that something was: this path reaches real websites.
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web typed %d characters into whatever has focus"), Text.Len());
+	return true;
+}
+
+bool UWonderlandUiSubsystem::SimulateWonderWebWindowKey(FName Key)
+{
+	if (!FSlateApplication::IsInitialized())
+	{
+		return false;
+	}
+	FSlateApplication& App = FSlateApplication::Get();
+	const FKey Pressed(Key);
+	if (!Pressed.IsValid())
+	{
+		return false;
+	}
+	const FKeyEvent Event(Pressed, FModifierKeysState(), App.GetUserIndexForKeyboard(), false, 0, 0);
+	const bool bDown = App.ProcessKeyDownEvent(Event);
+	App.ProcessKeyUpEvent(Event);
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web key %s: handled %d"), *Key.ToString(), bDown ? 1 : 0);
+	return bDown;
 }
 
 bool UWonderlandUiSubsystem::SimulateWonderWebClick(FName Control)

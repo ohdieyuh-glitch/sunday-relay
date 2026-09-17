@@ -353,6 +353,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
 	bool SimulateWonderWebWindowClick(FName Window, FName Control);
 
+	/**
+	 * Scroll a Wonder Web window where a real wheel would: a real wheel event, hit tested and routed like any other, at a
+	 * control or at a point ("at:760,420"). Positive scrolls up, as a wheel does.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	bool SimulateWonderWebWindowScroll(FName Window, FName Control, float Delta);
+
+	/**
+	 * Type into whatever has keyboard focus, as real character events. After a click on the live page that is the page, so
+	 * this types into a real website. What is typed is never logged.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	bool SimulateWonderWebWindowType(const FString& Text);
+
+	/** Press a key ("Enter", "BackSpace") as a real key event, routed to whatever has focus. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	bool SimulateWonderWebWindowKey(FName Key);
+
 	/** Where a named control of a named window stands on screen, in Slate screen space; (-1, -1) when it is not drawn. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Wonder Web")
 	FVector2D GetWonderWebWindowControlOnScreen(FName Window, FName Control) const;

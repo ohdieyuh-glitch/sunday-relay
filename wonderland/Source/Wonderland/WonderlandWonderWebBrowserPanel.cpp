@@ -1,7 +1,7 @@
 #include "WonderlandWonderWebBrowserPanel.h"
 
 #include "Brushes/SlateRoundedBoxBrush.h"
-#include "SWebBrowser.h"
+#include "Engine/GameInstance.h"
 #include "Widgets/Images/SImage.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Layout/SBorder.h"
@@ -14,6 +14,8 @@
 #include "WonderlandUiStyle.h"
 #include "WonderlandWonderWeb.h"
 #include "WonderlandWonderWebBrowse.h"
+#include "WonderlandWonderWebLive.h"
+#include "WonderlandWonderWebLivePage.h"
 #include "WonderlandWonderWebPanel.h"
 
 using namespace WonderWebLook;
@@ -42,6 +44,13 @@ void SWonderlandWonderWebBrowserPanel::Construct(const FArguments& InArgs)
 	Browse = InArgs._Browse;
 	Connect = InArgs._Connect;
 	Creation = InArgs._Creation;
+	if (UWonderlandWonderWebBrowseSubsystem* Pages = Browse.Get())
+	{
+		if (UGameInstance* GameInstance = Pages->GetGameInstance())
+		{
+			Live = GameInstance->GetSubsystem<UWonderlandWonderWebLiveSubsystem>();
+		}
+	}
 	OnRequestClose = InArgs._OnRequestClose;
 	OnRequestMinimize = InArgs._OnRequestMinimize;
 	OnRequestExpand = InArgs._OnRequestExpand;
@@ -254,6 +263,21 @@ TSharedRef<SWidget> SWonderlandWonderWebBrowserPanel::Probe(FName Id, TSharedRef
 	];
 }
 
+bool SWonderlandWonderWebBrowserPanel::GetLivePagePoint(const FVector2D& PagePixel, FVector2D& OutWindowPixel) const
+{
+	if (!LivePage.IsValid() || !Live.IsValid() || !Live->HasFrame())
+	{
+		return false;
+	}
+	const FGeometry& PageGeometry = LivePage->GetCachedGeometry();
+	FVector2D Offset;
+	float Scale = 1.0f;
+	LivePage->PageRect(PageGeometry, Offset, Scale);
+	const FVector2D Absolute = PageGeometry.LocalToAbsolute(Offset + PagePixel * Scale);
+	OutWindowPixel = GetTickSpaceGeometry().AbsoluteToLocal(Absolute);
+	return true;
+}
+
 bool SWonderlandWonderWebBrowserPanel::GetControlCentre(FName Control, FVector2D& OutCentre) const
 {
 	const FVector2D* Centre = ControlCentres.Find(Control);
@@ -297,47 +321,68 @@ void SWonderlandWonderWebBrowserPanel::Rebuild()
 		TabsSlot->SetContent(MakeTabs());
 	}
 	const FWonderWebBrowseTab* Tab = Browse->GetSelected();
-	// THE REAL WEB, WHEN IT IS ASKED FOR (founder, 2026-09-17). Real mode hands the page area to the engine's browser and
-	// loads the actual address; with it off, nothing is loaded and the sample page is drawn instead.
+	// THE REAL WEB, WHEN IT IS ASKED FOR (founder, 2026-09-17: "it should not be a simulation should be real"). Real mode
+	// hands the page area to the live page: a real browser on this machine renders the real address, Wonderland draws its
+	// frames, and what the founder does here goes back to it. With real mode off, nothing is loaded and the sample page is
+	// drawn instead.
+	const TWeakObjectPtr<UWonderlandWonderWebLiveSubsystem> WeakLive = Live;
+	UWonderlandWonderWebLiveSubsystem* LiveWeb = Live.Get();
 	if (Browse->IsRealMode())
 	{
 		const FString Url = Browse->GetRealUrl();
-		if (!WebView.IsValid())
+		const FString TabId = Tab != nullptr ? Tab->TabId : FString(TEXT("page"));
+		if (!LivePage.IsValid())
 		{
 			ShownPageKey.Reset();
 			PageBrushes.Reset();
-			SAssignNew(WebView, SWebBrowser)
-				.InitialURL(Url)
-				.ShowControls(false)
-				.ShowAddressBar(false)
-				.ShowErrorMessage(true)
-				.SupportsTransparency(false)
-				.ShowInitialThrobber(true)
-				.BackgroundColor(FColor::White);
-			ShownRealUrl = Url;
+			ShownRealUrl.Reset();
+			SAssignNew(LivePage, SWonderlandWonderWebLivePage).Live(Live);
 			if (PageSlot.IsValid())
 			{
-				PageSlot->SetContent(WebView.ToSharedRef());
+				PageSlot->SetContent(
+					SNew(SOverlay)
+					+ SOverlay::Slot()[LivePage.ToSharedRef()]
+					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center)
+					[
+						// WHAT IS HAPPENING, IN PLAIN WORDS: waiting for the first frame, or the reason there is none.
+						SNew(STextBlock).Font(WebLook::Sans(20)).ColorAndOpacity(WebLook::Grey()).Justification(ETextJustify::Center).AutoWrapText(true)
+						.Visibility_Lambda([WeakLive]() { return WeakLive.IsValid() && WeakLive->HasFrame() ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
+						.Text_Lambda([WeakLive]()
+						{
+							if (!WeakLive.IsValid())
+							{
+								return INVTEXT("The live browser is not available in this build.");
+							}
+							return FText::FromString(WeakLive->GetProblem().IsEmpty()
+								? FString::Printf(TEXT("Loading %s…"), *WeakLive->GetLiveUrl())
+								: WeakLive->GetProblem());
+						})
+					]);
 			}
 		}
-		else if (Url != ShownRealUrl)
+		if (LiveWeb != nullptr && Url != ShownRealUrl)
 		{
 			ShownRealUrl = Url;
 			if (Url.IsEmpty())
 			{
-				WebView->LoadString(TEXT("<html><body style=\"font:16px sans-serif;color:#8E8E8E;padding:24px\">Nothing loaded: this tab has no real address, or its host is not allowed.</body></html>"), TEXT("about:blank"));
+				LiveWeb->CloseTab(LiveWeb->GetLiveTab());
 			}
 			else
 			{
-				WebView->LoadURL(Url);
+				LiveWeb->Navigate(TabId, Url);
 			}
 		}
 		return;
 	}
-	if (WebView.IsValid())
+	if (LivePage.IsValid())
 	{
-		// Out of real mode: the browser is dropped, so no page keeps loading behind the sample ones.
-		WebView.Reset();
+		// Out of real mode: the live page is dropped and the runtime is told to close its page, so nothing keeps loading
+		// behind the sample ones.
+		if (LiveWeb != nullptr)
+		{
+			LiveWeb->CloseTab(LiveWeb->GetLiveTab());
+		}
+		LivePage.Reset();
 		ShownRealUrl.Reset();
 		ShownPageKey.Reset();
 	}
