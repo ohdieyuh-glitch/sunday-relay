@@ -1,0 +1,64 @@
+{
+ "name": "zzCG95_gt01_perf",
+ "started": "2026-09-17 12:42:50",
+ "status": "done",
+ "rounds": [
+  {
+   "pass_actors": 50,
+   "warm": {
+    "GroveRoadCam18": 39.5,
+    "TeapotCam24": 35.65,
+    "CloisterCam31": 36.83,
+    "SW_PlazaHero41": 59.01
+   },
+   "on": {
+    "GroveRoadCam18": 37.88,
+    "TeapotCam24": 35.12,
+    "CloisterCam31": 35.61,
+    "SW_PlazaHero41": 61.42
+   },
+   "off": {
+    "GroveRoadCam18": 37.38,
+    "TeapotCam24": 35.02,
+    "CloisterCam31": 35.49,
+    "SW_PlazaHero41": 59.38
+   },
+   "off_again": {
+    "GroveRoadCam18": 36.45,
+    "TeapotCam24": 34.36,
+    "CloisterCam31": 37.59,
+    "SW_PlazaHero41": 58.95
+   }
+  },
+  {
+   "pass_actors": 50,
+   "warm": {
+    "GroveRoadCam18": 38.59,
+    "TeapotCam24": 36.89,
+    "CloisterCam31": 36.98,
+    "SW_PlazaHero41": 57.41
+   },
+   "on": {
+    "GroveRoadCam18": 38.02,
+    "TeapotCam24": 34.81,
+    "CloisterCam31": 36.01,
+    "SW_PlazaHero41": 58.64
+   },
+   "off": {
+    "GroveRoadCam18": 37.76,
+    "TeapotCam24": 34.92,
+    "CloisterCam31": 37.91,
+    "SW_PlazaHero41": 56.85
+   },
+   "off_again": {
+    "GroveRoadCam18": 36.07,
+    "TeapotCam24": 35.12,
+    "CloisterCam31": 35.28,
+    "SW_PlazaHero41": 59.01
+   }
+  }
+ ],
+ "finished": "2026-09-17 12:48:10",
+ "seconds": 319.88,
+ "log": ""
+}
