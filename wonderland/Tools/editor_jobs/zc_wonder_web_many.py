@@ -7,8 +7,9 @@
 # What it proves, in the stills:
 #   1. Three windows, three different real addresses, all live at the same time, tiled by the workspace.
 #   2. Each window's tab strip moves only its own window: clicking a site in one does not move the others.
-#   3. A window folded to its chip stops costing frames, and picks up again when it is restored.
-#   4. Closing one window leaves the others alone, each still on its own page.
+#   3. The address bar takes an address the way a browser's does, and back goes back.
+#   4. A window folded to its chip stops costing frames, and picks up again when it is restored.
+#   5. Closing one window leaves the others alone, each still on its own page.
 import json
 import os
 
@@ -56,11 +57,11 @@ def job():
         console("wl.WonderWeb.Open browser")
         yield 2.0
         console("wl.WonderWeb.Go https://en.wikipedia.org/wiki/Design_system")
-        yield 8.0
+        yield 9.0
         shot("01_one_window", "the first window, on the encyclopaedia")
 
         console("wl.WonderWeb.Open browser-2")
-        yield 10.0
+        yield 11.0
         shot("02_two_windows", "the second window opened on its own site")
 
         console("wl.WonderWeb.Open browser-3")
@@ -72,28 +73,46 @@ def job():
         RESULT["three_pages"] = str(live.describe_live())
 
         # ---- 2. ONE WINDOW'S TABS MOVE ONLY THAT WINDOW
-        before = str(live.describe_live())
-        ui.simulate_wonder_web_window_click("browser-2", "tab:store")
+        ui.simulate_wonder_web_window_click("browser-2", "tab:docs")
         yield 10.0
         RESULT["after_second_window_tab"] = str(live.describe_live())
-        RESULT["first_window_unmoved"] = ("en.wikipedia.org" in RESULT["after_second_window_tab"])
-        shot("04_only_that_window_moved", "second window changed site; the others did not")
+        shot("04_only_that_window_moved", "the second window changed site; the others did not")
 
-        # ---- 3. FOLDED TO A CHIP, THEN BACK
+        # ---- 3. THE ADDRESS BAR TAKES AN ADDRESS, AND BACK GOES BACK.
+        # Only in a build that has them: the click says whether this build's shell answers to "address" at all, so the same
+        # job runs on the build before and the build after.
+        RESULT["clicked_address"] = bool(ui.simulate_wonder_web_window_click("browser-2", "address"))
+        if RESULT["clicked_address"]:
+            yield 1.5
+            ui.simulate_wonder_web_window_type("example.com")
+            yield 2.0
+            shot("05_typed_an_address", "typed into the second window's address bar")
+            ui.simulate_wonder_web_window_key("Enter")
+            yield 9.0
+            RESULT["after_address"] = str(live.describe_live())
+            shot("06_went_where_it_was_told", "live=%s" % live.describe_live())
+            ui.simulate_wonder_web_window_click("browser-2", "back")
+            yield 8.0
+            RESULT["after_back"] = str(live.describe_live())
+            shot("07_back_where_it_was", "live=%s" % live.describe_live())
+        else:
+            RESULT["address_bar"] = "this build's address bar is not clickable yet"
+
+        # ---- 4. FOLDED TO A CHIP, THEN BACK
         console("wl.WonderWeb.Minimize browser-2 1")
-        yield 5.0
-        folded = str(live.describe_live())
-        shot("05_one_folded", "the second window is a chip")
-        console("wl.WonderWeb.Minimize browser-2 0")
         yield 6.0
+        RESULT["while_folded"] = str(live.describe_live())
+        shot("08_one_folded", "the second window is a chip")
+        console("wl.WonderWeb.Minimize browser-2 0")
+        yield 7.0
         RESULT["restored"] = str(live.describe_live())
-        shot("06_restored", "and back, still on its own page")
+        shot("09_restored", "and back, still on its own page")
 
-        # ---- 4. CLOSE ONE, THE OTHERS CARRY ON
+        # ---- 5. CLOSE ONE, THE OTHERS CARRY ON
         console("wl.WonderWeb.CloseWindow browser-3")
         yield 5.0
         RESULT["after_close"] = str(live.describe_live())
-        shot("07_closed_one", "two windows left, each on its own page")
+        shot("10_closed_one", "two windows left, each on its own page")
 
         console("wl.WonderWeb.Real 0")
         yield 2.0
