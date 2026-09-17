@@ -98,6 +98,11 @@ private:
 	FString LiveTab;
 	/** The site this window chose, for every window but the first, which follows the shared selection. */
 	int32 OwnSite = 0;
+	/**
+	 * An address this window was sent to by hand, which outranks its site. Without it, the next rebuild would quietly pull
+	 * the window back to whatever its tab strip says -- undoing what the founder typed.
+	 */
+	FString OwnUrl;
 	int32 ShownOwnSite = -1;
 	TWeakObjectPtr<UWonderlandJuliusConnectSubsystem> Connect;
 	TWeakObjectPtr<UWonderlandWonderWebSubsystem> Creation;

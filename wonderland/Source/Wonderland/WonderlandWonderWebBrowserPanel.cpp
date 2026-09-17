@@ -375,7 +375,8 @@ void SWonderlandWonderWebBrowserPanel::Rebuild()
 	{
 		// WHERE THIS WINDOW SHOULD BE. The first window follows the shared address, which is what Julius's story and
 		// wl.WonderWeb.Go drive; the others are at whatever site they were pointed at.
-		const FString Url = IsPrimary() ? Browse->GetRealUrl() : (Tab != nullptr ? Tab->RealUrl : FString());
+		const FString Url = IsPrimary() ? Browse->GetRealUrl()
+			: (!OwnUrl.IsEmpty() ? OwnUrl : (Tab != nullptr ? Tab->RealUrl : FString()));
 		if (!LivePage.IsValid())
 		{
 			ShownPageKey.Reset();
@@ -477,6 +478,9 @@ void SWonderlandWonderWebBrowserPanel::OnAddressCommitted(const FText& Text, ETe
 	}
 	if (Live.IsValid())
 	{
+		// REMEMBERED, so the next rebuild leaves this window where it was sent rather than pulling it back to its site.
+		OwnUrl = Url;
+		ShownRealUrl = Url;
 		Live->Navigate(LiveTab, Url);
 	}
 }
@@ -517,7 +521,9 @@ TSharedRef<SWidget> SWonderlandWonderWebBrowserPanel::MakeTabs()
 						{
 							// THIS WINDOW'S OWN CHOICE. Several Wonder Webs are the point: one window changing site does not
 							// move the others.
+							// A SITE CHOSEN BY HAND REPLACES AN ADDRESS TYPED BY HAND: the tab strip is the plainer instruction.
 							Self->OwnSite = Index;
+							Self->OwnUrl.Reset();
 							Self->Rebuild();
 						}
 						return FReply::Handled();
