@@ -8,6 +8,7 @@
    "title": "Instagram",
    "site": "Instagram",
    "url": "instagram.com/wonderland.studio",
+   "real": "https://www.instagram.com/",
    "letter": "I",
    "blocks": [
     {
@@ -92,6 +93,7 @@
    "title": "Search",
    "site": "Google",
    "url": "www.google.com/search?q=pixel+canvas+palette+tokens",
+   "real": "https://html.duckduckgo.com/html/?q=pixel+canvas+palette+tokens",
    "letter": "G",
    "blocks": [
     {
@@ -186,6 +188,7 @@
    "title": "Design tokens",
    "site": "Docs",
    "url": "docs.wonderstudio.com/brand/design-tokens",
+   "real": "https://en.wikipedia.org/wiki/Design_system",
    "letter": "D",
    "blocks": [
     {
@@ -220,6 +223,7 @@
    "title": "Cart",
    "site": "Arden Supplies",
    "url": "shop.arden-supplies.com/cart",
+   "real": "https://example.com/",
    "letter": "A",
    "blocks": [
     {

@@ -20,6 +20,7 @@
 
 class SBox;
 class SScrollBox;
+class SWebBrowser;
 class SVerticalBox;
 class UWonderlandWonderWebBrowseSubsystem;
 class UWonderlandWonderWebSubsystem;
@@ -87,6 +88,10 @@ private:
 	TMap<FName, FVector2D> ControlCentres;
 	TMap<FName, double> ControlSeenAt;
 	double Now = 0.0;
+
+	/** The engine's real browser, made only while real mode is on and dropped when it goes off. */
+	TSharedPtr<SWebBrowser> WebView;
+	FString ShownRealUrl;
 
 	/** Brushes for the page being drawn; replaced with it. */
 	TArray<TSharedPtr<FSlateBrush>> PageBrushes;

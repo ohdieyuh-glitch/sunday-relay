@@ -52,13 +52,16 @@ struct FWonderWebPageBlock
 	TArray<FWonderWebPageRow> Rows;
 };
 
-/** One tab: a site, its address, and its page. */
+/** One tab: a site, its address, its sample page, and the real address to load when real mode is on. */
 struct FWonderWebBrowseTab
 {
 	FString TabId;
 	FString Title;
 	FString Site;
+	/** What the address bar reads. Never fetchable: the sample page is drawn, not loaded. */
 	FString Url;
+	/** The real page this tab stands for, loaded only in real mode and only if its host is allowed. Empty means none. */
+	FString RealUrl;
 	FString Letter;
 	TArray<FWonderWebPageBlock> Blocks;
 };
@@ -94,6 +97,28 @@ public:
 	const FString& GetProblem() const { return Problem; }
 	int32 GetRevision() const { return Revision; }
 	FOnWonderWebBrowseChanged OnChanged;
+
+	// ---------------------------------------------------------------- the real web, when it is asked for
+	//
+	// FOUNDER DIRECTION (2026-09-17): "when it comes to the wonder web soon it should not be a simulation should be real."
+	// Real mode loads the actual page with the engine's Chromium browser inside the Wonderland shell. It is off by default,
+	// and while it is on the shell says LIVE PAGE instead of SIMULATED PAGE -- the label always matches what is on screen.
+	// Only hosts on wl.WonderWeb.RealHosts load, so a typo cannot take the founder somewhere unintended, and nothing is
+	// signed in on their behalf: a site that needs an account shows its own sign-in page, which is the person's own step.
+
+	/** True when the browser loads real pages rather than drawing the sample ones. */
+	bool IsRealMode() const;
+	/** The address real mode has loaded (or is loading), empty when none. */
+	const FString& GetRealUrl() const { return RealUrl; }
+	/** What the shell should say about this page right now. */
+	FString PageLabel() const;
+	/**
+	 * Load a real page. Refused, with a reason, for an address that is not http(s) or whose host is not allowed.
+	 * The user's own navigation; Julius acting on a page is a capability and goes through Julius Connect.
+	 */
+	bool Navigate(const FString& Url, FString& OutRefusal);
+	/** Whether a host is on the allowlist, for the shell and for tests. */
+	static bool IsHostAllowed(const FString& Url, FString& OutHost);
 
 	int32 GetSelectedTab() const { return SelectedTab; }
 	const FWonderWebBrowseTab* GetTab(int32 Index) const { return Model.Tabs.IsValidIndex(Index) ? &Model.Tabs[Index] : nullptr; }
@@ -133,6 +158,7 @@ private:
 	int32 Revision = 0;
 	int32 SelectedTab = 0;
 
+	FString RealUrl;
 	FString Caption;
 	bool bPosted = false;
 	int32 PostedLikes = 0;
