@@ -77,7 +77,7 @@ applied, contract locked, Coding Agent dispatched and paid → run fails.
 
 ## Proofs
 
-Two commits, both authored and committed by julius-worker[bot]:
+Three commits, all authored and committed by julius-worker[bot]:
 
 1. **The three fixes**, the live reviewer's `resolutions`, unit-wide finding
    charging, the `answerFindings` fixture, and the proofs below.
@@ -86,6 +86,13 @@ Two commits, both authored and committed by julius-worker[bot]:
    repair *itself*, which skipped the charge and wrote `ACCEPT` beside the later
    `HALT`. The charge now belongs to the repair's concluded review, whichever
    task a verification entered through.
+3. **The repair-loop capability drill's reviewer answers the finding it raised.**
+   CI's `first-live-topology` job runs the REPAIR LOOP drill against real
+   PostgreSQL, and at the first head it failed exactly as it should: its
+   scripted re-review was silent, so Julius held the mission `FINDINGS_UNRESOLVED`.
+   The drill proves a repair loop, not a silent reviewer; its reviewer now
+   answers by id and the mission completes through the repair. Nothing the drill
+   checks was relaxed.
 
 **`julius-completion-truth.e2e.test.ts` (13)** — silent re-review held
 (`BLOCKED`/`VERIFYING`, never `COMPLETED`, reason `FINDINGS_UNRESOLVED`, refusal
@@ -136,8 +143,8 @@ collide on that schema, so the proof is not vacuous.
 
 ## Gates at the frozen head
 
-Frozen head `6b8426f939d7083cbd507b1b33b93d1295163abd`, tree
-`cd28feefb509cfb8b2f340b793d98eab238422b3`, on trusted main
+Frozen head `d0a4715e0373597552897e1a0800a23c0454371a`, tree
+`b499cd86f64c6009880ff7409ca2bf9607b5076a`, on trusted main
 `c6ffff10c176dcd42e768d6db66a60d5492a40a9`.
 
 - `npm run typecheck` (four passes) — exit 0
@@ -155,7 +162,11 @@ Frozen head `6b8426f939d7083cbd507b1b33b93d1295163abd`, tree
   git/worktree tests that passed on the branch. Everything else fails identically
   on both (Windows file modes, `ps`, provenance CLI stubs).
 
-CI on Linux is the authority for the rest.
+CI at this head: **Verify Relay**, **first-live-topology** (both receipt
+transports — including the new real-PostgreSQL identity step and the three
+capability drills), **sibling-control-plane** and Vercel — all green. The
+workstation gates above ran at the second commit; the third changes only the
+drill script, and its typecheck and drill tests pass here.
 
 ## Not in this PR (future boundaries, unchanged)
 
