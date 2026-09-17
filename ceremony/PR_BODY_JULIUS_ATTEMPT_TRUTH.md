@@ -198,7 +198,11 @@ Frozen head `b808979e3a8671a96baea44073d83c17fd2213ee`, tree `ef2b82ba216b5b37bd
   `/bin/sh` and runs on Linux CI only; its two new scenarios were executed
   directly here and produce refused results.
 
-CI at this head: running when this PR opens; this section is updated with its result.
+CI at this head (`b808979e`): **Verify Relay**, **sibling-control-plane**,
+**first-live-topology** in both receipt transports and Vercel — all green. The
+new real-PostgreSQL step, *A renewed lease holds and a reclaimed one is fenced*,
+ran and passed in both transports (3 tests), beside the run-scoped identity proof
+and the three capability drills.
 
 ## Not in this PR — next boundaries and one founder decision
 
