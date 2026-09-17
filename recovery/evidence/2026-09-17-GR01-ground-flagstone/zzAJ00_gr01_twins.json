@@ -1,0 +1,110 @@
+{
+ "name": "zzAJ00_gr01_twins",
+ "started": "2026-09-17 05:55:42",
+ "status": "done",
+ "twins": {
+  "MI_V2_GroundFlag_PlazaShade": {
+   "saved": true,
+   "parent": "M_V2_SurfaceHD",
+   "params": [
+    "TexScale",
+    "DetailScale",
+    "NormalStrength",
+    "DetailStrength",
+    "InstVary",
+    "InstWarm",
+    "InstRoughVary",
+    "MacroScale",
+    "MacroVary",
+    "Roughness",
+    "RoughVary",
+    "Metallic",
+    "Specular",
+    "EmissiveStrength"
+   ]
+  },
+  "MI_V2_GroundFlag_PlazaCream": {
+   "saved": true,
+   "parent": "M_V2_SurfaceHD",
+   "params": [
+    "TexScale",
+    "DetailScale",
+    "NormalStrength",
+    "DetailStrength",
+    "InstVary",
+    "InstWarm",
+    "InstRoughVary",
+    "MacroScale",
+    "MacroVary",
+    "Roughness",
+    "RoughVary",
+    "Metallic",
+    "Specular",
+    "EmissiveStrength"
+   ]
+  },
+  "MI_V2_GroundFlag_PlazaWarm": {
+   "saved": true,
+   "parent": "M_V2_SurfaceHD",
+   "params": [
+    "TexScale",
+    "DetailScale",
+    "NormalStrength",
+    "DetailStrength",
+    "InstVary",
+    "InstWarm",
+    "InstRoughVary",
+    "MacroScale",
+    "MacroVary",
+    "Roughness",
+    "RoughVary",
+    "Metallic",
+    "Specular",
+    "EmissiveStrength"
+   ]
+  },
+  "MI_V2_GroundFlag_PathStone": {
+   "saved": true,
+   "parent": "M_V2_SurfaceHD",
+   "params": [
+    "TexScale",
+    "DetailScale",
+    "NormalStrength",
+    "DetailStrength",
+    "InstVary",
+    "InstWarm",
+    "InstRoughVary",
+    "MacroScale",
+    "MacroVary",
+    "Roughness",
+    "RoughVary",
+    "Metallic",
+    "Specular",
+    "EmissiveStrength"
+   ]
+  },
+  "MI_V2_GroundFlag_PathWarm": {
+   "saved": true,
+   "parent": "M_V2_SurfaceHD",
+   "params": [
+    "TexScale",
+    "DetailScale",
+    "NormalStrength",
+    "DetailStrength",
+    "InstVary",
+    "InstWarm",
+    "InstRoughVary",
+    "MacroScale",
+    "MacroVary",
+    "Roughness",
+    "RoughVary",
+    "Metallic",
+    "Specular",
+    "EmissiveStrength"
+   ]
+  }
+ },
+ "finished": "2026-09-17 05:56:15",
+ "seconds": 33.33,
+ "log": ""
+}

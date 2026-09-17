@@ -1,0 +1,20 @@
+{
+ "name": "zzAJ95_save_gr01",
+ "started": "2026-09-17 06:00:02",
+ "status": "done",
+ "groundflag_tiles": {
+  "MI_V2_GroundFlag_PlazaCream": 20,
+  "MI_V2_GroundFlag_PlazaWarm": 6,
+  "MI_V2_GroundFlag_PlazaShade": 35,
+  "MI_V2_GroundFlag_PathStone": 69,
+  "MI_V2_GroundFlag_PathWarm": 66
+ },
+ "dirty_maps_before": [
+  "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2"
+ ],
+ "saved_level": true,
+ "dirty_maps_after": [],
+ "finished": "2026-09-17 06:00:10",
+ "seconds": 7.93,
+ "log": ""
+}
