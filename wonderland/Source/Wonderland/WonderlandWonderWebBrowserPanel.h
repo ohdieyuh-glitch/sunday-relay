@@ -19,6 +19,7 @@
 #include "Widgets/SCompoundWidget.h"
 
 class SBox;
+class SEditableText;
 class SScrollBox;
 class SWonderlandWonderWebLivePage;
 class SVerticalBox;
@@ -81,6 +82,8 @@ private:
 	/** The picture from Pixel Canvas, drawn as a post's image. */
 	TSharedRef<SWidget> MakeCanvasPicture();
 	TSharedRef<SWidget> Probe(FName Id, TSharedRef<SWidget> Content);
+	/** Enter in the address bar: where this window should go. */
+	void OnAddressCommitted(const FText& Text, ETextCommit::Type How);
 	/** The site this window is showing: the shared selection in the first window, its own choice in the others. */
 	const FWonderWebBrowseTab* CurrentTab() const;
 	/** True for the first browser window, which is the one Julius's own browsing appears in. */
@@ -105,6 +108,7 @@ private:
 	int32 ShownRevision = -1;
 	FString ShownPageKey;
 	TSharedPtr<SBox> TabsSlot;
+	TSharedPtr<SEditableText> AddressBox;
 	TSharedPtr<SBox> PageSlot;
 	TSharedPtr<SScrollBox> PageScroll;
 

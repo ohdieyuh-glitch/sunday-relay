@@ -4,6 +4,7 @@
 #include "Engine/GameInstance.h"
 #include "Widgets/Images/SImage.h"
 #include "Widgets/Input/SButton.h"
+#include "Widgets/Input/SEditableText.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SScrollBox.h"
@@ -152,11 +153,16 @@ void SWonderlandWonderWebBrowserPanel::Construct(const FArguments& InArgs)
 						SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(22.0f, 0.0f, 8.0f, 0.0f)
 						[
-							SNew(SWonderWebGlyph).Glyph(EWonderWebGlyph::Back).Size(30.0f).Color(FSlateColor(WonderWebLook::Line(0.5f))).Thickness(2.4f)
+							// BACK, AND IT GOES BACK. The runtime's browser keeps this page's history, the way any browser does.
+							ChromeButton(TEXT("back"), EWonderWebGlyph::Back,
+								[this]() { return Live.IsValid() && Live->HasFrame(LiveTab); },
+								[this]() { if (Live.IsValid()) { Live->SendBack(LiveTab); } })
 						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 16.0f, 0.0f)
 						[
-							SNew(SWonderWebGlyph).Glyph(EWonderWebGlyph::Reload).Size(28.0f).Color(FSlateColor(WonderWebLook::Line(0.5f))).Thickness(2.4f)
+							ChromeButton(TEXT("reload"), EWonderWebGlyph::Reload,
+								[this]() { return Live.IsValid() && !Live->GetLiveUrl(LiveTab).IsEmpty(); },
+								[this]() { if (Live.IsValid()) { Live->Navigate(LiveTab, Live->GetLiveUrl(LiveTab)); } })
 						]
 						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 						[
@@ -171,7 +177,11 @@ void SWonderlandWonderWebBrowserPanel::Construct(const FArguments& InArgs)
 									]
 									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 									[
-										SNew(STextBlock).Font(WonderWebLook::Sans(20)).ColorAndOpacity(WonderWebLook::Line())
+										// TYPE AN ADDRESS HERE, as in any browser: enter sends this window to it, and a host that is not allowed is
+										// refused with the reason in the page area. It shows the page's own address the rest of the time.
+										SAssignNew(AddressBox, SEditableText).Font(WonderWebLook::Sans(20)).ColorAndOpacity(WonderWebLook::Line())
+										.SelectAllTextWhenFocused(true).ClearKeyboardFocusOnCommit(true)
+										.OnTextCommitted(this, &SWonderlandWonderWebBrowserPanel::OnAddressCommitted)
 										.Text_Lambda([WeakBrowse, WeakLive = Live, Watched = LiveTab]()
 										{
 											// THE ADDRESS IS THE PAGE'S OWN, wherever it came from: the founder's navigation, or the page Julius opened.
@@ -436,6 +446,38 @@ void SWonderlandWonderWebBrowserPanel::Rebuild()
 		// The brushes of the page just drawn go with it; the new page brings its own.
 		PageBrushes.Reset();
 		PageSlot->SetContent(Tab != nullptr ? MakePage(*Tab) : SNullWidget::NullWidget);
+	}
+}
+
+void SWonderlandWonderWebBrowserPanel::OnAddressCommitted(const FText& Text, ETextCommit::Type How)
+{
+	if (How != ETextCommit::OnEnter)
+	{
+		return;
+	}
+	FString Url = Text.ToString().TrimStartAndEnd();
+	if (Url.IsEmpty())
+	{
+		return;
+	}
+	// A BARE HOST IS AN ADDRESS TOO: "en.wikipedia.org" means https, the way a browser's bar does.
+	if (!Url.StartsWith(TEXT("http://")) && !Url.StartsWith(TEXT("https://")))
+	{
+		Url = TEXT("https://") + Url;
+	}
+	if (IsPrimary() && Browse.IsValid())
+	{
+		// The first window goes through the shared browse state, which is what Julius's story and the label follow.
+		FString Refusal;
+		if (!Browse->Navigate(Url, Refusal))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("WLBROWSE address bar: %s"), *Refusal);
+		}
+		return;
+	}
+	if (Live.IsValid())
+	{
+		Live->Navigate(LiveTab, Url);
 	}
 }
 
