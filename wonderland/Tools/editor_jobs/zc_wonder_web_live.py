@@ -72,24 +72,25 @@ def job():
         RESULT["frames_after_first_page"] = int(field(live.describe_live(), "frames") or 0)
         shot("01_real_article", "live=%s" % live.describe_live())
 
-        # ---- 2. SCROLLED WITH A REAL WHEEL EVENT, routed through the window to the page
+        # ---- 2. TYPED INTO THE SITE'S OWN SEARCH BOX, and submitted
+        # The click is a real Slate click at a point of the page; focus then follows it, as it does in any browser. It
+        # comes before any scrolling, because a page scrolled down no longer has its search box where it was.
+        RESULT["clicked_search"] = bool(ui.simulate_wonder_web_window_click("browser", "page:466,35"))
+        yield 1.5
+        shot("02_clicked_search_box", "clicked=%s" % RESULT["clicked_search"])
+        ui.simulate_wonder_web_window_type("wonderland")
+        yield 3.0
+        shot("03_typed_into_the_site", "typed into the page's own field")
+        ui.simulate_wonder_web_window_key("Enter")
+        yield 12.0
+        shot("04_the_site_answered", "live=%s" % live.describe_live())
+
+        # ---- 3. SCROLLED WITH A REAL WHEEL EVENT, routed through the window to the page
         for _ in range(3):
             ui.simulate_wonder_web_window_scroll("browser", "at:760,560", -3.0)
             yield 1.2
         yield 2.0
-        shot("02_scrolled", "three real wheel events at the page")
-
-        # ---- 3. TYPED INTO THE SITE'S OWN SEARCH BOX, and submitted
-        # The click is a real Slate click at a point of the page; focus then follows it, as it does in any browser.
-        RESULT["clicked_search"] = bool(ui.simulate_wonder_web_window_click("browser", "page:520,33"))
-        yield 1.5
-        shot("03_clicked_search_box", "clicked=%s" % RESULT["clicked_search"])
-        ui.simulate_wonder_web_window_type("wonderland")
-        yield 2.5
-        shot("04_typed_into_the_site", "typed into the page's own field")
-        ui.simulate_wonder_web_window_key("Enter")
-        yield 10.0
-        shot("05_the_site_answered", "live=%s" % live.describe_live())
+        shot("05_scrolled", "three real wheel events at the page")
 
         # ---- 4. A HOST THAT IS NOT ALLOWED: refused, and nothing is fetched
         before = field(live.describe_live(), "live_url")

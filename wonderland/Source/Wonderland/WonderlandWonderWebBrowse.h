@@ -135,6 +135,15 @@ public:
 	void ClearPost();
 	int32 GetPostedLikes() const { return PostedLikes; }
 
+	/**
+	 * TRUE WHILE JULIUS IS BROWSING FOR ITSELF. Its web-lookup task drives the runtime's browser directly, through the
+	 * capability gate; the window then watches Julius's tab rather than navigating one of its own, so what is on screen is
+	 * the page Julius is actually reading.
+	 */
+	bool IsFollowingJulius() const;
+	/** The runtime tab Julius works in. */
+	static const TCHAR* JuliusTab();
+
 	/** What Julius is doing in the browser right now, for the shell's Julius strip. Empty when it is not working here. */
 	const FString& GetJuliusLine() const { return JuliusLine; }
 	/** True while Julius is typing the caption itself. */

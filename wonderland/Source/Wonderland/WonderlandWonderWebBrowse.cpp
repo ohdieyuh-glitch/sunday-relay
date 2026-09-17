@@ -28,6 +28,9 @@ namespace WonderWebBrowseTuning
 		TEXT("Wonder Web browser: the hosts real mode may load, comma separated. A host not on this list is refused."));
 
 	const TCHAR* SocialTemplate = TEXT("social-post");
+	/** The task in which Julius browses the real web itself, and the runtime tab it works in. */
+	const TCHAR* WebTemplate = TEXT("web-lookup");
+	const TCHAR* JuliusBrowserTab = TEXT("julius");
 
 	/** The block kinds the renderer knows. An unknown kind is a projection this build cannot draw, not a page to guess at. */
 	bool IsKnownKind(const FName Kind)
@@ -357,6 +360,19 @@ FString UWonderlandWonderWebBrowseSubsystem::DescribeBrowse() const
 		Caption.Len(), IsJuliusTyping() ? 1 : 0, bPosted ? 1 : 0, *JuliusLine, *Problem);
 }
 
+const TCHAR* UWonderlandWonderWebBrowseSubsystem::JuliusTab()
+{
+	return WonderWebBrowseTuning::JuliusBrowserTab;
+}
+
+bool UWonderlandWonderWebBrowseSubsystem::IsFollowingJulius() const
+{
+	const UWonderlandJuliusConnectSubsystem* Julius = Connect();
+	const FJuliusConnectTask* Task = Julius != nullptr ? Julius->GetSurface().CurrentTask() : nullptr;
+	return Task != nullptr && Task->TemplateId == WonderWebBrowseTuning::WebTemplate
+		&& Task->RunState != TEXT("COMPLETED") && Task->RunState != TEXT("CANCELLED") && Task->RunState != TEXT("FAILED");
+}
+
 bool UWonderlandWonderWebBrowseSubsystem::IsRealMode() const
 {
 	return WonderWebBrowseTuning::CVarReal.GetValueOnGameThread() != 0;
@@ -531,6 +547,16 @@ void UWonderlandWonderWebBrowseSubsystem::FollowJulius()
 		return;
 	}
 	const FJuliusConnectTask* Task = Julius->GetSurface().CurrentTask();
+	if (Task != nullptr && Task->TemplateId == WonderWebBrowseTuning::WebTemplate)
+	{
+		// JULIUS IS BROWSING FOR ITSELF. The page is not ours to move: the window watches the tab Julius works in, and what
+		// it shows is whatever the gate has let Julius open.
+		JuliusLine = Task->BlockedReason.IsEmpty()
+			? FString::Printf(TEXT("JULIUS is browsing the real web  ·  step %d of %d  ·  %s"), FMath::Min(Task->Progress + 1, Task->Total), Task->Total, *Task->RunState)
+			: FString::Printf(TEXT("JULIUS is waiting: %s"), *Task->BlockedReason);
+		Changed();
+		return;
+	}
 	if (Task == nullptr || Task->TemplateId != WonderWebBrowseTuning::SocialTemplate)
 	{
 		return;

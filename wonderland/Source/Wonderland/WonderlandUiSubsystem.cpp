@@ -1438,13 +1438,14 @@ FString UWonderlandUiSubsystem::DescribeWonderWebWorkspace() const
 		const FJuliusConnectTask* Task = Surface.CurrentTask();
 		const FJuliusConnectService* Figma = Surface.FindService(TEXT("dev-figma"));
 		const FJuliusConnectService* Social = Surface.FindService(TEXT("dev-social"));
+		const FJuliusConnectService* Web = Surface.FindService(TEXT("open-web"));
 		static const TCHAR* Links[] = { TEXT("connecting"), TEXT("online"), TEXT("offline") };
-		Connect = FString::Printf(TEXT("link=%s prompt=%s task=%s template=%s step=%d/%d blocked=\"%s\" dev_figma=%s dev_social=%s scope=%s audit=%d last_audit=\"%s %s %s\" intents=%d"),
+		Connect = FString::Printf(TEXT("link=%s prompt=%s task=%s template=%s step=%d/%d blocked=\"%s\" dev_figma=%s dev_social=%s open_web=%s scope=%s audit=%d last_audit=\"%s %s %s\" intents=%d"),
 			Links[static_cast<int32>(State->GetLink())], Surface.bHasPrompt ? *Surface.Prompt.RequestId : TEXT("-"),
 			Task != nullptr ? *Task->RunState : TEXT("-"), Task != nullptr ? *Task->TemplateId : TEXT("-"),
 			Task != nullptr ? Task->Progress : 0, Task != nullptr ? Task->Total : 0,
 			Task != nullptr ? *Task->BlockedReason : TEXT(""), Figma != nullptr ? *Figma->State : TEXT("-"),
-			Social != nullptr ? *Social->State : TEXT("-"),
+			Social != nullptr ? *Social->State : TEXT("-"), Web != nullptr ? *Web->State : TEXT("-"),
 			Task != nullptr && Task->TemplateId == TEXT("social-post") && Social != nullptr ? *FString::Join(Social->ProjectScope, TEXT(","))
 				: (Figma != nullptr ? *FString::Join(Figma->ProjectScope, TEXT(",")) : TEXT("-")), Surface.Audit.Num(),
 			Surface.Audit.Num() > 0 ? *Surface.Audit[0].Action : TEXT("-"), Surface.Audit.Num() > 0 ? *Surface.Audit[0].Capability : TEXT("-"),
