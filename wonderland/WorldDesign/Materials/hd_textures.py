@@ -18,6 +18,7 @@ wrap-around distances), one per surface family, each ALBEDO + NORMAL + ROUGHNESS
              sun can find, every block its own tone and a whisper of tilt; clean, pale, no grime
   ivory2     carved ivory stone: crystal speckle, faint bedding, rare thin veins, pores (IV01, 2026-09-17)
   flagstone  walked paving laid as random-ashlar flagstones with recessed joints (GR01, 2026-09-17)
+  stucco     hand-floated lime render, the Bible's cream stucco: sand tooth over trowel undulation (PS01, 2026-09-17)
   grass      lawn (MQ09) -- generated, applied, judged WORSE than the V2 lawn texture, reverted; kept for reference
   macro      one 1024 px low-frequency map (R: brightness, G: roughness) laid at ~60 m to break repetition
 
@@ -478,10 +479,34 @@ def macro(n, rng):
     return rgb
 
 
+def stucco(n, rng):
+    """PS01 -- hand-floated lime render, the Bible's CREAM STUCCO (2026-09-17).
+
+    The city is built of one surface: coursed ashlar marble on every wall, in five tints. BOARD_2's material palette
+    names cream stucco beside pale stone, and a plastered wall is not a stone wall with the joints turned off -- it is
+    a different scale of relief entirely. So this is a float coat: fine sand tooth at millimetre scale over the slow
+    undulation a trowel leaves at half a metre, with the faint cloudiness of limewash and a few open pores where a
+    sand grain was pulled out. No cracks, no runs, no grime: Wonderland's plaster is maintained.
+    """
+    sand = spectral(n, 1.0, rng, lo=200.0)                 # the sand in the float coat
+    fine = spectral(n, 1.7, rng, lo=48.0, hi=200.0)        # the tooth between the grains
+    sweep = spectral(n, 3.2, rng, lo=1.5, hi=16.0)         # the trowel's slow undulation
+    wash = spectral(n, 2.5, rng, lo=8.0, hi=48.0)          # limewash cloudiness
+    pores = spectral(n, 0.5, rng, lo=300.0)
+    open_pore = smoothstep(np.quantile(pores, 0.9975), np.quantile(pores, 0.9998), pores)
+    height = 0.019 * sand + 0.030 * fine + 0.055 * sweep - 0.070 * open_pore
+    lum = 0.88 + 0.022 * sand + 0.018 * wash + 0.022 * sweep - 0.05 * open_pore
+    tone = 1.0 + 0.012 * wash                              # a hair warm where the wash is thick
+    alb, mean = neutral_albedo(lum, np.stack([tone, np.ones_like(tone), 2.0 - tone], axis=-1))
+    rough = np.clip(0.82 + 0.05 * sand + 0.04 * wash - 0.03 * sweep, 0, 1)
+    return alb, normal_from_height(height, 5.0), rough, mean
+
+
 FAMILIES = {"limestone": limestone, "cobble": cobble, "ivory": ivory, "roof": roof, "gold": gold, "ashlar": ashlar,
-            "grass": grass, "flagstone": flagstone, "ivory2": ivory2}
+            "grass": grass, "flagstone": flagstone, "ivory2": ivory2, "stucco": stucco}
 # seed order: the MQ01 sets and macro first, so adding a family never changes a texture already imported
-SEED_ORDER = ["limestone", "cobble", "ivory", "roof", "gold", "macro", "ashlar", "grass", "flagstone", "ivory2"]
+SEED_ORDER = ["limestone", "cobble", "ivory", "roof", "gold", "macro", "ashlar", "grass", "flagstone", "ivory2",
+              "stucco"]
 
 
 def main():
