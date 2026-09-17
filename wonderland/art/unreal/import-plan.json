@@ -11,7 +11,7 @@
   ],
   "counts": {
     "assets": 128,
-    "meshes": 406,
+    "meshes": 405,
     "missing_sources": 0,
     "nanite_requested": 24,
     "collision_requested": 81,
@@ -8189,7 +8189,7 @@
       ]
     },
     {
-      "asset_id": "WL_Detail_Plinth_Run",
+      "asset_id": "WL_Detail_Plinth_Block",
       "family_group": "details",
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/details",
@@ -8213,35 +8213,23 @@
           "name": "back",
           "kind": "bridge_end",
           "z_uu": 0.0,
-          "radius_uu": 200.0,
+          "radius_uu": 50.0,
           "rung": null,
-          "note": "flat back at y = 0; butt to a wall's foot; scale in X to any length"
+          "note": "flat back at y = 0; butt to a wall's foot; lay end to end, scale in X 0.8-1.25"
         }
       ],
       "parts": [
         {
           "part": "stone",
-          "mesh_name": "WL_Detail_Plinth_Run",
-          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Detail_Plinth_Run.fbx",
+          "mesh_name": "WL_Detail_Plinth_Block",
+          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Detail_Plinth_Block.fbx",
           "source_exists": true,
           "destination_path": "/Game/WonderlandV2/Kit/details",
-          "destination_name": "WL_Detail_Plinth_Run",
-          "asset_path": "/Game/WonderlandV2/Kit/details/WL_Detail_Plinth_Run",
+          "destination_name": "WL_Detail_Plinth_Block",
+          "asset_path": "/Game/WonderlandV2/Kit/details/WL_Detail_Plinth_Block",
           "material_instance": "MI_V2_IvoryStone",
           "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_IvoryStone",
-          "triangles": 20
-        },
-        {
-          "part": "stone_dark",
-          "mesh_name": "WL_Detail_Plinth_Run_stone_dark",
-          "source": "C:\\dev\\iwonder\\wonderland-blender-forge\\wonderland\\art\\blender\\exports\\fbx\\WL_Detail_Plinth_Run_stone_dark.fbx",
-          "source_exists": true,
-          "destination_path": "/Game/WonderlandV2/Kit/details",
-          "destination_name": "WL_Detail_Plinth_Run_stone_dark",
-          "asset_path": "/Game/WonderlandV2/Kit/details/WL_Detail_Plinth_Run_stone_dark",
-          "material_instance": "MI_V2_Stone",
-          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Stone",
-          "triangles": 28
+          "triangles": 36
         }
       ]
     },

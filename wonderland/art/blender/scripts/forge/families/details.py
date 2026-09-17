@@ -604,40 +604,45 @@ def detail_window_lancet_pair(f):
         tri_budget=3000, collision=False, nanite=False)
 
 
-def detail_plinth_run(f):
-    """A 4 m plinth course for the foot of a wall: 48 cm tall, standing 9 cm proud, a chamfered weathering top.
+def detail_plinth_block(f):
+    """One block of a plinth course for the foot of a wall: 1 m long, 48 cm tall, 9 cm proud, every exposed arris cut.
 
     WHY (2026-09-17, material-realism phase, contact depth): the city's generator walls meet the paving on one hard
-    line -- no base course, no change of material, no shadow -- so every building reads as a box set down on a floor.
-    A classical wall stands on a plinth. This is one: a slightly proud base band with a chamfered top that catches the
-    sun, and a darker, rougher foot strip where a real wall base takes the wet and the wear.
+    line -- no base course, no shadow -- so every building reads as a box set down on a floor. A classical wall stands
+    on a plinth. The first cut (a 4 m run, 8bb3097b) grounded the walls at close range, but a 4 m band with no joints
+    read as a poured concrete kerb, not stone. A base course is BLOCKS: this is one, and a wall's course is laid block
+    by block at 0.8-1.25 m (scale in X), so the joints fall at irregular centres and each block takes its own tone
+    from the master's per-object variation.
 
-    A RUN with a flat back at y = 0 (projecting +Y), butt ends, and the same section at both ends, so any length is laid
-    by scaling in X or by butting runs. Its foot is on the datum.
+    The section is lofted along X: the front face, the top and the weathering chamfer between them run the block's
+    length; at both ends the front and top are pulled in by END_C, so two blocks butted together meet in a shallow
+    V-joint that shades like a mortar line, with no gap to see through. The top falls 1.5 cm toward the front
+    (a weathering wash). Flat back at y = 0 (projecting +Y), the foot on the datum, no chamfer at the foot or the back,
+    so it sits hard on the paving and tight to the wall.
     """
     p = f.part("stone")
-    d = f.part("stone_dark")
-    LEN, H, OUT = 4.0, 0.48, 0.09
-    # the band: a box from the wall out to OUT, with a chamfered weathering top
-    # starts 5 mm inside the foot strip, so the band's underside is never coplanar with the foot's top
-    p.loft([[(-LEN * 0.5, 0.0, 0.075), (LEN * 0.5, 0.0, 0.075), (LEN * 0.5, OUT, 0.075), (-LEN * 0.5, OUT, 0.075)],
-            [(-LEN * 0.5, 0.0, H - 0.06), (LEN * 0.5, 0.0, H - 0.06), (LEN * 0.5, OUT, H - 0.06), (-LEN * 0.5, OUT, H - 0.06)],
-            [(-LEN * 0.5, 0.0, H), (LEN * 0.5, 0.0, H), (LEN * 0.5, 0.012, H), (-LEN * 0.5, 0.012, H)]], smooth=False)
-    # the foot: darker, a touch prouder, where the wall meets the ground
-    d.box(LEN, OUT + 0.02, 0.08, at=(0.0, (OUT + 0.02) * 0.5, 0.0), chamfer=0.012, centre_z=False)
+    LEN, H, OUT = 1.0, 0.48, 0.09
+    TOP_C, END_C, WASH = 0.03, 0.012, 0.015
+
+    def section(x, i):
+        return [(x, 0.0, 0.0), (x, OUT - i, 0.0), (x, OUT - i, H - WASH - TOP_C),
+                (x, OUT - TOP_C, H - WASH * (OUT - TOP_C) / OUT - i), (x, 0.0, H - i)]
+
+    h = LEN * 0.5
+    p.loft([section(-h, END_C), section(-h + END_C, 0.0), section(h - END_C, 0.0), section(h, END_C)], smooth=False)
     return K.ModuleSpec(
-        "WL_Detail_Plinth_Run", "plinth", "prop", "detail",
-        f.emit("WL_Detail_Plinth_Run"),
-        [K.Socket("back", 0.0, LEN * 0.5, "bridge_end", "flat back at y = 0; butt to a wall's foot; scale in X to any length")],
+        "WL_Detail_Plinth_Block", "plinth", "prop", "detail",
+        f.emit("WL_Detail_Plinth_Block"),
+        [K.Socket("back", 0.0, h, "bridge_end", "flat back at y = 0; butt to a wall's foot; lay end to end, scale in X 0.8-1.25")],
         districts=("city", "castle", "plaza", "hamlet", "clock", "cloister"),
-        note="4 m plinth course: 48 cm band 9 cm proud with a chamfered weathering top, darker 8 cm foot strip",
+        note="1 m plinth-course block: 48 cm tall, 9 cm proud, chamfered top and ends so butted blocks meet in a V-joint",
         params={"length_m": LEN, "height_m": H, "projection_m": OUT},
-        tri_budget=200, collision=False, nanite=False)
+        tri_budget=80, collision=False, nanite=False)
 
 
 BUILDERS = (
     detail_balustrade_run, detail_newel_urn, detail_screen_filigree,
     detail_balcony_bracket, detail_pinnacle_grand, detail_oriel_bay,
     detail_window_arched, detail_banner_blade, detail_wall_lantern,
-    detail_lantern_hanging, detail_window_oculus, detail_window_lancet_pair, detail_plinth_run,
+    detail_lantern_hanging, detail_window_oculus, detail_window_lancet_pair, detail_plinth_block,
 )

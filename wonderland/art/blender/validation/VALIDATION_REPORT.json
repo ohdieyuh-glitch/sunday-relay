@@ -99,7 +99,7 @@
     "WL_Detail_Lantern_Hanging": [],
     "WL_Detail_Window_Oculus": [],
     "WL_Detail_Window_LancetPair": [],
-    "WL_Detail_Plinth_Run": [],
+    "WL_Detail_Plinth_Block": [],
     "WL_Hero_GreatSpire": [],
     "WL_Hero_Gate_Royal": [],
     "WL_Sky_Island_Small": [],
@@ -633,9 +633,8 @@
       "gold": "b5c88010686a0f2d1810d805bdf9b7e1a8ed56370c87e20e98399ae386859599",
       "stone": "7c5a483c6aa4244d67d6e3ff831fba91cf11e7368bfe4312e021673642aa415d"
     },
-    "WL_Detail_Plinth_Run": {
-      "stone": "3cdace71e79d4692e724759889d0c9a216d6facc4c61051f842c6837a94ca079",
-      "stone_dark": "b43bd9515d7bf8a1544f244457974fda1dba6ea5b6367685b908f2def90f2afc"
+    "WL_Detail_Plinth_Block": {
+      "stone": "c3373f5ab77667993f7a32cf49f201214e5cb5306b34f03a5ad893722f9ef55a"
     },
     "WL_Hero_GreatSpire": {
       "glass": "bcd03302e94403ce72efc9428a539e3c54e0134cf4d737861eaec08b56c60a04",

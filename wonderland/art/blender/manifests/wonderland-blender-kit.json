@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-17T16:09:06+00:00",
+  "generated_utc": "2026-09-17T16:24:31+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -236,8 +236,8 @@
   },
   "counts": {
     "assets": 128,
-    "meshes": 406,
-    "triangles": 506400,
+    "meshes": 405,
+    "triangles": 506388,
     "by_role": {
       "foot": 5,
       "body": 14,
@@ -32954,13 +32954,13 @@
       "part_count": 3
     },
     {
-      "asset_id": "WL_Detail_Plinth_Run",
+      "asset_id": "WL_Detail_Plinth_Block",
       "kit_version": "1.0.0",
       "family": "plinth",
       "family_group": "details",
       "category": "prop",
       "silhouette_role": "detail",
-      "note": "4 m plinth course: 48 cm band 9 cm proud with a chamfered weathering top, darker 8 cm foot strip",
+      "note": "1 m plinth-course block: 48 cm tall, 9 cm proud, chamfered top and ends so butted blocks meet in a V-joint",
       "districts": [
         "city",
         "castle",
@@ -32970,7 +32970,7 @@
         "cloister"
       ],
       "params": {
-        "length_m": 4.0,
+        "length_m": 1.0,
         "height_m": 0.48,
         "projection_m": 0.09
       },
@@ -32985,18 +32985,18 @@
       },
       "height_uu": 48.0,
       "bbox_min_uu": [
-        -200.0,
+        -50.0,
         0.0,
         0.0
       ],
       "bbox_max_uu": [
-        200.0,
-        11.0,
+        50.0,
+        9.0,
         48.0
       ],
       "size_uu": [
-        400.0,
-        11.0,
+        100.0,
+        9.0,
         48.0
       ],
       "style": {
@@ -33010,22 +33010,22 @@
       },
       "base_z_uu": 0.0,
       "profile_uu": [
-        200.3,
-        200.3,
-        200.3,
-        200.3,
-        200.3,
-        200.3,
-        200.3,
-        200.3,
-        200.3,
-        200.3,
-        200.2,
-        200.0
+        50.6,
+        50.6,
+        50.6,
+        50.6,
+        50.6,
+        50.6,
+        50.6,
+        50.6,
+        50.6,
+        50.6,
+        50.6,
+        50.36
       ],
-      "radius_uu": 200.0,
-      "tris_total": 48,
-      "tri_budget": 200,
+      "radius_uu": 50.0,
+      "tris_total": 36,
+      "tri_budget": 80,
       "over_budget": false,
       "nanite_recommended": false,
       "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
@@ -33036,16 +33036,16 @@
           "name": "back",
           "kind": "bridge_end",
           "z_uu": 0.0,
-          "radius_uu": 200.0,
+          "radius_uu": 50.0,
           "rung": null,
-          "note": "flat back at y = 0; butt to a wall's foot; scale in X to any length"
+          "note": "flat back at y = 0; butt to a wall's foot; lay end to end, scale in X 0.8-1.25"
         }
       ],
       "parts": {
         "stone": {
-          "verts": 12,
-          "faces": 10,
-          "tris": 20,
+          "verts": 20,
+          "faces": 17,
+          "tris": 36,
           "degenerate_faces": 0,
           "loose_verts": 0,
           "materials": [
@@ -33056,103 +33056,24 @@
             "UVMap"
           ],
           "bbox_min_uu": [
-            -200.0,
-            0.0,
-            7.5
-          ],
-          "bbox_max_uu": [
-            200.0,
-            9.0,
-            48.0
-          ],
-          "size_uu": [
-            400.0,
-            9.0,
-            40.5
-          ],
-          "height_m": 0.405,
-          "base_z_uu": 7.5,
-          "normals": {
-            "faces": 10,
-            "shells": 1,
-            "inverted_shells": 0,
-            "inverted_faces": 0,
-            "open_shells": 1,
-            "zero_normal_faces": 0
-          },
-          "profile_uu": [
-            200.2,
-            200.2,
-            200.2,
-            200.2,
-            200.2,
-            200.2,
-            200.2,
-            200.2,
-            200.2,
-            200.2,
-            200.2,
-            200.0
-          ],
-          "material": "MI_V2_IvoryStone",
-          "mesh_name": "WL_Detail_Plinth_Run",
-          "glb": "exports\\glb\\WL_Detail_Plinth_Run.glb",
-          "fbx": "exports\\fbx\\WL_Detail_Plinth_Run.fbx",
-          "glb_read": {
-            "materials": [
-              "MI_V2_IvoryStone"
-            ],
-            "meshes": 1,
-            "min_yup": [
-              -2,
-              0.07500000298023224,
-              -0.09000000357627869
-            ],
-            "max_yup": [
-              2,
-              0.47999998927116394,
-              0
-            ],
-            "bytes": 2420
-          },
-          "fbx_read": {
-            "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": 7.500000476837158,
-            "stored_z_max": 48.0
-          }
-        },
-        "stone_dark": {
-          "verts": 16,
-          "faces": 14,
-          "tris": 28,
-          "degenerate_faces": 0,
-          "loose_verts": 0,
-          "materials": [
-            "MI_V2_Stone"
-          ],
-          "material_slots": 1,
-          "uv_layers": [
-            "UVMap"
-          ],
-          "bbox_min_uu": [
-            -200.0,
+            -50.0,
             0.0,
             0.0
           ],
           "bbox_max_uu": [
-            200.0,
-            11.0,
-            8.0
+            50.0,
+            9.0,
+            48.0
           ],
           "size_uu": [
-            400.0,
-            11.0,
-            8.0
+            100.0,
+            9.0,
+            48.0
           ],
-          "height_m": 0.08,
+          "height_m": 0.48,
           "base_z_uu": 0.0,
           "normals": {
-            "faces": 14,
+            "faces": 17,
             "shells": 1,
             "inverted_shells": 0,
             "inverted_faces": 0,
@@ -33160,48 +33081,48 @@
             "zero_normal_faces": 0
           },
           "profile_uu": [
-            199.04,
-            200.3,
-            200.3,
-            200.3,
-            200.3,
-            200.3,
-            200.3,
-            200.3,
-            200.3,
-            200.3,
-            200.3,
-            199.04
+            50.6,
+            50.6,
+            50.6,
+            50.6,
+            50.6,
+            50.6,
+            50.6,
+            50.6,
+            50.6,
+            50.6,
+            50.6,
+            50.36
           ],
-          "material": "MI_V2_Stone",
-          "mesh_name": "WL_Detail_Plinth_Run_stone_dark",
-          "glb": "exports\\glb\\WL_Detail_Plinth_Run_stone_dark.glb",
-          "fbx": "exports\\fbx\\WL_Detail_Plinth_Run_stone_dark.fbx",
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Detail_Plinth_Block",
+          "glb": "exports\\glb\\WL_Detail_Plinth_Block.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Plinth_Block.fbx",
           "glb_read": {
             "materials": [
-              "MI_V2_Stone"
+              "MI_V2_IvoryStone"
             ],
             "meshes": 1,
             "min_yup": [
-              -2,
+              -0.5,
               0,
-              -0.10999999940395355
+              -0.09000000357627869
             ],
             "max_yup": [
-              2,
-              0.07999999821186066,
+              0.5,
+              0.47999998927116394,
               0
             ],
-            "bytes": 3172
+            "bytes": 3404
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
             "stored_z_min": 0.0,
-            "stored_z_max": 8.0
+            "stored_z_max": 48.0
           }
         }
       },
-      "part_count": 2
+      "part_count": 1
     },
     {
       "asset_id": "WL_Hero_GreatSpire",
