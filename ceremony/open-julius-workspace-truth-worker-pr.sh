@@ -24,9 +24,9 @@ set -euo pipefail
 REPO='ohdieyuh-glitch/sunday-relay'
 BRANCH='relay/julius-workspace-truth'
 BASE='04b2adcffa4f740353c415b9743191432bb7a741'
-HEAD='6b1dfee3433b7eb7412fcbdece383cc9b9a9fefe'
-TREE='e8ee66d4090cc54c3c03337b7b2c4118669782fe'
-COMMITS=3
+HEAD='d4feef2711c25a6b23d07125ed2eb4c50e42fded'
+TREE='b17255dc85d54edddeee3252aac43de97032ac13'
+COMMITS=4
 WORKER='julius-worker[bot]'
 # RESOLVED AGAINST THE SCRIPT, NOT THE WORKING DIRECTORY. The README says to run
 # this as `bash ceremony/open-...-pr.sh` from the repository root, where a bare

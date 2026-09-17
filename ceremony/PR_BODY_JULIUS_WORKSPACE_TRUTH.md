@@ -91,13 +91,15 @@ reviewed, and leaving the edits makes them the next attempt's inheritance.
 
 ## Proofs
 
-Three commits, all authored and committed by julius-worker[bot]:
+Four commits, all authored and committed by julius-worker[bot]:
 
 1. **The executor and the record shape** — the snapshot commands, the adapter,
    the attribution module, the dispatch carrier, the raised step bounds.
 2. **The kernel owns the attribution** — recording, scope, the UNKNOWN rule, the
    undo decision from the ledger, the real-PostgreSQL proof and its CI step.
 3. **What the mutants found** — two proofs, no production code.
+4. **What CI found** — the real-PostgreSQL replay proof, and the event-store
+   finding below. Only the proof changed.
 
 **New proofs (52)**
 
@@ -165,7 +167,7 @@ Three commits, all authored and committed by julius-worker[bot]:
 
 ## Gates at the frozen head
 
-Frozen head `6b1dfee3433b7eb7412fcbdece383cc9b9a9fefe`, tree `e8ee66d4090cc54c3c03337b7b2c4118669782fe`, on trusted main
+Frozen head `d4feef2711c25a6b23d07125ed2eb4c50e42fded`, tree `b17255dc85d54edddeee3252aac43de97032ac13`, on trusted main
 `04b2adcffa4f740353c415b9743191432bb7a741`.
 
 - `npm run typecheck` (four passes) — exit 0
@@ -184,7 +186,28 @@ Frozen head `6b1dfee3433b7eb7412fcbdece383cc9b9a9fefe`, tree `e8ee66d4090cc54c3c
   identically on both (Windows file modes, `ps`, `/bin/sh` spawns, provenance
   CLI stubs).
 
-CI at this head: running when this PR opens; this section is updated with its result.
+CI at this head (`d4feef27`): **Verify Relay**, **sibling-control-plane**,
+**first-live-topology** in both receipt transports and Vercel — all green. The
+new real-PostgreSQL step, *Attempt attribution cannot collide, leak or be
+overwritten*, ran and passed in both transports (4 tests), beside the lease
+renewal proof, the run-scoped identity proof and the three capability drills.
+
+## Found on the way — the event store's idempotency claim does not hold on PostgreSQL
+
+CI refused this PR's replay proof twice, and the second refusal is the finding.
+`JuliusEventPostgresRepository.append` takes its idempotent path only when the
+stored payload equals the one it just built, compared as `JSON.stringify` — and
+`jsonb` does not preserve key order, so that comparison never matches. On
+PostgreSQL a second append under an existing event id is ALWAYS refused with
+`julius_event_id_conflict`; the in-memory store takes the idempotent path. **The
+two stores disagree about a contract neither conformance suite covers.**
+
+Attempt records are safe either way — the first row stands, which is what the
+proof now asserts — but a replay that re-mints a deterministic event id would
+raise rather than no-op. **Not fixed here:** it is the event store's own
+contract, older than this boundary, and it belongs with the store conformance
+suite that should have caught the divergence. It is written into
+`docs/JULIUS_CODING_AGENT_AUDIT.md` as a finding.
 
 ## Not in this PR
 
