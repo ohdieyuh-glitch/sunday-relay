@@ -16,6 +16,7 @@ wrap-around distances), one per surface family, each ALBEDO + NORMAL + ROUGHNESS
   gold       polished metal: near-flat normal with fine directional scratches, roughness 0.18-0.40 with smudges
   ashlar     castle wall stone laid in courses (MQ05): running-bond blocks, fine joints with chamfered arrises the
              sun can find, every block its own tone and a whisper of tilt; clean, pale, no grime
+  ivory2     carved ivory stone: crystal speckle, faint bedding, rare thin veins, pores (IV01, 2026-09-17)
   flagstone  walked paving laid as random-ashlar flagstones with recessed joints (GR01, 2026-09-17)
   grass      lawn (MQ09) -- generated, applied, judged WORSE than the V2 lawn texture, reverted; kept for reference
   macro      one 1024 px low-frequency map (R: brightness, G: roughness) laid at ~60 m to break repetition
@@ -194,6 +195,50 @@ def ivory(n, rng):
     alb, mean = neutral_albedo(lum, np.stack([tone, np.ones_like(tone), 2.0 - tone], axis=-1))
     rough = np.clip(0.62 + 0.05 * grain + 0.06 * mottle, 0, 1)
     return alb, normal_from_height(height, 6.0), rough, mean
+
+
+def _hblur(a, width):
+    """Tileable horizontal box blur (wraps), for bedding streaks."""
+    c = np.cumsum(np.concatenate([a[:, -width:], a, a[:, :width]], axis=1), axis=1)
+    out = (c[:, 2 * width:] - c[:, :-2 * width]) / (2.0 * width)
+    return out[:, :a.shape[1]]
+
+
+def ivory2(n, rng):
+    """IV01 (2026-09-17): carved ivory stone -- Wonderland's most important building material, with a stone's grain.
+
+    WHY. The MQ01 ivory set is a soft cloudy mottle and nothing else: on towers, columns, arches and balustrades it reads
+    as a plain beige cube (founder material-realism phase, building stone after ground). A fine limestone / marble reads
+    at three scales, and each is kept restrained so the stone stays bright and clean:
+      CRYSTAL  a very fine speckle and sparkle in albedo and roughness -- what a close face shows in sun
+      BEDDING  faint horizontal strata (laid along image x, which the wall projection maps to horizontal)
+      VEINS    rare thin warm-grey veins, low contrast
+      MOTTLE   the old soft cloud, halved
+      PITS     sparse tiny pores
+    No joints: carved pieces (columns, arches, finials) must not show masonry seams; walls that need courses use ashlar.
+    Neutral like every family -- the instance's BaseColor carries the colour."""
+    crystal = spectral(n, 0.5, rng, lo=n / 5.0)
+    grain = spectral(n, 1.4, rng, lo=60.0, hi=n / 5.0)
+    # preview 2: bedding from a 6-90 cycle band read as broad grey smudges. Real bedding is FINE: many thin laminae
+    # (60-400 cycles across the tile), stretched long along the bed, and fading in and out rather than uniform.
+    # preview 3: 180 px streaks at full strength read as woven linen. Shorter (48 px), and present only in patches, so
+    # the bedding is a hint inside the stone, not a pattern on it.
+    strata_src = spectral(n, 1.0, rng, lo=60.0, hi=400.0)
+    strata = _hblur(strata_src, 48)
+    strata = (strata - strata.mean()) / (strata.std() + 1e-9)
+    strata *= smoothstep(0.2, 1.6, spectral(n, 2.6, rng, lo=1.0, hi=8.0))
+    ridged = 1.0 - np.abs(spectral(n, 2.3, rng, lo=2.0, hi=24.0))
+    veins = smoothstep(0.935, 0.99, ridged)
+    mottle = spectral(n, 2.8, rng, lo=1.0, hi=12.0)
+    # preview 1: pores at 2.4-3.1 read as black pepper; kept rare and faint
+    pores = smoothstep(2.9, 3.4, spectral(n, 0.5, rng, lo=n / 4.0))
+    height = 0.010 * crystal + 0.025 * grain + 0.012 * strata - 0.25 * pores - 0.02 * veins
+    lum = (0.87 + 0.012 * crystal + 0.020 * grain + 0.012 * strata + 0.030 * mottle - 0.045 * veins - 0.05 * pores)
+    tone = 1.0 + 0.012 * mottle + 0.006 * strata - 0.010 * veins
+    warm = np.stack([tone * 1.008, np.ones_like(tone), (2.0 - tone) * 0.990], axis=-1)
+    alb, mean = neutral_albedo(lum, warm)
+    rough = np.clip(0.60 + 0.035 * crystal + 0.04 * grain + 0.03 * strata + 0.04 * mottle - 0.05 * veins + 0.12 * pores, 0, 1)
+    return alb, normal_from_height(height, 7.0), rough, mean
 
 
 def roof(n, rng, rows=12, per_row=12):
@@ -434,9 +479,9 @@ def macro(n, rng):
 
 
 FAMILIES = {"limestone": limestone, "cobble": cobble, "ivory": ivory, "roof": roof, "gold": gold, "ashlar": ashlar,
-            "grass": grass, "flagstone": flagstone}
+            "grass": grass, "flagstone": flagstone, "ivory2": ivory2}
 # seed order: the MQ01 sets and macro first, so adding a family never changes a texture already imported
-SEED_ORDER = ["limestone", "cobble", "ivory", "roof", "gold", "macro", "ashlar", "grass", "flagstone"]
+SEED_ORDER = ["limestone", "cobble", "ivory", "roof", "gold", "macro", "ashlar", "grass", "flagstone", "ivory2"]
 
 
 def main():

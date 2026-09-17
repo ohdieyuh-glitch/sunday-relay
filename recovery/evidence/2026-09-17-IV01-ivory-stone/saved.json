@@ -1,0 +1,67 @@
+{
+ "name": "zzAP00_save_iv01",
+ "started": "2026-09-17 06:24:33",
+ "status": "done",
+ "instances": {
+  "MI_V2HD_IvoryStone": {
+   "albedo": "T_HD_ivory2_a",
+   "normal_strength": 3.0,
+   "saved": true
+  },
+  "MI_V2HD_MarbleBlush": {
+   "albedo": "T_HD_ivory2_a",
+   "normal_strength": 3.0,
+   "saved": true
+  },
+  "MI_V2HD_MarbleCool": {
+   "albedo": "T_HD_ivory2_a",
+   "normal_strength": 3.0,
+   "saved": true
+  },
+  "MI_V2HD_MarblePale": {
+   "albedo": "T_HD_ivory2_a",
+   "normal_strength": 3.0,
+   "saved": true
+  },
+  "MI_V2_IvoryStone": {
+   "albedo": "T_HD_ivory2_a",
+   "normal_strength": 1.0,
+   "saved": true
+  },
+  "MI_V2_MarbleBlush": {
+   "albedo": "T_HD_ivory2_a",
+   "normal_strength": 1.0,
+   "saved": true
+  },
+  "MI_V2_MarbleCool": {
+   "albedo": "T_HD_ivory2_a",
+   "normal_strength": 1.0,
+   "saved": true
+  },
+  "MI_V2_MarblePale": {
+   "albedo": "T_HD_ivory2_a",
+   "normal_strength": 1.0,
+   "saved": true
+  },
+  "MI_V2_TowerBlush": {
+   "albedo": "T_HD_ivory2_a",
+   "normal_strength": 1.0,
+   "saved": true
+  },
+  "MI_V2_TowerCream": {
+   "albedo": "T_HD_ivory2_a",
+   "normal_strength": 1.0,
+   "saved": true
+  },
+  "MI_V2_TowerLavender": {
+   "albedo": "T_HD_ivory2_a",
+   "normal_strength": 1.0,
+   "saved": true
+  }
+ },
+ "dirty_content_after": [],
+ "dirty_maps_after": [],
+ "finished": "2026-09-17 06:24:37",
+ "seconds": 3.79,
+ "log": ""
+}

@@ -1,0 +1,149 @@
+{
+ "from": "ivory",
+ "to": "ivory2",
+ "instances": {
+  "MI_V2_IvoryStone": {
+   "before": {
+    "Albedo": "T_HD_ivory_a",
+    "Normal": "T_HD_ivory_n",
+    "RoughnessMap": "T_HD_ivory_r"
+   },
+   "after": {
+    "Albedo": "T_HD_ivory2_a",
+    "Normal": "T_HD_ivory2_n",
+    "RoughnessMap": "T_HD_ivory2_r"
+   },
+   "scalars_before": {}
+  },
+  "MI_V2_MarbleBlush": {
+   "before": {
+    "Albedo": "T_HD_ivory_a",
+    "Normal": "T_HD_ivory_n",
+    "RoughnessMap": "T_HD_ivory_r"
+   },
+   "after": {
+    "Albedo": "T_HD_ivory2_a",
+    "Normal": "T_HD_ivory2_n",
+    "RoughnessMap": "T_HD_ivory2_r"
+   },
+   "scalars_before": {}
+  },
+  "MI_V2_MarbleCool": {
+   "before": {
+    "Albedo": "T_HD_ivory_a",
+    "Normal": "T_HD_ivory_n",
+    "RoughnessMap": "T_HD_ivory_r"
+   },
+   "after": {
+    "Albedo": "T_HD_ivory2_a",
+    "Normal": "T_HD_ivory2_n",
+    "RoughnessMap": "T_HD_ivory2_r"
+   },
+   "scalars_before": {}
+  },
+  "MI_V2_MarblePale": {
+   "before": {
+    "Albedo": "T_HD_ivory_a",
+    "Normal": "T_HD_ivory_n",
+    "RoughnessMap": "T_HD_ivory_r"
+   },
+   "after": {
+    "Albedo": "T_HD_ivory2_a",
+    "Normal": "T_HD_ivory2_n",
+    "RoughnessMap": "T_HD_ivory2_r"
+   },
+   "scalars_before": {}
+  },
+  "MI_V2_TowerBlush": {
+   "before": {
+    "Albedo": "T_HD_ivory_a",
+    "Normal": "T_HD_ivory_n",
+    "RoughnessMap": "T_HD_ivory_r"
+   },
+   "after": {
+    "Albedo": "T_HD_ivory2_a",
+    "Normal": "T_HD_ivory2_n",
+    "RoughnessMap": "T_HD_ivory2_r"
+   },
+   "scalars_before": {}
+  },
+  "MI_V2_TowerCream": {
+   "before": {
+    "Albedo": "T_HD_ivory_a",
+    "Normal": "T_HD_ivory_n",
+    "RoughnessMap": "T_HD_ivory_r"
+   },
+   "after": {
+    "Albedo": "T_HD_ivory2_a",
+    "Normal": "T_HD_ivory2_n",
+    "RoughnessMap": "T_HD_ivory2_r"
+   },
+   "scalars_before": {}
+  },
+  "MI_V2_TowerLavender": {
+   "before": {
+    "Albedo": "T_HD_ivory_a",
+    "Normal": "T_HD_ivory_n",
+    "RoughnessMap": "T_HD_ivory_r"
+   },
+   "after": {
+    "Albedo": "T_HD_ivory2_a",
+    "Normal": "T_HD_ivory2_n",
+    "RoughnessMap": "T_HD_ivory2_r"
+   },
+   "scalars_before": {}
+  },
+  "MI_V2HD_IvoryStone": {
+   "before": {
+    "Albedo": "T_HD_ivory_a",
+    "Normal": "T_HD_ivory_n",
+    "RoughnessMap": "T_HD_ivory_r"
+   },
+   "after": {
+    "Albedo": "T_HD_ivory2_a",
+    "Normal": "T_HD_ivory2_n",
+    "RoughnessMap": "T_HD_ivory2_r"
+   },
+   "scalars_before": {}
+  },
+  "MI_V2HD_MarbleBlush": {
+   "before": {
+    "Albedo": "T_HD_ivory_a",
+    "Normal": "T_HD_ivory_n",
+    "RoughnessMap": "T_HD_ivory_r"
+   },
+   "after": {
+    "Albedo": "T_HD_ivory2_a",
+    "Normal": "T_HD_ivory2_n",
+    "RoughnessMap": "T_HD_ivory2_r"
+   },
+   "scalars_before": {}
+  },
+  "MI_V2HD_MarbleCool": {
+   "before": {
+    "Albedo": "T_HD_ivory_a",
+    "Normal": "T_HD_ivory_n",
+    "RoughnessMap": "T_HD_ivory_r"
+   },
+   "after": {
+    "Albedo": "T_HD_ivory2_a",
+    "Normal": "T_HD_ivory2_n",
+    "RoughnessMap": "T_HD_ivory2_r"
+   },
+   "scalars_before": {}
+  },
+  "MI_V2HD_MarblePale": {
+   "before": {
+    "Albedo": "T_HD_ivory_a",
+    "Normal": "T_HD_ivory_n",
+    "RoughnessMap": "T_HD_ivory_r"
+   },
+   "after": {
+    "Albedo": "T_HD_ivory2_a",
+    "Normal": "T_HD_ivory2_n",
+    "RoughnessMap": "T_HD_ivory2_r"
+   },
+   "scalars_before": {}
+  }
+ }
+}
