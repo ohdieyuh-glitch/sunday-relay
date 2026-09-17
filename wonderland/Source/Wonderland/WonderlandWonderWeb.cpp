@@ -6,8 +6,10 @@
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
+#include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "UObject/UObjectIterator.h"
+#include "WonderlandJuliusConnect.h"
 #include "WonderlandUiSubsystem.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderWeb, Log, All);
@@ -16,66 +18,136 @@ DEFINE_LOG_CATEGORY_STATIC(LogWonderWeb, Log, All);
 
 namespace WonderWebConsole
 {
-	template <typename T>
-	void ForEachLive(TFunctionRef<void(T&)> Body)
+	/**
+	 * A COMMAND THAT DOES NOTHING MUST SAY SO, ON SCREEN (founder, 2026-09-17: "commands arent working"). Two console
+	 * commands were typed while Wonder Web was closed and nothing was connected: both ran, both answered into a window
+	 * that was not open, and the console showed nothing. Every command now answers in the viewport and in the log.
+	 */
+	void Say(const FString& Text, bool bProblem = false)
 	{
+		UE_LOG(LogWonderWeb, Display, TEXT("%s"), *Text);
+		if (GEngine != nullptr)
+		{
+			GEngine->AddOnScreenDebugMessage(INDEX_NONE, 7.0f, bProblem ? FColor(255, 107, 74) : FColor(255, 212, 0), Text);
+		}
+	}
+
+	/** An argument as typed, less the punctuation a sentence leaves on the end when a command is copied out of one. */
+	FString Arg(const TArray<FString>& Args, int32 Index, const TCHAR* Fallback)
+	{
+		FString Text = Args.IsValidIndex(Index) ? Args[Index] : FString(Fallback);
+		Text.TrimStartAndEndInline();
+		while (Text.Len() > 0 && FString(TEXT(".,;:!?\"'")).Contains(Text.Right(1)))
+		{
+			Text.LeftChopInline(1);
+		}
+		return Text.IsEmpty() ? FString(Fallback) : Text;
+	}
+
+	template <typename T>
+	int32 ForEachLive(TFunctionRef<void(T&)> Body)
+	{
+		int32 Found = 0;
 		for (TObjectIterator<T> It; It; ++It)
 		{
 			if (!It->HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject) && It->GetWorld() != nullptr && It->GetWorld()->IsGameWorld())
 			{
 				Body(**It);
+				++Found;
 			}
 		}
+		if (Found == 0)
+		{
+			Say(TEXT("WONDER WEB: nothing to do -- press Play first (these commands work on the running game)."), true);
+		}
+		return Found;
 	}
 
 	FAutoConsoleCommand CmdOpen(TEXT("wl.WonderWeb.Open"),
 		TEXT("Open a Wonder Web window in the workspace standing ahead of the Dog: `wl.WonderWeb.Open` (creation), `wl.WonderWeb.Open connections` (Julius Connect). A second window tiles beside the first."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
-			const FName Window(Args.Num() > 0 ? *Args[0] : TEXT("creation"));
-			ForEachLive<UWonderlandUiSubsystem>([Window](UWonderlandUiSubsystem& Ui) { Ui.OpenWonderWebWindow(Window); });
+			const FName Window(*Arg(Args, 0, TEXT("creation")));
+			ForEachLive<UWonderlandUiSubsystem>([Window](UWonderlandUiSubsystem& Ui)
+			{
+				Say(Ui.OpenWonderWebWindow(Window)
+					? FString::Printf(TEXT("WONDER WEB: the %s window is open."), *Window.ToString())
+					: FString::Printf(TEXT("WONDER WEB: there is no window called '%s' -- try creation or connections."), *Window.ToString()),
+					!Ui.IsWonderWebOpen());
+			});
 		}));
 
 	FAutoConsoleCommand CmdCloseWindow(TEXT("wl.WonderWeb.CloseWindow"), TEXT("Close one Wonder Web window: `wl.WonderWeb.CloseWindow connections`. The last one closes the workspace."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
-			const FName Window(Args.Num() > 0 ? *Args[0] : TEXT("creation"));
-			ForEachLive<UWonderlandUiSubsystem>([Window](UWonderlandUiSubsystem& Ui) { Ui.CloseWonderWebWindow(Window); });
+			const FName Window(*Arg(Args, 0, TEXT("creation")));
+			ForEachLive<UWonderlandUiSubsystem>([Window](UWonderlandUiSubsystem& Ui)
+			{
+				Say(Ui.CloseWonderWebWindow(Window) ? FString::Printf(TEXT("WONDER WEB: the %s window is closed."), *Window.ToString())
+					: FString::Printf(TEXT("WONDER WEB: the %s window was not open."), *Window.ToString()), true);
+			});
 		}));
 
 	FAutoConsoleCommand CmdMinimize(TEXT("wl.WonderWeb.Minimize"), TEXT("Fold a window to its chip (its work goes on), or `wl.WonderWeb.Minimize creation 0` to restore it."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
-			const FName Window(Args.Num() > 0 ? *Args[0] : TEXT("creation"));
-			const bool bMinimize = Args.Num() < 2 || Args[1] != TEXT("0");
-			ForEachLive<UWonderlandUiSubsystem>([Window, bMinimize](UWonderlandUiSubsystem& Ui) { Ui.MinimizeWonderWebWindow(Window, bMinimize); });
+			const FName Window(*Arg(Args, 0, TEXT("creation")));
+			const bool bMinimize = Args.Num() < 2 || Arg(Args, 1, TEXT("1")) != TEXT("0");
+			ForEachLive<UWonderlandUiSubsystem>([Window, bMinimize](UWonderlandUiSubsystem& Ui)
+			{
+				Say(Ui.MinimizeWonderWebWindow(Window, bMinimize)
+					? FString::Printf(TEXT("WONDER WEB: the %s window is %s."), *Window.ToString(), bMinimize ? TEXT("a chip along the bottom") : TEXT("back"))
+					: FString::Printf(TEXT("WONDER WEB: the %s window is not open."), *Window.ToString()), true);
+			});
 		}));
 
 	FAutoConsoleCommand CmdFocus(TEXT("wl.WonderWeb.Focus"), TEXT("Focus a Wonder Web window: `wl.WonderWeb.Focus connections`."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
-			const FName Window(Args.Num() > 0 ? *Args[0] : TEXT("creation"));
-			ForEachLive<UWonderlandUiSubsystem>([Window](UWonderlandUiSubsystem& Ui) { Ui.FocusWonderWebWindow(Window); });
+			const FName Window(*Arg(Args, 0, TEXT("creation")));
+			ForEachLive<UWonderlandUiSubsystem>([Window](UWonderlandUiSubsystem& Ui)
+			{
+				Say(Ui.FocusWonderWebWindow(Window) ? FString::Printf(TEXT("WONDER WEB: the %s window has the keyboard."), *Window.ToString())
+					: FString::Printf(TEXT("WONDER WEB: the %s window is not open."), *Window.ToString()), true);
+			});
 		}));
 
 	FAutoConsoleCommand CmdExpand(TEXT("wl.WonderWeb.Expand"), TEXT("Grow a window larger in the middle of the workspace, or back: `wl.WonderWeb.Expand connections`."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
-			const FName Window(Args.Num() > 0 ? *Args[0] : TEXT("creation"));
-			ForEachLive<UWonderlandUiSubsystem>([Window](UWonderlandUiSubsystem& Ui) { Ui.ExpandWonderWebWindow(Window); });
+			const FName Window(*Arg(Args, 0, TEXT("creation")));
+			ForEachLive<UWonderlandUiSubsystem>([Window](UWonderlandUiSubsystem& Ui)
+			{
+				Say(Ui.ExpandWonderWebWindow(Window) ? FString::Printf(TEXT("WONDER WEB: the %s window grew (run it again to put it back)."), *Window.ToString())
+					: FString::Printf(TEXT("WONDER WEB: the %s window is not open."), *Window.ToString()), true);
+			});
 		}));
 
 	FAutoConsoleCommand CmdTile(TEXT("wl.WonderWeb.Tile"), TEXT("Lay the open Wonder Web windows out again: one in the middle, two side by side, three in two rows."),
-		FConsoleCommandDelegate::CreateLambda([]() { ForEachLive<UWonderlandUiSubsystem>([](UWonderlandUiSubsystem& Ui) { Ui.TileWonderWeb(); }); }));
-
-	FAutoConsoleCommand CmdClose(TEXT("wl.WonderWeb.Close"),
-		TEXT("Close Wonder Web and glide back to the Dog. What is running keeps running."),
-		FConsoleCommandDelegate::CreateLambda([]() { ForEachLive<UWonderlandUiSubsystem>([](UWonderlandUiSubsystem& Ui) { Ui.CloseWonderWeb(); }); }));
-
-	FAutoConsoleCommand CmdRun(TEXT("wl.WonderWeb.Run"),
-		TEXT("Open and run the sample creation (Pixel Canvas) in MY VIEW: from rest it is built first; when stopped or ready it runs again."),
 		FConsoleCommandDelegate::CreateLambda([]()
 		{
+			ForEachLive<UWonderlandUiSubsystem>([](UWonderlandUiSubsystem& Ui)
+			{
+				Ui.TileWonderWeb();
+				Say(TEXT("WONDER WEB: the open windows are laid out again."));
+			});
+		}));
+
+	// ONE COMMAND FOR THE WHOLE FLOW (founder, 2026-09-17): Wonder Web A running its creation, Wonder Web B beside it, and
+	// Julius given the task that needs a connection this project does not have yet.
+	FAutoConsoleCommand CmdPlaytest(TEXT("wl.Julius.Playtest"),
+		TEXT("Open Wonder Web A with the sample creation running, open Julius Connect beside it, and give Julius the design task that needs a development connector."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			const int32 Found = ForEachLive<UWonderlandUiSubsystem>([](UWonderlandUiSubsystem& Ui)
+			{
+				Ui.OpenWonderWebWindow(TEXT("creation"));
+				Ui.OpenWonderWebWindow(TEXT("connections"));
+			});
+			if (Found == 0)
+			{
+				return;
+			}
 			ForEachLive<UWonderlandWonderWebSubsystem>([](UWonderlandWonderWebSubsystem& Web)
 			{
 				if (!Web.Act(EWonderWebAction::OpenSample))
@@ -83,31 +155,84 @@ namespace WonderWebConsole
 					Web.Act(EWonderWebAction::Restart);
 				}
 			});
+			ForEachLive<UWonderlandJuliusConnectSubsystem>([](UWonderlandJuliusConnectSubsystem& Connect) { Connect.StartTask(TEXT("design-sync")); });
+			Say(TEXT("PLAYTEST: Pixel Canvas is building in the left window; Julius has the design task and will ask you to connect the design tool in the right one."));
+		}));
+
+	FAutoConsoleCommand CmdClose(TEXT("wl.WonderWeb.Close"),
+		TEXT("Close Wonder Web and glide back to the Dog. What is running keeps running."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			ForEachLive<UWonderlandUiSubsystem>([](UWonderlandUiSubsystem& Ui)
+			{
+				Ui.CloseWonderWeb();
+				Say(TEXT("WONDER WEB: back to the world. What is running keeps running."));
+			});
+		}));
+
+	FAutoConsoleCommand CmdRun(TEXT("wl.WonderWeb.Run"),
+		TEXT("Open and run the sample creation (Pixel Canvas) in MY VIEW: from rest it is built first; when stopped or ready it runs again."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			ForEachLive<UWonderlandWonderWebSubsystem>([](UWonderlandWonderWebSubsystem& Web)
+			{
+				const bool bOpened = Web.Act(EWonderWebAction::OpenSample) || Web.Act(EWonderWebAction::Restart);
+				Say(bOpened ? TEXT("WONDER WEB: the sample creation is building.") : TEXT("WONDER WEB: the view on screen cannot run the sample."), !bOpened);
+			});
 		}));
 
 	FAutoConsoleCommand CmdStop(TEXT("wl.WonderWeb.Stop"), TEXT("Stop the running sample creation."),
-		FConsoleCommandDelegate::CreateLambda([]() { ForEachLive<UWonderlandWonderWebSubsystem>([](UWonderlandWonderWebSubsystem& Web) { Web.Act(EWonderWebAction::Stop); }); }));
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			ForEachLive<UWonderlandWonderWebSubsystem>([](UWonderlandWonderWebSubsystem& Web)
+			{
+				const bool bStopped = Web.Act(EWonderWebAction::Stop);
+				Say(bStopped ? TEXT("WONDER WEB: the creation stopped.") : TEXT("WONDER WEB: nothing is running."), !bStopped);
+			});
+		}));
 
 	FAutoConsoleCommand CmdRebuild(TEXT("wl.WonderWeb.Rebuild"), TEXT("Rebuild the sample creation and run it."),
-		FConsoleCommandDelegate::CreateLambda([]() { ForEachLive<UWonderlandWonderWebSubsystem>([](UWonderlandWonderWebSubsystem& Web) { Web.Act(EWonderWebAction::Rebuild); }); }));
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			ForEachLive<UWonderlandWonderWebSubsystem>([](UWonderlandWonderWebSubsystem& Web)
+			{
+				const bool bRebuilding = Web.Act(EWonderWebAction::Rebuild);
+				Say(bRebuilding ? TEXT("WONDER WEB: rebuilding the creation.") : TEXT("WONDER WEB: the view on screen cannot rebuild."), !bRebuilding);
+			});
+		}));
 
 	FAutoConsoleCommand CmdFail(TEXT("wl.WonderWeb.FailSample"), TEXT("Rebuild the sample creation from a broken source, to show a failed build."),
-		FConsoleCommandDelegate::CreateLambda([]() { ForEachLive<UWonderlandWonderWebSubsystem>([](UWonderlandWonderWebSubsystem& Web) { Web.Act(EWonderWebAction::FailSample); }); }));
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			ForEachLive<UWonderlandWonderWebSubsystem>([](UWonderlandWonderWebSubsystem& Web)
+			{
+				const bool bFailing = Web.Act(EWonderWebAction::FailSample);
+				Say(bFailing ? TEXT("WONDER WEB: building a broken source, to show a failed build.") : TEXT("WONDER WEB: the view on screen cannot rebuild."), !bFailing);
+			});
+		}));
 
 	FAutoConsoleCommand CmdTab(TEXT("wl.WonderWeb.Tab"),
 		TEXT("Choose a tab: `wl.WonderWeb.Tab 0` is MY VIEW, 1-4 the sample peers (observe only)."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
-			const int32 Index = Args.Num() > 0 ? FCString::Atoi(*Args[0]) : 0;
-			ForEachLive<UWonderlandWonderWebSubsystem>([Index](UWonderlandWonderWebSubsystem& Web) { Web.SelectTab(Index); });
+			const int32 Index = FCString::Atoi(*Arg(Args, 0, TEXT("0")));
+			ForEachLive<UWonderlandWonderWebSubsystem>([Index](UWonderlandWonderWebSubsystem& Web)
+			{
+				const bool bChosen = Web.SelectTab(Index);
+				Say(bChosen ? FString::Printf(TEXT("WONDER WEB: tab %d."), Index) : FString::Printf(TEXT("WONDER WEB: there is no tab %d."), Index), !bChosen);
+			});
 		}));
 
 	FAutoConsoleCommand CmdMove(TEXT("wl.WonderWeb.Move"),
 		TEXT("Glide the focused Wonder Web window to a place in the view: center, left, right, top, bottom, top-left, top-right, bottom-left, bottom-right."),
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
-			const FName Place(Args.Num() > 0 ? *Args[0] : TEXT("center"));
-			ForEachLive<UWonderlandUiSubsystem>([Place](UWonderlandUiSubsystem& Ui) { Ui.MoveWonderWeb(Place); });
+			const FName Place(*Arg(Args, 0, TEXT("center")));
+			ForEachLive<UWonderlandUiSubsystem>([Place](UWonderlandUiSubsystem& Ui)
+			{
+				Say(Ui.MoveWonderWeb(Place) ? FString::Printf(TEXT("WONDER WEB: gliding to %s."), *Place.ToString())
+					: FString::Printf(TEXT("WONDER WEB: '%s' is not a place -- center, left, right, top, bottom or a corner."), *Place.ToString()), true);
+			});
 		}));
 
 	FAutoConsoleCommand CmdType(TEXT("wl.WonderWeb.Type"),
@@ -115,7 +240,11 @@ namespace WonderWebConsole
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
 			const FString Line = FString::Join(Args, TEXT(" "));
-			ForEachLive<UWonderlandWonderWebSubsystem>([&Line](UWonderlandWonderWebSubsystem& Web) { Web.SubmitTerminal(Line); });
+			ForEachLive<UWonderlandWonderWebSubsystem>([&Line](UWonderlandWonderWebSubsystem& Web)
+			{
+				Say(Web.SubmitTerminal(Line) ? FString::Printf(TEXT("WONDER WEB terminal: %s"), *Line)
+					: FString::Printf(TEXT("WONDER WEB terminal refused '%s' -- the view on screen does not take input."), *Line), true);
+			});
 		}));
 }
 
