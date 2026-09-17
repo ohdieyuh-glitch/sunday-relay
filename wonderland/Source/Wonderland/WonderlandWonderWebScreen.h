@@ -54,6 +54,8 @@ public:
 	bool AimAtViewportPixel(APlayerController* Controller, const FVector2D& ViewportPixel);
 	/** The world position of a window pixel on the screen. */
 	FVector WindowPixelToWorld(const FVector2D& WindowPixel) const;
+	/** The window pixel the last aim landed on, (-1, -1) before any. */
+	FVector2D GetLastAimPixel() const { return LastAimPixel; }
 
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -73,6 +75,8 @@ private:
 	TSharedPtr<SWidget> Shown;
 	bool bPresented = false;
 	float Grow = 0.0f;
+	float AppliedBrightness = -1.0f;
+	FVector2D LastAimPixel = FVector2D(-1.0, -1.0);
 };
 
 /**

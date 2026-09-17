@@ -833,14 +833,33 @@ bool UWonderlandUiSubsystem::SimulateWonderWebClick(FName Control)
 	}
 	FSlateApplication& App = FSlateApplication::Get();
 	const uint32 Pointer = FSlateApplicationBase::CursorPointerIndex;
+	const uint32 User = static_cast<uint32>(App.GetUserIndexForMouse());
 	const int32 ClicksBefore = WonderWebLayer->GetForwardedClicks();
 	TSet<FKey> Held;
 	Held.Add(EKeys::LeftMouseButton);
-	App.ProcessMouseMoveEvent(FPointerEvent(0, Pointer, At, At, TSet<FKey>(), FKey(), 0.0f, FModifierKeysState()));
-	App.ProcessMouseButtonDownEvent(nullptr, FPointerEvent(0, Pointer, At, At, Held, EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
-	App.ProcessMouseButtonUpEvent(FPointerEvent(0, Pointer, At, At, TSet<FKey>(), EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
+	// HIT TESTED IN THE LAYER'S OWN WINDOW, as RouteClickToWidget does for the shortcuts: the scripted editor ranks its
+	// Content Browser above the PIE viewport at these desktop coordinates, so the application's window search would hand
+	// the click to an asset tile. Confined to the viewport's window it is still a real hit test and a real route.
+	const TSharedPtr<SWindow> Window = App.FindWidgetWindow(WonderWebLayer.ToSharedRef());
+	if (!Window.IsValid())
+	{
+		return false;
+	}
+	const FWidgetPath Path = WonderlandUiHitTest::PathInWindow(Window.ToSharedRef(), At, App.GetUserIndexForMouse());
+	bool bLayerUnderPoint = false;
+	for (int32 Index = 0; Index < Path.Widgets.Num(); ++Index)
+	{
+		bLayerUnderPoint |= Path.Widgets[Index].Widget == StaticCastSharedRef<SWidget>(WonderWebLayer.ToSharedRef());
+	}
+	if (bLayerUnderPoint)
+	{
+		App.RoutePointerMoveEvent(Path, FPointerEvent(User, Pointer, At, At, TSet<FKey>(), EKeys::Invalid, 0.0f, FModifierKeysState()), false);
+		App.RoutePointerDownEvent(Path, FPointerEvent(User, Pointer, At, At, Held, EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
+		App.RoutePointerUpEvent(Path, FPointerEvent(User, Pointer, At, At, TSet<FKey>(), EKeys::LeftMouseButton, 0.0f, FModifierKeysState()));
+	}
 	const bool bReached = WonderWebLayer->GetForwardedClicks() > ClicksBefore;
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web click %s at (%.0f, %.0f): %s"), *Control.ToString(), At.X, At.Y, bReached ? TEXT("reached the glass") : TEXT("did not reach the glass"));
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI wonder web click %s at (%.0f, %.0f): layer under the point %d, %s"), *Control.ToString(), At.X, At.Y,
+		bLayerUnderPoint ? 1 : 0, bReached ? TEXT("reached the glass") : TEXT("did not reach the glass"));
 	return bReached;
 }
 

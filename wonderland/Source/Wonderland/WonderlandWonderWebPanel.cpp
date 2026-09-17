@@ -98,17 +98,18 @@ int32 SWonderWebGlyph::OnPaint(const FPaintArgs& Args, const FGeometry& Allotted
 	{
 	case EWonderWebGlyph::WonderMark:
 	{
-		// THE WONDER FACE, from RelayWonderWeb.tsx's 120-unit SVG: a ring, two facing arcs joined by a bar, and a wave.
-		const float Stroke7 = static_cast<float>(S * 7.0 / 120.0);
-		Arc(0.5, 0.5, 52.0 / 120.0, 0.0, 360.0, 64, Stroke7);
-		Arc(40.0 / 120.0, 55.0 / 120.0, 11.0 / 120.0, 90.0, 270.0, 20, Stroke7);
-		Arc(80.0 / 120.0, 55.0 / 120.0, 11.0 / 120.0, -90.0, 90.0, 20, Stroke7);
-		Stroke({ P(40.0 / 120.0, 55.0 / 120.0), P(80.0 / 120.0, 55.0 / 120.0) }, Stroke7);
+		// THE WONDER FACE, measured off the founder's reference: a ring; two three-quarter arcs set back to back -- the left
+		// opening to the left, the right opening to the right -- joined by a short bar between their backs; a wave beneath.
+		const float Stroke7 = static_cast<float>(S * 5.2 / 120.0);
+		Arc(0.5, 0.5, 52.0 / 120.0, 0.0, 360.0, 72, Stroke7);
+		Arc(45.8 / 120.0, 48.2 / 120.0, 10.4 / 120.0, -138.0, 138.0, 28, Stroke7);
+		Arc(74.2 / 120.0, 48.2 / 120.0, 10.4 / 120.0, 42.0, 318.0, 28, Stroke7);
+		Stroke({ P(56.2 / 120.0, 48.2 / 120.0), P(63.8 / 120.0, 48.2 / 120.0) }, Stroke7);
 		TArray<FVector2D> Wave;
-		for (int32 i = 0; i <= 48; ++i)
+		for (int32 i = 0; i <= 64; ++i)
 		{
-			const double X = 34.0 + 52.0 * i / 48.0;
-			Wave.Add(P(X / 120.0, (80.0 - 3.5 * FMath::Sin(2.0 * PI * (X - 34.0) / 26.0)) / 120.0));
+			const double X = 27.0 + 66.0 * i / 64.0;
+			Wave.Add(P(X / 120.0, (82.7 - 2.9 * FMath::Sin(2.0 * PI * (X - 27.0) / 16.5)) / 120.0));
 		}
 		Stroke(Wave, Stroke7);
 		break;
@@ -629,10 +630,10 @@ TSharedRef<SWidget> SWonderlandWonderWebPanel::MakeTabs(const FWonderWebSurface&
 		// An observation reads a shade quieter than the viewer's own tab.
 		const FLinearColor Text = Tab.Access == EWonderWebAccess::Observe ? Line(0.82f) : Line();
 		const bool bReconnecting = Tab.ConnectionState == TEXT("RECONNECTING");
-		Row->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f).VAlign(VAlign_Bottom)
+		Row->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f).VAlign(VAlign_Bottom)
 		[
 			Probe(FName(*FString::Printf(TEXT("tab:%d"), Index)),
-				SNew(SBox).WidthOverride(Tab.bIsSelf ? 196.0f : 170.0f).HeightOverride(62.0f)
+				SNew(SBox).WidthOverride(Tab.bIsSelf ? 176.0f : 148.0f).HeightOverride(62.0f)
 				[
 					SNew(SButton)
 					.ButtonStyle(bSelected ? &TabActiveStyle : &TabStyle)
@@ -661,7 +662,7 @@ TSharedRef<SWidget> SWonderlandWonderWebPanel::MakeTabs(const FWonderWebSurface&
 	// The reference's "+": there is no second view of one's own yet, so it is shown and disabled.
 	Row->AddSlot().AutoWidth().VAlign(VAlign_Bottom)
 	[
-		SNew(SBox).WidthOverride(78.0f).HeightOverride(62.0f)
+		SNew(SBox).WidthOverride(64.0f).HeightOverride(62.0f)
 		[
 			SNew(SButton).ButtonStyle(&TabStyle).IsEnabled(false).HAlign(HAlign_Center).VAlign(VAlign_Center)
 			[
