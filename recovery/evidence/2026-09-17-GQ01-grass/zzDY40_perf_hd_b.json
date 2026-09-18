@@ -1,0 +1,24 @@
+{
+ "name": "zzDY40_perf_hd_b",
+ "started": "2026-09-17 17:26:58",
+ "status": "done",
+ "label": "new sward on M_V2_SurfaceHD, second window",
+ "frames": {
+  "warm": {
+   "LanternLaneCam27": 33.92,
+   "MushroomGroveCam14": 27.39,
+   "SW_StreetGate46": 37.03,
+   "WorldCam12": 60.6
+  },
+  "measured": {
+   "LanternLaneCam27": 39.01,
+   "MushroomGroveCam14": 31.42,
+   "SW_StreetGate46": 40.62,
+   "WorldCam12": 66.42
+  }
+ },
+ "mean": 44.37,
+ "finished": "2026-09-17 17:28:17",
+ "seconds": 78.67,
+ "log": ""
+}

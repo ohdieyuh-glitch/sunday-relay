@@ -1,0 +1,237 @@
+{
+ "MI_V2_Lawn": {
+  "parent": "M_V2_Surface",
+  "scalars": {
+   "TexScale": 0.018,
+   "Roughness": 0.86,
+   "RoughVary": 0.7,
+   "Metallic": 0.0,
+   "Specular": 0.15,
+   "EmissiveStrength": 0.0
+  },
+  "vectors": {
+   "BaseColor": [
+    0.2,
+    0.3,
+    0.12
+   ],
+   "Emissive": [
+    0.66,
+    0.36,
+    1.0
+   ]
+  },
+  "textures": {
+   "Albedo": {
+    "name": "T_V2_sward_a",
+    "path": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_a.T_V2_sward_a",
+    "compression": "<TextureCompressionSettings.TC_DEFAULT: 0>",
+    "mips": "<TextureMipGenSettings.TMGS_FROM_TEXTURE_GROUP: 0>",
+    "filter": "<TextureFilter.TF_DEFAULT: 3>",
+    "srgb": "True",
+    "lod_group": "<TextureGroup.TEXTUREGROUP_WORLD: 0>",
+    "never_stream": "False",
+    "max_size": "0",
+    "imported_size": [
+     256,
+     256
+    ]
+   },
+   "Normal": {
+    "name": "T_V2_sward_n",
+    "path": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_n.T_V2_sward_n",
+    "compression": "<TextureCompressionSettings.TC_NORMALMAP: 1>",
+    "mips": "<TextureMipGenSettings.TMGS_FROM_TEXTURE_GROUP: 0>",
+    "filter": "<TextureFilter.TF_DEFAULT: 3>",
+    "srgb": "False",
+    "lod_group": "<TextureGroup.TEXTUREGROUP_WORLD_NORMAL_MAP: 1>",
+    "never_stream": "False",
+    "max_size": "0",
+    "imported_size": [
+     256,
+     256
+    ]
+   },
+   "RoughnessMap": {
+    "name": "T_V2_sward_r",
+    "path": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_r.T_V2_sward_r",
+    "compression": "<TextureCompressionSettings.TC_GRAYSCALE: 3>",
+    "mips": "<TextureMipGenSettings.TMGS_FROM_TEXTURE_GROUP: 0>",
+    "filter": "<TextureFilter.TF_DEFAULT: 3>",
+    "srgb": "False",
+    "lod_group": "<TextureGroup.TEXTUREGROUP_WORLD: 0>",
+    "never_stream": "False",
+    "max_size": "0",
+    "imported_size": [
+     256,
+     256
+    ]
+   }
+  }
+ },
+ "MI_V2_Meadow": {
+  "parent": "M_V2_Surface",
+  "scalars": {
+   "TexScale": 0.018,
+   "Roughness": 0.88,
+   "RoughVary": 0.7,
+   "Metallic": 0.0,
+   "Specular": 0.15,
+   "EmissiveStrength": 0.0
+  },
+  "vectors": {
+   "BaseColor": [
+    0.22,
+    0.31,
+    0.13
+   ],
+   "Emissive": [
+    0.66,
+    0.36,
+    1.0
+   ]
+  },
+  "textures": {
+   "Albedo": {
+    "name": "T_V2_sward_a",
+    "path": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_a.T_V2_sward_a",
+    "compression": "<TextureCompressionSettings.TC_DEFAULT: 0>",
+    "mips": "<TextureMipGenSettings.TMGS_FROM_TEXTURE_GROUP: 0>",
+    "filter": "<TextureFilter.TF_DEFAULT: 3>",
+    "srgb": "True",
+    "lod_group": "<TextureGroup.TEXTUREGROUP_WORLD: 0>",
+    "never_stream": "False",
+    "max_size": "0",
+    "imported_size": [
+     256,
+     256
+    ]
+   },
+   "Normal": {
+    "name": "T_V2_sward_n",
+    "path": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_n.T_V2_sward_n",
+    "compression": "<TextureCompressionSettings.TC_NORMALMAP: 1>",
+    "mips": "<TextureMipGenSettings.TMGS_FROM_TEXTURE_GROUP: 0>",
+    "filter": "<TextureFilter.TF_DEFAULT: 3>",
+    "srgb": "False",
+    "lod_group": "<TextureGroup.TEXTUREGROUP_WORLD_NORMAL_MAP: 1>",
+    "never_stream": "False",
+    "max_size": "0",
+    "imported_size": [
+     256,
+     256
+    ]
+   },
+   "RoughnessMap": {
+    "name": "T_V2_sward_r",
+    "path": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_r.T_V2_sward_r",
+    "compression": "<TextureCompressionSettings.TC_GRAYSCALE: 3>",
+    "mips": "<TextureMipGenSettings.TMGS_FROM_TEXTURE_GROUP: 0>",
+    "filter": "<TextureFilter.TF_DEFAULT: 3>",
+    "srgb": "False",
+    "lod_group": "<TextureGroup.TEXTUREGROUP_WORLD: 0>",
+    "never_stream": "False",
+    "max_size": "0",
+    "imported_size": [
+     256,
+     256
+    ]
+   }
+  }
+ },
+ "MI_V2_Moss": {
+  "parent": "M_V2_Surface",
+  "scalars": {
+   "TexScale": 0.018,
+   "Roughness": 0.82,
+   "RoughVary": 0.7,
+   "Metallic": 0.0,
+   "Specular": 0.15,
+   "EmissiveStrength": 0.0
+  },
+  "vectors": {
+   "BaseColor": [
+    0.18,
+    0.27,
+    0.11
+   ],
+   "Emissive": [
+    0.66,
+    0.36,
+    1.0
+   ]
+  },
+  "textures": {
+   "Albedo": {
+    "name": "T_V2_sward_a",
+    "path": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_a.T_V2_sward_a",
+    "compression": "<TextureCompressionSettings.TC_DEFAULT: 0>",
+    "mips": "<TextureMipGenSettings.TMGS_FROM_TEXTURE_GROUP: 0>",
+    "filter": "<TextureFilter.TF_DEFAULT: 3>",
+    "srgb": "True",
+    "lod_group": "<TextureGroup.TEXTUREGROUP_WORLD: 0>",
+    "never_stream": "False",
+    "max_size": "0",
+    "imported_size": [
+     256,
+     256
+    ]
+   },
+   "Normal": {
+    "name": "T_V2_sward_n",
+    "path": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_n.T_V2_sward_n",
+    "compression": "<TextureCompressionSettings.TC_NORMALMAP: 1>",
+    "mips": "<TextureMipGenSettings.TMGS_FROM_TEXTURE_GROUP: 0>",
+    "filter": "<TextureFilter.TF_DEFAULT: 3>",
+    "srgb": "False",
+    "lod_group": "<TextureGroup.TEXTUREGROUP_WORLD_NORMAL_MAP: 1>",
+    "never_stream": "False",
+    "max_size": "0",
+    "imported_size": [
+     256,
+     256
+    ]
+   },
+   "RoughnessMap": {
+    "name": "T_V2_sward_r",
+    "path": "/Game/WonderlandV2/Materials/Textures/T_V2_sward_r.T_V2_sward_r",
+    "compression": "<TextureCompressionSettings.TC_GRAYSCALE: 3>",
+    "mips": "<TextureMipGenSettings.TMGS_FROM_TEXTURE_GROUP: 0>",
+    "filter": "<TextureFilter.TF_DEFAULT: 3>",
+    "srgb": "False",
+    "lod_group": "<TextureGroup.TEXTUREGROUP_WORLD: 0>",
+    "never_stream": "False",
+    "max_size": "0",
+    "imported_size": [
+     256,
+     256
+    ]
+   }
+  }
+ },
+ "M_V2_Surface": "missing",
+ "M_V2_SurfaceHD": {
+  "scalar_params": [
+   "DetailScale",
+   "DetailStrength",
+   "EmissiveStrength",
+   "InstRoughVary",
+   "InstVary",
+   "InstWarm",
+   "MacroScale",
+   "MacroVary",
+   "Metallic",
+   "NormalStrength",
+   "RoughVary",
+   "Roughness",
+   "Specular",
+   "TexScale"
+  ],
+  "texture_params": [
+   "Albedo",
+   "Macro",
+   "Normal",
+   "RoughnessMap"
+  ]
+ }
+}

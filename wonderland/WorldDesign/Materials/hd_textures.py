@@ -19,6 +19,7 @@ wrap-around distances), one per surface family, each ALBEDO + NORMAL + ROUGHNESS
   ivory2     carved ivory stone: crystal speckle, faint bedding, rare thin veins, pores (IV01, 2026-09-17)
   flagstone  walked paving laid as random-ashlar flagstones with recessed joints (GR01, 2026-09-17)
   stucco     hand-floated lime render, the Bible's cream stucco: sand tooth over trowel undulation (PS01, 2026-09-17)
+  sward      a dense mown lawn: directional blade fibre in patches that lie two ways, clumps, tips (GQ01, 2026-09-17)
   grass      lawn (MQ09) -- generated, applied, judged WORSE than the V2 lawn texture, reverted; kept for reference
   macro      one 1024 px low-frequency map (R: brightness, G: roughness) laid at ~60 m to break repetition
 
@@ -472,6 +473,64 @@ def grass(n, rng):
     return alb, normal_from_height(height, 3.2), rough, mean
 
 
+def _vblur(a, width):
+    """Tileable vertical box blur (wraps), the y twin of _hblur."""
+    return _hblur(a.T, width).T
+
+
+def sward(n, rng):
+    """GQ01 -- a dense mown fantasy lawn (2026-09-17, founder: the grass reads smooth, glossy, flat and pixelated).
+
+    WHY A NEW FAMILY. The lawn drew from T_V2_sward_*, 256 px tiled every 55 cm: about 460 texels per metre, which a
+    player standing on it out-resolves, so the grass went to visible texels up close. MQ09's earlier `grass` family
+    was rejected for reading softer and flatter than that 256 px set -- it had no blade direction, so it lost the one
+    thing the old texture did right. This keeps the directional fibre and adds the resolution.
+
+    WHAT IS IN IT. Blades are FIBRE: white noise smeared along one axis, so each streak is a blade-width line a few
+    pixels wide. Two fibre fields are built, one smeared in x and one in y, and a slow mask chooses between them, so
+    the lawn reads in patches that lie in different directions -- a mown lawn, and the macro variation the founder
+    asked to keep restrained, carried by DIRECTION rather than by tone (the tonal macro breakup GS01 tried was
+    invisible; this is not that). Over the fibre sits a fine blade-tip speckle, and under it a slow undulation so a
+    big lawn is not a plane.
+
+    Matte by construction: roughness 0.88-0.97, highest where the blades cross, so nothing on this surface can catch a
+    sheen. The albedo is neutral like the rest of the set; the instance's BaseColor carries Wonderland's green.
+    """
+    # A blade is centimetres wide, so at a 1 m tile it is tens of pixels, not two: the seed noise is coarse and the
+    # smear is long. Two lengths of blade are laid over each other -- the long ones give the lawn its lie, the short
+    # ones keep it from reading as brushed velvet.
+    fine = spectral(n, 0.5, rng, lo=150.0)                 # blade tips
+    def fibre_pair(lo, width):
+        fx = _hblur(spectral(n, 0.35, rng, lo=lo), max(2, int(width)))
+        fy = _vblur(spectral(n, 0.35, rng, lo=lo), max(2, int(width)))
+        out = []
+        for a in (fx, fy):
+            a = a - a.mean()
+            out.append(a / (a.std() + 1e-6))
+        return out
+    long_x, long_y = fibre_pair(26.0, n / 90.0)            # long blades: a stroke ~2 cm wide at a 1 m tile
+    short_x, short_y = fibre_pair(70.0, n / 200.0)         # short ones between them
+    # BOTH LENGTHS FOLLOW THE SAME LIE. Crossing them wove a linen: grass in one patch lies one way, and the patch
+    # next to it lies the other. The mask runs at ~20 cm so a lawn reads as mown in strokes, not as cloth.
+    lay = smoothstep(-0.45, 0.45, spectral(n, 3.0, rng, lo=3.0, hi=11.0))
+    fibre = (0.72 * long_x + 0.28 * short_x) * lay + (0.72 * long_y + 0.28 * short_y) * (1.0 - lay)
+    # a blade has an edge: take back a blurred copy so each stroke keeps its own line instead of melting into the next
+    fibre = fibre - 0.55 * (_hblur(fibre, max(2, n // 150)) * lay + _vblur(fibre, max(2, n // 150)) * (1.0 - lay))
+    fibre /= (fibre.std() + 1e-6)
+    clump = spectral(n, 2.2, rng, lo=10.0, hi=34.0)        # tufts gathering into clumps (finer, so no dark patches)
+    swell = spectral(n, 3.4, rng, lo=1.0, hi=4.0)          # the ground's own slow undulation
+
+    height = 0.075 * fibre + 0.030 * fine + 0.050 * clump + 0.05 * swell
+    # The lawn is Wonderland's, not a meadow's: the blades carry the detail and the clumps only hint, or a close
+    # camera reads dark blotches as dirt (the founder's "not dirty, not noisy").
+    lum = 0.875 + 0.055 * fibre + 0.022 * fine + 0.035 * clump + 0.012 * swell
+    # a blade lying toward the light is a touch yellower, one in the shade of its clump a touch bluer
+    tone = 1.0 + 0.030 * fibre - 0.020 * clump
+    alb, mean = neutral_albedo(lum, np.stack([tone, np.ones_like(tone), 2.0 - tone], axis=-1))
+    rough = np.clip(0.93 - 0.05 * fibre + 0.04 * clump - 0.02 * fine, 0.86, 0.99)
+    return alb, normal_from_height(height, 9.0), rough, mean
+
+
 def macro(n, rng):
     a = spectral(n, 3.0, rng, lo=1.0, hi=10.0)
     b = spectral(n, 3.0, rng, lo=1.0, hi=10.0)
@@ -503,10 +562,10 @@ def stucco(n, rng):
 
 
 FAMILIES = {"limestone": limestone, "cobble": cobble, "ivory": ivory, "roof": roof, "gold": gold, "ashlar": ashlar,
-            "grass": grass, "flagstone": flagstone, "ivory2": ivory2, "stucco": stucco}
+            "grass": grass, "flagstone": flagstone, "ivory2": ivory2, "stucco": stucco, "sward": sward}
 # seed order: the MQ01 sets and macro first, so adding a family never changes a texture already imported
 SEED_ORDER = ["limestone", "cobble", "ivory", "roof", "gold", "macro", "ashlar", "grass", "flagstone", "ivory2",
-              "stucco"]
+              "stucco", "sward"]
 
 
 def main():

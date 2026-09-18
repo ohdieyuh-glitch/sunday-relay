@@ -1,0 +1,17 @@
+{
+ "MI_V2_Lawn": {
+  "NormalStrength": 1.2999999523162842,
+  "DetailStrength": 0.44999998807907104,
+  "RoughVary": 0.25
+ },
+ "MI_V2_Meadow": {
+  "NormalStrength": 1.2999999523162842,
+  "DetailStrength": 0.44999998807907104,
+  "RoughVary": 0.25
+ },
+ "MI_V2_Moss": {
+  "NormalStrength": 1.2999999523162842,
+  "DetailStrength": 0.44999998807907104,
+  "RoughVary": 0.25
+ }
+}

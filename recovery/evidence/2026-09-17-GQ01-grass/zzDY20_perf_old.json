@@ -1,0 +1,24 @@
+{
+ "name": "zzDY20_perf_old",
+ "started": "2026-09-17 17:24:41",
+ "status": "done",
+ "label": "old 256 px sward on M_V2_Surface",
+ "frames": {
+  "warm": {
+   "LanternLaneCam27": 64.54,
+   "MushroomGroveCam14": 64.89,
+   "SW_StreetGate46": 67.27,
+   "WorldCam12": 71.03
+  },
+  "measured": {
+   "LanternLaneCam27": 72.66,
+   "MushroomGroveCam14": 69.78,
+   "SW_StreetGate46": 47.64,
+   "WorldCam12": 61.49
+  }
+ },
+ "mean": 62.89,
+ "finished": "2026-09-17 17:25:59",
+ "seconds": 78.49,
+ "log": ""
+}
