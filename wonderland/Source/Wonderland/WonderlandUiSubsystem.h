@@ -567,6 +567,14 @@ private:
 	bool IsMiniMapShown() const { return Open == EOverlay::None || Open == EOverlay::Terminal || Open == EOverlay::WonderWeb; }
 	UWonderlandWonderWebSubsystem* WonderWebState() const;
 	UWonderlandJuliusConnectSubsystem* JuliusConnect() const;
+	/** The companions' runtime: what is actually behind the LLM Companion and Jhinn, if anything. */
+	class UWonderlandSidekickSubsystem* Sidekicks() const;
+	/**
+	 * THE COMPANIONS AS THE RUNTIME REPORTS THEM. Their terminals show the truth state, the provider and the model; their
+	 * answers arrive as lines when a turn really finishes. Nothing here invents an answer, and nothing here decides a
+	 * state -- it is the same "Wonderland is a view" rule the Connections window follows.
+	 */
+	void HandleSidekicksChanged();
 	UWonderlandWonderWebBrowseSubsystem* BrowseState() const;
 
 	/** One window of the Wonder Web workspace: what it draws, its chip, and the glass it stands on. */
@@ -672,7 +680,14 @@ private:
 	FName FocusedWonderWebWindow;
 	int32 WonderWebOpenCounter = 0;
 	FDelegateHandle JuliusConnectChangedHandle;
+	FDelegateHandle SidekicksChangedHandle;
+	/** Per companion terminal: the turn whose ask, and the turn whose answer, are already on screen. */
+	TArray<FString> CompanionShownAsk;
+	TArray<FString> CompanionShownAnswer;
+	TArray<FString> CompanionShownNote;
 	FString LastPromptRequestId;
+	/** The browsing task a window has already been opened for, so Julius opens one window per task and not one per tick. */
+	FString LastBrowsingTaskId;
 
 	/** The mini-map and the bottom shortcuts, on one layer above the usage HUD and below every panel. */
 	TSharedPtr<SWidget> HudFurniture;

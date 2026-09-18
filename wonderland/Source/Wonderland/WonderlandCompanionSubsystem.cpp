@@ -8,6 +8,7 @@
 #include "Misc/Paths.h"
 #include "UObject/UObjectIterator.h"
 #include "WonderlandCompanionEmbodiment.h"
+#include "WonderlandSidekicks.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandCompanionPreview, Log, All);
 
@@ -156,10 +157,56 @@ void UWonderlandCompanionSubsystem::Spawn(APlayerController* Controller)
 		Embodiments.Add(Body);
 	}
 	UE_LOG(LogWonderlandCompanionPreview, Log, TEXT("WLCOMPANION preview: %d embodiments beside %s"), Embodiments.Num(), *Controller->GetName());
+
+	// WHAT EACH BODY IS DOING COMES FROM THE RUNTIME, and changes when the runtime changes.
+	if (UGameInstance* Instance = Controller->GetGameInstance())
+	{
+		if (UWonderlandSidekickSubsystem* Runtime = Instance->GetSubsystem<UWonderlandSidekickSubsystem>())
+		{
+			SidekicksChangedHandle = Runtime->OnChanged.AddUObject(this, &UWonderlandCompanionSubsystem::PushRuntimeActivity);
+			PushRuntimeActivity();
+		}
+	}
+}
+
+void UWonderlandCompanionSubsystem::PushRuntimeActivity()
+{
+	const APlayerController* Controller = BoundController.Get();
+	UGameInstance* Instance = Controller != nullptr ? Controller->GetGameInstance() : nullptr;
+	const UWonderlandSidekickSubsystem* Runtime = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSidekickSubsystem>() : nullptr;
+	if (Runtime == nullptr)
+	{
+		return;
+	}
+	for (int32 Index = 0; Index < Embodiments.Num(); ++Index)
+	{
+		AWonderlandCompanionEmbodiment* Body = Embodiments[Index].Get();
+		const FWonderlandSidekick* Sidekick = Runtime->ByIndex(Index);
+		if (Body == nullptr)
+		{
+			continue;
+		}
+		// NOTHING BEHIND IT IS NOT A MOOD. With no runtime, or no companion of that index, the body is DISCONNECTED and
+		// nearly still -- it does not keep drifting as though something were thinking.
+		const FString Activity = Sidekick == nullptr || Runtime->GetLink() != EWonderlandSidekickLink::Online
+			? FString(TEXT("DISCONNECTED"))
+			: Runtime->MascotStateOf(Sidekick->SidekickId);
+		Body->SetRuntimeActivity(FName(*Activity));
+	}
 }
 
 void UWonderlandCompanionSubsystem::Despawn()
 {
+	if (SidekicksChangedHandle.IsValid())
+	{
+		const APlayerController* Controller = BoundController.Get();
+		UGameInstance* Instance = Controller != nullptr ? Controller->GetGameInstance() : nullptr;
+		if (UWonderlandSidekickSubsystem* Runtime = Instance != nullptr ? Instance->GetSubsystem<UWonderlandSidekickSubsystem>() : nullptr)
+		{
+			Runtime->OnChanged.Remove(SidekicksChangedHandle);
+		}
+		SidekicksChangedHandle.Reset();
+	}
 	for (const TWeakObjectPtr<AWonderlandCompanionEmbodiment>& Weak : Embodiments)
 	{
 		if (AWonderlandCompanionEmbodiment* Body = Weak.Get())

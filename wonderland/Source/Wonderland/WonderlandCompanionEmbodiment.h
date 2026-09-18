@@ -80,6 +80,24 @@ public:
 	 */
 	void SetParticipation(bool bInJoined, bool bInAgent, const FLinearColor& InAccent, FName InFlightBeat);
 
+	/**
+	 * WHAT THIS COMPANION'S MIND IS ACTUALLY DOING, from the runtime behind it (WonderlandSidekicks.h): IDLE, LISTENING,
+	 * THINKING, WORKING, RESPONDING, WAITING_FOR_AUTH, ERROR or DISCONNECTED.
+	 *
+	 * FOUNDER RULE (2026-09-17): "Animation/state should come from actual runtime activity, not a canned timer. If the
+	 * provider is actually processing: the mascot reflects WORKING. If no provider is connected: do not pretend it is
+	 * working." So this is pushed in from the runtime and nothing here invents it: with nothing behind the companion the
+	 * activity is DISCONNECTED and the body is nearly still.
+	 *
+	 * It shapes the EXISTING motion rather than adding a second one -- the same float, the same parts, taken faster or
+	 * slower and higher or lower -- so a body never has two ideas about what it is doing.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
+	void SetRuntimeActivity(FName Activity);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	FName GetRuntimeActivity() const { return RuntimeActivity; }
+
 	EWonderlandCompanionFormation GetFormation() const { return Formation; }
 
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
@@ -258,6 +276,18 @@ private:
 	void AnimateBeam(float TimeSeconds, const FWonderlandCompanionOrbit& Orbit, bool bContributing);
 
 	TArray<FSupportPulse> Pulses;
+	/** What the runtime says this companion is doing, and when it started doing it (for the settle into a new activity). */
+	FName RuntimeActivity = TEXT("DISCONNECTED");
+	float ActivityChangedAt = 0.0f;
+	/** How far the body has moved into its current activity, 0..1. A body does not snap between moods. */
+	float ActivityBlend = 1.0f;
+	float ActivityRate = 1.0f;
+	float ActivityAmplitude = 1.0f;
+	float ActivityHeightUU = 0.0f;
+	/** The body's own clock, advanced by the activity's rate rather than by scaling the world's time. */
+	float ActivityPhase = 0.0f;
+	float LastAnimateSeconds = 0.0f;
+
 	TWeakObjectPtr<const AActor> ContractActor;
 	EWonderlandCompanionFormation Formation = EWonderlandCompanionFormation::Follow;
 	float FormationPhase = 0.0f;

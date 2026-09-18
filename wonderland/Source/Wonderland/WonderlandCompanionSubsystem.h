@@ -89,6 +89,12 @@ public:
 	int32 ReloadFigures();
 
 private:
+	/**
+	 * THE BODIES FOLLOW THE RUNTIME. Whatever the sidekick runtime says each companion's mind is doing -- thinking,
+	 * working, waiting for an account, or nothing at all -- is pushed into its body here (WonderlandSidekicks.h).
+	 * Founder, 2026-09-17: "If no provider is connected: do not pretend it is working."
+	 */
+	void PushRuntimeActivity();
 	void HandlePlayerControllerChanged(APlayerController* NewController);
 	void Spawn(APlayerController* Controller);
 	void Despawn();
@@ -96,4 +102,5 @@ private:
 	TWeakObjectPtr<APlayerController> BoundController;
 	TArray<TWeakObjectPtr<AWonderlandCompanionEmbodiment>> Embodiments;
 	FDelegateHandle ControllerChangedHandle;
+	FDelegateHandle SidekicksChangedHandle;
 };

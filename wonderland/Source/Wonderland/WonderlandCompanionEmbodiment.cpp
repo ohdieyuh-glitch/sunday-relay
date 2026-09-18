@@ -579,16 +579,72 @@ void AWonderlandCompanionEmbodiment::Tick(float DeltaSeconds)
 	AnimatePulses(static_cast<float>(World->GetTimeSeconds()));
 }
 
+/**
+ * HOW EACH ACTIVITY LOOKS, and why. Bounded, and all of it a shaping of the motion the body already has: the rate it
+ * moves at, how far it moves, and how high it floats. Nothing here is decorative -- each one is what that runtime state
+ * honestly looks like from outside.
+ */
+namespace WonderlandCompanionActivity
+{
+	struct FLook
+	{
+		float Rate = 1.0f;
+		float Amplitude = 1.0f;
+		float HeightUU = 0.0f;
+	};
+
+	FLook For(FName Activity)
+	{
+		// LISTENING is attentive stillness; THINKING is quick and small; WORKING is quicker and steadier; RESPONDING
+		// rises and moves; WAITING FOR AUTH is dormant; ERROR sinks; DISCONNECTED is nearly still, because nothing is
+		// there to move it.
+		if (Activity == TEXT("LISTENING")) return { 0.70f, 0.80f, 3.0f };
+		if (Activity == TEXT("THINKING")) return { 1.90f, 0.55f, 5.0f };
+		if (Activity == TEXT("WORKING")) return { 2.30f, 0.45f, 2.0f };
+		if (Activity == TEXT("RESPONDING")) return { 1.35f, 1.25f, 4.0f };
+		if (Activity == TEXT("WAITING_FOR_AUTH")) return { 0.35f, 0.50f, -4.0f };
+		if (Activity == TEXT("ERROR")) return { 0.45f, 0.35f, -7.0f };
+		if (Activity == TEXT("DISCONNECTED")) return { 0.15f, 0.15f, -9.0f };
+		return { 1.0f, 1.0f, 0.0f }; // IDLE, and anything this build does not know: the body's own resting motion.
+	}
+}
+
+void AWonderlandCompanionEmbodiment::SetRuntimeActivity(FName Activity)
+{
+	if (Activity.IsNone() || Activity == RuntimeActivity)
+	{
+		return;
+	}
+	RuntimeActivity = Activity;
+	ActivityChangedAt = GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0f;
+	// A BODY DOES NOT SNAP BETWEEN MOODS: the new look is eased into over the next moment.
+	ActivityBlend = 0.0f;
+}
+
 void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 {
 	const float Scale = FMath::Max(FigureScale, 0.05f);
 
+	// WHAT THE RUNTIME SAYS THIS COMPANION IS DOING, eased in. The phase is advanced by the rate rather than the clock
+	// being scaled, so a change of activity never makes the body jump: it simply moves at a different pace from here.
+	{
+		const WonderlandCompanionActivity::FLook Look = WonderlandCompanionActivity::For(RuntimeActivity);
+		ActivityBlend = FMath::Min(1.0f, ActivityBlend + FMath::Max(TimeSeconds - LastAnimateSeconds, 0.0f) * 1.8f);
+		const float Blend = FMath::SmoothStep(0.0f, 1.0f, ActivityBlend);
+		ActivityRate = FMath::Lerp(ActivityRate, Look.Rate, Blend * 0.25f);
+		ActivityAmplitude = FMath::Lerp(ActivityAmplitude, Look.Amplitude, Blend * 0.25f);
+		ActivityHeightUU = FMath::Lerp(ActivityHeightUU, Look.HeightUU, Blend * 0.25f);
+		ActivityPhase += FMath::Max(TimeSeconds - LastAnimateSeconds, 0.0f) * ActivityRate;
+		LastAnimateSeconds = TimeSeconds;
+	}
+	const float ActivityTime = ActivityPhase;
+
 	// THE FLOAT: bounded, absolute from rest, and on this companion's own phase.
 	if (FloatRoot != nullptr)
 	{
-		const float Hover = 2.0f * PI * (TimeSeconds / FMath::Max(HoverPeriodSeconds, 0.5f) + Phase);
+		const float Hover = 2.0f * PI * (ActivityTime / FMath::Max(HoverPeriodSeconds, 0.5f) + Phase);
 		FloatRoot->SetRelativeLocationAndRotation(
-			FVector(0.0, 0.0, FMath::Sin(Hover) * HoverAmplitudeUU),
+			FVector(0.0, 0.0, FMath::Sin(Hover) * HoverAmplitudeUU * ActivityAmplitude + ActivityHeightUU),
 			FRotator(FMath::Sin(Hover * 0.5f + 1.1f) * 1.5f, 0.0, FMath::Cos(Hover * 0.5f) * 2.0f));
 	}
 
@@ -604,13 +660,13 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 		{
 		case EWonderlandCompanionMotion::Float:
 		{
-			const float Angle = 2.0f * PI * (TimeSeconds / 3.1f + Phase + Part.A);
+			const float Angle = 2.0f * PI * (ActivityTime / 3.1f + Phase + Part.A);
 			Pivot->SetRelativeLocation(Part.RestLocation + FVector(0.0, 0.0, FMath::Sin(Angle) * 2.0f * Scale));
 			break;
 		}
 		case EWonderlandCompanionMotion::Head:
 		{
-			const float Angle = 2.0f * PI * (TimeSeconds / 5.3f + Phase);
+			const float Angle = 2.0f * PI * (ActivityTime / 5.3f + Phase);
 			Pivot->SetRelativeRotation(FRotator(FMath::Sin(Angle * 1.3f) * 2.5f, FMath::Sin(Angle) * 4.0f, FMath::Cos(Angle * 0.7f) * 3.0f));
 			break;
 		}
@@ -618,7 +674,7 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 		{
 			// Swept back and forward about the root and lifted a little, mirrored by side.
 			const float Side = Part.A < 0.0f ? -1.0f : 1.0f;
-			const float Flap = FMath::Sin(2.0f * PI * (TimeSeconds / 2.4f + Phase));
+			const float Flap = FMath::Sin(2.0f * PI * (ActivityTime / 2.4f + Phase));
 			Pivot->SetRelativeRotation(FRotator(0.0, Side * Flap * 9.0f, Side * Flap * 7.0f));
 			break;
 		}
@@ -627,26 +683,26 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			// A wave travelling down the wisp: the further from the body, the later and the wider it swings.
 			const float Along = FMath::Clamp(Part.A / FMath::Max(Part.B, 1.0f), 0.0f, 1.0f);
 			const float Reach = FMath::Pow(Along, 1.35f);
-			const float Wave = 2.0f * PI * (TimeSeconds / 2.2f + Phase) - Part.A * 0.62f;
+			const float Wave = 2.0f * PI * (ActivityTime / 2.2f + Phase) - Part.A * 0.62f;
 			Pivot->SetRelativeLocationAndRotation(
 				Part.RestLocation + FVector(FMath::Cos(Wave * 0.8f) * 3.0f, FMath::Sin(Wave) * 9.0f, 0.0) * (Reach * Scale),
 				FRotator(0.0, FMath::Sin(Wave) * 8.0f * Reach, 0.0));
 			break;
 		}
 		case EWonderlandCompanionMotion::Orbit:
-			Pivot->SetRelativeRotation(FRotator(0.0, FMath::Fmod(TimeSeconds * Part.A + Phase * 360.0f, 360.0f), 0.0));
+			Pivot->SetRelativeRotation(FRotator(0.0, FMath::Fmod(ActivityTime * Part.A + Phase * 360.0f, 360.0f), 0.0));
 			break;
 		case EWonderlandCompanionMotion::Blink:
 		{
 			// A 0.14 s squash every 5.2 s, offset per companion so the two never blink together.
-			const float Cycle = FMath::Fmod(TimeSeconds + Phase * 5.2f, 5.2f);
+			const float Cycle = FMath::Fmod(ActivityTime + Phase * 5.2f, 5.2f);
 			const float Squash = Cycle < 0.14f ? FMath::Lerp(0.12f, 1.0f, FMath::Abs(Cycle - 0.07f) / 0.07f) : 1.0f;
 			Pivot->SetRelativeScale3D(FVector(1.0, 1.0, Squash));
 			break;
 		}
 		case EWonderlandCompanionMotion::Twinkle:
 		{
-			const float Breath = 0.5f + 0.5f * FMath::Sin(2.0f * PI * (TimeSeconds / 1.7f + Part.A + Phase));
+			const float Breath = 0.5f + 0.5f * FMath::Sin(2.0f * PI * (ActivityTime / 1.7f + Part.A + Phase));
 			Pivot->SetRelativeScale3D(FVector(0.55f + 0.45f * Breath));
 			break;
 		}
@@ -656,7 +712,7 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 	}
 
 	// A slow pulse on everything that glows, from rest, so it can never ratchet brighter.
-	const float Pulse = 1.0f + 0.10f * FMath::Sin(2.0f * PI * (TimeSeconds / 2.9f + Phase));
+	const float Pulse = 1.0f + 0.10f * FMath::Sin(2.0f * PI * (ActivityTime / 2.9f + Phase));
 	for (const FGlowMaterial& Glow : GlowMaterials)
 	{
 		if (MaterialInstances.IsValidIndex(Glow.MaterialIndex) && MaterialInstances[Glow.MaterialIndex] != nullptr)
