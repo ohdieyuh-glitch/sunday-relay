@@ -139,7 +139,12 @@ Frozen head `6e09687124b8c27628ba3f9002944edb2f68f607`, tree `d7c81ba25ea9a648d5
   are the load-sensitive git tests seen before: both pass when rerun alone.
   Everything else fails identically on both.
 
-CI at this head: running when this PR opens; this section is updated with its result.
+CI at this head (`6e096871`): **Verify Relay**, **sibling-control-plane**,
+**first-live-topology** in both receipt transports and Vercel — all green. The
+new step, *One event append contract, on real PostgreSQL as in memory*, ran and
+passed in both transports (10 tests), beside the attempt-attribution proof, the
+lease renewal proof, the run-scoped identity proof and the three capability
+drills.
 
 ## Not in this PR
 
