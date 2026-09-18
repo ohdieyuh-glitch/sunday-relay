@@ -166,6 +166,8 @@ public:
 		SLATE_EVENT(FGetScreens, GetScreens)
 		SLATE_EVENT(FOnFocus, OnFocus)
 		SLATE_EVENT(FSimpleDelegate, OnRequestClose)
+		/** Ctrl+W, arriving through the workspace rather than through a page: spawn another Wonder Web. */
+		SLATE_EVENT(FSimpleDelegate, OnRequestSpawn)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
@@ -184,6 +186,13 @@ public:
 	virtual FReply OnMouseButtonUp(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
 	virtual FReply OnMouseMove(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
 	virtual FReply OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent) override;
+
+	/**
+	 * SAY SOMETHING IN THE WORKSPACE'S OWN VOICE. Used for the Wonder Web limit, which the founder asked not to be an
+	 * ugly modal: black and one yellow line, over the workspace, gone again a few seconds later. It takes no input and
+	 * blocks nothing -- a notice is not a question.
+	 */
+	void ShowNotice(const FString& Title, const FString& Line, const FString& Detail, float Seconds = 5.0f);
 
 	/** Presses that landed in a window, for the proof job. */
 	int32 GetForwardedClicks() const { return ForwardedClicks; }
@@ -213,6 +222,9 @@ private:
 	};
 
 	bool ToViewportPixel(const FGeometry& MyGeometry, const FVector2D& ScreenPosition, FVector2D& OutPixel) const;
+
+	/** The notice, its words, and when it was shown -- so it can fade on its own. */
+	TSharedPtr<class SWonderWebNotice> Notice;
 	/** The front-most window (or chip) under a layer-local point. */
 	const FEntry* EntryAt(const FVector2D& Local, bool& bOutChip) const;
 	const FEntry* FindEntry(const AWonderlandWonderWebScreen* Screen) const;
@@ -222,6 +234,7 @@ private:
 	FGetScreens GetScreens;
 	FOnFocus OnFocus;
 	FSimpleDelegate OnRequestClose;
+	FSimpleDelegate OnRequestSpawn;
 	TSharedPtr<SConstraintCanvas> Canvas;
 	/** Stable addresses: slots and weak pointers refer into these. */
 	TArray<TUniquePtr<FEntry>> Entries;

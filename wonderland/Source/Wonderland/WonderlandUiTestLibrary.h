@@ -30,6 +30,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
 	static UWonderlandUiSubsystem* GetUi(UObject* WorldContextObject);
 
+	/**
+	 * SPAWN ONE VOXEL FIGURE, standing where it is put, following nobody. Used by the Project Avatar progression proof:
+	 * the six forms are text files, so a founder's correction is a regeneration rather than a rebuild.
+	 *
+	 * Test-only, and it says so: this is how a proof builds a comparison scene in PIE. It is not how a Project Avatar
+	 * comes to be attached to a project.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static class AWonderlandCompanionEmbodiment* SpawnFigureActor(UObject* WorldContextObject, FVector Location, const FString& FigurePath, const FString& Label);
+
+	/**
+	 * Put the view where a proof needs it: one camera, posed, looking at a point. The same camera for every form in a
+	 * family, because a progression judged from three different angles is not a progression anyone can judge.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static bool PoseCamera(UObject* WorldContextObject, FVector Location, FVector LookAt, float FieldOfView = 55.0f);
+
+	/** Give the view back to the player. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static bool ReleaseCamera(UObject* WorldContextObject);
+
 	/** Press and release one key through Slate, optionally with Control held. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	static bool PressKey(FName KeyName, bool bControl);

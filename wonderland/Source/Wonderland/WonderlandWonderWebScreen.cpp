@@ -9,7 +9,12 @@
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "InputCoreTypes.h"
+#include "Brushes/SlateRoundedBoxBrush.h"
 #include "Slate/SRetainerWidget.h"
+#include "Widgets/Images/SImage.h"
+#include "Widgets/Layout/SBorder.h"
+#include "Widgets/SBoxPanel.h"
+#include "Widgets/Text/STextBlock.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SDPIScaler.h"
 #include "WonderlandWonderWebPanel.h"
@@ -341,17 +346,116 @@ void AWonderlandWonderWebScreen::EndDrag()
 
 /* ==================================================================== the layer: drawing the windows, and input */
 
+/**
+ * A NOTICE, IN THE WORKSPACE'S OWN VOICE. Black ground, one yellow line, the words, and gone. It is deliberately not a
+ * modal: the founder asked for "a clean Wonderland-native message", and a box that must be dismissed to carry on is the
+ * opposite of that. It takes no input, blocks nothing, and fades by itself.
+ */
+class SWonderWebNotice : public SCompoundWidget
+{
+public:
+	SLATE_BEGIN_ARGS(SWonderWebNotice) {}
+	SLATE_END_ARGS()
+
+	void Construct(const FArguments&)
+	{
+		Ground = FSlateRoundedBoxBrush(WonderWebLook::Ink(0.92f), 18.0f, WonderWebLook::Line(), 2.5f);
+		Rule.DrawAs = ESlateBrushDrawType::Image;
+		Rule.TintColor = FSlateColor(WonderWebLook::Line());
+		// A NOTICE IS NOT A QUESTION: it never takes the pointer or the keyboard.
+		SetVisibility(EVisibility::HitTestInvisible);
+		SetCanTick(true);
+		ChildSlot
+		[
+			SNew(SBorder).BorderImage(&Ground).Padding(FMargin(34.0f, 22.0f))
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(STextBlock).Font(WonderWebLook::Sans(22, true, 190)).ColorAndOpacity(WonderWebLook::Line())
+					.Text_Lambda([this]() { return FText::FromString(Title); })
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 12.0f)
+				[
+					SNew(SBox).HeightOverride(2.5f)[SNew(SImage).Image(&Rule)]
+				]
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(STextBlock).Font(WonderWebLook::Sans(30, true, 120)).ColorAndOpacity(WonderWebLook::Line())
+					.Text_Lambda([this]() { return FText::FromString(Line); })
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Font(WonderWebLook::Sans(17)).ColorAndOpacity(WonderWebLook::Line(0.72f)).AutoWrapText(true)
+					.Text_Lambda([this]() { return FText::FromString(Detail); })
+				]
+			]
+		];
+	}
+
+	void Show(const FString& InTitle, const FString& InLine, const FString& InDetail, float Seconds)
+	{
+		Title = InTitle;
+		Line = InLine;
+		Detail = InDetail;
+		Until = Now + static_cast<double>(FMath::Max(Seconds, 0.5f));
+		Opacity = 1.0f;
+	}
+
+	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override
+	{
+		SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+		Now = InCurrentTime;
+		// Held, then faded over the last second, so it leaves quietly instead of blinking out.
+		const double Left = Until - Now;
+		Opacity = Left <= 0.0 ? 0.0f : static_cast<float>(FMath::Clamp(Left, 0.0, 1.0));
+		SetRenderOpacity(Opacity);
+		SetVisibility(Opacity <= 0.01f ? EVisibility::Collapsed : EVisibility::HitTestInvisible);
+	}
+
+	bool IsShowing() const { return Opacity > 0.01f; }
+
+private:
+	FString Title;
+	FString Line;
+	FString Detail;
+	double Now = 0.0;
+	double Until = 0.0;
+	float Opacity = 0.0f;
+	FSlateBrush Ground;
+	FSlateBrush Rule;
+};
+
 void SWonderlandWonderWebInputLayer::Construct(const FArguments& InArgs)
 {
 	Controller = InArgs._Controller;
 	GetScreens = InArgs._GetScreens;
 	OnFocus = InArgs._OnFocus;
 	OnRequestClose = InArgs._OnRequestClose;
+	OnRequestSpawn = InArgs._OnRequestSpawn;
 	SetVisibility(EVisibility::Visible);
 	ChildSlot
 	[
 		SAssignNew(Canvas, SConstraintCanvas)
 	];
+	// The notice sits above every window, near the top of the workspace, and is collapsed until there is something to say.
+	Canvas->AddSlot()
+		.Anchors(FAnchors(0.5f, 0.12f, 0.5f, 0.12f))
+		.Alignment(FVector2D(0.5, 0.0))
+		.AutoSize(true)
+		.ZOrder(500)
+		[
+			SAssignNew(Notice, SWonderWebNotice)
+		];
+	Notice->SetVisibility(EVisibility::Collapsed);
+}
+
+void SWonderlandWonderWebInputLayer::ShowNotice(const FString& Title, const FString& Line, const FString& Detail, float Seconds)
+{
+	if (Notice.IsValid())
+	{
+		Notice->Show(Title, Line, Detail, Seconds);
+	}
 }
 
 void SWonderlandWonderWebInputLayer::Present(AWonderlandWonderWebScreen* Screen, const TSharedRef<SWidget>& Content, const FVector2D& ContentSize,
@@ -697,6 +801,14 @@ FReply SWonderlandWonderWebInputLayer::OnKeyDown(const FGeometry& MyGeometry, co
 	if (Key == EKeys::Escape)
 	{
 		OnRequestClose.ExecuteIfBound();
+		return FReply::Handled();
+	}
+	// CTRL+W IS WONDERLAND'S OWN. Caught here, before any window or any page inside one sees it, so the canonical
+	// shortcut means the same thing wherever the keyboard happens to be pointing (founder, 2026-09-17: "Do not let a
+	// website steal the canonical Wonderland shortcut").
+	if (InKeyEvent.IsControlDown() && Key == EKeys::W)
+	{
+		OnRequestSpawn.ExecuteIfBound();
 		return FReply::Handled();
 	}
 	AWonderlandWonderWebScreen* Target = FocusedScreen();

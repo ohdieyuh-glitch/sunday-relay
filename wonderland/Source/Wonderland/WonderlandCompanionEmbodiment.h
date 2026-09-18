@@ -132,6 +132,13 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	int32 GetBoxCount() const { return BoxCount; }
 
+	/**
+	 * How tall the figure it built actually stands, in uu, measured from its own boxes. A size progression that cannot
+	 * be measured is three pictures of a creature, so a proof reads this rather than trusting a parameter table.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	float GetFigureHeightUu() const { return FigureHeightUU; }
+
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	int32 GetPartCount() const { return PartPivots.Num(); }
 
@@ -309,6 +316,7 @@ private:
 	FString FigurePath;
 	FString LastError;
 	int32 BoxCount = 0;
+	float FigureHeightUU = 0.0f;
 	float Phase = 0.0f;
 	float IdleSeconds = 0.0f;
 	bool bHasSnapped = false;

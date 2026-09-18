@@ -1,6 +1,7 @@
 #include "WonderlandWonderWebLivePage.h"
 
 #include "Engine/Texture2D.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Rendering/DrawElements.h"
 #include "WonderlandWonderWebLive.h"
 
@@ -102,7 +103,9 @@ FReply SWonderlandWonderWebLivePage::OnKeyChar(const FGeometry& Geometry, const 
 {
 	UWonderlandWonderWebLiveSubsystem* Subsystem = Live.Get();
 	const TCHAR Char = Event.GetCharacter();
-	if (Subsystem == nullptr || Char < 0x20)
+	// A CONTROL CHORD IS NOT TEXT. Without this, Ctrl+W typed a "w" into whatever page had focus while Wonderland also
+	// acted on it -- the page would be given a character nobody meant to type.
+	if (Subsystem == nullptr || Char < 0x20 || FSlateApplication::Get().GetModifierKeys().IsControlDown())
 	{
 		return FReply::Unhandled();
 	}
@@ -115,6 +118,12 @@ FReply SWonderlandWonderWebLivePage::OnKeyDown(const FGeometry& Geometry, const 
 {
 	UWonderlandWonderWebLiveSubsystem* Subsystem = Live.Get();
 	if (Subsystem == nullptr)
+	{
+		return FReply::Unhandled();
+	}
+	// WONDERLAND'S OWN CHORDS PASS STRAIGHT THROUGH to the workspace: a page may not answer them, and may not be sent
+	// them either. Ctrl+W is the canonical spawn, and the arrows move windows.
+	if (Event.IsControlDown())
 	{
 		return FReply::Unhandled();
 	}

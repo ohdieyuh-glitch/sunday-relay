@@ -122,6 +122,17 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 	Phase = static_cast<float>(GetTypeHash(DisplayName) % 10007u) / 10007.0f;
 
 	const float Unit = Figure.VoxelUU * FMath::Max(FigureScale, 0.05f);
+	// MEASURED, NOT ASSUMED: how tall this figure really is, from the boxes it is about to build.
+	{
+		float Lowest = TNumericLimits<float>::Max();
+		float Highest = -TNumericLimits<float>::Max();
+		for (const FWonderlandCompanionBox& Box : Figure.Boxes)
+		{
+			Lowest = FMath::Min(Lowest, static_cast<float>(Box.Centre.Z - Box.Size.Z * 0.5));
+			Highest = FMath::Max(Highest, static_cast<float>(Box.Centre.Z + Box.Size.Z * 0.5));
+		}
+		FigureHeightUU = Figure.Boxes.Num() > 0 ? (Highest - Lowest) * Unit : 0.0f;
+	}
 
 	for (int32 Index = 0; Index < Figure.Materials.Num(); ++Index)
 	{
