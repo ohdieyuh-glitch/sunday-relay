@@ -17,6 +17,12 @@ import type { SidekickService } from './sidekick-service';
  */
 
 export const SIDEKICK_ROUTE_PREFIX = '/sidekicks/v1/';
+/**
+ * WHERE A KEY GOES IN, and the only place it can. Posted by the founder's own connect script from this machine; the
+ * material is handed to the runtime's memory and the reference comes back. Nothing reads a key out again: there is no
+ * route that returns one, because nothing outside the call itself has any business seeing it.
+ */
+export const SIDEKICK_CREDENTIAL_ROUTE = '/sidekicks/v1/credential';
 const MAX_INTENT_BYTES = 16 * 1024;
 
 export function isSidekickRoute(pathname: string): boolean {
@@ -63,7 +69,12 @@ function readBody(req: IncomingMessage): Promise<string | null> {
   });
 }
 
-export async function handleSidekickRoute(req: IncomingMessage, res: ServerResponse, service: SidekickService): Promise<void> {
+export async function handleSidekickRoute(
+  req: IncomingMessage,
+  res: ServerResponse,
+  service: SidekickService,
+  putCredential?: (providerId: string, material: string) => { readonly credentialRef: string },
+): Promise<void> {
   if (!isLoopback(req.socket.remoteAddress)) {
     send(res, 403, { ok: false, error: { code: 'permission-denied', message: 'This service answers this machine only.' } });
     return;
@@ -76,6 +87,30 @@ export async function handleSidekickRoute(req: IncomingMessage, res: ServerRespo
   const pathname = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
   if (pathname === `${SIDEKICK_ROUTE_PREFIX}view` && req.method === 'GET') {
     send(res, 200, { ok: true, ...service.view() });
+    return;
+  }
+  if (pathname === SIDEKICK_CREDENTIAL_ROUTE && req.method === 'POST') {
+    if (putCredential === undefined) {
+      send(res, 503, { ok: false, error: { code: 'not-found', message: 'This runtime has no credential intake.' } });
+      return;
+    }
+    const text = await readBody(req);
+    let body: { providerId?: unknown; material?: unknown } = {};
+    try {
+      body = text === null ? {} : (JSON.parse(text) as typeof body);
+    } catch {
+      send(res, 400, { ok: false, error: { code: 'validation-failed', message: 'Not JSON.' } });
+      return;
+    }
+    const providerId = typeof body.providerId === 'string' ? body.providerId : '';
+    const material = typeof body.material === 'string' ? body.material : '';
+    if (providerId.length === 0 || material.trim().length === 0) {
+      send(res, 400, { ok: false, error: { code: 'validation-failed', message: 'A providerId and the material are both needed.' } });
+      return;
+    }
+    // NOTHING ABOUT THE MATERIAL IS LOGGED OR RETURNED -- not its length, not its shape, not a prefix. Only the reference.
+    const { credentialRef } = putCredential(providerId, material);
+    send(res, 200, { ok: true, credentialRef });
     return;
   }
   if (pathname === `${SIDEKICK_ROUTE_PREFIX}intents` && req.method === 'POST') {

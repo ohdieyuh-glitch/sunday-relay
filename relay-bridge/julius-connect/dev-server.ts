@@ -5,6 +5,7 @@ import { createLiveBrowser, type LiveBrowser } from './live-browser';
 import { createJuliusConnectService, type JuliusConnectService, type JuliusConnectServiceOptions } from './julius-connect-service';
 import { handleSidekickRoute, isSidekickRoute } from '../sidekicks/sidekick-routes';
 import { createSidekickService, type SidekickService } from '../sidekicks/sidekick-service';
+import { createCredentialIntake } from '../sidekicks/credential-intake';
 
 /**
  * JULIUS CONNECT — THE LOCAL DEVELOPMENT SERVICE WONDERLAND TALKS TO.
@@ -41,7 +42,10 @@ export function startJuliusConnectDevServer(
   // THE COMPANIONS LIVE HERE TOO. One local service, two doors: connections under /julius-connect/v1/ and the LLM
   // Companion and Jhinn under /sidekicks/v1/. They share a process and share nothing else -- a sidekick has no
   // connection authority, and Julius Connect has no opinion about what a companion says.
-  const sidekicks: SidekickService = createSidekickService();
+  // THE KEY LIVES HERE AND NOWHERE ELSE: in this process's memory, put in by the founder's own connect step, resolved
+  // only at the moment of a call. Not on disk, not in a log, not in anything Wonderland reads.
+  const intake = createCredentialIntake();
+  const sidekicks: SidekickService = createSidekickService({ resolveOpenAiKey: () => intake.resolve('openai') });
   const ticker = setInterval(() => {
     service.tick();
     sidekicks.tick();
@@ -53,7 +57,7 @@ export function startJuliusConnectDevServer(
         const started = Date.now();
         res.on('finish', () => log(`${new Date().toISOString()} ${req.method} ${pathname} -> ${res.statusCode} (${Date.now() - started} ms)`));
       }
-      void handleSidekickRoute(req, res, sidekicks).catch(() => {
+      void handleSidekickRoute(req, res, sidekicks, (providerId, material) => intake.put(providerId, material)).catch(() => {
         if (!res.headersSent) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end('{"ok":false}');
