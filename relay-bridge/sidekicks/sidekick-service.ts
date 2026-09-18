@@ -8,6 +8,7 @@ import {
   disconnectSidekick,
   emptySidekickWorld,
   failTurn,
+  SIDEKICK_REGISTRY,
   findProvider,
   findSidekick,
   finishTurn,
@@ -20,7 +21,9 @@ import {
   type SidekickWorld,
 } from '../../src/relay/mission/sidekicks';
 import { fail, ok, relayError, type RelayResult } from '../../src/relay/protocol/errors';
+import { createClaudeCodeAgent } from './claude-code-agent';
 import { createFixtureAgent, createFixtureCompanion } from './fixture-providers';
+import { createOpenAiCompanion } from './openai-companion';
 import type { AgentProviderPort, SidekickProviderPort } from './sidekick-ports';
 
 /**
@@ -47,6 +50,12 @@ export interface SidekickServiceOptions {
    */
   readonly companions?: readonly SidekickProviderPort[];
   readonly agents?: readonly AgentProviderPort[];
+  /**
+   * How the OpenAI key is resolved, by reference, at the moment of a call. The founder connects it through Julius
+   * Connect and the vault answers here; with nothing connected this returns null and the companion stays AUTH_REQUIRED.
+   * It is never held between calls and never reaches a log or a view.
+   */
+  readonly resolveOpenAiKey?: () => string | null;
 }
 
 export interface SidekickServiceView {
@@ -70,6 +79,12 @@ export interface SidekickServiceView {
     readonly failure: string | null;
   }[];
   readonly audit: readonly { readonly at: string; readonly sidekickId: string; readonly action: string; readonly mode: string; readonly outcome: string; readonly detail: string }[];
+  /**
+   * WHAT IS ACTUALLY ON THIS MACHINE, as found by asking rather than by assuming. Each real provider says whether it is
+   * reachable and what is missing -- the tool not installed, an account not signed in, or live use not yet allowed --
+   * so the founder is told the true next step instead of a sentence written months ago.
+   */
+  readonly providers: readonly { readonly providerId: string; readonly displayName: string; readonly backs: string; readonly ready: boolean; readonly detail: string; readonly checkedAt: string | null }[];
 }
 
 export interface SidekickService {
@@ -99,13 +114,22 @@ export function createSidekickService(options: SidekickServiceOptions = {}): Sid
   const rateLimitMs = options.rateLimitMs ?? 5_000;
   const clock = (): SidekickClock => ({ at: now().toISOString() });
 
-  const companions: SidekickProviderPort[] = [...(options.companions ?? []), createFixtureCompanion(), createFixtureCompanion({ slowMs: 4000 })];
-  const agents: AgentProviderPort[] = [...(options.agents ?? []), createFixtureAgent()];
+  // THE REAL PROVIDERS ARE HERE AND CANNOT SPEND. Both refuse with AUTH_REQUIRED until the founder has connected his own
+  // account AND allowed live use; the development stand-ins do the whole path meanwhile.
+  const companions: SidekickProviderPort[] = [
+    ...(options.companions ?? []),
+    createOpenAiCompanion({ resolveKey: options.resolveOpenAiKey ?? (() => null) }),
+    createFixtureCompanion(),
+    createFixtureCompanion({ slowMs: 4000 }),
+  ];
+  const agents: AgentProviderPort[] = [...(options.agents ?? []), createClaudeCodeAgent(), createFixtureAgent()];
 
   let world: SidekickWorld = emptySidekickWorld(clock());
   let revision = 1;
   const inFlight = new Map<string, AbortController>();
   const rateLimitedUntil = new Map<string, number>();
+  /** What each real provider said when it was last asked whether it is there. Nothing is contacted to find out. */
+  const probed = new Map<string, { ready: boolean; detail: string; checkedAt: string }>();
 
   const changed = () => {
     revision += 1;
@@ -213,6 +237,17 @@ export function createSidekickService(options: SidekickServiceOptions = {}): Sid
       };
     }),
     audit: world.audit.slice(0, 40).map((row) => ({ at: row.at, sidekickId: row.sidekickId, action: row.action, mode: row.mode, outcome: row.outcome, detail: row.detail })),
+    providers: SIDEKICK_REGISTRY.filter((provider) => !provider.development).map((provider) => {
+      const found = probed.get(provider.providerId);
+      return {
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        backs: provider.backs,
+        ready: found?.ready ?? false,
+        detail: found?.detail ?? 'Not looked for yet. Ask for a probe to find out what is on this machine.',
+        checkedAt: found?.checkedAt ?? null,
+      };
+    }),
   });
 
   return {
@@ -259,6 +294,23 @@ export function createSidekickService(options: SidekickServiceOptions = {}): Sid
           const result = apply(changeModel(world, { sidekickId, modelId }, clock()));
           return result.ok ? ok(view()) : result;
         }
+        case 'probe': {
+          // ASKING IS FREE. Each real provider is asked whether it is there -- a version check, a models listing -- and
+          // says what is missing. No completion is requested and nothing is spent.
+          for (const provider of SIDEKICK_REGISTRY.filter((row) => !row.development)) {
+            const port: { reachable: SidekickProviderPort['reachable'] } | undefined =
+              companions.find((row) => row.providerId === provider.providerId) ?? agents.find((row) => row.providerId === provider.providerId);
+            if (port === undefined) {
+              probed.set(provider.providerId, { ready: false, detail: 'This build has no adapter for that provider.', checkedAt: now().toISOString() });
+              continue;
+            }
+            void port.reachable().then((reach) => {
+              probed.set(provider.providerId, { ready: reach.ok, detail: reach.detail, checkedAt: now().toISOString() });
+              changed();
+            });
+          }
+          return ok(view());
+        }
         case 'reset': {
           for (const controller of inFlight.values()) controller.abort();
           inFlight.clear();
@@ -268,7 +320,7 @@ export function createSidekickService(options: SidekickServiceOptions = {}): Sid
           return ok(view());
         }
         default:
-          return fail(relayError('validation-failed', `Unknown intent ${intent}. Known: connect, disconnect, ask, cancel, model, reset.`));
+          return fail(relayError('validation-failed', `Unknown intent ${intent}. Known: connect, disconnect, ask, cancel, model, probe, reset.`));
       }
     },
     tick() {
