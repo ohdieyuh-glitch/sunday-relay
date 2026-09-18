@@ -360,7 +360,11 @@ def ten_tails(stage):
         rise = math.radians(p["tail_rise"] * (0.62 + 0.38 * (1.0 - abs(half))))
         root = (-bl * 0.46, half * bw * 0.30, body_z + bh * 0.34)
         name = "tail_%d" % index
-        figure.part(name, "root", root, "tail", 0.0, float(count))
+        # THE TAIL WAVE NEEDS A REAL PLACE ALONG THE TAIL, and a different one per tail.
+        # The runtime's formula is Along = A / B, Reach = Along^1.35, and the phase carries -A*0.62: with A = 0 every
+        # tail has Reach 0 and the whole fan stands frozen -- which is exactly what it did the first time. A root sits
+        # part way along, a tip near the end, and each tail is offset from its neighbours so ten tails never sway as one.
+        figure.part(name, "root", root, "tail", 4.0 + index * 0.34, float(count))
         length = p["tail_len"]
         mid = (
             root[0] - math.cos(rise) * length * 0.45 * math.cos(yaw) * 1.0,
@@ -379,7 +383,7 @@ def ten_tails(stage):
             )
             figure.limb(name, hide, root, mid, p["tail_r"], p["tail_r"] * 0.72, tile=p["tile"])
             outer = "%s_tip" % name
-            figure.part(outer, name, mid, "tail", 1.0, float(count))
+            figure.part(outer, name, mid, "tail", 8.2 + index * 0.34, float(count))
             figure.limb(outer, hide, mid, tip, p["tail_r"] * 0.72, p["tail_r"] * p["tail_tip"], tile=p["tile"])
             eye_at = (mid[0] + (tip[0] - mid[0]) * 0.34, mid[1] + (tip[1] - mid[1]) * 0.34, mid[2] + (tip[2] - mid[2]) * 0.34)
             facing = (0.5, math.sin(yaw), 0.35)

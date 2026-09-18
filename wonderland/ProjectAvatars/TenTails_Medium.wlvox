@@ -16,26 +16,26 @@ part leg_rr root -4.500 3.612 12.720 none
 part leg_rl root -4.500 -3.612 12.720 none
 part head root 11.150 0.000 19.056 head
 part jaw head 14.150 0.000 16.536 none
-part tail_0 root -6.900 -2.580 17.868 tail 0.000 10.000
-part tail_0_tip tail_0 -11.943 -10.651 25.422 tail 1.000 10.000
-part tail_1 root -6.900 -2.007 17.868 tail 0.000 10.000
-part tail_1_tip tail_1 -13.102 -8.232 26.258 tail 1.000 10.000
-part tail_2 root -6.900 -1.433 17.868 tail 0.000 10.000
-part tail_2_tip tail_2 -13.655 -5.691 27.025 tail 1.000 10.000
-part tail_3 root -6.900 -0.860 17.868 tail 0.000 10.000
-part tail_3_tip tail_3 -13.615 -3.216 27.716 tail 1.000 10.000
-part tail_4 root -6.900 -0.287 17.868 tail 0.000 10.000
-part tail_4_tip tail_4 -13.049 -0.981 28.324 tail 1.000 10.000
-part tail_5 root -6.900 0.287 17.868 tail 0.000 10.000
-part tail_5_tip tail_5 -13.049 0.981 28.324 tail 1.000 10.000
-part tail_6 root -6.900 0.860 17.868 tail 0.000 10.000
-part tail_6_tip tail_6 -13.615 3.216 27.716 tail 1.000 10.000
-part tail_7 root -6.900 1.433 17.868 tail 0.000 10.000
-part tail_7_tip tail_7 -13.655 5.691 27.025 tail 1.000 10.000
-part tail_8 root -6.900 2.007 17.868 tail 0.000 10.000
-part tail_8_tip tail_8 -13.102 8.232 26.258 tail 1.000 10.000
-part tail_9 root -6.900 2.580 17.868 tail 0.000 10.000
-part tail_9_tip tail_9 -11.943 10.651 25.422 tail 1.000 10.000
+part tail_0 root -6.900 -2.580 17.868 tail 4.000 10.000
+part tail_0_tip tail_0 -11.943 -10.651 25.422 tail 8.200 10.000
+part tail_1 root -6.900 -2.007 17.868 tail 4.340 10.000
+part tail_1_tip tail_1 -13.102 -8.232 26.258 tail 8.540 10.000
+part tail_2 root -6.900 -1.433 17.868 tail 4.680 10.000
+part tail_2_tip tail_2 -13.655 -5.691 27.025 tail 8.880 10.000
+part tail_3 root -6.900 -0.860 17.868 tail 5.020 10.000
+part tail_3_tip tail_3 -13.615 -3.216 27.716 tail 9.220 10.000
+part tail_4 root -6.900 -0.287 17.868 tail 5.360 10.000
+part tail_4_tip tail_4 -13.049 -0.981 28.324 tail 9.560 10.000
+part tail_5 root -6.900 0.287 17.868 tail 5.700 10.000
+part tail_5_tip tail_5 -13.049 0.981 28.324 tail 9.900 10.000
+part tail_6 root -6.900 0.860 17.868 tail 6.040 10.000
+part tail_6_tip tail_6 -13.615 3.216 27.716 tail 10.240 10.000
+part tail_7 root -6.900 1.433 17.868 tail 6.380 10.000
+part tail_7_tip tail_7 -13.655 5.691 27.025 tail 10.580 10.000
+part tail_8 root -6.900 2.007 17.868 tail 6.720 10.000
+part tail_8_tip tail_8 -13.102 8.232 26.258 tail 10.920 10.000
+part tail_9 root -6.900 2.580 17.868 tail 7.060 10.000
+part tail_9_tip tail_9 -11.943 10.651 25.422 tail 11.260 10.000
 box root stone 0.000 0.000 11.316 2.043 2.043 2.043
 box root stone 0.000 0.000 11.316 2.036 2.036 2.036
 box root stone -0.000 0.000 11.316 2.160 2.160 2.160
