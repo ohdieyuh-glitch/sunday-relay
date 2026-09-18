@@ -67,6 +67,18 @@ struct FWonderlandSidekick
 	FString Failure;
 };
 
+/** What a real provider says about itself on THIS machine, found by asking rather than assumed. */
+struct FWonderlandSidekickProvider
+{
+	FString ProviderId;
+	FString DisplayName;
+	/** "llm_companion" or "single_agent". */
+	FString Backs;
+	bool bReady = false;
+	/** What is actually missing: the tool, the account, or permission to spend. Shown to the founder as it is. */
+	FString Detail;
+};
+
 DECLARE_MULTICAST_DELEGATE(FOnWonderlandSidekicksChanged);
 
 /**
@@ -87,6 +99,9 @@ public:
 	const FWonderlandSidekick* Find(const FString& SidekickId) const;
 	/** Index 0 is the LLM Companion and 1 the Jhinn, as the companion preview has always ordered them. */
 	const FWonderlandSidekick* ByIndex(int32 Index) const;
+	const TArray<FWonderlandSidekickProvider>& GetProviders() const { return Providers; }
+	/** Ask each real provider whether it is there. Free: a version check or a models listing, never a completion. */
+	void Probe();
 	int32 GetRevision() const { return Revision; }
 	FOnWonderlandSidekicksChanged OnChanged;
 
@@ -120,6 +135,7 @@ private:
 	EWonderlandSidekickLink Link = EWonderlandSidekickLink::Connecting;
 	FString LinkProblem;
 	TArray<FWonderlandSidekick> Sidekicks;
+	TArray<FWonderlandSidekickProvider> Providers;
 	int32 Revision = 0;
 	int32 ServiceRevision = -1;
 	bool bPollInFlight = false;

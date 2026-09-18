@@ -840,20 +840,19 @@ void UWonderlandUiSubsystem::HandleSidekicksChanged()
 			continue;
 		}
 		// THE EIGHT TRUTH STATES, as the founder named them, with the underscore turned into a space to read as words.
-		FString Status = Sidekick->State.Replace(TEXT("_"), TEXT(" "));
-		if (Sidekick->State == TEXT("CONNECTED") || Sidekick->State == TEXT("WORKING"))
-		{
-			// WHICH PROVIDER AND MODEL IS BEHIND IT, on the face of the terminal, where it cannot be mistaken.
-			Status = FString::Printf(TEXT("%s · %s"), *Status, *Sidekick->ModelId.ToUpper());
-		}
-		Panel->SetStatus(Status);
+		// SHORT, deliberately: the state shares the title row with a name that can be long, and the state is the half that
+		// must stay readable. Which provider and model is behind it goes on its own line, where there is room for both.
+		Panel->SetStatus(Sidekick->State.Replace(TEXT("_"), TEXT(" ")));
 
-		// The note changes rarely and matters when it does: the reason it is waiting, or what it is now backed by.
-		const FString Note = FString::Printf(TEXT("%s · %s"), *Sidekick->Mode, *Sidekick->Note);
+		// One line about what is behind this companion, added only when it actually changes -- including when it changes
+		// into a failure. Repeating AUTH REQUIRED three times tells the reader nothing the first line did not.
+		const FString Note = Sidekick->Failure.IsEmpty()
+			? FString::Printf(TEXT("%s · %s · %s — %s"), *Sidekick->ProviderName, *Sidekick->ModelId, *Sidekick->Mode, *Sidekick->Note)
+			: FString::Printf(TEXT("%s: %s"), *Sidekick->Failure.Replace(TEXT("_"), TEXT(" ")), *Sidekick->Note);
 		if (CompanionShownNote[Index] != Note)
 		{
 			CompanionShownNote[Index] = Note;
-			Panel->AddLine(FString(), FString::Printf(TEXT("%s — %s"), *Sidekick->ProviderName, *Sidekick->Note), true);
+			Panel->AddLine(FString(), Note, true);
 		}
 
 		// A turn that has started: show what was asked, once, whoever asked it (a terminal or a console command).
@@ -875,12 +874,6 @@ void UWonderlandUiSubsystem::HandleSidekicksChanged()
 				? Sidekick->LastAnswer
 				: FString::Printf(TEXT("%s  [SIMULATED]"), *Sidekick->LastAnswer);
 			Panel->AddLine(Panel->GetTitle(), Marked, false);
-		}
-		// A turn that ended badly says which way, in plain words.
-		if (!Sidekick->Failure.IsEmpty() && CompanionShownNote[Index] != Sidekick->Failure)
-		{
-			CompanionShownNote[Index] = Sidekick->Failure;
-			Panel->AddLine(FString(), FString::Printf(TEXT("%s: %s"), *Sidekick->Failure.Replace(TEXT("_"), TEXT(" ")), *Sidekick->Note), true);
 		}
 	}
 }
