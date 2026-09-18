@@ -68,6 +68,12 @@ def job():
         L.set_key_held("LeftControl", False)
         yield 1.5
         RESULT["terminals_open"] = bool(ui.is_live_terminal_open())
+        # WHAT IS ACTUALLY ON THIS MACHINE, asked rather than assumed. Free: a version check and a models listing.
+        console("wl.Sidekicks.Probe")
+        yield 4.0
+        console("wl.Sidekicks.Providers")
+        yield 1.5
+        RESULT["providers_probed"] = True
         RESULT["at_start"] = str(sidekicks.describe_sidekicks())
         shot("01_simulated", "both companions start SIMULATED and say so")
 
