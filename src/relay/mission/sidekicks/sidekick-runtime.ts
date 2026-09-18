@@ -50,6 +50,13 @@ export interface SidekickPresence {
   /** A reference, never material. Null for a provider that holds its own credential, or for a fixture. */
   readonly credentialRef: string | null;
   readonly connectedAt: string | null;
+  /**
+   * WHAT A SINGLE AGENT MAY DO, and nothing wider. Read only, until the user grants more -- the same shape as a Julius
+   * Connect capability: asked for, granted by a person, audited, and revocable. A task needing more than was granted is
+   * refused rather than quietly narrowed, because a bounded agent that silently does less is as confusing as one that
+   * silently does more.
+   */
+  readonly allowance: readonly ('read' | 'write' | 'run')[];
 }
 
 export interface SidekickWorld {
@@ -83,6 +90,8 @@ export function emptySidekickWorld(clock: SidekickClock): SidekickWorld {
       note: 'No account is connected. Answers come from a fixture and are marked SIMULATED.',
       credentialRef: null,
       connectedAt: null,
+      // READ ONLY UNTIL SOMEBODY SAYS OTHERWISE. A conversational companion never touches a folder at all.
+      allowance: kind === 'single_agent' ? ['read'] : [],
     };
   };
   return {
@@ -529,6 +538,44 @@ export function changeModel(world: SidekickWorld, input: { sidekickId: string; m
         mode: sidekick.mode,
         outcome: 'success',
         detail: `Model changed to ${input.modelId}; the conversation starts again.`,
+      },
+      clock,
+    ),
+  );
+}
+
+/**
+ * GRANT A SINGLE AGENT MORE THAN READING, or take it back. The user's own decision, recorded, and refused for anything
+ * that is not a single agent -- a conversational companion has no business writing to a folder, so it cannot be given
+ * permission to.
+ */
+export function setAllowance(
+  world: SidekickWorld,
+  input: { sidekickId: string; allowance: readonly ('read' | 'write' | 'run')[] },
+  clock: SidekickClock,
+): RelayResult<SidekickWorld> {
+  const sidekick = findSidekick(world, input.sidekickId);
+  if (sidekick === null) {
+    return fail(relayError('not-found', `There is no sidekick called ${input.sidekickId}.`));
+  }
+  if (sidekick.kind !== 'single_agent') {
+    return fail(relayError('permission-denied', `${sidekick.sidekickId} converses; it does not work in a folder, so there is nothing to allow.`));
+  }
+  if (sidekick.liveTurnId !== null) {
+    return fail(relayError('illegal-transition', 'Not while it is working. Let the task finish, or cancel it.'));
+  }
+  const allowance = [...new Set(input.allowance)].filter((grant) => grant === 'read' || grant === 'write' || grant === 'run');
+  return ok(
+    audit(
+      put(world, { ...sidekick, allowance, note: allowance.length === 0 ? 'Allowed nothing: it can look at nothing and change nothing.' : `Allowed to ${allowance.join(', ')} inside its own folder, and nothing outside it.` }),
+      {
+        sidekickId: sidekick.sidekickId,
+        action: allowance.length >= sidekick.allowance.length ? 'auth.completed' : 'refused',
+        providerId: sidekick.providerId,
+        modelId: sidekick.modelId,
+        mode: sidekick.mode,
+        outcome: 'success',
+        detail: `Allowance is now: ${allowance.length === 0 ? 'nothing' : allowance.join(', ')}.`,
       },
       clock,
     ),

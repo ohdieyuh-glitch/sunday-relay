@@ -55,6 +55,7 @@ export {
   markTurn,
   mascotOf,
   recoverInterruptedTurns,
+  setAllowance,
   type SidekickClock,
   type SidekickPresence,
   type SidekickWorld,

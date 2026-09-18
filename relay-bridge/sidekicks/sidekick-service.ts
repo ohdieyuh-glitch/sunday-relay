@@ -16,6 +16,7 @@ import {
   markTurn,
   mascotOf,
   recoverInterruptedTurns,
+  setAllowance,
   type SidekickClock,
   type SidekickFailure,
   type SidekickWorld,
@@ -74,6 +75,8 @@ export interface SidekickServiceView {
     readonly authority: string;
     readonly sessionId: string | null;
     readonly turns: number;
+    /** What a single agent has been allowed to do inside its folder. Empty for a conversational companion. */
+    readonly allowance: readonly string[];
     readonly live: { readonly turnId: string; readonly state: string; readonly ask: string; readonly answer: string } | null;
     readonly lastAnswer: string;
     readonly failure: string | null;
@@ -190,7 +193,8 @@ export function createSidekickService(options: SidekickServiceOptions = {}): Sid
             ...common,
             // BOUNDED BY CONSTRUCTION. A single agent works in one folder with one allowance, and the task cannot widen it.
             workingDirectory: process.env.WONDERLAND_AGENT_DIR ?? process.cwd(),
-            allow: ['read'],
+            // ONLY WHAT WAS GRANTED. Read until a person allows more, and never wider than the folder.
+            allow: sidekick.allowance,
           })
         : companion !== undefined
           ? companion.ask(common)
@@ -229,6 +233,7 @@ export function createSidekickService(options: SidekickServiceOptions = {}): Sid
         mode: sidekick.mode,
         note: sidekick.note,
         authority: sidekick.kind === 'llm_companion' ? 'conversation' : 'scoped_work',
+        allowance: sidekick.allowance,
         sessionId: sidekick.session?.sessionId ?? null,
         turns: sidekick.session?.turns.length ?? 0,
         live: turn === null ? null : { turnId: turn.turnId, state: turn.state, ask: turn.ask, answer: turn.answer },
@@ -294,6 +299,12 @@ export function createSidekickService(options: SidekickServiceOptions = {}): Sid
           const result = apply(changeModel(world, { sidekickId, modelId }, clock()));
           return result.ok ? ok(view()) : result;
         }
+        case 'allow': {
+          const asked = (Array.isArray((body as Record<string, unknown>)?.allowance) ? ((body as Record<string, unknown>).allowance as unknown[]) : [])
+            .filter((grant): grant is 'read' | 'write' | 'run' => grant === 'read' || grant === 'write' || grant === 'run');
+          const result = apply(setAllowance(world, { sidekickId, allowance: asked }, clock()));
+          return result.ok ? ok(view()) : result;
+        }
         case 'probe': {
           // ASKING IS FREE. Each real provider is asked whether it is there -- a version check, a models listing -- and
           // says what is missing. No completion is requested and nothing is spent.
@@ -320,7 +331,7 @@ export function createSidekickService(options: SidekickServiceOptions = {}): Sid
           return ok(view());
         }
         default:
-          return fail(relayError('validation-failed', `Unknown intent ${intent}. Known: connect, disconnect, ask, cancel, model, probe, reset.`));
+          return fail(relayError('validation-failed', `Unknown intent ${intent}. Known: connect, disconnect, ask, cancel, model, allow, probe, reset.`));
       }
     },
     tick() {

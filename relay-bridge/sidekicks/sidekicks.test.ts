@@ -311,6 +311,41 @@ describe('sidekicks: identity, memory and provenance', () => {
   });
 });
 
+describe('sidekicks: what a single agent is allowed to do', () => {
+  it('reads until a person allows more, and a conversational companion can be allowed nothing at all', async () => {
+    const service = createSidekickService({ timeoutMs: 5000 });
+    // READ ONLY, BY DEFAULT. Nobody granted anything yet, so nothing but looking is possible.
+    expect(look(service, 'jhinn').allowance).toEqual(['read']);
+    expect(look(service, 'llm-companion').allowance).toEqual([]);
+
+    // A COMPANION THAT CONVERSES HAS NO FOLDER, so there is nothing to allow and the attempt is refused.
+    const wrong = service.intent({ intent: 'allow', sidekickId: 'llm-companion', allowance: ['write'] });
+    expect(wrong.ok).toBe(false);
+    if (!wrong.ok) expect(wrong.error.code).toBe('permission-denied');
+
+    must(service.intent({ intent: 'allow', sidekickId: 'jhinn', allowance: ['read', 'write'] }));
+    expect(look(service, 'jhinn').allowance).toEqual(['read', 'write']);
+    expect(service.view().audit[0].detail).toContain('read, write');
+
+    // AND TAKEN BACK, which is the half that matters: an allowance that cannot be withdrawn is not a permission.
+    must(service.intent({ intent: 'allow', sidekickId: 'jhinn', allowance: [] }));
+    expect(look(service, 'jhinn').allowance).toEqual([]);
+    expect(look(service, 'jhinn').note).toContain('change nothing');
+  });
+
+  it('will not change an allowance while the agent is working', async () => {
+    const service = createSidekickService({ timeoutMs: 5000 });
+    must(service.intent({ intent: 'connect', sidekickId: 'jhinn', providerId: 'dev-single-agent' }));
+    await waitFor(() => look(service, 'jhinn').state === 'CONNECTED', 'the agent to connect');
+    must(service.intent({ intent: 'ask', sidekickId: 'jhinn', ask: 'look at the palette' }));
+    const busy = service.intent({ intent: 'allow', sidekickId: 'jhinn', allowance: ['read', 'run'] });
+    expect(busy.ok).toBe(false);
+    if (!busy.ok) expect(busy.error.message).toContain('Not while it is working');
+    must(service.intent({ intent: 'cancel', sidekickId: 'jhinn' }));
+    await waitFor(settled(service, 'jhinn'), 'the cancellation');
+  });
+});
+
 describe('sidekicks: the single agent is bounded work, not a mission', () => {
   it('does scoped work, reports, and stops', async () => {
     const service = createSidekickService({ timeoutMs: 5000 });
