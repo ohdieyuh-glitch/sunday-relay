@@ -177,5 +177,59 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
  /* recovery */
  'recovery.action',
 ]as const;export type JuliusOperationalEventType=typeof JULIUS_OPERATIONAL_EVENT_TYPES[number];
+/**
+ * WHAT MAKES TWO WRITES THE SAME EVENT — AND WHAT MAKES THEM A CONFLICT.
+ *
+ * `appendEvent` has always answered `true` for "recorded" and `false` for
+ * "already there", and the two stores disagreed about what "already there"
+ * meant. The in-memory store compared the ID ALONE, so a second event carrying
+ * DIFFERENT facts under a used id was silently dropped and its facts were lost.
+ * PostgreSQL compared `JSON.stringify` of the stored payload with the one it
+ * had just built — and `jsonb` does not preserve key order, so a genuine replay
+ * of the same event almost always compared unequal and was refused with
+ * `julius_event_id_conflict`. One contract, two behaviours, and neither was the
+ * one the ledger claims.
+ *
+ * THE CONTRACT, STATED ONCE HERE:
+ *
+ *   same id, same event   -> idempotent. No duplicate row, no error, `false`.
+ *   same id, other event  -> {@link JuliusEventIdConflict}, and nothing written.
+ *   new id                -> recorded, `true`.
+ *
+ * IDENTITY IS THE FACTS, NOT THE INSTANT. `occurredAt` is when the write
+ * happened, not what the event says: a replay after a restart reads a later
+ * clock, and refusing it would make every honest replay a conflict. The ledger
+ * keeps the first instant, and the event's identity is everything else.
+ *
+ * KEY ORDER IS NOT MEANING. The canonical form sorts every key at every depth,
+ * so a payload that survived a round trip through `jsonb` — which reorders —
+ * compares equal to the one that produced it.
+ */
+export const JULIUS_EVENT_IDENTITY_VERSION='julius-event-identity.v1'as const;
+/** The fields that make an event what it is. `eventId` names it; `occurredAt` is not part of it. */
+export interface JuliusEventIdentityFields{readonly runId:unknown;readonly projectId:unknown;readonly type:unknown;readonly taskId:unknown;readonly workerId:unknown;readonly correlationId:unknown;readonly causationId:unknown;readonly facts:unknown;}
+const canonical=(value:unknown):string=>{
+ if(value===null||typeof value!=='object')return JSON.stringify(value===undefined?null:value);
+ if(Array.isArray(value))return `[${value.map(canonical).join(',')}]`;
+ const record=value as Record<string,unknown>;
+ return `{${Object.keys(record).sort().map(key=>`${JSON.stringify(key)}:${canonical(record[key])}`).join(',')}}`;
+};
+/**
+ * The canonical form of one event's identity: stable at every depth, so two
+ * stores — and a value that has been through `jsonb` — agree on what it says.
+ */
+export function canonicalJuliusEventIdentity(event:JuliusEventIdentityFields):string{
+ return canonical({
+  version:JULIUS_EVENT_IDENTITY_VERSION,
+  runId:event.runId??null,projectId:event.projectId??null,type:event.type??null,
+  taskId:event.taskId??null,workerId:event.workerId??null,
+  correlationId:event.correlationId??null,causationId:event.causationId??null,
+  facts:event.facts??null,
+ });
+}
+/** The same event id, asked to say something else. Nothing is written. */
+export class JuliusEventIdConflict extends Error{
+ constructor(readonly eventId:string){super('julius_event_id_conflict');this.name='JuliusEventIdConflict';}
+}
 export interface JuliusOperationalEvent{readonly eventId:string;readonly runId:string;readonly projectId:string;readonly type:JuliusOperationalEventType;readonly taskId:string|null;readonly workerId:string|null;readonly correlationId:string;readonly causationId:string|null;readonly occurredAt:string;readonly facts:Readonly<Record<string,string|number|boolean|null>>;}
 export function validateJuliusEvent(event:JuliusOperationalEvent):void{for(const value of[event.eventId,event.runId,event.projectId,event.correlationId,event.occurredAt])if(!value.trim())throw new Error('julius_event_identity_required');const payload=JSON.stringify(event.facts);if(payload.length>8192)throw new Error('julius_event_too_large');if(/(?:api[_-]?key|authorization|token|secret|password)\s*[=:]/i.test(payload))throw new Error('julius_event_secret_rejected');for(const value of Object.values(event.facts))if(value!==null&&!['string','number','boolean'].includes(typeof value))throw new Error('julius_event_fact_invalid');}

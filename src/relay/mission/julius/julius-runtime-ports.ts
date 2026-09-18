@@ -238,6 +238,24 @@ export interface JuliusContextWriter {
  * always says which ledger it means.
  */
 export interface JuliusEventWriter {
+  /**
+   * APPEND ONE EVENT, WITH ONE CONTRACT IN EVERY STORE.
+   *
+   *   a new id                        -> recorded; returns true.
+   *   the same id, the same event     -> idempotent; no duplicate, no error,
+   *                                      returns false. The ledger keeps the
+   *                                      instant of the FIRST write.
+   *   the same id, a different event  -> throws {@link JuliusEventIdConflict};
+   *                                      nothing is written and the recorded
+   *                                      event stands.
+   *
+   * "The same event" is {@link canonicalJuliusEventIdentity}: the subject and
+   * the facts, at any key order and any depth, and NOT `occurredAt` — a replay
+   * after a restart reads a later clock and is still the same event.
+   *
+   * The two stores used to disagree here, in opposite directions, and
+   * `julius-event-append-conformance.ts` now runs one set of cases against both.
+   */
   appendEvent(event: JuliusOperationalEvent): Promise<boolean>;
 }
 
