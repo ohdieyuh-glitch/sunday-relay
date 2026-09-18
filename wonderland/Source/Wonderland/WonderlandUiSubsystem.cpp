@@ -26,6 +26,7 @@
 #include "WonderlandCompanionTerminal.h"
 #include "WonderlandHudPanels.h"
 #include "WonderlandJuliusConnect.h"
+#include "WonderlandSidekicks.h"
 #include "WonderlandJuliusConnectPanel.h"
 #include "WonderlandWonderWebBrowse.h"
 #include "WonderlandWonderWebBrowserPanel.h"
@@ -220,6 +221,10 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 	{
 		JuliusConnectChangedHandle = Connect->OnChanged.AddUObject(this, &UWonderlandUiSubsystem::HandleJuliusConnectChanged);
 	}
+	if (UWonderlandSidekickSubsystem* Runtime = Sidekicks())
+	{
+		SidekicksChangedHandle = Runtime->OnChanged.AddUObject(this, &UWonderlandUiSubsystem::HandleSidekicksChanged);
+	}
 
 	// Before the HUD exists, so its first paint already shows the configured source. With the source
 	// set to JuliusUsageAuthority this applies nothing and the HUD shows what the authority reports.
@@ -317,11 +322,24 @@ void UWonderlandUiSubsystem::HandleCompanionSubmit(int32 Index, const FString& T
 		return;
 	}
 	const TSharedPtr<SWonderlandCompanionTerminal>& Panel = CompanionTerminals[Index];
-	// Recorded as the visitor's own line and marked unsent: nothing is imported, and a companion that
-	// answered anyway would be inventing one.
+	UWonderlandSidekickSubsystem* Runtime = Sidekicks();
+	const FWonderlandSidekick* Sidekick = Runtime != nullptr ? Runtime->ByIndex(Index) : nullptr;
+	// THE COMPANION IS REALLY ASKED, when there is really something behind it. The line appears when the runtime reports
+	// the turn, so what is on screen is what was actually asked of a provider rather than a hopeful echo.
+	if (Runtime != nullptr && Sidekick != nullptr && Runtime->GetLink() == EWonderlandSidekickLink::Online && Sidekick->State == TEXT("CONNECTED"))
+	{
+		Runtime->Ask(Sidekick->SidekickId, Text);
+		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI companion terminal %d asked its runtime: %d characters"), Index, Text.Len());
+		return;
+	}
+	// Otherwise it is recorded as the visitor's own line and marked unsent -- with the reason, which is now a real one:
+	// no runtime, or a companion that has no provider behind it yet.
 	Panel->AddLine(TEXT("You"), Text, false);
-	Panel->AddLine(FString(), FString::Printf(TEXT("Not sent: %s is not imported into this world yet."), *Panel->GetTitle()), true);
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI companion terminal %d line recorded, not sent (nothing imported): %d characters"), Index, Text.Len());
+	const FString Why = Runtime == nullptr || Runtime->GetLink() != EWonderlandSidekickLink::Online
+		? FString::Printf(TEXT("Not sent: the companions' runtime is not running, so %s has nothing behind it."), *Panel->GetTitle())
+		: FString::Printf(TEXT("Not sent: %s is %s. Connect a provider first."), *Panel->GetTitle(), *Sidekick->State.Replace(TEXT("_"), TEXT(" ")).ToLower());
+	Panel->AddLine(FString(), Why, true);
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI companion terminal %d line recorded, not sent: %d characters"), Index, Text.Len());
 }
 
 FString UWonderlandUiSubsystem::GetCompanionTerminalTitle(int32 Index) const
@@ -778,6 +796,93 @@ UWonderlandJuliusConnectSubsystem* UWonderlandUiSubsystem::JuliusConnect() const
 	const APlayerController* Controller = BoundController.Get();
 	UGameInstance* Instance = Controller != nullptr ? Controller->GetGameInstance() : nullptr;
 	return Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusConnectSubsystem>() : nullptr;
+}
+
+UWonderlandSidekickSubsystem* UWonderlandUiSubsystem::Sidekicks() const
+{
+	const APlayerController* Controller = BoundController.Get();
+	UGameInstance* Instance = Controller != nullptr ? Controller->GetGameInstance() : nullptr;
+	return Instance != nullptr ? Instance->GetSubsystem<UWonderlandSidekickSubsystem>() : nullptr;
+}
+
+/**
+ * THE COMPANION TERMINALS FOLLOW THE RUNTIME. State at the right of the title, the provider and model under it, and a
+ * line when a turn actually ends -- the answer, marked SIMULATED while a fixture is behind it, or the plain reason it
+ * failed. Nothing is added while a turn is in flight: the state says THINKING, which is what is true.
+ */
+void UWonderlandUiSubsystem::HandleSidekicksChanged()
+{
+	const UWonderlandSidekickSubsystem* Runtime = Sidekicks();
+	if (Runtime == nullptr)
+	{
+		return;
+	}
+	CompanionShownAsk.SetNum(CompanionTerminals.Num());
+	CompanionShownAnswer.SetNum(CompanionTerminals.Num());
+	CompanionShownNote.SetNum(CompanionTerminals.Num());
+	for (int32 Index = 0; Index < CompanionTerminals.Num(); ++Index)
+	{
+		const TSharedPtr<SWonderlandCompanionTerminal>& Panel = CompanionTerminals[Index];
+		const FWonderlandSidekick* Sidekick = Runtime->ByIndex(Index);
+		if (!Panel.IsValid() || Sidekick == nullptr)
+		{
+			continue;
+		}
+		if (Runtime->GetLink() != EWonderlandSidekickLink::Online)
+		{
+			// NO RUNTIME IS NOT A MOOD: the terminal says the companion has nothing behind it, and how to change that.
+			Panel->SetStatus(TEXT("OFFLINE"));
+			if (CompanionShownNote[Index] != TEXT("offline"))
+			{
+				CompanionShownNote[Index] = TEXT("offline");
+				Panel->AddLine(FString(), Runtime->GetLinkProblem(), true);
+			}
+			continue;
+		}
+		// THE EIGHT TRUTH STATES, as the founder named them, with the underscore turned into a space to read as words.
+		FString Status = Sidekick->State.Replace(TEXT("_"), TEXT(" "));
+		if (Sidekick->State == TEXT("CONNECTED") || Sidekick->State == TEXT("WORKING"))
+		{
+			// WHICH PROVIDER AND MODEL IS BEHIND IT, on the face of the terminal, where it cannot be mistaken.
+			Status = FString::Printf(TEXT("%s · %s"), *Status, *Sidekick->ModelId.ToUpper());
+		}
+		Panel->SetStatus(Status);
+
+		// The note changes rarely and matters when it does: the reason it is waiting, or what it is now backed by.
+		const FString Note = FString::Printf(TEXT("%s · %s"), *Sidekick->Mode, *Sidekick->Note);
+		if (CompanionShownNote[Index] != Note)
+		{
+			CompanionShownNote[Index] = Note;
+			Panel->AddLine(FString(), FString::Printf(TEXT("%s — %s"), *Sidekick->ProviderName, *Sidekick->Note), true);
+		}
+
+		// A turn that has started: show what was asked, once, whoever asked it (a terminal or a console command).
+		if (Sidekick->bHasLiveTurn && CompanionShownAsk[Index] != Sidekick->LiveTurnId)
+		{
+			CompanionShownAsk[Index] = Sidekick->LiveTurnId;
+			if (!Sidekick->LiveAsk.IsEmpty())
+			{
+				Panel->AddLine(TEXT("You"), Sidekick->LiveAsk, false);
+			}
+		}
+
+		// A turn that has ended: the answer as it really came back, marked when it is a fixture's.
+		const FString AnswerKey = FString::Printf(TEXT("%s|%d"), *Sidekick->SessionId, Sidekick->Turns);
+		if (!Sidekick->bHasLiveTurn && !Sidekick->LastAnswer.IsEmpty() && CompanionShownAnswer[Index] != AnswerKey)
+		{
+			CompanionShownAnswer[Index] = AnswerKey;
+			const FString Marked = Sidekick->Mode == TEXT("REAL")
+				? Sidekick->LastAnswer
+				: FString::Printf(TEXT("%s  [SIMULATED]"), *Sidekick->LastAnswer);
+			Panel->AddLine(Panel->GetTitle(), Marked, false);
+		}
+		// A turn that ended badly says which way, in plain words.
+		if (!Sidekick->Failure.IsEmpty() && CompanionShownNote[Index] != Sidekick->Failure)
+		{
+			CompanionShownNote[Index] = Sidekick->Failure;
+			Panel->AddLine(FString(), FString::Printf(TEXT("%s: %s"), *Sidekick->Failure.Replace(TEXT("_"), TEXT(" ")), *Sidekick->Note), true);
+		}
+	}
 }
 
 UWonderlandWonderWebBrowseSubsystem* UWonderlandUiSubsystem::BrowseState() const
