@@ -17,7 +17,9 @@ import os
 L = unreal.WonderlandUiTestLibrary
 H = unreal.WonderlandHudTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "project_avatars")
-FIGURES = os.path.join("C:/dev/iwonder/wonderland-companions/wonderland", "ProjectAvatars")
+# THE FIGURES OF THE PROJECT THIS EDITOR IS RUNNING, not of whichever worktree wrote this job. The world lane merges
+# these commits into its own tree, so a hardcoded path would read another checkout's shapes and nobody would notice.
+FIGURES = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir()), "ProjectAvatars")
 
 # Family, stage, the figure file, and how far along the row it stands. Spacing grows with the forms so the LARGE ones
 # do not overlap their neighbours.
