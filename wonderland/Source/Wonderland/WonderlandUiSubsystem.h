@@ -326,6 +326,26 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
 	bool OpenWonderWebWindow(FName Window);
 
+	/**
+	 * CTRL+W: ONE MORE WONDER WEB (founder, 2026-09-17). Each press opens the next one; at the account's limit it opens
+	 * nothing and the workspace says so in its own voice rather than in a modal.
+	 *
+	 * How many is not written here: it is read from the entitlement (WonderlandEntitlements.h), so a future tier raises a
+	 * number rather than changing this code.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
+	bool SpawnWonderWebWindow();
+
+	/** What the key is bound to. A chord's handler returns nothing; the answer is shown in the workspace instead. */
+	void HandleSpawnWonderWebShortcut();
+
+	/** How many Wonder Web browser windows are open, and how many this account may have. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Wonder Web")
+	int32 CountOpenWonderWebWindows() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI|Wonder Web")
+	int32 GetWonderWebWindowLimit() const;
+
 	/** Close one window; closing the last closes the workspace. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI|Wonder Web")
 	bool CloseWonderWebWindow(FName Window);
@@ -569,6 +589,10 @@ private:
 	UWonderlandJuliusConnectSubsystem* JuliusConnect() const;
 	/** The companions' runtime: what is actually behind the LLM Companion and Jhinn, if anything. */
 	class UWonderlandSidekickSubsystem* Sidekicks() const;
+	/** What this account may do. The window limit comes from here and from nowhere else. */
+	class UWonderlandEntitlementSubsystem* Entitlements() const;
+	/** The next browser window id this account may open, or NAME_None when it is already at its limit. */
+	FName NextWonderWebWindowId() const;
 	/**
 	 * THE COMPANIONS AS THE RUNTIME REPORTS THEM. Their terminals show the truth state, the provider and the model; their
 	 * answers arrive as lines when a turn really finishes. Nothing here invents an answer, and nothing here decides a

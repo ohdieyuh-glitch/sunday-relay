@@ -26,6 +26,7 @@
 #include "WonderlandCompanionTerminal.h"
 #include "WonderlandHudPanels.h"
 #include "WonderlandJuliusConnect.h"
+#include "WonderlandEntitlements.h"
 #include "WonderlandSidekicks.h"
 #include "WonderlandJuliusConnectPanel.h"
 #include "WonderlandWonderWebBrowse.h"
@@ -61,7 +62,11 @@ namespace WonderWebWindowIds
 	const FName Connections(TEXT("connections"));
 	const FName Browser(TEXT("browser"));
 	/** How many browser windows may be open at once. Each one is a real page in the runtime, so this is a memory bound. */
-	constexpr int32 MaxBrowsers = 4;
+	/**
+	 * The highest number a browser window id may carry. Not a limit on how many may be open -- that is the account's
+	 * entitlement -- just the range of names this build will answer to, so a typo cannot invent a window.
+	 */
+	constexpr int32 MaxBrowserId = 12;
 }
 
 namespace WonderWebWorkspaceTuning
@@ -184,6 +189,9 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 	UiInput = NewObject<UInputComponent>(Controller, TEXT("WonderlandUiInput"));
 	UiInput->Priority = 100;
 	UiInput->BindKey(FInputChord(EKeys::T, false, true, false, false), IE_Pressed, this, &UWonderlandUiSubsystem::ToggleLiveTerminal);
+	// CTRL+W IS WONDERLAND'S, not a browser's close-tab. It spawns a Wonder Web; the workspace's own input layer catches
+	// it as well, so a page that has keyboard focus cannot swallow it (WonderlandWonderWebScreen.cpp).
+	UiInput->BindKey(FInputChord(EKeys::W, false, true, false, false), IE_Pressed, this, &UWonderlandUiSubsystem::HandleSpawnWonderWebShortcut);
 	UiInput->BindKey(EKeys::M, IE_Pressed, this, &UWonderlandUiSubsystem::ToggleWorldMap);
 	UiInput->BindKey(EKeys::B, IE_Pressed, this, &UWonderlandUiSubsystem::ToggleProjectBrain);
 	// THE BOTTOM STRIP'S KEYS, the letters its tiles show. INVENTORY's old I is deliberately not bound to anything.
@@ -568,7 +576,9 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 				.Controller(TWeakObjectPtr<APlayerController>(Controller))
 				.GetScreens_Lambda([WeakThis]() { return WeakThis.IsValid() ? WeakThis->OpenWonderWebScreens() : TArray<AWonderlandWonderWebScreen*>(); })
 				.OnFocus_Lambda([WeakThis](AWonderlandWonderWebScreen* Screen) { if (WeakThis.IsValid()) { WeakThis->FocusWonderWebScreen(Screen); } })
-				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } });
+				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
+				// CTRL+W CAUGHT IN THE WORKSPACE TOO, so a page holding keyboard focus cannot take Wonderland's shortcut.
+				.OnRequestSpawn_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->SpawnWonderWebWindow(); } });
 		}
 		if (!WonderWebWindows.ContainsByPredicate([](const FWonderWebWindow& Window) { return Window.bOpen; }))
 		{
@@ -1131,6 +1141,86 @@ bool UWonderlandUiSubsystem::FocusWonderWebWindow(FName Id)
 		}
 	}
 	return true;
+}
+
+UWonderlandEntitlementSubsystem* UWonderlandUiSubsystem::Entitlements() const
+{
+	const APlayerController* Controller = BoundController.Get();
+	UGameInstance* Instance = Controller != nullptr ? Controller->GetGameInstance() : nullptr;
+	return Instance != nullptr ? Instance->GetSubsystem<UWonderlandEntitlementSubsystem>() : nullptr;
+}
+
+int32 UWonderlandUiSubsystem::CountOpenWonderWebWindows() const
+{
+	int32 Count = 0;
+	for (const FWonderWebWindow& Window : WonderWebWindows)
+	{
+		// MINIMIZED STILL COUNTS. A folded window is still a Wonder Web: its page is still open and its work goes on.
+		Count += Window.bOpen && IsBrowserWindow(Window.Id) ? 1 : 0;
+	}
+	return Count;
+}
+
+int32 UWonderlandUiSubsystem::GetWonderWebWindowLimit() const
+{
+	const UWonderlandEntitlementSubsystem* Account = Entitlements();
+	// With no entitlement subsystem there is no account to read, and the free tier's figure is the honest fallback.
+	return Account != nullptr ? Account->GetMaxConcurrentWonderWebs() : 6;
+}
+
+FName UWonderlandUiSubsystem::NextWonderWebWindowId() const
+{
+	if (CountOpenWonderWebWindows() >= GetWonderWebWindowLimit())
+	{
+		return NAME_None;
+	}
+	// The first window is called "browser"; the rest are numbered. A closed number is reused, so the names stay small.
+	if (FindWonderWebWindow(WonderWebWindowIds::Browser) == nullptr || !FindWonderWebWindow(WonderWebWindowIds::Browser)->bOpen)
+	{
+		return WonderWebWindowIds::Browser;
+	}
+	for (int32 Number = 2; Number <= WonderWebWindowIds::MaxBrowserId; ++Number)
+	{
+		const FName Id(*FString::Printf(TEXT("browser-%d"), Number));
+		const FWonderWebWindow* Existing = FindWonderWebWindow(Id);
+		if (Existing == nullptr || !Existing->bOpen)
+		{
+			return Id;
+		}
+	}
+	return NAME_None;
+}
+
+void UWonderlandUiSubsystem::HandleSpawnWonderWebShortcut()
+{
+	SpawnWonderWebWindow();
+}
+
+bool UWonderlandUiSubsystem::SpawnWonderWebWindow()
+{
+	const int32 Limit = GetWonderWebWindowLimit();
+	const FName Id = NextWonderWebWindowId();
+	if (Id == NAME_None)
+	{
+		// AT THE LIMIT: nothing is opened, and the workspace says so where the founder is already looking. Not a modal,
+		// not a beep, and not silence -- a press that does nothing without saying why is the worst of the three.
+		const UWonderlandEntitlementSubsystem* Account = Entitlements();
+		const FString Tier = Account != nullptr ? Account->GetTierLabel() : TEXT("FREE");
+		if (WonderWebLayer.IsValid())
+		{
+			WonderWebLayer->ShowNotice(
+				TEXT("WONDER WEB LIMIT"),
+				FString::Printf(TEXT("%d / %d ACTIVE"), CountOpenWonderWebWindows(), Limit),
+				FString::Printf(TEXT("%s tier supports up to %d simultaneous Wonder Web windows. Close one to open another."), *Tier, Limit),
+				5.0f);
+		}
+		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI ctrl+w refused: %d of %d Wonder Webs are open (%s tier)"), CountOpenWonderWebWindows(), Limit,
+			Account != nullptr ? *Account->GetTierLabel() : TEXT("FREE"));
+		return false;
+	}
+	const bool bOpened = OpenWonderWebWindow(Id);
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI ctrl+w opened %s (%d of %d)"), *Id.ToString(), CountOpenWonderWebWindows(), Limit);
+	return bOpened;
 }
 
 bool UWonderlandUiSubsystem::OpenWonderWebWindow(FName Id)
@@ -1794,8 +1884,10 @@ bool UWonderlandUiSubsystem::IsBrowserWindow(FName Window)
 	{
 		return false;
 	}
+	// A SHAPE CHECK, NOT A LIMIT. Whether this account may have another open is a different question, asked of the
+	// entitlement at the moment of spawning -- so raising a tier never means editing this.
 	const int32 Number = FCString::Atoi(*Text.RightChop(8));
-	return Number >= 2 && Number <= WonderWebWindowIds::MaxBrowsers;
+	return Number >= 2 && Number <= WonderWebWindowIds::MaxBrowserId;
 }
 
 bool UWonderlandUiSubsystem::NavigateFocusedBrowser(const FString& Url, FString& OutRefusal)
