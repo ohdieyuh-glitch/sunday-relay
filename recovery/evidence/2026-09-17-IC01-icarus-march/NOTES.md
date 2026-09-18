@@ -35,8 +35,11 @@ ICARUS, and all 22 carry the WL_NATION_ICARUS tag.
 planting; the flagstones read as stone underfoot; from the city the white ribbon leads the eye north out of Golden
 Arrival, which is exactly what a nation approach should do.
 
-**Still weak, and stated rather than hidden:** the threshold reads as a plain white block with an arch. It wants a
-proper gatehouse, which is a forge module rather than a re-tint, and is the next thing to make for Icarus.
+**The threshold, fixed the same session.** It read as a plain white block with an arch, and the fix was not to make
+anything: the kit already held `WL_Gatehouse_Twin` -- two flanking drum towers, a machicolated bridge, an 8 m
+passage, 26 m tall, 13,048 tris -- already imported and never placed. It now stands on the axis in pearl, silver and
+white spires (`cut4_ceremonial_gatehouse.jpg`). From the middle of the march it closes the vista, which is what a
+processional way is for; from the core's edge it is the destination in the distance.
 
 ## Saved
 667 instances, 22 actors, all nation-tagged, umap mtime verified, nothing left dirty.

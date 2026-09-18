@@ -23,7 +23,10 @@ WHAT, and why each piece. The march is Icarus saying what it is before a word is
     accent metal where the core uses gold (make_nation_materials.py built it from the tuned gold instance);
   - grand pinnacles and slender white towers flanking, at 28 m, so the approach has Icarus's vertical silhouette
     from far off;
-  - a garden threshold on the axis where the march ends and the nation begins;
+  - the kit's own ceremonial gatehouse on the axis where the march ends: two flanking drum towers, 26 m, with a
+    machicolated bridge and an 8 m passage, in pearl with silver and white spires. The first cut used the garden
+    gate threshold and it read as a plain white block with an arch in it; the kit already had the right building,
+    which is the founder's rule about not making what exists;
   - planting along the outside of the balustrades, the boards' rule that ground is paving plus dense planting.
 
 Materials are the city's premium set, re-tinted for the nation: MI_V2_IcarusPearl, MI_V2_IcarusSilver,
@@ -135,8 +138,8 @@ def main():
             else:
                 add("Tower", TOWER["mesh"], ASHLAR, AXIS_X + side * (HALF_W + 520.0), y, PAVING_TOP,
                     rng.uniform(0, 360), scale=rng.uniform(0.85, 1.05), cull=CULL_FAR)
-    # 5. the threshold on the axis, where the march ends and Icarus begins
-    add_module("WL_Garden_Gate_Threshold", AXIS_X, END_Y, PAVING_TOP, 0.0, cull=CULL_FAR)
+    # 5. the gatehouse on the axis, where the march ends and Icarus begins
+    add_module("WL_Gatehouse_Twin", AXIS_X, END_Y + 300.0, PAVING_TOP - 12.0, 0.0, cull=CULL_FAR)
     # 6. planting outside the balustrades: the boards' rule, in the nation's own restraint
     y = START_Y + 300.0
     while y < END_Y - 300.0:
