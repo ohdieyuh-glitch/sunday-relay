@@ -207,7 +207,7 @@ describe('C3 — a failure is classified by the provider and disposed of by the 
     ['CONTEXT_OVERFLOW', 'INVALID_REQUEST', false, false],
     ['MALFORMED_OUTPUT', 'WORKER_EXECUTION_FAILURE', false, false],
     ['UNCLASSIFIED', 'WORKER_EXECUTION_FAILURE', false, false],
-  ] as const)('%s fails the dispatch as %s (retryable %s, operator %s), and nothing ran after it', async (failure, code, retryable, operator) => {
+  ] as const)('%s fails the dispatch as %s (retryable %s, operator %s), and produces no evidence', async (failure, code, retryable, operator) => {
     const provider = createScriptedCodingAgentProvider({ script: [{ kind: 'failed', failure, costUsdMicros: 40_000 }] });
     const { adapter, shell } = adapterWith(provider);
     const refusal = await refusalOf(adapter.dispatch(DISPATCH));
@@ -215,8 +215,10 @@ describe('C3 — a failure is classified by the provider and disposed of by the 
     expect(refusal!.code).toBe(code);
     expect(refusal!.retryable).toBe(retryable);
     expect(refusal!.diagnostics).toMatchObject({ codingAgentFailure: failure, operatorActionRequired: operator, costUsdMicros: 40_000, runtimeStarted: true });
-    // No diff, no test: a failure produces no evidence to be judged.
-    expect(shell.invocations.map((effect) => effect.invocationKey)).toEqual(['build-1:base']);
+    // No diff, no test: a failure produces no evidence to be judged. The close-out
+    // look at the workspace DOES run, because a failed attempt still owns what it changed.
+    expect(shell.invocations.map((effect) => effect.invocationKey)).toEqual(['build-1:base', 'build-1:status']);
+    expect((refusal!.implementation as { attemptOutcome: string }).attemptOutcome).toBe('FAILED');
   });
 
   it('a paid session followed by an executor refusal still carries what the session cost', async () => {
@@ -374,7 +376,9 @@ describe('C6 — what the executor saw is what the record says', () => {
     });
     const diffCommand = shell.invocations.find((effect) => effect.invocationKey === 'build-1:diff')!.command;
     expect(diffCommand, 'untracked files are rendered into the diff').toContain('git ls-files --others --exclude-standard');
-    expect(shell.invocations.find((effect) => effect.invocationKey === 'build-1:status')!.command).toBe('git status --porcelain=v1 --untracked-files=all -z');
+    const closeCommand = shell.invocations.find((effect) => effect.invocationKey === 'build-1:status')!.command;
+    expect(closeCommand, 'the change set is still read the same way').toContain('git status --porcelain=v1 --untracked-files=all -z');
+    expect(closeCommand, 'beside the three-tree attribution of this attempt').toContain('git diff --name-status -z');
     expect((result.evidence as { type: string; status: string; safeSummary: string }[])[0]).toMatchObject({ type: 'DIFF', status: 'PASSED' });
     expect((result.evidence as { safeSummary: string }[])[0]!.safeSummary).toContain('2 changed path(s), 1 new');
   });

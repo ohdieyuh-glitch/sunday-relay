@@ -21,7 +21,7 @@
 import type { JuliusLeaseTimers } from './julius-lease-keeper';
 import {
   JuliusProviderHealthRegistry, JuliusProviderRouter, JuliusDispatchError,
-  type JuliusDispatchAllocation, type JuliusProviderAdapter, type JuliusProviderResult,
+  type JuliusDispatchAllocation, type JuliusDispatchWorkspace, type JuliusProviderAdapter, type JuliusProviderResult,
 } from './julius-router';
 import { JuliusWorkerRegistry, type JuliusTask, type JuliusWorker } from './julius-runtime';
 import { lockJuliusTaskContract, seedJuliusTaskContract, type JuliusTaskContract, type JuliusContractReviewCharge } from './julius-task-contract';
@@ -240,12 +240,18 @@ export type ScriptedOutcome =
     readonly runtimeStarted?: boolean;
     /** The error text the boundary raised — a test may make it hostile, to prove none of it is recorded. */
     readonly message?: string;
+    /**
+     * WHAT THE FAILED ATTEMPT CHANGED IN THE WORKSPACE, as the live adapter
+     * carries it on the error. Unsanitised, for the same reason as the rest: a
+     * test may send a shape Julius must refuse.
+     */
+    readonly implementation?: unknown;
   }
   | { readonly kind: 'malformed' };
 
 export interface ScriptedAdapter extends JuliusProviderAdapter {
   /** Everything Julius handed the adapter, so a test can assert what a dispatch carried. */
-  readonly dispatches: { taskId: string; contextId: string; taskType?: string; allocation?: JuliusDispatchAllocation; contract?: JuliusContractReviewCharge }[];
+  readonly dispatches: { taskId: string; contextId: string; taskType?: string; allocation?: JuliusDispatchAllocation; contract?: JuliusContractReviewCharge; workspace?: JuliusDispatchWorkspace }[];
 }
 
 /**
@@ -272,6 +278,7 @@ export function scriptedAdapter(
         ...(input.taskType === undefined ? {} : { taskType: input.taskType }),
         ...(input.allocation === undefined ? {} : { allocation: input.allocation }),
         ...(input.contract === undefined ? {} : { contract: input.contract }),
+        ...(input.workspace === undefined ? {} : { workspace: input.workspace }),
       });
       const step = script[Math.min(index, script.length - 1)] ?? { kind: 'succeed' as const };
       index += 1;
@@ -284,6 +291,7 @@ export function scriptedAdapter(
               ...(step.costUsdMicros === undefined ? {} : { costUsdMicros: step.costUsdMicros }),
               ...(step.runtimeStarted === undefined ? {} : { runtimeStarted: step.runtimeStarted }),
             },
+          step.implementation,
         );
       }
       if (step.kind === 'malformed') {

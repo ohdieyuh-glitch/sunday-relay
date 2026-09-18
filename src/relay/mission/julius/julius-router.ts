@@ -540,7 +540,19 @@ export class JuliusDispatchError extends Error{
  readonly failureClass:string|null;
  /** Allowlisted structural facts, or null when the boundary reported none. */
  readonly diagnostics:JuliusSafeDiagnostics|null;
- constructor(readonly code:JuliusErrorCode,readonly retryable:boolean,readonly safeMessage:string,failureClass?:unknown,diagnostics?:unknown){super(code);this.failureClass=safeFailureClass(failureClass);this.diagnostics=diagnostics===undefined?null:safeReviewDiagnostics(diagnostics);}
+ /**
+  * WHAT THE EXECUTOR OBSERVED THE FAILED ATTEMPT CHANGE, unsanitised, for the
+  * domain to read with its own allowlist.
+  *
+  * A failed attempt still edited the workspace, and its edits used to reach the
+  * record only by appearing inside the NEXT attempt's diff. Diagnostics cannot
+  * carry them: they are flat scalars by contract, and a change set is neither
+  * flat nor a scalar. So the boundary carries the same shape a successful
+  * dispatch returns, and the kernel — which decides what a change set means —
+  * reads it the same way. Absent on every failure that observed nothing.
+  */
+ readonly implementation:unknown;
+ constructor(readonly code:JuliusErrorCode,readonly retryable:boolean,readonly safeMessage:string,failureClass?:unknown,diagnostics?:unknown,implementation?:unknown){super(code);this.failureClass=safeFailureClass(failureClass);this.diagnostics=diagnostics===undefined?null:safeReviewDiagnostics(diagnostics);this.implementation=implementation;}
 }
 /**
  * A WORKER MAY PROPOSE A CONTRACT REVISION, and `unknown` is the honest type.
@@ -659,7 +671,18 @@ export interface JuliusDispatchAllocation{readonly usdMicros:number;readonly pol
  * look one up would be choosing what it is graded against. Optional, so an
  * unbound role and the older reviewer harness are unchanged.
  */
-export interface JuliusDispatchInput{readonly taskId:string;readonly contextId:string;readonly taskType?:string;readonly allocation?:JuliusDispatchAllocation;readonly contract?:JuliusContractReviewCharge;readonly signal?:AbortSignal;}
+/**
+ * WHAT THE LAST ATTEMPT LEFT IN THE WORKSPACE, AND WHAT JULIUS DECIDED ABOUT IT.
+ *
+ * A mission has ONE workspace and it is never reset, so an attempt inherits
+ * whatever the last one left. Julius asks for exactly one kind of undo — a
+ * failed attempt whose own changes its locked contract refused — and names two
+ * trees: the one to put the workspace back to, and the one the workspace must
+ * STILL be for the undo to be safe. An adapter that finds anything else refuses
+ * it and says so; nothing here authorises a broad reset.
+ */
+export interface JuliusDispatchWorkspace{readonly restoreToTree:string;readonly expectedTree:string;}
+export interface JuliusDispatchInput{readonly taskId:string;readonly contextId:string;readonly taskType?:string;readonly allocation?:JuliusDispatchAllocation;readonly contract?:JuliusContractReviewCharge;readonly signal?:AbortSignal;readonly workspace?:JuliusDispatchWorkspace;}
 export interface JuliusProviderAdapter{readonly adapterId:string;dispatch(input:JuliusDispatchInput):Promise<JuliusProviderResult>;}
 export interface JuliusProviderHealth{readonly providerId:string;readonly state:'CLOSED'|'OPEN'|'HALF_OPEN';readonly consecutiveFailures:number;readonly openedAt:string|null;readonly active:number;readonly concurrencyLimit:number;}
 export class JuliusProviderHealthRegistry{private readonly values=new Map<string,JuliusProviderHealth>();set(value:JuliusProviderHealth){this.values.set(value.providerId,structuredClone(value));}available(providerId:string){const value=this.values.get(providerId);return value===undefined||(value.state!=='OPEN'&&value.active<value.concurrencyLimit);}get(providerId:string){const value=this.values.get(providerId);return value?structuredClone(value):null;}}

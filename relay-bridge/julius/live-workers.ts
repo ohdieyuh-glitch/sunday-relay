@@ -72,7 +72,6 @@ import {
 } from '../hosted-coding-agent/hosted-runner';
 import {
   buildJuliusCodingAgentRequest,
-  parseJuliusWorkspaceStatus,
   juliusCodingAgentFailureClass,
   juliusCodingAgentFailureDisposition,
   renderJuliusCodingAgentContract,
@@ -90,6 +89,7 @@ import {
 import { UNKNOWN_USAGE, type HermesUsage } from '../reviewer-harness/hermes/runner';
 import { REVIEW_TRANSIENT_REASK_BACKOFF_MS, REVIEW_TRANSIENT_REASK_LIMIT, REVIEW_TRANSIENT_REASK_SHAPES, reviewerReaskWithinDeadline } from '../reviewer-deadline';
 import { CODER_EXECUTOR_STEP_TIMEOUTS_MS } from '../hosted-coding-agent/coder-envelope';
+import { juliusAttemptCloseCommand, juliusAttemptStartCommand, parseJuliusAttemptClose, parseJuliusAttemptStart, type JuliusAttemptClose } from './coder-workspace';
 import type { ShellEffectPort } from './executor-effects';
 
 /* ------------------------------------------------------------- handoffs */
@@ -1371,14 +1371,29 @@ export function createJuliusCodingAgentAdapter(input: {
         });
       };
       stopIfCancelled('base', null);
+      /**
+       * WHERE THIS ATTEMPT STARTS, AS A TREE — and the one undo Julius allows.
+       *
+       * The base step used to read HEAD and nothing else, so an attempt knew
+       * which commit it stood on and nothing about what the directory already
+       * held. It now also records the committed tree and the working tree, so
+       * the attempt's own changes can be told from what it inherited; and, when
+       * Julius asked, it first puts back a refused attempt's edits — never
+       * anything else, and never when the workspace has moved since.
+       */
+      const restoreRequest = dispatch.workspace === undefined ? null
+        : { toTree: dispatch.workspace.restoreToTree, expectedTree: dispatch.workspace.expectedTree };
       const before = await input.shell.run({
         ...shellScope,
         invocationKey: `${dispatch.taskId}:base`,
-        command: 'git rev-parse HEAD',
+        command: juliusAttemptStartCommand(restoreRequest),
         timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.base,
       });
-      if (before.status === 'SUCCEEDED') {
-        input.artifacts.put(baseRevisionRef(snapshot.runId), before.stdout.trim());
+      const attemptStart = before.status === 'SUCCEEDED'
+        ? parseJuliusAttemptStart(before.stdout, restoreRequest)
+        : { headRevision: null, baseTree: null, startTree: null, restore: restoreRequest === null ? null : { outcome: 'REFUSED_EXECUTOR' as const, toTree: restoreRequest.toTree, expectedTree: restoreRequest.expectedTree, observedTree: null, removed: 0, restored: 0 } };
+      if (attemptStart.headRevision !== null) {
+        input.artifacts.put(baseRevisionRef(snapshot.runId), attemptStart.headRevision);
       }
       // A STALE DIFF IS WORSE THAN NONE. The refs are per run; clear this
       // round's before it runs, so a later capture failure is visible as absent.
@@ -1393,7 +1408,51 @@ export function createJuliusCodingAgentAdapter(input: {
       });
       const outcome = await input.provider.execute(request, dispatch.signal);
 
+      /** The close-out look at the workspace: the tree this attempt leaves, the change set, and who changed what. */
+      const closeStep = () => input.shell.run({
+        ...shellScope,
+        invocationKey: `${dispatch.taskId}:status`,
+        command: juliusAttemptCloseCommand(
+          attemptStart.baseTree !== null && attemptStart.startTree !== null
+            ? { baseTree: attemptStart.baseTree, startTree: attemptStart.startTree }
+            : null,
+        ),
+        timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.status,
+      });
+      /** What the attempt owns, inherits and leaves — as the adapter observed it. The kernel derives `captured`. */
+      const attemptRecord = (close: JuliusAttemptClose | null): Record<string, unknown> => ({
+        baseTree: attemptStart.baseTree,
+        startTree: attemptStart.startTree,
+        endTree: close?.endTree ?? null,
+        own: close?.own ?? null,
+        inherited: close?.inherited ?? null,
+        cumulative: close?.cumulative ?? null,
+        truncated: close?.truncated ?? false,
+        ...(attemptStart.restore === null ? {} : { restore: attemptStart.restore }),
+      });
+
       if (outcome.kind === 'failed') {
+        /**
+         * A FAILED ATTEMPT STILL EDITED THE DIRECTORY, and those edits used to
+         * reach the record only by appearing inside the NEXT attempt's diff.
+         * The same close-out the successful path runs is taken here so the
+         * attempt owns what it changed.
+         *
+         * NOT AFTER AN ABORT. PR #278's rule stands: a cancelled dispatch
+         * collects no executor evidence, and the record says the snapshot was
+         * not captured because the attempt was cancelled — which is UNKNOWN,
+         * and never a clean workspace. A runtime that never started changed
+         * nothing to look for.
+         */
+        const cancelled = outcome.failure === 'CANCELLED' || dispatch.signal?.aborted === true;
+        const close = cancelled || !outcome.runtimeStarted
+          ? null
+          : await closeStep().then(
+            (result) => parseJuliusAttemptClose(result.stdout, result.status === 'SUCCEEDED'),
+            // The attempt already failed; a failed look at the workspace does not
+            // replace its reason, and leaves the record uncaptured rather than empty.
+            () => null,
+          );
         /**
          * THE PROVIDER NAMES THE FAILURE; THE DOMAIN DECIDES WHAT IT MEANS.
          * The class travels with the code, the money travels with the class, and
@@ -1409,6 +1468,15 @@ export function createJuliusCodingAgentAdapter(input: {
             operatorActionRequired: disposition.operatorAction,
             runtimeStarted: outcome.runtimeStarted,
             ...(outcome.costUsdMicros === null ? {} : { costUsdMicros: outcome.costUsdMicros }),
+          },
+          {
+            providerKind: input.provider.providerKind,
+            workspace: close === null
+              ? { captured: false, changes: [], truncated: false }
+              : { captured: close.status.captured, changes: close.status.changes, truncated: close.status.truncated },
+            attempt: attemptRecord(close),
+            attemptOutcome: 'FAILED',
+            ...(cancelled ? { uncapturedReason: 'DISPATCH_CANCELLED' } : {}),
           },
         );
       }
@@ -1442,15 +1510,9 @@ export function createJuliusCodingAgentAdapter(input: {
        * locked contract from this set.
        */
       stopIfCancelled('status', outcome.observation);
-      const status = await afterSession(() => input.shell.run({
-        ...shellScope,
-        invocationKey: `${dispatch.taskId}:status`,
-        command: 'git status --porcelain=v1 --untracked-files=all -z',
-        timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.status,
-      }));
-      const workspace = status.status === 'SUCCEEDED'
-        ? { captured: true, ...parseJuliusWorkspaceStatus(status.stdout) }
-        : { captured: false, changes: [], truncated: false };
+      const status = await afterSession(closeStep);
+      const close = parseJuliusAttemptClose(status.stdout, status.status === 'SUCCEEDED');
+      const workspace = close.status;
       /**
        * THE DIFF THE REVIEWER READS, new files included: each untracked file is
        * rendered against /dev/null with plain git and a bash loop, so nothing
@@ -1503,6 +1565,8 @@ export function createJuliusCodingAgentAdapter(input: {
         implementation: {
           providerKind: input.provider.providerKind,
           workspace,
+          attempt: attemptRecord(close),
+          attemptOutcome: 'SUCCEEDED',
           ...(readable && 'report' in participation ? { report: participation.report } : {}),
         },
         safeSummary: `Coding Agent session completed (${input.provider.providerKind}; observed model ${safeClaim(observation.providerModel ?? 'unknown', 80)}, ${observation.turns ?? 'unknown'} turns); tests ${test.status === 'SUCCEEDED' ? 'passed' : 'failed'} under the independent executor.`,

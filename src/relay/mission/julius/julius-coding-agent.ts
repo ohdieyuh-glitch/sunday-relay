@@ -605,6 +605,17 @@ export interface JuliusCodingAgentImplementation {
     readonly changes: readonly JuliusWorkspaceChange[];
     readonly truncated: boolean;
   };
+  /**
+   * WHICH ATTEMPT CHANGED WHAT, unsanitised — the trees this attempt started
+   * and ended on, and the change sets between them. `readJuliusAttemptWorkspace`
+   * reads it and derives whether anything was captured at all, rather than
+   * believing an adapter that says so.
+   */
+  readonly attempt: unknown;
+  /** How the attempt ended, as the adapter reports it. Null when it did not say. */
+  readonly attemptOutcome: 'SUCCEEDED' | 'FAILED' | null;
+  /** Why there is no snapshot, when that is known: a cancelled dispatch collects none. */
+  readonly uncapturedReason: string | null;
   readonly report: unknown;
 }
 
@@ -629,9 +640,14 @@ export function readJuliusCodingAgentImplementation(value: unknown): JuliusCodin
     if (changes.length >= JULIUS_WORKSPACE_LIMITS.paths) { truncated = true; break; }
     changes.push(Object.freeze({ path: entry.path, change: entry.change as JuliusWorkspaceChangeKind }));
   }
+  const attemptOutcome = source.attemptOutcome === 'SUCCEEDED' || source.attemptOutcome === 'FAILED' ? source.attemptOutcome : null;
   return Object.freeze({
     providerKind,
     workspace: Object.freeze({ captured: ws.captured, changes: Object.freeze(changes), truncated }),
+    attempt: source.attempt,
+    attemptOutcome,
+    uncapturedReason: typeof source.uncapturedReason === 'string' && /^[A-Z][A-Z_]{0,63}$/u.test(source.uncapturedReason)
+      ? source.uncapturedReason : null,
     report: source.report,
   });
 }

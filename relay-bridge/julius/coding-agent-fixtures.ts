@@ -192,28 +192,79 @@ export function createFakeExecutorShell(input: {
   /** The change-set or diff capture fails with a non-zero exit, as a broken git would. */
   readonly statusFails?: boolean;
   readonly diffFails?: boolean;
+  /** The attempt's start snapshot fails, so the trees are missing even where the change set is not. */
+  readonly baseFails?: boolean;
   /** Throw from this step, to model an executor refusal after a paid session. */
-  readonly refuse?: 'diff' | 'test' | 'status';
+  readonly refuse?: 'diff' | 'test' | 'status' | 'base';
   readonly refusal?: () => Error;
-}): ShellEffectPort & { readonly invocations: ShellEffectInput[] } {
+  /* ------------------------------------------------- the attempt's own trees */
+  readonly headRevision?: string;
+  readonly baseTree?: string;
+  /** The working tree when the attempt started; null means the executor reported none. */
+  readonly startTree?: string | null;
+  /** The working tree when it stopped; null means the close-out reported none. */
+  readonly endTree?: string | null;
+  /** `git diff --name-status` pairs, e.g. `[['M', 'src/slug.ts']]`. Absent follows the change set. */
+  readonly own?: readonly (readonly [string, string])[];
+  readonly inherited?: readonly (readonly [string, string])[];
+  readonly cumulative?: readonly (readonly [string, string])[];
+  /** What the executor reports about an undo Julius asked for. */
+  readonly restore?: 'RESTORED' | 'REFUSED_TREE_MOVED';
+  readonly restoreCounts?: readonly [number, number];
+}): ShellEffectPort & { readonly invocations: ShellEffectInput[]; readonly commands: string[] } {
   const invocations: ShellEffectInput[] = [];
+  const commands: string[] = [];
   let counter = 0;
   const answer = (effect: ShellEffectInput, stdout: string, exitCode = 0): ShellEffectResult => ({
     status: exitCode === 0 ? 'SUCCEEDED' : 'FAILED', exitCode, stdout, stderr: '',
     invocationId: `inv-${effect.invocationKey}-${String(++counter)}`,
   });
+  const NUL = String.fromCharCode(0);
+  const SECTION = `${NUL}JULIUS-SECTION-9f2a${NUL}`;
+  /** A tree id the fixture hands out: forty hex characters, as git prints them. */
+  const treeId = (seed: string): string => seed.repeat(40).slice(0, 40);
+  const head = input.headRevision ?? 'abc123def4567890abc123def4567890abc123de';
+  const baseTree = input.baseTree ?? treeId('b');
+  const startTree = input.startTree === undefined ? treeId('5') : input.startTree;
+  const endTree = input.endTree === undefined ? treeId('e') : input.endTree;
+  const nameStatus = (
+    pairs: readonly (readonly [string, string])[] | undefined,
+    fallback: readonly (readonly [string, string])[],
+  ): string => (pairs ?? fallback).map(([status, path]) => `${status}${NUL}${path}${NUL}`).join('');
   return {
     invocations,
+    commands,
     async run(effect) {
       invocations.push(effect);
+      commands.push(effect.command);
       const step = effect.invocationKey.split(':').pop();
       if (input.refuse !== undefined && step === input.refuse) throw (input.refusal ?? (() => new Error('refused')))();
-      if (step === 'base') return answer(effect, 'abc123def\n');
+      if (step === 'base') {
+        if (input.baseFails === true) return answer(effect, '', 128);
+        const restore = input.restore === undefined ? 'RESTORE NONE'
+          : input.restore === 'RESTORED'
+            ? `RESTORE RESTORED ${String(input.restoreCounts?.[0] ?? 1)} ${String(input.restoreCounts?.[1] ?? 0)}`
+            : 'RESTORE REFUSED_TREE_MOVED';
+        const lines = [restore, `HEAD ${head}`, `BASE ${baseTree}`];
+        if (startTree !== null) lines.push(`START ${startTree}`);
+        return answer(effect, `${lines.join(String.fromCharCode(10))}${String.fromCharCode(10)}`);
+      }
       if (step === 'diff' && input.diffFails === true) return answer(effect, '', 128);
       if (step === 'diff') return answer(effect, `${input.diff ?? 'diff --git a/src/slug.ts b/src/slug.ts\n+export const slug = 1;\n'}${input.untrackedDiff ?? ''}`);
       if (step === 'status') {
         if (input.statusFails === true) return answer(effect, '', 128);
-        return answer(effect, (input.status ?? [' M src/slug.ts']).map((line) => `${line}${String.fromCharCode(0)}`).join(''));
+        const porcelain = (input.status ?? [' M src/slug.ts']).map((line) => `${line}${NUL}`).join('');
+        // The plain change-set command: the adapter had no start snapshot to compare against.
+        if (!effect.command.includes('JULIUS-SECTION')) return answer(effect, porcelain);
+        const observed = (input.status ?? [' M src/slug.ts']).map((line): readonly [string, string] =>
+          [line.startsWith('??') ? 'A' : line.trim().startsWith('D') ? 'D' : 'M', line.slice(3)]);
+        return answer(effect, [
+          endTree === null ? '' : `END ${endTree}${String.fromCharCode(10)}`,
+          porcelain,
+          nameStatus(input.own, observed),
+          nameStatus(input.inherited, []),
+          nameStatus(input.cumulative, observed),
+        ].join(SECTION));
       }
       if (step === 'test') return answer(effect, 'tests ran', input.testExitCode ?? 0);
       return answer(effect, '');

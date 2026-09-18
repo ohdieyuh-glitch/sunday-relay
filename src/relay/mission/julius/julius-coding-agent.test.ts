@@ -97,7 +97,18 @@ describe('S3 — the coder reports claims, and cannot report a decision', () => 
       providerKind: 'claude-code-hosted', workspace: { captured: true, changes: [{ path: 'src/slug.ts', change: 'MODIFIED' }], truncated: false },
       report: REPORT, somethingElse: 'dropped',
     });
-    expect(read).toEqual({ providerKind: 'claude-code-hosted', workspace: { captured: true, changes: [{ path: 'src/slug.ts', change: 'MODIFIED' }], truncated: false }, report: REPORT });
+    expect(read).toEqual({
+      providerKind: 'claude-code-hosted',
+      workspace: { captured: true, changes: [{ path: 'src/slug.ts', change: 'MODIFIED' }], truncated: false },
+      // The attempt block is carried unsanitised for the attribution reader, and an
+      // adapter that said nothing about how the attempt ended says null, never a guess.
+      attempt: undefined, attemptOutcome: null, uncapturedReason: null,
+      report: REPORT,
+    });
+    expect(readJuliusCodingAgentImplementation({
+      providerKind: 'x', workspace: { captured: true, changes: [], truncated: false },
+      attemptOutcome: 'MAYBE', uncapturedReason: 'because i said so',
+    })).toMatchObject({ attemptOutcome: null, uncapturedReason: null });
     expect(readJuliusCodingAgentImplementation({ providerKind: 'Claude Code!', workspace: { captured: true, changes: [], truncated: false } })).toBeNull();
     expect(readJuliusCodingAgentImplementation({ providerKind: 'x', workspace: { captured: true, changes: [{ path: 'a', change: 'TELEPORTED' }], truncated: false } })).toBeNull();
   });
