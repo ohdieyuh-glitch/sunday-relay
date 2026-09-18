@@ -155,6 +155,36 @@ namespace SidekickConsole
 			ForEachLive([&](UWonderlandSidekickSubsystem& Sidekicks) { Sidekicks.ChooseModel(SidekickId, ModelId); });
 		}));
 
+	FAutoConsoleCommand CmdProbe(TEXT("wl.Sidekicks.Probe"),
+		TEXT("Ask each real provider whether it is actually on this machine, and what is missing. Free: a version check or a models listing, never a completion."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			ForEachLive([](UWonderlandSidekickSubsystem& Sidekicks)
+			{
+				Sidekicks.Probe();
+				Say(TEXT("SIDEKICKS: asking each real provider whether it is there. Nothing is spent."));
+			});
+		}));
+
+	FAutoConsoleCommand CmdProviders(TEXT("wl.Sidekicks.Providers"),
+		TEXT("What the last probe found: each real provider, whether it is ready, and what is missing."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			ForEachLive([](UWonderlandSidekickSubsystem& Sidekicks)
+			{
+				if (Sidekicks.GetProviders().Num() == 0)
+				{
+					Say(TEXT("SIDEKICKS: nothing probed yet -- run wl.Sidekicks.Probe first."), true);
+					return;
+				}
+				for (const FWonderlandSidekickProvider& Provider : Sidekicks.GetProviders())
+				{
+					Say(FString::Printf(TEXT("%s (%s): %s — %s"), *Provider.DisplayName, *Provider.Backs,
+						Provider.bReady ? TEXT("READY") : TEXT("NOT READY"), *Provider.Detail), !Provider.bReady);
+				}
+			});
+		}));
+
 	FAutoConsoleCommand CmdReset(TEXT("wl.Sidekicks.Reset"), TEXT("Put both companions back to SIMULATED with no session."),
 		FConsoleCommandDelegate::CreateLambda([]()
 		{
@@ -367,6 +397,28 @@ void UWonderlandSidekickSubsystem::Accept(const FString& Text)
 		}
 	}
 	Sidekicks = MoveTemp(Next);
+
+	TArray<FWonderlandSidekickProvider> FoundProviders;
+	const TArray<TSharedPtr<FJsonValue>>* ProviderRows = nullptr;
+	if (Json->TryGetArrayField(TEXT("providers"), ProviderRows))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *ProviderRows)
+		{
+			const TSharedPtr<FJsonObject>* Object = nullptr;
+			if (!Value.IsValid() || !Value->TryGetObject(Object) || Object == nullptr)
+			{
+				continue;
+			}
+			FWonderlandSidekickProvider Provider;
+			(*Object)->TryGetStringField(TEXT("providerId"), Provider.ProviderId);
+			(*Object)->TryGetStringField(TEXT("displayName"), Provider.DisplayName);
+			(*Object)->TryGetStringField(TEXT("backs"), Provider.Backs);
+			(*Object)->TryGetBoolField(TEXT("ready"), Provider.bReady);
+			(*Object)->TryGetStringField(TEXT("detail"), Provider.Detail);
+			FoundProviders.Add(MoveTemp(Provider));
+		}
+	}
+	Providers = MoveTemp(FoundProviders);
 	Changed();
 }
 
@@ -449,6 +501,11 @@ void UWonderlandSidekickSubsystem::Disconnect(const FString& SidekickId)
 void UWonderlandSidekickSubsystem::ChooseModel(const FString& SidekickId, const FString& ModelId)
 {
 	SendIntent(FString::Printf(TEXT("{\"intent\":\"model\",\"sidekickId\":\"%s\",\"modelId\":\"%s\"}"), *SidekickId, *ModelId), TEXT("model"));
+}
+
+void UWonderlandSidekickSubsystem::Probe()
+{
+	SendIntent(TEXT("{\"intent\":\"probe\"}"), TEXT("probe"));
 }
 
 void UWonderlandSidekickSubsystem::Reset()

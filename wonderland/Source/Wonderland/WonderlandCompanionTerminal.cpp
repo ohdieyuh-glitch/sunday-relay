@@ -68,7 +68,10 @@ void SWonderlandCompanionTerminal::Construct(const FArguments& InArgs)
 			.AutoHeight()
 			.Padding(16.0f, 14.0f, 14.0f, 0.0f)
 			[
+				// CLIPPED, so a long name can never draw over the state at the right. A companion called "Claude Code
+				// Fable 5" is wider than one called "Astra", and the state is the part that must stay readable.
 				SNew(SHorizontalBox)
+				.Clipping(EWidgetClipping::ClipToBounds)
 				+ SHorizontalBox::Slot()
 				.AutoWidth()
 				.VAlign(VAlign_Center)
