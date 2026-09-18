@@ -1,5 +1,11 @@
 #include "WonderlandUiTestLibrary.h"
 
+#include "Camera/CameraActor.h"
+#include "EngineUtils.h"
+#include "Camera/CameraComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "WonderlandCompanionEmbodiment.h"
+
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
@@ -288,4 +294,83 @@ bool UWonderlandUiTestLibrary::SetBackgroundThrottleSuspended(bool bSuspended)
 #else
 	return false;
 #endif
+}
+
+/* ==================================================================== a comparison scene, for a proof */
+
+AWonderlandCompanionEmbodiment* UWonderlandUiTestLibrary::SpawnFigureActor(UObject* WorldContextObject, FVector Location, const FString& FigurePath, const FString& Label)
+{
+	UWorld* World = GEngine != nullptr ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+	if (World == nullptr)
+	{
+		return nullptr;
+	}
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	AWonderlandCompanionEmbodiment* Body = World->SpawnActor<AWonderlandCompanionEmbodiment>(AWonderlandCompanionEmbodiment::StaticClass(), FTransform(Location), Params);
+	if (Body == nullptr)
+	{
+		return nullptr;
+	}
+	Body->DisplayName = Label;
+	Body->ClassLabel = TEXT("PROJECT AVATAR");
+#if WITH_EDITOR
+	Body->SetActorLabel(FString::Printf(TEXT("WL_ProjectAvatar_%s"), *Label.Replace(TEXT(" "), TEXT("_"))), false);
+#endif
+	// FOLLOWING NOBODY. No controller is given, so it stands where it was put: a comparison scene, not a companion.
+	Body->LoadFigure(FigurePath);
+	return Body;
+}
+
+bool UWonderlandUiTestLibrary::PoseCamera(UObject* WorldContextObject, FVector Location, FVector LookAt, float FieldOfView)
+{
+	UWorld* World = GEngine != nullptr ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+	APlayerController* Controller = World != nullptr ? UGameplayStatics::GetPlayerController(World, 0) : nullptr;
+	if (Controller == nullptr)
+	{
+		return false;
+	}
+	// ONE CAMERA, REUSED. Every shot in a family comes from the same actor, so nothing differs between them but the pose.
+	static const FName ProofCameraName(TEXT("WL_ProofCamera"));
+	ACameraActor* Camera = nullptr;
+	for (TActorIterator<ACameraActor> It(World); It; ++It)
+	{
+		if (It->GetFName() == ProofCameraName)
+		{
+			Camera = *It;
+			break;
+		}
+	}
+	if (Camera == nullptr)
+	{
+		FActorSpawnParameters Params;
+		Params.Name = ProofCameraName;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		Camera = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(Location), Params);
+		if (Camera == nullptr)
+		{
+			return false;
+		}
+	}
+	const FRotator Facing = (LookAt - Location).Rotation();
+	Camera->SetActorLocationAndRotation(Location, Facing, false, nullptr, ETeleportType::TeleportPhysics);
+	if (UCameraComponent* Lens = Camera->GetCameraComponent())
+	{
+		Lens->SetConstraintAspectRatio(false);
+		Lens->SetFieldOfView(FMath::Clamp(FieldOfView, 10.0f, 150.0f));
+	}
+	Controller->SetViewTargetWithBlend(Camera, 0.0f);
+	return true;
+}
+
+bool UWonderlandUiTestLibrary::ReleaseCamera(UObject* WorldContextObject)
+{
+	UWorld* World = GEngine != nullptr ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+	APlayerController* Controller = World != nullptr ? UGameplayStatics::GetPlayerController(World, 0) : nullptr;
+	if (Controller == nullptr)
+	{
+		return false;
+	}
+	Controller->SetViewTargetWithBlend(Controller->GetPawn(), 0.0f);
+	return true;
 }
