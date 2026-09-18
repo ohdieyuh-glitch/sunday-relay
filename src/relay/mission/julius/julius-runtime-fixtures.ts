@@ -94,16 +94,30 @@ export function createFakeTime(startIso = '2026-09-17T12:00:00.000Z'): FakeTime 
   };
 }
 
-export function createCountingIds(): JuliusIdFactory {
+/**
+ * COUNTING IDS, AND WHY A RESTART NEEDS ITS OWN RUN OF THEM.
+ *
+ * A live process mints ids from a UUID, so a restarted one never re-mints an id
+ * another process already used. This factory counts, so a second harness over
+ * the same durable rows would hand the SAME id to a DIFFERENT event — which the
+ * event store now refuses as a conflict, correctly, and which used to be
+ * silently dropped. `epoch` gives a restarted harness its own run of the
+ * counter, which is what a real restart has; the first harness passes none and
+ * its ids are unchanged, so every proof that names one still names it.
+ */
+export function createCountingIds(epoch: string | null = null): JuliusIdFactory {
   const counters = new Map<string, number>();
   return {
     next(kind) {
       const value = (counters.get(kind) ?? 0) + 1;
       counters.set(kind, value);
-      return `${kind}#${value}`;
+      return epoch === null ? `${kind}#${value}` : `${kind}#${epoch}:${value}`;
     },
   };
 }
+
+/** How many harnesses have resumed an existing store in this file. */
+let restartEpoch = 0;
 
 /* --------------------------------------------------------------- budget */
 
@@ -412,7 +426,9 @@ export function createJuliusHarness(input: {
 }): JuliusHarness {
   const store = input.store ?? createJuliusMemoryStore();
   const clock = createSteppingClock();
-  const ids = createCountingIds();
+  // A harness handed an existing store is a RESTART over durable rows; a live
+  // restart mints fresh ids, and so does this one.
+  const ids = createCountingIds(input.store === undefined ? null : `r${String(++restartEpoch + 1)}`);
   const budget = createMemoryBudget(input.budgetUsdMicros ?? 1_000_000);
   const registry = new JuliusWorkerRegistry();
   const adapters = new Map<string, ScriptedAdapter>();

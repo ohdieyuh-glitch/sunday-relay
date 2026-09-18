@@ -315,8 +315,8 @@ at all: they simply appeared inside the next attempt's diff.
    refuses unless the workspace is still exactly the tree that attempt left.
    There is no broad reset anywhere on the path.
 
-**Found on the way — the event store's idempotency claim does not hold on
-PostgreSQL.** `JuliusEventPostgresRepository.append` returns `recorded: false`
+**Found on the way — the event store's idempotency claim did not hold on
+PostgreSQL. CLOSED in PR 7 (section F).** `JuliusEventPostgresRepository.append` returns `recorded: false`
 when an event id already exists AND the stored payload equals the one it built.
 It compares `JSON.stringify` of both, and `jsonb` does not preserve key order,
 so the comparison never matches and a second append under an existing id is
@@ -330,3 +330,44 @@ with the store conformance suite that should have caught the divergence.
 **Not in PR 6:** the attempt ceiling (still the founder's decision), the event
 store idempotency divergence above, and whether the executor's real per-effect
 cost fits the raised snapshot bounds (LIVE VALIDATION REQUIRED).
+
+---
+
+## F. PR 7 — one event append contract, in every store
+
+The finding above, audited and reproduced on main `8db97f9b` before it was
+fixed. Two stores implemented one port in opposite directions:
+
+- **In memory:** a repeated event id was compared BY ID ALONE. A second event
+  carrying different facts under a used id was dropped and its facts lost,
+  silently, with `false` returned as though it had been a replay.
+- **PostgreSQL:** the stored payload was compared with the built one through
+  `JSON.stringify`, and `jsonb` does not preserve key order, so a genuine replay
+  compared unequal and was refused `julius_event_id_conflict`.
+
+**The contract, stated once in `julius-events.ts` and documented on the port:**
+
+| write | answer |
+|---|---|
+| a new id | recorded, `true` |
+| the same id, the same event | idempotent: no duplicate, no error, `false` |
+| the same id, a different event | `JuliusEventIdConflict`, nothing written |
+
+`canonicalJuliusEventIdentity` decides sameness: the subject and the facts,
+sorted at every depth so key order is not meaning, and NOT `occurredAt` — a
+replay after a restart reads a later clock and is still the same event; the
+ledger keeps the first instant.
+
+`julius-event-append-conformance.ts` holds the cases; the in-memory suite and
+the real-PostgreSQL CI suite run the same ones, so the two cannot drift again.
+
+**Found while fixing it:** the test id factory counts, so a harness resuming a
+store re-minted ids a previous harness had used — which the contract now refuses
+rather than silently dropping. A resumed harness gets its own run of the
+counter, which is what a real restart (UUID ids) has.
+
+**Residual, reported not fixed:** live event ids are random UUIDs, so a replayed
+operation writes a NEW row rather than taking the idempotent path at all. The
+ledger's idempotency is therefore available to deterministic ids only. Making
+Julius's operational event ids deterministic is a boundary of its own — it
+changes every event's identity — and belongs with the durable-artifact work.

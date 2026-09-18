@@ -42,7 +42,7 @@
 
 import { MAX_TASK_RECOVERIES, planJuliusRecovery, type JuliusRecoveryAction } from './julius-recovery';
 import { transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
-import type { JuliusOperationalEvent } from './julius-events';
+import { JuliusEventIdConflict, canonicalJuliusEventIdentity, type JuliusOperationalEvent } from './julius-events';
 import type { JuliusTrajectoryEvent } from './julius-trajectory';
 import type { JuliusContextSnapshot } from './julius-context-snapshot';
 import { juliusTaskContractBindingDigest, type JuliusTaskContract } from './julius-task-contract';
@@ -150,6 +150,8 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
   const resultGenerations = new Set<string>();
   const eventLog: JuliusOperationalEvent[] = [];
   const eventIds = new Set<string>();
+  /** The canonical identity of every event recorded, so a repeat can be told from a rewrite. */
+  const identities = new Map<string, string>();
   /**
    * PER-STREAM SEQUENCES, ASSIGNED ON APPEND.
    *
@@ -635,7 +637,18 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
 
     /* ------------------------------------------------------------- events */
     async appendEvent(event) {
-      if (eventIds.has(event.eventId)) return false;
+      /**
+       * THE SAME ID MAY ONLY EVER SAY THE SAME THING. This compared the id
+       * alone, so a second event carrying DIFFERENT facts under a used id was
+       * dropped and its facts were lost — silently, and only in this store.
+       */
+      const recorded = identities.get(event.eventId);
+      const identity = canonicalJuliusEventIdentity(event);
+      if (recorded !== undefined) {
+        if (recorded !== identity) throw new JuliusEventIdConflict(event.eventId);
+        return false;
+      }
+      identities.set(event.eventId, identity);
       eventIds.add(event.eventId);
       const next = (eventSequences.get(event.runId) ?? 0) + 1;
       eventSequences.set(event.runId, next);
