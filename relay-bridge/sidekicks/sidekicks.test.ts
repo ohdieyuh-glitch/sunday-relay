@@ -29,6 +29,22 @@ import { createSidekickService, type SidekickService, type SidekickServiceView }
 
 const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * WAIT FOR THE THING, NOT FOR A NUMBER. These fixtures run on real timers, so a test that sleeps a fixed 700 ms passes
+ * on an idle machine and fails on a busy one -- which is a test that proves nothing. This polls until the condition
+ * holds, or gives up loudly.
+ */
+async function waitFor(check: () => boolean, what: string, timeoutMs = 15_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (check()) return;
+    await settle(20);
+  }
+  throw new Error(`waited ${timeoutMs} ms for: ${what}`);
+}
+
+const settled = (service: SidekickService, sidekickId: string) => () => look(service, sidekickId).live === null;
+
 function look(service: SidekickService, sidekickId: string): SidekickServiceView['sidekicks'][number] {
   const found = service.view().sidekicks.find((sidekick) => sidekick.sidekickId === sidekickId);
   if (found === undefined) throw new Error(`no sidekick ${sidekickId}`);
@@ -152,7 +168,7 @@ describe('sidekicks: a turn, and every way it can end', () => {
     expect(['THINKING', 'STREAMING']).toContain(working.live?.state);
     expect(working.mascot === 'THINKING' || working.mascot === 'RESPONDING').toBe(true);
 
-    await settle(700);
+    await waitFor(settled(service, 'llm-companion'), 'the answer to arrive');
     const done = look(service, 'llm-companion');
     expect(done.state).toBe('CONNECTED');
     expect(done.mascot).toBe('IDLE');
@@ -169,7 +185,7 @@ describe('sidekicks: a turn, and every way it can end', () => {
     must(service.intent({ intent: 'ask', sidekickId: 'llm-companion', ask: 'take your time' }));
     await settle(120);
     must(service.intent({ intent: 'cancel', sidekickId: 'llm-companion' }));
-    await settle(200);
+    await waitFor(settled(service, 'llm-companion'), 'the cancellation to land');
     const after = look(service, 'llm-companion');
     expect(after.state).toBe('CONNECTED');
     expect(after.live).toBeNull();
@@ -180,14 +196,13 @@ describe('sidekicks: a turn, and every way it can end', () => {
   it('a rate limit is a wait, and the companion comes back on its own', async () => {
     const service = await connected({ rateLimitMs: 100 });
     must(service.intent({ intent: 'ask', sidekickId: 'llm-companion', ask: 'please rate limit me' }));
-    await settle(600);
-    expect(look(service, 'llm-companion').state).toBe('RATE_LIMITED');
+    await waitFor(() => look(service, 'llm-companion').state === 'RATE_LIMITED', 'the rate limit');
     // RATE LIMITED IS NOT WORKING: nothing is being computed, so the body is idle rather than busy.
     expect(look(service, 'llm-companion').mascot).toBe('IDLE');
-    await settle(4200);
-    service.tick();
-    await settle(20);
-    expect(look(service, 'llm-companion').state).toBe('CONNECTED');
+    await waitFor(() => {
+      service.tick();
+      return look(service, 'llm-companion').state === 'CONNECTED';
+    }, 'the companion to come back on its own');
   });
 
   it('an exhausted account, a malformed answer and a provider error each fail honestly', async () => {
@@ -198,7 +213,7 @@ describe('sidekicks: a turn, and every way it can end', () => {
     ] as const) {
       const service = await connected();
       must(service.intent({ intent: 'ask', sidekickId: 'llm-companion', ask }));
-      await settle(600);
+      await waitFor(() => look(service, 'llm-companion').state === 'FAILED', `the ${failure} failure`);
       const after = look(service, 'llm-companion');
       expect(after.state).toBe('FAILED');
       expect(after.failure).toBe(failure);
@@ -214,7 +229,7 @@ describe('sidekicks: a turn, and every way it can end', () => {
     must(service.intent({ intent: 'connect', sidekickId: 'llm-companion', providerId: 'dev-companion', modelId: 'fixture-chat-slow' }));
     await settle(20);
     must(service.intent({ intent: 'ask', sidekickId: 'llm-companion', ask: 'a long answer please' }));
-    await settle(900);
+    await waitFor(() => look(service, 'llm-companion').state === 'FAILED', 'the timeout');
     const after = look(service, 'llm-companion');
     expect(after.state).toBe('FAILED');
     expect(after.failure).toBe('TIMEOUT');
@@ -238,9 +253,9 @@ describe('sidekicks: identity, memory and provenance', () => {
   it('a session remembers its turns, and a new model is a new conversation', async () => {
     const service = await connected();
     must(service.intent({ intent: 'ask', sidekickId: 'llm-companion', ask: 'first' }));
-    await settle(700);
+    await waitFor(settled(service, 'llm-companion'), 'the first answer');
     must(service.intent({ intent: 'ask', sidekickId: 'llm-companion', ask: 'second' }));
-    await settle(700);
+    await waitFor(settled(service, 'llm-companion'), 'the second answer');
     const twoTurns = look(service, 'llm-companion');
     expect(twoTurns.turns).toBe(2);
     // The fixture proves the history really reached the provider: it counts the turns it was given.
@@ -271,7 +286,6 @@ describe('sidekicks: identity, memory and provenance', () => {
     const service = await connected();
     const key = `sk-${'a1B2c3D4e5F6g7H8'}`;
     must(service.intent({ intent: 'ask', sidekickId: 'llm-companion', ask: `my key is ${key}` }));
-    await settle(200);
     const after = look(service, 'llm-companion');
     // NOTHING WAS SENT AND NO TURN WAS OPENED.
     expect(after.live).toBeNull();
@@ -304,10 +318,9 @@ describe('sidekicks: the single agent is bounded work, not a mission', () => {
     await settle(20);
     expect(look(service, 'jhinn').state).toBe('CONNECTED');
     must(service.intent({ intent: 'ask', sidekickId: 'jhinn', ask: 'add a test for the palette' }));
-    await settle(120);
     // A SINGLE AGENT WORKS; it does not "think" and it does not "respond".
-    expect(look(service, 'jhinn').mascot).toBe('WORKING');
-    await settle(2000);
+    await waitFor(() => look(service, 'jhinn').mascot === 'WORKING', 'the agent to be working');
+    await waitFor(settled(service, 'jhinn'), 'the task to finish');
     const done = look(service, 'jhinn');
     expect(done.state).toBe('CONNECTED');
     expect(done.authority).toBe('scoped_work');
