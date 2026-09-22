@@ -1,0 +1,8234 @@
+[
+ {
+  "name": "SM_bridge_arc",
+  "path": "/Game/WonderlandV2/Architecture/Bridges/SM_bridge_arc",
+  "folder": "Architecture/Bridges",
+  "size_cm": [
+   2900.0,
+   920.0,
+   1270.0
+  ],
+  "tris": 1840,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_castle_bridge",
+  "path": "/Game/WonderlandV2/Architecture/Bridges/SM_castle_bridge",
+  "folder": "Architecture/Bridges",
+  "size_cm": [
+   918.0,
+   132.0,
+   424.3
+  ],
+  "tris": 1660,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_floating_stair",
+  "path": "/Game/WonderlandV2/Architecture/Bridges/SM_floating_stair",
+  "folder": "Architecture/Bridges",
+  "size_cm": [
+   2927.5,
+   7410.0,
+   12462.5
+  ],
+  "tris": 1904,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_arch_stone",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_arch_stone",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   1100.0,
+   144.0,
+   865.0
+  ],
+  "tris": 240,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_balcony_ring",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_balcony_ring",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   660.0,
+   660.0,
+   156.9
+  ],
+  "tris": 3480,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_castle_arcade",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_castle_arcade",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   660.0,
+   120.0,
+   420.0
+  ],
+  "tris": 1008,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_castle_dome",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_castle_dome",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   620.9,
+   620.9,
+   704.0
+  ],
+  "tris": 2360,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_castle_hall",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_castle_hall",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   1260.0,
+   868.0,
+   1000.0
+  ],
+  "tris": 3868,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_castle_tower",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_castle_tower",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   576.0,
+   576.0,
+   1700.0
+  ],
+  "tris": 4608,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_castle_tower_octagon",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_castle_tower_octagon",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   690.0,
+   690.0,
+   1800.0
+  ],
+  "tris": 1828,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_castle_tower_slender",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_castle_tower_slender",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   268.0,
+   268.0,
+   2000.0
+  ],
+  "tris": 2886,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_castle_tower_square",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_castle_tower_square",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   560.0,
+   560.0,
+   1725.0
+  ],
+  "tris": 3540,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_cloister_square",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_cloister_square",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   2920.3,
+   2920.3,
+   2020.0
+  ],
+  "tris": 8220,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_column_ornate",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_column_ornate",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   176.8,
+   176.8,
+   950.0
+  ],
+  "tris": 1664,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_facade_panel",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_facade_panel",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   440.0,
+   123.0,
+   630.0
+  ],
+  "tris": 1030,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_finial_spire",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_finial_spire",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   56.0,
+   56.0,
+   300.0
+  ],
+  "tris": 360,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_roof_bell",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_roof_bell",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   673.3,
+   673.3,
+   700.0
+  ],
+  "tris": 3048,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_roof_cone_steep",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_roof_cone_steep",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   400.0,
+   400.0,
+   604.1
+  ],
+  "tris": 832,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_roof_flat_crenellated",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_roof_flat_crenellated",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   520.0,
+   520.0,
+   104.0
+  ],
+  "tris": 300,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_roof_hip",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_roof_hip",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   1300.0,
+   900.0,
+   428.0
+  ],
+  "tris": 100,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_roof_ogee",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_roof_ogee",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   621.2,
+   621.1,
+   827.9
+  ],
+  "tris": 3840,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_spire_great",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_spire_great",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   10323.8,
+   10323.8,
+   18000.0
+  ],
+  "tris": 32636,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_spire_halo_ring",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_spire_halo_ring",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   2096.0,
+   2092.0,
+   399.7
+  ],
+  "tris": 3072,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_spire_signature",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_spire_signature",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   1760.0,
+   1760.0,
+   11670.0
+  ],
+  "tris": 7168,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_tower_capped",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_tower_capped",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   356.0,
+   356.0,
+   1100.0
+  ],
+  "tris": 2448,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_tower_clock",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_tower_clock",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   352.0,
+   352.0,
+   1190.0
+  ],
+  "tris": 1616,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_tower_district",
+  "path": "/Game/WonderlandV2/Architecture/Castle/SM_tower_district",
+  "folder": "Architecture/Castle",
+  "size_cm": [
+   1552.0,
+   1552.0,
+   6730.0
+  ],
+  "tris": 8812,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_floral_arch",
+  "path": "/Game/WonderlandV2/Architecture/Garden/SM_floral_arch",
+  "folder": "Architecture/Garden",
+  "size_cm": [
+   1090.4,
+   223.4,
+   692.2
+  ],
+  "tris": 36768,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_floral_arch_trellis",
+  "path": "/Game/WonderlandV2/Architecture/Garden/SM_floral_arch_trellis",
+  "folder": "Architecture/Garden",
+  "size_cm": [
+   1040.0,
+   100.0,
+   620.0
+  ],
+  "tris": 1516,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_garden_arch_stone",
+  "path": "/Game/WonderlandV2/Architecture/Garden/SM_garden_arch_stone",
+  "folder": "Architecture/Garden",
+  "size_cm": [
+   820.0,
+   120.0,
+   723.0
+  ],
+  "tris": 240,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_glass_screen",
+  "path": "/Game/WonderlandV2/Architecture/Garden/SM_glass_screen",
+  "folder": "Architecture/Garden",
+  "size_cm": [
+   2080.0,
+   460.0,
+   2394.0
+  ],
+  "tris": 1356,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_glass_screen_panes",
+  "path": "/Game/WonderlandV2/Architecture/Garden/SM_glass_screen_panes",
+  "folder": "Architecture/Garden",
+  "size_cm": [
+   1332.0,
+   299.4,
+   1412.0
+  ],
+  "tris": 468,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_garden_wall",
+  "path": "/Game/WonderlandV2/Architecture/Gates/SM_garden_wall",
+  "folder": "Architecture/Gates",
+  "size_cm": [
+   510.0,
+   100.0,
+   262.3
+  ],
+  "tris": 252,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_gate_arch_gold",
+  "path": "/Game/WonderlandV2/Architecture/Gates/SM_gate_arch_gold",
+  "folder": "Architecture/Gates",
+  "size_cm": [
+   383.6,
+   18.0,
+   269.2
+  ],
+  "tris": 2560,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_gate_finial_ball",
+  "path": "/Game/WonderlandV2/Architecture/Gates/SM_gate_finial_ball",
+  "folder": "Architecture/Gates",
+  "size_cm": [
+   80.0,
+   80.0,
+   129.5
+  ],
+  "tris": 1820,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_gate_finial_heart",
+  "path": "/Game/WonderlandV2/Architecture/Gates/SM_gate_finial_heart",
+  "folder": "Architecture/Gates",
+  "size_cm": [
+   83.2,
+   112.0,
+   126.0
+  ],
+  "tris": 1196,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_gate_leaf",
+  "path": "/Game/WonderlandV2/Architecture/Gates/SM_gate_leaf",
+  "folder": "Architecture/Gates",
+  "size_cm": [
+   400.0,
+   20.0,
+   570.0
+  ],
+  "tris": 3304,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_gate_pier",
+  "path": "/Game/WonderlandV2/Architecture/Gates/SM_gate_pier",
+  "folder": "Architecture/Gates",
+  "size_cm": [
+   176.0,
+   176.0,
+   650.0
+  ],
+  "tris": 452,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_gatehouse_district",
+  "path": "/Game/WonderlandV2/Architecture/Gates/SM_gatehouse_district",
+  "folder": "Architecture/Gates",
+  "size_cm": [
+   1120.0,
+   2920.0,
+   2836.0
+  ],
+  "tris": 2996,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_gatehouse_glass",
+  "path": "/Game/WonderlandV2/Architecture/Gates/SM_gatehouse_glass",
+  "folder": "Architecture/Gates",
+  "size_cm": [
+   900.0,
+   1920.0,
+   1295.7
+  ],
+  "tris": 448,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_retaining_wall",
+  "path": "/Game/WonderlandV2/Architecture/Gates/SM_retaining_wall",
+  "folder": "Architecture/Gates",
+  "size_cm": [
+   410.0,
+   70.0,
+   84.2
+  ],
+  "tris": 156,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_balustrade",
+  "path": "/Game/WonderlandV2/Architecture/Stairs/SM_balustrade",
+  "folder": "Architecture/Stairs",
+  "size_cm": [
+   350.0,
+   36.0,
+   125.0
+  ],
+  "tris": 1104,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_path_steps",
+  "path": "/Game/WonderlandV2/Architecture/Stairs/SM_path_steps",
+  "folder": "Architecture/Stairs",
+  "size_cm": [
+   464.0,
+   272.1,
+   60.6
+  ],
+  "tris": 72,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_side_steps",
+  "path": "/Game/WonderlandV2/Architecture/Stairs/SM_side_steps",
+  "folder": "Architecture/Stairs",
+  "size_cm": [
+   400.0,
+   180.0,
+   60.5
+  ],
+  "tris": 36,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_stairs_broad",
+  "path": "/Game/WonderlandV2/Architecture/Stairs/SM_stairs_broad",
+  "folder": "Architecture/Stairs",
+  "size_cm": [
+   701.7,
+   354.2,
+   182.7
+  ],
+  "tris": 224,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_terrace_platform",
+  "path": "/Game/WonderlandV2/Architecture/Stairs/SM_terrace_platform",
+  "folder": "Architecture/Stairs",
+  "size_cm": [
+   1440.0,
+   740.0,
+   140.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDog_armLeft_ivory",
+  "path": "/Game/WonderlandV2/Characters/RelayDog/SM_RelayDog_armLeft_ivory",
+  "folder": "Characters/RelayDog",
+  "size_cm": [
+   12.8,
+   12.0,
+   26.7
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDog_armRight_ivory",
+  "path": "/Game/WonderlandV2/Characters/RelayDog/SM_RelayDog_armRight_ivory",
+  "folder": "Characters/RelayDog",
+  "size_cm": [
+   12.8,
+   12.0,
+   26.7
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDog_forearmLeft_ivory",
+  "path": "/Game/WonderlandV2/Characters/RelayDog/SM_RelayDog_forearmLeft_ivory",
+  "folder": "Characters/RelayDog",
+  "size_cm": [
+   13.5,
+   12.4,
+   34.5
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDog_forearmRight_ivory",
+  "path": "/Game/WonderlandV2/Characters/RelayDog/SM_RelayDog_forearmRight_ivory",
+  "folder": "Characters/RelayDog",
+  "size_cm": [
+   13.5,
+   12.4,
+   34.5
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDog_head_eye",
+  "path": "/Game/WonderlandV2/Characters/RelayDog/SM_RelayDog_head_eye",
+  "folder": "Characters/RelayDog",
+  "size_cm": [
+   1.5,
+   22.8,
+   8.1
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDog_head_ivory",
+  "path": "/Game/WonderlandV2/Characters/RelayDog/SM_RelayDog_head_ivory",
+  "folder": "Characters/RelayDog",
+  "size_cm": [
+   43.5,
+   60.0,
+   71.4
+  ],
+  "tris": 96,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDog_head_visor",
+  "path": "/Game/WonderlandV2/Characters/RelayDog/SM_RelayDog_head_visor",
+  "folder": "Characters/RelayDog",
+  "size_cm": [
+   1.5,
+   39.0,
+   18.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDog_legLeft_ivory",
+  "path": "/Game/WonderlandV2/Characters/RelayDog/SM_RelayDog_legLeft_ivory",
+  "folder": "Characters/RelayDog",
+  "size_cm": [
+   13.5,
+   11.4,
+   19.6
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDog_legRight_ivory",
+  "path": "/Game/WonderlandV2/Characters/RelayDog/SM_RelayDog_legRight_ivory",
+  "folder": "Characters/RelayDog",
+  "size_cm": [
+   13.5,
+   11.4,
+   19.6
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDog_root_ivory",
+  "path": "/Game/WonderlandV2/Characters/RelayDog/SM_RelayDog_root_ivory",
+  "folder": "Characters/RelayDog",
+  "size_cm": [
+   27.0,
+   37.2,
+   67.5
+  ],
+  "tris": 60,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDog_shinLeft_ivory",
+  "path": "/Game/WonderlandV2/Characters/RelayDog/SM_RelayDog_shinLeft_ivory",
+  "folder": "Characters/RelayDog",
+  "size_cm": [
+   22.5,
+   16.5,
+   30.8
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDog_shinRight_ivory",
+  "path": "/Game/WonderlandV2/Characters/RelayDog/SM_RelayDog_shinRight_ivory",
+  "folder": "Characters/RelayDog",
+  "size_cm": [
+   22.5,
+   16.5,
+   30.8
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDog_tail_ivory",
+  "path": "/Game/WonderlandV2/Characters/RelayDog/SM_RelayDog_tail_ivory",
+  "folder": "Characters/RelayDog",
+  "size_cm": [
+   21.4,
+   9.8,
+   28.1
+  ],
+  "tris": 60,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDogCub_armLeft_pearl",
+  "path": "/Game/WonderlandV2/Characters/RelayDogCub/SM_RelayDogCub_armLeft_pearl",
+  "folder": "Characters/RelayDogCub",
+  "size_cm": [
+   5.5,
+   5.2,
+   8.1
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDogCub_armRight_pearl",
+  "path": "/Game/WonderlandV2/Characters/RelayDogCub/SM_RelayDogCub_armRight_pearl",
+  "folder": "Characters/RelayDogCub",
+  "size_cm": [
+   5.5,
+   5.2,
+   8.1
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDogCub_eyes_arc",
+  "path": "/Game/WonderlandV2/Characters/RelayDogCub/SM_RelayDogCub_eyes_arc",
+  "folder": "Characters/RelayDogCub",
+  "size_cm": [
+   0.7,
+   10.9,
+   3.6
+  ],
+  "tris": 72,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDogCub_eyes_flat",
+  "path": "/Game/WonderlandV2/Characters/RelayDogCub/SM_RelayDogCub_eyes_flat",
+  "folder": "Characters/RelayDogCub",
+  "size_cm": [
+   0.7,
+   11.1,
+   4.8
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDogCub_eyes_slant",
+  "path": "/Game/WonderlandV2/Characters/RelayDogCub/SM_RelayDogCub_eyes_slant",
+  "folder": "Characters/RelayDogCub",
+  "size_cm": [
+   0.7,
+   12.1,
+   5.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDogCub_forearmLeft_pearl",
+  "path": "/Game/WonderlandV2/Characters/RelayDogCub/SM_RelayDogCub_forearmLeft_pearl",
+  "folder": "Characters/RelayDogCub",
+  "size_cm": [
+   5.8,
+   5.3,
+   10.5
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDogCub_forearmRight_pearl",
+  "path": "/Game/WonderlandV2/Characters/RelayDogCub/SM_RelayDogCub_forearmRight_pearl",
+  "folder": "Characters/RelayDogCub",
+  "size_cm": [
+   5.8,
+   5.3,
+   10.5
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDogCub_handLeft_pearl",
+  "path": "/Game/WonderlandV2/Characters/RelayDogCub/SM_RelayDogCub_handLeft_pearl",
+  "folder": "Characters/RelayDogCub",
+  "size_cm": [
+   8.3,
+   8.3,
+   8.3
+  ],
+  "tris": 672,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDogCub_handRight_pearl",
+  "path": "/Game/WonderlandV2/Characters/RelayDogCub/SM_RelayDogCub_handRight_pearl",
+  "folder": "Characters/RelayDogCub",
+  "size_cm": [
+   8.3,
+   8.3,
+   8.3
+  ],
+  "tris": 672,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDogCub_head_eye",
+  "path": "/Game/WonderlandV2/Characters/RelayDogCub/SM_RelayDogCub_head_eye",
+  "folder": "Characters/RelayDogCub",
+  "size_cm": [
+   0.7,
+   11.1,
+   4.8
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDogCub_head_pearl",
+  "path": "/Game/WonderlandV2/Characters/RelayDogCub/SM_RelayDogCub_head_pearl",
+  "folder": "Characters/RelayDogCub",
+  "size_cm": [
+   18.9,
+   26.0,
+   31.0
+  ],
+  "tris": 96,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDogCub_head_visor",
+  "path": "/Game/WonderlandV2/Characters/RelayDogCub/SM_RelayDogCub_head_visor",
+  "folder": "Characters/RelayDogCub",
+  "size_cm": [
+   0.7,
+   16.9,
+   7.8
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDogCub_plume_ghost",
+  "path": "/Game/WonderlandV2/Characters/RelayDogCub/SM_RelayDogCub_plume_ghost",
+  "folder": "Characters/RelayDogCub",
+  "size_cm": [
+   12.8,
+   10.4,
+   23.0
+  ],
+  "tris": 168,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDogCub_root_ghost",
+  "path": "/Game/WonderlandV2/Characters/RelayDogCub/SM_RelayDogCub_root_ghost",
+  "folder": "Characters/RelayDogCub",
+  "size_cm": [
+   8.8,
+   9.4,
+   4.1
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDogCub_root_pearl",
+  "path": "/Game/WonderlandV2/Characters/RelayDogCub/SM_RelayDogCub_root_pearl",
+  "folder": "Characters/RelayDogCub",
+  "size_cm": [
+   11.7,
+   16.1,
+   17.8
+  ],
+  "tris": 48,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_RelayDogCub_tail_ghost",
+  "path": "/Game/WonderlandV2/Characters/RelayDogCub/SM_RelayDogCub_tail_ghost",
+  "folder": "Characters/RelayDogCub",
+  "size_cm": [
+   51.4,
+   18.5,
+   30.6
+  ],
+  "tris": 176,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_cobble_slab_0",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_cobble_slab_0",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   85.4,
+   92.9,
+   14.9
+  ],
+  "tris": 294,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_cobble_slab_1",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_cobble_slab_1",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   89.0,
+   90.2,
+   14.5
+  ],
+  "tris": 302,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_cobble_slab_2",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_cobble_slab_2",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   91.5,
+   88.4,
+   15.4
+  ],
+  "tris": 302,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_cobble_slab_3",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_cobble_slab_3",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   87.4,
+   88.3,
+   14.9
+  ],
+  "tris": 294,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_kerb_stone",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   120.1,
+   36.2,
+   28.2
+  ],
+  "tris": 96,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_path_flag_0",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_path_flag_0",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   90.5,
+   71.2,
+   11.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_path_flag_1",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_path_flag_1",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   60.8,
+   71.6,
+   11.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_path_flag_2",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_path_flag_2",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   119.9,
+   71.0,
+   11.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_path_flag_3",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_path_flag_3",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   88.4,
+   72.7,
+   11.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_path_flag_4",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_path_flag_4",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   61.2,
+   73.6,
+   11.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_path_flag_5",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_path_flag_5",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   120.0,
+   72.7,
+   11.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_plaza_slab_0",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_0",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   129.0,
+   123.4,
+   13.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_plaza_slab_1",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_1",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   91.3,
+   122.3,
+   13.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_plaza_slab_2",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_2",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   198.7,
+   125.4,
+   13.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_plaza_slab_3",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_3",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   130.2,
+   128.8,
+   13.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_plaza_slab_4",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_4",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   94.0,
+   125.5,
+   13.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_plaza_slab_5",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_5",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   202.4,
+   123.1,
+   13.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_plaza_slab_6",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_6",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   128.9,
+   123.8,
+   13.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_plaza_slab_7",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_7",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   93.3,
+   123.9,
+   13.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_plaza_slab_8",
+  "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_8",
+  "folder": "Ground/Cobblestone",
+  "size_cm": [
+   202.7,
+   126.8,
+   13.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_garden_lawn",
+  "path": "/Game/WonderlandV2/Ground/Terrain/SM_garden_lawn",
+  "folder": "Ground/Terrain",
+  "size_cm": [
+   6000.0,
+   7200.0,
+   23.0
+  ],
+  "tris": 26508,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Bridge_Arc",
+  "path": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Arc",
+  "folder": "Kit/civic",
+  "size_cm": [
+   2500.0,
+   680.0,
+   765.0
+  ],
+  "tris": 4156,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Bridge_Arc_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Arc_stone_dark",
+  "folder": "Kit/civic",
+  "size_cm": [
+   1692.0,
+   218.4,
+   70.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Bridge_Flying",
+  "path": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Flying",
+  "folder": "Kit/civic",
+  "size_cm": [
+   1420.0,
+   310.0,
+   1830.0
+  ],
+  "tris": 726,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Bridge_Flying_gold",
+  "path": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Flying_gold",
+  "folder": "Kit/civic",
+  "size_cm": [
+   113.4,
+   113.4,
+   115.2
+  ],
+  "tris": 444,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Bridge_Sky",
+  "path": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Sky",
+  "folder": "Kit/civic",
+  "size_cm": [
+   3240.0,
+   490.0,
+   782.9
+  ],
+  "tris": 2740,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Bridge_Sky_glass",
+  "path": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Sky_glass",
+  "folder": "Kit/civic",
+  "size_cm": [
+   200.0,
+   195.0,
+   280.0
+  ],
+  "tris": 28,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Bridge_Sky_gold",
+  "path": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Sky_gold",
+  "folder": "Kit/civic",
+  "size_cm": [
+   62.3,
+   60.0,
+   110.1
+  ],
+  "tris": 444,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Bridge_Sky_roof",
+  "path": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Sky_roof",
+  "folder": "Kit/civic",
+  "size_cm": [
+   284.0,
+   276.9,
+   360.0
+  ],
+  "tris": 166,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Colonnade_Arcade",
+  "path": "/Game/WonderlandV2/Kit/civic/WL_Colonnade_Arcade",
+  "folder": "Kit/civic",
+  "size_cm": [
+   2300.0,
+   420.0,
+   993.0
+  ],
+  "tris": 3994,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Colonnade_Arcade_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/civic/WL_Colonnade_Arcade_stone_dark",
+  "folder": "Kit/civic",
+  "size_cm": [
+   2050.0,
+   110.0,
+   60.0
+  ],
+  "tris": 72,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Colonnade_Curved",
+  "path": "/Game/WonderlandV2/Kit/civic/WL_Colonnade_Curved",
+  "folder": "Kit/civic",
+  "size_cm": [
+   688.1,
+   2729.1,
+   738.0
+  ],
+  "tris": 3374,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Colonnade_Straight",
+  "path": "/Game/WonderlandV2/Kit/civic/WL_Colonnade_Straight",
+  "folder": "Kit/civic",
+  "size_cm": [
+   2250.0,
+   330.0,
+   779.0
+  ],
+  "tris": 3088,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Balcony_Bracket",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Balcony_Bracket",
+  "folder": "Kit/details",
+  "size_cm": [
+   484.0,
+   252.0,
+   248.0
+  ],
+  "tris": 2090,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Balustrade_Run",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Balustrade_Run",
+  "folder": "Kit/details",
+  "size_cm": [
+   830.0,
+   72.0,
+   137.0
+  ],
+  "tris": 3192,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Banner_Blade_gold",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Banner_Blade_gold",
+  "folder": "Kit/details",
+  "size_cm": [
+   44.0,
+   157.0,
+   233.0
+  ],
+  "tris": 860,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Banner_Blade_roof",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Banner_Blade_roof",
+  "folder": "Kit/details",
+  "size_cm": [
+   4.7,
+   93.2,
+   14.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Banner_Blade_roof_alt",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Banner_Blade_roof_alt",
+  "folder": "Kit/details",
+  "size_cm": [
+   3.5,
+   92.0,
+   292.0
+  ],
+  "tris": 16,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Lantern_Hanging_glass",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Lantern_Hanging_glass",
+  "folder": "Kit/details",
+  "size_cm": [
+   55.4,
+   64.0,
+   99.2
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Lantern_Hanging_gold",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Lantern_Hanging_gold",
+  "folder": "Kit/details",
+  "size_cm": [
+   72.1,
+   83.2,
+   233.2
+  ],
+  "tris": 432,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Newel_Urn",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Newel_Urn",
+  "folder": "Kit/details",
+  "size_cm": [
+   114.0,
+   111.1,
+   215.0
+  ],
+  "tris": 332,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Newel_Urn_gold",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Newel_Urn_gold",
+  "folder": "Kit/details",
+  "size_cm": [
+   116.4,
+   82.7,
+   77.0
+  ],
+  "tris": 336,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Oriel_Bay",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Oriel_Bay",
+  "folder": "Kit/details",
+  "size_cm": [
+   352.0,
+   328.1,
+   482.0
+  ],
+  "tris": 264,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Oriel_Bay_glass",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Oriel_Bay_glass",
+  "folder": "Kit/details",
+  "size_cm": [
+   309.4,
+   180.0,
+   228.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Oriel_Bay_gold",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Oriel_Bay_gold",
+  "folder": "Kit/details",
+  "size_cm": [
+   313.0,
+   173.8,
+   293.2
+  ],
+  "tris": 480,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Oriel_Bay_roof_alt",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Oriel_Bay_roof_alt",
+  "folder": "Kit/details",
+  "size_cm": [
+   352.0,
+   205.0,
+   108.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Pinnacle_Grand",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Pinnacle_Grand",
+  "folder": "Kit/details",
+  "size_cm": [
+   270.0,
+   270.0,
+   637.0
+  ],
+  "tris": 1000,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Pinnacle_Grand_gold",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Pinnacle_Grand_gold",
+  "folder": "Kit/details",
+  "size_cm": [
+   135.5,
+   135.5,
+   312.2
+  ],
+  "tris": 2220,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Pinnacle_Grand_roof",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Pinnacle_Grand_roof",
+  "folder": "Kit/details",
+  "size_cm": [
+   184.0,
+   184.0,
+   410.0
+  ],
+  "tris": 158,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Plinth_Block",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Plinth_Block",
+  "folder": "Kit/details",
+  "size_cm": [
+   100.0,
+   9.0,
+   48.0
+  ],
+  "tris": 36,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Plinth_Run",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Plinth_Run",
+  "folder": "Kit/details",
+  "size_cm": [
+   400.0,
+   9.0,
+   40.5
+  ],
+  "tris": 20,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Plinth_Run_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Plinth_Run_stone_dark",
+  "folder": "Kit/details",
+  "size_cm": [
+   400.0,
+   11.0,
+   8.0
+  ],
+  "tris": 28,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Screen_Filigree",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Screen_Filigree",
+  "folder": "Kit/details",
+  "size_cm": [
+   610.0,
+   90.0,
+   630.0
+  ],
+  "tris": 444,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Screen_Filigree_gold",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Screen_Filigree_gold",
+  "folder": "Kit/details",
+  "size_cm": [
+   540.2,
+   26.0,
+   592.5
+  ],
+  "tris": 2012,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Screen_Filigree_gold_aged",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Screen_Filigree_gold_aged",
+  "folder": "Kit/details",
+  "size_cm": [
+   448.0,
+   24.0,
+   24.0
+  ],
+  "tris": 28,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Screen_Filigree_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Screen_Filigree_veg_anchor",
+  "folder": "Kit/details",
+  "size_cm": [
+   568.0,
+   9.0,
+   430.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Wall_Lantern_glass",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Wall_Lantern_glass",
+  "folder": "Kit/details",
+  "size_cm": [
+   34.6,
+   40.0,
+   62.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Wall_Lantern_gold",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Wall_Lantern_gold",
+  "folder": "Kit/details",
+  "size_cm": [
+   45.0,
+   91.7,
+   174.0
+  ],
+  "tris": 664,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Window_Arched",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_Arched",
+  "folder": "Kit/details",
+  "size_cm": [
+   221.0,
+   39.0,
+   327.0
+  ],
+  "tris": 336,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Window_Arched_glass",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_Arched_glass",
+  "folder": "Kit/details",
+  "size_cm": [
+   95.2,
+   4.0,
+   243.8
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Window_Arched_gold",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_Arched_gold",
+  "folder": "Kit/details",
+  "size_cm": [
+   22.0,
+   28.6,
+   34.0
+  ],
+  "tris": 28,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Window_LancetPair",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_LancetPair",
+  "folder": "Kit/details",
+  "size_cm": [
+   234.0,
+   32.6,
+   345.7
+  ],
+  "tris": 404,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Window_LancetPair_glass",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_LancetPair_glass",
+  "folder": "Kit/details",
+  "size_cm": [
+   137.5,
+   4.0,
+   237.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Window_LancetPair_gold",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_LancetPair_gold",
+  "folder": "Kit/details",
+  "size_cm": [
+   24.0,
+   16.0,
+   24.0
+  ],
+  "tris": 72,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Window_Oculus",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_Oculus",
+  "folder": "Kit/details",
+  "size_cm": [
+   192.0,
+   26.9,
+   192.0
+  ],
+  "tris": 496,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Window_Oculus_glass",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_Oculus_glass",
+  "folder": "Kit/details",
+  "size_cm": [
+   110.0,
+   4.0,
+   110.0
+  ],
+  "tris": 96,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Window_Oculus_gold",
+  "path": "/Game/WonderlandV2/Kit/details/WL_Detail_Window_Oculus_gold",
+  "folder": "Kit/details",
+  "size_cm": [
+   114.0,
+   5.8,
+   114.0
+  ],
+  "tris": 192,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Flower_Daisy_Run_leaf",
+  "path": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Daisy_Run_leaf",
+  "folder": "Kit/flowers",
+  "size_cm": [
+   132.8,
+   42.4,
+   27.9
+  ],
+  "tris": 975,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Flower_Daisy_Run_petal",
+  "path": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Daisy_Run_petal",
+  "folder": "Kit/flowers",
+  "size_cm": [
+   122.5,
+   59.5,
+   23.2
+  ],
+  "tris": 4558,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Flower_Daisy_Run_petal_centre",
+  "path": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Daisy_Run_petal_centre",
+  "folder": "Kit/flowers",
+  "size_cm": [
+   110.5,
+   44.9,
+   15.7
+  ],
+  "tris": 986,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Flower_Lavender_Run_leaf",
+  "path": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Lavender_Run_leaf",
+  "folder": "Kit/flowers",
+  "size_cm": [
+   134.9,
+   42.5,
+   43.6
+  ],
+  "tris": 774,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Flower_Lavender_Run_petal",
+  "path": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Lavender_Run_petal",
+  "folder": "Kit/flowers",
+  "size_cm": [
+   109.8,
+   43.8,
+   35.1
+  ],
+  "tris": 5296,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Flower_Rose_Run_leaf",
+  "path": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Rose_Run_leaf",
+  "folder": "Kit/flowers",
+  "size_cm": [
+   125.4,
+   34.4,
+   13.8
+  ],
+  "tris": 560,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Flower_Rose_Run_petal",
+  "path": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Rose_Run_petal",
+  "folder": "Kit/flowers",
+  "size_cm": [
+   110.7,
+   47.2,
+   18.2
+  ],
+  "tris": 2728,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Gate_Threshold",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Gate_Threshold",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   800.0,
+   156.0,
+   470.0
+  ],
+  "tris": 684,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Gate_Threshold_gold",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Gate_Threshold_gold",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   380.2,
+   30.2,
+   25.6
+  ],
+  "tris": 888,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Gate_Threshold_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Gate_Threshold_stone_dark",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   780.0,
+   79.2,
+   310.0
+  ],
+  "tris": 48,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Gate_Threshold_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Gate_Threshold_veg_anchor",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   770.0,
+   34.0,
+   10.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Grass_Tuft_leaf",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Grass_Tuft_leaf",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   30.6,
+   36.0,
+   31.9
+  ],
+  "tris": 191,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Overlook",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Overlook",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   473.0,
+   866.0,
+   540.0
+  ],
+  "tris": 1928,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Overlook_gold",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Overlook_gold",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   48.0,
+   828.0,
+   92.0
+  ],
+  "tris": 888,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Overlook_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Overlook_stone_dark",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   366.0,
+   732.0,
+   5.0
+  ],
+  "tris": 92,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Pavilion_Base",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Pavilion_Base",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   962.9,
+   962.9,
+   404.0
+  ],
+  "tris": 384,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Pavilion_Base_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Pavilion_Base_stone_dark",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   776.1,
+   776.1,
+   5.0
+  ],
+  "tris": 28,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Planter_Wall",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Planter_Wall",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   634.0,
+   194.0,
+   103.0
+  ],
+  "tris": 224,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Planter_Wall_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Planter_Wall_stone_dark",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   556.0,
+   116.0,
+   6.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Planter_Wall_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Planter_Wall_veg_anchor",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   550.0,
+   110.0,
+   7.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Retaining_Corner_In",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Corner_In",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   642.0,
+   642.0,
+   304.0
+  ],
+  "tris": 202,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Retaining_Corner_In_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Corner_In_stone_dark",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   601.1,
+   568.1,
+   8.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Retaining_Corner_In_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Corner_In_veg_anchor",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   588.0,
+   526.0,
+   10.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Retaining_Corner_Out",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Corner_Out",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   642.0,
+   642.0,
+   340.0
+  ],
+  "tris": 232,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Retaining_Corner_Out_gold",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Corner_Out_gold",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   90.0,
+   88.6,
+   88.0
+  ],
+  "tris": 288,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Retaining_Corner_Out_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Corner_Out_stone_dark",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   601.1,
+   568.1,
+   8.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Retaining_Corner_Out_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Corner_Out_veg_anchor",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   588.0,
+   526.0,
+   10.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Retaining_Curved",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Curved",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   232.8,
+   910.0,
+   304.0
+  ],
+  "tris": 268,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Retaining_Curved_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Curved_stone_dark",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   203.7,
+   884.1,
+   8.0
+  ],
+  "tris": 132,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Retaining_Curved_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Curved_veg_anchor",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   101.1,
+   790.9,
+   10.0
+  ],
+  "tris": 132,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Retaining_Run",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Run",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   800.0,
+   154.0,
+   304.0
+  ],
+  "tris": 68,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Retaining_Run_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Run_stone_dark",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   780.0,
+   139.7,
+   248.0
+  ],
+  "tris": 48,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Retaining_Run_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Run_veg_anchor",
+  "folder": "Kit/gardens",
+  "size_cm": [
+   770.0,
+   34.0,
+   10.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Drain_Channel_metal",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Drain_Channel_metal",
+  "folder": "Kit/ground",
+  "size_cm": [
+   490.0,
+   43.0,
+   5.3
+  ],
+  "tris": 216,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Drain_Channel_paving",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Drain_Channel_paving",
+  "folder": "Kit/ground",
+  "size_cm": [
+   599.5,
+   486.0,
+   9.0
+  ],
+  "tris": 48,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Drain_Channel_paving_shade",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Drain_Channel_paving_shade",
+  "folder": "Kit/ground",
+  "size_cm": [
+   800.0,
+   486.0,
+   31.0
+  ],
+  "tris": 48,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Drain_Channel_paving_warm",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Drain_Channel_paving_warm",
+  "folder": "Kit/ground",
+  "size_cm": [
+   599.5,
+   486.0,
+   9.0
+  ],
+  "tris": 48,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Kerb_Corner_kerb",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Corner_kerb",
+  "folder": "Kit/ground",
+  "size_cm": [
+   417.0,
+   417.0,
+   31.0
+  ],
+  "tris": 140,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Kerb_Corner_paving",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Corner_paving",
+  "folder": "Kit/ground",
+  "size_cm": [
+   383.0,
+   383.0,
+   9.0
+  ],
+  "tris": 56,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Kerb_Corner_paving_shade",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Corner_paving_shade",
+  "folder": "Kit/ground",
+  "size_cm": [
+   383.0,
+   383.0,
+   22.0
+  ],
+  "tris": 56,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Kerb_Run_kerb",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Run_kerb",
+  "folder": "Kit/ground",
+  "size_cm": [
+   800.0,
+   34.0,
+   31.0
+  ],
+  "tris": 28,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Kerb_Run_paving",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Run_paving",
+  "folder": "Kit/ground",
+  "size_cm": [
+   800.0,
+   240.0,
+   9.0
+  ],
+  "tris": 48,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Kerb_Run_paving_shade",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Run_paving_shade",
+  "folder": "Kit/ground",
+  "size_cm": [
+   800.0,
+   319.0,
+   22.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Kerb_Run_paving_warm",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Run_paving_warm",
+  "folder": "Kit/ground",
+  "size_cm": [
+   800.0,
+   240.0,
+   9.0
+  ],
+  "tris": 48,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Plaza_Medallion_gold",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_gold",
+  "folder": "Kit/ground",
+  "size_cm": [
+   124.0,
+   124.0,
+   3.5
+  ],
+  "tris": 96,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Plaza_Medallion_kerb",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_kerb",
+  "folder": "Kit/ground",
+  "size_cm": [
+   900.0,
+   900.0,
+   10.0
+  ],
+  "tris": 316,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Plaza_Medallion_paving",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_paving",
+  "folder": "Kit/ground",
+  "size_cm": [
+   844.0,
+   844.0,
+   6.0
+  ],
+  "tris": 160,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Plaza_Medallion_paving_shade",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_paving_shade",
+  "folder": "Kit/ground",
+  "size_cm": [
+   716.0,
+   716.0,
+   1.8
+  ],
+  "tris": 632,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Plaza_Medallion_paving_warm",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_paving_warm",
+  "folder": "Kit/ground",
+  "size_cm": [
+   678.0,
+   678.0,
+   2.5
+  ],
+  "tris": 192,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Step_Single_kerb",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Step_Single_kerb",
+  "folder": "Kit/ground",
+  "size_cm": [
+   800.0,
+   44.0,
+   62.0
+  ],
+  "tris": 28,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Step_Single_paving",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Step_Single_paving",
+  "folder": "Kit/ground",
+  "size_cm": [
+   599.5,
+   484.0,
+   40.0
+  ],
+  "tris": 48,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Step_Single_paving_shade",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Step_Single_paving_shade",
+  "folder": "Kit/ground",
+  "size_cm": [
+   800.0,
+   484.0,
+   63.5
+  ],
+  "tris": 36,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Step_Single_paving_warm",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Step_Single_paving_warm",
+  "folder": "Kit/ground",
+  "size_cm": [
+   599.5,
+   484.0,
+   40.0
+  ],
+  "tris": 48,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Steps_Broad_kerb",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Steps_Broad_kerb",
+  "folder": "Kit/ground",
+  "size_cm": [
+   800.0,
+   456.0,
+   93.0
+  ],
+  "tris": 84,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Steps_Broad_paving",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Steps_Broad_paving",
+  "folder": "Kit/ground",
+  "size_cm": [
+   599.5,
+   756.0,
+   102.0
+  ],
+  "tris": 48,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Steps_Broad_paving_shade",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Steps_Broad_paving_shade",
+  "folder": "Kit/ground",
+  "size_cm": [
+   800.0,
+   756.0,
+   115.0
+  ],
+  "tris": 60,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Steps_Broad_paving_warm",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Steps_Broad_paving_warm",
+  "folder": "Kit/ground",
+  "size_cm": [
+   599.5,
+   756.0,
+   102.0
+  ],
+  "tris": 48,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Tree_Grate_kerb",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Tree_Grate_kerb",
+  "folder": "Kit/ground",
+  "size_cm": [
+   240.0,
+   240.0,
+   31.0
+  ],
+  "tris": 112,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Tree_Grate_paving",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Tree_Grate_paving",
+  "folder": "Kit/ground",
+  "size_cm": [
+   680.0,
+   119.0,
+   9.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Tree_Grate_paving_shade",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Tree_Grate_paving_shade",
+  "folder": "Kit/ground",
+  "size_cm": [
+   680.0,
+   240.0,
+   22.0
+  ],
+  "tris": 36,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Tree_Grate_paving_warm",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Tree_Grate_paving_warm",
+  "folder": "Kit/ground",
+  "size_cm": [
+   680.0,
+   119.0,
+   9.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Tree_Grate_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Tree_Grate_veg_anchor",
+  "folder": "Kit/ground",
+  "size_cm": [
+   130.0,
+   130.0,
+   11.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Verge_Run_kerb",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Verge_Run_kerb",
+  "folder": "Kit/ground",
+  "size_cm": [
+   800.0,
+   236.0,
+   31.0
+  ],
+  "tris": 56,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Verge_Run_paving_shade",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Verge_Run_paving_shade",
+  "folder": "Kit/ground",
+  "size_cm": [
+   800.0,
+   180.0,
+   10.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Verge_Run_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Verge_Run_veg_anchor",
+  "folder": "Kit/ground",
+  "size_cm": [
+   790.0,
+   164.0,
+   13.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_Gate_Royal",
+  "path": "/Game/WonderlandV2/Kit/hero/WL_Hero_Gate_Royal",
+  "folder": "Kit/hero",
+  "size_cm": [
+   3720.0,
+   1165.4,
+   3870.0
+  ],
+  "tris": 3128,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_Gate_Royal_glass",
+  "path": "/Game/WonderlandV2/Kit/hero/WL_Hero_Gate_Royal_glass",
+  "folder": "Kit/hero",
+  "size_cm": [
+   3573.2,
+   738.3,
+   2992.8
+  ],
+  "tris": 168,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_Gate_Royal_gold",
+  "path": "/Game/WonderlandV2/Kit/hero/WL_Hero_Gate_Royal_gold",
+  "folder": "Kit/hero",
+  "size_cm": [
+   2948.0,
+   168.0,
+   4883.0
+  ],
+  "tris": 4192,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_Gate_Royal_roof",
+  "path": "/Game/WonderlandV2/Kit/hero/WL_Hero_Gate_Royal_roof",
+  "folder": "Kit/hero",
+  "size_cm": [
+   3500.0,
+   660.0,
+   940.0
+  ],
+  "tris": 310,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_Gate_Royal_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/hero/WL_Hero_Gate_Royal_stone_dark",
+  "folder": "Kit/hero",
+  "size_cm": [
+   2156.0,
+   426.4,
+   110.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_Gate_Royal_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/hero/WL_Hero_Gate_Royal_veg_anchor",
+  "folder": "Kit/hero",
+  "size_cm": [
+   3428.0,
+   629.2,
+   1060.0
+  ],
+  "tris": 48,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_GreatSpire",
+  "path": "/Game/WonderlandV2/Kit/hero/WL_Hero_GreatSpire",
+  "folder": "Kit/hero",
+  "size_cm": [
+   3090.9,
+   3090.9,
+   8546.0
+  ],
+  "tris": 5068,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_GreatSpire_glass",
+  "path": "/Game/WonderlandV2/Kit/hero/WL_Hero_GreatSpire_glass",
+  "folder": "Kit/hero",
+  "size_cm": [
+   2029.0,
+   2029.0,
+   4730.0
+  ],
+  "tris": 256,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_GreatSpire_glass_cool",
+  "path": "/Game/WonderlandV2/Kit/hero/WL_Hero_GreatSpire_glass_cool",
+  "folder": "Kit/hero",
+  "size_cm": [
+   1268.0,
+   1268.0,
+   230.0
+  ],
+  "tris": 64,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_GreatSpire_gold",
+  "path": "/Game/WonderlandV2/Kit/hero/WL_Hero_GreatSpire_gold",
+  "folder": "Kit/hero",
+  "size_cm": [
+   1986.4,
+   1986.4,
+   5785.6
+  ],
+  "tris": 1680,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_GreatSpire_gold_aged",
+  "path": "/Game/WonderlandV2/Kit/hero/WL_Hero_GreatSpire_gold_aged",
+  "folder": "Kit/hero",
+  "size_cm": [
+   1079.9,
+   1079.9,
+   705.2
+  ],
+  "tris": 256,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_GreatSpire_roof",
+  "path": "/Game/WonderlandV2/Kit/hero/WL_Hero_GreatSpire_roof",
+  "folder": "Kit/hero",
+  "size_cm": [
+   680.0,
+   680.0,
+   3440.0
+  ],
+  "tris": 1124,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_GreatSpire_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/hero/WL_Hero_GreatSpire_stone_dark",
+  "folder": "Kit/hero",
+  "size_cm": [
+   1280.0,
+   1280.0,
+   4660.0
+  ],
+  "tris": 256,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Arcade_Insert",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Arcade_Insert",
+  "folder": "Kit/market",
+  "size_cm": [
+   709.6,
+   360.0,
+   459.0
+  ],
+  "tris": 3740,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Arcade_Insert_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Arcade_Insert_stone_dark",
+  "folder": "Kit/market",
+  "size_cm": [
+   620.0,
+   260.0,
+   315.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Awning",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Awning",
+  "folder": "Kit/market",
+  "size_cm": [
+   638.0,
+   16.0,
+   26.0
+  ],
+  "tris": 56,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Awning_metal",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Awning_metal",
+  "folder": "Kit/market",
+  "size_cm": [
+   640.0,
+   235.2,
+   71.0
+  ],
+  "tris": 96,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Awning_roof",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Awning_roof",
+  "folder": "Kit/market",
+  "size_cm": [
+   560.0,
+   256.0,
+   62.0
+  ],
+  "tris": 336,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Awning_roof_alt",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Awning_roof_alt",
+  "folder": "Kit/market",
+  "size_cm": [
+   560.0,
+   256.0,
+   62.0
+  ],
+  "tris": 336,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Canopy",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Canopy",
+  "folder": "Kit/market",
+  "size_cm": [
+   516.2,
+   396.2,
+   283.0
+  ],
+  "tris": 756,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Canopy_gold",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Canopy_gold",
+  "folder": "Kit/market",
+  "size_cm": [
+   33.0,
+   33.0,
+   62.0
+  ],
+  "tris": 444,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Canopy_metal",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Canopy_metal",
+  "folder": "Kit/market",
+  "size_cm": [
+   480.7,
+   360.7,
+   10.0
+  ],
+  "tris": 80,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Canopy_roof",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Canopy_roof",
+  "folder": "Kit/market",
+  "size_cm": [
+   561.0,
+   492.0,
+   3.0
+  ],
+  "tris": 72,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Canopy_roof_alt",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Canopy_roof_alt",
+  "folder": "Kit/market",
+  "size_cm": [
+   612.0,
+   492.0,
+   124.0
+  ],
+  "tris": 36,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Corner_Storefront",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront",
+  "folder": "Kit/market",
+  "size_cm": [
+   360.0,
+   360.0,
+   338.0
+  ],
+  "tris": 104,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Corner_Storefront_glass",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront_glass",
+  "folder": "Kit/market",
+  "size_cm": [
+   137.4,
+   137.4,
+   170.0
+  ],
+  "tris": 44,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Corner_Storefront_gold",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront_gold",
+  "folder": "Kit/market",
+  "size_cm": [
+   58.4,
+   57.7,
+   31.8
+  ],
+  "tris": 86,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Corner_Storefront_roof",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront_roof",
+  "folder": "Kit/market",
+  "size_cm": [
+   578.4,
+   578.4,
+   183.0
+  ],
+  "tris": 120,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Corner_Storefront_roof_alt",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront_roof_alt",
+  "folder": "Kit/market",
+  "size_cm": [
+   104.5,
+   104.5,
+   44.0
+  ],
+  "tris": 56,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Corner_Storefront_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront_stone_dark",
+  "folder": "Kit/market",
+  "size_cm": [
+   150.1,
+   150.1,
+   212.0
+  ],
+  "tris": 56,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Covered_Passage",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Covered_Passage",
+  "folder": "Kit/market",
+  "size_cm": [
+   500.0,
+   758.2,
+   465.0
+  ],
+  "tris": 640,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Covered_Passage_glass",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Covered_Passage_glass",
+  "folder": "Kit/market",
+  "size_cm": [
+   60.0,
+   508.0,
+   10.0
+  ],
+  "tris": 144,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Covered_Passage_gold",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Covered_Passage_gold",
+  "folder": "Kit/market",
+  "size_cm": [
+   26.0,
+   472.7,
+   26.0
+  ],
+  "tris": 216,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Covered_Passage_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Covered_Passage_stone_dark",
+  "folder": "Kit/market",
+  "size_cm": [
+   372.0,
+   700.0,
+   437.2
+  ],
+  "tris": 112,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Hanging_Sign",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Hanging_Sign",
+  "folder": "Kit/market",
+  "size_cm": [
+   186.0,
+   30.0,
+   133.0
+  ],
+  "tris": 56,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Hanging_Sign_gold",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Hanging_Sign_gold",
+  "folder": "Kit/market",
+  "size_cm": [
+   96.0,
+   24.7,
+   98.0
+  ],
+  "tris": 116,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Market_Hanging_Sign_metal",
+  "path": "/Game/WonderlandV2/Kit/market/WL_Market_Hanging_Sign_metal",
+  "folder": "Kit/market",
+  "size_cm": [
+   150.3,
+   8.3,
+   72.4
+  ],
+  "tris": 164,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Mushroom_Button_mush_cap",
+  "path": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_cap",
+  "folder": "Kit/mushrooms",
+  "size_cm": [
+   247.2,
+   247.2,
+   92.4
+  ],
+  "tris": 960,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Mushroom_Button_mush_gill",
+  "path": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_gill",
+  "folder": "Kit/mushrooms",
+  "size_cm": [
+   229.1,
+   229.1,
+   14.4
+  ],
+  "tris": 480,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Mushroom_Button_mush_spot",
+  "path": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_spot",
+  "folder": "Kit/mushrooms",
+  "size_cm": [
+   215.6,
+   230.3,
+   72.1
+  ],
+  "tris": 480,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Mushroom_Button_mush_stem",
+  "path": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Button_mush_stem",
+  "folder": "Kit/mushrooms",
+  "size_cm": [
+   84.0,
+   84.0,
+   241.5
+  ],
+  "tris": 288,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Mushroom_Tall_mush_cap",
+  "path": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_cap",
+  "folder": "Kit/mushrooms",
+  "size_cm": [
+   370.8,
+   370.8,
+   103.6
+  ],
+  "tris": 960,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Mushroom_Tall_mush_gill",
+  "path": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_gill",
+  "folder": "Kit/mushrooms",
+  "size_cm": [
+   331.2,
+   331.2,
+   21.4
+  ],
+  "tris": 624,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Mushroom_Tall_mush_spot",
+  "path": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_spot",
+  "folder": "Kit/mushrooms",
+  "size_cm": [
+   314.9,
+   362.5,
+   85.6
+  ],
+  "tris": 640,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Mushroom_Tall_mush_stem",
+  "path": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Tall_mush_stem",
+  "folder": "Kit/mushrooms",
+  "size_cm": [
+   115.5,
+   115.5,
+   677.3
+  ],
+  "tris": 476,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Mushroom_Toadstool_mush_cap",
+  "path": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_cap",
+  "folder": "Kit/mushrooms",
+  "size_cm": [
+   535.6,
+   535.6,
+   165.2
+  ],
+  "tris": 960,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Mushroom_Toadstool_mush_gill",
+  "path": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_gill",
+  "folder": "Kit/mushrooms",
+  "size_cm": [
+   482.1,
+   482.1,
+   30.9
+  ],
+  "tris": 720,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Mushroom_Toadstool_mush_spot",
+  "path": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_spot",
+  "folder": "Kit/mushrooms",
+  "size_cm": [
+   490.0,
+   443.5,
+   134.5
+  ],
+  "tris": 1040,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Mushroom_Toadstool_mush_stem",
+  "path": "/Game/WonderlandV2/Kit/mushrooms/WL_Mushroom_Toadstool_mush_stem",
+  "folder": "Kit/mushrooms",
+  "size_cm": [
+   174.8,
+   174.8,
+   515.0
+  ],
+  "tris": 476,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Object_LanternStandard",
+  "path": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard",
+  "folder": "Kit/objects",
+  "size_cm": [
+   160.0,
+   160.0,
+   128.0
+  ],
+  "tris": 112,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Object_LanternStandard_glass",
+  "path": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass",
+  "folder": "Kit/objects",
+  "size_cm": [
+   603.1,
+   96.0,
+   148.8
+  ],
+  "tris": 48,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Object_LanternStandard_gold",
+  "path": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold",
+  "folder": "Kit/objects",
+  "size_cm": [
+   628.1,
+   132.0,
+   1092.0
+  ],
+  "tris": 2142,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Object_PocketClock_enamel",
+  "path": "/Game/WonderlandV2/Kit/objects/WL_Object_PocketClock_enamel",
+  "folder": "Kit/objects",
+  "size_cm": [
+   5.0,
+   268.5,
+   268.5
+  ],
+  "tris": 192,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Object_PocketClock_gold",
+  "path": "/Game/WonderlandV2/Kit/objects/WL_Object_PocketClock_gold",
+  "folder": "Kit/objects",
+  "size_cm": [
+   59.0,
+   306.0,
+   412.5
+  ],
+  "tris": 2062,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Object_TeaCup_enamel",
+  "path": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel",
+  "folder": "Kit/objects",
+  "size_cm": [
+   380.0,
+   453.1,
+   228.0
+  ],
+  "tris": 1528,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Object_TeaCup_gold",
+  "path": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_gold",
+  "folder": "Kit/objects",
+  "size_cm": [
+   390.0,
+   390.0,
+   262.0
+  ],
+  "tris": 860,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Object_TeaCup_roof",
+  "path": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof",
+  "folder": "Kit/objects",
+  "size_cm": [
+   360.8,
+   274.3,
+   60.0
+  ],
+  "tris": 1632,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Object_TeaCup_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_veg_anchor",
+  "folder": "Kit/objects",
+  "size_cm": [
+   361.4,
+   290.5,
+   19.9
+  ],
+  "tris": 384,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Object_TeaSaucer_enamel",
+  "path": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_enamel",
+  "folder": "Kit/objects",
+  "size_cm": [
+   710.0,
+   710.0,
+   60.0
+  ],
+  "tris": 1280,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Object_TeaSaucer_gold",
+  "path": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaSaucer_gold",
+  "folder": "Kit/objects",
+  "size_cm": [
+   724.0,
+   724.0,
+   44.5
+  ],
+  "tris": 768,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Object_TeapotPavilion_enamel",
+  "path": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_enamel",
+  "folder": "Kit/objects",
+  "size_cm": [
+   1740.0,
+   2895.2,
+   1530.0
+  ],
+  "tris": 3934,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Object_TeapotPavilion_glass",
+  "path": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_glass",
+  "folder": "Kit/objects",
+  "size_cm": [
+   1709.9,
+   1156.8,
+   159.1
+  ],
+  "tris": 576,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Object_TeapotPavilion_gold",
+  "path": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_gold",
+  "folder": "Kit/objects",
+  "size_cm": [
+   1784.0,
+   2469.2,
+   1840.0
+  ],
+  "tris": 3780,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Object_TeapotPavilion_roof",
+  "path": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_roof",
+  "folder": "Kit/objects",
+  "size_cm": [
+   1710.8,
+   1476.4,
+   193.5
+  ],
+  "tris": 2720,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Object_TeapotPavilion_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_veg_anchor",
+  "folder": "Kit/objects",
+  "size_cm": [
+   1684.5,
+   1519.8,
+   63.7
+  ],
+  "tris": 512,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Palace_Dome_Grand",
+  "path": "/Game/WonderlandV2/Kit/palace/WL_Palace_Dome_Grand",
+  "folder": "Kit/palace",
+  "size_cm": [
+   3510.0,
+   4125.0,
+   3995.0
+  ],
+  "tris": 5340,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Palace_Dome_Grand_glass",
+  "path": "/Game/WonderlandV2/Kit/palace/WL_Palace_Dome_Grand_glass",
+  "folder": "Kit/palace",
+  "size_cm": [
+   3416.0,
+   3416.0,
+   3350.0
+  ],
+  "tris": 298,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Palace_Dome_Grand_gold",
+  "path": "/Game/WonderlandV2/Kit/palace/WL_Palace_Dome_Grand_gold",
+  "folder": "Kit/palace",
+  "size_cm": [
+   3492.0,
+   3921.0,
+   4083.0
+  ],
+  "tris": 1583,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Palace_Dome_Grand_roof",
+  "path": "/Game/WonderlandV2/Kit/palace/WL_Palace_Dome_Grand_roof",
+  "folder": "Kit/palace",
+  "size_cm": [
+   3430.0,
+   3430.0,
+   780.0
+  ],
+  "tris": 438,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Palace_Dome_Grand_roof_alt",
+  "path": "/Game/WonderlandV2/Kit/palace/WL_Palace_Dome_Grand_roof_alt",
+  "folder": "Kit/palace",
+  "size_cm": [
+   2470.0,
+   2470.0,
+   1400.0
+  ],
+  "tris": 256,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Palace_Dome_Grand_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/palace/WL_Palace_Dome_Grand_stone_dark",
+  "folder": "Kit/palace",
+  "size_cm": [
+   3413.0,
+   3413.0,
+   439.0
+  ],
+  "tris": 252,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Palace_Pavilion",
+  "path": "/Game/WonderlandV2/Kit/palace/WL_Palace_Pavilion",
+  "folder": "Kit/palace",
+  "size_cm": [
+   1510.0,
+   1510.0,
+   2688.0
+  ],
+  "tris": 4584,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Palace_Pavilion_glass",
+  "path": "/Game/WonderlandV2/Kit/palace/WL_Palace_Pavilion_glass",
+  "folder": "Kit/palace",
+  "size_cm": [
+   1416.0,
+   1416.0,
+   1993.0
+  ],
+  "tris": 318,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Palace_Pavilion_gold",
+  "path": "/Game/WonderlandV2/Kit/palace/WL_Palace_Pavilion_gold",
+  "folder": "Kit/palace",
+  "size_cm": [
+   1492.0,
+   1492.0,
+   2591.0
+  ],
+  "tris": 564,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Palace_Pavilion_roof",
+  "path": "/Game/WonderlandV2/Kit/palace/WL_Palace_Pavilion_roof",
+  "folder": "Kit/palace",
+  "size_cm": [
+   1220.0,
+   1220.0,
+   720.0
+  ],
+  "tris": 132,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Palace_Pavilion_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/palace/WL_Palace_Pavilion_stone_dark",
+  "folder": "Kit/palace",
+  "size_cm": [
+   1413.0,
+   1413.0,
+   439.0
+  ],
+  "tris": 144,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Palace_Wing",
+  "path": "/Game/WonderlandV2/Kit/palace/WL_Palace_Wing",
+  "folder": "Kit/palace",
+  "size_cm": [
+   2510.0,
+   1310.0,
+   1468.0
+  ],
+  "tris": 3692,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Palace_Wing_glass",
+  "path": "/Game/WonderlandV2/Kit/palace/WL_Palace_Wing_glass",
+  "folder": "Kit/palace",
+  "size_cm": [
+   2053.0,
+   1216.0,
+   828.0
+  ],
+  "tris": 192,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Palace_Wing_gold",
+  "path": "/Game/WonderlandV2/Kit/palace/WL_Palace_Wing_gold",
+  "folder": "Kit/palace",
+  "size_cm": [
+   2450.0,
+   1292.0,
+   1386.0
+  ],
+  "tris": 352,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Palace_Wing_roof_alt",
+  "path": "/Game/WonderlandV2/Kit/palace/WL_Palace_Wing_roof_alt",
+  "folder": "Kit/palace",
+  "size_cm": [
+   2220.0,
+   1064.0,
+   549.0
+  ],
+  "tris": 256,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Palace_Wing_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/palace/WL_Palace_Wing_stone_dark",
+  "folder": "Kit/palace",
+  "size_cm": [
+   2170.0,
+   1213.0,
+   439.0
+  ],
+  "tris": 120,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Flagstone_A_moss",
+  "path": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_moss",
+  "folder": "Kit/paving",
+  "size_cm": [
+   400.0,
+   400.0,
+   1.2
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Flagstone_A_paving",
+  "path": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving",
+  "folder": "Kit/paving",
+  "size_cm": [
+   398.4,
+   398.4,
+   5.9
+  ],
+  "tris": 420,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Flagstone_A_paving_shade",
+  "path": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_shade",
+  "folder": "Kit/paving",
+  "size_cm": [
+   398.4,
+   398.4,
+   5.9
+  ],
+  "tris": 700,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Flagstone_A_paving_warm",
+  "path": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_warm",
+  "folder": "Kit/paving",
+  "size_cm": [
+   398.4,
+   316.9,
+   5.9
+  ],
+  "tris": 588,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Flagstone_B_moss",
+  "path": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_moss",
+  "folder": "Kit/paving",
+  "size_cm": [
+   400.0,
+   400.0,
+   1.2
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Flagstone_B_paving",
+  "path": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving",
+  "folder": "Kit/paving",
+  "size_cm": [
+   398.4,
+   398.4,
+   5.8
+  ],
+  "tris": 756,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Flagstone_B_paving_shade",
+  "path": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_shade",
+  "folder": "Kit/paving",
+  "size_cm": [
+   398.4,
+   398.4,
+   5.9
+  ],
+  "tris": 672,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Flagstone_B_paving_warm",
+  "path": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_warm",
+  "folder": "Kit/paving",
+  "size_cm": [
+   398.4,
+   398.4,
+   5.8
+  ],
+  "tris": 476,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Flagstone_C_moss",
+  "path": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_moss",
+  "folder": "Kit/paving",
+  "size_cm": [
+   400.0,
+   400.0,
+   1.2
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Flagstone_C_paving",
+  "path": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving",
+  "folder": "Kit/paving",
+  "size_cm": [
+   398.4,
+   398.4,
+   5.8
+  ],
+  "tris": 504,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Flagstone_C_paving_shade",
+  "path": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_shade",
+  "folder": "Kit/paving",
+  "size_cm": [
+   398.4,
+   398.4,
+   5.9
+  ],
+  "tris": 896,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ground_Flagstone_C_paving_warm",
+  "path": "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_warm",
+  "folder": "Kit/paving",
+  "size_cm": [
+   349.5,
+   398.4,
+   5.9
+  ],
+  "tris": 392,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Gabled",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_House_Gabled",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   714.0,
+   627.2,
+   995.0
+  ],
+  "tris": 1716,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Gabled_glass",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_House_Gabled_glass",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   433.3,
+   574.4,
+   468.6
+  ],
+  "tris": 120,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Gabled_gold",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_House_Gabled_gold",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   713.0,
+   33.0,
+   62.0
+  ],
+  "tris": 888,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Gabled_roof",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_House_Gabled_roof",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   708.0,
+   588.0,
+   324.0
+  ],
+  "tris": 36,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Hipped",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_House_Hipped",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   674.0,
+   627.2,
+   1257.0
+  ],
+  "tris": 2732,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Hipped_glass",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_House_Hipped_glass",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   433.3,
+   574.4,
+   773.6
+  ],
+  "tris": 192,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Hipped_gold",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_House_Hipped_gold",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   36.0,
+   36.0,
+   72.0
+  ],
+  "tris": 444,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Hipped_roof_alt",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_House_Hipped_roof_alt",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   712.0,
+   592.0,
+   274.0
+  ],
+  "tris": 36,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Jettied",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_House_Jettied",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   674.0,
+   627.2,
+   915.0
+  ],
+  "tris": 2420,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Jettied_glass",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_House_Jettied_glass",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   433.3,
+   574.4,
+   468.6
+  ],
+  "tris": 120,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Jettied_gold",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_House_Jettied_gold",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   739.0,
+   39.0,
+   78.0
+  ],
+  "tris": 888,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Jettied_roof",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_House_Jettied_roof",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   724.0,
+   604.0,
+   349.0
+  ],
+  "tris": 36,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Jettied_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_House_Jettied_stone_dark",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   550.4,
+   447.2,
+   259.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Shopfront",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_House_Shopfront",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   695.1,
+   144.7,
+   342.0
+  ],
+  "tris": 2960,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Shopfront_glass",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_House_Shopfront_glass",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   579.1,
+   8.0,
+   130.0
+  ],
+  "tris": 36,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Shopfront_gold",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_House_Shopfront_gold",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   587.0,
+   6.3,
+   41.0
+  ],
+  "tris": 420,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Shopfront_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_House_Shopfront_stone_dark",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   596.0,
+   42.0,
+   195.0
+  ],
+  "tris": 36,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Roof_Chimney",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_Roof_Chimney",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   211.8,
+   211.8,
+   436.0
+  ],
+  "tris": 464,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Roof_Chimney_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_Roof_Chimney_stone_dark",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   124.8,
+   98.8,
+   8.0
+  ],
+  "tris": 128,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Roof_Dormer",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_Roof_Dormer",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   155.0,
+   227.6,
+   200.0
+  ],
+  "tris": 192,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Roof_Dormer_glass",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_Roof_Dormer_glass",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   4.8,
+   58.5,
+   98.1
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Roof_Dormer_roof",
+  "path": "/Game/WonderlandV2/Kit/roofscape/WL_Roof_Dormer_roof",
+  "folder": "Kit/roofscape",
+  "size_cm": [
+   187.0,
+   188.4,
+   105.0
+  ],
+  "tris": 36,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Sky_Island_Large",
+  "path": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Large",
+  "folder": "Kit/sky",
+  "size_cm": [
+   2760.0,
+   2760.0,
+   180.0
+  ],
+  "tris": 384,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Sky_Island_Large_lawn",
+  "path": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Large_lawn",
+  "folder": "Kit/sky",
+  "size_cm": [
+   2600.0,
+   2600.0,
+   30.0
+  ],
+  "tris": 112,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Sky_Island_Large_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Large_stone_dark",
+  "folder": "Kit/sky",
+  "size_cm": [
+   2652.0,
+   2652.0,
+   1745.0
+  ],
+  "tris": 870,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Sky_Island_Large_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Large_veg_anchor",
+  "folder": "Kit/sky",
+  "size_cm": [
+   2817.7,
+   2781.7,
+   436.5
+  ],
+  "tris": 1628,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Sky_Island_Medium",
+  "path": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Medium",
+  "folder": "Kit/sky",
+  "size_cm": [
+   1760.0,
+   1760.0,
+   180.0
+  ],
+  "tris": 384,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Sky_Island_Medium_lawn",
+  "path": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Medium_lawn",
+  "folder": "Kit/sky",
+  "size_cm": [
+   1600.0,
+   1600.0,
+   30.0
+  ],
+  "tris": 112,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Sky_Island_Medium_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Medium_stone_dark",
+  "folder": "Kit/sky",
+  "size_cm": [
+   1632.0,
+   1632.0,
+   1145.0
+  ],
+  "tris": 690,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Sky_Island_Medium_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Medium_veg_anchor",
+  "folder": "Kit/sky",
+  "size_cm": [
+   1783.5,
+   1792.6,
+   369.3
+  ],
+  "tris": 1012,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Sky_Island_Small",
+  "path": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Small",
+  "folder": "Kit/sky",
+  "size_cm": [
+   1080.0,
+   1080.0,
+   180.0
+  ],
+  "tris": 384,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Sky_Island_Small_lawn",
+  "path": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Small_lawn",
+  "folder": "Kit/sky",
+  "size_cm": [
+   920.0,
+   920.0,
+   30.0
+  ],
+  "tris": 112,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Sky_Island_Small_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Small_stone_dark",
+  "folder": "Kit/sky",
+  "size_cm": [
+   938.4,
+   938.4,
+   695.0
+  ],
+  "tris": 600,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Sky_Island_Small_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Small_veg_anchor",
+  "folder": "Kit/sky",
+  "size_cm": [
+   1093.7,
+   1118.3,
+   324.9
+  ],
+  "tris": 572,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ramp_Terrace",
+  "path": "/Game/WonderlandV2/Kit/stairs/WL_Ramp_Terrace",
+  "folder": "Kit/stairs",
+  "size_cm": [
+   1890.0,
+   352.0,
+   207.0
+  ],
+  "tris": 36,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Ramp_Terrace_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/stairs/WL_Ramp_Terrace_stone_dark",
+  "folder": "Kit/stairs",
+  "size_cm": [
+   1820.0,
+   248.0,
+   160.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Stair_Ceremonial",
+  "path": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Ceremonial",
+  "folder": "Kit/stairs",
+  "size_cm": [
+   1030.0,
+   1540.0,
+   409.0
+  ],
+  "tris": 640,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Stair_Ceremonial_gold",
+  "path": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Ceremonial_gold",
+  "folder": "Kit/stairs",
+  "size_cm": [
+   1004.0,
+   1512.4,
+   251.0
+  ],
+  "tris": 1152,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Stair_Curved",
+  "path": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Curved",
+  "folder": "Kit/stairs",
+  "size_cm": [
+   621.4,
+   747.5,
+   478.0
+  ],
+  "tris": 4012,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Stair_Garden",
+  "path": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Garden",
+  "folder": "Kit/stairs",
+  "size_cm": [
+   230.0,
+   332.0,
+   189.0
+  ],
+  "tris": 164,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Stair_Garden_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Garden_veg_anchor",
+  "folder": "Kit/stairs",
+  "size_cm": [
+   172.1,
+   310.0,
+   136.5
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Stair_HalfTurn",
+  "path": "/Game/WonderlandV2/Kit/stairs/WL_Stair_HalfTurn",
+  "folder": "Kit/stairs",
+  "size_cm": [
+   623.0,
+   669.0,
+   789.0
+  ],
+  "tris": 1680,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Stair_HalfTurn_gold",
+  "path": "/Game/WonderlandV2/Kit/stairs/WL_Stair_HalfTurn_gold",
+  "folder": "Kit/stairs",
+  "size_cm": [
+   39.0,
+   39.0,
+   72.0
+  ],
+  "tris": 444,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Stair_HalfTurn_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/stairs/WL_Stair_HalfTurn_stone_dark",
+  "folder": "Kit/stairs",
+  "size_cm": [
+   186.0,
+   551.0,
+   6.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Stair_Quarter_Landing",
+  "path": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Quarter_Landing",
+  "folder": "Kit/stairs",
+  "size_cm": [
+   557.5,
+   565.0,
+   479.0
+  ],
+  "tris": 1392,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Stair_Quarter_Landing_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Quarter_Landing_stone_dark",
+  "folder": "Kit/stairs",
+  "size_cm": [
+   326.0,
+   326.0,
+   6.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Stair_Straight_T2",
+  "path": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Straight_T2",
+  "folder": "Kit/stairs",
+  "size_cm": [
+   392.5,
+   424.0,
+   479.0
+  ],
+  "tris": 1288,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Stair_Straight_T3",
+  "path": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Straight_T3",
+  "folder": "Kit/stairs",
+  "size_cm": [
+   807.0,
+   500.0,
+   815.0
+  ],
+  "tris": 2480,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Stair_Straight_T3_gold",
+  "path": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Straight_T3_gold",
+  "folder": "Kit/stairs",
+  "size_cm": [
+   777.0,
+   470.0,
+   700.0
+  ],
+  "tris": 1776,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Arch_Ceremonial",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Ceremonial",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   2310.0,
+   776.2,
+   2930.0
+  ],
+  "tris": 1590,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Arch_Ceremonial_gold",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Ceremonial_gold",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   1810.7,
+   562.3,
+   710.7
+  ],
+  "tris": 3795,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Arch_Ceremonial_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Ceremonial_veg_anchor",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   2099.6,
+   447.4,
+   900.0
+  ],
+  "tris": 48,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Arch_Garden_Rose",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Garden_Rose",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   627.0,
+   87.0,
+   854.0
+  ],
+  "tris": 1412,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Arch_Garden_Rose_gold",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Garden_Rose_gold",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   48.0,
+   48.0,
+   95.0
+  ],
+  "tris": 444,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Arch_Garden_Rose_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Garden_Rose_veg_anchor",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   574.0,
+   40.0,
+   786.6
+  ],
+  "tris": 120,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Arch_Trefoil_Screen",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Trefoil_Screen",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   700.0,
+   134.0,
+   887.0
+  ],
+  "tris": 1696,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Arch_Trefoil_Screen_gold",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Trefoil_Screen_gold",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   602.8,
+   32.8,
+   449.7
+  ],
+  "tris": 1564,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Arch_Twin_Tiered",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Twin_Tiered",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   1490.0,
+   540.0,
+   2075.0
+  ],
+  "tris": 2100,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Arch_Twin_Tiered_gold",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Twin_Tiered_gold",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   1212.9,
+   52.9,
+   41.6
+  ],
+  "tris": 614,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Arch_Twin_Tiered_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Twin_Tiered_stone_dark",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   864.0,
+   190.0,
+   60.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Gatehouse_Screen",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Screen",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   1218.1,
+   188.1,
+   1424.0
+  ],
+  "tris": 450,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Gatehouse_Screen_gold",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Screen_gold",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   1108.1,
+   78.1,
+   1370.8
+  ],
+  "tris": 4914,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Gatehouse_Screen_gold_aged",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Screen_gold_aged",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   968.0,
+   30.0,
+   34.0
+  ],
+  "tris": 56,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Gatehouse_Screen_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Screen_veg_anchor",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   1102.0,
+   12.0,
+   840.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Gatehouse_Twin",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Twin",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   2832.0,
+   1032.0,
+   1932.0
+  ],
+  "tris": 4292,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Gatehouse_Twin_glass",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Twin_glass",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   2664.6,
+   845.2,
+   228.1
+  ],
+  "tris": 120,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Gatehouse_Twin_gold",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Twin_gold",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   1878.0,
+   337.2,
+   1350.0
+  ],
+  "tris": 1238,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Gatehouse_Twin_roof",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Twin_roof",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   2352.0,
+   552.0,
+   560.0
+  ],
+  "tris": 322,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Gatehouse_Twin_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Twin_stone_dark",
+  "folder": "Kit/thresholds",
+  "size_cm": [
+   790.0,
+   272.8,
+   70.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Spire_Barbed",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Spire_Barbed",
+  "folder": "Kit/towers",
+  "size_cm": [
+   636.0,
+   644.9,
+   216.1
+  ],
+  "tris": 252,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Spire_Barbed_gold",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Spire_Barbed_gold",
+  "folder": "Kit/towers",
+  "size_cm": [
+   367.4,
+   366.1,
+   1329.8
+  ],
+  "tris": 2220,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Spire_Barbed_roof",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Spire_Barbed_roof",
+  "folder": "Kit/towers",
+  "size_cm": [
+   405.3,
+   405.3,
+   1938.3
+  ],
+  "tris": 870,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Spire_Cluster",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Spire_Cluster",
+  "folder": "Kit/towers",
+  "size_cm": [
+   676.6,
+   672.0,
+   177.3
+  ],
+  "tris": 380,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Spire_Cluster_gold",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Spire_Cluster_gold",
+  "folder": "Kit/towers",
+  "size_cm": [
+   436.7,
+   416.6,
+   842.6
+  ],
+  "tris": 2664,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Spire_Cluster_roof",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Spire_Cluster_roof",
+  "folder": "Kit/towers",
+  "size_cm": [
+   479.7,
+   461.7,
+   1629.2
+  ],
+  "tris": 940,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Spire_Needle",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle",
+  "folder": "Kit/towers",
+  "size_cm": [
+   601.7,
+   615.1,
+   93.3
+  ],
+  "tris": 140,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Spire_Needle_gold",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle_gold",
+  "folder": "Kit/towers",
+  "size_cm": [
+   66.8,
+   66.0,
+   170.0
+  ],
+  "tris": 444,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Spire_Needle_roof",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle_roof",
+  "folder": "Kit/towers",
+  "size_cm": [
+   379.0,
+   373.1,
+   2240.5
+  ],
+  "tris": 398,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Spire_Ringed",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Spire_Ringed",
+  "folder": "Kit/towers",
+  "size_cm": [
+   613.7,
+   590.9,
+   104.7
+  ],
+  "tris": 140,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Spire_Ringed_gold",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Spire_Ringed_gold",
+  "folder": "Kit/towers",
+  "size_cm": [
+   323.7,
+   323.0,
+   1631.1
+  ],
+  "tris": 876,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Spire_Ringed_roof_alt",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Spire_Ringed_roof_alt",
+  "folder": "Kit/towers",
+  "size_cm": [
+   367.2,
+   367.2,
+   1810.6
+  ],
+  "tris": 318,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Spire_Twisted",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Spire_Twisted",
+  "folder": "Kit/towers",
+  "size_cm": [
+   600.0,
+   590.9,
+   97.4
+  ],
+  "tris": 140,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Spire_Twisted_gold",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Spire_Twisted_gold",
+  "folder": "Kit/towers",
+  "size_cm": [
+   63.9,
+   60.0,
+   155.1
+  ],
+  "tris": 444,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Spire_Twisted_roof",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Spire_Twisted_roof",
+  "folder": "Kit/towers",
+  "size_cm": [
+   426.0,
+   426.8,
+   2090.0
+  ],
+  "tris": 254,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Base_Arcaded",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Arcaded",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1898.3,
+   1898.3,
+   1170.0
+  ],
+  "tris": 3406,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Base_Arcaded_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Arcaded_stone_dark",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1858.3,
+   1858.3,
+   1050.0
+  ],
+  "tris": 216,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Base_Battered",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Battered",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1888.5,
+   1919.2,
+   853.7
+  ],
+  "tris": 1000,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Base_Battered_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Battered_stone_dark",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1828.9,
+   1828.5,
+   85.7
+  ],
+  "tris": 124,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Base_Buttressed",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Buttressed",
+  "folder": "Kit/towers",
+  "size_cm": [
+   2075.6,
+   1870.7,
+   1072.5
+  ],
+  "tris": 904,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Base_Buttressed_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Buttressed_stone_dark",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1496.0,
+   1510.0,
+   63.8
+  ],
+  "tris": 116,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Base_Terraced",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Terraced",
+  "folder": "Kit/towers",
+  "size_cm": [
+   2485.1,
+   2484.8,
+   760.0
+  ],
+  "tris": 3712,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Belvedere",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Belvedere",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1052.0,
+   1052.0,
+   985.5
+  ],
+  "tris": 3228,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Belvedere_gold",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Belvedere_gold",
+  "folder": "Kit/towers",
+  "size_cm": [
+   72.0,
+   72.0,
+   120.0
+  ],
+  "tris": 406,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Belvedere_roof",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Belvedere_roof",
+  "folder": "Kit/towers",
+  "size_cm": [
+   828.0,
+   828.0,
+   440.0
+  ],
+  "tris": 256,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Cap",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Cap",
+  "folder": "Kit/towers",
+  "size_cm": [
+   950.2,
+   995.3,
+   524.4
+  ],
+  "tris": 2376,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Cap_gold",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Cap_gold",
+  "folder": "Kit/towers",
+  "size_cm": [
+   84.0,
+   84.0,
+   145.0
+  ],
+  "tris": 444,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Cap_roof",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Cap_roof",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1236.0,
+   1229.2,
+   595.0
+  ],
+  "tris": 848,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Cone",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Cone",
+  "folder": "Kit/towers",
+  "size_cm": [
+   677.9,
+   696.2,
+   284.2
+  ],
+  "tris": 1024,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Cone_gold",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Cone_gold",
+  "folder": "Kit/towers",
+  "size_cm": [
+   93.4,
+   90.0,
+   155.2
+  ],
+  "tris": 444,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Cone_roof",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Cone_roof",
+  "folder": "Kit/towers",
+  "size_cm": [
+   615.6,
+   605.8,
+   1221.6
+  ],
+  "tris": 618,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Onion",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Onion",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1051.1,
+   1063.9,
+   435.9
+  ],
+  "tris": 2316,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Onion_glass",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Onion_glass",
+  "folder": "Kit/towers",
+  "size_cm": [
+   994.6,
+   994.6,
+   232.0
+  ],
+  "tris": 96,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Onion_gold",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Onion_gold",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1094.1,
+   1094.1,
+   994.8
+  ],
+  "tris": 1004,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Onion_roof",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Onion_roof",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1097.5,
+   1127.0,
+   710.3
+  ],
+  "tris": 830,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Pavilion",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Pavilion",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1642.4,
+   1606.4,
+   268.0
+  ],
+  "tris": 1490,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Pavilion_glass",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Pavilion_glass",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1591.2,
+   1584.6,
+   425.0
+  ],
+  "tris": 216,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Pavilion_gold",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Pavilion_gold",
+  "folder": "Kit/towers",
+  "size_cm": [
+   144.0,
+   144.0,
+   270.0
+  ],
+  "tris": 418,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Pavilion_roof",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Pavilion_roof",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1713.6,
+   1713.6,
+   860.0
+  ],
+  "tris": 816,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Ribbed",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Ribbed",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1002.7,
+   1002.7,
+   856.1
+  ],
+  "tris": 1804,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Ribbed_gold",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Ribbed_gold",
+  "folder": "Kit/towers",
+  "size_cm": [
+   139.1,
+   130.3,
+   305.0
+  ],
+  "tris": 500,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Ribbed_roof_alt",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Ribbed_roof_alt",
+  "folder": "Kit/towers",
+  "size_cm": [
+   965.5,
+   993.8,
+   611.1
+  ],
+  "tris": 518,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Tiered",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Tiered",
+  "folder": "Kit/towers",
+  "size_cm": [
+   629.4,
+   629.4,
+   58.4
+  ],
+  "tris": 604,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Tiered_gold",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Tiered_gold",
+  "folder": "Kit/towers",
+  "size_cm": [
+   514.5,
+   506.7,
+   687.3
+  ],
+  "tris": 724,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Crown_Tiered_roof_alt",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Tiered_roof_alt",
+  "folder": "Kit/towers",
+  "size_cm": [
+   624.0,
+   624.0,
+   945.1
+  ],
+  "tris": 826,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Mid_Arcade",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1416.0,
+   1416.0,
+   1320.0
+  ],
+  "tris": 4080,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Mid_Arcade_glass",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade_glass",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1315.2,
+   1315.2,
+   635.8
+  ],
+  "tris": 144,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Mid_Ashlar",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Ashlar",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1469.0,
+   1469.6,
+   1482.8
+  ],
+  "tris": 1648,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Mid_Balconied",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1083.8,
+   1083.8,
+   1280.0
+  ],
+  "tris": 2160,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Mid_Balconied_glass",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied_glass",
+  "folder": "Kit/towers",
+  "size_cm": [
+   954.0,
+   953.1,
+   913.1
+  ],
+  "tris": 132,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Mid_Fluted",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Fluted",
+  "folder": "Kit/towers",
+  "size_cm": [
+   648.6,
+   648.3,
+   1681.0
+  ],
+  "tris": 1660,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Mid_Lantern",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Lantern",
+  "folder": "Kit/towers",
+  "size_cm": [
+   692.9,
+   706.5,
+   903.4
+  ],
+  "tris": 1084,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Mid_Lantern_glass",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Lantern_glass",
+  "folder": "Kit/towers",
+  "size_cm": [
+   576.0,
+   570.1,
+   605.0
+  ],
+  "tris": 44,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Mid_Machicolated",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Machicolated",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1513.6,
+   1498.9,
+   940.0
+  ],
+  "tris": 2214,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Mid_Machicolated_gold",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Machicolated_gold",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1325.9,
+   1325.9,
+   67.2
+  ],
+  "tris": 1022,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Mid_Machicolated_roof",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Machicolated_roof",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1387.2,
+   1387.2,
+   60.0
+  ],
+  "tris": 126,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Mid_Oriel",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Oriel",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1079.7,
+   1048.3,
+   1340.0
+  ],
+  "tris": 1814,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Mid_Oriel_glass",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Oriel_glass",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1061.3,
+   1012.2,
+   353.0
+  ],
+  "tris": 36,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Mid_Ribbed",
+  "path": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Ribbed",
+  "folder": "Kit/towers",
+  "size_cm": [
+   1023.7,
+   959.7,
+   1665.2
+  ],
+  "tris": 1848,
+  "lods": 3,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Bridge_Arc__aged",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Bridge_Arc__aged",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   2500.4,
+   681.4,
+   768.0
+  ],
+  "tris": 4156,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Bridge_Arc__aged_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Bridge_Arc__aged_stone_dark",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   1692.6,
+   219.3,
+   70.6
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Bridge_Arc__aged_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Bridge_Arc__aged_veg_anchor",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   2215.1,
+   137.3,
+   472.8
+  ],
+  "tris": 84,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Colonnade_Arcade__ruined",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Colonnade_Arcade__ruined",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   2301.8,
+   420.8,
+   845.4
+  ],
+  "tris": 2437,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Colonnade_Arcade__ruined_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Colonnade_Arcade__ruined_stone_dark",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   2052.4,
+   113.3,
+   80.9
+  ],
+  "tris": 76,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Colonnade_Arcade__ruined_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Colonnade_Arcade__ruined_veg_anchor",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   2216.4,
+   294.6,
+   706.2
+  ],
+  "tris": 418,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Detail_Balustrade_Run__broken",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Detail_Balustrade_Run__broken",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   830.6,
+   74.1,
+   155.4
+  ],
+  "tris": 1852,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Retaining_Run__overgrown",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Garden_Retaining_Run__overgrown",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   802.7,
+   156.0,
+   305.8
+  ],
+  "tris": 68,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Retaining_Run__overgrown_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Garden_Retaining_Run__overgrown_stone_dark",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   781.8,
+   141.6,
+   249.9
+  ],
+  "tris": 48,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Garden_Retaining_Run__overgrown_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Garden_Retaining_Run__overgrown_veg_anchor",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   772.3,
+   121.1,
+   25.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Gatehouse_Twin__aged",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Gatehouse_Twin__aged",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   2832.0,
+   1033.1,
+   1934.9
+  ],
+  "tris": 4804,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Gatehouse_Twin__aged_glass",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Gatehouse_Twin__aged_glass",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   2665.7,
+   846.0,
+   229.8
+  ],
+  "tris": 120,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Gatehouse_Twin__aged_gold",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Gatehouse_Twin__aged_gold",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   1878.3,
+   339.0,
+   1348.4
+  ],
+  "tris": 1266,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Gatehouse_Twin__aged_roof",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Gatehouse_Twin__aged_roof",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   2354.6,
+   554.5,
+   560.7
+  ],
+  "tris": 328,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Gatehouse_Twin__aged_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Gatehouse_Twin__aged_stone_dark",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   791.2,
+   274.0,
+   71.7
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Gatehouse_Twin__aged_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Gatehouse_Twin__aged_veg_anchor",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   2761.9,
+   962.6,
+   2368.0
+  ],
+  "tris": 1066,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Jettied__overgrown",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_House_Jettied__overgrown",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   675.7,
+   628.8,
+   915.0
+  ],
+  "tris": 2420,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Jettied__overgrown_glass",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_House_Jettied__overgrown_glass",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   434.9,
+   575.9,
+   470.0
+  ],
+  "tris": 120,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Jettied__overgrown_gold",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_House_Jettied__overgrown_gold",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   741.1,
+   41.2,
+   78.9
+  ],
+  "tris": 888,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Jettied__overgrown_roof",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_House_Jettied__overgrown_roof",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   725.0,
+   604.0,
+   350.5
+  ],
+  "tris": 36,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Jettied__overgrown_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_House_Jettied__overgrown_stone_dark",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   550.9,
+   447.7,
+   259.1
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_House_Jettied__overgrown_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_House_Jettied__overgrown_veg_anchor",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   457.0,
+   548.2,
+   400.3
+  ],
+  "tris": 96,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Base_Buttressed__aged",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Tower_Base_Buttressed__aged",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   1829.8,
+   1668.4,
+   1018.6
+  ],
+  "tris": 904,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Base_Buttressed__aged_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Tower_Base_Buttressed__aged_stone_dark",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   1496.0,
+   1488.3,
+   63.2
+  ],
+  "tris": 116,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Tower_Base_Buttressed__aged_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Tower_Base_Buttressed__aged_veg_anchor",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   1304.5,
+   1499.5,
+   977.5
+  ],
+  "tris": 132,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Curtain_Run__aged",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Wall_Curtain_Run__aged",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   1363.2,
+   450.0,
+   810.8
+  ],
+  "tris": 750,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Curtain_Run__aged_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Wall_Curtain_Run__aged_stone_dark",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   1360.0,
+   210.0,
+   14.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Curtain_Run__aged_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Wall_Curtain_Run__aged_veg_anchor",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   115.0,
+   129.0,
+   42.8
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Mural_Tower__ruined",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Wall_Mural_Tower__ruined",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   1022.9,
+   1051.7,
+   1242.2
+  ],
+  "tris": 688,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Mural_Tower__ruined_glass",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Wall_Mural_Tower__ruined_glass",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   704.0,
+   412.7,
+   225.6
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Mural_Tower__ruined_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Wall_Mural_Tower__ruined_stone_dark",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   705.0,
+   91.6,
+   1011.8
+  ],
+  "tris": 16,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Mural_Tower__ruined_veg_anchor",
+  "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Wall_Mural_Tower__ruined_veg_anchor",
+  "folder": "Kit/variants/Weathered",
+  "size_cm": [
+   318.1,
+   650.8,
+   72.0
+  ],
+  "tris": 72,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Corner_Bastion",
+  "path": "/Game/WonderlandV2/Kit/walls/WL_Wall_Corner_Bastion",
+  "folder": "Kit/walls",
+  "size_cm": [
+   915.0,
+   1241.0,
+   1127.0
+  ],
+  "tris": 1251,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Corner_Bastion_gold",
+  "path": "/Game/WonderlandV2/Kit/walls/WL_Wall_Corner_Bastion_gold",
+  "folder": "Kit/walls",
+  "size_cm": [
+   52.9,
+   52.9,
+   51.2
+  ],
+  "tris": 444,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Corner_Bastion_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/walls/WL_Wall_Corner_Bastion_stone_dark",
+  "folder": "Kit/walls",
+  "size_cm": [
+   843.0,
+   1117.5,
+   14.0
+  ],
+  "tris": 40,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Curtain_Run",
+  "path": "/Game/WonderlandV2/Kit/walls/WL_Wall_Curtain_Run",
+  "folder": "Kit/walls",
+  "size_cm": [
+   1360.0,
+   450.0,
+   807.0
+  ],
+  "tris": 750,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Curtain_Run_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/walls/WL_Wall_Curtain_Run_stone_dark",
+  "folder": "Kit/walls",
+  "size_cm": [
+   1360.0,
+   210.0,
+   14.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Mural_Tower",
+  "path": "/Game/WonderlandV2/Kit/walls/WL_Wall_Mural_Tower",
+  "folder": "Kit/walls",
+  "size_cm": [
+   1021.7,
+   1049.7,
+   1590.0
+  ],
+  "tris": 1592,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Mural_Tower_glass",
+  "path": "/Game/WonderlandV2/Kit/walls/WL_Wall_Mural_Tower_glass",
+  "folder": "Kit/walls",
+  "size_cm": [
+   703.1,
+   412.4,
+   223.6
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Mural_Tower_gold",
+  "path": "/Game/WonderlandV2/Kit/walls/WL_Wall_Mural_Tower_gold",
+  "folder": "Kit/walls",
+  "size_cm": [
+   54.0,
+   54.0,
+   95.0
+  ],
+  "tris": 444,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Mural_Tower_roof",
+  "path": "/Game/WonderlandV2/Kit/walls/WL_Wall_Mural_Tower_roof",
+  "folder": "Kit/walls",
+  "size_cm": [
+   564.0,
+   564.0,
+   310.0
+  ],
+  "tris": 190,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Mural_Tower_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/walls/WL_Wall_Mural_Tower_stone_dark",
+  "folder": "Kit/walls",
+  "size_cm": [
+   704.0,
+   90.0,
+   1010.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Postern_Gate",
+  "path": "/Game/WonderlandV2/Kit/walls/WL_Wall_Postern_Gate",
+  "folder": "Kit/walls",
+  "size_cm": [
+   1360.0,
+   450.0,
+   1047.0
+  ],
+  "tris": 1292,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Postern_Gate_gold",
+  "path": "/Game/WonderlandV2/Kit/walls/WL_Wall_Postern_Gate_gold",
+  "folder": "Kit/walls",
+  "size_cm": [
+   542.8,
+   42.8,
+   38.4
+  ],
+  "tris": 888,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Postern_Gate_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/walls/WL_Wall_Postern_Gate_stone_dark",
+  "folder": "Kit/walls",
+  "size_cm": [
+   1360.0,
+   210.0,
+   14.0
+  ],
+  "tris": 32,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Stair_Flight",
+  "path": "/Game/WonderlandV2/Kit/walls/WL_Wall_Stair_Flight",
+  "folder": "Kit/walls",
+  "size_cm": [
+   801.0,
+   338.0,
+   745.0
+  ],
+  "tris": 1424,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Wall_Stair_Flight_gold",
+  "path": "/Game/WonderlandV2/Kit/walls/WL_Wall_Stair_Flight_gold",
+  "folder": "Kit/walls",
+  "size_cm": [
+   48.0,
+   48.0,
+   85.0
+  ],
+  "tris": 444,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_Water_Court",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Hero_Water_Court",
+  "folder": "Kit/water",
+  "size_cm": [
+   4089.0,
+   1604.0,
+   526.0
+  ],
+  "tris": 2014,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_Water_Court_gold",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Hero_Water_Court_gold",
+  "folder": "Kit/water",
+  "size_cm": [
+   3445.0,
+   1429.0,
+   85.0
+  ],
+  "tris": 2798,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_Water_Court_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Hero_Water_Court_stone_dark",
+  "folder": "Kit/water",
+  "size_cm": [
+   3767.0,
+   1370.0,
+   233.5
+  ],
+  "tris": 72,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_Water_Court_water",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Hero_Water_Court_water",
+  "folder": "Kit/water",
+  "size_cm": [
+   3394.0,
+   894.0,
+   4.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Hero_Water_Court_water_lit",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Hero_Water_Court_water_lit",
+  "folder": "Kit/water",
+  "size_cm": [
+   110.0,
+   510.0,
+   156.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Canal_Crossing",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Canal_Crossing",
+  "folder": "Kit/water",
+  "size_cm": [
+   880.0,
+   820.0,
+   246.0
+  ],
+  "tris": 1860,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Canal_Crossing_gold",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Canal_Crossing_gold",
+  "folder": "Kit/water",
+  "size_cm": [
+   380.0,
+   446.0,
+   70.0
+  ],
+  "tris": 1776,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Canal_Crossing_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Canal_Crossing_stone_dark",
+  "folder": "Kit/water",
+  "size_cm": [
+   800.0,
+   776.0,
+   180.5
+  ],
+  "tris": 96,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Canal_Crossing_water",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Canal_Crossing_water",
+  "folder": "Kit/water",
+  "size_cm": [
+   794.0,
+   314.0,
+   4.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Canal_Run",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Canal_Run",
+  "folder": "Kit/water",
+  "size_cm": [
+   880.0,
+   820.0,
+   31.0
+  ],
+  "tris": 168,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Canal_Run_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Canal_Run_stone_dark",
+  "folder": "Kit/water",
+  "size_cm": [
+   800.0,
+   776.0,
+   87.5
+  ],
+  "tris": 84,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Canal_Run_water",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Canal_Run_water",
+  "folder": "Kit/water",
+  "size_cm": [
+   794.0,
+   314.0,
+   4.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Cascade_Stair",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Cascade_Stair",
+  "folder": "Kit/water",
+  "size_cm": [
+   806.0,
+   648.0,
+   478.0
+  ],
+  "tris": 1456,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Cascade_Stair_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Cascade_Stair_stone_dark",
+  "folder": "Kit/water",
+  "size_cm": [
+   320.0,
+   560.0,
+   86.0
+  ],
+  "tris": 60,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Cascade_Stair_water",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Cascade_Stair_water",
+  "folder": "Kit/water",
+  "size_cm": [
+   743.0,
+   554.0,
+   300.0
+  ],
+  "tris": 132,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Cascade_Stair_water_lit",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Cascade_Stair_water_lit",
+  "folder": "Kit/water",
+  "size_cm": [
+   331.0,
+   154.0,
+   307.5
+  ],
+  "tris": 120,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Pavilion",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Pavilion",
+  "folder": "Kit/water",
+  "size_cm": [
+   1552.0,
+   1552.0,
+   1086.0
+  ],
+  "tris": 2484,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Pavilion_glass",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Pavilion_glass",
+  "folder": "Kit/water",
+  "size_cm": [
+   104.0,
+   101.4,
+   90.0
+  ],
+  "tris": 28,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Pavilion_gold",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Pavilion_gold",
+  "folder": "Kit/water",
+  "size_cm": [
+   72.0,
+   72.0,
+   135.0
+  ],
+  "tris": 402,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Pavilion_roof",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Pavilion_roof",
+  "folder": "Kit/water",
+  "size_cm": [
+   764.4,
+   764.4,
+   310.0
+  ],
+  "tris": 256,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Pavilion_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Pavilion_stone_dark",
+  "folder": "Kit/water",
+  "size_cm": [
+   1460.0,
+   1460.0,
+   180.5
+  ],
+  "tris": 256,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Pavilion_water",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Pavilion_water",
+  "folder": "Kit/water",
+  "size_cm": [
+   1454.0,
+   1454.0,
+   4.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Spillway_Wall",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Spillway_Wall",
+  "folder": "Kit/water",
+  "size_cm": [
+   996.0,
+   568.0,
+   304.0
+  ],
+  "tris": 246,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Spillway_Wall_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Spillway_Wall_stone_dark",
+  "folder": "Kit/water",
+  "size_cm": [
+   920.0,
+   520.0,
+   365.0
+  ],
+  "tris": 72,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Spillway_Wall_water",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Spillway_Wall_water",
+  "folder": "Kit/water",
+  "size_cm": [
+   914.0,
+   637.0,
+   272.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Spillway_Wall_water_lit",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Spillway_Wall_water_lit",
+  "folder": "Kit/water",
+  "size_cm": [
+   770.0,
+   9.0,
+   248.0
+  ],
+  "tris": 12,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Sunken_Pool",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Sunken_Pool",
+  "folder": "Kit/water",
+  "size_cm": [
+   1732.0,
+   1732.0,
+   177.0
+  ],
+  "tris": 1370,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Sunken_Pool_stone_dark",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Sunken_Pool_stone_dark",
+  "folder": "Kit/water",
+  "size_cm": [
+   1100.0,
+   1100.0,
+   22.0
+  ],
+  "tris": 112,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "WL_Water_Sunken_Pool_water",
+  "path": "/Game/WonderlandV2/Kit/water/WL_Water_Sunken_Pool_water",
+  "folder": "Kit/water",
+  "size_cm": [
+   1084.0,
+   1084.0,
+   4.0
+  ],
+  "tris": 112,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_MarbleWorld",
+  "path": "/Game/WonderlandV2/Marble/mesh_hq/StaticMeshes/SM_MarbleWorld",
+  "folder": "Marble/mesh_hq/StaticMeshes",
+  "size_cm": [
+   9697.9,
+   14794.1,
+   8143.3
+  ],
+  "tris": 28567,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_mushroom_giant",
+  "path": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_giant",
+  "folder": "Mushrooms/Landmark",
+  "size_cm": [
+   2013.8,
+   2017.6,
+   1599.7
+  ],
+  "tris": 7472,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_mushroom_giant_gills",
+  "path": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_giant_gills",
+  "folder": "Mushrooms/Landmark",
+  "size_cm": [
+   1680.0,
+   1680.0,
+   27.6
+  ],
+  "tris": 1888,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_mushroom_giant_rim",
+  "path": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_giant_rim",
+  "folder": "Mushrooms/Landmark",
+  "size_cm": [
+   2002.0,
+   2002.0,
+   32.0
+  ],
+  "tris": 1152,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_mushroom_giant_spots",
+  "path": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_giant_spots",
+  "folder": "Mushrooms/Landmark",
+  "size_cm": [
+   1300.0,
+   1454.5,
+   320.2
+  ],
+  "tris": 2496,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_mushroom_landmark",
+  "path": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_landmark",
+  "folder": "Mushrooms/Landmark",
+  "size_cm": [
+   1308.5,
+   1308.5,
+   1756.9
+  ],
+  "tris": 11948,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_stone_ring_base",
+  "path": "/Game/WonderlandV2/Mushrooms/Landmark/SM_stone_ring_base",
+  "folder": "Mushrooms/Landmark",
+  "size_cm": [
+   508.3,
+   508.1,
+   76.8
+  ],
+  "tris": 384,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_mushroom_medium",
+  "path": "/Game/WonderlandV2/Mushrooms/Medium/SM_mushroom_medium",
+  "folder": "Mushrooms/Medium",
+  "size_cm": [
+   524.1,
+   523.8,
+   630.5
+  ],
+  "tris": 10604,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_mushroom_small",
+  "path": "/Game/WonderlandV2/Mushrooms/Small/SM_mushroom_small",
+  "folder": "Mushrooms/Small",
+  "size_cm": [
+   238.7,
+   238.6,
+   319.6
+  ],
+  "tris": 9580,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_clock_grand",
+  "path": "/Game/WonderlandV2/Props/Clocks/SM_clock_grand",
+  "folder": "Props/Clocks",
+  "size_cm": [
+   2290.0,
+   2560.0,
+   5440.0
+  ],
+  "tris": 7476,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_clock_ornate",
+  "path": "/Game/WonderlandV2/Props/Clocks/SM_clock_ornate",
+  "folder": "Props/Clocks",
+  "size_cm": [
+   28.0,
+   156.0,
+   159.1
+  ],
+  "tris": 1568,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_gear_monument",
+  "path": "/Game/WonderlandV2/Props/Clocks/SM_gear_monument",
+  "folder": "Props/Clocks",
+  "size_cm": [
+   3428.1,
+   1972.0,
+   3100.0
+  ],
+  "tris": 6572,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_orrery_gold",
+  "path": "/Game/WonderlandV2/Props/Clocks/SM_orrery_gold",
+  "folder": "Props/Clocks",
+  "size_cm": [
+   1521.9,
+   1644.0,
+   2638.0
+  ],
+  "tris": 11196,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_fountain_basin",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_fountain_basin",
+  "folder": "Props/Garden",
+  "size_cm": [
+   594.9,
+   594.9,
+   300.2
+  ],
+  "tris": 3786,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_fountain_finial",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_fountain_finial",
+  "folder": "Props/Garden",
+  "size_cm": [
+   60.0,
+   60.0,
+   164.0
+  ],
+  "tris": 1318,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_fountain_grand",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_fountain_grand",
+  "folder": "Props/Garden",
+  "size_cm": [
+   1334.0,
+   1334.0,
+   1586.0
+  ],
+  "tris": 2736,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_fountain_grand_water",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_fountain_grand_water",
+  "folder": "Props/Garden",
+  "size_cm": [
+   1124.0,
+   1124.0,
+   1560.9
+  ],
+  "tris": 1344,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_fountain_water",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_fountain_water",
+  "folder": "Props/Garden",
+  "size_cm": [
+   469.3,
+   469.3,
+   6.0
+  ],
+  "tris": 28,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_garden_bench",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_garden_bench",
+  "folder": "Props/Garden",
+  "size_cm": [
+   76.0,
+   172.0,
+   117.0
+  ],
+  "tris": 144,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_garden_urn",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_garden_urn",
+  "folder": "Props/Garden",
+  "size_cm": [
+   213.9,
+   160.0,
+   202.5
+  ],
+  "tris": 5260,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_glass_pavilion",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_glass_pavilion",
+  "folder": "Props/Garden",
+  "size_cm": [
+   2340.0,
+   2340.0,
+   5400.0
+  ],
+  "tris": 2056,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_glass_pavilion_lights",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_glass_pavilion_lights",
+  "folder": "Props/Garden",
+  "size_cm": [
+   1691.5,
+   1691.5,
+   3420.0
+  ],
+  "tris": 1392,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_lantern_strange",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_lantern_strange",
+  "folder": "Props/Garden",
+  "size_cm": [
+   906.0,
+   416.0,
+   2160.1
+  ],
+  "tris": 834,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_lantern_strange_glass",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_lantern_strange_glass",
+  "folder": "Props/Garden",
+  "size_cm": [
+   357.4,
+   355.4,
+   580.0
+  ],
+  "tris": 488,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_lantern_swag",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_lantern_swag",
+  "folder": "Props/Garden",
+  "size_cm": [
+   3260.0,
+   260.0,
+   1250.0
+  ],
+  "tris": 2070,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_lantern_swag_glass",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_lantern_swag_glass",
+  "folder": "Props/Garden",
+  "size_cm": [
+   2536.0,
+   136.0,
+   443.2
+  ],
+  "tris": 648,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_pedestal_finial",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_pedestal_finial",
+  "folder": "Props/Garden",
+  "size_cm": [
+   80.0,
+   80.0,
+   124.0
+  ],
+  "tris": 200,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_planter_box",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_planter_box",
+  "folder": "Props/Garden",
+  "size_cm": [
+   210.0,
+   210.0,
+   70.0
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_signpost",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_signpost",
+  "folder": "Props/Garden",
+  "size_cm": [
+   177.1,
+   196.6,
+   262.0
+  ],
+  "tris": 520,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_waymarker",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_waymarker",
+  "folder": "Props/Garden",
+  "size_cm": [
+   221.7,
+   221.7,
+   966.0
+  ],
+  "tris": 552,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_waymarker_lamp",
+  "path": "/Game/WonderlandV2/Props/Garden/SM_waymarker_lamp",
+  "folder": "Props/Garden",
+  "size_cm": [
+   152.0,
+   148.2,
+   166.0
+  ],
+  "tris": 112,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_key_colossal",
+  "path": "/Game/WonderlandV2/Props/Keys/SM_key_colossal",
+  "folder": "Props/Keys",
+  "size_cm": [
+   2630.0,
+   2720.0,
+   8400.0
+  ],
+  "tris": 5202,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_key_ornate",
+  "path": "/Game/WonderlandV2/Props/Keys/SM_key_ornate",
+  "folder": "Props/Keys",
+  "size_cm": [
+   41.6,
+   35.7,
+   158.6
+  ],
+  "tris": 3496,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_tea_cup",
+  "path": "/Game/WonderlandV2/Props/Tea/SM_tea_cup",
+  "folder": "Props/Tea",
+  "size_cm": [
+   367.0,
+   268.0,
+   265.1
+  ],
+  "tris": 6196,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_tea_cup_small",
+  "path": "/Game/WonderlandV2/Props/Tea/SM_tea_cup_small",
+  "folder": "Props/Tea",
+  "size_cm": [
+   310.0,
+   260.0,
+   219.5
+  ],
+  "tris": 5656,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_tea_heart",
+  "path": "/Game/WonderlandV2/Props/Tea/SM_tea_heart",
+  "folder": "Props/Tea",
+  "size_cm": [
+   51.2,
+   10.0,
+   46.6
+  ],
+  "tris": 570,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_tea_plinth",
+  "path": "/Game/WonderlandV2/Props/Tea/SM_tea_plinth",
+  "folder": "Props/Tea",
+  "size_cm": [
+   400.1,
+   400.0,
+   96.7
+  ],
+  "tris": 24,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_tea_pot",
+  "path": "/Game/WonderlandV2/Props/Tea/SM_tea_pot",
+  "folder": "Props/Tea",
+  "size_cm": [
+   420.2,
+   276.0,
+   309.5
+  ],
+  "tris": 7056,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_tea_saucer",
+  "path": "/Game/WonderlandV2/Props/Tea/SM_tea_saucer",
+  "folder": "Props/Tea",
+  "size_cm": [
+   520.0,
+   520.0,
+   65.6
+  ],
+  "tris": 4412,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_teapot_pavilion",
+  "path": "/Game/WonderlandV2/Props/Tea/SM_teapot_pavilion",
+  "folder": "Props/Tea",
+  "size_cm": [
+   7640.1,
+   3400.0,
+   4821.0
+  ],
+  "tris": 5514,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_MarbleWorld",
+  "path": "/Game/WonderlandV2/Scenic/Marble/mesh_hq/StaticMeshes/SM_MarbleWorld",
+  "folder": "Scenic/Marble/mesh_hq/StaticMeshes",
+  "size_cm": [
+   9697.9,
+   14794.1,
+   8143.3
+  ],
+  "tris": 28567,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_balloon_basket",
+  "path": "/Game/WonderlandV2/Sky/SM_balloon_basket",
+  "folder": "Sky",
+  "size_cm": [
+   260.0,
+   260.0,
+   264.7
+  ],
+  "tris": 360,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_balloon_envelope",
+  "path": "/Game/WonderlandV2/Sky/SM_balloon_envelope",
+  "folder": "Sky",
+  "size_cm": [
+   900.0,
+   900.0,
+   656.6
+  ],
+  "tris": 2796,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_cloud_cumulus_a",
+  "path": "/Game/WonderlandV2/Sky/SM_cloud_cumulus_a",
+  "folder": "Sky",
+  "size_cm": [
+   11251.3,
+   4950.6,
+   6042.1
+  ],
+  "tris": 2880,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_cloud_cumulus_b",
+  "path": "/Game/WonderlandV2/Sky/SM_cloud_cumulus_b",
+  "folder": "Sky",
+  "size_cm": [
+   6654.9,
+   4432.5,
+   7707.3
+  ],
+  "tris": 2880,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_cloud_cumulus_c",
+  "path": "/Game/WonderlandV2/Sky/SM_cloud_cumulus_c",
+  "folder": "Sky",
+  "size_cm": [
+   4720.9,
+   2917.3,
+   3147.3
+  ],
+  "tris": 1920,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_cloud_veil",
+  "path": "/Game/WonderlandV2/Sky/SM_cloud_veil",
+  "folder": "Sky",
+  "size_cm": [
+   15808.4,
+   6670.2,
+   1151.2
+  ],
+  "tris": 1280,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_sky_dome",
+  "path": "/Game/WonderlandV2/Sky/SM_sky_dome",
+  "folder": "Sky",
+  "size_cm": [
+   89949.7,
+   89949.7,
+   90000.0
+  ],
+  "tris": 8832,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_portal_disc",
+  "path": "/Game/WonderlandV2/VFX/Portal/SM_portal_disc",
+  "folder": "VFX/Portal",
+  "size_cm": [
+   1260.0,
+   1260.0,
+   4.0
+  ],
+  "tris": 384,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_portal_ring",
+  "path": "/Game/WonderlandV2/VFX/Portal/SM_portal_ring",
+  "folder": "VFX/Portal",
+  "size_cm": [
+   1214.0,
+   1214.0,
+   13.3
+  ],
+  "tris": 1920,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_blossom_cluster",
+  "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_blossom_cluster",
+  "folder": "Vegetation/Flowers",
+  "size_cm": [
+   205.3,
+   237.7,
+   160.5
+  ],
+  "tris": 6720,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_flower_bed_base_0",
+  "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_base_0",
+  "folder": "Vegetation/Flowers",
+  "size_cm": [
+   194.7,
+   153.7,
+   76.6
+  ],
+  "tris": 4520,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_flower_bed_base_1",
+  "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_base_1",
+  "folder": "Vegetation/Flowers",
+  "size_cm": [
+   226.5,
+   137.8,
+   79.8
+  ],
+  "tris": 4520,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_flower_bed_base_2",
+  "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_base_2",
+  "folder": "Vegetation/Flowers",
+  "size_cm": [
+   220.2,
+   131.9,
+   82.2
+  ],
+  "tris": 4520,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_flower_bed_base_3",
+  "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_base_3",
+  "folder": "Vegetation/Flowers",
+  "size_cm": [
+   184.0,
+   147.7,
+   78.2
+  ],
+  "tris": 4520,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_flower_bed_blooms_0",
+  "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_0",
+  "folder": "Vegetation/Flowers",
+  "size_cm": [
+   189.0,
+   146.5,
+   59.3
+  ],
+  "tris": 8480,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_flower_bed_blooms_1",
+  "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_1",
+  "folder": "Vegetation/Flowers",
+  "size_cm": [
+   180.6,
+   141.4,
+   59.4
+  ],
+  "tris": 8692,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_flower_bed_blooms_2",
+  "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_2",
+  "folder": "Vegetation/Flowers",
+  "size_cm": [
+   206.5,
+   127.6,
+   57.9
+  ],
+  "tris": 9116,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_flower_bed_blooms_3",
+  "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_3",
+  "folder": "Vegetation/Flowers",
+  "size_cm": [
+   177.1,
+   152.1,
+   59.6
+  ],
+  "tris": 9328,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_flower_cluster",
+  "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_cluster",
+  "folder": "Vegetation/Flowers",
+  "size_cm": [
+   180.4,
+   165.8,
+   132.3
+  ],
+  "tris": 2224,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_flower_colossal",
+  "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_colossal",
+  "folder": "Vegetation/Flowers",
+  "size_cm": [
+   2390.0,
+   930.2,
+   2491.0
+  ],
+  "tris": 412,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_flower_colossal_bloom",
+  "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_colossal_bloom",
+  "folder": "Vegetation/Flowers",
+  "size_cm": [
+   2067.8,
+   2121.0,
+   1117.3
+  ],
+  "tris": 4572,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_ground_blooms",
+  "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_ground_blooms",
+  "folder": "Vegetation/Flowers",
+  "size_cm": [
+   166.8,
+   180.7,
+   37.0
+  ],
+  "tris": 2464,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_ground_flowers",
+  "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_ground_flowers",
+  "folder": "Vegetation/Flowers",
+  "size_cm": [
+   189.5,
+   177.0,
+   49.9
+  ],
+  "tris": 992,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_lavender_heads",
+  "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_lavender_heads",
+  "folder": "Vegetation/Flowers",
+  "size_cm": [
+   62.1,
+   67.3,
+   51.9
+  ],
+  "tris": 832,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_lavender_stems",
+  "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_lavender_stems",
+  "folder": "Vegetation/Flowers",
+  "size_cm": [
+   89.0,
+   80.9,
+   79.5
+  ],
+  "tris": 2200,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_ivy_drape",
+  "path": "/Game/WonderlandV2/Vegetation/Ivy/SM_ivy_drape",
+  "folder": "Vegetation/Ivy",
+  "size_cm": [
+   261.4,
+   226.3,
+   486.8
+  ],
+  "tris": 9768,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_vine_wall",
+  "path": "/Game/WonderlandV2/Vegetation/Ivy/SM_vine_wall",
+  "folder": "Vegetation/Ivy",
+  "size_cm": [
+   363.1,
+   51.4,
+   245.7
+  ],
+  "tris": 8372,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_rose_bloom",
+  "path": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bloom",
+  "folder": "Vegetation/Roses",
+  "size_cm": [
+   91.8,
+   104.3,
+   136.9
+  ],
+  "tris": 4704,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_rose_bush",
+  "path": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bush",
+  "folder": "Vegetation/Roses",
+  "size_cm": [
+   196.4,
+   211.2,
+   134.4
+  ],
+  "tris": 10080,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_hedge_block",
+  "path": "/Game/WonderlandV2/Vegetation/Shrubs/SM_hedge_block",
+  "folder": "Vegetation/Shrubs",
+  "size_cm": [
+   353.1,
+   150.3,
+   127.7
+  ],
+  "tris": 28608,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_hedge_mass",
+  "path": "/Game/WonderlandV2/Vegetation/Shrubs/SM_hedge_mass",
+  "folder": "Vegetation/Shrubs",
+  "size_cm": [
+   667.9,
+   541.4,
+   252.8
+  ],
+  "tris": 48740,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_shrub_flowering",
+  "path": "/Game/WonderlandV2/Vegetation/Shrubs/SM_shrub_flowering",
+  "folder": "Vegetation/Shrubs",
+  "size_cm": [
+   358.7,
+   341.6,
+   191.7
+  ],
+  "tris": 15850,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_heart_topiary",
+  "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_heart_topiary",
+  "folder": "Vegetation/Topiary",
+  "size_cm": [
+   1176.4,
+   397.2,
+   1082.0
+  ],
+  "tris": 65828,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_topiary_ball",
+  "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_ball",
+  "folder": "Vegetation/Topiary",
+  "size_cm": [
+   187.1,
+   184.6,
+   149.2
+  ],
+  "tris": 15648,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_topiary_cone_plain",
+  "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_cone_plain",
+  "folder": "Vegetation/Topiary",
+  "size_cm": [
+   231.5,
+   239.3,
+   318.5
+  ],
+  "tris": 22440,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_topiary_cone_roses",
+  "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_cone_roses",
+  "folder": "Vegetation/Topiary",
+  "size_cm": [
+   294.1,
+   295.0,
+   498.0
+  ],
+  "tris": 32164,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_topiary_spiral",
+  "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_spiral",
+  "folder": "Vegetation/Topiary",
+  "size_cm": [
+   225.8,
+   234.0,
+   340.4
+  ],
+  "tris": 21004,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_canopy_large",
+  "path": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large",
+  "folder": "Vegetation/Trees",
+  "size_cm": [
+   1149.6,
+   1059.1,
+   827.1
+  ],
+  "tris": 31264,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_canopy_medium",
+  "path": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium",
+  "folder": "Vegetation/Trees",
+  "size_cm": [
+   654.5,
+   577.4,
+   430.5
+  ],
+  "tris": 16870,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_tree_clock_trunk",
+  "path": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_clock_trunk",
+  "folder": "Vegetation/Trees",
+  "size_cm": [
+   922.5,
+   794.9,
+   2218.1
+  ],
+  "tris": 7516,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_tree_mature_trunk",
+  "path": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_mature_trunk",
+  "folder": "Vegetation/Trees",
+  "size_cm": [
+   751.7,
+   648.7,
+   1567.3
+  ],
+  "tris": 6224,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_tree_slender_trunk",
+  "path": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk",
+  "folder": "Vegetation/Trees",
+  "size_cm": [
+   450.0,
+   424.1,
+   982.8
+  ],
+  "tris": 4508,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ },
+ {
+  "name": "SM_vine_hanging",
+  "path": "/Game/WonderlandV2/Vegetation/Vines/SM_vine_hanging",
+  "folder": "Vegetation/Vines",
+  "size_cm": [
+   246.7,
+   226.1,
+   671.4
+  ],
+  "tris": 10044,
+  "lods": 1,
+  "slots": 1,
+  "collision": true
+ }
+]

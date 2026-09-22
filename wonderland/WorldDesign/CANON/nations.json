@@ -1,7 +1,16 @@
 {
  "canon_version": 1,
  "locked": "2026-09-17 founder directive: three nations, permanent canon; these names supersede all earlier placeholder nation names",
- "hierarchy": ["WONDERLAND", "NATION", "REGION", "CITY", "DISTRICT", "CLAN", "PLAYER", "CREATION"],
+ "hierarchy": [
+  "WONDERLAND",
+  "NATION",
+  "REGION",
+  "CITY",
+  "DISTRICT",
+  "CLAN",
+  "PLAYER",
+  "CREATION"
+ ],
  "neutral": {
   "id": "GOLDEN_ARRIVAL",
   "role": "universal arrival and crossroads; belongs to no nation and is not rebuilt for this canon",
@@ -10,64 +19,230 @@
   "measured": "2026-09-17: every built district of WL_V2_GoldenArrival_WP2 lies within 400 m of the origin; beyond 500 m the map holds 104 distant skyline buildings and almost nothing else"
  },
  "exceptions": [
-  {"id": "DUBEL", "rule": "if it stays outside the three-nation division, preserve it as an exception; never force it into a nation", "geography": "not defined in this world lane"}
+  {
+   "id": "DUBEL",
+   "rule": "if it stays outside the three-nation division, preserve it as an exception; never force it into a nation",
+   "geography": "not defined in this world lane"
+  }
  ],
  "nations": [
   {
    "id": "ICARUS",
    "colour": "WHITE",
    "specialisation": "VIDEO_GAME_DEVELOPMENT",
-   "domain": ["game creation", "Unreal-style development", "world building", "level design", "character creation",
-              "gameplay systems", "game AI", "NPC behaviour", "animation", "physics", "multiplayer", "game mechanics",
-              "simulation", "procedural worlds"],
-   "colour_identity": ["white", "ivory", "pearl", "silver", "bright glass", "ethereal light"],
+   "domain": [
+    "game creation",
+    "Unreal-style development",
+    "world building",
+    "level design",
+    "character creation",
+    "gameplay systems",
+    "game AI",
+    "NPC behaviour",
+    "animation",
+    "physics",
+    "multiplayer",
+    "game mechanics",
+    "simulation",
+    "procedural worlds"
+   ],
+   "colour_identity": [
+    "white",
+    "ivory",
+    "pearl",
+    "silver",
+    "bright glass",
+    "ethereal light"
+   ],
    "feel": "majestic, magical, luminous, highly advanced; never plain white -- material depth and architectural personality",
-   "sector_deg": [30.0, 150.0],
-   "materials_existing": ["MI_V2_IvoryStone", "MI_V2_AshlarMarblePale", "MI_V2_AshlarMarbleCool", "MI_V2_GoldAged",
-                          "MI_V2_GlassTeal", "MI_V2_MarblePale"],
-   "materials_needed": ["pearl", "silver leaf", "bright clear glass"],
-   "gve_spaces": ["physics simulation", "multiplayer testing", "combat/gameplay simulation", "level-design evaluation",
-                  "NPC behaviour testing", "animation testing", "procedural generation", "performance testing",
-                  "game-world validation"],
-   "npc_specialists": ["WORLDsmith", "Level Architect", "Mechanist", "Creature / Character Specialist",
-                       "Simulation Guide", "Animation Specialist", "Multiplayer Specialist"]
+   "sector_deg": [
+    30.0,
+    150.0
+   ],
+   "materials_existing": [
+    "MI_V2_IvoryStone",
+    "MI_V2_AshlarMarblePale",
+    "MI_V2_AshlarMarbleCool",
+    "MI_V2_GoldAged",
+    "MI_V2_GlassTeal",
+    "MI_V2_MarblePale",
+    "MI_V2_IcarusPearl",
+    "MI_V2_IcarusSilver",
+    "MI_V2_IcarusAshlar",
+    "MI_V2_IcarusGlass"
+   ],
+   "materials_needed": [],
+   "gve_spaces": [
+    "physics simulation",
+    "multiplayer testing",
+    "combat/gameplay simulation",
+    "level-design evaluation",
+    "NPC behaviour testing",
+    "animation testing",
+    "procedural generation",
+    "performance testing",
+    "game-world validation"
+   ],
+   "npc_specialists": [
+    "WORLDsmith",
+    "Level Architect",
+    "Mechanist",
+    "Creature / Character Specialist",
+    "Simulation Guide",
+    "Animation Specialist",
+    "Multiplayer Specialist"
+   ],
+   "materials_built_2026_09_22": [
+    "MI_V2_IcarusPearl",
+    "MI_V2_IcarusSilver",
+    "MI_V2_IcarusAshlar",
+    "MI_V2_IcarusGlass"
+   ]
   },
   {
    "id": "NOCTIS",
    "colour": "BLACK",
    "specialisation": "CONTENT_CREATION",
-   "domain": ["films", "short films", "YouTube content", "livestreams", "social content", "advertisements", "music",
-              "podcasts", "digital art", "animation", "documentaries", "books and stories", "virtual productions",
-              "trailers", "promotional content", "commissioned work for other users"],
-   "colour_identity": ["black", "obsidian", "dark glass", "charcoal", "subtle silver", "luminous accents"],
+   "domain": [
+    "films",
+    "short films",
+    "YouTube content",
+    "livestreams",
+    "social content",
+    "advertisements",
+    "music",
+    "podcasts",
+    "digital art",
+    "animation",
+    "documentaries",
+    "books and stories",
+    "virtual productions",
+    "trailers",
+    "promotional content",
+    "commissioned work for other users"
+   ],
+   "colour_identity": [
+    "black",
+    "obsidian",
+    "dark glass",
+    "charcoal",
+    "subtle silver",
+    "luminous accents"
+   ],
    "feel": "cinematic and beautiful, never gloomy or dead: a premium creator civilisation, a fantasy production capital",
-   "sector_deg": [150.0, -90.0],
-   "materials_existing": [],
-   "materials_needed": ["obsidian", "charcoal ashlar", "dark glass", "subtle silver", "luminous accent emissive"],
-   "gve_spaces": ["virtual film stages", "cinematography simulations", "lighting studios", "editing environments",
-                  "sound stages", "music environments", "virtual camera systems", "motion capture spaces",
-                  "audience/content testing", "storytelling environments", "creator performance spaces"],
-   "npc_specialists": ["Director", "Cinematographer", "Editor", "Story Specialist", "Sound Specialist",
-                       "Music Specialist", "Virtual Production Specialist", "Creative Director"]
+   "sector_deg": [
+    150.0,
+    -90.0
+   ],
+   "materials_existing": [
+    "MI_V2_NoctisObsidian",
+    "MI_V2_NoctisCharcoal",
+    "MI_V2_NoctisGlass",
+    "MI_V2_NoctisSilver",
+    "MI_V2_NoctisLuminous"
+   ],
+   "materials_needed": [],
+   "gve_spaces": [
+    "virtual film stages",
+    "cinematography simulations",
+    "lighting studios",
+    "editing environments",
+    "sound stages",
+    "music environments",
+    "virtual camera systems",
+    "motion capture spaces",
+    "audience/content testing",
+    "storytelling environments",
+    "creator performance spaces"
+   ],
+   "npc_specialists": [
+    "Director",
+    "Cinematographer",
+    "Editor",
+    "Story Specialist",
+    "Sound Specialist",
+    "Music Specialist",
+    "Virtual Production Specialist",
+    "Creative Director"
+   ],
+   "materials_built_2026_09_22": [
+    "MI_V2_NoctisObsidian",
+    "MI_V2_NoctisCharcoal",
+    "MI_V2_NoctisGlass",
+    "MI_V2_NoctisSilver",
+    "MI_V2_NoctisLuminous"
+   ]
   },
   {
    "id": "TARTARUS",
    "colour": "RED",
    "specialisation": "SOFTWARE_AND_APPLICATION_CREATION",
-   "domain": ["websites", "mobile applications", "SaaS", "AI applications", "APIs", "developer tools",
-              "agentic software", "backend systems", "frontend systems", "databases", "internal tools",
-              "cloud software", "automation", "enterprise applications"],
-   "colour_identity": ["red", "crimson", "dark red", "warm metal", "black accents", "glowing red technology and magic"],
+   "domain": [
+    "websites",
+    "mobile applications",
+    "SaaS",
+    "AI applications",
+    "APIs",
+    "developer tools",
+    "agentic software",
+    "backend systems",
+    "frontend systems",
+    "databases",
+    "internal tools",
+    "cloud software",
+    "automation",
+    "enterprise applications"
+   ],
+   "colour_identity": [
+    "red",
+    "crimson",
+    "dark red",
+    "warm metal",
+    "black accents",
+    "glowing red technology and magic"
+   ],
    "feel": "the great engineering and invention civilisation: powerful, ambitious, technologically advanced; never evil because it is red",
-   "sector_deg": [-90.0, 30.0],
-   "materials_existing": [],
-   "materials_needed": ["crimson stone", "dark red roof", "warm metal", "black accent stone", "red glowing emissive"],
-   "gve_spaces": ["application testing", "API simulation", "architecture validation", "security testing",
-                  "deployment simulation", "infrastructure simulation", "load testing", "database testing",
-                  "agent testing", "software reliability evaluation"],
-   "npc_specialists": ["Appwright", "System Architect", "Interface Specialist", "Protocol / API Specialist",
-                       "Database Specialist", "Deployment Specialist", "Security Specialist",
-                       "Agentic System Specialist"]
+   "sector_deg": [
+    -90.0,
+    30.0
+   ],
+   "materials_existing": [
+    "MI_V2_TartarusCrimson",
+    "MI_V2_TartarusRoof",
+    "MI_V2_TartarusMetal",
+    "MI_V2_TartarusBlack",
+    "MI_V2_TartarusEmber"
+   ],
+   "materials_needed": [],
+   "gve_spaces": [
+    "application testing",
+    "API simulation",
+    "architecture validation",
+    "security testing",
+    "deployment simulation",
+    "infrastructure simulation",
+    "load testing",
+    "database testing",
+    "agent testing",
+    "software reliability evaluation"
+   ],
+   "npc_specialists": [
+    "Appwright",
+    "System Architect",
+    "Interface Specialist",
+    "Protocol / API Specialist",
+    "Database Specialist",
+    "Deployment Specialist",
+    "Security Specialist",
+    "Agentic System Specialist"
+   ],
+   "materials_built_2026_09_22": [
+    "MI_V2_TartarusCrimson",
+    "MI_V2_TartarusRoof",
+    "MI_V2_TartarusMetal",
+    "MI_V2_TartarusBlack",
+    "MI_V2_TartarusEmber"
+   ]
   }
  ],
  "rules": {
@@ -78,6 +253,17 @@
   "map": "grow nation identity outward from the established core; never destroy or rebuild Golden Arrival for it",
   "sectors": "the identities are canon; the bearings here are a placement frame and may be moved as data"
  },
- "data_model_fields": ["Nation", "NationSpecialization", "NationColorIdentity", "Region", "Clan", "ClanSpecialization"],
- "nation_ids": ["ICARUS", "NOCTIS", "TARTARUS"]
+ "data_model_fields": [
+  "Nation",
+  "NationSpecialization",
+  "NationColorIdentity",
+  "Region",
+  "Clan",
+  "ClanSpecialization"
+ ],
+ "nation_ids": [
+  "ICARUS",
+  "NOCTIS",
+  "TARTARUS"
+ ]
 }

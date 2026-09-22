@@ -69,3 +69,35 @@ material -- crimson STONE with real grain, warm metal, black accents -- rather t
 3. **Macro tone breakup on a big flat surface does nothing** (GS01). Geometry -- edges, courses, tufts -- does.
 4. **Contact is what sells scale** (WB01): a wall must stand ON something, seated on the real wall plane.
 5. Measure the cost of anything instanced in the same session, with a warm-up window (`perf_remove_ab.py WARM=True`).
+
+---
+
+## 2026-09-22 — all three nations now have their own materials
+
+Until today NOCTIS and TARTARUS listed `materials_existing: []`. A nation with no materials cannot be built without
+tinting at placement time, which is the exact trap `make_nation_materials.py` exists to avoid: the moment a tint
+lives in a placement pass, every later pass has to remember it. So the sets were built the way Icarus's were —
+each instance copies a source instance's already-earned tuning and overrides only what makes it the nation's own.
+
+| nation | instance | from | what changed |
+|---|---|---|---|
+| ICARUS | `MI_V2_IcarusGlass` | `MI_V2_GlassTeal` | pale cool white-blue at roughness 0.075 — Icarus's canon signature is BRIGHT glass, and IC01 had to borrow teal because nothing paler existed |
+| NOCTIS | `MI_V2_NoctisObsidian` | `MI_V2_Stone` | near-black, roughness 0.17, specular 0.78 — **polished**, so it catches light and reads as black glass rather than a dark hole |
+| NOCTIS | `MI_V2_NoctisCharcoal` | `MI_V2_AshlarMarbleShade` | dark matte ashlar, the nation's workaday masonry |
+| NOCTIS | `MI_V2_NoctisGlass` | `MI_V2_GlassViolet` | smoked dark glass |
+| NOCTIS | `MI_V2_NoctisSilver` | `MI_V2_Gold` | cool silver at metallic 0.92 — Noctis's accent metal where the core uses gold |
+| NOCTIS | `MI_V2_NoctisLuminous` | `MI_V2_Stone` | cool blue-white emissive at 2600 — the canon's "luminous details" |
+| TARTARUS | `MI_V2_TartarusCrimson` | `MI_V2_AshlarMarbleBlush` | deep warm red masonry |
+| TARTARUS | `MI_V2_TartarusRoof` | `MI_V2_RoofRose` | dark red roof |
+| TARTARUS | `MI_V2_TartarusMetal` | `MI_V2_Bronze` | warm worked metal at metallic 0.86 |
+| TARTARUS | `MI_V2_TartarusBlack` | `MI_V2_Stone` | black accent stone |
+| TARTARUS | `MI_V2_TartarusEmber` | `MI_V2_Stone` | forge-glow emissive at 2300 |
+
+**The founder's two warnings are built into the values.** Noctis is cinematic, not gloomy — which is why its
+obsidian is polished rather than matte, and why it ships a luminous accent at all. Tartarus is engineering, not
+demonic — which is why its accent is a forge ember at 2300 rather than a hellfire, and its metal is worked bronze
+rather than something molten.
+
+Emissive strengths are in SCENE units against Wonderland's physically-based sun. The same lesson the Cub Ghost's
+ghost material taught at 55,000 applies here at a smaller scale: an emissive authored on a 0..1 artistic scale
+renders black in this world.

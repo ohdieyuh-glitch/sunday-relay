@@ -1,0 +1,317 @@
+{
+ "WonderlandInstancedBatch_3783": {
+  "label": "IC02_IC02_Ground_Kerb_Run_kerb",
+  "mesh": "WL_Ground_Kerb_Run_kerb",
+  "kind": "ground",
+  "instances": 44,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3784": {
+  "label": "IC02_IC02_Ground_Kerb_Run_paving",
+  "mesh": "WL_Ground_Kerb_Run_paving",
+  "kind": "ground",
+  "instances": 44,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3785": {
+  "label": "IC02_IC02_Ground_Kerb_Run_paving_shade",
+  "mesh": "WL_Ground_Kerb_Run_paving_shade",
+  "kind": "ground",
+  "instances": 44,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3786": {
+  "label": "IC02_IC02_Ground_Kerb_Run_paving_warm",
+  "mesh": "WL_Ground_Kerb_Run_paving_warm",
+  "kind": "ground",
+  "instances": 44,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3802": {
+  "label": "IC02_IC02_Stair_Ceremonial_gold",
+  "mesh": "WL_Stair_Ceremonial_gold",
+  "kind": "architecture",
+  "instances": 1,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3804": {
+  "label": "IC02_IC02_House_Gabled_glass",
+  "mesh": "WL_House_Gabled_glass",
+  "kind": "architecture",
+  "instances": 18,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3805": {
+  "label": "IC02_IC02_House_Gabled_gold",
+  "mesh": "WL_House_Gabled_gold",
+  "kind": "architecture",
+  "instances": 18,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3806": {
+  "label": "IC02_IC02_House_Gabled_roof",
+  "mesh": "WL_House_Gabled_roof",
+  "kind": "architecture",
+  "instances": 18,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3808": {
+  "label": "IC02_IC02_House_Hipped_glass",
+  "mesh": "WL_House_Hipped_glass",
+  "kind": "architecture",
+  "instances": 16,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3809": {
+  "label": "IC02_IC02_House_Hipped_gold",
+  "mesh": "WL_House_Hipped_gold",
+  "kind": "architecture",
+  "instances": 16,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3810": {
+  "label": "IC02_IC02_House_Hipped_roof_alt",
+  "mesh": "WL_House_Hipped_roof_alt",
+  "kind": "architecture",
+  "instances": 16,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3812": {
+  "label": "IC02_IC02_House_Shopfront_glass",
+  "mesh": "WL_House_Shopfront_glass",
+  "kind": "architecture",
+  "instances": 16,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3813": {
+  "label": "IC02_IC02_House_Shopfront_gold",
+  "mesh": "WL_House_Shopfront_gold",
+  "kind": "architecture",
+  "instances": 16,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3816": {
+  "label": "IC02_IC02_House_Jettied_glass",
+  "mesh": "WL_House_Jettied_glass",
+  "kind": "architecture",
+  "instances": 18,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3817": {
+  "label": "IC02_IC02_House_Jettied_gold",
+  "mesh": "WL_House_Jettied_gold",
+  "kind": "architecture",
+  "instances": 18,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3818": {
+  "label": "IC02_IC02_House_Jettied_roof",
+  "mesh": "WL_House_Jettied_roof",
+  "kind": "architecture",
+  "instances": 18,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3824": {
+  "label": "IC02_IC02_Tower_Mid_Arcade_glass",
+  "mesh": "WL_Tower_Mid_Arcade_glass",
+  "kind": "architecture",
+  "instances": 5,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3827": {
+  "label": "IC02_IC02_Tower_Mid_Balconied_glass",
+  "mesh": "WL_Tower_Mid_Balconied_glass",
+  "kind": "architecture",
+  "instances": 3,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3834": {
+  "label": "IC02_IC02_Tower_Mid_Machicolated_gold",
+  "mesh": "WL_Tower_Mid_Machicolated_gold",
+  "kind": "architecture",
+  "instances": 3,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3835": {
+  "label": "IC02_IC02_Tower_Mid_Machicolated_roof",
+  "mesh": "WL_Tower_Mid_Machicolated_roof",
+  "kind": "architecture",
+  "instances": 3,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3838": {
+  "label": "IC02_IC02_Tower_Crown_Cone_gold",
+  "mesh": "WL_Tower_Crown_Cone_gold",
+  "kind": "architecture",
+  "instances": 2,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3839": {
+  "label": "IC02_IC02_Tower_Crown_Cone_roof",
+  "mesh": "WL_Tower_Crown_Cone_roof",
+  "kind": "architecture",
+  "instances": 2,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3843": {
+  "label": "IC02_IC02_Tower_Mid_Oriel_glass",
+  "mesh": "WL_Tower_Mid_Oriel_glass",
+  "kind": "architecture",
+  "instances": 2,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3845": {
+  "label": "IC02_IC02_Tower_Crown_Belvedere_gold",
+  "mesh": "WL_Tower_Crown_Belvedere_gold",
+  "kind": "architecture",
+  "instances": 2,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3846": {
+  "label": "IC02_IC02_Tower_Crown_Belvedere_roof",
+  "mesh": "WL_Tower_Crown_Belvedere_roof",
+  "kind": "architecture",
+  "instances": 2,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3852": {
+  "label": "IC02_IC02_Tower_Mid_Lantern_glass",
+  "mesh": "WL_Tower_Mid_Lantern_glass",
+  "kind": "architecture",
+  "instances": 1,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3854": {
+  "label": "IC02_IC02_Tower_Crown_Tiered_gold",
+  "mesh": "WL_Tower_Crown_Tiered_gold",
+  "kind": "architecture",
+  "instances": 1,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3855": {
+  "label": "IC02_IC02_Tower_Crown_Tiered_roof_alt",
+  "mesh": "WL_Tower_Crown_Tiered_roof_alt",
+  "kind": "architecture",
+  "instances": 1,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3857": {
+  "label": "IC02_IC02_Bridge_Sky_glass",
+  "mesh": "WL_Bridge_Sky_glass",
+  "kind": "architecture",
+  "instances": 4,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3858": {
+  "label": "IC02_IC02_Bridge_Sky_gold",
+  "mesh": "WL_Bridge_Sky_gold",
+  "kind": "architecture",
+  "instances": 4,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3859": {
+  "label": "IC02_IC02_Bridge_Sky_roof",
+  "mesh": "WL_Bridge_Sky_roof",
+  "kind": "architecture",
+  "instances": 4,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3865": {
+  "label": "IC02_IC02_Ground_Plaza_Medallion_gold",
+  "mesh": "WL_Ground_Plaza_Medallion_gold",
+  "kind": "ground",
+  "instances": 1,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3873": {
+  "label": "IC02_IC02_PlinthCourse",
+  "mesh": "WL_Detail_Plinth_Block",
+  "kind": "architecture",
+  "instances": 768,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3874": {
+  "label": "IC02_IC02_Ground_Verge_Run_kerb",
+  "mesh": "WL_Ground_Verge_Run_kerb",
+  "kind": "ground",
+  "instances": 44,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3875": {
+  "label": "IC02_IC02_Ground_Verge_Run_paving_shade",
+  "mesh": "WL_Ground_Verge_Run_paving_shade",
+  "kind": "ground",
+  "instances": 44,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3879": {
+  "label": "IC02_IC02_Ground_Tree_Grate_kerb",
+  "mesh": "WL_Ground_Tree_Grate_kerb",
+  "kind": "ground",
+  "instances": 12,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3880": {
+  "label": "IC02_IC02_Ground_Tree_Grate_paving",
+  "mesh": "WL_Ground_Tree_Grate_paving",
+  "kind": "ground",
+  "instances": 12,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3881": {
+  "label": "IC02_IC02_Ground_Tree_Grate_paving_shade",
+  "mesh": "WL_Ground_Tree_Grate_paving_shade",
+  "kind": "ground",
+  "instances": 12,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3882": {
+  "label": "IC02_IC02_Ground_Tree_Grate_paving_warm",
+  "mesh": "WL_Ground_Tree_Grate_paving_warm",
+  "kind": "ground",
+  "instances": 12,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3885": {
+  "label": "IC02_IC02_Ground_Drain_Channel_metal",
+  "mesh": "WL_Ground_Drain_Channel_metal",
+  "kind": "ground",
+  "instances": 18,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3886": {
+  "label": "IC02_IC02_Ground_Drain_Channel_paving",
+  "mesh": "WL_Ground_Drain_Channel_paving",
+  "kind": "ground",
+  "instances": 18,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3887": {
+  "label": "IC02_IC02_Ground_Drain_Channel_paving_shade",
+  "mesh": "WL_Ground_Drain_Channel_paving_shade",
+  "kind": "ground",
+  "instances": 18,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3888": {
+  "label": "IC02_IC02_Ground_Drain_Channel_paving_warm",
+  "mesh": "WL_Ground_Drain_Channel_paving_warm",
+  "kind": "ground",
+  "instances": 18,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3892": {
+  "label": "IC02_IC02_Detail_Wall_Lantern_glass",
+  "mesh": "WL_Detail_Wall_Lantern_glass",
+  "kind": "architecture",
+  "instances": 12,
+  "before": false
+ },
+ "WonderlandInstancedBatch_3893": {
+  "label": "IC02_IC02_Detail_Wall_Lantern_gold",
+  "mesh": "WL_Detail_Wall_Lantern_gold",
+  "kind": "architecture",
+  "instances": 12,
+  "before": false
+ }
+}

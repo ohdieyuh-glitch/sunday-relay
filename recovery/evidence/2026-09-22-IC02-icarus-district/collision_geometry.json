@@ -1,0 +1,165 @@
+{
+ "name": "zzHG00_collgeom",
+ "started": "2026-09-22 09:25:18",
+ "status": "done",
+ "meshes": 252,
+ "one_box_and_colliding": [
+  {
+   "name": "SM_kerb_stone",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 24189
+  },
+  {
+   "name": "WL_Detail_Plinth_Block",
+   "simple_total": 0,
+   "complexity": "CTF_USE_DEFAULT: 0>",
+   "instances": 6225
+  },
+  {
+   "name": "SM_balustrade",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 2149
+  },
+  {
+   "name": "SM_plaza_slab_0",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 1737
+  },
+  {
+   "name": "SM_terrace_platform",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 1269
+  },
+  {
+   "name": "SM_gate_finial_ball",
+   "simple_total": 0,
+   "complexity": "CTF_USE_DEFAULT: 0>",
+   "instances": 1160
+  },
+  {
+   "name": "SM_ground_flowers",
+   "simple_total": 0,
+   "complexity": "CTF_USE_DEFAULT: 0>",
+   "instances": 990
+  },
+  {
+   "name": "SM_ground_blooms",
+   "simple_total": 0,
+   "complexity": "CTF_USE_DEFAULT: 0>",
+   "instances": 850
+  },
+  {
+   "name": "SM_facade_panel",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 815
+  },
+  {
+   "name": "SM_column_ornate",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 801
+  },
+  {
+   "name": "SM_castle_hall",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 678
+  },
+  {
+   "name": "SM_garden_lawn",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 506
+  },
+  {
+   "name": "SM_hedge_block",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 404
+  },
+  {
+   "name": "SM_gate_arch_gold",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 386
+  },
+  {
+   "name": "SM_gate_pier",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 310
+  },
+  {
+   "name": "SM_garden_wall",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 281
+  },
+  {
+   "name": "SM_tree_slender_trunk",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 262
+  },
+  {
+   "name": "SM_tree_mature_trunk",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 251
+  },
+  {
+   "name": "WL_Detail_Wall_Lantern_glass",
+   "simple_total": 0,
+   "complexity": "CTF_USE_DEFAULT: 0>",
+   "instances": 249
+  },
+  {
+   "name": "WL_Detail_Wall_Lantern_gold",
+   "simple_total": 0,
+   "complexity": "CTF_USE_DEFAULT: 0>",
+   "instances": 249
+  },
+  {
+   "name": "SM_castle_tower_slender",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 163
+  },
+  {
+   "name": "SM_plaza_slab_3",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 156
+  },
+  {
+   "name": "SM_plaza_slab_6",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 152
+  },
+  {
+   "name": "SM_castle_arcade",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 139
+  },
+  {
+   "name": "SM_side_steps",
+   "simple_total": 0,
+   "complexity": "CTF_USE_COMPLEX_AS_SIMPLE: 3>",
+   "instances": 116
+  }
+ ],
+ "complexity_counts": {
+  "CTF_USE_COMPLEX_AS_SIMPLE: 3>": 134,
+  "CTF_USE_DEFAULT: 0>": 118
+ },
+ "finished": "2026-09-22 09:26:27",
+ "seconds": 69.24,
+ "log": ""
+}

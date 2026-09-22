@@ -1,0 +1,97 @@
+{
+ "/Game/WonderlandV2/Architecture/Castle/SM_castle_dome.SM_castle_dome": {
+  "name": "SM_castle_dome",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 2360
+ },
+ "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_moss.WL_Ground_Flagstone_A_moss": {
+  "name": "WL_Ground_Flagstone_A_moss",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 12
+ },
+ "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving.WL_Ground_Flagstone_A_paving": {
+  "name": "WL_Ground_Flagstone_A_paving",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 420
+ },
+ "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_shade.WL_Ground_Flagstone_A_paving_shade": {
+  "name": "WL_Ground_Flagstone_A_paving_shade",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 700
+ },
+ "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_A_paving_warm.WL_Ground_Flagstone_A_paving_warm": {
+  "name": "WL_Ground_Flagstone_A_paving_warm",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 588
+ },
+ "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_moss.WL_Ground_Flagstone_B_moss": {
+  "name": "WL_Ground_Flagstone_B_moss",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 12
+ },
+ "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving.WL_Ground_Flagstone_B_paving": {
+  "name": "WL_Ground_Flagstone_B_paving",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 756
+ },
+ "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_shade.WL_Ground_Flagstone_B_paving_shade": {
+  "name": "WL_Ground_Flagstone_B_paving_shade",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 672
+ },
+ "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_B_paving_warm.WL_Ground_Flagstone_B_paving_warm": {
+  "name": "WL_Ground_Flagstone_B_paving_warm",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 476
+ },
+ "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_moss.WL_Ground_Flagstone_C_moss": {
+  "name": "WL_Ground_Flagstone_C_moss",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 12
+ },
+ "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving.WL_Ground_Flagstone_C_paving": {
+  "name": "WL_Ground_Flagstone_C_paving",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 504
+ },
+ "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_shade.WL_Ground_Flagstone_C_paving_shade": {
+  "name": "WL_Ground_Flagstone_C_paving_shade",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 896
+ },
+ "/Game/WonderlandV2/Kit/paving/WL_Ground_Flagstone_C_paving_warm.WL_Ground_Flagstone_C_paving_warm": {
+  "name": "WL_Ground_Flagstone_C_paving_warm",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 392
+ },
+ "/Game/WonderlandV2/Kit/details/WL_Detail_Plinth_Block.WL_Detail_Plinth_Block": {
+  "name": "WL_Detail_Plinth_Block",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 36
+ },
+ "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_gold.WL_Ground_Plaza_Medallion_gold": {
+  "name": "WL_Ground_Plaza_Medallion_gold",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 96
+ },
+ "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_kerb.WL_Ground_Plaza_Medallion_kerb": {
+  "name": "WL_Ground_Plaza_Medallion_kerb",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 316
+ },
+ "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_paving.WL_Ground_Plaza_Medallion_paving": {
+  "name": "WL_Ground_Plaza_Medallion_paving",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 160
+ },
+ "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_paving_shade.WL_Ground_Plaza_Medallion_paving_shade": {
+  "name": "WL_Ground_Plaza_Medallion_paving_shade",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 632
+ },
+ "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_paving_warm.WL_Ground_Plaza_Medallion_paving_warm": {
+  "name": "WL_Ground_Plaza_Medallion_paving_warm",
+  "before": "CTF_USE_DEFAULT",
+  "tris": 192
+ }
+}

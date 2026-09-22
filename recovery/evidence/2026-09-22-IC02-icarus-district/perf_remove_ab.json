@@ -1,0 +1,46 @@
+{
+ "name": "zzHF10_perf_ic02",
+ "started": "2026-09-22 08:57:11",
+ "status": "done",
+ "rounds": [
+  {
+   "pass_actors": 135,
+   "on": {
+    "IcPerfOver": 35.72,
+    "IcPerfCourt": 36.92,
+    "IcPerfTowers": 75.29
+   },
+   "off": {
+    "IcPerfOver": 39.1,
+    "IcPerfCourt": 39.41,
+    "IcPerfTowers": 80.12
+   },
+   "off_again": {
+    "IcPerfOver": 41.47,
+    "IcPerfCourt": 33.33,
+    "IcPerfTowers": 77.53
+   }
+  },
+  {
+   "pass_actors": 135,
+   "on": {
+    "IcPerfOver": 37.54,
+    "IcPerfCourt": 35.51,
+    "IcPerfTowers": 58.95
+   },
+   "off": {
+    "IcPerfOver": 32.08,
+    "IcPerfCourt": 34.92,
+    "IcPerfTowers": 71.21
+   },
+   "off_again": {
+    "IcPerfOver": 41.58,
+    "IcPerfCourt": 38.64,
+    "IcPerfTowers": 79.28
+   }
+  }
+ ],
+ "finished": "2026-09-22 09:07:36",
+ "seconds": 624.29,
+ "log": ""
+}
