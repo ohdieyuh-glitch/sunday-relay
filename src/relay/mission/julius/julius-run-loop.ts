@@ -27,7 +27,7 @@
 import { juliusEitherSignal, keepJuliusLease, type JuliusLeaseRenewalPolicy } from './julius-lease-keeper';
 import type { JuliusCardPolicy } from './julius-policy';
 import type { JuliusVerificationPolicy } from './julius-verification-runtime';
-import { missionMayComplete, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
+import { JULIUS_TERMINAL_MISSION_STATES, missionMayComplete, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
 import { canStillBeAccepted } from './julius-release-runtime';
 import { planRunStatePath, transitionIsLegal } from './julius-state-path';
 
@@ -764,6 +764,24 @@ export class JuliusRunLoop {
      * BLOCKED task, schedule a repair or complete the run — computing the
      * target from the pre-resume rows would report the stall this just cleared.
      */
+    /**
+     * A TERMINAL RUN IS FINISHED TRUTH, AND THE SWEEP DOES NOT TOUCH IT.
+     *
+     * Without this, advancing a run that had already COMPLETED, FAILED or been
+     * CANCELLED still re-ran the verification sweep. Work whose review FAILED
+     * is SUCCEEDED-and-undecided for good — no review can conclude now — so it
+     * was stranded on every pass, and every pass wrote another `review.started`
+     * saying exactly what the one before it said: eighty of them in the probe
+     * that found this, under eighty different event ids.
+     *
+     * The live driver returns as soon as a run is terminal, which is why
+     * nothing had run into it; that is a property of one caller, not of the
+     * run. Nothing a finished run owes can still be paid, so nothing is owed.
+     */
+    if (JULIUS_TERMINAL_MISSION_STATES.includes(run.state)) {
+      return { runId, from: run.state, to: run.state, changed: false, reasonCode: 'RUN_TERMINAL', resumedVerifications: 0 };
+    }
+
     const resumed = await this.#resumeVerifications(run, tasks, decisions, projectId);
     if (resumed > 0) {
       [tasks, decisions] = await Promise.all([

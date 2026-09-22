@@ -10,7 +10,14 @@ export const JULIUS_MISSION_STATES = [
 ] as const;
 export type JuliusMissionState = typeof JULIUS_MISSION_STATES[number];
 
-const TERMINAL = new Set<JuliusMissionState>(['FAILED', 'COMPLETED', 'CANCELLED']);
+/**
+ * A RUN THAT HAS FINISHED. Exported because more than this module has to ask —
+ * the run loop refuses to sweep a finished run — and a second hand-written copy
+ * of the list is how the two would drift apart.
+ */
+export const JULIUS_TERMINAL_MISSION_STATES: readonly JuliusMissionState[] =
+  Object.freeze(['FAILED', 'COMPLETED', 'CANCELLED']);
+const TERMINAL = new Set<JuliusMissionState>(JULIUS_TERMINAL_MISSION_STATES);
 const TRANSITIONS: Readonly<Record<JuliusMissionState, readonly JuliusMissionState[]>> = {
   CREATED: ['PLANNING', 'CANCELLED'],
   PLANNING: ['READY', 'BLOCKED', 'FAILED', 'CANCELLED'],

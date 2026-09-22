@@ -129,6 +129,7 @@ const EXCLUDED_FILES = [
 /** Kernel dependants that are neither reached nor declared, and why they stay out. */
 const KERNEL_DEPENDANT_EXCLUSIONS = [
   { path: 'src/relay/persistence/julius-event-append-conformance.ts', reason: 'the event-append contract cases themselves: written once and run by BOTH the in-memory suite and the real-PostgreSQL one, so the two stores cannot drift again. Test support, imported by no root' },
+  { path: 'src/relay/persistence/julius-decision-write-conformance.ts', reason: 'the decision-write contract cases themselves — a decision, the tasks it releases and the events explaining both are ONE durable write — run by BOTH the in-memory suite and the real-PostgreSQL one. Test support, imported by no root' },
   { path: 'src/relay/workspace/julius-tools/node-tool-adapter.ts', reason: 'the local in-process tool adapter (bounded host filesystem + /bin/bash). Since #208 every tool effect goes through the independent executor control plane and the live harness has no import through which this adapter could arrive; it survives for the offline tooling audit and its tests' },
 ];
 

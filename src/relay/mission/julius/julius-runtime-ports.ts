@@ -151,7 +151,8 @@ export interface JuliusRunWriter {
     runId: string; projectId: string; idempotencyKey: string; evidence: JuliusEvidence;
   }): Promise<boolean>;
   /**
-   * THE DECISION AND ITS RELEASE ARE ONE WRITE.
+   * THE DECISION, ITS RELEASE, AND THE HISTORY THAT EXPLAINS BOTH ARE ONE
+   * WRITE.
    *
    * `releaseTaskIds` names BLOCKED tasks this decision satisfies (computed by
    * `evaluateJuliusRelease`); they become RUNNABLE in the same durable write
@@ -161,11 +162,30 @@ export interface JuliusRunWriter {
    * recorded it first already did. Only Julius calls this, and the claim query
    * offers RUNNABLE tasks alone, so this is the only path from BLOCKED to
    * claimable.
+   *
+   * `events` ARE PART OF THAT SAME WRITE, for the reason the release is. They
+   * used to be appended after it returned, which left a window a crash could
+   * fall into: the decision stood, the release stood, and the events that
+   * explain them were lost — permanently, because the resume sweep skips a
+   * task that already has a decision, so nothing ever wrote them again. The
+   * run's history then could not say that a verification was decided or that a
+   * task became runnable, while the rows those events describe stood. The
+   * behaviour was right and the record was wrong, which is the failure a
+   * ledger exists to prevent.
+   *
+   * They are written ONLY when this call recorded the decision. A duplicate
+   * wrote them the first time, and writing them again would be a second row
+   * saying what the ledger already says.
+   *
+   * Their ids come from `juliusDecisionEventId`, so a replayed decision names
+   * the same events and the append contract applies to them: idempotent for a
+   * replay, a typed conflict for a rewrite.
    */
   appendDecision(input: {
     decisionId: string; runId: string; taskId: string; policyRevision: string;
     idempotencyKey: string; occurredAt: string; decision: JuliusVerificationDecision;
     releaseTaskIds?: readonly string[];
+    events?: readonly JuliusOperationalEvent[];
   }): Promise<boolean>;
 }
 

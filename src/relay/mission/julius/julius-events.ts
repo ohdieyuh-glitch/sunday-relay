@@ -227,6 +227,29 @@ export function canonicalJuliusEventIdentity(event:JuliusEventIdentityFields):st
   facts:event.facts??null,
  });
 }
+/**
+ * THE ID OF AN EVENT THAT EXPLAINS A DECISION — NAMED BY THE DECISION.
+ *
+ * Operational event ids are `${kind}:${randomUUID()}` in the live composition,
+ * which is right for an event written once and wrong for one that may be
+ * written again: a replay mints a NEW id, so the append contract above — the
+ * one that makes a replay idempotent and a rewrite a conflict — is never
+ * reached, and the ledger grows a second row saying the same thing.
+ *
+ * An event that explains a decision has a durable name available to it: the
+ * decision's own idempotency key, which is what the store dedupes the decision
+ * on. Two processes deciding the same thing agree on that key, so they agree
+ * on these ids, so a second write is recognised as the replay it is.
+ *
+ * The ORDINAL separates events one decision writes under a single type — one
+ * `task.runnable` per released task — and is the position within that
+ * decision's own released set, which is computed from durable rows rather than
+ * from the order a process happened to visit them in.
+ */
+export const JULIUS_DECISION_EVENT_ID_VERSION='julius-decision-event-id.v1'as const;
+export const juliusDecisionEventId=(idempotencyKey:string,type:JuliusOperationalEventType,ordinal:number):string=>
+ `${JULIUS_DECISION_EVENT_ID_VERSION}:${idempotencyKey}:${type}:${String(ordinal)}`;
+
 /** The same event id, asked to say something else. Nothing is written. */
 export class JuliusEventIdConflict extends Error{
  constructor(readonly eventId:string){super('julius_event_id_conflict');this.name='JuliusEventIdConflict';}
