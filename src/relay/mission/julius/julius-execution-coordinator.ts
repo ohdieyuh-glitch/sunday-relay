@@ -2,6 +2,7 @@ import type { JuliusCardPolicy } from './julius-policy';
 import { flattenDiagnostics, JuliusDispatchError, JuliusProviderRouter, safeReviewDiagnostics, type JuliusDispatchAllocation, type JuliusDispatchWorkspace, type JuliusProviderResult } from './julius-router';
 import type { JuliusEvidence, JuliusTask, JuliusWorker, JuliusWorkerRole } from './julius-runtime';
 import type { JuliusContractReviewCharge } from './julius-task-contract';
+import { isJuliusContentDigest, juliusDurableArtifactRef } from './julius-artifact-reference';
 import { juliusEvidenceAuthority, juliusMintedEvidenceId } from './julius-worker-authority';
 
 /** The cost a provider reported on its own result, or null when it reported none. */
@@ -149,7 +150,15 @@ export interface JuliusExecutionPorts {
   /** `usdMicros` is what the failed attempt billed, when the boundary reported it. Spent money is charged, not released. */
   release(input:{claim:JuliusExecutionClaim;reservationId:string;reason:string;usdMicros?:number|null;spendUnknown?:boolean}):Promise<void>;
   persistEvidence(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;evidence:readonly JuliusEvidence[]}):Promise<void>;
-  acceptResult(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;result:JuliusProviderResult;idempotencyKey:string}):Promise<{duplicate:boolean}>;
+  /**
+   * `evidence` is what this result CITES — the kept evidence, already
+   * persisted by the call before this one. The result row has carried an
+   * `evidence_ids` column since #173 and was given `[]` on every attempt,
+   * including attempts that had just written evidence: a durable row asserting
+   * "this result cited nothing" as a fact. Unknown is not zero, and neither is
+   * an empty list when the answer is known.
+   */
+  acceptResult(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;result:JuliusProviderResult;idempotencyKey:string;evidence:readonly JuliusEvidence[]}):Promise<{duplicate:boolean}>;
   /**
    * `taskId` is the task the event is ABOUT. It was absent, and the events
    * this coordinator writes carried none — so on the failure path that matters
@@ -244,7 +253,14 @@ const normalizedEvidence=(claim:JuliusExecutionClaim,worker:JuliusWorker,result:
   const kept=result.evidence.map((raw,index)=>{if(raw===null||typeof raw!=='object')throw new JuliusDispatchError('INVALID_REQUEST',false,'Provider returned malformed evidence.');const value=raw as Record<string,unknown>;if(!['PASSED','FAILED','INCONCLUSIVE'].includes(String(value.status))||typeof value.type!=='string'||typeof value.safeSummary!=='string')throw new JuliusDispatchError('INVALID_REQUEST',false,'Provider returned malformed evidence.');
    const authority=juliusEvidenceAuthority(role,value.type);
    if(!authority.ok){refused.push({index,evidenceType:value.type.slice(0,64),status:String(value.status),reasonCode:authority.reasonCode});return null;}
-   return{evidenceId:juliusMintedEvidenceId(claim.taskId,claim.leaseGeneration,index),missionId:claim.task.missionId,taskId:claim.taskId,workerId:worker.workerId,type:value.type as JuliusEvidence['type'],status:value.status as JuliusEvidence['status'],safeSummary:value.safeSummary,artifactRef:typeof value.artifactRef==='string'?value.artifactRef:null,integrityHash:typeof value.integrityHash==='string'?value.integrityHash:null,occurredAt:typeof value.occurredAt==='string'?value.occurredAt:new Date().toISOString()};}).filter((item):item is NonNullable<typeof item>=>item!==null);
+   return{evidenceId:juliusMintedEvidenceId(claim.taskId,claim.leaseGeneration,index),missionId:claim.task.missionId,taskId:claim.taskId,workerId:worker.workerId,type:value.type as JuliusEvidence['type'],status:value.status as JuliusEvidence['status'],safeSummary:value.safeSummary,/* WHAT A WORKER MAY PUT IN A DURABLE COLUMN. Both were taken verbatim: any
+      string a provider wrote became the artifact reference of record, and any
+      string became its integrity hash. A reference is kept only when it names
+      something that outlives this process, and a hash only when it IS one — a
+      dangling pointer and a plausible-looking non-digest are each worse than the
+      null that says the runtime does not know. The tool path has enforced this
+      since #208 (`tool_result_artifact_ref_unverified`); the worker path did not. */
+   artifactRef:juliusDurableArtifactRef(value.artifactRef),integrityHash:isJuliusContentDigest(value.integrityHash)?value.integrityHash:null,occurredAt:typeof value.occurredAt==='string'?value.occurredAt:new Date().toISOString()};}).filter((item):item is NonNullable<typeof item>=>item!==null);
   return{kept,refused};
 };
 
@@ -351,7 +367,7 @@ export class JuliusExecutionCoordinator {
        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'The worker reported that its attempt failed.','worker_reported_failure',{runtimeStarted:true});
       }
       await this.ports.persistEvidence({claim:request.claim,worker,evidence});
-      const receipt=await this.ports.acceptResult({claim:request.claim,worker,result,idempotencyKey:`${request.operationId}:result`});
+      const receipt=await this.ports.acceptResult({claim:request.claim,worker,result,idempotencyKey:`${request.operationId}:result`,evidence});
       await this.ports.commit({claim:request.claim,reservationId:reservation.reservationId,result});
       await this.event(request,'worker.completed',{workerId:worker.workerId,duplicate:receipt.duplicate,evidenceCount:evidence.length,...successDiagnostics(request,result)});
       return{status:'COMPLETED',workerId:worker.workerId,duplicate:receipt.duplicate,...(result.contractProposal===undefined?{}:{contractProposal:result.contractProposal}),...(result.guidanceRequest===undefined?{}:{guidanceRequest:result.guidanceRequest}),...(result.guidance===undefined?{}:{guidance:result.guidance}),
