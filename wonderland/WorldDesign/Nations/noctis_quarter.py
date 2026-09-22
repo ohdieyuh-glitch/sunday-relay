@@ -323,6 +323,14 @@ def main():
             "actors": actors,
             "batches": [b for b in batches.values() if b["instances"]]}
     (HERE / "nc01_quarter.json").write_text(json.dumps(spec, indent=1), encoding="utf-8")
+    # The footprints are written out as well, and they are the point of this line: every later detail
+    # pass -- cornices, window rows, wall lanterns -- needs to know where each building actually
+    # stands and how big it is, in this quarter's own rotated frame. Recovering that from the emitted
+    # instance list is lossy guesswork; handing it over is one line. Nothing about the spec changes.
+    (HERE / "nc01_footprints.json").write_text(json.dumps(
+        [{"module": n, "u": round(u, 1), "v": round(v, 1), "z": round(z, 1), "yaw": round(yw, 2),
+          "w": round(w, 1), "d": round(d, 1)} for (n, u, v, z, yw, w, d) in footprints],
+        indent=1), encoding="utf-8")
 
     total = sum(len(b["instances"]) for b in spec["batches"])
     colliding = sum(len(b["instances"]) for b in spec["batches"] if b["collides"])

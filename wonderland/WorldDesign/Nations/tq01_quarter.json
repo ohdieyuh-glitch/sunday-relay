@@ -1,10 +1,10 @@
 {
- "pass": "TR01",
+ "pass": "TQ01",
  "tags": [
   "WL_NATION_TARTARUS",
   "WL_DISTRICT_TARTARUS_FIRST"
  ],
- "folder": "Wonderland/Authored/TR01_TartarusQuarter",
+ "folder": "Wonderland/Authored/TQ01_TartarusQuarter",
  "actors": [
   {
    "id": "TartarusApproach",
@@ -502,7 +502,7 @@
  ],
  "batches": [
   {
-   "id": "TR01_Causeway",
+   "id": "TQ01_Causeway",
    "mesh": "/Game/WonderlandV2/Architecture/Stairs/SM_terrace_platform.SM_terrace_platform",
    "material": "MI_V2_GroundFlag_PlazaShade",
    "instances": [
@@ -909,7 +909,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Road",
+   "id": "TQ01_Road",
    "mesh": "/Game/WonderlandV2/Architecture/Stairs/SM_terrace_platform.SM_terrace_platform",
    "material": "MI_V2_GroundFlag_PlazaShade",
    "instances": [
@@ -1448,7 +1448,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_YardBand",
+   "id": "TQ01_YardBand",
    "mesh": "/Game/WonderlandV2/Architecture/Stairs/SM_terrace_platform.SM_terrace_platform",
    "material": "MI_V2_GroundFlag_PlazaGrey",
    "instances": [
@@ -2515,7 +2515,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_WorksBlock",
+   "id": "TQ01_WorksBlock",
    "mesh": "/Game/WonderlandV2/Architecture/Stairs/SM_terrace_platform.SM_terrace_platform",
    "material": "MI_V2_GroundFlag_PlazaGrey",
    "instances": [
@@ -3846,7 +3846,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Ground_Kerb_Run_kerb",
+   "id": "TQ01_Ground_Kerb_Run_kerb",
    "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Run_kerb.WL_Ground_Kerb_Run_kerb",
    "material": "MI_V2_TartarusBlack",
    "instances": [
@@ -4605,7 +4605,7 @@
    "cull_distance": 12000.0
   },
   {
-   "id": "TR01_Ground_Kerb_Run_paving",
+   "id": "TQ01_Ground_Kerb_Run_paving",
    "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Run_paving.WL_Ground_Kerb_Run_paving",
    "material": "MI_V2_GroundFlag_PlazaShade",
    "instances": [
@@ -5364,7 +5364,7 @@
    "cull_distance": 12000.0
   },
   {
-   "id": "TR01_Ground_Kerb_Run_paving_shade",
+   "id": "TQ01_Ground_Kerb_Run_paving_shade",
    "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Run_paving_shade.WL_Ground_Kerb_Run_paving_shade",
    "material": "MI_V2_GroundFlag_PlazaGrey",
    "instances": [
@@ -6123,7 +6123,7 @@
    "cull_distance": 12000.0
   },
   {
-   "id": "TR01_Ground_Kerb_Run_paving_warm",
+   "id": "TQ01_Ground_Kerb_Run_paving_warm",
    "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Run_paving_warm.WL_Ground_Kerb_Run_paving_warm",
    "material": "MI_V2_GroundFlag_PlazaWarm",
    "instances": [
@@ -6882,7 +6882,7 @@
    "cull_distance": 12000.0
   },
   {
-   "id": "TR01_Object_LanternStandard_glass",
+   "id": "TQ01_Object_LanternStandard_glass",
    "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
    "material": "MI_V2_TartarusEmber",
    "instances": [
@@ -7069,7 +7069,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_Object_LanternStandard_gold",
+   "id": "TQ01_Object_LanternStandard_gold",
    "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
    "material": "MI_V2_TartarusMetal",
    "instances": [
@@ -7256,7 +7256,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_Object_LanternStandard_stone",
+   "id": "TQ01_Object_LanternStandard_stone",
    "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -7443,7 +7443,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_Arch_Twin_Tiered_gold",
+   "id": "TQ01_Arch_Twin_Tiered_gold",
    "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Twin_Tiered_gold.WL_Arch_Twin_Tiered_gold",
    "material": "MI_V2_TartarusMetal",
    "instances": [
@@ -7465,7 +7465,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Arch_Twin_Tiered_stone",
+   "id": "TQ01_Arch_Twin_Tiered_stone",
    "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Twin_Tiered.WL_Arch_Twin_Tiered",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -7487,7 +7487,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Arch_Twin_Tiered_stone_dark",
+   "id": "TQ01_Arch_Twin_Tiered_stone_dark",
    "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Twin_Tiered_stone_dark.WL_Arch_Twin_Tiered_stone_dark",
    "material": "MI_V2_TartarusBlack",
    "instances": [
@@ -7509,7 +7509,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Market_Canopy_gold",
+   "id": "TQ01_Market_Canopy_gold",
    "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Canopy_gold.WL_Market_Canopy_gold",
    "material": "MI_V2_TartarusMetal",
    "instances": [
@@ -7740,7 +7740,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_Market_Canopy_metal",
+   "id": "TQ01_Market_Canopy_metal",
    "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Canopy_metal.WL_Market_Canopy_metal",
    "material": "MI_V2_TartarusMetal",
    "instances": [
@@ -7971,7 +7971,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_Market_Canopy_roof",
+   "id": "TQ01_Market_Canopy_roof",
    "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Canopy_roof.WL_Market_Canopy_roof",
    "material": "MI_V2_TartarusRoof",
    "instances": [
@@ -8202,7 +8202,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_Market_Canopy_roof_alt",
+   "id": "TQ01_Market_Canopy_roof_alt",
    "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Canopy_roof_alt.WL_Market_Canopy_roof_alt",
    "material": "MI_V2_TartarusRoof",
    "instances": [
@@ -8433,7 +8433,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_Market_Canopy_stone",
+   "id": "TQ01_Market_Canopy_stone",
    "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Canopy.WL_Market_Canopy",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -8664,7 +8664,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_Market_Corner_Storefront_glass",
+   "id": "TQ01_Market_Corner_Storefront_glass",
    "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront_glass.WL_Market_Corner_Storefront_glass",
    "material": "MI_V2_TartarusEmber",
    "instances": [
@@ -8785,7 +8785,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_Market_Corner_Storefront_gold",
+   "id": "TQ01_Market_Corner_Storefront_gold",
    "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront_gold.WL_Market_Corner_Storefront_gold",
    "material": "MI_V2_TartarusMetal",
    "instances": [
@@ -8906,7 +8906,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_Market_Corner_Storefront_roof",
+   "id": "TQ01_Market_Corner_Storefront_roof",
    "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront_roof.WL_Market_Corner_Storefront_roof",
    "material": "MI_V2_TartarusRoof",
    "instances": [
@@ -9027,7 +9027,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_Market_Corner_Storefront_roof_alt",
+   "id": "TQ01_Market_Corner_Storefront_roof_alt",
    "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront_roof_alt.WL_Market_Corner_Storefront_roof_alt",
    "material": "MI_V2_TartarusRoof",
    "instances": [
@@ -9148,7 +9148,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_Market_Corner_Storefront_stone",
+   "id": "TQ01_Market_Corner_Storefront_stone",
    "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront.WL_Market_Corner_Storefront",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -9269,7 +9269,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_Market_Corner_Storefront_stone_dark",
+   "id": "TQ01_Market_Corner_Storefront_stone_dark",
    "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront_stone_dark.WL_Market_Corner_Storefront_stone_dark",
    "material": "MI_V2_TartarusBlack",
    "instances": [
@@ -9390,7 +9390,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_Palace_Wing_glass",
+   "id": "TQ01_Palace_Wing_glass",
    "mesh": "/Game/WonderlandV2/Kit/palace/WL_Palace_Wing_glass.WL_Palace_Wing_glass",
    "material": "MI_V2_TartarusEmber",
    "instances": [
@@ -9423,7 +9423,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Palace_Wing_gold",
+   "id": "TQ01_Palace_Wing_gold",
    "mesh": "/Game/WonderlandV2/Kit/palace/WL_Palace_Wing_gold.WL_Palace_Wing_gold",
    "material": "MI_V2_TartarusMetal",
    "instances": [
@@ -9456,7 +9456,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Palace_Wing_roof_alt",
+   "id": "TQ01_Palace_Wing_roof_alt",
    "mesh": "/Game/WonderlandV2/Kit/palace/WL_Palace_Wing_roof_alt.WL_Palace_Wing_roof_alt",
    "material": "MI_V2_TartarusRoof",
    "instances": [
@@ -9489,7 +9489,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Palace_Wing_stone",
+   "id": "TQ01_Palace_Wing_stone",
    "mesh": "/Game/WonderlandV2/Kit/palace/WL_Palace_Wing.WL_Palace_Wing",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -9522,7 +9522,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Palace_Wing_stone_dark",
+   "id": "TQ01_Palace_Wing_stone_dark",
    "mesh": "/Game/WonderlandV2/Kit/palace/WL_Palace_Wing_stone_dark.WL_Palace_Wing_stone_dark",
    "material": "MI_V2_TartarusBlack",
    "instances": [
@@ -9555,7 +9555,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Palace_Dome_Grand_glass",
+   "id": "TQ01_Palace_Dome_Grand_glass",
    "mesh": "/Game/WonderlandV2/Kit/palace/WL_Palace_Dome_Grand_glass.WL_Palace_Dome_Grand_glass",
    "material": "MI_V2_TartarusEmber",
    "instances": [
@@ -9577,7 +9577,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Palace_Dome_Grand_gold",
+   "id": "TQ01_Palace_Dome_Grand_gold",
    "mesh": "/Game/WonderlandV2/Kit/palace/WL_Palace_Dome_Grand_gold.WL_Palace_Dome_Grand_gold",
    "material": "MI_V2_TartarusMetal",
    "instances": [
@@ -9599,7 +9599,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Palace_Dome_Grand_roof",
+   "id": "TQ01_Palace_Dome_Grand_roof",
    "mesh": "/Game/WonderlandV2/Kit/palace/WL_Palace_Dome_Grand_roof.WL_Palace_Dome_Grand_roof",
    "material": "MI_V2_TartarusRoof",
    "instances": [
@@ -9621,7 +9621,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Palace_Dome_Grand_roof_alt",
+   "id": "TQ01_Palace_Dome_Grand_roof_alt",
    "mesh": "/Game/WonderlandV2/Kit/palace/WL_Palace_Dome_Grand_roof_alt.WL_Palace_Dome_Grand_roof_alt",
    "material": "MI_V2_TartarusRoof",
    "instances": [
@@ -9643,7 +9643,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Palace_Dome_Grand_stone",
+   "id": "TQ01_Palace_Dome_Grand_stone",
    "mesh": "/Game/WonderlandV2/Kit/palace/WL_Palace_Dome_Grand.WL_Palace_Dome_Grand",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -9665,7 +9665,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Palace_Dome_Grand_stone_dark",
+   "id": "TQ01_Palace_Dome_Grand_stone_dark",
    "mesh": "/Game/WonderlandV2/Kit/palace/WL_Palace_Dome_Grand_stone_dark.WL_Palace_Dome_Grand_stone_dark",
    "material": "MI_V2_TartarusBlack",
    "instances": [
@@ -9687,7 +9687,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Detail_Wall_Lantern_glass",
+   "id": "TQ01_Detail_Wall_Lantern_glass",
    "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Wall_Lantern_glass.WL_Detail_Wall_Lantern_glass",
    "material": "MI_V2_TartarusEmber",
    "instances": [
@@ -9786,7 +9786,7 @@
    "cull_distance": 12000.0
   },
   {
-   "id": "TR01_Detail_Wall_Lantern_gold",
+   "id": "TQ01_Detail_Wall_Lantern_gold",
    "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Wall_Lantern_gold.WL_Detail_Wall_Lantern_gold",
    "material": "MI_V2_TartarusMetal",
    "instances": [
@@ -9885,7 +9885,7 @@
    "cull_distance": 12000.0
   },
   {
-   "id": "TR01_Tower_Base_Buttressed_stone",
+   "id": "TQ01_Tower_Base_Buttressed_stone",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Buttressed.WL_Tower_Base_Buttressed",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -9894,7 +9894,7 @@
      -39422.2,
      12.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -9905,7 +9905,7 @@
      -30524.6,
      12.0,
      0.0,
-     60.0,
+     15.0,
      0.0,
      1.0,
      1.0,
@@ -9918,7 +9918,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Base_Buttressed_stone_dark",
+   "id": "TQ01_Tower_Base_Buttressed_stone_dark",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Buttressed_stone_dark.WL_Tower_Base_Buttressed_stone_dark",
    "material": "MI_V2_TartarusBlack",
    "instances": [
@@ -9927,7 +9927,7 @@
      -39422.2,
      12.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -9938,7 +9938,7 @@
      -30524.6,
      12.0,
      0.0,
-     60.0,
+     15.0,
      0.0,
      1.0,
      1.0,
@@ -9951,7 +9951,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Mid_Machicolated_gold",
+   "id": "TQ01_Tower_Mid_Machicolated_gold",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Machicolated_gold.WL_Tower_Mid_Machicolated_gold",
    "material": "MI_V2_TartarusMetal",
    "instances": [
@@ -9960,7 +9960,7 @@
      -39422.2,
      1092.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -9971,7 +9971,7 @@
      -30524.6,
      1092.0,
      0.0,
-     60.0,
+     15.0,
      0.0,
      1.0,
      1.0,
@@ -9984,7 +9984,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Mid_Machicolated_roof",
+   "id": "TQ01_Tower_Mid_Machicolated_roof",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Machicolated_roof.WL_Tower_Mid_Machicolated_roof",
    "material": "MI_V2_TartarusRoof",
    "instances": [
@@ -9993,7 +9993,7 @@
      -39422.2,
      1092.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -10004,7 +10004,7 @@
      -30524.6,
      1092.0,
      0.0,
-     60.0,
+     15.0,
      0.0,
      1.0,
      1.0,
@@ -10017,7 +10017,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Mid_Machicolated_stone",
+   "id": "TQ01_Tower_Mid_Machicolated_stone",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Machicolated.WL_Tower_Mid_Machicolated",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -10026,7 +10026,7 @@
      -39422.2,
      1092.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -10037,7 +10037,7 @@
      -30524.6,
      1092.0,
      0.0,
-     60.0,
+     15.0,
      0.0,
      1.0,
      1.0,
@@ -10050,7 +10050,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Mid_Fluted_stone",
+   "id": "TQ01_Tower_Mid_Fluted_stone",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Fluted.WL_Tower_Mid_Fluted",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -10059,7 +10059,7 @@
      -39422.2,
      2032.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -10070,7 +10070,7 @@
      -30524.6,
      2032.0,
      0.0,
-     60.0,
+     15.0,
      0.0,
      1.0,
      1.0,
@@ -10083,7 +10083,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Crown_Cone_gold",
+   "id": "TQ01_Tower_Crown_Cone_gold",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Cone_gold.WL_Tower_Crown_Cone_gold",
    "material": "MI_V2_TartarusMetal",
    "instances": [
@@ -10092,7 +10092,7 @@
      -39422.2,
      3712.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -10103,7 +10103,7 @@
      -30524.6,
      3712.0,
      0.0,
-     60.0,
+     15.0,
      0.0,
      1.0,
      1.0,
@@ -10116,7 +10116,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Crown_Cone_roof",
+   "id": "TQ01_Tower_Crown_Cone_roof",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Cone_roof.WL_Tower_Crown_Cone_roof",
    "material": "MI_V2_TartarusRoof",
    "instances": [
@@ -10125,7 +10125,7 @@
      -39422.2,
      3712.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -10136,7 +10136,7 @@
      -30524.6,
      3712.0,
      0.0,
-     60.0,
+     15.0,
      0.0,
      1.0,
      1.0,
@@ -10149,7 +10149,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Crown_Cone_stone",
+   "id": "TQ01_Tower_Crown_Cone_stone",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Cone.WL_Tower_Crown_Cone",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -10158,7 +10158,7 @@
      -39422.2,
      3712.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -10169,7 +10169,7 @@
      -30524.6,
      3712.0,
      0.0,
-     60.0,
+     15.0,
      0.0,
      1.0,
      1.0,
@@ -10182,7 +10182,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Base_Battered_stone",
+   "id": "TQ01_Tower_Base_Battered_stone",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Battered.WL_Tower_Base_Battered",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -10215,7 +10215,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Base_Battered_stone_dark",
+   "id": "TQ01_Tower_Base_Battered_stone_dark",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Battered_stone_dark.WL_Tower_Base_Battered_stone_dark",
    "material": "MI_V2_TartarusBlack",
    "instances": [
@@ -10248,7 +10248,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Mid_Ashlar_stone",
+   "id": "TQ01_Tower_Mid_Ashlar_stone",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Ashlar.WL_Tower_Mid_Ashlar",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -10281,7 +10281,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Mid_Arcade_glass",
+   "id": "TQ01_Tower_Mid_Arcade_glass",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade_glass.WL_Tower_Mid_Arcade_glass",
    "material": "MI_V2_TartarusEmber",
    "instances": [
@@ -10323,7 +10323,7 @@
      -36076.3,
      772.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -10336,7 +10336,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Mid_Arcade_stone",
+   "id": "TQ01_Tower_Mid_Arcade_stone",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade.WL_Tower_Mid_Arcade",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -10378,7 +10378,7 @@
      -36076.3,
      772.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -10391,7 +10391,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Crown_Belvedere_gold",
+   "id": "TQ01_Tower_Crown_Belvedere_gold",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Belvedere_gold.WL_Tower_Crown_Belvedere_gold",
    "material": "MI_V2_TartarusMetal",
    "instances": [
@@ -10424,7 +10424,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Crown_Belvedere_roof",
+   "id": "TQ01_Tower_Crown_Belvedere_roof",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Belvedere_roof.WL_Tower_Crown_Belvedere_roof",
    "material": "MI_V2_TartarusRoof",
    "instances": [
@@ -10457,7 +10457,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Crown_Belvedere_stone",
+   "id": "TQ01_Tower_Crown_Belvedere_stone",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Belvedere.WL_Tower_Crown_Belvedere",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -10490,7 +10490,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Base_Terraced_stone",
+   "id": "TQ01_Tower_Base_Terraced_stone",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Terraced.WL_Tower_Base_Terraced",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -10510,7 +10510,7 @@
      -36076.3,
      12.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -10523,7 +10523,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Mid_Oriel_glass",
+   "id": "TQ01_Tower_Mid_Oriel_glass",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Oriel_glass.WL_Tower_Mid_Oriel_glass",
    "material": "MI_V2_TartarusEmber",
    "instances": [
@@ -10543,7 +10543,7 @@
      -36076.3,
      2092.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -10556,7 +10556,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Mid_Oriel_stone",
+   "id": "TQ01_Tower_Mid_Oriel_stone",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Oriel.WL_Tower_Mid_Oriel",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -10576,7 +10576,7 @@
      -36076.3,
      2092.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -10589,7 +10589,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Crown_Onion_glass",
+   "id": "TQ01_Tower_Crown_Onion_glass",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Onion_glass.WL_Tower_Crown_Onion_glass",
    "material": "MI_V2_TartarusEmber",
    "instances": [
@@ -10609,7 +10609,7 @@
      -36076.3,
      3432.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -10622,7 +10622,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Crown_Onion_gold",
+   "id": "TQ01_Tower_Crown_Onion_gold",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Onion_gold.WL_Tower_Crown_Onion_gold",
    "material": "MI_V2_TartarusMetal",
    "instances": [
@@ -10642,7 +10642,7 @@
      -36076.3,
      3432.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -10655,7 +10655,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Crown_Onion_roof",
+   "id": "TQ01_Tower_Crown_Onion_roof",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Onion_roof.WL_Tower_Crown_Onion_roof",
    "material": "MI_V2_TartarusRoof",
    "instances": [
@@ -10675,7 +10675,7 @@
      -36076.3,
      3432.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -10688,7 +10688,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Tower_Crown_Onion_stone",
+   "id": "TQ01_Tower_Crown_Onion_stone",
    "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Onion.WL_Tower_Crown_Onion",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -10708,7 +10708,7 @@
      -36076.3,
      3432.0,
      0.0,
-     330.0,
+     60.0,
      0.0,
      1.0,
      1.0,
@@ -10721,7 +10721,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Bridge_Sky_glass",
+   "id": "TQ01_Bridge_Sky_glass",
    "mesh": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Sky_glass.WL_Bridge_Sky_glass",
    "material": "MI_V2_TartarusEmber",
    "instances": [
@@ -10820,7 +10820,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Bridge_Sky_gold",
+   "id": "TQ01_Bridge_Sky_gold",
    "mesh": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Sky_gold.WL_Bridge_Sky_gold",
    "material": "MI_V2_TartarusMetal",
    "instances": [
@@ -10919,7 +10919,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Bridge_Sky_roof",
+   "id": "TQ01_Bridge_Sky_roof",
    "mesh": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Sky_roof.WL_Bridge_Sky_roof",
    "material": "MI_V2_TartarusRoof",
    "instances": [
@@ -11018,7 +11018,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_Bridge_Sky_stone",
+   "id": "TQ01_Bridge_Sky_stone",
    "mesh": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Sky.WL_Bridge_Sky",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -11117,7 +11117,7 @@
    "cull_distance": 60000.0
   },
   {
-   "id": "TR01_House_Gabled_glass",
+   "id": "TQ01_House_Gabled_glass",
    "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Gabled_glass.WL_House_Gabled_glass",
    "material": "MI_V2_TartarusEmber",
    "instances": [
@@ -11238,7 +11238,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_House_Gabled_gold",
+   "id": "TQ01_House_Gabled_gold",
    "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Gabled_gold.WL_House_Gabled_gold",
    "material": "MI_V2_TartarusMetal",
    "instances": [
@@ -11359,7 +11359,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_House_Gabled_roof",
+   "id": "TQ01_House_Gabled_roof",
    "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Gabled_roof.WL_House_Gabled_roof",
    "material": "MI_V2_TartarusRoof",
    "instances": [
@@ -11480,7 +11480,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_House_Gabled_stone",
+   "id": "TQ01_House_Gabled_stone",
    "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Gabled.WL_House_Gabled",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -11601,7 +11601,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_House_Hipped_glass",
+   "id": "TQ01_House_Hipped_glass",
    "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Hipped_glass.WL_House_Hipped_glass",
    "material": "MI_V2_TartarusEmber",
    "instances": [
@@ -11722,7 +11722,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_House_Hipped_gold",
+   "id": "TQ01_House_Hipped_gold",
    "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Hipped_gold.WL_House_Hipped_gold",
    "material": "MI_V2_TartarusMetal",
    "instances": [
@@ -11843,7 +11843,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_House_Hipped_roof_alt",
+   "id": "TQ01_House_Hipped_roof_alt",
    "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Hipped_roof_alt.WL_House_Hipped_roof_alt",
    "material": "MI_V2_TartarusRoof",
    "instances": [
@@ -11964,7 +11964,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_House_Hipped_stone",
+   "id": "TQ01_House_Hipped_stone",
    "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Hipped.WL_House_Hipped",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -12085,7 +12085,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_House_Jettied_glass",
+   "id": "TQ01_House_Jettied_glass",
    "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Jettied_glass.WL_House_Jettied_glass",
    "material": "MI_V2_TartarusEmber",
    "instances": [
@@ -12140,7 +12140,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_House_Jettied_gold",
+   "id": "TQ01_House_Jettied_gold",
    "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Jettied_gold.WL_House_Jettied_gold",
    "material": "MI_V2_TartarusMetal",
    "instances": [
@@ -12195,7 +12195,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_House_Jettied_roof",
+   "id": "TQ01_House_Jettied_roof",
    "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Jettied_roof.WL_House_Jettied_roof",
    "material": "MI_V2_TartarusRoof",
    "instances": [
@@ -12250,7 +12250,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_House_Jettied_stone",
+   "id": "TQ01_House_Jettied_stone",
    "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Jettied.WL_House_Jettied",
    "material": "MI_V2_TartarusCrimson",
    "instances": [
@@ -12305,7 +12305,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_House_Jettied_stone_dark",
+   "id": "TQ01_House_Jettied_stone_dark",
    "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Jettied_stone_dark.WL_House_Jettied_stone_dark",
    "material": "MI_V2_TartarusBlack",
    "instances": [
@@ -12360,7 +12360,7 @@
    "cull_distance": 26000.0
   },
   {
-   "id": "TR01_PlinthCourse",
+   "id": "TQ01_PlinthCourse",
    "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Plinth_Block.WL_Detail_Plinth_Block",
    "material": "MI_V2_TartarusBlack",
    "instances": [

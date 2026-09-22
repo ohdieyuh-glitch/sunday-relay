@@ -29,7 +29,7 @@ Built in the same local frame as NC01 and rotated: Tartarus's sector is bearing 
 shows through, banding by use, socket-stacked towers, plinth courses off recorded footprints, skipped veg_anchor
 panels, kerb runs rather than kerb stones, and a floor that starts where the approach's own last plate ends.
 
-    python tartarus_quarter.py         (writes tr01_quarter.json)
+    python tartarus_quarter.py         (writes tq01_quarter.json)
 """
 import json
 import math
@@ -45,7 +45,12 @@ import nations                                                    # noqa: E402
 
 KIT = json.loads((ROOT / "Skyline" / "kit_modules.json").read_text(encoding="utf-8"))["modules"]
 
-PASS = "TR01"
+#: TQ01, not TR01. WorldDesign/GoldenArrival/tr01_clock_plaza_steps.py has used the id TR01 since the
+#: Golden Arrival was built -- there "TR" means TReads -- and a layer pass id is a DELETE KEY: apply_layer
+#: removes everything tagged WL_PASS_<id> before it writes. Two passes sharing an id means each one
+#: silently destroys the other, and this one did: applying the Tartarus quarter took out the clock
+#: plaza's stair, two treads of which were the colliding kind a player stands on.
+PASS = "TQ01"
 BEARING = -30.0                  # the middle of Tartarus's sector (-90..30)
 U_START = 50400.0
 PAVING_TOP = 12.0
@@ -287,15 +292,23 @@ def main():
 
     spec = {"pass": PASS,
             "tags": ["WL_NATION_TARTARUS", "WL_DISTRICT_TARTARUS_FIRST"],
-            "folder": "Wonderland/Authored/TR01_TartarusQuarter",
+            "folder": "Wonderland/Authored/TQ01_TartarusQuarter",
             "actors": actors,
             "batches": [b for b in batches.values() if b["instances"]]}
-    (HERE / "tr01_quarter.json").write_text(json.dumps(spec, indent=1), encoding="utf-8")
+    (HERE / "tq01_quarter.json").write_text(json.dumps(spec, indent=1), encoding="utf-8")
+    # The footprints are written out as well, and they are the point of this line: every later detail
+    # pass -- cornices, window rows, wall lanterns -- needs to know where each building actually
+    # stands and how big it is, in this quarter's own rotated frame. Recovering that from the emitted
+    # instance list is lossy guesswork; handing it over is one line. Nothing about the spec changes.
+    (HERE / "tq01_footprints.json").write_text(json.dumps(
+        [{"module": n, "u": round(u, 1), "v": round(v, 1), "z": round(z, 1), "yaw": round(yw, 2),
+          "w": round(w, 1), "d": round(d, 1)} for (n, u, v, z, yw, w, d) in footprints],
+        indent=1), encoding="utf-8")
 
     total = sum(len(b["instances"]) for b in spec["batches"])
     colliding = sum(len(b["instances"]) for b in spec["batches"] if b["collides"])
     cx, cy = world(QUARTER_U + 9000.0, 0.0)
-    print("TR01 -> tr01_quarter.json")
+    print("TQ01 -> tq01_quarter.json")
     print("  batches %d, instances %d (%d colliding), anchors %d" % (len(spec["batches"]), total, colliding,
                                                                      len(actors)))
     print("  quarter centre world (%.0f, %.0f) -> %s" % (cx, cy, (nations.zone_at(cx, cy),)))
