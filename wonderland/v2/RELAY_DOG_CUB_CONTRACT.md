@@ -95,6 +95,34 @@ scale with whoever is being escorted:
 In practice, for a 174 cm Dog on level ground: Cubs occupy **z ≈ 237 cm to 388 cm**, within about
 26–130 cm of the Dog's vertical axis. Read `FLIGHT` rather than hard-coding these.
 
+## Motion — smooth, and two modes
+
+**Founder, 2026-09-22: "The Cubs cannot move stiff, they have to move smoothly just like the AI
+companions do, and they can move around the relay dog — swirl around its body — that's OK, that's
+only when the relay dog isn't moving."**
+
+Two station-keeping modes, chosen by whether the primary Dog is moving:
+
+| Dog | Cubs | Source |
+|---|---|---|
+| moving | hold station in the dome **above** it | `cub_canon.FLIGHT` |
+| at rest | **swirl around its body**, orbiting at body height | `cub_canon.SWIRL` |
+
+`SWIRL` carries orbit radius and jitter, the height band around the Dog's body, orbit and bob
+periods with jitter, and a max turn rate — all in multiples of the Dog's height so they scale.
+**`ease` is `sine`, never linear**: a constant-speed orbit is exactly what reads as stiff.
+
+The numbers deliberately mirror the hover component this project already uses for floating props
+(`WonderlandHoverProp`: `amplitude_uu`, `period_seconds`, `sway_deg`, `phase`), because "smoothly,
+like the AI companions" means the same easing the companions already use, not a second motion
+language.
+
+**What the asset owes this, and what it does not.** The tail and both hands are separate joints
+precisely so motion can be smooth: a sway written onto `Pivot_tail` reads as drag, and the hands can
+lag the head instead of being welded to it. None of it is baked into the mesh — it is all transform,
+so it costs nothing and is entirely yours to drive. The motion itself, and the choice of mode, is
+Internal Development's.
+
 ## VFX sockets
 
 `SceneComponent`s on the joint named, ready for Niagara. The world lane owns where they are;

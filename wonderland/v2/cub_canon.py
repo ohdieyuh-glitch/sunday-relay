@@ -65,13 +65,13 @@ for _n, _j, _surf, _c, _s in D.BOXES:
 #: +/-(HEAD_HALF - 0.085 - EAR_W/2); the spurs keep that x so the Cub still lines up with the Dog,
 #: then lean out and taper to a blunt tip.
 SPUR_X = D.HEAD_HALF - 0.085 * W - D.EAR_W / 2
-SPUR_H = 0.205 * W
+SPUR_H = 0.235 * W
 SPUR_W0, SPUR_W1 = 0.215 * W, 0.135 * W
 SPUR_CANT = 11.0            # degrees, leaning away from the centre line
 SPUR_BOXES = [
-    ("spurLeft", "pearl", (-SPUR_X, HEAD_TOP + SPUR_H / 2 - 0.048 * W, -0.03 * W),
+    ("spurLeft", "pearl", (-SPUR_X, HEAD_TOP + SPUR_H / 2 - 0.012 * W, -0.03 * W),
      (SPUR_W0, SPUR_H, 0.215 * W), (0.0, 0.0, SPUR_CANT), SPUR_W1),
-    ("spurRight", "pearl", (SPUR_X, HEAD_TOP + SPUR_H / 2 - 0.048 * W, -0.03 * W),
+    ("spurRight", "pearl", (SPUR_X, HEAD_TOP + SPUR_H / 2 - 0.012 * W, -0.03 * W),
      (SPUR_W0, SPUR_H, 0.215 * W), (0.0, 0.0, -SPUR_CANT), SPUR_W1),
 ]
 
@@ -151,6 +151,35 @@ FLIGHT = {
     "spread": 0.95,            # extra height between the lowest and highest cub, x dog height
     "radius_min": 0.15,        # horizontal offset from the Dog's axis, x dog height
     "radius_max": 0.75,
+}
+
+#: MOTION. FOUNDER, 2026-09-22: "The Cubs cannot move stiff, they have to move smoothly just like the
+#: AI companions do, and they can move around the relay dog -- swirl around its body -- that's OK,
+#: that's only when the relay dog isn't moving."
+#:
+#: So a Cub has TWO station-keeping modes and the runtime chooses between them by whether the primary
+#: Dog is moving. Internal Development owns that choice and the motion itself; what the asset owes is
+#: a body that can be moved smoothly, which is why the tail and both hands are separate joints -- a
+#: sway written onto Pivot_tail reads as drag, and the hands can lag the head instead of being welded
+#: to it. Nothing here is animated by the mesh; it is all transform.
+#:
+#: DOG MOVING   -> FLIGHT above, holding station overhead.
+#: DOG AT REST  -> SWIRL below, orbiting the Dog's BODY rather than hovering over its head.
+#:
+#: The numbers follow the hover component this project already uses for floating props
+#: (WonderlandHoverProp: amplitude_uu, period_seconds, sway_deg, phase), because "smoothly, like the
+#: AI companions" means the same easing the companions already use -- not a new motion language.
+SWIRL = {
+    "radius": 0.62,            # orbit radius around the Dog's axis, x dog height
+    "radius_jitter": 0.18,     # so twelve cubs are not a clock face
+    "height_min": 0.35,        # orbit band around the Dog's BODY, x dog height, from its feet
+    "height_max": 1.05,
+    "period_seconds": 11.0,    # one full turn; slow enough to read as drifting, not spinning
+    "period_jitter": 3.5,
+    "bob_uu": 9.0,             # vertical breathing on top of the orbit
+    "bob_period_seconds": 4.5,
+    "ease": "sine",            # never linear: a constant-speed orbit is what reads as stiff
+    "turn_rate_deg_s": 55.0,   # max yaw rate when a cub turns to face something
 }
 
 # --------------------------------------------------------------------------- assembly
