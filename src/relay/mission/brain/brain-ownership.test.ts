@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -179,5 +181,21 @@ describe('an attempt is identified in Julius terms, and never re-minted', () => 
     expect(() => brainWorkflowProvenanceRef({ workflowRunId: '3499', workflowRunAttempt: 0 })).toThrow('workflow_run_attempt_invalid');
     // It is not a scope, and the scope parser will not accept it as one.
     expect(parseBrainScope('workflow:34995797200/5')).toBeNull();
+  });
+
+  /**
+   * A literal control character in source reads as nothing on screen, so a
+   * regex that was meant to REJECT control characters can be written with them
+   * embedded instead of escaped, and still pass every test. git then treats the
+   * file as binary and the diff stops being reviewable. Escapes only.
+   */
+  it('the Brain source carries no invisible control characters', () => {
+    const files = readdirSync(__dirname).filter((name) => name.endsWith('.ts'));
+    expect(files.length).toBeGreaterThan(0);
+    for (const name of files) {
+      const bytes = readFileSync(join(__dirname, name));
+      const offending = [...bytes].findIndex((byte) => (byte < 9 || (byte > 13 && byte < 32) || byte === 127));
+      expect(offending, `${name} byte ${offending}`).toBe(-1);
+    }
   });
 });
