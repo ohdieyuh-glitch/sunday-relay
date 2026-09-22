@@ -143,6 +143,19 @@ export function RelayWorld({ initialStage, initialStep, onActivated }: {
             anchors={world.systemAnchors}
             webgl={world.telemetry.webgl}
           />
+          {/* BACK, and nothing more (founder, 2026-09-22: "Add a clean Back control ... Do not redesign the landing
+              page"). It lives on the RELAY side because that is where a person is when they want to go back, it is
+              in the established low-emphasis register rather than competing with the forward action, and its
+              accessible name deliberately avoids the words ENTER RELAY so the landing page's own control stays the
+              only thing by that name. */}
+          <button
+            type="button"
+            className="rw-back"
+            onClick={world.leaveRelay}
+            aria-label="Back to the landing page"
+          >
+            ← BACK
+          </button>
         </div>
       )}
 

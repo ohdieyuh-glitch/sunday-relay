@@ -141,11 +141,20 @@ export function transitionFrame(
 }
 
 /**
- * The stage machine. Deliberately tiny and total: there is no path from
- * `transition` back to `aquala`, and committing twice is a no-op, so a second
- * click mid-flight cannot restart the passage.
+ * The stage machine. Deliberately tiny and total.
+ *
+ * `commit` and `leave` are the two ways into the passage and both are no-ops from anywhere but their own starting
+ * stage, so a second click mid-flight cannot restart or reverse it. `arrive` and `return` are the two ways out, and
+ * WHICH ONE FIRES IS THE CALLER'S BUSINESS: the machine does not know which direction a passage was flying, because
+ * it does not need to -- the loop that ran the flight does.
+ *
+ * There is still no path from `transition` to anywhere but by finishing. Interrupting a passage half way would put
+ * the camera somewhere neither stage expects, and the founder's requirement is that entering and leaving read as one
+ * continuous move rather than as a screen change that can be caught mid-frame.
  */
-export function nextStage(current: WorldStage, event: 'commit' | 'arrive'): WorldStage {
+export function nextStage(current: WorldStage, event: 'commit' | 'arrive' | 'leave' | 'return'): WorldStage {
   if (event === 'commit') return current === 'aquala' ? 'transition' : current;
+  if (event === 'leave') return current === 'relay' ? 'transition' : current;
+  if (event === 'return') return current === 'transition' ? 'aquala' : current;
   return current === 'transition' ? 'relay' : current;
 }
