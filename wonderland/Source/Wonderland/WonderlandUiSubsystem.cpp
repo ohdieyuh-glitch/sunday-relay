@@ -1185,6 +1185,33 @@ bool UWonderlandUiSubsystem::FocusWonderWebWindow(FName Id)
 	return true;
 }
 
+bool UWonderlandUiSubsystem::SetBrainSkinsOpen(bool bOpen)
+{
+	if (!IsProjectBrainOpen() || !BrainPanel.IsValid())
+	{
+		return false;
+	}
+	BrainPanel->SetSkinsOpen(bOpen);
+	return BrainPanel->IsSkinsOpen() == bOpen;
+}
+
+bool UWonderlandUiSubsystem::IsBrainSkinsOpen() const
+{
+	return BrainPanel.IsValid() && BrainPanel->IsSkinsOpen();
+}
+
+bool UWonderlandUiSubsystem::WearRelaySkin(FName SkinId)
+{
+	UWonderlandRelaySkinSubsystem* Registry = RelaySkins();
+	return Registry != nullptr && Registry->EquipSkin(SkinId);
+}
+
+int32 UWonderlandUiSubsystem::GetSkinStageFrameCount() const
+{
+	const AWonderlandSkinStage* Stage = SkinStageActor.Get();
+	return Stage != nullptr ? Stage->GetFrameCount() : 0;
+}
+
 UWonderlandRelaySkinSubsystem* UWonderlandUiSubsystem::RelaySkins() const
 {
 	const UWorld* World = GetWorld();

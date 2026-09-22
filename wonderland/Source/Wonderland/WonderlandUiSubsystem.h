@@ -134,6 +134,27 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	bool IsProjectBrainOpen() const;
 
+	/**
+	 * OPEN OR SHUT THE RELAY DOG WARDROBE inside the Project Brain. False when the Brain panel itself is shut, because
+	 * the wardrobe lives inside it and opening one without the other would be a state no key can reach.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool SetBrainSkinsOpen(bool bOpen);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool IsBrainSkinsOpen() const;
+
+	/** Wear a skin, exactly as clicking its card does. False when the registry refuses it. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool WearRelaySkin(FName SkinId);
+
+	/**
+	 * HOW MANY FRAMES THE SKIN STAGE HAS CAPTURED. A proof reads it twice with a wait between: a number that moved is
+	 * a live 3D dog, and a number that did not is a still photograph wearing the same clothes.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	int32 GetSkinStageFrameCount() const;
+
 	/** Inspect one Project Brain surface, or NAME_None to close the inspector. False when the panel is shut. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
 	bool SelectBrainSurface(FName SurfaceId);
