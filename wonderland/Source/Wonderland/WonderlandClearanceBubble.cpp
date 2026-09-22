@@ -159,7 +159,8 @@ FWonderlandStagingCandidate WonderlandMeasureStaging(
 }
 
 FWonderlandStagingResult WonderlandProbeStaging(
-	const UWorld* World, const FVector& Origin, const FVector& Facing, const TArray<const AActor*>& Ignore)
+	const UWorld* World, const FVector& Origin, const FVector& Facing, const TArray<const AActor*>& Ignore,
+	const FWonderlandStagingEnvelope& Full)
 {
 	FWonderlandStagingResult Result;
 	Result.Location = Origin;
@@ -209,7 +210,7 @@ FWonderlandStagingResult WonderlandProbeStaging(
 
 	// ---- FULL FIRST, EVERYWHERE, THEN COMPACT. Being walked a few metres to get the whole presentation beats being
 	// given a reduced one where you stand.
-	const FWonderlandStagingEnvelope* Envelopes[] = { &WonderlandFullEnvelope(), &WonderlandCompactEnvelope() };
+	const FWonderlandStagingEnvelope* Envelopes[] = { &Full, &WonderlandCompactEnvelope() };
 	const EWonderlandStagingFit Fits[] = { EWonderlandStagingFit::Full, EWonderlandStagingFit::Compact };
 
 	for (int32 Pass = 0; Pass < 2; ++Pass)

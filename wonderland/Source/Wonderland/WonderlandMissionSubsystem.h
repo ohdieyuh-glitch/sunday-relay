@@ -19,6 +19,7 @@
 #include "Subsystems/LocalPlayerSubsystem.h"
 #include "Containers/Ticker.h"
 #include "WonderlandClearanceBubble.h"
+#include "WonderlandMissionTasks.h"
 #include "WonderlandMissionBeat.h"
 #include "WonderlandMissionEvent.h"
 #include "WonderlandMissionSubsystem.generated.h"
@@ -306,6 +307,33 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	FString GetLastStagingFitName() const { return WonderlandStagingFitName(LastStaging.Fit); }
 
+	/* ------------------------------------------------- the Mission Contract stack */
+
+	/**
+	 * BRING THE ORBS INTO LINE WITH THE TASKS: one orb per task, stacked in the task list's order, gray where the
+	 * slot is empty and coloured where a contract exists.
+	 *
+	 * Called whenever the task set changes. Idempotent, so calling it twice costs nothing and leaves the same stack.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
+	void SyncTaskOrbs();
+
+	/** How many orbs are standing in the stack right now. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	int32 GetStackedOrbCount() const { return TaskOrbs.Num(); }
+
+	/**
+	 * HOW TALL THE WHOLE PRESENTATION STANDS, in uu, with this many orbs in the stack. The clearance probe asks for
+	 * this rather than assuming one orb: a second Contract above the first raises the envelope, and a staging that
+	 * fit one would put the next one through a ceiling.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	float GetStackHeightUu() const;
+
+	/** The gray/red state of each orb, bottom to top, for a proof and for `wl.Tasks.Status`. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	TArray<FString> DescribeOrbStack() const;
+
 	/** A scenario is waiting for the travel to the simulation site to finish. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	bool IsScenarioWaitingForSite() const { return PendingScenario != NAME_None; }
@@ -389,6 +417,11 @@ private:
 	/** After the last event, hold the finished contract on screen before letting it go. */
 	float FinishHold = 0.0f;
 	FTSTicker::FDelegateHandle PlayTicker;
+	/** One orb per task, keyed by the task's local id. Weak: the world may take an actor away at any time. */
+	TMap<FGuid, TWeakObjectPtr<class AWonderlandMissionOrb>> TaskOrbs;
+	/** Bound once, so the stack follows the task set without anybody having to remember to call Sync. */
+	bool bBoundToTasks = false;
+
 	/** The clearance bubble: what it decided, when it must lift, and what is waiting behind it. */
 	FWonderlandStagingResult LastStaging;
 	double ClearanceUntil = 0.0;

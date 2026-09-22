@@ -399,13 +399,38 @@ void AWonderlandMissionOrb::ResetProgression()
 	PaintChakra();
 }
 
+void AWonderlandMissionOrb::SetDraft(bool bInDraft)
+{
+	if (bDraft == bInDraft)
+	{
+		return;
+	}
+	bDraft = bInDraft;
+	PaintChakra();
+}
+
+void AWonderlandMissionOrb::SetStackLift(float Up)
+{
+	FollowOffset.Z = Up;
+}
+
+FLinearColor AWonderlandMissionOrb::CurrentColour() const
+{
+	if (bDraft)
+	{
+		// COLOURLESS, AND DELIBERATELY NOT DARK. A draft slot is waiting, not broken: a near-black orb would read
+		// as a dead one, and the founder's rule is that gray never means failure.
+		return FLinearColor(0.42f, 0.44f, 0.48f);
+	}
+	return WonderlandChakraColour(Chakra == EWonderlandChakra::None ? EWonderlandChakra::Root : Chakra);
+}
+
 void AWonderlandMissionOrb::PaintChakra()
 {
 	// A CONTRACT WITH NO STEP YET IS STILL RED. The founder's canon starts a new Mission Contract at red,
 	// so `None` here means "just manifested, before the first event landed" and shows the root colour
 	// rather than the cold ivory a resting orb used to use.
-	const EWonderlandChakra Showing = Chakra == EWonderlandChakra::None ? EWonderlandChakra::Root : Chakra;
-	const FLinearColor Colour = WonderlandChakraColour(Showing);
+	const FLinearColor Colour = CurrentColour();
 	if (RingMid != nullptr)
 	{
 		RingMid->SetVectorParameterValue(TEXT("Color"), Colour * (GlowExposure * 0.55f * Manifest));
@@ -593,16 +618,14 @@ void AWonderlandMissionOrb::Animate(float TimeSeconds, float DeltaSeconds)
 			? 0.5f * (1.0f - FMath::Cos(TimeSeconds * Motion.PulseHz * 2.0f * PI))
 			: 0.0f;
 		const float Burn = FMath::Max(Motion.Brightness * (1.0f - Motion.PulseDepth * Cycle), 0.0f) * Manifest;
-		const EWonderlandChakra Showing = Chakra == EWonderlandChakra::None ? EWonderlandChakra::Root : Chakra;
-		CrystalMid->SetVectorParameterValue(TEXT("Color"), WonderlandChakraColour(Showing) * (GlowExposure * Burn));
+		CrystalMid->SetVectorParameterValue(TEXT("Color"), CurrentColour() * (GlowExposure * Burn));
 		CrystalBurn = Burn;
 	}
 
 	// ---------------------------------------------------------------- the repair, on the crown
 	RepairShown = FMath::FInterpTo(RepairShown, RepairWeight, DeltaSeconds, 4.0f);
 	{
-		const EWonderlandChakra Showing = Chakra == EWonderlandChakra::None ? EWonderlandChakra::Root : Chakra;
-		const FLinearColor Stone = WonderlandChakraColour(Showing) * CrystalBurn;
+		const FLinearColor Stone = CurrentColour() * CrystalBurn;
 		const FLinearColor Fault(1.0f, 0.06f, 0.04f);
 		const FLinearColor Ash(0.22f, 0.20f, 0.20f);
 		const FLinearColor Gold(1.0f, 0.78f, 0.30f);

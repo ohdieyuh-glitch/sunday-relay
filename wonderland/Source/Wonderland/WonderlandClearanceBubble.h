@@ -173,4 +173,5 @@ WONDERLAND_API FWonderlandStagingCandidate WonderlandMeasureStaging(
  * than a reduced one in a doorway.
  */
 WONDERLAND_API FWonderlandStagingResult WonderlandProbeStaging(
-	const UWorld* World, const FVector& Origin, const FVector& Facing, const TArray<const AActor*>& Ignore);
+	const UWorld* World, const FVector& Origin, const FVector& Facing, const TArray<const AActor*>& Ignore,
+	const FWonderlandStagingEnvelope& Full = WonderlandFullEnvelope());

@@ -1,6 +1,10 @@
 #include "WonderlandMissionTasks.h"
 
+#include "Engine/LocalPlayer.h"
+#include "Engine/World.h"
+#include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
+#include "Kismet/GameplayStatics.h"
 
 namespace
 {
@@ -13,6 +17,124 @@ namespace
 	 */
 	TAutoConsoleVariable<int32> CVarTaskCapacity(TEXT("wl.Tasks.Capacity"), 6,
 		TEXT("How many Mission Contract task slots may exist at once, drafts included."));
+}
+
+namespace
+{
+	UWonderlandMissionTaskSubsystem* TasksFor(UWorld* World)
+	{
+		const APlayerController* Controller = UGameplayStatics::GetPlayerController(World, 0);
+		ULocalPlayer* Player = Controller != nullptr ? Controller->GetLocalPlayer() : nullptr;
+		return Player != nullptr ? Player->GetSubsystem<UWonderlandMissionTaskSubsystem>() : nullptr;
+	}
+
+	/** Tasks are addressed by their position in the stack, because a GUID is not something anybody types. */
+	FGuid AtIndex(const UWonderlandMissionTaskSubsystem& Tasks, int32 Index)
+	{
+		const TArray<FWonderlandMissionTask>& Rows = Tasks.GetTasks();
+		return Rows.IsValidIndex(Index) ? Rows[Index].LocalId : FGuid();
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs GTaskStatus(
+		TEXT("wl.Tasks.Status"),
+		TEXT("The Mission Contract task set: what exists, what colour each orb is, and who said so."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+		{
+			const UWonderlandMissionTaskSubsystem* Tasks = TasksFor(World);
+			if (Tasks == nullptr) { UE_LOG(LogTemp, Warning, TEXT("WLTASK no task subsystem")); return; }
+			for (const FString& Line : Tasks->DescribeTasks()) { UE_LOG(LogTemp, Display, TEXT("WLTASK %s"), *Line); }
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs GTaskAdd(
+		TEXT("wl.Tasks.Add"),
+		TEXT("Press +: make a new GRAY empty Mission Contract slot above the current one. Creates no mission."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+		{
+			UWonderlandMissionTaskSubsystem* Tasks = TasksFor(World);
+			if (Tasks == nullptr) { UE_LOG(LogTemp, Warning, TEXT("WLTASK no task subsystem")); return; }
+			const FGuid Id = Tasks->AddDraft();
+			UE_LOG(LogTemp, Display, TEXT("WLTASK add -> %s"), Id.IsValid() ? TEXT("new gray slot") : TEXT("REFUSED (at capacity)"));
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs GTaskSubmit(
+		TEXT("wl.Tasks.Submit"),
+		TEXT("Enter a task into a slot, turning it from GRAY to RED: wl.Tasks.Submit <index> <the task>"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			UWonderlandMissionTaskSubsystem* Tasks = TasksFor(World);
+			if (Tasks == nullptr || Args.Num() < 2)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("WLTASK usage: wl.Tasks.Submit <index> <the task>"));
+				return;
+			}
+			const int32 Index = FCString::Atoi(*Args[0]);
+			TArray<FString> Words = Args;
+			Words.RemoveAt(0);
+			const FString Objective = FString::Join(Words, TEXT(" "));
+			UE_LOG(LogTemp, Display, TEXT("WLTASK submit %d -> %s"), Index,
+				Tasks->SubmitDraft(AtIndex(*Tasks, Index), Objective) ? TEXT("RED, queued") : TEXT("REFUSED"));
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs GTaskSelect(
+		TEXT("wl.Tasks.Select"),
+		TEXT("Show a different task: wl.Tasks.Select <index>. Changes the view and nothing any task is doing."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			UWonderlandMissionTaskSubsystem* Tasks = TasksFor(World);
+			if (Tasks == nullptr || Args.Num() < 1) { UE_LOG(LogTemp, Warning, TEXT("WLTASK usage: wl.Tasks.Select <index>")); return; }
+			const int32 Index = FCString::Atoi(*Args[0]);
+			UE_LOG(LogTemp, Display, TEXT("WLTASK select %d -> %s"), Index,
+				Tasks->SelectTask(AtIndex(*Tasks, Index)) ? TEXT("showing it") : TEXT("no such task"));
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs GTaskDismiss(
+		TEXT("wl.Tasks.Dismiss"),
+		TEXT("Throw away an unused GRAY slot: wl.Tasks.Dismiss <index>. Refuses once it holds a contract."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			UWonderlandMissionTaskSubsystem* Tasks = TasksFor(World);
+			if (Tasks == nullptr || Args.Num() < 1) { UE_LOG(LogTemp, Warning, TEXT("WLTASK usage: wl.Tasks.Dismiss <index>")); return; }
+			const int32 Index = FCString::Atoi(*Args[0]);
+			UE_LOG(LogTemp, Display, TEXT("WLTASK dismiss %d -> %s"), Index,
+				Tasks->DismissDraft(AtIndex(*Tasks, Index)) ? TEXT("gone, no mission created") : TEXT("REFUSED"));
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs GTaskScheduler(
+		TEXT("wl.Tasks.Scheduler"),
+		TEXT("Stand in for Julius's scheduler, for a proof: wl.Tasks.Scheduler <index> <STATE>. Marks the task as "
+		     "Julius-reported, which is the only way it counts as running."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			UWonderlandMissionTaskSubsystem* Tasks = TasksFor(World);
+			if (Tasks == nullptr || Args.Num() < 2)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("WLTASK usage: wl.Tasks.Scheduler <index> <QUEUED|RESEARCH|IMPLEMENTATION|...>"));
+				return;
+			}
+			const int32 Index = FCString::Atoi(*Args[0]);
+			const FGuid Id = AtIndex(*Tasks, Index);
+			const FWonderlandMissionTask* Row = Tasks->Find(Id);
+			if (Row == nullptr) { UE_LOG(LogTemp, Warning, TEXT("WLTASK no task %d"), Index); return; }
+			// A scheduler addresses contracts by THEIR id, so give the task one if it has not got one yet.
+			FString ContractId = Row->ContractId;
+			if (ContractId.IsEmpty())
+			{
+				ContractId = FString::Printf(TEXT("dev-contract-%d"), Index);
+				Tasks->AdoptContractId(Id, ContractId);
+			}
+			const FString Want = Args[1].ToUpper();
+			EWonderlandTaskState State = EWonderlandTaskState::Queued;
+			for (int32 Value = 0; Value <= static_cast<int32>(EWonderlandTaskState::Paused); ++Value)
+			{
+				if (Want == WonderlandTaskStateName(static_cast<EWonderlandTaskState>(Value)))
+				{
+					State = static_cast<EWonderlandTaskState>(Value);
+					break;
+				}
+			}
+			UE_LOG(LogTemp, Display, TEXT("WLTASK scheduler %s -> %s : %s"), *ContractId, *Want,
+				Tasks->ApplySchedulerState(ContractId, State, -1, 0) ? TEXT("applied") : TEXT("REFUSED"));
+		}));
 }
 
 const TCHAR* WonderlandTaskStateName(EWonderlandTaskState State)

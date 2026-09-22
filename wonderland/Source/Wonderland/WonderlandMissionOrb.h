@@ -116,6 +116,19 @@ public:
 	void SetFollowOffset(float Forward, float Right);
 
 	/**
+	 * AN EMPTY TASK SLOT, drawn gray instead of in its chakra colour.
+	 *
+	 * GRAY MEANS "NO TASK HAS BEEN ENTERED", never failure, and RED means a real Mission Contract exists, never
+	 * error. Asked at the one place the orb decides its colour, so every part of it follows without being told.
+	 */
+	void SetDraft(bool bInDraft);
+
+	bool IsDraft() const { return bDraft; }
+
+	/** How far up the stack this orb sits, in uu above the contract's normal place. Zero is the bottom orb. */
+	void SetStackLift(float Up);
+
+	/**
 	 * STOP FOLLOWING AND BECOME A PLACE. Takes the follow position once and holds that world location.
 	 *
 	 * WHY THIS EXISTS. The contract used to be pinned in the pawn's YAW frame, which meant it was always
@@ -215,6 +228,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
 	float BuiltScale = 1.90f;
 
+	/** True while this orb stands for a slot with no task in it. */
+	bool bDraft = false;
+
 	/** Time constant of the follow, seconds. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
 	float FollowLagSeconds = 0.42f;
@@ -254,6 +270,8 @@ private:
 	FVector DesiredLocation(const APawn* Pawn) const;
 	void Animate(float TimeSeconds, float DeltaSeconds);
 	void PaintChakra();
+	/** The colour every part of the orb is drawn in right now: gray for a draft slot, the chakra otherwise. */
+	FLinearColor CurrentColour() const;
 	/** OutMid is a TObjectPtr& because every caller hands it a TObjectPtr member, which will not bind to a raw one. */
 	UInstancedStaticMeshComponent* MakeMesh(FName Name, USceneComponent* Parent, bool bGlow, const TArray<FTransform>& Instances, TObjectPtr<UMaterialInstanceDynamic>& OutMid);
 

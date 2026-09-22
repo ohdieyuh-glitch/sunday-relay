@@ -813,6 +813,133 @@ bool UWonderlandMissionSubsystem::PlayScenario(FName ScenarioLetter, float Secon
 	return BeginMissionWithClearance(FName(*Letter), SecondsPerEvent);
 }
 
+namespace
+{
+	/**
+	 * HOW FAR APART THE ORBS SIT, in uu. Far enough that two are plainly two, close enough that six still read as
+	 * one composition rather than a column disappearing out of frame.
+	 */
+	constexpr float OrbStackSpacingUU = 130.0f;
+}
+
+float UWonderlandMissionSubsystem::GetStackHeightUu() const
+{
+	// One orb is the Contract's own height; each one above adds a step. Never less than one orb's worth, because a
+	// mission with no task list still manifests a Contract.
+	const int32 Orbs = FMath::Max(TaskOrbs.Num(), 1);
+	return (Orbs - 1) * OrbStackSpacingUU;
+}
+
+void UWonderlandMissionSubsystem::SyncTaskOrbs()
+{
+	ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
+	UWonderlandMissionTaskSubsystem* Tasks = Player != nullptr
+		? Player->GetSubsystem<UWonderlandMissionTaskSubsystem>() : nullptr;
+	// BOUND ONCE, HERE, so the stack follows the task set without every caller having to remember to ask. A feature
+	// that only looks right when somebody remembers to refresh it is a feature that will look wrong.
+	if (Tasks != nullptr && !bBoundToTasks)
+	{
+		bBoundToTasks = true;
+		TWeakObjectPtr<UWonderlandMissionSubsystem> WeakThis(this);
+		Tasks->OnTasksChanged.AddLambda([WeakThis]()
+		{
+			if (WeakThis.IsValid())
+			{
+				WeakThis->SyncTaskOrbs();
+			}
+		});
+	}
+	APlayerController* Controller = BoundController.Get();
+	UWorld* World = Controller != nullptr ? Controller->GetWorld() : nullptr;
+	if (Tasks == nullptr || World == nullptr)
+	{
+		return;
+	}
+
+	const TArray<FWonderlandMissionTask>& Rows = Tasks->GetTasks();
+
+	// ---- take away the orbs whose tasks have gone. A dismissed draft leaves nothing behind, which is the founder's
+	// ---- rule about an abandoned slot: no mission, no history, and no orb.
+	TArray<FGuid> Gone;
+	for (const TPair<FGuid, TWeakObjectPtr<AWonderlandMissionOrb>>& Pair : TaskOrbs)
+	{
+		if (Tasks->Find(Pair.Key) == nullptr)
+		{
+			Gone.Add(Pair.Key);
+		}
+	}
+	for (const FGuid& Id : Gone)
+	{
+		if (AWonderlandMissionOrb* Stacked = TaskOrbs[Id].Get())
+		{
+			Stacked->Destroy();
+		}
+		TaskOrbs.Remove(Id);
+	}
+
+	// ---- and bring the rest into line, bottom to top.
+	for (int32 Index = 0; Index < Rows.Num(); ++Index)
+	{
+		const FWonderlandMissionTask& Task = Rows[Index];
+		TWeakObjectPtr<AWonderlandMissionOrb>* Found = TaskOrbs.Find(Task.LocalId);
+		AWonderlandMissionOrb* Stacked = Found != nullptr ? Found->Get() : nullptr;
+		if (Stacked == nullptr)
+		{
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			Params.ObjectFlags |= RF_Transient;
+			const APawn* Pawn = Controller->GetPawn();
+			Stacked = World->SpawnActor<AWonderlandMissionOrb>(AWonderlandMissionOrb::StaticClass(),
+				Pawn != nullptr ? Pawn->GetActorTransform() : FTransform::Identity, Params);
+			if (Stacked == nullptr)
+			{
+				continue;
+			}
+#if WITH_EDITOR
+			Stacked->SetActorLabel(FString::Printf(TEXT("WL_MissionContract_%d"), Index), false);
+#endif
+			Stacked->SetFollowController(Controller);
+			Stacked->SetManifest(1.0f);
+			Stacked->SnapToTarget();
+			TaskOrbs.Add(Task.LocalId, Stacked);
+		}
+		// GRAY WHILE THE SLOT IS EMPTY, coloured once a contract exists. One question, asked of the task.
+		Stacked->SetDraft(!WonderlandTaskIsContract(Task.State));
+		// Index 0 sits where the Contract has always sat; each one above is a step higher.
+		Stacked->SetStackLift(Index * OrbStackSpacingUU);
+		// THE SELECTED TASK'S ORB IS THE FULL-SIZED ONE. The others stand back a little so the stack reads as a
+		// stack with a current member rather than as a row of equals.
+		Stacked->SetOrbScale(Task.LocalId == Tasks->GetSelected() ? 1.0f : 0.72f);
+	}
+}
+
+TArray<FString> UWonderlandMissionSubsystem::DescribeOrbStack() const
+{
+	TArray<FString> Lines;
+	const ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
+	const UWonderlandMissionTaskSubsystem* Tasks = Player != nullptr
+		? Player->GetSubsystem<UWonderlandMissionTaskSubsystem>() : nullptr;
+	if (Tasks == nullptr)
+	{
+		Lines.Add(TEXT("no task subsystem"));
+		return Lines;
+	}
+	Lines.Add(FString::Printf(TEXT("ORB STACK  %d orb(s)  ·  %.0f uu tall"), TaskOrbs.Num(), GetStackHeightUu()));
+	const TArray<FWonderlandMissionTask>& Rows = Tasks->GetTasks();
+	for (int32 Index = 0; Index < Rows.Num(); ++Index)
+	{
+		const TWeakObjectPtr<AWonderlandMissionOrb>* Found = TaskOrbs.Find(Rows[Index].LocalId);
+		const AWonderlandMissionOrb* Stacked = Found != nullptr ? Found->Get() : nullptr;
+		Lines.Add(FString::Printf(TEXT("  %d %s %-5s lift %4.0f uu  %s"),
+			Index,
+			Rows[Index].LocalId == Tasks->GetSelected() ? TEXT("*") : TEXT(" "),
+			Stacked == nullptr ? TEXT("-") : (Stacked->IsDraft() ? TEXT("GRAY") : TEXT("RED")),
+			Index * OrbStackSpacingUU,
+			*Rows[Index].Objective.Left(48)));
+	}
+	return Lines;
+}
+
 FWonderlandStagingResult UWonderlandMissionSubsystem::ProbeClearanceNow()
 {
 	UWorld* World = GetWorld();
@@ -827,7 +954,12 @@ FWonderlandStagingResult UWonderlandMissionSubsystem::ProbeClearanceNow()
 	Ignore.Add(Pawn);
 	Ignore.Add(Orb.Get());
 
-	LastStaging = WonderlandProbeStaging(World, Origin, Facing, Ignore);
+	// THE WHOLE STACK IS WHAT HAS TO FIT, not one Contract. A second orb above the first raises the envelope, so
+	// the probe is told how tall the presentation actually stands before it measures anything.
+	FWonderlandStagingEnvelope Full = WonderlandFullEnvelope();
+	Full.VerticalUU += GetStackHeightUu();
+	Full.ContractHeightUU += GetStackHeightUu();
+	LastStaging = WonderlandProbeStaging(World, Origin, Facing, Ignore, Full);
 	for (const FString& Note : LastStaging.Notes)
 	{
 		UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLCLEARANCE %s"), *Note);

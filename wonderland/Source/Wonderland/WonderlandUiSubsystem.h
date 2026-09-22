@@ -624,6 +624,17 @@ private:
 	/** The Relay Dog skin registry: what skins exist and which one the Dog is wearing. */
 	class UWonderlandRelaySkinSubsystem* RelaySkins() const;
 
+	/** The Mission Contract task set: what the + adds to and what the orb stack follows. */
+	class UWonderlandMissionTaskSubsystem* Tasks() const;
+
+	/** Press +. Returns false at capacity. Exposed so a proof can press it the way a person does. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
+	bool PressAddTask();
+
+	/** Whether the + control is on screen. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
+	bool IsAddTaskControlOnScreen() const { return TaskAddLayer.IsValid(); }
+
 	/**
 	 * THE LIVE RELAY DOG BEHIND THE PROJECT BRAIN'S WARDROBE. Made on first use and kept; it costs one idle actor when
 	 * nothing is looking at it, because it captures only while a surface asks. Null when there is no world.
@@ -774,6 +785,12 @@ private:
 
 	/** The brush the wardrobe draws: the skin stage's render target, pointed at once and then left alone. */
 	TSharedPtr<FSlateBrush> SkinPreviewBrush;
+
+	/** The + beside the token usage, and the one line a task is typed into. Mounted with the HUD. */
+	TSharedPtr<class SWidget> TaskAddLayer;
+	TSharedPtr<class SEditableTextBox> TaskEntry;
+	void MountTaskAddControl();
+	void UnmountTaskAddControl();
 	TWeakObjectPtr<class AWonderlandSkinStage> SkinStageActor;
 	FDelegateHandle BrainChangedHandle;
 	EOverlay Open = EOverlay::None;

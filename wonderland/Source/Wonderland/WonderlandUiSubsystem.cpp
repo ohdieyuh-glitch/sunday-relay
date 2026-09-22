@@ -41,6 +41,7 @@
 #include "Engine/TextureRenderTarget2D.h"
 #include "WonderlandProjectBrainPanel.h"
 #include "WonderlandRelaySkins.h"
+#include "WonderlandMissionTasks.h"
 #include "WonderlandSubAgentCubs.h"
 #include "WonderlandSkinStage.h"
 #include "WonderlandTravel.h"
@@ -252,6 +253,9 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 		UsageHud->SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
 		UsageHud->SetAlignmentInViewport(FVector2D(0.0, 0.0));
 		UsageHud->SetPositionInViewport(FVector2D(30.0, 22.0), true);
+		// THE + GOES UP WITH THE TOKEN USAGE, because that is where the founder put it and because a + with no
+		// usage beside it would be a control with nothing to explain it.
+		MountTaskAddControl();
 		// Thirty units taller with the white LLM Companion meter: its third readout row takes that height,
 		// so the art is drawn at the size it always was rather than shrinking to make room.
 		const UWonderlandUsageHudSettings* HudSettings = GetDefault<UWonderlandUsageHudSettings>();
@@ -1211,6 +1215,164 @@ int32 UWonderlandUiSubsystem::GetSkinStageFrameCount() const
 {
 	const AWonderlandSkinStage* Stage = SkinStageActor.Get();
 	return Stage != nullptr ? Stage->GetFrameCount() : 0;
+}
+
+UWonderlandMissionTaskSubsystem* UWonderlandUiSubsystem::Tasks() const
+{
+	ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
+	return Player != nullptr ? Player->GetSubsystem<UWonderlandMissionTaskSubsystem>() : nullptr;
+}
+
+bool UWonderlandUiSubsystem::PressAddTask()
+{
+	UWonderlandMissionTaskSubsystem* Set = Tasks();
+	if (Set == nullptr)
+	{
+		return false;
+	}
+	const FGuid Id = Set->AddDraft();
+	if (Id.IsValid() && TaskEntry.IsValid())
+	{
+		// THE NEXT THING ANYBODY DOES IS TYPE, so the field is cleared and given focus rather than waiting to be
+		// clicked. A + that takes two clicks to mean one thing is a + nobody presses twice.
+		TaskEntry->SetText(FText::GetEmpty());
+		FSlateApplication::Get().SetKeyboardFocus(TaskEntry, EFocusCause::SetDirectly);
+	}
+	return Id.IsValid();
+}
+
+void UWonderlandUiSubsystem::MountTaskAddControl()
+{
+	ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
+	if (TaskAddLayer.IsValid() || Player == nullptr || Player->ViewportClient == nullptr)
+	{
+		return;
+	}
+	TWeakObjectPtr<UWonderlandUiSubsystem> WeakThis(this);
+
+	// WHAT THE SELECTED SLOT IS, asked fresh each frame rather than remembered: the set can change from the console,
+	// from a proof, or from a scheduler, and a remembered answer would be wrong the moment any of those happened.
+	const auto SelectedIsDraft = [WeakThis]()
+	{
+		const UWonderlandMissionTaskSubsystem* Set = WeakThis.IsValid() ? WeakThis->Tasks() : nullptr;
+		const FWonderlandMissionTask* Task = Set != nullptr ? Set->GetSelectedTask() : nullptr;
+		return Task != nullptr && !WonderlandTaskIsContract(Task->State);
+	};
+
+	TaskAddLayer = SNew(SConstraintCanvas)
+		.Visibility(EVisibility::SelfHitTestInvisible)
+		// BESIDE THE TOKEN USAGE, which sits at (30, 22) top-left. Pixel-placed like the HUD it stands next to, so
+		// the two keep their relationship at any resolution rather than drifting apart on a wide screen.
+		+ SConstraintCanvas::Slot()
+		.Anchors(FAnchors(0.0f, 0.0f, 0.0f, 0.0f))
+		.Offset(FMargin(268.0f, 20.0f, 0.0f, 0.0f))
+		.AutoSize(true)
+		.Alignment(FVector2D(0.0, 0.0))
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(SButton)
+					.ButtonStyle(FCoreStyle::Get(), "NoBorder")
+					.ToolTipText(INVTEXT("Add another task for Julius"))
+					.ContentPadding(FMargin(7.0f, 1.0f))
+					.OnClicked_Lambda([WeakThis]()
+					{
+						if (WeakThis.IsValid()) { WeakThis->PressAddTask(); }
+						return FReply::Handled();
+					})
+					[
+						SNew(STextBlock)
+						.Text(INVTEXT("+"))
+						.Font(WonderlandUi::Sans(18, true))
+						.ColorAndOpacity(WonderlandUi::GoldDim())
+					]
+				]
+				// How many contracts are open, so the + says what it is adding to without being pressed.
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
+				[
+					SNew(STextBlock)
+					.Font(WonderlandUi::Sans(8, false, 2))
+					.ColorAndOpacity(WonderlandUi::Faint())
+					.Text_Lambda([WeakThis]()
+					{
+						const UWonderlandMissionTaskSubsystem* Set = WeakThis.IsValid() ? WeakThis->Tasks() : nullptr;
+						if (Set == nullptr || Set->NumTasks() == 0)
+						{
+							return INVTEXT("ADD A TASK");
+						}
+						return FText::FromString(FString::Printf(TEXT("%d TASK%s"),
+							Set->NumTasks(), Set->NumTasks() == 1 ? TEXT("") : TEXT("S")));
+					})
+				]
+			]
+			// THE ONE LINE, shown only while the selected slot is still empty. A field standing open beside a
+			// finished contract would invite somebody to type into a task that has already been submitted.
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.0f, 5.0f, 0.0f, 0.0f))
+			[
+				SNew(SHorizontalBox)
+				.Visibility_Lambda([SelectedIsDraft]()
+				{
+					return SelectedIsDraft() ? EVisibility::Visible : EVisibility::Collapsed;
+				})
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					SNew(SBox).WidthOverride(360.0f)
+					[
+						SAssignNew(TaskEntry, SEditableTextBox)
+						.HintText(INVTEXT("what should Julius do?"))
+						.OnTextCommitted_Lambda([WeakThis](const FText& Text, ETextCommit::Type How)
+						{
+							if (How != ETextCommit::OnEnter || !WeakThis.IsValid()) { return; }
+							UWonderlandMissionTaskSubsystem* Set = WeakThis->Tasks();
+							if (Set == nullptr) { return; }
+							// GRAY BECOMES RED HERE, and only here. A blank line is refused by the set itself.
+							if (Set->SubmitDraft(Set->GetSelected(), Text.ToString()) && WeakThis->TaskEntry.IsValid())
+							{
+								WeakThis->TaskEntry->SetText(FText::GetEmpty());
+							}
+						})
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(8.0f, 0.0f, 0.0f, 0.0f))
+				[
+					SNew(SButton)
+					.ButtonStyle(FCoreStyle::Get(), "NoBorder")
+					.ToolTipText(INVTEXT("Throw this empty slot away. No mission is created."))
+					.OnClicked_Lambda([WeakThis]()
+					{
+						if (WeakThis.IsValid())
+						{
+							if (UWonderlandMissionTaskSubsystem* Set = WeakThis->Tasks())
+							{
+								Set->DismissDraft(Set->GetSelected());
+							}
+						}
+						return FReply::Handled();
+					})
+					[
+						SNew(STextBlock).Text(INVTEXT("DISMISS"))
+						.Font(WonderlandUi::Sans(8, false, 2)).ColorAndOpacity(WonderlandUi::Faint())
+					]
+				]
+			]
+		];
+	// Beside the usage HUD's own layer (10), below the companion consoles (20) and every panel.
+	Player->ViewportClient->AddViewportWidgetForPlayer(Player, TaskAddLayer.ToSharedRef(), 11);
+}
+
+void UWonderlandUiSubsystem::UnmountTaskAddControl()
+{
+	ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
+	if (TaskAddLayer.IsValid() && Player != nullptr && Player->ViewportClient != nullptr)
+	{
+		Player->ViewportClient->RemoveViewportWidgetForPlayer(Player, TaskAddLayer.ToSharedRef());
+	}
+	TaskAddLayer.Reset();
+	TaskEntry.Reset();
 }
 
 UWonderlandRelaySkinSubsystem* UWonderlandUiSubsystem::RelaySkins() const
