@@ -34,17 +34,27 @@ suite('the decision write contract on real PostgreSQL', () => {
   let pool: Pool;
   let runs: JuliusPostgresRepository;
 
-  /** Each case gets its own tasks and its own ids, so one database holds them all. */
+  /** Each case gets its own tasks, ordinals and ids, so one run holds them all. */
+  let nextOrdinal = 0;
   const bind = async (prefix: string): Promise<{ store: JuliusDecisionWriteStore; build: Parameters<(typeof JULIUS_DECISION_WRITE_CASES)[number]['run']>[1] }> => {
     const subject = `${prefix}:plan`;
     const blocked = `${prefix}:build`;
+    const ordinal = nextOrdinal;
+    nextOrdinal += 2;
+    // The real schema: no `mission_id` on a task (the run carries it) and no
+    // `dependency_ids` column (dependencies are their own table). The release
+    // under test is driven by `releaseTaskIds`, which names the task directly.
     await pool.query(
-      "INSERT INTO relay_wonderland.julius_tasks(task_id,run_id,mission_id,parent_task_id,task_type,role,ordinal,state,dependency_ids,required_evidence_types,attempts,version) VALUES($1,$2,$3,NULL,'plan','PROMPT_ARCHITECT',0,'SUCCEEDED','[]'::jsonb,'[]'::jsonb,1,1)",
-      [subject, run, mission],
+      "INSERT INTO relay_wonderland.julius_tasks(task_id,run_id,parent_task_id,role,task_type,state,ordinal,required_evidence_types) VALUES($1,$2,NULL,'PROMPT_ARCHITECT','plan','SUCCEEDED',$3,'[]'::jsonb)",
+      [subject, run, ordinal],
     );
     await pool.query(
-      "INSERT INTO relay_wonderland.julius_tasks(task_id,run_id,mission_id,parent_task_id,task_type,role,ordinal,state,dependency_ids,required_evidence_types,attempts,version) VALUES($1,$2,$3,NULL,'build','CODING_AGENT',1,'BLOCKED',$4::jsonb,'[]'::jsonb,0,1)",
-      [blocked, run, mission, JSON.stringify([subject])],
+      "INSERT INTO relay_wonderland.julius_tasks(task_id,run_id,parent_task_id,role,task_type,state,ordinal,required_evidence_types) VALUES($1,$2,NULL,'CODING_AGENT','build','BLOCKED',$3,'[]'::jsonb)",
+      [blocked, run, ordinal + 1],
+    );
+    await pool.query(
+      'INSERT INTO relay_wonderland.julius_task_dependencies(task_id,dependency_task_id) VALUES($1,$2)',
+      [blocked, subject],
     );
     return {
       store: {
