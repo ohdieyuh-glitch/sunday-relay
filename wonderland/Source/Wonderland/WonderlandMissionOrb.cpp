@@ -326,7 +326,9 @@ void AWonderlandMissionOrb::SetOrbScale(float Scale)
 
 void AWonderlandMissionOrb::SetFollowOffset(float Forward, float Right)
 {
-	FollowOffset = FVector(Forward, Right, 0.0);
+	// THE LIFT SURVIVES. Staging sets the forward/right offset after the stack has been laid out, and rebuilding
+	// the whole vector here dropped every orb back to the bottom -- three orbs in one place, which reads as one.
+	FollowOffset = FVector(Forward, Right, FollowOffset.Z);
 	bHasSnapped = false;
 	SnapToTarget();
 }
@@ -464,6 +466,9 @@ FVector AWonderlandMissionOrb::DesiredLocation(const APawn* Pawn) const
 {
 	const FRotator Yaw(0.0f, Pawn->GetActorRotation().Yaw, 0.0f);
 	FVector Wanted = Pawn->GetActorLocation() + Yaw.RotateVector(FVector(FollowOffset.X, FollowOffset.Y, 0.0));
+	// HOW FAR UP THE STACK THIS ORB SITS. Added to whatever altitude the floor trace settles on below, never to the
+	// point it traces FROM -- a lifted trace start would look for the floor above the ground and find a balcony.
+	const double StackLift = FollowOffset.Z;
 
 	// IT FLOATS, BUT IT FLOATS OVER SOMETHING. The height is measured from the floor rather than from the
 	// pawn, so the contract keeps a constant altitude over rising ground instead of sinking into a slope.
@@ -477,12 +482,12 @@ FVector AWonderlandMissionOrb::DesiredLocation(const APawn* Pawn) const
 		const FVector To = Wanted - FVector(0.0, 0.0, 420.0);
 		if (World->LineTraceSingleByChannel(Hit, From, To, ECC_WorldStatic, Query))
 		{
-			Wanted.Z = Hit.Location.Z + FloatHeightUU;
+			Wanted.Z = Hit.Location.Z + FloatHeightUU + StackLift;
 			return Wanted;
 		}
 	}
 	// No floor found: hang at the pawn's own height rather than sinking through the world.
-	Wanted.Z = Pawn->GetActorLocation().Z + (FloatHeightUU - 89.0f);
+	Wanted.Z = Pawn->GetActorLocation().Z + (FloatHeightUU - 89.0f) + StackLift;
 	return Wanted;
 }
 
