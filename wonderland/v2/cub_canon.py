@@ -115,9 +115,14 @@ EYE_SETS = {"flat": _eye_pair(_flat), "arc": _eye_pair(_arc), "slant": _eye_pair
 DEFAULT_EYES = "flat"
 
 # --------------------------------------------------------------------------- ball hands
-#: Detached spheres that must FLOAT CLEAR of the skull -- at 0.615 W they intersected it, since
-#: the head's half width is 0.5 W. No arm, no shoulder, no pivot chain -- the runtime floats them beside the head
-#: and they are their own joints so they can bob independently.
+#: Detached spheres that must FLOAT CLEAR of the skull -- at 0.615 W they intersected it, since the head's half
+#: width is 0.5 W. No arm, no shoulder, no pivot chain.
+#:
+#: THE HANDS MUST LAG THE HEAD. They are their own joints for a reason, and Internal Development found in
+#: implementation (2026-09-22) that giving each hand a trailing motion -- following the head with a delay rather
+#: than moving welded to it -- reads noticeably better and costs nothing. That is an EXPECTATION of this rig, not
+#: an option left to whoever drives it: a detached hand that moves in perfect lock with the skull looks welded,
+#: which defeats the reason the plate detached it. Same for the tail.
 HAND_R = 0.160 * W
 HAND_X = 0.790 * W
 HAND_Y = -0.195 * W
