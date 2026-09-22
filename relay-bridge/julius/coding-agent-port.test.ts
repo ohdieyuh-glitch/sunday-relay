@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -30,7 +31,9 @@ import {
 import {
   createJuliusCodingAgentAdapter,
   createLiveArtifactExchange,
+  diffRef,
   planRef,
+  testOutputRef,
 } from './live-workers';
 
 /**
@@ -95,6 +98,19 @@ function adapterWith(provider: Parameters<typeof createJuliusCodingAgentAdapter>
 }
 
 const DISPATCH = { taskId: 'build-1', contextId: 'ctx-1', taskType: 'build', contract: CHARGE, allocation: { usdMicros: 2_000_000, policyVersion: 'v3', basis: 'CODER_SHARE' } };
+
+/** The same adapter, keeping the exchange so a test can read the bodies back. */
+function adapterKeepingArtifacts(provider: Parameters<typeof createJuliusCodingAgentAdapter>[0]['provider'], shell = createFakeExecutorShell({})) {
+  const artifacts = createLiveArtifactExchange();
+  artifacts.put(planRef('run-live'), PLAN);
+  return {
+    artifacts,
+    adapter: createJuliusCodingAgentAdapter({
+      worker: WORKER, contexts: { snapshotFor: () => snapshot() }, artifacts, projectId: 'prj-live',
+      workspacePath: '/workspace/mission', testCommand: 'npm test', shell, provider,
+    }),
+  };
+}
 
 const refusalOf = async (promise: Promise<unknown>) =>
   promise.then(() => null, (error: unknown) => error as JuliusDispatchError);
@@ -437,5 +453,62 @@ ${JSON.stringify({ architectureObservations })}` }],
     expect(result.status).toBe('SUCCEEDED');
     // What the executor saw is still the evidence; an observation is not evidence of anything.
     expect(result.evidence.map((item) => (item as { type: string }).type).sort()).toEqual(['DIFF', 'TEST']);
+  });
+});
+
+/* --------------------------------------------- the digest of what it captured */
+
+describe('what the coder records about the bodies it produced', () => {
+  /**
+   * THE DIGEST THE ADAPTER COMPUTES IS THE DIGEST THE RECORD KEEPS.
+   *
+   * DIFF evidence used to carry `artifactRef: "diff:<runId>"` — a key into the
+   * in-process exchange, keyed per RUN so the next repair round overwrites it —
+   * and no hash at all. TEST evidence carried neither: an exit code, and a
+   * sentence about output nobody could identify.
+   */
+  it('names the diff and the test output by their whole sha256, and claims no durable reference', async () => {
+    const { adapter, artifacts } = adapterKeepingArtifacts(createScriptedCodingAgentProvider({ script: [{ kind: 'completed' }] }));
+    const result = await adapter.dispatch(DISPATCH) as JuliusProviderResult;
+    const evidence = result.evidence as Array<Record<string, unknown>>;
+    const diff = evidence.find((item) => item.type === 'DIFF')!;
+    const test = evidence.find((item) => item.type === 'TEST')!;
+
+    const diffBody = artifacts.get(diffRef('run-live'));
+    const testBody = artifacts.get(testOutputRef('run-live'));
+    expect(testBody, 'the test output body was captured').not.toBeNull();
+
+    const sha = (value: string) => createHash('sha256').update(value).digest('hex');
+    if (diffBody !== null) {
+      expect(diff.integrityHash, 'the digest identifies the captured diff exactly').toBe(sha(diffBody));
+    }
+    expect(test.integrityHash, 'and the test output, which carried nothing before').toBe(sha(testBody!));
+    expect(String(test.integrityHash)).toMatch(/^[0-9a-f]{64}$/u);
+
+    expect(diff.artifactRef, 'no durable store holds these yet, so nothing is claimed').toBeNull();
+    expect(test.artifactRef).toBeNull();
+    expect(JSON.stringify(evidence), 'and no digest is left as theatre in a sentence').not.toContain('sha256:');
+  });
+});
+
+describe('a diff the executor never captured', () => {
+  /**
+   * A digest of whatever `stdout` happened to hold would be a real sha256 of a
+   * body nobody produced — the plausible-looking stand-in this column exists to
+   * keep out. The evidence already says INCONCLUSIVE; the digest must say
+   * nothing at all.
+   */
+  it('is identified by nothing, while the test output it did capture still is', async () => {
+    const { adapter } = adapterKeepingArtifacts(
+      createScriptedCodingAgentProvider({ script: [{ kind: 'completed' }] }),
+      createFakeExecutorShell({ diffFails: true }),
+    );
+    const result = await adapter.dispatch(DISPATCH) as JuliusProviderResult;
+    const evidence = result.evidence as Array<Record<string, unknown>>;
+    const diff = evidence.find((item) => item.type === 'DIFF')!;
+    expect(diff.status, 'a diff nobody captured is not PASSED').not.toBe('PASSED');
+    expect(diff.integrityHash, 'and it names no bytes').toBeNull();
+    expect(evidence.find((item) => item.type === 'TEST')!.integrityHash, 'the captured body still does')
+      .toMatch(/^[0-9a-f]{64}$/u);
   });
 });
