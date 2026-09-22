@@ -157,8 +157,13 @@ def main():
         for c in range(cols_from, cols_to):
             v = (c + 0.5) * PLATE["len_x"]
             for j in range(rows_from, ROWS if rows_to is None else rows_to):
+                # YAW 90, NOT 0. The plate is 1440 along its own X and 740 along its Y. In a ROTATED quarter
+                # the local frame turns with the nation's bearing, so at yaw 0 the 1440 side runs ALONG the axis
+                # while this grid spaces columns 1440 apart ACROSS it -- which left a 700 mm gap between every
+                # pair of columns and striped the whole quarter with lawn. Turning each plate 90 degrees puts its
+                # long side across the axis, where the column spacing actually is.
                 add(key, PLATE["mesh"], material, U0 + PLATE["len_y"] * (j + 0.5), v,
-                    PAVING_TOP - PLATE["top_local"], 0.0, cull=CULL_FAR, collides=True, shadow=False)
+                    PAVING_TOP - PLATE["top_local"], 90.0, cull=CULL_FAR, collides=True, shadow=False)
 
     APPROACH_ROWS = 18                                # the causeway, before the quarter widens
     pave_band(-1, 1, PART_MATERIAL["paving"], "Causeway", 0, APPROACH_ROWS)
