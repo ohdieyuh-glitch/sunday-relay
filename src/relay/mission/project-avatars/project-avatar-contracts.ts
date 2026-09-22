@@ -21,8 +21,15 @@
 
 /* ==================================================================== what it is */
 
-/** The canonical skins. Two to begin with, both from the founder's own reference sheets. */
-export const PROJECT_AVATAR_SKINS = ['TEN_TAILS', 'CHERUBIM'] as const;
+/**
+ * The canonical skins, all three from the founder's own direction.
+ *
+ * SERAPH was added on 2026-09-22: "violet / lavender celestial entity, luminous geometric central core, large
+ * crystalline / fairy-like wings, radiant crown, strong symmetrical celestial silhouette". Like the other two it is
+ * three MORPHOLOGIES rather than one scaled three ways -- the crown goes from three points to seven, the wings from
+ * one pair to three, and the core from bare to caged.
+ */
+export const PROJECT_AVATAR_SKINS = ['TEN_TAILS', 'CHERUBIM', 'SERAPH'] as const;
 export type ProjectAvatarSkin = (typeof PROJECT_AVATAR_SKINS)[number];
 
 /** The canonical stages. Three, in order: a form is never skipped on the way up. */
@@ -172,9 +179,15 @@ export interface ProjectAvatarView {
 
 /** The figure file each form is drawn from. The client resolves the file; the domain only ever names skin and stage. */
 export function figureNameFor(skin: ProjectAvatarSkin, stage: ProjectAvatarStage): string {
-  const family = skin === 'TEN_TAILS' ? 'TenTails' : 'Cherubim';
+  // A TABLE RATHER THAN A TERNARY. With two skins a ternary was honest; with three it would silently give every
+  // unknown skin the last family's figure, which is how a fourth one would ship wearing the third one's body.
+  const FAMILIES: Readonly<Record<ProjectAvatarSkin, string>> = {
+    TEN_TAILS: 'TenTails',
+    CHERUBIM: 'Cherubim',
+    SERAPH: 'Seraph',
+  };
   const form = `${stage.charAt(0)}${stage.slice(1).toLowerCase()}`;
-  return `${family}_${form}.wlvox`;
+  return `${FAMILIES[skin]}_${form}.wlvox`;
 }
 
 /**

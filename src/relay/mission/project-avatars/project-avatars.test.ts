@@ -32,7 +32,7 @@ function must<T>(result: { ok: true; value: T } | { ok: false; error: { code: st
   return result.value;
 }
 
-function avatar(skin: 'TEN_TAILS' | 'CHERUBIM' = 'TEN_TAILS'): ProjectAvatar {
+function avatar(skin: 'TEN_TAILS' | 'CHERUBIM' | 'SERAPH' = 'TEN_TAILS'): ProjectAvatar {
   return createProjectAvatar({ projectAvatarId: 'pav_1', projectId: 'pixel-canvas', ownerId: 'founder', skin }, clock());
 }
 
@@ -50,8 +50,8 @@ describe('project avatars: a project begins small', () => {
     expect(fresh.history[0].stage).toBe('SMALL');
   });
 
-  it('has two canonical skins and three canonical stages, in order', () => {
-    expect(PROJECT_AVATAR_SKINS).toEqual(['TEN_TAILS', 'CHERUBIM']);
+  it('has three canonical skins and three canonical stages, in order', () => {
+    expect(PROJECT_AVATAR_SKINS).toEqual(['TEN_TAILS', 'CHERUBIM', 'SERAPH']);
     expect(PROJECT_AVATAR_STAGES).toEqual(['SMALL', 'MEDIUM', 'LARGE']);
     // The domain and the art cannot drift: these are the metres the figure generator solves for.
     expect(STAGE_METRES).toEqual({ SMALL: 1.15, MEDIUM: 2.7, LARGE: 5.6 });
@@ -60,7 +60,13 @@ describe('project avatars: a project begins small', () => {
   it('names the figure for a skin and a stage, and nothing else', () => {
     expect(figureNameFor('TEN_TAILS', 'SMALL')).toBe('TenTails_Small.wlvox');
     expect(figureNameFor('CHERUBIM', 'LARGE')).toBe('Cherubim_Large.wlvox');
+    expect(figureNameFor('SERAPH', 'MEDIUM')).toBe('Seraph_Medium.wlvox');
     expect(figureForAvatar(avatar('CHERUBIM'))).toBe('Cherubim_Small.wlvox');
+    // EVERY SKIN NAMES ITS OWN FAMILY. A table rather than a ternary, so a fourth skin cannot silently inherit the
+    // third one's body -- which is exactly what the two-skin ternary would have done.
+    for (const skin of PROJECT_AVATAR_SKINS) {
+      expect(figureNameFor(skin, 'SMALL')).not.toBe(figureNameFor(skin === 'SERAPH' ? 'TEN_TAILS' : 'SERAPH', 'SMALL'));
+    }
   });
 });
 
