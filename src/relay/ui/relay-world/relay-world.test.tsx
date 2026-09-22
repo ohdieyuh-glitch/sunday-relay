@@ -98,6 +98,38 @@ describe('the old shell never returns', () => {
   });
 });
 
+describe('the way back', () => {
+  it('offers exactly one Back control once Relay is reached, and none before', () => {
+    render(createElement(RelayWorld, { initialStage: 'aquala' as const }));
+    // ON THE LANDING PAGE THERE IS NOTHING TO GO BACK FROM, so the control does not exist there. A Back that is
+    // present but inert is a control the user learns to distrust.
+    expect(screen.queryAllByRole('button', { name: /back/i })).toHaveLength(0);
+    fireEvent.click(screen.getAllByRole('button', { name: /ENTER RELAY/i })[0]);
+    expect(screen.getAllByRole('button', { name: /back/i })).toHaveLength(1);
+  });
+
+  it('returns to the landing state, and does not answer to the name of the forward control', () => {
+    render(createElement(RelayWorld, { initialStage: 'aquala' as const }));
+    fireEvent.click(screen.getAllByRole('button', { name: /ENTER RELAY/i })[0]);
+    const back = screen.getByRole('button', { name: /back/i });
+    // THE LANDING PAGE KEEPS ITS OWN NAME. relay-landing.test.tsx uses a singular getByRole for ENTER RELAY, so a
+    // Back control that matched that name would break it -- and would be ambiguous to a screen reader besides.
+    expect(back.getAttribute('aria-label') ?? back.textContent ?? '').not.toMatch(/ENTER RELAY/i);
+    fireEvent.click(back);
+    // Without a WebGL context there is no loop to fly a passage, so the return is immediate -- the same rule the
+    // forward journey already follows in static mode.
+    expect(screen.getAllByRole('button', { name: /ENTER RELAY/i }).length).toBeGreaterThan(0);
+  });
+
+  it('returns immediately from a deep link, because there is no journey to retrace', () => {
+    // A user who arrived at #/relay never flew in, so there is no departure pose. Flying them "back" from a place
+    // they were never standing would be an invented journey.
+    render(createElement(RelayWorld, { initialStage: 'relay' as const }));
+    fireEvent.click(screen.getByRole('button', { name: /back/i }));
+    expect(screen.getAllByRole('button', { name: /ENTER RELAY/i }).length).toBeGreaterThan(0);
+  });
+});
+
 describe('direct entry', () => {
   it('lands straight in Relay when the URL says so, with no passage', () => {
     render(createElement(RelayWorld, { initialStage: 'relay' as const }));

@@ -64,3 +64,32 @@
 @media (prefers-reduced-motion: reduce) {
   .rw-veil { transition: none; }
 }
+
+/* ---- BACK -----------------------------------------------------------------
+   The way home from Relay. One control, in the same low-emphasis register the
+   Relay experience already uses for its subordinate actions (`.rx-ghost`), so
+   it reads as available without competing with whatever the page is asking for
+   next. It is deliberately NOT a mirror of `.rl3-cta`: a pill-shaped gold
+   control pointing backwards would read as a second primary action. */
+.rw-back {
+  position: fixed; top: 22px; left: 24px; z-index: 5;
+  padding: 6px 0;
+  background: none; border: 0; border-bottom: 1px solid var(--rx-hairline, rgba(255, 255, 255, 0.14));
+  color: var(--rx-dim, rgba(236, 231, 240, 0.55));
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 10px; letter-spacing: 0.16em; cursor: pointer;
+  transition: color 240ms ease, border-color 240ms ease, transform 240ms ease;
+}
+.rw-back:hover, .rw-back:focus-visible {
+  color: var(--rl3-gold, #d8a83c);
+  border-bottom-color: var(--rl3-gold, #d8a83c);
+  transform: translateX(-2px);
+}
+/* While a passage is flying, the chrome is inert and so is this: a Back pressed
+   mid-flight is the one click that could leave the camera between two stages. */
+.rw[data-stage='transition'] .rw-back { pointer-events: none; opacity: 0.35; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rw-back { transition: none; }
+  .rw-back:hover, .rw-back:focus-visible { transform: none; }
+}
