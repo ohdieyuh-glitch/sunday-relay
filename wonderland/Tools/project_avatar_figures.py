@@ -50,6 +50,13 @@ GOLD_DEEP = (0.545, 0.392, 0.130)
 EYE_GOLD = (1.00, 0.760, 0.300)
 SCLERA = (0.960, 0.950, 0.930)
 
+# SERAPH: violet and lavender, with a core that is the brightest thing in the figure and crystal that is almost white.
+VIOLET = (0.545, 0.255, 0.925)
+VIOLET_DEEP = (0.300, 0.130, 0.560)
+LAVENDER = (0.790, 0.720, 0.960)
+CRYSTAL = (0.905, 0.890, 1.000)
+CORE_LIGHT = (0.980, 0.930, 1.000)
+
 
 # HOW BIG EACH STAGE REALLY IS, in metres, against a Wonderland player of about 1.8 m. The founder asked for a coherent
 # playable scale rather than locked numbers: SMALL is companion-sized, MEDIUM clearly larger and more developed, LARGE a
@@ -202,6 +209,46 @@ class Figure:
                 # The feather itself: a tapering run of blocks outward and down.
                 tip = (x - length * 0.34, root[1] + side * (length * 1.02 + tile * 1.2), z - length * 0.30)
                 self.limb(part, material_for, (x, y, z), tip, tile * 1.15, tile * 0.55, tile=tile)
+
+    def crystal_wing(self, part, side, root, span, blades, spread, sweep, tile, material_for):
+        """A WING OF CRYSTAL RATHER THAN OF FEATHERS: a fan of straight tapering blades, longest in the middle.
+
+        The founder's word is "crystalline / fairy-like", which is not a bird: a feathered wing is soft-edged and
+        overlapping, and this one is a spread of hard blades with daylight between them. Each blade is a limb rather
+        than a stack of quads, so the taper is real and the tip comes to a point.
+        """
+        for blade in range(blades):
+            t = (blade + 0.5) / blades
+            # Longest in the middle of the fan, shorter at both ends: the leaf silhouette the sheet describes.
+            length = span * (0.45 + 0.55 * math.sin(math.pi * t) ** 0.7)
+            angle = math.radians(spread * (1.0 - t) - sweep * t)
+            tip = (
+                root[0] - math.sin(angle) * length * 0.42 - length * 0.10,
+                root[1] + side * length * math.cos(angle) * 0.95,
+                root[2] + math.sin(angle) * length * 0.72,
+            )
+            self.limb(part, material_for, root, tip, tile * (1.5 - 0.6 * abs(t - 0.5) * 2.0), tile * 0.32, tile=tile)
+            # A bright node where each blade leaves the root, so the wing reads as lit from its own base.
+            self.box(part, "core", (root[0], root[1] + side * tile * 0.9, root[2]), (tile * 0.8,) * 3)
+
+    def octahedron(self, part, material_for, centre, radius, tile):
+        """The luminous geometric core: two square pyramids base to base, in blocks."""
+        steps = max(2, int(round(radius / tile)))
+        for iz in range(-steps, steps + 1):
+            z = iz * tile
+            reach = radius - abs(z)
+            if reach <= 0.0:
+                continue
+            across = max(1, int(round(reach / tile)))
+            for ix in range(-across, across + 1):
+                for iy in range(-across, across + 1):
+                    x, y = ix * tile, iy * tile
+                    if abs(x) + abs(y) > reach + tile * 0.4:
+                        continue
+                    # Only the surface: an octahedron's inside is never seen and costs boxes.
+                    if abs(x) + abs(y) < reach - tile * 1.1:
+                        continue
+                    self.box(part, material_for(x, y, z), (centre[0] + x, centre[1] + y, centre[2] + z), (tile * 1.02,) * 3)
 
     # ------------------------------------------------------------------ scale
     def fit_to_metres(self, metres):
@@ -547,9 +594,138 @@ def cherubim(stage):
 
 # ============================================================================ write them all
 
+# ============================================================================ SERAPH
+
+# THE IDENTITY, AT EVERY STAGE: a luminous geometric core, a radiant crown, crystalline wings, violet and lavender,
+# and a silhouette that is symmetrical about its own axis. What CHANGES with the stage is how much of each there is --
+# crown points 3 -> 5 -> 7, wing pairs 1 -> 2 -> 3, shard rings 0 -> 1 -> 2, and a core that goes from bare to caged.
+SERAPH_STAGES = {
+    "small": dict(
+        voxel=3.00, core=5.4, inner=2.0, crown=3, crown_reach=5.0, spire=0.0,
+        pairs=1, span=12.0, blades=5, spread=44.0, sweep=16.0,
+        rings=0, ring_major=0.0, shards=0, veil=0, tile=1.70, glow=3.2, girdle=0,
+    ),
+    "medium": dict(
+        voxel=3.85, core=7.4, inner=3.4, crown=5, crown_reach=7.6, spire=0.0,
+        pairs=2, span=19.0, blades=7, spread=50.0, sweep=20.0,
+        rings=1, ring_major=11.0, shards=6, veil=8, tile=1.85, glow=5.4, girdle=8,
+    ),
+    "large": dict(
+        voxel=5.20, core=9.6, inner=4.8, crown=7, crown_reach=11.0, spire=7.0,
+        pairs=3, span=29.0, blades=9, spread=54.0, sweep=24.0,
+        rings=2, ring_major=15.0, shards=10, veil=16, tile=2.00, glow=8.2, girdle=14,
+    ),
+}
+
+
+def seraph(stage):
+    p = SERAPH_STAGES[stage]
+    figure = Figure("SERAPH PROJECT AVATAR -- %s" % stage.upper(), seed=3030 + len(stage), voxel_uu=p["voxel"])
+    figure.material("violet", "rim", VIOLET, 1.0)
+    figure.material("deep", "lit", VIOLET_DEEP, 1.0)
+    figure.material("lavender", "rim", LAVENDER, 1.0)
+    figure.material("crystal", "rim", CRYSTAL, 1.0)
+    figure.material("core", "glow", CORE_LIGHT, p["glow"])
+    figure.material("corona", "glow", VIOLET, p["glow"] * 0.7)
+    figure.material("halo", "add", LAVENDER, 1.6)
+
+    tile = p["tile"]
+    centre_z = p["core"] * 2.4 + p["span"] * 0.18
+
+    def facet(x, y, z):
+        # BRIGHT ALONG THE EDGES, violet across the faces, deepest underneath: a cut stone lit from inside, which is
+        # what makes it read as a core rather than as a lump the wings happen to meet at.
+        if abs(x) < tile * 1.2 or abs(y) < tile * 1.2:
+            return "core"
+        return "corona" if z > -tile else "violet"
+
+    def blade(x, y, z):
+        return "crystal" if figure.rng.random() > 0.30 else "lavender"
+
+    # ---- THE CORE. Bare at SMALL; at MEDIUM a second, brighter octahedron burns inside it; at LARGE a lattice cages
+    # ---- it and turns. This is the stage difference a reader sees first.
+    figure.part("root", "-", (0.0, 0.0, 0.0), "spine", 0.7, 0.4)
+    figure.part("core", "root", (0.0, 0.0, centre_z), "float")
+    figure.octahedron("core", facet, (0.0, 0.0, centre_z), p["core"], tile)
+    if p["inner"] > 0.0:
+        figure.part("heart", "core", (0.0, 0.0, centre_z), "twinkle", 0.0)
+        figure.octahedron("heart", lambda *_: "core", (0.0, 0.0, centre_z), p["inner"], tile * 0.9)
+    if p["girdle"] > 0:
+        # A girdle of shards about the core's waist, each one standing out along its own radius.
+        figure.part("girdle", "core", (0.0, 0.0, centre_z), "orbit", 11.0)
+        for i in range(p["girdle"]):
+            a = 2.0 * math.pi * i / p["girdle"]
+            base = (math.cos(a) * p["core"] * 0.92, math.sin(a) * p["core"] * 0.92, centre_z)
+            tip = (math.cos(a) * p["core"] * 1.55, math.sin(a) * p["core"] * 1.55, centre_z + (1 if i % 2 else -1) * tile * 1.6)
+            figure.limb("girdle", lambda *_: "crystal", base, tip, tile * 0.85, tile * 0.28, tile=tile * 0.9)
+
+    # ---- THE RADIANT CROWN: three points, then five with a gem, then seven with a spire. Symmetrical about the
+    # ---- axis at every stage, which is the "strong symmetrical celestial silhouette" the founder asked for.
+    figure.part("crown", "core", (0.0, 0.0, centre_z + p["core"] * 0.9), "twinkle", 0.2)
+    for i in range(p["crown"]):
+        # Centred on straight up, fanned evenly to either side.
+        t = (i - (p["crown"] - 1) * 0.5) / max((p["crown"] - 1) * 0.5, 1.0)
+        lean = math.radians(t * 46.0)
+        reach = p["crown_reach"] * (1.0 - 0.34 * abs(t))
+        base = (0.0, math.sin(lean) * p["core"] * 0.55, centre_z + p["core"] * 0.85)
+        tip = (base[0] - math.sin(lean) * reach * 0.12, base[1] + math.sin(lean) * reach, base[2] + math.cos(lean) * reach)
+        figure.limb("crown", lambda *_: "crystal", base, tip, tile * 0.95, tile * 0.28, tile=tile * 0.95)
+        figure.box("crown", "core", tip, (tile * 0.75,) * 3)
+    if p["crown"] >= 5:
+        # A gem at the brow, set between the two innermost points.
+        figure.box("crown", "corona", (p["core"] * 0.35, 0.0, centre_z + p["core"] * 1.05), (tile * 0.9, tile * 1.6, tile * 1.8))
+    if p["spire"] > 0.0:
+        figure.limb("crown", lambda *_: "crystal", (0.0, 0.0, centre_z + p["core"] * 0.85),
+                    (0.0, 0.0, centre_z + p["core"] * 0.85 + p["spire"]), tile * 1.1, tile * 0.22, tile=tile)
+        figure.box("crown", "core", (0.0, 0.0, centre_z + p["core"] * 0.85 + p["spire"]), (tile * 1.1,) * 3)
+
+    # ---- THE WINGS: one pair, then two, then three. Upper pairs spread and rise; lower pairs sweep back and down,
+    # ---- so three pairs read as a fan rather than as six of the same thing.
+    for pair in range(p["pairs"]):
+        drop = pair * p["core"] * 0.72
+        for side in (1.0, -1.0):
+            name = "wing_%d_%s" % (pair, "r" if side > 0 else "l")
+            root = (-p["core"] * 1.05, side * p["core"] * 0.62, centre_z + p["core"] * 0.18 - drop)
+            figure.part(name, "core", root, "wing", side)
+            figure.crystal_wing(name, side, root, p["span"] * (1.0 - 0.22 * pair), p["blades"],
+                                p["spread"] - pair * 30.0, p["sweep"] + pair * 14.0, tile, blade)
+
+    # ---- THE SHARD RINGS: none, then one, then two turning against each other.
+    for ring in range(p["rings"]):
+        name = "shards_%d" % ring
+        figure.part(name, "root", (0.0, 0.0, centre_z), "orbit", (7.5 - ring * 3.0) * (1.0 if ring % 2 == 0 else -1.0))
+        major = p["ring_major"] * (1.0 + 0.22 * ring)
+        for i in range(p["shards"]):
+            a = 2.0 * math.pi * i / max(p["shards"], 1) + ring * 0.4
+            lift = math.sin(a * 2.0 + ring) * p["core"] * 0.5
+            at = (math.cos(a) * major * 0.35, math.sin(a) * major, centre_z + lift)
+            out = (at[0] - tile * 1.4, at[1] + math.sin(a) * tile * 2.2, at[2] + tile * 2.4)
+            figure.limb(name, lambda *_: "crystal", at, out, tile * 0.7, tile * 0.24, tile=tile * 0.9)
+            figure.box(name, "corona", at, (tile * 0.7,) * 3)
+
+    # ---- THE VEIL OF LIGHT beneath, at the two grown stages. A Seraph hovers; it needs something under it or it
+    # ---- reads as an object resting on nothing.
+    if p["veil"] > 0:
+        figure.part("veil", "root", (0.0, 0.0, centre_z - p["core"] * 1.6), "trail", 1.0, 2.0)
+        for i in range(p["veil"]):
+            t = (i + 0.5) / p["veil"]
+            a = 2.0 * math.pi * t * 2.0
+            fall = p["core"] * (1.4 + 1.9 * math.sin(math.pi * t))
+            steps = max(2, int(fall / tile))
+            for s in range(steps):
+                f = s / max(steps - 1, 1)
+                figure.box("veil", "halo" if f > 0.45 else "lavender",
+                           (math.cos(a) * p["core"] * 0.5 * (1.0 - f),
+                            math.sin(a) * p["core"] * 0.7 * (1.0 - f),
+                            centre_z - p["core"] * 1.6 - f * fall),
+                           (tile * (1.2 - 0.6 * f),) * 3)
+    return figure
+
+
 FORMS = [
     ("TenTails", "ten_tails", ten_tails),
     ("Cherubim", "cherubim", cherubim),
+    ("Seraph", "seraph", seraph),
 ]
 STAGES = ("small", "medium", "large")
 
