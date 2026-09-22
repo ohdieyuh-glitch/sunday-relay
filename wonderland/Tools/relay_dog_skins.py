@@ -764,6 +764,100 @@ def bee():
     return figure
 
 
+
+# ============================================================================ the sub-agent cub
+
+def cub_ghost(eyes="flat"):
+    """A RELAY DOG CUB GHOST: a regular temporary sub-agent, as the founder's "RELAY DOG CUBS / SUB AGENTS" plate
+    draws one.
+
+    NOT A MINIATURE OF THE MASCOT. The plate shows a floating HEAD -- the Relay Dog head with its two ear spurs, its
+    black visor and its warm gold eyes, two small pearl ball hands detached at either side, and a ghost tail
+    trailing below where a body would be. There is no torso, no arms, no elbows and no legs. A cub built by shrinking
+    the standing mascot is a different creature from the one on the sheet, and the world lane deleted exactly those
+    parts from its own build for the same reason.
+
+    NOT A /MAS CLONE EITHER (founder correction, 2026-09-22). A cub is a lightweight delegated helper under the
+    primary Compound AI Agent. It holds no mission authority, and nothing about how it is drawn may suggest it does.
+
+    THE EYE SHAPE CARRIES THE EXPRESSION. A creature with no face and no body has only its eyes, so the plate gives
+    each cub a different pair -- flat bars, curved arcs, slanted wedges -- and this takes the same three.
+    """
+    figure = start("RELAY DOG CUB GHOST -- SUB AGENT", 7100 + len(eyes), (1.00, 0.80, 0.34), 8.0,
+                   coat=(0.965, 0.960, 0.945), coat_deep=(0.800, 0.800, 0.800))
+    figure.material("ghost", "add", (0.98, 0.96, 0.90), 1.5)
+    d = DOG
+    tile = d["tile"]
+    hd, hw, hh = d["head"]
+    # The cub's own scale: a head about two thirds the mascot's, since it is a cub.
+    k = 0.66
+    hd, hw, hh = hd * k, hw * k, hh * k
+    head_z = 0.0
+
+    # THE HEAD. Everything a Relay Dog is recognised by, and nothing else.
+    figure.part("root", "-", (0.0, 0.0, 0.0), "float")
+    figure.part("head", "root", (0.0, 0.0, head_z), "head")
+    figure.slab("head", "bone", (0.0, 0.0, head_z), (hd, hw, hh), tile=tile * k)
+    ed, ew, eh = (v * k for v in d["ear"])
+    for side in (-1.0, 1.0):
+        y = side * (hw * 0.5 - ew * 0.9)
+        figure.slab("head", "bone", (0.0, y, head_z + hh * 0.5 + eh * 0.28), (ed, ew, eh * 0.62), tile=tile * k)
+        figure.slab("head", "bone", (0.0, y + side * ew * 0.16, head_z + hh * 0.5 + eh * 0.78),
+                    (ed * 0.72, ew * 0.72, eh * 0.50), tile=tile * k)
+    figure.slab("head", "visor", (hd * 0.5 - 0.25, 0.0, head_z + hh * 0.06), (1.1, hw * 0.76, hh * 0.38), tile=tile * 0.45)
+
+    # THE EYES, in one of the plate's three shapes. Same place and same size in all three: expression may change, and
+    # legibility may not.
+    ex = hd * 0.5 + 0.22
+    for side in (-1.0, 1.0):
+        base = (ex, side * hw * 0.19, head_z + hh * 0.06)
+        if eyes == "flat":
+            figure.box("head", "eye", base, (0.35, hw * 0.20, hh * 0.13))
+        elif eyes == "arc":
+            for s in range(5):
+                a = math.pi * (0.18 + 0.64 * s / 4.0)
+                figure.box("head", "eye", (base[0], base[1] + math.cos(a) * hw * 0.10, base[2] + math.sin(a) * hh * 0.07 - hh * 0.03),
+                           (0.35, hw * 0.055, hh * 0.055))
+        else:  # slant
+            for s in range(4):
+                f = (s - 1.5) / 3.0
+                figure.box("head", "eye", (base[0], base[1] + f * hw * 0.13, base[2] + side * f * hh * 0.08),
+                           (0.35, hw * 0.06, hh * 0.07))
+
+    # THE TWO BALL HANDS. Their own joints, detached, with nothing to weld them to -- as the plate has them and as
+    # the world lane rigged them. They lag the head rather than being fixed to it.
+    for side, name in ((-1.0, "hand_l"), (1.0, "hand_r")):
+        pivot = (hd * 0.22, side * (hw * 0.5 + 2.3), head_z - hh * 0.14)
+        figure.part(name, "root", pivot, "trail", 1.0, 2.0)
+        r = 1.5
+        span = int(r / (tile * 0.55)) + 1
+        for ix in range(-span, span + 1):
+            for iy in range(-span, span + 1):
+                for iz in range(-span, span + 1):
+                    q = (ix * tile * 0.55, iy * tile * 0.55, iz * tile * 0.55)
+                    if q[0] * q[0] + q[1] * q[1] + q[2] * q[2] <= r * r:
+                        figure.box(name, "bone", (pivot[0] + q[0], pivot[1] + q[1], pivot[2] + q[2]), (tile * 0.58,) * 3)
+
+    # THE GHOST TAIL: a smooth comet below and behind, not a stack of blocks. Two joints so it drags rather than
+    # swinging rigidly with the head.
+    figure.part("tail", "root", (-hd * 0.22, 0.0, head_z - hh * 0.45), "trail", 1.0, 3.0)
+    figure.part("tail_tip", "tail", (-hd * 0.55, 0.0, head_z - hh * 1.5), "trail", 2.6, 3.0)
+    for s in range(15):
+        f = s / 14.0
+        host = "tail" if f < 0.45 else "tail_tip"
+        width = (1.0 - 0.78 * f) * hw * 0.44
+        # Back three times as far as it falls, with a curl: a comet, as the plate draws it.
+        figure.box(host, "ghost" if f > 0.28 else "bone",
+                   (-hd * 0.30 - f * hd * 1.55 + math.sin(f * 2.6) * 0.8,
+                    math.sin(f * 3.4) * hw * 0.16,
+                    head_z - hh * 0.40 - f * hh * 0.62 - math.sin(f * 2.2) * hh * 0.10),
+                   (width * 1.15, width, width))
+    figure.mark_dog_extent()
+    return figure
+
+
+CUB_EYES = ("flat", "arc", "slant")
+
 SKINS = [
     ("RelayOg", relay_og),
     ("ArdenInfernal", arden_infernal),
@@ -784,6 +878,16 @@ def main():
         figure = build()
         figure.fit_to_metres(TARGET_METRES)
         path = os.path.join(args.out, "%s.wlvox" % name)
+        boxes, parts, materials = figure.write(path)
+        print("%-22s %5d boxes  %2d parts  %2d materials  voxel %.2f uu" % (os.path.basename(path), boxes, parts, materials, figure.voxel_uu))
+
+    # THE CUBS. A cub is about a third of the Dog's height on the plate, which is what "cub proportions" means here.
+    cubs = os.path.join(os.path.dirname(args.out), "RelayCubs")
+    os.makedirs(cubs, exist_ok=True)
+    for eyes in CUB_EYES:
+        figure = cub_ghost(eyes)
+        figure.fit_to_metres(TARGET_METRES * 0.34)
+        path = os.path.join(cubs, "CubGhost_%s.wlvox" % eyes.capitalize())
         boxes, parts, materials = figure.write(path)
         print("%-22s %5d boxes  %2d parts  %2d materials  voxel %.2f uu" % (os.path.basename(path), boxes, parts, materials, figure.voxel_uu))
 
