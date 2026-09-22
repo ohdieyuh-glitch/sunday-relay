@@ -371,3 +371,78 @@ operation writes a NEW row rather than taking the idempotent path at all. The
 ledger's idempotency is therefore available to deterministic ids only. Making
 Julius's operational event ids deterministic is a boundary of its own — it
 changes every event's identity — and belongs with the durable-artifact work.
+
+## G. PR 8 — a decision and the history that explains it
+
+The PR 7 residual, audited on main `3203b6d7`. The audit did not end where it
+started, so this records what was looked for, what was actually found, and the
+one that turned out not to matter.
+
+### What the residual was NOT
+
+Four provider-free crash probes were written before any code changed.
+
+**Crash at every durable write, four run shapes, resume each time** — 86 to 270
+durable writes per shape, 435 crash points reached, every resume driven to
+terminal. **Zero duplicate semantic events.** The claim, the lease and the
+result idempotency key already stop a resumed process re-entering work it
+finished, so random event ids produce no duplicate rows on the ordinary crash
+path. Making every operational event id deterministic would have been a large
+change chasing a consequence that does not occur, and it was not made.
+
+**A material challenge nobody resolves** concludes correctly — a REPAIR
+decision and an honest stall. No defect.
+
+### What it WAS: a decision no history could explain
+
+A verification writes its decision FIRST and the events explaining it after.
+Killing the process in between leaves, permanently:
+
+- the decision — present;
+- the release of the dependent task — present, in the same write;
+- `verification.decided`, `task.runnable` and the peer transitions — **gone**.
+
+The next resume writes nothing, because the stranded sweep skips a task that
+already has a decision. There is no second chance and nothing detects it. The
+behaviour is right and the record is wrong: the run's own history cannot say
+that a verification was decided or that a build became claimable, while the
+rows saying exactly that stand beside it.
+
+**The fix is the one the port already claimed for the release:** the decision,
+the tasks it releases and the events explaining both are ONE durable write —
+one PostgreSQL transaction, one synchronous call in memory. An event the write
+cannot accept takes the decision and the release down with it, which only a real
+database can demonstrate, and `julius-decision-history.real-postgres.test.ts`
+does.
+
+### Where deterministic identity actually earned its place
+
+Not in preventing duplicates — a duplicate decision writes nothing at all, so
+its events cannot be written twice whatever they are called. The first
+mutation run proved that: replacing the derived id with a minted one killed no
+test.
+
+It earns its place in being ASKABLE. `juliusDecisionEventId` derives an event's
+id from the decision's own idempotency key, so a reader holding a decision row
+can compute the id of the event that must explain it and go and look. With
+`${kind}:${randomUUID()}` there is no question to ask — the id is a fact about
+whichever process happened to write it. An unexplained decision is the state
+this PR makes impossible; being able to ask is what makes it checkable rather
+than merely intended, and the proof that fails without it says so.
+
+### The second defect, found by the same probe
+
+`advanceRun` had no terminal-run guard. Work whose review FAILED is
+SUCCEEDED-and-undecided for good — no review can conclude now — so the stranded
+sweep found it on every pass and wrote another `review.started` each time:
+**80 of them under 80 different ids**, growing a finished run's ledger without
+bound for as long as anything advanced it. The live driver returns as soon as a
+run is terminal, which is why nothing had run into it — a property of one
+caller, not of the run. A finished run is now swept by nobody, and the terminal
+vocabulary is exported from one place rather than restated.
+
+**Residual, reported not fixed:** operational event ids OUTSIDE the decision
+path remain random UUIDs. The probes above show this costs nothing on the crash
+paths that exist today, and every event written inside a durable operation now
+takes its identity from that operation. Extending derived identity to the rest
+of the ledger remains available, and is not justified by any defect yet found.
