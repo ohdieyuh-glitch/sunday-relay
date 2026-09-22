@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 
 import {
   OFFICIAL_RELAY_DOG_HEIGHT,
@@ -429,8 +429,12 @@ describe('the C++ side is present and readable', () => {
     const sources = readdirSync(CPP_DIR).filter(
       (file) => file.endsWith('.h') || file.endsWith('.cpp'),
     );
+    // `git ls-files` ALWAYS emits forward slashes, on every platform, while `join` uses the host separator -- so on
+    // Windows every path built here read as untracked and the check failed against a perfectly clean tree. Comparing
+    // in git's own spelling is the fix; the check itself is unchanged.
+    const asGitSpells = CPP_DIR_RELATIVE.split(sep).join('/');
     const untracked = sources
-      .map((file) => `${CPP_DIR_RELATIVE}/${file}`)
+      .map((file) => `${asGitSpells}/${file}`)
       .filter((path) => !tracked.has(path));
     expect(
       untracked,
