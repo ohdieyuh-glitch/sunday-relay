@@ -51,6 +51,11 @@ CULL = 9000.0
 MATERIAL = "MI_V2_AshlarMarblePale"
 
 
+def mesh_height(mesh):
+    bb = SECTIONS[mesh]["bb"]
+    return bb[5] - bb[2]
+
+
 def outline(mesh):
     """The measured wall segments at the LOWEST sliced height: the building's real foot."""
     rec = SECTIONS.get(mesh)
@@ -84,26 +89,38 @@ def main():
         if segs is None:
             skipped["no measured outline: " + b["mesh"]] += 1
             continue
+        # THE CORE'S BUILDINGS ARE SCALED, and the first cut ignored it. Measured from the census: 301 of 421
+        # stand at something other than 1.0, from 0.80 to 5.76. A measured outline is in the MESH's own
+        # coordinates, so using it raw put the course deep inside every enlarged building and floating off every
+        # shrunken one -- the WB01 failure again, wearing a different hat. Height gives the scale exactly, because
+        # z is the one axis a yaw cannot mix.
+        mh = mesh_height(b["mesh"])
+        scale = ((b.get("zmax", 0.0) - b.get("zmin", 0.0)) / mh) if mh > 0 else 1.0
+        if not (0.2 <= scale <= 12.0):
+            skipped["implausible scale"] += 1
+            continue
         ca, sa = math.cos(math.radians(b["yaw"])), math.sin(math.radians(b["yaw"]))
-        for x0, y0, x1, y1 in segs:
+        for sx0, sy0, sx1, sy1 in segs:
+            x0, y0, x1, y1 = sx0 * scale, sy0 * scale, sx1 * scale, sy1 * scale
             dx, dy = x1 - x0, y1 - y0
             length = math.hypot(dx, dy)
-            if length < RUN * 0.5:
+            if length < RUN * scale * 0.5:
                 continue                       # a stub between two runs; the neighbours already cover it
-            n = max(1, int(round(length / RUN)))
+            n = max(1, int(round(length / (RUN * scale))))
             step = length / n
             ux, uy = dx / length, dy / length
             # push the course very slightly OUT of the wall, along the segment's outward normal
             nx, ny = uy, -ux
             for i in range(n):
                 t = (i + 0.5) * step
-                lx = x0 + ux * t + nx * OUT_OFFSET
-                ly = y0 + uy * t + ny * OUT_OFFSET
+                lx = x0 + ux * t + nx * OUT_OFFSET * scale
+                ly = y0 + uy * t + ny * OUT_OFFSET * scale
                 wx = b["x"] + lx * ca - ly * sa
                 wy = b["y"] + lx * sa + ly * ca
                 yaw = b["yaw"] + math.degrees(math.atan2(uy, ux))
+                # the course grows with the building, or a 5.7x hall gets a doll's-house skirting
                 add("BaseCourse", PLINTH["parts"][0]["mesh"], MATERIAL, wx, wy, b.get("zmin", 0.0), yaw,
-                    (step / PLINTH_LEN, 1.0, 1.0))
+                    (step / PLINTH_LEN, scale, scale))
         used += 1
 
     spec = {"pass": PASS,
