@@ -19,7 +19,8 @@ are crisp at every distance and in every LOD, with no texture, no UV work and no
 trick bands the arms and legs. This is the "subtle striped armour" read: banded plating on a white
 machine, not a yellow-and-black insect.
 
-WHY THE WINGS DO NOT RUIN THE SILHOUETTE. Four wings, swept BACK along the body rather than spread,
+WHY THE WINGS DO NOT RUIN THE SILHOUETTE. Four wings, broad enough to read as wings rather than as
+whiskers -- the first cut was 0.20 W deep and rendered as four pale slivers -- and swept BACK along the body,
 built from the translucent unlit master the Sub-Agent Cub Ghost needed (M_V2_Ghost). Swept back they
 sit inside the Dog's existing outline from the front and read as wings only from three-quarters and
 above -- the founder's "if they fit the silhouette" condition, answered by sweep angle rather than by
@@ -72,13 +73,13 @@ EXTRAS = [
     # --- wings: fore and hind, each side, swept back so the front silhouette is unchanged.
     #     Long along web x (= Unreal y); yaw sweeps the tip backwards, roll lifts it.
     ("wingForeLeft", "root", "wing", (-0.46 * W, 1.63 * W, -0.30 * W),
-     (0.78 * W, 0.022 * W, 0.20 * W), (0.0, 34.0, 13.0), "box"),
+     (0.86 * W, 0.024 * W, 0.46 * W), (0.0, 34.0, 13.0), "box"),
     ("wingForeRight", "root", "wing", (0.46 * W, 1.63 * W, -0.30 * W),
-     (0.78 * W, 0.022 * W, 0.20 * W), (0.0, -34.0, -13.0), "box"),
+     (0.86 * W, 0.024 * W, 0.46 * W), (0.0, -34.0, -13.0), "box"),
     ("wingHindLeft", "root", "wing", (-0.36 * W, 1.52 * W, -0.34 * W),
-     (0.52 * W, 0.020 * W, 0.145 * W), (0.0, 44.0, 8.0), "box"),
+     (0.60 * W, 0.022 * W, 0.32 * W), (0.0, 44.0, 8.0), "box"),
     ("wingHindRight", "root", "wing", (0.36 * W, 1.52 * W, -0.34 * W),
-     (0.52 * W, 0.020 * W, 0.145 * W), (0.0, -44.0, -8.0), "box"),
+     (0.60 * W, 0.022 * W, 0.32 * W), (0.0, -44.0, -8.0), "box"),
     # the root each wing pair grows from, so they do not float off the back
     ("wingRootLeft", "root", "carapace", (-0.20 * W, 1.60 * W, -0.235 * W),
      (0.13 * W, 0.13 * W, 0.10 * W), (0.0, 0.0, 0.0), "box"),
@@ -112,12 +113,19 @@ MATERIALS = {
     "gold": {"color": "#E8A317", "roughness": 0.34, "metalness": 0.55, "emissive": None},
     "carapace": {"color": "#141210", "roughness": 0.38, "metalness": 0.15, "emissive": None},
     "eye": {"color": "#FFC94A", "roughness": 0.34, "metalness": 0.1, "emissive": ("#FFB627", 1.5)},
-    "wing": {"core": "#FFF6DC", "rim": "#F2B134", "opacity": 0.22, "rim_power": 3.2,
-             "brightness": 9000.0, "fade_strength": 0.45},
+    # THE WINGS ARE NOT A GHOST. Two cuts put them on M_V2_Ghost -- the translucent unlit master built for the
+    # Sub-Agent Cub's tail -- and both rendered as nothing at all: at 9000/0.22 and again at 58000/0.34 the wing
+    # was a faint streak at the shoulder and no more. Raising the number a third time would have been the wrong
+    # answer to the right observation. That master makes a GLOWING WISP: a soft volume seen against a dark
+    # interior. A bee's wing is a thin bright MEMBRANE seen against the sky, and every other "glass" in this
+    # world -- MI_V2_GlassTeal and its family -- is opaque on the surface master for exactly that reason. So the
+    # wing goes where the world's glass goes: pale warm, very smooth, high specular, so it catches the sun as a
+    # sheet rather than trying to out-glow it.
+    "wing": {"color": "#FBF0D2", "roughness": 0.085, "metalness": 0.0, "emissive": None},
 }
 SURFACES = ("ivory", "visor", "eye", "amber", "gold", "carapace", "wing")
-#: The one translucent surface, which the builder must put on the ghost master rather than a V2 one.
-TRANSLUCENT = ("wing",)
+#: Nothing in this skin is translucent. Kept as the hook the builder reads, so a future part can be.
+TRANSLUCENT = ()
 
 
 def boxes():
