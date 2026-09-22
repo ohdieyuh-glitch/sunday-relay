@@ -17,7 +17,8 @@
 //
 // Grid axes are Unreal's: +X forward (where the face looks), +Y right, +Z up. The origin is the point
 // that floats at hover height. Colours are linear. Parts are declared parent-first. Motions:
-// none, float, head, wing <side>, tail <index> <count>, orbit <degrees per second>, blink, twinkle <phase>.
+// none, float, head, wing <side>, tail <index> <count>, orbit <degrees per second>, blink, twinkle <phase>,
+// stride <phase> <lift>, knee <phase> <bend>, spine <amount> <phase>, trail <index> <count>.
 //
 // PURE, AND ALL OR NOTHING. No engine state is touched here. A figure that fails to parse names the line
 // and the reason and is never returned half-built, so a typo in a figure file can never spawn a companion
@@ -57,7 +58,34 @@ enum class EWonderlandCompanionMotion : uint8
 	/** Eyes: an occasional squash to a line. */
 	Blink,
 	/** Sparkles: a breathing scale. A = phase, 0..1. */
-	Twinkle
+	Twinkle,
+	/**
+	 * A LIMB'S UPPER JOINT, walking. A = this leg's phase in the gait cycle, 0..1 (diagonal pairs are half a cycle
+	 * apart); B = how far the foot lifts on the swing, as a multiple of the default.
+	 *
+	 * Driven by the body's measured ground speed, so a creature standing still does not march on the spot.
+	 */
+	Stride,
+	/**
+	 * THE JOINT BELOW A STRIDE, bending through the swing and straightening under load. A = the same phase as its
+	 * hip; B = how far it bends.
+	 *
+	 * IT LAGS ITS HIP ON PURPOSE. A knee that bends on the same frame as the hip above it is the most mechanical
+	 * thing a walk can do; the delay is what makes a leg read as a leg rather than as a hinge.
+	 */
+	Knee,
+	/**
+	 * THE BODY, FLEXING WITH THE GAIT: rolling into the stride, yawing against it, and bobbing twice a cycle.
+	 * A = how much, as a multiple of the default; B = a phase offset.
+	 */
+	Spine,
+	/**
+	 * A SEGMENT THAT STREAMS AND WHIPS rather than swinging in place. A = index along the chain, B = chain length.
+	 *
+	 * Unlike Tail, its amplitude rises with the body's speed and it sweeps backward as the body moves, so a tail
+	 * trails behind a running creature and settles when it stops.
+	 */
+	Trail
 };
 
 struct FWonderlandCompanionMaterial

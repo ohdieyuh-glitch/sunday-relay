@@ -274,7 +274,7 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
     d = DOG
     tile = tile or d["tile"]
     hd, hw, hh = d["head"]
-    figure.part("root", "-", (0.0, 0.0, 0.0), "float")
+    figure.part("root", "-", (0.0, 0.0, 0.0), "spine", 0.85, 0.0)
     figure.part("body", "root", (0.0, 0.0, d["torso_z"]), "none")
     figure.part("head", "body", (0.0, 0.0, d["head_z"]), "head")
 
@@ -308,10 +308,17 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
         figure.part(name, "body", pivot, "wing", side)
         figure.slab(name, coat, (pivot[0], pivot[1], pivot[2] - ah * 0.44), (ad, aw, ah), tile=tile)
     ld, lw, lh = d["leg"]
-    for side, name in ((-1.0, "leg_l"), (1.0, "leg_r")):
-        figure.part(name, "body", (0.0, side * d["leg_gap"], d["torso_z"] - th * 0.5), "none")
-        figure.slab(name, coat, (0.0, side * d["leg_gap"], d["torso_z"] - th * 0.5 - lh * 0.5), (ld, lw, lh), tile=tile)
-        figure.slab(name, coat_deep, (ld * 0.16, side * d["leg_gap"], d["torso_z"] - th * 0.5 - lh + tile * 0.55),
+    for side, name, phase in ((-1.0, "leg_l", 0.0), (1.0, "leg_r", 0.5)):
+        hip_z = d["torso_z"] - th * 0.5
+        # The two legs are half a cycle apart, which for two legs is simply walking.
+        figure.part(name, "body", (0.0, side * d["leg_gap"], hip_z), "stride", phase, 0.8)
+        figure.slab(name, coat, (0.0, side * d["leg_gap"], hip_z - lh * 0.26), (ld, lw, lh * 0.55), tile=tile)
+        # Everything below the knee is its own joint. Short legs still need one: a chibi mascot whose leg is a single
+        # rigid post reads as a peg, however well the hip swings.
+        shin = "%s_shin" % name
+        figure.part(shin, name, (0.0, side * d["leg_gap"], hip_z - lh * 0.50), "knee", phase, 0.7)
+        figure.slab(shin, coat, (0.0, side * d["leg_gap"], hip_z - lh * 0.74), (ld * 0.94, lw * 0.94, lh * 0.52), tile=tile)
+        figure.slab(shin, coat_deep, (ld * 0.16, side * d["leg_gap"], hip_z - lh + tile * 0.55),
                     (ld * 1.18, lw * 1.04, tile * 1.2), tile=tile)
     figure.mark_dog_extent()
     return figure
@@ -330,7 +337,7 @@ def quadruped_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=Non
     body_z = 7.4
     head_z = body_z + 3.4
 
-    figure.part("root", "-", (0.0, 0.0, 0.0), "float")
+    figure.part("root", "-", (0.0, 0.0, 0.0), "spine", 1.0, 0.0)
     figure.part("body", "root", (0.0, 0.0, body_z), "none")
     figure.part("head", "body", (5.2, 0.0, head_z), "head")
 
@@ -354,10 +361,17 @@ def quadruped_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=Non
     # Four legs, and a short tail carried up.
     for fx, name in ((3.9, "leg_fl"), (3.9, "leg_fr"), (-3.9, "leg_bl"), (-3.9, "leg_br")):
         side = -1.0 if name.endswith("l") else 1.0
-        figure.part(name, "body", (fx, side * 1.7, body_z - 2.5), "none")
-        figure.slab(name, coat, (fx, side * 1.7, body_z - 2.5 - 2.4), (2.3, 2.3, 4.9), tile=tile)
-        figure.slab(name, coat_deep, (fx + 0.2, side * 1.7, body_z - 2.5 - 4.6), (2.6, 2.5, tile * 1.1), tile=tile)
-    figure.part("tail", "body", (-5.6, 0.0, body_z + 1.6), "tail", 6.0, 8.0)
+        front = fx > 0.0
+        # Diagonal pairs: front-left with rear-right, half a cycle from front-right with rear-left.
+        phase = 0.0 if front == (side < 0.0) else 0.5
+        hip_z = body_z - 2.5
+        figure.part(name, "body", (fx, side * 1.7, hip_z), "stride", phase, 1.0)
+        figure.slab(name, coat, (fx, side * 1.7, hip_z - 1.3), (2.3, 2.3, 2.6), tile=tile)
+        shin = "%s_shin" % name
+        figure.part(shin, name, (fx, side * 1.7, hip_z - 2.5), "knee", phase, 1.0)
+        figure.slab(shin, coat, (fx, side * 1.7, hip_z - 3.6), (2.1, 2.1, 2.4), tile=tile)
+        figure.slab(shin, coat_deep, (fx + 0.2, side * 1.7, hip_z - 4.6), (2.6, 2.5, tile * 1.1), tile=tile)
+    figure.part("tail", "body", (-5.6, 0.0, body_z + 1.6), "trail", 6.0, 8.0)
     for s in range(5):
         t = s / 4.0
         figure.box("tail", coat, (-5.6 - t * 1.2, 0.0, body_z + 1.6 + t * 3.6), (2.0 - t * 0.5, 2.0 - t * 0.5, 1.6))

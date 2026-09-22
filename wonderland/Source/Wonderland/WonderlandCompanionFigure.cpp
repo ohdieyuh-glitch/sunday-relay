@@ -42,6 +42,10 @@ namespace
 		if (Token == TEXT("orbit")) { Out = EWonderlandCompanionMotion::Orbit; return true; }
 		if (Token == TEXT("blink")) { Out = EWonderlandCompanionMotion::Blink; return true; }
 		if (Token == TEXT("twinkle")) { Out = EWonderlandCompanionMotion::Twinkle; return true; }
+		if (Token == TEXT("stride")) { Out = EWonderlandCompanionMotion::Stride; return true; }
+		if (Token == TEXT("knee")) { Out = EWonderlandCompanionMotion::Knee; return true; }
+		if (Token == TEXT("spine")) { Out = EWonderlandCompanionMotion::Spine; return true; }
+		if (Token == TEXT("trail")) { Out = EWonderlandCompanionMotion::Trail; return true; }
 		return false;
 	}
 }

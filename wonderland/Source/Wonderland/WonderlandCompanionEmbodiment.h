@@ -98,6 +98,40 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	FName GetRuntimeActivity() const { return RuntimeActivity; }
 
+	/**
+	 * HOW FAST THIS BODY IS ACTUALLY TRAVELLING, uu/s, measured from its own movement rather than asked of anything.
+	 * The gait runs on this: a creature standing still must not march on the spot, and one crossing a plaza must not
+	 * mince. A proof reads it beside the gait phase to show the two agree.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	float GetGroundSpeedUu() const { return GroundSpeedUU; }
+
+	/** How far through the gait cycle the legs are, 0..1. For a proof that has to show the legs are not frozen. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	float GetGaitPhase() const { return FMath::Frac(GaitPhase); }
+
+	/**
+	 * HOW MUCH OF THE WALK IS SHOWING, 0 standing to 1 at full stride. Eased, so a body never snaps between standing
+	 * and walking -- the snap is itself a kind of stiffness.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	float GetGaitWeight() const { return GaitWeight; }
+
+	/**
+	 * WHERE ONE NAMED JOINT IS POINTING RIGHT NOW, relative to its parent. Zero rotation for a part that does not
+	 * exist, which a caller can tell from GetPartNames().
+	 *
+	 * THIS EXISTS BECAUSE "IT LOOKS STIFF" IS NOT MEASURABLE FROM A SCREENSHOT. A proof has to be able to say that
+	 * the left hip and the right hip are half a cycle apart, that a knee is running behind the hip above it, and that
+	 * both stop when the body stops -- and none of that is visible in a still.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	FRotator GetPartRotation(FName PartName) const;
+
+	/** Every joint this figure built, in declaration order. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	TArray<FName> GetPartNames() const;
+
 	EWonderlandCompanionFormation GetFormation() const { return Formation; }
 
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
@@ -237,6 +271,9 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USceneComponent>> PartPivots;
 
+	/** The joints' names, parallel to PartPivots. Kept only so a proof can name what it is measuring. */
+	TArray<FName> PartNames;
+
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> PartMeshes;
 
@@ -294,6 +331,27 @@ private:
 	/** The body's own clock, advanced by the activity's rate rather than by scaling the world's time. */
 	float ActivityPhase = 0.0f;
 	float LastAnimateSeconds = 0.0f;
+
+	// ---- THE GAIT. Measured, not timed: a creature standing still must not march on the spot.
+	/** Ground speed in uu/s, from this actor's own movement, smoothed so one stuttered frame is not a sprint. */
+	float GroundSpeedUU = 0.0f;
+	FVector LastGroundSpot = FVector::ZeroVector;
+	bool bHasGroundSpot = false;
+	/** The gait's clock, advanced by DISTANCE travelled rather than by time, so stride length stays constant. */
+	float GaitPhase = 0.0f;
+	/** 0 standing, 1 walking. Eased both ways, because snapping between them is itself a kind of stiffness. */
+	float GaitWeight = 0.0f;
+	float GaitMeasuredAt = 0.0f;
+
+	/**
+	 * ONE STRIDE ON THE GROUND, in grid units before the figure's scale. The gait clock turns once per stride, so a
+	 * bigger creature covers more ground per step rather than taking the same steps faster -- which is the difference
+	 * between a large avatar walking and a small one sped up.
+	 */
+	float StrideLengthUU = 105.0f;
+
+	/** The speed at which the walk is fully shown. Below it the stride is proportionally smaller, not slower. */
+	float WalkSpeedUU = 330.0f;
 
 	TWeakObjectPtr<const AActor> ContractActor;
 	EWonderlandCompanionFormation Formation = EWonderlandCompanionFormation::Follow;
