@@ -123,7 +123,7 @@ import {
 } from './julius-shared-ceiling';
 import type { JuliusTimelineReader } from './julius-runtime-api';
 import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusEvidence, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
-import { validateJuliusEvent, type JuliusOperationalEvent, type JuliusOperationalEventType } from './julius-events';
+import { juliusDecisionEventId, validateJuliusEvent, type JuliusOperationalEvent, type JuliusOperationalEventType } from './julius-events';
 import { validateTrajectoryEvent, type JuliusTrajectoryEvent, type JuliusTrajectoryKind } from './julius-trajectory';
 import {
   resolveWorkerRole,
@@ -328,8 +328,29 @@ class RuntimeLedger {
     type: JuliusOperationalEventType,
     input: { taskId: string | null; workerId?: string | null; causationId?: string | null; facts: Record<string, string | number | boolean | null> },
   ): Promise<void> {
+    await this.deps.store.appendEvent(this.compose(type, input));
+  }
+
+  /**
+   * THE SAME EVENT, BUILT BUT NOT WRITTEN.
+   *
+   * An event that explains a decision is written inside the decision's own
+   * durable write, so its caller needs the event as a value rather than as a
+   * side effect. `eventId` comes from that caller — derived from the decision's
+   * idempotency key, so a replayed decision names the same events — and
+   * otherwise defaults to the minted id every other event carries.
+   *
+   * Validated here, as it always was, so a fact that could not legally be
+   * recorded is refused before it can take a decision's transaction down with
+   * it.
+   */
+  compose(
+    type: JuliusOperationalEventType,
+    input: { taskId: string | null; workerId?: string | null; causationId?: string | null; facts: Record<string, string | number | boolean | null> },
+    eventId?: string,
+  ): JuliusOperationalEvent {
     const event: JuliusOperationalEvent = {
-      eventId: this.deps.ids.next(`event:${type}`),
+      eventId: eventId ?? this.deps.ids.next(`event:${type}`),
       runId: this.run.runId,
       projectId: this.run.projectId,
       type,
@@ -341,7 +362,7 @@ class RuntimeLedger {
       facts: { ...input.facts, owner: this.deps.owner },
     };
     validateJuliusEvent(event);
-    await this.deps.store.appendEvent(event);
+    return event;
   }
 
   async trajectory(
@@ -4284,21 +4305,22 @@ async function closeRebuttalTask(input: {
       ? 'No disagreement names this rebuttal; Julius closed the task.'
       : `Rebuttal received; Julius resolved the disagreement ${disagreement.resolution ?? 'UNRESOLVED'} (${disagreement.resolutionBasis ?? 'no basis'}).`,
   };
-  const recorded = await deps.store.appendDecision({
+  // The announcement goes in WITH the decision, for the reason the other site
+  // does: appended afterwards, a crash between the two lost it for good.
+  const decisionKey = `${task.taskId}:${decision.action}:${decision.reasonCode}`;
+  await deps.store.appendDecision({
     decisionId: deps.ids.next('decision'), runId: run.runId, taskId: task.taskId,
     policyRevision: input.request.verification.revision,
-    idempotencyKey: `${task.taskId}:${decision.action}:${decision.reasonCode}`,
+    idempotencyKey: decisionKey,
     occurredAt: deps.clock.now(), decision, releaseTaskIds: [],
-  });
-  if (recorded) {
-    await ledger.event('verification.decided', {
+    events: [ledger.compose('verification.decided', {
       taskId: task.taskId, workerId: input.workerId,
       facts: {
         action: decision.action, reasonCode, criteriaSatisfied: 0, criteriaMissing: 0, missionCompletable: false, released: 0,
         disagreementId: disagreement?.disagreementId ?? null, resolution: disagreement?.resolution ?? null,
       },
-    });
-  }
+    }, juliusDecisionEventId(decisionKey, 'verification.decided', 0))],
+  });
   return decision;
 }
 
@@ -5176,26 +5198,59 @@ async function verifyExecutedTask(input: {
     }
   }
 
+  /**
+   * THE DECISION AND THE HISTORY THAT EXPLAINS IT GO IN TOGETHER.
+   *
+   * `verification.decided` and the `task.runnable` rows for what this decision
+   * released used to be appended after this call returned. A crash in between
+   * left the decision and the release standing with neither recorded, and
+   * nothing ever wrote them: the resume sweep skips a task that already has a
+   * decision. The history could not say the verification had been decided, or
+   * that a build had become claimable, while the rows saying exactly that sat
+   * beside it.
+   *
+   * Their ids come from the decision's OWN idempotency key, so two processes
+   * deciding the same thing name the same events, and the store's append
+   * contract recognises the second as the replay it is.
+   */
+  const decisionKey = `${subject.taskId}:${decision.action}:${decision.reasonCode}`;
+  const byId = new Map(tasks.map((value) => [value.taskId, value]));
   const decisionRecorded = await deps.store.appendDecision({
     decisionId: deps.ids.next('decision'),
     runId: run.runId,
     taskId: subject.taskId,
     policyRevision: input.request.verification.revision,
-    idempotencyKey: `${subject.taskId}:${decision.action}:${decision.reasonCode}`,
+    idempotencyKey: decisionKey,
     occurredAt: deps.clock.now(),
     decision,
     releaseTaskIds: release.releasable,
-  });
-  await ledger.event('verification.decided', {
-    taskId: subject.taskId, workerId: input.workerId,
-    facts: {
-      action: decision.action, reasonCode: decision.reasonCode,
-      criteriaSatisfied: action.criteriaSatisfied.length, criteriaMissing: action.criteriaMissing.length,
-      missionCompletable: action.missionCompletable,
-      released: release.releasable.length,
-      reviewVerdict: applied?.verdict ?? null,
-      reviewRoute: applied?.route ?? null,
-    },
+    events: [
+      ledger.compose('verification.decided', {
+        taskId: subject.taskId, workerId: input.workerId,
+        facts: {
+          action: decision.action, reasonCode: decision.reasonCode,
+          criteriaSatisfied: action.criteriaSatisfied.length, criteriaMissing: action.criteriaMissing.length,
+          missionCompletable: action.missionCompletable,
+          released: release.releasable.length,
+          reviewVerdict: applied?.verdict ?? null,
+          reviewRoute: applied?.route ?? null,
+        },
+      }, juliusDecisionEventId(decisionKey, 'verification.decided', 0)),
+      /**
+       * `task.runnable` announces exactly what this write released — a fact
+       * the claim query will act on. Only an ACCEPT or a COMPLETE releases
+       * anything; for every other action `releasable` is empty, so this names
+       * nothing without having to ask which action it is.
+       */
+      ...release.releasable.map((taskId, ordinal) => ledger.compose('task.runnable', {
+        taskId,
+        facts: {
+          unblockedBy: subject.taskId,
+          role: byId.get(taskId)?.role ?? null,
+          taskType: byId.get(taskId)?.taskType ?? null,
+        },
+      }, juliusDecisionEventId(decisionKey, 'task.runnable', ordinal))),
+    ],
   });
   await ledger.trajectory('VERIFICATION', {
     taskId: subject.taskId, workerId: input.workerId,
@@ -5264,21 +5319,9 @@ async function verifyExecutedTask(input: {
     });
   }
   if (decision.action === 'ACCEPT' || decision.action === 'COMPLETE') {
-    /**
-     * `task.runnable` announces exactly what the decision's write released —
-     * a fact the claim query will act on, recorded once, by the writer. A
-     * duplicate decision released nothing, so it announces nothing.
-     */
-    if (decisionRecorded) {
-      const byId = new Map(tasks.map((value) => [value.taskId, value]));
-      for (const taskId of release.releasable) {
-        const dependent = byId.get(taskId);
-        await ledger.event('task.runnable', {
-          taskId,
-          facts: { unblockedBy: subject.taskId, role: dependent?.role ?? null, taskType: dependent?.taskType ?? null },
-        });
-      }
-    }
+    // `task.runnable` went in with the decision that released them: a duplicate
+    // decision released nothing, so it announced nothing, and a crash can no
+    // longer separate the release from the record of it.
     return { kind: 'COMPLETED', taskId: task.taskId, workerId: input.workerId, duplicate: input.duplicate, decision };
   }
   if (decision.action === 'RETRY') {

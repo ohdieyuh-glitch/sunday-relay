@@ -339,7 +339,7 @@ PostgreSQL authority for Julius: the repositories bound to the runtime ports, th
 | `src/relay/persistence/julius-brain-kinds.ts` | traced | `src/relay/persistence/julius-postgres.ts` |
 | `src/relay/persistence/julius-context-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
 | `src/relay/persistence/julius-contract-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
-| `src/relay/persistence/julius-event-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
+| `src/relay/persistence/julius-event-postgres.ts` | traced | `src/relay/persistence/julius-postgres.ts` |
 | `src/relay/persistence/julius-lifecycle-postgres.ts` | not composed by the live root | — |
 | `src/relay/persistence/julius-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `src/relay/persistence/julius-read-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
@@ -401,6 +401,7 @@ C.A.R.D. roles resolved to live adapters — fail closed, naming every missing v
 - **test harness** — `src/relay/mission/julius/julius-fault-injection.ts`: wraps a store so a named method throws on its Nth call — the chaos instrument the recovery scenarios use; no production caller. Reached only via `src/relay/mission/julius/index.ts`.
 - **fake** — `src/relay/connectors/gpt-architect/fake-architect.ts`: the deterministic offline fake of the GPT architect, exported by the connector barrel for the suite and Demo Simulation; the live worker binds runGptArchitect only. Reached only via `src/relay/connectors/gpt-architect/index.ts`, `src/relay/connectors/gpt-architect/index.ts`.
 - **legacy local execution** — `src/relay/persistence/julius-event-append-conformance.ts`: the event-append contract cases themselves: written once and run by BOTH the in-memory suite and the real-PostgreSQL one, so the two stores cannot drift again. Test support, imported by no root.
+- **legacy local execution** — `src/relay/persistence/julius-decision-write-conformance.ts`: the decision-write contract cases themselves — a decision, the tasks it releases and the events explaining both are ONE durable write — run by BOTH the in-memory suite and the real-PostgreSQL one. Test support, imported by no root.
 - **legacy local execution** — `src/relay/workspace/julius-tools/node-tool-adapter.ts`: the local in-process tool adapter (bounded host filesystem + /bin/bash). Since #208 every tool effect goes through the independent executor control plane and the live harness has no import through which this adapter could arrive; it survives for the offline tooling audit and its tests.
 - **pre-Julius schema** — `001_wonderland_runtime.sql`, `002_wonderland_outbox.sql`, `003_wonderland_budget_reservations.sql`, `004_wonderland_ratings.sql`, `005_wonderland_inventory.sql`, `006_wonderland_eval_runtime.sql`, `007_wonderland_provider_operations.sql`, `008_wonderland_swarm_scheduler.sql`, `009_wonderland_gve_runs.sql`, `010_wonderland_hidden_fixtures.sql`, `017_gauntlet_command.sql` under `src/relay/persistence/wonderland-migrations/`: registered by the same migration runner and applied in order before the Julius migrations; Julius tables reference `relay_wonderland.projects`, `mission_contracts` and `budget_reservations` defined there, and 017 is the Gauntlet Loop's own storage, deliberately not Julius's.
 

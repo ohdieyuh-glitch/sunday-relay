@@ -186,6 +186,30 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
   const CLAIMABLE_RUN_STATES: readonly JuliusMissionState[] =
     ['READY', 'EXECUTING', 'WAITING', 'REVIEWING', 'REPAIRING', 'VERIFYING'];
 
+  /**
+   * ONE APPEND, WHOEVER ASKS.
+   *
+   * `appendEvent` is the port; a decision writing the events that explain it
+   * needs the identical rule from inside its own write. Sharing the body is
+   * what makes "the same id may only ever say the same thing" true on both
+   * paths rather than true on the one that happened to be tested.
+   */
+  const recordEvent = (event: JuliusOperationalEvent): boolean => {
+    const recorded = identities.get(event.eventId);
+    const identity = canonicalJuliusEventIdentity(event);
+    if (recorded !== undefined) {
+      if (recorded !== identity) throw new JuliusEventIdConflict(event.eventId);
+      return false;
+    }
+    identities.set(event.eventId, identity);
+    eventIds.add(event.eventId);
+    const next = (eventSequences.get(event.runId) ?? 0) + 1;
+    eventSequences.set(event.runId, next);
+    sequenceOf.set(event.eventId, next);
+    eventLog.push({ ...event });
+    return true;
+  };
+
   return {
     /* ------------------------------------------------------------ seeding */
     seedRun(run) { runs.set(run.runId, { ...run }); },
@@ -480,6 +504,12 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
         task.state = 'RUNNABLE';
         task.version += 1;
       }
+      /* AND SO IS THE HISTORY THAT EXPLAINS IT. Production writes these inside
+         the decision's transaction; this whole call is synchronous, which is
+         the same guarantee — nothing can observe the decision without them.
+         They take the same append rule as any other event, so a replayed
+         decision that names the same events writes no second row. */
+      for (const event of input.events ?? []) recordEvent(event);
       return true;
     },
 
@@ -642,19 +672,7 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
        * alone, so a second event carrying DIFFERENT facts under a used id was
        * dropped and its facts were lost — silently, and only in this store.
        */
-      const recorded = identities.get(event.eventId);
-      const identity = canonicalJuliusEventIdentity(event);
-      if (recorded !== undefined) {
-        if (recorded !== identity) throw new JuliusEventIdConflict(event.eventId);
-        return false;
-      }
-      identities.set(event.eventId, identity);
-      eventIds.add(event.eventId);
-      const next = (eventSequences.get(event.runId) ?? 0) + 1;
-      eventSequences.set(event.runId, next);
-      sequenceOf.set(event.eventId, next);
-      eventLog.push({ ...event });
-      return true;
+      return recordEvent(event);
     },
 
     /**

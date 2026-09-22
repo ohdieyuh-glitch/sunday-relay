@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
-import { JULIUS_RUNTIME_VERSION, transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusTask, type JuliusVerificationDecision } from '../mission/julius';
+import { JULIUS_RUNTIME_VERSION, transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusOperationalEvent, type JuliusTask, type JuliusVerificationDecision } from '../mission/julius';
 import { brainKindToStored } from './julius-brain-kinds';
+import { appendJuliusEventWithin } from './julius-event-postgres';
 
 export interface JuliusRunRecord { readonly runId:string;readonly missionId:string;readonly projectId:string;readonly state:JuliusMissionState;readonly cardRevision:string;readonly missionContractRevision:number;readonly projectBrainRevision:number;readonly version:number; }
 export interface ClaimedJuliusTask { readonly taskId:string;readonly runId:string;readonly role:string;readonly taskType:string;readonly leaseGeneration:number;readonly attempt:number; }
@@ -83,7 +84,19 @@ export class JuliusPostgresRepository {
    * releases nothing — the transaction that recorded it first already did.
    * Only BLOCKED tasks of this run move; the update is a no-op for any other.
    */
-  async appendDecision(input:{decisionId:string;runId:string;taskId:string;policyRevision:string;idempotencyKey:string;occurredAt:string;decision:JuliusVerificationDecision;releaseTaskIds?:readonly string[]}):Promise<boolean>{return this.transaction(async client=>{const result=await client.query(`INSERT INTO relay_wonderland.julius_verification_decisions(decision_id,run_id,task_id,action,reason_code,safe_summary,evidence_ids,policy_revision,occurred_at,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10) ON CONFLICT(run_id,idempotency_key) DO NOTHING`,[input.decisionId,input.runId,input.taskId,input.decision.action,input.decision.reasonCode,input.decision.safeSummary,json(input.decision.evidenceIds),input.policyRevision,input.occurredAt,input.idempotencyKey]);if(result.rowCount!==1)return false;const releases=[...new Set(input.releaseTaskIds??[])];if(releases.length>0){await client.query(`UPDATE relay_wonderland.julius_tasks SET state='RUNNABLE',version=version+1,updated_at=$3 WHERE run_id=$1 AND task_id=ANY($2::text[]) AND state='BLOCKED'`,[input.runId,releases,input.occurredAt]);}return true;});}
+  /**
+   * THE DECISION, ITS RELEASE AND THE EVENTS THAT EXPLAIN THEM — ONE
+   * TRANSACTION.
+   *
+   * The events used to be appended after this returned, each in a transaction
+   * of its own. A crash in the gap left the decision and the release standing
+   * with nothing in the ledger to explain either, and nothing ever repaired
+   * it: the resume sweep skips a task that already has a decision, so those
+   * events were lost for good. The run's history could not say a verification
+   * was decided, or that a task had become runnable, while the rows saying so
+   * stood beside it.
+   */
+  async appendDecision(input:{decisionId:string;runId:string;taskId:string;policyRevision:string;idempotencyKey:string;occurredAt:string;decision:JuliusVerificationDecision;releaseTaskIds?:readonly string[];events?:readonly JuliusOperationalEvent[]}):Promise<boolean>{return this.transaction(async client=>{const result=await client.query(`INSERT INTO relay_wonderland.julius_verification_decisions(decision_id,run_id,task_id,action,reason_code,safe_summary,evidence_ids,policy_revision,occurred_at,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10) ON CONFLICT(run_id,idempotency_key) DO NOTHING`,[input.decisionId,input.runId,input.taskId,input.decision.action,input.decision.reasonCode,input.decision.safeSummary,json(input.decision.evidenceIds),input.policyRevision,input.occurredAt,input.idempotencyKey]);if(result.rowCount!==1)return false;const releases=[...new Set(input.releaseTaskIds??[])];if(releases.length>0){await client.query(`UPDATE relay_wonderland.julius_tasks SET state='RUNNABLE',version=version+1,updated_at=$3 WHERE run_id=$1 AND task_id=ANY($2::text[]) AND state='BLOCKED'`,[input.runId,releases,input.occurredAt]);}for(const event of input.events??[])await appendJuliusEventWithin(client,event);return true;});}
   /**
    * ONE STATEMENT, AND THE RUN ROW IS THE COUNTER.
    *
