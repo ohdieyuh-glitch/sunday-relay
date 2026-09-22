@@ -38,7 +38,10 @@
 #include "WonderlandMissionSubsystem.h"
 #include "WonderlandNavBar.h"
 #include "WonderlandProjectBrain.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "WonderlandProjectBrainPanel.h"
+#include "WonderlandRelaySkins.h"
+#include "WonderlandSkinStage.h"
 #include "WonderlandTravel.h"
 #include "WonderlandUiStyle.h"
 #include "WonderlandUsageHudWidget.h"
@@ -501,8 +504,47 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 		if (!BrainPanel.IsValid())
 		{
 			// Created once and kept, like the terminal: proposals made in this session are still there on reopen.
+			// THE WARDROBE'S LIVE DOG, made before the panel that draws it. A brush handed over null would leave the
+			// view saying the preview is unavailable for the life of the panel, since the panel is built once and kept.
+			UWonderlandRelaySkinSubsystem* SkinRegistry = RelaySkins();
+			AWonderlandSkinStage* Stage = SkinStage();
+			if (Stage != nullptr && Stage->GetRenderTarget() != nullptr)
+			{
+				if (!SkinPreviewBrush.IsValid())
+				{
+					SkinPreviewBrush = MakeShared<FSlateBrush>();
+				}
+				SkinPreviewBrush->SetResourceObject(Stage->GetRenderTarget());
+				SkinPreviewBrush->ImageSize = FVector2D(640.0, 800.0);
+				SkinPreviewBrush->DrawAs = ESlateBrushDrawType::Image;
+			}
+
 			SAssignNew(BrainPanel, SWonderlandProjectBrainPanel)
 				.HologramBrush(BrainArtBrush.IsValid() ? BrainArtBrush.Get() : nullptr)
+				.SkinPreviewBrush(SkinPreviewBrush.IsValid() ? SkinPreviewBrush.Get() : nullptr)
+				.Skins(SkinRegistry != nullptr ? SkinRegistry->GetSkins() : TArray<FWonderlandRelaySkin>())
+				.EquippedSkin_Lambda([WeakThis]()
+				{
+					// READ, NEVER REMEMBERED. The registry is the one authority on what the Dog wears, so a skin
+					// changed from the console shows on these cards without the panel being told.
+					UWonderlandRelaySkinSubsystem* Registry = WeakThis.IsValid() ? WeakThis->RelaySkins() : nullptr;
+					return Registry != nullptr ? Registry->GetEquippedSkinId() : NAME_None;
+				})
+				.OnChooseSkin_Lambda([WeakThis](FName SkinId)
+				{
+					if (UWonderlandRelaySkinSubsystem* Registry = WeakThis.IsValid() ? WeakThis->RelaySkins() : nullptr)
+					{
+						// The stage listens to the registry, so this one call dresses the Dog on the plinth too.
+						Registry->EquipSkin(SkinId);
+					}
+				})
+				.OnSkinPreviewPainted_Lambda([WeakThis]()
+				{
+					if (AWonderlandSkinStage* Watching = WeakThis.IsValid() ? WeakThis->SkinStage() : nullptr)
+					{
+						Watching->MarkWanted();
+					}
+				})
 				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
 				.OnRequestTerminal_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Terminal); } })
 				.OnRequestMap_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Map); } })
@@ -1141,6 +1183,24 @@ bool UWonderlandUiSubsystem::FocusWonderWebWindow(FName Id)
 		}
 	}
 	return true;
+}
+
+UWonderlandRelaySkinSubsystem* UWonderlandUiSubsystem::RelaySkins() const
+{
+	const UWorld* World = GetWorld();
+	const UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+	return GameInstance != nullptr ? GameInstance->GetSubsystem<UWonderlandRelaySkinSubsystem>() : nullptr;
+}
+
+AWonderlandSkinStage* UWonderlandUiSubsystem::SkinStage()
+{
+	if (SkinStageActor.IsValid())
+	{
+		return SkinStageActor.Get();
+	}
+	AWonderlandSkinStage* Stage = AWonderlandSkinStage::Get(GetWorld());
+	SkinStageActor = Stage;
+	return Stage;
 }
 
 UWonderlandEntitlementSubsystem* UWonderlandUiSubsystem::Entitlements() const

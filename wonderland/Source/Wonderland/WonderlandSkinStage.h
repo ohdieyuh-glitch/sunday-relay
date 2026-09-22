@@ -1,0 +1,135 @@
+// WONDERLAND — THE RELAY DOG SKIN STAGE.
+//
+// FOUNDER DIRECTIVE (2026-09-22): "make sure the mascot skin and a relay dog in the project brain is 3-D moving around
+// looking around staying at one place but is able to switch skins when I click on each skin it should switch skins."
+//
+// SO THE DOG IN THE PROJECT BRAIN IS A REAL ACTOR, not a picture of one. There is one stage in the world, standing a
+// kilometre above the map where nothing can walk into it; a Relay Dog stands on it, breathing and looking about; a
+// camera watches it and writes what it sees into a texture; the panel draws that texture. Clicking a skin card loads a
+// different figure into the SAME body, so the switch is a change of dress on a Dog that never stopped moving, which is
+// what the founder asked for and what a swapped-out image could not be.
+//
+// IT STAYS WHERE IT IS PUT. The Dog is given no controller, so the follow logic never runs and it cannot wander; the
+// only motion is its own idle -- the figure's float and head motion -- and a slow look-around this stage drives on the
+// actor's yaw. "Moving around, looking around, staying at one place."
+//
+// IT COSTS NOTHING WHEN NOBODY IS LOOKING. A scene capture is a second render of the world, so this one is off by
+// default and runs only while a surface asks for it: the panel marks the stage wanted on every paint and the stage
+// stops capturing a moment after the panel goes away. The same rule the Wonder Web windows use, for the same reason.
+//
+// NOT THE PLAYER'S DOG. This is a mannequin in a viewing room. It carries no mission state, joins nothing, and its
+// activity is fixed at IDLE: a preview that appeared to be working would be Wonderland inventing an agent.
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Actor.h"
+#include "WonderlandSkinStage.generated.h"
+
+class AWonderlandCompanionEmbodiment;
+class UPointLightComponent;
+class USceneCaptureComponent2D;
+class UStaticMeshComponent;
+class UTextureRenderTarget2D;
+
+UCLASS()
+class WONDERLAND_API AWonderlandSkinStage : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	AWonderlandSkinStage();
+
+	virtual void Tick(float DeltaSeconds) override;
+
+	/**
+	 * The world's one stage, made on first use. Returns null only when there is no world to make it in -- a caller that
+	 * gets null should draw nothing rather than draw a placeholder Dog, because a placeholder here would be a Dog the
+	 * player does not own in a skin nobody chose.
+	 */
+	static AWonderlandSkinStage* Get(UWorld* World);
+
+	/** Dress the Dog. Loads the skin's figure into the standing body; returns false and keeps the old dress on failure. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Skins")
+	bool ShowSkin(FName SkinId);
+
+	/** What it is wearing right now. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
+	FName GetShownSkinId() const { return ShownSkinId; }
+
+	/** The texture the panel draws. Never null once the stage exists. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
+	UTextureRenderTarget2D* GetRenderTarget() const { return RenderTarget; }
+
+	/**
+	 * A SURFACE IS LOOKING. Called on every paint by whoever is drawing the texture; the stage captures while this is
+	 * recent and sleeps when it goes quiet, so a closed panel costs one idle actor and no render.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Skins")
+	void MarkWanted();
+
+	/** Whether a capture ran recently. For a proof that has to show the picture is live rather than a still. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
+	bool IsCapturing() const { return bCapturing; }
+
+	/** How many frames this stage has captured. A proof reads it twice and compares. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
+	int32 GetFrameCount() const { return FrameCount; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
+	AWonderlandCompanionEmbodiment* GetBody() const { return Body; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
+	FString GetLastError() const { return LastError; }
+
+	/** Where the stage stands. Far above the world, where nothing can wander into the shot. */
+	static FVector StageOrigin() { return FVector(0.0, 0.0, 100000.0); }
+
+protected:
+	virtual void BeginPlay() override;
+
+private:
+	void EnsureBody();
+	void AimCamera();
+	void StepLookAround(float DeltaSeconds);
+
+	UPROPERTY(Transient)
+	TObjectPtr<USceneComponent> StageRoot;
+
+	UPROPERTY(Transient)
+	TObjectPtr<USceneCaptureComponent2D> Capture;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextureRenderTarget2D> RenderTarget;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMeshComponent> Backdrop;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UStaticMeshComponent> Plinth;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UPointLightComponent> KeyLight;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UPointLightComponent> FillLight;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UPointLightComponent> RimLight;
+
+	UPROPERTY(Transient)
+	TObjectPtr<AWonderlandCompanionEmbodiment> Body;
+
+	FName ShownSkinId;
+	FString LastError;
+
+	/** Seconds since a surface last asked for a frame. */
+	float SinceWanted = 1000.0f;
+	float SinceCapture = 0.0f;
+	bool bCapturing = false;
+	int32 FrameCount = 0;
+
+	/** The look-around: where the head is pointed, where it is going, and how long it waits before choosing again. */
+	float Yaw = 0.0f;
+	float YawTarget = 0.0f;
+	float HoldRemaining = 1.2f;
+};

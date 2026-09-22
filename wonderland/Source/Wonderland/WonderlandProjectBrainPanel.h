@@ -21,6 +21,7 @@
 #include "Styling/SlateTypes.h"
 #include "Widgets/SCompoundWidget.h"
 #include "WonderlandProjectBrain.h"
+#include "WonderlandRelaySkins.h"
 
 class SEditableTextBox;
 class SVerticalBox;
@@ -31,6 +32,8 @@ class WONDERLAND_API SWonderlandProjectBrainPanel : public SCompoundWidget
 public:
 	DECLARE_DELEGATE_TwoParams(FOnPropose, FName /*SurfaceId*/, const FString& /*Text*/);
 	DECLARE_DELEGATE_ThreeParams(FOnReview, FName /*SurfaceId*/, int32 /*LineIndex*/, bool /*bAccept*/);
+	/** A skin card was clicked. The panel never equips anything itself; the registry decides and the world follows. */
+	DECLARE_DELEGATE_OneParam(FOnChooseSkin, FName /*SkinId*/);
 
 	SLATE_BEGIN_ARGS(SWonderlandProjectBrainPanel)
 		: _HologramBrush(nullptr)
@@ -44,6 +47,19 @@ public:
 		SLATE_EVENT(FSimpleDelegate, OnRequestWonderWeb)
 		SLATE_EVENT(FOnPropose, OnPropose)
 		SLATE_EVENT(FOnReview, OnReview)
+		/**
+		 * THE LIVE RELAY DOG. A brush over the skin stage's render target -- a real actor in the world, breathing and
+		 * looking about on a plinth a kilometre above the map (WonderlandSkinStage.h). Null draws the view without it
+		 * and says the preview is unavailable, rather than drawing a still that pretends to be live.
+		 */
+		SLATE_ARGUMENT(const FSlateBrush*, SkinPreviewBrush)
+		/** The skins to list, in registry order. */
+		SLATE_ARGUMENT(TArray<FWonderlandRelaySkin>, Skins)
+		/** Which one is worn right now, read every frame so a change from anywhere shows here. */
+		SLATE_ATTRIBUTE(FName, EquippedSkin)
+		SLATE_EVENT(FOnChooseSkin, OnChooseSkin)
+		/** Raised on every paint of the preview, so the stage knows somebody is looking and keeps capturing. */
+		SLATE_EVENT(FSimpleDelegate, OnSkinPreviewPainted)
 	SLATE_END_ARGS()
 
 	SWonderlandProjectBrainPanel();
@@ -59,6 +75,10 @@ public:
 	/** The same path the inspector's input takes: a proposal on the selected surface. */
 	bool ProposeToSelected(const FString& Text);
 
+	/** Open or shut the RELAY DOG skin view, which stands where the inspector stands: over the brain. */
+	void SetSkinsOpen(bool bOpen);
+	bool IsSkinsOpen() const { return bSkinsOpen; }
+
 	virtual bool SupportsKeyboardFocus() const override { return true; }
 	virtual FReply OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent) override;
 
@@ -68,6 +88,8 @@ private:
 	TSharedRef<SWidget> MakeTile(EWonderlandBrainGlyph Glyph, FName SurfaceId, float Height);
 	TSharedRef<SWidget> MakeChip(EWonderlandBrainGlyph Glyph, FName SurfaceId);
 	TSharedRef<SWidget> MakeSelectable(FName SurfaceId, const FSlateBrush* RestBrush, TSharedRef<SWidget> Content);
+	TSharedRef<SWidget> MakeSkinsView();
+	TSharedRef<SWidget> MakeSkinCard(const FWonderlandRelaySkin& Skin);
 	void RebuildInspector();
 	FText SurfaceLabel(FName SurfaceId) const;
 	FText ChipLabel(FName SurfaceId) const;
@@ -76,6 +98,13 @@ private:
 	FWonderlandBrainModel Model;
 	FName Selected;
 	const FSlateBrush* HologramBrush = nullptr;
+
+	bool bSkinsOpen = false;
+	const FSlateBrush* SkinPreviewBrush = nullptr;
+	TArray<FWonderlandRelaySkin> Skins;
+	TAttribute<FName> EquippedSkin;
+	FOnChooseSkin OnChooseSkin;
+	FSimpleDelegate OnSkinPreviewPainted;
 
 	FSimpleDelegate OnRequestClose;
 	FSimpleDelegate OnRequestTerminal;

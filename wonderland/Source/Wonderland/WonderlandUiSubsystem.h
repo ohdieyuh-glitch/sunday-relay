@@ -591,6 +591,15 @@ private:
 	class UWonderlandSidekickSubsystem* Sidekicks() const;
 	/** What this account may do. The window limit comes from here and from nowhere else. */
 	class UWonderlandEntitlementSubsystem* Entitlements() const;
+
+	/** The Relay Dog skin registry: what skins exist and which one the Dog is wearing. */
+	class UWonderlandRelaySkinSubsystem* RelaySkins() const;
+
+	/**
+	 * THE LIVE RELAY DOG BEHIND THE PROJECT BRAIN'S WARDROBE. Made on first use and kept; it costs one idle actor when
+	 * nothing is looking at it, because it captures only while a surface asks. Null when there is no world.
+	 */
+	class AWonderlandSkinStage* SkinStage();
 	/** The next browser window id this account may open, or NAME_None when it is already at its limit. */
 	FName NextWonderWebWindowId() const;
 	/**
@@ -733,6 +742,10 @@ private:
 	TObjectPtr<UTexture2D> BrainArt;
 
 	TSharedPtr<FSlateBrush> BrainArtBrush;
+
+	/** The brush the wardrobe draws: the skin stage's render target, pointed at once and then left alone. */
+	TSharedPtr<FSlateBrush> SkinPreviewBrush;
+	TWeakObjectPtr<class AWonderlandSkinStage> SkinStageActor;
 	FDelegateHandle BrainChangedHandle;
 	EOverlay Open = EOverlay::None;
 	bool bOverlayIgnoresInput = false;
