@@ -283,6 +283,16 @@ void UWonderlandSubAgentCubSubsystem::ReportActiveSubAgentsForDevelopment(int32 
 		ActiveSubAgentCubCount);
 }
 
+int32 UWonderlandSubAgentCubSubsystem::SummonSubAgentCubs(int32 Wanted)
+{
+	ReportActiveSubAgents(Wanted);
+	// SAID AFTERWARDS, like the development path: the shared path sets the source to Julius, and overriding it here
+	// is what keeps a summon from ever being read as a report.
+	CountSource = EWonderlandCubCountSource::UserSummoned;
+	UE_LOG(LogTemp, Display, TEXT("WLCUB summoned %d sub-agent cubs -- a user request, not a Julius report"), WantedCount);
+	return WantedCount;
+}
+
 void UWonderlandSubAgentCubSubsystem::ReportActiveSubAgents(int32 ActiveSubAgentCubCount)
 {
 	bHasReport = true;
@@ -629,6 +639,7 @@ TArray<FString> UWonderlandSubAgentCubSubsystem::DescribeFlock() const
 	const TCHAR* From =
 		CountSource == EWonderlandCubCountSource::Julius ? TEXT("JULIUS (live)") :
 		CountSource == EWonderlandCubCountSource::Development ? TEXT("DEVELOPMENT (not production truth)") :
+		CountSource == EWonderlandCubCountSource::UserSummoned ? TEXT("SUMMONED by the user (not a Julius report)") :
 		TEXT("nothing has reported");
 	Lines.Add(FString::Printf(TEXT("SUB-AGENT CUBS  %d of %d (ceiling %d, capacity %s)  count from: %s  reported: %s"),
 		Cubs.Num(), Capacity.MaxSubAgentCubCount, Capacity.CeilingSubAgentCubCount, Source, From,

@@ -397,7 +397,7 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(1.2f).Padding(0.0f, 0.0f, 8.0f, 0.0f)[MakeTile(EWonderlandBrainGlyph::Arrows, TEXT("context_handoffs"), 0.0f)]
 			+ SHorizontalBox::Slot().FillWidth(1.2f).Padding(0.0f, 0.0f, 8.0f, 0.0f)[MakeTile(EWonderlandBrainGlyph::Pulse, TEXT("agent_state"), 0.0f)]
-			+ SHorizontalBox::Slot().FillWidth(0.6f)[SNew(SSpacer)]
+			+ SHorizontalBox::Slot().FillWidth(1.0f)[MakeSkinTile()]
 		];
 
 	// 03 LARGE LANGUAGE MODEL COMPONENTS
@@ -501,28 +501,6 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(14.0f, 0.0f, 0.0f, 0.0f)
 				[
 					SNew(STextBlock).Text(INVTEXT("OPEN WONDER WEB   W")).Font(Font("Bold", 10, 200)).ColorAndOpacity(WonderlandUi::Srgb(0xFF, 0xD4, 0x00))
-				]
-			]
-		]
-		// RELAY DOG, opened from the brain. The founder asked for the mascot skins to live in the Project Brain, and
-		// this is the door: one affordance in the top band beside the project's own, nothing moved to fit it.
-		+ SConstraintCanvas::Slot().Anchors(FAnchors(0.655f, 0.084f)).AutoSize(true).Alignment(FVector2D(0.0, 0.0))
-		[
-			SNew(SButton)
-			.ButtonStyle(&ActionStyle)
-			.Visibility_Lambda([this]() { return Selected.IsNone() ? EVisibility::Visible : EVisibility::Collapsed; })
-			.OnClicked_Lambda([this]() { SetSkinsOpen(!bSkinsOpen); return FReply::Handled(); })
-			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-				[
-					SNew(STextBlock).Text(INVTEXT("RELAY DOG")).Font(Font("Regular", 9, 200)).ColorAndOpacity(Mist())
-				]
-				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(14.0f, 0.0f, 0.0f, 0.0f)
-				[
-					SNew(STextBlock)
-					.Text_Lambda([this]() { return FText::FromString(bSkinsOpen ? TEXT("CLOSE SKINS") : TEXT("SKINS")); })
-					.Font(Font("Bold", 10, 200)).ColorAndOpacity(Violet())
 				]
 			]
 		]
@@ -1083,6 +1061,75 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSkinCard(const FWonderland
 						.Font(Font("Regular", 9)).ColorAndOpacity(Mist(bLocked ? 0.4f : 0.92f))
 						.AutoWrapText(true)
 					]
+				]
+			]
+		];
+}
+
+TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSkinTile()
+{
+	using namespace WonderlandBrainLook;
+	// THE WAY INTO THE WARDROBE, in the shape of the tiles it stands beside, so it reads as part of 02 PROJECT BRAIN
+	// SYSTEMS rather than as a button dropped into it. It shows what the Dog is wearing without being opened,
+	// because a control that only says its own name makes a person open it to learn anything.
+	const auto Worn = [this]() -> const FWonderlandRelaySkin*
+	{
+		const FName Id = EquippedSkin.IsSet() ? EquippedSkin.Get() : NAME_None;
+		return Skins.FindByPredicate([Id](const FWonderlandRelaySkin& Skin) { return Skin.SkinId == Id; });
+	};
+	return SNew(SButton)
+		.ButtonStyle(&SelectableStyle)
+		.OnClicked_Lambda([this]() { SetSkinsOpen(!bSkinsOpen); return FReply::Handled(); })
+		[
+			SNew(SBorder)
+			.BorderImage(&CardBrush)
+			.Padding(FMargin(12.0f, 10.0f))
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
+					[
+						SNew(SWonderlandBrainIcon).Glyph(EWonderlandBrainGlyph::Sparkle).Size(13.0f).Color(Violet())
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+					[
+						SNew(STextBlock).Text(INVTEXT("MASCOT SKIN")).Font(Font("Bold", 10, 180)).ColorAndOpacity(Ink())
+					]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
+				[
+					SNew(SHorizontalBox)
+					// The worn skin's own colour, so the tile changes when the Dog does.
+					+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f)
+					[
+						SNew(SBox).WidthOverride(3.0f)
+						[
+							SNew(SImage).Image(&StatusBrush)
+							.ColorAndOpacity_Lambda([Worn]()
+							{
+								const FWonderlandRelaySkin* Skin = Worn();
+								return FSlateColor(Skin != nullptr ? Skin->Accent : FLinearColor::White);
+							})
+						]
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+					[
+						SNew(STextBlock)
+						.Text_Lambda([Worn]()
+						{
+							const FWonderlandRelaySkin* Skin = Worn();
+							return FText::FromString(Skin != nullptr ? Skin->DisplayName : TEXT("RELAY OG"));
+						})
+						.Font(Font("Regular", 10, 120)).ColorAndOpacity(Mist())
+					]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock)
+					.Text_Lambda([this]() { return FText::FromString(bSkinsOpen ? TEXT("CLOSE") : TEXT("SWITCH SKIN")); })
+					.Font(Font("Bold", 8, 220)).ColorAndOpacity(Violet())
 				]
 			]
 		];

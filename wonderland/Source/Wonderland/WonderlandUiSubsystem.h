@@ -588,6 +588,14 @@ private:
 	void RefreshMap();
 	void RefreshBrain();
 	void HandleTerminalSubmit(const FString& Text);
+	/**
+	 * A WONDERLAND-NATIVE TERMINAL COMMAND, handled here rather than sent anywhere. Returns false for a line that is
+	 * not one, which then travels the ordinary path.
+	 *
+	 * These are the player's own commands over their own world -- summoning the cubs to look at them, and asking what
+	 * the commands are. None of them speaks for Julius or claims anything about what Julius is doing.
+	 */
+	bool HandleTerminalCommand(const FString& Text);
 	void HandleTravel(FName DestinationId);
 	void ApplyOverlayInput(bool bOverlayOpen, TSharedPtr<SWidget> Focus);
 	void MountCompanionTerminals();

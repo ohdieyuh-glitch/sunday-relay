@@ -143,6 +143,7 @@ FString UWonderlandDemoSubsystem::GetSubAgentSourceLabel() const
 	{
 	case EWonderlandCubCountSource::Julius:      return TEXT("LIVE  ·  JULIUS");
 	case EWonderlandCubCountSource::Development: return TEXT("SIMULATED  ·  DEVELOPMENT FIXTURE, NOT LIVE JULIUS");
+	case EWonderlandCubCountSource::UserSummoned: return TEXT("SUMMONED  ·  A USER REQUEST, NOT A JULIUS REPORT");
 	default:                                     return TEXT("NOTHING REPORTED");
 	}
 }

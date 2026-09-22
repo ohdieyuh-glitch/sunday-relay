@@ -41,6 +41,7 @@
 #include "Engine/TextureRenderTarget2D.h"
 #include "WonderlandProjectBrainPanel.h"
 #include "WonderlandRelaySkins.h"
+#include "WonderlandSubAgentCubs.h"
 #include "WonderlandSkinStage.h"
 #include "WonderlandTravel.h"
 #include "WonderlandUiStyle.h"
@@ -2189,9 +2190,72 @@ bool UWonderlandUiSubsystem::ProposeToSelectedBrainSurface(const FString& Text)
 	return Open == EOverlay::Brain && BrainPanel.IsValid() && BrainPanel->ProposeToSelected(Text);
 }
 
+bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
+{
+	const FString Line = Text.TrimStartAndEnd();
+	if (!Line.StartsWith(TEXT("/")) || !Terminal.IsValid())
+	{
+		return false;
+	}
+	FString Command = Line;
+	FString Argument;
+	Line.Split(TEXT(" "), &Command, &Argument, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+	Command = Command.ToLower().TrimStartAndEnd();
+	Argument = Argument.TrimStartAndEnd();
+
+	if (Command == TEXT("/cubs"))
+	{
+		UWorld* World = PlayerWorld();
+		UWonderlandSubAgentCubSubsystem* Flock = World != nullptr ? World->GetSubsystem<UWonderlandSubAgentCubSubsystem>() : nullptr;
+		if (Flock == nullptr)
+		{
+			Terminal->AddJuliusRow(TEXT("You"), Line, TEXT("There is no sub-agent flock in this world."));
+			return true;
+		}
+		// `/cubs` on its own brings out as many as this account may run; a number asks for that many; `off` or `0`
+		// sends them home. Nothing here needs a mission: the cubs escort the Dog, and the Dog is always there.
+		int32 Wanted = Flock->GetMaxSubAgentCubCount();
+		if (Argument.Equals(TEXT("off"), ESearchCase::IgnoreCase) || Argument.Equals(TEXT("none"), ESearchCase::IgnoreCase))
+		{
+			Wanted = 0;
+		}
+		else if (!Argument.IsEmpty() && Argument.IsNumeric())
+		{
+			Wanted = FCString::Atoi(*Argument);
+		}
+		const int32 Given = Flock->SummonSubAgentCubs(Wanted);
+		const FString Note = Given == 0
+			? FString(TEXT("The cubs are returning to the Relay Dog."))
+			: FString::Printf(
+				TEXT("%d sub-agent cub%s summoned. SUMMONED BY YOU — this is not a report that Julius is running %d sub-agents. "
+				     "They swirl around the Dog while it is still and fly above it while it moves."),
+				Given, Given == 1 ? TEXT("") : TEXT("s"), Given);
+		Terminal->AddJuliusRow(TEXT("You"), Line, Note);
+		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI /cubs -> %d summoned"), Given);
+		return true;
+	}
+
+	if (Command == TEXT("/help") || Command == TEXT("/commands"))
+	{
+		Terminal->AddJuliusRow(TEXT("You"), Line,
+			TEXT("/cubs [n|off] — summon the Relay Dog's sub-agent cub ghosts, in a mission or out of one."));
+		return true;
+	}
+
+	// AN UNKNOWN SLASH COMMAND IS NOT SILENTLY SENT ANYWHERE. A line beginning with a slash was meant as a command,
+	// and passing it on as a message to a Julius that is not connected would answer the wrong question twice.
+	Terminal->AddJuliusRow(TEXT("You"), Line,
+		FString::Printf(TEXT("%s is not a Wonderland command. Try /help."), *Command));
+	return true;
+}
+
 void UWonderlandUiSubsystem::HandleTerminalSubmit(const FString& Text)
 {
 	if (!Terminal.IsValid())
+	{
+		return;
+	}
+	if (HandleTerminalCommand(Text))
 	{
 		return;
 	}

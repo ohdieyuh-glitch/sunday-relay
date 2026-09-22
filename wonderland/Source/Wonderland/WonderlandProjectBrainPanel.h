@@ -88,6 +88,7 @@ private:
 	TSharedRef<SWidget> MakeTile(EWonderlandBrainGlyph Glyph, FName SurfaceId, float Height);
 	TSharedRef<SWidget> MakeChip(EWonderlandBrainGlyph Glyph, FName SurfaceId);
 	TSharedRef<SWidget> MakeSelectable(FName SurfaceId, const FSlateBrush* RestBrush, TSharedRef<SWidget> Content);
+	TSharedRef<SWidget> MakeSkinTile();
 	TSharedRef<SWidget> MakeSkinsView();
 	TSharedRef<SWidget> MakeSkinCard(const FWonderlandRelaySkin& Skin);
 	void RebuildInspector();

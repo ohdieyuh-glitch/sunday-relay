@@ -80,7 +80,15 @@ enum class EWonderlandCubCountSource : uint8
 	/** Julius said so. The only production truth. */
 	Julius,
 	/** A proof or the console said so. Always labelled. */
-	Development
+	Development,
+	/**
+	 * THE USER ASKED TO SEE THEM, from the terminal's `/cubs`.
+	 *
+	 * Deliberately not LIVE and deliberately not DEVELOPMENT. A summon is a person saying "show me", which is a real
+	 * thing a product should let them do and NOT a claim that Julius has that many sub-agents running -- so it is
+	 * named apart from both, and a real report from Julius replaces it the moment one arrives.
+	 */
+	UserSummoned
 };
 
 /** Where a capacity figure came from. A limit with no provenance is a limit nobody can check. */
@@ -293,6 +301,15 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Cubs")
 	void ReportActiveSubAgentsForDevelopment(int32 ActiveSubAgentCubCount);
+
+	/**
+	 * THE USER ASKED FOR CUBS, from the terminal. Works during a mission and outside one alike: the flock holds
+	 * station on the primary Relay Dog, which is there either way.
+	 *
+	 * Clamped to capacity like every other count, and labelled SUMMONED wherever it is shown.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Cubs")
+	int32 SummonSubAgentCubs(int32 Wanted);
 
 	/** Where the current count came from. A surface showing cubs must be able to say. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Cubs")
