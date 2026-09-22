@@ -1,0 +1,24 @@
+{
+ "name": "zzFC00_perf_before",
+ "started": "2026-09-22 06:50:35",
+ "status": "done",
+ "label": "batches NoCollision",
+ "frames": {
+  "warm": {
+   "LanternLaneCam27": 52.69,
+   "South_StreetHero34": 55.96,
+   "SW_StreetGate46": 52.41,
+   "WorldCam12": 55.11
+  },
+  "measured": {
+   "LanternLaneCam27": 50.9,
+   "South_StreetHero34": 46.29,
+   "SW_StreetGate46": 47.19,
+   "WorldCam12": 55.75
+  }
+ },
+ "mean": 50.03,
+ "finished": "2026-09-22 06:51:59",
+ "seconds": 83.96,
+ "log": ""
+}

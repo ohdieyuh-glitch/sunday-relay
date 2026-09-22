@@ -1,0 +1,43 @@
+{
+ "name": "zzFA00_collision_audit",
+ "started": "2026-09-22 06:35:28",
+ "status": "done",
+ "summary": {
+  "ground / NO_COLLISION: 0>": {
+   "actors": 458,
+   "instances": 29909
+  },
+  "foliage / NO_COLLISION: 0>": {
+   "actors": 1178,
+   "instances": 62288
+  },
+  "architecture / NO_COLLISION: 0>": {
+   "actors": 691,
+   "instances": 14557
+  },
+  "other / NO_COLLISION: 0>": {
+   "actors": 1035,
+   "instances": 10440
+  },
+  "ground / QUERY_AND_PHYSICS: 3>": {
+   "actors": 629,
+   "instances": 629
+  },
+  "foliage / QUERY_AND_PHYSICS: 3>": {
+   "actors": 470,
+   "instances": 470
+  },
+  "architecture / QUERY_AND_PHYSICS: 3>": {
+   "actors": 14852,
+   "instances": 14852
+  },
+  "other / QUERY_AND_PHYSICS: 3>": {
+   "actors": 506,
+   "instances": 506
+  }
+ },
+ "rows": 19819,
+ "finished": "2026-09-22 06:36:55",
+ "seconds": 87.47,
+ "log": ""
+}

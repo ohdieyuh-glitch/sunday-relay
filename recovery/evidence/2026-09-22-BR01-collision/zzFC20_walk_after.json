@@ -1,0 +1,59 @@
+{
+ "name": "zzFC20_walk_after",
+ "started": "2026-09-22 06:52:05",
+ "status": "done",
+ "legs": [
+  {
+   "waypoint": "causeway_south",
+   "status": "reached",
+   "seconds": 8.3,
+   "at": [
+    0,
+    51379,
+    101
+   ],
+   "remaining_cm": 121
+  },
+  {
+   "waypoint": "causeway_mid",
+   "status": "reached",
+   "seconds": 24.0,
+   "at": [
+    0,
+    56870,
+    101
+   ],
+   "remaining_cm": 130
+  },
+  {
+   "waypoint": "gate_tower_west",
+   "status": "stuck",
+   "seconds": 32.6,
+   "at": [
+    -705,
+    63388,
+    129
+   ],
+   "remaining_cm": 548,
+   "capture": "C:/Users/Kaisi/.claude/jobs/ec4f540e/tmp\\captures\\walks\\br01_after__gate_tower_west_stuck.png"
+  },
+  {
+   "waypoint": "beyond_the_gate",
+   "status": "reached",
+   "seconds": 7.5,
+   "at": [
+    -62,
+    65389,
+    75
+   ],
+   "remaining_cm": 127
+  }
+ ],
+ "route_seconds": 73.9,
+ "stuck": [
+  "gate_tower_west"
+ ],
+ "finished": "2026-09-22 06:53:37",
+ "seconds": 91.64,
+ "log": "causeway_south reached 8.3 [0, 51379, 101]\ncauseway_mid reached 24.0 [0, 56870, 101]\ngate_tower_west stuck 32.6 [-705, 63388, 129]\nbeyond_the_gate reached 7.5 [-62, 65389, 75]\n"
+}

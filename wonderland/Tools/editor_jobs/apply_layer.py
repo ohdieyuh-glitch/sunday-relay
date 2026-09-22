@@ -84,7 +84,11 @@ def job():
             smc.set_editor_property("affect_distance_field_lighting", spec_actor["affect_df"])
         actor.set_actor_label("%s_%s" % (spec["pass"], spec_actor["id"]))
         actor.set_folder_path(folder)
-        actor.set_editor_property("tags", list(base_tags))
+        # An actor may carry tags of its own on top of the pass's. This is how a place in the world says what it is
+        # -- WL_GVE_SIMULATION, WL_NATION_ICARUS -- so the runtime lane can find it by tag instead of by coordinates
+        # someone has to keep in step (beta-readiness, 2026-09-17).
+        extra = [unreal.Name(t) for t in spec_actor.get("tags", []) if unreal.Name(t) not in base_tags]
+        actor.set_editor_property("tags", list(base_tags) + extra)
         placed += 1
 
     batches = 0

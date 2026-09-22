@@ -1,0 +1,24 @@
+{
+ "name": "zzFC30_perf_after",
+ "started": "2026-09-22 06:53:37",
+ "status": "done",
+ "label": "architecture and ground batches collide",
+ "frames": {
+  "warm": {
+   "LanternLaneCam27": 46.95,
+   "South_StreetHero34": 46.93,
+   "SW_StreetGate46": 47.26,
+   "WorldCam12": 57.09
+  },
+  "measured": {
+   "LanternLaneCam27": 46.95,
+   "South_StreetHero34": 50.9,
+   "SW_StreetGate46": 47.33,
+   "WorldCam12": 59.83
+  }
+ },
+ "mean": 51.25,
+ "finished": "2026-09-22 06:55:01",
+ "seconds": 84.38,
+ "log": ""
+}

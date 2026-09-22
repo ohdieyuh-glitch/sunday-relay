@@ -1,0 +1,56 @@
+{
+ "name": "zzFB00_walk_before",
+ "started": "2026-09-22 06:46:33",
+ "status": "done",
+ "legs": [
+  {
+   "waypoint": "causeway_south",
+   "status": "reached",
+   "seconds": 8.3,
+   "at": [
+    0,
+    51393,
+    75
+   ],
+   "remaining_cm": 107
+  },
+  {
+   "waypoint": "causeway_mid",
+   "status": "reached",
+   "seconds": 24.0,
+   "at": [
+    0,
+    56892,
+    75
+   ],
+   "remaining_cm": 108
+  },
+  {
+   "waypoint": "gate_tower_west",
+   "status": "reached",
+   "seconds": 30.3,
+   "at": [
+    -886,
+    63791,
+    75
+   ],
+   "remaining_cm": 110
+  },
+  {
+   "waypoint": "beyond_the_gate",
+   "status": "reached",
+   "seconds": 8.0,
+   "at": [
+    -49,
+    65405,
+    75
+   ],
+   "remaining_cm": 107
+  }
+ ],
+ "route_seconds": 72.0,
+ "stuck": [],
+ "finished": "2026-09-22 06:48:02",
+ "seconds": 88.58,
+ "log": "causeway_south reached 8.3 [0, 51393, 75]\ncauseway_mid reached 24.0 [0, 56892, 75]\ngate_tower_west reached 30.3 [-886, 63791, 75]\nbeyond_the_gate reached 8.0 [-49, 65405, 75]\n"
+}
