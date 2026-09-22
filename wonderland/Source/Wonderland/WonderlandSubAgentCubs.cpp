@@ -4,7 +4,9 @@
 #include "Engine/World.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/Paths.h"
+#include "Kismet/GameplayStatics.h"
 #include "WonderlandCompanionEmbodiment.h"
+#include "WonderlandJuliusSubsystem.h"
 
 namespace
 {
@@ -23,6 +25,10 @@ namespace
 	constexpr float AscendGlow = 1.15f;     // and turns luminous
 	constexpr float AscendPerCub = 0.42f;   // one cub at a time, never two
 	constexpr float AscendSettle = 1.30f;   // and the Dog comes back
+
+	/** A cub leaving: how long it flies home before it folds in, and how long the fold takes. */
+	constexpr float ReturnSeconds = 1.05f;
+	constexpr float MergeSeconds = 0.75f;
 
 	float EaseInOut(float T)
 	{
@@ -267,9 +273,20 @@ FString UWonderlandSubAgentCubSubsystem::CubFigurePath(int32 Slot) const
 	return FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("RelayCubs") / CubFigures[Which]);
 }
 
+void UWonderlandSubAgentCubSubsystem::ReportActiveSubAgentsForDevelopment(int32 ActiveSubAgentCubCount)
+{
+	ReportActiveSubAgents(ActiveSubAgentCubCount);
+	// SAID AFTERWARDS, ON PURPOSE. The shared path sets the source to Julius; overriding it here is what keeps a
+	// development count from ever being mistaken for production truth, and the next real report simply sets it back.
+	CountSource = EWonderlandCubCountSource::Development;
+	UE_LOG(LogTemp, Warning, TEXT("WLCUB DEVELOPMENT count %d -- not production truth; Julius's next report replaces it"),
+		ActiveSubAgentCubCount);
+}
+
 void UWonderlandSubAgentCubSubsystem::ReportActiveSubAgents(int32 ActiveSubAgentCubCount)
 {
 	bHasReport = true;
+	CountSource = EWonderlandCubCountSource::Julius;
 	// CLAMPED, NEVER INVENTED. A report above capacity draws capacity and says so in the log rather than drawing
 	// what it was told; a negative report draws nothing.
 	const int32 Ceiling = FMath::Min(Capacity.MaxSubAgentCubCount, Capacity.CeilingSubAgentCubCount);
@@ -333,18 +350,16 @@ void UWonderlandSubAgentCubSubsystem::Grow(int32 To)
 
 void UWonderlandSubAgentCubSubsystem::Shrink(int32 To)
 {
+	// A CUB THAT VANISHES IS NOT A TRANSITION, IT IS A DELETION, and the founder asked for the flock to change
+	// honestly. So a cub leaving flies home first (RETURNING), folds into the primary Dog (MERGING) and only then
+	// stops existing -- the same three states the founder's own list ends with.
 	while (Cubs.Num() > FMath::Max(To, 0))
 	{
 		AWonderlandSubAgentCub* Cub = Cubs.Pop();
 		if (Cub != nullptr)
 		{
-			// Marked DESPAWNING before it goes, so anything watching sees it leave rather than vanish.
-			Cub->SetCubState(EWonderlandSubAgentCubState::Despawning);
-			if (AWonderlandCompanionEmbodiment* Body = Cub->GetBody())
-			{
-				Body->Destroy();
-			}
-			Cub->Destroy();
+			Cub->SetCubState(EWonderlandSubAgentCubState::Returning);
+			Retiring.Add({Cub, 0.0f});
 		}
 	}
 	for (int32 Index = 0; Index < Cubs.Num(); ++Index)
@@ -355,6 +370,93 @@ void UWonderlandSubAgentCubSubsystem::Shrink(int32 To)
 		}
 	}
 	OnFlockChanged.Broadcast(Cubs.Num());
+}
+
+void UWonderlandSubAgentCubSubsystem::StepRetiring(float DeltaSeconds)
+{
+	for (int32 Index = Retiring.Num() - 1; Index >= 0; --Index)
+	{
+		FRetiringCub& Row = Retiring[Index];
+		Row.Seconds += DeltaSeconds;
+		AWonderlandSubAgentCub* Cub = Row.Cub.Get();
+		if (Cub == nullptr)
+		{
+			Retiring.RemoveAt(Index);
+			continue;
+		}
+		if (Row.Seconds < ReturnSeconds)
+		{
+			// Flying home: emergence runs backwards, which is the same journey it made outward, reversed.
+			Cub->SetEmergence(1.0f - Row.Seconds / ReturnSeconds);
+		}
+		else if (Row.Seconds < ReturnSeconds + MergeSeconds)
+		{
+			Cub->SetEmergence(0.0f);
+			if (Cub->GetCubState() != EWonderlandSubAgentCubState::Merging)
+			{
+				Cub->SetCubState(EWonderlandSubAgentCubState::Merging);
+			}
+		}
+		else
+		{
+			Cub->SetCubState(EWonderlandSubAgentCubState::Despawning);
+			if (AWonderlandCompanionEmbodiment* Body = Cub->GetBody())
+			{
+				Body->Destroy();
+			}
+			Cub->Destroy();
+			Retiring.RemoveAt(Index);
+		}
+	}
+}
+
+void UWonderlandSubAgentCubSubsystem::EnsureJuliusBound()
+{
+	if (bBoundToJulius)
+	{
+		return;
+	}
+	const UWorld* World = GetWorld();
+	UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+	UWonderlandJuliusSubsystem* Julius = GameInstance != nullptr
+		? GameInstance->GetSubsystem<UWonderlandJuliusSubsystem>() : nullptr;
+	if (Julius == nullptr)
+	{
+		return;
+	}
+	// JULIUS IS THE PRODUCTION SOURCE OF THE COUNT, and this is the whole of the connection: when the run's state
+	// changes, read the number of sub-agents it says are running and tell the flock. Nothing is derived, inferred or
+	// remembered here -- a second opinion about how many sub-agents exist is exactly what must not be built.
+	Julius->OnJuliusChanged.AddDynamic(this, &UWonderlandSubAgentCubSubsystem::HandleJuliusChanged);
+	bBoundToJulius = true;
+	HandleJuliusChanged();
+}
+
+void UWonderlandSubAgentCubSubsystem::HandleJuliusChanged()
+{
+	const UWorld* World = GetWorld();
+	const UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+	const UWonderlandJuliusSubsystem* Julius = GameInstance != nullptr
+		? GameInstance->GetSubsystem<UWonderlandJuliusSubsystem>() : nullptr;
+	if (Julius == nullptr)
+	{
+		return;
+	}
+	// NEVER-TOLD IS NOT ZERO, and the two are kept apart: with no state applied the flock stays on whatever source it
+	// already had rather than being told a zero Julius never said.
+	if (!Julius->HasState())
+	{
+		return;
+	}
+	const int32 Reported = static_cast<int32>(FMath::Clamp<int64>(Julius->GetActivity().ActiveSubagents, 0, 1000));
+	if (Reported == LastJuliusReport && CountSource == EWonderlandCubCountSource::Julius)
+	{
+		// A REDUNDANT NOTIFICATION MUST NOT RESTART THE ASCENSION. Julius changes for many reasons that have nothing
+		// to do with sub-agents, and re-playing the emergence on each of them would be a light show, not a report.
+		return;
+	}
+	LastJuliusReport = Reported;
+	ReportActiveSubAgents(Reported);
 }
 
 void UWonderlandSubAgentCubSubsystem::StepAscension(float DeltaSeconds)
@@ -426,6 +528,18 @@ void UWonderlandSubAgentCubSubsystem::Tick(float DeltaTime)
 
 	// IS THE DOG MOVING? Measured from its own travel and smoothed, because the choice between the two modes must
 	// not flicker while it shuffles.
+	EnsureJuliusBound();
+
+	// THE PRIMARY RELAY DOG IS THE ONE THE PLAYER IS WEARING. Adopted automatically so the flock works in a shipped
+	// build without anything having to remember to introduce them, and overridable for a proof that needs a stand-in.
+	if (!PrimaryDog.IsValid())
+	{
+		if (APawn* Pawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0))
+		{
+			PrimaryDog = Pawn;
+			bHasDogSpot = false;
+		}
+	}
 	AActor* Dog = PrimaryDog.Get();
 	if (Dog != nullptr)
 	{
@@ -460,6 +574,7 @@ void UWonderlandSubAgentCubSubsystem::Tick(float DeltaTime)
 	}
 
 	StepAscension(DeltaTime);
+	StepRetiring(DeltaTime);
 
 	const bool bMoving = DogSpeedUU > MovingSpeedUU;
 	for (AWonderlandSubAgentCub* Cub : Cubs)
@@ -509,9 +624,19 @@ TArray<FString> UWonderlandSubAgentCubSubsystem::DescribeFlock() const
 	const TCHAR* Source =
 		Capacity.Source == EWonderlandCubCapacitySource::Account ? TEXT("ACCOUNT") :
 		Capacity.Source == EWonderlandCubCapacitySource::Development ? TEXT("DEVELOPMENT") : TEXT("BUILT-IN");
-	Lines.Add(FString::Printf(TEXT("SUB-AGENT CUBS  %d of %d (ceiling %d, capacity %s)  julius reported: %s"),
-		Cubs.Num(), Capacity.MaxSubAgentCubCount, Capacity.CeilingSubAgentCubCount, Source,
+	// WHERE THE COUNT CAME FROM IS PART OF THE COUNT. A development number shown without its label is a number
+	// somebody will eventually read as production truth.
+	const TCHAR* From =
+		CountSource == EWonderlandCubCountSource::Julius ? TEXT("JULIUS (live)") :
+		CountSource == EWonderlandCubCountSource::Development ? TEXT("DEVELOPMENT (not production truth)") :
+		TEXT("nothing has reported");
+	Lines.Add(FString::Printf(TEXT("SUB-AGENT CUBS  %d of %d (ceiling %d, capacity %s)  count from: %s  reported: %s"),
+		Cubs.Num(), Capacity.MaxSubAgentCubCount, Capacity.CeilingSubAgentCubCount, Source, From,
 		bHasReport ? *FString::FromInt(WantedCount) : TEXT("nothing")));
+	if (Retiring.Num() > 0)
+	{
+		Lines.Add(FString::Printf(TEXT("  %d returning/merging"), Retiring.Num()));
+	}
 	Lines.Add(FString::Printf(TEXT("primary dog speed %.0f uu/s -> %s"), DogSpeedUU,
 		DogSpeedUU > MovingSpeedUU ? TEXT("FLIGHT (dome above)") : TEXT("SWIRL (around the body)")));
 	for (const TObjectPtr<AWonderlandSubAgentCub>& Cub : Cubs)
@@ -564,8 +689,10 @@ namespace
 				UE_LOG(LogTemp, Warning, TEXT("WLCUB usage: wl.Cubs.Report <active sub-agents>"));
 				return;
 			}
-			Flock->ReportActiveSubAgents(FCString::Atoi(*Args[0]));
-			UE_LOG(LogTemp, Display, TEXT("WLCUB reported %s active sub-agents"), *Args[0]);
+			// DEVELOPMENT PATH ONLY. The founder kept this command explicitly as a proof tool and ruled that it
+			// must not become production truth, so it can never take the Julius path.
+			Flock->ReportActiveSubAgentsForDevelopment(FCString::Atoi(*Args[0]));
+			UE_LOG(LogTemp, Display, TEXT("WLCUB development report of %s active sub-agents"), *Args[0]);
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs GCubCapacity(

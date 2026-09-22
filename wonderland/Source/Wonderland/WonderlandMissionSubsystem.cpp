@@ -183,6 +183,22 @@ namespace
 			});
 		}));
 
+	FAutoConsoleCommand CmdMissionClearance(
+		TEXT("wl.Mission.Clearance"),
+		TEXT("Run the pre-mission spatial clearance probe where the Dog stands and print what it decided, without "
+		     "starting anything. Use it to check a cramped location: `wl.Mission.Clearance`."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			ForEachMission([](UWonderlandMissionSubsystem& Mission)
+			{
+				const FWonderlandStagingResult Staging = Mission.ProbeClearanceNow();
+				UE_LOG(LogWonderlandMissionUi, Display,
+					TEXT("WLCLEARANCE %s  clear radius %.0f uu  headroom %.0f uu  camera %s  move %.0f uu  %d places measured"),
+					WonderlandStagingFitName(Staging.Fit), Staging.Chosen.ClearRadiusUU, Staging.Chosen.ClearHeightUU,
+					Staging.Chosen.bCameraClear ? TEXT("clear") : TEXT("BLOCKED"), Staging.Chosen.MoveUU, Staging.CandidatesTried);
+			});
+		}));
+
 	FAutoConsoleCommand CmdMissionStop(
 		TEXT("wl.Mission.Stop"),
 		TEXT("Stop the running fixture and let the Mission Contract go: the world returns to idle and the companions to follow."),
@@ -792,8 +808,116 @@ bool UWonderlandMissionSubsystem::PlayScenario(FName ScenarioLetter, float Secon
 		UE_LOG(LogWonderlandMissionUi, Warning, TEXT("WLMISSION scenario %s: cannot reach the simulation site '%s' (%s); playing it here"),
 			*Letter, *Site.ToString(), *Refusal.ToString());
 	}
-	StartScenarioAndWatch(FName(*Letter), SecondsPerEvent);
+	// EVERY PATH INTO THE CUTSCENE GOES THROUGH THE BUBBLE, including this one. A probe that only ran on the
+	// travelling path would be a probe that missed exactly the missions played where the player happens to stand.
+	return BeginMissionWithClearance(FName(*Letter), SecondsPerEvent);
+}
+
+FWonderlandStagingResult UWonderlandMissionSubsystem::ProbeClearanceNow()
+{
+	UWorld* World = GetWorld();
+	APlayerController* Controller = BoundController.Get();
+	APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+	const FVector Origin = Pawn != nullptr ? Pawn->GetActorLocation() : FVector::ZeroVector;
+	const FVector Facing = Pawn != nullptr ? Pawn->GetActorForwardVector() : FVector(1.0, 0.0, 0.0);
+
+	// THE MISSION'S OWN ACTORS ARE NOT OBSTRUCTIONS TO THE MISSION. A Dog standing at the staging point does not
+	// block the staging point, and neither does the Contract it is about to manifest.
+	TArray<const AActor*> Ignore;
+	Ignore.Add(Pawn);
+	Ignore.Add(Orb.Get());
+
+	LastStaging = WonderlandProbeStaging(World, Origin, Facing, Ignore);
+	for (const FString& Note : LastStaging.Notes)
+	{
+		UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLCLEARANCE %s"), *Note);
+	}
+	return LastStaging;
+}
+
+void UWonderlandMissionSubsystem::ApplyStaging(const FWonderlandStagingResult& Staging)
+{
+	APlayerController* Controller = BoundController.Get();
+	const APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+	const bool bCompact = Staging.Fit != EWonderlandStagingFit::Full;
+
+	// A COMPACT PRESENTATION IS THE SAME PRESENTATION, SMALLER AND CLOSER. Both of these are knobs the mission
+	// already has, so nothing downstream has to know a probe happened.
+	SetOrbScale(bCompact ? 0.62f : 1.0f);
+
+	// AND THE CONTRACT MANIFESTS TOWARD THE CLEAR SPACE. The Contract already stands at an offset from the Dog, so
+	// aiming that offset is how a chosen position is honoured -- nobody is teleported, and the Dog walks to its own
+	// mark as it always did.
+	float Forward = bCompact ? 190.0f : 340.0f;
+	float Right = bCompact ? 20.0f : 40.0f;
+	if (Pawn != nullptr && Staging.Chosen.MoveUU > 1.0f)
+	{
+		const FVector Toward = Staging.Location - Pawn->GetActorLocation();
+		const float Reach = FMath::Min(static_cast<float>(Toward.Size2D()), bCompact ? 240.0f : 520.0f);
+		const FVector Unit = Toward.GetSafeNormal2D();
+		Forward = static_cast<float>(FVector::DotProduct(Unit, Pawn->GetActorForwardVector())) * Reach;
+		Right = static_cast<float>(FVector::DotProduct(Unit, Pawn->GetActorRightVector())) * Reach;
+		// Never behind the Dog: a Contract manifesting out of shot is worse than one manifesting a little close.
+		Forward = FMath::Max(Forward, bCompact ? 150.0f : 260.0f);
+	}
+	SetOrbFollowOffset(Forward, Right);
+
+	UE_LOG(LogWonderlandMissionUi, Display,
+		TEXT("WLCLEARANCE staging %s: contract at (%.0f, %.0f) from the Dog, orb scale %.2f, %d places measured"),
+		WonderlandStagingFitName(Staging.Fit), Forward, Right, bCompact ? 0.62f : 1.0f, Staging.CandidatesTried);
+}
+
+bool UWonderlandMissionSubsystem::BeginMissionWithClearance(FName ScenarioLetter, float SecondsPerEvent)
+{
+	const FString Letter = ScenarioLetter.ToString().ToUpper();
+	if (Letter != TEXT("A") && Letter != TEXT("B") && Letter != TEXT("C") && Letter != TEXT("D"))
+	{
+		return false;
+	}
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	// THE PROBE RUNS AT ONCE; THE BUBBLE IS WHAT TAKES A MOMENT. Tracing a dozen places is microseconds, so holding
+	// the mission for a second and a half is a deliberate beat rather than a wait for arithmetic: the founder asked
+	// for a bubble the player sees, and a probe nobody notices would not be one.
+	ProbeClearanceNow();
+	ClearanceScenario = FName(*Letter);
+	ClearancePace = SecondsPerEvent;
+	ClearanceStartedAt = World->GetTimeSeconds();
+	ClearanceUntil = ClearanceStartedAt + 1.4;
+	if (ClearanceTicker.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(ClearanceTicker);
+	}
+	ClearanceTicker = FTSTicker::GetCoreTicker().AddTicker(
+		FTickerDelegate::CreateUObject(this, &UWonderlandMissionSubsystem::StepClearance), 0.0f);
 	return true;
+}
+
+bool UWonderlandMissionSubsystem::StepClearance(float DeltaSeconds)
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr || ClearanceScenario == NAME_None)
+	{
+		ClearanceUntil = 0.0;
+		ClearanceTicker.Reset();
+		return false;
+	}
+	if (World->GetTimeSeconds() < ClearanceUntil)
+	{
+		return true;
+	}
+	const FName Letter = ClearanceScenario;
+	ClearanceScenario = NAME_None;
+	ClearanceUntil = 0.0;
+	ClearanceTicker.Reset();
+	ApplyStaging(LastStaging);
+	// AND THE CUTSCENE BEGINS -- whatever the probe found. There is no branch here that does not start the mission.
+	StartScenarioAndWatch(Letter, ClearancePace);
+	return false;
 }
 
 bool UWonderlandMissionSubsystem::StepPendingScenario(float DeltaSeconds)
@@ -822,7 +946,7 @@ bool UWonderlandMissionSubsystem::StepPendingScenario(float DeltaSeconds)
 	const FName Letter = PendingScenario;
 	PendingScenario = NAME_None;
 	PendingTicker.Reset();
-	StartScenarioAndWatch(Letter, PendingPace);
+	BeginMissionWithClearance(Letter, PendingPace);
 	return false;
 }
 

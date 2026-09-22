@@ -18,6 +18,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/LocalPlayerSubsystem.h"
 #include "Containers/Ticker.h"
+#include "WonderlandClearanceBubble.h"
 #include "WonderlandMissionBeat.h"
 #include "WonderlandMissionEvent.h"
 #include "WonderlandMissionSubsystem.generated.h"
@@ -279,6 +280,32 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
 	bool PlayScenario(FName ScenarioLetter, float SecondsPerEvent = 10.0f);
 
+	/* ------------------------------------------------- the pre-mission clearance bubble */
+
+	/**
+	 * PROBE THE ROOM, THEN PLAY. The founder's sequence: a 1-2 second bubble, an evaluation of the staging envelope,
+	 * a safe position, and only then the cutscene.
+	 *
+	 * IT NEVER REFUSES. Cramped surroundings change how a mission is presented and never whether it runs.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
+	bool BeginMissionWithClearance(FName ScenarioLetter, float SecondsPerEvent = 10.0f);
+
+	/** Run the probe alone and keep the answer, without starting anything. For a proof, and for `wl.Mission.Clearance`. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Mission")
+	FWonderlandStagingResult ProbeClearanceNow();
+
+	/** True while the bubble is up. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	bool IsClearanceProbing() const { return ClearanceUntil > 0.0; }
+
+	/** What the last probe decided, and why. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	const FWonderlandStagingResult& GetLastStaging() const { return LastStaging; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString GetLastStagingFitName() const { return WonderlandStagingFitName(LastStaging.Fit); }
+
 	/** A scenario is waiting for the travel to the simulation site to finish. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	bool IsScenarioWaitingForSite() const { return PendingScenario != NAME_None; }
@@ -362,6 +389,16 @@ private:
 	/** After the last event, hold the finished contract on screen before letting it go. */
 	float FinishHold = 0.0f;
 	FTSTicker::FDelegateHandle PlayTicker;
+	/** The clearance bubble: what it decided, when it must lift, and what is waiting behind it. */
+	FWonderlandStagingResult LastStaging;
+	double ClearanceUntil = 0.0;
+	double ClearanceStartedAt = 0.0;
+	FName ClearanceScenario;
+	float ClearancePace = 10.0f;
+	FTSTicker::FDelegateHandle ClearanceTicker;
+	bool StepClearance(float DeltaSeconds);
+	void ApplyStaging(const FWonderlandStagingResult& Staging);
+
 	/** A scenario waiting on the travel to the simulation site, its pace, and the world time the travel ended. */
 	FName PendingScenario;
 	float PendingPace = 10.0f;

@@ -65,6 +65,24 @@ enum class EWonderlandSubAgentCubState : uint8
 
 WONDERLAND_API const TCHAR* WonderlandSubAgentCubStateName(EWonderlandSubAgentCubState State);
 
+/**
+ * WHERE THE ACTIVE COUNT CAME FROM.
+ *
+ * The founder's rule is that `wl.Cubs.Report` stays a development command and "must not become production truth", so
+ * the two paths are distinct here and the difference is visible wherever a count is shown. Julius always wins: the
+ * first real report takes the flock off a development count immediately.
+ */
+UENUM(BlueprintType)
+enum class EWonderlandCubCountSource : uint8
+{
+	/** Nothing has reported. Not the same as a report of zero, and shown differently. */
+	NotReported,
+	/** Julius said so. The only production truth. */
+	Julius,
+	/** A proof or the console said so. Always labelled. */
+	Development
+};
+
 /** Where a capacity figure came from. A limit with no provenance is a limit nobody can check. */
 UENUM(BlueprintType)
 enum class EWonderlandCubCapacitySource : uint8
@@ -256,13 +274,33 @@ public:
 	void SetPrimaryRelayDog(AActor* Dog, float DogHeightUU);
 
 	/**
-	 * HOW MANY SUB-AGENTS JULIUS SAYS ARE RUNNING. This is the only way the flock grows.
+	 * HOW MANY ORDINARY SUB-AGENTS JULIUS SAYS ARE RUNNING. Production truth, and the only way the flock grows in a
+	 * shipped build. Called from the Julius subsystem's own change notification, never guessed at here.
 	 *
 	 * Clamped to capacity, never invented, and zero when nothing has been reported -- because "Wonderland should not
 	 * visually invent active sub-agents that do not exist", and an empty report is not the same as a full one.
+	 *
+	 * ORDINARY SUB-AGENTS, NOT /MAS. FWonderlandActivityReading::ActiveSubagents counts workers Julius spawned and
+	 * has not reported complete. /MAS is a separate capability and nothing here is connected to it.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Cubs")
 	void ReportActiveSubAgents(int32 ActiveSubAgentCubCount);
+
+	/**
+	 * THE SAME, FROM A PROOF OR THE CONSOLE, AND MARKED AS SUCH. Separate from the Julius path on the founder's
+	 * instruction, so a development count can never be mistaken for -- or outlive -- production truth: the next real
+	 * report from Julius replaces it without ceremony.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Cubs")
+	void ReportActiveSubAgentsForDevelopment(int32 ActiveSubAgentCubCount);
+
+	/** Where the current count came from. A surface showing cubs must be able to say. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Cubs")
+	EWonderlandCubCountSource GetCountSource() const { return CountSource; }
+
+	/** True once Julius has reported at least once. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Cubs")
+	bool IsDrivenByJulius() const { return CountSource == EWonderlandCubCountSource::Julius; }
 
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Cubs")
 	int32 GetActiveSubAgentCubCount() const { return Cubs.Num(); }
@@ -307,6 +345,16 @@ public:
 private:
 	void Grow(int32 To);
 	void Shrink(int32 To);
+	void StepRetiring(float DeltaSeconds);
+	/** Listen to Julius, once there is a Julius to listen to. */
+	void EnsureJuliusBound();
+
+	/**
+	 * JULIUS SAID SOMETHING CHANGED. Reads ActiveSubagents and tells the flock -- the whole of the live connection.
+	 * A UFUNCTION because the notification is a dynamic multicast.
+	 */
+	UFUNCTION()
+	void HandleJuliusChanged();
 	void StepAscension(float DeltaSeconds);
 	FString CubFigurePath(int32 Slot) const;
 
@@ -323,6 +371,18 @@ private:
 	FWonderlandCubCapacity Capacity;
 	int32 WantedCount = 0;
 	bool bHasReport = false;
+	EWonderlandCubCountSource CountSource = EWonderlandCubCountSource::NotReported;
+	bool bBoundToJulius = false;
+	/** What Julius last said, so a redundant notification does not restart the ascension. */
+	int32 LastJuliusReport = -1;
+
+	/** A cub on its way out: RETURNING, then MERGING, then gone. How long it has been leaving. */
+	struct FRetiringCub
+	{
+		TObjectPtr<AWonderlandSubAgentCub> Cub;
+		float Seconds = 0.0f;
+	};
+	TArray<FRetiringCub> Retiring;
 
 	/** Negative when no ascension is playing. */
 	float AscensionSeconds = -1.0f;
