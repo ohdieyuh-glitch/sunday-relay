@@ -10,6 +10,7 @@
  * payload termination, secret non-persistence — not provider behaviour.
  */
 
+import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { Readable } from 'node:stream';
@@ -3462,6 +3463,29 @@ describe('the architect and the reviewer can ask, through their own answers', ()
     expect(result.rebuttal).toEqual(REBUTTAL);
     // The dispatch is accounted for, and the argument is not evidence of the work.
     expect((result.evidence ?? []).map((item) => (item as { type: string }).type)).toEqual(['ARTIFACT']);
+  });
+
+  /**
+   * THE DIGEST THE ADAPTER COMPUTES IS THE DIGEST THE RECORD KEEPS.
+   *
+   * These adapters hashed every body they produced, cut the digest to sixteen
+   * characters, wrote it into an English sentence, and left
+   * `julius_evidence.integrity_hash` NULL — while filling `artifact_ref` with
+   * a key into the in-process artifact exchange, which no later reader can
+   * resolve. The digest survives a restart; the key does not.
+   */
+  it('an architect artifact carries its whole digest and claims no durable reference', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const { adapter } = architectFor(CONSULTATION, seen);
+    const result = await adapter.dispatch({
+      taskId: 'architecture:arch:PRE_COMPLETION_CHECK:r1:run:task', contextId: 'ctx-resume-1', taskType: 'architecture',
+    });
+    const [evidence] = (result.evidence ?? []) as Array<Record<string, unknown>>;
+    expect(evidence!.integrityHash, 'the sha256 of the body it produced')
+      .toBe(createHash('sha256').update(JSON.stringify(CONSULTATION)).digest('hex'));
+    expect(String(evidence!.integrityHash)).toMatch(/^[0-9a-f]{64}$/u);
+    expect(evidence!.artifactRef, 'nothing durable holds this body yet, so it names nothing').toBeUndefined();
+    expect(String(evidence!.safeSummary), 'and the digest is no longer theatre inside a sentence').not.toContain('sha256:');
   });
 
   it('a rebuttal the domain cannot use is refused rather than handed to Julius', async () => {

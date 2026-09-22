@@ -446,3 +446,70 @@ path remain random UUIDs. The probes above show this costs nothing on the crash
 paths that exist today, and every event written inside a durable operation now
 takes its identity from that operation. Extending derived identity to the rest
 of the ledger remains available, and is not justified by any defect yet found.
+
+## H. PR 9 — what the record says about an artifact
+
+Durable artifact truth, audited on main `9a399faa`. The audit found two
+artifact systems that never touch each other, and this closes the half that can
+be closed without a store.
+
+### What exists
+
+A complete, hash-verified, content-addressed artifact store —
+`LocalJuliusArtifactStore`, the `julius_artifacts` table, and byte
+re-verification at settlement — **wired to nothing**. Every production
+composition passes `artifacts: []`, so the table is always empty and the
+verification branch is unreachable. That is known debt
+(`JULIUS_BETA_READINESS.md`) and it is not what this PR changes.
+
+What the live mission path actually uses is a `Map<string,string>` in one
+process, keyed **per run** — `plan:<runId>`, `diff:<runId>` — capped at 256 KiB
+and gone on restart. Julius fails CLOSED when a body is missing
+(`reviewer_plan_absent`, `reviewer_implementation_absent`), which is right and
+already proven.
+
+### The defect this closes
+
+The durable record ABOUT those bodies was false in three ways:
+
+1. **`integrity_hash` was NULL on 100% of worker evidence** — while the
+   adapters computed the sha256 of the body, cut it to sixteen characters, and
+   wrote it into an English sentence. The digest existed; the column built to
+   hold it did not receive it. Nothing could compare two bodies, and nothing
+   could ever check a body against what was reviewed.
+2. **`artifact_ref` held a key into that `Map`.** A durable row told every later
+   reader to look somewhere that no longer exists — worse than null, because
+   null says "unknown" and `diff:run-1` says "look here".
+3. **The coordinator took both fields verbatim** from whatever the provider
+   wrote, with no shape check at all — while the tool path has refused an
+   unverified reference since #208.
+
+Plus a fourth, in the same family: `julius_worker_results.evidence_ids` was
+written `[]` on every attempt, **including attempts that had persisted evidence
+one line earlier**. A durable row asserting "this result cited nothing" as a
+fact.
+
+### The rule
+
+A REFERENCE THAT CANNOT BE RESOLVED IS NOT A REFERENCE. A reference is kept
+only when it names something that outlives the process that wrote it
+(`artifact:…`, or the store's own `local://…`); a hash is kept only when it IS
+one. Everything else is null — the same answer this runtime already gives for a
+cost nobody reported.
+
+So the truthful record of a body with no durable home is its DIGEST, which
+survives the process and identifies the bytes exactly, and a null reference.
+When the store is wired, the reference becomes real and nothing else has to
+change.
+
+`evidence_ids` now names the evidence the result cited. `provider_receipt_ids`
+stays empty because that is TRUE: no provider receipt is minted anywhere in
+this runtime yet.
+
+**Found by mutation:** nothing proved that an UNCAPTURED diff gets no digest —
+a sha256 of whatever `stdout` happened to hold would be a real digest of a body
+nobody produced. That case is now a test.
+
+**Still open, reported not fixed:** artifact BODIES are still process-local.
+The store, the schema and the verification exist; wiring them is a boundary of
+its own, and it is the next one.

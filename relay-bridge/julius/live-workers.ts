@@ -1083,7 +1083,8 @@ export function createLiveArchitectAdapter(input: {
           evidence: [{
             type: 'ARTIFACT',
             status: 'PASSED',
-            safeSummary: `Architecture consultation recorded (${outcome.outputText.length} chars, sha256:${sha256(outcome.outputText).slice(0, 16)}…).`,
+            safeSummary: `Architecture consultation recorded (${outcome.outputText.length} chars).`,
+            integrityHash: sha256(outcome.outputText),
             occurredAt: nowIso(),
           }],
           diagnostics: planDiagnostics({
@@ -1138,7 +1139,8 @@ export function createLiveArchitectAdapter(input: {
           evidence: [{
             type: 'ARTIFACT',
             status: 'PASSED',
-            safeSummary: `Rebuttal recorded (${outcome.outputText.length} chars, sha256:${sha256(outcome.outputText).slice(0, 16)}…).`,
+            safeSummary: `Rebuttal recorded (${outcome.outputText.length} chars).`,
+            integrityHash: sha256(outcome.outputText),
             occurredAt: nowIso(),
           }],
           diagnostics: planDiagnostics({
@@ -1191,8 +1193,9 @@ export function createLiveArchitectAdapter(input: {
           evidence: [{
             type: 'ARTIFACT',
             status: 'PASSED',
-            safeSummary: `Validated guidance packet stored for this task (${outcome.outputText.length} chars, sha256:${sha256(outcome.outputText).slice(0, 16)}…).`,
-            artifactRef: guidanceRef(dispatch.taskId),
+            safeSummary: `Validated guidance packet held for this task (${outcome.outputText.length} chars).`,
+            integrityHash: sha256(outcome.outputText),
+            artifactRef: null,
             occurredAt: nowIso(),
           }],
           diagnostics: planDiagnostics({
@@ -1261,8 +1264,21 @@ export function createLiveArchitectAdapter(input: {
         evidence: [{
           type: 'ARTIFACT',
           status: 'PASSED',
-          safeSummary: `Validated architect plan stored for this run (${outcome.outputText.length} chars, sha256:${sha256(outcome.outputText).slice(0, 16)}…).`,
-          artifactRef: planRef(snapshot.runId),
+          safeSummary: `Validated architect plan held for this run (${outcome.outputText.length} chars).`,
+          /**
+           * THE DIGEST OF THE PLAN, WHOLE, IN THE COLUMN BUILT FOR IT.
+           *
+           * It used to be computed, cut to sixteen characters and pushed into
+           * the sentence above while `integrity_hash` stayed NULL — a digest no
+           * reader could compare and no body could ever be checked against.
+           *
+           * `artifactRef` is null because the plan lives in this process's
+           * artifact exchange, and a key into a Map that dies with the process
+           * is not a reference a durable row may make. Null says "unknown";
+           * `plan:<runId>` said "look here" to a reader who would find nothing.
+           */
+          integrityHash: sha256(outcome.outputText),
+          artifactRef: null,
           occurredAt: nowIso(),
         }],
         /**
@@ -1533,7 +1549,10 @@ export function createJuliusCodingAgentAdapter(input: {
         command: input.testCommand,
         timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.test,
       }));
-      input.artifacts.put(testOutputRef(snapshot.runId), `exit=${test.exitCode ?? 'unknown'}\n${test.stdout}\n${test.stderr}`);
+      // The body the TEST evidence is drawn from, named once so the evidence
+      // can carry its digest rather than describing it.
+      const testOutputText = `exit=${test.exitCode ?? 'unknown'}\n${test.stdout}\n${test.stderr}`;
+      input.artifacts.put(testOutputRef(snapshot.runId), testOutputText);
 
       /**
        * WHAT THE WORKER ASKED FOR, HANDED ON EXACTLY AS IT WROTE IT. Julius
@@ -1584,13 +1603,28 @@ export function createJuliusCodingAgentAdapter(input: {
               : changed
                 ? `Workspace diff captured by executor invocation ${diff.invocationId} (${String(workspace.changes.length)} changed path(s), ${String(workspace.changes.filter((change) => change.change === 'UNTRACKED').length)} new; ${diff.stdout.length} chars).`
                 : `The executor observed no change to the workspace (invocation ${status.invocationId}).`,
-            artifactRef: diff.status === 'SUCCEEDED' ? diffRef(snapshot.runId) : null,
+            /**
+             * THE DIGEST OF THE DIFF THAT WAS CAPTURED — and nothing at all
+             * when none was. A digest of the empty string would be a real
+             * sha256 of a body nobody produced, which is exactly the
+             * plausible-looking stand-in this column must never hold.
+             *
+             * `artifactRef` is null for the reason it is null everywhere on
+             * this path: `diff:<runId>` is a key into this process's exchange,
+             * not a reference that survives it — and, being keyed per RUN, it
+             * is overwritten by the next repair round anyway.
+             */
+            integrityHash: diff.status === 'SUCCEEDED' && workspace.captured ? sha256(diff.stdout) : null,
+            artifactRef: null,
             occurredAt: nowIso(),
           },
           {
             type: 'TEST',
             status: test.status === 'SUCCEEDED' ? 'PASSED' : 'FAILED',
             safeSummary: `Deterministic test command exited ${test.exitCode ?? 'unknown'} under executor invocation ${test.invocationId}.`,
+            // The test output had no digest and no reference at all: the record
+            // named an exit code and described output nobody could identify.
+            integrityHash: sha256(testOutputText),
             artifactRef: null,
             occurredAt: nowIso(),
           },

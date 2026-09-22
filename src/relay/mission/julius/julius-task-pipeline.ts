@@ -2727,14 +2727,20 @@ function executionPorts(
         });
       }
     },
-    acceptResult: async ({ claim, worker, result, idempotencyKey }) => {
+    acceptResult: async ({ claim, worker, result, idempotencyKey, evidence }) => {
       const receipt = await deps.store.acceptWorkerResult({
         resultId: deps.ids.next('result'), idempotencyKey,
         runId: claim.runId, projectId: claim.projectId, taskId: claim.taskId,
         leaseGeneration: claim.leaseGeneration, workerId: worker.workerId,
         status: result.status === 'SUCCEEDED' ? 'SUCCEEDED' : 'FAILED',
         safeSummary: result.safeSummary,
-        evidenceIds: [], providerReceiptIds: [], occurredAt: deps.clock.now(),
+        /* WHAT THIS RESULT CITED, which is known here and was written as `[]`
+           on every attempt — including the ones that had just persisted
+           evidence a line earlier. An empty list is a claim, and it was false.
+           `providerReceiptIds` stays empty because it is TRUE: no provider
+           receipt is minted anywhere in this runtime yet. */
+        evidenceIds: evidence.map((item) => item.evidenceId),
+        providerReceiptIds: [], occurredAt: deps.clock.now(),
       });
       return { duplicate: receipt.duplicate };
     },

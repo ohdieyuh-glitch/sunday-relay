@@ -28,6 +28,7 @@ export * from './julius-task-pipeline';
 export * from './julius-run-loop';
 export * from './julius-lease-keeper';
 export * from './julius-workspace-attribution';
+export * from './julius-artifact-reference';
 export * from './julius-memory-store';
 export * from './julius-runtime-fixtures';
 export * from './julius-runtime-api';

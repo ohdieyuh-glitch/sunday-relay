@@ -265,6 +265,7 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-lifecycle-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   ['src/relay/mission/julius/julius-bounded-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   ['src/relay/mission/julius/julius-events.ts', 'EVENTS / TRAJECTORIES'],
+  ['src/relay/mission/julius/julius-artifact-reference.ts', 'EVENTS / TRAJECTORIES'],
   ['src/relay/mission/julius/julius-trajectory.ts', 'EVENTS / TRAJECTORIES'],
   ['src/relay/mission/julius/julius-metrics.ts', 'EVENTS / TRAJECTORIES'],
   ['src/relay/mission/julius/julius-run-loop.ts', 'COMPLETION AUTHORITY'],

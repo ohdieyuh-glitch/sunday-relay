@@ -13,3 +13,55 @@ describe('DEFECT 4 — the claim offers RUNNABLE only, and a decision releases i
  it('moves the released tasks to RUNNABLE inside the decision transaction, BLOCKED rows only',async()=>{const pool=new PoolStub();const recorded=await repo(pool).appendDecision({decisionId:'d1',runId:'run',taskId:'plan',policyRevision:'v1',idempotencyKey:'plan:ACCEPT:OK',occurredAt:'now',decision:{action:'ACCEPT',reasonCode:'OK',evidenceIds:[],safeSummary:'ok'},releaseTaskIds:['build','build']});expect(recorded).toBe(true);expect(pool.commands[0]).toBe('BEGIN ISOLATION LEVEL SERIALIZABLE');const insert=pool.commands.findIndex(sql=>sql.includes('julius_verification_decisions'));const release=pool.commands.findIndex(sql=>sql.includes("SET state='RUNNABLE'"));expect(insert).toBeGreaterThan(0);expect(release,'the release is written after the decision, before COMMIT').toBeGreaterThan(insert);expect(pool.commands[release]).toContain("state='BLOCKED'");expect(pool.commands[release]).toContain('run_id=$1');expect(pool.commands.at(-1)).toBe('COMMIT');});
  it('releases nothing when there is nothing to release, and nothing on a duplicate decision',async()=>{const pool=new PoolStub();await repo(pool).appendDecision({decisionId:'d1',runId:'run',taskId:'plan',policyRevision:'v1',idempotencyKey:'k',occurredAt:'now',decision:{action:'REPAIR',reasonCode:'X',evidenceIds:[],safeSummary:'x'}});expect(pool.commands.some(sql=>sql.includes("SET state='RUNNABLE'"))).toBe(false);const dup=new PoolStub();const original=dup.connect.bind(dup);dup.connect=async()=>{const client=await original();const query=client.query.bind(client);client.query=async(text:string,values?:readonly unknown[])=>{if(text.includes('julius_verification_decisions'))return{rows:[],rowCount:0};return query(text,values)};return client};expect(await repo(dup).appendDecision({decisionId:'d2',runId:'run',taskId:'plan',policyRevision:'v1',idempotencyKey:'k',occurredAt:'now',decision:{action:'ACCEPT',reasonCode:'OK',evidenceIds:[],safeSummary:'ok'},releaseTaskIds:['build']})).toBe(false);expect(dup.commands.some(sql=>sql.includes("SET state='RUNNABLE'")),'a duplicate releases nothing').toBe(false);});
 });
+
+describe('the evidence announcement carries what the row carries', () => {
+  /**
+   * The `julius.evidence.recorded` event held the sentence and dropped both
+   * machine-readable fields, so the stream — which is what a projection, an
+   * eval and Project Brain read — was a weaker record than the row it
+   * announced. A reader could see that an artifact existed and never learn
+   * which bytes it was.
+   */
+  class CapturingPool extends PoolStub {
+    payloads: unknown[] = [];
+    override async connect() {
+      const client = await super.connect();
+      const query = client.query.bind(client);
+      const payloads = this.payloads;
+      client.query = async (text: string, values?: readonly unknown[]) => {
+        if (text.includes('INSERT INTO relay_wonderland.events')) payloads.push((JSON.parse(String(values?.[5])) as { payload: unknown }).payload);
+        return query(text, values);
+      };
+      return client;
+    }
+  }
+
+  const evidence = (over: Record<string, unknown> = {}) => ({
+    evidenceId: 'ev-1', taskId: 'task-1', workerId: 'worker-1', type: 'ARTIFACT' as const,
+    status: 'PASSED' as const, safeSummary: 'A plan.', artifactRef: null, integrityHash: null,
+    occurredAt: '2026-09-22T00:00:00Z', ...over,
+  });
+
+  it('announces the digest and the reference, not only the sentence', async () => {
+    const pool = new CapturingPool();
+    const digest = 'c'.repeat(64);
+    await repo(pool).appendEvidence({
+      runId: 'run', projectId: 'project', idempotencyKey: 'task-1:1:ev-1',
+      evidence: evidence({ integrityHash: digest, artifactRef: 'artifact:plan-1' }) as never,
+    });
+    const payload = pool.payloads[0] as Record<string, unknown>;
+    expect(payload.integrityHash, 'the digest travels with the announcement').toBe(digest);
+    expect(payload.artifactRef).toBe('artifact:plan-1');
+    expect(payload.evidenceId).toBe('ev-1');
+  });
+
+  it('announces null when the row holds null, rather than leaving the reader to guess', async () => {
+    const pool = new CapturingPool();
+    await repo(pool).appendEvidence({
+      runId: 'run', projectId: 'project', idempotencyKey: 'task-1:1:ev-1', evidence: evidence() as never,
+    });
+    const payload = pool.payloads[0] as Record<string, unknown>;
+    expect(payload).toHaveProperty('integrityHash', null);
+    expect(payload).toHaveProperty('artifactRef', null);
+  });
+});
