@@ -77,9 +77,16 @@ def main():
     stats = Counter()
     rng = random.Random(PASS)
 
+    #: WHAT A PLAYER STANDS ON OR WALKS INTO. IC01 originally declared collides=False for EVERY batch, including
+    #: the causeway a player is meant to walk along. BR01's world sweep later turned it on, so the fault was
+    #: invisible -- until re-applying this pass reset it and the seam walk dropped straight back onto the world
+    #: slab at z=75. A pass must declare its own collision; it cannot rely on a later sweep remembering.
+    SOLID = ("Causeway", "Kerb", "Tower", "Gatehouse_Twin_stone", "Gatehouse_Twin_stone_dark",
+             "Detail_Balustrade_Run_stone", "Detail_Pinnacle_Grand_stone", "Detail_Newel_Urn_stone")
+
     def add(key, mesh, material, x, y, z, yaw, scale=1.0, cull=CULL_NEAR, shadow=True):
         bt = batches.setdefault(key, {"id": "%s_%s" % (PASS, key), "mesh": mesh, "material": material,
-                                      "instances": [], "collides": False, "cast_shadow": shadow,
+                                      "instances": [], "collides": key in SOLID, "cast_shadow": shadow,
                                       "affect_df": False, "cull_distance": cull})
         bt["instances"].append([round(x, 1), round(y, 1), round(z, 1), 0.0, round(yaw % 360.0, 1), 0.0,
                                 round(scale, 3), round(scale, 3), round(scale, 3)])
@@ -139,7 +146,15 @@ def main():
                 add("Tower", TOWER["mesh"], ASHLAR, AXIS_X + side * (HALF_W + 520.0), y, PAVING_TOP,
                     rng.uniform(0, 360), scale=rng.uniform(0.85, 1.05), cull=CULL_FAR)
     # 5. the gatehouse on the axis, where the march ends and Icarus begins
-    add_module("WL_Gatehouse_Twin", AXIS_X, END_Y + 300.0, PAVING_TOP - 12.0, 0.0, cull=CULL_FAR)
+    # SEATED ON THE PAVING, NOT ON A HIDDEN PLINTH. floor_profile.py measured this gatehouse's interior floor at
+    # z=90 while the paving either side is at z=12: a 78 cm sill on both faces. Unreal's max step height is 45, so
+    # it was a wall with a doorway painted on it, and three seam walks stopped dead against it. Two attempts to
+    # add steps made it worse -- the kit's ground "step" is a paving tile with a kerb lip, and the ceremonial
+    # stair brought a 165 cm gold balustrade across the passage. Dropping the building 78 cm puts its floor flush
+    # with the ground it stands on. The only cost is 78 cm of plinth buried in paving, which is what happens to a
+    # real building set into a paved street.
+    GATEHOUSE_SILL = 78.0
+    add_module("WL_Gatehouse_Twin", AXIS_X, END_Y + 300.0, PAVING_TOP - 12.0 - GATEHOUSE_SILL, 0.0, cull=CULL_FAR)
     # 6. planting outside the balustrades: the boards' rule, in the nation's own restraint
     y = START_Y + 300.0
     while y < END_Y - 300.0:

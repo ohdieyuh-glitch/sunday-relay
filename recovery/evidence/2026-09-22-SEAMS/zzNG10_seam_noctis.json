@@ -1,0 +1,45 @@
+{
+ "name": "zzNG10_seam_noctis",
+ "started": "2026-09-22 15:01:54",
+ "status": "done",
+ "legs": [
+  {
+   "waypoint": "core_edge",
+   "status": "reached",
+   "seconds": 4.0,
+   "at": [
+    -43211,
+    -24948,
+    75
+   ],
+   "remaining_cm": 104
+  },
+  {
+   "waypoint": "onto_the_quarter",
+   "status": "reached",
+   "seconds": 4.0,
+   "at": [
+    -43990,
+    -25398,
+    101
+   ],
+   "remaining_cm": 105
+  },
+  {
+   "waypoint": "into_the_quarter",
+   "status": "reached",
+   "seconds": 4.0,
+   "at": [
+    -44768,
+    -25847,
+    101
+   ],
+   "remaining_cm": 106
+  }
+ ],
+ "route_seconds": 13.0,
+ "stuck": [],
+ "finished": "2026-09-22 15:02:20",
+ "seconds": 26.77,
+ "log": "core_edge reached 4.0 [-43211, -24948, 75]\nonto_the_quarter reached 4.0 [-43990, -25398, 101]\ninto_the_quarter reached 4.0 [-44768, -25847, 101]\n"
+}

@@ -1,0 +1,45 @@
+{
+ "name": "zzNF30_seam",
+ "started": "2026-09-22 14:59:57",
+ "status": "done",
+ "legs": [
+  {
+   "waypoint": "before_the_seam",
+   "status": "reached",
+   "seconds": 2.0,
+   "at": [
+    0,
+    63036,
+    101
+   ],
+   "remaining_cm": 64
+  },
+  {
+   "waypoint": "across_the_seam",
+   "status": "reached",
+   "seconds": 3.3,
+   "at": [
+    0,
+    63782,
+    111
+   ],
+   "remaining_cm": 118
+  },
+  {
+   "waypoint": "into_the_district",
+   "status": "reached",
+   "seconds": 3.3,
+   "at": [
+    0,
+    64527,
+    101
+   ],
+   "remaining_cm": 73
+  }
+ ],
+ "route_seconds": 9.7,
+ "stuck": [],
+ "finished": "2026-09-22 15:00:20",
+ "seconds": 22.85,
+ "log": "before_the_seam reached 2.0 [0, 63036, 101]\nacross_the_seam reached 3.3 [0, 63782, 111]\ninto_the_district reached 3.3 [0, 64527, 101]\n"
+}

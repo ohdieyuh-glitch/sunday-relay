@@ -1,0 +1,45 @@
+{
+ "name": "zzNG00_seam_core",
+ "started": "2026-09-22 15:01:26",
+ "status": "done",
+ "legs": [
+  {
+   "waypoint": "core_edge",
+   "status": "reached",
+   "seconds": 4.0,
+   "at": [
+    0,
+    49496,
+    75
+   ],
+   "remaining_cm": 104
+  },
+  {
+   "waypoint": "onto_the_march",
+   "status": "reached",
+   "seconds": 4.3,
+   "at": [
+    0,
+    50472,
+    101
+   ],
+   "remaining_cm": 128
+  },
+  {
+   "waypoint": "up_the_march",
+   "status": "reached",
+   "seconds": 4.7,
+   "at": [
+    0,
+    51524,
+    101
+   ],
+   "remaining_cm": 76
+  }
+ ],
+ "route_seconds": 14.0,
+ "stuck": [],
+ "finished": "2026-09-22 15:01:53",
+ "seconds": 27.24,
+ "log": "core_edge reached 4.0 [0, 49496, 75]\nonto_the_march reached 4.3 [0, 50472, 101]\nup_the_march reached 4.7 [0, 51524, 101]\n"
+}
