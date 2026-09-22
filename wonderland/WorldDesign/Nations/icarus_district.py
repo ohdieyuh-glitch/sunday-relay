@@ -174,7 +174,12 @@ def main():
     # district's paved edge ahead of it. A gate you cannot walk up to is not a gate. The civic bands now run from
     # the march's own last plate; the studio blocks still begin further north, so the quarter narrows to its gate.
     COURT_S, COURT_N = 64600.0, 69000.0
-    MARCH_END = 63600.0
+    # WHERE THE MARCH ACTUALLY ENDS, not where it was meant to. IC01 lays its causeway with
+    # int((END_Y - START_Y) // len_y) = 18 plates from 50000, so its last plate finishes at 63320 -- 280 cm short
+    # of the 63600 the pass declares. Starting this floor at 63600 left a 2.8 m hole, and the walk fell into it:
+    # the Dog stood at z=101 on paving at 62652, z=75 on the world slab at 63554, and z=101 again at 64565 inside
+    # the district. A hole 2.8 m wide is invisible in every screenshot ever taken of this place.
+    MARCH_END = 63320.0
     FLOOR_S = MARCH_END
     ROWS = 25
     FLOOR_N = FLOOR_S + PLATE["len_y"] * ROWS
