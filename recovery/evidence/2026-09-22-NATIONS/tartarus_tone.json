@@ -1,0 +1,42 @@
+{
+ "name": "zzLA00_tone_tartarus",
+ "started": "2026-09-22 12:56:26",
+ "status": "done",
+ "tuned": {
+  "MI_V2_TartarusCrimson": "tuned",
+  "MI_V2_TartarusRoof": "tuned"
+ },
+ "previous": {
+  "MI_V2_TartarusCrimson": {
+   "scalars": {
+    "Roughness": 0.6299999952316284,
+    "RoughVary": 0.07000000029802322,
+    "Specular": 0.3799999952316284
+   },
+   "vectors": {
+    "BaseColor": [
+     0.072,
+     0.0132,
+     0.0142
+    ]
+   }
+  },
+  "MI_V2_TartarusRoof": {
+   "scalars": {
+    "Roughness": 0.5199999809265137,
+    "RoughVary": 0.05000000074505806,
+    "Specular": 0.44999998807907104
+   },
+   "vectors": {
+    "BaseColor": [
+     0.0355,
+     0.0072,
+     0.0088
+    ]
+   }
+  }
+ },
+ "finished": "2026-09-22 12:56:32",
+ "seconds": 5.84,
+ "log": ""
+}

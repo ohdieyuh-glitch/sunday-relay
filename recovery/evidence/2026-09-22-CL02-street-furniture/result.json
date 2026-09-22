@@ -1,0 +1,42 @@
+{
+ "name": "zzLC00_street_furniture",
+ "started": "2026-09-22 12:56:52",
+ "status": "done",
+ "batches_changed": 143,
+ "instances_affected": 2319,
+ "skipped": {
+  "ornament": 697,
+  "above head (z>260)": 25,
+  "already": 28,
+  "too short (60 cm)": 10
+ },
+ "examples": [
+  "SM_garden_urn (2, 202 cm, z 0)",
+  "SM_planter_box (10, 70 cm, z 0)",
+  "SM_garden_urn (27, 202 cm, z 100)",
+  "SM_garden_arch_stone (5, 723 cm, z -99780)",
+  "SM_stone_ring_base (1, 77 cm, z 0)",
+  "SM_planter_box (6, 70 cm, z 0)",
+  "SM_stone_ring_base (6, 77 cm, z -2)",
+  "SM_signpost (53, 262 cm, z 0)",
+  "SM_garden_bench (57, 117 cm, z 0)",
+  "SM_stone_ring_base (55, 77 cm, z -2)",
+  "SM_garden_arch_stone (22, 723 cm, z 220)",
+  "SM_garden_urn (51, 202 cm, z 138)",
+  "SM_key_ornate (9, 159 cm, z 151)",
+  "SM_waymarker (290, 966 cm, z 0)",
+  "SM_waymarker_lamp (127, 166 cm, z 0)",
+  "SM_waymarker_lamp (67, 166 cm, z 0)",
+  "SM_waymarker_lamp (64, 166 cm, z 0)",
+  "SM_waymarker_lamp (44, 166 cm, z 0)",
+  "SM_stone_ring_base (4, 77 cm, z 0)",
+  "SM_waymarker_lamp (30, 166 cm, z 0)",
+  "SM_garden_bench (7, 117 cm, z 0)",
+  "SM_planter_box (4, 70 cm, z 0)",
+  "SM_waymarker (1, 966 cm, z 0)",
+  "SM_garden_arch_stone (58, 723 cm, z 0)"
+ ],
+ "finished": "2026-09-22 12:56:57",
+ "seconds": 4.97,
+ "log": ""
+}

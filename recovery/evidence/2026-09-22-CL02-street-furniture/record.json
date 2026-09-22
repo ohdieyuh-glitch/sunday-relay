@@ -1,0 +1,1146 @@
+{
+ "WonderlandInstancedBatch_54": {
+  "label": "V2Batch_garden_urn_MI_V2_Ceramic",
+  "mesh": "SM_garden_urn",
+  "before": false,
+  "instances": 2,
+  "height_cm": 202.5,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_65": {
+  "label": "V2Batch_planter_box_MI_V2_IvoryStone",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 10,
+  "height_cm": 70.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_87": {
+  "label": "V2Batch_garden_urn_MI_V2_Ceramic",
+  "mesh": "SM_garden_urn",
+  "before": false,
+  "instances": 27,
+  "height_cm": 202.5,
+  "median_z": 100.0
+ },
+ "WonderlandInstancedBatch_104": {
+  "label": "V2Batch_garden_arch_stone_MI_V2_IvoryStone",
+  "mesh": "SM_garden_arch_stone",
+  "before": false,
+  "instances": 5,
+  "height_cm": 723.0,
+  "median_z": -99780.0
+ },
+ "WonderlandInstancedBatch_111": {
+  "label": "V2Batch_stone_ring_base_MI_V2_IvoryStone",
+  "mesh": "SM_stone_ring_base",
+  "before": false,
+  "instances": 1,
+  "height_cm": 76.8,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_247": {
+  "label": "V2Batch_planter_box_MI_V2_IvoryStone",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 6,
+  "height_cm": 70.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_262": {
+  "label": "V2Batch_stone_ring_base_MI_V2_Stone",
+  "mesh": "SM_stone_ring_base",
+  "before": false,
+  "instances": 6,
+  "height_cm": 76.8,
+  "median_z": -2.0
+ },
+ "WonderlandInstancedBatch_293": {
+  "label": "V2Batch_signpost_MI_V2_IvoryStone",
+  "mesh": "SM_signpost",
+  "before": false,
+  "instances": 53,
+  "height_cm": 262.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_294": {
+  "label": "V2Batch_garden_bench_MI_V2_IvoryStone",
+  "mesh": "SM_garden_bench",
+  "before": false,
+  "instances": 57,
+  "height_cm": 117.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_300": {
+  "label": "V2Batch_stone_ring_base_MI_V2_Stone",
+  "mesh": "SM_stone_ring_base",
+  "before": false,
+  "instances": 55,
+  "height_cm": 76.8,
+  "median_z": -2.0
+ },
+ "WonderlandInstancedBatch_301": {
+  "label": "V2Batch_garden_arch_stone_MI_V2_IvoryStone",
+  "mesh": "SM_garden_arch_stone",
+  "before": false,
+  "instances": 22,
+  "height_cm": 723.0,
+  "median_z": 220.0
+ },
+ "WonderlandInstancedBatch_319": {
+  "label": "V2Batch_garden_urn_MI_V2_Ceramic",
+  "mesh": "SM_garden_urn",
+  "before": false,
+  "instances": 51,
+  "height_cm": 202.5,
+  "median_z": 138.4
+ },
+ "WonderlandInstancedBatch_340": {
+  "label": "V2Batch_key_ornate_MI_V2_Gold",
+  "mesh": "SM_key_ornate",
+  "before": false,
+  "instances": 9,
+  "height_cm": 158.6,
+  "median_z": 150.8
+ },
+ "WonderlandInstancedBatch_397": {
+  "label": "V2Batch_waymarker_MI_V2_IvoryStone",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 290,
+  "height_cm": 966.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_398": {
+  "label": "V2Batch_waymarker_lamp_MI_V2_GlassAmber",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 127,
+  "height_cm": 166.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_400": {
+  "label": "V2Batch_waymarker_lamp_MI_V2_GlassRose",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 67,
+  "height_cm": 166.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_401": {
+  "label": "V2Batch_waymarker_lamp_MI_V2_GlassViolet",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 64,
+  "height_cm": 166.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_402": {
+  "label": "V2Batch_waymarker_lamp_MI_V2_GlassTeal",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 44,
+  "height_cm": 166.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_406": {
+  "label": "V2Batch_stone_ring_base_MI_V2_PlazaGrey",
+  "mesh": "SM_stone_ring_base",
+  "before": false,
+  "instances": 4,
+  "height_cm": 76.8,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_422": {
+  "label": "V2Batch_waymarker_lamp_MI_V2_GoldAged",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 30,
+  "height_cm": 166.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_423": {
+  "label": "V2Batch_garden_bench_MI_V2_IvoryStone",
+  "mesh": "SM_garden_bench",
+  "before": false,
+  "instances": 7,
+  "height_cm": 117.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_424": {
+  "label": "V2Batch_planter_box_MI_V2_PlazaCream",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 4,
+  "height_cm": 70.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_429": {
+  "label": "V2Batch_waymarker_MI_V2_IvoryStone",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 1,
+  "height_cm": 966.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_435": {
+  "label": "V2Batch_garden_arch_stone_MI_V2_PlazaCream",
+  "mesh": "SM_garden_arch_stone",
+  "before": false,
+  "instances": 58,
+  "height_cm": 723.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_488": {
+  "label": "V2Batch_garden_urn_MI_V2_PlazaCream",
+  "mesh": "SM_garden_urn",
+  "before": false,
+  "instances": 6,
+  "height_cm": 202.5,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_502": {
+  "label": "V2Batch_stone_ring_base_MI_V2_PlazaCream",
+  "mesh": "SM_stone_ring_base",
+  "before": false,
+  "instances": 1,
+  "height_cm": 76.8,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_520": {
+  "label": "V2Batch_garden_arch_stone_MI_V2_PlazaCream",
+  "mesh": "SM_garden_arch_stone",
+  "before": false,
+  "instances": 148,
+  "height_cm": 723.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_524": {
+  "label": "V2Batch_waymarker_lamp_MI_V2_GoldAged",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 23,
+  "height_cm": 166.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_570": {
+  "label": "V2Batch_garden_bench_MI_V2_IvoryStone",
+  "mesh": "SM_garden_bench",
+  "before": false,
+  "instances": 3,
+  "height_cm": 117.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_571": {
+  "label": "V2Batch_planter_box_MI_V2_PlazaCream",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 3,
+  "height_cm": 70.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_576": {
+  "label": "V2Batch_garden_bench_MI_V2_MarblePale",
+  "mesh": "SM_garden_bench",
+  "before": false,
+  "instances": 6,
+  "height_cm": 117.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_578": {
+  "label": "V2Batch_waymarker_lamp_MI_V2_GoldAged",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 10,
+  "height_cm": 166.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_585": {
+  "label": "V2Batch_garden_arch_stone_MI_V2_PlazaCream",
+  "mesh": "SM_garden_arch_stone",
+  "before": false,
+  "instances": 24,
+  "height_cm": 723.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_624": {
+  "label": "V2Batch_garden_bench_MI_V2_IvoryStone",
+  "mesh": "SM_garden_bench",
+  "before": false,
+  "instances": 1,
+  "height_cm": 117.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_634": {
+  "label": "V2Batch_clock_ornate_MI_V2_GoldAged",
+  "mesh": "SM_clock_ornate",
+  "before": false,
+  "instances": 1,
+  "height_cm": 159.1,
+  "median_z": 250.0
+ },
+ "WonderlandInstancedBatch_640": {
+  "label": "V2Batch_waymarker_lamp_MI_V2_GoldAged",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 6,
+  "height_cm": 166.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_643": {
+  "label": "V2Batch_garden_bench_MI_V2_MarblePale",
+  "mesh": "SM_garden_bench",
+  "before": false,
+  "instances": 4,
+  "height_cm": 117.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_649": {
+  "label": "V2Batch_garden_arch_stone_MI_V2_PlazaCream",
+  "mesh": "SM_garden_arch_stone",
+  "before": false,
+  "instances": 12,
+  "height_cm": 723.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_675": {
+  "label": "V2Batch_clock_ornate_MI_V2_GoldAged",
+  "mesh": "SM_clock_ornate",
+  "before": false,
+  "instances": 1,
+  "height_cm": 159.1,
+  "median_z": 250.0
+ },
+ "WonderlandInstancedBatch_685": {
+  "label": "V2Batch_garden_bench_MI_V2_IvoryStone",
+  "mesh": "SM_garden_bench",
+  "before": false,
+  "instances": 1,
+  "height_cm": 117.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_697": {
+  "label": "V2Batch_garden_bench_MI_V2_MarblePale",
+  "mesh": "SM_garden_bench",
+  "before": false,
+  "instances": 4,
+  "height_cm": 117.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_698": {
+  "label": "V2Batch_waymarker_lamp_MI_V2_GoldAged",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 6,
+  "height_cm": 166.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_704": {
+  "label": "V2Batch_garden_arch_stone_MI_V2_PlazaCream",
+  "mesh": "SM_garden_arch_stone",
+  "before": false,
+  "instances": 12,
+  "height_cm": 723.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_746": {
+  "label": "V2Batch_clock_ornate_MI_V2_GoldAged",
+  "mesh": "SM_clock_ornate",
+  "before": false,
+  "instances": 1,
+  "height_cm": 159.1,
+  "median_z": 250.0
+ },
+ "WonderlandInstancedBatch_748": {
+  "label": "V2Batch_waymarker_lamp_MI_V2_GoldAged",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 4,
+  "height_cm": 166.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_756": {
+  "label": "V2Batch_garden_arch_stone_MI_V2_PlazaCream",
+  "mesh": "SM_garden_arch_stone",
+  "before": false,
+  "instances": 9,
+  "height_cm": 723.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_791": {
+  "label": "V2Batch_garden_bench_MI_V2_IvoryStone",
+  "mesh": "SM_garden_bench",
+  "before": false,
+  "instances": 1,
+  "height_cm": 117.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_795": {
+  "label": "V2Batch_garden_bench_MI_V2_MarblePale",
+  "mesh": "SM_garden_bench",
+  "before": false,
+  "instances": 3,
+  "height_cm": 117.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_801": {
+  "label": "V2Batch_garden_arch_stone_MI_V2_PlazaCream",
+  "mesh": "SM_garden_arch_stone",
+  "before": false,
+  "instances": 8,
+  "height_cm": 723.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_820": {
+  "label": "V2Batch_waymarker_lamp_MI_V2_GoldAged",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 1,
+  "height_cm": 166.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_827": {
+  "label": "V2Batch_clock_ornate_MI_V2_GoldAged",
+  "mesh": "SM_clock_ornate",
+  "before": false,
+  "instances": 1,
+  "height_cm": 159.1,
+  "median_z": 250.0
+ },
+ "WonderlandInstancedBatch_837": {
+  "label": "V2Batch_waymarker_lamp_MI_V2_GoldAged",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 4,
+  "height_cm": 166.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_845": {
+  "label": "V2Batch_garden_arch_stone_MI_V2_PlazaCream",
+  "mesh": "SM_garden_arch_stone",
+  "before": false,
+  "instances": 9,
+  "height_cm": 723.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_869": {
+  "label": "V2Batch_clock_ornate_MI_V2_GoldAged",
+  "mesh": "SM_clock_ornate",
+  "before": false,
+  "instances": 1,
+  "height_cm": 159.1,
+  "median_z": 250.0
+ },
+ "WonderlandInstancedBatch_881": {
+  "label": "V2Batch_garden_bench_MI_V2_MarblePale",
+  "mesh": "SM_garden_bench",
+  "before": false,
+  "instances": 2,
+  "height_cm": 117.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_887": {
+  "label": "V2Batch_garden_arch_stone_MI_V2_PlazaCream",
+  "mesh": "SM_garden_arch_stone",
+  "before": false,
+  "instances": 3,
+  "height_cm": 723.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_905": {
+  "label": "V2Batch_waymarker_lamp_MI_V2_GoldAged",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 1,
+  "height_cm": 166.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_914": {
+  "label": "V2Batch_waymarker_lamp_MI_V2_GoldAged",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 2,
+  "height_cm": 166.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_922": {
+  "label": "V2Batch_garden_arch_stone_MI_V2_PlazaCream",
+  "mesh": "SM_garden_arch_stone",
+  "before": false,
+  "instances": 5,
+  "height_cm": 723.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_949": {
+  "label": "V2Batch_waymarker_lamp_MI_V2_GoldAged",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 2,
+  "height_cm": 166.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_957": {
+  "label": "V2Batch_garden_arch_stone_MI_V2_PlazaCream",
+  "mesh": "SM_garden_arch_stone",
+  "before": false,
+  "instances": 5,
+  "height_cm": 723.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_983": {
+  "label": "V2Batch_clock_ornate_MI_V2_GoldAged",
+  "mesh": "SM_clock_ornate",
+  "before": false,
+  "instances": 1,
+  "height_cm": 159.1,
+  "median_z": 250.0
+ },
+ "WonderlandInstancedBatch_985": {
+  "label": "V2Batch_waymarker_lamp_MI_V2_GoldAged",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 15,
+  "height_cm": 166.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_988": {
+  "label": "V2Batch_garden_bench_MI_V2_MarblePale",
+  "mesh": "SM_garden_bench",
+  "before": false,
+  "instances": 8,
+  "height_cm": 117.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_994": {
+  "label": "V2Batch_garden_arch_stone_MI_V2_PlazaCream",
+  "mesh": "SM_garden_arch_stone",
+  "before": false,
+  "instances": 36,
+  "height_cm": 723.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_1030": {
+  "label": "V2Batch_garden_bench_MI_V2_IvoryStone",
+  "mesh": "SM_garden_bench",
+  "before": false,
+  "instances": 2,
+  "height_cm": 117.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_1046": {
+  "label": "V2Batch_clock_ornate_MI_V2_GoldAged",
+  "mesh": "SM_clock_ornate",
+  "before": false,
+  "instances": 2,
+  "height_cm": 159.1,
+  "median_z": 250.0
+ },
+ "WonderlandInstancedBatch_1060": {
+  "label": "V2Batch_garden_arch_stone_MI_V2_PlazaCream",
+  "mesh": "SM_garden_arch_stone",
+  "before": false,
+  "instances": 42,
+  "height_cm": 723.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_1074": {
+  "label": "V2Batch_waymarker_lamp_MI_V2_GoldAged",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 18,
+  "height_cm": 166.0,
+  "median_z": 0.0
+ },
+ "WonderlandInstancedBatch_1177": {
+  "label": "PL01_PL01_Palace_Wing_stone_dark_WindowDark",
+  "mesh": "WL_Palace_Wing_stone_dark",
+  "before": false,
+  "instances": 1,
+  "height_cm": 439.0,
+  "median_z": -14.0
+ },
+ "WonderlandInstancedBatch_1183": {
+  "label": "PL02_PL02_Palace_Wing_stone_dark_WindowDark",
+  "mesh": "WL_Palace_Wing_stone_dark",
+  "before": false,
+  "instances": 1,
+  "height_cm": 439.0,
+  "median_z": -14.0
+ },
+ "WonderlandInstancedBatch_1456": {
+  "label": "AR01_AR01_stone_dark_Stone",
+  "mesh": "WL_Arch_Twin_Tiered_stone_dark",
+  "before": false,
+  "instances": 1,
+  "height_cm": 60.0,
+  "median_z": -2.0
+ },
+ "WonderlandInstancedBatch_2011": {
+  "label": "SF01_CxCitySW_SF01_CxCitySW_Awning_metal",
+  "mesh": "WL_Market_Awning_metal",
+  "before": false,
+  "instances": 1,
+  "height_cm": 71.0,
+  "median_z": 181.5
+ },
+ "WonderlandInstancedBatch_2103": {
+  "label": "SF01_CxCityWE_SF01_CxCityWE_Awning_metal",
+  "mesh": "WL_Market_Awning_metal",
+  "before": false,
+  "instances": 1,
+  "height_cm": 71.0,
+  "median_z": 181.5
+ },
+ "WonderlandInstancedBatch_2164": {
+  "label": "SD01_CxCityE_SD01_CxCityE_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 4,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2165": {
+  "label": "SD01_CxCityE_SD01_CxCityE_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 4,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2166": {
+  "label": "SD01_CxCityE_SD01_CxCityE_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 9,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2176": {
+  "label": "SD01_CxCityNE_SD01_CxCityNE_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 17,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2187": {
+  "label": "SD01_CxCityNE_SD01_CxCityNE_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 7,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2188": {
+  "label": "SD01_CxCityNE_SD01_CxCityNE_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 7,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2189": {
+  "label": "SD01_CxCityS_SD01_CxCityS_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 7,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2190": {
+  "label": "SD01_CxCityS_SD01_CxCityS_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 7,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2191": {
+  "label": "SD01_CxCityS_SD01_CxCityS_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 8,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2203": {
+  "label": "SD01_CxCitySW_SD01_CxCitySW_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 14,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2213": {
+  "label": "SD01_CxCitySW_SD01_CxCitySW_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 9,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2214": {
+  "label": "SD01_CxCitySW_SD01_CxCitySW_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 9,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2215": {
+  "label": "SD01_CxCityWE_SD01_CxCityWE_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 17,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2224": {
+  "label": "SD01_CxCityWE_SD01_CxCityWE_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 6,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2225": {
+  "label": "SD01_CxCityWE_SD01_CxCityWE_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 6,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2228": {
+  "label": "SD01_CxSSW_SD01_CxSSW_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 10,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2237": {
+  "label": "SD01_CxSSW_SD01_CxSSW_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 5,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2238": {
+  "label": "SD01_CxSSW_SD01_CxSSW_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 5,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2241": {
+  "label": "SD01_FillE_SD01_FillE_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 9,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2242": {
+  "label": "SD01_FillE_SD01_FillE_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 9,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2243": {
+  "label": "SD01_FillE_SD01_FillE_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 15,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2254": {
+  "label": "SD01_FillEE_SD01_FillEE_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 9,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2264": {
+  "label": "SD01_FillEE_SD01_FillEE_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 5,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2265": {
+  "label": "SD01_FillEE_SD01_FillEE_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 5,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2268": {
+  "label": "SD01_FillEL_SD01_FillEL_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 5,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2277": {
+  "label": "SD01_FillEL_SD01_FillEL_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 5,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2278": {
+  "label": "SD01_FillEL_SD01_FillEL_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 5,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2281": {
+  "label": "SD01_FillEMC_SD01_FillEMC_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 11,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2282": {
+  "label": "SD01_FillEMC_SD01_FillEMC_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 11,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2284": {
+  "label": "SD01_FillEMC_SD01_FillEMC_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 12,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2293": {
+  "label": "SD01_FillEMN_SD01_FillEMN_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 17,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2303": {
+  "label": "SD01_FillEMN_SD01_FillEMN_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 12,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2304": {
+  "label": "SD01_FillEMN_SD01_FillEMN_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 12,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2308": {
+  "label": "SD01_FillEMS_SD01_FillEMS_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 2,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2317": {
+  "label": "SD01_FillEMS_SD01_FillEMS_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 2,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2318": {
+  "label": "SD01_FillEMS_SD01_FillEMS_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 2,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2320": {
+  "label": "SD01_FillNE_SD01_FillNE_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 39,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2329": {
+  "label": "SD01_FillNE_SD01_FillNE_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 20,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2330": {
+  "label": "SD01_FillNE_SD01_FillNE_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 20,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2333": {
+  "label": "SD01_FillSE2_SD01_FillSE2_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 7,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2334": {
+  "label": "SD01_FillSE2_SD01_FillSE2_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 7,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2335": {
+  "label": "SD01_FillSE2_SD01_FillSE2_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 11,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2345": {
+  "label": "SD01_FillSFE_SD01_FillSFE_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 11,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2346": {
+  "label": "SD01_FillSFE_SD01_FillSFE_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 11,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2349": {
+  "label": "SD01_FillSFE_SD01_FillSFE_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 19,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2359": {
+  "label": "SD01_FillSFW_SD01_FillSFW_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 11,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2360": {
+  "label": "SD01_FillSFW_SD01_FillSFW_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 11,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2361": {
+  "label": "SD01_FillSFW_SD01_FillSFW_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 17,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2372": {
+  "label": "SD01_FillW_SD01_FillW_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 22,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2382": {
+  "label": "SD01_FillW_SD01_FillW_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 11,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2383": {
+  "label": "SD01_FillW_SD01_FillW_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 11,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2384": {
+  "label": "SD01_FillWE_SD01_FillWE_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 14,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2385": {
+  "label": "SD01_FillWE_SD01_FillWE_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 14,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2388": {
+  "label": "SD01_FillWE_SD01_FillWE_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 18,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2398": {
+  "label": "SD01_South_SD01_South_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 47,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2399": {
+  "label": "SD01_South_SD01_South_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 47,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2401": {
+  "label": "SD01_South_SD01_South_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 42,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2411": {
+  "label": "SD01_SW_SD01_SW_LampPost",
+  "mesh": "SM_waymarker",
+  "before": false,
+  "instances": 19,
+  "height_cm": 966.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2412": {
+  "label": "SD01_SW_SD01_SW_LampHead",
+  "mesh": "SM_waymarker_lamp",
+  "before": false,
+  "instances": 19,
+  "height_cm": 166.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_2413": {
+  "label": "SD01_SW_SD01_SW_Planter",
+  "mesh": "SM_planter_box",
+  "before": false,
+  "instances": 14,
+  "height_cm": 70.0,
+  "median_z": 12.0
+ },
+ "WonderlandInstancedBatch_3002": {
+  "label": "SF01_CxCityS_SF01_CxCityS_Awning_metal",
+  "mesh": "WL_Market_Awning_metal",
+  "before": false,
+  "instances": 1,
+  "height_cm": 71.0,
+  "median_z": 181.5
+ },
+ "WonderlandInstancedBatch_3010": {
+  "label": "SF01_FillE_SF01_FillE_Awning_metal",
+  "mesh": "WL_Market_Awning_metal",
+  "before": false,
+  "instances": 3,
+  "height_cm": 71.0,
+  "median_z": 181.5
+ },
+ "WonderlandInstancedBatch_3018": {
+  "label": "SF01_FillEMS_SF01_FillEMS_Awning_metal",
+  "mesh": "WL_Market_Awning_metal",
+  "before": false,
+  "instances": 1,
+  "height_cm": 71.0,
+  "median_z": 181.5
+ },
+ "WonderlandInstancedBatch_3026": {
+  "label": "SF01_FillNE_SF01_FillNE_Awning_metal",
+  "mesh": "WL_Market_Awning_metal",
+  "before": false,
+  "instances": 1,
+  "height_cm": 71.0,
+  "median_z": 181.5
+ },
+ "WonderlandInstancedBatch_3034": {
+  "label": "SF01_FillSFE_SF01_FillSFE_Awning_metal",
+  "mesh": "WL_Market_Awning_metal",
+  "before": false,
+  "instances": 4,
+  "height_cm": 71.0,
+  "median_z": 181.5
+ },
+ "WonderlandInstancedBatch_3042": {
+  "label": "SF01_FillSFW_SF01_FillSFW_Awning_metal",
+  "mesh": "WL_Market_Awning_metal",
+  "before": false,
+  "instances": 2,
+  "height_cm": 71.0,
+  "median_z": 181.5
+ },
+ "WonderlandInstancedBatch_3050": {
+  "label": "SF01_South_SF01_South_Awning_metal",
+  "mesh": "WL_Market_Awning_metal",
+  "before": false,
+  "instances": 40,
+  "height_cm": 71.0,
+  "median_z": 181.5
+ },
+ "WonderlandInstancedBatch_3058": {
+  "label": "SF01_SW_SF01_SW_Awning_metal",
+  "mesh": "WL_Market_Awning_metal",
+  "before": false,
+  "instances": 27,
+  "height_cm": 71.0,
+  "median_z": 181.5
+ },
+ "WonderlandInstancedBatch_2575": {
+  "label": "IC01_IC01_Detail_Newel_Urn_stone",
+  "mesh": "WL_Detail_Newel_Urn",
+  "before": false,
+  "instances": 16,
+  "height_cm": 215.0,
+  "median_z": 12.0
+ }
+}
