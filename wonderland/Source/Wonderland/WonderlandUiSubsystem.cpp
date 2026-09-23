@@ -1473,13 +1473,21 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 					// height differs per skin -- so the deck landed correctly for Apollo and far too low for
 					// Hagoromo, which showed the founder brick wall across half its window. The floor the Dog is
 					// actually standing on is a trace away, and it is the same floor for every skin.
+					//
+					// ON ECC_Camera, AND THAT IS THE WHOLE FIX. This traced on ECC_Visibility, which THIS MAP'S
+					// PAVING DOES NOT ANSWER -- the fact is recorded forty lines below, where the preview-spot
+					// sweep rejected every candidate for the same reason, and every other ground trace in the
+					// project (the clearance bubble, the wardrobe camera, the brain sculpture) is on Camera. So
+					// the trace found nothing, fell silently back to the derived height above, and the comment
+					// swearing the ground was traced has been describing something that never happened. That
+					// derived height is exactly the one the founder saw as brick across half the window.
 					float GroundZ = Dog->GetActorLocation().Z - Height * 0.5f;
 					FHitResult Ground;
 					FCollisionQueryParams GroundParams(SCENE_QUERY_STAT(WonderlandWardrobeDeck), false);
 					GroundParams.AddIgnoredActor(Dog);
 					if (Relay != nullptr && Relay->GetCostume() != nullptr) { GroundParams.AddIgnoredActor(Relay->GetCostume()); }
 					const FVector From = Dog->GetActorLocation();
-					if (W->LineTraceSingleByChannel(Ground, From, From - FVector(0.0, 0.0, 600.0), ECC_Visibility, GroundParams))
+					if (W->LineTraceSingleByChannel(Ground, From, From - FVector(0.0, 0.0, 600.0), ECC_Camera, GroundParams))
 					{
 						GroundZ = Ground.ImpactPoint.Z;
 					}
