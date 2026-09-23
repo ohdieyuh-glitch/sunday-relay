@@ -482,18 +482,32 @@ LEGACY_QUADRUPED_BODY = "legacy_relay_og_form_quadruped"
 # Nothing below this line changes it, and the proportions are the point: an enormous head, small tapered ears, a
 # visor cut across three quarters of the face, a short body and two stubby legs. Get these wrong and no amount of
 # dress makes it a Relay Dog.
+# MEASURED OFF THE FOUNDER'S CANONICAL BODY PHOTO, 2026-09-23, replacing a squat set he rejected by showing the
+# two side by side. The old numbers put the head at 39% of the figure and the arms at 20%; on the canonical photo
+# the head is 30%, the torso 29%, the legs 30% and the ARMS 36% -- long enough to hang past the hip, clearly
+# separated from a narrow torso, over long legs with real feet. That one difference is the whole silhouette: a
+# 39%-head body with 20% arms reads as a chibi, and no amount of ornament on top of it fixes that.
+#
+# THE HEAD IS THE ONE THING KEPT AT ITS OLD SIZE, deliberately -- the head, visor and gold eyes are the Relay
+# Dog's identity, so the proportions are corrected by making everything ELSE longer rather than by shrinking the
+# face. Head 8.0 stays; the total grows from 20.6 to about 25.7 around it.
 DOG = dict(
     tile=1.0,
-    head=(8.2, 9.2, 8.0),      # depth, width, height -- about 35% of the figure, and wider than the body
-    head_z=16.6,
-    ear=(2.2, 1.7, 3.4),       # a small tapered spur at each top corner, NOT a tall rabbit ear
-    visor=(6.9, 3.0),          # width, height -- inset into the face
-    eye=(1.7, 1.9),            # width, height of each glowing pane
-    eye_gap=1.75,
-    torso=(4.6, 5.8, 6.2),
-    torso_z=9.1,
-    arm=(1.9, 1.9, 4.2),
-    leg=(2.5, 2.7, 6.0),
+    head=(8.2, 9.2, 8.0),      # depth, width, height -- 30% of the figure on the canonical photo
+    head_z=19.7,
+    ear=(2.0, 1.3, 3.0),       # NARROW UPRIGHT POSTS, not tapered tabs -- 14% of the head width on the photo
+    # THE FACE, MEASURED OFF THE CANONICAL PHOTO RATHER THAN REMEMBERED. Three things were wrong and together
+    # they changed who the Dog looked like: the visor ran too wide across the face (75% of the head instead of
+    # 65%), the eyes were too big (18% of the head's width instead of 13%), and -- the loudest error -- they were
+    # set far too far apart, centres 38% of the head's width apart against the photo's 23%. Wide-set eyes read as
+    # a different character however correct the body is. They are also SQUARE on the photo, not tall.
+    visor=(6.0, 2.7),          # width, height -- inset into the face, 65% x 34% of the head
+    eye=(1.2, 1.2),            # a square glowing pane, 13% of the head's width
+    eye_gap=1.05,              # offset from centre: centres a little under a quarter of the head apart
+    torso=(4.0, 5.0, 7.7),     # NARROW and tall: 54% of the head's width on the photo, not 63%
+    torso_z=11.85,
+    arm=(1.9, 1.9, 9.6),       # 36% of total height -- upper arm, forearm and hand, hanging past the hip
+    leg=(2.5, 2.7, 8.0),
     leg_gap=1.6,
 )
 
@@ -519,13 +533,14 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
     for side in (-1.0, 1.0):
         y = side * (hw * 0.5 - ew * 0.9)
         figure.slab("head", coat, (0.0, y, d["head_z"] + hh * 0.5 + eh * 0.28), (ed, ew, eh * 0.62), tile=tile)
-        figure.slab("head", coat, (0.0, y + side * ew * 0.16, d["head_z"] + hh * 0.5 + eh * 0.78),
-                    (ed * 0.72, ew * 0.72, eh * 0.50), tile=tile)
+        figure.slab("head", coat, (0.0, y, d["head_z"] + hh * 0.5 + eh * 0.78),
+                    (ed * 0.96, ew * 0.96, eh * 0.50), tile=tile)
 
     # THE VISOR, CUT INTO THE FACE. On the sheets it sits in the head rather than on it, so it is recessed a little and
     # the coat is carried round it -- a black plate glued to the front reads as a sticker.
     vw, vh = d["visor"]
-    visor_z = d["head_z"] + hh * 0.06
+    # CENTRED ON THE FACE, as the photo has it -- it used to ride noticeably high.
+    visor_z = d["head_z"] + hh * 0.02
     figure.slab("head", "visor", (hd * 0.5 - 0.35, 0.0, visor_z), (1.5, vw, vh), tile=tile * 0.62)
 
     # THE STATUS EYES. The brightest thing on the dog, and the one part of the face a skin may recolour.
@@ -536,11 +551,22 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
     # The body and the two legs. Short, plain, and under the dress in every skin but the bare one.
     td, tw, th = d["torso"]
     figure.slab("body", coat, (0.0, 0.0, d["torso_z"]), (td, tw, th), tile=tile)
+    # THE ARMS ARE A LIMB, NOT A STUB. On the canonical photo each arm is an upper arm, a forearm and a hand,
+    # hanging past the hip with a clear gap of daylight between it and the narrow torso. The old build was a
+    # single short slab tucked against a wide body, which is most of why the figure read as squat.
     for side, name in ((-1.0, "arm_l"), (1.0, "arm_r")):
         ad, aw, ah = d["arm"]
-        pivot = (0.0, side * (tw * 0.5 + aw * 0.36), d["torso_z"] + th * 0.30)
+        # OUTBOARD OF THE TORSO BY A VISIBLE GAP, and still inside the head's width, as the photo has it.
+        arm_y = side * (tw * 0.5 + 0.55 + aw * 0.5)
+        pivot = (0.0, arm_y, d["torso_z"] + th * 0.34)
         figure.part(name, "body", pivot, "wing", side)
-        figure.slab(name, coat, (pivot[0], pivot[1], pivot[2] - ah * 0.44), (ad, aw, ah), tile=tile)
+        figure.slab(name, coat, (0.0, arm_y, pivot[2] - ah * 0.22), (ad, aw, ah * 0.46), tile=tile)
+        # the forearm swings from the elbow, so a long arm does not read as a plank
+        fore = "%s_fore" % name
+        figure.part(fore, name, (0.0, arm_y, pivot[2] - ah * 0.46), "knee", 0.25 + 0.2 * side, 0.5)
+        figure.slab(fore, coat, (0.0, arm_y, pivot[2] - ah * 0.70), (ad * 0.92, aw * 0.92, ah * 0.42), tile=tile)
+        # the hand: a squarer block at the wrist, slightly proud of the forearm
+        figure.slab(fore, coat_deep, (0.0, arm_y, pivot[2] - ah * 0.95), (ad * 1.04, aw * 1.06, ah * 0.13), tile=tile)
     ld, lw, lh = d["leg"]
     for side, name, phase in ((-1.0, "leg_l", 0.0), (1.0, "leg_r", 0.5)):
         hip_z = d["torso_z"] - th * 0.5
@@ -552,8 +578,12 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
         shin = "%s_shin" % name
         figure.part(shin, name, (0.0, side * d["leg_gap"], hip_z - lh * 0.50), "knee", phase, 0.7)
         figure.slab(shin, coat, (0.0, side * d["leg_gap"], hip_z - lh * 0.74), (ld * 0.94, lw * 0.94, lh * 0.52), tile=tile)
-        figure.slab(shin, coat_deep, (ld * 0.16, side * d["leg_gap"], hip_z - lh + tile * 0.55),
-                    (ld * 1.18, lw * 1.04, tile * 1.2), tile=tile)
+        # A FOOT, not a scuff mark. The canonical photo has a clearly defined foot standing proud of the ankle and
+        # reaching forward; the old build was a 1.2-unit sliver that vanished at any distance.
+        figure.slab(shin, coat, (ld * 0.30, side * d["leg_gap"], hip_z - lh + lh * 0.055),
+                    (ld * 1.42, lw * 1.10, lh * 0.11), tile=tile)
+        figure.slab(shin, coat_deep, (ld * 0.30, side * d["leg_gap"], hip_z - lh + lh * 0.012),
+                    (ld * 1.46, lw * 1.14, lh * 0.035), tile=tile)
     figure.mark_dog_extent()
     return figure
 
