@@ -1,0 +1,22 @@
+{
+ "look": "LOOK07",
+ "title": "Sky depth: scatter the atmosphere properly instead of painting a gradient",
+ "why": "Founder 2026-09-23: 'The sky currently contributes too much to the cartoonish appearance... avoid a flat video-game backdrop.' LOOK05/06 fixed the horizon by putting air between the camera and the world, but the sky ABOVE the horizon is still a near-uniform blue ramp, and the probe says why: V2_SkyAtmosphere is sitting on engine defaults. rayleigh_scattering_scale 0.0331 and mie_scattering_scale 0.006 are exactly the values a SkyAtmosphere ships with, so nobody has ever tuned this sky -- it is the default Earth atmosphere over a fantasy world.\n\nRayleigh is what makes a sky blue and what makes it GRADE from deep zenith to pale horizon; Mie is the forward-scattered haze that gives the sun a glow and the air near the horizon its milkiness. Raising both moves the sky from a painted ramp toward something with depth in it, and both are physical parameters rather than colour choices, so Wonderland's palette is not being repainted -- its air is being given density.\n\nNOT TOUCHED: the volumetric cloud. V2_Clouds is configured correctly (material MI_V2_Clouds, layer 2.0-4.5 km, not hidden) yet the captures show only the geometry clouds, which matches this project's own note that VolumetricCloud has failed twice on this runtime. That is a real bug and it is not this pass's to chase.",
+ "judged": "Judge on the sky ABOVE the horizon and on the air around the sun, at several cameras. What should change: a visible gradient from zenith to horizon rather than one blue; warmer, hazier air on the sun side; the horizon band reading as atmosphere rather than as fog alone. What should NOT change: the colour of lit stone, the depth of shade, exposure, or anything within 30 m of the camera.",
+ "lights": {
+  "V2_SkyAtmosphere": {
+   "component": "SkyAtmosphereComponent",
+   "before": {
+    "rayleigh_scattering_scale": 0.03310000151395798,
+    "mie_scattering_scale": 0.006000000052154064,
+    "multi_scattering_factor": 1.0
+   },
+   "after": {
+    "rayleigh_scattering_scale": 0.047,
+    "mie_scattering_scale": 0.011,
+    "multi_scattering_factor": 1.35
+   },
+   "note": "Rayleigh 0.0331 -> 0.047 deepens the zenith and widens the gradient down to the horizon; it is the single parameter that most separates a real sky from a blue ramp. Mie 0.006 -> 0.011 roughly doubles the forward-scattered haze, which is what puts glow around the sun and softens the air at distance. multi_scattering 1.0 -> 1.35 lifts the shadowed side of the sky so the gradient does not simply get darker -- without it, raising Rayleigh alone makes the world gloomier rather than deeper. All three are engine defaults being tuned for the first time."
+  }
+ }
+}
