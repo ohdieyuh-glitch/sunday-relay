@@ -1365,14 +1365,22 @@ def hagoromo():
     figure.star_burst("body", {"gold": "gold", "gem": "amethyst"}, (td * 0.54 + 0.9, 0.0, shoulder - 2.6), 3.3, 8, tile, key="gold", core="gem")
     figure.ring("body", lambda a: "gold", (td * 0.54 + 0.9, 0.0, shoulder - 2.6), 2.3, tile * 0.7, tile * 0.85)
 
-    # ================================================================== THE FOUR SACRED ORBS
-    # Two high, rising from the shoulders to stand beside and above the ears; two low, standing off the hips.
-    # Each on its own gold rod with a collar, and each ringed with light. They float a little, as the plate's
-    # do, and they are the widest thing in the silhouette by a distance.
+    # ================================================================== THE SIX SACRED ORBS
+    # Two high, rising from the shoulders to stand beside and above the ears; two mid, reaching furthest out;
+    # two low, standing off the hips. Each on its own gold rod with a collar, and each ringed with light. They
+    # float a little, as the plate's do, and they are the widest thing in the silhouette by a distance.
+    #
+    # SIX, NOT FOUR. Counted off the founder's own plate (recovered from the session transcript rather than
+    # remembered): the armature carries three orbs to a side, and the middle pair -- reaching out level with
+    # the chest, further than either the high or the low -- is what makes the arrangement read as a CIRCLE of
+    # orbs around the figure instead of two pairs bracketing it. Missing that pair, the widest point of the
+    # silhouette sat at the shoulders and the shape closed up into an hourglass.
     figure.part("orbs_high", "body", (0.0, 0.0, shoulder + 1.0), "float", 0.45)
+    figure.part("orbs_mid", "body", (0.0, 0.0, d["torso_z"] + 1.6), "float", 0.40)
     figure.part("orbs_low", "body", (0.0, 0.0, d["torso_z"] - 1.0), "float", 0.35)
     for side in (-1.0, 1.0):
         figure.orb_on_rod("orbs_high", mats, (-0.6, side * (tw * 0.5 + 1.4), shoulder + 1.2), (side * 0.72, 1.0), 10.8, 2.3, tile, halo=True)
+        figure.orb_on_rod("orbs_mid", mats, (-0.2, side * (tw * 0.5 + 1.2), d["torso_z"] + 1.8), (side * 1.0, 0.52), 12.6, 2.2, tile, halo=True)
         figure.orb_on_rod("orbs_low", mats, (0.2, side * (tw * 0.5 + 0.9), d["torso_z"] - 1.2), (side * 1.0, 0.18), 7.8, 2.0, tile, halo=True)
     return figure
 
