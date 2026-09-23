@@ -17,14 +17,33 @@
  * would pass while reaching the internet is not an offline proof.
  *
  * THE EXECUTABLE SHIM exists because Relay spawns children with an environment
- * built from empty, so there is no PATH for the OS to search. The shim is a
- * file named exactly as the registry entry's allowlisted executable, carrying
- * an ABSOLUTE-PATH shebang to this process's own Node binary. It is what lets
- * the real allowlist run against a real process without weakening the
- * allowlist or reintroducing an inherited PATH.
+ * built from empty, so there is no PATH for the OS to search. The shim lets the
+ * real allowlist run against a real process without weakening the allowlist or
+ * reintroducing an inherited PATH, and HOW it does that is per-platform:
+ *
+ *   POSIX    a file named exactly as the allowlisted executable, carrying an
+ *            ABSOLUTE-PATH shebang to this process's own Node binary.
+ *   Windows  a hard link to that same Node binary, named `<executable>.exe`.
+ *            Windows has no shebang and no executable bit — `CreateProcess`
+ *            reads a PE header — so a shim that POINTS at an interpreter
+ *            cannot launch and a shim must BE one. The entry script then has
+ *            to travel as an ARGUMENT, which is what
+ *            `FAKE_STDIO_FIXED_ARGUMENTS` carries.
+ *
+ * NEITHER FORM TOUCHES POLICY. The registry still holds only the bare NAME,
+ * `planStdioLaunch` still refuses a path, and resolution still happens only
+ * AFTER the allowlist decision — the `.exe` exists on the resolved path, which
+ * is a filesystem fact, never in curated data.
+ *
+ * This is deliberately not "skip the stdio proofs on Windows". A POSIX-only
+ * fixture does not make those scenarios pass here; it makes them fail as
+ * `process_spawn_failed`, and two of them — 12 and 16 — then PASS VACUOUSLY,
+ * because a server that never started satisfies "never became a success" and
+ * "never became a completion" without ever having produced the malformed
+ * response or the crash those proofs exist to judge.
  */
 
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, linkSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server as HttpServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -36,6 +55,26 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const STDIO_ENTRY = resolve(HERE, 'fake-stdio-entry.mjs');
 
 export const FAKE_STDIO_ENTRY_PATH = STDIO_ENTRY;
+
+/** Windows shims ARE the Node binary, so the entry script is argv[1] there. */
+const SHIM_IS_THE_INTERPRETER = process.platform === 'win32';
+
+/**
+ * The `fixedArguments` a registry entry must declare to launch these shims.
+ *
+ * Empty on POSIX, where the shebang names the interpreter and the shim body
+ * names the entry. On Windows the shim IS the interpreter, so the entry
+ * travels here instead — FIRST, because `validateStdioArguments` appends a
+ * caller's additional arguments after the fixed ones, and `node <script>` only
+ * works in that order.
+ *
+ * A module constant rather than a field on the shim handle: the value depends
+ * on the platform and the entry path, never on which temporary directory a
+ * particular test made — so a registry entry declared at module scope can
+ * reference it without having to order itself after `beforeAll`.
+ */
+export const FAKE_STDIO_FIXED_ARGUMENTS: readonly string[] =
+  Object.freeze(SHIM_IS_THE_INTERPRETER ? [STDIO_ENTRY] : []);
 
 /* ------------------------------------------------------------------ *
  * stdio: executable shims.
@@ -51,23 +90,41 @@ export interface FakeExecutableShims {
 /**
  * Creates executable shims for the allowlisted fixture names.
  *
- * The shebang is `#!<process.execPath>` — an absolute path — rather than
- * `#!/usr/bin/env node`, because `env` would search a PATH the child does not
- * have. This is the one place the empty-environment design shows up as extra
- * work, and paying it here is far better than adding a PATH to every MCP
+ * POSIX: the shebang is `#!<process.execPath>` — an absolute path — rather
+ * than `#!/usr/bin/env node`, because `env` would search a PATH the child does
+ * not have. This is the one place the empty-environment design shows up as
+ * extra work, and paying it here is far better than adding a PATH to every MCP
  * child on the planet.
+ *
+ * Windows: a HARD LINK to `process.execPath`, named `<name>.exe`. A link
+ * rather than a copy because `node.exe` is around 100 MB and five shims per
+ * suite would be half a gigabyte of temporary files per run; a copy is the
+ * fallback for the one case a link cannot serve, a shim directory on another
+ * volume.
  */
 export function createFakeExecutableShims(names: readonly string[]): FakeExecutableShims {
   const directory = mkdtempSync(join(tmpdir(), 'relay-mcp-bin-'));
   const paths = new Map<string, string>();
   for (const name of names) {
-    const shimPath = join(directory, name);
-    writeFileSync(
-      shimPath,
-      `#!${process.execPath}\nimport(${JSON.stringify(STDIO_ENTRY)});\n`,
-      'utf8',
-    );
-    chmodSync(shimPath, 0o700);
+    // The `.exe` lives on the RESOLVED PATH only. The allowlist is still keyed
+    // by the bare name and `resolve` below is still what maps one to the other,
+    // so the extension stays a fact about this host's filesystem and never
+    // reaches curated registry data.
+    const shimPath = join(directory, SHIM_IS_THE_INTERPRETER ? `${name}.exe` : name);
+    if (SHIM_IS_THE_INTERPRETER) {
+      try {
+        linkSync(process.execPath, shimPath);
+      } catch {
+        copyFileSync(process.execPath, shimPath);
+      }
+    } else {
+      writeFileSync(
+        shimPath,
+        `#!${process.execPath}\nimport(${JSON.stringify(STDIO_ENTRY)});\n`,
+        'utf8',
+      );
+      chmodSync(shimPath, 0o700);
+    }
     paths.set(name, shimPath);
   }
   return {

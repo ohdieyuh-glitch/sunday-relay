@@ -11,7 +11,7 @@ import {
 } from './policy/mcp-network-policy';
 import type { McpRegistryEntry } from './registry/mcp-registry-types';
 import {
-  createFakeExecutableShims, fixedResolver, installNoExternalNetworkGuard,
+  createFakeExecutableShims, FAKE_STDIO_FIXED_ARGUMENTS, fixedResolver, installNoExternalNetworkGuard,
   loopbackOnlyResolver, startFakeHttpMcpServer, type FakeHttpServerHandle,
 } from './testing/fake-mcp-harness';
 import {
@@ -36,7 +36,7 @@ const stdioEntry = (overrides: Partial<McpRegistryEntry> = {}): McpRegistryEntry
   transport: 'stdio',
   stdio: {
     executable: 'relay-fixture-repository',
-    fixedArguments: [],
+    fixedArguments: [...FAKE_STDIO_FIXED_ARGUMENTS],
     argumentAllowlist: [],
     environmentAllowlist: ['RELAY_FIXTURE_SCENARIO'],
     workspaceRootBehavior: 'isolated_temp',
@@ -321,7 +321,13 @@ describe('stdio transport against a real child process', () => {
     );
   }, 40_000);
 
-  it('close() terminates the process GROUP and leaves NO ORPHAN', async () => {
+  /**
+   * SKIPPED, NEVER SILENTLY PASSED, where the process table is unreadable.
+   * Until the Windows shim existed this looked green here for the worst
+   * possible reason: the spawn failed, the test returned at the `outcome.ok`
+   * guard, and a tick appeared for a teardown guarantee nothing had checked.
+   */
+  it.skipIf(!existsSync('/proc'))('close() terminates the process GROUP and leaves NO ORPHAN', async () => {
     const before = fixtureProcessPids();
 
     const outcome = await stdioFactory('clean_read_only', [stdioEntry()]).open(openRequest('mrg_test_stdio'));
@@ -378,8 +384,11 @@ describe('stdio transport against a real child process', () => {
  * prove the DIRECT child died. Scanning catches a helper the server itself
  * spawned, which is the orphan that actually survives a naive kill.
  *
- * Linux-only by construction; the guard below skips cleanly elsewhere rather
- * than asserting something it cannot observe.
+ * Linux-only by construction, and the proof it serves is POSIX-shaped too:
+ * orphan prevention here means PROCESS GROUPS, which is what `detached: true`
+ * plus a kill of the negative pid uses, and Windows has job objects instead.
+ * So the test that uses this SKIPS where the process table is unreadable and
+ * says so, rather than passing.
  */
 function fixtureProcessPids(): number[] {
   if (!existsSync('/proc')) return [];

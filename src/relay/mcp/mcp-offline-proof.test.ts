@@ -19,7 +19,7 @@ import {
 } from './policy/mcp-network-policy';
 import type { McpRegistryEntry } from './registry/mcp-registry-types';
 import {
-  createFakeExecutableShims, fixedResolver, installNoExternalNetworkGuard, loopbackOnlyResolver,
+  createFakeExecutableShims, FAKE_STDIO_FIXED_ARGUMENTS, fixedResolver, installNoExternalNetworkGuard, loopbackOnlyResolver,
   type FakeExecutableShims,
 } from './testing/fake-mcp-harness';
 import { MCP_ALLOWED_STDIO_EXECUTABLES } from './transports/stdio-launch-policy';
@@ -83,7 +83,7 @@ const entry = (overrides: Partial<McpRegistryEntry> = {}): McpRegistryEntry => (
   transport: 'stdio',
   stdio: {
     executable: 'relay-fixture-repository',
-    fixedArguments: [],
+    fixedArguments: [...FAKE_STDIO_FIXED_ARGUMENTS],
     argumentAllowlist: [],
     environmentAllowlist: ['RELAY_FIXTURE_SCENARIO'],
     workspaceRootBehavior: 'isolated_temp',
@@ -568,6 +568,12 @@ describe('offline proof', () => {
     const rig = await connectRig('malformed_message');
     expect(isRig(rig), 'a non-MCP server must never reach ready').toBe(false);
     if (isRig(rig)) { await rig.close(); return; }
+    // THE SERVER MUST HAVE LAUNCHED AND THEN MISBEHAVED. A process that never
+    // started also never reaches ready, so without this line the whole proof
+    // is satisfied by a broken fixture — which is exactly what happened on
+    // Windows while the shim carried a POSIX shebang.
+    expect(rig.failure, 'a spawn failure proves nothing about malformed JSON-RPC')
+      .not.toBe('process_spawn_failed');
     await rig.manager.closeAll();
   }, 60_000);
 
@@ -619,7 +625,12 @@ describe('offline proof', () => {
   it('16. a process crash can NEVER become a completion', async () => {
     const rig = await connectRig('process_crash');
     if (!isRig(rig)) {
-      // Crashed before ready — also truthful.
+      // Crashed before ready — also truthful, but only if it ran at all: a
+      // process that never started never became a completion either, and
+      // accepting that would make this proof pass on a host where no MCP
+      // server can launch.
+      expect(rig.failure, 'a spawn failure proves nothing about crash behaviour')
+        .not.toBe('process_spawn_failed');
       expect(rig.failure).not.toBe('ready');
       await rig.manager.closeAll();
       return;
