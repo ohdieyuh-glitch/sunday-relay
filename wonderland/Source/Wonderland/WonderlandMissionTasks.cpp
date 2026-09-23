@@ -457,6 +457,28 @@ bool UWonderlandMissionTaskSubsystem::SelectTask(FGuid LocalId)
 	return true;
 }
 
+bool UWonderlandMissionTaskSubsystem::ReportEvidence(const FString& ContractId, const TArray<FString>& EvidenceIds)
+{
+	if (ContractId.IsEmpty())
+	{
+		return false;
+	}
+	FWonderlandMissionTask* Task = Tasks.FindByPredicate(
+		[&ContractId](const FWonderlandMissionTask& Row) { return Row.ContractId == ContractId; });
+	if (Task == nullptr)
+	{
+		return false;
+	}
+	Task->EvidenceIds = EvidenceIds;
+	// THE COUNT FOLLOWS THE LIST ONCE THERE IS ONE. A scheduler that has named three artefacts has told us the
+	// count as well, and leaving a stale smaller number beside them would be a contradiction on the same task.
+	Task->EvidenceCount = FMath::Max(Task->EvidenceCount, EvidenceIds.Num());
+	UE_LOG(LogTemp, Display, TEXT("WLTASK %s reported %d evidence reference(s)"), *ContractId, EvidenceIds.Num());
+	SaveContracts();
+	OnTasksChanged.Broadcast();
+	return true;
+}
+
 bool UWonderlandMissionTaskSubsystem::AdoptContractId(FGuid LocalId, const FString& ContractId)
 {
 	FWonderlandMissionTask* Task = FindMutable(LocalId);

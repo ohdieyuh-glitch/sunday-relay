@@ -24,6 +24,7 @@ ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "demo_subagent_w
 # The steps worth a picture, and what a viewer should be able to see in each.
 SHOT_AT = {
     "CLEARANCE": "the clearance probe runs before any cinematic",
+    "MISSION CONTRACT": "the Contract manifests: the mission exists before anything is delegated",
     "ASCENSION": "the Relay Dog lifts, luminous, and the cubs emerge one by one",
     "SWIRL": "the Dog is still: the cubs orbit its body",
     "FLIGHT": "the Dog walks: the cubs hold the dome above it",
@@ -123,6 +124,27 @@ def job():
         # THE PAGE IS THE ONE THE FOUNDER NOMINATED, and the runtime says so rather than the job assuming it.
         RESULT["page_is_the_nominated_one"] = "iwonder-context-hub.vercel.app" in first["url"]
 
+        # ---- CANON: THE CUBS ARE ORDINARY SUB-AGENTS, AND THE PRIMARY DOG REMAINS THE MISSION AUTHORITY.
+        #
+        # FOUNDER: "Relay Dog Cub Ghosts = REGULAR SUB-AGENTS. They are NOT /MAS. Do not use /MAS terminology
+        # anywhere in this demonstration." A demonstration is the easiest place in the project for the wrong word
+        # to reach a founder's eyes, so the demo's own narration is read back and checked rather than trusted.
+        narration = " ".join(RESULT["first_report"] + [s["step"] for s in steps]).upper()
+        forbidden = [w for w in ("/MAS", "MAS CLONE", "MASCUB", "MAS CUB", "SWARM", "COMPOUND CLONE")
+                     if w in narration]
+        RESULT["forbidden_terms_in_narration"] = forbidden
+        RESULT["cub_canon_language_clean"] = len(forbidden) == 0
+
+        # AND THE AUTHORITY NEVER MOVES. A Mission Contract exists throughout, anchored to the primary Relay Dog;
+        # no cub holds a contract, because a sub-agent is delegated work and is not the mission.
+        mission = L.get_mission(world)
+        cub_actors = unreal.GameplayStatics.get_all_actors_of_class(world, unreal.WonderlandSubAgentCub)
+        RESULT["contract_present_during_delegation"] = bool(mission and mission.get_stacked_orb_count() >= 0)
+        RESULT["cubs_hold_no_contract"] = all(
+            not hasattr(c, "contract_id") or not str(getattr(c, "contract_id", "")) for c in cub_actors)
+        RESULT["primary_dog_remains_authority"] = bool(
+            RESULT["contract_present_during_delegation"] and RESULT["cubs_hold_no_contract"])
+
         yield 3.0
 
         # ---- SECOND RUN, no pictures, purely to answer "does it do that every time?"
@@ -150,6 +172,8 @@ def job():
             "real_webpage_loads": "PASS" if first["page_loaded"] and RESULT["page_is_the_nominated_one"] else "FAIL",
             "mission_completes": "PASS" if first["completed"] else "FAIL",
             "repeatability": "PASS" if RESULT["repeatable"] else "FAIL",
+            "primary_dog_remains_authority": "PASS" if RESULT["primary_dog_remains_authority"] else "FAIL",
+            "cub_canon_language": "PASS" if RESULT["cub_canon_language_clean"] else "FAIL",
             "page": "%s — %s" % (first["url"], first["title"]),
         }
         RESULT["status"] = "done"

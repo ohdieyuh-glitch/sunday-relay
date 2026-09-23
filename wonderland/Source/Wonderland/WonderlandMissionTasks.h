@@ -118,6 +118,20 @@ struct WONDERLAND_API FWonderlandMissionTask
 	int32 EvidenceCount = 0;
 
 	/**
+	 * WHICH ARTEFACTS, by the backend's own reference, and empty until a backend names them.
+	 *
+	 * A COUNT IS NOT A REFERENCE. "3 pieces of evidence" survives a restart as a number nobody can open; the
+	 * founder's persistence list asks for evidence REFERENCES, and RelayWorldState already carries EvidenceIds
+	 * for exactly this, so a task carries the same kind of thing rather than a second, different idea of evidence.
+	 *
+	 * NEVER INVENTED HERE, the same rule AcceptanceCriteria keeps. A scheduler may legitimately report a count
+	 * before it can report the list -- it knows how many it made, and has not sent them -- so these two are
+	 * reported separately and an empty list beside a non-zero count is a true state, not a missing one.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Tasks")
+	TArray<FString> EvidenceIds;
+
+	/**
 	 * TOKENS THIS TASK HAS SPENT, or -1 for "nobody has told us".
 	 *
 	 * NEGATIVE IS NOT ZERO. Zero is a measurement and would be a lie here: no provider telemetry reaches this build,
@@ -163,6 +177,44 @@ public:
 	UPROPERTY()
 	int32 SelectedIndex = INDEX_NONE;
 };
+
+/*
+ * ==========================================================================================================
+ * MULTIPLAYER AUTHORITY: WHAT IS MISSING, NAMED RATHER THAN GUESSED AT.
+ * ==========================================================================================================
+ *
+ * THIS FEATURE IS SINGLE-OWNER TODAY AND SAYS SO. Wonderland has no completed multiplayer authority layer, so
+ * nothing here enforces ownership, and nothing here pretends to. Writing speculative ownership rules that no
+ * test can exercise would produce code that LOOKS enforced and is not, which is worse than an absent layer --
+ * a reviewer would stop asking the question. Formal multi-mission authority belongs with Julius Formal.
+ *
+ * WHAT IS TRUE RIGHT NOW: this is a LocalPlayerSubsystem, so a task set belongs to one local player and reaches
+ * no other machine. There is no replication, no server, no RPC and no permission check anywhere in this file.
+ *
+ * THE FOUR SEAMS AN OWNERSHIP LAYER WOULD ATTACH TO, all of which already exist for other reasons:
+ *
+ *   1. IDENTITY IS ALREADY EXTERNAL. ContractId is the backend's name for a mission, and every state change
+ *      arrives through ApplySchedulerState/ReportEvidence addressed by it. An authority layer rejects or admits
+ *      a message at that boundary; it does not need a new identity to do it.
+ *
+ *   2. SOURCE ALREADY RECORDS WHO SAID SO. EWonderlandTaskSource distinguishes what this session asserted from
+ *      what a backend reported, and GetRunningCount() already trusts only the latter. An owner field would be a
+ *      third answer to the same question this enum is asking, and belongs beside it rather than instead of it.
+ *
+ *   3. THE MUTATORS ARE ALREADY A CLOSED SET. AddDraft, SubmitDraft, DismissDraft, SelectTask, AdoptContractId,
+ *      ApplySchedulerState, ReportEvidence. Nothing else changes a task. A permission check has exactly seven
+ *      places to live, and they are all in this header.
+ *
+ *   4. AND SELECTION IS DELIBERATELY NOT A COMMAND. SelectTask changes what is shown and nothing about what any
+ *      task is doing, so it is the one mutator that would stay unguarded per-viewer in any sane ownership model.
+ *
+ * WHAT WOULD HAVE TO BE DECIDED BY SOMEBODY, and is NOT decided here: whether a contract is owned by the player
+ * who submitted it or by the Julius account behind them; whether a second player may watch a mission they do not
+ * own; whether the orb stack is per-player or shared in one world; and who may dismiss or end another's mission.
+ * Each of those is a product decision with a different answer per game mode, and none of them is a detail.
+ *
+ * DO NOT READ THIS BLOCK AS A CLAIM THAT MULTIPLAYER AUTHORITY IS COMPLETE. It is a list of where it would go.
+ */
 
 DECLARE_MULTICAST_DELEGATE(FOnWonderlandTasksChanged);
 
@@ -252,6 +304,17 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
 	bool ApplySchedulerState(const FString& ContractId, EWonderlandTaskState State, int64 TokensUsed, int32 EvidenceCount);
+
+	/**
+	 * WHAT A CONTRACT PRODUCED, by reference.
+	 *
+	 * Separate from ApplySchedulerState on purpose: a state report and an evidence list arrive at different
+	 * moments and from different places, and folding them into one call would force a caller to restate a task's
+	 * whole condition every time it finished writing a file. Addressed by contract id, like every other thing a
+	 * backend says, so it reaches a contract that has survived a restart.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
+	bool ReportEvidence(const FString& ContractId, const TArray<FString>& EvidenceIds);
 
 	/** Give a locally-accepted contract the identity the backend assigned it. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")

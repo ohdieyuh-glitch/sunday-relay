@@ -1,20 +1,34 @@
 # PIE PROOF: MISSION CONTRACTS SURVIVE A RESTART, AND A DRAFT DOES NOT.
 #
-# FOUNDER DIRECTIVE, the persistence section: a contract's identity belongs to whoever is running it, so what has
-# to survive a restart is the CONTRACT id rather than this session's handle on it -- which is why
-# ApplySchedulerState matches on the contract id and not the local one.
+# FOUNDER'S EIGHT CHECKS, in the founder's own order and wording:
+#   P1  submit a real Mission Contract, restart, the contract returns
+#   P2  create a GRAY draft, restart, the draft does NOT return
+#   P3  multiple submitted contracts survive with SEPARATE identities
+#   P4  a previously IMPLEMENTATION contract restores unconfirmed/local, NOT falsely live
+#   P5  GetRunningCount() is zero until Julius reports
+#   P6  scheduler state arriving after restart reconnects through the backend contract id
+#   P7  objectives / evidence / token state do not LEAK between restored contracts
+#   P8  the development reset removes test state deliberately and logs that it is a development reset
 #
-# THIS IS A REAL RESTART, NOT A SIMULATED ONE. PIE is ended and begun again, so the LocalPlayer subsystem is torn
-# down and re-Initialized exactly as it would be on a fresh launch. Restoring from memory would prove nothing.
+# THIS IS A REAL RESTART. PIE is ended and begun again, so the LocalPlayer subsystem is torn down and
+# re-Initialized exactly as it would be on a fresh launch. Restoring from memory would prove nothing at all.
 #
-# AND THE SHARP TEST IS P4. A contract saved while Julius reported IMPLEMENTATION must NOT come back claiming
-# Julius is still working it -- nobody has said anything this session. If persistence could manufacture a running
-# mission out of a file, every other guarantee in this feature would be worth nothing.
+# AND P4 IS THE ONE THAT MATTERS. If persistence could manufacture a running mission out of a file, every other
+# guarantee in this feature would be worth nothing -- the whole point of the colour rule and the running count is
+# that Wonderland never claims more than a backend has actually said.
 import json
 import os
 
 L = unreal.WonderlandUiTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "task_persistence")
+
+# Two contracts, deliberately given DIFFERENT everything, so a leak between them is visible rather than plausible.
+A_OBJECTIVE = "Contract one: survey the arrival plaza"
+B_OBJECTIVE = "Contract two: inspect the garden arches"
+A_TOKENS, A_EVIDENCE = 12345, 3
+B_TOKENS, B_EVIDENCE = 678, 1
+A_REFS = ["evidence/alpha-1.md", "evidence/alpha-2.png", "evidence/alpha-3.json"]
+B_REFS = ["evidence/beta-1.md"]
 
 
 def job():
@@ -22,8 +36,9 @@ def job():
     les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
     ues = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
     RESULT["status"] = "running"
+    S = unreal.WonderlandMissionTaskSubsystem
     try:
-        # ============================================================ SESSION ONE
+        # ================================================= SESSION ONE: build a set worth restoring
         yield (lambda: ues.get_game_world() is None, 1800)
         L.set_background_throttle_suspended(True)
         les.editor_request_begin_play()
@@ -36,38 +51,59 @@ def job():
             RESULT["status"] = "failed"
             RESULT["why"] = "no ui / task subsystem"
             return
+        # Start from a clean board so this measures a set it built, not one it inherited.
         tasks.clear_all_tasks_for_development()
         yield 0.5
 
-        # Two real contracts, one given a backend identity and a running state, plus an empty draft.
         ui.press_add_task()
         yield 0.6
-        tasks.submit_draft(tasks.get_task_list()[0].local_id, "Contract one: survey the arrival plaza")
+        tasks.submit_draft(tasks.get_task_list()[0].local_id, A_OBJECTIVE)
         yield 0.6
         ui.press_add_task()
         yield 0.6
-        tasks.submit_draft(tasks.get_task_list()[1].local_id, "Contract two: inspect the garden arches")
+        tasks.submit_draft(tasks.get_task_list()[1].local_id, B_OBJECTIVE)
         yield 0.6
-        ui.press_add_task()                       # the DRAFT, left empty on purpose
+        ui.press_add_task()                      # the GRAY DRAFT, left empty on purpose
         yield 1.0
+        RESULT["before_slot_count"] = int(tasks.num_tasks())
+        RESULT["before_has_draft"] = any(not str(t.objective) for t in tasks.get_task_list())
 
+        # Two backend identities, two different live states, two different accounts.
         rows = tasks.get_task_list()
         tasks.adopt_contract_id(rows[0].local_id, "contract-alpha")
-        tasks.apply_scheduler_state("contract-alpha", unreal.WonderlandTaskState.IMPLEMENTATION, -1, 0)
-        yield 0.8
+        tasks.adopt_contract_id(rows[1].local_id, "contract-beta")
+        yield 0.4
+        tasks.apply_scheduler_state("contract-alpha", unreal.WonderlandTaskState.IMPLEMENTATION, A_TOKENS, A_EVIDENCE)
+        tasks.apply_scheduler_state("contract-beta", unreal.WonderlandTaskState.REVIEW, B_TOKENS, B_EVIDENCE)
+        tasks.report_evidence("contract-alpha", A_REFS)
+        tasks.report_evidence("contract-beta", B_REFS)
+        yield 1.0
         tasks.select_task(tasks.get_task_list()[1].local_id)
         yield 1.0
 
-        before = tasks.get_task_list()
-        RESULT["before"] = [{"objective": str(t.objective), "contract": str(t.contract_id),
-                             "state": str(t.state), "source": str(t.source), "local": str(t.local_id)}
-                            for t in before]
+        def snapshot(subsystem):
+            out = []
+            for t in subsystem.get_task_list():
+                out.append({
+                    "objective": str(t.objective),
+                    "contract": str(t.contract_id),
+                    "state": str(t.state).upper(),
+                    "source": str(t.source).upper(),
+                    "tokens": int(t.tokens_used),
+                    "evidence_count": int(t.evidence_count),
+                    "evidence_ids": [str(e) for e in t.evidence_ids],
+                    "local": str(t.local_id),
+                    "lifecycle_tail": str(t.lifecycle[-1]) if len(t.lifecycle) else "",
+                })
+            return out
+
+        RESULT["before"] = snapshot(tasks)
         RESULT["before_running"] = int(tasks.get_running_count())
         RESULT["before_selected_objective"] = str(
-            next((t.objective for t in before if str(t.local_id) == str(tasks.get_selected())), ""))
-        RESULT["saved_file_exists"] = bool(unreal.WonderlandMissionTaskSubsystem.has_saved_contracts())
+            next((t.objective for t in tasks.get_task_list() if str(t.local_id) == str(tasks.get_selected())), ""))
+        RESULT["saved_file_exists_before_restart"] = bool(S.has_saved_contracts())
 
-        # ============================================================ THE RESTART
+        # ================================================= THE RESTART
         les.editor_request_end_play()
         yield (lambda: ues.get_game_world() is None, 300)
         yield 3.0
@@ -82,71 +118,106 @@ def job():
             RESULT["status"] = "failed"
             RESULT["why"] = "no task subsystem after restart"
             return
-        after = tasks2.get_task_list()
-        RESULT["after"] = [{"objective": str(t.objective), "contract": str(t.contract_id),
-                            "state": str(t.state), "source": str(t.source), "local": str(t.local_id),
-                            "lifecycle_tail": str(t.lifecycle[-1]) if len(t.lifecycle) else ""}
-                           for t in after]
+        RESULT["after"] = snapshot(tasks2)
+        after = RESULT["after"]
+        by_contract = {r["contract"]: r for r in after}
+        A = by_contract.get("contract-alpha")
+        B = by_contract.get("contract-beta")
 
-        objs_before = [r["objective"] for r in RESULT["before"] if r["objective"]]
-        objs_after = [str(t.objective) for t in after]
+        # ---- P1: a real contract returns
+        RESULT["P1_contract_returned"] = A is not None and A["objective"] == A_OBJECTIVE
 
-        # ---- P1/P2: the contracts came back, with their backend identities intact
-        RESULT["P1_contracts_restored"] = objs_after == objs_before
-        RESULT["P2_contract_id_survived"] = any(str(t.contract_id) == "contract-alpha" for t in after)
+        # ---- P2: the draft does not. An abandoned empty slot leaves no durable history.
+        RESULT["P2_draft_did_not_return"] = len(after) == 2 and all(r["objective"] for r in after)
 
-        # ---- P6: the DRAFT did not. An abandoned empty slot leaves no history.
-        RESULT["P6_draft_not_restored"] = len(after) == len(objs_before) and all(str(t.objective) for t in after)
-
-        # ---- P3: new handles for a new session, which is what the whole contract-id design rests on
+        # ---- P3: both survived, with identities that did not merge or swap
+        RESULT["P3_both_survived"] = A is not None and B is not None
+        RESULT["P3_identities_separate"] = bool(
+            A and B
+            and A["objective"] == A_OBJECTIVE and B["objective"] == B_OBJECTIVE
+            and A["contract"] != B["contract"]
+            and A["local"] != B["local"])
+        # And the local handle is a SESSION handle: new every launch, which is why the contract id has to exist.
         locals_before = {r["local"] for r in RESULT["before"]}
-        RESULT["P3_local_ids_are_new"] = all(str(t.local_id) not in locals_before for t in after)
+        RESULT["P3_local_ids_are_new"] = all(r["local"] not in locals_before for r in after)
 
-        # ---- P4: NOTHING runs on the strength of a file
-        RESULT["after_running"] = int(tasks2.get_running_count())
-        RESULT["P4_nothing_runs_from_disk"] = int(tasks2.get_running_count()) == 0
-        RESULT["P4_sources_all_local"] = all("JULIUS" not in str(t.source).upper() for t in after)
-        RESULT["P4_state_remembered"] = any("IMPLEMENTATION" in str(t.state).upper() for t in after)
-        RESULT["P4_says_unconfirmed"] = any(
-            "RESTORED" in (str(t.lifecycle[-1]).upper() if len(t.lifecycle) else "") for t in after)
+        # ---- P4: IMPLEMENTATION is remembered, but not as a live claim
+        RESULT["P4_state_remembered"] = bool(A and A["state"].endswith("IMPLEMENTATION"))
+        RESULT["P4_source_is_local"] = bool(A and "JULIUS" not in A["source"])
+        RESULT["P4_lifecycle_says_unconfirmed"] = bool(
+            A and "RESTORED" in A["lifecycle_tail"].upper() and "UNCONFIRMED" in A["lifecycle_tail"].upper())
+        RESULT["P4_restored_unconfirmed_not_live"] = bool(
+            RESULT["P4_state_remembered"] and RESULT["P4_source_is_local"]
+            and RESULT["P4_lifecycle_says_unconfirmed"])
 
-        # ---- P5: and a scheduler can still find it by the only name that outlived the restart
-        RESULT["P5_scheduler_reaches_it"] = bool(
-            tasks2.apply_scheduler_state("contract-alpha", unreal.WonderlandTaskState.REVIEW, -1, 0))
-        yield 0.5
-        RESULT["P5_running_after_julius_spoke"] = int(tasks2.get_running_count())
-        RESULT["P5_it_runs_only_once_told"] = int(tasks2.get_running_count()) == 1
+        # ---- P5: nothing runs on the strength of a file
+        RESULT["P5_running_before_julius"] = int(tasks2.get_running_count())
+        RESULT["P5_zero_until_julius"] = int(tasks2.get_running_count()) == 0
 
-        # ---- P7: and you came back to the task you left on
+        # ---- P6: a scheduler reconnects through the durable id, and creates no duplicate
+        count_before_report = int(tasks2.num_tasks())
+        RESULT["P6_scheduler_reconnected"] = bool(
+            tasks2.apply_scheduler_state("contract-alpha", unreal.WonderlandTaskState.VERIFICATION, 20000, 4))
+        yield 0.8
+        RESULT["P6_no_duplicate_task"] = int(tasks2.num_tasks()) == count_before_report
+        reconnected = next((r for r in snapshot(tasks2) if r["contract"] == "contract-alpha"), None)
+        RESULT["P6_real_state_applied"] = bool(
+            reconnected and reconnected["state"].endswith("VERIFICATION") and "JULIUS" in reconnected["source"])
+        RESULT["P6_running_after_julius"] = int(tasks2.get_running_count())
+        RESULT["P6_counts_only_once_told"] = int(tasks2.get_running_count()) == 1
+
+        # ---- P7: nothing leaked between the two contracts across the restart
+        RESULT["P7_objectives_did_not_leak"] = bool(
+            A and B and A["objective"] == A_OBJECTIVE and B["objective"] == B_OBJECTIVE)
+        RESULT["P7_tokens_did_not_leak"] = bool(
+            A and B and A["tokens"] == A_TOKENS and B["tokens"] == B_TOKENS)
+        RESULT["P7_evidence_counts_did_not_leak"] = bool(
+            A and B and A["evidence_count"] == A_EVIDENCE and B["evidence_count"] == B_EVIDENCE)
+        RESULT["P7_evidence_refs_did_not_leak"] = bool(
+            A and B and A["evidence_ids"] == A_REFS and B["evidence_ids"] == B_REFS)
+        RESULT["P7_no_leak"] = bool(
+            RESULT["P7_objectives_did_not_leak"] and RESULT["P7_tokens_did_not_leak"]
+            and RESULT["P7_evidence_counts_did_not_leak"] and RESULT["P7_evidence_refs_did_not_leak"])
+
+        # ---- and the view came back where it was left
         sel = str(tasks2.get_selected())
         RESULT["after_selected_objective"] = str(
             next((t.objective for t in tasks2.get_task_list() if str(t.local_id) == sel), ""))
-        RESULT["P7_selection_restored"] = (
+        RESULT["selection_restored"] = (
             RESULT["after_selected_objective"] == RESULT["before_selected_objective"])
 
-        # ---- P8: and it can be forgotten
-        RESULT["P8_forgotten"] = bool(unreal.WonderlandMissionTaskSubsystem.forget_saved_contracts())
-        RESULT["P8_file_gone"] = not bool(unreal.WonderlandMissionTaskSubsystem.has_saved_contracts())
+        # ---- P8: the development reset is deliberate, complete, and says what it is
+        # The log line itself is checked outside this job against the editor log, because a job asserting on its
+        # own log output would be marking its own homework.
+        RESULT["P8_closed"] = int(tasks2.clear_all_tasks_for_development())
+        yield 0.6
+        RESULT["P8_slots_empty"] = int(tasks2.num_tasks()) == 0
+        RESULT["P8_file_gone"] = not bool(S.has_saved_contracts())
+        RESULT["P8_reset_is_deliberate"] = bool(
+            RESULT["P8_closed"] > 0 and RESULT["P8_slots_empty"] and RESULT["P8_file_gone"])
 
-        RESULT["task_status"] = [str(line) for line in tasks2.describe_tasks()]
+        RESULT["task_status_after_restart"] = [str(line) for line in tasks2.describe_tasks()]
         RESULT["REPORT"] = {
-            "contracts_survive_restart": "PASS" if RESULT["P1_contracts_restored"] else "FAIL",
-            "contract_id_is_what_survives": "PASS" if RESULT["P2_contract_id_survived"] else "FAIL",
-            "local_ids_are_session_handles": "PASS" if RESULT["P3_local_ids_are_new"] else "FAIL",
-            "no_running_mission_from_a_file": "PASS" if (
-                RESULT["P4_nothing_runs_from_disk"] and RESULT["P4_sources_all_local"]
-                and RESULT["P4_says_unconfirmed"]) else "FAIL",
-            "scheduler_reaches_a_restored_contract": "PASS" if (
-                RESULT["P5_scheduler_reaches_it"] and RESULT["P5_it_runs_only_once_told"]) else "FAIL",
-            "abandoned_draft_leaves_no_history": "PASS" if RESULT["P6_draft_not_restored"] else "FAIL",
-            "selection_restored": "PASS" if RESULT["P7_selection_restored"] else "FAIL",
-            "saved_set_can_be_forgotten": "PASS" if (RESULT["P8_forgotten"] and RESULT["P8_file_gone"]) else "FAIL",
+            "P1_contract_survives_restart": "PASS" if RESULT["P1_contract_returned"] else "FAIL",
+            "P2_draft_leaves_no_history": "PASS" if RESULT["P2_draft_did_not_return"] else "FAIL",
+            "P3_separate_identities_survive": "PASS" if (
+                RESULT["P3_both_survived"] and RESULT["P3_identities_separate"]
+                and RESULT["P3_local_ids_are_new"]) else "FAIL",
+            "P4_implementation_restores_unconfirmed": "PASS" if RESULT["P4_restored_unconfirmed_not_live"] else "FAIL",
+            "P5_running_count_zero_until_julius": "PASS" if RESULT["P5_zero_until_julius"] else "FAIL",
+            "P6_reconnects_by_contract_id": "PASS" if (
+                RESULT["P6_scheduler_reconnected"] and RESULT["P6_no_duplicate_task"]
+                and RESULT["P6_real_state_applied"] and RESULT["P6_counts_only_once_told"]) else "FAIL",
+            "P7_no_state_leak_between_contracts": "PASS" if RESULT["P7_no_leak"] else "FAIL",
+            "P8_development_reset_is_deliberate": "PASS" if RESULT["P8_reset_is_deliberate"] else "FAIL",
         }
+        RESULT["all_pass"] = all(v == "PASS" for v in RESULT["REPORT"].values())
         RESULT["status"] = "done"
     finally:
         with open(os.path.join(ROOT, "persistence.json"), "w", encoding="utf-8") as fh:
             json.dump({k: RESULT.get(k) for k in
-                       ("status", "why", "before", "after", "REPORT", "task_status")}, fh, indent=1)
+                       ("status", "why", "before", "after", "REPORT", "all_pass",
+                        "task_status_after_restart")}, fh, indent=1)
         try:
             les.editor_request_end_play()
             L.set_background_throttle_suspended(False)
