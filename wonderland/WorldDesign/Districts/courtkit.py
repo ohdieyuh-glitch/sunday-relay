@@ -52,8 +52,17 @@ class Court(object):
                             "materials": materials, "collision": collision})
 
     def inst_world(self, key, mesh, material, x, y, z, yaw, sx, sy, sz, collides=False, shadow=False):
-        b = self.batches.setdefault(key, {"id": key, "mesh": self.mesh[mesh], "material": material, "instances": [],
-                                          "collides": collides, "cast_shadow": shadow, "affect_df": False})
+        #: ONE BATCH IS ONE MESH AND ONE MATERIAL. This used to key on `key` alone and record mesh and
+        #: material only when the batch was first created, so every later instance was appended to the
+        #: first one whatever it was made of. pave_rect cycles three slab shapes and picks a tint per
+        #: instance exactly as its docstring says, and all of it was discarded: 45 slab batches came out
+        #: as 45 uniform patches, slab_0 ended up 87.9% of every plaza slab in the world, and the tints
+        #: landed 67/28/4 against the 5:3:1 PAVING was weighted for. The variation was always being
+        #: computed; it just had nowhere to live. GA02/03/04 do not use this path, which is why they mix.
+        bkey = (key, mesh, material)
+        b = self.batches.setdefault(bkey, {"id": "%s_%s_%s" % (key, mesh, material.replace("MI_V2_", "")),
+                                           "mesh": self.mesh[mesh], "material": material, "instances": [],
+                                           "collides": collides, "cast_shadow": shadow, "affect_df": False})
         b["instances"].append([round(x, 1), round(y, 1), round(z, 2), 0.0, round(yaw % 360.0, 1), 0.0,
                                round(sx, 3), round(sy, 3), round(sz, 3)])
 
