@@ -79,3 +79,13 @@ happens at chosen boundaries, not continuously.
 Each lane commits its own coherent work on its own branch — Internal on `local/wonderland-companions`, World on
 `local/wonderland-task3`. Small integration boundaries. Neither lane stages the other's paths; never `git add -A`
 in a tree the other lane also writes.
+
+## SHARED FILES THE INTERNAL LANE HAS TOUCHED
+
+`Source/Wonderland/Wonderland.Build.cs` — `bEnableExceptions = true`, 2026-09-23.
+
+WHY IT MATTERS TO THE WORLD LANE TOO. `WonderlandWireDecode.cpp` parses numbers with `std::stod` inside a
+try/catch. UnrealBuildTool turns exceptions on for EDITOR builds and off for GAME builds, so the editor compiled
+that happily while every game-target build of this module died with C4530 in the unity file holding it — before
+reaching whatever file was actually being checked. Any `Build.bat Wonderland Win64` compile-check either lane ran
+was failing for that reason and not for the change under test. The flag makes the two targets agree.

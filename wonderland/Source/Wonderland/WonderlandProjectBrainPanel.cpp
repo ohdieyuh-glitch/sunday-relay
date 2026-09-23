@@ -452,18 +452,30 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 			SNew(SWonderlandBrainBackdrop).ChakraRank_Lambda([this]() { return Model.ChakraRank; })
 			.Visibility_Lambda([this]() { return bSkinsOpen ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
 		]
-		// The brain.
+		// The brain. A NAMED BOX, because this rectangle is also where the living sculpture is framed: the lens
+		// maths needs the window's measured place on screen, exactly as the wardrobe's does.
 		+ SConstraintCanvas::Slot().Anchors(Slot(Hologram)).Offset(FMargin(0.0f))
 		[
-			SNew(SScaleBox)
-			.Stretch(EStretch::ScaleToFit)
+			SAssignNew(HologramWindow, SBox)
 			[
-				SNew(SImage)
-				.Image(HologramBrush)
-				// HIDDEN WHILE THE WARDROBE IS OPEN: the skin view stands over the brain, and its preview is a hole
-				// the world must show through -- not the hologram behind it.
-				.Visibility_Lambda([this]() { return HologramBrush != nullptr && !bSkinsOpen ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
-				.ColorAndOpacity_Lambda([this]() { return FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f, Selected.IsNone() ? 1.0f : 0.30f)); })
+				SNew(SScaleBox)
+				.Stretch(EStretch::ScaleToFit)
+				[
+					SNew(SImage)
+					.Image(HologramBrush)
+					// HIDDEN WHILE THE WARDROBE IS OPEN: the skin view stands over the brain, and its preview is a hole
+					// the world must show through -- not the hologram behind it.
+					//
+					// AND HIDDEN WHILE THE LIVING BRAIN IS FRAMED, for the same reason: a still of a brain drawn over
+					// a breathing one would hide it completely. The still comes straight back if the sculpture ever
+					// fails to stage, so a broken lens costs the movement and never the picture.
+					.Visibility_Lambda([this]()
+					{
+						const bool bWanted = HologramBrush != nullptr && !bSkinsOpen && !bSculptureLive;
+						return bWanted ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+					})
+					.ColorAndOpacity_Lambda([this]() { return FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f, Selected.IsNone() ? 1.0f : 0.30f)); })
+				]
 			]
 		]
 		+ SConstraintCanvas::Slot().Anchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f)).Offset(FMargin(0.0f))
@@ -1008,6 +1020,32 @@ bool SWonderlandProjectBrainPanel::GetSkinPreviewRect(FVector2D& OutCentre, FVec
 	OutSize = Window.GetAbsoluteSize() / WholeSize;
 	OutCentre = TopLeft + OutSize * 0.5;
 	return true;
+}
+
+bool SWonderlandProjectBrainPanel::GetBrainSculptureRect(FVector2D& OutCentre, FVector2D& OutSize) const
+{
+	// ONLY WHILE THE BRAIN IS THE THING ON SHOW. With the wardrobe open the skin preview owns the lens, and two
+	// surfaces asking for the same camera in the same frame would fight over it every tick.
+	if (bSkinsOpen || !HologramWindow.IsValid())
+	{
+		return false;
+	}
+	const FGeometry& Window = HologramWindow->GetCachedGeometry();
+	const FGeometry& Whole = GetCachedGeometry();
+	const FVector2D WholeSize = Whole.GetAbsoluteSize();
+	if (WholeSize.X < 1.0 || WholeSize.Y < 1.0 || Window.GetAbsoluteSize().X < 1.0)
+	{
+		return false;
+	}
+	const FVector2D TopLeft = (Window.GetAbsolutePosition() - Whole.GetAbsolutePosition()) / WholeSize;
+	OutSize = Window.GetAbsoluteSize() / WholeSize;
+	OutCentre = TopLeft + OutSize * 0.5;
+	return true;
+}
+
+void SWonderlandProjectBrainPanel::SetSculptureLive(bool bLive)
+{
+	bSculptureLive = bLive;
 }
 
 void SWonderlandProjectBrainPanel::SetSkinsOpen(bool bOpen)

@@ -86,6 +86,17 @@ public:
 	bool GetSkinPreviewRect(FVector2D& OutCentre, FVector2D& OutSize) const;
 	bool IsSkinsOpen() const { return bSkinsOpen; }
 
+	/**
+	 * WHERE THE BRAIN ITSELF IS DRAWN, in the same fractions. The living sculpture is framed into this rectangle the
+	 * way the Dog is framed into the wardrobe's, so the brain on screen is a real breathing actor rather than art.
+	 * False while the wardrobe is open, because the lens cannot serve two windows at once.
+	 */
+	bool GetBrainSculptureRect(FVector2D& OutCentre, FVector2D& OutSize) const;
+
+	/** Tell the panel the living brain is on screen, so it stops drawing the still one over the top of it. */
+	void SetSculptureLive(bool bLive);
+	bool IsSculptureLive() const { return bSculptureLive; }
+
 	virtual bool SupportsKeyboardFocus() const override { return true; }
 	virtual FReply OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent) override;
 
@@ -108,9 +119,13 @@ private:
 	const FSlateBrush* HologramBrush = nullptr;
 
 	bool bSkinsOpen = false;
+	/** True while a real sculpture is being framed in the hologram window; the still art stands down for it. */
+	bool bSculptureLive = false;
 	const FSlateBrush* SkinPreviewBrush = nullptr;
 	/** The hole in the panel the world shows through. */
 	TSharedPtr<SWidget> SkinPreviewWindow;
+	/** The rectangle the brain is drawn in, measured rather than assumed. */
+	TSharedPtr<SWidget> HologramWindow;
 	TArray<FWonderlandRelaySkin> Skins;
 	TAttribute<FName> EquippedSkin;
 	FOnChooseSkin OnChooseSkin;

@@ -808,6 +808,23 @@ private:
 	void StageSkinPreviewInWorld(bool bOn);
 
 	/**
+	 * THE LIVING BRAIN, FRAMED IN THE PANEL'S BRAIN WINDOW -- and taken away again when the panel closes.
+	 *
+	 * SAME LENS, SAME REASON AS THE WARDROBE. A render target cannot be used here: this build's scene capture
+	 * writes pure white, measured across ten configurations (see AWonderlandSkinStage). So the only way a real
+	 * breathing brain reaches the panel is the way the real Dog does -- the window is a hole, and the camera is
+	 * moved so the sculpture lands inside it. Live 3D by construction: there is no image that could go stale.
+	 *
+	 * bReleaseCamera is false when the wardrobe is taking the lens over directly: the brain stands its sculpture
+	 * down but leaves the view target alone, so the founder gets one blend into the wardrobe rather than a lurch
+	 * back to the pawn and out again.
+	 */
+	void FrameBrainSculpture(bool bOn, bool bReleaseCamera = true);
+	TWeakObjectPtr<class AWonderlandBrainSculpture> BrainSculptureActor;
+	TWeakObjectPtr<class ACameraActor> BrainCamera;
+	FTimerHandle BrainFrameTimer;
+
+	/**
 	 * THE WARDROBE CAMERA. Frames the founder's own Relay Dog inside the panel's preview window while the wardrobe
 	 * is open -- the window is a hole in the panel, the Dog is placed behind it by moving the lens rather than
 	 * the Dog -- and hands the view back to the player when it closes.

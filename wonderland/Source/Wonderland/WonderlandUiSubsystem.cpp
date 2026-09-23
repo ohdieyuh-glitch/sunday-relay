@@ -43,6 +43,7 @@
 #include "WonderlandMiniMap.h"
 #include "WonderlandMissionSubsystem.h"
 #include "WonderlandNavBar.h"
+#include "WonderlandBrainSculpture.h"
 #include "WonderlandProjectBrain.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "WonderlandProjectBrainPanel.h"
@@ -725,6 +726,12 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 	++OverlaysInViewport;
 	Open = Which;
 	ApplyOverlayInput(true, Focus);
+	// THE BRAIN COMES ALIVE WITH ITS PANEL. Started after the panel is in the viewport, because the framing reads
+	// the window's painted geometry and there is none until it has been laid out once.
+	if (Which == EOverlay::Brain)
+	{
+		FrameBrainSculpture(true);
+	}
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI open %s (panels in viewport: %d)"), OverlayName(Which), OverlaysInViewport);
 }
 
@@ -733,6 +740,9 @@ void UWonderlandUiSubsystem::CloseOverlay()
 	// THE CAMERA GOES BACK TO THE PLAYER whenever the panel closes by any route -- Escape, CLOSE, or a jump to
 	// another overlay. The Dog needs no sending home: it is the player's own pawn, wearing the skin.
 	FrameRelayDogInWardrobe(false);
+	// AND THE BRAIN GOES WITH IT, by every one of those same routes: a sculpture and a camera that outlive their
+	// panel would leave the founder looking at a brain with nothing on screen able to close it.
+	FrameBrainSculpture(false);
 	if (Open == EOverlay::None)
 	{
 		return;
@@ -1456,6 +1466,148 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 	}), 0.08f, true, 0.05f);
 }
 
+void UWonderlandUiSubsystem::FrameBrainSculpture(bool bOn, bool bReleaseCamera)
+{
+	APlayerController* Controller = BoundController.Get();
+	UWorld* World = Controller != nullptr ? Controller->GetWorld() : nullptr;
+	APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+	if (World == nullptr || Pawn == nullptr)
+	{
+		return;
+	}
+	if (!bOn)
+	{
+		World->GetTimerManager().ClearTimer(BrainFrameTimer);
+		if (BrainPanel.IsValid())
+		{
+			// THE STILL COMES BACK FIRST, so there is never a frame with neither brain on screen.
+			BrainPanel->SetSculptureLive(false);
+		}
+		// ONLY IF THE BRAIN ACTUALLY HAS THE LENS. This runs from CloseOverlay, which closes every overlay there
+		// is -- so a bare "the camera exists" test would snatch the view back to the pawn when the founder shut a
+		// Wonder Web window that the brain had nothing to do with.
+		if (bReleaseCamera && BrainCamera.IsValid() && Controller->GetViewTarget() == BrainCamera.Get())
+		{
+			Controller->SetViewTargetWithBlend(Pawn, 0.35f, EViewTargetBlendFunction::VTBlend_Cubic);
+		}
+		// DESTROYED, NOT HIDDEN, for the reason the wardrobe's backdrop is: a brain left floating in the plaza is
+		// a prop the founder walks into the moment the panel closes.
+		if (AActor* Sculpture = BrainSculptureActor.Get())
+		{
+			Sculpture->Destroy();
+		}
+		BrainSculptureActor.Reset();
+		return;
+	}
+
+	// THE WINDOW HAS TO HAVE PAINTED ONCE before its place on screen is known, so this re-solves for a few frames
+	// while the panel settles -- the same timer shape, and for the same reason, as the wardrobe's framing.
+	TWeakObjectPtr<UWonderlandUiSubsystem> WeakThis(this);
+	World->GetTimerManager().SetTimer(BrainFrameTimer, FTimerDelegate::CreateWeakLambda(this, [WeakThis]()
+	{
+		UWonderlandUiSubsystem* Self = WeakThis.Get();
+		APlayerController* PC = Self != nullptr ? Self->BoundController.Get() : nullptr;
+		APawn* Dog = PC != nullptr ? PC->GetPawn() : nullptr;
+		UWorld* W = PC != nullptr ? PC->GetWorld() : nullptr;
+		if (Self == nullptr || Dog == nullptr || W == nullptr || !Self->BrainPanel.IsValid())
+		{
+			return;
+		}
+		FVector2D Centre, Size;
+		if (!Self->BrainPanel->GetBrainSculptureRect(Centre, Size))
+		{
+			// The wardrobe has the lens, or the panel has not painted yet. Either way the still art stays up.
+			Self->BrainPanel->SetSculptureLive(false);
+			return;
+		}
+
+		// ---- the sculpture itself, made once and kept while the panel is open
+		AWonderlandBrainSculpture* Sculpture = Self->BrainSculptureActor.Get();
+		if (Sculpture == nullptr)
+		{
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.ObjectFlags |= RF_Transient;
+			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			Sculpture = W->SpawnActor<AWonderlandBrainSculpture>(
+				AWonderlandBrainSculpture::StaticClass(), FTransform::Identity, SpawnParams);
+			if (Sculpture == nullptr) { return; }
+#if WITH_EDITOR
+			Sculpture->SetActorLabel(TEXT("WL_ProjectBrainSculpture"), false);
+#endif
+			Self->BrainSculptureActor = Sculpture;
+		}
+
+		// ---- the lens: the player's own field of view, so the framing maths matches what is drawn
+		const float HFov = PC->PlayerCameraManager != nullptr ? PC->PlayerCameraManager->GetFOVAngle() : 90.0f;
+		int32 VX = 0, VY = 0;
+		PC->GetViewportSize(VX, VY);
+		const float Aspect = VY > 0 ? static_cast<float>(VX) / static_cast<float>(VY) : 1.777f;
+		const float TanH = FMath::Tan(FMath::DegreesToRadians(HFov * 0.5f));
+		const float TanV = TanH / Aspect;
+
+		// ---- IT FLOATS. A brain in a panel is a hologram, not a prop: it stands on nothing, so unlike the wardrobe
+		// ---- there is no floor to find and no plinth to put it on. The eye is taken from the PAWN and not from the
+		// ---- camera, because once the view target is this camera, reading the camera to place the camera is a loop.
+		const FVector Eye = Dog->GetActorLocation() + FVector(0.0, 0.0, 70.0);
+		const FVector Forward = Dog->GetActorForwardVector();
+
+		// The python swims on a shell outside the brain, so what has to fit in the window is that shell, not the mass.
+		const float Reach = Sculpture->BrainRadiusUU * 1.55f * 2.0f;
+		const float WantTall = FMath::Max(Size.Y * 0.74f, 0.05f);
+		float Distance = FMath::Clamp(Reach / (WantTall * 2.0f * TanV), 260.0f, 2000.0f);
+
+		// ---- AND IT IS NEVER INSIDE A WALL. Five metres ahead is a doorway as often as it is open air; if something
+		// ---- solid is nearer than that, the brain is brought in front of it and simply reads a little larger.
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(WonderlandBrainSculptureSpot), false);
+		Params.AddIgnoredActor(Dog);
+		Params.AddIgnoredActor(Sculpture);
+		if (const ARelayDogCharacter* Relay = Cast<ARelayDogCharacter>(Dog))
+		{
+			if (Relay->GetCostume() != nullptr) { Params.AddIgnoredActor(Relay->GetCostume()); }
+		}
+		FHitResult Blocked;
+		if (W->LineTraceSingleByChannel(Blocked, Eye, Eye + Forward * Distance, ECC_Camera, Params))
+		{
+			Distance = FMath::Max(static_cast<float>(Blocked.Distance) - Reach * 0.55f, 180.0f);
+		}
+		const FVector Where = Eye + Forward * Distance;
+		Sculpture->SetActorLocation(Where);
+
+		// ---- the brain sits at the WINDOW'S centre, which is off the screen's centre: aim the lens away from it by
+		// ---- exactly that angle. Screen y runs downward.
+		const float YawOff = FMath::RadiansToDegrees(FMath::Atan((Centre.X - 0.5f) * 2.0f * TanH));
+		const float PitchOff = FMath::RadiansToDegrees(FMath::Atan((Centre.Y - 0.5f) * 2.0f * TanV));
+
+		ACameraActor* Cam = Self->BrainCamera.Get();
+		if (Cam == nullptr)
+		{
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.ObjectFlags |= RF_Transient;
+			Cam = W->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(Eye), SpawnParams);
+			if (Cam == nullptr) { return; }
+#if WITH_EDITOR
+			Cam->SetActorLabel(TEXT("WL_ProjectBrainCamera"), false);
+#endif
+			Self->BrainCamera = Cam;
+		}
+		FRotator Aim = Forward.Rotation();
+		Aim.Yaw -= YawOff;
+		Aim.Pitch += PitchOff;
+		Cam->SetActorLocationAndRotation(Eye, Aim);
+		if (UCameraComponent* Lens = Cam->GetCameraComponent())
+		{
+			Lens->SetFieldOfView(HFov);
+			Lens->bConstrainAspectRatio = false;
+		}
+		if (PC->GetViewTarget() != Cam)
+		{
+			PC->SetViewTargetWithBlend(Cam, 0.45f, EViewTargetBlendFunction::VTBlend_Cubic);
+		}
+		// ONLY NOW is the still art stood down: everything the live brain needs exists and is pointed at.
+		Self->BrainPanel->SetSculptureLive(true);
+	}), 0.08f, true, 0.05f);
+}
+
 void UWonderlandUiSubsystem::StageSkinPreviewInWorld(bool bOn)
 {
 	AWonderlandSkinStage* Stage = SkinStage();
@@ -1576,7 +1728,21 @@ bool UWonderlandUiSubsystem::SetBrainSkinsOpen(bool bOpen)
 	// THE FOUNDER'S OWN DOG IS THE PREVIEW. It wears the skin now (ARelayDogCharacter::WearSkin), so there is no
 	// mannequin to stand anywhere: the panel opens a window and the camera frames the Dog inside it.
 	BrainPanel->SetSkinsOpen(bOpen);
-	FrameRelayDogInWardrobe(bOpen);
+	// ONE LENS, HANDED OVER CLEANLY. The wardrobe and the brain both want the camera, and they are never both on
+	// show: the brain stands down as the wardrobe opens and comes back when it closes. Without this the two
+	// framings fight over the view target every tick -- which is what a click on a skin looked like from outside.
+	// Opening, the brain lets go WITHOUT releasing the camera, because the wardrobe is about to take it: releasing
+	// would blend back to the pawn and straight out again for no reason the founder could see a purpose in.
+	if (bOpen)
+	{
+		FrameBrainSculpture(false, /*bReleaseCamera*/ false);
+		FrameRelayDogInWardrobe(true);
+	}
+	else
+	{
+		FrameRelayDogInWardrobe(false);
+		FrameBrainSculpture(true);
+	}
 	return BrainPanel->IsSkinsOpen() == bOpen;
 }
 

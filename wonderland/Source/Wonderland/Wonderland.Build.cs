@@ -6,6 +6,19 @@ public class Wonderland : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
+		// EXCEPTIONS ON, BECAUSE THIS MODULE ALREADY DEPENDS ON THEM.
+		//
+		// WonderlandWireDecode parses numbers with std::stod inside a try/catch, deliberately: that decoder is built
+		// with no engine dependency so the code which ships is the code the offline harness runs under sanitizers
+		// (see the Json note below). std::stod reports overflow by throwing, and there is no other way to ask it.
+		//
+		// WHY NOBODY HIT THIS. UnrealBuildTool enables exceptions for EDITOR builds and not for game builds, so the
+		// editor compiled that try/catch happily while the game target failed on it with C4530 -- and the editor is
+		// what a person has open. Every game-target compile-check of this module died in the unity file holding
+		// WonderlandWireDecode.cpp, before ever reaching the file actually being checked. Setting it here makes the
+		// two targets agree instead of leaving the module compilable in only one of them.
+		bEnableExceptions = true;
+
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
 			"Core",
