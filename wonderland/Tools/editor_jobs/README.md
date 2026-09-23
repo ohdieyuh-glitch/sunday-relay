@@ -49,3 +49,35 @@ Rules the jobs follow, each learned in a real run:
 After `place_anchors.py`, regenerate the registry:
 
     python wonderland/Tools/travel_registry.py --audit <audit.json> --anchors <channel dir>/done/anchors_search.json
+
+## get_actor_bounds is not a measurement. Do not quote a number derived from it.
+
+**Measured 2026-09-22.** `Actor.get_actor_bounds()` returns a **cube** for Blueprint actors in this project, not
+the actor's real extent, and it over-reports badly. The proof is a quantity this project already knows exactly:
+
+| actor | what `get_actor_bounds` said | what it actually is |
+|---|---|---|
+| canonical Relay Dog | `bounds_extent [1010, 1010, 1010]` &rarr; **2020 cm tall** | **174 cm** (`dog_canon.EAR_TOP * 60`) |
+| Relay Dog Sub-Agent Cub | `bounds_extent [128, 128, 128]` &rarr; 256 cm | a floating head, far smaller |
+| Ten Tails / Cherubim / Seraph, SMALL | `256.0 x 256.0 x 256.0` for **all three** | 1.15 m tall, three different footprints |
+
+An 11.6x over-report on the Dog, and one identical cube for three creatures that share no geometry. The giveaway
+is that the three axes come back **equal** — a real creature's bounds are never a perfect cube.
+
+This matters beyond one job: **every bounds-derived number anyone has quoted in this project is suspect**,
+including the extents recorded in `cub_figures.json`. If a figure came out of `get_actor_bounds`, re-derive it
+before relying on it.
+
+**What to use instead.** Ask the mesh, then place it:
+
+```python
+sm = comp.get_editor_property("static_mesh")        # StaticMeshComponent has NO 'bounds' property in 5.8 Python
+box = sm.get_bounding_box()                          # the asset's own box, in its own space
+world = comp.get_world_transform().transform_location(unreal.Vector(box.min.x, box.min.y, box.min.z))
+```
+
+Union the eight transformed corners of every component's box. `verify_avatars.py` does exactly this.
+
+For an asset built by this project's own generators there is also an offline answer that needs no editor at all:
+`wonderland/v2/verify_avatar_placement.py` on the forge branch redoes the build's arithmetic in plain Python and
+reports the true height to 0.05 cm. It is how the avatars were cleared without the editor.
