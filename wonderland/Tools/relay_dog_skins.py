@@ -324,8 +324,13 @@ class Figure:
                     y = side * reach * t
                     # forward at the sternum, curving back around the body toward the spine
                     x = cx + depth * (0.5 - 0.55 * t * t)
-                    sag = height * 0.055 * math.sin(math.pi * t)
-                    self.box(part, mats["bone"], (x, y, z - sag), (tile * 1.25, tile * 1.02, tile * 1.10))
+                    # THE SWEEP HAS TO BE BIGGER THAN A VOXEL OR IT IS NOT A SWEEP. At height*0.055 the droop came
+                    # to about a third of a tile across the whole rib, so every rib quantised to one flat row and
+                    # the chest read as a barcode -- the founder's words were "a striped Relay Dog". Real ribs fall
+                    # away steeply toward the spine, so the sweep is now several tiles and biased to the outer end,
+                    # and the ribs are slimmer so the shadow between them survives.
+                    sag = height * 0.26 * math.sin(math.pi * 0.5 * t) * (0.45 + 0.55 * t)
+                    self.box(part, mats["bone"], (x, y, z - sag), (tile * 1.25, tile * 1.02, tile * 0.85))
         # the sternum plate the ribs spring from
         for s in range(max(2, ribs - 1)):
             f = s / max(ribs - 2, 1)
@@ -960,9 +965,19 @@ def skeleton_flame():
     # A dark hollow first, then the ribs standing proud over it, so the cage is a cage and not a pattern.
     # FIVE RIBS OVER FOUR UNITS HAD NO GAPS -- the render showed a plain bone chest with a few dark marks.
     # Four ribs over a taller cage leaves a dark line of hollow between each pair, which is what a cage IS.
-    cage_c = (td * 0.5 + 1.9, 0.0, d["torso_z"] - 1.2)
-    figure.slab("body", "void", (td * 0.5 + 0.9, 0.0, cage_c[2]), (1.6, tw * 1.06, th * 0.90), tile=tile)
-    figure.ribcage("body", mats, cage_c, 2.4, tw * 1.30, th * 0.86, 3, tile)
+    # THREE RIBS ON A FLAT CHEST IS A SET OF STRIPES, which is exactly how the founder read it: "a striped Relay
+    # Dog with blue flames". A cage reads as a cage from two things -- more ribs than you can take in at a glance,
+    # and real darkness BETWEEN them. So: a deeper hollow, five ribs standing further off the chest, and a sternum
+    # running down the middle to tie them together into a ribcage rather than a barcode.
+    cage_c = (td * 0.5 + 2.3, 0.0, d["torso_z"] - 1.2)
+    figure.slab("body", "void", (td * 0.5 + 0.9, 0.0, cage_c[2]), (2.2, tw * 1.12, th * 0.98), tile=tile)
+    figure.ribcage("body", mats, cage_c, 2.8, tw * 1.34, th * 0.98, 5, tile)
+    # the sternum: a bone column down the centre of the cage, and a clavicle across the top of it
+    figure.slab("body", "bone", (td * 0.5 + 2.6, 0.0, cage_c[2]), (1.5, 1.7, th * 0.86), tile=tile)
+    figure.slab("body", "bone", (td * 0.5 + 2.2, 0.0, d["torso_z"] + th * 0.46), (1.6, tw * 1.18, 1.5), tile=tile)
+    for side in (-1.0, 1.0):
+        figure.box("body", "bone", (td * 0.5 + 2.0, side * tw * 0.60, d["torso_z"] + th * 0.40),
+                   (tile * 1.3, tile * 1.5, tile * 2.0))
     # and the spine, visible from behind, so the cage has a back
     for s in range(6):
         figure.box("body", "bone", (-td * 0.52, 0.0, d["torso_z"] + th * 0.36 - s * 1.1), (tile * 1.2, tile * 1.6, tile * 0.85))
@@ -1121,7 +1136,7 @@ def celestial_light():
     figure.material("edge", "glow", (0.62, 0.82, 1.00), 2.8)
     figure.material("starlight", "glow", (0.95, 0.98, 1.00), 2.4)
     figure.material("bannercloth", "rim", (0.80, 0.90, 1.00), 1.0)
-    figure.material("ink", "glow", (1.00, 0.93, 0.66), 1.0)
+    figure.material("ink", "glow", (0.93, 0.98, 1.00), 1.6)
     figure.material("frost", "rim", (0.86, 0.93, 1.00), 1.0)
     base_dog(figure)
     d = DOG
@@ -1161,15 +1176,54 @@ def celestial_light():
     for side, name in ((-1.0, "leg_l"), (1.0, "leg_r")):
         edge_frame(name, (0.0, side * d["leg_gap"], hip_z - lh * 0.25), (ld * 1.06, lw * 1.06, lh * 0.50), thin=0.45)
         edge_frame("%s_shin" % name, (0.0, side * d["leg_gap"], hip_z - lh * 0.74), (ld * 1.0, lw * 1.0, lh * 0.50), thin=0.45)
-    # frost panels on the shoulders and thighs, so the body has plates the way the plate's does
+    # ================================================================== LAYERED LUMINOUS ARMOUR
+    # THE GEOMETRY FIRST, AND THEN THE LIGHT. This skin was a bare body wearing an outline: two frost slabs, an
+    # edge glow and an aura, which is exactly the "bloom hiding simple geometry" the founder called out -- at any
+    # distance it collapsed to a white blob because there was nothing under the glow to read. The plate's figure
+    # is ARMOURED: segmented pauldrons stepping down the arm, a bordered breastplate, vambraces, knee plates and
+    # lit boots. All of it is built as plates with their own edges lit, so the light describes structure.
     for side in (-1.0, 1.0):
-        figure.slab("body", "frost", (0.3, side * (tw * 0.5 + 0.7), shoulder + 0.2), (3.4, 2.2, 2.6), tile=tile)
-        figure.slab("body", "frost", (td * 0.3, side * d["leg_gap"], hip_z - 1.4), (1.2, lw * 1.1, 2.6), tile=tile)
+        # pauldrons: three plates stepping outward and down, each smaller, each with a lit lip
+        for k in range(3):
+            w = 3.6 - k * 0.6
+            yy = side * (tw * 0.5 + 0.9 + k * 0.85)
+            zz = shoulder + 0.8 - k * 1.9
+            figure.slab("body", "frost", (0.3, yy, zz), (w, 2.4 - k * 0.3, 2.2 - k * 0.3), tile=tile)
+            figure.box("body", "edge", (0.3 + w * 0.5, yy, zz - (1.0 - k * 0.12)), (tile * 0.55, 2.2 - k * 0.3, tile * 0.55))
+        # vambrace: a cuff of two plates on the forearm
+        for k, zz in enumerate((shoulder - 4.2, shoulder - 5.8)):
+            figure.slab("body", "frost", (0.2, side * (tw * 0.5 + aw * 0.42), zz), (ad * 1.30, aw * 1.34, 1.5 - k * 0.3), tile=tile)
+        # knee plate and a lit boot, so the legs are not two bare posts
+        figure.slab("%s_shin" % ("leg_l" if side < 0 else "leg_r"), "frost",
+                    (td * 0.22, side * d["leg_gap"], hip_z - lh * 0.56), (ld * 1.14, lw * 1.20, 2.2), tile=tile)
+        figure.slab("%s_shin" % ("leg_l" if side < 0 else "leg_r"), "frost",
+                    (0.2, side * d["leg_gap"], hip_z - lh * 0.94), (ld * 1.22, lw * 1.26, 1.8), tile=tile)
+        figure.box("%s_shin" % ("leg_l" if side < 0 else "leg_r"), "edge",
+                   (0.2, side * d["leg_gap"], hip_z - lh * 1.02), (ld * 1.22, lw * 1.26, tile * 0.6))
+
+    # THE BREASTPLATE the banner hangs on, with a raised border and a star boss at the collar.
+    figure.slab("body", "frost", (td * 0.42, 0.0, shoulder - 1.2), (1.6, tw * 1.06, 5.6), tile=tile)
+    for yy in (-tw * 0.53, tw * 0.53):
+        figure.box("body", "edge", (td * 0.42 + 0.8, yy, shoulder - 1.2), (tile * 0.5, tile * 0.5, 5.6))
+    for zz in (shoulder + 1.6, shoulder - 4.0):
+        figure.box("body", "edge", (td * 0.42 + 0.8, 0.0, zz), (tile * 0.5, tw * 1.06, tile * 0.5))
+    figure.slab("body", "frost", (td * 0.40, 0.0, shoulder + 2.4), (1.4, tw * 0.86, 1.6), tile=tile)   # gorget
+    figure.star_burst("body", {"gold": "starlight", "gem": "starlight"},
+                      (td * 0.5 + 1.0, 0.0, shoulder + 2.4), 1.9, 4, tile, key="gold", core="gem")
+
+    # HANDS, which the plate shows plainly and this skin did not have at all.
+    for side, name in ((-1.0, "arm_l"), (1.0, "arm_r")):
+        figure.slab("body", "frost", (0.1, side * (tw * 0.5 + aw * 0.44), shoulder - 7.2),
+                    (ad * 1.16, aw * 1.24, 1.9), tile=tile)
 
     # ================================================================== THE BROW STAR
-    figure.star_burst("head", {"gold": "starlight", "gem": "starlight"}, (hd * 0.5 + 0.6, 0.0, d["head_z"] + 2.7), 2.3, 4, tile,
+    # BIG ENOUGH TO BE THE BROW STAR. On the plate it is the second thing you see after the glow, sitting above
+    # the visor and nearly as wide as the gap between the ears; at 2.3 it was a speck lost in the head's own light.
+    figure.star_burst("head", {"gold": "starlight", "gem": "starlight"}, (hd * 0.5 + 0.6, 0.0, d["head_z"] + 2.8), 3.6, 4, tile,
                       key="gold", core="gem")
-    figure.box("head", "edge", (hd * 0.5 + 0.4, 0.0, d["head_z"] + 2.7), (tile * 0.6, tile * 1.4, tile * 1.4))
+    figure.star_burst("head", {"gold": "edge", "gem": "starlight"}, (hd * 0.5 + 0.35, 0.0, d["head_z"] + 2.8), 2.2, 4, tile,
+                      key="gold", core="gem")
+    figure.box("head", "edge", (hd * 0.5 + 0.4, 0.0, d["head_z"] + 2.8), (tile * 0.6, tile * 1.6, tile * 1.6))
 
     # ================================================================== THE BANNER, WITH 凯
     figure.part("banner", "body", (td * 0.5 + 1.0, 0.0, shoulder + 0.6), "trail", 0.45)
