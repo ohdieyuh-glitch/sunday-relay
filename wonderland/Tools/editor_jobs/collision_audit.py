@@ -59,7 +59,12 @@ def job():
                      "kind": kind_of(mesh.get_name()), "instances": ism.get_instance_count(),
                      "collision": enabled, "profile": profile, "type": "batch",
                      "has_simple": mesh.get_num_sections(0) is not None})
-        yield None
+        #: YIELD IN BATCHES, NOT PER ACTOR. `yield None` waits a tick, so yielding once per actor ran this
+        #: at ONE ACTOR PER FRAME. On 2026-09-23 the editor ticked about 3/s on the full map and 2,408
+        #: batches took ~13 minutes of wall clock for milliseconds of real work -- and it sat in front of
+        #: six queued applies while it did. Every 100 keeps the editor responsive at a hundredth of the cost.
+        if len(rows) % 100 == 0:
+            yield None
     for a in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.StaticMeshActor):
         smc = a.static_mesh_component
         mesh = smc.static_mesh if smc else None
