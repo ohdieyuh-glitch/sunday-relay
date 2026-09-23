@@ -71,6 +71,7 @@ NATIONS = {
                    "paving": "MI_V2_GroundFlag_PlazaCream", "paving_shade": "MI_V2_GroundFlag_PlazaShade",
                    "paving_warm": "MI_V2_GroundFlag_PlazaWarm"},
         gate="WL_Arch_Ceremonial",
+        gate_yaw=90.0,
         hall="WL_Colonnade_Straight",          # collaborative courtyards: open, colonnaded, luminous
         signature="WL_Palace_Pavilion",        # studio pavilions
         block="WL_House_Hipped",               # the creation halls' lower workshops
