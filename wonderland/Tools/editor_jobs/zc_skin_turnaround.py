@@ -18,15 +18,22 @@ ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "skin_turnaround
 SKINS_DIR = "C:/dev/iwonder/wonderland-proof/wonderland/RelaySkins"
 SKINS = [("apollo", "Apollo"), ("arden_infernal", "ArdenInfernal"), ("skeleton_flame", "SkeletonFlame"),
          ("hagoromo", "Hagoromo"), ("celestial_light", "CelestialLight"), ("bee", "Bee"), ("relay_og", "RelayOg")]
-# TWO METRES SOUTH-WEST OF THE ORB SPOT. At (-170, -346) the front camera stood inside the gold gate's posts:
-# Apollo and Arden were photographed through bars. The paving is open toward the clock, so the figure moves
-# that way and faces it, and the front camera lands on paving.
-STAGE_AT = (-330.0, -420.0)
+# OFF THE PLAZA ENTIRELY, ONTO OPEN LAWN, because the plaza cannot hold a turnaround. (-170, -346) photographed
+# Apollo and Arden through the gold gate's posts; (-330, -420) fixed the front view but its SIDE camera still
+# stood in a flower bed and shot Hagoromo through tulips, which is what made these skins look simpler than they
+# are. A clearance probe grounded 184 candidates and traced all five bearings at the distance this turnaround
+# needs: the whole plaza neighbourhood scores 0.543 of the room required, and nothing on the paving reaches 1.0.
+# This spot does, and the figure stands on clean grass with its full height and its shadow visible.
+STAGE_AT = (-2600.0, -600.0)
 FACING = 40.0
 # bearing relative to the figure's facing, distance in figure heights, look height, fov, eye height
-VIEWS = [("front", 0.0, 2.3, 0.46, 40.0, 0.60), ("three_quarter", 40.0, 2.3, 0.46, 40.0, 0.62),
-         ("side", 90.0, 2.3, 0.46, 40.0, 0.58), ("rear", 180.0, 2.3, 0.46, 40.0, 0.60),
-         ("medium_distance", 25.0, 4.6, 0.40, 40.0, 0.75)]
+# THE VIEWPORT IS TWICE AS WIDE AS IT IS TALL, AND UNREAL'S FOV IS THE HORIZONTAL ONE. So the vertical field is
+# roughly half what the number suggests, and 2.3x height -- which frames comfortably side to side -- cut the top
+# off Apollo's halo and Arden's flaming ring every time. The turnaround views stand further back; the crowns are
+# the point of these plates and a crown running off the top of the frame is not a turnaround.
+VIEWS = [("front", 0.0, 3.2, 0.46, 40.0, 0.60), ("three_quarter", 40.0, 3.2, 0.46, 40.0, 0.62),
+         ("side", 90.0, 3.2, 0.46, 40.0, 0.58), ("rear", 180.0, 3.2, 0.46, 40.0, 0.60),
+         ("medium_distance", 25.0, 5.2, 0.40, 40.0, 0.75)]
 
 
 def job():
@@ -65,18 +72,28 @@ def job():
             yield 1.0
             h = max(float(body.get_figure_height_uu()), 80.0)
             at = body.get_actor_location()
+            # WHAT HAS TO FIT IS NOT THE HEIGHT. These distances were multiples of the figure's height, and the
+            # defining feature of half these plates is WIDER than the dog is tall -- Apollo's halo and solar crown
+            # ran off the top of its own front view. Framing on the larger of height and width leaves any skin
+            # that really is taller than wide exactly where it was.
+            span = h
+            try:
+                _, extent = body.get_actor_bounds(False)
+                span = max(h, 2.0 * max(float(extent.x), float(extent.y)))
+            except Exception as exc:
+                unreal.log_warning("WLSKIN no bounds, framing on height: %s" % exc)
             taken = []
             for view, bearing, dist_h, look_h, fov, eye_h in VIEWS:
                 # the camera stands on the FRONT side for bearing 0, so it is placed along the facing direction
                 rad = face + math.radians(bearing)
-                dist = h * dist_h
+                dist = span * dist_h
                 eye = unreal.Vector(at.x + math.cos(rad) * dist, at.y + math.sin(rad) * dist, at.z + h * eye_h)
                 L.pose_camera(world, eye, unreal.Vector(at.x, at.y, at.z + h * look_h), fov)
                 yield 1.1
                 name = "%s_%s.jpg" % (skin_id, view)
                 H.capture_viewport_jpeg(os.path.join(ROOT, name), 1900, 95)
                 taken.append(name)
-            rows.append({"skin": skin_id, "height_uu": round(h, 1), "shots": taken,
+            rows.append({"skin": skin_id, "height_uu": round(h, 1), "span_uu": round(span, 1), "shots": taken,
                          "parts": len(body.get_components_by_class(unreal.InstancedStaticMeshComponent))})
             body.destroy_actor()
             yield 0.4
