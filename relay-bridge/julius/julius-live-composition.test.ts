@@ -3108,6 +3108,78 @@ function reviewerAdapterFor(input: { taskId: string; artifacts: ReturnType<typeo
   });
 }
 
+/**
+ * THE CORRECTION, MADE EXECUTABLE.
+ *
+ * The rejected design answered a reviewer's "give me the diff" with the LATEST
+ * one — in the run, or in the task, which has the same hole. These cases run
+ * the subject at generation TWO with generation ONE still present, so any
+ * implementation that answers "the newest" or that fixes the generation at 1
+ * hands back the wrong round and fails here.
+ *
+ * Written because a mutation found the gap: fixing the reviewer's subject
+ * generation to a constant passed the whole suite, since every other case
+ * happened to use generation 1. A proof that only ever exercises one value
+ * cannot tell "the right attempt" from "any attempt".
+ */
+describe('a review is about ONE attempt, and it is told which', () => {
+  const ROUND_ONE = 'diff --git a/src/a.ts b/src/a.ts\n-const a = 1;\n+const a = 2;\n';
+  const ROUND_TWO = 'diff --git a/src/a.ts b/src/a.ts\n-const a = 2;\n+const a = 3;\n';
+
+  const twoRounds = () => {
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
+    artifacts.seed({ kind: 'DIFF', runId: 'run-live', taskId: 'build-1', leaseGeneration: 1, role: 'CODING_AGENT' }, ROUND_ONE);
+    return artifacts;
+  };
+
+  it('reads the SECOND attempt\'s diff when the second attempt is what it was sent to judge', async () => {
+    const artifacts = twoRounds();
+    artifacts.seed({ kind: 'DIFF', runId: 'run-live', taskId: 'build-1', leaseGeneration: 2, role: 'CODING_AGENT' }, ROUND_TWO);
+    const packets: ReviewPacket[] = [];
+    const adapter = reviewerAdapterFor({ taskId: 'build-1:review', artifacts, packets, log: { order: [] } });
+
+    await adapter.dispatch({
+      taskId: 'build-1:review', attempt: { leaseGeneration: 1 },
+      reads: { subject: { taskId: 'build-1', leaseGeneration: 2 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } },
+      contextId: 'ctx-resume-1', taskType: 'review:build',
+    });
+
+    expect(packets[0]!.unifiedDiff, 'the round it was sent to judge').toBe(ROUND_TWO);
+    expect(packets[0]!.unifiedDiff, 'and emphatically not the round before it').not.toBe(ROUND_ONE);
+  });
+
+  it('is REFUSED when the attempt it was sent to judge captured nothing, rather than shown the round before', async () => {
+    /**
+     * The whole defect in one case: attempt two ran and its capture failed, so
+     * there is no generation-2 diff. "Latest" would hand over attempt one and
+     * the verdict would name the wrong bytes. Absent is the right answer and
+     * `reviewer_implementation_absent` is the right end.
+     */
+    const artifacts = twoRounds();
+    const adapter = reviewerAdapterFor({ taskId: 'build-1:review', artifacts, packets: [], log: { order: [] } });
+
+    await expect(adapter.dispatch({
+      taskId: 'build-1:review', attempt: { leaseGeneration: 1 },
+      reads: { subject: { taskId: 'build-1', leaseGeneration: 2 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } },
+      contextId: 'ctx-resume-1', taskType: 'review:build',
+    })).rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_implementation_absent' });
+
+    expect(await artifacts.get({ kind: 'DIFF', runId: 'run-live', taskId: 'build-1', leaseGeneration: 1 }),
+      'while round one is still on the record, unharmed').toBe(ROUND_ONE);
+  });
+
+  it('is refused when it was told no subject at all, rather than finding one', async () => {
+    const artifacts = twoRounds();
+    const adapter = reviewerAdapterFor({ taskId: 'build-1:review', artifacts, packets: [], log: { order: [] } });
+    await expect(adapter.dispatch({
+      taskId: 'build-1:review', attempt: { leaseGeneration: 1 },
+      reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } },
+      contextId: 'ctx-resume-1', taskType: 'review:build',
+    })).rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_implementation_absent' });
+  });
+});
+
 describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispatched for', () => {
   it('a PLAN review sees the plan and no diff or test output, even when a diff artifact exists', async () => {
     const artifacts = createInMemoryArtifactExchange();
