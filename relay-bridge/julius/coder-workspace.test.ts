@@ -45,6 +45,25 @@ describe('the snapshot never disturbs the workspace it measures', () => {
     expect(status).toBeGreaterThan(unset);
   });
 
+  /**
+   * THE SEPARATOR ON THE WIRE, PINNED.
+   *
+   * The executor prints the marker with `printf`, so the shell text and the
+   * constant the parser splits on have to agree byte for byte. Asserting the
+   * constant alone proves nothing: change both and the round trip still works
+   * in-process while the executor emits something else. This pins the emitted
+   * form AND the value, so a marker without its NUL guards — the thing that
+   * makes it unforgeable in a diff — cannot pass.
+   */
+  it('emits the marker with a NUL on each side, exactly as the parser splits it', () => {
+    const close = juliusAttemptCloseCommand({ baseTree: BASE, startTree: START });
+    // printf renders a NUL as a three-digit octal escape: backslash, 0, 0, 0.
+    const octal = `${String.fromCharCode(92)}000`;
+    const emitted = `printf '${octal}JULIUS-SECTION-9f2a${octal}'`;
+    expect(close, 'the guards travel on the wire, not only in the constant').toContain(emitted);
+    expect(close.split(emitted), 'once before each of the four sections').toHaveLength(5);
+  });
+
   it('asks for the three tree diffs that attribute the attempt', () => {
     const close = juliusAttemptCloseCommand({ baseTree: BASE, startTree: START });
     expect(close).toContain(`git diff --name-status -z ${START} "$END"`);
@@ -121,6 +140,32 @@ describe('what the end of an attempt printed', () => {
     expect(parsed.own!.map((change) => change.path)).toEqual(['src/b.ts', 'src/c.ts']);
     expect(parsed.inherited!.map((change) => change.path)).toEqual(['src/a.ts']);
     expect(parsed.cumulative!.map((change) => change.path)).toEqual(['src/a.ts', 'src/b.ts', 'src/c.ts']);
+  });
+
+  /**
+   * WHY THE SEPARATOR CARRIES NUL BYTES AROUND ITS NAME.
+   *
+   * The sections are cut on a marker that appears in the executor's own
+   * output, so the marker must be something that output cannot contain by
+   * accident. A diff can perfectly well contain the WORDS
+   * `JULIUS-SECTION-9f2a` — a test fixture, a comment, this very file — and if
+   * the marker were only those words, that diff would be cut into pieces and
+   * attributed to the wrong sections. The NUL on each side is what makes it
+   * unforgeable in text a `git diff` can produce.
+   */
+  it('is not fooled by output that contains the marker WORDS without them', () => {
+    const decoy = 'JULIUS-SECTION-9f2a';
+    const parsed = parseJuliusAttemptClose(close(
+      `END ${END}${String.fromCharCode(10)}`,
+      `${z(' M src/b.ts')}`,
+      z('M', `src/${decoy}.ts`),
+      z('M', 'src/a.ts'),
+      z('M', 'src/a.ts', 'M', `src/${decoy}.ts`),
+    ), true);
+    expect(parsed.endTree, 'the sections still line up').toBe(END);
+    expect(parsed.own!.map((change) => change.path), 'and the decoy is just a path')
+      .toEqual([`src/${decoy}.ts`]);
+    expect(parsed.inherited!.map((change) => change.path)).toEqual(['src/a.ts']);
   });
 
   it('a failed capture is uncaptured with no sets at all — not an empty workspace', () => {

@@ -42,6 +42,30 @@ describe('a tree id is forty hex characters, and nothing else reaches a command'
   });
 });
 
+describe('a path no record may carry', () => {
+  /**
+   * `SAFE_PATH` refuses the control range AND DEL. A path carrying either is
+   * how a change set smuggles a line break, a NUL, or a terminal escape into
+   * every later reader of the ledger — so each one is refused by name rather
+   * than by a rule that happens to cover most of them.
+   */
+  it('refuses every control character and DEL, and keeps the rest of the change set', () => {
+    // NUL is absent on purpose: it is the FIELD SEPARATOR, so it cannot occur
+    // inside a field — a path carrying one simply ends there.
+    for (const code of [0x01, 0x09, 0x0a, 0x0d, 0x1b, 0x1f, 0x7f]) {
+      const hostile = `src/a${String.fromCharCode(code)}b.ts`;
+      const diff = parseJuliusTreeDiff(z('M', hostile, 'M', 'src/kept.ts'));
+      expect(diff.changes.map((change) => change.path), `0x${code.toString(16)}`).toEqual(['src/kept.ts']);
+    }
+  });
+
+  it('keeps a path that merely looks unusual', () => {
+    for (const path of ['src/a b.ts', 'src/é.ts', 'src/a-b_c.d.ts', 'src/中文.ts']) {
+      expect(parseJuliusTreeDiff(z('M', path)).changes.map((change) => change.path), path).toEqual([path]);
+    }
+  });
+});
+
 describe('the change set between two trees', () => {
   it('reads statuses, paths and the two-path forms', () => {
     const diff = parseJuliusTreeDiff(z('M', 'src/a.ts', 'A', 'src/new.ts', 'D', 'src/gone.ts', 'T', 'src/link.ts'));
