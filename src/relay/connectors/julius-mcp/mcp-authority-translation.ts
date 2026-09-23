@@ -166,10 +166,11 @@ export type JuliusMcpRoleTranslation =
 const CANONICAL_ROLE: Readonly<Record<(typeof JULIUS_DEFAULT_ROLES)[number], McpAgentRole>> = Object.freeze({
   PROMPT_ARCHITECT: 'architect',
   CODING_AGENT: 'coding-agent',
-  // Maps to a role MCP itself forbids. Stated as a mapping rather than as a
-  // refusal here, so the denial keeps coming from MCP_FORBIDDEN_ROLES — the
-  // rule no grant can override — instead of from a second rule that could
-  // drift away from it.
+  // Maps to a role MCP itself forbids. Translation states what the role IS;
+  // it is not where the refusal happens. Both the execution adapter and the
+  // gateway refuse it, and both do so by reading MCP_FORBIDDEN_ROLES — the
+  // rule no grant can override — so there is one rule consulted at two
+  // depths rather than a copy here that could drift away from it.
   INDEPENDENT_REVIEWER: 'reviewer',
 });
 

@@ -1,11 +1,31 @@
 import type { JuliusBudgetPort, JuliusClock } from './julius-runtime-ports';
 import { evaluateJuliusPolicy, type JuliusCardPolicy, type JuliusPolicyDecision, type JuliusPolicyOperation } from './julius-policy';
 
-export type JuliusToolId =
+/** The tools Julius runs through the independent executor. A CLOSED set: adding one is a source change. */
+export type JuliusBuiltinToolId =
   | 'fs.read'|'fs.write'|'fs.patch'|'fs.list'|'fs.stat'|'fs.mkdir'|'fs.move'|'fs.copy'|'fs.remove'
   | 'search.grep'|'search.find'|'search.glob'|'process.exec'|'shell.bash'
   | 'git.status'|'git.diff'|'git.show'|'git.log'|'git.apply'|'test.run'|'build.run';
-export type JuliusToolKind='FILESYSTEM'|'SEARCH'|'PROCESS'|'SHELL'|'GIT'|'TEST'|'BUILD';
+/**
+ * A capability of an APPROVED MCP connection, reached through the gateway.
+ *
+ * Open as a TYPE and closed as a FACT. The set of MCP capabilities is not
+ * knowable in source — it is whatever the servers an operator approved
+ * advertise — so the type cannot enumerate them. What stops that being a hole
+ * is the registry: `JuliusToolRegistry.get` answers null for anything not
+ * registered, `invoke` turns that into DENIED before any reservation, and the
+ * only thing that registers an MCP id is a definition derived from an APPROVED
+ * capability snapshot. A model that guesses a well-formed `mcp:…` id names
+ * nothing.
+ *
+ * The executor's own envelope still refuses these ids outright, which is what
+ * keeps the two execution paths from ever crossing: an MCP capability is not
+ * something the sandbox can run, and a bug that routed one there must fail
+ * rather than improvise.
+ */
+export type JuliusMcpToolId = `mcp:${string}`;
+export type JuliusToolId = JuliusBuiltinToolId | JuliusMcpToolId;
+export type JuliusToolKind='FILESYSTEM'|'SEARCH'|'PROCESS'|'SHELL'|'GIT'|'TEST'|'BUILD'|'MCP';
 export type JuliusToolRisk='LOW'|'MEDIUM'|'HIGH';
 export interface JuliusToolDefinition {readonly toolId:JuliusToolId;readonly version:string;readonly kind:JuliusToolKind;readonly capability:string;readonly riskClass:JuliusToolRisk;readonly readsFilesystem:boolean;readonly mutatesFilesystem:boolean;readonly accessesNetwork:boolean;readonly executesProcess:boolean;readonly timeoutCeilingMs:number;readonly outputCeilingBytes:number;readonly concurrency:'SERIAL'|'PARALLEL';readonly available:boolean;}
 export interface ToolInvocationRequest {readonly invocationId:string;readonly runId:string;readonly taskId:string;readonly projectId:string;readonly workerId:string;readonly toolId:JuliusToolId;readonly toolVersion:string;readonly arguments:Readonly<Record<string,unknown>>;readonly cwd?:string;readonly idempotencyKey:string;readonly timeoutMs?:number;readonly expectedMutation:'NONE'|'WORKSPACE';}
