@@ -1231,8 +1231,14 @@ def celestial_light():
     """
     figure = start("RELAY DOG SKIN -- CELESTIAL LIGHT", 7006, (0.62, 0.88, 1.00), 7.0,
                    coat=(0.930, 0.960, 1.000), coat_deep=(0.720, 0.820, 1.000))
-    figure.material("edge", "glow", (0.62, 0.82, 1.00), 2.8)
-    figure.material("starlight", "glow", (0.95, 0.98, 1.00), 2.4)
+    # THE LUMINOSITY COMES LAST, AND ONLY NOW. The founder's order was explicit -- "First make the geometry
+    # detailed. Then add controlled luminosity" -- so this was deliberately left weak until the armour, the
+    # engraving, the brow star and the banner were actually built. They are, so the light can come up.
+    # THE PLATE IS LIT ON BLACK AND THIS DOG STANDS IN A GARDEN AT NOON, which is most of the apparent gap: at
+    # 2.8 the edges lost to daylight and the figure read as pale grey rather than radiant. Raised until the cut
+    # lines and rim carry in sunlight, and no further -- the point is that the geometry reads THROUGH the glow.
+    figure.material("edge", "glow", (0.62, 0.82, 1.00), 5.2)
+    figure.material("starlight", "glow", (0.95, 0.98, 1.00), 4.4)
     figure.material("bannercloth", "rim", (0.80, 0.90, 1.00), 1.0)
     figure.material("ink", "glow", (0.93, 0.98, 1.00), 1.6)
     figure.material("frost", "rim", (0.86, 0.93, 1.00), 1.0)
