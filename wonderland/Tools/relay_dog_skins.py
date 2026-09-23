@@ -1175,6 +1175,18 @@ def skeleton_flame():
         figure.box(name, "void", (0.0, y, az + 0.1), (ad * 1.12, aw * 1.12, tile * 0.5))
         figure.box(name, "ash", (0.0, y, az + 0.65), (ad * 1.18, aw * 1.18, tile * 0.6))
         figure.box(name, "ash", (0.0, y, az - 0.45), (ad * 1.18, aw * 1.18, tile * 0.6))
+        # BONE ARMOUR ALONG THE LIMB, in courses, standing further off the arm the higher it sits.
+        #
+        # FOUNDER, item 12: "Avoid the appearance of bones pasted onto the base body." The arms were the base
+        # dog's arms with an elbow marked on them -- a bare stick between a decorated shoulder and a burning
+        # hand, which is exactly what "pasted on" looks like. Plated, the limb becomes part of the skeleton
+        # rather than the thing the skeleton is stuck to, and it finally has a width worth seeing from the side.
+        for k, (dz, out, long_, wide) in enumerate(((3.0, 0.55, 2.4, 1.5), (1.2, 0.42, 2.0, 1.3),
+                                                    (-1.4, 0.34, 1.8, 1.15), (-3.1, 0.26, 1.5, 1.0))):
+            figure.slab(name, "bone" if k % 2 == 0 else "ash",
+                        (0.0, y + side * out, az + dz), (ad * long_ * 0.55, aw * wide, 1.3), tile=tile)
+            figure.box(name, "void", (ad * 0.34, y + side * out, az + dz - 0.75),
+                       (tile * 0.5, tile * aw * wide * 0.7, tile * 0.3))
         # the hand burns
         fire = "handfire_%s" % ("l" if side < 0 else "r")
         figure.part(fire, name, (0.0, y, az - ah * 0.5), "twinkle", 0.3 + 0.2 * side)
