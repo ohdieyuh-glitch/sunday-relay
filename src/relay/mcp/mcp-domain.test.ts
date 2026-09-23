@@ -81,6 +81,18 @@ describe('MCP protocol identity and negotiation', () => {
  * ==================================================================== */
 
 describe('capability fingerprints', () => {
+  /**
+   * THE DOMAIN TAG IS SEPARATED FROM THE VALUE, and by a character the value
+   * cannot contain. Concatenated without one, a tag ending in a character the
+   * next value begins with produces the same bytes for two different
+   * capabilities, and two unlike things share a fingerprint.
+   */
+  it('cannot be collided by moving characters between the domain tag and the value', () => {
+    expect(fingerprintValue('tool', 'x')).not.toBe(fingerprintValue('too', 'lx'));
+    expect(fingerprintValue('a', 'bc')).not.toBe(fingerprintValue('ab', 'c'));
+    expect(fingerprintValue('resource', { n: 1 })).not.toBe(fingerprintValue('resourc', { n: 1 }));
+  });
+
   it('is stable across object key order', () => {
     const a = fingerprintValue('t', { alpha: 1, beta: { x: 1, y: 2 } });
     const b = fingerprintValue('t', { beta: { y: 2, x: 1 }, alpha: 1 });
