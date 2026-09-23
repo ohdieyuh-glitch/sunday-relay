@@ -730,6 +730,20 @@ def arden_infernal():
                  (td * 0.50, 0.0, shoulder - 7.6), tw * 0.92, 9.5, tile * 1.02, flare=1.6)
     figure.cloak("cloak", lambda down, across: "char" if abs(across - 0.5) > 0.36 else "crimson",
                  (-td * 0.66, 0.0, shoulder + 0.4), tw * 1.80, 21.0, tile * 1.12, flare=2.5, back=-3.0)
+    # THE CEREMONIAL LENGTH BEHIND. The plate's REAR view is its densest -- a long cream-and-red robe in banded
+    # layers falling past the feet and pooling behind, which is why Arden reads as ceremonial rather than as a
+    # cloaked figure. The falls above stop around the ankle; these carry the cloth down and back past it, in
+    # alternating bands so the back is striped cream/red the way the plate's is rather than one flat sheet.
+    for k, (back, width, length, warm) in enumerate(((-5.4, 1.62, 25.0, False), (-7.0, 1.42, 22.5, True),
+                                                     (-8.4, 1.20, 19.5, False))):
+        figure.cloak("cloak",
+                     lambda down, across, w=warm: ("crimson" if w else "bone") if down < 0.78 else "char",
+                     (-td * (0.80 + 0.16 * k), 0.0, shoulder - 1.2 - k * 1.1), tw * width, length,
+                     tile * 1.12, flare=2.9 + 0.25 * k, back=back)
+    # banded trim across the train, the gold rule between each cloth band
+    for k in range(4):
+        figure.ring("cloak", lambda a: "gold", (-td * 0.95, 0.0, shoulder - 6.0 - k * 3.4), tw * (1.16 - 0.06 * k),
+                    tile * 0.7, tile * 0.95, plane="xy")
     figure.part("hemfire", "cloak", (0.0, 0.0, 1.0), "twinkle", 0.55)
     for k in range(6):
         y = (k - 2.5) * 2.6
@@ -1118,11 +1132,30 @@ def hagoromo():
                  (-td * 0.15, 0.0, shoulder - 1.2), tw * 2.0, 17.5, tile * 1.14, flare=2.6, back=-1.2)
     figure.cloak("robe", lambda down, across: "snow" if down < 0.82 else "gold",
                  (td * 0.48, 0.0, shoulder - 3.0), tw * 1.0, 11.0, tile * 1.02, flare=1.6)
-    # gold cuffs and hem trim
+    # LAYERED SLEEVES, GOLD CUFFS AND HAND ENERGY. A band of gold and one white slab is not a sleeve: the plate's
+    # arms are wide ceremonial sleeves falling in layers well below the hand, trimmed in gold at every edge, with
+    # a bloom of violet light held at each palm. The arms were the plainest part of a figure whose whole point is
+    # ornament, and on the plate they are where the eye goes after the orbs.
     for side, name in ((-1.0, "arm_l"), (1.0, "arm_r")):
         y = side * (tw * 0.5 + d["arm"][1] * 0.36)
-        figure.box(name, "gold", (0.0, y, d["torso_z"] - 0.9), (d["arm"][0] * 1.3, d["arm"][1] * 1.3, tile * 0.8))
-        figure.slab(name, "snow", (0.0, y, d["torso_z"] + 0.6), (d["arm"][0] * 1.35, d["arm"][1] * 1.35, 2.4), tile=tile)
+        # three sleeve layers, each wider and longer than the one above it
+        for k, (w, ln) in enumerate(((1.45, 5.0), (1.72, 7.0), (1.95, 9.0))):
+            figure.slab(name, "snow" if k < 2 else "lavender",
+                        (-0.2 * k, y, d["torso_z"] + 1.4 - k * 2.4),
+                        (d["arm"][0] * w, d["arm"][1] * w, ln * 0.45), tile=tile)
+            figure.box(name, "gold", (-0.2 * k, y, d["torso_z"] + 1.4 - k * 2.4 - ln * 0.22),
+                       (d["arm"][0] * w, d["arm"][1] * w, tile * 0.7))
+        # the cuff proper, and the violet light held below it
+        figure.box(name, "gold", (0.0, y, d["torso_z"] - 4.6), (d["arm"][0] * 1.5, d["arm"][1] * 1.5, tile * 1.0))
+        figure.slab(name, "snow", (0.0, y, d["torso_z"] - 5.6), (d["arm"][0] * 1.20, d["arm"][1] * 1.24, 1.8), tile=tile)
+        figure.part("palm_%s" % ("l" if side < 0 else "r"), name, (0.4, y, d["torso_z"] - 7.4), "float", 0.4 + 0.2 * side)
+        pn = "palm_%s" % ("l" if side < 0 else "r")
+        figure.box(pn, "orbglow", (0.4, y, d["torso_z"] - 7.4), (tile * 1.9, tile * 2.1, tile * 2.1))
+        figure.ring(pn, lambda a: "orb", (0.4, y, d["torso_z"] - 7.4), 2.1, tile * 0.6, tile * 0.85)
+        for sp in range(5):
+            a = sp * 2.0 * math.pi / 5.0
+            figure.box(pn, "orbglow", (0.4 + math.cos(a) * 2.6, y, d["torso_z"] - 7.4 + math.sin(a) * 2.6),
+                       (tile * 0.7, tile * 0.7, tile * 0.7))
     # the sash: a violet band with gold edges, and a knot at the hip
     sash_z = d["torso_z"] - th * 0.30
     figure.slab("body", "violet", (0.0, 0.0, sash_z), (td * 1.18, tw * 1.18, 1.9), tile=tile)
