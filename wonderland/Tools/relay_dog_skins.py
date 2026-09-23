@@ -698,11 +698,18 @@ def arden_infernal():
     # medallion at the sternum. The chains hang with real sag; the old skin had no chains at all.
     # IN FRONT OF THE CLOTH. The first rebuild hung the chains 0.3 uu off the chest, where the front robe panel
     # covered every one of them; in the render there were no chains at all. They now stand a clear step out.
+    # SIX STRANDS AT THREE DEPTHS, because the plate's chest is a tangle of them and three read as a necklace.
+    # The strands are set at different distances from the chest as well as different heights, so from the side
+    # they layer over each other instead of sitting in one plane -- which is what makes a pile of chains read as
+    # a pile rather than as three drawn arcs.
     cx = td * 0.5 + 1.7
-    for k, (sag, drop_z) in enumerate(((1.6, 0.2), (2.9, -0.5), (4.2, -1.2))):
+    for k, (sag, drop_z, out) in enumerate(((1.4, 0.6, 0.0), (2.2, 0.1, 0.55), (3.1, -0.4, 0.15),
+                                            (4.0, -0.9, 0.70), (4.9, -1.5, 0.30), (5.8, -2.2, 0.85))):
         top_z = shoulder + drop_z
-        figure.chain_run("body", "gold", (cx, -tw * 0.5 - 0.6, top_z), (cx, tw * 0.5 + 0.6, top_z), tile, sag=sag)
-        figure.pendant("body", mats, (cx + 0.5, (k - 1) * 1.7, top_z - sag + 0.2), tile, drop=1.2 + 0.5 * k)
+        span = tw * 0.5 + 0.6 - 0.10 * k
+        figure.chain_run("body", "gold", (cx + out, -span, top_z), (cx + out, span, top_z), tile, sag=sag)
+        if k % 2 == 0:
+            figure.pendant("body", mats, (cx + out + 0.5, (k - 2) * 1.6, top_z - sag + 0.2), tile, drop=1.2 + 0.4 * k)
     figure.spoked_wheel("body", "gold", (cx + 0.8, 0.0, shoulder - 4.4), 2.6, 8, tile)
     figure.ring("body", lambda a: "golddeep", (cx + 0.8, 0.0, shoulder - 4.4), 2.6, tile * 0.7, tile * 0.9)
     figure.box("body", "ruby", (cx + 1.4, 0.0, shoulder - 4.4), (tile * 0.9, tile * 1.5, tile * 1.5))
@@ -868,6 +875,34 @@ def apollo():
                  (-td * 0.62, 0.0, shoulder - 0.4), tw * 1.70, 15.0, tile * 1.10, flare=2.4, back=-2.6)
     figure.cloak("robe", lambda down, across: "linen",
                  (td * 0.52, 0.0, shoulder - 5.6), tw * 0.96, 9.0, tile * 1.02, flare=1.7)
+    # THE TRAIN, and the volume the plate's robe actually has. Three sheets made a skirt; the reference is a
+    # CEREMONIAL robe -- cloth stacked in depth, spilling wider at the hem than the figure is, and running back
+    # along the ground behind. Without the rear length the three-quarter and rear views were the emptiest of the
+    # five, which is where a robed figure should look its best.
+    figure.cloak("robe", lambda down, across: "linen" if down < 0.80 else "linenshade",
+                 (-td * 1.05, 0.0, shoulder - 1.6), tw * 1.45, 20.0, tile * 1.20, flare=3.4, back=-4.2)
+    figure.cloak("robe", lambda down, across: "linenshade" if abs(across - 0.5) > 0.40 else "linen",
+                 (-td * 0.34, 0.0, shoulder - 3.2), tw * 2.30, 14.5, tile * 1.10, flare=3.2, back=-0.8)
+    for side in (-1.0, 1.0):
+        figure.cloak("robe", lambda down, across: "linen",
+                     (-td * 0.10, side * tw * 0.86, shoulder - 2.4), tw * 0.80, 13.0, tile * 1.04, flare=2.2, back=-1.2)
+    # gold hem trim, so the cloth ends on an edge rather than fading out
+    for zz, rad in ((shoulder - 15.4, tw * 1.30), (shoulder - 16.6, tw * 1.16)):
+        figure.ring("robe", lambda a: "golddeep", (-td * 0.22, 0.0, zz), rad, tile * 0.85, tile * 1.0, plane="xy")
+
+    # ---- KNEE AND SHIN ARMOUR, which the plate carries and the robe parts around.
+    for side, name in ((-1.0, "leg_l"), (1.0, "leg_r")):
+        shin = "%s_shin" % name
+        figure.slab(shin, "gold", (d["torso_z"] * 0.0 + 0.6, side * d["leg_gap"], d["torso_z"] - th * 0.5 - 6.4),
+                    (d["leg"][0] * 1.22, d["leg"][1] * 1.28, 2.4), tile=tile)
+        figure.box(shin, "solarpale", (d["leg"][0] * 0.72, side * d["leg_gap"], d["torso_z"] - th * 0.5 - 6.4),
+                   (tile * 0.6, tile * 1.0, tile * 1.0))
+
+    # ---- LAYERED NECKLACES. The plate hangs several strands at different depths under the gorget.
+    for k, (drop, rad) in enumerate(((1.4, tw * 0.52), (2.9, tw * 0.60), (4.3, tw * 0.66))):
+        top_z = shoulder + 1.2 - drop
+        figure.chain_run("body", "gold", (td * 0.34, -rad, top_z), (td * 0.34, rad, top_z), tile, sag=0.9 + 0.35 * k)
+        figure.pendant("body", mats, (td * 0.44, 0.0, top_z - 0.9 - 0.35 * k), tile, drop=1.1 + 0.4 * k, gem="gem")
 
     # ---- GOLD TASSETS OVER THE ROBE. The plate's waist is not cloth: a belt of separate gold skirt plates hangs
     # ---- over the drapery all the way round, each with a raised boss, and the white shows BETWEEN them. Without
@@ -1048,15 +1083,27 @@ def hagoromo():
     # ================================================================== THE MANE
     # Cascading sheets: a crown fall over the back of the head, a side fall past each ear, and a long back fall
     # from the shoulders to the knees. White at the top, lavender where it hangs deepest, as the plate has it.
+    # IT IS THE BIGGEST THING ON THE PLATE AND IT WAS THE SMALLEST THING HERE. On the reference the mane is a
+    # CASCADE -- sheet over sheet over sheet, falling from the crown past the knees and spreading wider than the
+    # robe, so the figure's whole outline is hair. Four short layers made a hood. More layers, longer, and each
+    # one set a little further back and wider than the last, so the fall has depth from the side as well as bulk
+    # from the front.
     figure.part("mane", "head", (0.0, 0.0, d["head_z"]), "trail", 0.35)
     figure.mane_layers("mane", lambda lf, down: "snow" if down < 0.45 + 0.25 * lf else "lavender",
-                       (-hd * 0.30, 0.0, d["head_z"] + hh * 0.46), hw * 1.25, 12.5, 4, tile, spread=1.1)
+                       (-hd * 0.30, 0.0, d["head_z"] + hh * 0.46), hw * 1.34, 19.0, 6, tile, spread=1.35)
+    figure.mane_layers("mane", lambda lf, down: "snow" if down < 0.32 + 0.30 * lf else "lavender",
+                       (-hd * 0.62, 0.0, d["head_z"] + hh * 0.30), hw * 1.52, 24.0, 5, tile * 1.05, spread=1.55)
     for side in (-1.0, 1.0):
         figure.mane_layers("mane", lambda lf, down: "snow" if down < 0.5 else "lavender",
-                           (hd * 0.05, side * (hw * 0.5 + 0.8), d["head_z"] + hh * 0.30), 3.8, 10.0, 3, tile * 0.95, spread=0.6)
+                           (hd * 0.05, side * (hw * 0.5 + 0.8), d["head_z"] + hh * 0.30), 5.2, 17.0, 5, tile * 0.95, spread=0.95)
+        # a second fall further out and further back, so the side of the head is hair to the shoulder line
+        figure.mane_layers("mane", lambda lf, down: "snow" if down < 0.38 else "lavender",
+                           (-hd * 0.34, side * (hw * 0.5 + 2.2), d["head_z"] + hh * 0.18), 4.4, 20.0, 4, tile, spread=1.05)
     figure.part("backmane", "body", (0.0, 0.0, shoulder), "trail", 0.5)
     figure.mane_layers("backmane", lambda lf, down: "snow" if down < 0.35 + 0.3 * lf else "lavender",
-                       (-td * 0.55, 0.0, shoulder + 0.6), tw * 1.9, 17.0, 5, tile * 1.05, spread=1.3)
+                       (-td * 0.55, 0.0, shoulder + 0.6), tw * 2.15, 25.0, 7, tile * 1.05, spread=1.55)
+    figure.mane_layers("backmane", lambda lf, down: "lavender" if down > 0.42 else "snow",
+                       (-td * 1.05, 0.0, shoulder - 1.4), tw * 1.80, 21.0, 5, tile * 1.05, spread=1.75)
     # the ruff at the collar, so the mane meets the robe rather than stopping at the neck
     figure.slab("body", "snow", (0.3, 0.0, shoulder + 1.6), (td * 1.25, tw * 1.30, 2.0), tile=tile)
 
