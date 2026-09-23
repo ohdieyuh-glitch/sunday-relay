@@ -815,6 +815,14 @@ private:
 	void FrameRelayDogInWardrobe(bool bOn);
 	TWeakObjectPtr<class ACameraActor> WardrobeCamera;
 	FTimerHandle WardrobeFrameTimer;
+	/**
+	 * THE BLACK BEHIND THE DOG. The window is a hole, so without this the founder's wardrobe shows whatever the
+	 * Dog happens to be standing in front of -- a brick wall, a flower bed, a passing companion -- which is a
+	 * different backdrop every time the wardrobe is opened and none of them is the reference plates' black.
+	 * A single unlit black panel, parked behind the Dog on the camera's own axis and moved with it, gives every
+	 * skin the same ground to be read against. Transient, hidden with the wardrobe, and it never collides.
+	 */
+	TWeakObjectPtr<class AActor> WardrobeBackdrop;
 
 	/** `/pa`: show every Project Avatar family that exists, in front of the founder. A development showcase. */
 	bool ShowProjectAvatars(const FString& Argument);

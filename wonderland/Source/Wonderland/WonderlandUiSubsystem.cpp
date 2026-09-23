@@ -2,7 +2,12 @@
 
 #include "Components/InputComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/CollisionProfile.h"
 #include "Engine/GameInstance.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
@@ -1224,6 +1229,13 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 		{
 			Controller->SetViewTargetWithBlend(Pawn, 0.35f, EViewTargetBlendFunction::VTBlend_Cubic);
 		}
+		// THE BLACK GOES AWAY WITH THE WINDOW. Leaving a panel standing in the garden would be a prop the founder
+		// walks into the moment the wardrobe closes, so it is destroyed rather than merely hidden.
+		if (AActor* Backdrop = WardrobeBackdrop.Get())
+		{
+			Backdrop->Destroy();
+		}
+		WardrobeBackdrop.Reset();
 		return;
 	}
 	// THE WINDOW HAS TO HAVE PAINTED ONCE before its place on screen is known, so the framing is done a tick after
@@ -1322,6 +1334,121 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 			Lens->SetFieldOfView(HFov);
 			Lens->bConstrainAspectRatio = false;
 		}
+		// ---- THE BLACK BEHIND THE DOG, on the camera's own axis so it is always square to the lens.
+		// The window is a hole, so whatever the Dog stands in front of IS the wardrobe's background: a brick wall
+		// one time, a flower bed the next, a companion wandering through the shot. The founder's reference plates
+		// are all read against black, and a premium skin cannot be judged against a different garden each time.
+		// Parked beyond the Dog and scaled past the frame's far corners, it fills the window and nothing else.
+		AActor* Backdrop = Self->WardrobeBackdrop.Get();
+		if (Backdrop == nullptr)
+		{
+			FActorSpawnParameters BackdropParams;
+			BackdropParams.ObjectFlags |= RF_Transient;
+			BackdropParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			Backdrop = W->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity, BackdropParams);
+			if (Backdrop != nullptr)
+			{
+				// A CYCLORAMA, NOT A PANEL. A vertical sheet behind the Dog cannot hide the garden FLOOR, because
+				// the floor runs from under the Dog toward the lens and fills the bottom of the frame in front of
+				// anything standing behind him -- the first build left the lower third of the window as paving.
+				// So: a wall behind, and a black deck under the Dog running back to meet it.
+				UStaticMeshComponent* Panel = NewObject<UStaticMeshComponent>(Backdrop, TEXT("WardrobeBlackWall"));
+				Backdrop->SetRootComponent(Panel);
+				UStaticMeshComponent* Deck = NewObject<UStaticMeshComponent>(Backdrop, TEXT("WardrobeBlackDeck"));
+				Deck->SetupAttachment(Panel);
+				UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+				UMaterialInstanceDynamic* Black = nullptr;
+				if (UMaterialInterface* Plain = LoadObject<UMaterialInterface>(
+						nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
+				{
+					Black = UMaterialInstanceDynamic::Create(Plain, Backdrop);
+					// NOT PURE ZERO: a hair above black keeps the panel from flattening into the HUD's own
+					// dark chrome, so the window still reads as a lit space the Dog is standing in.
+					if (Black != nullptr)
+					{
+						Black->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.008f, 0.009f, 0.013f, 1.0f));
+					}
+				}
+				for (UStaticMeshComponent* Part : { Panel, Deck })
+				{
+					Part->RegisterComponent();
+					Part->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+					Part->SetCastShadow(false);
+					if (Cube != nullptr) { Part->SetStaticMesh(Cube); }
+					if (Black != nullptr) { Part->SetMaterial(0, Black); }
+				}
+#if WITH_EDITOR
+				Backdrop->SetActorLabel(TEXT("WL_WardrobeBackdrop"), false);
+#endif
+				Self->WardrobeBackdrop = Backdrop;
+			}
+		}
+		if (Backdrop != nullptr)
+		{
+			// Far enough behind the Dog that its own shadow and any ground contact stay off it, and wide enough
+			// that the frame's corners are still panel at this distance.
+			// THE SQUARE, AND ONLY THE SQUARE. Sized to the whole frame, this blacked out the entire garden behind
+			// the panel -- the founder's words were "not the world turning black". What he asked for is the
+			// wardrobe's own window reading as a black screen with the skin standing on it, so the panel is cut
+			// to the WINDOW's angular size (Size is that window as a fraction of the viewport) and centred on the
+			// Dog, who is already framed at the window's middle. Outside the window the world is untouched.
+			const FVector Away = (LookAt - Eye).GetSafeNormal2D();
+			const float Behind = Distance * 1.35f;
+			// TIGHT ACROSS, GENEROUS UP AND DOWN. Horizontally the panel must not spill past the window or it
+			// starts blacking the garden either side of it. Vertically it can be over-large safely: the screen
+			// area above and below the window is panel chrome, not world. A tight vertical margin is what made
+			// this inconsistent -- Apollo's square came out black and Hagoromo's showed brick across its lower
+			// half, because each skin's figure height changes the camera distance and with it the fit.
+			const float HalfW = (Distance + Behind) * TanH * FMath::Max(Size.X, 0.05f) * 1.15f;
+			const float HalfH = (Distance + Behind) * TanV * FMath::Max(Size.Y, 0.05f) * 2.40f;
+			const FVector At = LookAt + Away * Behind;
+			// The engine cube is 100 uu across, so scale is half-extent/50. The wall is turned to face the lens on
+			// the horizontal only -- a wall that pitches to face a slightly-raised camera would lift its own base
+			// off the ground and show a bright seam under it.
+			const FRotator Facing(0.0, (Eye - At).Rotation().Yaw, 0.0);
+			Backdrop->SetActorLocationAndRotation(At, Facing);
+			Backdrop->SetActorScale3D(FVector(0.04f, FMath::Max(HalfW, 60.0f) / 50.0f, FMath::Max(HalfH, 60.0f) / 50.0f));
+			if (AActor* BackdropActor = Backdrop)
+			{
+				TArray<UStaticMeshComponent*> Parts;
+				BackdropActor->GetComponents<UStaticMeshComponent>(Parts);
+				for (UStaticMeshComponent* Part : Parts)
+				{
+					if (Part == nullptr || Part->GetFName() != TEXT("WardrobeBlackDeck")) { continue; }
+					// THE DECK, in the wall's own frame. It reaches from the wall forward past the Dog's feet to
+					// well in front of the lens, and sits a little below the feet so the Dog is not cut off at the
+					// ankle by its own stage. Parent scale is (0.04, W, H), so the child's scale is divided
+					// through by it to come out square in world space.
+					// FORWARD ONLY AS FAR AS THE WINDOW SEES. Running the deck out past the lens turned the whole
+					// garden floor black along with the window; it only has to reach the Dog's feet and a little
+					// past them, because beyond that it is outside the square.
+					const float Forward = Behind + Distance * 1.10f;
+					const FVector ParentScale(0.04f, FMath::Max(HalfW, 60.0f) / 50.0f, FMath::Max(HalfH, 60.0f) / 50.0f);
+					Part->SetRelativeScale3D(FVector((Forward / 50.0f) / ParentScale.X,
+													 1.0f,
+													 (4.0f / 50.0f) / ParentScale.Z));
+					// THE GROUND IS TRACED, NOT DERIVED. This was computed from the figure's height, and figure
+					// height differs per skin -- so the deck landed correctly for Apollo and far too low for
+					// Hagoromo, which showed the founder brick wall across half its window. The floor the Dog is
+					// actually standing on is a trace away, and it is the same floor for every skin.
+					float GroundZ = Dog->GetActorLocation().Z - Height * 0.5f;
+					FHitResult Ground;
+					FCollisionQueryParams GroundParams(SCENE_QUERY_STAT(WonderlandWardrobeDeck), false);
+					GroundParams.AddIgnoredActor(Dog);
+					if (Relay != nullptr && Relay->GetCostume() != nullptr) { GroundParams.AddIgnoredActor(Relay->GetCostume()); }
+					const FVector From = Dog->GetActorLocation();
+					if (W->LineTraceSingleByChannel(Ground, From, From - FVector(0.0, 0.0, 600.0), ECC_Visibility, GroundParams))
+					{
+						GroundZ = Ground.ImpactPoint.Z;
+					}
+					// A HAIR ABOVE THE REAL FLOOR, so the deck hides it instead of z-fighting with it.
+					const float DropToDeck = (LookAt.Z - GroundZ) - 1.5f;
+					Part->SetRelativeLocation(FVector(Forward * 0.5f / ParentScale.X, 0.0f,
+													  -DropToDeck / ParentScale.Z));
+				}
+			}
+		}
+
 		if (PC->GetViewTarget() != Cam)
 		{
 			PC->SetViewTargetWithBlend(Cam, 0.45f, EViewTargetBlendFunction::VTBlend_Cubic);

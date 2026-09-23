@@ -930,6 +930,27 @@ def apollo():
         figure.chain_run("body", "gold", (td * 0.34, -rad, top_z), (td * 0.34, rad, top_z), tile, sag=0.9 + 0.35 * k)
         figure.pendant("body", mats, (td * 0.44, 0.0, top_z - 0.9 - 0.35 * k), tile, drop=1.1 + 0.4 * k, gem="gem")
 
+    # ---- LAYERED GOLD TRIM, which is what the plate has everywhere the eye rests and this had only at the hem.
+    # On the reference every cloth edge and every plate edge is ruled in gold, and that ruling is most of why it
+    # reads as ceremonial rather than as white cloth with gold objects on it. Cheap in geometry, and it ties the
+    # separate gold pieces -- pauldrons, emblem, tassets, boots -- into one costume.
+    for side in (-1.0, 1.0):
+        # the two front edges of the robe opening, running from the collar to below the knee
+        for k in range(11):
+            t = k / 10.0
+            figure.box("robe", "gold", (td * 0.50 - t * 0.6, side * (tw * 0.30 + t * tw * 0.20),
+                                        shoulder - 1.6 - t * 12.5), (tile * 0.5, tile * 0.6, tile * 1.3))
+        # a rule along the outer edge of each pauldron cap
+        for k in range(6):
+            t = k / 5.0
+            figure.box("body", "golddeep", (2.4 - t * 3.4, side * (d["head"][1] * 0.5 + 3.6),
+                                            shoulder + 3.0 - t * 1.1), (tile * 0.55, tile * 0.55, tile * 0.9))
+    # and a collar rule where the gorget meets the drapery
+    for k in range(9):
+        a = math.pi * (-0.5 + k / 8.0)
+        figure.box("body", "golddeep", (td * 0.46 + math.cos(a) * 0.5, math.sin(a) * tw * 0.56, shoulder + 1.3),
+                   (tile * 0.5, tile * 0.7, tile * 0.5))
+
     # ---- GOLD TASSETS OVER THE ROBE. The plate's waist is not cloth: a belt of separate gold skirt plates hangs
     # ---- over the drapery all the way round, each with a raised boss, and the white shows BETWEEN them. Without
     # ---- these the robe reads as one white sheet from the chest down, which is most of why the lower half looked
