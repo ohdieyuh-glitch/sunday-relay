@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 
 import type {
   JuliusAcceptanceCriterion, JuliusBrainEntry, JuliusEvidence, JuliusReviewerFinding,
-  JuliusRecordedDecision, JuliusRuntimeReader, JuliusTask, JuliusTaskContractBinding,
+  JuliusRecordedDecision, JuliusRuntimeReader, JuliusTask, JuliusTaskContractBinding, JuliusTaskRecord,
   JuliusVerificationDecision, JuliusWorkerRole,
 } from '../mission/julius';
 import { JULIUS_RUN_HALTING_FAILURE_CLASSES, juliusRunHaltingFailureClass } from '../mission/julius/julius-coding-agent';
@@ -46,7 +46,7 @@ const parsed = <T>(value: unknown, fallback: T): T => {
 export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
   constructor(private readonly pool: Pool) {}
 
-  async tasksForRun(runId: string, projectId: string): Promise<readonly JuliusTask[]> {
+  async tasksForRun(runId: string, projectId: string): Promise<readonly JuliusTaskRecord[]> {
     const result = await this.pool.query<Record<string, unknown>>(
       `SELECT t.task_id,t.parent_task_id,t.role,t.task_type,t.state,t.ordinal,t.required_evidence_types,t.lease_generation,r.mission_id,
               COALESCE((SELECT jsonb_agg(d.dependency_task_id) FROM relay_wonderland.julius_task_dependencies d WHERE d.task_id=t.task_id),'[]'::jsonb) AS dependency_ids
@@ -65,7 +65,9 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
       role: String(row.role) as JuliusWorkerRole,
       ordinal: Number(row.ordinal),
       state: String(row.state) as JuliusTask['state'],
-      // The attempt a SUCCEEDED task's decision is about (defect A): its last claim's generation.
+      // The attempt this task is on: its last claim's generation. Frozen once the
+      // task has SUCCEEDED, which is what lets a decision name the attempt it is
+      // about (defect A) and a reader name that attempt's bodies (PR 12).
       leaseGeneration: Number(row.lease_generation),
     }));
   }

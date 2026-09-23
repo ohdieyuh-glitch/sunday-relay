@@ -7,9 +7,8 @@ import {
   type HostedObservation,
 } from './hosted-observation';
 import {
-  createLiveArtifactExchange,
+  createInMemoryArtifactExchange,
   createLiveHostedCodingAdapter,
-  planRef,
 } from '../julius/live-workers';
 import {
   JuliusDispatchError,
@@ -285,8 +284,8 @@ describe('D — a timed-out dispatch carries the floor into its durable diagnost
   ]);
 
   const dispatchTimedOut = async (): Promise<JuliusDispatchError> => {
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run'), 'THE PLAN');
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, 'THE PLAN');
     const adapter = createLiveHostedCodingAdapter({
       worker,
       contexts: { snapshotFor: (contextId) => (contextId === 'ctx' ? snapshot : null) },
@@ -311,7 +310,7 @@ describe('D — a timed-out dispatch carries the floor into its durable diagnost
       }),
     });
     try {
-      await adapter.dispatch({ taskId: 'task', contextId: 'ctx', taskType: 'implementation' });
+      await adapter.dispatch({ taskId: 'task', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx', taskType: 'implementation' });
     } catch (error) {
       if (error instanceof JuliusDispatchError) return error;
       throw error;

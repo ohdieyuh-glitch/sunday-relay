@@ -5,7 +5,7 @@ import { JULIUS_CONTEXT_COMPILER_VERSION } from '../../src/relay/mission/julius'
 import { readJuliusAttemptWorkspace } from '../../src/relay/mission/julius/julius-workspace-attribution';
 import { readJuliusCodingAgentImplementation } from '../../src/relay/mission/julius/julius-coding-agent';
 import { createFakeExecutorShell, createScriptedCodingAgentProvider } from './coding-agent-fixtures';
-import { createJuliusCodingAgentAdapter, createLiveArtifactExchange, planRef } from './live-workers';
+import { createJuliusCodingAgentAdapter, createInMemoryArtifactExchange } from './live-workers';
 
 /**
  * WHAT THE ADAPTER RECORDS ABOUT ONE ATTEMPT — including the attempts that failed.
@@ -43,14 +43,14 @@ const snapshot = (): JuliusContextSnapshot => ({
     blocks: [{ kind: 'OBJECTIVE', text: 'OBJECTIVE: normalize the mission label.' }], truncated: false,
   },
 });
-const DISPATCH = { taskId: 'build-1', contextId: 'ctx-1', taskType: 'build', contract: CHARGE, allocation: { usdMicros: 2_000_000, policyVersion: 'v3', basis: 'CODER_SHARE' } };
+const DISPATCH = { taskId: 'build-1', contextId: 'ctx-1', taskType: 'build', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contract: CHARGE, allocation: { usdMicros: 2_000_000, policyVersion: 'v3', basis: 'CODER_SHARE' } };
 
 const adapterOver = (
   provider: Parameters<typeof createJuliusCodingAgentAdapter>[0]['provider'],
   shell: ReturnType<typeof createFakeExecutorShell>,
 ) => {
-  const artifacts = createLiveArtifactExchange();
-  artifacts.put(planRef('run-live'), JSON.stringify({ objectiveSummary: 'Normalize.', steps: ['edit'] }));
+  const artifacts = createInMemoryArtifactExchange();
+  artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify({ objectiveSummary: 'Normalize.', steps: ['edit'] }));
   return createJuliusCodingAgentAdapter({
     worker: WORKER, contexts: { snapshotFor: () => snapshot() }, artifacts, projectId: 'prj-live',
     workspacePath: WS, testCommand: 'npm test', shell, provider,

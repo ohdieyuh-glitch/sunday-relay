@@ -14,7 +14,7 @@ import type { ClaudeAuthMode } from '../hosted-coding-agent/hosted-auth';
 import { runHostedCodingAgent, type HostedQueryFn } from '../hosted-coding-agent/hosted-runner';
 import { createClaudeCodeCodingAgentProvider } from './claude-code-coding-provider';
 import { createFakeExecutorShell } from './coding-agent-fixtures';
-import { createJuliusCodingAgentAdapter, createLiveArtifactExchange, planRef, type LiveArtifactExchange } from './live-workers';
+import { createJuliusCodingAgentAdapter, createInMemoryArtifactExchange, type InMemoryArtifactExchange } from './live-workers';
 
 /**
  * A SUBSCRIPTION-BACKED CODER DISPATCH, FROM THE PROVIDER TO THE LEDGER.
@@ -127,11 +127,11 @@ const snapshot = (): JuliusContextSnapshot => ({
     blocks: [{ kind: 'OBJECTIVE', text: 'OBJECTIVE: normalize the mission label.' }], truncated: false,
   },
 });
-const DISPATCH = { taskId: 'build-1', contextId: 'ctx-1', taskType: 'build', contract: CHARGE, allocation: { usdMicros: 2_000_000, policyVersion: 'v3', basis: 'CODER_SHARE' } };
+const DISPATCH = { taskId: 'build-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-1', taskType: 'build', contract: CHARGE, allocation: { usdMicros: 2_000_000, policyVersion: 'v3', basis: 'CODER_SHARE' } };
 
 const adapterOver = (mode: ClaudeAuthMode | undefined, sessions: readonly Session[], shell =createFakeExecutorShell({ diff: DIFF_TEXT, status: [' M src/slug.ts'], testExitCode: 0 })) => {
-  const artifacts = createLiveArtifactExchange();
-  artifacts.put(planRef('run-live'), JSON.stringify({ objectiveSummary: 'Normalize.', steps: ['edit'] }));
+  const artifacts = createInMemoryArtifactExchange();
+  artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify({ objectiveSummary: 'Normalize.', steps: ['edit'] }));
   const sdk = fakeSdk(sessions);
   const adapter = createJuliusCodingAgentAdapter({
     worker: ADAPTER_WORKER, contexts: { snapshotFor: () => snapshot() }, artifacts, projectId: 'prj-live',
@@ -349,8 +349,8 @@ async function runMission(mode: ClaudeAuthMode | undefined, sessions: readonly S
     { entryId: 'brain-1', kind: 'OBJECTIVE', text: 'Normalize the slug.', taskIds: [], allowedRoles: ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'], sensitivity: 'INTERNAL' },
   ]);
 
-  const artifacts: LiveArtifactExchange = createLiveArtifactExchange();
-  artifacts.put(planRef('run-1'), JSON.stringify({ objectiveSummary: 'Normalize the slug.', steps: ['edit src/slug.ts'] }));
+  const artifacts: InMemoryArtifactExchange = createInMemoryArtifactExchange();
+  artifacts.seed({ kind: 'PLAN', runId: 'run-1', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify({ objectiveSummary: 'Normalize the slug.', steps: ['edit src/slug.ts'] }));
   const sdk = fakeSdk(sessions);
   const live = createJuliusCodingAgentAdapter({
     worker: CODER,

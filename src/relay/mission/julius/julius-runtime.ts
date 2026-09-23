@@ -98,6 +98,24 @@ export interface JuliusTask {
   readonly leaseGeneration?: number;
 }
 
+/**
+ * A TASK AS THE STORE HAS IT, including the attempt it is on.
+ *
+ * `JuliusTask` is what a CALLER may create, and it deliberately cannot set a
+ * lease generation — the store owns that. This is what a caller READS back,
+ * and it carries the generation because a reader sometimes needs to name the
+ * attempt rather than the task: a review is about the bytes of one attempt of
+ * its subject, not about whichever attempt happens to be newest.
+ *
+ * THE GENERATION OF A SUCCEEDED TASK IS FROZEN, which is what makes it usable
+ * as that name. Claims only ever take RUNNABLE work and recovery only ever
+ * re-claims an expired ACTIVE lease, so nothing re-claims a task that has
+ * SUCCEEDED and its generation cannot move underneath a reader.
+ */
+export interface JuliusTaskRecord extends JuliusTask {
+  readonly leaseGeneration: number;
+}
+
 export class JuliusTaskGraph {
   private readonly tasks = new Map<string, JuliusTask>();
   add(task: JuliusTask): void {

@@ -7,7 +7,7 @@ import { CLAUDE_CODE_RESULT_CLASSES } from '../../src/relay/connectors/claude-co
 import { runHostedCodingAgent, type HostedQueryFn } from '../hosted-coding-agent/hosted-runner';
 import { createClaudeCodeCodingAgentProvider } from './claude-code-coding-provider';
 import { createFakeExecutorShell, createScriptedCodingAgentProvider } from './coding-agent-fixtures';
-import { createJuliusCodingAgentAdapter, createLiveArtifactExchange, diffRef, planRef, testOutputRef } from './live-workers';
+import { createJuliusCodingAgentAdapter, createInMemoryArtifactExchange } from './live-workers';
 
 /**
  * CODING AGENT ATTEMPT TRUTH — HOW AN ATTEMPT ENDS.
@@ -54,7 +54,7 @@ const snapshot = (): JuliusContextSnapshot => ({
     blocks: [{ kind: 'OBJECTIVE', text: 'OBJECTIVE: normalize the mission label.' }], truncated: false,
   },
 });
-const DISPATCH = { taskId: 'build-1', contextId: 'ctx-1', taskType: 'build', contract: CHARGE, allocation: { usdMicros: 2_000_000, policyVersion: 'v3', basis: 'CODER_SHARE' } };
+const DISPATCH = { taskId: 'build-1', contextId: 'ctx-1', taskType: 'build', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contract: CHARGE, allocation: { usdMicros: 2_000_000, policyVersion: 'v3', basis: 'CODER_SHARE' } };
 
 const init = { type: 'system', subtype: 'init', model: 'claude-x-served', claude_code_version: '2.1.220', apiKeySource: 'ANTHROPIC_API_KEY', cwd: WS, tools: ['Read', 'Glob', 'Grep', 'Edit'], session_id: 'sess-1' };
 const result = (over: Record<string, unknown>) => ({
@@ -102,8 +102,8 @@ const claude = (queryFn: HostedQueryFn, run = runHostedCodingAgent) =>
 
 const adapterOver = (provider: Parameters<typeof createJuliusCodingAgentAdapter>[0]['provider']) => {
   const shell = createFakeExecutorShell({});
-  const artifacts = createLiveArtifactExchange();
-  artifacts.put(planRef('run-live'), JSON.stringify({ objectiveSummary: 'Normalize.', steps: ['edit'] }));
+  const artifacts = createInMemoryArtifactExchange();
+  artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify({ objectiveSummary: 'Normalize.', steps: ['edit'] }));
   const adapter = createJuliusCodingAgentAdapter({
     worker: WORKER, contexts: { snapshotFor: () => snapshot() }, artifacts, projectId: 'prj-live',
     workspacePath: WS, testCommand: 'npm test', shell, provider,
@@ -143,8 +143,8 @@ describe('1 — a result is a success only when every field of it says so', () =
       // The close-out look at the workspace runs — a failed attempt still owns what it
       // changed — and nothing that would become evidence: no diff artifact, no test run.
       expect(steps(shell)).toEqual(['base', 'status']);
-      expect(artifacts.get(diffRef('run-live'))).toBeNull();
-      expect(artifacts.get(testOutputRef('run-live'))).toBeNull();
+      expect(await artifacts.get({ kind: 'DIFF', runId: 'run-live', taskId: 'build-1', leaseGeneration: 1 })).toBeNull();
+      expect(await artifacts.get({ kind: 'TEST_OUTPUT', runId: 'run-live', taskId: 'build-1', leaseGeneration: 1 })).toBeNull();
       expect((refusal.implementation as { attemptOutcome: string }).attemptOutcome).toBe('FAILED');
     });
   }
@@ -219,8 +219,8 @@ describe('2 — the abort reaches the session, and nothing after it is evidence'
     expect(refusal.diagnostics).toMatchObject({ codingAgentFailure: 'CANCELLED', runtimeStarted: true });
     // NO EVIDENCE AFTER ABORT: only the base read ran, and no artifact was written.
     expect(steps(shell)).toEqual(['base']);
-    expect(artifacts.get(diffRef('run-live'))).toBeNull();
-    expect(artifacts.get(testOutputRef('run-live'))).toBeNull();
+    expect(await artifacts.get({ kind: 'DIFF', runId: 'run-live', taskId: 'build-1', leaseGeneration: 1 })).toBeNull();
+    expect(await artifacts.get({ kind: 'TEST_OUTPUT', runId: 'run-live', taskId: 'build-1', leaseGeneration: 1 })).toBeNull();
   });
 
   it('aborting twice is one cancellation: the session is told once and the outcome is the same', async () => {
@@ -261,7 +261,7 @@ describe('2 — the abort reaches the session, and nothing after it is evidence'
     expect(refusal.code).toBe('CANCELLED');
     expect(refusal.diagnostics).toMatchObject({ runtimeStarted: true, costUsdMicros: 20_000 });
     expect(steps(shell)).toEqual(['base']);
-    expect(artifacts.get(diffRef('run-live'))).toBeNull();
+    expect(await artifacts.get({ kind: 'DIFF', runId: 'run-live', taskId: 'build-1', leaseGeneration: 1 })).toBeNull();
   });
 
   it('the provider itself never returns completed for a dispatch aborted as its stream ended', async () => {
@@ -291,8 +291,8 @@ describe('2 — the abort reaches the session, and nothing after it is evidence'
         return answer;
       },
     };
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify({ objectiveSummary: 'Normalize.', steps: ['edit'] }));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify({ objectiveSummary: 'Normalize.', steps: ['edit'] }));
     const adapter = createJuliusCodingAgentAdapter({
       worker: WORKER, contexts: { snapshotFor: () => snapshot() }, artifacts, projectId: 'prj-live',
       workspacePath: WS, testCommand: 'npm test', shell: aborting, provider,
@@ -301,7 +301,7 @@ describe('2 — the abort reaches the session, and nothing after it is evidence'
     expect(refusal.code).toBe('CANCELLED');
     expect(refusal.failureClass).toBe('coder_cancelled_before_diff');
     expect(steps(shell)).toEqual(['base', 'status']);
-    expect(artifacts.get(diffRef('run-live'))).toBeNull();
+    expect(await artifacts.get({ kind: 'DIFF', runId: 'run-live', taskId: 'build-1', leaseGeneration: 1 })).toBeNull();
   });
 
   it('a deterministic provider honours the signal too: aborted before launch, it is never asked', async () => {

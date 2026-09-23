@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { createLiveArtifactExchange, createLiveArchitectAdapter } from './live-workers';
+import { createInMemoryArtifactExchange, createLiveArchitectAdapter } from './live-workers';
 import { architectWorker } from './live-composition';
 import { JULIUS_CONTEXT_COMPILER_VERSION } from '../../src/relay/mission/julius';
 import type { JuliusContextSnapshot } from '../../src/relay/mission/julius';
@@ -113,7 +113,7 @@ function planSnapshot(taskId: string): JuliusContextSnapshot {
 
 /** Provider-free: the connector is replaced by a scripted outcome. Nothing is
     contacted and nothing is spent; these assert the RECORD, never a real run. */
-const architect = (outcome: GptRunOutcome, artifacts = createLiveArtifactExchange()) =>
+const architect = (outcome: GptRunOutcome, artifacts = createInMemoryArtifactExchange()) =>
   createLiveArchitectAdapter({
     worker: architectWorker({}),
     contexts: { snapshotFor: () => planSnapshot('plan-1:task') },
@@ -137,14 +137,14 @@ const PROVIDER_FACTS = [
 
 const dispatched = async (outcome: GptRunOutcome): Promise<Record<string, unknown>> => {
   const result = await architect(outcome).dispatch({
-    taskId: 'plan-1:task', contextId: 'ctx-diag-1', taskType: 'plan',
+    taskId: 'plan-1:task', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-diag-1', taskType: 'plan',
   });
   return (result.diagnostics ?? {}) as Record<string, unknown>;
 };
 
 const refused = async (outcome: GptRunOutcome): Promise<Record<string, unknown>> => {
   try {
-    await architect(outcome).dispatch({ taskId: 'plan-1:task', contextId: 'ctx-diag-1', taskType: 'plan' });
+    await architect(outcome).dispatch({ taskId: 'plan-1:task', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-diag-1', taskType: 'plan' });
   } catch (error) {
     return ((error as { diagnostics?: unknown }).diagnostics ?? {}) as Record<string, unknown>;
   }

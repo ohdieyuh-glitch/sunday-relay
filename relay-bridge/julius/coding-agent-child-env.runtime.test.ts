@@ -14,7 +14,7 @@ import { HOSTED_API_KEY_ENV } from '../hosted-coding-agent/hosted-readiness';
 import type { HostedQueryFn } from '../hosted-coding-agent/hosted-runner';
 import { createFakeExecutorShell } from './coding-agent-fixtures';
 import { CODER_WORKER, resolveLiveWorkers } from './live-composition';
-import { createLiveArtifactExchange, planRef } from './live-workers';
+import { createInMemoryArtifactExchange } from './live-workers';
 
 /**
  * THE CODING AGENT'S CHILD PROCESS RECEIVES EXACTLY THE ENVIRONMENT JULIUS COMPOSED.
@@ -141,7 +141,7 @@ const snapshot = (): JuliusContextSnapshot => ({
     blocks: [{ kind: 'OBJECTIVE', text: 'OBJECTIVE: normalize the mission label.' }], truncated: false,
   },
 });
-const DISPATCH = { taskId: 'build-1', contextId: 'ctx-1', taskType: 'build', contract: CHARGE, allocation: { usdMicros: 2_000_000, policyVersion: 'v3', basis: 'CODER_SHARE' } };
+const DISPATCH = { taskId: 'build-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-1', taskType: 'build', contract: CHARGE, allocation: { usdMicros: 2_000_000, policyVersion: 'v3', basis: 'CODER_SHARE' } };
 
 let scratch = '';
 /**
@@ -193,8 +193,8 @@ async function dispatchAndInspect(env: Record<string, string>): Promise<{
   readonly loaderCalls: number;
   readonly providerId: string | null;
 }> {
-  const artifacts = createLiveArtifactExchange();
-  artifacts.put(planRef('run-live'), JSON.stringify({ objectiveSummary: 'Normalize.', steps: ['edit'] }));
+  const artifacts = createInMemoryArtifactExchange();
+  artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify({ objectiveSummary: 'Normalize.', steps: ['edit'] }));
   const calls = { count: 0 };
   const resolution = resolveLiveWorkers({
     env, projectId: 'prj-child-env', workspacePath: workspace, testCommand: 'npm test',
