@@ -843,6 +843,31 @@ def apollo():
     figure.cloak("robe", lambda down, across: "linen",
                  (td * 0.52, 0.0, shoulder - 5.6), tw * 0.96, 9.0, tile * 1.02, flare=1.7)
 
+    # ---- GOLD TASSETS OVER THE ROBE. The plate's waist is not cloth: a belt of separate gold skirt plates hangs
+    # ---- over the drapery all the way round, each with a raised boss, and the white shows BETWEEN them. Without
+    # ---- these the robe reads as one white sheet from the chest down, which is most of why the lower half looked
+    # ---- plain -- the reference's whole midsection is gold-on-white, not white.
+    figure.slab("robe", "gold", (0.0, 0.0, shoulder - 5.4), (td * 1.12, tw * 1.12, 1.6), tile=tile)
+    figure.slab("robe", "golddeep", (0.0, 0.0, shoulder - 6.6), (td * 1.06, tw * 1.06, 0.9), tile=tile)
+    for plate in range(8):
+        a = math.radians(-118.0 + 236.0 * (plate / 7.0))
+        px, py = math.cos(a) * td * 0.86, math.sin(a) * tw * 0.86
+        drop = 4.4 if plate in (0, 7) else (6.2 if plate in (3, 4) else 5.4)
+        figure.slab("robe", "gold", (px, py, shoulder - 7.4 - drop * 0.5), (1.5, 2.1, drop), tile=tile)
+        figure.box("robe", "golddeep", (px + 0.7, py, shoulder - 7.4 - drop * 0.42),
+                   (tile * 0.7, tile * 1.1, tile * 1.1))
+        # the boss each plate carries on the plate's own render
+        figure.box("robe", "solarpale", (px + 1.1, py, shoulder - 7.4 - drop * 0.42),
+                   (tile * 0.5, tile * 0.6, tile * 0.6))
+
+    # ---- BRACERS. The reference's forearms are gold to the wrist; bare cream arms under baroque pauldrons were
+    # ---- the one place the costume stopped short of the plate.
+    for side, name in ((-1.0, "arm_l"), (1.0, "arm_r")):
+        ax, aw, ah = d["arm"]
+        arm_y = side * (tw * 0.5 + aw * 0.5)
+        figure.slab("body", "gold", (0.2, arm_y, shoulder - 3.4), (ax * 1.26, aw * 1.30, 2.6), tile=tile)
+        figure.slab("body", "golddeep", (0.3, arm_y, shoulder - 5.2), (ax * 1.30, aw * 1.34, 1.2), tile=tile)
+
     # ---- THE CHEST EMBLEM: a sun boss on a layered gold plate with rays, deeper than the old flat disc.
     # A STEP IN FRONT OF THE CLOTH, or the front panel swallows it -- in the first render there was no emblem.
     plate_x = td * 0.5 + 1.3
