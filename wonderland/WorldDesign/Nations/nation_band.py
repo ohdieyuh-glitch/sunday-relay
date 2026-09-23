@@ -92,6 +92,7 @@ NATIONS = {
                    "paving": "MI_V2_GroundFlag_PlazaGrey", "paving_shade": "MI_V2_GroundFlag_PlazaShade",
                    "paving_warm": "MI_V2_GroundFlag_PlazaGrey"},
         gate="WL_Gatehouse_Screen",
+        gate_yaw=90.0,
         hall="WL_Colonnade_Arcade",            # cinematic halls: deep, arcaded, a screen of dark glass
         signature="WL_Palace_Wing",            # media halls
         block="WL_House_Jettied",              # editing and creation rooms over the arcade
@@ -110,6 +111,7 @@ NATIONS = {
                    "paving": "MI_V2_GroundFlag_PlazaShade", "paving_shade": "MI_V2_GroundFlag_PlazaGrey",
                    "paving_warm": "MI_V2_GroundFlag_PlazaWarm"},
         gate="WL_Arch_Twin_Tiered",
+        gate_yaw=90.0,
         hall="WL_Colonnade_Arcade",            # engineering halls
         signature="WL_Palace_Wing",            # systems architecture
         block="WL_Market_Canopy",              # application foundries: a working, roofed floor
@@ -230,7 +232,15 @@ def build(pass_id, cfg):
         u += 115.0
 
     # ---------------------------------------------------------------- 2. the gate you enter the band through
-    add_module(cfg["gate"], BAND_U0 + 900.0, 0.0, PAVING_TOP, 0.0, cull=CULL_FAR, record=True)
+    #: GATES ARE NOT ALL AUTHORED ON THE SAME AXIS, and a walk proved it. Every gate was placed at
+    #: yaw_local 0, which puts the mesh's local X along the road. WL_Arch_Ceremonial is 2310 x 776 and
+    #: passable either way, so ICARUS walked through. WL_Gatehouse_Screen is 1218 x 188 -- a thin screen --
+    #: and at yaw 0 its 12 m length lies ALONG the road: a Dog walking the Noctis approach stopped 628 cm
+    #: short, which is half of 1218. WL_Arch_Twin_Tiered did the same at 746 cm and then climbed the
+    #: structure to z=643. Both gates were walls across the only way in. This is the d164a56b regression
+    #: in a new place: a gate that looks like a gate and does not admit a player.
+    add_module(cfg["gate"], BAND_U0 + 900.0, 0.0, PAVING_TOP, cfg.get("gate_yaw", 0.0),
+               cull=CULL_FAR, record=True)
 
     # ---------------------------------------------------------------- 3. the halls along the avenue
     hall = cfg["hall"]
