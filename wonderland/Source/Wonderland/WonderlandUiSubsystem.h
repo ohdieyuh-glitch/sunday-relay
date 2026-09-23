@@ -807,6 +807,15 @@ private:
 	/** Stand the preview Dog in the world in front of the player, or send it back to its viewing room. */
 	void StageSkinPreviewInWorld(bool bOn);
 
+	/**
+	 * THE WARDROBE CAMERA. Frames the founder's own Relay Dog inside the panel's preview window while the wardrobe
+	 * is open -- the window is a hole in the panel, the Dog is placed behind it by moving the lens rather than
+	 * the Dog -- and hands the view back to the player when it closes.
+	 */
+	void FrameRelayDogInWardrobe(bool bOn);
+	TWeakObjectPtr<class ACameraActor> WardrobeCamera;
+	FTimerHandle WardrobeFrameTimer;
+
 	/** `/pa`: show every Project Avatar family that exists, in front of the founder. A development showcase. */
 	bool ShowProjectAvatars(const FString& Argument);
 

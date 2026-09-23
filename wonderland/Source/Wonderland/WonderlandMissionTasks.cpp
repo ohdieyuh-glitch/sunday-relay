@@ -294,6 +294,10 @@ int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
 		// A NEW HANDLE FOR A NEW SESSION. The local id means nothing outside the machine it was minted on, and
 		// ApplySchedulerState deliberately does not use it; the CONTRACT id is what came back unchanged.
 		Task.LocalId = FGuid::NewGuid();
+		// REMEMBERED, NOT REOPENED. The founder respawned into a stack of orbs for tasks they had not touched,
+		// because every restored contract came straight back into the workspace. A restored task now waits in
+		// the record -- no tab, no orb -- until the user reopens it or a scheduler reports on it.
+		Task.bInWorkspace = false;
 		// AND NOBODY HAS CONFIRMED ANY OF THIS YET. The state is what we last heard and is kept as such, but the
 		// source drops to Local so that nothing counts as running on the strength of a file. GetRunningCount()
 		// counts Julius-sourced work only, so it reads zero until a scheduler speaks -- and when one does, it
@@ -301,17 +305,12 @@ int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
 		Task.Source = EWonderlandTaskSource::Local;
 		Task.Lifecycle.Add(FString::Printf(TEXT("%s RESTORED (%s, unconfirmed since restart)"),
 			*When, WonderlandTaskStateName(Task.State)));
-		if (Save->SelectedIndex == Restored)
-		{
-			Selected = Task.LocalId;
-		}
 		Tasks.Add(Task);
 		++Restored;
 	}
-	if (Restored > 0 && !Selected.IsValid())
-	{
-		Selected = Tasks.Last().LocalId;
-	}
+	// NOTHING IS SELECTED, because nothing is open. Selecting a task that is not in the workspace would put the
+	// mission strip on it and hand the + a slot the user cannot see.
+	Selected.Invalidate();
 	if (Restored > 0)
 	{
 		UE_LOG(LogTemp, Display, TEXT("WLTASK restored %d Mission Contract(s); none is running until Julius says so"),
@@ -361,7 +360,7 @@ FGuid UWonderlandMissionTaskSubsystem::AddDraft()
 {
 	if (!CanAddTask())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused a new slot: %d of %d already open"), Tasks.Num(), GetTaskCapacity());
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused a new slot: %d of %d already open"), GetWorkspaceCount(), GetTaskCapacity());
 		return FGuid();
 	}
 	FWonderlandMissionTask Task;
@@ -436,6 +435,73 @@ bool UWonderlandMissionTaskSubsystem::DismissDraft(FGuid LocalId)
 	SaveContracts();
 	OnTasksChanged.Broadcast();
 	return true;
+}
+
+bool UWonderlandMissionTaskSubsystem::CloseFromWorkspace(FGuid LocalId)
+{
+	FWonderlandMissionTask* Task = FindMutable(LocalId);
+	if (Task == nullptr)
+	{
+		return false;
+	}
+	if (!WonderlandTaskIsContract(Task->State))
+	{
+		// A DRAFT HAS NO TRUTH TO KEEP. Closing an empty slot is dismissing it.
+		return DismissDraft(LocalId);
+	}
+	if (!Task->bInWorkspace)
+	{
+		return true;
+	}
+	// THE TAB AND THE ORB GO; THE TASK STAYS. State, source, contract id, lifecycle, evidence: none of it moves.
+	Task->bInWorkspace = false;
+	if (Selected == LocalId)
+	{
+		// Look at the nearest open tab, or at nothing. Never at a closed one.
+		Selected.Invalidate();
+		for (int32 Index = Tasks.Num() - 1; Index >= 0; --Index)
+		{
+			if (Tasks[Index].bInWorkspace) { Selected = Tasks[Index].LocalId; break; }
+		}
+	}
+	UE_LOG(LogTemp, Display, TEXT("WLTASK tab closed: '%s' stays a %s contract, out of the workspace"),
+		*Task->Objective.Left(40), WonderlandTaskStateName(Task->State));
+	SaveContracts();
+	OnTasksChanged.Broadcast();
+	return true;
+}
+
+bool UWonderlandMissionTaskSubsystem::ReopenInWorkspace(FGuid LocalId)
+{
+	FWonderlandMissionTask* Task = FindMutable(LocalId);
+	if (Task == nullptr)
+	{
+		return false;
+	}
+	if (!Task->bInWorkspace && GetWorkspaceCount() >= GetTaskCapacity())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK cannot reopen: %d of %d already open"), GetWorkspaceCount(), GetTaskCapacity());
+		return false;
+	}
+	Task->bInWorkspace = true;
+	Selected = LocalId;
+	SaveContracts();
+	OnTasksChanged.Broadcast();
+	return true;
+}
+
+int32 UWonderlandMissionTaskSubsystem::GetWorkspaceCount() const
+{
+	int32 Count = 0;
+	for (const FWonderlandMissionTask& Task : Tasks) { Count += Task.bInWorkspace ? 1 : 0; }
+	return Count;
+}
+
+bool UWonderlandMissionTaskSubsystem::ShouldPresentOrb(FGuid LocalId) const
+{
+	const FWonderlandMissionTask* Task = Find(LocalId);
+	return Task != nullptr && Task->bInWorkspace
+		&& Task->State != EWonderlandTaskState::Completed && Task->State != EWonderlandTaskState::Failed;
 }
 
 bool UWonderlandMissionTaskSubsystem::SelectTask(FGuid LocalId)
@@ -519,6 +585,14 @@ bool UWonderlandMissionTaskSubsystem::ApplySchedulerState(
 	Touch(*Task, State, EWonderlandTaskSource::Julius);
 	Task->TokensUsed = TokensUsed;
 	Task->EvidenceCount = EvidenceCount;
+	// A CONTRACT JULIUS IS WORKING IS AN ACTIVE TASK, which is exactly what the orb is a visualisation of. The
+	// founder's rule reads "ACTIVE TASK(S) -> their appropriate orb presentation may remain visible", so a live
+	// report reopens the task if it was closed -- and a finished state is handled by ShouldPresentOrb.
+	if (!Task->bInWorkspace && State != EWonderlandTaskState::Completed && State != EWonderlandTaskState::Failed)
+	{
+		Task->bInWorkspace = true;
+		if (!Selected.IsValid()) { Selected = Task->LocalId; }
+	}
 	SaveContracts();
 	OnTasksChanged.Broadcast();
 	return true;

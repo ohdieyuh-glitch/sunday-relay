@@ -95,6 +95,10 @@ public:
 		SLATE_EVENT(FOnSelectTaskTab, OnSelectTaskTab)
 		/** Press +: open ANOTHER Julius task terminal. Never overwrites the one being viewed. */
 		SLATE_EVENT(FSimpleDelegate, OnAddTaskTerminal)
+		/** Press X: close the SELECTED task terminal. A draft is discarded; a contract keeps its truth. */
+		SLATE_EVENT(FSimpleDelegate, OnCloseTaskTerminal)
+		/** How many tasks are closed but remembered, so the strip can say so instead of hiding them. */
+		SLATE_ATTRIBUTE(int32, ClosedTaskCount)
 		/** How many command rows the left list draws: the preset station's quick slot count. */
 		SLATE_ARGUMENT(int32, CommandSlotCount)
 		/** The command in a quick slot of the active layout, read every paint; empty for an empty slot. */
@@ -191,6 +195,8 @@ private:
 	FOnGetTaskTabs OnGetTaskTabs;
 	FOnSelectTaskTab OnSelectTaskTab;
 	FSimpleDelegate OnAddTaskTerminal;
+	FSimpleDelegate OnCloseTaskTerminal;
+	TAttribute<int32> ClosedTaskCount;
 
 	/** The strip of task terminals across the top, and the + that opens another. */
 	TSharedRef<SWidget> MakeTaskTabs();

@@ -77,6 +77,13 @@ public:
 
 	/** Open or shut the RELAY DOG skin view, which stands where the inspector stands: over the brain. */
 	void SetSkinsOpen(bool bOpen);
+
+	/**
+	 * WHERE THE PREVIEW WINDOW IS ON SCREEN, as a fraction of the viewport: centre and size. False until the
+	 * wardrobe has painted once. The camera framing reads this rather than assuming a layout, so a resize or a
+	 * different font does not put the Dog behind the skin list.
+	 */
+	bool GetSkinPreviewRect(FVector2D& OutCentre, FVector2D& OutSize) const;
 	bool IsSkinsOpen() const { return bSkinsOpen; }
 
 	virtual bool SupportsKeyboardFocus() const override { return true; }
@@ -102,6 +109,8 @@ private:
 
 	bool bSkinsOpen = false;
 	const FSlateBrush* SkinPreviewBrush = nullptr;
+	/** The hole in the panel the world shows through. */
+	TSharedPtr<SWidget> SkinPreviewWindow;
 	TArray<FWonderlandRelaySkin> Skins;
 	TAttribute<FName> EquippedSkin;
 	FOnChooseSkin OnChooseSkin;
@@ -130,6 +139,10 @@ private:
 	FSlateRoundedBoxBrush ButtonHoverBrush;
 	FSlateRoundedBoxBrush RuleBrush;
 	FSlateRoundedBoxBrush StatusBrush;
+	/** An outline with no fill: the preview window's frame. */
+	FSlateRoundedBoxBrush SkinWindowFrameBrush;
+	FSlateRoundedBoxBrush SkinPanelFrameBrush;
+	FSlateRoundedBoxBrush SkinPanelSolidBrush;
 	FSlateBrush ClearBrush;
 	FButtonStyle SelectableStyle;
 	FButtonStyle ActionStyle;

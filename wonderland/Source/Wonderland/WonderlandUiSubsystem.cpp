@@ -43,6 +43,10 @@
 #include "WonderlandRelaySkins.h"
 #include "EngineUtils.h"
 #include "WonderlandCompanionEmbodiment.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "RelayDogCharacter.h"
+#include "TimerManager.h"
 #include "WonderlandMissionTasks.h"
 #include "WonderlandSubAgentCubs.h"
 #include "WonderlandSkinStage.h"
@@ -720,13 +724,9 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 
 void UWonderlandUiSubsystem::CloseOverlay()
 {
-	// THE PREVIEW DOG DELIBERATELY STAYS. It used to be sent home here, and that was wrong: the wardrobe panel
-	// covers the screen, so a Dog that vanishes when the panel closes is a Dog the founder can never actually look
-	// at. The founder asked to go "Apollo -> Bee -> Arden -> Celestial Light and visually inspect them quickly",
-	// which means picking a skin, shutting the panel, and seeing it standing there.
-	//
-	// IT IS NOT ABANDONED. `/skin off` dismisses it, opening the wardrobe again re-stages it in front of wherever
-	// the player now is, and it is a development preview body that holds no authority and no mission.
+	// THE CAMERA GOES BACK TO THE PLAYER whenever the panel closes by any route -- Escape, CLOSE, or a jump to
+	// another overlay. The Dog needs no sending home: it is the player's own pawn, wearing the skin.
+	FrameRelayDogInWardrobe(false);
 	if (Open == EOverlay::None)
 	{
 		return;
@@ -1207,6 +1207,127 @@ bool UWonderlandUiSubsystem::FocusWonderWebWindow(FName Id)
 	return true;
 }
 
+void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
+{
+	APlayerController* Controller = BoundController.Get();
+	UWorld* World = Controller != nullptr ? Controller->GetWorld() : nullptr;
+	APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+	if (World == nullptr || Pawn == nullptr)
+	{
+		return;
+	}
+	if (!bOn)
+	{
+		World->GetTimerManager().ClearTimer(WardrobeFrameTimer);
+		if (WardrobeCamera.IsValid())
+		{
+			Controller->SetViewTargetWithBlend(Pawn, 0.35f, EViewTargetBlendFunction::VTBlend_Cubic);
+		}
+		return;
+	}
+	// THE WINDOW HAS TO HAVE PAINTED ONCE before its place on screen is known, so the framing is done a tick after
+	// the wardrobe opens and re-solved for a few frames while the panel settles into its layout.
+	TWeakObjectPtr<UWonderlandUiSubsystem> WeakThis(this);
+	World->GetTimerManager().SetTimer(WardrobeFrameTimer, FTimerDelegate::CreateWeakLambda(this, [WeakThis]()
+	{
+		UWonderlandUiSubsystem* Self = WeakThis.Get();
+		APlayerController* PC = Self != nullptr ? Self->BoundController.Get() : nullptr;
+		APawn* Dog = PC != nullptr ? PC->GetPawn() : nullptr;
+		UWorld* W = PC != nullptr ? PC->GetWorld() : nullptr;
+		if (Self == nullptr || Dog == nullptr || W == nullptr || !Self->BrainPanel.IsValid() || !Self->BrainPanel->IsSkinsOpen())
+		{
+			return;
+		}
+		FVector2D Centre, Size;
+		if (!Self->BrainPanel->GetSkinPreviewRect(Centre, Size))
+		{
+			return;
+		}
+		// ---- how tall the Dog stands as dressed, and where its chest is
+		const ARelayDogCharacter* Relay = Cast<ARelayDogCharacter>(Dog);
+		const float Height = Relay != nullptr ? Relay->GetDressedHeightUu() : 174.0f;
+		const FVector Sole = Dog->GetActorLocation() - FVector(0.0, 0.0, Dog->GetSimpleCollisionHalfHeight());
+		const FVector LookAt = Sole + FVector(0.0, 0.0, Height * 0.47);
+
+		// ---- the lens: the player's own field of view, so the framing maths matches what is drawn
+		const float HFov = PC->PlayerCameraManager != nullptr ? PC->PlayerCameraManager->GetFOVAngle() : 90.0f;
+		int32 VX = 0, VY = 0;
+		PC->GetViewportSize(VX, VY);
+		const float Aspect = VY > 0 ? static_cast<float>(VX) / static_cast<float>(VY) : 1.777f;
+		const float TanH = FMath::Tan(FMath::DegreesToRadians(HFov * 0.5f));
+		const float TanV = TanH / Aspect;
+		// Distance so the Dog fills about three quarters of the window's height.
+		const float WantTall = FMath::Max(Size.Y * 0.74f, 0.05f);
+		const float Distance = FMath::Clamp(Height / (WantTall * 2.0f * TanV), 140.0f, 1400.0f);
+		// The Dog must sit at the window's centre, which is off the screen's centre: aim the lens away from the
+		// Dog by exactly that angle. Screen y runs downward.
+		const float YawOff = FMath::RadiansToDegrees(FMath::Atan((Centre.X - 0.5f) * 2.0f * TanH));
+		const float PitchOff = FMath::RadiansToDegrees(FMath::Atan((Centre.Y - 0.5f) * 2.0f * TanV));
+
+		// ---- a clear eye, in front of the face first. Bystanders (companions, cubs) have no collision and are
+		// ---- kept out of the shot by distance rather than by trace.
+		TArray<FVector> Bystanders;
+		for (TActorIterator<AWonderlandCompanionEmbodiment> It(W); It; ++It)
+		{
+			if (Relay == nullptr || *It != Relay->GetCostume()) { Bystanders.Add(It->GetActorLocation()); }
+		}
+		for (TActorIterator<AWonderlandSubAgentCub> It(W); It; ++It) { Bystanders.Add(It->GetActorLocation()); }
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(WonderlandWardrobeCamera), false);
+		Params.AddIgnoredActor(Dog);
+		if (Relay != nullptr && Relay->GetCostume() != nullptr) { Params.AddIgnoredActor(Relay->GetCostume()); }
+		const float BaseYaw = Dog->GetActorRotation().Yaw;
+		static const float Offsets[] = { 0.0f, -30.0f, 30.0f, -60.0f, 60.0f, -90.0f, 90.0f, 180.0f };
+		FVector Eye = LookAt + Dog->GetActorForwardVector() * Distance + FVector(0.0, 0.0, Height * 0.12);
+		for (float Off : Offsets)
+		{
+			const FVector Dir = FRotator(0.0, BaseYaw + Off, 0.0).Vector();
+			const FVector Candidate = LookAt + Dir * Distance + FVector(0.0, 0.0, Height * 0.12);
+			bool bCrowded = false;
+			for (const FVector& B : Bystanders)
+			{
+				if (FVector::Dist2D(B, Candidate) < 200.0f) { bCrowded = true; break; }
+				const FVector Seg = LookAt - Candidate;
+				const float T = FMath::Clamp(FVector::DotProduct(B - Candidate, Seg) / FMath::Max(Seg.SizeSquared(), 1.0), 0.0, 1.0);
+				if (FVector::Dist2D(Candidate + Seg * T, B) < 120.0f) { bCrowded = true; break; }
+			}
+			if (bCrowded) { continue; }
+			FHitResult Hit;
+			if (W->LineTraceSingleByChannel(Hit, Candidate, LookAt, ECC_Camera, Params)) { continue; }
+			FHitResult Above;
+			if (W->LineTraceSingleByChannel(Above, Candidate + FVector(0.0, 0.0, 250.0), Candidate, ECC_Camera, Params)) { continue; }
+			Eye = Candidate;
+			break;
+		}
+
+		// ---- the camera actor, reused
+		ACameraActor* Cam = Self->WardrobeCamera.Get();
+		if (Cam == nullptr)
+		{
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.ObjectFlags |= RF_Transient;
+			Cam = W->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(Eye), SpawnParams);
+			if (Cam == nullptr) { return; }
+#if WITH_EDITOR
+			Cam->SetActorLabel(TEXT("WL_WardrobeCamera"), false);
+#endif
+			Self->WardrobeCamera = Cam;
+		}
+		FRotator Aim = (LookAt - Eye).Rotation();
+		Aim.Yaw -= YawOff;
+		Aim.Pitch += PitchOff;
+		Cam->SetActorLocationAndRotation(Eye, Aim);
+		if (UCameraComponent* Lens = Cam->GetCameraComponent())
+		{
+			Lens->SetFieldOfView(HFov);
+			Lens->bConstrainAspectRatio = false;
+		}
+		if (PC->GetViewTarget() != Cam)
+		{
+			PC->SetViewTargetWithBlend(Cam, 0.45f, EViewTargetBlendFunction::VTBlend_Cubic);
+		}
+	}), 0.08f, true, 0.05f);
+}
+
 void UWonderlandUiSubsystem::StageSkinPreviewInWorld(bool bOn)
 {
 	AWonderlandSkinStage* Stage = SkinStage();
@@ -1324,11 +1445,10 @@ bool UWonderlandUiSubsystem::SetBrainSkinsOpen(bool bOpen)
 	{
 		RefreshSkinPreviewBrush();
 	}
-	// THE PREVIEW DOG COMES TO THE FOUNDER, because the wardrobe's mirror cannot be made to work in this build.
-	// It is the same body the stage has always dressed -- real, idling, and following the registry -- simply
-	// standing in the plaza instead of in a viewing room a kilometre overhead.
-	StageSkinPreviewInWorld(bOpen);
+	// THE FOUNDER'S OWN DOG IS THE PREVIEW. It wears the skin now (ARelayDogCharacter::WearSkin), so there is no
+	// mannequin to stand anywhere: the panel opens a window and the camera frames the Dog inside it.
 	BrainPanel->SetSkinsOpen(bOpen);
+	FrameRelayDogInWardrobe(bOpen);
 	return BrainPanel->IsSkinsOpen() == bOpen;
 }
 
@@ -2597,6 +2717,53 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 	Command = Command.ToLower().TrimStartAndEnd();
 	Argument = Argument.TrimStartAndEnd();
 
+	if (Command == TEXT("/tasks"))
+	{
+		// THE RECORD, AND THE WAY BACK INTO THE WORKSPACE. `/tasks` lists every task with its state and whether it
+		// is open; `/tasks open N` brings a closed one back as a tab and an orb; `/tasks close N` is the X.
+		UWonderlandMissionTaskSubsystem* Set = Tasks();
+		if (Set == nullptr)
+		{
+			Terminal->AddJuliusRow(TEXT("You"), Line, TEXT("There is no task set in this world."));
+			return true;
+		}
+		FString Verb, Which;
+		Argument.Split(TEXT(" "), &Verb, &Which);
+		if (Verb.IsEmpty()) { Verb = Argument; }
+		const TArray<FWonderlandMissionTask>& Rows = Set->GetTasks();
+		if (Verb.Equals(TEXT("open"), ESearchCase::IgnoreCase) || Verb.Equals(TEXT("close"), ESearchCase::IgnoreCase))
+		{
+			const int32 Index = FCString::Atoi(*Which) - 1;
+			if (!Rows.IsValidIndex(Index))
+			{
+				Terminal->AddJuliusRow(TEXT("You"), Line, FString::Printf(TEXT("No task %s. /tasks lists them."), *Which));
+				return true;
+			}
+			const bool bOpen = Verb.Equals(TEXT("open"), ESearchCase::IgnoreCase);
+			const bool bOk = bOpen ? Set->ReopenInWorkspace(Rows[Index].LocalId) : Set->CloseFromWorkspace(Rows[Index].LocalId);
+			Terminal->AddJuliusRow(TEXT("You"), Line, bOk
+				? FString::Printf(TEXT("Task %d %s. Its Mission Contract is unchanged."), Index + 1, bOpen ? TEXT("reopened") : TEXT("closed"))
+				: TEXT("Refused -- see the log."));
+			return true;
+		}
+		if (Rows.Num() == 0)
+		{
+			Terminal->AddJuliusRow(TEXT("You"), Line, TEXT("No tasks. Press + to open one."));
+			return true;
+		}
+		for (int32 Index = 0; Index < Rows.Num(); ++Index)
+		{
+			const FWonderlandMissionTask& Task = Rows[Index];
+			Terminal->AddJuliusRow(TEXT("Tasks"),
+				FString::Printf(TEXT("%d  %s  %s"), Index + 1, WonderlandTaskStateName(Task.State),
+					Task.bInWorkspace ? TEXT("OPEN") : TEXT("closed")),
+				Task.Objective.IsEmpty() ? TEXT("(empty draft)") : Task.Objective.Left(72));
+		}
+		Terminal->AddJuliusRow(TEXT("Tasks"), TEXT("/tasks open N   /tasks close N"),
+			TEXT("Closing a tab keeps the contract. Only an explicit cancel would end a mission, and there is none yet."));
+		return true;
+	}
+
 	if (Command == TEXT("/skin"))
 	{
 		// THE WARDROBE WITHOUT THE WARDROBE. The panel covers the screen, so the quickest way to compare skins is
@@ -2613,8 +2780,9 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 		}
 		if (Argument.Equals(TEXT("off"), ESearchCase::IgnoreCase) || Argument.Equals(TEXT("none"), ESearchCase::IgnoreCase))
 		{
-			StageSkinPreviewInWorld(false);
-			Terminal->AddJuliusRow(TEXT("You"), TEXT("/skin off"), TEXT("The preview Relay Dog has gone."));
+			// OFF IS RELAY OG: the Dog's own body. There is no separate preview body to dismiss any more.
+			Registry->EquipSkin(TEXT("relay_og"));
+			Terminal->AddJuliusRow(TEXT("You"), TEXT("/skin off"), TEXT("RELAY OG. The Dog wears its own body."));
 			return true;
 		}
 		if (Argument.IsEmpty() || Argument.Equals(TEXT("list"), ESearchCase::IgnoreCase))
@@ -2634,10 +2802,8 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 				FString::Printf(TEXT("No skin named '%s'. Try /skin list."), *Argument));
 			return true;
 		}
-		// AND BRING IT WHERE IT CAN BE SEEN, so `/skin apollo` on its own is enough.
-		StageSkinPreviewInWorld(true);
 		Terminal->AddJuliusRow(TEXT("You"), Line,
-			FString::Printf(TEXT("%s - standing ahead of you. DEVELOPMENT PREVIEW: appearance only, no entitlement granted."),
+			FString::Printf(TEXT("%s - your Relay Dog wears it now. DEVELOPMENT PREVIEW: appearance only, no entitlement granted."),
 				*Argument.ToUpper()));
 		return true;
 	}
@@ -3442,6 +3608,12 @@ void UWonderlandUiSubsystem::EnsureLiveTerminal()
 			const TArray<FWonderlandMissionTask>& Rows = Set->GetTasks();
 			for (int32 Index = 0; Index < Rows.Num(); ++Index)
 			{
+				// A TAB IS A TASK OPEN IN THE WORKSPACE. A closed one is on record and reachable through /tasks,
+				// and its orb is gone with it -- the same flag decides both.
+				if (!Rows[Index].bInWorkspace)
+				{
+					continue;
+				}
 				SWonderlandLiveTerminal::FTaskTab Tab;
 				Tab.Id = Rows[Index].LocalId;
 				Tab.bSelected = Rows[Index].LocalId == Set->GetSelected();
@@ -3467,6 +3639,19 @@ void UWonderlandUiSubsystem::EnsureLiveTerminal()
 			// THE SAME CALL THE ORB STACK GROWS FROM, so a tab and an orb can never disagree about how many tasks
 			// there are. It creates an empty slot and selects it; it does not touch the terminal being viewed.
 			if (WeakThis.IsValid()) { WeakThis->PressAddTask(); }
+		})
+		.OnCloseTaskTerminal_Lambda([WeakThis]()
+		{
+			// THE X. Closes the selected tab and its orb; a draft is discarded, a contract keeps its truth.
+			if (UWonderlandMissionTaskSubsystem* Set = WeakThis.IsValid() ? WeakThis->Tasks() : nullptr)
+			{
+				Set->CloseFromWorkspace(Set->GetSelected());
+			}
+		})
+		.ClosedTaskCount_Lambda([WeakThis]()
+		{
+			const UWonderlandMissionTaskSubsystem* Set = WeakThis.IsValid() ? WeakThis->Tasks() : nullptr;
+			return Set != nullptr ? Set->NumTasks() - Set->GetWorkspaceCount() : 0;
 		})
 		.OnSubmit_Lambda([WeakThis](const FString& Text) { if (WeakThis.IsValid()) { WeakThis->HandleTerminalSubmit(Text); } });
 }

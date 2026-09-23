@@ -95,6 +95,8 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 	OnGetTaskTabs = InArgs._OnGetTaskTabs;
 	OnSelectTaskTab = InArgs._OnSelectTaskTab;
 	OnAddTaskTerminal = InArgs._OnAddTaskTerminal;
+	OnCloseTaskTerminal = InArgs._OnCloseTaskTerminal;
+	ClosedTaskCount = InArgs._ClosedTaskCount;
 	CommandSlotCount = FMath::Clamp(InArgs._CommandSlotCount, 1, 9);
 
 	FSlateBrush NoBackground;
@@ -286,6 +288,39 @@ void SWonderlandLiveTerminal::RebuildTaskTabs()
 		];
 	}
 
+	// THE X, LEFT OF THE +, acting on the selected tab: "[TASK 1] [TASK 2] [X][+]". Closing a tab is not
+	// cancelling a mission -- a contract keeps everything it is and leaves the workspace; only an empty draft is
+	// actually discarded. Shown only while there is a tab to close, so it cannot be pressed at nothing.
+	const bool bAnySelected = Tabs.ContainsByPredicate([](const FTaskTab& Tab) { return Tab.bSelected; });
+	if (bAnySelected)
+	{
+		TaskTabBox->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(4.0f, 0.0f, 3.0f, 0.0f))
+		[
+			SNew(SButton)
+			.ButtonStyle(FCoreStyle::Get(), "NoBorder")
+			.ContentPadding(FMargin(0.0f))
+			.ToolTipText(INVTEXT("Close this task terminal. An empty draft is discarded; a Mission Contract keeps its state and can be reopened with /tasks."))
+			.OnClicked_Lambda([this]()
+			{
+				OnCloseTaskTerminal.ExecuteIfBound();
+				RebuildTaskTabs();
+				return FReply::Handled();
+			})
+			[
+				SNew(SBorder)
+				.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+				.BorderBackgroundColor(FSlateColor(FLinearColor(0.16f, 0.10f, 0.12f, 0.85f)))
+				.Padding(FMargin(9.0f, 2.0f))
+				[
+					SNew(STextBlock)
+					.Text(INVTEXT("X"))
+					.Font(WonderlandUi::Sans(12, true))
+					.ColorAndOpacity(WonderlandUi::Coral())
+				]
+			]
+		];
+	}
+
 	// THE +, AT THE END OF THE STRIP, where a new tab appears.
 	TaskTabBox->AddSlot().AutoWidth().VAlign(VAlign_Center)
 	[
@@ -321,6 +356,20 @@ void SWonderlandLiveTerminal::RebuildTaskTabs()
 		.Font(WonderlandUi::Sans(7, false, 170))
 		.ColorAndOpacity(WonderlandUi::Faint())
 	];
+
+	// CLOSED TASKS ARE NOT GONE, and the strip says so. A tab shut with X is a contract still on record; hiding
+	// that it exists would be the "destroy evidence/history" the founder ruled out. /tasks lists and reopens them.
+	const int32 Closed = ClosedTaskCount.Get(0);
+	if (Closed > 0)
+	{
+		TaskTabBox->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(12.0f, 0.0f, 0.0f, 0.0f))
+		[
+			SNew(STextBlock)
+			.Text(FText::FromString(FString::Printf(TEXT("%d CLOSED  \u00B7  /tasks"), Closed)))
+			.Font(WonderlandUi::Sans(7, false, 170))
+			.ColorAndOpacity(WonderlandUi::Faint())
+		];
+	}
 }
 
 TSharedRef<SWidget> SWonderlandLiveTerminal::MakeSection(const FString& Title, const FString& State, TSharedRef<SWidget> Body)
@@ -740,6 +789,7 @@ void SWonderlandLiveTerminal::Tick(const FGeometry& AllottedGeometry, const doub
 			Signature += FString::Printf(TEXT("%s|%s|%d|%d;"),
 				*Tab.Id.ToString(EGuidFormats::Digits), *Tab.Label, Tab.bSelected ? 1 : 0, Tab.bDraft ? 1 : 0);
 		}
+		Signature += FString::Printf(TEXT("closed=%d"), ClosedTaskCount.Get(0));
 		if (Signature != TaskTabSignature)
 		{
 			TaskTabSignature = Signature;

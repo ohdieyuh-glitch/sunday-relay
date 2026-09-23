@@ -146,6 +146,20 @@ struct WONDERLAND_API FWonderlandMissionTask
 	/** Why this task failed, when it did. Empty otherwise. */
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Tasks")
 	FString Failure;
+
+	/**
+	 * WHETHER THIS TASK IS OPEN IN THE WORKSPACE RIGHT NOW: a tab in the Julius terminal and an orb beside the Dog.
+	 *
+	 * PRESENTATION, NOT TRUTH. The record above is what the task IS; this is only whether the world is showing it.
+	 * The founder's rule: "merely spawning into Wonderland should NOT resurrect a stack of task orbs", and closing
+	 * a tab "does NOT automatically mean CANCEL THE MISSION". So a task restored from disk comes back with this
+	 * false -- remembered, untouched, and invisible until the user reopens it -- and X on a tab clears it without
+	 * touching state, source, contract id, lifecycle or evidence.
+	 *
+	 * ONE FLAG FOR BOTH SURFACES, so a tab and an orb can never disagree about whether a task is open.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Tasks")
+	bool bInWorkspace = true;
 };
 
 /**
@@ -256,6 +270,31 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
 	bool DismissDraft(FGuid LocalId);
 
+	/* ---------------------------------------------------------- the workspace */
+
+	/**
+	 * THE X ON A TAB. Closes the task's terminal tab and takes its orb out of the world -- and changes NOTHING
+	 * about the task. A draft has no truth to keep, so a draft is simply dismissed. A contract keeps its state,
+	 * source, id, lifecycle and evidence, stays on disk, and reopens with ReopenInWorkspace.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
+	bool CloseFromWorkspace(FGuid LocalId);
+
+	/** Bring a closed task back as a tab and an orb, and look at it. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
+	bool ReopenInWorkspace(FGuid LocalId);
+
+	/** How many tasks are open in the workspace. Zero means no tabs and no orbs, whatever is on disk. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
+	int32 GetWorkspaceCount() const;
+
+	/**
+	 * WHETHER A TASK SHOULD HAVE AN ORB BESIDE THE DOG: open in the workspace, and not finished. A completed or
+	 * failed contract keeps its tab and its record; its active-follow presentation is over.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
+	bool ShouldPresentOrb(FGuid LocalId) const;
+
 	/* --------------------------------------------------------- the task set */
 
 	const TArray<FWonderlandMissionTask>& GetTasks() const { return Tasks; }
@@ -275,8 +314,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
 	int32 GetTaskCapacity() const;
 
+	/** Capacity is a readability limit on what is OPEN. A closed history must not stop the + from working. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
-	bool CanAddTask() const { return Tasks.Num() < GetTaskCapacity(); }
+	bool CanAddTask() const { return GetWorkspaceCount() < GetTaskCapacity(); }
 
 	const FWonderlandMissionTask* Find(FGuid LocalId) const;
 

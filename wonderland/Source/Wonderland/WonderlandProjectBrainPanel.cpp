@@ -285,6 +285,12 @@ private:
 
 SWonderlandProjectBrainPanel::SWonderlandProjectBrainPanel()
 	: PanelBrush(WonderlandUi::Srgb(12, 18, 54, 0.66f), 14.0f, WonderlandBrainLook::Beam(0.95f), 1.4f)
+	// THE WINDOW'S FRAME: an outline and no fill at all. Anything with a fill here would tint the Dog behind it.
+	, SkinWindowFrameBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 12.0f, WonderlandBrainLook::Beam(0.9f), 1.6f)
+	// THE WARDROBE'S OWN SURFACES: an outline with no fill for the panel, so its window is really a hole, and a
+	// solid for every surface that is not the window. A filled panel behind the window tinted the Dog navy.
+	, SkinPanelFrameBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 6.0f, WonderlandBrainLook::Violet(0.95f), 1.6f)
+	, SkinPanelSolidBrush(WonderlandUi::Srgb(8, 12, 38, 0.95f), 0.0f, FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 0.0f)
 	, CardBrush(WonderlandUi::Srgb(20, 28, 80, 0.58f), 9.0f, WonderlandUi::Srgb(88, 102, 232, 0.60f), 1.0f)
 	, SelectedBrush(WonderlandUi::Srgb(96, 104, 255, 0.30f), 9.0f, WonderlandBrainLook::Violet(1.0f), 1.6f)
 	, InspectorBrush(WonderlandUi::Srgb(8, 12, 38, 0.95f), 14.0f, WonderlandBrainLook::Violet(0.95f), 1.6f)
@@ -442,6 +448,7 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 		+ SConstraintCanvas::Slot().Anchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f)).Offset(FMargin(0.0f))
 		[
 			SNew(SWonderlandBrainBackdrop).ChakraRank_Lambda([this]() { return Model.ChakraRank; })
+			.Visibility_Lambda([this]() { return bSkinsOpen ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
 		]
 		// The brain.
 		+ SConstraintCanvas::Slot().Anchors(Slot(Hologram)).Offset(FMargin(0.0f))
@@ -451,14 +458,16 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 			[
 				SNew(SImage)
 				.Image(HologramBrush)
-				.Visibility(HologramBrush != nullptr ? EVisibility::HitTestInvisible : EVisibility::Collapsed)
+				// HIDDEN WHILE THE WARDROBE IS OPEN: the skin view stands over the brain, and its preview is a hole
+				// the world must show through -- not the hologram behind it.
+				.Visibility_Lambda([this]() { return HologramBrush != nullptr && !bSkinsOpen ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 				.ColorAndOpacity_Lambda([this]() { return FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f, Selected.IsNone() ? 1.0f : 0.30f)); })
 			]
 		]
 		+ SConstraintCanvas::Slot().Anchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f)).Offset(FMargin(0.0f))
 		[
 			SNew(SWonderlandBrainCoreGlow)
-			.Visibility(EVisibility::HitTestInvisible)
+			.Visibility_Lambda([this]() { return bSkinsOpen ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
 			.ChakraRank_Lambda([this]() { return Model.ChakraRank; })
 			.Dim_Lambda([this]() { return Selected.IsNone() ? 1.0f : 0.25f; })
 		]
@@ -980,6 +989,25 @@ void SWonderlandProjectBrainPanel::RebuildInspector()
 
 /* ------------------------------------------------------------------ RELAY DOG SKINS */
 
+bool SWonderlandProjectBrainPanel::GetSkinPreviewRect(FVector2D& OutCentre, FVector2D& OutSize) const
+{
+	if (!bSkinsOpen || !SkinPreviewWindow.IsValid())
+	{
+		return false;
+	}
+	const FGeometry& Window = SkinPreviewWindow->GetCachedGeometry();
+	const FGeometry& Whole = GetCachedGeometry();
+	const FVector2D WholeSize = Whole.GetAbsoluteSize();
+	if (WholeSize.X < 1.0 || WholeSize.Y < 1.0 || Window.GetAbsoluteSize().X < 1.0)
+	{
+		return false;
+	}
+	const FVector2D TopLeft = (Window.GetAbsolutePosition() - Whole.GetAbsolutePosition()) / WholeSize;
+	OutSize = Window.GetAbsoluteSize() / WholeSize;
+	OutCentre = TopLeft + OutSize * 0.5;
+	return true;
+}
+
 void SWonderlandProjectBrainPanel::SetSkinsOpen(bool bOpen)
 {
 	if (bSkinsOpen == bOpen)
@@ -1153,124 +1181,148 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSkinsView()
 		return Skins.FindByPredicate([Id](const FWonderlandRelaySkin& Skin) { return Skin.SkinId == Id; });
 	};
 
+	// THE WARDROBE IS BUILT AROUND A HOLE. Slate cannot paint a filled panel with a window cut out of it, so the panel
+	// is an outline only, and every surface that is not the window -- the header, the wardrobe column, the caption
+	// under the window, the footer, the margin -- carries its own solid. What is left unpainted is exactly the window,
+	// and the world shows through it undimmed with the founder's own Relay Dog stood in it.
+	const auto Solid = [this](const FMargin& Padding, TSharedRef<SWidget> Content) -> TSharedRef<SWidget>
+	{
+		return SNew(SBorder).BorderImage(&SkinPanelSolidBrush).Padding(Padding)[Content];
+	};
+
 	return SNew(SBorder)
 		.Visibility_Lambda([this]() { return bSkinsOpen ? EVisibility::Visible : EVisibility::Collapsed; })
-		.BorderImage(&InspectorBrush)
-		.Padding(FMargin(22.0f, 18.0f))
+		.BorderImage(&SkinPanelFrameBrush)
+		.Padding(FMargin(0.0f))
 		[
 			SNew(SVerticalBox)
-			// ---- the header
+			// ---- the header, on its own solid
 			+ SVerticalBox::Slot().AutoHeight()
 			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+				Solid(FMargin(22.0f, 18.0f, 22.0f, 12.0f),
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
 				[
-					SNew(SVerticalBox)
-					+ SVerticalBox::Slot().AutoHeight()
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 					[
-						SNew(STextBlock).Text(INVTEXT("RELAY DOG")).Font(Font("Light", 26, 300)).ColorAndOpacity(Ink())
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Text(INVTEXT("RELAY DOG")).Font(Font("Light", 26, 300)).ColorAndOpacity(Ink())
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(1.0f, 5.0f, 0.0f, 0.0f)
+						[
+							// THE RULE, WRITTEN WHERE THE CHOICE IS MADE. A wardrobe is exactly the place a player would
+							// expect a skin to matter, so the panel says plainly that it does not.
+							SNew(STextBlock).Text(INVTEXT("ONE DOG   ·   MANY SKINS   ·   THE SAME JULIUS, THE SAME AUTHORITY"))
+							.Font(Font("Regular", 9, 260)).ColorAndOpacity(Mist())
+						]
 					]
-					+ SVerticalBox::Slot().AutoHeight().Padding(1.0f, 5.0f, 0.0f, 0.0f)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top)
 					[
-						// THE RULE, WRITTEN WHERE THE CHOICE IS MADE. A wardrobe is exactly the place a player would
-						// expect a skin to matter, so the panel says plainly that it does not.
-						SNew(STextBlock).Text(INVTEXT("ONE DOG   ·   MANY SKINS   ·   THE SAME JULIUS, THE SAME AUTHORITY"))
-						.Font(Font("Regular", 9, 260)).ColorAndOpacity(Mist())
+						SNew(SButton).ButtonStyle(&ActionStyle)
+						.OnClicked_Lambda([this]() { SetSkinsOpen(false); return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(INVTEXT("CLOSE   Esc")).Font(Font("Bold", 9, 200)).ColorAndOpacity(Mist())
+						]
 					]
 				]
-				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top)
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
 				[
-					SNew(SButton).ButtonStyle(&ActionStyle)
-					.OnClicked_Lambda([this]() { SetSkinsOpen(false); return FReply::Handled(); })
-					[
-						SNew(STextBlock).Text(INVTEXT("CLOSE   Esc")).Font(Font("Bold", 9, 200)).ColorAndOpacity(Mist())
-					]
-				]
+					SNew(SBox).HeightOverride(1.0f)[SNew(SImage).Image(&RuleBrush)]
+				])
 			]
-			+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 12.0f)
-			[
-				SNew(SBox).HeightOverride(1.0f)[SNew(SImage).Image(&RuleBrush)]
-			]
-			// ---- the figure, and the wardrobe beside it
+			// ---- the window, and the wardrobe beside it
 			+ SVerticalBox::Slot().FillHeight(1.0f)
 			[
 				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().FillWidth(1.05f).Padding(0.0f, 0.0f, 16.0f, 0.0f)
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					Solid(FMargin(0.0f), SNew(SBox).WidthOverride(22.0f))
+				]
+				+ SHorizontalBox::Slot().FillWidth(1.05f)
 				[
 					SNew(SVerticalBox)
 					+ SVerticalBox::Slot().FillHeight(1.0f)
 					[
-						SNew(SBorder).BorderImage(&InspectorBrush).Padding(FMargin(6.0f))
+						// THE WINDOW. Nothing is drawn inside this frame on purpose, and nothing is drawn behind it:
+						// Slate composites over the world, so this unpainted region is a hole the world shows through,
+						// and the wardrobe camera stands the founder's own Relay Dog in it. What is seen here is the
+						// Dog itself -- live, lit by the world, breathing, and wearing what the registry says -- not a
+						// capture and not a still. The scene capture this replaced wrote pure white in this build under
+						// ten configurations; the filled panel that first stood behind this frame tinted the Dog navy.
+						SAssignNew(SkinPreviewWindow, SBorder).BorderImage(&SkinWindowFrameBrush).Padding(FMargin(6.0f))
+						.Visibility(EVisibility::HitTestInvisible)
 						[
-							// THE LIVE DOG. This is a scene capture of an actor standing on a plinth in the world, so
-							// what is drawn here is breathing, looking about, and wearing what the registry says --
-							// never a rendered still. With no brush the view says so rather than faking one.
-							SkinPreviewBrush != nullptr
-								? StaticCastSharedRef<SWidget>(
-									SNew(SImage)
-									.Image(SkinPreviewBrush)
-									.Visibility(EVisibility::HitTestInvisible)
-									.ColorAndOpacity_Lambda([this]()
-									{
-										// Every paint tells the stage somebody is watching. A stage nobody is watching
-										// stops rendering, which is the whole reason this costs nothing when shut.
-										OnSkinPreviewPainted.ExecuteIfBound();
-										return FSlateColor(FLinearColor::White);
-									}))
-								: StaticCastSharedRef<SWidget>(
-									SNew(STextBlock)
-									.Text(INVTEXT("LIVE PREVIEW UNAVAILABLE\nthe skin stage did not start"))
-									.Font(Font("Regular", 10)).ColorAndOpacity(Mist(0.8f))
-									.Justification(ETextJustify::Center))
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().FillHeight(1.0f)
+							[
+								SNew(SSpacer)
+							]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 0.0f, 0.0f, 6.0f)
+							[
+								SNew(STextBlock)
+								.Text(INVTEXT("LIVE  \u00B7  THIS IS YOUR RELAY DOG, IN THE WORLD"))
+								.Font(Font("Regular", 8, 200)).ColorAndOpacity(Mist(0.85f))
+								.ShadowOffset(FVector2D(1.0f, 1.0f)).ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f))
+							]
 						]
 					]
-					+ SVerticalBox::Slot().AutoHeight().Padding(2.0f, 12.0f, 0.0f, 0.0f)
+					+ SVerticalBox::Slot().AutoHeight()
 					[
-						SNew(STextBlock)
-						.Text_Lambda([Worn]()
-						{
-							const FWonderlandRelaySkin* Skin = Worn();
-							return FText::FromString(Skin != nullptr ? Skin->DisplayName : TEXT("RELAY OG"));
-						})
-						.Font(Font("Bold", 14, 160)).ColorAndOpacity(Ink())
-					]
-					+ SVerticalBox::Slot().AutoHeight().Padding(2.0f, 5.0f, 0.0f, 0.0f)
-					[
-						// WHO GRANTED IT, said every time. No account authority grants skins in this build, so every
-						// skin but the Dog's own form reads DEVELOPMENT PREVIEW and none of them may read as owned.
-						SNew(STextBlock)
-						.Text_Lambda([Worn]()
-						{
-							const FWonderlandRelaySkin* Skin = Worn();
-							if (Skin == nullptr)
+						Solid(FMargin(2.0f, 12.0f, 0.0f, 0.0f),
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock)
+							.Text_Lambda([Worn]()
 							{
-								return INVTEXT("—");
-							}
-							switch (Skin->Access)
+								const FWonderlandRelaySkin* Skin = Worn();
+								return FText::FromString(Skin != nullptr ? Skin->DisplayName : TEXT("RELAY OG"));
+							})
+							.Font(Font("Bold", 14, 160)).ColorAndOpacity(Ink())
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+						[
+							// WHO GRANTED IT, said every time. No account authority grants skins in this build, so every
+							// skin but the Dog's own form reads DEVELOPMENT PREVIEW and none of them may read as owned.
+							SNew(STextBlock)
+							.Text_Lambda([Worn]()
 							{
-							case EWonderlandSkinAccess::Owned:
-								return Skin->bIsBaseForm ? INVTEXT("THE DOG'S OWN FORM") : INVTEXT("OWNED");
-							case EWonderlandSkinAccess::Locked:
-								return INVTEXT("LOCKED");
-							default:
-								return INVTEXT("DEVELOPMENT PREVIEW   ·   NO ACCOUNT HAS GRANTED THIS");
-							}
-						})
-						.Font(Font("Regular", 8, 200)).ColorAndOpacity(WonderlandUi::Srgb(0xFF, 0xD2, 0x73))
+								const FWonderlandRelaySkin* Skin = Worn();
+								if (Skin == nullptr)
+								{
+									return INVTEXT("—");
+								}
+								switch (Skin->Access)
+								{
+								case EWonderlandSkinAccess::Owned:
+									return Skin->bIsBaseForm ? INVTEXT("THE DOG'S OWN FORM") : INVTEXT("OWNED");
+								case EWonderlandSkinAccess::Locked:
+									return INVTEXT("LOCKED");
+								default:
+									return INVTEXT("DEVELOPMENT PREVIEW   ·   NO ACCOUNT HAS GRANTED THIS");
+								}
+							})
+							.Font(Font("Regular", 8, 200)).ColorAndOpacity(WonderlandUi::Srgb(0xFF, 0xD2, 0x73))
+						])
 					]
 				]
 				+ SHorizontalBox::Slot().FillWidth(1.0f)
 				[
+					Solid(FMargin(16.0f, 0.0f, 22.0f, 0.0f),
 					SNew(SScrollBox)
-					+ SScrollBox::Slot()[Cards]
+					+ SScrollBox::Slot()[Cards])
 				]
 			]
 			// ---- the footer
-			+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
+			+ SVerticalBox::Slot().AutoHeight()
 			[
+				Solid(FMargin(22.0f, 14.0f, 22.0f, 18.0f),
 				SNew(STextBlock)
 				.Text(INVTEXT("A skin changes appearance only. It does not change what Julius may do, what the Dog is allowed to decide, or what the status eyes mean."))
-				.Font(Font("Regular", 9)).ColorAndOpacity(Mist(0.85f)).AutoWrapText(true)
+				.Font(Font("Regular", 9)).ColorAndOpacity(Mist(0.85f)).AutoWrapText(true))
 			]
 		];
 }

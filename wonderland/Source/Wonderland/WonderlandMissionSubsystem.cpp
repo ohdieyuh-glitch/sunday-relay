@@ -882,12 +882,13 @@ void UWonderlandMissionSubsystem::SyncTaskOrbs()
 
 	const TArray<FWonderlandMissionTask>& Rows = Tasks->GetTasks();
 
-	// ---- take away the orbs whose tasks have gone. A dismissed draft leaves nothing behind, which is the founder's
-	// ---- rule about an abandoned slot: no mission, no history, and no orb.
+	// ---- take away the orbs whose tasks have gone OR ARE NO LONGER PRESENTED. A dismissed draft leaves nothing
+	// ---- behind; a tab closed with X takes its orb with it and keeps its record; a completed or failed contract
+	// ---- keeps its tab and loses its orb, because the orb is an ACTIVE-task visualisation and nothing else.
 	TArray<FGuid> Gone;
 	for (const TPair<FGuid, TWeakObjectPtr<AWonderlandMissionOrb>>& Pair : TaskOrbs)
 	{
-		if (Tasks->Find(Pair.Key) == nullptr)
+		if (!Tasks->ShouldPresentOrb(Pair.Key))
 		{
 			Gone.Add(Pair.Key);
 		}
@@ -901,10 +902,16 @@ void UWonderlandMissionSubsystem::SyncTaskOrbs()
 		TaskOrbs.Remove(Id);
 	}
 
-	// ---- and bring the rest into line, bottom to top.
-	for (int32 Index = 0; Index < Rows.Num(); ++Index)
+	// ---- and bring the rest into line, bottom to top. THE STACK INDEX COUNTS ONLY PRESENTED ORBS, so a closed
+	// ---- tab in the middle of the list does not leave a gap of air in the column.
+	int32 Index = -1;
+	for (const FWonderlandMissionTask& Task : Rows)
 	{
-		const FWonderlandMissionTask& Task = Rows[Index];
+		if (!Tasks->ShouldPresentOrb(Task.LocalId))
+		{
+			continue;
+		}
+		++Index;
 		TWeakObjectPtr<AWonderlandMissionOrb>* Found = TaskOrbs.Find(Task.LocalId);
 		AWonderlandMissionOrb* Stacked = Found != nullptr ? Found->Get() : nullptr;
 		if (Stacked == nullptr)

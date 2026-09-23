@@ -126,8 +126,16 @@ struct WONDERLAND_API FWonderlandCompanionFigure
 	TArray<FWonderlandCompanionPart> Parts;
 	TArray<FWonderlandCompanionBox> Boxes;
 
-	/** Hard ceilings, so a runaway generator cannot put ten thousand components into a world. */
-	static constexpr int32 MaxBoxes = 6000;
+	/**
+	 * Hard ceilings, so a runaway generator cannot put ten thousand components into a world.
+	 *
+	 * RAISED FOR THE PROJECT AVATARS. Boxes are ISM instances, one component per material, so forty thousand of
+	 * them is forty thousand instances across a dozen draw calls -- not forty thousand components. The founder
+	 * rejected the avatars as LEGO, and the cause is resolution: a 5.6 m creature built at 8-12 uu voxels is a
+	 * stack of bricks, while the companions the founder named as the bar are built at 2.5 uu. Fine voxels on a
+	 * body that size need this ceiling, and a runaway generator is still stopped, just later.
+	 */
+	static constexpr int32 MaxBoxes = 40000;
 	static constexpr int32 MaxParts = 48;
 	static constexpr int32 MaxMaterials = 12;
 

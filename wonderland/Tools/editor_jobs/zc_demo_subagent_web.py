@@ -56,8 +56,11 @@ def job():
         world = ues.get_game_world()
         L.focus_game_viewport()
 
-        demo = world.get_subsystem(unreal.WonderlandDemoSubsystem)
-        flock = world.get_subsystem(unreal.WonderlandSubAgentCubSubsystem)
+        # THROUGH THE TEST LIBRARY. UWorld has no get_subsystem on the Python surface in this build -- this exact
+        # line is what stopped the first run dead -- so the subsystems are handed over by C++ accessors that
+        # return the real runtime objects, not a fixture standing in for them.
+        demo = L.get_demo(world)
+        flock = L.get_cubs(world)
         if demo is None or flock is None:
             RESULT["status"] = "failed"
             RESULT["why"] = "no demonstration or cub subsystem"
@@ -108,7 +111,7 @@ def job():
             RESULT["%s_verdicts" % pass_name] = verdicts()
             RESULT["%s_report" % pass_name] = [str(line) for line in demo.describe_demo()]
             RESULT["%s_beats" % pass_name] = [
-                {"id": str(b.id), "observed": bool(b.b_observed), "seconds": round(float(b.seconds), 1), "note": str(b.note)}
+                {"id": str(b.id), "observed": bool(b.observed), "seconds": round(float(b.seconds), 1), "note": str(b.note)}
                 for b in demo.get_beats()
             ]
 
