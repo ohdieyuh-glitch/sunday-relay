@@ -445,7 +445,13 @@ class Figure:
                 lines.append("box %s %s %.3f %.3f %.3f %.3f %.3f %.3f" % (part, material, c[0], c[1], c[2], s[0], s[1], s[2]))
             else:
                 lines.append("box %s %s %.3f %.3f %.3f %.3f %.3f %.3f %.2f %.2f %.2f" % (part, material, c[0], c[1], c[2], s[0], s[1], s[2], r[0], r[1], r[2]))
-        assert len(self.boxes) <= 6000, (self.name, "boxes", len(self.boxes))
+        # THE BUDGET IS A DRAW-CALL BUDGET, AND IT WAS SET FOR A SIMPLER COSTUME. 6,000 was where these skins sat
+        # when they stopped at a halo and a colour, and the founder's plates are denser than that by a long way --
+        # layered drapery, chains, waist and knee armour, ribcages, manes. The Project Avatars he accepted run
+        # 12k-40k boxes, so a premium skin at this scale is not out of line with what this project already ships.
+        # Raised deliberately rather than by trimming the design to fit a number: it is one instanced mesh per
+        # material per part, and the costume is a single actor over the canon body.
+        assert len(self.boxes) <= 16000, (self.name, "boxes", len(self.boxes))
         assert len(self.parts) <= 48, (self.name, "parts", len(self.parts))
         assert len(self.materials) <= 12, (self.name, "materials", len(self.materials))
         with open(path, "w", encoding="utf-8", newline="\n") as handle:
@@ -722,25 +728,40 @@ def arden_infernal():
     # A whole limb, not a slab: a spiked shoulder mass, a thick upper arm, a heavier forearm, four long claws, a
     # burning wheel sigil on the back of the hand, and fire licking off the shoulder. Everything on this side is
     # dark red flesh and char; the right arm stays cream, which is what makes the asymmetry read from a distance.
+    # IT HAS TO BE HUGE, AND IT HAS TO LEAVE THE BODY. The first build was a correctly-shaped limb at roughly the
+    # size of a normal arm, tucked against the torso: 3.2 wide against a 5.8 torso. On the plate the demonic arm is
+    # a DOMINANT silhouette mass -- half again the torso's width, flaring outward and downward away from the ribs,
+    # with the claws spread low and clear of the robe. At medium distance that flare is the whole read of ARDEN,
+    # and a well-modelled limb held at the side simply disappears behind cloth. Every segment below now steps
+    # FURTHER OUT as it descends, so the arm makes its own outline instead of sharing the body's.
     arm_y = -(tw * 0.5 + d["arm"][1] * 0.36)
     az = d["torso_z"] + 1.0
-    figure.slab("arm_l", "char", (0.3, arm_y - 0.9, az + 3.4), (4.2, 4.6, 2.6), tile=tile)          # shoulder mass
-    for s in range(4):                                                                               # spikes
-        figure.box("arm_l", "char", (0.6 - s * 0.9, arm_y - 2.6, az + 4.6 + s * 0.35), (tile * 1.0, tile * 1.2, tile * (2.4 - 0.4 * s)))
-    figure.slab("arm_l", "demon", (0.0, arm_y - 0.6, az + 0.6), (3.2, 3.4, 5.0), tile=tile)           # upper arm
-    figure.slab("arm_l", "demon", (0.7, arm_y - 1.3, az - 3.4), (3.6, 3.8, 4.4), tile=tile)           # forearm
-    for s in range(3):                                                                               # sinew ridges
-        figure.box("arm_l", "char", (2.6, arm_y - 1.3 + (s - 1) * 1.2, az - 3.4), (tile * 0.6, tile * 0.7, tile * 3.6))
-    figure.claw_hand("arm_l", ("char", "ember"), (1.0, arm_y - 1.5, az - 5.9), 7.4, tile, -1.0)
-    figure.claw_hand("arm_l", ("demon", "ember"), (0.2, arm_y - 2.4, az - 5.4), 5.6, tile, -1.0)
-    sigil_c = (2.9, arm_y - 1.3, az - 3.2)
+    # the pauldron: a heavy spiked cap, wider than the shoulder it sits on
+    figure.slab("arm_l", "char", (0.3, arm_y - 1.6, az + 3.6), (6.0, 6.6, 3.6), tile=tile)           # shoulder mass
+    figure.slab("arm_l", "demon", (0.1, arm_y - 2.2, az + 1.9), (5.2, 5.8, 1.8), tile=tile)          # under-cap
+    for s in range(6):                                                                                # spikes
+        figure.box("arm_l", "char", (1.4 - s * 0.8, arm_y - 3.4 - s * 0.18, az + 5.2 + s * 0.30),
+                   (tile * 1.1, tile * 1.4, tile * (3.2 - 0.38 * s)))
+    figure.slab("arm_l", "demon", (0.0, arm_y - 2.6, az - 0.4), (5.0, 5.4, 6.6), tile=tile)           # upper arm
+    figure.slab("arm_l", "char", (0.9, arm_y - 3.4, az - 4.4), (4.4, 4.6, 2.0), tile=tile)            # elbow knot
+    figure.slab("arm_l", "demon", (1.1, arm_y - 4.4, az - 7.6), (5.6, 5.8, 6.2), tile=tile)           # forearm
+    for s in range(5):                                                                                # sinew ridges
+        figure.box("arm_l", "char", (3.6, arm_y - 4.4 + (s - 2) * 1.3, az - 7.6), (tile * 0.7, tile * 0.8, tile * 5.0))
+    for s in range(4):                                                                                # forearm barbs
+        figure.box("arm_l", "char", (0.4, arm_y - 6.8, az - 5.4 - s * 1.9), (tile * 0.9, tile * 2.2, tile * 1.0))
+    figure.claw_hand("arm_l", ("char", "ember"), (1.4, arm_y - 5.0, az - 11.4), 11.2, tile, -1.0)
+    figure.claw_hand("arm_l", ("demon", "ember"), (0.4, arm_y - 6.2, az - 10.6), 8.6, tile, -1.0)
+    sigil_c = (4.2, arm_y - 4.4, az - 7.2)
     figure.part("sigil", "arm_l", sigil_c, "orbit", -30.0)
     figure.spoked_wheel("sigil", "ruby", sigil_c, 2.9, 8, tile)
     figure.ring("sigil", lambda a: "ember", sigil_c, 3.8, tile * 0.55, tile * 0.85)
     figure.box("sigil", "emberpale", sigil_c, (tile * 0.8, tile * 1.4, tile * 1.4))
-    figure.part("armfire", "arm_l", (0.0, arm_y - 0.9, az + 4.2), "twinkle", 0.4)
-    figure.flame("armfire", lambda up: "ember" if up < 0.55 else "emberpale", (0.0, arm_y - 1.4, az + 4.4), 6.5, 3.4, 5, tile * 1.0)
-    figure.flame("armfire", lambda up: "ember" if up < 0.55 else "emberpale", (0.8, arm_y - 2.8, az - 1.2), 3.6, 2.2, 3, tile * 0.9)
+    # FIRE ALONG THE WHOLE LIMB, not just a tuft at the shoulder: the plate burns at the pauldron, down the outside
+    # of the arm and off the claws, which is what keeps the arm reading as infernal once it is this large.
+    figure.part("armfire", "arm_l", (0.0, arm_y - 1.6, az + 4.6), "twinkle", 0.4)
+    figure.flame("armfire", lambda up: "ember" if up < 0.55 else "emberpale", (0.0, arm_y - 2.2, az + 5.0), 8.5, 4.6, 7, tile * 1.0)
+    figure.flame("armfire", lambda up: "ember" if up < 0.55 else "emberpale", (0.6, arm_y - 4.6, az - 0.8), 5.4, 3.0, 4, tile * 0.95)
+    figure.flame("armfire", lambda up: "ember" if up < 0.55 else "emberpale", (1.0, arm_y - 6.4, az - 6.4), 4.6, 2.6, 4, tile * 0.9)
 
     # ================================================================== THE INFERNAL TAIL
     # A curl of char rising and hooking over behind the right hip, burning at the tip.
