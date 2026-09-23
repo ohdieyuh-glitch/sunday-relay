@@ -539,8 +539,11 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
     # THE VISOR, CUT INTO THE FACE. On the sheets it sits in the head rather than on it, so it is recessed a little and
     # the coat is carried round it -- a black plate glued to the front reads as a sticker.
     vw, vh = d["visor"]
-    # CENTRED ON THE FACE, as the photo has it -- it used to ride noticeably high.
-    visor_z = d["head_z"] + hh * 0.02
+    # SET LOW ON THE FACE. The founder compared the two heads crop to crop: the canonical Dog carries more brow
+    # above the visor than mine did, so the band sits BELOW the head's midline rather than on it. A visor riding
+    # high reads as a different expression entirely -- more alert, less calm -- which is why this is worth the
+    # fraction of a head it moves.
+    visor_z = d["head_z"] - hh * 0.07
     figure.slab("head", "visor", (hd * 0.5 - 0.35, 0.0, visor_z), (1.5, vw, vh), tile=tile * 0.62)
 
     # THE STATUS EYES. The brightest thing on the dog, and the one part of the face a skin may recolour.
