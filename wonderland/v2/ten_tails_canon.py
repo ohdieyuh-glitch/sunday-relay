@@ -45,7 +45,7 @@ PARENTS = {
 STAGES = {
     "small": dict(
         body_len=52.0, body_w=30.0, body_h=26.0, chunks=3, crag=0.0,
-        leg_hi=11.0, leg_lo=9.0, leg_r=5.0, paw_r=6.0, stance_w=0.70, claws=0,
+        leg_hi=11.0, leg_lo=9.0, leg_r=5.0, paw_r=6.0, stance_w=0.70, claws=0, leg_sides=8,
         neck_len=13.0, neck_r=7.5, head_len=24.0, head_w=20.0, head_h=18.0,
         head_rise=0.28, head_reach=0.78,
         snout=0.42, jaw_open=4.0, teeth=0, horns=0, horn_len=0.0, crest=0,
@@ -53,7 +53,7 @@ STAGES = {
         tail_eyes=False, tail_plates=0, brow_eyes=0, main_eye_r=3.4, tail_eye_r=0.0),
     "medium": dict(
         body_len=112.0, body_w=52.0, body_h=46.0, chunks=4, crag=0.35,
-        leg_hi=26.0, leg_lo=22.0, leg_r=12.5, paw_r=12.5, stance_w=0.78, claws=3,
+        leg_hi=26.0, leg_lo=22.0, leg_r=12.5, paw_r=12.5, stance_w=0.78, claws=3, leg_sides=10,
         neck_len=34.0, neck_r=15.0, head_len=48.0, head_w=36.0, head_h=32.0,
         head_rise=0.04, head_reach=1.30,
         snout=0.46, jaw_open=9.0, teeth=8, horns=2, horn_len=22.0, crest=5,
@@ -61,7 +61,7 @@ STAGES = {
         tail_eyes=True, tail_plates=3, brow_eyes=2, main_eye_r=6.0, tail_eye_r=4.0),
     "large": dict(
         body_len=240.0, body_w=104.0, body_h=96.0, chunks=5, crag=0.80,
-        leg_hi=58.0, leg_lo=50.0, leg_r=27.0, paw_r=26.0, stance_w=0.84, claws=4,
+        leg_hi=58.0, leg_lo=50.0, leg_r=27.0, paw_r=26.0, stance_w=0.84, claws=4, leg_sides=12,
         neck_len=76.0, neck_r=31.0, head_len=104.0, head_w=76.0, head_h=68.0,
         head_rise=-0.10, head_reach=1.50,
         snout=0.50, jaw_open=17.0, teeth=14, horns=6, horn_len=58.0, crest=9,
@@ -226,6 +226,27 @@ def parts(stage):
                        (0.0, body_y + p["body_h"] * 0.48 + hgt * 0.5, -half * 0.86 + p["body_len"] * 0.88 * f),
                        (p["body_w"] * 0.07, hgt, p["body_len"] * 0.055), chamfer=hgt * 0.20))
 
+    # ---- THE FRONT OF THE CREATURE. Everything that makes this body read -- crag plates, spine crest, the
+    # tail fan -- is on the back and the sides, and the one view a player gets walking up to it is a blank dark
+    # plane. So the chest carries its own plate and the shoulders carry their own mass, at the stages that have
+    # them: SMALL is a hatchling and is supposed to be smooth.
+    if p["crag"] > 0.0:
+        chest_y = body_y + p["body_h"] * 0.02
+        out.append(box("chestplate", "spine_high", "plate", (0.0, chest_y, half * 0.92),
+                       (p["body_w"] * 0.66, p["body_h"] * 0.74, p["body_len"] * 0.06),
+                       chamfer=p["body_h"] * 0.13))
+        for side in (-1.0, 1.0):
+            out.append(box("shoulder_%s" % ("l" if side < 0 else "r"), "spine_high", "hide",
+                           (side * p["body_w"] * 0.44, body_y + p["body_h"] * 0.20, half * 0.56),
+                           (p["body_w"] * 0.30, p["body_h"] * 0.62, p["body_len"] * 0.26),
+                           chamfer=p["body_h"] * 0.17))
+        # and a pair of collar ridges, so the join between chest and neck is a feature rather than a seam
+        for side in (-1.0, 1.0):
+            out.append(box("collar_%s" % ("l" if side < 0 else "r"), "spine_high", "crest",
+                           (side * p["body_w"] * 0.21, body_y + p["body_h"] * 0.40, half * 0.86),
+                           (p["body_w"] * 0.13, p["body_h"] * 0.22, p["body_len"] * 0.05),
+                           rot=(0.0, 0.0, side * 16.0), chamfer=p["body_h"] * 0.05))
+
     # ---- neck
     # The neck is swept to wherever the head pivot actually is, rather than to a second set of numbers that
     # had to be kept in step with it by hand. Move the head and the neck follows.
@@ -301,18 +322,29 @@ def parts(stage):
         lx = sx * p["body_w"] / 2.0 * p["stance_w"]
         lz = half * (0.60 if sz > 0 else -0.62)
         heavy = 1.18 if sz > 0 else 1.0        # the front half is the dangerous half
+        # ROUNDER AND LESS TAPERED. Eight sides on a 5.6 m animal's leg is visibly faceted at the distance a
+        # showcase is looked at, and 12 costs 16 triangles per leg segment. The taper is pulled in as well:
+        # 1.28 -> 0.92 over the thigh read as a spike driven into the ground, where a limb is closer to a
+        # column that swells at the top.
+        knee_y = p["leg_lo"] + p["paw_r"]
         out.append(tube("thigh_" + tag, "leg_%s_hi" % tag, "hide",
                         [(lx, hip, lz), (lx * 1.04, hip - p["leg_hi"] * 0.55, lz + sz * p["leg_hi"] * 0.10),
-                         (lx * 1.06, p["leg_lo"] + p["paw_r"], lz)],
-                        [p["leg_r"] * 1.28 * heavy, p["leg_r"] * 1.05 * heavy, p["leg_r"] * 0.92 * heavy],
-                        sides=8))
+                         (lx * 1.06, knee_y, lz)],
+                        [p["leg_r"] * 1.22 * heavy, p["leg_r"] * 1.02 * heavy, p["leg_r"] * 0.94 * heavy],
+                        sides=p["leg_sides"]))
+        # A HOCK. Without something at the joint a two-segment leg is one long cone and reads as furniture.
+        # This is also the joint the rig rotates, so a visible mass there is honest about where it bends.
+        out.append(sphere("hock_" + tag, "leg_%s_lo" % tag, "hide",
+                          (lx * 1.06, knee_y, lz), p["leg_r"] * 1.02 * heavy, steps=10))
         out.append(tube("shin_" + tag, "leg_%s_lo" % tag, "hide",
-                        [(lx * 1.06, p["leg_lo"] + p["paw_r"], lz),
+                        [(lx * 1.06, knee_y, lz),
+                         (lx * 1.03, knee_y * 0.52, lz - sz * p["leg_lo"] * 0.08),
                          (lx * 1.02, p["paw_r"] * 1.4, lz - sz * p["leg_lo"] * 0.12)],
-                        [p["leg_r"] * 0.92 * heavy, p["leg_r"] * 0.66 * heavy], sides=8))
+                        [p["leg_r"] * 0.94 * heavy, p["leg_r"] * 0.86 * heavy, p["leg_r"] * 0.78 * heavy],
+                        sides=p["leg_sides"]))
         out.append(box("paw_" + tag, "paw_%s" % tag, "hide",
                        (lx * 1.02, p["paw_r"] * 0.72, lz - sz * p["leg_lo"] * 0.12 + sz * p["paw_r"] * 0.35),
-                       (p["paw_r"] * 1.7, p["paw_r"] * 1.1, p["paw_r"] * 2.2), chamfer=p["paw_r"] * 0.30))
+                       (p["paw_r"] * 1.95, p["paw_r"] * 1.15, p["paw_r"] * 2.35), chamfer=p["paw_r"] * 0.34))
         for c in range(p["claws"]):
             f = 0.5 if p["claws"] == 1 else c / float(p["claws"] - 1)
             out.append(cone("claw_%s_%d" % (tag, c), "paw_%s" % tag, "claw",
