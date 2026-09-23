@@ -209,7 +209,14 @@ def job():
             "tabs_truth_preserved": "PASS" if RESULT.get("x_contract_truth_kept") and RESULT.get("reopened") else "FAIL",
             "skins_click_changes_visible_dog": "PASS" if (RESULT["dog_changed_every_time"] and RESULT["others_are_costumes"]
                                                           and RESULT["og_is_canon_body"]) else "FAIL",
-            "skins_dead_white_preview_gone": "PASS" if RESULT["wardrobe_open"] else "FAIL",
+            # NOT A VERDICT, BECAUSE THIS JOB CANNOT SEE. This line used to read
+            #   "skins_dead_white_preview_gone": "PASS" if RESULT["wardrobe_open"] else "FAIL"
+            # which asserts only that the panel OPENED -- it never looked at one pixel of the window. It reported
+            # PASS while the window was a dead navy rectangle with no Dog in it, under a caption saying the Dog was
+            # live in the world. A flag that never reached the rendering path must not speak for the rendering
+            # path, so this states what it actually knows and leaves the verdict to the photograph.
+            "skins_preview_window_verdict": "SEE wardrobe_*.jpg -- judged by eye, not asserted here",
+            "skins_wardrobe_opened": "PASS" if RESULT["wardrobe_open"] else "FAIL",
         }
         RESULT["status"] = "done"
     finally:
