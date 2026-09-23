@@ -622,6 +622,17 @@ namespace WonderlandCompanionActivity
 	}
 }
 
+void AWonderlandCompanionEmbodiment::DriveGaitFromCanonical(float InStridePhase, float InGaitWeight, float InSpeedUU)
+{
+	// TAKEN WHOLE, NOT BLENDED TOWARD. Easing the costume toward the Dog's numbers would just be a third gait with
+	// a lag of its own -- and a lag is precisely what "the skins do not move like the Dog" looks like. The
+	// canonical values ARE this body's values for the frame.
+	bGaitDrivenExternally = true;
+	GaitPhase = InStridePhase;
+	GaitWeight = InGaitWeight;
+	GroundSpeedUU = InSpeedUU;
+}
+
 void AWonderlandCompanionEmbodiment::SetRuntimeActivity(FName Activity)
 {
 	if (Activity.IsNone() || Activity == RuntimeActivity)
@@ -671,6 +682,18 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 	// doing, so a creature standing still paddles on the spot and one crossing a plaza takes the same little steps.
 	// This clock is advanced by DISTANCE instead, so one turn of the cycle is always one stride on the ground and the
 	// feet keep up with the body by construction.
+	// UNLESS A RELAY DOG IS HANDING DOWN ITS OWN, which is what a worn mascot skin does. The canonical stride has
+	// already been solved by the Dog this frame, so the costume wears that number and does not measure a second
+	// one. Everything below still reads GaitPhase and GaitWeight, so the entire body -- legs, lean, sway, bob,
+	// every joint -- inherits the canonical cadence, easing and transitions without any of them knowing.
+	if (bGaitDrivenExternally)
+	{
+		// The spot is still tracked so that releasing the drive does not read as one enormous instant stride.
+		GaitMeasuredAt = TimeSeconds;
+		LastGroundSpot = GetActorLocation();
+		bHasGroundSpot = true;
+	}
+	else
 	{
 		const float Delta = FMath::Max(TimeSeconds - GaitMeasuredAt, 0.0f);
 		GaitMeasuredAt = TimeSeconds;

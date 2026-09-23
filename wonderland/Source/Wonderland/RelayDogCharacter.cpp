@@ -1759,6 +1759,19 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 
 	const RelayDogStride::FDogPose& Pose = Animator.Update(In);
 
+	// ---- AND THE COSTUME WEARS THE SAME STRIDE, so a mascot skin is a change of appearance and nothing else.
+	//
+	// A worn skin replaces the visible body with a costume actor, and that actor knows how to walk on its own --
+	// its own phase from its own distance, its own weight, its own easing, its own idle cadence. All of it
+	// reasonable, none of it the Dog's, which is why the founder found the skins moving "nowhere near" the
+	// original. Handing the canonical pose down each frame is what makes them the same creature: the costume
+	// stops measuring and wears these numbers, so cadence, acceleration, easing and every transition come from
+	// the one animator that has always driven the Relay Dog.
+	if (AWonderlandCompanionEmbodiment* Worn = Costume)
+	{
+		Worn->DriveGaitFromCanonical(Pose.StridePhase, Pose.GaitWeight, Pose.SpeedUU);
+	}
+
 	// THE POSE IS ALREADY BLENDED. FDogAnimator multiplies the solved leg
 	// angles by the gait weight before returning them, so weighting them again
 	// here would square the blend and leave the Dog half-striding through every

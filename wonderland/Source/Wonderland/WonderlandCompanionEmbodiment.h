@@ -118,6 +118,30 @@ public:
 	float GetGaitWeight() const { return GaitWeight; }
 
 	/**
+	 * DRIVE THIS BODY'S GAIT FROM SOMEWHERE ELSE, and stop it running its own.
+	 *
+	 * WHY A MASCOT SKIN NEEDS THIS. A worn skin is a costume actor standing in for the Relay Dog's body, and left
+	 * alone it computed its own walk: its own phase from its own distance, its own weight from its own speed over
+	 * its own WalkSpeedUU, its own easing constant, its own idle cadence. Each is reasonable in isolation and all
+	 * of them are DIFFERENT from the canonical Dog's -- so a skinned Dog walked at a subtly wrong rate, eased in
+	 * and out of motion at a wrong rate, and idled to a wrong clock. "Nowhere near the same behaviour" is exactly
+	 * what two independently-tuned gaits look like side by side.
+	 *
+	 * A SKIN CHANGES THE APPEARANCE OF THE COMPANION AND NOTHING ELSE. So the Dog hands its own canonical
+	 * RelayDogStride pose down each frame and the costume wears that instead of inventing one: one animation
+	 * authority, one cadence, one set of transitions, whichever skin is on.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
+	void DriveGaitFromCanonical(float InStridePhase, float InGaitWeight, float InSpeedUU);
+
+	/** Hand the gait back to this body's own measurement, for a companion nothing is driving. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
+	void ReleaseCanonicalGait() { bGaitDrivenExternally = false; }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	bool IsGaitDrivenExternally() const { return bGaitDrivenExternally; }
+
+	/**
 	 * WHERE ONE NAMED JOINT IS POINTING RIGHT NOW, relative to its parent. Zero rotation for a part that does not
 	 * exist, which a caller can tell from GetPartNames().
 	 *
@@ -342,6 +366,8 @@ private:
 	/** 0 standing, 1 walking. Eased both ways, because snapping between them is itself a kind of stiffness. */
 	float GaitWeight = 0.0f;
 	float GaitMeasuredAt = 0.0f;
+	/** True while a Relay Dog is handing this costume its canonical stride; the body stops measuring its own. */
+	bool bGaitDrivenExternally = false;
 
 	/**
 	 * ONE STRIDE ON THE GROUND, in grid units before the figure's scale. The gait clock turns once per stride, so a
