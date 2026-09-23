@@ -1003,8 +1003,14 @@ def skeleton_flame():
     figure.flame("earfire", lambda up: "ghost" if up < 0.6 else "ghostpale", (-1.0, 0.0, d["head_z"] + hh * 0.5), 5.0, 6.0, 6, tile * 0.95)
 
     # ================================================================== THE SKULLS
-    figure.skull_emblem("head", mats, (hd * 0.5 + 0.6, 0.0, d["head_z"] + 2.5), 2.8, tile, deep="dark")
-    figure.skull_emblem("body", mats, (td * 0.5 + 1.3, 0.0, d["torso_z"] + th * 0.5 - 1.4), 3.2, tile, deep="dark")
+    # THE SKULLS ARE ORNAMENTS, NOT MARKS. On the plate the brow skull sits between the ears at a size you read
+    # before anything else on the face, the sternum skull is the centrepiece of the chest, and there is a skull
+    # set into each shoulder. At 2.8 and 3.2 these were dark smudges the eye skipped, so the skin's whole
+    # "skeletal armour" idea rested on the ribs alone.
+    figure.skull_emblem("head", mats, (hd * 0.5 + 0.6, 0.0, d["head_z"] + 3.0), 4.4, tile, deep="dark")
+    figure.skull_emblem("body", mats, (td * 0.5 + 1.8, 0.0, d["torso_z"] + th * 0.5 - 1.2), 5.0, tile, deep="dark")
+    for side in (-1.0, 1.0):
+        figure.skull_emblem("body", mats, (0.9, side * (tw * 0.5 + 1.6), shoulder + 0.9), 2.9, tile, deep="dark")
     # the gold charm on its chain, hanging just below the sternum skull
     chain_z = d["torso_z"] + th * 0.5 - 3.2
     figure.chain_run("body", "gold", (td * 0.5 + 1.0, -2.2, chain_z), (td * 0.5 + 1.0, 2.2, chain_z), tile, sag=1.2, link=tile * 0.8)
@@ -1290,6 +1296,20 @@ def celestial_light():
     figure.slab("body", "frost", (td * 0.40, 0.0, shoulder + 2.4), (1.4, tw * 0.86, 1.6), tile=tile)   # gorget
     figure.star_burst("body", {"gold": "starlight", "gem": "starlight"},
                       (td * 0.5 + 1.0, 0.0, shoulder + 2.4), 1.9, 4, tile, key="gold", core="gem")
+
+    # ENGRAVING, which is what stops a lit plate reading as a blank lit plate. The reference's armour is covered
+    # in fine scrollwork that only shows because the light catches the cut lines -- so these are single-voxel
+    # runs of the edge material laid ON the plates: a scroll curl either side of the breastplate, a run of
+    # chevrons down its centre, and a lit line along each pauldron's leading edge.
+    for side in (-1.0, 1.0):
+        for k in range(5):
+            a = math.pi * (0.15 + 0.30 * k / 4.0)
+            figure.box("body", "edge",
+                       (td * 0.5 + 1.0, side * (tw * 0.20 + math.sin(a) * tw * 0.22), shoulder - 0.2 - math.cos(a) * 2.4),
+                       (tile * 0.45, tile * 0.55, tile * 0.55))
+    for k in range(4):
+        figure.box("body", "edge", (td * 0.5 + 1.0, 0.0, shoulder + 0.6 - k * 1.5), (tile * 0.45, tile * 1.6, tile * 0.5))
+        figure.box("body", "edge", (td * 0.5 + 1.0, 0.0, shoulder + 0.1 - k * 1.5), (tile * 0.45, tile * 0.9, tile * 0.5))
 
     # HANDS, which the plate shows plainly and this skin did not have at all.
     for side, name in ((-1.0, "arm_l"), (1.0, "arm_r")):
