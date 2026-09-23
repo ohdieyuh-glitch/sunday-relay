@@ -67,7 +67,15 @@ def extend(batch, label):
     # spacing: the gap between the innermost section and the next one out, along the radius
     outer = sorted({round(r, 1) for r in radii})
     step = (outer[1] - outer[0]) if len(outer) > 1 else 740.0
-    ux, uy, _ = radial(section[0][0], section[0][1])
+    #: STEP ALONG THE ROAD'S AXIS, NOT ONE INSTANCE'S RADIAL. Using section[0]'s radial tilts the whole
+    #: extension by that instance's own bearing, and for a KERB -- whose first element sits 720 cm off the
+    #: centreline -- that tilt converges the two kerb lines as they run inward. Measured in the first apply:
+    #: the Icarus kerbs drifted from x = -720 to x = -596 over 120 m, a road quietly tapering by 1.24 m.
+    #: The section is symmetric about the carriageway, so its CENTROID lies on the axis and its radial is
+    #: the road's true direction. Every instance then steps by the same vector and the road stays parallel.
+    cx = sum(i[0] for i in section) / len(section)
+    cy = sum(i[1] for i in section) / len(section)
+    ux, uy, _ = radial(cx, cy)
     n = int((r_min - (GA_EDGE - OVERLAP)) // step)
     out = []
     for k in range(1, n + 1):
