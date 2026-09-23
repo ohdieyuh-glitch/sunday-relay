@@ -1840,6 +1840,53 @@ def main():
         path = os.path.join(cubs, "CubGhost_%s.wlvox" % eyes.capitalize())
         boxes, parts, materials = figure.write(path)
         print("%-22s %5d boxes  %2d parts  %2d materials  voxel %.2f uu" % (os.path.basename(path), boxes, parts, materials, figure.voxel_uu))
+    mirror_to_sibling_worktrees(args.out)
+    mirror_to_sibling_worktrees(cubs)
+
+
+def mirror_to_sibling_worktrees(out_dir):
+    """
+    A FIGURE THE EDITOR CANNOT SEE IS A FIGURE THAT DOES NOT EXIST.
+
+    UWonderlandRelaySkinSubsystem::FigurePathFor resolves to ProjectDir()/RelaySkins, so a running editor reads
+    the folder of the worktree it was LAUNCHED from, not this one. Only Content is shared between the
+    worktrees; RelaySkins is a separate tree in each. Regenerating here therefore leaves every other worktree
+    stale, and a proof run against a stale folder photographs the PREVIOUS round and reports on it.
+
+    That is not hypothetical: this session regenerated four figures here and left the editor worktree hours out
+    of date, while the generator's own output said it had written them.
+
+    ONLY WHERE THE FOLDER ALREADY EXISTS. A worktree without one has deliberately not got one -- the world
+    lane's has no RelaySkins at all -- and creating it there would push mascot files into a tree that never
+    asked for them.
+    """
+    here = os.path.abspath(out_dir)
+    if not os.path.isdir(here):
+        return
+    leaf = os.path.basename(here)
+    root = os.path.dirname(os.path.dirname(os.path.dirname(here)))
+    if not os.path.isdir(root):
+        return
+    for sibling in sorted(os.listdir(root)):
+        target = os.path.join(root, sibling, "wonderland", leaf)
+        if not os.path.isdir(target) or os.path.abspath(target) == here:
+            continue
+        copied = 0
+        for name in sorted(os.listdir(here)):
+            if not name.endswith(".wlvox"):
+                continue
+            src, dst = os.path.join(here, name), os.path.join(target, name)
+            with open(src, "rb") as handle:
+                payload = handle.read()
+            if os.path.isfile(dst):
+                with open(dst, "rb") as handle:
+                    if handle.read() == payload:
+                        continue
+            with open(dst, "wb") as handle:
+                handle.write(payload)
+            copied += 1
+        if copied:
+            print("mirrored %d figure(s) -> %s" % (copied, target))
 
 
 if __name__ == "__main__":
