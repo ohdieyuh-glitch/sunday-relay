@@ -81,3 +81,29 @@ Union the eight transformed corners of every component's box. `verify_avatars.py
 For an asset built by this project's own generators there is also an offline answer that needs no editor at all:
 `wonderland/v2/verify_avatar_placement.py` on the forge branch redoes the build's arithmetic in plain Python and
 reports the true height to 0.05 cm. It is how the avatars were cleared without the editor.
+
+## Lit and unlit emissive have working bands ~20x apart. Never carry a value between them.
+
+**Measured 2026-09-22, by two lanes who each had a number and disagreed by a factor of twenty.** Internal
+Development swept a small UNLIT emissive (`LevelColorationUnlitMaterial`) across six exposure floors in one PIE
+session and photographed each, against this map's pinned EV100 13.5 daylight:
+
+| scene units | what the frame shows |
+|---|---|
+| 1,700 | dark maroon — reads as a shadow, not a colour |
+| **3,400** | a deep, unmistakable red — **chosen** |
+| 13,700 | washed out to orange; it has stopped being red |
+| 56,000 | far past white |
+
+And the world lane's own measured band, for emissive on the **lit/opaque** `M_V2_Surface`, is **55,000–62,000** —
+where 2.2 renders black. Both numbers are right. Each is wrong by more than an order of magnitude on the other
+path: 56,000 is blown out on an unlit material, and 3,400 is invisible on a lit one.
+
+So the transferable rule is not a number:
+
+> A brightness measured on a lit material must never be carried to an unlit one, or the reverse. Sweep and
+> photograph on the path you are actually shipping.
+
+This is the same family as the Cub Ghost rendering black at 2.2 and the Bee's wings vanishing at 9,000 and again
+at 58,000 before they were moved off the translucent master. Before spending a rebuild on a colour value, check
+which path the material is on.

@@ -15,9 +15,16 @@ $log = 'C:\dev\iwonder\recovery\_manifests\wl-live-editor-103.log'
 # QUARANTINE ANY AUTOSAVES BEFORE LAUNCHING. On 2026-09-22 the editor came up behind a modal "Restore
 # Packages" dialog that looks exactly like a slow load -- responsive process, flat memory, the log frozen after
 # the DDC line at frame 0 -- and ESC does not dismiss a Slate modal, so the only way out was to kill the editor
-# and take 417 MB of autosaves out of the way. Autosave then wrote more, so the hazard returns on every launch.
-# This MOVES them aside rather than deleting them: nothing potentially useful to a recovery is destroyed, and the
-# folder can be put back by hand. Autosave itself stays on.
+# and take 417 MB of autosaves out of the way. Autosave keeps writing, so the material for it
+# accumulates again. This MOVES the autosaves aside rather than deleting them: nothing potentially
+# useful to a recovery is destroyed, and the folder can be put back by hand. Autosave stays on.
+#
+# WHAT ARMS THE MODAL, precisely, because I got this wrong once and said so out loud: it is NOT the
+# mere presence of Saved/Autosaves/PackageRestoreData.json. That file sits there permanently and
+# normally reads {"RestoreEnabled": false, "Packages": []}, which raises nothing. The prompt comes
+# when there is recoverable content to offer. Quarantining unconditionally is still the cheap and
+# reversible way to guarantee a clean start before an unattended run -- but do not read that file's
+# existence as a warning that the trap is armed.
 $autosaves = 'C:\dev\iwonder\wonderland-task3\wonderland\Saved\Autosaves'
 $quarantine = 'C:\dev\iwonder\recovery\_autosave_quarantine'
 if (Test-Path $autosaves) {
