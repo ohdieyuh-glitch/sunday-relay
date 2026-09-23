@@ -25,6 +25,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameFramework/SaveGame.h"
 #include "Subsystems/LocalPlayerSubsystem.h"
 #include "WonderlandMissionTasks.generated.h"
 
@@ -131,6 +132,36 @@ struct WONDERLAND_API FWonderlandMissionTask
 	/** Why this task failed, when it did. Empty otherwise. */
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Tasks")
 	FString Failure;
+};
+
+/**
+ * THE MISSION CONTRACTS ON DISK.
+ *
+ * Contracts only -- never a draft. And nothing secret: an objective is the user's own sentence, the same words
+ * they typed into the world, so this file holds no key, no token and no credential of any kind. If a backend
+ * identity ever needs a secret beside it, that secret belongs behind a credential reference and not in here.
+ */
+UCLASS()
+class WONDERLAND_API UWonderlandMissionTaskSave : public USaveGame
+{
+	GENERATED_BODY()
+
+public:
+	/** Which shape this file is, so an older one can be refused rather than misread. */
+	UPROPERTY()
+	int32 Version = 1;
+
+	UPROPERTY()
+	TArray<FWonderlandMissionTask> Contracts;
+
+	/**
+	 * WHICH CONTRACT WAS BEING LOOKED AT, by POSITION rather than by id.
+	 *
+	 * The local ids are deliberately not the ones that come back -- see RestoreContracts -- so an id saved here
+	 * would point at nothing. The stack's order is what the user actually remembers.
+	 */
+	UPROPERTY()
+	int32 SelectedIndex = INDEX_NONE;
 };
 
 DECLARE_MULTICAST_DELEGATE(FOnWonderlandTasksChanged);
@@ -242,6 +273,58 @@ public:
 	/** The set as lines, for `wl.Tasks.Status` and for a proof. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
 	TArray<FString> DescribeTasks() const;
+
+	/* -------------------------------------------------------- across a restart */
+
+	/**
+	 * WRITE THE CONTRACTS DOWN. Called after every change that alters what a contract IS; selection counts,
+	 * because coming back to a different task than you left on is its own small lie about where you were.
+	 *
+	 * DRAFTS ARE NEVER WRITTEN, which is the founder's rule that an abandoned empty slot leaves no history.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
+	bool SaveContracts() const;
+
+	/**
+	 * READ THEM BACK, at Initialize.
+	 *
+	 * NEW LOCAL IDS, OLD CONTRACT IDS. The local id is this session's handle and is minted fresh; the contract id
+	 * is the backend's own and is carried over untouched, because that is the only thing a scheduler can address
+	 * a restarted mission by.
+	 *
+	 * AND EVERY RESTORED CONTRACT COMES BACK AS LOCAL. Its last known state is kept -- that is genuinely what we
+	 * last heard -- but the source drops to Local, because Julius has said nothing this session and a surface
+	 * that showed three contracts "running" on the strength of a file would be inventing concurrency out of disk.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
+	int32 RestoreContracts();
+
+	/**
+	 * Throw the saved contracts away. What a test calls so it does not inherit the last session's set.
+	 *
+	 * STATIC, because it touches the file and not this set: forgetting what was written down is not the same act
+	 * as closing the contracts that are open right now, and nothing here should be able to confuse the two.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
+	static bool ForgetSavedContracts();
+
+	/** True when a file exists to restore from. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
+	static bool HasSavedContracts();
+
+	/**
+	 * CLOSE EVERY CONTRACT AND EVERY SLOT AT ONCE. A DEVELOPMENT AFFORDANCE, named so it cannot be mistaken for
+	 * product behaviour -- the same way ReportActiveSubAgentsForDevelopment is.
+	 *
+	 * WHY IT HAS TO EXIST. Contracts now survive a restart, which means a test that opens three of them inherits
+	 * the last run's three as well and measures a set it did not build. That is how a green suite starts lying.
+	 * DismissDraft deliberately refuses a real contract -- "a real mission is not dismissed by tidying" -- so
+	 * this is the separate, deliberate, logged act, and it is not what the DISMISS control calls.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
+	int32 ClearAllTasksForDevelopment();
+
+	static const TCHAR* SaveSlotName();
 
 	FOnWonderlandTasksChanged OnTasksChanged;
 

@@ -5,6 +5,7 @@
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "Misc/App.h"
 
 namespace
 {
@@ -34,6 +35,27 @@ namespace
 		const TArray<FWonderlandMissionTask>& Rows = Tasks.GetTasks();
 		return Rows.IsValidIndex(Index) ? Rows[Index].LocalId : FGuid();
 	}
+
+	FAutoConsoleCommandWithWorldAndArgs GTaskReset(
+		TEXT("wl.Tasks.Reset"),
+		TEXT("DEVELOPMENT: close every slot and forget the saved set. Not what the DISMISS control does."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+		{
+			UWonderlandMissionTaskSubsystem* Tasks = TasksFor(World);
+			if (Tasks == nullptr) { UE_LOG(LogTemp, Warning, TEXT("WLTASK no task subsystem")); return; }
+			UE_LOG(LogTemp, Display, TEXT("WLTASK reset -> closed %d"), Tasks->ClearAllTasksForDevelopment());
+		}));
+
+	FAutoConsoleCommandWithWorldAndArgs GTaskForget(
+		TEXT("wl.Tasks.Forget"),
+		TEXT("Throw away the SAVED Mission Contracts on disk. Does not touch the contracts open right now."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+		{
+			UWonderlandMissionTaskSubsystem* Tasks = TasksFor(World);
+			if (Tasks == nullptr) { UE_LOG(LogTemp, Warning, TEXT("WLTASK no task subsystem")); return; }
+			UE_LOG(LogTemp, Display, TEXT("WLTASK forget saved contracts -> %s"),
+				Tasks->ForgetSavedContracts() ? TEXT("ok") : TEXT("FAILED"));
+		}));
 
 	FAutoConsoleCommandWithWorldAndArgs GTaskStatus(
 		TEXT("wl.Tasks.Status"),
@@ -168,6 +190,146 @@ void UWonderlandMissionTaskSubsystem::Initialize(FSubsystemCollectionBase& Colle
 	Super::Initialize(Collection);
 	Tasks.Reset();
 	Selected.Invalidate();
+	// CONTRACTS OUTLIVE A SESSION; the world coming back with the missions you opened still open is the whole
+	// point of a contract having a backend identity at all.
+	RestoreContracts();
+}
+
+int32 UWonderlandMissionTaskSubsystem::ClearAllTasksForDevelopment()
+{
+	const int32 Closed = Tasks.Num();
+	if (Closed == 0)
+	{
+		return 0;
+	}
+	Tasks.Reset();
+	Selected.Invalidate();
+	// THE FILE GOES TOO, or the next Initialize brings them all straight back and this cleared nothing.
+	ForgetSavedContracts();
+	UE_LOG(LogTemp, Display, TEXT("WLTASK development: closed all %d slot(s) and forgot the saved set"), Closed);
+	OnTasksChanged.Broadcast();
+	return Closed;
+}
+
+const TCHAR* UWonderlandMissionTaskSubsystem::SaveSlotName()
+{
+	return TEXT("WonderlandMissionContracts");
+}
+
+bool UWonderlandMissionTaskSubsystem::HasSavedContracts()
+{
+	return UGameplayStatics::DoesSaveGameExist(SaveSlotName(), 0);
+}
+
+bool UWonderlandMissionTaskSubsystem::SaveContracts() const
+{
+	UWonderlandMissionTaskSave* Save = Cast<UWonderlandMissionTaskSave>(
+		UGameplayStatics::CreateSaveGameObject(UWonderlandMissionTaskSave::StaticClass()));
+	if (Save == nullptr)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK could not make a save object; contracts will not survive a restart"));
+		return false;
+	}
+	// CONTRACTS ONLY. An empty slot is local to the session and leaves no history, which is the founder's rule
+	// about an abandoned draft -- so it is not written here, and closing the game with one open loses nothing
+	// because there was nothing to lose.
+	int32 SelectedIndex = INDEX_NONE;
+	for (const FWonderlandMissionTask& Task : Tasks)
+	{
+		if (!WonderlandTaskIsContract(Task.State))
+		{
+			continue;
+		}
+		if (Task.LocalId == Selected)
+		{
+			SelectedIndex = Save->Contracts.Num();
+		}
+		Save->Contracts.Add(Task);
+	}
+	Save->SelectedIndex = SelectedIndex;
+	if (Save->Contracts.Num() == 0)
+	{
+		// NOTHING LEFT MEANS NOTHING KEPT. Writing an empty file would make the next session restore a set of no
+		// contracts over a set of no contracts, which is harmless but leaves a file claiming a state nobody has.
+		return ForgetSavedContracts();
+	}
+	const bool bWrote = UGameplayStatics::SaveGameToSlot(Save, SaveSlotName(), 0);
+	UE_LOG(LogTemp, Verbose, TEXT("WLTASK saved %d contract(s): %s"),
+		Save->Contracts.Num(), bWrote ? TEXT("ok") : TEXT("FAILED"));
+	return bWrote;
+}
+
+int32 UWonderlandMissionTaskSubsystem::RestoreContracts()
+{
+	if (!HasSavedContracts())
+	{
+		return 0;
+	}
+	UWonderlandMissionTaskSave* Save = Cast<UWonderlandMissionTaskSave>(
+		UGameplayStatics::LoadGameFromSlot(SaveSlotName(), 0));
+	if (Save == nullptr || Save->Version != 1)
+	{
+		// REFUSED, NOT GUESSED AT. A file of a shape this build does not know is left alone rather than read as
+		// though it were this one; a misread contract is worse than a forgotten one.
+		UE_LOG(LogTemp, Warning, TEXT("WLTASK saved contracts are version %d, not 1; leaving them alone"),
+			Save != nullptr ? Save->Version : -1);
+		return 0;
+	}
+	const FString When = FDateTime::UtcNow().ToIso8601();
+	int32 Restored = 0;
+	for (const FWonderlandMissionTask& Saved : Save->Contracts)
+	{
+		if (!WonderlandTaskIsContract(Saved.State))
+		{
+			// Belt and braces: a draft should never have been written, and is not read back if one ever is.
+			continue;
+		}
+		if (Tasks.Num() >= GetTaskCapacity())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("WLTASK capacity %d reached while restoring; %d contract(s) left on disk"),
+				GetTaskCapacity(), Save->Contracts.Num() - Restored);
+			break;
+		}
+		FWonderlandMissionTask Task = Saved;
+		// A NEW HANDLE FOR A NEW SESSION. The local id means nothing outside the machine it was minted on, and
+		// ApplySchedulerState deliberately does not use it; the CONTRACT id is what came back unchanged.
+		Task.LocalId = FGuid::NewGuid();
+		// AND NOBODY HAS CONFIRMED ANY OF THIS YET. The state is what we last heard and is kept as such, but the
+		// source drops to Local so that nothing counts as running on the strength of a file. GetRunningCount()
+		// counts Julius-sourced work only, so it reads zero until a scheduler speaks -- and when one does, it
+		// addresses this contract by the id above and the task picks up its real state.
+		Task.Source = EWonderlandTaskSource::Local;
+		Task.Lifecycle.Add(FString::Printf(TEXT("%s RESTORED (%s, unconfirmed since restart)"),
+			*When, WonderlandTaskStateName(Task.State)));
+		if (Save->SelectedIndex == Restored)
+		{
+			Selected = Task.LocalId;
+		}
+		Tasks.Add(Task);
+		++Restored;
+	}
+	if (Restored > 0 && !Selected.IsValid())
+	{
+		Selected = Tasks.Last().LocalId;
+	}
+	if (Restored > 0)
+	{
+		UE_LOG(LogTemp, Display, TEXT("WLTASK restored %d Mission Contract(s); none is running until Julius says so"),
+			Restored);
+		OnTasksChanged.Broadcast();
+	}
+	return Restored;
+}
+
+bool UWonderlandMissionTaskSubsystem::ForgetSavedContracts()
+{
+	if (!HasSavedContracts())
+	{
+		return true;
+	}
+	const bool bGone = UGameplayStatics::DeleteGameInSlot(SaveSlotName(), 0);
+	UE_LOG(LogTemp, Display, TEXT("WLTASK saved contracts forgotten: %s"), bGone ? TEXT("ok") : TEXT("FAILED"));
+	return bGone;
 }
 
 int32 UWonderlandMissionTaskSubsystem::GetTaskCapacity() const
@@ -242,6 +404,8 @@ bool UWonderlandMissionTaskSubsystem::SubmitDraft(FGuid LocalId, const FString& 
 	// ApplySchedulerState and this same task moves on -- nothing in the presentation has to change to believe it.
 	Touch(*Task, EWonderlandTaskState::Queued, EWonderlandTaskSource::Local);
 	UE_LOG(LogTemp, Display, TEXT("WLTASK contract accepted, QUEUED (local: Julius has not acknowledged it)"));
+	// GRAY BECOMING RED IS THE MOMENT SOMETHING WORTH KEEPING EXISTS, so this is the first write.
+	SaveContracts();
 	OnTasksChanged.Broadcast();
 	return true;
 }
@@ -267,6 +431,9 @@ bool UWonderlandMissionTaskSubsystem::DismissDraft(FGuid LocalId)
 		Selected = Tasks.Num() > 0 ? Tasks.Last().LocalId : FGuid();
 	}
 	UE_LOG(LogTemp, Display, TEXT("WLTASK empty slot dismissed; no mission was created"));
+	// The dismissed slot was never written, but the SELECTION moved, and coming back to a different contract
+	// than you left on is its own small untruth about where you were.
+	SaveContracts();
 	OnTasksChanged.Broadcast();
 	return true;
 }
@@ -283,6 +450,9 @@ bool UWonderlandMissionTaskSubsystem::SelectTask(FGuid LocalId)
 	}
 	Selected = LocalId;
 	// NOTHING ELSE HAPPENS. The other tasks are not paused, reset or touched: selection is a view.
+	// The view is worth remembering, though: coming back to a different contract than you left on is a small
+	// untruth about where you were, and it costs one file write to be right about.
+	SaveContracts();
 	OnTasksChanged.Broadcast();
 	return true;
 }
@@ -295,6 +465,9 @@ bool UWonderlandMissionTaskSubsystem::AdoptContractId(FGuid LocalId, const FStri
 		return false;
 	}
 	Task->ContractId = ContractId;
+	// THIS IS THE ONE FIELD A RESTART CANNOT REGENERATE, so it is written the instant it arrives. Without it a
+	// restored contract is a mission no scheduler can address by name.
+	SaveContracts();
 	OnTasksChanged.Broadcast();
 	return true;
 }
@@ -324,6 +497,7 @@ bool UWonderlandMissionTaskSubsystem::ApplySchedulerState(
 	Touch(*Task, State, EWonderlandTaskSource::Julius);
 	Task->TokensUsed = TokensUsed;
 	Task->EvidenceCount = EvidenceCount;
+	SaveContracts();
 	OnTasksChanged.Broadcast();
 	return true;
 }

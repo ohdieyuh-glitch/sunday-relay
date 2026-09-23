@@ -35,6 +35,10 @@ def job():
             RESULT["why"] = "no ui / task / mission subsystem"
             return
         L.focus_game_viewport()
+        # A CLEAN BOARD, BECAUSE CONTRACTS NOW SURVIVE A RESTART. Without this a run inherits the last one's
+        # contracts and measures a set it did not build, which is how a green suite starts lying.
+        tasks.clear_all_tasks_for_development()
+        yield 0.5
 
         # ONE RED AND ONE GRAY, through the control, so the two are photographed side by side under one exposure.
         ui.press_add_task()
