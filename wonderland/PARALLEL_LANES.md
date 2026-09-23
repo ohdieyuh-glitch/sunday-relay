@@ -89,3 +89,24 @@ try/catch. UnrealBuildTool turns exceptions on for EDITOR builds and off for GAM
 that happily while every game-target build of this module died with C4530 in the unity file holding it — before
 reaching whatever file was actually being checked. Any `Build.bat Wonderland Win64` compile-check either lane ran
 was failing for that reason and not for the change under test. The flag makes the two targets agree.
+
+## WHERE MASCOT SKINS CAN ACTUALLY BE SEEN
+
+`UWonderlandRelaySkinSubsystem::FigurePathFor` resolves to `FPaths::ProjectDir()/RelaySkins/<file>` — so a
+running editor reads the RelaySkins folder of THE WORKTREE IT WAS LAUNCHED FROM, and nothing else.
+
+Measured 2026-09-23:
+
+| worktree | RelaySkins | Content | use for |
+|---|---|---|---|
+| `wonderland-task3` (world lane) | **absent** | real directory | world work |
+| `wonderland-proof` | all 7 `.wlvox` | symlink → task3's Content | editor + build |
+| `wonderland-companions` | all 7 `.wlvox` | — | commits |
+
+SO AN EDITOR LAUNCHED FROM `wonderland-task3` CANNOT LOAD ANY MASCOT SKIN. Every `WearSkin` there fails with
+"did not load", and a proof run in it would report the skins broken when the only thing wrong is which folder
+the process is looking in. Skin and wardrobe verification runs from `wonderland-proof`.
+
+And note what the table also says: proof's `Content` is a SYMLINK into task3. The two worktrees genuinely do
+share one map, so the standing rule holds — do not run a second editor against it while the world lane has one
+open. That is a real shared resource, not a scheduling preference.
