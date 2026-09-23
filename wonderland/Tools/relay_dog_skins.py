@@ -1153,10 +1153,24 @@ def skeleton_flame():
         figure.box("body", "void", (-td * 0.50, 0.0, d["torso_z"] + th * 0.36 - s * 1.1 - 0.55), (tile * 0.9, tile * 1.2, tile * 0.3))
 
     # ================================================================== BONE PAULDRONS AND JOINTED LIMBS
+    # HEAVY, BECAUSE THE PLATE'S IS. Rendered beside Arden, Apollo and Hagoromo this skin read as the slight one
+    # of the set -- a slim white dog standing in blue fire, where the founder's sheet shows a bulky skeletal
+    # warrior in layered bone. The old cap was 3.0 wide and sat almost inside the torso's own width, so the
+    # shoulders had no presence at all. Three courses now, stepping outward and down, with a dark seam between
+    # each: a pauldron you can see the weight of.
     for side in (-1.0, 1.0):
-        figure.slab("body", "bone", (0.2, side * (tw * 0.5 + 0.9), shoulder + 0.5), (3.8, 3.0, 2.6), tile=tile)
-        figure.slab("body", "ash", (0.4, side * (tw * 0.5 + 1.2), shoulder - 0.9), (3.2, 2.2, 1.0), tile=tile)
-        figure.box("body", "void", (0.2, side * (tw * 0.5 + 0.9), shoulder - 0.2), (tile * 3.6, tile * 2.6, tile * 0.35))
+        for k, (dz, out, deep, wide, tall) in enumerate(((1.1, 1.7, 5.2, 4.4, 3.0),
+                                                         (-1.4, 2.0, 4.6, 3.6, 1.9),
+                                                         (-3.1, 1.9, 3.8, 2.8, 1.5))):
+            figure.slab("body", "bone" if k % 2 == 0 else "ash",
+                        (0.2, side * (tw * 0.5 + out), shoulder + dz), (deep, wide, tall), tile=tile)
+            # A SEAM YOU CAN ACTUALLY SEE. At 0.3 of a tile these were hairlines between a bone plate and a bone
+            # body, and rendered the whole pauldron vanished into the torso -- present in the box count and
+            # absent from the picture. Dark, and thick enough to separate one course from the next.
+            figure.slab("body", "void", (0.4, side * (tw * 0.5 + out), shoulder + dz - tall * 0.5 - 0.35),
+                        (deep * 1.02, wide * 1.06, 0.9), tile=tile)
+        # and the collar that ties them to the body rather than leaving them floating beside it
+        figure.slab("body", "ash", (0.3, side * (tw * 0.5 + 0.2), shoulder + 1.4), (4.0, 1.8, 2.2), tile=tile)
     ad, aw, ah = d["arm"]
     az = d["torso_z"] + 1.0
     for side, name in ((-1.0, "arm_l"), (1.0, "arm_r")):
