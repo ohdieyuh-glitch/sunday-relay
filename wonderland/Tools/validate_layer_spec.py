@@ -27,6 +27,21 @@ CONTENT = ROOT / "Content" / "WonderlandV2"
 INVENTORY = Path(r"C:/Users/Kaisi/.claude/jobs/ec4f540e/tmp/mesh_inventory.json")
 
 
+#: Nested collision this gate knows about and is NOT failing on, with the reason and the test that settles it.
+#: Ground_Plaza_Medallion: its paving layers collide in IC02 and NC01 and do not in the second band. One is
+#: wrong. They are 1.8-6 cm discs a player walks ON, so guessing risks a hole in a plaza floor -- it needs a
+#: floor profile across a medallion, queued as zzB65 in Tools/queue_second_band.sh. Remove this entry when
+#: that profile has answered it. An exception with no test named is just a silenced failure.
+OPEN_NESTED = ("Ground_Plaza_Medallion",)
+
+
+def mesh_records():
+    """The inventory rows by mesh name -- size_cm and tris, which no pass writes."""
+    if not INVENTORY.exists():
+        return None
+    return {r["name"]: r for r in json.loads(INVENTORY.read_text(encoding="utf-8"))}
+
+
 def known_meshes():
     if not INVENTORY.exists():
         return None
@@ -106,6 +121,61 @@ def check(path, meshes, materials):
     return ok
 
 
+#: Batch ids are "<PASS>_<Family>_<materialsuffix>". Longest suffixes first so _stone_dark beats _stone.
+_SUFFIXES = ("_stone_dark", "_paving_shade", "_paving_warm", "_roof_alt", "_gold_aged", "_stone", "_glass",
+             "_gold", "_roof", "_kerb", "_paving", "_leaf", "_metal", "_petal_centre", "_petal")
+
+
+def _family(batch_id):
+    for s in _SUFFIXES:
+        if batch_id.endswith(s):
+            return batch_id[: -len(s)]
+    return batch_id
+
+
+def nested_collision(meshes_by_name):
+    """Colliding batches that sit INSIDE another colliding batch at the same transform.
+
+    A kit module is authored as co-located parts at one transform -- a stone shell plus glass, gold, roof and
+    accent sub-meshes. If two of them collide, the player meets two bodies in one place and the engine pays
+    for both; and when one mesh fits entirely inside the other, the inner one can never be met first, so it is
+    pure cost. On 2026-09-23 that was 279 instances across the world -- 178 in the second civilization band and
+    101 in the first -- every one of them a stone_dark accent of 12 to 216 triangles nested in its own shell.
+
+    The cause was that NO_COLLIDE_PARTS had been copied into four generators and had drifted in three. The fix
+    was one definition in nations.py; THIS is the gate that makes the fix stick, because a rule in one place is
+    still a rule nothing checks. Sizes come from the mesh inventory, which no pass writes.
+    """
+    if meshes_by_name is None:
+        return None
+    findings = []
+    for path in sorted((ROOT / "WorldDesign").rglob("*.json")):
+        try:
+            spec = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(spec, dict) or "batches" not in spec:
+            continue
+        fams = {}
+        for b in spec["batches"]:
+            fams.setdefault(_family(b["id"]), []).append(b)
+        for batches in fams.values():
+            coll = [b for b in batches if b.get("collides")]
+            for i, a in enumerate(coll):
+                for b in coll[i + 1:]:
+                    shared = {tuple(t) for t in a["instances"]} & {tuple(t) for t in b["instances"]}
+                    if not shared:
+                        continue
+                    sa = meshes_by_name.get(a["mesh"].rsplit("/", 1)[-1].split(".")[0])
+                    sb = meshes_by_name.get(b["mesh"].rsplit("/", 1)[-1].split(".")[0])
+                    if not sa or not sb:
+                        continue
+                    inner, si, so = (b, sb, sa) if sum(sb["size_cm"]) < sum(sa["size_cm"]) else (a, sa, sb)
+                    outer = a if inner is b else b
+                    if all(si["size_cm"][k] <= so["size_cm"][k] for k in range(3)):
+                        findings.append((spec.get("pass"), inner["id"], outer["id"], si["tris"], len(shared)))
+    return findings
+
 def pass_id_collisions():
     """Every pass id on disk, and any id claimed by more than one spec.
 
@@ -151,8 +221,27 @@ def main():
     args = sys.argv[1:]
     if not args:
         args = sorted(str(p) for p in (ROOT / "WorldDesign" / "Nations").glob("*.json"))
+    nested = nested_collision(mesh_records())
+    bad_nested = []
+    if nested is None:
+        print("(no mesh inventory on disk -- nested collision unchecked)")
+    else:
+        opened = [f for f in nested if any(k in f[1] for k in OPEN_NESTED)]
+        bad_nested = [f for f in nested if f not in opened]
+        if bad_nested:
+            print("COLLIDING BATCHES NESTED INSIDE ANOTHER COLLIDING BATCH -- the inner body is unreachable:")
+            for pid, inner, outer, tris, n in sorted(bad_nested, key=lambda f: -f[4]):
+                print("   %-8s %-40s (%d tris) inside %-34s x%d" % (pid, inner, tris, outer, n))
+        else:
+            print("no nested collision bodies")
+        if opened:
+            print("OPEN, not failed (%d instances) -- see OPEN_NESTED in this file for the test that settles it:"
+                  % sum(f[4] for f in opened))
+            for pid, inner, outer, tris, n in sorted(opened, key=lambda f: -f[4]):
+                print("   %-8s %-40s inside %-34s x%d" % (pid, inner, outer, n))
+    print()
     good = all([check(a, meshes, materials) for a in args])
-    return 0 if (good and not dupes) else 1
+    return 0 if (good and not dupes and not bad_nested) else 1
 
 
 if __name__ == "__main__":
