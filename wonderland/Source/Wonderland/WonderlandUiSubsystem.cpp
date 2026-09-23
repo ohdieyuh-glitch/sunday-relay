@@ -1261,11 +1261,15 @@ void UWonderlandUiSubsystem::MountTaskAddControl()
 
 	TaskAddLayer = SNew(SConstraintCanvas)
 		.Visibility(EVisibility::SelfHitTestInvisible)
-		// BESIDE THE TOKEN USAGE, which sits at (30, 22) top-left. Pixel-placed like the HUD it stands next to, so
-		// the two keep their relationship at any resolution rather than drifting apart on a wide screen.
+		// BESIDE THE TOKEN USAGE METERS, not beside the logo above them.
+		//
+		// The usage widget is positioned at (30, 22) but that is its TOP LEFT, and what it draws there is the mark;
+		// the COMPOUND AGENT / SINGLE AGENT / LLM COMPANION rows sit well below it. A + at y=20 landed alongside the
+		// logo, where a filmed frame showed it invisible against the art -- beside the wrong thing, which is the same
+		// fault as being missing. These offsets put it level with the first meter row, just right of the figures.
 		+ SConstraintCanvas::Slot()
 		.Anchors(FAnchors(0.0f, 0.0f, 0.0f, 0.0f))
-		.Offset(FMargin(268.0f, 20.0f, 0.0f, 0.0f))
+		.Offset(FMargin(392.0f, 318.0f, 0.0f, 0.0f))
 		.AutoSize(true)
 		.Alignment(FVector2D(0.0, 0.0))
 		[
@@ -1275,28 +1279,38 @@ void UWonderlandUiSubsystem::MountTaskAddControl()
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 				[
-					SNew(SButton)
-					.ButtonStyle(FCoreStyle::Get(), "NoBorder")
-					.ToolTipText(INVTEXT("Add another task for Julius"))
-					.ContentPadding(FMargin(7.0f, 1.0f))
-					.OnClicked_Lambda([WeakThis]()
-					{
-						if (WeakThis.IsValid()) { WeakThis->PressAddTask(); }
-						return FReply::Handled();
-					})
+					// A BORDER, BECAUSE A BORDERLESS + IS NOT A CONTROL. Filmed against the plaza the NoBorder
+					// version was invisible -- the subsystem reported it on screen and no frame contained it, which
+					// is the worst of both. This is still small and still quiet: a hairline box and a dim gold
+					// glyph, sized to sit beside a usage figure rather than compete with one.
+					SNew(SBorder)
+					.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+					.BorderBackgroundColor(FSlateColor(FLinearColor(0.05f, 0.05f, 0.07f, 0.78f)))
+					.Padding(FMargin(1.0f))
 					[
-						SNew(STextBlock)
-						.Text(INVTEXT("+"))
-						.Font(WonderlandUi::Sans(18, true))
-						.ColorAndOpacity(WonderlandUi::GoldDim())
+						SNew(SButton)
+						.ButtonStyle(FCoreStyle::Get(), "NoBorder")
+						.ToolTipText(INVTEXT("Add another task for Julius"))
+						.ContentPadding(FMargin(10.0f, 2.0f))
+						.OnClicked_Lambda([WeakThis]()
+						{
+							if (WeakThis.IsValid()) { WeakThis->PressAddTask(); }
+							return FReply::Handled();
+						})
+						[
+							SNew(STextBlock)
+							.Text(INVTEXT("+"))
+							.Font(WonderlandUi::Sans(22, true))
+							.ColorAndOpacity(WonderlandUi::Gold())
+						]
 					]
 				]
 				// How many contracts are open, so the + says what it is adding to without being pressed.
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
 				[
 					SNew(STextBlock)
-					.Font(WonderlandUi::Sans(8, false, 2))
-					.ColorAndOpacity(WonderlandUi::Faint())
+					.Font(WonderlandUi::Sans(9, false, 2))
+					.ColorAndOpacity(WonderlandUi::Cream())
 					.Text_Lambda([WeakThis]()
 					{
 						const UWonderlandMissionTaskSubsystem* Set = WeakThis.IsValid() ? WeakThis->Tasks() : nullptr;

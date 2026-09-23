@@ -302,6 +302,31 @@ void UWonderlandMissionSubsystem::Attach(APlayerController* Controller)
 	// means a player is present in Wonderland; it does not mean a task is being executed. The contract is
 	// manifested by ShowBeat when a beat arrives that describes a running task, and by nothing else.
 	MountStrip();
+
+	// FOLLOW THE TASK SET FROM HERE ON. Attaching still spawns nothing -- a player being present is not a task being
+	// executed, which is the founder's canon of 2026-09-16 -- but a task EXISTING is, and that is what this listens
+	// for. Bound at attach rather than inside the handler, which is where it was and where nothing could reach it.
+	if (ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>())
+	{
+		if (UWonderlandMissionTaskSubsystem* TaskSet = Player->GetSubsystem<UWonderlandMissionTaskSubsystem>())
+		{
+			if (!bBoundToTasks)
+			{
+				bBoundToTasks = true;
+				TWeakObjectPtr<UWonderlandMissionSubsystem> WeakThis(this);
+				TaskSet->OnTasksChanged.AddLambda([WeakThis]()
+				{
+					if (WeakThis.IsValid())
+					{
+						WeakThis->SyncTaskOrbs();
+					}
+				});
+			}
+			// And catch up with whatever already exists, so a set built before the attach is not invisible.
+			SyncTaskOrbs();
+		}
+	}
+
 	UE_LOG(LogWonderlandMissionUi, Log, TEXT("WLMISSION attached to %s, strip %s, no contract (nothing is executing)"),
 		*Controller->GetName(), MissionStrip.IsValid() ? TEXT("on screen") : TEXT("FAILED"));
 }
@@ -816,10 +841,22 @@ bool UWonderlandMissionSubsystem::PlayScenario(FName ScenarioLetter, float Secon
 namespace
 {
 	/**
-	 * HOW FAR APART THE ORBS SIT, in uu. Far enough that two are plainly two, close enough that six still read as
-	 * one composition rather than a column disappearing out of frame.
+	 * HOW FAR APART THE ORBS SIT, in uu -- WHICH IS THE HEIGHT OF ONE ORB, so their tips meet and the column is
+	 * one object rather than several.
+	 *
+	 * FOUNDER, on the first filmed stack: "The orbs should not be that spread apart, they should be touching."
+	 *
+	 * THE OLD NUMBER CAME FROM A WRONG MEASUREMENT. The comment that used to stand here said a Mission Contract orb
+	 * is "about 80 uu tall" and chose 105 to leave it a little air. The geometry says 2 * CrystalHalfHeightUU =
+	 * 56 uu, so 105 was not a small gap above an orb -- it was most of a second orb of empty sky between each one,
+	 * and the filmed stack read as three separate distant objects exactly as the founder said.
+	 *
+	 * TIPS MEETING, NOT OVERLAPPING. The crystal is a bipyramid reaching CrystalHalfHeightUU above and below its
+	 * origin, so a step of exactly twice that puts the point of one orb on the point of the next. An unselected orb
+	 * draws at 0.86 and leaves a few uu of air, which still reads as a stack; a smaller step would drive one
+	 * crystal through another and stop it reading as orbs at all.
 	 */
-	constexpr float OrbStackSpacingUU = 130.0f;
+	constexpr float OrbStackSpacingUU = 56.0f;
 }
 
 float UWonderlandMissionSubsystem::GetStackHeightUu() const
@@ -835,20 +872,7 @@ void UWonderlandMissionSubsystem::SyncTaskOrbs()
 	ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
 	UWonderlandMissionTaskSubsystem* Tasks = Player != nullptr
 		? Player->GetSubsystem<UWonderlandMissionTaskSubsystem>() : nullptr;
-	// BOUND ONCE, HERE, so the stack follows the task set without every caller having to remember to ask. A feature
-	// that only looks right when somebody remembers to refresh it is a feature that will look wrong.
-	if (Tasks != nullptr && !bBoundToTasks)
-	{
-		bBoundToTasks = true;
-		TWeakObjectPtr<UWonderlandMissionSubsystem> WeakThis(this);
-		Tasks->OnTasksChanged.AddLambda([WeakThis]()
-		{
-			if (WeakThis.IsValid())
-			{
-				WeakThis->SyncTaskOrbs();
-			}
-		});
-	}
+	// The subscription is made at Attach, not here: binding inside the handler meant nothing ever subscribed.
 	APlayerController* Controller = BoundController.Get();
 	UWorld* World = Controller != nullptr ? Controller->GetWorld() : nullptr;
 	if (Tasks == nullptr || World == nullptr)
@@ -909,7 +933,9 @@ void UWonderlandMissionSubsystem::SyncTaskOrbs()
 		Stacked->SetStackLift(Index * OrbStackSpacingUU);
 		// THE SELECTED TASK'S ORB IS THE FULL-SIZED ONE. The others stand back a little so the stack reads as a
 		// stack with a current member rather than as a row of equals.
-		Stacked->SetOrbScale(Task.LocalId == Tasks->GetSelected() ? 1.0f : 0.72f);
+		// 0.72 made the unselected orbs read as distant rather than as smaller, and two frames taken with different
+		// selections were indistinguishable. 0.86 is still plainly a step down from the current contract.
+		Stacked->SetOrbScale(Task.LocalId == Tasks->GetSelected() ? 1.0f : 0.86f);
 	}
 }
 

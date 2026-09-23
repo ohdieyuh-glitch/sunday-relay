@@ -177,6 +177,14 @@ public:
 
 	const TArray<FWonderlandMissionTask>& GetTasks() const { return Tasks; }
 
+	/**
+	 * THE SAME LIST, BY VALUE, so a proof can read it. The reference above is what C++ callers want and is not
+	 * reflected; a UFUNCTION cannot return a reference to an array, so this copies rather than leaving Python with
+	 * no way to see the set it is supposed to be checking.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
+	TArray<FWonderlandMissionTask> GetTaskList() const { return Tasks; }
+
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
 	int32 NumTasks() const { return Tasks.Num(); }
 

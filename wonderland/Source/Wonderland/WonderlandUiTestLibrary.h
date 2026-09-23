@@ -31,6 +31,20 @@ public:
 	static UWonderlandUiSubsystem* GetUi(UObject* WorldContextObject);
 
 	/**
+	 * THE MISSION TASK SET AND THE MISSION SUBSYSTEM, for a proof that has to read them.
+	 *
+	 * Both are LocalPlayerSubsystems, and this build's Python exposes no route to one: `PlayerController.Player` is
+	 * protected, `LocalPlayer` has no `get_subsystem`, and `SubsystemBlueprintLibrary` is not reflected here. Rather
+	 * than have every job rediscover that, the test library hands them over the same way it already hands over the
+	 * UI subsystem.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static class UWonderlandMissionTaskSubsystem* GetMissionTasks(UObject* WorldContextObject);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static class UWonderlandMissionSubsystem* GetMission(UObject* WorldContextObject);
+
+	/**
 	 * SPAWN ONE VOXEL FIGURE, standing where it is put, following nobody. Used by the Project Avatar progression proof:
 	 * the six forms are text files, so a founder's correction is a regeneration rather than a rebuild.
 	 *

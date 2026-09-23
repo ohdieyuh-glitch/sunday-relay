@@ -261,6 +261,43 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
 	float GlowExposure = 4000.0f;
 
+	/**
+	 * THE DIMMEST THE CRYSTAL BODY MAY EVER BE DRAWN, as a fraction of GlowExposure.
+	 *
+	 * A BEAT MAY DIM AN ORB BUT NOT ERASE ITS COLOUR. UNOBSERVED drives Brightness to 0.25, and a body at
+	 * GlowExposure * 0.24 photographed as rgb(48,46,44) under the arrival plaza's sun -- black, next to its own
+	 * orbit ring running at 0.55. RED and GRAY are this feature's entire vocabulary, so the body is floored here
+	 * and the beat drives it from there upward.
+	 *
+	 * 1.10 WAS FILMED, NOT CHOSEN. A sweep of 0.55 / 1.1 / 2.2 / 4.4 / 8.8 / 14.0 in one PIE session settled it:
+	 * at 0.55 the contract is still the dark maroon that started this; at 4.4 and above the red washes out to
+	 * orange and stops being red at all, which would break the colour rule far worse than dimness did. 1.10 --
+	 * about 3,400 scene units at the red's peak channel -- is a deep, unmistakable red.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
+	float ContractBodyExposure = 1.10f;
+
+	/**
+	 * AND A DRAFT SITS HIGHER STILL, because pale is harder to see than saturated.
+	 *
+	 * FOUNDER: "the new orb that pops up on the one on top needs to be grey not black." A neutral colour has no
+	 * hue to carry it, so at the red orb's exposure the same light reads as a dark stone rather than as an empty
+	 * one. A third again above the contract is what filmed as pale and waiting rather than as dull or as white:
+	 * at 2,300 units the draft is a muddy mid-grey and at 9,000 it has gone white and stopped reading as a stone.
+	 *
+	 * AND THE WORKING RANGE IS THE ORB'S OWN, not this map's. A peer lane measuring LIT assets against the same
+	 * sun puts its working band at 55,000-62,000 scene units; this body is a small UNLIT emissive and blows out
+	 * an order of magnitude below that. Both numbers are right about different materials, which is exactly why
+	 * this one was filmed instead of argued.
+	 */
+	// WRITEABLE ON PURPOSE. The right value is the one that photographs as grey under this map's sun, and that is
+	// found by sweeping it in a live PIE session and looking, not by reasoning about exposure at a desk. A peer
+	// lane measured a working emissive range of 55,000-62,000 for lit assets here while this orb's own orbit ring
+	// reads clearly at 2,200, so the two estimates disagree by a factor of twenty and only a filmed sweep settles
+	// it. The default below is this lane's measurement; the sweep is what confirms or corrects it.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
+	float DraftBodyExposure = 1.43f;
+
 	/** Seconds to ease from one beat's motion to the next. A beat that asks for a person CUTS instead. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Mission")
 	float BeatBlendSeconds = 0.35f;

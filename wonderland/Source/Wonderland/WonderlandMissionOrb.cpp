@@ -422,7 +422,15 @@ FLinearColor AWonderlandMissionOrb::CurrentColour() const
 	{
 		// COLOURLESS, AND DELIBERATELY NOT DARK. A draft slot is waiting, not broken: a near-black orb would read
 		// as a dead one, and the founder's rule is that gray never means failure.
-		return FLinearColor(0.42f, 0.44f, 0.48f);
+		//
+		// BRIGHTER THAN IT LOOKS IT SHOULD BE, because a Mission Contract orb is a small slender thing and this
+		// colour has to survive being seen across a plaza. At 0.42 the draft orb was simply a dark spindle in a
+		// filmed frame and could not be told from the red ones.
+		//
+		// THE COLOUR WAS NEVER THE WHOLE PROBLEM. Raising it to 0.62 changed the measured frame by almost nothing,
+		// because the body was being drawn at a quarter of its glow exposure; DraftBodyExposure is what fixed
+		// that. This is a touch paler again so the stone reads as cool and empty rather than merely unlit.
+		return FLinearColor(0.70f, 0.73f, 0.80f);
 	}
 	return WonderlandChakraColour(Chakra == EWonderlandChakra::None ? EWonderlandChakra::Root : Chakra);
 }
@@ -622,7 +630,12 @@ void AWonderlandMissionOrb::Animate(float TimeSeconds, float DeltaSeconds)
 		const float Cycle = Motion.PulseHz > KINDA_SMALL_NUMBER
 			? 0.5f * (1.0f - FMath::Cos(TimeSeconds * Motion.PulseHz * 2.0f * PI))
 			: 0.0f;
-		const float Burn = FMath::Max(Motion.Brightness * (1.0f - Motion.PulseDepth * Cycle), 0.0f) * Manifest;
+		// Named for what it is rather than `Beat`, which is already the orb's own mission beat member.
+		const float BeatBurn = FMath::Max(Motion.Brightness * (1.0f - Motion.PulseDepth * Cycle), 0.0f);
+		// A CRYSTAL IS NEVER DIMMER THAN THE RING AROUND IT, which is what went wrong in the first filmed stack.
+		// The beat still drives the body -- the pulse still breathes, a brighter beat still brightens it -- but it
+		// may no longer take the colour below the point where the colour can be read.
+		const float Burn = FMath::Max(BeatBurn, bDraft ? DraftBodyExposure : ContractBodyExposure) * Manifest;
 		CrystalMid->SetVectorParameterValue(TEXT("Color"), CurrentColour() * (GlowExposure * Burn));
 		CrystalBurn = Burn;
 	}
