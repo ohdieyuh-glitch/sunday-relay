@@ -100,6 +100,11 @@ class Court(object):
         self.ring("MedallionGold", "MI_V2_Gold", d, lat, radius * 0.55, 12.0, z, 2.2)
         self.ring("MedallionGold", "MI_V2_Gold", d, lat, radius * 0.16, 10.0, z, 2.4, seg_len=20.0)
 
+    #: VARIANT C. Paving batches are grouped under one name per pass rather than per caller key.
+    #: The 9 (shape, tint) combinations are then paid for ONCE per pass instead of once per key, and
+    #: nothing about the geometry changes: same meshes, same materials, same transforms, same count.
+    PAVE_GROUP = "Paving"
+
     def pave_rect(self, key, d0, d1, lat0, lat1, z, skip=None):
         """Plaza slabs in courses (GA04): 128 uu cells, three slab shapes, cream/warm/grey. Slabs collide (13 cm)."""
         slabs = ["slab0", "slab3", "slab6"]
@@ -114,7 +119,7 @@ class Court(object):
                 # Slabs are ~129 x 123 uu with bevelled edges: on a 128 uu grid the lawn showed through as lines between the
                 # columns (DC02a, and still at 1.04 in DC02b). At 1.09 they overlap by ~6 uu; alternate columns sit 0.4 uu
                 # apart in height so the overlapping top faces never share a plane.
-                self.inst(key, slabs[(r + c) % 3], self.rng.choice(PAVING), d, lat, z + 0.5 + 0.4 * (c % 2),
+                self.inst(self.PAVE_GROUP, slabs[(r + c) % 3], self.rng.choice(PAVING), d, lat, z + 0.5 + 0.4 * (c % 2),
                           self.rng.choice([0.0, 180.0]), 1.0, 1.09, 0.985, collides=True)
 
     def pave_disc(self, key, d, lat, r_in, r_out, z):
@@ -125,7 +130,7 @@ class Court(object):
             count = max(1, int(round(2.0 * math.pi * radius / 132.0)))     # radius 0: one slab at the centre
             for k in range(count):
                 ang = 360.0 * (k + 0.5 * (course % 2)) / count
-                self.inst_world(key, slabs[(k + course) % 3], self.rng.choice(PAVING), cx + radius * math.cos(math.radians(ang)),
+                self.inst_world(self.PAVE_GROUP, slabs[(k + course) % 3], self.rng.choice(PAVING), cx + radius * math.cos(math.radians(ang)),
                                 cy + radius * math.sin(math.radians(ang)), z + 0.5, ang, 0.985, 0.985, 0.985, collides=True)
             radius += 128.0
             course += 1
