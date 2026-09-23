@@ -78,10 +78,21 @@ def job():
                         body.set_actor_location(unreal.Vector(at.x, at.y, at.z + (gz - lowest)), False, False)
                         yield 0.5
                         at = body.get_actor_location()
+                    # WHAT THE CAMERA HAS TO FIT IS NOT THE HEIGHT. Every distance here was a multiple of height, and
+                    # the LARGE forms are far wider than they are tall -- Cherubim's ring span and Seraph's radial
+                    # wings both ran off both edges of the frame, so front and three-quarter could not be judged at
+                    # all. Framing is driven by the larger of height and width, which leaves every form that really
+                    # is taller than wide (all of Small and Medium) at exactly the distance it had.
+                    span = h
+                    try:
+                        _, extent = body.get_actor_bounds(False)
+                        span = max(h, 2.0 * max(float(extent.x), float(extent.y)))
+                    except Exception as exc:
+                        unreal.log_warning("WLAVATAR no bounds, framing on height: %s" % exc)
                     taken = []
                     for view, bearing, dist_h, look_h, fov, eye_h in VIEWS:
                         rad = face + math.radians(bearing)
-                        dist = h * dist_h
+                        dist = span * dist_h
                         look = unreal.Vector(at.x, at.y, gz + h * look_h)
                         eye = unreal.Vector(at.x + math.cos(rad) * dist, at.y + math.sin(rad) * dist, gz + h * eye_h)
                         # NOTHING SOLID BETWEEN THE CAMERA AND THE CREATURE. At 4.2x height the LARGE stage puts the
@@ -97,7 +108,7 @@ def job():
                         if blocked and hasattr(blocked, "to_tuple"):
                             hp = blocked.to_tuple()[4]
                             # STOP SHORT OF THE WALL, not at it: a camera exactly on the surface still renders its face.
-                            clear = max(h * 1.6, math.hypot(hp.x - look.x, hp.y - look.y) - 90.0)
+                            clear = max(span * 1.6, math.hypot(hp.x - look.x, hp.y - look.y) - 90.0)
                             eye = unreal.Vector(look.x + math.cos(rad) * clear, look.y + math.sin(rad) * clear,
                                                 gz + h * eye_h)
                         L.pose_camera(world, eye, look, fov)
@@ -105,7 +116,7 @@ def job():
                         name = "%s_%s_%s_%s.jpg" % (family, stage, version, view)
                         H.capture_viewport_jpeg(os.path.join(ROOT, name), 1900, 95)
                         taken.append(name)
-                    rows.append({"family": family, "stage": stage, "version": version, "height_uu": round(h, 1),
+                    rows.append({"family": family, "stage": stage, "version": version, "height_uu": round(h, 1), "span_uu": round(span, 1),
                                  "boxes": int(body.get_box_count()), "lowest_z": None if lowest is None else round(lowest, 1),
                                  "shots": taken})
                     body.destroy_actor()

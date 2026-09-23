@@ -285,12 +285,6 @@ private:
 
 SWonderlandProjectBrainPanel::SWonderlandProjectBrainPanel()
 	: PanelBrush(WonderlandUi::Srgb(12, 18, 54, 0.66f), 14.0f, WonderlandBrainLook::Beam(0.95f), 1.4f)
-	// THE WINDOW'S FRAME: an outline and no fill at all. Anything with a fill here would tint the Dog behind it.
-	, SkinWindowFrameBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 12.0f, WonderlandBrainLook::Beam(0.9f), 1.6f)
-	// THE WARDROBE'S OWN SURFACES: an outline with no fill for the panel, so its window is really a hole, and a
-	// solid for every surface that is not the window. A filled panel behind the window tinted the Dog navy.
-	, SkinPanelFrameBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 6.0f, WonderlandBrainLook::Violet(0.95f), 1.6f)
-	, SkinPanelSolidBrush(WonderlandUi::Srgb(8, 12, 38, 0.95f), 0.0f, FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 0.0f)
 	, CardBrush(WonderlandUi::Srgb(20, 28, 80, 0.58f), 9.0f, WonderlandUi::Srgb(88, 102, 232, 0.60f), 1.0f)
 	, SelectedBrush(WonderlandUi::Srgb(96, 104, 255, 0.30f), 9.0f, WonderlandBrainLook::Violet(1.0f), 1.6f)
 	, InspectorBrush(WonderlandUi::Srgb(8, 12, 38, 0.95f), 14.0f, WonderlandBrainLook::Violet(0.95f), 1.6f)
@@ -302,6 +296,14 @@ SWonderlandProjectBrainPanel::SWonderlandProjectBrainPanel()
 	, ButtonHoverBrush(WonderlandUi::Srgb(110, 118, 255, 0.55f), 7.0f, WonderlandBrainLook::Ink(1.0f), 1.0f)
 	, RuleBrush(WonderlandBrainLook::Beam(0.45f), 0.0f)
 	, StatusBrush(WonderlandUi::Srgb(40, 30, 10, 0.60f), 6.0f, WonderlandUi::Srgb(250, 204, 96, 0.75f), 1.0f)
+	// THE WARDROBE'S SURFACES, LAST because that is where they are declared. C++ initialises members in
+	// declaration order whatever this list says, so listing them first only earned a C5038.
+	// THE WINDOW'S FRAME: an outline and no fill at all. Anything with a fill here would tint the Dog behind it.
+	, SkinWindowFrameBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 12.0f, WonderlandBrainLook::Beam(0.9f), 1.6f)
+	// An outline with no fill for the panel, so its window is really a hole, and a solid for every surface that is
+	// NOT the window. A filled panel behind the window tinted the Dog navy.
+	, SkinPanelFrameBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 6.0f, WonderlandBrainLook::Violet(0.95f), 1.6f)
+	, SkinPanelSolidBrush(WonderlandUi::Srgb(8, 12, 38, 0.95f), 0.0f, FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 0.0f)
 {
 	ClearBrush.DrawAs = ESlateBrushDrawType::NoDrawType;
 }
