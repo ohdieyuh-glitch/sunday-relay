@@ -1180,6 +1180,21 @@ def skeleton_flame():
     # The plate's rear view is a column of blue fire up the spine; from behind this is most of the skin.
     figure.part("backfire", "body", (-td * 0.55, 0.0, shoulder + 0.5), "twinkle", 0.22)
     figure.flame("backfire", lambda up: "ghost" if up < 0.6 else "ghostpale", (-td * 0.6, 0.0, shoulder + 0.2), 10.5, 6.8, 7, tile * 1.1)
+
+    # AND IT TRAILS BACKWARD, which is the only thing the SIDE of this skin has.
+    #
+    # The flank fire and the hip plates both spread ACROSS the body, so they fixed the front and left the side
+    # exactly where it was -- 0.60 against Celestial Light before and after. From the side they simply hide
+    # behind the torso. figure.flame only leans its tongues along Y, so depth cannot come from one call however
+    # big: it has to be several, stepped back through X. The plate shows the ghostfire streaming off the spine
+    # and sinking as it goes, so that is what these are.
+    for k, (backset, drop, height, width, tongues) in enumerate((
+            (2.6, 0.8, 9.0, 5.4, 6),
+            (5.0, 2.4, 7.0, 4.4, 5),
+            (7.2, 4.2, 5.2, 3.4, 4),
+            (9.1, 6.0, 3.6, 2.6, 3))):
+        figure.flame("backfire", (lambda up: "ghost") if k else (lambda up: "ghost" if up < 0.6 else "ghostpale"),
+                     (-td * 0.6 - backset, 0.0, shoulder + 0.2 - drop), height, width, tongues, tile * (1.08 - 0.07 * k))
     return figure
 
 
