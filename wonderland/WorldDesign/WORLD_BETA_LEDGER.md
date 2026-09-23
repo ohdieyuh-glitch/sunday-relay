@@ -23,18 +23,22 @@ most of B is therefore unmeasured by construction.
 | H | STREAMING | **UNMEASURED** | The authoritative map is a classic non-WP container; streaming behaviour at 1,155 m is unmeasured. |
 | I | LOD / NANITE | **BLOCKING (evidence)** | Of 588 meshes in the inventory, **535 have a single LOD** and only 53 have three. Of the 159 meshes at 1,500+ triangles, **148 have one LOD** — including `SM_heart_topiary` at 65,828 triangles, `SM_hedge_mass` at 48,740 and `SM_spire_great` at 32,636, all of them `collision: True`. Whether Nanite covers them is unverified. This is the one row where evidence already points at a problem rather than at missing evidence. |
 | J | PERFORMANCE | **UNMEASURED** | No before/after frame measurement exists for the second band, because it has not been applied. Note the harness trap: `measure-fps.sh` once measured an empty world by not forwarding the map argument. Confirm the map it measured before believing a number. |
-| K | WAYFINDING | **PARTIAL** | Each nation has a distinct gate — ICARUS ceremonial arch, NOCTIS gatehouse screen, TARTARUS twin-tiered arch — so gates are differentiated rather than copy-pasted, and each has a colliding shell. Sightlines, crossroads and dead ends are unjudged. See the sky-bridge note below. |
+| K | WAYFINDING | **BLOCKING** | Each nation has a distinct gate — ICARUS ceremonial arch, NOCTIS gatehouse screen, TARTARUS twin-tiered arch — so gates are differentiated rather than copy-pasted, and each has a colliding shell. Sightlines, crossroads and dead ends are unjudged. **But the road hierarchy has a hole in it: the causeways run 504→634 m and stop at the nation boundary, so no built route links Golden Arrival (edge ~400 m) to any nation.** See blocker 1. |
 | L | EMPTY / PLACEHOLDER | **BLOCKING** | The **800–900 m ring is a density trough in all three nations at once** — ICARUS 852, NOCTIS 715, TARTARUS 1,060, against 1,300–2,600 in the rings either side. That ring is the first→second band seam. NOCTIS's inner approach (500–600 m, 179 instances) is the thinnest ring any nation has inside its frontier. **Worse, measured 2026-09-23: Golden Arrival stops at ~400 m, not at its 500 m boundary — 400–450 m holds 841 instances and 450–500 m holds 181.** The walk out of the arrival city into any nation therefore crosses ~400–600 m of near-emptiness, and that is the first journey a beta player ever takes. |
 | M | WORLD SAVE / RECOVERY | **UNMEASURED** | No save has been exercised by this lane in this session. |
 
 ## The biggest world beta blockers, in order
 
-1. **Nothing is applied.** Six validated passes and 9,797 instances are still on disk. Until they land and the
+1. **No nation is connected to Golden Arrival.** Measured 2026-09-23. Each nation is internally continuous —
+   IC01 500→639 m, IC02 637→824 m, IC03 819→1158 m, and the same unbroken chain in NOCTIS and TARTARUS. But
+   all three begin at 500–508 m while Golden Arrival's built edge is ~400 m, leaving an identical **100–108 m
+   unbuilt ring around the entire arrival city**. The causeways — the actual roads, collision on — run
+   504→634 m and stop dead at the nation boundary; none reaches back toward the city. So the first journey
+   every beta player takes, out of the arrival city toward any nation, crosses ~100 m of open ground with no
+   road, no kerb and no edge. This outranks everything else in this list: it is not a thin region, it is a
+   missing link, and it is in front of every player before anything else in the world is.
+2. **Nothing is applied.** Six validated passes and 9,797 instances are still on disk. Until they land and the
    world is saved, B, J, H and most of D cannot be graded at all.
-2. **The arrival-to-nation void (row L).** Golden Arrival stops at ~400 m rather than its 500 m boundary, and
-   the nations' inner ring is thin. The walk out of the arrival city crosses ~400–600 m of near-emptiness, and
-   it is the first journey every beta player takes. Ahead of the band seam because every player meets it and
-   most will never reach 800 m.
 3. **LOD (row I).** 535 of 588 meshes carry a single LOD, and 148 of the 159 meshes at 1,500+ triangles do.
    A measurement, not a guess, and the one row where evidence already points at a problem rather than at an
    absence of evidence.
