@@ -55,6 +55,19 @@ public:
 	static class AWonderlandCompanionEmbodiment* SpawnFigureActor(UObject* WorldContextObject, FVector Location, const FString& FigurePath, const FString& Label);
 
 	/**
+	 * THE WORLD SUBSYSTEMS A PROOF HAS TO DRIVE, handed over in C++ because Python cannot reach them.
+	 *
+	 * UWorld has no get_subsystem on the Python surface in this build, which is what stopped the sub-agent and
+	 * Wonder Web demonstration dead. This is the smallest honest way round it: two accessors that hand back the
+	 * real subsystems, so the demo exercises the actual runtime rather than a fixture standing in for it.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static class UWonderlandDemoSubsystem* GetDemo(UObject* WorldContextObject);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static class UWonderlandSubAgentCubSubsystem* GetCubs(UObject* WorldContextObject);
+
+	/**
 	 * Put the view where a proof needs it: one camera, posed, looking at a point. The same camera for every form in a
 	 * family, because a progression judged from three different angles is not a progression anyone can judge.
 	 */

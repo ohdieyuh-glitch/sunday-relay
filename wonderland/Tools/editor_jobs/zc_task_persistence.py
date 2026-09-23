@@ -142,7 +142,11 @@ def job():
         RESULT["P3_local_ids_are_new"] = all(r["local"] not in locals_before for r in after)
 
         # ---- P4: IMPLEMENTATION is remembered, but not as a live claim
-        RESULT["P4_state_remembered"] = bool(A and A["state"].endswith("IMPLEMENTATION"))
+        # SUBSTRING, NOT endswith. Python renders a reflected UENUM as "WonderlandTaskState.IMPLEMENTATION: 4>",
+        # so the value ends in the enum's ordinal and a tail match can never be true. The first run of this proof
+        # reported P4 FAIL on exactly that while the product was behaving correctly -- an assertion that cannot
+        # pass is a worse defect than the one it was looking for, because it reads as a real failure.
+        RESULT["P4_state_remembered"] = bool(A and "IMPLEMENTATION" in A["state"])
         RESULT["P4_source_is_local"] = bool(A and "JULIUS" not in A["source"])
         RESULT["P4_lifecycle_says_unconfirmed"] = bool(
             A and "RESTORED" in A["lifecycle_tail"].upper() and "UNCONFIRMED" in A["lifecycle_tail"].upper())
@@ -162,7 +166,7 @@ def job():
         RESULT["P6_no_duplicate_task"] = int(tasks2.num_tasks()) == count_before_report
         reconnected = next((r for r in snapshot(tasks2) if r["contract"] == "contract-alpha"), None)
         RESULT["P6_real_state_applied"] = bool(
-            reconnected and reconnected["state"].endswith("VERIFICATION") and "JULIUS" in reconnected["source"])
+            reconnected and "VERIFICATION" in reconnected["state"] and "JULIUS" in reconnected["source"])
         RESULT["P6_running_after_julius"] = int(tasks2.get_running_count())
         RESULT["P6_counts_only_once_told"] = int(tasks2.get_running_count()) == 1
 

@@ -92,6 +92,9 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 	OnRequestClose = InArgs._OnRequestClose;
 	OnSubmit = InArgs._OnSubmit;
 	OnGetCommandLabel = InArgs._OnGetCommandLabel;
+	OnGetTaskTabs = InArgs._OnGetTaskTabs;
+	OnSelectTaskTab = InArgs._OnSelectTaskTab;
+	OnAddTaskTerminal = InArgs._OnAddTaskTerminal;
 	CommandSlotCount = FMath::Clamp(InArgs._CommandSlotCount, 1, 9);
 
 	FSlateBrush NoBackground;
@@ -124,6 +127,15 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 				.Text(FText::FromString(TEXT("DEVELOPMENT PREVIEW \u00B7 SIMULATED JULIUS EXECUTION")))
 				.Font(WonderlandUi::Sans(8, true, 140))
 				.ColorAndOpacity(WonderlandUi::Coral())
+			]
+			// THE TASK TERMINALS, ACROSS THE TOP, above PROMPT ARCHITECT -- which is where the founder asked for
+			// them: "put a + control at the TOP of the JULIUS LIVE TERMINAL ... the Wonderland equivalent of
+			// CLAUDE CODE -> new terminal/tab/task."
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			.Padding(0.0f, 0.0f, 0.0f, 6.0f)
+			[
+				MakeTaskTabs()
 			]
 			+ SVerticalBox::Slot()
 			.FillHeight(1.0f)
@@ -210,6 +222,104 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 		[
 			MakeSideList(false)
 		]
+	];
+}
+
+TSharedRef<SWidget> SWonderlandLiveTerminal::MakeTaskTabs()
+{
+	SAssignNew(TaskTabBox, SHorizontalBox);
+	RebuildTaskTabs();
+	return SNew(SBox).HeightOverride(24.0f)[TaskTabBox.ToSharedRef()];
+}
+
+void SWonderlandLiveTerminal::RebuildTaskTabs()
+{
+	if (!TaskTabBox.IsValid())
+	{
+		return;
+	}
+	TArray<FTaskTab> Tabs;
+	if (OnGetTaskTabs.IsBound())
+	{
+		Tabs = OnGetTaskTabs.Execute();
+	}
+	TaskTabBox->ClearChildren();
+
+	for (const FTaskTab& Tab : Tabs)
+	{
+		const FGuid Id = Tab.Id;
+		const bool bSelected = Tab.bSelected;
+		// A DRAFT TERMINAL SAYS SO. The founder asked that a newly opened one "visibly read as NEW TASK or
+		// PENDING TASK until the user enters/submits its objective", which is the same gray-means-empty rule the
+		// orb stack already keeps -- one vocabulary, two surfaces.
+		const FLinearColor Ink = Tab.bDraft ? WonderlandUi::Faint() : WonderlandUi::Cream();
+		TaskTabBox->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)
+		[
+			SNew(SButton)
+			.ButtonStyle(FCoreStyle::Get(), "NoBorder")
+			.ContentPadding(FMargin(0.0f))
+			.ToolTipText(FText::FromString(Tab.bDraft
+				? TEXT("An empty task terminal. Type an objective to make it a Mission Contract.")
+				: TEXT("Show this task. The others carry on: selection is a view, not a command.")))
+			.OnClicked_Lambda([this, Id]()
+			{
+				OnSelectTaskTab.ExecuteIfBound(Id);
+				RebuildTaskTabs();
+				return FReply::Handled();
+			})
+			[
+				SNew(SBorder)
+				.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+				// THE SELECTED TAB IS THE LIT ONE, and the rest are plainly a step back -- the same relationship
+				// the orb stack draws with scale.
+				.BorderBackgroundColor(FSlateColor(bSelected
+					? FLinearColor(0.20f, 0.19f, 0.28f, 0.95f)
+					: FLinearColor(0.10f, 0.10f, 0.15f, 0.65f)))
+				.Padding(FMargin(9.0f, 3.0f))
+				[
+					SNew(STextBlock)
+					.Text(FText::FromString(Tab.Label))
+					.Font(WonderlandUi::Sans(8, bSelected, 140))
+					.ColorAndOpacity(Ink)
+				]
+			]
+		];
+	}
+
+	// THE +, AT THE END OF THE STRIP, where a new tab appears.
+	TaskTabBox->AddSlot().AutoWidth().VAlign(VAlign_Center)
+	[
+		SNew(SButton)
+		.ButtonStyle(FCoreStyle::Get(), "NoBorder")
+		.ContentPadding(FMargin(0.0f))
+		.ToolTipText(INVTEXT("Open another Julius task terminal. The one you are looking at is not touched."))
+		.OnClicked_Lambda([this]()
+		{
+			OnAddTaskTerminal.ExecuteIfBound();
+			RebuildTaskTabs();
+			return FReply::Handled();
+		})
+		[
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+			.BorderBackgroundColor(FSlateColor(FLinearColor(0.14f, 0.13f, 0.20f, 0.85f)))
+			.Padding(FMargin(9.0f, 2.0f))
+			[
+				SNew(STextBlock)
+				.Text(INVTEXT("+"))
+				.Font(WonderlandUi::Sans(13, true))
+				.ColorAndOpacity(WonderlandUi::GoldDim())
+			]
+		]
+	];
+
+	// And a word, because a bare + beside four agent roles is a control with nothing to explain it.
+	TaskTabBox->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(7.0f, 0.0f, 0.0f, 0.0f))
+	[
+		SNew(STextBlock)
+		.Text(INVTEXT("NEW TASK TERMINAL"))
+		.Font(WonderlandUi::Sans(7, false, 170))
+		.ColorAndOpacity(WonderlandUi::Faint())
 	];
 }
 
@@ -619,6 +729,24 @@ void SWonderlandLiveTerminal::ResetSimulation()
 
 void SWonderlandLiveTerminal::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
 {
+	// THE TAB STRIP FOLLOWS THE TASK SET, and is rebuilt only when that set actually changes. A signature rather
+	// than a rebuild every frame: this terminal redraws constantly, and re-creating a row of buttons sixty times a
+	// second to show the same three tabs would be work nobody asked for.
+	if (OnGetTaskTabs.IsBound())
+	{
+		FString Signature;
+		for (const FTaskTab& Tab : OnGetTaskTabs.Execute())
+		{
+			Signature += FString::Printf(TEXT("%s|%s|%d|%d;"),
+				*Tab.Id.ToString(EGuidFormats::Digits), *Tab.Label, Tab.bSelected ? 1 : 0, Tab.bDraft ? 1 : 0);
+		}
+		if (Signature != TaskTabSignature)
+		{
+			TaskTabSignature = Signature;
+			RebuildTaskTabs();
+		}
+	}
+
 	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
 	// HOW MANY LINES EACH SECTION SHOWS, AND HOW TALL THE TERMINAL IS. The whole viewport is this widget, so its height is
 	// the screen's. The terminal may extend from its approved 27.3% to a hard 42% of the screen; within that, every section

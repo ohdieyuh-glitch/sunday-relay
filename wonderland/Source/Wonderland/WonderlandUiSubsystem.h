@@ -595,6 +595,13 @@ private:
 	 * These are the player's own commands over their own world -- summoning the cubs to look at them, and asking what
 	 * the commands are. None of them speaks for Julius or claims anything about what Julius is doing.
 	 */
+	/**
+	 * THE TERMINAL'S OWN SLASH COMMANDS, and reflected so a proof can type one the way a founder does.
+	 *
+	 * A PROOF THAT CANNOT PRESS THE KEY IS NOT PROVING THE COMMAND. /cubs and /pa are founder-facing dev
+	 * commands, and the only honest way to verify them is through the same entry point the terminal uses.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Terminal")
 	bool HandleTerminalCommand(const FString& Text);
 	void HandleTravel(FName DestinationId);
 	void ApplyOverlayInput(bool bOverlayOpen, TSharedPtr<SWidget> Focus);
@@ -785,6 +792,26 @@ private:
 
 	/** The brush the wardrobe draws: the skin stage's render target, pointed at once and then left alone. */
 	TSharedPtr<FSlateBrush> SkinPreviewBrush;
+
+	/**
+	 * POINT THE WARDROBE MIRROR AT THE STAGE AGAIN, every time the wardrobe opens.
+	 *
+	 * WHY ONCE WAS NOT ENOUGH. The brush was bound a single time, while the Project Brain panel was being built --
+	 * and the stage it binds to is spawned in that same statement, so its render target's RHI resource may not
+	 * exist yet when Slate takes its handle. A Slate brush whose resource fails to resolve does not draw nothing;
+	 * it draws WHITE, which is exactly the blank panel the founder reported, and it stays white for the life of
+	 * the panel because the panel is built once and kept.
+	 */
+	void RefreshSkinPreviewBrush();
+
+	/** Stand the preview Dog in the world in front of the player, or send it back to its viewing room. */
+	void StageSkinPreviewInWorld(bool bOn);
+
+	/** `/pa`: show every Project Avatar family that exists, in front of the founder. A development showcase. */
+	bool ShowProjectAvatars(const FString& Argument);
+
+	/** What `/pa` put in the world, so a second `/pa` can take it away again. */
+	TArray<TWeakObjectPtr<AActor>> ShownProjectAvatars;
 
 	/** The + beside the token usage, and the one line a task is typed into. Mounted with the HUD. */
 	TSharedPtr<class SWidget> TaskAddLayer;

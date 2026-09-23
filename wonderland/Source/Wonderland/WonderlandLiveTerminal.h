@@ -65,6 +65,23 @@ private:
 class WONDERLAND_API SWonderlandLiveTerminal : public SCompoundWidget
 {
 public:
+	/**
+	 * ONE JULIUS TASK TERMINAL, as the tab strip needs to draw it.
+	 *
+	 * THE ID IS THE TASK'S OWN. The founder was explicit that a terminal tab, its Mission Contract and its orb are
+	 * one thing seen three ways -- "Do not create three independent representations with unrelated ids" -- so this
+	 * carries FWonderlandMissionTask::LocalId and invents no identity of its own.
+	 */
+	struct FTaskTab
+	{
+		FGuid Id;
+		FString Label;
+		bool bSelected = false;
+		bool bDraft = false;
+	};
+
+	DECLARE_DELEGATE_RetVal(TArray<FTaskTab>, FOnGetTaskTabs);
+	DECLARE_DELEGATE_OneParam(FOnSelectTaskTab, FGuid /*Id*/);
 	DECLARE_DELEGATE_OneParam(FOnSubmit, const FString& /*Text*/);
 	DECLARE_DELEGATE_RetVal_OneParam(FString, FOnGetCommandLabel, int32 /*Slot*/);
 
@@ -73,6 +90,11 @@ public:
 	{}
 		SLATE_EVENT(FSimpleDelegate, OnRequestClose)
 		SLATE_EVENT(FOnSubmit, OnSubmit)
+		/** The open Julius task terminals, asked for fresh rather than remembered. */
+		SLATE_EVENT(FOnGetTaskTabs, OnGetTaskTabs)
+		SLATE_EVENT(FOnSelectTaskTab, OnSelectTaskTab)
+		/** Press +: open ANOTHER Julius task terminal. Never overwrites the one being viewed. */
+		SLATE_EVENT(FSimpleDelegate, OnAddTaskTerminal)
 		/** How many command rows the left list draws: the preset station's quick slot count. */
 		SLATE_ARGUMENT(int32, CommandSlotCount)
 		/** The command in a quick slot of the active layout, read every paint; empty for an empty slot. */
@@ -166,6 +188,16 @@ private:
 
 	FSimpleDelegate OnRequestClose;
 	FOnSubmit OnSubmit;
+	FOnGetTaskTabs OnGetTaskTabs;
+	FOnSelectTaskTab OnSelectTaskTab;
+	FSimpleDelegate OnAddTaskTerminal;
+
+	/** The strip of task terminals across the top, and the + that opens another. */
+	TSharedRef<SWidget> MakeTaskTabs();
+	void RebuildTaskTabs();
+	TSharedPtr<class SHorizontalBox> TaskTabBox;
+	/** What the strip was last built from, so it is rebuilt when the set changes and not every frame. */
+	FString TaskTabSignature;
 	FOnGetCommandLabel OnGetCommandLabel;
 	int32 CommandSlotCount = 4;
 	bool bSimulated = false;

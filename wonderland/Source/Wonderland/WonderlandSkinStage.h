@@ -84,6 +84,49 @@ public:
 	/** Where the stage stands. Far above the world, where nothing can wander into the shot. */
 	static FVector StageOrigin() { return FVector(0.0, 0.0, 100000.0); }
 
+	/**
+	 * THE PREVIEW'S FIXED EXPOSURE, in EV.
+	 *
+	 * WHY IT HAS TO BE FIXED AT ALL. SCS_FinalColorLDR runs the whole post chain, auto-exposure included, and this
+	 * room is a thousand metres above the world with almost nothing in it. Auto-exposure adapted to that emptiness
+	 * and drove every frame to pure white -- the founder's "the large WHITE preview area is blank" was not a blank
+	 * panel at all, it was a correctly captured photograph of a blown-out sky.
+	 *
+	 * AND WRITEABLE, so the value is found by sweeping it in a live session and looking, the same way the Mission
+	 * Contract orb's exposure was. Guessing a photometric constant and rebuilding to test it costs a cycle a try.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Skins")
+	float PreviewExposureEv = 11.0f;
+
+	/** Re-apply the exposure and show flags after PreviewExposureEv is changed. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Skins")
+	void ApplyPreviewExposure();
+
+	/**
+	 * BRING THE PREVIEW DOG INTO THE WORLD, where the founder can simply look at it.
+	 *
+	 * WHY THE PICTURE MOVED INSTEAD OF THE PANEL. The wardrobe's mirror was a SceneCaptureComponent2D writing to a
+	 * render target, and in this build that capture writes pure white: measured across ten configurations -- stage
+	 * lights at full, at a hundredth and at a ten-thousandth; post processing disabled; SceneColorHDR instead of
+	 * tonemapped LDR; exposure swept from EV -10 to +15; an 8-bit and a 16-bit float target; moved down into the
+	 * fully loaded plaza; engine-driven every-frame capture; and bAlwaysPersistRenderingState on. A capture that
+	 * ignores the scene, the lights, the tonemapper and its own location is not photographing anything.
+	 *
+	 * SO THE DOG COMES TO THE FOUNDER. Everything else about this stage was already proven working -- it spawns a
+	 * real body, dresses it from the registry, keeps it in one place and idles its head, arms, legs and spine --
+	 * and none of that needed the capture. Standing it in front of the player is live 3D by construction: there is
+	 * no image to be stale, and nothing that could be faked with a screenshot.
+	 *
+	 * THE BACKDROP AND PLINTH GO WITH IT, but the backdrop is hidden: a dark wall floating in the arrival plaza
+	 * would read as broken scenery. The plinth stays, because a figure standing on something reads as staged
+	 * rather than as an actor that wandered in.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Skins")
+	void SetInWorldPreview(bool bOn, FVector Where, FRotator Facing);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
+	bool IsInWorldPreview() const { return bInWorldPreview; }
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -126,6 +169,9 @@ private:
 	float SinceWanted = 1000.0f;
 	float SinceCapture = 0.0f;
 	bool bCapturing = false;
+
+	/** True while the preview body is standing in the world rather than in the viewing room. */
+	bool bInWorldPreview = false;
 	int32 FrameCount = 0;
 
 	/** The look-around: where the head is pointed, where it is going, and how long it waits before choosing again. */

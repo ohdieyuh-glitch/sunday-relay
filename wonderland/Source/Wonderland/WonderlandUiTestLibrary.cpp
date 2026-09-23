@@ -1,5 +1,8 @@
 #include "WonderlandUiTestLibrary.h"
 
+#include "WonderlandDemoFlow.h"
+#include "WonderlandSubAgentCubs.h"
+
 #include "Camera/CameraActor.h"
 #include "EngineUtils.h"
 #include "Camera/CameraComponent.h"
@@ -314,6 +317,18 @@ UWonderlandMissionSubsystem* UWonderlandUiTestLibrary::GetMission(UObject* World
 	const APlayerController* Controller = World != nullptr ? UGameplayStatics::GetPlayerController(World, 0) : nullptr;
 	ULocalPlayer* Player = Controller != nullptr ? Controller->GetLocalPlayer() : nullptr;
 	return Player != nullptr ? Player->GetSubsystem<UWonderlandMissionSubsystem>() : nullptr;
+}
+
+UWonderlandDemoSubsystem* UWonderlandUiTestLibrary::GetDemo(UObject* WorldContextObject)
+{
+	UWorld* World = GEngine != nullptr ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+	return World != nullptr ? World->GetSubsystem<UWonderlandDemoSubsystem>() : nullptr;
+}
+
+UWonderlandSubAgentCubSubsystem* UWonderlandUiTestLibrary::GetCubs(UObject* WorldContextObject)
+{
+	UWorld* World = GEngine != nullptr ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+	return World != nullptr ? World->GetSubsystem<UWonderlandSubAgentCubSubsystem>() : nullptr;
 }
 
 AWonderlandCompanionEmbodiment* UWonderlandUiTestLibrary::SpawnFigureActor(UObject* WorldContextObject, FVector Location, const FString& FigurePath, const FString& Label)

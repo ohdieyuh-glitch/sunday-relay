@@ -253,9 +253,14 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 		UsageHud->SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
 		UsageHud->SetAlignmentInViewport(FVector2D(0.0, 0.0));
 		UsageHud->SetPositionInViewport(FVector2D(30.0, 22.0), true);
-		// THE + GOES UP WITH THE TOKEN USAGE, because that is where the founder put it and because a + with no
-		// usage beside it would be a control with nothing to explain it.
-		MountTaskAddControl();
+		// THE + IS NOT HERE ANY MORE.
+		//
+		// FOUNDER CORRECTION: "REMOVE ADD TASK from the usage shelf / percentage HUD ... It must feel like a
+		// terminal-level action, not a HUD/shelf-bar action." Adding a Julius task is opening another Julius
+		// terminal, and it belongs beside the terminal it opens -- not next to a row of usage percentages, which
+		// report consumption and have nothing to do with starting work.
+		//
+		// It now lives at the top of the Julius live terminal. See MakeTaskTabs in SWonderlandLiveTerminal.
 		// Thirty units taller with the white LLM Companion meter: its third readout row takes that height,
 		// so the art is drawn at the size it always was rather than shrinking to make room.
 		const UWonderlandUsageHudSettings* HudSettings = GetDefault<UWonderlandUsageHudSettings>();
@@ -512,6 +517,9 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 			// THE WARDROBE'S LIVE DOG, made before the panel that draws it. A brush handed over null would leave the
 			// view saying the preview is unavailable for the life of the panel, since the panel is built once and kept.
 			UWonderlandRelaySkinSubsystem* SkinRegistry = RelaySkins();
+			// SPAWNED HERE AND BOUND AGAIN LATER. Creating the stage in the same statement that reads its render
+			// target is what made the first binding race the resource; the binding is now also redone every time
+			// the wardrobe opens, so a handle taken too early cannot survive as a permanently white panel.
 			AWonderlandSkinStage* Stage = SkinStage();
 			if (Stage != nullptr && Stage->GetRenderTarget() != nullptr)
 			{
@@ -710,6 +718,13 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 
 void UWonderlandUiSubsystem::CloseOverlay()
 {
+	// THE PREVIEW DOG DELIBERATELY STAYS. It used to be sent home here, and that was wrong: the wardrobe panel
+	// covers the screen, so a Dog that vanishes when the panel closes is a Dog the founder can never actually look
+	// at. The founder asked to go "Apollo -> Bee -> Arden -> Celestial Light and visually inspect them quickly",
+	// which means picking a skin, shutting the panel, and seeing it standing there.
+	//
+	// IT IS NOT ABANDONED. `/skin off` dismisses it, opening the wardrobe again re-stages it in front of wherever
+	// the player now is, and it is a development preview body that holds no authority and no mission.
 	if (Open == EOverlay::None)
 	{
 		return;
@@ -1190,12 +1205,72 @@ bool UWonderlandUiSubsystem::FocusWonderWebWindow(FName Id)
 	return true;
 }
 
+void UWonderlandUiSubsystem::StageSkinPreviewInWorld(bool bOn)
+{
+	AWonderlandSkinStage* Stage = SkinStage();
+	APlayerController* Controller = BoundController.Get();
+	APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+	if (Stage == nullptr || Pawn == nullptr)
+	{
+		return;
+	}
+	if (!bOn)
+	{
+		Stage->SetInWorldPreview(false, FVector::ZeroVector, FRotator::ZeroRotator);
+		return;
+	}
+	const FVector At = Pawn->GetActorLocation();
+	const FVector Forward = Pawn->GetActorForwardVector();
+	const FVector Right = Pawn->GetActorRightVector();
+	// AHEAD AND A LITTLE ASIDE. Straight ahead would put the Dog behind the middle of the wardrobe panel, which is
+	// the one part of the screen the founder cannot see through; offset to the side it stands in the open where
+	// the panel's edge does not cover it, and close enough that a visor and a pair of eyes are readable.
+	const FVector Where = At + Forward * 320.0 + Right * 170.0 - FVector(0.0, 0.0, 88.0);
+	// FACING THE PLAYER, because a skin is judged from the front.
+	const FRotator Facing = (At - Where).GetSafeNormal2D().Rotation();
+	Stage->SetInWorldPreview(true, Where, Facing);
+}
+
+void UWonderlandUiSubsystem::RefreshSkinPreviewBrush()
+{
+	AWonderlandSkinStage* Stage = SkinStage();
+	if (Stage == nullptr)
+	{
+		return;
+	}
+	UTextureRenderTarget2D* Target = Stage->GetRenderTarget();
+	if (Target == nullptr)
+	{
+		return;
+	}
+	if (!SkinPreviewBrush.IsValid())
+	{
+		SkinPreviewBrush = MakeShared<FSlateBrush>();
+		SkinPreviewBrush->ImageSize = FVector2D(640.0, 800.0);
+		SkinPreviewBrush->DrawAs = ESlateBrushDrawType::Image;
+	}
+	// RE-POINTED EVERY TIME, not only when it is null. Re-setting the resource object makes Slate drop the handle
+	// it cached and take a fresh one, which is the whole point: the stale handle is the bug.
+	SkinPreviewBrush->SetResourceObject(Target);
+	// AND THE STAGE IS TOLD SOMEBODY IS LOOKING, so the first frame after opening is a real capture rather than
+	// whatever was left in the target from last time.
+	Stage->MarkWanted();
+}
+
 bool UWonderlandUiSubsystem::SetBrainSkinsOpen(bool bOpen)
 {
 	if (!IsProjectBrainOpen() || !BrainPanel.IsValid())
 	{
 		return false;
 	}
+	if (bOpen)
+	{
+		RefreshSkinPreviewBrush();
+	}
+	// THE PREVIEW DOG COMES TO THE FOUNDER, because the wardrobe's mirror cannot be made to work in this build.
+	// It is the same body the stage has always dressed -- real, idling, and following the registry -- simply
+	// standing in the plaza instead of in a viewing room a kilometre overhead.
+	StageSkinPreviewInWorld(bOpen);
 	BrainPanel->SetSkinsOpen(bOpen);
 	return BrainPanel->IsSkinsOpen() == bOpen;
 }
@@ -2366,6 +2441,92 @@ bool UWonderlandUiSubsystem::ProposeToSelectedBrainSurface(const FString& Text)
 	return Open == EOverlay::Brain && BrainPanel.IsValid() && BrainPanel->ProposeToSelected(Text);
 }
 
+bool UWonderlandUiSubsystem::ShowProjectAvatars(const FString& Argument)
+{
+	UWorld* World = PlayerWorld();
+	APlayerController* Controller = BoundController.Get();
+	APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+	if (World == nullptr || Pawn == nullptr || !Terminal.IsValid())
+	{
+		return true;
+	}
+
+	// A SECOND /pa CLEARS THE FIRST, so the founder can look twice without wading through six avatars.
+	int32 Cleared = 0;
+	for (int32 Index = ShownProjectAvatars.Num() - 1; Index >= 0; --Index)
+	{
+		if (AActor* Shown = ShownProjectAvatars[Index].Get())
+		{
+			Shown->Destroy();
+			++Cleared;
+		}
+	}
+	ShownProjectAvatars.Reset();
+	if (Argument.Equals(TEXT("off"), ESearchCase::IgnoreCase) || Argument.Equals(TEXT("none"), ESearchCase::IgnoreCase))
+	{
+		Terminal->AddJuliusRow(TEXT("You"), TEXT("/pa off"),
+			FString::Printf(TEXT("%d project avatar(s) dismissed."), Cleared));
+		return true;
+	}
+
+	FString Stage = Argument.IsEmpty() ? TEXT("Large") : Argument;
+	Stage = Stage.Left(1).ToUpper() + Stage.Mid(1).ToLower();
+	if (Stage != TEXT("Small") && Stage != TEXT("Medium") && Stage != TEXT("Large"))
+	{
+		Stage = TEXT("Large");
+	}
+
+	static const TCHAR* const Families[] = { TEXT("TenTails"), TEXT("Cherubim"), TEXT("Seraph") };
+	const FVector At = Pawn->GetActorLocation();
+	const FVector Forward = Pawn->GetActorForwardVector();
+	const FVector Right = Pawn->GetActorRightVector();
+
+	TArray<FString> Shown;
+	TArray<FString> Missing;
+	for (int32 Index = 0; Index < UE_ARRAY_COUNT(Families); ++Index)
+	{
+		const FString Path = FString::Printf(
+			TEXT("/Game/WonderlandV2/Characters/Avatars/%s/%s/BP_Avatar_%s_%s.BP_Avatar_%s_%s_C"),
+			Families[Index], *Stage, Families[Index], *Stage, Families[Index], *Stage);
+		UClass* Loaded = LoadClass<AActor>(nullptr, *Path);
+		if (Loaded == nullptr)
+		{
+			Missing.Add(FString::Printf(TEXT("%s %s"), Families[Index], *Stage.ToUpper()));
+			continue;
+		}
+		// SPREAD ACROSS THE VIEW, far enough apart that a five-metre creature does not stand inside its neighbour.
+		// The world lane measured these bodies as levelled so their lowest geometry sits at z=0, so they are placed
+		// at the ground the player is standing on with no per-family lift -- the opposite of the .wlvox figures,
+		// which each carry their own overhang. Mixing those two conventions buries one family and floats another.
+		const float Lateral = (static_cast<float>(Index) - 1.0f) * 620.0f;
+		const FVector Where = At + Forward * 900.0 + Right * Lateral - FVector(0.0, 0.0, 88.0);
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		AActor* Body = World->SpawnActor<AActor>(Loaded, FTransform((At - Where).GetSafeNormal2D().Rotation(), Where), Params);
+		if (Body == nullptr)
+		{
+			Missing.Add(FString::Printf(TEXT("%s %s (spawn refused)"), Families[Index], *Stage.ToUpper()));
+			continue;
+		}
+#if WITH_EDITOR
+		Body->SetActorLabel(FString::Printf(TEXT("WL_PA_%s_%s"), Families[Index], *Stage), false);
+#endif
+		ShownProjectAvatars.Add(Body);
+		Shown.Add(FString::Printf(TEXT("%s %s"), Families[Index], *Stage.ToUpper()));
+	}
+
+	const FString Headline = Shown.Num() > 0
+		? FString::Printf(TEXT("%d Project Avatar(s) standing ahead: %s"), Shown.Num(), *FString::Join(Shown, TEXT(", ")))
+		: TEXT("No Project Avatar assets could be loaded.");
+	const FString Sub = Missing.Num() > 0
+		? FString::Printf(TEXT("DEVELOPMENT PREVIEW. Not built yet: %s"), *FString::Join(Missing, TEXT(", ")))
+		: TEXT("DEVELOPMENT PREVIEW - a showcase only. No project's real progression is changed by this.");
+	Terminal->AddJuliusRow(TEXT("You"), FString::Printf(TEXT("/pa %s"), *Stage.ToLower()), Headline);
+	Terminal->AddJuliusRow(TEXT("Wonderland"), Headline, Sub);
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI /pa -> %d shown, %d missing"), Shown.Num(), Missing.Num());
+	return true;
+}
+
 bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 {
 	const FString Line = Text.TrimStartAndEnd();
@@ -2378,6 +2539,67 @@ bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
 	Line.Split(TEXT(" "), &Command, &Argument, ESearchCase::IgnoreCase, ESearchDir::FromStart);
 	Command = Command.ToLower().TrimStartAndEnd();
 	Argument = Argument.TrimStartAndEnd();
+
+	if (Command == TEXT("/skin"))
+	{
+		// THE WARDROBE WITHOUT THE WARDROBE. The panel covers the screen, so the quickest way to compare skins is
+		// to not open it: `/skin apollo`, look, `/skin bee`, look.
+		//
+		// PREVIEW IS NOT OWNERSHIP. This dresses the development preview body and the registry's equipped skin,
+		// which is what the in-world Dog and the cards both read. It grants no entitlement and claims no purchase:
+		// the panel still says NO ACCOUNT HAS GRANTED THIS, because no account has.
+		UWonderlandRelaySkinSubsystem* Registry = RelaySkins();
+		if (Registry == nullptr)
+		{
+			Terminal->AddJuliusRow(TEXT("You"), Line, TEXT("There is no skin registry in this world."));
+			return true;
+		}
+		if (Argument.Equals(TEXT("off"), ESearchCase::IgnoreCase) || Argument.Equals(TEXT("none"), ESearchCase::IgnoreCase))
+		{
+			StageSkinPreviewInWorld(false);
+			Terminal->AddJuliusRow(TEXT("You"), TEXT("/skin off"), TEXT("The preview Relay Dog has gone."));
+			return true;
+		}
+		if (Argument.IsEmpty() || Argument.Equals(TEXT("list"), ESearchCase::IgnoreCase))
+		{
+			TArray<FString> Names;
+			for (const FWonderlandRelaySkin& Skin : Registry->GetSkins())
+			{
+				Names.Add(Skin.SkinId.ToString());
+			}
+			Terminal->AddJuliusRow(TEXT("You"), Line, FString::Join(Names, TEXT("  ")));
+			return true;
+		}
+		const FName Wanted(*Argument.ToLower().Replace(TEXT(" "), TEXT("_")));
+		if (!Registry->EquipSkin(Wanted))
+		{
+			Terminal->AddJuliusRow(TEXT("You"), Line,
+				FString::Printf(TEXT("No skin named '%s'. Try /skin list."), *Argument));
+			return true;
+		}
+		// AND BRING IT WHERE IT CAN BE SEEN, so `/skin apollo` on its own is enough.
+		StageSkinPreviewInWorld(true);
+		Terminal->AddJuliusRow(TEXT("You"), Line,
+			FString::Printf(TEXT("%s - standing ahead of you. DEVELOPMENT PREVIEW: appearance only, no entitlement granted."),
+				*Argument.ToUpper()));
+		return true;
+	}
+
+	if (Command == TEXT("/pa"))
+	{
+		// FOUNDER PREVIEW: every Project Avatar family that actually exists, standing in front of the founder.
+		//
+		// A PROJECT AVATAR IS THE REPRESENTATION OF A PROJECT. Not Julius, not the Relay Dog, not a sub-agent, not
+		// a Jhinn and not the LLM Companion. Nothing here spawns or touches any of those, and nothing here moves
+		// a project's real progression: this is a development showcase and it is the founder's own dev command.
+		//
+		// THE HANDED-OVER MESH ASSETS, NOT THE VOXEL PLACEHOLDERS. The founder was explicit -- "Do not silently
+		// substitute old voxel placeholders if newer assets exist" -- and the world lane's BP_Avatar_* Blueprints
+		// are the newer ones. A family whose Blueprint will not load is REPORTED MISSING rather than quietly
+		// replaced by the .wlvox figure of the same name, because those are different asset families and saying
+		// otherwise would show the founder one thing while naming another.
+		return ShowProjectAvatars(Argument);
+	}
 
 	if (Command == TEXT("/cubs"))
 	{
@@ -3149,6 +3371,46 @@ void UWonderlandUiSubsystem::EnsureLiveTerminal()
 			return Source != nullptr ? Source->GetSlotLabel(Slot) : FString();
 		})
 		.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
+		// ONE IDENTITY, THREE SURFACES. A tab, its Mission Contract and its orb are the same task seen three ways,
+		// so the strip is built straight from the task set and carries that task's own LocalId. Nothing here mints
+		// a terminal id of its own -- which is exactly what the founder ruled out.
+		.OnGetTaskTabs_Lambda([WeakThis]()
+		{
+			TArray<SWonderlandLiveTerminal::FTaskTab> Out;
+			const UWonderlandMissionTaskSubsystem* Set = WeakThis.IsValid() ? WeakThis->Tasks() : nullptr;
+			if (Set == nullptr)
+			{
+				return Out;
+			}
+			const TArray<FWonderlandMissionTask>& Rows = Set->GetTasks();
+			for (int32 Index = 0; Index < Rows.Num(); ++Index)
+			{
+				SWonderlandLiveTerminal::FTaskTab Tab;
+				Tab.Id = Rows[Index].LocalId;
+				Tab.bSelected = Rows[Index].LocalId == Set->GetSelected();
+				Tab.bDraft = !WonderlandTaskIsContract(Rows[Index].State);
+				// A DRAFT HAS NO OBJECTIVE TO NAME IT BY, so it says what it is instead of showing an empty tab.
+				Tab.Label = Tab.bDraft
+					? FString::Printf(TEXT("TASK %d · NEW"), Index + 1)
+					: FString::Printf(TEXT("TASK %d · %s"), Index + 1, *Rows[Index].Objective.Left(18).ToUpper());
+				Out.Add(Tab);
+			}
+			return Out;
+		})
+		.OnSelectTaskTab_Lambda([WeakThis](FGuid Id)
+		{
+			if (UWonderlandMissionTaskSubsystem* Set = WeakThis.IsValid() ? WeakThis->Tasks() : nullptr)
+			{
+				// A VIEW, NOT A COMMAND. The other tasks are not paused, reset or touched.
+				Set->SelectTask(Id);
+			}
+		})
+		.OnAddTaskTerminal_Lambda([WeakThis]()
+		{
+			// THE SAME CALL THE ORB STACK GROWS FROM, so a tab and an orb can never disagree about how many tasks
+			// there are. It creates an empty slot and selects it; it does not touch the terminal being viewed.
+			if (WeakThis.IsValid()) { WeakThis->PressAddTask(); }
+		})
 		.OnSubmit_Lambda([WeakThis](const FString& Text) { if (WeakThis.IsValid()) { WeakThis->HandleTerminalSubmit(Text); } });
 }
 

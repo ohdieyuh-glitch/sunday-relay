@@ -94,6 +94,53 @@ AWonderlandSkinStage::AWonderlandSkinStage()
 	// ONLY WHAT BELONGS ON THE STAGE. The show-only list is filled in when the body exists; until then the capture
 	// would draw the whole world, which at this altitude is a picture of the sky.
 	Capture->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
+	ApplyPreviewExposure();
+}
+
+void AWonderlandSkinStage::ApplyPreviewExposure()
+{
+	if (Capture == nullptr)
+	{
+		return;
+	}
+
+	// A ROOM, NOT A WINDOW ONTO THE SKY.
+	//
+	// THE SHOW-ONLY LIST DOES NOT FILTER THE SKY. It filters PRIMITIVES, and the atmosphere, the height fog and the
+	// sky light are none of those -- so a capture a thousand metres up rendered the sky whatever the show-only list
+	// said, and the three stage lights were photographing a bright white ceiling. Turning them off here is what
+	// makes the dark backdrop the actual background of the shot.
+	Capture->ShowFlags.SetAtmosphere(false);
+	Capture->ShowFlags.SetFog(false);
+	Capture->ShowFlags.SetVolumetricFog(false);
+	Capture->ShowFlags.SetMotionBlur(false);
+	// The world's own post volumes have no business dressing a wardrobe mirror.
+	Capture->bOverride_CustomNearClippingPlane = false;
+
+	Capture->PostProcessBlendWeight = 1.0f;
+	FPostProcessSettings& Post = Capture->PostProcessSettings;
+
+	// MANUAL EXPOSURE, PINNED. Min and max equal removes the adaptation entirely, so the picture cannot drift
+	// brighter because the room is empty, and two skins photographed a minute apart are actually comparable.
+	Post.bOverride_AutoExposureMethod = true;
+	Post.AutoExposureMethod = EAutoExposureMethod::AEM_Manual;
+	Post.bOverride_AutoExposureMinBrightness = true;
+	Post.AutoExposureMinBrightness = 1.0f;
+	Post.bOverride_AutoExposureMaxBrightness = true;
+	Post.AutoExposureMaxBrightness = 1.0f;
+	Post.bOverride_AutoExposureBias = true;
+	Post.AutoExposureBias = PreviewExposureEv;
+
+	// A LITTLE BLOOM, because the luminous skins -- Celestial Light, Apollo's halo, Skeleton Flame's ghost-fire --
+	// are most of their own identity, and none at all makes them read as flat paint.
+	Post.bOverride_BloomIntensity = true;
+	Post.BloomIntensity = 0.22f;
+	// NEUTRAL, so a white skin and a black skin are both readable. The founder asked for lighting that works
+	// across white, black, gold, infernal and luminous without a pure-white environment swallowing the white ones.
+	Post.bOverride_VignetteIntensity = true;
+	Post.VignetteIntensity = 0.28f;
+	Post.bOverride_ColorSaturation = true;
+	Post.ColorSaturation = FVector4(1.04, 1.04, 1.04, 1.0);
 }
 
 void AWonderlandSkinStage::BeginPlay()
@@ -140,6 +187,37 @@ void AWonderlandSkinStage::BeginPlay()
 			Skins->OnSkinChanged.AddWeakLambda(this, [this](FName SkinId) { ShowSkin(SkinId); });
 		}
 	}
+}
+
+void AWonderlandSkinStage::SetInWorldPreview(bool bOn, FVector Where, FRotator Facing)
+{
+	EnsureBody();
+	bInWorldPreview = bOn;
+	const FVector Home = bOn ? Where : StageOrigin();
+	SetActorLocation(Home, false, nullptr, ETeleportType::TeleportPhysics);
+	SetActorRotation(bOn ? Facing : FRotator::ZeroRotator, ETeleportType::TeleportPhysics);
+	if (Body != nullptr)
+	{
+		// THE BODY IS A SEPARATE ACTOR, not a child, so it has to be carried across by hand. Teleport rather than
+		// sweep: it is crossing a kilometre of world and must not try to walk the distance or collide on the way.
+		Body->SetActorLocation(Home, false, nullptr, ETeleportType::TeleportPhysics);
+		Body->SetActorRotation(bOn ? Facing : FRotator::ZeroRotator, ETeleportType::TeleportPhysics);
+	}
+	if (Backdrop != nullptr)
+	{
+		// A DARK WALL IN THE ARRIVAL PLAZA WOULD READ AS BROKEN SCENERY, so the viewing room's back wall stays in
+		// the viewing room. It is still wanted when the stage is at home, where it is what makes two skins
+		// photographed an hour apart comparable.
+		Backdrop->SetVisibility(!bOn, true);
+	}
+	if (Plinth != nullptr)
+	{
+		// The plinth stays. A figure standing ON something reads as staged; one standing on paving reads as an
+		// actor that wandered into the shot.
+		Plinth->SetVisibility(true, true);
+	}
+	UE_LOG(LogTemp, Display, TEXT("WLSKIN in-world preview %s at %s"),
+		bOn ? TEXT("ON") : TEXT("OFF"), *Home.ToCompactString());
 }
 
 void AWonderlandSkinStage::EnsureBody()
