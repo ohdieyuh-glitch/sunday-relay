@@ -81,7 +81,11 @@ def main():
     #: the causeway a player is meant to walk along. BR01's world sweep later turned it on, so the fault was
     #: invisible -- until re-applying this pass reset it and the seam walk dropped straight back onto the world
     #: slab at z=75. A pass must declare its own collision; it cannot rely on a later sweep remembering.
-    SOLID = ("Causeway", "Kerb", "Tower", "Gatehouse_Twin_stone", "Gatehouse_Twin_stone_dark",
+    #: Gatehouse_Twin_stone_dark was in this list until 2026-09-23. It is a 12-triangle accent of
+    #: 790 x 273 x 70 cm nested wholly inside Gatehouse_Twin_stone, which stays solid -- so its collision
+    #: could never be met first, and dropping it removes a duplicate blocker rather than opening a hole.
+    #: The rest of this list stays exactly as it is: see the note above about IC01 declaring nothing solid.
+    SOLID = ("Causeway", "Kerb", "Tower", "Gatehouse_Twin_stone",
              "Detail_Balustrade_Run_stone", "Detail_Pinnacle_Grand_stone", "Detail_Newel_Urn_stone")
 
     def add(key, mesh, material, x, y, z, yaw, scale=1.0, cull=CULL_NEAR, shadow=True):

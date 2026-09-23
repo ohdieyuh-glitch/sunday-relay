@@ -26,6 +26,21 @@ CANON = json.loads((HERE / "CANON" / "nations.json").read_text(encoding="utf-8")
 NATIONS = {n["id"]: n for n in CANON["nations"]}
 NEUTRAL = CANON["neutral"]
 CORE_R = float(NEUTRAL["core_radius_cm"])
+
+#: THE KIT'S COLLISION POLICY, IN ONE PLACE.
+#:
+#: A kit module is authored as several co-located parts -- a stone shell plus glass, gold, roof and accent
+#: sub-meshes at the SAME transform. Exactly one of them may collide, or a player is blocked by several
+#: coincident bodies and the engine pays for each. These are the parts that must NOT collide.
+#:
+#: It lives here because it was previously copied into four generators and had already drifted: on
+#: 2026-09-23 icarus_district.py was missing gold_aged, and ALL FOUR were missing stone_dark. stone_dark is
+#: an accent sub-mesh -- a plinth band or arch soffit of 12 to 216 triangles nested wholly inside the stone
+#: shell -- so letting it collide put 279 unreachable collision bodies into the world: 178 in the second
+#: civilization band and 101 in the first. Four copies of a rule is four chances to forget one.
+NO_COLLIDE_PARTS = ("glass", "gold", "roof", "roof_alt", "veg_anchor", "moss", "metal",
+                    "gold_aged", "stone_dark")
+
 MARCH_R = float(NEUTRAL["march_outer_cm"])
 
 

@@ -77,7 +77,8 @@ PART_MATERIAL = {"gold": SILVER, "stone": PEARL, "stone_dark": ASHLAR, "glass": 
                  "paving": "MI_V2_GroundFlag_PlazaCream", "paving_shade": "MI_V2_GroundFlag_PlazaShade",
                  "paving_warm": "MI_V2_GroundFlag_PlazaWarm"}
 #: Parts a player can never touch, or that are pure ornament: they draw, they do not block.
-NO_COLLIDE_PARTS = ("glass", "gold", "roof", "roof_alt", "veg_anchor", "moss", "metal")
+#: One definition, in nations.py. It was copied into four generators and had already drifted -- see that module.
+NO_COLLIDE_PARTS = nations.NO_COLLIDE_PARTS
 #: VEG_ANCHOR IS NOT DRAWN. The kit ships a flat panel on planters, verges and retaining walls marking where
 #: vegetation belongs. Given a leaf material it renders as a bright green SLAB -- visible as rectangles down both
 #: verges in the first detailed cut. The anchor is an instruction, not geometry: it is skipped, and real planting

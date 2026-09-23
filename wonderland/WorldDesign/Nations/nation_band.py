@@ -154,8 +154,7 @@ def build(pass_id, cfg):
             # second collision body inside a shell that already blocks: 178 of the second band's 2,288
             # colliding instances, 146 of them in NOCTIS, none of them reachable first. All 51 kit modules
             # that carry a stone_dark part also carry a stone shell, so nothing stops blocking by this.
-            blocks = collide and part["part"] not in ("glass", "gold", "roof", "roof_alt", "moss", "metal",
-                                                      "gold_aged", "stone_dark")
+            blocks = collide and part["part"] not in nations.NO_COLLIDE_PARTS
             add("%s_%s" % (name.replace("WL_", ""), part["part"]), part["mesh"], mat, u, v, z, yaw_local,
                 scale, cull, collides=blocks)
         if record:

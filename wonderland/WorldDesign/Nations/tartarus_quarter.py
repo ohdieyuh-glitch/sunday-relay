@@ -69,7 +69,8 @@ PART_MATERIAL = {"gold": METAL, "stone": CRIMSON, "stone_dark": BLACK, "glass": 
                  "moss": "MI_V2_Moss", "gold_aged": METAL,
                  "paving": "MI_V2_GroundFlag_PlazaShade", "paving_shade": "MI_V2_GroundFlag_PlazaGrey",
                  "paving_warm": "MI_V2_GroundFlag_PlazaWarm"}
-NO_COLLIDE_PARTS = ("glass", "gold", "roof", "roof_alt", "veg_anchor", "moss", "metal", "gold_aged")
+#: One definition, in nations.py. It was copied into four generators and had already drifted -- see that module.
+NO_COLLIDE_PARTS = nations.NO_COLLIDE_PARTS
 SKIP_PARTS = ("veg_anchor",)
 CULL_NEAR, CULL_MID, CULL_FAR = 12000.0, 26000.0, 60000.0
 

@@ -10127,7 +10127,7 @@
      1.0
     ]
    ],
-   "collides": true,
+   "collides": false,
    "cast_shadow": true,
    "affect_df": false,
    "cull_distance": 60000.0
@@ -10292,7 +10292,7 @@
      1.0
     ]
    ],
-   "collides": true,
+   "collides": false,
    "cast_shadow": true,
    "affect_df": false,
    "cull_distance": 60000.0
@@ -12668,7 +12668,7 @@
      1.0
     ]
    ],
-   "collides": true,
+   "collides": false,
    "cast_shadow": true,
    "affect_df": false,
    "cull_distance": 12000.0
@@ -13713,7 +13713,7 @@
      1.0
     ]
    ],
-   "collides": true,
+   "collides": false,
    "cast_shadow": true,
    "affect_df": false,
    "cull_distance": 26000.0
@@ -13801,7 +13801,7 @@
      1.0
     ]
    ],
-   "collides": true,
+   "collides": false,
    "cast_shadow": true,
    "affect_df": false,
    "cull_distance": 60000.0
@@ -14263,7 +14263,7 @@
      1.0
     ]
    ],
-   "collides": true,
+   "collides": false,
    "cast_shadow": true,
    "affect_df": false,
    "cull_distance": 60000.0
@@ -14593,7 +14593,7 @@
      1.0
     ]
    ],
-   "collides": true,
+   "collides": false,
    "cast_shadow": true,
    "affect_df": false,
    "cull_distance": 60000.0
