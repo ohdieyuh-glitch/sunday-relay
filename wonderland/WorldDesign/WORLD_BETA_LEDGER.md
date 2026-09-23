@@ -12,9 +12,17 @@ matching offline validation, zero hovers). Since then, in the editor: LOOK05+LOO
 GROUND01 surface breakup, DF01 Dubel Forest (2,925 instances), XM01 Christmas street lighting (228). World:
 20,642 → 20,858 actors, 265 → 273 pass groups. Map saved at 45,386,879 bytes.
 
-**Measured performance, and it is the headline problem: PIE runs at 3.3–3.5 fps** at every camera sampled,
-before and after every change this run. Nothing this session moved it, which means the world is not
-triangle-bound at the margin — it was 3.5 fps before Dubel Forest added 38 M triangles and 3.5 fps after.
+**Performance, corrected 2026-09-23.** I reported "3.3–3.5 fps" from `camera_shots`'s `fps_last_camera`. A
+proper A/B with `perf_remove_ab` at WorldCam12 measures **64–81 ms, i.e. 12–15 fps** — so the 3.5 figure was
+the capture job's own throughput, not the world's frame rate, and I should not have quoted it as one.
+
+**The vegetation is NOT measurably the cost.** Destroying eight `LF01_*` tiles (48 actors) in the PIE copy
+made frame time WORSE, not better: 64.04 → 69.42 ms on, and the `off_again` noise floor worse again at 72.22.
+Round 2 repeated the pattern (76.47 → 79.58 → 81.61). Frame time drifts monotonically upward across the
+measurement window whatever is removed, so this machine is drifting — thermal or memory pressure after hours
+of editor uptime — and **A/B results taken on it right now are not trustworthy**. The 89.3%-of-triangles
+finding stands as a triangle count; the claim that it is the frame-time cost does not, and was never measured
+until now.
 
 | | category | verdict | evidence |
 |---|---|---|---|
