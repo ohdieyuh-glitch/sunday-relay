@@ -27,7 +27,7 @@ already carry their own openings in the kit; putting more on them would be detai
 come from each module's own DECLARED WALL TOP -- its eaves or deck socket -- not from its bounding box,
 which on a domed palace is mostly dome.
 
-    python nation_detail.py        (writes nc02_noctis_detail.json and tq02_tartarus_detail.json)
+    python nation_detail.py        (writes the NC02/TQ02 quarter detail and the IC04/NC04/TQ04 band detail)
 """
 import json
 import math
@@ -39,8 +39,31 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
+import math as _math                   # noqa: E402
+
+import nation_band as BAND             # noqa: E402
 import noctis_quarter as NOCTIS        # noqa: E402
 import tartarus_quarter as TARTARUS    # noqa: E402
+
+
+class Frame(object):
+    """A nation's rotated local frame and palette, as plain data.
+
+    The quarter passes hand over their own module for this; the BAND passes have no such module, and writing a
+    second copy of world() for them would be duplicated arithmetic that drifts apart. A bearing and a material
+    map is all either kind actually needs from its nation.
+    """
+
+    def __init__(self, bearing, materials):
+        self.BEARING = bearing
+        self.PART_MATERIAL = materials
+        self.SKIP_PARTS = ("veg_anchor",)
+        r = _math.radians(bearing)
+        self._d = (_math.cos(r), _math.sin(r))
+        self._l = (-_math.sin(r), _math.cos(r))
+
+    def world(self, u, v):
+        return (self._d[0] * u + self._l[0] * v, self._d[1] * u + self._l[1] * v)
 
 KIT = json.loads((HERE.parent / "Skyline" / "kit_modules.json").read_text(encoding="utf-8"))["modules"]
 
@@ -63,6 +86,20 @@ NATIONS = {
     "TQ02": dict(mod=TARTARUS, source="tq01_footprints.json", out="tq02_tartarus_detail.json",
                  folder="Wonderland/Authored/TQ02_TartarusDetail",
                  tags=["WL_NATION_TARTARUS", "WL_QUARTER_TARTARUS_FIRST", "WL_NATION_DETAIL"]),
+    #: The second band's detail. Its footprints carry a SCALE, which the quarters never needed because they
+    #: place everything at 1.0 -- see the transform notes in wall_top and at the height line below.
+    "IC04": dict(mod=Frame(BAND.NATIONS["IC03"]["bearing"], BAND.NATIONS["IC03"]["materials"]),
+                 source="ic03_band_footprints.json", out="ic04_band_detail.json",
+                 folder="Wonderland/Authored/IC04_IcarusBandDetail",
+                 tags=["WL_NATION_ICARUS", "WL_DISTRICT_ICARUS_SECOND", "WL_NATION_DETAIL"]),
+    "NC04": dict(mod=Frame(BAND.NATIONS["NC03"]["bearing"], BAND.NATIONS["NC03"]["materials"]),
+                 source="nc03_band_footprints.json", out="nc04_band_detail.json",
+                 folder="Wonderland/Authored/NC04_NoctisBandDetail",
+                 tags=["WL_NATION_NOCTIS", "WL_DISTRICT_NOCTIS_SECOND", "WL_NATION_DETAIL"]),
+    "TQ04": dict(mod=Frame(BAND.NATIONS["TQ03"]["bearing"], BAND.NATIONS["TQ03"]["materials"]),
+                 source="tq03_band_footprints.json", out="tq04_band_detail.json",
+                 folder="Wonderland/Authored/TQ04_TartarusBandDetail",
+                 tags=["WL_NATION_TARTARUS", "WL_DISTRICT_TARTARUS_SECOND", "WL_NATION_DETAIL"]),
 }
 
 
@@ -80,10 +117,12 @@ def wall_top(module, height):
     mouldings in mid-air.
     """
     sockets = KIT[module].get("sockets") or {}
+    #: An eaves socket is in the module's OWN space, so it scales with the actor exactly as the height does.
+    factor = height / KIT[module]["size"][2] if KIT[module]["size"][2] else 1.0
     for key in ("eaves", "parapet", "deck"):
         s = sockets.get(key)
         if isinstance(s, dict) and s.get("z"):
-            return float(s["z"]), key
+            return float(s["z"]) * factor, key
     return height * 0.45, "assumed"
 
 
@@ -140,7 +179,11 @@ def build(pass_id, cfg):
         if max(bw, bd) < MIN_FACE:
             skipped["no face long enough: " + name] += 1
             continue
-        height = KIT[name]["size"][2]
+        # THE TRANSFORM RULE. A band footprint records the SCALED plan size, and the module's height has to be
+        # scaled by the same factor or a cornice on a 1.4x hall lands at 1.0x of its wall. The quarters place
+        # everything at 1.0 so this is a no-op there and load-bearing here.
+        fscale = float(fp.get("scale", 1.0))
+        height = KIT[name]["size"][2] * fscale
         top, top_source = wall_top(name, height)
         tops[top_source] += 1
         byaw = fp["yaw"]

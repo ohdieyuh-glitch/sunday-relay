@@ -42,6 +42,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
 
+import nation_detail as ND             # noqa: E402
 import nations                         # noqa: E402
 import noctis_quarter as NOCTIS        # noqa: E402
 import tartarus_quarter as TARTARUS    # noqa: E402
@@ -53,6 +54,14 @@ CASES = (
          footprints="nc01_footprints.json", parent="nc01_quarter.json"),
     dict(pass_id="TQ02", nation="TARTARUS", mod=TARTARUS, spec="tq02_tartarus_detail.json",
          footprints="tq01_footprints.json", parent="tq01_quarter.json"),
+    #: The second band's detail, checked by the same independent tests. Their footprints carry a scale, so
+    #: seating is tested against the SCALED plan -- which is the whole point of recording it.
+    dict(pass_id="IC04", nation="ICARUS", mod=ND.NATIONS["IC04"]["mod"], spec="ic04_band_detail.json",
+         footprints="ic03_band_footprints.json", parent="ic03_band.json"),
+    dict(pass_id="NC04", nation="NOCTIS", mod=ND.NATIONS["NC04"]["mod"], spec="nc04_band_detail.json",
+         footprints="nc03_band_footprints.json", parent="nc03_band.json"),
+    dict(pass_id="TQ04", nation="TARTARUS", mod=ND.NATIONS["TQ04"]["mod"], spec="tq04_band_detail.json",
+         footprints="tq03_band_footprints.json", parent="tq03_band.json"),
 )
 
 FACE_TOL = 40.0        # cm a detail may stand proud of its wall face before it counts as floating
@@ -83,7 +92,8 @@ def audit(case):
         buildings.append({"module": fp["module"], "x": wx, "y": wy,
                           "yaw": (fp["yaw"] + mod.BEARING) % 360.0,
                           "w": fp["w"], "d": fp["d"], "z": fp["z"],
-                          "top": wall_top(fp["module"], KIT[fp["module"]]["size"][2])})
+                          "top": wall_top(fp["module"],
+                                          KIT[fp["module"]]["size"][2] * float(fp.get("scale", 1.0)))})
 
     problems = Counter()
     detail = defaultdict(list)
