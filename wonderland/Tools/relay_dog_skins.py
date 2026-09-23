@@ -1041,6 +1041,55 @@ def apollo():
     for side in (-1.0, 1.0):
         figure.orb_on_rod("lamps", {"gold": "gold", "orb": "solarpale", "orbglow": "solarpale"},
                           (td * 0.34, side * 5.2, shoulder - 5.6), (side * 0.35, -1.0), 5.2, 2.2, tile, halo=True)
+
+    # ================================================================== THE SUNBURST
+    # FOUNDER (2026-09-23), item 10, on this skin by name: "Apollo should become a genuinely celestial / solar
+    # Relay Dog rather than a base dog with a large ring attached. Integrate the solar/celestial forms into the
+    # ENTIRE body design. The large ring/halo must feel structurally intentional."
+    #
+    # AND THE MEASUREMENT AGREED WITH HIM, for a reason worth writing down. Apollo and Arden Infernal came back
+    # as the closest pair of DRESSED skins in the set -- 0.533 front, 0.598 side -- because both are the same
+    # sentence: a big round thing behind the head, over a wide ragged skirt. Every solar idea Apollo had was in
+    # its COLOUR, which is exactly what the founder's silhouette test throws away.
+    #
+    # So the sun stops being a ring behind the head and becomes the shape of the whole figure: rays radiating
+    # from the chest, long and short alternating, reaching past the halo. A ring is an outline; a sunburst is a
+    # star, and a star is not something Arden's flaming circle can be mistaken for at any distance.
+    burst_c = (-td * 0.72, 0.0, shoulder - 3.2)
+    figure.part("sunburst", "body", burst_c, "twinkle", 0.08)
+    rays = 16
+    for i in range(rays):
+        a = 2.0 * math.pi * i / rays
+        longer = (i % 2 == 0)
+        inner, outer = 7.2, (21.5 if longer else 13.8)
+        steps = max(3, int((outer - inner) / (tile * 1.05)))
+        for s in range(steps):
+            t = (s + 0.5) / steps
+            r = inner + (outer - inner) * t
+            wide = tile * (1.55 - 1.10 * t) * (1.0 if longer else 0.86)
+            figure.box("sunburst", "gold" if t < 0.5 else ("solarmid" if longer else "solarpale"),
+                       (burst_c[0] - t * 1.3, math.cos(a) * r, burst_c[2] + math.sin(a) * r),
+                       (tile * 0.8, wide, wide))
+
+    # AND THE RAYS CARRY ONTO THE BODY, so the sun is worn rather than parked behind it: a spike standing off
+    # the top of each pauldron, and a row of points along the hem of the robe.
+    for side in (-1.0, 1.0):
+        for k, (out, up, length) in enumerate(((0.2, 1.9, 4.6), (1.7, 1.2, 3.4), (-1.3, 1.4, 3.0))):
+            steps = max(2, int(length / tile))
+            for s in range(steps):
+                t = (s + 0.5) / steps
+                figure.box("body", "gold" if t < 0.6 else "solarpale",
+                           (0.3 + out * 0.4, side * (tw * 0.5 + 1.4 + out), shoulder + up + t * length),
+                           (tile * (1.2 - 0.6 * t), tile * (1.2 - 0.6 * t), tile))
+    for i in range(14):
+        a = 2.0 * math.pi * (i + 0.5) / 14
+        rad = 7.4
+        for s in range(3):
+            t = (s + 0.5) / 3
+            figure.box("robe", "gold" if t < 0.5 else "solarpale",
+                       (-td * 0.22 + math.cos(a) * rad * 0.35, math.sin(a) * rad,
+                        d["torso_z"] - th * 0.5 - 6.2 - t * 2.2),
+                       (tile * (1.1 - 0.5 * t), tile * (1.1 - 0.5 * t), tile))
     return figure
 
 
