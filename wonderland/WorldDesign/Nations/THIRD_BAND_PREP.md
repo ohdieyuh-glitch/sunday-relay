@@ -10,7 +10,19 @@ should the third band contain" but "what does the world already own that it has 
 
 **83 of the kit's 129 modules have never been placed by any nation pass.** The first and second bands together
 draw on 50. The unused 64% is not a random remainder — it clusters into coherent district vocabularies that the
-world has simply never opened:
+nations have simply never opened.
+
+Split by risk, which matters more than the headline number:
+
+- **20 are already proven elsewhere in the world** — placed in Golden Arrival and standing up in-engine today:
+  the three `Flower_*_Run` families (7,738 / 5,084 / 4,654 instances), `Ground_Flagstone_A/B/C`,
+  `Ground_Verge_Run`, `Ground_Tree_Grate`, `Detail_Banner_Blade` (332), `Detail_Balcony_Bracket` (206),
+  `Detail_Oriel_Bay`, `Market_Awning`, `Gatehouse_Screen`, `Arch_Ceremonial`, `Arch_Garden_Rose`,
+  `Arch_Trefoil_Screen`, `Spire_Barbed`, `Spire_Cluster`, `Spire_Ringed`, `Tower_Crown_Ribbed`. These carry
+  the least risk: the nations have not used them, but Golden Arrival has, so they are known good.
+- **63 have never been placed anywhere in the world.** Every module in the water and stair vocabularies, and
+  all three `WL_Hero_*` landmarks, are in this group. They are the highest-value and the least proven, and
+  each needs a look in-engine before a band is built on it.
 
 | vocabulary | unused modules | what it unlocks |
 |---|---|---|
@@ -52,6 +64,28 @@ water vocabulary without inventing lore.
 - *Application district* — dense work blocks on a canal grid.
 - *Infrastructure quarter* — `Water_Spillway_Wall`, `Water_Cascade_Stair` as visible working systems.
 - *Deployment / operations district* — `Wall_Curtain_Run` and `Wall_Postern_Gate` edges, `Hero_GreatSpire` anchor.
+
+## The seam nobody has looked at: Golden Arrival's own edge
+
+Measured 2026-09-23 over the neutral core (86,375 instances inside 500 m). Golden Arrival does not reach its
+own boundary — it stops around 400 m and the last 100 m is nearly empty:
+
+| ring | instances | |
+|---|---|---|
+| 300–350 m | 15,413 | the city at full density |
+| 350–400 m | 9,388 | falling away |
+| **400–450 m** | **841** | |
+| **450–500 m** | **181** | effectively empty |
+| 500–600 m | ICARUS 553 · NOCTIS 179 · TARTARUS 223 | the nations' thinnest inner ring |
+
+So the walk out of Golden Arrival into any nation crosses roughly **400 m → 600 m of near-emptiness** — and
+that is the **first journey a beta player ever takes out of the arrival city**. It is a more consequential void
+than the 800–900 m band seam, because every player meets it and most will never reach 800 m. Neither ring is
+visible in a screenshot taken from inside either city.
+
+Golden Arrival is also overwhelmingly vegetation by instance count: `Garden_Grass_Tuft` 21,767 and the three
+flower runs ~35,000 between them, against 1,769 plaza slabs. That is not wrong, but it means the core's
+instance total is not a measure of its architecture.
 
 ## Two things the third band must fix, not repeat
 
