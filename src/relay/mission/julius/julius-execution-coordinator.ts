@@ -340,7 +340,7 @@ export class JuliusExecutionCoordinator {
        * one edit that could actually break this, which is moving a line above
        * the await. `julius-worker-deadline.test.ts` pins the ordering instead.
        */
-      const result=await dispatchWithinDeadline(worker.timeoutMs,request.signal,(signal)=>this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,taskType:request.taskType,signal,...(request.allocation===undefined?{}:{allocation:request.allocation}),...(request.contract===undefined?{}:{contract:request.contract}),...(request.workspace===undefined?{}:{workspace:request.workspace})}));
+      const result=await dispatchWithinDeadline(worker.timeoutMs,request.signal,(signal)=>this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,taskType:request.taskType,signal,...(request.allocation===undefined?{}:{allocation:request.allocation}),...(request.contract===undefined?{}:{contract:request.contract}),...(request.workspace===undefined?{}:{workspace:request.workspace}),/* WHICH ATTEMPT. The claim already fences it; the adapter needs it to keep one round's body from overwriting the round before it. */attempt:{leaseGeneration:request.claim.leaseGeneration}}));
       answered=result;
       /**
        * NOTHING FROM A CANCELLED DISPATCH BECOMES MISSION STATE. An abort that
