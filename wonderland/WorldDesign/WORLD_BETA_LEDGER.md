@@ -19,7 +19,7 @@ triangle-bound at the margin — it was 3.5 fps before Dubel Forest added 38 M t
 | | category | verdict | evidence |
 |---|---|---|---|
 | A | WORLD COVERAGE | **PARTIAL** | 107,546 placed instances over 270 layer specs. Golden Arrival 86,967 inside the 500 m neutral core. Nation civilization: ICARUS 6,953, NOCTIS 7,530, TARTARUS 6,096. Built frontier ~1,155 m in all three once the second band lands. Beyond it: empty. |
-| B | TRAVERSAL | **UNMEASURED** | Needs the editor. Required: three nation gates, principal avenue per nation, plaza and court entrances, district edges, and the first→second band seam. Surface profile AND a character walk — neither alone proves it. Keep walks short; long routes have hung this editor before. |
+| B | TRAVERSAL | **PARTIAL** | **Walked 2026-09-23:** all three arrival approaches verified end to end by character walk (9 waypoints, 0 stuck). One obstruction found and recorded — a monument plinth on the Icarus axis at (0, 41411). Still unwalked: the three nation gates, the principal avenues, plaza and court entrances, and the first→second band seam. Keep walks short; long routes have hung this editor before. |
 | C | COLLISION | **PASS (on disk)** | 2,110 colliding instances in the second band after removing 178 that sat inside a shell already blocking (`fc72e1d6`). Every mesh family now has exactly one colliding shell or is on a stated decorative allowlist. Measured cost in-engine still unmeasured. |
 | D | ARCHITECTURE | **PARTIAL** | Band and detail passes seat correctly on disk: `audit_nation_detail.py` clean on IC04/NC04/TQ04 (13.1–13.9 details per wall face), `audit_nation_band.py` clean on IC03/NC03/TQ03. Crispness, recess depth and building-to-ground contact are visual and unjudged. |
 | E | FLOORS / ROADS | **BLOCKING** | The floor reads as a flat procedural sheet, and the cause is a bug, not a shortage of art. `courtkit.inst_world` keys a batch by NAME ONLY — `setdefault(key, {... "mesh": mesh, "material": material ...})` — so the mesh and tint are recorded when the batch is first created and every later instance is appended to it regardless. `pave_rect` faithfully cycles three slab shapes (`slabs[(r+c) % 3]`) and picks a tint per instance from `PAVING`, and **both are then discarded**: each batch ends up one uniform shape and one uniform tint. Across 45 slab batches that means ~45 uniform patches instead of 1,649 varied slabs, and it is why `slab_0` is 87.9% of every plaza slab in the world. 32 district passes are affected (CK, ER, FO, TC, CQ, SM, WW, LH, EQ, WG, CL, RG, DC). GA02/GA03/GA04 do NOT use this path and mix evenly — 46/45/45, 54/56/52, 20/23/22 — which is the proof the rest is broken rather than styled. **Correction, 2026-09-23:** an earlier version of this row blamed unused vocabulary and called for the six unplaced `SM_plaza_slab` variants. That was wrong — those six are the narrow (~93 cm) and wide (~200 cm) classes, and #0/#3/#6 are all three of the medium (~129 cm) class, so using one width class is a deliberate, correct choice that keeps a course regular. The nations' single-mesh floor (`SM_terrace_platform` × 2,536) is a separate and still-open issue. |
@@ -34,7 +34,14 @@ triangle-bound at the margin — it was 3.5 fps before Dubel Forest added 38 M t
 
 ## The biggest world beta blockers, in order
 
-1. **No nation is connected to Golden Arrival.** Measured 2026-09-23. Each nation is internally continuous —
+1. ~~**No nation is connected to Golden Arrival.**~~ **CLOSED 2026-09-23 by AP01.** All three causeways now
+   continue inward to the city edge (334 instances, 274 colliding) and a Dog walked all three corridors end to
+   end with nothing stuck — ICARUS, NOCTIS and TARTARUS each reached MidGap, CausewayHead and OnCauseway.
+   Remaining, as a smaller separate finding: a pre-existing Golden Arrival monument plinth stands on the x=0
+   Icarus axis inside the city edge and stops a player walking straight out; the corridor works from 426 m.
+   Original finding follows.
+
+   ~~**No nation is connected to Golden Arrival.**~~ Measured 2026-09-23. Each nation is internally continuous —
    IC01 500→639 m, IC02 637→824 m, IC03 819→1158 m, and the same unbroken chain in NOCTIS and TARTARUS. But
    all three begin at 500–508 m while Golden Arrival's built edge is ~400 m, leaving an identical **100–108 m
    unbuilt ring around the entire arrival city**. The causeways — the actual roads, collision on — run
