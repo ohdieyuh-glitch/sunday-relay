@@ -18,8 +18,11 @@ ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "skin_turnaround
 SKINS_DIR = "C:/dev/iwonder/wonderland-proof/wonderland/RelaySkins"
 SKINS = [("apollo", "Apollo"), ("arden_infernal", "ArdenInfernal"), ("skeleton_flame", "SkeletonFlame"),
          ("hagoromo", "Hagoromo"), ("celestial_light", "CelestialLight"), ("bee", "Bee"), ("relay_og", "RelayOg")]
-STAGE_AT = (-170.0, -346.0)
-FACING = 315.0
+# TWO METRES SOUTH-WEST OF THE ORB SPOT. At (-170, -346) the front camera stood inside the gold gate's posts:
+# Apollo and Arden were photographed through bars. The paving is open toward the clock, so the figure moves
+# that way and faces it, and the front camera lands on paving.
+STAGE_AT = (-330.0, -420.0)
+FACING = 40.0
 # bearing relative to the figure's facing, distance in figure heights, look height, fov, eye height
 VIEWS = [("front", 0.0, 2.3, 0.46, 40.0, 0.60), ("three_quarter", 40.0, 2.3, 0.46, 40.0, 0.62),
          ("side", 90.0, 2.3, 0.46, 40.0, 0.58), ("rear", 180.0, 2.3, 0.46, 40.0, 0.60),
