@@ -129,6 +129,23 @@ SECONDS = 12.0
 WARM = True
 OUT = r\"$TMP/band_perf_after.json\"" perf_frames.py
 
+# ---- 55  what the GARDEN costs, which is the question the band was distracting from --------------------
+# Priced on disk 2026-09-23: the world is 114,637,683 triangles and 99.2% of them sit on single-LOD meshes.
+# Vegetation is 89.3% of that -- 102.3 M triangles of flowers, topiary, hedge and grass, spread across the
+# tiled LF01_* passes. The entire second civilization band is 2.25%. The flower beds are THIRTY TIMES the band.
+#
+# So measuring only the band would answer the wrong question confidently. perf_remove_ab prices a pass by
+# DESTROYING its actors in the PIE copy (the editor world is untouched) rather than hiding them, because a
+# hidden instanced component can still be registered with the scene. Three LF01 tiles here -- the three
+# largest, 8.5% + 6.5% + 5.3% of the world between them -- is enough to extrapolate the garden without
+# destroying it all. If this comes back large, the LOD blocker has its number and Nanite coverage on
+# vegetation becomes the most valuable thing in the ledger.
+queue zzB55_perf_garden.py "PASSES = [\"LF01_0_-1\", \"LF01_0_-2\", \"LF01_1_0\"]
+SECONDS = 10.0
+ROUNDS = 2
+WARM = True
+OUT = r\"$TMP/band_perf_garden.json\"" perf_remove_ab.py
+
 # ---- 60..62  the three gate seams: is there a surface? ------------------------------------------------
 queue zzB60_profile_ic_gate.py "LINE = [0.0, 81880.0, 0.0, 82880.0]
 SAMPLES = 60
@@ -181,7 +198,7 @@ REACH_CM = 120.0
 LEG_TIMEOUT = 40.0" walk_route.py
 
 echo
-echo "Queued 22 jobs. What each answer should look like:"
+echo "Queued 23 jobs. What each answer should look like:"
 echo "  B10 REFUSING TO SAVE is not a bug -- it means the map was already dirty when this started, and"
 echo "      another lane's unsaved work is in it. Stop and find out whose. Do NOT add MAP_WAS_DIRTY_OK."
 echo "  B20 vs B40  colliding instances should rise by about 2,110 across the three bands and NOT rise"
