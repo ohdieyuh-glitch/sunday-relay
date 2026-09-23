@@ -1,0 +1,15 @@
+{
+ "asset": "/Game/WonderlandV2/Materials/Instances/MI_V2_Moss.MI_V2_Moss",
+ "before": {
+  "MacroVary": 0.035,
+  "InstVary": 0.02,
+  "InstRoughVary": 0.04,
+  "RoughVary": 0.2
+ },
+ "after": {
+  "MacroVary": 0.18,
+  "InstVary": 0.06,
+  "InstRoughVary": 0.12,
+  "RoughVary": 0.55
+ }
+}
