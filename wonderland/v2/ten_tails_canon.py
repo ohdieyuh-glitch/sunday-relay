@@ -261,20 +261,38 @@ def parts(stage):
 
     # ---- head
     hx, hy, hz = pivots(stage)["head"]
-    out.append(box("skull", "head", "hide", (0.0, hy, hz), (p["head_w"], p["head_h"], p["head_len"] * 0.62),
+    # A SKULL NARROWS. Round 4's head was a block with a smaller block stuck on the front: every feature was
+    # present and none of it read as bone, because the cranium had no taper at all. Three masses now step down
+    # in width and height from cheek to muzzle, each shorter than the last, so the silhouette closes to a point
+    # the way a head does -- and the cheek is widest at the BACK, where the jaw muscle would be.
+    out.append(box("cranium", "head", "hide", (0.0, hy + p["head_h"] * 0.04, hz - p["head_len"] * 0.16),
+                   (p["head_w"], p["head_h"] * 0.96, p["head_len"] * 0.40),
+                   chamfer=p["head_h"] * 0.26))
+    out.append(box("cheek", "head", "hide", (0.0, hy - p["head_h"] * 0.02, hz + p["head_len"] * 0.14),
+                   (p["head_w"] * 0.80, p["head_h"] * 0.74, p["head_len"] * 0.30),
                    chamfer=p["head_h"] * 0.20))
-    snout_z = hz + p["head_len"] * 0.44
-    out.append(box("snout", "head", "hide", (0.0, hy - p["head_h"] * 0.10, snout_z),
-                   (p["head_w"] * 0.66, p["head_h"] * p["snout"], p["head_len"] * 0.44),
-                   chamfer=p["head_h"] * 0.10))
+    snout_z = hz + p["head_len"] * 0.46
+    out.append(box("snout", "head", "hide", (0.0, hy - p["head_h"] * 0.12, snout_z),
+                   (p["head_w"] * 0.54, p["head_h"] * p["snout"] * 0.92, p["head_len"] * 0.38),
+                   chamfer=p["head_h"] * 0.13))
+    # a nose block, so the muzzle ends in something rather than stopping
+    out.append(box("muzzle", "head", "plate", (0.0, hy - p["head_h"] * 0.06, hz + p["head_len"] * 0.62),
+                   (p["head_w"] * 0.34, p["head_h"] * 0.26, p["head_len"] * 0.10),
+                   chamfer=p["head_h"] * 0.06))
     out.append(box("brow", "head", "plate", (0.0, hy + p["head_h"] * 0.36, hz + p["head_len"] * 0.12),
                    (p["head_w"] * 0.94, p["head_h"] * 0.20, p["head_len"] * 0.34),
                    chamfer=p["head_h"] * 0.07))
     # jaw: its own joint, so the maw can open. SMALL's barely parts; LARGE's is a door.
-    out.append(box("jaw", "jaw", "hide", (0.0, hy - p["head_h"] * (0.30 + p["jaw_open"] / p["head_h"] * 0.4),
-                                          hz + p["head_len"] * 0.30),
-                   (p["head_w"] * 0.62, p["head_h"] * 0.24, p["head_len"] * 0.62),
-                   chamfer=p["head_h"] * 0.08))
+    out.append(box("jaw", "jaw", "hide", (0.0, hy - p["head_h"] * (0.34 + p["jaw_open"] / p["head_h"] * 0.4),
+                                          hz + p["head_len"] * 0.26),
+                   (p["head_w"] * 0.56, p["head_h"] * 0.26, p["head_len"] * 0.66),
+                   chamfer=p["head_h"] * 0.09))
+    # the cheek ridge: the line a jaw closes against, and the thing that makes a mouth read as a mouth
+    for side in (-1.0, 1.0):
+        out.append(box("jawline_%s" % ("l" if side < 0 else "r"), "head", "plate",
+                       (side * p["head_w"] * 0.34, hy - p["head_h"] * 0.20, hz + p["head_len"] * 0.16),
+                       (p["head_w"] * 0.10, p["head_h"] * 0.16, p["head_len"] * 0.52),
+                       chamfer=p["head_h"] * 0.04))
     if p["teeth"]:
         out.append(box("maw", "jaw", "maw", (0.0, hy - p["head_h"] * 0.22, hz + p["head_len"] * 0.32),
                        (p["head_w"] * 0.52, p["head_h"] * 0.10, p["head_len"] * 0.54)))
@@ -332,15 +350,17 @@ def parts(stage):
                          (lx * 1.06, knee_y, lz)],
                         [p["leg_r"] * 1.22 * heavy, p["leg_r"] * 1.02 * heavy, p["leg_r"] * 0.94 * heavy],
                         sides=p["leg_sides"]))
-        # A HOCK. Without something at the joint a two-segment leg is one long cone and reads as furniture.
-        # This is also the joint the rig rotates, so a visible mass there is honest about where it bends.
+        # A HOCK, AT THE SIZE A HOCK ACTUALLY IS. Round 4 put this at 1.02x the leg radius and the legs came
+        # back reading as ball-jointed doll legs at the one distance that matters. A joint swells; it does not
+        # become a sphere wider than the limb through it. 0.74x sits just inside the thigh above and just
+        # outside the shin below, which is the whole effect wanted: a knee you can see, not a bearing.
         out.append(sphere("hock_" + tag, "leg_%s_lo" % tag, "hide",
-                          (lx * 1.06, knee_y, lz), p["leg_r"] * 1.02 * heavy, steps=10))
+                          (lx * 1.06, knee_y, lz), p["leg_r"] * 0.74 * heavy, steps=10))
         out.append(tube("shin_" + tag, "leg_%s_lo" % tag, "hide",
                         [(lx * 1.06, knee_y, lz),
                          (lx * 1.03, knee_y * 0.52, lz - sz * p["leg_lo"] * 0.08),
                          (lx * 1.02, p["paw_r"] * 1.4, lz - sz * p["leg_lo"] * 0.12)],
-                        [p["leg_r"] * 0.94 * heavy, p["leg_r"] * 0.86 * heavy, p["leg_r"] * 0.78 * heavy],
+                        [p["leg_r"] * 0.90 * heavy, p["leg_r"] * 0.84 * heavy, p["leg_r"] * 0.80 * heavy],
                         sides=p["leg_sides"]))
         out.append(box("paw_" + tag, "paw_%s" % tag, "hide",
                        (lx * 1.02, p["paw_r"] * 0.72, lz - sz * p["leg_lo"] * 0.12 + sz * p["paw_r"] * 0.35),
