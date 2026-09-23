@@ -84,6 +84,12 @@ def main():
     if not nav.get("ok"):
         return 1
 
+    # A KNOWN STARTING SIZE, because a tab REMEMBERS its viewport across runs.
+    #
+    # Without this the proof is order-dependent and quietly wrong: a previous run left the tab at 900x600, the
+    # next run's "first" frame came back 900x600, and the resize check below then asked it to change to the size
+    # it was already at and correctly reported that nothing changed. The proof failed on its own leftovers.
+    post("viewport", width=1200, height=800)
     try:
         data = frame()
         path = os.path.join(out, "live_frame.jpg")
@@ -121,6 +127,16 @@ def main():
                "%dx%d after asking for 900x600 -> %s" % (w2, h2, path2))
         record("the new frame is genuinely a different picture", after != data,
                "%d bytes vs %d; identical bytes would mean a cached still" % (len(after), len(data)))
+
+        # SCROLL IS ACCEPTED BUT NOT PROVEN HERE, and it is worth saying why rather than leaving a check that
+        # passes on nothing. The runtime answers a scroll with a bare {"ok":true}, so the only evidence it moved
+        # anything is the picture changing -- and example.com is shorter than the window, so there is nothing to
+        # scroll. Squeezing the viewport does not help: the runtime CLAMPS height to 320 (asked for 240 and for
+        # 150, both came back 800x320), and the page still fits. Proving scroll therefore needs a page long
+        # enough to overflow 320px, which means fetching more of the web than a proof should.
+        sc = post("scroll", dy=180)
+        record("a scroll is accepted (movement not proven, see note)", bool(sc.get("ok")),
+               "example.com is shorter than the 320px minimum window; nothing to scroll")
     finally:
         try:
             post("close")
