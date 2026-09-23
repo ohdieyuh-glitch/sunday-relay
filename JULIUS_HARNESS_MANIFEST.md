@@ -257,6 +257,8 @@ Artifact metadata, scope and the staged→finalized store port with its durable 
 | `src/relay/mission/evidence/evidence-normalizer.ts` | traced | `src/relay/mission/evidence/index.ts` |
 | `src/relay/mission/evidence/index.ts` | traced | `src/relay/mission/julius/julius-research-policy.ts` |
 | `src/relay/mission/julius/julius-artifacts.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-work-artifact-memory.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-work-artifact.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/live-reach/index.ts` | traced | `src/relay/mission/evidence/evidence-contracts.ts` |
 | `src/relay/mission/live-reach/live-reach-contracts.ts` | traced | `src/relay/mission/live-reach/index.ts` |
 | `src/relay/mission/live-reach/live-reach-metering.ts` | traced | `src/relay/mission/live-reach/index.ts` |
