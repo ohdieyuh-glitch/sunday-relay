@@ -1364,6 +1364,31 @@ def celestial_light():
                       key="gold", core="gem")
     figure.box("head", "edge", (hd * 0.5 + 0.4, 0.0, d["head_z"] + 2.8), (tile * 0.6, tile * 1.6, tile * 1.6))
 
+    # ================================================================== THE HALO STANDING BEHIND
+    # THE WARDROBE PROMISED THIS AND THE MODEL DID NOT HAVE IT. The skin registry's own description reads "A coat
+    # of light, a star at the brow, a marked banner, and a HALO STANDING BEHIND" -- so the founder was being told
+    # about a halo while looking at a Dog that had none.
+    #
+    # It also fixes the one skin that failed the founder's medium-distance test. Every other premium skin breaks
+    # its outline with something: Apollo a halo and crown, Arden a demonic arm, Hagoromo a mane and four orbs,
+    # Skeleton Flame tall ghostfire, Bee wings. CELESTIAL LIGHT had only surface detail -- brow star, banner,
+    # engraving -- all of which vanish at distance, leaving a silhouette identical to bare RELAY OG. A ring
+    # standing behind the head is the cheapest honest way to give it an outline of its own.
+    halo_c = (-hd * 0.34, 0.0, d["head_z"] + hh * 0.30)
+    # STANDING, NOT SPINNING. On "orbit" the ring turns, and a ring seen edge-on is a vertical line -- the first
+    # render caught it at about seventy degrees and the halo read as a narrow almond around the head instead of a
+    # disc behind it. Since the whole reason this halo exists is to give the skin an outline at gameplay distance,
+    # a motion that periodically deletes that outline defeats it. It stands still and always reads.
+    figure.part("halo", "head", halo_c, "none")
+    for r, m in ((11.4, "edge"), (10.4, "starlight"), (9.5, "edge")):
+        figure.ring("halo", lambda a, mm=m: mm, halo_c, r, tile * 1.15, tile * 0.95)
+    # four points on the ring, at the compass, so it reads as celestial rather than as a hoop
+    for k in range(4):
+        a = math.pi * 0.5 * k + math.pi * 0.25
+        figure.star_burst("halo", {"gold": "starlight", "gem": "edge"},
+                          (halo_c[0], math.cos(a) * 10.4, halo_c[2] + math.sin(a) * 10.4), 2.2, 4, tile,
+                          key="gold", core="gem")
+
     # ================================================================== THE BANNER, WITH 凯
     figure.part("banner", "body", (td * 0.5 + 1.0, 0.0, shoulder + 0.6), "trail", 0.45)
     figure.glyph_banner("banner", {"cloth": "bannercloth", "ink": "ink"}, (td * 0.5 + 1.1, 0.0, shoulder + 0.6), 7.2, 9.0, tile, KAI_GLYPH)
