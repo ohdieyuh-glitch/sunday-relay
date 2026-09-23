@@ -17,7 +17,7 @@ most of B is therefore unmeasured by construction.
 | B | TRAVERSAL | **UNMEASURED** | Needs the editor. Required: three nation gates, principal avenue per nation, plaza and court entrances, district edges, and the first→second band seam. Surface profile AND a character walk — neither alone proves it. Keep walks short; long routes have hung this editor before. |
 | C | COLLISION | **PASS (on disk)** | 2,110 colliding instances in the second band after removing 178 that sat inside a shell already blocking (`fc72e1d6`). Every mesh family now has exactly one colliding shell or is on a stated decorative allowlist. Measured cost in-engine still unmeasured. |
 | D | ARCHITECTURE | **PARTIAL** | Band and detail passes seat correctly on disk: `audit_nation_detail.py` clean on IC04/NC04/TQ04 (13.1–13.9 details per wall face), `audit_nation_band.py` clean on IC03/NC03/TQ03. Crispness, recess depth and building-to-ground contact are visual and unjudged. |
-| E | FLOORS / ROADS | **PARTIAL** | Avenue, court and plaza paving present in all three bands, with kerb runs and four-tint plaza medallions. The founder's standing note that the floor must not read as a flat procedural sheet is not yet answered for the second band. |
+| E | FLOORS / ROADS | **BLOCKING** | The founder's standing note is that the floor must not read as a flat procedural sheet under detailed buildings. Measured 2026-09-23, it currently does. **Nine `SM_plaza_slab` variants exist and three are placed — `slab_0` alone is 87.9% of every plaza slab in the world** (1,769 of 2,012); #1, #2, #4, #5, #7 and #8 have never been placed anywhere. The nations are worse: their entire walkable floor is `SM_terrace_platform` × 2,536, one mesh doing every avenue, court and work block. Golden Arrival's ground is 83% kerb stone (10,623 of 12,775) with 2,012 slabs. And the vocabulary that would break it up is sitting unused — 12 `WL_Ground_Flagstone_A/B/C` meshes with about 12 instances placed in total, all in Golden Arrival, none in any nation, plus `Ground_Steps_Broad`, `Ground_Step_Single`, `Ground_Kerb_Corner` and `Ground_Tree_Grate`, none of them placed by a nation pass. This is proven art, already standing up in-engine. The floor has nine tools and uses one for seven-eighths of the work. |
 | F | MATERIALS | **PARTIAL** | Every material in every second-band spec resolves against the 134 material instances on disk, and every one is declared by its own nation's canon. **Gap: `MI_V2_NoctisLuminous` is canon, exists as an asset, and is used in ZERO instances across NC01–NC04.** Noctis is the only nation whose signature accent is entirely absent — the exact drift toward generic gothic the founder warned against. |
 | G | LIGHTING | **UNMEASURED** | No lighting pass has been graded for the nation bands. |
 | H | STREAMING | **UNMEASURED** | The authoritative map is a classic non-WP container; streaming behaviour at 1,155 m is unmeasured. |
@@ -42,9 +42,12 @@ most of B is therefore unmeasured by construction.
 3. **LOD, and it is the garden (row I).** 99.2% of the world's 114.6 M triangles sit on single-LOD meshes, and
    vegetation is 89.3% of every triangle in Wonderland. The second band, the thing this lane
    was worried about, is 2.25%. The performance question was being asked about the wrong part of the world.
-4. **The 800–900 m seam (row L).** The thinnest ring inside every nation's frontier is exactly where the first
+4. **The floor is one slab (row E).** `slab_0` is 87.9% of every plaza slab in the world and the nations'
+   whole floor is a single mesh, while nine slab variants and three flagstone families sit unused. The fix
+   needs no new art, and the floor is under every screenshot of everything else.
+5. **The 800–900 m seam (row L).** The thinnest ring inside every nation's frontier is exactly where the first
    band meets the second. Both the likeliest traversal break and the likeliest visual break.
-5. **Noctis has no luminous accent (row F).** One material, canon since the nation was written, used nowhere.
+6. **Noctis has no luminous accent (row F).** One material, canon since the nation was written, used nowhere.
 
 ## Standing notes
 
