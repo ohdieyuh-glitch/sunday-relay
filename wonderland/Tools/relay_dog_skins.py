@@ -459,6 +459,13 @@ BONE = (0.898, 0.871, 0.800)
 BONE_DEEP = (0.690, 0.660, 0.592)
 VISOR = (0.045, 0.042, 0.050)
 
+# WHICH BODY IS THE MASCOT. Named here so no skin can be dressed on the wrong morphology by accident: the
+# CURRENT DEFAULT RELAY DOG is the standing biped the founder walks around Wonderland (base_dog, matching the
+# canon body ARelayDogCharacter::ShowCanonBody builds). The quadruped is the legacy RELAY OG FORM badge from the
+# corner of the premium sheets -- kept, because the badge is real lore, but it may never carry a mascot skin.
+CANONICAL_BODY = "current_default_relay_dog_biped"
+LEGACY_QUADRUPED_BODY = "legacy_relay_og_form_quadruped"
+
 # The one measurement sheet every skin is built on. Nothing below changes it.
 # THE ONE MEASUREMENT SHEET EVERY SKIN IS BUILT ON, taken off the founder's ARDEN INFERNAL and APOLLO plates.
 # Nothing below this line changes it, and the proportions are the point: an enormous head, small tapered ears, a
@@ -489,6 +496,7 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
     d = DOG
     tile = tile or d["tile"]
     hd, hw, hh = d["head"]
+    figure.body_kind = CANONICAL_BODY
     figure.part("root", "-", (0.0, 0.0, 0.0), "spine", 0.85, 0.0)
     figure.part("body", "root", (0.0, 0.0, d["torso_z"]), "none")
     figure.part("head", "body", (0.0, 0.0, d["head_z"]), "head")
@@ -548,6 +556,7 @@ def quadruped_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=Non
     """
     d = DOG
     tile = tile or d["tile"]
+    figure.body_kind = LEGACY_QUADRUPED_BODY
     hd, hw, hh = (d["head"][0] * 0.80, d["head"][1] * 0.80, d["head"][2] * 0.80)
     body_z = 7.4
     head_z = body_z + 3.4
@@ -607,14 +616,22 @@ def start(name, seed, eye_rgb, eye_strength=6.0, coat=BONE, coat_deep=BONE_DEEP)
 # ============================================================================ the skins
 
 def relay_og():
-    """RELAY OG FORM. The origin: a small white four-legged dog with the visor and the warm gold eyes.
+    """RELAY OG: THE DOG THE FOUNDER ACTUALLY WALKS AROUND WONDERLAND. The standing mascot, undressed.
 
-    Both premium sheets show this in the corner as a quadruped, captioned RELAY OG FORM -- "even in origin, the flame
-    cannot be erased" on ARDEN, "the light that started it all" on APOLLO. It is a different body from the standing
-    mascot, not the mascot stripped, and that is why it gets its own builder.
+    THIS WAS WRONG, AND IT WAS THE ROOT OF THE SKIN PROBLEM. It used to build the QUADRUPED, reasoning from the
+    small corner inset on the ARDEN and APOLLO sheets captioned "RELAY OG FORM". That inset is a lore badge saying
+    where the Dog came from -- it is NOT the mascot the founder uses. The founder's current-default reference is
+    the STANDING BIPED: big cubic head, visor band with two gold panes, ear spurs, torso, arms with hands, two
+    stubby legs. Building relay_og as a four-legged animal meant the wardrobe offered a quadruped as "RELAY OG"
+    and a biped for every premium skin -- the base and its own skins were different creatures.
+
+    At runtime the default Dog is the character's own C++ body (ARelayDogCharacter::ShowCanonBody) and this file is
+    never loaded for it; premium skins spawn a costume actor over that body instead. So this figure exists to be
+    PREVIEWED and photographed, and it must be the same mascot the canon body is, or every preview of "wearing
+    nothing" shows the founder an animal he does not own.
     """
-    figure = start("RELAY DOG -- OG FORM", 7001, (1.00, 0.72, 0.16), 7.0)
-    quadruped_dog(figure)
+    figure = start("RELAY DOG -- OG", 7001, (1.00, 0.72, 0.16), 7.0)
+    base_dog(figure)
     return figure
 
 
@@ -1326,6 +1343,17 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     for name, build in SKINS:
         figure = build()
+        # THE CANONICAL BODY IS ENFORCED, NOT TRUSTED. relay_og silently shipped as a four-legged animal for a
+        # whole round because nothing checked which body a skin was dressed on, and a wardrobe that offers a
+        # quadruped base and bipedal skins is the defect the founder reported. Every mascot skin is built on the
+        # CURRENT DEFAULT RELAY DOG -- the standing biped of base_dog -- and the build fails loudly rather than
+        # writing a skin dressed on the legacy morphology.
+        kind = getattr(figure, "body_kind", None)
+        if kind != CANONICAL_BODY:
+            raise SystemExit(
+                "%s was built on body '%s', not the canonical '%s'. The current default Relay Dog is the standing\n"
+                "biped (base_dog). The quadruped is the legacy RELAY OG FORM badge and must not carry a mascot skin."
+                % (name, kind, CANONICAL_BODY))
         figure.fit_to_metres(TARGET_METRES)
         path = os.path.join(args.out, "%s.wlvox" % name)
         boxes, parts, materials = figure.write(path)
