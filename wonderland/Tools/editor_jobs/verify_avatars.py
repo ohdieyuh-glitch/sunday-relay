@@ -56,20 +56,33 @@ def job():
                 y += 4000.0
                 origin, extent = actor.get_actor_bounds(False)
                 comps = actor.get_components_by_class(unreal.StaticMeshComponent)
-                # get_actor_bounds came back LARGER than the geometry on every avatar in round 2 -- and by the
-                # same 256 cm on all three SMALL forms, which no real geometry would do. So take the union of the
-                # components' own world bounds as well: if that matches the canon, the actor-level call is
-                # padding (a bounds floor, or a component with no mesh) and the assets are fine; if it does not,
-                # the meshes really are bigger than they claim and culling and LOD screen sizes are wrong too.
+                # get_actor_bounds came back LARGER than the geometry on every avatar -- and by the same
+                # 256.0 cm on all three SMALL forms, which no real geometry would do. So measure the union of
+                # the MESH ASSETS' own bounds instead: if that matches the canon, the actor-level number is
+                # padding (a bounds floor, or a component that carries no geometry) and the assets are fine;
+                # if it does not, the meshes really are bigger than they claim and culling distances and LOD
+                # screen sizes are wrong along with them.
+                #
+                # Asked the mesh, not the component: StaticMeshComponent exposes no 'bounds' editor property in
+                # 5.8 Python (that was this job's own crash), while StaticMesh.get_bounding_box() does, and the
+                # asset's box in its own space is the honest thing to compare a canon part list against.
                 clo = [float("inf")] * 3
                 chi = [float("-inf")] * 3
                 for c in comps:
-                    b = c.get_editor_property("bounds")
-                    bo, be = b.origin, b.box_extent
-                    for i, (o, e) in enumerate(((bo.x, be.x), (bo.y, be.y), (bo.z, be.z))):
-                        clo[i] = min(clo[i], o - e)
-                        chi[i] = max(chi[i], o + e)
-                comp_height = (chi[2] - clo[2]) if comps else 0.0
+                    sm = c.get_editor_property("static_mesh")
+                    if sm is None:
+                        continue
+                    box = sm.get_bounding_box()
+                    xf = c.get_world_transform()
+                    bmin, bmax = box.min, box.max
+                    for cx in (bmin.x, bmax.x):
+                        for cy in (bmin.y, bmax.y):
+                            for cz in (bmin.z, bmax.z):
+                                w = xf.transform_location(unreal.Vector(cx, cy, cz))
+                                for i, v in enumerate((w.x, w.y, w.z)):
+                                    clo[i] = min(clo[i], v)
+                                    chi[i] = max(chi[i], v)
+                comp_height = (chi[2] - clo[2]) if chi[2] > clo[2] else 0.0
                 scenes = actor.get_components_by_class(unreal.SceneComponent)
                 no_mat = [c.get_name() for c in comps if c.get_material(0) is None]
                 colliding = [c.get_name() for c in comps
