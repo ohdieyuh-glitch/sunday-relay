@@ -1,6 +1,7 @@
 #include "WonderlandUiSubsystem.h"
 
 #include "Components/InputComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/GameInstance.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
@@ -2662,28 +2663,59 @@ bool UWonderlandUiSubsystem::ShowProjectAvatars(const FString& Argument)
 	TArray<FString> Missing;
 	for (int32 Index = 0; Index < UE_ARRAY_COUNT(Families); ++Index)
 	{
-		const FString Path = FString::Printf(
-			TEXT("/Game/WonderlandV2/Characters/Avatars/%s/%s/BP_Avatar_%s_%s.BP_Avatar_%s_%s_C"),
-			Families[Index], *Stage, Families[Index], *Stage, Families[Index], *Stage);
-		UClass* Loaded = LoadClass<AActor>(nullptr, *Path);
-		if (Loaded == nullptr)
+		// THE ACCEPTED FAMILY IS NOW THE .wlvox ONE, AND THAT IS A REVERSAL WORTH STATING. This spawned the world
+		// lane's BP_Avatar_* Blueprints because they were the newer assets and the founder had said "do not
+		// silently substitute old voxel placeholders if newer assets exist". Both halves of that have since
+		// changed: on 2026-09-23 the founder rejected every BP_Avatar_* body as blocky and LEGO-like, the whole
+		// line was handed to this lane, the figures were remade from the forge, and the founder approved THOSE.
+		// So showing the .wlvox figures is no longer a silent substitution of something older -- it is the only
+		// way /pa shows what was actually accepted. The Blueprints are deliberately no longer loaded.
+		const FString Figure = FPaths::ConvertRelativePathToFull(
+			FPaths::ProjectDir() / TEXT("ProjectAvatars") / FString::Printf(TEXT("%s_%s.wlvox"), Families[Index], *Stage));
+		if (!FPaths::FileExists(Figure))
 		{
 			Missing.Add(FString::Printf(TEXT("%s %s"), Families[Index], *Stage.ToUpper()));
 			continue;
 		}
 		// SPREAD ACROSS THE VIEW, far enough apart that a five-metre creature does not stand inside its neighbour.
-		// The world lane measured these bodies as levelled so their lowest geometry sits at z=0, so they are placed
-		// at the ground the player is standing on with no per-family lift -- the opposite of the .wlvox figures,
-		// which each carry their own overhang. Mixing those two conventions buries one family and floats another.
 		const float Lateral = (static_cast<float>(Index) - 1.0f) * 620.0f;
 		const FVector Where = At + Forward * 900.0 + Right * Lateral - FVector(0.0, 0.0, 88.0);
 		FActorSpawnParameters Params;
 		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		AActor* Body = World->SpawnActor<AActor>(Loaded, FTransform((At - Where).GetSafeNormal2D().Rotation(), Where), Params);
-		if (Body == nullptr)
+		AWonderlandCompanionEmbodiment* Body = World->SpawnActor<AWonderlandCompanionEmbodiment>(
+			AWonderlandCompanionEmbodiment::StaticClass(),
+			FTransform((At - Where).GetSafeNormal2D().Rotation(), Where), Params);
+		if (Body == nullptr || !Body->LoadFigure(Figure))
 		{
-			Missing.Add(FString::Printf(TEXT("%s %s (spawn refused)"), Families[Index], *Stage.ToUpper()));
+			if (Body != nullptr) { Body->Destroy(); }
+			Missing.Add(FString::Printf(TEXT("%s %s (figure would not load)"), Families[Index], *Stage.ToUpper()));
 			continue;
+		}
+		Body->DisplayName = FString::Printf(TEXT("%s %s"), Families[Index], *Stage.ToUpper());
+		Body->ClassLabel = TEXT("PROJECT AVATAR");
+		// THE OVERHANG, WHICH IS THE WHOLE TRAP THE HANDOFF WARNED ABOUT. The Blueprints were levelled so their
+		// lowest geometry sat at z=0 and could be dropped straight on the ground. These figures are not: each one
+		// carries its own overhang, and the two families' conventions cannot be mixed without burying one and
+		// floating the other. So the lift is MEASURED from the figure's own lowest instance rather than assumed.
+		TInlineComponentArray<UInstancedStaticMeshComponent*> Meshes(Body);
+		double Lowest = TNumericLimits<double>::Max();
+		for (UInstancedStaticMeshComponent* Mesh : Meshes)
+		{
+			const int32 Count = Mesh != nullptr ? Mesh->GetInstanceCount() : 0;
+			for (int32 I = 0; I < Count; ++I)
+			{
+				FTransform Instance;
+				if (Mesh->GetInstanceTransform(I, Instance, /*bWorldSpace=*/true))
+				{
+					Lowest = FMath::Min(Lowest, Instance.GetTranslation().Z);
+				}
+			}
+		}
+		if (Lowest < TNumericLimits<double>::Max())
+		{
+			// Lift by exactly the gap between where the feet are and where the ground is, so the lowest voxel lands on it.
+			const double Lift = Where.Z - Lowest;
+			Body->SetActorLocation(Where + FVector(0.0, 0.0, Lift), false, nullptr, ETeleportType::TeleportPhysics);
 		}
 #if WITH_EDITOR
 		Body->SetActorLabel(FString::Printf(TEXT("WL_PA_%s_%s"), Families[Index], *Stage), false);
