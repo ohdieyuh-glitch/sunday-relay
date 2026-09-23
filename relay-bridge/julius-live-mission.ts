@@ -581,7 +581,7 @@ export async function observeResearchAllowances(
     for (const capability of allowance.capabilities) {
       for (const host of allowance.hosts) {
         // The same triple twice is one observation, not two GETs of one page.
-        const key = `${allowance.source} ${capability} ${host}`;
+        const key = `${allowance.source}\u0000${capability}\u0000${host}`;
         if (probed.has(key)) continue;
         probed.add(key);
 

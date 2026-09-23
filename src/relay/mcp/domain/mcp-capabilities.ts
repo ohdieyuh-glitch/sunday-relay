@@ -232,9 +232,9 @@ export function snapshotFingerprint(input: {
     serverName: input.serverName,
     serverVersion: input.serverVersion,
     flags: input.flags,
-    tools: sorted(input.tools, (t) => `${t.name} ${t.fingerprint}`),
-    resources: sorted(input.resources, (r) => `${r.uri} ${r.fingerprint}`),
-    prompts: sorted(input.prompts, (p) => `${p.name} ${p.fingerprint}`),
+    tools: sorted(input.tools, (t) => `${t.name}\u0000${t.fingerprint}`),
+    resources: sorted(input.resources, (r) => `${r.uri}\u0000${r.fingerprint}`),
+    prompts: sorted(input.prompts, (p) => `${p.name}\u0000${p.fingerprint}`),
   });
 }
 
