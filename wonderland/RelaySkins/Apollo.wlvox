@@ -25,7 +25,7 @@ part leg_l body 0.000 -1.600 8.000 stride 0.000 0.800
 part leg_l_shin leg_l 0.000 -1.600 4.000 knee 0.000 0.700
 part leg_r body 0.000 1.600 8.000 stride 0.500 0.800
 part leg_r_shin leg_r 0.000 1.600 4.000 knee 0.500 0.700
-part halo head -4.200 0.000 25.700 orbit 3.000
+part halo head -4.200 0.000 25.700 none
 part crown head 0.000 0.000 23.700 twinkle 0.100
 part robe body 0.000 0.000 13.546 trail 0.500
 part lamps body 0.000 0.000 11.546 float 0.350

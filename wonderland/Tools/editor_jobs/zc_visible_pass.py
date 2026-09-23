@@ -6,7 +6,8 @@
 #
 # 1. A SESSION WITH SAVED CONTRACTS, then a RESTART: ZERO orbs and ZERO tabs at spawn, the contracts still on
 #    record and listed by /tasks as closed. This is the regression the founder respawned into.
-# 2. + -> a gray orb appears. Submit -> red. X on a draft -> gone. X on a contract -> tab and orb gone, record
+# 2. + -> a gray TAB and NO orb (founder, 2026-09-23: a pending tab does not attach beside the Dog). Submit ->
+#    the orb appears, red. X on a draft -> gone. X on a contract -> tab and orb gone, record
 #    kept. /tasks open -> back. Completed -> orb gone, tab kept.
 # 3. The wardrobe: the panel opens a WINDOW and the camera frames the founder's own Relay Dog inside it. Each
 #    click re-dresses THAT Dog. Frames for Relay OG, Apollo, Arden, Skeleton Flame, Hagoromo, Celestial Light, Bee.
@@ -105,7 +106,7 @@ def job():
         L.pose_camera(world, unreal.Vector(at.x - fwd.x * 420.0, at.y - fwd.y * 420.0, at.z + 260.0),
                       unreal.Vector(at.x + fwd.x * 120.0, at.y + fwd.y * 120.0, at.z + 90.0), 70.0)
         yield 1.0
-        shot("plus_gray_orb_appears", "press +: one gray orb manifests")
+        shot("plus_no_orb_yet", "press +: a pending tab, and the world unchanged -- no orb until Enter commits it")
         L.release_camera(world)
         draft_id = tasks.get_task_list()[-1].local_id
         tasks.submit_draft(draft_id, "Photograph the clock")
@@ -199,7 +200,11 @@ def job():
 
         RESULT["REPORT"] = {
             "orbs_idle_no_task_state": "PASS" if RESULT["spawn_orbs"] == 0 and RESULT["spawn_workspace"] == 0 else "FAIL",
-            "orbs_task_activation_spawn": "PASS" if RESULT["plus_orbs"] == 1 and RESULT["plus_is_gray"] else "FAIL",
+            # THE EXPECTATION INVERTED ON FOUNDER INSTRUCTION, 2026-09-23. This used to demand that pressing +
+            # put a GREY orb in the world; the founder found two of them following him around and ruled that a
+            # pending tab must not attach beside the Dog until Enter commits it. So + must now leave the world
+            # alone, and the orb appears at the commit.
+            "orbs_pending_tab_adds_no_orb": "PASS" if RESULT["plus_orbs"] == 0 else "FAIL",
             "orbs_close_disappearance": "PASS" if RESULT.get("x_contract_tab_and_orb_gone") else "FAIL",
             "orbs_completion_disappearance": "PASS" if RESULT.get("completed_orb_gone_tab_kept") else "FAIL",
             "orbs_persistence_intact": "PASS" if (RESULT["spawn_records"] == 2 and RESULT.get("x_contract_truth_kept")) else "FAIL",

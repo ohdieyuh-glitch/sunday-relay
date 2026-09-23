@@ -705,7 +705,12 @@ def arden_infernal():
     # ================================================================== THE HALO
     # Enormous, thick, gem-set at the four points and wreathed in flame across its whole upper arc.
     halo_c = (-4.4, 0.0, d["head_z"] + 5.4)
-    figure.part("halo", "head", halo_c, "orbit", 5.0)
+    # MOUNTED, NOT ORBITING. The halo was on "orbit" at 5 degrees a second -- a continuous spin on the biggest
+    # ring in the silhouette. The founder read it as wobbling, swinging and rotating unpredictably, and he is
+    # right: a large ring that never stops turning cannot look deliberately fitted, and once it reaches edge-on
+    # it collapses to a vertical line and the skin loses its outline entirely. It stands fixed to the head now
+    # and inherits the head's own motion, which is what "mounted" means.
+    figure.part("halo", "head", halo_c, "none")
     for r, m in ((12.8, "gold"), (12.0, "gold"), (11.2, "golddeep")):
         figure.ring("halo", lambda a, mm=m: mm, halo_c, r, tile * 1.35, tile * 1.0)
     figure.ring("halo", lambda a: "gold", (halo_c[0] - 1.3, halo_c[1], halo_c[2]), 12.4, tile * 1.0, tile * 1.05)
@@ -811,7 +816,9 @@ def arden_infernal():
     figure.claw_hand("arm_l", ("char", "ember"), (1.4, arm_y - 5.0, az - 11.4), 11.2, tile, -1.0)
     figure.claw_hand("arm_l", ("demon", "ember"), (0.4, arm_y - 6.2, az - 10.6), 8.6, tile, -1.0)
     sigil_c = (4.2, arm_y - 4.4, az - 7.2)
-    figure.part("sigil", "arm_l", sigil_c, "orbit", -30.0)
+    # A WHEEL MAY TURN, BUT SLOWLY AND ON PURPOSE. -30 degrees a second is three full turns every half minute on
+    # a charm the size of a fist: it read as a loose spinning object rather than a sigil burning on the arm.
+    figure.part("sigil", "arm_l", sigil_c, "orbit", -7.0)
     figure.spoked_wheel("sigil", "ruby", sigil_c, 2.9, 8, tile)
     figure.ring("sigil", lambda a: "ember", sigil_c, 3.8, tile * 0.55, tile * 0.85)
     figure.box("sigil", "emberpale", sigil_c, (tile * 0.8, tile * 1.4, tile * 1.4))
@@ -868,7 +875,9 @@ def apollo():
     # ---- THE HALO. Thicker and wider than before, and set BEHIND the head as the plate shows, with an inner
     # ---- bright rim so it reads as a lit ring rather than a drawn circle.
     halo_c = (-4.2, 0.0, d["head_z"] + 6.0)
-    figure.part("halo", "head", halo_c, "orbit", 3.0)
+    # MOUNTED, for the same reason Arden's and Celestial Light's are: a halo that turns is a halo that spends
+    # part of its cycle edge-on, and Apollo's is the loudest thing in his silhouette.
+    figure.part("halo", "head", halo_c, "none")
     for r, m in ((12.6, "gold"), (11.7, "gold"), (10.9, "solarpale")):
         figure.ring("halo", lambda a, mm=m: mm, halo_c, r, tile * 1.45, tile * 1.0)
     # the band has depth: a second ring offset backward gives the rim a thickness you can see from three-quarter

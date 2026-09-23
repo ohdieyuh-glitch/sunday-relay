@@ -214,6 +214,25 @@ void SWonderlandCompanionTerminal::Construct(const FArguments& InArgs)
 					.Padding(0.0f)
 				]
 			]
+			// THE i.WONDER PULSE, ON ITS OWN ROW ABOVE THE INPUT, anchored bottom-left.
+			//
+			// IT USED TO LIVE INSIDE THE COMMAND LINE, in the same horizontal box as the chevron and the editable
+			// text -- so it read as part of the input control, and the companion's words looked like they were
+			// coming out of the box the founder types into. They are not: they come from the companion. The mark
+			// belongs between the transcript and the input, with the answer building upward above it.
+			//
+			// ITS OWN SLOT IS ALSO WHAT KEEPS IT OUT. A row of its own cannot be pushed back inside the text
+			// field when the terminal is resized, which an AutoWidth slot sharing a box with a FillWidth text
+			// control eventually would be.
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			.HAlign(HAlign_Left)
+			.Padding(12.0f, 2.0f, 0.0f, 3.0f)
+			[
+				SAssignNew(Pulse, SWonderlandPulseMark)
+				.Size(24.0f)
+				.Beating_Lambda([this]() { return IsPulsing(); })
+			]
 			// THE COMMAND LINE: chevron and input, then Send and its chord ruled off at the right.
 			+ SVerticalBox::Slot()
 			.AutoHeight()
@@ -222,21 +241,11 @@ void SWonderlandCompanionTerminal::Construct(const FArguments& InArgs)
 				.HeightOverride(38.0f)
 				[
 					SNew(SHorizontalBox)
-					// THE i.WONDER PULSE, bottom left. Beating while the companion works and nothing is being said;
-					// still and dim while it waits, streams, or is offline. Internal work shown, none of it printed.
+					// the chevron leads the row now that the mark has moved out, so it takes the mark's left margin
 					+ SHorizontalBox::Slot()
 					.AutoWidth()
 					.VAlign(VAlign_Center)
-					.Padding(12.0f, 0.0f, 4.0f, 0.0f)
-					[
-						SAssignNew(Pulse, SWonderlandPulseMark)
-						.Size(24.0f)
-						.Beating_Lambda([this]() { return IsPulsing(); })
-					]
-					+ SHorizontalBox::Slot()
-					.AutoWidth()
-					.VAlign(VAlign_Center)
-					.Padding(4.0f, 0.0f, 6.0f, 0.0f)
+					.Padding(14.0f, 0.0f, 6.0f, 0.0f)
 					[
 						SNew(STextBlock)
 						.Text(INVTEXT(">"))

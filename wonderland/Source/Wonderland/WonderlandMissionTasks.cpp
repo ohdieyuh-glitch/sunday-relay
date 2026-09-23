@@ -500,8 +500,27 @@ int32 UWonderlandMissionTaskSubsystem::GetWorkspaceCount() const
 bool UWonderlandMissionTaskSubsystem::ShouldPresentOrb(FGuid LocalId) const
 {
 	const FWonderlandMissionTask* Task = Find(LocalId);
-	return Task != nullptr && Task->bInWorkspace
-		&& Task->State != EWonderlandTaskState::Completed && Task->State != EWonderlandTaskState::Failed;
+	if (Task == nullptr || !Task->bInWorkspace)
+	{
+		return false;
+	}
+	// A DRAFT IS A TAB, NOT A CONTRACT, AND IT GETS NO ORB IN THE WORLD.
+	//
+	// This is where the founder's "two gray mission orbs following me around the open world" came from. Pressing
+	// + makes an empty Draft, a Draft counted as presentable, and so an uncommitted slot immediately hung a grey
+	// orb beside the Dog and walked around with him. Press + twice and there are two, for two missions that do
+	// not exist. Nothing was leaking and nothing was duplicated -- the orb was doing exactly what it was told.
+	//
+	// It is also what the founder asked for on the other side of the same feature: until Enter is pressed, "do
+	// not attach it beside the Relay Dog". ENTER IS THE COMMIT BOUNDARY, so the orb -- which is the world's
+	// picture of a real mission -- begins at the commit and not before it. The pending tab still exists, still
+	// shows grey in the strip above the running contract, and still belongs to the founder; it just has not
+	// earned a place in the world yet.
+	if (!WonderlandTaskIsContract(Task->State))
+	{
+		return false;
+	}
+	return Task->State != EWonderlandTaskState::Completed && Task->State != EWonderlandTaskState::Failed;
 }
 
 bool UWonderlandMissionTaskSubsystem::SelectTask(FGuid LocalId)
