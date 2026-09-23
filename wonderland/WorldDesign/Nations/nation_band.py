@@ -112,6 +112,7 @@ NATIONS = {
                    "paving": "MI_V2_GroundFlag_PlazaShade", "paving_shade": "MI_V2_GroundFlag_PlazaGrey",
                    "paving_warm": "MI_V2_GroundFlag_PlazaWarm"},
         gate="WL_Arch_Twin_Tiered",
+        band_push=4200.0,
         gate_yaw=90.0,
         hall="WL_Colonnade_Arcade",            # engineering halls
         signature="WL_Palace_Wing",            # systems architecture
@@ -197,15 +198,29 @@ def build(pass_id, cfg):
                        "tags": cfg["tags"] + ["WL_GVE_" + gve.upper().replace(" ", "_").replace("/", "_")]})
         stats["anchor"] += 1
 
+    #: PER-NATION BAND ORIGIN. A floor profile across the Tartarus approach found the walk running over
+    #: the ROOF of WL_Palace_Dome_Grand for fifty samples at z 554-604 and then dropping 618 cm off its
+    #: edge. TQ01_Palace_Dome_Grand stands at (71638, -41360), r 827 m, and its mesh is 35 x 41 x 40 m,
+    #: so it spans roughly r 807-847 m. The TQ03 gate was placed at r 824 m -- 3.4 m from the palace
+    #: CENTRE, which is to say inside it -- and the avenue began at 819 m, running through the building.
+    #: Band one and band two were laid from the same BAND_U0 without either knowing what the other had
+    #: already built there. band_push moves a nation's whole band outward, keeping its internal layout
+    #: identical, so TARTARUS starts clear of its own palace instead of on top of it.
+    #: NAMED band_u0, NOT u0. The sky-bridge loop below already owns a local u0 -- it unpacks tower tops
+    #: into (u0, v0, t0) -- so calling this one u0 let that loop overwrite the band origin partway through the
+    #: build. The bands came out starting at 1,085 m instead of 815 m and 70 m long instead of 340. Caught by
+    #: reading the generator's own printed band range, which is why it prints one.
+    band_u0 = BAND_U0 + float(cfg.get("band_push", 0.0))
+
     # ---------------------------------------------------------------- 1. the floor, tiled exactly
-    U1 = BAND_U0 + PLATE["len_y"] * BAND_ROWS
+    U1 = band_u0 + PLATE["len_y"] * BAND_ROWS
 
     def pave(c0, c1, material, key, row0=0, row1=None):
         rows = BAND_ROWS if row1 is None else row1
         for c in range(c0, c1):
             v = (c + 0.5) * PLATE["len_x"]
             for j in range(row0, rows):
-                add(key, PLATE["mesh"], material, BAND_U0 + PLATE["len_y"] * (j + 0.5), v,
+                add(key, PLATE["mesh"], material, band_u0 + PLATE["len_y"] * (j + 0.5), v,
                     PAVING_TOP - PLATE["top_local"], 0.0, cull=CULL_FAR, collides=True, shadow=False)
 
     pave(-1, 1, mats["paving_warm"], "Avenue")
@@ -218,13 +233,13 @@ def build(pass_id, cfg):
     # kerbs where the paving meets the world's lawn, and a grass fringe outside them (the GT01 rule: an edge is
     # what makes ground read as built)
     run = KIT["WL_Ground_Kerb_Run"]["size"][0]
-    n = int((U1 - BAND_U0 - PLATE["len_y"] * 4) // run)
+    n = int((U1 - band_u0 - PLATE["len_y"] * 4) // run)
     for side in (-1.0, 1.0):
         for i in range(n):
-            add_module("WL_Ground_Kerb_Run", BAND_U0 + PLATE["len_y"] * 4 + run * (i + 0.5),
+            add_module("WL_Ground_Kerb_Run", band_u0 + PLATE["len_y"] * 4 + run * (i + 0.5),
                        side * FLOOR_HALF, PAVING_TOP, 90.0, cull=CULL_NEAR, collide=False)
     tuft = KIT["WL_Garden_Grass_Tuft"]["parts"][0]
-    u = BAND_U0 + PLATE["len_y"] * 4
+    u = band_u0 + PLATE["len_y"] * 4
     while u < U1:
         for side in (-1.0, 1.0):
             add("Fringe", tuft["mesh"], mats["moss"], u + rng.uniform(-30.0, 30.0),
@@ -240,7 +255,7 @@ def build(pass_id, cfg):
     #: short, which is half of 1218. WL_Arch_Twin_Tiered did the same at 746 cm and then climbed the
     #: structure to z=643. Both gates were walls across the only way in. This is the d164a56b regression
     #: in a new place: a gate that looks like a gate and does not admit a player.
-    add_module(cfg["gate"], BAND_U0 + 900.0, 0.0, PAVING_TOP, cfg.get("gate_yaw", 0.0),
+    add_module(cfg["gate"], band_u0 + 900.0, 0.0, PAVING_TOP, cfg.get("gate_yaw", 0.0),
                cull=CULL_FAR, record=True)
 
     # ---------------------------------------------------------------- 3. the halls along the avenue
@@ -248,7 +263,7 @@ def build(pass_id, cfg):
     hl = KIT[hall]["size"][0]
     n_hall = 9
     for i in range(n_hall):
-        hu = BAND_U0 + 4200.0 + i * (hl * 1.12)
+        hu = band_u0 + 4200.0 + i * (hl * 1.12)
         if hu > U1 - 3000.0:
             break
         for side in (-1.0, 1.0):
@@ -256,7 +271,7 @@ def build(pass_id, cfg):
 
     # ---------------------------------------------------------------- 4. the signature halls, facing the plaza
     sig = cfg["signature"]
-    PLAZA_U = BAND_U0 + PLATE["len_y"] * BAND_ROWS * 0.52
+    PLAZA_U = band_u0 + PLATE["len_y"] * BAND_ROWS * 0.52
     for side in (-1.0, 1.0):
         add_module(sig, PLAZA_U, side * 6100.0, PAVING_TOP, 90.0 * side, cull=CULL_FAR, record=True)
 
@@ -273,16 +288,16 @@ def build(pass_id, cfg):
     for side in (-1.0, 1.0):
         for row in range(2):
             v = side * (5000.0 + row * 1500.0)
-            u = BAND_U0 + 6000.0
+            u = band_u0 + 6000.0
             while u < U1 - 4000.0:
                 add_module(blk, u, v, PAVING_TOP, 90.0 * side, cull=CULL_MID, record=True)
                 u += bw * 1.10
 
     # ---------------------------------------------------------------- 7. towers, and the connectors between them
     chains = cfg["chains"]
-    SITES = [(BAND_U0 + 7000.0, -7600.0), (BAND_U0 + 7000.0, 7600.0),
-             (BAND_U0 + 17000.0, -7900.0), (BAND_U0 + 17000.0, 7900.0),
-             (BAND_U0 + 27000.0, -7200.0), (BAND_U0 + 27000.0, 7200.0)]
+    SITES = [(band_u0 + 7000.0, -7600.0), (band_u0 + 7000.0, 7600.0),
+             (band_u0 + 17000.0, -7900.0), (band_u0 + 17000.0, 7900.0),
+             (band_u0 + 27000.0, -7200.0), (band_u0 + 27000.0, 7200.0)]
     tops = []
     for i, (tu, tv) in enumerate(SITES):
         top = stack(chains[i % len(chains)], tu, tv, PAVING_TOP, rng.choice((0.0, 45.0, 90.0)))
@@ -308,7 +323,7 @@ def build(pass_id, cfg):
     # ---------------------------------------------------------------- 8. GVE anchors, named from the canon
     spaces = GVE.get(cfg["nation"], [])[:6]
     for i, gve in enumerate(spaces):
-        su = BAND_U0 + 5000.0 + (i % 3) * 9000.0
+        su = band_u0 + 5000.0 + (i % 3) * 9000.0
         sv = (-1.0 if i < 3 else 1.0) * 4300.0
         anchor(gve, "%s_GVE_%02d" % (cfg["nation"].title(), i), su, sv, PAVING_TOP)
 
@@ -320,9 +335,9 @@ def build(pass_id, cfg):
 
     total = sum(len(b["instances"]) for b in spec["batches"])
     coll = sum(len(b["instances"]) for b in spec["batches"] if b["collides"])
-    cx, cy = world((BAND_U0 + U1) * 0.5, 0.0)
+    cx, cy = world((band_u0 + U1) * 0.5, 0.0)
     print("%s -> %s" % (pass_id, cfg["out"]))
-    print("  band u %.0f..%.0f  (%.0f m .. %.0f m from the core)" % (BAND_U0, U1, BAND_U0 / 100, U1 / 100))
+    print("  band u %.0f..%.0f  (%.0f m .. %.0f m from the core)" % (band_u0, U1, band_u0 / 100, U1 / 100))
     print("  batches %d, instances %d (%d collide), anchors %d, footprints %d"
           % (len(spec["batches"]), total, coll, len(actors), len(footprints)))
     print("  band centre lands in %s" % (nations.nation_at(cx, cy),))
