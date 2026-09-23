@@ -49,6 +49,25 @@ most of B is therefore unmeasured by construction.
    band meets the second. Both the likeliest traversal break and the likeliest visual break.
 6. **Noctis has no luminous accent (row F).** One material, canon since the nation was written, used nowhere.
 
+## Where these numbers come from, and how far to trust them
+
+Every triangle and instance figure in this ledger is computed on disk from the 270 layer specs plus the mesh
+inventory at `.claude/jobs/ec4f540e/tmp/mesh_inventory.json`, written by the `mesh_inventory` editor job on
+**2026-09-22**. Checked 2026-09-23, because a ledger that grades on measurement has to be able to say how good
+its measurements are:
+
+- **267 distinct meshes are placed by the 270 specs, and all 267 are in the inventory.** Nothing placed is
+  being counted as zero.
+- The inventory holds 588 meshes and the project has ~950 `SM_`/`WL_` uassets, so **320 inventoried meshes and
+  several hundred more on disk are never placed by any spec.** That is not a measurement gap — it is the same
+  unused-vocabulary pattern that four of the six blockers describe.
+- **18 of the 267 placed meshes have been re-saved since the inventory was written**, so their triangle counts
+  could have moved. Their combined weight is **589,420 triangles, 0.52% of the total** — almost all of it
+  `WL_Detail_Plinth_Block` (14,297 instances × 36 tris). The headline figures are not sensitive to it.
+- Two totals appear in this session's notes: **114,637,683** counts batches *and* actors, **113,871,980**
+  counts batches alone. Both are correct for what they count; the ledger quotes the former.
+- A fresh `mesh_inventory` run is cheap and should be the first read-only job whenever the editor returns.
+
 ## Standing notes
 
 - **Sky bridges do not collide** — 168 instances at one height per nation (ICARUS 29.6 m, NOCTIS 27.1 m,
