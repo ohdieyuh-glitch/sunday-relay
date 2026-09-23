@@ -1561,11 +1561,14 @@ def bee():
         pivot = (-td * 0.44, side * tw * 0.42, d["torso_z"] + th * 0.46)
         figure.part(name, "body", pivot, "wing", side)
         figure.box(name, "stripe", pivot, (tile * 1.2, tile * 1.4, tile * 1.4))
-        for leaf, (length, lift, sweep) in enumerate(((13.0, 4.2, 5.0), (9.5, 0.8, 6.6))):
+        # BROADER LEAVES. The wings were the only real silhouette this skin had and they were a thin strip: two
+        # units of chord against a thirteen unit span, which is a blade, not a wing. Widened and lengthened so
+        # that from the front the wings ARE the animal, the way they are on the founder's plate.
+        for leaf, (length, lift, sweep) in enumerate(((15.5, 4.6, 5.0), (11.5, 0.6, 6.8))):
             across = max(4, int(length / (tile * 1.4)))
             for s in range(across):
                 t2 = (s + 0.5) / across
-                half = (0.6 + 2.6 * math.sin(math.pi * min(t2 * 1.12, 1.0))) * (1.0 - 0.22 * t2)
+                half = (0.9 + 4.6 * math.sin(math.pi * min(t2 * 1.12, 1.0))) * (1.0 - 0.18 * t2)
                 steps = max(1, int(half / tile))
                 for w in range(-steps, steps + 1):
                     figure.box(name, "gauze",
@@ -1575,13 +1578,50 @@ def bee():
                 figure.box(name, "vein", (pivot[0] - t2 * sweep + 0.25, pivot[1] + side * t2 * length, pivot[2] + t2 * lift),
                            (tile * 0.5, tile * 1.5, tile * 0.5))
 
-    # THE STINGER.
-    figure.part("sting", "body", (-td * 0.5, 0.0, d["torso_z"] - th * 0.35), "none")
-    for s in range(5):
-        t3 = s / 4.0
-        figure.box("sting", "stripe" if t3 < 0.7 else "amber",
-                   (-td * 0.5 - 0.8 - t3 * 2.8, 0.0, d["torso_z"] - th * 0.35 - t3 * 1.1),
-                   (tile * (1.2 - 0.7 * t3),) * 3)
+    # ================================================================== THE ABDOMEN
+    # FOUNDER (2026-09-23), on this skin by name: "Do not make it simply: yellow/black dog + wings + antennae.
+    # Create a stronger cohesive Bee identity." And on the set as a whole: "recognizable from silhouette alone."
+    #
+    # WHAT THE MEASUREMENT SAID. Tools/silhouette_check.py put Bee at 0.66 front and 0.72 side against an
+    # UNDRESSED Relay OG -- the worst pair in the entire set. With the colour taken away it WAS the base dog:
+    # the stripes are paint, the emblem is paint, and a five-box stinger is not a shape. The wings were the only
+    # real silhouette on it.
+    #
+    # SO IT GETS THE ONE THING THAT MAKES A BEE A BEE FROM ACROSS A ROOM: a heavy banded abdomen, slung back and
+    # down off the thorax, segment by segment, tapering into the sting. It is the whole rear half of the animal
+    # and it is what the old five boxes were standing in for.
+    ab_root = (-td * 0.5 - 0.6, 0.0, d["torso_z"] - th * 0.24)
+    figure.part("abdomen", "body", ab_root, "sway", 0.30, 0.55)
+    segments = ((0.0, 0.00, 2.9, 5.4, 4.8), (2.5, -1.15, 2.8, 5.6, 4.9), (5.0, -2.60, 2.6, 5.0, 4.4),
+                (7.2, -4.20, 2.2, 4.0, 3.6), (9.0, -5.70, 1.7, 2.9, 2.6), (10.4, -6.90, 1.2, 1.9, 1.7))
+    for seg, (back, drop, depth, wide, tall) in enumerate(segments):
+        band = "stripe" if seg % 2 else None
+        centre = (ab_root[0] - back, 0.0, ab_root[2] + drop)
+        figure.slab("abdomen", band or "bone", centre, (depth, wide, tall), tile=tile)
+        # THE BANDS ARE CUT INTO IT, not painted on: a dark groove standing proud between every pair of
+        # segments, so the abdomen reads as segmented at the distance the founder judges these from.
+        if seg < len(segments) - 1:
+            nxt = segments[seg + 1]
+            figure.slab("abdomen", "stripe",
+                        (ab_root[0] - (back + nxt[0]) * 0.5, 0.0, ab_root[2] + (drop + nxt[1]) * 0.5),
+                        (depth * 0.5, wide * 1.06, tall * 0.52), tile=tile)
+        # a warm underglow along the belly of each segment, which is where a bee actually carries its colour
+        figure.slab("abdomen", "amber", (centre[0], 0.0, centre[2] - tall * 0.42),
+                    (depth * 0.72, wide * 0.74, 0.9), tile=tile)
+
+    # THE STING: short, dark, and the only part of the animal that comes to a point.
+    tip = (ab_root[0] - 11.4, 0.0, ab_root[2] - 7.6)
+    for s in range(4):
+        t3 = s / 3.0
+        figure.box("abdomen", "stripe" if t3 < 0.65 else "amber",
+                   (tip[0] - t3 * 2.0, 0.0, tip[2] - t3 * 1.0), (tile * (1.15 - 0.72 * t3),) * 3)
+
+    # THE POLLEN BASKETS: a loaded clump on the outside of each hind leg. Small, but it is the detail that says
+    # this animal has been working rather than that somebody painted a dog yellow.
+    for side, name in ((-1.0, "leg_l"), (1.0, "leg_r")):
+        y = side * (d["leg_gap"] + d["leg"][1] * 0.5 + 0.5)
+        figure.slab(name, "honey", (0.2, y, d["torso_z"] - th * 0.5 - 3.2), (2.0, 1.5, 2.6), tile=tile)
+        figure.box(name, "amber", (0.9, y, d["torso_z"] - th * 0.5 - 3.2), (tile * 0.9, tile * 1.0, tile * 1.4))
     return figure
 
 
