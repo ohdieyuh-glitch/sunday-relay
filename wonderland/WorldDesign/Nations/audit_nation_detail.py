@@ -49,6 +49,12 @@ import tartarus_quarter as TARTARUS    # noqa: E402
 
 KIT = json.loads((HERE.parent / "Skyline" / "kit_modules.json").read_text(encoding="utf-8"))["modules"]
 
+#: Every StaticMesh's measured triangle count, written by the mesh_inventory editor job. The kit records
+#: a MODULE's triangles; a batch places ONE MESH, and those are not the same number.
+_INV = Path(r"C:/Users/Kaisi/.claude/jobs/ec4f540e/tmp/mesh_inventory.json")
+INVENTORY_BY_NAME = ({r["name"]: r for r in json.loads(_INV.read_text(encoding="utf-8"))}
+                     if _INV.exists() else {})
+
 CASES = (
     dict(pass_id="NC02", nation="NOCTIS", mod=NOCTIS, spec="nc02_noctis_detail.json",
          footprints="nc01_footprints.json", parent="nc01_quarter.json"),
@@ -169,9 +175,15 @@ def audit(case):
                 problems["above the wall top it was placed against"] += 1
                 detail["above wall"].append((b["id"], bl["module"], round(rel), round(bl["top"])))
 
-        m = KIT.get("WL_" + "_".join(b["id"].split("_")[1:-1]))
-        if m and m.get("tris"):
-            tris += m["tris"] * len(b["instances"])
+        #: TRIANGLES COME FROM THE MESH INVENTORY, NOT THE KIT MODULE.
+        #: This used to look up the MODULE and multiply its whole triangle count by each batch's
+        #: instances -- but a module is placed as several co-located per-material batches, so a
+        #: four-part module was counted four times over. IC04 reported ~310,592 triangles on
+        #: 2026-09-23 when its real cost is 136,816, an inflation of 2.3x, and a triangle count that
+        #: overstates is worse than none when it is what performance gets judged on.
+        r = INVENTORY_BY_NAME.get(b["mesh"].rsplit("/", 1)[-1].split(".")[0])
+        if r and r.get("tris"):
+            tris += r["tris"] * len(b["instances"])
 
     parent_inst = sum(len(x["instances"]) for x in parent["batches"])
     print("== %s  (%s)" % (case["pass_id"], case["spec"]))
