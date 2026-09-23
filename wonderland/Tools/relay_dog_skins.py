@@ -876,6 +876,18 @@ def apollo():
             lf = leaf / 3.0
             figure.box("body", "gold", (1.0 - lf * 1.2, base_y + side * (1.0 + lf * 2.4), shoulder - 2.6 - lf * 0.7),
                        (tile * 1.3, tile * 1.5, tile * (2.4 - 0.7 * lf)))
+        # THE CELESTIAL FIGURE ON EACH SHOULDER. The plate does not put ornament on Apollo's shoulders -- it puts
+        # a small winged BEING there, a face above a pair of gold wings that fan up and back beside the head. One
+        # cherub face set flat into the cap read as a coin; with wings behind it and a second face below, the
+        # shoulder becomes the figure the reference shows.
+        for w, (span, rise, back) in enumerate(((7.2, 5.4, 0.8), (5.8, 3.4, 2.6), (4.4, 1.6, 4.0))):
+            for f in range(5):
+                ft = f / 4.0
+                figure.box("body", "gold" if f % 2 == 0 else "golddeep",
+                           (2.0 - back, base_y + side * (2.0 + span * 0.16 * f),
+                            shoulder + 3.4 + rise * 0.22 * f - w * 0.5),
+                           (tile * 1.1, tile * 1.25, tile * (3.0 - 0.34 * f)))
+        figure.cherub_face("body", mats, (2.2, base_y + side * 3.6, shoulder - 1.0), 2.8, tile, face_dir=1.0)
 
     # ---- THE GORGET, so the neck is not a bare gap between a gold shoulder and a pale head.
     figure.slab("body", "gold", (0.6, 0.0, shoulder + 2.1), (4.0, tw * 0.94, 1.5), tile=tile)
