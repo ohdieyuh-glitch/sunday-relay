@@ -1212,10 +1212,16 @@ def skeleton_flame():
         y = side * (tw * 0.5 + aw + 2.0)
         name = "flankfire_%s" % ("l" if side < 0 else "r")
         figure.part(name, "body", (0.0, y, shoulder - 2.0), "twinkle", 0.38 + 0.24 * side)
+        # BILLOWING, NOT LICKING. Rendered offline (Tools/wlvox_render.py) the first pass read as two small
+        # flames at the elbows: 5.6 of width is barely wider than the arm it stands beside, so it looked like a
+        # detail rather than the ghostfire the plate wraps this animal in. Wider than the body, taller than the
+        # head, and a third pass in front so it is a volume rather than a fan.
         figure.flame(name, lambda up: "ghost" if up < 0.62 else "ghostpale",
-                     (-0.4, y, hip_z + 1.0), 12.5, 5.6, 8, tile * 1.15)
+                     (-0.4, y, hip_z + 0.4), 15.5, 8.6, 12, tile * 1.15)
         figure.flame(name, lambda up: "ghost",
-                     (-2.0, y + side * 1.4, hip_z + 3.0), 8.5, 3.6, 5, tile * 1.0)
+                     (-2.4, y + side * 2.0, hip_z + 2.4), 11.0, 6.0, 8, tile * 1.05)
+        figure.flame(name, lambda up: "ghost" if up < 0.5 else "ghostpale",
+                     (1.6, y - side * 1.2, hip_z + 1.6), 9.5, 4.6, 6, tile * 1.0)
 
     # THE HIP PLATES: three courses of bone flaring outward under the ribcage. Without them the waist runs
     # straight into the legs and the whole lower half of the figure is a post.
