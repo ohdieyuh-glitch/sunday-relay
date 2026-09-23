@@ -54,6 +54,14 @@ def material_name(ref):
 
 def check(path, meshes, materials):
     spec = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(spec, dict):
+        # Sidecar data, not a layer spec -- the footprint files next to the band specs are JSON lists.
+        # Until 2026-09-23 this raised, and because main() evaluates every check before all() sees one,
+        # ONE sidecar aborted the whole run: the default glob dies at ic03_band_footprints.json, so
+        # nc03/nc04/tq03/tq04 were never mesh- or material-checked by a no-argument gate run.
+        print("== %s  -- sidecar data (%s of %d), not a layer spec; skipped"
+              % (Path(path).name, type(spec).__name__, len(spec)))
+        return True
     bad_mesh, bad_mat = Counter(), Counter()
     instances = colliding = 0
     biggest = []

@@ -149,8 +149,13 @@ def build(pass_id, cfg):
             if part["part"] == "veg_anchor":
                 continue                       # a flat panel that renders as a green slab if given a leaf material
             mat = mats.get(part["part"], part["material"])
+            # stone_dark is an ACCENT sub-mesh -- a plinth band or arch soffit of 12-216 triangles that sits
+            # wholly inside the stone shell's own footprint, at the same transform. Letting it collide put a
+            # second collision body inside a shell that already blocks: 178 of the second band's 2,288
+            # colliding instances, 146 of them in NOCTIS, none of them reachable first. All 51 kit modules
+            # that carry a stone_dark part also carry a stone shell, so nothing stops blocking by this.
             blocks = collide and part["part"] not in ("glass", "gold", "roof", "roof_alt", "moss", "metal",
-                                                      "gold_aged")
+                                                      "gold_aged", "stone_dark")
             add("%s_%s" % (name.replace("WL_", ""), part["part"]), part["mesh"], mat, u, v, z, yaw_local,
                 scale, cull, collides=blocks)
         if record:
