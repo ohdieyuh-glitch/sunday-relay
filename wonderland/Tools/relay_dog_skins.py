@@ -878,10 +878,16 @@ def apollo():
     # MOUNTED, for the same reason Arden's and Celestial Light's are: a halo that turns is a halo that spends
     # part of its cycle edge-on, and Apollo's is the loudest thing in his silhouette.
     figure.part("halo", "head", halo_c, "none")
-    for r, m in ((12.6, "gold"), (11.7, "gold"), (10.9, "solarpale")):
+    # BIG ENOUGH TO BE THE OUTER FRAME, which is the whole of founder item 10: "the large ring/halo must feel
+    # structurally intentional". At 12.6 it was smaller than the baroque pauldron volutes that flank the head, so
+    # the ring sat INSIDE them and the eye read four curling gold tendrils with something round lost behind --
+    # not a halo at all. Rendered offline (Tools/wlvox_render.py) that is unmistakable, and it is invisible to
+    # every silhouette-overlap number, because a tangle is still a distinct shape. Out past the volutes it
+    # becomes the one clean circle the whole figure sits inside.
+    for r, m in ((20.6, "gold"), (19.5, "gold"), (18.5, "solarpale")):
         figure.ring("halo", lambda a, mm=m: mm, halo_c, r, tile * 1.45, tile * 1.0)
     # the band has depth: a second ring offset backward gives the rim a thickness you can see from three-quarter
-    for r in (12.2, 11.3):
+    for r in (20.1, 19.0):
         figure.ring("halo", lambda a: "golddeep", (halo_c[0] - 1.5, halo_c[1], halo_c[2]), r, tile * 1.1, tile * 1.05)
 
     # ---- THE SOLAR CROWN. Taller than the head and billowing wider: on the plate the fire is the loudest thing
@@ -1055,22 +1061,6 @@ def apollo():
     # So the sun stops being a ring behind the head and becomes the shape of the whole figure: rays radiating
     # from the chest, long and short alternating, reaching past the halo. A ring is an outline; a sunburst is a
     # star, and a star is not something Arden's flaming circle can be mistaken for at any distance.
-    burst_c = (-td * 0.72, 0.0, shoulder - 3.2)
-    figure.part("sunburst", "body", burst_c, "twinkle", 0.08)
-    rays = 16
-    for i in range(rays):
-        a = 2.0 * math.pi * i / rays
-        longer = (i % 2 == 0)
-        inner, outer = 7.2, (21.5 if longer else 13.8)
-        steps = max(3, int((outer - inner) / (tile * 1.05)))
-        for s in range(steps):
-            t = (s + 0.5) / steps
-            r = inner + (outer - inner) * t
-            wide = tile * (1.55 - 1.10 * t) * (1.0 if longer else 0.86)
-            figure.box("sunburst", "gold" if t < 0.5 else ("solarmid" if longer else "solarpale"),
-                       (burst_c[0] - t * 1.3, math.cos(a) * r, burst_c[2] + math.sin(a) * r),
-                       (tile * 0.8, wide, wide))
-
     # AND THE RAYS CARRY ONTO THE BODY, so the sun is worn rather than parked behind it: a spike standing off
     # the top of each pauldron, and a row of points along the hem of the robe.
     for side in (-1.0, 1.0):
