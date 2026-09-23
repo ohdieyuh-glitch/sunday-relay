@@ -265,7 +265,7 @@ export type ScriptedOutcome =
 
 export interface ScriptedAdapter extends JuliusProviderAdapter {
   /** Everything Julius handed the adapter, so a test can assert what a dispatch carried. */
-  readonly dispatches: { taskId: string; contextId: string; taskType?: string; allocation?: JuliusDispatchAllocation; contract?: JuliusContractReviewCharge; workspace?: JuliusDispatchWorkspace }[];
+  readonly dispatches: { taskId: string; contextId: string; taskType?: string; allocation?: JuliusDispatchAllocation; contract?: JuliusContractReviewCharge; workspace?: JuliusDispatchWorkspace; attempt?: { leaseGeneration: number } }[];
 }
 
 /**
@@ -293,6 +293,7 @@ export function scriptedAdapter(
         ...(input.allocation === undefined ? {} : { allocation: input.allocation }),
         ...(input.contract === undefined ? {} : { contract: input.contract }),
         ...(input.workspace === undefined ? {} : { workspace: input.workspace }),
+        ...(input.attempt === undefined ? {} : { attempt: input.attempt }),
       });
       const step = script[Math.min(index, script.length - 1)] ?? { kind: 'succeed' as const };
       index += 1;

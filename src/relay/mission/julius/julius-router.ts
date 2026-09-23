@@ -682,7 +682,17 @@ export interface JuliusDispatchAllocation{readonly usdMicros:number;readonly pol
  * it and says so; nothing here authorises a broad reset.
  */
 export interface JuliusDispatchWorkspace{readonly restoreToTree:string;readonly expectedTree:string;}
-export interface JuliusDispatchInput{readonly taskId:string;readonly contextId:string;readonly taskType?:string;readonly allocation?:JuliusDispatchAllocation;readonly contract?:JuliusContractReviewCharge;readonly signal?:AbortSignal;readonly workspace?:JuliusDispatchWorkspace;}
+/**
+ * WHICH ATTEMPT IS BEING RUN.
+ *
+ * `leaseGeneration` is the fencing token the claim already carries, and it is
+ * what separates attempt 1 from attempt 2 of the same task. An adapter needs
+ * it to say which attempt produced a body: without it, every round of a repair
+ * wrote over the round before it, destroying the diff and the test output that
+ * explained why the repair existed.
+ */
+export interface JuliusDispatchAttempt{readonly leaseGeneration:number;}
+export interface JuliusDispatchInput{readonly taskId:string;readonly contextId:string;readonly taskType?:string;readonly allocation?:JuliusDispatchAllocation;readonly contract?:JuliusContractReviewCharge;readonly signal?:AbortSignal;readonly workspace?:JuliusDispatchWorkspace;readonly attempt?:JuliusDispatchAttempt;}
 export interface JuliusProviderAdapter{readonly adapterId:string;dispatch(input:JuliusDispatchInput):Promise<JuliusProviderResult>;}
 export interface JuliusProviderHealth{readonly providerId:string;readonly state:'CLOSED'|'OPEN'|'HALF_OPEN';readonly consecutiveFailures:number;readonly openedAt:string|null;readonly active:number;readonly concurrencyLimit:number;}
 export class JuliusProviderHealthRegistry{private readonly values=new Map<string,JuliusProviderHealth>();set(value:JuliusProviderHealth){this.values.set(value.providerId,structuredClone(value));}available(providerId:string){const value=this.values.get(providerId);return value===undefined||(value.state!=='OPEN'&&value.active<value.concurrencyLimit);}get(providerId:string){const value=this.values.get(providerId);return value?structuredClone(value):null;}}
