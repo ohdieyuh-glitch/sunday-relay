@@ -31,11 +31,16 @@ most of B is therefore unmeasured by construction.
 
 1. **Nothing is applied.** Six validated passes and 9,797 instances are still on disk. Until they land and the
    world is saved, B, J, H and most of D cannot be graded at all.
-2. **LOD (row I).** Every kit mesh reports a single LOD. This is a measurement, not a guess, and it is the one
-   row where the evidence already points at a problem rather than at an absence of evidence.
-3. **The 800–900 m seam (row L).** The thinnest ring inside every nation's frontier is exactly where the first
-   band meets the second. It is both the likeliest traversal break and the likeliest visual break.
-4. **Noctis has no luminous accent (row F).** One material, canon since the nation was written, used nowhere.
+2. **The arrival-to-nation void (row L).** Golden Arrival stops at ~400 m rather than its 500 m boundary, and
+   the nations' inner ring is thin. The walk out of the arrival city crosses ~400–600 m of near-emptiness, and
+   it is the first journey every beta player takes. Ahead of the band seam because every player meets it and
+   most will never reach 800 m.
+3. **LOD (row I).** 535 of 588 meshes carry a single LOD, and 148 of the 159 meshes at 1,500+ triangles do.
+   A measurement, not a guess, and the one row where evidence already points at a problem rather than at an
+   absence of evidence.
+4. **The 800–900 m seam (row L).** The thinnest ring inside every nation's frontier is exactly where the first
+   band meets the second. Both the likeliest traversal break and the likeliest visual break.
+5. **Noctis has no luminous accent (row F).** One material, canon since the nation was written, used nowhere.
 
 ## Standing notes
 
