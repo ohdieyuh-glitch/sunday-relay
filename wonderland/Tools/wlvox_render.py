@@ -137,11 +137,13 @@ def main():
     skins_dir, out = os.path.normpath(args.skins), os.path.normpath(args.out)
     os.makedirs(out, exist_ok=True)
 
+    # ORDER is the mascot set's reading order; anything else in the folder follows it, sorted. That makes this
+    # work on ProjectAvatars and RelayCubs without knowing their names.
+    found = sorted(n[:-6] for n in os.listdir(skins_dir) if n.endswith(".wlvox"))
+    names = [n for n in ORDER if n in found] + [n for n in found if n not in ORDER]
     figures = {}
-    for name in ORDER:
-        path = os.path.join(skins_dir, name + ".wlvox")
-        if os.path.isfile(path):
-            figures[name] = read_figure(path)
+    for name in names:
+        figures[name] = read_figure(os.path.join(skins_dir, name + ".wlvox"))
     if not figures:
         raise SystemExit("no .wlvox found in %s" % skins_dir)
 
@@ -154,7 +156,6 @@ def main():
 
     w = args.size
     h = int(args.size * 1.25)
-    names = [n for n in figures]
     # front: look along -X, so across=Y and up=Z, nearest box has the LARGEST x
     # side:  look along -Y, so across=X and up=Z, nearest box has the LARGEST y
     views = (("front", (1, 2), 0, +1), ("side", (0, 2), 1, +1))
