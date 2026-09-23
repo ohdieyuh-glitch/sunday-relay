@@ -154,11 +154,18 @@ def job():
            min_uu=round(RESULT["body_length_min"], 1), max_uu=round(RESULT["body_length_max"], 1),
            swing_ratio=round(RESULT["body_length_swing_ratio"], 3), simulated_steady="1.04")
 
-    # ---- and it is the length it was built to be, from the very first frame the founder could see it
-    want = radius * 0.12 * 45.0
+    # ---- and it is the length it was built to be, from the very first frame the founder could see it.
+    # READ FROM THE ACTOR, not restated here: spacing and segment count are both editable properties, and a
+    # proof that hardcodes what they were on the day it was written starts failing for the wrong reason the
+    # first time somebody tunes them.
+    spacing = float(art.get_editor_property("segment_spacing_uu"))
+    segments = int(art.get_editor_property("snake_segments"))
+    want = spacing * (segments - 1)
+    RESULT["built_for_uu"] = want
     record("S08b", "the python is full length immediately, not growing into it",
            RESULT["body_length_min"] > want * 0.80,
-           first_uu=round(body[0], 1), min_uu=round(RESULT["body_length_min"], 1), built_for_uu=round(want, 1))
+           first_uu=round(body[0], 1), min_uu=round(RESULT["body_length_min"], 1),
+           built_for_uu=round(want, 1), spacing_uu=spacing, segments=segments)
 
     # ---------------------------------------------------------------- THE EXIT: it must all go away
     L.press_key("Escape", False)
