@@ -765,6 +765,13 @@ private:
 	TArray<FString> CompanionShownAsk;
 	TArray<FString> CompanionShownAnswer;
 	TArray<FString> CompanionShownNote;
+	/**
+	 * THE REAL PROVIDER BEHIND THIS COMPANION, AND WHAT IT IS STILL WAITING FOR -- shown once, and only while the
+	 * companion is answering from a fixture. Without it the founder reads SIMULATED forever with no way to learn
+	 * from inside Wonderland that an openai provider exists and wants a key, or that Claude Code is installed on
+	 * this machine and wants one line of consent. The text is the runtime's own; nothing here composes advice.
+	 */
+	TArray<FString> CompanionShownProvider;
 	FString LastPromptRequestId;
 	/** The browsing task a window has already been opened for, so Julius opens one window per task and not one per tick. */
 	FString LastBrowsingTaskId;

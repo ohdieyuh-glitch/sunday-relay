@@ -910,6 +910,7 @@ void UWonderlandUiSubsystem::HandleSidekicksChanged()
 	CompanionShownAsk.SetNum(CompanionTerminals.Num());
 	CompanionShownAnswer.SetNum(CompanionTerminals.Num());
 	CompanionShownNote.SetNum(CompanionTerminals.Num());
+	CompanionShownProvider.SetNum(CompanionTerminals.Num());
 	for (int32 Index = 0; Index < CompanionTerminals.Num(); ++Index)
 	{
 		const TSharedPtr<SWonderlandCompanionTerminal>& Panel = CompanionTerminals[Index];
@@ -943,6 +944,37 @@ void UWonderlandUiSubsystem::HandleSidekicksChanged()
 		{
 			CompanionShownNote[Index] = Note;
 			Panel->AddLine(FString(), Note, true);
+		}
+
+		// WHAT IT WOULD TAKE TO MAKE THIS COMPANION REAL, said once, and only while it is answering from a fixture.
+		//
+		// The runtime already knows. It probes each real provider and reports exactly what is missing: an OpenAI
+		// key that has never been connected, or a Claude Code that IS installed on this machine and has simply not
+		// been allowed to spend anything yet. NONE OF THAT REACHED THE FOUNDER -- GetProviders() was read nowhere
+		// outside the sidekick client's own proof string, so from inside Wonderland the companions said SIMULATED
+		// and gave no way to find out why, or that a real provider was sitting there waiting for one decision.
+		//
+		// THE WORDS ARE THE RUNTIME'S OWN. This composes no advice, invents no next step, and grants no permission:
+		// consent to spend is the founder's and is kept in the service, not here.
+		if (Sidekick->Mode == TEXT("SIMULATED"))
+		{
+			FString Waiting;
+			for (const FWonderlandSidekickProvider& Provider : Runtime->GetProviders())
+			{
+				if (Provider.Backs == Sidekick->Kind && !Provider.bReady)
+				{
+					Waiting = FString::Printf(TEXT("%s is not connected yet — %s"), *Provider.DisplayName, *Provider.Detail);
+					break;
+				}
+			}
+			if (CompanionShownProvider[Index] != Waiting)
+			{
+				CompanionShownProvider[Index] = Waiting;
+				if (!Waiting.IsEmpty())
+				{
+					Panel->AddLine(FString(), Waiting, true);
+				}
+			}
 		}
 
 		// A turn that has started: show what was asked, once, whoever asked it (a terminal or a console command).
