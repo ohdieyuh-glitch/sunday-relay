@@ -1,0 +1,22 @@
+{
+ "look": "LOOK05",
+ "title": "Atmospheric depth: give the world air, so distance reads as distance",
+ "why": "Founder 2026-09-23: the world reads cartoonish and the sky is a flat video-game backdrop. The captures say why, and it is not the sky dome -- it is that Wonderland has almost no air in it. V2_HeightFog runs at fog_density 0.009 with start_distance 4000 (40 m), which is near enough to nothing across a world whose built frontier is now 1,155 m. So a tower at 1,100 m is rendered as crisply as a balustrade at 10 m, the horizon meets the ground on a razor line, and every distant silhouette sits flat against the blue instead of receding into it. Aerial perspective is the single strongest depth cue a large world has, and Wonderland is not using it.\n\nThis changes fog only. The sun, the sky light, the three fill lights, exposure and the atmosphere are all untouched, because PASS 08b already tuned warmth and shade against the founder's reference and this pass has no business relitigating that. Fog is additive to what is there: it cannot wash out a surface it is not between the camera and.",
+ "judged": "Judge on the distant band and the horizon, not on the foreground. What should change: towers at 900-1,150 m soften and separate from each other by depth; the horizon line stops being a hard seam; the far skyline reads as further away than the near one. What should NOT change: any surface within about 30 m of the camera, the colour of lit stone, the depth of shade under the mushrooms.",
+ "lights": {
+  "V2_HeightFog": {
+   "component": "ExponentialHeightFogComponent",
+   "before": {
+    "fog_density": 0.008999999612569809,
+    "fog_height_falloff": 0.18000000715255737,
+    "start_distance": 4000.0
+   },
+   "after": {
+    "fog_density": 0.022,
+    "fog_height_falloff": 0.12,
+    "start_distance": 3000.0
+   },
+   "note": "density 0.009 -> 0.022 is the whole point: enough air for 1,155 m to read as 1,155 m. height_falloff 0.18 -> 0.12 lets the fog stand taller than the 74 m Icarus towers, so a spire's top is not clear while its base is hazy -- at 0.18 the layer thins out below the skyline this world now has. start_distance 4000 -> 3000 cm moves the onset from 40 m to 30 m, which is still well beyond any foreground the player stands in."
+  }
+ }
+}

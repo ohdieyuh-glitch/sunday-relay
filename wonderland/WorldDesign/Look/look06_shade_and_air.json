@@ -1,0 +1,47 @@
+{
+ "look": "LOOK06",
+ "title": "Shade and air: stop lighting every surface equally, and give distance more of it",
+ "why": "LOOK05 put air in the world and it helped at the horizon, but the captures still read flat, and the reason is in the light rig rather than the fog. Wonderland is lit by one 70,000 lux sun that casts shadows and THREE shadowless fills that do not: GroundBounce 2,000 straight down, CanopyFill 4,500 from yaw 169, CanopyFill2 4,500 from yaw 49. That is 11,000 lux of light arriving from three directions at once with no shadow attached to any of it, and its whole effect is to raise every shaded surface toward the lit value. Shade stops being shade. It is why the founder reads the world as cartoonish: a toy looks like a toy partly because its shadow side is nearly as bright as its lit side.\n\nPASS 08b cut these fills once already (9,000 -> 4,500, 3,000 -> 2,000) for exactly this reason and the world is still flat, so the direction was right and the distance was short. This goes the rest of the way. The sun, its colour, its angle, the sky light and exposure are all untouched -- this pass only removes light that was never casting a shadow.",
+ "judged": "Judge on the SHADE side of things, not the lit side. What should change: the underside of every mushroom cap, the inside of colonnades and arcades, the north faces of towers, the recesses behind balustrades -- all should darken and gain form. Contact between an object and the ground should read. What should NOT change: any surface the sun hits directly, the colour of the lawn in full sun, the exposure of the sky.",
+ "lights": {
+  "V2_HeightFog": {
+   "component": "ExponentialHeightFogComponent",
+   "before": {
+    "fog_density": 0.022,
+    "start_distance": 3000.0
+   },
+   "after": {
+    "fog_density": 0.032,
+    "start_distance": 2500.0
+   },
+   "note": "LOOK05's 0.022 was measurably better and still conservative. 0.032 is the value where a 1,100 m tower reads as a different depth from a 700 m one rather than merely softer."
+  },
+  "V2_CanopyFill": {
+   "before": {
+    "intensity": 4500.0
+   },
+   "after": {
+    "intensity": 2200.0
+   },
+   "note": "Shadowless. Halved so a colonnade has an interior."
+  },
+  "V2_CanopyFill2": {
+   "before": {
+    "intensity": 4500.0
+   },
+   "after": {
+    "intensity": 2200.0
+   },
+   "note": "Shadowless, and nearly opposite CanopyFill in yaw (49 vs 169), so the pair together were filling shade from both sides at once."
+  },
+  "V2_GroundBounce": {
+   "before": {
+    "intensity": 2000.0
+   },
+   "after": {
+    "intensity": 1100.0
+   },
+   "note": "Shadowless and pointing straight down, so it lifts every ground-facing surface and every contact shadow. Halved rather than removed: a real ground bounce exists, it is just not this strong."
+  }
+ }
+}
