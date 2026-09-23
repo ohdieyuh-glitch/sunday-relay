@@ -68,6 +68,28 @@ SECONDS = 12.0
 WARM = True
 OUT = r\"$TMP/band_perf_before.json\"" perf_frames.py
 
+# ---- 05..08  the FIRST band's collision fix, which the live world does not have yet -----------------
+# 262697fc removed 101 nested collision bodies from IC01/IC02/NC01/TQ01 by consolidating a rule that had been
+# copied into four generators and drifted in three. Those are APPLIED passes: the spec is fixed on disk and
+# the world is not, until each is re-applied. apply_layer deletes a pass's own actors before rewriting them,
+# so re-applying is exact rather than additive. Doing it BEFORE the second band keeps one save boundary
+# between "the world as it was" and "the world with 9,797 new instances".
+queue zzB05_reapply_ic01.py "SPEC = r\"$WD/Nations/ic01_march.json\"
+SAVE = True
+MAP_WAS_DIRTY_OK = True" apply_layer.py
+
+queue zzB06_reapply_ic02.py "SPEC = r\"$WD/Nations/ic02_district.json\"
+SAVE = True
+MAP_WAS_DIRTY_OK = True" apply_layer.py
+
+queue zzB07_reapply_nc01.py "SPEC = r\"$WD/Nations/nc01_quarter.json\"
+SAVE = True
+MAP_WAS_DIRTY_OK = True" apply_layer.py
+
+queue zzB08_reapply_tq01.py "SPEC = r\"$WD/Nations/tq01_quarter.json\"
+SAVE = True
+MAP_WAS_DIRTY_OK = True" apply_layer.py
+
 # ---- 10..12  the three bands --------------------------------------------------------------------------
 # NOTE: step 10 deliberately omits MAP_WAS_DIRTY_OK. See the header.
 queue zzB10_apply_ic03.py "SPEC = r\"$WD/Nations/ic03_band.json\"
@@ -126,6 +148,19 @@ Z_TOP = 400.0
 Z_BOTTOM = -400.0
 OUT = r\"$TMP/band_profile_tartarus_gate.json\"" floor_profile.py
 
+# ---- 65  the plaza medallion: is its paving a surface, or is the ground under it? --------------------
+# The one nested-collision case left open by 262697fc. IC02 and NC01 let the medallion's paving layers
+# collide; the second band treats the same medallion as flat inlay and does not. One of them is wrong. These
+# are 1.8-6 cm discs a player walks ON, so the risk of guessing is a hole in a plaza floor, and disk cannot
+# tell a flush inlay from a proud one. This line crosses the IC02 medallion at (0, 79450), 844 cm across.
+# Continuous floor either way -> the second band's non-colliding treatment is right and IC02/NC01 follow it.
+# A dip where the medallion sits -> that collision is load-bearing and stays.
+queue zzB65_profile_medallion.py "LINE = [-700.0, 79450.0, 700.0, 79450.0]
+SAMPLES = 70
+Z_TOP = 300.0
+Z_BOTTOM = -300.0
+OUT = r\"$TMP/band_profile_medallion.json\"" floor_profile.py
+
 # ---- 70..72  the same three seams: can a player get THROUGH? -----------------------------------------
 queue zzB70_walk_ic_gate.py "ROUTE = [[\"GateMouth\", 0.0, 82380.0], [\"InsideBand\", 0.0, 82880.0]]
 START = [0.0, 81880.0, 90.0]
@@ -146,7 +181,7 @@ REACH_CM = 120.0
 LEG_TIMEOUT = 40.0" walk_route.py
 
 echo
-echo "Queued 17 jobs. What each answer should look like:"
+echo "Queued 22 jobs. What each answer should look like:"
 echo "  B10 REFUSING TO SAVE is not a bug -- it means the map was already dirty when this started, and"
 echo "      another lane's unsaved work is in it. Stop and find out whose. Do NOT add MAP_WAS_DIRTY_OK."
 echo "  B20 vs B40  colliding instances should rise by about 2,110 across the three bands and NOT rise"
