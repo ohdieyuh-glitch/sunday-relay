@@ -725,6 +725,7 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
           taskId: task.taskId, missionId: task.missionId, parentTaskId: task.parentTaskId,
           dependencyIds: task.dependencyIds, requiredEvidenceTypes: task.requiredEvidenceTypes,
           taskType: task.taskType, role: task.role, ordinal: task.ordinal, state: task.state,
+          leaseGeneration: task.leaseGeneration,
         }));
     },
     async evidenceForRun(runId, projectId) {

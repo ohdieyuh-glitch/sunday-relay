@@ -1,5 +1,5 @@
 import type { JuliusCardPolicy } from './julius-policy';
-import { flattenDiagnostics, JuliusDispatchError, JuliusProviderRouter, safeReviewDiagnostics, type JuliusDispatchAllocation, type JuliusDispatchWorkspace, type JuliusProviderResult } from './julius-router';
+import { flattenDiagnostics, JuliusDispatchError, JuliusProviderRouter, safeReviewDiagnostics, type JuliusDispatchAllocation, type JuliusDispatchReads, type JuliusDispatchWorkspace, type JuliusProviderResult } from './julius-router';
 import type { JuliusEvidence, JuliusTask, JuliusWorker, JuliusWorkerRole } from './julius-runtime';
 import type { JuliusContractReviewCharge } from './julius-task-contract';
 import { isJuliusContentDigest, juliusDurableArtifactRef } from './julius-artifact-reference';
@@ -169,7 +169,7 @@ export interface JuliusExecutionPorts {
   recordEvent(input:{runId:string;projectId:string;taskId:string|null;type:JuliusExecutionEventType;idempotencyKey:string;payload:Record<string,unknown>}):Promise<void>;
 }
 export type JuliusExecutionEventType='worker.selected'|'budget.reserved'|'budget.denied'|'worker.dispatched'|'worker.completed'|'retry.scheduled'|'task.failed'|'evidence.refused';
-export interface JuliusExecutionRequest { readonly claim:JuliusExecutionClaim;readonly policy:JuliusCardPolicy;readonly role:JuliusWorkerRole;readonly taskType:string;readonly capability:string;readonly resources:JuliusResourceRequest;readonly operationId:string;readonly signal?:AbortSignal;/** Workers already tried for this task. Additive: omitted behaves exactly as before. */readonly excludedWorkerIds?:readonly string[];/** The execution ceiling Julius reserved for this dispatch, handed to the adapter. Additive. */readonly allocation?:JuliusDispatchAllocation;/** The locked task contract this dispatch runs under, as a review charge. Additive. */readonly contract?:JuliusContractReviewCharge;
+export interface JuliusExecutionRequest { readonly claim:JuliusExecutionClaim;readonly policy:JuliusCardPolicy;readonly role:JuliusWorkerRole;readonly taskType:string;readonly capability:string;readonly resources:JuliusResourceRequest;readonly operationId:string;readonly signal?:AbortSignal;/** Workers already tried for this task. Additive: omitted behaves exactly as before. */readonly excludedWorkerIds?:readonly string[];/** The execution ceiling Julius reserved for this dispatch, handed to the adapter. Additive. */readonly allocation?:JuliusDispatchAllocation;/** The locked task contract this dispatch runs under, as a review charge. Additive. */readonly contract?:JuliusContractReviewCharge;/** WHOSE BODIES THIS DISPATCH MAY READ — the exact attempts, resolved by the pipeline from the task graph. Additive: absent means this dispatch reads nobody else's work. */readonly reads?:JuliusDispatchReads;
  /**
   * WHICH DISPATCH THIS IS — 1, 2 or 3 of the task's attempt ceiling.
   *
@@ -340,7 +340,7 @@ export class JuliusExecutionCoordinator {
        * one edit that could actually break this, which is moving a line above
        * the await. `julius-worker-deadline.test.ts` pins the ordering instead.
        */
-      const result=await dispatchWithinDeadline(worker.timeoutMs,request.signal,(signal)=>this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,taskType:request.taskType,signal,...(request.allocation===undefined?{}:{allocation:request.allocation}),...(request.contract===undefined?{}:{contract:request.contract}),...(request.workspace===undefined?{}:{workspace:request.workspace}),/* WHICH ATTEMPT. The claim already fences it; the adapter needs it to keep one round's body from overwriting the round before it. */attempt:{leaseGeneration:request.claim.leaseGeneration}}));
+      const result=await dispatchWithinDeadline(worker.timeoutMs,request.signal,(signal)=>this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,taskType:request.taskType,signal,...(request.allocation===undefined?{}:{allocation:request.allocation}),...(request.contract===undefined?{}:{contract:request.contract}),...(request.workspace===undefined?{}:{workspace:request.workspace}),/* WHICH ATTEMPT. The claim already fences it; the adapter needs it to keep one round's body from overwriting the round before it. */attempt:{leaseGeneration:request.claim.leaseGeneration},...(request.reads===undefined?{}:{reads:request.reads})}));
       answered=result;
       /**
        * NOTHING FROM A CANCELLED DISPATCH BECOMES MISSION STATE. An abort that

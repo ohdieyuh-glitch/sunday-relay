@@ -49,7 +49,7 @@ import {
   meteredFromJuliusOutcome,
   reviewerWorker,
 } from './live-composition';
-import { createLiveHostedCodingAdapter, createLiveArtifactExchange, planRef } from './live-workers';
+import { createLiveHostedCodingAdapter, createInMemoryArtifactExchange } from './live-workers';
 import { emptyObservation } from '../hosted-coding-agent/hosted-observation';
 import type { HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
 import { JULIUS_PARTICIPATION_MARKER } from '../../src/relay/mission/julius';
@@ -1040,8 +1040,8 @@ describe('Q8 — a live Coding Agent can ask, and the ask reaches the mission', 
     const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
     seedQualificationRun(memory);
 
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef(RUN), JSON.stringify({ objective: 'Implement the fixture.' }));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: RUN, taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify({ objective: 'Implement the fixture.' }));
     const prompts: string[] = [];
     let index = 0;
     const coder = createLiveHostedCodingAdapter({

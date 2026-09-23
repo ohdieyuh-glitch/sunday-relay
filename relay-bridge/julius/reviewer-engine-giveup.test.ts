@@ -28,7 +28,7 @@ import {
   type HermesConfig,
   type ReviewPacket,
 } from '../hermes-reviewer';
-import { createLiveArtifactExchange, createLiveHermesReviewerAdapter, planRef } from './live-workers';
+import { createInMemoryArtifactExchange, createLiveHermesReviewerAdapter } from './live-workers';
 
 const LIVE_ENV: Record<string, string> = {
   RELAY_HERMES_EXECUTABLE: process.execPath,
@@ -175,8 +175,8 @@ function snapshot(taskId: string): JuliusContextSnapshot {
 }
 
 const adapterOver = (answers: ReadonlyArray<{ stdout: string; usage: Record<string, unknown> | null }>) => {
-  const artifacts = createLiveArtifactExchange();
-  artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+  const artifacts = createInMemoryArtifactExchange();
+  artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
   const prompts: string[] = [];
   let call = 0;
   const adapter = createLiveHermesReviewerAdapter({
@@ -193,7 +193,7 @@ const adapterOver = (answers: ReadonlyArray<{ stdout: string; usage: Record<stri
   return {
     prompts,
     dispatch: () => adapter.dispatch({
-      taskId: 'plan-1:review', contextId: 'ctx-1', taskType: 'review:plan',
+      taskId: 'plan-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'plan-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-1', taskType: 'review:plan',
       allocation: { usdMicros: 21_000_000, basis: 'SHARED_POOL', policyVersion: 'julius-allocation.v3' },
     }),
   };

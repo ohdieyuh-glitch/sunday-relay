@@ -34,7 +34,7 @@
 import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
 import { decideJuliusContinuation } from './julius-continuation';
 import { JuliusExecutionCoordinator, type JuliusExecutionOutcome, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest } from './julius-execution-coordinator';
-import { safeReasonCode, type JuliusDispatchWorkspace, type JuliusProviderRouter } from './julius-router';
+import { safeReasonCode, type JuliusDispatchReads, type JuliusDispatchWorkspace, type JuliusProviderRouter, type JuliusWorkAttemptRef } from './julius-router';
 import { juliusCostComponent } from './julius-cost-accounting';
 import { juliusContractDisposition, juliusContractDispositionFacts } from './julius-contract-disposition';
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
@@ -122,7 +122,7 @@ import {
   type JuliusSharedCeilingPolicy,
 } from './julius-shared-ceiling';
 import type { JuliusTimelineReader } from './julius-runtime-api';
-import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusEvidence, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
+import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusEvidence, type JuliusRecordedDecision, type JuliusTask, type JuliusTaskRecord, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
 import { juliusDecisionEventId, validateJuliusEvent, type JuliusOperationalEvent, type JuliusOperationalEventType } from './julius-events';
 import { validateTrajectoryEvent, type JuliusTrajectoryEvent, type JuliusTrajectoryKind } from './julius-trajectory';
 import {
@@ -474,6 +474,79 @@ export type JuliusTaskPreflight =
  *   contract, which is rule 2 — the thing being graded and the thing it is
  *   graded against must be one document.
  */
+/**
+ * WHOSE BODIES THIS DISPATCH MAY READ, resolved from the task graph.
+ *
+ * A worker that reads another task's body has to name the ATTEMPT, because a
+ * task can have run more than once and the rounds are different bytes. Two
+ * cheaper answers were considered and both are defects:
+ *
+ *   slicing `:review` off the reviewer's own task id, which names a task and
+ *   never an attempt, and turns a rename into a review of nothing; and
+ *
+ *   asking the store for the latest body of that kind, which silently hands
+ *   back the PREVIOUS round whenever this round's capture failed — a review of
+ *   attempt one, recorded as a review of attempt two.
+ *
+ * So it is resolved from recorded relationships instead, exactly as
+ * {@link juliusContractSubjectTaskId} resolves a contract:
+ *
+ *   the SUBJECT is the nearest ancestor in a DIFFERENT ROLE. A review's parent
+ *   is the task it reviews; a review that paused to research continues as a
+ *   reviewer-role child of that review, and climbing through same-role parents
+ *   reaches the same subject rather than stopping at the continuation.
+ *
+ *   the PLAN IN FORCE is the last architect task that produced one and
+ *   succeeded. `guidance`, `repair:guidance` and reviews are excluded because
+ *   they write no PLAN; ordinal breaks the tie, because a later plan round
+ *   supersedes an earlier one.
+ *
+ * ONLY A SUCCEEDED TASK IS NAMEABLE, and that is what makes the generation
+ * safe to use: claims take RUNNABLE work and recovery re-claims expired ACTIVE
+ * leases, so nothing re-claims a SUCCEEDED task and its `leaseGeneration`
+ * cannot move underneath a reader. A task that has not succeeded is omitted
+ * rather than guessed at, and the adapters refuse when a body they require was
+ * not named — `reviewer_plan_absent` and its siblings, unchanged.
+ */
+export function juliusDispatchReadsFor(
+  task: JuliusTask,
+  tasks: readonly JuliusTaskRecord[],
+): JuliusDispatchReads {
+  const byId = new Map(tasks.map((item) => [item.taskId, item]));
+  const settled = (candidate: JuliusTaskRecord | undefined | null): JuliusWorkAttemptRef | null =>
+    candidate !== undefined && candidate !== null && candidate.state === 'SUCCEEDED'
+      ? { taskId: candidate.taskId, leaseGeneration: candidate.leaseGeneration }
+      : null;
+
+  const subjectOf = (start: JuliusTask): JuliusTaskRecord | null => {
+    const seen = new Set<string>([start.taskId]);
+    let current = start;
+    while (current.parentTaskId !== null) {
+      const parent = byId.get(current.parentTaskId);
+      // A cycle is a graph nobody can climb; a missing parent is a graph that
+      // cannot answer. Both are "no subject", never "some other task".
+      if (parent === undefined || seen.has(parent.taskId)) return null;
+      seen.add(parent.taskId);
+      if (parent.role !== start.role) return parent;
+      current = parent;
+    }
+    return null;
+  };
+
+  const planInForce = tasks
+    .filter((item) => item.role === 'PROMPT_ARCHITECT'
+      && (item.taskType === 'plan' || item.taskType === 'repair:plan')
+      && item.state === 'SUCCEEDED')
+    .sort((a, b) => a.ordinal - b.ordinal || a.taskId.localeCompare(b.taskId))
+    .at(-1);
+
+  const subject = task.role === 'INDEPENDENT_REVIEWER' ? settled(subjectOf(task)) : null;
+  const plan = settled(planInForce);
+  return {
+    ...(subject === null ? {} : { subject }),
+    ...(plan === null ? {} : { plan }),
+  };
+}
 export function juliusContractSubjectTaskId(task: JuliusTask, tasks: readonly JuliusTask[]): string | null {
   const byId = new Map(tasks.map((item) => [item.taskId, item]));
   const rootOf = (start: JuliusTask): string => {
@@ -814,6 +887,12 @@ export async function runClaimedTask(
    * packet was handed nothing MEASURED, which is not the same as being handed
    * nothing, so it stays unknown rather than becoming zero.
    */
+  /* WHOSE BODIES THIS DISPATCH MAY READ. Resolved where the task graph is
+     already loaded, held here so both the first dispatch and any reroute use
+     the SAME answer — a reviewer that changed subject on a reroute would be a
+     different review wearing the same task id. Empty until resolved, which is
+     the honest value for a dispatch that never reached a worker. */
+  let dispatchReads: JuliusDispatchReads = {};
   let handed: { brainRetrievals: number; evidenceInspected: number; guidanceConsumed: number } | null = null;
   if (worker !== null) {
     // WORKER_SELECTED and PROVIDER_SELECTED were declared trajectory kinds
@@ -847,13 +926,20 @@ export async function runClaimedTask(
       effectiveFindingsOf(deps, run),
       deps.store.criteriaForRun(run.runId, run.projectId),
       deps.store.brainEntriesForRun(run.runId, run.projectId),
-      // Only a repair RE-REVIEW needs to walk to its parent's parent; every
-      // other task's subject is its own parent, and a 300-task run must not
-      // pay for a graph copy per dispatch it will not read.
-      // A repair's own continuation needs the graph too: its parent is the
-      // repair it continues, and the findings are on the work that repair is for.
+      /* WHO NEEDS THE GRAPH. A repair re-review walks to its parent's parent,
+         and a repair's own continuation needs it because the findings are on
+         the work the repair is for. Since the bodies became durable, anything
+         that READS ANOTHER TASK'S BODY needs it too, to name the attempt that
+         wrote it: a reviewer needs its subject, a coder needs the plan, and an
+         architect needs the plan for every job except drafting the first one.
+         That is most dispatches, so the saving this condition was written for
+         is now small — it is kept rather than dropped because an initial plan
+         and a mission's seeded work still read nobody, and a 300-task run
+         should not copy the graph for them. */
       task.taskType.startsWith('review:repair:') || task.taskType.startsWith('repair:')
-        ? deps.store.tasksForRun(run.runId, run.projectId) : Promise.resolve([] as readonly JuliusTask[]),
+        || task.role === 'INDEPENDENT_REVIEWER' || task.role === 'CODING_AGENT'
+        || (task.role === 'PROMPT_ARCHITECT' && task.taskType !== 'plan')
+        ? deps.store.tasksForRun(run.runId, run.projectId) : Promise.resolve([] as readonly JuliusTaskRecord[]),
     ]);
     /**
      * A REPAIR SEES WHAT IT IS REPAIRING. The findings that admitted a repair
@@ -863,6 +949,7 @@ export async function runClaimedTask(
      * into the repair's context (and into its re-review's, so the reviewer can
      * judge resolution) as FINDING entries scoped to this task and role.
      */
+    dispatchReads = juliusDispatchReadsFor(task, runTasks);
     const priorFindings = repairContextFindings(task, runTasks, findings);
     const snapshot = createJuliusContextSnapshot({
       contextId: deps.ids.next('context'),
@@ -1172,7 +1259,7 @@ export async function runClaimedTask(
     : await coordinator.execute({
       claim: executionClaim, policy: request.policy, role, taskType: claim.taskType,
       capability: request.capability, resources, operationId, signal: request.signal,
-      attempt: claim.attempt,
+      attempt: claim.attempt, reads: dispatchReads,
       ...(workspaceUndo === null ? {} : { workspace: workspaceUndo }),
       ...(dispatchAllocation === undefined ? {} : { allocation: dispatchAllocation }),
       ...(contractCharge === null ? {} : { contract: contractCharge }),
@@ -1226,7 +1313,10 @@ export async function runClaimedTask(
       claim: executionClaim, policy: request.policy, role, taskType: claim.taskType,
       capability: request.capability, resources,
       operationId: `${operationId}:reroute:${tried.length}`,
-      attempt: claim.attempt,
+      // A REROUTE IS THE SAME WORK ON ANOTHER WORKER, so it reads the same
+      // attempts. Recomputing could only differ if the graph moved mid-dispatch,
+      // and a reviewer that switched subject on a reroute is a different review.
+      attempt: claim.attempt, reads: dispatchReads,
       ...(workspaceUndo === null ? {} : { workspace: workspaceUndo }),
       signal: request.signal, excludedWorkerIds: tried,
       ...(contractCharge === null ? {} : { contract: contractCharge }),

@@ -38,6 +38,8 @@
 
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createPublicKey, type KeyObject } from 'node:crypto';
 import { Pool } from 'pg';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
@@ -55,7 +57,10 @@ import { createLiveJuliusBootstrapPort } from './julius/bootstrap';
 import { createPostgresMissionSeedStore } from './julius/mission-seed';
 import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
 import { createExecutorShellPort } from './julius/executor-effects';
-import { createLiveArtifactExchange } from './julius/live-workers';
+import { createDurableArtifactExchange, type JuliusArtifactExchange } from './julius/live-workers';
+import { createJuliusDurableArtifacts } from './julius/durable-artifacts';
+import { LocalJuliusArtifactStore } from '../src/relay/workspace/julius-tools/local-artifact-store';
+import { JuliusWorkArtifactPostgresRepository } from '../src/relay/persistence/julius-work-artifact-postgres';
 import {
   assembleLiveJuliusRuntime,
   createContextAndClaimHandoffs,
@@ -765,7 +770,20 @@ async function main(argv: readonly string[]): Promise<number> {
   const executorMissing = EXECUTOR_ENV.filter((name) => !env[name]);
   const databaseMissing = env.DATABASE_URL ? [] : ['DATABASE_URL'];
 
-  const artifacts = createLiveArtifactExchange();
+  /**
+   * THE PREFLIGHT HAS NO ARTIFACT STORE, AND SAYS SO RATHER THAN HAVING ONE.
+   *
+   * It resolves workers to report every problem in one pass and dispatches
+   * nothing — `snapshotFor` returns null, so `requireSnapshot` refuses before
+   * any adapter reaches the exchange. That was already true and was kept true
+   * by nothing. An exchange that throws makes it structural: if a preflight
+   * ever did reach a body, it would fail loudly here instead of quietly
+   * reading or writing one outside a run.
+   */
+  const artifacts: JuliusArtifactExchange = {
+    put: () => { throw new Error('julius_preflight_stores_no_artifacts'); },
+    get: () => { throw new Error('julius_preflight_reads_no_artifacts'); },
+  };
   // Preflight resolution runs with a null shell so that a machine with no
   // executor still reports every problem in one pass; the confirmed run
   // resolves again with the real shell port before anything dispatches.
@@ -892,9 +910,39 @@ async function main(argv: readonly string[]): Promise<number> {
     const researchPolicyOf = (missionId: string): JuliusResearchPolicy => (researchClause === undefined
       ? noJuliusResearch(missionId)
       : sealLiveMissionResearchPolicy(missionId, researchClause));
+    /**
+     * WHERE THIS MISSION'S BODIES ACTUALLY GO.
+     *
+     * #285 landed the durable home and wired nothing to it; this is the
+     * wiring. The record of which attempt wrote what goes to PostgreSQL
+     * beside every other durable mission fact; the BYTES go to the same
+     * content-addressed store the tool path already uses, which hashes on
+     * write and re-hashes on read.
+     *
+     * THE ROOT, AND WHAT IT HONESTLY BUYS. `JULIUS_WORK_ARTIFACT_ROOT` when
+     * the operator mounts durable storage; otherwise a per-mission directory
+     * under the system temp root. That survives a PROCESS restart on this
+     * host, which is the restart the reviewer-absent failure was about, and
+     * it does NOT survive a host that is torn down — a fresh CI runner starts
+     * with nothing. It is stated rather than implied, and the operator can
+     * make it durable without a code change.
+     *
+     * NOT the workspace: bodies written under the workspace would appear in
+     * the coder's own `git diff` and become part of the change under review.
+     */
+    const liveArtifacts = createDurableArtifactExchange({
+      projectId: contract.projectId,
+      artifacts: createJuliusDurableArtifacts({
+        content: new LocalJuliusArtifactStore(
+          env.JULIUS_WORK_ARTIFACT_ROOT ?? join(tmpdir(), 'julius-work-artifacts', contract.missionId),
+        ),
+        records: new JuliusWorkArtifactPostgresRepository(pool),
+        tenancy: { tenantId: contract.tenantId },
+      }),
+    });
     const resolution = resolveLiveWorkers({
       env, projectId: contract.projectId, workspacePath: contract.workspacePath,
-      testCommand: contract.testCommand, contexts: handoffs.contexts, artifacts, shell,
+      testCommand: contract.testCommand, contexts: handoffs.contexts, artifacts: liveArtifacts, shell,
       architectMaxOutputTokens: contract.limits?.architectMaxOutputTokens,
       researchPolicyFor: researchPolicyOf,
     });

@@ -58,7 +58,7 @@ import {
   driveJuliusRunToTerminal,
   reviewerWorker,
 } from './live-composition';
-import { createJuliusCodingAgentAdapter, createLiveArtifactExchange, planRef } from './live-workers';
+import { createJuliusCodingAgentAdapter, createInMemoryArtifactExchange } from './live-workers';
 
 const RUN = 'run-peers3';
 const PROJECT = 'prj-peers3';
@@ -258,8 +258,8 @@ async function driveMission(providerName: ProviderName, hostility: Hostility = {
   const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
   seed(memory);
 
-  const artifacts = createLiveArtifactExchange();
-  artifacts.put(planRef(RUN), JSON.stringify({ objective: 'Normalize a mission label.', steps: ['edit src/slug.ts', 'test it'] }));
+  const artifacts = createInMemoryArtifactExchange();
+  artifacts.seed({ kind: 'PLAN', runId: RUN, taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify({ objective: 'Normalize a mission label.', steps: ['edit src/slug.ts', 'test it'] }));
   const provider = providerFor(providerName, hostility.coder ?? HONEST, hostility.repairFailures ?? []);
   const shell = createFakeExecutorShell({
     status: [' M src/slug.ts', '?? src/slug.test.ts'],

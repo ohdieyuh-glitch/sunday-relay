@@ -103,7 +103,6 @@ const DECLARED_NOT_COMPOSED = [
   { path: 'src/relay/persistence/julius-subagent-postgres.ts', reason: 'durable sub-agent grants (JuliusSubagentStore) for julius-subagent-runtime; the live C.A.R.D. policy sets subagents.allowed=false' },
   { path: 'src/relay/persistence/julius-repair-postgres.ts', reason: 'durable repair-cycle scheduling against julius_tasks and julius_repair_cycles; the live root reaches repair through the store aggregate, not this repository' },
   { path: 'src/relay/workspace/julius-tools/registry.ts', reason: 'the default tool catalogue (DEFAULT_JULIUS_TOOL_IDS, createDefaultJuliusToolRegistry); the live root routes tool effects through the executor shell port and does not build a registry' },
-  { path: 'src/relay/workspace/julius-tools/local-artifact-store.ts', reason: 'the durable staged→finalized artifact store (StagedArtifactStorePort); the live root uses an in-process artifact exchange, recorded as debt in docs/JULIUS_BETA_READINESS.md' },
 ];
 
 /** Directories the trace does not enter. Crossing edges are reported, never hidden. */
@@ -129,8 +128,6 @@ const EXCLUDED_FILES = [
 /** Kernel dependants that are neither reached nor declared, and why they stay out. */
 const KERNEL_DEPENDANT_EXCLUSIONS = [
   { path: 'src/relay/persistence/julius-event-append-conformance.ts', reason: 'the event-append contract cases themselves: written once and run by BOTH the in-memory suite and the real-PostgreSQL one, so the two stores cannot drift again. Test support, imported by no root' },
-  { path: 'relay-bridge/julius/durable-artifacts.ts', reason: 'composes the content-addressed artifact store with the work-artifact record so a body survives the process that made it; not yet reached by the live composition, which still holds bodies in its own exchange — the wiring is the next boundary' },
-  { path: 'src/relay/persistence/julius-work-artifact-postgres.ts', reason: 'the PostgreSQL record of which body belongs to which attempt; reached once the live composition stops holding bodies in memory' },
   { path: 'src/relay/persistence/julius-decision-write-conformance.ts', reason: 'the decision-write contract cases themselves — a decision, the tasks it releases and the events explaining both are ONE durable write — run by BOTH the in-memory suite and the real-PostgreSQL one. Test support, imported by no root' },
   { path: 'src/relay/workspace/julius-tools/node-tool-adapter.ts', reason: 'the local in-process tool adapter (bounded host filesystem + /bin/bash). Since #208 every tool effect goes through the independent executor control plane and the live harness has no import through which this adapter could arrive; it survives for the offline tooling audit and its tests' },
 ];
@@ -268,6 +265,9 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-bounded-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   ['src/relay/mission/julius/julius-events.ts', 'EVENTS / TRAJECTORIES'],
   ['src/relay/mission/julius/julius-artifact-reference.ts', 'EVENTS / TRAJECTORIES'],
+  ['relay-bridge/julius/artifact-exchange.ts', 'ARTIFACTS / EVIDENCE'],
+  ['relay-bridge/julius/durable-artifacts.ts', 'ARTIFACTS / EVIDENCE'],
+  ['src/relay/persistence/julius-work-artifact-postgres.ts', 'ARTIFACTS / EVIDENCE'],
   ['src/relay/mission/julius/julius-work-artifact.ts', 'ARTIFACTS / EVIDENCE'],
   ['src/relay/mission/julius/julius-work-artifact-memory.ts', 'ARTIFACTS / EVIDENCE'],
   ['src/relay/mission/julius/julius-trajectory.ts', 'EVENTS / TRAJECTORIES'],

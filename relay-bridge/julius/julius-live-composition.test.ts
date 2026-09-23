@@ -36,13 +36,10 @@ import { JULIUS_REVIEW_STAGES, repairTaskTypeFor, reviewChargeFor, reviewStageOf
 import { juliusLeaseHoldBoundMs, juliusLeaseMsFor, type JuliusRunLoopConfig } from '../../src/relay/mission/julius';
 import { DEFAULT_HOSTED_LIMITS, type HostedLimits } from '../hosted-coding-agent/hosted-envelope';
 import {
-  createLiveArtifactExchange,
+  createInMemoryArtifactExchange,
   createLiveArchitectAdapter,
   createLiveHermesReviewerAdapter,
   createLiveHostedCodingAdapter,
-  diffRef,
-  guidanceRef,
-  planRef,
   type ResearchPolicySource,
 } from './live-workers';
 import {
@@ -355,7 +352,7 @@ function liveResolution(overrides: {
   const prompts: string[] = [];
   const packets: ReviewPacket[] = [];
   const invocations: ShellEffectInput[] = [];
-  const artifacts = createLiveArtifactExchange();
+  const artifacts = createInMemoryArtifactExchange();
   const shell = overrides.shell === undefined ? fakeShell(log, invocations) : overrides.shell;
   const resolution = resolveLiveWorkers({
     env: overrides.env ?? LIVE_ENV,
@@ -1110,20 +1107,20 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
         adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
         taskTypes: ['review:build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
       },
-      contexts, artifacts: createLiveArtifactExchange(),
+      contexts, artifacts: createInMemoryArtifactExchange(),
       config: loadHermesConfig(LIVE_ENV as never),
       testCommand: 'npm run mission-test',
       run: fakeReviewer(log, [], ['approved']) as never,
     });
-    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' }))
+    await expect(adapter.dispatch({ taskId: 'build-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'build-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:build' }))
       .rejects.toMatchObject({ code: 'INVALID_REQUEST', safeMessage: expect.stringContaining('review of nothing is refused') });
     expect(log.order, 'Hermes must never have been invoked').toEqual([]);
   });
 
   it('the reviewer refuses a dispatch that names no stage, rather than guessing one', async () => {
     const log: FakeLog = { order: [] };
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     const adapter = createLiveHermesReviewerAdapter({
       worker: {
         workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
@@ -1135,7 +1132,7 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
       testCommand: 'npm run mission-test',
       run: fakeReviewer(log, [], ['approved']) as never,
     });
-    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' }))
+    await expect(adapter.dispatch({ taskId: 'build-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'build-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1' }))
       .rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_stage_unknown' });
     expect(log.order).toEqual([]);
   });
@@ -1147,8 +1144,8 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
     // holding the plan and NOT the thing it exists to judge, and its
     // "approved" would have released a continuation.
     const log: FakeLog = { order: [] };
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     const adapter = createLiveHermesReviewerAdapter({
       worker: {
         workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
@@ -1161,7 +1158,7 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
       run: fakeReviewer(log, [], ['approved']) as never,
     });
     await expect(adapter.dispatch({
-      taskId: 'guidance:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:guidance',
+      taskId: 'guidance:build-1:1:task:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'guidance:build-1:1:task', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:guidance',
     })).rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_guidance_absent' });
     expect(log.order, 'Hermes must never have been invoked').toEqual([]);
   });
@@ -1169,9 +1166,9 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
   it('a guidance review is prompted as GUIDANCE, carries the packet, and demands no diff', async () => {
     const log: FakeLog = { order: [] };
     const packets: ReviewPacket[] = [];
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
-    artifacts.put(guidanceRef('guidance:build-1:1:task'), '{"subObjective":"Reuse the existing reader."}');
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
+    artifacts.seed({ kind: 'GUIDANCE', runId: 'run-live', taskId: 'guidance:build-1:1:task', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, '{"subObjective":"Reuse the existing reader."}');
     const adapter = createLiveHermesReviewerAdapter({
       worker: {
         workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
@@ -1184,7 +1181,7 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
       run: fakeReviewer(log, packets, ['approved']) as never,
     });
     const result = await adapter.dispatch({
-      taskId: 'guidance:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:guidance',
+      taskId: 'guidance:build-1:1:task:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'guidance:build-1:1:task', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:guidance',
     });
     expect(result.status).toBe('SUCCEEDED');
     expect(packets).toHaveLength(1);
@@ -1214,21 +1211,21 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
         adapterId: 'claude-agent-sdk-hosted-live', providerId: 'anthropic', capabilities: ['implement'],
         taskTypes: ['build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
       },
-      contexts, artifacts: createLiveArtifactExchange(), projectId: 'prj-live',
+      contexts, artifacts: createInMemoryArtifactExchange(), projectId: 'prj-live',
       apiKey: 'FAKETESTNOTREAL-anthropic', requestedModel: 'claude-fable-5',
       workspacePath: '/workspace/mission', testCommand: 'npm run mission-test',
       shell: fakeShell(log, invocations),
       run: fakeCoder(log, []) as never, queryLoader: async () => fakeQuery,
     });
-    await expect(adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1' }))
+    await expect(adapter.dispatch({ taskId: 'build-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1' }))
       .rejects.toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', safeMessage: expect.stringContaining('architect plan artifact is not available') });
     expect(log.order, 'no shell effect and no SDK session may have run').toEqual([]);
     expect(invocations).toEqual([]);
   });
 
   it('a non-approved verdict without blocking-severity findings drives the repair path, and unable_to_review fails the dispatch', async () => {
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     const worker = {
       workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER' as const,
       adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
@@ -1243,7 +1240,7 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
       worker, contexts, artifacts, config: loadHermesConfig(LIVE_ENV as never),
       testCommand: 'npm run mission-test', run: (async () => outcomeFor('changes_required')) as never,
     });
-    const result = await minorOnly.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    const result = await minorOnly.dispatch({ taskId: 'build-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'build-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:plan' });
     expect(result.evidence).toHaveLength(1);
     expect((result.evidence[0] as { status: string }).status).toBe('FAILED');
 
@@ -1251,7 +1248,7 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
       worker, contexts, artifacts, config: loadHermesConfig(LIVE_ENV as never),
       testCommand: 'npm run mission-test', run: (async () => outcomeFor('unable_to_review')) as never,
     });
-    await expect(unable.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' }))
+    await expect(unable.dispatch({ taskId: 'build-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'build-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:plan' }))
       .rejects.toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', safeMessage: expect.stringContaining('unable to review') });
   });
 });
@@ -1796,8 +1793,8 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
 
   /** Dispatches through the real adapter and returns the thrown Julius error. */
   const failureFrom = async (fetchImpl: unknown) => {
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     const adapter = createLiveHermesReviewerAdapter({
       worker,
       contexts: { snapshotFor: () => reviewSnapshot('build-1:review') },
@@ -1816,7 +1813,7 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
       // lives in reviewer-transient-reask.test.ts and nothing here waits it out.
       sleep: () => Promise.resolve(),
     });
-    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' })
+    return adapter.dispatch({ taskId: 'build-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'build-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:plan' })
       .then(() => { throw new Error('the dispatch was expected to fail'); })
       .catch((error: unknown) => error as { code: string; retryable: boolean; failureClass: string | null; diagnostics?: Record<string, unknown> });
   };
@@ -1942,8 +1939,8 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
 
   /** Dispatches through the real adapter and returns the SUCCESSFUL result. */
   const resultFrom = async (fetchImpl: unknown) => {
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     const adapter = createLiveHermesReviewerAdapter({
       worker,
       contexts: { snapshotFor: () => reviewSnapshot('build-1:review') },
@@ -1956,7 +1953,7 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
       })) as never,
       sleep: () => Promise.resolve(),
     });
-    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    return adapter.dispatch({ taskId: 'build-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'build-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:plan' });
   };
 
   it('prose first, a real verdict second: the run that died here now gets one', async () => {
@@ -2005,8 +2002,8 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
     // rather than a per-call cap, so a second call cannot exceed it — but
     // buying one for a mission with nothing left is the ceiling being ignored.
     const { prompts, fetchImpl } = rounds('The plan looks fine to me.', APPROVED);
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     const adapter = createLiveHermesReviewerAdapter({
       worker,
       contexts: { snapshotFor: () => reviewSnapshot('build-1:review') },
@@ -2019,7 +2016,7 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
       })) as never,
     });
     const failure = await adapter.dispatch({
-      taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan',
+      taskId: 'build-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'build-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:plan',
       allocation: { usdMicros: 0, basis: 'EXHAUSTED', policyVersion: 'julius-allocation.v1' },
     })
       .then(() => { throw new Error('the dispatch was expected to fail'); })
@@ -2035,8 +2032,8 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
     // the behaviour proved above, so the refusal is the budget's and not a
     // silent disabling of the re-ask.
     const { prompts, fetchImpl } = rounds('The plan looks fine to me.', APPROVED);
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     const adapter = createLiveHermesReviewerAdapter({
       worker,
       contexts: { snapshotFor: () => reviewSnapshot('build-1:review') },
@@ -2049,7 +2046,7 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
       })) as never,
     });
     const result = await adapter.dispatch({
-      taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan',
+      taskId: 'build-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'build-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:plan',
       allocation: { usdMicros: 300_000, basis: 'ESTIMATE', policyVersion: 'julius-allocation.v1' },
     });
     expect(prompts, 'the correction was bought').toHaveLength(2);
@@ -2134,12 +2131,12 @@ describe('a paid reviewer failure can be diagnosed from the record alone', () =>
   };
 
   const failureFrom = async (child: Parameters<typeof fakeChild>[0], overrides: Record<string, unknown> = {}) => {
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     // A BUILD review reviews a diff. Supplying it is what makes the stage
     // 'build', because the stage is read from what the review actually carried
     // rather than from the shape of a task id.
-    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    artifacts.seed({ kind: 'DIFF', runId: 'run-live', taskId: 'build-1', leaseGeneration: 1, role: 'CODING_AGENT' }, DIFF_TEXT);
     const adapter = createLiveHermesReviewerAdapter({
       worker: {
         workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
@@ -2154,7 +2151,7 @@ describe('a paid reviewer failure can be diagnosed from the record alone', () =>
         packet: packetInput.packet, config: packetInput.config, spawnImpl: fakeChild(child),
       })) as never,
     });
-    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' })
+    return adapter.dispatch({ taskId: 'build-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'build-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:build' })
       .then(() => { throw new Error('the dispatch was expected to fail'); })
       .catch((error: unknown) => error as JuliusDispatchError);
   };
@@ -2629,7 +2626,7 @@ function repairReviewSnapshot(taskId: string): JuliusContextSnapshot {
   };
 }
 
-function reviewerAdapterFor(input: { taskId: string; artifacts: ReturnType<typeof createLiveArtifactExchange>; packets: ReviewPacket[]; log: FakeLog; snapshot?: JuliusContextSnapshot }) {
+function reviewerAdapterFor(input: { taskId: string; artifacts: ReturnType<typeof createInMemoryArtifactExchange>; packets: ReviewPacket[]; log: FakeLog; snapshot?: JuliusContextSnapshot }) {
   return createLiveHermesReviewerAdapter({
     worker: LIVE_REVIEWER_WORKER,
     contexts: { snapshotFor: () => input.snapshot ?? reviewSnapshot(input.taskId) },
@@ -2642,12 +2639,12 @@ function reviewerAdapterFor(input: { taskId: string; artifacts: ReturnType<typeo
 
 describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispatched for', () => {
   it('a PLAN review sees the plan and no diff or test output, even when a diff artifact exists', async () => {
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
-    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
+    artifacts.seed({ kind: 'DIFF', runId: 'run-live', taskId: 'build-1', leaseGeneration: 1, role: 'CODING_AGENT' }, DIFF_TEXT);
     const packets: ReviewPacket[] = [];
     const adapter = reviewerAdapterFor({ taskId: 'plan-1:review', artifacts, packets, log: { order: [] } });
-    const result = await adapter.dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    const result = await adapter.dispatch({ taskId: 'plan-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'plan-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:plan' });
     expect(packets).toHaveLength(1);
     const packet = packets[0]!;
     expect(packet.stage).toBe('plan');
@@ -2683,11 +2680,11 @@ describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispat
    * name it, and the elapsed time of a healthy review survived nowhere.
    */
   it('a review that SUCCEEDED carries the same lifecycle a failed one does', async () => {
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     const packets: ReviewPacket[] = [];
     const adapter = reviewerAdapterFor({ taskId: 'plan-1:review', artifacts, packets, log: { order: [] } });
-    const result = await adapter.dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    const result = await adapter.dispatch({ taskId: 'plan-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'plan-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:plan' });
     expect(result.status).toBe('SUCCEEDED');
     const diagnostics = result.diagnostics as Record<string, unknown>;
 
@@ -2723,8 +2720,8 @@ describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispat
    * checked rather than trusted.
    */
   it('derives an elapsed time only when the transport measured none', async () => {
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     const unmeasured = createLiveHermesReviewerAdapter({
       worker: LIVE_REVIEWER_WORKER,
       contexts: { snapshotFor: () => reviewSnapshot('plan-1:review') },
@@ -2740,7 +2737,7 @@ describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispat
         usage: UNKNOWN_USAGE,
       })) as never,
     });
-    const result = await unmeasured.dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    const result = await unmeasured.dispatch({ taskId: 'plan-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'plan-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:plan' });
     const diagnostics = result.diagnostics as Record<string, unknown>;
     expect(diagnostics.elapsedMs, 'the difference between the two instants beside it').toBe(206_500);
     expect(diagnostics.startedAt).toBe('2026-09-09T23:03:10.000Z');
@@ -2748,30 +2745,34 @@ describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispat
   });
 
   it('a BUILD review is refused when no implementation exists to judge, and an EMPTY diff is no implementation', async () => {
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     const log: FakeLog = { order: [] };
     const adapter = reviewerAdapterFor({ taskId: 'build-1:review', artifacts, packets: [], log });
-    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' }))
+    await expect(adapter.dispatch({ taskId: 'build-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'build-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:build' }))
       .rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_implementation_absent' });
     // The exchange stores whatever `git diff` printed, so a coder that edited
     // nothing leaves an empty string — which is not an implementation either.
-    artifacts.put(diffRef('run-live'), '');
-    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' }))
+    artifacts.seed({ kind: 'DIFF', runId: 'run-live', taskId: 'build-1', leaseGeneration: 1, role: 'CODING_AGENT' }, '');
+    await expect(adapter.dispatch({ taskId: 'build-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'build-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:build' }))
       .rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_implementation_absent' });
     expect(log.order).toEqual([]);
   });
 
   it('the findings are the findings, not the founder\'s request: they are not repeated into the request block', async () => {
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
-    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
+    // A REPAIR REVIEW JUDGES THE REPAIR ROUND'S DIFF, not the build's. The
+    // subject the review names is the repair task, so that is the attempt the
+    // body belongs to; seeding it under `build-1` would be seeding a round
+    // this review is not about.
+    artifacts.seed({ kind: 'DIFF', runId: 'run-live', taskId: 'repair:build-1:1:task', leaseGeneration: 1, role: 'CODING_AGENT' }, DIFF_TEXT);
     const packets: ReviewPacket[] = [];
     const adapter = reviewerAdapterFor({
       taskId: 'repair:build-1:1:task:review', artifacts, packets, log: { order: [] },
       snapshot: repairReviewSnapshot('repair:build-1:1:task:review'),
     });
-    await adapter.dispatch({ taskId: 'repair:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:repair:build' });
+    await adapter.dispatch({ taskId: 'repair:build-1:1:task:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'repair:build-1:1:task', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:repair:build' });
     expect(packets[0]!.priorFindings).toEqual(['REVIEW FINDING f-1 [HIGH]: no verification strategy']);
     expect(packets[0]!.originalRequest, 'the request is the mission, not the verdict on it')
       .not.toContain('REVIEW FINDING');
@@ -2779,21 +2780,25 @@ describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispat
   });
 
   it('a BUILD review carries the diff and the implementation charge', async () => {
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
-    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
+    artifacts.seed({ kind: 'DIFF', runId: 'run-live', taskId: 'build-1', leaseGeneration: 1, role: 'CODING_AGENT' }, DIFF_TEXT);
     const packets: ReviewPacket[] = [];
     const adapter = reviewerAdapterFor({ taskId: 'build-1:review', artifacts, packets, log: { order: [] } });
-    await adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' });
+    await adapter.dispatch({ taskId: 'build-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'build-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:build' });
     expect(packets[0]!.stage).toBe('build');
     expect(packets[0]!.charge?.subject).toBe('IMPLEMENTATION');
     expect(packets[0]!.unifiedDiff).toBe(DIFF_TEXT);
   });
 
   it('a REPAIR review carries the prior findings, and proceeds without them when the round was admitted by failed evidence', async () => {
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
-    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
+    // A REPAIR REVIEW JUDGES THE REPAIR ROUND'S DIFF, not the build's. The
+    // subject the review names is the repair task, so that is the attempt the
+    // body belongs to; seeding it under `build-1` would be seeding a round
+    // this review is not about.
+    artifacts.seed({ kind: 'DIFF', runId: 'run-live', taskId: 'repair:build-1:1:task', leaseGeneration: 1, role: 'CODING_AGENT' }, DIFF_TEXT);
     const log: FakeLog = { order: [] };
     /**
      * NOT A REFUSAL. Julius admits a repair round on the subject's own FAILED
@@ -2804,7 +2809,7 @@ describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispat
      */
     const bare: ReviewPacket[] = [];
     const evidenceAdmitted = reviewerAdapterFor({ taskId: 'repair:build-1:1:task:review', artifacts, packets: bare, log });
-    const outcome = await evidenceAdmitted.dispatch({ taskId: 'repair:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:repair:build' });
+    const outcome = await evidenceAdmitted.dispatch({ taskId: 'repair:build-1:1:task:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'repair:build-1:1:task', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:repair:build' });
     expect(outcome.status).toBe('SUCCEEDED');
     expect(bare[0]!.stage).toBe('repair:build');
     expect(bare[0]!.priorFindings).toEqual([]);
@@ -2812,7 +2817,7 @@ describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispat
     const informed = reviewerAdapterFor({
       taskId: 'repair:build-1:1:task:review', artifacts, packets, log, snapshot: repairReviewSnapshot('repair:build-1:1:task:review'),
     });
-    await informed.dispatch({ taskId: 'repair:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:repair:build' });
+    await informed.dispatch({ taskId: 'repair:build-1:1:task:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'repair:build-1:1:task', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:repair:build' });
     expect(packets[0]!.stage).toBe('repair:build');
     expect(packets[0]!.priorFindings).toEqual(['REVIEW FINDING f-1 [HIGH]: no verification strategy']);
     expect(packets[0]!.charge?.repair).toBe(true);
@@ -2821,15 +2826,15 @@ describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispat
   it('swapping the reviewer runner does not change what the stage means', async () => {
     // Two different reviewer implementations receive the identical packet for
     // the identical dispatch: the stage and charge are Julius's, not theirs.
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     const seen: ReviewPacket[] = [];
     for (const runner of [fakeReviewer({ order: [] }, seen, ['approved']), textReviewer({ order: [] }, seen, [JSON.stringify({ verdict: 'approved', summary: 'ok', findings: [], requirementsChecked: [] })])]) {
       const adapter = createLiveHermesReviewerAdapter({
         worker: LIVE_REVIEWER_WORKER, contexts: { snapshotFor: () => reviewSnapshot('plan-1:review') },
         artifacts, config: loadHermesConfig(LIVE_ENV as never), testCommand: 'npm run mission-test', run: runner as never,
       });
-      await adapter.dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+      await adapter.dispatch({ taskId: 'plan-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'plan-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:plan' });
     }
     expect(seen).toHaveLength(2);
     expect(seen[0]!.stage).toBe(seen[1]!.stage);
@@ -2841,8 +2846,8 @@ describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispat
 describe('DEFECT 1 — the live coder adapter is limited to what Julius allocated', () => {
   const coderAdapter = (input: { runs: HostedRunInput[]; cost?: number; refuse?: boolean }) => {
     const log: FakeLog = { order: [] };
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     const run = async (runInput: HostedRunInput): Promise<HostedRunOutcome> => {
       input.runs.push(runInput);
       const completed = await fakeCoder(log, [])(runInput) as Extract<HostedRunOutcome, { kind: 'completed' }>;
@@ -2867,19 +2872,19 @@ describe('DEFECT 1 — the live coder adapter is limited to what Julius allocate
   it('with an allocation, the hosted limits ARE the allocation; without one, the conservative default', async () => {
     const runs: HostedRunInput[] = [];
     const adapter = coderAdapter({ runs, cost: 0.9 });
-    const granted = await adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build', allocation: { usdMicros: 5_000_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_SHARE' } });
+    const granted = await adapter.dispatch({ taskId: 'build-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'build', allocation: { usdMicros: 5_000_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_SHARE' } });
     expect((runs[0]!.limits as HostedLimits).maxCostCents).toBe(500);
     expect((runs[0]!.limits as HostedLimits).maxTurns).toBe(DEFAULT_HOSTED_LIMITS.maxTurns);
     expect(granted.status).toBe('SUCCEEDED');
     expect((granted.usage as { usdMicros: number }).usdMicros).toBe(900_000);
-    await adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build' });
+    await adapter.dispatch({ taskId: 'build-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'build' });
     expect(runs[1]!.limits).toBe(DEFAULT_HOSTED_LIMITS);
   });
 
   it('an allocation below one cent is refused BEFORE the runtime is reached, because a $0 ceiling still bills a turn', async () => {
     const runs: HostedRunInput[] = [];
     const adapter = coderAdapter({ runs });
-    await expect(adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build', allocation: { usdMicros: 6_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_REMAINDER' } }))
+    await expect(adapter.dispatch({ taskId: 'build-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'build', allocation: { usdMicros: 6_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_REMAINDER' } }))
       .rejects.toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', failureClass: 'coder_allocation_below_one_cent' });
     expect(runs, 'no hosted run was started').toEqual([]);
   });
@@ -2887,14 +2892,14 @@ describe('DEFECT 1 — the live coder adapter is limited to what Julius allocate
   it('names the round that spent the money: a repair refusal is not recorded as the first build', async () => {
     const runs: HostedRunInput[] = [];
     const adapter = coderAdapter({ runs, cost: 5.25, refuse: true });
-    await expect(adapter.dispatch({ taskId: 'repair:build-1:1:task', contextId: 'ctx-resume-1', taskType: 'repair:build', allocation: { usdMicros: 5_000_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_SHARE' } }))
+    await expect(adapter.dispatch({ taskId: 'repair:build-1:1:task', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'repair:build', allocation: { usdMicros: 5_000_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_SHARE' } }))
       .rejects.toMatchObject({ diagnostics: expect.objectContaining({ stage: 'repair:build' }) });
   });
 
   it('a cost refusal carries the money beside it: observed, ceiling and source', async () => {
     const runs: HostedRunInput[] = [];
     const adapter = coderAdapter({ runs, cost: 5.25, refuse: true });
-    await expect(adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build', allocation: { usdMicros: 5_000_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_SHARE' } }))
+    await expect(adapter.dispatch({ taskId: 'build-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'build', allocation: { usdMicros: 5_000_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_SHARE' } }))
       .rejects.toMatchObject({
         code: 'WORKER_EXECUTION_FAILURE', failureClass: 'coder_cost_exceeded',
         diagnostics: expect.objectContaining({ costUsdMicros: 5_250_000, costCeilingUsdMicros: 5_000_000, costSource: 'runtime_reported', stage: 'build' }),
@@ -2920,8 +2925,8 @@ describe('DEFECT 1 — the live coder adapter is limited to what Julius allocate
 describe('a coder failure records WHY, in a closed vocabulary, and quotes nothing', () => {
   const coderAdapterWithFinalText = (input: { runs: HostedRunInput[]; finalText?: string | null; refuse?: boolean; runnerReason?: string }) => {
     const log: FakeLog = { order: [] };
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     const run = async (runInput: HostedRunInput): Promise<HostedRunOutcome> => {
       input.runs.push(runInput);
       const completed = await fakeCoder(log, [])(runInput) as Extract<HostedRunOutcome, { kind: 'completed' }>;
@@ -2956,7 +2961,7 @@ describe('a coder failure records WHY, in a closed vocabulary, and quotes nothin
     const runs: HostedRunInput[] = [];
     const adapter = coderAdapterWithFinalText({ runs, finalText, refuse: true });
     const failure = await adapter
-      .dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build' })
+      .dispatch({ taskId: 'build-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'build' })
       .then(() => null)
       .catch((error: unknown) => error as { diagnostics?: Record<string, unknown> });
     expect(failure, 'the refusal must fail the dispatch').not.toBeNull();
@@ -2992,7 +2997,7 @@ describe('a coder failure records WHY, in a closed vocabulary, and quotes nothin
     const runs: HostedRunInput[] = [];
     const adapter = coderAdapterWithFinalText({ runs, finalText: 'Execution error', refuse: true, runnerReason: 'provider_overloaded' });
     const failure = await adapter
-      .dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build' })
+      .dispatch({ taskId: 'build-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'build' })
       .then(() => null)
       .catch((error: unknown) => error as { diagnostics?: Record<string, unknown> });
     expect(failure!.diagnostics?.failureReason).toBe('provider_overloaded');
@@ -3003,7 +3008,7 @@ describe('a coder failure records WHY, in a closed vocabulary, and quotes nothin
     // summary would read the word "error" in a test log as a failure.
     const runs: HostedRunInput[] = [];
     const adapter = coderAdapterWithFinalText({ runs, finalText: 'Implemented the change. 0 errors, 0 failures.' });
-    const granted = await adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build' });
+    const granted = await adapter.dispatch({ taskId: 'build-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'build' });
     expect(granted.status).toBe('SUCCEEDED');
     expect((granted.diagnostics as Record<string, unknown>).outcome).toBe('succeeded');
     expect((granted.diagnostics as Record<string, unknown>).failureReason).toBeNull();
@@ -3142,7 +3147,7 @@ describe('every repair the planner can mint has a registered worker', () => {
 describe('the architect revises a rejected plan', () => {
   const REVISED = { ...VALID_PLAN, objectiveSummary: 'Revised: add the verification strategy the review asked for.' };
 
-  const architectAdapter = (input: { artifacts: ReturnType<typeof createLiveArtifactExchange>; seen: Array<Record<string, unknown>>; snapshot?: JuliusContextSnapshot }) =>
+  const architectAdapter = (input: { artifacts: ReturnType<typeof createInMemoryArtifactExchange>; seen: Array<Record<string, unknown>>; snapshot?: JuliusContextSnapshot }) =>
     createLiveArchitectAdapter({
       worker: architectWorker({}),
       contexts: { snapshotFor: () => input.snapshot ?? reviewSnapshot('repair:plan-1:1:task') },
@@ -3160,11 +3165,11 @@ describe('the architect revises a rejected plan', () => {
     });
 
   it('shows the architect the plan it is revising, and says the revision is a revision', async () => {
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     const seen: Array<Record<string, unknown>> = [];
     const result = await architectAdapter({ artifacts, seen })
-      .dispatch({ taskId: 'repair:plan-1:1:task', contextId: 'ctx-resume-1', taskType: 'repair:plan' });
+      .dispatch({ taskId: 'repair:plan-1:1:task', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'repair:plan' });
 
     expect(result.status).toBe('SUCCEEDED');
     const call = seen[0]!;
@@ -3175,14 +3180,14 @@ describe('the architect revises a rejected plan', () => {
     expect(String(call.instructions), 'and forbids claiming work that has not happened')
       .toContain('Do not claim any finding is resolved by implementation work');
     // The revision REPLACES the plan the Coding Agent will read.
-    expect(artifacts.get(planRef('run-live'))).toBe(JSON.stringify(REVISED));
+    expect(await artifacts.get({ kind: 'PLAN', runId: 'run-live', taskId: 'repair:plan-1:1:task', leaseGeneration: 1 })).toBe(JSON.stringify(REVISED));
   });
 
   it('a first plan is not a revision: no prior plan, no revision charter', async () => {
-    const artifacts = createLiveArtifactExchange();
+    const artifacts = createInMemoryArtifactExchange();
     const seen: Array<Record<string, unknown>> = [];
     await architectAdapter({ artifacts, seen, snapshot: reviewSnapshot('plan-1') })
-      .dispatch({ taskId: 'plan-1', contextId: 'ctx-resume-1', taskType: 'plan' });
+      .dispatch({ taskId: 'plan-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'plan' });
     expect(String(seen[0]!.instructions)).not.toContain('This is a PLAN REVISION');
     expect(String(seen[0]!.input)).not.toContain('PRIOR PLAN');
   });
@@ -3191,13 +3196,13 @@ describe('the architect revises a rejected plan', () => {
     // The artifact exchange is same-process: after a restart the plan is gone
     // even though its task succeeded durably. Revising from nothing would
     // silently replace a reviewed plan with an unreviewed one.
-    const artifacts = createLiveArtifactExchange();
+    const artifacts = createInMemoryArtifactExchange();
     const seen: Array<Record<string, unknown>> = [];
     await expect(architectAdapter({ artifacts, seen })
-      .dispatch({ taskId: 'repair:plan-1:1:task', contextId: 'ctx-resume-1', taskType: 'repair:plan' }))
+      .dispatch({ taskId: 'repair:plan-1:1:task', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'repair:plan' }))
       .rejects.toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', failureClass: 'prior_plan_unavailable' });
     expect(seen, 'no provider was reached').toEqual([]);
-    expect(artifacts.get(planRef('run-live'))).toBeNull();
+    expect(await artifacts.get({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1 })).toBeNull();
   });
 });
 
@@ -3214,8 +3219,8 @@ describe('the architect revises a rejected plan', () => {
 describe('a coder’s request crosses the adapter without being cleaned or lost', () => {
   const coderWithFinalText = (input: { runs: HostedRunInput[]; finalText?: string | null; refuse?: boolean }) => {
     const log: FakeLog = { order: [] };
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     const run = async (runInput: HostedRunInput): Promise<HostedRunOutcome> => {
       input.runs.push(runInput);
       const completed = await fakeCoder(log, [])(runInput) as Extract<HostedRunOutcome, { kind: 'completed' }>;
@@ -3244,7 +3249,7 @@ describe('a coder’s request crosses the adapter without being cleaned or lost'
   const succeed = async (finalText: string | null) => {
     const runs: HostedRunInput[] = [];
     const result = await coderWithFinalText({ runs, finalText })
-      .dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build' });
+      .dispatch({ taskId: 'build-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'build' });
     return { result, runs, diagnostics: result.diagnostics as Record<string, unknown> };
   };
 
@@ -3317,7 +3322,7 @@ describe('a coder’s request crosses the adapter without being cleaned or lost'
   it('a failed dispatch carries the same participation facts a successful one does', async () => {
     const runs: HostedRunInput[] = [];
     const failure = await coderWithFinalText({ runs, finalText: ask({ guidanceRequest: { question: 'why' } }), refuse: true })
-      .dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build' })
+      .dispatch({ taskId: 'build-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'build' })
       .then(() => null)
       .catch((error: unknown) => error as { diagnostics?: Record<string, unknown> });
     const diagnostics = failure!.diagnostics ?? {};
@@ -3378,7 +3383,7 @@ describe('the architect and the reviewer can ask, through their own answers', ()
     adapter: createLiveArchitectAdapter({
       worker: architectWorker({}),
       contexts: { snapshotFor: () => reviewSnapshot('plan-1') },
-      artifacts: (() => { const a = createLiveArtifactExchange(); a.put(planRef('run-live'), JSON.stringify(VALID_PLAN)); return a; })(),
+      artifacts: (() => { const a = createInMemoryArtifactExchange(); a.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN)); return a; })(),
       config: { liveMode: true, model: 'gpt-5.6-sol', maxOutputTokens: 4_000 } as never,
       apiKey: 'FAKETESTNOTREAL-openai',
       run: (async (call: Record<string, unknown>) => {
@@ -3403,7 +3408,7 @@ describe('the architect and the reviewer can ask, through their own answers', ()
   it('the plan dispatch now sends a schema, and that schema requires the ask', async () => {
     const seen: Array<Record<string, unknown>> = [];
     const { adapter } = architectFor(planWith([]), seen);
-    await adapter.dispatch({ taskId: 'plan-1', contextId: 'ctx-resume-1', taskType: 'plan' });
+    await adapter.dispatch({ taskId: 'plan-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'plan' });
     const schema = (seen[0]!.schema as { schema: Record<string, unknown> }).schema;
     expect(Object.keys(schema.properties as object)).toContain('researchAsks');
     expect(schema.required).toContain('researchAsks');
@@ -3420,7 +3425,7 @@ describe('the architect and the reviewer can ask, through their own answers', ()
       researchAsks: [ASK],
     }, seen);
     const result = await adapter.dispatch({
-      taskId: 'guidance:build-1:1:task', contextId: 'ctx-resume-1', taskType: 'guidance',
+      taskId: 'guidance:build-1:1:task', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'guidance',
       contract: CONTRACT_CHARGE,
     });
     const schema = (seen[0]!.schema as { schema: Record<string, unknown> }).schema;
@@ -3457,7 +3462,7 @@ describe('the architect and the reviewer can ask, through their own answers', ()
   it('a rebuttal dispatch is charged, shaped and validated as a rebuttal', async () => {
     const seen: Array<Record<string, unknown>> = [];
     const { adapter } = architectFor(REBUTTAL, seen);
-    const result = await adapter.dispatch({ taskId: 'rebuttal:build-1:review:task', contextId: 'ctx-resume-1', taskType: 'rebuttal' });
+    const result = await adapter.dispatch({ taskId: 'rebuttal:build-1:review:task', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'rebuttal' });
     expect((seen[0]!.schema as { name: string }).name).toBe('relay_prompt_architect_rebuttal');
     expect(String(seen[0]!.instructions)).toContain('This is your ONE answer to it.');
     expect(result.rebuttal).toEqual(REBUTTAL);
@@ -3478,7 +3483,7 @@ describe('the architect and the reviewer can ask, through their own answers', ()
     const seen: Array<Record<string, unknown>> = [];
     const { adapter } = architectFor(CONSULTATION, seen);
     const result = await adapter.dispatch({
-      taskId: 'architecture:arch:PRE_COMPLETION_CHECK:r1:run:task', contextId: 'ctx-resume-1', taskType: 'architecture',
+      taskId: 'architecture:arch:PRE_COMPLETION_CHECK:r1:run:task', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'architecture',
     });
     const [evidence] = (result.evidence ?? []) as Array<Record<string, unknown>>;
     expect(evidence!.integrityHash, 'the sha256 of the body it produced')
@@ -3492,7 +3497,7 @@ describe('the architect and the reviewer can ask, through their own answers', ()
     const seen: Array<Record<string, unknown>> = [];
     // MAINTAINS with nothing to cite: the domain's own rule, applied in the adapter.
     const { adapter } = architectFor({ ...REBUTTAL, evidence: [] }, seen);
-    const refusal = await adapter.dispatch({ taskId: 'rebuttal:build-1:review:task', contextId: 'ctx-resume-1', taskType: 'rebuttal' })
+    const refusal = await adapter.dispatch({ taskId: 'rebuttal:build-1:review:task', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'rebuttal' })
       .then(() => null, (error: unknown) => error as { failureClass: string | null; safeMessage: string });
     expect(refusal, 'refused, not handed on').not.toBeNull();
     expect(refusal!.failureClass).toBe('rebuttal_validation_failed');
@@ -3503,7 +3508,7 @@ describe('the architect and the reviewer can ask, through their own answers', ()
     const seen: Array<Record<string, unknown>> = [];
     const { adapter } = architectFor(CONSULTATION, seen);
     const result = await adapter.dispatch({
-      taskId: 'architecture:arch:PRE_COMPLETION_CHECK:r1:run:task', contextId: 'ctx-resume-1', taskType: 'architecture',
+      taskId: 'architecture:arch:PRE_COMPLETION_CHECK:r1:run:task', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'architecture',
     });
     expect((seen[0]!.schema as { name: string }).name).toBe('relay_prompt_architect_architecture');
     const instructions = String(seen[0]!.instructions);
@@ -3526,7 +3531,7 @@ describe('the architect and the reviewer can ask, through their own answers', ()
       },
     }, seen);
     const refusal = await adapter.dispatch({
-      taskId: 'architecture:arch:PRE_COMPLETION_CHECK:r1:run:task', contextId: 'ctx-resume-1', taskType: 'architecture',
+      taskId: 'architecture:arch:PRE_COMPLETION_CHECK:r1:run:task', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'architecture',
     }).then(() => null, (error: unknown) => error as { failureClass: string | null; safeMessage: string });
     expect(refusal, 'refused, not handed on').not.toBeNull();
     expect(refusal!.failureClass).toBe('architecture_validation_failed');
@@ -3536,7 +3541,7 @@ describe('the architect and the reviewer can ask, through their own answers', ()
   it('the charter tells the architect what the field is — a field nobody was told about is unused', async () => {
     const seen: Array<Record<string, unknown>> = [];
     const { adapter } = architectFor(planWith([]), seen);
-    await adapter.dispatch({ taskId: 'plan-1', contextId: 'ctx-resume-1', taskType: 'plan' });
+    await adapter.dispatch({ taskId: 'plan-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'plan' });
     const instructions = String(seen[0]!.instructions);
     expect(instructions).toContain('"researchAsks"');
     expect(instructions).toContain('before the work that depends on it');
@@ -3547,7 +3552,7 @@ describe('the architect and the reviewer can ask, through their own answers', ()
   it('a pre-lock ask reaches the pipeline untouched, and the domain sanitizer accepts it', async () => {
     const seen: Array<Record<string, unknown>> = [];
     const { adapter } = architectFor(planWith([ASK]), seen);
-    const result = await adapter.dispatch({ taskId: 'plan-1', contextId: 'ctx-resume-1', taskType: 'plan' });
+    const result = await adapter.dispatch({ taskId: 'plan-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'plan' });
     expect(result.researchAsks).toEqual([ASK]);
     expect(sanitizeJuliusResearchAsks(result.researchAsks)).toHaveLength(1);
     // The plan still validated: the new field does not break the fifteen rules.
@@ -3564,14 +3569,14 @@ describe('the architect and the reviewer can ask, through their own answers', ()
   it('an empty list is not carried, so needing nothing costs no checkpoint', async () => {
     const seen: Array<Record<string, unknown>> = [];
     const { adapter } = architectFor(planWith([]), seen);
-    const result = await adapter.dispatch({ taskId: 'plan-1', contextId: 'ctx-resume-1', taskType: 'plan' });
+    const result = await adapter.dispatch({ taskId: 'plan-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'plan' });
     expect('researchAsks' in result).toBe(false);
   });
 
   it('an ask the domain will refuse is still carried, rather than cleaned here', async () => {
     const seen: Array<Record<string, unknown>> = [];
     const { adapter } = architectFor(planWith([{ ...ASK, hosts: ['evil.example'] }]), seen);
-    const result = await adapter.dispatch({ taskId: 'plan-1', contextId: 'ctx-resume-1', taskType: 'plan' });
+    const result = await adapter.dispatch({ taskId: 'plan-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'plan' });
     expect(result.researchAsks).toBeDefined();
     expect(sanitizeJuliusResearchAsks(result.researchAsks), 'the DOMAIN refuses it, not the adapter').toBeNull();
   });
@@ -3586,8 +3591,8 @@ describe('the architect and the reviewer can ask, through their own answers', ()
 
   const reviewerFor = (text: string, packets: ReviewPacket[]) => {
     const log: FakeLog = { order: [] };
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     return createLiveHermesReviewerAdapter({
       worker: {
         workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
@@ -3605,7 +3610,7 @@ describe('the architect and the reviewer can ask, through their own answers', ()
   it('the review prompt declares the field and states the same bounds', async () => {
     const packets: ReviewPacket[] = [];
     await reviewerFor(reviewText([]), packets)
-      .dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+      .dispatch({ taskId: 'plan-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'plan-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:plan' });
     expect(packets).toHaveLength(1);
     const prompt = buildReviewPrompt(packets[0]!);
     /**
@@ -3635,7 +3640,7 @@ describe('the architect and the reviewer can ask, through their own answers', ()
       verdict: 'approved', summary: 'The plan is sound.', findings: [],
       requirementsChecked: [{ requirement: 'AC-1', status: 'passed', evidence: 'diff reviewed' }],
       ...body,
-    }), packets).dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    }), packets).dispatch({ taskId: 'plan-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'plan-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:plan' });
     return { result, prompt: buildReviewPrompt(packets[0]!) };
   };
 
@@ -3756,18 +3761,18 @@ describe('the architect and the reviewer can ask, through their own answers', ()
   it('a composition that hands no policy says it was not told, never NONE and never a host', async () => {
     const seen: Array<Record<string, unknown>> = [];
     const { adapter } = architectFor(planWith([]), seen);
-    await adapter.dispatch({ taskId: 'plan-1', contextId: 'ctx-resume-1', taskType: 'plan' });
+    await adapter.dispatch({ taskId: 'plan-1', attempt: { leaseGeneration: 1 }, reads: { plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'plan' });
     expect(String(seen[0]!.instructions)).toContain(RESEARCH_AUTHORITY_NOT_STATED);
     const packets: ReviewPacket[] = [];
     await reviewerFor(reviewText([]), packets)
-      .dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+      .dispatch({ taskId: 'plan-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'plan-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:plan' });
     expect(buildReviewPrompt(packets[0]!)).toContain(RESEARCH_AUTHORITY_NOT_STATED);
   });
 
   it('a reviewer’s ask survives the REAL parser and reaches the dispatch result', async () => {
     const packets: ReviewPacket[] = [];
     const result = await reviewerFor(reviewText([ASK]), packets)
-      .dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+      .dispatch({ taskId: 'plan-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'plan-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:plan' });
     expect(result.researchAsks).toEqual([ASK]);
     expect(sanitizeJuliusResearchAsks(result.researchAsks)).toHaveLength(1);
   });
@@ -3776,7 +3781,7 @@ describe('the architect and the reviewer can ask, through their own answers', ()
     for (const text of [reviewText([]), reviewText(undefined)]) {
       const packets: ReviewPacket[] = [];
       const result = await reviewerFor(text, packets)
-        .dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+        .dispatch({ taskId: 'plan-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'plan-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:plan' });
       expect('researchAsks' in result).toBe(false);
       expect(result.status).toBe('SUCCEEDED');
     }
@@ -3795,8 +3800,8 @@ describe('the architect and the reviewer can ask, through their own answers', ()
 describe('the live reviewer adapter treats a transient upstream status as retryable', () => {
   const reviewerEmitting = (text: string, packets: ReviewPacket[]) => {
     const log: FakeLog = { order: [] };
-    const artifacts = createLiveArtifactExchange();
-    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const artifacts = createInMemoryArtifactExchange();
+    artifacts.seed({ kind: 'PLAN', runId: 'run-live', taskId: 'plan-1', leaseGeneration: 1, role: 'PROMPT_ARCHITECT' }, JSON.stringify(VALID_PLAN));
     return createLiveHermesReviewerAdapter({
       worker: {
         workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
@@ -3814,7 +3819,7 @@ describe('the live reviewer adapter treats a transient upstream status as retrya
   const failureFor = async (text: string) => {
     const packets: ReviewPacket[] = [];
     return reviewerEmitting(text, packets)
-      .dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' })
+      .dispatch({ taskId: 'plan-1:review', attempt: { leaseGeneration: 1 }, reads: { subject: { taskId: 'plan-1', leaseGeneration: 1 }, plan: { taskId: 'plan-1', leaseGeneration: 1 } }, contextId: 'ctx-resume-1', taskType: 'review:plan' })
       .then(() => null)
       .catch((error: unknown) => error as { code: string; retryable: boolean; failureClass?: string });
   };
