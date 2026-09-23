@@ -297,13 +297,29 @@ def ten_tails(stage):
     # A low, heavy quadruped: the chest is the biggest mass and sits forward and high; the belly hangs behind and
     # lower; the haunches rise again at the hips where the tails root. Their boundaries fall inside each other.
     fig.part("root", "-", (0.0, 0.0, 0.0), "spine", 0.9, 0.0)
-    chest_z = ground + leg * 0.62 + bh * 0.42
-    fig.blob("root", hide, (bl * 0.18, 0.0, chest_z), (bl * 0.34, bw * 0.52, bh * 0.56), tile, n=2.3, jitter=0.06)
-    fig.blob("root", hide, (-bl * 0.12, 0.0, chest_z - bh * 0.12), (bl * 0.40, bw * 0.46, bh * 0.44), tile, n=2.2, jitter=0.06)
-    fig.blob("root", hide, (-bl * 0.36, 0.0, chest_z + bh * 0.02), (bl * 0.22, bw * 0.42, bh * 0.46), tile, n=2.4, jitter=0.06)
-    # shoulder masses, standing proud over the front legs
+    # ROUND TWO, AGAINST THE FIRST REMAKE'S OWN FRONT VIEW. The finer voxel stopped it reading as LEGO, but from
+    # the front it was a smooth loaf on stubs: the three masses blended into one dome, the shoulders were inside
+    # the chest instead of on it, and the legs had no air under them. Four changes, all about silhouette.
+    # 1. THE BODY STANDS UP. The chest rode at 0.62 of leg length, so the legs read as stubs under a mass sitting
+    #    on the floor. There is air under it now and the existing leg solve simply reaches further to the ground.
+    chest_z = ground + leg * 0.72 + bh * 0.42
+    fig.blob("root", hide, (bl * 0.18, 0.0, chest_z), (bl * 0.34, bw * 0.54, bh * 0.56), tile, n=2.3, jitter=0.06)
+    # 2. A WAIST. The belly was nearly as wide as the chest, which is what fused them into one form; drawn in, so
+    #    chest and haunch become two masses with a transition rather than a single tube.
+    fig.blob("root", hide, (-bl * 0.12, 0.0, chest_z - bh * 0.12), (bl * 0.40, bw * 0.38, bh * 0.42), tile, n=2.2, jitter=0.06)
+    fig.blob("root", hide, (-bl * 0.36, 0.0, chest_z + bh * 0.02), (bl * 0.22, bw * 0.46, bh * 0.46), tile, n=2.4, jitter=0.06)
+    # 3. A BRISKET, so the chest has a bottom edge and the front of the creature reads as a front.
+    fig.blob("root", hide, (bl * 0.26, 0.0, chest_z - bh * 0.34), (bl * 0.18, bw * 0.34, bh * 0.22), tile, n=2.5, jitter=0.05)
+    # 4. SHOULDERS THAT ACTUALLY STAND PROUD. At y=0.40 of the half-width with a 0.16 radius they reached about one
+    #    unit past the chest's own 0.52 and were swallowed by it -- the creature had no shoulder at all from the
+    #    front. Out to 0.52 and half again as big, they now break the chest's outline where a quadruped's do.
     for sy in (-1.0, 1.0):
-        fig.blob("root", hide, (bl * 0.22, sy * bw * 0.40, chest_z + bh * 0.06), (bl * 0.16, bw * 0.16, bh * 0.28), tile, n=2.1)
+        fig.blob("root", hide, (bl * 0.24, sy * bw * 0.52, chest_z + bh * 0.04), (bl * 0.19, bw * 0.24, bh * 0.34), tile, n=2.1)
+        # the deltoid, outboard and lower, carrying the shoulder down into the leg instead of stopping in mid-air.
+        # Kept small deliberately: at bl*0.13 these four new masses put LARGE at 40,395 boxes against a 40,000 cap,
+        # and the cap is a draw-call budget, not a suggestion. The silhouette work pays for itself here rather than
+        # by coarsening the whole creature's voxel, which is what stopped it reading as LEGO in the first place.
+        fig.blob("root", hide, (bl * 0.20, sy * bw * 0.50, chest_z - bh * 0.26), (bl * 0.10, bw * 0.15, bh * 0.19), tile, n=2.3)
     # the spine crest: a row of plates from the skull to the hips, taller with age
     crest = [(bl * 0.30, 0.0, chest_z + bh * 0.52), (0.0, 0.0, chest_z + bh * 0.46), (-bl * 0.34, 0.0, chest_z + bh * 0.44)]
     fig.spikes("root", "crag", crest, 7 + int(4 * p["crest"]), tile * 1.6, bh * 0.22 * p["crest"] + tile, tile)
