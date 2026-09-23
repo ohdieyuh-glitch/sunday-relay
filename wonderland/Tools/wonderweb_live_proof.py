@@ -103,6 +103,24 @@ def main():
         record("the page actually drew something", len(data) > expected_floor,
                "%d bytes against a %d-byte floor for %dx%d; a blank frame collapses far below it"
                % (len(data), expected_floor, w, h))
+
+        # AND IT IS A BROWSER, NOT A SCREENSHOT SERVER.
+        #
+        # Everything above is satisfied by a process that took one picture once and hands the same bytes to
+        # everybody. What separates a live browser from that is whether it RESPONDS: change the viewport, and the
+        # page must re-render at the size asked for. Deterministic, and it costs no extra page load -- which is
+        # why this is the op used rather than a second navigate.
+        vp = post("viewport", width=900, height=600)
+        record("a viewport change is accepted", bool(vp.get("ok")), json.dumps(vp)[:120])
+        after = frame()
+        w2, h2 = jpeg_size(after)
+        path2 = os.path.join(out, "live_frame_resized.jpg")
+        with open(path2, "wb") as handle:
+            handle.write(after)
+        record("the page re-rendered at the new size", (w2, h2) == (900, 600),
+               "%dx%d after asking for 900x600 -> %s" % (w2, h2, path2))
+        record("the new frame is genuinely a different picture", after != data,
+               "%d bytes vs %d; identical bytes would mean a cached still" % (len(after), len(data)))
     finally:
         try:
             post("close")
