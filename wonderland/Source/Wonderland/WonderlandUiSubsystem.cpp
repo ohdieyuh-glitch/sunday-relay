@@ -41,6 +41,8 @@
 #include "Engine/TextureRenderTarget2D.h"
 #include "WonderlandProjectBrainPanel.h"
 #include "WonderlandRelaySkins.h"
+#include "EngineUtils.h"
+#include "WonderlandCompanionEmbodiment.h"
 #include "WonderlandMissionTasks.h"
 #include "WonderlandSubAgentCubs.h"
 #include "WonderlandSkinStage.h"
@@ -1222,10 +1224,65 @@ void UWonderlandUiSubsystem::StageSkinPreviewInWorld(bool bOn)
 	const FVector At = Pawn->GetActorLocation();
 	const FVector Forward = Pawn->GetActorForwardVector();
 	const FVector Right = Pawn->GetActorRightVector();
-	// AHEAD AND A LITTLE ASIDE. Straight ahead would put the Dog behind the middle of the wardrobe panel, which is
-	// the one part of the screen the founder cannot see through; offset to the side it stands in the open where
-	// the panel's edge does not cover it, and close enough that a visor and a pair of eyes are readable.
-	const FVector Where = At + Forward * 320.0 + Right * 170.0 - FVector(0.0, 0.0, 88.0);
+	UWorld* World = Pawn->GetWorld();
+
+	// A SPOT THE FOUNDER CAN ACTUALLY SEE. The first version stood the Dog a fixed 320 uu ahead and 170 aside,
+	// and the first portraits came back as a wall of Jhinn: the companions follow the player at three or four
+	// metres, they have no collision, so a trace walks straight through them and calls the view clear while one
+	// of them fills the frame. Candidates are swept outward instead, and each must have a floor under it, nobody
+	// standing on it, and a line of sight from the founder's eyes that passes nothing solid AND no bystander.
+	TArray<FVector> Bystanders;
+	for (TActorIterator<AWonderlandCompanionEmbodiment> It(World); It; ++It)
+	{
+		if (*It != Stage->GetBody()) { Bystanders.Add(It->GetActorLocation()); }
+	}
+	for (TActorIterator<AWonderlandSubAgentCub> It(World); It; ++It) { Bystanders.Add(It->GetActorLocation()); }
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(WonderlandSkinPreviewSpot), false);
+	Params.AddIgnoredActor(Pawn);
+	Params.AddIgnoredActor(Stage);
+	if (Stage->GetBody() != nullptr) { Params.AddIgnoredActor(Stage->GetBody()); }
+	const FVector Eyes = At + FVector(0.0, 0.0, 70.0);
+
+	// ECC_Camera, NOT ECC_Visibility. The first sweep rejected every candidate: this map's paving does not answer
+	// on Visibility, and the clearance bubble -- which finds ground under a Mission Contract every time -- traces
+	// on Camera. Same channel, same answer.
+	static const float Ahead[] = { 340.0f, 460.0f, 600.0f, 760.0f };
+	static const float Aside[] = { 170.0f, -170.0f, 0.0f, 340.0f, -340.0f };
+	FVector Where = At + Forward * 320.0 + Right * 170.0 - FVector(0.0, 0.0, 88.0);
+	bool bFound = false;
+	for (float A : Ahead)
+	{
+		for (float S : Aside)
+		{
+			const FVector Spot = At + Forward * A + Right * S;
+			FHitResult Ground;
+			if (!World->LineTraceSingleByChannel(Ground, Spot + FVector(0.0, 0.0, 300.0), Spot - FVector(0.0, 0.0, 400.0), ECC_Camera, Params)
+				|| Ground.ImpactNormal.Z < 0.7f)
+			{
+				continue;
+			}
+			bool bCrowded = false;
+			for (const FVector& B : Bystanders) { if (FVector::Dist2D(B, Spot) < 260.0f) { bCrowded = true; break; } }
+			if (bCrowded) { continue; }
+			const FVector Chest(Spot.X, Spot.Y, Ground.ImpactPoint.Z + 90.0);
+			FHitResult Sight;
+			if (World->LineTraceSingleByChannel(Sight, Eyes, Chest, ECC_Camera, Params)) { continue; }
+			bool bBodyInTheWay = false;
+			const FVector Seg = Chest - Eyes;
+			for (const FVector& B : Bystanders)
+			{
+				const float T = FMath::Clamp(FVector::DotProduct(B - Eyes, Seg) / FMath::Max(Seg.SizeSquared(), 1.0), 0.0, 1.0);
+				if (FVector::Dist2D(Eyes + Seg * T, B) < 150.0f) { bBodyInTheWay = true; break; }
+			}
+			if (bBodyInTheWay) { continue; }
+			Where = FVector(Spot.X, Spot.Y, Ground.ImpactPoint.Z);
+			bFound = true;
+			break;
+		}
+		if (bFound) { break; }
+	}
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLSKIN preview spot %s (%d bystander(s))"), bFound ? TEXT("found clear") : TEXT("FALLBACK, none clear"), Bystanders.Num());
 	// FACING THE PLAYER, because a skin is judged from the front.
 	const FRotator Facing = (At - Where).GetSafeNormal2D().Rotation();
 	Stage->SetInWorldPreview(true, Where, Facing);

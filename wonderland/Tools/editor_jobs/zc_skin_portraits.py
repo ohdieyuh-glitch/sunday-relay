@@ -10,6 +10,7 @@
 # EVERY SWITCH GOES THROUGH /skin, the command the founder will actually type. Nothing here reaches past the
 # registry, and nothing here grants an entitlement: the preview body is dressed, the account is not.
 import json
+import math
 import os
 
 L = unreal.WonderlandUiTestLibrary
@@ -53,20 +54,74 @@ def job():
         RESULT["in_world"] = bool(stage.is_in_world_preview())
 
         def frame(body):
-            # SOLVED FROM THE BODY'S OWN HEIGHT, not a constant. A halo or a crown stands well above the head, so
-            # the distance is taken from the measured figure and the look-at sits at mid-chest.
+            """A CLEAR VIEW OF THE FRONT, found by tracing rather than assumed.
+
+            Solving the distance from the figure's height is right, but a tall skin needs a long lens-throw --
+            Apollo is 235 uu and wants nearly seven metres of it -- and seven metres from the arrival plaza is
+            frequently inside a planter. Two frames came back as flat brown nothing that way.
+
+            So candidate eyes are swept from straight-ahead outward in both directions, each traced back to the
+            body, and the first unobstructed one wins. Front is preferred because a Relay Dog's identity -- visor,
+            eyes, chest emblem -- is all on the front; the sweep only gives that up when the front is blocked.
+            """
             height = max(float(body.get_figure_height_uu()), 80.0)
             at = body.get_actor_location()
-            back = height * 2.9
-            # IN FRONT OF THE DOG, NOT BEHIND IT. Standing the camera at a fixed +X offset photographed the back of
-            # the head -- a plain white box with no visor and no eyes -- because the body turns to face the player.
-            # The world lane hit exactly this on its creatures. Ask the body which way it is looking.
+            look = unreal.Vector(at.x, at.y, at.z + height * 0.46)
             fwd = body.get_actor_forward_vector()
-            right = body.get_actor_right_vector()
-            eye = unreal.Vector(at.x + fwd.x * back + right.x * height * 0.5,
-                                at.y + fwd.y * back + right.y * height * 0.5,
-                                at.z + height * 0.72)
-            L.pose_camera(world, eye, unreal.Vector(at.x, at.y, at.z + height * 0.46), 40.0)
+            base = math.degrees(math.atan2(fwd.y, fwd.x))
+            # THE BYSTANDERS. A trace cannot see the companions -- they have no collision -- and the first pass
+            # came back as a frame full of Jhinn with the Dog somewhere behind her. Anything standing between the
+            # lens and the subject, or right beside the lens, disqualifies that eye.
+            bystanders = []
+            for cls in (unreal.WonderlandCompanionEmbodiment, unreal.WonderlandSubAgentCub, unreal.Pawn):
+                for a in unreal.GameplayStatics.get_all_actors_of_class(world, cls):
+                    if a == body:
+                        continue
+                    v = a.get_actor_location()
+                    bystanders.append((v.x, v.y))
+
+            def eye_is_crowded(eye):
+                ex, ey, lx, ly = eye.x, eye.y, look.x, look.y
+                sx, sy = lx - ex, ly - ey
+                seg = sx * sx + sy * sy or 1.0
+                for bx, by in bystanders:
+                    if math.hypot(bx - ex, by - ey) < 220.0:
+                        return True
+                    tt = max(0.0, min(1.0, ((bx - ex) * sx + (by - ey) * sy) / seg))
+                    if math.hypot(ex + sx * tt - bx, ey + sy * tt - by) < 150.0:
+                        return True
+                return False
+
+            for back_scale in (2.9, 2.4, 2.0):
+                back = height * back_scale
+                # 40 DEGREES FIRST. Straight ahead of the preview spot is the planter bed, and a bed of flowers has
+                # no collision, so a trace calls it clear and Celestial Light was photographed from inside the tulips.
+                # Every tall skin found its clear view at +40, which is the open paving; try that before the rest.
+                for offset in (40.0, -40.0, 22.0, -22.0, 0.0, 60.0, -60.0, 80.0, -80.0):
+                    rad = math.radians(base + offset)
+                    eye = unreal.Vector(at.x + math.cos(rad) * back,
+                                        at.y + math.sin(rad) * back,
+                                        at.z + height * 0.62)
+                    if eye_is_crowded(eye):
+                        continue
+                    blocked = unreal.SystemLibrary.line_trace_single(
+                        world, eye, look, unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [body],
+                        unreal.DrawDebugTrace.NONE, True, unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
+                    # AND THE LENS ITSELF MUST BE IN OPEN AIR: a trace that STARTS inside a post never hits the
+                    # post, which is how a camera sitting in a wall was reported clear.
+                    lens_boxed = unreal.SystemLibrary.line_trace_single(
+                        world, unreal.Vector(eye.x, eye.y, eye.z + 250.0), eye,
+                        unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [body],
+                        unreal.DrawDebugTrace.NONE, True, unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
+                    if not blocked and not lens_boxed:
+                        L.pose_camera(world, eye, look, 40.0)
+                        return {"offset_deg": offset, "back_uu": round(back, 1)}
+            # Nothing clear at any distance: take the nearest front view rather than no picture at all.
+            rad = math.radians(base)
+            L.pose_camera(world, unreal.Vector(at.x + math.cos(rad) * height * 1.8,
+                                               at.y + math.sin(rad) * height * 1.8,
+                                               at.z + height * 0.62), look, 40.0)
+            return {"offset_deg": 0.0, "back_uu": round(height * 1.8, 1), "fallback": True}
 
         rows = []
         for skin in SKINS:
@@ -76,11 +131,11 @@ def job():
             if body is None:
                 rows.append({"skin": skin, "accepted": ok, "why": "no body"})
                 continue
-            frame(body)
+            cam = frame(body)
             yield 1.2
             H.capture_viewport_jpeg(os.path.join(ROOT, "%s.jpg" % skin), 1900, 95)
             rows.append({"skin": skin, "accepted": ok, "shown": str(stage.get_shown_skin_id()),
-                         "height_uu": round(float(body.get_figure_height_uu()), 1)})
+                         "height_uu": round(float(body.get_figure_height_uu()), 1), "cam": cam})
         RESULT["portraits"] = rows
         RESULT["all_shown"] = all(r.get("shown", "").endswith(r["skin"]) or r["skin"] in r.get("shown", "")
                                   for r in rows)
