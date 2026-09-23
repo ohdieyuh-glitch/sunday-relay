@@ -1144,6 +1144,38 @@ def skeleton_flame():
         figure.flame(fire, lambda up: "ghost" if up < 0.5 else "ghostpale", (0.6, y, hip_z - lh + 0.2), 4.6, 3.2, 5, tile * 0.95)
         figure.flame(fire, lambda up: "ghost", (-0.8, y, hip_z - lh + 0.2), 3.0, 2.4, 3, tile * 0.85)
 
+    # ================================================================== THE FLANK FIRE AND THE HIP ARMOUR
+    # WHY THIS EXISTS, MEASURED. Tools/silhouette_check.py compares every skin's outline with the colour thrown
+    # away -- the founder's own test: "if removing the colour would make two skins look nearly identical, the
+    # silhouette design is not strong enough." Skeleton Flame came back as two bare vertical bars: 0.60 overlap
+    # with Celestial Light and 0.56 with an UNDRESSED Relay OG, at medium distance.
+    #
+    # AND THE REASON WAS NOT A LACK OF DETAIL. It already carried a ribcage, three skulls, a chain and pendant,
+    # pauldrons, jointed limbs and fire at every hand and foot -- 1,597 boxes against Relay OG's 762. Every one
+    # of them sits INSIDE the body's own width, so none of it survives being looked at from across a room. More
+    # cubes was never going to fix that, which is precisely what the founder said: don't solve detail with cubes.
+    #
+    # The plate answers it directly: ghostfire stands off BOTH FLANKS from the hip to above the shoulder, and
+    # the bone armour flares at the hip instead of running straight down into the legs.
+    for side in (-1.0, 1.0):
+        y = side * (tw * 0.5 + aw + 2.0)
+        name = "flankfire_%s" % ("l" if side < 0 else "r")
+        figure.part(name, "body", (0.0, y, shoulder - 2.0), "twinkle", 0.38 + 0.24 * side)
+        figure.flame(name, lambda up: "ghost" if up < 0.62 else "ghostpale",
+                     (-0.4, y, hip_z + 1.0), 12.5, 5.6, 8, tile * 1.15)
+        figure.flame(name, lambda up: "ghost",
+                     (-2.0, y + side * 1.4, hip_z + 3.0), 8.5, 3.6, 5, tile * 1.0)
+
+    # THE HIP PLATES: three courses of bone flaring outward under the ribcage. Without them the waist runs
+    # straight into the legs and the whole lower half of the figure is a post.
+    for side in (-1.0, 1.0):
+        for k, (dz, out, wide, depth) in enumerate(((0.6, 1.4, 3.6, 3.4), (-1.5, 2.1, 3.2, 3.0), (-3.2, 2.5, 2.4, 2.4))):
+            figure.slab("body", "bone" if k % 2 == 0 else "ash",
+                        (td * 0.14, side * (tw * 0.5 + out), hip_z + dz),
+                        (depth, wide, 1.6), tile=tile)
+            figure.box("body", "void", (td * 0.14 + depth * 0.5, side * (tw * 0.5 + out), hip_z + dz - 0.9),
+                       (tile * 0.6, tile * wide * 0.8, tile * 0.35))
+
     # ================================================================== THE BACK PLUME
     # The plate's rear view is a column of blue fire up the spine; from behind this is most of the skin.
     figure.part("backfire", "body", (-td * 0.55, 0.0, shoulder + 0.5), "twinkle", 0.22)
