@@ -37,7 +37,13 @@ import random
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-PASS = "GF01"
+#: One generator, several wedges. The camera-driven planting left more than one sector bare, and copying this
+#: file per sector is how NO_COLLIDE_PARTS ended up in four generators and drifted in three.
+#: (pass id, bearing lo, bearing hi, r in cm, r out cm, beds, spiral cap, output file)
+WEDGES = [
+    ("GF01", 96.0, 148.0, 20500.0, 47000.0, 34, 14, "gf01_garden_fill_east.json"),
+    ("GF02", 164.0, 208.0, 19000.0, 34000.0, 22, 9, "gf02_garden_fill_south.json"),
+]
 
 V2 = "/Game/WonderlandV2/"
 MESH = {
@@ -55,7 +61,6 @@ MESH = {
 
 ARC_LO, ARC_HI = 96.0, 148.0        # degrees; 90 is the Icarus approach road, kept clear
 R_IN, R_OUT = 20500.0, 47000.0      # cm: 205 m to 470 m
-BEDS = 34
 SPIRAL_CAP = 14
 CULL = 30000.0
 
@@ -68,8 +73,8 @@ def polar(r, deg):
     return r * math.cos(a), r * math.sin(a)
 
 
-def main():
-    rng = random.Random(20260923)
+def build(PASS, ARC_LO, ARC_HI, R_IN, R_OUT, BEDS, SPIRAL_CAP, outfile):
+    rng = random.Random(20260923 + int(ARC_LO))
     batches = {}
     spirals = [0]
 
@@ -149,18 +154,23 @@ def main():
 
     inst = sum(len(b["instances"]) for b in batches.values())
     spec = {"pass": PASS,
-            "title": "GF01: the eastern quarter's garden -- the sector the camera-driven planting missed",
-            "tags": ["GF01", "WL_GARDEN", "WL_GOLDEN_ARRIVAL"],
-            "folder": "Wonderland/Authored/GF01_GardenFillEast",
+            "title": "%s: a quarter the camera-driven planting missed, planted by sector" % PASS,
+            "tags": [PASS, "WL_GARDEN", "WL_GOLDEN_ARRIVAL"],
+            "folder": "Wonderland/Authored/%s_GardenFill" % PASS,
             "actors": [], "batches": list(batches.values())}
-    (HERE / "gf01_garden_fill_east.json").write_text(json.dumps(spec, indent=1), encoding="utf-8")
-    print("%s -> gf01_garden_fill_east.json" % PASS)
+    (HERE / outfile).write_text(json.dumps(spec, indent=1), encoding="utf-8")
+    print("%s -> %s" % (PASS, outfile))
     print("  wedge %.0f-%.0f deg, r %.0f-%.0f m, %d beds, %d topiary spirals"
           % (ARC_LO, ARC_HI, R_IN / 100, R_OUT / 100, len(placed), spirals[0]))
     print("  batches %d, instances %d" % (len(batches), inst))
     for k in sorted(batches, key=lambda k: -len(batches[k]["instances"]))[:8]:
         print("    %-34s %5d" % (k, len(batches[k]["instances"])))
     return spec
+
+
+def main():
+    for w in WEDGES:
+        build(*w)
 
 
 if __name__ == "__main__":
