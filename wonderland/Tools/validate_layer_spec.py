@@ -98,8 +98,44 @@ def check(path, meshes, materials):
     return ok
 
 
+def pass_id_collisions():
+    """Every pass id on disk, and any id claimed by more than one spec.
+
+    A pass id is a DELETE KEY: apply_layer removes everything tagged WL_PASS_<id> before it writes. Two specs
+    sharing an id means each silently destroys the other, and on 2026-09-22 that is exactly what happened --
+    WorldDesign/Nations/tartarus_quarter.py took TR01, which GoldenArrival/tr01_clock_plaza_steps.py had held
+    since the Golden Arrival was built, and applying the quarter destroyed a stair whose two colliding treads
+    were the only way back up from the Clock Plaza to the garden. Nothing reported it. This is one scan over
+    every spec, so it can never be nothing-reported again.
+    """
+    seen = {}
+    for path in sorted((ROOT / "WorldDesign").rglob("*.json")):
+        try:
+            spec = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(spec, dict):
+            continue
+        pid = spec.get("pass")
+        if not pid or not ("batches" in spec or "actors" in spec):
+            continue
+        seen.setdefault(pid, []).append(path.relative_to(ROOT))
+    return {k: v for k, v in seen.items() if len(v) > 1}, len(seen)
+
+
 def main():
     meshes, materials = known_meshes(), known_materials()
+    dupes, n_ids = pass_id_collisions()
+    print("%d distinct pass ids on disk" % n_ids)
+    if dupes:
+        print("PASS ID COLLISIONS -- each of these specs DELETES the other's actors when applied:")
+        for pid, paths in sorted(dupes.items()):
+            print("   %s" % pid)
+            for q in paths:
+                print("      %s" % q)
+    else:
+        print("no pass id collisions")
+    print()
     if meshes is None:
         print("(no mesh inventory on disk -- run the mesh_inventory editor job; mesh paths unchecked)")
     if materials is None:
@@ -108,7 +144,7 @@ def main():
     if not args:
         args = sorted(str(p) for p in (ROOT / "WorldDesign" / "Nations").glob("*.json"))
     good = all([check(a, meshes, materials) for a in args])
-    return 0 if good else 1
+    return 0 if (good and not dupes) else 1
 
 
 if __name__ == "__main__":
