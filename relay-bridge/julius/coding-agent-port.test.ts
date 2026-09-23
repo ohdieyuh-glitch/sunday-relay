@@ -413,6 +413,31 @@ describe('C6 — what the executor saw is what the record says', () => {
     expect((result.evidence as { status: string }[])[0]!.status).toBe('INCONCLUSIVE');
   });
 
+  it('refuses to store anything when the dispatch does not say which attempt it is', async () => {
+    /**
+     * A BODY UNDER A GUESSED GENERATION IS THE SILENT OVERWRITE #285 REMOVED.
+     *
+     * The coordinator populates `attempt` from the claim it already holds, so
+     * absence means the dispatch path itself is broken. Defaulting to 0 would
+     * collide every round of a repair onto one row and look like it worked —
+     * which is exactly what a mutation of this guard did: it passed the entire
+     * suite, because nothing asserted the refusal. This is that assertion.
+     */
+    const { adapter, artifacts } = adapterKeepingArtifacts(createScriptedCodingAgentProvider({ script: [{ kind: 'completed' }] }));
+    const { attempt: _dropped, ...withoutAttempt } = DISPATCH;
+
+    const error = await refusalOf(adapter.dispatch(withoutAttempt));
+    expect(error, 'the dispatch must be refused, not completed').not.toBeNull();
+    expect(error?.failureClass).toBe('dispatch_attempt_absent');
+
+    for (const generation of [0, 1, 2]) {
+      expect(
+        await artifacts.get({ kind: 'DIFF', runId: 'run-live', taskId: 'build-1', leaseGeneration: generation }),
+        `nothing was stored under generation ${String(generation)}`,
+      ).toBeNull();
+    }
+  });
+
   it('a diff that could not be captured leaves no stale diff behind for the reviewer, and does not destroy the round that explains the repair', async () => {
     const provider = createScriptedCodingAgentProvider({ script: [{ kind: 'completed' }] });
     const artifacts = createInMemoryArtifactExchange();
