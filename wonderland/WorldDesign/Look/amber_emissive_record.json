@@ -1,0 +1,28 @@
+{
+ "before": {
+  "MI_V2_PaneAmber": {
+   "EmissiveStrength": 0.0,
+   "Emissive": [
+    0.66,
+    0.36,
+    1.0
+   ]
+  },
+  "MI_V2_GlassAmber": {
+   "EmissiveStrength": 620.0,
+   "Emissive": [
+    0.93,
+    0.68,
+    0.26
+   ]
+  }
+ },
+ "after": {
+  "MI_V2_PaneAmber": {
+   "EmissiveStrength": 6.0
+  },
+  "MI_V2_GlassAmber": {
+   "EmissiveStrength": 5.0
+  }
+ }
+}
