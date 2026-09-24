@@ -326,7 +326,9 @@ void AWonderlandMissionOrb::SetOrbScale(float Scale)
 
 void AWonderlandMissionOrb::SetFollowOffset(float Forward, float Right)
 {
-	FollowOffset = FVector(Forward, Right, 0.0);
+	// THE LIFT SURVIVES. Staging sets the forward/right offset after the stack has been laid out, and rebuilding
+	// the whole vector here dropped every orb back to the bottom -- three orbs in one place, which reads as one.
+	FollowOffset = FVector(Forward, Right, FollowOffset.Z);
 	bHasSnapped = false;
 	SnapToTarget();
 }
@@ -399,13 +401,46 @@ void AWonderlandMissionOrb::ResetProgression()
 	PaintChakra();
 }
 
+void AWonderlandMissionOrb::SetDraft(bool bInDraft)
+{
+	if (bDraft == bInDraft)
+	{
+		return;
+	}
+	bDraft = bInDraft;
+	PaintChakra();
+}
+
+void AWonderlandMissionOrb::SetStackLift(float Up)
+{
+	FollowOffset.Z = Up;
+}
+
+FLinearColor AWonderlandMissionOrb::CurrentColour() const
+{
+	if (bDraft)
+	{
+		// COLOURLESS, AND DELIBERATELY NOT DARK. A draft slot is waiting, not broken: a near-black orb would read
+		// as a dead one, and the founder's rule is that gray never means failure.
+		//
+		// BRIGHTER THAN IT LOOKS IT SHOULD BE, because a Mission Contract orb is a small slender thing and this
+		// colour has to survive being seen across a plaza. At 0.42 the draft orb was simply a dark spindle in a
+		// filmed frame and could not be told from the red ones.
+		//
+		// THE COLOUR WAS NEVER THE WHOLE PROBLEM. Raising it to 0.62 changed the measured frame by almost nothing,
+		// because the body was being drawn at a quarter of its glow exposure; DraftBodyExposure is what fixed
+		// that. This is a touch paler again so the stone reads as cool and empty rather than merely unlit.
+		return FLinearColor(0.70f, 0.73f, 0.80f);
+	}
+	return WonderlandChakraColour(Chakra == EWonderlandChakra::None ? EWonderlandChakra::Root : Chakra);
+}
+
 void AWonderlandMissionOrb::PaintChakra()
 {
 	// A CONTRACT WITH NO STEP YET IS STILL RED. The founder's canon starts a new Mission Contract at red,
 	// so `None` here means "just manifested, before the first event landed" and shows the root colour
 	// rather than the cold ivory a resting orb used to use.
-	const EWonderlandChakra Showing = Chakra == EWonderlandChakra::None ? EWonderlandChakra::Root : Chakra;
-	const FLinearColor Colour = WonderlandChakraColour(Showing);
+	const FLinearColor Colour = CurrentColour();
 	if (RingMid != nullptr)
 	{
 		RingMid->SetVectorParameterValue(TEXT("Color"), Colour * (GlowExposure * 0.55f * Manifest));
@@ -439,6 +474,9 @@ FVector AWonderlandMissionOrb::DesiredLocation(const APawn* Pawn) const
 {
 	const FRotator Yaw(0.0f, Pawn->GetActorRotation().Yaw, 0.0f);
 	FVector Wanted = Pawn->GetActorLocation() + Yaw.RotateVector(FVector(FollowOffset.X, FollowOffset.Y, 0.0));
+	// HOW FAR UP THE STACK THIS ORB SITS. Added to whatever altitude the floor trace settles on below, never to the
+	// point it traces FROM -- a lifted trace start would look for the floor above the ground and find a balcony.
+	const double StackLift = FollowOffset.Z;
 
 	// IT FLOATS, BUT IT FLOATS OVER SOMETHING. The height is measured from the floor rather than from the
 	// pawn, so the contract keeps a constant altitude over rising ground instead of sinking into a slope.
@@ -452,12 +490,12 @@ FVector AWonderlandMissionOrb::DesiredLocation(const APawn* Pawn) const
 		const FVector To = Wanted - FVector(0.0, 0.0, 420.0);
 		if (World->LineTraceSingleByChannel(Hit, From, To, ECC_WorldStatic, Query))
 		{
-			Wanted.Z = Hit.Location.Z + FloatHeightUU;
+			Wanted.Z = Hit.Location.Z + FloatHeightUU + StackLift;
 			return Wanted;
 		}
 	}
 	// No floor found: hang at the pawn's own height rather than sinking through the world.
-	Wanted.Z = Pawn->GetActorLocation().Z + (FloatHeightUU - 89.0f);
+	Wanted.Z = Pawn->GetActorLocation().Z + (FloatHeightUU - 89.0f) + StackLift;
 	return Wanted;
 }
 
@@ -592,17 +630,20 @@ void AWonderlandMissionOrb::Animate(float TimeSeconds, float DeltaSeconds)
 		const float Cycle = Motion.PulseHz > KINDA_SMALL_NUMBER
 			? 0.5f * (1.0f - FMath::Cos(TimeSeconds * Motion.PulseHz * 2.0f * PI))
 			: 0.0f;
-		const float Burn = FMath::Max(Motion.Brightness * (1.0f - Motion.PulseDepth * Cycle), 0.0f) * Manifest;
-		const EWonderlandChakra Showing = Chakra == EWonderlandChakra::None ? EWonderlandChakra::Root : Chakra;
-		CrystalMid->SetVectorParameterValue(TEXT("Color"), WonderlandChakraColour(Showing) * (GlowExposure * Burn));
+		// Named for what it is rather than `Beat`, which is already the orb's own mission beat member.
+		const float BeatBurn = FMath::Max(Motion.Brightness * (1.0f - Motion.PulseDepth * Cycle), 0.0f);
+		// A CRYSTAL IS NEVER DIMMER THAN THE RING AROUND IT, which is what went wrong in the first filmed stack.
+		// The beat still drives the body -- the pulse still breathes, a brighter beat still brightens it -- but it
+		// may no longer take the colour below the point where the colour can be read.
+		const float Burn = FMath::Max(BeatBurn, bDraft ? DraftBodyExposure : ContractBodyExposure) * Manifest;
+		CrystalMid->SetVectorParameterValue(TEXT("Color"), CurrentColour() * (GlowExposure * Burn));
 		CrystalBurn = Burn;
 	}
 
 	// ---------------------------------------------------------------- the repair, on the crown
 	RepairShown = FMath::FInterpTo(RepairShown, RepairWeight, DeltaSeconds, 4.0f);
 	{
-		const EWonderlandChakra Showing = Chakra == EWonderlandChakra::None ? EWonderlandChakra::Root : Chakra;
-		const FLinearColor Stone = WonderlandChakraColour(Showing) * CrystalBurn;
+		const FLinearColor Stone = CurrentColour() * CrystalBurn;
 		const FLinearColor Fault(1.0f, 0.06f, 0.04f);
 		const FLinearColor Ash(0.22f, 0.20f, 0.20f);
 		const FLinearColor Gold(1.0f, 0.78f, 0.30f);

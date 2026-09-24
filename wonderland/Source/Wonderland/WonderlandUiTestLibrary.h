@@ -31,6 +31,20 @@ public:
 	static UWonderlandUiSubsystem* GetUi(UObject* WorldContextObject);
 
 	/**
+	 * THE MISSION TASK SET AND THE MISSION SUBSYSTEM, for a proof that has to read them.
+	 *
+	 * Both are LocalPlayerSubsystems, and this build's Python exposes no route to one: `PlayerController.Player` is
+	 * protected, `LocalPlayer` has no `get_subsystem`, and `SubsystemBlueprintLibrary` is not reflected here. Rather
+	 * than have every job rediscover that, the test library hands them over the same way it already hands over the
+	 * UI subsystem.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static class UWonderlandMissionTaskSubsystem* GetMissionTasks(UObject* WorldContextObject);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static class UWonderlandMissionSubsystem* GetMission(UObject* WorldContextObject);
+
+	/**
 	 * SPAWN ONE VOXEL FIGURE, standing where it is put, following nobody. Used by the Project Avatar progression proof:
 	 * the six forms are text files, so a founder's correction is a regeneration rather than a rebuild.
 	 *
@@ -39,6 +53,19 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
 	static class AWonderlandCompanionEmbodiment* SpawnFigureActor(UObject* WorldContextObject, FVector Location, const FString& FigurePath, const FString& Label);
+
+	/**
+	 * THE WORLD SUBSYSTEMS A PROOF HAS TO DRIVE, handed over in C++ because Python cannot reach them.
+	 *
+	 * UWorld has no get_subsystem on the Python surface in this build, which is what stopped the sub-agent and
+	 * Wonder Web demonstration dead. This is the smallest honest way round it: two accessors that hand back the
+	 * real subsystems, so the demo exercises the actual runtime rather than a fixture standing in for it.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static class UWonderlandDemoSubsystem* GetDemo(UObject* WorldContextObject);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static class UWonderlandSubAgentCubSubsystem* GetCubs(UObject* WorldContextObject);
 
 	/**
 	 * Put the view where a proof needs it: one camera, posed, looking at a point. The same camera for every form in a

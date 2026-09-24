@@ -83,6 +83,7 @@ void AWonderlandCompanionEmbodiment::ClearBody()
 	}
 	PartMeshes.Reset();
 	PartPivots.Reset();
+	PartNames.Reset();
 	MaterialInstances.Reset();
 	Motions.Reset();
 	GlowMaterials.Reset();
@@ -176,6 +177,7 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		USceneComponent* Pivot = NewObject<USceneComponent>(this, ComponentName);
 		Pivot->SetMobility(EComponentMobility::Movable);
 		Pivot->SetupAttachment(Parent);
+		PartNames.Add(Def.Name);
 		const FVector Rest = (Def.Pivot - ParentPivot) * Unit;
 		Pivot->SetRelativeLocation(Rest);
 		Pivot->RegisterComponent();
@@ -620,6 +622,17 @@ namespace WonderlandCompanionActivity
 	}
 }
 
+void AWonderlandCompanionEmbodiment::DriveGaitFromCanonical(float InStridePhase, float InGaitWeight, float InSpeedUU)
+{
+	// TAKEN WHOLE, NOT BLENDED TOWARD. Easing the costume toward the Dog's numbers would just be a third gait with
+	// a lag of its own -- and a lag is precisely what "the skins do not move like the Dog" looks like. The
+	// canonical values ARE this body's values for the frame.
+	bGaitDrivenExternally = true;
+	GaitPhase = InStridePhase;
+	GaitWeight = InGaitWeight;
+	GroundSpeedUU = InSpeedUU;
+}
+
 void AWonderlandCompanionEmbodiment::SetRuntimeActivity(FName Activity)
 {
 	if (Activity.IsNone() || Activity == RuntimeActivity)
@@ -630,6 +643,19 @@ void AWonderlandCompanionEmbodiment::SetRuntimeActivity(FName Activity)
 	ActivityChangedAt = GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0f;
 	// A BODY DOES NOT SNAP BETWEEN MOODS: the new look is eased into over the next moment.
 	ActivityBlend = 0.0f;
+}
+
+FRotator AWonderlandCompanionEmbodiment::GetPartRotation(FName PartName) const
+{
+	const int32 Index = PartNames.IndexOfByKey(PartName);
+	return PartPivots.IsValidIndex(Index) && PartPivots[Index] != nullptr
+		? PartPivots[Index]->GetRelativeRotation()
+		: FRotator::ZeroRotator;
+}
+
+TArray<FName> AWonderlandCompanionEmbodiment::GetPartNames() const
+{
+	return PartNames;
 }
 
 void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
@@ -649,6 +675,57 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 		LastAnimateSeconds = TimeSeconds;
 	}
 	const float ActivityTime = ActivityPhase;
+
+	// ---------------------------------------------------------------- THE GAIT, MEASURED RATHER THAN TIMED
+	//
+	// A WALK CYCLE DRIVEN BY A TIMER IS THE DEFINITION OF STIFF: the legs march at a fixed rate whatever the body is
+	// doing, so a creature standing still paddles on the spot and one crossing a plaza takes the same little steps.
+	// This clock is advanced by DISTANCE instead, so one turn of the cycle is always one stride on the ground and the
+	// feet keep up with the body by construction.
+	// UNLESS A RELAY DOG IS HANDING DOWN ITS OWN, which is what a worn mascot skin does. The canonical stride has
+	// already been solved by the Dog this frame, so the costume wears that number and does not measure a second
+	// one. Everything below still reads GaitPhase and GaitWeight, so the entire body -- legs, lean, sway, bob,
+	// every joint -- inherits the canonical cadence, easing and transitions without any of them knowing.
+	if (bGaitDrivenExternally)
+	{
+		// The spot is still tracked so that releasing the drive does not read as one enormous instant stride.
+		GaitMeasuredAt = TimeSeconds;
+		LastGroundSpot = GetActorLocation();
+		bHasGroundSpot = true;
+	}
+	else
+	{
+		const float Delta = FMath::Max(TimeSeconds - GaitMeasuredAt, 0.0f);
+		GaitMeasuredAt = TimeSeconds;
+		const FVector Here = GetActorLocation();
+		if (bHasGroundSpot && Delta > KINDA_SMALL_NUMBER)
+		{
+			const float Travelled = static_cast<float>(FVector::Dist2D(Here, LastGroundSpot));
+			// Smoothed: one stuttered editor frame must not read as a sprint, and one dropped frame must not stop it.
+			GroundSpeedUU = FMath::FInterpTo(GroundSpeedUU, Travelled / Delta, Delta, 6.0f);
+			GaitPhase += Travelled / FMath::Max(StrideLengthUU * Scale, 1.0f);
+		}
+		LastGroundSpot = Here;
+		bHasGroundSpot = true;
+
+		// HOW MUCH OF THE WALK IS SHOWING. Eased both ways, because a body that snaps from standing to walking on the
+		// frame it starts moving is as mechanical as one that never moves at all.
+		const float Want = FMath::Clamp(GroundSpeedUU / FMath::Max(WalkSpeedUU, 1.0f), 0.0f, 1.35f);
+		GaitWeight = FMath::FInterpTo(GaitWeight, Want, FMath::Max(TimeSeconds - LastAnimateSeconds, 0.0f) + Delta, 3.2f);
+
+		// STANDING IS NOT STILLNESS. With no stride to run, the cycle keeps turning slowly so the body shifts its
+		// weight, breathes and settles: a creature frozen between steps reads as a statue that happens to hover.
+		if (GaitWeight < 0.98f)
+		{
+			GaitPhase += Delta * 0.22f * (1.0f - GaitWeight);
+		}
+	}
+	// A SECOND CLOCK AT AN UNRELATED PERIOD. Every joint below mixes a little of this in, so no cycle ever lands in
+	// exactly the same place twice. It is a small thing and it is most of the difference between a body that is
+	// animated and one that is running a loop.
+	const float Drift = FMath::Sin(2.0f * PI * (ActivityTime / 7.37f + Phase * 3.1f));
+	const float Gait = GaitPhase;
+	const float Walk = FMath::Clamp(GaitWeight, 0.0f, 1.2f);
 
 	// THE FLOAT: bounded, absolute from rest, and on this companion's own phase.
 	if (FloatRoot != nullptr)
@@ -685,8 +762,16 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 		{
 			// Swept back and forward about the root and lifted a little, mirrored by side.
 			const float Side = Part.A < 0.0f ? -1.0f : 1.0f;
-			const float Flap = FMath::Sin(2.0f * PI * (ActivityTime / 2.4f + Phase));
-			Pivot->SetRelativeRotation(FRotator(0.0, Side * Flap * 9.0f, Side * Flap * 7.0f));
+			const float Beat = 2.0f * PI * (ActivityTime / 2.4f + Phase);
+			// TWO TERMS AT DIFFERENT PERIODS, and the second lags: a wing driven by one sine beats like a metronome,
+			// and the founder's word for that is stiff. The downstroke is also faster than the recovery, which is how
+			// a wing actually works and what makes the beat read as effort rather than as oscillation.
+			const float Flap = FMath::Sin(Beat) * 0.78f + FMath::Sin(Beat * 0.41f + 1.2f) * 0.22f;
+			const float Bite = FMath::Sin(Beat - 0.55f);
+			Pivot->SetRelativeRotation(FRotator(
+				Bite * 4.0f + Drift * 1.4f,
+				Side * Flap * 11.0f,
+				Side * (Flap * 8.0f + Bite * 2.5f)));
 			break;
 		}
 		case EWonderlandCompanionMotion::Tail:
@@ -695,9 +780,80 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			const float Along = FMath::Clamp(Part.A / FMath::Max(Part.B, 1.0f), 0.0f, 1.0f);
 			const float Reach = FMath::Pow(Along, 1.35f);
 			const float Wave = 2.0f * PI * (ActivityTime / 2.2f + Phase) - Part.A * 0.62f;
+			// A SECOND, SLOWER SWING ACROSS THE FIRST, and a little pitch: one sine on one axis is a windscreen wiper.
+			const float Cross = 2.0f * PI * (ActivityTime / 6.1f + Phase * 0.7f) - Part.A * 0.30f;
 			Pivot->SetRelativeLocationAndRotation(
-				Part.RestLocation + FVector(FMath::Cos(Wave * 0.8f) * 3.0f, FMath::Sin(Wave) * 9.0f, 0.0) * (Reach * Scale),
-				FRotator(0.0, FMath::Sin(Wave) * 8.0f * Reach, 0.0));
+				Part.RestLocation + FVector(
+					FMath::Cos(Wave * 0.8f) * 3.0f,
+					FMath::Sin(Wave) * 9.0f + FMath::Sin(Cross) * 3.4f,
+					FMath::Sin(Cross * 1.3f) * 2.2f) * (Reach * Scale),
+				FRotator(
+					FMath::Sin(Cross) * 4.0f * Reach,
+					FMath::Sin(Wave) * 8.0f * Reach,
+					FMath::Sin(Wave * 0.5f + 0.4f) * 5.0f * Reach));
+			break;
+		}
+		case EWonderlandCompanionMotion::Stride:
+		{
+			// A LEG. Through one cycle the hip swings forward, plants, and is driven back under the body; the foot
+			// lifts only on the forward half, because a foot that lifts while bearing weight is a creature skating.
+			const float Cycle = FMath::Frac(Gait + Part.A);
+			const float Swing = FMath::Sin(2.0f * PI * Cycle);
+			// The lift is the positive half only, eased, so the foot leaves and meets the ground softly.
+			const float Raw = FMath::Max(Swing, 0.0f);
+			const float Lift = Raw * Raw * (3.0f - 2.0f * Raw);
+			const float Reach = FMath::Max(Part.B, 0.01f);
+			// Standing, the legs do not hold a pose: they shift weight slowly from side to side.
+			const float Idle = FMath::Sin(2.0f * PI * (ActivityTime / 4.6f + Phase + Part.A)) * 2.2f;
+			Pivot->SetRelativeLocationAndRotation(
+				Part.RestLocation + FVector(0.0, 0.0, Lift * 3.4f * Reach * Walk * Scale),
+				FRotator(Swing * 27.0f * Walk + Idle * (1.0f - Walk) + Drift * 1.1f, 0.0, 0.0));
+			break;
+		}
+		case EWonderlandCompanionMotion::Knee:
+		{
+			// THE JOINT BELOW A HIP, AND IT ARRIVES LATE. A knee that bends on the same frame as its hip is the most
+			// mechanical thing a walk can do; the 0.11 of a cycle it runs behind is what makes the leg read as a leg.
+			const float Cycle = FMath::Frac(Gait + Part.A - 0.11f);
+			// Bent hardest through the swing, nearly straight under load, and never quite locked.
+			const float Bend = FMath::Max(FMath::Sin(2.0f * PI * Cycle), 0.0f);
+			const float Load = FMath::Max(-FMath::Sin(2.0f * PI * Cycle), 0.0f);
+			const float Reach = FMath::Max(Part.B, 0.01f);
+			Pivot->SetRelativeRotation(FRotator(
+				(-Bend * 34.0f + Load * 6.0f) * Reach * Walk + Drift * 0.9f, 0.0, 0.0));
+			break;
+		}
+		case EWonderlandCompanionMotion::Spine:
+		{
+			// THE BODY ITSELF FLEXES. It rolls into the stride, yaws against it, and bobs twice a cycle -- once for
+			// each pair of feet. A torso carried rigidly over moving legs is a puppet on a stick.
+			const float Amount = FMath::Max(Part.A, 0.0f);
+			const float Wave = 2.0f * PI * (Gait + Part.B);
+			const float Breathe = FMath::Sin(2.0f * PI * (ActivityTime / 3.9f + Phase)) * 1.4f;
+			Pivot->SetRelativeLocationAndRotation(
+				Part.RestLocation + FVector(0.0, 0.0, FMath::Sin(Wave * 2.0f) * 1.9f * Amount * Walk * Scale),
+				FRotator(
+					FMath::Sin(Wave * 2.0f + 0.7f) * 2.6f * Amount * Walk + Breathe * Amount,
+					FMath::Sin(Wave + 1.57f) * 3.4f * Amount * Walk,
+					FMath::Sin(Wave) * 5.2f * Amount * Walk + Drift * 1.6f * Amount));
+			break;
+		}
+		case EWonderlandCompanionMotion::Trail:
+		{
+			// A SEGMENT THAT STREAMS. The wave starts at the body and arrives late at the tip, it widens along the
+			// chain, and the whole thing sweeps BACK as the body speeds up -- so a tail follows a running creature
+			// instead of waving at the same rate whatever it is doing.
+			const float Along = FMath::Clamp(Part.A / FMath::Max(Part.B, 1.0f), 0.0f, 1.0f);
+			const float Reach = FMath::Pow(Along, 1.2f) + 0.12f;
+			const float Lag = Part.A * 0.42f;
+			const float Wave = 2.0f * PI * (ActivityTime / 2.05f + Phase) - Lag;
+			const float Slow = 2.0f * PI * (ActivityTime / 5.7f + Phase * 0.5f) - Lag * 0.6f;
+			// Swinging widens with speed; the backward sweep is what "streaming" actually looks like.
+			const float Amplitude = (1.0f + 1.5f * Walk) * Reach;
+			Pivot->SetRelativeRotation(FRotator(
+				(FMath::Sin(Slow) * 5.0f - 16.0f * Walk * Reach) * (1.0f + 0.3f * Drift),
+				FMath::Sin(Wave) * 11.0f * Amplitude,
+				FMath::Sin(Wave * 0.63f + 0.9f) * 7.0f * Amplitude));
 			break;
 		}
 		case EWonderlandCompanionMotion::Orbit:

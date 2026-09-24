@@ -345,6 +345,45 @@ protected:
 	 *  failure mode this project keeps paying for. */
 	bool BindJoints();
 
+public:
+	/* -------------------------------------------------------------- the skin */
+
+	/**
+	 * WEAR A SKIN, VISIBLY. The founder's test is the only one that counts here: click APOLLO and see the Relay
+	 * Dog you are looking at become Apollo. Anything but RELAY OG hides the canon body and stands a costume built
+	 * from that skin's figure on the capsule; RELAY OG takes the costume off and shows the body again.
+	 *
+	 * Called from the skin registry's OnSkinChanged, and once at BeginPlay for whatever is already equipped.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Skins")
+	void WearSkin(FName SkinId);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
+	FName GetWornSkinId() const { return WornSkinId; }
+
+	/** The costume standing on this Dog, or null while it wears its own body. For a proof to photograph. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
+	class AWonderlandCompanionEmbodiment* GetCostume() const { return Costume; }
+
+	/** True while the canon body is hidden under a costume. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
+	bool IsWearingCostume() const { return Costume != nullptr; }
+
+	/** How tall the Dog stands as currently dressed, in uu: the costume's measured height, or the canon body's. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
+	float GetDressedHeightUu() const;
+
+private:
+	void ShowCanonBody(bool bShow);
+
+	UPROPERTY(Transient)
+	TObjectPtr<class AWonderlandCompanionEmbodiment> Costume = nullptr;
+
+	FName WornSkinId = TEXT("relay_og");
+	bool bCanonBodyHidden = false;
+
+public:
+
 	/** Build the standard capture route relative to where the Dog spawned:
 	 *  stand, walk, jog, run, anime run, stop, turns, stairs. */
 	void BuildDefaultRoute();

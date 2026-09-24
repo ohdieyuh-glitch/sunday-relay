@@ -1,7 +1,13 @@
 #include "WonderlandUiSubsystem.h"
 
 #include "Components/InputComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/CollisionProfile.h"
 #include "Engine/GameInstance.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
@@ -37,8 +43,20 @@
 #include "WonderlandMiniMap.h"
 #include "WonderlandMissionSubsystem.h"
 #include "WonderlandNavBar.h"
+#include "WonderlandBrainSculpture.h"
 #include "WonderlandProjectBrain.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "WonderlandProjectBrainPanel.h"
+#include "WonderlandRelaySkins.h"
+#include "EngineUtils.h"
+#include "WonderlandCompanionEmbodiment.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "RelayDogCharacter.h"
+#include "TimerManager.h"
+#include "WonderlandMissionTasks.h"
+#include "WonderlandSubAgentCubs.h"
+#include "WonderlandSkinStage.h"
 #include "WonderlandTravel.h"
 #include "WonderlandUiStyle.h"
 #include "WonderlandUsageHudWidget.h"
@@ -248,6 +266,14 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 		UsageHud->SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
 		UsageHud->SetAlignmentInViewport(FVector2D(0.0, 0.0));
 		UsageHud->SetPositionInViewport(FVector2D(30.0, 22.0), true);
+		// THE + IS NOT HERE ANY MORE.
+		//
+		// FOUNDER CORRECTION: "REMOVE ADD TASK from the usage shelf / percentage HUD ... It must feel like a
+		// terminal-level action, not a HUD/shelf-bar action." Adding a Julius task is opening another Julius
+		// terminal, and it belongs beside the terminal it opens -- not next to a row of usage percentages, which
+		// report consumption and have nothing to do with starting work.
+		//
+		// It now lives at the top of the Julius live terminal. See MakeTaskTabs in SWonderlandLiveTerminal.
 		// Thirty units taller with the white LLM Companion meter: its third readout row takes that height,
 		// so the art is drawn at the size it always was rather than shrinking to make room.
 		const UWonderlandUsageHudSettings* HudSettings = GetDefault<UWonderlandUsageHudSettings>();
@@ -501,8 +527,50 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 		if (!BrainPanel.IsValid())
 		{
 			// Created once and kept, like the terminal: proposals made in this session are still there on reopen.
+			// THE WARDROBE'S LIVE DOG, made before the panel that draws it. A brush handed over null would leave the
+			// view saying the preview is unavailable for the life of the panel, since the panel is built once and kept.
+			UWonderlandRelaySkinSubsystem* SkinRegistry = RelaySkins();
+			// SPAWNED HERE AND BOUND AGAIN LATER. Creating the stage in the same statement that reads its render
+			// target is what made the first binding race the resource; the binding is now also redone every time
+			// the wardrobe opens, so a handle taken too early cannot survive as a permanently white panel.
+			AWonderlandSkinStage* Stage = SkinStage();
+			if (Stage != nullptr && Stage->GetRenderTarget() != nullptr)
+			{
+				if (!SkinPreviewBrush.IsValid())
+				{
+					SkinPreviewBrush = MakeShared<FSlateBrush>();
+				}
+				SkinPreviewBrush->SetResourceObject(Stage->GetRenderTarget());
+				SkinPreviewBrush->ImageSize = FVector2D(640.0, 800.0);
+				SkinPreviewBrush->DrawAs = ESlateBrushDrawType::Image;
+			}
+
 			SAssignNew(BrainPanel, SWonderlandProjectBrainPanel)
 				.HologramBrush(BrainArtBrush.IsValid() ? BrainArtBrush.Get() : nullptr)
+				.SkinPreviewBrush(SkinPreviewBrush.IsValid() ? SkinPreviewBrush.Get() : nullptr)
+				.Skins(SkinRegistry != nullptr ? SkinRegistry->GetSkins() : TArray<FWonderlandRelaySkin>())
+				.EquippedSkin_Lambda([WeakThis]()
+				{
+					// READ, NEVER REMEMBERED. The registry is the one authority on what the Dog wears, so a skin
+					// changed from the console shows on these cards without the panel being told.
+					UWonderlandRelaySkinSubsystem* Registry = WeakThis.IsValid() ? WeakThis->RelaySkins() : nullptr;
+					return Registry != nullptr ? Registry->GetEquippedSkinId() : NAME_None;
+				})
+				.OnChooseSkin_Lambda([WeakThis](FName SkinId)
+				{
+					if (UWonderlandRelaySkinSubsystem* Registry = WeakThis.IsValid() ? WeakThis->RelaySkins() : nullptr)
+					{
+						// The stage listens to the registry, so this one call dresses the Dog on the plinth too.
+						Registry->EquipSkin(SkinId);
+					}
+				})
+				.OnSkinPreviewPainted_Lambda([WeakThis]()
+				{
+					if (AWonderlandSkinStage* Watching = WeakThis.IsValid() ? WeakThis->SkinStage() : nullptr)
+					{
+						Watching->MarkWanted();
+					}
+				})
 				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
 				.OnRequestTerminal_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Terminal); } })
 				.OnRequestMap_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Map); } })
@@ -658,11 +726,23 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 	++OverlaysInViewport;
 	Open = Which;
 	ApplyOverlayInput(true, Focus);
+	// THE BRAIN COMES ALIVE WITH ITS PANEL. Started after the panel is in the viewport, because the framing reads
+	// the window's painted geometry and there is none until it has been laid out once.
+	if (Which == EOverlay::Brain)
+	{
+		FrameBrainSculpture(true);
+	}
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI open %s (panels in viewport: %d)"), OverlayName(Which), OverlaysInViewport);
 }
 
 void UWonderlandUiSubsystem::CloseOverlay()
 {
+	// THE CAMERA GOES BACK TO THE PLAYER whenever the panel closes by any route -- Escape, CLOSE, or a jump to
+	// another overlay. The Dog needs no sending home: it is the player's own pawn, wearing the skin.
+	FrameRelayDogInWardrobe(false);
+	// AND THE BRAIN GOES WITH IT, by every one of those same routes: a sculpture and a camera that outlive their
+	// panel would leave the founder looking at a brain with nothing on screen able to close it.
+	FrameBrainSculpture(false);
 	if (Open == EOverlay::None)
 	{
 		return;
@@ -830,6 +910,7 @@ void UWonderlandUiSubsystem::HandleSidekicksChanged()
 	CompanionShownAsk.SetNum(CompanionTerminals.Num());
 	CompanionShownAnswer.SetNum(CompanionTerminals.Num());
 	CompanionShownNote.SetNum(CompanionTerminals.Num());
+	CompanionShownProvider.SetNum(CompanionTerminals.Num());
 	for (int32 Index = 0; Index < CompanionTerminals.Num(); ++Index)
 	{
 		const TSharedPtr<SWonderlandCompanionTerminal>& Panel = CompanionTerminals[Index];
@@ -863,6 +944,37 @@ void UWonderlandUiSubsystem::HandleSidekicksChanged()
 		{
 			CompanionShownNote[Index] = Note;
 			Panel->AddLine(FString(), Note, true);
+		}
+
+		// WHAT IT WOULD TAKE TO MAKE THIS COMPANION REAL, said once, and only while it is answering from a fixture.
+		//
+		// The runtime already knows. It probes each real provider and reports exactly what is missing: an OpenAI
+		// key that has never been connected, or a Claude Code that IS installed on this machine and has simply not
+		// been allowed to spend anything yet. NONE OF THAT REACHED THE FOUNDER -- GetProviders() was read nowhere
+		// outside the sidekick client's own proof string, so from inside Wonderland the companions said SIMULATED
+		// and gave no way to find out why, or that a real provider was sitting there waiting for one decision.
+		//
+		// THE WORDS ARE THE RUNTIME'S OWN. This composes no advice, invents no next step, and grants no permission:
+		// consent to spend is the founder's and is kept in the service, not here.
+		if (Sidekick->Mode == TEXT("SIMULATED"))
+		{
+			FString Waiting;
+			for (const FWonderlandSidekickProvider& Provider : Runtime->GetProviders())
+			{
+				if (Provider.Backs == Sidekick->Kind && !Provider.bReady)
+				{
+					Waiting = FString::Printf(TEXT("%s is not connected yet — %s"), *Provider.DisplayName, *Provider.Detail);
+					break;
+				}
+			}
+			if (CompanionShownProvider[Index] != Waiting)
+			{
+				CompanionShownProvider[Index] = Waiting;
+				if (!Waiting.IsEmpty())
+				{
+					Panel->AddLine(FString(), Waiting, true);
+				}
+			}
 		}
 
 		// A turn that has started: show what was asked, once, whoever asked it (a terminal or a console command).
@@ -1141,6 +1253,744 @@ bool UWonderlandUiSubsystem::FocusWonderWebWindow(FName Id)
 		}
 	}
 	return true;
+}
+
+void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
+{
+	APlayerController* Controller = BoundController.Get();
+	UWorld* World = Controller != nullptr ? Controller->GetWorld() : nullptr;
+	APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+	if (World == nullptr || Pawn == nullptr)
+	{
+		return;
+	}
+	if (!bOn)
+	{
+		World->GetTimerManager().ClearTimer(WardrobeFrameTimer);
+		if (WardrobeCamera.IsValid())
+		{
+			Controller->SetViewTargetWithBlend(Pawn, 0.35f, EViewTargetBlendFunction::VTBlend_Cubic);
+		}
+		// THE BLACK GOES AWAY WITH THE WINDOW. Leaving a panel standing in the garden would be a prop the founder
+		// walks into the moment the wardrobe closes, so it is destroyed rather than merely hidden.
+		if (AActor* Backdrop = WardrobeBackdrop.Get())
+		{
+			Backdrop->Destroy();
+		}
+		WardrobeBackdrop.Reset();
+		return;
+	}
+	// THE WINDOW HAS TO HAVE PAINTED ONCE before its place on screen is known, so the framing is done a tick after
+	// the wardrobe opens and re-solved for a few frames while the panel settles into its layout.
+	TWeakObjectPtr<UWonderlandUiSubsystem> WeakThis(this);
+	World->GetTimerManager().SetTimer(WardrobeFrameTimer, FTimerDelegate::CreateWeakLambda(this, [WeakThis]()
+	{
+		UWonderlandUiSubsystem* Self = WeakThis.Get();
+		APlayerController* PC = Self != nullptr ? Self->BoundController.Get() : nullptr;
+		APawn* Dog = PC != nullptr ? PC->GetPawn() : nullptr;
+		UWorld* W = PC != nullptr ? PC->GetWorld() : nullptr;
+		if (Self == nullptr || Dog == nullptr || W == nullptr || !Self->BrainPanel.IsValid() || !Self->BrainPanel->IsSkinsOpen())
+		{
+			return;
+		}
+		FVector2D Centre, Size;
+		if (!Self->BrainPanel->GetSkinPreviewRect(Centre, Size))
+		{
+			return;
+		}
+		// ---- how tall the Dog stands as dressed, and where its chest is
+		const ARelayDogCharacter* Relay = Cast<ARelayDogCharacter>(Dog);
+		const float Height = Relay != nullptr ? Relay->GetDressedHeightUu() : 174.0f;
+		const FVector Sole = Dog->GetActorLocation() - FVector(0.0, 0.0, Dog->GetSimpleCollisionHalfHeight());
+		const FVector LookAt = Sole + FVector(0.0, 0.0, Height * 0.47);
+
+		// ---- the lens: the player's own field of view, so the framing maths matches what is drawn
+		const float HFov = PC->PlayerCameraManager != nullptr ? PC->PlayerCameraManager->GetFOVAngle() : 90.0f;
+		int32 VX = 0, VY = 0;
+		PC->GetViewportSize(VX, VY);
+		const float Aspect = VY > 0 ? static_cast<float>(VX) / static_cast<float>(VY) : 1.777f;
+		const float TanH = FMath::Tan(FMath::DegreesToRadians(HFov * 0.5f));
+		const float TanV = TanH / Aspect;
+		// Distance so the Dog fills about three quarters of the window's height.
+		const float WantTall = FMath::Max(Size.Y * 0.74f, 0.05f);
+		const float Distance = FMath::Clamp(Height / (WantTall * 2.0f * TanV), 140.0f, 1400.0f);
+		// The Dog must sit at the window's centre, which is off the screen's centre: aim the lens away from the
+		// Dog by exactly that angle. Screen y runs downward.
+		const float YawOff = FMath::RadiansToDegrees(FMath::Atan((Centre.X - 0.5f) * 2.0f * TanH));
+		const float PitchOff = FMath::RadiansToDegrees(FMath::Atan((Centre.Y - 0.5f) * 2.0f * TanV));
+
+		// ---- a clear eye, in front of the face first. Bystanders (companions, cubs) have no collision and are
+		// ---- kept out of the shot by distance rather than by trace.
+		TArray<FVector> Bystanders;
+		for (TActorIterator<AWonderlandCompanionEmbodiment> It(W); It; ++It)
+		{
+			if (Relay == nullptr || *It != Relay->GetCostume()) { Bystanders.Add(It->GetActorLocation()); }
+		}
+		for (TActorIterator<AWonderlandSubAgentCub> It(W); It; ++It) { Bystanders.Add(It->GetActorLocation()); }
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(WonderlandWardrobeCamera), false);
+		Params.AddIgnoredActor(Dog);
+		if (Relay != nullptr && Relay->GetCostume() != nullptr) { Params.AddIgnoredActor(Relay->GetCostume()); }
+		const float BaseYaw = Dog->GetActorRotation().Yaw;
+		static const float Offsets[] = { 0.0f, -30.0f, 30.0f, -60.0f, 60.0f, -90.0f, 90.0f, 180.0f };
+		FVector Eye = LookAt + Dog->GetActorForwardVector() * Distance + FVector(0.0, 0.0, Height * 0.12);
+		for (float Off : Offsets)
+		{
+			const FVector Dir = FRotator(0.0, BaseYaw + Off, 0.0).Vector();
+			const FVector Candidate = LookAt + Dir * Distance + FVector(0.0, 0.0, Height * 0.12);
+			bool bCrowded = false;
+			for (const FVector& B : Bystanders)
+			{
+				if (FVector::Dist2D(B, Candidate) < 200.0f) { bCrowded = true; break; }
+				const FVector Seg = LookAt - Candidate;
+				const float T = FMath::Clamp(FVector::DotProduct(B - Candidate, Seg) / FMath::Max(Seg.SizeSquared(), 1.0), 0.0, 1.0);
+				if (FVector::Dist2D(Candidate + Seg * T, B) < 120.0f) { bCrowded = true; break; }
+			}
+			if (bCrowded) { continue; }
+			FHitResult Hit;
+			if (W->LineTraceSingleByChannel(Hit, Candidate, LookAt, ECC_Camera, Params)) { continue; }
+			FHitResult Above;
+			if (W->LineTraceSingleByChannel(Above, Candidate + FVector(0.0, 0.0, 250.0), Candidate, ECC_Camera, Params)) { continue; }
+			Eye = Candidate;
+			break;
+		}
+
+		// ---- the camera actor, reused
+		ACameraActor* Cam = Self->WardrobeCamera.Get();
+		if (Cam == nullptr)
+		{
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.ObjectFlags |= RF_Transient;
+			Cam = W->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(Eye), SpawnParams);
+			if (Cam == nullptr) { return; }
+#if WITH_EDITOR
+			Cam->SetActorLabel(TEXT("WL_WardrobeCamera"), false);
+#endif
+			Self->WardrobeCamera = Cam;
+		}
+		FRotator Aim = (LookAt - Eye).Rotation();
+		Aim.Yaw -= YawOff;
+		Aim.Pitch += PitchOff;
+		Cam->SetActorLocationAndRotation(Eye, Aim);
+		if (UCameraComponent* Lens = Cam->GetCameraComponent())
+		{
+			Lens->SetFieldOfView(HFov);
+			Lens->bConstrainAspectRatio = false;
+		}
+		// ---- THE BLACK BEHIND THE DOG, on the camera's own axis so it is always square to the lens.
+		// The window is a hole, so whatever the Dog stands in front of IS the wardrobe's background: a brick wall
+		// one time, a flower bed the next, a companion wandering through the shot. The founder's reference plates
+		// are all read against black, and a premium skin cannot be judged against a different garden each time.
+		// Parked beyond the Dog and scaled past the frame's far corners, it fills the window and nothing else.
+		AActor* Backdrop = Self->WardrobeBackdrop.Get();
+		if (Backdrop == nullptr)
+		{
+			FActorSpawnParameters BackdropParams;
+			BackdropParams.ObjectFlags |= RF_Transient;
+			BackdropParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			Backdrop = W->SpawnActor<AActor>(AActor::StaticClass(), FTransform::Identity, BackdropParams);
+			if (Backdrop != nullptr)
+			{
+				// A CYCLORAMA, NOT A PANEL. A vertical sheet behind the Dog cannot hide the garden FLOOR, because
+				// the floor runs from under the Dog toward the lens and fills the bottom of the frame in front of
+				// anything standing behind him -- the first build left the lower third of the window as paving.
+				// So: a wall behind, and a black deck under the Dog running back to meet it.
+				UStaticMeshComponent* Panel = NewObject<UStaticMeshComponent>(Backdrop, TEXT("WardrobeBlackWall"));
+				Backdrop->SetRootComponent(Panel);
+				UStaticMeshComponent* Deck = NewObject<UStaticMeshComponent>(Backdrop, TEXT("WardrobeBlackDeck"));
+				Deck->SetupAttachment(Panel);
+				UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
+				UMaterialInstanceDynamic* Black = nullptr;
+				if (UMaterialInterface* Plain = LoadObject<UMaterialInterface>(
+						nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
+				{
+					Black = UMaterialInstanceDynamic::Create(Plain, Backdrop);
+					// NOT PURE ZERO: a hair above black keeps the panel from flattening into the HUD's own
+					// dark chrome, so the window still reads as a lit space the Dog is standing in.
+					if (Black != nullptr)
+					{
+						Black->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.008f, 0.009f, 0.013f, 1.0f));
+					}
+				}
+				for (UStaticMeshComponent* Part : { Panel, Deck })
+				{
+					Part->RegisterComponent();
+					Part->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+					Part->SetCastShadow(false);
+					if (Cube != nullptr) { Part->SetStaticMesh(Cube); }
+					if (Black != nullptr) { Part->SetMaterial(0, Black); }
+				}
+#if WITH_EDITOR
+				Backdrop->SetActorLabel(TEXT("WL_WardrobeBackdrop"), false);
+#endif
+				Self->WardrobeBackdrop = Backdrop;
+			}
+		}
+		if (Backdrop != nullptr)
+		{
+			// Far enough behind the Dog that its own shadow and any ground contact stay off it, and wide enough
+			// that the frame's corners are still panel at this distance.
+			// THE SQUARE, AND ONLY THE SQUARE. Sized to the whole frame, this blacked out the entire garden behind
+			// the panel -- the founder's words were "not the world turning black". What he asked for is the
+			// wardrobe's own window reading as a black screen with the skin standing on it, so the panel is cut
+			// to the WINDOW's angular size (Size is that window as a fraction of the viewport) and centred on the
+			// Dog, who is already framed at the window's middle. Outside the window the world is untouched.
+			const FVector Away = (LookAt - Eye).GetSafeNormal2D();
+			const float Behind = Distance * 1.35f;
+			// TIGHT ACROSS, GENEROUS UP AND DOWN. Horizontally the panel must not spill past the window or it
+			// starts blacking the garden either side of it. Vertically it can be over-large safely: the screen
+			// area above and below the window is panel chrome, not world. A tight vertical margin is what made
+			// this inconsistent -- Apollo's square came out black and Hagoromo's showed brick across its lower
+			// half, because each skin's figure height changes the camera distance and with it the fit.
+			const float HalfW = (Distance + Behind) * TanH * FMath::Max(Size.X, 0.05f) * 1.15f;
+			const float HalfH = (Distance + Behind) * TanV * FMath::Max(Size.Y, 0.05f) * 2.40f;
+			const FVector At = LookAt + Away * Behind;
+			// The engine cube is 100 uu across, so scale is half-extent/50. The wall is turned to face the lens on
+			// the horizontal only -- a wall that pitches to face a slightly-raised camera would lift its own base
+			// off the ground and show a bright seam under it.
+			const FRotator Facing(0.0, (Eye - At).Rotation().Yaw, 0.0);
+			Backdrop->SetActorLocationAndRotation(At, Facing);
+			Backdrop->SetActorScale3D(FVector(0.04f, FMath::Max(HalfW, 60.0f) / 50.0f, FMath::Max(HalfH, 60.0f) / 50.0f));
+			if (AActor* BackdropActor = Backdrop)
+			{
+				TArray<UStaticMeshComponent*> Parts;
+				BackdropActor->GetComponents<UStaticMeshComponent>(Parts);
+				for (UStaticMeshComponent* Part : Parts)
+				{
+					if (Part == nullptr || Part->GetFName() != TEXT("WardrobeBlackDeck")) { continue; }
+					// THE DECK, in the wall's own frame. It reaches from the wall forward past the Dog's feet to
+					// well in front of the lens, and sits a little below the feet so the Dog is not cut off at the
+					// ankle by its own stage. Parent scale is (0.04, W, H), so the child's scale is divided
+					// through by it to come out square in world space.
+					// FORWARD ONLY AS FAR AS THE WINDOW SEES. Running the deck out past the lens turned the whole
+					// garden floor black along with the window; it only has to reach the Dog's feet and a little
+					// past them, because beyond that it is outside the square.
+					const float Forward = Behind + Distance * 1.10f;
+					const FVector ParentScale(0.04f, FMath::Max(HalfW, 60.0f) / 50.0f, FMath::Max(HalfH, 60.0f) / 50.0f);
+					Part->SetRelativeScale3D(FVector((Forward / 50.0f) / ParentScale.X,
+													 1.0f,
+													 (4.0f / 50.0f) / ParentScale.Z));
+					// THE GROUND IS TRACED, NOT DERIVED. This was computed from the figure's height, and figure
+					// height differs per skin -- so the deck landed correctly for Apollo and far too low for
+					// Hagoromo, which showed the founder brick wall across half its window. The floor the Dog is
+					// actually standing on is a trace away, and it is the same floor for every skin.
+					//
+					// ON ECC_Camera, AND THAT IS THE WHOLE FIX. This traced on ECC_Visibility, which THIS MAP'S
+					// PAVING DOES NOT ANSWER -- the fact is recorded forty lines below, where the preview-spot
+					// sweep rejected every candidate for the same reason, and every other ground trace in the
+					// project (the clearance bubble, the wardrobe camera, the brain sculpture) is on Camera. So
+					// the trace found nothing, fell silently back to the derived height above, and the comment
+					// swearing the ground was traced has been describing something that never happened. That
+					// derived height is exactly the one the founder saw as brick across half the window.
+					float GroundZ = Dog->GetActorLocation().Z - Height * 0.5f;
+					FHitResult Ground;
+					FCollisionQueryParams GroundParams(SCENE_QUERY_STAT(WonderlandWardrobeDeck), false);
+					GroundParams.AddIgnoredActor(Dog);
+					if (Relay != nullptr && Relay->GetCostume() != nullptr) { GroundParams.AddIgnoredActor(Relay->GetCostume()); }
+					const FVector From = Dog->GetActorLocation();
+					if (W->LineTraceSingleByChannel(Ground, From, From - FVector(0.0, 0.0, 600.0), ECC_Camera, GroundParams))
+					{
+						GroundZ = Ground.ImpactPoint.Z;
+					}
+					// A HAIR ABOVE THE REAL FLOOR, so the deck hides it instead of z-fighting with it.
+					const float DropToDeck = (LookAt.Z - GroundZ) - 1.5f;
+					Part->SetRelativeLocation(FVector(Forward * 0.5f / ParentScale.X, 0.0f,
+													  -DropToDeck / ParentScale.Z));
+				}
+			}
+		}
+
+		if (PC->GetViewTarget() != Cam)
+		{
+			PC->SetViewTargetWithBlend(Cam, 0.45f, EViewTargetBlendFunction::VTBlend_Cubic);
+		}
+	}), 0.08f, true, 0.05f);
+}
+
+void UWonderlandUiSubsystem::FrameBrainSculpture(bool bOn, bool bReleaseCamera)
+{
+	APlayerController* Controller = BoundController.Get();
+	UWorld* World = Controller != nullptr ? Controller->GetWorld() : nullptr;
+	APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+	if (World == nullptr || Pawn == nullptr)
+	{
+		return;
+	}
+	if (!bOn)
+	{
+		World->GetTimerManager().ClearTimer(BrainFrameTimer);
+		if (BrainPanel.IsValid())
+		{
+			// THE STILL COMES BACK FIRST, so there is never a frame with neither brain on screen.
+			BrainPanel->SetSculptureLive(false);
+		}
+		// ONLY IF THE BRAIN ACTUALLY HAS THE LENS. This runs from CloseOverlay, which closes every overlay there
+		// is -- so a bare "the camera exists" test would snatch the view back to the pawn when the founder shut a
+		// Wonder Web window that the brain had nothing to do with.
+		if (bReleaseCamera && BrainCamera.IsValid() && Controller->GetViewTarget() == BrainCamera.Get())
+		{
+			Controller->SetViewTargetWithBlend(Pawn, 0.35f, EViewTargetBlendFunction::VTBlend_Cubic);
+		}
+		// DESTROYED, NOT HIDDEN, for the reason the wardrobe's backdrop is: a brain left floating in the plaza is
+		// a prop the founder walks into the moment the panel closes.
+		if (AActor* Sculpture = BrainSculptureActor.Get())
+		{
+			Sculpture->Destroy();
+		}
+		BrainSculptureActor.Reset();
+		return;
+	}
+
+	// THE WINDOW HAS TO HAVE PAINTED ONCE before its place on screen is known, so this re-solves for a few frames
+	// while the panel settles -- the same timer shape, and for the same reason, as the wardrobe's framing.
+	TWeakObjectPtr<UWonderlandUiSubsystem> WeakThis(this);
+	World->GetTimerManager().SetTimer(BrainFrameTimer, FTimerDelegate::CreateWeakLambda(this, [WeakThis]()
+	{
+		UWonderlandUiSubsystem* Self = WeakThis.Get();
+		APlayerController* PC = Self != nullptr ? Self->BoundController.Get() : nullptr;
+		APawn* Dog = PC != nullptr ? PC->GetPawn() : nullptr;
+		UWorld* W = PC != nullptr ? PC->GetWorld() : nullptr;
+		if (Self == nullptr || Dog == nullptr || W == nullptr || !Self->BrainPanel.IsValid())
+		{
+			return;
+		}
+		FVector2D Centre, Size;
+		if (!Self->BrainPanel->GetBrainSculptureRect(Centre, Size))
+		{
+			// The wardrobe has the lens, or the panel has not painted yet. Either way the still art stays up.
+			Self->BrainPanel->SetSculptureLive(false);
+			return;
+		}
+
+		// ---- the sculpture itself, made once and kept while the panel is open
+		AWonderlandBrainSculpture* Sculpture = Self->BrainSculptureActor.Get();
+		if (Sculpture == nullptr)
+		{
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.ObjectFlags |= RF_Transient;
+			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			Sculpture = W->SpawnActor<AWonderlandBrainSculpture>(
+				AWonderlandBrainSculpture::StaticClass(), FTransform::Identity, SpawnParams);
+			if (Sculpture == nullptr) { return; }
+#if WITH_EDITOR
+			Sculpture->SetActorLabel(TEXT("WL_ProjectBrainSculpture"), false);
+#endif
+			Self->BrainSculptureActor = Sculpture;
+		}
+
+		// ---- the lens: the player's own field of view, so the framing maths matches what is drawn
+		const float HFov = PC->PlayerCameraManager != nullptr ? PC->PlayerCameraManager->GetFOVAngle() : 90.0f;
+		int32 VX = 0, VY = 0;
+		PC->GetViewportSize(VX, VY);
+		const float Aspect = VY > 0 ? static_cast<float>(VX) / static_cast<float>(VY) : 1.777f;
+		const float TanH = FMath::Tan(FMath::DegreesToRadians(HFov * 0.5f));
+		const float TanV = TanH / Aspect;
+
+		// ---- IT FLOATS. A brain in a panel is a hologram, not a prop: it stands on nothing, so unlike the wardrobe
+		// ---- there is no floor to find and no plinth to put it on. The eye is taken from the PAWN and not from the
+		// ---- camera, because once the view target is this camera, reading the camera to place the camera is a loop.
+		const FVector Eye = Dog->GetActorLocation() + FVector(0.0, 0.0, 70.0);
+		const FVector Forward = Dog->GetActorForwardVector();
+
+		// The python swims on a shell outside the brain, so what has to fit in the window is that shell, not the mass.
+		const float Reach = Sculpture->BrainRadiusUU * 1.55f * 2.0f;
+		const float WantTall = FMath::Max(Size.Y * 0.74f, 0.05f);
+		float Distance = FMath::Clamp(Reach / (WantTall * 2.0f * TanV), 260.0f, 2000.0f);
+
+		// ---- AND IT IS NEVER INSIDE A WALL. Five metres ahead is a doorway as often as it is open air; if something
+		// ---- solid is nearer than that, the brain is brought in front of it and simply reads a little larger.
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(WonderlandBrainSculptureSpot), false);
+		Params.AddIgnoredActor(Dog);
+		Params.AddIgnoredActor(Sculpture);
+		if (const ARelayDogCharacter* Relay = Cast<ARelayDogCharacter>(Dog))
+		{
+			if (Relay->GetCostume() != nullptr) { Params.AddIgnoredActor(Relay->GetCostume()); }
+		}
+		FHitResult Blocked;
+		if (W->LineTraceSingleByChannel(Blocked, Eye, Eye + Forward * Distance, ECC_Camera, Params))
+		{
+			Distance = FMath::Max(static_cast<float>(Blocked.Distance) - Reach * 0.55f, 180.0f);
+		}
+		const FVector Where = Eye + Forward * Distance;
+		Sculpture->SetActorLocation(Where);
+
+		// ---- the brain sits at the WINDOW'S centre, which is off the screen's centre: aim the lens away from it by
+		// ---- exactly that angle. Screen y runs downward.
+		const float YawOff = FMath::RadiansToDegrees(FMath::Atan((Centre.X - 0.5f) * 2.0f * TanH));
+		const float PitchOff = FMath::RadiansToDegrees(FMath::Atan((Centre.Y - 0.5f) * 2.0f * TanV));
+
+		ACameraActor* Cam = Self->BrainCamera.Get();
+		if (Cam == nullptr)
+		{
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.ObjectFlags |= RF_Transient;
+			Cam = W->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(Eye), SpawnParams);
+			if (Cam == nullptr) { return; }
+#if WITH_EDITOR
+			Cam->SetActorLabel(TEXT("WL_ProjectBrainCamera"), false);
+#endif
+			Self->BrainCamera = Cam;
+		}
+		FRotator Aim = Forward.Rotation();
+		Aim.Yaw -= YawOff;
+		Aim.Pitch += PitchOff;
+		Cam->SetActorLocationAndRotation(Eye, Aim);
+		if (UCameraComponent* Lens = Cam->GetCameraComponent())
+		{
+			Lens->SetFieldOfView(HFov);
+			Lens->bConstrainAspectRatio = false;
+		}
+		if (PC->GetViewTarget() != Cam)
+		{
+			PC->SetViewTargetWithBlend(Cam, 0.45f, EViewTargetBlendFunction::VTBlend_Cubic);
+		}
+		// ONLY NOW is the still art stood down: everything the live brain needs exists and is pointed at.
+		Self->BrainPanel->SetSculptureLive(true);
+	}), 0.08f, true, 0.05f);
+}
+
+void UWonderlandUiSubsystem::StageSkinPreviewInWorld(bool bOn)
+{
+	AWonderlandSkinStage* Stage = SkinStage();
+	APlayerController* Controller = BoundController.Get();
+	APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+	if (Stage == nullptr || Pawn == nullptr)
+	{
+		return;
+	}
+	if (!bOn)
+	{
+		Stage->SetInWorldPreview(false, FVector::ZeroVector, FRotator::ZeroRotator);
+		return;
+	}
+	const FVector At = Pawn->GetActorLocation();
+	const FVector Forward = Pawn->GetActorForwardVector();
+	const FVector Right = Pawn->GetActorRightVector();
+	UWorld* World = Pawn->GetWorld();
+
+	// A SPOT THE FOUNDER CAN ACTUALLY SEE. The first version stood the Dog a fixed 320 uu ahead and 170 aside,
+	// and the first portraits came back as a wall of Jhinn: the companions follow the player at three or four
+	// metres, they have no collision, so a trace walks straight through them and calls the view clear while one
+	// of them fills the frame. Candidates are swept outward instead, and each must have a floor under it, nobody
+	// standing on it, and a line of sight from the founder's eyes that passes nothing solid AND no bystander.
+	TArray<FVector> Bystanders;
+	for (TActorIterator<AWonderlandCompanionEmbodiment> It(World); It; ++It)
+	{
+		if (*It != Stage->GetBody()) { Bystanders.Add(It->GetActorLocation()); }
+	}
+	for (TActorIterator<AWonderlandSubAgentCub> It(World); It; ++It) { Bystanders.Add(It->GetActorLocation()); }
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(WonderlandSkinPreviewSpot), false);
+	Params.AddIgnoredActor(Pawn);
+	Params.AddIgnoredActor(Stage);
+	if (Stage->GetBody() != nullptr) { Params.AddIgnoredActor(Stage->GetBody()); }
+	const FVector Eyes = At + FVector(0.0, 0.0, 70.0);
+
+	// ECC_Camera, NOT ECC_Visibility. The first sweep rejected every candidate: this map's paving does not answer
+	// on Visibility, and the clearance bubble -- which finds ground under a Mission Contract every time -- traces
+	// on Camera. Same channel, same answer.
+	static const float Ahead[] = { 340.0f, 460.0f, 600.0f, 760.0f };
+	static const float Aside[] = { 170.0f, -170.0f, 0.0f, 340.0f, -340.0f };
+	FVector Where = At + Forward * 320.0 + Right * 170.0 - FVector(0.0, 0.0, 88.0);
+	bool bFound = false;
+	for (float A : Ahead)
+	{
+		for (float S : Aside)
+		{
+			const FVector Spot = At + Forward * A + Right * S;
+			FHitResult Ground;
+			if (!World->LineTraceSingleByChannel(Ground, Spot + FVector(0.0, 0.0, 300.0), Spot - FVector(0.0, 0.0, 400.0), ECC_Camera, Params)
+				|| Ground.ImpactNormal.Z < 0.7f)
+			{
+				continue;
+			}
+			bool bCrowded = false;
+			for (const FVector& B : Bystanders) { if (FVector::Dist2D(B, Spot) < 260.0f) { bCrowded = true; break; } }
+			if (bCrowded) { continue; }
+			const FVector Chest(Spot.X, Spot.Y, Ground.ImpactPoint.Z + 90.0);
+			FHitResult Sight;
+			if (World->LineTraceSingleByChannel(Sight, Eyes, Chest, ECC_Camera, Params)) { continue; }
+			bool bBodyInTheWay = false;
+			const FVector Seg = Chest - Eyes;
+			for (const FVector& B : Bystanders)
+			{
+				const float T = FMath::Clamp(FVector::DotProduct(B - Eyes, Seg) / FMath::Max(Seg.SizeSquared(), 1.0), 0.0, 1.0);
+				if (FVector::Dist2D(Eyes + Seg * T, B) < 150.0f) { bBodyInTheWay = true; break; }
+			}
+			if (bBodyInTheWay) { continue; }
+			Where = FVector(Spot.X, Spot.Y, Ground.ImpactPoint.Z);
+			bFound = true;
+			break;
+		}
+		if (bFound) { break; }
+	}
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLSKIN preview spot %s (%d bystander(s))"), bFound ? TEXT("found clear") : TEXT("FALLBACK, none clear"), Bystanders.Num());
+	// FACING THE PLAYER, because a skin is judged from the front.
+	const FRotator Facing = (At - Where).GetSafeNormal2D().Rotation();
+	Stage->SetInWorldPreview(true, Where, Facing);
+}
+
+void UWonderlandUiSubsystem::RefreshSkinPreviewBrush()
+{
+	AWonderlandSkinStage* Stage = SkinStage();
+	if (Stage == nullptr)
+	{
+		return;
+	}
+	UTextureRenderTarget2D* Target = Stage->GetRenderTarget();
+	if (Target == nullptr)
+	{
+		return;
+	}
+	if (!SkinPreviewBrush.IsValid())
+	{
+		SkinPreviewBrush = MakeShared<FSlateBrush>();
+		SkinPreviewBrush->ImageSize = FVector2D(640.0, 800.0);
+		SkinPreviewBrush->DrawAs = ESlateBrushDrawType::Image;
+	}
+	// RE-POINTED EVERY TIME, not only when it is null. Re-setting the resource object makes Slate drop the handle
+	// it cached and take a fresh one, which is the whole point: the stale handle is the bug.
+	SkinPreviewBrush->SetResourceObject(Target);
+	// AND THE STAGE IS TOLD SOMEBODY IS LOOKING, so the first frame after opening is a real capture rather than
+	// whatever was left in the target from last time.
+	Stage->MarkWanted();
+}
+
+bool UWonderlandUiSubsystem::SetBrainSkinsOpen(bool bOpen)
+{
+	if (!IsProjectBrainOpen() || !BrainPanel.IsValid())
+	{
+		return false;
+	}
+	if (bOpen)
+	{
+		RefreshSkinPreviewBrush();
+	}
+	// THE FOUNDER'S OWN DOG IS THE PREVIEW. It wears the skin now (ARelayDogCharacter::WearSkin), so there is no
+	// mannequin to stand anywhere: the panel opens a window and the camera frames the Dog inside it.
+	BrainPanel->SetSkinsOpen(bOpen);
+	// ONE LENS, HANDED OVER CLEANLY. The wardrobe and the brain both want the camera, and they are never both on
+	// show: the brain stands down as the wardrobe opens and comes back when it closes. Without this the two
+	// framings fight over the view target every tick -- which is what a click on a skin looked like from outside.
+	// Opening, the brain lets go WITHOUT releasing the camera, because the wardrobe is about to take it: releasing
+	// would blend back to the pawn and straight out again for no reason the founder could see a purpose in.
+	if (bOpen)
+	{
+		FrameBrainSculpture(false, /*bReleaseCamera*/ false);
+		FrameRelayDogInWardrobe(true);
+	}
+	else
+	{
+		FrameRelayDogInWardrobe(false);
+		FrameBrainSculpture(true);
+	}
+	return BrainPanel->IsSkinsOpen() == bOpen;
+}
+
+bool UWonderlandUiSubsystem::IsBrainSkinsOpen() const
+{
+	return BrainPanel.IsValid() && BrainPanel->IsSkinsOpen();
+}
+
+bool UWonderlandUiSubsystem::WearRelaySkin(FName SkinId)
+{
+	UWonderlandRelaySkinSubsystem* Registry = RelaySkins();
+	return Registry != nullptr && Registry->EquipSkin(SkinId);
+}
+
+int32 UWonderlandUiSubsystem::GetSkinStageFrameCount() const
+{
+	const AWonderlandSkinStage* Stage = SkinStageActor.Get();
+	return Stage != nullptr ? Stage->GetFrameCount() : 0;
+}
+
+UWonderlandMissionTaskSubsystem* UWonderlandUiSubsystem::Tasks() const
+{
+	ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
+	return Player != nullptr ? Player->GetSubsystem<UWonderlandMissionTaskSubsystem>() : nullptr;
+}
+
+bool UWonderlandUiSubsystem::PressAddTask()
+{
+	UWonderlandMissionTaskSubsystem* Set = Tasks();
+	if (Set == nullptr)
+	{
+		return false;
+	}
+	const FGuid Id = Set->AddDraft();
+	if (Id.IsValid() && TaskEntry.IsValid())
+	{
+		// THE NEXT THING ANYBODY DOES IS TYPE, so the field is cleared and given focus rather than waiting to be
+		// clicked. A + that takes two clicks to mean one thing is a + nobody presses twice.
+		TaskEntry->SetText(FText::GetEmpty());
+		FSlateApplication::Get().SetKeyboardFocus(TaskEntry, EFocusCause::SetDirectly);
+	}
+	return Id.IsValid();
+}
+
+void UWonderlandUiSubsystem::MountTaskAddControl()
+{
+	ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
+	if (TaskAddLayer.IsValid() || Player == nullptr || Player->ViewportClient == nullptr)
+	{
+		return;
+	}
+	TWeakObjectPtr<UWonderlandUiSubsystem> WeakThis(this);
+
+	// WHAT THE SELECTED SLOT IS, asked fresh each frame rather than remembered: the set can change from the console,
+	// from a proof, or from a scheduler, and a remembered answer would be wrong the moment any of those happened.
+	const auto SelectedIsDraft = [WeakThis]()
+	{
+		const UWonderlandMissionTaskSubsystem* Set = WeakThis.IsValid() ? WeakThis->Tasks() : nullptr;
+		const FWonderlandMissionTask* Task = Set != nullptr ? Set->GetSelectedTask() : nullptr;
+		return Task != nullptr && !WonderlandTaskIsContract(Task->State);
+	};
+
+	TaskAddLayer = SNew(SConstraintCanvas)
+		.Visibility(EVisibility::SelfHitTestInvisible)
+		// BESIDE THE TOKEN USAGE METERS, not beside the logo above them.
+		//
+		// The usage widget is positioned at (30, 22) but that is its TOP LEFT, and what it draws there is the mark;
+		// the COMPOUND AGENT / SINGLE AGENT / LLM COMPANION rows sit well below it. A + at y=20 landed alongside the
+		// logo, where a filmed frame showed it invisible against the art -- beside the wrong thing, which is the same
+		// fault as being missing. These offsets put it level with the first meter row, just right of the figures.
+		+ SConstraintCanvas::Slot()
+		.Anchors(FAnchors(0.0f, 0.0f, 0.0f, 0.0f))
+		.Offset(FMargin(392.0f, 318.0f, 0.0f, 0.0f))
+		.AutoSize(true)
+		.Alignment(FVector2D(0.0, 0.0))
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					// A BORDER, BECAUSE A BORDERLESS + IS NOT A CONTROL. Filmed against the plaza the NoBorder
+					// version was invisible -- the subsystem reported it on screen and no frame contained it, which
+					// is the worst of both. This is still small and still quiet: a hairline box and a dim gold
+					// glyph, sized to sit beside a usage figure rather than compete with one.
+					SNew(SBorder)
+					.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+					.BorderBackgroundColor(FSlateColor(FLinearColor(0.05f, 0.05f, 0.07f, 0.78f)))
+					.Padding(FMargin(1.0f))
+					[
+						SNew(SButton)
+						.ButtonStyle(FCoreStyle::Get(), "NoBorder")
+						.ToolTipText(INVTEXT("Add another task for Julius"))
+						.ContentPadding(FMargin(10.0f, 2.0f))
+						.OnClicked_Lambda([WeakThis]()
+						{
+							if (WeakThis.IsValid()) { WeakThis->PressAddTask(); }
+							return FReply::Handled();
+						})
+						[
+							SNew(STextBlock)
+							.Text(INVTEXT("+"))
+							.Font(WonderlandUi::Sans(22, true))
+							.ColorAndOpacity(WonderlandUi::Gold())
+						]
+					]
+				]
+				// How many contracts are open, so the + says what it is adding to without being pressed.
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(6.0f, 0.0f, 0.0f, 0.0f))
+				[
+					SNew(STextBlock)
+					.Font(WonderlandUi::Sans(9, false, 2))
+					.ColorAndOpacity(WonderlandUi::Cream())
+					.Text_Lambda([WeakThis]()
+					{
+						const UWonderlandMissionTaskSubsystem* Set = WeakThis.IsValid() ? WeakThis->Tasks() : nullptr;
+						if (Set == nullptr || Set->NumTasks() == 0)
+						{
+							return INVTEXT("ADD A TASK");
+						}
+						return FText::FromString(FString::Printf(TEXT("%d TASK%s"),
+							Set->NumTasks(), Set->NumTasks() == 1 ? TEXT("") : TEXT("S")));
+					})
+				]
+			]
+			// THE ONE LINE, shown only while the selected slot is still empty. A field standing open beside a
+			// finished contract would invite somebody to type into a task that has already been submitted.
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.0f, 5.0f, 0.0f, 0.0f))
+			[
+				SNew(SHorizontalBox)
+				.Visibility_Lambda([SelectedIsDraft]()
+				{
+					return SelectedIsDraft() ? EVisibility::Visible : EVisibility::Collapsed;
+				})
+				+ SHorizontalBox::Slot().AutoWidth()
+				[
+					SNew(SBox).WidthOverride(360.0f)
+					[
+						SAssignNew(TaskEntry, SEditableTextBox)
+						.HintText(INVTEXT("what should Julius do?"))
+						.OnTextCommitted_Lambda([WeakThis](const FText& Text, ETextCommit::Type How)
+						{
+							if (How != ETextCommit::OnEnter || !WeakThis.IsValid()) { return; }
+							UWonderlandMissionTaskSubsystem* Set = WeakThis->Tasks();
+							if (Set == nullptr) { return; }
+							// GRAY BECOMES RED HERE, and only here. A blank line is refused by the set itself.
+							if (Set->SubmitDraft(Set->GetSelected(), Text.ToString()) && WeakThis->TaskEntry.IsValid())
+							{
+								WeakThis->TaskEntry->SetText(FText::GetEmpty());
+							}
+						})
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(8.0f, 0.0f, 0.0f, 0.0f))
+				[
+					SNew(SButton)
+					.ButtonStyle(FCoreStyle::Get(), "NoBorder")
+					.ToolTipText(INVTEXT("Throw this empty slot away. No mission is created."))
+					.OnClicked_Lambda([WeakThis]()
+					{
+						if (WeakThis.IsValid())
+						{
+							if (UWonderlandMissionTaskSubsystem* Set = WeakThis->Tasks())
+							{
+								Set->DismissDraft(Set->GetSelected());
+							}
+						}
+						return FReply::Handled();
+					})
+					[
+						SNew(STextBlock).Text(INVTEXT("DISMISS"))
+						.Font(WonderlandUi::Sans(8, false, 2)).ColorAndOpacity(WonderlandUi::Faint())
+					]
+				]
+			]
+		];
+	// Beside the usage HUD's own layer (10), below the companion consoles (20) and every panel.
+	Player->ViewportClient->AddViewportWidgetForPlayer(Player, TaskAddLayer.ToSharedRef(), 11);
+}
+
+void UWonderlandUiSubsystem::UnmountTaskAddControl()
+{
+	ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
+	if (TaskAddLayer.IsValid() && Player != nullptr && Player->ViewportClient != nullptr)
+	{
+		Player->ViewportClient->RemoveViewportWidgetForPlayer(Player, TaskAddLayer.ToSharedRef());
+	}
+	TaskAddLayer.Reset();
+	TaskEntry.Reset();
+}
+
+UWonderlandRelaySkinSubsystem* UWonderlandUiSubsystem::RelaySkins() const
+{
+	const UWorld* World = GetWorld();
+	const UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+	return GameInstance != nullptr ? GameInstance->GetSubsystem<UWonderlandRelaySkinSubsystem>() : nullptr;
+}
+
+AWonderlandSkinStage* UWonderlandUiSubsystem::SkinStage()
+{
+	if (SkinStageActor.IsValid())
+	{
+		return SkinStageActor.Get();
+	}
+	AWonderlandSkinStage* Stage = AWonderlandSkinStage::Get(GetWorld());
+	SkinStageActor = Stage;
+	return Stage;
 }
 
 UWonderlandEntitlementSubsystem* UWonderlandUiSubsystem::Entitlements() const
@@ -2102,9 +2952,296 @@ bool UWonderlandUiSubsystem::ProposeToSelectedBrainSurface(const FString& Text)
 	return Open == EOverlay::Brain && BrainPanel.IsValid() && BrainPanel->ProposeToSelected(Text);
 }
 
+bool UWonderlandUiSubsystem::ShowProjectAvatars(const FString& Argument)
+{
+	UWorld* World = PlayerWorld();
+	APlayerController* Controller = BoundController.Get();
+	APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+	if (World == nullptr || Pawn == nullptr || !Terminal.IsValid())
+	{
+		return true;
+	}
+
+	// A SECOND /pa CLEARS THE FIRST, so the founder can look twice without wading through six avatars.
+	int32 Cleared = 0;
+	for (int32 Index = ShownProjectAvatars.Num() - 1; Index >= 0; --Index)
+	{
+		if (AActor* Shown = ShownProjectAvatars[Index].Get())
+		{
+			Shown->Destroy();
+			++Cleared;
+		}
+	}
+	ShownProjectAvatars.Reset();
+	if (Argument.Equals(TEXT("off"), ESearchCase::IgnoreCase) || Argument.Equals(TEXT("none"), ESearchCase::IgnoreCase))
+	{
+		Terminal->AddJuliusRow(TEXT("You"), TEXT("/pa off"),
+			FString::Printf(TEXT("%d project avatar(s) dismissed."), Cleared));
+		return true;
+	}
+
+	FString Stage = Argument.IsEmpty() ? TEXT("Large") : Argument;
+	Stage = Stage.Left(1).ToUpper() + Stage.Mid(1).ToLower();
+	if (Stage != TEXT("Small") && Stage != TEXT("Medium") && Stage != TEXT("Large"))
+	{
+		Stage = TEXT("Large");
+	}
+
+	static const TCHAR* const Families[] = { TEXT("TenTails"), TEXT("Cherubim"), TEXT("Seraph") };
+	const FVector At = Pawn->GetActorLocation();
+	const FVector Forward = Pawn->GetActorForwardVector();
+	const FVector Right = Pawn->GetActorRightVector();
+
+	TArray<FString> Shown;
+	TArray<FString> Missing;
+	for (int32 Index = 0; Index < UE_ARRAY_COUNT(Families); ++Index)
+	{
+		// THE ACCEPTED FAMILY IS NOW THE .wlvox ONE, AND THAT IS A REVERSAL WORTH STATING. This spawned the world
+		// lane's BP_Avatar_* Blueprints because they were the newer assets and the founder had said "do not
+		// silently substitute old voxel placeholders if newer assets exist". Both halves of that have since
+		// changed: on 2026-09-23 the founder rejected every BP_Avatar_* body as blocky and LEGO-like, the whole
+		// line was handed to this lane, the figures were remade from the forge, and the founder approved THOSE.
+		// So showing the .wlvox figures is no longer a silent substitution of something older -- it is the only
+		// way /pa shows what was actually accepted. The Blueprints are deliberately no longer loaded.
+		const FString Figure = FPaths::ConvertRelativePathToFull(
+			FPaths::ProjectDir() / TEXT("ProjectAvatars") / FString::Printf(TEXT("%s_%s.wlvox"), Families[Index], *Stage));
+		if (!FPaths::FileExists(Figure))
+		{
+			Missing.Add(FString::Printf(TEXT("%s %s"), Families[Index], *Stage.ToUpper()));
+			continue;
+		}
+		// SPREAD ACROSS THE VIEW, far enough apart that a five-metre creature does not stand inside its neighbour.
+		const float Lateral = (static_cast<float>(Index) - 1.0f) * 620.0f;
+		const FVector Where = At + Forward * 900.0 + Right * Lateral - FVector(0.0, 0.0, 88.0);
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		AWonderlandCompanionEmbodiment* Body = World->SpawnActor<AWonderlandCompanionEmbodiment>(
+			AWonderlandCompanionEmbodiment::StaticClass(),
+			FTransform((At - Where).GetSafeNormal2D().Rotation(), Where), Params);
+		if (Body == nullptr || !Body->LoadFigure(Figure))
+		{
+			if (Body != nullptr) { Body->Destroy(); }
+			Missing.Add(FString::Printf(TEXT("%s %s (figure would not load)"), Families[Index], *Stage.ToUpper()));
+			continue;
+		}
+		Body->DisplayName = FString::Printf(TEXT("%s %s"), Families[Index], *Stage.ToUpper());
+		Body->ClassLabel = TEXT("PROJECT AVATAR");
+		// THE OVERHANG, WHICH IS THE WHOLE TRAP THE HANDOFF WARNED ABOUT. The Blueprints were levelled so their
+		// lowest geometry sat at z=0 and could be dropped straight on the ground. These figures are not: each one
+		// carries its own overhang, and the two families' conventions cannot be mixed without burying one and
+		// floating the other. So the lift is MEASURED from the figure's own lowest instance rather than assumed.
+		TInlineComponentArray<UInstancedStaticMeshComponent*> Meshes(Body);
+		double Lowest = TNumericLimits<double>::Max();
+		for (UInstancedStaticMeshComponent* Mesh : Meshes)
+		{
+			const int32 Count = Mesh != nullptr ? Mesh->GetInstanceCount() : 0;
+			for (int32 I = 0; I < Count; ++I)
+			{
+				FTransform Instance;
+				if (Mesh->GetInstanceTransform(I, Instance, /*bWorldSpace=*/true))
+				{
+					Lowest = FMath::Min(Lowest, Instance.GetTranslation().Z);
+				}
+			}
+		}
+		if (Lowest < TNumericLimits<double>::Max())
+		{
+			// Lift by exactly the gap between where the feet are and where the ground is, so the lowest voxel lands on it.
+			const double Lift = Where.Z - Lowest;
+			Body->SetActorLocation(Where + FVector(0.0, 0.0, Lift), false, nullptr, ETeleportType::TeleportPhysics);
+		}
+#if WITH_EDITOR
+		Body->SetActorLabel(FString::Printf(TEXT("WL_PA_%s_%s"), Families[Index], *Stage), false);
+#endif
+		ShownProjectAvatars.Add(Body);
+		Shown.Add(FString::Printf(TEXT("%s %s"), Families[Index], *Stage.ToUpper()));
+	}
+
+	const FString Headline = Shown.Num() > 0
+		? FString::Printf(TEXT("%d Project Avatar(s) standing ahead: %s"), Shown.Num(), *FString::Join(Shown, TEXT(", ")))
+		: TEXT("No Project Avatar assets could be loaded.");
+	const FString Sub = Missing.Num() > 0
+		? FString::Printf(TEXT("DEVELOPMENT PREVIEW. Not built yet: %s"), *FString::Join(Missing, TEXT(", ")))
+		: TEXT("DEVELOPMENT PREVIEW - a showcase only. No project's real progression is changed by this.");
+	Terminal->AddJuliusRow(TEXT("You"), FString::Printf(TEXT("/pa %s"), *Stage.ToLower()), Headline);
+	Terminal->AddJuliusRow(TEXT("Wonderland"), Headline, Sub);
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI /pa -> %d shown, %d missing"), Shown.Num(), Missing.Num());
+	return true;
+}
+
+bool UWonderlandUiSubsystem::HandleTerminalCommand(const FString& Text)
+{
+	const FString Line = Text.TrimStartAndEnd();
+	if (!Line.StartsWith(TEXT("/")) || !Terminal.IsValid())
+	{
+		return false;
+	}
+	FString Command = Line;
+	FString Argument;
+	Line.Split(TEXT(" "), &Command, &Argument, ESearchCase::IgnoreCase, ESearchDir::FromStart);
+	Command = Command.ToLower().TrimStartAndEnd();
+	Argument = Argument.TrimStartAndEnd();
+
+	if (Command == TEXT("/tasks"))
+	{
+		// THE RECORD, AND THE WAY BACK INTO THE WORKSPACE. `/tasks` lists every task with its state and whether it
+		// is open; `/tasks open N` brings a closed one back as a tab and an orb; `/tasks close N` is the X.
+		UWonderlandMissionTaskSubsystem* Set = Tasks();
+		if (Set == nullptr)
+		{
+			Terminal->AddJuliusRow(TEXT("You"), Line, TEXT("There is no task set in this world."));
+			return true;
+		}
+		FString Verb, Which;
+		Argument.Split(TEXT(" "), &Verb, &Which);
+		if (Verb.IsEmpty()) { Verb = Argument; }
+		const TArray<FWonderlandMissionTask>& Rows = Set->GetTasks();
+		if (Verb.Equals(TEXT("open"), ESearchCase::IgnoreCase) || Verb.Equals(TEXT("close"), ESearchCase::IgnoreCase))
+		{
+			const int32 Index = FCString::Atoi(*Which) - 1;
+			if (!Rows.IsValidIndex(Index))
+			{
+				Terminal->AddJuliusRow(TEXT("You"), Line, FString::Printf(TEXT("No task %s. /tasks lists them."), *Which));
+				return true;
+			}
+			const bool bOpen = Verb.Equals(TEXT("open"), ESearchCase::IgnoreCase);
+			const bool bOk = bOpen ? Set->ReopenInWorkspace(Rows[Index].LocalId) : Set->CloseFromWorkspace(Rows[Index].LocalId);
+			Terminal->AddJuliusRow(TEXT("You"), Line, bOk
+				? FString::Printf(TEXT("Task %d %s. Its Mission Contract is unchanged."), Index + 1, bOpen ? TEXT("reopened") : TEXT("closed"))
+				: TEXT("Refused -- see the log."));
+			return true;
+		}
+		if (Rows.Num() == 0)
+		{
+			Terminal->AddJuliusRow(TEXT("You"), Line, TEXT("No tasks. Press + to open one."));
+			return true;
+		}
+		for (int32 Index = 0; Index < Rows.Num(); ++Index)
+		{
+			const FWonderlandMissionTask& Task = Rows[Index];
+			Terminal->AddJuliusRow(TEXT("Tasks"),
+				FString::Printf(TEXT("%d  %s  %s"), Index + 1, WonderlandTaskStateName(Task.State),
+					Task.bInWorkspace ? TEXT("OPEN") : TEXT("closed")),
+				Task.Objective.IsEmpty() ? TEXT("(empty draft)") : Task.Objective.Left(72));
+		}
+		Terminal->AddJuliusRow(TEXT("Tasks"), TEXT("/tasks open N   /tasks close N"),
+			TEXT("Closing a tab keeps the contract. Only an explicit cancel would end a mission, and there is none yet."));
+		return true;
+	}
+
+	if (Command == TEXT("/skin"))
+	{
+		// THE WARDROBE WITHOUT THE WARDROBE. The panel covers the screen, so the quickest way to compare skins is
+		// to not open it: `/skin apollo`, look, `/skin bee`, look.
+		//
+		// PREVIEW IS NOT OWNERSHIP. This dresses the development preview body and the registry's equipped skin,
+		// which is what the in-world Dog and the cards both read. It grants no entitlement and claims no purchase:
+		// the panel still says NO ACCOUNT HAS GRANTED THIS, because no account has.
+		UWonderlandRelaySkinSubsystem* Registry = RelaySkins();
+		if (Registry == nullptr)
+		{
+			Terminal->AddJuliusRow(TEXT("You"), Line, TEXT("There is no skin registry in this world."));
+			return true;
+		}
+		if (Argument.Equals(TEXT("off"), ESearchCase::IgnoreCase) || Argument.Equals(TEXT("none"), ESearchCase::IgnoreCase))
+		{
+			// OFF IS RELAY OG: the Dog's own body. There is no separate preview body to dismiss any more.
+			Registry->EquipSkin(TEXT("relay_og"));
+			Terminal->AddJuliusRow(TEXT("You"), TEXT("/skin off"), TEXT("RELAY OG. The Dog wears its own body."));
+			return true;
+		}
+		if (Argument.IsEmpty() || Argument.Equals(TEXT("list"), ESearchCase::IgnoreCase))
+		{
+			TArray<FString> Names;
+			for (const FWonderlandRelaySkin& Skin : Registry->GetSkins())
+			{
+				Names.Add(Skin.SkinId.ToString());
+			}
+			Terminal->AddJuliusRow(TEXT("You"), Line, FString::Join(Names, TEXT("  ")));
+			return true;
+		}
+		const FName Wanted(*Argument.ToLower().Replace(TEXT(" "), TEXT("_")));
+		if (!Registry->EquipSkin(Wanted))
+		{
+			Terminal->AddJuliusRow(TEXT("You"), Line,
+				FString::Printf(TEXT("No skin named '%s'. Try /skin list."), *Argument));
+			return true;
+		}
+		Terminal->AddJuliusRow(TEXT("You"), Line,
+			FString::Printf(TEXT("%s - your Relay Dog wears it now. DEVELOPMENT PREVIEW: appearance only, no entitlement granted."),
+				*Argument.ToUpper()));
+		return true;
+	}
+
+	if (Command == TEXT("/pa"))
+	{
+		// FOUNDER PREVIEW: every Project Avatar family that actually exists, standing in front of the founder.
+		//
+		// A PROJECT AVATAR IS THE REPRESENTATION OF A PROJECT. Not Julius, not the Relay Dog, not a sub-agent, not
+		// a Jhinn and not the LLM Companion. Nothing here spawns or touches any of those, and nothing here moves
+		// a project's real progression: this is a development showcase and it is the founder's own dev command.
+		//
+		// THE HANDED-OVER MESH ASSETS, NOT THE VOXEL PLACEHOLDERS. The founder was explicit -- "Do not silently
+		// substitute old voxel placeholders if newer assets exist" -- and the world lane's BP_Avatar_* Blueprints
+		// are the newer ones. A family whose Blueprint will not load is REPORTED MISSING rather than quietly
+		// replaced by the .wlvox figure of the same name, because those are different asset families and saying
+		// otherwise would show the founder one thing while naming another.
+		return ShowProjectAvatars(Argument);
+	}
+
+	if (Command == TEXT("/cubs"))
+	{
+		UWorld* World = PlayerWorld();
+		UWonderlandSubAgentCubSubsystem* Flock = World != nullptr ? World->GetSubsystem<UWonderlandSubAgentCubSubsystem>() : nullptr;
+		if (Flock == nullptr)
+		{
+			Terminal->AddJuliusRow(TEXT("You"), Line, TEXT("There is no sub-agent flock in this world."));
+			return true;
+		}
+		// `/cubs` on its own brings out as many as this account may run; a number asks for that many; `off` or `0`
+		// sends them home. Nothing here needs a mission: the cubs escort the Dog, and the Dog is always there.
+		int32 Wanted = Flock->GetMaxSubAgentCubCount();
+		if (Argument.Equals(TEXT("off"), ESearchCase::IgnoreCase) || Argument.Equals(TEXT("none"), ESearchCase::IgnoreCase))
+		{
+			Wanted = 0;
+		}
+		else if (!Argument.IsEmpty() && Argument.IsNumeric())
+		{
+			Wanted = FCString::Atoi(*Argument);
+		}
+		const int32 Given = Flock->SummonSubAgentCubs(Wanted);
+		const FString Note = Given == 0
+			? FString(TEXT("The cubs are returning to the Relay Dog."))
+			: FString::Printf(
+				TEXT("%d sub-agent cub%s summoned. SUMMONED BY YOU — this is not a report that Julius is running %d sub-agents. "
+				     "They swirl around the Dog while it is still and fly above it while it moves."),
+				Given, Given == 1 ? TEXT("") : TEXT("s"), Given);
+		Terminal->AddJuliusRow(TEXT("You"), Line, Note);
+		UE_LOG(LogWonderlandUi, Log, TEXT("WLUI /cubs -> %d summoned"), Given);
+		return true;
+	}
+
+	if (Command == TEXT("/help") || Command == TEXT("/commands"))
+	{
+		Terminal->AddJuliusRow(TEXT("You"), Line,
+			TEXT("/cubs [n|off] — summon the Relay Dog's sub-agent cub ghosts, in a mission or out of one."));
+		return true;
+	}
+
+	// AN UNKNOWN SLASH COMMAND IS NOT SILENTLY SENT ANYWHERE. A line beginning with a slash was meant as a command,
+	// and passing it on as a message to a Julius that is not connected would answer the wrong question twice.
+	Terminal->AddJuliusRow(TEXT("You"), Line,
+		FString::Printf(TEXT("%s is not a Wonderland command. Try /help."), *Command));
+	return true;
+}
+
 void UWonderlandUiSubsystem::HandleTerminalSubmit(const FString& Text)
 {
 	if (!Terminal.IsValid())
+	{
+		return;
+	}
+	if (HandleTerminalCommand(Text))
 	{
 		return;
 	}
@@ -2822,6 +3959,65 @@ void UWonderlandUiSubsystem::EnsureLiveTerminal()
 			return Source != nullptr ? Source->GetSlotLabel(Slot) : FString();
 		})
 		.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
+		// ONE IDENTITY, THREE SURFACES. A tab, its Mission Contract and its orb are the same task seen three ways,
+		// so the strip is built straight from the task set and carries that task's own LocalId. Nothing here mints
+		// a terminal id of its own -- which is exactly what the founder ruled out.
+		.OnGetTaskTabs_Lambda([WeakThis]()
+		{
+			TArray<SWonderlandLiveTerminal::FTaskTab> Out;
+			const UWonderlandMissionTaskSubsystem* Set = WeakThis.IsValid() ? WeakThis->Tasks() : nullptr;
+			if (Set == nullptr)
+			{
+				return Out;
+			}
+			const TArray<FWonderlandMissionTask>& Rows = Set->GetTasks();
+			for (int32 Index = 0; Index < Rows.Num(); ++Index)
+			{
+				// A TAB IS A TASK OPEN IN THE WORKSPACE. A closed one is on record and reachable through /tasks,
+				// and its orb is gone with it -- the same flag decides both.
+				if (!Rows[Index].bInWorkspace)
+				{
+					continue;
+				}
+				SWonderlandLiveTerminal::FTaskTab Tab;
+				Tab.Id = Rows[Index].LocalId;
+				Tab.bSelected = Rows[Index].LocalId == Set->GetSelected();
+				Tab.bDraft = !WonderlandTaskIsContract(Rows[Index].State);
+				// A DRAFT HAS NO OBJECTIVE TO NAME IT BY, so it says what it is instead of showing an empty tab.
+				Tab.Label = Tab.bDraft
+					? FString::Printf(TEXT("TASK %d · NEW"), Index + 1)
+					: FString::Printf(TEXT("TASK %d · %s"), Index + 1, *Rows[Index].Objective.Left(18).ToUpper());
+				Out.Add(Tab);
+			}
+			return Out;
+		})
+		.OnSelectTaskTab_Lambda([WeakThis](FGuid Id)
+		{
+			if (UWonderlandMissionTaskSubsystem* Set = WeakThis.IsValid() ? WeakThis->Tasks() : nullptr)
+			{
+				// A VIEW, NOT A COMMAND. The other tasks are not paused, reset or touched.
+				Set->SelectTask(Id);
+			}
+		})
+		.OnAddTaskTerminal_Lambda([WeakThis]()
+		{
+			// THE SAME CALL THE ORB STACK GROWS FROM, so a tab and an orb can never disagree about how many tasks
+			// there are. It creates an empty slot and selects it; it does not touch the terminal being viewed.
+			if (WeakThis.IsValid()) { WeakThis->PressAddTask(); }
+		})
+		.OnCloseTaskTerminal_Lambda([WeakThis]()
+		{
+			// THE X. Closes the selected tab and its orb; a draft is discarded, a contract keeps its truth.
+			if (UWonderlandMissionTaskSubsystem* Set = WeakThis.IsValid() ? WeakThis->Tasks() : nullptr)
+			{
+				Set->CloseFromWorkspace(Set->GetSelected());
+			}
+		})
+		.ClosedTaskCount_Lambda([WeakThis]()
+		{
+			const UWonderlandMissionTaskSubsystem* Set = WeakThis.IsValid() ? WeakThis->Tasks() : nullptr;
+			return Set != nullptr ? Set->NumTasks() - Set->GetWorkspaceCount() : 0;
+		})
 		.OnSubmit_Lambda([WeakThis](const FString& Text) { if (WeakThis.IsValid()) { WeakThis->HandleTerminalSubmit(Text); } });
 }
 

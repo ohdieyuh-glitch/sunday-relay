@@ -1,4 +1,5 @@
 #include "WonderlandCompanionTerminal.h"
+#include "Rendering/DrawElements.h"
 
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/IConsoleManager.h"
@@ -22,6 +23,72 @@ namespace
 	// sit at the screen's edge over bright stone and carry a heavy amber border.
 	FLinearColor CompanionFrameGold(float Alpha = 1.0f) { return WonderlandUi::Srgb(0xE3, 0xA5, 0x3E, Alpha); }
 	FLinearColor CompanionTitleGold() { return WonderlandUi::Srgb(0xF4, 0xAA, 0x3E); }
+}
+
+void SWonderlandPulseMark::Construct(const FArguments& InArgs)
+{
+	Size = InArgs._Size;
+	Beating = InArgs._Beating;
+	SetVisibility(EVisibility::HitTestInvisible);
+}
+
+float SWonderlandPulseMark::GetEnvelope() const
+{
+	if (!Beating.Get(false))
+	{
+		return 0.0f;
+	}
+	// A HEARTBEAT, NOT A SINE: a sharp rise to the first beat, a slower fall, a smaller second beat, then rest.
+	// 1.15 s per cycle, which is a resting pulse and reads as alive rather than busy.
+	const double T = FMath::Fmod(FSlateApplication::Get().GetCurrentTime(), 1.15);
+	auto Beat = [](double Local, double Rise, double Fall, double Peak)
+	{
+		if (Local < 0.0) return 0.0;
+		if (Local < Rise) return Peak * FMath::Sin((Local / Rise) * HALF_PI);
+		if (Local < Rise + Fall) return Peak * FMath::Cos(((Local - Rise) / Fall) * HALF_PI);
+		return 0.0;
+	};
+	return static_cast<float>(FMath::Max(Beat(T, 0.12, 0.30, 1.0), Beat(T - 0.36, 0.10, 0.28, 0.55)));
+}
+
+int32 SWonderlandPulseMark::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
+	FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const
+{
+	const float Env = GetEnvelope();
+	const bool bAlive = Beating.Get(false);
+	// The mark grows with the beat and brightens with it; still, it sits small and dim so a resting terminal is quiet.
+	const float Scale = (bAlive ? 0.86f : 0.72f) + 0.18f * Env;
+	const float Bright = (bAlive ? 0.55f : 0.28f) + 0.45f * Env;
+	const FVector2D Local = AllottedGeometry.GetLocalSize();
+	const FVector2D Centre = Local * 0.5;
+	const float Radius = FMath::Min(Local.X, Local.Y) * 0.5f * Scale;
+
+	// THREE NESTED ARCS, open at the lower right, green outside, blue in the middle, white at the heart -- the
+	// HUD's own i.Wonder mark. Each is a polyline so it scales without a texture.
+	struct FArc { FLinearColor Colour; float R; float From; float To; float Thick; };
+	const FArc Arcs[] = {
+		{ FLinearColor(0.20f, 0.82f, 0.60f), 1.00f, 300.0f, 30.0f, 3.2f },
+		{ FLinearColor(0.32f, 0.56f, 1.00f), 0.68f, 290.0f, 40.0f, 2.6f },
+		{ FLinearColor(0.98f, 0.98f, 1.00f), 0.38f, 280.0f, 55.0f, 2.0f },
+	};
+	int32 Layer = LayerId;
+	for (const FArc& Arc : Arcs)
+	{
+		TArray<FVector2D> Points;
+		const float Span = 360.0f - Arc.From + Arc.To;
+		const int32 Steps = 28;
+		for (int32 S = 0; S <= Steps; ++S)
+		{
+			const float Deg = Arc.From + Span * (static_cast<float>(S) / Steps);
+			const float Rad = FMath::DegreesToRadians(Deg);
+			Points.Add(Centre + FVector2D(FMath::Cos(Rad), FMath::Sin(Rad)) * Radius * Arc.R);
+		}
+		FLinearColor Colour = Arc.Colour * Bright;
+		Colour.A = 0.55f + 0.45f * Bright;
+		FSlateDrawElement::MakeLines(OutDrawElements, ++Layer, AllottedGeometry.ToPaintGeometry(), Points,
+			ESlateDrawEffect::None, Colour, true, Arc.Thick * (0.85f + 0.3f * Env));
+	}
+	return Layer;
 }
 
 SWonderlandCompanionTerminal::SWonderlandCompanionTerminal()
@@ -98,7 +165,8 @@ void SWonderlandCompanionTerminal::Construct(const FArguments& InArgs)
 				.Padding(10.0f, 1.0f, 0.0f, 0.0f)
 				[
 					SNew(STextBlock)
-					.Text_Lambda([this]() { return FText::FromString(Status); })
+					// STREAMING while words are arriving; otherwise the runtime's own state, never a made-up one.
+					.Text_Lambda([this]() { return FText::FromString(GetShownStatus()); })
 					.Font(WonderlandUi::Mono(10))
 					// Waiting in the frame's gold; working in the companion's own colour, so it is plain which is live.
 					.ColorAndOpacity_Lambda([this]() { return FSlateColor(Status == TEXT("WAITING") ? CompanionFrameGold() : Accent); })
@@ -146,6 +214,25 @@ void SWonderlandCompanionTerminal::Construct(const FArguments& InArgs)
 					.Padding(0.0f)
 				]
 			]
+			// THE i.WONDER PULSE, ON ITS OWN ROW ABOVE THE INPUT, anchored bottom-left.
+			//
+			// IT USED TO LIVE INSIDE THE COMMAND LINE, in the same horizontal box as the chevron and the editable
+			// text -- so it read as part of the input control, and the companion's words looked like they were
+			// coming out of the box the founder types into. They are not: they come from the companion. The mark
+			// belongs between the transcript and the input, with the answer building upward above it.
+			//
+			// ITS OWN SLOT IS ALSO WHAT KEEPS IT OUT. A row of its own cannot be pushed back inside the text
+			// field when the terminal is resized, which an AutoWidth slot sharing a box with a FillWidth text
+			// control eventually would be.
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			.HAlign(HAlign_Left)
+			.Padding(12.0f, 2.0f, 0.0f, 3.0f)
+			[
+				SAssignNew(Pulse, SWonderlandPulseMark)
+				.Size(24.0f)
+				.Beating_Lambda([this]() { return IsPulsing(); })
+			]
 			// THE COMMAND LINE: chevron and input, then Send and its chord ruled off at the right.
 			+ SVerticalBox::Slot()
 			.AutoHeight()
@@ -154,10 +241,11 @@ void SWonderlandCompanionTerminal::Construct(const FArguments& InArgs)
 				.HeightOverride(38.0f)
 				[
 					SNew(SHorizontalBox)
+					// the chevron leads the row now that the mark has moved out, so it takes the mark's left margin
 					+ SHorizontalBox::Slot()
 					.AutoWidth()
 					.VAlign(VAlign_Center)
-					.Padding(16.0f, 0.0f, 6.0f, 0.0f)
+					.Padding(14.0f, 0.0f, 6.0f, 0.0f)
 					[
 						SNew(STextBlock)
 						.Text(INVTEXT(">"))
@@ -256,8 +344,96 @@ void SWonderlandCompanionTerminal::RebuildLog()
 
 void SWonderlandCompanionTerminal::AddLine(const FString& Speaker, const FString& Text, bool bDim)
 {
-	Lines.Add({Speaker, Text, bDim});
+	if (Speaker.IsEmpty() || bDim)
+	{
+		// A NOTE IS THE RUNTIME TALKING ABOUT THE COMPANION, not the companion talking. It lands whole.
+		Lines.Add({Speaker, Text, bDim});
+		RebuildLog();
+		return;
+	}
+	const double Now = FSlateApplication::IsInitialized() ? FSlateApplication::Get().GetCurrentTime() : 0.0;
+	if (IsStreaming())
+	{
+		// One voice at a time: a second line waits for the first to finish arriving.
+		Reveal.Queue.Add(TPair<FString, FString>(Speaker, Text));
+		return;
+	}
+	StartReveal(Speaker, Text, Now);
+}
+
+void SWonderlandCompanionTerminal::StartReveal(const FString& Speaker, const FString& Text, double Now)
+{
+	Text.ParseIntoArray(Reveal.Pending, TEXT(" "), true);
+	Reveal.Revealed = 0;
+	Reveal.LineIndex = Lines.Add({Speaker, FString(), false});
+	Reveal.NextWordAt = Now;
 	RebuildLog();
+}
+
+void SWonderlandCompanionTerminal::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
+{
+	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+	if (!IsStreaming())
+	{
+		if (Reveal.Queue.Num() > 0)
+		{
+			// THE NEXT LINE WAITS A BEAT, so the mark shows between two lines: think, speak, think, speak.
+			if (Reveal.NextWordAt <= 0.0) { Reveal.NextWordAt = InCurrentTime + 0.75; }
+			if (InCurrentTime >= Reveal.NextWordAt)
+			{
+				const TPair<FString, FString> Next = Reveal.Queue[0];
+				Reveal.Queue.RemoveAt(0);
+				StartReveal(Next.Key, Next.Value, InCurrentTime);
+			}
+		}
+		return;
+	}
+	if (InCurrentTime < Reveal.NextWordAt || !Lines.IsValidIndex(Reveal.LineIndex))
+	{
+		return;
+	}
+	// WORDS, NOT CHARACTERS. A character-at-a-time reveal reads as a typewriter; words arriving in small bursts
+	// with the odd longer gap is what a response arriving from somewhere actually looks like.
+	const FString& Word = Reveal.Pending[Reveal.Revealed];
+	FString& Text = Lines[Reveal.LineIndex].Text;
+	Text += (Text.IsEmpty() ? TEXT("") : TEXT(" ")) + Word;
+	++Reveal.Revealed;
+	if (Reveal.Revealed >= Reveal.Pending.Num())
+	{
+		Reveal.Pending.Reset();
+		Reveal.Revealed = 0;
+		Reveal.NextWordAt = 0.0;
+	}
+	else
+	{
+		// Cadence: 55-95 ms a word, a pause of a few hundred at punctuation, as speech has.
+		const bool bPause = Word.EndsWith(TEXT(".")) || Word.EndsWith(TEXT(",")) || Word.EndsWith(TEXT(":")) || Word.EndsWith(TEXT(";"));
+		Reveal.NextWordAt = InCurrentTime + (bPause ? 0.34 : 0.055 + 0.04 * FMath::Frac(InCurrentTime * 7.31));
+	}
+	RebuildLog();
+}
+
+bool SWonderlandCompanionTerminal::IsPulsing() const
+{
+	if (IsStreaming())
+	{
+		return false;
+	}
+	// THE RUNTIME'S OWN WORKING STATES, and only those. WAITING, OFFLINE and COMPLETE do not beat.
+	static const TCHAR* const Working[] = {
+		TEXT("WORKING"), TEXT("ANALYSING"), TEXT("SEARCHING"), TEXT("THINKING"), TEXT("RUNNING"),
+		TEXT("RESEARCHING"), TEXT("REVIEWING"), TEXT("VERIFYING"), TEXT("ACTIVE"), TEXT("ACTIVE \u00B7 JOINED"),
+		TEXT("PREPARING"), TEXT("IMPLEMENTING"), TEXT("PLANNING") };
+	for (const TCHAR* State : Working)
+	{
+		if (Status.StartsWith(State)) { return true; }
+	}
+	return Reveal.Queue.Num() > 0;
+}
+
+FString SWonderlandCompanionTerminal::GetShownStatus() const
+{
+	return IsStreaming() ? TEXT("STREAMING") : Status;
 }
 
 void SWonderlandCompanionTerminal::SetStatus(const FString& InStatus)

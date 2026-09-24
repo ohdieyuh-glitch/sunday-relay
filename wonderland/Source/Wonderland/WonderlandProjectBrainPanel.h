@@ -21,6 +21,7 @@
 #include "Styling/SlateTypes.h"
 #include "Widgets/SCompoundWidget.h"
 #include "WonderlandProjectBrain.h"
+#include "WonderlandRelaySkins.h"
 
 class SEditableTextBox;
 class SVerticalBox;
@@ -31,6 +32,8 @@ class WONDERLAND_API SWonderlandProjectBrainPanel : public SCompoundWidget
 public:
 	DECLARE_DELEGATE_TwoParams(FOnPropose, FName /*SurfaceId*/, const FString& /*Text*/);
 	DECLARE_DELEGATE_ThreeParams(FOnReview, FName /*SurfaceId*/, int32 /*LineIndex*/, bool /*bAccept*/);
+	/** A skin card was clicked. The panel never equips anything itself; the registry decides and the world follows. */
+	DECLARE_DELEGATE_OneParam(FOnChooseSkin, FName /*SkinId*/);
 
 	SLATE_BEGIN_ARGS(SWonderlandProjectBrainPanel)
 		: _HologramBrush(nullptr)
@@ -44,6 +47,19 @@ public:
 		SLATE_EVENT(FSimpleDelegate, OnRequestWonderWeb)
 		SLATE_EVENT(FOnPropose, OnPropose)
 		SLATE_EVENT(FOnReview, OnReview)
+		/**
+		 * THE LIVE RELAY DOG. A brush over the skin stage's render target -- a real actor in the world, breathing and
+		 * looking about on a plinth a kilometre above the map (WonderlandSkinStage.h). Null draws the view without it
+		 * and says the preview is unavailable, rather than drawing a still that pretends to be live.
+		 */
+		SLATE_ARGUMENT(const FSlateBrush*, SkinPreviewBrush)
+		/** The skins to list, in registry order. */
+		SLATE_ARGUMENT(TArray<FWonderlandRelaySkin>, Skins)
+		/** Which one is worn right now, read every frame so a change from anywhere shows here. */
+		SLATE_ATTRIBUTE(FName, EquippedSkin)
+		SLATE_EVENT(FOnChooseSkin, OnChooseSkin)
+		/** Raised on every paint of the preview, so the stage knows somebody is looking and keeps capturing. */
+		SLATE_EVENT(FSimpleDelegate, OnSkinPreviewPainted)
 	SLATE_END_ARGS()
 
 	SWonderlandProjectBrainPanel();
@@ -59,6 +75,28 @@ public:
 	/** The same path the inspector's input takes: a proposal on the selected surface. */
 	bool ProposeToSelected(const FString& Text);
 
+	/** Open or shut the RELAY DOG skin view, which stands where the inspector stands: over the brain. */
+	void SetSkinsOpen(bool bOpen);
+
+	/**
+	 * WHERE THE PREVIEW WINDOW IS ON SCREEN, as a fraction of the viewport: centre and size. False until the
+	 * wardrobe has painted once. The camera framing reads this rather than assuming a layout, so a resize or a
+	 * different font does not put the Dog behind the skin list.
+	 */
+	bool GetSkinPreviewRect(FVector2D& OutCentre, FVector2D& OutSize) const;
+	bool IsSkinsOpen() const { return bSkinsOpen; }
+
+	/**
+	 * WHERE THE BRAIN ITSELF IS DRAWN, in the same fractions. The living sculpture is framed into this rectangle the
+	 * way the Dog is framed into the wardrobe's, so the brain on screen is a real breathing actor rather than art.
+	 * False while the wardrobe is open, because the lens cannot serve two windows at once.
+	 */
+	bool GetBrainSculptureRect(FVector2D& OutCentre, FVector2D& OutSize) const;
+
+	/** Tell the panel the living brain is on screen, so it stops drawing the still one over the top of it. */
+	void SetSculptureLive(bool bLive);
+	bool IsSculptureLive() const { return bSculptureLive; }
+
 	virtual bool SupportsKeyboardFocus() const override { return true; }
 	virtual FReply OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent) override;
 
@@ -68,6 +106,9 @@ private:
 	TSharedRef<SWidget> MakeTile(EWonderlandBrainGlyph Glyph, FName SurfaceId, float Height);
 	TSharedRef<SWidget> MakeChip(EWonderlandBrainGlyph Glyph, FName SurfaceId);
 	TSharedRef<SWidget> MakeSelectable(FName SurfaceId, const FSlateBrush* RestBrush, TSharedRef<SWidget> Content);
+	TSharedRef<SWidget> MakeSkinTile();
+	TSharedRef<SWidget> MakeSkinsView();
+	TSharedRef<SWidget> MakeSkinCard(const FWonderlandRelaySkin& Skin);
 	void RebuildInspector();
 	FText SurfaceLabel(FName SurfaceId) const;
 	FText ChipLabel(FName SurfaceId) const;
@@ -76,6 +117,19 @@ private:
 	FWonderlandBrainModel Model;
 	FName Selected;
 	const FSlateBrush* HologramBrush = nullptr;
+
+	bool bSkinsOpen = false;
+	/** True while a real sculpture is being framed in the hologram window; the still art stands down for it. */
+	bool bSculptureLive = false;
+	const FSlateBrush* SkinPreviewBrush = nullptr;
+	/** The hole in the panel the world shows through. */
+	TSharedPtr<SWidget> SkinPreviewWindow;
+	/** The rectangle the brain is drawn in, measured rather than assumed. */
+	TSharedPtr<SWidget> HologramWindow;
+	TArray<FWonderlandRelaySkin> Skins;
+	TAttribute<FName> EquippedSkin;
+	FOnChooseSkin OnChooseSkin;
+	FSimpleDelegate OnSkinPreviewPainted;
 
 	FSimpleDelegate OnRequestClose;
 	FSimpleDelegate OnRequestTerminal;
@@ -100,6 +154,10 @@ private:
 	FSlateRoundedBoxBrush ButtonHoverBrush;
 	FSlateRoundedBoxBrush RuleBrush;
 	FSlateRoundedBoxBrush StatusBrush;
+	/** An outline with no fill: the preview window's frame. */
+	FSlateRoundedBoxBrush SkinWindowFrameBrush;
+	FSlateRoundedBoxBrush SkinPanelFrameBrush;
+	FSlateRoundedBoxBrush SkinPanelSolidBrush;
 	FSlateBrush ClearBrush;
 	FButtonStyle SelectableStyle;
 	FButtonStyle ActionStyle;

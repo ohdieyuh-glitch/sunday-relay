@@ -134,6 +134,27 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	bool IsProjectBrainOpen() const;
 
+	/**
+	 * OPEN OR SHUT THE RELAY DOG WARDROBE inside the Project Brain. False when the Brain panel itself is shut, because
+	 * the wardrobe lives inside it and opening one without the other would be a state no key can reach.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool SetBrainSkinsOpen(bool bOpen);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool IsBrainSkinsOpen() const;
+
+	/** Wear a skin, exactly as clicking its card does. False when the registry refuses it. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool WearRelaySkin(FName SkinId);
+
+	/**
+	 * HOW MANY FRAMES THE SKIN STAGE HAS CAPTURED. A proof reads it twice with a wait between: a number that moved is
+	 * a live 3D dog, and a number that did not is a still photograph wearing the same clothes.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	int32 GetSkinStageFrameCount() const;
+
 	/** Inspect one Project Brain surface, or NAME_None to close the inspector. False when the panel is shut. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
 	bool SelectBrainSurface(FName SurfaceId);
@@ -567,6 +588,21 @@ private:
 	void RefreshMap();
 	void RefreshBrain();
 	void HandleTerminalSubmit(const FString& Text);
+	/**
+	 * A WONDERLAND-NATIVE TERMINAL COMMAND, handled here rather than sent anywhere. Returns false for a line that is
+	 * not one, which then travels the ordinary path.
+	 *
+	 * These are the player's own commands over their own world -- summoning the cubs to look at them, and asking what
+	 * the commands are. None of them speaks for Julius or claims anything about what Julius is doing.
+	 */
+	/**
+	 * THE TERMINAL'S OWN SLASH COMMANDS, and reflected so a proof can type one the way a founder does.
+	 *
+	 * A PROOF THAT CANNOT PRESS THE KEY IS NOT PROVING THE COMMAND. /cubs and /pa are founder-facing dev
+	 * commands, and the only honest way to verify them is through the same entry point the terminal uses.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Terminal")
+	bool HandleTerminalCommand(const FString& Text);
 	void HandleTravel(FName DestinationId);
 	void ApplyOverlayInput(bool bOverlayOpen, TSharedPtr<SWidget> Focus);
 	void MountCompanionTerminals();
@@ -591,6 +627,26 @@ private:
 	class UWonderlandSidekickSubsystem* Sidekicks() const;
 	/** What this account may do. The window limit comes from here and from nowhere else. */
 	class UWonderlandEntitlementSubsystem* Entitlements() const;
+
+	/** The Relay Dog skin registry: what skins exist and which one the Dog is wearing. */
+	class UWonderlandRelaySkinSubsystem* RelaySkins() const;
+
+	/** The Mission Contract task set: what the + adds to and what the orb stack follows. */
+	class UWonderlandMissionTaskSubsystem* Tasks() const;
+
+	/** Press +. Returns false at capacity. Exposed so a proof can press it the way a person does. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
+	bool PressAddTask();
+
+	/** Whether the + control is on screen. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
+	bool IsAddTaskControlOnScreen() const { return TaskAddLayer.IsValid(); }
+
+	/**
+	 * THE LIVE RELAY DOG BEHIND THE PROJECT BRAIN'S WARDROBE. Made on first use and kept; it costs one idle actor when
+	 * nothing is looking at it, because it captures only while a surface asks. Null when there is no world.
+	 */
+	class AWonderlandSkinStage* SkinStage();
 	/** The next browser window id this account may open, or NAME_None when it is already at its limit. */
 	FName NextWonderWebWindowId() const;
 	/**
@@ -709,6 +765,13 @@ private:
 	TArray<FString> CompanionShownAsk;
 	TArray<FString> CompanionShownAnswer;
 	TArray<FString> CompanionShownNote;
+	/**
+	 * THE REAL PROVIDER BEHIND THIS COMPANION, AND WHAT IT IS STILL WAITING FOR -- shown once, and only while the
+	 * companion is answering from a fixture. Without it the founder reads SIMULATED forever with no way to learn
+	 * from inside Wonderland that an openai provider exists and wants a key, or that Claude Code is installed on
+	 * this machine and wants one line of consent. The text is the runtime's own; nothing here composes advice.
+	 */
+	TArray<FString> CompanionShownProvider;
 	FString LastPromptRequestId;
 	/** The browsing task a window has already been opened for, so Julius opens one window per task and not one per tick. */
 	FString LastBrowsingTaskId;
@@ -733,6 +796,70 @@ private:
 	TObjectPtr<UTexture2D> BrainArt;
 
 	TSharedPtr<FSlateBrush> BrainArtBrush;
+
+	/** The brush the wardrobe draws: the skin stage's render target, pointed at once and then left alone. */
+	TSharedPtr<FSlateBrush> SkinPreviewBrush;
+
+	/**
+	 * POINT THE WARDROBE MIRROR AT THE STAGE AGAIN, every time the wardrobe opens.
+	 *
+	 * WHY ONCE WAS NOT ENOUGH. The brush was bound a single time, while the Project Brain panel was being built --
+	 * and the stage it binds to is spawned in that same statement, so its render target's RHI resource may not
+	 * exist yet when Slate takes its handle. A Slate brush whose resource fails to resolve does not draw nothing;
+	 * it draws WHITE, which is exactly the blank panel the founder reported, and it stays white for the life of
+	 * the panel because the panel is built once and kept.
+	 */
+	void RefreshSkinPreviewBrush();
+
+	/** Stand the preview Dog in the world in front of the player, or send it back to its viewing room. */
+	void StageSkinPreviewInWorld(bool bOn);
+
+	/**
+	 * THE LIVING BRAIN, FRAMED IN THE PANEL'S BRAIN WINDOW -- and taken away again when the panel closes.
+	 *
+	 * SAME LENS, SAME REASON AS THE WARDROBE. A render target cannot be used here: this build's scene capture
+	 * writes pure white, measured across ten configurations (see AWonderlandSkinStage). So the only way a real
+	 * breathing brain reaches the panel is the way the real Dog does -- the window is a hole, and the camera is
+	 * moved so the sculpture lands inside it. Live 3D by construction: there is no image that could go stale.
+	 *
+	 * bReleaseCamera is false when the wardrobe is taking the lens over directly: the brain stands its sculpture
+	 * down but leaves the view target alone, so the founder gets one blend into the wardrobe rather than a lurch
+	 * back to the pawn and out again.
+	 */
+	void FrameBrainSculpture(bool bOn, bool bReleaseCamera = true);
+	TWeakObjectPtr<class AWonderlandBrainSculpture> BrainSculptureActor;
+	TWeakObjectPtr<class ACameraActor> BrainCamera;
+	FTimerHandle BrainFrameTimer;
+
+	/**
+	 * THE WARDROBE CAMERA. Frames the founder's own Relay Dog inside the panel's preview window while the wardrobe
+	 * is open -- the window is a hole in the panel, the Dog is placed behind it by moving the lens rather than
+	 * the Dog -- and hands the view back to the player when it closes.
+	 */
+	void FrameRelayDogInWardrobe(bool bOn);
+	TWeakObjectPtr<class ACameraActor> WardrobeCamera;
+	FTimerHandle WardrobeFrameTimer;
+	/**
+	 * THE BLACK BEHIND THE DOG. The window is a hole, so without this the founder's wardrobe shows whatever the
+	 * Dog happens to be standing in front of -- a brick wall, a flower bed, a passing companion -- which is a
+	 * different backdrop every time the wardrobe is opened and none of them is the reference plates' black.
+	 * A single unlit black panel, parked behind the Dog on the camera's own axis and moved with it, gives every
+	 * skin the same ground to be read against. Transient, hidden with the wardrobe, and it never collides.
+	 */
+	TWeakObjectPtr<class AActor> WardrobeBackdrop;
+
+	/** `/pa`: show every Project Avatar family that exists, in front of the founder. A development showcase. */
+	bool ShowProjectAvatars(const FString& Argument);
+
+	/** What `/pa` put in the world, so a second `/pa` can take it away again. */
+	TArray<TWeakObjectPtr<AActor>> ShownProjectAvatars;
+
+	/** The + beside the token usage, and the one line a task is typed into. Mounted with the HUD. */
+	TSharedPtr<class SWidget> TaskAddLayer;
+	TSharedPtr<class SEditableTextBox> TaskEntry;
+	void MountTaskAddControl();
+	void UnmountTaskAddControl();
+	TWeakObjectPtr<class AWonderlandSkinStage> SkinStageActor;
 	FDelegateHandle BrainChangedHandle;
 	EOverlay Open = EOverlay::None;
 	bool bOverlayIgnoresInput = false;

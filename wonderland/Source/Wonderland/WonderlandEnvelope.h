@@ -380,9 +380,13 @@ struct FWonderlandCardScope
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Card")
 	FWonderlandFlag HasIndependentReviewer;
 
-	// MAY spawn a swarm, which is not "is running one" — that is `Swarming` on
-	// the activity axis. A world needs this one to leave room before any clone
-	// exists.
+	// MAY use /MAS, which is not "is running it" — running shows on the activity
+	// axis. A world needs this one to leave room before any clone exists.
+	//
+	// /MAS ONLY. This is the Multi-Agent Swarm capability: full temporary
+	// Compound AI Agent clones. It says nothing about ordinary sub-agents,
+	// which are a different and much lighter thing (founder, 2026-09-22), and
+	// a false here never means "no sub-agents".
 	//
 	// A CARRIER, FOR THE SAME REASON THE THREE SLOTS ARE. It was a bare bool,
 	// and a reader that could not resolve the C.A.R.D. — which is every reader

@@ -183,6 +183,22 @@ namespace
 			});
 		}));
 
+	FAutoConsoleCommand CmdMissionClearance(
+		TEXT("wl.Mission.Clearance"),
+		TEXT("Run the pre-mission spatial clearance probe where the Dog stands and print what it decided, without "
+		     "starting anything. Use it to check a cramped location: `wl.Mission.Clearance`."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			ForEachMission([](UWonderlandMissionSubsystem& Mission)
+			{
+				const FWonderlandStagingResult Staging = Mission.ProbeClearanceNow();
+				UE_LOG(LogWonderlandMissionUi, Display,
+					TEXT("WLCLEARANCE %s  clear radius %.0f uu  headroom %.0f uu  camera %s  move %.0f uu  %d places measured"),
+					WonderlandStagingFitName(Staging.Fit), Staging.Chosen.ClearRadiusUU, Staging.Chosen.ClearHeightUU,
+					Staging.Chosen.bCameraClear ? TEXT("clear") : TEXT("BLOCKED"), Staging.Chosen.MoveUU, Staging.CandidatesTried);
+			});
+		}));
+
 	FAutoConsoleCommand CmdMissionStop(
 		TEXT("wl.Mission.Stop"),
 		TEXT("Stop the running fixture and let the Mission Contract go: the world returns to idle and the companions to follow."),
@@ -286,6 +302,31 @@ void UWonderlandMissionSubsystem::Attach(APlayerController* Controller)
 	// means a player is present in Wonderland; it does not mean a task is being executed. The contract is
 	// manifested by ShowBeat when a beat arrives that describes a running task, and by nothing else.
 	MountStrip();
+
+	// FOLLOW THE TASK SET FROM HERE ON. Attaching still spawns nothing -- a player being present is not a task being
+	// executed, which is the founder's canon of 2026-09-16 -- but a task EXISTING is, and that is what this listens
+	// for. Bound at attach rather than inside the handler, which is where it was and where nothing could reach it.
+	if (ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>())
+	{
+		if (UWonderlandMissionTaskSubsystem* TaskSet = Player->GetSubsystem<UWonderlandMissionTaskSubsystem>())
+		{
+			if (!bBoundToTasks)
+			{
+				bBoundToTasks = true;
+				TWeakObjectPtr<UWonderlandMissionSubsystem> WeakThis(this);
+				TaskSet->OnTasksChanged.AddLambda([WeakThis]()
+				{
+					if (WeakThis.IsValid())
+					{
+						WeakThis->SyncTaskOrbs();
+					}
+				});
+			}
+			// And catch up with whatever already exists, so a set built before the attach is not invisible.
+			SyncTaskOrbs();
+		}
+	}
+
 	UE_LOG(LogWonderlandMissionUi, Log, TEXT("WLMISSION attached to %s, strip %s, no contract (nothing is executing)"),
 		*Controller->GetName(), MissionStrip.IsValid() ? TEXT("on screen") : TEXT("FAILED"));
 }
@@ -792,8 +833,256 @@ bool UWonderlandMissionSubsystem::PlayScenario(FName ScenarioLetter, float Secon
 		UE_LOG(LogWonderlandMissionUi, Warning, TEXT("WLMISSION scenario %s: cannot reach the simulation site '%s' (%s); playing it here"),
 			*Letter, *Site.ToString(), *Refusal.ToString());
 	}
-	StartScenarioAndWatch(FName(*Letter), SecondsPerEvent);
+	// EVERY PATH INTO THE CUTSCENE GOES THROUGH THE BUBBLE, including this one. A probe that only ran on the
+	// travelling path would be a probe that missed exactly the missions played where the player happens to stand.
+	return BeginMissionWithClearance(FName(*Letter), SecondsPerEvent);
+}
+
+namespace
+{
+	/**
+	 * HOW FAR APART THE ORBS SIT, in uu -- WHICH IS THE HEIGHT OF ONE ORB, so their tips meet and the column is
+	 * one object rather than several.
+	 *
+	 * FOUNDER, on the first filmed stack: "The orbs should not be that spread apart, they should be touching."
+	 *
+	 * THE OLD NUMBER CAME FROM A WRONG MEASUREMENT. The comment that used to stand here said a Mission Contract orb
+	 * is "about 80 uu tall" and chose 105 to leave it a little air. The geometry says 2 * CrystalHalfHeightUU =
+	 * 56 uu, so 105 was not a small gap above an orb -- it was most of a second orb of empty sky between each one,
+	 * and the filmed stack read as three separate distant objects exactly as the founder said.
+	 *
+	 * TIPS MEETING, NOT OVERLAPPING. The crystal is a bipyramid reaching CrystalHalfHeightUU above and below its
+	 * origin, so a step of exactly twice that puts the point of one orb on the point of the next. An unselected orb
+	 * draws at 0.86 and leaves a few uu of air, which still reads as a stack; a smaller step would drive one
+	 * crystal through another and stop it reading as orbs at all.
+	 */
+	constexpr float OrbStackSpacingUU = 56.0f;
+}
+
+float UWonderlandMissionSubsystem::GetStackHeightUu() const
+{
+	// One orb is the Contract's own height; each one above adds a step. Never less than one orb's worth, because a
+	// mission with no task list still manifests a Contract.
+	const int32 Orbs = FMath::Max(TaskOrbs.Num(), 1);
+	return (Orbs - 1) * OrbStackSpacingUU;
+}
+
+void UWonderlandMissionSubsystem::SyncTaskOrbs()
+{
+	ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
+	UWonderlandMissionTaskSubsystem* Tasks = Player != nullptr
+		? Player->GetSubsystem<UWonderlandMissionTaskSubsystem>() : nullptr;
+	// The subscription is made at Attach, not here: binding inside the handler meant nothing ever subscribed.
+	APlayerController* Controller = BoundController.Get();
+	UWorld* World = Controller != nullptr ? Controller->GetWorld() : nullptr;
+	if (Tasks == nullptr || World == nullptr)
+	{
+		return;
+	}
+
+	const TArray<FWonderlandMissionTask>& Rows = Tasks->GetTasks();
+
+	// ---- take away the orbs whose tasks have gone OR ARE NO LONGER PRESENTED. A dismissed draft leaves nothing
+	// ---- behind; a tab closed with X takes its orb with it and keeps its record; a completed or failed contract
+	// ---- keeps its tab and loses its orb, because the orb is an ACTIVE-task visualisation and nothing else.
+	TArray<FGuid> Gone;
+	for (const TPair<FGuid, TWeakObjectPtr<AWonderlandMissionOrb>>& Pair : TaskOrbs)
+	{
+		if (!Tasks->ShouldPresentOrb(Pair.Key))
+		{
+			Gone.Add(Pair.Key);
+		}
+	}
+	for (const FGuid& Id : Gone)
+	{
+		if (AWonderlandMissionOrb* Stacked = TaskOrbs[Id].Get())
+		{
+			Stacked->Destroy();
+		}
+		TaskOrbs.Remove(Id);
+	}
+
+	// ---- and bring the rest into line, bottom to top. THE STACK INDEX COUNTS ONLY PRESENTED ORBS, so a closed
+	// ---- tab in the middle of the list does not leave a gap of air in the column.
+	int32 Index = -1;
+	for (const FWonderlandMissionTask& Task : Rows)
+	{
+		if (!Tasks->ShouldPresentOrb(Task.LocalId))
+		{
+			continue;
+		}
+		++Index;
+		TWeakObjectPtr<AWonderlandMissionOrb>* Found = TaskOrbs.Find(Task.LocalId);
+		AWonderlandMissionOrb* Stacked = Found != nullptr ? Found->Get() : nullptr;
+		if (Stacked == nullptr)
+		{
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			Params.ObjectFlags |= RF_Transient;
+			const APawn* Pawn = Controller->GetPawn();
+			Stacked = World->SpawnActor<AWonderlandMissionOrb>(AWonderlandMissionOrb::StaticClass(),
+				Pawn != nullptr ? Pawn->GetActorTransform() : FTransform::Identity, Params);
+			if (Stacked == nullptr)
+			{
+				continue;
+			}
+#if WITH_EDITOR
+			Stacked->SetActorLabel(FString::Printf(TEXT("WL_MissionContract_%d"), Index), false);
+#endif
+			Stacked->SetFollowController(Controller);
+			Stacked->SetManifest(1.0f);
+			Stacked->SnapToTarget();
+			TaskOrbs.Add(Task.LocalId, Stacked);
+		}
+		// GRAY WHILE THE SLOT IS EMPTY, coloured once a contract exists. One question, asked of the task.
+		Stacked->SetDraft(!WonderlandTaskIsContract(Task.State));
+		// Index 0 sits where the Contract has always sat; each one above is a step higher.
+		Stacked->SetStackLift(Index * OrbStackSpacingUU);
+		// THE SELECTED TASK'S ORB IS THE FULL-SIZED ONE. The others stand back a little so the stack reads as a
+		// stack with a current member rather than as a row of equals.
+		// 0.72 made the unselected orbs read as distant rather than as smaller, and two frames taken with different
+		// selections were indistinguishable. 0.86 is still plainly a step down from the current contract.
+		Stacked->SetOrbScale(Task.LocalId == Tasks->GetSelected() ? 1.0f : 0.86f);
+	}
+}
+
+TArray<FString> UWonderlandMissionSubsystem::DescribeOrbStack() const
+{
+	TArray<FString> Lines;
+	const ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
+	const UWonderlandMissionTaskSubsystem* Tasks = Player != nullptr
+		? Player->GetSubsystem<UWonderlandMissionTaskSubsystem>() : nullptr;
+	if (Tasks == nullptr)
+	{
+		Lines.Add(TEXT("no task subsystem"));
+		return Lines;
+	}
+	Lines.Add(FString::Printf(TEXT("ORB STACK  %d orb(s)  ·  %.0f uu tall"), TaskOrbs.Num(), GetStackHeightUu()));
+	const TArray<FWonderlandMissionTask>& Rows = Tasks->GetTasks();
+	for (int32 Index = 0; Index < Rows.Num(); ++Index)
+	{
+		const TWeakObjectPtr<AWonderlandMissionOrb>* Found = TaskOrbs.Find(Rows[Index].LocalId);
+		const AWonderlandMissionOrb* Stacked = Found != nullptr ? Found->Get() : nullptr;
+		Lines.Add(FString::Printf(TEXT("  %d %s %-5s lift %4.0f uu  %s"),
+			Index,
+			Rows[Index].LocalId == Tasks->GetSelected() ? TEXT("*") : TEXT(" "),
+			Stacked == nullptr ? TEXT("-") : (Stacked->IsDraft() ? TEXT("GRAY") : TEXT("RED")),
+			Index * OrbStackSpacingUU,
+			*Rows[Index].Objective.Left(48)));
+	}
+	return Lines;
+}
+
+FWonderlandStagingResult UWonderlandMissionSubsystem::ProbeClearanceNow()
+{
+	UWorld* World = GetWorld();
+	APlayerController* Controller = BoundController.Get();
+	APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+	const FVector Origin = Pawn != nullptr ? Pawn->GetActorLocation() : FVector::ZeroVector;
+	const FVector Facing = Pawn != nullptr ? Pawn->GetActorForwardVector() : FVector(1.0, 0.0, 0.0);
+
+	// THE MISSION'S OWN ACTORS ARE NOT OBSTRUCTIONS TO THE MISSION. A Dog standing at the staging point does not
+	// block the staging point, and neither does the Contract it is about to manifest.
+	TArray<const AActor*> Ignore;
+	Ignore.Add(Pawn);
+	Ignore.Add(Orb.Get());
+
+	// THE WHOLE STACK IS WHAT HAS TO FIT, not one Contract. A second orb above the first raises the envelope, so
+	// the probe is told how tall the presentation actually stands before it measures anything.
+	FWonderlandStagingEnvelope Full = WonderlandFullEnvelope();
+	Full.VerticalUU += GetStackHeightUu();
+	Full.ContractHeightUU += GetStackHeightUu();
+	LastStaging = WonderlandProbeStaging(World, Origin, Facing, Ignore, Full);
+	for (const FString& Note : LastStaging.Notes)
+	{
+		UE_LOG(LogWonderlandMissionUi, Display, TEXT("WLCLEARANCE %s"), *Note);
+	}
+	return LastStaging;
+}
+
+void UWonderlandMissionSubsystem::ApplyStaging(const FWonderlandStagingResult& Staging)
+{
+	APlayerController* Controller = BoundController.Get();
+	const APawn* Pawn = Controller != nullptr ? Controller->GetPawn() : nullptr;
+	const bool bCompact = Staging.Fit != EWonderlandStagingFit::Full;
+
+	// A COMPACT PRESENTATION IS THE SAME PRESENTATION, SMALLER AND CLOSER. Both of these are knobs the mission
+	// already has, so nothing downstream has to know a probe happened.
+	SetOrbScale(bCompact ? 0.62f : 1.0f);
+
+	// AND THE CONTRACT MANIFESTS TOWARD THE CLEAR SPACE. The Contract already stands at an offset from the Dog, so
+	// aiming that offset is how a chosen position is honoured -- nobody is teleported, and the Dog walks to its own
+	// mark as it always did.
+	float Forward = bCompact ? 190.0f : 340.0f;
+	float Right = bCompact ? 20.0f : 40.0f;
+	if (Pawn != nullptr && Staging.Chosen.MoveUU > 1.0f)
+	{
+		const FVector Toward = Staging.Location - Pawn->GetActorLocation();
+		const float Reach = FMath::Min(static_cast<float>(Toward.Size2D()), bCompact ? 240.0f : 520.0f);
+		const FVector Unit = Toward.GetSafeNormal2D();
+		Forward = static_cast<float>(FVector::DotProduct(Unit, Pawn->GetActorForwardVector())) * Reach;
+		Right = static_cast<float>(FVector::DotProduct(Unit, Pawn->GetActorRightVector())) * Reach;
+		// Never behind the Dog: a Contract manifesting out of shot is worse than one manifesting a little close.
+		Forward = FMath::Max(Forward, bCompact ? 150.0f : 260.0f);
+	}
+	SetOrbFollowOffset(Forward, Right);
+
+	UE_LOG(LogWonderlandMissionUi, Display,
+		TEXT("WLCLEARANCE staging %s: contract at (%.0f, %.0f) from the Dog, orb scale %.2f, %d places measured"),
+		WonderlandStagingFitName(Staging.Fit), Forward, Right, bCompact ? 0.62f : 1.0f, Staging.CandidatesTried);
+}
+
+bool UWonderlandMissionSubsystem::BeginMissionWithClearance(FName ScenarioLetter, float SecondsPerEvent)
+{
+	const FString Letter = ScenarioLetter.ToString().ToUpper();
+	if (Letter != TEXT("A") && Letter != TEXT("B") && Letter != TEXT("C") && Letter != TEXT("D"))
+	{
+		return false;
+	}
+	UWorld* World = GetWorld();
+	if (World == nullptr)
+	{
+		return false;
+	}
+
+	// THE PROBE RUNS AT ONCE; THE BUBBLE IS WHAT TAKES A MOMENT. Tracing a dozen places is microseconds, so holding
+	// the mission for a second and a half is a deliberate beat rather than a wait for arithmetic: the founder asked
+	// for a bubble the player sees, and a probe nobody notices would not be one.
+	ProbeClearanceNow();
+	ClearanceScenario = FName(*Letter);
+	ClearancePace = SecondsPerEvent;
+	ClearanceStartedAt = World->GetTimeSeconds();
+	ClearanceUntil = ClearanceStartedAt + 1.4;
+	if (ClearanceTicker.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(ClearanceTicker);
+	}
+	ClearanceTicker = FTSTicker::GetCoreTicker().AddTicker(
+		FTickerDelegate::CreateUObject(this, &UWonderlandMissionSubsystem::StepClearance), 0.0f);
 	return true;
+}
+
+bool UWonderlandMissionSubsystem::StepClearance(float DeltaSeconds)
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr || ClearanceScenario == NAME_None)
+	{
+		ClearanceUntil = 0.0;
+		ClearanceTicker.Reset();
+		return false;
+	}
+	if (World->GetTimeSeconds() < ClearanceUntil)
+	{
+		return true;
+	}
+	const FName Letter = ClearanceScenario;
+	ClearanceScenario = NAME_None;
+	ClearanceUntil = 0.0;
+	ClearanceTicker.Reset();
+	ApplyStaging(LastStaging);
+	// AND THE CUTSCENE BEGINS -- whatever the probe found. There is no branch here that does not start the mission.
+	StartScenarioAndWatch(Letter, ClearancePace);
+	return false;
 }
 
 bool UWonderlandMissionSubsystem::StepPendingScenario(float DeltaSeconds)
@@ -822,7 +1111,7 @@ bool UWonderlandMissionSubsystem::StepPendingScenario(float DeltaSeconds)
 	const FName Letter = PendingScenario;
 	PendingScenario = NAME_None;
 	PendingTicker.Reset();
-	StartScenarioAndWatch(Letter, PendingPace);
+	BeginMissionWithClearance(Letter, PendingPace);
 	return false;
 }
 

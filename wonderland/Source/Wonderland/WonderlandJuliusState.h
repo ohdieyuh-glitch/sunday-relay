@@ -329,7 +329,15 @@ enum class EWonderlandActivitySignal : uint8
 	Retrying,
 	// Work moved to a different worker: a reroute or a fallback.
 	SwitchingWorker,
-	// Subagents are running. This is what /MAS looks like from outside.
+	// SUB-AGENTS ARE RUNNING. Regular delegated helpers under the primary
+	// Compound AI Agent — what Wonderland draws as Relay Dog Cub Ghosts.
+	//
+	// NOT /MAS, and the distinction is the founder's (2026-09-22). /MAS is a
+	// separate capability that spawns full temporary Compound AI Agent
+	// clones; ordinary sub-agents are lightweight helpers with no mission
+	// authority of their own. Both raise this signal, because from outside
+	// both are "more than one worker is running" — the signal does not say
+	// WHICH, and a reader must not conclude /MAS from it.
 	Swarming,
 	// Context was compiled for a worker. Project Brain and memory are not yet
 	// distinguishable — `context.compiled` reports that context was assembled
@@ -339,9 +347,10 @@ enum class EWonderlandActivitySignal : uint8
 
 // Mirrors JuliusWorkerActivity. One worker's signals.
 //
-// A LIST OF WORKERS RATHER THAN A FIELD ON THE RUN, deliberately. /MAS spawns
-// two or three Compound clones under one primary, and a shape that could only
-// describe "the" agent would have to be replaced the day that ships.
+// A LIST OF WORKERS RATHER THAN A FIELD ON THE RUN, deliberately. A run can
+// have several workers under one primary — ordinary sub-agents always, and
+// full Compound clones when /MAS is used — and a shape that could only
+// describe "the" agent would have to be replaced the day either ships.
 USTRUCT(BlueprintType)
 struct FWonderlandWorkerActivity
 {
@@ -379,7 +388,12 @@ struct FWonderlandActivityReading
 
 	// Spawned and not yet reported complete. `Swarming` follows THIS rather than
 	// the last event: two spawning and one completing leaves one running, and
-	// clearing on the first completion would put the swarm away mid-work.
+	// clearing on the first completion would put them away mid-work.
+	//
+	// THE ONLY HONEST SOURCE FOR HOW MANY CUB GHOSTS TO DRAW. Wonderland shows
+	// one Relay Dog Cub Ghost per live sub-agent and must never invent an
+	// active one Julius did not create, so the world reads this number and
+	// never a wish. See WonderlandSubAgentCubs.h.
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
 	int64 ActiveSubagents = 0;
 
@@ -441,7 +455,9 @@ enum class EWonderlandActivityAccent : uint8
 	Strained,
 	// The same work, attempted again or by other means.
 	Reattempting,
-	// More than one worker present. What /MAS looks like from outside.
+	// More than one worker present: sub-agents, or /MAS Compound clones. The
+	// accent deliberately does not distinguish them — it asks for company to
+	// be SHOWN, and what company means is the world's business.
 	Accompanied,
 	// Reading before acting: context assembled for a worker.
 	Recalling

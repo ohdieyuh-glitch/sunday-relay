@@ -1,4 +1,7 @@
 #include "RelayDogCharacter.h"
+#include "Engine/GameInstance.h"
+#include "WonderlandRelaySkins.h"
+#include "WonderlandCompanionEmbodiment.h"
 
 #include "Camera/CameraComponent.h"
 #include "Misc/CommandLine.h"
@@ -1360,6 +1363,17 @@ void ARelayDogCharacter::BeginPlay()
 	SpawnLocation = GetActorLocation();
 	SpawnYaw = GetActorRotation().Yaw;
 	bJointsBound = BindJoints();
+
+	// THE DOG LISTENS TO THE WARDROBE. Until now only a stage mannequin did, and the founder clicked skins and
+	// watched a Dog that never changed. The registry is the one authority on what is worn; the Dog obeys it.
+	if (UGameInstance* Instance = GetGameInstance())
+	{
+		if (UWonderlandRelaySkinSubsystem* Skins = Instance->GetSubsystem<UWonderlandRelaySkinSubsystem>())
+		{
+			Skins->OnSkinChanged.AddWeakLambda(this, [this](FName SkinId) { WearSkin(SkinId); });
+			WearSkin(Skins->GetEquippedSkinId());
+		}
+	}
 	// THE MISSION CAMERA'S LEFT-DRAG is read ahead of Slate's routing (see FRelayDogMissionCameraInput).
 	if (FSlateApplication::IsInitialized() && GetWorld() != nullptr && GetWorld()->IsGameWorld() && !MissionCamInput.IsValid())
 	{
@@ -1372,6 +1386,104 @@ void ARelayDogCharacter::BeginPlay()
 		UE_LOG(LogTemp, Log, TEXT("WLDOG DEMO: %d route legs from (%.0f, %.0f, %.0f)"),
 		       Route.Num(), SpawnLocation.X, SpawnLocation.Y, SpawnLocation.Z);
 	}
+}
+
+void ARelayDogCharacter::WearSkin(FName SkinId)
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr || !World->IsGameWorld())
+	{
+		return;
+	}
+	const UGameInstance* Instance = GetGameInstance();
+	const UWonderlandRelaySkinSubsystem* Skins = Instance != nullptr ? Instance->GetSubsystem<UWonderlandRelaySkinSubsystem>() : nullptr;
+	const FString FigurePath = Skins != nullptr ? Skins->FigurePathFor(SkinId) : FString();
+	const bool bCanon = SkinId.IsNone() || SkinId == TEXT("relay_og") || FigurePath.IsEmpty();
+
+	if (bCanon)
+	{
+		// RELAY OG IS THE DOG ITSELF. The costume comes off and the canon body is shown again.
+		if (Costume != nullptr)
+		{
+			Costume->Destroy();
+			Costume = nullptr;
+		}
+		ShowCanonBody(true);
+		WornSkinId = TEXT("relay_og");
+		UE_LOG(LogTemp, Display, TEXT("WLDOG wears RELAY OG (canon body)"));
+		return;
+	}
+
+	if (Costume == nullptr)
+	{
+		FActorSpawnParameters Params;
+		Params.Owner = this;
+		Params.ObjectFlags |= RF_Transient;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		Costume = World->SpawnActor<AWonderlandCompanionEmbodiment>(
+			AWonderlandCompanionEmbodiment::StaticClass(), GetActorTransform(), Params);
+		if (Costume == nullptr)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("WLDOG could not spawn a costume; the canon body stays"));
+			return;
+		}
+		Costume->DisplayName = TEXT("RELAY DOG");
+		Costume->ClassLabel = TEXT("RELAY DOG SKIN");
+#if WITH_EDITOR
+		Costume->SetActorLabel(TEXT("WL_RelayDog_Costume"), false);
+#endif
+		// NO CONTROLLER. It follows nobody, so its follow path never runs and never moves the actor; the
+		// attachment below is what carries it, and its own distance-driven gait reads that movement as walking.
+		Costume->SetRuntimeActivity(TEXT("IDLE"));
+		// ON THE CAPSULE'S SOLE, FACING WHERE THE DOG FACES. The capsule root is the one thing that does not bob or
+		// lean with the canon gait, so the costume stands square and runs its own.
+		Costume->AttachToComponent(GetRootComponent(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+		Costume->SetActorRelativeLocation(FVector(0.0, 0.0, -GetCapsuleComponent()->GetScaledCapsuleHalfHeight()));
+		Costume->SetActorRelativeRotation(FRotator::ZeroRotator);
+	}
+	if (!Costume->LoadFigure(FigurePath))
+	{
+		// LOUD, AND HONEST: a skin whose figure will not load leaves the Dog as it was rather than half-dressed.
+		UE_LOG(LogTemp, Warning, TEXT("WLDOG skin '%s' did not load from %s: %s"),
+			*SkinId.ToString(), *FigurePath, *Costume->GetLastError());
+		return;
+	}
+	ShowCanonBody(false);
+	WornSkinId = SkinId;
+	UE_LOG(LogTemp, Display, TEXT("WLDOG wears %s (%d boxes)"), *SkinId.ToString(), Costume->GetBoxCount());
+}
+
+void ARelayDogCharacter::ShowCanonBody(bool bShow)
+{
+	if (bCanonBodyHidden == !bShow)
+	{
+		return;
+	}
+	bCanonBodyHidden = !bShow;
+	// THE CANON BODY IS EVERY MESH THE BLUEPRINT BUILT. The props this class makes for missions -- the book, the
+	// lens, the scraper, the beam -- carry the WL_Prop tag and are left alone, because a costumed Dog still reads.
+	TInlineComponentArray<UStaticMeshComponent*> Meshes;
+	GetComponents<UStaticMeshComponent>(Meshes);
+	int32 Toggled = 0;
+	for (UStaticMeshComponent* Body : Meshes)
+	{
+		if (Body == nullptr || Body->ComponentHasTag(TEXT("WL_Prop")))
+		{
+			continue;
+		}
+		Body->SetVisibility(bShow, false);
+		++Toggled;
+	}
+	UE_LOG(LogTemp, Verbose, TEXT("WLDOG canon body %s (%d meshes)"), bShow ? TEXT("shown") : TEXT("hidden"), Toggled);
+}
+
+float ARelayDogCharacter::GetDressedHeightUu() const
+{
+	if (Costume != nullptr)
+	{
+		return FMath::Max(Costume->GetFigureHeightUu(), 60.0f);
+	}
+	return GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * 2.0f;
 }
 
 float ARelayDogCharacter::EyeScaleAt(float TimeSeconds) const
@@ -1647,6 +1759,19 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 
 	const RelayDogStride::FDogPose& Pose = Animator.Update(In);
 
+	// ---- AND THE COSTUME WEARS THE SAME STRIDE, so a mascot skin is a change of appearance and nothing else.
+	//
+	// A worn skin replaces the visible body with a costume actor, and that actor knows how to walk on its own --
+	// its own phase from its own distance, its own weight, its own easing, its own idle cadence. All of it
+	// reasonable, none of it the Dog's, which is why the founder found the skins moving "nowhere near" the
+	// original. Handing the canonical pose down each frame is what makes them the same creature: the costume
+	// stops measuring and wears these numbers, so cadence, acceleration, easing and every transition come from
+	// the one animator that has always driven the Relay Dog.
+	if (AWonderlandCompanionEmbodiment* Worn = Costume)
+	{
+		Worn->DriveGaitFromCanonical(Pose.StridePhase, Pose.GaitWeight, Pose.SpeedUU);
+	}
+
 	// THE POSE IS ALREADY BLENDED. FDogAnimator multiplies the solved leg
 	// angles by the gait weight before returning them, so weighting them again
 	// here would square the blend and leave the Dog half-striding through every
@@ -1833,6 +1958,8 @@ UInstancedStaticMeshComponent* ARelayDogCharacter::MakePropMesh(FName Name, USce
 		Built->AddInstance(Box);
 	}
 	Built->SetVisibility(false);
+	// TAGGED AS A PROP, so a costume can hide the canon body and leave the Dog's tools in its hands.
+	Built->ComponentTags.AddUnique(TEXT("WL_Prop"));
 	return Built;
 }
 

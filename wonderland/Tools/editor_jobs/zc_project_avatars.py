@@ -26,6 +26,9 @@ FIGURES = os.path.join(unreal.Paths.convert_relative_path_to_full(unreal.Paths.p
 FAMILIES = [
     ("TEN TAILS", "TenTails", [("SMALL", -520.0), ("MEDIUM", 60.0), ("LARGE", 900.0)]),
     ("CHERUBIM", "Cherubim", [("SMALL", -520.0), ("MEDIUM", 60.0), ("LARGE", 900.0)]),
+    # SERAPH, the third family (founder, 2026-09-22). Same row, same camera rule: a progression judged from three
+    # different angles is not a progression anyone can judge, and that applies across families too.
+    ("SERAPH", "Seraph", [("SMALL", -520.0), ("MEDIUM", 60.0), ("LARGE", 900.0)]),
 ]
 
 
@@ -80,7 +83,8 @@ def job():
             for stage_label, along in stages:
                 figure = os.path.join(FIGURES, "%s_%s.wlvox" % (slug, stage_label.capitalize()))
                 # Cherubim floats; Ten Tails stands. Both keep their feet (or their light) where they belong.
-                lift = 120.0 if slug == "Cherubim" else 0.0
+                # Cherubim and Seraph hover; Ten Tails stands. Each keeps its feet, or its light, where it belongs.
+            lift = 120.0 if slug in ("Cherubim", "Seraph") else 0.0
                 body = L.spawn_figure_actor(world, place(along, 1050.0, lift), figure, "%s %s" % (family_label, stage_label))
                 if body is None:
                     RESULT.setdefault("failed", []).append(figure)

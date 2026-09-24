@@ -1,5 +1,8 @@
 #include "WonderlandUiTestLibrary.h"
 
+#include "WonderlandDemoFlow.h"
+#include "WonderlandSubAgentCubs.h"
+
 #include "Camera/CameraActor.h"
 #include "EngineUtils.h"
 #include "Camera/CameraComponent.h"
@@ -20,6 +23,8 @@
 #include "Misc/Paths.h"
 #include "Slate/SGameLayerManager.h"
 #include "Widgets/SViewport.h"
+#include "WonderlandMissionSubsystem.h"
+#include "WonderlandMissionTasks.h"
 #include "WonderlandUiSubsystem.h"
 #include "WonderlandUsageSubsystem.h"
 
@@ -297,6 +302,34 @@ bool UWonderlandUiTestLibrary::SetBackgroundThrottleSuspended(bool bSuspended)
 }
 
 /* ==================================================================== a comparison scene, for a proof */
+
+UWonderlandMissionTaskSubsystem* UWonderlandUiTestLibrary::GetMissionTasks(UObject* WorldContextObject)
+{
+	const UWorld* World = GEngine != nullptr ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+	const APlayerController* Controller = World != nullptr ? UGameplayStatics::GetPlayerController(World, 0) : nullptr;
+	ULocalPlayer* Player = Controller != nullptr ? Controller->GetLocalPlayer() : nullptr;
+	return Player != nullptr ? Player->GetSubsystem<UWonderlandMissionTaskSubsystem>() : nullptr;
+}
+
+UWonderlandMissionSubsystem* UWonderlandUiTestLibrary::GetMission(UObject* WorldContextObject)
+{
+	const UWorld* World = GEngine != nullptr ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+	const APlayerController* Controller = World != nullptr ? UGameplayStatics::GetPlayerController(World, 0) : nullptr;
+	ULocalPlayer* Player = Controller != nullptr ? Controller->GetLocalPlayer() : nullptr;
+	return Player != nullptr ? Player->GetSubsystem<UWonderlandMissionSubsystem>() : nullptr;
+}
+
+UWonderlandDemoSubsystem* UWonderlandUiTestLibrary::GetDemo(UObject* WorldContextObject)
+{
+	UWorld* World = GEngine != nullptr ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+	return World != nullptr ? World->GetSubsystem<UWonderlandDemoSubsystem>() : nullptr;
+}
+
+UWonderlandSubAgentCubSubsystem* UWonderlandUiTestLibrary::GetCubs(UObject* WorldContextObject)
+{
+	UWorld* World = GEngine != nullptr ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+	return World != nullptr ? World->GetSubsystem<UWonderlandSubAgentCubSubsystem>() : nullptr;
+}
 
 AWonderlandCompanionEmbodiment* UWonderlandUiTestLibrary::SpawnFigureActor(UObject* WorldContextObject, FVector Location, const FString& FigurePath, const FString& Label)
 {
