@@ -25,6 +25,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "WonderlandWornPose.h"
 #include "GameFramework/Character.h"
 #include "RelayDogStride.h"
 #include "RelayDogMissionPose.h"
@@ -358,6 +359,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Skins")
 	void WearSkin(FName SkinId);
 
+	/**
+	 * THE POSE THIS DOG HANDED ITS COSTUME LAST FRAME -- the canonical one, composed after the mission overlay.
+	 *
+	 * Exposed so a proof can hold a skin's worn pose against the authority's own numbers and show they are the
+	 * SAME numbers rather than merely similar ones. Valid whether or not a costume is on, so Relay OG and an
+	 * alternate skin can be compared over the identical performance.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Relay Dog")
+	FWonderlandWornPose GetCanonicalWornPose() const { return LastWornPose; }
+
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
 	FName GetWornSkinId() const { return WornSkinId; }
 
@@ -684,6 +695,7 @@ private:
 	/** How many times the editor rebuilt the Dog's Blueprint joints during play; each is said once in the log. */
 	int32 RigRebuilds = 0;
 	bool bLoggedBindFailure = false;
+	FWonderlandWornPose LastWornPose;
 
 	bool bRunHeld = false;
 	bool bWalkHeld = false;

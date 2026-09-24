@@ -1767,10 +1767,9 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	// original. Handing the canonical pose down each frame is what makes them the same creature: the costume
 	// stops measuring and wears these numbers, so cadence, acceleration, easing and every transition come from
 	// the one animator that has always driven the Relay Dog.
-	if (AWonderlandCompanionEmbodiment* Worn = Costume)
-	{
-		Worn->DriveGaitFromCanonical(Pose.StridePhase, Pose.GaitWeight, Pose.SpeedUU);
-	}
+	// THE HAND-DOWN ITSELF MOVED, to after ApplyMissionPose: the mission overlay is what lifts the body to
+	// meditate and to fly up and verify, and composing the costume's pose HERE -- before that overlay exists
+	// -- is why a skinned Dog performed none of it.
 
 	// THE POSE IS ALREADY BLENDED. FDogAnimator multiplies the solved leg
 	// angles by the gait weight before returning them, so weighting them again
@@ -1830,6 +1829,40 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	// solved onto the book / brush / lens / Contract, legs crossed or trailing, props, the beam, the energy, the repair.
 	ApplyMissionPose(Pose, Overlay, MissionIn, DeltaSeconds);
 	UpdateMissionCamera(DeltaSeconds);
+
+	// ---- AND THE COSTUME WEARS THE WHOLE OF IT, so a mascot skin is a change of appearance and nothing else.
+	//
+	// Composed from the SAME numbers ApplyMissionPose just wrote onto the canon body, so whatever the Dog is
+	// doing -- standing, walking, jumping, meditating, reading, painting, hovering to verify -- the skin is
+	// doing it too, on the Dog's clock, with the Dog's easing and the Dog's transitions. Relay OG remains the
+	// one animation authority; the costume owns no state machine of its own and never decides an act.
+	const float Still = FMath::Clamp((Overlay.Meditate + Overlay.Fly) / FMath::Max(Overlay.Weight, 0.001f), 0.0f, 1.0f) * Overlay.Weight;
+	FWonderlandWornPose Dressed;
+	Dressed.StridePhase = Pose.StridePhase;
+	Dressed.GaitWeight = Pose.GaitWeight;
+	Dressed.SpeedUU = Pose.SpeedUU;
+	Dressed.SwayUU = Pose.SwayUU * (1.0f - Still);
+	Dressed.BobUU = (Pose.BobUU - Pose.PelvisDropUU) * (1.0f - Still);
+	Dressed.LiftUU = Overlay.LiftUU;
+	Dressed.BodyPitchDeg = Pose.LeanDeg + Pose.Body.PitchDeg;
+	Dressed.BodyYawDeg = Pose.BodyYawDeg * (1.0f - Still);
+	Dressed.BodyRollDeg = (Pose.Body.RollDeg + Pose.TurnRollDeg) * (1.0f - Still);
+	// The head keeps its own level against the body's lean, exactly as HeadPivot is written above.
+	Dressed.HeadPitchDeg = Pose.HeadPitchDeg - Pose.LeanDeg;
+	Dressed.HeadYawDeg = Pose.HeadYawDeg;
+	Dressed.TailPitchDeg = Pose.TailPitchDeg;
+	Dressed.TailYawDeg = Pose.TailYawDeg;
+	Dressed.AirborneWeight = Pose.AirborneWeight;
+	Dressed.Stillness = Still;
+	Dressed.bValid = true;
+	// COMPOSED WHETHER OR NOT ANYTHING IS WEARING IT, so Relay OG's own numbers can be held against an
+	// alternate skin's over the identical performance. Relay OG is not a special case of the authority; it IS
+	// the authority, and this is what it is saying each frame.
+	LastWornPose = Dressed;
+	if (AWonderlandCompanionEmbodiment* Worn = Costume)
+	{
+		Worn->WearCanonicalPose(Dressed);
+	}
 
 	// One log line per gait change, so a capture can be read against what the
 	// Dog was doing without watching every frame.

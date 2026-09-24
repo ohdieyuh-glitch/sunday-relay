@@ -82,11 +82,14 @@ class SWonderlandBrainBackdrop : public SLeafWidget
 public:
 	SLATE_BEGIN_ARGS(SWonderlandBrainBackdrop) {}
 		SLATE_ATTRIBUTE(int32, ChakraRank)
+		/** Normalised (L,T,R,B) the night field must NOT cover. Zero area means cover everything. */
+		SLATE_ATTRIBUTE(FVector4f, Hole)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs)
 	{
 		ChakraRank = InArgs._ChakraRank;
+		Hole = InArgs._Hole;
 		RegisterActiveTimer(0.0f, FWidgetActiveTimerDelegate::CreateSP(this, &SWonderlandBrainBackdrop::Animate));
 	}
 
@@ -102,8 +105,38 @@ public:
 		int32 Layer = LayerId;
 
 		// The night field. Deep enough that the world is a memory behind it, not a competitor.
-		FSlateDrawElement::MakeBox(OutDrawElements, Layer, AllottedGeometry.ToPaintGeometry(Size, FSlateLayoutTransform()), White,
-			ESlateDrawEffect::None, Night(0.94f));
+		//
+		// AND THIS IS WHY THE LIVING BRAIN WAS INVISIBLE. This wash is Srgb(3,6,22) at 0.94 across FAnchors(0,0,1,1)
+		// -- the whole screen -- so the 3D world behind it, the sculpture included, reached the eye at six percent.
+		// Every render precondition read healthy (2015 instances, mesh, material, vis=1, hidden=0, dead ahead at
+		// 808 uu) because nothing was wrong with the sculpture: it was being painted over. Forcing it to 320 uu at
+		// triple scale changed nothing, which is the tell -- distance and size cannot beat an opaque wash.
+		//
+		// The wardrobe never had this bug because it collapses this whole widget when it opens; its comment calls
+		// its preview "a hole the world must show through". The brain window needed the same hole and never got it.
+		// So the field is drawn as four bands around the window instead of one box over it. No hole, no change.
+		const FVector4f Gap = Hole.Get(FVector4f(0.0f, 0.0f, 0.0f, 0.0f));
+		const bool bHasHole = (Gap.Z - Gap.X) > 0.001f && (Gap.W - Gap.Y) > 0.001f;
+		if (!bHasHole)
+		{
+			FSlateDrawElement::MakeBox(OutDrawElements, Layer, AllottedGeometry.ToPaintGeometry(Size, FSlateLayoutTransform()), White,
+				ESlateDrawEffect::None, Night(0.94f));
+		}
+		else
+		{
+			const float L = Gap.X * Size.X, T = Gap.Y * Size.Y, R = Gap.Z * Size.X, B = Gap.W * Size.Y;
+			auto Band = [&](float X, float Y, float W, float H)
+			{
+				if (W <= 0.5f || H <= 0.5f) { return; }
+				FSlateDrawElement::MakeBox(OutDrawElements, Layer,
+					AllottedGeometry.ToPaintGeometry(FVector2f(W, H), FSlateLayoutTransform(FVector2f(X, Y))),
+					White, ESlateDrawEffect::None, Night(0.94f));
+			};
+			Band(0.0f, 0.0f, Size.X, T);
+			Band(0.0f, B, Size.X, Size.Y - B);
+			Band(0.0f, T, L, B - T);
+			Band(R, T, Size.X - R, B - T);
+		}
 
 		// Light falling from the upper left, and the blue-violet bloom the brain stands in.
 		++Layer;
@@ -211,6 +244,7 @@ private:
 	}
 
 	TAttribute<int32> ChakraRank;
+	TAttribute<FVector4f> Hole;
 };
 
 /** The living light over the brain: its core breathing in the rank's colour, and the platform's rings turning. */
@@ -450,6 +484,18 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 		+ SConstraintCanvas::Slot().Anchors(FAnchors(0.0f, 0.0f, 1.0f, 1.0f)).Offset(FMargin(0.0f))
 		[
 			SNew(SWonderlandBrainBackdrop).ChakraRank_Lambda([this]() { return Model.ChakraRank; })
+			// ONLY WHILE THE SCULPTURE IS ACTUALLY LIVE. If it ever fails to stage, the still hologram comes back
+			// over an unbroken night field exactly as before -- a broken lens costs the movement, never the picture.
+			.Hole_Lambda([this]() -> FVector4f
+			{
+				FVector2D Centre, Extent;
+				if (!bSculptureLive || !GetBrainSculptureRect(Centre, Extent))
+				{
+					return FVector4f(0.0f, 0.0f, 0.0f, 0.0f);
+				}
+				return FVector4f(static_cast<float>(Centre.X - Extent.X * 0.5), static_cast<float>(Centre.Y - Extent.Y * 0.5),
+								 static_cast<float>(Centre.X + Extent.X * 0.5), static_cast<float>(Centre.Y + Extent.Y * 0.5));
+			})
 			.Visibility_Lambda([this]() { return bSkinsOpen ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
 		]
 		// The brain. A NAMED BOX, because this rectangle is also where the living sculpture is framed: the lens
@@ -1028,6 +1074,8 @@ bool SWonderlandProjectBrainPanel::GetBrainSculptureRect(FVector2D& OutCentre, F
 	// surfaces asking for the same camera in the same frame would fight over it every tick.
 	if (bSkinsOpen || !HologramWindow.IsValid())
 	{
+		UE_LOG(LogTemp, Warning, TEXT("WLBRAINRECT: no rect -- skinsOpen=%d windowValid=%d"),
+			bSkinsOpen ? 1 : 0, HologramWindow.IsValid() ? 1 : 0);
 		return false;
 	}
 	const FGeometry& Window = HologramWindow->GetCachedGeometry();
@@ -1035,6 +1083,8 @@ bool SWonderlandProjectBrainPanel::GetBrainSculptureRect(FVector2D& OutCentre, F
 	const FVector2D WholeSize = Whole.GetAbsoluteSize();
 	if (WholeSize.X < 1.0 || WholeSize.Y < 1.0 || Window.GetAbsoluteSize().X < 1.0)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("WLBRAINRECT: no rect -- whole=%.1fx%.1f window=%.1fx%.1f"),
+			WholeSize.X, WholeSize.Y, Window.GetAbsoluteSize().X, Window.GetAbsoluteSize().Y);
 		return false;
 	}
 	const FVector2D TopLeft = (Window.GetAbsolutePosition() - Whole.GetAbsolutePosition()) / WholeSize;

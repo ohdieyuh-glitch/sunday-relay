@@ -135,6 +135,15 @@ public:
 	bool IsProjectBrainOpen() const;
 
 	/**
+	 * The brain window as the panel measures it: (L,T,R,B) in 0..1 of the screen, and the hole the night field
+	 * is cutting for the living sculpture. A zero rect means NO HOLE IS BEING CUT -- which is the state that made
+	 * the brain invisible for so long, so it is worth being able to read directly rather than inferred from a
+	 * photograph.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FVector4 GetBrainWindowRect() const;
+
+	/**
 	 * OPEN OR SHUT THE RELAY DOG WARDROBE inside the Project Brain. False when the Brain panel itself is shut, because
 	 * the wardrobe lives inside it and opening one without the other would be a state no key can reach.
 	 */

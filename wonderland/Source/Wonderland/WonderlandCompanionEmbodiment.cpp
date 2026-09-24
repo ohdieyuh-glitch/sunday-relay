@@ -669,6 +669,18 @@ void AWonderlandCompanionEmbodiment::DriveGaitFromCanonical(float InStridePhase,
 	GroundSpeedUU = InSpeedUU;
 }
 
+void AWonderlandCompanionEmbodiment::WearCanonicalPose(const FWonderlandWornPose& InPose)
+{
+	// TAKEN WHOLE, for the same reason the gait is: easing toward the Dog's numbers would be a third animation
+	// with a lag of its own, and a lag is exactly what "the skins do not move like the Dog" looks like.
+	WornPose = InPose;
+	WornPose.bValid = true;
+	bGaitDrivenExternally = true;
+	GaitPhase = InPose.StridePhase;
+	GaitWeight = InPose.GaitWeight;
+	GroundSpeedUU = InPose.SpeedUU;
+}
+
 void AWonderlandCompanionEmbodiment::SetRuntimeActivity(FName Activity)
 {
 	if (Activity.IsNone() || Activity == RuntimeActivity)
@@ -785,11 +797,22 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 		case EWonderlandCompanionMotion::Float:
 		{
 			const float Angle = 2.0f * PI * (ActivityTime / 3.1f + Phase + Part.A);
-			Pivot->SetRelativeLocation(Part.RestLocation + FVector(0.0, 0.0, FMath::Sin(Angle) * 2.0f * Scale));
+			const float Idle = FMath::Sin(Angle) * 2.0f * Scale;
+			// THE PERFORMANCE LIFTS THE WHOLE BODY -- 72 uu to meditate, 150 to fly up and verify. A floating part
+			// keeps its own small bob on top of that; what it must not do is ignore the lift entirely, which is
+			// what a costume did through every preparation and verification the founder ever watched.
+			Pivot->SetRelativeLocation(Part.RestLocation + FVector(0.0, 0.0, Idle + (WornPose.bValid ? WornPose.LiftUU : 0.0f)));
 			break;
 		}
 		case EWonderlandCompanionMotion::Head:
 		{
+			if (WornPose.bValid)
+			{
+				// THE DOG'S HEAD. Bowed to the pages while it reads, level against its own lean while it walks,
+				// turned to the Contract where the performance turns it -- all of it decided by the one animator.
+				Pivot->SetRelativeRotation(FRotator(WornPose.HeadPitchDeg, WornPose.HeadYawDeg, 0.0f));
+				break;
+			}
 			const float Angle = 2.0f * PI * (ActivityTime / 5.3f + Phase);
 			Pivot->SetRelativeRotation(FRotator(FMath::Sin(Angle * 1.3f) * 2.5f, FMath::Sin(Angle) * 4.0f, FMath::Cos(Angle * 0.7f) * 3.0f));
 			break;
@@ -815,6 +838,14 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			// A wave travelling down the wisp: the further from the body, the later and the wider it swings.
 			const float Along = FMath::Clamp(Part.A / FMath::Max(Part.B, 1.0f), 0.0f, 1.0f);
 			const float Reach = FMath::Pow(Along, 1.35f);
+			if (WornPose.bValid)
+			{
+				// THE DOG'S TAIL, spread along the chain so a segmented wisp still reads as one tail rather than
+				// every segment snapping to the same angle.
+				Pivot->SetRelativeLocationAndRotation(Part.RestLocation,
+					FRotator(WornPose.TailPitchDeg * Reach, WornPose.TailYawDeg * Reach, 0.0f));
+				break;
+			}
 			const float Wave = 2.0f * PI * (ActivityTime / 2.2f + Phase) - Part.A * 0.62f;
 			// A SECOND, SLOWER SWING ACROSS THE FIRST, and a little pitch: one sine on one axis is a windscreen wiper.
 			const float Cross = 2.0f * PI * (ActivityTime / 6.1f + Phase * 0.7f) - Part.A * 0.30f;
@@ -839,11 +870,17 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			const float Raw = FMath::Max(Swing, 0.0f);
 			const float Lift = Raw * Raw * (3.0f - 2.0f * Raw);
 			const float Reach = FMath::Max(Part.B, 0.01f);
-			// Standing, the legs do not hold a pose: they shift weight slowly from side to side.
+			// Standing, the legs do not hold a pose: they shift weight slowly from side to side. DRIVEN, that
+			// shuffle is the Dog's stillness instead of this body's clock -- and while the Dog is off the ground
+			// the legs stop striding at nothing, which is the jump channel a costume never had.
 			const float Idle = FMath::Sin(2.0f * PI * (ActivityTime / 4.6f + Phase + Part.A)) * 2.2f;
+			const float Air = WornPose.bValid ? FMath::Clamp(WornPose.AirborneWeight, 0.0f, 1.0f) : 0.0f;
+			const float Still = WornPose.bValid ? FMath::Clamp(WornPose.Stillness, 0.0f, 1.0f) : 0.0f;
+			const float Ground = (1.0f - Air) * (1.0f - Still);
 			Pivot->SetRelativeLocationAndRotation(
-				Part.RestLocation + FVector(0.0, 0.0, Lift * 3.4f * Reach * Walk * Scale),
-				FRotator(Swing * 27.0f * Walk + Idle * (1.0f - Walk) + Drift * 1.1f, 0.0, 0.0));
+				Part.RestLocation + FVector(0.0, 0.0, Lift * 3.4f * Reach * Walk * Scale * Ground),
+				FRotator((Swing * 27.0f * Walk + Idle * (1.0f - Walk) * (1.0f - Still)) * Ground
+					+ Air * -18.0f * Reach + Drift * 1.1f, 0.0, 0.0));
 			break;
 		}
 		case EWonderlandCompanionMotion::Knee:
@@ -855,8 +892,10 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			const float Bend = FMath::Max(FMath::Sin(2.0f * PI * Cycle), 0.0f);
 			const float Load = FMath::Max(-FMath::Sin(2.0f * PI * Cycle), 0.0f);
 			const float Reach = FMath::Max(Part.B, 0.01f);
+			const float KneeAir = WornPose.bValid ? FMath::Clamp(WornPose.AirborneWeight, 0.0f, 1.0f) : 0.0f;
 			Pivot->SetRelativeRotation(FRotator(
-				(-Bend * 34.0f + Load * 6.0f) * Reach * Walk + Drift * 0.9f, 0.0, 0.0));
+				(-Bend * 34.0f + Load * 6.0f) * Reach * Walk * (1.0f - KneeAir)
+				+ KneeAir * -30.0f * Reach + Drift * 0.9f, 0.0, 0.0));
 			break;
 		}
 		case EWonderlandCompanionMotion::Spine:
@@ -866,6 +905,17 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			const float Amount = FMath::Max(Part.A, 0.0f);
 			const float Wave = 2.0f * PI * (Gait + Part.B);
 			const float Breathe = FMath::Sin(2.0f * PI * (ActivityTime / 3.9f + Phase)) * 1.4f;
+			if (WornPose.bValid)
+			{
+				// THE DOG'S OWN TORSO, composed exactly as the canon body's root is: sway and bob damped by the
+				// stillness the performance asks for, the mission lift added, the lean and turn-roll carried.
+				// This is the half that used to be invented here, and the reason a standing skin looked nothing
+				// like a standing Relay OG -- at rest the gait weight is zero and ONLY this was left running.
+				Pivot->SetRelativeLocationAndRotation(
+					Part.RestLocation + FVector(0.0, WornPose.SwayUU * Amount, (WornPose.BobUU + WornPose.LiftUU) * Amount),
+					FRotator(WornPose.BodyPitchDeg * Amount, WornPose.BodyYawDeg * Amount, WornPose.BodyRollDeg * Amount));
+				break;
+			}
 			Pivot->SetRelativeLocationAndRotation(
 				Part.RestLocation + FVector(0.0, 0.0, FMath::Sin(Wave * 2.0f) * 1.9f * Amount * Walk * Scale),
 				FRotator(

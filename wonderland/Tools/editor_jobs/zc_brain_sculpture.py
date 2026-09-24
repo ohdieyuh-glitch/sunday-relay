@@ -133,10 +133,10 @@ def job():
     # ---- AND IT NEVER GOES THROUGH THE BRAIN. Offline the closest approach measured 151.6 uu against this 135.6
     # ---- floor, because the head is held outside by construction rather than by the clamp; a reading that sits
     # ---- exactly ON the floor would mean the clamp is steering again and should be treated as a regression.
-    floor = radius * 1.13
+    floor = radius * 1.24
     record("S06", "no segment ever entered the brain mass", RESULT["closest_segment_uu"] >= floor - 1.0,
            closest_uu=round(RESULT["closest_segment_uu"], 1), floor_uu=round(floor, 1),
-           expected_uu=round(radius * 1.16, 1))
+           expected_uu=round(radius * 1.26, 1))
 
     # ---- AND THE BRAIN ITSELF IS ALIVE
     record("S07", "the brain breathes rather than sitting still",

@@ -26,6 +26,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "WonderlandWornPose.h"
 #include "GameFramework/Actor.h"
 #include "WonderlandCompanionFigure.h"
 #include "WonderlandCompanionFormation.h"
@@ -134,9 +135,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	void DriveGaitFromCanonical(float InStridePhase, float InGaitWeight, float InSpeedUU);
 
+	/**
+	 * WEAR THE WHOLE CANONICAL POSE, not just its gait. This is the call the Relay Dog makes; everything the
+	 * costume would otherwise invent for itself is taken from here instead, for every act and for standing still.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
+	void WearCanonicalPose(const FWonderlandWornPose& InPose);
+
+	/** What this body is currently wearing, for proofs that compare a skin against Relay OG frame by frame. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	FWonderlandWornPose GetWornPose() const { return WornPose; }
+
 	/** Hand the gait back to this body's own measurement, for a companion nothing is driving. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
-	void ReleaseCanonicalGait() { bGaitDrivenExternally = false; }
+	void ReleaseCanonicalGait() { bGaitDrivenExternally = false; WornPose.bValid = false; }
 
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	bool IsGaitDrivenExternally() const { return bGaitDrivenExternally; }
@@ -371,6 +383,7 @@ private:
 	float GaitMeasuredAt = 0.0f;
 	/** True while a Relay Dog is handing this costume its canonical stride; the body stops measuring its own. */
 	bool bGaitDrivenExternally = false;
+	FWonderlandWornPose WornPose;
 
 	/**
 	 * ONE STRIDE ON THE GROUND, in grid units before the figure's scale. The gait clock turns once per stride, so a

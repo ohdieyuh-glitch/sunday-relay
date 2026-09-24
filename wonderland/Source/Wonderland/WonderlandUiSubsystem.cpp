@@ -1626,6 +1626,7 @@ void UWonderlandUiSubsystem::FrameBrainSculpture(bool bOn, bool bReleaseCamera)
 		if (!Self->BrainPanel->GetBrainSculptureRect(Centre, Size))
 		{
 			// The wardrobe has the lens, or the panel has not painted yet. Either way the still art stays up.
+			UE_LOG(LogTemp, Warning, TEXT("WLBRAINFRAME: timer ran but the window rect was not available"));
 			Self->BrainPanel->SetSculptureLive(false);
 			return;
 		}
@@ -1654,19 +1655,58 @@ void UWonderlandUiSubsystem::FrameBrainSculpture(bool bOn, bool bReleaseCamera)
 		const float TanH = FMath::Tan(FMath::DegreesToRadians(HFov * 0.5f));
 		const float TanV = TanH / Aspect;
 
-		// ---- IT FLOATS. A brain in a panel is a hologram, not a prop: it stands on nothing, so unlike the wardrobe
-		// ---- there is no floor to find and no plinth to put it on. The eye is taken from the PAWN and not from the
-		// ---- camera, because once the view target is this camera, reading the camera to place the camera is a loop.
-		const FVector Eye = Dog->GetActorLocation() + FVector(0.0, 0.0, 70.0);
-		const FVector Forward = Dog->GetActorForwardVector();
+		// ---- IT FLOATS, AND IT GOES WHERE THE REAL CAMERA IS LOOKING.
+		//
+		// This used to take the eye from the PAWN and then aim a camera of its own. Measured in PIE, that put the
+		// sculpture 808 uu from the camera that was actually rendering while the code believed it was 537 -- the
+		// brain was being placed in front of a viewpoint nobody was looking through, which is exactly why the
+		// window came back empty with every instance present, meshed, materialled and visible.
+		//
+		// The real camera is the only viewpoint that matters, so the subject is placed on the ray leaving IT --
+		// the same thing that finally made the wardrobe preview work. No camera of our own is created and no view
+		// target is taken, so opening Project Brain no longer moves the player either.
+		const APlayerCameraManager* Lens = PC->PlayerCameraManager;
+		if (Lens == nullptr)
+		{
+			return;
+		}
+		const FVector Eye = Lens->GetCameraLocation();
+		const FRotator Aim0 = Lens->GetCameraRotation();
 
 		// The python swims on a shell outside the brain, so what has to fit in the window is that shell, not the mass.
 		const float Reach = Sculpture->BrainRadiusUU * 1.55f * 2.0f;
-		const float WantTall = FMath::Max(Size.Y * 0.74f, 0.05f);
-		float Distance = FMath::Clamp(Reach / (WantTall * 2.0f * TanV), 260.0f, 2000.0f);
+		// BIGGER IN THE WINDOW (founder, 2026-09-24). The subject fills nearly the whole window height
+		// rather than three quarters of it; the fit distance below turns that into how far away it stands.
+		const float WantTall = FMath::Max(Size.Y * 0.95f, 0.05f);
 
-		// ---- AND IT IS NEVER INSIDE A WALL. Five metres ahead is a doorway as often as it is open air; if something
-		// ---- solid is nearer than that, the brain is brought in front of it and simply reads a little larger.
+		// The ray through the window's centre, turned back from the screen offset into an angle off the real axis.
+		// SOLVED FIRST, because everything below has to be measured along the ray the subject is actually placed
+		// on -- the previous version traced for obstructions down the camera axis while placing along this one,
+		// and with the window sitting at x=0.70 of the screen those are nowhere near the same direction.
+		FRotator Through = Aim0;
+		Through.Yaw += FMath::RadiansToDegrees(FMath::Atan((Centre.X - 0.5f) * 2.0f * TanH));
+		Through.Pitch -= FMath::RadiansToDegrees(FMath::Atan((Centre.Y - 0.5f) * 2.0f * TanV));
+		const FVector Ray = Through.Vector();
+
+		// How far away the brain fills the window at its built size. Everything after this only ever brings it
+		// NEARER, and the scale at the end pays that back so the founder sees the same size either way.
+		const float FitDistance = FMath::Clamp(Reach / (WantTall * 2.0f * TanV), 260.0f, 2000.0f);
+		float Distance = FitDistance;
+
+		// ---- IN FRONT OF THE DOG, ALWAYS.
+		//
+		// Measured in PIE with the night field finally cut open: the brain sat 808 uu out while the mascot stood
+		// at roughly half that, so the first thing the founder saw in the brain window was his own dog standing
+		// in the middle of it. A backdrop behind the subject cannot hide anything in FRONT of the subject, so the
+		// only fix is to put the subject nearer than the world it has to beat.
+		const float DogAway = static_cast<float>(FVector::Dist(Eye, Dog->GetActorLocation()));
+		if (DogAway > 1.0f)
+		{
+			Distance = FMath::Min(Distance, DogAway * 0.55f);
+		}
+
+		// ---- AND NEVER INSIDE A WALL. Five metres ahead is a doorway as often as it is open air; if something
+		// ---- solid is nearer than that, the brain is brought in front of it.
 		FCollisionQueryParams Params(SCENE_QUERY_STAT(WonderlandBrainSculptureSpot), false);
 		Params.AddIgnoredActor(Dog);
 		Params.AddIgnoredActor(Sculpture);
@@ -1675,42 +1715,23 @@ void UWonderlandUiSubsystem::FrameBrainSculpture(bool bOn, bool bReleaseCamera)
 			if (Relay->GetCostume() != nullptr) { Params.AddIgnoredActor(Relay->GetCostume()); }
 		}
 		FHitResult Blocked;
-		if (W->LineTraceSingleByChannel(Blocked, Eye, Eye + Forward * Distance, ECC_Camera, Params))
+		if (W->LineTraceSingleByChannel(Blocked, Eye, Eye + Ray * Distance, ECC_Camera, Params))
 		{
-			Distance = FMath::Max(static_cast<float>(Blocked.Distance) - Reach * 0.55f, 180.0f);
+			Distance = FMath::Max(static_cast<float>(Blocked.Distance) - Reach * 0.25f, 150.0f);
 		}
-		const FVector Where = Eye + Forward * Distance;
-		Sculpture->SetActorLocation(Where);
 
-		// ---- the brain sits at the WINDOW'S centre, which is off the screen's centre: aim the lens away from it by
-		// ---- exactly that angle. Screen y runs downward.
-		const float YawOff = FMath::RadiansToDegrees(FMath::Atan((Centre.X - 0.5f) * 2.0f * TanH));
-		const float PitchOff = FMath::RadiansToDegrees(FMath::Atan((Centre.Y - 0.5f) * 2.0f * TanV));
+		// ---- SIZED FOR WHERE IT ENDED UP. Coming closer must not make it enormous: the apparent size is held to
+		// what the window asked for, so the brain reads the same in an open plaza and up against a wall.
+		const float Scale = FMath::Clamp(Distance / FMath::Max(FitDistance, 1.0f), 0.10f, 1.0f);
+		Sculpture->SetActorScale3D(FVector(Scale, Scale, Scale));
+		Sculpture->SetActorLocation(Eye + Ray * Distance);
 
-		ACameraActor* Cam = Self->BrainCamera.Get();
-		if (Cam == nullptr)
+		// NO CAMERA OF OUR OWN. The offsets above already carried the subject to the window, so there is
+		// nothing left to aim and nothing to possess -- opening Project Brain does not move the player.
+		if (ACameraActor* Stale = Self->BrainCamera.Get())
 		{
-			FActorSpawnParameters SpawnParams;
-			SpawnParams.ObjectFlags |= RF_Transient;
-			Cam = W->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(Eye), SpawnParams);
-			if (Cam == nullptr) { return; }
-#if WITH_EDITOR
-			Cam->SetActorLabel(TEXT("WL_ProjectBrainCamera"), false);
-#endif
-			Self->BrainCamera = Cam;
-		}
-		FRotator Aim = Forward.Rotation();
-		Aim.Yaw -= YawOff;
-		Aim.Pitch += PitchOff;
-		Cam->SetActorLocationAndRotation(Eye, Aim);
-		if (UCameraComponent* Lens = Cam->GetCameraComponent())
-		{
-			Lens->SetFieldOfView(HFov);
-			Lens->bConstrainAspectRatio = false;
-		}
-		if (PC->GetViewTarget() != Cam)
-		{
-			PC->SetViewTargetWithBlend(Cam, 0.45f, EViewTargetBlendFunction::VTBlend_Cubic);
+			Stale->Destroy();
+			Self->BrainCamera.Reset();
 		}
 		// ONLY NOW is the still art stood down: everything the live brain needs exists and is pointed at.
 		Self->BrainPanel->SetSculptureLive(true);
@@ -2987,6 +3008,17 @@ void UWonderlandUiSubsystem::ToggleProjectBrain()
 bool UWonderlandUiSubsystem::IsProjectBrainOpen() const
 {
 	return Open == EOverlay::Brain;
+}
+
+FVector4 UWonderlandUiSubsystem::GetBrainWindowRect() const
+{
+	FVector2D Centre, Extent;
+	if (!BrainPanel.IsValid() || !BrainPanel->GetBrainSculptureRect(Centre, Extent))
+	{
+		return FVector4(0.0, 0.0, 0.0, 0.0);
+	}
+	return FVector4(Centre.X - Extent.X * 0.5, Centre.Y - Extent.Y * 0.5,
+					Centre.X + Extent.X * 0.5, Centre.Y + Extent.Y * 0.5);
 }
 
 void UWonderlandUiSubsystem::RefreshBrain()

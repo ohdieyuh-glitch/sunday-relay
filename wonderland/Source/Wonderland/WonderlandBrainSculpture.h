@@ -19,6 +19,7 @@
 #include "WonderlandBrainSculpture.generated.h"
 
 class UInstancedStaticMeshComponent;
+class UStaticMeshComponent;
 class UMaterialInstanceDynamic;
 
 /**
@@ -92,6 +93,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Brain")
 	float GetBearingRateSpreadDeg() const;
 
+	/**
+	 * WHY CAN I NOT SEE IT. Actor exists, transforms update, materials are made -- and the window is empty. This
+	 * reports the things that actually decide whether a pixel is drawn: how many instances each component really
+	 * holds, whether it has a mesh and a material at all, where the actor is, and whether it is hidden.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Brain")
+	FString DescribeRendering() const;
+
 private:
 	void BuildBrain();
 	void BuildSnake();
@@ -106,7 +115,16 @@ private:
 	FVector PathPoint(int32 StepsBack) const;
 	/** How finely the path is stored. A quarter of a segment gap, so sampling between points stays smooth. */
 	float PathResolution() const;
+	/** Stands the dark chamber wall behind the brain, from wherever the founder is actually looking. */
+	void StandTheChamber();
 
+	/**
+	 * THE DARK CHAMBER THE BRAIN STANDS IN -- the same trick the wardrobe already uses and which the founder
+	 * asked not to be broken. Cutting the night field open lets the sculpture through, but it also lets the
+	 * GARDEN through, and a brain floating over mushrooms is not a brain framed in a window. This wall stands
+	 * behind it and gives the hole something black to be a window onto.
+	 */
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> Backdrop = nullptr;
 	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> BrainMesh = nullptr;
 	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> BrainFold = nullptr;
 	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> SnakeMesh = nullptr;
@@ -119,6 +137,7 @@ private:
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> BellyMid = nullptr;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> HeadMid = nullptr;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> EyeMid = nullptr;
+	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> BackdropMid = nullptr;
 
 	/**
 	 * THE HEAD'S PATH, RESAMPLED AT A FIXED ARC LENGTH, in a ring that never reallocates. Storing one sample per

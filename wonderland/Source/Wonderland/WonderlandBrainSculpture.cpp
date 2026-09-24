@@ -1,6 +1,10 @@
 #include "WonderlandBrainSculpture.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Kismet/GameplayStatics.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -55,6 +59,12 @@ AWonderlandBrainSculpture::AWonderlandBrainSculpture()
 		Mesh->SetMobility(EComponentMobility::Movable);
 		return Mesh;
 	};
+	Backdrop = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Chamber"));
+	Backdrop->SetupAttachment(Root);
+	Backdrop->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+	Backdrop->SetCastShadow(false);
+	Backdrop->SetMobility(EComponentMobility::Movable);
+
 	BrainMesh = MakeMesh(TEXT("BrainMass"));
 	BrainFold = MakeMesh(TEXT("BrainFolds"));
 	SnakeMesh = MakeMesh(TEXT("PythonBody"));
@@ -84,15 +94,34 @@ void AWonderlandBrainSculpture::PostInitializeComponents()
 			}
 		}
 	};
-	// A BRAIN IS NOT PINK PLASTIC. Two tones, a warm pale mass and a darker crease, so the folds read as depth
-	// rather than as a pattern painted on a ball.
-	Dress(BrainMesh, FLinearColor(0.78f, 0.62f, 0.66f, 1.0f), BrainMid);
-	Dress(BrainFold, FLinearColor(0.44f, 0.30f, 0.36f, 1.0f), FoldMid);
+	// THE PANEL'S OWN COLOUR, not a pink lump pasted into it (founder, 2026-09-24: "keep the project brain the
+	// same color as the background of the project brain UI"). The night field behind it is Srgb(3,6,22), so the
+	// brain is built out of that same blue-black -- the mass a little above it so the lighting still separates
+	// the silhouette from the chamber, the creases a little below it, which is what makes the folds read as
+	// depth rather than as a pattern painted on a ball.
+	Dress(BrainMesh, FLinearColor(0.022f, 0.030f, 0.082f, 1.0f), BrainMid);
+	Dress(BrainFold, FLinearColor(0.008f, 0.012f, 0.038f, 1.0f), FoldMid);
 	// And a python is four tones, not one: a dark back, a pale belly, a darker snout and a lit eye.
 	Dress(SnakeMesh, FLinearColor(0.20f, 0.42f, 0.23f, 1.0f), SnakeMid);
 	Dress(SnakeBelly, FLinearColor(0.76f, 0.77f, 0.52f, 1.0f), BellyMid);
 	Dress(SnakeHead, FLinearColor(0.14f, 0.30f, 0.17f, 1.0f), HeadMid);
 	Dress(SnakeEyes, FLinearColor(0.96f, 0.72f, 0.16f, 1.0f), EyeMid);
+
+	// The chamber wall: not pure black, because a true 0,0,0 wall and the night field's Srgb(3,6,22) read as two
+	// different blacks and the hole's edges show as a visible rectangle. This sits where the field sits.
+	if (Backdrop != nullptr)
+	{
+		if (Cube != nullptr) { Backdrop->SetStaticMesh(Cube); }
+		if (Plain != nullptr)
+		{
+			if (UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Plain, this))
+			{
+				Mid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.0118f, 0.0235f, 0.0863f, 1.0f));
+				Backdrop->SetMaterial(0, Mid);
+				BackdropMid = Mid;
+			}
+		}
+	}
 
 	BuildBrain();
 	BuildSnake();
@@ -157,7 +186,7 @@ void AWonderlandBrainSculpture::BuildSnake()
 	{
 		// THICKEST A THIRD OF THE WAY BACK, tapering to the tail: a python, not a rope of equal beads.
 		const float T = static_cast<float>(I) / FMath::Max(Count - 1, 1);
-		const float Girth = R * 0.105f * FMath::Sin(FMath::Clamp(0.30f + T * 0.78f, 0.0f, 1.0f) * PI) + R * 0.020f;
+		const float Girth = R * 0.135f * FMath::Sin(FMath::Clamp(0.30f + T * 0.78f, 0.0f, 1.0f) * PI) + R * 0.026f;
 		SegmentGirth.Add(Girth);
 		const FTransform Rest(FRotator::ZeroRotator, FVector(R * 1.6f, 0.0f, 0.0f), FVector(Girth / 100.0f));
 		SnakeMesh->AddInstance(Rest);
@@ -176,7 +205,7 @@ void AWonderlandBrainSculpture::BuildSnake()
 	BearingWrite = 0;
 
 	// The head starts on the shell.
-	TargetRadius = R * 1.42f;
+	TargetRadius = R * 1.50f;
 	TargetYaw = 0.0f;
 	TargetPitch = 0.0f;
 	HeadDir = FVector::ForwardVector;
@@ -259,7 +288,7 @@ void AWonderlandBrainSculpture::AdvanceHead(float FixedStep)
 	// ---- lap at a constant rate. This is the whole reason it does not read as RotateAroundActor.
 	TargetYaw = BrainWander(Elapsed * 0.31f, YawSeed) * PI;
 	TargetPitch = BrainWander(Elapsed * 0.41f, PitchSeed) * 1.05f;
-	TargetRadius = R * (1.38f + BrainWander(Elapsed * 0.33f, RadiusSeed) * 0.17f);
+	TargetRadius = R * (1.46f + BrainWander(Elapsed * 0.33f, RadiusSeed) * 0.17f);
 
 	// ---- AND IT CHANGES ITS MIND. Every few seconds the yaw walk is kicked, which is what makes the python
 	// ---- double back over the top of the brain instead of settling into a groove.
@@ -291,7 +320,7 @@ void AWonderlandBrainSculpture::AdvanceHead(float FixedStep)
 	RadiusVel *= FMath::Clamp(1.0f - FixedStep * 2.6f, 0.0f, 1.0f);
 	// THE FLOOR THAT NEVER FIRES. With the direction and the radius kept apart there is no way to be inside the
 	// brain at all; this stays only so that a hand-edited BrainRadiusUU cannot make one.
-	HeadRadius = FMath::Max(HeadRadius + RadiusVel * FixedStep, R * 1.16f);
+	HeadRadius = FMath::Max(HeadRadius + RadiusVel * FixedStep, R * 1.26f);
 	HeadWorld = HeadDir * HeadRadius;
 
 	// ---- THE PATH IS RECORDED BY DISTANCE, NOT BY TIME. A point is laid down every time the head has travelled
@@ -332,7 +361,11 @@ void AWonderlandBrainSculpture::AdvanceBody()
 
 	const float R = FMath::Max(BrainRadiusUU, 20.0f);
 	const float Spacing = FMath::Max(SegmentSpacingUU, 0.5f);
-	const float MinR = R * 1.13f;
+	// AGAINST THE OVOID, NOT A SPHERE. This floor and the head's were both written as multiples of R as though the
+	// brain were a ball, but BuildBrain's longest semi-axis is R*1.06 -- so the old R*1.13 left 8.4 uu of clearance,
+	// less than the R/13 voxel the brain is built out of. Photographed in PIE the python was grazing the surface
+	// and being swallowed by it; it renders, and always did, but there was nowhere for it to be seen.
+	const float MinR = R * 1.24f;
 	ClosestThisFrame = TNumericLimits<float>::Max();
 	BodyLengthThisFrame = 0.0f;
 
@@ -445,6 +478,33 @@ void AWonderlandBrainSculpture::Tick(float DeltaSeconds)
 	}
 	AdvanceBody();
 	Breathe(DeltaSeconds);
+	StandTheChamber();
+}
+
+void AWonderlandBrainSculpture::StandTheChamber()
+{
+	// Placed from the REAL camera every frame rather than parented at a fixed offset: the panel frames the brain
+	// along the ray through the window, so which way "behind" points depends on where the founder is standing.
+	if (Backdrop == nullptr) { return; }
+	const APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	const APlayerCameraManager* Lens = (PC != nullptr) ? PC->PlayerCameraManager : nullptr;
+	if (Lens == nullptr) { Backdrop->SetVisibility(false, true); return; }
+
+	const FVector Here = GetActorLocation();
+	const FVector Eye = Lens->GetCameraLocation();
+	const FVector Away = (Here - Eye).GetSafeNormal(UE_SMALL_NUMBER, FVector::ForwardVector);
+	// Wide enough to overrun the window at any aspect, and set back far enough that the python never clips into
+	// it on the far side of its route.
+	// Scaled with the actor, because the panel shrinks the sculpture to hold its apparent size when it has to be
+	// brought in close -- a chamber that stayed its built size would sit in front of a brain that had moved back.
+	const float R = FMath::Max(BrainRadiusUU, 20.0f) * static_cast<float>(GetActorScale3D().X);
+	// Deliberately far wider than the window. Anything of it that overruns is covered by the night field's own
+	// bands, which are drawn over the world, so there is no cost to being generous and a hole to be seen through
+	// if it is too mean.
+	Backdrop->SetVisibility(true, true);
+	Backdrop->SetWorldLocation(Here + Away * (R * 3.0f));
+	Backdrop->SetWorldRotation(Away.Rotation());
+	Backdrop->SetWorldScale3D(FVector(0.04f, R * 0.34f, R * 0.34f));
 }
 
 float AWonderlandBrainSculpture::GetHeadRadiusUU() const
@@ -462,6 +522,24 @@ float AWonderlandBrainSculpture::GetClosestSegmentRadiusUU() const
 float AWonderlandBrainSculpture::GetBodyLengthUU() const
 {
 	return BodyLengthThisFrame;
+}
+
+FString AWonderlandBrainSculpture::DescribeRendering() const
+{
+	auto Say = [](const TCHAR* Name, UInstancedStaticMeshComponent* M) -> FString
+	{
+		if (M == nullptr) { return FString::Printf(TEXT("%s=NULL"), Name); }
+		return FString::Printf(TEXT("%s{n=%d mesh=%s mat=%s vis=%d hidden=%d}"),
+			Name, M->GetInstanceCount(),
+			M->GetStaticMesh() != nullptr ? TEXT("yes") : TEXT("NO"),
+			M->GetMaterial(0) != nullptr ? TEXT("yes") : TEXT("NO"),
+			M->IsVisible() ? 1 : 0, M->bHiddenInGame ? 1 : 0);
+	};
+	return FString::Printf(TEXT("at=%s hiddenActor=%d radius=%.1f | %s %s %s %s %s %s"),
+		*GetActorLocation().ToCompactString(), IsHidden() ? 1 : 0, BrainRadiusUU,
+		*Say(TEXT("mass"), BrainMesh), *Say(TEXT("fold"), BrainFold),
+		*Say(TEXT("body"), SnakeMesh), *Say(TEXT("belly"), SnakeBelly),
+		*Say(TEXT("snout"), SnakeHead), *Say(TEXT("eyes"), SnakeEyes));
 }
 
 float AWonderlandBrainSculpture::GetBearingRateSpreadDeg() const
