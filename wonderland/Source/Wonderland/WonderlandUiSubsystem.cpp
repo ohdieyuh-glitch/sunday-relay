@@ -1539,6 +1539,39 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 			// registry, so a click re-dresses it without anything here being told about it).
 			Stage->SetInWorldPreview(true, Spot - FVector(0.0, 0.0, Height * 0.5), (RealEye - Spot).GetSafeNormal2D().Rotation());
 		}
+
+		// AND THE BLACK GOES BEHIND THE NEW SPOT, not the old one.
+		//
+		// The backdrop above was placed relative to the virtual camera this function used to fly the player to.
+		// Once the subject started coming to the window instead, that camera stopped existing -- so the black
+		// panel was still being parked out in the garden while the preview window showed whatever the REAL
+		// camera happened to be pointing at. The founder's words: "Wardrobe still does NOT have the correct
+		// black background preview area." It was there, behind the wrong thing.
+		//
+		// Squarely across the ray, far enough past the figure to clear it, and big enough that the window's
+		// corners are still panel at that distance.
+		if (AActor* Black = Self->WardrobeBackdrop.Get())
+		{
+			const FVector Ray = Through.Vector();
+			const float BackOff = Distance * 0.55f;
+			const FVector At = Spot + Ray * BackOff;
+			const float Reach = Distance + BackOff;
+			const float HalfW = Reach * TanH * FMath::Max(Size.X, 0.05f) * 1.60f;
+			const float HalfH = Reach * TanV * FMath::Max(Size.Y, 0.05f) * 1.60f;
+			Black->SetActorLocationAndRotation(At, (RealEye - At).Rotation());
+			// The engine cube is 100 uu, and the wall faces the lens down its own X.
+			Black->SetActorScale3D(FVector(0.04f, FMath::Max(HalfW, 80.0f) / 50.0f, FMath::Max(HalfH, 80.0f) / 50.0f));
+			TInlineComponentArray<UStaticMeshComponent*> Parts(Black);
+			for (UStaticMeshComponent* Part : Parts)
+			{
+				// The deck belonged to a Dog standing on a garden floor. There is no floor in front of the
+				// lens here, so the wall alone is the background and the deck only gets in the way.
+				if (Part != nullptr && Part->GetFName() == TEXT("WardrobeBlackDeck"))
+				{
+					Part->SetVisibility(false, true);
+				}
+			}
+		}
 	}), 0.08f, true, 0.05f);
 }
 

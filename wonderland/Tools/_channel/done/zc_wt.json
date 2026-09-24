@@ -1,0 +1,123 @@
+{
+ "name": "zc_wt",
+ "started": "2026-09-24 05:26:08",
+ "status": "measured",
+ "clicks": [
+  {
+   "skin": "relay_og",
+   "worn": true,
+   "view_before": [
+    "CameraActor_60",
+    -327.3,
+    -650.0,
+    179.1
+   ],
+   "view_after": [
+    "CameraActor_60",
+    -327.3,
+    -650.0,
+    179.1
+   ],
+   "VIEW_MOVED": false,
+   "brain_still_open": true
+  },
+  {
+   "skin": "apollo",
+   "worn": true,
+   "view_before": [
+    "CameraActor_60",
+    -327.3,
+    -650.0,
+    179.1
+   ],
+   "view_after": [
+    "CameraActor_60",
+    -327.3,
+    -650.0,
+    179.1
+   ],
+   "VIEW_MOVED": false,
+   "brain_still_open": true
+  },
+  {
+   "skin": "arden_infernal",
+   "worn": true,
+   "view_before": [
+    "CameraActor_60",
+    -327.3,
+    -650.0,
+    179.1
+   ],
+   "view_after": [
+    "CameraActor_60",
+    -327.3,
+    -650.0,
+    179.1
+   ],
+   "VIEW_MOVED": false,
+   "brain_still_open": true
+  },
+  {
+   "skin": "skeleton_flame",
+   "worn": true,
+   "view_before": [
+    "CameraActor_60",
+    -327.3,
+    -650.0,
+    179.1
+   ],
+   "view_after": [
+    "CameraActor_60",
+    -327.3,
+    -650.0,
+    179.1
+   ],
+   "VIEW_MOVED": false,
+   "brain_still_open": true
+  },
+  {
+   "skin": "celestial_light",
+   "worn": true,
+   "view_before": [
+    "CameraActor_60",
+    -327.3,
+    -650.0,
+    179.1
+   ],
+   "view_after": [
+    "CameraActor_60",
+    -327.3,
+    -650.0,
+    179.1
+   ],
+   "VIEW_MOVED": false,
+   "brain_still_open": true
+  }
+ ],
+ "brain_open": true,
+ "view_before_wardrobe": [
+  "CameraActor_60",
+  -327.3,
+  -650.0,
+  179.1
+ ],
+ "wardrobe_opened": true,
+ "view_after_wardrobe": [
+  "CameraActor_60",
+  -327.3,
+  -650.0,
+  179.1
+ ],
+ "wardrobe_moved_the_view": false,
+ "any_click_moved_the_view": false,
+ "brain_open_at_end": true,
+ "view_at_end": [
+  "CameraActor_60",
+  -327.3,
+  -650.0,
+  179.1
+ ],
+ "finished": "2026-09-24 05:26:52",
+ "seconds": 43.54,
+ "log": ""
+}

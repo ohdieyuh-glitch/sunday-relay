@@ -205,10 +205,25 @@ void AWonderlandSkinStage::SetInWorldPreview(bool bOn, FVector Where, FRotator F
 	}
 	if (Backdrop != nullptr)
 	{
-		// A DARK WALL IN THE ARRIVAL PLAZA WOULD READ AS BROKEN SCENERY, so the viewing room's back wall stays in
-		// the viewing room. It is still wanted when the stage is at home, where it is what makes two skins
-		// photographed an hour apart comparable.
-		Backdrop->SetVisibility(!bOn, true);
+		// THE WALL COMES WITH IT NOW, AND THAT IS THE WHOLE POINT.
+		//
+		// This used to hide the back wall whenever the stage stood in the world, because "a dark wall in the
+		// arrival plaza would read as broken scenery" -- true when the preview body stood loose in the open
+		// plaza with the player free to walk around it. It is no longer where this stands: the body is placed on
+		// the ray leaving the real camera through the centre of the wardrobe's window, so the only thing that
+		// ever sees this wall is that window, and a wall is exactly what the founder has asked for there --
+		// "a black background preview area... the currently equipped mascot visible there."
+		//
+		// Behind the body along its own facing, which already points at the viewer, and wide and tall enough
+		// that the window's corners are still wall. Square to the body so it never shows an edge.
+		Backdrop->SetVisibility(true, true);
+		if (bOn)
+		{
+			const float Reach = FMath::Max(Body != nullptr ? Body->GetFigureHeightUu() : 0.0f, 160.0f);
+			Backdrop->SetWorldScale3D(FVector(0.04f, Reach * 0.075f, Reach * 0.055f));
+			Backdrop->SetWorldLocation(Home - Facing.Vector() * (Reach * 1.25f) + FVector(0.0, 0.0, Reach * 0.45f));
+			Backdrop->SetWorldRotation(Facing + FRotator(0.0, 180.0, 0.0));
+		}
 	}
 	if (Plinth != nullptr)
 	{
