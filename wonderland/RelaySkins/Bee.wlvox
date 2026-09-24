@@ -25,7 +25,7 @@ part leg_r body 0.000 1.600 8.000 stride 0.500 0.800
 part leg_r_shin leg_r 0.000 1.600 4.000 knee 0.500 0.700
 part wing_l body -1.760 -2.100 15.392 wing -1.000
 part wing_r body -1.760 2.100 15.392 wing 1.000
-part abdomen body -2.600 0.000 10.002 sway 0.300 0.550
+part abdomen body -2.600 0.000 10.002 tail 5.000 7.000
 box head bone -3.587 -4.089 16.200 1.025 1.022 1.000
 box head bone -3.587 -4.089 17.200 1.025 1.022 1.000
 box head bone -3.587 -4.089 18.200 1.025 1.022 1.000

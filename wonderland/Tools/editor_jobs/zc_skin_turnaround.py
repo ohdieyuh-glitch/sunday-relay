@@ -15,7 +15,10 @@ import os
 L = unreal.WonderlandUiTestLibrary
 H = unreal.WonderlandHudTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "skin_turnaround")
-SKINS_DIR = "C:/dev/iwonder/wonderland-proof/wonderland/RelaySkins"
+# THE RUNNING PROJECT'S OWN SKINS, never another worktree's. This was hardcoded to wonderland-proof, so a
+# run inside the authoritative project would have photographed a DIFFERENT worktree's figures and reported
+# on them -- which is the same class of mistake as the skins going stale in proof earlier today.
+SKINS_DIR = unreal.Paths.project_dir() + "RelaySkins"
 SKINS = [("apollo", "Apollo"), ("arden_infernal", "ArdenInfernal"), ("skeleton_flame", "SkeletonFlame"),
          ("hagoromo", "Hagoromo"), ("celestial_light", "CelestialLight"), ("bee", "Bee"), ("relay_og", "RelayOg")]
 # OFF THE PLAZA ENTIRELY, ONTO OPEN LAWN, because the plaza cannot hold a turnaround. (-170, -346) photographed

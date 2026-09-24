@@ -1670,7 +1670,11 @@ def bee():
     # down off the thorax, segment by segment, tapering into the sting. It is the whole rear half of the animal
     # and it is what the old five boxes were standing in for.
     ab_root = (-td * 0.5 - 0.6, 0.0, d["torso_z"] - th * 0.24)
-    figure.part("abdomen", "body", ab_root, "sway", 0.30, 0.55)
+    # "tail", NOT an invented kind. The loader knows a fixed set of motions (blink, float, head, knee, none,
+    # orbit, spine, stride, tail, trail, twinkle, wing) and rejects anything else -- and an unknown motion
+    # cost the WHOLE FIGURE: Bee loaded with 0 parts in engine and its turnaround came back as an empty
+    # lawn, while the offline renderer drew it perfectly because that renderer ignores motion entirely.
+    figure.part("abdomen", "body", ab_root, "tail", 5.0, 7.0)
     segments = ((0.0, 0.00, 2.9, 5.4, 4.8), (2.5, -1.15, 2.8, 5.6, 4.9), (5.0, -2.60, 2.6, 5.0, 4.4),
                 (7.2, -4.20, 2.2, 4.0, 3.6), (9.0, -5.70, 1.7, 2.9, 2.6), (10.4, -6.90, 1.2, 1.9, 1.7))
     for seg, (back, drop, depth, wide, tall) in enumerate(segments):
