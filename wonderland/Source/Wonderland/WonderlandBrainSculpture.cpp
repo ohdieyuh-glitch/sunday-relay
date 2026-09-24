@@ -6,13 +6,17 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 
+// NAMED FOR THIS FILE, not anonymous. The module is ONE UNITY TRANSLATION UNIT -- the convention
+// WonderlandBrainIcon.cpp states outright, and which this file ignored: bare CubePath collided with the
+// identical constant in WonderlandCompanionEmbodiment.cpp the moment a clean unity build ran. The
+// adaptive game-target builds never caught it because they compile changed files OUTSIDE unity.
 namespace
 {
-	const TCHAR* const CubePath = TEXT("/Engine/BasicShapes/Cube.Cube");
-	const TCHAR* const PlainMaterialPath = TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial");
+	const TCHAR* const BrainCubePath = TEXT("/Engine/BasicShapes/Cube.Cube");
+	const TCHAR* const BrainPlainMaterialPath = TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial");
 
 	/** The head is integrated at this rate whatever the frame rate, so the body wave is the same on any machine. */
-	constexpr float SubStepSeconds = 1.0f / 120.0f;
+	constexpr float BrainSubStepSeconds = 1.0f / 120.0f;
 	/**
 	 * How many bearing samples the not-an-orbit proof averages over -- EIGHT seconds at the substep rate.
 	 *
@@ -21,10 +25,10 @@ namespace
 	 * 5.6 deg/s, against a threshold the proof wanted to set at 20. Over eight seconds the worst window measured
 	 * 10.2 deg/s and a real circular orbit still reads ~0, which is a gap a proof can actually stand on.
 	 */
-	constexpr int32 BearingWindow = 960;
+	constexpr int32 BrainBearingWindow = 960;
 
 	/** Smooth value noise in one dimension: enough to wander convincingly, cheap, and repeatable from a seed. */
-	float Wander(float T, float Seed)
+	float BrainWander(float T, float Seed)
 	{
 		const float A = FMath::Sin((T + Seed) * 0.37f);
 		const float B = FMath::Sin((T + Seed) * 0.83f + 1.7f);
@@ -63,8 +67,8 @@ void AWonderlandBrainSculpture::PostInitializeComponents()
 {
 	Super::PostInitializeComponents();
 
-	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, CubePath);
-	UMaterialInterface* Plain = LoadObject<UMaterialInterface>(nullptr, PlainMaterialPath);
+	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, BrainCubePath);
+	UMaterialInterface* Plain = LoadObject<UMaterialInterface>(nullptr, BrainPlainMaterialPath);
 	auto Dress = [this, Cube, Plain](UInstancedStaticMeshComponent* Mesh, const FLinearColor& Colour,
 									 TObjectPtr<UMaterialInstanceDynamic>& OutMid)
 	{
@@ -168,7 +172,7 @@ void AWonderlandBrainSculpture::BuildSnake()
 	}
 
 	BearingRates.Reset();
-	BearingRates.SetNumZeroed(BearingWindow);
+	BearingRates.SetNumZeroed(BrainBearingWindow);
 	BearingWrite = 0;
 
 	// The head starts on the shell.
@@ -253,9 +257,9 @@ void AWonderlandBrainSculpture::AdvanceHead(float FixedStep)
 	// ---- THE ROUTE. Not an angle being incremented: three unrelated noise walks, one per spherical coordinate,
 	// ---- so the target slides over the shell, rises and falls, and leans in and out without ever completing a
 	// ---- lap at a constant rate. This is the whole reason it does not read as RotateAroundActor.
-	TargetYaw = Wander(Elapsed * 0.31f, YawSeed) * PI;
-	TargetPitch = Wander(Elapsed * 0.41f, PitchSeed) * 1.05f;
-	TargetRadius = R * (1.38f + Wander(Elapsed * 0.33f, RadiusSeed) * 0.17f);
+	TargetYaw = BrainWander(Elapsed * 0.31f, YawSeed) * PI;
+	TargetPitch = BrainWander(Elapsed * 0.41f, PitchSeed) * 1.05f;
+	TargetRadius = R * (1.38f + BrainWander(Elapsed * 0.33f, RadiusSeed) * 0.17f);
 
 	// ---- AND IT CHANGES ITS MIND. Every few seconds the yaw walk is kicked, which is what makes the python
 	// ---- double back over the top of the brain instead of settling into a groove.
@@ -433,11 +437,11 @@ void AWonderlandBrainSculpture::Tick(float DeltaSeconds)
 	// hundred substeps and snaps the body straight.
 	StepAccumulator += FMath::Clamp(DeltaSeconds, 0.0f, 0.25f);
 	int32 Guard = 0;
-	while (StepAccumulator >= SubStepSeconds && Guard++ < 32)
+	while (StepAccumulator >= BrainSubStepSeconds && Guard++ < 32)
 	{
-		StepAccumulator -= SubStepSeconds;
-		Elapsed += SubStepSeconds;
-		AdvanceHead(SubStepSeconds);
+		StepAccumulator -= BrainSubStepSeconds;
+		Elapsed += BrainSubStepSeconds;
+		AdvanceHead(BrainSubStepSeconds);
 	}
 	AdvanceBody();
 	Breathe(DeltaSeconds);
@@ -464,7 +468,7 @@ float AWonderlandBrainSculpture::GetBearingRateSpreadDeg() const
 {
 	// Only the samples actually written count: the ring starts zeroed, and averaging those in would report a
 	// steady route as an erratic one for the first three seconds of life.
-	const int32 Count = FMath::Min(BearingRates.Num(), FMath::FloorToInt(Elapsed / SubStepSeconds));
+	const int32 Count = FMath::Min(BearingRates.Num(), FMath::FloorToInt(Elapsed / BrainSubStepSeconds));
 	if (Count < 8) { return 0.0f; }
 	float Mean = 0.0f;
 	for (int32 I = 0; I < Count; ++I) { Mean += BearingRates[I]; }
