@@ -1,0 +1,13 @@
+{
+ "volume": "V2_PostProcess",
+ "before": {
+  "auto_exposure_min_brightness": 13.5,
+  "auto_exposure_max_brightness": 13.5,
+  "auto_exposure_bias": 0.0
+ },
+ "after": {
+  "auto_exposure_min_brightness": 14.2,
+  "auto_exposure_max_brightness": 14.2,
+  "auto_exposure_bias": -0.15
+ }
+}
