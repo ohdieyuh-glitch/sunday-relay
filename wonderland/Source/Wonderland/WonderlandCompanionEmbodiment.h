@@ -402,6 +402,25 @@ private:
 		float Width = 0.0f;
 		float Seed = 0.0f;
 	};
+	/**
+	 * WHICH TIER OF ITSELF THIS FIGURE IS WEARING.
+	 *
+	 * THE MEASUREMENT THAT ASKED FOR THIS. Ten Project Avatars put 314,020 instanced boxes in the world and took
+	 * the RENDER thread from 109 ms to 499 while the GPU went 48 to 70 -- the hardware was never struggling; the
+	 * CPU could not submit that many movable instances. The figure is already a hollow shell (fill ratio 0.173),
+	 * so there is no interior fat to trim, and the detail is real: 99.9% of its boxes are under 3 uu.
+	 *
+	 * But the forge already ships three tiers of every avatar and nothing was using them. Cherubim is 36,025
+	 * boxes at Large, 16,920 at Medium and 5,885 at Small -- SIX TIMES cheaper -- and at the distance a crowd
+	 * actually stands, nobody can tell which one they are looking at. So the founder's rule is kept exactly:
+	 * not one avatar fewer, and the system itself becomes cheaper.
+	 */
+	FString FigureTierRoot;
+	int32 FigureTier = INDEX_NONE;
+	float NextTierCheckSeconds = 0.0f;
+	/** Picks the tier for this distance and reloads if the band changed. Hysteresis keeps it from flickering. */
+	void ChooseFigureTier(float DistanceUU, float NowSeconds);
+
 	TArray<FFlameSource> FlameSources;
 	UPROPERTY() TObjectPtr<UProceduralMeshComponent> FlameSurface = nullptr;
 	/** Lays the flame ribbons down for this frame. Cheap: a few hundred triangles for a whole figure. */

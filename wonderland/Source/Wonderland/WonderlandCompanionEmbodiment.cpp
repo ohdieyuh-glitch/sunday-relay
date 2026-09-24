@@ -3,6 +3,14 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "ProceduralMeshComponent.h"
+#include "Kismet/GameplayStatics.h"
+
+namespace
+{
+	/** The three tiers the Project Avatar forge writes, coarsest first. */
+	const TCHAR* const WonderlandFigureTiers[] = { TEXT("_Small"), TEXT("_Medium"), TEXT("_Large") };
+}
+
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -94,6 +102,23 @@ void AWonderlandCompanionEmbodiment::ClearBody()
 
 bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 {
+	// LEARN WHETHER THIS FIGURE HAS TIERS, once, from its own name. Set before the load so a tier swap that
+	// re-enters here does not keep re-deriving it.
+	if (FigureTier == INDEX_NONE)
+	{
+		const FString Base = FPaths::GetBaseFilename(FilePath);
+		for (int32 Tier = 0; Tier < UE_ARRAY_COUNT(WonderlandFigureTiers); ++Tier)
+		{
+			if (Base.EndsWith(WonderlandFigureTiers[Tier]))
+			{
+				FigureTierRoot = FPaths::Combine(FPaths::GetPath(FilePath),
+					Base.LeftChop(FCString::Strlen(WonderlandFigureTiers[Tier])));
+				FigureTier = Tier;
+				break;
+			}
+		}
+	}
+
 	// PARSED ONCE PER FILE, NOT ONCE PER SPAWN.
 	//
 	// Every LoadFigure used to read the whole file off disk and parse it again: Cherubim Large is 2.5 MB and
@@ -684,8 +709,54 @@ void AWonderlandCompanionEmbodiment::Tick(float DeltaSeconds)
 		SetActorLocationAndRotation(Location, Facing, false, nullptr, ETeleportType::TeleportPhysics);
 	}
 
-	Animate(static_cast<float>(World->GetTimeSeconds()));
-	AnimatePulses(static_cast<float>(World->GetTimeSeconds()));
+	// ---- WHAT A BODY NOBODY IS LOOKING AT COSTS: NOTHING.
+	//
+	// FOUNDER: "a private Server Avatar may eventually contain MANY Project Avatars... DO NOT solve this by
+	// simply reducing the number of Project Avatars. The system itself must become cheaper."
+	//
+	// Measured, one Project Avatar is 31,899 instanced boxes, and ten of them took the RENDER thread from 86.6
+	// to 405.2 ms while the GPU barely moved, 53.5 to 78.9. The hardware can draw this comfortably; what it
+	// cannot do is re-submit a third of a million movable instances every frame. Every joint this animator
+	// moves dirties the instanced components hanging off it, and it does so whether or not the body is on
+	// screen -- which is where nearly all of that cost was going, because most of a crowd is behind you.
+	//
+	// So an unseen body holds its pose, and a distant one animates on a coarser clock. Nothing is removed from
+	// the world, nothing is culled from view, and a body that comes back into frame simply carries on.
+	const float Now = static_cast<float>(World->GetTimeSeconds());
+	const bool bSeen = WasRecentlyRendered(0.4f);
+	// A SPAWNED PROJECT AVATAR FOLLOWS NOBODY, so its distance is measured from whoever is looking instead.
+	if (!FollowController.IsValid())
+	{
+		if (const APlayerController* Viewer = UGameplayStatics::GetPlayerController(this, 0))
+		{
+			if (const APawn* Eye = Viewer->GetPawn())
+			{
+				ChooseFigureTier(static_cast<float>(FVector::Dist(GetActorLocation(), Eye->GetActorLocation())), Now);
+			}
+		}
+	}
+	float Every = 0.0f;
+	if (!bSeen)
+	{
+		// Out of sight. Kept alive on a slow heartbeat so a body that reappears is never frozen mid-stride.
+		Every = 0.5f;
+	}
+	else if (const APawn* Watcher = FollowController.IsValid() ? FollowController->GetPawn() : nullptr)
+	{
+		const float Away = static_cast<float>(FVector::Dist(GetActorLocation(), Watcher->GetActorLocation()));
+		ChooseFigureTier(Away, Now);
+		// Close enough to read a joint: every frame. Further out, a body's limbs subtend less than a pixel of
+		// movement per frame and nobody can tell the difference.
+		if (Away > 4500.0f) { Every = 0.20f; }
+		else if (Away > 2200.0f) { Every = 0.08f; }
+	}
+	if (Every > 0.0f && (Now - LastAnimateSeconds) < Every)
+	{
+		return;
+	}
+
+	Animate(Now);
+	AnimatePulses(Now);
 }
 
 /**
@@ -739,6 +810,36 @@ void AWonderlandCompanionEmbodiment::WearCanonicalPose(const FWonderlandWornPose
 	GaitPhase = InPose.StridePhase;
 	GaitWeight = InPose.GaitWeight;
 	GroundSpeedUU = InPose.SpeedUU;
+}
+
+void AWonderlandCompanionEmbodiment::ChooseFigureTier(float DistanceUU, float NowSeconds)
+{
+	// Only for figures that HAVE tiers. A companion or a mascot skin is one file and is left alone.
+	if (FigureTierRoot.IsEmpty() || FigureTier == INDEX_NONE) { return; }
+	// Checked a few times a second at most: this is a distance band, not a per-frame decision.
+	if (NowSeconds < NextTierCheckSeconds) { return; }
+	NextTierCheckSeconds = NowSeconds + 0.5f;
+
+	// HYSTERESIS, so a body hovering on a boundary does not reload itself every half second. Coming closer has
+	// to beat the threshold it left by a clear margin before the finer tier is loaded again.
+	const float Near = 2600.0f;
+	const float Far = 6200.0f;
+	const float Slack = 700.0f;
+	int32 Want = FigureTier;
+	if (DistanceUU > Far + Slack) { Want = 0; }
+	else if (DistanceUU > Near + Slack && FigureTier == 2) { Want = 1; }
+	else if (DistanceUU < Far - Slack && FigureTier == 0) { Want = 1; }
+	else if (DistanceUU < Near - Slack) { Want = 2; }
+	if (Want == FigureTier) { return; }
+
+	const FString Wanted = FigureTierRoot + WonderlandFigureTiers[Want] + TEXT(".wlvox");
+	if (!FPaths::FileExists(Wanted)) { return; }
+	const int32 Was = FigureTier;
+	if (LoadFigure(Wanted))
+	{
+		FigureTier = Want;
+		UE_LOG(LogTemp, Verbose, TEXT("WLFIGURE %s tier %d -> %d at %.0f uu"), *GetName(), Was, Want, DistanceUU);
+	}
 }
 
 void AWonderlandCompanionEmbodiment::RebuildFlames(float TimeSeconds)
@@ -882,6 +983,46 @@ TArray<FName> AWonderlandCompanionEmbodiment::GetPartNames() const
 	return PartNames;
 }
 
+namespace
+{
+	/**
+	 * WRITE A JOINT ONLY IF IT ACTUALLY MOVED.
+	 *
+	 * THE COST THIS EXISTS TO STOP. One Project Avatar is 31,899 instanced boxes hanging off its joints, and
+	 * moving a joint dirties every instance under it for the renderer to re-submit. The idle motions here are
+	 * fractions of a degree -- a breath, a weight shift, a tail drifting -- and they were being written EVERY
+	 * FRAME regardless, so a crowd standing perfectly still cost exactly as much as a crowd running. Measured:
+	 * ten avatars took the render thread from 86.6 ms to 405.2 while the GPU barely moved, 53.5 to 78.9. The
+	 * hardware was never the problem; re-submitting a third of a million movable instances was.
+	 *
+	 * The thresholds are below what a joint can show on screen: a twentieth of a degree, and a twentieth of a
+	 * uu. Nothing visible is dropped, and a pose that genuinely changes is written as it always was.
+	 */
+	void WriteJoint(USceneComponent* Pivot, const FVector& Where, const FRotator& Facing)
+	{
+		if (Pivot == nullptr) { return; }
+		if (Pivot->GetRelativeLocation().Equals(Where, 0.05) && Pivot->GetRelativeRotation().Equals(Facing, 0.05f))
+		{
+			return;
+		}
+		Pivot->SetRelativeLocationAndRotation(Where, Facing);
+	}
+
+	void WriteJointRotation(USceneComponent* Pivot, const FRotator& Facing)
+	{
+		if (Pivot == nullptr) { return; }
+		if (Pivot->GetRelativeRotation().Equals(Facing, 0.05f)) { return; }
+		Pivot->SetRelativeRotation(Facing);
+	}
+
+	void WriteJointLocation(USceneComponent* Pivot, const FVector& Where)
+	{
+		if (Pivot == nullptr) { return; }
+		if (Pivot->GetRelativeLocation().Equals(Where, 0.05)) { return; }
+		Pivot->SetRelativeLocation(Where);
+	}
+}
+
 void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 {
 	const float Scale = FMath::Max(FigureScale, 0.05f);
@@ -981,7 +1122,7 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			// THE PERFORMANCE LIFTS THE WHOLE BODY -- 72 uu to meditate, 150 to fly up and verify. A floating part
 			// keeps its own small bob on top of that; what it must not do is ignore the lift entirely, which is
 			// what a costume did through every preparation and verification the founder ever watched.
-			Pivot->SetRelativeLocation(Part.RestLocation + FVector(0.0, 0.0, Idle + (WornPose.bValid ? WornPose.LiftUU : 0.0f)));
+			WriteJointLocation(Pivot, Part.RestLocation + FVector(0.0, 0.0, Idle + (WornPose.bValid ? WornPose.LiftUU : 0.0f)));
 			break;
 		}
 		case EWonderlandCompanionMotion::Head:
@@ -990,11 +1131,11 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			{
 				// THE DOG'S HEAD. Bowed to the pages while it reads, level against its own lean while it walks,
 				// turned to the Contract where the performance turns it -- all of it decided by the one animator.
-				Pivot->SetRelativeRotation(FRotator(WornPose.HeadPitchDeg, WornPose.HeadYawDeg, 0.0f));
+				WriteJointRotation(Pivot, FRotator(WornPose.HeadPitchDeg, WornPose.HeadYawDeg, 0.0f));
 				break;
 			}
 			const float Angle = 2.0f * PI * (ActivityTime / 5.3f + Phase);
-			Pivot->SetRelativeRotation(FRotator(FMath::Sin(Angle * 1.3f) * 2.5f, FMath::Sin(Angle) * 4.0f, FMath::Cos(Angle * 0.7f) * 3.0f));
+			WriteJointRotation(Pivot, FRotator(FMath::Sin(Angle * 1.3f) * 2.5f, FMath::Sin(Angle) * 4.0f, FMath::Cos(Angle * 0.7f) * 3.0f));
 			break;
 		}
 		case EWonderlandCompanionMotion::Wing:
@@ -1005,7 +1146,7 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			{
 				const bool bLeftArm = Part.RestLocation.Y < 0.0f;
 				const float Shoulder = bLeftArm ? WornPose.ShoulderLeftDeg : WornPose.ShoulderRightDeg;
-				Pivot->SetRelativeLocationAndRotation(Part.RestLocation, FRotator(Shoulder, 0.0f, 0.0f));
+				WriteJoint(Pivot, Part.RestLocation, FRotator(Shoulder, 0.0f, 0.0f));
 				break;
 			}
 			// Swept back and forward about the root and lifted a little, mirrored by side.
@@ -1016,7 +1157,7 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			// a wing actually works and what makes the beat read as effort rather than as oscillation.
 			const float Flap = FMath::Sin(Beat) * 0.78f + FMath::Sin(Beat * 0.41f + 1.2f) * 0.22f;
 			const float Bite = FMath::Sin(Beat - 0.55f);
-			Pivot->SetRelativeRotation(FRotator(
+			WriteJointRotation(Pivot, FRotator(
 				Bite * 4.0f + Drift * 1.4f,
 				Side * Flap * 11.0f,
 				Side * (Flap * 8.0f + Bite * 2.5f)));
@@ -1031,14 +1172,14 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			{
 				// THE DOG'S TAIL, spread along the chain so a segmented wisp still reads as one tail rather than
 				// every segment snapping to the same angle.
-				Pivot->SetRelativeLocationAndRotation(Part.RestLocation,
+				WriteJoint(Pivot, Part.RestLocation,
 					FRotator(WornPose.TailPitchDeg * Reach, WornPose.TailYawDeg * Reach, 0.0f));
 				break;
 			}
 			const float Wave = 2.0f * PI * (ActivityTime / 2.2f + Phase) - Part.A * 0.62f;
 			// A SECOND, SLOWER SWING ACROSS THE FIRST, and a little pitch: one sine on one axis is a windscreen wiper.
 			const float Cross = 2.0f * PI * (ActivityTime / 6.1f + Phase * 0.7f) - Part.A * 0.30f;
-			Pivot->SetRelativeLocationAndRotation(
+			WriteJoint(Pivot, 
 				Part.RestLocation + FVector(
 					FMath::Cos(Wave * 0.8f) * 3.0f,
 					FMath::Sin(Wave) * 9.0f + FMath::Sin(Cross) * 3.4f,
@@ -1069,13 +1210,13 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 				// character measures its own SideSign -- the rigs are identical, so left is left.
 				const bool bLeftLeg = Part.RestLocation.Y < 0.0f;
 				const float Hip = bLeftLeg ? WornPose.HipLeftDeg : WornPose.HipRightDeg;
-				Pivot->SetRelativeLocationAndRotation(Part.RestLocation, FRotator(Hip, 0.0f, 0.0f));
+				WriteJoint(Pivot, Part.RestLocation, FRotator(Hip, 0.0f, 0.0f));
 				break;
 			}
 			const float Air = 0.0f;
 			const float Still = WornPose.bValid ? FMath::Clamp(WornPose.Stillness, 0.0f, 1.0f) : 0.0f;
 			const float Ground = (1.0f - Air) * (1.0f - Still);
-			Pivot->SetRelativeLocationAndRotation(
+			WriteJoint(Pivot, 
 				Part.RestLocation + FVector(0.0, 0.0, Lift * 3.4f * Reach * Walk * Scale * Ground),
 				FRotator((Swing * 27.0f * Walk + Idle * (1.0f - Walk) * (1.0f - Still)) * Ground
 					+ Air * -18.0f * Reach + Drift * 1.1f, 0.0, 0.0));
@@ -1098,11 +1239,11 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 				const bool bArm = FMath::Abs(Part.RestLocation.Y) > 2.5f;
 				const float Solved = bArm ? (bLeftSide ? WornPose.ElbowLeftDeg : WornPose.ElbowRightDeg)
 										  : (bLeftSide ? WornPose.KneeLeftDeg : WornPose.KneeRightDeg);
-				Pivot->SetRelativeRotation(FRotator(Solved, 0.0f, 0.0f));
+				WriteJointRotation(Pivot, FRotator(Solved, 0.0f, 0.0f));
 				break;
 			}
 			const float KneeAir = 0.0f;
-			Pivot->SetRelativeRotation(FRotator(
+			WriteJointRotation(Pivot, FRotator(
 				(-Bend * 34.0f + Load * 6.0f) * Reach * Walk * (1.0f - KneeAir)
 				+ KneeAir * -30.0f * Reach + Drift * 0.9f, 0.0, 0.0));
 			break;
@@ -1120,12 +1261,12 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 				// stillness the performance asks for, the mission lift added, the lean and turn-roll carried.
 				// This is the half that used to be invented here, and the reason a standing skin looked nothing
 				// like a standing Relay OG -- at rest the gait weight is zero and ONLY this was left running.
-				Pivot->SetRelativeLocationAndRotation(
+				WriteJoint(Pivot, 
 					Part.RestLocation + FVector(0.0, WornPose.SwayUU * Amount, (WornPose.BobUU + WornPose.LiftUU) * Amount),
 					FRotator(WornPose.BodyPitchDeg * Amount, WornPose.BodyYawDeg * Amount, WornPose.BodyRollDeg * Amount));
 				break;
 			}
-			Pivot->SetRelativeLocationAndRotation(
+			WriteJoint(Pivot, 
 				Part.RestLocation + FVector(0.0, 0.0, FMath::Sin(Wave * 2.0f) * 1.9f * Amount * Walk * Scale),
 				FRotator(
 					FMath::Sin(Wave * 2.0f + 0.7f) * 2.6f * Amount * Walk + Breathe * Amount,
@@ -1145,14 +1286,14 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			const float Slow = 2.0f * PI * (ActivityTime / 5.7f + Phase * 0.5f) - Lag * 0.6f;
 			// Swinging widens with speed; the backward sweep is what "streaming" actually looks like.
 			const float Amplitude = (1.0f + 1.5f * Walk) * Reach;
-			Pivot->SetRelativeRotation(FRotator(
+			WriteJointRotation(Pivot, FRotator(
 				(FMath::Sin(Slow) * 5.0f - 16.0f * Walk * Reach) * (1.0f + 0.3f * Drift),
 				FMath::Sin(Wave) * 11.0f * Amplitude,
 				FMath::Sin(Wave * 0.63f + 0.9f) * 7.0f * Amplitude));
 			break;
 		}
 		case EWonderlandCompanionMotion::Orbit:
-			Pivot->SetRelativeRotation(FRotator(0.0, FMath::Fmod(ActivityTime * Part.A + Phase * 360.0f, 360.0f), 0.0));
+			WriteJointRotation(Pivot, FRotator(0.0, FMath::Fmod(ActivityTime * Part.A + Phase * 360.0f, 360.0f), 0.0));
 			break;
 		case EWonderlandCompanionMotion::Blink:
 		{
@@ -1186,7 +1327,7 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			const float Tall = 0.70f + 0.66f * Lick;
 			const float Wide = 1.00f - 0.28f * Lick;
 			Pivot->SetRelativeScale3D(FVector(Wide, Wide, Tall));
-			Pivot->SetRelativeLocation(Part.RestLocation + FVector(0.0, 0.0, Lick * 1.9f * Scale));
+			WriteJointLocation(Pivot, Part.RestLocation + FVector(0.0, 0.0, Lick * 1.9f * Scale));
 			break;
 		}
 		default:

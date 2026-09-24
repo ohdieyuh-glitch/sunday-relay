@@ -77,6 +77,13 @@ def job():
 
     def window(seconds):
         """Mean and worst over a window, from the engine's own unit counters."""
+        # RE-ISSUED EVERY WINDOW. FStatUnitData only advances while the stat overlay is actually drawing, and
+        # left alone it hands back one frozen snapshot over and over -- measured as byte-identical timings for
+        # 0, 1, 5 and 10 avatars across a load that added 318,987 instances.
+        unreal.SystemLibrary.execute_console_command(world, "stat unit")
+        yield 0.35
+        unreal.SystemLibrary.execute_console_command(world, "stat unit")
+        yield 0.35
         got = []
         deadline = time.perf_counter() + seconds
         while time.perf_counter() < deadline:
@@ -171,6 +178,7 @@ def job():
         stats = RESULT.pop("_last")
         comps, insts = count_instances()
         total = len(spawned)
+        RESULT["_facing10"] = dict(stats)
         rows.append(dict(avatars=total, stage=stage, added=count,
                          spawn_seconds=round(took, 3),
                          spawn_ms_each=round(took / max(count, 1) * 1000.0, 1),
@@ -192,6 +200,64 @@ def job():
                 r[k] = "FROZEN - not measured"
         RESULT["timing_note"] = ("FStatUnitData did not advance between loads, so no per-frame cost was "
                                  "captured. Draw calls, instance counts and spawn times below ARE real.")
+    # ---------------------------------------------------------------- AND THE SAME CROWD, FURTHER OFF
+    #
+    # THE CASE THE TIERS ARE FOR. Everything above is spawned 1,100 uu ahead, which is closer than any crowd
+    # ever stands and is the one distance where every avatar is pinned to its finest tier. Moved out to where
+    # a Server Avatar's population would actually be, each body drops to Medium and then Small -- 36,025 boxes
+    # to 16,920 to 5,885 -- without one of them being removed.
+    at = pawn.get_actor_location()
+    fwd = pawn.get_actor_forward_vector()
+    right = pawn.get_actor_right_vector()
+    for i, body in enumerate(spawned):
+        if body is None:
+            continue
+        body.set_actor_location(unreal.Vector(
+            at.x + fwd.x * 7400.0 + right.x * ((i - len(spawned) * 0.5) * 520.0),
+            at.y + fwd.y * 7400.0 + right.y * ((i - len(spawned) * 0.5) * 520.0),
+            at.z - 88.0), False, False)
+    # Long enough for the half-second tier check to fire and the reload to land.
+    yield 4.0
+    for step in window(4.0):
+        yield step
+    far = RESULT.pop("_last")
+    RESULT["ten_avatars_far_off"] = far
+    comps, insts = count_instances()
+    RESULT["instances_when_far"] = insts
+    H.capture_viewport_jpeg(os.path.join(ROOT, "12_far_off.jpg"), 1600, 88)
+
+    # ---------------------------------------------------------------- AND THE SAME CROWD, LOOKED AWAY FROM
+    #
+    # THE CASE THE OPTIMISATION IS FOR, and the one this job could not previously see. Every avatar is spawned
+    # 1,100 uu DIRECTLY IN FRONT of the pawn, so all ten are on screen and within arm's reach of it -- which is
+    # the one arrangement where an unseen-body throttle can do nothing at all. A real crowd is mostly behind
+    # you. Turning the camera around measures that, with the identical avatars already spawned.
+    pc = unreal.GameplayStatics.get_player_controller(world, 0)
+    if pc is not None:
+        facing = pc.get_control_rotation()
+        pc.set_control_rotation(unreal.Rotator(facing.roll, facing.pitch, facing.yaw + 180.0))
+    yield 3.0
+    for step in window(4.0):
+        yield step
+    away = RESULT.pop("_last")
+    RESULT["ten_avatars_behind_you"] = away
+    lit = RESULT.pop("_facing10", {})
+    RESULT["ten_avatars_facing_you"] = lit
+
+    def ms(row, key):
+        try:
+            return float(row.get(key))
+        except (TypeError, ValueError):
+            return None
+
+    before, after = ms(lit, "frame_ms_mean"), ms(away, "frame_ms_mean")
+    rbefore, rafter = ms(lit, "render_ms_mean"), ms(away, "render_ms_mean")
+    if before is not None and after is not None:
+        RESULT["looking_away_saves_ms"] = round(before - after, 2)
+    if rbefore is not None and rafter is not None:
+        RESULT["looking_away_saves_render_ms"] = round(rbefore - rafter, 2)
+    H.capture_viewport_jpeg(os.path.join(ROOT, "11_looking_away.jpg"), 1600, 88)
+
     RESULT["total_spawned"] = len(spawned)
     if len(rows) > 1:
         last = rows[-1]
