@@ -47,8 +47,14 @@ def job():
     shot("world", "PIE running, the world as it opens")
 
     # ---------------------------------------------------------------- JULIUS LIVE TERMINAL + THE + BUTTON
+    # THE KEY FIRST, because that is how the founder opens it -- then the direct toggle, because the point of
+    # this run is to SHOW the surface. Both are recorded: a key that does not open the panel is itself a finding.
     L.press_key("T", True)
     yield 1.6
+    facts["ctrl_t_opened_it"] = bool(ui.is_live_terminal_open())
+    if not ui.is_live_terminal_open():
+        ui.toggle_live_terminal()
+        yield 1.4
     facts["live_terminal_open"] = bool(ui.is_live_terminal_open())
     facts["terminal_rows"] = int(ui.get_terminal_row_count())
     shot("julius_terminal", "Ctrl+T -- the Julius Live Terminal. The + and NEW TASK TERMINAL sit across the top.")
@@ -69,12 +75,12 @@ def job():
     shot("pending_tab", "after + -- a PENDING GRAY tab above the working contract, which has not moved")
 
     # ---------------------------------------------------------------- ENTER IS THE COMMIT BOUNDARY
-    draft = next((r.local_id for r in rows if "Draft" in str(r.state)), None)
+    draft = next((r.local_id for r in rows if "DRAFT" in str(r.state).upper()), None)
     facts["found_draft"] = draft is not None
     if draft is not None:
         tasks.submit_draft(draft, "Inspect the garden arches")
         yield 1.4
-        facts["contracts_after_enter"] = sum(1 for r in tasks.get_task_list() if "Draft" not in str(r.state))
+        facts["contracts_after_enter"] = sum(1 for r in tasks.get_task_list() if "DRAFT" not in str(r.state).upper())
         shot("committed", "after Enter -- the pending tab became a second active Mission Contract")
 
     # ---------------------------------------------------------------- GRAY ORBS
@@ -83,11 +89,8 @@ def job():
     shot("orbs", "mission orbs in the world: one per ACTIVE contract, none for a draft")
 
     # ---------------------------------------------------------------- AI COMPANION TERMINALS
-    L.press_key("Escape", False)
-    yield 0.8
     facts["companion_terminals"] = int(ui.get_companion_terminal_count()) if hasattr(ui, "get_companion_terminal_count") else -1
-    L.press_key("T", True)
-    yield 1.4
+    yield 1.0
     shot("companions", "the AI Companion terminals -- i.Wonder logo in its own row, above the input box")
     L.press_key("Escape", False)
     yield 0.8
@@ -95,6 +98,10 @@ def job():
     # ---------------------------------------------------------------- PROJECT BRAIN + LIVING BRAIN + SNAKE
     L.press_key("B", False)
     yield 2.2
+    facts["b_key_opened_it"] = bool(ui.is_project_brain_open())
+    if not ui.is_project_brain_open():
+        ui.toggle_project_brain()
+        yield 2.0
     facts["brain_open"] = bool(ui.is_project_brain_open())
     sculpt = unreal.GameplayStatics.get_all_actors_of_class(world, unreal.WonderlandBrainSculpture)
     facts["brain_sculptures"] = len(sculpt)
