@@ -132,6 +132,8 @@ public:
 	/** Show or hide the simulated-execution banner. */
 	void SetSimulated(bool bInSimulated) { bSimulated = bInSimulated; }
 	bool IsSimulated() const { return bSimulated; }
+	/** Deterministic estimate from emitted work-log characters, not provider usage or billing. */
+	int64 GetSimulatedTokenCount() const { return (SimulatedCharacters + 3) / 4; }
 
 	/** Move one section: PROMPT ARCHITECT, CODING AGENT, INDEPENDENT REVIEWER (state and line) or JULIUS 3.3 (state). */
 	void SetSectionState(const FString& Section, const FString& State, const FString& Line);
@@ -189,6 +191,7 @@ private:
 	void HandleCommitted(const FText& Text, ETextCommit::Type CommitType);
 	FReply HandleInputKeyDown(const FGeometry& Geometry, const FKeyEvent& KeyEvent);
 	bool IsCloseChord(const FKeyEvent& KeyEvent) const;
+	void UpdateSimulatedTokenCount();
 
 	FSimpleDelegate OnRequestClose;
 	FOnSubmit OnSubmit;
@@ -207,6 +210,8 @@ private:
 	FOnGetCommandLabel OnGetCommandLabel;
 	int32 CommandSlotCount = 4;
 	bool bSimulated = false;
+	int64 SimulatedCharacters = 0;
+	TMap<FString, int32> SimulatedCountedLines;
 	TMap<FString, FString> SectionStates;
 	TMap<FString, FString> SectionLines;
 	TMap<FString, FString> RestingStates;

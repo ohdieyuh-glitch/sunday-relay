@@ -124,11 +124,26 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 			.Padding(2.0f, 0.0f, 0.0f, 4.0f)
 			[
 				// Never a paid run by accident: while simulated rows are showing, the terminal says so first.
-				SNew(STextBlock)
-				.Visibility_Lambda([this]() { return bSimulated ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
-				.Text(FText::FromString(TEXT("DEVELOPMENT PREVIEW \u00B7 SIMULATED JULIUS EXECUTION")))
-				.Font(WonderlandUi::Sans(8, true, 140))
-				.ColorAndOpacity(WonderlandUi::Coral())
+				SNew(SHorizontalBox)
+				.Visibility_Lambda([this]() { return bSimulated ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; })
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(STextBlock)
+					.Text(FText::FromString(TEXT("DEVELOPMENT PREVIEW \u00B7 SIMULATED JULIUS EXECUTION")))
+					.Font(WonderlandUi::Sans(8, true, 140))
+					.ColorAndOpacity(WonderlandUi::Coral())
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(12.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock)
+					.Text_Lambda([this]()
+					{
+						return FText::Format(INVTEXT("SIM TOKENS {0}"), FText::AsNumber(GetSimulatedTokenCount()));
+					})
+					.ToolTipText(INVTEXT("Simulated usage: one token per four emitted work-log characters, rounded up. Updates with mission output; no provider telemetry or billable tokens."))
+					.Font(WonderlandUi::Mono(8))
+					.ColorAndOpacity(WonderlandUi::Cream())
+				]
 			]
 			// THE TASK TERMINALS, ACROSS THE TOP, above PROMPT ARCHITECT -- which is where the founder asked for
 			// them: "put a + control at the TOP of the JULIUS LIVE TERMINAL ... the Wonderland equivalent of
@@ -761,6 +776,8 @@ FString SWonderlandLiveTerminal::GetSectionState(const FString& Section) const
 
 void SWonderlandLiveTerminal::ResetSimulation()
 {
+	SimulatedCharacters = 0;
+	SimulatedCountedLines.Reset();
 	SectionStates.Reset();
 	SectionLines.Reset();
 	JuliusRows.Reset();
@@ -774,6 +791,31 @@ void SWonderlandLiveTerminal::ResetSimulation()
 		}
 	}
 
+}
+
+void SWonderlandLiveTerminal::UpdateSimulatedTokenCount()
+{
+	if (!bSimulated)
+	{
+		return;
+	}
+	// Count only newly emitted text. Including the separator between batches makes the result independent of frame rate.
+	// This is a deterministic simulation estimate, never a claim about a provider's tokenizer or billed usage.
+	for (const TPair<FString, TSharedPtr<SWonderlandWorkLog>>& Pair : WorkLogs)
+	{
+		if (!Pair.Value.IsValid())
+		{
+			continue;
+		}
+		int32& CountedLines = SimulatedCountedLines.FindOrAdd(Pair.Key);
+		const int32 LineCount = Pair.Value->GetLineCount();
+		if (LineCount > CountedLines)
+		{
+			SimulatedCharacters += Pair.Value->DescribeLines(LineCount - CountedLines).Len();
+			SimulatedCharacters += CountedLines > 0 ? 1 : 0;
+			CountedLines = LineCount;
+		}
+	}
 }
 
 void SWonderlandLiveTerminal::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
@@ -798,6 +840,7 @@ void SWonderlandLiveTerminal::Tick(const FGeometry& AllottedGeometry, const doub
 	}
 
 	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+	UpdateSimulatedTokenCount();
 	// HOW MANY LINES EACH SECTION SHOWS, AND HOW TALL THE TERMINAL IS. The whole viewport is this widget, so its height is
 	// the screen's. The terminal may extend from its approved 27.3% to a hard 42% of the screen; within that, every section
 	// shows at least one line (as in the founder's image), the stage's focus section up to ten, a working section up to

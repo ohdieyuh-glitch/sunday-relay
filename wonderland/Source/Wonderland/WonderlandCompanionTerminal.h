@@ -5,52 +5,20 @@
 // UWonderlandUiSubsystem with everything else drawn over the world. The founder was explicit that the two
 // must never be confused (2026-09-15), and keeping them in different owners is what makes that structural.
 //
-// DRAWN TO THE FOUNDER'S FRAME (2026-09-15), in the Julius Live Terminal's colourway: a near-black panel in a
-// heavy gold frame; the title in chunky gold pixel type behind the CLI chevron (SWonderlandPixelText), WAITING
-// at the right; the companion's line in wide cream capitals; an open log; and, under a gold rule, the command
-// line -- a chevron, the input, and a ruled-off "Send  Ctrl+Enter".
-//
-// NOTHING HERE PRETENDS TO BE CONNECTED. No companion is imported into Wonderland yet, so the state reads
-// WAITING, and a line typed into the panel is recorded as yours and marked not sent -- the Live Terminal's
-// rule, "a command typed with nowhere to send it says so rather than being answered."
+// The title treatment is locked. The body is a charcoal, append-only terminal transcript
+// with observable activity and the supplied i.Wonder symbol pulsing only during processing.
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
+#include "Brushes/SlateDynamicImageBrush.h"
 #include "Styling/SlateTypes.h"
 #include "Widgets/SCompoundWidget.h"
 
 class SEditableTextBox;
 class SVerticalBox;
-
-/**
- * THE i.WONDER PULSE: the mark, beating while a companion works.
- *
- * Three nested arcs in the HUD's own colours, painted as lines so they scale cleanly, on a heartbeat envelope --
- * a quick rise, a slower fall, a smaller second beat, a rest. Not a spinner: nothing rotates, the mark breathes.
- */
-class WONDERLAND_API SWonderlandPulseMark : public SLeafWidget
-{
-public:
-	SLATE_BEGIN_ARGS(SWonderlandPulseMark)
-		: _Size(26.0f), _Beating(true) {}
-		SLATE_ARGUMENT(float, Size)
-		/** Beating while the companion works; still and dim otherwise. */
-		SLATE_ATTRIBUTE(bool, Beating)
-	SLATE_END_ARGS()
-
-	void Construct(const FArguments& InArgs);
-	virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
-		FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
-	virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(Size, Size); }
-
-	/** The envelope, 0..1, for a proof to read: it must move while beating and sit at zero while still. */
-	float GetEnvelope() const;
-
-private:
-	float Size = 26.0f;
-	TAttribute<bool> Beating;
-};
+class SScrollBox;
+class SImage;
 
 class WONDERLAND_API SWonderlandCompanionTerminal : public SCompoundWidget
 {
@@ -72,27 +40,12 @@ public:
 
 	SWonderlandCompanionTerminal();
 	void Construct(const FArguments& InArgs);
+	virtual void Tick(const FGeometry& Geometry, const double Time, const float DeltaTime) override;
+	FString GetActivityLabel() const;
+	bool IsProcessing() const;
 
-	/**
-	 * Record one line under the intro. The newest two show; older lines scroll away.
-	 *
-	 * A COMPANION'S OWN LINE STREAMS IN word by word rather than landing whole; a note (no speaker, dim) lands
-	 * at once, because a note is the runtime talking about the companion, not the companion talking.
-	 */
+	/** Append a line, retaining prior rows and following the end unless the reader scrolled up. */
 	void AddLine(const FString& Speaker, const FString& Text, bool bDim);
-
-	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
-
-	/* ------------------------------------------------ the working rhythm, for the founder and for a proof */
-
-	/** True while the mark is beating: the runtime says the companion is working and no words are being revealed. */
-	bool IsPulsing() const;
-	/** True while a line is being revealed word by word. */
-	bool IsStreaming() const { return !Reveal.Pending.IsEmpty(); }
-	/** The label actually shown at the top right: STREAMING while revealing, else the runtime's own state. */
-	FString GetShownStatus() const;
-	/** How many words have been revealed of the line currently streaming. */
-	int32 GetRevealedWordCount() const { return Reveal.Revealed; }
 
 	/**
 	 * THE STATE AT THE RIGHT OF THE TITLE. WAITING until the companion joins a mission; ACTIVE · JOINED while it takes
@@ -126,10 +79,15 @@ private:
 	};
 
 	void RebuildLog();
+	void AppendLogRow(const FLine& Line);
+	bool IsSimulatedActivity() const;
 	void Submit();
 	FReply HandleInputKeyDown(const FGeometry& Geometry, const FKeyEvent& KeyEvent);
 
 	FString Title;
+	FString Intro;
+	bool bFollowOutput = true;
+	float ActivityPhase = 0.0f;
 	FString Status = TEXT("WAITING");
 	FString LatestActivity;
 	FName NarratedBeat;
@@ -139,24 +97,14 @@ private:
 
 	TSharedPtr<SEditableTextBox> Input;
 	TSharedPtr<SVerticalBox> Log;
+	TSharedPtr<SScrollBox> Transcript;
+	TSharedPtr<SImage> ActivitySymbol;
+	TSharedPtr<FSlateDynamicImageBrush> ActivityBrush;
 	TArray<FLine> Lines;
-
-	/**
-	 * THE REVEAL. A companion line is appended to Lines with empty text and its words are moved across from
-	 * Pending one at a time on a cadence, so the founder watches it arrive. Whole lines queue behind it.
-	 */
-	struct FReveal
-	{
-		TArray<FString> Pending;
-		int32 Revealed = 0;
-		int32 LineIndex = INDEX_NONE;
-		double NextWordAt = 0.0;
-		TArray<TPair<FString, FString>> Queue;
-	} Reveal;
-	void StartReveal(const FString& Speaker, const FString& Text, double Now);
-	TSharedPtr<SWonderlandPulseMark> Pulse;
 
 	FSlateRoundedBoxBrush FrameBrush;
 	FSlateRoundedBoxBrush RuleBrush;
+	FSlateRoundedBoxBrush BodyBrush;
+	FSlateRoundedBoxBrush CommandBrush;
 	FEditableTextBoxStyle InputStyle;
 };
