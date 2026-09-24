@@ -58,6 +58,12 @@ public class Wonderland : ModuleRules
 		// FImageView and FImageUtils come through Engine; the resize itself lives in ImageCore and does not.
 		PrivateDependencyModuleNames.Add("ImageCore");
 
+		// GNumDrawCallsRHI / GNumPrimitivesDrawnRHI, for the Project Avatar cost measurement. The founder asked for
+		// draw calls beside the thread times, and those counters are declared in RHI rather than reachable through
+		// Engine -- without this the link fails on two unresolved externals and the numbers simply cannot be read.
+		PrivateDependencyModuleNames.Add("RHI");
+
+
 		if (Target.bBuildEditor)
 		{
 			// Editor-only test hooks (WonderlandUiTestLibrary::SetBackgroundThrottleSuspended).

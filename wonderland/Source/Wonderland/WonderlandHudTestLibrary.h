@@ -27,4 +27,24 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	static bool CaptureViewportJpeg(const FString& FilePath, int32 Width = 1280, int32 Quality = 88);
+
+	/**
+	 * WHAT A FRAME ACTUALLY COSTS, from the engine's own unit counters rather than from the world's delta.
+	 *
+	 * THE MEASUREMENT THIS REPLACES WAS VOID. The first Project Avatar pass timed frames with
+	 * GetWorldDeltaSeconds and reported 349 ms mean / 400 ms worst -- WITH NO AVATARS SPAWNED AT ALL. 400.00 is
+	 * UE's max-delta clamp, not a reading, and an unfocused PIE window throttles into it, so every number in
+	 * that run described the editor's throttle rather than the cost of anything.
+	 *
+	 * FStatUnitData is what the stat unit overlay itself draws: frame, game thread, render thread and GPU, each
+	 * measured where it happens. Returns false when no viewport is running, so a missing reading is never
+	 * mistaken for a cheap one.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static bool GetFrameCostMs(float& OutFrameMs, float& OutGameMs, float& OutRenderMs, float& OutGpuMs);
+
+	/** Draw calls and primitives the renderer issued for the last frame. Zero for both means it was not counted. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static bool GetDrawCallCount(int32& OutDrawCalls, int32& OutPrimitives);
+
 };

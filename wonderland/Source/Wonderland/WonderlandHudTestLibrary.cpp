@@ -2,6 +2,9 @@
 
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
+#include "Performance/EnginePerformanceTargets.h"
+#include "UnrealClient.h"
+#include "RenderCore.h"
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/FileManager.h"
 #include "ImageCore.h"
@@ -86,3 +89,30 @@ bool UWonderlandHudTestLibrary::CaptureViewportJpeg(const FString& FilePath, int
 	return FImageUtils::SaveImageByExtension(*FilePath, View, FMath::Clamp(Quality, 1, 100));
 }
 
+
+bool UWonderlandHudTestLibrary::GetFrameCostMs(float& OutFrameMs, float& OutGameMs, float& OutRenderMs, float& OutGpuMs)
+{
+	OutFrameMs = OutGameMs = OutRenderMs = OutGpuMs = 0.0f;
+	if (GEngine == nullptr || GEngine->GameViewport == nullptr)
+	{
+		return false;
+	}
+	// The same numbers `stat unit` prints, taken from the viewport that is actually drawing.
+	FStatUnitData* Unit = GEngine->GameViewport->GetStatUnitData();
+	if (Unit == nullptr)
+	{
+		return false;
+	}
+	OutFrameMs = Unit->FrameTime;
+	OutGameMs = Unit->GameThreadTime;
+	OutRenderMs = Unit->RenderThreadTime;
+	OutGpuMs = Unit->GPUFrameTime[0];
+	return true;
+}
+
+bool UWonderlandHudTestLibrary::GetDrawCallCount(int32& OutDrawCalls, int32& OutPrimitives)
+{
+	OutDrawCalls = GNumDrawCallsRHI[0];
+	OutPrimitives = static_cast<int32>(GNumPrimitivesDrawnRHI[0]);
+	return OutDrawCalls > 0 || OutPrimitives > 0;
+}
