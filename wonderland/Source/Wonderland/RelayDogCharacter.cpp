@@ -1852,6 +1852,15 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	Dressed.HeadYawDeg = Pose.HeadYawDeg;
 	Dressed.TailPitchDeg = Pose.TailPitchDeg;
 	Dressed.TailYawDeg = Pose.TailYawDeg;
+	// THE SOLVED JOINTS, so a skin bends where the Dog bends rather than re-deriving a swing of its own.
+	Dressed.HipLeftDeg = Pose.LegLeft.HipDeg;
+	Dressed.KneeLeftDeg = Pose.LegLeft.KneeDeg;
+	Dressed.HipRightDeg = Pose.LegRight.HipDeg;
+	Dressed.KneeRightDeg = Pose.LegRight.KneeDeg;
+	Dressed.ShoulderLeftDeg = Pose.ArmLeft.ShoulderDeg;
+	Dressed.ElbowLeftDeg = Pose.ArmLeft.ElbowDeg;
+	Dressed.ShoulderRightDeg = Pose.ArmRight.ShoulderDeg;
+	Dressed.ElbowRightDeg = Pose.ArmRight.ElbowDeg;
 	Dressed.AirborneWeight = Pose.AirborneWeight;
 	Dressed.Stillness = Still;
 	Dressed.bValid = true;

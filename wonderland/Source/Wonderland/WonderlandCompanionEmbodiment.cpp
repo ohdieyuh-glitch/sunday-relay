@@ -819,6 +819,15 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 		}
 		case EWonderlandCompanionMotion::Wing:
 		{
+			// AN ARM, WHEN A DOG IS DRIVING IT. The canon rig hangs the arms off this motion, so a driven body
+			// swings them from the Dog's own solved shoulder rather than flapping them as decoration.
+			if (WornPose.bValid && FMath::Abs(Part.RestLocation.Y) > 2.5f)
+			{
+				const bool bLeftArm = Part.RestLocation.Y < 0.0f;
+				const float Shoulder = bLeftArm ? WornPose.ShoulderLeftDeg : WornPose.ShoulderRightDeg;
+				Pivot->SetRelativeLocationAndRotation(Part.RestLocation, FRotator(Shoulder, 0.0f, 0.0f));
+				break;
+			}
 			// Swept back and forward about the root and lifted a little, mirrored by side.
 			const float Side = Part.A < 0.0f ? -1.0f : 1.0f;
 			const float Beat = 2.0f * PI * (ActivityTime / 2.4f + Phase);
@@ -874,7 +883,16 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			// shuffle is the Dog's stillness instead of this body's clock -- and while the Dog is off the ground
 			// the legs stop striding at nothing, which is the jump channel a costume never had.
 			const float Idle = FMath::Sin(2.0f * PI * (ActivityTime / 4.6f + Phase + Part.A)) * 2.2f;
-			const float Air = WornPose.bValid ? FMath::Clamp(WornPose.AirborneWeight, 0.0f, 1.0f) : 0.0f;
+			if (WornPose.bValid)
+			{
+				// THE DOG'S OWN HIP ANGLE. Which leg this is comes from the side it rests on, exactly as the
+				// character measures its own SideSign -- the rigs are identical, so left is left.
+				const bool bLeftLeg = Part.RestLocation.Y < 0.0f;
+				const float Hip = bLeftLeg ? WornPose.HipLeftDeg : WornPose.HipRightDeg;
+				Pivot->SetRelativeLocationAndRotation(Part.RestLocation, FRotator(Hip, 0.0f, 0.0f));
+				break;
+			}
+			const float Air = 0.0f;
 			const float Still = WornPose.bValid ? FMath::Clamp(WornPose.Stillness, 0.0f, 1.0f) : 0.0f;
 			const float Ground = (1.0f - Air) * (1.0f - Still);
 			Pivot->SetRelativeLocationAndRotation(
@@ -892,7 +910,18 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 			const float Bend = FMath::Max(FMath::Sin(2.0f * PI * Cycle), 0.0f);
 			const float Load = FMath::Max(-FMath::Sin(2.0f * PI * Cycle), 0.0f);
 			const float Reach = FMath::Max(Part.B, 0.01f);
-			const float KneeAir = WornPose.bValid ? FMath::Clamp(WornPose.AirborneWeight, 0.0f, 1.0f) : 0.0f;
+			if (WornPose.bValid)
+			{
+				// A KNEE OR AN ELBOW: the shins rest under the hips, the forearms out at the shoulders, so the
+				// lateral distance tells them apart without the figure having to label them.
+				const bool bLeftSide = Part.RestLocation.Y < 0.0f;
+				const bool bArm = FMath::Abs(Part.RestLocation.Y) > 2.5f;
+				const float Solved = bArm ? (bLeftSide ? WornPose.ElbowLeftDeg : WornPose.ElbowRightDeg)
+										  : (bLeftSide ? WornPose.KneeLeftDeg : WornPose.KneeRightDeg);
+				Pivot->SetRelativeRotation(FRotator(Solved, 0.0f, 0.0f));
+				break;
+			}
+			const float KneeAir = 0.0f;
 			Pivot->SetRelativeRotation(FRotator(
 				(-Bend * 34.0f + Load * 6.0f) * Reach * Walk * (1.0f - KneeAir)
 				+ KneeAir * -30.0f * Reach + Drift * 0.9f, 0.0, 0.0));

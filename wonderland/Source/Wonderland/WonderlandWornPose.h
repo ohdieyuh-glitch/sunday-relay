@@ -53,6 +53,25 @@ struct FWonderlandWornPose
 	/** How still the performance is holding the body: 1 while meditating or hovering, 0 while walking. */
 	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") float Stillness = 0.0f;
 
+	/**
+	 * THE SOLVED JOINTS THEMSELVES, not the phase they were solved from.
+	 *
+	 * THE LAST GAP IN THE PARITY. Handing down StridePhase let the costume re-derive its own leg swing from it
+	 * -- Swing * 27 degrees, its own number, its own easing -- so the skins were walking to the Dog's CLOCK
+	 * while still using their own LEGS. The rigs are identical (Celestial Light carries exactly Relay OG's
+	 * eleven joints), the pose matched field for field, and the walk still looked wrong, because the one thing
+	 * never handed over was the angle each joint should actually be at. These are those angles, straight from
+	 * RelayDogStride's own solve, so a skin's knee bends where the Dog's knee bends.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") float HipLeftDeg = 0.0f;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") float KneeLeftDeg = 0.0f;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") float HipRightDeg = 0.0f;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") float KneeRightDeg = 0.0f;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") float ShoulderLeftDeg = 0.0f;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") float ElbowLeftDeg = 0.0f;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") float ShoulderRightDeg = 0.0f;
+	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") float ElbowRightDeg = 0.0f;
+
 	/** False until a Dog has handed one down; the body then keeps its own idle, as a free companion should. */
 	UPROPERTY(BlueprintReadWrite, Category = "Wonderland|Companion") bool bValid = false;
 };

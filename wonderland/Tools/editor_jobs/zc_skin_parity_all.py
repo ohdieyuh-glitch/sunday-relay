@@ -18,6 +18,8 @@ SKINS = ["celestial_light", "apollo", "arden_infernal", "skeleton_flame"]
 FIELDS = ("stride_phase", "gait_weight", "speed_uu", "bob_uu", "sway_uu", "lift_uu",
           "body_pitch_deg", "body_yaw_deg", "body_roll_deg",
           "head_pitch_deg", "head_yaw_deg", "tail_pitch_deg", "tail_yaw_deg",
+          "hip_left_deg", "knee_left_deg", "hip_right_deg", "knee_right_deg",
+          "shoulder_left_deg", "elbow_left_deg", "shoulder_right_deg", "elbow_right_deg",
           "airborne_weight", "stillness")
 
 
