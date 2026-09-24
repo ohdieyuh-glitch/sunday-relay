@@ -46,7 +46,7 @@ def job():
         samples = []
         deadline = time.perf_counter() + seconds
         while time.perf_counter() < deadline:
-            samples.append(float(unreal.SystemLibrary.get_world_delta_seconds(world)))
+            samples.append(float(unreal.GameplayStatics.get_world_delta_seconds(world)))
             yield 0.05
         if not samples:
             samples = [0.0]

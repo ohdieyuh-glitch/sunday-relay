@@ -1267,9 +1267,12 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 	if (!bOn)
 	{
 		World->GetTimerManager().ClearTimer(WardrobeFrameTimer);
-		if (WardrobeCamera.IsValid())
+		// NOTHING TO GIVE BACK. The wardrobe no longer takes the view target, so closing it restores no camera
+		// and plays no blend -- there is no trip out to the world to return from. The preview body goes home to
+		// its viewing room instead.
+		if (AWonderlandSkinStage* Stage = SkinStage())
 		{
-			Controller->SetViewTargetWithBlend(Pawn, 0.35f, EViewTargetBlendFunction::VTBlend_Cubic);
+			Stage->SetInWorldPreview(false, FVector::ZeroVector, FRotator::ZeroRotator);
 		}
 		// THE BLACK GOES AWAY WITH THE WINDOW. Leaving a panel standing in the garden would be a prop the founder
 		// walks into the moment the wardrobe closes, so it is destroyed rather than merely hidden.
@@ -1499,9 +1502,42 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 			}
 		}
 
-		if (PC->GetViewTarget() != Cam)
+		// THE CAMERA DOES NOT MOVE. THAT WAS THE BUG.
+		//
+		// FOUNDER, reported repeatedly: "When I am inside PROJECT BRAIN and click a mascot skin: IT MUST NOT
+		// TAKE ME BACK INTO WONDERLAND." What stood here was SetViewTargetWithBlend(Cam) -- the wardrobe took
+		// the player's view target and flew it out to wherever the Dog was standing in the garden. Project
+		// Brain never closed, which is why every test that asked IsProjectBrainOpen() came back true and I kept
+		// reporting it fixed; what actually happened is that the founder was looking at Wonderland through a
+		// borrowed camera. The panel was still there, behind a view of the world.
+		//
+		// So the SUBJECT COMES TO THE WINDOW instead of the window going to the subject. The real camera stays
+		// exactly where it is; the preview body is placed along the ray that leaves the real camera through the
+		// centre of the wardrobe's window, at the distance that makes it fill the frame. Nothing is possessed,
+		// no view target is set, no blend is played, and the player never leaves Project Brain.
+		if (Cam != nullptr)
 		{
-			PC->SetViewTargetWithBlend(Cam, 0.45f, EViewTargetBlendFunction::VTBlend_Cubic);
+			Cam->Destroy();
+			Self->WardrobeCamera.Reset();
+		}
+		const APlayerCameraManager* Lens = PC->PlayerCameraManager;
+		if (Lens == nullptr)
+		{
+			return;
+		}
+		const FVector RealEye = Lens->GetCameraLocation();
+		const FRotator RealAim = Lens->GetCameraRotation();
+		// The ray through the window's centre: the screen offset turned back into an angle off the real axis.
+		FRotator Through = RealAim;
+		Through.Yaw += YawOff;
+		Through.Pitch -= PitchOff;
+		const FVector Spot = RealEye + Through.Vector() * Distance;
+		if (AWonderlandSkinStage* Stage = Self->SkinStage())
+		{
+			// The stage's own mannequin, not the player's Dog: the Dog stays where it is in the world, and the
+			// body in the window is the one that wears whatever card was clicked (the stage listens to the skin
+			// registry, so a click re-dresses it without anything here being told about it).
+			Stage->SetInWorldPreview(true, Spot - FVector(0.0, 0.0, Height * 0.5), (RealEye - Spot).GetSafeNormal2D().Rotation());
 		}
 	}), 0.08f, true, 0.05f);
 }
