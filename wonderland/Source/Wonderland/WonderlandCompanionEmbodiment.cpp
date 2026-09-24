@@ -2,6 +2,7 @@
 
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "ProceduralMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -197,7 +198,18 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 				break;
 			case EWonderlandCompanionMaterialKind::Glow:
 			case EWonderlandCompanionMaterialKind::Additive:
+				// EVERY NAME THE STOCK MATERIALS USE, because setting the wrong one fails SILENTLY.
+				//
+				// A material instance accepts any parameter name you hand it and simply ignores one it does not
+				// have, so a mis-named parameter looks exactly like a correct one that had no effect. That cost
+				// three build-and-test cycles on the brain's chamber, where tinting LevelColorationUnlitMaterial
+				// through "Color" did nothing at all and every panel stayed the material's own white. The ember
+				// flames were dull brown here for the same reason. Setting all of them is free: the ones that do
+				// not exist are discarded, and the one that does takes.
 				Instance->SetVectorParameterValue(TEXT("Color"), Emissive);
+				Instance->SetVectorParameterValue(TEXT("EmissiveColor"), Emissive);
+				Instance->SetVectorParameterValue(TEXT("BaseColor"), Emissive);
+				Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), FMath::Max(Def.Strength, 0.0f));
 				GlowMaterials.Add({Index, TEXT("Color"), Emissive});
 				break;
 			}
@@ -230,14 +242,62 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 	// ONE INSTANCED COMPONENT PER PART AND MATERIAL, filled before it is registered, so a figure of a few
 	// thousand boxes costs a few dozen components and a single render-state build each.
 	TMap<int64, TArray<FTransform>> Groups;
+	// THE FLAME PARTS ARE MEASURED AND THEN SKIPPED.
+	//
+	// Everything a figure tags `twinkle` is a tongue of fire -- halofire, armfire, tailfire, earfire, backfire,
+	// the leg and shoulder fires. Their boxes are used only to learn how tall and wide the fire should be and
+	// which two ember materials it burns in; no cube of them is ever drawn. RebuildFlames lays real tapered
+	// ribbons in their place each frame.
+	FlameSources.Reset();
+	TMap<int32, FBox> FlameBounds;
+	TMap<int32, TArray<int32>> FlameMaterials;
 	for (const FWonderlandCompanionBox& Box : Figure.Boxes)
 	{
-		const int64 Key = (static_cast<int64>(Box.Part) << 32) | static_cast<int64>(static_cast<uint32>(Box.Material));
+		const bool bFlame = Figure.Parts.IsValidIndex(Box.Part)
+			&& Figure.Parts[Box.Part].Motion == EWonderlandCompanionMotion::Twinkle;
 		const FVector Local = (Box.Centre - Figure.Parts[Box.Part].Pivot) * Unit;
-		// The engine cube is 100 uu on a side, centred on its pivot.
 		const FVector Scale = Box.Size * (Unit / 100.0f);
+		if (bFlame)
+		{
+			const FVector Half = Box.Size * Unit * 0.5;
+			FBox& Bounds = FlameBounds.FindOrAdd(Box.Part, FBox(ForceInit));
+			Bounds += FBox(Local - Half, Local + Half);
+			FlameMaterials.FindOrAdd(Box.Part).AddUnique(Box.Material);
+			continue;
+		}
+		const int64 Key = (static_cast<int64>(Box.Part) << 32) | static_cast<int64>(static_cast<uint32>(Box.Material));
+		// The engine cube is 100 uu on a side, centred on its pivot.
 		Groups.FindOrAdd(Key).Add(FTransform(Box.Rotation, Local, Scale));
 	}
+	for (const TPair<int32, FBox>& Found : FlameBounds)
+	{
+		const TArray<int32>* Mats = FlameMaterials.Find(Found.Key);
+		if (Mats == nullptr || Mats->Num() == 0) { continue; }
+		FFlameSource Source;
+		Source.PartIndex = Found.Key;
+		// The figures list the deeper ember first and the pale tip second, so the last one is the hot core.
+		Source.OuterMaterial = (*Mats)[0];
+		Source.InnerMaterial = (*Mats)[Mats->Num() - 1];
+		const FVector Size = Found.Value.GetSize();
+		Source.Base = FVector(Found.Value.GetCenter().X, Found.Value.GetCenter().Y, Found.Value.Min.Z);
+		Source.Height = FMath::Max(static_cast<float>(Size.Z), 4.0f);
+		Source.Width = FMath::Max(static_cast<float>(FMath::Max(Size.X, Size.Y)), 3.0f);
+		Source.Seed = static_cast<float>(Found.Key) * 2.393f;
+		FlameSources.Add(Source);
+	}
+	if (FlameSources.Num() > 0 && FlameSurface == nullptr)
+	{
+		FlameSurface = NewObject<UProceduralMeshComponent>(this, TEXT("FlameSurface"));
+		FlameSurface->SetMobility(EComponentMobility::Movable);
+		FlameSurface->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		FlameSurface->SetGenerateOverlapEvents(false);
+		FlameSurface->SetCanEverAffectNavigation(false);
+		// Fire does not cast shadows: a shadow-casting flame is a dark lamp, the same rule the glow boxes follow.
+		FlameSurface->SetCastShadow(false);
+		FlameSurface->SetupAttachment(RootComponent);
+		FlameSurface->RegisterComponent();
+	}
+
 	for (TPair<int64, TArray<FTransform>>& Group : Groups)
 	{
 		const int32 PartIndex = static_cast<int32>(Group.Key >> 32);
@@ -681,6 +741,122 @@ void AWonderlandCompanionEmbodiment::WearCanonicalPose(const FWonderlandWornPose
 	GroundSpeedUU = InPose.SpeedUU;
 }
 
+void AWonderlandCompanionEmbodiment::RebuildFlames(float TimeSeconds)
+{
+	if (FlameSurface == nullptr || FlameSources.Num() == 0) { return; }
+
+	// ONE SECTION PER EMBER MATERIAL, not one per pass.
+	//
+	// The first build painted every section from FlameSources[0], so a figure whose fires burn in more than one
+	// colour -- or whose first flame part happens to list an unexpected material -- came out in the wrong one.
+	// Keyed by the material each tongue actually belongs to, a skin's own ghostfire blue and another's ember
+	// orange both come out right without either being named here.
+	struct FPile
+	{
+		TArray<FVector> Verts;
+		TArray<int32> Tris;
+		TArray<FVector2D> UVs;
+		TArray<FVector> Normals;
+	};
+	TMap<int32, FPile> Piles;
+
+	const int32 Tongues = 5;
+	const int32 Rungs = 7;
+	for (const FFlameSource& Source : FlameSources)
+	{
+		if (!PartPivots.IsValidIndex(Source.PartIndex) || PartPivots[Source.PartIndex] == nullptr) { continue; }
+		// In the actor's own space, so the ribbons ride the joint they burn on wherever the animation puts it.
+		const FTransform Local = PartPivots[Source.PartIndex]->GetComponentTransform().GetRelativeTransform(GetActorTransform());
+
+		for (int32 Pass = 0; Pass < 2; ++Pass)
+		{
+			const int32 Material = (Pass == 0) ? Source.OuterMaterial : Source.InnerMaterial;
+			if (!MaterialInstances.IsValidIndex(Material)) { continue; }
+			FPile& Pile = Piles.FindOrAdd(Material);
+			const float Reach = (Pass == 0) ? 1.0f : 0.62f;
+			const float Fat = (Pass == 0) ? 1.0f : 0.52f;
+
+			for (int32 T = 0; T < Tongues; ++T)
+			{
+				const float Turn = 2.0f * PI * (static_cast<float>(T) / Tongues) + Source.Seed;
+				const float Seed = Source.Seed + T * 1.77f + Pass * 0.41f;
+				// THE SAME THREE-OCTAVE FLICKER the tongues already move on, so shape and motion agree.
+				const float Flick =
+					  0.55f * FMath::Sin(2.0f * PI * (TimeSeconds / 0.37f + Seed))
+					+ 0.30f * FMath::Sin(2.0f * PI * (TimeSeconds / 0.19f + Seed * 2.3f))
+					+ 0.15f * FMath::Sin(2.0f * PI * (TimeSeconds / 0.83f + Seed * 0.7f));
+				const float Lick = FMath::Clamp(0.5f + 0.5f * Flick, 0.0f, 1.0f);
+				const float Tall = Source.Height * Reach * (0.58f + 0.62f * Lick);
+				const FVector Foot = Source.Base + FVector(FMath::Cos(Turn), FMath::Sin(Turn), 0.0f) * (Source.Width * 0.22f);
+
+				// CROSSED, SO IT HAS VOLUME. A single ribbon is a card: turn ninety degrees to it and the flame
+				// thins to a line and disappears. Two sheets through the same spine read as a tongue from every
+				// angle, for one more quad strip.
+				for (int32 Blade = 0; Blade < 2; ++Blade)
+				{
+					const float Face = Turn + PI * 0.5f + (Blade == 1 ? PI * 0.5f : 0.0f);
+					const int32 First = Pile.Verts.Num();
+					for (int32 Rung = 0; Rung <= Rungs; ++Rung)
+					{
+						const float Up = static_cast<float>(Rung) / Rungs;
+						// A tongue does not rise straight: it leans and curls, more the higher it gets.
+						const float Sway = FMath::Sin(2.0f * PI * (TimeSeconds / 0.44f + Seed) + Up * 3.1f) * Source.Width * 0.30f * Up;
+						const float Drift = FMath::Cos(2.0f * PI * (TimeSeconds / 0.61f + Seed * 1.3f) + Up * 2.4f) * Source.Width * 0.24f * Up;
+						const FVector Spine = Foot + FVector(Sway, Drift, Tall * Up);
+						// TAPERING TO NOTHING. Fire has no edge at the top; a ribbon ending square reads as card.
+						const float Wide = Source.Width * 0.30f * Fat * FMath::Pow(1.0f - Up, 0.75f);
+						const FVector Side(FMath::Cos(Face) * Wide, FMath::Sin(Face) * Wide, 0.0f);
+						Pile.Verts.Add(Local.TransformPosition(Spine - Side));
+						Pile.Verts.Add(Local.TransformPosition(Spine + Side));
+						Pile.UVs.Add(FVector2D(0.0f, Up));
+						Pile.UVs.Add(FVector2D(1.0f, Up));
+						const FVector Out = Local.TransformVectorNoScale(
+							FVector(FMath::Cos(Face + PI * 0.5f), FMath::Sin(Face + PI * 0.5f), 0.25f)).GetSafeNormal();
+						Pile.Normals.Add(Out);
+						Pile.Normals.Add(Out);
+					}
+					for (int32 Rung = 0; Rung < Rungs; ++Rung)
+					{
+						const int32 A = First + Rung * 2;
+						Pile.Tris.Add(A); Pile.Tris.Add(A + 1); Pile.Tris.Add(A + 2);
+						Pile.Tris.Add(A + 1); Pile.Tris.Add(A + 3); Pile.Tris.Add(A + 2);
+						// Drawn from both sides: a flame seen from behind must not vanish.
+						Pile.Tris.Add(A + 2); Pile.Tris.Add(A + 1); Pile.Tris.Add(A);
+						Pile.Tris.Add(A + 2); Pile.Tris.Add(A + 3); Pile.Tris.Add(A + 1);
+					}
+				}
+			}
+		}
+	}
+
+	// The section index for a material is fixed the first time it is seen, so sections are only ever UPDATED
+	// after that -- the topology of a flame never changes, only where its vertices are.
+	int32 Slot = 0;
+	for (TPair<int32, FPile>& Pair : Piles)
+	{
+		FPile& Pile = Pair.Value;
+		if (Pile.Verts.Num() == 0) { ++Slot; continue; }
+		if (FlameSurface->GetNumSections() <= Slot)
+		{
+			FlameSurface->CreateMeshSection(Slot, Pile.Verts, Pile.Tris, Pile.Normals, Pile.UVs,
+											TArray<FColor>(), TArray<FProcMeshTangent>(), false);
+			// PAINTED AFTER THE SECTION EXISTS. ProceduralMeshComponent keeps materials per section, so setting
+			// one before the section is made is silently dropped -- the mistake that made the brain's python
+			// draw white.
+			if (MaterialInstances.IsValidIndex(Pair.Key) && MaterialInstances[Pair.Key] != nullptr)
+			{
+				FlameSurface->SetMaterial(Slot, MaterialInstances[Pair.Key]);
+			}
+		}
+		else
+		{
+			FlameSurface->UpdateMeshSection(Slot, Pile.Verts, Pile.Normals, Pile.UVs,
+											TArray<FColor>(), TArray<FProcMeshTangent>());
+		}
+		++Slot;
+	}
+}
+
 void AWonderlandCompanionEmbodiment::SetRuntimeActivity(FName Activity)
 {
 	if (Activity.IsNone() || Activity == RuntimeActivity)
@@ -709,6 +885,10 @@ TArray<FName> AWonderlandCompanionEmbodiment::GetPartNames() const
 void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 {
 	const float Scale = FMath::Max(FigureScale, 0.05f);
+
+	// THE FIRE IS LAID DOWN FIRST, on the joints as they stood last frame -- a few hundred triangles for a
+	// whole figure, and only for the skins that actually carry flame parts.
+	RebuildFlames(TimeSeconds);
 
 	// WHAT THE RUNTIME SAYS THIS COMPANION IS DOING, eased in. The phase is advanced by the rate rather than the clock
 	// being scaled, so a change of activity never makes the body jump: it simply moves at a different pace from here.

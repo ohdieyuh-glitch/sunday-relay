@@ -34,6 +34,7 @@
 
 class APlayerController;
 class UInstancedStaticMeshComponent;
+class UProceduralMeshComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 
@@ -382,6 +383,30 @@ private:
 	float GaitWeight = 0.0f;
 	float GaitMeasuredAt = 0.0f;
 	/** True while a Relay Dog is handing this costume its canonical stride; the body stops measuring its own. */
+	/**
+	 * REAL FIRE, NOT BOXES.
+	 *
+	 * FOUNDER, repeatedly: the flames on Arden Infernal and Skeleton Flame read as plastic. They were voxel
+	 * tongues -- stacked cubes -- and no amount of flicker can make a stack of cubes look like combustion,
+	 * because the silhouette is wrong at every instant. Every part the figures tag `twinkle` IS a tongue of
+	 * flame, so those parts no longer emit boxes at all: they emit tapered, crossed ribbons that lick upward on
+	 * layered noise and taper to nothing at the tip, drawn in the figure's own ember materials.
+	 */
+	struct FFlameSource
+	{
+		int32 PartIndex = INDEX_NONE;
+		int32 OuterMaterial = INDEX_NONE;
+		int32 InnerMaterial = INDEX_NONE;
+		FVector Base = FVector::ZeroVector;
+		float Height = 0.0f;
+		float Width = 0.0f;
+		float Seed = 0.0f;
+	};
+	TArray<FFlameSource> FlameSources;
+	UPROPERTY() TObjectPtr<UProceduralMeshComponent> FlameSurface = nullptr;
+	/** Lays the flame ribbons down for this frame. Cheap: a few hundred triangles for a whole figure. */
+	void RebuildFlames(float TimeSeconds);
+
 	bool bGaitDrivenExternally = false;
 	FWonderlandWornPose WornPose;
 
