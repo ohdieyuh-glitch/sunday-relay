@@ -489,14 +489,24 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 			.Hole_Lambda([this]() -> FVector4f
 			{
 				FVector2D Centre, Extent;
-				if (!bSculptureLive || !GetBrainSculptureRect(Centre, Extent))
+				// THE WARDROBE'S WINDOW FIRST, because while the wardrobe is open it owns the only hole there is.
+				const bool bGot = bSkinsOpen ? GetSkinPreviewRect(Centre, Extent)
+											 : (bSculptureLive && GetBrainSculptureRect(Centre, Extent));
+				if (!bGot)
 				{
 					return FVector4f(0.0f, 0.0f, 0.0f, 0.0f);
 				}
 				return FVector4f(static_cast<float>(Centre.X - Extent.X * 0.5), static_cast<float>(Centre.Y - Extent.Y * 0.5),
 								 static_cast<float>(Centre.X + Extent.X * 0.5), static_cast<float>(Centre.Y + Extent.Y * 0.5));
 			})
-			.Visibility_Lambda([this]() { return bSkinsOpen ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
+			// IT NEVER COLLAPSES NOW.
+			//
+			// FOUNDER, 2026-09-24: "Keep the existing Project Brain look. Do NOT make the whole Project Brain
+			// black. Only the Wardrobe preview square is black." Collapsing this widget when the wardrobe opened
+			// took the night field off the WHOLE panel, so the garden showed through every card and heading --
+			// photographed in PIE, the plaza, the HUD counters and the i.Wonder mark were all visible straight
+			// through Project Brain. The field stays; the preview square is the hole.
+			.Visibility_Lambda([this]() { return EVisibility::HitTestInvisible; })
 		]
 		// The brain. A NAMED BOX, because this rectangle is also where the living sculpture is framed: the lens
 		// maths needs the window's measured place on screen, exactly as the wardrobe's does.

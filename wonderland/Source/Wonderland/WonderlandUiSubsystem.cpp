@@ -1303,7 +1303,20 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 		}
 		// ---- how tall the Dog stands as dressed, and where its chest is
 		const ARelayDogCharacter* Relay = Cast<ARelayDogCharacter>(Dog);
-		const float Height = Relay != nullptr ? Relay->GetDressedHeightUu() : 174.0f;
+		// THE HEIGHT OF THE THING ACTUALLY IN THE WINDOW, not of the Dog standing out in the world.
+		//
+		// This framed on the PLAYER'S dressed height, but what the window shows is the stage's own mannequin --
+		// and a skin can be far bigger than the Dog wearing it. Photographed in PIE, Apollo's halo filled the
+		// preview square from edge to edge with the lens sitting inside the ring, because the fit was solved for
+		// a 174 uu Dog while a ~400 uu halo was what had to be got into frame.
+		float Height = Relay != nullptr ? Relay->GetDressedHeightUu() : 174.0f;
+		if (const AWonderlandSkinStage* Staged = Self->SkinStage())
+		{
+			if (const AWonderlandCompanionEmbodiment* Shown = Staged->GetBody())
+			{
+				Height = FMath::Max(Height, Shown->GetFigureHeightUu());
+			}
+		}
 		const FVector Sole = Dog->GetActorLocation() - FVector(0.0, 0.0, Dog->GetSimpleCollisionHalfHeight());
 		const FVector LookAt = Sole + FVector(0.0, 0.0, Height * 0.47);
 
@@ -1315,8 +1328,31 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 		const float TanH = FMath::Tan(FMath::DegreesToRadians(HFov * 0.5f));
 		const float TanV = TanH / Aspect;
 		// Distance so the Dog fills about three quarters of the window's height.
-		const float WantTall = FMath::Max(Size.Y * 0.74f, 0.05f);
-		const float Distance = FMath::Clamp(Height / (WantTall * 2.0f * TanV), 140.0f, 1400.0f);
+		// 0.62 rather than 0.74: Apollo's halo and Celestial Light's banner both reach well past the figure's
+		// own height, and at three quarters they were being clipped by the window's top and side.
+		const float WantTall = FMath::Max(Size.Y * 0.62f, 0.05f);
+		const float FitDistance = FMath::Clamp(Height / (WantTall * 2.0f * TanV), 140.0f, 1400.0f);
+		float Distance = FitDistance;
+
+		// ---- IN FRONT OF THE PLAYER'S OWN DOG, WHICH IS WHAT WAS IN THE WINDOW ALL ALONG.
+		//
+		// Measured in PIE with Apollo worn: the preview mannequin WAS being staged correctly, 832 uu out along
+		// the ray through the window's centre -- and the player's own Dog, wearing the same skin, stood at 297 uu
+		// squarely between it and the lens. The gold filling the preview square was the PLAYER'S halo seen from
+		// inside, not the preview at all, which is why widening the chamber and re-framing on the staged figure
+		// both changed nothing: the chamber was doing its job 500 uu behind the thing that was blocking it.
+		//
+		// A backdrop cannot hide what stands in front of the subject, so the subject comes in front instead.
+		const float DogAway = static_cast<float>(FVector::Dist(
+			PC->PlayerCameraManager != nullptr ? PC->PlayerCameraManager->GetCameraLocation() : Dog->GetActorLocation(),
+			Dog->GetActorLocation()));
+		if (DogAway > 1.0f)
+		{
+			Distance = FMath::Min(Distance, DogAway * 0.55f);
+		}
+		// Sized for where it ended up, so coming closer does not make it enormous: the apparent size stays
+		// whatever the window asked for.
+		const float PreviewScale = FMath::Clamp(Distance / FMath::Max(FitDistance, 1.0f), 0.05f, 1.0f);
 		// The Dog must sit at the window's centre, which is off the screen's centre: aim the lens away from the
 		// Dog by exactly that angle. Screen y runs downward.
 		const float YawOff = FMath::RadiansToDegrees(FMath::Atan((Centre.X - 0.5f) * 2.0f * TanH));
@@ -1403,8 +1439,20 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 				Deck->SetupAttachment(Panel);
 				UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
 				UMaterialInstanceDynamic* Black = nullptr;
-				if (UMaterialInterface* Plain = LoadObject<UMaterialInterface>(
-						nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial")))
+				// UNLIT, WHICH IS THE WHOLE DIFFERENCE. BasicShapeMaterial is LIT, so a wall painted 0.008 black
+				// still takes the garden's sunlight and came back grey-brown -- photographed in PIE the preview's
+				// "black" was a lit slab with a visible sunlit edge. An unlit material renders exactly the colour
+				// it is given whatever the sun is doing, which is what a backdrop has to do.
+				UMaterialInterface* Flat = LoadObject<UMaterialInterface>(
+					nullptr, TEXT("/Engine/EngineDebugMaterials/LevelColorationUnlitMaterial.LevelColorationUnlitMaterial"));
+				if (Flat == nullptr)
+				{
+					Flat = LoadObject<UMaterialInterface>(
+						nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+					UE_LOG(LogWonderlandUi, Warning,
+						TEXT("WLUI wardrobe backdrop fell back to a LIT material; the preview will not read as black"));
+				}
+				if (UMaterialInterface* Plain = Flat)
 				{
 					Black = UMaterialInstanceDynamic::Create(Plain, Backdrop);
 					// NOT PURE ZERO: a hair above black keeps the panel from flattening into the HUD's own
@@ -1537,7 +1585,12 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 			// The stage's own mannequin, not the player's Dog: the Dog stays where it is in the world, and the
 			// body in the window is the one that wears whatever card was clicked (the stage listens to the skin
 			// registry, so a click re-dresses it without anything here being told about it).
-			Stage->SetInWorldPreview(true, Spot - FVector(0.0, 0.0, Height * 0.5), (RealEye - Spot).GetSafeNormal2D().Rotation());
+			Stage->SetInWorldPreview(true, Spot - FVector(0.0, 0.0, Height * PreviewScale * 0.5), (RealEye - Spot).GetSafeNormal2D().Rotation());
+			Stage->SetActorScale3D(FVector(PreviewScale, PreviewScale, PreviewScale));
+			if (AWonderlandCompanionEmbodiment* Shown = Stage->GetBody())
+			{
+				Shown->SetActorScale3D(FVector(PreviewScale, PreviewScale, PreviewScale));
+			}
 		}
 
 		// AND THE BLACK GOES BEHIND THE NEW SPOT, not the old one.
@@ -1556,20 +1609,44 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 			const float BackOff = Distance * 0.55f;
 			const FVector At = Spot + Ray * BackOff;
 			const float Reach = Distance + BackOff;
-			const float HalfW = Reach * TanH * FMath::Max(Size.X, 0.05f) * 1.60f;
-			const float HalfH = Reach * TanV * FMath::Max(Size.Y, 0.05f) * 1.60f;
+			// Generous on purpose: anything of the chamber that overruns the window is covered by the night
+			// field's own bands, so being too big costs nothing and being too small shows garden in a corner.
+			const float HalfW = Reach * TanH * FMath::Max(Size.X, 0.05f) * 2.40f;
+			const float HalfH = Reach * TanV * FMath::Max(Size.Y, 0.05f) * 2.40f;
 			Black->SetActorLocationAndRotation(At, (RealEye - At).Rotation());
 			// The engine cube is 100 uu, and the wall faces the lens down its own X.
 			Black->SetActorScale3D(FVector(0.04f, FMath::Max(HalfW, 80.0f) / 50.0f, FMath::Max(HalfH, 80.0f) / 50.0f));
+			// AND THE DECK COMES BACK, because the floor was never gone.
+			//
+			// It was switched off here on the reasoning that "there is no floor in front of the lens" once the
+			// subject came to the window. Photographed in PIE, that is simply untrue: the player's camera looks
+			// DOWNWARD, so the lower half of the preview window is aimed at garden ground a couple of metres
+			// ahead -- nearer than the wall, which therefore cannot hide it. The founder saw decking, flowers
+			// and a mission orb in a square that is supposed to be black.
+			//
+			// So the chamber has a floor again: a slab whose top sits at the figure's feet, running from behind
+			// the wall forward PAST the camera, wide enough to pass the window's corners. A wall hides what is
+			// behind the subject; only a floor hides what is below and in front of it.
 			TInlineComponentArray<UStaticMeshComponent*> Parts(Black);
+			const FVector ActorScale = Black->GetActorScale3D();
 			for (UStaticMeshComponent* Part : Parts)
 			{
-				// The deck belonged to a Dog standing on a garden floor. There is no floor in front of the
-				// lens here, so the wall alone is the background and the deck only gets in the way.
-				if (Part != nullptr && Part->GetFName() == TEXT("WardrobeBlackDeck"))
+				if (Part == nullptr || Part->GetFName() != TEXT("WardrobeBlackDeck"))
 				{
-					Part->SetVisibility(false, true);
+					continue;
 				}
+				Part->SetVisibility(true, true);
+				// Laid flat and square to the ray, in the wall's own space: the wall faces the lens down its X,
+				// so forward-toward-the-camera is -X and down is -Z.
+				const float DeckLong = (Reach + Distance) / FMath::Max(ActorScale.X * 100.0f, 1.0f);
+				const float DeckWide = FMath::Max(HalfW, 80.0f) * 2.2f / FMath::Max(ActorScale.Y * 100.0f, 1.0f);
+				const float FeetBelowCentre = Height * PreviewScale * 0.5f + 4.0f;
+				Part->SetRelativeScale3D(FVector(DeckLong, DeckWide, 0.04f / FMath::Max(ActorScale.Z, 0.0001f)));
+				Part->SetRelativeRotation(FRotator::ZeroRotator);
+				Part->SetRelativeLocation(FVector(
+					-(Reach + Distance) * 0.5f / FMath::Max(ActorScale.X * 100.0f, 1.0f) * 100.0f,
+					0.0f,
+					-FeetBelowCentre / FMath::Max(ActorScale.Z * 100.0f, 1.0f) * 100.0f));
 			}
 		}
 	}), 0.08f, true, 0.05f);

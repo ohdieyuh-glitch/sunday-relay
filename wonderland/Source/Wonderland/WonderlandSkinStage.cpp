@@ -160,16 +160,30 @@ void AWonderlandSkinStage::BeginPlay()
 		Backdrop->SetStaticMesh(Cube);
 		Plinth->SetStaticMesh(Cube);
 	}
-	if (UMaterialInterface* Plain = LoadObject<UMaterialInterface>(nullptr, PlainMaterialPath))
+	// UNLIT FOR BOTH, because this stage now stands IN THE GARDEN rather than in a dark room of its own.
+	//
+	// The wall and plinth were painted near-black and then lit by Wonderland's sun, which turned them grey and
+	// brown -- photographed in PIE, the preview square's "black" backdrop read as stonework and the plinth read
+	// as garden paving, which is exactly the scenery the founder asked to be rid of. Unlit renders the colour as
+	// given, whatever the sun is doing.
+	UMaterialInterface* Flat = LoadObject<UMaterialInterface>(
+		nullptr, TEXT("/Engine/EngineDebugMaterials/LevelColorationUnlitMaterial.LevelColorationUnlitMaterial"));
+	if (Flat == nullptr)
+	{
+		Flat = LoadObject<UMaterialInterface>(nullptr, PlainMaterialPath);
+		UE_LOG(LogTemp, Warning, TEXT("WLSTAGE unlit backdrop material missing; the preview will not read as black"));
+	}
+	if (UMaterialInterface* Plain = Flat)
 	{
 		if (UMaterialInstanceDynamic* Dark = UMaterialInstanceDynamic::Create(Plain, this))
 		{
-			Dark->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.030f, 0.032f, 0.052f, 1.0f));
+			Dark->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.012f, 0.014f, 0.028f, 1.0f));
 			Backdrop->SetMaterial(0, Dark);
 		}
 		if (UMaterialInstanceDynamic* Stone = UMaterialInstanceDynamic::Create(Plain, this))
 		{
-			Stone->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.075f, 0.080f, 0.115f, 1.0f));
+			// A shade above the wall so the figure still reads as standing ON something rather than floating.
+			Stone->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.030f, 0.033f, 0.058f, 1.0f));
 			Plinth->SetMaterial(0, Stone);
 		}
 	}
