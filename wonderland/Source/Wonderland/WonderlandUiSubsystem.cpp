@@ -56,6 +56,7 @@
 #include "TimerManager.h"
 #include "WonderlandMissionTasks.h"
 #include "WonderlandSubAgentCubs.h"
+#include "WonderlandMissionOrb.h"
 #include "WonderlandSkinStage.h"
 #include "WonderlandTravel.h"
 #include "WonderlandUiStyle.h"
@@ -1682,6 +1683,11 @@ void UWonderlandUiSubsystem::FrameBrainSculpture(bool bOn, bool bReleaseCamera)
 		{
 			Sculpture->Destroy();
 		}
+		// THE CRYSTAL COMES STRAIGHT BACK. It was only ever hidden to keep it out of the brain window.
+		for (TActorIterator<AWonderlandMissionOrb> It(World); It; ++It)
+		{
+			It->SetActorHiddenInGame(false);
+		}
 		BrainSculptureActor.Reset();
 		return;
 	}
@@ -1781,6 +1787,14 @@ void UWonderlandUiSubsystem::FrameBrainSculpture(bool bOn, bool bReleaseCamera)
 		{
 			Distance = FMath::Min(Distance, DogAway * 0.55f);
 		}
+		// AND CLOSER STILL, because the chamber can only exclude what is OUTSIDE it.
+		//
+		// Measured: with the sculpture hidden, the brain window showed a pale voxel staircase standing right
+		// beside the lens -- and it was still there with the sculpture shown, because the chamber's mouth opened
+		// further from the eye than the staircase stood. No size of box can help: a box hides what is behind its
+		// walls, and that was in front of them. Bringing the whole assembly in to arm's length puts its mouth
+		// within a few uu of the lens, so there is almost nowhere left for the world to stand in between.
+		Distance = FMath::Min(Distance, 90.0f);
 
 		// ---- AND NEVER INSIDE A WALL. Five metres ahead is a doorway as often as it is open air; if something
 		// ---- solid is nearer than that, the brain is brought in front of it.
@@ -1809,6 +1823,17 @@ void UWonderlandUiSubsystem::FrameBrainSculpture(bool bOn, bool bReleaseCamera)
 		{
 			Stale->Destroy();
 			Self->BrainCamera.Reset();
+		}
+		// ---- AND THE PLAZA'S OWN PROPS STAND DOWN WHILE THE WINDOW IS OPEN.
+		//
+		// The Mission Contract crystal is a large white voxel ring with NO COLLISION, so the obstruction trace
+		// above cannot see it -- photographed in PIE it stood between the lens and the sculpture and appeared
+		// inside the brain window as a white slab. A chamber cannot hide what is inside it, and enlarging the
+		// box only let more of the crystal in. While Project Brain is open the world is covered by the night
+		// field in any case, so nothing is lost by standing the crystal down until the panel closes.
+		for (TActorIterator<AWonderlandMissionOrb> It(W); It; ++It)
+		{
+			It->SetActorHiddenInGame(true);
 		}
 		// ONLY NOW is the still art stood down: everything the live brain needs exists and is pointed at.
 		Self->BrainPanel->SetSculptureLive(true);

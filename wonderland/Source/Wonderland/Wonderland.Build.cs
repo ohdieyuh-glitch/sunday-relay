@@ -62,6 +62,9 @@ public class Wonderland : ModuleRules
 		// draw calls beside the thread times, and those counters are declared in RHI rather than reachable through
 		// Engine -- without this the link fails on two unresolved externals and the numbers simply cannot be read.
 		PrivateDependencyModuleNames.Add("RHI");
+		// Real geometry for the living brain and its python. The founder's words: "organic, polished, realistic,
+		// not Roblox/blocky" -- which instanced cubes cannot be, however many of them there are.
+		PublicDependencyModuleNames.Add("ProceduralMeshComponent");
 
 
 		if (Target.bBuildEditor)

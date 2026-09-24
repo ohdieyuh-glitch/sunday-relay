@@ -20,6 +20,7 @@
 
 class UInstancedStaticMeshComponent;
 class UStaticMeshComponent;
+class UProceduralMeshComponent;
 class UMaterialInstanceDynamic;
 
 /**
@@ -119,12 +120,44 @@ private:
 	void StandTheChamber();
 
 	/**
+	 * THE BRAIN AS A SURFACE, built once.
+	 *
+	 * FOUNDER: "organic, polished, realistic, not Roblox/blocky." A brain made of instanced cubes cannot be any
+	 * of those however fine the voxel gets -- at the size it is framed the silhouette is stepped and the folds
+	 * read as terracing. This lays down a real skinned ovoid: gyri raised and sulci cut by layered noise, a
+	 * longitudinal fissure down the midline, and smooth shared vertex normals so the light runs over it.
+	 */
+	void BuildBrainSurface();
+	/** THE PYTHON AS A TUBE swept along the very path the segments already follow, rebuilt each frame. */
+	void RebuildSnakeSurface();
+
+	/** Smooth per-vertex normals from the faces that share each vertex. */
+	static void SmoothNormals(const TArray<FVector>& Verts, const TArray<int32>& Tris, TArray<FVector>& OutNormals);
+
+	/**
 	 * THE DARK CHAMBER THE BRAIN STANDS IN -- the same trick the wardrobe already uses and which the founder
 	 * asked not to be broken. Cutting the night field open lets the sculpture through, but it also lets the
 	 * GARDEN through, and a brain floating over mushrooms is not a brain framed in a window. This wall stands
 	 * behind it and gives the hole something black to be a window onto.
 	 */
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> Backdrop = nullptr;
+	/**
+	 * THE REST OF THE CHAMBER.
+	 *
+	 * A back wall alone cannot hide what stands in FRONT of the brain, and photographed in PIE a white voxel
+	 * prop from the plaza was doing exactly that -- poking into the top-left of the brain window, past a
+	 * backdrop that was doing its job faithfully several hundred uu further away. Five panels make an
+	 * open-fronted box around the sculpture, so the only things that can intrude are the ones already inside it.
+	 */
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> ChamberTop = nullptr;
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> ChamberFloor = nullptr;
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> ChamberLeft = nullptr;
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> ChamberRight = nullptr;
+	/** The real geometry. The instanced boxes below are kept only for the eyes, which are specks. */
+	UPROPERTY() TObjectPtr<UProceduralMeshComponent> BrainSurface = nullptr;
+	UPROPERTY() TObjectPtr<UProceduralMeshComponent> SnakeSurface = nullptr;
+	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> BrainSurfaceMid = nullptr;
+	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> SnakeSurfaceMid = nullptr;
 	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> BrainMesh = nullptr;
 	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> BrainFold = nullptr;
 	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> SnakeMesh = nullptr;

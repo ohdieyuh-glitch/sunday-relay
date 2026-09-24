@@ -2,6 +2,7 @@
 
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "ProceduralMeshComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Kismet/GameplayStatics.h"
@@ -59,11 +60,32 @@ AWonderlandBrainSculpture::AWonderlandBrainSculpture()
 		Mesh->SetMobility(EComponentMobility::Movable);
 		return Mesh;
 	};
-	Backdrop = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Chamber"));
-	Backdrop->SetupAttachment(Root);
-	Backdrop->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
-	Backdrop->SetCastShadow(false);
-	Backdrop->SetMobility(EComponentMobility::Movable);
+	auto MakePanel = [this, Root](const TCHAR* Name) -> UStaticMeshComponent*
+	{
+		UStaticMeshComponent* Panel = CreateDefaultSubobject<UStaticMeshComponent>(Name);
+		Panel->SetupAttachment(Root);
+		Panel->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+		Panel->SetCastShadow(false);
+		Panel->SetMobility(EComponentMobility::Movable);
+		return Panel;
+	};
+	Backdrop = MakePanel(TEXT("Chamber"));
+	ChamberTop = MakePanel(TEXT("ChamberTop"));
+	ChamberFloor = MakePanel(TEXT("ChamberFloor"));
+	ChamberLeft = MakePanel(TEXT("ChamberLeft"));
+	ChamberRight = MakePanel(TEXT("ChamberRight"));
+
+	auto MakeSurface = [this, Root](const TCHAR* Name) -> UProceduralMeshComponent*
+	{
+		UProceduralMeshComponent* Surface = CreateDefaultSubobject<UProceduralMeshComponent>(Name);
+		Surface->SetupAttachment(Root);
+		Surface->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+		Surface->SetCastShadow(false);
+		Surface->SetMobility(EComponentMobility::Movable);
+		return Surface;
+	};
+	BrainSurface = MakeSurface(TEXT("BrainSurface"));
+	SnakeSurface = MakeSurface(TEXT("PythonSurface"));
 
 	BrainMesh = MakeMesh(TEXT("BrainMass"));
 	BrainFold = MakeMesh(TEXT("BrainFolds"));
@@ -109,23 +131,215 @@ void AWonderlandBrainSculpture::PostInitializeComponents()
 
 	// The chamber wall: not pure black, because a true 0,0,0 wall and the night field's Srgb(3,6,22) read as two
 	// different blacks and the hole's edges show as a visible rectangle. This sits where the field sits.
-	if (Backdrop != nullptr)
+	// UNLIT, so the chamber is the colour it is told to be rather than whatever Wonderland's sun makes of it.
+	// Lit, a wall painted near-black came back brown, and the brain appeared to be floating in a cave.
+	// BasicShapeMaterial, NOT the unlit debug material.
+	//
+	// LevelColorationUnlitMaterial has no parameter called "Color", so SetVectorParameterValue on it did exactly
+	// nothing and every panel kept the material's own default -- WHITE. That is the white slab that appeared
+	// down the left of the brain window, and it grew each time the chamber was enlarged, which is precisely what
+	// a mis-painted chamber panel would do. Three cycles were spent hunting it as an intruding world prop.
+	// This material's Color parameter is the one the rest of this file already relies on, so it is known to work.
+	UMaterialInterface* FlatDark = Plain;
+	for (UStaticMeshComponent* Panel : { Backdrop.Get(), ChamberTop.Get(), ChamberFloor.Get(),
+										 ChamberLeft.Get(), ChamberRight.Get() })
 	{
-		if (Cube != nullptr) { Backdrop->SetStaticMesh(Cube); }
-		if (Plain != nullptr)
+		if (Panel == nullptr) { continue; }
+		if (Cube != nullptr) { Panel->SetStaticMesh(Cube); }
+		if (FlatDark == nullptr) { continue; }
+		if (UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(FlatDark, this))
 		{
-			if (UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Plain, this))
-			{
-				Mid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.0118f, 0.0235f, 0.0863f, 1.0f));
-				Backdrop->SetMaterial(0, Mid);
-				BackdropMid = Mid;
-			}
+			Mid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.0118f, 0.0235f, 0.0863f, 1.0f));
+			Panel->SetMaterial(0, Mid);
+			if (Panel == Backdrop) { BackdropMid = Mid; }
 		}
 	}
 
+	// THE SURFACES CARRY THE LOOK NOW. The instanced boxes still run, because the path maths, the girth profile
+	// and every proof read from them -- but the brain mass, its folds and the python's body are no longer DRAWN
+	// as cubes. They are hidden rather than deleted so that each measurement the proofs take is still the same
+	// measurement it always was.
+	auto DressSurface = [this, Plain](UProceduralMeshComponent* Surface, const FLinearColor& Colour,
+									  TObjectPtr<UMaterialInstanceDynamic>& OutMid)
+	{
+		if (Surface == nullptr || Plain == nullptr) { return; }
+		if (UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Plain, this))
+		{
+			Mid->SetVectorParameterValue(TEXT("Color"), Colour);
+			Surface->SetMaterial(0, Mid);
+			OutMid = Mid;
+		}
+	};
+	// IN THE PANEL'S OWN FAMILY, but light enough that the folds read. A surface this dark returns almost no
+	// light whatever its shape, so the first build's organic geometry was invisible and it looked like a stone.
+	DressSurface(BrainSurface, FLinearColor(0.150f, 0.140f, 0.245f, 1.0f), BrainSurfaceMid);
+	DressSurface(SnakeSurface, FLinearColor(0.085f, 0.215f, 0.110f, 1.0f), SnakeSurfaceMid);
+
 	BuildBrain();
 	BuildSnake();
+	BuildBrainSurface();
+	for (UInstancedStaticMeshComponent* Hide : { BrainMesh.Get(), BrainFold.Get(), SnakeMesh.Get(),
+								 SnakeBelly.Get(), SnakeHead.Get(), SnakeEyes.Get() })
+	{
+		if (Hide != nullptr) { Hide->SetVisibility(false, true); }
+	}
 }
+
+void AWonderlandBrainSculpture::SmoothNormals(const TArray<FVector>& Verts, const TArray<int32>& Tris,
+											  TArray<FVector>& OutNormals)
+{
+	OutNormals.Init(FVector::ZeroVector, Verts.Num());
+	for (int32 I = 0; I + 2 < Tris.Num(); I += 3)
+	{
+		const int32 A = Tris[I], B = Tris[I + 1], C = Tris[I + 2];
+		if (!Verts.IsValidIndex(A) || !Verts.IsValidIndex(B) || !Verts.IsValidIndex(C)) { continue; }
+		// UNNORMALISED ON PURPOSE: a face's cross product is proportional to its area, so accumulating them raw
+		// weights broad faces above slivers, which is what keeps a folded surface from shading like gravel.
+		const FVector Face = FVector::CrossProduct(Verts[B] - Verts[A], Verts[C] - Verts[A]);
+		OutNormals[A] += Face;
+		OutNormals[B] += Face;
+		OutNormals[C] += Face;
+	}
+	for (FVector& N : OutNormals)
+	{
+		N = N.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+	}
+}
+
+void AWonderlandBrainSculpture::BuildBrainSurface()
+{
+	if (BrainSurface == nullptr) { return; }
+	const float R = FMath::Max(BrainRadiusUU, 20.0f);
+	// Fine enough that the silhouette is a curve rather than a staircase, and still only a few thousand
+	// triangles -- leaving voxels behind costs LESS here, not more: the cube brain was 2,758 instanced boxes.
+	const int32 Rings = 72;
+	const int32 Segs = 108;
+
+	TArray<FVector> Verts;
+	TArray<int32> Tris;
+	TArray<FVector2D> UVs;
+	Verts.Reserve((Rings + 1) * (Segs + 1));
+	UVs.Reserve((Rings + 1) * (Segs + 1));
+
+	for (int32 Ring = 0; Ring <= Rings; ++Ring)
+	{
+		const float V = static_cast<float>(Ring) / static_cast<float>(Rings);
+		const float Theta = V * PI;
+		for (int32 Seg = 0; Seg <= Segs; ++Seg)
+		{
+			const float U = static_cast<float>(Seg) / static_cast<float>(Segs);
+			const float Phi = U * 2.0f * PI;
+			const FVector Dir(FMath::Sin(Theta) * FMath::Cos(Phi), FMath::Sin(Theta) * FMath::Sin(Phi), FMath::Cos(Theta));
+
+			// THE SAME OVOID THE VOXEL BRAIN USED -- flattened, longer than it is wide -- so the python's shell
+			// and the panel's framing, both tuned against those proportions, do not have to be tuned again.
+			const FVector Base(Dir.X * R * 1.06f, Dir.Y * R * 0.84f, Dir.Z * R * 0.78f);
+			const FVector Out = Base.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+
+			// The longitudinal fissure: a valley down the midline, deepest on top and closing underneath.
+			const float Midline = FMath::Exp(-(Dir.Y * Dir.Y) * 26.0f) * FMath::Clamp(Dir.Z, 0.0f, 1.0f);
+			// GYRI AND SULCI IN THREE SIZES. One frequency reads as corduroy; three that do not divide into one
+			// another read as a brain, which is the whole difference between "folded" and "patterned".
+			const float Fold =
+				  FMath::Sin(Dir.X * 9.2f + Dir.Z * 4.1f) * FMath::Sin(Dir.Y * 7.7f - Dir.X * 3.3f)
+				+ 0.55f * FMath::Sin(Dir.Y * 15.1f + Dir.X * 6.7f) * FMath::Sin(Dir.Z * 12.9f + Dir.Y * 5.3f)
+				+ 0.30f * FMath::Sin(Dir.Z * 23.3f - Dir.Y * 11.1f) * FMath::Sin(Dir.X * 19.7f + Dir.Z * 8.9f);
+			// DEEP ENOUGH TO SEE. At R*0.028 the relief was 3.4 uu on a 120 uu brain -- real, and invisible at
+			// the size the window frames it, so the first smooth build read as a polished stone. Gyri stand
+			// proud and sulci cut in far enough that the light actually breaks over them.
+			const float Disp = -Midline * R * 0.22f + Fold * R * 0.062f;
+
+			Verts.Add(Base + Out * Disp);
+			UVs.Add(FVector2D(U, V));
+		}
+	}
+	for (int32 Ring = 0; Ring < Rings; ++Ring)
+	{
+		for (int32 Seg = 0; Seg < Segs; ++Seg)
+		{
+			const int32 A = Ring * (Segs + 1) + Seg;
+			const int32 B = A + Segs + 1;
+			Tris.Add(A); Tris.Add(B); Tris.Add(A + 1);
+			Tris.Add(A + 1); Tris.Add(B); Tris.Add(B + 1);
+		}
+	}
+
+	TArray<FVector> Normals;
+	SmoothNormals(Verts, Tris, Normals);
+	BrainSurface->CreateMeshSection(0, Verts, Tris, Normals, UVs, TArray<FColor>(), TArray<FProcMeshTangent>(), false);
+	// APPLIED AFTER THE SECTION EXISTS, which is the whole trick.
+	//
+	// UProceduralMeshComponent keeps materials PER SECTION, so SetMaterial(0, ...) called at construction -- when
+	// there is no section 0 yet -- is dropped on the floor. Both surfaces were therefore drawing with the engine
+	// default: photographed in PIE the brain came back warm grey-brown instead of the violet it was given, and
+	// the python came back as a white band, which is what sent three cycles hunting for an imaginary white prop
+	// intruding on the window. Nothing was intruding. It was the snake.
+	if (BrainSurfaceMid != nullptr) { BrainSurface->SetMaterial(0, BrainSurfaceMid); }
+}
+
+void AWonderlandBrainSculpture::RebuildSnakeSurface()
+{
+	if (SnakeSurface == nullptr || SegmentSpot.Num() < 3) { return; }
+	const int32 Count = SegmentSpot.Num();
+	const int32 Around = 12;
+
+	TArray<FVector> Verts;
+	TArray<int32> Tris;
+	TArray<FVector2D> UVs;
+	Verts.Reserve(Count * (Around + 1));
+	UVs.Reserve(Count * (Around + 1));
+
+	for (int32 I = 0; I < Count; ++I)
+	{
+		const FVector Here = SegmentSpot[I];
+		const int32 Ahead = FMath::Max(I - 1, 0);
+		const int32 Behind = FMath::Min(I + 1, Count - 1);
+		FVector Forward = SegmentSpot[Ahead] - SegmentSpot[Behind];
+		Forward = Forward.GetSafeNormal(UE_SMALL_NUMBER, FVector::ForwardVector);
+		// THE BRAIN IS THE FRAME'S UP. Taking the outward direction rather than transporting a frame along the
+		// curve means the pale belly faces the mass all the way down the animal by construction, and the tube
+		// can never corkscrew: the two are never parallel, because it travels ACROSS the shell, not into it.
+		const FVector Out = Here.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+		const FVector Side = FVector::CrossProduct(Out, Forward).GetSafeNormal(UE_SMALL_NUMBER, FVector::RightVector);
+		const FVector Up = FVector::CrossProduct(Forward, Side).GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+
+		const float Girth = SegmentGirth.IsValidIndex(I) ? SegmentGirth[I] : FMath::Max(BrainRadiusUU, 20.0f) * 0.08f;
+		for (int32 K = 0; K <= Around; ++K)
+		{
+			const float A = static_cast<float>(K) / static_cast<float>(Around) * 2.0f * PI;
+			// Flattened a little underneath, as an animal lying along a surface is.
+			const FVector Ring = Side * (FMath::Cos(A) * Girth) + Up * (FMath::Sin(A) * Girth * 0.82f);
+			Verts.Add(Here + Ring);
+			UVs.Add(FVector2D(static_cast<float>(K) / static_cast<float>(Around),
+							  static_cast<float>(I) / static_cast<float>(Count) * 6.0f));
+		}
+	}
+	for (int32 I = 0; I + 1 < Count; ++I)
+	{
+		for (int32 K = 0; K < Around; ++K)
+		{
+			const int32 A = I * (Around + 1) + K;
+			const int32 B = A + Around + 1;
+			Tris.Add(A); Tris.Add(B); Tris.Add(A + 1);
+			Tris.Add(A + 1); Tris.Add(B); Tris.Add(B + 1);
+		}
+	}
+
+	TArray<FVector> Normals;
+	SmoothNormals(Verts, Tris, Normals);
+	if (SnakeSurface->GetNumSections() == 0)
+	{
+		SnakeSurface->CreateMeshSection(0, Verts, Tris, Normals, UVs, TArray<FColor>(), TArray<FProcMeshTangent>(), false);
+		if (SnakeSurfaceMid != nullptr) { SnakeSurface->SetMaterial(0, SnakeSurfaceMid); }
+	}
+	else
+	{
+		// UPDATED, NOT RECREATED: the topology never changes, only where the vertices are, and recreating the
+		// section every frame reallocates its buffers for nothing.
+		SnakeSurface->UpdateMeshSection(0, Verts, Normals, UVs, TArray<FColor>(), TArray<FProcMeshTangent>());
+	}
+}
+
 
 void AWonderlandBrainSculpture::BuildBrain()
 {
@@ -186,7 +400,7 @@ void AWonderlandBrainSculpture::BuildSnake()
 	{
 		// THICKEST A THIRD OF THE WAY BACK, tapering to the tail: a python, not a rope of equal beads.
 		const float T = static_cast<float>(I) / FMath::Max(Count - 1, 1);
-		const float Girth = R * 0.135f * FMath::Sin(FMath::Clamp(0.30f + T * 0.78f, 0.0f, 1.0f) * PI) + R * 0.026f;
+		const float Girth = R * 0.190f * FMath::Sin(FMath::Clamp(0.30f + T * 0.78f, 0.0f, 1.0f) * PI) + R * 0.038f;
 		SegmentGirth.Add(Girth);
 		const FTransform Rest(FRotator::ZeroRotator, FVector(R * 1.6f, 0.0f, 0.0f), FVector(Girth / 100.0f));
 		SnakeMesh->AddInstance(Rest);
@@ -205,7 +419,7 @@ void AWonderlandBrainSculpture::BuildSnake()
 	BearingWrite = 0;
 
 	// The head starts on the shell.
-	TargetRadius = R * 1.50f;
+	TargetRadius = R * 1.82f;
 	TargetYaw = 0.0f;
 	TargetPitch = 0.0f;
 	HeadDir = FVector::ForwardVector;
@@ -288,7 +502,10 @@ void AWonderlandBrainSculpture::AdvanceHead(float FixedStep)
 	// ---- lap at a constant rate. This is the whole reason it does not read as RotateAroundActor.
 	TargetYaw = BrainWander(Elapsed * 0.31f, YawSeed) * PI;
 	TargetPitch = BrainWander(Elapsed * 0.41f, PitchSeed) * 1.05f;
-	TargetRadius = R * (1.46f + BrainWander(Elapsed * 0.33f, RadiusSeed) * 0.17f);
+	// FURTHER OUT AGAIN. The smooth brain's gyri stand proud of the old voxel silhouette, and at 1.46R the
+	// animal spent most of its route hidden behind the mass -- photographed as a green sliver. At 1.78R it
+	// passes clearly in front, above, below and behind, which is the whole point of it not being an orbit.
+	TargetRadius = R * (1.78f + BrainWander(Elapsed * 0.33f, RadiusSeed) * 0.22f);
 
 	// ---- AND IT CHANGES ITS MIND. Every few seconds the yaw walk is kicked, which is what makes the python
 	// ---- double back over the top of the brain instead of settling into a groove.
@@ -320,7 +537,7 @@ void AWonderlandBrainSculpture::AdvanceHead(float FixedStep)
 	RadiusVel *= FMath::Clamp(1.0f - FixedStep * 2.6f, 0.0f, 1.0f);
 	// THE FLOOR THAT NEVER FIRES. With the direction and the radius kept apart there is no way to be inside the
 	// brain at all; this stays only so that a hand-edited BrainRadiusUU cannot make one.
-	HeadRadius = FMath::Max(HeadRadius + RadiusVel * FixedStep, R * 1.26f);
+	HeadRadius = FMath::Max(HeadRadius + RadiusVel * FixedStep, R * 1.52f);
 	HeadWorld = HeadDir * HeadRadius;
 
 	// ---- THE PATH IS RECORDED BY DISTANCE, NOT BY TIME. A point is laid down every time the head has travelled
@@ -365,7 +582,7 @@ void AWonderlandBrainSculpture::AdvanceBody()
 	// brain were a ball, but BuildBrain's longest semi-axis is R*1.06 -- so the old R*1.13 left 8.4 uu of clearance,
 	// less than the R/13 voxel the brain is built out of. Photographed in PIE the python was grazing the surface
 	// and being swallowed by it; it renders, and always did, but there was nowhere for it to be seen.
-	const float MinR = R * 1.24f;
+	const float MinR = R * 1.50f;
 	ClosestThisFrame = TNumericLimits<float>::Max();
 	BodyLengthThisFrame = 0.0f;
 
@@ -477,34 +694,78 @@ void AWonderlandBrainSculpture::Tick(float DeltaSeconds)
 		AdvanceHead(BrainSubStepSeconds);
 	}
 	AdvanceBody();
+	RebuildSnakeSurface();
 	Breathe(DeltaSeconds);
 	StandTheChamber();
 }
 
 void AWonderlandBrainSculpture::StandTheChamber()
 {
-	// Placed from the REAL camera every frame rather than parented at a fixed offset: the panel frames the brain
-	// along the ray through the window, so which way "behind" points depends on where the founder is standing.
+	// AN OPEN-FRONTED BOX, PLACED FROM THE REAL CAMERA EVERY FRAME.
+	//
+	// A single wall behind the brain hid the garden behind it and nothing else, so a white voxel prop standing
+	// between the lens and the sculpture appeared inside the brain window -- photographed in PIE at the top-left
+	// of the frame. Five panels close the sides, the top and the floor as well, and the only opening is the one
+	// the founder is looking through.
 	if (Backdrop == nullptr) { return; }
 	const APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
 	const APlayerCameraManager* Lens = (PC != nullptr) ? PC->PlayerCameraManager : nullptr;
-	if (Lens == nullptr) { Backdrop->SetVisibility(false, true); return; }
+	UStaticMeshComponent* const Panels[] = { Backdrop.Get(), ChamberTop.Get(), ChamberFloor.Get(),
+											 ChamberLeft.Get(), ChamberRight.Get() };
+	if (Lens == nullptr)
+	{
+		for (UStaticMeshComponent* Panel : Panels) { if (Panel != nullptr) { Panel->SetVisibility(false, true); } }
+		return;
+	}
 
 	const FVector Here = GetActorLocation();
 	const FVector Eye = Lens->GetCameraLocation();
 	const FVector Away = (Here - Eye).GetSafeNormal(UE_SMALL_NUMBER, FVector::ForwardVector);
-	// Wide enough to overrun the window at any aspect, and set back far enough that the python never clips into
-	// it on the far side of its route.
-	// Scaled with the actor, because the panel shrinks the sculpture to hold its apparent size when it has to be
-	// brought in close -- a chamber that stayed its built size would sit in front of a brain that had moved back.
+	const FRotator Facing = Away.Rotation();
+	const FVector Right = FRotationMatrix(Facing).GetUnitAxis(EAxis::Y);
+	const FVector Up = FRotationMatrix(Facing).GetUnitAxis(EAxis::Z);
+
+	// Scaled with the actor, because the panel shrinks the sculpture when it has to be brought in close.
 	const float R = FMath::Max(BrainRadiusUU, 20.0f) * static_cast<float>(GetActorScale3D().X);
-	// Deliberately far wider than the window. Anything of it that overruns is covered by the night field's own
-	// bands, which are drawn over the world, so there is no cost to being generous and a hole to be seen through
-	// if it is too mean.
-	Backdrop->SetVisibility(true, true);
-	Backdrop->SetWorldLocation(Here + Away * (R * 3.0f));
-	Backdrop->SetWorldRotation(Away.Rotation());
-	Backdrop->SetWorldScale3D(FVector(0.04f, R * 0.34f, R * 0.34f));
+	// DELIBERATELY OVERSIZED. At R*2.6 the box subtended about 41 degrees while the brain window is nearer 35,
+	// so props sitting just outside its edges still showed in the corners of the frame -- photographed in PIE as
+	// a white voxel slab at the top left. Anything of the box that overruns the window is covered by the night
+	// field's own bands, so being too generous costs nothing and being too mean shows the garden.
+	const float Half = R * 6.0f;     // how wide and tall the box is, well past the window's corners
+	const float Back = R * 4.0f;     // how far behind the brain the rear wall stands
+	// THE MOUTH REACHES NEARLY TO THE LENS.
+	//
+	// At R*2.2 the box opened about 90 uu in front of the brain and left 70-odd uu of unprotected space between
+	// its mouth and the camera -- and something large, whose ACTOR ORIGIN sits far away across the map so no
+	// proximity search ever listed it, reached into exactly that gap and showed as a white slab down the left of
+	// the window. Measured: nothing at all has its origin between the lens and the brain, so the intruder could
+	// only ever have been a big mesh leaning in. Carrying the side panels most of the way back to the lens
+	// leaves almost nothing for anything to lean into, and stops short so the panels never close over the eye.
+	const float ToEye = static_cast<float>(FVector::Dist(Here, Eye));
+	// Stops just short of the near clip plane; any closer and the panels close over the eye entirely.
+	const float Front = FMath::Max(ToEye - 14.0f, 4.0f);
+	const float Thin = 0.04f;        // the engine cube is 100 uu, so this is a 4 uu sheet
+
+	auto Place = [](UStaticMeshComponent* Panel, const FVector& At, const FRotator& Rot, const FVector& Scale)
+	{
+		if (Panel == nullptr) { return; }
+		Panel->SetVisibility(true, true);
+		Panel->SetWorldLocation(At);
+		Panel->SetWorldRotation(Rot);
+		Panel->SetWorldScale3D(Scale);
+	};
+
+	// The rear wall faces the lens down its own X; the four sides are the same sheet turned onto its edges.
+	const float Depth = (Back + Front) / 100.0f;
+	Place(Backdrop.Get(), Here + Away * Back, Facing, FVector(Thin, Half * 2.0f / 100.0f, Half * 2.0f / 100.0f));
+	Place(ChamberTop.Get(), Here + Up * Half + Away * (Back - Front) * 0.5f,
+		  Facing, FVector(Depth, Half * 2.0f / 100.0f, Thin));
+	Place(ChamberFloor.Get(), Here - Up * Half + Away * (Back - Front) * 0.5f,
+		  Facing, FVector(Depth, Half * 2.0f / 100.0f, Thin));
+	Place(ChamberLeft.Get(), Here - Right * Half + Away * (Back - Front) * 0.5f,
+		  Facing, FVector(Depth, Thin, Half * 2.0f / 100.0f));
+	Place(ChamberRight.Get(), Here + Right * Half + Away * (Back - Front) * 0.5f,
+		  Facing, FVector(Depth, Thin, Half * 2.0f / 100.0f));
 }
 
 float AWonderlandBrainSculpture::GetHeadRadiusUU() const
