@@ -955,8 +955,29 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 		}
 		case EWonderlandCompanionMotion::Twinkle:
 		{
-			const float Breath = 0.5f + 0.5f * FMath::Sin(2.0f * PI * (ActivityTime / 1.7f + Part.A + Phase));
-			Pivot->SetRelativeScale3D(FVector(0.55f + 0.45f * Breath));
+			// FIRE, NOT A PULSING BALL.
+			//
+			// FOUNDER, repeatedly: the flames on Arden Infernal and Skeleton Flame still read as plastic. This is
+			// why. Every part carrying this motion in the skins is a tongue of flame -- halofire, armfire,
+			// tailfire, earfire, backfire, the leg and shoulder fires -- and it was scaling the whole tuft
+			// UNIFORMLY by ONE slow sine, which is a lump growing and shrinking in place. Nothing burns like that.
+			//
+			// Real fire runs at several rates at once, it is TALLER AND THINNER at the peak of a lick rather than
+			// simply bigger, and it climbs off whatever it is burning. Three octaves at deliberately unrelated
+			// periods, seeded per part, so neighbouring tongues never flicker together and the whole never settles
+			// into a visible beat -- which is the tell that gave the old one away as an animation.
+			const float Seed = Part.A * 7.13f + Phase * 3.7f;
+			const float Flicker =
+				  0.55f * FMath::Sin(2.0f * PI * (ActivityTime / 0.37f + Seed))
+				+ 0.30f * FMath::Sin(2.0f * PI * (ActivityTime / 0.19f + Seed * 2.3f))
+				+ 0.15f * FMath::Sin(2.0f * PI * (ActivityTime / 0.83f + Seed * 0.7f));
+			const float Lick = FMath::Clamp(0.5f + 0.5f * Flicker, 0.0f, 1.0f);
+			// Thin as it climbs, broad as it falls back: the volume is roughly held, and holding it is what stops
+			// the tuft pumping like a bellows.
+			const float Tall = 0.70f + 0.66f * Lick;
+			const float Wide = 1.00f - 0.28f * Lick;
+			Pivot->SetRelativeScale3D(FVector(Wide, Wide, Tall));
+			Pivot->SetRelativeLocation(Part.RestLocation + FVector(0.0, 0.0, Lick * 1.9f * Scale));
 			break;
 		}
 		default:

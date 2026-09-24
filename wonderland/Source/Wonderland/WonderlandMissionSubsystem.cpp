@@ -1,4 +1,5 @@
 #include "WonderlandMissionSubsystem.h"
+#include "WonderlandMissionTasks.h"
 
 #include "Engine/GameViewportClient.h"
 #include "Engine/LocalPlayer.h"
@@ -319,11 +320,17 @@ void UWonderlandMissionSubsystem::Attach(APlayerController* Controller)
 					if (WeakThis.IsValid())
 					{
 						WeakThis->SyncTaskOrbs();
+						// AND THE DOG, because a contract changing stage IS the thing it performs. TellTheDog used to
+						// run only from ShowBeat, so with no kernel attached there were no beats, it was never called,
+						// and a contract could walk its whole lifecycle with the mascot standing still -- measured in
+						// PIE as seven stages with dog_act NONE seven times.
+						WeakThis->TellTheDog();
 					}
 				});
 			}
 			// And catch up with whatever already exists, so a set built before the attach is not invisible.
 			SyncTaskOrbs();
+			TellTheDog();
 		}
 	}
 
@@ -408,8 +415,36 @@ void UWonderlandMissionSubsystem::TellTheDog()
 		// Not every body the player can wear is the canonical Dog -- the hub pawn and a spectator are not.
 		return;
 	}
-	const bool bMissionRunning = WonderlandBeatShowsContract(Beat);
-	Dog->SetMissionAct(WonderlandDogActForBeat(Beat), bMissionRunning ? Orb.Get() : nullptr);
+	bool bMissionRunning = WonderlandBeatShowsContract(Beat);
+	EWonderlandDogAct Act = WonderlandDogActForBeat(Beat);
+
+	// ---- AND A MISSION CONTRACT THE FOUNDER CAN SEE PERFORMS WHEN NO BEAT SAYS OTHERWISE.
+	//
+	// THE DEFECT THIS CLOSES, measured in PIE. A contract driven through its whole lifecycle -- PREPARATION,
+	// RESEARCH, IMPLEMENTATION, VERIFICATION, REVIEW, REPAIR, COMPLETED -- changed state correctly at every
+	// step and the Dog performed NONE at every step, because this function only ever read the BEAT and beats
+	// come from Julius. With no kernel attached there are no beats, so the mascot stood still through the
+	// entire performance the founder was watching for. It was never a skin fault: Relay OG did nothing either.
+	//
+	// NOTHING IS PRETENDED HERE. This does not invent progress or mark anything as Julius-reported; it reads
+	// the state the contract is ALREADY in and performs it. A contract that is merely QUEUED still maps to
+	// None, so a queued contract remains a Dog standing still, exactly as before.
+	if (const ULocalPlayer* Instance = Controller->GetLocalPlayer())
+	{
+		if (const UWonderlandMissionTaskSubsystem* Tasks = Instance->GetSubsystem<UWonderlandMissionTaskSubsystem>())
+		{
+			const EWonderlandDogAct FromContract = WonderlandDogActForTaskState(Tasks->GetPerformingState());
+			// AND ONLY WHERE THE BEAT HAS NOTHING TO SAY. A connected kernel stays the authority it already was:
+			// this fills the silence that was leaving the Dog motionless and never overrides a real beat, so the
+			// Julius-driven path behaves today exactly as it did before this existed.
+			if (Act == EWonderlandDogAct::None && FromContract != EWonderlandDogAct::None)
+			{
+				Act = FromContract;
+				bMissionRunning = true;
+			}
+		}
+	}
+	Dog->SetMissionAct(Act, bMissionRunning ? Orb.Get() : nullptr);
 }
 
 void UWonderlandMissionSubsystem::Detach()

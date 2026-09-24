@@ -334,6 +334,35 @@ public:
 	/** The selected task, or null when there is none. */
 	const FWonderlandMissionTask* GetSelectedTask() const { return Find(Selected); }
 
+	/**
+	 * THE STATE THE DOG SHOULD BE PERFORMING: the first contract actually being worked, or the selected one.
+	 *
+	 * A WORKING contract outranks the selection because the founder watches whatever is RUNNING, not whatever
+	 * he last clicked -- and a draft or a queued row must never take the performance away from a contract
+	 * mid-verification. Returns Draft when there is nothing to perform, which maps to no act at all.
+	 */
+	EWonderlandTaskState GetPerformingState() const
+	{
+		for (const FWonderlandMissionTask& Row : Tasks)
+		{
+			switch (Row.State)
+			{
+			case EWonderlandTaskState::Preparation:
+			case EWonderlandTaskState::Research:
+			case EWonderlandTaskState::Implementation:
+			case EWonderlandTaskState::Verification:
+			case EWonderlandTaskState::Review:
+			case EWonderlandTaskState::Repair:
+				return Row.State;
+			default:
+				break;
+			}
+		}
+		const FWonderlandMissionTask* Chosen = Find(Selected);
+		return Chosen != nullptr ? Chosen->State : EWonderlandTaskState::Draft;
+	}
+
+
 	/* ------------------------------------------------------- backend truth */
 
 	/**

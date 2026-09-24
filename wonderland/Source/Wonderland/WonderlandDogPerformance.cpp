@@ -115,6 +115,22 @@ EWonderlandDogAct WonderlandDogActForBeat(EWonderlandMissionBeat Beat)
 	return EWonderlandDogAct::None;
 }
 
+EWonderlandDogAct WonderlandDogActForTaskState(EWonderlandTaskState State)
+{
+	switch (State)
+	{
+	case EWonderlandTaskState::Preparation:    return EWonderlandDogAct::FloatingActivation;
+	case EWonderlandTaskState::Research:       return EWonderlandDogAct::ReadingTheBook;
+	case EWonderlandTaskState::Implementation: return EWonderlandDogAct::PaintingTheWork;
+	case EWonderlandTaskState::Verification:   return EWonderlandDogAct::VerificationBeam;
+	case EWonderlandTaskState::Review:         return EWonderlandDogAct::InspectingTheWork;
+	case EWonderlandTaskState::Repair:         return EWonderlandDogAct::CorrectingTheWork;
+	// DRAFT, QUEUED, COMPLETED, FAILED and PAUSED are not performances. A contract waiting to be reached has
+	// nothing to act out, and a finished one must SETTLE rather than hold its last pose forever.
+	default:                                   return EWonderlandDogAct::None;
+	}
+}
+
 const TCHAR* WonderlandDogActName(EWonderlandDogAct Act)
 {
 	return WonderlandDogActReading(Act).Label;

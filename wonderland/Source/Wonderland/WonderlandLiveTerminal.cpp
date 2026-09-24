@@ -350,15 +350,19 @@ void SWonderlandLiveTerminal::RebuildTaskTabs()
 			return FReply::Handled();
 		})
 		[
+			// BIG ENOUGH TO FIND. Photographed in PIE at the panel's real size, the old + was a 13pt GoldDim
+			// glyph on a near-black plate: present, working -- pressing it through the same path made a second
+			// tab -- and completely unreadable, which is why the founder reported it as ABSENT. "Does not even
+			// have the + button at the top" was a report about legibility, and the fix is legibility.
 			SNew(SBorder)
 			.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
-			.BorderBackgroundColor(FSlateColor(FLinearColor(0.14f, 0.13f, 0.20f, 0.85f)))
-			.Padding(FMargin(9.0f, 2.0f))
+			.BorderBackgroundColor(FSlateColor(FLinearColor(0.30f, 0.24f, 0.07f, 0.95f)))
+			.Padding(FMargin(13.0f, 4.0f))
 			[
 				SNew(STextBlock)
 				.Text(INVTEXT("+"))
-				.Font(WonderlandUi::Sans(13, true))
-				.ColorAndOpacity(WonderlandUi::GoldDim())
+				.Font(WonderlandUi::Sans(18, true))
+				.ColorAndOpacity(WonderlandUi::Gold())
 			]
 		]
 	];
@@ -368,8 +372,8 @@ void SWonderlandLiveTerminal::RebuildTaskTabs()
 	[
 		SNew(STextBlock)
 		.Text(INVTEXT("NEW TASK TERMINAL"))
-		.Font(WonderlandUi::Sans(7, false, 170))
-		.ColorAndOpacity(WonderlandUi::Faint())
+		.Font(WonderlandUi::Sans(9, true, 140))
+		.ColorAndOpacity(WonderlandUi::GoldDim())
 	];
 
 	// CLOSED TASKS ARE NOT GONE, and the strip says so. A tab shut with X is a contract still on record; hiding

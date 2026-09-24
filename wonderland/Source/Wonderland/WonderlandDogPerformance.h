@@ -31,6 +31,7 @@
 
 #include "CoreMinimal.h"
 #include "WonderlandMissionBeat.h"
+#include "WonderlandMissionTasks.h"
 
 /** The performances, plus the absence of one. `None` MEANS INHERIT while a Mission Contract exists. */
 enum class EWonderlandDogAct : uint8
@@ -109,6 +110,21 @@ WONDERLAND_API const FWonderlandDogActReading& WonderlandDogActReading(EWonderla
  * TRANSITIONS (handoff, checkpoint, a non-terminal approval) and ENDINGS resolve to `None`, told apart by the contract.
  */
 WONDERLAND_API EWonderlandDogAct WonderlandDogActForBeat(EWonderlandMissionBeat Beat);
+
+/**
+ * WHAT THE DOG IS DOING FOR A MISSION CONTRACT IN THIS STATE.
+ *
+ * THE GAP THIS CLOSES. The contract's lifecycle and the Dog's performance were two parallel systems with
+ * nothing between them: a contract walked PREPARATION -> RESEARCH -> IMPLEMENTATION -> VERIFICATION ->
+ * REVIEW -> REPAIR -> COMPLETED exactly as it should, and TellTheDog only ever read the mission BEAT, so the
+ * Dog performed NONE at every stage and the whole lifecycle passed with the mascot standing still. Measured
+ * in PIE: seven stages, dog_act NONE seven times, lift 0.0 throughout -- while the same body lifts 77.97 uu
+ * the moment the act is set directly. It was never a skin fault; Relay OG did nothing either.
+ *
+ * The stages are the founder's own lifecycle, so the mapping is one-to-one and needs no interpretation.
+ */
+WONDERLAND_API EWonderlandDogAct WonderlandDogActForTaskState(EWonderlandTaskState State);
+
 
 WONDERLAND_API const TCHAR* WonderlandDogActName(EWonderlandDogAct Act);
 WONDERLAND_API const TCHAR* WonderlandDogPropName(EWonderlandDogProp Prop);

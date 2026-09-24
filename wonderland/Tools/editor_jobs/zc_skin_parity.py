@@ -148,22 +148,40 @@ def job():
     # now ALSO records whether the Dog actually left the ground. A peak of zero while the movement component
     # never reported falling is a test that did not jump, and must not be reported as a broken channel.
     air = 0.0
-    left_ground = False
-    dog.jump()
-    for _ in range(20):
-        yield 0.1
-        air = max(air, read(skin.get_worn_pose())["airborne_weight"])
-        move = dog.get_character_movement()
-        if move is not None and bool(move.is_falling()):
-            left_ground = True
+    ground_z = float(dog.get_actor_location().z)
+    peak_rise = 0.0
+    how = "none"
+    # DEFENSIVELY, AND MEASURED BY HEIGHT. The first version called dog.jump() and dog.get_character_movement()
+    # and an AttributeError killed the whole job at A07, losing the three tests after it -- a proof that cannot
+    # survive one missing binding is not a proof. Leaving the ground is read from the actor's own Z, which needs
+    # no binding at all, and every way of jumping is tried in turn.
+    for attempt in ("jump", "key"):
+        try:
+            if attempt == "jump":
+                dog.call_method("Jump")
+                how = "Jump()"
+            else:
+                L.press_key("SpaceBar", False)
+                how = "SpaceBar"
+        except Exception as bad:
+            RESULT["jump_%s_error" % attempt] = str(bad)[:180]
+            continue
+        for _ in range(16):
+            yield 0.1
+            air = max(air, read(skin.get_worn_pose())["airborne_weight"])
+            peak_rise = max(peak_rise, float(dog.get_actor_location().z) - ground_z)
+        if peak_rise > 5.0:
+            break
     L.set_key_held("W", False)
     yield 1.4
     RESULT["celestial_airborne_peak"] = round(air, 3)
-    RESULT["dog_actually_left_the_ground"] = left_ground
+    RESULT["dog_rose_uu"] = round(peak_rise, 2)
+    RESULT["jump_driven_by"] = how
+    left_ground = peak_rise > 5.0
     record("A07", "jumping, the skin is told it is off the ground",
            (air > 0.05) if left_ground else False,
-           airborne_peak=round(air, 3), dog_left_the_ground=left_ground,
-           note="a zero peak with no falling is a test that never jumped, not a broken channel")
+           airborne_peak=round(air, 3), dog_rose_uu=round(peak_rise, 2), driven_by=how,
+           note="a zero peak with no rise is a test that never jumped, not a broken channel")
 
     # ---------------------------------------------------------------- A MISSION ACT
     # Driven through the Dog's own console verb, so the performance is the real one and not a stand-in.
