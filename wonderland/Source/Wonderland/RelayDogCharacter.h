@@ -387,6 +387,9 @@ public:
 private:
 	void ShowCanonBody(bool bShow);
 
+	/** Puts the founder's chosen PRIMARY on the body and SECONDARY on the eyes. No-op until one is chosen. */
+	void PaintCanonBody();
+
 	UPROPERTY(Transient)
 	TObjectPtr<class AWonderlandCompanionEmbodiment> Costume = nullptr;
 

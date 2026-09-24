@@ -2,6 +2,7 @@
 #include "Engine/GameInstance.h"
 #include "WonderlandRelaySkins.h"
 #include "WonderlandCompanionEmbodiment.h"
+#include "WonderlandMascotStyle.h"
 
 #include "Camera/CameraComponent.h"
 #include "Misc/CommandLine.h"
@@ -1409,6 +1410,7 @@ void ARelayDogCharacter::WearSkin(FName SkinId)
 			Costume = nullptr;
 		}
 		ShowCanonBody(true);
+		PaintCanonBody();
 		WornSkinId = TEXT("relay_og");
 		UE_LOG(LogTemp, Display, TEXT("WLDOG wears RELAY OG (canon body)"));
 		return;
@@ -1451,6 +1453,43 @@ void ARelayDogCharacter::WearSkin(FName SkinId)
 	ShowCanonBody(false);
 	WornSkinId = SkinId;
 	UE_LOG(LogTemp, Display, TEXT("WLDOG wears %s (%d boxes)"), *SkinId.ToString(), Costume->GetBoxCount());
+}
+
+/**
+ * THE FOUNDER'S COLOURWAY ON THE DOG'S OWN BODY.
+ *
+ * Relay OG is not a costume -- it IS the Blueprint's meshes -- so it is the one case the figure loader never
+ * touches, and the one that would have stayed its designed colour while every skin changed. PRIMARY goes on
+ * the body, SECONDARY on the eyes and visor, and a component tagged WL_Prop is left alone because a book or a
+ * magnifying glass is not part of the mascot.
+ */
+void ARelayDogCharacter::PaintCanonBody()
+{
+	const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+	if (!Style.bChosen)
+	{
+		return;
+	}
+	TInlineComponentArray<UStaticMeshComponent*> Meshes;
+	GetComponents<UStaticMeshComponent>(Meshes);
+	int32 Painted = 0;
+	for (UStaticMeshComponent* Body : Meshes)
+	{
+		if (Body == nullptr || Body->ComponentHasTag(TEXT("WL_Prop"))) { continue; }
+		const bool bEye = WonderlandMascotStyle::NamesAnEye(Body->GetName());
+		const FLinearColor Chosen = bEye ? Style.Secondary : Style.Primary;
+		for (int32 Slot = 0; Slot < Body->GetNumMaterials(); ++Slot)
+		{
+			UMaterialInstanceDynamic* Mid = Cast<UMaterialInstanceDynamic>(Body->GetMaterial(Slot));
+			if (Mid == nullptr)
+			{
+				Mid = Body->CreateAndSetMaterialInstanceDynamic(Slot);
+			}
+			WonderlandMascotStyle::Tint(Mid, Chosen);
+			++Painted;
+		}
+	}
+	UE_LOG(LogTemp, Display, TEXT("WLDOG canon body painted in the chosen colourway (%d slots)"), Painted);
 }
 
 void ARelayDogCharacter::ShowCanonBody(bool bShow)

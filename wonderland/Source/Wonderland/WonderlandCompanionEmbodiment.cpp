@@ -4,6 +4,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "ProceduralMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "WonderlandMascotStyle.h"
 
 namespace
 {
@@ -96,6 +97,17 @@ void AWonderlandCompanionEmbodiment::ClearBody()
 	PartNames.Reset();
 	MaterialInstances.Reset();
 	Motions.Reset();
+	// THE FIRE GOES OUT WITH THE BODY THAT WAS BURNING.
+	//
+	// FlameSources is rebuilt by the next LoadFigure, but the SECTIONS already laid into FlameSurface are not --
+	// so changing to a skin that carries no fire left the previous skin's flames hanging in the air. Photographed
+	// in the Wardrobe: Apollo, which has no flame part at all, was wearing somebody else's burning crown. The
+	// material instances those sections were drawn with are being discarded on the line above, too.
+	FlameSources.Reset();
+	if (FlameSurface != nullptr)
+	{
+		FlameSurface->ClearAllMeshSections();
+	}
 	GlowMaterials.Reset();
 	BoxCount = 0;
 }
@@ -237,6 +249,23 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 				Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), FMath::Max(Def.Strength, 0.0f));
 				GlowMaterials.Add({Index, TEXT("Color"), Emissive});
 				break;
+			}
+
+			// ---- AND THE FOUNDER'S OWN COLOURWAY OVER THE TOP.
+			//
+			// PRIMARY is the whole mascot, SECONDARY is its eyes (founder, 2026-09-24). Applied here, where
+			// every body is built, so the Dog in the world, the mannequin in the Wardrobe and the performer in
+			// a Mission Contract are all one colour without any of them being told separately. Untouched by
+			// default: an install where nothing has been chosen multiplies by white and shows the skins exactly
+			// as they were designed.
+			const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+			if (Style.bChosen)
+			{
+				const bool bEye = WonderlandMascotStyle::NamesAnEye(Def.Name.ToString());
+				const bool bGlows = Def.Kind == EWonderlandCompanionMaterialKind::Glow
+					|| Def.Kind == EWonderlandCompanionMaterialKind::Additive;
+				// MULTIPLIED, NOT REPLACED, so a skin keeps its own light and shade and only its hue moves.
+				WonderlandMascotStyle::Tint(Instance, (bGlows ? Emissive : Lit) * (bEye ? Style.Secondary : Style.Primary));
 			}
 		}
 		MaterialInstances.Add(Instance);

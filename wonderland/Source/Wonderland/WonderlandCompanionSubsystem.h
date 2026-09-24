@@ -40,6 +40,17 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Preview")
 	FString FigureDirectory = TEXT("Companions");
 
+	/**
+	 * WHAT THE FOUNDER CALLED HIS COMPOUND AGENT.
+	 *
+	 * The HUD's three rows name the three things that are actually running -- "COMPOUND AGENT: <user-created
+	 * name>", "SINGLE AGENT: <active coding agent>", "LLM COMPANION: <active companion>" (founder, 2026-09-24).
+	 * The other two names already existed, below; this is the one that did not, because the compound agent is
+	 * the one the user names themselves rather than one Wonderland ships.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Preview")
+	FString CompoundAgentName = TEXT("Julius");
+
 	/** The imported large language model companion's presentation name. */
 	UPROPERTY(Config, EditAnywhere, Category = "LLM Companion")
 	FString LlmCompanionName = TEXT("GPT 6 Astra");

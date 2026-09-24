@@ -12,6 +12,7 @@
 #include "WonderlandCompanionHud.h"
 #include "WonderlandUiStyle.h"
 #include "WonderlandUsagePreview.h"
+#include "WonderlandCompanionSubsystem.h"
 #include "WonderlandUsageSubsystem.h"
 
 namespace
@@ -534,16 +535,25 @@ int32 UWonderlandUsageHudWidget::NativePaint(
 	struct FRow
 	{
 		const TCHAR* Label;
+		FString Named;
 		const FString* Value;
 		const FString* Percent;
 		const FWonderlandUsagePalette* Palette;
 	};
+	// WHO EACH ROW IS, not merely what kind of thing it is (founder, 2026-09-24): "COMPOUND AGENT: <user-created
+	// name>", "SINGLE AGENT: <active coding agent, e.g. Claude Code>", "LLM COMPANION: <active companion, e.g.
+	// ChatGPT>". Read from the settings the rest of Wonderland already names these by, so the HUD, the companion
+	// terminals and the world all say the same thing without a second vocabulary to keep honest.
+	const UWonderlandCompanionPreviewSettings* Named = GetDefault<UWonderlandCompanionPreviewSettings>();
 	TArray<FRow, TInlineAllocator<3>> Rows;
-	Rows.Add({CompoundLabel, &CompoundFigure, &CompoundPercent, &WonderlandCompoundPalette()});
-	Rows.Add({SingleLabel, &SingleFigure, &SinglePercent, &WonderlandSinglePalette()});
+	Rows.Add({CompoundLabel, Named != nullptr ? Named->CompoundAgentName : FString(),
+			  &CompoundFigure, &CompoundPercent, &WonderlandCompoundPalette()});
+	Rows.Add({SingleLabel, Named != nullptr ? Named->AgentName : FString(),
+			  &SingleFigure, &SinglePercent, &WonderlandSinglePalette()});
 	if (bShowCompanionMeter)
 	{
-		Rows.Add({CompanionLabel, &CompanionFigure, &CompanionPercent, &WonderlandCompanionHud::LlmCompanionPalette()});
+		Rows.Add({CompanionLabel, Named != nullptr ? Named->LlmCompanionName : FString(),
+				  &CompanionFigure, &CompanionPercent, &WonderlandCompanionHud::LlmCompanionPalette()});
 	}
 	++Layer;
 	for (const FRow& Row : Rows)
@@ -553,6 +563,14 @@ int32 UWonderlandUsageHudWidget::NativePaint(
 		// units are real usage (a development preview's 100 units are not).
 		const float BaseLine = Y + RowHeight - LabelLift;
 		PaintText(Row.Label, LabelFont, Row.Palette->Accent, FVector2f(2.0f, BaseLine + 1.0f), AllottedGeometry, OutDrawElements, Layer);
+		// The name follows its label, dimmer, so the kind still reads first and the identity second.
+		if (!Row.Named.IsEmpty())
+		{
+			const float LabelWidth = static_cast<float>(Measure->Measure(Row.Label, LabelFont).X);
+			const FLinearColor Quiet(Row.Palette->Accent.R, Row.Palette->Accent.G, Row.Palette->Accent.B, 0.72f);
+			PaintText(FString::Printf(TEXT("  %s"), *Row.Named), LabelFont, Quiet,
+					  FVector2f(2.0f + LabelWidth, BaseLine + 1.0f), AllottedGeometry, OutDrawElements, Layer);
+		}
 		float ValueRight = Right;
 		if (!Row.Percent->IsEmpty())
 		{
