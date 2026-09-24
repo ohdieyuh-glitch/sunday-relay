@@ -3,12 +3,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   completeGitHubSignIn, configuredBridgeUrl, loadBridgeSession,
   beginRepositoryInstall, registerRepository, readInstallationFromReturn,
+  abandonSignInAttempt,
 } from './bridge-session';
 import { RelayGitHubSignIn } from './RelayGitHubSignIn';
 import { RelayConnectRepository } from './RelayConnectRepository';
-import { RelayWorld } from '../relay-world';
+import { RelayWorld, relayStageFromHash } from '../relay-world';
 import {
-  canActivate, cardBelongsTo, cardCurrency, cardNotCarriedNote, cardReference, claimCard, isConfigured, isPersistedCard,
+  cardBelongsTo, cardCurrency, cardNotCarriedNote, cardReference, claimCard, isConfigured, isPersistedCard,
   loadAgentDraft, missionConfigLabel, newCardForAgent, projectMissionConfig, startNewCompoundAgent,
   type CompoundAgentDraft, type OnboardingStepId,
 } from '../relay-experience';
@@ -96,14 +97,24 @@ export function RelayBetaEntry({
   const [connectingNew, setConnectingNew] = useState(false);
   // THE CANONICAL FLOW: the Relay experience → sign-in. A fresh live participant
   // begins in Aquala and builds their Compound Agent — its C.A.R.D. — in the
-  // world; bringing it online advances straight to the contextual GitHub
-  // sign-in. There is NO second configuration stage: the C.A.R.D. built in the
-  // world is the one every later surface reads. GitHub is never the entrance,
-  // and the Agent is always configured before any repository connects.
+  // world; ASKING TO ENTER WONDERLAND advances to the contextual GitHub sign-in.
+  // There is NO second configuration stage: the C.A.R.D. built in the world is
+  // the one every later surface reads. GitHub is never the entrance, and the
+  // Agent is always configured before any repository connects.
+  //
+  // AN ATTEMPT TO AUTHENTICATE IS NOT AUTHENTICATION, and this is the state that
+  // has to say so. It is deliberately EPHEMERAL — plain React state, written by
+  // an explicit act in THIS visit and gone on the next load — and nothing may
+  // restore it from storage. It used to be reached automatically the moment the
+  // world reported an activated Agent, and the world reports one it read out of
+  // localStorage, so every subsequent visit resolved to the GitHub wall: refresh,
+  // reopen, or type the public URL, and a person who had declined to sign in got
+  // the same screen with nothing on it that led anywhere else. The public
+  // landing was unreachable for as long as that record survived.
   //
   // The first phase is still spelled `wonderland` because that is the name the
   // persisted journey has always used; renaming it would change stored state
-  // for no behavioural gain. It means "before the Agent is online".
+  // for no behavioural gain. It means "before the participant asked to enter".
   const [phase, setPhase] = useState<'wonderland' | 'signin'>('wonderland');
   // THE ACTIVE C.A.R.D. — the authoritative record, read from its durable store
   // on mount and RE-READ whenever it can have changed (activation, sign-in,
@@ -223,24 +234,33 @@ export function RelayBetaEntry({
     // still served at the explicit `#/relay/home-legacy` route that nothing in
     // the product links to.
     if (phase === 'wonderland') {
-      // A participant who already built their Agent resumes at the Relay stage
-      // of the SAME scene rather than replaying the arrival — the world is
-      // continuous, so returning is a camera position, not a different screen.
-      // A first-time visitor gets the full passage from Aquala.
-      //
-      // The test is `canActivate`, not `isConfigured`: the second also requires
-      // activation, and someone who BUILT an Agent but has not brought it
-      // online is exactly the person who needs to land on the control that
-      // does.
-      const stage = canActivate(loadAgentDraft()) ? 'relay' : 'aquala';
-      // Bringing the Agent online advances DIRECTLY to sign-in. The C.A.R.D.
-      // the world just persisted is complete by construction (activation
-      // requires it), so there is nothing left to ask — a second configuration
-      // screen for the same values is exactly the defect this replaced. The
-      // runner reads that same record.
-      return <RelayWorld initialStage={stage} onActivated={() => { setCard(loadAgentDraft()); setPhase('signin'); }} />;
+      // THE ADDRESS BAR DECIDES WHICH STAGE OPENS, exactly as it does in the
+      // preview build. It used to be the persisted record — `canActivate(...)
+      // ? 'relay' : 'aquala'` — which meant the public URL stopped answering
+      // with the public landing as soon as a visitor had built anything, and
+      // two code paths decided one thing from two different sources. Nothing is
+      // lost by resuming from the URL instead: arriving in Relay rewrites the
+      // hash to `#/relay`, so a reload stays where the person actually is, and
+      // the draft survives in its own store either way, so ENTER RELAY from the
+      // landing resumes the half-built Agent on the step it stopped at.
+      const stage = relayStageFromHash(typeof window === 'undefined' ? '' : window.location.hash);
+      return (
+        <RelayWorld
+          initialStage={stage}
+          // ACTIVATION IS REPORTED, NOT ACTED ON. The world announces an online
+          // Agent once per mount — including one activated on a previous visit
+          // and read back out of storage — so all this may do is re-read the
+          // record it is telling us about. Advancing to sign-in here is what
+          // made the GitHub wall the root state of the whole site.
+          onActivated={() => setCard(loadAgentDraft())}
+          // ENTERING IS A REQUEST A PERSON MAKES. This is the only route from
+          // the public world to the auth gate, and it runs when the participant
+          // presses ENTER WONDERLAND — never on a mount, never on a reload.
+          onEnterWonderland={() => setPhase('signin')}
+        />
+      );
     }
-    // The Agent is online — now the contextual sign-in.
+    // The participant asked to enter — now the contextual sign-in.
     return (
       <div className="relay-beta-entry" data-state="sign-in">
         <h1>Sunday Relay — private beta</h1>
@@ -250,6 +270,22 @@ export function RelayBetaEntry({
           // The gate already finished any redirect; the component need not repeat it.
           completeImpl={async () => ({ signedIn: false, message: null })}
         />
+        {/* THE WAY OUT OF THE AUTH GATE, which had none.
+            Deciding not to sign in is an ordinary thing to decide, and it left a
+            visitor on a screen whose only control was the one they had declined.
+            This returns them to the PUBLIC LANDING — the page they came in by —
+            and clears only the state that belongs to an abandoned attempt: the
+            ephemeral phase, and any one-time sign-in claim still sitting in the
+            URL from a redirect that did not complete. It signs nobody out, and
+            it touches neither the C.A.R.D., nor a connected repository, nor any
+            session this browser legitimately holds. */}
+        <button
+          type="button"
+          className="relay-beta-entry__back"
+          onClick={() => { abandonSignInAttempt(); setPhase('wonderland'); }}
+        >
+          ← Back to Wonderland
+        </button>
       </div>
     );
   }

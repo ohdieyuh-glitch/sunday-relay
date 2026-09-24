@@ -21,7 +21,7 @@ import type { WorldStage } from './world-stage';
  *
  * The old shell is not reachable from any of it.
  */
-export function RelayWorld({ initialStage, initialStep, onActivated }: {
+export function RelayWorld({ initialStage, initialStep, onActivated, onEnterWonderland }: {
   readonly initialStage: WorldStage;
   /** Open the Relay panel on this step instead of resuming where the record
    *  left off — the explicit NEW C.A.R.D. path opens on its C.A.R.D. step. */
@@ -37,6 +37,13 @@ export function RelayWorld({ initialStage, initialStep, onActivated }: {
    * would make the front door unreachable for the people most likely to visit.
    */
   readonly onActivated?: () => void;
+  /**
+   * The participant asked to enter Wonderland and the host can do something
+   * about it. Passed straight through to the experience, which owns the control;
+   * the world only knows that such a request exists. Omitted — the demo build —
+   * the control stays disabled beside the reason.
+   */
+  readonly onEnterWonderland?: () => void;
 }): JSX.Element {
   const reducedMotion = usePrefersReducedMotion();
   const [draft, setDraftState] = useState<CompoundAgentDraft>(() => loadAgentDraft());
@@ -142,20 +149,16 @@ export function RelayWorld({ initialStage, initialStep, onActivated }: {
             returning={returning}
             anchors={world.systemAnchors}
             webgl={world.telemetry.webgl}
+            /* BACK, and nothing more (founder, 2026-09-22: "Add a clean Back control ... Do not redesign the landing
+               page"). The RETURN is ours: `leaveRelay` retraces the outward passage, and no second choreography
+               exists to drift from it. The PLACEMENT is the experience's, because the experience is what is on
+               screen. Handing it down rather than drawing it here is what fixed the defect the founder reported:
+               this component rendered the control at a fixed top-left position it chose blind, and the experience's
+               own SUNDAY RELAY lockup was already there — so the only Back control on the page was drawn on top of
+               the wordmark and could not be read. */
+            onBack={world.leaveRelay}
+            {...(onEnterWonderland !== undefined ? { onEnterWonderland } : {})}
           />
-          {/* BACK, and nothing more (founder, 2026-09-22: "Add a clean Back control ... Do not redesign the landing
-              page"). It lives on the RELAY side because that is where a person is when they want to go back, it is
-              in the established low-emphasis register rather than competing with the forward action, and its
-              accessible name deliberately avoids the words ENTER RELAY so the landing page's own control stays the
-              only thing by that name. */}
-          <button
-            type="button"
-            className="rw-back"
-            onClick={world.leaveRelay}
-            aria-label="Back to the landing page"
-          >
-            ← BACK
-          </button>
         </div>
       )}
 

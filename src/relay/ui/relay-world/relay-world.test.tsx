@@ -128,6 +128,46 @@ describe('the way back', () => {
     fireEvent.click(screen.getByRole('button', { name: /back/i }));
     expect(screen.getAllByRole('button', { name: /ENTER RELAY/i }).length).toBeGreaterThan(0);
   });
+
+  /**
+   * IT IS IN THE BRAND ROW, WHICH IS WHY IT CAN BE SEEN.
+   *
+   * FOUNDER (2026-09-24): "The user asked DAYS AGO for a BACK control on this
+   * experience. It is still not visible in the actual deployed page."
+   *
+   * It WAS deployed, and it was invisible, and both were true at once: the
+   * control was `position: fixed` at top 22px / left 24px, and `.rx-brand` is
+   * `top: var(--rx-pad); left: var(--rx-pad)` — the same corner. Measured on the
+   * production page, `.rw-back` sat at (24, 22) 45x26 with the SUNDAY RELAY
+   * lockup at (24, 24) 143x16, drawn over each other. It answered a hit test and
+   * a screen reader and could not be read by a person.
+   *
+   * A coordinate cannot be asserted in jsdom, which computes no layout — so this
+   * asserts the STRUCTURE that makes the coordinate impossible to get wrong.
+   * Inside the row, the wordmark's own width decides where the control starts,
+   * at every breakpoint, with no offset for anyone to keep in step.
+   */
+  it('lives INSIDE the brand row, so it can never be drawn underneath the wordmark', () => {
+    const { container } = render(createElement(RelayWorld, { initialStage: 'relay' as const }));
+    const back = screen.getByRole('button', { name: /back/i });
+    const brand = container.querySelector('.rx-brand');
+    expect(brand).not.toBeNull();
+    expect(brand?.contains(back)).toBe(true);
+    // And it is a SIBLING of the lockup, not a wrapper around it or a child of
+    // it: the row places the two side by side.
+    expect(back.parentElement).toBe(brand);
+    expect(brand?.querySelector('.rx-wordmark')).not.toBeNull();
+  });
+
+  it('is still exactly one control, and still not styled as a second primary action', () => {
+    const { container } = render(createElement(RelayWorld, { initialStage: 'relay' as const }));
+    expect(container.querySelectorAll('.rw-back')).toHaveLength(1);
+    // `.rl3-cta` is the landing's gold pill and `.rx-cta` the experience's. A
+    // Back wearing either would read as a second thing to do rather than the way
+    // out of the one being asked for.
+    const back = screen.getByRole('button', { name: /back/i });
+    expect(back.className).not.toContain('cta');
+  });
 });
 
 describe('direct entry', () => {
