@@ -28,7 +28,15 @@ MESH = {
     "spiral": V2 + "Vegetation/Topiary/SM_topiary_spiral.SM_topiary_spiral",
 }
 SINK_UU = 100000.0
-PAVING = ["MI_V2_PlazaCream"] * 5 + ["MI_V2_PlazaWarm"] * 3 + ["MI_V2_PlazaGrey"]
+#: VARIANT D. PAVING used to be a weighted bag of three tints, chosen per instance -- which meant a batch per
+#: (shape, tint) once inst_world was keyed correctly: 9 combinations a pass, 103 batches across the walks.
+#: MI_V2_PlazaVaried carries that variation INSIDE one material instead: it sits on M_V2_SurfaceHD, whose
+#: InstVary / InstWarm / InstRoughVary hash each instance's own world position into brightness, warmth and
+#: roughness, so every slab still differs from its neighbours. Its BaseColor is the 5:3:1 weighted mean of
+#: the three tints it replaces and its per-instance spread is widened to cover their range. One tint x three
+#: shapes = 3 batches a pass instead of 9.
+PAVING = ["MI_V2_PlazaVaried"]
+PAVING_TINTS = ["MI_V2_PlazaCream"] * 5 + ["MI_V2_PlazaWarm"] * 3 + ["MI_V2_PlazaGrey"]   # what D replaces
 
 
 class Court(object):
