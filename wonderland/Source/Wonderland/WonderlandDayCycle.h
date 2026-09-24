@@ -52,6 +52,8 @@ public:
 
 private:
 	void FindTheSky();
+	/** Points every pond, well, canal and fountain basin at the real water material, if it is present. */
+	void DressTheWater();
 	void ApplyStableShadows();
 	void PaintTheSky();
 
@@ -71,4 +73,7 @@ private:
 	TArray<float> FillIntensities;
 	float SunIntensityAtNoon = 70000.0f;
 	float FogDensityByDay = 0.0f;
+	/** The water surfaces, so the day cycle can carry their colour with the light. */
+	TArray<TWeakObjectPtr<class UMaterialInstanceDynamic>> WaterSurfaces;
+	int32 WaterDressed = 0;
 };

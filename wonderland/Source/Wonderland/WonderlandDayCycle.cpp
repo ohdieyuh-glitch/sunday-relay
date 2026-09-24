@@ -9,6 +9,9 @@
 #include "Engine/SkyLight.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Engine/StaticMeshActor.h"
+#include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "HAL/IConsoleManager.h"
 
 namespace
@@ -58,6 +61,7 @@ void UWonderlandDayCycleSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	Super::OnWorldBeginPlay(InWorld);
 	FindTheSky();
 	ApplyStableShadows();
+	DressTheWater();
 	PaintTheSky();
 }
 
@@ -108,6 +112,59 @@ void UWonderlandDayCycleSubsystem::FindTheSky()
 		Sun.IsValid() ? *Sun->GetName() : TEXT("NONE -- the sky will not move"),
 		Fills.Num(), Sky.IsValid() ? TEXT("yes") : TEXT("no"),
 		Fog.IsValid() ? TEXT("yes") : TEXT("no"), Grade.IsValid() ? TEXT("yes") : TEXT("no"));
+}
+
+void UWonderlandDayCycleSubsystem::DressTheWater()
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr) { return; }
+
+	// ---- WHY THE WATER LOOKED PLASTIC, measured rather than guessed.
+	//
+	// All 64 ponds, wells, canals and fountain basins share MI_V2_Water, whose master M_V2_Surface is
+	// BLEND_OPAQUE and MSM_DEFAULT_LIT and exposes only TexScale, Roughness, RoughVary, Metallic, Specular and
+	// EmissiveStrength. There is no refraction in it, no flow, no depth response and no translucency -- so NO
+	// value of any parameter it has could ever have made it look wet. It is a shiny opaque solid, which is
+	// exactly what the founder kept seeing.
+	//
+	// M_WL_RealWater is a new master, authored alongside it and never replacing it: translucent, two normal maps
+	// panning at different rates so the ripples never line up again, a depth fade that makes the rim clear and
+	// the middle deep, and refraction. Applied HERE, at runtime, so the level is never edited -- Wonderland's
+	// Content is a shared junction and not durably tracked, and if this asset is ever missing the water simply
+	// stays as it was.
+	UMaterialInterface* Real = LoadObject<UMaterialInterface>(
+		nullptr, TEXT("/Game/Wonderland/Materials/M_WL_RealWater.M_WL_RealWater"));
+	if (Real == nullptr)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WLWATER M_WL_RealWater is not present; the water is left as it was"));
+		return;
+	}
+
+	WaterSurfaces.Reset();
+	WaterDressed = 0;
+	for (TActorIterator<AStaticMeshActor> It(World); It; ++It)
+	{
+		UStaticMeshComponent* Mesh = It->GetStaticMeshComponent();
+		if (Mesh == nullptr) { continue; }
+		for (int32 Slot = 0; Slot < Mesh->GetNumMaterials(); ++Slot)
+		{
+			const UMaterialInterface* Worn = Mesh->GetMaterial(Slot);
+			// MATCHED ON THE MATERIAL, NOT ON THE ACTOR'S NAME. Every water surface in the level wears
+			// MI_V2_Water and nothing else does, so this cannot catch a basin's stone rim or a fountain's gold
+			// finial by accident -- which a name like "court_fountainwater" very nearly would.
+			if (Worn == nullptr || !Worn->GetName().Equals(TEXT("MI_V2_Water"), ESearchCase::IgnoreCase))
+			{
+				continue;
+			}
+			if (UMaterialInstanceDynamic* Wet = UMaterialInstanceDynamic::Create(Real, *It))
+			{
+				Mesh->SetMaterial(Slot, Wet);
+				WaterSurfaces.Add(Wet);
+				++WaterDressed;
+			}
+		}
+	}
+	UE_LOG(LogTemp, Display, TEXT("WLWATER dressed %d surfaces in M_WL_RealWater"), WaterDressed);
 }
 
 void UWonderlandDayCycleSubsystem::ApplyStableShadows()
@@ -225,6 +282,19 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 		}
 	}
 
+	// ---- THE WATER GOES WITH THE SKY. Water is mostly what it reflects, so a pond that stays noon-blue at
+	// ---- dusk is the loudest thing in a night scene.
+	for (const TWeakObjectPtr<UMaterialInstanceDynamic>& Weak : WaterSurfaces)
+	{
+		UMaterialInstanceDynamic* Wet = Weak.Get();
+		if (Wet == nullptr) { continue; }
+		const FLinearColor Daylit = SunColourAt(Elevation);
+		Wet->SetVectorParameterValue(TEXT("ShallowColor"),
+			FMath::Lerp(FLinearColor(0.03f, 0.06f, 0.11f, 1.0f), FLinearColor(0.16f, 0.42f, 0.44f, 1.0f) * Daylit, Daylight));
+		Wet->SetVectorParameterValue(TEXT("DeepColor"),
+			FMath::Lerp(FLinearColor(0.01f, 0.02f, 0.05f, 1.0f), FLinearColor(0.02f, 0.10f, 0.16f, 1.0f), Daylight));
+	}
+
 	// ---- AND THE EYE ADJUSTS. Opened at night and closed at noon, by a stop and a half either way, so the
 	// ---- founder can still read the garden at midnight without noon becoming milky.
 	if (APostProcessVolume* Volume = Grade.Get())
@@ -279,5 +349,5 @@ FString UWonderlandDayCycleSubsystem::DescribeSky() const
 		Comp != nullptr ? Comp->DynamicShadowCascades : -1,
 		Comp != nullptr ? Comp->DynamicShadowDistanceMovableLight : -1.0f,
 		Grade.IsValid() ? Grade->Settings.AutoExposureBias : 0.0f,
-		Fills.Num());
+		Fills.Num()) + FString::Printf(TEXT(" water=%d"), WaterDressed);
 }
