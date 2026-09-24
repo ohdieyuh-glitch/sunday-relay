@@ -64,18 +64,34 @@ const registerOk = (async () => ({ ok: true as const, key: 'github:github.com/be
 afterEach(() => {
   cleanup(); clearBridgeSession(); clearActiveMissions();
   clearConnectedRepository(); clearAgentDraft();
+  // THE ADDRESS IS STATE TOO, and it now decides which stage of the world opens.
+  // A test that left `#/relay` behind would hand the next one a participant
+  // standing somewhere it never put them.
+  window.history.replaceState(null, '', '/');
 });
+
+/**
+ * The participant is IN Relay — which, in a browser, means the address says so.
+ * Arriving through the passage rewrites the hash to `#/relay`, so this is the
+ * URL a real participant holds once they are past the landing, and the one a
+ * reload restores them to.
+ */
+function inTheWorld() {
+  window.history.replaceState(null, '', '#/relay');
+}
 
 const T0 = '2026-08-27T10:00:00.000Z';
 const T1 = '2026-08-27T10:05:00.000Z';
 
 /**
  * A participant who has already built their Compound Agent but not activated
- * it. The live front door resumes them at the Relay stage of the same scene,
- * where ACTIVATE RELAY is the control that carries them into the rest of the
- * journey — so a test about sign-in can start where sign-in becomes reachable
- * instead of replaying eight onboarding steps. The role ids are the product
- * catalogue's — exactly what the world stores.
+ * it. Pair it with {@link inTheWorld}: the record says what they built, the URL
+ * says where they are standing, and ACTIVATE RELAY is the control in front of
+ * them — so a test about sign-in can start where sign-in becomes reachable
+ * instead of replaying eight onboarding steps. The record alone is deliberately
+ * NOT enough to place them: a stored draft used to decide the opening stage by
+ * itself, which is how the public URL stopped answering with the public page.
+ * The role ids are the product catalogue's — exactly what the world stores.
  */
 function agentBuilt(overrides: Partial<CompoundAgentDraft> = {}): CompoundAgentDraft {
   return saveAgentDraft({
@@ -147,15 +163,138 @@ describe('RelayBetaEntry', () => {
     }
   });
 
-  it('AC-2: bringing the Agent online reveals sign-in DIRECTLY — no second configuration stage, and GitHub is never the entrance', async () => {
+  /**
+   * THE AUTH GATE IS NOT THE ROOT STATE OF THE SITE.
+   *
+   * FOUNDER (2026-09-24): "A user who decides not to authenticate must be able
+   * to return to the normal Wonderland landing page. The GitHub authentication
+   * gate may protect ENTRY INTO WONDERLAND. It must NOT permanently trap the
+   * entire public Wonderland website."
+   *
+   * Reproduced on the deployed site before it was fixed: activate a Compound
+   * Agent, decline to sign in, and every route back — refresh, reopen, or type
+   * the bare public URL — returned the same GitHub screen, which carried no
+   * control that went anywhere else. Nothing was wrong with the session logic:
+   * there was no session. What persisted was the RECORD of an activation, and
+   * two places read it as a decision to authenticate.
+   *
+   * These tests separate the four states the interface has to keep apart —
+   * public, entry requested, signed in, and abandoned — and they are written
+   * against the LOADS a person actually performs, because "refresh" and "open
+   * the URL again" are exactly the two things a trapped user will try.
+   */
+  describe('an attempt to authenticate is not an authentication', () => {
+    it('does not open the GitHub wall for an Agent activated on a previous visit', async () => {
+      // THE TRAP, EXACTLY. This record is what the browser held: complete, online
+      // and nobody's — the state a visitor is left in by declining to sign in.
+      agentActivated();
+      inTheWorld();
+      const { container } = render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
+      await waitFor(() => expect(container.querySelector('.rw')).toBeTruthy());
+      expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
+      // And the way on is offered, not taken on their behalf.
+      expect(await screen.findByRole('button', { name: /ENTER WONDERLAND/i })).toBeTruthy();
+    });
+
+    it('answers the bare public URL with the public landing, activated record or not', async () => {
+      // CASE E: abandon the attempt, come back to the address on the business
+      // card. The landing is the front door and stays the front door; the world
+      // is continuous, so this is the arrival beat, not a different site.
+      agentActivated();
+      const { container } = render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
+      await waitFor(() => expect(container.querySelector('.rw')).toBeTruthy());
+      expect(container.querySelector('.rw')?.getAttribute('data-stage')).toBe('aquala');
+      expect(screen.getAllByRole('button', { name: /ENTER RELAY/i }).length).toBeGreaterThan(0);
+      expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
+    });
+
+    it('does not restore the sign-in screen across a reload — the attempt lives in the tab, not in storage', async () => {
+      // CASE D. The remount IS the refresh: a reload destroys React state and
+      // rebuilds the interface from whatever survived it. Nothing about an
+      // unfinished attempt may survive it, which is why `phase` is plain state
+      // and why no effect writes it anywhere durable.
+      inTheWorld();
+      agentBuilt();
+      render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
+      fireEvent.click(await screen.findByRole('button', { name: /ACTIVATE RELAY/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /ENTER WONDERLAND/i }));
+      expect(await screen.findByRole('button', { name: /Sign in with GitHub/i })).toBeTruthy();
+
+      cleanup();
+      const { container } = render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
+      await waitFor(() => expect(container.querySelector('.rw')).toBeTruthy());
+      expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
+    });
+
+    it('offers a way back OUT of the sign-in screen, and it returns to the public landing', async () => {
+      // CASE C. Declining is an ordinary decision. The screen that asks must not
+      // be the only screen that answers.
+      inTheWorld();
+      agentActivated();
+      const { container } = render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
+      fireEvent.click(await screen.findByRole('button', { name: /ENTER WONDERLAND/i }));
+      expect(await screen.findByRole('button', { name: /Sign in with GitHub/i })).toBeTruthy();
+
+      const back = screen.getByRole('button', { name: /Back to Wonderland/i });
+      fireEvent.click(back);
+      await waitFor(() => expect(container.querySelector('.rw')).toBeTruthy());
+      expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
+      // The URL agrees with the screen, so a reload does not disagree with it.
+      expect(window.location.hash).toBe('');
+      expect(container.querySelector('.rw')?.getAttribute('data-stage')).toBe('aquala');
+    });
+
+    it('signs nobody out and loses no work on the way back', async () => {
+      // CLEAR THE TRANSIENT, AND ONLY THE TRANSIENT. A cleanup that reached the
+      // C.A.R.D. or a legitimate session would turn "I would rather not sign in
+      // right now" into lost work, which is a worse bug than the one being fixed.
+      inTheWorld();
+      const built = agentActivated({ name: 'Keeper' });
+      render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
+      fireEvent.click(await screen.findByRole('button', { name: /ENTER WONDERLAND/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /Back to Wonderland/i }));
+      const after = loadAgentDraft();
+      expect(after.name).toBe('Keeper');
+      expect(after.cardId).toBe(built.cardId);
+      expect(after.revision).toBe(built.revision);
+      expect(after.activatedAt).not.toBeNull();
+    });
+
+    it('still lets a SIGNED-IN participant straight through — the gate protects what it always protected', async () => {
+      // CASE G. The bug belonged to people who are not authenticated. Nothing
+      // here loosens the gate: a real session still reaches the repository step,
+      // and an unauthenticated visitor still cannot.
+      agentActivated();
+      signedIn();
+      render(
+        <RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete} listRepositoriesImpl={emptyRepoList}>
+          {APP}
+        </RelayBetaEntry>,
+      );
+      expect(await screen.findByText(/Connect a repository/i)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
+      expect(screen.queryByTestId('app')).toBeNull();
+    });
+  });
+
+  it('AC-2: ASKING TO ENTER reveals sign-in DIRECTLY — no second configuration stage, and GitHub is never the entrance', async () => {
+    inTheWorld();
     agentBuilt();
     render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
     const activateRelay = await screen.findByRole('button', { name: /ACTIVATE RELAY/i });
     // Still no GitHub wall while the participant is in the world.
     expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
-    // Bringing the Agent online is the ONE configuration act. What follows is
-    // the contextual sign-in — never a screen asking for the same values again.
     fireEvent.click(activateRelay);
+    // ACTIVATION IS NOT A REQUEST TO ENTER. It used to be read as one: the gate
+    // advanced to GitHub the instant the world reported an online Agent, and the
+    // world reports one it read out of storage — so the wall came back on every
+    // later visit and the public site was unreachable behind it. Bringing the
+    // Agent online leaves the participant in the world, looking at their Agent.
+    expect(await screen.findByRole('button', { name: /ENTER WONDERLAND/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
+    // ASKING to enter is what reveals it, and what follows is the contextual
+    // sign-in — never a screen asking for the same values again.
+    fireEvent.click(screen.getByRole('button', { name: /ENTER WONDERLAND/i }));
     expect(await screen.findByRole('button', { name: /Sign in with GitHub/i })).toBeTruthy();
     expect(screen.queryByText(/Edit your C.A.R.D./i)).toBeNull();
     expect(screen.queryByLabelText('Execution mode')).toBeNull();
@@ -164,9 +303,11 @@ describe('RelayBetaEntry', () => {
 
   it('THE SEAM, CLOSED: the C.A.R.D. built in the world is the ONE configuration — it survives the OAuth reload and reaches the Mission unchanged, with no second setup', async () => {
     // The participant chose their C.A.R.D. in the world: autonomous, $3, 90 min, network blocked.
+    inTheWorld();
     agentBuilt({ mode: 'autonomous', spendUsd: 3, runtimeMinutes: 90, network: 'blocked' });
     render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
     fireEvent.click(await screen.findByRole('button', { name: /ACTIVATE RELAY/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /ENTER WONDERLAND/i }));
     // Straight to sign-in. Nothing asks for the same values again, and no
     // default is shown in their place.
     expect(await screen.findByRole('button', { name: /Sign in with GitHub/i })).toBeTruthy();

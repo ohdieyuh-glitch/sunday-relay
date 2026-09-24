@@ -700,3 +700,33 @@
   /* A stacked column of timestamps: same-width figures keep it straight. */
   font-variant-numeric: tabular-nums;
 }
+
+/* ==========================================================================
+   THE WAY OUT OF THE AUTH GATE.
+
+   The private-beta gate is otherwise an unstyled screen, and it stays that way
+   here: this is one control, not a restyling of a surface the founder did not
+   ask to change. The one thing it must not be is a second button of equal
+   weight beside "Sign in with GitHub" — the choice being offered is not
+   "sign in OR leave", it is "sign in, or go back to what you were looking at".
+   So it reads as a subordinate link in the same low-emphasis register the rest
+   of the product uses for its way-back controls.
+   ========================================================================== */
+.relay-beta-entry__back {
+  display: inline-block;
+  margin-top: 14px;
+  padding: 4px 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+.relay-beta-entry__back:hover,
+.relay-beta-entry__back:focus-visible {
+  color: var(--gold-400);
+  border-bottom-color: var(--gold-400);
+}

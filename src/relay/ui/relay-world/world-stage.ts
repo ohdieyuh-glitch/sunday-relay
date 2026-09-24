@@ -19,6 +19,30 @@ import { clamp01, smoothstep, type Vec3 } from '../landing/choreography';
 
 export type WorldStage = 'aquala' | 'transition' | 'relay';
 
+/**
+ * WHICH STAGE A URL ASKS FOR — the same answer `parsePreviewHash` gives, for the
+ * callers that mount the world directly instead of going through the preview
+ * router.
+ *
+ * WHY IT EXISTS. The live beta gate used to choose the opening stage from the
+ * PERSISTED RECORD alone (`canActivate(loadAgentDraft()) ? 'relay' : 'aquala'`),
+ * so the public URL stopped answering with the public landing the moment a
+ * visitor had built anything. Two code paths decided the same thing from two
+ * different sources, and only one of them was the address bar. The address bar
+ * wins: it is the thing a person types, bookmarks, refreshes and shares.
+ *
+ * `transition` is never a URL's answer. It is a stage a journey passes through,
+ * not a place anyone can be sent to — a deep link into it would strand the
+ * camera between two stages with no passage running to finish it.
+ *
+ * A sign-in return (`#relay_claim=…`) is not `#/relay`, so it resolves to the
+ * landing, which is the correct public answer while the claim is redeemed.
+ */
+export function relayStageFromHash(hash: string): Extract<WorldStage, 'aquala' | 'relay'> {
+  const parts = hash.replace(/^#/, '').split('/').filter(Boolean);
+  return parts[0] === 'relay' ? 'relay' : 'aquala';
+}
+
 /** A camera pose the transition interpolates through. */
 export type CameraPose = { readonly position: Vec3; readonly target: Vec3; readonly fov: number };
 

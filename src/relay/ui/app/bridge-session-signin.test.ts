@@ -87,6 +87,44 @@ describe('completeGitHubSignIn', () => {
     expect(r.message).toContain('sign in again');
     expect(loadBridgeSession()).toBeNull();
   });
+
+  /**
+   * A REFUSED CLAIM IS SPENT, AND SPENT THINGS LEAVE THE URL.
+   *
+   * The bridge ANSWERED here: expired, already redeemed, or never valid. No
+   * number of reloads will change that answer, so a claim left in the fragment
+   * makes every subsequent load re-POST the same dead value and re-raise the
+   * same error — a loop a person cannot leave by reloading, which is the first
+   * thing anyone tries. That is the same failure the founder reported from the
+   * other direction: an auth state the site would not let go of.
+   */
+  it('strips a claim the bridge REFUSED, so reloading cannot re-run a dead sign-in', async () => {
+    let cleared = false;
+    await completeGitHubSignIn({
+      locationHash: '#relay_claim=stale', bridgeUrl: BRIDGE,
+      fetchImpl: (async () => jsonRes(false, {})) as typeof fetch,
+      clearClaim: () => { cleared = true; },
+    });
+    expect(cleared).toBe(true);
+  });
+
+  /**
+   * A NETWORK EXCEPTION DECIDED NOTHING, so it takes nothing away. The bridge
+   * never answered; the claim may still be perfectly good, and discarding it
+   * would turn a dropped connection into a sign-in the participant has to start
+   * over. The distinction is the whole point: clear what is known to be dead,
+   * keep what is merely unconfirmed.
+   */
+  it('keeps the claim when the bridge could not be reached at all', async () => {
+    let cleared = false;
+    const r = await completeGitHubSignIn({
+      locationHash: '#relay_claim=maybe-good', bridgeUrl: BRIDGE,
+      fetchImpl: (async () => { throw new Error('offline'); }) as unknown as typeof fetch,
+      clearClaim: () => { cleared = true; },
+    });
+    expect(r.signedIn).toBe(false);
+    expect(cleared).toBe(false);
+  });
 });
 
 describe('connect-a-repository client seams', () => {
