@@ -10,6 +10,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "Misc/FileHelper.h"
+#include "HAL/FileManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandCompanion, Log, All);
 
@@ -92,21 +93,52 @@ void AWonderlandCompanionEmbodiment::ClearBody()
 
 bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 {
-	FString Text;
-	if (!FFileHelper::LoadFileToString(Text, *FilePath))
+	// PARSED ONCE PER FILE, NOT ONCE PER SPAWN.
+	//
+	// Every LoadFigure used to read the whole file off disk and parse it again: Cherubim Large is 2.5 MB and
+	// 36,025 boxes, TenTails Large 2.9 MB and 39,845. One /pa at Large therefore read and parsed 7 MB on the
+	// spawn frame, and a server holding MANY Project Avatars would pay that per avatar -- which is the cost the
+	// founder is feeling. The wardrobe pays it too, on every skin click.
+	//
+	// The parsed figure is immutable once built, so it is shared. Keyed by path AND the file's timestamp, so
+	// regenerating a skin with the forge is picked up without an editor restart; the entry is simply replaced.
+	struct FCachedFigure
 	{
-		LastError = FString::Printf(TEXT("cannot read figure file %s"), *FilePath);
-		UE_LOG(LogWonderlandCompanion, Error, TEXT("WLCOMPANION %s: %s"), *DisplayName, *LastError);
-		return false;
-	}
-	FWonderlandCompanionFigure Figure;
-	FString ParseError;
-	if (!FWonderlandCompanionFigure::Parse(Text, Figure, ParseError))
+		FDateTime Stamp;
+		TSharedPtr<const FWonderlandCompanionFigure> Figure;
+	};
+	static TMap<FString, FCachedFigure> FigureCache;
+
+	const FDateTime Stamp = IFileManager::Get().GetTimeStamp(*FilePath);
+	TSharedPtr<const FWonderlandCompanionFigure> Shared;
+	if (const FCachedFigure* Hit = FigureCache.Find(FilePath))
 	{
-		LastError = FString::Printf(TEXT("%s: %s"), *FilePath, *ParseError);
-		UE_LOG(LogWonderlandCompanion, Error, TEXT("WLCOMPANION %s: figure refused, %s"), *DisplayName, *LastError);
-		return false;
+		if (Hit->Stamp == Stamp && Hit->Figure.IsValid())
+		{
+			Shared = Hit->Figure;
+		}
 	}
+	if (!Shared.IsValid())
+	{
+		FString Text;
+		if (!FFileHelper::LoadFileToString(Text, *FilePath))
+		{
+			LastError = FString::Printf(TEXT("cannot read figure file %s"), *FilePath);
+			UE_LOG(LogWonderlandCompanion, Error, TEXT("WLCOMPANION %s: %s"), *DisplayName, *LastError);
+			return false;
+		}
+		TSharedRef<FWonderlandCompanionFigure> Parsed = MakeShared<FWonderlandCompanionFigure>();
+		FString ParseError;
+		if (!FWonderlandCompanionFigure::Parse(Text, Parsed.Get(), ParseError))
+		{
+			LastError = FString::Printf(TEXT("%s: %s"), *FilePath, *ParseError);
+			UE_LOG(LogWonderlandCompanion, Error, TEXT("WLCOMPANION %s: figure refused, %s"), *DisplayName, *LastError);
+			return false;
+		}
+		Shared = Parsed;
+		FigureCache.Add(FilePath, FCachedFigure{Stamp, Shared});
+	}
+	const FWonderlandCompanionFigure& Figure = *Shared;
 	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, CubePath);
 	if (Cube == nullptr)
 	{
@@ -133,6 +165,10 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 			Highest = FMath::Max(Highest, static_cast<float>(Box.Centre.Z + Box.Size.Z * 0.5));
 		}
 		FigureHeightUU = Figure.Boxes.Num() > 0 ? (Highest - Lowest) * Unit : 0.0f;
+		// AND KEEP THE FLOOR OF IT. /pa was re-deriving this by walking every instance of every component back
+		// out of the render proxy with GetInstanceTransform(bWorldSpace=true) -- 95,594 calls for one /pa at
+		// Large, on the spawn frame, to recover a number this loop had just computed for free.
+		FigureLowestUU = Figure.Boxes.Num() > 0 ? Lowest * Unit : 0.0f;
 	}
 
 	for (int32 Index = 0; Index < Figure.Materials.Num(); ++Index)

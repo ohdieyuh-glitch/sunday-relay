@@ -67,17 +67,20 @@ void UWonderlandRelaySkinSubsystem::BuildRegistry()
 		TEXT("Bone over bone, a ribcage cut into the chest, and blue ghostfire at ears, shoulders and feet."),
 		TEXT("SkeletonFlame.wlvox"), Rgb(0x6E, 0xD8, 0xFF), Rgb(0x73, 0xEA, 0xFF), false);
 
-	Add(TEXT("hagoromo"), TEXT("HAGOROMO"), TEXT("CELESTIAL"),
-		TEXT("White and lavender robes with gold trim, a long celestial mane, and two sacred orbs that turn."),
-		TEXT("Hagoromo.wlvox"), Rgb(0xC7, 0xB8, 0xE6), Rgb(0xC7, 0x73, 0xFF), false);
-
 	Add(TEXT("celestial_light"), TEXT("CELESTIAL LIGHT"), TEXT("CELESTIAL"),
 		TEXT("A coat of light, a star at the brow, a marked banner, and a halo standing behind."),
 		TEXT("CelestialLight.wlvox"), Rgb(0x8C, 0xCC, 0xFF), Rgb(0x8C, 0xE6, 0xFF), false);
 
-	Add(TEXT("bee"), TEXT("BEE"), TEXT("HIVE"),
-		TEXT("Amber and black bands, gauze wings that beat, antennae and a small stinger. Still a Relay Dog."),
-		TEXT("Bee.wlvox"), Rgb(0xF5, 0xC2, 0x2E), Rgb(0x33, 0x29, 0x1A), false);
+	// BEE AND HAGOROMO ARE OUT OF THE LINEUP (founder, 2026-09-23): "REMOVE THE BEE / BUMBLEBEE SKIN... REMOVE
+	// HAGOROMO from the active mascot lineup as well. Same rule: no Wardrobe entry, no active selection, no
+	// preview entry, no runtime choice."
+	//
+	// UNREGISTERED, NOT DELETED. Bee.wlvox and Hagoromo.wlvox stay on disk and the forge still builds them, so
+	// nothing reusable is destroyed and either can come back by restoring one Add() call. Anyone who had one
+	// equipped lands softly: LoadPersisted already drops a remembered skin the registry no longer knows and
+	// leaves the Dog in its base form, so no stored data is invalidated and no id is broken.
+	//
+	// The active lineup is Relay OG, Arden Infernal, Apollo, Skeleton Flame and Celestial Light.
 }
 
 const FWonderlandRelaySkin* UWonderlandRelaySkinSubsystem::Find(FName SkinId) const

@@ -757,36 +757,13 @@ def arden_infernal():
     for side in (-1.0, 1.0):
         figure.spoked_wheel("body", "gold", (td * 0.30, side * (tw * 0.5 + 0.9), shoulder + 0.4), 1.4, 6, tile)
 
-    # ================================================================== THE ROBE
-    # Long, layered, wider than the body: crimson and char outside, cream inside, a front panel and a back cape.
-    figure.part("cloak", "body", (0.0, 0.0, shoulder), "trail", 0.5)
-    figure.cloak("cloak", lambda down, across: "char" if abs(across - 0.5) > 0.40 or down > 0.90 else "crimson",
-                 (-td * 0.20, 0.0, shoulder - 0.8), tw * 2.15, 19.5, tile * 1.16, flare=2.9, back=-1.6)
-    figure.cloak("cloak", lambda down, across: "bone" if down < 0.84 else "crimson",
-                 (-td * 0.05, 0.0, shoulder - 1.6), tw * 1.55, 17.5, tile * 1.08, flare=2.3, back=-0.8)
-    figure.cloak("cloak", lambda down, across: "crimson" if down < 0.72 else "char",
-                 (td * 0.50, 0.0, shoulder - 7.6), tw * 0.92, 9.5, tile * 1.02, flare=1.6)
-    figure.cloak("cloak", lambda down, across: "char" if abs(across - 0.5) > 0.36 else "crimson",
-                 (-td * 0.66, 0.0, shoulder + 0.4), tw * 1.80, 21.0, tile * 1.12, flare=2.5, back=-3.0)
-    # THE CEREMONIAL LENGTH BEHIND. The plate's REAR view is its densest -- a long cream-and-red robe in banded
-    # layers falling past the feet and pooling behind, which is why Arden reads as ceremonial rather than as a
-    # cloaked figure. The falls above stop around the ankle; these carry the cloth down and back past it, in
-    # alternating bands so the back is striped cream/red the way the plate's is rather than one flat sheet.
-    for k, (back, width, length, warm) in enumerate(((-5.4, 1.62, 25.0, False), (-7.0, 1.42, 22.5, True),
-                                                     (-8.4, 1.20, 19.5, False))):
-        figure.cloak("cloak",
-                     lambda down, across, w=warm: ("crimson" if w else "bone") if down < 0.78 else "char",
-                     (-td * (0.80 + 0.16 * k), 0.0, shoulder - 1.2 - k * 1.1), tw * width, length,
-                     tile * 1.12, flare=2.9 + 0.25 * k, back=back)
-    # banded trim across the train, the gold rule between each cloth band
-    for k in range(4):
-        figure.ring("cloak", lambda a: "gold", (-td * 0.95, 0.0, shoulder - 6.0 - k * 3.4), tw * (1.16 - 0.06 * k),
-                    tile * 0.7, tile * 0.95, plane="xy")
-    figure.part("hemfire", "cloak", (0.0, 0.0, 1.0), "twinkle", 0.55)
-    for k in range(6):
-        y = (k - 2.5) * 2.6
-        figure.flame("hemfire", lambda up: "ember" if up > 0.4 else "crimson",
-                     (-td * 0.3 + (k % 2) * 1.4, y, 0.8), 4.2, 2.2, 3, tile * 0.95)
+    # ================================================================== NO CAPE
+    # FOUNDER (2026-09-23): "REMOVE THE CAPE from Inferno. Do not replace it with another giant attachment...
+    # Inferno should feel integrated into the Relay Dog body itself."
+    #
+    # The layered robe and its fringe were the bulk of this skin and the reason it read as Relay Dog + cape +
+    # ring + fire. Gone. The infernal identity stays in the flaming halo, the gold chains and charms, the
+    # demonic claw arm and the infernal tail -- all of which sit on the body rather than draping it.
 
     # ================================================================== THE DEMONIC ARM (left)
     # A whole limb, not a slab: a spiked shoulder mass, a thick upper arm, a heavier forearm, four long claws, a
@@ -940,29 +917,18 @@ def apollo():
     # ---- THE GORGET, so the neck is not a bare gap between a gold shoulder and a pale head.
     figure.slab("body", "gold", (0.6, 0.0, shoulder + 2.1), (4.0, tw * 0.94, 1.5), tile=tile)
 
-    # ---- DIVINE DRAPERY. A column to the floor with a heavy flare, a shorter front panel over it, and a back
-    # ---- sheet so the figure has cloth from every angle the founder will inspect it from.
+    # ---- NO CAPE (founder, 2026-09-23): "REMOVE THE CAPE from Apollo as well... Do not replace it with
+    # ---- another giant attachment. Simplify Apollo significantly."
+    #
+    # What stood here was SEVEN stacked cloak sheets plus a ground train and two hem rings -- the single
+    # heaviest thing on the figure, and exactly the "dog + lots of attached objects" the founder keeps
+    # rejecting. Removed outright rather than swapped for a smaller drape: the celestial identity is carried by
+    # the halo, the gorget, the gold body armour and the knee and shin plates, which are ON the character
+    # rather than hung off it.
+
+    # The node itself stays: the gold belt, the sash and its drops hang off it and sit ON the body. Only the
+    # cloth is gone.
     figure.part("robe", "body", (0.0, 0.0, shoulder - 2.0), "trail", 0.5)
-    figure.cloak("robe", lambda down, across: "linen" if down < 0.88 else "golddeep",
-                 (-td * 0.18, 0.0, shoulder - 1.0), tw * 2.05, 17.0, tile * 1.16, flare=2.9, back=-1.4)
-    figure.cloak("robe", lambda down, across: "linenshade" if abs(across - 0.5) > 0.34 else "linen",
-                 (-td * 0.62, 0.0, shoulder - 0.4), tw * 1.70, 15.0, tile * 1.10, flare=2.4, back=-2.6)
-    figure.cloak("robe", lambda down, across: "linen",
-                 (td * 0.52, 0.0, shoulder - 5.6), tw * 0.96, 9.0, tile * 1.02, flare=1.7)
-    # THE TRAIN, and the volume the plate's robe actually has. Three sheets made a skirt; the reference is a
-    # CEREMONIAL robe -- cloth stacked in depth, spilling wider at the hem than the figure is, and running back
-    # along the ground behind. Without the rear length the three-quarter and rear views were the emptiest of the
-    # five, which is where a robed figure should look its best.
-    figure.cloak("robe", lambda down, across: "linen" if down < 0.80 else "linenshade",
-                 (-td * 1.05, 0.0, shoulder - 1.6), tw * 1.45, 20.0, tile * 1.20, flare=3.4, back=-4.2)
-    figure.cloak("robe", lambda down, across: "linenshade" if abs(across - 0.5) > 0.40 else "linen",
-                 (-td * 0.34, 0.0, shoulder - 3.2), tw * 2.30, 14.5, tile * 1.10, flare=3.2, back=-0.8)
-    for side in (-1.0, 1.0):
-        figure.cloak("robe", lambda down, across: "linen",
-                     (-td * 0.10, side * tw * 0.86, shoulder - 2.4), tw * 0.80, 13.0, tile * 1.04, flare=2.2, back=-1.2)
-    # gold hem trim, so the cloth ends on an edge rather than fading out
-    for zz, rad in ((shoulder - 15.4, tw * 1.30), (shoulder - 16.6, tw * 1.16)):
-        figure.ring("robe", lambda a: "golddeep", (-td * 0.22, 0.0, zz), rad, tile * 0.85, tile * 1.0, plane="xy")
 
     # ---- KNEE AND SHIN ARMOUR, which the plate carries and the robe parts around.
     for side, name in ((-1.0, "leg_l"), (1.0, "leg_r")):
@@ -1071,15 +1037,6 @@ def apollo():
                 figure.box("body", "gold" if t < 0.6 else "solarpale",
                            (0.3 + out * 0.4, side * (tw * 0.5 + 1.4 + out), shoulder + up + t * length),
                            (tile * (1.2 - 0.6 * t), tile * (1.2 - 0.6 * t), tile))
-    for i in range(14):
-        a = 2.0 * math.pi * (i + 0.5) / 14
-        rad = 7.4
-        for s in range(3):
-            t = (s + 0.5) / 3
-            figure.box("robe", "gold" if t < 0.5 else "solarpale",
-                       (-td * 0.22 + math.cos(a) * rad * 0.35, math.sin(a) * rad,
-                        d["torso_z"] - th * 0.5 - 6.2 - t * 2.2),
-                       (tile * (1.1 - 0.5 * t), tile * (1.1 - 0.5 * t), tile))
     return figure
 
 
@@ -1153,24 +1110,13 @@ def skeleton_flame():
         figure.box("body", "void", (-td * 0.50, 0.0, d["torso_z"] + th * 0.36 - s * 1.1 - 0.55), (tile * 0.9, tile * 1.2, tile * 0.3))
 
     # ================================================================== BONE PAULDRONS AND JOINTED LIMBS
-    # HEAVY, BECAUSE THE PLATE'S IS. Rendered beside Arden, Apollo and Hagoromo this skin read as the slight one
-    # of the set -- a slim white dog standing in blue fire, where the founder's sheet shows a bulky skeletal
-    # warrior in layered bone. The old cap was 3.0 wide and sat almost inside the torso's own width, so the
-    # shoulders had no presence at all. Three courses now, stepping outward and down, with a dark seam between
-    # each: a pauldron you can see the weight of.
+    # ONE CAP A SIDE (founder, 2026-09-23): "STOP adding pieces... REMOVE unnecessary layered clutter, random
+    # armor pieces, EXCESSIVE SHOULDER STACKS." I had stacked three courses with seams here. Back to the single
+    # clean pauldron the plate actually shows.
     for side in (-1.0, 1.0):
-        for k, (dz, out, deep, wide, tall) in enumerate(((1.1, 1.7, 5.2, 4.4, 3.0),
-                                                         (-1.4, 2.0, 4.6, 3.6, 1.9),
-                                                         (-3.1, 1.9, 3.8, 2.8, 1.5))):
-            figure.slab("body", "bone" if k % 2 == 0 else "ash",
-                        (0.2, side * (tw * 0.5 + out), shoulder + dz), (deep, wide, tall), tile=tile)
-            # A SEAM YOU CAN ACTUALLY SEE. At 0.3 of a tile these were hairlines between a bone plate and a bone
-            # body, and rendered the whole pauldron vanished into the torso -- present in the box count and
-            # absent from the picture. Dark, and thick enough to separate one course from the next.
-            figure.slab("body", "void", (0.4, side * (tw * 0.5 + out), shoulder + dz - tall * 0.5 - 0.35),
-                        (deep * 1.02, wide * 1.06, 0.9), tile=tile)
-        # and the collar that ties them to the body rather than leaving them floating beside it
-        figure.slab("body", "ash", (0.3, side * (tw * 0.5 + 0.2), shoulder + 1.4), (4.0, 1.8, 2.2), tile=tile)
+        figure.slab("body", "bone", (0.2, side * (tw * 0.5 + 0.9), shoulder + 0.5), (3.8, 3.0, 2.6), tile=tile)
+        figure.box("body", "void", (0.2, side * (tw * 0.5 + 0.9), shoulder - 0.2), (tile * 3.6, tile * 2.6, tile * 0.35))
+
     ad, aw, ah = d["arm"]
     az = d["torso_z"] + 1.0
     for side, name in ((-1.0, "arm_l"), (1.0, "arm_r")):
@@ -1179,18 +1125,6 @@ def skeleton_flame():
         figure.box(name, "void", (0.0, y, az + 0.1), (ad * 1.12, aw * 1.12, tile * 0.5))
         figure.box(name, "ash", (0.0, y, az + 0.65), (ad * 1.18, aw * 1.18, tile * 0.6))
         figure.box(name, "ash", (0.0, y, az - 0.45), (ad * 1.18, aw * 1.18, tile * 0.6))
-        # BONE ARMOUR ALONG THE LIMB, in courses, standing further off the arm the higher it sits.
-        #
-        # FOUNDER, item 12: "Avoid the appearance of bones pasted onto the base body." The arms were the base
-        # dog's arms with an elbow marked on them -- a bare stick between a decorated shoulder and a burning
-        # hand, which is exactly what "pasted on" looks like. Plated, the limb becomes part of the skeleton
-        # rather than the thing the skeleton is stuck to, and it finally has a width worth seeing from the side.
-        for k, (dz, out, long_, wide) in enumerate(((3.0, 0.55, 2.4, 1.5), (1.2, 0.42, 2.0, 1.3),
-                                                    (-1.4, 0.34, 1.8, 1.15), (-3.1, 0.26, 1.5, 1.0))):
-            figure.slab(name, "bone" if k % 2 == 0 else "ash",
-                        (0.0, y + side * out, az + dz), (ad * long_ * 0.55, aw * wide, 1.3), tile=tile)
-            figure.box(name, "void", (ad * 0.34, y + side * out, az + dz - 0.75),
-                       (tile * 0.5, tile * aw * wide * 0.7, tile * 0.3))
         # the hand burns
         fire = "handfire_%s" % ("l" if side < 0 else "r")
         figure.part(fire, name, (0.0, y, az - ah * 0.5), "twinkle", 0.3 + 0.2 * side)
@@ -1236,16 +1170,6 @@ def skeleton_flame():
                      (-2.4, y + side * 2.0, hip_z + 2.4), 11.0, 6.0, 8, tile * 1.05)
         figure.flame(name, lambda up: "ghost" if up < 0.5 else "ghostpale",
                      (1.6, y - side * 1.2, hip_z + 1.6), 9.5, 4.6, 6, tile * 1.0)
-
-    # THE HIP PLATES: three courses of bone flaring outward under the ribcage. Without them the waist runs
-    # straight into the legs and the whole lower half of the figure is a post.
-    for side in (-1.0, 1.0):
-        for k, (dz, out, wide, depth) in enumerate(((0.6, 1.4, 3.6, 3.4), (-1.5, 2.1, 3.2, 3.0), (-3.2, 2.5, 2.4, 2.4))):
-            figure.slab("body", "bone" if k % 2 == 0 else "ash",
-                        (td * 0.14, side * (tw * 0.5 + out), hip_z + dz),
-                        (depth, wide, 1.6), tile=tile)
-            figure.box("body", "void", (td * 0.14 + depth * 0.5, side * (tw * 0.5 + out), hip_z + dz - 0.9),
-                       (tile * 0.6, tile * wide * 0.8, tile * 0.35))
 
     # ================================================================== THE BACK PLUME
     # The plate's rear view is a column of blue fire up the spine; from behind this is most of the skin.

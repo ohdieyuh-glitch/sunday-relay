@@ -196,6 +196,9 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	float GetFigureHeightUu() const { return FigureHeightUU; }
+	/** The figure's lowest point in local uu, measured at load. Spawners use it to sit a figure on the ground
+	 *  without walking every instance back out of the render proxy to find out where its feet are. */
+	float GetFigureLowestUu() const { return FigureLowestUU; }
 
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	int32 GetPartCount() const { return PartPivots.Num(); }
@@ -401,6 +404,7 @@ private:
 	FString LastError;
 	int32 BoxCount = 0;
 	float FigureHeightUU = 0.0f;
+	float FigureLowestUU = 0.0f;
 	float Phase = 0.0f;
 	float IdleSeconds = 0.0f;
 	bool bHasSnapped = false;

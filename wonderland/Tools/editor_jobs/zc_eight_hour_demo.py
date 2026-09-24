@@ -124,7 +124,7 @@ def job():
     facts["brain_still_open_after_wardrobe"] = bool(ui.is_project_brain_open())
     shot("wardrobe", "the Wardrobe open inside Project Brain -- the preview window and the skin cards")
 
-    for skin in ("celestial_light", "apollo", "bee", "skeleton_flame", "hagoromo", "arden_infernal"):
+    for skin in ("relay_og", "celestial_light", "apollo", "arden_infernal", "skeleton_flame"):
         worn = bool(ui.wear_relay_skin(skin))
         yield 1.6
         still = bool(ui.is_project_brain_open())

@@ -155,9 +155,6 @@ private:
 	} Reveal;
 	void StartReveal(const FString& Speaker, const FString& Text, double Now);
 	TSharedPtr<SWonderlandPulseMark> Pulse;
-	/** The canonical i.Wonder mark, when Content has it; the drawn pulse is the fallback. */
-	TSharedPtr<FSlateDynamicImageBrush> LogoBrush;
-	TSharedPtr<class SImage> LogoImage;
 
 	FSlateRoundedBoxBrush FrameBrush;
 	FSlateRoundedBoxBrush RuleBrush;

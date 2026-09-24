@@ -1,0 +1,99 @@
+{
+ "name": "zc_skin_turnaround",
+ "started": "2026-09-23 22:01:02",
+ "status": "done",
+ "ground_z": -2.5,
+ "turnarounds": [
+  {
+   "skin": "apollo",
+   "height_uu": 300.8,
+   "span_uu": 300.8,
+   "shots": [
+    "apollo_front.jpg",
+    "apollo_three_quarter.jpg",
+    "apollo_side.jpg",
+    "apollo_rear.jpg",
+    "apollo_medium_distance.jpg"
+   ],
+   "parts": 41
+  },
+  {
+   "skin": "arden_infernal",
+   "height_uu": 329.9,
+   "span_uu": 329.9,
+   "shots": [
+    "arden_infernal_front.jpg",
+    "arden_infernal_three_quarter.jpg",
+    "arden_infernal_side.jpg",
+    "arden_infernal_rear.jpg",
+    "arden_infernal_medium_distance.jpg"
+   ],
+   "parts": 42
+  },
+  {
+   "skin": "skeleton_flame",
+   "height_uu": 227.0,
+   "span_uu": 227.0,
+   "shots": [
+    "skeleton_flame_front.jpg",
+    "skeleton_flame_three_quarter.jpg",
+    "skeleton_flame_side.jpg",
+    "skeleton_flame_rear.jpg",
+    "skeleton_flame_medium_distance.jpg"
+   ],
+   "parts": 47
+  },
+  {
+   "skin": "hagoromo",
+   "height_uu": 237.8,
+   "span_uu": 237.8,
+   "shots": [
+    "hagoromo_front.jpg",
+    "hagoromo_three_quarter.jpg",
+    "hagoromo_side.jpg",
+    "hagoromo_rear.jpg",
+    "hagoromo_medium_distance.jpg"
+   ],
+   "parts": 52
+  },
+  {
+   "skin": "celestial_light",
+   "height_uu": 198.9,
+   "span_uu": 198.9,
+   "shots": [
+    "celestial_light_front.jpg",
+    "celestial_light_three_quarter.jpg",
+    "celestial_light_side.jpg",
+    "celestial_light_rear.jpg",
+    "celestial_light_medium_distance.jpg"
+   ],
+   "parts": 35
+  },
+  {
+   "skin": "bee",
+   "height_uu": 172.7,
+   "span_uu": 172.7,
+   "shots": [
+    "bee_front.jpg",
+    "bee_three_quarter.jpg",
+    "bee_side.jpg",
+    "bee_rear.jpg",
+    "bee_medium_distance.jpg"
+   ],
+   "parts": 36
+  },
+  {
+   "skin": "relay_og",
+   "height_uu": 155.0,
+   "span_uu": 155.0,
+   "shots": [
+    "relay_og_front.jpg",
+    "relay_og_three_quarter.jpg",
+    "relay_og_side.jpg",
+    "relay_og_rear.jpg",
+    "relay_og_medium_distance.jpg"
+   ],
+   "parts": 16
+  }
+ ]
+}

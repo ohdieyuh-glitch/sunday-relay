@@ -3030,26 +3030,13 @@ bool UWonderlandUiSubsystem::ShowProjectAvatars(const FString& Argument)
 		// lowest geometry sat at z=0 and could be dropped straight on the ground. These figures are not: each one
 		// carries its own overhang, and the two families' conventions cannot be mixed without burying one and
 		// floating the other. So the lift is MEASURED from the figure's own lowest instance rather than assumed.
-		TInlineComponentArray<UInstancedStaticMeshComponent*> Meshes(Body);
-		double Lowest = TNumericLimits<double>::Max();
-		for (UInstancedStaticMeshComponent* Mesh : Meshes)
-		{
-			const int32 Count = Mesh != nullptr ? Mesh->GetInstanceCount() : 0;
-			for (int32 I = 0; I < Count; ++I)
-			{
-				FTransform Instance;
-				if (Mesh->GetInstanceTransform(I, Instance, /*bWorldSpace=*/true))
-				{
-					Lowest = FMath::Min(Lowest, Instance.GetTranslation().Z);
-				}
-			}
-		}
-		if (Lowest < TNumericLimits<double>::Max())
-		{
-			// Lift by exactly the gap between where the feet are and where the ground is, so the lowest voxel lands on it.
-			const double Lift = Where.Z - Lowest;
-			Body->SetActorLocation(Where + FVector(0.0, 0.0, Lift), false, nullptr, ETeleportType::TeleportPhysics);
-		}
+		// MEASURED AT LOAD, NOT WALKED BACK OUT. This used to read every instance of every component through
+		// GetInstanceTransform(bWorldSpace=true) to find the figure's feet -- 95,594 calls for one /pa at Large
+		// (Cherubim 36,025 + Seraph 19,724 + TenTails 39,845 boxes), all on the spawn frame, to recover a number
+		// LoadFigure had already computed while parsing. That was the spawn hitch, and it grew with every avatar.
+		// The figure's feet sit GetFigureLowestUu() below its origin, so lifting by exactly that puts them on Where.
+		const double Lift = -static_cast<double>(Body->GetFigureLowestUu());
+		Body->SetActorLocation(Where + FVector(0.0, 0.0, Lift), false, nullptr, ETeleportType::TeleportPhysics);
 #if WITH_EDITOR
 		Body->SetActorLabel(FString::Printf(TEXT("WL_PA_%s_%s"), Families[Index], *Stage), false);
 #endif

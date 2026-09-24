@@ -68,30 +68,58 @@ int32 SWonderlandPulseMark::OnPaint(const FPaintArgs& Args, const FGeometry& All
 	const FVector2D Centre = Local * 0.5;
 	const float Radius = FMath::Min(Local.X, Local.Y) * 0.5f * Scale;
 
-	// THREE NESTED ARCS, open at the lower right, green outside, blue in the middle, white at the heart -- the
-	// HUD's own i.Wonder mark. Each is a polyline so it scales without a texture.
-	struct FArc { FLinearColor Colour; float R; float From; float To; float Thick; };
-	const FArc Arcs[] = {
-		{ FLinearColor(0.20f, 0.82f, 0.60f), 1.00f, 300.0f, 30.0f, 3.2f },
-		{ FLinearColor(0.32f, 0.56f, 1.00f), 0.68f, 290.0f, 40.0f, 2.6f },
-		{ FLinearColor(0.98f, 0.98f, 1.00f), 0.38f, 280.0f, 55.0f, 2.0f },
-	};
+	// THE i.WONDER MARK ITSELF, IN YELLOW, AND NOTHING ELSE.
+	//
+	// FOUNDER: "The emblem is the i.Wonder logo. It must be YELLOW. ONLY THE LOGO. Remove: gray outline, black
+	// outline, colored background plate, gray plate, black plate, border, decorative frame... I do NOT want
+	// yellow logo inside gray shape."
+	//
+	// Content/UI/iWonderActivity.png cannot give him that: it is a BLACK emblem baked onto a GRAY PLATE, so
+	// tinting it yellow tints the plate too. Drawn instead -- a ring, the twin facing curves, and the wave
+	// beneath -- in one yellow, on nothing. No plate, no border, no backing. It scales without a texture and
+	// there is no background for a frame to be.
+	const FLinearColor Gold(1.00f, 0.78f, 0.16f);
+	FLinearColor Ink = Gold * (0.62f + 0.38f * Bright);
+	Ink.A = 0.72f + 0.28f * Bright;
+	const float Thick = FMath::Max(Radius * 0.13f, 1.2f) * (0.9f + 0.2f * Env);
 	int32 Layer = LayerId;
-	for (const FArc& Arc : Arcs)
+
+	auto Stroke = [&](const TArray<FVector2D>& Points)
+	{
+		FSlateDrawElement::MakeLines(OutDrawElements, ++Layer, AllottedGeometry.ToPaintGeometry(), Points,
+			ESlateDrawEffect::None, Ink, true, Thick);
+	};
+	auto Arc = [&](float Cx, float Cy, float R, float FromDeg, float ToDeg, int32 Steps)
 	{
 		TArray<FVector2D> Points;
-		const float Span = 360.0f - Arc.From + Arc.To;
-		const int32 Steps = 28;
 		for (int32 S = 0; S <= Steps; ++S)
 		{
-			const float Deg = Arc.From + Span * (static_cast<float>(S) / Steps);
+			const float Deg = FMath::Lerp(FromDeg, ToDeg, static_cast<float>(S) / Steps);
 			const float Rad = FMath::DegreesToRadians(Deg);
-			Points.Add(Centre + FVector2D(FMath::Cos(Rad), FMath::Sin(Rad)) * Radius * Arc.R);
+			Points.Add(Centre + FVector2D(Cx + FMath::Cos(Rad) * R, Cy + FMath::Sin(Rad) * R));
 		}
-		FLinearColor Colour = Arc.Colour * Bright;
-		Colour.A = 0.55f + 0.45f * Bright;
-		FSlateDrawElement::MakeLines(OutDrawElements, ++Layer, AllottedGeometry.ToPaintGeometry(), Points,
-			ESlateDrawEffect::None, Colour, true, Arc.Thick * (0.85f + 0.3f * Env));
+		Stroke(Points);
+	};
+
+	// the ring
+	Arc(0.0f, 0.0f, Radius, 0.0f, 360.0f, 40);
+	// the twin curves, facing each other, joined across the middle
+	const float Eye = Radius * 0.30f;
+	const float Gap = Radius * 0.34f;
+	Arc(-Gap, -Radius * 0.12f, Eye, 300.0f, 60.0f, 18);
+	Arc(Gap, -Radius * 0.12f, Eye, 120.0f, 240.0f, 18);
+	Stroke({Centre + FVector2D(-Gap + Eye * 0.5f, -Radius * 0.12f),
+			Centre + FVector2D(Gap - Eye * 0.5f, -Radius * 0.12f)});
+	// the wave beneath
+	{
+		TArray<FVector2D> Wave;
+		for (int32 S = 0; S <= 24; ++S)
+		{
+			const float T = static_cast<float>(S) / 24.0f;
+			Wave.Add(Centre + FVector2D(FMath::Lerp(-Radius * 0.62f, Radius * 0.62f, T),
+				Radius * 0.40f + FMath::Sin(T * PI * 4.0f) * Radius * 0.10f));
+		}
+		Stroke(Wave);
 	}
 	return Layer;
 }
@@ -104,15 +132,6 @@ SWonderlandCompanionTerminal::SWonderlandCompanionTerminal()
 
 void SWonderlandCompanionTerminal::Construct(const FArguments& InArgs)
 {
-	// THE CANONICAL i.WONDER LOGO, not a drawn stand-in. The founder asked for the real mark; the world lane had
-	// already imported it to Content/UI/iWonderActivity.png. It goes in the slot the pulse mark already owns --
-	// its own row, bottom-left, above the command line -- so the placement rule is unchanged and only the artwork
-	// improves. If the file is ever missing the drawn mark still renders, so the terminal cannot lose its pulse.
-	const FString LogoPath = FPaths::ProjectContentDir() / TEXT("UI/iWonderActivity.png");
-	if (IFileManager::Get().FileExists(*LogoPath))
-	{
-		LogoBrush = MakeShared<FSlateDynamicImageBrush>(FName(*LogoPath), FVector2D(24.0f, 24.0f));
-	}
 	Title = InArgs._Title;
 	Accent = InArgs._Accent;
 	OnSubmit = InArgs._OnSubmit;
@@ -243,31 +262,9 @@ void SWonderlandCompanionTerminal::Construct(const FArguments& InArgs)
 			.HAlign(HAlign_Left)
 			.Padding(12.0f, 2.0f, 0.0f, 3.0f)
 			[
-				SNew(SOverlay)
-				+ SOverlay::Slot()
-				[
-					SAssignNew(Pulse, SWonderlandPulseMark)
-					.Size(24.0f)
-					.Beating_Lambda([this]() { return IsPulsing(); })
-					.Visibility(LogoBrush.IsValid() ? EVisibility::Collapsed : EVisibility::HitTestInvisible)
-				]
-				+ SOverlay::Slot()
-				[
-					SNew(SBox).WidthOverride(24.0f).HeightOverride(24.0f)
-					.Visibility(LogoBrush.IsValid() ? EVisibility::HitTestInvisible : EVisibility::Collapsed)
-					[
-						SAssignNew(LogoImage, SImage).Image(LogoBrush.Get())
-						// IT PULSES ON THE SAME HEARTBEAT as the drawn mark it replaces -- the same 1.15 s
-						// envelope, so swapping the artwork did not quietly swap the behaviour the founder
-						// asked for. It rests at a readable opacity and lifts on the beat rather than
-						// blinking, which is what "gently pulse" means.
-						.ColorAndOpacity_Lambda([this]()
-						{
-							const float Beat = Pulse.IsValid() ? Pulse->GetEnvelope() : 0.0f;
-							return FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.62f + 0.38f * Beat));
-						})
-					]
-				]
+				SAssignNew(Pulse, SWonderlandPulseMark)
+				.Size(24.0f)
+				.Beating_Lambda([this]() { return IsPulsing(); })
 			]
 			// THE COMMAND LINE: chevron and input, then Send and its chord ruled off at the right.
 			+ SVerticalBox::Slot()
