@@ -27,10 +27,21 @@ namespace WonderlandUi
 		return C;
 	}
 
+	/**
+	 * THE ACCENT EVERY TERMINAL AND CONTROL IS DRAWN IN, and the one thing a theme has to move.
+	 *
+	 * FOUNDER, 2026-09-24: "Add Julius + Companion Terminal color customization; theme also recolours
+	 * preset-command/accent UI." Those three surfaces do not each own a colour -- they all call Gold(), and so
+	 * do the preset command chips, the section rules, the chevrons and every accent on the HUD. So the theme is
+	 * this ONE value, and moving it moves all of them at once. Defaults to the gold that is already there, so
+	 * an untouched install looks exactly as it does today.
+	 */
+	WONDERLAND_API FLinearColor ThemeAccent();
+
 	// --wl-* in player.css.
-	inline FLinearColor Gold(float A = 1.0f)     { return Srgb(0xD9, 0xA4, 0x41, A); }
-	inline FLinearColor GoldDim()                { return Srgb(0xD9, 0xA4, 0x41, 0.40f); }
-	inline FLinearColor GoldLive()               { return Srgb(0xD9, 0xA4, 0x41, 0.62f); }
+	inline FLinearColor Gold(float A = 1.0f)     { const FLinearColor C = ThemeAccent(); return FLinearColor(C.R, C.G, C.B, A); }
+	inline FLinearColor GoldDim()                { return Gold(0.40f); }
+	inline FLinearColor GoldLive()               { return Gold(0.62f); }
 	inline FLinearColor Cream(float A = 1.0f)    { return Srgb(0xEC, 0xE7, 0xDD, A); }
 	inline FLinearColor Dim(float A = 1.0f)      { return Srgb(0x8B, 0x85, 0x78, A); }
 	inline FLinearColor Faint(float A = 1.0f)    { return Srgb(0x5D, 0x58, 0x4E, A); }

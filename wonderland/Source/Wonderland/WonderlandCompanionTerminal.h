@@ -158,5 +158,15 @@ private:
 
 	FSlateRoundedBoxBrush FrameBrush;
 	FSlateRoundedBoxBrush RuleBrush;
+	/**
+	 * THE ACCENT THESE BRUSHES WERE BUILT FROM.
+	 *
+	 * A rounded-box brush carries its own outline colour and is made once, in this widget's constructor, so a
+	 * terminal already on screen would keep the old gold when the founder's theme moved. Kept here so the timer
+	 * below can notice the difference and rebuild them.
+	 */
+	FLinearColor BrushAccent = FLinearColor::White;
+	/** Rebuilds the brushes if the theme's accent has moved. Cheap: two comparisons a second. */
+	EActiveTimerReturnType FollowTheme(double InCurrentTime, float InDeltaTime);
 	FEditableTextBoxStyle InputStyle;
 };

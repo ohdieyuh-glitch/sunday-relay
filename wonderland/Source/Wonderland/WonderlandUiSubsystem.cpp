@@ -56,6 +56,7 @@
 #include "TimerManager.h"
 #include "WonderlandMissionTasks.h"
 #include "WonderlandSubAgentCubs.h"
+#include "WonderlandCursor.h"
 #include "WonderlandMissionOrb.h"
 #include "WonderlandSkinStage.h"
 #include "WonderlandTravel.h"
@@ -337,6 +338,12 @@ void UWonderlandUiSubsystem::MountCompanionTerminals()
 		];
 	// Above the HUD's layer, below the terminal (50), the map (60) and the Project Brain (58).
 	LocalPlayer->ViewportClient->AddViewportWidgetForPlayer(LocalPlayer, CompanionLayer.ToSharedRef(), 20);
+
+	// ---- AND WONDERLAND'S OWN POINTER, if the founder has asked for one.
+	//
+	// Registered here because this is where the viewport is already in hand and known good. It is a no-op until
+	// a cursor is actually chosen: an install that has not asked for one keeps the machine's own pointer.
+	WonderlandCursor::Apply(LocalPlayer->ViewportClient);
 }
 
 void UWonderlandUiSubsystem::UnmountCompanionTerminals()

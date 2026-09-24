@@ -100,3 +100,81 @@ namespace
 			}
 		}));
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// THE TERMINAL AND ACCENT THEME.
+//
+// Kept beside the mascot's colours because it is the same idea applied to the other half of the screen: one
+// value, saved, that every surface reads rather than each remembering its own.
+#include "WonderlandUiStyle.h"
+
+namespace
+{
+	/** The gold that was hard-coded in WonderlandUiStyle.h, which is what an untouched install must still show. */
+	FLinearColor GThemeAccent = FLinearColor(FColor(0xD9, 0xA4, 0x41));
+	bool GThemeAccentLoaded = false;
+}
+
+namespace WonderlandUi
+{
+	FLinearColor ThemeAccent()
+	{
+		if (!GThemeAccentLoaded)
+		{
+			GThemeAccentLoaded = true;
+			if (const UWonderlandMascotStyleSettings* Settings = GetDefault<UWonderlandMascotStyleSettings>())
+			{
+				if (Settings->bTerminalAccentChosen)
+				{
+					GThemeAccent = Settings->TerminalAccent;
+				}
+			}
+		}
+		return GThemeAccent;
+	}
+}
+
+namespace
+{
+	FAutoConsoleCommand GTerminalAccent(
+		TEXT("wl.Theme.Accent"),
+		TEXT("The colour every terminal, preset command and accent is drawn in: wl.Theme.Accent <r,g,b | #RRGGBB>. Saved."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			UWonderlandMascotStyleSettings* Settings = GetMutableDefault<UWonderlandMascotStyleSettings>();
+			FLinearColor Colour;
+			if (Settings == nullptr || Args.Num() < 1 || !ReadColour(FString::Join(Args, TEXT("")), Colour))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("WLTHEME usage: wl.Theme.Accent <r,g,b | #RRGGBB>"));
+				return;
+			}
+			Settings->TerminalAccent = Colour;
+			Settings->bTerminalAccentChosen = true;
+			Settings->SaveConfig();
+			GThemeAccent = Colour;
+			GThemeAccentLoaded = true;
+			// REBUILT, NOT WAITED FOR. The brushes that carry this colour are made once when a panel is
+			// constructed, so a running terminal keeps the old gold until it is asked to build again.
+			if (GEngine != nullptr)
+			{
+				GEngine->Exec(nullptr, TEXT("wl.Hud.Refresh"));
+			}
+			UE_LOG(LogTemp, Display, TEXT("WLTHEME accent = %s (saved)"), *Colour.ToString());
+		}));
+
+	FAutoConsoleCommand GTerminalAccentReset(
+		TEXT("wl.Theme.Reset"),
+		TEXT("Put every terminal and accent back to Wonderland's own gold."),
+		FConsoleCommandDelegate::CreateLambda([]()
+		{
+			if (UWonderlandMascotStyleSettings* Settings = GetMutableDefault<UWonderlandMascotStyleSettings>())
+			{
+				Settings->bTerminalAccentChosen = false;
+				Settings->SaveConfig();
+			}
+			GThemeAccent = FLinearColor(FColor(0xD9, 0xA4, 0x41));
+			GThemeAccentLoaded = true;
+			if (GEngine != nullptr) { GEngine->Exec(nullptr, TEXT("wl.Hud.Refresh")); }
+			UE_LOG(LogTemp, Display, TEXT("WLTHEME accent reset to Wonderland gold"));
+		}));
+}

@@ -26,8 +26,22 @@ namespace
 
 	// The frame's gold is warmer and brighter than the Julius window's hairline: in the founder's frame these panels
 	// sit at the screen's edge over bright stone and carry a heavy amber border.
-	FLinearColor CompanionFrameGold(float Alpha = 1.0f) { return WonderlandUi::Srgb(0xE3, 0xA5, 0x3E, Alpha); }
-	FLinearColor CompanionTitleGold() { return WonderlandUi::Srgb(0xF4, 0xAA, 0x3E); }
+	// THE THEME'S ACCENT, NOT A SECOND GOLD.
+	//
+	// These were two hard-coded hexes a shade apart from WonderlandUi::Gold(), which meant the founder's theme
+	// moved the Julius terminal and every accent on the HUD while the two companion terminals stayed gold --
+	// photographed in PIE, exactly that happened. They are shades OF the accent now, so one value moves all
+	// three terminals together.
+	FLinearColor CompanionFrameGold(float Alpha = 1.0f)
+	{
+		const FLinearColor A = WonderlandUi::Gold();
+		return FLinearColor(FMath::Min(A.R * 1.06f, 1.0f), A.G * 1.01f, A.B * 0.96f, Alpha);
+	}
+	FLinearColor CompanionTitleGold()
+	{
+		const FLinearColor A = WonderlandUi::Gold();
+		return FLinearColor(FMath::Min(A.R * 1.14f, 1.0f), FMath::Min(A.G * 1.06f, 1.0f), A.B * 0.96f, 1.0f);
+	}
 }
 
 void SWonderlandPulseMark::Construct(const FArguments& InArgs)
@@ -127,6 +141,7 @@ int32 SWonderlandPulseMark::OnPaint(const FPaintArgs& Args, const FGeometry& All
 SWonderlandCompanionTerminal::SWonderlandCompanionTerminal()
 	: FrameBrush(WonderlandUi::Srgb(4, 4, 6, 0.93f), 8.0f, CompanionFrameGold(), 2.5f)
 	, RuleBrush(CompanionFrameGold(0.9f), 0.0f)
+
 {
 }
 
@@ -135,6 +150,9 @@ void SWonderlandCompanionTerminal::Construct(const FArguments& InArgs)
 	Title = InArgs._Title;
 	Accent = InArgs._Accent;
 	OnSubmit = InArgs._OnSubmit;
+	BrushAccent = WonderlandUi::Gold();
+	// TWICE A SECOND, not every frame: a theme changes when the founder changes it and never on its own.
+	RegisterActiveTimer(0.5f, FWidgetActiveTimerDelegate::CreateSP(this, &SWonderlandCompanionTerminal::FollowTheme));
 	OnRequestClose = InArgs._OnRequestClose;
 
 	FSlateBrush NoBackground;
@@ -533,4 +551,17 @@ FReply SWonderlandCompanionTerminal::HandleInputKeyDown(const FGeometry& Geometr
 		return FReply::Handled();
 	}
 	return FReply::Unhandled();
+}
+
+EActiveTimerReturnType SWonderlandCompanionTerminal::FollowTheme(double InCurrentTime, float InDeltaTime)
+{
+	const FLinearColor Now = WonderlandUi::Gold();
+	if (!BrushAccent.Equals(Now, 0.002f))
+	{
+		BrushAccent = Now;
+		FrameBrush = FSlateRoundedBoxBrush(WonderlandUi::Srgb(4, 4, 6, 0.93f), 8.0f, CompanionFrameGold(), 2.5f);
+		RuleBrush = FSlateRoundedBoxBrush(CompanionFrameGold(0.9f), 0.0f);
+		Invalidate(EInvalidateWidgetReason::Paint | EInvalidateWidgetReason::Layout);
+	}
+	return EActiveTimerReturnType::Continue;
 }

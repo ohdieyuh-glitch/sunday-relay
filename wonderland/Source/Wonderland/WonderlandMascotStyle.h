@@ -35,6 +35,32 @@ public:
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Mascot")
 	FLinearColor Secondary = FLinearColor(1.00f, 0.78f, 0.16f, 1.0f);
 
+	/**
+	 * THE COLOUR EVERY TERMINAL, PRESET COMMAND AND ACCENT IS DRAWN IN.
+	 *
+	 * Wonderland's own gold by default. WonderlandUi::Gold() reads this, and the Julius terminal, both companion
+	 * terminals, the command chips and every accent on the HUD read Gold(), so moving this one value moves all
+	 * of them -- which is exactly what "theme also recolours preset-command/accent UI" asks for.
+	 */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Terminals")
+	FLinearColor TerminalAccent = FLinearColor(FColor(0xD9, 0xA4, 0x41));
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Terminals")
+	bool bTerminalAccentChosen = false;
+
+	/**
+	 * WONDERLAND'S OWN POINTER: "system", "arrow", "mark" or "ring" (founder, 2026-09-24).
+	 *
+	 * "system" by default and deliberately: a custom pointer that cannot be turned off is a worse default than
+	 * the one the machine already has. Painted rather than shipped as an asset, so it wears TerminalAccent and
+	 * the founder's theme moves the pointer along with every other control.
+	 */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Cursor")
+	FString CursorShape = TEXT("system");
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Cursor")
+	float CursorSize = 22.0f;
+
 	/** True once the founder has actually chosen, so an untouched install never tints anything. */
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Mascot")
 	bool bChosen = false;
