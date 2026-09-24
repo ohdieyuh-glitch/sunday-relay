@@ -43,6 +43,14 @@ HERE = Path(__file__).resolve().parent
 WEDGES = [
     ("GF01", 96.0, 148.0, 20500.0, 47000.0, 34, 14, "gf01_garden_fill_east.json"),
     ("GF02", 164.0, 208.0, 19000.0, 34000.0, 22, 9, "gf02_garden_fill_south.json"),
+    #: THE OUTER RING, r 390-500 m. After GF01/GF02 the only cells still under 200 instances were all in the
+    #: 400-500 m band -- the edge where Golden Arrival stops and AP01's approach roads run out to the nations.
+    #: These wedges are deliberately SPARSER than GF01/GF02 (fewer beds over a wider arc): a city edge should
+    #: thin toward parkland, not present another dense garden right where the district ends. The three
+    #: approach bearings are avoided -- ICARUS 90, NOCTIS 210, TARTARUS 330 -- so nothing plants on a road.
+    ("GF03", 238.0, 322.0, 39000.0, 50000.0, 16, 5, "gf03_outer_ring_west.json"),
+    ("GF04", 338.0, 418.0, 39000.0, 50000.0, 15, 5, "gf04_outer_ring_north.json"),
+    ("GF05", 142.0, 202.0, 39000.0, 50000.0, 12, 4, "gf05_outer_ring_south.json"),
 ]
 
 V2 = "/Game/WonderlandV2/"
