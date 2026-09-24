@@ -61,8 +61,14 @@ CASES = (
 
 #: The second band as designed: first band ends near 815 m, the band runs out to about 1,155 m. A little
 #: overhang is the far corner of a placed mesh, not a stray instance, so the outer bound is checked with slack.
+#:
+#: 2026-09-23: TARTARUS is deliberately pushed 42 m outward (nation_band band_push) because its band was
+#: otherwise laid on top of WL_Palace_Dome_Grand -- the gate sat 3.4 m from the palace CENTRE and a walk
+#: ran over the palace roof. That moves TQ03 to 860..1200 m, and this check caught it at 1200.1, which is
+#: the check working rather than failing. The outer bound follows the design: 1,250 m leaves room for the
+#: push plus mesh overhang without going so wide that a genuinely stray instance would pass.
 BAND_INNER_M = 800.0
-BAND_OUTER_M = 1200.0
+BAND_OUTER_M = 1250.0
 
 #: Ground sits at 0; avenue and court paving is recessed a little. Anything far below this is buried.
 BURIED_CM = -400.0
