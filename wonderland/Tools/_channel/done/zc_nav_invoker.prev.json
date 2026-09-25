@@ -1,7 +1,7 @@
 {
  "name": "zc_nav_invoker",
- "started": "2026-09-25 14:46:39",
- "status": "error",
+ "started": "2026-09-25 14:47:52",
+ "status": "measured",
  "tests": [
   {
    "id": "V00",
@@ -68,6 +68,28 @@
     ],
     "note": "find_path_to_location_synchronously returned NOTHING anywhere before this, at any distance; asked on six bearings so one blocked direction cannot decide it"
    }
+  },
+  {
+   "id": "V04",
+   "name": "the navigable surface follows the Dog as it walks",
+   "pass": true,
+   "detail": {
+    "walked_uu": 1847.8,
+    "reachable_point_after": [
+     616.6,
+     134.1
+    ],
+    "note": "tiles built ahead and discarded behind: navigation where the player is, without paying for it across a 1,478 m disc"
+   }
+  },
+  {
+   "id": "V03",
+   "name": "the frame cost stays sane with navigation generating",
+   "pass": true,
+   "detail": {
+    "frame_ms": 0.0,
+    "note": "generation is bounded by the invoker's radius, not by the size of the world"
+   }
   }
  ],
  "world": "WL_V2_GoldenArrival_WP2",
@@ -121,8 +143,13 @@
   }
  ],
  "routes_found": 6,
- "error": "Traceback (most recent call last):\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/editor_channel.py\", line 121, in _step\n    yielded = job[\"gen\"].throw(thrown) if thrown is not None else next(job[\"gen\"])\n                                                                  ^^^^^^^^^^^^^^^^\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/_channel\\inbox\\zc_nav_invoker.py\", line 180, in job\nAttributeError: 'Vector' object has no attribute 'size'\n",
- "finished": "2026-09-25 14:47:12",
- "seconds": 32.83,
- "log": "V00 PASS the level carries a navigation bounds volume {'volumes': ['WL_NavBounds'], 'added_this_run': False, 'note': 'the level shipped without one, which is why it had no navigation data at all'}\nV01 PASS a navigation mesh actually generates in play {'seconds': 2.0, 'actors': ['RecastNavMesh-Default'], 'note': \"generated around the Dog's invoker rather than baked across the disc\"}\nV02 PASS the engine can route through the level within the invoker's radius (40 m) {'found': 6, 'of': 6, 'attempts': [{'bearing': 0.0, 'path': True, 'points': 5}, {'bearing': 60.0, 'path': True, 'points': 9}, {'bearing': 120.0, 'path': True, 'points': 11}, {'bearing': 180.0, 'path': True, 'points': 8}, {'bearing': 240.0, 'path': True, 'points': 6}, {'bearing': 300.0, 'path': True, 'points': 8}], 'note': 'find_path_to_location_synchronously returned NOTHING anywhere before this, at any distance; asked on six bearings so one blocked direction cannot decide it'}\n"
+ "walked_uu": 1847.8,
+ "navigable_after_walking": [
+  616.6,
+  134.1
+ ],
+ "frame_ms_with_nav": 0.0,
+ "finished": "2026-09-25 14:48:30",
+ "seconds": 38.69,
+ "log": "V00 PASS the level carries a navigation bounds volume {'volumes': ['WL_NavBounds'], 'added_this_run': False, 'note': 'the level shipped without one, which is why it had no navigation data at all'}\nV01 PASS a navigation mesh actually generates in play {'seconds': 2.0, 'actors': ['RecastNavMesh-Default'], 'note': \"generated around the Dog's invoker rather than baked across the disc\"}\nV02 PASS the engine can route through the level within the invoker's radius (40 m) {'found': 6, 'of': 6, 'attempts': [{'bearing': 0.0, 'path': True, 'points': 5}, {'bearing': 60.0, 'path': True, 'points': 9}, {'bearing': 120.0, 'path': True, 'points': 11}, {'bearing': 180.0, 'path': True, 'points': 8}, {'bearing': 240.0, 'path': True, 'points': 6}, {'bearing': 300.0, 'path': True, 'points': 8}], 'note': 'find_path_to_location_synchronously returned NOTHING anywhere before this, at any distance; asked on six bearings so one blocked direction cannot decide it'}\nV04 PASS the navigable surface follows the Dog as it walks {'walked_uu': 1847.8, 'reachable_point_after': [616.6, 134.1], 'note': 'tiles built ahead and discarded behind: navigation where the player is, without paying for it across a 1,478 m disc'}\nV03 PASS the frame cost stays sane with navigation generating {'frame_ms': 0.0, 'note': \"generation is bounded by the invoker's radius, not by the size of the world\"}\n"
 }

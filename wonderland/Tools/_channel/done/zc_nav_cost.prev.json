@@ -1,0 +1,61 @@
+{
+ "name": "zc_nav_cost",
+ "started": "2026-09-25 15:05:16",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "N01",
+   "name": "both sides were actually measured",
+   "pass": false,
+   "detail": {
+    "with_navigation": {
+     "samples": 0,
+     "mean_ms": 0.0,
+     "median_ms": 0.0,
+     "worst_ms": 0.0
+    },
+    "without_navigation": {
+     "samples": 0,
+     "mean_ms": 0.0,
+     "median_ms": 0.0,
+     "worst_ms": 0.0
+    }
+   }
+  },
+  {
+   "id": "N02",
+   "name": "the level is left routable, not left as the cost fixture",
+   "pass": true,
+   "detail": {
+    "restored": [
+     "<RuntimeGenerationType.DYNAMIC: 2>"
+    ]
+   }
+  }
+ ],
+ "set_dynamic": [
+  "<RuntimeGenerationType.DYNAMIC: 2>"
+ ],
+ "with_navigation": {
+  "samples": 0,
+  "mean_ms": 0.0,
+  "median_ms": 0.0,
+  "worst_ms": 0.0
+ },
+ "set_static": [
+  "<RuntimeGenerationType.STATIC: 0>"
+ ],
+ "without_navigation": {
+  "samples": 0,
+  "mean_ms": 0.0,
+  "median_ms": 0.0,
+  "worst_ms": 0.0
+ },
+ "restored": [
+  "<RuntimeGenerationType.DYNAMIC: 2>"
+ ],
+ "navigation_costs_ms": 0.0,
+ "finished": "2026-09-25 15:07:02",
+ "seconds": 105.4,
+ "log": "with_navigation INFO with_navigation {'samples': 0, 'mean_ms': 0.0, 'median_ms': 0.0, 'worst_ms': 0.0}\nwithout_navigation INFO without_navigation {'samples': 0, 'mean_ms': 0.0, 'median_ms': 0.0, 'worst_ms': 0.0}\nN01 FAIL both sides were actually measured {'with_navigation': {'samples': 0, 'mean_ms': 0.0, 'median_ms': 0.0, 'worst_ms': 0.0}, 'without_navigation': {'samples': 0, 'mean_ms': 0.0, 'median_ms': 0.0, 'worst_ms': 0.0}}\nN02 PASS the level is left routable, not left as the cost fixture {'restored': ['<RuntimeGenerationType.DYNAMIC: 2>']}\nN03 INFO what navigation costs, same session, same thermal state {'with_median_ms': 0.0, 'without_median_ms': 0.0, 'difference_ms': 0.0}\n"
+}
