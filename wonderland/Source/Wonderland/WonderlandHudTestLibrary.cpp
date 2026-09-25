@@ -8,6 +8,7 @@
 #include "Engine/World.h"
 #include "UObject/UObjectIterator.h"
 #include "WonderlandUsageHudWidget.h"
+#include "WonderlandCursor.h"
 #include "Performance/EnginePerformanceTargets.h"
 #include "UnrealClient.h"
 #include "RenderCore.h"
@@ -184,4 +185,21 @@ TArray<FString> UWonderlandHudTestLibrary::GetPaintedAgentRows(UObject* WorldCon
 		}
 	}
 	return Rows;
+}
+
+FString UWonderlandHudTestLibrary::GetDrawnCursorShape()
+{
+	return WonderlandCursor::NameOf(WonderlandCursor::Chosen());
+}
+
+bool UWonderlandHudTestLibrary::IsDrawingWonderlandCursor(UObject* WorldContextObject)
+{
+	const UWorld* World = GEngine != nullptr
+		? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull)
+		: nullptr;
+	UGameViewportClient* Viewport = World != nullptr ? World->GetGameViewport() : nullptr;
+	// The viewport is the authority on whether a Wonderland pointer is on screen at all. The accessor is
+	// GetIsUsingSoftwareCursorWidgets -- GetUseSoftwareCursorWidgets does not exist, which the compiler
+	// said rather than the runtime, and that is the good case.
+	return Viewport != nullptr && Viewport->GetIsUsingSoftwareCursorWidgets();
 }

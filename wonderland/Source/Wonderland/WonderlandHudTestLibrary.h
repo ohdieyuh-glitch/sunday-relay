@@ -80,4 +80,30 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
 	static TArray<FString> GetPaintedAgentRows(UObject* WorldContextObject);
 
+	/**
+	 * WHICH POINTER WONDERLAND IS ACTUALLY DRAWING, and whether it is drawing one at all.
+	 *
+	 * FOUNDER, P1 item 8: "Add Wonderland cursor customization." Built, and evidenced only by photographs --
+	 * and a screenshot of a pointer cannot distinguish a cursor the setting chose from a cursor that happens
+	 * to look like it. Worse, the shape is captured into the widget at Apply() time rather than bound live,
+	 * so a setting that changed without a re-apply would look right in the settings and wrong on screen.
+	 *
+	 * OutShape is the shape the drawn widget was built from. The return value is whether the viewport is
+	 * using software cursor widgets at all -- false means the machine's own pointer is showing and
+	 * Wonderland is drawing nothing, which is the failure a photograph is least likely to reveal.
+	 */
+	/**
+	 * TWO PLAIN RETURNS RATHER THAN ONE RETURN AND AN OUT-PARAMETER.
+	 *
+	 * The first version was `bool GetDrawnCursor(UObject*, FString& OutShape)` and came back as None in
+	 * Python -- an out-parameter's binding shape is not worth guessing at, and a proof that cannot read its
+	 * own instrument proves nothing. Two functions, two ordinary values, no ambiguity.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static FString GetDrawnCursorShape();
+
+	/** False means the machine's own pointer is showing, whatever the settings say. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static bool IsDrawingWonderlandCursor(UObject* WorldContextObject);
+
 };

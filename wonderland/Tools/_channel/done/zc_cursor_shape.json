@@ -1,0 +1,98 @@
+{
+ "name": "zc_cursor_shape",
+ "started": "2026-09-25 10:14:37",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "K00",
+   "name": "Wonderland is drawing its own pointer, not the machine's",
+   "pass": true,
+   "detail": {
+    "by_shape": {
+     "arrow": {
+      "drawing": true,
+      "shape": "arrow"
+     },
+     "mark": {
+      "drawing": true,
+      "shape": "mark"
+     },
+     "ring": {
+      "drawing": true,
+      "shape": "ring"
+     }
+    },
+    "note": "software cursor widgets off means the system arrow is showing whatever the settings say"
+   }
+  },
+  {
+   "id": "K01",
+   "name": "every shape the founder can choose is the shape actually drawn",
+   "pass": true,
+   "detail": {
+    "asked": [
+     "arrow",
+     "mark",
+     "ring"
+    ],
+    "got": {
+     "arrow": "arrow",
+     "mark": "mark",
+     "ring": "ring"
+    },
+    "note": "read off the drawn widget, which is captured at Apply() time rather than bound live"
+   }
+  },
+  {
+   "id": "K02",
+   "name": "choosing 'system' hands the machine's own pointer back",
+   "pass": true,
+   "detail": {
+    "state": {
+     "drawing_wonderland_cursor": false,
+     "shape": "system"
+    },
+    "note": "drawn false here is CORRECT: it means Wonderland stopped drawing and the OS cursor returned"
+   }
+  },
+  {
+   "id": "K03",
+   "name": "the project's own cursor comes back afterwards",
+   "pass": true,
+   "detail": {
+    "shipped": "system",
+    "restored": "system",
+    "note": "CursorShape is a saved Config property, so the fixture must not be left in it"
+   }
+  }
+ ],
+ "as_shipped": {
+  "drawing_wonderland_cursor": false,
+  "shape": "system"
+ },
+ "by_shape": {
+  "arrow": {
+   "drawing": true,
+   "shape": "arrow"
+  },
+  "mark": {
+   "drawing": true,
+   "shape": "mark"
+  },
+  "ring": {
+   "drawing": true,
+   "shape": "ring"
+  }
+ },
+ "system": {
+  "drawing_wonderland_cursor": false,
+  "shape": "system"
+ },
+ "restored": {
+  "drawing_wonderland_cursor": false,
+  "shape": "system"
+ },
+ "finished": "2026-09-25 10:14:59",
+ "seconds": 22.27,
+ "log": "K00 PASS Wonderland is drawing its own pointer, not the machine's {'by_shape': {'arrow': {'drawing': True, 'shape': 'arrow'}, 'mark': {'drawing': True, 'shape': 'mark'}, 'ring': {'drawing': True, 'shape': 'ring'}}, 'note': 'software cursor widgets off means the system arrow is showing whatever the settings say'}\nK01 PASS every shape the founder can choose is the shape actually drawn {'asked': ['arrow', 'mark', 'ring'], 'got': {'arrow': 'arrow', 'mark': 'mark', 'ring': 'ring'}, 'note': 'read off the drawn widget, which is captured at Apply() time rather than bound live'}\nK02 PASS choosing 'system' hands the machine's own pointer back {'state': {'drawing_wonderland_cursor': False, 'shape': 'system'}, 'note': 'drawn false here is CORRECT: it means Wonderland stopped drawing and the OS cursor returned'}\nK03 PASS the project's own cursor comes back afterwards {'shipped': 'system', 'restored': 'system', 'note': 'CursorShape is a saved Config property, so the fixture must not be left in it'}\n"
+}
