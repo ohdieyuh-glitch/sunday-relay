@@ -25,10 +25,10 @@ CHILD = "/Game/WonderlandV2/Materials/Instances/MI_V2_MossSlab"
 #: tiles about every 111 uu and 2700 tiles so densely it mips to a flat average -- the same flat green, for
 #: the opposite reason. 0.05 would be a tile every 20 cm: obvious under the world-space model, and still
 #: flat under the UV model. Either way the answer is in the next capture.
-TEX_SCALE = 0.05
+TEX_SCALE = 0.03
 #: MacroScale is the slow large-scale variation and is in the same UV space, so it is carried by the same
 #: factor -- 0.0002 * 300000 -- or the macro blotches would be the new flat colour.
-MACRO_SCALE = 0.0016
+MACRO_SCALE = 0.0009
 
 
 def job():
@@ -66,6 +66,11 @@ def job():
             before[n] = None
     unreal.MaterialEditingLibrary.set_material_instance_scalar_parameter_value(mat, "TexScale", TEX_SCALE)
     unreal.MaterialEditingLibrary.set_material_instance_scalar_parameter_value(mat, "MacroScale", MACRO_SCALE)
+    # BREAK THE REPETITION. At a 20 cm tile the ground read as ground but showed a regular grid at middle
+    # distance, which is what tiling always does when nothing varies across it. MacroVary is the parent
+    # material's own knob for exactly this -- a slow large-scale modulation laid over the tile -- so it is
+    # raised from the moss default of 0.18 rather than a new mechanism being invented for it.
+    unreal.MaterialEditingLibrary.set_material_instance_scalar_parameter_value(mat, "MacroVary", 0.30)
     try:
         unreal.MaterialEditingLibrary.update_material_instance(mat)
     except Exception:

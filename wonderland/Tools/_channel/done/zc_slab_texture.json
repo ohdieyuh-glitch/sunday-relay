@@ -1,6 +1,6 @@
 {
  "name": "zc_slab_texture",
- "started": "2026-09-25 16:14:54",
+ "started": "2026-09-25 16:26:53",
  "status": "measured",
  "tests": [
   {
@@ -10,12 +10,12 @@
    "detail": {
     "created": false,
     "before": {
-     "TexScale": 2700.0,
-     "MacroScale": 60.0
-    },
-    "after": {
      "TexScale": 0.05,
      "MacroScale": 0.0016
+    },
+    "after": {
+     "TexScale": 0.03,
+     "MacroScale": 0.0009
     },
     "note": "MI_V2_Moss itself is untouched; other surfaces wearing it are unwrapped properly and raising its TexScale would break every one of them"
    }
@@ -41,18 +41,18 @@
  ],
  "child_created": false,
  "before": {
-  "TexScale": 2700.0,
-  "MacroScale": 60.0
- },
- "after": {
   "TexScale": 0.05,
   "MacroScale": 0.0016
+ },
+ "after": {
+  "TexScale": 0.03,
+  "MacroScale": 0.0009
  },
  "dressed": [],
  "slab_wears_now": [
   "MI_V2_MossSlab"
  ],
- "finished": "2026-09-25 16:15:02",
- "seconds": 7.7,
- "log": "S00 PASS a slab-only material carries the corrected tiling {'created': False, 'before': {'TexScale': 2700.0, 'MacroScale': 60.0}, 'after': {'TexScale': 0.05, 'MacroScale': 0.0016}, 'note': 'MI_V2_Moss itself is untouched; other surfaces wearing it are unwrapped properly and raising its TexScale would break every one of them'}\nS01 FAIL the ground slab wears it {'dressed': []}\nS02 PASS and still wears it after the level was saved {'worn': ['MI_V2_MossSlab']}\n"
+ "finished": "2026-09-25 16:27:02",
+ "seconds": 9.06,
+ "log": "S00 PASS a slab-only material carries the corrected tiling {'created': False, 'before': {'TexScale': 0.05, 'MacroScale': 0.0016}, 'after': {'TexScale': 0.03, 'MacroScale': 0.0009}, 'note': 'MI_V2_Moss itself is untouched; other surfaces wearing it are unwrapped properly and raising its TexScale would break every one of them'}\nS01 FAIL the ground slab wears it {'dressed': []}\nS02 PASS and still wears it after the level was saved {'worn': ['MI_V2_MossSlab']}\n"
 }
