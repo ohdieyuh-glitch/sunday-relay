@@ -67,9 +67,44 @@ distance alone, so ten avatars standing together each loaded its finest self. Th
 as well: **202.60 -> 57.63 ms, render 193.46 -> 43.10, marginal cost per avatar 17.02 -> 2.18 ms**, on the
 founder's own 0/1/5/10 -- 35.82 / 44.76 / 63.41 / 57.63 ms, with a single avatar still at full Large detail.
 
+**Corrected 2026-09-25, same session, a few hours later.** The world measurement published earlier tonight
+was wrong, and this records how rather than quietly restating it.
+
+`zc_beta_walk` counted **StaticMeshActors** -- 16,803 of them -- and called a 200 m tile EMPTY when it held
+none. Wonderland is overwhelmingly INSTANCED: this file's own headline figure is "107,546 placed instances",
+and every authored layer lands as instanced batches. So "empty" never meant "nothing here", it meant "no
+StaticMeshActor here", and every coverage number reported from that job -- including the 82.5% quoted above --
+was measuring roughly a tenth of the world.
+
+**It was caught by being acted on.** FR01/FR02/FR03 planted 1,665 instances into the seventeen tiles the job
+called empty. They applied and saved cleanly, and the re-walk came back identical to the digit: 16,803 actors,
+17 empty tiles, 82.5%. A fill that changes nothing is not a fill that failed; it is an instrument that cannot
+see.
+
+With instanced components enumerated, the world is a different and much better shape:
+
+| | reported earlier | actually |
+|---|---|---|
+| placed things | 16,803 | **171,292** (16,803 actors + 154,489 instances over 3,844 instanced components) |
+| core radius | 1,096 m | **1,480.7 m** |
+| empty tiles inside 1,000 m | 14 | **0** |
+| empty at 1,000-1,200 m | -- | 5 of 36 |
+| empty at 1,200-1,600 m | -- | 35 of 64 |
+
+**Nothing is empty anywhere inside a kilometre** -- not one tile across the first five rings. The emptiness is
+at 1,200-1,600 m, which is the Dubel Forest band and the outer edge beyond it, and a Dog stood on ground in
+all 23 landings including eight bare tiles. The frontier is BARE, not missing.
+
+**FR01/FR02/FR03 were removed again** (45 batches, saved; 172,957 -> 171,292 placed, exactly the 1,665 they
+added). Three of the seventeen tiles they planted were genuinely bare; fourteen were not, and Wonderland does
+not need 1,665 more plants in a world that is already 89.3% vegetation by triangle. `frontier_fill.py` and its
+three specs are kept in the tree, unapplied: the 1,200-1,600 m edge is a real edge, and the pass is the right
+shape for it once the founder decides what the edge of Wonderland should look like.
+
+
 | | category | verdict | evidence |
 |---|---|---|---|
-| A | WORLD COVERAGE | **PARTIAL - 82.5% of a 1,096 m disc, measured 2026-09-25; the gap is the frontier ring** | 107,546 placed instances over 270 layer specs. Golden Arrival 86,967 inside the 500 m neutral core. Nation civilization: ICARUS 6,953, NOCTIS 7,530, TARTARUS 6,096. Built frontier ~1,155 m in all three once the second band lands. Beyond it: DF01 Dubel Forest at 1,230–1,480 m. **Golden Arrival is uneven by SECTOR, measured 2026-09-23 in 100 m × 30° cells:** the 200–300 m ring holds 7,298 instances at bearing 300° but **28** at bearing 180°; the 300–400 m ring holds 5,321 at 270° but **22** at 120° and **79** at 90°. So the arrival city is not thin at its edge — it is thin on one *side*. **Closed 2026-09-23 by GF01/GF02**, which plant by SECTOR rather than by camera: 300–400 m at b=120 went **22 → 670**, 200–300 m at b=180 went **28 → 991**, and cells holding under 200 instances fell **13 → 8** — every survivor now in the 400–500 m outer ring, which is the city's genuine edge and where AP01's approach roads cross. The cause was in the generator: `lawn_planting.py` plants within 35 m of the 60 gameplay cameras, so the world was planted where the cameras look, and the 90–150° sector holds none. |
+| A | WORLD COVERAGE | **PARTIAL - nothing empty inside 1,000 m of a 1,480.7 m disc (171,292 placed, corrected 2026-09-25); the gap is the 1,200-1,600 m edge** | 107,546 placed instances over 270 layer specs. Golden Arrival 86,967 inside the 500 m neutral core. Nation civilization: ICARUS 6,953, NOCTIS 7,530, TARTARUS 6,096. Built frontier ~1,155 m in all three once the second band lands. Beyond it: DF01 Dubel Forest at 1,230–1,480 m. **Golden Arrival is uneven by SECTOR, measured 2026-09-23 in 100 m × 30° cells:** the 200–300 m ring holds 7,298 instances at bearing 300° but **28** at bearing 180°; the 300–400 m ring holds 5,321 at 270° but **22** at 120° and **79** at 90°. So the arrival city is not thin at its edge — it is thin on one *side*. **Closed 2026-09-23 by GF01/GF02**, which plant by SECTOR rather than by camera: 300–400 m at b=120 went **22 → 670**, 200–300 m at b=180 went **28 → 991**, and cells holding under 200 instances fell **13 → 8** — every survivor now in the 400–500 m outer ring, which is the city's genuine edge and where AP01's approach roads cross. The cause was in the generator: `lawn_planting.py` plants within 35 m of the 60 gameplay cameras, so the world was planted where the cameras look, and the 90–150° sector holds none. |
 | B | TRAVERSAL | **PARTIAL — no hole found (2026-09-24)** | **Walked 2026-09-23.** All three arrival approaches verified end to end (9 waypoints, 0 stuck). All three nation gates walked: **NOCTIS and TARTARUS were impassable** — thin gate meshes placed with their length along the road, the d164a56b regression repeated — fixed by `gate_yaw` and re-walked clean. **Band seams walked:** ICARUS clean (gate → seam → band), NOCTIS clean, **TARTARUS stuck at (73075, −42191)**.
 
 Three obstructions recorded, none yet fixed:
