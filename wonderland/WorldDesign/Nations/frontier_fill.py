@@ -71,6 +71,21 @@ PASSES = {
                  footprints=["nc01_footprints.json", "nc03_band_footprints.json"]),
     "FR03": dict(nation="TARTARUS", bearing=330.0, module="tartarus_quarter", out="fr03_tartarus_frontier.json",
                  footprints=["tq01_footprints.json", "tq03_band_footprints.json"]),
+    # FR04 -- ONE TILE THE GRID MOVED UNDER. The walk grids the world against its own measured core radius,
+    # so when the disc grew (1,096 m -> 1,479 m) every tile boundary shifted and a 200 m cell that had been
+    # split across two neighbours became a cell of its own, at (221 m, -1179 m): 1,199.5 m out, and bare.
+    #
+    # IT IS PLANTED BECAUSE IT IS ALREADY IN THIS FILE'S BAND, not to make a proof pass. The nations stop at
+    # ~1,158 m and Dubel Forest starts at 1,230 m; this tile falls between them, which is the exact band the
+    # docstring above says belongs to a planted edge. Its neighbour along x was planted by FR03 for the same
+    # reason. Changing the walk's frontier constant from 1,200 to 1,199 would also have turned the proof
+    # green, and would have moved a goalpost instead of finishing an edge.
+    #
+    # It is its own pass rather than a sixth tile in FR03 so the applied FR03 layer is not disturbed:
+    # re-generating it would mean removing and re-applying work already standing in the level.
+    "FR04": dict(nation="TARTARUS", bearing=330.0, module="tartarus_quarter", out="fr04_tartarus_edge.json",
+                 footprints=["tq01_footprints.json", "tq03_band_footprints.json"],
+                 tiles=[(22098, -117902)]),
 }
 
 #: How far outside a recorded building plan anything here must stay, cm. Same reason as the seam passes:
@@ -149,7 +164,8 @@ def build(pass_id, cfg):
             add("%s_%s" % (name.replace("WL_", ""), part["part"]), part["mesh"], material,
                 x, y, z, yaw, scale, cull, blocks)
 
-    mine = [(x, y) for (x, y) in EMPTY_TILES
+    # A pass may name its own tiles; FR01-03 share the measured list.
+    mine = [(x, y) for (x, y) in cfg.get("tiles", EMPTY_TILES)
             if nations.nation_at(float(x), float(y)) == cfg["nation"]]
     stats["tiles"] = len(mine)
 
@@ -212,9 +228,10 @@ def build(pass_id, cfg):
 
 def main():
     grand = 0
+    tiles = len(EMPTY_TILES) + sum(len(c["tiles"]) for c in PASSES.values() if "tiles" in c)
     for pass_id, cfg in sorted(PASSES.items()):
         grand += build(pass_id, cfg)
-    print("\nFRONTIER TOTAL %d instances across %d measured-empty tiles" % (grand, len(EMPTY_TILES)))
+    print("\nFRONTIER TOTAL %d instances across %d measured-empty tiles" % (grand, tiles))
 
 
 if __name__ == "__main__":
