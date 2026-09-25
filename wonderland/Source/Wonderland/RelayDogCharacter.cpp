@@ -1463,10 +1463,12 @@ void ARelayDogCharacter::WearSkin(FName SkinId)
  * the body, SECONDARY on the eyes and visor, and a component tagged WL_Prop is left alone because a book or a
  * magnifying glass is not part of the mascot.
  */
-void ARelayDogCharacter::PaintCanonBody()
+void ARelayDogCharacter::PaintCanonBody(bool bEvenIfUnchosen)
 {
 	const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
-	if (!Style.bChosen)
+	// A Dog whose colourway was never chosen keeps the materials it was authored with. Reset is the
+	// exception: it has just written the DESIGNED colours into the settings and needs them put on.
+	if (!Style.bChosen && !bEvenIfUnchosen)
 	{
 		return;
 	}

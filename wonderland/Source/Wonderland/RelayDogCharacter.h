@@ -384,11 +384,22 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
 	float GetDressedHeightUu() const;
 
+	/** Puts the founder's chosen PRIMARY on the body and SECONDARY on the eyes. No-op until one is chosen.
+	 *
+	 * PUBLIC BECAUSE A COLOUR HAS TO ARRIVE WHEN IT IS CHOSEN. This had exactly one caller -- WearSkin, on
+	 * the branch where the skin resolves to canon -- so setting wl.Mascot.Primary changed the saved setting
+	 * and nothing else: the world Dog kept its old colours until the player happened to re-wear Relay OG.
+	 * The founder's wording is "persist/apply to world, Wardrobe, missions", and the first of those needs
+	 * the console command to be able to reach a Dog that is already standing there.
+	 * RESET NEEDS bEvenIfUnchosen. Clearing the colourway sets bChosen=false, and a paint that returns
+	 * early on that flag leaves the old colours on the Dog -- the founder presses reset, the setting
+	 * changes and the mascot does not. The designed values ARE what reset writes, so painting them is
+	 * the restoration; the flag exists so a Dog that never had a colourway chosen is still left alone.
+	 */
+	void PaintCanonBody(bool bEvenIfUnchosen = false);
+
 private:
 	void ShowCanonBody(bool bShow);
-
-	/** Puts the founder's chosen PRIMARY on the body and SECONDARY on the eyes. No-op until one is chosen. */
-	void PaintCanonBody();
 
 	UPROPERTY(Transient)
 	TObjectPtr<class AWonderlandCompanionEmbodiment> Costume = nullptr;
