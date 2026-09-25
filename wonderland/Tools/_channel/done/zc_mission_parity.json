@@ -1,6 +1,6 @@
 {
  "name": "zc_mission_parity",
- "started": "2026-09-25 09:07:32",
+ "started": "2026-09-25 09:29:18",
  "status": "measured",
  "tests": [
   {
@@ -68,9 +68,9 @@
    "stage": "PREPARATION",
    "task_state": "<WonderlandTaskState.PREPARATION: 2>",
    "dog_act": "PREPARATION",
-   "skin_lift_uu": 78.0,
+   "skin_lift_uu": 77.99,
    "skin_stillness": 1.0,
-   "skin_head_moved_deg": 0.787,
+   "skin_head_moved_deg": 0.617,
    "skin_is_animated": true
   },
   {
@@ -79,7 +79,7 @@
    "dog_act": "RESEARCH",
    "skin_lift_uu": 0.0,
    "skin_stillness": 0.0,
-   "skin_head_moved_deg": 0.593,
+   "skin_head_moved_deg": 0.53,
    "skin_is_animated": true
   },
   {
@@ -88,16 +88,16 @@
    "dog_act": "IMPLEMENTATION",
    "skin_lift_uu": 0.0,
    "skin_stillness": 0.0,
-   "skin_head_moved_deg": 4.666,
+   "skin_head_moved_deg": 5.564,
    "skin_is_animated": true
   },
   {
    "stage": "VERIFICATION",
    "task_state": "<WonderlandTaskState.VERIFICATION: 5>",
    "dog_act": "VERIFICATION",
-   "skin_lift_uu": 154.95,
+   "skin_lift_uu": 154.98,
    "skin_stillness": 1.0,
-   "skin_head_moved_deg": 1.056,
+   "skin_head_moved_deg": 1.023,
    "skin_is_animated": true
   },
   {
@@ -106,7 +106,7 @@
    "dog_act": "REVIEW",
    "skin_lift_uu": 0.0,
    "skin_stillness": 0.0,
-   "skin_head_moved_deg": 1.549,
+   "skin_head_moved_deg": 1.506,
    "skin_is_animated": true
   },
   {
@@ -115,7 +115,7 @@
    "dog_act": "REPAIR",
    "skin_lift_uu": 0.0,
    "skin_stillness": 0.0,
-   "skin_head_moved_deg": 0.54,
+   "skin_head_moved_deg": 0.588,
    "skin_is_animated": true
   },
   {
@@ -124,7 +124,7 @@
    "dog_act": "NONE",
    "skin_lift_uu": 0.0,
    "skin_stillness": 0.0,
-   "skin_head_moved_deg": 0.383,
+   "skin_head_moved_deg": 0.552,
    "skin_is_animated": true
   }
  ],
@@ -151,10 +151,10 @@
   "dog_act": "NONE",
   "skin_lift_uu": 0.0,
   "skin_stillness": 0.0,
-  "skin_head_moved_deg": 0.383,
+  "skin_head_moved_deg": 0.552,
   "skin_is_animated": true
  },
- "finished": "2026-09-25 09:08:33",
- "seconds": 60.74,
+ "finished": "2026-09-25 09:30:16",
+ "seconds": 58.12,
  "log": "M01 PASS one Mission Contract exists to perform {'contracts': 1}\nM02 PASS Celestial Light is on before the performance starts {'worn': True}\nM03 PASS every working stage of the contract reaches the skin {'reached': ['PREPARATION', 'RESEARCH', 'IMPLEMENTATION', 'VERIFICATION', 'REVIEW', 'REPAIR'], 'did_not_reach': []}\nM04 PASS the Dog performs more than one act across the lifecycle {'acts': ['PREPARATION', 'RESEARCH', 'IMPLEMENTATION', 'VERIFICATION', 'REVIEW', 'REPAIR'], 'distinct': 6}\nM05 PASS COMPLETED is reached and the performance settles {'task_state': '<WonderlandTaskState.COMPLETED: 8>', 'dog_act': 'NONE', 'lift_uu': 0.0}\n"
 }

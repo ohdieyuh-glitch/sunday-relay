@@ -1,6 +1,6 @@
 {
  "name": "zc_beta_walk",
- "started": "2026-09-25 02:30:15",
+ "started": "2026-09-25 09:40:18",
  "status": "walked",
  "tests": [
   {
@@ -8,10 +8,10 @@
    "name": "the walkable world is a disc of real size rather than a scatter of strays",
    "pass": true,
    "detail": {
-    "core_radius_m": 1479.5,
-    "in_core": 173015,
-    "of_total": 173061,
-    "beyond": 46
+    "core_radius_m": 1478.0,
+    "in_core": 174738,
+    "of_total": 174787,
+    "beyond": 49
    }
   },
   {
@@ -32,8 +32,8 @@
    "pass": true,
    "detail": {
     "tiles": 60,
-    "empty": 34,
-    "placed": 2967
+    "empty": 33,
+    "placed": 2951
    }
   },
   {
@@ -57,20 +57,20 @@
    }
   }
  ],
- "instanced_components": 3934,
- "instances_total": 156258,
- "placed_total": 173061,
+ "instanced_components": 3940,
+ "instances_total": 157984,
+ "placed_total": 174787,
  "mesh_actors_total": 16803,
- "core_radius_metres": 1479.5,
+ "core_radius_metres": 1478.0,
  "radius_percentiles_metres": {
-  "p50": 293.7,
-  "p90": 869.6,
-  "p99": 1345.0,
+  "p50": 292.0,
+  "p90": 866.1,
+  "p99": 1343.6,
   "max": 16957.1
  },
- "placed_in_core": 173015,
- "mesh_actors_in_core": 173015,
- "actors_beyond_core": 46,
+ "placed_in_core": 174738,
+ "mesh_actors_in_core": 174738,
+ "actors_beyond_core": 49,
  "strays": [
   {
    "name": "V2_Cloud_veil_07",
@@ -350,11 +350,11 @@
     0
    ],
    "centre": [
-    -37952,
-    -137952
+    -37796,
+    -137796
    ],
    "mesh_actors": 0,
-   "radius_metres": 1431,
+   "radius_metres": 1429,
    "verdict": "EMPTY"
   },
   {
@@ -363,12 +363,13 @@
     0
    ],
    "centre": [
-    -17952,
-    -137952
+    -17796,
+    -137796
    ],
-   "mesh_actors": 0,
-   "radius_metres": 1391,
-   "verdict": "EMPTY"
+   "mesh_actors": 2,
+   "radius_metres": 1389,
+   "ground_z": 0,
+   "verdict": "sparse"
   },
   {
    "tile": [
@@ -376,11 +377,11 @@
     0
    ],
    "centre": [
-    2048,
-    -137952
+    2204,
+    -137796
    ],
    "mesh_actors": 0,
-   "radius_metres": 1380,
+   "radius_metres": 1378,
    "verdict": "EMPTY"
   },
   {
@@ -389,11 +390,11 @@
     0
    ],
    "centre": [
-    22048,
-    -137952
+    22204,
+    -137796
    ],
    "mesh_actors": 0,
-   "radius_metres": 1397,
+   "radius_metres": 1396,
    "verdict": "EMPTY"
   },
   {
@@ -402,11 +403,11 @@
     0
    ],
    "centre": [
-    42048,
-    -137952
+    42204,
+    -137796
    ],
    "mesh_actors": 0,
-   "radius_metres": 1442,
+   "radius_metres": 1441,
    "verdict": "EMPTY"
   },
   {
@@ -415,11 +416,11 @@
     1
    ],
    "centre": [
-    -77952,
-    -117952
+    -77796,
+    -117796
    ],
    "mesh_actors": 0,
-   "radius_metres": 1414,
+   "radius_metres": 1412,
    "verdict": "EMPTY"
   },
   {
@@ -428,11 +429,11 @@
     1
    ],
    "centre": [
-    -57952,
-    -117952
+    -57796,
+    -117796
    ],
    "mesh_actors": 0,
-   "radius_metres": 1314,
+   "radius_metres": 1312,
    "verdict": "EMPTY"
   },
   {
@@ -441,13 +442,13 @@
     1
    ],
    "centre": [
-    -37952,
-    -117952
+    -37796,
+    -117796
    ],
    "mesh_actors": 0,
-   "radius_metres": 1239,
+   "radius_metres": 1237,
    "verdict": "EMPTY",
-   "ground_z_borrowed": 234
+   "ground_z_borrowed": 217
   },
   {
    "tile": [
@@ -455,11 +456,11 @@
     1
    ],
    "centre": [
-    -17952,
-    -117952
+    -17796,
+    -117796
    ],
-   "mesh_actors": 101,
-   "radius_metres": 1193,
+   "mesh_actors": 99,
+   "radius_metres": 1191,
    "ground_z": 0,
    "verdict": "built"
   },
@@ -469,11 +470,11 @@
     1
    ],
    "centre": [
-    2048,
-    -117952
+    2204,
+    -117796
    ],
    "mesh_actors": 100,
-   "radius_metres": 1180,
+   "radius_metres": 1178,
    "ground_z": 0,
    "verdict": "built"
   },
@@ -483,11 +484,11 @@
     1
    ],
    "centre": [
-    22048,
-    -117952
+    22204,
+    -117796
    ],
    "mesh_actors": 92,
-   "radius_metres": 1200,
+   "radius_metres": 1199,
    "ground_z": 0,
    "verdict": "built"
   },
@@ -497,11 +498,11 @@
     1
    ],
    "centre": [
-    42048,
-    -117952
+    42204,
+    -117796
    ],
    "mesh_actors": 2,
-   "radius_metres": 1252,
+   "radius_metres": 1251,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -511,11 +512,11 @@
     1
    ],
    "centre": [
-    62048,
-    -117952
+    62204,
+    -117796
    ],
    "mesh_actors": 0,
-   "radius_metres": 1333,
+   "radius_metres": 1332,
    "verdict": "EMPTY"
   },
   {
@@ -524,11 +525,11 @@
     1
    ],
    "centre": [
-    82048,
-    -117952
+    82204,
+    -117796
    ],
    "mesh_actors": 0,
-   "radius_metres": 1437,
+   "radius_metres": 1436,
    "verdict": "EMPTY"
   },
   {
@@ -537,11 +538,11 @@
     2
    ],
    "centre": [
-    -97952,
-    -97952
+    -97796,
+    -97796
    ],
    "mesh_actors": 0,
-   "radius_metres": 1385,
+   "radius_metres": 1383,
    "verdict": "EMPTY"
   },
   {
@@ -550,11 +551,11 @@
     2
    ],
    "centre": [
-    -77952,
-    -97952
+    -77796,
+    -97796
    ],
    "mesh_actors": 1,
-   "radius_metres": 1252,
+   "radius_metres": 1250,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -564,11 +565,11 @@
     2
    ],
    "centre": [
-    -57952,
-    -97952
+    -57796,
+    -97796
    ],
    "mesh_actors": 98,
-   "radius_metres": 1138,
+   "radius_metres": 1136,
    "ground_z": 0,
    "verdict": "built"
   },
@@ -578,11 +579,11 @@
     2
    ],
    "centre": [
-    -37952,
-    -97952
+    -37796,
+    -97796
    ],
    "mesh_actors": 5,
-   "radius_metres": 1050,
+   "radius_metres": 1048,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -592,11 +593,11 @@
     2
    ],
    "centre": [
-    -17952,
-    -97952
+    -17796,
+    -97796
    ],
    "mesh_actors": 5,
-   "radius_metres": 996,
+   "radius_metres": 994,
    "ground_z": 2581,
    "verdict": "sparse"
   },
@@ -606,11 +607,11 @@
     2
    ],
    "centre": [
-    2048,
-    -97952
+    2204,
+    -97796
    ],
    "mesh_actors": 201,
-   "radius_metres": 980,
+   "radius_metres": 978,
    "ground_z": 912,
    "verdict": "built"
   },
@@ -620,11 +621,11 @@
     2
    ],
    "centre": [
-    22048,
-    -97952
+    22204,
+    -97796
    ],
    "mesh_actors": 5,
-   "radius_metres": 1004,
+   "radius_metres": 1003,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -634,11 +635,11 @@
     2
    ],
    "centre": [
-    42048,
-    -97952
+    42204,
+    -97796
    ],
    "mesh_actors": 4,
-   "radius_metres": 1066,
+   "radius_metres": 1065,
    "ground_z": 3183,
    "verdict": "sparse"
   },
@@ -648,11 +649,11 @@
     2
    ],
    "centre": [
-    62048,
-    -97952
+    62204,
+    -97796
    ],
    "mesh_actors": 3,
-   "radius_metres": 1160,
+   "radius_metres": 1159,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -662,8 +663,8 @@
     2
    ],
    "centre": [
-    82048,
-    -97952
+    82204,
+    -97796
    ],
    "mesh_actors": 0,
    "radius_metres": 1278,
@@ -675,8 +676,8 @@
     2
    ],
    "centre": [
-    102048,
-    -97952
+    102204,
+    -97796
    ],
    "mesh_actors": 0,
    "radius_metres": 1415,
@@ -688,11 +689,11 @@
     3
    ],
    "centre": [
-    -117952,
-    -77952
+    -117796,
+    -77796
    ],
    "mesh_actors": 0,
-   "radius_metres": 1414,
+   "radius_metres": 1412,
    "verdict": "EMPTY"
   },
   {
@@ -701,11 +702,11 @@
     3
    ],
    "centre": [
-    -97952,
-    -77952
+    -97796,
+    -77796
    ],
    "mesh_actors": 2,
-   "radius_metres": 1252,
+   "radius_metres": 1250,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -715,11 +716,11 @@
     3
    ],
    "centre": [
-    -77952,
-    -77952
+    -77796,
+    -77796
    ],
    "mesh_actors": 5,
-   "radius_metres": 1102,
+   "radius_metres": 1100,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -729,11 +730,11 @@
     3
    ],
    "centre": [
-    -57952,
-    -77952
+    -57796,
+    -77796
    ],
    "mesh_actors": 130,
-   "radius_metres": 971,
+   "radius_metres": 969,
    "ground_z": 1021,
    "verdict": "built"
   },
@@ -743,12 +744,12 @@
     3
    ],
    "centre": [
-    -37952,
-    -77952
+    -37796,
+    -77796
    ],
-   "mesh_actors": 134,
-   "radius_metres": 867,
-   "ground_z": 861,
+   "mesh_actors": 146,
+   "radius_metres": 865,
+   "ground_z": 845,
    "verdict": "built"
   },
   {
@@ -757,12 +758,12 @@
     3
    ],
    "centre": [
-    -17952,
-    -77952
+    -17796,
+    -77796
    ],
-   "mesh_actors": 248,
-   "radius_metres": 800,
-   "ground_z": 1038,
+   "mesh_actors": 236,
+   "radius_metres": 798,
+   "ground_z": 1057,
    "verdict": "built"
   },
   {
@@ -771,11 +772,11 @@
     3
    ],
    "centre": [
-    2048,
-    -77952
+    2204,
+    -77796
    ],
    "mesh_actors": 1,
-   "radius_metres": 780,
+   "radius_metres": 778,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -785,11 +786,11 @@
     3
    ],
    "centre": [
-    22048,
-    -77952
+    22204,
+    -77796
    ],
    "mesh_actors": 100,
-   "radius_metres": 810,
+   "radius_metres": 809,
    "ground_z": 911,
    "verdict": "built"
   },
@@ -799,11 +800,11 @@
     3
    ],
    "centre": [
-    42048,
-    -77952
+    42204,
+    -77796
    ],
    "mesh_actors": 190,
-   "radius_metres": 886,
+   "radius_metres": 885,
    "ground_z": 896,
    "verdict": "built"
   },
@@ -813,8 +814,8 @@
     3
    ],
    "centre": [
-    62048,
-    -77952
+    62204,
+    -77796
    ],
    "mesh_actors": 77,
    "radius_metres": 996,
@@ -827,8 +828,8 @@
     3
    ],
    "centre": [
-    82048,
-    -77952
+    82204,
+    -77796
    ],
    "mesh_actors": 6,
    "radius_metres": 1132,
@@ -841,8 +842,8 @@
     3
    ],
    "centre": [
-    102048,
-    -77952
+    102204,
+    -77796
    ],
    "mesh_actors": 1,
    "radius_metres": 1284,
@@ -855,13 +856,13 @@
     3
    ],
    "centre": [
-    122048,
-    -77952
+    122204,
+    -77796
    ],
    "mesh_actors": 0,
-   "radius_metres": 1448,
+   "radius_metres": 1449,
    "verdict": "EMPTY",
-   "ground_z_borrowed": 86
+   "ground_z_borrowed": 224
   },
   {
    "tile": [
@@ -869,11 +870,11 @@
     4
    ],
    "centre": [
-    -117952,
-    -57952
+    -117796,
+    -57796
    ],
    "mesh_actors": 2,
-   "radius_metres": 1314,
+   "radius_metres": 1312,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -883,12 +884,12 @@
     4
    ],
    "centre": [
-    -97952,
-    -57952
+    -97796,
+    -57796
    ],
-   "mesh_actors": 821,
-   "radius_metres": 1138,
-   "ground_z": 233,
+   "mesh_actors": 858,
+   "radius_metres": 1136,
+   "ground_z": 228,
    "verdict": "built"
   },
   {
@@ -897,12 +898,12 @@
     4
    ],
    "centre": [
-    -77952,
-    -57952
+    -77796,
+    -57796
    ],
-   "mesh_actors": 1171,
-   "radius_metres": 971,
-   "ground_z": 319,
+   "mesh_actors": 1176,
+   "radius_metres": 969,
+   "ground_z": 324,
    "verdict": "built"
   },
   {
@@ -911,12 +912,12 @@
     4
    ],
    "centre": [
-    -57952,
-    -57952
+    -57796,
+    -57796
    ],
-   "mesh_actors": 125,
-   "radius_metres": 820,
-   "ground_z": 624,
+   "mesh_actors": 131,
+   "radius_metres": 817,
+   "ground_z": 569,
    "verdict": "built"
   },
   {
@@ -925,12 +926,12 @@
     4
    ],
    "centre": [
-    -37952,
-    -57952
+    -37796,
+    -57796
    ],
-   "mesh_actors": 192,
-   "radius_metres": 693,
-   "ground_z": 1051,
+   "mesh_actors": 181,
+   "radius_metres": 691,
+   "ground_z": 1085,
    "verdict": "built"
   },
   {
@@ -939,12 +940,12 @@
     4
    ],
    "centre": [
-    -17952,
-    -57952
+    -17796,
+    -57796
    ],
-   "mesh_actors": 83,
-   "radius_metres": 607,
-   "ground_z": 685,
+   "mesh_actors": 82,
+   "radius_metres": 605,
+   "ground_z": 696,
    "verdict": "built"
   },
   {
@@ -953,11 +954,11 @@
     4
    ],
    "centre": [
-    2048,
-    -57952
+    2204,
+    -57796
    ],
    "mesh_actors": 200,
-   "radius_metres": 580,
+   "radius_metres": 578,
    "ground_z": 994,
    "verdict": "built"
   },
@@ -967,11 +968,11 @@
     4
    ],
    "centre": [
-    22048,
-    -57952
+    22204,
+    -57796
    ],
    "mesh_actors": 203,
-   "radius_metres": 620,
+   "radius_metres": 619,
    "ground_z": 948,
    "verdict": "built"
   },
@@ -981,8 +982,8 @@
     4
    ],
    "centre": [
-    42048,
-    -57952
+    42204,
+    -57796
    ],
    "mesh_actors": 149,
    "radius_metres": 716,
@@ -995,12 +996,12 @@
     4
    ],
    "centre": [
-    62048,
-    -57952
+    62204,
+    -57796
    ],
-   "mesh_actors": 3,
+   "mesh_actors": 7,
    "radius_metres": 849,
-   "ground_z": -900,
+   "ground_z": -379,
    "verdict": "sparse"
   },
   {
@@ -1009,12 +1010,12 @@
     4
    ],
    "centre": [
-    82048,
-    -57952
+    82204,
+    -57796
    ],
-   "mesh_actors": 1560,
+   "mesh_actors": 1605,
    "radius_metres": 1005,
-   "ground_z": 353,
+   "ground_z": 348,
    "verdict": "built"
   },
   {
@@ -1023,12 +1024,12 @@
     4
    ],
    "centre": [
-    102048,
-    -57952
+    102204,
+    -57796
    ],
-   "mesh_actors": 966,
+   "mesh_actors": 957,
    "radius_metres": 1174,
-   "ground_z": 184,
+   "ground_z": 182,
    "verdict": "built"
   },
   {
@@ -1037,11 +1038,11 @@
     4
    ],
    "centre": [
-    122048,
-    -57952
+    122204,
+    -57796
    ],
-   "mesh_actors": 1,
-   "radius_metres": 1351,
+   "mesh_actors": 2,
+   "radius_metres": 1352,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -1051,11 +1052,11 @@
     5
    ],
    "centre": [
-    -137952,
-    -37952
+    -137796,
+    -37796
    ],
    "mesh_actors": 0,
-   "radius_metres": 1431,
+   "radius_metres": 1429,
    "verdict": "EMPTY"
   },
   {
@@ -1064,13 +1065,13 @@
     5
    ],
    "centre": [
-    -117952,
-    -37952
+    -117796,
+    -37796
    ],
    "mesh_actors": 0,
-   "radius_metres": 1239,
+   "radius_metres": 1237,
    "verdict": "EMPTY",
-   "ground_z_borrowed": 129
+   "ground_z_borrowed": 126
   },
   {
    "tile": [
@@ -1078,12 +1079,12 @@
     5
    ],
    "centre": [
-    -97952,
-    -37952
+    -97796,
+    -37796
    ],
-   "mesh_actors": 566,
-   "radius_metres": 1050,
-   "ground_z": 307,
+   "mesh_actors": 570,
+   "radius_metres": 1048,
+   "ground_z": 322,
    "verdict": "built"
   },
   {
@@ -1092,12 +1093,12 @@
     5
    ],
    "centre": [
-    -77952,
-    -37952
+    -77796,
+    -37796
    ],
-   "mesh_actors": 2461,
-   "radius_metres": 867,
-   "ground_z": 203,
+   "mesh_actors": 2448,
+   "radius_metres": 865,
+   "ground_z": 205,
    "verdict": "built"
   },
   {
@@ -1106,12 +1107,12 @@
     5
    ],
    "centre": [
-    -57952,
-    -37952
+    -57796,
+    -37796
    ],
-   "mesh_actors": 3605,
-   "radius_metres": 693,
-   "ground_z": 270,
+   "mesh_actors": 3599,
+   "radius_metres": 691,
+   "ground_z": 271,
    "verdict": "built"
   },
   {
@@ -1120,12 +1121,12 @@
     5
    ],
    "centre": [
-    -37952,
-    -37952
+    -37796,
+    -37796
    ],
-   "mesh_actors": 1284,
-   "radius_metres": 537,
-   "ground_z": 509,
+   "mesh_actors": 1328,
+   "radius_metres": 535,
+   "ground_z": 503,
    "verdict": "built"
   },
   {
@@ -1134,12 +1135,12 @@
     5
    ],
    "centre": [
-    -17952,
-    -37952
+    -17796,
+    -37796
    ],
-   "mesh_actors": 5160,
-   "radius_metres": 420,
-   "ground_z": 388,
+   "mesh_actors": 5319,
+   "radius_metres": 418,
+   "ground_z": 381,
    "verdict": "built"
   },
   {
@@ -1148,12 +1149,12 @@
     5
    ],
    "centre": [
-    2048,
-    -37952
+    2204,
+    -37796
    ],
-   "mesh_actors": 8643,
-   "radius_metres": 380,
-   "ground_z": 258,
+   "mesh_actors": 8832,
+   "radius_metres": 379,
+   "ground_z": 266,
    "verdict": "built"
   },
   {
@@ -1162,12 +1163,12 @@
     5
    ],
    "centre": [
-    22048,
-    -37952
+    22204,
+    -37796
    ],
-   "mesh_actors": 3222,
-   "radius_metres": 439,
-   "ground_z": 251,
+   "mesh_actors": 3190,
+   "radius_metres": 438,
+   "ground_z": 242,
    "verdict": "built"
   },
   {
@@ -1176,12 +1177,12 @@
     5
    ],
    "centre": [
-    42048,
-    -37952
+    42204,
+    -37796
    ],
-   "mesh_actors": 237,
-   "radius_metres": 566,
-   "ground_z": 514,
+   "mesh_actors": 249,
+   "radius_metres": 567,
+   "ground_z": 509,
    "verdict": "built"
   },
   {
@@ -1190,12 +1191,12 @@
     5
    ],
    "centre": [
-    62048,
-    -37952
+    62204,
+    -37796
    ],
-   "mesh_actors": 2259,
-   "radius_metres": 727,
-   "ground_z": 278,
+   "mesh_actors": 2273,
+   "radius_metres": 728,
+   "ground_z": 277,
    "verdict": "built"
   },
   {
@@ -1204,12 +1205,12 @@
     5
    ],
    "centre": [
-    82048,
-    -37952
+    82204,
+    -37796
    ],
-   "mesh_actors": 1805,
-   "radius_metres": 904,
-   "ground_z": 248,
+   "mesh_actors": 1779,
+   "radius_metres": 905,
+   "ground_z": 256,
    "verdict": "built"
   },
   {
@@ -1218,12 +1219,12 @@
     5
    ],
    "centre": [
-    102048,
-    -37952
+    102204,
+    -37796
    ],
-   "mesh_actors": 305,
-   "radius_metres": 1089,
-   "ground_z": 367,
+   "mesh_actors": 276,
+   "radius_metres": 1090,
+   "ground_z": 350,
    "verdict": "built"
   },
   {
@@ -1232,13 +1233,12 @@
     5
    ],
    "centre": [
-    122048,
-    -37952
+    122204,
+    -37796
    ],
-   "mesh_actors": 1,
-   "radius_metres": 1278,
-   "ground_z": -900,
-   "verdict": "sparse"
+   "mesh_actors": 0,
+   "radius_metres": 1279,
+   "verdict": "EMPTY"
   },
   {
    "tile": [
@@ -1246,13 +1246,13 @@
     5
    ],
    "centre": [
-    142048,
-    -37952
+    142204,
+    -37796
    ],
    "mesh_actors": 0,
-   "radius_metres": 1470,
+   "radius_metres": 1471,
    "verdict": "EMPTY",
-   "ground_z_borrowed": -335
+   "ground_z_borrowed": -244
   },
   {
    "tile": [
@@ -1260,12 +1260,13 @@
     6
    ],
    "centre": [
-    -137952,
-    -17952
+    -137796,
+    -17796
    ],
-   "mesh_actors": 0,
-   "radius_metres": 1391,
-   "verdict": "EMPTY"
+   "mesh_actors": 2,
+   "radius_metres": 1389,
+   "ground_z": 0,
+   "verdict": "sparse"
   },
   {
    "tile": [
@@ -1273,11 +1274,11 @@
     6
    ],
    "centre": [
-    -117952,
-    -17952
+    -117796,
+    -17796
    ],
-   "mesh_actors": 102,
-   "radius_metres": 1193,
+   "mesh_actors": 100,
+   "radius_metres": 1191,
    "ground_z": 0,
    "verdict": "built"
   },
@@ -1287,11 +1288,11 @@
     6
    ],
    "centre": [
-    -97952,
-    -17952
+    -97796,
+    -17796
    ],
    "mesh_actors": 6,
-   "radius_metres": 996,
+   "radius_metres": 994,
    "ground_z": 2533,
    "verdict": "sparse"
   },
@@ -1301,12 +1302,12 @@
     6
    ],
    "centre": [
-    -77952,
-    -17952
+    -77796,
+    -17796
    ],
-   "mesh_actors": 262,
-   "radius_metres": 800,
-   "ground_z": 1073,
+   "mesh_actors": 244,
+   "radius_metres": 798,
+   "ground_z": 1082,
    "verdict": "built"
   },
   {
@@ -1315,12 +1316,12 @@
     6
    ],
    "centre": [
-    -57952,
-    -17952
+    -57796,
+    -17796
    ],
-   "mesh_actors": 142,
-   "radius_metres": 607,
-   "ground_z": 596,
+   "mesh_actors": 143,
+   "radius_metres": 605,
+   "ground_z": 623,
    "verdict": "built"
   },
   {
@@ -1329,11 +1330,11 @@
     6
    ],
    "centre": [
-    -37952,
-    -17952
+    -37796,
+    -17796
    ],
-   "mesh_actors": 4541,
-   "radius_metres": 420,
+   "mesh_actors": 4674,
+   "radius_metres": 418,
    "ground_z": 405,
    "verdict": "built"
   },
@@ -1343,12 +1344,12 @@
     6
    ],
    "centre": [
-    -17952,
-    -17952
+    -17796,
+    -17796
    ],
-   "mesh_actors": 8898,
-   "radius_metres": 254,
-   "ground_z": 201,
+   "mesh_actors": 8832,
+   "radius_metres": 252,
+   "ground_z": 192,
    "verdict": "built"
   },
   {
@@ -1357,12 +1358,12 @@
     6
    ],
    "centre": [
-    2048,
-    -17952
+    2204,
+    -17796
    ],
-   "mesh_actors": 16365,
-   "radius_metres": 181,
-   "ground_z": 118,
+   "mesh_actors": 16336,
+   "radius_metres": 179,
+   "ground_z": 114,
    "verdict": "built"
   },
   {
@@ -1371,11 +1372,11 @@
     6
    ],
    "centre": [
-    22048,
-    -17952
+    22204,
+    -17796
    ],
-   "mesh_actors": 14280,
-   "radius_metres": 284,
+   "mesh_actors": 14221,
+   "radius_metres": 285,
    "ground_z": 158,
    "verdict": "built"
   },
@@ -1385,12 +1386,12 @@
     6
    ],
    "centre": [
-    42048,
-    -17952
+    42204,
+    -17796
    ],
    "mesh_actors": 510,
-   "radius_metres": 457,
-   "ground_z": 458,
+   "radius_metres": 458,
+   "ground_z": 431,
    "verdict": "built"
   },
   {
@@ -1399,12 +1400,12 @@
     6
    ],
    "centre": [
-    62048,
-    -17952
+    62204,
+    -17796
    ],
-   "mesh_actors": 104,
-   "radius_metres": 646,
-   "ground_z": 543,
+   "mesh_actors": 100,
+   "radius_metres": 647,
+   "ground_z": 544,
    "verdict": "built"
   },
   {
@@ -1413,11 +1414,11 @@
     6
    ],
    "centre": [
-    82048,
-    -17952
+    82204,
+    -17796
    ],
    "mesh_actors": 101,
-   "radius_metres": 840,
+   "radius_metres": 841,
    "ground_z": 942,
    "verdict": "built"
   },
@@ -1427,11 +1428,11 @@
     6
    ],
    "centre": [
-    102048,
-    -17952
+    102204,
+    -17796
    ],
    "mesh_actors": 85,
-   "radius_metres": 1036,
+   "radius_metres": 1037,
    "ground_z": 706,
    "verdict": "built"
   },
@@ -1441,13 +1442,13 @@
     6
    ],
    "centre": [
-    122048,
-    -17952
+    122204,
+    -17796
    ],
    "mesh_actors": 0,
-   "radius_metres": 1234,
+   "radius_metres": 1235,
    "verdict": "EMPTY",
-   "ground_z_borrowed": 209
+   "ground_z_borrowed": 281
   },
   {
    "tile": [
@@ -1455,11 +1456,11 @@
     6
    ],
    "centre": [
-    142048,
-    -17952
+    142204,
+    -17796
    ],
    "mesh_actors": 0,
-   "radius_metres": 1432,
+   "radius_metres": 1433,
    "verdict": "EMPTY"
   },
   {
@@ -1468,11 +1469,11 @@
     7
    ],
    "centre": [
-    -137952,
-    2048
+    -137796,
+    2204
    ],
    "mesh_actors": 1,
-   "radius_metres": 1380,
+   "radius_metres": 1378,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -1482,11 +1483,11 @@
     7
    ],
    "centre": [
-    -117952,
-    2048
+    -117796,
+    2204
    ],
    "mesh_actors": 3,
-   "radius_metres": 1180,
+   "radius_metres": 1178,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -1496,12 +1497,12 @@
     7
    ],
    "centre": [
-    -97952,
-    2048
+    -97796,
+    2204
    ],
-   "mesh_actors": 186,
-   "radius_metres": 980,
-   "ground_z": 1031,
+   "mesh_actors": 195,
+   "radius_metres": 978,
+   "ground_z": 1091,
    "verdict": "built"
   },
   {
@@ -1510,11 +1511,11 @@
     7
    ],
    "centre": [
-    -77952,
-    2048
+    -77796,
+    2204
    ],
    "mesh_actors": 72,
-   "radius_metres": 780,
+   "radius_metres": 778,
    "ground_z": 606,
    "verdict": "built"
   },
@@ -1524,11 +1525,11 @@
     7
    ],
    "centre": [
-    -57952,
-    2048
+    -57796,
+    2204
    ],
    "mesh_actors": 13,
-   "radius_metres": 580,
+   "radius_metres": 578,
    "ground_z": 1094,
    "verdict": "sparse"
   },
@@ -1538,12 +1539,12 @@
     7
    ],
    "centre": [
-    -37952,
-    2048
+    -37796,
+    2204
    ],
-   "mesh_actors": 5350,
-   "radius_metres": 380,
-   "ground_z": 154,
+   "mesh_actors": 5376,
+   "radius_metres": 379,
+   "ground_z": 160,
    "verdict": "built"
   },
   {
@@ -1552,12 +1553,12 @@
     7
    ],
    "centre": [
-    -17952,
-    2048
+    -17796,
+    2204
    ],
-   "mesh_actors": 10422,
-   "radius_metres": 181,
-   "ground_z": -36,
+   "mesh_actors": 10307,
+   "radius_metres": 179,
+   "ground_z": -35,
    "verdict": "built"
   },
   {
@@ -1566,12 +1567,12 @@
     7
    ],
    "centre": [
-    2048,
-    2048
+    2204,
+    2204
    ],
-   "mesh_actors": 17644,
-   "radius_metres": 29,
-   "ground_z": -1451,
+   "mesh_actors": 19465,
+   "radius_metres": 31,
+   "ground_z": -1305,
    "verdict": "built"
   },
   {
@@ -1580,12 +1581,12 @@
     7
    ],
    "centre": [
-    22048,
-    2048
+    22204,
+    2204
    ],
-   "mesh_actors": 15374,
-   "radius_metres": 221,
-   "ground_z": 179,
+   "mesh_actors": 15478,
+   "radius_metres": 223,
+   "ground_z": 186,
    "verdict": "built"
   },
   {
@@ -1594,12 +1595,12 @@
     7
    ],
    "centre": [
-    42048,
-    2048
+    42204,
+    2204
    ],
-   "mesh_actors": 2811,
-   "radius_metres": 421,
-   "ground_z": 215,
+   "mesh_actors": 2634,
+   "radius_metres": 423,
+   "ground_z": 209,
    "verdict": "built"
   },
   {
@@ -1608,11 +1609,11 @@
     7
    ],
    "centre": [
-    62048,
-    2048
+    62204,
+    2204
    ],
    "mesh_actors": 180,
-   "radius_metres": 621,
+   "radius_metres": 622,
    "ground_z": 893,
    "verdict": "built"
   },
@@ -1622,11 +1623,11 @@
     7
    ],
    "centre": [
-    82048,
-    2048
+    82204,
+    2204
    ],
    "mesh_actors": 72,
-   "radius_metres": 821,
+   "radius_metres": 822,
    "ground_z": 555,
    "verdict": "built"
   },
@@ -1636,11 +1637,11 @@
     7
    ],
    "centre": [
-    102048,
-    2048
+    102204,
+    2204
    ],
    "mesh_actors": 1,
-   "radius_metres": 1021,
+   "radius_metres": 1022,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -1650,13 +1651,13 @@
     7
    ],
    "centre": [
-    122048,
-    2048
+    122204,
+    2204
    ],
    "mesh_actors": 0,
-   "radius_metres": 1221,
+   "radius_metres": 1222,
    "verdict": "EMPTY",
-   "ground_z_borrowed": 1842
+   "ground_z_borrowed": 2088
   },
   {
    "tile": [
@@ -1664,11 +1665,11 @@
     7
    ],
    "centre": [
-    142048,
-    2048
+    142204,
+    2204
    ],
    "mesh_actors": 0,
-   "radius_metres": 1421,
+   "radius_metres": 1422,
    "verdict": "EMPTY"
   },
   {
@@ -1677,11 +1678,11 @@
     8
    ],
    "centre": [
-    -137952,
-    22048
+    -137796,
+    22204
    ],
    "mesh_actors": 0,
-   "radius_metres": 1397,
+   "radius_metres": 1396,
    "verdict": "EMPTY"
   },
   {
@@ -1690,11 +1691,11 @@
     8
    ],
    "centre": [
-    -117952,
-    22048
+    -117796,
+    22204
    ],
    "mesh_actors": 1,
-   "radius_metres": 1200,
+   "radius_metres": 1199,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -1704,12 +1705,12 @@
     8
    ],
    "centre": [
-    -97952,
-    22048
+    -97796,
+    22204
    ],
-   "mesh_actors": 45,
-   "radius_metres": 1004,
-   "ground_z": 589,
+   "mesh_actors": 53,
+   "radius_metres": 1003,
+   "ground_z": 335,
    "verdict": "built"
   },
   {
@@ -1718,12 +1719,12 @@
     8
    ],
    "centre": [
-    -77952,
-    22048
+    -77796,
+    22204
    ],
-   "mesh_actors": 128,
-   "radius_metres": 810,
-   "ground_z": 1087,
+   "mesh_actors": 111,
+   "radius_metres": 809,
+   "ground_z": 1143,
    "verdict": "built"
   },
   {
@@ -1732,11 +1733,11 @@
     8
    ],
    "centre": [
-    -57952,
-    22048
+    -57796,
+    22204
    ],
    "mesh_actors": 348,
-   "radius_metres": 620,
+   "radius_metres": 619,
    "ground_z": 1073,
    "verdict": "built"
   },
@@ -1746,12 +1747,12 @@
     8
    ],
    "centre": [
-    -37952,
-    22048
+    -37796,
+    22204
    ],
-   "mesh_actors": 993,
-   "radius_metres": 439,
-   "ground_z": 218,
+   "mesh_actors": 990,
+   "radius_metres": 438,
+   "ground_z": 222,
    "verdict": "built"
   },
   {
@@ -1760,12 +1761,12 @@
     8
    ],
    "centre": [
-    -17952,
-    22048
+    -17796,
+    22204
    ],
-   "mesh_actors": 3159,
-   "radius_metres": 284,
-   "ground_z": 103,
+   "mesh_actors": 3149,
+   "radius_metres": 285,
+   "ground_z": 105,
    "verdict": "built"
   },
   {
@@ -1774,12 +1775,12 @@
     8
    ],
    "centre": [
-    2048,
-    22048
+    2204,
+    22204
    ],
-   "mesh_actors": 8151,
-   "radius_metres": 221,
-   "ground_z": 212,
+   "mesh_actors": 8140,
+   "radius_metres": 223,
+   "ground_z": 211,
    "verdict": "built"
   },
   {
@@ -1788,11 +1789,11 @@
     8
    ],
    "centre": [
-    22048,
-    22048
+    22204,
+    22204
    ],
-   "mesh_actors": 8515,
-   "radius_metres": 312,
+   "mesh_actors": 8376,
+   "radius_metres": 314,
    "ground_z": 348,
    "verdict": "built"
   },
@@ -1802,12 +1803,12 @@
     8
    ],
    "centre": [
-    42048,
-    22048
+    42204,
+    22204
    ],
-   "mesh_actors": 447,
-   "radius_metres": 475,
-   "ground_z": 1310,
+   "mesh_actors": 422,
+   "radius_metres": 477,
+   "ground_z": 1386,
    "verdict": "built"
   },
   {
@@ -1816,11 +1817,11 @@
     8
    ],
    "centre": [
-    62048,
-    22048
+    62204,
+    22204
    ],
    "mesh_actors": 139,
-   "radius_metres": 658,
+   "radius_metres": 660,
    "ground_z": 1660,
    "verdict": "built"
   },
@@ -1830,12 +1831,12 @@
     8
    ],
    "centre": [
-    82048,
-    22048
+    82204,
+    22204
    ],
-   "mesh_actors": 163,
-   "radius_metres": 850,
-   "ground_z": 1038,
+   "mesh_actors": 174,
+   "radius_metres": 852,
+   "ground_z": 1098,
    "verdict": "built"
   },
   {
@@ -1844,12 +1845,12 @@
     8
    ],
    "centre": [
-    102048,
-    22048
+    102204,
+    22204
    ],
-   "mesh_actors": 47,
-   "radius_metres": 1044,
-   "ground_z": 810,
+   "mesh_actors": 36,
+   "radius_metres": 1046,
+   "ground_z": 449,
    "verdict": "built"
   },
   {
@@ -1858,11 +1859,11 @@
     8
    ],
    "centre": [
-    122048,
-    22048
+    122204,
+    22204
    ],
    "mesh_actors": 0,
-   "radius_metres": 1240,
+   "radius_metres": 1242,
    "verdict": "EMPTY"
   },
   {
@@ -1871,11 +1872,11 @@
     8
    ],
    "centre": [
-    142048,
-    22048
+    142204,
+    22204
    ],
    "mesh_actors": 0,
-   "radius_metres": 1437,
+   "radius_metres": 1439,
    "verdict": "EMPTY"
   },
   {
@@ -1884,13 +1885,13 @@
     9
    ],
    "centre": [
-    -137952,
-    42048
+    -137796,
+    42204
    ],
    "mesh_actors": 0,
-   "radius_metres": 1442,
+   "radius_metres": 1441,
    "verdict": "EMPTY",
-   "ground_z_borrowed": 1712
+   "ground_z_borrowed": 1691
   },
   {
    "tile": [
@@ -1898,11 +1899,11 @@
     9
    ],
    "centre": [
-    -117952,
-    42048
+    -117796,
+    42204
    ],
    "mesh_actors": 0,
-   "radius_metres": 1252,
+   "radius_metres": 1251,
    "verdict": "EMPTY"
   },
   {
@@ -1911,11 +1912,11 @@
     9
    ],
    "centre": [
-    -97952,
-    42048
+    -97796,
+    42204
    ],
    "mesh_actors": 4,
-   "radius_metres": 1066,
+   "radius_metres": 1065,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -1925,11 +1926,11 @@
     9
    ],
    "centre": [
-    -77952,
-    42048
+    -77796,
+    42204
    ],
    "mesh_actors": 230,
-   "radius_metres": 886,
+   "radius_metres": 885,
    "ground_z": 1929,
    "verdict": "built"
   },
@@ -1939,12 +1940,12 @@
     9
    ],
    "centre": [
-    -57952,
-    42048
+    -57796,
+    42204
    ],
-   "mesh_actors": 141,
+   "mesh_actors": 149,
    "radius_metres": 716,
-   "ground_z": 3512,
+   "ground_z": 3358,
    "verdict": "built"
   },
   {
@@ -1953,12 +1954,12 @@
     9
    ],
    "centre": [
-    -37952,
-    42048
+    -37796,
+    42204
    ],
-   "mesh_actors": 152,
-   "radius_metres": 566,
-   "ground_z": 2324,
+   "mesh_actors": 131,
+   "radius_metres": 567,
+   "ground_z": 2307,
    "verdict": "built"
   },
   {
@@ -1967,12 +1968,12 @@
     9
    ],
    "centre": [
-    -17952,
-    42048
+    -17796,
+    42204
    ],
-   "mesh_actors": 1210,
-   "radius_metres": 457,
-   "ground_z": 339,
+   "mesh_actors": 1226,
+   "radius_metres": 458,
+   "ground_z": 345,
    "verdict": "built"
   },
   {
@@ -1981,12 +1982,12 @@
     9
    ],
    "centre": [
-    2048,
-    42048
+    2204,
+    42204
    ],
-   "mesh_actors": 1066,
-   "radius_metres": 421,
-   "ground_z": 182,
+   "mesh_actors": 1044,
+   "radius_metres": 423,
+   "ground_z": 173,
    "verdict": "built"
   },
   {
@@ -1995,12 +1996,12 @@
     9
    ],
    "centre": [
-    22048,
-    42048
+    22204,
+    42204
    ],
-   "mesh_actors": 1358,
-   "radius_metres": 475,
-   "ground_z": 398,
+   "mesh_actors": 1288,
+   "radius_metres": 477,
+   "ground_z": 389,
    "verdict": "built"
   },
   {
@@ -2009,11 +2010,11 @@
     9
    ],
    "centre": [
-    42048,
-    42048
+    42204,
+    42204
    ],
    "mesh_actors": 112,
-   "radius_metres": 595,
+   "radius_metres": 597,
    "ground_z": 1972,
    "verdict": "built"
   },
@@ -2023,12 +2024,12 @@
     9
    ],
    "centre": [
-    62048,
-    42048
+    62204,
+    42204
    ],
-   "mesh_actors": 154,
-   "radius_metres": 750,
-   "ground_z": 1521,
+   "mesh_actors": 155,
+   "radius_metres": 752,
+   "ground_z": 1511,
    "verdict": "built"
   },
   {
@@ -2037,12 +2038,12 @@
     9
    ],
    "centre": [
-    82048,
-    42048
+    82204,
+    42204
    ],
-   "mesh_actors": 139,
-   "radius_metres": 922,
-   "ground_z": 4078,
+   "mesh_actors": 138,
+   "radius_metres": 924,
+   "ground_z": 4107,
    "verdict": "built"
   },
   {
@@ -2051,11 +2052,11 @@
     9
    ],
    "centre": [
-    102048,
-    42048
+    102204,
+    42204
    ],
    "mesh_actors": 18,
-   "radius_metres": 1104,
+   "radius_metres": 1106,
    "ground_z": 13314,
    "verdict": "built"
   },
@@ -2065,11 +2066,11 @@
     9
    ],
    "centre": [
-    122048,
-    42048
+    122204,
+    42204
    ],
    "mesh_actors": 0,
-   "radius_metres": 1291,
+   "radius_metres": 1293,
    "verdict": "EMPTY"
   },
   {
@@ -2078,11 +2079,11 @@
     10
    ],
    "centre": [
-    -117952,
-    62048
+    -117796,
+    62204
    ],
    "mesh_actors": 2,
-   "radius_metres": 1333,
+   "radius_metres": 1332,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -2092,11 +2093,11 @@
     10
    ],
    "centre": [
-    -97952,
-    62048
+    -97796,
+    62204
    ],
    "mesh_actors": 33,
-   "radius_metres": 1160,
+   "radius_metres": 1159,
    "ground_z": 8881,
    "verdict": "built"
   },
@@ -2106,8 +2107,8 @@
     10
    ],
    "centre": [
-    -77952,
-    62048
+    -77796,
+    62204
    ],
    "mesh_actors": 121,
    "radius_metres": 996,
@@ -2120,8 +2121,8 @@
     10
    ],
    "centre": [
-    -57952,
-    62048
+    -57796,
+    62204
    ],
    "mesh_actors": 105,
    "radius_metres": 849,
@@ -2134,11 +2135,11 @@
     10
    ],
    "centre": [
-    -37952,
-    62048
+    -37796,
+    62204
    ],
    "mesh_actors": 160,
-   "radius_metres": 727,
+   "radius_metres": 728,
    "ground_z": 3003,
    "verdict": "built"
   },
@@ -2148,12 +2149,12 @@
     10
    ],
    "centre": [
-    -17952,
-    62048
+    -17796,
+    62204
    ],
-   "mesh_actors": 309,
-   "radius_metres": 646,
-   "ground_z": 183,
+   "mesh_actors": 325,
+   "radius_metres": 647,
+   "ground_z": 170,
    "verdict": "built"
   },
   {
@@ -2162,12 +2163,12 @@
     10
    ],
    "centre": [
-    2048,
-    62048
+    2204,
+    62204
    ],
-   "mesh_actors": 1622,
-   "radius_metres": 621,
-   "ground_z": 19,
+   "mesh_actors": 1633,
+   "radius_metres": 622,
+   "ground_z": 20,
    "verdict": "built"
   },
   {
@@ -2176,12 +2177,12 @@
     10
    ],
    "centre": [
-    22048,
-    62048
+    22204,
+    62204
    ],
-   "mesh_actors": 210,
-   "radius_metres": 658,
-   "ground_z": 1712,
+   "mesh_actors": 220,
+   "radius_metres": 660,
+   "ground_z": 2207,
    "verdict": "built"
   },
   {
@@ -2190,11 +2191,11 @@
     10
    ],
    "centre": [
-    42048,
-    62048
+    42204,
+    62204
    ],
    "mesh_actors": 197,
-   "radius_metres": 750,
+   "radius_metres": 752,
    "ground_z": 1755,
    "verdict": "built"
   },
@@ -2204,11 +2205,11 @@
     10
    ],
    "centre": [
-    62048,
-    62048
+    62204,
+    62204
    ],
    "mesh_actors": 158,
-   "radius_metres": 877,
+   "radius_metres": 880,
    "ground_z": 3120,
    "verdict": "built"
   },
@@ -2218,11 +2219,11 @@
     10
    ],
    "centre": [
-    82048,
-    62048
+    82204,
+    62204
    ],
    "mesh_actors": 4,
-   "radius_metres": 1029,
+   "radius_metres": 1031,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -2232,11 +2233,11 @@
     10
    ],
    "centre": [
-    102048,
-    62048
+    102204,
+    62204
    ],
    "mesh_actors": 22,
-   "radius_metres": 1194,
+   "radius_metres": 1196,
    "ground_z": 11578,
    "verdict": "built"
   },
@@ -2246,11 +2247,11 @@
     10
    ],
    "centre": [
-    122048,
-    62048
+    122204,
+    62204
    ],
    "mesh_actors": 0,
-   "radius_metres": 1369,
+   "radius_metres": 1371,
    "verdict": "EMPTY"
   },
   {
@@ -2259,11 +2260,11 @@
     11
    ],
    "centre": [
-    -117952,
-    82048
+    -117796,
+    82204
    ],
    "mesh_actors": 0,
-   "radius_metres": 1437,
+   "radius_metres": 1436,
    "verdict": "EMPTY"
   },
   {
@@ -2272,8 +2273,8 @@
     11
    ],
    "centre": [
-    -97952,
-    82048
+    -97796,
+    82204
    ],
    "mesh_actors": 19,
    "radius_metres": 1278,
@@ -2286,8 +2287,8 @@
     11
    ],
    "centre": [
-    -77952,
-    82048
+    -77796,
+    82204
    ],
    "mesh_actors": 10,
    "radius_metres": 1132,
@@ -2300,8 +2301,8 @@
     11
    ],
    "centre": [
-    -57952,
-    82048
+    -57796,
+    82204
    ],
    "mesh_actors": 235,
    "radius_metres": 1005,
@@ -2314,11 +2315,11 @@
     11
    ],
    "centre": [
-    -37952,
-    82048
+    -37796,
+    82204
    ],
    "mesh_actors": 137,
-   "radius_metres": 904,
+   "radius_metres": 905,
    "ground_z": 2214,
    "verdict": "built"
   },
@@ -2328,12 +2329,12 @@
     11
    ],
    "centre": [
-    -17952,
-    82048
+    -17796,
+    82204
    ],
-   "mesh_actors": 392,
-   "radius_metres": 840,
-   "ground_z": 467,
+   "mesh_actors": 411,
+   "radius_metres": 841,
+   "ground_z": 438,
    "verdict": "built"
   },
   {
@@ -2342,12 +2343,12 @@
     11
    ],
    "centre": [
-    2048,
-    82048
+    2204,
+    82204
    ],
-   "mesh_actors": 2731,
-   "radius_metres": 821,
-   "ground_z": 177,
+   "mesh_actors": 2698,
+   "radius_metres": 822,
+   "ground_z": 180,
    "verdict": "built"
   },
   {
@@ -2356,12 +2357,12 @@
     11
    ],
    "centre": [
-    22048,
-    82048
+    22204,
+    82204
    ],
-   "mesh_actors": 75,
-   "radius_metres": 850,
-   "ground_z": 2178,
+   "mesh_actors": 65,
+   "radius_metres": 852,
+   "ground_z": 575,
    "verdict": "built"
   },
   {
@@ -2370,11 +2371,11 @@
     11
    ],
    "centre": [
-    42048,
-    82048
+    42204,
+    82204
    ],
    "mesh_actors": 128,
-   "radius_metres": 922,
+   "radius_metres": 924,
    "ground_z": 1199,
    "verdict": "built"
   },
@@ -2384,11 +2385,11 @@
     11
    ],
    "centre": [
-    62048,
-    82048
+    62204,
+    82204
    ],
    "mesh_actors": 14,
-   "radius_metres": 1029,
+   "radius_metres": 1031,
    "ground_z": 10159,
    "verdict": "sparse"
   },
@@ -2398,11 +2399,11 @@
     11
    ],
    "centre": [
-    82048,
-    82048
+    82204,
+    82204
    ],
    "mesh_actors": 19,
-   "radius_metres": 1160,
+   "radius_metres": 1163,
    "ground_z": 10359,
    "verdict": "built"
   },
@@ -2412,11 +2413,11 @@
     11
    ],
    "centre": [
-    102048,
-    82048
+    102204,
+    82204
    ],
    "mesh_actors": 0,
-   "radius_metres": 1309,
+   "radius_metres": 1312,
    "verdict": "EMPTY"
   },
   {
@@ -2425,13 +2426,13 @@
     11
    ],
    "centre": [
-    122048,
-    82048
+    122204,
+    82204
    ],
    "mesh_actors": 0,
-   "radius_metres": 1471,
+   "radius_metres": 1473,
    "verdict": "EMPTY",
-   "ground_z_borrowed": 9688
+   "ground_z_borrowed": 9724
   },
   {
    "tile": [
@@ -2439,8 +2440,8 @@
     12
    ],
    "centre": [
-    -97952,
-    102048
+    -97796,
+    102204
    ],
    "mesh_actors": 0,
    "radius_metres": 1415,
@@ -2452,8 +2453,8 @@
     12
    ],
    "centre": [
-    -77952,
-    102048
+    -77796,
+    102204
    ],
    "mesh_actors": 1,
    "radius_metres": 1284,
@@ -2466,12 +2467,12 @@
     12
    ],
    "centre": [
-    -57952,
-    102048
+    -57796,
+    102204
    ],
-   "mesh_actors": 56,
+   "mesh_actors": 57,
    "radius_metres": 1174,
-   "ground_z": 5546,
+   "ground_z": 5448,
    "verdict": "built"
   },
   {
@@ -2480,11 +2481,11 @@
     12
    ],
    "centre": [
-    -37952,
-    102048
+    -37796,
+    102204
    ],
-   "mesh_actors": 2,
-   "radius_metres": 1089,
+   "mesh_actors": 3,
+   "radius_metres": 1090,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -2494,12 +2495,12 @@
     12
    ],
    "centre": [
-    -17952,
-    102048
+    -17796,
+    102204
    ],
-   "mesh_actors": 276,
-   "radius_metres": 1036,
-   "ground_z": -8,
+   "mesh_actors": 315,
+   "radius_metres": 1037,
+   "ground_z": 145,
    "verdict": "built"
   },
   {
@@ -2508,12 +2509,12 @@
     12
    ],
    "centre": [
-    2048,
-    102048
+    2204,
+    102204
    ],
-   "mesh_actors": 1976,
-   "radius_metres": 1021,
-   "ground_z": 246,
+   "mesh_actors": 1932,
+   "radius_metres": 1022,
+   "ground_z": 227,
    "verdict": "built"
   },
   {
@@ -2522,11 +2523,11 @@
     12
    ],
    "centre": [
-    22048,
-    102048
+    22204,
+    102204
    ],
    "mesh_actors": 103,
-   "radius_metres": 1044,
+   "radius_metres": 1046,
    "ground_z": 0,
    "verdict": "built"
   },
@@ -2536,11 +2537,11 @@
     12
    ],
    "centre": [
-    42048,
-    102048
+    42204,
+    102204
    ],
    "mesh_actors": 4,
-   "radius_metres": 1104,
+   "radius_metres": 1106,
    "ground_z": -900,
    "verdict": "sparse"
   },
@@ -2550,12 +2551,12 @@
     12
    ],
    "centre": [
-    62048,
-    102048
+    62204,
+    102204
    ],
-   "mesh_actors": 28,
-   "radius_metres": 1194,
-   "ground_z": 181,
+   "mesh_actors": 33,
+   "radius_metres": 1196,
+   "ground_z": 187,
    "verdict": "built"
   },
   {
@@ -2564,11 +2565,11 @@
     12
    ],
    "centre": [
-    82048,
-    102048
+    82204,
+    102204
    ],
    "mesh_actors": 13,
-   "radius_metres": 1309,
+   "radius_metres": 1312,
    "ground_z": 17926,
    "verdict": "sparse"
   },
@@ -2578,11 +2579,11 @@
     12
    ],
    "centre": [
-    102048,
-    102048
+    102204,
+    102204
    ],
    "mesh_actors": 10,
-   "radius_metres": 1443,
+   "radius_metres": 1445,
    "ground_z": 14734,
    "verdict": "sparse"
   },
@@ -2592,12 +2593,12 @@
     13
    ],
    "centre": [
-    -77952,
-    122048
+    -77796,
+    122204
    ],
-   "mesh_actors": 123,
-   "radius_metres": 1448,
-   "ground_z": 1644,
+   "mesh_actors": 127,
+   "radius_metres": 1449,
+   "ground_z": 1603,
    "verdict": "built"
   },
   {
@@ -2606,12 +2607,12 @@
     13
    ],
    "centre": [
-    -57952,
-    122048
+    -57796,
+    122204
    ],
-   "mesh_actors": 360,
-   "radius_metres": 1351,
-   "ground_z": 648,
+   "mesh_actors": 358,
+   "radius_metres": 1352,
+   "ground_z": 647,
    "verdict": "built"
   },
   {
@@ -2620,12 +2621,12 @@
     13
    ],
    "centre": [
-    -37952,
-    122048
+    -37796,
+    122204
    ],
-   "mesh_actors": 209,
-   "radius_metres": 1278,
-   "ground_z": 191,
+   "mesh_actors": 211,
+   "radius_metres": 1279,
+   "ground_z": 193,
    "verdict": "built"
   },
   {
@@ -2634,12 +2635,12 @@
     13
    ],
    "centre": [
-    -17952,
-    122048
+    -17796,
+    122204
    ],
-   "mesh_actors": 195,
-   "radius_metres": 1234,
-   "ground_z": 1006,
+   "mesh_actors": 202,
+   "radius_metres": 1235,
+   "ground_z": 974,
    "verdict": "built"
   },
   {
@@ -2648,12 +2649,12 @@
     13
    ],
    "centre": [
-    2048,
-    122048
+    2204,
+    122204
    ],
-   "mesh_actors": 257,
-   "radius_metres": 1221,
-   "ground_z": 101,
+   "mesh_actors": 244,
+   "radius_metres": 1222,
+   "ground_z": 123,
    "verdict": "built"
   },
   {
@@ -2662,12 +2663,12 @@
     13
    ],
    "centre": [
-    22048,
-    122048
+    22204,
+    122204
    ],
-   "mesh_actors": 201,
-   "radius_metres": 1240,
-   "ground_z": 211,
+   "mesh_actors": 205,
+   "radius_metres": 1242,
+   "ground_z": 207,
    "verdict": "built"
   },
   {
@@ -2676,11 +2677,11 @@
     13
    ],
    "centre": [
-    42048,
-    122048
+    42204,
+    122204
    ],
-   "mesh_actors": 271,
-   "radius_metres": 1291,
+   "mesh_actors": 275,
+   "radius_metres": 1293,
    "ground_z": 191,
    "verdict": "built"
   },
@@ -2690,12 +2691,12 @@
     13
    ],
    "centre": [
-    62048,
-    122048
+    62204,
+    122204
    ],
-   "mesh_actors": 418,
-   "radius_metres": 1369,
-   "ground_z": 209,
+   "mesh_actors": 412,
+   "radius_metres": 1371,
+   "ground_z": 210,
    "verdict": "built"
   },
   {
@@ -2704,12 +2705,12 @@
     13
    ],
    "centre": [
-    82048,
-    122048
+    82204,
+    122204
    ],
-   "mesh_actors": 26,
-   "radius_metres": 1471,
-   "ground_z": 6415,
+   "mesh_actors": 25,
+   "radius_metres": 1473,
+   "ground_z": 6672,
    "verdict": "built"
   },
   {
@@ -2718,12 +2719,12 @@
     14
    ],
    "centre": [
-    -37952,
-    142048
+    -37796,
+    142204
    ],
-   "mesh_actors": 189,
-   "radius_metres": 1470,
-   "ground_z": 200,
+   "mesh_actors": 184,
+   "radius_metres": 1471,
+   "ground_z": 201,
    "verdict": "built"
   },
   {
@@ -2732,11 +2733,11 @@
     14
    ],
    "centre": [
-    -17952,
-    142048
+    -17796,
+    142204
    ],
-   "mesh_actors": 236,
-   "radius_metres": 1432,
+   "mesh_actors": 235,
+   "radius_metres": 1433,
    "ground_z": 211,
    "verdict": "built"
   },
@@ -2746,12 +2747,12 @@
     14
    ],
    "centre": [
-    2048,
-    142048
+    2204,
+    142204
    ],
-   "mesh_actors": 206,
-   "radius_metres": 1421,
-   "ground_z": 180,
+   "mesh_actors": 196,
+   "radius_metres": 1422,
+   "ground_z": 175,
    "verdict": "built"
   },
   {
@@ -2760,12 +2761,12 @@
     14
    ],
    "centre": [
-    22048,
-    142048
+    22204,
+    142204
    ],
-   "mesh_actors": 220,
-   "radius_metres": 1437,
-   "ground_z": 175,
+   "mesh_actors": 217,
+   "radius_metres": 1439,
+   "ground_z": 177,
    "verdict": "built"
   }
  ],
@@ -2776,17 +2777,17 @@
  "tile_metres": 200.0,
  "tiles_in_disc": 175,
  "tiles_built": 109,
- "tiles_sparse": 32,
- "tiles_empty": 34,
- "coverage_pct": 80.6,
+ "tiles_sparse": 33,
+ "tiles_empty": 33,
+ "coverage_pct": 81.1,
  "map": [
-  "     .....      ",
+  "     .s...      ",
   "   ...BBBs..    ",
   "  .sBssBsss..   ",
   " .ssBBBsBBBss.  ",
   " sBBBBBBBBsBBs  ",
-  "..BBBBBBBBBBBs. ",
-  ".BsBBBBBBBBBB.. ",
+  "..BBBBBBBBBBB.. ",
+  "sBsBBBBBBBBBB.. ",
   "ssBBsBBBBBBBs.. ",
   ".sBBBBBBBBBBB.. ",
   "..sBBBBBBBBBB.  ",
@@ -2803,56 +2804,56 @@
    "to_metres": 200,
    "tiles": 3,
    "empty": 0,
-   "actors": 44431
+   "actors": 46108
   },
   {
    "from_metres": 200,
    "to_metres": 400,
    "tiles": 8,
    "empty": 0,
-   "actors": 72370
+   "actors": 72404
   },
   {
    "from_metres": 400,
    "to_metres": 600,
    "tiles": 16,
    "empty": 0,
-   "actors": 23316
+   "actors": 23330
   },
   {
    "from_metres": 600,
    "to_metres": 800,
-   "tiles": 20,
+   "tiles": 22,
    "empty": 0,
-   "actors": 10270
+   "actors": 10789
   },
   {
    "from_metres": 800,
    "to_metres": 1000,
-   "tiles": 30,
+   "tiles": 28,
    "empty": 0,
-   "actors": 11784
+   "actors": 11240
   },
   {
    "from_metres": 1000,
    "to_metres": 1200,
-   "tiles": 36,
+   "tiles": 38,
    "empty": 0,
-   "actors": 7632
+   "actors": 7768
   },
   {
    "from_metres": 1200,
    "to_metres": 1400,
-   "tiles": 39,
-   "empty": 18,
-   "actors": 2050
+   "tiles": 37,
+   "empty": 17,
+   "actors": 1957
   },
   {
    "from_metres": 1400,
    "to_metres": 1600,
    "tiles": 23,
    "empty": 16,
-   "actors": 1010
+   "actors": 994
   }
  ],
  "built_world": {
@@ -2862,8 +2863,8 @@
  },
  "wilderness": {
   "tiles": 60,
-  "empty": 34,
-  "placed": 2967
+  "empty": 33,
+  "placed": 2951
  },
  "visits": [
   {
@@ -2871,10 +2872,10 @@
     7,
     7
    ],
-   "radius_metres": 29,
-   "mesh_actors": 17644,
-   "landed_z": -567,
-   "expected_near_z": -1451,
+   "radius_metres": 31,
+   "mesh_actors": 19465,
+   "landed_z": -517,
+   "expected_near_z": -1305,
    "fell_through": false,
    "was_empty": false
   },
@@ -2883,10 +2884,10 @@
     7,
     6
    ],
-   "radius_metres": 181,
-   "mesh_actors": 16365,
-   "landed_z": 87,
-   "expected_near_z": 118,
+   "radius_metres": 179,
+   "mesh_actors": 16336,
+   "landed_z": 108,
+   "expected_near_z": 114,
    "fell_through": false,
    "was_empty": false
   },
@@ -2895,10 +2896,10 @@
     8,
     7
    ],
-   "radius_metres": 221,
-   "mesh_actors": 15374,
-   "landed_z": 104,
-   "expected_near_z": 179,
+   "radius_metres": 223,
+   "mesh_actors": 15478,
+   "landed_z": 101,
+   "expected_near_z": 186,
    "fell_through": false,
    "was_empty": false
   },
@@ -2907,8 +2908,8 @@
     8,
     6
    ],
-   "radius_metres": 284,
-   "mesh_actors": 14280,
+   "radius_metres": 285,
+   "mesh_actors": 14221,
    "landed_z": 101,
    "expected_near_z": 158,
    "fell_through": false,
@@ -2919,22 +2920,22 @@
     6,
     7
    ],
-   "radius_metres": 181,
-   "mesh_actors": 10422,
+   "radius_metres": 179,
+   "mesh_actors": 10307,
    "landed_z": 87,
-   "expected_near_z": -36,
+   "expected_near_z": -35,
    "fell_through": false,
    "was_empty": false
   },
   {
    "tile": [
-    4,
-    11
+    6,
+    14
    ],
-   "radius_metres": 1005,
+   "radius_metres": 1433,
    "mesh_actors": 235,
-   "landed_z": 1105,
-   "expected_near_z": 1625,
+   "landed_z": 75,
+   "expected_near_z": 211,
    "fell_through": false,
    "was_empty": false
   },
@@ -2943,9 +2944,9 @@
     3,
     9
    ],
-   "radius_metres": 886,
+   "radius_metres": 885,
    "mesh_actors": 230,
-   "landed_z": 75,
+   "landed_z": 1433,
    "expected_near_z": 1929,
    "fell_through": false,
    "was_empty": false
@@ -2953,12 +2954,12 @@
   {
    "tile": [
     8,
-    14
+    10
    ],
-   "radius_metres": 1437,
+   "radius_metres": 660,
    "mesh_actors": 220,
    "landed_z": 75,
-   "expected_near_z": 175,
+   "expected_near_z": 2207,
    "fell_through": false,
    "was_empty": false
   },
@@ -2967,22 +2968,10 @@
     4,
     6
    ],
-   "radius_metres": 607,
-   "mesh_actors": 142,
-   "landed_z": 88,
-   "expected_near_z": 596,
-   "fell_through": false,
-   "was_empty": false
-  },
-  {
-   "tile": [
-    4,
-    9
-   ],
-   "radius_metres": 716,
-   "mesh_actors": 141,
-   "landed_z": 219,
-   "expected_near_z": 3512,
+   "radius_metres": 605,
+   "mesh_actors": 143,
+   "landed_z": 102,
+   "expected_near_z": 623,
    "fell_through": false,
    "was_empty": false
   },
@@ -2991,10 +2980,22 @@
     10,
     8
    ],
-   "radius_metres": 658,
+   "radius_metres": 660,
    "mesh_actors": 139,
-   "landed_z": 1176,
+   "landed_z": 75,
    "expected_near_z": 1660,
+   "fell_through": false,
+   "was_empty": false
+  },
+  {
+   "tile": [
+    11,
+    9
+   ],
+   "radius_metres": 924,
+   "mesh_actors": 138,
+   "landed_z": 3590,
+   "expected_near_z": 4107,
    "fell_through": false,
    "was_empty": false
   },
@@ -3003,7 +3004,7 @@
     0,
     7
    ],
-   "radius_metres": 1380,
+   "radius_metres": 1378,
    "mesh_actors": 1,
    "landed_z": 75,
    "expected_near_z": -900,
@@ -3015,7 +3016,7 @@
     12,
     7
    ],
-   "radius_metres": 1021,
+   "radius_metres": 1022,
    "mesh_actors": 1,
    "landed_z": 75,
    "expected_near_z": -900,
@@ -3027,7 +3028,7 @@
     1,
     8
    ],
-   "radius_metres": 1200,
+   "radius_metres": 1199,
    "mesh_actors": 1,
    "landed_z": 75,
    "expected_near_z": -900,
@@ -3051,10 +3052,10 @@
     13,
     7
    ],
-   "radius_metres": 1221,
+   "radius_metres": 1222,
    "mesh_actors": 0,
-   "landed_z": 1328,
-   "expected_near_z": 1842,
+   "landed_z": 1711,
+   "expected_near_z": 2088,
    "fell_through": false,
    "was_empty": true
   },
@@ -3063,10 +3064,10 @@
     13,
     6
    ],
-   "radius_metres": 1234,
+   "radius_metres": 1235,
    "mesh_actors": 0,
    "landed_z": 75,
-   "expected_near_z": 209,
+   "expected_near_z": 281,
    "fell_through": false,
    "was_empty": true
   },
@@ -3075,10 +3076,10 @@
     5,
     1
    ],
-   "radius_metres": 1239,
+   "radius_metres": 1237,
    "mesh_actors": 0,
    "landed_z": 75,
-   "expected_near_z": 234,
+   "expected_near_z": 217,
    "fell_through": false,
    "was_empty": true
   },
@@ -3087,10 +3088,10 @@
     1,
     5
    ],
-   "radius_metres": 1239,
+   "radius_metres": 1237,
    "mesh_actors": 0,
    "landed_z": 75,
-   "expected_near_z": 129,
+   "expected_near_z": 126,
    "fell_through": false,
    "was_empty": true
   },
@@ -3099,10 +3100,10 @@
     0,
     9
    ],
-   "radius_metres": 1442,
+   "radius_metres": 1441,
    "mesh_actors": 0,
-   "landed_z": 1213,
-   "expected_near_z": 1712,
+   "landed_z": 1189,
+   "expected_near_z": 1691,
    "fell_through": false,
    "was_empty": true
   },
@@ -3111,10 +3112,10 @@
     13,
     3
    ],
-   "radius_metres": 1448,
+   "radius_metres": 1449,
    "mesh_actors": 0,
    "landed_z": 75,
-   "expected_near_z": 86,
+   "expected_near_z": 224,
    "fell_through": false,
    "was_empty": true
   },
@@ -3123,10 +3124,10 @@
     14,
     5
    ],
-   "radius_metres": 1470,
+   "radius_metres": 1471,
    "mesh_actors": 0,
    "landed_z": 75,
-   "expected_near_z": -335,
+   "expected_near_z": -244,
    "fell_through": false,
    "was_empty": true
   },
@@ -3135,10 +3136,10 @@
     13,
     11
    ],
-   "radius_metres": 1471,
+   "radius_metres": 1473,
    "mesh_actors": 0,
-   "landed_z": 9185,
-   "expected_near_z": 9688,
+   "landed_z": 9212,
+   "expected_near_z": 9724,
    "fell_through": false,
    "was_empty": true
   }
@@ -3146,7 +3147,7 @@
  "visits_that_fell_through": 0,
  "empty_tiles_visited": 8,
  "empty_tiles_with_no_floor": 0,
- "finished": "2026-09-25 02:31:13",
- "seconds": 57.98,
- "log": "W01 PASS the walkable world is a disc of real size rather than a scatter of strays {'core_radius_m': 1479.5, 'in_core': 173015, 'of_total': 173061, 'beyond': 46}\nW02 PASS the built world has no empty areas in it {'built_tiles': 115, 'built_empty': 0, 'where': [], 'frontier_m': 1200.0, 'note': \"the wilderness past the frontier is judged by W05, not by a city's standard\"}\nW05 PASS the wilderness belt is planted, with the clearings DF01 was designed to have {'tiles': 60, 'empty': 34, 'placed': 2967}\nW03 PASS the Dog stands on ground everywhere it was put down {'visited': 23, 'fell_through': 0, 'where': []}\nW04 PASS even the empty frontier tiles have a floor under them {'empty_visited': 8, 'no_floor': 0, 'where': []}\n"
+ "finished": "2026-09-25 09:41:13",
+ "seconds": 55.37,
+ "log": "W01 PASS the walkable world is a disc of real size rather than a scatter of strays {'core_radius_m': 1478.0, 'in_core': 174738, 'of_total': 174787, 'beyond': 49}\nW02 PASS the built world has no empty areas in it {'built_tiles': 115, 'built_empty': 0, 'where': [], 'frontier_m': 1200.0, 'note': \"the wilderness past the frontier is judged by W05, not by a city's standard\"}\nW05 PASS the wilderness belt is planted, with the clearings DF01 was designed to have {'tiles': 60, 'empty': 33, 'placed': 2951}\nW03 PASS the Dog stands on ground everywhere it was put down {'visited': 23, 'fell_through': 0, 'where': []}\nW04 PASS even the empty frontier tiles have a floor under them {'empty_visited': 8, 'no_floor': 0, 'where': []}\n"
 }
