@@ -541,9 +541,13 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		const int32 PartIndex = static_cast<int32>(Group.Key >> 32);
 		const int32 MaterialIndex = static_cast<int32>(Group.Key & 0xffffffff);
 		const EWonderlandCompanionMaterialKind Kind = Figure.Materials[MaterialIndex].Kind;
-		const FName ComponentName = MakeUniqueObjectName(this, UInstancedStaticMeshComponent::StaticClass(),
-			FName(*FString::Printf(TEXT("Mesh_%s_%s"), *Figure.Parts[PartIndex].Name.ToString(), *Figure.Materials[MaterialIndex].Name.ToString())));
-		UInstancedStaticMeshComponent* Mesh = NewObject<UInstancedStaticMeshComponent>(this, ComponentName);
+		// AUTO-NAMED, DELIBERATELY. This built a readable name per component -- Printf into an FString, an
+		// FName construction that hashes it, then MakeUniqueObjectName, which walks the outer's objects to
+		// prove the name is free. That is three allocations and a scan for each of ~58 components per avatar,
+		// on the frame the avatar arrives, and the scan gets slower as more avatars accumulate. P0 item 5 is
+		// about exactly that frame. Nothing reads these names -- no proof and no C++ looks up "Mesh_*", only
+		// the pivots are found by name -- so the engine's counter-based naming does the same job for free.
+		UInstancedStaticMeshComponent* Mesh = NewObject<UInstancedStaticMeshComponent>(this);
 		Mesh->SetMobility(EComponentMobility::Movable);
 		Mesh->SetStaticMesh(Cube);
 		if (MaterialInstances.IsValidIndex(MaterialIndex) && MaterialInstances[MaterialIndex] != nullptr)

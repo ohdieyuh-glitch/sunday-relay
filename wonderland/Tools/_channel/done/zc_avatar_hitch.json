@@ -1,0 +1,143 @@
+{
+ "name": "zc_avatar_hitch",
+ "started": "2026-09-25 16:51:36",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "H00",
+   "name": "both sides were actually sampled",
+   "pass": true,
+   "detail": {
+    "quiet": {
+     "samples": 386,
+     "median_ms": 38.02,
+     "p95_ms": 592.85,
+     "worst_ms": 592.85
+    },
+    "spawns": [
+     {
+      "samples": 122,
+      "median_ms": 49.91,
+      "p95_ms": 53.13,
+      "worst_ms": 54.1,
+      "avatar": "Cherubim_Large.wlvox"
+     },
+     {
+      "samples": 78,
+      "median_ms": 53.12,
+      "p95_ms": 81.59,
+      "worst_ms": 83.29,
+      "avatar": "Cherubim_Medium.wlvox"
+     },
+     {
+      "samples": 96,
+      "median_ms": 61.98,
+      "p95_ms": 80.21,
+      "worst_ms": 80.21,
+      "avatar": "Cherubim_Small.wlvox"
+     },
+     {
+      "samples": 102,
+      "median_ms": 58.71,
+      "p95_ms": 64.29,
+      "worst_ms": 65.48,
+      "avatar": "Seraph_Large.wlvox"
+     }
+    ],
+    "note": "a hitch is one frame; sampled every tick rather than on an interval, or the frame that stutters is the one the sampler slept through"
+   }
+  },
+  {
+   "id": "H01",
+   "name": "an arriving avatar does not add a hitch worse than the 73 ms the founder still felt",
+   "pass": true,
+   "detail": {
+    "normal_frame_ms": 38.02,
+    "longest_spawn_frame_ms": 83.29,
+    "hitch_ms": 45.27,
+    "quiet_tail": {
+     "p95_ms": 592.85,
+     "worst_ms": 592.85
+    },
+    "per_spawn": [
+     {
+      "samples": 122,
+      "median_ms": 49.91,
+      "p95_ms": 53.13,
+      "worst_ms": 54.1,
+      "avatar": "Cherubim_Large.wlvox"
+     },
+     {
+      "samples": 78,
+      "median_ms": 53.12,
+      "p95_ms": 81.59,
+      "worst_ms": 83.29,
+      "avatar": "Cherubim_Medium.wlvox"
+     },
+     {
+      "samples": 96,
+      "median_ms": 61.98,
+      "p95_ms": 80.21,
+      "worst_ms": 80.21,
+      "avatar": "Cherubim_Small.wlvox"
+     },
+     {
+      "samples": 102,
+      "median_ms": 58.71,
+      "p95_ms": 64.29,
+      "worst_ms": 65.48,
+      "avatar": "Seraph_Large.wlvox"
+     }
+    ],
+    "note": "the longest frame during a spawn against a NORMAL frame in the same session, so neither the machine's own stalls nor its thermal state is charged to the avatar"
+   }
+  }
+ ],
+ "quiet_before": {
+  "samples": 386,
+  "median_ms": 38.02,
+  "p95_ms": 592.85,
+  "worst_ms": 592.85
+ },
+ "avatar_files": 9,
+ "spawn_spikes": [
+  {
+   "samples": 122,
+   "median_ms": 49.91,
+   "p95_ms": 53.13,
+   "worst_ms": 54.1,
+   "avatar": "Cherubim_Large.wlvox"
+  },
+  {
+   "samples": 78,
+   "median_ms": 53.12,
+   "p95_ms": 81.59,
+   "worst_ms": 83.29,
+   "avatar": "Cherubim_Medium.wlvox"
+  },
+  {
+   "samples": 96,
+   "median_ms": 61.98,
+   "p95_ms": 80.21,
+   "worst_ms": 80.21,
+   "avatar": "Cherubim_Small.wlvox"
+  },
+  {
+   "samples": 102,
+   "median_ms": 58.71,
+   "p95_ms": 64.29,
+   "worst_ms": 65.48,
+   "avatar": "Seraph_Large.wlvox"
+  }
+ ],
+ "normal_frame_ms": 38.02,
+ "longest_spawn_frame_ms": 83.29,
+ "hitch_ms": 45.27,
+ "quiet_tail": {
+  "p95_ms": 592.85,
+  "worst_ms": 592.85
+ },
+ "finished": "2026-09-25 16:52:35",
+ "seconds": 58.68,
+ "log": "quiet_before INFO quiet_before {'samples': 386, 'median_ms': 38.02, 'p95_ms': 592.85, 'worst_ms': 592.85}\nH_0 INFO spawn 0 {'samples': 122, 'median_ms': 49.91, 'p95_ms': 53.13, 'worst_ms': 54.1, 'avatar': 'Cherubim_Large.wlvox'}\nH_1 INFO spawn 1 {'samples': 78, 'median_ms': 53.12, 'p95_ms': 81.59, 'worst_ms': 83.29, 'avatar': 'Cherubim_Medium.wlvox'}\nH_2 INFO spawn 2 {'samples': 96, 'median_ms': 61.98, 'p95_ms': 80.21, 'worst_ms': 80.21, 'avatar': 'Cherubim_Small.wlvox'}\nH_3 INFO spawn 3 {'samples': 102, 'median_ms': 58.71, 'p95_ms': 64.29, 'worst_ms': 65.48, 'avatar': 'Seraph_Large.wlvox'}\nH00 PASS both sides were actually sampled {'quiet': {'samples': 386, 'median_ms': 38.02, 'p95_ms': 592.85, 'worst_ms': 592.85}, 'spawns': [{'samples': 122, 'median_ms': 49.91, 'p95_ms': 53.13, 'worst_ms': 54.1, 'avatar': 'Cherubim_Large.wlvox'}, {'samples': 78, 'median_ms': 53.12, 'p95_ms': 81.59, 'worst_ms': 83.29, 'avatar': 'Cherubim_Medium.wlvox'}, {'samples': 96, 'median_ms': 61.98, 'p95_ms': 80.21, 'worst_ms': 80.21, 'avatar': 'Cherubim_Small.wlvox'}, {'samples': 102, 'median_ms': 58.71, 'p95_ms': 64.29, 'worst_ms': 65.48, 'avatar': 'Seraph_Large.wlvox'}], 'note': 'a hitch is one frame; sampled every tick rather than on an interval, or the frame that stutters is the one the sampler slept through'}\nH01 PASS an arriving avatar does not add a hitch worse than the 73 ms the founder still felt {'normal_frame_ms': 38.02, 'longest_spawn_frame_ms': 83.29, 'hitch_ms': 45.27, 'quiet_tail': {'p95_ms': 592.85, 'worst_ms': 592.85}, 'per_spawn': [{'samples': 122, 'median_ms': 49.91, 'p95_ms': 53.13, 'worst_ms': 54.1, 'avatar': 'Cherubim_Large.wlvox'}, {'samples': 78, 'median_ms': 53.12, 'p95_ms': 81.59, 'worst_ms': 83.29, 'avatar': 'Cherubim_Medium.wlvox'}, {'samples': 96, 'median_ms': 61.98, 'p95_ms': 80.21, 'worst_ms': 80.21, 'avatar': 'Cherubim_Small.wlvox'}, {'samples': 102, 'median_ms': 58.71, 'p95_ms': 64.29, 'worst_ms': 65.48, 'avatar': 'Seraph_Large.wlvox'}], 'note': \"the longest frame during a spawn against a NORMAL frame in the same session, so neither the machine's own stalls nor its thermal state is charged to the avatar\"}\n"
+}
