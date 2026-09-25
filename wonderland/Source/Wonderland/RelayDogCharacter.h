@@ -526,6 +526,18 @@ private:
 
 	/** How high the Dog is lifted, as a share of VERIFICATION's flight (meditation about half): the camera widens with it. */
 	float LastFlyShare = 0.0f;
+
+	/** The mission stage overlay's weight as of the last pose. 0 when the Dog is walking on its own.
+	 *
+	 *  EXPOSED BECAUSE A PROOF COULD NOT SEE IT. While an overlay is performing, ApplyMissionPose holds the
+	 *  legs in the meditate/fly pose, so their WALK swing is correctly zero -- and zc_skin_stance, which
+	 *  compares the canon body's leg swing against a skin's, read that zero once in six runs as the canon
+	 *  authority having gone dead and reported a swing ratio of 106,089,000. It was not dead. It was
+	 *  performing. A proof that compares walk channels has to be able to tell those two apart. */
+	UFUNCTION(BlueprintPure, Category = "Relay|Pose")
+	float GetMissionOverlayWeight() const { return LastOverlayWeight; }
+
+	float LastOverlayWeight = 0.0f;
 	/**
 	 * Which way the Dog is travelling round the Contract, +1 or -1, for the camera to stand ahead of it. Every act walks
 	 * with the Contract on the Dog's left (the performance table's orbit side, +1), which measures as -1 here -- so it

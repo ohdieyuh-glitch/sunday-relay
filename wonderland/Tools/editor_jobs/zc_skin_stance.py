@@ -149,6 +149,7 @@ def job():
     L.set_key_held("LeftShift", True)
     yield 1.2
     speeds = []
+    overlay = []
     series = {}
     for canon_name, skin_name in PAIRS:
         series[canon_name] = {"canon_z": [], "canon_pitch": [], "skin_z": [], "skin_pitch": []}
@@ -165,6 +166,11 @@ def job():
             series[canon_name]["skin_pitch"].append(float(bt.rotation.rotator().pitch))
         try:
             speeds.append(float(getattr(dog.get_canonical_worn_pose(), "speed_uu")))
+        except Exception:
+            pass
+        # WAS THE DOG WALKING ON ITS OWN, OR PERFORMING? See N01.
+        try:
+            overlay.append(float(dog.get_mission_overlay_weight()))
         except Exception:
             pass
         yield INTERVAL
@@ -188,14 +194,39 @@ def job():
     RESULT["walk"] = {"peak_speed_uu": round(max(speeds), 1) if speeds else 0.0,
                       "mean_speed_uu": round(sum(speeds) / len(speeds), 1) if speeds else 0.0,
                       "samples": len(speeds)}
+    RESULT["mission_overlay"] = {"peak_weight": round(max(overlay), 3) if overlay else 0.0,
+                                 "samples_performing": sum(1 for v in overlay if v > 1e-4),
+                                 "samples": len(overlay)}
 
     # ---- THE INSTRUMENT FIRST. If the canon body's own pivots never move, there is nothing to compare and
     # a correlation of 0 would be reported as a mismatch when it is really a dead probe. The canon body is
     # HIDDEN while a costume is worn, so whether it is still POSED is exactly the thing to check.
-    canon_moves = any(r["canon_z_swing"] > 0.05 or r["canon_pitch_swing"] > 0.05 for r in readings.values())
+    # EVERY JUDGED CHANNEL MUST BE ALIVE -- AND THE DOG MUST HAVE BEEN WALKING ON ITS OWN.
+    #
+    # This asked `any(...)` and that was too weak. On one run in six the canon body's LEG pivot read a walk
+    # swing of exactly 0.0000 while its Body and Head were posed normally. `any` was satisfied by the Body,
+    # so the flat leg fell through to N02/N03 and was reported as the SKIN diverging from the authority, with
+    # a swing ratio of 106,089,000.
+    #
+    # THE CANON BODY WAS NOT DEAD. IT WAS PERFORMING. ApplyMissionPose computes
+    # `bPerforming = W > KINDA_SMALL_NUMBER && ...` from the mission stage overlay's weight, and while that
+    # holds it writes the legs from the meditate/fly pose instead of the walk -- a HELD pose, whose walk
+    # swing is correctly zero. The skin's channel is fed from the raw walk pose and kept swinging, so the two
+    # genuinely disagreed for the length of that overlay, and the disagreement was the product working as
+    # designed. Four consecutive runs afterwards read canon and skin identical to three decimals.
+    #
+    # So the Dog is now asked whether it was performing (GetMissionOverlayWeight, exposed for this), and a
+    # window that caught an overlay is reported as an unfair window rather than as a skin that diverged --
+    # the same guard S04 and Q03 carry for the pixel proofs.
+    channels_for_life = {"Body": "z", "Pivot_head": "pitch", "Pivot_legLeft": "pitch"}
+    asleep = {k: v["canon_%s_swing" % channels_for_life.get(k, "z")] for k, v in readings.items()
+              if v["canon_%s_swing" % channels_for_life.get(k, "z")] <= 0.05}
+    performing = sum(1 for v in overlay if v > 1e-4)
+    canon_moves = (not asleep) and performing == 0
     walked = (RESULT.get("walk") or {}).get("peak_speed_uu", 0.0) > 50.0
     record("N01", "the canon body is still being posed, and the Dog actually walked",
            canon_moves and walked, readings=readings, walk=RESULT.get("walk"),
+           canon_channels_asleep=asleep, samples_while_performing=performing,
            note="it is hidden, not stopped -- if this fails the comparison below is meaningless and the "
                 "finding is that the authority stops running when it is dressed")
 

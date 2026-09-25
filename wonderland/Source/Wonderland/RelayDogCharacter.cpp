@@ -2906,6 +2906,7 @@ void ARelayDogCharacter::ApplyMissionPose(const RelayDogStride::FDogPose& Pose, 
 	using RelayDogMission::ERepairStage;
 	LastEyesShut = O.EyesShut;
 	const float W = O.Weight;
+	LastOverlayWeight = O.Weight;
 	const AActor* Contract = MissionContract.Get();
 	const FVector Heart = Contract != nullptr ? Contract->GetActorLocation() : FVector::ZeroVector;
 	const bool bPerforming = W > KINDA_SMALL_NUMBER && BodyRoot != nullptr && ArmChainLeft.bMeasured && ArmChainRight.bMeasured;
