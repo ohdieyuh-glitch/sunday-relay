@@ -538,6 +538,10 @@ private:
 	float GetMissionOverlayWeight() const { return LastOverlayWeight; }
 
 	float LastOverlayWeight = 0.0f;
+
+	/** Generates navigation around the Dog instead of baking it across the whole disc. See the constructor. */
+	UPROPERTY(VisibleAnywhere, Category = "Relay|Navigation")
+	TObjectPtr<class UNavigationInvokerComponent> NavInvoker;
 	/**
 	 * Which way the Dog is travelling round the Contract, +1 or -1, for the camera to stand ahead of it. Every act walks
 	 * with the Contract on the Dog's left (the performance table's orbit side, +1), which measures as -1 here -- so it

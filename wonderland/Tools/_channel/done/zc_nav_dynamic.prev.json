@@ -1,0 +1,16 @@
+{
+ "name": "zc_nav_dynamic",
+ "started": "2026-09-25 14:44:50",
+ "status": "error",
+ "tests": [],
+ "recast_in_level": [
+  "RecastNavMesh-Default"
+ ],
+ "runtime_generation_before": [
+  "<RuntimeGenerationType.STATIC: 0>"
+ ],
+ "error": "Traceback (most recent call last):\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/editor_channel.py\", line 121, in _step\n    yielded = job[\"gen\"].throw(thrown) if thrown is not None else next(job[\"gen\"])\n                                                                  ^^^^^^^^^^^^^^^^\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/_channel\\inbox\\zc_nav_dynamic.py\", line 50, in job\nAttributeError: module 'unreal' has no attribute 'ERuntimeGenerationType'\n",
+ "finished": "2026-09-25 14:44:51",
+ "seconds": 0.02,
+ "log": ""
+}

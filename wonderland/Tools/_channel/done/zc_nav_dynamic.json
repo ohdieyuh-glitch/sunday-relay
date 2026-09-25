@@ -1,0 +1,121 @@
+{
+ "name": "zc_nav_dynamic",
+ "started": "2026-09-25 14:45:29",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "R00",
+   "name": "the level's navmesh is set to generate at runtime",
+   "pass": true,
+   "detail": {
+    "before": [
+     "<RuntimeGenerationType.STATIC: 0>"
+    ],
+    "after": [
+     "<RuntimeGenerationType.DYNAMIC: 2>"
+    ],
+    "note": "an ini default does not reach an actor already serialised into the map"
+   }
+  },
+  {
+   "id": "R01",
+   "name": "a navigable surface exists under the Dog",
+   "pass": true,
+   "detail": {
+    "appeared_after_seconds": 10,
+    "samples": {
+     "after_10s": [
+      -103.4,
+      -848.1
+     ]
+    },
+    "note": "get_random_reachable_point_in_radius, which succeeds only where tiles are actually built"
+   }
+  },
+  {
+   "id": "R02",
+   "name": "the engine can route across this level over 400 m",
+   "pass": false,
+   "detail": {
+    "found": 0,
+    "of": 6,
+    "attempts": [
+     {
+      "bearing": 0.0,
+      "points": 0
+     },
+     {
+      "bearing": 60.0,
+      "points": 0
+     },
+     {
+      "bearing": 120.0,
+      "points": 0
+     },
+     {
+      "bearing": 180.0,
+      "points": 0
+     },
+     {
+      "bearing": 240.0,
+      "points": 0
+     },
+     {
+      "bearing": 300.0,
+      "points": 0
+     }
+    ]
+   }
+  }
+ ],
+ "recast_in_level": [
+  "RecastNavMesh-Default"
+ ],
+ "runtime_generation_before": [
+  "<RuntimeGenerationType.STATIC: 0>"
+ ],
+ "runtime_generation_after": [
+  "<RuntimeGenerationType.DYNAMIC: 2>"
+ ],
+ "reachable_over_time": {
+  "after_10s": [
+   -103.4,
+   -848.1
+  ]
+ },
+ "surface_after_seconds": 10,
+ "from": [
+  -327.3,
+  -650.0
+ ],
+ "routes": [
+  {
+   "bearing": 0.0,
+   "points": 0
+  },
+  {
+   "bearing": 60.0,
+   "points": 0
+  },
+  {
+   "bearing": 120.0,
+   "points": 0
+  },
+  {
+   "bearing": 180.0,
+   "points": 0
+  },
+  {
+   "bearing": 240.0,
+   "points": 0
+  },
+  {
+   "bearing": 300.0,
+   "points": 0
+  }
+ ],
+ "routes_found": 0,
+ "finished": "2026-09-25 14:45:58",
+ "seconds": 29.21,
+ "log": "R00 PASS the level's navmesh is set to generate at runtime {'before': ['<RuntimeGenerationType.STATIC: 0>'], 'after': ['<RuntimeGenerationType.DYNAMIC: 2>'], 'note': 'an ini default does not reach an actor already serialised into the map'}\nR01_10s INFO reachable point {'at': [-103.4, -848.1]}\nR01 PASS a navigable surface exists under the Dog {'appeared_after_seconds': 10, 'samples': {'after_10s': [-103.4, -848.1]}, 'note': 'get_random_reachable_point_in_radius, which succeeds only where tiles are actually built'}\nR02 FAIL the engine can route across this level over 400 m {'found': 0, 'of': 6, 'attempts': [{'bearing': 0.0, 'points': 0}, {'bearing': 60.0, 'points': 0}, {'bearing': 120.0, 'points': 0}, {'bearing': 180.0, 'points': 0}, {'bearing': 240.0, 'points': 0}, {'bearing': 300.0, 'points': 0}]}\n"
+}

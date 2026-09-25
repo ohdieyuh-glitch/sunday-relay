@@ -1,0 +1,100 @@
+{
+ "name": "zc_nav_geometry",
+ "started": "2026-09-25 14:42:52",
+ "status": "measured",
+ "instanced_components": 3904,
+ "instances": 155085,
+ "components_with_collision": 3904,
+ "components_affecting_nav": 1422,
+ "components_usable_by_recast": 1422,
+ "instances_usable_by_recast": 50252,
+ "samples": [
+  {
+   "actor": "WonderlandInstancedBatch_0",
+   "comp": "ISM_V2_plaza_slab_0",
+   "instances": 8,
+   "collision": true,
+   "affects_nav": true
+  },
+  {
+   "actor": "WonderlandInstancedBatch_1",
+   "comp": "ISM_V2_plaza_slab_7",
+   "instances": 5,
+   "collision": true,
+   "affects_nav": true
+  },
+  {
+   "actor": "WonderlandInstancedBatch_2",
+   "comp": "ISM_V2_plaza_slab_6",
+   "instances": 11,
+   "collision": true,
+   "affects_nav": true
+  },
+  {
+   "actor": "WonderlandInstancedBatch_3",
+   "comp": "ISM_V2_plaza_slab_3",
+   "instances": 6,
+   "collision": true,
+   "affects_nav": true
+  },
+  {
+   "actor": "WonderlandInstancedBatch_4",
+   "comp": "ISM_V2_plaza_slab_6",
+   "instances": 10,
+   "collision": true,
+   "affects_nav": true
+  },
+  {
+   "actor": "WonderlandInstancedBatch_5",
+   "comp": "ISM_V2_plaza_slab_8",
+   "instances": 6,
+   "collision": true,
+   "affects_nav": true
+  },
+  {
+   "actor": "WonderlandInstancedBatch_6",
+   "comp": "ISM_V2_plaza_slab_1",
+   "instances": 6,
+   "collision": true,
+   "affects_nav": true
+  },
+  {
+   "actor": "WonderlandInstancedBatch_7",
+   "comp": "ISM_V2_plaza_slab_6",
+   "instances": 4,
+   "collision": true,
+   "affects_nav": true
+  },
+  {
+   "actor": "WonderlandInstancedBatch_8",
+   "comp": "ISM_V2_plaza_slab_7",
+   "instances": 2,
+   "collision": true,
+   "affects_nav": true
+  },
+  {
+   "actor": "WonderlandInstancedBatch_9",
+   "comp": "ISM_V2_plaza_slab_0",
+   "instances": 12,
+   "collision": true,
+   "affects_nav": true
+  },
+  {
+   "actor": "WonderlandInstancedBatch_10",
+   "comp": "ISM_V2_plaza_slab_3",
+   "instances": 13,
+   "collision": true,
+   "affects_nav": true
+  },
+  {
+   "actor": "WonderlandInstancedBatch_11",
+   "comp": "ISM_V2_plaza_slab_1",
+   "instances": 3,
+   "collision": true,
+   "affects_nav": true
+  }
+ ],
+ "finished": "2026-09-25 14:43:06",
+ "seconds": 14.77,
+ "log": "G01 INFO what recast can see {'instanced_components': 3904, 'instances': 155085, 'with_collision': 3904, 'affect_navigation': 1422, 'BOTH (usable)': 1422, 'instances usable': 50252}\n"
+}

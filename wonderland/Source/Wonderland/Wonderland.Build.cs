@@ -66,6 +66,12 @@ public class Wonderland : ModuleRules
 		// not Roblox/blocky" -- which instanced cubes cannot be, however many of them there are.
 		PublicDependencyModuleNames.Add("ProceduralMeshComponent");
 
+		// UNavigationInvokerComponent, for the Relay Dog. Wonderland is a 1,478 m disc and shipped with NO
+		// navigation data at all -- find_path_to_location_synchronously returned nothing over 400 m, so nothing
+		// could be ROUTED across the level even though a player walks it fine. Generating around an invoker
+		// gives routable navigation where the player is, without baking 2.5 km of it.
+		PublicDependencyModuleNames.Add("NavigationSystem");
+
 
 		if (Target.bBuildEditor)
 		{

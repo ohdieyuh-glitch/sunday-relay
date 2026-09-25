@@ -1,0 +1,128 @@
+{
+ "name": "zc_nav_invoker",
+ "started": "2026-09-25 14:46:39",
+ "status": "error",
+ "tests": [
+  {
+   "id": "V00",
+   "name": "the level carries a navigation bounds volume",
+   "pass": true,
+   "detail": {
+    "volumes": [
+     "WL_NavBounds"
+    ],
+    "added_this_run": false,
+    "note": "the level shipped without one, which is why it had no navigation data at all"
+   }
+  },
+  {
+   "id": "V01",
+   "name": "a navigation mesh actually generates in play",
+   "pass": true,
+   "detail": {
+    "seconds": 2.0,
+    "actors": [
+     "RecastNavMesh-Default"
+    ],
+    "note": "generated around the Dog's invoker rather than baked across the disc"
+   }
+  },
+  {
+   "id": "V02",
+   "name": "the engine can route through the level within the invoker's radius (40 m)",
+   "pass": true,
+   "detail": {
+    "found": 6,
+    "of": 6,
+    "attempts": [
+     {
+      "bearing": 0.0,
+      "path": true,
+      "points": 5
+     },
+     {
+      "bearing": 60.0,
+      "path": true,
+      "points": 9
+     },
+     {
+      "bearing": 120.0,
+      "path": true,
+      "points": 11
+     },
+     {
+      "bearing": 180.0,
+      "path": true,
+      "points": 8
+     },
+     {
+      "bearing": 240.0,
+      "path": true,
+      "points": 6
+     },
+     {
+      "bearing": 300.0,
+      "path": true,
+      "points": 8
+     }
+    ],
+    "note": "find_path_to_location_synchronously returned NOTHING anywhere before this, at any distance; asked on six bearings so one blocked direction cannot decide it"
+   }
+  }
+ ],
+ "world": "WL_V2_GoldenArrival_WP2",
+ "bounds_before": [
+  "WL_NavBounds"
+ ],
+ "bounds_after": [
+  "WL_NavBounds"
+ ],
+ "added_this_run": false,
+ "dog": "BP_RelayDog_C_0",
+ "seconds_to_navmesh": 2.0,
+ "recast_actors": [
+  "RecastNavMesh-Default"
+ ],
+ "from": [
+  -327.3,
+  -650.0,
+  109.1
+ ],
+ "routes": [
+  {
+   "bearing": 0.0,
+   "path": true,
+   "points": 5
+  },
+  {
+   "bearing": 60.0,
+   "path": true,
+   "points": 9
+  },
+  {
+   "bearing": 120.0,
+   "path": true,
+   "points": 11
+  },
+  {
+   "bearing": 180.0,
+   "path": true,
+   "points": 8
+  },
+  {
+   "bearing": 240.0,
+   "path": true,
+   "points": 6
+  },
+  {
+   "bearing": 300.0,
+   "path": true,
+   "points": 8
+  }
+ ],
+ "routes_found": 6,
+ "error": "Traceback (most recent call last):\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/editor_channel.py\", line 121, in _step\n    yielded = job[\"gen\"].throw(thrown) if thrown is not None else next(job[\"gen\"])\n                                                                  ^^^^^^^^^^^^^^^^\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/_channel\\inbox\\zc_nav_invoker.py\", line 180, in job\nAttributeError: 'Vector' object has no attribute 'size'\n",
+ "finished": "2026-09-25 14:47:12",
+ "seconds": 32.83,
+ "log": "V00 PASS the level carries a navigation bounds volume {'volumes': ['WL_NavBounds'], 'added_this_run': False, 'note': 'the level shipped without one, which is why it had no navigation data at all'}\nV01 PASS a navigation mesh actually generates in play {'seconds': 2.0, 'actors': ['RecastNavMesh-Default'], 'note': \"generated around the Dog's invoker rather than baked across the disc\"}\nV02 PASS the engine can route through the level within the invoker's radius (40 m) {'found': 6, 'of': 6, 'attempts': [{'bearing': 0.0, 'path': True, 'points': 5}, {'bearing': 60.0, 'path': True, 'points': 9}, {'bearing': 120.0, 'path': True, 'points': 11}, {'bearing': 180.0, 'path': True, 'points': 8}, {'bearing': 240.0, 'path': True, 'points': 6}, {'bearing': 300.0, 'path': True, 'points': 8}], 'note': 'find_path_to_location_synchronously returned NOTHING anywhere before this, at any distance; asked on six bearings so one blocked direction cannot decide it'}\n"
+}

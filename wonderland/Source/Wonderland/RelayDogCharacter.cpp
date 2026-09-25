@@ -32,6 +32,7 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Layout/WidgetPath.h"
 #include "Widgets/SViewport.h"
+#include "NavigationInvokerComponent.h"
 #include "WonderlandMissionOrb.h"
 
 // THE READING POSE, TUNABLE LIVE. Named, not anonymous: the module is one unity translation unit.
@@ -388,6 +389,23 @@ private:
 
 ARelayDogCharacter::ARelayDogCharacter()
 {
+	// ---- NAVIGATION IS GENERATED AROUND THE DOG, not baked across the world.
+	//
+	// The level had no navigation data whatsoever: NavigationSystemV1 returned no path over 400 m, so nothing
+	// could be routed anywhere, and zc_nation_paths had to search a walkability grid with the Dog's own capsule
+	// to answer whether the nations were even traversable. Baking a navmesh over a 1,478 m disc carrying
+	// 174,787 instances is not a small operation and the map is a 46 MB asset on a shared Content junction.
+	//
+	// An invoker generates only the tiles near the player and throws them away behind, so the cost is set by
+	// the radius below rather than by the size of the world. 6,000 uu of generation with 7,500 of removal gives
+	// the Dog a routable surface well past anything it can see, and the hysteresis stops tiles thrashing as it
+	// walks a boundary.
+	NavInvoker = CreateDefaultSubobject<UNavigationInvokerComponent>(TEXT("NavInvoker"));
+	if (NavInvoker != nullptr)
+	{
+		NavInvoker->SetGenerationRadii(6000.0f, 7500.0f);
+	}
+
 	PrimaryActorTick.bCanEverTick = true;
 	// The pose must be written AFTER movement has produced this frame's
 	// velocity, or every limb is a frame behind the body — which reads as the

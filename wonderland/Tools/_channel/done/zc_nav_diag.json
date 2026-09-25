@@ -1,0 +1,131 @@
+{
+ "name": "zc_nav_diag",
+ "started": "2026-09-25 14:40:20",
+ "status": "measured",
+ "dog": "BP_RelayDog_C_0",
+ "dog_components": [
+  "CollisionCylinder",
+  "Arrow",
+  "CharMoveComp",
+  "CharacterMesh0",
+  "NavInvoker",
+  "CameraBoom",
+  "FollowCamera",
+  "CameraProxyMeshComponent_0",
+  "DrawFrustumComponent_0",
+  "Body",
+  "Mesh_root_ivory",
+  "Pivot_head",
+  "Mesh_head_ivory",
+  "Mesh_head_visor",
+  "Mesh_head_eye",
+  "Pivot_armLeft",
+  "Mesh_armLeft_ivory",
+  "Pivot_forearmLeft",
+  "Mesh_forearmLeft_ivory",
+  "Pivot_armRight",
+  "Mesh_armRight_ivory",
+  "Pivot_forearmRight",
+  "Mesh_forearmRight_ivory",
+  "Pivot_legLeft",
+  "Mesh_legLeft_ivory",
+  "Pivot_shinLeft",
+  "Mesh_shinLeft_ivory",
+  "Pivot_legRight",
+  "Mesh_legRight_ivory",
+  "Pivot_shinRight",
+  "Mesh_shinRight_ivory",
+  "Pivot_tail",
+  "Mesh_tail_ivory",
+  "CameraProxyMeshComponent_1",
+  "DrawFrustumComponent_1",
+  "PawnInputComponent0",
+  "MissionBookRoot_0",
+  "MissionBook_0",
+  "MissionBookPages_0",
+  "MissionBookTurningPage_0",
+  "MissionBrush_0",
+  "MissionBrushTip_0",
+  "MissionLensRoot_0",
+  "MissionLensRim_0",
+  "MissionLensHandle_0",
+  "MissionLensGlass_0",
+  "MissionLensGlint_0",
+  "MissionScraper_0",
+  "MissionScraperBlade_0",
+  "MissionEnergy_0",
+  "VerificationBeam_0"
+ ],
+ "has_invoker": true,
+ "immediately": {
+  "at": [
+   -327.3,
+   -650.0,
+   109.1
+  ],
+  "project_error": "NavigationSystemV1: Failed to convert parameter 'filter_class' when calling function 'NavigationSystemV1.K2_ProjectPoint",
+  "random_reachable": null,
+  "recast_actors": 1,
+  "tile_count": 1048576
+ },
+ "over_time": {
+  "after_15s": {
+   "at": [
+    -327.3,
+    -650.0,
+    109.1
+   ],
+   "project_error": "NavigationSystemV1: Failed to convert parameter 'filter_class' when calling function 'NavigationSystemV1.K2_ProjectPoint",
+   "random_reachable": null,
+   "recast_actors": 1,
+   "tile_count": 1048576
+  },
+  "after_30s": {
+   "at": [
+    -327.3,
+    -650.0,
+    109.1
+   ],
+   "project_error": "NavigationSystemV1: Failed to convert parameter 'filter_class' when calling function 'NavigationSystemV1.K2_ProjectPoint",
+   "random_reachable": null,
+   "recast_actors": 1,
+   "tile_count": 1048576
+  },
+  "after_45s": {
+   "at": [
+    -327.3,
+    -650.0,
+    109.1
+   ],
+   "project_error": "NavigationSystemV1: Failed to convert parameter 'filter_class' when calling function 'NavigationSystemV1.K2_ProjectPoint",
+   "random_reachable": null,
+   "recast_actors": 1,
+   "tile_count": 1048576
+  },
+  "after_60s": {
+   "at": [
+    -327.3,
+    -650.0,
+    109.1
+   ],
+   "project_error": "NavigationSystemV1: Failed to convert parameter 'filter_class' when calling function 'NavigationSystemV1.K2_ProjectPoint",
+   "random_reachable": null,
+   "recast_actors": 1,
+   "tile_count": 1048576
+  },
+  "after_90s": {
+   "at": [
+    -327.3,
+    -650.0,
+    109.1
+   ],
+   "project_error": "NavigationSystemV1: Failed to convert parameter 'filter_class' when calling function 'NavigationSystemV1.K2_ProjectPoint",
+   "random_reachable": null,
+   "recast_actors": 1,
+   "tile_count": 1048576
+  }
+ },
+ "finished": "2026-09-25 14:42:02",
+ "seconds": 102.17,
+ "log": "D01_immediately INFO D01_immediately {'at': [-327.3, -650.0, 109.1], 'project_error': \"NavigationSystemV1: Failed to convert parameter 'filter_class' when calling function 'NavigationSystemV1.K2_ProjectPoint\", 'random_reachable': None, 'recast_actors': 1, 'tile_count': 1048576}\nD02_after_15s INFO D02_after_15s {'at': [-327.3, -650.0, 109.1], 'project_error': \"NavigationSystemV1: Failed to convert parameter 'filter_class' when calling function 'NavigationSystemV1.K2_ProjectPoint\", 'random_reachable': None, 'recast_actors': 1, 'tile_count': 1048576}\nD02_after_30s INFO D02_after_30s {'at': [-327.3, -650.0, 109.1], 'project_error': \"NavigationSystemV1: Failed to convert parameter 'filter_class' when calling function 'NavigationSystemV1.K2_ProjectPoint\", 'random_reachable': None, 'recast_actors': 1, 'tile_count': 1048576}\nD02_after_45s INFO D02_after_45s {'at': [-327.3, -650.0, 109.1], 'project_error': \"NavigationSystemV1: Failed to convert parameter 'filter_class' when calling function 'NavigationSystemV1.K2_ProjectPoint\", 'random_reachable': None, 'recast_actors': 1, 'tile_count': 1048576}\nD02_after_60s INFO D02_after_60s {'at': [-327.3, -650.0, 109.1], 'project_error': \"NavigationSystemV1: Failed to convert parameter 'filter_class' when calling function 'NavigationSystemV1.K2_ProjectPoint\", 'random_reachable': None, 'recast_actors': 1, 'tile_count': 1048576}\nD02_after_90s INFO D02_after_90s {'at': [-327.3, -650.0, 109.1], 'project_error': \"NavigationSystemV1: Failed to convert parameter 'filter_class' when calling function 'NavigationSystemV1.K2_ProjectPoint\", 'random_reachable': None, 'recast_actors': 1, 'tile_count': 1048576}\n"
+}
