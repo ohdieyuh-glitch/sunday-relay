@@ -1,6 +1,6 @@
 {
  "name": "zc_nation_routes",
- "started": "2026-09-25 06:47:01",
+ "started": "2026-09-25 09:14:01",
  "status": "measured",
  "tests": [
   {
@@ -271,7 +271,7 @@
    "lanes_tried": 9
   }
  },
- "finished": "2026-09-25 06:47:20",
- "seconds": 19.12,
+ "finished": "2026-09-25 09:14:23",
+ "seconds": 21.8,
  "log": "R_ICARUS FAIL ICARUS: a corridor from the gate to the band is walkable end to end {'bearing': 90.0, 'best_offset_m': -64.0, 'arrived_at_m': 850.0, 'blocked_segments': 1, 'steps_too_tall': 2, 'clean_lanes': 0, 'of': 9, 'worst_blockers': [{'at_m': 800.0, 'by': 'IC02_IC02_Tower_Base_Terraced_stone', 'normal_z': 0.0}], 'worst_steps': [{'at_m': 780.0, 'rise_uu': 221.5, 'from': 'IC02_IC02_StudioBlock', 'to': 'IC02_IC02_Tower_Base_Terraced_stone'}, {'at_m': 790.0, 'rise_uu': 221.5, 'from': 'IC02_IC02_Tower_Base_Terraced_stone', 'to': 'IC02_IC02_StudioBlock'}], 'note': \"swept with the Dog's own capsule over 9 parallel lanes, 600-1060 m\"}\nR_NOCTIS FAIL NOCTIS: a corridor from the gate to the band is walkable end to end {'bearing': 210.0, 'best_offset_m': -48.0, 'arrived_at_m': 850.0, 'blocked_segments': 5, 'steps_too_tall': 6, 'clean_lanes': 0, 'of': 9, 'worst_blockers': [{'at_m': 670.0, 'by': 'NC01_NC01_Colonnade_Arcade_stone', 'normal_z': 0.0}, {'at_m': 700.0, 'by': 'NC01_NC01_Colonnade_Arcade_stone', 'normal_z': 0.0}, {'at_m': 740.0, 'by': 'NC01_NC01_Palace_Pavilion_stone', 'normal_z': -0.656}], 'worst_steps': [{'at_m': 720.0, 'rise_uu': 55.0, 'from': 'NC01_NC01_GalleryBlock', 'to': 'NC01_NC01_Colonnade_Arcade_stone'}, {'at_m': 730.0, 'rise_uu': 55.0, 'from': 'NC01_NC01_Colonnade_Arcade_stone', 'to': 'NC01_NC01_GalleryBlock'}, {'at_m': 740.0, 'rise_uu': 375.0, 'from': 'NC01_NC01_GalleryBlock', 'to': 'NC01_NC01_Palace_Pavilion_stone'}], 'note': \"swept with the Dog's own capsule over 9 parallel lanes, 600-1060 m\"}\nR_TARTARUS FAIL TARTARUS: a corridor from the gate to the band is walkable end to end {'bearing': 330.0, 'best_offset_m': -32.0, 'arrived_at_m': 900.0, 'blocked_segments': 1, 'steps_too_tall': 2, 'clean_lanes': 0, 'of': 9, 'worst_blockers': [{'at_m': 770.0, 'by': 'TQ01_TQ01_Palace_Wing_stone_dark', 'normal_z': 0.0}], 'worst_steps': [{'at_m': 770.0, 'rise_uu': 375.0, 'from': 'TQ01_TQ01_YardBand', 'to': 'TQ01_TQ01_Palace_Wing_stone'}, {'at_m': 780.0, 'rise_uu': 375.0, 'from': 'TQ01_TQ01_Palace_Wing_stone', 'to': 'TQ01_TQ01_YardBand'}], 'note': \"swept with the Dog's own capsule over 9 parallel lanes, 600-1060 m\"}\nR_ALL FAIL every nation has a walkable gate-to-band corridor {'nations': ['ICARUS', 'NOCTIS', 'TARTARUS'], 'clean_lanes': {'ICARUS': 0, 'NOCTIS': 0, 'TARTARUS': 0}, 'note': \"the founder's 'walk-test every major region', asked of all three rather than of the one that had a complaint\"}\n"
 }
