@@ -127,9 +127,30 @@ Fewer actors resident and the same instances is what streaming looks like; whole
 the instances with it. The job opens the authoritative map again as its last act and saves nothing to either,
 which P05 confirms.
 
+**THE POPULATION CROSSED INTACT** (`zc_wp_census`). The authoritative map holds **21,052 actors**
+(16,803 StaticMeshActor, 3,773 WonderlandInstancedBatch, 371 HoverProp, 63 cameras, 23 travel anchors,
+4 directional lights, the sky and fog singletons); the twin has **21,047 external actor files**. A
+shortfall of five in twenty-one thousand -- 0.02% -- rules out content loss at any scale that matters.
+Which five is NOT identified: `persistent_level` is unreadable on UWorld in this build, the same way
+`world_partition` is, so the likely explanation (the actors World Partition never externalises) is
+recorded as a likelihood rather than a finding.
+
+**AND THE RUNTIME GRID IS READ** (`zc_wp_grid`, 4/4) -- which corrected what this file's own row H
+number meant. Row H reported "runtime grid `{'None': 20858}`", and I took that to mean the actors
+belonged to no grid and therefore did not stream. Both maps read `None` for every actor: an empty
+`runtime_grid` means *use the default grid*, not *unstreamed*. It does not discriminate, and row H's
+finding rested on the `world_partition: None` beside it rather than on that bucket count.
+
+What discriminates is residency on open, which is row H's complaint in its own words -- "every actor
+is permanently resident":
+
+| map | resident when merely opened |
+|---|---|
+| `WL_V2_GoldenArrival_WP2` | **21,052 of 21,052 -- 100%** |
+| `WL_V2_GoldenArrival_WP2_WP` | **631 of 21,047 -- 3%** |
+
 **What is still NOT done, and is deliberately the founder's call:** nothing is switched over. No config
-points at the twin, its runtime grid has not been read in-engine, and whether all 16,803 actors survive
-across the whole map is not proven by six landings. Adopting it means changing which map every worktree
+points at the twin, and its runtime grid and population have both now been read. Adopting it means changing which map every worktree
 opens, which is exactly the kind of shared-resource decision this session does not make on its own. Row H
 moves from BLOCKING to **READY** rather than to PASS.
 
