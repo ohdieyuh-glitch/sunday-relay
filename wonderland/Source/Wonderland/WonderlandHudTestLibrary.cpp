@@ -6,6 +6,8 @@
 #include "Engine/SceneCapture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
+#include "UObject/UObjectIterator.h"
+#include "WonderlandUsageHudWidget.h"
 #include "Performance/EnginePerformanceTargets.h"
 #include "UnrealClient.h"
 #include "RenderCore.h"
@@ -154,4 +156,32 @@ ASceneCapture2D* UWonderlandHudTestLibrary::SpawnSceneCapture(UObject* WorldCont
 		Component->bCaptureOnMovement = false;
 	}
 	return Capture;
+}
+
+TArray<FString> UWonderlandHudTestLibrary::GetPaintedAgentRows(UObject* WorldContextObject)
+{
+	TArray<FString> Rows;
+	const UWorld* World = GEngine != nullptr
+		? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull)
+		: nullptr;
+	if (World == nullptr)
+	{
+		return Rows;
+	}
+
+	for (TObjectIterator<UWonderlandUsageHudWidget> It; It; ++It)
+	{
+		const UWonderlandUsageHudWidget* Widget = *It;
+		// THE RIGHT WORLD, and a live one. Play-in-editor keeps the editor's own widget objects alive
+		// alongside the running game's, and a stale one would answer with rows nobody is looking at.
+		if (Widget == nullptr || Widget->GetWorld() != World || Widget->HasAnyFlags(RF_ClassDefaultObject))
+		{
+			continue;
+		}
+		if (Widget->PaintedAgentRows.Num() > 0)
+		{
+			return Widget->PaintedAgentRows;
+		}
+	}
+	return Rows;
 }

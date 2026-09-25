@@ -45,6 +45,49 @@ def sample(world, rt):
     return out
 
 
+def probe_pixels(world, rt):
+    """Five points spread across the picture, as raw channels, for judging exposure rather than change."""
+    pts = ((RT_W // 2, RT_H // 2), (RT_W // 4, RT_H // 4), (3 * RT_W // 4, 3 * RT_H // 4),
+           (RT_W // 8, 7 * RT_H // 8), (7 * RT_W // 8, RT_H // 8))
+    out = []
+    for (x, y) in pts:
+        c = unreal.RenderingLibrary.read_render_target_pixel(world, rt, x, y)
+        out.append([int(c.r), int(c.g), int(c.b)])
+    return out
+
+
+def calibrate(comp, world, rt, out):
+    """Set the capture's exposure so the picture is not clipped, and record which value was used.
+
+    WHY THIS IS NEEDED. A scene capture does not inherit the player camera's eye adaptation, so against a
+    70,000 lux sun its frames came back 255,255,255 in every channel -- fully blown. Two blown images differ
+    by exactly nothing, which is how the first run measured 0.0 change with shadows and 0.0 without, and
+    then passed its own comparison.
+
+    This is calibration, not tuning until something passes: exposure is stepped down until the picture stops
+    clipping, and the value that worked is recorded alongside the result. A view that cannot be brought into
+    range records None, and the job fails rather than measuring a white rectangle.
+    """
+    for bias in (0.0, -2.0, -4.0, -6.0, -8.0, -10.0, -12.0, -14.0):
+        pp = comp.get_editor_property("post_process_settings")
+        pp.set_editor_property("override_auto_exposure_method", True)
+        pp.set_editor_property("auto_exposure_method", unreal.AutoExposureMethod.AEM_MANUAL)
+        pp.set_editor_property("override_auto_exposure_bias", True)
+        pp.set_editor_property("auto_exposure_bias", bias)
+        comp.set_editor_property("post_process_settings", pp)
+        # Time for the change to reach the running capture and for the image to settle on it.
+        for _ in range(8):
+            yield 0.1
+        px = probe_pixels(world, rt)
+        brightest = max(max(p) for p in px)
+        darkest = min(min(p) for p in px)
+        out["pixels"] = px
+        if brightest < 250 and brightest > darkest:
+            out["bias"] = bias
+            return
+    out["bias"] = None
+
+
 def spread(a, b):
     """Mean absolute difference between two samples of the same view, in 0-255 luminance."""
     if not a or len(a) != len(b):
@@ -133,7 +176,13 @@ def job():
         unreal.SystemLibrary.execute_console_command(world, "wl.Sky.DayMinutes 0")
         yield 1.5
 
-        rt = unreal.RenderingLibrary.create_render_target2d(world, RT_W, RT_H)
+        # EIGHT-BIT RGBA, NOT THE DEFAULT FLOAT TARGET. read_render_target_pixel only supports 8-bit
+        # RGBA; against a float target it returns black for every pixel and mentions it only in the log.
+        # The first run read 0.0 change with shadows AND 0.0 without, then PASSED on 0.0 <= 0.0 + 1.0 --
+        # a vacuous pass, which is the exact failure this suite exists to prevent. The guard below now
+        # refuses a reading that is flat on both sides.
+        rt = unreal.RenderingLibrary.create_render_target2d(
+            world, RT_W, RT_H, unreal.TextureRenderTargetFormat.RTF_RGBA8)
         # SPAWNED BY THE TEST LIBRARY. GameplayStatics' deferred spawn is not bound in this engine's Python,
         # and the editor's own spawn puts an actor in the EDITOR world rather than the running one -- which
         # would photograph a level nobody is playing.
@@ -143,12 +192,27 @@ def job():
         comp = cap.get_editor_property("capture_component2d")
         yield 1.0
 
+        # RENDERING EVERY FRAME, NOT ONCE ON DEMAND. A single CaptureScene gives TSR and Lumen no temporal
+        # history to resolve against, and the frame came back 255 in every channel at every exposure from
+        # 0 to -14 EV -- which is not a bright picture, it is an unconverged one. Running continuously costs
+        # a small 480x270 render each frame and gives a settled image; the proof still controls WHEN it
+        # samples, which is all the comparison actually needs.
+        comp.set_editor_property("capture_every_frame", True)
+        for _ in range(12):
+            yield 0.1
+
+        # THE INSTRUMENT IS SET UP BEFORE IT IS TRUSTED.
+        cal = {}
+        for step in calibrate(comp, world, rt, cal):
+            yield step
+        RESULT["exposure"] = {"bias": cal.get("bias"), "sample_pixels": cal.get("pixels")}
+        if cal.get("bias") is None:
+            raise RuntimeError("the capture could not be brought into exposure range: %s" % cal.get("pixels"))
+
         def two_frames():
-            comp.capture_scene()
             first = sample(world, rt)
             for _ in range(8):
                 yield 0.1
-            comp.capture_scene()
             second = sample(world, rt)
             RESULT.setdefault("_frames", []).append((first, second))
 
@@ -185,6 +249,14 @@ def job():
                allowed=round(ceiling, 4),
                note="mean luminance change per sample across 0.8 s; the control is the same scene with "
                     "r.ShadowQuality 0, so TSR's own jitter is subtracted rather than assumed away")
+
+        # THE INSTRUMENT HAS TO PROVE ITSELF FIRST. If the capture read nothing, both numbers are 0.0 and
+        # S03 is satisfied by two empty pictures. That is not a stable scene; it is no scene at all.
+        record("S04", "the measurement actually looked at something",
+               with_shadows > 0.0 or without_shadows > 0.0,
+               with_shadows=round(with_shadows, 4), without_shadows=round(without_shadows, 4),
+               note="flat on both sides means the render target came back empty, not that the world was "
+                    "still; that is a failure of this job rather than a pass for the product")
 
         cap.destroy_actor()
     except Exception as err:                                   # noqa: BLE001

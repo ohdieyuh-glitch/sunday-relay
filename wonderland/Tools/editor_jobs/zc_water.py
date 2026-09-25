@@ -23,7 +23,7 @@ L = unreal.WonderlandUiTestLibrary
 H = unreal.WonderlandHudTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "water")
 
-MASTER = "/Game/Wonderland/Materials/M_WL_RealWater.M_WL_RealWater"
+MASTER = "/Game/Wonderland/Materials/M_WL_RealWater"
 RT_W, RT_H = 480, 270
 GRID_X, GRID_Y = 12, 9
 
@@ -37,6 +37,49 @@ def sample(world, rt):
             c = unreal.RenderingLibrary.read_render_target_pixel(world, rt, x, y)
             out.append(0.2126 * float(c.r) + 0.7152 * float(c.g) + 0.0722 * float(c.b))
     return out
+
+
+def probe_pixels(world, rt):
+    """Five points spread across the picture, as raw channels, for judging exposure rather than change."""
+    pts = ((RT_W // 2, RT_H // 2), (RT_W // 4, RT_H // 4), (3 * RT_W // 4, 3 * RT_H // 4),
+           (RT_W // 8, 7 * RT_H // 8), (7 * RT_W // 8, RT_H // 8))
+    out = []
+    for (x, y) in pts:
+        c = unreal.RenderingLibrary.read_render_target_pixel(world, rt, x, y)
+        out.append([int(c.r), int(c.g), int(c.b)])
+    return out
+
+
+def calibrate(comp, world, rt, out):
+    """Set the capture's exposure so the picture is not clipped, and record which value was used.
+
+    WHY THIS IS NEEDED. A scene capture does not inherit the player camera's eye adaptation, so against a
+    70,000 lux sun its frames came back 255,255,255 in every channel -- fully blown. Two blown images differ
+    by exactly nothing, which is how the first run measured 0.0 change with shadows and 0.0 without, and
+    then passed its own comparison.
+
+    This is calibration, not tuning until something passes: exposure is stepped down until the picture stops
+    clipping, and the value that worked is recorded alongside the result. A view that cannot be brought into
+    range records None, and the job fails rather than measuring a white rectangle.
+    """
+    for bias in (0.0, -2.0, -4.0, -6.0, -8.0, -10.0, -12.0, -14.0):
+        pp = comp.get_editor_property("post_process_settings")
+        pp.set_editor_property("override_auto_exposure_method", True)
+        pp.set_editor_property("auto_exposure_method", unreal.AutoExposureMethod.AEM_MANUAL)
+        pp.set_editor_property("override_auto_exposure_bias", True)
+        pp.set_editor_property("auto_exposure_bias", bias)
+        comp.set_editor_property("post_process_settings", pp)
+        # Time for the change to reach the running capture and for the image to settle on it.
+        for _ in range(8):
+            yield 0.1
+        px = probe_pixels(world, rt)
+        brightest = max(max(p) for p in px)
+        darkest = min(min(p) for p in px)
+        out["pixels"] = px
+        if brightest < 250 and brightest > darkest:
+            out["bias"] = bias
+            return
+    out["bias"] = None
 
 
 def spread(a, b):
@@ -71,19 +114,10 @@ def job():
 
     cap = None
     try:
-        # ------------------------------------------------------------ IS IT A REAL WATER SHADER AT ALL
-        master = unreal.EditorAssetLibrary.load_asset(MASTER)
-        blend = str(master.get_editor_property("blend_mode")) if master is not None else "missing"
-        RESULT["master"] = {"asset": MASTER, "blend_mode": blend}
-        record("Q00", "the water master exists and is translucent, not opaque",
-               master is not None and "TRANSLUCENT" in blend.upper(),
-               blend_mode=blend,
-               note="the old master was BLEND_OPAQUE, so no parameter value it had could ever look wet")
-
         # ------------------------------------------------------------ DID IT REACH THE PONDS
         # Matched on the material actually worn, the same way the runtime matches, so a basin's stone rim or
         # a fountain's gold finial cannot be counted as water by having a watery name.
-        wet, biggest, best_size = 0, None, -1.0
+        wet, biggest, best_size, example = 0, None, -1.0, None
         for actor in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.StaticMeshActor):
             mesh = actor.static_mesh_component
             if mesh is None:
@@ -101,11 +135,39 @@ def job():
                 if "M_WL_RealWater" not in name and "M_WL_RealWater" not in parent:
                     continue
                 wet += 1
+                if example is None:
+                    example = worn
                 origin, extent = actor.get_actor_bounds(False)
                 size = float(extent.x) * float(extent.y)
                 if size > best_size:
                     best_size, biggest = size, (origin, extent)
         RESULT["surfaces_dressed"] = wet
+
+        # ---- JUDGED ON THE MATERIAL A POND IS ACTUALLY WEARING. The first version loaded the master off
+        # disk with EditorAssetLibrary, which returns null under PIE and read as "missing" -- a fault in the
+        # proof that looked exactly like a missing asset. The material in the running world cannot lie about
+        # this: it is the one drawing the water.
+        blend = "no water found"
+        if example is not None:
+            probe = example
+            for _ in range(4):
+                try:
+                    nxt = probe.get_editor_property("parent")
+                except Exception:
+                    break
+                if nxt is None:
+                    break
+                probe = nxt
+            try:
+                blend = str(probe.get_editor_property("blend_mode"))
+            except Exception as err:                           # noqa: BLE001
+                blend = "unreadable: %s" % err
+            RESULT["master"] = {"worn": str(example.get_name()), "root": str(probe.get_name()),
+                                "blend_mode": blend}
+        record("Q00", "the water a pond is wearing is translucent, not opaque",
+               "TRANSLUCENT" in blend.upper(), blend_mode=blend,
+               note="the old master was BLEND_OPAQUE, so no parameter value it had could ever look wet")
+
         record("Q01", "the ponds, wells, canals and basins are actually wearing it",
                wet > 0 and biggest is not None, surfaces=wet,
                note="counted by the material each surface wears in the live world, not by the log line")
@@ -121,7 +183,13 @@ def job():
         yield 1.5
 
         origin, extent = biggest
-        rt = unreal.RenderingLibrary.create_render_target2d(world, RT_W, RT_H)
+        # EIGHT-BIT RGBA, NOT THE DEFAULT FLOAT TARGET. read_render_target_pixel only supports 8-bit
+        # RGBA; against a float target it returns black for every pixel and mentions it only in the log.
+        # The first run read 0.0 change with shadows AND 0.0 without, then PASSED on 0.0 <= 0.0 + 1.0 --
+        # a vacuous pass, which is the exact failure this suite exists to prevent. The guard below now
+        # refuses a reading that is flat on both sides.
+        rt = unreal.RenderingLibrary.create_render_target2d(
+            world, RT_W, RT_H, unreal.TextureRenderTargetFormat.RTF_RGBA8)
         down = unreal.Rotator(-90.0, 0.0, 0.0)
         # Low enough that the frame is water and nothing else. A vantage that caught the rim would dilute
         # the measurement with stone and make a still pond look like it was moving a little.
@@ -136,12 +204,27 @@ def job():
         comp = cap.get_editor_property("capture_component2d")
         yield 1.0
 
+        # RENDERING EVERY FRAME, NOT ONCE ON DEMAND. A single CaptureScene gives TSR and Lumen no temporal
+        # history to resolve against, and the frame came back 255 in every channel at every exposure from
+        # 0 to -14 EV -- which is not a bright picture, it is an unconverged one. Running continuously costs
+        # a small 480x270 render each frame and gives a settled image; the proof still controls WHEN it
+        # samples, which is all the comparison actually needs.
+        comp.set_editor_property("capture_every_frame", True)
+        for _ in range(12):
+            yield 0.1
+
+        # THE INSTRUMENT IS SET UP BEFORE IT IS TRUSTED.
+        cal = {}
+        for step in calibrate(comp, world, rt, cal):
+            yield step
+        RESULT["exposure"] = {"bias": cal.get("bias"), "sample_pixels": cal.get("pixels")}
+        if cal.get("bias") is None:
+            raise RuntimeError("the capture could not be brought into exposure range: %s" % cal.get("pixels"))
+
         def two_frames():
-            comp.capture_scene()
             first = sample(world, rt)
             for _ in range(10):
                 yield 0.1
-            comp.capture_scene()
             second = sample(world, rt)
             RESULT["_last"] = (first, second)
 
@@ -168,6 +251,12 @@ def job():
         RESULT["flow"] = {"water_frame_change": round(water_moves, 4),
                           "ground_control_change": round(stone_moves, 4),
                           "grid_points": GRID_X * GRID_Y, "gap_s": 1.0}
+        record("Q03", "the measurement actually looked at something",
+               water_moves > 0.0 or stone_moves > 0.0,
+               water=round(water_moves, 4), ground=round(stone_moves, 4),
+               note="flat on both sides means the render target came back empty; Q02 would then pass on "
+                    "two blank pictures, which is a fake pass and not a still pond")
+
         record("Q02", "the water moves while the world stands still",
                water_moves > stone_moves + 1.0,
                water_frame_change=round(water_moves, 4),

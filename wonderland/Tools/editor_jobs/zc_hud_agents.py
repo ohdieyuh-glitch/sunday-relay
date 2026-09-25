@@ -35,15 +35,11 @@ PROBE = {
 
 def rows_now(world):
     """Every agent row the usage HUD painted most recently, as (label, name) pairs."""
-    # BY PATH, NOT BY ATTRIBUTE. Not every UCLASS in this module is generated onto the `unreal` module,
-    # and a proof that dies on a missing attribute proves nothing about the HUD.
-    widget_class = unreal.load_class(None, "/Script/Wonderland.WonderlandUsageHudWidget")
-    widgets = unreal.WidgetBlueprintLibrary.get_all_widgets_of_class(world, widget_class, False)
-    for w in widgets:
-        painted = list(w.get_editor_property("painted_agent_rows") or [])
-        if painted:
-            return [(p.split("|", 1)[0], p.split("|", 1)[1] if "|" in p else "") for p in painted]
-    return []
+    # THROUGH THE TEST LIBRARY, because UMG's WidgetBlueprintLibrary has no Python binding in this engine
+    # and there is no other way to enumerate live widgets from a job. The rows themselves are still written
+    # by NativePaint; the accessor only carries them out.
+    painted = list(H.get_painted_agent_rows(world) or [])
+    return [(p.split("|", 1)[0], p.split("|", 1)[1] if "|" in p else "") for p in painted]
 
 
 def job():

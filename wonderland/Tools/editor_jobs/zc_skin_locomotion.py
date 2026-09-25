@@ -168,18 +168,28 @@ def job():
     # is made of, and that is what is asserted. Whether the Dog SHOULD have a body-offset bounce is a
     # question about the gait, not about parity, and it is recorded here rather than answered by changing
     # founder-approved movement maths unreviewed.
-    bob_skin = []
-    for _ in range(10):
-        bob_skin.append(read(skin.get_worn_pose())["bob_uu"])
+    # SAME FRAME, BOTH POSES -- and this is a correction. The previous version sampled the skin LIVE and
+    # compared every reading against a single stale sample of the Dog, which can only agree while the bob is
+    # motionless. It was written after a run where bob_uu read 0.0 throughout, so the flaw was invisible; the
+    # moment a run produced a real swing (8.87 uu) the comparison reported a disagreement that was entirely
+    # its own. The bob is read from both in the same frame now, exactly as the other states are.
+    pairs = []
+    for _ in range(24):
+        a = read(dog.get_canonical_worn_pose())["bob_uu"]
+        b = read(skin.get_worn_pose())["bob_uu"]
+        pairs.append((a, b))
         yield 0.05
-    agree = all(abs(x - bobs[-1]) < 0.001 for x in bob_skin) if bobs else False
-    RESULT["bob_channel_carries_signal"] = bool(swing > 0.05)
-    record("L02", "body bounce: whatever the Dog's bob channel says, the skin says the same",
-           agree,
-           dog_bob_swing_uu=round(swing, 4), samples=len(bobs), interval_s=0.05,
-           skin_agrees=agree,
-           FINDING=("bob_uu is 0.0 on BOTH at a full run -- the body-offset bounce channel carries no "
-                    "signal; the visible bounce comes from the leg angles, which do reach the skin"))
+    live_swing = max(x for x, _ in pairs) - min(x for x, _ in pairs)
+    worst_gap = max(abs(x - y) for x, y in pairs)
+    RESULT["bob_swing_live_uu"] = round(live_swing, 4)
+    RESULT["bob_worst_gap_uu"] = round(worst_gap, 4)
+    RESULT["bob_channel_carries_signal"] = bool(live_swing > 0.05)
+    record("L02", "body bounce: the Dog's bob reaches the skin, same frame",
+           worst_gap < 0.001,
+           dog_bob_swing_uu=round(live_swing, 4), worst_gap_uu=round(worst_gap, 4),
+           samples=len(pairs), interval_s=0.05,
+           channel_carries_signal=RESULT["bob_channel_carries_signal"],
+           note="a swing near zero is not a failure here -- stillness damps the bob to nothing by design")
     L.set_key_held("LeftShift", False)
     L.set_key_held("W", False)
     yield 1.0

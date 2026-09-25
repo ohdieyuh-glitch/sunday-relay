@@ -67,4 +67,17 @@ public:
 	static class ASceneCapture2D* SpawnSceneCapture(UObject* WorldContextObject, FVector Location,
 		FRotator Rotation, class UTextureRenderTarget2D* Target);
 
+	/**
+	 * THE AGENT ROWS THE USAGE HUD LAST PAINTED, "LABEL|Name" each (P1 item 7).
+	 *
+	 * The widget records them itself, inside the loop that emits the glyphs. This only carries them out,
+	 * because a proof cannot reach the widget on its own: UMG's WidgetBlueprintLibrary has no Python binding
+	 * in this engine, so there is no way to enumerate live widgets from a job. Iterating them here is three
+	 * lines and needs no binding at all.
+	 *
+	 * Empty means no usage HUD in that world painted rows -- a real state, and the one H00 asks about.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static TArray<FString> GetPaintedAgentRows(UObject* WorldContextObject);
+
 };

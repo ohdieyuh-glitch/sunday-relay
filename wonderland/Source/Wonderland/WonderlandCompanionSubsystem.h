@@ -26,7 +26,11 @@
 class APlayerController;
 class AWonderlandCompanionEmbodiment;
 
-UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Wonderland Companion Preview"))
+// BlueprintType so the reflection system generates a Python type for this class. Without it,
+// get_default_object() hands back an object typed as the base UDeveloperSettings and these
+// properties are simply not there -- "Failed to find property 'compound_agent_name'" -- which
+// leaves the three agent names unreachable to any proof, and P1 item 7 unverifiable.
+UCLASS(Config = Game, DefaultConfig, BlueprintType, meta = (DisplayName = "Wonderland Companion Preview"))
 class WONDERLAND_API UWonderlandCompanionPreviewSettings : public UDeveloperSettings
 {
 	GENERATED_BODY()
