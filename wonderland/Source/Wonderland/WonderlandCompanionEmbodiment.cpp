@@ -1336,12 +1336,37 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 	const float Walk = FMath::Clamp(GaitWeight, 0.0f, 1.2f);
 
 	// THE FLOAT: bounded, absolute from rest, and on this companion's own phase.
+	//
+	// AND NOT AT ALL WHEN THE BODY IS WORN. This is why the alternate skins drifted.
+	//
+	// FOUNDER, 2026-09-25: "The alternate mascot skins are still not truly standing still during idle. When
+	// they are supposed to be standing, they slightly float/drift left and right... They should remain
+	// planted exactly like Relay OG."
+	//
+	// FloatRoot is the PARENT of every root part in the figure, and it was writing a hover on Z plus a
+	// rotation of 1.5 degrees of pitch and 2.0 degrees of ROLL, continuously, on the companion's own clock.
+	// That is correct and wanted for a free-standing companion, which is a hovering creature. It is wrong
+	// for a costume: two degrees of roll on a body this tall swings it several uu side to side, which is
+	// precisely "floats and drifts left and right" -- and Relay OG cannot do it, because Relay OG is the
+	// Dog's own geometry and has no FloatRoot at all.
+	//
+	// So when the pose is canonical the float is not damped or scaled, it is ABSENT: the component is put
+	// back to identity and every bit of motion comes from the Dog. That is the canonical path fixed rather
+	// than a per-frame snap over the top of it, and it leaves the free-standing companions exactly as they
+	// were -- which the founder also asked for.
 	if (FloatRoot != nullptr)
 	{
-		const float Hover = 2.0f * PI * (ActivityTime / FMath::Max(HoverPeriodSeconds, 0.5f) + Phase);
-		FloatRoot->SetRelativeLocationAndRotation(
-			FVector(0.0, 0.0, FMath::Sin(Hover) * HoverAmplitudeUU * ActivityAmplitude + ActivityHeightUU),
-			FRotator(FMath::Sin(Hover * 0.5f + 1.1f) * 1.5f, 0.0, FMath::Cos(Hover * 0.5f) * 2.0f));
+		if (WornPose.bValid)
+		{
+			WriteJoint(FloatRoot, FVector::ZeroVector, FRotator::ZeroRotator);
+		}
+		else
+		{
+			const float Hover = 2.0f * PI * (ActivityTime / FMath::Max(HoverPeriodSeconds, 0.5f) + Phase);
+			FloatRoot->SetRelativeLocationAndRotation(
+				FVector(0.0, 0.0, FMath::Sin(Hover) * HoverAmplitudeUU * ActivityAmplitude + ActivityHeightUU),
+				FRotator(FMath::Sin(Hover * 0.5f + 1.1f) * 1.5f, 0.0, FMath::Cos(Hover * 0.5f) * 2.0f));
+		}
 	}
 
 	for (int32 Index = 0; Index < PartPivots.Num() && Index < Motions.Num(); ++Index)
