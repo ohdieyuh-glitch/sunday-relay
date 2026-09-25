@@ -1,0 +1,31 @@
+{
+ "name": "zc_chamber_probe",
+ "started": "2026-09-25 07:53:21",
+ "status": "probed",
+ "brain_open": true,
+ "sculptures": 1,
+ "glow_loaded": false,
+ "panels": [
+  "Chamber",
+  "ChamberTop",
+  "ChamberFloor",
+  "ChamberLeft",
+  "ChamberRight",
+  "BlackSnow",
+  "BrainMass",
+  "BrainFolds",
+  "PythonBody",
+  "PythonBelly",
+  "PythonSnout",
+  "PythonEyes"
+ ],
+ "applied": {
+  "Chamber": "no MID",
+  "ChamberTop": "no MID",
+  "ChamberFloor": "no MID",
+  "ChamberLeft": "no MID"
+ },
+ "log": "",
+ "finished": "2026-09-25 07:53:46",
+ "seconds": 25.33
+}

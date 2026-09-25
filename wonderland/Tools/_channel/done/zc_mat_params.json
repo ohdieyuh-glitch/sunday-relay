@@ -1,0 +1,87 @@
+{
+ "name": "zc_mat_params",
+ "started": "2026-09-25 07:51:56",
+ "status": "probed",
+ "materials": {
+  "/Game/Wonderland/Materials/M_WL_VoxelGlow": {
+   "loaded": true,
+   "class": "Material",
+   "vector": [
+    "Color",
+    "BaseColor",
+    "EmissiveColor"
+   ],
+   "scalar": [
+    "EmissiveStrength"
+   ],
+   "texture": [],
+   "static_switch": [],
+   "shading_model": "<MaterialShadingModel.MSM_UNLIT: 0>",
+   "blend_mode": "<BlendMode.BLEND_OPAQUE: 0>"
+  },
+  "/Game/Wonderland/Materials/M_WLMaster": {
+   "loaded": true,
+   "class": "Material",
+   "vector": [
+    "BaseColor",
+    "Emissive",
+    "RimColor"
+   ],
+   "scalar": [
+    "Specular",
+    "Metallic",
+    "Roughness",
+    "RoughVary",
+    "DetailAmp",
+    "TexScale",
+    "EmissiveStrength",
+    "RimAmp",
+    "SelfColour",
+    "BreatheSpeed",
+    "PhaseSpread",
+    "BreatheAmp",
+    "BobSpeed",
+    "BobAmp"
+   ],
+   "texture": [
+    "AlbedoTex",
+    "NormalTex",
+    "RoughTex"
+   ],
+   "static_switch": [
+    "Animated"
+   ],
+   "shading_model": "<MaterialShadingModel.MSM_DEFAULT_LIT: 1>",
+   "blend_mode": "<BlendMode.BLEND_OPAQUE: 0>"
+  },
+  "/Game/Wonderland/Materials/M_WL_RealWater": {
+   "loaded": true,
+   "class": "Material",
+   "vector": [
+    "ShallowColor",
+    "DeepColor"
+   ],
+   "scalar": [
+    "FlowSpeedA",
+    "FlowSpeedB",
+    "RippleStrength",
+    "Opacity",
+    "Roughness",
+    "Specular",
+    "Metallic",
+    "Refraction"
+   ],
+   "texture": [
+    "NormalTex",
+    "NormalA",
+    "NormalB"
+   ],
+   "static_switch": [],
+   "shading_model": "<MaterialShadingModel.MSM_DEFAULT_LIT: 1>",
+   "blend_mode": "<BlendMode.BLEND_TRANSLUCENT: 2>"
+  }
+ },
+ "finished": "2026-09-25 07:51:56",
+ "seconds": 0.1,
+ "log": ""
+}

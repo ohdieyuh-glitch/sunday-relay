@@ -109,8 +109,12 @@ AWonderlandBrainSculpture::AWonderlandBrainSculpture()
 	// across the back wall: the lamps were lighting the sculpture but the world's own sun and sky were still
 	// setting the colour of the walls. These are neutral and strong enough that the chamber is lit by its own
 	// two lamps and reads white, which is what the founder asked the background to be.
-	KeyLight = MakeLamp(TEXT("BrainKeyLight"), 520000.0f);
-	FillLight = MakeLamp(TEXT("BrainFillLight"), 190000.0f);
+	// STRONG ENOUGH TO FLATTEN THE WALLS, not merely to light the brain. The walls have to reach the top of
+	// the range so the chamber reads as one flat white against the UI's flat white and the seam between them
+	// stops being a square. The brain keeps its form because its albedo is a deep red: bright light on a
+	// dark red returns a bright RED, not a white.
+	KeyLight = MakeLamp(TEXT("BrainKeyLight"), 1450000.0f);
+	FillLight = MakeLamp(TEXT("BrainFillLight"), 900000.0f);
 
 	BrainMesh = MakeMesh(TEXT("BrainMass"));
 	BrainFold = MakeMesh(TEXT("BrainFolds"));
@@ -172,17 +176,20 @@ void AWonderlandBrainSculpture::PostInitializeComponents()
 	// down the left of the brain window, and it grew each time the chamber was enlarged, which is precisely what
 	// a mis-painted chamber panel would do. Three cycles were spent hunting it as an intruding world prop.
 	// This material's Color parameter is the one the rest of this file already relies on, so it is known to work.
-	// THE PANELS STAY ON THE MATERIAL THAT IS KNOWN TO TAKE A COLOUR HERE.
+	// THE PANELS STAY ON THE LIT MATERIAL, LIT HARD, and that is a decision made by exhaustion of the
+	// alternatives rather than by preference.
 	//
-	// Swapping them to M_WL_VoxelGlow to get an unlit white produced a BLACK chamber -- twice, once setting
-	// "Color" and again setting Color, EmissiveColor, BaseColor and EmissiveStrength together. Whatever
-	// drives that material's emissive, it is none of those names, and this file's own history says exactly
-	// what that costs: "a material instance accepts any parameter name you hand it and simply ignores one it
-	// does not have, so a mis-named parameter looks exactly like a correct one that had no effect."
+	// FOUNDER: "take the square around the project brain out." Nothing draws a frame there -- the square IS
+	// the chamber, whose walls read a different white from the flat UI behind them. A lit wall cannot match a
+	// flat UI colour, so the walls wanted to stop being lit, and THREE ways of making them unlit all failed:
+	// M_WL_VoxelGlow with "Color" (black), the same with Color + EmissiveColor + BaseColor +
+	// EmissiveStrength together (black again, even though the material is confirmed UNLIT and confirmed to
+	// have all four), and M_WLMaster driven through its confirmed Emissive + EmissiveStrength (black).
 	//
-	// So the white is made the honest way instead: a white ALBEDO on the lit material the rest of this file
-	// already relies on, lit by the chamber's own key and fill. Those lamps had to exist anyway -- a red
-	// brain in an unlit box is a black blob -- so the background costs nothing extra.
+	// So the walls are driven to white by LIGHT instead, which is the one mechanism in this file that has
+	// never failed: a white albedo on the material the rest of the file already uses, under lamps strong
+	// enough that the walls sit at the top of the range and stop carrying a gradient. Flat by saturation
+	// rather than flat by emission.
 	UMaterialInterface* FlatDark = Plain;
 	for (UStaticMeshComponent* Panel : { Backdrop.Get(), ChamberTop.Get(), ChamberFloor.Get(),
 										 ChamberLeft.Get(), ChamberRight.Get() })
@@ -207,8 +214,7 @@ void AWonderlandBrainSculpture::PostInitializeComponents()
 			// nothing and every panel stayed white, and three cycles went into hunting it as an intruding
 			// world prop. Setting "Color" alone on M_WL_VoxelGlow reproduced it exactly -- the chamber came
 			// out BLACK -- so all four are set here the same way the figure loader does it.
-			const FLinearColor ChamberWhite(0.94f, 0.94f, 0.95f, 1.0f);
-			Mid->SetVectorParameterValue(TEXT("Color"), ChamberWhite);
+			Mid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.97f, 0.97f, 0.98f, 1.0f));
 			Panel->SetMaterial(0, Mid);
 			if (Panel == Backdrop) { BackdropMid = Mid; }
 		}
