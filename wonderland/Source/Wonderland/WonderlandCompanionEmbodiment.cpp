@@ -43,6 +43,66 @@ namespace
 	//
 	// The engine one is kept as a fallback purely so a tree without the asset still draws something rather
 	// than nothing; zc_make_glow_material authors the real one.
+	/**
+	 * THE BRIGHTEST A FIGURE'S OWN LIGHT IS ALLOWED TO GET, and why there is a ceiling at all.
+	 *
+	 * FOUNDER, 2026-09-25: "the lighting is too bright and washed out. Reduce glare, bloom, and overexposure
+	 * so the mascot skins are clearly visible. The same applies to the AI Agent companions and LLM
+	 * companions. They should not be blown out by bright lighting." And, in the same breath: "Keep the
+	 * current flame quality on the mascot skins. The flames finally look good. Do not regress them."
+	 *
+	 * Those two only look contradictory until the numbers are read. Measured across every figure this
+	 * project ships:
+	 *
+	 *   flames and embers   4,000 - 4,800     <- the thing the founder says looks good
+	 *   companion bases     5,200 - 10,400
+	 *   starlight, edges   17,600 - 20,800
+	 *   eyes               20,000 - 32,000    <- the starbursts
+	 *
+	 * The glare is not coming from the sun. It is coming from figures emitting up to thirty-two thousand
+	 * times white and blooming across half the frame. Closing the world's exposure cannot fix that -- it only
+	 * darkens the world AROUND the blown figure, which is exactly what the first attempt at this did.
+	 *
+	 * So the top end is compressed and the bottom is left alone. Below the knee nothing changes at all, which
+	 * is what keeps every flame in the project bit-identical to the version the founder approved. Above it,
+	 * the fourth root pulls 32,000 down to about 9,100 while keeping the ORDER intact, so an eye still reads
+	 * brighter than a body and a halo still reads brighter than cloth.
+	 */
+	/**
+	 * 700, CHOSEN BY SWEEPING IT IN A LIVE SESSION (zc_glow_sweep), not picked.
+	 *
+	 * The ladder, measured on the LLM Companion filling the frame -- the worst case in the project, because
+	 * its wings, tail, gems and body are ALL glow:
+	 *
+	 *     knee   clipped   mean
+	 *     6000     4.17%   74.4     washed; the figure is a white shape
+	 *     1800     3.57%   65.2     better, still glow-washed over the armour
+	 *      700     3.57%   61.5     crown, face, gold trim AND the eyes read
+	 *      220     1.79%   58.6     crispest body, but the eyes go dark
+	 *
+	 * The clipped fraction barely moves across the whole range, which is the useful finding: the last few
+	 * per cent of clipping in that frame are the FLAMES, and they are supposed to clip. So the number could
+	 * not be chosen by the metric alone, and the pictures decided between 220 and 700 -- 220 is crisper but
+	 * kills the glowing eyes, which are a feature rather than glare.
+	 */
+	TAutoConsoleVariable<float> CVarGlowKnee(
+		TEXT("wl.Look.GlowKnee"), 700.0f,
+		TEXT("Brightness at which a figure's BODY glow starts being compressed. Flames are never compressed."));
+	TAutoConsoleVariable<float> CVarGlowCurve(
+		TEXT("wl.Look.GlowCurve"), 0.15f,
+		TEXT("How hard body glow is compressed above the knee. 1 = no compression, 0 = hard ceiling."));
+
+	float WonderlandTameGlow(float Strength)
+	{
+		const float Knee = FMath::Max(CVarGlowKnee.GetValueOnAnyThread(), 1.0f);
+		const float Curve = FMath::Clamp(CVarGlowCurve.GetValueOnAnyThread(), 0.0f, 1.0f);
+		if (!(Strength > Knee))
+		{
+			return FMath::Max(Strength, 0.0f);
+		}
+		return Knee * FMath::Pow(Strength / Knee, Curve);
+	}
+
 	const TCHAR* const GlowParentPath = TEXT("/Game/Wonderland/Materials/M_WL_VoxelGlow.M_WL_VoxelGlow");
 	const TCHAR* const GlowFallbackPath = TEXT("/Engine/EngineDebugMaterials/LevelColorationUnlitMaterial.LevelColorationUnlitMaterial");
 	const TCHAR* const AdditiveParentPath = TEXT("/Engine/EngineMaterials/EmissiveMeshMaterial.EmissiveMeshMaterial");
@@ -146,6 +206,7 @@ void AWonderlandCompanionEmbodiment::ClearBody()
 	PartPivots.Reset();
 	PartNames.Reset();
 	MaterialInstances.Reset();
+	FlameMaterialInstances.Reset();
 	Motions.Reset();
 	// THE FIRE GOES OUT WITH THE BODY THAT WAS BURNING.
 	//
@@ -266,7 +327,7 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		if (Instance != nullptr)
 		{
 			const FLinearColor Lit(Def.Color.R, Def.Color.G, Def.Color.B, 1.0f);
-			const FLinearColor Emissive = Lit * FMath::Max(Def.Strength, 0.0f);
+			const FLinearColor Emissive = Lit * WonderlandTameGlow(Def.Strength);
 			switch (Def.Kind)
 			{
 			case EWonderlandCompanionMaterialKind::Lit:
@@ -296,7 +357,7 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 				Instance->SetVectorParameterValue(TEXT("Color"), Emissive);
 				Instance->SetVectorParameterValue(TEXT("EmissiveColor"), Emissive);
 				Instance->SetVectorParameterValue(TEXT("BaseColor"), Emissive);
-				Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), FMath::Max(Def.Strength, 0.0f));
+				Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), WonderlandTameGlow(Def.Strength));
 				GlowMaterials.Add({Index, TEXT("Color"), Emissive});
 				break;
 			}
@@ -319,6 +380,31 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 			}
 		}
 		MaterialInstances.Add(Instance);
+
+		// ---- AND ITS FLAME TWIN. Only glowing materials need one; everything else reuses the body instance,
+		// so a figure with no fire allocates nothing extra.
+		UMaterialInstanceDynamic* Flame = Instance;
+		if (Def.Kind == EWonderlandCompanionMaterialKind::Glow
+			|| Def.Kind == EWonderlandCompanionMaterialKind::Additive)
+		{
+			if (UMaterialInstanceDynamic* Full = UMaterialInstanceDynamic::Create(ParentFor(Def.Kind), this))
+			{
+				const FLinearColor Untamed(Def.Color.R, Def.Color.G, Def.Color.B, 1.0f);
+				const FLinearColor FullEmissive = Untamed * FMath::Max(Def.Strength, 0.0f);
+				Full->SetVectorParameterValue(TEXT("Color"), FullEmissive);
+				Full->SetVectorParameterValue(TEXT("EmissiveColor"), FullEmissive);
+				Full->SetVectorParameterValue(TEXT("BaseColor"), FullEmissive);
+				Full->SetScalarParameterValue(TEXT("EmissiveStrength"), FMath::Max(Def.Strength, 0.0f));
+				const UWonderlandMascotStyleSettings& FlameStyle = UWonderlandMascotStyleSettings::Get();
+				if (FlameStyle.bChosen)
+				{
+					const bool bEye = WonderlandMascotStyle::NamesAnEye(Def.Name.ToString());
+					WonderlandMascotStyle::Tint(Full, FullEmissive * (bEye ? FlameStyle.Secondary : FlameStyle.Primary));
+				}
+				Flame = Full;
+			}
+		}
+		FlameMaterialInstances.Add(Flame);
 	}
 
 	for (const FWonderlandCompanionPart& Def : Figure.Parts)
@@ -951,6 +1037,34 @@ void AWonderlandCompanionEmbodiment::ChooseFigureTier(float DistanceUU, float No
 	}
 }
 
+namespace
+{
+	/**
+	 * `wl.Look.Reglow` -- rebuild every figure in the world against the current glow knee.
+	 *
+	 * The knee is the one number in this change that cannot be reasoned to: where a glow stops reading as
+	 * bright armour and starts reading as a white blob depends on the tonemapper, the sun and the exposure
+	 * together. Guessing it and rebuilding to check would cost a full build per candidate value.
+	 *
+	 * With this, a proof can set `wl.Look.GlowKnee`, call `wl.Look.Reglow`, photograph and measure, and walk
+	 * the value to the answer inside ONE play session.
+	 */
+	FAutoConsoleCommandWithWorldAndArgs GReglow(
+		TEXT("wl.Look.Reglow"),
+		TEXT("Re-apply every figure's materials at the current wl.Look.GlowKnee."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>&, UWorld* World)
+		{
+			if (World == nullptr) { return; }
+			int32 Rebuilt = 0;
+			for (TActorIterator<AWonderlandCompanionEmbodiment> It(World); It; ++It)
+			{
+				if (It->ReloadFigure()) { ++Rebuilt; }
+			}
+			UE_LOG(LogTemp, Display, TEXT("WLLOOK reglowed %d figures at knee %.0f"),
+				Rebuilt, CVarGlowKnee.GetValueOnGameThread());
+		}));
+}
+
 void AWonderlandCompanionEmbodiment::RebuildFlames(float TimeSeconds)
 {
 	if (FlameSurface == nullptr || FlameSources.Num() == 0) { return; }
@@ -1053,9 +1167,11 @@ void AWonderlandCompanionEmbodiment::RebuildFlames(float TimeSeconds)
 			// PAINTED AFTER THE SECTION EXISTS. ProceduralMeshComponent keeps materials per section, so setting
 			// one before the section is made is silently dropped -- the mistake that made the brain's python
 			// draw white.
-			if (MaterialInstances.IsValidIndex(Pair.Key) && MaterialInstances[Pair.Key] != nullptr)
+			// THE UNTAMED TWIN, so the fire is exactly the fire the founder approved while the body it grows
+			// out of is brought down around it.
+			if (FlameMaterialInstances.IsValidIndex(Pair.Key) && FlameMaterialInstances[Pair.Key] != nullptr)
 			{
-				FlameSurface->SetMaterial(Slot, MaterialInstances[Pair.Key]);
+				FlameSurface->SetMaterial(Slot, FlameMaterialInstances[Pair.Key]);
 			}
 		}
 		else

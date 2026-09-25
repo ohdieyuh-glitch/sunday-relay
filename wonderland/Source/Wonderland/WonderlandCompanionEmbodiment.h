@@ -319,6 +319,19 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> MaterialInstances;
+	/**
+	 * THE SAME MATERIALS AGAIN, AT THEIR FULL UNCOMPRESSED STRENGTH, for the flame ribbons only.
+	 *
+	 * A figure's glow materials are shared between its BODY boxes and its FLAME sections -- GPT 6 Astra's
+	 * "pale" paints its wings, its tail and its fire. That is fine until the two need different brightness,
+	 * which is exactly what the founder asked for: "keep the current flame quality... do not regress them"
+	 * and, in the same message, the companions "should not be blown out".
+	 *
+	 * Brightness alone cannot tell them apart -- a flame and a wing are the same 6,430 -- but a flame SHOULD
+	 * clip to white, because that is what white-hot looks like, and a wing should not, because then it is a
+	 * white blob with no armour in it. So the body instances take the compression and these do not.
+	 */
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> FlameMaterialInstances;
 
 	/** One support pulse, travelling from this companion into the Contract. */
 	struct FSupportPulse

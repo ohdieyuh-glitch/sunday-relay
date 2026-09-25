@@ -253,7 +253,32 @@ void SWonderlandCompanionTerminal::Construct(const FArguments& InArgs)
 			[
 				Log.ToSharedRef()
 			]
-			// THE RULE, edge to edge inside the frame.
+			// THE i.WONDER PULSE, ON ITS OWN ROW, ABOVE THE RULE, anchored bottom-left.
+			//
+			// FOUNDER, 2026-09-25: "the symbol/logo at the bottom left must be ABOVE the horizontal divider
+			// line. Fix the placement cleanly. No overlap." It was below the rule, sitting in the same band as
+			// the command line, so the divider read as separating the transcript from a strip that held both
+			// the mark and the input. Now the order down the panel is transcript, mark, rule, input -- the
+			// mark belongs to the companion's side of the line, and the rule closes it off from what the
+			// founder types.
+			//
+			// IT USED TO LIVE INSIDE THE COMMAND LINE before that, in the same horizontal box as the chevron
+			// and the editable text, so it read as part of the input control -- as though the companion's
+			// words came out of the box the founder types into. They come from the companion.
+			//
+			// ITS OWN SLOT IS WHAT KEEPS IT OUT, and is also why there is no overlap to fix: a row of its own
+			// cannot be pushed back inside the text field when the terminal is resized, which an AutoWidth
+			// slot sharing a box with a FillWidth text control eventually would be.
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			.HAlign(HAlign_Left)
+			.Padding(12.0f, 4.0f, 0.0f, 4.0f)
+			[
+				SAssignNew(Pulse, SWonderlandPulseMark)
+				.Size(24.0f)
+				.Beating_Lambda([this]() { return IsPulsing(); })
+			]
+			// THE RULE, edge to edge inside the frame, BELOW the mark and above the input.
 			+ SVerticalBox::Slot()
 			.AutoHeight()
 			[
@@ -264,25 +289,6 @@ void SWonderlandCompanionTerminal::Construct(const FArguments& InArgs)
 					.BorderImage(&RuleBrush)
 					.Padding(0.0f)
 				]
-			]
-			// THE i.WONDER PULSE, ON ITS OWN ROW ABOVE THE INPUT, anchored bottom-left.
-			//
-			// IT USED TO LIVE INSIDE THE COMMAND LINE, in the same horizontal box as the chevron and the editable
-			// text -- so it read as part of the input control, and the companion's words looked like they were
-			// coming out of the box the founder types into. They are not: they come from the companion. The mark
-			// belongs between the transcript and the input, with the answer building upward above it.
-			//
-			// ITS OWN SLOT IS ALSO WHAT KEEPS IT OUT. A row of its own cannot be pushed back inside the text
-			// field when the terminal is resized, which an AutoWidth slot sharing a box with a FillWidth text
-			// control eventually would be.
-			+ SVerticalBox::Slot()
-			.AutoHeight()
-			.HAlign(HAlign_Left)
-			.Padding(12.0f, 2.0f, 0.0f, 3.0f)
-			[
-				SAssignNew(Pulse, SWonderlandPulseMark)
-				.Size(24.0f)
-				.Beating_Lambda([this]() { return IsPulsing(); })
 			]
 			// THE COMMAND LINE: chevron and input, then Send and its chord ruled off at the right.
 			+ SVerticalBox::Slot()

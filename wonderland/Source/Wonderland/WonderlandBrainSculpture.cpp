@@ -87,6 +87,8 @@ AWonderlandBrainSculpture::AWonderlandBrainSculpture()
 	BrainSurface = MakeSurface(TEXT("BrainSurface"));
 	SnakeSurface = MakeSurface(TEXT("PythonSurface"));
 
+	Snow = MakeMesh(TEXT("BlackSnow"));
+
 	BrainMesh = MakeMesh(TEXT("BrainMass"));
 	BrainFold = MakeMesh(TEXT("BrainFolds"));
 	SnakeMesh = MakeMesh(TEXT("PythonBody"));
@@ -121,13 +123,20 @@ void AWonderlandBrainSculpture::PostInitializeComponents()
 	// brain is built out of that same blue-black -- the mass a little above it so the lighting still separates
 	// the silhouette from the chamber, the creases a little below it, which is what makes the folds read as
 	// depth rather than as a pattern painted on a ball.
-	Dress(BrainMesh, FLinearColor(0.022f, 0.030f, 0.082f, 1.0f), BrainMid);
-	Dress(BrainFold, FLinearColor(0.008f, 0.012f, 0.038f, 1.0f), FoldMid);
+	// RED ON WHITE (founder, 2026-09-25): "white background, red brain, red Python snake, black snow falling
+	// continuously from top to bottom." The blue-black family below was the previous direction, where the
+	// sculpture was built out of the panel's own night colour; it is replaced rather than tinted, because a
+	// near-black mass lit against WHITE reads as a hole rather than as a brain.
+	//
+	// The brain and the python are both red and must still read apart, so they are red at different depths:
+	// the brain a deep oxblood, the python a brighter vermilion with the four tones a python needs.
+	Dress(BrainMesh, FLinearColor(0.240f, 0.020f, 0.028f, 1.0f), BrainMid);
+	Dress(BrainFold, FLinearColor(0.110f, 0.008f, 0.014f, 1.0f), FoldMid);
 	// And a python is four tones, not one: a dark back, a pale belly, a darker snout and a lit eye.
-	Dress(SnakeMesh, FLinearColor(0.20f, 0.42f, 0.23f, 1.0f), SnakeMid);
-	Dress(SnakeBelly, FLinearColor(0.76f, 0.77f, 0.52f, 1.0f), BellyMid);
-	Dress(SnakeHead, FLinearColor(0.14f, 0.30f, 0.17f, 1.0f), HeadMid);
-	Dress(SnakeEyes, FLinearColor(0.96f, 0.72f, 0.16f, 1.0f), EyeMid);
+	Dress(SnakeMesh, FLinearColor(0.560f, 0.070f, 0.055f, 1.0f), SnakeMid);
+	Dress(SnakeBelly, FLinearColor(0.880f, 0.520f, 0.470f, 1.0f), BellyMid);
+	Dress(SnakeHead, FLinearColor(0.380f, 0.040f, 0.038f, 1.0f), HeadMid);
+	Dress(SnakeEyes, FLinearColor(0.060f, 0.050f, 0.050f, 1.0f), EyeMid);
 
 	// The chamber wall: not pure black, because a true 0,0,0 wall and the night field's Srgb(3,6,22) read as two
 	// different blacks and the hole's edges show as a visible rectangle. This sits where the field sits.
@@ -149,7 +158,10 @@ void AWonderlandBrainSculpture::PostInitializeComponents()
 		if (FlatDark == nullptr) { continue; }
 		if (UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(FlatDark, this))
 		{
-			Mid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.0118f, 0.0235f, 0.0863f, 1.0f));
+			// WHITE, not the night field's blue-black. All five panels take it, so the chamber is a white room
+			// rather than a white back wall with dark sides -- which would have read as a lit rectangle.
+			// Slightly off pure white: at 1.0 the panel clips and the flakes lose their edges against it.
+			Mid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.945f, 0.945f, 0.955f, 1.0f));
 			Panel->SetMaterial(0, Mid);
 			if (Panel == Backdrop) { BackdropMid = Mid; }
 		}
@@ -172,8 +184,44 @@ void AWonderlandBrainSculpture::PostInitializeComponents()
 	};
 	// IN THE PANEL'S OWN FAMILY, but light enough that the folds read. A surface this dark returns almost no
 	// light whatever its shape, so the first build's organic geometry was invisible and it looked like a stone.
-	DressSurface(BrainSurface, FLinearColor(0.150f, 0.140f, 0.245f, 1.0f), BrainSurfaceMid);
-	DressSurface(SnakeSurface, FLinearColor(0.085f, 0.215f, 0.110f, 1.0f), SnakeSurfaceMid);
+	// THE SURFACES ARE WHAT IS ACTUALLY SEEN, so these are the two colours that matter. Both red, a stop
+	// apart, so the python reads against the brain as well as against the white.
+	DressSurface(BrainSurface, FLinearColor(0.330f, 0.045f, 0.055f, 1.0f), BrainSurfaceMid);
+	DressSurface(SnakeSurface, FLinearColor(0.620f, 0.105f, 0.080f, 1.0f), SnakeSurfaceMid);
+
+	// ---- THE BLACK SNOW. One flake mesh, dressed once, seeded once, re-placed every frame.
+	if (Snow != nullptr)
+	{
+		if (Cube != nullptr) { Snow->SetStaticMesh(Cube); }
+		if (Plain != nullptr)
+		{
+			if (UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Plain, this))
+			{
+				// Not pure 0: an unlit true black loses its silhouette where two flakes overlap, and reads
+				// as one larger blob rather than two flakes.
+				Mid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.020f, 0.018f, 0.022f, 1.0f));
+				Snow->SetMaterial(0, Mid);
+				SnowMid = Mid;
+			}
+		}
+		// SEEDED ONCE AND KEPT. Re-rolling the field each frame would make it flicker rather than fall; the
+		// only thing that changes per frame is how far each flake has descended.
+		FRandomStream Flakes(20260925);
+		SnowSeeds.Reset();
+		SnowShape.Reset();
+		Snow->ClearInstances();
+		for (int32 Index = 0; Index < 240; ++Index)
+		{
+			SnowSeeds.Add(FVector4(
+				Flakes.FRandRange(-0.94f, 0.94f),        // across the window
+				Flakes.FRandRange(-1.0f, 1.0f),          // where in its fall it starts
+				Flakes.FRandRange(0.10f, 0.92f),         // depth between the lens and the back wall
+				Flakes.FRandRange(0.055f, 0.185f)));     // fall rate, as a fraction of the window per second
+			SnowShape.Add(FVector2D(Flakes.FRandRange(0.014f, 0.040f),      // size, engine-cube units
+									Flakes.FRandRange(0.0f, 6.2831853f)));  // sway phase
+			Snow->AddInstance(FTransform::Identity, true);
+		}
+	}
 
 	BuildBrain();
 	BuildSnake();
@@ -697,6 +745,7 @@ void AWonderlandBrainSculpture::Tick(float DeltaSeconds)
 	RebuildSnakeSurface();
 	Breathe(DeltaSeconds);
 	StandTheChamber();
+	DriftTheSnow();
 }
 
 void AWonderlandBrainSculpture::StandTheChamber()
@@ -766,6 +815,80 @@ void AWonderlandBrainSculpture::StandTheChamber()
 		  Facing, FVector(Depth, Thin, Half * 2.0f / 100.0f));
 	Place(ChamberRight.Get(), Here + Right * Half + Away * (Back - Front) * 0.5f,
 		  Facing, FVector(Depth, Thin, Half * 2.0f / 100.0f));
+}
+
+void AWonderlandBrainSculpture::DriftTheSnow()
+{
+	// BLACK SNOW, FALLING TOP TO BOTTOM, CONTINUOUSLY (founder, 2026-09-25).
+	//
+	// IT FALLS IN THE CAMERA'S FRAME, NOT THE WORLD'S. The chamber is rebuilt from the lens every frame, and
+	// the founder looks through one open face of it, so "top to bottom" means down the WINDOW. Snow that fell
+	// along world -Z would drift diagonally whenever the camera turned, and would fall sideways the moment the
+	// camera looked up at the sculpture. The same Right/Up basis the chamber is placed on is the one the flakes
+	// descend in, so down is always down on screen.
+	//
+	// EVERY FLAKE IS A CONSTANT PLUS A PHASE. The field is seeded once; per frame each flake's height is just
+	// its start less its rate times the clock, wrapped. Nothing is randomised here -- re-rolling per frame is
+	// what makes a snow field flicker instead of fall.
+	if (Snow == nullptr || SnowSeeds.Num() == 0)
+	{
+		return;
+	}
+	const APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	const APlayerCameraManager* Lens = (PC != nullptr) ? PC->PlayerCameraManager : nullptr;
+	if (Lens == nullptr)
+	{
+		// No lens, no window to fall down. Hidden rather than left frozen mid-air.
+		Snow->SetVisibility(false, true);
+		return;
+	}
+	Snow->SetVisibility(true, true);
+
+	const FVector Here = GetActorLocation();
+	const FVector Eye = Lens->GetCameraLocation();
+	const FVector Away = (Here - Eye).GetSafeNormal(UE_SMALL_NUMBER, FVector::ForwardVector);
+	const FRotator Facing = Away.Rotation();
+	const FVector Right = FRotationMatrix(Facing).GetUnitAxis(EAxis::Y);
+	const FVector Up = FRotationMatrix(Facing).GetUnitAxis(EAxis::Z);
+
+	// The same measurements the chamber is built from, so the snow cannot fall outside the room it is in.
+	const float R = FMath::Max(BrainRadiusUU, 20.0f) * static_cast<float>(GetActorScale3D().X);
+	const float Half = R * 6.0f;
+	const float Back = R * 4.0f;
+	const float ToEye = static_cast<float>(FVector::Dist(Here, Eye));
+	const float Front = FMath::Max(ToEye - 14.0f, 4.0f);
+
+	const float Clock = Elapsed;
+	const int32 Count = FMath::Min(SnowSeeds.Num(), Snow->GetInstanceCount());
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		const FVector4& Seed = SnowSeeds[Index];
+		const FVector2D& Shape = SnowShape.IsValidIndex(Index) ? SnowShape[Index] : FVector2D(0.02f, 0.0f);
+
+		// WRAPPED, NOT RESET. Fmod on the whole two-unit span means a flake leaving the bottom re-enters at the
+		// top in the same column, so the field never thins out and never restarts as a visible sheet.
+		float Height = static_cast<float>(Seed.Y) - static_cast<float>(Seed.W) * Clock;
+		Height = FMath::Fmod(Height + 1.0f, 2.0f);
+		if (Height < 0.0f) { Height += 2.0f; }
+		Height -= 1.0f;
+
+		// A LITTLE SWAY, because snow does not fall on rails. Small enough that it reads as air rather than as
+		// a flake being pushed sideways.
+		const float Across = static_cast<float>(Seed.X)
+			+ 0.018f * FMath::Sin(Clock * 0.9f + static_cast<float>(Shape.Y));
+
+		// Kept off the very edges so a flake never intersects a chamber wall and flicker-clips against it.
+		const FVector At = Here
+			+ Right * (Across * Half * 0.93f)
+			+ Up * (Height * Half * 0.93f)
+			+ Away * (-Front + static_cast<float>(Seed.Z) * (Back + Front));
+
+		// Turned with the window, so a flake is a square facing the founder rather than an edge-on sliver.
+		Snow->UpdateInstanceTransform(Index,
+			FTransform(Facing, At, FVector(static_cast<float>(Shape.X))), true, false, true);
+	}
+	// One render-state push for the whole field, after the last flake, rather than one per flake.
+	Snow->MarkRenderStateDirty();
 }
 
 float AWonderlandBrainSculpture::GetHeadRadiusUU() const

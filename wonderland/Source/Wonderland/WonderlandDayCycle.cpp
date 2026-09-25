@@ -340,8 +340,36 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 	// ---- founder can still read the garden at midnight without noon becoming milky.
 	if (APostProcessVolume* Volume = Grade.Get())
 	{
+		// ---- CLOSED FURTHER AT NOON (founder, 2026-09-25): "the lighting is too bright and washed out.
+		// Reduce glare, bloom, and overexposure so the mascot skins are clearly visible. The same applies to
+		// the AI Agent companions and LLM companions."
+		//
+		// Was Lerp(1.5, -0.4): about a third of a stop closed at noon, which is not enough against a
+		// 70,000 lux sun falling on ivory stone. Now nearly a stop and a third. Night is brought down a
+		// little too, because the old +1.5 was lifting midnight far enough to grey it.
 		Volume->Settings.bOverride_AutoExposureBias = true;
-		Volume->Settings.AutoExposureBias = FMath::Lerp(1.5f, -0.4f, Daylight);
+		// PULLED BACK FROM -1.3 AFTER MEASURING. The first pass closed the world nearly a stop and a third
+		// and the guard caught it: the plaza went dark while the luminous skins stayed blown, because the
+		// glare was never the sun -- it was figures emitting up to 32,000x white. That is now compressed at
+		// its source (WonderlandTameGlow), so the world only needs the modest close it always did.
+		Volume->Settings.AutoExposureBias = FMath::Lerp(1.2f, -0.9f, Daylight);
+
+		// ---- AND THE GLARE ITSELF, which is the half exposure cannot fix.
+		//
+		// Bloom was never overridden here, so it ran at the engine's default 0.675 with a threshold of -1 --
+		// and a threshold of -1 means EVERYTHING blooms, including plain lit stone at 0.8. That is precisely
+		// what "washed out" looks like: a white haze lifted off every bright surface, flattening the skins
+		// and the companions into it.
+		//
+		// A THRESHOLD OF 1.0 IS THE WHOLE POINT, AND IT IS WHY THE FLAMES SURVIVE. Only pixels brighter than
+		// white bloom now. Lit stone, cloth and voxel skins sit below that and stop hazing; the flames,
+		// Celestial Light and the glow parts are emissive at thousands of times white (DogGlowExposure is
+		// 4000) and are nowhere near the threshold -- they bloom exactly as they did. The founder asked for
+		// the flame quality to be kept, and this removes haze from everything EXCEPT the things that glow.
+		Volume->Settings.bOverride_BloomIntensity = true;
+		Volume->Settings.BloomIntensity = 0.34f;
+		Volume->Settings.bOverride_BloomThreshold = true;
+		Volume->Settings.BloomThreshold = 1.0f;
 	}
 }
 

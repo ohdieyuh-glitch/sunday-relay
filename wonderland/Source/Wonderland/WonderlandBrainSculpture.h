@@ -173,6 +173,25 @@ private:
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> BackdropMid = nullptr;
 
 	/**
+	 * BLACK SNOW, FALLING TOP TO BOTTOM, CONTINUOUSLY (founder, 2026-09-25).
+	 *
+	 * One instanced component holding every flake. It falls in the CAMERA'S frame rather than the world's,
+	 * because the chamber is built from the lens every frame and the founder is looking through one face of
+	 * it: snow that fell along world -Z would drift diagonally across the window whenever the camera turned,
+	 * and would fall sideways if the camera ever looked up.
+	 */
+	UPROPERTY() TObjectPtr<UInstancedStaticMeshComponent> Snow = nullptr;
+	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> SnowMid = nullptr;
+
+	/** Per-flake constants: X across, Y its starting height, Z depth into the chamber, W its fall rate. */
+	TArray<FVector4> SnowSeeds;
+	/** Per-flake size in engine-cube units, and a sway phase so no two drift together. */
+	TArray<FVector2D> SnowShape;
+
+	/** Re-place every flake for this frame, in the chamber's own basis. */
+	void DriftTheSnow();
+
+	/**
 	 * THE HEAD'S PATH, RESAMPLED AT A FIXED ARC LENGTH, in a ring that never reallocates. Storing one sample per
 	 * frame would make the body's shape depend on the frame rate; storing one per fixed TIME still ties its
 	 * length to the head's speed. One per fixed DISTANCE ties it to neither.
