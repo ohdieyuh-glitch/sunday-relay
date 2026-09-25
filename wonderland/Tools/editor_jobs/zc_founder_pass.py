@@ -121,12 +121,18 @@ def job():
         yield 5.0
         ui.close_overlay()
         yield 2.0
+        # BY CLASS, NOT BY NAME. This used to match actors whose NAME contained "Avatar", which was right when
+        # /pa spawned BP_Avatar_* Blueprints. On 2026-09-23 the founder rejected every one of those bodies as
+        # blocky, the line was remade in the forge, and ShowProjectAvatars now spawns
+        # AWonderlandCompanionEmbodiment -- whose names are WonderlandCompanionEmbodiment_7 and contain no
+        # "Avatar" at all. So this proof reported pa_families_shown=0 for a command that was working perfectly,
+        # which is worse than no proof: it accuses the product of a fault that is in the test.
         names = []
-        for a in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.Actor):
-            n = str(a.get_name())
-            if "Avatar" in n or "BP_Avatar" in n:
+        for a in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.WonderlandCompanionEmbodiment):
+            if str(a.get_editor_property("class_label")) == "PROJECT AVATAR":
                 v = a.get_actor_location()
-                names.append({"name": n, "at": [round(v.x), round(v.y), round(v.z)]})
+                names.append({"name": str(a.get_editor_property("display_name")),
+                              "at": [round(v.x), round(v.y), round(v.z)]})
         RESULT["project_avatars_in_world"] = names
         RESULT["pa_families_shown"] = len(names)
         at = pawn.get_actor_location()
@@ -174,7 +180,16 @@ def job():
             H.capture_viewport_jpeg(os.path.join(ROOT, "skin_%s.jpg" % skin), 1900, 95)
             switched.append({"skin": skin, "accepted": ok, "stage_now": shown})
         RESULT["skin_switching"] = switched
-        RESULT["all_skins_switched"] = all(s["accepted"] and s["skin"] in s["stage_now"] for s in switched)
+        # BEE AND HAGOROMO ARE SUPPOSED TO REFUSE. The founder's standing instruction is that they stay
+        # removed, so a run in which all seven switched would be the failure. This asked for seven and called
+        # the two correct refusals a fault.
+        REMOVED = ("hagoromo", "bee")
+        live = [x for x in switched if x["skin"] not in REMOVED]
+        gone = [x for x in switched if x["skin"] in REMOVED]
+        RESULT["live_skins_switched"] = all(x["accepted"] and x["skin"] in x["stage_now"] for x in live)
+        RESULT["removed_skins_refused"] = all(x["skin"] not in x["stage_now"] for x in gone)
+        RESULT["removed_skins"] = [x["skin"] for x in gone]
+        RESULT["all_skins_switched"] = RESULT["live_skins_switched"] and RESULT["removed_skins_refused"]
         RESULT["preview_still_in_world_after_all"] = bool(stage and stage.is_in_world_preview())
         L.release_camera(world)
 
@@ -191,7 +206,7 @@ def job():
             "pa_families_shown": RESULT.get("pa_families_shown", 0),
             "in_world_skin_preview": "PASS" if (RESULT.get("preview_in_world") and RESULT.get("preview_near_player")
                                                 and RESULT.get("preview_survives_panel_close")) else "FAIL",
-            "all_seven_skins_switch": "PASS" if RESULT.get("all_skins_switched") else "FAIL",
+            "live_skins_switch_removed_refuse": "PASS" if RESULT.get("all_skins_switched") else "FAIL",
         }
         RESULT["status"] = "done"
     finally:
