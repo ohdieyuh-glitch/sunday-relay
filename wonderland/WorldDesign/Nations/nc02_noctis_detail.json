@@ -7898,7 +7898,7 @@
   {
    "id": "NC02_Detail_Wall_Lantern_glass",
    "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Wall_Lantern_glass.WL_Detail_Wall_Lantern_glass",
-   "material": "MI_V2_NoctisGlass",
+   "material": "MI_V2_NoctisLuminous",
    "instances": [
     [
      -57289.8,

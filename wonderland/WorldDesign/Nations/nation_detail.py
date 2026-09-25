@@ -162,12 +162,22 @@ def build(pass_id, cfg):
                                 round(scale[0], 3), round(scale[1], 3), round(scale[2], 3)])
         stats[key] += 1
 
-    def add_module(name, u, v, z, yaw_local, scale=(1.0, 1.0, 1.0), cull=CULL_NEAR):
+    #: A NATION THAT DECLARES A LUMINOUS ACCENT GETS IT ON ITS WALL LIGHT.
+    #:
+    #: Read from the quarter module rather than named here, so this stays one rule rather than a list of
+    #: nations to keep in step: Noctis defines LUMINOUS and Tartarus does not, so Noctis's lanterns burn and
+    #: Tartarus's are lit stone exactly as before. WORLD_BETA_LEDGER row F had MI_V2_NoctisLuminous used in
+    #: ZERO instances across NC01-NC04 -- canon, on disk, and never once placed.
+    accent = getattr(mod, "LUMINOUS", None)
+
+    def add_module(name, u, v, z, yaw_local, scale=(1.0, 1.0, 1.0), cull=CULL_NEAR, glow=()):
         for part in KIT[name]["parts"]:
             if part["part"] in mod.SKIP_PARTS:
                 continue
+            material = (accent if (accent and part["part"] in glow)
+                        else mats.get(part["part"], part["material"]))
             add("%s_%s" % (name.replace("WL_", ""), part["part"]), part["mesh"],
-                mats.get(part["part"], part["material"]), u, v, z, yaw_local, scale, cull)
+                material, u, v, z, yaw_local, scale, cull)
 
     used, skipped = 0, Counter()
     for fp in footprints:
@@ -190,12 +200,12 @@ def build(pass_id, cfg):
         ca, sa = math.cos(math.radians(byaw)), math.sin(math.radians(byaw))
 
         def place(lx, ly, z, face_yaw, module=None, key=None, mesh=None, material=None, scale=(1, 1, 1),
-                  cull=CULL_NEAR):
+                  cull=CULL_NEAR, glow=()):
             """Put something at (lx, ly) in the BUILDING's own frame, facing out of the face it sits on."""
             u = fp["u"] + lx * ca - ly * sa
             v = fp["v"] + lx * sa + ly * ca
             if module:
-                add_module(module, u, v, z, byaw + face_yaw, scale, cull)
+                add_module(module, u, v, z, byaw + face_yaw, scale, cull, glow=glow)
             else:
                 add(key, mesh, material, u, v, z, byaw + face_yaw, scale, cull)
 
@@ -224,7 +234,9 @@ def build(pass_id, cfg):
                 t = (i + 0.5) / n - 0.5
                 lx = t * run if fy else fx * (half + 10.0)
                 ly = fy * (half + 10.0) if fy else t * run
-                place(lx, ly, fp["z"] + top * 0.20, face_yaw, module="WL_Detail_Wall_Lantern", cull=8000.0)
+                # THE GLASS BURNS on a nation that has a luminous accent to burn with.
+                place(lx, ly, fp["z"] + top * 0.20, face_yaw, module="WL_Detail_Wall_Lantern",
+                      cull=8000.0, glow=("glass",))
 
         # ---- a cornice where the wall meets its roof. The plinth block is the kit's only moulding run, so it is
         # stretched along the course exactly as BC01 stretches it around the core's buildings: a base course and a

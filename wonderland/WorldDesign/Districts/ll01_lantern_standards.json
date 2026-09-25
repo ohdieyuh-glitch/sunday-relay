@@ -1,0 +1,1885 @@
+{
+ "pass": "LL01",
+ "title": "Gold lantern standards for the strange lanterns",
+ "tags": [
+  "LL01"
+ ],
+ "actors": [
+  {
+   "id": "LMLanternHamlets_Lantern0_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -14363.1,
+    9905.8,
+    0
+   ],
+   "rot": [
+    0.0,
+    145.85,
+    0.0
+   ],
+   "scale": [
+    1.1795,
+    1.1795,
+    1.1795
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern0_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -14363.1,
+    9905.8,
+    0
+   ],
+   "rot": [
+    0.0,
+    145.85,
+    0.0
+   ],
+   "scale": [
+    1.1795,
+    1.1795,
+    1.1795
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern0_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    -14363.1,
+    9905.8,
+    0
+   ],
+   "rot": [
+    0.0,
+    145.85,
+    0.0
+   ],
+   "scale": [
+    1.1795,
+    1.1795,
+    1.1795
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern1_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -14974.9,
+    9055.6,
+    0
+   ],
+   "rot": [
+    0.0,
+    -125.63,
+    0.0
+   ],
+   "scale": [
+    1.0656,
+    1.0656,
+    1.0656
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern1_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -14974.9,
+    9055.6,
+    0
+   ],
+   "rot": [
+    0.0,
+    -125.63,
+    0.0
+   ],
+   "scale": [
+    1.0656,
+    1.0656,
+    1.0656
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern1_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    -14974.9,
+    9055.6,
+    0
+   ],
+   "rot": [
+    0.0,
+    -125.63,
+    0.0
+   ],
+   "scale": [
+    1.0656,
+    1.0656,
+    1.0656
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern2_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -14916.5,
+    9225.9,
+    0
+   ],
+   "rot": [
+    0.0,
+    54.74,
+    0.0
+   ],
+   "scale": [
+    1.0844,
+    1.0844,
+    1.0844
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern2_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -14916.5,
+    9225.9,
+    0
+   ],
+   "rot": [
+    0.0,
+    54.74,
+    0.0
+   ],
+   "scale": [
+    1.0844,
+    1.0844,
+    1.0844
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern2_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    -14916.5,
+    9225.9,
+    0
+   ],
+   "rot": [
+    0.0,
+    54.74,
+    0.0
+   ],
+   "scale": [
+    1.0844,
+    1.0844,
+    1.0844
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern3_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -15628.5,
+    8414.1,
+    0
+   ],
+   "rot": [
+    0.0,
+    144.15,
+    0.0
+   ],
+   "scale": [
+    0.9746,
+    0.9746,
+    0.9746
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern3_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -15628.5,
+    8414.1,
+    0
+   ],
+   "rot": [
+    0.0,
+    144.15,
+    0.0
+   ],
+   "scale": [
+    0.9746,
+    0.9746,
+    0.9746
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern3_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    -15628.5,
+    8414.1,
+    0
+   ],
+   "rot": [
+    0.0,
+    144.15,
+    0.0
+   ],
+   "scale": [
+    0.9746,
+    0.9746,
+    0.9746
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern4_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -16125.0,
+    8521.4,
+    0
+   ],
+   "rot": [
+    0.0,
+    -38.76,
+    0.0
+   ],
+   "scale": [
+    0.9877,
+    0.9877,
+    0.9877
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern4_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -16125.0,
+    8521.4,
+    0
+   ],
+   "rot": [
+    0.0,
+    -38.76,
+    0.0
+   ],
+   "scale": [
+    0.9877,
+    0.9877,
+    0.9877
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern4_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    -16125.0,
+    8521.4,
+    0
+   ],
+   "rot": [
+    0.0,
+    -38.76,
+    0.0
+   ],
+   "scale": [
+    0.9877,
+    0.9877,
+    0.9877
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern5_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -16098.9,
+    7795.7,
+    0
+   ],
+   "rot": [
+    0.0,
+    154.15,
+    0.0
+   ],
+   "scale": [
+    1.1877,
+    1.1877,
+    1.1877
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern5_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -16098.9,
+    7795.7,
+    0
+   ],
+   "rot": [
+    0.0,
+    154.15,
+    0.0
+   ],
+   "scale": [
+    1.1877,
+    1.1877,
+    1.1877
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern5_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    -16098.9,
+    7795.7,
+    0
+   ],
+   "rot": [
+    0.0,
+    154.15,
+    0.0
+   ],
+   "scale": [
+    1.1877,
+    1.1877,
+    1.1877
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern6_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -16889.1,
+    7796.0,
+    0
+   ],
+   "rot": [
+    0.0,
+    171.81,
+    0.0
+   ],
+   "scale": [
+    1.0385,
+    1.0385,
+    1.0385
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern6_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -16889.1,
+    7796.0,
+    0
+   ],
+   "rot": [
+    0.0,
+    171.81,
+    0.0
+   ],
+   "scale": [
+    1.0385,
+    1.0385,
+    1.0385
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern6_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    -16889.1,
+    7796.0,
+    0
+   ],
+   "rot": [
+    0.0,
+    171.81,
+    0.0
+   ],
+   "scale": [
+    1.0385,
+    1.0385,
+    1.0385
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern7_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -17263.4,
+    7195.5,
+    0
+   ],
+   "rot": [
+    0.0,
+    38.51,
+    0.0
+   ],
+   "scale": [
+    1.1057,
+    1.1057,
+    1.1057
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern7_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -17263.4,
+    7195.5,
+    0
+   ],
+   "rot": [
+    0.0,
+    38.51,
+    0.0
+   ],
+   "scale": [
+    1.1057,
+    1.1057,
+    1.1057
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern7_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    -17263.4,
+    7195.5,
+    0
+   ],
+   "rot": [
+    0.0,
+    38.51,
+    0.0
+   ],
+   "scale": [
+    1.1057,
+    1.1057,
+    1.1057
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern8_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -17299.5,
+    7055.6,
+    0
+   ],
+   "rot": [
+    0.0,
+    135.23,
+    0.0
+   ],
+   "scale": [
+    1.0008,
+    1.0008,
+    1.0008
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern8_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -17299.5,
+    7055.6,
+    0
+   ],
+   "rot": [
+    0.0,
+    135.23,
+    0.0
+   ],
+   "scale": [
+    1.0008,
+    1.0008,
+    1.0008
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern8_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    -17299.5,
+    7055.6,
+    0
+   ],
+   "rot": [
+    0.0,
+    135.23,
+    0.0
+   ],
+   "scale": [
+    1.0008,
+    1.0008,
+    1.0008
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern9_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -18140.3,
+    6606.8,
+    0
+   ],
+   "rot": [
+    0.0,
+    -5.05,
+    0.0
+   ],
+   "scale": [
+    1.2279,
+    1.2279,
+    1.2279
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern9_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -18140.3,
+    6606.8,
+    0
+   ],
+   "rot": [
+    0.0,
+    -5.05,
+    0.0
+   ],
+   "scale": [
+    1.2279,
+    1.2279,
+    1.2279
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern9_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    -18140.3,
+    6606.8,
+    0
+   ],
+   "rot": [
+    0.0,
+    -5.05,
+    0.0
+   ],
+   "scale": [
+    1.2279,
+    1.2279,
+    1.2279
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern10_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -18394.2,
+    6307.5,
+    0
+   ],
+   "rot": [
+    0.0,
+    58.81,
+    0.0
+   ],
+   "scale": [
+    1.0885,
+    1.0885,
+    1.0885
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern10_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -18394.2,
+    6307.5,
+    0
+   ],
+   "rot": [
+    0.0,
+    58.81,
+    0.0
+   ],
+   "scale": [
+    1.0885,
+    1.0885,
+    1.0885
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMLanternHamlets_Lantern10_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    -18394.2,
+    6307.5,
+    0
+   ],
+   "rot": [
+    0.0,
+    58.81,
+    0.0
+   ],
+   "scale": [
+    1.0885,
+    1.0885,
+    1.0885
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern0_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    8713.7,
+    -19579.0,
+    0
+   ],
+   "rot": [
+    0.0,
+    145.85,
+    0.0
+   ],
+   "scale": [
+    0.9508,
+    0.9508,
+    0.9508
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern0_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    8713.7,
+    -19579.0,
+    0
+   ],
+   "rot": [
+    0.0,
+    145.85,
+    0.0
+   ],
+   "scale": [
+    0.9508,
+    0.9508,
+    0.9508
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern0_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    8713.7,
+    -19579.0,
+    0
+   ],
+   "rot": [
+    0.0,
+    145.85,
+    0.0
+   ],
+   "scale": [
+    0.9508,
+    0.9508,
+    0.9508
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern1_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    9018.2,
+    -20042.4,
+    0
+   ],
+   "rot": [
+    0.0,
+    -125.63,
+    0.0
+   ],
+   "scale": [
+    0.859,
+    0.859,
+    0.859
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern1_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    9018.2,
+    -20042.4,
+    0
+   ],
+   "rot": [
+    0.0,
+    -125.63,
+    0.0
+   ],
+   "scale": [
+    0.859,
+    0.859,
+    0.859
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern1_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    9018.2,
+    -20042.4,
+    0
+   ],
+   "rot": [
+    0.0,
+    -125.63,
+    0.0
+   ],
+   "scale": [
+    0.859,
+    0.859,
+    0.859
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern2_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    9992.8,
+    -19485.2,
+    0
+   ],
+   "rot": [
+    0.0,
+    54.74,
+    0.0
+   ],
+   "scale": [
+    0.8746,
+    0.8746,
+    0.8746
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern2_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    9992.8,
+    -19485.2,
+    0
+   ],
+   "rot": [
+    0.0,
+    54.74,
+    0.0
+   ],
+   "scale": [
+    0.8746,
+    0.8746,
+    0.8746
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern2_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    9992.8,
+    -19485.2,
+    0
+   ],
+   "rot": [
+    0.0,
+    54.74,
+    0.0
+   ],
+   "scale": [
+    0.8746,
+    0.8746,
+    0.8746
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern3_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    10197.1,
+    -19910.1,
+    0
+   ],
+   "rot": [
+    0.0,
+    144.15,
+    0.0
+   ],
+   "scale": [
+    0.7861,
+    0.7861,
+    0.7861
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern3_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    10197.1,
+    -19910.1,
+    0
+   ],
+   "rot": [
+    0.0,
+    144.15,
+    0.0
+   ],
+   "scale": [
+    0.7861,
+    0.7861,
+    0.7861
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern3_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    10197.1,
+    -19910.1,
+    0
+   ],
+   "rot": [
+    0.0,
+    144.15,
+    0.0
+   ],
+   "scale": [
+    0.7861,
+    0.7861,
+    0.7861
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern4_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    10616.8,
+    -19416.0,
+    0
+   ],
+   "rot": [
+    0.0,
+    -38.76,
+    0.0
+   ],
+   "scale": [
+    0.7967,
+    0.7967,
+    0.7967
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern4_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    10616.8,
+    -19416.0,
+    0
+   ],
+   "rot": [
+    0.0,
+    -38.76,
+    0.0
+   ],
+   "scale": [
+    0.7967,
+    0.7967,
+    0.7967
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern4_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    10616.8,
+    -19416.0,
+    0
+   ],
+   "rot": [
+    0.0,
+    -38.76,
+    0.0
+   ],
+   "scale": [
+    0.7967,
+    0.7967,
+    0.7967
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern5_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    11559.2,
+    -19754.8,
+    0
+   ],
+   "rot": [
+    0.0,
+    154.15,
+    0.0
+   ],
+   "scale": [
+    0.9582,
+    0.9582,
+    0.9582
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern5_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    11559.2,
+    -19754.8,
+    0
+   ],
+   "rot": [
+    0.0,
+    154.15,
+    0.0
+   ],
+   "scale": [
+    0.9582,
+    0.9582,
+    0.9582
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern5_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    11559.2,
+    -19754.8,
+    0
+   ],
+   "rot": [
+    0.0,
+    154.15,
+    0.0
+   ],
+   "scale": [
+    0.9582,
+    0.9582,
+    0.9582
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern6_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    11685.2,
+    -19367.7,
+    0
+   ],
+   "rot": [
+    0.0,
+    171.81,
+    0.0
+   ],
+   "scale": [
+    0.8377,
+    0.8377,
+    0.8377
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern6_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    11685.2,
+    -19367.7,
+    0
+   ],
+   "rot": [
+    0.0,
+    171.81,
+    0.0
+   ],
+   "scale": [
+    0.8377,
+    0.8377,
+    0.8377
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern6_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    11685.2,
+    -19367.7,
+    0
+   ],
+   "rot": [
+    0.0,
+    171.81,
+    0.0
+   ],
+   "scale": [
+    0.8377,
+    0.8377,
+    0.8377
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern7_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    12227.1,
+    -19581.3,
+    0
+   ],
+   "rot": [
+    0.0,
+    38.51,
+    0.0
+   ],
+   "scale": [
+    0.8918,
+    0.8918,
+    0.8918
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern7_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    12227.1,
+    -19581.3,
+    0
+   ],
+   "rot": [
+    0.0,
+    38.51,
+    0.0
+   ],
+   "scale": [
+    0.8918,
+    0.8918,
+    0.8918
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern7_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    12227.1,
+    -19581.3,
+    0
+   ],
+   "rot": [
+    0.0,
+    38.51,
+    0.0
+   ],
+   "scale": [
+    0.8918,
+    0.8918,
+    0.8918
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern8_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    13107.2,
+    -19334.4,
+    0
+   ],
+   "rot": [
+    0.0,
+    135.23,
+    0.0
+   ],
+   "scale": [
+    0.8066,
+    0.8066,
+    0.8066
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern8_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    13107.2,
+    -19334.4,
+    0
+   ],
+   "rot": [
+    0.0,
+    135.23,
+    0.0
+   ],
+   "scale": [
+    0.8066,
+    0.8066,
+    0.8066
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern8_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    13107.2,
+    -19334.4,
+    0
+   ],
+   "rot": [
+    0.0,
+    135.23,
+    0.0
+   ],
+   "scale": [
+    0.8066,
+    0.8066,
+    0.8066
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern9_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    13182.7,
+    -19396.3,
+    0
+   ],
+   "rot": [
+    0.0,
+    -5.05,
+    0.0
+   ],
+   "scale": [
+    0.9902,
+    0.9902,
+    0.9902
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern9_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    13182.7,
+    -19396.3,
+    0
+   ],
+   "rot": [
+    0.0,
+    -5.05,
+    0.0
+   ],
+   "scale": [
+    0.9902,
+    0.9902,
+    0.9902
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern9_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    13182.7,
+    -19396.3,
+    0
+   ],
+   "rot": [
+    0.0,
+    -5.05,
+    0.0
+   ],
+   "scale": [
+    0.9902,
+    0.9902,
+    0.9902
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern10_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    13845.0,
+    -19308.8,
+    0
+   ],
+   "rot": [
+    0.0,
+    58.81,
+    0.0
+   ],
+   "scale": [
+    0.8779,
+    0.8779,
+    0.8779
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern10_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    13845.0,
+    -19308.8,
+    0
+   ],
+   "rot": [
+    0.0,
+    58.81,
+    0.0
+   ],
+   "scale": [
+    0.8779,
+    0.8779,
+    0.8779
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "LMMushroomGrove_Lantern10_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    13845.0,
+    -19308.8,
+    0
+   ],
+   "rot": [
+    0.0,
+    58.81,
+    0.0
+   ],
+   "scale": [
+    0.8779,
+    0.8779,
+    0.8779
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "Way0246_Lantern_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -27049.6,
+    12731.6,
+    0
+   ],
+   "rot": [
+    0.0,
+    -45.93,
+    0.0
+   ],
+   "scale": [
+    0.9205,
+    0.9205,
+    0.9205
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "Way0246_Lantern_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -27049.6,
+    12731.6,
+    0
+   ],
+   "rot": [
+    0.0,
+    -45.93,
+    0.0
+   ],
+   "scale": [
+    0.9205,
+    0.9205,
+    0.9205
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "Way0246_Lantern_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    -27049.6,
+    12731.6,
+    0
+   ],
+   "rot": [
+    0.0,
+    -45.93,
+    0.0
+   ],
+   "scale": [
+    0.9205,
+    0.9205,
+    0.9205
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "Way0258_Lantern_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -25605.8,
+    -481.4,
+    0
+   ],
+   "rot": [
+    0.0,
+    -71.74,
+    0.0
+   ],
+   "scale": [
+    0.9205,
+    0.9205,
+    0.9205
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "Way0258_Lantern_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -25605.8,
+    -481.4,
+    0
+   ],
+   "rot": [
+    0.0,
+    -71.74,
+    0.0
+   ],
+   "scale": [
+    0.9205,
+    0.9205,
+    0.9205
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "Way0258_Lantern_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    -25605.8,
+    -481.4,
+    0
+   ],
+   "rot": [
+    0.0,
+    -71.74,
+    0.0
+   ],
+   "scale": [
+    0.9205,
+    0.9205,
+    0.9205
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "Way0264_Lantern_glass",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_glass.WL_Object_LanternStandard_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ],
+   "loc": [
+    -30723.5,
+    348.0,
+    0
+   ],
+   "rot": [
+    0.0,
+    89.81,
+    0.0
+   ],
+   "scale": [
+    0.9205,
+    0.9205,
+    0.9205
+   ],
+   "collision": "none",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "Way0264_Lantern_gold",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold.WL_Object_LanternStandard_gold",
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "loc": [
+    -30723.5,
+    348.0,
+    0
+   ],
+   "rot": [
+    0.0,
+    89.81,
+    0.0
+   ],
+   "scale": [
+    0.9205,
+    0.9205,
+    0.9205
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "Way0264_Lantern_stone",
+   "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard.WL_Object_LanternStandard",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "loc": [
+    -30723.5,
+    348.0,
+    0
+   ],
+   "rot": [
+    0.0,
+    89.81,
+    0.0
+   ],
+   "scale": [
+    0.9205,
+    0.9205,
+    0.9205
+   ],
+   "collision": "block",
+   "cast_shadow": true,
+   "affect_df": false
+  }
+ ],
+ "batches": []
+}

@@ -110,11 +110,21 @@ def main():
                                 round(scale, 3), round(scale, 3), round(scale, 3)])
         stats[key] += 1
 
-    def add_module(name, u, v, z, yaw_local, scale=1.0, cull=CULL_NEAR, collide=True, record=False):
+    def add_module(name, u, v, z, yaw_local, scale=1.0, cull=CULL_NEAR, collide=True, record=False,
+                   glow=()):
+        """`glow` names the parts of THIS placement that burn with the nation's luminous accent.
+
+        WHY IT HAD TO EXIST. PART_MATERIAL is one table for the whole quarter, so it can say what a `glass`
+        part is made of in general but cannot say that THESE lanterns and THOSE tower crowns are the bright
+        ones. Without it MI_V2_NoctisLuminous was declared on line 71, promised twice in this file's own
+        comments -- "the luminous material on the lantern glass", "the luminous crown: the one bright thing
+        in Noctis" -- and applied exactly nowhere. WORLD_BETA_LEDGER row F: used in ZERO instances across
+        NC01-NC04, the only nation whose signature accent is entirely absent.
+        """
         for part in KIT[name]["parts"]:
             if part["part"] in SKIP_PARTS:
                 continue
-            mat = PART_MATERIAL.get(part["part"], part["material"])
+            mat = LUMINOUS if part["part"] in glow else PART_MATERIAL.get(part["part"], part["material"])
             blocks = collide and part["part"] not in NO_COLLIDE_PARTS
             add("%s_%s" % (name.replace("WL_", ""), part["part"]), part["mesh"], mat, u, v, z, yaw_local,
                 scale, cull, collides=blocks)
@@ -196,8 +206,9 @@ def main():
     for i in range(n_lamp):
         u = U0 + lamp_step * (i + 0.5)
         for side in (-1.0, 1.0):
+            # THE GLASS BURNS -- the sentence three lines above, finally true in the geometry.
             add_module("WL_Object_LanternStandard", u, side * (PLATE["len_x"] + 190.0), PAVING_TOP, 0.0,
-                       cull=CULL_MID, collide=True)
+                       cull=CULL_MID, collide=True, glow=("glass",))
     anchor("APPROACH", "NoctisApproach", U0 + (QUARTER_U - U0) * 0.5, 0.0, PAVING_TOP)
 
     # a twin-tiered arch where the approach becomes the quarter
@@ -257,7 +268,8 @@ def main():
         top, joints = stack(CHAINS[i % len(CHAINS)], tu, tv, PAVING_TOP, rng.choice((0.0, 45.0, 90.0)))
         tops.append((tu, tv, top, joints))
         # the luminous crown: the one bright thing in Noctis, and it says what the nation sends out
-        add_module("WL_Detail_Pinnacle_Grand", tu, tv, top, 0.0, cull=CULL_FAR, collide=False)
+        add_module("WL_Detail_Pinnacle_Grand", tu, tv, top, 0.0, cull=CULL_FAR, collide=False,
+                   glow=("gold", "metal", "glass"))
         anchor("BROADCAST", "BroadcastTower%d" % (i + 1), tu, tv, PAVING_TOP)
 
     bridge = KIT["WL_Bridge_Sky"]["size"][0]
