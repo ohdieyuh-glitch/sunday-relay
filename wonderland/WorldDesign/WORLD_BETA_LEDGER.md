@@ -24,6 +24,27 @@ of editor uptime — and **A/B results taken on it right now are not trustworthy
 finding stands as a triangle count; the claim that it is the frame-time cost does not, and was never measured
 until now.
 
+**Updated 2026-09-24, Internal Development lane.** Four rows moved, each with the measurement that moved it.
+**Row I BLOCKING -> PASS:** the ledger's own "single most valuable unknown" is answered -- Nanite does cover
+the garden. 137 Wonderland meshes enabled (the engine's editor furniture deliberately left alone), and at one
+fixed camera on a FRESH editor: primitives 1,644,283 -> 191,764 (-88.3%), draw calls 7,428 -> 5,641, GPU 50.32
+-> 17.07 ms, frame 114.95 -> 55.54 ms. The first two attempts read 152 and 168 ms and would have buried the
+result; this file's own drift warning is why they were re-run on a fresh process rather than believed.
+**Row F gap CLOSED:** `MI_V2_NoctisLuminous` 0 -> 160 instances in the level. It was declared in
+`noctis_quarter.py` and promised twice in that file's prose, and applied nowhere, because PART_MATERIAL is one
+table per quarter and cannot say which lanterns are the bright ones. Placements can now name the parts that
+burn, and the detail pass reads the accent off the quarter module, so Tartarus -- which declares none -- is
+unchanged. **Row E gap CLOSED:** nation avenues now vary. Every paving instance already sat on M_V2_SurfaceHD
+with InstVary/InstWarm/InstRoughVary exposed; MI_V2_PlazaVaried ran 0.20/0.12/0.16 and the GroundFlag pair the
+avenues use was still on the 0.08/0.03/0.10 default. 18 ground materials raised to the proven numbers, no mesh
+and no palette touched. **Row L trough CLOSED by SF01/SF02/SF03:** the 800-900 m seam, counted on disk exactly
+as this file counts, went ICARUS 852 -> 1,998, NOCTIS 715 -> 1,869, TARTARUS 1,060 -> 1,739 -- all three now
+inside the 1,300-2,600 of the rings either side. 3,342 instances: a flagstone floor laid across the join on
+the module's own grid, kerb and verge, planted retaining edges, and a threshold so the seam is a place. Every
+module used is on THIRD_BAND_PREP's "already proven elsewhere" list. Nine walk points across the three axes
+at 780/850/920 m, none fell -- though the readback showed identical z at equal radii, so the traversal half
+wants a founder's walk before it is called PASS.
+
 | | category | verdict | evidence |
 |---|---|---|---|
 | A | WORLD COVERAGE | **PARTIAL** | 107,546 placed instances over 270 layer specs. Golden Arrival 86,967 inside the 500 m neutral core. Nation civilization: ICARUS 6,953, NOCTIS 7,530, TARTARUS 6,096. Built frontier ~1,155 m in all three once the second band lands. Beyond it: DF01 Dubel Forest at 1,230–1,480 m. **Golden Arrival is uneven by SECTOR, measured 2026-09-23 in 100 m × 30° cells:** the 200–300 m ring holds 7,298 instances at bearing 300° but **28** at bearing 180°; the 300–400 m ring holds 5,321 at 270° but **22** at 120° and **79** at 90°. So the arrival city is not thin at its edge — it is thin on one *side*. **Closed 2026-09-23 by GF01/GF02**, which plant by SECTOR rather than by camera: 300–400 m at b=120 went **22 → 670**, 200–300 m at b=180 went **28 → 991**, and cells holding under 200 instances fell **13 → 8** — every survivor now in the 400–500 m outer ring, which is the city's genuine edge and where AP01's approach roads cross. The cause was in the generator: `lawn_planting.py` plants within 35 m of the 60 gameplay cameras, so the world was planted where the cameras look, and the 90–150° sector holds none. |
