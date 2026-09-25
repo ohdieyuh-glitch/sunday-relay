@@ -1,6 +1,6 @@
 {
  "name": "zc_beta_walk",
- "started": "2026-09-25 12:43:53",
+ "started": "2026-09-25 16:11:51",
  "status": "walked",
  "tests": [
   {
@@ -2873,7 +2873,7 @@
    ],
    "radius_metres": 30,
    "mesh_actors": 18168,
-   "landed_z": -520,
+   "landed_z": -533,
    "expected_near_z": -1393,
    "fell_through": false,
    "was_empty": false
@@ -2933,7 +2933,7 @@
    ],
    "radius_metres": 1005,
    "mesh_actors": 235,
-   "landed_z": 1087,
+   "landed_z": 1126,
    "expected_near_z": 1625,
    "fell_through": false,
    "was_empty": false
@@ -2957,7 +2957,7 @@
    ],
    "radius_metres": 659,
    "mesh_actors": 220,
-   "landed_z": 1676,
+   "landed_z": 1734,
    "expected_near_z": 2207,
    "fell_through": false,
    "was_empty": false
@@ -2981,7 +2981,7 @@
    ],
    "radius_metres": 866,
    "mesh_actors": 143,
-   "landed_z": 326,
+   "landed_z": 385,
    "expected_near_z": 850,
    "fell_through": false,
    "was_empty": false
@@ -3053,7 +3053,7 @@
    ],
    "radius_metres": 1221,
    "mesh_actors": 0,
-   "landed_z": 1324,
+   "landed_z": 1344,
    "expected_near_z": 1841,
    "fell_through": false,
    "was_empty": true
@@ -3101,7 +3101,7 @@
    ],
    "radius_metres": 1442,
    "mesh_actors": 0,
-   "landed_z": 1132,
+   "landed_z": 1163,
    "expected_near_z": 1673,
    "fell_through": false,
    "was_empty": true
@@ -3137,7 +3137,7 @@
    ],
    "radius_metres": 1471,
    "mesh_actors": 0,
-   "landed_z": 9148,
+   "landed_z": 9197,
    "expected_near_z": 9688,
    "fell_through": false,
    "was_empty": true
@@ -3146,7 +3146,7 @@
  "visits_that_fell_through": 0,
  "empty_tiles_visited": 8,
  "empty_tiles_with_no_floor": 0,
- "finished": "2026-09-25 12:44:49",
- "seconds": 56.44,
+ "finished": "2026-09-25 16:12:48",
+ "seconds": 57.04,
  "log": "W01 PASS the walkable world is a disc of real size rather than a scatter of strays {'core_radius_m': 1479.0, 'in_core': 173472, 'of_total': 173518, 'beyond': 46}\nW02 PASS the built world has no empty areas in it {'built_tiles': 115, 'built_empty': 0, 'where': [], 'frontier_m': 1200.0, 'note': \"the wilderness past the frontier is judged by W05, not by a city's standard\"}\nW05 PASS the wilderness belt is planted, with the clearings DF01 was designed to have {'tiles': 60, 'empty': 34, 'placed': 2966}\nW03 PASS the Dog stands on ground everywhere it was put down {'visited': 23, 'fell_through': 0, 'where': []}\nW04 PASS even the empty frontier tiles have a floor under them {'empty_visited': 8, 'no_floor': 0, 'where': []}\n"
 }

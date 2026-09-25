@@ -1,0 +1,156 @@
+{
+ "name": "zc_slab_params",
+ "started": "2026-09-25 16:07:59",
+ "status": "measured",
+ "materials": {
+  "MI_V2_Moss": {
+   "path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Moss",
+   "class": "MaterialInstanceConstant",
+   "parent": "M_V2_SurfaceHD",
+   "scalars": [
+    "TexScale",
+    "DetailScale",
+    "NormalStrength",
+    "DetailStrength",
+    "InstVary",
+    "InstWarm",
+    "InstRoughVary",
+    "MacroScale",
+    "MacroVary",
+    "Roughness",
+    "RoughVary",
+    "Metallic",
+    "Specular",
+    "EmissiveStrength"
+   ],
+   "vectors": [
+    "BaseColor",
+    "Emissive"
+   ],
+   "textures": [
+    "Albedo",
+    "Normal",
+    "RoughnessMap",
+    "Macro"
+   ],
+   "scalar_values": {
+    "TexScale": 0.009,
+    "DetailScale": 4.0,
+    "NormalStrength": 1.0,
+    "DetailStrength": 0.33,
+    "InstVary": 0.06,
+    "InstWarm": 0.01,
+    "InstRoughVary": 0.12,
+    "MacroScale": 0.0002,
+    "MacroVary": 0.18,
+    "Roughness": 0.95,
+    "RoughVary": 0.55,
+    "Metallic": 0.0,
+    "Specular": 0.06,
+    "EmissiveStrength": 0.0
+   }
+  },
+  "MI_V2_Lawn": {
+   "path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Lawn",
+   "class": "MaterialInstanceConstant",
+   "parent": "M_V2_SurfaceHD",
+   "scalars": [
+    "TexScale",
+    "DetailScale",
+    "NormalStrength",
+    "DetailStrength",
+    "InstVary",
+    "InstWarm",
+    "InstRoughVary",
+    "MacroScale",
+    "MacroVary",
+    "Roughness",
+    "RoughVary",
+    "Metallic",
+    "Specular",
+    "EmissiveStrength"
+   ],
+   "vectors": [
+    "BaseColor",
+    "Emissive"
+   ],
+   "textures": [
+    "Albedo",
+    "Normal",
+    "RoughnessMap",
+    "Macro"
+   ],
+   "scalar_values": {
+    "TexScale": 0.009,
+    "DetailScale": 4.0,
+    "NormalStrength": 1.0,
+    "DetailStrength": 0.33,
+    "InstVary": 0.02,
+    "InstWarm": 0.01,
+    "InstRoughVary": 0.04,
+    "MacroScale": 0.0002,
+    "MacroVary": 0.035,
+    "Roughness": 0.95,
+    "RoughVary": 0.2,
+    "Metallic": 0.0,
+    "Specular": 0.06,
+    "EmissiveStrength": 0.0
+   }
+  },
+  "MI_V2_Cobble": {
+   "path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Cobble",
+   "class": "MaterialInstanceConstant",
+   "parent": "M_V2_SurfaceHD",
+   "scalars": [
+    "TexScale",
+    "DetailScale",
+    "NormalStrength",
+    "DetailStrength",
+    "InstVary",
+    "InstWarm",
+    "InstRoughVary",
+    "MacroScale",
+    "MacroVary",
+    "Roughness",
+    "RoughVary",
+    "Metallic",
+    "Specular",
+    "EmissiveStrength"
+   ],
+   "vectors": [
+    "BaseColor",
+    "Emissive"
+   ],
+   "textures": [
+    "Albedo",
+    "Normal",
+    "RoughnessMap",
+    "Macro"
+   ],
+   "scalar_values": {
+    "TexScale": 0.0018,
+    "DetailScale": 4.0,
+    "NormalStrength": 0.85,
+    "DetailStrength": 0.2,
+    "InstVary": 0.2,
+    "InstWarm": 0.12,
+    "InstRoughVary": 0.16,
+    "MacroScale": 0.0002,
+    "MacroVary": 0.07,
+    "Roughness": 0.78,
+    "RoughVary": 0.9,
+    "Metallic": 0.0,
+    "Specular": 0.28,
+    "EmissiveStrength": 0.0
+   }
+  }
+ },
+ "located": {
+  "MI_V2_Cobble": "/Game/WonderlandV2/Materials/Instances/MI_V2_Cobble",
+  "MI_V2_Lawn": "/Game/WonderlandV2/Materials/Instances/MI_V2_Lawn",
+  "MI_V2_Moss": "/Game/WonderlandV2/Materials/Instances/MI_V2_Moss"
+ },
+ "finished": "2026-09-25 16:08:00",
+ "seconds": 0.54,
+ "log": "MI_V2_Moss INFO MI_V2_Moss {'parent': 'M_V2_SurfaceHD', 'scalars': ['TexScale', 'DetailScale', 'NormalStrength', 'DetailStrength', 'InstVary', 'InstWarm', 'InstRoughVary', 'MacroScale', 'MacroVary', 'Roughness', 'RoughVary', 'Metallic', 'Specular', 'EmissiveStrength'], 'scalar_values': {'TexScale': 0.009, 'DetailScale': 4.0, 'NormalStrength': 1.0, 'DetailStrength': 0.33, 'InstVary': 0.06, 'InstWarm': 0.01, 'InstRoughVary': 0.12, 'MacroScale': 0.0002, 'MacroVary': 0.18, 'Roughness': 0.95, 'RoughVary': 0.55, 'Metallic': 0.0, 'Specular': 0.06, 'EmissiveStrength': 0.0}}\nMI_V2_Lawn INFO MI_V2_Lawn {'parent': 'M_V2_SurfaceHD', 'scalars': ['TexScale', 'DetailScale', 'NormalStrength', 'DetailStrength', 'InstVary', 'InstWarm', 'InstRoughVary', 'MacroScale', 'MacroVary', 'Roughness', 'RoughVary', 'Metallic', 'Specular', 'EmissiveStrength'], 'scalar_values': {'TexScale': 0.009, 'DetailScale': 4.0, 'NormalStrength': 1.0, 'DetailStrength': 0.33, 'InstVary': 0.02, 'InstWarm': 0.01, 'InstRoughVary': 0.04, 'MacroScale': 0.0002, 'MacroVary': 0.035, 'Roughness': 0.95, 'RoughVary': 0.2, 'Metallic': 0.0, 'Specular': 0.06, 'EmissiveStrength': 0.0}}\nMI_V2_Cobble INFO MI_V2_Cobble {'parent': 'M_V2_SurfaceHD', 'scalars': ['TexScale', 'DetailScale', 'NormalStrength', 'DetailStrength', 'InstVary', 'InstWarm', 'InstRoughVary', 'MacroScale', 'MacroVary', 'Roughness', 'RoughVary', 'Metallic', 'Specular', 'EmissiveStrength'], 'scalar_values': {'TexScale': 0.0018, 'DetailScale': 4.0, 'NormalStrength': 0.85, 'DetailStrength': 0.2, 'InstVary': 0.2, 'InstWarm': 0.12, 'InstRoughVary': 0.16, 'MacroScale': 0.0002, 'MacroVary': 0.07, 'Roughness': 0.78, 'RoughVary': 0.9, 'Metallic': 0.0, 'Specular': 0.28, 'EmissiveStrength': 0.0}}\n"
+}

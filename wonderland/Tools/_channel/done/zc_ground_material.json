@@ -1,0 +1,109 @@
+{
+ "name": "zc_ground_material",
+ "started": "2026-09-25 16:14:05",
+ "status": "measured",
+ "ground": [
+  {
+   "radius_m": 30.0,
+   "hit": true,
+   "z": -2.7,
+   "actor": "V2Batch_garden_lawn_MI_V2_Lawn",
+   "component": "ISM_V2_garden_lawn",
+   "mesh": "SM_garden_lawn",
+   "materials": [
+    "MI_V2_Lawn"
+   ]
+  },
+  {
+   "radius_m": 120.0,
+   "hit": true,
+   "z": -2.6,
+   "actor": "V2Batch_garden_lawn_MI_V2_Lawn",
+   "component": "ISM_V2_garden_lawn",
+   "mesh": "SM_garden_lawn",
+   "materials": [
+    "MI_V2_Lawn"
+   ]
+  },
+  {
+   "radius_m": 284.0,
+   "hit": true,
+   "z": 12.0,
+   "actor": "FillEMN_StA2_005",
+   "component": "StaticMeshComponent0",
+   "mesh": "SM_terrace_platform",
+   "materials": [
+    "MI_V2_Cobble"
+   ]
+  },
+  {
+   "radius_m": 420.0,
+   "hit": true,
+   "z": 2422.0,
+   "actor": "V2Batch_castle_tower_octagon_MI_V2_IvorySton",
+   "component": "ISM_V2_castle_tower_octagon",
+   "mesh": "SM_castle_tower_octagon",
+   "materials": [
+    "MI_V2_AshlarIvoryStone"
+   ]
+  },
+  {
+   "radius_m": 560.0,
+   "hit": true,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "component": "StaticMeshComponent0",
+   "mesh": "Cube",
+   "materials": [
+    "MI_V2_MossSlab"
+   ]
+  },
+  {
+   "radius_m": 659.0,
+   "hit": true,
+   "z": 4000.0,
+   "actor": "SKY05_SKY05_Tower_Mid_Arcade_glass_GlassAmbe",
+   "component": "ISM_SKY05_SKY05_Tower_Mid_Arcade_glass_G",
+   "mesh": "WL_Tower_Mid_Arcade_glass",
+   "materials": [
+    "MI_V2_GlassAmber"
+   ]
+  },
+  {
+   "radius_m": 780.0,
+   "hit": true,
+   "z": 3283.6,
+   "actor": "SKY05_SKY05_Tower_Base_Buttressed_IvoryStone",
+   "component": "ISM_SKY05_SKY05_Tower_Base_Buttressed_Iv",
+   "mesh": "WL_Tower_Base_Buttressed",
+   "materials": [
+    "MI_V2_IvoryStone"
+   ]
+  },
+  {
+   "radius_m": 900.0,
+   "hit": true,
+   "z": 1056.0,
+   "actor": "SKY05_SKY05_Tower_Base_Terraced_TowerBlush",
+   "component": "ISM_SKY05_SKY05_Tower_Base_Terraced_Towe",
+   "mesh": "WL_Tower_Base_Terraced",
+   "materials": [
+    "MI_V2_TowerBlush"
+   ]
+  },
+  {
+   "radius_m": 1050.0,
+   "hit": true,
+   "z": -2.0,
+   "actor": "SKY05_SKY05_Tower_Base_Buttressed_stone_dark",
+   "component": "ISM_SKY05_SKY05_Tower_Base_Buttressed_st",
+   "mesh": "WL_Tower_Base_Buttressed_stone_dark",
+   "materials": [
+    "MI_V2_Stone"
+   ]
+  }
+ ],
+ "finished": "2026-09-25 16:14:21",
+ "seconds": 15.47,
+ "log": "G_0030m INFO ground at 30 m {'radius_m': 30.0, 'hit': True, 'z': -2.7, 'actor': 'V2Batch_garden_lawn_MI_V2_Lawn', 'component': 'ISM_V2_garden_lawn', 'mesh': 'SM_garden_lawn', 'materials': ['MI_V2_Lawn']}\nG_0120m INFO ground at 120 m {'radius_m': 120.0, 'hit': True, 'z': -2.6, 'actor': 'V2Batch_garden_lawn_MI_V2_Lawn', 'component': 'ISM_V2_garden_lawn', 'mesh': 'SM_garden_lawn', 'materials': ['MI_V2_Lawn']}\nG_0284m INFO ground at 284 m {'radius_m': 284.0, 'hit': True, 'z': 12.0, 'actor': 'FillEMN_StA2_005', 'component': 'StaticMeshComponent0', 'mesh': 'SM_terrace_platform', 'materials': ['MI_V2_Cobble']}\nG_0420m INFO ground at 420 m {'radius_m': 420.0, 'hit': True, 'z': 2422.0, 'actor': 'V2Batch_castle_tower_octagon_MI_V2_IvorySton', 'component': 'ISM_V2_castle_tower_octagon', 'mesh': 'SM_castle_tower_octagon', 'materials': ['MI_V2_AshlarIvoryStone']}\nG_0560m INFO ground at 560 m {'radius_m': 560.0, 'hit': True, 'z': -14.0, 'actor': 'V2_GroundSlab', 'component': 'StaticMeshComponent0', 'mesh': 'Cube', 'materials': ['MI_V2_MossSlab']}\nG_0659m INFO ground at 659 m {'radius_m': 659.0, 'hit': True, 'z': 4000.0, 'actor': 'SKY05_SKY05_Tower_Mid_Arcade_glass_GlassAmbe', 'component': 'ISM_SKY05_SKY05_Tower_Mid_Arcade_glass_G', 'mesh': 'WL_Tower_Mid_Arcade_glass', 'materials': ['MI_V2_GlassAmber']}\nG_0780m INFO ground at 780 m {'radius_m': 780.0, 'hit': True, 'z': 3283.6, 'actor': 'SKY05_SKY05_Tower_Base_Buttressed_IvoryStone', 'component': 'ISM_SKY05_SKY05_Tower_Base_Buttressed_Iv', 'mesh': 'WL_Tower_Base_Buttressed', 'materials': ['MI_V2_IvoryStone']}\nG_0900m INFO ground at 900 m {'radius_m': 900.0, 'hit': True, 'z': 1056.0, 'actor': 'SKY05_SKY05_Tower_Base_Terraced_TowerBlush', 'component': 'ISM_SKY05_SKY05_Tower_Base_Terraced_Towe', 'mesh': 'WL_Tower_Base_Terraced', 'materials': ['MI_V2_TowerBlush']}\nG_1050m INFO ground at 1050 m {'radius_m': 1050.0, 'hit': True, 'z': -2.0, 'actor': 'SKY05_SKY05_Tower_Base_Buttressed_stone_dark', 'component': 'ISM_SKY05_SKY05_Tower_Base_Buttressed_st', 'mesh': 'WL_Tower_Base_Buttressed_stone_dark', 'materials': ['MI_V2_Stone']}\n"
+}

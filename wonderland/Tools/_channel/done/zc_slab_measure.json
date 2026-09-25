@@ -1,0 +1,35 @@
+{
+ "name": "zc_slab_measure",
+ "started": "2026-09-25 16:09:46",
+ "status": "measured",
+ "slabs": [
+  {
+   "label": "V2_GroundSlab",
+   "scale": [
+    3000.0,
+    3000.0,
+    0.6
+   ],
+   "extent_uu": [
+    150000.0,
+    150000.0,
+    30.0
+   ],
+   "across_m": 3000.0,
+   "components": [
+    {
+     "name": "StaticMeshComponent0",
+     "mesh": "Cube",
+     "materials": [
+      "MI_V2_Moss"
+     ]
+    }
+   ]
+  }
+ ],
+ "slab_width_uu": 300000.0,
+ "texscale_to_match_lawn": 2700.0,
+ "finished": "2026-09-25 16:09:46",
+ "seconds": 0.07,
+ "log": "V2_GroundSlab INFO ground slab {'label': 'V2_GroundSlab', 'scale': [3000.0, 3000.0, 0.6], 'extent_uu': [150000.0, 150000.0, 30.0], 'across_m': 3000.0, 'components': [{'name': 'StaticMeshComponent0', 'mesh': 'Cube', 'materials': ['MI_V2_Moss']}]}\nPLAN INFO what would match the lawn {'slab_width_uu': 300000.0, 'lawn_texscale_per_uu': 0.009, 'texscale_for_a_0_to_1_uv_cube': 2700.0}\n"
+}
