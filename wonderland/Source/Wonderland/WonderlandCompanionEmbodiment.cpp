@@ -1500,9 +1500,21 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 				// stillness the performance asks for, the mission lift added, the lean and turn-roll carried.
 				// This is the half that used to be invented here, and the reason a standing skin looked nothing
 				// like a standing Relay OG -- at rest the gait weight is zero and ONLY this was left running.
+				// NOT SCALED BY Amount, AND THAT WAS THE BUG.
+				//
+				// FOUNDER, repeatedly: "Relay OG is still the exact animation authority... they still stand
+				// weird and walk weird. Fix the actual cause, not cosmetic offsets."
+				//
+				// Part.A is this FIGURE'S own idle amplitude -- how much it flexes when it is animating
+				// itself, which is the branch below. Every Relay skin declares `part root - 0 0 0 spine
+				// 0.850`, so multiplying the CANONICAL pose by it made every dressed Dog bob, sway, pitch,
+				// yaw and roll at exactly 85% of the authority it is supposed to be copying. Measured
+				// against the canon body's own root: 14.880 against 17.519 uu of bob, a ratio of 0.849.
+				//
+				// An authority's value is not a starting point to be scaled. It is the value.
 				WriteJoint(Pivot, 
-					Part.RestLocation + FVector(0.0, WornPose.SwayUU * Amount, (WornPose.BobUU + WornPose.LiftUU) * Amount),
-					FRotator(WornPose.BodyPitchDeg * Amount, WornPose.BodyYawDeg * Amount, WornPose.BodyRollDeg * Amount));
+					Part.RestLocation + FVector(0.0, WornPose.SwayUU, WornPose.BobUU + WornPose.LiftUU),
+					FRotator(WornPose.BodyPitchDeg, WornPose.BodyYawDeg, WornPose.BodyRollDeg));
 				break;
 			}
 			WriteJoint(Pivot, 

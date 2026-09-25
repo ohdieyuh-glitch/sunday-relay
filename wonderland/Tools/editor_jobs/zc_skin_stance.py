@@ -32,8 +32,14 @@ L = unreal.WonderlandUiTestLibrary
 H = unreal.WonderlandHudTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "skin_stance")
 
-#: canon pivot name -> costume pivot name
-PAIRS = (("Body", "Part_body"), ("Pivot_head", "Part_head"), ("Pivot_legLeft", "Part_leg_l"))
+#: canon pivot name -> costume pivot name.
+#:
+#: THE BODY PAIR WAS WRONG IN THE FIRST VERSION and it produced a frightening-looking result: the canon Body
+#: bobbing 4.894 uu against a costume body that never moved at all. The costume's body does not carry the
+#: bob. Every skin declares `part root - 0 0 0 spine 0.850`, and the Spine motion is where WornPose.BobUU is
+#: applied, so the bob lives on Part_root; `part body root ... none` is a child that never moves relative to
+#: it. Comparing Body against Part_body was comparing the bob against a part defined to be still.
+PAIRS = (("Body", "Part_root"), ("Pivot_head", "Part_head"), ("Pivot_legLeft", "Part_leg_l"))
 
 SAMPLES, INTERVAL = 90, 0.05
 
@@ -134,8 +140,14 @@ def job():
     # the SAME frame, which is the only way a comparison of motion means anything.
     # THE DOG HAS TO ACTUALLY MOVE, and that is recorded rather than assumed: a flat reading from a Dog that
     # never walked would look exactly like a rig that never moves.
+    # W ALONE DID NOT MOVE IT. The first run recorded peak speed 0.0 and every channel flat, which would
+    # have read as a dead rig. zc_skin_locomotion reaches 520 uu/s by holding W AND LeftShift with the
+    # viewport focused, so that is what is done here, and the speed is read from the Dog's own pose rather
+    # than from get_velocity.
+    L.focus_game_viewport()
     L.set_key_held("W", True)
-    yield 0.8
+    L.set_key_held("LeftShift", True)
+    yield 1.2
     speeds = []
     series = {}
     for canon_name, skin_name in PAIRS:
@@ -152,11 +164,12 @@ def job():
             series[canon_name]["canon_pitch"].append(float(at.rotation.rotator().pitch))
             series[canon_name]["skin_pitch"].append(float(bt.rotation.rotator().pitch))
         try:
-            speeds.append(float(dog.get_velocity().size()))
+            speeds.append(float(getattr(dog.get_canonical_worn_pose(), "speed_uu")))
         except Exception:
             pass
         yield INTERVAL
     L.set_key_held("W", False)
+    L.set_key_held("LeftShift", False)
     yield 0.6
     H.capture_viewport_jpeg(os.path.join(ROOT, "01_walking.jpg"), 1400, 90)
 
@@ -180,27 +193,36 @@ def job():
     # a correlation of 0 would be reported as a mismatch when it is really a dead probe. The canon body is
     # HIDDEN while a costume is worn, so whether it is still POSED is exactly the thing to check.
     canon_moves = any(r["canon_z_swing"] > 0.05 or r["canon_pitch_swing"] > 0.05 for r in readings.values())
-    record("N01", "the canon body is still being posed while a costume is worn",
-           canon_moves, readings=readings, walk=RESULT.get("walk"),
+    walked = (RESULT.get("walk") or {}).get("peak_speed_uu", 0.0) > 50.0
+    record("N01", "the canon body is still being posed, and the Dog actually walked",
+           canon_moves and walked, readings=readings, walk=RESULT.get("walk"),
            note="it is hidden, not stopped -- if this fails the comparison below is meaningless and the "
                 "finding is that the authority stops running when it is dressed")
 
     if canon_moves:
-        worst_z = min(r["z_correlation"] for r in readings.values())
-        record("N02", "the costume's body moves the way the canon body moves",
-               worst_z > 0.9, by_pivot={k: v["z_correlation"] for k, v in readings.items()},
-               note="mean-removed, same frames; the two rigs have different rest heights so only the MOTION "
-                    "is compared")
-
-        ratios = {}
+        # EACH PIVOT IS JUDGED ON THE CHANNEL IT ACTUALLY USES. The body translates, so its bob is read on Z;
+        # the head and the hip only ROTATE, and their Z never moves by design. The first version judged all
+        # three on Z and reported the head and leg as 0.0 correlated -- a perfect score for a channel that
+        # is defined to be still, reported as total failure.
+        channels = {"Body": "z", "Pivot_head": "pitch", "Pivot_legLeft": "pitch"}
+        corrs, ratios = {}, {}
         for k, v in readings.items():
-            base = max(v["canon_z_swing"], 1e-6)
-            ratios[k] = round(v["skin_z_swing"] / base, 3)
+            which = channels.get(k, "z")
+            corrs[k] = v["%s_correlation" % which]
+            base = max(v["canon_%s_swing" % which], 1e-6)
+            ratios[k] = round(v["skin_%s_swing" % which] / base, 3)
+        RESULT["judged_on"] = channels
+
+        record("N02", "every joint moves the way the canon body's own joint moves",
+               min(corrs.values()) > 0.9, by_pivot=corrs, channel=channels,
+               note="mean-removed, same frames; the two rigs have different rest poses so only the MOTION is "
+                    "compared")
+
         record("N03", "and by the same amount, not a damped or exaggerated copy",
-               all(0.8 <= r <= 1.25 for r in ratios.values()),
+               all(0.95 <= r <= 1.05 for r in ratios.values()),
                swing_ratios=ratios,
-               note="skin swing divided by canon swing; 1.0 is a faithful copy, below 1 is damped, above 1 "
-                    "is exaggerated")
+               note="skin swing divided by canon swing; 1.0 is a faithful copy. This is the check that "
+                    "caught the spine scaling the authority by Part.A = 0.850")
 
     RESULT["status"] = "measured"
     les.editor_request_end_play()

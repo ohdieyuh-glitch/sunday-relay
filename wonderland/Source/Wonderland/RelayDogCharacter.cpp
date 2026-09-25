@@ -1439,6 +1439,15 @@ void ARelayDogCharacter::WearSkin(FName SkinId)
 		Costume->SetRuntimeActivity(TEXT("IDLE"));
 		// ON THE CAPSULE'S SOLE, FACING WHERE THE DOG FACES. The capsule root is the one thing that does not bob or
 		// lean with the canon gait, so the costume stands square and runs its own.
+		// ---- AND IT TICKS AFTER THE DOG, so it wears THIS frame's pose rather than last frame's.
+		//
+		// Without this the order is whatever the engine happens to choose, and a costume that ticks first
+		// reads the pose written on the PREVIOUS frame. A frame of lag is invisible on the body, whose bob
+		// is slow -- it measured 0.970 correlation -- and very visible on the legs, whose stride at a full
+		// run turns over fast: the hip angles measured only 0.689 correlated against the canon body's own,
+		// with almost the same amplitude. Same numbers, one frame apart, which is what "walks weird" looks
+		// like when every pose field is provably identical.
+		Costume->AddTickPrerequisiteActor(this);
 		Costume->AttachToComponent(GetRootComponent(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 		Costume->SetActorRelativeLocation(FVector(0.0, 0.0, -GetCapsuleComponent()->GetScaledCapsuleHalfHeight()));
 		Costume->SetActorRelativeRotation(FRotator::ZeroRotator);
