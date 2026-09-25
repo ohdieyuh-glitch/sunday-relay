@@ -216,6 +216,48 @@ Planted rather than reclassified: the walk's frontier constant is 1,200 m and th
 moving the constant to 1,199 would also have turned W02 green. 92 instances, 15 batches, 0 hovers.
 `zc_beta_walk` is now **5/5**, with **0 empty of 115 built tiles**.
 
+## 2026-09-25 -- the TARTARUS elevation blocker is RETRACTED
+
+The entry under gate B, open since 2026-09-23, said: "TARTARUS elevation mismatch. The Dog walks the Tartarus
+gate area at z=228 while TQ03_Avenue 7.8 m away sits at z=-128 -- a ~3.5 m step. Nothing colliding is in any
+layer spec at the stuck point, so the surface it stands on is generator geometry (folder:V2), meaning the
+Tartarus second band was laid over it."
+
+**Both halves of that are measured false.** `zc_tartarus_seam`, `zc_tartarus_stuck` and `zc_tartarus_route`:
+
+| claim | measurement |
+|---|---|
+| a ~3.5 m elevation step | the axis is FLAT from 500 m to 1,300 m: z = 12 inside 800 m, z = -14 past 850 m -- **a quarter of a metre**. The twenty-metre "steps" an axis profile shows are ROOFS, from tracing 40 m up and hitting building tops |
+| unaccounted generator geometry, folder:V2 | the surface at (73075, -42191) names itself **`TQ01_Palace_Dome_Grand_stone`, z = 1255.2, folder `Wonderland/Authored/TQ01_TartarusQ`** -- TQ01's own palace dome, 12.5 m up. The walk did not find a seam defect; it walked into a palace |
+| the band was laid over it | nothing supports this. Around the point, 136 of 289 traced surfaces are `V2_GroundSlab` at median z = 12 and the rest are authored TQ01/TQ03/SF03 pieces, seated on it |
+
+**And a route exists.** `zc_tartarus_route` sweeps the Dog's OWN capsule (r=36, h=87, max_step_height 30 uu)
+along 19 parallel lanes from the gate at 600 m to the band's near edge at 1,000 m. The lane at **-56 m is
+clean end to end: 0 blocked segments, 0 steps over the Dog's step height, 0 points without ground.**
+
+This is the same shape as the Icarus entry this ledger already retracted -- "a central gate pier, not a wall.
+A walk offset from the axis passes either side." A building on the straight line between two places is not a
+traversal fault. It is a building.
+
+**FOUR INSTRUMENT FAULTS ON THE WAY, all mine, listed because they are the reusable part:**
+
+1. Tracing from 40 m up measures ROOFS, not ground, and reports them as terrain cliffs.
+2. `HitResult` has **no named attributes at all** in this engine's Python -- `hit.location`,
+   `hit.blocking_hit`, `hit.component` and `get_editor_property` for each all raise. `to_tuple()` is the only
+   way in (18 fields; location 4, impact normal 7, actor 9, component 10). Two probes read **zero** surfaces
+   out of a world the Dog was demonstrably standing in before `zc_hit_shape` established this.
+3. A capsule swept flush with the floor grazes the floor. The sweep reported `TQ01_Road` and `TQ01_Causeway`
+   as blockers -- the road blocking the walk down the road. Lift by one `max_step_height`, and judge by the
+   IMPACT NORMAL: mostly-up is ground, mostly-sideways is a wall. Blockers fell from 21 to 2.
+4. Dropping the Dog from a fixed 16 m chose which surface answered: it landed on the dome roof at z = 1447.
+   Drop onto the traced floor instead.
+
+**ONE NEW FINDING, smaller and real: the map has no navigation data.**
+`NavigationSystemV1.find_path_to_location_synchronously` returns no path over a 400 m span, so nothing can be
+routed across this level and no bending route can be measured. It is recorded as UNMEASURED rather than as a
+traversal failure: a player is not a navmesh agent, and T01's capsule sweep is the evidence that the corridor
+walks. Worth a founder decision on whether beta needs nav data built.
+
 ## The biggest world beta blockers, in order
 
 1. ~~**No nation is connected to Golden Arrival.**~~ **CLOSED 2026-09-23 by AP01.** All three causeways now
