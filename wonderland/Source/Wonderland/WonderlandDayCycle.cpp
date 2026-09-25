@@ -253,10 +253,21 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 	// ---- negative pitch: the light points DOWN at the world from up there.
 	Light->SetActorRotation(FRotator(-Elevation, BearingAt(Hour), 0.0f));
 
-	// Full strength from a little above the horizon, falling to nothing as it sets, and never negative.
-	const float Daylight = FMath::Clamp(Elevation / 12.0f, 0.0f, 1.0f);
-	// A FLOOR OF MOONLIGHT, so night is legible rather than black. Cool, and a thousandth of noon.
-	const float Night = 1.0f - Daylight;
+	// DUSK IS NOT A SWITCH, and this term is the only place that decides. Every value below is driven from
+	// Daylight -- the sun's intensity and colour, the three fills, the fog colour, the water colour and the
+	// exposure bias -- so the shape of this one curve IS the shape of the transition.
+	//
+	// MEASURED, 2026-09-24 (zc_day_cycle): it used to read Clamp(Elevation / 12), which is zero everywhere
+	// below the horizon, and the readback showed the consequence exactly -- 54,821 lux at +9.4 deg, then 280
+	// lux at -3.8 deg. The sun crossed the horizon and took the whole sky with it between two frames, so
+	// "evening" did not exist: it was afternoon, and then it was midnight.
+	//
+	// The band now opens at -9 deg, a little past civil twilight, so the light keeps falling for the half hour
+	// after sunset the way it does outdoors. The exponent is what keeps the horizon reading as EVENING rather
+	// than as a dimmer afternoon: at 0 deg it lands near a fifth of noon, not the two fifths a straight line
+	// would give.
+	const float TwilightBand = FMath::Clamp((Elevation + 9.0f) / 21.0f, 0.0f, 1.0f);
+	const float Daylight = FMath::Pow(TwilightBand, 1.9f);
 	Comp->SetIntensity(FMath::Max(SunIntensityAtNoon * Daylight, SunIntensityAtNoon * 0.004f));
 	Comp->SetLightColor(FMath::Lerp(FLinearColor(0.42f, 0.55f, 0.95f, 1.0f), SunColourAt(Elevation), Daylight));
 

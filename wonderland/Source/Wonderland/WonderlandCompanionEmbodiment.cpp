@@ -35,6 +35,31 @@ namespace
 	const TCHAR* const GlowParentPath = TEXT("/Engine/EngineDebugMaterials/LevelColorationUnlitMaterial.LevelColorationUnlitMaterial");
 	const TCHAR* const AdditiveParentPath = TEXT("/Engine/EngineMaterials/EmissiveMeshMaterial.EmissiveMeshMaterial");
 	const TCHAR* const CubePath = TEXT("/Engine/BasicShapes/Cube.Cube");
+	// THE FIGURES' OWN CUBE, AND WHY IT EXISTS. Every .wlvox body is instances of a cube, and on 2026-09-24
+	// zc_avatar_cost measured what that costs once several of them are on screen at once: ten Project Avatars
+	// BEHIND the camera cost nothing (32.36 ms against a 32.37 ms baseline), the same ten FACING it cost
+	// 202.6 ms -- and 193.46 ms of that was the RENDER THREAD while the GPU sat at 42.97 ms over 6,338 draw
+	// calls. Low draw calls and low GPU with a huge render thread is the CPU walking 314,020 instances.
+	//
+	// The world's Nanite pass fixed the same shape of problem (114.95 -> 55.54 ms) but deliberately skipped the
+	// engine's own meshes, because they are shared editor furniture this project does not own. So the project
+	// now carries its own Nanite cube and the figures use that instead, which moves the instance culling onto
+	// the GPU where it costs nothing to add another avatar.
+	//
+	// FALLBACK KEPT ON PURPOSE. If SM_WL_VoxelCube is ever missing -- a fresh clone before the asset job has
+	// run, a Content tree that did not sync -- the figures fall back to the engine cube and simply render the
+	// way they did before. A missing optimisation must not be a missing companion.
+	const TCHAR* const NaniteCubePath = TEXT("/Game/Wonderland/Meshes/SM_WL_VoxelCube.SM_WL_VoxelCube");
+
+	/** The cube the voxel bodies are instanced from: the project's Nanite one if it is there, the engine's if not. */
+	UStaticMesh* LoadVoxelCube()
+	{
+		if (UStaticMesh* Nanite = LoadObject<UStaticMesh>(nullptr, NaniteCubePath))
+		{
+			return Nanite;
+		}
+		return LoadObject<UStaticMesh>(nullptr, CubePath);
+	}
 }
 
 AWonderlandCompanionEmbodiment::AWonderlandCompanionEmbodiment()
@@ -177,7 +202,7 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		FigureCache.Add(FilePath, FCachedFigure{Stamp, Shared});
 	}
 	const FWonderlandCompanionFigure& Figure = *Shared;
-	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, CubePath);
+	UStaticMesh* Cube = LoadVoxelCube();
 	if (Cube == nullptr)
 	{
 		LastError = TEXT("the engine cube /Engine/BasicShapes/Cube did not load");
@@ -1398,7 +1423,7 @@ void AWonderlandCompanionEmbodiment::AnimatePulses(float TimeSeconds)
 			return;
 		}
 		// Built on first use rather than at spawn: a companion that never joins a study never pays for it.
-		UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, CubePath);
+		UStaticMesh* Cube = LoadVoxelCube();
 		UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr, GlowParentPath);
 		if (Cube == nullptr)
 		{
@@ -1544,7 +1569,7 @@ void AWonderlandCompanionEmbodiment::AnimateBeam(float TimeSeconds, const FWonde
 	}
 	if (BeamMesh == nullptr)
 	{
-		UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, CubePath);
+		UStaticMesh* Cube = LoadVoxelCube();
 		UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr, GlowParentPath);
 		if (Cube == nullptr)
 		{
