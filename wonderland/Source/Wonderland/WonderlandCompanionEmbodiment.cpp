@@ -324,12 +324,39 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		// know that a halo or a banner reaches sideways -- so those skins were clipped at the window's sides
 		// and every other skin paid for it with margin. Measured here rather than guessed there.
 		float Widest = 0.0f;
+		// AND WHERE THE FLAMES WILL REACH. RebuildFlames does not draw the twinkle boxes -- it lays procedural
+		// ribbons in their place, running to Source.Height * Reach * (0.58 + 0.62 * Lick), up to 1.20x the
+		// source's own height, and swaying out to about 0.82x its width. The wardrobe frames on the two numbers
+		// below, so measuring only the boxes told it Arden Infernal fitted while its mane -- which is flame,
+		// not boxes -- was being cut off by the window. Gathered per part and in FIGURE space, which is what
+		// Box.Centre already is; the FlameSources built later are relative to their part's pivot instead.
+		TMap<int32, FBox> Fires;
 		for (const FWonderlandCompanionBox& Box : Figure.Boxes)
 		{
 			Lowest = FMath::Min(Lowest, static_cast<float>(Box.Centre.Z - Box.Size.Z * 0.5));
 			Highest = FMath::Max(Highest, static_cast<float>(Box.Centre.Z + Box.Size.Z * 0.5));
 			Widest = FMath::Max(Widest, static_cast<float>(FMath::Abs(Box.Centre.X) + Box.Size.X * 0.5));
 			Widest = FMath::Max(Widest, static_cast<float>(FMath::Abs(Box.Centre.Y) + Box.Size.Y * 0.5));
+			if (Figure.Parts.IsValidIndex(Box.Part)
+				&& Figure.Parts[Box.Part].Motion == EWonderlandCompanionMotion::Twinkle)
+			{
+				const FVector Half = Box.Size * 0.5;
+				Fires.FindOrAdd(Box.Part, FBox(ForceInit)) += FBox(Box.Centre - Half, Box.Centre + Half);
+			}
+		}
+		for (const TPair<int32, FBox>& Fire : Fires)
+		{
+			const FVector FireSize = Fire.Value.GetSize();
+			const float Tall = FMath::Max(static_cast<float>(FireSize.Z), 4.0f);
+			const float Fat = FMath::Max(static_cast<float>(FMath::Max(FireSize.X, FireSize.Y)), 3.0f);
+			// 1.45 and 1.15 rather than the 1.20 and 0.82 the ribbon maths alone gives. Those are the limits for
+			// ONE tongue at full lick; a source lays five of them, each with its own sway and drift, and the
+			// envelope of five is wider than any one. Measured against the capture rather than derived: at 1.20
+			// and 0.82 Arden Infernal's mane still ran past the window's left edge.
+			Highest = FMath::Max(Highest, static_cast<float>(Fire.Value.Min.Z) + Tall * 1.45f);
+			const FVector Mid = Fire.Value.GetCenter();
+			Widest = FMath::Max(Widest, static_cast<float>(FMath::Abs(Mid.X)) + Fat * 1.15f);
+			Widest = FMath::Max(Widest, static_cast<float>(FMath::Abs(Mid.Y)) + Fat * 1.15f);
 		}
 		FigureHeightUU = Figure.Boxes.Num() > 0 ? (Highest - Lowest) * Unit : 0.0f;
 		FigureWidthUU = Figure.Boxes.Num() > 0 ? Widest * 2.0f * Unit : 0.0f;

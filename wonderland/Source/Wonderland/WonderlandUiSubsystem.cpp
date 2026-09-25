@@ -1363,7 +1363,14 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 		const float WantWide = FMath::Max(Size.X * Fill, 0.05f);
 		const float FitTall = Height / (WantTall * 2.0f * TanV);
 		const float FitWide = FigureWide > 1.0f ? FigureWide / (WantWide * 2.0f * TanH) : 0.0f;
-		const float FitDistance = FMath::Clamp(FMath::Max(FitTall, FitWide), 140.0f, 1400.0f);
+		// THE CEILING WAS THE THING BINDING ARDEN, not the bounds. Logged mid-framing: Arden Infernal asks for
+		// fitWide 1642 and this clamp handed back 1400, so the widest skin in the set could never be given the
+		// distance its own mane needed and was cut off by the window no matter how the bounds were measured.
+		// Three separate attempts at the bounds moved nothing because none of them was what was binding.
+		// The camera does not actually stand at this distance -- it is pinned to dogAway * 0.55 and the figure
+		// is scaled by distance/fit to match -- so this is a scale denominator, not a real camera position,
+		// and a larger ceiling costs nothing.
+		const float FitDistance = FMath::Clamp(FMath::Max(FitTall, FitWide), 140.0f, 4000.0f);
 		float Distance = FitDistance;
 
 		// ---- IN FRONT OF THE PLAYER'S OWN DOG, WHICH IS WHAT WAS IN THE WINDOW ALL ALONG.
