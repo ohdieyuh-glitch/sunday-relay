@@ -1,0 +1,50 @@
+{
+ "name": "zc_cost_census",
+ "started": "2026-09-25 08:37:28",
+ "status": "counted",
+ "actors": {
+  "brain_sculptures": 0,
+  "companions": 2,
+  "dogs": 1,
+  "point_lights": 1,
+  "directional_lights": 4
+ },
+ "light_components": [
+  {
+   "actor": "V2_Sun",
+   "comp": "LightComponent0",
+   "intensity": 70000.0,
+   "visible": true
+  },
+  {
+   "actor": "V2_GroundBounce",
+   "comp": "LightComponent0",
+   "intensity": 1100.0,
+   "visible": true
+  },
+  {
+   "actor": "V2_CanopyFill",
+   "comp": "LightComponent0",
+   "intensity": 2200.0,
+   "visible": true
+  },
+  {
+   "actor": "V2_CanopyFill2",
+   "comp": "LightComponent0",
+   "intensity": 2200.0,
+   "visible": true
+  },
+  {
+   "actor": "V2_PortalLight",
+   "comp": "LightComponent0",
+   "intensity": 8000.0,
+   "visible": true
+  }
+ ],
+ "light_count": 5,
+ "ism_components": 3904,
+ "ism_instances": 155085,
+ "log": "",
+ "finished": "2026-09-25 08:37:50",
+ "seconds": 22.13
+}

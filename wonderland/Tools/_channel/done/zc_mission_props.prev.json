@@ -1,6 +1,6 @@
 {
  "name": "zc_mission_props",
- "started": "2026-09-25 01:21:11",
+ "started": "2026-09-25 02:20:44",
  "status": "measured",
  "tests": [
   {
@@ -109,7 +109,7 @@
   "MissionLensRim_0"
  ],
  "stage_differences": [],
- "finished": "2026-09-25 01:22:32",
- "seconds": 80.86,
+ "finished": "2026-09-25 02:22:04",
+ "seconds": 80.33,
  "log": "P01 PASS the bare Dog raises props during its mission at all {'props': ['MissionBookPages_0', 'MissionBookTurningPage_0', 'MissionBook_0', 'MissionBrushTip_0', 'MissionBrush_0', 'MissionLensGlass_0', 'MissionLensGlint_0', 'MissionLensHandle_0', 'MissionLensRim_0'], 'note': 'if this is empty the comparison below proves nothing, so it is asked first'}\nP02 PASS a costumed Dog raises the same props, stage for stage, as a bare one {'differences': [], 'stages': 6, 'note': 'the bare Dog is the authority; no invented count is used'}\nP03 PASS the props come down again when the contract completes {'bare_left_up': [], 'skinned_left_up': []}\n"
 }

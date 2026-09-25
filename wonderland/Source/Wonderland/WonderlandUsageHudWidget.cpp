@@ -483,34 +483,27 @@ int32 UWonderlandUsageHudWidget::NativePaint(
 	const FVector2f GroundSize(Right + 34.0f, Bottom + 26.0f);
 	++Layer;
 
-	// ---- A CORE FIELD UNDER THE WHOLE INSTRUMENT (founder, 2026-09-25): "the C.A.R.D is still not readable
-	// enough... being washed out by bright emissive/effect lighting from the mascot skins and nearby scene
-	// lighting... whether the C.A.R.D needs a slightly stronger dark backing or cleaner edge separation."
+	// ---- A SOFT GROUND, DENSE AT THE MIDDLE AND GONE AT THE EDGES.
 	//
-	// WHY THE FEATHER ALONE COULD NOT HOLD IT. The five rings below are 0.075 alpha each -- they build a
-	// gentle shadow that works beautifully over ivory stone, and fails completely the moment a Celestial
-	// Light skin or a flame stands behind the panel. The HUD is Slate drawn over the scene, so the world's
-	// bloom does not literally bleed into these pixels; what happens is simpler and worse. At a third of an
-	// alpha the panel is mostly the world, and when the world behind it goes white the small type has
-	// nothing left to sit against.
+	// FOUNDER, 2026-09-25: "take the square rectangle out around the health usage bar." The pass before this
+	// one gave the panel a solid field at 0.66 so the type would stop being washed out by bright skins -- it
+	// worked, and it drew a rectangle, because a rounded box at two thirds alpha has an edge wherever it
+	// stops.
 	//
-	// So a real ground goes underneath, and the feather stays on top of it to keep the edge soft. The
-	// founder's standing rule is that a content request is not a licence to redesign the layout: nothing
-	// moves, nothing is resized, no element is added to the composition. This is the same shape in the same
-	// place, made opaque enough to be a background.
-	FSlateDrawElement::MakeBox(OutDrawElements, Layer,
-		AllottedGeometry.ToPaintGeometry(GroundSize, FSlateLayoutTransform(GroundOrigin)),
-		&Ground, ESlateDrawEffect::None, FLinearColor(0.012f, 0.018f, 0.032f, 0.66f));
-
-	for (int32 Ring = 0; Ring < 5; ++Ring)
+	// The darkness is the same; only its distribution changes. Fourteen rounded fields, each a little larger
+	// than the last and each at 0.075, accumulate to 1 - 0.925^14 = 0.66 at the centre -- exactly the ground
+	// the text needs -- while the outermost contributes 0.075 and simply fades into the world. No step in
+	// the alpha anywhere, so there is no boundary for the eye to read as a box.
+	//
+	// The original five rings were the right idea at a third of the strength: they built a lovely soft
+	// shadow and left the type sitting on the world. This keeps the softness and adds the body.
+	for (int32 Ring = 0; Ring < 14; ++Ring)
 	{
-		// The feather is deepened with it. On its own it was the whole background; now it is the falloff
-		// that stops the core reading as a rectangle pasted on the world.
-		const float Grow = static_cast<float>(4 - Ring) * 7.0f;
+		const float Grow = static_cast<float>(13 - Ring) * 6.0f;
 		FSlateDrawElement::MakeBox(OutDrawElements, Layer,
 			AllottedGeometry.ToPaintGeometry(GroundSize + FVector2f(Grow * 2.0f, Grow * 2.0f),
 				FSlateLayoutTransform(GroundOrigin - FVector2f(Grow, Grow))),
-			&Ground, ESlateDrawEffect::None, FLinearColor(0.02f, 0.03f, 0.05f, 0.115f));
+			&Ground, ESlateDrawEffect::None, FLinearColor(0.015f, 0.022f, 0.038f, 0.075f));
 	}
 
 	// A SHADOW UNDER THE FRAME, the lift the web HUD gets from its drop-shadow filter.

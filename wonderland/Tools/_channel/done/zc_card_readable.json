@@ -1,6 +1,6 @@
 {
  "name": "zc_card_readable",
- "started": "2026-09-25 08:09:26",
+ "started": "2026-09-25 08:41:04",
  "status": "captured; the verdict on readability is the pictures",
  "skins": [
   "celestial_light",
@@ -9,7 +9,7 @@
   "apollo",
   "relay_og"
  ],
- "finished": "2026-09-25 08:10:05",
- "seconds": 39.2,
+ "finished": "2026-09-25 08:41:44",
+ "seconds": 39.03,
  "log": ""
 }
