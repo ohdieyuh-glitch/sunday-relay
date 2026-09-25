@@ -1,6 +1,6 @@
 {
  "name": "zc_wardrobe_truth",
- "started": "2026-09-25 14:03:02",
+ "started": "2026-09-25 14:12:19",
  "status": "measured",
  "clicks": [
   {
@@ -117,7 +117,7 @@
   -857.9,
   207.8
  ],
- "finished": "2026-09-25 14:03:29",
- "seconds": 27.3,
+ "finished": "2026-09-25 14:12:46",
+ "seconds": 26.61,
  "log": ""
 }
