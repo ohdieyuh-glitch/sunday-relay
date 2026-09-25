@@ -35,8 +35,10 @@ PROBE = {
 
 def rows_now(world):
     """Every agent row the usage HUD painted most recently, as (label, name) pairs."""
-    widgets = unreal.WidgetBlueprintLibrary.get_all_widgets_of_class(
-        world, unreal.WonderlandUsageHudWidget, False)
+    # BY PATH, NOT BY ATTRIBUTE. Not every UCLASS in this module is generated onto the `unreal` module,
+    # and a proof that dies on a missing attribute proves nothing about the HUD.
+    widget_class = unreal.load_class(None, "/Script/Wonderland.WonderlandUsageHudWidget")
+    widgets = unreal.WidgetBlueprintLibrary.get_all_widgets_of_class(world, widget_class, False)
     for w in widgets:
         painted = list(w.get_editor_property("painted_agent_rows") or [])
         if painted:
@@ -71,7 +73,8 @@ def job():
     L.focus_game_viewport()
     yield 1.0
 
-    settings = unreal.WonderlandCompanionPreviewSettings.get_default_object()
+    settings_class = unreal.load_class(None, "/Script/Wonderland.WonderlandCompanionPreviewSettings")
+    settings = unreal.get_default_object(settings_class)
     # WHAT THE PROJECT SHIPS, kept so the probe can be undone. These are Config properties: leaving test
     # names in them would write this job's fixtures into the founder's HUD.
     shipped = {k: str(settings.get_editor_property(k)) for k in PROBE}

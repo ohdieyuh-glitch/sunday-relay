@@ -47,4 +47,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	static bool GetDrawCallCount(int32& OutDrawCalls, int32& OutPrimitives);
 
+	/**
+	 * A SCENE CAPTURE IN THE RUNNING WORLD, so a proof can READ the picture instead of photographing it.
+	 *
+	 * WHY THIS IS HERE. Two of the founder's items can only be settled by comparing one frame against
+	 * another: shadows must hold still while the world does (P2-11), and water must NOT (P2-10). A JPEG
+	 * capture cannot answer either -- nothing in the toolchain can read one back -- and a person looking at
+	 * two screenshots of a pond cannot tell a slow ripple from a still one.
+	 *
+	 * A render target can be read a pixel at a time, so the comparison becomes a number. The capture is
+	 * transient, manual (it captures when asked, not every frame, so the proof controls exactly when each
+	 * frame is taken), and spawned by the test library rather than by the game: nothing in Wonderland
+	 * creates or needs one.
+	 *
+	 * Returns null when there is no world to spawn into, which is a real state a proof must handle rather
+	 * than a failure to hide.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static class ASceneCapture2D* SpawnSceneCapture(UObject* WorldContextObject, FVector Location,
+		FRotator Rotation, class UTextureRenderTarget2D* Target);
+
 };

@@ -173,6 +173,21 @@ void UWonderlandDayCycleSubsystem::DressTheWater()
 			}
 			if (UMaterialInstanceDynamic* Wet = UMaterialInstanceDynamic::Create(Real, *It))
 			{
+				// NANITE WILL NOT DRAW TRANSLUCENCY, and says so rather than guessing:
+				//
+				//   Invalid material [MID_M_WL_RealWater_0] used on Nanite static mesh
+				//   [WL_Water_Pavilion_water]. Only opaque or masked blend modes are currently
+				//   supported, [BLEND_Translucent] blend mode was specified.
+				//
+				// Found in the editor log, not by any proof -- the material assignment below succeeds, and
+				// a proof reading back which material a surface wears would agree that the water is wet.
+				// The substitution happens at render time, downstream of everything a proof can see.
+				//
+				// The engine's own remedy is the one taken: this surface stops being a Nanite mesh. Water
+				// basins are a few hundred triangles of flat plane, which is the case Nanite buys least on,
+				// so the cost of dropping them out of it is close to nothing. Done per component and only
+				// to surfaces this function just dressed, so nothing else in the level changes.
+				Mesh->SetForceDisableNanite(true);
 				Mesh->SetMaterial(Slot, Wet);
 				WaterSurfaces.Add(Wet);
 				++WaterDressed;

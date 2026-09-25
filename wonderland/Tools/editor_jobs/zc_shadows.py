@@ -134,14 +134,13 @@ def job():
         yield 1.5
 
         rt = unreal.RenderingLibrary.create_render_target2d(world, RT_W, RT_H)
-        where = unreal.Transform(EYE, AIM, unreal.Vector(1.0, 1.0, 1.0))
-        cap = unreal.GameplayStatics.begin_deferred_actor_spawn_from_class(world, unreal.SceneCapture2D, where)
-        unreal.GameplayStatics.finish_spawning_actor(cap, where)
+        # SPAWNED BY THE TEST LIBRARY. GameplayStatics' deferred spawn is not bound in this engine's Python,
+        # and the editor's own spawn puts an actor in the EDITOR world rather than the running one -- which
+        # would photograph a level nobody is playing.
+        cap = H.spawn_scene_capture(world, EYE, AIM, rt)
+        if cap is None:
+            raise RuntimeError("no scene capture could be spawned into the running world")
         comp = cap.get_editor_property("capture_component2d")
-        comp.set_editor_property("texture_target", rt)
-        comp.set_editor_property("capture_source", unreal.SceneCaptureSource.SCS_FINAL_COLOR_LDR)
-        comp.set_editor_property("capture_every_frame", False)
-        comp.set_editor_property("capture_on_movement", False)
         yield 1.0
 
         def two_frames():

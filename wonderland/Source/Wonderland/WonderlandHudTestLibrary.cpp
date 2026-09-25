@@ -1,7 +1,11 @@
 #include "WonderlandHudTestLibrary.h"
 
+#include "Components/SceneCaptureComponent2D.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
+#include "Engine/SceneCapture2D.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Engine/World.h"
 #include "Performance/EnginePerformanceTargets.h"
 #include "UnrealClient.h"
 #include "RenderCore.h"
@@ -115,4 +119,39 @@ bool UWonderlandHudTestLibrary::GetDrawCallCount(int32& OutDrawCalls, int32& Out
 	OutDrawCalls = GNumDrawCallsRHI[0];
 	OutPrimitives = static_cast<int32>(GNumPrimitivesDrawnRHI[0]);
 	return OutDrawCalls > 0 || OutPrimitives > 0;
+}
+
+ASceneCapture2D* UWonderlandHudTestLibrary::SpawnSceneCapture(UObject* WorldContextObject, FVector Location,
+	FRotator Rotation, UTextureRenderTarget2D* Target)
+{
+	UWorld* World = GEngine != nullptr
+		? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull)
+		: nullptr;
+	if (World == nullptr)
+	{
+		return nullptr;
+	}
+
+	FActorSpawnParameters Params;
+	Params.ObjectFlags |= RF_Transient;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ASceneCapture2D* Capture = World->SpawnActor<ASceneCapture2D>(
+		ASceneCapture2D::StaticClass(), FTransform(Rotation, Location), Params);
+	if (Capture == nullptr)
+	{
+		return nullptr;
+	}
+
+	if (USceneCaptureComponent2D* Component = Capture->GetCaptureComponent2D())
+	{
+		Component->TextureTarget = Target;
+		// FINAL COLOUR, because the question is what a player sees -- a scene-colour capture would answer a
+		// question about the renderer's intermediate state instead.
+		Component->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+		// ON DEMAND. The proof decides when each frame is taken; a capture running every frame would make
+		// "two frames one second apart" mean whatever the scheduler happened to do.
+		Component->bCaptureEveryFrame = false;
+		Component->bCaptureOnMovement = false;
+	}
+	return Capture;
 }
