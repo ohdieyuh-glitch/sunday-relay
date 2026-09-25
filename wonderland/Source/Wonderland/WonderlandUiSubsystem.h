@@ -193,6 +193,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	FString GetCompanionTerminalTitle(int32 Index) const;
 
+	/** The accent a companion terminal is actually drawn in, for proving P1 item 9 with a number. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Ui")
+	FLinearColor GetCompanionTerminalAccent(int32 Index) const;
+
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	int32 GetCompanionTerminalLineCount(int32 Index) const;
 

@@ -117,6 +117,18 @@ public:
 	int32 GetLineCount() const { return Lines.Num(); }
 	const FString& GetTitle() const { return Title; }
 
+	/**
+	 * THE ACCENT THIS TERMINAL IS ACTUALLY DRAWN IN, as of its last theme follow.
+	 *
+	 * FOUNDER, P1 item 9: "Add Julius + Companion Terminal color customization; theme also recolours
+	 * preset-command/accent UI." That was implemented and its only evidence was photographs -- and a colour
+	 * in a screenshot cannot distinguish a theme that took from a theme that was set and ignored.
+	 *
+	 * This is the value FollowTheme last wrote into the frame and rule brushes, so it is what the terminal
+	 * is wearing rather than what the settings say it should be wearing.
+	 */
+	FLinearColor GetPaintedAccent() const { return BrushAccent; }
+
 private:
 	struct FLine
 	{

@@ -389,6 +389,12 @@ FString UWonderlandUiSubsystem::GetCompanionTerminalTitle(int32 Index) const
 	return CompanionTerminals.IsValidIndex(Index) && CompanionTerminals[Index].IsValid() ? CompanionTerminals[Index]->GetTitle() : FString();
 }
 
+FLinearColor UWonderlandUiSubsystem::GetCompanionTerminalAccent(int32 Index) const
+{
+	return CompanionTerminals.IsValidIndex(Index) && CompanionTerminals[Index].IsValid()
+		? CompanionTerminals[Index]->GetPaintedAccent() : FLinearColor::Transparent;
+}
+
 int32 UWonderlandUiSubsystem::GetCompanionTerminalLineCount(int32 Index) const
 {
 	return CompanionTerminals.IsValidIndex(Index) && CompanionTerminals[Index].IsValid() ? CompanionTerminals[Index]->GetLineCount() : 0;
