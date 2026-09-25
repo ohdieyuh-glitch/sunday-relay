@@ -482,13 +482,35 @@ int32 UWonderlandUsageHudWidget::NativePaint(
 	const FVector2f GroundOrigin(-16.0f, -12.0f);
 	const FVector2f GroundSize(Right + 34.0f, Bottom + 26.0f);
 	++Layer;
+
+	// ---- A CORE FIELD UNDER THE WHOLE INSTRUMENT (founder, 2026-09-25): "the C.A.R.D is still not readable
+	// enough... being washed out by bright emissive/effect lighting from the mascot skins and nearby scene
+	// lighting... whether the C.A.R.D needs a slightly stronger dark backing or cleaner edge separation."
+	//
+	// WHY THE FEATHER ALONE COULD NOT HOLD IT. The five rings below are 0.075 alpha each -- they build a
+	// gentle shadow that works beautifully over ivory stone, and fails completely the moment a Celestial
+	// Light skin or a flame stands behind the panel. The HUD is Slate drawn over the scene, so the world's
+	// bloom does not literally bleed into these pixels; what happens is simpler and worse. At a third of an
+	// alpha the panel is mostly the world, and when the world behind it goes white the small type has
+	// nothing left to sit against.
+	//
+	// So a real ground goes underneath, and the feather stays on top of it to keep the edge soft. The
+	// founder's standing rule is that a content request is not a licence to redesign the layout: nothing
+	// moves, nothing is resized, no element is added to the composition. This is the same shape in the same
+	// place, made opaque enough to be a background.
+	FSlateDrawElement::MakeBox(OutDrawElements, Layer,
+		AllottedGeometry.ToPaintGeometry(GroundSize, FSlateLayoutTransform(GroundOrigin)),
+		&Ground, ESlateDrawEffect::None, FLinearColor(0.012f, 0.018f, 0.032f, 0.66f));
+
 	for (int32 Ring = 0; Ring < 5; ++Ring)
 	{
+		// The feather is deepened with it. On its own it was the whole background; now it is the falloff
+		// that stops the core reading as a rectangle pasted on the world.
 		const float Grow = static_cast<float>(4 - Ring) * 7.0f;
 		FSlateDrawElement::MakeBox(OutDrawElements, Layer,
 			AllottedGeometry.ToPaintGeometry(GroundSize + FVector2f(Grow * 2.0f, Grow * 2.0f),
 				FSlateLayoutTransform(GroundOrigin - FVector2f(Grow, Grow))),
-			&Ground, ESlateDrawEffect::None, FLinearColor(0.02f, 0.03f, 0.05f, 0.075f));
+			&Ground, ESlateDrawEffect::None, FLinearColor(0.02f, 0.03f, 0.05f, 0.115f));
 	}
 
 	// A SHADOW UNDER THE FRAME, the lift the web HUD gets from its drop-shadow filter.
@@ -571,7 +593,8 @@ int32 UWonderlandUsageHudWidget::NativePaint(
 		if (!Row.Named.IsEmpty())
 		{
 			const float LabelWidth = static_cast<float>(Measure->Measure(Row.Label, LabelFont).X);
-			const FLinearColor Quiet(Row.Palette->Accent.R, Row.Palette->Accent.G, Row.Palette->Accent.B, 0.72f);
+			// Lifted with the backing: a name at 0.72 disappeared whenever a bright skin stood behind it.
+			const FLinearColor Quiet(Row.Palette->Accent.R, Row.Palette->Accent.G, Row.Palette->Accent.B, 0.92f);
 			PaintText(FString::Printf(TEXT("  %s"), *Row.Named), LabelFont, Quiet,
 					  FVector2f(2.0f + LabelWidth, BaseLine + 1.0f), AllottedGeometry, OutDrawElements, Layer);
 		}
@@ -600,9 +623,9 @@ int32 UWonderlandUsageHudWidget::NativePaint(
 		Y += RowHeight;
 	}
 	Y += 6.0f;
-	PaintText(ProvenanceLine, NoteFont, FLinearColor(0.913f, 0.941f, 1.0f, 0.82f), FVector2f(2.0f, Y), AllottedGeometry, OutDrawElements, Layer);
+	PaintText(ProvenanceLine, NoteFont, FLinearColor(0.945f, 0.960f, 1.0f, 0.95f), FVector2f(2.0f, Y), AllottedGeometry, OutDrawElements, Layer);
 	Y += ProvenanceLine.IsEmpty() ? 0.0f : NoteHeight;
-	PaintText(ReasonLine, NoteFont, FLinearColor(0.913f, 0.941f, 1.0f, 0.66f), FVector2f(2.0f, Y), AllottedGeometry, OutDrawElements, Layer);
+	PaintText(ReasonLine, NoteFont, FLinearColor(0.945f, 0.960f, 1.0f, 0.86f), FVector2f(2.0f, Y), AllottedGeometry, OutDrawElements, Layer);
 	Layer += 4;   // the percent figures paint up to Layer + 3
 
 	return Layer;

@@ -1,0 +1,94 @@
+{
+ "name": "zc_skin_stance",
+ "started": "2026-09-25 08:03:13",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "N00",
+   "name": "both rigs expose the pivots this compares",
+   "pass": false,
+   "detail": {
+    "pivots": {
+     "Body": true,
+     "Part_body": false,
+     "Pivot_head": true,
+     "Part_head": false,
+     "Pivot_legLeft": true,
+     "Part_leg_l": false
+    },
+    "note": "canon Body/Pivot_head/Pivot_legLeft against costume Part_body/Part_head/Part_leg_l"
+   }
+  },
+  {
+   "id": "N01",
+   "name": "the canon body is still being posed while a costume is worn",
+   "pass": false,
+   "detail": {
+    "readings": {
+     "Body": {
+      "canon_z_swing": 0.0,
+      "skin_z_swing": 0.0,
+      "z_correlation": 0.0,
+      "canon_pitch_swing": 0.0,
+      "skin_pitch_swing": 0.0,
+      "pitch_correlation": 0.0
+     },
+     "Pivot_head": {
+      "canon_z_swing": 0.0,
+      "skin_z_swing": 0.0,
+      "z_correlation": 0.0,
+      "canon_pitch_swing": 0.0,
+      "skin_pitch_swing": 0.0,
+      "pitch_correlation": 0.0
+     },
+     "Pivot_legLeft": {
+      "canon_z_swing": 0.0,
+      "skin_z_swing": 0.0,
+      "z_correlation": 0.0,
+      "canon_pitch_swing": 0.0,
+      "skin_pitch_swing": 0.0,
+      "pitch_correlation": 0.0
+     }
+    },
+    "note": "it is hidden, not stopped -- if this fails the comparison below is meaningless and the finding is that the authority stops running when it is dressed"
+   }
+  }
+ ],
+ "pivots_found": {
+  "Body": true,
+  "Part_body": false,
+  "Pivot_head": true,
+  "Part_head": false,
+  "Pivot_legLeft": true,
+  "Part_leg_l": false
+ },
+ "readings": {
+  "Body": {
+   "canon_z_swing": 0.0,
+   "skin_z_swing": 0.0,
+   "z_correlation": 0.0,
+   "canon_pitch_swing": 0.0,
+   "skin_pitch_swing": 0.0,
+   "pitch_correlation": 0.0
+  },
+  "Pivot_head": {
+   "canon_z_swing": 0.0,
+   "skin_z_swing": 0.0,
+   "z_correlation": 0.0,
+   "canon_pitch_swing": 0.0,
+   "skin_pitch_swing": 0.0,
+   "pitch_correlation": 0.0
+  },
+  "Pivot_legLeft": {
+   "canon_z_swing": 0.0,
+   "skin_z_swing": 0.0,
+   "z_correlation": 0.0,
+   "canon_pitch_swing": 0.0,
+   "skin_pitch_swing": 0.0,
+   "pitch_correlation": 0.0
+  }
+ },
+ "finished": "2026-09-25 08:03:44",
+ "seconds": 30.98,
+ "log": "N00 FAIL both rigs expose the pivots this compares {'pivots': {'Body': True, 'Part_body': False, 'Pivot_head': True, 'Part_head': False, 'Pivot_legLeft': True, 'Part_leg_l': False}, 'note': 'canon Body/Pivot_head/Pivot_legLeft against costume Part_body/Part_head/Part_leg_l'}\nN01 FAIL the canon body is still being posed while a costume is worn {'readings': {'Body': {'canon_z_swing': 0.0, 'skin_z_swing': 0.0, 'z_correlation': 0.0, 'canon_pitch_swing': 0.0, 'skin_pitch_swing': 0.0, 'pitch_correlation': 0.0}, 'Pivot_head': {'canon_z_swing': 0.0, 'skin_z_swing': 0.0, 'z_correlation': 0.0, 'canon_pitch_swing': 0.0, 'skin_pitch_swing': 0.0, 'pitch_correlation': 0.0}, 'Pivot_legLeft': {'canon_z_swing': 0.0, 'skin_z_swing': 0.0, 'z_correlation': 0.0, 'canon_pitch_swing': 0.0, 'skin_pitch_swing': 0.0, 'pitch_correlation': 0.0}}, 'note': 'it is hidden, not stopped -- if this fails the comparison below is meaningless and the finding is that the authority stops running when it is dressed'}\n"
+}
