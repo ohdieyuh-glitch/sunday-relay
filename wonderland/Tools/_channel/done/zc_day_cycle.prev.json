@@ -1,6 +1,6 @@
 {
  "name": "zc_day_cycle",
- "started": "2026-09-25 08:49:27",
+ "started": "2026-09-25 09:33:25",
  "status": "measured",
  "hours": [
   {
@@ -133,7 +133,7 @@
   280.0,
   4992.5
  ],
- "finished": "2026-09-25 08:50:19",
- "seconds": 51.98,
+ "finished": "2026-09-25 09:34:09",
+ "seconds": 43.92,
  "log": "D00 PASS the atmosphere sun was found, so the readings are of the real light {}\nD01 PASS the sun stands high at midday and below the horizon at night {'brightest_elevation': 72.0, 'darkest_elevation': -69.55}\nD02 PASS noon is daylight and deep night is a moonlight floor, not darkness {'noon_lux': 70000.0, 'night_lux': 280.0}\nD03 PASS the light does not fall off a cliff when the sun crosses the horizon {'worst_ratio': 17.8, 'across': [-9.4, -3.77, 280.0, 4992.5], 'samples_in_band': 5, 'old_curve_was': '195x between +9.4 and -3.8 deg'}\n"
 }

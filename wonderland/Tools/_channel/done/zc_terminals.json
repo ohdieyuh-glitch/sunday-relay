@@ -1,6 +1,6 @@
 {
  "name": "zc_terminals",
- "started": "2026-09-25 09:35:21",
+ "started": "2026-09-25 10:53:32",
  "status": "measured; the verdict on how it LOOKS is the photographs",
  "facts": {
   "ctrl_t_opened_it": false,
@@ -13,13 +13,13 @@
   "plus_made_a_tab": true,
   "companion_0_title": "GPT 6 Astra",
   "companion_1_title": "Claude Code Fable 5",
-  "companion_0_lines_before": 0,
+  "companion_0_lines_before": 3,
   "companion_0_focused": true,
   "companion_0_input_text": "What is Wonderland?",
-  "companion_0_lines_after": 2,
+  "companion_0_lines_after": 6,
   "companion_0_answered": true
  },
- "finished": "2026-09-25 09:35:45",
- "seconds": 24.09,
+ "finished": "2026-09-25 10:53:58",
+ "seconds": 26.26,
  "log": ""
 }

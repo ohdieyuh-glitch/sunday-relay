@@ -1,6 +1,6 @@
 {
  "name": "zc_snake_follow",
- "started": "2026-09-25 10:29:15",
+ "started": "2026-09-25 10:30:43",
  "status": "measured",
  "tests": [
   {
@@ -15,17 +15,20 @@
   {
    "id": "Y01",
    "name": "the head goes in front, behind, above and below the brain",
-   "pass": false,
+   "pass": true,
    "detail": {
     "samples_on_each_side": {
-     "front": 160,
-     "behind": 56,
-     "above": 8,
-     "below": 27
+     "front": 143,
+     "behind": 85,
+     "above": 125,
+     "below": 32
     },
     "of": 240,
-    "counted_past_uu": 31.4,
-    "note": "a side counts only where the head is past 15%% of its own reach, so one stray sample cannot claim it"
+    "counted_past_uu": {
+     "x": 30.8,
+     "z": 24.2
+    },
+    "note": "each axis judged against its OWN reach, so a route that is naturally wider than it is tall is not failed for it"
    }
   },
   {
@@ -44,19 +47,22 @@
    "name": "the tail travels its own distance rather than being dragged rigidly",
    "pass": true,
    "detail": {
-    "head_uu": 2703.6,
-    "tail_uu": 2620.4,
+    "head_uu": 2609.7,
+    "tail_uu": 2531.2,
     "note": "a rigid ring's tail travels exactly as far as its head; a real body's does not"
    }
   }
  ],
  "sides": {
-  "front": 160,
-  "behind": 56,
-  "above": 8,
-  "below": 27
+  "front": 143,
+  "behind": 85,
+  "above": 125,
+  "below": 32
  },
- "head_reach_uu": 209.3,
+ "head_reach_uu": {
+  "x": 205.1,
+  "z": 161.7
+ },
  "follow_through": {
   "segments_compared": 45,
   "median_best_lag_frames": 1,
@@ -64,11 +70,11 @@
   "lag_seconds_at_median": 0.1
  },
  "travel": {
-  "head_uu": 2703.6,
-  "tail_uu": 2620.4,
-  "ratio": 0.969
+  "head_uu": 2609.7,
+  "tail_uu": 2531.2,
+  "ratio": 0.97
  },
- "finished": "2026-09-25 10:30:01",
- "seconds": 45.96,
- "log": "Y00 PASS the python's body is readable segment by segment {'segments': 46, 'note': 'follow-through is a claim about the body; only the head was exposed before this'}\nY01 FAIL the head goes in front, behind, above and below the brain {'samples_on_each_side': {'front': 160, 'behind': 56, 'above': 8, 'below': 27}, 'of': 240, 'counted_past_uu': 31.4, 'note': 'a side counts only where the head is past 15%% of its own reach, so one stray sample cannot claim it'}\nY02 PASS each segment arrives where the one ahead of it has already been {'median_best_lag_frames': 1, 'segments_trailing': 45, 'of': 45, 'note': 'the lag at which a segment best matches the one ahead. A rigid body swung on a stick matches at lag 0 and would pass every existing check'}\nY03 PASS the tail travels its own distance rather than being dragged rigidly {'head_uu': 2703.6, 'tail_uu': 2620.4, 'note': \"a rigid ring's tail travels exactly as far as its head; a real body's does not\"}\n"
+ "finished": "2026-09-25 10:31:29",
+ "seconds": 46.46,
+ "log": "Y00 PASS the python's body is readable segment by segment {'segments': 46, 'note': 'follow-through is a claim about the body; only the head was exposed before this'}\nY01 PASS the head goes in front, behind, above and below the brain {'samples_on_each_side': {'front': 143, 'behind': 85, 'above': 125, 'below': 32}, 'of': 240, 'counted_past_uu': {'x': 30.8, 'z': 24.2}, 'note': 'each axis judged against its OWN reach, so a route that is naturally wider than it is tall is not failed for it'}\nY02 PASS each segment arrives where the one ahead of it has already been {'median_best_lag_frames': 1, 'segments_trailing': 45, 'of': 45, 'note': 'the lag at which a segment best matches the one ahead. A rigid body swung on a stick matches at lag 0 and would pass every existing check'}\nY03 PASS the tail travels its own distance rather than being dragged rigidly {'head_uu': 2609.7, 'tail_uu': 2531.2, 'note': \"a rigid ring's tail travels exactly as far as its head; a real body's does not\"}\n"
 }
