@@ -42,14 +42,22 @@ import nations                                                    # noqa: E402
 
 KIT = json.loads((ROOT / "Skyline" / "kit_modules.json").read_text(encoding="utf-8"))["modules"]
 
-#: Read straight out of zc_beta_walk's result: every tile it gridded and found holding zero mesh actors,
-#: as world centimetres. Kept as data rather than recomputed, because the grid that produced them is the
-#: grid the proof will re-measure against.
+#: The tiles that are genuinely bare, measured by the CORRECTED walk -- the one that counts instances as
+#: well as StaticMeshActors. The first version of this list was measured by the broken walk and named
+#: seventeen tiles; fourteen of them were never empty, the fill that went into them changed nothing, and it
+#: was removed again. These five are inside the nations' own built frontier (~1,158 m), which is why they
+#: are a gap rather than an edge.
+#:
+#: THE WILDERNESS IS DELIBERATELY NOT IN THIS LIST. Thirty-five tiles past 1,200 m hold nothing, and that is
+#: DF01's design rather than a hole: Dubel Forest is built with "clearings -- explicit voids, placed first and
+#: respected by everything after" and "thinning toward both the inner edge and the outer edge, so the belt
+#: fades rather than stops". Planting those would delete the clearings the founder asked for.
 EMPTY_TILES = [
-    (100370, 370), (80370, 20370), (80370, 60370), (60370, 80370), (40370, 100370),
-    (20370, 100370), (-19630, 100370), (-39630, 100370), (-99630, 40370), (-99630, -19630),
-    (-39630, -99630), (-19630, -99630), (370, -79630), (20370, -99630), (40370, -99630),
-    (60370, -59630), (100370, -39630),
+    (-18073, -118073),
+    (1927, -118073),
+    (-58073, -98073),
+    (-118073, -18073),
+    (21927, 101927),
 ]
 
 #: Half a 200 m tile, less a margin so two neighbouring patches never meet in a hard line.

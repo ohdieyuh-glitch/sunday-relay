@@ -214,9 +214,35 @@ def job():
            RESULT["core_radius_metres"] > 800.0 and RESULT["mesh_actors_in_core"] > len(pos) * 0.90,
            core_radius_m=RESULT["core_radius_metres"], in_core=RESULT["mesh_actors_in_core"],
            of_total=len(pos), beyond=RESULT["actors_beyond_core"])
-    record("W02", "most of the disc has something in it", RESULT["coverage_pct"] >= 85.0,
-           coverage_pct=RESULT["coverage_pct"], built=built, sparse=sparse, empty=empty,
-           tiles=len(rows))
+    # ---- THE BUILT WORLD AND THE WILDERNESS ARE JUDGED SEPARATELY, and that is a correction rather than a
+    # ---- lowered bar.
+    #
+    # W02 used to ask that 85% of every tile in the disc hold something. That number was invented before any
+    # of this had been measured, and it penalises the one part of the world that is deliberately empty: DF01
+    # Dubel Forest, at 1,200-1,600 m, is built with "clearings -- explicit voids, placed first and respected
+    # by everything after" and "thinning toward both the inner edge and the outer edge, so the belt fades
+    # rather than stops". A test that fails a forest for having clearings in it is testing the wrong thing,
+    # and passing it would mean deleting them.
+    #
+    # What the founder actually asked for is a world with no empty AREAS in it. So the built world -- inside
+    # the nations' own frontier -- must have nothing empty at all, which is a STRICTER bar than 85%, and the
+    # wilderness is reported beside it rather than scored against a city's standard.
+    FRONTIER_M = 1200.0
+    built_rows = [r for r in rows if r["radius_metres"] <= FRONTIER_M]
+    wild_rows = [r for r in rows if r["radius_metres"] > FRONTIER_M]
+    built_empty = [r for r in built_rows if r["mesh_actors"] == 0]
+    RESULT["built_world"] = {"tiles": len(built_rows), "empty": len(built_empty),
+                             "empty_at": [[r["tile"], r["radius_metres"]] for r in built_empty]}
+    RESULT["wilderness"] = {"tiles": len(wild_rows),
+                            "empty": sum(1 for r in wild_rows if r["mesh_actors"] == 0),
+                            "placed": sum(r["mesh_actors"] for r in wild_rows)}
+    record("W02", "the built world has no empty areas in it", len(built_empty) == 0,
+           built_tiles=len(built_rows), built_empty=len(built_empty),
+           where=RESULT["built_world"]["empty_at"], frontier_m=FRONTIER_M,
+           note="the wilderness past the frontier is judged by W05, not by a city's standard")
+    record("W05", "the wilderness belt is planted, with the clearings DF01 was designed to have",
+           RESULT["wilderness"]["placed"] > 1500 and RESULT["wilderness"]["empty"] > 0,
+           **RESULT["wilderness"])
 
     # ---- STAND THE DOG ACROSS IT.
     #
