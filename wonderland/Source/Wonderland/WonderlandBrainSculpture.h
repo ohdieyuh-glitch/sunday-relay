@@ -102,6 +102,24 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Brain")
 	FString DescribeRendering() const;
 
+	/**
+	 * THE BODY, SEGMENT BY SEGMENT, so follow-through can be measured rather than asserted.
+	 *
+	 * FOUNDER, P0 item 2: the python must "slither believably in 3D, moving front/behind/above/below with
+	 * body follow-through. No simple orbit/spin." The existing proof settles the orbit half -- the bearing
+	 * rate varies, the radius varies, the route leaves the plane -- and cannot reach the other half, because
+	 * only the HEAD is exposed. Follow-through is a statement about the BODY: every segment must arrive
+	 * where the one ahead of it has already been, a little later. That needs the segments.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Brain")
+	int32 GetSnakeSegmentCount() const { return SegmentSpot.Num(); }
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Brain")
+	FVector GetSnakeSegmentLocation(int32 Index) const
+	{
+		return SegmentSpot.IsValidIndex(Index) ? SegmentSpot[Index] : FVector::ZeroVector;
+	}
+
 private:
 	void BuildBrain();
 	void BuildSnake();
