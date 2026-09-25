@@ -372,3 +372,25 @@ its measurements are:
   same commit, or the first player to reach a tower top walks into a bridge that is not there.
 - **A generator must not be its own only checker.** `audit_nation_band.py` found a fault in itself before it
   found one in the band.
+
+## 2026-09-25 - the Relay stance proof's one-in-six failure was the mission overlay
+
+zc_skin_stance failed once in six runs: the canon body's Pivot_legLeft read a walk swing of exactly
+0.0000 against the skin's 106.0890, giving a swing ratio of 106,089,000 and reporting the skin as having
+diverged from Relay OG, the animation authority.
+
+It had not diverged. The canon body was PERFORMING. ApplyMissionPose derives bPerforming from the mission
+stage overlay's weight, and while that holds, WriteLeg poses the legs from the meditate/fly pose rather
+than the walk - a HELD pose, whose walk swing is correctly zero. The skin's channel is fed from the raw
+Pose.LegLeft and kept swinging. The two really did disagree for the length of that overlay, and the
+disagreement was the product doing what it is designed to do.
+
+Fixed in the instrument, not the animation path: GetMissionOverlayWeight is exposed, the proof samples it,
+and a window that caught an overlay is reported as an unfair window rather than as a skin that diverged.
+N01 also now requires EVERY judged channel to be alive rather than any one of them - `any()` was what let
+the flat leg through to be judged by N02/N03 in the first place.
+
+Checked and deliberately NOT changed while here: WriteLeg multiplies Chain.ForwardSign in twice (once
+building WalkAngles, once inside RootRotation). Every sign is assigned as exactly +/-1, so the square is 1
+and the overlay's walk component reduces to HipDeg, matching the plain write at RelayDogCharacter.cpp:1853.
+The redundancy is load-bearing: removing one multiply would flip the legs on any chain measuring -1.
