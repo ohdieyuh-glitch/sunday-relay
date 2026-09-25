@@ -488,7 +488,11 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 			// over an unbroken night field exactly as before -- a broken lens costs the movement, never the picture.
 			.Hole_Lambda([this]() -> FVector4f
 			{
-				FVector2D Centre, Extent;
+				// Initialised because the compiler cannot see that neither is read unless the getter returned true
+				// (C4701), and because a getter that ever returns true without writing should give a zero rect
+				// rather than whatever was on the stack.
+				FVector2D Centre = FVector2D::ZeroVector;
+				FVector2D Extent = FVector2D::ZeroVector;
 				// THE WARDROBE'S WINDOW FIRST, because while the wardrobe is open it owns the only hole there is.
 				const bool bGot = bSkinsOpen ? GetSkinPreviewRect(Centre, Extent)
 											 : (bSculptureLive && GetBrainSculptureRect(Centre, Extent));

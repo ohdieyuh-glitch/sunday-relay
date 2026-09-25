@@ -884,6 +884,35 @@ void AWonderlandCompanionEmbodiment::ChooseFigureTier(float DistanceUU, float No
 	else if (DistanceUU > Near + Slack && FigureTier == 2) { Want = 1; }
 	else if (DistanceUU < Far - Slack && FigureTier == 0) { Want = 1; }
 	else if (DistanceUU < Near - Slack) { Want = 2; }
+
+	// ---- A CROWD BUDGET, AND IT IS NOT A GUESS.
+	//
+	// FOUNDER: "Project Avatar lag... must scale inside one Server Avatar." zc_avatar_cost measured exactly
+	// where the lag is and exactly what moves it. Ten Project Avatars standing at 900 uu and FACING the camera
+	// cost 183.63 ms a frame, with 314,020 instances between them and the render thread at 166.62 ms while the
+	// GPU sat at 42.18. The SAME ten, seen from far enough away to drop to the coarse tier, cost 46.61 ms with
+	// 67,910 instances. Same figures, same materials, same shaders: the instance count is the whole cost, and
+	// the tier is the whole lever. (A Nanite cube was tried first and returned 9% -- the cost is not GPU-side
+	// instance culling, so it is not a shading problem to be shaded away.)
+	//
+	// So distance is no longer the only thing that decides. One avatar, or two, keep the finest tier they have
+	// always had and nothing about the single-avatar case changes. A crowd shares a budget. That is what
+	// scaling inside one Server Avatar means in practice: the cost of the tenth avatar is bounded, rather than
+	// being the same as the cost of the first and simply arriving ten times.
+	//
+	// Counted rather than tracked. A live counter incremented and decremented across spawn, load, tier reload
+	// and destruction is four places to get a leak wrong; this runs at most twice a second per figure, over a
+	// handful of actors, and cannot drift.
+	int32 Crowd = 0;
+	for (TActorIterator<AWonderlandCompanionEmbodiment> Other(GetWorld()); Other; ++Other)
+	{
+		if (!Other->FigureTierRoot.IsEmpty()) { ++Crowd; }
+	}
+	const int32 Ceiling = Crowd <= 2 ? 2 : (Crowd <= 5 ? 1 : 0);
+	Want = FMath::Min(Want, Ceiling);
+	CrowdSeen = Crowd;
+	CrowdTierCeiling = Ceiling;
+
 	if (Want == FigureTier) { return; }
 
 	const FString Wanted = FigureTierRoot + WonderlandFigureTiers[Want] + TEXT(".wlvox");
@@ -892,7 +921,8 @@ void AWonderlandCompanionEmbodiment::ChooseFigureTier(float DistanceUU, float No
 	if (LoadFigure(Wanted))
 	{
 		FigureTier = Want;
-		UE_LOG(LogTemp, Verbose, TEXT("WLFIGURE %s tier %d -> %d at %.0f uu"), *GetName(), Was, Want, DistanceUU);
+		UE_LOG(LogTemp, Display, TEXT("WLFIGURE %s tier %d -> %d at %.0f uu (crowd %d, ceiling %d)"),
+			*GetName(), Was, Want, DistanceUU, Crowd, Ceiling);
 	}
 }
 

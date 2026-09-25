@@ -52,12 +52,36 @@ def job():
     # moved. Worse, the answer that WAS in the log contained a real defect -- 54,821 lux at +9.4 deg and 280 lux
     # at -3.8 deg, a sky that fell off a cliff at the horizon -- and nothing in the result would ever have said
     # so. The readings come back into RESULT now, and the cliff is something a test can fail on.
+    # The light COMPONENT, reached without guessing. ADirectionalLight has no get_component() in this Python
+    # build -- the first version of this proof assumed it did and died on the assumption -- so the accessors are
+    # tried in order and the one that worked is recorded, which is cheaper than being wrong again next time.
+    def light_component(actor):
+        for how in ("light_component", "directional_light_component"):
+            try:
+                comp = actor.get_editor_property(how)
+                if comp is not None:
+                    return comp, how
+            except Exception:
+                pass
+        try:
+            comp = actor.get_component_by_class(unreal.DirectionalLightComponent)
+            if comp is not None:
+                return comp, "get_component_by_class"
+        except Exception:
+            pass
+        return None, "none"
+
     sun = None
+    sun_owner = None
     for light in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.DirectionalLight):
-        comp = light.get_component()
+        comp, how = light_component(light)
+        if comp is None:
+            continue
+        RESULT["component_reached_via"] = how
         try:
             if comp.get_editor_property("atmosphere_sun_light"):
                 sun = comp
+                sun_owner = light
                 break
         except Exception:
             continue
@@ -70,7 +94,7 @@ def job():
         row = {"asked_for": hour}
         if sun is not None:
             row["intensity"] = round(float(sun.get_editor_property("intensity")), 1)
-            rot = sun.get_owner().get_actor_rotation()
+            rot = sun_owner.get_actor_rotation()
             row["elevation_deg"] = round(-float(rot.pitch), 2)
             row["bearing_deg"] = round(float(rot.yaw), 2)
         rows.append(row)

@@ -142,7 +142,9 @@ namespace
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
 		{
 			UWonderlandMascotStyleSettings* Settings = GetMutableDefault<UWonderlandMascotStyleSettings>();
-			FLinearColor Colour;
+			// Initialised for the same reason as the rect above: unread unless ReadColour succeeded, but a
+			// colour read off the stack would be a real bug rather than a warning.
+			FLinearColor Colour = FLinearColor::White;
 			if (Settings == nullptr || Args.Num() < 1 || !ReadColour(FString::Join(Args, TEXT("")), Colour))
 			{
 				UE_LOG(LogTemp, Warning, TEXT("WLTHEME usage: wl.Theme.Accent <r,g,b | #RRGGBB>"));

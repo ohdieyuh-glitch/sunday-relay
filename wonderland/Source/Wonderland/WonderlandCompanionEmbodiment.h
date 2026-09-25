@@ -416,6 +416,20 @@ private:
 	 * not one avatar fewer, and the system itself becomes cheaper.
 	 */
 	FString FigureTierRoot;
+	/** How many tiered figures were live at the last tier decision, and the tier ceiling that crowd allows. */
+	int32 CrowdSeen = 0;
+	int32 CrowdTierCeiling = 2;
+
+public:
+	/** What the crowd budget did at the last decision, so a proof can read the reason rather than infer it. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	int32 GetCrowdSeen() const { return CrowdSeen; }
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	int32 GetCrowdTierCeiling() const { return CrowdTierCeiling; }
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
+	int32 GetFigureTier() const { return FigureTier; }
+
+private:
 	int32 FigureTier = INDEX_NONE;
 	float NextTierCheckSeconds = 0.0f;
 	/** Picks the tier for this distance and reloads if the band changed. Hysteresis keeps it from flickering. */
