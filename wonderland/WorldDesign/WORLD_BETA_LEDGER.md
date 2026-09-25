@@ -258,6 +258,63 @@ routed across this level and no bending route can be measured. It is recorded as
 traversal failure: a player is not a navmesh agent, and T01's capsule sweep is the evidence that the corridor
 walks. Worth a founder decision on whether beta needs nav data built.
 
+## 2026-09-25 (later) -- the animation authority, the idle drift, and traversal answered
+
+**THE SKINS WERE COPYING RELAY OG AT 85%, ONE FRAME LATE.** Every proof said they were identical because
+`zc_skin_parity` compares the dressed pose against ITSELF -- it confirms the value sent is the value
+received, and cannot see whether that value is what the canon body uses. `zc_skin_stance` compares the real
+transforms instead, and found two causes:
+
+| cause | evidence | after |
+|---|---|---|
+| the `Spine` motion multiplied the CANONICAL pose by `Part.A`, and every skin declares `spine 0.850` | body bob 14.880 uu against the canon body's 17.519, ratio **0.849** | ratio **1.000** |
+| tick order was unspecified, so the costume often wore the PREVIOUS frame's pose | hip angles only **0.689** correlated at nearly the same amplitude | correlation **1.000** |
+
+Head pitch went 0.999 -> 1.000. `AddTickPrerequisiteActor` puts the costume after the Dog.
+
+**AND THEY DRIFTED BECAUSE A WORN COSTUME WAS STILL HOVERING.** `FloatRoot` is the parent of every root part
+and was writing a hover on Z plus **2.0 degrees of roll and 1.5 of pitch**, continuously, on the companion's
+own clock. Right for a free-standing companion, which is a hovering creature; wrong for a costume, where two
+degrees of roll on a body this tall swings it several uu side to side. Relay OG cannot do it because Relay OG
+is the Dog's own geometry and has no `FloatRoot` at all -- which is why the authority looked planted and
+everything wearing a costume did not. Worn, it is now identity: not damped, absent.
+
+Measured with **Relay OG as the bar rather than a number picked here**, 12 s of standing per skin, reading
+the body's offset FROM THE DOG so the Dog being nudged does not count as the costume wandering:
+
+| skin | lateral drift | vertical | FloatRoot |
+|---|---|---|---|
+| relay_og (the authority) | 1.4397 uu | 0.0000 | -- |
+| celestial_light | 1.4082 uu | 0.0000 | 0 / 0 / 0 |
+| apollo | 1.4054 uu | 0.0000 | 0 / 0 / 0 |
+| arden_infernal | 1.4122 uu | 0.0000 | 0 / 0 / 0 |
+| skeleton_flame | 1.3825 uu | 0.0000 | 0 / 0 / 0 |
+
+**TRAVERSAL IS ANSWERED FOR ALL THREE NATIONS.** The straight-lane sweep could not do it: every nation's best
+lane is blocked by a named building, and a building on a straight line is not a traversal fault. The engine's
+navigation would have settled it and **this map has no nav data at all**, so the search was built instead --
+a 39x15 grid at a 12 m pitch, 84 m either side of the axis, with cells joined only where the step is within
+the Dog's own `max_step_height` and its own capsule sweeps through without meeting a wall (judged by impact
+normal, so the floor is never mistaken for an obstacle).
+
+| nation | cells with floor | reached | arrived at the band |
+|---|---|---|---|
+| ICARUS | 585 | 239 | **828 m** |
+| NOCTIS | 585 | 238 | **816 m** |
+| TARTARUS | 585 | 299 | **864 m** |
+
+**AVATARS SCALE, AND A REGRESSION I REPORTED WAS NOT REAL.** I read a 47.88 ms baseline against 31.86 and
+called it a regression. Three consecutive runs of the same build read 31.7, 35.3 and 52.5 -- median **35.29**,
+which is where the number sat before the look pass. One reading cannot support a claim in either direction,
+so it is now taken three times and reported as a median with its spread. The ladder: **0 = 31.7 ms, 1 = 45.8,
+5 = 60.2, 10 = 53.9**. Ten cost LESS than five, which is the crowd tier budget doing what "scale inside one
+Server Avatar" asks -- the tenth avatar's cost is bounded, not the first one's arriving ten times.
+
+**AND A THRESHOLD OF MINE, CORRECTED OPENLY.** `zc_fire` F03 demanded flame self-similarity below 0.9, a
+number set from ONE observation of 0.857; the same unchanged code later read 0.936. The statistic swings that
+much on a six-second window, so the bar was measuring sampling luck. Moved to 0.98, which still catches a
+flame collapsed into a loop, with the reasoning written into the job rather than quietly loosened.
+
 ## The biggest world beta blockers, in order
 
 1. ~~**No nation is connected to Golden Arrival.**~~ **CLOSED 2026-09-23 by AP01.** All three causeways now
