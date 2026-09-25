@@ -73,7 +73,13 @@ def job():
     strays = []
     for a, x, y, z in pos:
         if x < x0 or x > x1 or y < y0 or y > y1:
-            strays.append({"name": a.get_actor_label(), "at_metres": [round(x / 100.0), round(y / 100.0), round(z / 100.0)]})
+            # get_actor_label is editor-only and has not been exercised on a PIE actor here, so a stray that
+            # cannot name itself is still reported by its class and position rather than dropped.
+            try:
+                label = a.get_actor_label()
+            except Exception:
+                label = a.get_class().get_name()
+            strays.append({"name": label, "at_metres": [round(x / 100.0), round(y / 100.0), round(z / 100.0)]})
     RESULT["strays_outside_core"] = len(strays)
     RESULT["strays"] = strays[:40]
 
