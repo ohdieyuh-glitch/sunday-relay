@@ -75,9 +75,9 @@
   "step": "10_all_three",
   "note": "Julius's Dog, Jhinn and the LLM Companion, each doing its own thing",
   "file": "C:/dev/iwonder/wonderland-task3/wonderland/Tools\\captures\\zc\\sidekicks\\09_10_all_three.jpg",
-  "sidekicks": "link=online intents=12 llm-companion[state=CONNECTED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=1 live=- failure=-] jhinn[state=CONNECTED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=2 live=- failure=-]",
+  "sidekicks": "link=online intents=12 llm-companion[state=CONNECTED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=1 live=- failure=-] jhinn[state=WORKING mascot=WORKING provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=2 live=STREAMING failure=-]",
   "llm_mascot": "IDLE",
-  "jhinn_mascot": "IDLE"
+  "jhinn_mascot": "WORKING"
  },
  {
   "step": "11_all_three_done",

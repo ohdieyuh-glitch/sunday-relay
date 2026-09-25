@@ -209,6 +209,10 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Companion")
 	float GetFigureHeightUu() const { return FigureHeightUU; }
+
+	/** How wide the staged figure is, ornaments included. The wardrobe frames on height and needs this
+	 *  to know that a halo or a banner reaches past the body sideways. */
+	float GetFigureWidthUu() const { return FigureWidthUU; }
 	/** The figure's lowest point in local uu, measured at load. Spawners use it to sit a figure on the ground
 	 *  without walking every instance back out of the render proxy to find out where its feet are. */
 	float GetFigureLowestUu() const { return FigureLowestUU; }
@@ -488,6 +492,7 @@ private:
 	FString LastError;
 	int32 BoxCount = 0;
 	float FigureHeightUU = 0.0f;
+	float FigureWidthUU = 0.0f;
 	float FigureLowestUU = 0.0f;
 	float Phase = 0.0f;
 	float IdleSeconds = 0.0f;

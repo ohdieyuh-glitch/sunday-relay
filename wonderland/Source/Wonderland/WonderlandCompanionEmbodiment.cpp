@@ -320,12 +320,19 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 	{
 		float Lowest = TNumericLimits<float>::Max();
 		float Highest = -TNumericLimits<float>::Max();
+		// AND HOW WIDE, in the same pass. The wardrobe frames the figure from its height alone, which does not
+		// know that a halo or a banner reaches sideways -- so those skins were clipped at the window's sides
+		// and every other skin paid for it with margin. Measured here rather than guessed there.
+		float Widest = 0.0f;
 		for (const FWonderlandCompanionBox& Box : Figure.Boxes)
 		{
 			Lowest = FMath::Min(Lowest, static_cast<float>(Box.Centre.Z - Box.Size.Z * 0.5));
 			Highest = FMath::Max(Highest, static_cast<float>(Box.Centre.Z + Box.Size.Z * 0.5));
+			Widest = FMath::Max(Widest, static_cast<float>(FMath::Abs(Box.Centre.X) + Box.Size.X * 0.5));
+			Widest = FMath::Max(Widest, static_cast<float>(FMath::Abs(Box.Centre.Y) + Box.Size.Y * 0.5));
 		}
 		FigureHeightUU = Figure.Boxes.Num() > 0 ? (Highest - Lowest) * Unit : 0.0f;
+		FigureWidthUU = Figure.Boxes.Num() > 0 ? Widest * 2.0f * Unit : 0.0f;
 		// AND KEEP THE FLOOR OF IT. /pa was re-deriving this by walking every instance of every component back
 		// out of the render proxy with GetInstanceTransform(bWorldSpace=true) -- 95,594 calls for one /pa at
 		// Large, on the spawn frame, to recover a number this loop had just computed for free.

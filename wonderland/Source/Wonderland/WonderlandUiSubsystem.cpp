@@ -1324,11 +1324,15 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 		// preview square from edge to edge with the lens sitting inside the ring, because the fit was solved for
 		// a 174 uu Dog while a ~400 uu halo was what had to be got into frame.
 		float Height = Relay != nullptr ? Relay->GetDressedHeightUu() : 174.0f;
+		// And how wide it is, read in the same place: the fit below is solved from the vertical angle alone,
+		// so without this a halo or a banner is clipped at the window's SIDES however much height it is given.
+		float FigureWide = 0.0f;
 		if (const AWonderlandSkinStage* Staged = Self->SkinStage())
 		{
 			if (const AWonderlandCompanionEmbodiment* Shown = Staged->GetBody())
 			{
 				Height = FMath::Max(Height, Shown->GetFigureHeightUu());
+				FigureWide = Shown->GetFigureWidthUu();
 			}
 		}
 		const FVector Sole = Dog->GetActorLocation() - FVector(0.0, 0.0, Dog->GetSimpleCollisionHalfHeight());
@@ -1341,11 +1345,25 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 		const float Aspect = VY > 0 ? static_cast<float>(VX) / static_cast<float>(VY) : 1.777f;
 		const float TanH = FMath::Tan(FMath::DegreesToRadians(HFov * 0.5f));
 		const float TanV = TanH / Aspect;
-		// Distance so the Dog fills about three quarters of the window's height.
-		// 0.62 rather than 0.74: Apollo's halo and Celestial Light's banner both reach well past the figure's
-		// own height, and at three quarters they were being clipped by the window's top and side.
-		const float WantTall = FMath::Max(Size.Y * 0.62f, 0.05f);
-		const float FitDistance = FMath::Clamp(Height / (WantTall * 2.0f * TanV), 140.0f, 1400.0f);
+		// Distance so the Dog fills most of the window's height.
+		// FOUNDER, 2026-09-25: "Bring the mascot skins closer to the frame in the wardrobe feature section."
+		// 0.62 was set when Apollo's halo and Celestial Light's banner were being clipped at 0.74, and it left
+		// a lot of black around every skin. The clipping is not really a height problem -- Height above is
+		// already the MAX of the dressed height and the staged figure's own height, so an ornament that reaches
+		// past the head is already counted. It was the WIDTH: a halo and a banner are wider than the body, and
+		// a fit computed only from the vertical angle does not know that. So the figure is brought in to 0.80
+		// and the widest-ornamented skins are given their width back explicitly, rather than every skin paying
+		// for them with margin it does not need.
+		// BOTH DIMENSIONS, AT THE SAME FILL. Solving only the vertical angle is what clipped Apollo's halo and
+		// Celestial Light's banner at the window's sides, and pulling the whole fill back to 0.62 to hide it
+		// made every OTHER skin small. So each axis gets its own fit distance and the camera takes whichever
+		// is further: the figure then fills 0.80 of whichever axis binds, and nothing leaves the frame.
+		const float Fill = 0.80f;
+		const float WantTall = FMath::Max(Size.Y * Fill, 0.05f);
+		const float WantWide = FMath::Max(Size.X * Fill, 0.05f);
+		const float FitTall = Height / (WantTall * 2.0f * TanV);
+		const float FitWide = FigureWide > 1.0f ? FigureWide / (WantWide * 2.0f * TanH) : 0.0f;
+		const float FitDistance = FMath::Clamp(FMath::Max(FitTall, FitWide), 140.0f, 1400.0f);
 		float Distance = FitDistance;
 
 		// ---- IN FRONT OF THE PLAYER'S OWN DOG, WHICH IS WHAT WAS IN THE WINDOW ALL ALONG.

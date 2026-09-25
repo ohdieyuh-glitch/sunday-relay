@@ -1,6 +1,6 @@
 {
  "name": "zc_theme_cursor",
- "started": "2026-09-25 02:27:28",
+ "started": "2026-09-25 09:35:46",
  "status": "measured; the verdict on the colours is the photographs",
  "facts": {
   "terminal_open": true,
@@ -10,7 +10,7 @@
    "ring"
   ]
  },
- "finished": "2026-09-25 02:27:59",
- "seconds": 31.18,
+ "finished": "2026-09-25 09:36:16",
+ "seconds": 29.34,
  "log": ""
 }

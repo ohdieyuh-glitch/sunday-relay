@@ -1,6 +1,6 @@
 {
  "name": "zc_sidekicks",
- "started": "2026-09-25 10:54:05",
+ "started": "2026-09-25 12:47:26",
  "status": "done",
  "steps": [
   {
@@ -79,9 +79,9 @@
    "step": "10_all_three",
    "note": "Julius's Dog, Jhinn and the LLM Companion, each doing its own thing",
    "file": "C:/dev/iwonder/wonderland-task3/wonderland/Tools\\captures\\zc\\sidekicks\\09_10_all_three.jpg",
-   "sidekicks": "link=online intents=12 llm-companion[state=CONNECTED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=1 live=- failure=-] jhinn[state=CONNECTED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=2 live=- failure=-]",
+   "sidekicks": "link=online intents=12 llm-companion[state=CONNECTED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=1 live=- failure=-] jhinn[state=WORKING mascot=WORKING provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=2 live=STREAMING failure=-]",
    "llm_mascot": "IDLE",
-   "jhinn_mascot": "IDLE"
+   "jhinn_mascot": "WORKING"
   },
   {
    "step": "11_all_three_done",
@@ -106,7 +106,7 @@
  "disconnected": "link=online intents=9 llm-companion[state=DISCONNECTED mascot=DISCONNECTED provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=2 live=- failure=-] jhinn[state=CONNECTED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=1 live=- failure=-]",
  "llm_mascot_disconnected": "DISCONNECTED",
  "final": "link=online intents=12 llm-companion[state=CONNECTED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=1 live=- failure=-] jhinn[state=CONNECTED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=2 live=- failure=-]",
- "finished": "2026-09-25 10:55:19",
- "seconds": 73.95,
+ "finished": "2026-09-25 12:48:40",
+ "seconds": 73.79,
  "log": ""
 }

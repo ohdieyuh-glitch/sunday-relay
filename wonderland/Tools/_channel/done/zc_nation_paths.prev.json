@@ -1,6 +1,6 @@
 {
  "name": "zc_nation_paths",
- "started": "2026-09-25 09:40:01",
+ "started": "2026-09-25 10:57:55",
  "status": "measured",
  "tests": [
   {
@@ -99,7 +99,7 @@
    "edges_walked": 284
   }
  },
- "finished": "2026-09-25 09:40:16",
- "seconds": 15.5,
+ "finished": "2026-09-25 10:58:12",
+ "seconds": 17.27,
  "log": "P_ICARUS PASS ICARUS: a walkable path exists from the gate to the band {'cells_with_floor': 585, 'cells_reached': 239, 'band_cells': 120, 'reached_band': True, 'reached_at_m': 828.0, 'deepest_reached_m': 840.0, 'edges_walked': 224}\nP_NOCTIS PASS NOCTIS: a walkable path exists from the gate to the band {'cells_with_floor': 585, 'cells_reached': 238, 'band_cells': 122, 'reached_band': True, 'reached_at_m': 816.0, 'deepest_reached_m': 840.0, 'edges_walked': 223}\nP_TARTARUS PASS TARTARUS: a walkable path exists from the gate to the band {'cells_with_floor': 585, 'cells_reached': 299, 'band_cells': 107, 'reached_band': True, 'reached_at_m': 864.0, 'deepest_reached_m': 876.0, 'edges_walked': 284}\nP_ALL PASS every nation can be walked from its gate to its band {'by_nation': {'ICARUS': True, 'NOCTIS': True, 'TARTARUS': True}, 'note': \"breadth-first over a 12 m grid, joined only where the Dog's own capsule fits and its own max_step_height allows -- so a path here is a path a body can walk\"}\n"
 }

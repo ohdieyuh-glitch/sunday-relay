@@ -1,6 +1,6 @@
 {
  "name": "zc_brain_visible",
- "started": "2026-09-25 10:40:13",
+ "started": "2026-09-25 12:48:48",
  "status": "measured; the verdict is the photographs",
  "brain_panel_open": true,
  "window_rect_LTRB": [
@@ -25,7 +25,7 @@
  ],
  "distance_uu": 90.0,
  "view_target": "BP_RelayDog_C_0",
- "finished": "2026-09-25 10:40:35",
- "seconds": 21.75,
+ "finished": "2026-09-25 12:49:10",
+ "seconds": 22.14,
  "log": ""
 }
