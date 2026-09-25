@@ -1,0 +1,87 @@
+{
+ "name": "zc_nav_routes",
+ "started": "2026-09-25 10:36:51",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "V01",
+   "name": "the navmesh returns a real route for every nation",
+   "pass": false,
+   "detail": {
+    "by_nation": {
+     "ICARUS": {
+      "points": 0,
+      "straight_uu": 40000.0,
+      "walked_uu": 0.0,
+      "detour": null
+     },
+     "NOCTIS": {
+      "points": 0,
+      "straight_uu": 40000.0,
+      "walked_uu": 0.0,
+      "detour": null
+     },
+     "TARTARUS": {
+      "points": 0,
+      "straight_uu": 40000.0,
+      "walked_uu": 0.0,
+      "detour": null
+     }
+    },
+    "routed": [],
+    "note": "before the bounds volume, this returned nothing at all over the same spans"
+   }
+  },
+  {
+   "id": "V02",
+   "name": "and the routes are sensible rather than absurd detours",
+   "pass": false,
+   "detail": {
+    "by_nation": {
+     "ICARUS": {
+      "points": 0,
+      "straight_uu": 40000.0,
+      "walked_uu": 0.0,
+      "detour": null
+     },
+     "NOCTIS": {
+      "points": 0,
+      "straight_uu": 40000.0,
+      "walked_uu": 0.0,
+      "detour": null
+     },
+     "TARTARUS": {
+      "points": 0,
+      "straight_uu": 40000.0,
+      "walked_uu": 0.0,
+      "detour": null
+     }
+    },
+    "note": "walked distance over straight-line distance; a path that wanders the whole map would show here even though it technically 'routes'"
+   }
+  }
+ ],
+ "routes": {
+  "ICARUS": {
+   "points": 0,
+   "straight_uu": 40000.0,
+   "walked_uu": 0.0,
+   "detour": null
+  },
+  "NOCTIS": {
+   "points": 0,
+   "straight_uu": 40000.0,
+   "walked_uu": 0.0,
+   "detour": null
+  },
+  "TARTARUS": {
+   "points": 0,
+   "straight_uu": 40000.0,
+   "walked_uu": 0.0,
+   "detour": null
+  }
+ },
+ "finished": "2026-09-25 10:37:12",
+ "seconds": 21.2,
+ "log": "V01 FAIL the navmesh returns a real route for every nation {'by_nation': {'ICARUS': {'points': 0, 'straight_uu': 40000.0, 'walked_uu': 0.0, 'detour': None}, 'NOCTIS': {'points': 0, 'straight_uu': 40000.0, 'walked_uu': 0.0, 'detour': None}, 'TARTARUS': {'points': 0, 'straight_uu': 40000.0, 'walked_uu': 0.0, 'detour': None}}, 'routed': [], 'note': 'before the bounds volume, this returned nothing at all over the same spans'}\nV02 FAIL and the routes are sensible rather than absurd detours {'by_nation': {'ICARUS': {'points': 0, 'straight_uu': 40000.0, 'walked_uu': 0.0, 'detour': None}, 'NOCTIS': {'points': 0, 'straight_uu': 40000.0, 'walked_uu': 0.0, 'detour': None}, 'TARTARUS': {'points': 0, 'straight_uu': 40000.0, 'walked_uu': 0.0, 'detour': None}}, 'note': \"walked distance over straight-line distance; a path that wanders the whole map would show here even though it technically 'routes'\"}\n"
+}

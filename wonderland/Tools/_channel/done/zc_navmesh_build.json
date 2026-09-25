@@ -1,0 +1,23 @@
+{
+ "name": "zc_navmesh_build",
+ "started": "2026-09-25 10:33:38",
+ "status": "built",
+ "world": "WL_V2_GoldenArrival_WP2",
+ "existing_bounds_volumes": [],
+ "existing_recast": [],
+ "volume": {
+  "scale": 1250.0,
+  "half_metres": 1250.0,
+  "covers_metres": 2500.0
+ },
+ "build_started": true,
+ "seconds_to_navmesh_actor": 1.9,
+ "recast_after": [
+  "RecastNavMesh-Default"
+ ],
+ "navmesh_actors": 1,
+ "seconds_total": 122.3,
+ "log": "",
+ "finished": "2026-09-25 10:35:41",
+ "seconds": 122.39
+}
