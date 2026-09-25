@@ -178,13 +178,19 @@ def job():
            coverage_pct=RESULT["coverage_pct"], built=built, sparse=sparse, empty=empty,
            tiles=len(rows))
 
-    # ---- STAND THE DOG ACROSS IT: the busiest tiles, the middle ones, and the thinnest that still hold anything.
+    # ---- STAND THE DOG ACROSS IT.
+    #
+    # THE EMPTY TILES ARE VISITED TOO, and that is the point. The first version of this walk picked only tiles
+    # that HAD actors, which quietly skipped the only question a beta player can actually be hurt by: whether
+    # the frontier has a floor. A tile with nothing in it is not a defect -- every world ends somewhere -- but
+    # a tile you fall through is, and the two are indistinguishable until somebody stands in one.
     have = sorted([r for r in rows if r["mesh_actors"] > 0], key=lambda r: -r["mesh_actors"])
+    blank = sorted([r for r in rows if r["mesh_actors"] == 0], key=lambda r: r["radius_metres"])
     third = len(have) // 3
     middle = len(have) // 2
     picks = []
     seen = set()
-    for r in have[:5] + have[third:third + 3] + have[middle:middle + 3] + have[-4:]:
+    for r in have[:5] + have[third:third + 3] + have[middle:middle + 3] + have[-4:] + blank[:4] + blank[-4:]:
         key = (r["tile"][0], r["tile"][1])
         if key not in seen:
             seen.add(key)
@@ -193,21 +199,36 @@ def job():
     visits = []
     RESULT["visits"] = visits
     for n, r in enumerate(picks):
-        gz = r.get("ground_z", 0.0)
+        # An empty tile has no actors to average a height from, so it borrows the height of the built world
+        # around it rather than being dropped from an arbitrary zero.
+        gz = r.get("ground_z")
+        if gz is None:
+            near = [q for q in rows if "ground_z" in q
+                    and abs(q["tile"][0] - r["tile"][0]) <= 2 and abs(q["tile"][1] - r["tile"][1]) <= 2]
+            gz = (sum(q["ground_z"] for q in near) / len(near)) if near else 0.0
+            r["ground_z_borrowed"] = round(gz)
         pawn.set_actor_location(unreal.Vector(r["centre"][0], r["centre"][1], gz + 900.0), False, False)
         yield 1.8
         at = pawn.get_actor_location()
         fell = float(at.z) < gz - 5000.0
         visits.append({"tile": r["tile"], "radius_metres": r["radius_metres"],
                        "mesh_actors": r["mesh_actors"], "landed_z": round(float(at.z)),
-                       "expected_near_z": gz, "fell_through": bool(fell)})
+                       "expected_near_z": round(gz), "fell_through": bool(fell),
+                       "was_empty": r["mesh_actors"] == 0})
         H.capture_viewport_jpeg(os.path.join(ROOT, "%02d_r%04dm.jpg" % (n + 1, r["radius_metres"])), 1600, 90)
 
     fell_through = sum(1 for v in visits if v["fell_through"])
     RESULT["visits_that_fell_through"] = fell_through
+    empties = [v for v in visits if v["was_empty"]]
+    RESULT["empty_tiles_visited"] = len(empties)
+    RESULT["empty_tiles_with_no_floor"] = sum(1 for v in empties if v["fell_through"])
     record("W03", "the Dog stands on ground everywhere it was put down", fell_through == 0,
            visited=len(visits), fell_through=fell_through,
            where=[v["tile"] for v in visits if v["fell_through"]])
+    record("W04", "even the empty frontier tiles have a floor under them",
+           RESULT["empty_tiles_with_no_floor"] == 0,
+           empty_visited=len(empties), no_floor=RESULT["empty_tiles_with_no_floor"],
+           where=[[v["tile"], v["radius_metres"]] for v in empties if v["fell_through"]])
 
     RESULT["status"] = "walked"
     les.editor_request_end_play()
