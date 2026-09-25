@@ -1,5 +1,16 @@
 # IS CTRL+T BROKEN, OR IS THE HARNESS?
 #
+# DO NOT QUEUE THIS WITHOUT READING THE NEXT PARAGRAPH. The question it asks was already answered, with a
+# control, by zc_terminals: "legacy BindKey chords do not receive synthetic keys; False here is a harness
+# limit, not a defect -- SpaceBar/Jump behaves identically". Jump is bound the same way and is just as
+# unreachable from an injected key, which is the comparison that settles it. So Ctrl+T reading false in a
+# proof is expected and is not a beta blocker.
+#
+# AND THIS JOB ITSELF IS UNPROVEN. Its first run raised before reaching its own editor_request_end_play,
+# which left PIE up; the second run then sat for half an hour waiting for a world nothing was going to
+# close, and had to be cleared by restarting the editor. The end-play-first guard below fixes that cause,
+# but the job has never completed a run, so treat it as a draft rather than as a proof.
+#
 # zc_eight_hour_demo recorded ctrl_t_opened_it=false while live_terminal_open=true -- the Julius Live Terminal
 # opened, but not by the chord the founder actually uses. That is either a beta blocker on the primary Julius
 # gesture or an artefact of how this harness injects a modifier, and the two look identical in the result.
@@ -29,7 +40,12 @@ def job():
         tests.append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
         emit(tid, "PASS" if ok else "FAIL", name, detail)
 
-    yield (lambda: ues.get_game_world() is None, 1800)
+    # END A PIE THAT IS ALREADY RUNNING rather than waiting for one to end on its own. The first run of this
+    # job raised before its own editor_request_end_play, which left PIE up -- and the second run then sat for
+    # 1800 ticks waiting for a world that nothing was going to close. Every other job in this folder asks first.
+    if ues.get_game_world() is not None:
+        les.editor_request_end_play()
+    yield (lambda: ues.get_game_world() is None, 600)
     L.set_background_throttle_suspended(True)
     les.editor_request_begin_play()
     yield (lambda: ues.get_game_world() is not None, 240)
