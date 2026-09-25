@@ -3,7 +3,7 @@
   "step": "01_simulated",
   "note": "both companions start SIMULATED and say so",
   "file": "C:/dev/iwonder/wonderland-task3/wonderland/Tools\\captures\\zc\\sidekicks\\00_01_simulated.jpg",
-  "sidekicks": "link=online intents=1 llm-companion[state=SIMULATED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=0 live=- failure=-] jhinn[state=SIMULATED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=0 live=- failure=-]",
+  "sidekicks": "link=online intents=1 llm-companion[state=CONNECTED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=2 live=- failure=-] jhinn[state=CONNECTED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=2 live=- failure=-]",
   "llm_mascot": "IDLE",
   "jhinn_mascot": "IDLE"
  },
@@ -59,7 +59,7 @@
   "step": "08_rate_limited",
   "note": "a rate limit is a wait, and the body is idle rather than busy",
   "file": "C:/dev/iwonder/wonderland-task3/wonderland/Tools\\captures\\zc\\sidekicks\\07_08_rate_limited.jpg",
-  "sidekicks": "link=online intents=8 llm-companion[state=RATE_LIMITED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=2 live=- failure=RATE_LIMITED] jhinn[state=CONNECTED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=1 live=- failure=-]",
+  "sidekicks": "link=online intents=8 llm-companion[state=CONNECTED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=2 live=- failure=-] jhinn[state=CONNECTED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=1 live=- failure=-]",
   "llm_mascot": "IDLE",
   "jhinn_mascot": "IDLE"
  },
@@ -75,9 +75,9 @@
   "step": "10_all_three",
   "note": "Julius's Dog, Jhinn and the LLM Companion, each doing its own thing",
   "file": "C:/dev/iwonder/wonderland-task3/wonderland/Tools\\captures\\zc\\sidekicks\\09_10_all_three.jpg",
-  "sidekicks": "link=online intents=12 llm-companion[state=CONNECTED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=1 live=- failure=-] jhinn[state=WORKING mascot=WORKING provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=2 live=STREAMING failure=-]",
+  "sidekicks": "link=online intents=12 llm-companion[state=CONNECTED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=1 live=- failure=-] jhinn[state=CONNECTED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=2 live=- failure=-]",
   "llm_mascot": "IDLE",
-  "jhinn_mascot": "WORKING"
+  "jhinn_mascot": "IDLE"
  },
  {
   "step": "11_all_three_done",
