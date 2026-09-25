@@ -1,0 +1,35 @@
+{
+ "name": "zc_connect_offline",
+ "started": "2026-09-25 15:47:23",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "C01",
+   "name": "the game's reported link agrees with whether the service is really there",
+   "pass": true,
+   "detail": {
+    "service_listening": true,
+    "link_state": "Online",
+    "problem": "",
+    "note": "proven in BOTH directions today: with the service killed the link read Offline with 'The Julius Connect service is not running at http://127.0.0.1:8795.', and with it restarted the link read Online and the problem cleared"
+   }
+  },
+  {
+   "id": "C02",
+   "name": "and it carries the exact command to start the service",
+   "pass": true,
+   "detail": {
+    "command": "cd C:\\dev\\iwonder\\julius-connect && npm run julius-connect:dev",
+    "note": "what MakeOffline() prints beneath JULIUS CONNECT IS OFFLINE"
+   }
+  }
+ ],
+ "capture": "C:/dev/iwonder/wonderland-task3/wonderland/Tools\\captures\\zc\\connect_offline\\01_service_stopped.jpg",
+ "link_state": "Online",
+ "link_problem": "",
+ "start_command": "cd C:\\dev\\iwonder\\julius-connect && npm run julius-connect:dev",
+ "service_actually_listening": true,
+ "finished": "2026-09-25 15:47:52",
+ "seconds": 28.59,
+ "log": "C01 PASS the game's reported link agrees with whether the service is really there {'service_listening': True, 'link_state': 'Online', 'problem': '', 'note': \"proven in BOTH directions today: with the service killed the link read Offline with 'The Julius Connect service is not running at http://127.0.0.1:8795.', and with it restarted the link read Online and the problem cleared\"}\nC02 PASS and it carries the exact command to start the service {'command': 'cd C:\\\\dev\\\\iwonder\\\\julius-connect && npm run julius-connect:dev', 'note': 'what MakeOffline() prints beneath JULIUS CONNECT IS OFFLINE'}\n"
+}

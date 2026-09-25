@@ -1,0 +1,33 @@
+{
+ "name": "zc_connect_offline",
+ "started": "2026-09-25 15:46:18",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "C01",
+   "name": "the game knows the link is offline rather than waiting silently",
+   "pass": false,
+   "detail": {
+    "link_state": "Online",
+    "problem": "",
+    "note": "asked of the running subsystem with the service actually stopped; Connecting would mean it had not given up yet, and Online would mean the service never went down"
+   }
+  },
+  {
+   "id": "C02",
+   "name": "and it carries the exact command to start the service",
+   "pass": true,
+   "detail": {
+    "command": "cd C:\\dev\\iwonder\\julius-connect && npm run julius-connect:dev",
+    "note": "what MakeOffline() prints beneath JULIUS CONNECT IS OFFLINE"
+   }
+  }
+ ],
+ "capture": "C:/dev/iwonder/wonderland-task3/wonderland/Tools\\captures\\zc\\connect_offline\\01_service_stopped.jpg",
+ "link_state": "Online",
+ "link_problem": "",
+ "start_command": "cd C:\\dev\\iwonder\\julius-connect && npm run julius-connect:dev",
+ "finished": "2026-09-25 15:46:47",
+ "seconds": 29.1,
+ "log": "C01 FAIL the game knows the link is offline rather than waiting silently {'link_state': 'Online', 'problem': '', 'note': 'asked of the running subsystem with the service actually stopped; Connecting would mean it had not given up yet, and Online would mean the service never went down'}\nC02 PASS and it carries the exact command to start the service {'command': 'cd C:\\\\dev\\\\iwonder\\\\julius-connect && npm run julius-connect:dev', 'note': 'what MakeOffline() prints beneath JULIUS CONNECT IS OFFLINE'}\n"
+}

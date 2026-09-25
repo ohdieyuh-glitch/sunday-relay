@@ -165,6 +165,32 @@ public:
 
 	const FJuliusConnectSurface& GetSurface() const { return Surface; }
 	EJuliusConnectLink GetLink() const { return Link; }
+
+	/** The link state as a word, for proofs. "Online", "Connecting" or "Offline".
+	 *
+	 *  EXPOSED BECAUSE A PROOF COULD NOT SEE IT. I reported "nothing in Wonderland says the service is down"
+	 *  as a founder blocker, then found MakeOffline() already draws JULIUS CONNECT IS OFFLINE and the exact
+	 *  command to start it. Reading that in the source is not the same as seeing it render -- a widget can
+	 *  exist in code and still never draw -- and there was no way to ask the running game which state it was
+	 *  in. */
+	UFUNCTION(BlueprintPure, Category = "Julius|Connect")
+	FString GetLinkState() const
+	{
+		switch (Link)
+		{
+		case EJuliusConnectLink::Online:     return TEXT("Online");
+		case EJuliusConnectLink::Connecting: return TEXT("Connecting");
+		default:                             return TEXT("Offline");
+		}
+	}
+
+	/** What went wrong, as the offline panel shows it. */
+	UFUNCTION(BlueprintPure, Category = "Julius|Connect")
+	FString GetLinkProblem() const { return Problem; }
+
+	/** The command the offline panel prints, so a proof can check the panel offers a way out. */
+	UFUNCTION(BlueprintPure, Category = "Julius|Connect")
+	FString GetStartCommand() const { return StartCommand(); }
 	/** Why the link is not online, or why the last surface was refused. */
 	const FString& GetProblem() const { return Problem; }
 	/** Bumps on every change a view should redraw for (a new surface, the link, a terminal line). */

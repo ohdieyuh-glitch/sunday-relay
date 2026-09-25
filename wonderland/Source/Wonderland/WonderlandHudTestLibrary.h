@@ -106,4 +106,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
 	static bool IsDrawingWonderlandCursor(UObject* WorldContextObject);
 
+	/** The Julius Connect link as a word: "Online", "Connecting", "Offline", or "" if the subsystem is absent.
+	 *
+	 *  ROUTED THROUGH HERE BECAUSE PYTHON CANNOT REACH A GameInstanceSubsystem. unreal.get_editor_subsystem
+	 *  and get_engine_subsystem exist; there is no binding for UGameInstance::GetSubsystem, and a proof that
+	 *  cannot ask the game what state it is in has to settle for photographing it. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static FString GetJuliusLinkState(UObject* WorldContextObject);
+
+	/** What the offline panel gives as the reason, and the command it prints to fix it. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static FString GetJuliusLinkProblem(UObject* WorldContextObject);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static FString GetJuliusStartCommand(UObject* WorldContextObject);
+
 };

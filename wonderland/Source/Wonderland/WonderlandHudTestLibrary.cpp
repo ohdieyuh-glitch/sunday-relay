@@ -1,4 +1,6 @@
 #include "WonderlandHudTestLibrary.h"
+#include "Engine/GameInstance.h"
+#include "WonderlandJuliusConnect.h"
 
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/Engine.h"
@@ -202,4 +204,34 @@ bool UWonderlandHudTestLibrary::IsDrawingWonderlandCursor(UObject* WorldContextO
 	// GetIsUsingSoftwareCursorWidgets -- GetUseSoftwareCursorWidgets does not exist, which the compiler
 	// said rather than the runtime, and that is the good case.
 	return Viewport != nullptr && Viewport->GetIsUsingSoftwareCursorWidgets();
+}
+
+namespace
+{
+	UWonderlandJuliusConnectSubsystem* FindConnect(const UObject* WorldContextObject)
+	{
+		const UWorld* World = GEngine != nullptr
+			? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull)
+			: nullptr;
+		UGameInstance* Instance = World != nullptr ? World->GetGameInstance() : nullptr;
+		return Instance != nullptr ? Instance->GetSubsystem<UWonderlandJuliusConnectSubsystem>() : nullptr;
+	}
+}
+
+FString UWonderlandHudTestLibrary::GetJuliusLinkState(UObject* WorldContextObject)
+{
+	const UWonderlandJuliusConnectSubsystem* Connect = FindConnect(WorldContextObject);
+	return Connect != nullptr ? Connect->GetLinkState() : FString();
+}
+
+FString UWonderlandHudTestLibrary::GetJuliusLinkProblem(UObject* WorldContextObject)
+{
+	const UWonderlandJuliusConnectSubsystem* Connect = FindConnect(WorldContextObject);
+	return Connect != nullptr ? Connect->GetLinkProblem() : FString();
+}
+
+FString UWonderlandHudTestLibrary::GetJuliusStartCommand(UObject* WorldContextObject)
+{
+	const UWonderlandJuliusConnectSubsystem* Connect = FindConnect(WorldContextObject);
+	return Connect != nullptr ? Connect->GetStartCommand() : FString();
 }
