@@ -1,0 +1,67 @@
+{
+ "name": "zc_seam_verify",
+ "started": "2026-09-24 20:57:30",
+ "status": "verified",
+ "instances_by_ring_metres": {},
+ "seam_ring_800_900": {},
+ "walks": [
+  {
+   "nation": "ICARUS",
+   "radius_m": 780,
+   "landed_z": 101.2,
+   "fell": false
+  },
+  {
+   "nation": "ICARUS",
+   "radius_m": 850,
+   "landed_z": 395.4,
+   "fell": false
+  },
+  {
+   "nation": "ICARUS",
+   "radius_m": 920,
+   "landed_z": 75.2,
+   "fell": false
+  },
+  {
+   "nation": "NOCTIS",
+   "radius_m": 780,
+   "landed_z": 101.2,
+   "fell": false
+  },
+  {
+   "nation": "NOCTIS",
+   "radius_m": 850,
+   "landed_z": 395.4,
+   "fell": false
+  },
+  {
+   "nation": "NOCTIS",
+   "radius_m": 920,
+   "landed_z": 75.2,
+   "fell": false
+  },
+  {
+   "nation": "TARTARUS",
+   "radius_m": 780,
+   "landed_z": 101.2,
+   "fell": false
+  },
+  {
+   "nation": "TARTARUS",
+   "radius_m": 850,
+   "landed_z": 395.4,
+   "fell": false
+  },
+  {
+   "nation": "TARTARUS",
+   "radius_m": 920,
+   "landed_z": 75.2,
+   "fell": false
+  }
+ ],
+ "walks_that_fell": 0,
+ "finished": "2026-09-24 20:58:25",
+ "seconds": 55.18,
+ "log": ""
+}

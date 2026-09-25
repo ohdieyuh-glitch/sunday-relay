@@ -1,0 +1,28 @@
+{
+ "name": "zc_brain_intruder",
+ "started": "2026-09-24 11:10:35",
+ "status": "measured",
+ "window_rect_LTRB": [
+  0.502,
+  0.125,
+  0.892,
+  0.956
+ ],
+ "brain_distance_uu": 163.7,
+ "in_the_window": [
+  {
+   "name": "WonderlandBrainSculpture_0",
+   "class": "WonderlandBrainSculpture",
+   "distance_uu": 163.7,
+   "nearer_than_brain": false,
+   "screen_uv": [
+    0.666,
+    0.546
+   ]
+  }
+ ],
+ "count_in_window": 1,
+ "finished": "2026-09-24 11:11:08",
+ "seconds": 33.38,
+ "log": ""
+}

@@ -192,6 +192,20 @@ private:
 	void DriftTheSnow();
 
 	/**
+	 * THE CHAMBER'S OWN TWO LIGHTS, a key and a fill.
+	 *
+	 * The sculpture never had a light. It did not need one while it was built out of the panel's own
+	 * blue-black: a near-black mass on a near-black wall reads by silhouette alone. A RED brain on a WHITE
+	 * wall does not -- the chamber is a closed box, the sun barely reaches inside it, and without a light of
+	 * its own the brain photographed as a black blob in a beige room.
+	 *
+	 * Placed from the lens every frame like the panels are, so the key always falls from the founder's upper
+	 * left and the folds read the same way from any angle the sculpture is viewed at.
+	 */
+	UPROPERTY() TObjectPtr<class UPointLightComponent> KeyLight = nullptr;
+	UPROPERTY() TObjectPtr<class UPointLightComponent> FillLight = nullptr;
+
+	/**
 	 * THE HEAD'S PATH, RESAMPLED AT A FIXED ARC LENGTH, in a ring that never reallocates. Storing one sample per
 	 * frame would make the body's shape depend on the frame rate; storing one per fixed TIME still ties its
 	 * length to the head's speed. One per fixed DISTANCE ties it to neither.

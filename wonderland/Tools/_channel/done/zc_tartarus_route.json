@@ -1,0 +1,1015 @@
+{
+ "name": "zc_tartarus_route",
+ "started": "2026-09-25 03:52:29",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "T01",
+   "name": "some corridor from the Tartarus gate to the TQ03 band is walkable end to end",
+   "pass": true,
+   "detail": {
+    "best_offset_m": -56.0,
+    "blocked_segments": 0,
+    "steps_too_tall": 0,
+    "no_ground": 0,
+    "lanes_tried": 19,
+    "from_m": 600.0,
+    "to_m": 1000.0,
+    "note": "swept with the Dog's own capsule (r=36 h=87) and its own max_step_height 30 uu"
+   }
+  },
+  {
+   "id": "T02",
+   "name": "a bending route was measurable by the engine's navigation",
+   "pass": false,
+   "detail": {
+    "path_found": false,
+    "clean_straight_lanes": [
+     "-56 m"
+    ],
+    "nav_error": "no path returned",
+    "note": "no nav data on this map, so routing is UNMEASURED here; T01's capsule sweep is what stands as traversal evidence, and it passes"
+   }
+  },
+  {
+   "id": "T03",
+   "name": "the ledger's stuck point is a building, not an unaccounted generator surface",
+   "pass": true,
+   "detail": {
+    "surface": {
+     "z": 1255.2,
+     "on": "TQ01_TQ01_Palace_Dome_Grand_stone"
+    },
+    "note": "the ledger recorded folder:V2 generator geometry; the surface names itself TQ01's palace dome"
+   }
+  }
+ ],
+ "dog_limits": {
+  "max_step_height_uu": 30.0,
+  "capsule_radius_uu": 35.900001525878906,
+  "capsule_half_height_uu": 87.07499694824219
+ },
+ "lanes": {
+  "-72 m": {
+   "offset_m": -72.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 10,
+   "blocked_segments": 7,
+   "blockers": [
+    {
+     "at_m": 660.0,
+     "by": "TQ01_TQ01_Tower_Base_Buttressed_stone_da",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 665.0,
+     "by": "TQ01_TQ01_Tower_Base_Buttressed_stone_da",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 675.0,
+     "by": "TQ01_TQ01_Tower_Base_Buttressed_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 725.0,
+     "by": "TQ01_TQ01_Tower_Base_Terraced_stone",
+     "normal_z": 0.096
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 665.0,
+     "rise_uu": 88.0,
+     "from": "V2_GroundSlab",
+     "to": "TQ01_TQ01_Tower_Base_Buttressed_stone_da"
+    },
+    {
+     "at_m": 675.0,
+     "rise_uu": 62.0,
+     "from": "TQ01_TQ01_Tower_Base_Buttressed_stone_da",
+     "to": "TQ01_TQ01_WorksBlock"
+    },
+    {
+     "at_m": 725.0,
+     "rise_uu": 130.0,
+     "from": "TQ01_TQ01_WorksBlock",
+     "to": "TQ01_TQ01_Tower_Base_Terraced_stone"
+    },
+    {
+     "at_m": 730.0,
+     "rise_uu": 238.7,
+     "from": "TQ01_TQ01_Tower_Base_Terraced_stone",
+     "to": "TQ01_TQ01_Tower_Base_Terraced_stone"
+    }
+   ]
+  },
+  "-64 m": {
+   "offset_m": -64.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 22,
+   "blocked_segments": 27,
+   "blockers": [
+    {
+     "at_m": 665.0,
+     "by": "TQ01_TQ01_Tower_Base_Buttressed_stone_da",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 670.0,
+     "by": "TQ01_TQ01_Tower_Base_Buttressed_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 680.0,
+     "by": "TQ01_TQ01_House_Hipped_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 685.0,
+     "by": "TQ01_TQ01_House_Hipped_stone",
+     "normal_z": 0.022
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 665.0,
+     "rise_uu": 88.0,
+     "from": "V2_GroundSlab",
+     "to": "TQ01_TQ01_Tower_Base_Buttressed_stone_da"
+    },
+    {
+     "at_m": 670.0,
+     "rise_uu": 231.0,
+     "from": "TQ01_TQ01_Tower_Base_Buttressed_stone_da",
+     "to": "TQ01_TQ01_House_Gabled_stone"
+    },
+    {
+     "at_m": 675.0,
+     "rise_uu": 293.0,
+     "from": "TQ01_TQ01_House_Gabled_stone",
+     "to": "TQ01_TQ01_WorksBlock"
+    },
+    {
+     "at_m": 680.0,
+     "rise_uu": 293.0,
+     "from": "TQ01_TQ01_WorksBlock",
+     "to": "TQ01_TQ01_House_Hipped_stone"
+    }
+   ]
+  },
+  "-56 m": {
+   "offset_m": -56.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 0,
+   "blocked_segments": 0,
+   "blockers": [],
+   "tall_steps": []
+  },
+  "-48 m": {
+   "offset_m": -48.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 10,
+   "blocked_segments": 24,
+   "blockers": [
+    {
+     "at_m": 765.0,
+     "by": "TQ01_TQ01_Palace_Wing_stone",
+     "normal_z": 0.002
+    },
+    {
+     "at_m": 780.0,
+     "by": "TQ01_TQ01_Palace_Wing_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 795.0,
+     "by": "TQ01_TQ01_Tower_Base_Battered_stone",
+     "normal_z": 0.141
+    },
+    {
+     "at_m": 840.0,
+     "by": "V2Batch_kerb_stone_MI_V2_MarblePale",
+     "normal_z": -0.001
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 765.0,
+     "rise_uu": 375.0,
+     "from": "TQ01_TQ01_WorksBlock",
+     "to": "TQ01_TQ01_Palace_Wing_stone"
+    },
+    {
+     "at_m": 780.0,
+     "rise_uu": 375.0,
+     "from": "TQ01_TQ01_Palace_Wing_stone",
+     "to": "TQ01_TQ01_WorksBlock"
+    },
+    {
+     "at_m": 795.0,
+     "rise_uu": 123.0,
+     "from": "TQ01_TQ01_WorksBlock",
+     "to": "TQ01_TQ01_Tower_Base_Battered_stone"
+    },
+    {
+     "at_m": 815.0,
+     "rise_uu": 149.0,
+     "from": "TQ01_TQ01_Tower_Base_Battered_stone",
+     "to": "V2_GroundSlab"
+    }
+   ]
+  },
+  "-40 m": {
+   "offset_m": -40.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 21,
+   "blocked_segments": 17,
+   "blockers": [
+    {
+     "at_m": 675.0,
+     "by": "TQ01_TQ01_Market_Corner_Storefront_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 695.0,
+     "by": "TQ01_TQ01_Market_Corner_Storefront_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 715.0,
+     "by": "TQ01_TQ01_Market_Corner_Storefront_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 765.0,
+     "by": "TQ01_TQ01_Palace_Wing_stone",
+     "normal_z": 0.0
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 650.0,
+     "rise_uu": 338.0,
+     "from": "TQ01_TQ01_YardBand",
+     "to": "TQ01_TQ01_Market_Corner_Storefront_stone"
+    },
+    {
+     "at_m": 655.0,
+     "rise_uu": 338.0,
+     "from": "TQ01_TQ01_Market_Corner_Storefront_stone",
+     "to": "TQ01_TQ01_YardBand"
+    },
+    {
+     "at_m": 715.0,
+     "rise_uu": 338.0,
+     "from": "TQ01_TQ01_YardBand",
+     "to": "TQ01_TQ01_Market_Corner_Storefront_stone"
+    },
+    {
+     "at_m": 720.0,
+     "rise_uu": 338.0,
+     "from": "TQ01_TQ01_Market_Corner_Storefront_stone",
+     "to": "TQ01_TQ01_YardBand"
+    }
+   ]
+  },
+  "-32 m": {
+   "offset_m": -32.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 11,
+   "blocked_segments": 3,
+   "blockers": [
+    {
+     "at_m": 765.0,
+     "by": "TQ01_TQ01_Palace_Wing_stone_dark",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 780.0,
+     "by": "TQ01_TQ01_Palace_Wing_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 900.0,
+     "by": "TQ03_TQ03_Colonnade_Arcade_stone",
+     "normal_z": 0.0
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 765.0,
+     "rise_uu": 375.0,
+     "from": "TQ01_TQ01_YardBand",
+     "to": "TQ01_TQ01_Palace_Wing_stone"
+    },
+    {
+     "at_m": 780.0,
+     "rise_uu": 375.0,
+     "from": "TQ01_TQ01_Palace_Wing_stone",
+     "to": "TQ01_TQ01_YardBand"
+    },
+    {
+     "at_m": 900.0,
+     "rise_uu": 81.0,
+     "from": "V2_GroundSlab",
+     "to": "TQ03_TQ03_Colonnade_Arcade_stone"
+    },
+    {
+     "at_m": 905.0,
+     "rise_uu": 81.0,
+     "from": "TQ03_TQ03_Colonnade_Arcade_stone",
+     "to": "V2_GroundSlab"
+    }
+   ]
+  },
+  "-24 m": {
+   "offset_m": -24.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 15,
+   "blocked_segments": 31,
+   "blockers": [
+    {
+     "at_m": 650.0,
+     "by": "TQ01_TQ01_Market_Canopy_stone",
+     "normal_z": 0.005
+    },
+    {
+     "at_m": 655.0,
+     "by": "TQ01_TQ01_Market_Canopy_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 660.0,
+     "by": "TQ01_TQ01_Market_Canopy_stone",
+     "normal_z": 0.005
+    },
+    {
+     "at_m": 665.0,
+     "by": "TQ01_TQ01_Market_Canopy_stone",
+     "normal_z": 0.0
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 725.0,
+     "rise_uu": 102.0,
+     "from": "TQ01_TQ01_YardBand",
+     "to": "TQ01_TQ01_Market_Canopy_stone"
+    },
+    {
+     "at_m": 730.0,
+     "rise_uu": 102.0,
+     "from": "TQ01_TQ01_Market_Canopy_stone",
+     "to": "TQ01_TQ01_YardBand"
+    },
+    {
+     "at_m": 820.0,
+     "rise_uu": 318.0,
+     "from": "V2_GroundSlab",
+     "to": "SF03_SF03_Garden_Retaining_Run_stone"
+    },
+    {
+     "at_m": 825.0,
+     "rise_uu": 318.0,
+     "from": "SF03_SF03_Garden_Retaining_Run_stone",
+     "to": "V2_GroundSlab"
+    }
+   ]
+  },
+  "-16 m": {
+   "offset_m": -16.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 3,
+   "blocked_segments": 5,
+   "blockers": [
+    {
+     "at_m": 610.0,
+     "by": "TQ01_TQ01_Object_LanternStandard_stone",
+     "normal_z": -0.0
+    },
+    {
+     "at_m": 625.0,
+     "by": "TQ01_TQ01_Object_LanternStandard_stone",
+     "normal_z": -0.0
+    },
+    {
+     "at_m": 630.0,
+     "by": "TQ01_TQ01_Object_LanternStandard_stone",
+     "normal_z": 0.351
+    },
+    {
+     "at_m": 810.0,
+     "by": "TQ01_TQ01_Palace_Dome_Grand_stone",
+     "normal_z": 0.002
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 810.0,
+     "rise_uu": 52.0,
+     "from": "TQ01_TQ01_YardBand",
+     "to": "TQ01_TQ01_Palace_Dome_Grand_stone"
+    },
+    {
+     "at_m": 815.0,
+     "rise_uu": 323.0,
+     "from": "TQ01_TQ01_Palace_Dome_Grand_stone",
+     "to": "TQ01_TQ01_Palace_Dome_Grand_stone"
+    },
+    {
+     "at_m": 845.0,
+     "rise_uu": 401.0,
+     "from": "TQ01_TQ01_Palace_Dome_Grand_stone",
+     "to": "V2_GroundSlab"
+    }
+   ]
+  },
+  "-8 m": {
+   "offset_m": -8.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 3,
+   "blocked_segments": 2,
+   "blockers": [
+    {
+     "at_m": 810.0,
+     "by": "TQ01_TQ01_Palace_Dome_Grand_stone",
+     "normal_z": -0.201
+    },
+    {
+     "at_m": 815.0,
+     "by": "TQ01_TQ01_Palace_Dome_Grand_stone",
+     "normal_z": 0.0
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 810.0,
+     "rise_uu": 52.0,
+     "from": "TQ01_TQ01_Road",
+     "to": "TQ01_TQ01_Palace_Dome_Grand_stone"
+    },
+    {
+     "at_m": 815.0,
+     "rise_uu": 323.0,
+     "from": "TQ01_TQ01_Palace_Dome_Grand_stone",
+     "to": "TQ01_TQ01_Palace_Dome_Grand_stone"
+    },
+    {
+     "at_m": 845.0,
+     "rise_uu": 401.0,
+     "from": "TQ01_TQ01_Palace_Dome_Grand_stone",
+     "to": "V2_GroundSlab"
+    }
+   ]
+  },
+  "+0 m": {
+   "offset_m": 0.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 7,
+   "blocked_segments": 7,
+   "blockers": [
+    {
+     "at_m": 625.0,
+     "by": "V2Batch_kerb_stone_MI_V2_MarblePale",
+     "normal_z": -0.001
+    },
+    {
+     "at_m": 630.0,
+     "by": "V2Batch_kerb_stone_MI_V2_MarbleCool",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 635.0,
+     "by": "TQ01_TQ01_Arch_Twin_Tiered_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 640.0,
+     "by": "TQ01_TQ01_Arch_Twin_Tiered_stone",
+     "normal_z": 0.0
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 640.0,
+     "rise_uu": 72.0,
+     "from": "TQ01_TQ01_Causeway",
+     "to": "TQ01_TQ01_Arch_Twin_Tiered_stone"
+    },
+    {
+     "at_m": 645.0,
+     "rise_uu": 72.0,
+     "from": "TQ01_TQ01_Arch_Twin_Tiered_stone",
+     "to": "TQ01_TQ01_Road"
+    },
+    {
+     "at_m": 810.0,
+     "rise_uu": 52.0,
+     "from": "TQ01_TQ01_Road",
+     "to": "TQ01_TQ01_Palace_Dome_Grand_stone"
+    },
+    {
+     "at_m": 815.0,
+     "rise_uu": 323.0,
+     "from": "TQ01_TQ01_Palace_Dome_Grand_stone",
+     "to": "TQ01_TQ01_Palace_Dome_Grand_stone"
+    }
+   ]
+  },
+  "+8 m": {
+   "offset_m": 8.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 5,
+   "blocked_segments": 5,
+   "blockers": [
+    {
+     "at_m": 625.0,
+     "by": "V2Batch_kerb_stone_MI_V2_MarblePale",
+     "normal_z": 0.003
+    },
+    {
+     "at_m": 630.0,
+     "by": "V2Batch_castle_hall_MI_V2_MarblePale",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 635.0,
+     "by": "V2Batch_castle_hall_MI_V2_MarblePale",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 810.0,
+     "by": "TQ01_TQ01_Palace_Dome_Grand_stone",
+     "normal_z": -0.213
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 630.0,
+     "rise_uu": 148.8,
+     "from": "TQ01_TQ01_Causeway",
+     "to": "V2Batch_kerb_stone_MI_V2_MarblePale"
+    },
+    {
+     "at_m": 635.0,
+     "rise_uu": 148.8,
+     "from": "V2Batch_kerb_stone_MI_V2_MarblePale",
+     "to": "TQ01_TQ01_Causeway"
+    },
+    {
+     "at_m": 810.0,
+     "rise_uu": 52.0,
+     "from": "TQ01_TQ01_Road",
+     "to": "TQ01_TQ01_Palace_Dome_Grand_stone"
+    },
+    {
+     "at_m": 815.0,
+     "rise_uu": 323.0,
+     "from": "TQ01_TQ01_Palace_Dome_Grand_stone",
+     "to": "TQ01_TQ01_Palace_Dome_Grand_stone"
+    }
+   ]
+  },
+  "+16 m": {
+   "offset_m": 16.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 3,
+   "blocked_segments": 5,
+   "blockers": [
+    {
+     "at_m": 610.0,
+     "by": "TQ01_TQ01_Object_LanternStandard_stone",
+     "normal_z": -0.0
+    },
+    {
+     "at_m": 625.0,
+     "by": "TQ01_TQ01_Object_LanternStandard_stone",
+     "normal_z": -0.0
+    },
+    {
+     "at_m": 630.0,
+     "by": "TQ01_TQ01_Object_LanternStandard_stone",
+     "normal_z": 0.351
+    },
+    {
+     "at_m": 810.0,
+     "by": "TQ01_TQ01_Palace_Dome_Grand_stone",
+     "normal_z": -0.002
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 810.0,
+     "rise_uu": 52.0,
+     "from": "TQ01_TQ01_YardBand",
+     "to": "TQ01_TQ01_Palace_Dome_Grand_stone"
+    },
+    {
+     "at_m": 815.0,
+     "rise_uu": 323.0,
+     "from": "TQ01_TQ01_Palace_Dome_Grand_stone",
+     "to": "TQ01_TQ01_Palace_Dome_Grand_stone"
+    },
+    {
+     "at_m": 845.0,
+     "rise_uu": 401.0,
+     "from": "TQ01_TQ01_Palace_Dome_Grand_stone",
+     "to": "V2_GroundSlab"
+    }
+   ]
+  },
+  "+24 m": {
+   "offset_m": 24.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 13,
+   "blocked_segments": 33,
+   "blockers": [
+    {
+     "at_m": 650.0,
+     "by": "TQ01_TQ01_Market_Canopy_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 655.0,
+     "by": "TQ01_TQ01_Market_Canopy_stone",
+     "normal_z": 0.005
+    },
+    {
+     "at_m": 660.0,
+     "by": "TQ01_TQ01_Market_Canopy_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 665.0,
+     "by": "TQ01_TQ01_Market_Canopy_stone",
+     "normal_z": 0.005
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 820.0,
+     "rise_uu": 318.0,
+     "from": "V2_GroundSlab",
+     "to": "SF03_SF03_Garden_Retaining_Run_stone"
+    },
+    {
+     "at_m": 825.0,
+     "rise_uu": 318.0,
+     "from": "SF03_SF03_Garden_Retaining_Run_stone",
+     "to": "V2_GroundSlab"
+    },
+    {
+     "at_m": 860.0,
+     "rise_uu": 292.0,
+     "from": "TQ03_TQ03_CourtBand",
+     "to": "SF03_SF03_Garden_Retaining_Run_stone"
+    },
+    {
+     "at_m": 865.0,
+     "rise_uu": 292.0,
+     "from": "SF03_SF03_Garden_Retaining_Run_stone",
+     "to": "TQ03_TQ03_CourtBand"
+    }
+   ]
+  },
+  "+32 m": {
+   "offset_m": 32.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 11,
+   "blocked_segments": 3,
+   "blockers": [
+    {
+     "at_m": 765.0,
+     "by": "TQ01_TQ01_Palace_Wing_stone_dark",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 780.0,
+     "by": "TQ01_TQ01_Palace_Wing_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 900.0,
+     "by": "TQ03_TQ03_Colonnade_Arcade_stone",
+     "normal_z": 0.0
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 765.0,
+     "rise_uu": 375.0,
+     "from": "TQ01_TQ01_YardBand",
+     "to": "TQ01_TQ01_Palace_Wing_stone"
+    },
+    {
+     "at_m": 780.0,
+     "rise_uu": 375.0,
+     "from": "TQ01_TQ01_Palace_Wing_stone",
+     "to": "TQ01_TQ01_YardBand"
+    },
+    {
+     "at_m": 900.0,
+     "rise_uu": 81.0,
+     "from": "V2_GroundSlab",
+     "to": "TQ03_TQ03_Colonnade_Arcade_stone"
+    },
+    {
+     "at_m": 905.0,
+     "rise_uu": 81.0,
+     "from": "TQ03_TQ03_Colonnade_Arcade_stone",
+     "to": "V2_GroundSlab"
+    }
+   ]
+  },
+  "+40 m": {
+   "offset_m": 40.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 20,
+   "blocked_segments": 18,
+   "blockers": [
+    {
+     "at_m": 655.0,
+     "by": "TQ01_TQ01_Market_Corner_Storefront_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 660.0,
+     "by": "TQ01_TQ01_Market_Corner_Storefront_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 675.0,
+     "by": "TQ01_TQ01_Market_Corner_Storefront_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 720.0,
+     "by": "TQ01_TQ01_Market_Corner_Storefront_stone",
+     "normal_z": 0.0
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 675.0,
+     "rise_uu": 338.0,
+     "from": "TQ01_TQ01_YardBand",
+     "to": "TQ01_TQ01_Market_Corner_Storefront_stone"
+    },
+    {
+     "at_m": 680.0,
+     "rise_uu": 338.0,
+     "from": "TQ01_TQ01_Market_Corner_Storefront_stone",
+     "to": "TQ01_TQ01_YardBand"
+    },
+    {
+     "at_m": 695.0,
+     "rise_uu": 338.0,
+     "from": "TQ01_TQ01_YardBand",
+     "to": "TQ01_TQ01_Market_Corner_Storefront_stone"
+    },
+    {
+     "at_m": 700.0,
+     "rise_uu": 338.0,
+     "from": "TQ01_TQ01_Market_Corner_Storefront_stone",
+     "to": "TQ01_TQ01_YardBand"
+    }
+   ]
+  },
+  "+48 m": {
+   "offset_m": 48.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 6,
+   "blocked_segments": 21,
+   "blockers": [
+    {
+     "at_m": 765.0,
+     "by": "TQ01_TQ01_Palace_Wing_stone",
+     "normal_z": -0.002
+    },
+    {
+     "at_m": 780.0,
+     "by": "TQ01_TQ01_Palace_Wing_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 795.0,
+     "by": "TQ01_TQ01_Tower_Base_Terraced_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 915.0,
+     "by": "TQ03_TQ03_Market_Canopy_stone",
+     "normal_z": 0.0
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 765.0,
+     "rise_uu": 375.0,
+     "from": "TQ01_TQ01_WorksBlock",
+     "to": "TQ01_TQ01_Palace_Wing_stone"
+    },
+    {
+     "at_m": 780.0,
+     "rise_uu": 375.0,
+     "from": "TQ01_TQ01_Palace_Wing_stone",
+     "to": "TQ01_TQ01_WorksBlock"
+    },
+    {
+     "at_m": 790.0,
+     "rise_uu": 130.0,
+     "from": "TQ01_TQ01_WorksBlock",
+     "to": "TQ01_TQ01_Tower_Base_Terraced_stone"
+    },
+    {
+     "at_m": 795.0,
+     "rise_uu": 236.8,
+     "from": "TQ01_TQ01_Tower_Base_Terraced_stone",
+     "to": "TQ01_TQ01_Tower_Base_Terraced_stone"
+    }
+   ]
+  },
+  "+56 m": {
+   "offset_m": 56.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 3,
+   "blocked_segments": 1,
+   "blockers": [
+    {
+     "at_m": 800.0,
+     "by": "TQ01_TQ01_Tower_Base_Terraced_stone",
+     "normal_z": 0.0
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 795.0,
+     "rise_uu": 130.0,
+     "from": "TQ01_TQ01_WorksBlock",
+     "to": "TQ01_TQ01_Tower_Base_Terraced_stone"
+    },
+    {
+     "at_m": 800.0,
+     "rise_uu": 93.5,
+     "from": "TQ01_TQ01_Tower_Base_Terraced_stone",
+     "to": "TQ01_TQ01_Tower_Base_Terraced_stone"
+    },
+    {
+     "at_m": 810.0,
+     "rise_uu": 228.4,
+     "from": "TQ01_TQ01_Tower_Base_Terraced_stone",
+     "to": "TQ01_TQ01_WorksBlock"
+    }
+   ]
+  },
+  "+64 m": {
+   "offset_m": 64.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 20,
+   "blocked_segments": 28,
+   "blockers": [
+    {
+     "at_m": 660.0,
+     "by": "TQ01_TQ01_Tower_Base_Battered_stone",
+     "normal_z": 0.141
+    },
+    {
+     "at_m": 665.0,
+     "by": "TQ01_TQ01_Tower_Base_Battered_stone",
+     "normal_z": 0.0
+    },
+    {
+     "at_m": 670.0,
+     "by": "TQ01_TQ01_House_Gabled_stone",
+     "normal_z": -0.027
+    },
+    {
+     "at_m": 680.0,
+     "by": "TQ01_TQ01_House_Hipped_stone",
+     "normal_z": 0.0
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 665.0,
+     "rise_uu": 149.0,
+     "from": "V2_GroundSlab",
+     "to": "TQ01_TQ01_Tower_Base_Battered_stone"
+    },
+    {
+     "at_m": 670.0,
+     "rise_uu": 170.0,
+     "from": "TQ01_TQ01_Tower_Base_Battered_stone",
+     "to": "TQ01_TQ01_House_Gabled_stone"
+    },
+    {
+     "at_m": 675.0,
+     "rise_uu": 293.0,
+     "from": "TQ01_TQ01_House_Gabled_stone",
+     "to": "TQ01_TQ01_WorksBlock"
+    },
+    {
+     "at_m": 680.0,
+     "rise_uu": 293.0,
+     "from": "TQ01_TQ01_WorksBlock",
+     "to": "TQ01_TQ01_House_Hipped_stone"
+    }
+   ]
+  },
+  "+72 m": {
+   "offset_m": 72.0,
+   "samples": 81,
+   "no_ground": 0,
+   "steps_too_tall": 9,
+   "blocked_segments": 3,
+   "blockers": [
+    {
+     "at_m": 660.0,
+     "by": "TQ01_TQ01_Tower_Base_Battered_stone",
+     "normal_z": 0.141
+    },
+    {
+     "at_m": 730.0,
+     "by": "TQ01_TQ01_Tower_Base_Buttressed_stone",
+     "normal_z": 0.045
+    },
+    {
+     "at_m": 920.0,
+     "by": "TQ03_TQ03_Tower_Base_Terraced_stone",
+     "normal_z": 0.0
+    }
+   ],
+   "tall_steps": [
+    {
+     "at_m": 660.0,
+     "rise_uu": 149.0,
+     "from": "V2_GroundSlab",
+     "to": "TQ01_TQ01_Tower_Base_Battered_stone"
+    },
+    {
+     "at_m": 675.0,
+     "rise_uu": 204.1,
+     "from": "TQ01_TQ01_Tower_Base_Battered_stone",
+     "to": "TQ01_TQ01_Tower_Base_Battered_stone"
+    },
+    {
+     "at_m": 680.0,
+     "rise_uu": 353.1,
+     "from": "TQ01_TQ01_Tower_Base_Battered_stone",
+     "to": "V2_GroundSlab"
+    },
+    {
+     "at_m": 730.0,
+     "rise_uu": 62.0,
+     "from": "TQ01_TQ01_WorksBlock",
+     "to": "TQ01_TQ01_Tower_Base_Buttressed_stone_da"
+    }
+   ]
+  }
+ },
+ "best_lane": {
+  "offset_m": -56.0,
+  "samples": 81,
+  "no_ground": 0,
+  "steps_too_tall": 0,
+  "blocked_segments": 0,
+  "blockers": [],
+  "tall_steps": []
+ },
+ "clean_straight_lanes": [
+  "-56 m"
+ ],
+ "navigation": {
+  "path_found": false,
+  "points": 0,
+  "straight_uu": 40000.0,
+  "walked_uu": 0.0,
+  "detour": null
+ },
+ "ledger_stuck_point": {
+  "z": 1255.2,
+  "on": "TQ01_TQ01_Palace_Dome_Grand_stone"
+ },
+ "finished": "2026-09-25 03:54:16",
+ "seconds": 106.9,
+ "log": "T01 PASS some corridor from the Tartarus gate to the TQ03 band is walkable end to end {'best_offset_m': -56.0, 'blocked_segments': 0, 'steps_too_tall': 0, 'no_ground': 0, 'lanes_tried': 19, 'from_m': 600.0, 'to_m': 1000.0, 'note': \"swept with the Dog's own capsule (r=36 h=87) and its own max_step_height 30 uu\"}\nT02 FAIL a bending route was measurable by the engine's navigation {'path_found': False, 'clean_straight_lanes': ['-56 m'], 'nav_error': 'no path returned', 'note': \"no nav data on this map, so routing is UNMEASURED here; T01's capsule sweep is what stands as traversal evidence, and it passes\"}\nT03 PASS the ledger's stuck point is a building, not an unaccounted generator surface {'surface': {'z': 1255.2, 'on': 'TQ01_TQ01_Palace_Dome_Grand_stone'}, 'note': \"the ledger recorded folder:V2 generator geometry; the surface names itself TQ01's palace dome\"}\n"
+}

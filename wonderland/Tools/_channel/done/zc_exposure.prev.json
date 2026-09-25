@@ -1,0 +1,195 @@
+{
+ "name": "zc_exposure",
+ "started": "2026-09-25 06:53:16",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "E01",
+   "name": "the world is not clipping large parts of the frame to white",
+   "pass": false,
+   "detail": {
+    "player_view": {
+     "samples": 336,
+     "clipped_pct": 16.96,
+     "near_clipped_pct": 19.64,
+     "crushed_black_pct": 0.89,
+     "mean_luminance": 150.7,
+     "median_luminance": 156.4,
+     "p95_luminance": 255.0
+    },
+    "note": "pixels at 250+ have lost their detail permanently; 2% is the bar"
+   }
+  },
+  {
+   "id": "E02",
+   "name": "a mascot skin filling the frame is not blown out",
+   "pass": false,
+   "detail": {
+    "worst_skin": "celestial_light",
+    "worst": {
+     "samples": 336,
+     "clipped_pct": 8.93,
+     "near_clipped_pct": 11.31,
+     "crushed_black_pct": 4.76,
+     "mean_luminance": 106.9,
+     "median_luminance": 88.5,
+     "p95_luminance": 255.0
+    },
+    "all_skins": {
+     "relay_og": {
+      "samples": 336,
+      "clipped_pct": 2.08,
+      "near_clipped_pct": 2.38,
+      "crushed_black_pct": 8.04,
+      "mean_luminance": 66.5,
+      "median_luminance": 58.1,
+      "p95_luminance": 171.3
+     },
+     "arden_infernal": {
+      "samples": 336,
+      "clipped_pct": 8.04,
+      "near_clipped_pct": 9.52,
+      "crushed_black_pct": 6.85,
+      "mean_luminance": 78.6,
+      "median_luminance": 66.8,
+      "p95_luminance": 254.1
+     },
+     "celestial_light": {
+      "samples": 336,
+      "clipped_pct": 8.93,
+      "near_clipped_pct": 11.31,
+      "crushed_black_pct": 4.76,
+      "mean_luminance": 106.9,
+      "median_luminance": 88.5,
+      "p95_luminance": 255.0
+     }
+    },
+    "note": "the founder's own words: the skins must be clearly visible"
+   }
+  },
+  {
+   "id": "E03",
+   "name": "a companion is not blown out either",
+   "pass": false,
+   "detail": {
+    "companion": {
+     "samples": 336,
+     "clipped_pct": 5.36,
+     "near_clipped_pct": 6.55,
+     "crushed_black_pct": 5.36,
+     "mean_luminance": 93.4,
+     "median_luminance": 73.2,
+     "p95_luminance": 249.7
+    },
+    "measured": true,
+    "note": "named in the same breath as the skins; unmeasured if no standalone companion is present"
+   }
+  },
+  {
+   "id": "E04",
+   "name": "and the picture has not simply been made dark instead",
+   "pass": true,
+   "detail": {
+    "player_view_mean": 150.7,
+    "crushed": 0.89,
+    "note": "guards the fix: reducing glare by underexposing everything would pass E01 and be worse"
+   }
+  }
+ ],
+ "post_process_volumes": {
+  "V2_PostProcess": {
+   "auto_exposure_bias": -0.9,
+   "bloom_intensity": 0.34,
+   "bloom_threshold": 1.0,
+   "override_bloom_intensity": true,
+   "override_bloom_threshold": true,
+   "unbound": true
+  }
+ },
+ "player_eye": [
+  -516,
+  -858,
+  208,
+  -11.0,
+  56.0
+ ],
+ "skins": {
+  "relay_og": {
+   "samples": 336,
+   "clipped_pct": 2.08,
+   "near_clipped_pct": 2.38,
+   "crushed_black_pct": 8.04,
+   "mean_luminance": 66.5,
+   "median_luminance": 58.1,
+   "p95_luminance": 171.3
+  },
+  "arden_infernal": {
+   "samples": 336,
+   "clipped_pct": 8.04,
+   "near_clipped_pct": 9.52,
+   "crushed_black_pct": 6.85,
+   "mean_luminance": 78.6,
+   "median_luminance": 66.8,
+   "p95_luminance": 254.1
+  },
+  "celestial_light": {
+   "samples": 336,
+   "clipped_pct": 8.93,
+   "near_clipped_pct": 11.31,
+   "crushed_black_pct": 4.76,
+   "mean_luminance": 106.9,
+   "median_luminance": 88.5,
+   "p95_luminance": 255.0
+  }
+ },
+ "views": {
+  "01_player_view": {
+   "samples": 336,
+   "clipped_pct": 16.96,
+   "near_clipped_pct": 19.64,
+   "crushed_black_pct": 0.89,
+   "mean_luminance": 150.7,
+   "median_luminance": 156.4,
+   "p95_luminance": 255.0
+  },
+  "02_skin_relay_og": {
+   "samples": 336,
+   "clipped_pct": 2.08,
+   "near_clipped_pct": 2.38,
+   "crushed_black_pct": 8.04,
+   "mean_luminance": 66.5,
+   "median_luminance": 58.1,
+   "p95_luminance": 171.3
+  },
+  "02_skin_arden_infernal": {
+   "samples": 336,
+   "clipped_pct": 8.04,
+   "near_clipped_pct": 9.52,
+   "crushed_black_pct": 6.85,
+   "mean_luminance": 78.6,
+   "median_luminance": 66.8,
+   "p95_luminance": 254.1
+  },
+  "02_skin_celestial_light": {
+   "samples": 336,
+   "clipped_pct": 8.93,
+   "near_clipped_pct": 11.31,
+   "crushed_black_pct": 4.76,
+   "mean_luminance": 106.9,
+   "median_luminance": 88.5,
+   "p95_luminance": 255.0
+  },
+  "03_companion": {
+   "samples": 336,
+   "clipped_pct": 5.36,
+   "near_clipped_pct": 6.55,
+   "crushed_black_pct": 5.36,
+   "mean_luminance": 93.4,
+   "median_luminance": 73.2,
+   "p95_luminance": 249.7
+  }
+ },
+ "finished": "2026-09-25 06:53:52",
+ "seconds": 36.09,
+ "log": "E01 FAIL the world is not clipping large parts of the frame to white {'player_view': {'samples': 336, 'clipped_pct': 16.96, 'near_clipped_pct': 19.64, 'crushed_black_pct': 0.89, 'mean_luminance': 150.7, 'median_luminance': 156.4, 'p95_luminance': 255.0}, 'note': 'pixels at 250+ have lost their detail permanently; 2% is the bar'}\nE02 FAIL a mascot skin filling the frame is not blown out {'worst_skin': 'celestial_light', 'worst': {'samples': 336, 'clipped_pct': 8.93, 'near_clipped_pct': 11.31, 'crushed_black_pct': 4.76, 'mean_luminance': 106.9, 'median_luminance': 88.5, 'p95_luminance': 255.0}, 'all_skins': {'relay_og': {'samples': 336, 'clipped_pct': 2.08, 'near_clipped_pct': 2.38, 'crushed_black_pct': 8.04, 'mean_luminance': 66.5, 'median_luminance': 58.1, 'p95_luminance': 171.3}, 'arden_infernal': {'samples': 336, 'clipped_pct': 8.04, 'near_clipped_pct': 9.52, 'crushed_black_pct': 6.85, 'mean_luminance': 78.6, 'median_luminance': 66.8, 'p95_luminance': 254.1}, 'celestial_light': {'samples': 336, 'clipped_pct': 8.93, 'near_clipped_pct': 11.31, 'crushed_black_pct': 4.76, 'mean_luminance': 106.9, 'median_luminance': 88.5, 'p95_luminance': 255.0}}, 'note': \"the founder's own words: the skins must be clearly visible\"}\nE03 FAIL a companion is not blown out either {'companion': {'samples': 336, 'clipped_pct': 5.36, 'near_clipped_pct': 6.55, 'crushed_black_pct': 5.36, 'mean_luminance': 93.4, 'median_luminance': 73.2, 'p95_luminance': 249.7}, 'measured': True, 'note': 'named in the same breath as the skins; unmeasured if no standalone companion is present'}\nE04 PASS and the picture has not simply been made dark instead {'player_view_mean': 150.7, 'crushed': 0.89, 'note': 'guards the fix: reducing glare by underexposing everything would pass E01 and be worse'}\n"
+}

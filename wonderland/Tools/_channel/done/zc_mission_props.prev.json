@@ -1,0 +1,115 @@
+{
+ "name": "zc_mission_props",
+ "started": "2026-09-25 01:21:11",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "P01",
+   "name": "the bare Dog raises props during its mission at all",
+   "pass": true,
+   "detail": {
+    "props": [
+     "MissionBookPages_0",
+     "MissionBookTurningPage_0",
+     "MissionBook_0",
+     "MissionBrushTip_0",
+     "MissionBrush_0",
+     "MissionLensGlass_0",
+     "MissionLensGlint_0",
+     "MissionLensHandle_0",
+     "MissionLensRim_0"
+    ],
+    "note": "if this is empty the comparison below proves nothing, so it is asked first"
+   }
+  },
+  {
+   "id": "P02",
+   "name": "a costumed Dog raises the same props, stage for stage, as a bare one",
+   "pass": true,
+   "detail": {
+    "differences": [],
+    "stages": 6,
+    "note": "the bare Dog is the authority; no invented count is used"
+   }
+  },
+  {
+   "id": "P03",
+   "name": "the props come down again when the contract completes",
+   "pass": true,
+   "detail": {
+    "bare_left_up": [],
+    "skinned_left_up": []
+   }
+  }
+ ],
+ "bare_wearing": "relay_og",
+ "bare_props": {
+  "PREPARATION": [],
+  "RESEARCH": [
+   "MissionBookPages_0",
+   "MissionBookTurningPage_0",
+   "MissionBook_0"
+  ],
+  "IMPLEMENTATION": [
+   "MissionBrushTip_0",
+   "MissionBrush_0"
+  ],
+  "VERIFICATION": [],
+  "REVIEW": [
+   "MissionLensGlass_0",
+   "MissionLensGlint_0",
+   "MissionLensHandle_0",
+   "MissionLensRim_0"
+  ],
+  "COMPLETED": []
+ },
+ "bare_idle_after": [],
+ "skinned_wearing": "celestial_light",
+ "skinned_props": {
+  "PREPARATION": [],
+  "RESEARCH": [
+   "MissionBookPages_0",
+   "MissionBookTurningPage_0",
+   "MissionBook_0"
+  ],
+  "IMPLEMENTATION": [
+   "MissionBrushTip_0",
+   "MissionBrush_0"
+  ],
+  "VERIFICATION": [],
+  "REVIEW": [
+   "MissionLensGlass_0",
+   "MissionLensGlint_0",
+   "MissionLensHandle_0",
+   "MissionLensRim_0"
+  ],
+  "COMPLETED": []
+ },
+ "skinned_idle_after": [],
+ "props_ever_bare": [
+  "MissionBookPages_0",
+  "MissionBookTurningPage_0",
+  "MissionBook_0",
+  "MissionBrushTip_0",
+  "MissionBrush_0",
+  "MissionLensGlass_0",
+  "MissionLensGlint_0",
+  "MissionLensHandle_0",
+  "MissionLensRim_0"
+ ],
+ "props_ever_skinned": [
+  "MissionBookPages_0",
+  "MissionBookTurningPage_0",
+  "MissionBook_0",
+  "MissionBrushTip_0",
+  "MissionBrush_0",
+  "MissionLensGlass_0",
+  "MissionLensGlint_0",
+  "MissionLensHandle_0",
+  "MissionLensRim_0"
+ ],
+ "stage_differences": [],
+ "finished": "2026-09-25 01:22:32",
+ "seconds": 80.86,
+ "log": "P01 PASS the bare Dog raises props during its mission at all {'props': ['MissionBookPages_0', 'MissionBookTurningPage_0', 'MissionBook_0', 'MissionBrushTip_0', 'MissionBrush_0', 'MissionLensGlass_0', 'MissionLensGlint_0', 'MissionLensHandle_0', 'MissionLensRim_0'], 'note': 'if this is empty the comparison below proves nothing, so it is asked first'}\nP02 PASS a costumed Dog raises the same props, stage for stage, as a bare one {'differences': [], 'stages': 6, 'note': 'the bare Dog is the authority; no invented count is used'}\nP03 PASS the props come down again when the contract completes {'bare_left_up': [], 'skinned_left_up': []}\n"
+}

@@ -1,0 +1,90 @@
+{
+ "name": "zc_tartarus_walk",
+ "started": "2026-09-24 21:02:31",
+ "status": "walked",
+ "stuck_point_radius_m": 843.8,
+ "bearing_deg": -30.0,
+ "steps": [
+  {
+   "radius_m": 760,
+   "asked_xy": [
+    65817,
+    -38001
+   ],
+   "got_xy": [
+    65817,
+    -38001
+   ],
+   "off_by_uu": 0.0,
+   "arrived": true,
+   "landed_z": 101.2,
+   "fell": false
+  },
+  {
+   "radius_m": 800,
+   "asked_xy": [
+    69282,
+    -40001
+   ],
+   "got_xy": [
+    69282,
+    -40001
+   ],
+   "off_by_uu": 0.0,
+   "arrived": true,
+   "landed_z": 101.2,
+   "fell": false
+  },
+  {
+   "radius_m": 844,
+   "asked_xy": [
+    73071,
+    -42189
+   ],
+   "got_xy": [
+    73071,
+    -42189
+   ],
+   "off_by_uu": 0.0,
+   "arrived": true,
+   "landed_z": 1444.9,
+   "fell": false
+  },
+  {
+   "radius_m": 880,
+   "asked_xy": [
+    76210,
+    -44001
+   ],
+   "got_xy": [
+    76210,
+    -44001
+   ],
+   "off_by_uu": 0.0,
+   "arrived": true,
+   "landed_z": 94.3,
+   "fell": false
+  },
+  {
+   "radius_m": 920,
+   "asked_xy": [
+    79674,
+    -46001
+   ],
+   "got_xy": [
+    79674,
+    -46001
+   ],
+   "off_by_uu": 0.0,
+   "arrived": true,
+   "landed_z": 75.2,
+   "fell": false
+  }
+ ],
+ "arrived_count": 5,
+ "fell_count": 0,
+ "z_spread_uu": 1369.7,
+ "finished": "2026-09-24 21:03:36",
+ "seconds": 65.09,
+ "log": ""
+}

@@ -1,0 +1,64 @@
+{
+ "name": "zc_skin_parity_all",
+ "started": "2026-09-25 02:17:26",
+ "status": "measured",
+ "skins": [
+  {
+   "skin": "celestial_light",
+   "worn": true,
+   "dressed": true,
+   "boxes": 1630,
+   "field_mismatches": 0,
+   "first_mismatches": [],
+   "act_lift_uu": 77.97,
+   "act_stillness": 1.0,
+   "wears_the_pose": true,
+   "performs_the_act": true,
+   "verdict": "PASS"
+  },
+  {
+   "skin": "apollo",
+   "worn": true,
+   "dressed": true,
+   "boxes": 2899,
+   "field_mismatches": 0,
+   "first_mismatches": [],
+   "act_lift_uu": 78.0,
+   "act_stillness": 1.0,
+   "wears_the_pose": true,
+   "performs_the_act": true,
+   "verdict": "PASS"
+  },
+  {
+   "skin": "arden_infernal",
+   "worn": true,
+   "dressed": true,
+   "boxes": 1977,
+   "field_mismatches": 0,
+   "first_mismatches": [],
+   "act_lift_uu": 78.0,
+   "act_stillness": 1.0,
+   "wears_the_pose": true,
+   "performs_the_act": true,
+   "verdict": "PASS"
+  },
+  {
+   "skin": "skeleton_flame",
+   "worn": true,
+   "dressed": true,
+   "boxes": 1173,
+   "field_mismatches": 0,
+   "first_mismatches": [],
+   "act_lift_uu": 77.97,
+   "act_stillness": 1.0,
+   "wears_the_pose": true,
+   "performs_the_act": true,
+   "verdict": "PASS"
+  }
+ ],
+ "all_pass": true,
+ "failing": [],
+ "finished": "2026-09-25 02:18:50",
+ "seconds": 83.15,
+ "log": "celestial_light PASS wears the canonical pose and performs the act {'skin': 'celestial_light', 'worn': True, 'dressed': True, 'boxes': 1630, 'field_mismatches': 0, 'first_mismatches': [], 'act_lift_uu': 77.97, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'PASS'}\napollo PASS wears the canonical pose and performs the act {'skin': 'apollo', 'worn': True, 'dressed': True, 'boxes': 2899, 'field_mismatches': 0, 'first_mismatches': [], 'act_lift_uu': 78.0, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'PASS'}\narden_infernal PASS wears the canonical pose and performs the act {'skin': 'arden_infernal', 'worn': True, 'dressed': True, 'boxes': 1977, 'field_mismatches': 0, 'first_mismatches': [], 'act_lift_uu': 78.0, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'PASS'}\nskeleton_flame PASS wears the canonical pose and performs the act {'skin': 'skeleton_flame', 'worn': True, 'dressed': True, 'boxes': 1173, 'field_mismatches': 0, 'first_mismatches': [], 'act_lift_uu': 77.97, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'PASS'}\n"
+}

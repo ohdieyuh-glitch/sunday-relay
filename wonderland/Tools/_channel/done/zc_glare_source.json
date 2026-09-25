@@ -1,0 +1,143 @@
+{
+ "name": "zc_glare_source",
+ "started": "2026-09-25 06:56:11",
+ "status": "probed",
+ "emitters": [
+  {
+   "peak": 8638.0,
+   "actor": "WL_RelayDog_Costume",
+   "component": "Mesh_head_eye_0",
+   "material": "MID_M_WL_VoxelGlow_0",
+   "metres_from_eye": 3.4,
+   "visible": true
+  },
+  {
+   "peak": 7808.0,
+   "actor": "WL_Companion_GPT6Astra",
+   "component": "Mesh_eyes_eye_0",
+   "material": "MID_M_WL_VoxelGlow_0",
+   "metres_from_eye": 4.0,
+   "visible": true
+  },
+  {
+   "peak": 7296.8,
+   "actor": "WL_Companion_ClaudeCodeFable5",
+   "component": "Mesh_eyes_eye_0",
+   "material": "MID_M_WL_VoxelGlow_0",
+   "metres_from_eye": 3.7,
+   "visible": true
+  },
+  {
+   "peak": 6630.4,
+   "actor": "WL_Companion_GPT6Astra",
+   "component": "Mesh_head_gem_0",
+   "material": "MID_M_WL_VoxelGlow_4",
+   "metres_from_eye": 4.0,
+   "visible": true
+  },
+  {
+   "peak": 6630.4,
+   "actor": "WL_Companion_GPT6Astra",
+   "component": "Mesh_body_gem_0",
+   "material": "MID_M_WL_VoxelGlow_4",
+   "metres_from_eye": 4.0,
+   "visible": true
+  },
+  {
+   "peak": 6630.4,
+   "actor": "WL_Companion_GPT6Astra",
+   "component": "Mesh_orbit_gem_0",
+   "material": "MID_M_WL_VoxelGlow_4",
+   "metres_from_eye": 4.0,
+   "visible": true
+  },
+  {
+   "peak": 6430.2,
+   "actor": "WL_Companion_GPT6Astra",
+   "component": "FlameSurface",
+   "material": "MID_M_WL_VoxelGlow_3",
+   "metres_from_eye": 4.0,
+   "visible": true
+  },
+  {
+   "peak": 6430.2,
+   "actor": "WL_Companion_GPT6Astra",
+   "component": "Mesh_wingL_pale_0",
+   "material": "MID_M_WL_VoxelGlow_3",
+   "metres_from_eye": 4.0,
+   "visible": true
+  },
+  {
+   "peak": 6430.2,
+   "actor": "WL_Companion_GPT6Astra",
+   "component": "Mesh_wingR_pale_0",
+   "material": "MID_M_WL_VoxelGlow_3",
+   "metres_from_eye": 4.0,
+   "visible": true
+  },
+  {
+   "peak": 6430.2,
+   "actor": "WL_Companion_GPT6Astra",
+   "component": "Mesh_tail0_pale_0",
+   "material": "MID_M_WL_VoxelGlow_3",
+   "metres_from_eye": 4.0,
+   "visible": true
+  },
+  {
+   "peak": 6430.2,
+   "actor": "WL_Companion_GPT6Astra",
+   "component": "Mesh_tail1_pale_0",
+   "material": "MID_M_WL_VoxelGlow_3",
+   "metres_from_eye": 4.0,
+   "visible": true
+  },
+  {
+   "peak": 6430.2,
+   "actor": "WL_Companion_GPT6Astra",
+   "component": "Mesh_tail2_pale_0",
+   "material": "MID_M_WL_VoxelGlow_3",
+   "metres_from_eye": 4.0,
+   "visible": true
+  },
+  {
+   "peak": 6430.2,
+   "actor": "WL_Companion_GPT6Astra",
+   "component": "Mesh_tail3_pale_0",
+   "material": "MID_M_WL_VoxelGlow_3",
+   "metres_from_eye": 4.0,
+   "visible": true
+  },
+  {
+   "peak": 6430.2,
+   "actor": "WL_Companion_GPT6Astra",
+   "component": "Mesh_tail4_pale_0",
+   "material": "MID_M_WL_VoxelGlow_3",
+   "metres_from_eye": 4.0,
+   "visible": true
+  },
+  {
+   "peak": 6430.2,
+   "actor": "WL_Companion_GPT6Astra",
+   "component": "Mesh_tail5_pale_0",
+   "material": "MID_M_WL_VoxelGlow_3",
+   "metres_from_eye": 4.0,
+   "visible": true
+  },
+  {
+   "peak": 6430.2,
+   "actor": "WL_Companion_GPT6Astra",
+   "component": "Mesh_tail6_pale_0",
+   "material": "MID_M_WL_VoxelGlow_3",
+   "metres_from_eye": 4.0,
+   "visible": true
+  }
+ ],
+ "player_eye": [
+  -516,
+  -858,
+  208
+ ],
+ "log": "",
+ "finished": "2026-09-25 06:56:31",
+ "seconds": 19.54
+}

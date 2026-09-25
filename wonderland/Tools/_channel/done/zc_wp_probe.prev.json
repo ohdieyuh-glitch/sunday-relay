@@ -1,0 +1,49 @@
+{
+ "name": "zc_wp_probe",
+ "started": "2026-09-25 00:21:48",
+ "status": "measured",
+ "original": {
+  "package": "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2",
+  "exists": true,
+  "loaded": true,
+  "world_partition": "unreadable: World: Failed to find property 'world_partition' for attribute 'world_",
+  "is_partitioned": true
+ },
+ "converted": {
+  "package": "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2_WP",
+  "exists": true,
+  "loaded": true,
+  "world_partition": "unreadable: World: Failed to find property 'world_partition' for attribute 'world_",
+  "is_partitioned": true
+ },
+ "tests": [
+  {
+   "id": "H01",
+   "name": "the converted map exists on disk and loads",
+   "pass": true,
+   "detail": {
+    "package": "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2_WP"
+   }
+  },
+  {
+   "id": "H02",
+   "name": "the converted map IS partitioned, which the authoritative one is not",
+   "pass": false,
+   "detail": {
+    "converted": "unreadable: World: Failed to find property 'world_partition' for attribute 'world_",
+    "original": "unreadable: World: Failed to find property 'world_partition' for attribute 'world_"
+   }
+  },
+  {
+   "id": "H03",
+   "name": "the authoritative map is untouched -- still unpartitioned, still the one in use",
+   "pass": false,
+   "detail": {
+    "original": "unreadable: World: Failed to find property 'world_partition' for attribute 'world_"
+   }
+  }
+ ],
+ "finished": "2026-09-25 00:21:49",
+ "seconds": 0.93,
+ "log": "H01 PASS the converted map exists on disk and loads {'package': '/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2_WP'}\nH02 FAIL the converted map IS partitioned, which the authoritative one is not {'converted': \"unreadable: World: Failed to find property 'world_partition' for attribute 'world_\", 'original': \"unreadable: World: Failed to find property 'world_partition' for attribute 'world_\"}\nH03 FAIL the authoritative map is untouched -- still unpartitioned, still the one in use {'original': \"unreadable: World: Failed to find property 'world_partition' for attribute 'world_\"}\n"
+}

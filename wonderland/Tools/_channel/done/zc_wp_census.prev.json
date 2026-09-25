@@ -1,0 +1,47 @@
+{
+ "name": "zc_wp_census",
+ "started": "2026-09-25 00:32:49",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "C01",
+   "name": "the twin has an external actor file for every actor the authoritative map holds",
+   "pass": false,
+   "detail": {
+    "twin_files": 21047,
+    "authoritative_actors": 21052,
+    "surplus": -5,
+    "note": "surplus is expected: world settings, volumes and folders externalise too"
+   }
+  },
+  {
+   "id": "C02",
+   "name": "the twin's own package is a stub, which is what partitioned means",
+   "pass": true,
+   "detail": {
+    "stub_bytes": 13416
+   }
+  }
+ ],
+ "editor_world": "WL_V2_GoldenArrival_WP2",
+ "authoritative_actors": 21052,
+ "authoritative_by_class": {
+  "StaticMeshActor": 16803,
+  "WonderlandInstancedBatch": 3773,
+  "WonderlandHoverProp": 371,
+  "CameraActor": 63,
+  "WonderlandTravelAnchor": 23,
+  "DirectionalLight": 4,
+  "WorldSettings": 1,
+  "Brush": 1,
+  "SkyAtmosphere": 1,
+  "SkyLight": 1,
+  "VolumetricCloud": 1,
+  "ExponentialHeightFog": 1
+ },
+ "twin_external_actor_files": 21047,
+ "twin_stub_bytes": 13416,
+ "finished": "2026-09-25 00:32:50",
+ "seconds": 1.06,
+ "log": "C01 FAIL the twin has an external actor file for every actor the authoritative map holds {'twin_files': 21047, 'authoritative_actors': 21052, 'surplus': -5, 'note': 'surplus is expected: world settings, volumes and folders externalise too'}\nC02 PASS the twin's own package is a stub, which is what partitioned means {'stub_bytes': 13416}\n"
+}

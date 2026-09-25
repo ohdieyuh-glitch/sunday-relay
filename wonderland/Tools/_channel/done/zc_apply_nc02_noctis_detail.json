@@ -1,0 +1,16 @@
+{
+ "name": "zc_apply_nc02_noctis_detail",
+ "started": "2026-09-24 20:41:02",
+ "status": "done",
+ "map_dirty_before": [],
+ "removed": 6,
+ "pass": "NC02",
+ "actors": 0,
+ "batches": 6,
+ "instances": 1476,
+ "hovers": 0,
+ "saved": true,
+ "finished": "2026-09-24 20:41:13",
+ "seconds": 11.37,
+ "log": "applied NC02 0 actors 6 batches 1476 instances\n"
+}

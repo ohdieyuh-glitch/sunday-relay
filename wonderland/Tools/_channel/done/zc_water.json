@@ -1,0 +1,99 @@
+{
+ "name": "zc_water",
+ "started": "2026-09-25 02:44:35",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "Q00",
+   "name": "the water a pond is wearing is translucent, not opaque",
+   "pass": true,
+   "detail": {
+    "blend_mode": "<BlendMode.BLEND_TRANSLUCENT: 2>",
+    "note": "the old master was BLEND_OPAQUE, so no parameter value it had could ever look wet"
+   }
+  },
+  {
+   "id": "Q01",
+   "name": "the ponds, wells, canals and basins are actually wearing it",
+   "pass": true,
+   "detail": {
+    "surfaces": 20,
+    "note": "counted by the material each surface wears in the live world, not by the log line"
+   }
+  },
+  {
+   "id": "Q04",
+   "name": "the capture was still rendering while the world was paused",
+   "pass": true,
+   "detail": {
+    "change_when_poked": 87.9513,
+    "note": "exposure moved one and a half stops with the game paused; a frozen capture would report 0.0 here, and then the paused control under Q02 would prove nothing"
+   }
+  },
+  {
+   "id": "Q03",
+   "name": "the measurement actually looked at something",
+   "pass": true,
+   "detail": {
+    "running": 1.5941,
+    "paused": 0.0,
+    "note": "both flat means the render target came back empty, and Q02 would then be decided by blank pictures rather than by the water"
+   }
+  },
+  {
+   "id": "Q02",
+   "name": "the water moves, and stops moving when the world is paused",
+   "pass": true,
+   "detail": {
+    "change_running": 1.5941,
+    "change_paused": 0.0,
+    "note": "same view and same renderer noise on both sides; pause removes only the animation, so the gap between them is the flow and nothing else"
+   }
+  }
+ ],
+ "surfaces_dressed": 20,
+ "master": {
+  "worn": "MID_M_WL_RealWater_0",
+  "root": "M_WL_RealWater",
+  "blend_mode": "<BlendMode.BLEND_TRANSLUCENT: 2>"
+ },
+ "exposure": {
+  "bias": -2.0,
+  "sample_pixels": [
+   [
+    172,
+    183,
+    193
+   ],
+   [
+    172,
+    185,
+    80
+   ],
+   [
+    154,
+    188,
+    217
+   ],
+   [
+    45,
+    34,
+    31
+   ],
+   [
+    162,
+    183,
+    210
+   ]
+  ]
+ },
+ "flow": {
+  "change_running": 1.5941,
+  "change_paused": 0.0,
+  "grid_points": 108,
+  "change_when_poked_while_paused": 87.9513
+ },
+ "finished": "2026-09-25 02:45:05",
+ "seconds": 29.94,
+ "log": "Q00 PASS the water a pond is wearing is translucent, not opaque {'blend_mode': '<BlendMode.BLEND_TRANSLUCENT: 2>', 'note': 'the old master was BLEND_OPAQUE, so no parameter value it had could ever look wet'}\nQ01 PASS the ponds, wells, canals and basins are actually wearing it {'surfaces': 20, 'note': 'counted by the material each surface wears in the live world, not by the log line'}\nQ04 PASS the capture was still rendering while the world was paused {'change_when_poked': 87.9513, 'note': 'exposure moved one and a half stops with the game paused; a frozen capture would report 0.0 here, and then the paused control under Q02 would prove nothing'}\nQ03 PASS the measurement actually looked at something {'running': 1.5941, 'paused': 0.0, 'note': 'both flat means the render target came back empty, and Q02 would then be decided by blank pictures rather than by the water'}\nQ02 PASS the water moves, and stops moving when the world is paused {'change_running': 1.5941, 'change_paused': 0.0, 'note': 'same view and same renderer noise on both sides; pause removes only the animation, so the gap between them is the flow and nothing else'}\n"
+}

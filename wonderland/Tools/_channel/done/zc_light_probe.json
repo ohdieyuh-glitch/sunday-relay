@@ -1,0 +1,86 @@
+{
+ "name": "zc_light_probe",
+ "started": "2026-09-24 13:38:23",
+ "status": "probed",
+ "lights": [
+  {
+   "name": "DirectionalLight_0",
+   "label": "V2_Sun",
+   "rotation": [
+    -40.0,
+    -11.0,
+    0.0
+   ],
+   "hidden": false,
+   "intensity": "70000.0",
+   "visible": "True",
+   "cast_shadows": "True",
+   "cast_dynamic_shadows": "True",
+   "atmosphere_sun_light": "True",
+   "atmosphere_sun_light_index": "0",
+   "light_color": "<Struct 'Color' (0x0000017FFA9F7AB8) {b: 255, g: 255, r: 255, a: 255}>",
+   "cast_volumetric_shadow": "True",
+   "affects_world": "True"
+  },
+  {
+   "name": "DirectionalLight_1",
+   "label": "V2_GroundBounce",
+   "rotation": [
+    90.0,
+    0.0,
+    0.0
+   ],
+   "hidden": false,
+   "intensity": "1100.0",
+   "visible": "True",
+   "cast_shadows": "False",
+   "cast_dynamic_shadows": "True",
+   "atmosphere_sun_light": "False",
+   "atmosphere_sun_light_index": "0",
+   "light_color": "<Struct 'Color' (0x0000017FFA9F32B8) {b: 220, g: 238, r: 255, a: 255}>",
+   "cast_volumetric_shadow": "False",
+   "affects_world": "True"
+  },
+  {
+   "name": "DirectionalLight_2",
+   "label": "V2_CanopyFill",
+   "rotation": [
+    -18.0,
+    169.0,
+    -0.0
+   ],
+   "hidden": false,
+   "intensity": "2200.0",
+   "visible": "True",
+   "cast_shadows": "False",
+   "cast_dynamic_shadows": "True",
+   "atmosphere_sun_light": "False",
+   "atmosphere_sun_light_index": "0",
+   "light_color": "<Struct 'Color' (0x0000017FFA9FD4B8) {b: 222, g: 238, r: 240, a: 255}>",
+   "cast_volumetric_shadow": "False",
+   "affects_world": "True"
+  },
+  {
+   "name": "DirectionalLight_3",
+   "label": "V2_CanopyFill2",
+   "rotation": [
+    -14.0,
+    49.0,
+    -0.0
+   ],
+   "hidden": false,
+   "intensity": "2200.0",
+   "visible": "True",
+   "cast_shadows": "False",
+   "cast_dynamic_shadows": "True",
+   "atmosphere_sun_light": "False",
+   "atmosphere_sun_light_index": "0",
+   "light_color": "<Struct 'Color' (0x0000017FFA9FBCB8) {b: 228, g: 240, r: 250, a: 255}>",
+   "cast_volumetric_shadow": "False",
+   "affects_world": "True"
+  }
+ ],
+ "finished": "2026-09-24 13:38:57",
+ "seconds": 34.59,
+ "log": ""
+}

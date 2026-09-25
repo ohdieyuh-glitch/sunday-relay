@@ -1,0 +1,130 @@
+{
+ "name": "zc_shadows",
+ "started": "2026-09-25 02:12:50",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "S01",
+   "name": "no two lights are fighting over the same shadow",
+   "pass": true,
+   "detail": {
+    "atmosphere_suns": [
+     "V2_Sun"
+    ],
+    "shadow_casters": [
+     "V2_Sun"
+    ],
+    "directional_lights": 4,
+    "note": "the fills light the scene without casting, so only the sun draws a shadow"
+   }
+  },
+  {
+   "id": "S02",
+   "name": "the sun's shadow bias is in the working band, and it has cascades to spend",
+   "pass": true,
+   "detail": {
+    "bias": 0.30000001192092896,
+    "slope_bias": 0.3499999940395355,
+    "cascades": 4,
+    "dynamic_distance_uu": 18000.0,
+    "note": "below the band is acne on lit surfaces; above it, a shadow that floats off its object"
+   }
+  },
+  {
+   "id": "S03",
+   "name": "with the sky and the camera held still, the shadows hold still too",
+   "pass": true,
+   "detail": {
+    "with_shadows": 0.9196,
+    "without_shadows_control": 2.1575,
+    "allowed": 3.1575,
+    "note": "mean luminance change per sample across 0.8 s; the control is the same scene with r.ShadowQuality 0, so TSR's own jitter is subtracted rather than assumed away"
+   }
+  },
+  {
+   "id": "S04",
+   "name": "the measurement actually looked at something",
+   "pass": true,
+   "detail": {
+    "with_shadows": 0.9196,
+    "without_shadows": 2.1575,
+    "note": "flat on both sides means the render target came back empty, not that the world was still; that is a failure of this job rather than a pass for the product"
+   }
+  }
+ ],
+ "directional_lights": [
+  {
+   "label": "V2_Sun",
+   "intensity": 70000.0,
+   "casts": true,
+   "sun": true,
+   "mobility": "<ComponentMobility.MOVABLE: 2>"
+  },
+  {
+   "label": "V2_GroundBounce",
+   "intensity": 1100.0,
+   "casts": false,
+   "sun": false,
+   "mobility": "<ComponentMobility.MOVABLE: 2>"
+  },
+  {
+   "label": "V2_CanopyFill",
+   "intensity": 2200.0,
+   "casts": false,
+   "sun": false,
+   "mobility": "<ComponentMobility.MOVABLE: 2>"
+  },
+  {
+   "label": "V2_CanopyFill2",
+   "intensity": 2200.0,
+   "casts": false,
+   "sun": false,
+   "mobility": "<ComponentMobility.MOVABLE: 2>"
+  }
+ ],
+ "sun_shadow": {
+  "bias": 0.30000001192092896,
+  "slope_bias": 0.3499999940395355,
+  "cascades": 4,
+  "dynamic_distance_uu": 18000.0
+ },
+ "exposure": {
+  "bias": -2.0,
+  "sample_pixels": [
+   [
+    0,
+    1,
+    0
+   ],
+   [
+    0,
+    0,
+    0
+   ],
+   [
+    128,
+    175,
+    210
+   ],
+   [
+    0,
+    1,
+    0
+   ],
+   [
+    23,
+    15,
+    17
+   ]
+  ]
+ },
+ "stability": {
+  "still_frames_differ_with_shadows": 0.9196,
+  "still_frames_differ_without_shadows": 2.1575,
+  "grid_points": 108,
+  "gap_s": 0.8
+ },
+ "finished": "2026-09-25 02:13:15",
+ "seconds": 24.72,
+ "log": "S01 PASS no two lights are fighting over the same shadow {'atmosphere_suns': ['V2_Sun'], 'shadow_casters': ['V2_Sun'], 'directional_lights': 4, 'note': 'the fills light the scene without casting, so only the sun draws a shadow'}\nS02 PASS the sun's shadow bias is in the working band, and it has cascades to spend {'bias': 0.30000001192092896, 'slope_bias': 0.3499999940395355, 'cascades': 4, 'dynamic_distance_uu': 18000.0, 'note': 'below the band is acne on lit surfaces; above it, a shadow that floats off its object'}\nS03 PASS with the sky and the camera held still, the shadows hold still too {'with_shadows': 0.9196, 'without_shadows_control': 2.1575, 'allowed': 3.1575, 'note': \"mean luminance change per sample across 0.8 s; the control is the same scene with r.ShadowQuality 0, so TSR's own jitter is subtracted rather than assumed away\"}\nS04 PASS the measurement actually looked at something {'with_shadows': 0.9196, 'without_shadows': 2.1575, 'note': 'flat on both sides means the render target came back empty, not that the world was still; that is a failure of this job rather than a pass for the product'}\n"
+}

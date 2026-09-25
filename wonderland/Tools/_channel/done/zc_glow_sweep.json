@@ -1,0 +1,108 @@
+{
+ "name": "zc_glow_sweep",
+ "started": "2026-09-25 07:02:23",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "G01",
+   "name": "some knee stops the companion blowing out",
+   "pass": true,
+   "detail": {
+    "chosen_knee": 220.0,
+    "ladder": {
+     "6000": {
+      "clipped_pct": 4.17,
+      "mean_luminance": 74.4,
+      "crushed_black_pct": 6.25
+     },
+     "3000": {
+      "clipped_pct": 4.17,
+      "mean_luminance": 67.4,
+      "crushed_black_pct": 6.85
+     },
+     "1800": {
+      "clipped_pct": 3.57,
+      "mean_luminance": 65.2,
+      "crushed_black_pct": 7.14
+     },
+     "1100": {
+      "clipped_pct": 3.87,
+      "mean_luminance": 61.0,
+      "crushed_black_pct": 7.74
+     },
+     "700": {
+      "clipped_pct": 3.57,
+      "mean_luminance": 61.5,
+      "crushed_black_pct": 8.63
+     },
+     "400": {
+      "clipped_pct": 3.87,
+      "mean_luminance": 58.3,
+      "crushed_black_pct": 11.01
+     },
+     "220": {
+      "clipped_pct": 1.79,
+      "mean_luminance": 58.6,
+      "crushed_black_pct": 10.42
+     }
+    },
+    "note": "clipped fraction of a frame the LLM Companion fills; it is the worst case in the project because its wings, tail, gems and body are all glow"
+   }
+  },
+  {
+   "id": "G02",
+   "name": "and it does not do it by turning the figure black",
+   "pass": true,
+   "detail": {
+    "at_chosen": {
+     "clipped_pct": 1.79,
+     "mean_luminance": 58.6,
+     "crushed_black_pct": 10.42
+    },
+    "note": "guards the fix the same way the exposure job does"
+   }
+  }
+ ],
+ "measured_figure": "WL_Companion_GPT6Astra",
+ "ladder": {
+  "6000": {
+   "clipped_pct": 4.17,
+   "mean_luminance": 74.4,
+   "crushed_black_pct": 6.25
+  },
+  "3000": {
+   "clipped_pct": 4.17,
+   "mean_luminance": 67.4,
+   "crushed_black_pct": 6.85
+  },
+  "1800": {
+   "clipped_pct": 3.57,
+   "mean_luminance": 65.2,
+   "crushed_black_pct": 7.14
+  },
+  "1100": {
+   "clipped_pct": 3.87,
+   "mean_luminance": 61.0,
+   "crushed_black_pct": 7.74
+  },
+  "700": {
+   "clipped_pct": 3.57,
+   "mean_luminance": 61.5,
+   "crushed_black_pct": 8.63
+  },
+  "400": {
+   "clipped_pct": 3.87,
+   "mean_luminance": 58.3,
+   "crushed_black_pct": 11.01
+  },
+  "220": {
+   "clipped_pct": 1.79,
+   "mean_luminance": 58.6,
+   "crushed_black_pct": 10.42
+  }
+ },
+ "chosen_knee": 220.0,
+ "finished": "2026-09-25 07:03:02",
+ "seconds": 39.01,
+ "log": "G01 PASS some knee stops the companion blowing out {'chosen_knee': 220.0, 'ladder': {'6000': {'clipped_pct': 4.17, 'mean_luminance': 74.4, 'crushed_black_pct': 6.25}, '3000': {'clipped_pct': 4.17, 'mean_luminance': 67.4, 'crushed_black_pct': 6.85}, '1800': {'clipped_pct': 3.57, 'mean_luminance': 65.2, 'crushed_black_pct': 7.14}, '1100': {'clipped_pct': 3.87, 'mean_luminance': 61.0, 'crushed_black_pct': 7.74}, '700': {'clipped_pct': 3.57, 'mean_luminance': 61.5, 'crushed_black_pct': 8.63}, '400': {'clipped_pct': 3.87, 'mean_luminance': 58.3, 'crushed_black_pct': 11.01}, '220': {'clipped_pct': 1.79, 'mean_luminance': 58.6, 'crushed_black_pct': 10.42}}, 'note': 'clipped fraction of a frame the LLM Companion fills; it is the worst case in the project because its wings, tail, gems and body are all glow'}\nG02 PASS and it does not do it by turning the figure black {'at_chosen': {'clipped_pct': 1.79, 'mean_luminance': 58.6, 'crushed_black_pct': 10.42}, 'note': 'guards the fix the same way the exposure job does'}\n"
+}

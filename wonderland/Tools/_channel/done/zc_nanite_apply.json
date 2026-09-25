@@ -1,0 +1,92 @@
+{
+ "name": "zc_nanite_apply",
+ "started": "2026-09-24 14:35:27",
+ "status": "applied",
+ "enabled_count": 137,
+ "triangles_covered": 874972,
+ "skipped_too_small": 791,
+ "skipped_already_nanite": 32,
+ "skipped_unreadable": 0,
+ "failed": [],
+ "heaviest_changed": [
+  {
+   "name": "SM_heart_topiary",
+   "package": "/Game/WonderlandV2/Vegetation/Topiary/SM_heart_topiary",
+   "triangles": 65828
+  },
+  {
+   "name": "SM_hedge_mass",
+   "package": "/Game/WonderlandV2/Vegetation/Shrubs/SM_hedge_mass",
+   "triangles": 48740
+  },
+  {
+   "name": "SM_floral_arch",
+   "package": "/Game/WonderlandV2/Architecture/Garden/SM_floral_arch",
+   "triangles": 36768
+  },
+  {
+   "name": "SM_spire_great",
+   "package": "/Game/WonderlandV2/Architecture/Castle/SM_spire_great",
+   "triangles": 32636
+  },
+  {
+   "name": "SM_topiary_cone_roses",
+   "package": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_cone_roses",
+   "triangles": 32164
+  },
+  {
+   "name": "SM_canopy_large",
+   "package": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large",
+   "triangles": 31264
+  },
+  {
+   "name": "SM_hedge_block",
+   "package": "/Game/WonderlandV2/Vegetation/Shrubs/SM_hedge_block",
+   "triangles": 28608
+  },
+  {
+   "name": "SM_garden_lawn",
+   "package": "/Game/WonderlandV2/Ground/Terrain/SM_garden_lawn",
+   "triangles": 26508
+  },
+  {
+   "name": "SM_topiary_cone_plain",
+   "package": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_cone_plain",
+   "triangles": 22440
+  },
+  {
+   "name": "SM_topiary_spiral",
+   "package": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_spiral",
+   "triangles": 21004
+  },
+  {
+   "name": "SM_canopy_medium",
+   "package": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium",
+   "triangles": 16870
+  },
+  {
+   "name": "SM_shrub_flowering",
+   "package": "/Game/WonderlandV2/Vegetation/Shrubs/SM_shrub_flowering",
+   "triangles": 15850
+  },
+  {
+   "name": "SM_topiary_ball",
+   "package": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_ball",
+   "triangles": 15648
+  },
+  {
+   "name": "SM_mushroom_landmark",
+   "package": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_landmark",
+   "triangles": 11948
+  },
+  {
+   "name": "SM_orrery_gold",
+   "package": "/Game/WonderlandV2/Props/Clocks/SM_orrery_gold",
+   "triangles": 11196
+  }
+ ],
+ "ledger": "C:/dev/iwonder/wonderland-task3/wonderland/Tools\\nanite_enabled.json",
+ "finished": "2026-09-24 14:39:53",
+ "seconds": 266.03,
+ "log": ""
+}

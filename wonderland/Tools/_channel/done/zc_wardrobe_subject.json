@@ -1,0 +1,102 @@
+{
+ "name": "zc_wardrobe_subject",
+ "started": "2026-09-24 10:29:57",
+ "status": "measured",
+ "actors": [
+  {
+   "what": "SkinStage",
+   "exists": true,
+   "name": "WonderlandSkinStage_0",
+   "at": [
+    -162.6,
+    -124.3,
+    -99.8
+   ],
+   "distance_from_camera_uu": 870.4,
+   "hidden_in_game": false
+  },
+  {
+   "what": "SkinStage.Body",
+   "exists": true,
+   "name": "WonderlandCompanionEmbodiment_3",
+   "at": [
+    -162.6,
+    -124.3,
+    -99.8
+   ],
+   "distance_from_camera_uu": 870.4,
+   "hidden_in_game": false,
+   "figure_height_uu": 270.6,
+   "boxes": 3268
+  },
+  {
+   "what": "PlayerDog",
+   "exists": true,
+   "name": "BP_RelayDog_C_0",
+   "at": [
+    -327.3,
+    -650.0,
+    109.1
+   ],
+   "distance_from_camera_uu": 297.6,
+   "hidden_in_game": false
+  },
+  {
+   "what": "Embodiment:LLM COMPANION",
+   "exists": true,
+   "name": "WonderlandCompanionEmbodiment_0",
+   "at": [
+    -166.1,
+    -712.5,
+    66.7
+   ],
+   "distance_from_camera_uu": 404.4,
+   "hidden_in_game": false
+  },
+  {
+   "what": "Embodiment:JHINN AI AGENT",
+   "exists": true,
+   "name": "WonderlandCompanionEmbodiment_1",
+   "at": [
+    -457.4,
+    -523.0,
+    64.2
+   ],
+   "distance_from_camera_uu": 369.1,
+   "hidden_in_game": false
+  },
+  {
+   "what": "Embodiment:RELAY DOG SKIN",
+   "exists": true,
+   "name": "WonderlandCompanionEmbodiment_2",
+   "at": [
+    -327.3,
+    -650.0,
+    22.0
+   ],
+   "distance_from_camera_uu": 336.7,
+   "hidden_in_game": false
+  },
+  {
+   "what": "Embodiment:SKIN PREVIEW",
+   "exists": true,
+   "name": "WonderlandCompanionEmbodiment_3",
+   "at": [
+    -162.6,
+    -124.3,
+    -99.8
+   ],
+   "distance_from_camera_uu": 870.4,
+   "hidden_in_game": false
+  }
+ ],
+ "camera_at": [
+  -516.1,
+  -857.9,
+  207.8
+ ],
+ "skin_stages": 1,
+ "finished": "2026-09-24 10:30:23",
+ "seconds": 26.3,
+ "log": ""
+}

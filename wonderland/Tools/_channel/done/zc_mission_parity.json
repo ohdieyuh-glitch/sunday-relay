@@ -1,0 +1,160 @@
+{
+ "name": "zc_mission_parity",
+ "started": "2026-09-25 02:19:38",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "M01",
+   "name": "one Mission Contract exists to perform",
+   "pass": true,
+   "detail": {
+    "contracts": 1
+   }
+  },
+  {
+   "id": "M02",
+   "name": "Celestial Light is on before the performance starts",
+   "pass": true,
+   "detail": {
+    "worn": true
+   }
+  },
+  {
+   "id": "M03",
+   "name": "every working stage of the contract reaches the skin",
+   "pass": true,
+   "detail": {
+    "reached": [
+     "PREPARATION",
+     "RESEARCH",
+     "IMPLEMENTATION",
+     "VERIFICATION",
+     "REVIEW",
+     "REPAIR"
+    ],
+    "did_not_reach": []
+   }
+  },
+  {
+   "id": "M04",
+   "name": "the Dog performs more than one act across the lifecycle",
+   "pass": true,
+   "detail": {
+    "acts": [
+     "PREPARATION",
+     "RESEARCH",
+     "IMPLEMENTATION",
+     "VERIFICATION",
+     "REVIEW",
+     "REPAIR"
+    ],
+    "distinct": 6
+   }
+  },
+  {
+   "id": "M05",
+   "name": "COMPLETED is reached and the performance settles",
+   "pass": true,
+   "detail": {
+    "task_state": "<WonderlandTaskState.COMPLETED: 8>",
+    "dog_act": "NONE",
+    "lift_uu": 0.0
+   }
+  }
+ ],
+ "contracts": 1,
+ "stages": [
+  {
+   "stage": "PREPARATION",
+   "task_state": "<WonderlandTaskState.PREPARATION: 2>",
+   "dog_act": "PREPARATION",
+   "skin_lift_uu": 78.0,
+   "skin_stillness": 1.0,
+   "skin_head_moved_deg": 0.76,
+   "skin_is_animated": true
+  },
+  {
+   "stage": "RESEARCH",
+   "task_state": "<WonderlandTaskState.RESEARCH: 3>",
+   "dog_act": "RESEARCH",
+   "skin_lift_uu": 0.0,
+   "skin_stillness": 0.0,
+   "skin_head_moved_deg": 0.574,
+   "skin_is_animated": true
+  },
+  {
+   "stage": "IMPLEMENTATION",
+   "task_state": "<WonderlandTaskState.IMPLEMENTATION: 4>",
+   "dog_act": "IMPLEMENTATION",
+   "skin_lift_uu": 0.0,
+   "skin_stillness": 0.0,
+   "skin_head_moved_deg": 4.229,
+   "skin_is_animated": true
+  },
+  {
+   "stage": "VERIFICATION",
+   "task_state": "<WonderlandTaskState.VERIFICATION: 5>",
+   "dog_act": "VERIFICATION",
+   "skin_lift_uu": 155.0,
+   "skin_stillness": 1.0,
+   "skin_head_moved_deg": 1.032,
+   "skin_is_animated": true
+  },
+  {
+   "stage": "REVIEW",
+   "task_state": "<WonderlandTaskState.REVIEW: 6>",
+   "dog_act": "REVIEW",
+   "skin_lift_uu": 0.0,
+   "skin_stillness": 0.0,
+   "skin_head_moved_deg": 1.532,
+   "skin_is_animated": true
+  },
+  {
+   "stage": "REPAIR",
+   "task_state": "<WonderlandTaskState.REPAIR: 7>",
+   "dog_act": "REPAIR",
+   "skin_lift_uu": 0.0,
+   "skin_stillness": 0.0,
+   "skin_head_moved_deg": 0.521,
+   "skin_is_animated": true
+  },
+  {
+   "stage": "COMPLETED",
+   "task_state": "<WonderlandTaskState.COMPLETED: 8>",
+   "dog_act": "NONE",
+   "skin_lift_uu": 0.0,
+   "skin_stillness": 0.0,
+   "skin_head_moved_deg": 0.389,
+   "skin_is_animated": true
+  }
+ ],
+ "stages_that_reached_the_skin": [
+  "PREPARATION",
+  "RESEARCH",
+  "IMPLEMENTATION",
+  "VERIFICATION",
+  "REVIEW",
+  "REPAIR"
+ ],
+ "stages_that_did_not": [],
+ "acts_performed": [
+  "PREPARATION",
+  "RESEARCH",
+  "IMPLEMENTATION",
+  "VERIFICATION",
+  "REVIEW",
+  "REPAIR"
+ ],
+ "completed_row": {
+  "stage": "COMPLETED",
+  "task_state": "<WonderlandTaskState.COMPLETED: 8>",
+  "dog_act": "NONE",
+  "skin_lift_uu": 0.0,
+  "skin_stillness": 0.0,
+  "skin_head_moved_deg": 0.389,
+  "skin_is_animated": true
+ },
+ "finished": "2026-09-25 02:20:38",
+ "seconds": 59.6,
+ "log": "M01 PASS one Mission Contract exists to perform {'contracts': 1}\nM02 PASS Celestial Light is on before the performance starts {'worn': True}\nM03 PASS every working stage of the contract reaches the skin {'reached': ['PREPARATION', 'RESEARCH', 'IMPLEMENTATION', 'VERIFICATION', 'REVIEW', 'REPAIR'], 'did_not_reach': []}\nM04 PASS the Dog performs more than one act across the lifecycle {'acts': ['PREPARATION', 'RESEARCH', 'IMPLEMENTATION', 'VERIFICATION', 'REVIEW', 'REPAIR'], 'distinct': 6}\nM05 PASS COMPLETED is reached and the performance settles {'task_state': '<WonderlandTaskState.COMPLETED: 8>', 'dog_act': 'NONE', 'lift_uu': 0.0}\n"
+}

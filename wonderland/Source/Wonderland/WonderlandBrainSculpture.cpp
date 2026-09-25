@@ -3,6 +3,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "ProceduralMeshComponent.h"
+#include "Components/PointLightComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Kismet/GameplayStatics.h"
@@ -89,6 +90,24 @@ AWonderlandBrainSculpture::AWonderlandBrainSculpture()
 
 	Snow = MakeMesh(TEXT("BlackSnow"));
 
+	auto MakeLamp = [this, Root](const TCHAR* Name, float Lumens) -> UPointLightComponent*
+	{
+		UPointLightComponent* Lamp = CreateDefaultSubobject<UPointLightComponent>(Name);
+		Lamp->SetupAttachment(Root);
+		Lamp->SetMobility(EComponentMobility::Movable);
+		Lamp->SetIntensityUnits(ELightUnits::Lumens);
+		Lamp->SetIntensity(Lumens);
+		// NEUTRAL. A warm lamp turned the white chamber cream, and the founder asked for white.
+		Lamp->SetLightColor(FLinearColor(1.0f, 1.0f, 1.0f));
+		// NO SHADOWS. Two lamps inside a five-panel box would throw the panels' own shadows across the
+		// backdrop and turn the white wall grey in bands -- and the founder asked for a white background.
+		Lamp->SetCastShadows(false);
+		Lamp->SetAffectTranslucentLighting(false);
+		return Lamp;
+	};
+	KeyLight = MakeLamp(TEXT("BrainKeyLight"), 140000.0f);
+	FillLight = MakeLamp(TEXT("BrainFillLight"), 46000.0f);
+
 	BrainMesh = MakeMesh(TEXT("BrainMass"));
 	BrainFold = MakeMesh(TEXT("BrainFolds"));
 	SnakeMesh = MakeMesh(TEXT("PythonBody"));
@@ -149,6 +168,17 @@ void AWonderlandBrainSculpture::PostInitializeComponents()
 	// down the left of the brain window, and it grew each time the chamber was enlarged, which is precisely what
 	// a mis-painted chamber panel would do. Three cycles were spent hunting it as an intruding world prop.
 	// This material's Color parameter is the one the rest of this file already relies on, so it is known to work.
+	// THE PANELS STAY ON THE MATERIAL THAT IS KNOWN TO TAKE A COLOUR HERE.
+	//
+	// Swapping them to M_WL_VoxelGlow to get an unlit white produced a BLACK chamber -- twice, once setting
+	// "Color" and again setting Color, EmissiveColor, BaseColor and EmissiveStrength together. Whatever
+	// drives that material's emissive, it is none of those names, and this file's own history says exactly
+	// what that costs: "a material instance accepts any parameter name you hand it and simply ignores one it
+	// does not have, so a mis-named parameter looks exactly like a correct one that had no effect."
+	//
+	// So the white is made the honest way instead: a white ALBEDO on the lit material the rest of this file
+	// already relies on, lit by the chamber's own key and fill. Those lamps had to exist anyway -- a red
+	// brain in an unlit box is a black blob -- so the background costs nothing extra.
 	UMaterialInterface* FlatDark = Plain;
 	for (UStaticMeshComponent* Panel : { Backdrop.Get(), ChamberTop.Get(), ChamberFloor.Get(),
 										 ChamberLeft.Get(), ChamberRight.Get() })
@@ -158,10 +188,23 @@ void AWonderlandBrainSculpture::PostInitializeComponents()
 		if (FlatDark == nullptr) { continue; }
 		if (UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(FlatDark, this))
 		{
-			// WHITE, not the night field's blue-black. All five panels take it, so the chamber is a white room
-			// rather than a white back wall with dark sides -- which would have read as a lit rectangle.
-			// Slightly off pure white: at 1.0 the panel clips and the flakes lose their edges against it.
-			Mid->SetVectorParameterValue(TEXT("Color"), FLinearColor(0.945f, 0.945f, 0.955f, 1.0f));
+			// WHITE, AND UNLIT, so it is white whatever the sun is doing.
+			//
+			// Painted 0.945 on the LIT BasicShapeMaterial the chamber photographed as a dim beige room with a
+			// shadow gradient across it -- because the chamber is a closed box and almost no sunlight reaches
+			// inside. A background asked to be white has to be told, not lit.
+			//
+			// The value is far above 1 because this project runs in extended luminance range: the glow knee
+			// measured at 700 is where a surface reads as bright-but-detailed, so a touch under it is a clean
+			// white that the black flakes still cut against.
+			// EVERY NAME, because a material instance ACCEPTS any parameter name and silently ignores one it
+			// does not have -- so a wrong name looks exactly like a correct one that had no effect. This file
+			// has already paid for that lesson once: tinting LevelColorationUnlitMaterial through "Color" did
+			// nothing and every panel stayed white, and three cycles went into hunting it as an intruding
+			// world prop. Setting "Color" alone on M_WL_VoxelGlow reproduced it exactly -- the chamber came
+			// out BLACK -- so all four are set here the same way the figure loader does it.
+			const FLinearColor ChamberWhite(0.94f, 0.94f, 0.95f, 1.0f);
+			Mid->SetVectorParameterValue(TEXT("Color"), ChamberWhite);
 			Panel->SetMaterial(0, Mid);
 			if (Panel == Backdrop) { BackdropMid = Mid; }
 		}
@@ -186,8 +229,11 @@ void AWonderlandBrainSculpture::PostInitializeComponents()
 	// light whatever its shape, so the first build's organic geometry was invisible and it looked like a stone.
 	// THE SURFACES ARE WHAT IS ACTUALLY SEEN, so these are the two colours that matter. Both red, a stop
 	// apart, so the python reads against the brain as well as against the white.
-	DressSurface(BrainSurface, FLinearColor(0.330f, 0.045f, 0.055f, 1.0f), BrainSurfaceMid);
-	DressSurface(SnakeSurface, FLinearColor(0.620f, 0.105f, 0.080f, 1.0f), SnakeSurfaceMid);
+	// BRIGHT ENOUGH TO READ AS RED AGAINST WHITE. At 0.33 the brain photographed black: a lit surface that
+	// dark, in a box the sun does not reach, returns almost nothing. With the chamber's own key and fill
+	// standing over it these are the albedo of something red rather than something nearly black.
+	DressSurface(BrainSurface, FLinearColor(0.720f, 0.085f, 0.095f, 1.0f), BrainSurfaceMid);
+	DressSurface(SnakeSurface, FLinearColor(0.880f, 0.145f, 0.105f, 1.0f), SnakeSurfaceMid);
 
 	// ---- THE BLACK SNOW. One flake mesh, dressed once, seeded once, re-placed every frame.
 	if (Snow != nullptr)
@@ -210,14 +256,16 @@ void AWonderlandBrainSculpture::PostInitializeComponents()
 		SnowSeeds.Reset();
 		SnowShape.Reset();
 		Snow->ClearInstances();
-		for (int32 Index = 0; Index < 240; ++Index)
+		// More, and finer. At 240 flakes of 1.4-4.0 uu they photographed as black BLOCKS drifting past;
+		// snow is small and plentiful, and the count is what carries the effect rather than the size.
+		for (int32 Index = 0; Index < 340; ++Index)
 		{
 			SnowSeeds.Add(FVector4(
 				Flakes.FRandRange(-0.94f, 0.94f),        // across the window
 				Flakes.FRandRange(-1.0f, 1.0f),          // where in its fall it starts
 				Flakes.FRandRange(0.10f, 0.92f),         // depth between the lens and the back wall
 				Flakes.FRandRange(0.055f, 0.185f)));     // fall rate, as a fraction of the window per second
-			SnowShape.Add(FVector2D(Flakes.FRandRange(0.014f, 0.040f),      // size, engine-cube units
+			SnowShape.Add(FVector2D(Flakes.FRandRange(0.007f, 0.019f),      // size, engine-cube units
 									Flakes.FRandRange(0.0f, 6.2831853f)));  // sway phase
 			Snow->AddInstance(FTransform::Identity, true);
 		}
@@ -815,6 +863,26 @@ void AWonderlandBrainSculpture::StandTheChamber()
 		  Facing, FVector(Depth, Thin, Half * 2.0f / 100.0f));
 	Place(ChamberRight.Get(), Here + Right * Half + Away * (Back - Front) * 0.5f,
 		  Facing, FVector(Depth, Thin, Half * 2.0f / 100.0f));
+
+	// ---- AND THE TWO LAMPS, in the founder's own frame.
+	//
+	// The key falls from the upper left as seen through the window and the fill sits low on the right, so the
+	// folds have a consistent direction of light however the sculpture is turned. Both sit BETWEEN the lens
+	// and the brain: behind it they would light the white wall and silhouette the brain against its own
+	// background, which is the picture this is trying to avoid.
+	// REACHING THE WALLS AS WELL AS THE SCULPTURE. The chamber is Half = R*6 across, so a radius that only
+	// covered the brain would leave a lit brain in a dark room -- which is the picture before this existed.
+	const float Reach = Half * 2.6f;
+	if (KeyLight != nullptr)
+	{
+		KeyLight->SetWorldLocation(Here - Right * (R * 1.5f) + Up * (R * 1.6f) - Away * (R * 1.5f));
+		KeyLight->SetAttenuationRadius(Reach);
+	}
+	if (FillLight != nullptr)
+	{
+		FillLight->SetWorldLocation(Here + Right * (R * 1.7f) - Up * (R * 0.9f) - Away * (R * 1.2f));
+		FillLight->SetAttenuationRadius(Reach);
+	}
 }
 
 void AWonderlandBrainSculpture::DriftTheSnow()

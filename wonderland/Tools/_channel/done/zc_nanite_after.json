@@ -1,0 +1,15 @@
+{
+ "name": "zc_nanite_after",
+ "started": "2026-09-24 20:32:48",
+ "status": "measured",
+ "draw_calls": 5641.0,
+ "primitives": 191764.0,
+ "frame_ms": 55.54,
+ "game_ms": 55.48,
+ "render_ms": 38.78,
+ "gpu_ms": 17.07,
+ "samples": 26,
+ "finished": "2026-09-24 20:33:19",
+ "seconds": 31.93,
+ "log": ""
+}

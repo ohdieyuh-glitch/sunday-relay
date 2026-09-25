@@ -1,0 +1,153 @@
+{
+ "name": "zc_eight_hour_demo",
+ "started": "2026-09-24 23:13:48",
+ "status": "done; the verdict on how it LOOKS is the photographs",
+ "shots": [
+  {
+   "n": 1,
+   "name": "world",
+   "note": "PIE running, the world as it opens",
+   "file": "01_world.jpg"
+  },
+  {
+   "n": 2,
+   "name": "julius_terminal",
+   "note": "Ctrl+T -- the Julius Live Terminal. The + and NEW TASK TERMINAL sit across the top.",
+   "file": "02_julius_terminal.jpg"
+  },
+  {
+   "n": 3,
+   "name": "contract_working",
+   "note": "one committed Mission Contract, working",
+   "file": "03_contract_working.jpg"
+  },
+  {
+   "n": 4,
+   "name": "pending_tab",
+   "note": "after + -- a PENDING GRAY tab above the working contract, which has not moved",
+   "file": "04_pending_tab.jpg"
+  },
+  {
+   "n": 5,
+   "name": "committed",
+   "note": "after Enter -- the pending tab became a second active Mission Contract",
+   "file": "05_committed.jpg"
+  },
+  {
+   "n": 6,
+   "name": "orbs",
+   "note": "mission orbs in the world: one per ACTIVE contract, none for a draft",
+   "file": "06_orbs.jpg"
+  },
+  {
+   "n": 7,
+   "name": "companions",
+   "note": "the AI Companion terminals -- i.Wonder logo in its own row, above the input box",
+   "file": "07_companions.jpg"
+  },
+  {
+   "n": 8,
+   "name": "project_brain",
+   "note": "B -- Project Brain, with the living brain and its python framed in the brain window",
+   "file": "08_project_brain.jpg"
+  },
+  {
+   "n": 9,
+   "name": "project_brain_later",
+   "note": "the same brain two seconds later -- the python has moved along its own route",
+   "file": "09_project_brain_later.jpg"
+  },
+  {
+   "n": 10,
+   "name": "wardrobe",
+   "note": "the Wardrobe open inside Project Brain -- the preview window and the skin cards",
+   "file": "10_wardrobe.jpg"
+  },
+  {
+   "n": 11,
+   "name": "wardrobe_relay_og",
+   "note": "relay_og selected -- Project Brain must still be open (True)",
+   "file": "11_wardrobe_relay_og.jpg"
+  },
+  {
+   "n": 12,
+   "name": "wardrobe_celestial_light",
+   "note": "celestial_light selected -- Project Brain must still be open (True)",
+   "file": "12_wardrobe_celestial_light.jpg"
+  },
+  {
+   "n": 13,
+   "name": "wardrobe_apollo",
+   "note": "apollo selected -- Project Brain must still be open (True)",
+   "file": "13_wardrobe_apollo.jpg"
+  },
+  {
+   "n": 14,
+   "name": "wardrobe_arden_infernal",
+   "note": "arden_infernal selected -- Project Brain must still be open (True)",
+   "file": "14_wardrobe_arden_infernal.jpg"
+  },
+  {
+   "n": 15,
+   "name": "wardrobe_skeleton_flame",
+   "note": "skeleton_flame selected -- Project Brain must still be open (True)",
+   "file": "15_wardrobe_skeleton_flame.jpg"
+  },
+  {
+   "n": 16,
+   "name": "after_escape",
+   "note": "Escape -- and only Escape -- leaves Project Brain",
+   "file": "16_after_escape.jpg"
+  }
+ ],
+ "facts": {
+  "ctrl_t_opened_it": false,
+  "live_terminal_open": true,
+  "terminal_rows": 0,
+  "contracts_before_plus": 1,
+  "tabs_after_plus": 2,
+  "draft_states": [
+   "<WonderlandTaskState.QUEUED: 1>",
+   "<WonderlandTaskState.DRAFT: 0>"
+  ],
+  "found_draft": true,
+  "contracts_after_enter": 2,
+  "orbs_in_world": 2,
+  "companion_terminals": 2,
+  "b_key_opened_it": true,
+  "brain_open": true,
+  "brain_sculptures": 1,
+  "snake_head_radius_uu": 218.2,
+  "closest_segment_uu": 218.2,
+  "body_length_uu": 645.2,
+  "snake_moved_uu": 3.8,
+  "bearing_spread_deg": 15.28,
+  "wardrobe_opened": true,
+  "brain_still_open_after_wardrobe": true,
+  "wear_relay_og": {
+   "worn": true,
+   "brain_still_open": true
+  },
+  "wear_celestial_light": {
+   "worn": true,
+   "brain_still_open": true
+  },
+  "wear_apollo": {
+   "worn": true,
+   "brain_still_open": true
+  },
+  "wear_arden_infernal": {
+   "worn": true,
+   "brain_still_open": true
+  },
+  "wear_skeleton_flame": {
+   "worn": true,
+   "brain_still_open": true
+  },
+  "brain_open_after_all_skins": true,
+  "brain_closed_by_escape": false
+ },
+ "finished": "2026-09-24 23:14:31",
+ "seconds": 42.78,
+ "log": ""
+}

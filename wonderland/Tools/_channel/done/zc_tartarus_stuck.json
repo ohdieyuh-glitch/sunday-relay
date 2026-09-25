@@ -1,0 +1,2358 @@
+{
+ "name": "zc_tartarus_stuck",
+ "started": "2026-09-25 03:40:18",
+ "status": "probed",
+ "samples": 289,
+ "surface_owners": {
+  "V2_GroundSlab | None": 136,
+  "TQ01_TQ01_YardBand | Wonderland/Authored/TQ01_TartarusQ": 30,
+  "TQ03_TQ03_CourtBand | Wonderland/Authored/TQ03_TartarusB": 22,
+  "TQ01_TQ01_WorksBlock | Wonderland/Authored/TQ01_TartarusQ": 21,
+  "TQ01_TQ01_Road | Wonderland/Authored/TQ01_TartarusQ": 19,
+  "TQ01_TQ01_Palace_Dome_Grand_stone | Wonderland/Authored/TQ01_TartarusQ": 15,
+  "TQ03_TQ03_Avenue | Wonderland/Authored/TQ03_TartarusB": 12,
+  "TQ03_TQ03_WorkBlock | Wonderland/Authored/TQ03_TartarusB": 6,
+  "TQ01_TQ01_Palace_Wing_stone | Wonderland/Authored/TQ01_TartarusQ": 5,
+  "TQ03_TQ03_Colonnade_Arcade_stone | Wonderland/Authored/TQ03_TartarusB": 4,
+  "SF03_SF03_Ground_Flagstone_A_paving_shade | Wonderland/Authored/SF03_TartarusS": 3,
+  "TQ01_TQ01_Tower_Base_Terraced_stone | Wonderland/Authored/TQ01_TartarusQ": 3
+ },
+ "ground_z": {
+  "min": -14.0,
+  "max": 2500.0,
+  "median": 12.0,
+  "spread_uu": 2514.0
+ },
+ "grid": [
+  {
+   "dx_m": -80,
+   "dy_m": -80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -70,
+   "dy_m": -80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -60,
+   "dy_m": -80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -50,
+   "dy_m": -80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -40,
+   "dy_m": -80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -30,
+   "dy_m": -80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -20,
+   "dy_m": -80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -10,
+   "dy_m": -80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 0,
+   "dy_m": -80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 10,
+   "dy_m": -80,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_WorkBlock",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_WorkBlock"
+  },
+  {
+   "dx_m": 20,
+   "dy_m": -80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 30,
+   "dy_m": -80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 40,
+   "dy_m": -80,
+   "z": 114.0,
+   "actor": "TQ03_TQ03_Market_Canopy_stone",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Market_Canopy_stone"
+  },
+  {
+   "dx_m": 50,
+   "dy_m": -80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 60,
+   "dy_m": -80,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 70,
+   "dy_m": -80,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 80,
+   "dy_m": -80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -80,
+   "dy_m": -70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -70,
+   "dy_m": -70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -60,
+   "dy_m": -70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -50,
+   "dy_m": -70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -40,
+   "dy_m": -70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -30,
+   "dy_m": -70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -20,
+   "dy_m": -70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -10,
+   "dy_m": -70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 0,
+   "dy_m": -70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 10,
+   "dy_m": -70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 20,
+   "dy_m": -70,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_WorkBlock",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_WorkBlock"
+  },
+  {
+   "dx_m": 30,
+   "dy_m": -70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 40,
+   "dy_m": -70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 50,
+   "dy_m": -70,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 60,
+   "dy_m": -70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 70,
+   "dy_m": -70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 80,
+   "dy_m": -70,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": -80,
+   "dy_m": -60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -70,
+   "dy_m": -60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -60,
+   "dy_m": -60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -50,
+   "dy_m": -60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -40,
+   "dy_m": -60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -30,
+   "dy_m": -60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -20,
+   "dy_m": -60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -10,
+   "dy_m": -60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 0,
+   "dy_m": -60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 10,
+   "dy_m": -60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 20,
+   "dy_m": -60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 30,
+   "dy_m": -60,
+   "z": 817.0,
+   "actor": "TQ03_TQ03_Colonnade_Arcade_stone",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Colonnade_Arcade_sto"
+  },
+  {
+   "dx_m": 40,
+   "dy_m": -60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 50,
+   "dy_m": -60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 60,
+   "dy_m": -60,
+   "z": 817.0,
+   "actor": "TQ03_TQ03_Colonnade_Arcade_stone",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Colonnade_Arcade_sto"
+  },
+  {
+   "dx_m": 70,
+   "dy_m": -60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 80,
+   "dy_m": -60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -80,
+   "dy_m": -50,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": -70,
+   "dy_m": -50,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": -60,
+   "dy_m": -50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -50,
+   "dy_m": -50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -40,
+   "dy_m": -50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -30,
+   "dy_m": -50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -20,
+   "dy_m": -50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -10,
+   "dy_m": -50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 0,
+   "dy_m": -50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 10,
+   "dy_m": -50,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 20,
+   "dy_m": -50,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 30,
+   "dy_m": -50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 40,
+   "dy_m": -50,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 50,
+   "dy_m": -50,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 60,
+   "dy_m": -50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 70,
+   "dy_m": -50,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_Avenue",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Avenue"
+  },
+  {
+   "dx_m": 80,
+   "dy_m": -50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -80,
+   "dy_m": -40,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": -70,
+   "dy_m": -40,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": -60,
+   "dy_m": -40,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": -50,
+   "dy_m": -40,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -40,
+   "dy_m": -40,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -30,
+   "dy_m": -40,
+   "z": 888.9,
+   "actor": "V2Batch_castle_hall_MI_V2_MarblePale",
+   "folder": "V2/V2_SkyRing/Batches",
+   "component": "ISM_V2_castle_hall"
+  },
+  {
+   "dx_m": -20,
+   "dy_m": -40,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -10,
+   "dy_m": -40,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 0,
+   "dy_m": -40,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 10,
+   "dy_m": -40,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 20,
+   "dy_m": -40,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 30,
+   "dy_m": -40,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 40,
+   "dy_m": -40,
+   "z": 5.9,
+   "actor": "SF03_SF03_Ground_Flagstone_A_paving",
+   "folder": "Wonderland/Authored/SF03_TartarusS",
+   "component": "ISM_SF03_SF03_Ground_Flagstone_A_p"
+  },
+  {
+   "dx_m": 50,
+   "dy_m": -40,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_Avenue",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Avenue"
+  },
+  {
+   "dx_m": 60,
+   "dy_m": -40,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_Avenue",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Avenue"
+  },
+  {
+   "dx_m": 70,
+   "dy_m": -40,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 80,
+   "dy_m": -40,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_Avenue",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Avenue"
+  },
+  {
+   "dx_m": -80,
+   "dy_m": -30,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": -70,
+   "dy_m": -30,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": -60,
+   "dy_m": -30,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": -50,
+   "dy_m": -30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -40,
+   "dy_m": -30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -30,
+   "dy_m": -30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -20,
+   "dy_m": -30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -10,
+   "dy_m": -30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 0,
+   "dy_m": -30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 10,
+   "dy_m": -30,
+   "z": 304.0,
+   "actor": "SF03_SF03_Garden_Retaining_Run_stone",
+   "folder": "Wonderland/Authored/SF03_TartarusS",
+   "component": "ISM_SF03_SF03_Garden_Retaining_Run"
+  },
+  {
+   "dx_m": 20,
+   "dy_m": -30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 30,
+   "dy_m": -30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 40,
+   "dy_m": -30,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_Avenue",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Avenue"
+  },
+  {
+   "dx_m": 50,
+   "dy_m": -30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 60,
+   "dy_m": -30,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_Avenue",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Avenue"
+  },
+  {
+   "dx_m": 70,
+   "dy_m": -30,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_Avenue",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Avenue"
+  },
+  {
+   "dx_m": 80,
+   "dy_m": -30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -80,
+   "dy_m": -20,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": -70,
+   "dy_m": -20,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": -60,
+   "dy_m": -20,
+   "z": 2500.0,
+   "actor": "TQ01_TQ01_Tower_Mid_Arcade_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Tower_Mid_Arcade_sto"
+  },
+  {
+   "dx_m": -50,
+   "dy_m": -20,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -40,
+   "dy_m": -20,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -30,
+   "dy_m": -20,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -20,
+   "dy_m": -20,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -10,
+   "dy_m": -20,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 0,
+   "dy_m": -20,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 10,
+   "dy_m": -20,
+   "z": 5.9,
+   "actor": "SF03_SF03_Ground_Flagstone_A_paving_shade",
+   "folder": "Wonderland/Authored/SF03_TartarusS",
+   "component": "ISM_SF03_SF03_Ground_Flagstone_A_p"
+  },
+  {
+   "dx_m": 20,
+   "dy_m": -20,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_Avenue",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Avenue"
+  },
+  {
+   "dx_m": 30,
+   "dy_m": -20,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 40,
+   "dy_m": -20,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 50,
+   "dy_m": -20,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_Avenue",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Avenue"
+  },
+  {
+   "dx_m": 60,
+   "dy_m": -20,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 70,
+   "dy_m": -20,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 80,
+   "dy_m": -20,
+   "z": 817.0,
+   "actor": "TQ03_TQ03_Colonnade_Arcade_stone",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Colonnade_Arcade_sto"
+  },
+  {
+   "dx_m": -80,
+   "dy_m": -10,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": -70,
+   "dy_m": -10,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": -60,
+   "dy_m": -10,
+   "z": 160.0,
+   "actor": "TQ01_TQ01_Tower_Base_Battered_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Tower_Base_Battered_"
+  },
+  {
+   "dx_m": -50,
+   "dy_m": -10,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -40,
+   "dy_m": -10,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -30,
+   "dy_m": -10,
+   "z": 39.7,
+   "actor": "TQ01_TQ01_Palace_Dome_Grand_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Dome_Grand_st"
+  },
+  {
+   "dx_m": -20,
+   "dy_m": -10,
+   "z": 1405.7,
+   "actor": "TQ01_TQ01_Palace_Dome_Grand_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Dome_Grand_st"
+  },
+  {
+   "dx_m": -10,
+   "dy_m": -10,
+   "z": 1258.0,
+   "actor": "TQ01_TQ01_Palace_Dome_Grand_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Dome_Grand_st"
+  },
+  {
+   "dx_m": 0,
+   "dy_m": -10,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 10,
+   "dy_m": -10,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_Avenue",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Avenue"
+  },
+  {
+   "dx_m": 20,
+   "dy_m": -10,
+   "z": 1827.0,
+   "actor": "TQ03_TQ03_Arch_Twin_Tiered_stone",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Arch_Twin_Tiered_sto"
+  },
+  {
+   "dx_m": 30,
+   "dy_m": -10,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_Avenue",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Avenue"
+  },
+  {
+   "dx_m": 40,
+   "dy_m": -10,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 50,
+   "dy_m": -10,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 60,
+   "dy_m": -10,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 70,
+   "dy_m": -10,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 80,
+   "dy_m": -10,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -80,
+   "dy_m": 0,
+   "z": 1255.0,
+   "actor": "TQ01_TQ01_Palace_Wing_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Wing_stone"
+  },
+  {
+   "dx_m": -70,
+   "dy_m": 0,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -60,
+   "dy_m": 0,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -50,
+   "dy_m": 0,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -40,
+   "dy_m": 0,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -30,
+   "dy_m": 0,
+   "z": 1258.0,
+   "actor": "TQ01_TQ01_Palace_Dome_Grand_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Dome_Grand_st"
+  },
+  {
+   "dx_m": -20,
+   "dy_m": 0,
+   "z": 2192.4,
+   "actor": "TQ01_TQ01_Palace_Dome_Grand_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Dome_Grand_st"
+  },
+  {
+   "dx_m": -10,
+   "dy_m": 0,
+   "z": 2192.3,
+   "actor": "TQ01_TQ01_Palace_Dome_Grand_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Dome_Grand_st"
+  },
+  {
+   "dx_m": 0,
+   "dy_m": 0,
+   "z": 1255.2,
+   "actor": "TQ01_TQ01_Palace_Dome_Grand_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Dome_Grand_st"
+  },
+  {
+   "dx_m": 10,
+   "dy_m": 0,
+   "z": 5.9,
+   "actor": "SF03_SF03_Ground_Flagstone_A_paving",
+   "folder": "Wonderland/Authored/SF03_TartarusS",
+   "component": "ISM_SF03_SF03_Ground_Flagstone_A_p"
+  },
+  {
+   "dx_m": 20,
+   "dy_m": 0,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_Avenue",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Avenue"
+  },
+  {
+   "dx_m": 30,
+   "dy_m": 0,
+   "z": 5.7,
+   "actor": "SF03_SF03_Ground_Flagstone_A_paving_shade",
+   "folder": "Wonderland/Authored/SF03_TartarusS",
+   "component": "ISM_SF03_SF03_Ground_Flagstone_A_p"
+  },
+  {
+   "dx_m": 40,
+   "dy_m": 0,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 50,
+   "dy_m": 0,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 60,
+   "dy_m": 0,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 70,
+   "dy_m": 0,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 80,
+   "dy_m": 0,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -80,
+   "dy_m": 10,
+   "z": 1255.0,
+   "actor": "TQ01_TQ01_Palace_Wing_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Wing_stone"
+  },
+  {
+   "dx_m": -70,
+   "dy_m": 10,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -60,
+   "dy_m": 10,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -50,
+   "dy_m": 10,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -40,
+   "dy_m": 10,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -30,
+   "dy_m": 10,
+   "z": 1258.0,
+   "actor": "TQ01_TQ01_Palace_Dome_Grand_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Dome_Grand_st"
+  },
+  {
+   "dx_m": -20,
+   "dy_m": 10,
+   "z": 2192.3,
+   "actor": "TQ01_TQ01_Palace_Dome_Grand_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Dome_Grand_st"
+  },
+  {
+   "dx_m": -10,
+   "dy_m": 10,
+   "z": 2192.3,
+   "actor": "TQ01_TQ01_Palace_Dome_Grand_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Dome_Grand_st"
+  },
+  {
+   "dx_m": 0,
+   "dy_m": 10,
+   "z": 1258.0,
+   "actor": "TQ01_TQ01_Palace_Dome_Grand_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Dome_Grand_st"
+  },
+  {
+   "dx_m": 10,
+   "dy_m": 10,
+   "z": 5.7,
+   "actor": "SF03_SF03_Ground_Flagstone_A_paving_shade",
+   "folder": "Wonderland/Authored/SF03_TartarusS",
+   "component": "ISM_SF03_SF03_Ground_Flagstone_A_p"
+  },
+  {
+   "dx_m": 20,
+   "dy_m": 10,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 30,
+   "dy_m": 10,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 40,
+   "dy_m": 10,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 50,
+   "dy_m": 10,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 60,
+   "dy_m": 10,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 70,
+   "dy_m": 10,
+   "z": 817.0,
+   "actor": "TQ03_TQ03_Colonnade_Arcade_stone",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_Colonnade_Arcade_sto"
+  },
+  {
+   "dx_m": 80,
+   "dy_m": 10,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_WorkBlock",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_WorkBlock"
+  },
+  {
+   "dx_m": -80,
+   "dy_m": 20,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -70,
+   "dy_m": 20,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -60,
+   "dy_m": 20,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -50,
+   "dy_m": 20,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -40,
+   "dy_m": 20,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -30,
+   "dy_m": 20,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -20,
+   "dy_m": 20,
+   "z": 2119.8,
+   "actor": "TQ01_TQ01_Palace_Dome_Grand_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Dome_Grand_st"
+  },
+  {
+   "dx_m": -10,
+   "dy_m": 20,
+   "z": 2114.3,
+   "actor": "TQ01_TQ01_Palace_Dome_Grand_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Dome_Grand_st"
+  },
+  {
+   "dx_m": 0,
+   "dy_m": 20,
+   "z": 1362.1,
+   "actor": "TQ01_TQ01_Palace_Dome_Grand_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Dome_Grand_st"
+  },
+  {
+   "dx_m": 10,
+   "dy_m": 20,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 20,
+   "dy_m": 20,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 30,
+   "dy_m": 20,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 40,
+   "dy_m": 20,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_CourtBand",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_CourtBand"
+  },
+  {
+   "dx_m": 50,
+   "dy_m": 20,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 60,
+   "dy_m": 20,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_WorkBlock",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_WorkBlock"
+  },
+  {
+   "dx_m": 70,
+   "dy_m": 20,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_WorkBlock",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_WorkBlock"
+  },
+  {
+   "dx_m": 80,
+   "dy_m": 20,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -80,
+   "dy_m": 30,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -70,
+   "dy_m": 30,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -60,
+   "dy_m": 30,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -50,
+   "dy_m": 30,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -40,
+   "dy_m": 30,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -30,
+   "dy_m": 30,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -20,
+   "dy_m": 30,
+   "z": 1850.5,
+   "actor": "TQ01_TQ01_Palace_Dome_Grand_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Dome_Grand_st"
+  },
+  {
+   "dx_m": -10,
+   "dy_m": 30,
+   "z": 304.0,
+   "actor": "SF03_SF03_Garden_Retaining_Run_stone",
+   "folder": "Wonderland/Authored/SF03_TartarusS",
+   "component": "ISM_SF03_SF03_Garden_Retaining_Run"
+  },
+  {
+   "dx_m": 0,
+   "dy_m": 30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 10,
+   "dy_m": 30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 20,
+   "dy_m": 30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 30,
+   "dy_m": 30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 40,
+   "dy_m": 30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 50,
+   "dy_m": 30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 60,
+   "dy_m": 30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 70,
+   "dy_m": 30,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 80,
+   "dy_m": 30,
+   "z": 12.0,
+   "actor": "TQ03_TQ03_WorkBlock",
+   "folder": "Wonderland/Authored/TQ03_TartarusB",
+   "component": "ISM_TQ03_TQ03_WorkBlock"
+  },
+  {
+   "dx_m": -80,
+   "dy_m": 40,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -70,
+   "dy_m": 40,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -60,
+   "dy_m": 40,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -50,
+   "dy_m": 40,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -40,
+   "dy_m": 40,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -30,
+   "dy_m": 40,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -20,
+   "dy_m": 40,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -10,
+   "dy_m": 40,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 0,
+   "dy_m": 40,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 10,
+   "dy_m": 40,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 20,
+   "dy_m": 40,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 30,
+   "dy_m": 40,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 40,
+   "dy_m": 40,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 50,
+   "dy_m": 40,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 60,
+   "dy_m": 40,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 70,
+   "dy_m": 40,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 80,
+   "dy_m": 40,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -80,
+   "dy_m": 50,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -70,
+   "dy_m": 50,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -60,
+   "dy_m": 50,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -50,
+   "dy_m": 50,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -40,
+   "dy_m": 50,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -30,
+   "dy_m": 50,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -20,
+   "dy_m": 50,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -10,
+   "dy_m": 50,
+   "z": 142.0,
+   "actor": "TQ01_TQ01_Tower_Base_Terraced_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Tower_Base_Terraced_"
+  },
+  {
+   "dx_m": 0,
+   "dy_m": 50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 10,
+   "dy_m": 50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 20,
+   "dy_m": 50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 30,
+   "dy_m": 50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 40,
+   "dy_m": 50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 50,
+   "dy_m": 50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 60,
+   "dy_m": 50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 70,
+   "dy_m": 50,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 80,
+   "dy_m": 50,
+   "z": 2256.8,
+   "actor": "V2Batch_balustrade_MI_V2_GoldAged",
+   "folder": "V2/V2_SkyRing/Batches",
+   "component": "ISM_V2_balustrade"
+  },
+  {
+   "dx_m": -80,
+   "dy_m": 60,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_Road",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Road"
+  },
+  {
+   "dx_m": -70,
+   "dy_m": 60,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -60,
+   "dy_m": 60,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -50,
+   "dy_m": 60,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -40,
+   "dy_m": 60,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -30,
+   "dy_m": 60,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -20,
+   "dy_m": 60,
+   "z": 2080.3,
+   "actor": "TQ01_TQ01_Tower_Mid_Arcade_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Tower_Mid_Arcade_sto"
+  },
+  {
+   "dx_m": -10,
+   "dy_m": 60,
+   "z": 2500.0,
+   "actor": "TQ01_TQ01_Tower_Mid_Oriel_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Tower_Mid_Oriel_ston"
+  },
+  {
+   "dx_m": 0,
+   "dy_m": 60,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": 10,
+   "dy_m": 60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 20,
+   "dy_m": 60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 30,
+   "dy_m": 60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 40,
+   "dy_m": 60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 50,
+   "dy_m": 60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 60,
+   "dy_m": 60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 70,
+   "dy_m": 60,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 80,
+   "dy_m": 60,
+   "z": 2353.9,
+   "actor": "V2Batch_castle_tower_octagon_MI_V2_MarbleCool",
+   "folder": "V2/V2_SkyRing/Batches",
+   "component": "ISM_V2_castle_tower_octagon"
+  },
+  {
+   "dx_m": -80,
+   "dy_m": 70,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -70,
+   "dy_m": 70,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -60,
+   "dy_m": 70,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -50,
+   "dy_m": 70,
+   "z": 1255.0,
+   "actor": "TQ01_TQ01_Palace_Wing_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Wing_stone"
+  },
+  {
+   "dx_m": -40,
+   "dy_m": 70,
+   "z": 1255.0,
+   "actor": "TQ01_TQ01_Palace_Wing_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Wing_stone"
+  },
+  {
+   "dx_m": -30,
+   "dy_m": 70,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": -20,
+   "dy_m": 70,
+   "z": 142.0,
+   "actor": "TQ01_TQ01_Tower_Base_Terraced_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Tower_Base_Terraced_"
+  },
+  {
+   "dx_m": -10,
+   "dy_m": 70,
+   "z": 272.0,
+   "actor": "TQ01_TQ01_Tower_Base_Terraced_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Tower_Base_Terraced_"
+  },
+  {
+   "dx_m": 0,
+   "dy_m": 70,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": 10,
+   "dy_m": 70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 20,
+   "dy_m": 70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 30,
+   "dy_m": 70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 40,
+   "dy_m": 70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 50,
+   "dy_m": 70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 60,
+   "dy_m": 70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 70,
+   "dy_m": 70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 80,
+   "dy_m": 70,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": -80,
+   "dy_m": 80,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -70,
+   "dy_m": 80,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -60,
+   "dy_m": 80,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_YardBand",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_YardBand"
+  },
+  {
+   "dx_m": -50,
+   "dy_m": 80,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": -40,
+   "dy_m": 80,
+   "z": 1255.0,
+   "actor": "TQ01_TQ01_Palace_Wing_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Wing_stone"
+  },
+  {
+   "dx_m": -30,
+   "dy_m": 80,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": -20,
+   "dy_m": 80,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": -10,
+   "dy_m": 80,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": 0,
+   "dy_m": 80,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": 10,
+   "dy_m": 80,
+   "z": 12.0,
+   "actor": "TQ01_TQ01_WorksBlock",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_WorksBlock"
+  },
+  {
+   "dx_m": 20,
+   "dy_m": 80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 30,
+   "dy_m": 80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 40,
+   "dy_m": 80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 50,
+   "dy_m": 80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 60,
+   "dy_m": 80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 70,
+   "dy_m": 80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  },
+  {
+   "dx_m": 80,
+   "dy_m": 80,
+   "z": -14.0,
+   "actor": "V2_GroundSlab",
+   "folder": "None",
+   "component": "StaticMeshComponent0"
+  }
+ ],
+ "floor_under_stuck_point": {
+  "z": 1255.2,
+  "actor": "TQ01_TQ01_Palace_Dome_Grand_stone",
+  "folder": "Wonderland/Authored/TQ01_TartarusQ",
+  "component": "ISM_TQ01_TQ01_Palace_Dome_Grand_st"
+ },
+ "dog": {
+  "rested_z": 1447.4,
+  "standing_on": {
+   "z": 1255.2,
+   "actor": "TQ01_TQ01_Palace_Dome_Grand_stone",
+   "folder": "Wonderland/Authored/TQ01_TartarusQ",
+   "component": "ISM_TQ01_TQ01_Palace_Dome_Grand_st"
+  }
+ },
+ "finished": "2026-09-25 03:40:55",
+ "seconds": 36.6,
+ "log": ""
+}

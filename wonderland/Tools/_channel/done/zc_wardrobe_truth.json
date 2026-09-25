@@ -1,0 +1,123 @@
+{
+ "name": "zc_wardrobe_truth",
+ "started": "2026-09-25 07:23:02",
+ "status": "measured",
+ "clicks": [
+  {
+   "skin": "relay_og",
+   "worn": true,
+   "view_before": [
+    "BP_RelayDog_C_0",
+    -516.1,
+    -857.9,
+    207.8
+   ],
+   "view_after": [
+    "BP_RelayDog_C_0",
+    -516.1,
+    -857.9,
+    207.8
+   ],
+   "VIEW_MOVED": false,
+   "brain_still_open": true
+  },
+  {
+   "skin": "apollo",
+   "worn": true,
+   "view_before": [
+    "BP_RelayDog_C_0",
+    -516.1,
+    -857.9,
+    207.8
+   ],
+   "view_after": [
+    "BP_RelayDog_C_0",
+    -516.1,
+    -857.9,
+    207.8
+   ],
+   "VIEW_MOVED": false,
+   "brain_still_open": true
+  },
+  {
+   "skin": "arden_infernal",
+   "worn": true,
+   "view_before": [
+    "BP_RelayDog_C_0",
+    -516.1,
+    -857.9,
+    207.8
+   ],
+   "view_after": [
+    "BP_RelayDog_C_0",
+    -516.1,
+    -857.9,
+    207.8
+   ],
+   "VIEW_MOVED": false,
+   "brain_still_open": true
+  },
+  {
+   "skin": "skeleton_flame",
+   "worn": true,
+   "view_before": [
+    "BP_RelayDog_C_0",
+    -516.1,
+    -857.9,
+    207.8
+   ],
+   "view_after": [
+    "BP_RelayDog_C_0",
+    -516.1,
+    -857.9,
+    207.8
+   ],
+   "VIEW_MOVED": false,
+   "brain_still_open": true
+  },
+  {
+   "skin": "celestial_light",
+   "worn": true,
+   "view_before": [
+    "BP_RelayDog_C_0",
+    -516.1,
+    -857.9,
+    207.8
+   ],
+   "view_after": [
+    "BP_RelayDog_C_0",
+    -516.1,
+    -857.9,
+    207.8
+   ],
+   "VIEW_MOVED": false,
+   "brain_still_open": true
+  }
+ ],
+ "brain_open": true,
+ "view_before_wardrobe": [
+  "BP_RelayDog_C_0",
+  -516.1,
+  -857.9,
+  207.8
+ ],
+ "wardrobe_opened": true,
+ "view_after_wardrobe": [
+  "BP_RelayDog_C_0",
+  -516.1,
+  -857.9,
+  207.8
+ ],
+ "wardrobe_moved_the_view": false,
+ "any_click_moved_the_view": false,
+ "brain_open_at_end": true,
+ "view_at_end": [
+  "BP_RelayDog_C_0",
+  -516.1,
+  -857.9,
+  207.8
+ ],
+ "finished": "2026-09-25 07:23:35",
+ "seconds": 32.99,
+ "log": ""
+}

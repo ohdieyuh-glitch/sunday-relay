@@ -1,0 +1,16 @@
+{
+ "name": "zc_apply_sf01_icarus_seam",
+ "started": "2026-09-24 21:06:19",
+ "status": "done",
+ "map_dirty_before": [],
+ "removed": 33,
+ "pass": "SF01",
+ "actors": 0,
+ "batches": 33,
+ "instances": 1039,
+ "hovers": 0,
+ "saved": true,
+ "finished": "2026-09-24 21:06:45",
+ "seconds": 25.63,
+ "log": "applied SF01 0 actors 33 batches 1039 instances\n"
+}

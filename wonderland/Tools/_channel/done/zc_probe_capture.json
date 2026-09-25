@@ -1,0 +1,133 @@
+{
+ "name": "zc_probe_capture",
+ "started": "2026-09-25 02:05:57",
+ "status": "probed",
+ "findings": {
+  "water_master": {
+   "package": {
+    "path": "/Game/Wonderland/Materials/M_WL_RealWater",
+    "loaded": false,
+    "class": null,
+    "blend": null
+   },
+   "object": {
+    "path": "/Game/Wonderland/Materials/M_WL_RealWater.M_WL_RealWater",
+    "loaded": false,
+    "class": null,
+    "blend": null
+   }
+  },
+  "settings": {
+   "class": "WonderlandCompanionPreviewSettings",
+   "python_type": "WonderlandCompanionPreviewSettings",
+   "compound_agent_name": "Julius"
+  },
+  "render_target": {
+   "made": true,
+   "format": "<TextureRenderTargetFormat.RTF_RGBA8: 2>"
+  },
+  "capture_spawned": true,
+  "component": "NewSceneCaptureComponent2D",
+  "target_bound": true,
+  "pixels_before_capture": [
+   [
+    0,
+    0,
+    0,
+    255
+   ],
+   [
+    0,
+    0,
+    0,
+    255
+   ],
+   [
+    0,
+    0,
+    0,
+    255
+   ],
+   [
+    0,
+    0,
+    0,
+    255
+   ],
+   [
+    0,
+    0,
+    0,
+    255
+   ]
+  ],
+  "pixels_after_capture": [
+   [
+    255,
+    255,
+    255,
+    255
+   ],
+   [
+    255,
+    255,
+    255,
+    255
+   ],
+   [
+    255,
+    255,
+    255,
+    255
+   ],
+   [
+    255,
+    255,
+    255,
+    255
+   ],
+   [
+    255,
+    255,
+    255,
+    255
+   ]
+  ],
+  "pixels_second_capture": [
+   [
+    255,
+    255,
+    255,
+    255
+   ],
+   [
+    255,
+    255,
+    255,
+    255
+   ],
+   [
+    255,
+    255,
+    255,
+    255
+   ],
+   [
+    255,
+    255,
+    255,
+    255
+   ],
+   [
+    255,
+    255,
+    255,
+    255
+   ]
+  ],
+  "exported_png_bytes": 5173
+ },
+ "finished": "2026-09-25 02:06:14",
+ "seconds": 16.4,
+ "log": ""
+}

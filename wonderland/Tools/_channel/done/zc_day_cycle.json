@@ -1,0 +1,139 @@
+{
+ "name": "zc_day_cycle",
+ "started": "2026-09-25 02:23:53",
+ "status": "measured",
+ "hours": [
+  {
+   "asked_for": 6.5,
+   "intensity": 54442.8,
+   "elevation_deg": 9.4,
+   "bearing_deg": 95.14
+  },
+  {
+   "asked_for": 9.5,
+   "intensity": 70000.0,
+   "elevation_deg": 57.12,
+   "bearing_deg": 141.43
+  },
+  {
+   "asked_for": 12.0,
+   "intensity": 70000.0,
+   "elevation_deg": 72.0,
+   "bearing_deg": 180.0
+  },
+  {
+   "asked_for": 16.0,
+   "intensity": 70000.0,
+   "elevation_deg": 36.0,
+   "bearing_deg": -118.29
+  },
+  {
+   "asked_for": 17.5,
+   "intensity": 54442.7,
+   "elevation_deg": 9.4,
+   "bearing_deg": -95.14
+  },
+  {
+   "asked_for": 18.0,
+   "intensity": 13994.0,
+   "elevation_deg": -0.0,
+   "bearing_deg": -87.43
+  },
+  {
+   "asked_for": 18.2,
+   "intensity": 4992.5,
+   "elevation_deg": -3.77,
+   "bearing_deg": -84.34
+  },
+  {
+   "asked_for": 18.5,
+   "intensity": 280.0,
+   "elevation_deg": -9.4,
+   "bearing_deg": -79.71
+  },
+  {
+   "asked_for": 20.5,
+   "intensity": 280.0,
+   "elevation_deg": -43.83,
+   "bearing_deg": -72.0
+  },
+  {
+   "asked_for": 23.0,
+   "intensity": 280.0,
+   "elevation_deg": -69.55,
+   "bearing_deg": -72.0
+  },
+  {
+   "asked_for": 3.0,
+   "intensity": 280.0,
+   "elevation_deg": -50.91,
+   "bearing_deg": 72.0
+  }
+ ],
+ "component_reached_via": "light_component",
+ "found_the_sun": true,
+ "tests": [
+  {
+   "id": "D00",
+   "name": "the atmosphere sun was found, so the readings are of the real light",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "D01",
+   "name": "the sun stands high at midday and below the horizon at night",
+   "pass": true,
+   "detail": {
+    "brightest_elevation": 72.0,
+    "darkest_elevation": -69.55
+   }
+  },
+  {
+   "id": "D02",
+   "name": "noon is daylight and deep night is a moonlight floor, not darkness",
+   "pass": true,
+   "detail": {
+    "noon_lux": 70000.0,
+    "night_lux": 280.0
+   }
+  },
+  {
+   "id": "D03",
+   "name": "the light does not fall off a cliff when the sun crosses the horizon",
+   "pass": true,
+   "detail": {
+    "worst_ratio": 17.8,
+    "across": [
+     -9.4,
+     -3.77,
+     280.0,
+     4992.5
+    ],
+    "samples_in_band": 5,
+    "old_curve_was": "195x between +9.4 and -3.8 deg"
+   }
+  }
+ ],
+ "brightest": {
+  "asked_for": 12.0,
+  "intensity": 70000.0,
+  "elevation_deg": 72.0,
+  "bearing_deg": 180.0
+ },
+ "darkest": {
+  "asked_for": 23.0,
+  "intensity": 280.0,
+  "elevation_deg": -69.55,
+  "bearing_deg": -72.0
+ },
+ "worst_twilight_step_ratio": 17.8,
+ "worst_twilight_step": [
+  -9.4,
+  -3.77,
+  280.0,
+  4992.5
+ ],
+ "finished": "2026-09-25 02:24:39",
+ "seconds": 45.61,
+ "log": "D00 PASS the atmosphere sun was found, so the readings are of the real light {}\nD01 PASS the sun stands high at midday and below the horizon at night {'brightest_elevation': 72.0, 'darkest_elevation': -69.55}\nD02 PASS noon is daylight and deep night is a moonlight floor, not darkness {'noon_lux': 70000.0, 'night_lux': 280.0}\nD03 PASS the light does not fall off a cliff when the sun crosses the horizon {'worst_ratio': 17.8, 'across': [-9.4, -3.77, 280.0, 4992.5], 'samples_in_band': 5, 'old_curve_was': '195x between +9.4 and -3.8 deg'}\n"
+}

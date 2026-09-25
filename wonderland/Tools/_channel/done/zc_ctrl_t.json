@@ -1,0 +1,10 @@
+{
+ "name": "zc_ctrl_t",
+ "started": "2026-09-24 23:16:51",
+ "status": "error",
+ "tests": [],
+ "error": "Traceback (most recent call last):\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/editor_channel.py\", line 121, in _step\n    yielded = job[\"gen\"].throw(thrown) if thrown is not None else next(job[\"gen\"])\n                                                                  ^^^^^^^^^^^^^^^^\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/_channel\\inbox\\zc_ctrl_t.py\", line 47, in job\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/_channel\\inbox\\zc_ctrl_t.py\", line 43, in shut\nAttributeError: type object 'WonderlandUiTestLibrary' has no attribute 'is_live_terminal_open'\n",
+ "finished": "2026-09-24 23:17:01",
+ "seconds": 10.5,
+ "log": ""
+}

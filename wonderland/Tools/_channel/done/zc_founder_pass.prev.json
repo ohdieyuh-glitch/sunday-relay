@@ -1,0 +1,115 @@
+{
+ "name": "zc_founder_pass",
+ "started": "2026-09-24 23:14:38",
+ "status": "done",
+ "add_task_layer_on_hud": false,
+ "usage_hud_present": true,
+ "terminal_open": true,
+ "add_1": true,
+ "add_2": true,
+ "task_count_after_two": 2,
+ "second_is_draft": true,
+ "objectives": [
+  "Survey the arrival plaza",
+  "Inspect the garden arches"
+ ],
+ "transcripts_not_merged": true,
+ "selected_first": true,
+ "selected_second": true,
+ "objectives_after_switch": [
+  "Survey the arrival plaza",
+  "Inspect the garden arches"
+ ],
+ "switch_mutated_nothing": true,
+ "orb_stack": [
+  "ORB STACK  2 orb(s)  \u00b7  56 uu tall",
+  "  0   RED   lift    0 uu  Survey the arrival plaza",
+  "  1 * RED   lift   56 uu  Inspect the garden arches"
+ ],
+ "orbs_match_tabs": true,
+ "cubs_command_handled": true,
+ "cub_subsystem_found": true,
+ "cub_count": 5,
+ "cub_source": "<WonderlandCubCountSource.USER_SUMMONED: 3>",
+ "cub_driven_by_julius": false,
+ "cub_states": [
+  "IDLE",
+  "IDLE",
+  "IDLE",
+  "IDLE",
+  "IDLE"
+ ],
+ "cub_states_later": [
+  "IDLE",
+  "IDLE",
+  "IDLE",
+  "IDLE",
+  "IDLE"
+ ],
+ "pa_command_handled": true,
+ "project_avatars_in_world": [],
+ "pa_families_shown": 0,
+ "preview_in_world": true,
+ "preview_body_at": [
+  -447,
+  -714,
+  152
+ ],
+ "preview_near_player": true,
+ "preview_survives_panel_close": false,
+ "skin_switching": [
+  {
+   "skin": "relay_og",
+   "accepted": true,
+   "stage_now": "relay_og"
+  },
+  {
+   "skin": "arden_infernal",
+   "accepted": true,
+   "stage_now": "arden_infernal"
+  },
+  {
+   "skin": "apollo",
+   "accepted": true,
+   "stage_now": "apollo"
+  },
+  {
+   "skin": "skeleton_flame",
+   "accepted": true,
+   "stage_now": "skeleton_flame"
+  },
+  {
+   "skin": "hagoromo",
+   "accepted": true,
+   "stage_now": "skeleton_flame"
+  },
+  {
+   "skin": "celestial_light",
+   "accepted": true,
+   "stage_now": "celestial_light"
+  },
+  {
+   "skin": "bee",
+   "accepted": true,
+   "stage_now": "celestial_light"
+  }
+ ],
+ "all_skins_switched": false,
+ "preview_still_in_world_after_all": false,
+ "REPORT": {
+  "add_task_removed_from_usage_hud": "PASS",
+  "plus_in_julius_terminal": "PASS",
+  "new_terminal_created": "PASS",
+  "new_terminal_reads_pending": "PASS",
+  "terminal_switching": "PASS",
+  "one_identity_tab_contract_orb": "PASS",
+  "cubs_command": "PASS",
+  "pa_command": "PASS",
+  "pa_families_shown": 0,
+  "in_world_skin_preview": "FAIL",
+  "all_seven_skins_switch": "FAIL"
+ },
+ "finished": "2026-09-24 23:15:48",
+ "seconds": 70.63,
+ "log": ""
+}

@@ -1,0 +1,236 @@
+[
+ {
+  "name": "MI_V2_Cobble",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.06,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ },
+ {
+  "name": "MI_V2_GroundFlag_PathStone",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.03,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ },
+ {
+  "name": "MI_V2_GroundFlag_PathWarm",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.03,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ },
+ {
+  "name": "MI_V2_GroundFlag_PlazaCream",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.03,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ },
+ {
+  "name": "MI_V2_GroundFlag_PlazaGrey",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.03,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ },
+ {
+  "name": "MI_V2_GroundFlag_PlazaShade",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.03,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ },
+ {
+  "name": "MI_V2_GroundFlag_PlazaWarm",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.03,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ },
+ {
+  "name": "MI_V2_PlazaCream",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.03,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ },
+ {
+  "name": "MI_V2_PlazaGrey",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.03,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ },
+ {
+  "name": "MI_V2_PlazaShade",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.03,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ },
+ {
+  "name": "MI_V2_PlazaWarm",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.03,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ },
+ {
+  "name": "MI_V2HD_Cobble",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.03,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ },
+ {
+  "name": "MI_V2HD_CobbleHero",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.03,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ },
+ {
+  "name": "MI_V2HD_PlazaCream",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.03,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ },
+ {
+  "name": "MI_V2HD_PlazaGrey",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.03,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ },
+ {
+  "name": "MI_V2HD_PlazaShade",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.03,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ },
+ {
+  "name": "MI_V2HD_PlazaWarm",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.03,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ },
+ {
+  "name": "MI_V2_CobbleHero",
+  "before": {
+   "InstVary": 0.08,
+   "InstWarm": 0.03,
+   "InstRoughVary": 0.1
+  },
+  "after": {
+   "InstVary": 0.2,
+   "InstWarm": 0.12,
+   "InstRoughVary": 0.16
+  }
+ }
+]

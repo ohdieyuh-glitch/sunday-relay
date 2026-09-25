@@ -1,0 +1,751 @@
+{
+ "name": "zc_nanite_audit",
+ "started": "2026-09-24 14:26:52",
+ "status": "audited",
+ "meshes_checked": 1187,
+ "nanite_enabled_count": 109,
+ "single_lod_count": 1110,
+ "heaviest": [
+  {
+   "name": "S_Preview_LS_256x256",
+   "path": "/Landmass/Landscape/Meshes/S_Preview_LS_256x256.S_Preview_LS_256x256",
+   "triangles": 130050,
+   "lods": 4,
+   "nanite": false
+  },
+  {
+   "name": "S_Scatter_255x255_quads",
+   "path": "/Landmass/Landscape/Meshes/S_Scatter_255x255_quads.S_Scatter_255x255_quads",
+   "triangles": 130050,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_heart_topiary",
+   "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_heart_topiary.SM_heart_topiary",
+   "triangles": 65828,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_MH_Head",
+   "path": "/MetaHumanSDK/TemplateAssets/SM_MH_Head.SM_MH_Head",
+   "triangles": 64094,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_Room_01",
+   "path": "/Engine/VREditor/BasicMeshes/SM_Room_01.SM_Room_01",
+   "triangles": 63774,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "EditorShaderBall",
+   "path": "/Engine/EditorMeshes/EditorShaderBall.EditorShaderBall",
+   "triangles": 58540,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_MatPreviewMesh_01",
+   "path": "/Engine/EngineMeshes/SM_MatPreviewMesh_01.SM_MatPreviewMesh_01",
+   "triangles": 58540,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_MatPreviewMesh_01",
+   "path": "/InterchangeAxfAssets/Meshes/SM_MatPreviewMesh_01.SM_MatPreviewMesh_01",
+   "triangles": 58540,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_hedge_mass",
+   "path": "/Game/WonderlandV2/Vegetation/Shrubs/SM_hedge_mass.SM_hedge_mass",
+   "triangles": 48740,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_ColorCalibrator",
+   "path": "/Engine/EditorMeshes/ColorCalibrator/SM_ColorCalibrator.SM_ColorCalibrator",
+   "triangles": 37472,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_floral_arch",
+   "path": "/Game/WonderlandV2/Architecture/Garden/SM_floral_arch.SM_floral_arch",
+   "triangles": 36768,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_spire_great",
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_spire_great.SM_spire_great",
+   "triangles": 32636,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "S_Preview_LS_128x128",
+   "path": "/Landmass/Landscape/Meshes/S_Preview_LS_128x128.S_Preview_LS_128x128",
+   "triangles": 32258,
+   "lods": 3,
+   "nanite": false
+  },
+  {
+   "name": "S_Scatter_127x127_quads",
+   "path": "/Landmass/Landscape/Meshes/S_Scatter_127x127_quads.S_Scatter_127x127_quads",
+   "triangles": 32258,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "CausticPhotonMeshGrid",
+   "path": "/Water/Caustics/Meshes/CausticPhotonMeshGrid.CausticPhotonMeshGrid",
+   "triangles": 32258,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "TransformGizmoFreeRotation",
+   "path": "/Engine/VREditor/TransformGizmo/TransformGizmoFreeRotation.TransformGizmoFreeRotation",
+   "triangles": 32256,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_topiary_cone_roses",
+   "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_cone_roses.SM_topiary_cone_roses",
+   "triangles": 32164,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_canopy_large",
+   "path": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "triangles": 31264,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_hedge_block",
+   "path": "/Game/WonderlandV2/Vegetation/Shrubs/SM_hedge_block.SM_hedge_block",
+   "triangles": 28608,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_MarbleWorld",
+   "path": "/Game/WonderlandV2/Scenic/Marble/mesh_hq/StaticMeshes/SM_MarbleWorld.SM_MarbleWorld",
+   "triangles": 28567,
+   "lods": 1,
+   "nanite": true
+  },
+  {
+   "name": "SM_MarbleWorld",
+   "path": "/Game/WonderlandV2/Marble/mesh_hq/StaticMeshes/SM_MarbleWorld.SM_MarbleWorld",
+   "triangles": 28567,
+   "lods": 1,
+   "nanite": true
+  },
+  {
+   "name": "SM_Marble_royal-garden-backdrop",
+   "path": "/Game/Wonderland/Marble/RoyalGardenBackdrop/mesh_hq/StaticMeshes/SM_Marble_royal-garden-backdrop.SM_Marble_royal-garden-backdrop",
+   "triangles": 28567,
+   "lods": 1,
+   "nanite": true
+  },
+  {
+   "name": "SM_garden_lawn",
+   "path": "/Game/WonderlandV2/Ground/Terrain/SM_garden_lawn.SM_garden_lawn",
+   "triangles": 26508,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_topiary_cone_plain",
+   "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_cone_plain.SM_topiary_cone_plain",
+   "triangles": 22440,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_topiary_spiral",
+   "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_spiral.SM_topiary_spiral",
+   "triangles": 21004,
+   "lods": 1,
+   "nanite": false
+  }
+ ],
+ "candidates": [
+  {
+   "name": "S_Preview_LS_256x256",
+   "path": "/Landmass/Landscape/Meshes/S_Preview_LS_256x256.S_Preview_LS_256x256",
+   "triangles": 130050,
+   "lods": 4,
+   "nanite": false
+  },
+  {
+   "name": "S_Scatter_255x255_quads",
+   "path": "/Landmass/Landscape/Meshes/S_Scatter_255x255_quads.S_Scatter_255x255_quads",
+   "triangles": 130050,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_heart_topiary",
+   "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_heart_topiary.SM_heart_topiary",
+   "triangles": 65828,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_MH_Head",
+   "path": "/MetaHumanSDK/TemplateAssets/SM_MH_Head.SM_MH_Head",
+   "triangles": 64094,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_Room_01",
+   "path": "/Engine/VREditor/BasicMeshes/SM_Room_01.SM_Room_01",
+   "triangles": 63774,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "EditorShaderBall",
+   "path": "/Engine/EditorMeshes/EditorShaderBall.EditorShaderBall",
+   "triangles": 58540,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_MatPreviewMesh_01",
+   "path": "/Engine/EngineMeshes/SM_MatPreviewMesh_01.SM_MatPreviewMesh_01",
+   "triangles": 58540,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_MatPreviewMesh_01",
+   "path": "/InterchangeAxfAssets/Meshes/SM_MatPreviewMesh_01.SM_MatPreviewMesh_01",
+   "triangles": 58540,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_hedge_mass",
+   "path": "/Game/WonderlandV2/Vegetation/Shrubs/SM_hedge_mass.SM_hedge_mass",
+   "triangles": 48740,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_ColorCalibrator",
+   "path": "/Engine/EditorMeshes/ColorCalibrator/SM_ColorCalibrator.SM_ColorCalibrator",
+   "triangles": 37472,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_floral_arch",
+   "path": "/Game/WonderlandV2/Architecture/Garden/SM_floral_arch.SM_floral_arch",
+   "triangles": 36768,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_spire_great",
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_spire_great.SM_spire_great",
+   "triangles": 32636,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "S_Preview_LS_128x128",
+   "path": "/Landmass/Landscape/Meshes/S_Preview_LS_128x128.S_Preview_LS_128x128",
+   "triangles": 32258,
+   "lods": 3,
+   "nanite": false
+  },
+  {
+   "name": "S_Scatter_127x127_quads",
+   "path": "/Landmass/Landscape/Meshes/S_Scatter_127x127_quads.S_Scatter_127x127_quads",
+   "triangles": 32258,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "CausticPhotonMeshGrid",
+   "path": "/Water/Caustics/Meshes/CausticPhotonMeshGrid.CausticPhotonMeshGrid",
+   "triangles": 32258,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "TransformGizmoFreeRotation",
+   "path": "/Engine/VREditor/TransformGizmo/TransformGizmoFreeRotation.TransformGizmoFreeRotation",
+   "triangles": 32256,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_topiary_cone_roses",
+   "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_cone_roses.SM_topiary_cone_roses",
+   "triangles": 32164,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_canopy_large",
+   "path": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large.SM_canopy_large",
+   "triangles": 31264,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_hedge_block",
+   "path": "/Game/WonderlandV2/Vegetation/Shrubs/SM_hedge_block.SM_hedge_block",
+   "triangles": 28608,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_garden_lawn",
+   "path": "/Game/WonderlandV2/Ground/Terrain/SM_garden_lawn.SM_garden_lawn",
+   "triangles": 26508,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_topiary_cone_plain",
+   "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_cone_plain.SM_topiary_cone_plain",
+   "triangles": 22440,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_topiary_spiral",
+   "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_spiral.SM_topiary_spiral",
+   "triangles": 21004,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "VivePreController_Trimlines",
+   "path": "/Engine/VREditor/Devices/Vive/VivePreController_Trimlines.VivePreController_Trimlines",
+   "triangles": 17912,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "VivePreControllerMesh",
+   "path": "/Engine/VREditor/Devices/Vive/VivePreControllerMesh.VivePreControllerMesh",
+   "triangles": 17326,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_canopy_medium",
+   "path": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "triangles": 16870,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_shrub_flowering",
+   "path": "/Game/WonderlandV2/Vegetation/Shrubs/SM_shrub_flowering.SM_shrub_flowering",
+   "triangles": 15850,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_topiary_ball",
+   "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_ball.SM_topiary_ball",
+   "triangles": 15648,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "OculusControllerMesh",
+   "path": "/Engine/VREditor/Devices/Oculus/OculusControllerMesh.OculusControllerMesh",
+   "triangles": 12554,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_mushroom_landmark",
+   "path": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_landmark.SM_mushroom_landmark",
+   "triangles": 11948,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_orrery_gold",
+   "path": "/Game/WonderlandV2/Props/Clocks/SM_orrery_gold.SM_orrery_gold",
+   "triangles": 11196,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_mushroom_medium",
+   "path": "/Game/WonderlandV2/Mushrooms/Medium/SM_mushroom_medium.SM_mushroom_medium",
+   "triangles": 10604,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_rose_bush",
+   "path": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bush.SM_rose_bush",
+   "triangles": 10080,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_vine_hanging",
+   "path": "/Game/WonderlandV2/Vegetation/Vines/SM_vine_hanging.SM_vine_hanging",
+   "triangles": 10044,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_ivy_drape",
+   "path": "/Game/WonderlandV2/Vegetation/Ivy/SM_ivy_drape.SM_ivy_drape",
+   "triangles": 9768,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_mushroom_small",
+   "path": "/Game/WonderlandV2/Mushrooms/Small/SM_mushroom_small.SM_mushroom_small",
+   "triangles": 9580,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_flower_bed_blooms_3",
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_3.SM_flower_bed_blooms_3",
+   "triangles": 9328,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "ViveControllerMesh",
+   "path": "/Engine/VREditor/Devices/Vive/ViveControllerMesh.ViveControllerMesh",
+   "triangles": 9314,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_flower_bed_blooms_2",
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_2.SM_flower_bed_blooms_2",
+   "triangles": 9116,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_Ball_01",
+   "path": "/Engine/VREditor/BasicMeshes/SM_Ball_01.SM_Ball_01",
+   "triangles": 9096,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_sky_dome",
+   "path": "/Game/WonderlandV2/Sky/SM_sky_dome.SM_sky_dome",
+   "triangles": 8832,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_tower_district",
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_tower_district.SM_tower_district",
+   "triangles": 8812,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_flower_bed_blooms_1",
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_1.SM_flower_bed_blooms_1",
+   "triangles": 8692,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_flower_bed_blooms_0",
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_0.SM_flower_bed_blooms_0",
+   "triangles": 8480,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_vine_wall",
+   "path": "/Game/WonderlandV2/Vegetation/Ivy/SM_vine_wall.SM_vine_wall",
+   "triangles": 8372,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_cloister_square",
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_cloister_square.SM_cloister_square",
+   "triangles": 8220,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "S_WaterPlane_256",
+   "path": "/Water/Meshes/S_WaterPlane_256.S_WaterPlane_256",
+   "triangles": 8192,
+   "lods": 7,
+   "nanite": false
+  },
+  {
+   "name": "S_Preview_LS_64x64",
+   "path": "/Landmass/Landscape/Meshes/S_Preview_LS_64x64.S_Preview_LS_64x64",
+   "triangles": 7938,
+   "lods": 3,
+   "nanite": false
+  },
+  {
+   "name": "S_Scatter_63x63_quads",
+   "path": "/Landmass/Landscape/Meshes/S_Scatter_63x63_quads.S_Scatter_63x63_quads",
+   "triangles": 7938,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_tree_clock_trunk",
+   "path": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_clock_trunk.SM_tree_clock_trunk",
+   "triangles": 7516,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_clock_grand",
+   "path": "/Game/WonderlandV2/Props/Clocks/SM_clock_grand.SM_clock_grand",
+   "triangles": 7476,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_mushroom_giant",
+   "path": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_giant.SM_mushroom_giant",
+   "triangles": 7472,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_spire_signature",
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_spire_signature.SM_spire_signature",
+   "triangles": 7168,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_tea_pot",
+   "path": "/Game/WonderlandV2/Props/Tea/SM_tea_pot.SM_tea_pot",
+   "triangles": 7056,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_blossom_cluster",
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_blossom_cluster.SM_blossom_cluster",
+   "triangles": 6720,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_gear_monument",
+   "path": "/Game/WonderlandV2/Props/Clocks/SM_gear_monument.SM_gear_monument",
+   "triangles": 6572,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_CineCam",
+   "path": "/Engine/EditorMeshes/Camera/SM_CineCam.SM_CineCam",
+   "triangles": 6252,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_tree_mature_trunk",
+   "path": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_mature_trunk.SM_tree_mature_trunk",
+   "triangles": 6224,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_tea_cup",
+   "path": "/Game/WonderlandV2/Props/Tea/SM_tea_cup.SM_tea_cup",
+   "triangles": 6196,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_Hand-Lft-Mesh",
+   "path": "/ConcertSyncClient/SM_Hand-Lft-Mesh.SM_Hand-Lft-Mesh",
+   "triangles": 5914,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "GenericHMD",
+   "path": "/Engine/VREditor/Devices/Generic/GenericHMD.GenericHMD",
+   "triangles": 5818,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_GenericHMD",
+   "path": "/ConcertSyncClient/SM_GenericHMD.SM_GenericHMD",
+   "triangles": 5810,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "ShadowTestMesh",
+   "path": "/Engine/ArtTools/RenderToTexture/Meshes/ShadowTestMesh.ShadowTestMesh",
+   "triangles": 5760,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_tea_cup_small",
+   "path": "/Game/WonderlandV2/Props/Tea/SM_tea_cup_small.SM_tea_cup_small",
+   "triangles": 5656,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_teapot_pavilion",
+   "path": "/Game/WonderlandV2/Props/Tea/SM_teapot_pavilion.SM_teapot_pavilion",
+   "triangles": 5514,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_garden_urn",
+   "path": "/Game/WonderlandV2/Props/Garden/SM_garden_urn.SM_garden_urn",
+   "triangles": 5260,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_key_colossal",
+   "path": "/Game/WonderlandV2/Props/Keys/SM_key_colossal.SM_key_colossal",
+   "triangles": 5202,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "S_1_Unit_Sphere_HI",
+   "path": "/Engine/ArtTools/RenderToTexture/Meshes/S_1_Unit_Sphere_HI.S_1_Unit_Sphere_HI",
+   "triangles": 5120,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_rose_bloom",
+   "path": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bloom.SM_rose_bloom",
+   "triangles": 4704,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_castle_tower",
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_castle_tower.SM_castle_tower",
+   "triangles": 4608,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_flower_colossal_bloom",
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_colossal_bloom.SM_flower_colossal_bloom",
+   "triangles": 4572,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "MatineeCam_SM",
+   "path": "/Engine/EditorMeshes/MatineeCam_SM.MatineeCam_SM",
+   "triangles": 4528,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_flower_bed_base_0",
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_base_0.SM_flower_bed_base_0",
+   "triangles": 4520,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_flower_bed_base_1",
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_base_1.SM_flower_bed_base_1",
+   "triangles": 4520,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_flower_bed_base_2",
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_base_2.SM_flower_bed_base_2",
+   "triangles": 4520,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_flower_bed_base_3",
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_base_3.SM_flower_bed_base_3",
+   "triangles": 4520,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_tree_slender_trunk",
+   "path": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "triangles": 4508,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "SM_tea_saucer",
+   "path": "/Game/WonderlandV2/Props/Tea/SM_tea_saucer.SM_tea_saucer",
+   "triangles": 4412,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "WL_Bridge_Arc",
+   "path": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Arc.WL_Bridge_Arc",
+   "triangles": 4156,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "WL_Bridge_Arc__aged",
+   "path": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Bridge_Arc__aged.WL_Bridge_Arc__aged",
+   "triangles": 4156,
+   "lods": 1,
+   "nanite": false
+  },
+  {
+   "name": "RotationHandleFull",
+   "path": "/Engine/VREditor/TransformGizmo/RotationHandleFull.RotationHandleFull",
+   "triangles": 4096,
+   "lods": 1,
+   "nanite": false
+  }
+ ],
+ "candidate_count": 187,
+ "finished": "2026-09-24 14:26:53",
+ "seconds": 0.33,
+ "log": ""
+}

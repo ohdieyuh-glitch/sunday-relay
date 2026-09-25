@@ -1,0 +1,34 @@
+{
+ "name": "zc_avenue_floor",
+ "started": "2026-09-24 20:48:00",
+ "status": "photographed",
+ "spots": [
+  {
+   "label": "tartarus_gate",
+   "asked": [
+    73075.0,
+    -42191.0
+   ],
+   "landed_z": 678.1
+  },
+  {
+   "label": "noctis_avenue",
+   "asked": [
+    -52000.0,
+    -30000.0
+   ],
+   "landed_z": 101.2
+  },
+  {
+   "label": "icarus_axis",
+   "asked": [
+    0.0,
+    41411.0
+   ],
+   "landed_z": 101.2
+  }
+ ],
+ "finished": "2026-09-24 20:48:48",
+ "seconds": 47.82,
+ "log": ""
+}

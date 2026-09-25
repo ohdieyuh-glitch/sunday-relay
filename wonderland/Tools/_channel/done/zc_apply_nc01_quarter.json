@@ -1,0 +1,18 @@
+{
+ "name": "zc_apply_nc01_quarter",
+ "started": "2026-09-24 20:40:30",
+ "status": "done",
+ "map_dirty_before": [
+  "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2"
+ ],
+ "removed": 99,
+ "pass": "NC01",
+ "actors": 17,
+ "batches": 82,
+ "instances": 2407,
+ "hovers": 0,
+ "saved": true,
+ "finished": "2026-09-24 20:40:57",
+ "seconds": 26.54,
+ "log": "applied NC01 17 actors 82 batches 2407 instances\n"
+}

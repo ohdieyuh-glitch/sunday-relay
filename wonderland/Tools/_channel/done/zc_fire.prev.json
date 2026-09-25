@@ -1,0 +1,177 @@
+{
+ "name": "zc_fire",
+ "started": "2026-09-25 06:53:54",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "F00",
+   "name": "arden_infernal: the skin carries flame parts, and a surface to draw them on",
+   "pass": true,
+   "detail": {
+    "flame_parts": [
+     "armfire_0",
+     "halofire_0",
+     "tailfire_0"
+    ],
+    "has_flame_surface": true,
+    "note": "parts tagged twinkle become Part_<name>; RebuildFlames lays ribbons into FlameSurface"
+   }
+  },
+  {
+   "id": "F01",
+   "name": "arden_infernal: every tongue of flame moves",
+   "pass": true,
+   "detail": {
+    "parts": 3,
+    "smallest_swing": 0.6045,
+    "largest_swing": 0.6344,
+    "still": [],
+    "note": "Tall runs 0.70-1.36 by design, so a burning tongue swings well past 0.25"
+   }
+  },
+  {
+   "id": "F02",
+   "name": "arden_infernal: a tongue goes tall and thin, it does not swell in place",
+   "pass": true,
+   "detail": {
+    "by_part": {
+     "halofire_0": -1.0,
+     "tailfire_0": -1.0,
+     "armfire_0": -1.0
+    },
+    "worst": -1.0,
+    "note": "width against height, same frames; a uniformly scaling tuft would read +1.0"
+   }
+  },
+  {
+   "id": "F03",
+   "name": "arden_infernal: the flicker never repeats itself",
+   "pass": true,
+   "detail": {
+    "by_part": {
+     "halofire_0": {
+      "self_similarity": 0.848,
+      "lag_s": 0.35
+     },
+     "tailfire_0": {
+      "self_similarity": 0.862,
+      "lag_s": 0.35
+     },
+     "armfire_0": {
+      "self_similarity": 0.845,
+      "lag_s": 0.7
+     }
+    },
+    "worst": 0.862,
+    "note": "highest self-correlation past 0.2 s; a looping animation reads close to 1.0"
+   }
+  },
+  {
+   "id": "F04",
+   "name": "arden_infernal: neighbouring tongues do not flicker together",
+   "pass": true,
+   "detail": {
+    "most_alike": [
+     [
+      0.797,
+      "armfire_0",
+      "halofire_0"
+     ],
+     [
+      0.354,
+      "armfire_0",
+      "tailfire_0"
+     ],
+     [
+      0.176,
+      "halofire_0",
+      "tailfire_0"
+     ]
+    ],
+    "pairs": 3,
+    "note": "seeded per part, so the whole never pulses as one object"
+   }
+  },
+  {
+   "id": "F05",
+   "name": "arden_infernal: the fire travels with the Dog",
+   "pass": true,
+   "detail": {
+    "dog_moved_uu": 471.7,
+    "fire_moved_uu": 474.47,
+    "drift_uu": 3.18,
+    "note": "the Dog is teleported; a flame parented anywhere else would be left behind"
+   }
+  },
+  {
+   "id": "F06",
+   "name": "arden_infernal: the flame ribbons are drawn with a material",
+   "pass": true,
+   "detail": {
+    "materials": [
+     "MID_M_WL_VoxelGlow_5",
+     "MID_M_WL_VoxelGlow_6"
+    ],
+    "sections": 2,
+    "note": "one section per ember colour the skin burns in"
+   }
+  },
+  {
+   "id": "G00",
+   "name": "skeleton_flame: the skin carries flame parts, and a surface to draw them on",
+   "pass": true,
+   "detail": {
+    "flame_parts": [
+     "backfire_0",
+     "earfire_0",
+     "flankfire_l_0",
+     "flankfire_r_0",
+     "footfire_l_0",
+     "footfire_r_0",
+     "handfire_l_0",
+     "handfire_r_0"
+    ],
+    "has_flame_surface": true,
+    "note": "parts tagged twinkle become Part_<name>; RebuildFlames lays ribbons into FlameSurface"
+   }
+  },
+  {
+   "id": "G01",
+   "name": "skeleton_flame: every tongue of flame moves",
+   "pass": true,
+   "detail": {
+    "parts": 8,
+    "smallest_swing": 0.5689,
+    "largest_swing": 0.6197,
+    "still": [],
+    "note": "Tall runs 0.70-1.36 by design, so a burning tongue swings well past 0.25"
+   }
+  }
+ ],
+ "skins": {
+  "arden_infernal": {
+   "parts": 3,
+   "swing_by_part": {
+    "halofire_0": 0.6062,
+    "tailfire_0": 0.6045,
+    "armfire_0": 0.6344
+   }
+  },
+  "skeleton_flame": {
+   "parts": 8,
+   "swing_by_part": {
+    "earfire_0": 0.6142,
+    "handfire_l_0": 0.5851,
+    "handfire_r_0": 0.6197,
+    "flankfire_r_0": 0.5689,
+    "backfire_0": 0.6107,
+    "flankfire_l_0": 0.6142,
+    "footfire_r_0": 0.6142,
+    "footfire_l_0": 0.6135
+   }
+  }
+ },
+ "finished": "2026-09-25 06:54:26",
+ "seconds": 31.82,
+ "log": "F00 PASS arden_infernal: the skin carries flame parts, and a surface to draw them on {'flame_parts': ['armfire_0', 'halofire_0', 'tailfire_0'], 'has_flame_surface': True, 'note': 'parts tagged twinkle become Part_<name>; RebuildFlames lays ribbons into FlameSurface'}\nF01 PASS arden_infernal: every tongue of flame moves {'parts': 3, 'smallest_swing': 0.6045, 'largest_swing': 0.6344, 'still': [], 'note': 'Tall runs 0.70-1.36 by design, so a burning tongue swings well past 0.25'}\nF02 PASS arden_infernal: a tongue goes tall and thin, it does not swell in place {'by_part': {'halofire_0': -1.0, 'tailfire_0': -1.0, 'armfire_0': -1.0}, 'worst': -1.0, 'note': 'width against height, same frames; a uniformly scaling tuft would read +1.0'}\nF03 PASS arden_infernal: the flicker never repeats itself {'by_part': {'halofire_0': {'self_similarity': 0.848, 'lag_s': 0.35}, 'tailfire_0': {'self_similarity': 0.862, 'lag_s': 0.35}, 'armfire_0': {'self_similarity': 0.845, 'lag_s': 0.7}}, 'worst': 0.862, 'note': 'highest self-correlation past 0.2 s; a looping animation reads close to 1.0'}\nF04 PASS arden_infernal: neighbouring tongues do not flicker together {'most_alike': [(0.797, 'armfire_0', 'halofire_0'), (0.354, 'armfire_0', 'tailfire_0'), (0.176, 'halofire_0', 'tailfire_0')], 'pairs': 3, 'note': 'seeded per part, so the whole never pulses as one object'}\nF05 PASS arden_infernal: the fire travels with the Dog {'dog_moved_uu': 471.7, 'fire_moved_uu': 474.47, 'drift_uu': 3.18, 'note': 'the Dog is teleported; a flame parented anywhere else would be left behind'}\nF06 PASS arden_infernal: the flame ribbons are drawn with a material {'materials': ['MID_M_WL_VoxelGlow_5', 'MID_M_WL_VoxelGlow_6'], 'sections': 2, 'note': 'one section per ember colour the skin burns in'}\nG00 PASS skeleton_flame: the skin carries flame parts, and a surface to draw them on {'flame_parts': ['backfire_0', 'earfire_0', 'flankfire_l_0', 'flankfire_r_0', 'footfire_l_0', 'footfire_r_0', 'handfire_l_0', 'handfire_r_0'], 'has_flame_surface': True, 'note': 'parts tagged twinkle become Part_<name>; RebuildFlames lays ribbons into FlameSurface'}\nG01 PASS skeleton_flame: every tongue of flame moves {'parts': 8, 'smallest_swing': 0.5689, 'largest_swing': 0.6197, 'still': [], 'note': 'Tall runs 0.70-1.36 by design, so a burning tongue swings well past 0.25'}\n"
+}

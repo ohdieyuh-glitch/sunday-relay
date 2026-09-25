@@ -1,0 +1,16 @@
+{
+ "name": "zc_apply_fr04_tartarus_edge",
+ "started": "2026-09-25 01:34:45",
+ "status": "done",
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "FR04",
+ "actors": 0,
+ "batches": 15,
+ "instances": 92,
+ "hovers": 0,
+ "saved": true,
+ "finished": "2026-09-25 01:34:51",
+ "seconds": 5.61,
+ "log": "applied FR04 0 actors 15 batches 92 instances\n"
+}

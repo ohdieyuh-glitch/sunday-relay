@@ -1,0 +1,60 @@
+{
+ "name": "zc_wp_grid",
+ "started": "2026-09-25 00:38:23",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "G01",
+   "name": "the twin opened and its actors could be read",
+   "pass": true,
+   "detail": {
+    "actors_seen": 631
+   }
+  },
+  {
+   "id": "G02",
+   "name": "opening the authoritative map loads its entire population, which is row H's complaint",
+   "pass": true,
+   "detail": {
+    "resident_on_open": 21052,
+    "buckets": {
+     "None": 21052
+    }
+   }
+  },
+  {
+   "id": "G03",
+   "name": "opening the twin loads a small fraction, the rest arriving by region",
+   "pass": true,
+   "detail": {
+    "resident_on_open": 631,
+    "of_external_actor_files": 21047,
+    "pct": 3.0,
+    "note": "runtime_grid is 'None' in BOTH maps and means the default grid, not unstreamed"
+   }
+  },
+  {
+   "id": "G04",
+   "name": "the authoritative map is open again, nothing saved to either",
+   "pass": true,
+   "detail": {}
+  }
+ ],
+ "authoritative_runtime_grid": {
+  "None": 21052
+ },
+ "authoritative_unreadable": 0,
+ "twin_opened": true,
+ "twin_runtime_grid": {
+  "None": 631
+ },
+ "twin_unreadable": 0,
+ "restored_authoritative": true,
+ "runtime_grid_note": "an empty runtime_grid means the DEFAULT grid, not 'unstreamed'; it does not discriminate",
+ "authoritative_resident_on_open": 21052,
+ "twin_resident_on_open": 631,
+ "twin_external_actor_files": 21047,
+ "finished": "2026-09-25 00:38:32",
+ "seconds": 8.71,
+ "log": "G01 PASS the twin opened and its actors could be read {'actors_seen': 631}\nG02 PASS opening the authoritative map loads its entire population, which is row H's complaint {'resident_on_open': 21052, 'buckets': {'None': 21052}}\nG03 PASS opening the twin loads a small fraction, the rest arriving by region {'resident_on_open': 631, 'of_external_actor_files': 21047, 'pct': 3.0, 'note': \"runtime_grid is 'None' in BOTH maps and means the default grid, not unstreamed\"}\nG04 PASS the authoritative map is open again, nothing saved to either {}\n"
+}

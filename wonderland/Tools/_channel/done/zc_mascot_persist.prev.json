@@ -1,0 +1,414 @@
+{
+ "name": "zc_mascot_persist",
+ "started": "2026-09-25 01:22:33",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "M01",
+   "name": "the world Dog wears the chosen PRIMARY on its body",
+   "pass": true,
+   "detail": {
+    "on": 13,
+    "off": 0
+   }
+  },
+  {
+   "id": "M02",
+   "name": "the world Dog wears the chosen SECONDARY on its eyes",
+   "pass": true,
+   "detail": {
+    "on": 2,
+    "off": 0,
+    "note": "eyes are matched by the runtime's own rule: eye / visor / pupil"
+   }
+  },
+  {
+   "id": "M03",
+   "name": "the colourway is still on while the Wardrobe is open",
+   "pass": true,
+   "detail": {
+    "on": 13,
+    "off": 0
+   }
+  },
+  {
+   "id": "M04",
+   "name": "the colourway survives a Mission Contract",
+   "pass": true,
+   "detail": {
+    "on": 13,
+    "off": 0
+   }
+  },
+  {
+   "id": "M05",
+   "name": "reset takes the chosen colourway off again",
+   "pass": true,
+   "detail": {
+    "still_on": 0,
+    "components": 15
+   }
+  }
+ ],
+ "in_world": {
+  "body_on_primary": 13,
+  "body_off": 0,
+  "eyes_on_secondary": 2,
+  "eyes_off": 0,
+  "components": 15,
+  "samples": [
+   {
+    "comp": "CameraProxyMeshComponent_0",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_root_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_head_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_head_visor",
+    "eye": true,
+    "rgb": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_head_eye",
+    "eye": true,
+    "rgb": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_armLeft_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_forearmLeft_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_armRight_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   }
+  ]
+ },
+ "wardrobe_open": true,
+ "in_wardrobe": {
+  "body_on_primary": 13,
+  "body_off": 0,
+  "eyes_on_secondary": 2,
+  "eyes_off": 0,
+  "components": 15,
+  "samples": [
+   {
+    "comp": "CameraProxyMeshComponent_0",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_root_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_head_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_head_visor",
+    "eye": true,
+    "rgb": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_head_eye",
+    "eye": true,
+    "rgb": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_armLeft_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_forearmLeft_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_armRight_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   }
+  ]
+ },
+ "contracts": 1,
+ "in_mission": {
+  "body_on_primary": 13,
+  "body_off": 0,
+  "eyes_on_secondary": 2,
+  "eyes_off": 0,
+  "components": 15,
+  "samples": [
+   {
+    "comp": "CameraProxyMeshComponent_0",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_root_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_head_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_head_visor",
+    "eye": true,
+    "rgb": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_head_eye",
+    "eye": true,
+    "rgb": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_armLeft_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_forearmLeft_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   },
+   {
+    "comp": "Mesh_armRight_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     0.0,
+     1.0
+    ],
+    "matches": true
+   }
+  ]
+ },
+ "after_reset": {
+  "body_on_primary": 0,
+  "body_off": 13,
+  "eyes_on_secondary": 0,
+  "eyes_off": 2,
+  "components": 15,
+  "samples": [
+   {
+    "comp": "CameraProxyMeshComponent_0",
+    "eye": false,
+    "rgb": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "matches": false
+   },
+   {
+    "comp": "Mesh_root_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "matches": false
+   },
+   {
+    "comp": "Mesh_head_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "matches": false
+   },
+   {
+    "comp": "Mesh_head_visor",
+    "eye": true,
+    "rgb": [
+     1.0,
+     0.78,
+     0.16
+    ],
+    "matches": false
+   },
+   {
+    "comp": "Mesh_head_eye",
+    "eye": true,
+    "rgb": [
+     1.0,
+     0.78,
+     0.16
+    ],
+    "matches": false
+   },
+   {
+    "comp": "Mesh_armLeft_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "matches": false
+   },
+   {
+    "comp": "Mesh_forearmLeft_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "matches": false
+   },
+   {
+    "comp": "Mesh_armRight_ivory",
+    "eye": false,
+    "rgb": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "matches": false
+   }
+  ]
+ },
+ "finished": "2026-09-25 01:23:08",
+ "seconds": 34.95,
+ "log": "M01 PASS the world Dog wears the chosen PRIMARY on its body {'on': 13, 'off': 0}\nM02 PASS the world Dog wears the chosen SECONDARY on its eyes {'on': 2, 'off': 0, 'note': \"eyes are matched by the runtime's own rule: eye / visor / pupil\"}\nM03 PASS the colourway is still on while the Wardrobe is open {'on': 13, 'off': 0}\nM04 PASS the colourway survives a Mission Contract {'on': 13, 'off': 0}\nM05 PASS reset takes the chosen colourway off again {'still_on': 0, 'components': 15}\n"
+}

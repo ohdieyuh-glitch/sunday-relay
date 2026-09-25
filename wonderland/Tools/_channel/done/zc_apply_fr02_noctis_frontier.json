@@ -1,0 +1,16 @@
+{
+ "name": "zc_apply_fr02_noctis_frontier",
+ "started": "2026-09-25 00:14:14",
+ "status": "done",
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "FR02",
+ "actors": 0,
+ "batches": 15,
+ "instances": 301,
+ "hovers": 0,
+ "saved": true,
+ "finished": "2026-09-25 00:14:19",
+ "seconds": 4.81,
+ "log": "applied FR02 0 actors 15 batches 301 instances\n"
+}

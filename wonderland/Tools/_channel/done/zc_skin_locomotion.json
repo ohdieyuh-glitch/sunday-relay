@@ -1,0 +1,168 @@
+{
+ "name": "zc_skin_locomotion",
+ "started": "2026-09-25 02:18:57",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "L00",
+   "name": "Celestial Light is on, so there is a costume to hold against the Dog",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "L01",
+   "name": "run: the skin wears the Dog's pose field for field",
+   "pass": true,
+   "detail": {
+    "peak": {
+     "speed_uu": 520.0,
+     "gait_weight": 1.0,
+     "airborne_weight": 0.0,
+     "bob_swing": 2.692,
+     "yaw_swing": 4.273,
+     "lift_uu": 0.0
+    },
+    "mismatches": [],
+    "evidence": "speed_uu peak"
+   }
+  },
+  {
+   "id": "L02",
+   "name": "body bounce: the Dog's bob reaches the skin, same frame",
+   "pass": true,
+   "detail": {
+    "dog_bob_swing_uu": 0.5828,
+    "worst_gap_uu": 0.0,
+    "samples": 24,
+    "interval_s": 0.05,
+    "channel_carries_signal": true,
+    "note": "a swing near zero is not a failure here -- stillness damps the bob to nothing by design"
+   }
+  },
+  {
+   "id": "L03",
+   "name": "stop: the skin wears the Dog's pose field for field",
+   "pass": true,
+   "detail": {
+    "peak": {
+     "speed_uu": 0.0,
+     "gait_weight": 0.0,
+     "airborne_weight": 0.0,
+     "bob_swing": 0.0,
+     "yaw_swing": 0.0,
+     "lift_uu": 0.0
+    },
+    "mismatches": [],
+    "evidence": "speed_uu fell back toward zero"
+   }
+  },
+  {
+   "id": "L04",
+   "name": "ground contact: standing still, the Dog is not airborne",
+   "pass": true,
+   "detail": {
+    "airborne_weight": 0.0,
+    "lift_uu_observed": 0.0,
+    "note": "lift_uu is the act/flight overlay, recorded not gated"
+   }
+  },
+  {
+   "id": "L05",
+   "name": "turns: the Dog turns, and the skin holds the Dog's pose throughout",
+   "pass": true,
+   "detail": {
+    "actor_yaw_travel_deg": 56.0,
+    "body_yaw_travel_deg": 0.0,
+    "mismatches": [],
+    "note": "body_yaw_deg is a relative lean and stays near zero; the heading is the actor's yaw"
+   }
+  },
+  {
+   "id": "L06",
+   "name": "fall: the skin is told it is falling, with the Dog's own pose",
+   "pass": true,
+   "detail": {
+    "airborne_peak": 1.0,
+    "mismatches": [],
+    "note": "dropped from 9 m rather than walked off a ledge, so the state is certain"
+   }
+  },
+  {
+   "id": "L07",
+   "name": "landing: the skin comes back to the ground with the Dog",
+   "pass": true,
+   "detail": {
+    "airborne_floor": 0.0,
+    "mismatches": []
+   }
+  }
+ ],
+ "run": {
+  "happened": true,
+  "peak": {
+   "speed_uu": 520.0,
+   "gait_weight": 1.0,
+   "airborne_weight": 0.0,
+   "bob_swing": 2.692,
+   "yaw_swing": 4.273,
+   "lift_uu": 0.0
+  },
+  "mismatches": []
+ },
+ "run_speed_uu": 520.0,
+ "bob_swing_fast": 10.0814,
+ "bob_samples": [
+  -10.776,
+  -10.557,
+  -8.764,
+  -6.501,
+  -9.15,
+  -9.583,
+  -7.838,
+  -6.723,
+  -9.04,
+  -9.432,
+  -7.251,
+  -7.824
+ ],
+ "bob_swing_live_uu": 0.5828,
+ "bob_worst_gap_uu": 0.0,
+ "bob_channel_carries_signal": true,
+ "stop": {
+  "happened": true,
+  "peak": {
+   "speed_uu": 0.0,
+   "gait_weight": 0.0,
+   "airborne_weight": 0.0,
+   "bob_swing": 0.0,
+   "yaw_swing": 0.0,
+   "lift_uu": 0.0
+  },
+  "mismatches": []
+ },
+ "turn_body_yaw_travel_deg": 0.0,
+ "turn_body_yaw_samples": [
+  -0.0,
+  -0.0,
+  -0.0,
+  -0.0,
+  -0.0,
+  -0.0,
+  -0.0,
+  -0.0,
+  -0.0,
+  -0.0
+ ],
+ "turn_actor_yaw_travel_deg": 56.0,
+ "fall": {
+  "airborne_peak": 1.0,
+  "mismatches": []
+ },
+ "landing": {
+  "airborne_floor": 0.0,
+  "mismatches": []
+ },
+ "finished": "2026-09-25 02:19:36",
+ "seconds": 39.79,
+ "log": "L00 PASS Celestial Light is on, so there is a costume to hold against the Dog {}\nL01 PASS run: the skin wears the Dog's pose field for field {'peak': {'speed_uu': 520.0, 'gait_weight': 1.0, 'airborne_weight': 0.0, 'bob_swing': 2.692, 'yaw_swing': 4.273, 'lift_uu': 0.0}, 'mismatches': [], 'evidence': 'speed_uu peak'}\nL02 PASS body bounce: the Dog's bob reaches the skin, same frame {'dog_bob_swing_uu': 0.5828, 'worst_gap_uu': 0.0, 'samples': 24, 'interval_s': 0.05, 'channel_carries_signal': True, 'note': 'a swing near zero is not a failure here -- stillness damps the bob to nothing by design'}\nL03 PASS stop: the skin wears the Dog's pose field for field {'peak': {'speed_uu': 0.0, 'gait_weight': 0.0, 'airborne_weight': 0.0, 'bob_swing': 0.0, 'yaw_swing': 0.0, 'lift_uu': 0.0}, 'mismatches': [], 'evidence': 'speed_uu fell back toward zero'}\nL04 PASS ground contact: standing still, the Dog is not airborne {'airborne_weight': 0.0, 'lift_uu_observed': 0.0, 'note': 'lift_uu is the act/flight overlay, recorded not gated'}\nL05 PASS turns: the Dog turns, and the skin holds the Dog's pose throughout {'actor_yaw_travel_deg': 56.0, 'body_yaw_travel_deg': 0.0, 'mismatches': [], 'note': \"body_yaw_deg is a relative lean and stays near zero; the heading is the actor's yaw\"}\nL06 PASS fall: the skin is told it is falling, with the Dog's own pose {'airborne_peak': 1.0, 'mismatches': [], 'note': 'dropped from 9 m rather than walked off a ledge, so the state is certain'}\nL07 PASS landing: the skin comes back to the ground with the Dog {'airborne_floor': 0.0, 'mismatches': []}\n"
+}

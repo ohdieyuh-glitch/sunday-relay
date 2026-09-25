@@ -1,0 +1,31 @@
+{
+ "name": "zc_brain_visible",
+ "started": "2026-09-25 02:15:39",
+ "status": "measured; the verdict is the photographs",
+ "brain_panel_open": true,
+ "window_rect_LTRB": [
+  0.502,
+  0.125,
+  0.892,
+  0.956
+ ],
+ "hole_is_being_cut": true,
+ "hole_area_pct_of_screen": 32.41,
+ "sculptures": 1,
+ "rendering": "at=V(X=-490.14, Y=-774.01, Z=187.96) hiddenActor=0 radius=120.0 | mass{n=2015 mesh=yes mat=yes vis=0 hidden=0} fold{n=743 mesh=yes mat=yes vis=0 hidden=0} body{n=46 mesh=yes mat=yes vis=0 hidden=0} belly{n=46 mesh=yes mat=yes vis=0 hidden=0} snout{n=1 mesh=yes mat=yes vis=0 hidden=0} eyes{n=2 mesh=yes mat=yes vis=0 hidden=0}",
+ "camera_at": [
+  -516.1,
+  -857.9,
+  207.8
+ ],
+ "sculpture_at": [
+  -490.1,
+  -774.0,
+  188.0
+ ],
+ "distance_uu": 90.0,
+ "view_target": "BP_RelayDog_C_0",
+ "finished": "2026-09-25 02:16:00",
+ "seconds": 21.11,
+ "log": ""
+}

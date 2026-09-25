@@ -1,0 +1,18 @@
+{
+ "name": "zc_make_glow_material",
+ "started": "2026-09-24 23:49:47",
+ "status": "built",
+ "asset": "/Game/Wonderland/Materials/M_WL_VoxelGlow",
+ "nodes": [
+  "MaterialExpressionVectorParameter",
+  "MaterialExpressionScalarParameter",
+  "MaterialExpressionMultiply",
+  "MaterialExpressionVectorParameter",
+  "MaterialExpressionVectorParameter"
+ ],
+ "exists": true,
+ "shading_model": "<MaterialShadingModel.MSM_UNLIT: 0>",
+ "finished": "2026-09-24 23:49:52",
+ "seconds": 5.78,
+ "log": ""
+}

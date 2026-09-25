@@ -1,0 +1,16 @@
+{
+ "name": "zc_tartarus_stuck",
+ "started": "2026-09-25 03:38:18",
+ "status": "probed",
+ "samples": 0,
+ "surface_owners": {},
+ "grid": [],
+ "floor_under_stuck_point": null,
+ "dog": {
+  "rested_z": 250.0,
+  "standing_on": null
+ },
+ "finished": "2026-09-25 03:38:53",
+ "seconds": 35.43,
+ "log": ""
+}

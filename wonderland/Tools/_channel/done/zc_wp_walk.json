@@ -1,0 +1,106 @@
+{
+ "name": "zc_wp_walk",
+ "started": "2026-09-25 00:29:45",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "P01",
+   "name": "the partitioned twin opens in the editor at all",
+   "pass": true,
+   "detail": {
+    "map": "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2_WP"
+   }
+  },
+  {
+   "id": "P02",
+   "name": "the twin runs in PIE",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "P03",
+   "name": "the Dog spawned in the twin",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "P04",
+   "name": "the Dog stands on ground everywhere it was put down in the twin",
+   "pass": true,
+   "detail": {
+    "visited": 6,
+    "fell": 0
+   }
+  },
+  {
+   "id": "P05",
+   "name": "the authoritative map is open again, and nothing was saved to either",
+   "pass": true,
+   "detail": {
+    "map": "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2"
+   }
+  }
+ ],
+ "twin_opened": true,
+ "twin_plays": true,
+ "twin_contents": {
+  "static_mesh_actors": 7220,
+  "instanced_components": 3924,
+  "instances": 156623
+ },
+ "visits": [
+  {
+   "at": [
+    0,
+    0
+   ],
+   "landed_z": 368,
+   "fell_through": false
+  },
+  {
+   "at": [
+    20000,
+    20000
+   ],
+   "landed_z": 0,
+   "fell_through": false
+  },
+  {
+   "at": [
+    -40000,
+    40000
+   ],
+   "landed_z": 0,
+   "fell_through": false
+  },
+  {
+   "at": [
+    60000,
+    -60000
+   ],
+   "landed_z": 0,
+   "fell_through": false
+  },
+  {
+   "at": [
+    -90000,
+    -30000
+   ],
+   "landed_z": 0,
+   "fell_through": false
+  },
+  {
+   "at": [
+    100000,
+    10000
+   ],
+   "landed_z": 0,
+   "fell_through": false
+  }
+ ],
+ "fell_through": 0,
+ "restored_authoritative": true,
+ "finished": "2026-09-25 00:30:24",
+ "seconds": 39.5,
+ "log": "P01 PASS the partitioned twin opens in the editor at all {'map': '/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2_WP'}\nP02 PASS the twin runs in PIE {}\nP03 PASS the Dog spawned in the twin {}\nP04 PASS the Dog stands on ground everywhere it was put down in the twin {'visited': 6, 'fell': 0}\nP05 PASS the authoritative map is open again, and nothing was saved to either {'map': '/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2'}\n"
+}

@@ -1,0 +1,23 @@
+{
+ "name": "zc_noctis_check",
+ "started": "2026-09-24 20:41:47",
+ "status": "counted",
+ "luminous_instances_in_world": 160,
+ "carriers": [
+  [
+   "WonderlandInstancedBatch_2820",
+   138
+  ],
+  [
+   "WonderlandInstancedBatch_1518",
+   16
+  ],
+  [
+   "WonderlandInstancedBatch_1590",
+   6
+  ]
+ ],
+ "finished": "2026-09-24 20:42:14",
+ "seconds": 27.91,
+ "log": ""
+}

@@ -1,0 +1,125 @@
+{
+ "name": "zc_world_survey",
+ "started": "2026-09-24 13:36:41",
+ "status": "surveyed",
+ "sky": {
+  "directional_lights": 4,
+  "sun_names": [
+   "DirectionalLight_0",
+   "DirectionalLight_1",
+   "DirectionalLight_2",
+   "DirectionalLight_3"
+  ],
+  "sun_rotation": [
+   -40.0,
+   -11.0,
+   0.0
+  ],
+  "sun_mobility_movable": true,
+  "sun_intensity": "70000.0",
+  "sun_light_color": "<Struct 'Color' (0x0000017ED9EE92B8) {b: 255, g: 255, r: 255, a: 255}>",
+  "sun_dynamic_shadow_distance_movable_light": "40000.0",
+  "sun_cascade_distribution_exponent": "3.0",
+  "sun_shadow_bias": "0.5",
+  "sun_shadow_slope_bias": "0.5",
+  "sun_contact_shadow_length": "0.0",
+  "sky_atmospheres": 1,
+  "sky_lights": 1,
+  "exponential_fog": 1,
+  "post_process_volumes": 1,
+  "volumetric_clouds": 1
+ },
+ "water": {
+  "count": 64,
+  "actors": [
+   {
+    "name": "StaticMeshActor_18",
+    "label": "court_fountainbasin",
+    "materials": [
+     "MI_V2_IvoryStone"
+    ]
+   },
+   {
+    "name": "StaticMeshActor_19",
+    "label": "court_fountainwater",
+    "materials": [
+     "MI_V2_Water"
+    ]
+   },
+   {
+    "name": "StaticMeshActor_20",
+    "label": "court_fountainfinial",
+    "materials": [
+     "MI_V2_Gold"
+    ]
+   },
+   {
+    "name": "StaticMeshActor_82",
+    "label": "s12_hamlet_wellwater",
+    "materials": [
+     "MI_V2_Water"
+    ]
+   },
+   {
+    "name": "StaticMeshActor_98",
+    "label": "q02_water_basin",
+    "materials": [
+     "MI_V2_IvoryStone"
+    ]
+   },
+   {
+    "name": "StaticMeshActor_99",
+    "label": "q02_water_water",
+    "materials": [
+     "MI_V2_Water"
+    ]
+   },
+   {
+    "name": "StaticMeshActor_100",
+    "label": "q02_water_finial",
+    "materials": [
+     "MI_V2_Gold"
+    ]
+   },
+   {
+    "name": "StaticMeshActor_101",
+    "label": "q02_water_lowerbasin",
+    "materials": [
+     "MI_V2_IvoryStone"
+    ]
+   },
+   {
+    "name": "StaticMeshActor_102",
+    "label": "q02_water_lowerwater",
+    "materials": [
+     "MI_V2_Water"
+    ]
+   },
+   {
+    "name": "StaticMeshActor_103",
+    "label": "s13_lake_basin",
+    "materials": [
+     "MI_V2_IvoryStone"
+    ]
+   },
+   {
+    "name": "StaticMeshActor_104",
+    "label": "s13_lake_basinwater",
+    "materials": [
+     "MI_V2_Water"
+    ]
+   },
+   {
+    "name": "StaticMeshActor_105",
+    "label": "s13_lake_finial",
+    "materials": [
+     "MI_V2_Gold"
+    ]
+   }
+  ]
+ },
+ "total_actors": 20921,
+ "finished": "2026-09-24 13:37:19",
+ "seconds": 38.8,
+ "log": ""
+}

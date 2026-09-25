@@ -1,0 +1,203 @@
+{
+ "name": "zc_nation_routes",
+ "started": "2026-09-25 03:57:00",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "R_ICARUS",
+   "name": "ICARUS: a corridor from the gate to the band is walkable end to end",
+   "pass": false,
+   "detail": {
+    "bearing": 90.0,
+    "best_offset_m": -56.0,
+    "blocked_segments": 1,
+    "steps_too_tall": 2,
+    "clean_lanes": 0,
+    "of": 19,
+    "worst_blockers": [
+     {
+      "at_m": 985.0,
+      "by": "IC03_IC03_Palace_Pavilion_stone",
+      "normal_z": -0.016
+     }
+    ],
+    "worst_steps": [
+     {
+      "at_m": 985.0,
+      "rise_uu": 401.0,
+      "from": "V2_GroundSlab",
+      "to": "IC03_IC03_Palace_Pavilion_stone"
+     },
+     {
+      "at_m": 1000.0,
+      "rise_uu": 401.0,
+      "from": "IC03_IC03_Palace_Pavilion_stone",
+      "to": "V2_GroundSlab"
+     }
+    ],
+    "note": "swept with the Dog's own capsule over 19 parallel lanes, 600-1000 m"
+   }
+  },
+  {
+   "id": "R_NOCTIS",
+   "name": "NOCTIS: a corridor from the gate to the band is walkable end to end",
+   "pass": false,
+   "detail": {
+    "bearing": 210.0,
+    "best_offset_m": -56.0,
+    "blocked_segments": 1,
+    "steps_too_tall": 2,
+    "clean_lanes": 0,
+    "of": 19,
+    "worst_blockers": [
+     {
+      "at_m": 990.0,
+      "by": "NC03_NC03_Palace_Wing_stone",
+      "normal_z": 0.0
+     }
+    ],
+    "worst_steps": [
+     {
+      "at_m": 990.0,
+      "rise_uu": 401.0,
+      "from": "V2_GroundSlab",
+      "to": "NC03_NC03_Palace_Wing_stone"
+     },
+     {
+      "at_m": 1000.0,
+      "rise_uu": 401.0,
+      "from": "NC03_NC03_Palace_Wing_stone",
+      "to": "V2_GroundSlab"
+     }
+    ],
+    "note": "swept with the Dog's own capsule over 19 parallel lanes, 600-1000 m"
+   }
+  },
+  {
+   "id": "R_TARTARUS",
+   "name": "TARTARUS: a corridor from the gate to the band is walkable end to end",
+   "pass": true,
+   "detail": {
+    "bearing": 330.0,
+    "best_offset_m": -56.0,
+    "blocked_segments": 0,
+    "steps_too_tall": 0,
+    "clean_lanes": 1,
+    "of": 19,
+    "worst_blockers": [],
+    "worst_steps": [],
+    "note": "swept with the Dog's own capsule over 19 parallel lanes, 600-1000 m"
+   }
+  },
+  {
+   "id": "R_ALL",
+   "name": "every nation has a walkable gate-to-band corridor",
+   "pass": false,
+   "detail": {
+    "nations": [
+     "ICARUS",
+     "NOCTIS",
+     "TARTARUS"
+    ],
+    "clean_lanes": {
+     "ICARUS": 0,
+     "NOCTIS": 0,
+     "TARTARUS": 1
+    },
+    "note": "the founder's 'walk-test every major region', asked of all three rather than of the one that had a complaint"
+   }
+  }
+ ],
+ "dog_limits": {
+  "max_step_height_uu": 30.0,
+  "capsule_radius_uu": 35.9,
+  "capsule_half_height_uu": 87.1
+ },
+ "nations": {
+  "ICARUS": {
+   "bearing": 90.0,
+   "best": {
+    "offset_m": -56.0,
+    "samples": 81,
+    "no_ground": 0,
+    "steps_too_tall": 2,
+    "blocked_segments": 1,
+    "blockers": [
+     {
+      "at_m": 985.0,
+      "by": "IC03_IC03_Palace_Pavilion_stone",
+      "normal_z": -0.016
+     }
+    ],
+    "tall_steps": [
+     {
+      "at_m": 985.0,
+      "rise_uu": 401.0,
+      "from": "V2_GroundSlab",
+      "to": "IC03_IC03_Palace_Pavilion_stone"
+     },
+     {
+      "at_m": 1000.0,
+      "rise_uu": 401.0,
+      "from": "IC03_IC03_Palace_Pavilion_stone",
+      "to": "V2_GroundSlab"
+     }
+    ]
+   },
+   "clean_lanes": [],
+   "lanes_tried": 19
+  },
+  "NOCTIS": {
+   "bearing": 210.0,
+   "best": {
+    "offset_m": -56.0,
+    "samples": 81,
+    "no_ground": 0,
+    "steps_too_tall": 2,
+    "blocked_segments": 1,
+    "blockers": [
+     {
+      "at_m": 990.0,
+      "by": "NC03_NC03_Palace_Wing_stone",
+      "normal_z": 0.0
+     }
+    ],
+    "tall_steps": [
+     {
+      "at_m": 990.0,
+      "rise_uu": 401.0,
+      "from": "V2_GroundSlab",
+      "to": "NC03_NC03_Palace_Wing_stone"
+     },
+     {
+      "at_m": 1000.0,
+      "rise_uu": 401.0,
+      "from": "NC03_NC03_Palace_Wing_stone",
+      "to": "V2_GroundSlab"
+     }
+    ]
+   },
+   "clean_lanes": [],
+   "lanes_tried": 19
+  },
+  "TARTARUS": {
+   "bearing": 330.0,
+   "best": {
+    "offset_m": -56.0,
+    "samples": 81,
+    "no_ground": 0,
+    "steps_too_tall": 0,
+    "blocked_segments": 0,
+    "blockers": [],
+    "tall_steps": []
+   },
+   "clean_lanes": [
+    "-56"
+   ],
+   "lanes_tried": 19
+  }
+ },
+ "finished": "2026-09-25 04:01:25",
+ "seconds": 265.04,
+ "log": "R_ICARUS FAIL ICARUS: a corridor from the gate to the band is walkable end to end {'bearing': 90.0, 'best_offset_m': -56.0, 'blocked_segments': 1, 'steps_too_tall': 2, 'clean_lanes': 0, 'of': 19, 'worst_blockers': [{'at_m': 985.0, 'by': 'IC03_IC03_Palace_Pavilion_stone', 'normal_z': -0.016}], 'worst_steps': [{'at_m': 985.0, 'rise_uu': 401.0, 'from': 'V2_GroundSlab', 'to': 'IC03_IC03_Palace_Pavilion_stone'}, {'at_m': 1000.0, 'rise_uu': 401.0, 'from': 'IC03_IC03_Palace_Pavilion_stone', 'to': 'V2_GroundSlab'}], 'note': \"swept with the Dog's own capsule over 19 parallel lanes, 600-1000 m\"}\nR_NOCTIS FAIL NOCTIS: a corridor from the gate to the band is walkable end to end {'bearing': 210.0, 'best_offset_m': -56.0, 'blocked_segments': 1, 'steps_too_tall': 2, 'clean_lanes': 0, 'of': 19, 'worst_blockers': [{'at_m': 990.0, 'by': 'NC03_NC03_Palace_Wing_stone', 'normal_z': 0.0}], 'worst_steps': [{'at_m': 990.0, 'rise_uu': 401.0, 'from': 'V2_GroundSlab', 'to': 'NC03_NC03_Palace_Wing_stone'}, {'at_m': 1000.0, 'rise_uu': 401.0, 'from': 'NC03_NC03_Palace_Wing_stone', 'to': 'V2_GroundSlab'}], 'note': \"swept with the Dog's own capsule over 19 parallel lanes, 600-1000 m\"}\nR_TARTARUS PASS TARTARUS: a corridor from the gate to the band is walkable end to end {'bearing': 330.0, 'best_offset_m': -56.0, 'blocked_segments': 0, 'steps_too_tall': 0, 'clean_lanes': 1, 'of': 19, 'worst_blockers': [], 'worst_steps': [], 'note': \"swept with the Dog's own capsule over 19 parallel lanes, 600-1000 m\"}\nR_ALL FAIL every nation has a walkable gate-to-band corridor {'nations': ['ICARUS', 'NOCTIS', 'TARTARUS'], 'clean_lanes': {'ICARUS': 0, 'NOCTIS': 0, 'TARTARUS': 1}, 'note': \"the founder's 'walk-test every major region', asked of all three rather than of the one that had a complaint\"}\n"
+}

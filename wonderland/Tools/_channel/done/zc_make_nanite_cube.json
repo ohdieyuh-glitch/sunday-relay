@@ -1,0 +1,13 @@
+{
+ "name": "zc_make_nanite_cube",
+ "started": "2026-09-24 22:57:16",
+ "status": "built",
+ "already_existed": false,
+ "nanite_before": false,
+ "nanite_after": true,
+ "asset": "/Game/Wonderland/Meshes/SM_WL_VoxelCube",
+ "triangles": 48,
+ "finished": "2026-09-24 22:57:16",
+ "seconds": 0.35,
+ "log": ""
+}

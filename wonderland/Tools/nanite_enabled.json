@@ -1,0 +1,687 @@
+[
+ {
+  "name": "SM_bridge_arc",
+  "package": "/Game/WonderlandV2/Architecture/Bridges/SM_bridge_arc",
+  "triangles": 1840
+ },
+ {
+  "name": "SM_castle_bridge",
+  "package": "/Game/WonderlandV2/Architecture/Bridges/SM_castle_bridge",
+  "triangles": 1660
+ },
+ {
+  "name": "SM_floating_stair",
+  "package": "/Game/WonderlandV2/Architecture/Bridges/SM_floating_stair",
+  "triangles": 1904
+ },
+ {
+  "name": "SM_balcony_ring",
+  "package": "/Game/WonderlandV2/Architecture/Castle/SM_balcony_ring",
+  "triangles": 3480
+ },
+ {
+  "name": "SM_castle_dome",
+  "package": "/Game/WonderlandV2/Architecture/Castle/SM_castle_dome",
+  "triangles": 2360
+ },
+ {
+  "name": "SM_castle_hall",
+  "package": "/Game/WonderlandV2/Architecture/Castle/SM_castle_hall",
+  "triangles": 3868
+ },
+ {
+  "name": "SM_castle_tower",
+  "package": "/Game/WonderlandV2/Architecture/Castle/SM_castle_tower",
+  "triangles": 4608
+ },
+ {
+  "name": "SM_castle_tower_octagon",
+  "package": "/Game/WonderlandV2/Architecture/Castle/SM_castle_tower_octagon",
+  "triangles": 1828
+ },
+ {
+  "name": "SM_castle_tower_slender",
+  "package": "/Game/WonderlandV2/Architecture/Castle/SM_castle_tower_slender",
+  "triangles": 2886
+ },
+ {
+  "name": "SM_castle_tower_square",
+  "package": "/Game/WonderlandV2/Architecture/Castle/SM_castle_tower_square",
+  "triangles": 3540
+ },
+ {
+  "name": "SM_cloister_square",
+  "package": "/Game/WonderlandV2/Architecture/Castle/SM_cloister_square",
+  "triangles": 8220
+ },
+ {
+  "name": "SM_column_ornate",
+  "package": "/Game/WonderlandV2/Architecture/Castle/SM_column_ornate",
+  "triangles": 1664
+ },
+ {
+  "name": "SM_roof_bell",
+  "package": "/Game/WonderlandV2/Architecture/Castle/SM_roof_bell",
+  "triangles": 3048
+ },
+ {
+  "name": "SM_roof_ogee",
+  "package": "/Game/WonderlandV2/Architecture/Castle/SM_roof_ogee",
+  "triangles": 3840
+ },
+ {
+  "name": "SM_spire_great",
+  "package": "/Game/WonderlandV2/Architecture/Castle/SM_spire_great",
+  "triangles": 32636
+ },
+ {
+  "name": "SM_spire_halo_ring",
+  "package": "/Game/WonderlandV2/Architecture/Castle/SM_spire_halo_ring",
+  "triangles": 3072
+ },
+ {
+  "name": "SM_spire_signature",
+  "package": "/Game/WonderlandV2/Architecture/Castle/SM_spire_signature",
+  "triangles": 7168
+ },
+ {
+  "name": "SM_tower_capped",
+  "package": "/Game/WonderlandV2/Architecture/Castle/SM_tower_capped",
+  "triangles": 2448
+ },
+ {
+  "name": "SM_tower_clock",
+  "package": "/Game/WonderlandV2/Architecture/Castle/SM_tower_clock",
+  "triangles": 1616
+ },
+ {
+  "name": "SM_tower_district",
+  "package": "/Game/WonderlandV2/Architecture/Castle/SM_tower_district",
+  "triangles": 8812
+ },
+ {
+  "name": "SM_floral_arch",
+  "package": "/Game/WonderlandV2/Architecture/Garden/SM_floral_arch",
+  "triangles": 36768
+ },
+ {
+  "name": "SM_gate_arch_gold",
+  "package": "/Game/WonderlandV2/Architecture/Gates/SM_gate_arch_gold",
+  "triangles": 2560
+ },
+ {
+  "name": "SM_gate_finial_ball",
+  "package": "/Game/WonderlandV2/Architecture/Gates/SM_gate_finial_ball",
+  "triangles": 1820
+ },
+ {
+  "name": "SM_gate_leaf",
+  "package": "/Game/WonderlandV2/Architecture/Gates/SM_gate_leaf",
+  "triangles": 3304
+ },
+ {
+  "name": "SM_gatehouse_district",
+  "package": "/Game/WonderlandV2/Architecture/Gates/SM_gatehouse_district",
+  "triangles": 2996
+ },
+ {
+  "name": "SM_garden_lawn",
+  "package": "/Game/WonderlandV2/Ground/Terrain/SM_garden_lawn",
+  "triangles": 26508
+ },
+ {
+  "name": "SM_mushroom_giant",
+  "package": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_giant",
+  "triangles": 7472
+ },
+ {
+  "name": "SM_mushroom_giant_gills",
+  "package": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_giant_gills",
+  "triangles": 1888
+ },
+ {
+  "name": "SM_mushroom_giant_spots",
+  "package": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_giant_spots",
+  "triangles": 2496
+ },
+ {
+  "name": "SM_mushroom_landmark",
+  "package": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_landmark",
+  "triangles": 11948
+ },
+ {
+  "name": "SM_mushroom_medium",
+  "package": "/Game/WonderlandV2/Mushrooms/Medium/SM_mushroom_medium",
+  "triangles": 10604
+ },
+ {
+  "name": "SM_mushroom_small",
+  "package": "/Game/WonderlandV2/Mushrooms/Small/SM_mushroom_small",
+  "triangles": 9580
+ },
+ {
+  "name": "SM_clock_grand",
+  "package": "/Game/WonderlandV2/Props/Clocks/SM_clock_grand",
+  "triangles": 7476
+ },
+ {
+  "name": "SM_clock_ornate",
+  "package": "/Game/WonderlandV2/Props/Clocks/SM_clock_ornate",
+  "triangles": 1568
+ },
+ {
+  "name": "SM_gear_monument",
+  "package": "/Game/WonderlandV2/Props/Clocks/SM_gear_monument",
+  "triangles": 6572
+ },
+ {
+  "name": "SM_orrery_gold",
+  "package": "/Game/WonderlandV2/Props/Clocks/SM_orrery_gold",
+  "triangles": 11196
+ },
+ {
+  "name": "SM_fountain_basin",
+  "package": "/Game/WonderlandV2/Props/Garden/SM_fountain_basin",
+  "triangles": 3786
+ },
+ {
+  "name": "SM_fountain_grand",
+  "package": "/Game/WonderlandV2/Props/Garden/SM_fountain_grand",
+  "triangles": 2736
+ },
+ {
+  "name": "SM_garden_urn",
+  "package": "/Game/WonderlandV2/Props/Garden/SM_garden_urn",
+  "triangles": 5260
+ },
+ {
+  "name": "SM_glass_pavilion",
+  "package": "/Game/WonderlandV2/Props/Garden/SM_glass_pavilion",
+  "triangles": 2056
+ },
+ {
+  "name": "SM_lantern_swag",
+  "package": "/Game/WonderlandV2/Props/Garden/SM_lantern_swag",
+  "triangles": 2070
+ },
+ {
+  "name": "SM_key_colossal",
+  "package": "/Game/WonderlandV2/Props/Keys/SM_key_colossal",
+  "triangles": 5202
+ },
+ {
+  "name": "SM_key_ornate",
+  "package": "/Game/WonderlandV2/Props/Keys/SM_key_ornate",
+  "triangles": 3496
+ },
+ {
+  "name": "SM_tea_cup",
+  "package": "/Game/WonderlandV2/Props/Tea/SM_tea_cup",
+  "triangles": 6196
+ },
+ {
+  "name": "SM_tea_cup_small",
+  "package": "/Game/WonderlandV2/Props/Tea/SM_tea_cup_small",
+  "triangles": 5656
+ },
+ {
+  "name": "SM_tea_pot",
+  "package": "/Game/WonderlandV2/Props/Tea/SM_tea_pot",
+  "triangles": 7056
+ },
+ {
+  "name": "SM_tea_saucer",
+  "package": "/Game/WonderlandV2/Props/Tea/SM_tea_saucer",
+  "triangles": 4412
+ },
+ {
+  "name": "SM_teapot_pavilion",
+  "package": "/Game/WonderlandV2/Props/Tea/SM_teapot_pavilion",
+  "triangles": 5514
+ },
+ {
+  "name": "SM_balloon_envelope",
+  "package": "/Game/WonderlandV2/Sky/SM_balloon_envelope",
+  "triangles": 2796
+ },
+ {
+  "name": "SM_cloud_cumulus_a",
+  "package": "/Game/WonderlandV2/Sky/SM_cloud_cumulus_a",
+  "triangles": 2880
+ },
+ {
+  "name": "SM_cloud_cumulus_b",
+  "package": "/Game/WonderlandV2/Sky/SM_cloud_cumulus_b",
+  "triangles": 2880
+ },
+ {
+  "name": "SM_cloud_cumulus_c",
+  "package": "/Game/WonderlandV2/Sky/SM_cloud_cumulus_c",
+  "triangles": 1920
+ },
+ {
+  "name": "SM_blossom_cluster",
+  "package": "/Game/WonderlandV2/Vegetation/Flowers/SM_blossom_cluster",
+  "triangles": 6720
+ },
+ {
+  "name": "SM_flower_bed_base_0",
+  "package": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_base_0",
+  "triangles": 4520
+ },
+ {
+  "name": "SM_flower_bed_blooms_0",
+  "package": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_0",
+  "triangles": 8480
+ },
+ {
+  "name": "SM_flower_cluster",
+  "package": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_cluster",
+  "triangles": 2224
+ },
+ {
+  "name": "SM_flower_colossal_bloom",
+  "package": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_colossal_bloom",
+  "triangles": 4572
+ },
+ {
+  "name": "SM_ground_blooms",
+  "package": "/Game/WonderlandV2/Vegetation/Flowers/SM_ground_blooms",
+  "triangles": 2464
+ },
+ {
+  "name": "SM_lavender_stems",
+  "package": "/Game/WonderlandV2/Vegetation/Flowers/SM_lavender_stems",
+  "triangles": 2200
+ },
+ {
+  "name": "SM_ivy_drape",
+  "package": "/Game/WonderlandV2/Vegetation/Ivy/SM_ivy_drape",
+  "triangles": 9768
+ },
+ {
+  "name": "SM_vine_wall",
+  "package": "/Game/WonderlandV2/Vegetation/Ivy/SM_vine_wall",
+  "triangles": 8372
+ },
+ {
+  "name": "SM_rose_bloom",
+  "package": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bloom",
+  "triangles": 4704
+ },
+ {
+  "name": "SM_rose_bush",
+  "package": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bush",
+  "triangles": 10080
+ },
+ {
+  "name": "SM_hedge_block",
+  "package": "/Game/WonderlandV2/Vegetation/Shrubs/SM_hedge_block",
+  "triangles": 28608
+ },
+ {
+  "name": "SM_hedge_mass",
+  "package": "/Game/WonderlandV2/Vegetation/Shrubs/SM_hedge_mass",
+  "triangles": 48740
+ },
+ {
+  "name": "SM_shrub_flowering",
+  "package": "/Game/WonderlandV2/Vegetation/Shrubs/SM_shrub_flowering",
+  "triangles": 15850
+ },
+ {
+  "name": "SM_heart_topiary",
+  "package": "/Game/WonderlandV2/Vegetation/Topiary/SM_heart_topiary",
+  "triangles": 65828
+ },
+ {
+  "name": "SM_topiary_ball",
+  "package": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_ball",
+  "triangles": 15648
+ },
+ {
+  "name": "SM_topiary_cone_plain",
+  "package": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_cone_plain",
+  "triangles": 22440
+ },
+ {
+  "name": "SM_topiary_cone_roses",
+  "package": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_cone_roses",
+  "triangles": 32164
+ },
+ {
+  "name": "SM_topiary_spiral",
+  "package": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_spiral",
+  "triangles": 21004
+ },
+ {
+  "name": "SM_canopy_large",
+  "package": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large",
+  "triangles": 31264
+ },
+ {
+  "name": "SM_canopy_medium",
+  "package": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium",
+  "triangles": 16870
+ },
+ {
+  "name": "SM_tree_clock_trunk",
+  "package": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_clock_trunk",
+  "triangles": 7516
+ },
+ {
+  "name": "SM_tree_mature_trunk",
+  "package": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_mature_trunk",
+  "triangles": 6224
+ },
+ {
+  "name": "SM_tree_slender_trunk",
+  "package": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk",
+  "triangles": 4508
+ },
+ {
+  "name": "SM_vine_hanging",
+  "package": "/Game/WonderlandV2/Vegetation/Vines/SM_vine_hanging",
+  "triangles": 10044
+ },
+ {
+  "name": "SM_portal_ring",
+  "package": "/Game/WonderlandV2/VFX/Portal/SM_portal_ring",
+  "triangles": 1920
+ },
+ {
+  "name": "WL_Bridge_Sky",
+  "package": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Sky",
+  "triangles": 2740
+ },
+ {
+  "name": "WL_Detail_Balcony_Bracket",
+  "package": "/Game/WonderlandV2/Kit/details/WL_Detail_Balcony_Bracket",
+  "triangles": 2090
+ },
+ {
+  "name": "WL_Detail_Balustrade_Run",
+  "package": "/Game/WonderlandV2/Kit/details/WL_Detail_Balustrade_Run",
+  "triangles": 3192
+ },
+ {
+  "name": "WL_Detail_Pinnacle_Grand_gold",
+  "package": "/Game/WonderlandV2/Kit/details/WL_Detail_Pinnacle_Grand_gold",
+  "triangles": 2220
+ },
+ {
+  "name": "WL_Detail_Screen_Filigree_gold",
+  "package": "/Game/WonderlandV2/Kit/details/WL_Detail_Screen_Filigree_gold",
+  "triangles": 2012
+ },
+ {
+  "name": "WL_Object_LanternStandard_gold",
+  "package": "/Game/WonderlandV2/Kit/objects/WL_Object_LanternStandard_gold",
+  "triangles": 2142
+ },
+ {
+  "name": "WL_Object_PocketClock_gold",
+  "package": "/Game/WonderlandV2/Kit/objects/WL_Object_PocketClock_gold",
+  "triangles": 2062
+ },
+ {
+  "name": "WL_Object_TeapotPavilion_gold",
+  "package": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_gold",
+  "triangles": 3780
+ },
+ {
+  "name": "WL_House_Gabled",
+  "package": "/Game/WonderlandV2/Kit/roofscape/WL_House_Gabled",
+  "triangles": 1716
+ },
+ {
+  "name": "WL_House_Hipped",
+  "package": "/Game/WonderlandV2/Kit/roofscape/WL_House_Hipped",
+  "triangles": 2732
+ },
+ {
+  "name": "WL_House_Jettied",
+  "package": "/Game/WonderlandV2/Kit/roofscape/WL_House_Jettied",
+  "triangles": 2420
+ },
+ {
+  "name": "WL_House_Shopfront",
+  "package": "/Game/WonderlandV2/Kit/roofscape/WL_House_Shopfront",
+  "triangles": 2960
+ },
+ {
+  "name": "WL_Arch_Trefoil_Screen",
+  "package": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Trefoil_Screen",
+  "triangles": 1696
+ },
+ {
+  "name": "WL_Arch_Trefoil_Screen_gold",
+  "package": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Trefoil_Screen_gold",
+  "triangles": 1564
+ },
+ {
+  "name": "WL_Spire_Barbed_gold",
+  "package": "/Game/WonderlandV2/Kit/towers/WL_Spire_Barbed_gold",
+  "triangles": 2220
+ },
+ {
+  "name": "WL_Spire_Cluster_gold",
+  "package": "/Game/WonderlandV2/Kit/towers/WL_Spire_Cluster_gold",
+  "triangles": 2664
+ },
+ {
+  "name": "WL_Tower_Base_Terraced",
+  "package": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Terraced",
+  "triangles": 3712
+ },
+ {
+  "name": "WL_Tower_Crown_Onion",
+  "package": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Onion",
+  "triangles": 2316
+ },
+ {
+  "name": "WL_Tower_Crown_Ribbed",
+  "package": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Ribbed",
+  "triangles": 1804
+ },
+ {
+  "name": "WL_Tower_Mid_Ashlar",
+  "package": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Ashlar",
+  "triangles": 1648
+ },
+ {
+  "name": "WL_Tower_Mid_Fluted",
+  "package": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Fluted",
+  "triangles": 1660
+ },
+ {
+  "name": "WL_Tower_Mid_Oriel",
+  "package": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Oriel",
+  "triangles": 1814
+ },
+ {
+  "name": "WL_Tower_Mid_Ribbed",
+  "package": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Ribbed",
+  "triangles": 1848
+ },
+ {
+  "name": "WL_Object_TeaCup_enamel",
+  "package": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_enamel",
+  "triangles": 1528
+ },
+ {
+  "name": "WL_Object_TeapotPavilion_enamel",
+  "package": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_enamel",
+  "triangles": 3934
+ },
+ {
+  "name": "WL_Flower_Rose_Run_petal",
+  "package": "/Game/WonderlandV2/Kit/flowers/WL_Flower_Rose_Run_petal",
+  "triangles": 2728
+ },
+ {
+  "name": "WL_Sky_Island_Large_veg_anchor",
+  "package": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Large_veg_anchor",
+  "triangles": 1628
+ },
+ {
+  "name": "WL_Object_TeaCup_roof",
+  "package": "/Game/WonderlandV2/Kit/objects/WL_Object_TeaCup_roof",
+  "triangles": 1632
+ },
+ {
+  "name": "WL_Object_TeapotPavilion_roof",
+  "package": "/Game/WonderlandV2/Kit/objects/WL_Object_TeapotPavilion_roof",
+  "triangles": 2720
+ },
+ {
+  "name": "SM_sky_dome",
+  "package": "/Game/WonderlandV2/Sky/SM_sky_dome",
+  "triangles": 8832
+ },
+ {
+  "name": "SM_floral_arch_trellis",
+  "package": "/Game/WonderlandV2/Architecture/Garden/SM_floral_arch_trellis",
+  "triangles": 1516
+ },
+ {
+  "name": "WL_Bridge_Arc",
+  "package": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Arc",
+  "triangles": 4156
+ },
+ {
+  "name": "WL_Garden_Overlook",
+  "package": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Overlook",
+  "triangles": 1928
+ },
+ {
+  "name": "WL_Market_Arcade_Insert",
+  "package": "/Game/WonderlandV2/Kit/market/WL_Market_Arcade_Insert",
+  "triangles": 3740
+ },
+ {
+  "name": "WL_Stair_Curved",
+  "package": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Curved",
+  "triangles": 4012
+ },
+ {
+  "name": "WL_Stair_HalfTurn",
+  "package": "/Game/WonderlandV2/Kit/stairs/WL_Stair_HalfTurn",
+  "triangles": 1680
+ },
+ {
+  "name": "WL_Stair_Straight_T3",
+  "package": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Straight_T3",
+  "triangles": 2480
+ },
+ {
+  "name": "WL_Stair_Straight_T3_gold",
+  "package": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Straight_T3_gold",
+  "triangles": 1776
+ },
+ {
+  "name": "WL_Tower_Crown_Cap",
+  "package": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Cap",
+  "triangles": 2376
+ },
+ {
+  "name": "WL_Wall_Mural_Tower",
+  "package": "/Game/WonderlandV2/Kit/walls/WL_Wall_Mural_Tower",
+  "triangles": 1592
+ },
+ {
+  "name": "WL_Water_Canal_Crossing",
+  "package": "/Game/WonderlandV2/Kit/water/WL_Water_Canal_Crossing",
+  "triangles": 1860
+ },
+ {
+  "name": "WL_Water_Canal_Crossing_gold",
+  "package": "/Game/WonderlandV2/Kit/water/WL_Water_Canal_Crossing_gold",
+  "triangles": 1776
+ },
+ {
+  "name": "SM_flower_bed_base_1",
+  "package": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_base_1",
+  "triangles": 4520
+ },
+ {
+  "name": "SM_flower_bed_base_2",
+  "package": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_base_2",
+  "triangles": 4520
+ },
+ {
+  "name": "SM_flower_bed_base_3",
+  "package": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_base_3",
+  "triangles": 4520
+ },
+ {
+  "name": "SM_flower_bed_blooms_1",
+  "package": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_1",
+  "triangles": 8692
+ },
+ {
+  "name": "SM_flower_bed_blooms_2",
+  "package": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_2",
+  "triangles": 9116
+ },
+ {
+  "name": "SM_flower_bed_blooms_3",
+  "package": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_3",
+  "triangles": 9328
+ },
+ {
+  "name": "WL_Bridge_Arc__aged",
+  "package": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Bridge_Arc__aged",
+  "triangles": 4156
+ },
+ {
+  "name": "WL_Detail_Balustrade_Run__broken",
+  "package": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Detail_Balustrade_Run__broken",
+  "triangles": 1852
+ },
+ {
+  "name": "WL_House_Jettied__overgrown",
+  "package": "/Game/WonderlandV2/Kit/variants/Weathered/WL_House_Jettied__overgrown",
+  "triangles": 2420
+ },
+ {
+  "name": "SM_Avatar_Cherubim_Large_ring_00_eye",
+  "package": "/Game/WonderlandV2/Characters/Avatars/Cherubim/Large/SM_Avatar_Cherubim_Large_ring_00_eye",
+  "triangles": 2880
+ },
+ {
+  "name": "SM_Avatar_Cherubim_Large_ring_00_eye_ring",
+  "package": "/Game/WonderlandV2/Characters/Avatars/Cherubim/Large/SM_Avatar_Cherubim_Large_ring_00_eye_ring",
+  "triangles": 2880
+ },
+ {
+  "name": "SM_Avatar_Cherubim_Large_ring_00_pupil",
+  "package": "/Game/WonderlandV2/Characters/Avatars/Cherubim/Large/SM_Avatar_Cherubim_Large_ring_00_pupil",
+  "triangles": 1920
+ },
+ {
+  "name": "SM_Avatar_Cherubim_Large_ring_01_eye",
+  "package": "/Game/WonderlandV2/Characters/Avatars/Cherubim/Large/SM_Avatar_Cherubim_Large_ring_01_eye",
+  "triangles": 1920
+ },
+ {
+  "name": "SM_Avatar_Cherubim_Medium_ring_00_eye",
+  "package": "/Game/WonderlandV2/Characters/Avatars/Cherubim/Medium/SM_Avatar_Cherubim_Medium_ring_00_eye",
+  "triangles": 1920
+ },
+ {
+  "name": "SM_Avatar_Cherubim_Medium_ring_00_eye_ring",
+  "package": "/Game/WonderlandV2/Characters/Avatars/Cherubim/Medium/SM_Avatar_Cherubim_Medium_ring_00_eye_ring",
+  "triangles": 1920
+ },
+ {
+  "name": "SM_Avatar_TenTails_Large_head_eye",
+  "package": "/Game/WonderlandV2/Characters/Avatars/TenTails/Large/SM_Avatar_TenTails_Large_head_eye",
+  "triangles": 3360
+ },
+ {
+  "name": "SM_Avatar_TenTails_Large_head_pupil",
+  "package": "/Game/WonderlandV2/Characters/Avatars/TenTails/Large/SM_Avatar_TenTails_Large_head_pupil",
+  "triangles": 2240
+ }
+]

@@ -1,0 +1,54 @@
+{
+ "name": "zc_wp_probe",
+ "started": "2026-09-25 00:22:34",
+ "status": "measured",
+ "original": {
+  "package": "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2",
+  "exists": true,
+  "loaded": true,
+  "umap_bytes": 46151953,
+  "external_actors": 0,
+  "is_partitioned": false
+ },
+ "converted": {
+  "package": "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2_WP",
+  "exists": true,
+  "loaded": true,
+  "umap_bytes": 13416,
+  "external_actors": 21047,
+  "is_partitioned": true
+ },
+ "tests": [
+  {
+   "id": "H01",
+   "name": "the converted map exists on disk and loads",
+   "pass": true,
+   "detail": {
+    "package": "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2_WP"
+   }
+  },
+  {
+   "id": "H02",
+   "name": "the converted map IS partitioned, which the authoritative one is not",
+   "pass": true,
+   "detail": {
+    "converted_umap_bytes": 13416,
+    "converted_external_actors": 21047,
+    "original_umap_bytes": 46151953,
+    "original_external_actors": 0
+   }
+  },
+  {
+   "id": "H03",
+   "name": "the authoritative map is untouched -- still unpartitioned, still the one in use",
+   "pass": true,
+   "detail": {
+    "umap_bytes": 46151953,
+    "external_actors": 0
+   }
+  }
+ ],
+ "finished": "2026-09-25 00:22:35",
+ "seconds": 0.83,
+ "log": "H01 PASS the converted map exists on disk and loads {'package': '/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2_WP'}\nH02 PASS the converted map IS partitioned, which the authoritative one is not {'converted_umap_bytes': 13416, 'converted_external_actors': 21047, 'original_umap_bytes': 46151953, 'original_external_actors': 0}\nH03 PASS the authoritative map is untouched -- still unpartitioned, still the one in use {'umap_bytes': 46151953, 'external_actors': 0}\n"
+}

@@ -1,0 +1,31 @@
+{
+ "name": "zc_fix_material_usage",
+ "started": "2026-09-25 01:53:49",
+ "status": "done",
+ "materials": [
+  {
+   "asset": "/Game/Wonderland/Materials/M_WL_VoxelGlow",
+   "set": [
+    "Nanite",
+    "InstancedStaticMeshes"
+   ],
+   "already": [],
+   "refused": [],
+   "saved": true
+  },
+  {
+   "asset": "/Game/Wonderland/Materials/M_WLMaster",
+   "set": [
+    "Nanite"
+   ],
+   "already": [
+    "InstancedStaticMeshes"
+   ],
+   "refused": [],
+   "saved": true
+  }
+ ],
+ "log": "",
+ "finished": "2026-09-25 01:53:56",
+ "seconds": 7.84
+}

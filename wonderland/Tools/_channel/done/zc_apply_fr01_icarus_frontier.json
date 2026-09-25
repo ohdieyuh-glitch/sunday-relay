@@ -1,0 +1,16 @@
+{
+ "name": "zc_apply_fr01_icarus_frontier",
+ "started": "2026-09-25 00:14:06",
+ "status": "done",
+ "map_dirty_before": [],
+ "removed": 0,
+ "pass": "FR01",
+ "actors": 0,
+ "batches": 15,
+ "instances": 103,
+ "hovers": 0,
+ "saved": true,
+ "finished": "2026-09-25 00:14:10",
+ "seconds": 4.76,
+ "log": "applied FR01 0 actors 15 batches 103 instances\n"
+}

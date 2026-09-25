@@ -1,0 +1,1210 @@
+{
+ "name": "zc_world_walk",
+ "started": "2026-09-24 14:07:34",
+ "status": "walked",
+ "bounds": {
+  "min": [
+   -1204462.0,
+   -1333687.0,
+   -100000.0
+  ],
+  "max": [
+   1544818.0,
+   1203966.0,
+   404707.0
+  ],
+  "mesh_actors": 16803
+ },
+ "span_metres": [
+  27492.8,
+  25376.5
+ ],
+ "samples": [
+  {
+   "tile": [
+    0,
+    0
+   ],
+   "centre": [
+    -1051724.0,
+    -1192706.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    0,
+    1
+   ],
+   "centre": [
+    -1051724.0,
+    -910745.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 155014.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    0,
+    2
+   ],
+   "centre": [
+    -1051724.0,
+    -628783.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    0,
+    3
+   ],
+   "centre": [
+    -1051724.0,
+    -346822.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 154015.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    0,
+    4
+   ],
+   "centre": [
+    -1051724.0,
+    -64860.0
+   ],
+   "mesh_actors": 2,
+   "ground_z": 193818.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    0,
+    5
+   ],
+   "centre": [
+    -1051724.0,
+    217101.0
+   ],
+   "mesh_actors": 2,
+   "ground_z": 167928.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    0,
+    6
+   ],
+   "centre": [
+    -1051724.0,
+    499063.0
+   ],
+   "mesh_actors": 3,
+   "ground_z": 209779.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    0,
+    7
+   ],
+   "centre": [
+    -1051724.0,
+    781024.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    0,
+    8
+   ],
+   "centre": [
+    -1051724.0,
+    1062986.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    1,
+    0
+   ],
+   "centre": [
+    -746248.0,
+    -1192706.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    1,
+    1
+   ],
+   "centre": [
+    -746248.0,
+    -910745.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    1,
+    2
+   ],
+   "centre": [
+    -746248.0,
+    -628783.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    1,
+    3
+   ],
+   "centre": [
+    -746248.0,
+    -346822.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 331099.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    1,
+    4
+   ],
+   "centre": [
+    -746248.0,
+    -64860.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    1,
+    5
+   ],
+   "centre": [
+    -746248.0,
+    217101.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    1,
+    6
+   ],
+   "centre": [
+    -746248.0,
+    499063.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 229182.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    1,
+    7
+   ],
+   "centre": [
+    -746248.0,
+    781024.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    1,
+    8
+   ],
+   "centre": [
+    -746248.0,
+    1062986.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    2,
+    0
+   ],
+   "centre": [
+    -440773.0,
+    -1192706.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 377393.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    2,
+    1
+   ],
+   "centre": [
+    -440773.0,
+    -910745.0
+   ],
+   "mesh_actors": 2,
+   "ground_z": 148782.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    2,
+    2
+   ],
+   "centre": [
+    -440773.0,
+    -628783.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    2,
+    3
+   ],
+   "centre": [
+    -440773.0,
+    -346822.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 154570.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    2,
+    4
+   ],
+   "centre": [
+    -440773.0,
+    -64860.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 153698.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    2,
+    5
+   ],
+   "centre": [
+    -440773.0,
+    217101.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    2,
+    6
+   ],
+   "centre": [
+    -440773.0,
+    499063.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    2,
+    7
+   ],
+   "centre": [
+    -440773.0,
+    781024.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 161090.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    2,
+    8
+   ],
+   "centre": [
+    -440773.0,
+    1062986.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 184436.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    3,
+    0
+   ],
+   "centre": [
+    -135298.0,
+    -1192706.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 131779.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    3,
+    1
+   ],
+   "centre": [
+    -135298.0,
+    -910745.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    3,
+    2
+   ],
+   "centre": [
+    -135298.0,
+    -628783.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 208735.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    3,
+    3
+   ],
+   "centre": [
+    -135298.0,
+    -346822.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    3,
+    4
+   ],
+   "centre": [
+    -135298.0,
+    -64860.0
+   ],
+   "mesh_actors": 11897,
+   "ground_z": 463.0,
+   "verdict": "built"
+  },
+  {
+   "tile": [
+    3,
+    5
+   ],
+   "centre": [
+    -135298.0,
+    217101.0
+   ],
+   "mesh_actors": 133,
+   "ground_z": 663.0,
+   "verdict": "built"
+  },
+  {
+   "tile": [
+    3,
+    6
+   ],
+   "centre": [
+    -135298.0,
+    499063.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    3,
+    7
+   ],
+   "centre": [
+    -135298.0,
+    781024.0
+   ],
+   "mesh_actors": 2,
+   "ground_z": 209908.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    3,
+    8
+   ],
+   "centre": [
+    -135298.0,
+    1062986.0
+   ],
+   "mesh_actors": 2,
+   "ground_z": 281411.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    4,
+    0
+   ],
+   "centre": [
+    170178.0,
+    -1192706.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    4,
+    1
+   ],
+   "centre": [
+    170178.0,
+    -910745.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    4,
+    2
+   ],
+   "centre": [
+    170178.0,
+    -628783.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 194565.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    4,
+    3
+   ],
+   "centre": [
+    170178.0,
+    -346822.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    4,
+    4
+   ],
+   "centre": [
+    170178.0,
+    -64860.0
+   ],
+   "mesh_actors": 4639,
+   "ground_z": 673.0,
+   "verdict": "built"
+  },
+  {
+   "tile": [
+    4,
+    5
+   ],
+   "centre": [
+    170178.0,
+    217101.0
+   ],
+   "mesh_actors": 88,
+   "ground_z": 856.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    4,
+    6
+   ],
+   "centre": [
+    170178.0,
+    499063.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    4,
+    7
+   ],
+   "centre": [
+    170178.0,
+    781024.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    4,
+    8
+   ],
+   "centre": [
+    170178.0,
+    1062986.0
+   ],
+   "mesh_actors": 2,
+   "ground_z": 257081.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    5,
+    0
+   ],
+   "centre": [
+    475653.0,
+    -1192706.0
+   ],
+   "mesh_actors": 2,
+   "ground_z": 157531.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    5,
+    1
+   ],
+   "centre": [
+    475653.0,
+    -910745.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 392992.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    5,
+    2
+   ],
+   "centre": [
+    475653.0,
+    -628783.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 145408.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    5,
+    3
+   ],
+   "centre": [
+    475653.0,
+    -346822.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    5,
+    4
+   ],
+   "centre": [
+    475653.0,
+    -64860.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    5,
+    5
+   ],
+   "centre": [
+    475653.0,
+    217101.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    5,
+    6
+   ],
+   "centre": [
+    475653.0,
+    499063.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    5,
+    7
+   ],
+   "centre": [
+    475653.0,
+    781024.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 226374.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    5,
+    8
+   ],
+   "centre": [
+    475653.0,
+    1062986.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 170985.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    6,
+    0
+   ],
+   "centre": [
+    781129.0,
+    -1192706.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    6,
+    1
+   ],
+   "centre": [
+    781129.0,
+    -910745.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    6,
+    2
+   ],
+   "centre": [
+    781129.0,
+    -628783.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 132502.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    6,
+    3
+   ],
+   "centre": [
+    781129.0,
+    -346822.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 207977.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    6,
+    4
+   ],
+   "centre": [
+    781129.0,
+    -64860.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    6,
+    5
+   ],
+   "centre": [
+    781129.0,
+    217101.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 163135.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    6,
+    6
+   ],
+   "centre": [
+    781129.0,
+    499063.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    6,
+    7
+   ],
+   "centre": [
+    781129.0,
+    781024.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 204460.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    6,
+    8
+   ],
+   "centre": [
+    781129.0,
+    1062986.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 172810.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    7,
+    0
+   ],
+   "centre": [
+    1086604.0,
+    -1192706.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    7,
+    1
+   ],
+   "centre": [
+    1086604.0,
+    -910745.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    7,
+    2
+   ],
+   "centre": [
+    1086604.0,
+    -628783.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 191593.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    7,
+    3
+   ],
+   "centre": [
+    1086604.0,
+    -346822.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 172646.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    7,
+    4
+   ],
+   "centre": [
+    1086604.0,
+    -64860.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 133712.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    7,
+    5
+   ],
+   "centre": [
+    1086604.0,
+    217101.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 153178.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    7,
+    6
+   ],
+   "centre": [
+    1086604.0,
+    499063.0
+   ],
+   "mesh_actors": 2,
+   "ground_z": 308650.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    7,
+    7
+   ],
+   "centre": [
+    1086604.0,
+    781024.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 197635.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    7,
+    8
+   ],
+   "centre": [
+    1086604.0,
+    1062986.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    8,
+    0
+   ],
+   "centre": [
+    1392080.0,
+    -1192706.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    8,
+    1
+   ],
+   "centre": [
+    1392080.0,
+    -910745.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    8,
+    2
+   ],
+   "centre": [
+    1392080.0,
+    -628783.0
+   ],
+   "mesh_actors": 1,
+   "ground_z": 338696.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    8,
+    3
+   ],
+   "centre": [
+    1392080.0,
+    -346822.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    8,
+    4
+   ],
+   "centre": [
+    1392080.0,
+    -64860.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    8,
+    5
+   ],
+   "centre": [
+    1392080.0,
+    217101.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    8,
+    6
+   ],
+   "centre": [
+    1392080.0,
+    499063.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    8,
+    7
+   ],
+   "centre": [
+    1392080.0,
+    781024.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  },
+  {
+   "tile": [
+    8,
+    8
+   ],
+   "centre": [
+    1392080.0,
+    1062986.0
+   ],
+   "mesh_actors": 0,
+   "verdict": "EMPTY"
+  }
+ ],
+ "tiles_built": 3,
+ "tiles_sparse": 37,
+ "tiles_empty": 41,
+ "tiles_total": 81,
+ "tile_size_metres": [
+  3055.0,
+  2820.0
+ ],
+ "busiest_tiles": [
+  {
+   "tile": [
+    3,
+    4
+   ],
+   "centre": [
+    -135298.0,
+    -64860.0
+   ],
+   "mesh_actors": 11897,
+   "ground_z": 463.0,
+   "verdict": "built"
+  },
+  {
+   "tile": [
+    4,
+    4
+   ],
+   "centre": [
+    170178.0,
+    -64860.0
+   ],
+   "mesh_actors": 4639,
+   "ground_z": 673.0,
+   "verdict": "built"
+  },
+  {
+   "tile": [
+    3,
+    5
+   ],
+   "centre": [
+    -135298.0,
+    217101.0
+   ],
+   "mesh_actors": 133,
+   "ground_z": 663.0,
+   "verdict": "built"
+  },
+  {
+   "tile": [
+    4,
+    5
+   ],
+   "centre": [
+    170178.0,
+    217101.0
+   ],
+   "mesh_actors": 88,
+   "ground_z": 856.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    0,
+    6
+   ],
+   "centre": [
+    -1051724.0,
+    499063.0
+   ],
+   "mesh_actors": 3,
+   "ground_z": 209779.0,
+   "verdict": "sparse"
+  },
+  {
+   "tile": [
+    0,
+    4
+   ],
+   "centre": [
+    -1051724.0,
+    -64860.0
+   ],
+   "mesh_actors": 2,
+   "ground_z": 193818.0,
+   "verdict": "sparse"
+  }
+ ],
+ "visits": [
+  {
+   "tile": [
+    3,
+    4
+   ],
+   "landed_z": 1363.0,
+   "expected_near_z": 463.0,
+   "fell_through": false,
+   "mesh_actors": 11897
+  },
+  {
+   "tile": [
+    4,
+    4
+   ],
+   "landed_z": 242.0,
+   "expected_near_z": 673.0,
+   "fell_through": false,
+   "mesh_actors": 4639
+  },
+  {
+   "tile": [
+    3,
+    5
+   ],
+   "landed_z": -2193.0,
+   "expected_near_z": 663.0,
+   "fell_through": false,
+   "mesh_actors": 133
+  },
+  {
+   "tile": [
+    4,
+    5
+   ],
+   "landed_z": -4766.0,
+   "expected_near_z": 856.0,
+   "fell_through": true,
+   "mesh_actors": 88
+  },
+  {
+   "tile": [
+    0,
+    6
+   ],
+   "landed_z": 204013.0,
+   "expected_near_z": 209779.0,
+   "fell_through": true,
+   "mesh_actors": 3
+  },
+  {
+   "tile": [
+    0,
+    4
+   ],
+   "landed_z": 188746.0,
+   "expected_near_z": 193818.0,
+   "fell_through": true,
+   "mesh_actors": 2
+  },
+  {
+   "tile": [
+    0,
+    5
+   ],
+   "landed_z": 162282.0,
+   "expected_near_z": 167928.0,
+   "fell_through": true,
+   "mesh_actors": 2
+  },
+  {
+   "tile": [
+    2,
+    1
+   ],
+   "landed_z": 143730.0,
+   "expected_near_z": 148782.0,
+   "fell_through": true,
+   "mesh_actors": 2
+  }
+ ],
+ "visits_that_fell_through": 5,
+ "finished": "2026-09-24 14:08:24",
+ "seconds": 50.17,
+ "log": ""
+}

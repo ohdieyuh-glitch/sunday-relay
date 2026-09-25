@@ -1,0 +1,52 @@
+{
+ "name": "zc_wp_census",
+ "started": "2026-09-25 00:33:43",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "C01",
+   "name": "every actor crossed except the handful the engine keeps in the persistent level",
+   "pass": true,
+   "detail": {
+    "twin_files": 21047,
+    "authoritative_actors": 21052,
+    "shortfall": 5,
+    "stayed_in_persistent_level": {},
+    "note": "World Partition never externalises WorldSettings, the builder brush or the level script"
+   }
+  },
+  {
+   "id": "C02",
+   "name": "the twin's own package is a stub, which is what partitioned means",
+   "pass": true,
+   "detail": {
+    "stub_bytes": 13416
+   }
+  }
+ ],
+ "editor_world": "WL_V2_GoldenArrival_WP2",
+ "authoritative_actors": 21052,
+ "authoritative_by_class": {
+  "StaticMeshActor": 16803,
+  "WonderlandInstancedBatch": 3773,
+  "WonderlandHoverProp": 371,
+  "CameraActor": 63,
+  "WonderlandTravelAnchor": 23,
+  "DirectionalLight": 4,
+  "WorldSettings": 1,
+  "Brush": 1,
+  "SkyAtmosphere": 1,
+  "SkyLight": 1,
+  "VolumetricCloud": 1,
+  "ExponentialHeightFog": 1
+ },
+ "twin_external_actor_files": 21047,
+ "twin_stub_bytes": 13416,
+ "persistent_level_note": "unreadable: World: Failed to find property 'persistent_level' for attribute 'persistent_level' on 'Wor",
+ "stayed_in_persistent_level": {},
+ "stayed_count": 0,
+ "shortfall": 5,
+ "finished": "2026-09-25 00:33:44",
+ "seconds": 1.49,
+ "log": "C01 PASS every actor crossed except the handful the engine keeps in the persistent level {'twin_files': 21047, 'authoritative_actors': 21052, 'shortfall': 5, 'stayed_in_persistent_level': {}, 'note': 'World Partition never externalises WorldSettings, the builder brush or the level script'}\nC02 PASS the twin's own package is a stub, which is what partitioned means {'stub_bytes': 13416}\n"
+}
