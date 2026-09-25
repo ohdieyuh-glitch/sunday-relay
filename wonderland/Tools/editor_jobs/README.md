@@ -107,3 +107,25 @@ So the transferable rule is not a number:
 This is the same family as the Cub Ghost rendering black at 2.2 and the Bee's wings vanishing at 9,000 and again
 at 58,000 before they were moved off the translucent master. Before spending a rebuild on a colour value, check
 which path the material is on.
+
+## Verified by reading, not by photograph (2026-09-25)
+
+Two of the founder's P0/P1 requirements are satisfied by construction, and the construction was read
+rather than photographed. Recorded here because "I looked at the source" is evidence only if the
+reading is written down.
+
+**P0-4, the fire's FLICKER.** `zc_skin_parity_all` proves each skin wears the Dog's pose and performs
+its act; it says nothing about the fire. `AWonderlandCompanionEmbodiment::RebuildFlames(TimeSeconds)` is
+called every tick from `Animate(TimeSeconds)`, and the ribbon shape is driven by three NON-HARMONIC sine
+terms -- periods 0.37 s, 0.19 s and 0.83 s, each offset by a per-source seed -- summed into `Flick` and
+clamped into `Lick`. Non-harmonic periods never come back into phase, so the flame never repeats itself.
+That is the same principle the water normals and the python's route use.
+
+**P1-7, the HUD row NAMES.** The founder asked for "COMPOUND AGENT: <user-created name>" and two more.
+`WonderlandUsageHudWidget` reads all three from `UWonderlandCompanionPreviewSettings` and draws the name
+after the label at 0.72 alpha, `if (!Row.Named.IsEmpty())`. Two names are in `DefaultGame.ini`
+(`AgentName=Claude Code Fable 5`, `LlmCompanionName=GPT 6 Astra`) and the third is a class default
+(`CompoundAgentName = TEXT("Julius")`), so all three rows carry a name with no config at all.
+
+Neither is a substitute for a measurement where one is possible -- see `zc_mascot_persist`, which exists
+because "the Wardrobe photograph looked right" hid a colour that never reached the world Dog.
