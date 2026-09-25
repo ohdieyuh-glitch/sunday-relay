@@ -32,7 +32,19 @@ namespace
 	// triplanar and would swim on anything that floats, and they are the world's to tune.
 	const TCHAR* const LitParentPath = TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial");
 	const TCHAR* const RimParentPath = TEXT("/Game/Wonderland/Materials/M_WLMaster.M_WLMaster");
-	const TCHAR* const GlowParentPath = TEXT("/Engine/EngineDebugMaterials/LevelColorationUnlitMaterial.LevelColorationUnlitMaterial");
+	// THE GLOW PARENT, AND WHY IT IS THE PROJECT'S OWN.
+	//
+	// This used to be /Engine/EngineDebugMaterials/LevelColorationUnlitMaterial, and the first packaged build
+	// Wonderland has ever had reported the consequence fourteen times: "material parent ... did not load;
+	// drawing that material lit instead". It is an engine DEBUG material and is not cooked into a packaged
+	// build, so Arden Infernal's fire, Skeleton Flame's fire and Celestial Light's glow would every one of
+	// them have drawn LIT in the only build a player ever runs -- and no proof could see it, because PIE loads
+	// editor content perfectly happily.
+	//
+	// The engine one is kept as a fallback purely so a tree without the asset still draws something rather
+	// than nothing; zc_make_glow_material authors the real one.
+	const TCHAR* const GlowParentPath = TEXT("/Game/Wonderland/Materials/M_WL_VoxelGlow.M_WL_VoxelGlow");
+	const TCHAR* const GlowFallbackPath = TEXT("/Engine/EngineDebugMaterials/LevelColorationUnlitMaterial.LevelColorationUnlitMaterial");
 	const TCHAR* const AdditiveParentPath = TEXT("/Engine/EngineMaterials/EmissiveMeshMaterial.EmissiveMeshMaterial");
 	const TCHAR* const CubePath = TEXT("/Engine/BasicShapes/Cube.Cube");
 	// THE FIGURES' OWN CUBE, AND WHY IT EXISTS. Every .wlvox body is instances of a cube, and on 2026-09-24
@@ -91,6 +103,19 @@ UMaterialInterface* AWonderlandCompanionEmbodiment::ParentFor(EWonderlandCompani
 	default: break;
 	}
 	UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr, Path);
+	// The glow parent is the project's own material now. If a tree has not run zc_make_glow_material yet,
+	// the old engine debug material still draws something unlit rather than dropping straight to lit -- but
+	// it is a fallback for a missing asset, not the shipping path, because it does not survive a cook.
+	if (Parent == nullptr && Kind == EWonderlandCompanionMaterialKind::Glow)
+	{
+		Parent = LoadObject<UMaterialInterface>(nullptr, GlowFallbackPath);
+		if (Parent != nullptr)
+		{
+			UE_LOG(LogWonderlandCompanion, Warning,
+				TEXT("WLCOMPANION %s is missing; falling back to the engine debug material, which does NOT package"),
+				GlowParentPath);
+		}
+	}
 	if (Parent == nullptr && Path != LitParentPath)
 	{
 		// LOUD, NOT SILENT. A missing parent draws the part in plain lit colour rather than not at all, and
