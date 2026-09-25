@@ -17,6 +17,21 @@
 namespace
 {
 	/**
+	 * THE SUN'S LIGHT COMPONENT, REACHED THE WAY A PACKAGED BUILD CAN REACH IT.
+	 *
+	 * ADirectionalLight::GetComponent() is declared inside WITH_EDITOR. This file used it five times, the
+	 * EDITOR target compiled every one of them happily, and the GAME target could not compile a single one --
+	 * so Wonderland could not be packaged at all, and no amount of testing in PIE would ever have said so.
+	 * The failure only appeared when a packaged build was actually attempted.
+	 *
+	 * ALight::GetLightComponent() is the runtime accessor and exists in both targets.
+	 */
+	UDirectionalLightComponent* SunComponent(const ADirectionalLight* Light)
+	{
+		return Light != nullptr ? Cast<UDirectionalLightComponent>(Light->GetLightComponent()) : nullptr;
+	}
+
+	/**
 	 * HOW HIGH THE SUN STANDS AT THIS HOUR.
 	 *
 	 * Sunrise at six, noon at twelve, sunset at eighteen, and below the horizon between -- one smooth curve
@@ -77,7 +92,7 @@ void UWonderlandDayCycleSubsystem::FindTheSky()
 
 	for (TActorIterator<ADirectionalLight> It(World); It; ++It)
 	{
-		UDirectionalLightComponent* Comp = It->GetComponent();
+		UDirectionalLightComponent* Comp = SunComponent(*It);
 		if (Comp == nullptr) { continue; }
 		// THE SUN IS THE ONE THE ATMOSPHERE ALREADY BELIEVES IN. Measured, this level has four directional
 		// lights and exactly one of them -- V2_Sun -- is the atmosphere sun light; the other three are a ground
@@ -170,7 +185,7 @@ void UWonderlandDayCycleSubsystem::DressTheWater()
 void UWonderlandDayCycleSubsystem::ApplyStableShadows()
 {
 	ADirectionalLight* Light = Sun.Get();
-	UDirectionalLightComponent* Comp = Light != nullptr ? Light->GetComponent() : nullptr;
+	UDirectionalLightComponent* Comp = SunComponent(Light);
 	if (Comp == nullptr) { return; }
 
 	// ---- WHY THE SHADOWS CRAWLED.
@@ -245,7 +260,7 @@ void UWonderlandDayCycleSubsystem::Tick(float DeltaSeconds)
 void UWonderlandDayCycleSubsystem::PaintTheSky()
 {
 	ADirectionalLight* Light = Sun.Get();
-	UDirectionalLightComponent* Comp = Light != nullptr ? Light->GetComponent() : nullptr;
+	UDirectionalLightComponent* Comp = SunComponent(Light);
 	if (Comp == nullptr) { return; }
 
 	const float Elevation = ElevationAt(Hour);
@@ -276,7 +291,7 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 	for (int32 Index = 0; Index < Fills.Num(); ++Index)
 	{
 		ADirectionalLight* Fill = Fills[Index].Get();
-		UDirectionalLightComponent* FillComp = Fill != nullptr ? Fill->GetComponent() : nullptr;
+		UDirectionalLightComponent* FillComp = SunComponent(Fill);
 		if (FillComp == nullptr || !FillIntensities.IsValidIndex(Index)) { continue; }
 		FillComp->SetIntensity(FillIntensities[Index] * FMath::Max(Daylight, 0.06f));
 	}
@@ -352,7 +367,7 @@ namespace
 FString UWonderlandDayCycleSubsystem::DescribeSky() const
 {
 	const ADirectionalLight* Light = Sun.Get();
-	const UDirectionalLightComponent* Comp = Light != nullptr ? Light->GetComponent() : nullptr;
+	const UDirectionalLightComponent* Comp = SunComponent(Light);
 	return FString::Printf(
 		TEXT("hour=%.2f elevation=%.1f intensity=%.0f cascades=%d shadowDistance=%.0f exposureBias=%.2f fills=%d"),
 		Hour, ElevationAt(Hour),
