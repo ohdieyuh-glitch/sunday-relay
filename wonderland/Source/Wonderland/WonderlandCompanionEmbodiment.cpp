@@ -92,6 +92,18 @@ namespace
 		TEXT("wl.Look.GlowCurve"), 0.15f,
 		TEXT("How hard body glow is compressed above the knee. 1 = no compression, 0 = hard ceiling."));
 
+	/**
+	 * HOW FAR THE FLAMES COME DOWN (founder, 2026-09-25): "Don't overexaggerate on the flames either, the
+	 * flames look good, just dim them down a bit."
+	 *
+	 * So they are NOT compressed like a body is -- the shape, the flicker and the falloff that the founder
+	 * approved are all untouched -- they are simply scaled. A plain multiplier keeps every relative value
+	 * inside the fire intact: an ember that was brighter than its neighbour still is.
+	 */
+	TAutoConsoleVariable<float> CVarFlameDim(
+		TEXT("wl.Look.FlameDim"), 0.55f,
+		TEXT("Scale on flame brightness. 1 = as authored. Shape and flicker are never touched."));
+
 	float WonderlandTameGlow(float Strength)
 	{
 		const float Knee = FMath::Max(CVarGlowKnee.GetValueOnAnyThread(), 1.0f);
@@ -390,11 +402,13 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 			if (UMaterialInstanceDynamic* Full = UMaterialInstanceDynamic::Create(ParentFor(Def.Kind), this))
 			{
 				const FLinearColor Untamed(Def.Color.R, Def.Color.G, Def.Color.B, 1.0f);
-				const FLinearColor FullEmissive = Untamed * FMath::Max(Def.Strength, 0.0f);
+				const float FlameStrength = FMath::Max(Def.Strength, 0.0f)
+					* FMath::Clamp(CVarFlameDim.GetValueOnAnyThread(), 0.05f, 4.0f);
+				const FLinearColor FullEmissive = Untamed * FlameStrength;
 				Full->SetVectorParameterValue(TEXT("Color"), FullEmissive);
 				Full->SetVectorParameterValue(TEXT("EmissiveColor"), FullEmissive);
 				Full->SetVectorParameterValue(TEXT("BaseColor"), FullEmissive);
-				Full->SetScalarParameterValue(TEXT("EmissiveStrength"), FMath::Max(Def.Strength, 0.0f));
+				Full->SetScalarParameterValue(TEXT("EmissiveStrength"), FlameStrength);
 				const UWonderlandMascotStyleSettings& FlameStyle = UWonderlandMascotStyleSettings::Get();
 				if (FlameStyle.bChosen)
 				{

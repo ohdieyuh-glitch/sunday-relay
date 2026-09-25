@@ -22,11 +22,68 @@
 namespace WonderlandBrainLook
 {
 	// The frame's palette: deep navy, blue-violet light, cool white type.
-	FLinearColor Ink(float A = 1.0f) { return WonderlandUi::Srgb(0xEE, 0xF1, 0xFF, A); }
-	FLinearColor Mist(float A = 1.0f) { return WonderlandUi::Srgb(0x9C, 0xA8, 0xDA, A); }
-	FLinearColor Violet(float A = 1.0f) { return WonderlandUi::Srgb(0xB7, 0xA6, 0xFF, A); }
-	FLinearColor Beam(float A = 1.0f) { return WonderlandUi::Srgb(0x7E, 0x8E, 0xFF, A); }
-	FLinearColor Night(float A = 1.0f) { return WonderlandUi::Srgb(3, 6, 22, A); }
+	// ---- A WHITE PROJECT BRAIN (founder, 2026-09-25): "the whole project brain UI is white with black snow".
+	//
+	// The panel was a night field: a near-black ground with near-white text on it. Every name below keeps its
+	// ROLE and swaps its value, so the hundreds of call sites throughout this file did not have to move -- Ink
+	// is still "the text colour", Night is still "the ground", and they are simply the other way up now.
+	//
+	// THE ONE THING THAT STAYS DARK is the Wardrobe preview square, which the founder has now said twice:
+	// "Do NOT make the whole Project Brain black. Only the Wardrobe preview square is black." It is drawn
+	// from SkinPanelSolidBrush further down and is deliberately left as it was.
+	FLinearColor Ink(float A = 1.0f) { return WonderlandUi::Srgb(0x14, 0x16, 0x24, A); }
+	FLinearColor Mist(float A = 1.0f) { return WonderlandUi::Srgb(0x55, 0x5C, 0x78, A); }
+	FLinearColor Violet(float A = 1.0f) { return WonderlandUi::Srgb(0x5A, 0x44, 0xC8, A); }
+	FLinearColor Beam(float A = 1.0f) { return WonderlandUi::Srgb(0x35, 0x49, 0xC0, A); }
+	FLinearColor Night(float A = 1.0f) { return WonderlandUi::Srgb(0xF7, 0xF7, 0xFB, A); }
+
+	/**
+	 * BLACK SNOW ACROSS THE WHOLE PANEL (founder, 2026-09-25).
+	 *
+	 * The sculpture already has snow of its own, falling inside its chamber in three dimensions. This is the
+	 * other half of the same instruction: the UI around it is white, and the snow falls over that too.
+	 *
+	 * DRAWN, NOT SIMULATED. There is no state to keep -- each flake's position is a pure function of its
+	 * index and the clock, so the field costs nothing between frames, survives the panel being closed and
+	 * reopened, and cannot drift out of step with itself.
+	 *
+	 * IT SKIPS THE SCULPTURE'S WINDOW. Inside that rectangle the founder is looking at the real chamber,
+	 * which has real flakes falling in real depth; painting flat ones on top would put two snowfalls at two
+	 * scales over each other.
+	 */
+	void PaintSnow(const FGeometry& Geometry, FSlateWindowElementList& Elements, int32 Layer,
+				   float Time, const FVector4f& Hole, bool bHasHole)
+	{
+		const FSlateBrush* White = FCoreStyle::Get().GetBrush("WhiteBrush");
+		const FVector2f Size(Geometry.GetLocalSize());
+		if (Size.X < 8.0f || Size.Y < 8.0f)
+		{
+			return;
+		}
+		constexpr int32 Flakes = 190;
+		for (int32 Index = 0; Index < Flakes; ++Index)
+		{
+			// A cheap fixed hash per flake: stable across frames, and uncorrelated enough between flakes that
+			// the field does not read as rows.
+			const float A = FMath::Frac(FMath::Sin(Index * 12.9898f) * 43758.5453f);
+			const float B = FMath::Frac(FMath::Sin(Index * 78.2330f) * 21391.7739f);
+			const float C = FMath::Frac(FMath::Sin(Index * 39.4262f) * 17631.4471f);
+
+			const float Rate = 0.020f + B * 0.055f;                      // screens per second
+			const float Fall = FMath::Frac(A + Time * Rate);
+			const float Sway = FMath::Sin(Time * (0.5f + C) + Index) * 0.006f;
+			const FVector2f At((A + Sway) * Size.X, Fall * Size.Y);
+			const float Wide = 2.0f + C * 3.4f;
+
+			if (bHasHole && At.X > Hole.X && At.X < Hole.Z && At.Y > Hole.Y && At.Y < Hole.W)
+			{
+				continue;
+			}
+			FSlateDrawElement::MakeBox(Elements, Layer,
+				Geometry.ToPaintGeometry(FVector2f(Wide, Wide), FSlateLayoutTransform(At)),
+				White, ESlateDrawEffect::None, WonderlandUi::Srgb(10, 10, 16, 0.80f));
+		}
+	}
 
 	FSlateFontInfo Font(const char* Typeface, int32 Size, int32 LetterSpacing = 0)
 	{
@@ -137,6 +194,12 @@ public:
 			Band(0.0f, T, L, B - T);
 			Band(R, T, Size.X - R, B - T);
 		}
+
+		// THE SNOW GOES ON HERE, straight after the field and before anything else -- so it falls BEHIND the
+		// cards and the text rather than over them. Black flakes crossing a paragraph would make it
+		// unreadable, and the first version deferred this to the end of the scope and would have done
+		// exactly that.
+		PaintSnow(AllottedGeometry, OutDrawElements, Layer, Time, Gap, bHasHole);
 
 		// Light falling from the upper left, and the blue-violet bloom the brain stands in.
 		++Layer;
@@ -318,18 +381,18 @@ private:
 /* ---------------------------------------------------------------- the panel */
 
 SWonderlandProjectBrainPanel::SWonderlandProjectBrainPanel()
-	: PanelBrush(WonderlandUi::Srgb(12, 18, 54, 0.66f), 14.0f, WonderlandBrainLook::Beam(0.95f), 1.4f)
-	, CardBrush(WonderlandUi::Srgb(20, 28, 80, 0.58f), 9.0f, WonderlandUi::Srgb(88, 102, 232, 0.60f), 1.0f)
-	, SelectedBrush(WonderlandUi::Srgb(96, 104, 255, 0.30f), 9.0f, WonderlandBrainLook::Violet(1.0f), 1.6f)
-	, InspectorBrush(WonderlandUi::Srgb(8, 12, 38, 0.95f), 14.0f, WonderlandBrainLook::Violet(0.95f), 1.6f)
+	: PanelBrush(WonderlandUi::Srgb(255, 255, 255, 0.72f), 14.0f, WonderlandBrainLook::Beam(0.55f), 1.4f)
+	, CardBrush(WonderlandUi::Srgb(255, 255, 255, 0.86f), 9.0f, WonderlandUi::Srgb(120, 132, 214, 0.55f), 1.0f)
+	, SelectedBrush(WonderlandUi::Srgb(96, 104, 255, 0.18f), 9.0f, WonderlandBrainLook::Violet(1.0f), 1.6f)
+	, InspectorBrush(WonderlandUi::Srgb(252, 252, 255, 0.97f), 14.0f, WonderlandBrainLook::Violet(0.75f), 1.6f)
 	, YoursBadge(WonderlandUi::Srgb(40, 200, 170, 0.18f), 6.0f, WonderlandUi::Srgb(96, 232, 204, 0.90f), 1.0f)
 	, ReviewBadge(WonderlandUi::Srgb(240, 180, 60, 0.16f), 6.0f, WonderlandUi::Srgb(250, 204, 96, 0.90f), 1.0f)
 	, SystemBadge(WonderlandUi::Srgb(150, 130, 255, 0.16f), 6.0f, WonderlandUi::Srgb(186, 166, 255, 0.90f), 1.0f)
-	, InputBrush(WonderlandUi::Srgb(4, 6, 22, 0.96f), 7.0f, WonderlandBrainLook::Beam(0.80f), 1.0f)
-	, ButtonBrush(WonderlandUi::Srgb(70, 80, 220, 0.35f), 7.0f, WonderlandBrainLook::Violet(0.90f), 1.0f)
-	, ButtonHoverBrush(WonderlandUi::Srgb(110, 118, 255, 0.55f), 7.0f, WonderlandBrainLook::Ink(1.0f), 1.0f)
+	, InputBrush(WonderlandUi::Srgb(255, 255, 255, 0.98f), 7.0f, WonderlandBrainLook::Beam(0.55f), 1.0f)
+	, ButtonBrush(WonderlandUi::Srgb(90, 100, 230, 0.16f), 7.0f, WonderlandBrainLook::Violet(0.85f), 1.0f)
+	, ButtonHoverBrush(WonderlandUi::Srgb(110, 118, 255, 0.30f), 7.0f, WonderlandBrainLook::Ink(1.0f), 1.0f)
 	, RuleBrush(WonderlandBrainLook::Beam(0.45f), 0.0f)
-	, StatusBrush(WonderlandUi::Srgb(40, 30, 10, 0.60f), 6.0f, WonderlandUi::Srgb(250, 204, 96, 0.75f), 1.0f)
+	, StatusBrush(WonderlandUi::Srgb(255, 244, 214, 0.90f), 6.0f, WonderlandUi::Srgb(196, 146, 24, 0.85f), 1.0f)
 	// THE WARDROBE'S SURFACES, LAST because that is where they are declared. C++ initialises members in
 	// declaration order whatever this list says, so listing them first only earned a C5038.
 	// THE WINDOW'S FRAME: an outline and no fill at all. Anything with a fill here would tint the Dog behind it.

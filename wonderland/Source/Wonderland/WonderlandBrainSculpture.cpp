@@ -105,8 +105,12 @@ AWonderlandBrainSculpture::AWonderlandBrainSculpture()
 		Lamp->SetAffectTranslucentLighting(false);
 		return Lamp;
 	};
-	KeyLight = MakeLamp(TEXT("BrainKeyLight"), 140000.0f);
-	FillLight = MakeLamp(TEXT("BrainFillLight"), 46000.0f);
+	// BRIGHT ENOUGH TO OWN THE ROOM. At 140k/46k the chamber photographed as warm TAN with a shadow gradient
+	// across the back wall: the lamps were lighting the sculpture but the world's own sun and sky were still
+	// setting the colour of the walls. These are neutral and strong enough that the chamber is lit by its own
+	// two lamps and reads white, which is what the founder asked the background to be.
+	KeyLight = MakeLamp(TEXT("BrainKeyLight"), 520000.0f);
+	FillLight = MakeLamp(TEXT("BrainFillLight"), 190000.0f);
 
 	BrainMesh = MakeMesh(TEXT("BrainMass"));
 	BrainFold = MakeMesh(TEXT("BrainFolds"));
@@ -232,8 +236,8 @@ void AWonderlandBrainSculpture::PostInitializeComponents()
 	// BRIGHT ENOUGH TO READ AS RED AGAINST WHITE. At 0.33 the brain photographed black: a lit surface that
 	// dark, in a box the sun does not reach, returns almost nothing. With the chamber's own key and fill
 	// standing over it these are the albedo of something red rather than something nearly black.
-	DressSurface(BrainSurface, FLinearColor(0.720f, 0.085f, 0.095f, 1.0f), BrainSurfaceMid);
-	DressSurface(SnakeSurface, FLinearColor(0.880f, 0.145f, 0.105f, 1.0f), SnakeSurfaceMid);
+	DressSurface(BrainSurface, FLinearColor(0.640f, 0.070f, 0.080f, 1.0f), BrainSurfaceMid);
+	DressSurface(SnakeSurface, FLinearColor(0.820f, 0.130f, 0.095f, 1.0f), SnakeSurfaceMid);
 
 	// ---- THE BLACK SNOW. One flake mesh, dressed once, seeded once, re-placed every frame.
 	if (Snow != nullptr)
