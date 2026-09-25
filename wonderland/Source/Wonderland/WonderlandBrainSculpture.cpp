@@ -160,8 +160,8 @@ void AWonderlandBrainSculpture::PostInitializeComponents()
 	Dress(BrainMesh, FLinearColor(0.240f, 0.020f, 0.028f, 1.0f), BrainMid);
 	Dress(BrainFold, FLinearColor(0.110f, 0.008f, 0.014f, 1.0f), FoldMid);
 	// And a python is four tones, not one: a dark back, a pale belly, a darker snout and a lit eye.
-	Dress(SnakeMesh, FLinearColor(0.560f, 0.070f, 0.055f, 1.0f), SnakeMid);
-	Dress(SnakeBelly, FLinearColor(0.880f, 0.520f, 0.470f, 1.0f), BellyMid);
+	Dress(SnakeMesh, FLinearColor(0.470f, 0.045f, 0.038f, 1.0f), SnakeMid);
+	Dress(SnakeBelly, FLinearColor(0.640f, 0.210f, 0.175f, 1.0f), BellyMid);
 	Dress(SnakeHead, FLinearColor(0.380f, 0.040f, 0.038f, 1.0f), HeadMid);
 	Dress(SnakeEyes, FLinearColor(0.060f, 0.050f, 0.050f, 1.0f), EyeMid);
 
@@ -243,7 +243,7 @@ void AWonderlandBrainSculpture::PostInitializeComponents()
 	// dark, in a box the sun does not reach, returns almost nothing. With the chamber's own key and fill
 	// standing over it these are the albedo of something red rather than something nearly black.
 	DressSurface(BrainSurface, FLinearColor(0.640f, 0.070f, 0.080f, 1.0f), BrainSurfaceMid);
-	DressSurface(SnakeSurface, FLinearColor(0.820f, 0.130f, 0.095f, 1.0f), SnakeSurfaceMid);
+	DressSurface(SnakeSurface, FLinearColor(0.680f, 0.070f, 0.055f, 1.0f), SnakeSurfaceMid);
 
 	// ---- THE BLACK SNOW. One flake mesh, dressed once, seeded once, re-placed every frame.
 	if (Snow != nullptr)
