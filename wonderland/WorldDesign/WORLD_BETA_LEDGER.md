@@ -176,6 +176,46 @@ Three obstructions recorded, none yet fixed:
 | L | EMPTY / PLACEHOLDER | **PASS (2026-09-24)** | The **800–900 m ring is a density trough in all three nations at once** — ICARUS 852, NOCTIS 715, TARTARUS 1,060, against 1,300–2,600 in the rings either side. That ring is the first→second band seam. NOCTIS's inner approach (500–600 m, 179 instances) is the thinnest ring any nation has inside its frontier. **Worse, measured 2026-09-23: Golden Arrival stops at ~400 m, not at its 500 m boundary — 400–450 m holds 841 instances and 450–500 m holds 181.** Between the city edge and the causeway heads at 504–508 m there is no built work at all; beyond them the causeways are thin (18–36 instances each). See blocker 1, which states the connectivity precisely. |
 | M | WORLD SAVE / RECOVERY | **PASS (exercised 2026-09-24)** | Five authored layers were applied and saved through `apply_layer` in one session -- NC01 (82 batches / 2,407), NC02 (6 / 1,476) and SF01/SF02/SF03 (33 each / 1,039, 1,066, 766) -- and each SF pass was applied twice, the second time removing its own 33 batches first, which is the additive/removable contract working rather than being asserted. The map re-opened after every save and was walked. Three full `.umap` copies were taken before the writes and are held outside the worktree; the map is 46,056,704 bytes and unchanged in structure. The one save-related hazard found is not in saving but in MEASURING after it: the editor's own frame time drifts monotonically upward the longer it stays open (115 -> 152 -> 168 ms for an identical scene), so any A/B taken late in a session is worthless and must be re-run on a fresh process -- which is how row I's result was recovered from two readings that said the opposite. |
 
+## 2026-09-25 -- four founder items that had implementations but no verdicts
+
+P0-4 (fire), P1-7 (HUD agent rows), P2-10 (water) and P2-11 (shadows) were all built and none of them had a
+proof that could fail. They have one now, and all four pass.
+
+| item | proof | result |
+|---|---|---|
+| P0-4 fire | `zc_fire` 9/9 | tongues swing 0.59-0.63 of height; width vs height correlates **-1.0** (tall-and-thin, never a swelling ball); worst self-similarity **0.857** where a loop reads 1.0; **2.19 uu** drift over a 471 uu teleport |
+| P1-7 HUD rows | `zc_hud_agents` 5/5 | COMPOUND AGENT: Julius / SINGLE AGENT: Claude Code Fable 5 / LLM COMPANION: GPT 6 Astra, read off the paint; renaming all three live changes all three rows |
+| P2-10 water | `zc_water` 4/4 | BLEND_Translucent read off a pond's own material; **20** surfaces dressed; pond changes **1.4689** against **0.2443** for the ground beside it |
+| P2-11 shadows | `zc_shadows` 4/4 | one sun, one caster of four directional lights; bias 0.30 / slope 0.35 / 4 cascades over 180 m; still-frame change **0.9196** with shadows against **2.1575** with shadows OFF |
+
+**Two defects found in the editor log, which nothing had been reading.** Both were invisible to every proof
+written so far, and one of them had already been "passed" over:
+
+- `M_WL_VoxelGlow missing usage flag Nanite` and `missing usage flag InstancedStaticMeshes`, each followed by
+  *"Default Material will be used in game."* This is the glow every companion figure, every Project Avatar
+  and every tongue of flame draws with, applied to INSTANCED meshes -- exactly the flag it lacked. A material
+  without the usage flag for its mesh kind does not fail loudly; the renderer substitutes the grey engine
+  default. `zc_fire` had passed F06 hours earlier by reading `MID_M_WL_VoxelGlow` off the flame surface: true,
+  and never the question, because the substitution happens downstream of the assignment. Both flags set and
+  the assets resaved. `M_WLMaster` was missing the Nanite flag too.
+- `Invalid material [MID_M_WL_RealWater_0] used on Nanite static mesh [WL_Water_Pavilion_water]. Only opaque
+  or masked blend modes are currently supported, [BLEND_Translucent] blend mode was specified.` Nanite does
+  not draw translucency. `ApplyRealWater` now calls `SetForceDisableNanite(true)` on the surfaces it dresses;
+  a basin is a few hundred triangles of flat plane, the case Nanite buys least on.
+
+**And one fake pass of my own, recorded rather than quietly fixed.** `zc_shadows` reported 3/3 earlier the
+same day. S03 had read 0.0 change with shadows and 0.0 without, and passed on `0.0 <= 0.0 + 1.0` -- two empty
+pictures comparing equal. `read_render_target_pixel` only supports 8-bit RGBA and the target was float. Then
+a one-shot `CaptureScene` gave TSR and Lumen no temporal history and every frame came back 255 in every
+channel at every exposure from 0 to -14 EV. S04 and Q03 now refuse any reading that is flat on both sides, so
+a blank instrument reports as a broken job and never as a green product.
+
+**FR04.** One 200 m tile at (221 m, -1179 m) measured bare. The walk grids the world against its own core
+radius, so when the disc grew from 1,096 m to 1,479 m every boundary moved and this cell became its own.
+Planted rather than reclassified: the walk's frontier constant is 1,200 m and the tile sits at 1,199.5, so
+moving the constant to 1,199 would also have turned W02 green. 92 instances, 15 batches, 0 hovers.
+`zc_beta_walk` is now **5/5**, with **0 empty of 115 built tiles**.
+
 ## The biggest world beta blockers, in order
 
 1. ~~**No nation is connected to Golden Arrival.**~~ **CLOSED 2026-09-23 by AP01.** All three causeways now
