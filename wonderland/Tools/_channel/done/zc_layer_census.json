@@ -1,0 +1,1140 @@
+{
+ "name": "zc_layer_census",
+ "started": "2026-09-25 09:55:09",
+ "status": "counted",
+ "world": "editor",
+ "authored_layers": {
+  "AP01_ArrivalApproaches": {
+   "actors": 6,
+   "instances": 334
+  },
+  "AR01": {
+   "actors": 3,
+   "instances": 3
+  },
+  "AR02": {
+   "actors": 4,
+   "instances": 112
+  },
+  "AR03": {
+   "actors": 2,
+   "instances": 12
+  },
+  "BC01_BaseCourse": {
+   "actors": 1,
+   "instances": 4132
+  },
+  "CK01": {
+   "actors": 23,
+   "instances": 485
+  },
+  "CK02": {
+   "actors": 22,
+   "instances": 317
+  },
+  "CK03": {
+   "actors": 16,
+   "instances": 392
+  },
+  "CL01": {
+   "actors": 23,
+   "instances": 541
+  },
+  "CL02": {
+   "actors": 22,
+   "instances": 251
+  },
+  "CQ01": {
+   "actors": 23,
+   "instances": 511
+  },
+  "CQ02": {
+   "actors": 22,
+   "instances": 305
+  },
+  "DC01": {
+   "actors": 27,
+   "instances": 297
+  },
+  "DC02": {
+   "actors": 22,
+   "instances": 260
+  },
+  "DC03": {
+   "actors": 18,
+   "instances": 213
+  },
+  "DF01_DubelForest": {
+   "actors": 13,
+   "instances": 2925
+  },
+  "EQ01": {
+   "actors": 23,
+   "instances": 520
+  },
+  "EQ02": {
+   "actors": 22,
+   "instances": 281
+  },
+  "ER01": {
+   "actors": 23,
+   "instances": 544
+  },
+  "ER02": {
+   "actors": 21,
+   "instances": 312
+  },
+  "ER03": {
+   "actors": 18,
+   "instances": 392
+  },
+  "FD01_FillE": {
+   "actors": 5,
+   "instances": 32
+  },
+  "FD01_FillEE": {
+   "actors": 5,
+   "instances": 11
+  },
+  "FD01_FillEL": {
+   "actors": 1,
+   "instances": 8
+  },
+  "FD01_FillEMC": {
+   "actors": 5,
+   "instances": 27
+  },
+  "FD01_FillEMN": {
+   "actors": 5,
+   "instances": 38
+  },
+  "FD01_FillEMS": {
+   "actors": 5,
+   "instances": 25
+  },
+  "FD01_FillNE": {
+   "actors": 5,
+   "instances": 98
+  },
+  "FD01_FillSE2": {
+   "actors": 5,
+   "instances": 12
+  },
+  "FD01_FillSFE": {
+   "actors": 5,
+   "instances": 35
+  },
+  "FD01_FillSFW": {
+   "actors": 5,
+   "instances": 22
+  },
+  "FD01_FillW": {
+   "actors": 5,
+   "instances": 49
+  },
+  "FD01_FillWE": {
+   "actors": 5,
+   "instances": 10
+  },
+  "FD01_SW": {
+   "actors": 5,
+   "instances": 9
+  },
+  "FD01_South": {
+   "actors": 5,
+   "instances": 34
+  },
+  "FD02_CxCityE": {
+   "actors": 4,
+   "instances": 12
+  },
+  "FD02_CxCityNE": {
+   "actors": 4,
+   "instances": 321
+  },
+  "FD02_CxCityS": {
+   "actors": 4,
+   "instances": 66
+  },
+  "FD02_CxCitySW": {
+   "actors": 3,
+   "instances": 30
+  },
+  "FD02_CxCityWE": {
+   "actors": 4,
+   "instances": 45
+  },
+  "FD02_CxSSW": {
+   "actors": 4,
+   "instances": 18
+  },
+  "FD02_FillE": {
+   "actors": 4,
+   "instances": 126
+  },
+  "FD02_FillEE": {
+   "actors": 4,
+   "instances": 78
+  },
+  "FD02_FillEL": {
+   "actors": 3,
+   "instances": 24
+  },
+  "FD02_FillEMC": {
+   "actors": 4,
+   "instances": 276
+  },
+  "FD02_FillEMN": {
+   "actors": 4,
+   "instances": 210
+  },
+  "FD02_FillEMS": {
+   "actors": 4,
+   "instances": 126
+  },
+  "FD02_FillNE": {
+   "actors": 4,
+   "instances": 711
+  },
+  "FD02_FillSE2": {
+   "actors": 4,
+   "instances": 63
+  },
+  "FD02_FillSFE": {
+   "actors": 4,
+   "instances": 168
+  },
+  "FD02_FillSFW": {
+   "actors": 4,
+   "instances": 219
+  },
+  "FD02_FillW": {
+   "actors": 4,
+   "instances": 141
+  },
+  "FD02_FillWE": {
+   "actors": 4,
+   "instances": 123
+  },
+  "FD02_SW": {
+   "actors": 4,
+   "instances": 102
+  },
+  "FD02_South": {
+   "actors": 4,
+   "instances": 225
+  },
+  "FD04_CxCityE": {
+   "actors": 3,
+   "instances": 3
+  },
+  "FD04_CxCityNE": {
+   "actors": 7,
+   "instances": 18
+  },
+  "FD04_CxCityS": {
+   "actors": 5,
+   "instances": 12
+  },
+  "FD04_CxCitySW": {
+   "actors": 5,
+   "instances": 15
+  },
+  "FD04_CxCityWE": {
+   "actors": 6,
+   "instances": 24
+  },
+  "FD04_CxSSW": {
+   "actors": 5,
+   "instances": 6
+  },
+  "FD04_FillE": {
+   "actors": 7,
+   "instances": 42
+  },
+  "FD04_FillEE": {
+   "actors": 6,
+   "instances": 24
+  },
+  "FD04_FillEL": {
+   "actors": 3,
+   "instances": 9
+  },
+  "FD04_FillEMC": {
+   "actors": 7,
+   "instances": 141
+  },
+  "FD04_FillEMN": {
+   "actors": 7,
+   "instances": 111
+  },
+  "FD04_FillEMS": {
+   "actors": 7,
+   "instances": 36
+  },
+  "FD04_FillNE": {
+   "actors": 7,
+   "instances": 150
+  },
+  "FD04_FillSE2": {
+   "actors": 7,
+   "instances": 21
+  },
+  "FD04_FillSFE": {
+   "actors": 7,
+   "instances": 81
+  },
+  "FD04_FillSFW": {
+   "actors": 7,
+   "instances": 90
+  },
+  "FD04_FillW": {
+   "actors": 7,
+   "instances": 45
+  },
+  "FD04_FillWE": {
+   "actors": 7,
+   "instances": 48
+  },
+  "FD04_SW": {
+   "actors": 7,
+   "instances": 33
+  },
+  "FD04_South": {
+   "actors": 7,
+   "instances": 87
+  },
+  "FD05_CxCityE": {
+   "actors": 2,
+   "instances": 2
+  },
+  "FD05_CxCityNE": {
+   "actors": 2,
+   "instances": 10
+  },
+  "FD05_CxCityS": {
+   "actors": 2,
+   "instances": 6
+  },
+  "FD05_CxCitySW": {
+   "actors": 2,
+   "instances": 4
+  },
+  "FD05_CxCityWE": {
+   "actors": 2,
+   "instances": 2
+  },
+  "FD05_CxSSW": {
+   "actors": 2,
+   "instances": 2
+  },
+  "FD05_FillE": {
+   "actors": 2,
+   "instances": 26
+  },
+  "FD05_FillEE": {
+   "actors": 2,
+   "instances": 12
+  },
+  "FD05_FillEL": {
+   "actors": 2,
+   "instances": 4
+  },
+  "FD05_FillEMC": {
+   "actors": 2,
+   "instances": 26
+  },
+  "FD05_FillEMN": {
+   "actors": 2,
+   "instances": 24
+  },
+  "FD05_FillEMS": {
+   "actors": 2,
+   "instances": 12
+  },
+  "FD05_FillNE": {
+   "actors": 2,
+   "instances": 48
+  },
+  "FD05_FillSE2": {
+   "actors": 2,
+   "instances": 12
+  },
+  "FD05_FillSFE": {
+   "actors": 2,
+   "instances": 34
+  },
+  "FD05_FillSFW": {
+   "actors": 2,
+   "instances": 38
+  },
+  "FD05_FillW": {
+   "actors": 2,
+   "instances": 18
+  },
+  "FD05_FillWE": {
+   "actors": 2,
+   "instances": 14
+  },
+  "FD05_SW": {
+   "actors": 2,
+   "instances": 80
+  },
+  "FD05_South": {
+   "actors": 2,
+   "instances": 100
+  },
+  "FL04": {
+   "actors": 14,
+   "instances": 532
+  },
+  "FO01": {
+   "actors": 23,
+   "instances": 539
+  },
+  "FO02": {
+   "actors": 21,
+   "instances": 312
+  },
+  "FR01_IcarusFrontier": {
+   "actors": 15,
+   "instances": 103
+  },
+  "FR02_NoctisFrontier": {
+   "actors": 15,
+   "instances": 301
+  },
+  "FR03_TartarusFrontier": {
+   "actors": 15,
+   "instances": 100
+  },
+  "FR04_TartarusFrontier": {
+   "actors": 15,
+   "instances": 92
+  },
+  "GA01": {
+   "actors": 37,
+   "instances": 120
+  },
+  "GA02": {
+   "actors": 67,
+   "instances": 994
+  },
+  "GA03": {
+   "actors": 27,
+   "instances": 94
+  },
+  "GA04": {
+   "actors": 54,
+   "instances": 500
+  },
+  "GA05": {
+   "actors": 18,
+   "instances": 84
+  },
+  "GA06": {
+   "actors": 8,
+   "instances": 0
+  },
+  "GA07": {
+   "actors": 6,
+   "instances": 567
+  },
+  "GC01_CxCityE": {
+   "actors": 9,
+   "instances": 40
+  },
+  "GC01_CxCityNE": {
+   "actors": 10,
+   "instances": 23
+  },
+  "GC01_CxCityS": {
+   "actors": 11,
+   "instances": 70
+  },
+  "GC01_CxCitySW": {
+   "actors": 9,
+   "instances": 54
+  },
+  "GC01_CxCityWE": {
+   "actors": 8,
+   "instances": 14
+  },
+  "GC01_CxSSW": {
+   "actors": 7,
+   "instances": 8
+  },
+  "GC01_FillE": {
+   "actors": 6,
+   "instances": 6
+  },
+  "GC01_FillEE": {
+   "actors": 8,
+   "instances": 31
+  },
+  "GC01_FillEL": {
+   "actors": 8,
+   "instances": 32
+  },
+  "GC01_FillEMC": {
+   "actors": 8,
+   "instances": 16
+  },
+  "GC01_FillEMS": {
+   "actors": 2,
+   "instances": 2
+  },
+  "GC01_FillNE": {
+   "actors": 7,
+   "instances": 11
+  },
+  "GC01_FillSE2": {
+   "actors": 11,
+   "instances": 35
+  },
+  "GC01_FillSFE": {
+   "actors": 8,
+   "instances": 26
+  },
+  "GC01_FillSFW": {
+   "actors": 8,
+   "instances": 28
+  },
+  "GC01_FillW": {
+   "actors": 12,
+   "instances": 54
+  },
+  "GC01_FillWE": {
+   "actors": 11,
+   "instances": 31
+  },
+  "GC01_Garden": {
+   "actors": 12,
+   "instances": 219
+  },
+  "GC01_SW": {
+   "actors": 12,
+   "instances": 146
+  },
+  "GC01_South": {
+   "actors": 12,
+   "instances": 265
+  },
+  "GF01_GardenFill": {
+   "actors": 13,
+   "instances": 3670
+  },
+  "GF02_GardenFill": {
+   "actors": 13,
+   "instances": 2377
+  },
+  "GT01_CxCityE": {
+   "actors": 3,
+   "instances": 740
+  },
+  "GT01_CxCityNE": {
+   "actors": 3,
+   "instances": 1848
+  },
+  "GT01_CxCityS": {
+   "actors": 3,
+   "instances": 1852
+  },
+  "GT01_CxCitySW": {
+   "actors": 3,
+   "instances": 3276
+  },
+  "GT01_CxCityWE": {
+   "actors": 3,
+   "instances": 411
+  },
+  "GT01_CxSSW": {
+   "actors": 3,
+   "instances": 278
+  },
+  "GT01_FillE": {
+   "actors": 2,
+   "instances": 52
+  },
+  "GT01_FillEE": {
+   "actors": 3,
+   "instances": 720
+  },
+  "GT01_FillEL": {
+   "actors": 2,
+   "instances": 362
+  },
+  "GT01_FillEMC": {
+   "actors": 3,
+   "instances": 647
+  },
+  "GT01_FillEMN": {
+   "actors": 3,
+   "instances": 652
+  },
+  "GT01_FillEMS": {
+   "actors": 3,
+   "instances": 1353
+  },
+  "GT01_FillSE2": {
+   "actors": 3,
+   "instances": 632
+  },
+  "GT01_FillSFE": {
+   "actors": 3,
+   "instances": 473
+  },
+  "GT01_FillSFW": {
+   "actors": 3,
+   "instances": 728
+  },
+  "GT01_FillW": {
+   "actors": 3,
+   "instances": 336
+  },
+  "GT01_FillWE": {
+   "actors": 2,
+   "instances": 302
+  },
+  "GT01_FlankL": {
+   "actors": 1,
+   "instances": 279
+  },
+  "GT01_FlankR": {
+   "actors": 1,
+   "instances": 275
+  },
+  "GT01_GA03": {
+   "actors": 2,
+   "instances": 27
+  },
+  "GT01_Garden": {
+   "actors": 3,
+   "instances": 2097
+  },
+  "GT01_SW": {
+   "actors": 3,
+   "instances": 973
+  },
+  "GT01_South": {
+   "actors": 3,
+   "instances": 3454
+  },
+  "IC01": {
+   "actors": 23,
+   "instances": 668
+  },
+  "IC02_IcarusDistrict": {
+   "actors": 135,
+   "instances": 2424
+  },
+  "IC03_IcarusBand": {
+   "actors": 56,
+   "instances": 2044
+  },
+  "IC04_IcarusBandDetail": {
+   "actors": 6,
+   "instances": 1044
+  },
+  "LF01_-1_-1": {
+   "actors": 6,
+   "instances": 2009
+  },
+  "LF01_-1_-2": {
+   "actors": 6,
+   "instances": 1657
+  },
+  "LF01_-1_0": {
+   "actors": 6,
+   "instances": 1463
+  },
+  "LF01_-2_-1": {
+   "actors": 6,
+   "instances": 766
+  },
+  "LF01_-2_-2": {
+   "actors": 6,
+   "instances": 934
+  },
+  "LF01_-2_0": {
+   "actors": 6,
+   "instances": 561
+  },
+  "LF01_0_-1": {
+   "actors": 6,
+   "instances": 4355
+  },
+  "LF01_0_-2": {
+   "actors": 6,
+   "instances": 3188
+  },
+  "LF01_0_0": {
+   "actors": 6,
+   "instances": 1924
+  },
+  "LF01_0_1": {
+   "actors": 6,
+   "instances": 544
+  },
+  "LF01_1_-1": {
+   "actors": 6,
+   "instances": 2288
+  },
+  "LF01_1_-2": {
+   "actors": 6,
+   "instances": 671
+  },
+  "LF01_1_0": {
+   "actors": 6,
+   "instances": 2531
+  },
+  "LF01_1_1": {
+   "actors": 6,
+   "instances": 964
+  },
+  "LH01": {
+   "actors": 23,
+   "instances": 539
+  },
+  "LH02": {
+   "actors": 21,
+   "instances": 293
+  },
+  "MQ02": {
+   "actors": 13,
+   "instances": 92
+  },
+  "MQ03": {
+   "actors": 12,
+   "instances": 40
+  },
+  "MQ04": {
+   "actors": 12,
+   "instances": 24
+  },
+  "NC01_NoctisQuarter": {
+   "actors": 99,
+   "instances": 2407
+  },
+  "NC02_NoctisDetail": {
+   "actors": 6,
+   "instances": 1476
+  },
+  "NC03_NoctisBand": {
+   "actors": 61,
+   "instances": 2167
+  },
+  "NC04_NoctisBandDetail": {
+   "actors": 9,
+   "instances": 1142
+  },
+  "OL01": {
+   "actors": 144,
+   "instances": 0
+  },
+  "PL01": {
+   "actors": 5,
+   "instances": 5
+  },
+  "PL02": {
+   "actors": 5,
+   "instances": 5
+  },
+  "RG01": {
+   "actors": 23,
+   "instances": 548
+  },
+  "RG02": {
+   "actors": 22,
+   "instances": 189
+  },
+  "SD01_CxCityE": {
+   "actors": 13,
+   "instances": 222
+  },
+  "SD01_CxCityNE": {
+   "actors": 13,
+   "instances": 418
+  },
+  "SD01_CxCityS": {
+   "actors": 13,
+   "instances": 206
+  },
+  "SD01_CxCitySW": {
+   "actors": 13,
+   "instances": 354
+  },
+  "SD01_CxCityWE": {
+   "actors": 13,
+   "instances": 416
+  },
+  "SD01_CxSSW": {
+   "actors": 13,
+   "instances": 247
+  },
+  "SD01_FillE": {
+   "actors": 13,
+   "instances": 380
+  },
+  "SD01_FillEE": {
+   "actors": 13,
+   "instances": 230
+  },
+  "SD01_FillEL": {
+   "actors": 13,
+   "instances": 134
+  },
+  "SD01_FillEMC": {
+   "actors": 13,
+   "instances": 322
+  },
+  "SD01_FillEMN": {
+   "actors": 13,
+   "instances": 449
+  },
+  "SD01_FillEMS": {
+   "actors": 13,
+   "instances": 59
+  },
+  "SD01_FillNE": {
+   "actors": 13,
+   "instances": 980
+  },
+  "SD01_FillSE2": {
+   "actors": 13,
+   "instances": 280
+  },
+  "SD01_FillSFE": {
+   "actors": 13,
+   "instances": 480
+  },
+  "SD01_FillSFW": {
+   "actors": 13,
+   "instances": 436
+  },
+  "SD01_FillW": {
+   "actors": 13,
+   "instances": 551
+  },
+  "SD01_FillWE": {
+   "actors": 13,
+   "instances": 472
+  },
+  "SD01_SW": {
+   "actors": 13,
+   "instances": 377
+  },
+  "SD01_South": {
+   "actors": 13,
+   "instances": 1112
+  },
+  "SF01_CxCityS": {
+   "actors": 8,
+   "instances": 8
+  },
+  "SF01_CxCitySW": {
+   "actors": 8,
+   "instances": 8
+  },
+  "SF01_CxCityWE": {
+   "actors": 8,
+   "instances": 8
+  },
+  "SF01_FillE": {
+   "actors": 8,
+   "instances": 24
+  },
+  "SF01_FillEMS": {
+   "actors": 8,
+   "instances": 8
+  },
+  "SF01_FillNE": {
+   "actors": 8,
+   "instances": 8
+  },
+  "SF01_FillSFE": {
+   "actors": 8,
+   "instances": 32
+  },
+  "SF01_FillSFW": {
+   "actors": 8,
+   "instances": 16
+  },
+  "SF01_IcarusSeam": {
+   "actors": 33,
+   "instances": 1039
+  },
+  "SF01_SW": {
+   "actors": 8,
+   "instances": 216
+  },
+  "SF01_South": {
+   "actors": 8,
+   "instances": 320
+  },
+  "SF02_NoctisSeam": {
+   "actors": 33,
+   "instances": 1066
+  },
+  "SF03_TartarusSeam": {
+   "actors": 33,
+   "instances": 766
+  },
+  "SKY01": {
+   "actors": 17,
+   "instances": 0
+  },
+  "SKY02": {
+   "actors": 31,
+   "instances": 49
+  },
+  "SKY03": {
+   "actors": 158,
+   "instances": 0
+  },
+  "SKY04": {
+   "actors": 59,
+   "instances": 190
+  },
+  "SKY05": {
+   "actors": 112,
+   "instances": 790
+  },
+  "SKY06": {
+   "actors": 192,
+   "instances": 0
+  },
+  "SM01": {
+   "actors": 23,
+   "instances": 548
+  },
+  "SM02": {
+   "actors": 22,
+   "instances": 319
+  },
+  "SM03": {
+   "actors": 20,
+   "instances": 417
+  },
+  "TC01": {
+   "actors": 23,
+   "instances": 544
+  },
+  "TC02": {
+   "actors": 21,
+   "instances": 312
+  },
+  "TC03": {
+   "actors": 30,
+   "instances": 392
+  },
+  "TG01_CxCityE": {
+   "actors": 2,
+   "instances": 2
+  },
+  "TG01_CxCityNE": {
+   "actors": 7,
+   "instances": 10
+  },
+  "TG01_CxCityS": {
+   "actors": 5,
+   "instances": 6
+  },
+  "TG01_CxCitySW": {
+   "actors": 3,
+   "instances": 6
+  },
+  "TG01_CxCityWE": {
+   "actors": 5,
+   "instances": 6
+  },
+  "TG01_CxSSW": {
+   "actors": 4,
+   "instances": 4
+  },
+  "TG01_FillEL": {
+   "actors": 3,
+   "instances": 4
+  },
+  "TG01_FillEMC": {
+   "actors": 2,
+   "instances": 2
+  },
+  "TG01_FillSE2": {
+   "actors": 2,
+   "instances": 2
+  },
+  "TG01_FillSFE": {
+   "actors": 2,
+   "instances": 2
+  },
+  "TG01_FillSFW": {
+   "actors": 3,
+   "instances": 4
+  },
+  "TG01_FillW": {
+   "actors": 5,
+   "instances": 12
+  },
+  "TG01_FillWE": {
+   "actors": 2,
+   "instances": 4
+  },
+  "TG01_Garden": {
+   "actors": 8,
+   "instances": 68
+  },
+  "TG01_SW": {
+   "actors": 7,
+   "instances": 26
+  },
+  "TG01_South": {
+   "actors": 6,
+   "instances": 20
+  },
+  "TP01": {
+   "actors": 5,
+   "instances": 0
+  },
+  "TQ01_TartarusQuarter": {
+   "actors": 97,
+   "instances": 1641
+  },
+  "TQ02_TartarusDetail": {
+   "actors": 9,
+   "instances": 654
+  },
+  "TQ03_TartarusBand": {
+   "actors": 60,
+   "instances": 2284
+  },
+  "TQ04_TartarusBandDetail": {
+   "actors": 9,
+   "instances": 1116
+  },
+  "TR01": {
+   "actors": 2,
+   "instances": 5
+  },
+  "WB01_CxCityE": {
+   "actors": 1,
+   "instances": 14
+  },
+  "WB01_CxCityNE": {
+   "actors": 1,
+   "instances": 77
+  },
+  "WB01_CxCityS": {
+   "actors": 1,
+   "instances": 36
+  },
+  "WB01_CxCitySW": {
+   "actors": 1,
+   "instances": 35
+  },
+  "WB01_CxCityWE": {
+   "actors": 1,
+   "instances": 49
+  },
+  "WB01_CxSSW": {
+   "actors": 1,
+   "instances": 21
+  },
+  "WB01_FillE": {
+   "actors": 1,
+   "instances": 302
+  },
+  "WB01_FillEE": {
+   "actors": 1,
+   "instances": 151
+  },
+  "WB01_FillEL": {
+   "actors": 1,
+   "instances": 89
+  },
+  "WB01_FillEMC": {
+   "actors": 1,
+   "instances": 592
+  },
+  "WB01_FillEMN": {
+   "actors": 1,
+   "instances": 463
+  },
+  "WB01_FillEMS": {
+   "actors": 1,
+   "instances": 157
+  },
+  "WB01_FillNE": {
+   "actors": 1,
+   "instances": 921
+  },
+  "WB01_FillSE2": {
+   "actors": 1,
+   "instances": 138
+  },
+  "WB01_FillSFE": {
+   "actors": 1,
+   "instances": 573
+  },
+  "WB01_FillSFW": {
+   "actors": 1,
+   "instances": 513
+  },
+  "WB01_FillW": {
+   "actors": 1,
+   "instances": 299
+  },
+  "WB01_FillWE": {
+   "actors": 1,
+   "instances": 291
+  },
+  "WB01_SW": {
+   "actors": 1,
+   "instances": 168
+  },
+  "WB01_South": {
+   "actors": 1,
+   "instances": 568
+  },
+  "WG01": {
+   "actors": 23,
+   "instances": 548
+  },
+  "WG02": {
+   "actors": 21,
+   "instances": 214
+  },
+  "WG03": {
+   "actors": 21,
+   "instances": 417
+  },
+  "WW01": {
+   "actors": 23,
+   "instances": 552
+  },
+  "WW02": {
+   "actors": 22,
+   "instances": 318
+  },
+  "WW03": {
+   "actors": 18,
+   "instances": 345
+  },
+  "XM01_Christmas": {
+   "actors": 2,
+   "instances": 228
+  },
+  "XM02_WarmWindows": {
+   "actors": 6,
+   "instances": 264
+  }
+ },
+ "layer_count": 281,
+ "christmas_present": [
+  "XM01_Christmas",
+  "XM02_WarmWindows"
+ ],
+ "log": "",
+ "finished": "2026-09-25 09:55:10",
+ "seconds": 0.33
+}
