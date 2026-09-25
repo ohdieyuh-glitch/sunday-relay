@@ -42,7 +42,7 @@ as this file counts, went ICARUS 852 -> 1,998, NOCTIS 715 -> 1,869, TARTARUS 1,0
 inside the 1,300-2,600 of the rings either side. 3,342 instances: a flagstone floor laid across the join on
 the module's own grid, kerb and verge, planted retaining edges, and a threshold so the seam is a place. Every
 module used is on THIRD_BAND_PREP's "already proven elsewhere" list. Nine walk points across the three axes
-at 780/850/920 m, none fell -- though the readback showed identical z at equal radii, so the traversal half
+at 780/850/920 m, none fell. **Row B's Tartarus stuck point is not a hole and not a height mismatch in the seam: it is a BUILDING.** Walked with position readback (the pawn arrived at every point, off by 0.0 uu), the axis reads z 101 / 101 / **1445** / 94 / 75 at 760/800/844/880/920 m -- and the specs say why: at (73071, -42189) TQ01_PlinthCourse sits at z=12 and TQ02_Cornice at z=2072, so a 20.7 m hall stands on the seam and the Dog was landing on it. SF03's first build had paved straight through that floor plan; the seam passes now read the nations' own recorded footprints and leave them alone -- 86 tiles left for buildings in Tartarus, 14 in Icarus, 6 in Noctis -- which is why Tartarus lands at 1,395 rather than 1,739. The traversal half
 wants a founder's walk before it is called PASS.
 
 | | category | verdict | evidence |

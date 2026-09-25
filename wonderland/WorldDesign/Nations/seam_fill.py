@@ -56,10 +56,17 @@ CULL_NEAR, CULL_MID, CULL_FAR = 12000.0, 26000.0, 60000.0
 #: Bearings are the middle of each canon sector (CANON/nations.json): ICARUS 30..150, NOCTIS 150..-90,
 #: TARTARUS -90..30.
 PASSES = {
-    "SF01": dict(nation="ICARUS", bearing=90.0, module="icarus_district", out="sf01_icarus_seam.json"),
-    "SF02": dict(nation="NOCTIS", bearing=210.0, module="noctis_quarter", out="sf02_noctis_seam.json"),
-    "SF03": dict(nation="TARTARUS", bearing=330.0, module="tartarus_quarter", out="sf03_tartarus_seam.json"),
+    "SF01": dict(nation="ICARUS", bearing=90.0, module="icarus_district", out="sf01_icarus_seam.json",
+                 footprints=["ic03_band_footprints.json"]),
+    "SF02": dict(nation="NOCTIS", bearing=210.0, module="noctis_quarter", out="sf02_noctis_seam.json",
+                 footprints=["nc01_footprints.json", "nc03_band_footprints.json"]),
+    "SF03": dict(nation="TARTARUS", bearing=330.0, module="tartarus_quarter", out="sf03_tartarus_seam.json",
+                 footprints=["tq01_footprints.json", "tq03_band_footprints.json"]),
 }
+
+#: How far outside a building's own plan a seam tile must stay, cm. A floor that stops flush against a wall
+#: still z-fights with its base course, so it stops a metre short.
+CLEAR = 100.0
 
 #: A flagstone is 4 m square and a kerb run is 8 m long; the avenue is laid to those, not to a round number,
 #: because a floor that does not tile on its own module leaves the hairline gaps the ledger calls a flat sheet.
@@ -74,8 +81,45 @@ def load_palette(module_name):
     return mod, dict(mod.PART_MATERIAL), getattr(mod, "LUMINOUS", None)
 
 
+def occupied(cfg):
+    """The building plans this seam must not pave over, in the nation's own (u, v) frame.
+
+    WHY THIS EXISTS. The first build of this pass laid a flagstone floor straight down the axis without asking
+    what was already standing there, and it ran through a Tartarus building: measured at the ledger's own stuck
+    point (73075, -42191), TQ01_PlinthCourse sits at z=12 and TQ02_Cornice at z=2072, so a 20.7 m hall stands on
+    the seam and SF03 paved its floor plan. Invisible from outside, wrong underneath, and exactly the kind of
+    thing that later reads as a doorway you cannot walk through.
+
+    The nation passes already record every building they place. This reads those plans and leaves them alone.
+    """
+    plans = []
+    for name in cfg.get("footprints", ()):
+        path = HERE / name
+        if not path.exists():
+            continue
+        for fp in json.loads(path.read_text(encoding="utf-8")):
+            scale = float(fp.get("scale", 1.0))
+            plans.append((float(fp["u"]), float(fp["v"]),
+                          float(fp["w"]) * scale * 0.5 + CLEAR,
+                          float(fp["d"]) * scale * 0.5 + CLEAR,
+                          math.radians(float(fp.get("yaw", 0.0)))))
+    return plans
+
+
+def blocked(plans, u, v):
+    """True if (u, v) falls inside any recorded building plan, tested in that building's own frame."""
+    for bu, bv, hw, hd, yaw in plans:
+        du, dv = u - bu, v - bv
+        ca, sa = math.cos(-yaw), math.sin(-yaw)
+        lx, ly = du * ca - dv * sa, du * sa + dv * ca
+        if abs(lx) <= hw and abs(ly) <= hd:
+            return True
+    return False
+
+
 def build(pass_id, cfg):
     mod, mats, accent = load_palette(cfg["module"])
+    plans = occupied(cfg)
     rad = math.radians(cfg["bearing"])
     fwd = (math.cos(rad), math.sin(rad))
     left = (-math.sin(rad), math.cos(rad))
@@ -118,6 +162,9 @@ def build(pass_id, cfg):
         u = SEAM_IN + FLAG * (r + 0.5)
         for c in range(lanes):
             v = -ROAD_HALF + FLAG * (c + 0.5)
+            if blocked(plans, u, v):
+                stats["skipped_under_building"] += 1
+                continue
             # Three shapes cycled rather than one repeated -- the lesson of row E, applied at laying time.
             add_module(shapes[(r + c) % 3], u, v, 0.0, 0.0, cull=CULL_MID, collide=(c in (0, lanes - 1)))
 
@@ -126,6 +173,9 @@ def build(pass_id, cfg):
         n = int((SEAM_OUT - SEAM_IN) / KERB)
         for i in range(n):
             u = SEAM_IN + KERB * (i + 0.5)
+            if blocked(plans, u, side * (ROAD_HALF + 160.0)):
+                stats["skipped_under_building"] += 1
+                continue
             add_module("WL_Ground_Kerb_Run", u, side * (ROAD_HALF + 160.0), 0.0, 90.0 * side,
                        cull=CULL_MID, collide=False)
 
@@ -138,6 +188,9 @@ def build(pass_id, cfg):
         for i in range(n):
             u = SEAM_IN + KERB * (i + 0.5)
             v = side * (ROAD_HALF + 620.0)
+            if blocked(plans, u, v):
+                stats["skipped_under_building"] += 1
+                continue
             add_module("WL_Garden_Retaining_Run", u, v, 0.0, 90.0 * side, cull=CULL_MID)
             if i % 2 == 0:
                 add_module("WL_Garden_Planter_Wall", u, side * (ROAD_HALF + 980.0), 310.0, 90.0 * side,
@@ -152,7 +205,8 @@ def build(pass_id, cfg):
     # A threshold at the midpoint, flanked by lanterns. On Noctis those lanterns burn with the nation's
     # luminous accent, which is the rule established when ledger row F was closed.
     mid = (SEAM_IN + SEAM_OUT) * 0.5
-    add_module("WL_Garden_Gate_Threshold", mid, 0.0, 0.0, 0.0, cull=CULL_FAR)
+    if not blocked(plans, mid, 0.0):
+        add_module("WL_Garden_Gate_Threshold", mid, 0.0, 0.0, 0.0, cull=CULL_FAR)
     for side in (-1.0, 1.0):
         add_module("WL_Object_LanternStandard", mid, side * (ROAD_HALF + 300.0), 0.0, 0.0,
                    cull=CULL_MID, glow=("glass",))
@@ -167,8 +221,9 @@ def build(pass_id, cfg):
     }
     (HERE / cfg["out"]).write_text(json.dumps(out, indent=1), encoding="utf-8")
     total = sum(len(b["instances"]) for b in out["batches"])
-    print("%s  %-9s %5d instances in %3d batches -> %s"
-          % (pass_id, cfg["nation"], total, len(out["batches"]), cfg["out"]))
+    print("%s  %-9s %5d instances in %3d batches  (%d tiles left for buildings, %d plans read) -> %s"
+          % (pass_id, cfg["nation"], total, len(out["batches"]),
+             stats["skipped_under_building"], len(plans), cfg["out"]))
     for key, n in stats.most_common(6):
         print("    %-38s %5d" % (key, n))
     return total
