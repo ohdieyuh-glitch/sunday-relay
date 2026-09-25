@@ -119,10 +119,19 @@ this file had already measured as unpartitioned:
 A partitioned map is a stub package whose actors live in `__ExternalActors__` beside it; an unpartitioned one
 carries every actor inline. That is not a close call.
 
-**What is still NOT done, and is deliberately the founder's call:** nothing has been switched over. The
-converted twin has not been walked, PIE-tested, or had its runtime grid read in-engine, and no config points
-at it. Adopting it means changing which map every worktree opens, which is exactly the kind of shared-resource
-decision this session does not make on its own. Row H moves from BLOCKING to **READY** rather than to PASS.
+**AND THE TWIN HAS NOW BEEN WALKED** (`zc_wp_walk`, 5/5). It opens, it runs in PIE, the Dog spawns in it
+and stood on ground at all six landings spread from the centre to 1,005 m. The number that answers row H's
+actual complaint -- "every actor is permanently resident" -- is the resident count: **7,220 StaticMeshActors
+were loaded at a time against the map's 16,803**, with instances intact at 156,623 across 3,924 components.
+Fewer actors resident and the same instances is what streaming looks like; wholesale loss would have taken
+the instances with it. The job opens the authoritative map again as its last act and saves nothing to either,
+which P05 confirms.
+
+**What is still NOT done, and is deliberately the founder's call:** nothing is switched over. No config
+points at the twin, its runtime grid has not been read in-engine, and whether all 16,803 actors survive
+across the whole map is not proven by six landings. Adopting it means changing which map every worktree
+opens, which is exactly the kind of shared-resource decision this session does not make on its own. Row H
+moves from BLOCKING to **READY** rather than to PASS.
 
 
 | | category | verdict | evidence |
