@@ -221,48 +221,94 @@ def job():
         if cal.get("bias") is None:
             raise RuntimeError("the capture could not be brought into exposure range: %s" % cal.get("pixels"))
 
-        def two_frames():
-            first = sample(world, rt)
-            for _ in range(10):
+        # ---- THE SAME VIEW, RUNNING AND PAUSED. Third design, and the reasoning for each discard is kept
+        # because the discards are most of what was learned here.
+        #
+        # A CONTROL VIEW OF THE GROUND BESIDE THE POND failed: it read water 1.4689 / ground 0.2443 on one
+        # run and water 0.3383 / ground 1.6191 on the next. "Beside the pond" is an arbitrary vantage and it
+        # can land on foliage, which moves in the wind -- so the floor was never a floor.
+        #
+        # COMPARING SHORT AND LONG SAMPLE GAPS at the same view was reproducible but could not discriminate:
+        # 1.89 at a tenth of a second against 2.02 at a whole one, twice over. A difference that large at a
+        # tenth of a second, and barely larger at a second, means the picture is either already decorrelated
+        # by 0.1 s or simply noisy -- and that measurement cannot tell those apart.
+        #
+        # PAUSING CAN. Pause stops the world's time, so the panning normals stop panning, while the renderer
+        # keeps drawing and TSR keeps jittering exactly as before. Same camera, same pixels, same exposure,
+        # same noise -- the only thing removed is the animation. Whatever the running view has that the
+        # paused view does not IS the water moving.
+        def watch(label, count=16):
+            frames = []
+            for _ in range(count):
+                frames.append(sample(world, rt))
                 yield 0.1
-            second = sample(world, rt)
-            RESULT["_last"] = (first, second)
+            RESULT["_" + label] = [spread(frames[i], frames[i + 1]) for i in range(len(frames) - 1)]
+            RESULT["_last_" + label] = frames[-1]
 
-        for step in two_frames():
+        def median(xs):
+            xs = sorted(xs)
+            return xs[len(xs) // 2] if xs else -1.0
+
+        for step in watch("running"):
             yield step
-        a, b = RESULT["_last"]
-        water_moves = spread(a, b)
-        H.capture_viewport_jpeg(os.path.join(ROOT, "01_water.jpg"), 1400, 90)
+        H.capture_viewport_jpeg(os.path.join(ROOT, "01_water_running.jpg"), 1400, 90)
 
-        # ---- THE CONTROL: ground beside the pond, same camera height, same frozen sky. Whatever this reads
-        # is what the renderer does on its own; the water has to beat it to have moved at all.
-        aside = unreal.Vector(origin.x + float(extent.x) * 3.0 + 600.0, origin.y, origin.z + lift)
-        cap.set_actor_location(aside, False, False)
-        yield 1.2
-        for step in two_frames():
+        unreal.GameplayStatics.set_game_paused(world, True)
+        yield 1.0
+        for step in watch("paused"):
             yield step
-        c, d = RESULT["_last"]
-        stone_moves = spread(c, d)
-        H.capture_viewport_jpeg(os.path.join(ROOT, "02_control_ground.jpg"), 1400, 90)
+        frames_paused_last = RESULT.get("_last_paused")
+        H.capture_viewport_jpeg(os.path.join(ROOT, "02_water_paused.jpg"), 1400, 90)
+        # ---- IS THE INSTRUMENT STILL AWAKE WHILE PAUSED?
+        #
+        # The paused reading came back 0.0000 exactly, twice. That is the answer the control wants, and it
+        # is also precisely what a FROZEN CAPTURE would report -- if the component stops ticking with the
+        # game, the render target simply holds its last frame and every sample matches. Then "paused 0.0"
+        # would mean the instrument stopped, not the water, and Q02 would be resting on it.
+        #
+        # So the capture is poked while still paused: the exposure is moved one stop and the picture must
+        # change. A live capture re-renders and the luminance shifts; a frozen one cannot.
+        pp = comp.get_editor_property("post_process_settings")
+        pp.set_editor_property("auto_exposure_bias", float(cal.get("bias", 0.0)) - 1.5)
+        comp.set_editor_property("post_process_settings", pp)
+        for _ in range(8):
+            yield 0.1
+        poked = sample(world, rt)
+        pp.set_editor_property("auto_exposure_bias", float(cal.get("bias", 0.0)))
+        comp.set_editor_property("post_process_settings", pp)
+        for _ in range(6):
+            yield 0.1
+        awake = spread(frames_paused_last, poked)
 
+        unreal.GameplayStatics.set_game_paused(world, False)
         unreal.SystemLibrary.execute_console_command(world, "wl.Sky.DayMinutes 24")
         yield 0.5
 
-        RESULT["flow"] = {"water_frame_change": round(water_moves, 4),
-                          "ground_control_change": round(stone_moves, 4),
-                          "grid_points": GRID_X * GRID_Y, "gap_s": 1.0}
-        record("Q03", "the measurement actually looked at something",
-               water_moves > 0.0 or stone_moves > 0.0,
-               water=round(water_moves, 4), ground=round(stone_moves, 4),
-               note="flat on both sides means the render target came back empty; Q02 would then pass on "
-                    "two blank pictures, which is a fake pass and not a still pond")
+        running = median(RESULT.pop("_running", []))
+        paused = median(RESULT.pop("_paused", []))
+        RESULT["flow"] = {"change_running": round(running, 4), "change_paused": round(paused, 4),
+                          "grid_points": GRID_X * GRID_Y}
 
-        record("Q02", "the water moves while the world stands still",
-               water_moves > stone_moves + 1.0,
-               water_frame_change=round(water_moves, 4),
-               ground_control_change=round(stone_moves, 4),
-               note="sky frozen, camera fixed, nothing else moving; the ground beside the pond is the floor "
-                    "this has to beat, so no threshold is invented here")
+        RESULT.pop("_last_running", None)
+        RESULT.pop("_last_paused", None)
+        RESULT["flow"]["change_when_poked_while_paused"] = round(awake, 4)
+
+        record("Q04", "the capture was still rendering while the world was paused",
+               awake > 0.5, change_when_poked=round(awake, 4),
+               note="exposure moved one and a half stops with the game paused; a frozen capture would "
+                    "report 0.0 here, and then the paused control under Q02 would prove nothing")
+
+        record("Q03", "the measurement actually looked at something",
+               running > 0.0 or paused > 0.0,
+               running=round(running, 4), paused=round(paused, 4),
+               note="both flat means the render target came back empty, and Q02 would then be decided by "
+                    "blank pictures rather than by the water")
+
+        record("Q02", "the water moves, and stops moving when the world is paused",
+               running > paused * 1.5 and running > 0.0,
+               change_running=round(running, 4), change_paused=round(paused, 4),
+               note="same view and same renderer noise on both sides; pause removes only the animation, so "
+                    "the gap between them is the flow and nothing else")
 
     except Exception as err:                                   # noqa: BLE001
         RESULT["error"] = str(err)
