@@ -555,6 +555,10 @@ int32 UWonderlandUsageHudWidget::NativePaint(
 		Rows.Add({CompanionLabel, Named != nullptr ? Named->LlmCompanionName : FString(),
 				  &CompanionFigure, &CompanionPercent, &WonderlandCompanionHud::LlmCompanionPalette()});
 	}
+	// RECORDED AS IT IS DRAWN. NativePaint is const because Slate paints are, so the write is cast -- kept to
+	// this one diagnostic line, and touching nothing the widget draws from.
+	TArray<FString>& Painted = const_cast<UWonderlandUsageHudWidget*>(this)->PaintedAgentRows;
+	Painted.Reset();
 	++Layer;
 	for (const FRow& Row : Rows)
 	{
@@ -571,6 +575,10 @@ int32 UWonderlandUsageHudWidget::NativePaint(
 			PaintText(FString::Printf(TEXT("  %s"), *Row.Named), LabelFont, Quiet,
 					  FVector2f(2.0f + LabelWidth, BaseLine + 1.0f), AllottedGeometry, OutDrawElements, Layer);
 		}
+		// After both glyph runs, so an entry here means the label went down and reports whether a name went
+		// with it. An unnamed row records as "LABEL|" rather than going missing, which is the state a proof
+		// most needs to be able to see.
+		Painted.Add(FString::Printf(TEXT("%s|%s"), Row.Label, *Row.Named));
 		float ValueRight = Right;
 		if (!Row.Percent->IsEmpty())
 		{

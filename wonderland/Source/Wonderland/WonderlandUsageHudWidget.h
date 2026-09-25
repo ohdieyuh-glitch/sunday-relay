@@ -92,6 +92,24 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Wonderland|Usage")
 	int32 CurveSteps = 48;
 
+	/**
+	 * WHAT THE THREE AGENT ROWS ACTUALLY PAINTED, one entry per row, "LABEL|Name".
+	 *
+	 * WHY THIS EXISTS. The founder's rule is that a visual system is not proven by a photograph of it, and
+	 * the rows are text -- the thing a screenshot proof is worst at and a reader is most likely to take on
+	 * trust. Re-reading the settings from a proof would establish nothing either: that tests the settings
+	 * object against itself and leaves the actual question, whether NativePaint draws those names, exactly
+	 * as unanswered as before.
+	 *
+	 * So this is written BY the paint, inside the same loop that emits the glyphs, from the same strings. A
+	 * row that is not painted cannot appear here, and a name the HUD silently dropped cannot either.
+	 *
+	 * Transient and diagnostic. Nothing in the widget or the game reads it, so the presenter rule at the top
+	 * of this file is intact: it reports what was drawn, it decides nothing.
+	 */
+	UPROPERTY(BlueprintReadOnly, Transient, Category = "Wonderland|Test")
+	TArray<FString> PaintedAgentRows;
+
 private:
 	/** The subsystem, or null. Null is a real state: a widget can outlive one. */
 	UWonderlandUsageSubsystem* Usage() const;
