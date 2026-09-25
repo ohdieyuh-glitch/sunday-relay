@@ -62,11 +62,24 @@ def job():
            RESULT["sculptures_before_open"] == 0, count=RESULT["sculptures_before_open"])
 
     # ---------------------------------------------------------------- B opens it
+    #
+    # WAITED FOR, NOT SLEPT THROUGH. This read a flat 2.0 s and failed on 2026-09-24 with count=0 -- and the
+    # cause was in this line, not in the brain. The panel takes ~1.7 s to open on a loaded editor, and the
+    # framing timer needs a few PAINTED frames before the window has a rect at all (the run logged
+    # "WLBRAINRECT: no rect -- whole=0.0x0.0" for its whole 0.3 s of life). So the sleep was measuring the
+    # editor's frame rate, not the feature. The bound stays hard -- six seconds and it has still failed -- and
+    # the time taken is recorded, so a brain that stages slowly shows up as a number instead of hiding inside
+    # a pass.
     L.press_key("B", False)
-    yield 2.0
+    waited = 0.0
+    while waited < 6.0 and len(sculptures(world)) != 1:
+        yield 0.25
+        waited += 0.25
     found = sculptures(world)
     RESULT["sculptures_open"] = len(found)
-    record("S01", "opening Project Brain makes exactly one living brain", len(found) == 1, count=len(found))
+    RESULT["seconds_to_stage"] = round(waited, 2)
+    record("S01", "opening Project Brain makes exactly one living brain", len(found) == 1,
+           count=len(found), seconds_to_stage=round(waited, 2))
     if len(found) != 1:
         RESULT["status"] = "FAIL: the sculpture did not stage; nothing below could be measured"
         les.editor_request_end_play()
@@ -177,7 +190,11 @@ def job():
 
     # ---------------------------------------------------------------- and it comes back a second time
     L.press_key("B", False)
-    yield 2.0
+    waited = 0.0
+    while waited < 6.0 and len(sculptures(world)) != 1:
+        yield 0.25
+        waited += 0.25
+    RESULT["seconds_to_restage"] = round(waited, 2)
     again = len(sculptures(world))
     RESULT["sculptures_reopen"] = again
     record("S10", "reopening stages exactly one brain again, not a second one", again == 1, count=again)
