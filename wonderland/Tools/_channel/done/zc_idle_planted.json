@@ -1,6 +1,6 @@
 {
  "name": "zc_idle_planted",
- "started": "2026-09-25 09:27:32",
+ "started": "2026-09-25 10:17:48",
  "status": "measured",
  "tests": [
   {
@@ -28,10 +28,10 @@
     "allowed_uu": 1.9398,
     "by_skin": {
      "relay_og": 1.4398,
-     "celestial_light": 1.3822,
-     "apollo": 1.4376,
-     "arden_infernal": 1.3887,
-     "skeleton_flame": 1.3536
+     "celestial_light": 1.3955,
+     "apollo": 1.3395,
+     "arden_infernal": 1.3411,
+     "skeleton_flame": 1.3426
     },
     "over_the_bar": {},
     "note": "lateral spread of the body's offset FROM THE DOG over 12 s of standing"
@@ -58,9 +58,9 @@
   },
   "celestial_light": {
    "source": "costume Part_root",
-   "lateral_drift_uu": 1.3822,
-   "x_spread_uu": 1.1459,
-   "y_spread_uu": 0.7729,
+   "lateral_drift_uu": 1.3955,
+   "x_spread_uu": 1.1569,
+   "y_spread_uu": 0.7804,
    "vertical_spread_uu": 0.0,
    "seconds": 12.0,
    "float_root_max": {
@@ -71,9 +71,9 @@
   },
   "apollo": {
    "source": "costume Part_root",
-   "lateral_drift_uu": 1.4376,
-   "x_spread_uu": 1.1918,
-   "y_spread_uu": 0.8039,
+   "lateral_drift_uu": 1.3395,
+   "x_spread_uu": 1.1105,
+   "y_spread_uu": 0.749,
    "vertical_spread_uu": 0.0,
    "seconds": 12.0,
    "float_root_max": {
@@ -84,9 +84,9 @@
   },
   "arden_infernal": {
    "source": "costume Part_root",
-   "lateral_drift_uu": 1.3887,
-   "x_spread_uu": 1.1513,
-   "y_spread_uu": 0.7766,
+   "lateral_drift_uu": 1.3411,
+   "x_spread_uu": 1.1118,
+   "y_spread_uu": 0.7499,
    "vertical_spread_uu": 0.0,
    "seconds": 12.0,
    "float_root_max": {
@@ -97,9 +97,9 @@
   },
   "skeleton_flame": {
    "source": "costume Part_root",
-   "lateral_drift_uu": 1.3536,
-   "x_spread_uu": 1.1222,
-   "y_spread_uu": 0.757,
+   "lateral_drift_uu": 1.3426,
+   "x_spread_uu": 1.1131,
+   "y_spread_uu": 0.7508,
    "vertical_spread_uu": 0.0,
    "seconds": 12.0,
    "float_root_max": {
@@ -109,7 +109,7 @@
    }
   }
  },
- "finished": "2026-09-25 09:29:12",
- "seconds": 100.55,
- "log": "I00 PASS Relay OG itself was measured, to set the bar {'relay_og': {'source': 'canon Body', 'lateral_drift_uu': 1.4398, 'x_spread_uu': 1.1937, 'y_spread_uu': 0.8051, 'vertical_spread_uu': 0.0, 'seconds': 12.0}, 'note': 'a threshold invented here would either forgive drift Relay OG does not have, or fail Relay OG itself'}\nI01 PASS every other skin stands as planted as Relay OG does {'relay_og_drift_uu': 1.4398, 'allowed_uu': 1.9398, 'by_skin': {'relay_og': 1.4398, 'celestial_light': 1.3822, 'apollo': 1.4376, 'arden_infernal': 1.3887, 'skeleton_flame': 1.3536}, 'over_the_bar': {}, 'note': \"lateral spread of the body's offset FROM THE DOG over 12 s of standing\"}\nI02 PASS no worn costume is running the free-standing hover {'still_hovering': {}, 'note': \"FloatRoot rocked every costume by 2 degrees of roll and 1.5 of pitch on the companion's own clock; worn, it must be identity and all motion must come from the Dog\"}\n"
+ "finished": "2026-09-25 10:19:27",
+ "seconds": 99.45,
+ "log": "I00 PASS Relay OG itself was measured, to set the bar {'relay_og': {'source': 'canon Body', 'lateral_drift_uu': 1.4398, 'x_spread_uu': 1.1937, 'y_spread_uu': 0.8051, 'vertical_spread_uu': 0.0, 'seconds': 12.0}, 'note': 'a threshold invented here would either forgive drift Relay OG does not have, or fail Relay OG itself'}\nI01 PASS every other skin stands as planted as Relay OG does {'relay_og_drift_uu': 1.4398, 'allowed_uu': 1.9398, 'by_skin': {'relay_og': 1.4398, 'celestial_light': 1.3955, 'apollo': 1.3395, 'arden_infernal': 1.3411, 'skeleton_flame': 1.3426}, 'over_the_bar': {}, 'note': \"lateral spread of the body's offset FROM THE DOG over 12 s of standing\"}\nI02 PASS no worn costume is running the free-standing hover {'still_hovering': {}, 'note': \"FloatRoot rocked every costume by 2 degrees of roll and 1.5 of pitch on the companion's own clock; worn, it must be identity and all motion must come from the Dog\"}\n"
 }

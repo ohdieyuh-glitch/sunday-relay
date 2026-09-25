@@ -1,6 +1,6 @@
 {
  "name": "zc_mascot_persist",
- "started": "2026-09-25 08:48:45",
+ "started": "2026-09-25 09:31:46",
  "status": "measured",
  "tests": [
   {
@@ -408,7 +408,7 @@
    }
   ]
  },
- "finished": "2026-09-25 08:49:25",
- "seconds": 40.71,
+ "finished": "2026-09-25 09:32:18",
+ "seconds": 32.07,
  "log": "M01 PASS the world Dog wears the chosen PRIMARY on its body {'on': 13, 'off': 0}\nM02 PASS the world Dog wears the chosen SECONDARY on its eyes {'on': 2, 'off': 0, 'note': \"eyes are matched by the runtime's own rule: eye / visor / pupil\"}\nM03 PASS the colourway is still on while the Wardrobe is open {'on': 13, 'off': 0}\nM04 PASS the colourway survives a Mission Contract {'on': 13, 'off': 0}\nM05 PASS reset takes the chosen colourway off again {'still_on': 0, 'components': 15}\n"
 }
