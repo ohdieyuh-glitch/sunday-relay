@@ -63,23 +63,59 @@ def job():
     yield 1.0
 
     everything = unreal.GameplayStatics.get_all_actors_of_class(world, unreal.StaticMeshActor)
-    if not everything:
+
+    # ---- AND THE INSTANCES, WHICH ARE MOST OF THE WORLD.
+    #
+    # THE ERROR THIS FIXES, and it was mine. Both earlier versions of this walk counted only StaticMeshActors
+    # -- 16,803 of them -- and called a tile EMPTY when it held none. But Wonderland is overwhelmingly
+    # INSTANCED: the ledger's own headline is "107,546 placed instances", and every authored layer lands as
+    # instanced batches. So "empty" never meant "nothing here", it meant "no StaticMeshActor here", and the
+    # 82.5% coverage this job reported was measuring the wrong population entirely. It was caught the only way
+    # it could be: 1,665 instances were applied to the seventeen tiles it called empty, and the number did not
+    # move by one.
+    #
+    # Instance transforms are read one at a time because that is the only accessor there is. It is ~100k calls
+    # and takes seconds, which is the right trade for an audit that runs once and decides whether the world is
+    # finished.
+    inst_pos = []
+    comps = 0
+    for a in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.Actor):
+        for comp in a.get_components_by_class(unreal.InstancedStaticMeshComponent):
+            comps += 1
+            try:
+                count = int(comp.get_instance_count())
+            except Exception:
+                continue
+            for i in range(count):
+                try:
+                    t = comp.get_instance_transform(i, world_space=True)
+                except Exception:
+                    break
+                v = t.translation
+                inst_pos.append((float(v.x), float(v.y), float(v.z)))
+    RESULT["instanced_components"] = comps
+    RESULT["instances_total"] = len(inst_pos)
+
+    if not everything and not inst_pos:
         RESULT["status"] = "FAIL: the level has no static meshes at all"
         les.editor_request_end_play()
         yield (lambda: ues.get_game_world() is None, 300)
         return
 
-    # ---- HOW BIG IS THE WORLD PEOPLE WALK IN? Ask the actors for their radius, not for their extremes.
+    # ---- HOW BIG IS THE WORLD PEOPLE WALK IN? Ask what is placed for its radius, not for its extremes.
     pos = []
     for a in everything:
         loc = a.get_actor_location()
         x = float(loc.x)
         y = float(loc.y)
         pos.append((a, x, y, float(loc.z), (x * x + y * y) ** 0.5))
+    for (x, y, z) in inst_pos:
+        pos.append((None, x, y, z, (x * x + y * y) ** 0.5))
     radii = [p[4] for p in pos]
     r99 = pct(radii, 0.99)
     core = max(r99 * 1.10, 40000.0)
-    RESULT["mesh_actors_total"] = len(pos)
+    RESULT["placed_total"] = len(pos)
+    RESULT["mesh_actors_total"] = len(everything)
     RESULT["core_radius_metres"] = round(core / 100.0, 1)
     RESULT["radius_percentiles_metres"] = {
         "p50": round(pct(radii, 0.50) / 100.0, 1),
@@ -89,6 +125,7 @@ def job():
     }
 
     inside = [p for p in pos if p[4] <= core]
+    RESULT["placed_in_core"] = len(inside)
     RESULT["mesh_actors_in_core"] = len(inside)
     RESULT["actors_beyond_core"] = len(pos) - len(inside)
 
@@ -96,10 +133,13 @@ def job():
     strays = []
     for a, x, y, z, r in pos:
         if r > core:
-            try:
-                label = a.get_actor_label()
-            except Exception:
-                label = a.get_class().get_name()
+            if a is None:
+                label = "(instance)"
+            else:
+                try:
+                    label = a.get_actor_label()
+                except Exception:
+                    label = a.get_class().get_name()
             strays.append({"name": label,
                            "at_metres": [round(x / 100.0), round(y / 100.0), round(z / 100.0)],
                            "radius_metres": round(r / 100.0)})
