@@ -1,4 +1,34 @@
 #include "WonderlandSkinStage.h"
+#include "HAL/IConsoleManager.h"
+
+/**
+ * HOW MUCH OF ITS AUTHORED FIRE A FIGURE KEEPS WHILE IT IS IN THE WARDROBE WINDOW.
+ *
+ * A console variable rather than a literal because the literal went stale without anyone noticing. 0.10 was
+ * measured against photographs and was right at the time; two things then moved underneath it -- the founder
+ * asked for a close-up preview, so the figure went from filling part of the square to filling 88% of it, and
+ * the flames were brought back on the legacy path at wl.Look.FireGain 2.3. Photographed again afterwards,
+ * Arden Infernal was a single orange mass with no silhouette in it and the brightest CORNER of the window
+ * read 0.98. A number that has to be re-derived every time something near it changes should be a knob.
+ *
+ * THE 0.98 CORNER WAS A SECOND BUG AND IT IS FIXED SEPARATELY, below in Tick: the scale was applied when the
+ * stage changed mode and when the stage loaded a figure, but a skin clicked in the wardrobe's own list goes
+ * through the UI rather than the stage, and that body came up wearing its full authored fire. It is now
+ * re-applied every frame the wardrobe is open, so there is no path back to the blown state.
+ *
+ * 0.022 IS FROM THE SWEEP. Four settings across four skins, judged on the wardrobe proof's own two
+ * conditions -- the corners of the window must be the backdrop and the middle must out-read them -- and it is
+ * the only rung that satisfies both for every skin, which makes it also the BRIGHTEST such rung and so the
+ * one that keeps the most fire. Against the captures: at 0.100 Arden is a white-hot mass with no figure in
+ * it, at 0.010 the flame is orange with the body legible through it, and 0.022 sits between with the fire
+ * still plainly fire.
+ */
+static float GWonderlandPreviewGlow = 0.022f;
+static FAutoConsoleVariableRef GWonderlandPreviewGlowRef(
+	TEXT("wl.Look.PreviewGlow"),
+	GWonderlandPreviewGlow,
+	TEXT("How much of its authored fire a figure keeps in the wardrobe preview window. 1 = untouched."),
+	ECVF_Default);
 
 #include "Components/PointLightComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
@@ -227,7 +257,7 @@ void AWonderlandSkinStage::SetInWorldPreview(bool bOn, FVector Where, FRotator F
 		// at 1.0 neither Arden Infernal nor Celestial Light had a readable silhouette; at 0.10 the fire is
 		// still plainly fire and the dog inside it is a dog. The Dog standing in the garden is a different
 		// actor and is not touched, so the flame quality the founder approved outdoors is exactly as approved.
-		Body->SetGlowScale(bOn ? 0.10f : 1.0f);
+		Body->SetGlowScale(bOn ? GWonderlandPreviewGlow : 1.0f);
 		// THE BODY IS A SEPARATE ACTOR, not a child, so it has to be carried across by hand. Teleport rather than
 		// sweep: it is crossing a kilometre of world and must not try to walk the distance or collide on the way.
 		Body->SetActorLocation(Home, false, nullptr, ETeleportType::TeleportPhysics);
@@ -291,6 +321,8 @@ void AWonderlandSkinStage::EnsureBody()
 	// THE SAME MASCOT, so what the Wardrobe shows is what the world shows. A preview that ignored the chosen
 	// colourway would be showing the player a skin they are not going to get.
 	Body->SetBodyRole(EWonderlandBodyRole::Mascot);
+	// THE CLOCK DOES NOT REACH THE PREVIEW. See AWonderlandCompanionEmbodiment::SetExposureAware.
+	Body->SetExposureAware(false);
 #if WITH_EDITOR
 	Body->SetActorLabel(TEXT("WL_SkinStage_Dog"), false);
 #endif
@@ -350,7 +382,7 @@ bool AWonderlandSkinStage::ShowSkin(FName SkinId)
 	LastError.Reset();
 	// A FRESH FIGURE COMES UP AT ITS AUTHORED FIRE, so a skin clicked while the wardrobe is open has to be
 	// told again -- otherwise the second skin the founder tries is the blown-out one.
-	Body->SetGlowScale(bInWorldPreview ? 0.10f : 1.0f);
+	Body->SetGlowScale(bInWorldPreview ? GWonderlandPreviewGlow : 1.0f);
 	AimCamera();
 	return true;
 }
@@ -380,6 +412,14 @@ void AWonderlandSkinStage::Tick(float DeltaSeconds)
 	if (!bWanted)
 	{
 		return;
+	}
+
+	// THE PREVIEW GLOW IS RE-APPLIED RATHER THAN SET ONCE, so wl.Look.PreviewGlow is live. SetGlowScale
+	// early-outs unless the value actually moved, so this costs a float compare per frame in the one state
+	// where the wardrobe is open.
+	if (Body != nullptr && bInWorldPreview)
+	{
+		Body->SetGlowScale(GWonderlandPreviewGlow);
 	}
 
 	StepLookAround(DeltaSeconds);

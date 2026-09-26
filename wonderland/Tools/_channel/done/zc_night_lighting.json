@@ -1,0 +1,165 @@
+{
+ "name": "zc_night_lighting",
+ "started": "2026-09-26 10:09:09",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "L00",
+   "name": "every rung was photographed and read",
+   "pass": true,
+   "detail": {
+    "read": 6,
+    "wanted": 6,
+    "day_luma": 0.28307,
+    "note": "all None means the editor window was behind another one"
+   }
+  },
+  {
+   "id": "L01",
+   "name": "the sky knobs actually reach the night",
+   "pass": true,
+   "detail": {
+    "darkest": {
+     "label": "as it stands",
+     "moon": 0.02,
+     "fill": 0.15,
+     "sky": 5.5,
+     "night_luma": 0.07233,
+     "crushed": 0.8889,
+     "ratio": 0.2555,
+     "inside_both_gates": false
+    },
+    "brightest": {
+     "label": "moon x3.6 + fill + sky",
+     "moon": 0.072,
+     "fill": 0.34,
+     "sky": 8.0,
+     "night_luma": 0.10584,
+     "crushed": 0.7604,
+     "ratio": 0.3739,
+     "inside_both_gates": false
+    },
+    "note": "if the last rung does not out-read the first, the console variables are not being applied and every row below is the same picture measured six times"
+   }
+  },
+  {
+   "id": "L02",
+   "name": "there is a setting where the night is both unmistakably night and actually lit",
+   "pass": false,
+   "detail": {
+    "inside": [],
+    "all_rungs": [
+     {
+      "label": "as it stands",
+      "night_luma": 0.07233,
+      "crushed": 0.8889,
+      "ratio": 0.2555
+     },
+     {
+      "label": "moon x1.8",
+      "night_luma": 0.07906,
+      "crushed": 0.8666,
+      "ratio": 0.2793
+     },
+     {
+      "label": "moon x1.8 + fill",
+      "night_luma": 0.08769,
+      "crushed": 0.8495,
+      "ratio": 0.3098
+     },
+     {
+      "label": "moon x2.6 + fill",
+      "night_luma": 0.09197,
+      "crushed": 0.8322,
+      "ratio": 0.3249
+     },
+     {
+      "label": "moon x2.6 + fill + sky",
+      "night_luma": 0.09402,
+      "crushed": 0.8154,
+      "ratio": 0.3321
+     },
+     {
+      "label": "moon x3.6 + fill + sky",
+      "night_luma": 0.10584,
+      "crushed": 0.7604,
+      "ratio": 0.3739
+     }
+    ],
+    "gates": {
+     "ratio_ceiling": 0.38,
+     "crushed_ceiling": 0.72
+    },
+    "note": "N10 and N02 are a window, not a target: too bright is a dim afternoon, too dark is an unlit scene. This says whether the window is reachable with the moon and fills alone, now that the mascots are no longer lighting the plaza."
+   }
+  }
+ ],
+ "day_luma": 0.28307,
+ "rungs": [
+  {
+   "label": "as it stands",
+   "moon": 0.02,
+   "fill": 0.15,
+   "sky": 5.5,
+   "night_luma": 0.07233,
+   "crushed": 0.8889,
+   "ratio": 0.2555,
+   "inside_both_gates": false
+  },
+  {
+   "label": "moon x1.8",
+   "moon": 0.036,
+   "fill": 0.15,
+   "sky": 5.5,
+   "night_luma": 0.07906,
+   "crushed": 0.8666,
+   "ratio": 0.2793,
+   "inside_both_gates": false
+  },
+  {
+   "label": "moon x1.8 + fill",
+   "moon": 0.036,
+   "fill": 0.26,
+   "sky": 5.5,
+   "night_luma": 0.08769,
+   "crushed": 0.8495,
+   "ratio": 0.3098,
+   "inside_both_gates": false
+  },
+  {
+   "label": "moon x2.6 + fill",
+   "moon": 0.052,
+   "fill": 0.26,
+   "sky": 5.5,
+   "night_luma": 0.09197,
+   "crushed": 0.8322,
+   "ratio": 0.3249,
+   "inside_both_gates": false
+  },
+  {
+   "label": "moon x2.6 + fill + sky",
+   "moon": 0.052,
+   "fill": 0.26,
+   "sky": 8.0,
+   "night_luma": 0.09402,
+   "crushed": 0.8154,
+   "ratio": 0.3321,
+   "inside_both_gates": false
+  },
+  {
+   "label": "moon x3.6 + fill + sky",
+   "moon": 0.072,
+   "fill": 0.34,
+   "sky": 8.0,
+   "night_luma": 0.10584,
+   "crushed": 0.7604,
+   "ratio": 0.3739,
+   "inside_both_gates": false
+  }
+ ],
+ "rungs_inside_both_gates": [],
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\night_lighting",
+ "finished": "2026-09-26 10:10:13",
+ "seconds": 64.3,
+ "log": "L_DAY INFO the brightest hour {'hour': 9.5, 'luma': 0.28307}\nL_00 INFO as it stands {'label': 'as it stands', 'moon': 0.02, 'fill': 0.15, 'sky': 5.5, 'night_luma': 0.07233, 'crushed': 0.8889, 'ratio': 0.2555, 'inside_both_gates': False}\nL_01 INFO moon x1.8 {'label': 'moon x1.8', 'moon': 0.036, 'fill': 0.15, 'sky': 5.5, 'night_luma': 0.07906, 'crushed': 0.8666, 'ratio': 0.2793, 'inside_both_gates': False}\nL_02 INFO moon x1.8 + fill {'label': 'moon x1.8 + fill', 'moon': 0.036, 'fill': 0.26, 'sky': 5.5, 'night_luma': 0.08769, 'crushed': 0.8495, 'ratio': 0.3098, 'inside_both_gates': False}\nL_03 INFO moon x2.6 + fill {'label': 'moon x2.6 + fill', 'moon': 0.052, 'fill': 0.26, 'sky': 5.5, 'night_luma': 0.09197, 'crushed': 0.8322, 'ratio': 0.3249, 'inside_both_gates': False}\nL_04 INFO moon x2.6 + fill + sky {'label': 'moon x2.6 + fill + sky', 'moon': 0.052, 'fill': 0.26, 'sky': 8.0, 'night_luma': 0.09402, 'crushed': 0.8154, 'ratio': 0.3321, 'inside_both_gates': False}\nL_05 INFO moon x3.6 + fill + sky {'label': 'moon x3.6 + fill + sky', 'moon': 0.072, 'fill': 0.34, 'sky': 8.0, 'night_luma': 0.10584, 'crushed': 0.7604, 'ratio': 0.3739, 'inside_both_gates': False}\nL00 PASS every rung was photographed and read {'read': 6, 'wanted': 6, 'day_luma': 0.28307, 'note': 'all None means the editor window was behind another one'}\nL01 PASS the sky knobs actually reach the night {'darkest': {'label': 'as it stands', 'moon': 0.02, 'fill': 0.15, 'sky': 5.5, 'night_luma': 0.07233, 'crushed': 0.8889, 'ratio': 0.2555, 'inside_both_gates': False}, 'brightest': {'label': 'moon x3.6 + fill + sky', 'moon': 0.072, 'fill': 0.34, 'sky': 8.0, 'night_luma': 0.10584, 'crushed': 0.7604, 'ratio': 0.3739, 'inside_both_gates': False}, 'note': 'if the last rung does not out-read the first, the console variables are not being applied and every row below is the same picture measured six times'}\nL02 FAIL there is a setting where the night is both unmistakably night and actually lit {'inside': [], 'all_rungs': [{'label': 'as it stands', 'night_luma': 0.07233, 'crushed': 0.8889, 'ratio': 0.2555}, {'label': 'moon x1.8', 'night_luma': 0.07906, 'crushed': 0.8666, 'ratio': 0.2793}, {'label': 'moon x1.8 + fill', 'night_luma': 0.08769, 'crushed': 0.8495, 'ratio': 0.3098}, {'label': 'moon x2.6 + fill', 'night_luma': 0.09197, 'crushed': 0.8322, 'ratio': 0.3249}, {'label': 'moon x2.6 + fill + sky', 'night_luma': 0.09402, 'crushed': 0.8154, 'ratio': 0.3321}, {'label': 'moon x3.6 + fill + sky', 'night_luma': 0.10584, 'crushed': 0.7604, 'ratio': 0.3739}], 'gates': {'ratio_ceiling': 0.38, 'crushed_ceiling': 0.72}, 'note': 'N10 and N02 are a window, not a target: too bright is a dim afternoon, too dark is an unlit scene. This says whether the window is reachable with the moon and fills alone, now that the mascots are no longer lighting the plaza.'}\n"
+}

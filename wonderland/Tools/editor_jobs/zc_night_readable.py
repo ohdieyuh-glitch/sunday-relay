@@ -178,9 +178,15 @@ def job():
            note="dark is correct at night; a frame that is nearly all below 0.14 is not a night, it is a "
                 "failure to light one")
 
-    record("N03", "the mascot is visible at the darkest hour, and brighter than the ground it stands on",
-           night["mascot"]["luma"] >= 0.025 and night["mascot"]["luma"] > night["ground"]["luma"],
-           darkest_night_hour=night_key, mascot_luma=night["mascot"]["luma"], ground_luma=night["ground"]["luma"])
+    # VISIBLE MEANS TELLABLE APART, IN EITHER DIRECTION. The first version of this clause demanded the mascot
+    # be BRIGHTER than its ground, which is one of the two ways of being visible and not the more common one:
+    # a bone dog reads perfectly well as a pale silhouette against pale paving lit by its own lamp, and a dark
+    # skin reads as a dark one. What would actually hide it is the two being the same.
+    contrast = abs(night["mascot"]["luma"] - night["ground"]["luma"])
+    record("N03", "the mascot can be told apart from the ground it stands on at the darkest hour",
+           night["mascot"]["luma"] >= 0.025 and contrast >= 0.05,
+           darkest_night_hour=night_key, mascot_luma=night["mascot"]["luma"],
+           ground_luma=night["ground"]["luma"], contrast=round(contrast, 4), floor=0.05)
 
     record("N04", "the ground and paths around the player read at the darkest hour",
            night["ground"]["luma"] >= 0.015,

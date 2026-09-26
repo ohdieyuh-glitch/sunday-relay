@@ -1,0 +1,117 @@
+{
+ "name": "zc_night_culprit",
+ "started": "2026-09-26 09:42:46",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "C00",
+   "name": "every reading came back with the window up",
+   "pass": true,
+   "detail": {
+    "readings": {
+     "00 as it stands": 0.7417,
+     "glow hidden (5 components)": 0.73811,
+     "lamp hidden (5 components)": 0.76238,
+     "stone hidden (5 components)": 0.74056,
+     "ivory hidden (5 components)": 0.73933,
+     "whole checkpoint hidden": 0.76273,
+     "back again": 0.76168
+    },
+    "note": "all None means the editor was behind another window, not that the world is black"
+   }
+  },
+  {
+   "id": "C01",
+   "name": "hiding is reversible -- the last reading matches the first",
+   "pass": false,
+   "detail": {
+    "first": 0.7417,
+    "last": 0.76168,
+    "tolerance": 0.012,
+    "note": "if these disagree the scene was still settling and every difference below is noise"
+   }
+  },
+  {
+   "id": "C02",
+   "name": "the night's brightness is or is not the territory checkpoints",
+   "pass": true,
+   "detail": {
+    "base_luma": 0.7417,
+    "with_checkpoint_hidden": 0.76273,
+    "removed": -0.02103,
+    "per_part": {
+     "glow hidden (5 components)": 0.00359,
+     "lamp hidden (5 components)": -0.02068,
+     "stone hidden (5 components)": 0.00114,
+     "ivory hidden (5 components)": 0.00237,
+     "whole checkpoint hidden": -0.02103
+    },
+    "note": "reported either way. The night proof's ceiling needs the world at about 0.17 here; if hiding the checkpoint gets most of the way there, the glow's brightness is the bug. If it does not, the lift is somewhere else and this rules the checkpoint out for good."
+   }
+  }
+ ],
+ "checkpoints_in_level": 5,
+ "checkpoints_by_distance": [
+  {
+   "label": "WL_Checkpoint_golden_arrival",
+   "metres": 8.8
+  },
+  {
+   "label": "WL_Checkpoint_noctis",
+   "metres": 518.9
+  },
+  {
+   "label": "WL_Checkpoint_tartarus",
+   "metres": 524.6
+  },
+  {
+   "label": "WL_Checkpoint_icarus",
+   "metres": 531.5
+  },
+  {
+   "label": "WL_Checkpoint_dubel",
+   "metres": 1266.5
+  }
+ ],
+ "midnight_luma": {
+  "00 as it stands": {
+   "mean": 0.7417,
+   "brightest": 0.67059
+  },
+  "glow hidden (5 components)": {
+   "mean": 0.73811,
+   "brightest": 0.67059
+  },
+  "lamp hidden (5 components)": {
+   "mean": 0.76238,
+   "brightest": 0.67059
+  },
+  "stone hidden (5 components)": {
+   "mean": 0.74056,
+   "brightest": 0.67059
+  },
+  "ivory hidden (5 components)": {
+   "mean": 0.73933,
+   "brightest": 0.67059
+  },
+  "whole checkpoint hidden": {
+   "mean": 0.76273,
+   "brightest": 0.67059
+  },
+  "back again": {
+   "mean": 0.76168,
+   "brightest": 0.67059
+  }
+ },
+ "luma_removed_by_hiding": {
+  "glow hidden (5 components)": 0.00359,
+  "lamp hidden (5 components)": -0.02068,
+  "stone hidden (5 components)": 0.00114,
+  "ivory hidden (5 components)": 0.00237,
+  "whole checkpoint hidden": -0.02103
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\night_culprit",
+ "finished": "2026-09-26 09:43:46",
+ "seconds": 60.6,
+ "log": "C_POSTS INFO territory checkpoints, nearest first {'n': 5, 'near': [{'label': 'WL_Checkpoint_golden_arrival', 'metres': 8.8}, {'label': 'WL_Checkpoint_noctis', 'metres': 518.9}, {'label': 'WL_Checkpoint_tartarus', 'metres': 524.6}, {'label': 'WL_Checkpoint_icarus', 'metres': 531.5}]}\nC INFO 00 as it stands {'mean': 0.7417, 'brightest': 0.67059}\nC INFO glow hidden (5 components) {'mean': 0.73811, 'brightest': 0.67059}\nC INFO lamp hidden (5 components) {'mean': 0.76238, 'brightest': 0.67059}\nC INFO stone hidden (5 components) {'mean': 0.74056, 'brightest': 0.67059}\nC INFO ivory hidden (5 components) {'mean': 0.73933, 'brightest': 0.67059}\nC INFO whole checkpoint hidden {'mean': 0.76273, 'brightest': 0.67059}\nC INFO back again {'mean': 0.76168, 'brightest': 0.67059}\nC00 PASS every reading came back with the window up {'readings': {'00 as it stands': 0.7417, 'glow hidden (5 components)': 0.73811, 'lamp hidden (5 components)': 0.76238, 'stone hidden (5 components)': 0.74056, 'ivory hidden (5 components)': 0.73933, 'whole checkpoint hidden': 0.76273, 'back again': 0.76168}, 'note': 'all None means the editor was behind another window, not that the world is black'}\nC01 FAIL hiding is reversible -- the last reading matches the first {'first': 0.7417, 'last': 0.76168, 'tolerance': 0.012, 'note': 'if these disagree the scene was still settling and every difference below is noise'}\nC_SHARE INFO how much of the night each part is {'glow hidden (5 components)': 0.00359, 'lamp hidden (5 components)': -0.02068, 'stone hidden (5 components)': 0.00114, 'ivory hidden (5 components)': 0.00237, 'whole checkpoint hidden': -0.02103}\nC02 PASS the night's brightness is or is not the territory checkpoints {'base_luma': 0.7417, 'with_checkpoint_hidden': 0.76273, 'removed': -0.02103, 'per_part': {'glow hidden (5 components)': 0.00359, 'lamp hidden (5 components)': -0.02068, 'stone hidden (5 components)': 0.00114, 'ivory hidden (5 components)': 0.00237, 'whole checkpoint hidden': -0.02103}, 'note': \"reported either way. The night proof's ceiling needs the world at about 0.17 here; if hiding the checkpoint gets most of the way there, the glow's brightness is the bug. If it does not, the lift is somewhere else and this rules the checkpoint out for good.\"}\n"
+}

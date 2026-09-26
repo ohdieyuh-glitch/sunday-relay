@@ -986,6 +986,32 @@ private:
 	 */
 	TWeakObjectPtr<class AActor> WardrobeBackdrop;
 
+	/**
+	 * HOW FAR THE FIGURE'S DRAWN BOX SITS SIDEWAYS FROM ITS OWN ORIGIN, smoothed. See the wardrobe framing.
+	 *
+	 * A figure is not centred on its actor origin: Arden Infernal's mane and fire hang to one side, and the
+	 * framing was putting the ORIGIN on the window's centre and then solving a width around the BOX. Measured
+	 * with the wardrobe open on Arden: the top-left corner of the window read 0.963 and the bottom-right 0.027
+	 * -- the figure was hanging off the left edge while the right half of the square was empty black.
+	 *
+	 * Smoothed rather than applied raw because the fire animates, and the box centre with it; a correction
+	 * taken straight from a 12.5 Hz solve would shiver the figure sideways a few pixels forever.
+	 */
+	FVector2D WardrobeDrift = FVector2D::ZeroVector;
+
+	/**
+	 * THE LAST WARDROBE FRAMING SOLVE, IN WORDS, so a proof can read the arithmetic instead of guessing at it.
+	 *
+	 * Three separate attempts to fix this framing have now been made from the captures alone -- the bounds,
+	 * the fill ceiling and the sideways drift -- and each moved the measured corner by less than 0.02. The
+	 * numbers that decide the frame are all local to one function and none of them has ever been looked at.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Wardrobe")
+	FString DescribeWardrobeFraming() const { return WardrobeFramingNote; }
+
+	/** Written by the wardrobe framing solve; read by DescribeWardrobeFraming. */
+	FString WardrobeFramingNote;
+
 	/** `/pa`: show every Project Avatar family that exists, in front of the founder. A development showcase. */
 	bool ShowProjectAvatars(const FString& Argument);
 

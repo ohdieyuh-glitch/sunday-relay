@@ -1416,6 +1416,14 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 		// HOW FAR THE MIDDLE OF WHAT IS DRAWN SITS ABOVE THE ACTOR'S OWN ORIGIN. Never zero, and getting this
 		// wrong is what cut the Dog's head off the top of the window.
 		float FigureMiddle = 0.0f;
+		// WHICH OF THE TWO BOUNDS BRANCHES BELOW ACTUALLY RAN. The declared envelope over-counts a flame by
+		// design and the drawn bounds under-count a flame that is displaced by its material; knowing which one
+		// framed a given skin is the first thing anyone debugging this needs and it was not recorded.
+		bool bFramedOnDrawnBounds = false;
+		// Kept for the framing note: which of the two measures won is the first thing anyone debugging a
+		// mis-framed skin needs to know, and deriving it afterwards is guesswork.
+		float EnvelopeTall = 0.0f;
+		float EnvelopeSeen = 0.0f;
 		if (const AWonderlandSkinStage* Staged = Self->SkinStage())
 		{
 			if (const AWonderlandCompanionEmbodiment* Shown = Staged->GetBody())
@@ -1441,10 +1449,51 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 				const FBox Drawn = Shown->GetComponentsBoundingBox(true);
 				if (Drawn.IsValid && Drawn.GetExtent().Z > 1.0)
 				{
+					bFramedOnDrawnBounds = true;
 					const FVector Half = Drawn.GetExtent() / Uniform;
 					Height = FMath::Max(static_cast<float>(Half.Z) * 2.0f, 60.0f);
 					FigureWide = FMath::Max(static_cast<float>(Half.X), static_cast<float>(Half.Y)) * 2.0f;
+
+					// ---- AND THE ENVELOPE IS TAKEN AS A FLOOR, NOT DISCARDED.
+					//
+					// Choosing between these two measures was the mistake, and both choices were wrong in the
+					// same way: each is blind to something the other sees. The declared envelope adds a reach
+					// factor to every glow group and OVER-counts a flame, which framed Arden Infernal at 0.59
+					// of a window it had been solved to fill. The drawn bounds UNDER-count one, because the
+					// fire is displaced outward by its material at render time and a component's bounding box
+					// knows nothing about world-position offset -- so Arden was then solved to 0.88 and drew
+					// past every edge, with the window's top-left corner reading 0.98 white.
+					//
+					// Instrumented rather than guessed, which is how this was finally pinned: the solve says
+					// Arden's drawn height is 379.8 against a declared 473, and the arithmetic on the drawn
+					// figure is exactly right -- 0.88 of the window -- for a figure 20% smaller than the one
+					// that actually renders.
+					//
+					// A floor keeps both guarantees at once. Where the envelope is the larger, the flame it
+					// was invented to predict is inside the frame by construction. Where the drawn figure is
+					// larger -- a half-loaded skin, or one whose envelope is honest -- the measured size wins
+					// and nothing is framed small. For a skin with no glow group at all the two agree and
+					// this changes nothing, which is why Relay OG never showed the bug.
+					const float Envelope = Shown->GetFigureHeightUu();
+					EnvelopeTall = Envelope;
+					EnvelopeSeen = Shown->GetFigureWidthUu();
+					if (Envelope > Height)
+					{
+						Height = Envelope;
+					}
+					const float EnvelopeWide = Shown->GetFigureWidthUu();
+					if (EnvelopeWide > FigureWide)
+					{
+						FigureWide = EnvelopeWide;
+					}
 					FigureMiddle = static_cast<float>(Drawn.GetCenter().Z - Shown->GetActorLocation().Z) / Uniform;
+					// AND SIDEWAYS, WHICH WAS BEING THROWN AWAY. The same subtraction, on the two axes the
+					// framing never corrected: see UWonderlandUiSubsystem::WardrobeDrift.
+					const FVector Sideways = (Drawn.GetCenter() - Shown->GetActorLocation()) / Uniform;
+					Self->WardrobeDrift = FMath::Lerp(
+						Self->WardrobeDrift,
+						FVector2D(static_cast<float>(Sideways.X), static_cast<float>(Sideways.Y)),
+						0.15f);
 				}
 				else
 				{
@@ -1760,7 +1809,20 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 			// top of the window and there was a band of empty black under the feet. Half the height PLUS the
 			// base is where the middle of the figure actually is.
 			const float MiddleAbove = FigureMiddle * PreviewScale;
-			Stage->SetInWorldPreview(true, Spot - FVector(0.0, 0.0, MiddleAbove),
+			// THE BOX'S CENTRE ON THE RAY, NOT THE ACTOR'S ORIGIN, on all three axes now. The vertical half of
+			// this was already here and was what stopped the Dog's head being cut off; the sideways half is
+			// what stops Arden hanging off the left edge of the window. Both are the same measurement.
+			const FVector2D Drift = Self->WardrobeDrift * PreviewScale;
+			Self->WardrobeFramingNote = FString::Printf(
+				TEXT("height=%.1f wide=%.1f middle=%.1f fitTall=%.0f fitWide=%.0f fit=%.0f dogAway=%.0f ")
+				TEXT("distance=%.0f scale=%.3f drift=(%.1f,%.1f) winSize=(%.3f,%.3f) winCentre=(%.3f,%.3f) ")
+				TEXT("tanH=%.3f aspect=%.3f bounds=%s envelope=%.1f envelopeWide=%.1f"),
+				Height, FigureWide, FigureMiddle, FitTall, FitWide, FitDistance, DogAway,
+				Distance, PreviewScale, Self->WardrobeDrift.X, Self->WardrobeDrift.Y,
+				Size.X, Size.Y, Centre.X, Centre.Y, TanH, Aspect,
+				bFramedOnDrawnBounds ? TEXT("drawn") : TEXT("declared"), EnvelopeTall, EnvelopeSeen);
+			Stage->SetInWorldPreview(true,
+				Spot - FVector(Drift.X, Drift.Y, MiddleAbove),
 				(RealEye - Spot).GetSafeNormal2D().Rotation());
 			Stage->SetActorScale3D(FVector(PreviewScale, PreviewScale, PreviewScale));
 			if (AWonderlandCompanionEmbodiment* Shown = Stage->GetBody())
@@ -1782,13 +1844,35 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 		if (AActor* Black = Self->WardrobeBackdrop.Get())
 		{
 			const FVector Ray = Through.Vector();
-			const float BackOff = Distance * 0.55f;
+			// ---- JUST BEHIND THE FIGURE, NOT HALF A ROOM BEHIND IT.
+			//
+			// THE BUG THIS FIXES, and it wore a framing bug's clothes for four attempts. Photographed with
+			// Arden Infernal worn, the preview square showed an orange-lit WALL with a STAIRCASE across its
+			// bottom-left corner -- the Golden Arrival plaza, not the mascot. I read the bright shape as a
+			// mis-framed figure and spent three fixes on the framing arithmetic; the arithmetic turned out to
+			// be exactly right, solving every skin to 0.88 of the window, which is what finally made it clear
+			// the bright thing was not the figure.
+			//
+			// A backdrop at Distance * 0.55 BEYOND the subject sat 254 uu from the lens with plaza geometry a
+			// couple of metres in front of it, so the world was never hidden -- it was merely darker than the
+			// figure, which is why only the skins bright enough to LIGHT that geometry ever showed it. Arden
+			// and Celestial Light light it; Relay OG and Skeleton Flame do not, and their corners always read
+			// black, which is exactly how this hid for so long.
+			//
+			// The wall only has to be behind the subject, and the subject is a few uu deep at preview scale.
+			// Close enough that nothing can get between them, with a floor so a very near figure still has a
+			// wall rather than a coincident plane.
+			const float BackOff = FMath::Max(Distance * 0.12f, 18.0f);
 			const FVector At = Spot + Ray * BackOff;
 			const float Reach = Distance + BackOff;
 			// Generous on purpose: anything of the chamber that overruns the window is covered by the night
 			// field's own bands, so being too big costs nothing and being too small shows garden in a corner.
-			const float HalfW = Reach * TanH * FMath::Max(Size.X, 0.05f) * 2.40f;
-			const float HalfH = Reach * TanV * FMath::Max(Size.Y, 0.05f) * 2.40f;
+			// The wall is nearer now, so the same angular coverage needs less of it -- but the multiplier is
+			// raised rather than left alone, because being generous here costs nothing (anything of it that
+			// overruns the window is covered by the night field's own bands) and being a few uu short shows
+			// garden in a corner, which is the whole fault being fixed.
+			const float HalfW = Reach * TanH * FMath::Max(Size.X, 0.05f) * 3.20f;
+			const float HalfH = Reach * TanV * FMath::Max(Size.Y, 0.05f) * 3.20f;
 			Black->SetActorLocationAndRotation(At, (RealEye - At).Rotation());
 			// The engine cube is 100 uu, and the wall faces the lens down its own X.
 			Black->SetActorScale3D(FVector(0.04f, FMath::Max(HalfW, 80.0f) / 50.0f, FMath::Max(HalfH, 80.0f) / 50.0f));

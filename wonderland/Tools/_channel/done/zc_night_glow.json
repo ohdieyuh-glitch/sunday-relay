@@ -1,0 +1,346 @@
+{
+ "name": "zc_night_glow",
+ "started": "2026-09-26 09:56:58",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "G00",
+   "name": "the Dog was found in frame and read at every setting for every skin",
+   "pass": true,
+   "detail": {
+    "read": 16,
+    "wanted": 16,
+    "rects": {
+     "relay_og": [
+      0.299,
+      0.188,
+      0.701,
+      0.778
+     ],
+     "celestial_light": [
+      0.299,
+      0.188,
+      0.701,
+      0.778
+     ],
+     "arden_infernal": [
+      0.299,
+      0.188,
+      0.701,
+      0.778
+     ],
+     "skeleton_flame": [
+      0.299,
+      0.188,
+      0.701,
+      0.778
+     ]
+    },
+    "note": "a missing rect means the figure did not project into the frame; all-None readings mean the editor window was behind another one"
+   }
+  },
+  {
+   "id": "G01",
+   "name": "the night glow control actually reaches every skin",
+   "pass": true,
+   "detail": {
+    "dimmed": {
+     "relay_og": 0.1423,
+     "celestial_light": 0.1636,
+     "arden_infernal": 0.161,
+     "skeleton_flame": 0.192
+    },
+    "floor": 0.02,
+    "note": "a skin that does not move is not going through ApplyColourway and the correction misses it"
+   }
+  },
+  {
+   "id": "G02",
+   "name": "at the shipped setting every skin is still plainly brighter than the ground it stands on",
+   "pass": true,
+   "detail": {
+    "at_0_32": {
+     "relay_og": {
+      "figure_luma": 0.4648,
+      "figure_blown": 0.1577,
+      "figure_dark": 0.157,
+      "ground_luma": 0.3612,
+      "over_ground": 0.1036
+     },
+     "celestial_light": {
+      "figure_luma": 0.7947,
+      "figure_blown": 0.7681,
+      "figure_dark": 0.0,
+      "ground_luma": 0.5162,
+      "over_ground": 0.2785
+     },
+     "arden_infernal": {
+      "figure_luma": 0.7729,
+      "figure_blown": 0.5979,
+      "figure_dark": 0.002,
+      "ground_luma": 0.3654,
+      "over_ground": 0.4075
+     },
+     "skeleton_flame": {
+      "figure_luma": 0.5397,
+      "figure_blown": 0.2336,
+      "figure_dark": 0.1373,
+      "ground_luma": 0.3572,
+      "over_ground": 0.1825
+     }
+    },
+    "floor": 0.03,
+    "note": "the founder asked for the flames and Celestial Light to be kept, not removed; a mascot that no longer out-reads the ground after dark has been turned off rather than corrected"
+   }
+  },
+  {
+   "id": "G03",
+   "name": "at the shipped setting no skin is mostly clipped to white",
+   "pass": false,
+   "detail": {
+    "blown_at_0_32": {
+     "relay_og": 0.1577,
+     "celestial_light": 0.7681,
+     "arden_infernal": 0.5979,
+     "skeleton_flame": 0.2336
+    },
+    "ceiling": 0.18,
+    "note": "a figure with a fifth of itself at 1.0 has lost its detail there, which is what the 04:00 capture showed: a white starburst with two eyes in it"
+   }
+  },
+  {
+   "id": "G04",
+   "name": "the correction is an improvement on doing nothing",
+   "pass": true,
+   "detail": {
+    "uncorrected": {
+     "relay_og": 0.2336,
+     "celestial_light": 0.8709,
+     "arden_infernal": 0.8069,
+     "skeleton_flame": 0.5106
+    },
+    "corrected": {
+     "relay_og": 0.1577,
+     "celestial_light": 0.7681,
+     "arden_infernal": 0.5979,
+     "skeleton_flame": 0.2336
+    },
+    "note": "a skin that was never blown out at 1.00 is excused; one that was must be better at 0.32 or the correction is not doing the job it was written for"
+   }
+  }
+ ],
+ "by_skin": {
+  "relay_og": {
+   "1.00": {
+    "figure_luma": 0.5531,
+    "figure_blown": 0.2336,
+    "figure_dark": 0.0851,
+    "ground_luma": 0.4102,
+    "over_ground": 0.1429
+   },
+   "0.55": {
+    "figure_luma": 0.4929,
+    "figure_blown": 0.1861,
+    "figure_dark": 0.1231,
+    "ground_luma": 0.3535,
+    "over_ground": 0.1394
+   },
+   "0.32": {
+    "figure_luma": 0.4648,
+    "figure_blown": 0.1577,
+    "figure_dark": 0.157,
+    "ground_luma": 0.3612,
+    "over_ground": 0.1036
+   },
+   "0.18": {
+    "figure_luma": 0.4108,
+    "figure_blown": 0.1255,
+    "figure_dark": 0.1785,
+    "ground_luma": 0.3186,
+    "over_ground": 0.0922
+   }
+  },
+  "celestial_light": {
+   "1.00": {
+    "figure_luma": 0.8931,
+    "figure_blown": 0.8709,
+    "figure_dark": 0.0,
+    "ground_luma": 0.5872,
+    "over_ground": 0.3059
+   },
+   "0.55": {
+    "figure_luma": 0.8375,
+    "figure_blown": 0.804,
+    "figure_dark": 0.0,
+    "ground_luma": 0.5536,
+    "over_ground": 0.2839
+   },
+   "0.32": {
+    "figure_luma": 0.7947,
+    "figure_blown": 0.7681,
+    "figure_dark": 0.0,
+    "ground_luma": 0.5162,
+    "over_ground": 0.2785
+   },
+   "0.18": {
+    "figure_luma": 0.7295,
+    "figure_blown": 0.6753,
+    "figure_dark": 0.0179,
+    "ground_luma": 0.503,
+    "over_ground": 0.2265
+   }
+  },
+  "arden_infernal": {
+   "1.00": {
+    "figure_luma": 0.8733,
+    "figure_blown": 0.8069,
+    "figure_dark": 0.0,
+    "ground_luma": 0.4328,
+    "over_ground": 0.4405
+   },
+   "0.55": {
+    "figure_luma": 0.8408,
+    "figure_blown": 0.7361,
+    "figure_dark": 0.0,
+    "ground_luma": 0.4018,
+    "over_ground": 0.439
+   },
+   "0.32": {
+    "figure_luma": 0.7729,
+    "figure_blown": 0.5979,
+    "figure_dark": 0.002,
+    "ground_luma": 0.3654,
+    "over_ground": 0.4075
+   },
+   "0.18": {
+    "figure_luma": 0.7123,
+    "figure_blown": 0.5294,
+    "figure_dark": 0.0343,
+    "ground_luma": 0.3374,
+    "over_ground": 0.3749
+   }
+  },
+  "skeleton_flame": {
+   "1.00": {
+    "figure_luma": 0.6888,
+    "figure_blown": 0.5106,
+    "figure_dark": 0.0113,
+    "ground_luma": 0.4489,
+    "over_ground": 0.2399
+   },
+   "0.55": {
+    "figure_luma": 0.6145,
+    "figure_blown": 0.3325,
+    "figure_dark": 0.054,
+    "ground_luma": 0.3738,
+    "over_ground": 0.2407
+   },
+   "0.32": {
+    "figure_luma": 0.5397,
+    "figure_blown": 0.2336,
+    "figure_dark": 0.1373,
+    "ground_luma": 0.3572,
+    "over_ground": 0.1825
+   },
+   "0.18": {
+    "figure_luma": 0.4968,
+    "figure_blown": 0.2159,
+    "figure_dark": 0.1624,
+    "ground_luma": 0.307,
+    "over_ground": 0.1898
+   }
+  }
+ },
+ "figure_rects": {
+  "relay_og": [
+   0.299,
+   0.188,
+   0.701,
+   0.778
+  ],
+  "celestial_light": [
+   0.299,
+   0.188,
+   0.701,
+   0.778
+  ],
+  "arden_infernal": [
+   0.299,
+   0.188,
+   0.701,
+   0.778
+  ],
+  "skeleton_flame": [
+   0.299,
+   0.188,
+   0.701,
+   0.778
+  ]
+ },
+ "figure_dimmed_from_1_00_to_0_18": {
+  "relay_og": 0.1423,
+  "celestial_light": 0.1636,
+  "arden_infernal": 0.161,
+  "skeleton_flame": 0.192
+ },
+ "blown_fraction_by_setting": {
+  "relay_og": {
+   "1.00": 0.2336,
+   "0.55": 0.1861,
+   "0.32": 0.1577,
+   "0.18": 0.1255
+  },
+  "celestial_light": {
+   "1.00": 0.8709,
+   "0.55": 0.804,
+   "0.32": 0.7681,
+   "0.18": 0.6753
+  },
+  "arden_infernal": {
+   "1.00": 0.8069,
+   "0.55": 0.7361,
+   "0.32": 0.5979,
+   "0.18": 0.5294
+  },
+  "skeleton_flame": {
+   "1.00": 0.5106,
+   "0.55": 0.3325,
+   "0.32": 0.2336,
+   "0.18": 0.2159
+  }
+ },
+ "at_shipped_0_32": {
+  "relay_og": {
+   "figure_luma": 0.4648,
+   "figure_blown": 0.1577,
+   "figure_dark": 0.157,
+   "ground_luma": 0.3612,
+   "over_ground": 0.1036
+  },
+  "celestial_light": {
+   "figure_luma": 0.7947,
+   "figure_blown": 0.7681,
+   "figure_dark": 0.0,
+   "ground_luma": 0.5162,
+   "over_ground": 0.2785
+  },
+  "arden_infernal": {
+   "figure_luma": 0.7729,
+   "figure_blown": 0.5979,
+   "figure_dark": 0.002,
+   "ground_luma": 0.3654,
+   "over_ground": 0.4075
+  },
+  "skeleton_flame": {
+   "figure_luma": 0.5397,
+   "figure_blown": 0.2336,
+   "figure_dark": 0.1373,
+   "ground_luma": 0.3572,
+   "over_ground": 0.1825
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\night_glow",
+ "finished": "2026-09-26 09:58:31",
+ "seconds": 93.59,
+ "log": "G_relay_og INFO relay_og {'1.00': {'figure_luma': 0.5531, 'figure_blown': 0.2336, 'figure_dark': 0.0851, 'ground_luma': 0.4102, 'over_ground': 0.1429}, '0.55': {'figure_luma': 0.4929, 'figure_blown': 0.1861, 'figure_dark': 0.1231, 'ground_luma': 0.3535, 'over_ground': 0.1394}, '0.32': {'figure_luma': 0.4648, 'figure_blown': 0.1577, 'figure_dark': 0.157, 'ground_luma': 0.3612, 'over_ground': 0.1036}, '0.18': {'figure_luma': 0.4108, 'figure_blown': 0.1255, 'figure_dark': 0.1785, 'ground_luma': 0.3186, 'over_ground': 0.0922}}\nG_celestial_light INFO celestial_light {'1.00': {'figure_luma': 0.8931, 'figure_blown': 0.8709, 'figure_dark': 0.0, 'ground_luma': 0.5872, 'over_ground': 0.3059}, '0.55': {'figure_luma': 0.8375, 'figure_blown': 0.804, 'figure_dark': 0.0, 'ground_luma': 0.5536, 'over_ground': 0.2839}, '0.32': {'figure_luma': 0.7947, 'figure_blown': 0.7681, 'figure_dark': 0.0, 'ground_luma': 0.5162, 'over_ground': 0.2785}, '0.18': {'figure_luma': 0.7295, 'figure_blown': 0.6753, 'figure_dark': 0.0179, 'ground_luma': 0.503, 'over_ground': 0.2265}}\nG_arden_infernal INFO arden_infernal {'1.00': {'figure_luma': 0.8733, 'figure_blown': 0.8069, 'figure_dark': 0.0, 'ground_luma': 0.4328, 'over_ground': 0.4405}, '0.55': {'figure_luma': 0.8408, 'figure_blown': 0.7361, 'figure_dark': 0.0, 'ground_luma': 0.4018, 'over_ground': 0.439}, '0.32': {'figure_luma': 0.7729, 'figure_blown': 0.5979, 'figure_dark': 0.002, 'ground_luma': 0.3654, 'over_ground': 0.4075}, '0.18': {'figure_luma': 0.7123, 'figure_blown': 0.5294, 'figure_dark': 0.0343, 'ground_luma': 0.3374, 'over_ground': 0.3749}}\nG_skeleton_flame INFO skeleton_flame {'1.00': {'figure_luma': 0.6888, 'figure_blown': 0.5106, 'figure_dark': 0.0113, 'ground_luma': 0.4489, 'over_ground': 0.2399}, '0.55': {'figure_luma': 0.6145, 'figure_blown': 0.3325, 'figure_dark': 0.054, 'ground_luma': 0.3738, 'over_ground': 0.2407}, '0.32': {'figure_luma': 0.5397, 'figure_blown': 0.2336, 'figure_dark': 0.1373, 'ground_luma': 0.3572, 'over_ground': 0.1825}, '0.18': {'figure_luma': 0.4968, 'figure_blown': 0.2159, 'figure_dark': 0.1624, 'ground_luma': 0.307, 'over_ground': 0.1898}}\nG00 PASS the Dog was found in frame and read at every setting for every skin {'read': 16, 'wanted': 16, 'rects': {'relay_og': [0.299, 0.188, 0.701, 0.778], 'celestial_light': [0.299, 0.188, 0.701, 0.778], 'arden_infernal': [0.299, 0.188, 0.701, 0.778], 'skeleton_flame': [0.299, 0.188, 0.701, 0.778]}, 'note': 'a missing rect means the figure did not project into the frame; all-None readings mean the editor window was behind another one'}\nG01 PASS the night glow control actually reaches every skin {'dimmed': {'relay_og': 0.1423, 'celestial_light': 0.1636, 'arden_infernal': 0.161, 'skeleton_flame': 0.192}, 'floor': 0.02, 'note': 'a skin that does not move is not going through ApplyColourway and the correction misses it'}\nG_BLOWN INFO how much of the figure is clipped to white {'relay_og': {'1.00': 0.2336, '0.55': 0.1861, '0.32': 0.1577, '0.18': 0.1255}, 'celestial_light': {'1.00': 0.8709, '0.55': 0.804, '0.32': 0.7681, '0.18': 0.6753}, 'arden_infernal': {'1.00': 0.8069, '0.55': 0.7361, '0.32': 0.5979, '0.18': 0.5294}, 'skeleton_flame': {'1.00': 0.5106, '0.55': 0.3325, '0.32': 0.2336, '0.18': 0.2159}}\nG02 PASS at the shipped setting every skin is still plainly brighter than the ground it stands on {'at_0_32': {'relay_og': {'figure_luma': 0.4648, 'figure_blown': 0.1577, 'figure_dark': 0.157, 'ground_luma': 0.3612, 'over_ground': 0.1036}, 'celestial_light': {'figure_luma': 0.7947, 'figure_blown': 0.7681, 'figure_dark': 0.0, 'ground_luma': 0.5162, 'over_ground': 0.2785}, 'arden_infernal': {'figure_luma': 0.7729, 'figure_blown': 0.5979, 'figure_dark': 0.002, 'ground_luma': 0.3654, 'over_ground': 0.4075}, 'skeleton_flame': {'figure_luma': 0.5397, 'figure_blown': 0.2336, 'figure_dark': 0.1373, 'ground_luma': 0.3572, 'over_ground': 0.1825}}, 'floor': 0.03, 'note': 'the founder asked for the flames and Celestial Light to be kept, not removed; a mascot that no longer out-reads the ground after dark has been turned off rather than corrected'}\nG03 FAIL at the shipped setting no skin is mostly clipped to white {'blown_at_0_32': {'relay_og': 0.1577, 'celestial_light': 0.7681, 'arden_infernal': 0.5979, 'skeleton_flame': 0.2336}, 'ceiling': 0.18, 'note': 'a figure with a fifth of itself at 1.0 has lost its detail there, which is what the 04:00 capture showed: a white starburst with two eyes in it'}\nG04 PASS the correction is an improvement on doing nothing {'uncorrected': {'relay_og': 0.2336, 'celestial_light': 0.8709, 'arden_infernal': 0.8069, 'skeleton_flame': 0.5106}, 'corrected': {'relay_og': 0.1577, 'celestial_light': 0.7681, 'arden_infernal': 0.5979, 'skeleton_flame': 0.2336}, 'note': 'a skin that was never blown out at 1.00 is excused; one that was must be better at 0.32 or the correction is not doing the job it was written for'}\n"
+}

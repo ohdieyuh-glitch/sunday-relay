@@ -1,0 +1,281 @@
+{
+ "name": "zc_wardrobe_framing",
+ "started": "2026-09-26 11:06:33",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "F00",
+   "name": "the wardrobe is open through the founder's own button",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "F01",
+   "name": "the framing solve reported for every skin",
+   "pass": true,
+   "detail": {
+    "read": 5,
+    "wanted": 5,
+    "raw": {
+     "relay_og": "height=158.8 wide=76.9 middle=72.1 fitTall=500 fitWide=266 fit=500 dogAway=298 distance=164 scale=0.328 drift=(1.1,0.7) winSize=(0.214,0.483) winCentre=(0.595,0.470) tanH=0.767 aspect=2.052 bounds=drawn",
+     "arden_infernal": "height=379.8 wide=161.2 middle=128.8 fitTall=1195 fitWide=559 fit=1195 dogAway=298 distance=164 scale=0.137 drift=(-18.5,-4.8) winSize=(0.214,0.483) winCentre=(0.595,0.470) tanH=0.767 aspect=2.052 bounds=drawn",
+     "apollo": "height=288.2 wide=297.9 middle=139.8 fitTall=907 fitWide=1033 fit=1033 dogAway=298 distance=164 scale=0.158 drift=(-2.2,-6.6) winSize=(0.214,0.483) winCentre=(0.595,0.470) tanH=0.767 aspect=2.052 bounds=drawn",
+     "skeleton_flame": "height=225.2 wide=66.2 middle=110.5 fitTall=709 fitWide=230 fit=709 dogAway=298 distance=164 scale=0.231 drift=(3.6,0.0) winSize=(0.214,0.483) winCentre=(0.595,0.470) tanH=0.767 aspect=2.052 bounds=drawn",
+     "celestial_light": "height=204.0 wide=150.1 middle=102.0 fitTall=642 fitWide=520 fit=642 dogAway=298 distance=164 scale=0.255 drift=(-3.6,6.4) winSize=(0.214,0.483) winCentre=(0.595,0.470) tanH=0.767 aspect=2.052 bounds=drawn"
+    }
+   }
+  },
+  {
+   "id": "F02",
+   "name": "the preview scale clamp is not bottoming out on any skin",
+   "pass": true,
+   "detail": {
+    "per_skin": {
+     "relay_og": {
+      "fit": 500.0,
+      "dogAway": 298.0,
+      "distance": 164.0,
+      "scale_wanted": 0.328,
+      "scale_applied": 0.328,
+      "clamp_binding": false
+     },
+     "arden_infernal": {
+      "fit": 1195.0,
+      "dogAway": 298.0,
+      "distance": 164.0,
+      "scale_wanted": 0.1372,
+      "scale_applied": 0.137,
+      "clamp_binding": false
+     },
+     "apollo": {
+      "fit": 1033.0,
+      "dogAway": 298.0,
+      "distance": 164.0,
+      "scale_wanted": 0.1588,
+      "scale_applied": 0.158,
+      "clamp_binding": false
+     },
+     "skeleton_flame": {
+      "fit": 709.0,
+      "dogAway": 298.0,
+      "distance": 164.0,
+      "scale_wanted": 0.2313,
+      "scale_applied": 0.231,
+      "clamp_binding": false
+     },
+     "celestial_light": {
+      "fit": 642.0,
+      "dogAway": 298.0,
+      "distance": 164.0,
+      "scale_wanted": 0.2555,
+      "scale_applied": 0.255,
+      "clamp_binding": false
+     }
+    },
+    "note": "scale is meant to cancel the fact that the figure is brought much closer than its honest fit distance. Clamped at 0.05 it stops cancelling, and the figure is then drawn at whatever size being that close makes it -- which is a window full of skin."
+   }
+  },
+  {
+   "id": "F03",
+   "name": "every skin was framed on what it actually draws",
+   "pass": true,
+   "detail": {
+    "bounds_branch": {
+     "relay_og": "drawn",
+     "arden_infernal": "drawn",
+     "apollo": "drawn",
+     "skeleton_flame": "drawn",
+     "celestial_light": "drawn"
+    },
+    "note": "the declared envelope adds a reach factor to every glow group and over-counts a flame by design; falling back to it silently is how a skin ends up framed too small"
+   }
+  }
+ ],
+ "solve": {
+  "relay_og": {
+   "height": 158.8,
+   "wide": 76.9,
+   "middle": 72.1,
+   "fitTall": 500.0,
+   "fitWide": 266.0,
+   "fit": 500.0,
+   "dogAway": 298.0,
+   "distance": 164.0,
+   "scale": 0.328,
+   "drift": "(1.1,0.7)",
+   "winSize": "(0.214,0.483)",
+   "winCentre": "(0.595,0.470)",
+   "tanH": 0.767,
+   "aspect": 2.052,
+   "bounds": "drawn"
+  },
+  "arden_infernal": {
+   "height": 379.8,
+   "wide": 161.2,
+   "middle": 128.8,
+   "fitTall": 1195.0,
+   "fitWide": 559.0,
+   "fit": 1195.0,
+   "dogAway": 298.0,
+   "distance": 164.0,
+   "scale": 0.137,
+   "drift": "(-18.5,-4.8)",
+   "winSize": "(0.214,0.483)",
+   "winCentre": "(0.595,0.470)",
+   "tanH": 0.767,
+   "aspect": 2.052,
+   "bounds": "drawn"
+  },
+  "apollo": {
+   "height": 288.2,
+   "wide": 297.9,
+   "middle": 139.8,
+   "fitTall": 907.0,
+   "fitWide": 1033.0,
+   "fit": 1033.0,
+   "dogAway": 298.0,
+   "distance": 164.0,
+   "scale": 0.158,
+   "drift": "(-2.2,-6.6)",
+   "winSize": "(0.214,0.483)",
+   "winCentre": "(0.595,0.470)",
+   "tanH": 0.767,
+   "aspect": 2.052,
+   "bounds": "drawn"
+  },
+  "skeleton_flame": {
+   "height": 225.2,
+   "wide": 66.2,
+   "middle": 110.5,
+   "fitTall": 709.0,
+   "fitWide": 230.0,
+   "fit": 709.0,
+   "dogAway": 298.0,
+   "distance": 164.0,
+   "scale": 0.231,
+   "drift": "(3.6,0.0)",
+   "winSize": "(0.214,0.483)",
+   "winCentre": "(0.595,0.470)",
+   "tanH": 0.767,
+   "aspect": 2.052,
+   "bounds": "drawn"
+  },
+  "celestial_light": {
+   "height": 204.0,
+   "wide": 150.1,
+   "middle": 102.0,
+   "fitTall": 642.0,
+   "fitWide": 520.0,
+   "fit": 642.0,
+   "dogAway": 298.0,
+   "distance": 164.0,
+   "scale": 0.255,
+   "drift": "(-3.6,6.4)",
+   "winSize": "(0.214,0.483)",
+   "winCentre": "(0.595,0.470)",
+   "tanH": 0.767,
+   "aspect": 2.052,
+   "bounds": "drawn"
+  }
+ },
+ "raw": {
+  "relay_og": "height=158.8 wide=76.9 middle=72.1 fitTall=500 fitWide=266 fit=500 dogAway=298 distance=164 scale=0.328 drift=(1.1,0.7) winSize=(0.214,0.483) winCentre=(0.595,0.470) tanH=0.767 aspect=2.052 bounds=drawn",
+  "arden_infernal": "height=379.8 wide=161.2 middle=128.8 fitTall=1195 fitWide=559 fit=1195 dogAway=298 distance=164 scale=0.137 drift=(-18.5,-4.8) winSize=(0.214,0.483) winCentre=(0.595,0.470) tanH=0.767 aspect=2.052 bounds=drawn",
+  "apollo": "height=288.2 wide=297.9 middle=139.8 fitTall=907 fitWide=1033 fit=1033 dogAway=298 distance=164 scale=0.158 drift=(-2.2,-6.6) winSize=(0.214,0.483) winCentre=(0.595,0.470) tanH=0.767 aspect=2.052 bounds=drawn",
+  "skeleton_flame": "height=225.2 wide=66.2 middle=110.5 fitTall=709 fitWide=230 fit=709 dogAway=298 distance=164 scale=0.231 drift=(3.6,0.0) winSize=(0.214,0.483) winCentre=(0.595,0.470) tanH=0.767 aspect=2.052 bounds=drawn",
+  "celestial_light": "height=204.0 wide=150.1 middle=102.0 fitTall=642 fitWide=520 fit=642 dogAway=298 distance=164 scale=0.255 drift=(-3.6,6.4) winSize=(0.214,0.483) winCentre=(0.595,0.470) tanH=0.767 aspect=2.052 bounds=drawn"
+ },
+ "scale_clamp": {
+  "relay_og": {
+   "fit": 500.0,
+   "dogAway": 298.0,
+   "distance": 164.0,
+   "scale_wanted": 0.328,
+   "scale_applied": 0.328,
+   "clamp_binding": false
+  },
+  "arden_infernal": {
+   "fit": 1195.0,
+   "dogAway": 298.0,
+   "distance": 164.0,
+   "scale_wanted": 0.1372,
+   "scale_applied": 0.137,
+   "clamp_binding": false
+  },
+  "apollo": {
+   "fit": 1033.0,
+   "dogAway": 298.0,
+   "distance": 164.0,
+   "scale_wanted": 0.1588,
+   "scale_applied": 0.158,
+   "clamp_binding": false
+  },
+  "skeleton_flame": {
+   "fit": 709.0,
+   "dogAway": 298.0,
+   "distance": 164.0,
+   "scale_wanted": 0.2313,
+   "scale_applied": 0.231,
+   "clamp_binding": false
+  },
+  "celestial_light": {
+   "fit": 642.0,
+   "dogAway": 298.0,
+   "distance": 164.0,
+   "scale_wanted": 0.2555,
+   "scale_applied": 0.255,
+   "clamp_binding": false
+  }
+ },
+ "axes": {
+  "relay_og": {
+   "fitTall": 500.0,
+   "fitWide": 266.0,
+   "bounds": "drawn",
+   "binding": "tall",
+   "height": 158.8,
+   "wide": 76.9,
+   "drift": "(1.1,0.7)"
+  },
+  "arden_infernal": {
+   "fitTall": 1195.0,
+   "fitWide": 559.0,
+   "bounds": "drawn",
+   "binding": "tall",
+   "height": 379.8,
+   "wide": 161.2,
+   "drift": "(-18.5,-4.8)"
+  },
+  "apollo": {
+   "fitTall": 907.0,
+   "fitWide": 1033.0,
+   "bounds": "drawn",
+   "binding": "wide",
+   "height": 288.2,
+   "wide": 297.9,
+   "drift": "(-2.2,-6.6)"
+  },
+  "skeleton_flame": {
+   "fitTall": 709.0,
+   "fitWide": 230.0,
+   "bounds": "drawn",
+   "binding": "tall",
+   "height": 225.2,
+   "wide": 66.2,
+   "drift": "(3.6,0.0)"
+  },
+  "celestial_light": {
+   "fitTall": 642.0,
+   "fitWide": 520.0,
+   "bounds": "drawn",
+   "binding": "tall",
+   "height": 204.0,
+   "wide": 150.1,
+   "drift": "(-3.6,6.4)"
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\wardrobe_framing",
+ "finished": "2026-09-26 11:07:35",
+ "seconds": 62.16,
+ "log": "F00 PASS the wardrobe is open through the founder's own button {}\nF_relay_og INFO relay_og {'height': 158.8, 'wide': 76.9, 'middle': 72.1, 'fitTall': 500.0, 'fitWide': 266.0, 'fit': 500.0, 'dogAway': 298.0, 'distance': 164.0, 'scale': 0.328, 'drift': '(1.1,0.7)', 'winSize': '(0.214,0.483)', 'winCentre': '(0.595,0.470)', 'tanH': 0.767, 'aspect': 2.052, 'bounds': 'drawn'}\nF_arden_infernal INFO arden_infernal {'height': 379.8, 'wide': 161.2, 'middle': 128.8, 'fitTall': 1195.0, 'fitWide': 559.0, 'fit': 1195.0, 'dogAway': 298.0, 'distance': 164.0, 'scale': 0.137, 'drift': '(-18.5,-4.8)', 'winSize': '(0.214,0.483)', 'winCentre': '(0.595,0.470)', 'tanH': 0.767, 'aspect': 2.052, 'bounds': 'drawn'}\nF_apollo INFO apollo {'height': 288.2, 'wide': 297.9, 'middle': 139.8, 'fitTall': 907.0, 'fitWide': 1033.0, 'fit': 1033.0, 'dogAway': 298.0, 'distance': 164.0, 'scale': 0.158, 'drift': '(-2.2,-6.6)', 'winSize': '(0.214,0.483)', 'winCentre': '(0.595,0.470)', 'tanH': 0.767, 'aspect': 2.052, 'bounds': 'drawn'}\nF_skeleton_flame INFO skeleton_flame {'height': 225.2, 'wide': 66.2, 'middle': 110.5, 'fitTall': 709.0, 'fitWide': 230.0, 'fit': 709.0, 'dogAway': 298.0, 'distance': 164.0, 'scale': 0.231, 'drift': '(3.6,0.0)', 'winSize': '(0.214,0.483)', 'winCentre': '(0.595,0.470)', 'tanH': 0.767, 'aspect': 2.052, 'bounds': 'drawn'}\nF_celestial_light INFO celestial_light {'height': 204.0, 'wide': 150.1, 'middle': 102.0, 'fitTall': 642.0, 'fitWide': 520.0, 'fit': 642.0, 'dogAway': 298.0, 'distance': 164.0, 'scale': 0.255, 'drift': '(-3.6,6.4)', 'winSize': '(0.214,0.483)', 'winCentre': '(0.595,0.470)', 'tanH': 0.767, 'aspect': 2.052, 'bounds': 'drawn'}\nF01 PASS the framing solve reported for every skin {'read': 5, 'wanted': 5, 'raw': {'relay_og': 'height=158.8 wide=76.9 middle=72.1 fitTall=500 fitWide=266 fit=500 dogAway=298 distance=164 scale=0.328 drift=(1.1,0.7) winSize=(0.214,0.483) winCentre=(0.595,0.470) tanH=0.767 aspect=2.052 bounds=drawn', 'arden_infernal': 'height=379.8 wide=161.2 middle=128.8 fitTall=1195 fitWide=559 fit=1195 dogAway=298 distance=164 scale=0.137 drift=(-18.5,-4.8) winSize=(0.214,0.483) winCentre=(0.595,0.470) tanH=0.767 aspect=2.052 bounds=drawn', 'apollo': 'height=288.2 wide=297.9 middle=139.8 fitTall=907 fitWide=1033 fit=1033 dogAway=298 distance=164 scale=0.158 drift=(-2.2,-6.6) winSize=(0.214,0.483) winCentre=(0.595,0.470) tanH=0.767 aspect=2.052 bounds=drawn', 'skeleton_flame': 'height=225.2 wide=66.2 middle=110.5 fitTall=709 fitWide=230 fit=709 dogAway=298 distance=164 scale=0.231 drift=(3.6,0.0) winSize=(0.214,0.483) winCentre=(0.595,0.470) tanH=0.767 aspect=2.052 bounds=drawn', 'celestial_light': 'height=204.0 wide=150.1 middle=102.0 fitTall=642 fitWide=520 fit=642 dogAway=298 distance=164 scale=0.255 drift=(-3.6,6.4) winSize=(0.214,0.483) winCentre=(0.595,0.470) tanH=0.767 aspect=2.052 bounds=drawn'}}\nF_CLAMP INFO is the preview scale clamp bottoming out {'relay_og': {'fit': 500.0, 'dogAway': 298.0, 'distance': 164.0, 'scale_wanted': 0.328, 'scale_applied': 0.328, 'clamp_binding': False}, 'arden_infernal': {'fit': 1195.0, 'dogAway': 298.0, 'distance': 164.0, 'scale_wanted': 0.1372, 'scale_applied': 0.137, 'clamp_binding': False}, 'apollo': {'fit': 1033.0, 'dogAway': 298.0, 'distance': 164.0, 'scale_wanted': 0.1588, 'scale_applied': 0.158, 'clamp_binding': False}, 'skeleton_flame': {'fit': 709.0, 'dogAway': 298.0, 'distance': 164.0, 'scale_wanted': 0.2313, 'scale_applied': 0.231, 'clamp_binding': False}, 'celestial_light': {'fit': 642.0, 'dogAway': 298.0, 'distance': 164.0, 'scale_wanted': 0.2555, 'scale_applied': 0.255, 'clamp_binding': False}}\nF02 PASS the preview scale clamp is not bottoming out on any skin {'per_skin': {'relay_og': {'fit': 500.0, 'dogAway': 298.0, 'distance': 164.0, 'scale_wanted': 0.328, 'scale_applied': 0.328, 'clamp_binding': False}, 'arden_infernal': {'fit': 1195.0, 'dogAway': 298.0, 'distance': 164.0, 'scale_wanted': 0.1372, 'scale_applied': 0.137, 'clamp_binding': False}, 'apollo': {'fit': 1033.0, 'dogAway': 298.0, 'distance': 164.0, 'scale_wanted': 0.1588, 'scale_applied': 0.158, 'clamp_binding': False}, 'skeleton_flame': {'fit': 709.0, 'dogAway': 298.0, 'distance': 164.0, 'scale_wanted': 0.2313, 'scale_applied': 0.231, 'clamp_binding': False}, 'celestial_light': {'fit': 642.0, 'dogAway': 298.0, 'distance': 164.0, 'scale_wanted': 0.2555, 'scale_applied': 0.255, 'clamp_binding': False}}, 'note': 'scale is meant to cancel the fact that the figure is brought much closer than its honest fit distance. Clamped at 0.05 it stops cancelling, and the figure is then drawn at whatever size being that close makes it -- which is a window full of skin.'}\nF_AXES INFO which axis binds, and on which bounds {'relay_og': {'fitTall': 500.0, 'fitWide': 266.0, 'bounds': 'drawn', 'binding': 'tall', 'height': 158.8, 'wide': 76.9, 'drift': '(1.1,0.7)'}, 'arden_infernal': {'fitTall': 1195.0, 'fitWide': 559.0, 'bounds': 'drawn', 'binding': 'tall', 'height': 379.8, 'wide': 161.2, 'drift': '(-18.5,-4.8)'}, 'apollo': {'fitTall': 907.0, 'fitWide': 1033.0, 'bounds': 'drawn', 'binding': 'wide', 'height': 288.2, 'wide': 297.9, 'drift': '(-2.2,-6.6)'}, 'skeleton_flame': {'fitTall': 709.0, 'fitWide': 230.0, 'bounds': 'drawn', 'binding': 'tall', 'height': 225.2, 'wide': 66.2, 'drift': '(3.6,0.0)'}, 'celestial_light': {'fitTall': 642.0, 'fitWide': 520.0, 'bounds': 'drawn', 'binding': 'tall', 'height': 204.0, 'wide': 150.1, 'drift': '(-3.6,6.4)'}}\nF03 PASS every skin was framed on what it actually draws {'bounds_branch': {'relay_og': 'drawn', 'arden_infernal': 'drawn', 'apollo': 'drawn', 'skeleton_flame': 'drawn', 'celestial_light': 'drawn'}, 'note': 'the declared envelope adds a reach factor to every glow group and over-counts a flame by design; falling back to it silently is how a skin ends up framed too small'}\n"
+}
