@@ -1,0 +1,140 @@
+{
+ "name": "zc_avatar_scale",
+ "started": "2026-09-25 17:33:07",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "X00",
+   "name": "every tier was actually measured",
+   "pass": true,
+   "detail": {
+    "baseline": {
+     "samples": 371,
+     "median_ms": 27.77,
+     "worst_ms": 414.84
+    },
+    "tiers": [
+     {
+      "avatars": 10,
+      "median_ms": 39.25,
+      "over_baseline_ms": 11.48,
+      "per_avatar_ms": 1.148
+     },
+     {
+      "avatars": 20,
+      "median_ms": 65.56,
+      "over_baseline_ms": 37.79,
+      "per_avatar_ms": 1.889
+     },
+     {
+      "avatars": 30,
+      "median_ms": 101.67,
+      "over_baseline_ms": 73.9,
+      "per_avatar_ms": 2.463
+     },
+     {
+      "avatars": 40,
+      "median_ms": 137.55,
+      "over_baseline_ms": 109.78,
+      "per_avatar_ms": 2.744
+     }
+    ]
+   }
+  },
+  {
+   "id": "X01",
+   "name": "the per-avatar cost does not grow as the crowd grows",
+   "pass": false,
+   "detail": {
+    "per_avatar_by_tier": [
+     1.148,
+     1.889,
+     2.463,
+     2.744
+    ],
+    "tiers": [
+     {
+      "avatars": 10,
+      "median_ms": 39.25,
+      "over_baseline_ms": 11.48,
+      "per_avatar_ms": 1.148
+     },
+     {
+      "avatars": 20,
+      "median_ms": 65.56,
+      "over_baseline_ms": 37.79,
+      "per_avatar_ms": 1.889
+     },
+     {
+      "avatars": 30,
+      "median_ms": 101.67,
+      "over_baseline_ms": 73.9,
+      "per_avatar_ms": 2.463
+     },
+     {
+      "avatars": 40,
+      "median_ms": 137.55,
+      "over_baseline_ms": 109.78,
+      "per_avatar_ms": 2.744
+     }
+    ],
+    "note": "ten was the largest count anyone had measured; 'bounded' was an extrapolation from four points until this. A 35%% allowance because this machine's timings are noisy"
+   }
+  }
+ ],
+ "baseline": {
+  "samples": 371,
+  "median_ms": 27.77,
+  "worst_ms": 414.84
+ },
+ "tiers": [
+  {
+   "avatars": 10,
+   "median_ms": 39.25,
+   "over_baseline_ms": 11.48,
+   "per_avatar_ms": 1.148
+  },
+  {
+   "avatars": 20,
+   "median_ms": 65.56,
+   "over_baseline_ms": 37.79,
+   "per_avatar_ms": 1.889
+  },
+  {
+   "avatars": 30,
+   "median_ms": 101.67,
+   "over_baseline_ms": 73.9,
+   "per_avatar_ms": 2.463
+  },
+  {
+   "avatars": 40,
+   "median_ms": 137.55,
+   "over_baseline_ms": 109.78,
+   "per_avatar_ms": 2.744
+  }
+ ],
+ "at_10": {
+  "samples": 250,
+  "median_ms": 39.25,
+  "worst_ms": 41.92
+ },
+ "at_20": {
+  "samples": 149,
+  "median_ms": 65.56,
+  "worst_ms": 69.33
+ },
+ "at_30": {
+  "samples": 98,
+  "median_ms": 101.67,
+  "worst_ms": 109.68
+ },
+ "at_40": {
+  "samples": 72,
+  "median_ms": 137.55,
+  "worst_ms": 147.61
+ },
+ "baseline_median_ms": 27.77,
+ "finished": "2026-09-25 17:34:44",
+ "seconds": 96.54,
+ "log": "baseline INFO baseline {'samples': 371, 'median_ms': 27.77, 'worst_ms': 414.84}\nat_10 INFO at_10 {'samples': 250, 'median_ms': 39.25, 'worst_ms': 41.92}\nT_10 INFO 10 avatars {'avatars': 10, 'median_ms': 39.25, 'over_baseline_ms': 11.48, 'per_avatar_ms': 1.148}\nat_20 INFO at_20 {'samples': 149, 'median_ms': 65.56, 'worst_ms': 69.33}\nT_20 INFO 20 avatars {'avatars': 20, 'median_ms': 65.56, 'over_baseline_ms': 37.79, 'per_avatar_ms': 1.889}\nat_30 INFO at_30 {'samples': 98, 'median_ms': 101.67, 'worst_ms': 109.68}\nT_30 INFO 30 avatars {'avatars': 30, 'median_ms': 101.67, 'over_baseline_ms': 73.9, 'per_avatar_ms': 2.463}\nat_40 INFO at_40 {'samples': 72, 'median_ms': 137.55, 'worst_ms': 147.61}\nT_40 INFO 40 avatars {'avatars': 40, 'median_ms': 137.55, 'over_baseline_ms': 109.78, 'per_avatar_ms': 2.744}\nX00 PASS every tier was actually measured {'baseline': {'samples': 371, 'median_ms': 27.77, 'worst_ms': 414.84}, 'tiers': [{'avatars': 10, 'median_ms': 39.25, 'over_baseline_ms': 11.48, 'per_avatar_ms': 1.148}, {'avatars': 20, 'median_ms': 65.56, 'over_baseline_ms': 37.79, 'per_avatar_ms': 1.889}, {'avatars': 30, 'median_ms': 101.67, 'over_baseline_ms': 73.9, 'per_avatar_ms': 2.463}, {'avatars': 40, 'median_ms': 137.55, 'over_baseline_ms': 109.78, 'per_avatar_ms': 2.744}]}\nX01 FAIL the per-avatar cost does not grow as the crowd grows {'per_avatar_by_tier': [1.148, 1.889, 2.463, 2.744], 'tiers': [{'avatars': 10, 'median_ms': 39.25, 'over_baseline_ms': 11.48, 'per_avatar_ms': 1.148}, {'avatars': 20, 'median_ms': 65.56, 'over_baseline_ms': 37.79, 'per_avatar_ms': 1.889}, {'avatars': 30, 'median_ms': 101.67, 'over_baseline_ms': 73.9, 'per_avatar_ms': 2.463}, {'avatars': 40, 'median_ms': 137.55, 'over_baseline_ms': 109.78, 'per_avatar_ms': 2.744}], 'note': \"ten was the largest count anyone had measured; 'bounded' was an extrapolation from four points until this. A 35%% allowance because this machine's timings are noisy\"}\n"
+}
