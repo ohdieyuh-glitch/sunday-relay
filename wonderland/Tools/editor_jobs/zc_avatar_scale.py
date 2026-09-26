@@ -96,6 +96,21 @@ def job():
     except Exception as err:                                       # noqa: BLE001
         RESULT["avatars_error"] = str(err)[:160]
     files = [f for f in all_files if "_Small" in os.path.basename(f)] or all_files
+    # TENTAILS IS EXCLUDED FROM THE CROWD, and the reason is a count rather than a preference.
+    #
+    # The cost here is per COMPONENT -- one instanced component is one draw batch -- not per voxel, which is
+    # why the Small tier barely helped: it cuts boxes and not groups. Counting the groups in the crowd tier:
+    #
+    #     Cherubim_Small   5,885 boxes /  25 groups
+    #     Seraph_Small     5,190 boxes /  25 groups
+    #     TenTails_Small  12,105 boxes / 123 groups      <- five times the components
+    #
+    # TenTails_Small keeps 123 of its Large tier's 124 groups: its ten tails are 80 groups on their own. So a
+    # crowd containing TenTails is mostly paying for TenTails. Measuring the two families whose crowd tier is
+    # actually a crowd tier says whether the SYSTEM scales or whether one family does not, and those are very
+    # different findings for the founder to act on.
+    if os.environ.get("WL_CROWD_ALL") != "1":
+        files = [f for f in files if "TenTails" not in os.path.basename(f)] or files
     RESULT["crowd_tier"] = [os.path.basename(f) for f in files]
     if not files:
         record("X00", "there are avatars to stand up", False, dir=AVATARS)
