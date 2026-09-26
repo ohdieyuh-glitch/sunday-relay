@@ -1,6 +1,6 @@
 {
  "name": "zc_gate_c",
- "started": "2026-09-25 16:21:11",
+ "started": "2026-09-25 17:25:06",
  "status": "measured",
  "tests": [
   {
@@ -208,7 +208,7 @@
    "status": "STANDBY"
   }
  },
- "finished": "2026-09-25 16:22:47",
- "seconds": 96.39,
+ "finished": "2026-09-25 17:26:41",
+ "seconds": 95.18,
  "log": "C01 PASS the Julius Live Terminal opens {'open': True, 'rows_on_open': 0, 'headline': '', 'note': 'first surface of the session; everything after this runs with it already used'}\nC02 PASS both companion terminals are on screen with the Live Terminal {'terminals': 2, 'titles': ['GPT 6 Astra', 'Claude Code Fable 5'], 'on_screen': True, 'note': \"the founder's rule is that the LLM and Jhinn terminals never share a side\"}\nC03 PASS Project Brain opens after the terminal, and every skin wears in the wardrobe {'brain_open': True, 'skins_worn': 5, 'skins_tried': 5, 'brain_still_open': True, 'stage_frame_counter': 0, 'note': 'stage_frame_counter recorded, not judged: SkinStageActor is null so it reads 0'}\nC04 PASS the player camera never moved while the wardrobe was used {'camera_drift_uu': 0.0, 'note': 'P0 item 1: no camera teleport, no world view -- the Dog on black and nothing else'}\nC05 PASS a Mission Contract runs its whole lifecycle in this same session {'stages': ['PREPARATION', 'RESEARCH', 'IMPLEMENTATION', 'VERIFICATION', 'REVIEW', 'COMPLETED'], 'terminal_rows_before': 0, 'terminal_rows_after': 71, 'beats': 18, 'note': \"the founder's list: start, planning, implementing, verifying, completion, return to idle\"}\nC05b PASS the Mission Contract panel opens in this session too {'open': True}\nC06 PASS Julius narrated the verification and completion, rather than the stages merely being set {'lines_written': 251, 'by_role': {0: {'written': 80, 'latest': 'all components returned to standby', 'status': 'COMPLETE'}, 1: {'written': 73, 'latest': 'available', 'status': 'STANDBY'}, 2: {'written': 98, 'latest': 'available', 'status': 'STANDBY'}}, 'terminal_rows': [0, 71], 'fixture': {'id': 'full_lifecycle', 'events': 0, 'progress': 0, 'seconds': 10.5, 'last_event': 'run.completed', 'verdict': 'applied'}, 'note': 'driven by a mission FIXTURE, not by beats or task stages: narration hangs off events, and setting a beat is not an event happening'}\nC07 PASS Wonder Web opens last, after every other surface has been used {'open': True, 'windows': 0, 'describes': 'open=1 presented=1 hidden=0 view_target=1 loaded=1 frame=idle tab=0 access=control viewport=idle status= running=0 input=1 chrome=00000 session_lines=0 painted=', 'note': 'opened last on purpose: it is the heaviest surface and the most likely to be broken by whatever ran before it'}\nC08 PASS the Live Terminal still opens after Wonder Web, the Brain and a whole mission {'open': True, 'rows_first': 0, 'rows_now': 71, 'surfaces_used': ['live terminal', 'companions', 'project brain', 'mission contract', 'wonder web'], 'note': 'this is the check no single-surface proof can make, and the reason this job exists'}\n"
 }

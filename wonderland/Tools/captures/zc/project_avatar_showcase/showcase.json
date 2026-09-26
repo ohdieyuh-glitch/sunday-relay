@@ -1,0 +1,91 @@
+{
+ "status": "done",
+ "why": null,
+ "spawn": [
+  -327.3,
+  -650.0,
+  109.1
+ ],
+ "approved": [
+  "CHERUBIM",
+  "SERAPH",
+  "TEN TAILS"
+ ],
+ "not_approved": [],
+ "pairs": [
+  {
+   "a": "TEN TAILS",
+   "b": "CHERUBIM",
+   "apart_uu": 1558.8,
+   "need_uu": 827.0,
+   "clear": true
+  },
+  {
+   "a": "TEN TAILS",
+   "b": "SERAPH",
+   "apart_uu": 1558.8,
+   "need_uu": 657.0,
+   "clear": true
+  },
+  {
+   "a": "CHERUBIM",
+   "b": "SERAPH",
+   "apart_uu": 1558.8,
+   "need_uu": 724.0,
+   "clear": true
+  }
+ ],
+ "spawn_edges": [
+  {
+   "name": "TEN TAILS",
+   "edge_from_spawn_uu": 520.0
+  },
+  {
+   "name": "CHERUBIM",
+   "edge_from_spawn_uu": 453.0
+  },
+  {
+   "name": "SERAPH",
+   "edge_from_spawn_uu": 623.0
+  }
+ ],
+ "intersections": [
+  {
+   "name": "TEN TAILS",
+   "intersects": false
+  },
+  {
+   "name": "CHERUBIM",
+   "intersects": false
+  },
+  {
+   "name": "SERAPH",
+   "intersects": false
+  }
+ ],
+ "motion": [
+  {
+   "name": "TEN TAILS",
+   "parts_moved": 21,
+   "parts": 147
+  },
+  {
+   "name": "CHERUBIM",
+   "parts_moved": 9,
+   "parts": 54
+  },
+  {
+   "name": "SERAPH",
+   "parts_moved": 10,
+   "parts": 44
+  }
+ ],
+ "REPORT": {
+  "ten_tails_large": "PASS",
+  "cherubim_large": "PASS",
+  "seraph_large": "PASS",
+  "full_scale_placement": "PASS",
+  "runtime_motion": "PASS",
+  "spawn_obstruction": "PASS"
+ }
+}
