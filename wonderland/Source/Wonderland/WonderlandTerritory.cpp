@@ -99,8 +99,14 @@ AWonderlandTerritoryCheckpoint::AWonderlandTerritoryCheckpoint()
 	Lamp->SetupAttachment(Root);
 	Lamp->SetRelativeLocation(FVector(0.0, 0.0, WTL::PylonHeight * 0.92));
 	Lamp->SetIntensityUnits(ELightUnits::Candelas);
-	Lamp->SetIntensity(9.0f);
-	Lamp->SetAttenuationRadius(900.0f);
+	// A MARKER, NOT A STREET LAMP. Measured after the checkpoints went in: the Golden Arrival marker stands at
+	// the Arrival Gate, which is exactly where the player spawns, and at nine candelas over nine metres it lit
+	// the whole plaza -- night at that spot went from 0.13 of the world's luma to 0.20 and stopped reading as
+	// night at all. What makes a checkpoint visible after dark is its own UNLIT ring, which renders the same
+	// colour at midnight as at noon and throws nothing; the lamp only has to put a little of that colour on
+	// the stone at its feet.
+	Lamp->SetIntensity(2.5f);
+	Lamp->SetAttenuationRadius(420.0f);
 	Lamp->SetCastShadows(false);
 }
 
@@ -175,7 +181,7 @@ void AWonderlandTerritoryCheckpoint::Stand(const FWonderlandTerritory& Territory
 	if (Lamp != nullptr)
 	{
 		Lamp->SetLightColor(Accent);
-		Lamp->SetIntensity(bFound ? 9.0f : 2.0f);
+		Lamp->SetIntensity(bFound ? 2.5f : 0.8f);
 	}
 }
 
@@ -195,7 +201,7 @@ void AWonderlandTerritoryCheckpoint::SetDiscovered(bool bDiscovered)
 	}
 	if (Lamp != nullptr)
 	{
-		Lamp->SetIntensity(bFound ? 9.0f : 2.0f);
+		Lamp->SetIntensity(bFound ? 2.5f : 0.8f);
 	}
 }
 

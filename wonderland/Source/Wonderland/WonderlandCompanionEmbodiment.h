@@ -115,6 +115,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	void SetGlowScale(float Scale);
 
+	/**
+	 * HOW HARD THE GLOWING CHANNELS BURN AGAINST THE NIGHT EXPOSURE. Driven by the day cycle; 1 is noon.
+	 *
+	 * A lit surface gets darker when the sun goes down. An EMISSIVE one does not -- it renders the value it
+	 * was given whatever the sky is doing -- and the night exposure lift of +1.45 EV, which is what makes the
+	 * dark world readable at all, then multiplies it by nearly three. Photographed at four in the morning the
+	 * Dog was a featureless white starburst with the eyes just visible inside it, and every flame skin does
+	 * the same thing. This is the correction, and it is a SEPARATE factor from SetGlowScale so the wardrobe's
+	 * 0.10 preview dimming and the clock cannot overwrite one another.
+	 */
+	void SetNightGlow(float Scale);
+
+	/**
+	 * Whether the clock is allowed to touch this body's glow at all. False for the wardrobe's preview figure,
+	 * which stands on its own black stage under its own light: a preview that got dimmer after sunset would
+	 * be reporting the weather rather than the skin.
+	 */
+	void SetExposureAware(bool bAware) { bExposureAware = bAware; }
+
 	float GetGlowScale() const { return GlowScale; }
 
 	/** Follow whatever pawn this controller is wearing, now and after it changes. */
@@ -611,6 +630,12 @@ private:
 	EWonderlandBodyRole BodyRole = EWonderlandBodyRole::Neutral;
 	/** See SetGlowScale. 1 is the authored flame, which is what every body in the world wears. */
 	float GlowScale = 1.0f;
+
+	/** See SetNightGlow. 1 is noon; the day cycle drives it down towards NightGlowFloor after dark. */
+	float NightGlowScale = 1.0f;
+
+	/** See SetExposureAware. */
+	bool bExposureAware = true;
 	/**
 	 * THE MATERIALS AS THE FIGURE FILE DECLARED THEM -- name, kind, authored colour and strength -- kept beside
 	 * MaterialInstances and parallel to it.

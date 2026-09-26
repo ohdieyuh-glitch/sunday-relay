@@ -947,6 +947,21 @@ void AWonderlandCompanionEmbodiment::SetGlowScale(float Scale)
 	RepaintColourway();
 }
 
+void AWonderlandCompanionEmbodiment::SetNightGlow(float Scale)
+{
+	if (!bExposureAware)
+	{
+		return;
+	}
+	const float Wanted = FMath::Clamp(Scale, 0.05f, 1.0f);
+	if (FMath::IsNearlyEqual(NightGlowScale, Wanted, 0.004f))
+	{
+		return;
+	}
+	NightGlowScale = Wanted;
+	RepaintColourway();
+}
+
 void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMaterialInstanceDynamic* Instance,
 	const FWonderlandCompanionMaterial& Def, const FLinearColor& Lit, const FLinearColor& Emissive)
 {
@@ -983,7 +998,10 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 	// the founder did not ask for is restored rather than merely skipped.
 	// AND HOW HARD THE FIRE BURNS ON THIS PARTICULAR BODY. Only the glowing channels: dimming the shell as
 	// well would turn a wardrobe preview into a night scene. See SetGlowScale.
-	FLinearColor Want = bGlows ? Authored * GlowScale : Authored;
+	// AND HOW HARD IT BURNS AGAINST THE SKY, which is the clock's business rather than the wardrobe's. The two
+	// factors are multiplied and never assigned over one another: a preview figure at 0.10 stays at 0.10 all
+	// night. See SetNightGlow.
+	FLinearColor Want = bGlows ? Authored * GlowScale * NightGlowScale : Authored;
 	if (bChosen)
 	{
 		switch (WonderlandMascotStyle::ChannelFor(Def.Name.ToString()))

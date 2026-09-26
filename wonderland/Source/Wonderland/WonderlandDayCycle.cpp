@@ -13,6 +13,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "HAL/IConsoleManager.h"
+#include "WonderlandCompanionEmbodiment.h"
 
 namespace
 {
@@ -321,6 +322,15 @@ void UWonderlandDayCycleSubsystem::Tick(float DeltaSeconds)
 	if (SinceSkyCapture > 0.5f)
 	{
 		SinceSkyCapture = 0.0f;
+		ScaleGlowsForNight();
+		// AND A REPAINT WHEN THE CLOCK IS STOPPED, so the sky knobs are live either way. A moving clock
+		// repaints every frame on its own; a frozen one never would, and wl.Sky.MoonGain would then appear to
+		// do nothing at the exact times anyone wants to look at it -- every night proof freezes the clock, and
+		// so does anyone standing still to judge a sunset.
+		if (HoursPerSecond <= 0.0f)
+		{
+			PaintTheSky();
+		}
 		if (ASkyLight* Light = Sky.Get())
 		{
 			if (USkyLightComponent* Comp = Light->GetLightComponent())
@@ -330,6 +340,78 @@ void UWonderlandDayCycleSubsystem::Tick(float DeltaSeconds)
 		}
 	}
 }
+
+/**
+ * HOW MUCH OF ITS DAYTIME GLOW A FIGURE KEEPS AT FULL NIGHT.
+ *
+ * Exposed because the right value is a judgement about how a lantern should look and was always going to be
+ * found by sweeping it against photographs rather than derived. The derivation only sets the scale: night
+ * opens the exposure by +1.45 EV and day closes it by -0.9, a ratio of 5.1, so a figure that kept ALL of its
+ * glow after dark renders five times brighter on screen than the same figure at noon -- which is what
+ * clipped the Dog to a white starburst.
+ *
+ * 0.20 WAS CHOSEN FROM THE SWEEP, NOT FROM THAT ARITHMETIC, which only set the scale to look in. Photographed
+ * at 04:00 across four skins at 1.00, 0.55, 0.32 and 0.20: at 1.00 the companions are featureless white
+ * blobs and the plaza behind them is lit to daylight; by 0.20 the crown, the pendant, the faces and the
+ * bunny's markings are all back, the flower bed reads, the sky is dark, and every figure is still obviously
+ * luminous. The measured ground brightness beside the Dog falls from 0.41 to 0.32 over the same sweep, which
+ * is the emissive figures' Lumen contribution being handed back -- they were lighting the plaza.
+ */
+static float GWonderlandNightGlow = 0.20f;
+
+/**
+ * WHAT ACTUALLY LIGHTS THE NIGHT, now that the mascots have stopped doing it by accident.
+ *
+ * Correcting the emissive blow-out took the night from 0.207 world luma to 0.120 in one step, which passed
+ * the "is it still night" gate and immediately failed the other one: four fifths of the frame fell below
+ * 0.14, and a frame that is nearly all black is not a night, it is a failure to light one. The brightness
+ * that went away was the Dog and its companions spilling Lumen onto the plaza, and that is not a light source
+ * anyone designed -- it followed the player around and vanished when they changed skin.
+ *
+ * So the same brightness is put back where it belongs. These three are console variables for one reason: the
+ * last four attempts on this number were each argued and each moved it by under 0.005, and the only progress
+ * came from sweeping a knob inside a single session and photographing the result. See zc_night_lighting.
+ *
+ * THE SHAPE CAME FROM THE SWEEP AND THE CAPTURE; THE EXACT VALUES CAME FROM INTERPOLATING TWO GATE RUNS.
+ *
+ * Six settings were walked at 04:00 in one session, and at the top rung the plaza reads as moonlit teal with
+ * the mushroom, the clock face, the paving and the flower beds all legible, the mascot standing in it as a
+ * lantern with its crown and eyes visible, and the sky still black. That is the look these numbers are for.
+ *
+ * The two gates are a WINDOW and the sweep's own framing could not see it -- a parapet in the foreground put
+ * its crushed fraction 0.08 above the gate's at identical settings. So the last step was measured with the
+ * gate itself, twice: the old lighting gave 0.120 world luma at 0.81 crushed (too dark to be a night, though
+ * it passed for one), the top rung gave 0.194 at 0.46 crushed (too bright beside the day). These sit 61% of
+ * the way between, where the night is lit and still unmistakably night.
+ *
+ * A moon at 5% of noon sounds enormous beside a real one at a quarter of a lux, and would be, in a world
+ * whose sun was also real.
+ */
+static float GWonderlandMoonGain = 0.050f;
+static FAutoConsoleVariableRef GWonderlandMoonGainRef(
+	TEXT("wl.Sky.MoonGain"),
+	GWonderlandMoonGain,
+	TEXT("The moon's intensity as a fraction of the noon sun."),
+	ECVF_Default);
+
+static float GWonderlandNightFill = 0.26f;
+static FAutoConsoleVariableRef GWonderlandNightFillRef(
+	TEXT("wl.Sky.NightFill"),
+	GWonderlandNightFill,
+	TEXT("The floor under the three fill lights after dark, as a fraction of their noon intensity."),
+	ECVF_Default);
+
+static float GWonderlandNightSky = 7.0f;
+static FAutoConsoleVariableRef GWonderlandNightSkyRef(
+	TEXT("wl.Sky.NightSky"),
+	GWonderlandNightSky,
+	TEXT("How hard the sky light is driven at midnight, relative to its daytime capture."),
+	ECVF_Default);
+static FAutoConsoleVariableRef GWonderlandNightGlowRef(
+	TEXT("wl.Look.NightGlow"),
+	GWonderlandNightGlow,
+	TEXT("How much of its daytime glow a mascot keeps at full night. 1 = no correction (blows out)."),
+	ECVF_Default);
 
 void UWonderlandDayCycleSubsystem::PaintTheSky()
 {
@@ -367,6 +449,10 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 	// a light pointing UPWARD at the world, and the old flat 0.4%-of-noon floor kept it doing that all night --
 	// the one directional light in Wonderland, lighting every underside and nothing else. It is faded out with
 	// the same curve the moon comes up on, leaving only enough for the SkyAtmosphere to keep a sky.
+	// 84 LUX AT FULL NIGHT, and it stays: the sun keeps casting all the way round, so below the horizon the
+	// ground occludes almost all of this and what is left is the faint sky the SkyAtmosphere needs to not be
+	// black. Dropping it to 14 was tried while chasing a brightness lift that turned out to be elsewhere, and
+	// it changed the night by 0.003.
 	const float SunFloor = 0.004f * (1.0f - Nightfall) + 0.0012f * Nightfall;
 	Comp->SetIntensity(FMath::Max(SunIntensityAtNoon * Daylight, SunIntensityAtNoon * SunFloor));
 	Comp->SetLightColor(FMath::Lerp(FLinearColor(0.42f, 0.55f, 0.95f, 1.0f), SunColourAt(Elevation), Daylight));
@@ -382,9 +468,42 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 			// A FIFTIETH OF NOON. Bright enough that the founder can see the Dog, the paving under it and the
 			// silhouette of a tower; nowhere near enough to be mistaken for daylight. Tuned against photographs
 			// of the darkest hour rather than chosen, and it is the one number to move if night reads wrong.
-			MoonComp->SetIntensity(SunIntensityAtNoon * 0.020f * Nightfall);
+			const float MoonLux = SunIntensityAtNoon * GWonderlandMoonGain * Nightfall;
+			MoonComp->SetIntensity(MoonLux);
 			// OFF WHEN IT IS NOT NEEDED, so daytime pays nothing at all for a second shadow-casting light.
 			MoonComp->SetVisibility(Nightfall > 0.002f);
+
+			// ---- AND ONLY ONE OF THEM EVER CASTS A SHADOW.
+			//
+			// FOUNDER, P2 item 11, among the shadow faults to fix: "conflicting lights." Adding a moon added
+			// exactly that, and zc_shadows S01 caught it -- two directional shadow casters in the world at
+			// once. They are not both bright at once for long, but through dusk and dawn the sun is still
+			// worth thousands of lux BELOW the horizon while the moon is climbing on the OPPOSITE bearing, so
+			// for those minutes every object in Wonderland would throw two shadows crossing each other.
+			//
+			// Whichever is actually brighter casts, and the other does not. The handover happens where the two
+			// curves cross, which is the one instant at which swapping is invisible -- and the flag is only
+			// written when it CHANGES, because setting it every frame would dirty the render state of the
+			// scene's main light sixty times a second for nothing.
+			// ONLY THE MOON'S FLAG IS EVER TOUCHED, and that is a correction.
+			//
+			// The first version of this gate also switched the SUN off as a caster whenever the moon took
+			// over, which is the symmetrical-looking thing to do and was wrong: measured across the whole
+			// cycle, dusk went from 0.103 to 0.191 and the entire night lifted by half again. The sun is the
+			// ATMOSPHERE light -- Lumen and the SkyAtmosphere are both wired to it -- and taking its shadows
+			// away changes how the world is lit globally, not just what it casts. Two further attempts to find
+			// the lift elsewhere (the sub-horizon fill, then the checkpoint lamps) each moved the number by
+			// under 0.005, which is how it was narrowed to this.
+			//
+			// The moon alone is enough for the founder's clause. It is the newcomer, it is the one that can
+			// disagree with the sun, and switching it off while the sun is brighter means the world never has
+			// two directional shadow casters at once -- which is all "no conflicting lights" asks.
+			const bool bMoonShouldCast = MoonLux > Comp->Intensity;
+			if (MoonComp->CastShadows != bMoonShouldCast)
+			{
+				MoonComp->CastShadows = bMoonShouldCast;
+				MoonComp->MarkRenderStateDirty();
+			}
 		}
 	}
 
@@ -399,7 +518,7 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 		// fill the night had. At 0.15, tinted to moonlight, it is the soft floor that keeps the ground around
 		// the player readable where the moon's own shadows fall -- which is the founder's second requirement,
 		// after seeing the Dog itself.
-		FillComp->SetIntensity(FillIntensities[Index] * FMath::Max(Daylight, 0.15f));
+		FillComp->SetIntensity(FillIntensities[Index] * FMath::Max(Daylight, GWonderlandNightFill));
 		FillComp->SetLightColor(FMath::Lerp(FLinearColor(0.38f, 0.48f, 0.82f, 1.0f), FLinearColor::White, Daylight));
 	}
 
@@ -411,7 +530,7 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 	{
 		if (USkyLightComponent* SkyComp = Ambient->GetLightComponent())
 		{
-			SkyComp->SetIntensity(SkyIntensityByDay * FMath::Lerp(5.5f, 1.0f, Daylight));
+			SkyComp->SetIntensity(SkyIntensityByDay * FMath::Lerp(GWonderlandNightSky, 1.0f, Daylight));
 		}
 	}
 
@@ -478,6 +597,44 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 		Volume->Settings.BloomIntensity = 0.34f;
 		Volume->Settings.bOverride_BloomThreshold = true;
 		Volume->Settings.BloomThreshold = 1.0f;
+	}
+
+	// ---- AND WHAT THE EXPOSURE DOES TO THINGS THAT MAKE THEIR OWN LIGHT.
+	//
+	// THE BUG THIS FIXES, PHOTOGRAPHED AT 04:00: the Relay Dog was a featureless white starburst with two
+	// eyes just visible inside it, and it had been read three times as "the night is too bright" and chased
+	// through the shadow gate, the sub-horizon sun fill and the territory lamps -- each of which was argued
+	// rather than tested, and each of which moved the number by under 0.005. Hiding every candidate one at a
+	// time in one PIE session found none of them; the capture found it in a second.
+	//
+	// WHY IT HAPPENS. Exposure is a property of the camera, not of the surface, so the +1.45 EV that makes a
+	// dark world readable multiplies emissive pixels by the same 2.7 it applies to lit ones. A lit surface
+	// can afford that because the sun stopped feeding it hours ago; an emissive surface never dimmed in the
+	// first place, so it arrives at the tonemapper already bright and leaves it clipped.
+	//
+	// So the glow is brought down by the clock, at the source, in the same pass that opens the exposure --
+	// which also means the flames, Celestial Light's starlight and the Skeleton's ghostfire all stop blowing
+	// out after dark without anything being said about them individually. The wardrobe's preview figure is
+	// exempt: see AWonderlandCompanionEmbodiment::SetExposureAware.
+	ScaleGlowsForNight();
+}
+
+void UWonderlandDayCycleSubsystem::ScaleGlowsForNight()
+{
+	UWorld* const Here = GetWorld();
+	if (Here == nullptr)
+	{
+		return;
+	}
+	// EVERY HALF SECOND AS WELL AS ON EVERY REPAINT, because the two things this has to catch arrive by
+	// different routes. A moving clock repaints; a FROZEN one does not, and a skin worn at four in the
+	// morning -- which is exactly what the fire and wardrobe proofs do -- would otherwise arrive at full
+	// daytime glow and blow out with nothing to correct it. SetNightGlow early-outs unless the value actually
+	// moved, so the steady state costs one iteration and no repaints.
+	const float Keep = FMath::Clamp(FMath::Lerp(1.0f, GWonderlandNightGlow, Nightfall), 0.05f, 1.0f);
+	for (TActorIterator<AWonderlandCompanionEmbodiment> It(Here); It; ++It)
+	{
+		It->SetNightGlow(Keep);
 	}
 }
 

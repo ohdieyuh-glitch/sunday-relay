@@ -1,6 +1,6 @@
 {
  "name": "zc_shadows",
- "started": "2026-09-25 19:22:02",
+ "started": "2026-09-26 10:24:11",
  "status": "measured",
  "tests": [
   {
@@ -14,7 +14,7 @@
     "shadow_casters": [
      "V2_Sun"
     ],
-    "directional_lights": 4,
+    "directional_lights": 5,
     "note": "the fills light the scene without casting, so only the sun draws a shadow"
    }
   },
@@ -35,9 +35,9 @@
    "name": "with the sky and the camera held still, the shadows hold still too",
    "pass": true,
    "detail": {
-    "with_shadows": 0.8245,
-    "without_shadows_control": 3.3412,
-    "allowed": 4.3412,
+    "with_shadows": 1.6831,
+    "without_shadows_control": 1.1876,
+    "allowed": 2.1876,
     "note": "mean luminance change per sample across 0.8 s; the control is the same scene with r.ShadowQuality 0, so TSR's own jitter is subtracted rather than assumed away"
    }
   },
@@ -46,8 +46,8 @@
    "name": "the measurement actually looked at something",
    "pass": true,
    "detail": {
-    "with_shadows": 0.8245,
-    "without_shadows": 3.3412,
+    "with_shadows": 1.6831,
+    "without_shadows": 1.1876,
     "note": "flat on both sides means the render target came back empty, not that the world was still; that is a failure of this job rather than a pass for the product"
    }
   }
@@ -80,6 +80,13 @@
    "casts": false,
    "sun": false,
    "mobility": "<ComponentMobility.MOVABLE: 2>"
+  },
+  {
+   "label": "WL_Moon",
+   "intensity": 0.0,
+   "casts": false,
+   "sun": false,
+   "mobility": "<ComponentMobility.MOVABLE: 2>"
   }
  ],
  "sun_shadow": {
@@ -93,18 +100,18 @@
   "sample_pixels": [
    [
     0,
+    2,
+    0
+   ],
+   [
+    0,
     1,
     0
    ],
    [
-    0,
-    0,
-    0
-   ],
-   [
-    127,
-    174,
-    209
+    128,
+    175,
+    210
    ],
    [
     0,
@@ -113,18 +120,18 @@
    ],
    [
     24,
-    15,
-    17
+    17,
+    19
    ]
   ]
  },
  "stability": {
-  "still_frames_differ_with_shadows": 0.8245,
-  "still_frames_differ_without_shadows": 3.3412,
+  "still_frames_differ_with_shadows": 1.6831,
+  "still_frames_differ_without_shadows": 1.1876,
   "grid_points": 108,
   "gap_s": 0.8
  },
- "finished": "2026-09-25 19:22:28",
- "seconds": 26.1,
- "log": "S01 PASS no two lights are fighting over the same shadow {'atmosphere_suns': ['V2_Sun'], 'shadow_casters': ['V2_Sun'], 'directional_lights': 4, 'note': 'the fills light the scene without casting, so only the sun draws a shadow'}\nS02 PASS the sun's shadow bias is in the working band, and it has cascades to spend {'bias': 0.30000001192092896, 'slope_bias': 0.3499999940395355, 'cascades': 4, 'dynamic_distance_uu': 18000.0, 'note': 'below the band is acne on lit surfaces; above it, a shadow that floats off its object'}\nS03 PASS with the sky and the camera held still, the shadows hold still too {'with_shadows': 0.8245, 'without_shadows_control': 3.3412, 'allowed': 4.3412, 'note': \"mean luminance change per sample across 0.8 s; the control is the same scene with r.ShadowQuality 0, so TSR's own jitter is subtracted rather than assumed away\"}\nS04 PASS the measurement actually looked at something {'with_shadows': 0.8245, 'without_shadows': 3.3412, 'note': 'flat on both sides means the render target came back empty, not that the world was still; that is a failure of this job rather than a pass for the product'}\n"
+ "finished": "2026-09-26 10:24:37",
+ "seconds": 25.8,
+ "log": "S01 PASS no two lights are fighting over the same shadow {'atmosphere_suns': ['V2_Sun'], 'shadow_casters': ['V2_Sun'], 'directional_lights': 5, 'note': 'the fills light the scene without casting, so only the sun draws a shadow'}\nS02 PASS the sun's shadow bias is in the working band, and it has cascades to spend {'bias': 0.30000001192092896, 'slope_bias': 0.3499999940395355, 'cascades': 4, 'dynamic_distance_uu': 18000.0, 'note': 'below the band is acne on lit surfaces; above it, a shadow that floats off its object'}\nS03 PASS with the sky and the camera held still, the shadows hold still too {'with_shadows': 1.6831, 'without_shadows_control': 1.1876, 'allowed': 2.1876, 'note': \"mean luminance change per sample across 0.8 s; the control is the same scene with r.ShadowQuality 0, so TSR's own jitter is subtracted rather than assumed away\"}\nS04 PASS the measurement actually looked at something {'with_shadows': 1.6831, 'without_shadows': 1.1876, 'note': 'flat on both sides means the render target came back empty, not that the world was still; that is a failure of this job rather than a pass for the product'}\n"
 }

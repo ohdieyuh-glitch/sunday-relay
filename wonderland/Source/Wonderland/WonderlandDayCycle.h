@@ -66,6 +66,8 @@ private:
 	/** Points every pond, well, canal and fountain basin at the real water material, if it is present. */
 	void DressTheWater();
 	void ApplyStableShadows();
+	/** Bring every mascot's emissive channels down to meet the night exposure. See the definition. */
+	void ScaleGlowsForNight();
 	void PaintTheSky();
 
 	/** 0-24. Starts mid-morning, which is the light every reference plate of Wonderland was made in. */
