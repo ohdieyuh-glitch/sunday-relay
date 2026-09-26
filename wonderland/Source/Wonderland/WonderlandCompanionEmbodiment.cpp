@@ -2,6 +2,7 @@
 
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "ProceduralMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "WonderlandMascotStyle.h"
@@ -591,7 +592,15 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		// on the frame the avatar arrives, and the scan gets slower as more avatars accumulate. P0 item 5 is
 		// about exactly that frame. Nothing reads these names -- no proof and no C++ looks up "Mesh_*", only
 		// the pivots are found by name -- so the engine's counter-based naming does the same job for free.
-		UInstancedStaticMeshComponent* Mesh = NewObject<UInstancedStaticMeshComponent>(this);
+		// HIERARCHICAL, NOT PLAIN. HISM keeps a quadtree over its instances and culls and LODs them per
+		// instance on the render thread; a plain ISM submits the lot. These figures animate by moving the
+		// COMPONENT -- every instance inside one is static relative to it -- which is the case HISM is built
+		// for, so the tree is built once at load rather than rebuilt per frame.
+		//
+		// Tried because the crowd cost is per-avatar render work and the alternatives were all closed: the
+		// material regrouping did nothing measurable, both voxel culls removed geometry that turned out to be
+		// visible, and a coarser voxel distorts the creature. This one changes no art at all.
+		UInstancedStaticMeshComponent* Mesh = NewObject<UHierarchicalInstancedStaticMeshComponent>(this);
 		Mesh->SetMobility(EComponentMobility::Movable);
 		// Additive cannot be Nanite. See LoadPlainCube.
 		Mesh->SetStaticMesh(Kind == EWonderlandCompanionMaterialKind::Additive ? PlainCube : Cube);
