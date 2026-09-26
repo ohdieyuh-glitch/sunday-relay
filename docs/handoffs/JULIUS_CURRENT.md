@@ -4,6 +4,9 @@
 > repository evidence does not. Update it whenever meaningful state changes and
 > before ending a session. Never rely on `/resume` as the sole record.
 
+**Most recent session: 2026-09-26, the BETA QUALIFICATION run. Read §000 first.**
+> The paragraph below it is the record of the session before that.
+
 **Most recent session:** 2026-09-08, the **Claude Code cloud session**. Read
 **§00** first: it holds the current branch, the commits it added, a security
 finding about the merge-provenance credential, and the founder-only actions
@@ -11,6 +14,138 @@ that gate everything else. **§00h** is the newest work: stale-handoff
 rejection, the reviewer-binding guard, the challenge leg of the contract
 lifecycle, and the concurrent-proposal fix a real PostgreSQL race found.
 Everything from §0a onward is the earlier local record.
+
+---
+
+## 000. BETA QUALIFICATION RUN 2026-09-26 — THE TWO STUBS THAT WERE COUNTED AS CAPABILITIES
+
+**Read this first.** It is the newest work and it changes what the previous rows
+of this file can be trusted to mean.
+
+**Branch:** `relay/julius-beta-qualification`, worktree `C:\dev\iwonder\julius-beta`.
+**Base:** `origin/main` = `a384b21590c664f752682de86f4dcc6fb533849d` (#287).
+**Commits:** `1a0c679b`, `574d660d`, `2953966c`. **Not pushed. No PR.**
+**Paid API spend this run: $0.00.** No provider credential exists in this
+environment; every proof below is provider-free by construction.
+
+### What the audit found before anything was written
+
+`src/relay/mission/julius/julius-context-integrity.ts` and
+`julius-memory-trust.ts` were **five throwing stubs each**, seeded as the
+deliverables of paid Live Missions 5 and 4. Neither mission completed. Nothing in
+the runtime held a `JuliusMemoryClaim`; the barrel was the only importer of
+either file. So every claim resting on them — authority-ranked context, "a
+verified fact survives noisy low-authority memory", "an authoritative conflict
+fails closed", "auto-generate is allowed, auto-trust is not" — was a comment, and
+`docs/JULIUS_BETA_READINESS.md` scored both as present.
+
+That is the single most important fact in this section: **the readiness document
+read a declared signature as a capability.** The new assessment at the top of that
+file says so, and its 74% is a correction rather than a regression.
+
+### What is now true
+
+- **Both modules are implemented**, and each paid mission's own specification is
+  committed beside its module, ported from `node:test` to vitest and extended.
+  Provisioning each mission's slice and running its own declared `testCommand`
+  against the landed source exits zero: **10/10 for Mission 4, 21/21 for Mission
+  5**. Those two fixtures are therefore VACUOUS as deliverable proofs now —
+  their slices carry implemented source. `julius-bundle-cell.ts` remains a
+  genuine unimplemented deliverable behind `julius-continuous-1`.
+- **Context integrity is on the real dispatch path.** `compileJuliusContext`
+  routes through `compileContextWithIntegrity` whenever it is handed
+  claim-qualified entries, and the pipeline always hands it some:
+  `julius-context-provenance.ts` derives a claim per brain entry from durable
+  columns only — `worker_id`, `entry_kind`, `evidence_ids`, `created_at`, three of
+  which the PostgreSQL read had never selected.
+- **The delivered packet is proven, not the selector.**
+  `julius-context-delivery.e2e.test.ts` seeds a brain hostile four ways at once —
+  60 imperative unverified notes the CODER wrote about itself, each five times the
+  size of the one reviewer-cited finding the task needs, all retrieved first, plus
+  a reviewer-only entry, a SECRET and another task's — drives the real run loop,
+  and reads the packet out of the durable snapshot the dispatch was recorded
+  against. The finding is second, behind only the locked term. A control
+  simulates the pre-integrity compiler at the same budget and loses it entirely.
+- **Migration 025** makes the decision durable, nullable with no default: NULL is
+  "never checked", `[]` is "checked, nothing excluded", and the decision reaches
+  the content hash because `persist` deduplicates on it.
+- **A Learning Loop that measures.** `julius-learning-loop.ts` is a measurement
+  and a promotion gate, not a learner. The matched pair runs through the real
+  loop: the mission without the learning takes a repair round because the real
+  context compiler could not carry a fact nobody stored. The gate refuses on
+  regression, on no effect, on an unmatched pair, on an unmeasured dimension and
+  on a policy that could not refuse anything. **The worker's knowledge-dependence
+  is the fixture's premise and the file says so.**
+- **A reviewer that catches.** Every previous repair proof handed the reviewer its
+  conclusion as an array. `contentReviewer` reads the REAL `ReviewPacket` the real
+  Hermes adapter built from the real artifact exchange, and finds a real
+  violation of this repository's own rule in an added line:
+  `+export const costUsdMicros = reported ?? 0;`. Four cases: the catch and its
+  repair and re-review to completion; the SAME judge approving the clean diff
+  when it arrives first; an unrepaired defect caught AGAIN with the run refusing
+  to complete; and the full lineage.
+- **Provider conformance is keyed to a served model.** The occupant registry
+  carries a required `qualification`, and `juliusProviderQualification` answers
+  VERIFIED only for a model the qualification covered. **One leg is VERIFIED:
+  `hermes_local` at `grok-build-0.1`.** The architect and Coding Agent legs ran in
+  paid run 34414726976 and its bundle names neither served model, so both read
+  COMPATIBLE with the run as evidence and a note naming what is missing.
+- **An authoritative clash fails the task, not the tick.** The refusal the
+  compiler throws is now a recorded `task.failed` with
+  `failureClass: context_integrity_unresolved_clash`, both conflicting claim ids,
+  and `errorRetryable: false`. `deps.contextQualification` is the seam a claim
+  store will arrive through and is how the proof drives it.
+- **`inspectSlots`** projects the three peers from the durable ledger for
+  Wonderland; `docs/JULIUS_WONDERLAND_CONTRACT.md` is the contract.
+
+### Four defects found by doing the above, all repaired
+
+1. **The context redaction named nothing.** `(?:api_key|token|secret)` with
+   `'$1=[REDACTED]'` — a non-capturing group and a `$1` JavaScript leaves as the
+   literal text `$1`. Every redacted credential in every packet Julius has ever
+   compiled read `$1=[REDACTED]`.
+2. **Two mission slices could not run.** `julius-repair-lineage` grew a value
+   import of `julius-segment-lineage` and no slice manifest followed it, so
+   provisioning Mission 4 or 5 and running its own declared test command died on
+   ERR_MODULE_NOT_FOUND before an assertion. `scripts/julius-mission-slice.test.ts`
+   now resolves every relative import of every slice mission transitively.
+3. **The brain read discarded three columns** it had held since migration 014.
+4. **The seeded specs' `claim()` helper dropped `over.claimId` silently**, so a
+   case naming its own claim ids asserted on relations that did not exist.
+
+### What this run deliberately did NOT do
+
+- **No paid run.** No credential is present and spending one is a founder act.
+  The representative final beta mission is therefore not run, and row 14 of the
+  readiness scorecard is 30% because of it.
+- **No PR, no push.** The branch is local. Landing follows the worker ceremony in
+  `docs/JULIUS_WORKER_PR_RUNBOOK.md`, and this session does not merge.
+- **Nothing under `wonderland/` was touched.** A Wonderland editor session was
+  active on this machine throughout (its backup manifests are 15 minutes apart in
+  `C:\dev\iwonder\recovery\_manifests`). The Wonderland-facing work is a Julius
+  API plus a contract document, so the session that owns the client can consume
+  it without a merge against this lane.
+- **PR #286 was not touched.** It is frozen for founder review and it is the
+  single dependency shared by three rows of the scorecard.
+
+### The suite, honestly
+
+`npm test` on Windows is **not green, before or after**. The baseline at
+`a384b215` was 194 failing cases across 56 files, dominated by platform paths:
+the MCP stdio proofs (13, already fixed on the unlanded `local/julius-mcp-authority`),
+spawned-process and path handling in `ship-runner`, `repository-target-observer`
+and the Hermes adapter. CI on Linux is the authority.
+
+The clean signal is per directory: `src/relay/mission/julius` had 1 failing case
+at baseline and has 1 after, with 1,830 passing and about 120 of them new;
+`relay-bridge/julius/julius-live-composition.test.ts` is 161/161.
+
+### JULIUS BETA READINESS: 74%
+
+Full scorecard, weights and both remaining paths in
+`docs/JULIUS_BETA_READINESS.md`. The three highest-value next moves, in order:
+land PR #286 (founder); build the claim store; buy one paid run whose bundle
+records every served model.
 
 ---
 
