@@ -95,31 +95,15 @@ def job():
                 all_files.append(os.path.join(AVATARS, name))
     except Exception as err:                                       # noqa: BLE001
         RESULT["avatars_error"] = str(err)[:160]
+    # THE CROWD TIER IS THE MATERIAL FOLD ONLY. A hidden-voxel cull was tried and REVERTED -- see
+    # Tools/verify_cull_lossless.py. It dropped a fifth of every figure and took 40 avatars from 169 ms to
+    # 109 ms, which was the best number of the day and was wrong: face sampling found 979 of 1,092 dropped
+    # Cherubim boxes and 903 of 999 Seraph boxes with an EXPOSED FACE. The nine-point corner test it was
+    # built on cannot see a gap between the corners it samples. The figures would have come back moth-eaten.
     files = [f for f in all_files if "_Small" in os.path.basename(f)] or all_files
-    # TENTAILS IS EXCLUDED FROM THE CROWD, and the reason is a count rather than a preference.
-    #
-    # The cost here is per COMPONENT -- one instanced component is one draw batch -- not per voxel, which is
-    # why the Small tier barely helped: it cuts boxes and not groups. Counting the groups in the crowd tier:
-    #
-    #     Cherubim_Small   5,885 boxes /  25 groups
-    #     Seraph_Small     5,190 boxes /  25 groups
-    #     TenTails_Small  12,105 boxes / 123 groups      <- five times the components
-    #
-    # TenTails_Small keeps 123 of its Large tier's 124 groups: its ten tails are 80 groups on their own. So a
-    # crowd containing TenTails is mostly paying for TenTails. Measuring the two families whose crowd tier is
-    # actually a crowd tier says whether the SYSTEM scales or whether one family does not, and those are very
-    # different findings for the founder to act on.
-    # TENTAILS IS BACK IN, through a crowd tier built for the job.
-    #
-    # It was excluded to find out whether the SYSTEM scaled or one family did not, and the answer was the
-    # family: TenTails_Small keeps 123 of its Large tier's 124 groups because its ten tails each carry the
-    # same eight materials. Tools/make_tentails_crowd.py folds the five sub-pixel ones into the three that
-    # carry the figure -- 123 groups to 73, tails 80 to 30 -- with every box, every tail's own phase and
-    # amplitude, and the silhouette unchanged. TenTails_Small itself is untouched.
-    # Which TenTails the crowd uses, so the two can be compared in ONE session at one thermal state rather
-    # than across runs an hour apart -- the confound that already cost me a false regression today.
-    # READ FROM A FILE, NOT THE ENVIRONMENT. The job runs inside the editor, which inherited its environment
-    # when it launched, so an `export` in the shell that submits the job never reaches here -- the first
+
+    # WHICH TENTAILS, read from a file rather than the environment: the job runs inside the editor, which
+    # inherited its environment at launch, so an export in the submitting shell never reaches here. The first
     # attempt at this A/B silently measured the same tier twice and looked like a result.
     want = "Crowd"
     try:
@@ -130,8 +114,12 @@ def job():
     except Exception:
         want = "Crowd"
     RESULT["tentails_tier"] = want
+
+    # ALWAYS swap, whichever tier was asked for. Guarding this with `if want != "Crowd"` left TenTails_Small
+    # in the list when Crowd was requested, so the run reported the crowd tier and measured the stock one.
     crowd = [f for f in all_files if ("TenTails_" + want) in os.path.basename(f)]
-    files = [f for f in files if "TenTails" not in os.path.basename(f)] + crowd
+    if crowd:
+        files = [f for f in files if "TenTails" not in os.path.basename(f)] + crowd
     RESULT["crowd_tier"] = [os.path.basename(f) for f in files]
     if not files:
         record("X00", "there are avatars to stand up", False, dir=AVATARS)

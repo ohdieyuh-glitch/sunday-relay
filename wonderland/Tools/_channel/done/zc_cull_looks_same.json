@@ -1,0 +1,28 @@
+{
+ "name": "zc_cull_looks_same",
+ "started": "2026-09-25 19:44:36",
+ "status": "captured; the verdict on whether it looks the same is the pictures",
+ "tests": [
+  {
+   "id": "V00",
+   "name": "each family was photographed with both tiers in one frame",
+   "pass": true,
+   "detail": {
+    "captures": [
+     "TenTails",
+     "Cherubim",
+     "Seraph"
+    ],
+    "note": "original on the LEFT, culled on the RIGHT, same distance and same light -- the only difference in the frame is the buried voxels"
+   }
+  }
+ ],
+ "captures": {
+  "TenTails": "C:/dev/iwonder/wonderland-task3/wonderland/Tools\\captures\\zc\\cull_looks_same\\01_tentails.jpg",
+  "Cherubim": "C:/dev/iwonder/wonderland-task3/wonderland/Tools\\captures\\zc\\cull_looks_same\\02_cherubim.jpg",
+  "Seraph": "C:/dev/iwonder/wonderland-task3/wonderland/Tools\\captures\\zc\\cull_looks_same\\03_seraph.jpg"
+ },
+ "finished": "2026-09-25 19:45:05",
+ "seconds": 28.85,
+ "log": "V00 PASS each family was photographed with both tiers in one frame {'captures': ['TenTails', 'Cherubim', 'Seraph'], 'note': 'original on the LEFT, culled on the RIGHT, same distance and same light -- the only difference in the frame is the buried voxels'}\n"
+}
