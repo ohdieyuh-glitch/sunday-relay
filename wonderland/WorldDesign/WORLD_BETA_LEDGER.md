@@ -394,3 +394,34 @@ Checked and deliberately NOT changed while here: WriteLeg multiplies Chain.Forwa
 building WalkAngles, once inside RootRotation). Every sign is assigned as exactly +/-1, so the square is 1
 and the overlay's walk component reduces to HipDeg, matching the plain write at RelayDogCharacter.cpp:1853.
 The redundancy is load-bearing: removing one multiply would flip the legs on any chain measuring -1.
+
+## 2026-09-26 - TenTails in a crowd: measured, partly fixed, and blocked on art direction
+
+P0 item 5 ends "Project Avatars must scale inside one Server Avatar". Nothing had tested that clause;
+zc_avatar_cost stops at ten. zc_avatar_scale walks to forty.
+
+THE SYSTEM SCALES. Cherubim + Seraph, Small tier, forty inside one Server Avatar: 1.973 ms each, growth
+1.20x across four times the crowd. Flat within this machine's noise.
+
+TENTAILS DOES NOT, and it is the only one. Two causes were tested:
+
+  COMPONENT COUNT - ruled out by experiment. TenTails_Small carries 123 instanced components against the
+  other families' 25, because its ten tails each declare the same eight materials. make_tentails_crowd.py
+  folds the five sub-pixel ones: 123 groups -> 73, tails 80 -> 30, every box and every tail's own phase
+  and amplitude preserved. Same-session A/B at forty avatars: 169.26 ms -> 161.31 ms. 41% fewer draw
+  batches bought 5%. Kept, because 5% is free and invisible, but the theory was wrong.
+
+  VOXEL COUNT - fits the numbers. Cherubim_Small 5,885 boxes, Seraph_Small 5,190, TenTails_Small 12,105.
+  A crowd of all three averages 7,727 an avatar against 5,537 without TenTails: 1.40x. Measured cost
+  ratio at forty is 161 against 112: 1.44x. TenTails costs more because it is twice the figure.
+
+AND THE OBVIOUS FIX IS THE ONE THE FOUNDER RULED OUT. A genuinely cheaper TenTails means fewer boxes,
+which means a coarser voxel. project_avatar_forge.py carries a per-stage `tile`, and this project already
+learned the hard way that tile is STEP AND FEATURE SIZE together - resolution is not a detail knob, and
+sub-voxel curvature quantises flat. Coarsening would not simplify the creature, it would distort it into
+the blockiness P0 item 2 explicitly forbids. The forge's own comment says the finer voxel is 'what stopped
+it reading as LEGO in the first place'.
+
+So this is blocked on art direction rather than on engineering, and the block is recorded with the number
+instead of a shrug: a crowd containing TenTails costs 1.43x per avatar and 161 ms at forty. Cherubim and
+Seraph need nothing.
