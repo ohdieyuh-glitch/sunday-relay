@@ -149,7 +149,11 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
 
   async brainEntriesForRun(runId: string, projectId: string): Promise<readonly JuliusBrainEntry[]> {
     const result = await this.pool.query<Record<string, unknown>>(
-      `SELECT b.entry_id,b.entry_kind,b.safe_content,b.task_id FROM relay_wonderland.julius_brain_entries b
+      // `worker_id`, `evidence_ids` and `created_at` have been on this table
+      // since migration 014 and were never selected, so every entry reached the
+      // context compiler unattributed, uncited and undated. The integrity layer
+      // ranks on exactly those three.
+      `SELECT b.entry_id,b.entry_kind,b.safe_content,b.task_id,b.worker_id,b.evidence_ids,b.created_at FROM relay_wonderland.julius_brain_entries b
         WHERE b.run_id=$1 AND b.project_id=$2 ORDER BY b.revision LIMIT $3`,
       [runId, projectId, JULIUS_READ_LIMIT],
     );
@@ -168,6 +172,11 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
       // INTERNAL, not PUBLIC: the compiler drops SECRET and keeps the rest,
       // and calling a stored entry PUBLIC would be a claim nobody checked.
       sensitivity: 'INTERNAL',
+      provenance: {
+        workerId: String(row.worker_id),
+        recordedAt: new Date(String(row.created_at)).toISOString(),
+        evidenceIds: parsed<string[]>(row.evidence_ids, []),
+      },
     }));
   }
 

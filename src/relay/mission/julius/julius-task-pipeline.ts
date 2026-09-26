@@ -38,6 +38,7 @@ import { safeReasonCode, type JuliusDispatchWorkspace, type JuliusProviderRouter
 import { juliusCostComponent } from './julius-cost-accounting';
 import { juliusContractDisposition, juliusContractDispositionFacts } from './julius-contract-disposition';
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
+import { deriveJuliusContextQualification } from './julius-context-provenance';
 import { JULIUS_DEFAULT_MAX_CODER_SEGMENTS, evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
 import { juliusWorkUnitRootOf, repairLineageRootOf, repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
@@ -864,12 +865,30 @@ export async function runClaimedTask(
      * judge resolution) as FINDING entries scoped to this task and role.
      */
     const priorFindings = repairContextFindings(task, runTasks, findings);
+    /**
+     * THE CONTEXT INTEGRITY LAYER, ON THE REAL DISPATCH PATH.
+     *
+     * Every packet a live worker receives is now authority-ranked: the locked
+     * terms first, then Julius's own decisions, then the reviewer's cited
+     * findings, and an unverified handoff note last — whatever order the brain
+     * rows happened to be written in, and however imperative their prose. The
+     * qualification is DERIVED from durable columns only
+     * (`julius-context-provenance.ts`); an entry the store cannot attribute is
+     * admitted at the lowest standing rather than left out.
+     *
+     * This is deliberately not behind a flag. A ranking that runs for a fixture
+     * and not for a mission proves nothing about the mission, and the failure it
+     * prevents — one fat unverified memory crowding out the finding a repair
+     * exists to address — is a failure of the real path only.
+     */
+    const contextEntries = [...brain, ...priorFindings.map((finding) => findingEntryFor(task, finding))];
     const snapshot = createJuliusContextSnapshot({
+      qualification: deriveJuliusContextQualification(contextEntries),
       contextId: deps.ids.next('context'),
       runId: run.runId,
       task,
       worker,
-      entries: [...brain, ...priorFindings.map((finding) => findingEntryFor(task, finding))],
+      entries: contextEntries,
       maxCharacters: typeof deps.contextCharacterBudget === 'function'
         ? deps.contextCharacterBudget(worker.role)
         : deps.contextCharacterBudget,
