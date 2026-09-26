@@ -607,7 +607,19 @@ void AWonderlandBrainSculpture::AdvanceHead(float FixedStep)
 	// ---- so the target slides over the shell, rises and falls, and leans in and out without ever completing a
 	// ---- lap at a constant rate. This is the whole reason it does not read as RotateAroundActor.
 	TargetYaw = BrainWander(Elapsed * 0.31f, YawSeed) * PI;
-	TargetPitch = BrainWander(Elapsed * 0.41f, PitchSeed) * 1.05f;
+	// ---- AND A CLIMB IT CANNOT SKIP.
+	//
+	// FOUNDER, P0 item 2: the python must move "front/behind/above/below". MEASURED over 24 seconds of play
+	// (zc_snake_follow Y01): front 156 samples, behind 64, below 129, ABOVE ZERO. The pitch walk is three
+	// summed sines whose slowest term, at this rate, has a period near 41 seconds -- so on any ordinary look
+	// at the brain the animal can spend the entire time in one hemisphere and never once cross the top. The
+	// route was not an orbit, which is what the proof was built to catch, and it was still wrong.
+	//
+	// A slow guaranteed traverse fixes the coverage without making it a lap: the wander still decides WHERE on
+	// the way up and down it goes, and the climb only guarantees that it goes. Thirteen seconds means a viewer
+	// sees the crossing twice a minute rather than possibly never.
+	const float Climb = FMath::Sin(2.0f * PI * (Elapsed / 13.0f) + PitchSeed * 0.21f);
+	TargetPitch = (BrainWander(Elapsed * 0.41f, PitchSeed) * 0.55f + Climb * 0.62f) * 1.12f;
 	// FURTHER OUT AGAIN. The smooth brain's gyri stand proud of the old voxel silhouette, and at 1.46R the
 	// animal spent most of its route hidden behind the mass -- photographed as a green sliver. At 1.78R it
 	// passes clearly in front, above, below and behind, which is the whole point of it not being an orbit.
@@ -627,7 +639,9 @@ void AWonderlandBrainSculpture::AdvanceHead(float FixedStep)
 	const FVector TargetDir = FVector(
 		FMath::Cos(TargetYaw) * CosP,
 		FMath::Sin(TargetYaw) * CosP,
-		FMath::Sin(TargetPitch) * 0.78f).GetSafeNormal(UE_SMALL_NUMBER, FVector::ForwardVector);
+		// 0.78 FLATTENED THE ROUTE INTO A BAND. Squashing Z before normalising cost the top and bottom of the
+		// shell most of their reach, which is half of why "above" never happened.
+		FMath::Sin(TargetPitch) * 0.94f).GetSafeNormal(UE_SMALL_NUMBER, FVector::ForwardVector);
 
 	// ---- THE DIRECTION SPRINGS ACROSS THE SHELL. Accelerating toward the target and damping gives the overshoot
 	// ---- and recovery that reads as a living thing deciding where to go; keeping the momentum TANGENT means the
