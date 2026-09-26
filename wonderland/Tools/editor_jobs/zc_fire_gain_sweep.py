@@ -16,7 +16,10 @@ import unreal
 L = unreal.WonderlandUiTestLibrary
 
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "fire_gain")
-GAINS = (0.12, 0.35, 0.8, 1.6, 3.0, 6.0)
+# FOUNDER, 2026-09-26: "bring the flames back to the mascot skins." The second sweep is over the pair that
+# decides how much fire there is -- how bright each tongue burns and how many of them there are -- because
+# the first sweep only ever moved brightness, and a softer tongue needs MORE tongues to read as a blaze.
+SETTINGS = ((1.6, 5), (2.3, 8), (2.3, 11), (3.2, 8))
 
 
 def job():
@@ -79,21 +82,23 @@ def job():
 
     rows = {}
     RESULT["by_gain"] = rows
-    for gain in GAINS:
+    for gain, tongues in SETTINGS:
         unreal.SystemLibrary.execute_console_command(world, "wl.Look.FireGain %.3f" % gain)
+        unreal.SystemLibrary.execute_console_command(world, "wl.Look.FireTongues %d" % tongues)
         unreal.SystemLibrary.execute_console_command(world, "wl.Look.Reglow")
         L.pose_camera(world, eye, look, 38.0)
         yield 3.5
         foot = light(band(70.0, 0.026))
         tip = light(band(140.0, 0.026))
-        shot = os.path.join(ROOT, "gain_%05.2f.png" % gain)
+        shot = os.path.join(ROOT, "gain_%04.1f_tongues_%02d.png" % (gain, tongues))
         try:
             L.capture_game_viewport(shot)
         except Exception:
             pass
-        rows["%.2f" % gain] = {"foot": foot, "tip": tip,
+        rows["gain %.1f x %d tongues" % (gain, tongues)] = {"foot": foot, "tip": tip,
                                "falloff": round(foot["luma"] - tip["luma"], 5) if (foot and tip) else None}
-        emit("G_%.2f" % gain, "INFO", "fire gain %.2f" % gain, rows["%.2f" % gain])
+        key = "gain %.1f x %d tongues" % (gain, tongues)
+        emit("G", "INFO", key, rows[key])
 
     # WHAT A GOOD ONE LOOKS LIKE, stated before the answer is read off: the foot clearly lit, a minority of it
     # over white so the core blooms without the band flattening, and the tip dimmer than the foot.
@@ -102,7 +107,8 @@ def job():
         if not row["foot"] or not row["tip"]:
             continue
         foot = row["foot"]
-        if 0.18 <= foot["luma"] <= 0.70 and 0.04 <= foot["bright"] <= 0.45 and row["falloff"] > 0.0:
+        # PRESENCE AND COLOUR TOGETHER: plenty of the band lit, and not washed to white.
+        if 0.15 <= foot["luma"] <= 0.70 and foot["bright"] <= 0.30 and foot["dark"] <= 0.55:
             if best is None or foot["luma"] > rows[best]["foot"]["luma"]:
                 best = key
     RESULT["recommended_gain"] = best

@@ -1,0 +1,35 @@
+{
+ "name": "zc_fire_present",
+ "started": "2026-09-26 08:18:58",
+ "status": "measured",
+ "flame_surface": {
+  "arden_infernal": {
+   "costume": true,
+   "procedural": [
+    {
+     "name": "FlameSurface",
+     "sections": 2,
+     "verts": [],
+     "visible": true,
+     "bounds_z": null
+    }
+   ]
+  },
+  "skeleton_flame": {
+   "costume": true,
+   "procedural": [
+    {
+     "name": "FlameSurface",
+     "sections": 2,
+     "verts": [],
+     "visible": true,
+     "bounds_z": null
+    }
+   ]
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\fire_present",
+ "finished": "2026-09-26 08:19:43",
+ "seconds": 44.28,
+ "log": "P_arden_infernal INFO arden_infernal {'costume': True, 'procedural': [{'name': 'FlameSurface', 'sections': 2, 'verts': [], 'visible': True, 'bounds_z': None}]}\nP_skeleton_flame INFO skeleton_flame {'costume': True, 'procedural': [{'name': 'FlameSurface', 'sections': 2, 'verts': [], 'visible': True, 'bounds_z': None}]}\n"
+}

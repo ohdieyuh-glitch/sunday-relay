@@ -117,13 +117,51 @@ namespace
 	 * the ordering and compresses the range into one a shaped additive surface can draw, which a flat scale
 	 * cannot: any scale small enough for 32,000 makes 2,400 invisible.
 	 */
+	/**
+	 * HOW MANY TONGUES A FLAME PART BURNS WITH, and how far they reach.
+	 *
+	 * FOUNDER, 2026-09-26: "bring the flames back to the mascot skins." Moving the ribbons onto the fire
+	 * material made every tongue softer and narrower, and the honest result of that is LESS fire on screen --
+	 * each tongue now fades out at its tip and at both edges instead of being a solid card, so five of them
+	 * read as a few licks where five cards read as a blaze. The shape is right and there is not enough of it.
+	 *
+	 * Both are CVars so the pair can be swept together in one play session against wl.Look.Reglow, which is
+	 * how the gain was found; guessing either of them costs a build.
+	 */
+	/**
+	 * WHICH SURFACE THE FLAME RIBBONS ARE DRAWN ON -- and it is OFF, which is a retreat and is recorded as one.
+	 *
+	 * FOUNDER, 2026-09-26: "bring the flames back to the mascot skins."
+	 *
+	 * Moving the ribbons onto M_WL_Fire took the flames off the mascots entirely. Photographed with the gain
+	 * cranked to thirty -- twenty times the tuned value -- Skeleton Flame showed bone, eyes and NO ghostfire
+	 * at all: not dim, absent. The flame surface is there and reports two live sections, so the geometry is
+	 * being built and the material is not drawing it. I do not yet know why, and the founder should not be
+	 * looking at a mascot with no fire on it while I find out.
+	 *
+	 * So this ships at 0: the ribbons go back to the figure's own glow material, which is what the founder
+	 * approved and has been looking at. M_WL_Fire stays in the project and stays reachable with
+	 * `wl.Look.FireMaterial 1`, because the shape work behind it is right -- the tongues are tapered, crossed
+	 * and flickering, and they carry UVs a proper fire shader can use the moment this is understood.
+	 */
+	TAutoConsoleVariable<int32> CVarFireMaterial(
+		TEXT("wl.Look.FireMaterial"), 0,
+		TEXT("1 draws flame ribbons on M_WL_Fire; 0 draws them on the figure's own glow material."));
+
+	TAutoConsoleVariable<int32> CVarFireTongues(
+		TEXT("wl.Look.FireTongues"), 8,
+		TEXT("Tongues per flame part. More is a fuller fire; the cost is a few hundred triangles a figure."));
+	TAutoConsoleVariable<float> CVarFireReach(
+		TEXT("wl.Look.FireReach"), 1.18f,
+		TEXT("Scale on flame height and width. 1 = as the figure authored it."));
+
 	TAutoConsoleVariable<float> CVarFireGain(
 		// 1.6, SWEPT RATHER THAN CHOSEN. zc_fire_gain_sweep walks 0.12 to 6.0 in one play session -- the CVar
 		// is read at build time and wl.Look.Reglow rebuilds every figure, so no candidate costs a compile and
 		// none of them is measured at a different temperature. Below 0.8 the fire is a smudge; at 3.0 and
 		// above every tongue washes to white and Arden's ember orange is gone. At 1.6 the ribbons keep their
 		// colour, taper softly and read as flame licking off the ring.
-		TEXT("wl.Look.FireGain"), 1.6f,
+		TEXT("wl.Look.FireGain"), 2.3f,
 		TEXT("Brightness of a flame ribbon on M_WL_Fire, against the square root of its authored strength."));
 
 	TAutoConsoleVariable<float> CVarFlameDim(
@@ -517,7 +555,8 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		{
 			// THE FIRE MASTER IF THE PROJECT HAS ONE, and the figure's own glow master if it does not -- so a
 			// worktree without the asset still draws flames, just the old way, rather than drawing nothing.
-			UMaterialInterface* FireMaster = LoadObject<UMaterialInterface>(nullptr, FireParentPath);
+			UMaterialInterface* FireMaster = CVarFireMaterial.GetValueOnAnyThread() != 0
+				? LoadObject<UMaterialInterface>(nullptr, FireParentPath) : nullptr;
 			if (UMaterialInstanceDynamic* Full = UMaterialInstanceDynamic::Create(
 				FireMaster != nullptr ? FireMaster : ParentFor(Def.Kind), this))
 			{
@@ -1398,8 +1437,9 @@ void AWonderlandCompanionEmbodiment::RebuildFlames(float TimeSeconds)
 	};
 	TMap<int32, FPile> Piles;
 
-	const int32 Tongues = 5;
+	const int32 Tongues = FMath::Clamp(CVarFireTongues.GetValueOnAnyThread(), 1, 16);
 	const int32 Rungs = 7;
+	const float Reach = FMath::Clamp(CVarFireReach.GetValueOnAnyThread(), 0.3f, 2.5f);
 	for (const FFlameSource& Source : FlameSources)
 	{
 		if (!PartPivots.IsValidIndex(Source.PartIndex) || PartPivots[Source.PartIndex] == nullptr) { continue; }
@@ -1411,8 +1451,10 @@ void AWonderlandCompanionEmbodiment::RebuildFlames(float TimeSeconds)
 			const int32 Material = (Pass == 0) ? Source.OuterMaterial : Source.InnerMaterial;
 			if (!MaterialInstances.IsValidIndex(Material)) { continue; }
 			FPile& Pile = Piles.FindOrAdd(Material);
-			const float Reach = (Pass == 0) ? 1.0f : 0.62f;
-			const float Fat = (Pass == 0) ? 1.0f : 0.52f;
+			// THE OUTER SHEET AND THE INNER CORE, both scaled by the figure-wide reach so "more fire" is one
+			// knob rather than two places to forget.
+			const float Lift = ((Pass == 0) ? 1.0f : 0.62f) * Reach;
+			const float Fat = ((Pass == 0) ? 1.0f : 0.52f) * Reach;
 
 			for (int32 T = 0; T < Tongues; ++T)
 			{
@@ -1424,7 +1466,7 @@ void AWonderlandCompanionEmbodiment::RebuildFlames(float TimeSeconds)
 					+ 0.30f * FMath::Sin(2.0f * PI * (TimeSeconds / 0.19f + Seed * 2.3f))
 					+ 0.15f * FMath::Sin(2.0f * PI * (TimeSeconds / 0.83f + Seed * 0.7f));
 				const float Lick = FMath::Clamp(0.5f + 0.5f * Flick, 0.0f, 1.0f);
-				const float Tall = Source.Height * Reach * (0.58f + 0.62f * Lick);
+				const float Tall = Source.Height * Lift * (0.58f + 0.62f * Lick);
 				const FVector Foot = Source.Base + FVector(FMath::Cos(Turn), FMath::Sin(Turn), 0.0f) * (Source.Width * 0.22f);
 
 				// CROSSED, SO IT HAS VOLUME. A single ribbon is a card: turn ninety degrees to it and the flame

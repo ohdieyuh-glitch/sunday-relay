@@ -1,90 +1,64 @@
 {
  "name": "zc_fire_gain_sweep",
- "started": "2026-09-26 02:39:37",
+ "started": "2026-09-26 08:11:23",
  "status": "measured",
  "by_gain": {
-  "0.12": {
+  "gain 1.6 x 5 tongues": {
    "foot": {
-    "luma": 0.00997,
+    "luma": 0.21455,
     "bright": 0.0,
-    "dark": 1.0
+    "dark": 0.1267
    },
    "tip": {
-    "luma": 0.04746,
-    "bright": 0.0,
-    "dark": 0.8259
+    "luma": 0.27722,
+    "bright": 0.1774,
+    "dark": 0.2963
    },
-   "falloff": -0.03749
+   "falloff": -0.06267
   },
-  "0.35": {
+  "gain 2.3 x 8 tongues": {
    "foot": {
-    "luma": 0.04551,
+    "luma": 0.31602,
     "bright": 0.0,
-    "dark": 1.0
+    "dark": 0.0573
    },
    "tip": {
-    "luma": 0.12192,
-    "bright": 0.0,
-    "dark": 0.8156
+    "luma": 0.35217,
+    "bright": 0.1774,
+    "dark": 0.2303
    },
-   "falloff": -0.07641
+   "falloff": -0.03615
   },
-  "0.80": {
+  "gain 2.3 x 11 tongues": {
    "foot": {
-    "luma": 0.11238,
+    "luma": 0.34653,
     "bright": 0.0,
-    "dark": 0.8669
+    "dark": 0.0531
    },
    "tip": {
-    "luma": 0.19891,
-    "bright": 0.1719,
-    "dark": 0.7401
+    "luma": 0.32013,
+    "bright": 0.1658,
+    "dark": 0.2483
    },
-   "falloff": -0.08653
+   "falloff": 0.0264
   },
-  "1.60": {
+  "gain 3.2 x 8 tongues": {
    "foot": {
-    "luma": 0.18972,
+    "luma": 0.38761,
     "bright": 0.0,
-    "dark": 0.1234
+    "dark": 0.036
    },
    "tip": {
-    "luma": 0.28191,
-    "bright": 0.1822,
-    "dark": 0.4623
+    "luma": 0.38449,
+    "bright": 0.1699,
+    "dark": 0.1547
    },
-   "falloff": -0.09219
-  },
-  "3.00": {
-   "foot": {
-    "luma": 0.31864,
-    "bright": 0.0,
-    "dark": 0.0859
-   },
-   "tip": {
-    "luma": 0.35798,
-    "bright": 0.1724,
-    "dark": 0.2226
-   },
-   "falloff": -0.03934
-  },
-  "6.00": {
-   "foot": {
-    "luma": 0.52631,
-    "bright": 0.0,
-    "dark": 0.015
-   },
-   "tip": {
-    "luma": 0.49908,
-    "bright": 0.1721,
-    "dark": 0.0433
-   },
-   "falloff": 0.02723
+   "falloff": 0.00312
   }
  },
- "recommended_gain": null,
+ "recommended_gain": "gain 3.2 x 8 tongues",
  "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\fire_gain",
- "finished": "2026-09-26 02:40:16",
- "seconds": 39.46,
- "log": "G_0.12 INFO fire gain 0.12 {'foot': {'luma': 0.00997, 'bright': 0.0, 'dark': 1.0}, 'tip': {'luma': 0.04746, 'bright': 0.0, 'dark': 0.8259}, 'falloff': -0.03749}\nG_0.35 INFO fire gain 0.35 {'foot': {'luma': 0.04551, 'bright': 0.0, 'dark': 1.0}, 'tip': {'luma': 0.12192, 'bright': 0.0, 'dark': 0.8156}, 'falloff': -0.07641}\nG_0.80 INFO fire gain 0.80 {'foot': {'luma': 0.11238, 'bright': 0.0, 'dark': 0.8669}, 'tip': {'luma': 0.19891, 'bright': 0.1719, 'dark': 0.7401}, 'falloff': -0.08653}\nG_1.60 INFO fire gain 1.60 {'foot': {'luma': 0.18972, 'bright': 0.0, 'dark': 0.1234}, 'tip': {'luma': 0.28191, 'bright': 0.1822, 'dark': 0.4623}, 'falloff': -0.09219}\nG_3.00 INFO fire gain 3.00 {'foot': {'luma': 0.31864, 'bright': 0.0, 'dark': 0.0859}, 'tip': {'luma': 0.35798, 'bright': 0.1724, 'dark': 0.2226}, 'falloff': -0.03934}\nG_6.00 INFO fire gain 6.00 {'foot': {'luma': 0.52631, 'bright': 0.0, 'dark': 0.015}, 'tip': {'luma': 0.49908, 'bright': 0.1721, 'dark': 0.0433}, 'falloff': 0.02723}\nG_PICK INFO the gain that lands in the window {'gain': None, 'window': 'foot luma 0.18-0.70, over-white 0.04-0.45, and brighter at the foot than the tip'}\n"
+ "finished": "2026-09-26 08:11:43",
+ "seconds": 20.11,
+ "log": "G INFO gain 1.6 x 5 tongues {'foot': {'luma': 0.21455, 'bright': 0.0, 'dark': 0.1267}, 'tip': {'luma': 0.27722, 'bright': 0.1774, 'dark': 0.2963}, 'falloff': -0.06267}\nG INFO gain 2.3 x 8 tongues {'foot': {'luma': 0.31602, 'bright': 0.0, 'dark': 0.0573}, 'tip': {'luma': 0.35217, 'bright': 0.1774, 'dark': 0.2303}, 'falloff': -0.03615}\nG INFO gain 2.3 x 11 tongues {'foot': {'luma': 0.34653, 'bright': 0.0, 'dark': 0.0531}, 'tip': {'luma': 0.32013, 'bright': 0.1658, 'dark': 0.2483}, 'falloff': 0.0264}\nG INFO gain 3.2 x 8 tongues {'foot': {'luma': 0.38761, 'bright': 0.0, 'dark': 0.036}, 'tip': {'luma': 0.38449, 'bright': 0.1699, 'dark': 0.1547}, 'falloff': 0.00312}\nG_PICK INFO the gain that lands in the window {'gain': 'gain 3.2 x 8 tongues', 'window': 'foot luma 0.18-0.70, over-white 0.04-0.45, and brighter at the foot than the tip'}\n"
 }

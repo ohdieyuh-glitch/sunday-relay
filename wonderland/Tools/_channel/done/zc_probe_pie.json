@@ -1,0 +1,26 @@
+{
+ "name": "zc_probe_pie",
+ "started": "2026-09-26 08:10:49",
+ "status": "measured",
+ "game_world_before": "WL_V2_GoldenArrival_WP2",
+ "game_world": "WL_V2_GoldenArrival_WP2",
+ "pawn": "BP_RelayDog_C_0",
+ "controller": "PlayerController_0",
+ "capture_returned": "(1903, 927)",
+ "capture_on_disk": true,
+ "read_screen": [
+  0.332,
+  0.412
+ ],
+ "projected": [
+  803.7,
+  625.8
+ ],
+ "viewport": [
+  1904,
+  928
+ ],
+ "finished": "2026-09-26 08:10:52",
+ "seconds": 2.54,
+ "log": ""
+}

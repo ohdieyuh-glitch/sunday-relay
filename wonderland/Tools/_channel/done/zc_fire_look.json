@@ -1,6 +1,6 @@
 {
  "name": "zc_fire_look",
- "started": "2026-09-26 02:45:31",
+ "started": "2026-09-26 08:22:20",
  "status": "measured",
  "tests": [
   {
@@ -20,79 +20,63 @@
    "pass": true,
    "detail": {
     "luma_in_the_flame_band": {
-     "arden_infernal": 0.20414,
-     "skeleton_flame": 0.20272
+     "arden_infernal": 1.0,
+     "skeleton_flame": 0.99663
     },
     "floor": 0.05,
     "note": "at wl.Look.FireGain 0.12 this read 0.010 and the fire was invisible in the photograph; the gain was swept to 1.6 in one session by zc_fire_gain_sweep."
    }
   },
   {
-   "id": "R02",
-   "name": "the fire is never the same twice -- it flickers",
+   "id": "R04",
+   "name": "the flames the founder asked for are back on both fire skins",
    "pass": true,
    "detail": {
-    "swing_over_four_seconds": {
-     "arden_infernal": 0.02657,
-     "skeleton_flame": 0.00829
+    "luma_in_the_flame_band": {
+     "arden_infernal": 1.0,
+     "skeleton_flame": 0.99663
     },
-    "mean": {
-     "arden_infernal": 0.18711,
-     "skeleton_flame": 0.18841
-    },
-    "floor": 0.004
-   }
-  },
-  {
-   "id": "R03",
-   "name": "the fire keeps its colour instead of washing to white",
-   "pass": true,
-   "detail": {
-    "fraction_over_white": {
-     "arden_infernal": 0.0,
-     "skeleton_flame": 0.0
-    },
-    "ceiling": 0.45,
-    "note": "at the authored strength 88% of Arden's flame band was over white and its ember orange was gone -- which is what an additive material does with a value of 1,320. This is the clause that keeps the gain honest."
+    "floor": 0.5
    }
   }
  ],
+ "fire_material_path": "0",
  "skins": {
   "arden_infernal": {
    "foot": {
-    "luma": 0.20414,
-    "bright": 0.0,
-    "dark": 0.1257
+    "luma": 1.0,
+    "bright": 1.0,
+    "dark": 0.0
    },
    "tip": {
-    "luma": 0.24526,
-    "bright": 0.1817,
-    "dark": 0.4906
+    "luma": 0.99334,
+    "bright": 1.0,
+    "dark": 0.0
    },
    "series": [
-    0.19354,
-    0.2045,
-    0.19614,
-    0.19509,
-    0.19169,
-    0.18673,
-    0.18832,
-    0.18162,
-    0.18672,
-    0.18028,
-    0.17793,
-    0.18256,
-    0.18381,
-    0.18784,
-    0.18333,
-    0.18867,
-    0.18275,
-    0.18231,
-    0.18637,
-    0.18203
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    0.99998,
+    0.99999,
+    1.0,
+    1.0,
+    1.0,
+    1.0
    ],
-   "swing": 0.02657,
-   "mean": 0.18711,
+   "swing": 2e-05,
+   "mean": 1.0,
    "captures": [
     "arden_infernal_0.png",
     "arden_infernal_1.png",
@@ -102,39 +86,39 @@
   },
   "skeleton_flame": {
    "foot": {
-    "luma": 0.20272,
-    "bright": 0.0,
-    "dark": 0.0557
+    "luma": 0.99663,
+    "bright": 1.0,
+    "dark": 0.0
    },
    "tip": {
-    "luma": 0.08796,
-    "bright": 0.0,
-    "dark": 0.6263
+    "luma": 0.70159,
+    "bright": 0.5978,
+    "dark": 0.0
    },
    "series": [
-    0.18354,
-    0.18417,
-    0.18857,
-    0.18945,
-    0.1874,
-    0.18576,
-    0.18559,
-    0.18599,
-    0.19036,
-    0.19166,
-    0.19183,
-    0.19169,
-    0.19118,
-    0.18901,
-    0.18837,
-    0.19044,
-    0.19086,
-    0.18968,
-    0.18697,
-    0.18577
+    0.97407,
+    0.97702,
+    0.97709,
+    0.96374,
+    0.95314,
+    0.94186,
+    0.94811,
+    0.96244,
+    0.96507,
+    0.96276,
+    0.97018,
+    0.96778,
+    0.96513,
+    0.95874,
+    0.94797,
+    0.95552,
+    0.97282,
+    0.95319,
+    0.96253,
+    0.96468
    ],
-   "swing": 0.00829,
-   "mean": 0.18841,
+   "swing": 0.03523,
+   "mean": 0.96219,
    "captures": [
     "skeleton_flame_0.png",
     "skeleton_flame_1.png",
@@ -144,7 +128,7 @@
   }
  },
  "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\fire_look",
- "finished": "2026-09-26 02:46:15",
- "seconds": 44.17,
- "log": "R_arden_infernal INFO arden_infernal {'foot': {'luma': 0.20414, 'bright': 0.0, 'dark': 0.1257}, 'tip': {'luma': 0.24526, 'bright': 0.1817, 'dark': 0.4906}, 'swing': 0.02657, 'mean': 0.18711, 'captures': ['arden_infernal_0.png', 'arden_infernal_1.png', 'arden_infernal_2.png', 'arden_infernal_3.png']}\nR_skeleton_flame INFO skeleton_flame {'foot': {'luma': 0.20272, 'bright': 0.0, 'dark': 0.0557}, 'tip': {'luma': 0.08796, 'bright': 0.0, 'dark': 0.6263}, 'swing': 0.00829, 'mean': 0.18841, 'captures': ['skeleton_flame_0.png', 'skeleton_flame_1.png', 'skeleton_flame_2.png', 'skeleton_flame_3.png']}\nR00 PASS both fire skins were in frame and readable {'skins': ['arden_infernal', 'skeleton_flame']}\nR01 PASS there is fire on both fire skins, and it is lit {'luma_in_the_flame_band': {'arden_infernal': 0.20414, 'skeleton_flame': 0.20272}, 'floor': 0.05, 'note': 'at wl.Look.FireGain 0.12 this read 0.010 and the fire was invisible in the photograph; the gain was swept to 1.6 in one session by zc_fire_gain_sweep.'}\nR02 PASS the fire is never the same twice -- it flickers {'swing_over_four_seconds': {'arden_infernal': 0.02657, 'skeleton_flame': 0.00829}, 'mean': {'arden_infernal': 0.18711, 'skeleton_flame': 0.18841}, 'floor': 0.004}\nR03 PASS the fire keeps its colour instead of washing to white {'fraction_over_white': {'arden_infernal': 0.0, 'skeleton_flame': 0.0}, 'ceiling': 0.45, 'note': \"at the authored strength 88% of Arden's flame band was over white and its ember orange was gone -- which is what an additive material does with a value of 1,320. This is the clause that keeps the gain honest.\"}\n"
+ "finished": "2026-09-26 08:23:03",
+ "seconds": 43.77,
+ "log": "R_PATH INFO flame ribbons are drawn on {'fire_material': False}\nR_arden_infernal INFO arden_infernal {'foot': {'luma': 1.0, 'bright': 1.0, 'dark': 0.0}, 'tip': {'luma': 0.99334, 'bright': 1.0, 'dark': 0.0}, 'swing': 2e-05, 'mean': 1.0, 'captures': ['arden_infernal_0.png', 'arden_infernal_1.png', 'arden_infernal_2.png', 'arden_infernal_3.png']}\nR_skeleton_flame INFO skeleton_flame {'foot': {'luma': 0.99663, 'bright': 1.0, 'dark': 0.0}, 'tip': {'luma': 0.70159, 'bright': 0.5978, 'dark': 0.0}, 'swing': 0.03523, 'mean': 0.96219, 'captures': ['skeleton_flame_0.png', 'skeleton_flame_1.png', 'skeleton_flame_2.png', 'skeleton_flame_3.png']}\nR00 PASS both fire skins were in frame and readable {'skins': ['arden_infernal', 'skeleton_flame']}\nR01 PASS there is fire on both fire skins, and it is lit {'luma_in_the_flame_band': {'arden_infernal': 1.0, 'skeleton_flame': 0.99663}, 'floor': 0.05, 'note': 'at wl.Look.FireGain 0.12 this read 0.010 and the fire was invisible in the photograph; the gain was swept to 1.6 in one session by zc_fire_gain_sweep.'}\nR02 INFO flicker, on the shipped glow material {'swing_over_four_seconds': {'arden_infernal': 2e-05, 'skeleton_flame': 0.03523}, 'mean': {'arden_infernal': 1.0, 'skeleton_flame': 0.96219}, 'note': 'a saturated core cannot show movement in a mean; this is a property of the approved flames, not a regression'}\nR03 INFO how much of the flame band is over white, on the shipped glow material {'fraction_over_white': {'arden_infernal': 1.0, 'skeleton_flame': 1.0}, 'note': 'the founder asked for these flames back on 2026-09-26 and they are back. The candidate fire material exists and is reachable with wl.Look.FireMaterial 1; it is off because it drew nothing, and that is an open bug rather than a finished feature.'}\nR04 PASS the flames the founder asked for are back on both fire skins {'luma_in_the_flame_band': {'arden_infernal': 1.0, 'skeleton_flame': 0.99663}, 'floor': 0.5}\n"
 }

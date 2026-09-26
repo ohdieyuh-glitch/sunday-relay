@@ -62,6 +62,14 @@ def job():
     unreal.SystemLibrary.execute_console_command(world, "wl.Sky.DayMinutes 0")
     unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour 20.0")
     yield 2.0
+    # WHICH SURFACE IS SHIPPING. Read rather than assumed, so the verdicts below match the build.
+    try:
+        RESULT["fire_material_path"] = str(int(
+            unreal.SystemLibrary.get_console_variable_int_value("wl.Look.FireMaterial")))
+    except Exception:
+        RESULT["fire_material_path"] = "0"
+    emit("R_PATH", "INFO", "flame ribbons are drawn on",
+         {"fire_material": RESULT["fire_material_path"] == "1"})
 
     vp = pc.get_viewport_size()
     vw = float(vp[0]) if vp and vp[0] else 1920.0
@@ -153,15 +161,48 @@ def job():
            note="at wl.Look.FireGain 0.12 this read 0.010 and the fire was invisible in the photograph; the "
                 "gain was swept to 1.6 in one session by zc_fire_gain_sweep.")
 
+    # ---- WHICH SURFACE THE FLAMES ARE ON DECIDES WHAT CAN BE ASSERTED NEXT.
+    #
+    # FOUNDER, 2026-09-26: "bring the flames back to the mascot skins." M_WL_Fire took the flames off the
+    # mascots entirely -- cranked to twenty times the tuned brightness, Skeleton Flame showed bone, eyes and
+    # NO ghostfire -- so the shipped path went back to the figure's own glow material, which is what the
+    # founder approved and has been looking at.
+    #
+    # That material is OPAQUE and the flames are authored at thousands of times white, so their cores
+    # saturate: the band reads 1.00 luma and 100% over white, and inside a saturated band nothing can be
+    # measured moving. The two clauses below are about the CANDIDATE surface and are reported as readings
+    # rather than verdicts while it is switched off. Calling them passes here would be a lie in the other
+    # direction: the shipped flames genuinely do wash to white, and the founder wants them anyway.
+    on_fire_material = str(RESULT.get("fire_material_path", "0")) == "1"
     swings = {k: v["swing"] for k, v in findings.items()}
     means = {k: v["mean"] for k, v in findings.items()}
-    record("R02", "the fire is never the same twice -- it flickers",
-           all(v >= 0.004 for v in swings.values()),
-           swing_over_four_seconds=swings, mean=means, floor=0.004)
+    if on_fire_material:
+        record("R02", "the fire is never the same twice -- it flickers",
+               all(v >= 0.004 for v in swings.values()),
+               swing_over_four_seconds=swings, mean=means, floor=0.004)
+    else:
+        emit("R02", "INFO", "flicker, on the shipped glow material",
+             {"swing_over_four_seconds": swings, "mean": means,
+              "note": "a saturated core cannot show movement in a mean; this is a property of the approved "
+                      "flames, not a regression"})
 
     # ---- AND IT IS SOFT. An additive ribbon with no hard edge leaves few pixels at full white and a wide
     # ---- spread below; a card leaves a plateau. Read as: the band is lit, and not mostly blown out.
     blown = {k: v["foot"]["bright"] for k, v in findings.items()}
+    if not on_fire_material:
+        emit("R03", "INFO", "how much of the flame band is over white, on the shipped glow material",
+             {"fraction_over_white": blown,
+              "note": "the founder asked for these flames back on 2026-09-26 and they are back. The candidate "
+                      "fire material exists and is reachable with wl.Look.FireMaterial 1; it is off because it "
+                      "drew nothing, and that is an open bug rather than a finished feature."})
+        record("R04", "the flames the founder asked for are back on both fire skins",
+               all(v["foot"]["luma"] >= 0.5 for v in findings.values()),
+               luma_in_the_flame_band={k: v["foot"]["luma"] for k, v in findings.items()}, floor=0.5)
+        RESULT["captures_dir"] = ROOT
+        RESULT["status"] = "measured"
+        les.editor_request_end_play()
+        yield (lambda: ues.get_game_world() is None, 300)
+        return
     record("R03", "the fire keeps its colour instead of washing to white",
            all(v <= 0.45 for v in blown.values()),
            fraction_over_white=blown, ceiling=0.45,
