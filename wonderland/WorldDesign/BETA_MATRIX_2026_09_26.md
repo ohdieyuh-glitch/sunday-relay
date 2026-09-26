@@ -35,13 +35,19 @@ green it says so and says why, because a matrix that rounds up is worth nothing.
 
 ## What is not green, stated plainly
 
-1. **STREAMING — BLOCKING.** `zc_streaming` S01: 21,089 actors resident at every stop, spread exactly 0.
-   Nothing pages. `zc_streaming_why` names the cause: World Partition pages by actor bounds, and 753 actors
-   are wider than a 200 m cell and hold 44.5% of the world's instances. `BC01_BaseCourse` alone is one actor
-   1,970 m wide with 4,132 instances. The remedy is to split the world-spanning material batches by tile in
-   the builders, and to widen the cell past the authored tile size for the ones that miss by a metre. Not
-   attempted here: both mean re-running builders and re-saving a 45 MB map on a Content junction shared with
-   other worktrees, and the standing rule is that two editors must never be two writers on one .umap.
+1. **STREAMING — BLOCKING, and the cause is simpler and worse than the one I first published.** `zc_streaming`
+   S01: 21,089 actors resident at every stop, spread exactly 0. I first attributed that to 753 actors being
+   wider than a 200 m cell — real arithmetic, wrong explanation. `zc_wp_state`, asking through a C++
+   `DescribeWorldPartition` because Python cannot reach any of World Partition in 5.8, answers
+   **`partitioned=0` in the editor world and in PIE alike.** There are no cells for an actor to be too big
+   for. On disk: `WL_V2_GoldenArrival_WP2.umap` is 46 MB, monolithic, the map the project loads, last written
+   19:31 on the 25th; `WL_V2_GoldenArrival_WP2_WP` is a partition stub with 21,047 externalised actors last
+   written 00:19 the same day. The conversion ran, and the world lane then edited the monolithic map for
+   another nineteen hours. The remedy is to re-run the convert commandlet against the current map — which is
+   non-destructive, writing a new map and leaving the source alone — and point the project at the result. A
+   checkpoint of the 46 MB map and its ini was taken to `recovery/_map_checkpoints/2026-09-26-streaming/`
+   first. The oversized-actor work is the NEXT question, not this one: once cells exist, `BC01_BaseCourse` at
+   1,970 m wide really will sit in all of them.
 2. **Celestial Light's eyes keep 0.031 channel separation against a 0.05 floor** (`zc_eyes_glow` E03). Its
    authored eye is the palest in the lineup, (0.62, 0.88, 1.00), and its head sits inside its own halo. The
    founder's SECONDARY colour will read weakly on this one skin. Fixing it means changing authored art.
