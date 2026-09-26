@@ -144,6 +144,30 @@ namespace
 		}
 		return LoadObject<UStaticMesh>(nullptr, CubePath);
 	}
+
+	/** The plain, non-Nanite cube. ADDITIVE PARTS MUST NOT BE NANITE.
+	 *
+	 *  Nanite supports opaque and masked blend modes and nothing else, and the additive parent here is the
+	 *  engine's EmissiveMeshMaterial, which is BLEND_Additive. Together they made the engine say so on every
+	 *  load, twice over:
+	 *
+	 *    LogStaticMesh: Invalid material [MID_EmissiveMeshMaterial_0] used on Nanite static mesh
+	 *                   [SM_WL_VoxelCube]. Only opaque or masked blend modes are currently supported,
+	 *                   [BLEND_Additive] blend mode was specified.
+	 *    LogMaterial:   Material EmissiveMeshMaterial missing usage flag Nanite!
+	 *                   DEFAULT MATERIAL WILL BE USED IN GAME.
+	 *
+	 *  The last line is the one that matters: not a cosmetic warning, a statement that these surfaces render
+	 *  as default grey in a packaged build. 43 materials across the Project Avatars -- every Cherubim, Seraph
+	 *  and TenTails halo -- are declared `add`, so that is all of their halos.
+	 *
+	 *  Nanite stays for the opaque bulk, which is the overwhelming majority of a figure's instances and the
+	 *  reason the cube was made Nanite. Only the additive groups move to the plain cube, where their blend
+	 *  mode is legal. */
+	UStaticMesh* LoadPlainCube()
+	{
+		return LoadObject<UStaticMesh>(nullptr, CubePath);
+	}
 }
 
 AWonderlandCompanionEmbodiment::AWonderlandCompanionEmbodiment()
@@ -301,6 +325,7 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 	}
 	const FWonderlandCompanionFigure& Figure = *Shared;
 	UStaticMesh* Cube = LoadVoxelCube();
+	UStaticMesh* PlainCube = LoadPlainCube();
 	if (Cube == nullptr)
 	{
 		LastError = TEXT("the engine cube /Engine/BasicShapes/Cube did not load");
@@ -549,7 +574,8 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		// the pivots are found by name -- so the engine's counter-based naming does the same job for free.
 		UInstancedStaticMeshComponent* Mesh = NewObject<UInstancedStaticMeshComponent>(this);
 		Mesh->SetMobility(EComponentMobility::Movable);
-		Mesh->SetStaticMesh(Cube);
+		// Additive cannot be Nanite. See LoadPlainCube.
+		Mesh->SetStaticMesh(Kind == EWonderlandCompanionMaterialKind::Additive ? PlainCube : Cube);
 		if (MaterialInstances.IsValidIndex(MaterialIndex) && MaterialInstances[MaterialIndex] != nullptr)
 		{
 			Mesh->SetMaterial(0, MaterialInstances[MaterialIndex]);

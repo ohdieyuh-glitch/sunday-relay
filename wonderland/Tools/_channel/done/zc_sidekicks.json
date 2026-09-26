@@ -1,13 +1,13 @@
 {
  "name": "zc_sidekicks",
- "started": "2026-09-25 12:47:26",
+ "started": "2026-09-25 16:56:58",
  "status": "done",
  "steps": [
   {
    "step": "01_simulated",
    "note": "both companions start SIMULATED and say so",
    "file": "C:/dev/iwonder/wonderland-task3/wonderland/Tools\\captures\\zc\\sidekicks\\00_01_simulated.jpg",
-   "sidekicks": "link=online intents=1 llm-companion[state=CONNECTED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=2 live=- failure=-] jhinn[state=CONNECTED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=2 live=- failure=-]",
+   "sidekicks": "link=online intents=1 llm-companion[state=SIMULATED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=0 live=- failure=-] jhinn[state=SIMULATED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=0 live=- failure=-]",
    "llm_mascot": "IDLE",
    "jhinn_mascot": "IDLE"
   },
@@ -79,9 +79,9 @@
    "step": "10_all_three",
    "note": "Julius's Dog, Jhinn and the LLM Companion, each doing its own thing",
    "file": "C:/dev/iwonder/wonderland-task3/wonderland/Tools\\captures\\zc\\sidekicks\\09_10_all_three.jpg",
-   "sidekicks": "link=online intents=12 llm-companion[state=CONNECTED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=1 live=- failure=-] jhinn[state=WORKING mascot=WORKING provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=2 live=STREAMING failure=-]",
+   "sidekicks": "link=online intents=12 llm-companion[state=CONNECTED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=1 live=- failure=-] jhinn[state=CONNECTED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=2 live=- failure=-]",
    "llm_mascot": "IDLE",
-   "jhinn_mascot": "WORKING"
+   "jhinn_mascot": "IDLE"
   },
   {
    "step": "11_all_three_done",
@@ -94,7 +94,7 @@
  ],
  "terminals_open": true,
  "providers_probed": true,
- "at_start": "link=online intents=1 llm-companion[state=CONNECTED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=2 live=- failure=-] jhinn[state=CONNECTED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=2 live=- failure=-]",
+ "at_start": "link=online intents=1 llm-companion[state=SIMULATED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=0 live=- failure=-] jhinn[state=SIMULATED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=0 live=- failure=-]",
  "auth_required": "link=online intents=3 llm-companion[state=AUTH_REQUIRED mascot=WAITING_FOR_AUTH provider=openai model=gpt-4.1 mode=REAL authority=conversation turns=0 live=- failure=AUTH_REQUIRED] jhinn[state=AUTH_REQUIRED mascot=WAITING_FOR_AUTH provider=claude-code model=claude-code-default mode=REAL authority=scoped_work turns=0 live=- failure=AUTH_REQUIRED]",
  "connected": "link=online intents=5 llm-companion[state=CONNECTED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=0 live=- failure=-] jhinn[state=CONNECTED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=0 live=- failure=-]",
  "while_thinking": "link=online intents=6 llm-companion[state=WORKING mascot=RESPONDING provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=1 live=STREAMING failure=-] jhinn[state=CONNECTED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=0 live=- failure=-]",
@@ -106,7 +106,7 @@
  "disconnected": "link=online intents=9 llm-companion[state=DISCONNECTED mascot=DISCONNECTED provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=2 live=- failure=-] jhinn[state=CONNECTED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=1 live=- failure=-]",
  "llm_mascot_disconnected": "DISCONNECTED",
  "final": "link=online intents=12 llm-companion[state=CONNECTED mascot=IDLE provider=dev-companion model=fixture-chat mode=SIMULATED authority=conversation turns=1 live=- failure=-] jhinn[state=CONNECTED mascot=IDLE provider=dev-single-agent model=fixture-agent mode=SIMULATED authority=scoped_work turns=2 live=- failure=-]",
- "finished": "2026-09-25 12:48:40",
- "seconds": 73.79,
+ "finished": "2026-09-25 16:58:13",
+ "seconds": 75.07,
  "log": ""
 }
