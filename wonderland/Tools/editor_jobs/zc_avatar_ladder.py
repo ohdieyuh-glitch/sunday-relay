@@ -137,6 +137,30 @@ def job():
             pass
         emit("A_%d" % want, "INFO", "%d avatars" % want, rungs[str(want)]["steady"])
 
+    # ---- AND BACK DOWN AGAIN, WHICH IS THE CONTROL THE FIRST RUN DID NOT HAVE.
+    #
+    # The ascending ladder read 30.6 ms at zero, 132.0 at one, 88.2 at five and 55.9 at ten -- the cost FELL
+    # as the crowd grew, which no per-avatar cost can do. Either the tier system is dropping the whole crowd
+    # to a cheaper figure as it fills (which it is designed to do), or the first rung was paying for shader
+    # compiles and streaming that the later rungs did not. Those have opposite fixes, and a descending pass
+    # separates them: if one avatar is cheap on the way DOWN, the 132 ms was warm-up and not the avatar.
+    down = {}
+    RESULT["descending"] = down
+    for want in (5, 1):
+        while len(standing) > want:
+            body = standing.pop()
+            try:
+                body.destroy_actor()
+            except Exception:
+                pass
+        yield SETTLE_S
+        yield from watch(STEADY_S)
+        down[str(want)] = stats(globals().get("_SEEN", []))
+        emit("A_DOWN_%d" % want, "INFO", "%d avatars, coming back down" % want, down[str(want)])
+    RESULT["one_avatar_up_vs_down"] = {
+        "up": rungs["1"]["steady"]["frame_median"] if rungs.get("1", {}).get("steady") else None,
+        "down": down["1"]["frame_median"] if down.get("1") else None}
+
     read_all = all(v.get("steady") for v in rungs.values())
     record("A01", "every rung of the ladder was measured with the clock running", read_all,
            rungs=sorted(rungs.keys()),
@@ -160,6 +184,19 @@ def job():
 
     record("A02", "ten Project Avatars still hold a playable frame",
            ten <= 50.0, steady_ms=RESULT["steady_ms"], ceiling=50.0)
+
+    # THE HONEST READING OF THE LADDER, once the control is in. A03 is only meaningful if the ascending and
+    # descending readings for the same crowd size agree; where they do not, the ladder measured the machine
+    # warming up and says so instead of pretending to a per-avatar cost.
+    up_one = rungs["1"]["steady"]["frame_median"]
+    down_one = down["1"]["frame_median"] if down.get("1") else None
+    warm = down_one is not None and abs(up_one - down_one) > 12.0
+    RESULT["warm_up_confounded"] = warm
+    record("A05", "the ladder measured avatars and not the machine warming up",
+           not warm, one_avatar_ascending_ms=up_one, one_avatar_descending_ms=down_one, tolerance=12.0,
+           note="the same crowd size measured twice in one session, once on the way up and once on the way "
+                "down. A gap here means the first rung paid for shader compiles the later rungs did not, and "
+                "every marginal cost derived from the ascending pass is worth nothing.")
 
     record("A03", "the cost per avatar does not grow as the crowd does",
            marginal["6th-10th each"] <= marginal["2nd-5th each"] + 2.5,

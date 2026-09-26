@@ -1,0 +1,78 @@
+{
+ "name": "zc_avatar_why",
+ "started": "2026-09-26 08:30:21",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "W00",
+   "name": "every step was measured with the clock running",
+   "pass": true,
+   "detail": {
+    "steps": {
+     "00 no avatar, shadows on": 28.76,
+     "01 one avatar, shadows on": 47.44,
+     "02 one avatar, shadows off": 46.64,
+     "03 one avatar, hidden": 31.91
+    }
+   }
+  },
+  {
+   "id": "W01",
+   "name": "the avatar's render cost is dynamic shadows, or it is not",
+   "pass": true,
+   "detail": {
+    "render_ms": {
+     "no avatar": 0.0,
+     "one avatar": 0.0,
+     "shadows off": 0.0,
+     "hidden": 0.0
+    },
+    "shadows_account_for_ms": 0.0,
+    "being_drawn_accounts_for_ms": 0.0,
+    "note": "reported either way. A large gap between 'shadows on' and 'shadows off' names the cause; a large gap between 'one avatar' and 'hidden' says the cost is in drawing it at all, and a small one says the cost is in merely having it."
+   }
+  }
+ ],
+ "avatar_files": 10,
+ "steps": {
+  "00 no avatar, shadows on": {
+   "samples": 203,
+   "frame": 28.76,
+   "game": 28.76,
+   "render": 0.0,
+   "gpu": 22.84
+  },
+  "01 one avatar, shadows on": {
+   "samples": 128,
+   "frame": 47.44,
+   "game": 34.75,
+   "render": 0.0,
+   "gpu": 23.03
+  },
+  "02 one avatar, shadows off": {
+   "samples": 131,
+   "frame": 46.64,
+   "game": 38.02,
+   "render": 0.0,
+   "gpu": 19.39
+  },
+  "03 one avatar, hidden": {
+   "samples": 187,
+   "frame": 31.91,
+   "game": 31.78,
+   "render": 0.0,
+   "gpu": 28.76
+  }
+ },
+ "render_ms": {
+  "no avatar": 0.0,
+  "one avatar": 0.0,
+  "shadows off": 0.0,
+  "hidden": 0.0
+ },
+ "shadow_share": 0.0,
+ "draw_share": 0.0,
+ "finished": "2026-09-26 08:31:38",
+ "seconds": 76.89,
+ "log": "W INFO 00 no avatar, shadows on {'samples': 203, 'frame': 28.76, 'game': 28.76, 'render': 0.0, 'gpu': 22.84}\nW INFO 01 one avatar, shadows on {'samples': 128, 'frame': 47.44, 'game': 34.75, 'render': 0.0, 'gpu': 23.03}\nW INFO 02 one avatar, shadows off {'samples': 131, 'frame': 46.64, 'game': 38.02, 'render': 0.0, 'gpu': 19.39}\nW INFO 03 one avatar, hidden {'samples': 187, 'frame': 31.91, 'game': 31.78, 'render': 0.0, 'gpu': 28.76}\nW00 PASS every step was measured with the clock running {'steps': {'00 no avatar, shadows on': 28.76, '01 one avatar, shadows on': 47.44, '02 one avatar, shadows off': 46.64, '03 one avatar, hidden': 31.91}}\nW01 PASS the avatar's render cost is dynamic shadows, or it is not {'render_ms': {'no avatar': 0.0, 'one avatar': 0.0, 'shadows off': 0.0, 'hidden': 0.0}, 'shadows_account_for_ms': 0.0, 'being_drawn_accounts_for_ms': 0.0, 'note': \"reported either way. A large gap between 'shadows on' and 'shadows off' names the cause; a large gap between 'one avatar' and 'hidden' says the cost is in drawing it at all, and a small one says the cost is in merely having it.\"}\n"
+}
