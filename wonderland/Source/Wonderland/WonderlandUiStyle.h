@@ -38,8 +38,18 @@ namespace WonderlandUi
 	 */
 	WONDERLAND_API FLinearColor ThemeAccent();
 
+	/** The Julius Live Terminal's accent, and the AI Companion terminals' accent, chosen separately. */
+	WONDERLAND_API FLinearColor JuliusAccent();
+	WONDERLAND_API FLinearColor CompanionAccent();
+	/** The Menu's accent surfaces only -- never a background and never body text. */
+	WONDERLAND_API FLinearColor MenuAccent();
+
 	// --wl-* in player.css.
 	inline FLinearColor Gold(float A = 1.0f)     { const FLinearColor C = ThemeAccent(); return FLinearColor(C.R, C.G, C.B, A); }
+	/** The same shape as Gold(), but each reading the accent its own surface was given. */
+	inline FLinearColor JuliusGold(float A = 1.0f)    { const FLinearColor C = JuliusAccent();    return FLinearColor(C.R, C.G, C.B, A); }
+	inline FLinearColor CompanionGold(float A = 1.0f) { const FLinearColor C = CompanionAccent(); return FLinearColor(C.R, C.G, C.B, A); }
+	inline FLinearColor MenuGold(float A = 1.0f)      { const FLinearColor C = MenuAccent();      return FLinearColor(C.R, C.G, C.B, A); }
 	inline FLinearColor GoldDim()                { return Gold(0.40f); }
 	inline FLinearColor GoldLive()               { return Gold(0.62f); }
 	inline FLinearColor Cream(float A = 1.0f)    { return Srgb(0xEC, 0xE7, 0xDD, A); }

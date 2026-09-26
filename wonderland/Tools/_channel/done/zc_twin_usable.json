@@ -1,0 +1,10 @@
+{
+ "name": "zc_twin_usable",
+ "started": "2026-09-25 21:34:56",
+ "status": "error",
+ "tests": [],
+ "error": "Traceback (most recent call last):\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/editor_channel.py\", line 121, in _step\n    yielded = job[\"gen\"].throw(thrown) if thrown is not None else next(job[\"gen\"])\n                                                                  ^^^^^^^^^^^^^^^^\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/_channel\\inbox\\zc_twin_usable.py\", line 76, in job\nException: RelayDogCharacter: Internal Error - ObjectInstance is null!\n",
+ "finished": "2026-09-25 21:35:53",
+ "seconds": 56.62,
+ "log": "U_0030m INFO twin at 30 m {'radius_m': 30.0, 'ground': True, 'z': -2.7, 'on': 'V2Batch_garden_lawn_MI_V2_Lawn'}\nU_0284m INFO twin at 284 m {'radius_m': 284.0, 'ground': True, 'z': 12.0, 'on': 'FillEMN_StA2_005'}\n"
+}

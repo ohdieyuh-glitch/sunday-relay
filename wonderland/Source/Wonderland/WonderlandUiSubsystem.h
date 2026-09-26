@@ -198,6 +198,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	float GetWardrobeInspectYaw() const;
 
+	/** The Menu's tab titles, "|"-joined. Empty when the Menu has never been built. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString GetMenuTabs() const;
+
+	/** Which Menu tab is showing. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString GetOpenMenuTab() const;
+
+	/** Press a Menu tab by title, exactly as clicking it does. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool ShowMenuTab(const FString& Title);
+
 	/**
 	 * HOW MANY FRAMES THE SKIN STAGE HAS CAPTURED. A proof reads it twice with a wait between: a number that moved is
 	 * a live 3D dog, and a number that did not is a still photograph wearing the same clothes.

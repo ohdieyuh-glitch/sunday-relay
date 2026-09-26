@@ -1,0 +1,68 @@
+{
+ "name": "zc_wardrobe_geom",
+ "started": "2026-09-26 00:22:58",
+ "status": "measured",
+ "window": {
+  "centre": [
+   0.5947,
+   0.4704
+  ],
+  "size": [
+   0.2136,
+   0.4829
+  ]
+ },
+ "per_skin": {
+  "relay_og": {
+   "scale": 0.3294,
+   "bounds_extent": [
+    8.8,
+    13.1,
+    26.0
+   ],
+   "origin_z": 178.8,
+   "actor_z": 155.0,
+   "away_from_lens": 164.4,
+   "fov": 75.0,
+   "subtends_across_viewport": 0.1039,
+   "subtends_up_viewport": 0.4231,
+   "as_fraction_of_window_across": 0.486,
+   "as_fraction_of_window_up": 0.876
+  },
+  "arden_infernal": {
+   "scale": 0.1591,
+   "bounds_extent": [
+    13.1,
+    13.1,
+    25.8
+   ],
+   "origin_z": 178.3,
+   "actor_z": 162.3,
+   "away_from_lens": 162.0,
+   "fov": 75.0,
+   "subtends_across_viewport": 0.1056,
+   "subtends_up_viewport": 0.4251,
+   "as_fraction_of_window_across": 0.494,
+   "as_fraction_of_window_up": 0.88
+  },
+  "celestial_light": {
+   "scale": 0.2515,
+   "bounds_extent": [
+    16.6,
+    19.0,
+    26.0
+   ],
+   "origin_z": 178.9,
+   "actor_z": 155.1,
+   "away_from_lens": 162.1,
+   "fov": 75.0,
+   "subtends_across_viewport": 0.1527,
+   "subtends_up_viewport": 0.4297,
+   "as_fraction_of_window_across": 0.715,
+   "as_fraction_of_window_up": 0.89
+  }
+ },
+ "finished": "2026-09-26 00:23:38",
+ "seconds": 39.96,
+ "log": "G_relay_og INFO preview geometry for relay_og {'scale': 0.3294, 'bounds_extent': [8.8, 13.1, 26.0], 'origin_z': 178.8, 'actor_z': 155.0, 'away_from_lens': 164.4, 'fov': 75.0, 'subtends_across_viewport': 0.1039, 'subtends_up_viewport': 0.4231, 'as_fraction_of_window_across': 0.486, 'as_fraction_of_window_up': 0.876}\nG_arden_infernal INFO preview geometry for arden_infernal {'scale': 0.1591, 'bounds_extent': [13.1, 13.1, 25.8], 'origin_z': 178.3, 'actor_z': 162.3, 'away_from_lens': 162.0, 'fov': 75.0, 'subtends_across_viewport': 0.1056, 'subtends_up_viewport': 0.4251, 'as_fraction_of_window_across': 0.494, 'as_fraction_of_window_up': 0.88}\nG_celestial_light INFO preview geometry for celestial_light {'scale': 0.2515, 'bounds_extent': [16.6, 19.0, 26.0], 'origin_z': 178.9, 'actor_z': 155.1, 'away_from_lens': 162.1, 'fov': 75.0, 'subtends_across_viewport': 0.1527, 'subtends_up_viewport': 0.4297, 'as_fraction_of_window_across': 0.715, 'as_fraction_of_window_up': 0.89}\n"
+}

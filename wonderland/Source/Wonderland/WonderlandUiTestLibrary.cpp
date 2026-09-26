@@ -1,6 +1,7 @@
 #include "WonderlandUiTestLibrary.h"
 
 #include "WonderlandDemoFlow.h"
+#include "WonderlandMascotStyle.h"
 #include "WonderlandSubAgentCubs.h"
 
 #include "Camera/CameraActor.h"
@@ -477,5 +478,60 @@ bool UWonderlandUiTestLibrary::ReadScreenRect(float MinX, float MinY, float MaxX
 	OutDarkFraction = static_cast<float>(Dark) / static_cast<float>(Count);
 	OutBrightFraction = static_cast<float>(Bright) / static_cast<float>(Count);
 	OutSampled = Count;
+	return true;
+}
+
+bool UWonderlandUiTestLibrary::PickMascotColour(bool bPrimary, FLinearColor Colour)
+{
+	UWonderlandMascotStyleSettings* Style = GetMutableDefault<UWonderlandMascotStyleSettings>();
+	if (Style == nullptr)
+	{
+		return false;
+	}
+	(bPrimary ? Style->Primary : Style->Secondary) = Colour;
+	Style->bChosen = true;
+	WonderlandMascotStyle::SaveAndApply();
+	return true;
+}
+
+bool UWonderlandUiTestLibrary::PickCompanionColour(bool bPrimary, FLinearColor Colour)
+{
+	UWonderlandMascotStyleSettings* Style = GetMutableDefault<UWonderlandMascotStyleSettings>();
+	if (Style == nullptr)
+	{
+		return false;
+	}
+	(bPrimary ? Style->CompanionPrimary : Style->CompanionSecondary) = Colour;
+	Style->bCompanionChosen = true;
+	WonderlandMascotStyle::SaveAndApply();
+	return true;
+}
+
+FLinearColor UWonderlandUiTestLibrary::GetMascotColour(bool bPrimary)
+{
+	const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+	return bPrimary ? Style.Primary : Style.Secondary;
+}
+
+FLinearColor UWonderlandUiTestLibrary::GetCompanionColour(bool bPrimary)
+{
+	const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+	return bPrimary ? Style.CompanionPrimary : Style.CompanionSecondary;
+}
+
+bool UWonderlandUiTestLibrary::ResetAllColours()
+{
+	UWonderlandMascotStyleSettings* Style = GetMutableDefault<UWonderlandMascotStyleSettings>();
+	if (Style == nullptr)
+	{
+		return false;
+	}
+	Style->Primary = FLinearColor::White;
+	Style->Secondary = FLinearColor(1.00f, 0.78f, 0.16f, 1.0f);
+	Style->bChosen = false;
+	Style->CompanionPrimary = FLinearColor::White;
+	Style->CompanionSecondary = FLinearColor(0.42f, 0.80f, 1.00f, 1.0f);
+	Style->bCompanionChosen = false;
+	WonderlandMascotStyle::SaveAndApply();
 	return true;
 }

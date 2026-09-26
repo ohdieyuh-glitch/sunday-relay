@@ -196,7 +196,7 @@ void SWonderlandLiveTerminal::Construct(const FArguments& InArgs)
 						SNew(STextBlock)
 						.Text(INVTEXT(">"))
 						.Font(WonderlandUi::Mono(12))
-						.ColorAndOpacity(WonderlandUi::Gold())
+						.ColorAndOpacity(WonderlandUi::JuliusGold())
 					]
 					+ SHorizontalBox::Slot()
 					.FillWidth(1.0f)
@@ -362,7 +362,7 @@ void SWonderlandLiveTerminal::RebuildTaskTabs()
 				SNew(STextBlock)
 				.Text(INVTEXT("+"))
 				.Font(WonderlandUi::Sans(18, true))
-				.ColorAndOpacity(WonderlandUi::Gold())
+				.ColorAndOpacity(WonderlandUi::JuliusGold())
 			]
 		]
 	];
@@ -412,7 +412,7 @@ TSharedRef<SWidget> SWonderlandLiveTerminal::MakeSection(const FString& Title, c
 					SNew(STextBlock)
 					.Text(FText::FromString(TEXT("\u25A0")))
 					.Font(WonderlandUi::Mono(8))
-					.ColorAndOpacity(WonderlandUi::Gold())
+					.ColorAndOpacity(WonderlandUi::JuliusGold())
 				]
 				+ SHorizontalBox::Slot()
 				.AutoWidth()
@@ -421,7 +421,7 @@ TSharedRef<SWidget> SWonderlandLiveTerminal::MakeSection(const FString& Title, c
 					SNew(STextBlock)
 					.Text(FText::FromString(Title))
 					.Font(WonderlandUi::Sans(10, true, 130))
-					.ColorAndOpacity(WonderlandUi::Gold())
+					.ColorAndOpacity(WonderlandUi::JuliusGold())
 				]
 				+ SHorizontalBox::Slot()
 				.AutoWidth()
@@ -451,7 +451,7 @@ TSharedRef<SWidget> SWonderlandLiveTerminal::MakeSection(const FString& Title, c
 							return FSlateColor(WonderlandUi::Sage());
 						}
 						const bool bResting = Now == TEXT("WAITING") || Now == TEXT("STANDBY");
-						return FSlateColor(bResting ? WonderlandUi::Gold(0.55f) : WonderlandUi::Gold());
+						return FSlateColor(bResting ? WonderlandUi::JuliusGold(0.55f) : WonderlandUi::JuliusGold());
 					})
 				]
 			]
@@ -500,7 +500,7 @@ TSharedRef<SWidget> SWonderlandLiveTerminal::MakeSideList(bool bLoops)
 				.AutoWidth()
 				.VAlign(VAlign_Center)
 				[
-					SNew(SWonderlandHexBadge).Label(Number).Size(34.0f).Color(WonderlandUi::Gold())
+					SNew(SWonderlandHexBadge).Label(Number).Size(34.0f).Color(WonderlandUi::JuliusGold())
 				]
 				+ SHorizontalBox::Slot()
 				.FillWidth(1.0f)
@@ -602,15 +602,15 @@ void SWonderlandLiveTerminal::RebuildJuliusBody()
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 5.0f, 0.0f)
 			[
-				SNew(STextBlock).Text(FText::FromString(TEXT("\u25CF"))).Font(WonderlandUi::Mono(6)).ColorAndOpacity(WonderlandUi::Gold())
+				SNew(STextBlock).Text(FText::FromString(TEXT("\u25CF"))).Font(WonderlandUi::Mono(6)).ColorAndOpacity(WonderlandUi::JuliusGold())
 			]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 7.0f, 0.0f)
 			[
-				SNew(STextBlock).Text(FText::FromString(Row.Time)).Font(WonderlandUi::Mono(9)).ColorAndOpacity(WonderlandUi::Gold())
+				SNew(STextBlock).Text(FText::FromString(Row.Time)).Font(WonderlandUi::Mono(9)).ColorAndOpacity(WonderlandUi::JuliusGold())
 			]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 5.0f, 0.0f)
 			[
-				SNew(STextBlock).Text(FText::FromString(Row.Role + TEXT(":"))).Font(WonderlandUi::Mono(9)).ColorAndOpacity(WonderlandUi::Gold(0.9f))
+				SNew(STextBlock).Text(FText::FromString(Row.Role + TEXT(":"))).Font(WonderlandUi::Mono(9)).ColorAndOpacity(WonderlandUi::JuliusGold(0.9f))
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 			[

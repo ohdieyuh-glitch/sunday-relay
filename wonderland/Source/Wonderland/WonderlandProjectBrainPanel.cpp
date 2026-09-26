@@ -32,7 +32,14 @@ namespace WonderlandBrainLook
 	// THE ONE THING THAT STAYS DARK is the Wardrobe preview square, which the founder has now said twice:
 	// "Do NOT make the whole Project Brain black. Only the Wardrobe preview square is black." It is drawn
 	// from SkinPanelSolidBrush further down and is deliberately left as it was.
-	FLinearColor Ink(float A = 1.0f) { return WonderlandUi::Srgb(0x14, 0x16, 0x24, A); }
+	// NAMED FOR ITS OWN PANEL, and it has to be.
+	//
+	// WonderWebLook declares an Ink() of its own in a HEADER, and two files in this module carry
+	// `using namespace WonderWebLook;` at FILE scope -- so whenever the unity build happens to place this
+	// file after one of them, every Ink() here becomes ambiguous and the module stops compiling. Nothing
+	// about this file changed to cause that; the adaptive unity grouping did, which means it can happen
+	// again to anyone. A name that cannot collide is cheaper than a build that fails by arrangement.
+	FLinearColor BrainInk(float A = 1.0f) { return WonderlandUi::Srgb(0x14, 0x16, 0x24, A); }
 	FLinearColor Mist(float A = 1.0f) { return WonderlandUi::Srgb(0x55, 0x5C, 0x78, A); }
 	FLinearColor Violet(float A = 1.0f) { return WonderlandUi::Srgb(0x5A, 0x44, 0xC8, A); }
 	FLinearColor Beam(float A = 1.0f) { return WonderlandUi::Srgb(0x35, 0x49, 0xC0, A); }
@@ -274,7 +281,7 @@ public:
 				FSlateDrawElement::MakeBox(OutDrawElements, Layer + 2, AllottedGeometry.ToPaintGeometry(FVector2f(11.0f, 11.0f), FSlateLayoutTransform(End - FVector2f(5.5f, 5.5f))),
 					&Dot, ESlateDrawEffect::None, Beam(0.30f));
 				FSlateDrawElement::MakeBox(OutDrawElements, Layer + 3, AllottedGeometry.ToPaintGeometry(FVector2f(5.0f, 5.0f), FSlateLayoutTransform(End - FVector2f(2.5f, 2.5f))),
-					&Dot, ESlateDrawEffect::None, Ink(0.95f));
+					&Dot, ESlateDrawEffect::None, BrainInk(0.95f));
 			}
 			const float T = FMath::Frac(Time * 0.22f + Index * 0.137f);
 			const float U = 1.0f - T;
@@ -391,7 +398,7 @@ SWonderlandProjectBrainPanel::SWonderlandProjectBrainPanel()
 	, SystemBadge(WonderlandUi::Srgb(150, 130, 255, 0.16f), 6.0f, WonderlandUi::Srgb(186, 166, 255, 0.90f), 1.0f)
 	, InputBrush(WonderlandUi::Srgb(255, 255, 255, 0.98f), 7.0f, WonderlandBrainLook::Beam(0.55f), 1.0f)
 	, ButtonBrush(WonderlandUi::Srgb(90, 100, 230, 0.16f), 7.0f, WonderlandBrainLook::Violet(0.85f), 1.0f)
-	, ButtonHoverBrush(WonderlandUi::Srgb(110, 118, 255, 0.30f), 7.0f, WonderlandBrainLook::Ink(1.0f), 1.0f)
+	, ButtonHoverBrush(WonderlandUi::Srgb(110, 118, 255, 0.30f), 7.0f, WonderlandBrainLook::BrainInk(1.0f), 1.0f)
 	, RuleBrush(WonderlandBrainLook::Beam(0.45f), 0.0f)
 	, StatusBrush(WonderlandUi::Srgb(255, 244, 214, 0.90f), 6.0f, WonderlandUi::Srgb(196, 146, 24, 0.85f), 1.0f)
 	// THE WARDROBE'S SURFACES, LAST because that is where they are declared. C++ initialises members in
@@ -482,8 +489,8 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 		.SetBackgroundImageHovered(NoBackground)
 		.SetBackgroundImageFocused(NoBackground)
 		.SetFont(Font("Regular", 11))
-		.SetForegroundColor(FSlateColor(Ink()))
-		.SetFocusedForegroundColor(FSlateColor(Ink()))
+		.SetForegroundColor(FSlateColor(BrainInk()))
+		.SetFocusedForegroundColor(FSlateColor(BrainInk()))
 		.SetPadding(FMargin(6.0f, 4.0f));
 
 	const auto Slot = [](const FRect& Rect) { return FAnchors(Rect.X0, Rect.Y0, Rect.X1, Rect.Y1); };
@@ -631,7 +638,7 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 			SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight()
 			[
-				SNew(STextBlock).Text(INVTEXT("PROJECT BRAIN")).Font(Font("Light", 38, 330)).ColorAndOpacity(Ink())
+				SNew(STextBlock).Text(INVTEXT("PROJECT BRAIN")).Font(Font("Light", 38, 330)).ColorAndOpacity(BrainInk())
 				.ShadowOffset(FVector2D(0.0f, 0.0f)).ShadowColorAndOpacity(Violet(0.0f))
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(2.0f, 6.0f, 0.0f, 0.0f)
@@ -696,13 +703,13 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 		+ SConstraintCanvas::Slot().Anchors(FAnchors(0.823f, 0.058f)).AutoSize(true).Alignment(FVector2D(0.0, 0.0))
 		[
 			SNew(SVerticalBox)
-			+ SVerticalBox::Slot().AutoHeight()[Caption(TEXT("ADAPTIVE INTELLIGENCE"), Font("Regular", 9, 320), Ink(0.88f))]
-			+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[Caption(TEXT("FOR A MORE CAPABLE YOU"), Font("Regular", 9, 320), Ink(0.88f))]
+			+ SVerticalBox::Slot().AutoHeight()[Caption(TEXT("ADAPTIVE INTELLIGENCE"), Font("Regular", 9, 320), BrainInk(0.88f))]
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[Caption(TEXT("FOR A MORE CAPABLE YOU"), Font("Regular", 9, 320), BrainInk(0.88f))]
 		]
 		+ SConstraintCanvas::Slot().Anchors(FAnchors(0.898f, 0.232f)).AutoSize(true).Alignment(FVector2D(0.0, 0.0))
 		[
 			SNew(SVerticalBox)
-			+ SVerticalBox::Slot().AutoHeight()[Caption(TEXT("PROJECT BRAIN"), Font("Bold", 10, 220), Ink())]
+			+ SVerticalBox::Slot().AutoHeight()[Caption(TEXT("PROJECT BRAIN"), Font("Bold", 10, 220), BrainInk())]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 16.0f, 0.0f, 0.0f)[Caption(TEXT("ADAPTS"), Font("Regular", 8, 300), Mist())]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)[Caption(TEXT("LEARNS"), Font("Regular", 8, 300), Mist())]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)[Caption(TEXT("REMEMBERS"), Font("Regular", 8, 300), Mist())]
@@ -711,7 +718,7 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 		]
 		+ SConstraintCanvas::Slot().Anchors(FAnchors(0.898f, 0.607f)).AutoSize(true).Alignment(FVector2D(0.0, 0.0))
 		[
-			Caption(TEXT("CHAKRA ADAPTIVE"), Font("Regular", 8, 300), Ink(0.85f))
+			Caption(TEXT("CHAKRA ADAPTIVE"), Font("Regular", 8, 300), BrainInk(0.85f))
 		]
 		+ SConstraintCanvas::Slot().Anchors(FAnchors(0.898f, 0.666f)).AutoSize(true).Alignment(FVector2D(0.0, 0.0))
 		[
@@ -721,11 +728,11 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 		]
 		+ SConstraintCanvas::Slot().Anchors(FAnchors(0.042f, 0.947f)).AutoSize(true).Alignment(FVector2D(0.0, 0.0))
 		[
-			Caption(TEXT("YOUR CONTEXT, AMPLIFIED.   ——"), Font("Regular", 9, 320), Ink(0.85f))
+			Caption(TEXT("YOUR CONTEXT, AMPLIFIED.   ——"), Font("Regular", 9, 320), BrainInk(0.85f))
 		]
 		+ SConstraintCanvas::Slot().Anchors(FAnchors(0.800f, 0.947f)).AutoSize(true).Alignment(FVector2D(0.0, 0.0))
 		[
-			Caption(TEXT("A MORE CAPABLE TOMORROW.   ——"), Font("Regular", 9, 320), Ink(0.85f))
+			Caption(TEXT("A MORE CAPABLE TOMORROW.   ——"), Font("Regular", 9, 320), BrainInk(0.85f))
 		]
 		+ SConstraintCanvas::Slot().Anchors(FAnchors(0.42f, 0.978f)).AutoSize(true).Alignment(FVector2D(0.0, 0.0))
 		[
@@ -763,7 +770,7 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeGlassPanel(const TCHAR* Nu
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(2.0f, 0.0f, 22.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Number)).Font(Font("Light", 15, 80)).ColorAndOpacity(Ink(0.9f))
+					SNew(STextBlock).Text(FText::FromString(Number)).Font(Font("Light", 15, 80)).ColorAndOpacity(BrainInk(0.9f))
 				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 26.0f, 0.0f)
 				[
@@ -774,7 +781,7 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeGlassPanel(const TCHAR* Nu
 					SNew(SVerticalBox)
 					+ SVerticalBox::Slot().AutoHeight()
 					[
-						SNew(STextBlock).Text(FText::FromString(Title)).Font(Font("Regular", 12, 300)).ColorAndOpacity(Ink())
+						SNew(STextBlock).Text(FText::FromString(Title)).Font(Font("Regular", 12, 300)).ColorAndOpacity(BrainInk())
 					]
 					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
 					[
@@ -822,7 +829,7 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeMemoryCard(EWonderlandBrai
 				]
 				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 				[
-					SNew(STextBlock).Text_Lambda([this, SurfaceId]() { return SurfaceLabel(SurfaceId); }).Font(Font("Regular", 10)).ColorAndOpacity(Ink(0.92f))
+					SNew(STextBlock).Text_Lambda([this, SurfaceId]() { return SurfaceLabel(SurfaceId); }).Font(Font("Regular", 10)).ColorAndOpacity(BrainInk(0.92f))
 				])
 		];
 	}
@@ -840,7 +847,7 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeMemoryCard(EWonderlandBrai
 				]
 				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 				[
-					SNew(STextBlock).Text(FText::FromString(Title)).Font(Font("Regular", 11)).ColorAndOpacity(Ink())
+					SNew(STextBlock).Text(FText::FromString(Title)).Font(Font("Regular", 11)).ColorAndOpacity(BrainInk())
 				]
 			]
 			+ SVerticalBox::Slot().FillHeight(1.0f)
@@ -864,7 +871,7 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeTile(EWonderlandBrainGlyph
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
 			[
-				SNew(STextBlock).Text_Lambda([this, SurfaceId]() { return SurfaceLabel(SurfaceId); }).Font(Font("Regular", 11)).ColorAndOpacity(Ink()).AutoWrapText(true)
+				SNew(STextBlock).Text_Lambda([this, SurfaceId]() { return SurfaceLabel(SurfaceId); }).Font(Font("Regular", 11)).ColorAndOpacity(BrainInk()).AutoWrapText(true)
 			]
 		]);
 }
@@ -880,7 +887,7 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeChip(EWonderlandBrainGlyph
 		]
 		+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
 		[
-			SNew(STextBlock).Text_Lambda([this, SurfaceId]() { return ChipLabel(SurfaceId); }).Font(Font("Regular", 9, 40)).ColorAndOpacity(Ink(0.95f))
+			SNew(STextBlock).Text_Lambda([this, SurfaceId]() { return ChipLabel(SurfaceId); }).Font(Font("Regular", 9, 40)).ColorAndOpacity(BrainInk(0.95f))
 			.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
 		]);
 }
@@ -971,7 +978,7 @@ void SWonderlandProjectBrainPanel::RebuildInspector()
 	];
 	InspectorBody->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
 	[
-		SNew(STextBlock).Text(FText::FromString(Found->Title)).Font(Font("Light", 24, 60)).ColorAndOpacity(Ink())
+		SNew(STextBlock).Text(FText::FromString(Found->Title)).Font(Font("Light", 24, 60)).ColorAndOpacity(BrainInk())
 	];
 	InspectorBody->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 	[
@@ -1021,7 +1028,7 @@ void SWonderlandProjectBrainPanel::RebuildInspector()
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 			[
-				SNew(STextBlock).Text(FText::FromString(Found->SampleLines[Index])).Font(Font("Regular", 12)).ColorAndOpacity(Ink()).AutoWrapText(true)
+				SNew(STextBlock).Text(FText::FromString(Found->SampleLines[Index])).Font(Font("Regular", 12)).ColorAndOpacity(BrainInk()).AutoWrapText(true)
 			];
 		if (Found->Access == EWonderlandBrainAccess::Review)
 		{
@@ -1030,7 +1037,7 @@ void SWonderlandProjectBrainPanel::RebuildInspector()
 				SNew(SButton).ButtonStyle(&ActionStyle)
 				.OnClicked_Lambda([this, SurfaceId, Index]() { OnReview.ExecuteIfBound(SurfaceId, Index, true); return FReply::Handled(); })
 				[
-					SNew(STextBlock).Text(INVTEXT("ACCEPT")).Font(Font("Bold", 8, 140)).ColorAndOpacity(Ink())
+					SNew(STextBlock).Text(INVTEXT("ACCEPT")).Font(Font("Bold", 8, 140)).ColorAndOpacity(BrainInk())
 				]
 			];
 			Row->AddSlot().AutoWidth().VAlign(VAlign_Center)
@@ -1038,7 +1045,7 @@ void SWonderlandProjectBrainPanel::RebuildInspector()
 				SNew(SButton).ButtonStyle(&ActionStyle)
 				.OnClicked_Lambda([this, SurfaceId, Index]() { OnReview.ExecuteIfBound(SurfaceId, Index, false); return FReply::Handled(); })
 				[
-					SNew(STextBlock).Text(INVTEXT("DECLINE")).Font(Font("Bold", 8, 140)).ColorAndOpacity(Ink())
+					SNew(STextBlock).Text(INVTEXT("DECLINE")).Font(Font("Bold", 8, 140)).ColorAndOpacity(BrainInk())
 				]
 			];
 		}
@@ -1113,7 +1120,7 @@ void SWonderlandProjectBrainPanel::RebuildInspector()
 					return FReply::Handled();
 				})
 				[
-					SNew(STextBlock).Text(INVTEXT("PROPOSE")).Font(Font("Bold", 9, 160)).ColorAndOpacity(Ink())
+					SNew(STextBlock).Text(INVTEXT("PROPOSE")).Font(Font("Bold", 9, 160)).ColorAndOpacity(BrainInk())
 				]
 			]
 		];
@@ -1303,8 +1310,9 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeColourStrip()
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
 		[
 			SNew(STextBlock)
-			.Text(INVTEXT("PRIMARY paints the shell  ·  SECONDARY the status eyes  ·  a skin's own fire, halo and visor are left alone"))
+			.Text(INVTEXT("PRIMARY paints the shell, SECONDARY the status eyes. A skin's own fire, halo and visor are left as designed."))
 			.Font(Font("Regular", 7, 180)).ColorAndOpacity(Mist(0.75f))
+			.AutoWrapText(true)
 		];
 }
 
@@ -1351,7 +1359,7 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSkinCard(const FWonderland
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 						[
 							SNew(STextBlock).Text(FText::FromString(Skin.DisplayName))
-							.Font(Font("Bold", 11, 130)).ColorAndOpacity(Ink(bLocked ? 0.45f : 1.0f))
+							.Font(Font("Bold", 11, 130)).ColorAndOpacity(BrainInk(bLocked ? 0.45f : 1.0f))
 						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
 						[
@@ -1408,7 +1416,7 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSkinTile()
 					]
 					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 					[
-						SNew(STextBlock).Text(INVTEXT("MASCOT SKIN")).Font(Font("Bold", 10, 180)).ColorAndOpacity(Ink())
+						SNew(STextBlock).Text(INVTEXT("MASCOT SKIN")).Font(Font("Bold", 10, 180)).ColorAndOpacity(BrainInk())
 					]
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
@@ -1494,7 +1502,7 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSkinsView()
 						SNew(SVerticalBox)
 						+ SVerticalBox::Slot().AutoHeight()
 						[
-							SNew(STextBlock).Text(INVTEXT("RELAY DOG")).Font(Font("Light", 26, 300)).ColorAndOpacity(Ink())
+							SNew(STextBlock).Text(INVTEXT("RELAY DOG")).Font(Font("Light", 26, 300)).ColorAndOpacity(BrainInk())
 						]
 						+ SVerticalBox::Slot().AutoHeight().Padding(1.0f, 5.0f, 0.0f, 0.0f)
 						[
@@ -1607,7 +1615,7 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSkinsView()
 								const FWonderlandRelaySkin* Skin = Worn();
 								return FText::FromString(Skin != nullptr ? Skin->DisplayName : TEXT("RELAY OG"));
 							})
-							.Font(Font("Bold", 14, 160)).ColorAndOpacity(Ink())
+							.Font(Font("Bold", 14, 160)).ColorAndOpacity(BrainInk())
 						]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 						[

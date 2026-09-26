@@ -1,0 +1,90 @@
+{
+ "name": "zc_moon_state",
+ "started": "2026-09-25 22:47:34",
+ "status": "measured",
+ "directional_lights": [
+  {
+   "name": "DirectionalLight_0",
+   "label": "V2_Sun",
+   "pitch": 72.0,
+   "yaw": 72.0,
+   "intensity": "84.00000762939453",
+   "color": "<Struct 'Color' (0x0000016517022CB8) {b: 249, g: 196, r: 173, a: 255}>",
+   "cast_shadows": "True",
+   "affects_world": "True",
+   "visible": "True",
+   "mobility": "<ComponentMobility.MOVABLE: 2>",
+   "atmosphere_sun": "True",
+   "is_visible": true
+  },
+  {
+   "name": "DirectionalLight_1",
+   "label": "V2_GroundBounce",
+   "pitch": 90.0,
+   "yaw": 0.0,
+   "intensity": "165.0",
+   "color": "<Struct 'Color' (0x00000165170268B8) {b: 234, g: 184, r: 166, a: 255}>",
+   "cast_shadows": "False",
+   "affects_world": "True",
+   "visible": "True",
+   "mobility": "<ComponentMobility.MOVABLE: 2>",
+   "atmosphere_sun": "False",
+   "is_visible": true
+  },
+  {
+   "name": "DirectionalLight_2",
+   "label": "V2_CanopyFill",
+   "pitch": -18.0,
+   "yaw": 169.0,
+   "intensity": "330.0",
+   "color": "<Struct 'Color' (0x000001651702A4B8) {b: 234, g: 184, r: 166, a: 255}>",
+   "cast_shadows": "False",
+   "affects_world": "True",
+   "visible": "True",
+   "mobility": "<ComponentMobility.MOVABLE: 2>",
+   "atmosphere_sun": "False",
+   "is_visible": true
+  },
+  {
+   "name": "DirectionalLight_3",
+   "label": "V2_CanopyFill2",
+   "pitch": -14.0,
+   "yaw": 49.0,
+   "intensity": "330.0",
+   "color": "<Struct 'Color' (0x000001651702BCB8) {b: 234, g: 184, r: 166, a: 255}>",
+   "cast_shadows": "False",
+   "affects_world": "True",
+   "visible": "True",
+   "mobility": "<ComponentMobility.MOVABLE: 2>",
+   "atmosphere_sun": "False",
+   "is_visible": true
+  },
+  {
+   "name": "DirectionalLight_4",
+   "label": "WL_Moon",
+   "pitch": -72.0,
+   "yaw": -108.0,
+   "intensity": "1400.0",
+   "color": "<Struct 'Color' (0x00000164455D14B8) {b: 239, g: 191, r: 170, a: 255}>",
+   "cast_shadows": "True",
+   "affects_world": "True",
+   "visible": "True",
+   "mobility": "<ComponentMobility.MOVABLE: 2>",
+   "atmosphere_sun": "False",
+   "is_visible": true
+  }
+ ],
+ "sky_lights": [
+  {
+   "name": "SkyLight_0",
+   "intensity": "12.375",
+   "source_type": "<SkyLightSourceType.SLS_CAPTURED_SCENE: 0>",
+   "mobility": "<ComponentMobility.MOVABLE: 2>",
+   "real_time_capture": "True",
+   "lower_hemisphere_is_black": "False"
+  }
+ ],
+ "finished": "2026-09-25 22:47:53",
+ "seconds": 18.95,
+ "log": "M INFO directional light {'name': 'DirectionalLight_0', 'label': 'V2_Sun', 'pitch': 72.0, 'yaw': 72.0, 'intensity': '84.00000762939453', 'color': \"<Struct 'Color' (0x0000016517022CB8) {b: 249, g: 196, r: 173, a: 255}>\", 'cast_shadows': 'True', 'affects_world': 'True', 'visible': 'True', 'mobility': '<ComponentMobility.MOVABLE: 2>', 'atmosphere_sun': 'True', 'is_visible': True}\nM INFO directional light {'name': 'DirectionalLight_1', 'label': 'V2_GroundBounce', 'pitch': 90.0, 'yaw': 0.0, 'intensity': '165.0', 'color': \"<Struct 'Color' (0x00000165170268B8) {b: 234, g: 184, r: 166, a: 255}>\", 'cast_shadows': 'False', 'affects_world': 'True', 'visible': 'True', 'mobility': '<ComponentMobility.MOVABLE: 2>', 'atmosphere_sun': 'False', 'is_visible': True}\nM INFO directional light {'name': 'DirectionalLight_2', 'label': 'V2_CanopyFill', 'pitch': -18.0, 'yaw': 169.0, 'intensity': '330.0', 'color': \"<Struct 'Color' (0x000001651702A4B8) {b: 234, g: 184, r: 166, a: 255}>\", 'cast_shadows': 'False', 'affects_world': 'True', 'visible': 'True', 'mobility': '<ComponentMobility.MOVABLE: 2>', 'atmosphere_sun': 'False', 'is_visible': True}\nM INFO directional light {'name': 'DirectionalLight_3', 'label': 'V2_CanopyFill2', 'pitch': -14.0, 'yaw': 49.0, 'intensity': '330.0', 'color': \"<Struct 'Color' (0x000001651702BCB8) {b: 234, g: 184, r: 166, a: 255}>\", 'cast_shadows': 'False', 'affects_world': 'True', 'visible': 'True', 'mobility': '<ComponentMobility.MOVABLE: 2>', 'atmosphere_sun': 'False', 'is_visible': True}\nM INFO directional light {'name': 'DirectionalLight_4', 'label': 'WL_Moon', 'pitch': -72.0, 'yaw': -108.0, 'intensity': '1400.0', 'color': \"<Struct 'Color' (0x00000164455D14B8) {b: 239, g: 191, r: 170, a: 255}>\", 'cast_shadows': 'True', 'affects_world': 'True', 'visible': 'True', 'mobility': '<ComponentMobility.MOVABLE: 2>', 'atmosphere_sun': 'False', 'is_visible': True}\nS INFO sky light {'name': 'SkyLight_0', 'intensity': '12.375', 'source_type': '<SkyLightSourceType.SLS_CAPTURED_SCENE: 0>', 'mobility': '<ComponentMobility.MOVABLE: 2>', 'real_time_capture': 'True', 'lower_hemisphere_is_black': 'False'}\n"
+}

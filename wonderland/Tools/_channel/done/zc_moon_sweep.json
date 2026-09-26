@@ -1,0 +1,46 @@
+{
+ "name": "zc_moon_sweep",
+ "started": "2026-09-25 22:49:46",
+ "status": "measured",
+ "found_moon": true,
+ "sweep": {
+  "0": {
+   "luma": 0.17405,
+   "dark": 0.6755,
+   "bright": 0.0726
+  },
+  "1400": {
+   "luma": 0.19403,
+   "dark": 0.5999,
+   "bright": 0.0724
+  },
+  "7000": {
+   "luma": 0.26426,
+   "dark": 0.3785,
+   "bright": 0.0754
+  },
+  "20000": {
+   "luma": 0.37648,
+   "dark": 0.3167,
+   "bright": 0.0874
+  },
+  "70000": {
+   "luma": 0.54277,
+   "dark": 0.1623,
+   "bright": 0.4819
+  },
+  "200000": {
+   "luma": 0.67776,
+   "dark": 0.0415,
+   "bright": 0.5556
+  }
+ },
+ "noon": {
+  "luma": 0.38601,
+  "dark": 0.1524,
+  "bright": 0.0686
+ },
+ "finished": "2026-09-25 22:50:20",
+ "seconds": 33.92,
+ "log": "M_0 INFO moon at 0 lux {'luma': 0.17405, 'dark': 0.6755, 'bright': 0.0726}\nM_1400 INFO moon at 1400 lux {'luma': 0.19403, 'dark': 0.5999, 'bright': 0.0724}\nM_7000 INFO moon at 7000 lux {'luma': 0.26426, 'dark': 0.3785, 'bright': 0.0754}\nM_20000 INFO moon at 20000 lux {'luma': 0.37648, 'dark': 0.3167, 'bright': 0.0874}\nM_70000 INFO moon at 70000 lux {'luma': 0.54277, 'dark': 0.1623, 'bright': 0.4819}\nM_200000 INFO moon at 200000 lux {'luma': 0.67776, 'dark': 0.0415, 'bright': 0.5556}\nM_NOON INFO the same shot at noon {'luma': 0.38601, 'dark': 0.1524, 'bright': 0.0686}\n"
+}

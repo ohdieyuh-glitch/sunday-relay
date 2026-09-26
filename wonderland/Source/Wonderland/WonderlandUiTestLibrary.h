@@ -140,4 +140,28 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	static bool ReadScreenRect(float MinX, float MinY, float MaxX, float MaxY,
 		FLinearColor& OutMean, float& OutDarkFraction, float& OutBrightFraction, int32& OutSampled);
+
+	/**
+	 * PRESS A COLOUR SWATCH, exactly as the Wardrobe's and the Menu's own swatches press it.
+	 *
+	 * Both of those write the canonical settings and then call WonderlandMascotStyle::SaveAndApply, and so does
+	 * this -- one line each, so a proof cannot pass through a path the player does not use. That is the mistake
+	 * the wardrobe made for a week.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static bool PickMascotColour(bool bPrimary, FLinearColor Colour);
+
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static bool PickCompanionColour(bool bPrimary, FLinearColor Colour);
+
+	/** What the canonical state holds right now, so a proof can check the Wardrobe and the Menu agree. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test")
+	static FLinearColor GetMascotColour(bool bPrimary);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test")
+	static FLinearColor GetCompanionColour(bool bPrimary);
+
+	/** Put every customisable colour back to the one its art was designed in. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static bool ResetAllColours();
 };

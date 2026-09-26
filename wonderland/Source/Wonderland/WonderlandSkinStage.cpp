@@ -220,6 +220,14 @@ void AWonderlandSkinStage::SetInWorldPreview(bool bOn, FVector Where, FRotator F
 	SetActorRotation(bOn ? Facing : FRotator::ZeroRotator, ETeleportType::TeleportPhysics);
 	if (Body != nullptr)
 	{
+		// A SIXTH OF THE AUTHORED FIRE WHILE IT IS IN THE WINDOW, and all of it everywhere else.
+		//
+		// The wardrobe brings the figure close enough to fill a 400-pixel square, and a flame authored at
+		// thousands of times white fills that square with one white shape. Measured against the photographs:
+		// at 1.0 neither Arden Infernal nor Celestial Light had a readable silhouette; at 0.10 the fire is
+		// still plainly fire and the dog inside it is a dog. The Dog standing in the garden is a different
+		// actor and is not touched, so the flame quality the founder approved outdoors is exactly as approved.
+		Body->SetGlowScale(bOn ? 0.10f : 1.0f);
 		// THE BODY IS A SEPARATE ACTOR, not a child, so it has to be carried across by hand. Teleport rather than
 		// sweep: it is crossing a kilometre of world and must not try to walk the distance or collide on the way.
 		Body->SetActorLocation(Home, false, nullptr, ETeleportType::TeleportPhysics);
@@ -340,6 +348,9 @@ bool AWonderlandSkinStage::ShowSkin(FName SkinId)
 	}
 	ShownSkinId = SkinId;
 	LastError.Reset();
+	// A FRESH FIGURE COMES UP AT ITS AUTHORED FIRE, so a skin clicked while the wardrobe is open has to be
+	// told again -- otherwise the second skin the founder tries is the blown-out one.
+	Body->SetGlowScale(bInWorldPreview ? 0.10f : 1.0f);
 	AimCamera();
 	return true;
 }
@@ -354,7 +365,14 @@ void AWonderlandSkinStage::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	SinceWanted += DeltaSeconds;
-	const bool bWanted = SinceWanted < ForgetSeconds;
+	// WANTED WHENEVER THE WARDROBE IS SHOWING THIS BODY IN THE WORLD.
+	//
+	// SinceWanted is fed by the preview BRUSH being painted, which is how the old render-target preview said
+	// somebody was looking. The wardrobe no longer draws that brush -- its window is a hole with the figure
+	// standing in the world behind it -- so nothing marked the stage wanted, this returned early every frame,
+	// and the 360 inspection turned the figure by exactly zero degrees. Measured: eight yaw samples over
+	// thirty seconds, all 0.0, with the control reporting itself ON the whole time.
+	const bool bWanted = SinceWanted < ForgetSeconds || bInWorldPreview;
 	if (bCapturing != bWanted)
 	{
 		bCapturing = bWanted;

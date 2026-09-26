@@ -99,6 +99,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	void RepaintColourway();
 
+	/**
+	 * HOW HARD THIS BODY'S FIRE BURNS, as a multiple of what its figure asked for. 1 is the authored flame.
+	 *
+	 * FOUNDER, 2026-09-25: the Wardrobe preview must be "significantly larger", and separately, from the run
+	 * before: "keep the current flame quality... do not regress them". Both, at once, is the problem this
+	 * solves. Photographed after the framing was corrected, Arden Infernal and Celestial Light filled the
+	 * preview square with a single blown-out shape -- no dog, no halo, no detail. The flames are authored at
+	 * two to thirty THOUSAND times white, which is right at arm's length in a garden and is a white wall when
+	 * the same figure is brought close enough to fill a 400-pixel window.
+	 *
+	 * So the MANNEQUIN in the wardrobe burns lower. It is a different actor from the Dog in the world, and the
+	 * Dog is untouched: what the founder approved outdoors stays exactly as approved.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
+	void SetGlowScale(float Scale);
+
+	float GetGlowScale() const { return GlowScale; }
+
 	/** Follow whatever pawn this controller is wearing, now and after it changes. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	void SetFollowController(APlayerController* Controller);
@@ -360,7 +378,29 @@ private:
 		int32 MaterialIndex = INDEX_NONE;
 		FName Parameter;
 		FLinearColor Rest = FLinearColor::White;
+		/**
+		 * TRUE FOR A MATERIAL THAT IS MEANT TO BEAT RATHER THAN BREATHE.
+		 *
+		 * FOUNDER, 2026-09-25, on Skeleton Flame: "The chest skull must GLOW that exact colour ... NOT
+		 * permanently emissive. It should have the same living pulse: glow on -> soften/off -> glow on. The
+		 * skull's EYES must visibly pulse ... a dark/black block visible from the SIDE/BACK must also pulse ...
+		 * synchronised as one system."
+		 *
+		 * Marked from the FIGURE FILE rather than from a list in here: a material whose name contains "pulse"
+		 * beats deeply. Nothing else in the project has to know which skin this is.
+		 */
+		bool bHeartbeat = false;
 	};
+
+	/**
+	 * TRUE WHEN THIS FIGURE DECLARED ANY HEARTBEAT MATERIAL AT ALL.
+	 *
+	 * It is what keeps the change to ONE skin. A figure with no "pulse" material keeps the gentle ten-percent
+	 * breath every glow in Wonderland has always had; a figure that declares one puts its whole glow on a
+	 * single clock -- eyes, ghostfire, chest skull, the skull's eyes and the seams down its back, together,
+	 * which is the "synchronised as one system" the founder asked for in as many words.
+	 */
+	bool bHasHeartbeat = false;
 
 	UMaterialInterface* ParentFor(EWonderlandCompanionMaterialKind Kind) const;
 
@@ -408,6 +448,13 @@ private:
 	 * clip to white, because that is what white-hot looks like, and a wing should not, because then it is a
 	 * white blob with no armour in it. So the body instances take the compression and these do not.
 	 */
+	//
+	// UPROPERTY, AND IT WAS NOT. A TObjectPtr in a bare member does NOT keep its object alive -- only a
+	// UPROPERTY is a GC root -- so these material instances were collected while the array went on holding
+	// pointers to them. Nothing dereferenced them after the build, so it never showed; the moment a live
+	// recolour walked the array the editor died on the first one, inside SetVectorParameterValue, with an
+	// access violation at address zero. MaterialInstances directly above has always had it.
+	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> FlameMaterialInstances;
 
 	/** One support pulse, travelling from this companion into the Contract. */
@@ -561,6 +608,8 @@ private:
 	TArray<FPartMotion> Motions;
 	TArray<FGlowMaterial> GlowMaterials;
 	EWonderlandBodyRole BodyRole = EWonderlandBodyRole::Neutral;
+	/** See SetGlowScale. 1 is the authored flame, which is what every body in the world wears. */
+	float GlowScale = 1.0f;
 	/**
 	 * THE MATERIALS AS THE FIGURE FILE DECLARED THEM -- name, kind, authored colour and strength -- kept beside
 	 * MaterialInstances and parallel to it.

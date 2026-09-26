@@ -23,7 +23,7 @@ namespace WonderlandHudPanelLook
 		return SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 14.0f, 0.0f)
 			[
-				SNew(SWonderlandBrainIcon).Glyph(Glyph).Size(32.0f).Color(WonderlandUi::Gold()).Thickness(1.8f)
+				SNew(SWonderlandBrainIcon).Glyph(Glyph).Size(32.0f).Color(WonderlandUi::MenuGold()).Thickness(1.8f)
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
 			[
@@ -50,7 +50,7 @@ namespace WonderlandHudPanelLook
 			[
 				SNew(SBox).WidthOverride(130.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Key)).Font(WonderlandUi::Sans(9, true, 160)).ColorAndOpacity(WonderlandUi::Gold(0.85f))
+					SNew(STextBlock).Text(FText::FromString(Key)).Font(WonderlandUi::Sans(9, true, 160)).ColorAndOpacity(WonderlandUi::MenuGold(0.85f))
 				]
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
@@ -63,13 +63,13 @@ namespace WonderlandHudPanelLook
 // ---------------------------------------------------------------------------------------------------------------- missions
 
 SWonderlandMissionsPanel::SWonderlandMissionsPanel()
-	: PanelBrush(WonderlandUi::MapFill(), 14.0f, WonderlandUi::Gold(0.34f), 1.0f)
+	: PanelBrush(WonderlandUi::MapFill(), 14.0f, WonderlandUi::MenuGold(0.34f), 1.0f)
 	, SectionBrush(WonderlandUi::Srgb(14, 16, 26, 0.72f), 10.0f, WonderlandUi::Ivory(0.10f), 1.0f)
 	, PreviewBrush(WonderlandUi::Srgb(40, 20, 14, 0.80f), 6.0f, WonderlandUi::Coral(0.70f), 1.0f)
-	, RuleBrush(WonderlandUi::Gold(0.22f), 0.0f, FLinearColor::Transparent, 0.0f)
-	, HumanBrush(WonderlandUi::Srgb(44, 34, 12, 0.90f), 6.0f, WonderlandUi::Gold(0.95f), 1.2f)
+	, RuleBrush(WonderlandUi::MenuGold(0.22f), 0.0f, FLinearColor::Transparent, 0.0f)
+	, HumanBrush(WonderlandUi::Srgb(44, 34, 12, 0.90f), 6.0f, WonderlandUi::MenuGold(0.95f), 1.2f)
 	, ButtonNormal(WonderlandUi::Srgb(24, 26, 38, 0.90f), 7.0f, WonderlandUi::Ivory(0.24f), 1.0f)
-	, ButtonHovered(WonderlandUi::Srgb(40, 34, 18, 0.95f), 7.0f, WonderlandUi::Gold(0.90f), 1.2f)
+	, ButtonHovered(WonderlandUi::Srgb(40, 34, 18, 0.95f), 7.0f, WonderlandUi::MenuGold(0.90f), 1.2f)
 	, PipUnreached(WonderlandUi::Srgb(10, 12, 20, 0.85f), 8.0f, WonderlandUi::Ivory(0.30f), 1.2f)
 {
 	PipLit.Reserve(WonderlandChakraSteps);
@@ -162,7 +162,7 @@ void SWonderlandMissionsPanel::Construct(const FArguments& InArgs)
 			.Padding(FMargin(10.0f, 5.0f))
 			.Visibility_Lambda([Weak]() { return Weak.IsValid() && Weak->DoesBeatAskForAHuman(Weak->GetBeatId()) ? EVisibility::Visible : EVisibility::Collapsed; })
 			[
-				SNew(STextBlock).Text(FText::FromString(TEXT("THIS STAGE IS WAITING ON A PERSON"))).Font(WonderlandUi::Sans(9, true, 160)).ColorAndOpacity(WonderlandUi::Gold())
+				SNew(STextBlock).Text(FText::FromString(TEXT("THIS STAGE IS WAITING ON A PERSON"))).Font(WonderlandUi::Sans(9, true, 160)).ColorAndOpacity(WonderlandUi::MenuGold())
 			]
 		];
 
@@ -283,14 +283,14 @@ FReply SWonderlandMissionsPanel::OnKeyDown(const FGeometry& MyGeometry, const FK
 // ---------------------------------------------------------------------------------------------------------------- menu
 
 SWonderlandMenuPanel::SWonderlandMenuPanel()
-	: PanelBrush(WonderlandUi::MapFill(), 14.0f, WonderlandUi::Gold(0.34f), 1.0f)
-	, RuleBrush(WonderlandUi::Gold(0.22f), 0.0f, FLinearColor::Transparent, 0.0f)
+	: PanelBrush(WonderlandUi::MapFill(), 14.0f, WonderlandUi::MenuGold(0.34f), 1.0f)
+	, RuleBrush(WonderlandUi::MenuGold(0.22f), 0.0f, FLinearColor::Transparent, 0.0f)
 	, RowNormal(WonderlandUi::Srgb(16, 18, 28, 0.80f), 9.0f, WonderlandUi::Ivory(0.14f), 1.0f)
-	, RowHovered(WonderlandUi::Srgb(38, 32, 16, 0.92f), 9.0f, WonderlandUi::Gold(0.90f), 1.3f)
-	, RowPressed(WonderlandUi::Srgb(54, 44, 20, 1.0f), 9.0f, WonderlandUi::Gold(1.0f), 1.5f)
+	, RowHovered(WonderlandUi::Srgb(38, 32, 16, 0.92f), 9.0f, WonderlandUi::MenuGold(0.90f), 1.3f)
+	, RowPressed(WonderlandUi::Srgb(54, 44, 20, 1.0f), 9.0f, WonderlandUi::MenuGold(1.0f), 1.5f)
 	, SwatchBrush(FLinearColor::White, 4.0f, FLinearColor(0.0f, 0.0f, 0.0f, 0.35f), 1.0f)
 	, SwatchRingBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 5.0f, FLinearColor::White, 1.8f)
-	, TabOnBrush(WonderlandUi::Srgb(46, 38, 16, 0.95f), 8.0f, WonderlandUi::Gold(1.0f), 1.3f)
+	, TabOnBrush(WonderlandUi::Srgb(46, 38, 16, 0.95f), 8.0f, WonderlandUi::MenuGold(1.0f), 1.3f)
 	, TabOffBrush(WonderlandUi::Srgb(16, 18, 28, 0.70f), 8.0f, WonderlandUi::Ivory(0.16f), 1.0f)
 {
 	SwatchStyle = FButtonStyle()
@@ -363,7 +363,7 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColourRow(const TCHAR* Label, cons
 				SNew(SBox).WidthOverride(178.0f)
 				[
 					SNew(STextBlock).Text(FText::FromString(Label))
-					.Font(WonderlandUi::Sans(10, true, 160)).ColorAndOpacity(WonderlandUi::Gold())
+					.Font(WonderlandUi::Sans(10, true, 160)).ColorAndOpacity(WonderlandUi::MenuGold())
 				]
 			]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Chips]
@@ -494,7 +494,7 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeTabBar()
 				.ColorAndOpacity_Lambda([this, bIsColours]()
 				{
 					return FSlateColor(bColorsOpen == bIsColours
-						? WonderlandUi::Gold() : WonderlandUi::Ivory(0.55f));
+						? WonderlandUi::MenuGold() : WonderlandUi::Ivory(0.55f));
 				})
 			]
 		];
@@ -560,7 +560,7 @@ void SWonderlandMenuPanel::Construct(const FArguments& InArgs)
 				]
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 				[
-					SNew(STextBlock).Text(FText::FromString(Row.Key)).Font(WonderlandUi::Sans(9, true, 120)).ColorAndOpacity(WonderlandUi::Gold(0.80f))
+					SNew(STextBlock).Text(FText::FromString(Row.Key)).Font(WonderlandUi::Sans(9, true, 120)).ColorAndOpacity(WonderlandUi::MenuGold(0.80f))
 				]
 			]
 		];
@@ -586,7 +586,7 @@ void SWonderlandMenuPanel::Construct(const FArguments& InArgs)
 			[
 				SNew(SBox).WidthOverride(92.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Control.Keys)).Font(WonderlandUi::Sans(9, true, 120)).ColorAndOpacity(WonderlandUi::Gold(0.85f))
+					SNew(STextBlock).Text(FText::FromString(Control.Keys)).Font(WonderlandUi::Sans(9, true, 120)).ColorAndOpacity(WonderlandUi::MenuGold(0.85f))
 				]
 			]
 			+ SHorizontalBox::Slot().FillWidth(1.0f)
@@ -635,7 +635,7 @@ void SWonderlandMenuPanel::Construct(const FArguments& InArgs)
 									SNew(SVerticalBox)
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 10.0f)
 									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("CONTROLS"))).Font(WonderlandUi::Sans(10, true, 200)).ColorAndOpacity(WonderlandUi::Gold())
+										SNew(STextBlock).Text(FText::FromString(TEXT("CONTROLS"))).Font(WonderlandUi::Sans(10, true, 200)).ColorAndOpacity(WonderlandUi::MenuGold())
 									]
 									+ SVerticalBox::Slot().AutoHeight()[ControlList]
 								]

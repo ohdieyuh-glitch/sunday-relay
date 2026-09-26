@@ -1,0 +1,22 @@
+{
+ "name": "zc_restore_home",
+ "started": "2026-09-25 22:28:19",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "R01",
+   "name": "the editor is on the shipping map",
+   "pass": true,
+   "detail": {
+    "found_on": "WL_V2_GoldenArrival_WP2",
+    "now_on": "WL_V2_GoldenArrival_WP2",
+    "note": "zc_twin_usable errored before its own restore step; nothing was saved in the twin"
+   }
+  }
+ ],
+ "found_on": "WL_V2_GoldenArrival_WP2",
+ "now_on": "WL_V2_GoldenArrival_WP2",
+ "finished": "2026-09-25 22:28:21",
+ "seconds": 1.55,
+ "log": "R00 INFO the editor was found on {'map': 'WL_V2_GoldenArrival_WP2'}\nR01 PASS the editor is on the shipping map {'found_on': 'WL_V2_GoldenArrival_WP2', 'now_on': 'WL_V2_GoldenArrival_WP2', 'note': 'zc_twin_usable errored before its own restore step; nothing was saved in the twin'}\n"
+}

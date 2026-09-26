@@ -28,18 +28,18 @@ namespace
 	// sit at the screen's edge over bright stone and carry a heavy amber border.
 	// THE THEME'S ACCENT, NOT A SECOND GOLD.
 	//
-	// These were two hard-coded hexes a shade apart from WonderlandUi::Gold(), which meant the founder's theme
+	// These were two hard-coded hexes a shade apart from WonderlandUi::CompanionGold(), which meant the founder's theme
 	// moved the Julius terminal and every accent on the HUD while the two companion terminals stayed gold --
 	// photographed in PIE, exactly that happened. They are shades OF the accent now, so one value moves all
 	// three terminals together.
 	FLinearColor CompanionFrameGold(float Alpha = 1.0f)
 	{
-		const FLinearColor A = WonderlandUi::Gold();
+		const FLinearColor A = WonderlandUi::CompanionGold();
 		return FLinearColor(FMath::Min(A.R * 1.06f, 1.0f), A.G * 1.01f, A.B * 0.96f, Alpha);
 	}
 	FLinearColor CompanionTitleGold()
 	{
-		const FLinearColor A = WonderlandUi::Gold();
+		const FLinearColor A = WonderlandUi::CompanionGold();
 		return FLinearColor(FMath::Min(A.R * 1.14f, 1.0f), FMath::Min(A.G * 1.06f, 1.0f), A.B * 0.96f, 1.0f);
 	}
 }
@@ -150,7 +150,7 @@ void SWonderlandCompanionTerminal::Construct(const FArguments& InArgs)
 	Title = InArgs._Title;
 	Accent = InArgs._Accent;
 	OnSubmit = InArgs._OnSubmit;
-	BrushAccent = WonderlandUi::Gold();
+	BrushAccent = WonderlandUi::CompanionGold();
 	// TWICE A SECOND, not every frame: a theme changes when the founder changes it and never on its own.
 	RegisterActiveTimer(0.5f, FWidgetActiveTimerDelegate::CreateSP(this, &SWonderlandCompanionTerminal::FollowTheme));
 	OnRequestClose = InArgs._OnRequestClose;
@@ -561,7 +561,7 @@ FReply SWonderlandCompanionTerminal::HandleInputKeyDown(const FGeometry& Geometr
 
 EActiveTimerReturnType SWonderlandCompanionTerminal::FollowTheme(double InCurrentTime, float InDeltaTime)
 {
-	const FLinearColor Now = WonderlandUi::Gold();
+	const FLinearColor Now = WonderlandUi::CompanionGold();
 	if (!BrushAccent.Equals(Now, 0.002f))
 	{
 		BrushAccent = Now;

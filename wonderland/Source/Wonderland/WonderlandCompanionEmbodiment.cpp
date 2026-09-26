@@ -278,6 +278,7 @@ void AWonderlandCompanionEmbodiment::ClearBody()
 		FlameSurface->ClearAllMeshSections();
 	}
 	GlowMaterials.Reset();
+	bHasHeartbeat = false;
 	BoxCount = 0;
 }
 
@@ -451,7 +452,11 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 				Instance->SetVectorParameterValue(TEXT("EmissiveColor"), Emissive);
 				Instance->SetVectorParameterValue(TEXT("BaseColor"), Emissive);
 				Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), WonderlandTameGlow(Def.Strength));
-				GlowMaterials.Add({Index, TEXT("Color"), Emissive});
+				{
+					const bool bBeats = Def.Name.ToString().Contains(TEXT("pulse"), ESearchCase::IgnoreCase);
+					GlowMaterials.Add({Index, TEXT("Color"), Emissive, bBeats});
+					bHasHeartbeat |= bBeats;
+				}
 				break;
 			}
 
@@ -840,6 +845,17 @@ void AWonderlandCompanionEmbodiment::SetBodyRole(EWonderlandBodyRole InRole)
 	RepaintColourway();
 }
 
+void AWonderlandCompanionEmbodiment::SetGlowScale(float Scale)
+{
+	const float Wanted = FMath::Clamp(Scale, 0.0f, 4.0f);
+	if (FMath::IsNearlyEqual(GlowScale, Wanted, 0.001f))
+	{
+		return;
+	}
+	GlowScale = Wanted;
+	RepaintColourway();
+}
+
 void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMaterialInstanceDynamic* Instance,
 	const FWonderlandCompanionMaterial& Def, const FLinearColor& Lit, const FLinearColor& Emissive)
 {
@@ -874,13 +890,15 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 	// banner, and the black visor every one of them is recognised by -- is None, and is written back at its
 	// authored colour. That is what makes a repaint safe to run repeatedly: it is idempotent, and a channel
 	// the founder did not ask for is restored rather than merely skipped.
-	FLinearColor Want = Authored;
+	// AND HOW HARD THE FIRE BURNS ON THIS PARTICULAR BODY. Only the glowing channels: dimming the shell as
+	// well would turn a wardrobe preview into a night scene. See SetGlowScale.
+	FLinearColor Want = bGlows ? Authored * GlowScale : Authored;
 	if (bChosen)
 	{
 		switch (WonderlandMascotStyle::ChannelFor(Def.Name.ToString()))
 		{
-		case EWonderlandColorChannel::Body: Want = Authored * Primary;   break;
-		case EWonderlandColorChannel::Eye:  Want = Authored * Secondary; break;
+		case EWonderlandColorChannel::Body: Want *= Primary;   break;
+		case EWonderlandColorChannel::Eye:  Want *= Secondary; break;
 		case EWonderlandColorChannel::None: default:                     break;
 		}
 	}
@@ -1843,11 +1861,31 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 
 	// A slow pulse on everything that glows, from rest, so it can never ratchet brighter.
 	const float Pulse = 1.0f + 0.10f * FMath::Sin(2.0f * PI * (ActivityTime / 2.9f + Phase));
+
+	// ---- AND THE HEARTBEAT, for a figure that declared one. See FGlowMaterial::bHeartbeat.
+	//
+	// ONE CLOCK, TWO DEPTHS. The beat is a raised cosine over 2.4 s -- bright, softening away to almost
+	// nothing, and back -- which is the founder's "glow on, soften/off, glow on" and reads as something alive
+	// rather than as a light being switched. The marked materials take it at full depth, down to a twelfth,
+	// so a chest skull is genuinely dark between beats instead of permanently emissive. Everything else that
+	// glows on the same body takes the SAME clock at a third of the depth: the eyes and the ghostfire pulse
+	// with the skull rather than ignoring it, and the flame never drops far enough to look like it is going
+	// out -- the founder's other standing instruction about this skin.
+	//
+	// The phase is the body's own, hashed from its name, so two Dogs beat independently and one Dog's parts
+	// beat exactly together.
+	const float Swell = 0.5f - 0.5f * FMath::Cos(2.0f * PI * FMath::Frac(ActivityTime / 2.4f + Phase));
+	const float Shaped = FMath::Pow(Swell, 1.7f);
+	const float DeepBeat = 0.08f + 0.92f * Shaped;
+	const float ShallowBeat = 0.62f + 0.38f * Shaped;
 	for (const FGlowMaterial& Glow : GlowMaterials)
 	{
 		if (MaterialInstances.IsValidIndex(Glow.MaterialIndex) && MaterialInstances[Glow.MaterialIndex] != nullptr)
 		{
-			MaterialInstances[Glow.MaterialIndex]->SetVectorParameterValue(Glow.Parameter, Glow.Rest * Pulse);
+			const float Amount = bHasHeartbeat
+				? (Glow.bHeartbeat ? DeepBeat : ShallowBeat)
+				: Pulse;
+			MaterialInstances[Glow.MaterialIndex]->SetVectorParameterValue(Glow.Parameter, Glow.Rest * Amount);
 		}
 	}
 }

@@ -1,0 +1,656 @@
+{
+ "name": "zc_wardrobe_upgrade",
+ "started": "2026-09-26 00:33:33",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "U00",
+   "name": "the Project Brain is open with the wardrobe inside it",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "U01",
+   "name": "the preview window reports where it is",
+   "pass": true,
+   "detail": {
+    "centre": [
+     0.5947,
+     0.4704
+    ],
+    "size": [
+     0.2136,
+     0.4829
+    ]
+   }
+  },
+  {
+   "id": "U02",
+   "name": "the preview body was found and measured for every skin",
+   "pass": true,
+   "detail": {
+    "missing": []
+   }
+  },
+  {
+   "id": "U10",
+   "name": "the mascot fills 80-90% of the preview square, for every skin",
+   "pass": true,
+   "detail": {
+    "binding_axis_occupancy": {
+     "relay_og": 0.878,
+     "arden_infernal": 0.918,
+     "apollo": 0.885,
+     "skeleton_flame": 0.888,
+     "celestial_light": 0.874
+    },
+    "window": "0.78 - 0.98",
+    "note": "the founder asked for approximately 80-90% where the silhouette allows, with a small clean margin -- so both a floor and a ceiling"
+   }
+  },
+  {
+   "id": "U12",
+   "name": "no skin's silhouette runs past the frame",
+   "pass": true,
+   "detail": {
+    "over_the_edge": {
+     "relay_og": {
+      "across": false,
+      "up": false
+     },
+     "arden_infernal": {
+      "across": false,
+      "up": false
+     },
+     "apollo": {
+      "across": false,
+      "up": false
+     },
+     "skeleton_flame": {
+      "across": false,
+      "up": false
+     },
+     "celestial_light": {
+      "across": false,
+      "up": false
+     }
+    },
+    "occupancy": {
+     "relay_og": [
+      0.378,
+      0.878
+     ],
+     "arden_infernal": [
+      0.527,
+      0.918
+     ],
+     "apollo": [
+      0.885,
+      0.768
+     ],
+     "skeleton_flame": [
+      0.385,
+      0.888
+     ],
+     "celestial_light": [
+      0.799,
+      0.874
+     ]
+    }
+   }
+  },
+  {
+   "id": "U11",
+   "name": "the mascot is centred in the preview square",
+   "pass": true,
+   "detail": {
+    "offset_in_window_widths": {
+     "relay_og": {
+      "x": -0.044,
+      "y": 0.011
+     },
+     "arden_infernal": {
+      "x": -0.005,
+      "y": 0.013
+     },
+     "apollo": {
+      "x": -0.076,
+      "y": 0.024
+     },
+     "skeleton_flame": {
+      "x": -0.064,
+      "y": 0.016
+     },
+     "celestial_light": {
+      "x": -0.05,
+      "y": 0.01
+     }
+    },
+    "tolerance": 0.1
+   }
+  },
+  {
+   "id": "U13",
+   "name": "the frame's own edges are still the black backdrop, not world bleeding in",
+   "pass": false,
+   "detail": {
+    "brightest_edge_strip": {
+     "relay_og": 0.043,
+     "arden_infernal": 1.0,
+     "apollo": 0.046,
+     "skeleton_flame": 0.043,
+     "celestial_light": 0.999
+    },
+    "ceiling": 0.45
+   }
+  },
+  {
+   "id": "U20",
+   "name": "the mascot is NOT rotating before the button is pressed",
+   "pass": true,
+   "detail": {
+    "inspecting": false
+   }
+  },
+  {
+   "id": "U21",
+   "name": "pressing 360 starts the rotation",
+   "pass": true,
+   "detail": {
+    "returned": true,
+    "inspecting": true
+   }
+  },
+  {
+   "id": "U22",
+   "name": "the mascot actually turns while 360 is on",
+   "pass": true,
+   "detail": {
+    "yaws": [
+     104.5,
+     196.1,
+     286.3,
+     17.0,
+     204.2,
+     294.6,
+     25.2,
+     115.4
+    ],
+    "note": "sampled every 3.75 s, which is a quarter turn at the inspection rate"
+   }
+  },
+  {
+   "id": "U23",
+   "name": "pressing 360 again stops the rotation",
+   "pass": true,
+   "detail": {
+    "inspecting": false
+   }
+  },
+  {
+   "id": "U24",
+   "name": "stopped, the mascot eases back to facing front",
+   "pass": true,
+   "detail": {
+    "yaw": 0.0,
+    "note": "the founder: 'If stopped midway, it can smoothly return to the canonical front-facing preview orientation.'"
+   }
+  },
+  {
+   "id": "U30",
+   "name": "a PRIMARY colour picked in the Wardrobe shows on the preview immediately",
+   "pass": true,
+   "detail": {
+    "plain_mean": [
+     0.2072,
+     0.2515,
+     0.2566
+    ],
+    "crimson_mean": [
+     0.1739,
+     0.1398,
+     0.1481
+    ],
+    "note": "Skeleton Flame is bone and blue ghostfire; a crimson shell must push red above blue in the square, and the ghostfire must not follow it"
+   }
+  },
+  {
+   "id": "U31",
+   "name": "the canonical state is what the Wardrobe wrote, so the Menu reads the same colour",
+   "pass": true,
+   "detail": {
+    "state": [
+     0.82,
+     0.14,
+     0.18
+    ]
+   }
+  },
+  {
+   "id": "U32",
+   "name": "the skin's own fire and glow survive the recolour",
+   "pass": true,
+   "detail": {
+    "bright_before": 0.1453,
+    "bright_after": 0.1147,
+    "note": "PRIMARY reaches bone and bonedeep only; ghost, ghostpale, ash, void and gold are never touched"
+   }
+  },
+  {
+   "id": "U33",
+   "name": "a SECONDARY colour is held in the same canonical state",
+   "pass": true,
+   "detail": {
+    "state": [
+     0.2,
+     0.86,
+     0.6
+    ]
+   }
+  },
+  {
+   "id": "U34",
+   "name": "closing and reopening the Wardrobe keeps the chosen colours",
+   "pass": true,
+   "detail": {
+    "primary": 0.82,
+    "secondary": 0.86
+   }
+  },
+  {
+   "id": "U35",
+   "name": "and the rotation did not survive the close",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "U40",
+   "name": "the Menu has a tab titled \"Colors\"",
+   "pass": true,
+   "detail": {
+    "tabs": "MENU|COLORS"
+   }
+  },
+  {
+   "id": "U41",
+   "name": "the Colors tab opens",
+   "pass": true,
+   "detail": {
+    "open_tab": "COLORS"
+   }
+  }
+ ],
+ "per_skin": {
+  "relay_og": {
+   "across": {
+    "first": 5,
+    "last": 9,
+    "occupancy": 0.3125,
+    "centre": 0.4688,
+    "touches_edge": false,
+    "peak": 0.475,
+    "threshold": 0.085
+   },
+   "up": {
+    "first": 2,
+    "last": 9,
+    "occupancy": 0.5,
+    "centre": 0.375,
+    "touches_edge": false,
+    "peak": 0.337,
+    "threshold": 0.08
+   },
+   "cols": [
+    0.023,
+    0.031,
+    0.02,
+    0.013,
+    0.01,
+    0.248,
+    0.436,
+    0.475,
+    0.362,
+    0.244,
+    0.082,
+    0.003,
+    0.008,
+    0.008,
+    0.005,
+    0.006
+   ],
+   "rows": [
+    0.043,
+    0.051,
+    0.089,
+    0.302,
+    0.331,
+    0.337,
+    0.325,
+    0.115,
+    0.132,
+    0.121,
+    0.053,
+    0.013,
+    0.009,
+    0.042,
+    0.012,
+    0.019
+   ]
+  },
+  "arden_infernal": {
+   "across": {
+    "first": 0,
+    "last": 11,
+    "occupancy": 0.75,
+    "centre": 0.375,
+    "touches_edge": true,
+    "peak": 1.0,
+    "threshold": 0.18
+   },
+   "up": {
+    "first": 0,
+    "last": 15,
+    "occupancy": 1.0,
+    "centre": 0.5,
+    "touches_edge": true,
+    "peak": 0.782,
+    "threshold": 0.141
+   },
+   "cols": [
+    1.0,
+    0.998,
+    0.979,
+    0.878,
+    0.809,
+    0.692,
+    0.615,
+    0.672,
+    0.564,
+    0.513,
+    0.474,
+    0.424,
+    0.131,
+    0.009,
+    0.005,
+    0.006
+   ],
+   "rows": [
+    0.32,
+    0.49,
+    0.686,
+    0.763,
+    0.78,
+    0.782,
+    0.773,
+    0.758,
+    0.743,
+    0.628,
+    0.525,
+    0.494,
+    0.425,
+    0.239,
+    0.193,
+    0.268
+   ]
+  },
+  "apollo": {
+   "across": {
+    "first": 3,
+    "last": 9,
+    "occupancy": 0.4375,
+    "centre": 0.4062,
+    "touches_edge": false,
+    "peak": 0.618,
+    "threshold": 0.111
+   },
+   "up": {
+    "first": 3,
+    "last": 13,
+    "occupancy": 0.6875,
+    "centre": 0.5312,
+    "touches_edge": false,
+    "peak": 0.383,
+    "threshold": 0.08
+   },
+   "cols": [
+    0.033,
+    0.037,
+    0.028,
+    0.17,
+    0.263,
+    0.519,
+    0.618,
+    0.556,
+    0.518,
+    0.343,
+    0.002,
+    0.003,
+    0.01,
+    0.009,
+    0.005,
+    0.006
+   ],
+   "rows": [
+    0.046,
+    0.0,
+    0.008,
+    0.155,
+    0.196,
+    0.297,
+    0.348,
+    0.383,
+    0.372,
+    0.363,
+    0.272,
+    0.282,
+    0.233,
+    0.158,
+    0.014,
+    0.02
+   ]
+  },
+  "skeleton_flame": {
+   "across": {
+    "first": 4,
+    "last": 8,
+    "occupancy": 0.3125,
+    "centre": 0.4062,
+    "touches_edge": false,
+    "peak": 0.728,
+    "threshold": 0.131
+   },
+   "up": {
+    "first": 2,
+    "last": 14,
+    "occupancy": 0.8125,
+    "centre": 0.5312,
+    "touches_edge": false,
+    "peak": 0.345,
+    "threshold": 0.08
+   },
+   "cols": [
+    0.025,
+    0.032,
+    0.02,
+    0.014,
+    0.325,
+    0.728,
+    0.706,
+    0.707,
+    0.603,
+    0.115,
+    0.002,
+    0.003,
+    0.008,
+    0.008,
+    0.005,
+    0.006
+   ],
+   "rows": [
+    0.043,
+    0.041,
+    0.213,
+    0.313,
+    0.33,
+    0.345,
+    0.287,
+    0.258,
+    0.262,
+    0.216,
+    0.215,
+    0.247,
+    0.24,
+    0.165,
+    0.141,
+    0.019
+   ]
+  },
+  "celestial_light": {
+   "across": {
+    "first": 0,
+    "last": 13,
+    "occupancy": 0.875,
+    "centre": 0.4375,
+    "touches_edge": true,
+    "peak": 0.999,
+    "threshold": 0.18
+   },
+   "up": {
+    "first": 0,
+    "last": 15,
+    "occupancy": 1.0,
+    "centre": 0.5,
+    "touches_edge": true,
+    "peak": 0.92,
+    "threshold": 0.166
+   },
+   "cols": [
+    0.999,
+    0.999,
+    0.998,
+    0.998,
+    0.997,
+    0.998,
+    0.998,
+    0.996,
+    0.996,
+    0.986,
+    0.946,
+    0.922,
+    0.803,
+    0.548,
+    0.179,
+    0.007
+   ],
+   "rows": [
+    0.814,
+    0.83,
+    0.863,
+    0.889,
+    0.905,
+    0.916,
+    0.92,
+    0.912,
+    0.897,
+    0.881,
+    0.855,
+    0.816,
+    0.783,
+    0.796,
+    0.747,
+    0.632
+   ]
+  }
+ },
+ "framing": {
+  "relay_og": {
+   "across": 0.378,
+   "up": 0.878,
+   "screen": [
+    0.5853,
+    0.4759
+   ],
+   "away": 164.1
+  },
+  "arden_infernal": {
+   "across": 0.527,
+   "up": 0.918,
+   "screen": [
+    0.5936,
+    0.4768
+   ],
+   "away": 161.6
+  },
+  "apollo": {
+   "across": 0.885,
+   "up": 0.768,
+   "screen": [
+    0.5784,
+    0.482
+   ],
+   "away": 162.8
+  },
+  "skeleton_flame": {
+   "across": 0.385,
+   "up": 0.888,
+   "screen": [
+    0.581,
+    0.4782
+   ],
+   "away": 162.2
+  },
+  "celestial_light": {
+   "across": 0.799,
+   "up": 0.874,
+   "screen": [
+    0.5841,
+    0.4752
+   ],
+   "away": 164.8
+  }
+ },
+ "yaws_seen": [
+  104.5,
+  196.1,
+  286.3,
+  17.0,
+  204.2,
+  294.6,
+  25.2,
+  115.4
+ ],
+ "faces": {
+  "arden_infernal": {
+   "front": 104.5,
+   "right": 196.1,
+   "back": 286.3,
+   "left": 17.0
+  },
+  "celestial_light": {
+   "front": 204.2,
+   "right": 294.6,
+   "back": 25.2,
+   "left": 115.4
+  }
+ },
+ "yaw_after_stop": 0.0,
+ "colour": {
+  "plain": [
+   0.2072,
+   0.2515,
+   0.2566
+  ],
+  "crimson": [
+   0.1739,
+   0.1398,
+   0.1481
+  ],
+  "bright_before": 0.1453,
+  "bright_after": 0.1147
+ },
+ "menu_tabs": "MENU|COLORS",
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\wardrobe_upgrade",
+ "finished": "2026-09-26 00:35:42",
+ "seconds": 128.54,
+ "log": "U00 PASS the Project Brain is open with the wardrobe inside it {}\nU01 PASS the preview window reports where it is {'centre': [0.5947, 0.4704], 'size': [0.2136, 0.4829]}\nU_relay_og INFO relay_og in the window {'across': 0.378, 'up': 0.878, 'screen': [0.5853, 0.4759], 'away': 164.1}\nU_arden_infernal INFO arden_infernal in the window {'across': 0.527, 'up': 0.918, 'screen': [0.5936, 0.4768], 'away': 161.6}\nU_apollo INFO apollo in the window {'across': 0.885, 'up': 0.768, 'screen': [0.5784, 0.482], 'away': 162.8}\nU_skeleton_flame INFO skeleton_flame in the window {'across': 0.385, 'up': 0.888, 'screen': [0.581, 0.4782], 'away': 162.2}\nU_celestial_light INFO celestial_light in the window {'across': 0.799, 'up': 0.874, 'screen': [0.5841, 0.4752], 'away': 164.8}\nU02 PASS the preview body was found and measured for every skin {'missing': []}\nU10 PASS the mascot fills 80-90% of the preview square, for every skin {'binding_axis_occupancy': {'relay_og': 0.878, 'arden_infernal': 0.918, 'apollo': 0.885, 'skeleton_flame': 0.888, 'celestial_light': 0.874}, 'window': '0.78 - 0.98', 'note': 'the founder asked for approximately 80-90% where the silhouette allows, with a small clean margin -- so both a floor and a ceiling'}\nU12 PASS no skin's silhouette runs past the frame {'over_the_edge': {'relay_og': {'across': False, 'up': False}, 'arden_infernal': {'across': False, 'up': False}, 'apollo': {'across': False, 'up': False}, 'skeleton_flame': {'across': False, 'up': False}, 'celestial_light': {'across': False, 'up': False}}, 'occupancy': {'relay_og': [0.378, 0.878], 'arden_infernal': [0.527, 0.918], 'apollo': [0.885, 0.768], 'skeleton_flame': [0.385, 0.888], 'celestial_light': [0.799, 0.874]}}\nU11 PASS the mascot is centred in the preview square {'offset_in_window_widths': {'relay_og': {'x': -0.044, 'y': 0.011}, 'arden_infernal': {'x': -0.005, 'y': 0.013}, 'apollo': {'x': -0.076, 'y': 0.024}, 'skeleton_flame': {'x': -0.064, 'y': 0.016}, 'celestial_light': {'x': -0.05, 'y': 0.01}}, 'tolerance': 0.1}\nU13 FAIL the frame's own edges are still the black backdrop, not world bleeding in {'brightest_edge_strip': {'relay_og': 0.043, 'arden_infernal': 1.0, 'apollo': 0.046, 'skeleton_flame': 0.043, 'celestial_light': 0.999}, 'ceiling': 0.45}\nU20 PASS the mascot is NOT rotating before the button is pressed {'inspecting': False}\nU21 PASS pressing 360 starts the rotation {'returned': True, 'inspecting': True}\nU22 PASS the mascot actually turns while 360 is on {'yaws': [104.5, 196.1, 286.3, 17.0, 204.2, 294.6, 25.2, 115.4], 'note': 'sampled every 3.75 s, which is a quarter turn at the inspection rate'}\nU23 PASS pressing 360 again stops the rotation {'inspecting': False}\nU24 PASS stopped, the mascot eases back to facing front {'yaw': 0.0, 'note': \"the founder: 'If stopped midway, it can smoothly return to the canonical front-facing preview orientation.'\"}\nU30 PASS a PRIMARY colour picked in the Wardrobe shows on the preview immediately {'plain_mean': [0.2072, 0.2515, 0.2566], 'crimson_mean': [0.1739, 0.1398, 0.1481], 'note': 'Skeleton Flame is bone and blue ghostfire; a crimson shell must push red above blue in the square, and the ghostfire must not follow it'}\nU31 PASS the canonical state is what the Wardrobe wrote, so the Menu reads the same colour {'state': [0.82, 0.14, 0.18]}\nU32 PASS the skin's own fire and glow survive the recolour {'bright_before': 0.1453, 'bright_after': 0.1147, 'note': 'PRIMARY reaches bone and bonedeep only; ghost, ghostpale, ash, void and gold are never touched'}\nU33 PASS a SECONDARY colour is held in the same canonical state {'state': [0.2, 0.86, 0.6]}\nU34 PASS closing and reopening the Wardrobe keeps the chosen colours {'primary': 0.82, 'secondary': 0.86}\nU35 PASS and the rotation did not survive the close {}\nU40 PASS the Menu has a tab titled \"Colors\" {'tabs': 'MENU|COLORS'}\nU41 PASS the Colors tab opens {'open_tab': 'COLORS'}\n"
+}

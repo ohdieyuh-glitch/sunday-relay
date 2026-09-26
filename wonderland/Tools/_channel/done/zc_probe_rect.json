@@ -1,0 +1,21 @@
+{
+ "name": "zc_probe_rect",
+ "started": "2026-09-25 22:36:27",
+ "status": "measured",
+ "ui": true,
+ "help_rect": "x.get_skin_preview_rect() -> (out_centre=Vector2D, out_size=Vector2D) or None\r\nWHERE THE PREVIEW WINDOW IS ON SCREEN, as a fraction of the viewport: centre and size.\n\nSo a proof can read the PIXELS INSIDE IT rather than ask the panel whether it thinks it is open. False when\nthe wardrobe is shut or the window has not painted yet.\r\n\r\nReturns:\r\n    tuple or None: \r\n\r\n    out_centre (Vector2D): \r\n\r\n    out_size (Vector2D):",
+ "help_read": "X.read_screen_rect(min_x, min_y, max_x, max_y) -> (out_mean=LinearColor, out_dark_fraction=float, out_bright_fraction=float, out_sampled=int32) or None\r\nWHAT IS ACTUALLY ON THE SCREEN INSIDE A RECTANGLE -- read from the same back buffer the founder photographs.\n\nFOUNDER, 2026-09-25: \"The screenshot is ground truth ... PIE test the visible pixels/content of the preview\nfor every skin\", and \"my screenshots/video override a proof that says a visibly broken feature is complete.\"\n\nEvery wardrobe proof this project has written asked the PANEL whether it was open and the CAMERA where it\nwas pointing,",
+ "rect_returned": [
+  "<Struct 'Vector2D' (0x00000163EFDDFFE0) {x: 0.594738, y: 0.522158}>",
+  "<Struct 'Vector2D' (0x00000163EFDDFDA0) {x: 0.213623, y: 0.586408}>"
+ ],
+ "read_returned": [
+  "<Struct 'LinearColor' (0x00000163EFDDE5E0) {r: 0.487784, g: 0.516480, b: 0.535527, a: 1.000000}>",
+  "0.37563687562942505",
+  "0.453534871339798",
+  "23749"
+ ],
+ "finished": "2026-09-25 22:36:27",
+ "seconds": 0.24,
+ "log": ""
+}

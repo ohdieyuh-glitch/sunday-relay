@@ -1,0 +1,87 @@
+{
+ "name": "zc_twin_usable",
+ "started": "2026-09-25 21:31:59",
+ "status": "measured; whether it LOOKS right is the captures",
+ "tests": [
+  {
+   "id": "U01",
+   "name": "there is ground under the Dog everywhere it is put down in the twin",
+   "pass": true,
+   "detail": {
+    "stops": [
+     {
+      "radius_m": 30.0,
+      "ground": true,
+      "z": -2.7,
+      "on": "V2Batch_garden_lawn_MI_V2_Lawn"
+     },
+     {
+      "radius_m": 284.0,
+      "ground": true,
+      "z": 12.0,
+      "on": "FillEMN_StA2_005"
+     },
+     {
+      "radius_m": 660.0,
+      "ground": true,
+      "z": 3000.0,
+      "on": "SKY05_SKY05_Tower_Mid_Arcade_glass_Glass"
+     }
+    ],
+    "note": "a migrated world with cells that failed to stream would drop the Dog through the floor, and the residency counts would look perfect while it did"
+   }
+  },
+  {
+   "id": "U02",
+   "name": "no resident batch is standing there with nothing in it",
+   "pass": true,
+   "detail": {
+    "components": 3876,
+    "instances": 154909,
+    "empty": 0,
+    "note": "an empty instanced component is what a batch looks like when its instances did not survive"
+   }
+  },
+  {
+   "id": "T90",
+   "name": "the editor is left on the shipping map",
+   "pass": true,
+   "detail": {
+    "world": "WL_V2_GoldenArrival_WP2",
+    "restored": true
+   }
+  }
+ ],
+ "ground_checks": [
+  {
+   "radius_m": 30.0,
+   "ground": true,
+   "z": -2.7,
+   "on": "V2Batch_garden_lawn_MI_V2_Lawn"
+  },
+  {
+   "radius_m": 284.0,
+   "ground": true,
+   "z": 12.0,
+   "on": "FillEMN_StA2_005"
+  },
+  {
+   "radius_m": 660.0,
+   "ground": true,
+   "z": 3000.0,
+   "on": "SKY05_SKY05_Tower_Mid_Arcade_glass_Glass"
+  }
+ ],
+ "captures": [
+  "0030m.jpg",
+  "0284m.jpg",
+  "0660m.jpg"
+ ],
+ "resident_components": 3876,
+ "resident_instances": 154909,
+ "empty_components": 0,
+ "editor_world_at_end": "WL_V2_GoldenArrival_WP2",
+ "finished": "2026-09-25 21:33:13",
+ "seconds": 74.39,
+ "log": "U_0030m INFO twin at 30 m {'radius_m': 30.0, 'ground': True, 'z': -2.7, 'on': 'V2Batch_garden_lawn_MI_V2_Lawn'}\nU_0284m INFO twin at 284 m {'radius_m': 284.0, 'ground': True, 'z': 12.0, 'on': 'FillEMN_StA2_005'}\nU_0660m INFO twin at 660 m {'radius_m': 660.0, 'ground': True, 'z': 3000.0, 'on': 'SKY05_SKY05_Tower_Mid_Arcade_glass_Glass'}\nU01 PASS there is ground under the Dog everywhere it is put down in the twin {'stops': [{'radius_m': 30.0, 'ground': True, 'z': -2.7, 'on': 'V2Batch_garden_lawn_MI_V2_Lawn'}, {'radius_m': 284.0, 'ground': True, 'z': 12.0, 'on': 'FillEMN_StA2_005'}, {'radius_m': 660.0, 'ground': True, 'z': 3000.0, 'on': 'SKY05_SKY05_Tower_Mid_Arcade_glass_Glass'}], 'note': 'a migrated world with cells that failed to stream would drop the Dog through the floor, and the residency counts would look perfect while it did'}\nU02 PASS no resident batch is standing there with nothing in it {'components': 3876, 'instances': 154909, 'empty': 0, 'note': 'an empty instanced component is what a batch looks like when its instances did not survive'}\nT90 PASS the editor is left on the shipping map {'world': 'WL_V2_GoldenArrival_WP2', 'restored': True}\n"
+}

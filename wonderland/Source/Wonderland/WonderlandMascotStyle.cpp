@@ -155,11 +155,11 @@ namespace
 		}
 		(bPrimary ? Settings->Primary : Settings->Secondary) = Colour;
 		Settings->bChosen = true;
-		// SAVED IMMEDIATELY, because a colour the founder picks and loses on exit is not a preference.
-		Settings->SaveConfig();
-		const int32 Repainted = RepaintLiveDogs();
-		UE_LOG(LogTemp, Display, TEXT("WLMASCOT %s = %s (saved, %d dog(s) repainted)"),
-			bPrimary ? TEXT("PRIMARY") : TEXT("SECONDARY"), *Colour.ToString(), Repainted);
+		// THROUGH THE SAME DOOR AS THE WARDROBE AND THE MENU. This used to save and repaint by itself, which
+		// made the console a third writer of a state the founder asked to have exactly one of.
+		WonderlandMascotStyle::SaveAndApply();
+		UE_LOG(LogTemp, Display, TEXT("WLMASCOT %s = %s (saved and applied)"),
+			bPrimary ? TEXT("PRIMARY") : TEXT("SECONDARY"), *Colour.ToString());
 	}
 
 	/** Repaint every AI Companion body standing in a live world. Cubs are NOT touched: they are not companions. */
@@ -210,13 +210,11 @@ namespace
 				Settings->Primary = FLinearColor::White;
 				Settings->Secondary = FLinearColor(1.00f, 0.78f, 0.16f, 1.0f);
 				Settings->bChosen = false;
-				Settings->SaveConfig();
-				// TRUE: reset has just written the designed colours and must put them ON, which a paint
-				// that returns early on bChosen would not do -- that is what left magenta on the Dog.
-				const int32 Repainted = RepaintLiveDogs(true);
-				UE_LOG(LogTemp, Display, TEXT("WLMASCOT colours reset to the designed ones (%d dog(s) repainted)"),
-					Repainted);
 			}
+			// THROUGH THE ONE DOOR. SaveAndApply repaints even when nothing is chosen, which is exactly what a
+			// reset needs: a paint that returned early on bChosen is what once left magenta on the Dog.
+			WonderlandMascotStyle::SaveAndApply();
+			UE_LOG(LogTemp, Display, TEXT("WLMASCOT colours reset to the designed ones"));
 		}));
 }
 
@@ -233,6 +231,13 @@ namespace WonderlandMascotStyle
 		// returned early on bChosen is exactly what once left magenta on the Dog after a reset.
 		RepaintLiveDogs(true);
 		RepaintLiveCompanions();
+		// THE SLATE SURFACES TOO. A terminal's accent is baked into brushes when its panel is constructed, so a
+		// running terminal keeps the old gold until it is asked to build again -- which is what makes a colour
+		// picked in the Menu look like it did nothing. Rebuilding the HUD is what "live" means for those.
+		if (GEngine != nullptr)
+		{
+			GEngine->Exec(nullptr, TEXT("wl.Hud.Refresh"));
+		}
 		OnChanged().Broadcast();
 	}
 }
@@ -267,6 +272,42 @@ namespace WonderlandUi
 			}
 		}
 		return GThemeAccent;
+	}
+
+	/**
+	 * THE TWO TERMINALS, SEPARATELY (founder, 2026-09-25: "real color customization in the MENU tab for (A)
+	 * Julius Live Terminal, (B) AI Companion terminals").
+	 *
+	 * Each falls back to the shared accent until it has been chosen, so an install that has asked for nothing
+	 * still shows Wonderland's own gold everywhere and the two cannot silently drift apart.
+	 *
+	 * READ EVERY TIME rather than cached like ThemeAccent above: these are chosen from a panel the player has
+	 * open, and the cached one needs a HUD rebuild to take -- which is fine for a console command and wrong for
+	 * a swatch the player just clicked.
+	 */
+	FLinearColor JuliusAccent()
+	{
+		const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+		return Style.bJuliusTerminalAccentChosen ? Style.JuliusTerminalAccent : ThemeAccent();
+	}
+
+	FLinearColor CompanionAccent()
+	{
+		const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+		return Style.bCompanionTerminalAccentChosen ? Style.CompanionTerminalAccent : ThemeAccent();
+	}
+
+	/**
+	 * THE MENU'S OWN ACCENT, and only its accent.
+	 *
+	 * FOUNDER: "Update the intentional accent surfaces WITHOUT making text unreadable. Do not indiscriminately
+	 * tint every element." So this is read by headings, key hints and the chosen tab. Nothing reads it for a
+	 * background or for body text, which is what makes every choice in the palette safe.
+	 */
+	FLinearColor MenuAccent()
+	{
+		const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+		return Style.bMenuAccentChosen ? Style.MenuAccent : ThemeAccent();
 	}
 }
 

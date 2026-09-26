@@ -1396,16 +1396,50 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 		// And how wide it is, read in the same place: the fit below is solved from the vertical angle alone,
 		// so without this a halo or a banner is clipped at the window's SIDES however much height it is given.
 		float FigureWide = 0.0f;
+		// HOW FAR THE MIDDLE OF WHAT IS DRAWN SITS ABOVE THE ACTOR'S OWN ORIGIN. Never zero, and getting this
+		// wrong is what cut the Dog's head off the top of the window.
+		float FigureMiddle = 0.0f;
 		if (const AWonderlandSkinStage* Staged = Self->SkinStage())
 		{
 			if (const AWonderlandCompanionEmbodiment* Shown = Staged->GetBody())
 			{
-				const float Standing = Shown->GetFigureHeightUu();
-				if (Standing > 60.0f)
+				// ---- MEASURED FROM WHAT IS ON SCREEN, NOT FROM WHAT THE FIGURE FILE DECLARES.
+				//
+				// GetFigureHeightUu and GetFigureWidthUu are an ENVELOPE, not a size: they add a reach factor
+				// to every glow group (Tall * 1.45, Fat * 1.15) so that a flame which animates outward is
+				// counted before it gets there. That is right for deciding a safe distance and wrong for
+				// filling a frame, and the difference is not small.
+				//
+				// MEASURED IN PIE with the wardrobe open: Arden Infernal's declared height is about 473 uu and
+				// the bounds of what actually renders are 326 -- so a frame solved to 0.86 of the window put
+				// the visible figure at 0.59 of it, which is precisely the "too much empty black space around
+				// it" the founder photographed. Relay OG, which has no fire, came out at 0.87 from the same
+				// code, which is why this was invisible until a skin with flames was measured.
+				//
+				// So the fit reads the rendered bounds and divides out the scale they were rendered at. That is
+				// a fixed point -- the scale cancels -- and it re-solves every 0.08 s, so a skin that has only
+				// half loaded is corrected on the next tick instead of being framed for good.
+				const FVector Applied = Shown->GetActorScale3D();
+				const float Uniform = FMath::Max(FMath::Abs(static_cast<float>(Applied.Z)), 0.001f);
+				const FBox Drawn = Shown->GetComponentsBoundingBox(true);
+				if (Drawn.IsValid && Drawn.GetExtent().Z > 1.0)
 				{
-					Height = Standing;
+					const FVector Half = Drawn.GetExtent() / Uniform;
+					Height = FMath::Max(static_cast<float>(Half.Z) * 2.0f, 60.0f);
+					FigureWide = FMath::Max(static_cast<float>(Half.X), static_cast<float>(Half.Y)) * 2.0f;
+					FigureMiddle = static_cast<float>(Drawn.GetCenter().Z - Shown->GetActorLocation().Z) / Uniform;
 				}
-				FigureWide = Shown->GetFigureWidthUu();
+				else
+				{
+					// Nothing drawn yet: the declared envelope, which is at least the right order of size.
+					const float Standing = Shown->GetFigureHeightUu();
+					if (Standing > 60.0f)
+					{
+						Height = Standing;
+					}
+					FigureWide = Shown->GetFigureWidthUu();
+					FigureMiddle = Shown->GetFigureLowestUu() + Height * 0.5f;
+				}
 			}
 		}
 		const FVector Sole = Dog->GetActorLocation() - FVector(0.0, 0.0, Dog->GetSimpleCollisionHalfHeight());
@@ -1701,7 +1735,16 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 			// The stage's own mannequin, not the player's Dog: the Dog stays where it is in the world, and the
 			// body in the window is the one that wears whatever card was clicked (the stage listens to the skin
 			// registry, so a click re-dresses it without anything here being told about it).
-			Stage->SetInWorldPreview(true, Spot - FVector(0.0, 0.0, Height * PreviewScale * 0.5), (RealEye - Spot).GetSafeNormal2D().Rotation());
+			// THE FIGURE'S MIDDLE ON THE RAY, NOT THE ACTOR'S.
+			//
+			// A figure does not start at its actor origin: the boxes begin at FigureLowestUu above it, and for
+			// the Relay Dog that is most of a shin. Dropping the body by half its HEIGHT therefore left it
+			// riding high by that base -- photographed with Relay OG at Fill 0.88 the head was cut off by the
+			// top of the window and there was a band of empty black under the feet. Half the height PLUS the
+			// base is where the middle of the figure actually is.
+			const float MiddleAbove = FigureMiddle * PreviewScale;
+			Stage->SetInWorldPreview(true, Spot - FVector(0.0, 0.0, MiddleAbove),
+				(RealEye - Spot).GetSafeNormal2D().Rotation());
 			Stage->SetActorScale3D(FVector(PreviewScale, PreviewScale, PreviewScale));
 			if (AWonderlandCompanionEmbodiment* Shown = Stage->GetBody())
 			{
@@ -1756,7 +1799,7 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 				// so forward-toward-the-camera is -X and down is -Z.
 				const float DeckLong = (Reach + Distance) / FMath::Max(ActorScale.X * 100.0f, 1.0f);
 				const float DeckWide = FMath::Max(HalfW, 80.0f) * 2.2f / FMath::Max(ActorScale.Y * 100.0f, 1.0f);
-				const float FeetBelowCentre = Height * PreviewScale * 0.5f + 4.0f;
+				const float FeetBelowCentre = FigureMiddle * PreviewScale + 4.0f;
 				Part->SetRelativeScale3D(FVector(DeckLong, DeckWide, 0.04f / FMath::Max(ActorScale.Z, 0.0001f)));
 				Part->SetRelativeRotation(FRotator::ZeroRotator);
 				Part->SetRelativeLocation(FVector(
@@ -2150,6 +2193,21 @@ float UWonderlandUiSubsystem::GetWardrobeInspectYaw() const
 {
 	const AWonderlandSkinStage* Stage = SkinStageActor.Get();
 	return Stage != nullptr ? Stage->GetInspectYaw() : 0.0f;
+}
+
+FString UWonderlandUiSubsystem::GetMenuTabs() const
+{
+	return MenuPanel.IsValid() ? MenuPanel->DescribeTabs() : FString();
+}
+
+FString UWonderlandUiSubsystem::GetOpenMenuTab() const
+{
+	return MenuPanel.IsValid() ? MenuPanel->GetOpenTab() : FString();
+}
+
+bool UWonderlandUiSubsystem::ShowMenuTab(const FString& Title)
+{
+	return MenuPanel.IsValid() && MenuPanel->ShowTab(Title);
 }
 
 bool UWonderlandUiSubsystem::WearRelaySkin(FName SkinId)

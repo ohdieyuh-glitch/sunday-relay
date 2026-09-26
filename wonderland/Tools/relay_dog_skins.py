@@ -1040,6 +1040,11 @@ def apollo():
     return figure
 
 
+#: THE ONE BLUE THIS SKIN IS LIT BY: its eyes, its ghostfire's pale tip, its chest skull and its spine seams.
+#: The founder named the eyes/flame colour as authoritative, so it is written once and read everywhere.
+SKELETON_SOUL = (0.36, 0.95, 1.00)
+
+
 def skeleton_flame():
     """SKELETON FLAME -- BONES IGNITE. SIGNAL NEVER DIES.
 
@@ -1047,12 +1052,29 @@ def skeleton_flame():
     the chest over a dark hollow, skull emblems at brow and sternum, a gold chain charm, blue flame at every hand
     and foot, jointed bone limbs and cyan eyes.
     """
-    figure = start("RELAY DOG SKIN -- SKELETON FLAME", 7004, (0.36, 0.95, 1.00), 8.0)
+    figure = start("RELAY DOG SKIN -- SKELETON FLAME", 7004, SKELETON_SOUL, 8.0)
     figure.material("ghost", "glow", (0.22, 0.70, 1.00), 0.7)
     figure.material("ghostpale", "glow", (0.72, 0.94, 1.00), 1.2)
     figure.material("void", "lit", (0.030, 0.040, 0.060), 1.0)
     figure.material("ash", "lit", (0.640, 0.610, 0.540), 1.0)
     figure.material("gold", "rim", (0.905, 0.720, 0.290), 1.0)
+    # ---- THE SOUL LIGHT, AND IT BEATS.
+    #
+    # FOUNDER, 2026-09-25: "Use the current eyes/flame colour as the authoritative glow colour. The chest skull
+    # must GLOW that exact colour ... NOT permanently emissive. It should have the same living pulse: glow on ->
+    # soften/off -> glow on. The skull's EYES must visibly pulse ... a dark/black block visible from the SIDE or
+    # BACK must also pulse ... synchronised as one system."
+    #
+    # THE COLOUR IS THE EYES', taken from the same tuple the eyes are built from at the top of this function --
+    # not a new blue chosen to look similar, which is how two blues end up in one skin.
+    #
+    # "PULSE" IN THE NAME IS THE CONTRACT. AWonderlandCompanionEmbodiment reads it: a material whose name
+    # contains "pulse" beats deeply, down to a twelfth and back, and every other glow on the same body rides
+    # the SAME clock at a third of the depth. That is what makes the skull, its sockets, the seams, the eyes
+    # and the ghostfire one system rather than five timers -- and it is why nothing here had to be told about
+    # any other skin. SKELETON_SOUL is the eyes' colour.
+    figure.material("soulpulse", "glow", SKELETON_SOUL, 2.2)
+    figure.material("soulveilpulse", "glow", SKELETON_SOUL, 0.55)
     base_dog(figure)
     d = DOG
     tile = d["tile"]
@@ -1079,7 +1101,19 @@ def skeleton_flame():
     # set into each shoulder. At 2.8 and 3.2 these were dark smudges the eye skipped, so the skin's whole
     # "skeletal armour" idea rested on the ribs alone.
     figure.skull_emblem("head", mats, (hd * 0.5 + 0.6, 0.0, d["head_z"] + 3.0), 4.4, tile, deep="dark")
-    figure.skull_emblem("body", mats, (td * 0.5 + 1.8, 0.0, d["torso_z"] + th * 0.5 - 1.2), 5.0, tile, deep="dark")
+    # THE CHEST SKULL IS THE ONE THAT BURNS. Its bone is a dim soul-veil and its sockets, nasal notch and teeth
+    # are the bright soul light, so between beats it is a dark skull and on the beat it is a lit one -- which is
+    # the founder's "glow on -> soften/off -> glow on" rather than a lamp that is always on. The brow skull and
+    # the shoulder skulls stay bone and shadow: three burning skulls would be a lantern, not a mascot.
+    soul_mats = {"bone": "soulveilpulse", "dark": "soulpulse", "gold": "gold", "gem": "ghostpale"}
+    figure.skull_emblem("body", soul_mats, (td * 0.5 + 1.8, 0.0, d["torso_z"] + th * 0.5 - 1.2), 5.0, tile, deep="dark")
+    # AND THE SOCKETS AGAIN, A STEP PROUD AND SMALLER, so the eyes read as eyes at arm's length and across a
+    # plaza. The founder asked for the skull's eyes to pulse VISIBLY, and a socket flush with the chest reads as
+    # a hole whatever colour it is.
+    for eye_side in (-1.0, 1.0):
+        figure.box("body", "soulpulse",
+                   (td * 0.5 + 1.8 + 5.0 * 0.34, eye_side * 5.0 * 0.24, d["torso_z"] + th * 0.5 - 1.2 + 5.0 * 0.22),
+                   (tile * 0.7, tile * 1.5, tile * 1.3))
     for side in (-1.0, 1.0):
         figure.skull_emblem("body", mats, (0.9, side * (tw * 0.5 + 1.6), shoulder + 0.9), 2.9, tile, deep="dark")
     # the gold charm on its chain, hanging just below the sternum skull
@@ -1107,7 +1141,10 @@ def skeleton_flame():
     # and the spine, visible from behind, so the cage has a back
     for s in range(6):
         figure.box("body", "bone", (-td * 0.52, 0.0, d["torso_z"] + th * 0.36 - s * 1.1), (tile * 1.2, tile * 1.6, tile * 0.85))
-        figure.box("body", "void", (-td * 0.50, 0.0, d["torso_z"] + th * 0.36 - s * 1.1 - 0.55), (tile * 0.9, tile * 1.2, tile * 0.3))
+        # THE SEAM BETWEEN THE VERTEBRAE IS WHERE THE LIGHT GETS OUT. Unlit soul light, so between beats it is
+        # as black as the void it replaces and on the beat the spine is a line of fire -- the founder's
+        # "dark/black block visible from the SIDE/BACK must also pulse", answered where the back actually is.
+        figure.box("body", "soulpulse", (-td * 0.50, 0.0, d["torso_z"] + th * 0.36 - s * 1.1 - 0.55), (tile * 0.9, tile * 1.2, tile * 0.3))
 
     # ================================================================== BONE PAULDRONS AND JOINTED LIMBS
     # ONE CAP A SIDE (founder, 2026-09-23): "STOP adding pieces... REMOVE unnecessary layered clutter, random
@@ -1115,7 +1152,8 @@ def skeleton_flame():
     # clean pauldron the plate actually shows.
     for side in (-1.0, 1.0):
         figure.slab("body", "bone", (0.2, side * (tw * 0.5 + 0.9), shoulder + 0.5), (3.8, 3.0, 2.6), tile=tile)
-        figure.box("body", "void", (0.2, side * (tw * 0.5 + 0.9), shoulder - 0.2), (tile * 3.6, tile * 2.6, tile * 0.35))
+        # AND THE DARK BAND UNDER EACH PAULDRON, which is the block you see from the side. Same light, same beat.
+        figure.box("body", "soulpulse", (0.2, side * (tw * 0.5 + 0.9), shoulder - 0.2), (tile * 3.6, tile * 2.6, tile * 0.35))
 
     ad, aw, ah = d["arm"]
     az = d["torso_z"] + 1.0
