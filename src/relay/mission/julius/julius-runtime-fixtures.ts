@@ -23,7 +23,7 @@ import {
   JuliusProviderHealthRegistry, JuliusProviderRouter, JuliusDispatchError,
   type JuliusDispatchAllocation, type JuliusDispatchWorkspace, type JuliusProviderAdapter, type JuliusProviderResult,
 } from './julius-router';
-import { JuliusWorkerRegistry, type JuliusTask, type JuliusWorker } from './julius-runtime';
+import { JuliusWorkerRegistry, type JuliusTask, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
 import { lockJuliusTaskContract, seedJuliusTaskContract, type JuliusTaskContract, type JuliusContractReviewCharge } from './julius-task-contract';
 import type { JuliusCardPolicy } from './julius-policy';
 import type { JuliusVerificationPolicy } from './julius-verification-runtime';
@@ -261,7 +261,24 @@ export type ScriptedOutcome =
      */
     readonly implementation?: unknown;
   }
-  | { readonly kind: 'malformed' };
+  | { readonly kind: 'malformed' }
+  /**
+   * A WORKER WHOSE ANSWER DEPENDS ON THE CONTEXT IT WAS GIVEN.
+   *
+   * Every other step is a constant, which is right for the cases that are about
+   * Julius's own machinery and useless for the one case that is about the
+   * CONTEXT: a matched-pair learning experiment has to show a worker doing worse
+   * because a fact was missing from its packet, not because a script said so.
+   *
+   * `decide` receives the compiled packet text this dispatch was handed — the
+   * real one, out of the durable snapshot, through the same `packetFor` seam
+   * `answerFindings` reads. It returns an ordinary step, and may not return
+   * another `readsPacket`: one level, so a fixture cannot become a program.
+   */
+  | {
+    readonly kind: 'readsPacket';
+    readonly decide: (packet: string | null) => Exclude<ScriptedOutcome, { readonly kind: 'readsPacket' }>;
+  };
 
 export interface ScriptedAdapter extends JuliusProviderAdapter {
   /** Everything Julius handed the adapter, so a test can assert what a dispatch carried. */
@@ -295,8 +312,13 @@ export function scriptedAdapter(
         ...(input.workspace === undefined ? {} : { workspace: input.workspace }),
         ...(input.attempt === undefined ? {} : { attempt: input.attempt }),
       });
-      const step = script[Math.min(index, script.length - 1)] ?? { kind: 'succeed' as const };
+      const scripted = script[Math.min(index, script.length - 1)] ?? { kind: 'succeed' as const };
       index += 1;
+      // RESOLVED BEFORE ANYTHING ELSE READS IT, so every branch below sees an
+      // ordinary step and none of them has to know this kind exists.
+      const step = scripted.kind === 'readsPacket'
+        ? scripted.decide(options.packetFor?.(input) ?? null)
+        : scripted;
       if (step.kind === 'fail') {
         throw new JuliusDispatchError(
           step.code, step.code === 'RATE_LIMIT' || step.code === 'TIMEOUT', step.message ?? 'Scripted provider failure.', undefined,

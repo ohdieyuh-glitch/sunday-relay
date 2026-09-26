@@ -75,6 +75,10 @@ function snapshot(): JuliusContextSnapshot {
     taskContractRevision: 2, taskContractDigest: CHARGE.binding.bindingDigest,
     sourceEntryIds: blocks.map((block) => block.entryId), dependencyTaskIds: [], evidenceIds: [], findingIds: [], acceptanceCriterionIds: ['AC-1'],
     contentHash: 'sha256:test', characterCount: 100, redactionCount: 0, truncated: false,
+    // A fixture packet was compiled without claims, so no integrity decision
+    // was made for it. NULL says that; `[]` would say it was checked.
+    integrityVersion: null, integrityConflicts: null,
+    integrityExcludedEntryIds: null, integrityEvictedEntryIds: null,
     packet: {
       missionId: 'mission-1', taskId: 'build-1', workerId: WORKER.workerId,
       sourceEntryIds: blocks.map((block) => block.entryId),
