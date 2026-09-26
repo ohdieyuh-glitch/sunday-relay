@@ -1,0 +1,260 @@
+{
+ "name": "zc_streaming_why",
+ "started": "2026-09-26 13:03:36",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "T00",
+   "name": "the world was actually enumerated",
+   "pass": true,
+   "detail": {
+    "actors": 21075,
+    "instances": 156393
+   }
+  },
+  {
+   "id": "T01",
+   "name": "the world is not held in a handful of actors too big to page",
+   "pass": false,
+   "detail": {
+    "oversized_actors": 753,
+    "cell_metres": 200.0,
+    "share_of_instances_in_them": 0.4451,
+    "widest": [
+     {
+      "label": "GameplayDebuggerCategoryReplicator0",
+      "span_m": 20000.0,
+      "instances": 0
+     },
+     {
+      "label": "V2_Cloud_veil_01",
+      "span_m": 3926.6,
+      "instances": 0
+     },
+     {
+      "label": "V2_Cloud_veil_05",
+      "span_m": 3585.9,
+      "instances": 0
+     },
+     {
+      "label": "V2_Cloud_veil_07",
+      "span_m": 3463.1,
+      "instances": 0
+     },
+     {
+      "label": "V2_Cloud_veil_03",
+      "span_m": 3338.5,
+      "instances": 0
+     },
+     {
+      "label": "V2_GroundSlab",
+      "span_m": 3000.0,
+      "instances": 0
+     },
+     {
+      "label": "V2_Cloud_veil_06",
+      "span_m": 2844.3,
+      "instances": 0
+     },
+     {
+      "label": "V2_Cloud_veil_02",
+      "span_m": 2697.8,
+      "instances": 0
+     }
+    ],
+    "ceiling": 0.25,
+    "note": "World Partition pages by ACTOR using its bounds. An actor whose instanced component spans more than a cell is inside every cell it touches and can never leave residency. If most of the world's instances live in such actors, no grid setting can make it stream and the fix is to split the components by tile at build time."
+   }
+  },
+  {
+   "id": "T02",
+   "name": "actors are marked as spatially loaded",
+   "pass": true,
+   "detail": {
+    "flags": {
+     "yes": 20448,
+     "no": 627,
+     "unknown": 0
+    },
+    "note": "an actor with is_spatially_loaded false is pinned into the always-loaded set whatever its size, which is the other way a world ends up fully resident"
+   }
+  }
+ ],
+ "partition": {
+  "persistent_level": "?World: Failed to find property 'persistent_level' for attrib",
+  "world_partition": "?World: Failed to find property 'world_partition' for attribute 'world_"
+ },
+ "oversized_actors_by_instances": [
+  {
+   "label": "BC01_BC01_BaseCourse",
+   "span_m": 1970.7,
+   "instances": 4132
+  },
+  {
+   "label": "LF01_0_-1_LF01_0_-1_leaf_LeafMid",
+   "span_m": 201.5,
+   "instances": 1820
+  },
+  {
+   "label": "GT01_South_GT01_South_Tuft_Moss",
+   "span_m": 216.8,
+   "instances": 1552
+  },
+  {
+   "label": "V2Batch_kerb_stone_MI_V2_Kerb",
+   "span_m": 689.7,
+   "instances": 1533
+  },
+  {
+   "label": "V2Batch_kerb_stone_MI_V2_MarbleCool",
+   "span_m": 1967.5,
+   "instances": 1444
+  },
+  {
+   "label": "LF01_0_-2_LF01_0_-2_leaf_LeafMid",
+   "span_m": 201.3,
+   "instances": 1323
+  },
+  {
+   "label": "GT01_Garden_GT01_Garden_Tuft_Meadow",
+   "span_m": 366.1,
+   "instances": 1177
+  },
+  {
+   "label": "LF01_1_0_LF01_1_0_leaf_LeafMid",
+   "span_m": 201.5,
+   "instances": 1060
+  },
+  {
+   "label": "V2Batch_kerb_stone_MI_V2_MarblePale",
+   "span_m": 1969.7,
+   "instances": 1032
+  },
+  {
+   "label": "GT01_South_GT01_South_Tuft_Lawn",
+   "span_m": 201.0,
+   "instances": 948
+  },
+  {
+   "label": "LF01_1_-1_LF01_1_-1_leaf_LeafMid",
+   "span_m": 201.9,
+   "instances": 945
+  },
+  {
+   "label": "LF01_0_-1_LF01_0_-1_petal_PetalViolet",
+   "span_m": 201.3,
+   "instances": 911
+  },
+  {
+   "label": "GT01_Garden_GT01_Garden_Tuft_Lawn",
+   "span_m": 588.8,
+   "instances": 826
+  },
+  {
+   "label": "V2Batch_kerb_stone_MI_V2_MarbleCool",
+   "span_m": 229.3,
+   "instances": 792
+  },
+  {
+   "label": "GF01_GF01_PlanterLip",
+   "span_m": 357.7,
+   "instances": 759
+  },
+  {
+   "label": "V2Batch_ground_flowers_MI_V2_LeafMid",
+   "span_m": 718.9,
+   "instances": 740
+  }
+ ],
+ "actors_measured": 21075,
+ "total_instances": 156393,
+ "instances_in_oversized_actors": 69615,
+ "oversized_actor_count": 753,
+ "widest_actors": [
+  {
+   "label": "GameplayDebuggerCategoryReplicator0",
+   "span_m": 20000.0,
+   "instances": 0
+  },
+  {
+   "label": "V2_Cloud_veil_01",
+   "span_m": 3926.6,
+   "instances": 0
+  },
+  {
+   "label": "V2_Cloud_veil_05",
+   "span_m": 3585.9,
+   "instances": 0
+  },
+  {
+   "label": "V2_Cloud_veil_07",
+   "span_m": 3463.1,
+   "instances": 0
+  },
+  {
+   "label": "V2_Cloud_veil_03",
+   "span_m": 3338.5,
+   "instances": 0
+  },
+  {
+   "label": "V2_GroundSlab",
+   "span_m": 3000.0,
+   "instances": 0
+  },
+  {
+   "label": "V2_Cloud_veil_06",
+   "span_m": 2844.3,
+   "instances": 0
+  },
+  {
+   "label": "V2_Cloud_veil_02",
+   "span_m": 2697.8,
+   "instances": 0
+  },
+  {
+   "label": "V2_Cloud_veil_04",
+   "span_m": 2656.5,
+   "instances": 0
+  },
+  {
+   "label": "V2Batch_hedge_mass_MI_V2_LeafDark",
+   "span_m": 2528.7,
+   "instances": 366
+  },
+  {
+   "label": "V2Batch_hedge_mass_MI_V2_LeafMid",
+   "span_m": 2502.7,
+   "instances": 289
+  },
+  {
+   "label": "WL_NavBounds",
+   "span_m": 2500.0,
+   "instances": 0
+  },
+  {
+   "label": "V2_Cloud_veil_00",
+   "span_m": 2226.3,
+   "instances": 0
+  },
+  {
+   "label": "SKY05_SKY05_Tower_Mid_Arcade_glass_GlassAmber",
+   "span_m": 2204.7,
+   "instances": 49
+  }
+ ],
+ "spatially_loaded_flag": {
+  "yes": 20448,
+  "no": 627,
+  "unknown": 0
+ },
+ "actor_span_m": {
+  "p50": 3.3,
+  "p90": 63.9,
+  "p99": 887.7,
+  "max": 20000.0
+ },
+ "share_of_instances_unpageable": 0.4451,
+ "finished": "2026-09-26 13:03:58",
+ "seconds": 21.43,
+ "log": "T_PART INFO what the level says about partition {'persistent_level': \"?World: Failed to find property 'persistent_level' for attrib\", 'world_partition': \"?World: Failed to find property 'world_partition' for attribute 'world_\"}\nT_LOAD INFO the oversized actors that actually carry the world [{'label': 'BC01_BC01_BaseCourse', 'span_m': 1970.7, 'instances': 4132}, {'label': 'LF01_0_-1_LF01_0_-1_leaf_LeafMid', 'span_m': 201.5, 'instances': 1820}, {'label': 'GT01_South_GT01_South_Tuft_Moss', 'span_m': 216.8, 'instances': 1552}, {'label': 'V2Batch_kerb_stone_MI_V2_Kerb', 'span_m': 689.7, 'instances': 1533}, {'label': 'V2Batch_kerb_stone_MI_V2_MarbleCool', 'span_m': 1967.5, 'instances': 1444}, {'label': 'LF01_0_-2_LF01_0_-2_leaf_LeafMid', 'span_m': 201.3, 'instances': 1323}, {'label': 'GT01_Garden_GT01_Garden_Tuft_Meadow', 'span_m': 366.1, 'instances': 1177}, {'label': 'LF01_1_0_LF01_1_0_leaf_LeafMid', 'span_m': 201.5, 'instances': 1060}, {'label': 'V2Batch_kerb_stone_MI_V2_MarblePale', 'span_m': 1969.7, 'instances': 1032}, {'label': 'GT01_South_GT01_South_Tuft_Lawn', 'span_m': 201.0, 'instances': 948}, {'label': 'LF01_1_-1_LF01_1_-1_leaf_LeafMid', 'span_m': 201.9, 'instances': 945}, {'label': 'LF01_0_-1_LF01_0_-1_petal_PetalViolet', 'span_m': 201.3, 'instances': 911}, {'label': 'GT01_Garden_GT01_Garden_Tuft_Lawn', 'span_m': 588.8, 'instances': 826}, {'label': 'V2Batch_kerb_stone_MI_V2_MarbleCool', 'span_m': 229.3, 'instances': 792}, {'label': 'GF01_GF01_PlanterLip', 'span_m': 357.7, 'instances': 759}, {'label': 'V2Batch_ground_flowers_MI_V2_LeafMid', 'span_m': 718.9, 'instances': 740}]\nT_SHAPE INFO how big the world's actors are {'actors': 21075, 'span_m': {'p50': 3.3, 'p90': 63.9, 'p99': 887.7, 'max': 20000.0}, 'oversized': 753, 'instances_in_oversized': 69615, 'instances_total': 156393}\nT00 PASS the world was actually enumerated {'actors': 21075, 'instances': 156393}\nT01 FAIL the world is not held in a handful of actors too big to page {'oversized_actors': 753, 'cell_metres': 200.0, 'share_of_instances_in_them': 0.4451, 'widest': [{'label': 'GameplayDebuggerCategoryReplicator0', 'span_m': 20000.0, 'instances': 0}, {'label': 'V2_Cloud_veil_01', 'span_m': 3926.6, 'instances': 0}, {'label': 'V2_Cloud_veil_05', 'span_m': 3585.9, 'instances': 0}, {'label': 'V2_Cloud_veil_07', 'span_m': 3463.1, 'instances': 0}, {'label': 'V2_Cloud_veil_03', 'span_m': 3338.5, 'instances': 0}, {'label': 'V2_GroundSlab', 'span_m': 3000.0, 'instances': 0}, {'label': 'V2_Cloud_veil_06', 'span_m': 2844.3, 'instances': 0}, {'label': 'V2_Cloud_veil_02', 'span_m': 2697.8, 'instances': 0}], 'ceiling': 0.25, 'note': \"World Partition pages by ACTOR using its bounds. An actor whose instanced component spans more than a cell is inside every cell it touches and can never leave residency. If most of the world's instances live in such actors, no grid setting can make it stream and the fix is to split the components by tile at build time.\"}\nT02 PASS actors are marked as spatially loaded {'flags': {'yes': 20448, 'no': 627, 'unknown': 0}, 'note': 'an actor with is_spatially_loaded false is pinned into the always-loaded set whatever its size, which is the other way a world ends up fully resident'}\n"
+}

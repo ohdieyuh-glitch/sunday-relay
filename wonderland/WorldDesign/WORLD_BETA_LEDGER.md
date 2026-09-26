@@ -45,6 +45,48 @@ module used is on THIRD_BAND_PREP's "already proven elsewhere" list. Nine walk p
 at 780/850/920 m, none fell. **Row B's Tartarus stuck point is not a hole and not a height mismatch in the seam: it is a BUILDING.** Walked with position readback (the pawn arrived at every point, off by 0.0 uu), the axis reads z 101 / 101 / **1445** / 94 / 75 at 760/800/844/880/920 m -- and the specs say why: at (73071, -42189) TQ01_PlinthCourse sits at z=12 and TQ02_Cornice at z=2072, so a 20.7 m hall stands on the seam and the Dog was landing on it. SF03's first build had paved straight through that floor plan; the seam passes now read the nations' own recorded footprints and leave them alone -- 86 tiles left for buildings in Tartarus, 14 in Icarus, 6 in Noctis -- which is why Tartarus lands at 1,395 rather than 1,739. The traversal half
 wants a founder's walk before it is called PASS.
 
+**Updated 2026-09-26, Internal Development lane. THE COVERAGE GAP IS CLOSED AND THE STREAMING CAUSE IS NAMED.**
+
+**Coverage, re-measured (`zc_beta_walk`, 5/5).** The 17 empty tiles this file has been carrying are gone from
+the beta-accessible world. Ringed at 200 m: **0-200 m 3 tiles / 0 empty, 200-400 8/0, 400-600 16/0, 600-800
+20/0, 800-1,000 30/0, 1,000-1,200 36/0.** One hundred and thirteen tiles from the Arrival Gate out to 1.2 km
+with not one hole in them. Beyond that the frontier is still open -- 18 of 39 tiles empty at 1,200-1,400 m and
+16 of 23 at 1,400-1,600 -- and W04 confirms even those have a floor under them, so a Dog that wanders out
+walks on ground rather than falling. The Dog was stood down across the disc and fell through nothing.
+
+**Water, re-measured (`zc_water`, 5/5).** Translucent, worn by the ponds, wells, canals and basins, moving,
+and stopping when the world is paused -- with the control that the capture was still rendering while paused,
+which is what makes "it stopped" mean something.
+
+**ROW: STREAMING -- BLOCKING, AND THE CAUSE IS NOW MEASURED RATHER THAN SUSPECTED.**
+
+`zc_streaming` S01 fails as flatly as it is possible to fail: **21,089 actors and 156,393 instances resident at
+every stop across the world, an actor spread of exactly 0.** Nothing pages, anywhere, ever.
+
+`zc_streaming_why` says why, and it is not a grid setting. World Partition pages by ACTOR, using that actor's
+bounds, and this world is instanced rather than actor-based -- so an actor whose instanced component spans
+half a kilometre sits inside every cell it touches and can never leave residency. Measured against a 200 m
+cell: **753 actors are wider than one, and they hold 69,615 instances -- 44.5% of the world.** The actors are
+otherwise healthy (20,448 of 21,075 are marked spatially loaded), and the span distribution shows the shape
+plainly: p50 3.3 m, p90 63.9 m, **p99 887.7 m**.
+
+They fall into two classes, and only one of them is hard:
+
+*World-spanning material batches.* `BC01_BaseCourse` is a single actor **1,970 m wide holding 4,132
+instances**; `V2Batch_kerb_stone_MI_V2_MarbleCool` is 1,967 m with 1,444; `MI_V2_MarblePale` 1,970 m with
+1,032; `MI_V2_Kerb` 690 m with 1,533. These are batched by MATERIAL across the entire world, which is exactly
+the right thing to do for draw calls and exactly the wrong thing for paging. Splitting them by tile at build
+time is the fix, and it is a change to the world builders in `Tools/`, not to the map by hand.
+
+*Marginally oversized tiles.* `LF01_*_leaf_LeafMid` at 201.5 m, `GT01_South_Tuft_Moss` at 216.8 m,
+`GT01_South_Tuft_Lawn` at 201.0 m. These are already per-tile and miss the cell by a metre or two. A cell size
+a little larger than the authored tile would page every one of them with no rebuild of the content at all.
+
+**This is left BLOCKING and not attempted in this pass, deliberately.** Both fixes mean re-running world
+builders and re-saving a 45 MB map that is on a Content junction shared with other worktrees, and the standing
+rule on this project is that two editors must never be two writers on one .umap. It wants the founder's word
+before it is done, and it now comes with the numbers and the named remedy rather than as a mystery.
+
 **Updated 2026-09-25, Wonderland master session.** Two measurements, one of which corrects this file's own
 arithmetic.
 
