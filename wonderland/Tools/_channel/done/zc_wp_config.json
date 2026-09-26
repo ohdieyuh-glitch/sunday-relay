@@ -1,0 +1,53 @@
+{
+ "name": "zc_wp_config",
+ "started": "2026-09-26 13:44:08",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "C00",
+   "name": "the editor world is reachable",
+   "pass": true,
+   "detail": {
+    "world": "WL_V2_GoldenArrival_WP2"
+   }
+  },
+  {
+   "id": "C01",
+   "name": "world partition is reachable and reports a runtime hash",
+   "pass": false,
+   "detail": {
+    "partition_object": null,
+    "runtime_hash": null,
+    "note": "a partitioned map with no runtime hash, or a hash set with no runtime partition, has nowhere to put an actor except the always-loaded set -- which is what zero streaming looks like"
+   }
+  },
+  {
+   "id": "C02",
+   "name": "streaming is enabled on the partition",
+   "pass": false,
+   "detail": {
+    "enable_streaming": null,
+    "note": "the single switch that turns the whole thing off"
+   }
+  }
+ ],
+ "editor_world": "WL_V2_GoldenArrival_WP2",
+ "world_settings_error": "type object 'GameplayStatics' has no attribute 'get_world_settings'",
+ "properties": {
+  "World.world_partition": "?World: Failed to find property 'world_partition' for attribute 'world_partition'",
+  "World.enable_world_bounds_checks": "?World: Failed to find property 'enable_world_bounds_checks' for attribute 'enabl",
+  "World.is_partitioned_world": "?World: Failed to find property 'is_partitioned_world' for attribute 'is_partitio",
+  "World.instanced_foliage_grid_size": "?World: Failed to find property 'instanced_foliage_grid_size' for attribute 'inst",
+  "World.navigation_data_chunk_generation_mode": "?World: Failed to find property 'navigation_data_chunk_generation_mode' for attri",
+  "World.default_runtime_partition": "?World: Failed to find property 'default_runtime_partition' for attribute 'defaul",
+  "World.runtime_partitions": "?World: Failed to find property 'runtime_partitions' for attribute 'runtime_parti",
+  "World.streaming_generation": "?World: Failed to find property 'streaming_generation' for attribute 'streaming_g"
+ },
+ "reach": [
+  "get_world_partition: type object 'WorldPartitionBlueprintLibrary' has no attribute 'get_world_partition'"
+ ],
+ "world_partition_object": null,
+ "finished": "2026-09-26 13:44:10",
+ "seconds": 1.41,
+ "log": "C00 PASS the editor world is reachable {'world': 'WL_V2_GoldenArrival_WP2'}\nC_CFG INFO what the level says about partition {'partition': None, 'runtime_hash': None, 'class': None}\nC01 FAIL world partition is reachable and reports a runtime hash {'partition_object': None, 'runtime_hash': None, 'note': 'a partitioned map with no runtime hash, or a hash set with no runtime partition, has nowhere to put an actor except the always-loaded set -- which is what zero streaming looks like'}\nC02 FAIL streaming is enabled on the partition {'enable_streaming': None, 'note': 'the single switch that turns the whole thing off'}\n"
+}

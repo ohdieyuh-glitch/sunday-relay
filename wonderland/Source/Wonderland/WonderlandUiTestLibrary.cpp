@@ -1,4 +1,7 @@
 #include "WonderlandUiTestLibrary.h"
+#include "WorldPartition/WorldPartitionSubsystem.h"
+#include "WorldPartition/WorldPartitionRuntimeHash.h"
+#include "WorldPartition/WorldPartition.h"
 
 #include "WonderlandDemoFlow.h"
 #include "WonderlandTerritory.h"
@@ -588,6 +591,36 @@ FLinearColor UWonderlandUiTestLibrary::GetTerminalAccent(bool bJulius)
 FLinearColor UWonderlandUiTestLibrary::GetMenuAccentColour()
 {
 	return WonderlandUi::MenuAccent();
+}
+
+FString UWonderlandUiTestLibrary::DescribeWorldPartition(UWorld* World)
+{
+	if (World == nullptr)
+	{
+		return TEXT("no world");
+	}
+	UWorldPartition* Partition = World->GetWorldPartition();
+	if (Partition == nullptr)
+	{
+		return FString::Printf(TEXT("world=%s partitioned=0"), *World->GetName());
+	}
+	FString Out = FString::Printf(TEXT("world=%s partitioned=1 streaming=%d initialised=%d"),
+		*World->GetName(),
+		Partition->IsStreamingEnabled() ? 1 : 0,
+		Partition->IsInitialized() ? 1 : 0);
+	if (Partition->RuntimeHash != nullptr)
+	{
+		Out += FString::Printf(TEXT(" runtimeHash=%s"), *Partition->RuntimeHash->GetClass()->GetName());
+	}
+	else
+	{
+		Out += TEXT(" runtimeHash=NONE");
+	}
+	if (World->GetSubsystem<UWorldPartitionSubsystem>() != nullptr)
+	{
+		Out += TEXT(" subsystem=1");
+	}
+	return Out;
 }
 
 bool UWonderlandUiTestLibrary::ReadScreenExtremes(float MinX, float MinY, float MaxX, float MaxY,

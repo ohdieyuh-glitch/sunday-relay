@@ -1,0 +1,47 @@
+{
+ "name": "zc_wp_state",
+ "started": "2026-09-26 13:49:05",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "W00",
+   "name": "both worlds answered",
+   "pass": true,
+   "detail": {
+    "editor": "world=WL_V2_GoldenArrival_WP2 partitioned=0",
+    "pie": "world=WL_V2_GoldenArrival_WP2 partitioned=0"
+   }
+  },
+  {
+   "id": "W01",
+   "name": "the map is partitioned at all",
+   "pass": false,
+   "detail": {
+    "pie": "world=WL_V2_GoldenArrival_WP2 partitioned=0",
+    "note": "if this is 0 the map is a plain level and nothing was ever going to stream"
+   }
+  },
+  {
+   "id": "W02",
+   "name": "streaming is enabled on the running world",
+   "pass": false,
+   "detail": {
+    "pie": "world=WL_V2_GoldenArrival_WP2 partitioned=0",
+    "note": "the single switch. A partitioned map with streaming disabled loads every cell at once, which is exactly the flat residency zc_streaming measures."
+   }
+  },
+  {
+   "id": "W03",
+   "name": "there is a runtime hash to put cells in",
+   "pass": true,
+   "detail": {
+    "pie": "world=WL_V2_GoldenArrival_WP2 partitioned=0"
+   }
+  }
+ ],
+ "editor": "world=WL_V2_GoldenArrival_WP2 partitioned=0",
+ "pie": "world=WL_V2_GoldenArrival_WP2 partitioned=0",
+ "finished": "2026-09-26 13:49:24",
+ "seconds": 18.19,
+ "log": "W_EDITOR INFO the editor world {'partition': 'world=WL_V2_GoldenArrival_WP2 partitioned=0'}\nW_PIE INFO the PIE world {'partition': 'world=WL_V2_GoldenArrival_WP2 partitioned=0'}\nW00 PASS both worlds answered {'editor': 'world=WL_V2_GoldenArrival_WP2 partitioned=0', 'pie': 'world=WL_V2_GoldenArrival_WP2 partitioned=0'}\nW01 FAIL the map is partitioned at all {'pie': 'world=WL_V2_GoldenArrival_WP2 partitioned=0', 'note': 'if this is 0 the map is a plain level and nothing was ever going to stream'}\nW02 FAIL streaming is enabled on the running world {'pie': 'world=WL_V2_GoldenArrival_WP2 partitioned=0', 'note': 'the single switch. A partitioned map with streaming disabled loads every cell at once, which is exactly the flat residency zc_streaming measures.'}\nW03 PASS there is a runtime hash to put cells in {'pie': 'world=WL_V2_GoldenArrival_WP2 partitioned=0'}\n"
+}

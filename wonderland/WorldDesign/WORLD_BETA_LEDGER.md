@@ -45,6 +45,34 @@ module used is on THIRD_BAND_PREP's "already proven elsewhere" list. Nine walk p
 at 780/850/920 m, none fell. **Row B's Tartarus stuck point is not a hole and not a height mismatch in the seam: it is a BUILDING.** Walked with position readback (the pawn arrived at every point, off by 0.0 uu), the axis reads z 101 / 101 / **1445** / 94 / 75 at 760/800/844/880/920 m -- and the specs say why: at (73071, -42189) TQ01_PlinthCourse sits at z=12 and TQ02_Cornice at z=2072, so a 20.7 m hall stands on the seam and the Dog was landing on it. SF03's first build had paved straight through that floor plan; the seam passes now read the nations' own recorded footprints and leave them alone -- 86 tiles left for buildings in Tartarus, 14 in Icarus, 6 in Noctis -- which is why Tartarus lands at 1,395 rather than 1,739. The traversal half
 wants a founder's walk before it is called PASS.
 
+**CORRECTED a few hours later, same day. THE MAP BEING PLAYED IS NOT PARTITIONED, AND THAT IS THE WHOLE
+CAUSE.** The oversized-actor finding below is real arithmetic and was the wrong explanation, and I published
+it as the answer. It is not: it would only begin to matter once partition existed.
+
+Python cannot reach any of World Partition in 5.8 -- `World` has no `world_partition` property,
+`WorldPartitionBlueprintLibrary` has no getter, every name tried returns "failed to find property" -- and a
+probe built on those reported "no runtime hash", which is an unreachable API rather than a finding. Asked
+properly, through a new `DescribeWorldPartition` UFUNCTION calling `UWorld::GetWorldPartition` directly:
+**`partitioned=0`, in the editor world and in PIE alike.** The world has no partition object at all.
+
+The reason is on disk and is a housekeeping accident, not a design fault:
+
+| file | what it is | last written |
+|---|---|---|
+| `WL_V2_GoldenArrival_WP2.umap` | 46 MB, monolithic, **the map the project loads and everyone has been editing** | 2026-09-25 **19:31** |
+| `WL_V2_GoldenArrival_WP2_WP.umap` | 13 KB partition stub with 21,047 externalised actors | 2026-09-25 **00:19** |
+
+The conversion was run, produced `_WP2_WP`, and then the world lane carried on editing the monolithic `_WP2`
+for another nineteen hours. The partitioned copy is a snapshot of the world as it stood before a day's work,
+and the map actually being played has never been partitioned for a moment. That is why residency is flat: not
+753 actors too wide for a cell, but no cells.
+
+The remedy is to re-run the convert commandlet against the current `_WP2` and point the project at the result.
+It is NON-DESTRUCTIVE -- the commandlet writes a new map and leaves the source untouched -- and a checkpoint of
+the 46 MB map and its ini was taken to `recovery/_map_checkpoints/2026-09-26-streaming/` before anything was
+started. The oversized-actor work below stays on the ledger as the NEXT question, because once cells exist,
+`BC01_BaseCourse` at 1,970 m wide really will sit in all of them.
+
 **Updated 2026-09-26, Internal Development lane. THE COVERAGE GAP IS CLOSED AND THE STREAMING CAUSE IS NAMED.**
 
 **Coverage, re-measured (`zc_beta_walk`, 5/5).** The 17 empty tiles this file has been carrying are gone from

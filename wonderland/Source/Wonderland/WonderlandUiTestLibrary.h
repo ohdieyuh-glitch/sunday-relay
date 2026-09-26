@@ -137,6 +137,19 @@ public:
 	 *
 	 * Sampled on a grid rather than every pixel: the answer is a proportion, and 10,000 samples settle it.
 	 */
+	/**
+	 * WHAT WORLD PARTITION IS ACTUALLY DOING ON THIS MAP, in one line.
+	 *
+	 * Asked in C++ because Python cannot reach any of it in 5.8 -- World has no `world_partition` property,
+	 * WorldPartitionBlueprintLibrary has no getter, and every name tried came back "failed to find property".
+	 * A probe built on those reported "no runtime hash" for a map that may well have one, which is not a
+	 * finding, it is an unreachable API. zc_streaming has been failing with 21,089 actors resident at every
+	 * stop and the two candidate causes -- no runtime grid at all, versus actors too big to fit a cell -- have
+	 * completely different costs, so it is worth a UFUNCTION to tell them apart.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static FString DescribeWorldPartition(UWorld* World);
+
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	static bool ReadScreenRect(float MinX, float MinY, float MaxX, float MaxY,
 		FLinearColor& OutMean, float& OutDarkFraction, float& OutBrightFraction, int32& OutSampled);
