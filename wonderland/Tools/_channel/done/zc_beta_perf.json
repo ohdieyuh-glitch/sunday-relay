@@ -1,0 +1,139 @@
+{
+ "name": "zc_beta_perf",
+ "started": "2026-09-26 02:11:05",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "F00",
+   "name": "every stand was measured at noon and at midnight, and the clock was actually running",
+   "pass": true,
+   "detail": {
+    "stands": [
+     "arrival",
+     "icarus_checkpoint",
+     "tartarus_march",
+     "dubel_belt"
+    ],
+    "frame_ms": {
+     "noon/arrival": 27.85,
+     "noon/icarus_checkpoint": 26.96,
+     "noon/tartarus_march": 26.69,
+     "noon/dubel_belt": 26.54,
+     "midnight/arrival": 26.09,
+     "midnight/icarus_checkpoint": 27.68,
+     "midnight/tartarus_march": 27.28,
+     "midnight/dubel_belt": 26.49
+    },
+    "note": "a frame cost of 0.00 is what FStatUnitData reports when the stat unit overlay is not drawing, and it is under every ceiling anyone would set. Asserted here so the two clauses below cannot pass on nothing."
+   }
+  },
+  {
+   "id": "F01",
+   "name": "the worst stand in the world holds a playable frame",
+   "pass": true,
+   "detail": {
+    "worst_frame_ms": 27.85,
+    "ceiling": 50.0,
+    "note": "a ceiling, not a target. This is an editor PIE window on a throttling laptop, which is the harshest place Wonderland is ever drawn; a packaged build has never been measured and that gap is listed as a beta blocker rather than estimated away."
+   }
+  },
+  {
+   "id": "F02",
+   "name": "the moon's second shadow-casting light is affordable",
+   "pass": true,
+   "detail": {
+    "night_minus_noon_ms": {
+     "arrival": -1.76,
+     "icarus_checkpoint": 0.72,
+     "tartarus_march": 0.59,
+     "dubel_belt": -0.05
+    },
+    "ceiling": 14.0,
+    "note": "midnight now runs a second directional light with two cascades, plus a small unshadowed lamp on the Dog. This is what that costs, measured in the same session as the noon figure it is subtracted from."
+   }
+  }
+ ],
+ "by_hour": {
+  "noon": {
+   "arrival": {
+    "frames": 141,
+    "frame_ms": 27.85,
+    "game_ms": 27.82,
+    "render_ms": 14.6,
+    "gpu_ms": 18.72
+   },
+   "icarus_checkpoint": {
+    "frames": 141,
+    "frame_ms": 26.96,
+    "game_ms": 26.94,
+    "render_ms": 12.94,
+    "gpu_ms": 15.62
+   },
+   "tartarus_march": {
+    "frames": 141,
+    "frame_ms": 26.69,
+    "game_ms": 26.6,
+    "render_ms": 12.84,
+    "gpu_ms": 15.85
+   },
+   "dubel_belt": {
+    "frames": 141,
+    "frame_ms": 26.54,
+    "game_ms": 26.59,
+    "render_ms": 12.35,
+    "gpu_ms": 14.73
+   }
+  },
+  "midnight": {
+   "arrival": {
+    "frames": 141,
+    "frame_ms": 26.09,
+    "game_ms": 26.0,
+    "render_ms": 11.94,
+    "gpu_ms": 14.87
+   },
+   "icarus_checkpoint": {
+    "frames": 141,
+    "frame_ms": 27.68,
+    "game_ms": 27.65,
+    "render_ms": 13.47,
+    "gpu_ms": 16.41
+   },
+   "tartarus_march": {
+    "frames": 141,
+    "frame_ms": 27.28,
+    "game_ms": 27.34,
+    "render_ms": 13.32,
+    "gpu_ms": 17.65
+   },
+   "dubel_belt": {
+    "frames": 141,
+    "frame_ms": 26.49,
+    "game_ms": 26.53,
+    "render_ms": 12.46,
+    "gpu_ms": 15.3
+   }
+  }
+ },
+ "_windows": [
+  141,
+  141,
+  141,
+  141,
+  141,
+  141,
+  141,
+  141
+ ],
+ "worst_frame_ms": 27.85,
+ "night_over_noon_ms": {
+  "arrival": -1.76,
+  "icarus_checkpoint": 0.72,
+  "tartarus_march": 0.59,
+  "dubel_belt": -0.05
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\beta_perf",
+ "finished": "2026-09-26 02:13:22",
+ "seconds": 136.62,
+ "log": "F_noon_arrival INFO arrival at noon {'frames': 141, 'frame_ms': 27.85, 'game_ms': 27.82, 'render_ms': 14.6, 'gpu_ms': 18.72}\nF_noon_icarus_checkpoint INFO icarus_checkpoint at noon {'frames': 141, 'frame_ms': 26.96, 'game_ms': 26.94, 'render_ms': 12.94, 'gpu_ms': 15.62}\nF_noon_tartarus_march INFO tartarus_march at noon {'frames': 141, 'frame_ms': 26.69, 'game_ms': 26.6, 'render_ms': 12.84, 'gpu_ms': 15.85}\nF_noon_dubel_belt INFO dubel_belt at noon {'frames': 141, 'frame_ms': 26.54, 'game_ms': 26.59, 'render_ms': 12.35, 'gpu_ms': 14.73}\nF_midnight_arrival INFO arrival at midnight {'frames': 141, 'frame_ms': 26.09, 'game_ms': 26.0, 'render_ms': 11.94, 'gpu_ms': 14.87}\nF_midnight_icarus_checkpoint INFO icarus_checkpoint at midnight {'frames': 141, 'frame_ms': 27.68, 'game_ms': 27.65, 'render_ms': 13.47, 'gpu_ms': 16.41}\nF_midnight_tartarus_march INFO tartarus_march at midnight {'frames': 141, 'frame_ms': 27.28, 'game_ms': 27.34, 'render_ms': 13.32, 'gpu_ms': 17.65}\nF_midnight_dubel_belt INFO dubel_belt at midnight {'frames': 141, 'frame_ms': 26.49, 'game_ms': 26.53, 'render_ms': 12.46, 'gpu_ms': 15.3}\nF00 PASS every stand was measured at noon and at midnight, and the clock was actually running {'stands': ['arrival', 'icarus_checkpoint', 'tartarus_march', 'dubel_belt'], 'frame_ms': {'noon/arrival': 27.85, 'noon/icarus_checkpoint': 26.96, 'noon/tartarus_march': 26.69, 'noon/dubel_belt': 26.54, 'midnight/arrival': 26.09, 'midnight/icarus_checkpoint': 27.68, 'midnight/tartarus_march': 27.28, 'midnight/dubel_belt': 26.49}, 'note': 'a frame cost of 0.00 is what FStatUnitData reports when the stat unit overlay is not drawing, and it is under every ceiling anyone would set. Asserted here so the two clauses below cannot pass on nothing.'}\nF01 PASS the worst stand in the world holds a playable frame {'worst_frame_ms': 27.85, 'ceiling': 50.0, 'note': 'a ceiling, not a target. This is an editor PIE window on a throttling laptop, which is the harshest place Wonderland is ever drawn; a packaged build has never been measured and that gap is listed as a beta blocker rather than estimated away.'}\nF02 PASS the moon's second shadow-casting light is affordable {'night_minus_noon_ms': {'arrival': -1.76, 'icarus_checkpoint': 0.72, 'tartarus_march': 0.59, 'dubel_belt': -0.05}, 'ceiling': 14.0, 'note': 'midnight now runs a second directional light with two cascades, plus a small unshadowed lamp on the Dog. This is what that costs, measured in the same session as the noon figure it is subtracted from.'}\n"
+}

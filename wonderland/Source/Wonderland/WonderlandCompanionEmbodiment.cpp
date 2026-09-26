@@ -102,6 +102,30 @@ namespace
 	 * approved are all untouched -- they are simply scaled. A plain multiplier keeps every relative value
 	 * inside the fire intact: an ember that was brighter than its neighbour still is.
 	 */
+	/**
+	 * WHAT A FLAME IS WORTH ON THE FIRE MATERIAL, which is a different question from what it was worth on a
+	 * flat unlit card.
+	 *
+	 * The figures author their fires at two to five THOUSAND times white, and that was survivable when the
+	 * ribbons were drawn in an opaque unlit material that simply clipped. M_WL_Fire is ADDITIVE and shaped:
+	 * the value passes straight through, so the same number puts the entire foot of every tongue over white
+	 * and erases the falloff and the flicker the material exists to draw. Measured on the first build: 88% of
+	 * Arden's foot band and 94% of Skeleton Flame's were over white.
+	 *
+	 * THE SQUARE ROOT IS THE POINT. The authored strengths span 2,400 to 32,000 and their RATIOS are the
+	 * artist's intent -- an ember that is brighter than its neighbour must stay brighter. A square root keeps
+	 * the ordering and compresses the range into one a shaped additive surface can draw, which a flat scale
+	 * cannot: any scale small enough for 32,000 makes 2,400 invisible.
+	 */
+	TAutoConsoleVariable<float> CVarFireGain(
+		// 1.6, SWEPT RATHER THAN CHOSEN. zc_fire_gain_sweep walks 0.12 to 6.0 in one play session -- the CVar
+		// is read at build time and wl.Look.Reglow rebuilds every figure, so no candidate costs a compile and
+		// none of them is measured at a different temperature. Below 0.8 the fire is a smudge; at 3.0 and
+		// above every tongue washes to white and Arden's ember orange is gone. At 1.6 the ribbons keep their
+		// colour, taper softly and read as flame licking off the ring.
+		TEXT("wl.Look.FireGain"), 1.6f,
+		TEXT("Brightness of a flame ribbon on M_WL_Fire, against the square root of its authored strength."));
+
 	TAutoConsoleVariable<float> CVarFlameDim(
 		TEXT("wl.Look.FlameDim"), 0.55f,
 		TEXT("Scale on flame brightness. 1 = as authored. Shape and flicker are never touched."));
@@ -134,6 +158,24 @@ namespace
 	//
 	// The engine material is kept as a fallback for the same reason the engine cube is: a project that has
 	// not run the asset job should still show a companion, just without the flag.
+	/**
+	 * THE FIRE MATERIAL, and it is the flame RIBBONS' parent and nothing else's.
+	 *
+	 * FOUNDER, P0 item 4: "believable animated Unreal fire, not plastic voxel flames ... flicker, emissive
+	 * falloff, softness/distortion." The ribbons were already the right SHAPE -- tapered, crossed, licking on
+	 * a three-octave flicker -- and were being painted in the figure's own opaque unlit glow material, so a
+	 * beautifully shaped tongue of flame was drawn as a hard-edged coloured card. That is the plastic.
+	 *
+	 * M_WL_Fire (Tools/editor_jobs/zc_make_fire_material.py) is additive, unlit, two-sided, and reads the UVs
+	 * RebuildFlames already writes: V runs 0 at the foot of a tongue to 1 at its tip, U across the ribbon. It
+	 * fades out at the tip, softens to nothing at both edges, and scrolls leaning bands up through the flame.
+	 * Its colour parameter is called "Color", which is what every existing writer already sets -- the
+	 * colourway, the heartbeat and the wardrobe's glow scale all reach it without being told about it.
+	 *
+	 * BODY BOXES DO NOT USE IT. A glow material on a cube still has to read as a solid lit block.
+	 */
+	const TCHAR* const FireParentPath = TEXT("/Game/Wonderland/Materials/M_WL_Fire.M_WL_Fire");
+
 	const TCHAR* const AdditiveParentPath = TEXT("/Game/Wonderland/Materials/M_WL_VoxelAdditive.M_WL_VoxelAdditive");
 	const TCHAR* const AdditiveFallbackPath = TEXT("/Engine/EngineMaterials/EmissiveMeshMaterial.EmissiveMeshMaterial");
 	const TCHAR* const CubePath = TEXT("/Engine/BasicShapes/Cube.Cube");
@@ -473,11 +515,21 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		if (Def.Kind == EWonderlandCompanionMaterialKind::Glow
 			|| Def.Kind == EWonderlandCompanionMaterialKind::Additive)
 		{
-			if (UMaterialInstanceDynamic* Full = UMaterialInstanceDynamic::Create(ParentFor(Def.Kind), this))
+			// THE FIRE MASTER IF THE PROJECT HAS ONE, and the figure's own glow master if it does not -- so a
+			// worktree without the asset still draws flames, just the old way, rather than drawing nothing.
+			UMaterialInterface* FireMaster = LoadObject<UMaterialInterface>(nullptr, FireParentPath);
+			if (UMaterialInstanceDynamic* Full = UMaterialInstanceDynamic::Create(
+				FireMaster != nullptr ? FireMaster : ParentFor(Def.Kind), this))
 			{
 				const FLinearColor Untamed(Def.Color.R, Def.Color.G, Def.Color.B, 1.0f);
-				const float FlameStrength = FMath::Max(Def.Strength, 0.0f)
-					* FMath::Clamp(CVarFlameDim.GetValueOnAnyThread(), 0.05f, 4.0f);
+				const float Dim = FMath::Clamp(CVarFlameDim.GetValueOnAnyThread(), 0.05f, 4.0f);
+				// ON THE FIRE MATERIAL, the square root of the authored strength; on the old flat card, the
+				// strength itself. See CVarFireGain -- the two surfaces need different numbers to look the
+				// same brightness, and the fallback path must not change just because this one did.
+				const float FlameStrength = FireMaster != nullptr
+					? FMath::Sqrt(FMath::Max(Def.Strength, 0.0f))
+						* FMath::Max(CVarFireGain.GetValueOnAnyThread(), 0.001f) * Dim
+					: FMath::Max(Def.Strength, 0.0f) * Dim;
 				const FLinearColor FullEmissive = Untamed * FlameStrength;
 				Full->SetVectorParameterValue(TEXT("Color"), FullEmissive);
 				Full->SetVectorParameterValue(TEXT("EmissiveColor"), FullEmissive);

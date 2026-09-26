@@ -61,7 +61,10 @@ namespace WonderlandTerritoryLook
 	}
 }
 
-using namespace WonderlandTerritoryLook;
+// QUALIFIED, NOT IMPORTED. A `using namespace` here reaches the whole rest of the unity translation unit,
+// so `CubePath` became ambiguous the moment another file in the blob declared one of its own -- which is the
+// same class of collision this namespace was named to avoid. Two short aliases instead.
+namespace WTL = WonderlandTerritoryLook;
 
 /* ---------------------------------------------------------------------------------------- the marker */
 
@@ -94,7 +97,7 @@ AWonderlandTerritoryCheckpoint::AWonderlandTerritoryCheckpoint()
 
 	Lamp = CreateDefaultSubobject<UPointLightComponent>(TEXT("Lamp"));
 	Lamp->SetupAttachment(Root);
-	Lamp->SetRelativeLocation(FVector(0.0, 0.0, PylonHeight * 0.92));
+	Lamp->SetRelativeLocation(FVector(0.0, 0.0, WTL::PylonHeight * 0.92));
 	Lamp->SetIntensityUnits(ELightUnits::Candelas);
 	Lamp->SetIntensity(9.0f);
 	Lamp->SetAttenuationRadius(900.0f);
@@ -106,11 +109,11 @@ void AWonderlandTerritoryCheckpoint::Stand(const FWonderlandTerritory& Territory
 	TerritoryId = Territory.Id;
 	Accent = Territory.Accent;
 	bFound = bDiscovered;
-	HeightUU = PylonHeight;
+	HeightUU = WTL::PylonHeight;
 
-	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, CubePath);
-	UMaterialInterface* Lit = LoadObject<UMaterialInterface>(nullptr, LitPath);
-	UMaterialInterface* Unlit = LoadObject<UMaterialInterface>(nullptr, UnlitPath);
+	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, WTL::CubePath);
+	UMaterialInterface* Lit = LoadObject<UMaterialInterface>(nullptr, WTL::LitPath);
+	UMaterialInterface* Unlit = LoadObject<UMaterialInterface>(nullptr, WTL::UnlitPath);
 	if (Cube == nullptr)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("WLTERRITORY no cube; %s has no marker"), *TerritoryId.ToString());
@@ -124,13 +127,13 @@ void AWonderlandTerritoryCheckpoint::Stand(const FWonderlandTerritory& Territory
 			Mesh->SetStaticMesh(Cube);
 		}
 	}
-	Paint(Stone, Lit, FLinearColor(0.32f, 0.31f, 0.29f));
-	Paint(Ivory, Lit, FLinearColor(0.88f, 0.86f, 0.80f));
+	WTL::Paint(Stone, Lit, FLinearColor(0.32f, 0.31f, 0.29f));
+	WTL::Paint(Ivory, Lit, FLinearColor(0.88f, 0.86f, 0.80f));
 	// THE RING CARRIES THE TERRITORY'S OWN COLOUR, well above white so it blooms a little and reads across a
 	// plaza. Undiscovered it is dim: the founder asked for a DISCOVERED/UNDISCOVERED state and this is what it
 	// looks like from a hundred metres away, before any panel is opened.
 	UMaterialInstanceDynamic* Mid = nullptr;
-	Paint(Glow, Unlit, Accent * (bFound ? 22.0f : 3.0f), &Mid);
+	WTL::Paint(Glow, Unlit, Accent * (bFound ? 22.0f : 3.0f), &Mid);
 	GlowMid = Mid;
 
 	const float Unit = 100.0f;   // the engine cube is 100 uu across, so scale is size/100
@@ -143,24 +146,24 @@ void AWonderlandTerritoryCheckpoint::Stand(const FWonderlandTerritory& Territory
 	};
 
 	// ---- THE PLINTH: three courses of stone, each a little narrower, so it reads as built and not extruded.
-	Block(Stone, FVector(0.0, 0.0, 18.0), FVector(PlinthSide, PlinthSide, 36.0));
-	Block(Stone, FVector(0.0, 0.0, 52.0), FVector(PlinthSide * 0.82f, PlinthSide * 0.82f, 34.0));
-	Block(Stone, FVector(0.0, 0.0, 82.0), FVector(PlinthSide * 0.66f, PlinthSide * 0.66f, 28.0));
+	Block(Stone, FVector(0.0, 0.0, 18.0), FVector(WTL::PlinthSide, WTL::PlinthSide, 36.0));
+	Block(Stone, FVector(0.0, 0.0, 52.0), FVector(WTL::PlinthSide * 0.82f, WTL::PlinthSide * 0.82f, 34.0));
+	Block(Stone, FVector(0.0, 0.0, 82.0), FVector(WTL::PlinthSide * 0.66f, WTL::PlinthSide * 0.66f, 28.0));
 
 	// ---- THE PYLON: a slim ivory shaft with a shoulder near the top, in Wonderland's own stone-and-ivory.
-	Block(Ivory, FVector(0.0, 0.0, PylonHeight * 0.52f), FVector(66.0, 66.0, PylonHeight * 0.80f));
-	Block(Ivory, FVector(0.0, 0.0, PylonHeight * 0.90f), FVector(92.0, 92.0, 38.0));
-	Block(Ivory, FVector(0.0, 0.0, PylonHeight * 0.98f), FVector(54.0, 54.0, 46.0));
+	Block(Ivory, FVector(0.0, 0.0, WTL::PylonHeight * 0.52f), FVector(66.0, 66.0, WTL::PylonHeight * 0.80f));
+	Block(Ivory, FVector(0.0, 0.0, WTL::PylonHeight * 0.90f), FVector(92.0, 92.0, 38.0));
+	Block(Ivory, FVector(0.0, 0.0, WTL::PylonHeight * 0.98f), FVector(54.0, 54.0, 46.0));
 
 	// ---- THE RING: eight blocks around the shoulder, which reads as a band rather than as eight blocks, and
 	// ---- the core behind it. Together they are the thing that is seen first and from furthest away.
 	for (int32 Step = 0; Step < 8; ++Step)
 	{
 		const float Angle = FMath::DegreesToRadians(Step * 45.0f);
-		Block(Glow, FVector(FMath::Cos(Angle) * 74.0f, FMath::Sin(Angle) * 74.0f, PylonHeight * 0.90f),
+		Block(Glow, FVector(FMath::Cos(Angle) * 74.0f, FMath::Sin(Angle) * 74.0f, WTL::PylonHeight * 0.90f),
 			FVector(34.0, 34.0, 20.0));
 	}
-	Block(Glow, FVector(0.0, 0.0, PylonHeight * 0.62f), FVector(22.0, 22.0, 150.0));
+	Block(Glow, FVector(0.0, 0.0, WTL::PylonHeight * 0.62f), FVector(22.0, 22.0, 150.0));
 	// And a medallion at the foot, so the marker is still legible from directly above it.
 	for (int32 Step = 0; Step < 12; ++Step)
 	{
