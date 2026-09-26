@@ -206,6 +206,14 @@ void AWonderlandSkinStage::BeginPlay()
 void AWonderlandSkinStage::SetInWorldPreview(bool bOn, FVector Where, FRotator Facing)
 {
 	EnsureBody();
+	// CLOSING THE WARDROBE STOPS THE ROTATION, which the founder asked for explicitly -- and reopening it must
+	// start from the front, not from wherever the last inspection was abandoned.
+	if (!bOn)
+	{
+		SetInspectSpin(false);
+		Yaw = 0.0f;
+		YawTarget = 0.0f;
+	}
 	bInWorldPreview = bOn;
 	const FVector Home = bOn ? Where : StageOrigin();
 	SetActorLocation(Home, false, nullptr, ETeleportType::TeleportPhysics);
@@ -272,6 +280,9 @@ void AWonderlandSkinStage::EnsureBody()
 	}
 	Body->DisplayName = TEXT("RELAY DOG");
 	Body->ClassLabel = TEXT("SKIN PREVIEW");
+	// THE SAME MASCOT, so what the Wardrobe shows is what the world shows. A preview that ignored the chosen
+	// colourway would be showing the player a skin they are not going to get.
+	Body->SetBodyRole(EWonderlandBodyRole::Mascot);
 #if WITH_EDITOR
 	Body->SetActorLabel(TEXT("WL_SkinStage_Dog"), false);
 #endif
@@ -364,6 +375,23 @@ void AWonderlandSkinStage::Tick(float DeltaSeconds)
 	}
 }
 
+void AWonderlandSkinStage::SetInspectSpin(bool bOn)
+{
+	if (bSpinning == bOn)
+	{
+		return;
+	}
+	bSpinning = bOn;
+	if (!bSpinning)
+	{
+		// HOME IS THE FRONT. Wrapped into (-180, 180] first, so a figure stopped at 350 degrees turns the short
+		// 10 degrees forward instead of unwinding all the way back round.
+		Yaw = FMath::UnwindDegrees(Yaw);
+		YawTarget = 0.0f;
+	}
+	UE_LOG(LogTemp, Display, TEXT("WLSKIN 360 inspection %s"), bOn ? TEXT("ON") : TEXT("OFF"));
+}
+
 void AWonderlandSkinStage::StepLookAround(float DeltaSeconds)
 {
 	if (Body == nullptr)
@@ -371,28 +399,51 @@ void AWonderlandSkinStage::StepLookAround(float DeltaSeconds)
 		return;
 	}
 
-	// LOOKING AROUND, WITHOUT GOING ANYWHERE. The Dog turns to a new heading, settles, waits a beat and chooses
-	// another; the figure's own float and head motions carry the breathing underneath. Both halves are needed: a body
-	// that only breathes reads as a statue, and one that only turns reads as a turntable.
-	HoldRemaining -= DeltaSeconds;
-	if (HoldRemaining <= 0.0f)
+	// ---- 360 DEGREE INSPECTION, WHEN THE PLAYER HAS ASKED FOR IT.
+	//
+	// Twenty-four degrees a second: fifteen seconds for a full turn, which is slow enough to read a ribcage or
+	// a chain as it goes past and quick enough that nobody waits for the back. Only the FIGURE turns -- not the
+	// stage, not the wardrobe camera, not the player's camera and not the player, which is what the founder
+	// asked for in as many words.
+	if (bSpinning)
 	{
-		// Mostly small glances to either side, and now and then a longer look over one shoulder. Never the full circle:
-		// a preview that turned its back on the viewer would be showing the skin's least interesting side.
-		const float Reach = FMath::FRand() < 0.25f ? 52.0f : 26.0f;
-		YawTarget = FMath::FRandRange(-Reach, Reach);
-		HoldRemaining = FMath::FRandRange(1.6f, 3.4f);
+		Yaw += 24.0f * DeltaSeconds;
+		if (Yaw >= 360.0f)
+		{
+			Yaw -= 360.0f;
+		}
+		YawTarget = Yaw;
+		const double SpinNow = GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0;
+		Body->SetActorLocationAndRotation(
+			GetActorLocation() + FVector(0.0, 0.0, static_cast<float>(FMath::Sin(SpinNow * 1.15) * 1.6)),
+			FRotator(0.0f, Yaw, 0.0f));
+		return;
 	}
-	Yaw = FMath::FInterpTo(Yaw, YawTarget, DeltaSeconds, 2.1f);
+
+	// ---- OTHERWISE IT STANDS STILL AND FACES FRONT.
+	//
+	// FOUNDER, 2026-09-25: "Normal Wardrobe state: STATIC." This used to wander -- a new heading every couple of
+	// seconds, up to 52 degrees either way -- which was written when the preview was a viewing room nobody was
+	// inspecting a skin in. A player comparing two skins needs them photographed from the same angle, and a
+	// player who has just pressed STOP needs the figure to come back to the front rather than stay where it
+	// happened to be. The float and the head motion in the figure's own animator carry on underneath, so this
+	// is a figure standing still, not a statue.
+	if (!FMath::IsNearlyZero(Yaw, 0.05f))
+	{
+		Yaw = FMath::FInterpTo(Yaw, 0.0f, DeltaSeconds, 3.2f);
+	}
+	else
+	{
+		Yaw = 0.0f;
+	}
+	YawTarget = 0.0f;
 
 	const double Now = GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0;
-	// A slight lean into the turn, and a shallow bob the figure's own float does not cover. Small on purpose: this is
-	// weight, not a performance.
-	const float Lean = FMath::Clamp((YawTarget - Yaw) * 0.06f, -3.0f, 3.0f);
+	// A shallow bob the figure's own float does not cover. Small on purpose: this is weight, not a performance.
 	const float Bob = static_cast<float>(FMath::Sin(Now * 1.15) * 1.6);
 	Body->SetActorLocationAndRotation(
 		GetActorLocation() + FVector(0.0, 0.0, Bob),
-		FRotator(0.0f, Yaw, Lean));
+		FRotator(0.0f, Yaw, 0.0f));
 }
 
 AWonderlandSkinStage* AWonderlandSkinStage::Get(UWorld* World)

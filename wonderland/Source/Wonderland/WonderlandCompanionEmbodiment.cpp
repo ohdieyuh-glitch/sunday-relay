@@ -6,6 +6,7 @@
 #include "ProceduralMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "WonderlandMascotStyle.h"
+#include "WonderlandSubAgentCubs.h"
 
 namespace
 {
@@ -263,6 +264,7 @@ void AWonderlandCompanionEmbodiment::ClearBody()
 	PartNames.Reset();
 	MaterialInstances.Reset();
 	FlameMaterialInstances.Reset();
+	BuiltMaterials.Reset();
 	Motions.Reset();
 	// THE FIRE GOES OUT WITH THE BODY THAT WAS BURNING.
 	//
@@ -453,24 +455,12 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 				break;
 			}
 
-			// ---- AND THE FOUNDER'S OWN COLOURWAY OVER THE TOP.
-			//
-			// PRIMARY is the whole mascot, SECONDARY is its eyes (founder, 2026-09-24). Applied here, where
-			// every body is built, so the Dog in the world, the mannequin in the Wardrobe and the performer in
-			// a Mission Contract are all one colour without any of them being told separately. Untouched by
-			// default: an install where nothing has been chosen multiplies by white and shows the skins exactly
-			// as they were designed.
-			const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
-			if (Style.bChosen)
-			{
-				const bool bEye = WonderlandMascotStyle::NamesAnEye(Def.Name.ToString());
-				const bool bGlows = Def.Kind == EWonderlandCompanionMaterialKind::Glow
-					|| Def.Kind == EWonderlandCompanionMaterialKind::Additive;
-				// MULTIPLIED, NOT REPLACED, so a skin keeps its own light and shade and only its hue moves.
-				WonderlandMascotStyle::Tint(Instance, (bGlows ? Emissive : Lit) * (bEye ? Style.Secondary : Style.Primary));
-			}
+			// ---- AND THE FOUNDER'S OWN COLOURWAY OVER THE TOP. See ApplyColourway: it is the one place that
+			// ---- decides which channels a chosen colour is allowed to reach.
+			ApplyColourway(Index, Instance, Def, Lit, Emissive);
 		}
 		MaterialInstances.Add(Instance);
+		BuiltMaterials.Add(Def);
 
 		// ---- AND ITS FLAME TWIN. Only glowing materials need one; everything else reuses the body instance,
 		// so a figure with no fire allocates nothing extra.
@@ -488,12 +478,7 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 				Full->SetVectorParameterValue(TEXT("EmissiveColor"), FullEmissive);
 				Full->SetVectorParameterValue(TEXT("BaseColor"), FullEmissive);
 				Full->SetScalarParameterValue(TEXT("EmissiveStrength"), FlameStrength);
-				const UWonderlandMascotStyleSettings& FlameStyle = UWonderlandMascotStyleSettings::Get();
-				if (FlameStyle.bChosen)
-				{
-					const bool bEye = WonderlandMascotStyle::NamesAnEye(Def.Name.ToString());
-					WonderlandMascotStyle::Tint(Full, FullEmissive * (bEye ? FlameStyle.Secondary : FlameStyle.Primary));
-				}
+				ApplyColourway(Index, Full, Def, FullEmissive, FullEmissive);
 				Flame = Full;
 			}
 		}
@@ -686,7 +671,10 @@ bool AWonderlandCompanionEmbodiment::ChooseFlank(const AActor* Contract) const
 	const double Mine = FVector::DotProduct(GetActorLocation() - Pawn->GetActorLocation(), Right);
 	for (TActorIterator<AWonderlandCompanionEmbodiment> Other(GetWorld()); Other; ++Other)
 	{
-		if (*Other == this)
+		// ONLY THE OTHER COMPANION. This returns on the FIRST body it finds, so a cub's body or the Dog's own
+		// costume walking into the iteration decided which flank this companion took -- and the pair no longer
+		// agreed, because each of them met a different stranger first. See IsIndependentCompanion.
+		if (*Other == this || !Other->IsIndependentCompanion())
 		{
 			continue;
 		}
@@ -840,6 +828,117 @@ FVector AWonderlandCompanionEmbodiment::DesiredLocation(const APawn* Pawn) const
 		+ FVector(0.0, 0.0, HoverHeightUU + FollowOffset.Z);
 }
 
+void AWonderlandCompanionEmbodiment::SetBodyRole(EWonderlandBodyRole InRole)
+{
+	if (BodyRole == InRole)
+	{
+		return;
+	}
+	BodyRole = InRole;
+	// A BODY THAT HAS ALREADY BEEN BUILT IS REPAINTED, so telling it what it is never has to happen before it
+	// is dressed. The Dog's costume is spawned, loaded and only then classified; this makes that order safe.
+	RepaintColourway();
+}
+
+void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMaterialInstanceDynamic* Instance,
+	const FWonderlandCompanionMaterial& Def, const FLinearColor& Lit, const FLinearColor& Emissive)
+{
+	if (Instance == nullptr)
+	{
+		return;
+	}
+	const bool bGlows = Def.Kind == EWonderlandCompanionMaterialKind::Glow
+		|| Def.Kind == EWonderlandCompanionMaterialKind::Additive;
+	const FLinearColor Authored = bGlows ? Emissive : Lit;
+
+	// ---- WHICH COLOURWAY, IF ANY. A Sub-Agent Cub wears none, and neither does anything unclassified.
+	const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+	FLinearColor Primary = FLinearColor::White;
+	FLinearColor Secondary = FLinearColor::White;
+	bool bChosen = false;
+	if (BodyRole == EWonderlandBodyRole::Mascot && Style.bChosen)
+	{
+		Primary = Style.Primary;
+		Secondary = Style.Secondary;
+		bChosen = true;
+	}
+	else if (BodyRole == EWonderlandBodyRole::Companion && Style.bCompanionChosen)
+	{
+		Primary = Style.CompanionPrimary;
+		Secondary = Style.CompanionSecondary;
+		bChosen = true;
+	}
+
+	// ---- AND WHICH CHANNELS IT MAY TOUCH. Everything the skin's artist authored on top of the shared shell --
+	// Skeleton Flame's ghostfire, Arden's ember and char, Apollo's solar, Celestial Light's starlight and
+	// banner, and the black visor every one of them is recognised by -- is None, and is written back at its
+	// authored colour. That is what makes a repaint safe to run repeatedly: it is idempotent, and a channel
+	// the founder did not ask for is restored rather than merely skipped.
+	FLinearColor Want = Authored;
+	if (bChosen)
+	{
+		switch (WonderlandMascotStyle::ChannelFor(Def.Name.ToString()))
+		{
+		case EWonderlandColorChannel::Body: Want = Authored * Primary;   break;
+		case EWonderlandColorChannel::Eye:  Want = Authored * Secondary; break;
+		case EWonderlandColorChannel::None: default:                     break;
+		}
+	}
+
+	switch (Def.Kind)
+	{
+	case EWonderlandCompanionMaterialKind::Lit:
+		Instance->SetVectorParameterValue(TEXT("Color"), Want);
+		break;
+	case EWonderlandCompanionMaterialKind::Rim:
+		Instance->SetVectorParameterValue(TEXT("BaseColor"), Want);
+		// The rim keeps its own relationship to the base: it is the same hue, at the strength the figure asked
+		// for, so a recoloured shell still reads as a shell and not as a flat card.
+		Instance->SetVectorParameterValue(TEXT("RimColor"), Want * WonderlandTameGlow(Def.Strength));
+		break;
+	case EWonderlandCompanionMaterialKind::Glow:
+	case EWonderlandCompanionMaterialKind::Additive:
+		Instance->SetVectorParameterValue(TEXT("Color"), Want);
+		Instance->SetVectorParameterValue(TEXT("EmissiveColor"), Want);
+		Instance->SetVectorParameterValue(TEXT("BaseColor"), Want);
+		break;
+	}
+
+	// AND THE PULSE REMEMBERS THE NEW REST. The glow animator drives Color from a remembered rest colour; left
+	// alone it would put the old one back on the next frame and the recolour would last exactly one tick.
+	for (FGlowMaterial& Glow : GlowMaterials)
+	{
+		if (Glow.MaterialIndex == MaterialIndex && Glow.Parameter == TEXT("Color"))
+		{
+			Glow.Rest = Want;
+		}
+	}
+}
+
+void AWonderlandCompanionEmbodiment::RepaintColourway()
+{
+	for (int32 Index = 0; Index < BuiltMaterials.Num(); ++Index)
+	{
+		const FWonderlandCompanionMaterial& Def = BuiltMaterials[Index];
+		const FLinearColor Lit(Def.Color.R, Def.Color.G, Def.Color.B, 1.0f);
+		const FLinearColor Emissive = Lit * WonderlandTameGlow(Def.Strength);
+		if (MaterialInstances.IsValidIndex(Index))
+		{
+			ApplyColourway(Index, MaterialInstances[Index], Def, Lit, Emissive);
+		}
+		// THE FLAME TWIN TOO, at its own uncompressed strength -- the same colour, not the same number.
+		UMaterialInstanceDynamic* Body = MaterialInstances.IsValidIndex(Index) ? MaterialInstances[Index] : nullptr;
+		UMaterialInstanceDynamic* Flame = FlameMaterialInstances.IsValidIndex(Index)
+			? FlameMaterialInstances[Index] : nullptr;
+		if (Flame != nullptr && Flame != Body)
+		{
+			const FLinearColor Full = Lit * FMath::Max(Def.Strength, 0.0f)
+				* FMath::Clamp(CVarFlameDim.GetValueOnAnyThread(), 0.05f, 4.0f);
+			ApplyColourway(Index, FlameMaterialInstances[Index], Def, Full, Full);
+		}
+	}
+}
+
 void AWonderlandCompanionEmbodiment::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -925,12 +1024,19 @@ void AWonderlandCompanionEmbodiment::Tick(float DeltaSeconds)
 		{
 			for (TActorIterator<AWonderlandCompanionEmbodiment> Other(GetWorld()); Other; ++Other)
 			{
-				if (*Other == this)
+				// A PEER, OR NOTHING AT ALL. Every Sub-Agent Cub carries a body of this class, and so does the
+				// Dog itself and the wardrobe's mannequin. Counting them as companions is what made summoning
+				// Cubs shove the AI Companions about and push them into the floor. See IsIndependentCompanion.
+				if (*Other == this || !Other->IsIndependentCompanion())
 				{
 					continue;
 				}
+				// FLAT, AND ONLY FLAT. This kept half of the vertical separation, so a body floating above this
+				// one produced a push with a DOWNWARD component -- and a companion hovering 34 uu off the ground
+				// has nowhere downward to go but through it. Two companions at different heights still part
+				// perfectly well sideways, which is the only direction the composition ever cared about.
 				FVector Apart = Location - Other->GetActorLocation();
-				Apart.Z *= 0.5;
+				Apart.Z = 0.0;
 				const double Gap = Apart.Size();
 				if (Gap < CompanionSpacingUU)
 				{
@@ -939,6 +1045,38 @@ void AWonderlandCompanionEmbodiment::Tick(float DeltaSeconds)
 						: FVector(0.0, FormationPhase < 0.5f ? 1.0 : -1.0, 0.0);
 					Target += Away * ((CompanionSpacingUU - Gap) * 1.5);
 				}
+			}
+		}
+
+		// ---- AND NEVER BELOW THE GROUND, whatever anything above decided.
+		//
+		// FOUNDER, 2026-09-25, with video: the AI Companions "sink or merge into the floor". The cause is fixed
+		// above -- cub bodies were being counted as companions to steer away from -- but a companion standing in
+		// the world's floor is a thing the founder should never see again for ANY reason, so the floor is now a
+		// floor. Traced from well above the target to well below it, on the channel the world's ground blocks;
+		// the body is held at least its own half-hover clear of whatever it finds, and left alone if it finds
+		// nothing (out over water, or mid-orbit above a gap) rather than snapped to some invented height.
+		//
+		// This is also what makes UNEVEN GROUND work, which the founder's test list asks for: the follow offset
+		// is measured from the DOG's feet, so a companion walking beside a Dog on a slope was already being asked
+		// to stand at the Dog's height rather than at its own.
+		if (UWorld* FloorWorld = GetWorld())
+		{
+			FHitResult Floor;
+			FCollisionQueryParams FloorQuery(SCENE_QUERY_STAT(WonderlandCompanionFloor), false, this);
+			FloorQuery.AddIgnoredActor(Pawn);
+			for (TActorIterator<AWonderlandCompanionEmbodiment> Body(FloorWorld); Body; ++Body)
+			{
+				FloorQuery.AddIgnoredActor(*Body);
+			}
+			for (TActorIterator<AWonderlandSubAgentCub> Cub(FloorWorld); Cub; ++Cub)
+			{
+				FloorQuery.AddIgnoredActor(*Cub);
+			}
+			if (FloorWorld->LineTraceSingleByChannel(Floor, Target + FVector(0.0, 0.0, 400.0),
+					Target - FVector(0.0, 0.0, 800.0), ECC_Visibility, FloorQuery))
+			{
+				Target.Z = FMath::Max(Target.Z, Floor.ImpactPoint.Z + HoverHeightUU * 0.5);
 			}
 		}
 

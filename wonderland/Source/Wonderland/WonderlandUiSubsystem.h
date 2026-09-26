@@ -158,6 +158,47 @@ public:
 	bool WearRelaySkin(FName SkinId);
 
 	/**
+	 * PRESS SWITCH SKIN, THE WAY A PLAYER PRESSES IT.
+	 *
+	 * FOUNDER, 2026-09-25: "Do not treat Wardrobe as complete just because automated camera/state checks pass ...
+	 * Diagnose the actual render/preview ownership problem rather than adding another state assertion that cannot
+	 * see what the player sees."
+	 *
+	 * This is that diagnosis made permanent. The wardrobe had TWO doors -- SetBrainSkinsOpen, which every proof
+	 * used and which staged the world, and the panel's own SWITCH SKIN button, which the founder used and which
+	 * did not. Both now run the same staging, and this exists so a proof goes through the BUTTON'S door: it runs
+	 * exactly what the button's handler runs, on the widget, with nothing added.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool PressSwitchSkin();
+
+	/**
+	 * WHERE THE PREVIEW WINDOW IS ON SCREEN, as a fraction of the viewport: centre and size.
+	 *
+	 * So a proof can read the PIXELS INSIDE IT rather than ask the panel whether it thinks it is open. False when
+	 * the wardrobe is shut or the window has not painted yet.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool GetSkinPreviewRect(FVector2D& OutCentre, FVector2D& OutSize) const;
+
+	/**
+	 * START OR STOP THE 360 DEGREE INSPECTION of the mascot in the Wardrobe's preview.
+	 *
+	 * FOUNDER, 2026-09-25: "ONLY rotate the preview mascot around its vertical axis inside the preview
+	 * environment. Do not rotate the Project Brain camera. Do not rotate the player camera. Do not move the
+	 * player." Which is exactly what this does and all it does: the stage's mannequin turns, nothing else moves.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool ToggleWardrobeInspect();
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	bool IsWardrobeInspecting() const;
+
+	/** The mannequin's yaw right now, degrees, so a proof can say which face it photographed. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	float GetWardrobeInspectYaw() const;
+
+	/**
 	 * HOW MANY FRAMES THE SKIN STAGE HAS CAPTURED. A proof reads it twice with a wait between: a number that moved is
 	 * a live 3D dog, and a number that did not is a still photograph wearing the same clothes.
 	 */
@@ -850,6 +891,17 @@ private:
 	 * the Dog -- and hands the view back to the player when it closes.
 	 */
 	void FrameRelayDogInWardrobe(bool bOn);
+
+	/**
+	 * THE WORLD SIDE OF OPENING AND SHUTTING THE WARDROBE: brain sculpture down, Dog framed into the window, and
+	 * back again. Bound to SWonderlandProjectBrainPanel::OnSkinsOpenChanged so it runs on EVERY route in and out
+	 * -- the SWITCH SKIN button, the window's X, Escape, the console, SetBrainSkinsOpen -- because it used to run
+	 * on only one of them and the proofs all used that one.
+	 */
+	void StageWardrobe(bool bOpen);
+
+	/** Set while CloseOverlay puts the wardrobe away, so it does not stage a brain it is about to destroy. */
+	bool bSuppressWardrobeStaging = false;
 	TWeakObjectPtr<class ACameraActor> WardrobeCamera;
 	FTimerHandle WardrobeFrameTimer;
 	/**

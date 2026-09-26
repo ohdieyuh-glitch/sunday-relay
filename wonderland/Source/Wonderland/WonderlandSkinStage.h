@@ -127,6 +127,24 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
 	bool IsInWorldPreview() const { return bInWorldPreview; }
 
+	/**
+	 * 360 DEGREE INSPECTION, AND ONLY WHEN ASKED.
+	 *
+	 * FOUNDER, 2026-09-25: "Do NOT make the mascot rotate continuously by default. Normal Wardrobe state:
+	 * STATIC. The mascot should ONLY begin rotating when the player presses the 360 button ... Press again:
+	 * stop. If stopped midway, it can smoothly return to the canonical front-facing preview orientation."
+	 *
+	 * Off, the figure holds the canonical front -- and EASES back to it rather than snapping, so stopping
+	 * halfway round is a turn home and not a jump cut. Its own float and head motion continue underneath:
+	 * "static" is about the turntable, not about making a statue of it.
+	 */
+	void SetInspectSpin(bool bOn);
+
+	bool IsInspectSpinning() const { return bSpinning; }
+
+	/** The figure's yaw right now, degrees, so a proof can say which face it was photographing. */
+	float GetInspectYaw() const { return Yaw; }
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -175,6 +193,8 @@ private:
 	int32 FrameCount = 0;
 
 	/** The look-around: where the head is pointed, where it is going, and how long it waits before choosing again. */
+	/** True while the player is holding the 360 button on: the only state in which the figure turns. */
+	bool bSpinning = false;
 	float Yaw = 0.0f;
 	float YawTarget = 0.0f;
 	float HoldRemaining = 1.2f;

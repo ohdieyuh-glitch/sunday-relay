@@ -585,6 +585,8 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 						Watching->MarkWanted();
 					}
 				})
+				.OnToggleInspect_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->ToggleWardrobeInspect(); } })
+				.IsInspecting_Lambda([WeakThis]() { return WeakThis.IsValid() && WeakThis->IsWardrobeInspecting(); })
 				.OnRequestClose_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->CloseOverlay(); } })
 				.OnRequestTerminal_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Terminal); } })
 				.OnRequestMap_Lambda([WeakThis]() { if (WeakThis.IsValid()) { WeakThis->OpenOverlay(EOverlay::Map); } })
@@ -610,6 +612,24 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 					}
 				});
 		}
+		// ONE DOOR INTO THE WARDROBE, NOT TWO -- AND THE SECOND ONE WAS THE PLAYER'S.
+		//
+		// Standing the brain sculpture down and framing the Dog into the window lived in SetBrainSkinsOpen below,
+		// which is what every proof called. The panel's own SWITCH SKIN button called SetSkinsOpen on the WIDGET
+		// (WonderlandProjectBrainPanel.cpp), so the founder clicking it opened the wardrobe with the brain still
+		// staged and the camera still on it -- and the preview window is a HOLE, so what it showed was the brain
+		// chamber: white background, black snow. Exactly the screenshot. Escape and the window's own X had the
+		// same two-door problem in reverse.
+		//
+		// So staging hangs off the PANEL'S state change instead. Whatever route flips it -- button, X, Escape,
+		// console, subsystem -- the world is staged once and the same way.
+		BrainPanel->OnSkinsOpenChanged = [WeakThis](bool bNowOpen)
+		{
+			if (UWonderlandUiSubsystem* Self = WeakThis.Get())
+			{
+				Self->StageWardrobe(bNowOpen);
+			}
+		};
 		RefreshBrain();
 		Panel = BrainPanel;
 		Focus = BrainPanel;
@@ -751,6 +771,21 @@ void UWonderlandUiSubsystem::OpenOverlay(EOverlay Which)
 
 void UWonderlandUiSubsystem::CloseOverlay()
 {
+	// THE WARDROBE IS SHUT BEFORE THE BRAIN IS, AND THE PANEL IS LEFT REMEMBERING NOTHING.
+	//
+	// Closing the Project Brain while the wardrobe stood open left bSkinsOpen TRUE on the widget, because nothing
+	// ever put it back. The next time the brain was opened, OpenOverlay staged the brain sculpture and the panel
+	// drew the wardrobe over it -- a skin preview window full of brain chamber, with no click on SWITCH SKIN
+	// involved at all. That is the second half of the same screenshot.
+	//
+	// Staging is suppressed across this one call: the two lines below tear the whole lot down a moment later, and
+	// re-framing the sculpture on the way out would be work done only to be undone.
+	if (Open == EOverlay::Brain && BrainPanel.IsValid() && BrainPanel->IsSkinsOpen())
+	{
+		bSuppressWardrobeStaging = true;
+		BrainPanel->SetSkinsOpen(false);
+		bSuppressWardrobeStaging = false;
+	}
 	// THE CAMERA GOES BACK TO THE PLAYER whenever the panel closes by any route -- Escape, CLOSE, or a jump to
 	// another overlay. The Dog needs no sending home: it is the player's own pawn, wearing the skin.
 	FrameRelayDogInWardrobe(false);
@@ -1278,6 +1313,34 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 	{
 		return;
 	}
+	// ---- THE PLAYER'S OWN DOG STEPS OUT OF THE SHOT WHILE THE WARDROBE IS OPEN.
+	//
+	// The preview is staged on the ray that leaves the REAL camera through the centre of the window, and the
+	// player's Dog is standing on very nearly that same ray -- that is why the spot is pinned to 55% of the way
+	// to it. Photographed in PIE with ARDEN INFERNAL: 55% is not far enough, because Arden's burning mane
+	// reaches toward the lens, and the window filled with a blown-out orange wall with the mannequin a sixth of
+	// the frame behind it. No distance is safe here: every skin reaches a different way.
+	//
+	// Nothing is lost by hiding it. The Project Brain page covers the screen while the wardrobe is open, so the
+	// only window onto the world is the preview square itself -- the one place the Dog must NOT be. The founder
+	// asked for "no world bleed-through" in the preview, and this is what actually guarantees it, for every
+	// skin, rather than hoping a clearance holds.
+	auto ShowTheDog = [Pawn](bool bShow)
+	{
+		if (Pawn != nullptr)
+		{
+			Pawn->SetActorHiddenInGame(!bShow);
+		}
+		if (const ARelayDogCharacter* Relay = Cast<ARelayDogCharacter>(Pawn))
+		{
+			if (AActor* Worn = Relay->GetCostume())
+			{
+				Worn->SetActorHiddenInGame(!bShow);
+			}
+		}
+	};
+	ShowTheDog(!bOn);
+
 	if (!bOn)
 	{
 		World->GetTimerManager().ClearTimer(WardrobeFrameTimer);
@@ -1315,14 +1378,20 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 		{
 			return;
 		}
-		// ---- how tall the Dog stands as dressed, and where its chest is
+		// ---- how tall the thing IN THE WINDOW stands, and where its middle is
 		const ARelayDogCharacter* Relay = Cast<ARelayDogCharacter>(Dog);
-		// THE HEIGHT OF THE THING ACTUALLY IN THE WINDOW, not of the Dog standing out in the world.
+		// THE MANNEQUIN'S OWN HEIGHT, AND NOTHING ELSE'S.
 		//
-		// This framed on the PLAYER'S dressed height, but what the window shows is the stage's own mannequin --
-		// and a skin can be far bigger than the Dog wearing it. Photographed in PIE, Apollo's halo filled the
-		// preview square from edge to edge with the lens sitting inside the ring, because the fit was solved for
-		// a 174 uu Dog while a ~400 uu halo was what had to be got into frame.
+		// This took the MAX of the player's dressed height and the staged figure's, which was meant to stop a
+		// halo being clipped. Photographed in PIE with Arden Infernal, it does the opposite: Arden's dressed
+		// height on the PLAYER counts the flame reach, so Height came out far larger than the mannequin standing
+		// in the window -- and every use of it is wrong by that ratio at once. The fit distance is too far, the
+		// scale that compensates for it is too small, and the figure is dropped Height*Scale*0.5 below the ray,
+		// so Arden came out a sixth of the frame and sitting near the bottom of it.
+		//
+		// What is in the window is the stage's mannequin. It is measured, it already includes whatever the skin
+		// reaches to, and it is the only figure the framing has any business solving for. The player's dressed
+		// height is the fallback for the frames before the mannequin exists, not a participant.
 		float Height = Relay != nullptr ? Relay->GetDressedHeightUu() : 174.0f;
 		// And how wide it is, read in the same place: the fit below is solved from the vertical angle alone,
 		// so without this a halo or a banner is clipped at the window's SIDES however much height it is given.
@@ -1331,7 +1400,11 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 		{
 			if (const AWonderlandCompanionEmbodiment* Shown = Staged->GetBody())
 			{
-				Height = FMath::Max(Height, Shown->GetFigureHeightUu());
+				const float Standing = Shown->GetFigureHeightUu();
+				if (Standing > 60.0f)
+				{
+					Height = Standing;
+				}
 				FigureWide = Shown->GetFigureWidthUu();
 			}
 		}
@@ -1358,7 +1431,11 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 		// Celestial Light's banner at the window's sides, and pulling the whole fill back to 0.62 to hide it
 		// made every OTHER skin small. So each axis gets its own fit distance and the camera takes whichever
 		// is further: the figure then fills 0.80 of whichever axis binds, and nothing leaves the frame.
-		const float Fill = 0.80f;
+		// FOUNDER, 2026-09-25: "MAKE THE MASCOT PREVIEW MORE CLOSE-UP ... significantly larger than it is now ...
+		// Target approximately 80-90% useful frame occupancy where the skin's silhouette allows it, while
+		// retaining a small clean margin." 0.88 of whichever axis binds, both axes still solved separately, so
+		// a halo or a mane is brought to the frame's edge rather than through it.
+		const float Fill = 0.88f;
 		const float WantTall = FMath::Max(Size.Y * Fill, 0.05f);
 		const float WantWide = FMath::Max(Size.X * Fill, 0.05f);
 		const float FitTall = Height / (WantTall * 2.0f * TanV);
@@ -1985,19 +2062,18 @@ void UWonderlandUiSubsystem::RefreshSkinPreviewBrush()
 	Stage->MarkWanted();
 }
 
-bool UWonderlandUiSubsystem::SetBrainSkinsOpen(bool bOpen)
+void UWonderlandUiSubsystem::StageWardrobe(bool bOpen)
 {
-	if (!IsProjectBrainOpen() || !BrainPanel.IsValid())
+	// THE WORLD SIDE OF THE WARDROBE, and the ONLY copy of it. Called from the panel's own state change, so it
+	// runs whichever way the wardrobe was opened or shut. See the binding in OpenOverlay.
+	if (bSuppressWardrobeStaging || !BrainPanel.IsValid())
 	{
-		return false;
+		return;
 	}
 	if (bOpen)
 	{
 		RefreshSkinPreviewBrush();
 	}
-	// THE FOUNDER'S OWN DOG IS THE PREVIEW. It wears the skin now (ARelayDogCharacter::WearSkin), so there is no
-	// mannequin to stand anywhere: the panel opens a window and the camera frames the Dog inside it.
-	BrainPanel->SetSkinsOpen(bOpen);
 	// ONE LENS, HANDED OVER CLEANLY. The wardrobe and the brain both want the camera, and they are never both on
 	// show: the brain stands down as the wardrobe opens and comes back when it closes. Without this the two
 	// framings fight over the view target every tick -- which is what a click on a skin looked like from outside.
@@ -2013,12 +2089,67 @@ bool UWonderlandUiSubsystem::SetBrainSkinsOpen(bool bOpen)
 		FrameRelayDogInWardrobe(false);
 		FrameBrainSculpture(true);
 	}
+}
+
+bool UWonderlandUiSubsystem::SetBrainSkinsOpen(bool bOpen)
+{
+	if (!IsProjectBrainOpen() || !BrainPanel.IsValid())
+	{
+		return false;
+	}
+	// THE FOUNDER'S OWN DOG IS THE PREVIEW. It wears the skin now (ARelayDogCharacter::WearSkin), so there is no
+	// mannequin to stand anywhere: the panel opens a window and the camera frames the Dog inside it.
+	//
+	// NOTHING IS STAGED HERE. Setting the panel's state fires OnSkinsOpenChanged, which calls StageWardrobe above
+	// -- the same path the player's own SWITCH SKIN button takes. This is the whole point of the change: a proof
+	// that calls this function now exercises exactly what a click does, instead of a second route that worked.
+	BrainPanel->SetSkinsOpen(bOpen);
 	return BrainPanel->IsSkinsOpen() == bOpen;
 }
 
 bool UWonderlandUiSubsystem::IsBrainSkinsOpen() const
 {
 	return BrainPanel.IsValid() && BrainPanel->IsSkinsOpen();
+}
+
+bool UWonderlandUiSubsystem::PressSwitchSkin()
+{
+	if (!IsProjectBrainOpen() || !BrainPanel.IsValid())
+	{
+		return false;
+	}
+	// THE BUTTON'S OWN LINE, AND NOTHING ELSE. WonderlandProjectBrainPanel.cpp:
+	//     .OnClicked_Lambda([this]() { SetSkinsOpen(!bSkinsOpen); return FReply::Handled(); })
+	BrainPanel->SetSkinsOpen(!BrainPanel->IsSkinsOpen());
+	return true;
+}
+
+bool UWonderlandUiSubsystem::GetSkinPreviewRect(FVector2D& OutCentre, FVector2D& OutSize) const
+{
+	return BrainPanel.IsValid() && BrainPanel->GetSkinPreviewRect(OutCentre, OutSize);
+}
+
+bool UWonderlandUiSubsystem::ToggleWardrobeInspect()
+{
+	AWonderlandSkinStage* Stage = SkinStage();
+	if (Stage == nullptr || !IsBrainSkinsOpen())
+	{
+		return false;
+	}
+	Stage->SetInspectSpin(!Stage->IsInspectSpinning());
+	return true;
+}
+
+bool UWonderlandUiSubsystem::IsWardrobeInspecting() const
+{
+	const AWonderlandSkinStage* Stage = SkinStageActor.Get();
+	return Stage != nullptr && Stage->IsInspectSpinning();
+}
+
+float UWonderlandUiSubsystem::GetWardrobeInspectYaw() const
+{
+	const AWonderlandSkinStage* Stage = SkinStageActor.Get();
+	return Stage != nullptr ? Stage->GetInspectYaw() : 0.0f;
 }
 
 bool UWonderlandUiSubsystem::WearRelaySkin(FName SkinId)

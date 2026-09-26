@@ -200,6 +200,23 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Relay Dog")
 	TObjectPtr<UCameraComponent> FollowCamera = nullptr;
 
+	/**
+	 * THE DOG'S OWN LIGHT, AND IT IS ONLY ON AT NIGHT.
+	 *
+	 * FOUNDER, 2026-09-25: at the darkest hour "the player must be able to see: the Relay Dog / mascot, the
+	 * ground around the player". Measured with the moon in and the whole day photographed, Relay OG at 04:00
+	 * read 0.082 against paving at 0.163 -- a shape, but a shape darker than the stone it stands on, and the
+	 * mascot is the first thing the founder listed.
+	 *
+	 * Moonlight cannot fix that without turning the night into an afternoon, because the same light falls on
+	 * the paving. A small cool lamp carried by the Dog can: it lifts the mascot and two metres of ground around
+	 * it -- the founder's second requirement -- and touches nothing else in the frame. It is faded in by the day
+	 * cycle's own night curve, so there is no moment where it switches on, and it casts no shadows, so it costs
+	 * a few microseconds and cannot fight the moon's.
+	 */
+	UPROPERTY(Transient)
+	TObjectPtr<class UPointLightComponent> NightLamp = nullptr;
+
 	/** The last pose, for the world proof and for diagnostics. */
 	const RelayDogStride::FDogPose& CurrentPose() const { return Animator.Pose(); }
 

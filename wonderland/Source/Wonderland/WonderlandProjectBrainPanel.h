@@ -60,6 +60,15 @@ public:
 		SLATE_EVENT(FOnChooseSkin, OnChooseSkin)
 		/** Raised on every paint of the preview, so the stage knows somebody is looking and keeps capturing. */
 		SLATE_EVENT(FSimpleDelegate, OnSkinPreviewPainted)
+		/**
+		 * THE 360 BUTTON, in the preview square's top-right corner (founder, 2026-09-25).
+		 *
+		 * The panel owns the BUTTON and nothing else: the figure that turns is an actor in the world, so the
+		 * subsystem is told to start or stop the turn and reports back through IsInspecting whether it did.
+		 * The panel never holds a second opinion about whether the mascot is rotating.
+		 */
+		SLATE_EVENT(FSimpleDelegate, OnToggleInspect)
+		SLATE_ATTRIBUTE(bool, IsInspecting)
 	SLATE_END_ARGS()
 
 	SWonderlandProjectBrainPanel();
@@ -77,6 +86,19 @@ public:
 
 	/** Open or shut the RELAY DOG skin view, which stands where the inspector stands: over the brain. */
 	void SetSkinsOpen(bool bOpen);
+
+	/**
+	 * TOLD WHENEVER THE WARDROBE OPENS OR SHUTS, BY ANY ROUTE, and this exists because it did not.
+	 *
+	 * Standing the brain sculpture down and framing the Dog into the window lives in
+	 * UWonderlandUiSubsystem::SetBrainSkinsOpen. The panel's own SWITCH SKIN button called SetSkinsOpen on the
+	 * WIDGET, so a player clicking it opened the wardrobe with the brain still staged and the Dog never framed
+	 * -- which is why the preview showed the brain chamber, white background and black snow and all.
+	 *
+	 * Every proof went through the subsystem and passed. The player goes through the button. Two doors into one
+	 * feature, and only one of them did the work. The subsystem binds this so there is now only one.
+	 */
+	TFunction<void(bool)> OnSkinsOpenChanged;
 
 	/**
 	 * WHERE THE PREVIEW WINDOW IS ON SCREEN, as a fraction of the viewport: centre and size. False until the
@@ -158,6 +180,22 @@ private:
 	FSlateRoundedBoxBrush SkinWindowFrameBrush;
 	FSlateRoundedBoxBrush SkinPanelFrameBrush;
 	FSlateRoundedBoxBrush SkinPanelSolidBrush;
+	/** The 360 pill in the preview's corner: an outline that fills faintly under the pointer, and nothing more. */
+	FSlateRoundedBoxBrush InspectBrush;
+	FSlateRoundedBoxBrush InspectHoverBrush;
+	FSlateRoundedBoxBrush InspectOnBrush;
+	FButtonStyle InspectStyle;
+	/** One white rounded chip, tinted per swatch, and one ring drawn over whichever swatch is chosen. */
+	FSlateRoundedBoxBrush SwatchBrush;
+	FSlateRoundedBoxBrush SwatchRingBrush;
+	FButtonStyle SwatchStyle;
+
+	FSimpleDelegate OnToggleInspect;
+	TAttribute<bool> IsInspecting;
+
+	/** The PRIMARY / SECONDARY swatch strip that lives under the preview. See MakeColourStrip. */
+	TSharedRef<SWidget> MakeColourStrip();
+	TSharedRef<SWidget> MakeSwatchRow(bool bPrimary);
 	FSlateBrush ClearBrush;
 	FButtonStyle SelectableStyle;
 	FButtonStyle ActionStyle;

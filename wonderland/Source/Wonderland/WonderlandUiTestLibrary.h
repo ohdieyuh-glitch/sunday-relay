@@ -121,4 +121,23 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	static bool SetBackgroundThrottleSuspended(bool bSuspended);
+
+	/**
+	 * WHAT IS ACTUALLY ON THE SCREEN INSIDE A RECTANGLE -- read from the same back buffer the founder photographs.
+	 *
+	 * FOUNDER, 2026-09-25: "The screenshot is ground truth ... PIE test the visible pixels/content of the preview
+	 * for every skin", and "my screenshots/video override a proof that says a visibly broken feature is complete."
+	 *
+	 * Every wardrobe proof this project has written asked the PANEL whether it was open and the CAMERA where it
+	 * was pointing, and every one of them passed while the preview window showed the brain chamber. Neither
+	 * instrument can see a picture. This one can: the rectangle is given in fractions of the viewport (0-1), the
+	 * pixels inside it are read back, and what comes out is the mean colour, how much of it is nearly black and
+	 * how much is nearly white -- which is exactly the difference between a black preview with a figure standing
+	 * on it and a white brain chamber with snow falling through it.
+	 *
+	 * Sampled on a grid rather than every pixel: the answer is a proportion, and 10,000 samples settle it.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static bool ReadScreenRect(float MinX, float MinY, float MaxX, float MaxY,
+		FLinearColor& OutMean, float& OutDarkFraction, float& OutBrightFraction, int32& OutSampled);
 };

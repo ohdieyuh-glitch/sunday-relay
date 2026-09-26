@@ -77,6 +77,15 @@ public:
 	/** The row titles as built, "|"-joined. */
 	FString DescribeRows() const { return FString::Join(RowTitles, TEXT("|")); }
 
+	/** The tab titles as built, "|"-joined, so a proof can read the tab bar rather than a screenshot of it. */
+	FString DescribeTabs() const { return FString::Join(TabTitles, TEXT("|")); }
+
+	/** Which tab is showing: "MENU" or "COLORS". */
+	FString GetOpenTab() const { return bColorsOpen ? TEXT("COLORS") : TEXT("MENU"); }
+
+	/** Press a tab by name, exactly as clicking it does. False for a name this panel does not have. */
+	bool ShowTab(const FString& Title);
+
 	virtual bool SupportsKeyboardFocus() const override { return true; }
 	virtual FReply OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent) override;
 
@@ -86,6 +95,22 @@ private:
 	FSimpleDelegate OnRequestWallet;
 	FOnRequestNavigate OnRequestNavigate;
 	TArray<FString> RowTitles;
+	TArray<FString> TabTitles;
+	/**
+	 * FOUNDER, 2026-09-25: "The new tab in the Menu for the overall color section of wonderland should be
+	 * titled COLORS." One extra page rather than a second panel, because everything the founder listed --
+	 * mascot, AI Companions, the two terminals, the Menu's own theme -- is the same kind of choice and belongs
+	 * in one place the player can find.
+	 */
+	bool bColorsOpen = false;
+
+	/** Built once and swapped by the tab bar, so switching pages costs nothing and loses no scroll position. */
+	TSharedPtr<class SWidgetSwitcher> Pages;
+
+	TSharedRef<SWidget> MakeColoursPage();
+	TSharedRef<SWidget> MakeColourRow(const TCHAR* Label, const TCHAR* Note,
+		TFunction<FLinearColor()> Read, TFunction<void(FLinearColor)> Write);
+	TSharedRef<SWidget> MakeTabBar();
 
 	FSlateBrush ScrimBrush;
 	FSlateRoundedBoxBrush PanelBrush;
@@ -94,4 +119,10 @@ private:
 	FSlateRoundedBoxBrush RowHovered;
 	FSlateRoundedBoxBrush RowPressed;
 	FButtonStyle RowStyle;
+	FSlateRoundedBoxBrush SwatchBrush;
+	FSlateRoundedBoxBrush SwatchRingBrush;
+	FSlateRoundedBoxBrush TabOnBrush;
+	FSlateRoundedBoxBrush TabOffBrush;
+	FButtonStyle SwatchStyle;
+	FButtonStyle TabStyle;
 };

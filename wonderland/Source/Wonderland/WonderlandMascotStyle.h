@@ -65,6 +65,53 @@ public:
 	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Mascot")
 	bool bChosen = false;
 
+	/**
+	 * THE AI COMPANIONS' OWN COLOURWAY, kept separate from the mascot's (founder, 2026-09-25).
+	 *
+	 * "AI COMPANION COLOR CUSTOMIZATION ... Do not couple this to Sub-Agent Cub transforms. Preserve companion
+	 * identity/readability." Separate values, the same two channels, and nothing about it touches a Cub.
+	 */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Companions")
+	FLinearColor CompanionPrimary = FLinearColor::White;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Companions")
+	FLinearColor CompanionSecondary = FLinearColor(0.42f, 0.80f, 1.00f, 1.0f);
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Companions")
+	bool bCompanionChosen = false;
+
+	/**
+	 * THE JULIUS LIVE TERMINAL'S OWN ACCENT, and the AI COMPANION TERMINALS' accent, separately.
+	 *
+	 * FOUNDER, 2026-09-25: "Provide real color customization in the MENU tab for: (A) Julius Live Terminal,
+	 * (B) AI Companion terminals." One TerminalAccent served both, so they could not be told apart. Each falls
+	 * back to TerminalAccent until it is chosen, so nothing changes for an install that has not asked.
+	 */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Terminals")
+	FLinearColor JuliusTerminalAccent = FLinearColor(FColor(0xD9, 0xA4, 0x41));
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Terminals")
+	bool bJuliusTerminalAccentChosen = false;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Terminals")
+	FLinearColor CompanionTerminalAccent = FLinearColor(FColor(0xD9, 0xA4, 0x41));
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Terminals")
+	bool bCompanionTerminalAccentChosen = false;
+
+	/**
+	 * THE MENU'S OWN THEME COLOUR (founder, 2026-09-25): "Allow the player to select a Menu theme ... Update the
+	 * intentional accent surfaces WITHOUT making text unreadable. Do not indiscriminately tint every element."
+	 *
+	 * So this drives the Menu's accents -- headings, keys, the selected tab -- and nothing else. Body text keeps
+	 * its own ivory whatever is chosen here, which is what stops a dark theme choice erasing the words.
+	 */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Menu")
+	FLinearColor MenuAccent = FLinearColor(FColor(0xD9, 0xA4, 0x41));
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadWrite, Category = "Menu")
+	bool bMenuAccentChosen = false;
+
 	static const UWonderlandMascotStyleSettings& Get()
 	{
 		const UWonderlandMascotStyleSettings* Settings = GetDefault<UWonderlandMascotStyleSettings>();
@@ -73,10 +120,48 @@ public:
 	}
 };
 
+/**
+ * WHICH OF A FIGURE'S CHANNELS A CHOSEN COLOUR IS ALLOWED TO TOUCH.
+ *
+ * FOUNDER, 2026-09-25: "Color customization must not flatten or destroy the actual art. Preserve Skeleton
+ * Flame's flames and glowing elements, Arden Infernal's fire/mane/details, Apollo's celestial details,
+ * Celestial Light's special elements, Relay OG's recognizable structure. Only recolour the surfaces/channels
+ * intended to be customizable. Do not simply tint the entire rendered mascot."
+ *
+ * The skins make this easy, because they were built to a shared scheme. Every one of the five declares the
+ * same first four materials -- bone (the shell), bonedeep (its shade), visor (the black face) and eye -- and
+ * then its OWN art on top: gold, ghost, ghostpale, ember, emberpale, crimson, char, demon, ruby, solar,
+ * starlight, bannercloth, frost, ink. So:
+ *
+ *   Body  -- bone and bonedeep. The main colourway, present in every skin, and the founder's PRIMARY.
+ *   Eye   -- eye and pupil. The status eyes, and the founder's SECONDARY.
+ *   None  -- everything else, including the visor and every authored effect, which is never touched.
+ */
+enum class EWonderlandColorChannel : uint8 { None, Body, Eye };
+
 namespace WonderlandMascotStyle
 {
 	/** True when a part, material or component of this name is one of the Dog's eyes rather than its body. */
 	WONDERLAND_API bool NamesAnEye(const FString& Name);
+
+	/** Which channel a material of this name belongs to. See EWonderlandColorChannel. */
+	WONDERLAND_API EWonderlandColorChannel ChannelFor(const FString& MaterialName);
+
+	/** The swatches offered in the Wardrobe and the Menu, so both offer exactly the same set. */
+	WONDERLAND_API const TArray<TPair<FName, FLinearColor>>& Palette();
+
+	/**
+	 * SAVE, AND MAKE IT TRUE EVERYWHERE, NOW.
+	 *
+	 * The founder's rule for these controls is that the Wardrobe and the Menu are one system: "Changing the
+	 * mascot color in Wardrobe must immediately be reflected in Menu. Changing it in Menu must immediately be
+	 * reflected when Wardrobe opens." Every writer calls this and nothing else, so there is one path from a
+	 * chosen colour to a repainted world.
+	 */
+	WONDERLAND_API void SaveAndApply();
+
+	/** Told whenever SaveAndApply runs, so an open panel can redraw its swatches. */
+	WONDERLAND_API FSimpleMulticastDelegate& OnChanged();
 
 	/**
 	 * Tint one material instance, setting EVERY name the project's materials use for a colour.

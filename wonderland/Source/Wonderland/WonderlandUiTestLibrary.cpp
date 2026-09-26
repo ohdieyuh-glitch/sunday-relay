@@ -407,3 +407,75 @@ bool UWonderlandUiTestLibrary::ReleaseCamera(UObject* WorldContextObject)
 	Controller->SetViewTargetWithBlend(Controller->GetPawn(), 0.0f);
 	return true;
 }
+
+bool UWonderlandUiTestLibrary::ReadScreenRect(float MinX, float MinY, float MaxX, float MaxY,
+	FLinearColor& OutMean, float& OutDarkFraction, float& OutBrightFraction, int32& OutSampled)
+{
+	OutMean = FLinearColor::Black;
+	OutDarkFraction = 0.0f;
+	OutBrightFraction = 0.0f;
+	OutSampled = 0;
+	if (!FSlateApplication::IsInitialized() || GEngine == nullptr || GEngine->GameViewport == nullptr)
+	{
+		return false;
+	}
+	// THE GAME LAYER, not the bare SViewport: the panel drawn OVER the world is half of what is being judged.
+	TSharedPtr<SWidget> Target;
+	if (TSharedPtr<IGameLayerManager> Layers = GEngine->GameViewport->GetGameLayerManager())
+	{
+		Target = StaticCastSharedPtr<SGameLayerManager>(Layers);
+	}
+	if (!Target.IsValid())
+	{
+		Target = GEngine->GameViewport->GetGameViewportWidget();
+	}
+	if (!Target.IsValid())
+	{
+		return false;
+	}
+
+	TArray<FColor> Pixels;
+	FIntVector Size;
+	if (!FSlateApplication::Get().TakeScreenshot(Target.ToSharedRef(), Pixels, Size)
+		|| Size.X <= 0 || Size.Y <= 0 || Pixels.Num() != Size.X * Size.Y)
+	{
+		return false;
+	}
+
+	const int32 Left   = FMath::Clamp(FMath::FloorToInt(FMath::Min(MinX, MaxX) * Size.X), 0, Size.X - 1);
+	const int32 Right  = FMath::Clamp(FMath::CeilToInt (FMath::Max(MinX, MaxX) * Size.X), Left + 1, Size.X);
+	const int32 Top    = FMath::Clamp(FMath::FloorToInt(FMath::Min(MinY, MaxY) * Size.Y), 0, Size.Y - 1);
+	const int32 Bottom = FMath::Clamp(FMath::CeilToInt (FMath::Max(MinY, MaxY) * Size.Y), Top + 1, Size.Y);
+
+	const int32 Wide = Right - Left;
+	const int32 Tall = Bottom - Top;
+	const int32 StepX = FMath::Max(1, Wide / 100);
+	const int32 StepY = FMath::Max(1, Tall / 100);
+
+	double SumR = 0.0, SumG = 0.0, SumB = 0.0;
+	int32 Dark = 0, Bright = 0, Count = 0;
+	for (int32 Y = Top; Y < Bottom; Y += StepY)
+	{
+		for (int32 X = Left; X < Right; X += StepX)
+		{
+			const FColor& C = Pixels[Y * Size.X + X];
+			const double R = C.R / 255.0, G = C.G / 255.0, B = C.B / 255.0;
+			SumR += R; SumG += G; SumB += B;
+			// Luma rather than a channel: a blue-black backdrop and a grey one are both "dark".
+			const double Luma = 0.2126 * R + 0.7152 * G + 0.0722 * B;
+			if (Luma < 0.14) { ++Dark; }
+			if (Luma > 0.72) { ++Bright; }
+			++Count;
+		}
+	}
+	if (Count <= 0)
+	{
+		return false;
+	}
+	OutMean = FLinearColor(
+		static_cast<float>(SumR / Count), static_cast<float>(SumG / Count), static_cast<float>(SumB / Count), 1.0f);
+	OutDarkFraction = static_cast<float>(Dark) / static_cast<float>(Count);
+	OutBrightFraction = static_cast<float>(Bright) / static_cast<float>(Count);
+	OutSampled = Count;
+	return true;
+}

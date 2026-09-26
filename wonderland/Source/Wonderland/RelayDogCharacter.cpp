@@ -1,4 +1,7 @@
 #include "RelayDogCharacter.h"
+
+#include "Components/PointLightComponent.h"
+#include "WonderlandDayCycle.h"
 #include "Engine/GameInstance.h"
 #include "WonderlandRelaySkins.h"
 #include "WonderlandCompanionEmbodiment.h"
@@ -443,6 +446,18 @@ ARelayDogCharacter::ARelayDogCharacter()
 	// reacts to something the camera would really have entered.
 	CameraBoom->bDoCollisionTest = true;
 	CameraBoom->ProbeSize = 7.0f;
+
+	NightLamp = CreateDefaultSubobject<UPointLightComponent>(TEXT("NightLamp"));
+	NightLamp->SetupAttachment(GetRootComponent());
+	NightLamp->SetRelativeLocation(FVector(0.0, 0.0, 55.0));
+	NightLamp->SetIntensityUnits(ELightUnits::Candelas);
+	NightLamp->SetIntensity(0.0f);
+	NightLamp->SetAttenuationRadius(380.0f);
+	NightLamp->SetLightColor(FLinearColor(0.72f, 0.82f, 1.00f));
+	NightLamp->SetCastShadows(false);
+	NightLamp->SetVolumetricScatteringIntensity(0.0f);
+	NightLamp->bAffectsWorld = true;
+	NightLamp->SetVisibility(false);
 
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
@@ -1449,6 +1464,8 @@ void ARelayDogCharacter::WearSkin(FName SkinId)
 		}
 		Costume->DisplayName = TEXT("RELAY DOG");
 		Costume->ClassLabel = TEXT("RELAY DOG SKIN");
+		// THIS IS THE MASCOT, so it wears the mascot colourway and no other. See EWonderlandBodyRole.
+		Costume->SetBodyRole(EWonderlandBodyRole::Mascot);
 #if WITH_EDITOR
 		Costume->SetActorLabel(TEXT("WL_RelayDog_Costume"), false);
 #endif
@@ -1603,6 +1620,30 @@ float ARelayDogCharacter::EyeScaleAt(float TimeSeconds) const
 
 void ARelayDogCharacter::Tick(float DeltaSeconds)
 {
+	// ---- THE NIGHT LAMP, FOLLOWING THE ONE NIGHT CURVE. See the declaration for why the Dog carries a light.
+	if (NightLamp != nullptr)
+	{
+		float Night = 0.0f;
+		if (const UWorld* Lit = GetWorld())
+		{
+			if (const UWonderlandDayCycleSubsystem* Cycle = Lit->GetSubsystem<UWonderlandDayCycleSubsystem>())
+			{
+				Night = Cycle->GetNightAmount();
+			}
+		}
+		// SMALL. Eight candelas over four metres reads as the mascot catching the moon, not as a torch; at
+		// twenty it lit a circle of paving that followed the Dog about, which is a lantern and not lighting.
+		const bool bWanted = Night > 0.01f;
+		if (NightLamp->IsVisible() != bWanted)
+		{
+			NightLamp->SetVisibility(bWanted);
+		}
+		if (bWanted)
+		{
+			NightLamp->SetIntensity(8.0f * Night);
+		}
+	}
+
 	Super::Tick(DeltaSeconds);
 	if (!bJointsBound)
 	{

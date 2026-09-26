@@ -109,7 +109,15 @@ void UWonderlandDayCycleSubsystem::FindTheSky()
 			FillIntensities.Add(Comp->Intensity);
 		}
 	}
-	for (TActorIterator<ASkyLight> It(World); It; ++It) { Sky = *It; break; }
+	for (TActorIterator<ASkyLight> It(World); It; ++It)
+	{
+		Sky = *It;
+		if (const USkyLightComponent* SkyComp = It->GetLightComponent())
+		{
+			SkyIntensityByDay = SkyComp->Intensity;
+		}
+		break;
+	}
 	for (TActorIterator<AExponentialHeightFog> It(World); It; ++It)
 	{
 		Fog = *It;
@@ -121,12 +129,63 @@ void UWonderlandDayCycleSubsystem::FindTheSky()
 	}
 	for (TActorIterator<APostProcessVolume> It(World); It; ++It) { Grade = *It; break; }
 
+	MakeTheMoon();
+
 	bFound = Sun.IsValid();
 	UE_LOG(LogTemp, Display,
 		TEXT("WLSKY sun=%s fills=%d skylight=%s fog=%s grade=%s"),
 		Sun.IsValid() ? *Sun->GetName() : TEXT("NONE -- the sky will not move"),
 		Fills.Num(), Sky.IsValid() ? TEXT("yes") : TEXT("no"),
 		Fog.IsValid() ? TEXT("yes") : TEXT("no"), Grade.IsValid() ? TEXT("yes") : TEXT("no"));
+}
+
+void UWonderlandDayCycleSubsystem::MakeTheMoon()
+{
+	UWorld* World = GetWorld();
+	if (World == nullptr || Moon.IsValid())
+	{
+		return;
+	}
+	// SPAWNED, NOT PLACED, for the same reason this whole subsystem is a subsystem: Wonderland's Content is a
+	// junction shared by every worktree, and adding an actor to the .umap is the one change that could be lost
+	// or could collide with another editor. Transient, so it is never saved into anything.
+	FActorSpawnParameters Params;
+	Params.ObjectFlags |= RF_Transient;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ADirectionalLight* Light = World->SpawnActor<ADirectionalLight>(
+		ADirectionalLight::StaticClass(), FTransform::Identity, Params);
+	if (Light == nullptr)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WLSKY the moon could not be spawned; night will be as dark as it was"));
+		return;
+	}
+	Light->SetMobility(EComponentMobility::Movable);
+#if WITH_EDITOR
+	Light->SetActorLabel(TEXT("WL_Moon"), false);
+#endif
+	if (UDirectionalLightComponent* Comp = SunComponent(Light))
+	{
+		// NOT A SECOND SUN. The atmosphere is driven by exactly one light and it is V2_Sun; a moon that claimed
+		// to be an atmosphere sun would paint a second daylight sky in the middle of the night.
+		Comp->SetAtmosphereSunLight(false);
+		Comp->SetIntensity(0.0f);
+		Comp->SetLightColor(FLinearColor(0.40f, 0.52f, 0.86f, 1.0f));
+		Comp->CastShadows = true;
+		Comp->bCastVolumetricShadow = false;
+		// SILHOUETTES ARE THE POINT, so the moon casts, but it casts cheaply: the founder asked to see the shape
+		// of the architecture at night, not to read the mortar. Two cascades over the near field do that, and a
+		// softer source reads as moonlight rather than as a second midday.
+		Comp->DynamicShadowDistanceMovableLight = 12000.0f;
+		Comp->DynamicShadowCascades = 2;
+		Comp->CascadeDistributionExponent = 1.6f;
+		Comp->CascadeTransitionFraction = 0.15f;
+		Comp->ShadowBias = 0.45f;
+		Comp->ShadowSlopeBias = 0.45f;
+		Comp->SetLightSourceAngle(1.6f);
+		Comp->MarkRenderStateDirty();
+	}
+	Moon = Light;
+	UE_LOG(LogTemp, Display, TEXT("WLSKY the moon is up"));
 }
 
 void UWonderlandDayCycleSubsystem::DressTheWater()
@@ -298,8 +357,36 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 	// would give.
 	const float TwilightBand = FMath::Clamp((Elevation + 9.0f) / 21.0f, 0.0f, 1.0f);
 	const float Daylight = FMath::Pow(TwilightBand, 1.9f);
-	Comp->SetIntensity(FMath::Max(SunIntensityAtNoon * Daylight, SunIntensityAtNoon * 0.004f));
+
+	// HOW FAR INTO THE NIGHT WE ARE: 0 while the sun is still up, 1 once it is well down. Smoothstepped, because
+	// this is what crossfades the sun out and the moon in and the founder asked for no jumps in the transition.
+	const float Sinking = FMath::Clamp((-Elevation - 2.0f) / 10.0f, 0.0f, 1.0f);
+	Nightfall = Sinking * Sinking * (3.0f - 2.0f * Sinking);
+
+	// THE SUN STOPS SHINING UP THROUGH THE GROUND. Pitch is -Elevation, so a sun 40 degrees below the horizon is
+	// a light pointing UPWARD at the world, and the old flat 0.4%-of-noon floor kept it doing that all night --
+	// the one directional light in Wonderland, lighting every underside and nothing else. It is faded out with
+	// the same curve the moon comes up on, leaving only enough for the SkyAtmosphere to keep a sky.
+	const float SunFloor = 0.004f * (1.0f - Nightfall) + 0.0012f * Nightfall;
+	Comp->SetIntensity(FMath::Max(SunIntensityAtNoon * Daylight, SunIntensityAtNoon * SunFloor));
 	Comp->SetLightColor(FMath::Lerp(FLinearColor(0.42f, 0.55f, 0.95f, 1.0f), SunColourAt(Elevation), Daylight));
+
+	// ---- AND THE MOON RISES, OPPOSITE IT. Same bearing plus half a turn and the elevation mirrored, which is
+	// ---- where a full moon actually stands: highest at midnight, setting as the sun comes up. So the night is
+	// ---- lit from ABOVE, with its own shadows, and the ground, the paths and the architecture read as shapes.
+	if (ADirectionalLight* MoonLight = Moon.Get())
+	{
+		if (UDirectionalLightComponent* MoonComp = SunComponent(MoonLight))
+		{
+			MoonLight->SetActorRotation(FRotator(Elevation, BearingAt(Hour) + 180.0f, 0.0f));
+			// A FIFTIETH OF NOON. Bright enough that the founder can see the Dog, the paving under it and the
+			// silhouette of a tower; nowhere near enough to be mistaken for daylight. Tuned against photographs
+			// of the darkest hour rather than chosen, and it is the one number to move if night reads wrong.
+			MoonComp->SetIntensity(SunIntensityAtNoon * 0.020f * Nightfall);
+			// OFF WHEN IT IS NOT NEEDED, so daytime pays nothing at all for a second shadow-casting light.
+			MoonComp->SetVisibility(Nightfall > 0.002f);
+		}
+	}
 
 	// ---- THE FILLS GO WITH IT. Bounced ground light and canopy fill are daylight effects; leaving them at
 	// ---- full strength through the night is what makes a night scene look like a day scene with a dark sky.
@@ -308,7 +395,24 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 		ADirectionalLight* Fill = Fills[Index].Get();
 		UDirectionalLightComponent* FillComp = SunComponent(Fill);
 		if (FillComp == nullptr || !FillIntensities.IsValidIndex(Index)) { continue; }
-		FillComp->SetIntensity(FillIntensities[Index] * FMath::Max(Daylight, 0.06f));
+		// A LITTLE MORE THAN BEFORE, AND COLD. 0.06 of a daylight bounce is nearly nothing, and it was the only
+		// fill the night had. At 0.15, tinted to moonlight, it is the soft floor that keeps the ground around
+		// the player readable where the moon's own shadows fall -- which is the founder's second requirement,
+		// after seeing the Dog itself.
+		FillComp->SetIntensity(FillIntensities[Index] * FMath::Max(Daylight, 0.15f));
+		FillComp->SetLightColor(FMath::Lerp(FLinearColor(0.38f, 0.48f, 0.82f, 1.0f), FLinearColor::White, Daylight));
+	}
+
+	// ---- THE AMBIENT THE SUN NEVER REACHES. The sky light is captured from the sky itself, so at midnight it
+	// ---- captures a nearly black dome and contributes nothing -- which is why shadowed sides of buildings went
+	// ---- to pure black. Raising its gain at night lifts that floor WITHOUT flattening anything, because what
+	// ---- it is lifting is the night sky's own colour and not a grey wash.
+	if (ASkyLight* Ambient = Sky.Get())
+	{
+		if (USkyLightComponent* SkyComp = Ambient->GetLightComponent())
+		{
+			SkyComp->SetIntensity(SkyIntensityByDay * FMath::Lerp(5.5f, 1.0f, Daylight));
+		}
 	}
 
 	// ---- THE AIR THICKENS AT EITHER END OF THE DAY, which is what sells a sunrise and a dusk.
@@ -352,7 +456,11 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 		// and the guard caught it: the plaza went dark while the luminous skins stayed blown, because the
 		// glare was never the sun -- it was figures emitting up to 32,000x white. That is now compressed at
 		// its source (WonderlandTameGlow), so the world only needs the modest close it always did.
-		Volume->Settings.AutoExposureBias = FMath::Lerp(1.2f, -0.9f, Daylight);
+		// NIGHT OPENS A LITTLE FURTHER, 1.2 -> 1.45, and no further than that ON PURPOSE. Exposure is the one
+		// tool here that CANNOT make night readable without also making it flat, which is exactly what the
+		// founder ruled out ("do not simply wash the world in flat brightness"). The readability comes from the
+		// moon, the fills and the sky light above; this is a quarter stop of help, not the mechanism.
+		Volume->Settings.AutoExposureBias = FMath::Lerp(1.45f, -0.9f, Daylight);
 
 		// ---- AND THE GLARE ITSELF, which is the half exposure cannot fix.
 		//

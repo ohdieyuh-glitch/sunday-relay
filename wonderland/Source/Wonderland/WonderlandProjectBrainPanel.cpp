@@ -17,6 +17,7 @@
 #include "Widgets/Text/STextBlock.h"
 #include "WonderlandBrainIcon.h"
 #include "WonderlandUiStyle.h"
+#include "WonderlandMascotStyle.h"
 
 // Named, not anonymous: the module is one unity translation unit (see WonderlandCompanionHud.cpp).
 namespace WonderlandBrainLook
@@ -401,8 +402,24 @@ SWonderlandProjectBrainPanel::SWonderlandProjectBrainPanel()
 	// NOT the window. A filled panel behind the window tinted the Dog navy.
 	, SkinPanelFrameBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 6.0f, WonderlandBrainLook::Violet(0.95f), 1.6f)
 	, SkinPanelSolidBrush(WonderlandUi::Srgb(8, 12, 38, 0.95f), 0.0f, FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 0.0f)
+	// THE 360 PILL. Barely there until the pointer finds it, and plainly lit while it is turning -- the founder
+	// asked for "subtle and premium", and a control sitting inside the preview square must not compete with the
+	// mascot for attention. Declaration order matters here: C++ initialises members in the order they are
+	// DECLARED whatever this list says, and listing them out of order earns a C5038.
+	, InspectBrush(WonderlandUi::Srgb(6, 9, 28, 0.55f), 12.0f, WonderlandBrainLook::Beam(0.55f), 1.0f)
+	, InspectHoverBrush(WonderlandUi::Srgb(18, 24, 60, 0.85f), 12.0f, WonderlandBrainLook::Beam(0.95f), 1.2f)
+	, InspectOnBrush(WonderlandUi::Srgb(46, 56, 150, 0.90f), 12.0f, WonderlandUi::Srgb(0xB8, 0xC4, 0xFF, 1.0f), 1.4f)
+	, SwatchBrush(FLinearColor::White, 4.0f, FLinearColor(0.0f, 0.0f, 0.0f, 0.35f), 1.0f)
+	, SwatchRingBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 5.0f, FLinearColor::White, 1.8f)
 {
 	ClearBrush.DrawAs = ESlateBrushDrawType::NoDrawType;
+	InspectStyle = FButtonStyle()
+		.SetNormal(InspectBrush).SetHovered(InspectHoverBrush).SetPressed(InspectOnBrush)
+		.SetNormalPadding(FMargin(9.0f, 5.0f)).SetPressedPadding(FMargin(9.0f, 5.0f));
+	// A SWATCH IS ITS OWN COLOUR, so the button chrome must add nothing: the chip inside it is what is seen.
+	SwatchStyle = FButtonStyle()
+		.SetNormal(ClearBrush).SetHovered(ClearBrush).SetPressed(ClearBrush)
+		.SetNormalPadding(FMargin(0.0f)).SetPressedPadding(FMargin(0.0f));
 }
 
 const FWonderlandBrainSurface* SWonderlandProjectBrainPanel::Surface(FName SurfaceId) const
@@ -623,12 +640,20 @@ void SWonderlandProjectBrainPanel::Construct(const FArguments& InArgs)
 			]
 		]
 		// What this is, said at the top.
+		//
+		// FOUNDER, 2026-09-25: "REMOVE THE PROJECT BRAIN YELLOW SQUARE/LAYER ... a faint yellow square or
+		// rectangular layer ... Remove completely." This was it: StatusBrush is a pale-yellow (255,244,214)
+		// rounded plate with a gold border, and it was the only yellow surface anywhere on the page. Painted
+		// across the top of the white brain chamber it reads exactly as a stray layer -- which is what it was
+		// being read as.
+		//
+		// THE SENTENCE STAYS. The plate is what the founder objected to, not the disclosure: this line is the
+		// project's standing honesty about sample data, and it is preserved -- set as plain page ink at the
+		// weight the rest of the captions use, with no plate behind it and nothing yellow left on the page.
 		+ SConstraintCanvas::Slot().Anchors(FAnchors(0.47f, 0.046f)).AutoSize(true).Alignment(FVector2D(0.0, 0.0))
 		[
-			SNew(SBorder).BorderImage(&StatusBrush).Padding(FMargin(10.0f, 4.0f))
-			[
-				SNew(STextBlock).Text_Lambda([this]() { return FText::FromString(Model.SourceLine); }).Font(Font("Bold", 8, 160)).ColorAndOpacity(WonderlandUi::Srgb(0xFF, 0xD2, 0x73))
-			]
+			SNew(STextBlock).Text_Lambda([this]() { return FText::FromString(Model.SourceLine); })
+				.Font(Font("Bold", 8, 160)).ColorAndOpacity(Mist())
 		]
 		// WONDER WEB IS OPENED FROM THE PROJECT (founder, 2026-09-17: contextually, never a permanent bottom shortcut): the
 		// project the brain belongs to, and its in-world browser one click or W away.
@@ -1188,6 +1213,99 @@ void SWonderlandProjectBrainPanel::SetSkinsOpen(bool bOpen)
 	{
 		Select(NAME_None);
 	}
+	// AND WHOEVER STAGES THE WORLD IS TOLD, from here, so it happens on EVERY route in. See the declaration.
+	if (OnSkinsOpenChanged)
+	{
+		OnSkinsOpenChanged(bSkinsOpen);
+	}
+}
+
+TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSwatchRow(bool bPrimary)
+{
+	using namespace WonderlandBrainLook;
+	TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
+	Row->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+	[
+		SNew(SBox).WidthOverride(74.0f)
+		[
+			SNew(STextBlock)
+			.Text(bPrimary ? INVTEXT("PRIMARY") : INVTEXT("SECONDARY"))
+			.Font(Font("Bold", 8, 200)).ColorAndOpacity(Mist(0.95f))
+		]
+	];
+	for (const TPair<FName, FLinearColor>& Swatch : WonderlandMascotStyle::Palette())
+	{
+		const FLinearColor Colour = Swatch.Value;
+		const FName Label = Swatch.Key;
+		Row->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)
+		[
+			SNew(SButton)
+			.ButtonStyle(&SwatchStyle)
+			.ToolTipText(FText::FromName(Label))
+			.OnClicked_Lambda([bPrimary, Colour]()
+			{
+				// ONE CANONICAL STATE, WRITTEN FROM BOTH PLACES. The founder's rule: "Wardrobe color controls
+				// and Menu mascot-color controls must read/write the SAME canonical customization state." This
+				// is that state, and SaveAndApply is the only path from it to a repainted world -- so the
+				// preview, the Dog in the world and the Menu's own swatches all move on this one click.
+				if (UWonderlandMascotStyleSettings* Style = GetMutableDefault<UWonderlandMascotStyleSettings>())
+				{
+					(bPrimary ? Style->Primary : Style->Secondary) = Colour;
+					Style->bChosen = true;
+					WonderlandMascotStyle::SaveAndApply();
+				}
+				return FReply::Handled();
+			})
+			[
+				SNew(SBox).WidthOverride(18.0f).HeightOverride(18.0f)
+				[
+					SNew(SOverlay)
+					+ SOverlay::Slot()[SNew(SImage).Image(&SwatchBrush).ColorAndOpacity(FSlateColor(Colour))]
+					// THE RING SAYS WHICH ONE IS ON, and it is drawn from the SETTINGS rather than remembered
+					// here: a colour chosen in the Menu while this panel is open must light up here too.
+					+ SOverlay::Slot()
+					[
+						SNew(SImage).Image(&SwatchRingBrush)
+						.Visibility_Lambda([bPrimary, Colour]()
+						{
+							const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+							const FLinearColor Now = bPrimary ? Style.Primary : Style.Secondary;
+							return Style.bChosen && Now.Equals(Colour, 0.01f)
+								? EVisibility::HitTestInvisible : EVisibility::Hidden;
+						})
+					]
+				]
+			]
+		];
+	}
+	return Row;
+}
+
+TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeColourStrip()
+{
+	using namespace WonderlandBrainLook;
+	// FOUNDER, 2026-09-25: "Add color controls directly inside the Wardrobe because this is where the player is
+	// visually inspecting the skin ... Integrate the color controls cleanly without turning Wardrobe into a
+	// crowded settings panel. The preview should remain the visual focus."
+	//
+	// So: two rows of chips under the preview, no headings beyond the two words, no sliders, no picker dialog.
+	// PRIMARY is the shell every skin shares; SECONDARY is the status eyes. What each of them is ALLOWED to
+	// touch is decided once, in WonderlandMascotStyle::ChannelFor -- the flames, the fire, the halo, the banner
+	// and the black visor are never reached from here.
+	return SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
+		[
+			SNew(STextBlock).Text(INVTEXT("COLOURWAY"))
+			.Font(Font("Bold", 8, 260)).ColorAndOpacity(Violet(0.95f))
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)[MakeSwatchRow(true)]
+		+ SVerticalBox::Slot().AutoHeight()[MakeSwatchRow(false)]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
+		[
+			SNew(STextBlock)
+			.Text(INVTEXT("PRIMARY paints the shell  ·  SECONDARY the status eyes  ·  a skin's own fire, halo and visor are left alone"))
+			.Font(Font("Regular", 7, 180)).ColorAndOpacity(Mist(0.75f))
+		];
 }
 
 TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSkinCard(const FWonderlandRelaySkin& Skin)
@@ -1419,20 +1537,61 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSkinsView()
 						// Dog itself -- live, lit by the world, breathing, and wearing what the registry says -- not a
 						// capture and not a still. The scene capture this replaced wrote pure white in this build under
 						// ten configurations; the filled panel that first stood behind this frame tinted the Dog navy.
-						SAssignNew(SkinPreviewWindow, SBorder).BorderImage(&SkinWindowFrameBrush).Padding(FMargin(6.0f))
-						.Visibility(EVisibility::HitTestInvisible)
+						SNew(SOverlay)
+						+ SOverlay::Slot()
 						[
-							SNew(SVerticalBox)
-							+ SVerticalBox::Slot().FillHeight(1.0f)
+							SAssignNew(SkinPreviewWindow, SBorder).BorderImage(&SkinWindowFrameBrush).Padding(FMargin(6.0f))
+							.Visibility(EVisibility::HitTestInvisible)
 							[
-								SNew(SSpacer)
+								SNew(SVerticalBox)
+								+ SVerticalBox::Slot().FillHeight(1.0f)
+								[
+									SNew(SSpacer)
+								]
+								+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 0.0f, 0.0f, 6.0f)
+								[
+									SNew(STextBlock)
+									.Text(INVTEXT("LIVE  \u00B7  THIS IS YOUR RELAY DOG, IN THE WORLD"))
+									.Font(Font("Regular", 8, 200)).ColorAndOpacity(Mist(0.85f))
+									.ShadowOffset(FVector2D(1.0f, 1.0f)).ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f))
+								]
 							]
-							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 0.0f, 0.0f, 6.0f)
+						]
+						// ---- THE 360 CONTROL, INSIDE THE PREVIEW SQUARE AT ITS TOP RIGHT (founder, 2026-09-25).
+						//
+						// IT CANNOT LIVE INSIDE THE WINDOW ITSELF. That border is HitTestInvisible on purpose -- it is a
+						// hole the world is seen through, and a hit-testable widget stretched over a hole swallows the
+						// clicks meant for what is behind it. So the window and the button are SIBLINGS in an overlay:
+						// the button is the only hit-testable thing in the square, and it is forty pixels of its corner.
+						+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(0.0f, 14.0f, 14.0f, 0.0f)
+						[
+							SNew(SButton)
+							.ButtonStyle(&InspectStyle)
+							.ToolTipText(INVTEXT("Turn the mascot slowly through front, side, back and side. Press again to stop."))
+							.OnClicked_Lambda([this]() { OnToggleInspect.ExecuteIfBound(); return FReply::Handled(); })
 							[
-								SNew(STextBlock)
-								.Text(INVTEXT("LIVE  \u00B7  THIS IS YOUR RELAY DOG, IN THE WORLD"))
-								.Font(Font("Regular", 8, 200)).ColorAndOpacity(Mist(0.85f))
-								.ShadowOffset(FVector2D(1.0f, 1.0f)).ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.8f))
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+								[
+									SNew(SWonderlandBrainIcon).Glyph(EWonderlandBrainGlyph::Arrows).Size(13.0f)
+									// ONE COLOUR FOR THE GLYPH: SWonderlandBrainIcon takes a plain colour, not an attribute, and the
+									// label beside it already says which state the control is in.
+									.Color(WonderlandBrainLook::Beam(0.95f))
+									.Thickness(1.3f)
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+								[
+									SNew(STextBlock)
+									.Text_Lambda([this]()
+									{
+										return IsInspecting.Get(false) ? INVTEXT("360°  STOP") : INVTEXT("360°  VIEW");
+									})
+									.Font(Font("Bold", 8, 220))
+									.ColorAndOpacity_Lambda([this]()
+									{
+										return FSlateColor(IsInspecting.Get(false) ? FLinearColor::White : WonderlandBrainLook::Beam(0.95f));
+									})
+								]
 							]
 						]
 					]
@@ -1474,6 +1633,10 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSkinsView()
 							})
 							.Font(Font("Regular", 8, 200)).ColorAndOpacity(WonderlandUi::Srgb(0xFF, 0xD2, 0x73))
 						])
+					]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						Solid(FMargin(2.0f, 14.0f, 0.0f, 2.0f), MakeColourStrip())
 					]
 				]
 				+ SHorizontalBox::Slot().FillWidth(1.0f)

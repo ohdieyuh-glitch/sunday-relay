@@ -46,12 +46,23 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Sky")
 	float GetSunElevationDeg() const;
 
+	/**
+	 * HOW FAR INTO THE NIGHT IT IS: 0 with the sun up, 1 once it is well down, smooth between.
+	 *
+	 * Read by anything that has to behave differently after dark -- the Relay Dog's own night light is the
+	 * first -- so there is ONE curve for "it is night now" and not a second opinion per system.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Sky")
+	float GetNightAmount() const { return Nightfall; }
+
 	/** What the sky is doing, in one line, for a proof to read back rather than infer from a photograph. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Sky")
 	FString DescribeSky() const;
 
 private:
 	void FindTheSky();
+	/** Stands a second directional light in the sky, opposite the sun, so night is LIT rather than merely dark. */
+	void MakeTheMoon();
 	/** Points every pond, well, canal and fountain basin at the real water material, if it is present. */
 	void DressTheWater();
 	void ApplyStableShadows();
@@ -61,10 +72,29 @@ private:
 	float Hour = 9.5f;
 	/** Hours of Wonderland time per real second. Zero holds the sky still. */
 	float HoursPerSecond = 0.0f;
+	/** The night curve, computed in PaintTheSky and published by GetNightAmount. */
+	float Nightfall = 0.0f;
 	float SinceSkyCapture = 0.0f;
 	bool bFound = false;
 
 	TWeakObjectPtr<ADirectionalLight> Sun;
+	/**
+	 * THE MOON, and it is a real light rather than a floor under the sun's.
+	 *
+	 * FOUNDER, 2026-09-25: "NIGHT MODE IS TOO DARK ... it must still read as NIGHT, but the player must be able
+	 * to see the Relay Dog, the ground around the player, paths, architecture silhouettes, the Project Avatars
+	 * and AI Companions, and navigation landmarks."
+	 *
+	 * The old night was the SUN held at 0.4% of noon while it stood up to 72 degrees BELOW the horizon -- which
+	 * means the only directional light in the world was shining UPWARDS through the ground. That is why raising
+	 * it was never the answer: brighter would only have lit the undersides of things. So the night gets its own
+	 * light, standing where a moon stands (opposite the sun, therefore high when the sun is low), and it lights
+	 * the world from above with its own shadows. Silhouettes come back, the ground reads, and nothing is washed
+	 * flat, because this is a light with a direction rather than a lift on the exposure.
+	 */
+	TWeakObjectPtr<ADirectionalLight> Moon;
+	/** The sky light's authored strength, so night can raise it without forgetting what day was. */
+	float SkyIntensityByDay = 1.0f;
 	TWeakObjectPtr<ASkyLight> Sky;
 	TWeakObjectPtr<AExponentialHeightFog> Fog;
 	TWeakObjectPtr<APostProcessVolume> Grade;

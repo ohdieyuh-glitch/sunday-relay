@@ -132,6 +132,9 @@ void AWonderlandSubAgentCub::Prepare(const FString& FigurePath, int32 InSlot, in
 			Body->DisplayName = FString::Printf(TEXT("CUB %d"), Slot + 1);
 			// WHAT IT IS, WRITTEN ON IT. Never "clone", never "MAS": a label is how a reader learns the boundary.
 			Body->ClassLabel = TEXT("SUB-AGENT CUB");
+			// A CUB KEEPS ITS OWN COLOURS. The founder asked that AI Companion customisation not be coupled to
+			// the Cubs in any way, and this is the colour half of that: SubAgent wears no colourway at all.
+			Body->SetBodyRole(EWonderlandBodyRole::SubAgent);
 			Body->AttachToActor(this, FAttachmentTransformRules::SnapToTargetIncludingScale);
 #if WITH_EDITOR
 			Body->SetActorLabel(FString::Printf(TEXT("WL_SubAgentCub_%02d"), Slot), false);

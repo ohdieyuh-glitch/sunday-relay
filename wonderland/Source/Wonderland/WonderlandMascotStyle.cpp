@@ -1,6 +1,7 @@
 #include "WonderlandMascotStyle.h"
 
 #include "RelayDogCharacter.h"
+#include "WonderlandCompanionEmbodiment.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -18,6 +19,52 @@ namespace WonderlandMascotStyle
 		return Name.Contains(TEXT("eye"), ESearchCase::IgnoreCase)
 			|| Name.Contains(TEXT("visor"), ESearchCase::IgnoreCase)
 			|| Name.Contains(TEXT("pupil"), ESearchCase::IgnoreCase);
+	}
+
+	EWonderlandColorChannel ChannelFor(const FString& MaterialName)
+	{
+		const FString Name = MaterialName.ToLower();
+		// THE EYES FIRST, because "eye" is the narrower claim and the visor is NOT one of them: it is the black
+		// face the whole lineup is recognised by, and a secondary colour painted onto it would erase that.
+		if (Name.Contains(TEXT("eye")) || Name.Contains(TEXT("pupil")))
+		{
+			return EWonderlandColorChannel::Eye;
+		}
+		// THE SHELL. Every skin in the lineup declares exactly these two and builds its own art on top of them,
+		// so they are the one channel a colourway can move without touching anything authored.
+		if (Name == TEXT("bone") || Name == TEXT("bonedeep"))
+		{
+			return EWonderlandColorChannel::Body;
+		}
+		return EWonderlandColorChannel::None;
+	}
+
+	const TArray<TPair<FName, FLinearColor>>& Palette()
+	{
+		// ONE SET, OFFERED IN BOTH PLACES. Chosen to read against Wonderland's ivory stone and against black:
+		// a swatch that vanishes in the Wardrobe's preview square is not a choice, it is a trap. DEFAULT is
+		// first and is how a player puts a skin back to the colours it was designed in.
+		static const TArray<TPair<FName, FLinearColor>> Swatches = {
+			{TEXT("DEFAULT"),  FLinearColor::White},
+			{TEXT("BONE"),     FLinearColor(0.898f, 0.871f, 0.800f)},
+			{TEXT("GOLD"),     FLinearColor(1.000f, 0.780f, 0.260f)},
+			{TEXT("EMBER"),    FLinearColor(1.000f, 0.420f, 0.160f)},
+			{TEXT("CRIMSON"),  FLinearColor(0.820f, 0.140f, 0.180f)},
+			{TEXT("VIOLET"),   FLinearColor(0.560f, 0.340f, 0.960f)},
+			{TEXT("AZURE"),    FLinearColor(0.260f, 0.560f, 1.000f)},
+			{TEXT("CYAN"),     FLinearColor(0.300f, 0.900f, 1.000f)},
+			{TEXT("JADE"),     FLinearColor(0.200f, 0.860f, 0.600f)},
+			{TEXT("ROSE"),     FLinearColor(1.000f, 0.520f, 0.680f)},
+			{TEXT("SLATE"),    FLinearColor(0.420f, 0.460f, 0.540f)},
+			{TEXT("OBSIDIAN"), FLinearColor(0.140f, 0.150f, 0.190f)},
+		};
+		return Swatches;
+	}
+
+	FSimpleMulticastDelegate& OnChanged()
+	{
+		static FSimpleMulticastDelegate Changed;
+		return Changed;
 	}
 
 	void Tint(UMaterialInstanceDynamic* Instance, const FLinearColor& Colour)
@@ -115,6 +162,34 @@ namespace
 			bPrimary ? TEXT("PRIMARY") : TEXT("SECONDARY"), *Colour.ToString(), Repainted);
 	}
 
+	/** Repaint every AI Companion body standing in a live world. Cubs are NOT touched: they are not companions. */
+	int32 RepaintLiveCompanions()
+	{
+		int32 Painted = 0;
+		if (GEngine == nullptr)
+		{
+			return 0;
+		}
+		for (const FWorldContext& Context : GEngine->GetWorldContexts())
+		{
+			UWorld* World = Context.World();
+			if (World == nullptr || !World->IsGameWorld())
+			{
+				continue;
+			}
+			for (TActorIterator<AWonderlandCompanionEmbodiment> It(World); It; ++It)
+			{
+				// EVERY BODY, INCLUDING THE DOG'S COSTUME AND THE WARDROBE'S MANNEQUIN, because all three wear
+				// a colourway -- but each reads the colourway meant for it, which the embodiment decides from
+				// what it is. A Sub-Agent Cub's body is left exactly as it is: the founder asked that companion
+				// colour never reach a Cub, and a Cub is told apart here by the actor that owns it.
+				It->RepaintColourway();
+				++Painted;
+			}
+		}
+		return Painted;
+	}
+
 	FAutoConsoleCommand GMascotPrimary(
 		TEXT("wl.Mascot.Primary"),
 		TEXT("The mascot's main colourway: wl.Mascot.Primary <r,g,b | #RRGGBB>. Saved."),
@@ -143,6 +218,23 @@ namespace
 					Repainted);
 			}
 		}));
+}
+
+namespace WonderlandMascotStyle
+{
+	void SaveAndApply()
+	{
+		if (UWonderlandMascotStyleSettings* Settings = GetMutableDefault<UWonderlandMascotStyleSettings>())
+		{
+			// SAVED IMMEDIATELY, because a colour the player picks and loses on exit is not a preference.
+			Settings->SaveConfig();
+		}
+		// TRUE even when nothing has been chosen: this is also the path RESET takes, and a repaint that
+		// returned early on bChosen is exactly what once left magenta on the Dog after a reset.
+		RepaintLiveDogs(true);
+		RepaintLiveCompanions();
+		OnChanged().Broadcast();
+	}
 }
 
 // ---------------------------------------------------------------------------------------------------------

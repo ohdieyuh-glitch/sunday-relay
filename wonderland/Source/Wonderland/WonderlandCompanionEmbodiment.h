@@ -38,6 +38,30 @@ class UProceduralMeshComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 
+/**
+ * WHAT THIS BODY IS, so it knows whose colourway to wear.
+ *
+ * One actor class does five jobs, and the founder has asked for the mascot, the AI Companions and the
+ * Sub-Agent Cubs to be independently customisable -- so a body has to know which of them it is. Sniffing the
+ * attach parent would work today and break the first time something is re-parented; this is told, once, by
+ * whoever spawned it.
+ *
+ * Neutral is the default ON PURPOSE. A body nobody has classified keeps exactly the colours its figure was
+ * authored in, which is the safe way to be wrong.
+ */
+UENUM()
+enum class EWonderlandBodyRole : uint8
+{
+	/** Authored colours, untouched by any customisation. Project Avatars, test figures, anything unclassified. */
+	Neutral,
+	/** The Relay Dog's worn skin, and the Wardrobe mannequin that shows it. Wears the MASCOT colourway. */
+	Mascot,
+	/** An AI Companion. Wears the COMPANION colourway. */
+	Companion,
+	/** A Sub-Agent Cub's body. Wears NOTHING: a Cub keeps its own identity and its own colours. */
+	SubAgent
+};
+
 UCLASS(NotBlueprintable)
 class WONDERLAND_API AWonderlandCompanionEmbodiment : public AActor
 {
@@ -59,9 +83,47 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	bool ReloadFigure();
 
+	/** Say what this body is, so it wears the right colourway. See EWonderlandBodyRole. */
+	void SetBodyRole(EWonderlandBodyRole InRole);
+
+	EWonderlandBodyRole GetBodyRole() const { return BodyRole; }
+
+	/**
+	 * PUT THE CURRENT COLOURWAY ON A BODY THAT IS ALREADY STANDING, without rebuilding it.
+	 *
+	 * The founder's requirement is that a colour chosen in the Wardrobe shows on the preview LIVE, and that the
+	 * same colour is already on the Dog when the Wardrobe closes. Rebuilding a 30,000-box figure to change a hue
+	 * would be a visible stutter and would restart its animation; this re-sets the three parameters that carry
+	 * colour on the material instances the body already has.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
+	void RepaintColourway();
+
 	/** Follow whatever pawn this controller is wearing, now and after it changes. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
 	void SetFollowController(APlayerController* Controller);
+
+	/**
+	 * IS THIS BODY A COMPANION IN ITS OWN RIGHT, OR IS IT SOMEBODY'S COSTUME?
+	 *
+	 * One actor class does four jobs in this world: the two AI Companions, EVERY Sub-Agent Cub's body, the Relay
+	 * Dog's own worn skin, and the wardrobe mannequin standing on the skin stage. Only the first drives itself --
+	 * it follows a player controller and owns its own transform. The rest are attached to, or posed by, something
+	 * else, and a TActorIterator cannot tell them apart.
+	 *
+	 * FOUNDER, 2026-09-25, WITH VIDEO: summoning Sub-Agent Cubs made the AI Companions "move incorrectly and sink
+	 * or merge into the floor". This is why. The companions' keep-apart steering iterated every embodiment in the
+	 * world, so each newly spawned cub body counted as a peer to be pushed away from -- at up to 345 uu of shove
+	 * per cub, several cubs at once -- and cubs are spawned ABOVE the Dog's feet, so the push carried a DOWNWARD
+	 * component and drove a companion whose whole hover is 34 uu straight through the ground.
+	 *
+	 * Companions and Cubs must remain separate actors with independent transform authority. This is the test that
+	 * keeps them separate.
+	 */
+	bool IsIndependentCompanion() const
+	{
+		return FollowController.IsValid() && GetAttachParentActor() == nullptr;
+	}
 
 	/**
 	 * Stand where a mission stage needs this companion to stand, for as long as that stage lasts.
@@ -301,6 +363,17 @@ private:
 	};
 
 	UMaterialInterface* ParentFor(EWonderlandCompanionMaterialKind Kind) const;
+
+	/**
+	 * THE ONE PLACE A CHOSEN COLOUR IS ALLOWED TO REACH A MATERIAL.
+	 *
+	 * Called once per material as the body is built and again for every material on a live repaint, so the two
+	 * paths cannot disagree about what a colourway means. Which colourway (mascot, companion, or none at all)
+	 * comes from BodyRole; which CHANNELS it may touch comes from WonderlandMascotStyle::ChannelFor; and the
+	 * chosen colour is MULTIPLIED over the authored one so a skin keeps its own light and shade.
+	 */
+	void ApplyColourway(int32 MaterialIndex, class UMaterialInstanceDynamic* Instance,
+		const FWonderlandCompanionMaterial& Def, const FLinearColor& Lit, const FLinearColor& Emissive);
 	void ClearBody();
 	FVector DesiredLocation(const APawn* Pawn) const;
 	void Animate(float TimeSeconds);
@@ -487,6 +560,17 @@ private:
 
 	TArray<FPartMotion> Motions;
 	TArray<FGlowMaterial> GlowMaterials;
+	EWonderlandBodyRole BodyRole = EWonderlandBodyRole::Neutral;
+	/**
+	 * THE MATERIALS AS THE FIGURE FILE DECLARED THEM -- name, kind, authored colour and strength -- kept beside
+	 * MaterialInstances and parallel to it.
+	 *
+	 * A live repaint has to know what each instance WAS before it can say what it should become: a colourway is
+	 * multiplied over the authored colour so that a skin keeps its own light and shade, and there is nowhere
+	 * else to read that authored colour back from once the instance has been written to once.
+	 */
+	TArray<FWonderlandCompanionMaterial> BuiltMaterials;
+
 	TWeakObjectPtr<APlayerController> FollowController;
 	FString FigurePath;
 	FString LastError;

@@ -151,6 +151,8 @@ void UWonderlandCompanionSubsystem::Spawn(APlayerController* Controller)
 		Body->SetActorLabel(FString::Printf(TEXT("WL_Companion_%s"), *Spec.Name.Replace(TEXT(" "), TEXT(""))), false);
 #endif
 		Body->SetFollowController(Controller);
+		// AN AI COMPANION, which wears the COMPANION colourway -- not the mascot's, and never a Cub's.
+		Body->SetBodyRole(EWonderlandBodyRole::Companion);
 		// A refused figure leaves an empty body standing and says why (GetLastError); the other companion
 		// still builds. Neither failure hides the other.
 		Body->LoadFigure(ResolveFigurePath(Spec.Figure));
