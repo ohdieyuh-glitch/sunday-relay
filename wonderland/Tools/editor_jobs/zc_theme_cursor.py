@@ -77,6 +77,35 @@ def job():
     L.press_key("Escape", False)
     yield 0.8
 
+
+    # ---- AND JUDGE WHAT CAN BE. The COLOURS are the captures' job; whether the terminal was up and whether
+
+    # every shape was actually exercised are facts this job already had and never asserted.
+
+    tests = []
+
+    RESULT["tests"] = tests
+
+    F = RESULT.get("facts", {})
+
+
+    def record(tid, name, ok, **detail):
+
+        tests.append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
+
+        emit(tid, "PASS" if ok else "FAIL", name, detail)
+
+
+    record("C01", "the terminal was actually up for the colour captures",
+
+           bool(F.get("terminal_open")), terminal_open=F.get("terminal_open"),
+
+           note="a colour capture of a closed terminal photographs nothing and would still look like a pass")
+
+    record("C02", "every cursor shape was exercised, not just one",
+
+           len(F.get("cursor_shapes_tried") or []) >= 3, tried=F.get("cursor_shapes_tried"))
+
     RESULT["status"] = "measured; the verdict on the colours is the photographs"
     les.editor_request_end_play()
     yield (lambda: ues.get_game_world() is None, 300)

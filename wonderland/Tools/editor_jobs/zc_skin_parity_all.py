@@ -115,6 +115,30 @@ def job():
     yield 1.5
     RESULT["all_pass"] = all(r.get("verdict") == "PASS" for r in rows)
     RESULT["failing"] = [r["skin"] for r in rows if r.get("verdict") != "PASS"]
+
+    # ---- AND SAY SO AS A CHECK. This job worked out a verdict, wrote it into the result as `all_pass`, and
+    # recorded no tests -- so it has been reported as "measured" and counted as judged by capture, while the
+    # answer sat in the file. A verdict nobody asserts is not a verdict.
+    tests = []
+    RESULT["tests"] = tests
+
+    def record(tid, name, ok, **detail):
+        tests.append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
+        emit(tid, "PASS" if ok else "FAIL", name, detail)
+
+    record("S01", "every active skin goes on and is dressed",
+           bool(rows) and all(r.get("worn") and r.get("dressed") for r in rows),
+           skins=[r["skin"] for r in rows])
+    record("S02", "no skin mismatches the pose it was handed, on any field",
+           all(int(r.get("field_mismatches", 1)) == 0 for r in rows),
+           mismatches={r["skin"]: r.get("field_mismatches") for r in rows})
+    record("S03", "every skin wears the pose AND performs the act",
+           all(r.get("wears_the_pose") and r.get("performs_the_act") for r in rows),
+           wears={r["skin"]: r.get("wears_the_pose") for r in rows},
+           performs={r["skin"]: r.get("performs_the_act") for r in rows})
+    record("S04", "and none of them is failing",
+           RESULT["all_pass"] and not RESULT["failing"], failing=RESULT["failing"])
+
     RESULT["status"] = "measured"
     les.editor_request_end_play()
     yield (lambda: ues.get_game_world() is None, 300)

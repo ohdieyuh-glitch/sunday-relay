@@ -137,6 +137,33 @@ def job():
         yield 8.0
         RESULT["final"] = str(sidekicks.describe_sidekicks())
         shot("11_all_three_done", "final=%s" % RESULT["final"])
+
+        # ---- AND JUDGE IT. The state chain was walked and written down and never asserted, so this counted as
+        # "judged by capture" while every answer sat in the result. The founder's canon here is authority
+        # separation and honest state: a companion must SAY it is simulated, must demand auth before going real,
+        # and its mascot must reflect what it is doing.
+        tests = []
+        RESULT["tests"] = tests
+
+        def record(tid, name, ok, **detail):
+            tests.append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
+            emit(tid, "PASS" if ok else "FAIL", name, detail)
+
+        record("K01", "both terminals open and both providers are probed",
+               bool(RESULT.get("terminals_open")) and bool(RESULT.get("providers_probed")),
+               terminals_open=RESULT.get("terminals_open"), providers_probed=RESULT.get("providers_probed"))
+        record("K02", "they start SIMULATED and say so, rather than pretending to be live",
+               "SIMULATED" in str(RESULT.get("at_start", "")), at_start=str(RESULT.get("at_start", ""))[:180])
+        record("K03", "going real demands auth first",
+               "AUTH_REQUIRED" in str(RESULT.get("auth_required", "")),
+               state=str(RESULT.get("auth_required", ""))[:180])
+        record("K04", "the mascot reflects what the companion is doing",
+               str(RESULT.get("llm_mascot_while_thinking")) == "RESPONDING"
+               and str(RESULT.get("jhinn_mascot_working")) == "WORKING"
+               and str(RESULT.get("llm_mascot_disconnected")) == "DISCONNECTED",
+               thinking=RESULT.get("llm_mascot_while_thinking"),
+               jhinn=RESULT.get("jhinn_mascot_working"),
+               disconnected=RESULT.get("llm_mascot_disconnected"))
         RESULT["status"] = "done"
     finally:
         with open(os.path.join(ROOT, "steps.json"), "w", encoding="utf-8") as fh:

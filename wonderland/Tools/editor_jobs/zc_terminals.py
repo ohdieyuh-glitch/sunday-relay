@@ -100,6 +100,36 @@ def job():
 
     L.press_key("Escape", False)
     yield 1.0
+
+    # ---- AND JUDGE IT. Every fact below was already collected and none was asserted, so this counted as
+    # "judged by capture" while the answers sat in the file. The LOOK of the terminal -- the emblem above the
+    # rule, the colours -- stays the captures' job, because that is a judgement. Whether it opened, whether
+    # the plus made a tab, and whether a companion actually answered are facts.
+    tests = []
+    RESULT["tests"] = tests
+    F = RESULT.get("facts", {})
+
+    def record(tid, name, ok, **detail):
+        tests.append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
+        emit(tid, "PASS" if ok else "FAIL", name, detail)
+
+    record("T01", "the Live Terminal opens and carries both companions",
+           bool(F.get("live_terminal_open"))
+           and bool(F.get("companion_0_title")) and bool(F.get("companion_1_title")),
+           open=F.get("live_terminal_open"),
+           titles=[F.get("companion_0_title"), F.get("companion_1_title")])
+    record("T02", "the plus actually makes a tab",
+           bool(F.get("plus_made_a_tab"))
+           and int(F.get("tabs_after_plus", 0)) > int(F.get("tabs_before_plus", 0)),
+           before=F.get("tabs_before_plus"), after=F.get("tabs_after_plus"))
+    record("T03", "a companion takes a question and answers it",
+           bool(F.get("companion_0_answered"))
+           and int(F.get("companion_0_lines_after", 0)) > int(F.get("companion_0_lines_before", 0)),
+           asked=F.get("companion_0_input_text"),
+           lines_before=F.get("companion_0_lines_before"),
+           lines_after=F.get("companion_0_lines_after"),
+           note="more transcript lines after asking than before, which a terminal that only looked right "
+                "would not produce")
     RESULT["status"] = "measured; the verdict on how it LOOKS is the photographs"
     les.editor_request_end_play()
     yield (lambda: ues.get_game_world() is None, 300)

@@ -1,7 +1,7 @@
 {
  "name": "zc_brain_visible",
- "started": "2026-09-25 13:16:11",
- "status": "measured; the verdict is the photographs",
+ "started": "2026-09-25 18:58:39",
+ "status": "measured",
  "brain_panel_open": true,
  "window_rect_LTRB": [
   0.502,
@@ -25,7 +25,52 @@
  ],
  "distance_uu": 90.0,
  "view_target": "BP_RelayDog_C_0",
- "finished": "2026-09-25 13:16:31",
- "seconds": 20.75,
- "log": ""
+ "tests": [
+  {
+   "id": "B01",
+   "name": "Project Brain is open and cutting a hole for the sculpture",
+   "pass": true,
+   "detail": {
+    "open": true,
+    "hole": true,
+    "rect": [
+     0.502,
+     0.125,
+     0.892,
+     0.956
+    ]
+   }
+  },
+  {
+   "id": "B02",
+   "name": "the hole is a window, not a sliver and not the whole screen",
+   "pass": true,
+   "detail": {
+    "hole_area_pct": 32.41,
+    "note": "a hole of nearly zero would pass 'is being cut' while showing nothing, and one near 100 would mean the panel had eaten the world -- which the founder explicitly ruled out"
+   }
+  },
+  {
+   "id": "B03",
+   "name": "exactly one brain sculpture is staged in it",
+   "pass": true,
+   "detail": {
+    "sculptures": 1,
+    "at": [
+     -490.1,
+     -774.0,
+     188.0
+    ],
+    "camera": [
+     -516.1,
+     -857.9,
+     207.8
+    ],
+    "distance_uu": 90.0
+   }
+  }
+ ],
+ "finished": "2026-09-25 18:59:01",
+ "seconds": 21.95,
+ "log": "B01 PASS Project Brain is open and cutting a hole for the sculpture {'open': True, 'hole': True, 'rect': [0.502, 0.125, 0.892, 0.956]}\nB02 PASS the hole is a window, not a sliver and not the whole screen {'hole_area_pct': 32.41, 'note': \"a hole of nearly zero would pass 'is being cut' while showing nothing, and one near 100 would mean the panel had eaten the world -- which the founder explicitly ruled out\"}\nB03 PASS exactly one brain sculpture is staged in it {'sculptures': 1, 'at': [-490.1, -774.0, 188.0], 'camera': [-516.1, -857.9, 207.8], 'distance_uu': 90.0}\n"
 }

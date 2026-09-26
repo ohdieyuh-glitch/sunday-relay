@@ -167,6 +167,26 @@ def job():
         yield 1.4
         shot("15_back_to_world")
         RESULT["final"] = str(ui.describe_wonder_web_workspace())
+        # ---- AND JUDGE IT. This walked the whole Connect chain, wrote down whether the link was online and
+        # whether Wonder Web A kept running through it, and then recorded no tests -- so the matrix counted
+        # it as "judged by capture" while the answers sat in the result.
+        tests = []
+        RESULT["tests"] = tests
+
+        def record(tid, name, ok, **detail):
+            tests.append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
+            emit(tid, "PASS" if ok else "FAIL", name, detail)
+
+        record("J01", "the Julius Connect link is online for the run",
+               str(RESULT.get("link")) == "online", link=RESULT.get("link"),
+               note="the dev service has to be up; when it is not, the window says so -- zc_connect_offline")
+        record("J02", "Wonder Web A keeps running through the whole Connect chain",
+               bool(RESULT.get("a_kept_running")), samples=len(RESULT.get("a_running") or []),
+               note="a second window opening, a capability being requested, approved and revoked must not "
+                    "stop the first one")
+        record("J03", "the chain actually walked its steps rather than stopping early",
+               len(RESULT.get("steps") or []) >= 6, steps=len(RESULT.get("steps") or []))
+
         RESULT["status"] = "done"
     finally:
         with open(os.path.join(ROOT, "steps.json"), "w", encoding="utf-8") as fh:

@@ -1,6 +1,6 @@
 {
  "name": "zc_theme_cursor",
- "started": "2026-09-25 12:53:22",
+ "started": "2026-09-25 19:06:28",
  "status": "measured; the verdict on the colours is the photographs",
  "facts": {
   "terminal_open": true,
@@ -10,7 +10,30 @@
    "ring"
   ]
  },
- "finished": "2026-09-25 12:53:53",
- "seconds": 30.82,
- "log": ""
+ "tests": [
+  {
+   "id": "C01",
+   "name": "the terminal was actually up for the colour captures",
+   "pass": true,
+   "detail": {
+    "terminal_open": true,
+    "note": "a colour capture of a closed terminal photographs nothing and would still look like a pass"
+   }
+  },
+  {
+   "id": "C02",
+   "name": "every cursor shape was exercised, not just one",
+   "pass": true,
+   "detail": {
+    "tried": [
+     "arrow",
+     "mark",
+     "ring"
+    ]
+   }
+  }
+ ],
+ "finished": "2026-09-25 19:06:58",
+ "seconds": 29.68,
+ "log": "C01 PASS the terminal was actually up for the colour captures {'terminal_open': True, 'note': 'a colour capture of a closed terminal photographs nothing and would still look like a pass'}\nC02 PASS every cursor shape was exercised, not just one {'tried': ['arrow', 'mark', 'ring']}\n"
 }

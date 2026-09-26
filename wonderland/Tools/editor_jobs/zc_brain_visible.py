@@ -85,6 +85,31 @@ def job():
     yield 2.0
     H.capture_viewport_jpeg(os.path.join(ROOT, "04_brain_later.jpg"), 1700, 92)
 
-    RESULT["status"] = "measured; the verdict is the photographs"
+    # ---- WHAT CAN BE DECIDED, IS. The photographs remain the verdict on how the brain LOOKS -- organic,
+    # polished, not blocky -- which is a judgement and the founder's. But whether the panel is open, whether
+    # a hole is actually being cut for it, and whether a sculpture is staged in that hole are facts, and this
+    # job measured all three and then asked none of them.
+    tests = []
+    RESULT["tests"] = tests
+
+    def record(tid, name, ok, **detail):
+        tests.append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
+        emit(tid, "PASS" if ok else "FAIL", name, detail)
+
+    area = float(RESULT.get("hole_area_pct_of_screen") or 0.0)
+    record("B01", "Project Brain is open and cutting a hole for the sculpture",
+           bool(RESULT.get("brain_panel_open")) and bool(RESULT.get("hole_is_being_cut")),
+           open=RESULT.get("brain_panel_open"), hole=RESULT.get("hole_is_being_cut"),
+           rect=RESULT.get("window_rect_LTRB"))
+    record("B02", "the hole is a window, not a sliver and not the whole screen",
+           5.0 < area < 60.0, hole_area_pct=area,
+           note="a hole of nearly zero would pass 'is being cut' while showing nothing, and one near 100 "
+                "would mean the panel had eaten the world -- which the founder explicitly ruled out")
+    record("B03", "exactly one brain sculpture is staged in it",
+           int(RESULT.get("sculptures") or 0) == 1, sculptures=RESULT.get("sculptures"),
+           at=RESULT.get("sculpture_at"), camera=RESULT.get("camera_at"),
+           distance_uu=RESULT.get("distance_uu"))
+
+    RESULT["status"] = "measured"
     les.editor_request_end_play()
     yield (lambda: ues.get_game_world() is None, 300)

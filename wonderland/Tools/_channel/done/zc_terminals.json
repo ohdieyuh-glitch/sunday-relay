@@ -1,6 +1,6 @@
 {
  "name": "zc_terminals",
- "started": "2026-09-25 12:38:04",
+ "started": "2026-09-25 19:05:55",
  "status": "measured; the verdict on how it LOOKS is the photographs",
  "facts": {
   "ctrl_t_opened_it": false,
@@ -19,7 +19,41 @@
   "companion_0_lines_after": 6,
   "companion_0_answered": true
  },
- "finished": "2026-09-25 12:38:29",
- "seconds": 25.22,
- "log": ""
+ "tests": [
+  {
+   "id": "T01",
+   "name": "the Live Terminal opens and carries both companions",
+   "pass": true,
+   "detail": {
+    "open": true,
+    "titles": [
+     "GPT 6 Astra",
+     "Claude Code Fable 5"
+    ]
+   }
+  },
+  {
+   "id": "T02",
+   "name": "the plus actually makes a tab",
+   "pass": true,
+   "detail": {
+    "before": 1,
+    "after": 2
+   }
+  },
+  {
+   "id": "T03",
+   "name": "a companion takes a question and answers it",
+   "pass": true,
+   "detail": {
+    "asked": "What is Wonderland?",
+    "lines_before": 3,
+    "lines_after": 6,
+    "note": "more transcript lines after asking than before, which a terminal that only looked right would not produce"
+   }
+  }
+ ],
+ "finished": "2026-09-25 19:06:20",
+ "seconds": 24.57,
+ "log": "T01 PASS the Live Terminal opens and carries both companions {'open': True, 'titles': ['GPT 6 Astra', 'Claude Code Fable 5']}\nT02 PASS the plus actually makes a tab {'before': 1, 'after': 2}\nT03 PASS a companion takes a question and answers it {'asked': 'What is Wonderland?', 'lines_before': 3, 'lines_after': 6, 'note': 'more transcript lines after asking than before, which a terminal that only looked right would not produce'}\n"
 }
