@@ -16,16 +16,48 @@
 #
 # -- and this one is blocked by neither, because it changes nothing anyone can see.
 #
-# CONSERVATIVE ON PURPOSE. A box is dropped only when its centre AND all eight corners each lie inside some
-# OTHER single box. A box hidden by the UNION of several neighbours, with corners poking into the gaps
-# between them, is kept. So this under-removes, and every box it does remove was provably invisible.
+# THE FIRST VERSION OF THIS WAS WRONG AND THE NUMBER IT PRODUCED WAS A LIE.
 #
-# AND IT WRITES NEW FILES. The founder's Small, Medium and Large tiers are untouched.
+# It dropped a box when its centre and eight CORNERS lay inside other boxes, removed 19% of every figure,
+# and took forty avatars from 169 ms to 109 ms. verify_cull_lossless.py then sampled the FACES of what had
+# been dropped: 979 of 1,092 Cherubim boxes and 903 of 999 Seraph boxes had an exposed face. Nine points
+# cannot see a hole between them -- a box can have every corner buried and its middle open, and about 90%
+# of them did. Those figures would have come back moth-eaten.
+#
+# SO THE CRITERION IS NOW THE SURFACE, which is the thing that can actually be seen. A box is dropped only
+# when a grid across all six of its faces is covered, every sample, by other boxes. A box contributing no
+# visible surface contributes nothing.
+#
+# AND THE CHECK IS NOT THE CULL. Culling samples at CULL_GRID and verify_cull_lossless.py checks at a finer
+# one, so the verifier can still catch a gap the culler stepped over. Using one grid for both would be a
+# proof that cannot fail, which is the trap this whole exercise exists to avoid.
+#
+# AND IT IS NOT USED. KEPT AS THE RECORD OF A DEAD END.
+#
+# The surface criterion was the right idea and point-sampling cannot carry it. Culling at a 7x7 face grid and
+# verifying at 11x11 still found 754 of 1,059 dropped TenTails boxes with an exposed face -- the two grids
+# disagree about 71% of the time, which means the gaps between covering boxes are smaller than any practical
+# sample spacing. A finer grid would only find more; it would not make the cull safe, it would just move the
+# threshold at which I noticed.
+#
+# Establishing that a box is genuinely buried in this geometry needs exact solid coverage -- real CSG against
+# the union of its neighbours -- not points. That is a much larger piece of work than the saving justifies,
+# and until someone does it, no cull ships. Both tools stay because the second one is the reason a visible
+# regression in the founder's avatars is not in the repository.
+#
+# WHAT IT WOULD HAVE BEEN WORTH, for whoever picks this up: 19% of every figure by the corner test (wrong),
+# 7-9% by the surface test (still unproven), and forty avatars from 169 ms to 109 ms on the wrong one.
+#
+# The founder's Small, Medium and Large tiers were never modified by any version of this.
 from pathlib import Path
 import collections
 import sys
 
 BITE = 0.02
+
+#: Samples per face edge when deciding. Deliberately COARSER than the verifier's, so the two disagree when
+#: the cull is wrong instead of agreeing by construction.
+CULL_GRID = 7
 
 
 def cull(path, out_path):
@@ -66,24 +98,30 @@ def cull(path, out_path):
                 return True
         return False
 
+    steps = [(-1.0 + 2.0 * k / (CULL_GRID - 1.0)) for k in range(CULL_GRID)]
     drop = set()
     for i, (x, y, z, sx, sy, sz) in enumerate(boxes):
         hx, hy, hz = sx * 0.5 - BITE, sy * 0.5 - BITE, sz * 0.5 - BITE
         if hx <= 0 or hy <= 0 or hz <= 0:
             continue
-        pts = [(x, y, z)]
-        for dx in (-hx, hx):
-            for dy in (-hy, hy):
-                for dz in (-hz, hz):
-                    pts.append((x + dx, y + dy, z + dz))
+        pts = []
+        for a in steps:
+            for b in steps:
+                pts.append((x + hx, y + a * hy, z + b * hz))
+                pts.append((x - hx, y + a * hy, z + b * hz))
+                pts.append((x + a * hx, y + hy, z + b * hz))
+                pts.append((x + a * hx, y - hy, z + b * hz))
+                pts.append((x + a * hx, y + b * hy, z + hz))
+                pts.append((x + a * hx, y + b * hy, z - hz))
         if all(inside(px, py, pz, i) for px, py, pz in pts):
             drop.add(where[i])
 
     header = [
         "# CROWD TIER -- hidden voxels removed by Tools/cull_hidden_boxes.py.",
-        "# Every box dropped had its centre and all eight corners inside another box: instanced and drawn,",
-        "# never visible. Parts, materials, phases, amplitudes and the silhouette are untouched, and the",
-        "# source tier this was made from is untouched too.",
+        "# Every box dropped had its whole SURFACE covered by other boxes -- a 7x7 grid across all six faces,",
+        "# every sample inside another box -- so it contributed no visible surface. An earlier version tested",
+        "# the eight corners instead and removed boxes whose middles were open; see verify_cull_lossless.py.",
+        "# Parts, materials, phases, amplitudes and the silhouette are untouched, and so is the source tier.",
     ]
     kept = [ln for i, ln in enumerate(lines) if i not in drop]
     Path(out_path).write_bytes(nl.join(header + kept).encode("utf-8"))

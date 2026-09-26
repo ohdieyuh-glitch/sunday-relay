@@ -16,9 +16,10 @@ from pathlib import Path
 import collections
 import sys
 
-#: Samples per face edge. 5 x 5 across six faces is 150 points a box, which finds a gap far smaller than a
-#: voxel. Corners alone were 8.
-GRID = 5
+#: Samples per face edge, and it MUST exceed the culler's CULL_GRID (7). 11 x 11 across six faces is 726
+#: points a box against the culler's 294, so the verifier samples between the culler's samples and can
+#: still disagree with it. Equal grids would make this a proof that cannot fail.
+GRID = 11
 BITE = 0.02
 
 
