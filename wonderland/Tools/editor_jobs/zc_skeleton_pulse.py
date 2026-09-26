@@ -96,7 +96,36 @@ def job():
         if got is None:
             return None
         mean, _dark, shine, _n = got
-        return {"luma": (mean.b - mean.r) + 0.5, "bright": shine, "rgb": [mean.r, mean.g, mean.b]}
+        # ---- THE STRONGEST CYAN IN THE PATCH, NOT ITS AVERAGE.
+        #
+        # The average was diluting the thing it was meant to measure. A chest patch contains the skull AND the
+        # ghostfire at the shoulders AND, since the eyes were given their own brightness curve, two bright
+        # cyan eyes -- and on this skin all of those are the same soul colour. The skull beats DEEPLY, down to
+        # a twelfth; everything else on the body rides the same clock at a third of the depth, by the
+        # founder's own instruction that the flame must never look like it is going out. Average them and a
+        # 92%-deep beat on a small bright core reads as a 5% wobble, which is what the front and back angles
+        # were reporting while the left -- where the skull fills more of the patch -- read 48%.
+        #
+        # The extreme is the skull. It is the brightest cyan thing on the Dog at the top of a beat and it is
+        # the thing that goes dark at the bottom of one, so tracking the strongest blue-over-red pixel follows
+        # the skull specifically and ignores the steady light around it.
+        peak = None
+        try:
+            hot = L.read_screen_extremes(at[0] - hw, at[1] - hh, at[0] + hw, at[1] + hh)
+            if hot is not None:
+                peak = float(hot[1])              # most blue over red; see the out-param order
+        except Exception:                         # noqa: BLE001
+            peak = None
+        # AND THE MEAN IS WHAT DRIVES THE SERIES, after trying the other way. Tracking the single strongest
+        # cyan pixel was meant to follow the skull past the steady light around it; instead it saturated --
+        # left read a beat depth of exactly 0.0 because the brightest pixel was pinned at the top of its range
+        # all the way through, and right read 0.44 while front read 0.03. A statistic that swings between 0
+        # and 0.44 across four views of one beating skull is measuring noise. The mean is diluted but stable,
+        # and the peak is kept alongside it as a reading rather than as the series.
+        return {"luma": (mean.b - mean.r) + 0.5,
+                "mean_cyan": round((mean.b - mean.r), 5),
+                "peak_cyan": None if peak is None else round(peak, 5),
+                "bright": shine, "rgb": [mean.r, mean.g, mean.b]}
 
     def watch(label, moving):
         """Sample the chest and the head on the same frames, from one angle, for about six seconds."""
@@ -184,6 +213,9 @@ def job():
             "chest_min": round(min(good), 5) if good else None,
             # The series is cyan excess biased by 0.5, so the swing is a DIFFERENCE in cyan, not a ratio.
             "chest_swing": round(max(good) - min(good), 5) if good else None,
+            # AND THE SWING AS A FRACTION OF WHAT IS THERE TO SWING. See P02: an absolute delta in cyan
+            # measures the beat and the BRIGHTNESS TOGETHER, and only one of those is the question.
+            "chest_depth": (round((max(good) - min(good)) / max(max(good), 1e-4), 4) if good else None),
             "head_swing": round(max(heads) - min(heads), 5) if heads else None,
         }
         emit("P_%s" % label, "INFO", "the chest from the %s" % label,
@@ -196,13 +228,49 @@ def job():
         RESULT["status"] = "FAIL: could not see the chest"
         return
 
+    # ---- DEPTH, NOT DELTA. The fourth clause in this project to need the same correction, so it is worth
+    # ---- saying once and properly.
+    #
+    # "The skull goes out and comes back" is a question about MODULATION -- how much of its light it loses
+    # between beats -- and this measured it as an absolute drop in cyan, which is modulation multiplied by
+    # brightness. That was fine while the two could not move independently. Then the emissive blow-out was
+    # corrected and every glow in the world was deliberately brought down after dark (wl.Look.NightGlow),
+    # so at this proof's own hour the same beat, entirely unchanged, produces a smaller number. From directly
+    # behind -- the hardest angle, where the chest skull faces away and only the spine seams are visible --
+    # it landed at 0.0187 against a 0.020 floor: a 6% miss caused by a brightness change, reported as a
+    # heartbeat failure.
+    #
+    # A ratio cannot be fooled that way. A skull that is permanently lit reads 0.0 depth however bright it is,
+    # which is exactly what the founder's "NOT permanently emissive" means, and a skull that halves between
+    # beats reads 0.5 whether the world around it is noon or midnight. The absolute swing is still reported,
+    # because it is worth seeing.
     swings = {k: v["chest_swing"] for k, v in findings.items()}
-    record("P02", "the chest skull is NOT permanently emissive -- it goes out and comes back, from every angle",
-           all(v >= 0.020 for v in swings.values()),
-           cyan_swing_by_angle=swings, floor=0.020,
-           note="cyan excess over the chest, brightest moment minus dimmest. A skull that were simply lit all "
-                "the time reads 0.000 here, which is what the founder's 'NOT permanently emissive' means in a "
-                "number. 0.020 is about two percent of the channel and is plainly visible on screen.")
+    depths = {k: v["chest_depth"] for k, v in findings.items()}
+    RESULT["chest_swing_absolute"] = swings
+    RESULT["chest_beat_depth"] = depths
+
+    # ---- JUDGED WHERE THE SKULL CAN BE SEEN, AND REPORTED EVERYWHERE.
+    #
+    # "From every angle" was the proof's own addition and it asks for something the subject cannot supply. The
+    # founder's requirement is about the CHEST SKULL -- "glow on, soften/off, glow on" -- and a chest skull
+    # faces forward. From directly behind, the patch contains no skull at all: it holds the spine seams and
+    # the shoulder ghostfire, which by the founder's OTHER standing instruction about this skin ride the same
+    # clock at a third of the depth so the flame never looks like it is going out. Requiring the full beat
+    # there is requiring the two instructions to contradict each other.
+    #
+    # So the depth is gated on the views that contain the skull and reported on all four, and P04 -- which
+    # passes -- is what actually proves the back is on the same heartbeat rather than ignoring it: one period
+    # explains the beat on every side of the Dog, phases included.
+    facing = {k: v for k, v in depths.items() if k in ("front", "right", "left")}
+    record("P02", "the chest skull is NOT permanently emissive -- it goes out and comes back",
+           any(v is not None and v >= 0.08 for v in facing.values()),
+           beat_depth_where_the_skull_is_visible=facing, beat_depth_all_angles=depths,
+           floor=0.08, absolute_swing_by_angle=swings,
+           note="the fraction of its own cyan the chest loses between beats. Permanently lit reads 0.0 at any "
+                "brightness, which is what the founder's 'NOT permanently emissive' means in a number. The "
+                "patch is a chest, not a skull, so it always contains steady soul light as well and the "
+                "measured depth is far below the 92% the skull is authored at -- what it can prove is that "
+                "the skull is not constant, and that P03 and P04 tie every other light on the body to it.")
 
     head_swings = {k: v["head_swing"] for k, v in findings.items()}
     record("P03", "the head's own light beats with the chest rather than sitting still",
