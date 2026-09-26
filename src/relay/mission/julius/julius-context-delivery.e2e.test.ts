@@ -5,7 +5,8 @@ import {
   cardPolicy, createJuliusHarness, seedTaskContractInto, task, verificationPolicy, worker,
   type JuliusHarness,
 } from './julius-runtime-fixtures';
-import type { JuliusBrainEntry } from './julius-runtime';
+import { deriveJuliusContextQualification } from './julius-context-provenance';
+import type { JuliusBrainEntry, JuliusContextQualification } from './julius-runtime';
 import type { JuliusRunRow } from './julius-runtime-ports';
 
 /**
@@ -108,7 +109,10 @@ const brain = (): readonly JuliusBrainEntry[] => [
  */
 const BUDGET = 900;
 
-function build(contextCharacterBudget = BUDGET): JuliusHarness {
+function build(
+  contextCharacterBudget = BUDGET,
+  contextQualification?: (entries: readonly JuliusBrainEntry[]) => JuliusContextQualification,
+): JuliusHarness {
   const harness = createJuliusHarness({
     workers: [
       { worker: ARCHITECT, script: [PLAN_OK] },
@@ -133,6 +137,12 @@ function build(contextCharacterBudget = BUDGET): JuliusHarness {
     state: 'BLOCKED', dependencyIds: ['plan-1'], requiredEvidenceTypes: ['TEST'],
   }));
   harness.store.seedBrain('run-1', brain());
+  if (contextQualification !== undefined) {
+    // The pipeline's own seam, set on the real dependencies the loop was built
+    // with. Nothing else about the mission changes.
+    (harness.deps as { contextQualification?: typeof contextQualification }).contextQualification =
+      contextQualification;
+  }
   return harness;
 }
 
@@ -308,5 +318,121 @@ describe('the packet a live Coding Agent is handed', () => {
     expect(snapshot.truncated).toBe(false);
     expect(snapshot.sourceEntryIds.slice(0, 2)).toEqual(['brain:contract', 'brain:finding']);
     expect(snapshot.sourceEntryIds.length, 'the whole in-scope brain is carried').toBe(62);
+  });
+});
+
+/**
+ * AN AUTHORITATIVE CLASH FAILS THE TASK, AND THE TICK SURVIVES IT.
+ *
+ * `compileContextWithIntegrity` refuses to compile a packet when two claims of
+ * equal authority and equal trust contradict and nothing separates them. Proving
+ * that at the compiler is not enough: the refusal arrives as a thrown
+ * `JuliusContextIntegrityRefusal` in the middle of `dispatchJuliusTask`, and an
+ * exception escaping there would abort the whole tick — taking every other
+ * claimed task with it and leaving this one ACTIVE with its lease held until the
+ * recovery sweep noticed.
+ *
+ * WHY THE SEAM IS USED HERE RATHER THAN A HAND-BUILT CLASH. Nothing durable
+ * records that one brain entry contradicts another yet, so the DERIVED
+ * qualification produces no lineage and this path is unreachable in production —
+ * a fact the pipeline's own comment states. The seam
+ * (`deps.contextQualification`) is where a claim store will arrive, so driving
+ * the proof through it exercises exactly the code the claim store will feed, in
+ * the real pipeline, with the real loop, against the real store.
+ */
+describe('a context clash nothing can settle', () => {
+  /** The derivation, plus a mutual contradiction between two admissible claims. */
+  const clashing = (entries: readonly JuliusBrainEntry[]): JuliusContextQualification => {
+    const base = deriveJuliusContextQualification(entries);
+    const left = base.claims.find((claim) => claim.entryId === 'brain:finding')!;
+    const right = base.claims.find((claim) => claim.entryId === 'brain:noise-000')!;
+    return {
+      ...base,
+      claims: base.claims.map((claim) => {
+        // Equal authority and equal trust on both sides, each naming the other.
+        // Anything that separated them would be resolved rather than fatal.
+        if (claim.claimId === left.claimId) {
+          return { ...claim, trust: 'VERIFIED' as const, contradicts: [right.claimId] };
+        }
+        if (claim.claimId === right.claimId) {
+          return {
+            ...claim, trust: 'VERIFIED' as const, provenance: 'reviewer_verified' as const,
+            evidence: [{ kind: 'EVIDENCE' as const, id: 'evidence:rival' }],
+            contradicts: [left.claimId],
+          };
+        }
+        return claim;
+      }),
+    };
+  };
+
+  it('fails the task with a named failure class instead of throwing out of the tick', async () => {
+    const harness = build(BUDGET, clashing);
+    // The tick must RESOLVE, not reject: that is the whole point.
+    await expect(drain(harness.loop)).resolves.toBeTypeOf('number');
+
+    const tasks = await harness.store.tasksForRun('run-1', 'prj-1');
+    // THE FIRST TASK TO BE DISPATCHED is the architect's, and the clash is in the
+    // brain every packet is compiled from, so that is where the refusal lands.
+    const plan = tasks.find((item) => item.taskId === 'plan-1');
+    expect(plan?.state, 'the dispatched task failed closed').toBe('FAILED');
+    expect(harness.store.taskRow('plan-1')!.leaseOwner,
+      'and released its lease rather than holding it until recovery').toBeNull();
+    // And the work that depended on it never ran — a dependency that failed
+    // closed does not release its dependents.
+    expect(tasks.find((item) => item.taskId === 'build-1')?.state).toBe('BLOCKED');
+
+    const failure = harness.store.events()
+      .find((event) => event.type === 'task.failed'
+        && (event.facts as { failureClass?: unknown }).failureClass === 'context_integrity_unresolved_clash');
+    expect(failure, 'the ledger names why').toBeDefined();
+    const facts = failure!.facts as Record<string, unknown>;
+    expect(facts.reasonCode).toBe('UNRESOLVED_AUTHORITATIVE_CLASH');
+    expect(facts.errorRetryable, 'the same rows compile the same refusal').toBe(false);
+    expect(facts.conflicts).toBe(1);
+    // "Something contradicted something" is not a diagnosis: both ids are here.
+    expect(String(facts.clashClaimIds)).toContain('claim:brain:finding');
+    expect(String(facts.clashClaimIds)).toContain('claim:brain:noise-000');
+    expect(String(facts.clashEntryIds)).toContain('brain:finding');
+  });
+
+  it('never completes the run on a packet it refused to compile', async () => {
+    const harness = build(BUDGET, clashing);
+    await drain(harness.loop);
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run?.state, 'a mission whose coder was never honestly briefed must not complete')
+      .not.toBe('COMPLETED');
+    // And no evidence was recorded from a dispatch that never happened.
+    const evidence = await harness.store.evidenceForRun('run-1', 'prj-1');
+    expect(evidence.filter((item) => item.taskId === 'build-1')).toEqual([]);
+  });
+
+  it('compiles normally once one side outranks the other', async () => {
+    // THE CONTROL. The same pair, with the rival demoted — now authority
+    // separates them, the conflict RESOLVES, and the mission proceeds. Without
+    // this, the case above could be passing because any qualification with a
+    // `contradicts` field fails, which is a different and much worse behaviour.
+    const separable = (entries: readonly JuliusBrainEntry[]): JuliusContextQualification => {
+      const base = clashing(entries);
+      return {
+        ...base,
+        claims: base.claims.map((claim) => (claim.entryId === 'brain:noise-000'
+          ? { ...claim, trust: 'UNVERIFIED' as const, provenance: 'derived_candidate' as const, evidence: [] }
+          : claim)),
+      };
+    };
+    const harness = build(BUDGET, separable);
+    await drain(harness.loop);
+    const tasks = await harness.store.tasksForRun('run-1', 'prj-1');
+    expect(tasks.find((item) => item.taskId === 'build-1')?.state).toBe('SUCCEEDED');
+    const snapshot = coderPacket(harness);
+    expect(snapshot.sourceEntryIds, 'and the surviving side is what the coder was handed')
+      .toContain('brain:finding');
+    // Demoting the rival moves its AUTHORITY as well as its trust — an
+    // unverified derived candidate is an ASSERTION — so the authority arm
+    // decides, which is the earlier and stronger of the two separations.
+    expect(snapshot.integrityConflicts?.map((conflict) => conflict.resolution))
+      .toEqual(['RESOLVED_BY_AUTHORITY']);
+    expect(snapshot.integrityConflicts?.[0]?.keptClaimId).toBe('claim:brain:finding');
   });
 });

@@ -123,7 +123,7 @@ import {
   type JuliusSharedCeilingPolicy,
 } from './julius-shared-ceiling';
 import type { JuliusTimelineReader } from './julius-runtime-api';
-import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusEvidence, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
+import { JULIUS_RUNTIME_VERSION, JuliusContextIntegrityRefusal, type JuliusBrainEntry, type JuliusContextQualification, type JuliusEvidence, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
 import { juliusDecisionEventId, validateJuliusEvent, type JuliusOperationalEvent, type JuliusOperationalEventType } from './julius-events';
 import { validateTrajectoryEvent, type JuliusTrajectoryEvent, type JuliusTrajectoryKind } from './julius-trajectory';
 import {
@@ -262,6 +262,19 @@ export interface JuliusPipelineDependencies {
    * given room it cannot carry.
    */
   readonly contextCharacterBudget: number | ((role: JuliusWorkerRole) => number);
+  /**
+   * HOW A BRAIN ENTRY BECOMES A RANKABLE CLAIM. Defaults to
+   * `deriveJuliusContextQualification`, which reads durable columns and nothing
+   * else.
+   *
+   * IT IS A SEAM FOR A CLAIM STORE, not a switch. Today nothing records that one
+   * brain entry supersedes or contradicts another, so the derivation produces no
+   * lineage and the compiler's fail-closed path is unreachable in production. The
+   * day a claim store exists it arrives here, and the pipeline does not change.
+   * Until then this is also how the fail-closed path is driven through the REAL
+   * pipeline by a proof, rather than asserted at the compiler and hoped for here.
+   */
+  readonly contextQualification?: (entries: readonly JuliusBrainEntry[]) => JuliusContextQualification;
 }
 
 export interface JuliusPipelineRequest {
@@ -882,8 +895,11 @@ export async function runClaimedTask(
      * exists to address — is a failure of the real path only.
      */
     const contextEntries = [...brain, ...priorFindings.map((finding) => findingEntryFor(task, finding))];
-    const snapshot = createJuliusContextSnapshot({
-      qualification: deriveJuliusContextQualification(contextEntries),
+    const qualification = (deps.contextQualification ?? deriveJuliusContextQualification)(contextEntries);
+    let snapshot;
+    try {
+      snapshot = createJuliusContextSnapshot({
+      qualification,
       contextId: deps.ids.next('context'),
       runId: run.runId,
       task,
@@ -912,7 +928,46 @@ export async function runClaimedTask(
       evidenceIds: evidence.filter((value) => task.dependencyIds.includes(value.taskId)).map((value) => value.evidenceId),
       findingIds: (priorFindings.length > 0 ? priorFindings : findings.filter((value) => value.taskId === task.taskId)).map((value) => value.findingId),
       acceptanceCriterionIds: criteria.map((value) => value.criterionId),
-    });
+      });
+    } catch (error) {
+      /**
+       * AN AUTHORITATIVE CLASH FAILS THE TASK, IT DOES NOT CRASH THE TICK.
+       *
+       * `compileContextWithIntegrity` refuses to compile a packet when two claims
+       * of equal authority and equal trust contradict and nothing separates them:
+       * handing a worker either side would make the packet assert something
+       * Julius has no basis for. That refusal has to become a RECORDED task
+       * failure — an exception escaping `dispatchJuliusTask` would abort the whole
+       * tick, taking every other claimed task with it, and leave this one ACTIVE
+       * with its lease held until the recovery sweep.
+       *
+       * The conflicting claim ids reach the ledger, because "something
+       * contradicted something" is not a diagnosis. It is not retryable: the same
+       * rows compile the same refusal, and a retry would spend an attempt to
+       * learn what this row already says.
+       */
+      if (!(error instanceof JuliusContextIntegrityRefusal)) throw error;
+      const clash = error.conflicts[0];
+      await ledger.event('task.failed', {
+        taskId: task.taskId,
+        facts: {
+          code: 'INVALID_REQUEST', errorRetryable: false,
+          failureClass: 'context_integrity_unresolved_clash',
+          reasonCode: error.reasonCode,
+          conflicts: error.conflicts.length,
+          clashClaimIds: clash === undefined ? null : clash.claimIds.join('|'),
+          clashEntryIds: clash === undefined ? null : clash.entryIds.join('|'),
+        },
+      });
+      await deps.store.finishTask({
+        taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration,
+        state: 'FAILED', now: deps.clock.now(),
+      });
+      return {
+        kind: 'FAILED', taskId: claim.taskId, code: 'INVALID_REQUEST',
+        failureClass: 'context_integrity_unresolved_clash',
+      };
+    }
     /**
      * WHAT THIS DISPATCH WAS ACTUALLY HANDED — the two effort dimensions Julius
      * can measure itself, and the only point in the runtime that knows them.

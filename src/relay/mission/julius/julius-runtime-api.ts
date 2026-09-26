@@ -28,7 +28,7 @@
  * that will eventually forget to catch.
  */
 
-import type { JuliusEvidence, JuliusMissionState, JuliusTask, JuliusVerificationDecision } from './julius-runtime';
+import { JULIUS_DEFAULT_ROLES, type JuliusDefaultRole, type JuliusEvidence, type JuliusMissionState, type JuliusTask, type JuliusVerificationDecision } from './julius-runtime';
 import type { JuliusReviewerFinding } from './julius-verification-runtime';
 import type { JuliusSubagentRecord, JuliusSubagentStore } from './julius-subagent-runtime';
 import {
@@ -92,6 +92,64 @@ export interface JuliusRunView {
   readonly taskCounts: Readonly<Record<JuliusTask['state'], number>>;
   readonly activeTasks: number;
   readonly pendingApprovals: number;
+}
+
+/**
+ * WHAT ONE C.A.R.D. SLOT IS DOING, FOR A SURFACE THAT HAS TO DRAW IT.
+ *
+ * WHY THIS EXISTS. Wonderland has to represent three peers — the Prompt
+ * Architect, the Coding Agent, the Independent Reviewer — and `JuliusRunView`
+ * carries a run state and task counts. A surface given only that has two
+ * choices: invent per-role state from task names, or read the timeline and
+ * re-derive the runtime's own conclusions in UI code. Both make the UI a second
+ * authority on Julius, which is the failure this API exists to prevent.
+ *
+ * EVERY FIELD IS PROJECTED FROM THE DURABLE LEDGER. Nothing here is counted
+ * alongside the events; a number that disagreed with the timeline would be
+ * impossible rather than unlikely.
+ *
+ * AND EVERY UNKNOWN IS NULL. A slot whose provider never reported a model has
+ * `servedModel: null`, not the requested one — the two are separate fields
+ * because the provider's answer is the only authority on what actually ran. A
+ * slot whose costs were never reported has `costComplete: false` and a
+ * `knownUsdMicros` that is a FLOOR. A surface that renders a floor as a total is
+ * wrong, and this shape is what lets it know.
+ */
+export interface JuliusSlotView {
+  /**
+   * ONE OF THE THREE PERMANENT PEERS, and deliberately not `JuliusWorkerRole`.
+   * A `SPECIALIST:*` is a bounded child of a slot rather than a slot: it has no
+   * standing peer to draw, and `inspectSubagents` is where its record lives.
+   * Widening this to the full union would promise rows nothing ever produces.
+   */
+  readonly role: JuliusDefaultRole;
+  /** The worker that most recently held this slot, or null if none ever has. */
+  readonly workerId: string | null;
+  /** The provider that answered, as the adapter reported it. Never inferred. */
+  readonly providerId: string | null;
+  /** What was ASKED FOR. */
+  readonly requestedModel: string | null;
+  /** What ANSWERED. Null is the provider's silence, never a copy of the request. */
+  readonly servedModel: string | null;
+  /**
+   * `NEVER_DISPATCHED` is a real state and the commonest one early in a mission.
+   * `ACTIVE` means a dispatch is open — dispatched with nothing recorded after
+   * it. `FAILED` means this slot's last recorded outcome was a failure, which is
+   * not the same as the run having failed.
+   */
+  readonly state: 'NEVER_DISPATCHED' | 'ACTIVE' | 'IDLE' | 'FAILED';
+  readonly dispatches: number;
+  /** The ledger position of this slot's last activity. Null when it has none. */
+  readonly lastSequence: number | null;
+  /** A FLOOR whenever `costComplete` is false. */
+  readonly knownUsdMicros: number;
+  /** Settlements this slot made that reported no amount. Not zero-cost ones. */
+  readonly unknownCostComponents: number;
+  readonly costComplete: boolean;
+  /** The failure class of this slot's last failure, or null. Never prose. */
+  readonly lastFailureClass: string | null;
+  /** Findings this slot RAISED, which is a reviewer's number and nobody else's. */
+  readonly findingsRaised: number;
 }
 
 /** One safe timeline entry. Never a payload, never a prompt, never reasoning. */
@@ -189,6 +247,27 @@ export class JuliusRuntimeApi {
       this.deps.store.findingsForRun(runId, identity.projectId),
     ]);
     return allow({ decisions, findings });
+  }
+
+  /**
+   * THE THREE PEER SLOTS, PROJECTED. One page of the timeline per call at the
+   * reader's own limit, walked to the end — the same paging every other
+   * projection here uses, so a long mission does not silently report a prefix.
+   */
+  async inspectSlots(identity: JuliusApiIdentity, runId: string): Promise<JuliusApiResult<readonly JuliusSlotView[]>> {
+    const authorized = await this.#authorizedRun(identity, runId, 'run:read');
+    if (!authorized.ok) return authorized;
+    const entries: JuliusTimelineEntry[] = [];
+    let sinceSequence = 0;
+    for (;;) {
+      const page = await this.deps.timeline.timeline({
+        runId, projectId: identity.projectId, sinceSequence, limit: 500,
+      });
+      entries.push(...page.entries);
+      if (page.entries.length === 0 || !page.hasMore) break;
+      sinceSequence = Math.max(...page.entries.map((entry: JuliusTimelineEntry) => entry.sequence));
+    }
+    return allow(projectJuliusSlotViews(entries));
   }
 
   async inspectSubagents(identity: JuliusApiIdentity, runId: string): Promise<JuliusApiResult<readonly JuliusSubagentRecord[]>> {
@@ -354,4 +433,133 @@ export class JuliusRuntimeApi {
     if (run === null) return refuse('run_not_found', 'No such run in this project.');
     return allow(run);
   }
+}
+
+/* ---------------------------------------------------- the slot projection */
+
+/**
+ * THE THREE SLOTS, OUT OF THE LEDGER AND NOTHING ELSE.
+ *
+ * Exported so the projection is testable without an API instance, and so a
+ * bundle exporter can produce the same rows from a dump of the same events.
+ *
+ * ONE PASS, IN LEDGER ORDER. `sequence` is the position the ledger allocates on
+ * append — `UNIQUE(stream_id, sequence)` in PostgreSQL — and NOT `occurredAt`,
+ * which routinely ties: several events of one mission land in the same
+ * millisecond and a wall-clock sort has no deterministic tiebreak.
+ */
+export function projectJuliusSlotViews(
+  entries: readonly JuliusTimelineEntry[],
+): readonly JuliusSlotView[] {
+  const ordered = [...entries].sort((left, right) => left.sequence - right.sequence);
+  const byRole = new Map<JuliusDefaultRole, {
+    workerId: string | null; providerId: string | null;
+    requestedModel: string | null; servedModel: string | null;
+    dispatches: number; lastSequence: number | null;
+    knownUsdMicros: number; unknownCostComponents: number;
+    lastFailureClass: string | null; findingsRaised: number;
+    open: boolean; failed: boolean;
+  }>();
+  const roleOfTask = new Map<string, JuliusDefaultRole>();
+  const slot = (role: JuliusDefaultRole) => {
+    const existing = byRole.get(role);
+    if (existing !== undefined) return existing;
+    const fresh = {
+      workerId: null, providerId: null, requestedModel: null, servedModel: null,
+      dispatches: 0, lastSequence: null as number | null,
+      knownUsdMicros: 0, unknownCostComponents: 0,
+      lastFailureClass: null as string | null, findingsRaised: 0,
+      open: false, failed: false,
+    };
+    byRole.set(role, fresh);
+    return fresh;
+  };
+
+  const text = (value: unknown): string | null =>
+    (typeof value === 'string' && value.trim() !== '' ? value : null);
+  const roleOf = (entry: JuliusTimelineEntry): JuliusDefaultRole | null => {
+    const stated = text(entry.facts.role);
+    if (stated !== null && (JULIUS_DEFAULT_ROLES as readonly string[]).includes(stated)) {
+      return stated as JuliusDefaultRole;
+    }
+    // A row that does not state its role still belongs to a task whose role an
+    // earlier row did state. Nothing is guessed from a task NAME.
+    return entry.taskId === null ? null : roleOfTask.get(entry.taskId) ?? null;
+  };
+
+  for (const entry of ordered) {
+    const role = roleOf(entry);
+    if (role === null) continue;
+    if (entry.taskId !== null) roleOfTask.set(entry.taskId, role);
+    const account = slot(role);
+    account.lastSequence = entry.sequence;
+    if (entry.workerId !== null) account.workerId = entry.workerId;
+    // Provider identity and the two model fields arrive on whichever row carries
+    // the adapter's diagnostics. They are only ever OVERWRITTEN by a later row
+    // that states them, so a silent row cannot erase what an earlier one said.
+    account.providerId = text(entry.facts.provider) ?? text(entry.facts.providerId) ?? account.providerId;
+    account.requestedModel = text(entry.facts.requestedModel) ?? account.requestedModel;
+    account.servedModel = text(entry.facts.servedModel) ?? account.servedModel;
+
+    switch (entry.type) {
+      case 'worker.dispatched':
+        account.dispatches += 1;
+        account.open = true;
+        break;
+      case 'worker.completed':
+        account.open = false;
+        account.failed = false;
+        break;
+      case 'task.failed':
+      case 'provider.failure':
+        account.open = false;
+        account.failed = true;
+        account.lastFailureClass = text(entry.facts.failureClass) ?? account.lastFailureClass;
+        break;
+      case 'finding.recorded':
+        account.findingsRaised += 1;
+        break;
+      case 'budget.settled': {
+        const amount = entry.facts.usdMicros;
+        // AN UNKNOWN SETTLEMENT IS NOT A FREE ONE. It is counted as a component
+        // nobody priced, which is what turns the sum into a floor.
+        if (typeof amount === 'number' && Number.isFinite(amount) && amount >= 0) {
+          account.knownUsdMicros += amount;
+        } else {
+          account.unknownCostComponents += 1;
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  return JULIUS_DEFAULT_ROLES.map((role): JuliusSlotView => {
+    const account = byRole.get(role);
+    if (account === undefined) {
+      return {
+        role, workerId: null, providerId: null, requestedModel: null, servedModel: null,
+        state: 'NEVER_DISPATCHED', dispatches: 0, lastSequence: null,
+        knownUsdMicros: 0, unknownCostComponents: 0, costComplete: true,
+        lastFailureClass: null, findingsRaised: 0,
+      };
+    }
+    return {
+      role,
+      workerId: account.workerId,
+      providerId: account.providerId,
+      requestedModel: account.requestedModel,
+      servedModel: account.servedModel,
+      state: account.dispatches === 0 ? 'NEVER_DISPATCHED'
+        : account.open ? 'ACTIVE' : account.failed ? 'FAILED' : 'IDLE',
+      dispatches: account.dispatches,
+      lastSequence: account.lastSequence,
+      knownUsdMicros: account.knownUsdMicros,
+      unknownCostComponents: account.unknownCostComponents,
+      costComplete: account.unknownCostComponents === 0,
+      lastFailureClass: account.lastFailureClass,
+      findingsRaised: account.findingsRaised,
+    };
+  });
 }
