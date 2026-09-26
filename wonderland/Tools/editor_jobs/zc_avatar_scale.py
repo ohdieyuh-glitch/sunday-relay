@@ -109,8 +109,29 @@ def job():
     # crowd containing TenTails is mostly paying for TenTails. Measuring the two families whose crowd tier is
     # actually a crowd tier says whether the SYSTEM scales or whether one family does not, and those are very
     # different findings for the founder to act on.
-    if os.environ.get("WL_CROWD_ALL") != "1":
-        files = [f for f in files if "TenTails" not in os.path.basename(f)] or files
+    # TENTAILS IS BACK IN, through a crowd tier built for the job.
+    #
+    # It was excluded to find out whether the SYSTEM scaled or one family did not, and the answer was the
+    # family: TenTails_Small keeps 123 of its Large tier's 124 groups because its ten tails each carry the
+    # same eight materials. Tools/make_tentails_crowd.py folds the five sub-pixel ones into the three that
+    # carry the figure -- 123 groups to 73, tails 80 to 30 -- with every box, every tail's own phase and
+    # amplitude, and the silhouette unchanged. TenTails_Small itself is untouched.
+    # Which TenTails the crowd uses, so the two can be compared in ONE session at one thermal state rather
+    # than across runs an hour apart -- the confound that already cost me a false regression today.
+    # READ FROM A FILE, NOT THE ENVIRONMENT. The job runs inside the editor, which inherited its environment
+    # when it launched, so an `export` in the shell that submits the job never reaches here -- the first
+    # attempt at this A/B silently measured the same tier twice and looked like a result.
+    want = "Crowd"
+    try:
+        marker = os.path.join(os.path.dirname(CHANNEL), "tentails.txt")
+        if os.path.exists(marker):
+            with open(marker, "r") as handle:
+                want = handle.read().strip() or "Crowd"
+    except Exception:
+        want = "Crowd"
+    RESULT["tentails_tier"] = want
+    crowd = [f for f in all_files if ("TenTails_" + want) in os.path.basename(f)]
+    files = [f for f in files if "TenTails" not in os.path.basename(f)] + crowd
     RESULT["crowd_tier"] = [os.path.basename(f) for f in files]
     if not files:
         record("X00", "there are avatars to stand up", False, dir=AVATARS)
