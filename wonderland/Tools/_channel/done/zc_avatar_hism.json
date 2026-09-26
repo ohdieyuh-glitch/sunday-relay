@@ -1,0 +1,159 @@
+{
+ "name": "zc_avatar_hism",
+ "started": "2026-09-26 12:52:13",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "H00",
+   "name": "there is a Project Avatar figure to spawn",
+   "pass": true,
+   "detail": {
+    "found": 10
+   }
+  },
+  {
+   "id": "H01",
+   "name": "every pass was measured with the clock running",
+   "pass": true,
+   "detail": {
+    "costs": {
+     "01 hierarchical (first)": 14.16,
+     "02 plain (first)": 13.47,
+     "03 plain (second)": 9.89,
+     "04 hierarchical (second)": 14.05
+    },
+    "note": "all zeroes means the stat unit overlay stopped drawing, not that an avatar became free"
+   }
+  },
+  {
+   "id": "H02",
+   "name": "the two passes at each setting agree well enough to compare the settings",
+   "pass": true,
+   "detail": {
+    "hierarchical": [
+     14.16,
+     14.05
+    ],
+    "plain": [
+     13.47,
+     9.89
+    ],
+    "disagreement_ms": 3.58,
+    "tolerance": 6.0,
+    "note": "the same setting measured early and late. If these disagree by more than the gap between SETTINGS, the experiment measured the machine and not the quadtree."
+   }
+  },
+  {
+   "id": "H03",
+   "name": "the quadtree is or is not costing a Project Avatar time",
+   "pass": true,
+   "detail": {
+    "hierarchical_ms": [
+     14.16,
+     14.05
+    ],
+    "plain_ms": [
+     13.47,
+     9.89
+    ],
+    "hierarchical_minus_plain_ms": 2.43,
+    "repeat_disagreement_ms": 3.58,
+    "note": "reported either way, and only meaningful if H02 passed. A positive gap larger than the disagreement says the plain component is cheaper for this shape of data and the default should change; anything smaller says the tree is not where the 15.5 ms lives."
+   }
+  }
+ ],
+ "avatar_files": 10,
+ "steps": {
+  "01 hierarchical (first)": {
+   "with_one_avatar": {
+    "samples": 160,
+    "frame": 46.06,
+    "game": 35.32,
+    "render": 46.04,
+    "gpu": 22.08
+   },
+   "with_none": {
+    "samples": 226,
+    "frame": 31.9,
+    "game": 31.41,
+    "render": 17.37,
+    "gpu": 23.65
+   },
+   "components": 58,
+   "avatar_costs_ms": 14.16
+  },
+  "02 plain (first)": {
+   "with_one_avatar": {
+    "samples": 148,
+    "frame": 45.88,
+    "game": 42.0,
+    "render": 44.89,
+    "gpu": 24.22
+   },
+   "with_none": {
+    "samples": 215,
+    "frame": 32.41,
+    "game": 32.67,
+    "render": 16.98,
+    "gpu": 28.7
+   },
+   "components": 58,
+   "avatar_costs_ms": 13.47
+  },
+  "03 plain (second)": {
+   "with_one_avatar": {
+    "samples": 147,
+    "frame": 45.48,
+    "game": 41.46,
+    "render": 43.94,
+    "gpu": 26.31
+   },
+   "with_none": {
+    "samples": 213,
+    "frame": 35.59,
+    "game": 35.25,
+    "render": 18.52,
+    "gpu": 28.98
+   },
+   "components": 58,
+   "avatar_costs_ms": 9.89
+  },
+  "04 hierarchical (second)": {
+   "with_one_avatar": {
+    "samples": 135,
+    "frame": 48.17,
+    "game": 38.3,
+    "render": 46.86,
+    "gpu": 27.67
+   },
+   "with_none": {
+    "samples": 205,
+    "frame": 34.12,
+    "game": 34.1,
+    "render": 18.01,
+    "gpu": 29.24
+   },
+   "components": 58,
+   "avatar_costs_ms": 14.05
+  }
+ },
+ "avatar_cost_ms": {
+  "01 hierarchical (first)": 14.16,
+  "02 plain (first)": 13.47,
+  "03 plain (second)": 9.89,
+  "04 hierarchical (second)": 14.05
+ },
+ "hierarchical_ms": [
+  14.16,
+  14.05
+ ],
+ "plain_ms": [
+  13.47,
+  9.89
+ ],
+ "repeat_disagreement_ms": 3.58,
+ "hierarchical_minus_plain_ms": 2.43,
+ "finished": "2026-09-26 12:54:15",
+ "seconds": 122.24,
+ "log": "H00 PASS there is a Project Avatar figure to spawn {'found': 10}\nH_01 hierarchical (first) INFO 01 hierarchical (first) {'with_one_avatar': {'samples': 160, 'frame': 46.06, 'game': 35.32, 'render': 46.04, 'gpu': 22.08}, 'with_none': {'samples': 226, 'frame': 31.9, 'game': 31.41, 'render': 17.37, 'gpu': 23.65}, 'components': 58, 'avatar_costs_ms': 14.16}\nH_02 plain (first) INFO 02 plain (first) {'with_one_avatar': {'samples': 148, 'frame': 45.88, 'game': 42.0, 'render': 44.89, 'gpu': 24.22}, 'with_none': {'samples': 215, 'frame': 32.41, 'game': 32.67, 'render': 16.98, 'gpu': 28.7}, 'components': 58, 'avatar_costs_ms': 13.47}\nH_03 plain (second) INFO 03 plain (second) {'with_one_avatar': {'samples': 147, 'frame': 45.48, 'game': 41.46, 'render': 43.94, 'gpu': 26.31}, 'with_none': {'samples': 213, 'frame': 35.59, 'game': 35.25, 'render': 18.52, 'gpu': 28.98}, 'components': 58, 'avatar_costs_ms': 9.89}\nH_04 hierarchical (second) INFO 04 hierarchical (second) {'with_one_avatar': {'samples': 135, 'frame': 48.17, 'game': 38.3, 'render': 46.86, 'gpu': 27.67}, 'with_none': {'samples': 205, 'frame': 34.12, 'game': 34.1, 'render': 18.01, 'gpu': 29.24}, 'components': 58, 'avatar_costs_ms': 14.05}\nH01 PASS every pass was measured with the clock running {'costs': {'01 hierarchical (first)': 14.16, '02 plain (first)': 13.47, '03 plain (second)': 9.89, '04 hierarchical (second)': 14.05}, 'note': 'all zeroes means the stat unit overlay stopped drawing, not that an avatar became free'}\nH02 PASS the two passes at each setting agree well enough to compare the settings {'hierarchical': [14.16, 14.05], 'plain': [13.47, 9.89], 'disagreement_ms': 3.58, 'tolerance': 6.0, 'note': 'the same setting measured early and late. If these disagree by more than the gap between SETTINGS, the experiment measured the machine and not the quadtree.'}\nH03 PASS the quadtree is or is not costing a Project Avatar time {'hierarchical_ms': [14.16, 14.05], 'plain_ms': [13.47, 9.89], 'hierarchical_minus_plain_ms': 2.43, 'repeat_disagreement_ms': 3.58, 'note': 'reported either way, and only meaningful if H02 passed. A positive gap larger than the disagreement says the plain component is cheaper for this shape of data and the default should change; anything smaller says the tree is not where the 15.5 ms lives.'}\n"
+}

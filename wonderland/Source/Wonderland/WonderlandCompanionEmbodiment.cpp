@@ -185,6 +185,38 @@ namespace
 		TEXT("wl.Look.FireGain"), 60.0f,
 		TEXT("Brightness of a flame ribbon on M_WL_Fire, against the square root of its authored strength."));
 
+	/**
+	 * WHETHER A FIGURE'S BOXES GO IN A HIERARCHICAL INSTANCED COMPONENT OR A PLAIN ONE.
+	 *
+	 * FOUNDER, P0 item 5: "Test 0/1/5/10 avatars and optimize remaining spawn/render cost."
+	 *
+	 * WHAT THE LADDER ACTUALLY MEASURED, once the readings were separated properly. One Large Project Avatar
+	 * costs 18.7 ms of frame; HIDING it gives back 15.5 of those and turning off its shadows gives back 0.8.
+	 * So the cost is neither the animator, nor the ticking, nor the shadows, nor having the actor at all -- it
+	 * is submitting the thing to be drawn, across roughly seventy movable components and 31,900 instances.
+	 *
+	 * HISM WAS CHOSEN FOR THAT AND HAD NEVER BEEN A/B'D. Its per-instance quadtree culling is worth having
+	 * when instances are spread over a landscape; every instance in one of these components is inside a volume
+	 * about the size of a shoe, moves with the component, and is either all visible or all not, so the tree
+	 * looked like pure upkeep.
+	 *
+	 * MEASURED, AND IT IS NOT THE ANSWER -- which is worth writing down so nobody spends another afternoon on
+	 * it. zc_avatar_hism prices one avatar four times in a single session, out and back: hierarchical cost
+	 * 14.16 ms and then 14.05 ms, plain cost 13.47 ms and then 9.89 ms. Plain looks 2.4 ms cheaper on the
+	 * average and its own two passes disagree by 3.6, so the gap is smaller than the noise it is drawn from
+	 * and the honest reading is that the two are indistinguishable on this hardware. The default stays where
+	 * it was, because there is no evidence to move it.
+	 *
+	 * WHAT THAT LEAVES. The 15.5 ms is not the animator, not the ticking, not the shadows, not the actor, and
+	 * not the tree. It is the plain fact of submitting 58 movable components and ~31,900 instances, and the
+	 * only lever left that does not touch the art is the tier system -- which already works, and is why ten
+	 * avatars cost less than one: the crowd budget drops them all to Small. The open question for the founder
+	 * is whether a single hero avatar needs to be Large at all.
+	 */
+	TAutoConsoleVariable<int32> CVarFigureHism(
+		TEXT("wl.Figure.Hism"), 1,
+		TEXT("1 builds figure parts as hierarchical instanced meshes; 0 as plain instanced meshes."));
+
 	TAutoConsoleVariable<float> CVarFlameDim(
 		TEXT("wl.Look.FlameDim"), 0.55f,
 		TEXT("Scale on flame brightness. 1 = as authored. Shape and flicker are never touched."));
@@ -706,7 +738,11 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		// Tried because the crowd cost is per-avatar render work and the alternatives were all closed: the
 		// material regrouping did nothing measurable, both voxel culls removed geometry that turned out to be
 		// visible, and a coarser voxel distorts the creature. This one changes no art at all.
-		UInstancedStaticMeshComponent* Mesh = NewObject<UHierarchicalInstancedStaticMeshComponent>(this);
+		// See CVarFigureHism: the tree is a bet that per-instance culling is worth its upkeep, and until now
+		// nobody had measured it against the alternative on this shape of data.
+		UInstancedStaticMeshComponent* Mesh = CVarFigureHism.GetValueOnAnyThread() != 0
+			? NewObject<UHierarchicalInstancedStaticMeshComponent>(this)
+			: NewObject<UInstancedStaticMeshComponent>(this);
 		Mesh->SetMobility(EComponentMobility::Movable);
 		// Additive cannot be Nanite. See LoadPlainCube.
 		Mesh->SetStaticMesh(Kind == EWonderlandCompanionMaterialKind::Additive ? PlainCube : Cube);
