@@ -83,6 +83,15 @@ platform-specific paths — the MCP stdio proofs (13, fixed on an unlanded branc
 spawned-process and path handling in `ship-runner`, `repository-target-observer`
 and the Hermes adapter. CI runs on Linux and is the authority on green.
 
+THE SAME CAUSE REACHES A THIRD GATE. `relay:claude:contract-verify` fails here
+with five steps and `exit=5`, because it drives the same POSIX fake executable.
+It is NOT fixed in this change — it is outside the Julius lane — and it is named
+here so the next person to see those five lines has the cause in one grep rather
+than an afternoon. `relay-repository-boundary`, `relay-parity-gate`,
+`relay:surface-parity:check:strict`, `relay:yc-demo:check`,
+`relay:cli:contract-verify`, `relay:workspace:verify`, `git diff --check`, both
+typecheck passes and all six esbuild bundles pass on this host.
+
 What this session can honestly claim about its own delta is measured per
 directory, where the signal is clean: `src/relay/mission/julius` was 1 failing
 case at baseline (`julius-slot-envelope.e2e`, which also passes intermittently
