@@ -1,6 +1,6 @@
 {
  "name": "zc_skin_stance",
- "started": "2026-09-25 16:55:20",
+ "started": "2026-09-25 18:38:55",
  "status": "measured",
  "tests": [
   {
@@ -26,33 +26,33 @@
    "detail": {
     "readings": {
      "Body": {
-      "canon_z_swing": 17.494,
-      "skin_z_swing": 17.475,
+      "canon_z_swing": 17.285,
+      "skin_z_swing": 17.26,
       "z_correlation": 1.0,
-      "canon_pitch_swing": 18.419,
-      "skin_pitch_swing": 18.419,
+      "canon_pitch_swing": 18.371,
+      "skin_pitch_swing": 18.371,
       "pitch_correlation": 1.0
      },
      "Pivot_head": {
       "canon_z_swing": 0.0,
       "skin_z_swing": 0.0,
       "z_correlation": 0.0,
-      "canon_pitch_swing": 10.968,
-      "skin_pitch_swing": 10.939,
+      "canon_pitch_swing": 8.029,
+      "skin_pitch_swing": 8.029,
       "pitch_correlation": 1.0
      },
      "Pivot_legLeft": {
       "canon_z_swing": 0.0,
       "skin_z_swing": 0.0,
       "z_correlation": 0.0,
-      "canon_pitch_swing": 109.864,
-      "skin_pitch_swing": 109.864,
+      "canon_pitch_swing": 102.341,
+      "skin_pitch_swing": 102.341,
       "pitch_correlation": 1.0
      }
     },
     "walk": {
      "peak_speed_uu": 520.0,
-     "mean_speed_uu": 250.2,
+     "mean_speed_uu": 283.8,
      "samples": 90
     },
     "canon_channels_asleep": {},
@@ -85,7 +85,7 @@
    "detail": {
     "swing_ratios": {
      "Body": 0.999,
-     "Pivot_head": 0.997,
+     "Pivot_head": 1.0,
      "Pivot_legLeft": 1.0
     },
     "note": "skin swing divided by canon swing; 1.0 is a faithful copy. This is the check that caught the spine scaling the authority by Part.A = 0.850"
@@ -102,33 +102,33 @@
  },
  "readings": {
   "Body": {
-   "canon_z_swing": 17.494,
-   "skin_z_swing": 17.475,
+   "canon_z_swing": 17.285,
+   "skin_z_swing": 17.26,
    "z_correlation": 1.0,
-   "canon_pitch_swing": 18.419,
-   "skin_pitch_swing": 18.419,
+   "canon_pitch_swing": 18.371,
+   "skin_pitch_swing": 18.371,
    "pitch_correlation": 1.0
   },
   "Pivot_head": {
    "canon_z_swing": 0.0,
    "skin_z_swing": 0.0,
    "z_correlation": 0.0,
-   "canon_pitch_swing": 10.968,
-   "skin_pitch_swing": 10.939,
+   "canon_pitch_swing": 8.029,
+   "skin_pitch_swing": 8.029,
    "pitch_correlation": 1.0
   },
   "Pivot_legLeft": {
    "canon_z_swing": 0.0,
    "skin_z_swing": 0.0,
    "z_correlation": 0.0,
-   "canon_pitch_swing": 109.864,
-   "skin_pitch_swing": 109.864,
+   "canon_pitch_swing": 102.341,
+   "skin_pitch_swing": 102.341,
    "pitch_correlation": 1.0
   }
  },
  "walk": {
   "peak_speed_uu": 520.0,
-  "mean_speed_uu": 250.2,
+  "mean_speed_uu": 283.8,
   "samples": 90
  },
  "mission_overlay": {
@@ -141,7 +141,7 @@
   "Pivot_head": "pitch",
   "Pivot_legLeft": "pitch"
  },
- "finished": "2026-09-25 16:55:47",
- "seconds": 27.0,
- "log": "N00 PASS both rigs expose the pivots this compares {'pivots': {'Body': True, 'Part_root': True, 'Pivot_head': True, 'Part_head': True, 'Pivot_legLeft': True, 'Part_leg_l': True}, 'note': 'canon Body/Pivot_head/Pivot_legLeft against costume Part_body/Part_head/Part_leg_l'}\nN01 PASS the canon body is still being posed, and the Dog actually walked {'readings': {'Body': {'canon_z_swing': 17.494, 'skin_z_swing': 17.475, 'z_correlation': 1.0, 'canon_pitch_swing': 18.419, 'skin_pitch_swing': 18.419, 'pitch_correlation': 1.0}, 'Pivot_head': {'canon_z_swing': 0.0, 'skin_z_swing': 0.0, 'z_correlation': 0.0, 'canon_pitch_swing': 10.968, 'skin_pitch_swing': 10.939, 'pitch_correlation': 1.0}, 'Pivot_legLeft': {'canon_z_swing': 0.0, 'skin_z_swing': 0.0, 'z_correlation': 0.0, 'canon_pitch_swing': 109.864, 'skin_pitch_swing': 109.864, 'pitch_correlation': 1.0}}, 'walk': {'peak_speed_uu': 520.0, 'mean_speed_uu': 250.2, 'samples': 90}, 'canon_channels_asleep': {}, 'samples_while_performing': 0, 'note': 'it is hidden, not stopped -- if this fails the comparison below is meaningless and the finding is that the authority stops running when it is dressed'}\nN02 PASS every joint moves the way the canon body's own joint moves {'by_pivot': {'Body': 1.0, 'Pivot_head': 1.0, 'Pivot_legLeft': 1.0}, 'channel': {'Body': 'z', 'Pivot_head': 'pitch', 'Pivot_legLeft': 'pitch'}, 'note': 'mean-removed, same frames; the two rigs have different rest poses so only the MOTION is compared'}\nN03 PASS and by the same amount, not a damped or exaggerated copy {'swing_ratios': {'Body': 0.999, 'Pivot_head': 0.997, 'Pivot_legLeft': 1.0}, 'note': 'skin swing divided by canon swing; 1.0 is a faithful copy. This is the check that caught the spine scaling the authority by Part.A = 0.850'}\n"
+ "finished": "2026-09-25 18:39:22",
+ "seconds": 26.93,
+ "log": "N00 PASS both rigs expose the pivots this compares {'pivots': {'Body': True, 'Part_root': True, 'Pivot_head': True, 'Part_head': True, 'Pivot_legLeft': True, 'Part_leg_l': True}, 'note': 'canon Body/Pivot_head/Pivot_legLeft against costume Part_body/Part_head/Part_leg_l'}\nN01 PASS the canon body is still being posed, and the Dog actually walked {'readings': {'Body': {'canon_z_swing': 17.285, 'skin_z_swing': 17.26, 'z_correlation': 1.0, 'canon_pitch_swing': 18.371, 'skin_pitch_swing': 18.371, 'pitch_correlation': 1.0}, 'Pivot_head': {'canon_z_swing': 0.0, 'skin_z_swing': 0.0, 'z_correlation': 0.0, 'canon_pitch_swing': 8.029, 'skin_pitch_swing': 8.029, 'pitch_correlation': 1.0}, 'Pivot_legLeft': {'canon_z_swing': 0.0, 'skin_z_swing': 0.0, 'z_correlation': 0.0, 'canon_pitch_swing': 102.341, 'skin_pitch_swing': 102.341, 'pitch_correlation': 1.0}}, 'walk': {'peak_speed_uu': 520.0, 'mean_speed_uu': 283.8, 'samples': 90}, 'canon_channels_asleep': {}, 'samples_while_performing': 0, 'note': 'it is hidden, not stopped -- if this fails the comparison below is meaningless and the finding is that the authority stops running when it is dressed'}\nN02 PASS every joint moves the way the canon body's own joint moves {'by_pivot': {'Body': 1.0, 'Pivot_head': 1.0, 'Pivot_legLeft': 1.0}, 'channel': {'Body': 'z', 'Pivot_head': 'pitch', 'Pivot_legLeft': 'pitch'}, 'note': 'mean-removed, same frames; the two rigs have different rest poses so only the MOTION is compared'}\nN03 PASS and by the same amount, not a damped or exaggerated copy {'swing_ratios': {'Body': 0.999, 'Pivot_head': 1.0, 'Pivot_legLeft': 1.0}, 'note': 'skin swing divided by canon swing; 1.0 is a faithful copy. This is the check that caught the spine scaling the authority by Part.A = 0.850'}\n"
 }

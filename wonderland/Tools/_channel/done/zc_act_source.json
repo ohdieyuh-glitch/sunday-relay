@@ -1,0 +1,20 @@
+{
+ "name": "zc_act_source",
+ "started": "2026-09-25 18:42:59",
+ "status": "measured",
+ "mission_actors_in_saved_level": [],
+ "overlay_on_plain_start": {
+  "after_2s": 1.0,
+  "after_6s": 1.0,
+  "after_12s": 1.0,
+  "after_20s": 1.0
+ },
+ "after_clearing": {
+  "cleared": 0.0,
+  "six_seconds_later": 0.0,
+  "eighteen_seconds_later": 0.0
+ },
+ "finished": "2026-09-25 18:44:10",
+ "seconds": 70.61,
+ "log": "A00 INFO mission-ish actors saved in the level {'count': 0, 'labels': []}\nafter_2s INFO overlay weight after_2s {'weight': 1.0}\nafter_6s INFO overlay weight after_6s {'weight': 1.0}\nafter_12s INFO overlay weight after_12s {'weight': 1.0}\nafter_20s INFO overlay weight after_20s {'weight': 1.0}\ncleared INFO after clearing {'weight': 0.0}\nsix_seconds_later INFO after clearing {'weight': 0.0}\neighteen_seconds_later INFO after clearing {'weight': 0.0}\n"
+}

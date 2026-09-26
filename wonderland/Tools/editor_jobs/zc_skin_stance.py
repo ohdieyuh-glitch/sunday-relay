@@ -145,6 +145,20 @@ def job():
     # viewport focused, so that is what is done here, and the speed is read from the Dog's own pose rather
     # than from get_velocity.
     L.focus_game_viewport()
+    # ESTABLISH THE CONDITIONS RATHER THAN HOPE FOR THEM.
+    #
+    # This compares WALK channels, and ApplyMissionPose holds the legs in the meditate/fly pose whenever a
+    # mission overlay is running -- so a mission left active by an earlier proof makes the comparison
+    # meaningless. It used to be rare; after a session of running gate_c and the mission fixtures it became
+    # every run: samples_performing 90 of 90, twice in a row, where the same proof read 0 earlier the same
+    # day. Ambient state from a previous job is not something to measure around.
+    unreal.SystemLibrary.execute_console_command(world, "wl.Mission.Reset")
+    # wl.Mission.Reset alone did NOT clear it -- two runs still read samples_performing 90 of 90. The
+    # overlay follows the Dog ACT (bWant = Current != None), which is a separate latch from the mission
+    # fixtures, so the act is cleared explicitly too.
+    unreal.SystemLibrary.execute_console_command(world, "wl.Dog.Act none")
+    yield 2.5
+
     L.set_key_held("W", True)
     L.set_key_held("LeftShift", True)
     yield 1.2

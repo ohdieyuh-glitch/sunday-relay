@@ -1,6 +1,6 @@
 {
  "name": "zc_theme_accent",
- "started": "2026-09-25 10:50:47",
+ "started": "2026-09-25 12:42:52",
  "status": "measured",
  "tests": [
   {
@@ -162,7 +162,7 @@
    0.053
   ]
  ],
- "finished": "2026-09-25 10:51:07",
- "seconds": 20.54,
+ "finished": "2026-09-25 12:43:12",
+ "seconds": 20.14,
  "log": "A00 PASS both companion terminals are up and report an accent {'terminals': 2, 'titles': ['GPT 6 Astra', 'Claude Code Fable 5'], 'accents': [(0.694, 0.371, 0.053), (0.694, 0.371, 0.053)], 'note': 'read from the brush the terminal last painted, not from the settings'}\nA01 PASS setting the theme recolours every companion terminal {'asked_for': [0.1, 0.85, 0.35], 'got': [(0.1, 0.85, 0.35), (0.1, 0.85, 0.35)], 'was': [(0.694, 0.371, 0.053), (0.694, 0.371, 0.053)], 'moved_by': [0.594, 0.594], 'note': 'judged on the accent MOVING from the shipped gold, so the check does not depend on how the console command parses its argument'}\nA02 PASS both terminals take the SAME accent, as one theme rather than two {'accents': [(0.1, 0.85, 0.35), (0.1, 0.85, 0.35)], 'note': \"the founder's words: Claude Code and ChatGPT use the same clean sequence\"}\nA03 PASS the project's own gold comes back afterwards {'shipped': [(0.694, 0.371, 0.053), (0.694, 0.371, 0.053)], 'restored': [(0.694, 0.371, 0.053), (0.694, 0.371, 0.053)], 'note': \"the accent is a Config property; a job that left its fixture in it would have recoloured the founder's terminals rather than tested them\"}\n"
 }
