@@ -136,9 +136,18 @@ the MCP stdio proofs (13, already fixed on the unlanded `local/julius-mcp-author
 spawned-process and path handling in `ship-runner`, `repository-target-observer`
 and the Hermes adapter. CI on Linux is the authority.
 
-The clean signal is per directory: `src/relay/mission/julius` had 1 failing case
-at baseline and has 1 after, with 1,830 passing and about 120 of them new;
-`relay-bridge/julius/julius-live-composition.test.ts` is 161/161.
+**A whole-suite figure is unobtainable on this host.** Two full runs were killed
+for low memory — 16 GB with 6.9 GB free, a Wonderland Unreal editor session
+holding the machine — and a third finished only while the tree was being edited
+under it, which makes its numbers worthless.
+
+So measure per directory at `--maxWorkers=2`, which fits the memory and removes
+the contention: `src/relay/mission/julius` + `src/relay/mission/role-slots` is
+**97 files, 1,894 tests, 0 failures**; `relay-bridge/julius` +
+`src/relay/persistence` + the four affected `scripts/` suites is 916 passed and
+**11 failed, being the same five files and the same five counts as the baseline**.
+Zero new failures anywhere this session touched. `julius-slot-envelope.e2e`, which
+the contaminated runs showed failing, passes here — contention, not a defect.
 
 ### JULIUS BETA READINESS: 74%
 
