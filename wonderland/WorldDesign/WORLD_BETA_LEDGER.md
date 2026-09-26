@@ -45,6 +45,28 @@ module used is on THIRD_BAND_PREP's "already proven elsewhere" list. Nine walk p
 at 780/850/920 m, none fell. **Row B's Tartarus stuck point is not a hole and not a height mismatch in the seam: it is a BUILDING.** Walked with position readback (the pawn arrived at every point, off by 0.0 uu), the axis reads z 101 / 101 / **1445** / 94 / 75 at 760/800/844/880/920 m -- and the specs say why: at (73071, -42189) TQ01_PlinthCourse sits at z=12 and TQ02_Cornice at z=2072, so a 20.7 m hall stands on the seam and the Dog was landing on it. SF03's first build had paved straight through that floor plan; the seam passes now read the nations' own recorded footprints and leave them alone -- 86 tiles left for buildings in Tartarus, 14 in Icarus, 6 in Noctis -- which is why Tartarus lands at 1,395 rather than 1,739. The traversal half
 wants a founder's walk before it is called PASS.
 
+**ROW: STREAMING — BLOCKING → PASS, 2026-09-26 14:05.** The map is converted and the world pages.
+
+`WorldPartitionConvertCommandlet` was run against the live map behind a full checkpoint. It converts IN PLACE,
+which is not what I expected and is why the checkpoint mattered: `WL_V2_GoldenArrival_WP2.umap` went from
+46,314,202 bytes to a 13,447-byte partition stub, and its 21,064 actors now live in
+`Content/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2/`. It also deleted the stale
+`_WP2_WP` conversion from the previous day as "existing conversion results". Restore instructions are in
+`recovery/_map_checkpoints/2026-09-26-streaming/RESTORE.md`; that copy is the ONLY rollback, because
+`wonderland/Content/` is untracked by git and shared between worktrees by junction — so this changed the map
+for every worktree at once.
+
+| measurement | before | after |
+|---|---|---|
+| `DescribeWorldPartition`, editor and PIE | `partitioned=0` | `partitioned=1 streaming=1 initialised=1 runtimeHash=WorldPartitionRuntimeHashSet` |
+| actors resident, spawn → 600 m → 1,250 m | 21,089 / 21,089 / 21,089 | **12,658 / 2,405 / 2,405** |
+| instances resident | 156,393 at every stop | **156,393 / 13,247 / 13,247** |
+| `zc_streaming` | S01 FAIL, actor spread 0 | **S00 + S01 PASS, actor spread 10,253** |
+
+The oversized-actor finding stays on the ledger as the next question rather than a closed one: now that cells
+exist, `BC01_BaseCourse` at 1,970 m wide with 4,132 instances really will sit in all of them, and the 12,658
+actors still resident at the spawn point are where that will show.
+
 **CORRECTED a few hours later, same day. THE MAP BEING PLAYED IS NOT PARTITIONED, AND THAT IS THE WHOLE
 CAUSE.** The oversized-actor finding below is real arithmetic and was the wrong explanation, and I published
 it as the answer. It is not: it would only begin to matter once partition existed.
