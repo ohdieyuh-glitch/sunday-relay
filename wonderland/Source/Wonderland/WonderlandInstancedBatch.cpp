@@ -258,10 +258,13 @@ int32 AWonderlandInstancedBatch::BuildInstances()
 	Instances->PreAllocateInstancesMemory(Declared);
 	TArray<FTransform> Locals;
 	AppendInstanceTransforms(Locals);
-	for (const FTransform& Local : Locals)
-	{
-		Instances->AddInstance(Local);
-	}
+	// ONE CALL, NOT ONE PER INSTANCE. The transforms are already gathered, and the editor preview path below
+	// has always added them in a batch; only this runtime path looped. AddInstance one at a time does the
+	// per-add bookkeeping 174,787 times across the world's 3,904 batches, and on a HISM it rebuilds the
+	// cluster tree on every call -- which is precisely the degeneration the header note warns about and the
+	// reason bHierarchical could not honestly be measured while this loop existed.
+	Instances->AddInstances(Locals, /*bShouldReturnIndices*/ false, /*bWorldSpace*/ false,
+	                        /*bUpdateNavigation*/ false);
 	BuiltInstances = Instances->GetInstanceCount();
 
 	if (BuiltInstances != Declared)

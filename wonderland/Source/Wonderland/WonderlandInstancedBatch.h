@@ -29,6 +29,24 @@
 // exists on this actor so the choice can be MEASURED rather than argued about,
 // and it defaults to the one that cannot degenerate.
 //
+// MEASURED, 2026-09-26. The invitation above was taken up, after the runtime
+// path was changed to add its instances in ONE call -- while it looped over
+// AddInstance, a HISM rebuilt its tree on every one of them and the flag could
+// not have been tested honestly. With that fixed, three runs a side:
+//
+//     ISM    world baseline 30.17 / 31.34 / 33.93 ms    median 31.34
+//     HISM   world baseline 31.53 / 28.78 / 31.14 ms    median 31.14
+//
+// Indistinguishable, and the same at forty avatars (139.13 against 142.95).
+// The reasoning above holds: UE5's GPU Scene already culls these instances and
+// the cluster tree earns nothing back. ISM stays, now because it was measured
+// rather than because it was safer.
+//
+// It is NOT the same answer for the voxel figures. The same change on
+// WonderlandCompanionEmbodiment's part meshes took forty avatars from ~150 ms
+// to ~126 ms, because those are many small components that move every frame
+// rather than static world batches. One result does not transfer to the other.
+//
 // WHY MOVABLE AND NOT STATIC
 //
 // The generator's own note, learned the hard way: with `r.AllowStaticLighting`
