@@ -1,6 +1,6 @@
 {
  "name": "zc_wardrobe_truth",
- "started": "2026-09-25 15:51:56",
+ "started": "2026-09-25 18:53:06",
  "status": "measured",
  "clicks": [
   {
@@ -117,7 +117,97 @@
   -857.9,
   207.8
  ],
- "finished": "2026-09-25 15:52:25",
- "seconds": 29.05,
- "log": ""
+ "tests": [
+  {
+   "id": "W01",
+   "name": "all five named skins actually go on from the Wardrobe",
+   "pass": true,
+   "detail": {
+    "wore": [
+     "relay_og",
+     "apollo",
+     "arden_infernal",
+     "skeleton_flame",
+     "celestial_light"
+    ],
+    "asked": [
+     "relay_og",
+     "apollo",
+     "arden_infernal",
+     "skeleton_flame",
+     "celestial_light"
+    ],
+    "note": "Relay OG, Celestial Light, Apollo, Arden Infernal and Skeleton Flame, by name"
+   }
+  },
+  {
+   "id": "W02",
+   "name": "no skin change teleports the player camera",
+   "pass": true,
+   "detail": {
+    "before": [
+     "BP_RelayDog_C_0",
+     -516.1,
+     -857.9,
+     207.8
+    ],
+    "after": [
+     "BP_RelayDog_C_0",
+     -516.1,
+     -857.9,
+     207.8
+    ],
+    "moved_on_open": false,
+    "moved_on_any_click": false,
+    "note": "the view is the pawn and its location; identical before opening, after every click, and at the end means the camera never went anywhere"
+   }
+  },
+  {
+   "id": "W03",
+   "name": "Project Brain stays open the whole way through",
+   "pass": true,
+   "detail": {
+    "at_start": true,
+    "at_end": true,
+    "after_each_click": [
+     true,
+     true,
+     true,
+     true,
+     true
+    ]
+   }
+  },
+  {
+   "id": "W04",
+   "name": "a backdrop stands behind the previewed Dog, so the world cannot show through",
+   "pass": true,
+   "detail": {
+    "backdrops": [
+     {
+      "label": "WL_WardrobeBackdrop",
+      "at": [
+       -408.4,
+       -634.3,
+       155.2
+      ]
+     }
+    ],
+    "note": "the preview window is a hole into the world; without this the Dog is judged against whatever happens to be behind it"
+   }
+  }
+ ],
+ "backdrops": [
+  {
+   "label": "WL_WardrobeBackdrop",
+   "at": [
+    -408.4,
+    -634.3,
+    155.2
+   ]
+  }
+ ],
+ "finished": "2026-09-25 18:53:34",
+ "seconds": 27.45,
+ "log": "W01 PASS all five named skins actually go on from the Wardrobe {'wore': ['relay_og', 'apollo', 'arden_infernal', 'skeleton_flame', 'celestial_light'], 'asked': ['relay_og', 'apollo', 'arden_infernal', 'skeleton_flame', 'celestial_light'], 'note': 'Relay OG, Celestial Light, Apollo, Arden Infernal and Skeleton Flame, by name'}\nW02 PASS no skin change teleports the player camera {'before': ('BP_RelayDog_C_0', -516.1, -857.9, 207.8), 'after': ('BP_RelayDog_C_0', -516.1, -857.9, 207.8), 'moved_on_open': False, 'moved_on_any_click': False, 'note': 'the view is the pawn and its location; identical before opening, after every click, and at the end means the camera never went anywhere'}\nW03 PASS Project Brain stays open the whole way through {'at_start': True, 'at_end': True, 'after_each_click': [True, True, True, True, True]}\nW04 PASS a backdrop stands behind the previewed Dog, so the world cannot show through {'backdrops': [{'label': 'WL_WardrobeBackdrop', 'at': [-408.4, -634.3, 155.2]}], 'note': 'the preview window is a hole into the world; without this the Dog is judged against whatever happens to be behind it'}\n"
 }

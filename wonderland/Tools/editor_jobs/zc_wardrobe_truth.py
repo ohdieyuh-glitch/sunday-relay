@@ -80,6 +80,60 @@ def job():
     RESULT["any_click_moved_the_view"] = any(r["VIEW_MOVED"] for r in rows)
     RESULT["brain_open_at_end"] = bool(ui.is_project_brain_open())
     RESULT["view_at_end"] = view_state()
+
+    # ---- AND NOW JUDGE IT.
+    #
+    # This job collected every number P0 item 1 asks about and then recorded no tests at all, so it has been
+    # reported as PHOTO -- a proof whose verdict is "look at the pictures" -- while the data to decide it was
+    # sitting in the result. That is the opposite failure to a fake pass: not a check that cannot fail, a
+    # measurement that never gets asked. The founder's clauses are each a line below.
+    tests = []
+    RESULT["tests"] = tests
+
+    def record(tid, name, ok, **detail):
+        tests.append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
+        emit(tid, "PASS" if ok else "FAIL", name, detail)
+
+    wore = [r["skin"] for r in rows if r["worn"]]
+    record("W01", "all five named skins actually go on from the Wardrobe",
+           len(wore) == len(SKINS), wore=wore, asked=SKINS,
+           note="Relay OG, Celestial Light, Apollo, Arden Infernal and Skeleton Flame, by name")
+
+    record("W02", "no skin change teleports the player camera",
+           not RESULT["any_click_moved_the_view"]
+           and not RESULT["wardrobe_moved_the_view"]
+           and RESULT["view_before_wardrobe"] == RESULT["view_at_end"],
+           before=RESULT["view_before_wardrobe"], after=RESULT["view_at_end"],
+           moved_on_open=RESULT["wardrobe_moved_the_view"],
+           moved_on_any_click=RESULT["any_click_moved_the_view"],
+           note="the view is the pawn and its location; identical before opening, after every click, and at "
+                "the end means the camera never went anywhere")
+
+    record("W03", "Project Brain stays open the whole way through",
+           bool(RESULT["brain_open"]) and bool(RESULT["brain_open_at_end"])
+           and all(r["brain_still_open"] for r in rows),
+           at_start=RESULT["brain_open"], at_end=RESULT["brain_open_at_end"],
+           after_each_click=[r["brain_still_open"] for r in rows])
+
+    # THE BLACK BEHIND THE DOG, structurally. The window is a hole into the world, so what stops Wonderland
+    # showing through is a backdrop parked beyond the Dog and scaled past the frame's corners. Its presence
+    # and placement are checkable; whether it LOOKS right is the captures' job.
+    backdrops = []
+    for actor in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.Actor):
+        try:
+            label = str(actor.get_actor_label())
+        except Exception:
+            continue
+        if "Backdrop" in label or "WardrobeBackdrop" in label:
+            loc = actor.get_actor_location()
+            backdrops.append({"label": label[:44],
+                              "at": [round(float(loc.x), 1), round(float(loc.y), 1), round(float(loc.z), 1)]})
+    RESULT["backdrops"] = backdrops
+    record("W04", "a backdrop stands behind the previewed Dog, so the world cannot show through",
+           len(backdrops) > 0, backdrops=backdrops,
+           note="the preview window is a hole into the world; without this the Dog is judged against "
+                "whatever happens to be behind it")
+
     RESULT["status"] = "measured"
     les.editor_request_end_play()
     yield (lambda: ues.get_game_world() is None, 300)
