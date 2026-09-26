@@ -1,0 +1,343 @@
+{
+ "name": "zc_floor_after_wp",
+ "started": "2026-09-26 15:47:15",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "F00",
+   "name": "the traces ran across the whole disc",
+   "pass": true,
+   "detail": {
+    "points": 42,
+    "wanted": 42,
+    "partition": "world=WL_V2_GoldenArrival_WP2 partitioned=1 streaming=1 initialised=1 runtimeHash=WorldPartitionRuntimeHashSet subsystem=1"
+   }
+  },
+  {
+   "id": "F01",
+   "name": "there is collidable floor at every point of the beta disc",
+   "pass": true,
+   "detail": {
+    "collidable": 42,
+    "of": 42,
+    "missing": [],
+    "note": "traced on the channel a CHARACTER collides with, after the conversion, with the player standing near each point so its cell is loaded"
+   }
+  },
+  {
+   "id": "F02",
+   "name": "no floor is visible-but-not-solid",
+   "pass": true,
+   "detail": {
+    "visible_but_not_collidable": [],
+    "note": "a mesh you can see and fall through is what a conversion that dropped collision would leave behind, and no count of the map's contents would show it"
+   }
+  }
+ ],
+ "partition": "world=WL_V2_GoldenArrival_WP2 partitioned=1 streaming=1 initialised=1 runtimeHash=WorldPartitionRuntimeHashSet subsystem=1",
+ "points": [
+  {
+   "radius_m": 80.0,
+   "bearing": 3.0,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": 262
+  },
+  {
+   "radius_m": 80.0,
+   "bearing": 63.0,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": 1760
+  },
+  {
+   "radius_m": 80.0,
+   "bearing": 123.0,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -3
+  },
+  {
+   "radius_m": 80.0,
+   "bearing": 183.0,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -3
+  },
+  {
+   "radius_m": 80.0,
+   "bearing": 243.0,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": 1530
+  },
+  {
+   "radius_m": 80.0,
+   "bearing": 303.0,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -3
+  },
+  {
+   "radius_m": 260.0,
+   "bearing": 9.6,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": 1307
+  },
+  {
+   "radius_m": 260.0,
+   "bearing": 69.6,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": 12
+  },
+  {
+   "radius_m": 260.0,
+   "bearing": 129.6,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -3
+  },
+  {
+   "radius_m": 260.0,
+   "bearing": 189.6,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -3
+  },
+  {
+   "radius_m": 260.0,
+   "bearing": 249.6,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": 2311
+  },
+  {
+   "radius_m": 260.0,
+   "bearing": 309.6,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -3
+  },
+  {
+   "radius_m": 440.0,
+   "bearing": 16.3,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": 3049
+  },
+  {
+   "radius_m": 440.0,
+   "bearing": 76.3,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 440.0,
+   "bearing": 136.3,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 440.0,
+   "bearing": 196.3,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 440.0,
+   "bearing": 256.3,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 440.0,
+   "bearing": 316.3,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 620.0,
+   "bearing": 22.9,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 620.0,
+   "bearing": 82.9,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 620.0,
+   "bearing": 142.9,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 620.0,
+   "bearing": 202.9,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 620.0,
+   "bearing": 262.9,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 620.0,
+   "bearing": 322.9,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 800.0,
+   "bearing": 29.6,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 800.0,
+   "bearing": 89.6,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 800.0,
+   "bearing": 149.6,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 800.0,
+   "bearing": 209.6,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 800.0,
+   "bearing": 269.6,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 800.0,
+   "bearing": 329.6,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 980.0,
+   "bearing": 36.3,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 980.0,
+   "bearing": 96.3,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 980.0,
+   "bearing": 156.3,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 980.0,
+   "bearing": 216.3,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 980.0,
+   "bearing": 276.3,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 980.0,
+   "bearing": 336.3,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 1150.0,
+   "bearing": 42.5,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 1150.0,
+   "bearing": 102.5,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 1150.0,
+   "bearing": 162.6,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 1150.0,
+   "bearing": 222.6,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 1150.0,
+   "bearing": 282.6,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  },
+  {
+   "radius_m": 1150.0,
+   "bearing": 342.6,
+   "visible_floor": true,
+   "collidable_floor": true,
+   "floor_z": -14
+  }
+ ],
+ "totals": {
+  "points": 42,
+  "visible_floor": 42,
+  "collidable_floor": 42
+ },
+ "visible_but_not_collidable": [],
+ "finished": "2026-09-26 15:48:26",
+ "seconds": 71.68,
+ "log": "F_0080 INFO ring 80 m {'collidable': 6, 'of': 6}\nF_0260 INFO ring 260 m {'collidable': 6, 'of': 6}\nF_0440 INFO ring 440 m {'collidable': 6, 'of': 6}\nF_0620 INFO ring 620 m {'collidable': 6, 'of': 6}\nF_0800 INFO ring 800 m {'collidable': 6, 'of': 6}\nF_0980 INFO ring 980 m {'collidable': 6, 'of': 6}\nF_1150 INFO ring 1150 m {'collidable': 6, 'of': 6}\nF00 PASS the traces ran across the whole disc {'points': 42, 'wanted': 42, 'partition': 'world=WL_V2_GoldenArrival_WP2 partitioned=1 streaming=1 initialised=1 runtimeHash=WorldPartitionRuntimeHashSet subsystem=1'}\nF01 PASS there is collidable floor at every point of the beta disc {'collidable': 42, 'of': 42, 'missing': [], 'note': 'traced on the channel a CHARACTER collides with, after the conversion, with the player standing near each point so its cell is loaded'}\nF02 PASS no floor is visible-but-not-solid {'visible_but_not_collidable': [], 'note': \"a mesh you can see and fall through is what a conversion that dropped collision would leave behind, and no count of the map's contents would show it\"}\n"
+}

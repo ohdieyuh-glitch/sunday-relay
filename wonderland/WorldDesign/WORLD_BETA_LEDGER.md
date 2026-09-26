@@ -45,6 +45,32 @@ module used is on THIRD_BAND_PREP's "already proven elsewhere" list. Nine walk p
 at 780/850/920 m, none fell. **Row B's Tartarus stuck point is not a hole and not a height mismatch in the seam: it is a BUILDING.** Walked with position readback (the pawn arrived at every point, off by 0.0 uu), the axis reads z 101 / 101 / **1445** / 94 / 75 at 760/800/844/880/920 m -- and the specs say why: at (73071, -42189) TQ01_PlinthCourse sits at z=12 and TQ02_Cornice at z=2072, so a 20.7 m hall stands on the seam and the Dog was landing on it. SF03's first build had paved straight through that floor plan; the seam passes now read the nations' own recorded footprints and leave them alone -- 86 tiles left for buildings in Tartarus, 14 in Icarus, 6 in Noctis -- which is why Tartarus lands at 1,395 rather than 1,739. The traversal half
 wants a founder's walk before it is called PASS.
 
+**WORLD INTEGRITY AFTER THE CONVERSION — PASS, and one new risk found.**
+
+The conversion's own danger is that a converted map loses collision, or that a cell never arrives and leaves a
+hole that exists only at runtime. Both answered:
+
+* `zc_floor_after_wp`: **42 of 42 points across seven rings out to 1,150 m have COLLIDABLE floor**, traced on
+  the channel a character collides with rather than the one a camera sees through, with the player standing
+  near each point so its cell is loaded. None is visible-but-not-solid. **3/3.**
+* `zc_walk_after_wp`: **every cell streamed in, in 2.5 s**, and every stand traced solid ground.
+* Coverage is unchanged: 113 tiles from the Arrival Gate to 1.2 km, no holes.
+* Performance at two stands after the conversion: 37.84 ms and 42.44 ms at noon, against a pre-conversion
+  worst stand of 38.25 ms. Unchanged within noise, which is expected -- the 12,658 actors still resident at
+  the spawn point are the oversized batches, and they are the next piece of work.
+
+**NEW RISK, FOUND BY THE PROOFS DYING ON IT: teleporting into an unloaded region kills the player.** Three
+separate jobs died with "RelayDogCharacter: Internal Error - ObjectInstance is null" before this was
+understood. The destination cell is not loaded at the instant of a teleport -- it only begins streaming
+because the player just became a streaming source there -- so the Dog arrives above where the floor WILL be,
+falls through nothing, passes KillZ and is destroyed. It does not respawn. Holding it in place with its
+velocity reset until a downward trace answers is enough to survive it, which is what the proofs now do.
+
+This does not affect walking, which is how a player crosses the world, and it did not exist before the
+conversion because nothing was ever unloaded. It WILL affect anything that moves the player instantly --
+fast travel, a checkpoint warp, a mission that places the Dog somewhere. Anything of that kind needs to hold
+the player until the destination cell reports in. Worth fixing before a beta ships a warp.
+
 **ROW: STREAMING — BLOCKING → PASS, 2026-09-26 14:05.** The map is converted and the world pages.
 
 `WorldPartitionConvertCommandlet` was run against the live map behind a full checkpoint. It converts IN PLACE,

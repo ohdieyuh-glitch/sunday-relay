@@ -1,40 +1,64 @@
 {
  "name": "zc_beta_perf",
- "started": "2026-09-26 13:58:49",
- "status": "error",
- "tests": [],
+ "started": "2026-09-26 15:51:27",
+ "status": "FAIL: stat unit did not report",
+ "tests": [
+  {
+   "id": "F00",
+   "name": "every stand was measured at noon and at midnight, and the clock was actually running",
+   "pass": false,
+   "detail": {
+    "stands": [
+     "arrival",
+     "icarus_checkpoint",
+     "tartarus_march",
+     "dubel_belt"
+    ],
+    "frame_ms": {
+     "noon/arrival": 37.84,
+     "noon/icarus_checkpoint": 42.44,
+     "noon/tartarus_march": null,
+     "noon/dubel_belt": null,
+     "midnight/arrival": null,
+     "midnight/icarus_checkpoint": null,
+     "midnight/tartarus_march": null,
+     "midnight/dubel_belt": null
+    },
+    "note": "a frame cost of 0.00 is what FStatUnitData reports when the stat unit overlay is not drawing, and it is under every ceiling anyone would set. Asserted here so the two clauses below cannot pass on nothing."
+   }
+  }
+ ],
  "by_hour": {
   "noon": {
    "arrival": {
     "frames": 141,
-    "frame_ms": 32.18,
-    "game_ms": 20.62,
-    "render_ms": 32.19,
-    "gpu_ms": 29.83
+    "frame_ms": 37.84,
+    "game_ms": 29.52,
+    "render_ms": 36.67,
+    "gpu_ms": 34.21
    },
    "icarus_checkpoint": {
     "frames": 141,
-    "frame_ms": 21.51,
-    "game_ms": 19.32,
-    "render_ms": 20.68,
-    "gpu_ms": 19.24
+    "frame_ms": 42.44,
+    "game_ms": 26.75,
+    "render_ms": 41.67,
+    "gpu_ms": 39.94
    },
-   "tartarus_march": {
-    "frames": 141,
-    "frame_ms": 21.46,
-    "game_ms": 17.67,
-    "render_ms": 21.42,
-    "gpu_ms": 19.43
-   }
+   "tartarus_march": null,
+   "dubel_belt": null
+  },
+  "midnight": {
+   "arrival": null,
+   "icarus_checkpoint": null,
+   "tartarus_march": null,
+   "dubel_belt": null
   }
  },
  "_windows": [
   141,
-  141,
   141
  ],
- "error": "Traceback (most recent call last):\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/editor_channel.py\", line 121, in _step\n    yielded = job[\"gen\"].throw(thrown) if thrown is not None else next(job[\"gen\"])\n                                                                  ^^^^^^^^^^^^^^^^\n  File \"C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\_channel\\inbox\\zc_beta_perf.py\", line 95, in job\nException: RelayDogCharacter: Internal Error - ObjectInstance is null!\n",
- "finished": "2026-09-26 13:59:55",
- "seconds": 66.24,
- "log": "F_noon_arrival INFO arrival at noon {'frames': 141, 'frame_ms': 32.18, 'game_ms': 20.62, 'render_ms': 32.19, 'gpu_ms': 29.83}\nF_noon_icarus_checkpoint INFO icarus_checkpoint at noon {'frames': 141, 'frame_ms': 21.51, 'game_ms': 19.32, 'render_ms': 20.68, 'gpu_ms': 19.24}\nF_noon_tartarus_march INFO tartarus_march at noon {'frames': 141, 'frame_ms': 21.46, 'game_ms': 17.67, 'render_ms': 21.42, 'gpu_ms': 19.43}\n"
+ "finished": "2026-09-26 15:52:23",
+ "seconds": 56.35,
+ "log": "F_noon_arrival INFO arrival at noon {'frames': 141, 'frame_ms': 37.84, 'game_ms': 29.52, 'render_ms': 36.67, 'gpu_ms': 34.21}\nF_noon_icarus_checkpoint INFO icarus_checkpoint at noon {'frames': 141, 'frame_ms': 42.44, 'game_ms': 26.75, 'render_ms': 41.67, 'gpu_ms': 39.94}\nF00 FAIL every stand was measured at noon and at midnight, and the clock was actually running {'stands': ['arrival', 'icarus_checkpoint', 'tartarus_march', 'dubel_belt'], 'frame_ms': {'noon/arrival': 37.84, 'noon/icarus_checkpoint': 42.44, 'noon/tartarus_march': None, 'noon/dubel_belt': None, 'midnight/arrival': None, 'midnight/icarus_checkpoint': None, 'midnight/tartarus_march': None, 'midnight/dubel_belt': None}, 'note': 'a frame cost of 0.00 is what FStatUnitData reports when the stat unit overlay is not drawing, and it is under every ceiling anyone would set. Asserted here so the two clauses below cannot pass on nothing.'}\n"
 }

@@ -92,7 +92,44 @@ def job():
         at_hour = {}
         readings[hour_label] = at_hour
         for name, x, y in STANDS:
-            dog.set_actor_location(unreal.Vector(x, y, dog.get_actor_location().z + 150.0), False, False)
+            # THE DOG IS RE-ACQUIRED AND GUARDED AT EVERY STAND, because since the map was converted to World
+            # Partition a teleport can outrun its own ground: the destination cell is not loaded at the moment
+            # of the jump, the Dog falls through where the floor will be, passes KillZ and is destroyed -- and
+            # a destroyed pawn's Python wrapper is not None, it throws "ObjectInstance is null" on the next
+            # touch. This job died on exactly that. Held at a stand height with its velocity reset until the
+            # cell answers a downward trace, it survives; and if it does not, the stand is skipped rather than
+            # taking the whole measurement down with it.
+            try:
+                live = unreal.GameplayStatics.get_player_pawn(world, 0)
+                base = live.get_actor_location().z if live is not None else 0.0
+            except Exception:                                      # noqa: BLE001
+                live, base = None, 0.0
+            if live is None:
+                at_hour[name] = None
+                continue
+            dog = live
+            hold = unreal.Vector(x, y, base + 150.0)
+            import time as _t
+            _began = _t.time()
+            while True:
+                try:
+                    dog.set_actor_location(hold, False, False)
+                    mc = dog.character_movement
+                    if mc is not None:
+                        mc.set_editor_property("velocity", unreal.Vector(0.0, 0.0, 0.0))
+                except Exception:                                  # noqa: BLE001
+                    break
+                try:
+                    under = unreal.SystemLibrary.line_trace_single(
+                        world, hold, unreal.Vector(x, y, hold.z - 5000.0),
+                        unreal.TraceTypeQuery.TRACE_TYPE_QUERY2, False, [dog],
+                        unreal.DrawDebugTrace.NONE, True,
+                        unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
+                except Exception:                                  # noqa: BLE001
+                    under = None
+                if under is not None or _t.time() - _began > 10.0:
+                    break
+                yield 0.25
             # Let streaming and Lumen settle before the clock is read, not while it is.
             unreal.SystemLibrary.execute_console_command(world, "stat unit")
             yield 6.0

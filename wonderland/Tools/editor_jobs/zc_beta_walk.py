@@ -19,6 +19,7 @@
 # it that way throughout: Golden Arrival inside 500 m, the nation bands out to ~1,155 m, Dubel Forest at
 # 1,230-1,480 m. So the core is a DISC about the origin, not a box about the outliers -- and a disc needs one
 # number, which the actors themselves can be asked for.
+import time
 import os
 
 L = unreal.WonderlandUiTestLibrary
@@ -274,15 +275,127 @@ def job():
             gz = (sum(q["ground_z"] for q in near) / len(near)) if near else 0.0
             r["ground_z_borrowed"] = round(gz)
         pawn.set_actor_location(unreal.Vector(r["centre"][0], r["centre"][1], gz + 900.0), False, False)
-        yield 1.8
+        # ---- AND WAIT FOR THE GROUND TO ARRIVE, HOLDING THE DOG UP WHILE IT DOES.
+        #
+        # This was a flat 1.8 second settle, which was right while the whole world was resident: the Dog
+        # teleported into a tile whose floor had been loaded since startup and fell straight onto it. With the
+        # map converted to World Partition the destination cell is NOT loaded at the moment of the teleport --
+        # it only begins streaming because the player just became a streaming source there -- and the first
+        # version of this fix, which simply waited for the Dog to stop falling, KILLED IT: with no floor yet,
+        # it fell past where the floor will be, through KillZ, and was destroyed. The proof then died on
+        # "RelayDogCharacter: Internal Error - ObjectInstance is null", which is a pawn that no longer exists.
+        #
+        # So the Dog is HELD at the teleport height, re-placed every tick, while a downward trace asks whether
+        # the ground has arrived. The trace is the right instrument because it does not depend on the pawn
+        # surviving, and the holding is what stops the fall that would destroy it. Only once something is
+        # under the Dog is it released to settle onto it. The pawn is re-fetched each tick as well, so a
+        # respawn between stops cannot poison every later reading.
+        # GRAVITY IS SWITCHED OFF FOR THE WAIT, not fought with. Re-placing the Dog every quarter second was
+        # not enough -- it accelerates between ticks, and a few ticks of free fall over a cell that has not
+        # arrived is all it takes to pass KillZ and be destroyed. And a destroyed pawn's Python wrapper is not
+        # None; it throws "ObjectInstance is null" the moment anything touches it, which is how two runs of
+        # this proof died mid-traversal rather than reporting. So: disable movement, wait for ground, restore.
+        hold_at = unreal.Vector(r["centre"][0], r["centre"][1], gz + 900.0)
+
+        def living():
+            """The pawn, or None -- asked in a way that survives it having been destroyed."""
+            try:
+                got = unreal.GameplayStatics.get_player_pawn(world, 0)
+                if got is None:
+                    return None
+                got.get_actor_location()          # touches the UObject; throws if it is gone
+                return got
+            except Exception:                     # noqa: BLE001
+                return None
+
+        def mover(who):
+            try:
+                return who.character_movement
+            except Exception:                     # noqa: BLE001
+                return None
+
+        live = living()
+        mc = mover(live) if live else None
+        if mc is not None:
+            try:
+                mc.disable_movement()
+            except Exception:                     # noqa: BLE001
+                pass
+        # WALL CLOCK, NOT WORLD TIME. The first version timed this wait with GameplayStatics.get_time_seconds,
+        # which does not advance while the world is paused -- so the escape hatch could never fire, the loop
+        # span until the channel's own thirty-minute cap killed the job, and the proof reported nothing at all
+        # after half an hour. A timeout that depends on the thing it is timing out is not a timeout.
+        began = time.time()
+        arrived = False
+        while True:
+            live = living()
+            if live is not None:
+                try:
+                    live.set_actor_location(hold_at, False, False)
+                    # AND THE VELOCITY WITH IT, which is what the first two attempts missed. Re-placing the
+                    # Dog every quarter second does not stop it ACCELERATING: gravity keeps integrating, so
+                    # after ten seconds of waiting it carries about 9,800 uu/s and a single tick moves it
+                    # 2,450 uu -- past KillZ and destroyed before the next re-placement can catch it. The
+                    # position has to be reset and the speed with it.
+                    moving = mover(live)
+                    if moving is not None:
+                        moving.set_editor_property("velocity", unreal.Vector(0.0, 0.0, 0.0))
+                except Exception:                 # noqa: BLE001
+                    pass
+            try:
+                down = unreal.SystemLibrary.line_trace_single(
+                    world, hold_at, unreal.Vector(hold_at.x, hold_at.y, hold_at.z - 4000.0),
+                    unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [live] if live else [],
+                    unreal.DrawDebugTrace.NONE, True,
+                    unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
+            except Exception:                     # noqa: BLE001
+                down = None
+            if down is not None:
+                arrived = True
+                break
+            if time.time() - began > 12.0:
+                break
+            yield 0.25
+        r["cell_streamed_in"] = arrived
+        live = living()
+        mc = mover(live) if live else None
+        if mc is not None:
+            try:
+                mc.set_movement_mode(unreal.MovementMode.MOVE_FALLING)
+            except Exception:                     # noqa: BLE001
+                pass
+        if live is not None:
+            pawn = live
+        yield 2.0
+        # THE STAND IS READ FROM A PAWN THAT IS STILL THERE, or it is recorded as unmeasured. A destroyed
+        # Dog's wrapper is not None -- it throws on the first touch -- and three runs of this proof died on
+        # that rather than reporting anything at all. An unmeasured stand is a result; a traceback is not.
+        live = living()
+        if live is None:
+            visits.append({"tile": r["tile"], "radius_metres": r["radius_metres"],
+                           "mesh_actors": r["mesh_actors"], "landed_z": None,
+                           "expected_near_z": round(gz), "fell_through": None,
+                           "unmeasured": "the Dog did not survive the stand",
+                           "cell_streamed_in": r.get("cell_streamed_in"),
+                           "was_empty": r["mesh_actors"] == 0})
+            continue
+        pawn = live
         at = pawn.get_actor_location()
         fell = float(at.z) < gz - 5000.0
         visits.append({"tile": r["tile"], "radius_metres": r["radius_metres"],
                        "mesh_actors": r["mesh_actors"], "landed_z": round(float(at.z)),
                        "expected_near_z": round(gz), "fell_through": bool(fell),
+                       "cell_streamed_in": r.get("cell_streamed_in"),
                        "was_empty": r["mesh_actors"] == 0})
         H.capture_viewport_jpeg(os.path.join(ROOT, "%02d_r%04dm.jpg" % (n + 1, r["radius_metres"])), 1600, 90)
 
+    unmeasured = [v for v in visits if v.get("unmeasured")]
+    RESULT["unmeasured_stands"] = len(unmeasured)
+    record("W06", "every stand was actually measured",
+           len(unmeasured) == 0, unmeasured=len(unmeasured), of=len(visits),
+           which=[v["tile"] for v in unmeasured],
+           note="a stand where the Dog was destroyed proves nothing about whether there is ground there, and "
+                "must not be counted as a pass")
     fell_through = sum(1 for v in visits if v["fell_through"])
     RESULT["visits_that_fell_through"] = fell_through
     empties = [v for v in visits if v["was_empty"]]
