@@ -1,0 +1,19 @@
+{
+ "name": "zc_dog_residency",
+ "started": "2026-09-26 16:01:26",
+ "status": "FAIL: no placed Dog",
+ "tests": [
+  {
+   "id": "D00",
+   "name": "the placed Relay Dog was found in the editor world",
+   "pass": false,
+   "detail": {
+    "found": []
+   }
+  }
+ ],
+ "placed_dogs": [],
+ "finished": "2026-09-26 16:01:26",
+ "seconds": 0.0,
+ "log": "D_FOUND INFO placed Relay Dogs in the editor world {'found': []}\nD00 FAIL the placed Relay Dog was found in the editor world {'found': []}\n"
+}

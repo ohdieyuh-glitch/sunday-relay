@@ -67,9 +67,26 @@ falls through nothing, passes KillZ and is destroyed. It does not respawn. Holdi
 velocity reset until a downward trace answers is enough to survive it, which is what the proofs now do.
 
 This does not affect walking, which is how a player crosses the world, and it did not exist before the
-conversion because nothing was ever unloaded. It WILL affect anything that moves the player instantly --
-fast travel, a checkpoint warp, a mission that places the Dog somewhere. Anything of that kind needs to hold
-the player until the destination cell reports in. Worth fixing before a beta ships a warp.
+conversion because nothing was ever unloaded.
+
+**WHAT IT IS NOT, ruled out one at a time rather than assumed.** *Falling through unloaded ground* — no: a
+downward trace finds solid floor at every stand, and `ARelayDogCharacter::CatchIfTheGroundIsMissing`, added
+for exactly this and firing after a second of falling with nothing beneath, never fires. *A cell that never
+arrives* — no: every cell streamed in within 2.5 s. *The player's pawn being paged with its cell* — no, and
+this was the best of the four: a placed pawn marked spatially loaded would be destroyed when the cell it was
+placed in unloads, which would be catastrophic and would match "dies once you get far enough from spawn". But
+`zc_dog_residency` finds NO placed Relay Dog in the editor world at all; it is spawned at runtime, so World
+Partition never manages it. *Position* — no: the radius at which it dies moves between runs.
+
+**WHAT IS LEFT, stated as what it is.** The failure is CUMULATIVE in the number of instant moves, not in where
+they go: the Dog survived one stand in the first run and two in the second, then was destroyed and did not
+come back. Something about repeatedly teleporting a character and resetting its velocity in a paging world
+consumes it. That is reproducible only through the harness's rapid teleporting; no player input does this.
+It is OPEN, it is written down with the four eliminations so the next attempt does not repeat them, and it
+must be understood before a beta ships fast travel, a checkpoint warp, or a mission that places the Dog.
+
+`CatchIfTheGroundIsMissing` stays regardless. It is not the fix for this, but a player who can never be
+destroyed by a hole in the floor is worth having on its own, and it costs one trace per airborne frame.
 
 **ROW: STREAMING — BLOCKING → PASS, 2026-09-26 14:05.** The map is converted and the world pages.
 

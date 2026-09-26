@@ -143,6 +143,32 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void Tick(float DeltaSeconds) override;
+
+private:
+	/**
+	 * CATCH THE DOG IF THE GROUND IS NOT THERE YET, and put it back where it last stood.
+	 *
+	 * WHY THIS IS NEEDED NOW AND WAS NOT BEFORE. Until the world was converted to World Partition it was
+	 * entirely resident, so there was always a floor wherever the Dog arrived. Now a cell only begins
+	 * streaming because the player became a streaming source in it -- which means the instant after any
+	 * INSTANT move, the Dog is standing over a hole that is about to be filled. It falls through nothing,
+	 * passes KillZ, and is destroyed: not respawned, destroyed, with the pawn gone for the rest of the
+	 * session. Three separate proofs died on this before it was understood, each reporting a different
+	 * symptom.
+	 *
+	 * Walking cannot hit it -- you cannot walk somewhere faster than its cell loads -- so this is not a
+	 * traversal fix. It is for everything that MOVES the player rather than letting them walk: a checkpoint
+	 * warp, fast travel, a mission placing the Dog at a contract. Those are exactly the things a beta will
+	 * add, and a player destroyed by one would be unrecoverable.
+	 */
+	void CatchIfTheGroundIsMissing(float DeltaSeconds);
+
+	/** The last place the Dog was genuinely standing on something. See CatchIfTheGroundIsMissing. */
+	FVector LastGoodStanding = FVector::ZeroVector;
+	bool bHasGoodStanding = false;
+	/** How long it has been falling with nothing underneath it. */
+	float FallingWithNoGround = 0.0f;
+public:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 	/** Head width in uu — the canon's unit. dog_v2 builds at 60. */

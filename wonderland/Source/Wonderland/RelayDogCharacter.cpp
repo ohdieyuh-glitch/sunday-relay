@@ -1618,8 +1618,60 @@ float ARelayDogCharacter::EyeScaleAt(float TimeSeconds) const
 	return Scale;
 }
 
+void ARelayDogCharacter::CatchIfTheGroundIsMissing(float DeltaSeconds)
+{
+	UWorld* const Here = GetWorld();
+	UCharacterMovementComponent* const Move = GetCharacterMovement();
+	if (Here == nullptr || Move == nullptr)
+	{
+		return;
+	}
+
+	// STANDING IS REMEMBERED, and it is the cheap half of this: whenever the Dog is on something, that is
+	// where it gets put back to.
+	if (!Move->IsFalling())
+	{
+		LastGoodStanding = GetActorLocation();
+		bHasGoodStanding = true;
+		FallingWithNoGround = 0.0f;
+		return;
+	}
+
+	// FALLING IS ONLY A PROBLEM WHEN THERE IS NOTHING BELOW. A jump, a step off a kerb and a drop from a roof
+	// all trace onto something; a Dog over an unloaded cell traces onto nothing at all. That distinction is
+	// what keeps this from interfering with ordinary falling, which the founder's locomotion parity work
+	// depends on being untouched.
+	const FVector At = GetActorLocation();
+	FHitResult Below;
+	FCollisionQueryParams Ask(SCENE_QUERY_STAT(WonderlandGroundCatch), false, this);
+	const bool bSomethingBelow = Here->LineTraceSingleByChannel(
+		Below, At, At - FVector(0.0, 0.0, 20000.0), ECC_Pawn, Ask);
+	if (bSomethingBelow)
+	{
+		FallingWithNoGround = 0.0f;
+		return;
+	}
+
+	// A second of falling through nothing is far longer than any streaming cell needs and far shorter than
+	// the drop to KillZ from a normal height, so it catches the real case without ever firing on a jump.
+	FallingWithNoGround += DeltaSeconds;
+	if (FallingWithNoGround < 1.0f || !bHasGoodStanding)
+	{
+		return;
+	}
+	FallingWithNoGround = 0.0f;
+	Move->StopMovementImmediately();
+	Move->Velocity = FVector::ZeroVector;
+	SetActorLocation(LastGoodStanding + FVector(0.0, 0.0, 30.0), false, nullptr, ETeleportType::TeleportPhysics);
+	UE_LOG(LogTemp, Warning,
+		TEXT("WLDOG caught the Dog falling through unloaded world and returned it to its last standing at %s"),
+		*LastGoodStanding.ToCompactString());
+}
+
 void ARelayDogCharacter::Tick(float DeltaSeconds)
 {
+	CatchIfTheGroundIsMissing(DeltaSeconds);
+
 	// ---- THE NIGHT LAMP, FOLLOWING THE ONE NIGHT CURVE. See the declaration for why the Dog carries a light.
 	if (NightLamp != nullptr)
 	{
