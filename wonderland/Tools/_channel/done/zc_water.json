@@ -1,6 +1,6 @@
 {
  "name": "zc_water",
- "started": "2026-09-25 16:19:45",
+ "started": "2026-09-25 19:23:14",
  "status": "measured",
  "tests": [
   {
@@ -26,7 +26,7 @@
    "name": "the capture was still rendering while the world was paused",
    "pass": true,
    "detail": {
-    "change_when_poked": 87.7872,
+    "change_when_poked": 87.4135,
     "note": "exposure moved one and a half stops with the game paused; a frozen capture would report 0.0 here, and then the paused control under Q02 would prove nothing"
    }
   },
@@ -35,7 +35,7 @@
    "name": "the measurement actually looked at something",
    "pass": true,
    "detail": {
-    "running": 1.5742,
+    "running": 1.7326,
     "paused": 0.0,
     "note": "both flat means the render target came back empty, and Q02 would then be decided by blank pictures rather than by the water"
    }
@@ -45,7 +45,7 @@
    "name": "the water moves, and stops moving when the world is paused",
    "pass": true,
    "detail": {
-    "change_running": 1.5742,
+    "change_running": 1.7326,
     "change_paused": 0.0,
     "note": "same view and same renderer noise on both sides; pause removes only the animation, so the gap between them is the flow and nothing else"
    }
@@ -62,38 +62,38 @@
   "sample_pixels": [
    [
     173,
-    184,
-    194
+    185,
+    195
    ],
    [
-    179,
-    194,
-    87
+    186,
+    201,
+    104
    ],
    [
-    153,
+    154,
     188,
-    216
+    217
    ],
    [
-    45,
-    33,
-    32
+    40,
+    31,
+    31
    ],
    [
-    162,
+    161,
     183,
     210
    ]
   ]
  },
  "flow": {
-  "change_running": 1.5742,
+  "change_running": 1.7326,
   "change_paused": 0.0,
   "grid_points": 108,
-  "change_when_poked_while_paused": 87.7872
+  "change_when_poked_while_paused": 87.4135
  },
- "finished": "2026-09-25 16:20:17",
- "seconds": 32.74,
- "log": "Q00 PASS the water a pond is wearing is translucent, not opaque {'blend_mode': '<BlendMode.BLEND_TRANSLUCENT: 2>', 'note': 'the old master was BLEND_OPAQUE, so no parameter value it had could ever look wet'}\nQ01 PASS the ponds, wells, canals and basins are actually wearing it {'surfaces': 20, 'note': 'counted by the material each surface wears in the live world, not by the log line'}\nQ04 PASS the capture was still rendering while the world was paused {'change_when_poked': 87.7872, 'note': 'exposure moved one and a half stops with the game paused; a frozen capture would report 0.0 here, and then the paused control under Q02 would prove nothing'}\nQ03 PASS the measurement actually looked at something {'running': 1.5742, 'paused': 0.0, 'note': 'both flat means the render target came back empty, and Q02 would then be decided by blank pictures rather than by the water'}\nQ02 PASS the water moves, and stops moving when the world is paused {'change_running': 1.5742, 'change_paused': 0.0, 'note': 'same view and same renderer noise on both sides; pause removes only the animation, so the gap between them is the flow and nothing else'}\n"
+ "finished": "2026-09-25 19:23:44",
+ "seconds": 29.23,
+ "log": "Q00 PASS the water a pond is wearing is translucent, not opaque {'blend_mode': '<BlendMode.BLEND_TRANSLUCENT: 2>', 'note': 'the old master was BLEND_OPAQUE, so no parameter value it had could ever look wet'}\nQ01 PASS the ponds, wells, canals and basins are actually wearing it {'surfaces': 20, 'note': 'counted by the material each surface wears in the live world, not by the log line'}\nQ04 PASS the capture was still rendering while the world was paused {'change_when_poked': 87.4135, 'note': 'exposure moved one and a half stops with the game paused; a frozen capture would report 0.0 here, and then the paused control under Q02 would prove nothing'}\nQ03 PASS the measurement actually looked at something {'running': 1.7326, 'paused': 0.0, 'note': 'both flat means the render target came back empty, and Q02 would then be decided by blank pictures rather than by the water'}\nQ02 PASS the water moves, and stops moving when the world is paused {'change_running': 1.7326, 'change_paused': 0.0, 'note': 'same view and same renderer noise on both sides; pause removes only the animation, so the gap between them is the flow and nothing else'}\n"
 }

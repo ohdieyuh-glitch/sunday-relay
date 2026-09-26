@@ -1,24 +1,24 @@
 {
  "name": "zc_nav_cost",
- "started": "2026-09-25 15:05:16",
+ "started": "2026-09-25 15:07:38",
  "status": "measured",
  "tests": [
   {
    "id": "N01",
    "name": "both sides were actually measured",
-   "pass": false,
+   "pass": true,
    "detail": {
     "with_navigation": {
-     "samples": 0,
-     "mean_ms": 0.0,
-     "median_ms": 0.0,
-     "worst_ms": 0.0
+     "samples": 83,
+     "mean_ms": 35.04,
+     "median_ms": 35.06,
+     "worst_ms": 41.12
     },
     "without_navigation": {
-     "samples": 0,
-     "mean_ms": 0.0,
-     "median_ms": 0.0,
-     "worst_ms": 0.0
+     "samples": 82,
+     "mean_ms": 289.43,
+     "median_ms": 37.75,
+     "worst_ms": 1030.08
     }
    }
   },
@@ -37,25 +37,25 @@
   "<RuntimeGenerationType.DYNAMIC: 2>"
  ],
  "with_navigation": {
-  "samples": 0,
-  "mean_ms": 0.0,
-  "median_ms": 0.0,
-  "worst_ms": 0.0
+  "samples": 83,
+  "mean_ms": 35.04,
+  "median_ms": 35.06,
+  "worst_ms": 41.12
  },
  "set_static": [
   "<RuntimeGenerationType.STATIC: 0>"
  ],
  "without_navigation": {
-  "samples": 0,
-  "mean_ms": 0.0,
-  "median_ms": 0.0,
-  "worst_ms": 0.0
+  "samples": 82,
+  "mean_ms": 289.43,
+  "median_ms": 37.75,
+  "worst_ms": 1030.08
  },
  "restored": [
   "<RuntimeGenerationType.DYNAMIC: 2>"
  ],
- "navigation_costs_ms": 0.0,
- "finished": "2026-09-25 15:07:02",
- "seconds": 105.4,
- "log": "with_navigation INFO with_navigation {'samples': 0, 'mean_ms': 0.0, 'median_ms': 0.0, 'worst_ms': 0.0}\nwithout_navigation INFO without_navigation {'samples': 0, 'mean_ms': 0.0, 'median_ms': 0.0, 'worst_ms': 0.0}\nN01 FAIL both sides were actually measured {'with_navigation': {'samples': 0, 'mean_ms': 0.0, 'median_ms': 0.0, 'worst_ms': 0.0}, 'without_navigation': {'samples': 0, 'mean_ms': 0.0, 'median_ms': 0.0, 'worst_ms': 0.0}}\nN02 PASS the level is left routable, not left as the cost fixture {'restored': ['<RuntimeGenerationType.DYNAMIC: 2>']}\nN03 INFO what navigation costs, same session, same thermal state {'with_median_ms': 0.0, 'without_median_ms': 0.0, 'difference_ms': 0.0}\n"
+ "navigation_costs_ms": -2.69,
+ "finished": "2026-09-25 15:09:24",
+ "seconds": 106.3,
+ "log": "with_navigation INFO with_navigation {'samples': 83, 'mean_ms': 35.04, 'median_ms': 35.06, 'worst_ms': 41.12}\nwithout_navigation INFO without_navigation {'samples': 82, 'mean_ms': 289.43, 'median_ms': 37.75, 'worst_ms': 1030.08}\nN01 PASS both sides were actually measured {'with_navigation': {'samples': 83, 'mean_ms': 35.04, 'median_ms': 35.06, 'worst_ms': 41.12}, 'without_navigation': {'samples': 82, 'mean_ms': 289.43, 'median_ms': 37.75, 'worst_ms': 1030.08}}\nN02 PASS the level is left routable, not left as the cost fixture {'restored': ['<RuntimeGenerationType.DYNAMIC: 2>']}\nN03 INFO what navigation costs, same session, same thermal state {'with_median_ms': 35.06, 'without_median_ms': 37.75, 'difference_ms': -2.69}\n"
 }

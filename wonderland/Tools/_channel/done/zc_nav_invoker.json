@@ -1,6 +1,6 @@
 {
  "name": "zc_nav_invoker",
- "started": "2026-09-25 16:22:49",
+ "started": "2026-09-25 19:23:47",
  "status": "measured",
  "tests": [
   {
@@ -74,10 +74,10 @@
    "name": "the navigable surface follows the Dog as it walks",
    "pass": true,
    "detail": {
-    "walked_uu": 1847.5,
+    "walked_uu": 1848.5,
     "reachable_point_after": [
-     -377.1,
-     -29.9
+     -167.9,
+     -1243.7
     ],
     "note": "tiles built ahead and discarded behind: navigation where the player is, without paying for it across a 1,478 m disc"
    }
@@ -143,13 +143,13 @@
   }
  ],
  "routes_found": 6,
- "walked_uu": 1847.5,
+ "walked_uu": 1848.5,
  "navigable_after_walking": [
-  -377.1,
-  -29.9
+  -167.9,
+  -1243.7
  ],
  "frame_ms_with_nav": 0.0,
- "finished": "2026-09-25 16:23:28",
- "seconds": 38.92,
- "log": "V00 PASS the level carries a navigation bounds volume {'volumes': ['WL_NavBounds'], 'added_this_run': False, 'note': 'the level shipped without one, which is why it had no navigation data at all'}\nV01 PASS a navigation mesh actually generates in play {'seconds': 2.0, 'actors': ['RecastNavMesh-Default'], 'note': \"generated around the Dog's invoker rather than baked across the disc\"}\nV02 PASS the engine can route through the level within the invoker's radius (40 m) {'found': 6, 'of': 6, 'attempts': [{'bearing': 0.0, 'path': True, 'points': 5}, {'bearing': 60.0, 'path': True, 'points': 9}, {'bearing': 120.0, 'path': True, 'points': 11}, {'bearing': 180.0, 'path': True, 'points': 8}, {'bearing': 240.0, 'path': True, 'points': 6}, {'bearing': 300.0, 'path': True, 'points': 8}], 'note': 'find_path_to_location_synchronously returned NOTHING anywhere before this, at any distance; asked on six bearings so one blocked direction cannot decide it'}\nV04 PASS the navigable surface follows the Dog as it walks {'walked_uu': 1847.5, 'reachable_point_after': [-377.1, -29.9], 'note': 'tiles built ahead and discarded behind: navigation where the player is, without paying for it across a 1,478 m disc'}\nV03 PASS the frame cost stays sane with navigation generating {'frame_ms': 0.0, 'note': \"generation is bounded by the invoker's radius, not by the size of the world\"}\n"
+ "finished": "2026-09-25 19:24:24",
+ "seconds": 36.81,
+ "log": "V00 PASS the level carries a navigation bounds volume {'volumes': ['WL_NavBounds'], 'added_this_run': False, 'note': 'the level shipped without one, which is why it had no navigation data at all'}\nV01 PASS a navigation mesh actually generates in play {'seconds': 2.0, 'actors': ['RecastNavMesh-Default'], 'note': \"generated around the Dog's invoker rather than baked across the disc\"}\nV02 PASS the engine can route through the level within the invoker's radius (40 m) {'found': 6, 'of': 6, 'attempts': [{'bearing': 0.0, 'path': True, 'points': 5}, {'bearing': 60.0, 'path': True, 'points': 9}, {'bearing': 120.0, 'path': True, 'points': 11}, {'bearing': 180.0, 'path': True, 'points': 8}, {'bearing': 240.0, 'path': True, 'points': 6}, {'bearing': 300.0, 'path': True, 'points': 8}], 'note': 'find_path_to_location_synchronously returned NOTHING anywhere before this, at any distance; asked on six bearings so one blocked direction cannot decide it'}\nV04 PASS the navigable surface follows the Dog as it walks {'walked_uu': 1848.5, 'reachable_point_after': [-167.9, -1243.7], 'note': 'tiles built ahead and discarded behind: navigation where the player is, without paying for it across a 1,478 m disc'}\nV03 PASS the frame cost stays sane with navigation generating {'frame_ms': 0.0, 'note': \"generation is bounded by the invoker's radius, not by the size of the world\"}\n"
 }
