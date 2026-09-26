@@ -1,6 +1,6 @@
 {
  "name": "zc_tartarus_walk",
- "started": "2026-09-24 21:02:31",
+ "started": "2026-09-26 13:38:26",
  "status": "walked",
  "stuck_point_radius_m": 843.8,
  "bearing_deg": -30.0,
@@ -84,7 +84,7 @@
  "arrived_count": 5,
  "fell_count": 0,
  "z_spread_uu": 1369.7,
- "finished": "2026-09-24 21:03:36",
- "seconds": 65.09,
+ "finished": "2026-09-26 13:38:56",
+ "seconds": 30.38,
  "log": ""
 }
