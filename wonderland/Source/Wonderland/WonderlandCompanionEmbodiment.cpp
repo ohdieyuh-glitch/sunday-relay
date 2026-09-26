@@ -117,7 +117,23 @@ namespace
 
 	const TCHAR* const GlowParentPath = TEXT("/Game/Wonderland/Materials/M_WL_VoxelGlow.M_WL_VoxelGlow");
 	const TCHAR* const GlowFallbackPath = TEXT("/Engine/EngineDebugMaterials/LevelColorationUnlitMaterial.LevelColorationUnlitMaterial");
-	const TCHAR* const AdditiveParentPath = TEXT("/Engine/EngineMaterials/EmissiveMeshMaterial.EmissiveMeshMaterial");
+	// THE PROJECT'S OWN ADDITIVE MATERIAL, not the engine's.
+	//
+	// This pointed at /Engine/EngineMaterials/EmissiveMeshMaterial, and the engine answered on every load:
+	//
+	//     LogMaterial: Material EmissiveMeshMaterial missing usage flag InstancedStaticMeshes!
+	//                  Default Material will be used in game.
+	//
+	// The figures draw through instanced components, so that flag is not optional for them, and the halos
+	// were being replaced by the default material in a packaged build. Usage flags cannot be set on engine
+	// content -- it is not ours to resave and the flag would not travel with the project -- so
+	// M_WL_VoxelAdditive is ours: unlit, additive, flagged for instanced static meshes, carrying the same
+	// "Color" parameter this file already writes into every instance.
+	//
+	// The engine material is kept as a fallback for the same reason the engine cube is: a project that has
+	// not run the asset job should still show a companion, just without the flag.
+	const TCHAR* const AdditiveParentPath = TEXT("/Game/Wonderland/Materials/M_WL_VoxelAdditive.M_WL_VoxelAdditive");
+	const TCHAR* const AdditiveFallbackPath = TEXT("/Engine/EngineMaterials/EmissiveMeshMaterial.EmissiveMeshMaterial");
 	const TCHAR* const CubePath = TEXT("/Engine/BasicShapes/Cube.Cube");
 	// THE FIGURES' OWN CUBE, AND WHY IT EXISTS. Every .wlvox body is instances of a cube, and on 2026-09-24
 	// zc_avatar_cost measured what that costs once several of them are on screen at once: ten Project Avatars
@@ -195,7 +211,10 @@ UMaterialInterface* AWonderlandCompanionEmbodiment::ParentFor(EWonderlandCompani
 	{
 	case EWonderlandCompanionMaterialKind::Rim: Path = RimParentPath; break;
 	case EWonderlandCompanionMaterialKind::Glow: Path = GlowParentPath; break;
-	case EWonderlandCompanionMaterialKind::Additive: Path = AdditiveParentPath; break;
+	case EWonderlandCompanionMaterialKind::Additive:
+		Path = LoadObject<UMaterialInterface>(nullptr, AdditiveParentPath) != nullptr
+			? AdditiveParentPath : AdditiveFallbackPath;
+		break;
 	default: break;
 	}
 	UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr, Path);

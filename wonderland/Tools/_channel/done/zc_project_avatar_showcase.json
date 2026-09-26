@@ -1,6 +1,6 @@
 {
  "name": "zc_project_avatar_showcase",
- "started": "2026-09-25 17:29:21",
+ "started": "2026-09-25 18:05:40",
  "status": "done",
  "staged": [
   {
@@ -156,7 +156,7 @@
   "runtime_motion": "PASS",
   "spawn_obstruction": "PASS"
  },
- "finished": "2026-09-25 17:29:49",
- "seconds": 27.88,
+ "finished": "2026-09-25 18:06:07",
+ "seconds": 27.43,
  "log": ""
 }

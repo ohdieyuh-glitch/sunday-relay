@@ -1,0 +1,62 @@
+{
+ "name": "zc_make_additive_material",
+ "started": "2026-09-25 17:52:39",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "M00",
+   "name": "the project has its own additive material",
+   "pass": true,
+   "detail": {
+    "path": "/Game/Wonderland/Materials/M_WL_VoxelAdditive",
+    "created": true
+   }
+  },
+  {
+   "id": "M01",
+   "name": "it is additive, unlit, and allowed on instanced static meshes",
+   "pass": true,
+   "detail": {
+    "read_back": {
+     "blend_mode": "<BlendMode.BLEND_ADDITIVE: 3>",
+     "shading_model": "<MaterialShadingModel.MSM_UNLIT: 0>",
+     "used_with_instanced_static_meshes": "True",
+     "vector_parameters": [
+      "Color"
+     ]
+    },
+    "note": "the InstancedStaticMeshes flag is the one the engine material is missing, and it is why the halos were being replaced by the default material in game"
+   }
+  },
+  {
+   "id": "M02",
+   "name": "and it carries the Color parameter the figures already write",
+   "pass": true,
+   "detail": {
+    "parameters": [
+     "Color"
+    ],
+    "note": "the embodiment dresses every instance through SetVectorParameterValue('Color')"
+   }
+  }
+ ],
+ "created": true,
+ "properties": {
+  "blend_mode": true,
+  "shading_model": true,
+  "two_sided": true,
+  "used_with_instanced_static_meshes": true,
+  "used_with_static_lighting": true
+ },
+ "read_back": {
+  "blend_mode": "<BlendMode.BLEND_ADDITIVE: 3>",
+  "shading_model": "<MaterialShadingModel.MSM_UNLIT: 0>",
+  "used_with_instanced_static_meshes": "True",
+  "vector_parameters": [
+   "Color"
+  ]
+ },
+ "finished": "2026-09-25 17:52:45",
+ "seconds": 5.71,
+ "log": "M00 PASS the project has its own additive material {'path': '/Game/Wonderland/Materials/M_WL_VoxelAdditive', 'created': True}\nM01 PASS it is additive, unlit, and allowed on instanced static meshes {'read_back': {'blend_mode': '<BlendMode.BLEND_ADDITIVE: 3>', 'shading_model': '<MaterialShadingModel.MSM_UNLIT: 0>', 'used_with_instanced_static_meshes': 'True', 'vector_parameters': ['Color']}, 'note': 'the InstancedStaticMeshes flag is the one the engine material is missing, and it is why the halos were being replaced by the default material in game'}\nM02 PASS and it carries the Color parameter the figures already write {'parameters': ['Color'], 'note': \"the embodiment dresses every instance through SetVectorParameterValue('Color')\"}\n"
+}
