@@ -1,0 +1,127 @@
+{
+ "name": "zc_cub_grounding",
+ "started": "2026-09-26 01:39:51",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "C00",
+   "name": "the Sub-Agent Cub subsystem is running",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "C01",
+   "name": "both AI Companions are in the world",
+   "pass": true,
+   "detail": {
+    "companions": [
+     "WL_Companion_ClaudeCodeFable5",
+     "WL_Companion_GPT6Astra"
+    ]
+   }
+  },
+  {
+   "id": "C10",
+   "name": "no AI Companion is ever inside the floor, at any point in the founder's sequence",
+   "pass": true,
+   "detail": {
+    "worst_clearance_uu": 36.05,
+    "floor": -2.0,
+    "worst_at": "WL_Companion_ClaudeCodeFable5 @ 04_turned",
+    "note": "the feet, measured against the ground traced directly beneath them. Negative is the sinking the founder filmed."
+   }
+  },
+  {
+   "id": "C11",
+   "name": "summoning Cubs does not shove the AI Companions",
+   "pass": true,
+   "detail": {
+    "change_in_clearance_uu": {
+     "WL_Companion_ClaudeCodeFable5": 0.0,
+     "WL_Companion_GPT6Astra": 0.0
+    },
+    "tolerance": 40.0,
+    "note": "before and after the summon, standing still. The old keep-apart steering pushed a companion by up to 345 uu per cub."
+   }
+  },
+  {
+   "id": "C12",
+   "name": "Companions and Cubs are separate actors with their own transforms",
+   "pass": true,
+   "detail": {
+    "cub_bodies": 5,
+    "companions": 2,
+    "note": "each cub carries its own body, attached to the cub; neither owns the other's transform"
+   }
+  }
+ ],
+ "through_the_sequence": {
+  "00_no_cubs": {
+   "WL_Companion_ClaudeCodeFable5": 43.72,
+   "WL_Companion_GPT6Astra": 41.94
+  },
+  "01_summoned": {
+   "WL_Companion_ClaudeCodeFable5": 43.72,
+   "WL_Companion_GPT6Astra": 41.94
+  },
+  "02_moving": {
+   "WL_Companion_ClaudeCodeFable5": 42.13,
+   "WL_Companion_GPT6Astra": 40.02
+  },
+  "03_stopped": {
+   "WL_Companion_ClaudeCodeFable5": 41.78,
+   "WL_Companion_GPT6Astra": 39.67
+  },
+  "04_turned": {
+   "WL_Companion_ClaudeCodeFable5": 36.05,
+   "WL_Companion_GPT6Astra": 66.18
+  },
+  "05_uneven": {
+   "WL_Companion_ClaudeCodeFable5": 41.7,
+   "WL_Companion_GPT6Astra": 39.67
+  },
+  "06_idle": {
+   "WL_Companion_ClaudeCodeFable5": 41.7,
+   "WL_Companion_GPT6Astra": 39.67
+  },
+  "07_dismissed": {
+   "WL_Companion_ClaudeCodeFable5": 41.7,
+   "WL_Companion_GPT6Astra": 39.67
+  },
+  "08_resummoned": {
+   "WL_Companion_ClaudeCodeFable5": 41.7,
+   "WL_Companion_GPT6Astra": 39.67
+  }
+ },
+ "cubs_summoned": 5,
+ "worst_clearance_uu": 36.05,
+ "clearance": {
+  "WL_Companion_ClaudeCodeFable5 @ 00_no_cubs": 43.72,
+  "WL_Companion_GPT6Astra @ 00_no_cubs": 41.94,
+  "WL_Companion_ClaudeCodeFable5 @ 01_summoned": 43.72,
+  "WL_Companion_GPT6Astra @ 01_summoned": 41.94,
+  "WL_Companion_ClaudeCodeFable5 @ 02_moving": 42.13,
+  "WL_Companion_GPT6Astra @ 02_moving": 40.02,
+  "WL_Companion_ClaudeCodeFable5 @ 03_stopped": 41.78,
+  "WL_Companion_GPT6Astra @ 03_stopped": 39.67,
+  "WL_Companion_ClaudeCodeFable5 @ 04_turned": 36.05,
+  "WL_Companion_GPT6Astra @ 04_turned": 66.18,
+  "WL_Companion_ClaudeCodeFable5 @ 05_uneven": 41.7,
+  "WL_Companion_GPT6Astra @ 05_uneven": 39.67,
+  "WL_Companion_ClaudeCodeFable5 @ 06_idle": 41.7,
+  "WL_Companion_GPT6Astra @ 06_idle": 39.67,
+  "WL_Companion_ClaudeCodeFable5 @ 07_dismissed": 41.7,
+  "WL_Companion_GPT6Astra @ 07_dismissed": 39.67,
+  "WL_Companion_ClaudeCodeFable5 @ 08_resummoned": 41.7,
+  "WL_Companion_GPT6Astra @ 08_resummoned": 39.67
+ },
+ "shift_on_summon": {
+  "WL_Companion_ClaudeCodeFable5": 0.0,
+  "WL_Companion_GPT6Astra": 0.0
+ },
+ "cub_bodies": 5,
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\cub_grounding",
+ "finished": "2026-09-26 01:40:54",
+ "seconds": 63.86,
+ "log": "C00 PASS the Sub-Agent Cub subsystem is running {}\nC01 PASS both AI Companions are in the world {'companions': ['WL_Companion_ClaudeCodeFable5', 'WL_Companion_GPT6Astra']}\nC_00_no_cubs INFO 00_no_cubs {'WL_Companion_ClaudeCodeFable5': 43.72, 'WL_Companion_GPT6Astra': 41.94}\nC_01_summoned INFO 01_summoned {'WL_Companion_ClaudeCodeFable5': 43.72, 'WL_Companion_GPT6Astra': 41.94}\nC_02_moving INFO 02_moving {'WL_Companion_ClaudeCodeFable5': 42.13, 'WL_Companion_GPT6Astra': 40.02}\nC_03_stopped INFO 03_stopped {'WL_Companion_ClaudeCodeFable5': 41.78, 'WL_Companion_GPT6Astra': 39.67}\nC_04_turned INFO 04_turned {'WL_Companion_ClaudeCodeFable5': 36.05, 'WL_Companion_GPT6Astra': 66.18}\nC_05_uneven INFO 05_uneven {'WL_Companion_ClaudeCodeFable5': 41.7, 'WL_Companion_GPT6Astra': 39.67}\nC_06_idle INFO 06_idle {'WL_Companion_ClaudeCodeFable5': 41.7, 'WL_Companion_GPT6Astra': 39.67}\nC_07_dismissed INFO 07_dismissed {'WL_Companion_ClaudeCodeFable5': 41.7, 'WL_Companion_GPT6Astra': 39.67}\nC_08_resummoned INFO 08_resummoned {'WL_Companion_ClaudeCodeFable5': 41.7, 'WL_Companion_GPT6Astra': 39.67}\nC10 PASS no AI Companion is ever inside the floor, at any point in the founder's sequence {'worst_clearance_uu': 36.05, 'floor': -2.0, 'worst_at': 'WL_Companion_ClaudeCodeFable5 @ 04_turned', 'note': 'the feet, measured against the ground traced directly beneath them. Negative is the sinking the founder filmed.'}\nC11 PASS summoning Cubs does not shove the AI Companions {'change_in_clearance_uu': {'WL_Companion_ClaudeCodeFable5': 0.0, 'WL_Companion_GPT6Astra': 0.0}, 'tolerance': 40.0, 'note': 'before and after the summon, standing still. The old keep-apart steering pushed a companion by up to 345 uu per cub.'}\nC12 PASS Companions and Cubs are separate actors with their own transforms {'cub_bodies': 5, 'companions': 2, 'note': \"each cub carries its own body, attached to the cub; neither owns the other's transform\"}\n"
+}

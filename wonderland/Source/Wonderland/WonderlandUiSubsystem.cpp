@@ -60,6 +60,7 @@
 #include "WonderlandMissionOrb.h"
 #include "WonderlandSkinStage.h"
 #include "WonderlandTerritory.h"
+#include "WonderlandMascotStyle.h"
 #include "WonderlandTravel.h"
 #include "WonderlandUiStyle.h"
 #include "WonderlandUsageHudWidget.h"
@@ -287,6 +288,19 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 	MountCompanionTerminals();
 	MountHudFurniture();
 	EnsureLiveTerminal();
+	// EVERY COLOUR CHANGE REBUILDS THE CHROME THAT CARRIES IT. One subscription, so the Wardrobe's swatches,
+	// the Menu's Colors tab and the console commands all reach the screen by the same route.
+	if (!StyleChangedHandle.IsValid())
+	{
+		TWeakObjectPtr<UWonderlandUiSubsystem> WeakStyleThis(this);
+		StyleChangedHandle = WonderlandMascotStyle::OnChanged().AddLambda([WeakStyleThis]()
+		{
+			if (UWonderlandUiSubsystem* Self = WeakStyleThis.Get())
+			{
+				Self->RefreshChrome();
+			}
+		});
+	}
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI attached to %s (usage HUD %s%s, %d companion terminals, mini-map and shortcuts mounted; Ctrl+T J B C Tab, M map, hold Alt to point)"),
 		*Controller->GetName(), UsageHud != nullptr ? TEXT("on screen") : TEXT("FAILED"), bPreview ? TEXT(", DEVELOPMENT PREVIEW reading") : TEXT(""),
 		CompanionTerminals.Num());
@@ -4154,6 +4168,38 @@ bool UWonderlandUiSubsystem::SimulateNavTileClick(FName ShortcutId)
 }
 
 /* ------------------------------------------------------------------ the HUD furniture */
+
+void UWonderlandUiSubsystem::RefreshChrome()
+{
+	// THE WARDROBE IS NEVER INTERRUPTED. See the declaration.
+	if (Open == EOverlay::Brain)
+	{
+		return;
+	}
+	const EOverlay Was = Open;
+	if (Was != EOverlay::None)
+	{
+		CloseOverlay();
+	}
+	// Every panel whose brushes carry an accent. BrainPanel is deliberately not in this list, and the Julius
+	// terminal is an overlay like the rest -- so reopening `Was` brings it back with the rest of them.
+	MenuPanel.Reset();
+	WorldMap.Reset();
+	CommandStation.Reset();
+	WalletPanel.Reset();
+	Terminal.Reset();
+
+	UnmountCompanionTerminals();
+	UnmountHudFurniture();
+	MountHudFurniture();
+	MountCompanionTerminals();
+	EnsureLiveTerminal();
+	if (Was != EOverlay::None)
+	{
+		OpenOverlay(Was);
+	}
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI chrome rebuilt for a colour change"));
+}
 
 void UWonderlandUiSubsystem::MountHudFurniture()
 {

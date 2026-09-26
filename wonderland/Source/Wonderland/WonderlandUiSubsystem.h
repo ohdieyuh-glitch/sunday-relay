@@ -724,6 +724,25 @@ private:
 	void HandleNavigate(EWonderlandNavTarget Target);
 	void MountHudFurniture();
 	void UnmountHudFurniture();
+
+	/**
+	 * REBUILD EVERY SURFACE THAT BAKED A COLOUR INTO A BRUSH, because that is what "live" has to mean here.
+	 *
+	 * FOUNDER, 2026-09-25: the terminal and Menu colour controls "should update live and persist".
+	 *
+	 * A Slate panel builds its FSlateRoundedBoxBrushes ONCE, in its constructor, from WonderlandUi::Gold() and
+	 * its new per-surface cousins. Choosing a colour therefore changed the value every one of them reads and
+	 * nothing on screen at all -- measured: the Julius terminal's chrome moved by -0.001 in green after being
+	 * set to a green nobody could mistake, because the panel it was drawn with had been built an hour earlier.
+	 *
+	 * So the panels are thrown away and made again. The Project Brain is the one exception and is left alone:
+	 * the wardrobe lives inside it, its own swatches repaint the DOG rather than any chrome, and tearing the
+	 * panel down under a founder who is mid-inspection would be a worse bug than the one this fixes.
+	 */
+	void RefreshChrome();
+
+	/** The one subscription to WonderlandMascotStyle::OnChanged, so chrome is rebuilt exactly once. */
+	FDelegateHandle StyleChangedHandle;
 	void StopPointing(bool bRestoreGameInput);
 	/** The map shows over the world while no full-screen panel covers it. The terminal is not full-screen, and Wonder Web stands in the world. */
 	bool IsMiniMapShown() const { return Open == EOverlay::None || Open == EOverlay::Terminal || Open == EOverlay::WonderWeb; }

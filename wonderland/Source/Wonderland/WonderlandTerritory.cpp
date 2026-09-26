@@ -16,7 +16,11 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
-namespace
+// NAMED, NOT ANONYMOUS, and the names carry this file's own prefix. The module compiles as one unity
+// translation unit, so an anonymous `CubePath` here is the same symbol as an anonymous `CubePath` in the skin
+// stage -- which is exactly the redefinition the first build of this file hit. Every other look namespace in
+// the module is named for the same reason.
+namespace WonderlandTerritoryLook
 {
 	const TCHAR* const CubePath = TEXT("/Engine/BasicShapes/Cube.Cube");
 	/** LIT, for the stone and the ivory: they take the day cycle's light like every other surface in Wonderland. */
@@ -56,6 +60,8 @@ namespace
 		}
 	}
 }
+
+using namespace WonderlandTerritoryLook;
 
 /* ---------------------------------------------------------------------------------------- the marker */
 

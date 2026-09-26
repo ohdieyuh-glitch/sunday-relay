@@ -165,6 +165,39 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	static bool ResetAllColours();
 
+	/**
+	 * THE MOST STRONGLY TINTED PIXEL IN A RECTANGLE, per channel pair.
+	 *
+	 * WHY A SEPARATE READER. An accent in this UI is a hairline border and a few words of small text: averaged
+	 * over any patch big enough to be worth sampling, it is a percent or two of the dark plate behind it. A
+	 * grid of 96 mean readings over the Julius terminal moved by 0.008 when the accent was changed from gold to
+	 * a green the photograph shows unmistakably -- the change was real and the instrument could not see it.
+	 * Going finer is not an option either: ReadScreenRect takes a whole screenshot per call.
+	 *
+	 * So this takes ONE screenshot and walks every pixel of the rectangle, returning the extremes. A single
+	 * accent stroke is enough to move them, which is exactly the sensitivity the question needs.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static bool ReadScreenExtremes(float MinX, float MinY, float MaxX, float MaxY,
+		float& OutMostGreenOverRed, float& OutMostBlueOverRed, float& OutMostRedOverBlue,
+		FLinearColor& OutMean, int32& OutSampled);
+
+	/**
+	 * PRESS A TERMINAL OR MENU SWATCH, exactly as the Colors tab presses it: write the canonical state, then
+	 * SaveAndApply, which is also what rebuilds the Slate chrome that carries the colour.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static bool PickTerminalAccent(bool bJulius, FLinearColor Colour);
+
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static bool PickMenuAccent(FLinearColor Colour);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test")
+	static FLinearColor GetTerminalAccent(bool bJulius);
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test")
+	static FLinearColor GetMenuAccentColour();
+
 	/** The territory subsystem, so a proof can ask the world where it is and what it knows. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
 	static class UWonderlandTerritorySubsystem* GetTerritories(UObject* WorldContextObject);

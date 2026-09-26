@@ -3,6 +3,7 @@
 #include "WonderlandDemoFlow.h"
 #include "WonderlandTerritory.h"
 #include "WonderlandMascotStyle.h"
+#include "WonderlandUiStyle.h"
 #include "WonderlandSubAgentCubs.h"
 
 #include "Camera/CameraActor.h"
@@ -542,4 +543,116 @@ UWonderlandTerritorySubsystem* UWonderlandUiTestLibrary::GetTerritories(UObject*
 	const UWorld* World = GEngine != nullptr
 		? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
 	return World != nullptr ? World->GetSubsystem<UWonderlandTerritorySubsystem>() : nullptr;
+}
+
+bool UWonderlandUiTestLibrary::PickTerminalAccent(bool bJulius, FLinearColor Colour)
+{
+	UWonderlandMascotStyleSettings* Style = GetMutableDefault<UWonderlandMascotStyleSettings>();
+	if (Style == nullptr)
+	{
+		return false;
+	}
+	if (bJulius)
+	{
+		Style->JuliusTerminalAccent = Colour;
+		Style->bJuliusTerminalAccentChosen = true;
+	}
+	else
+	{
+		Style->CompanionTerminalAccent = Colour;
+		Style->bCompanionTerminalAccentChosen = true;
+	}
+	WonderlandMascotStyle::SaveAndApply();
+	return true;
+}
+
+bool UWonderlandUiTestLibrary::PickMenuAccent(FLinearColor Colour)
+{
+	UWonderlandMascotStyleSettings* Style = GetMutableDefault<UWonderlandMascotStyleSettings>();
+	if (Style == nullptr)
+	{
+		return false;
+	}
+	Style->MenuAccent = Colour;
+	Style->bMenuAccentChosen = true;
+	WonderlandMascotStyle::SaveAndApply();
+	return true;
+}
+
+FLinearColor UWonderlandUiTestLibrary::GetTerminalAccent(bool bJulius)
+{
+	return bJulius ? WonderlandUi::JuliusAccent() : WonderlandUi::CompanionAccent();
+}
+
+FLinearColor UWonderlandUiTestLibrary::GetMenuAccentColour()
+{
+	return WonderlandUi::MenuAccent();
+}
+
+bool UWonderlandUiTestLibrary::ReadScreenExtremes(float MinX, float MinY, float MaxX, float MaxY,
+	float& OutMostGreenOverRed, float& OutMostBlueOverRed, float& OutMostRedOverBlue,
+	FLinearColor& OutMean, int32& OutSampled)
+{
+	OutMostGreenOverRed = 0.0f;
+	OutMostBlueOverRed = 0.0f;
+	OutMostRedOverBlue = 0.0f;
+	OutMean = FLinearColor::Black;
+	OutSampled = 0;
+	if (!FSlateApplication::IsInitialized() || GEngine == nullptr || GEngine->GameViewport == nullptr)
+	{
+		return false;
+	}
+	TSharedPtr<SWidget> Target;
+	if (TSharedPtr<IGameLayerManager> Layers = GEngine->GameViewport->GetGameLayerManager())
+	{
+		Target = StaticCastSharedPtr<SGameLayerManager>(Layers);
+	}
+	if (!Target.IsValid())
+	{
+		Target = GEngine->GameViewport->GetGameViewportWidget();
+	}
+	if (!Target.IsValid())
+	{
+		return false;
+	}
+	TArray<FColor> Pixels;
+	FIntVector Size;
+	if (!FSlateApplication::Get().TakeScreenshot(Target.ToSharedRef(), Pixels, Size)
+		|| Size.X <= 0 || Size.Y <= 0 || Pixels.Num() != Size.X * Size.Y)
+	{
+		return false;
+	}
+	const int32 Left   = FMath::Clamp(FMath::FloorToInt(FMath::Min(MinX, MaxX) * Size.X), 0, Size.X - 1);
+	const int32 Right  = FMath::Clamp(FMath::CeilToInt (FMath::Max(MinX, MaxX) * Size.X), Left + 1, Size.X);
+	const int32 Top    = FMath::Clamp(FMath::FloorToInt(FMath::Min(MinY, MaxY) * Size.Y), 0, Size.Y - 1);
+	const int32 Bottom = FMath::Clamp(FMath::CeilToInt (FMath::Max(MinY, MaxY) * Size.Y), Top + 1, Size.Y);
+
+	double SumR = 0.0, SumG = 0.0, SumB = 0.0;
+	int32 Count = 0;
+	for (int32 Y = Top; Y < Bottom; ++Y)
+	{
+		for (int32 X = Left; X < Right; ++X)
+		{
+			const FColor& C = Pixels[Y * Size.X + X];
+			const float R = C.R / 255.0f, G = C.G / 255.0f, B = C.B / 255.0f;
+			// DARK PIXELS ARE IGNORED. A channel difference on a near-black plate is noise with a sign, and
+			// including it would let JPEG-grade speckle set the extreme.
+			if (R + G + B > 0.18f)
+			{
+				OutMostGreenOverRed = FMath::Max(OutMostGreenOverRed, G - R);
+				OutMostBlueOverRed  = FMath::Max(OutMostBlueOverRed,  B - R);
+				OutMostRedOverBlue  = FMath::Max(OutMostRedOverBlue,  R - B);
+			}
+			SumR += R; SumG += G; SumB += B;
+			++Count;
+		}
+	}
+	if (Count <= 0)
+	{
+		return false;
+	}
+	OutMean = FLinearColor(static_cast<float>(SumR / Count), static_cast<float>(SumG / Count),
+		static_cast<float>(SumB / Count), 1.0f);
+	OutSampled = Count;
+	return true;
 }
