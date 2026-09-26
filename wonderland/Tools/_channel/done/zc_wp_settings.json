@@ -1,0 +1,14 @@
+{
+ "name": "zc_wp_settings",
+ "started": "2026-09-25 21:24:38",
+ "status": "measured",
+ "world": "WL_V2_GoldenArrival_WP2",
+ "settings": {
+  "has_world_partition_library": true,
+  "world_settings_error": "type object 'GameplayStatics' has no attribute 'get_world_settings'",
+  "world_partition_error": "World: Failed to find property 'world_partition' for attribute 'world_partition' on 'World'"
+ },
+ "finished": "2026-09-25 21:24:38",
+ "seconds": 0.21,
+ "log": "W01 INFO what the level says about streaming {'has_world_partition_library': True, 'world_settings_error': \"type object 'GameplayStatics' has no attribute 'get_world_settings'\", 'world_partition_error': \"World: Failed to find property 'world_partition' for attribute 'world_partition' on 'World'\"}\n"
+}

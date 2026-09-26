@@ -1,0 +1,71 @@
+{
+ "name": "zc_twin_streams",
+ "started": "2026-09-25 21:27:56",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "T00",
+   "name": "the partitioned twin can be opened",
+   "pass": true,
+   "detail": {
+    "world": "WL_V2_GoldenArrival_WP2_WP",
+    "actors_in_editor": 631
+   }
+  },
+  {
+   "id": "T01",
+   "name": "the twin's residency CHANGES as the player crosses it, unlike the shipping map",
+   "pass": true,
+   "detail": {
+    "actors_by_stop": [
+     12634,
+     2396,
+     2396
+    ],
+    "spread": 10238,
+    "shipping_map_for_comparison": [
+     21083,
+     21083,
+     21083
+    ],
+    "note": "the shipping map is flat at 21,083. If the twin is flat too, adopting it buys nothing and the blocker was built on a misread number"
+   }
+  },
+  {
+   "id": "T02",
+   "name": "the editor is left on the shipping map, not the twin",
+   "pass": true,
+   "detail": {
+    "world": "WL_V2_GoldenArrival_WP2",
+    "restored": true
+   }
+  }
+ ],
+ "twin_opened": true,
+ "twin_world": "WL_V2_GoldenArrival_WP2_WP",
+ "twin_actors_in_editor": 631,
+ "at_each_stop": {
+  "0000m": {
+   "actors": 12634,
+   "instanced_components": 3919,
+   "instances": 156166
+  },
+  "0600m": {
+   "actors": 2396,
+   "instanced_components": 310,
+   "instances": 13112
+  },
+  "1250m": {
+   "actors": 2396,
+   "instanced_components": 310,
+   "instances": 13112
+  }
+ },
+ "actor_spread": 10238,
+ "lowest_resident": 2396,
+ "restored_home": true,
+ "editor_world_at_end": "WL_V2_GoldenArrival_WP2",
+ "finished": "2026-09-25 21:29:10",
+ "seconds": 74.7,
+ "log": "T00 PASS the partitioned twin can be opened {'world': 'WL_V2_GoldenArrival_WP2_WP', 'actors_in_editor': 631}\nT_0000m INFO twin resident at 0 m {'actors': 12634, 'instanced_components': 3919, 'instances': 156166}\nT_0600m INFO twin resident at 600 m {'actors': 2396, 'instanced_components': 310, 'instances': 13112}\nT_1250m INFO twin resident at 1250 m {'actors': 2396, 'instanced_components': 310, 'instances': 13112}\nT01 PASS the twin's residency CHANGES as the player crosses it, unlike the shipping map {'actors_by_stop': [12634, 2396, 2396], 'spread': 10238, 'shipping_map_for_comparison': [21083, 21083, 21083], 'note': 'the shipping map is flat at 21,083. If the twin is flat too, adopting it buys nothing and the blocker was built on a misread number'}\nT02 PASS the editor is left on the shipping map, not the twin {'world': 'WL_V2_GoldenArrival_WP2', 'restored': True}\n"
+}
