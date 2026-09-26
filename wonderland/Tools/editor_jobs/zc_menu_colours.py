@@ -184,6 +184,28 @@ def job():
            note="the founder: 'Update the intentional accent surfaces WITHOUT making text unreadable. Do not "
                 "indiscriminately tint every element.' This is the clause a blanket tint fails.")
 
+    # ---- AND THE POINTER, which is the same "not console-only" requirement applied to P1 item 8.
+    ui.toggle_menu()
+    yield 3.0
+    ui.show_menu_tab("COLORS")
+    yield 2.0
+    before_shape = L.get_cursor_shape()
+    L.pick_cursor("ring", 30.0)
+    yield 2.0
+    after_shape = L.get_cursor_shape()
+    try:
+        L.capture_game_viewport(os.path.join(ROOT, "menu_cursor.png"))
+    except Exception:
+        pass
+    RESULT["cursor"] = {"before": before_shape, "after": after_shape}
+    record("M30", "the pointer can be chosen from the Colors tab, not only from the console",
+           str(after_shape).lower() == "ring" and str(before_shape).lower() != "ring",
+           before=before_shape, after=after_shape,
+           note="the shape is read back from WonderlandCursor::Chosen, which is what Apply draws from -- so "
+                "this fails if the setting moved and the cached choice did not.")
+    L.pick_cursor("system", 22.0)
+    yield 1.0
+
     ui.toggle_menu()
     yield 1.0
     # Put everything back, so the next proof measures the shipped colours.

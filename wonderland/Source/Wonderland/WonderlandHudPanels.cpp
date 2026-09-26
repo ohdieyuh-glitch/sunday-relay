@@ -14,6 +14,7 @@
 #include "WonderlandMissionSubsystem.h"
 #include "WonderlandUiStyle.h"
 #include "WonderlandMascotStyle.h"
+#include "WonderlandCursor.h"
 
 // Named, not anonymous: the module is one unity translation unit (see WonderlandCompanionHud.cpp).
 namespace WonderlandHudPanelLook
@@ -440,6 +441,26 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColoursPage()
 					[Style]() { return Style() != nullptr ? Style()->MenuAccent : FLinearColor::White; },
 					[Style](FLinearColor C) { if (Style()) { Style()->MenuAccent = C; Style()->bMenuAccentChosen = true; } })
 			]
+			// ---- THE POINTER. FOUNDER, P1 item 8: "Add Wonderland cursor customization."
+			//
+			// The pointer itself has existed for some time -- four shapes, drawn rather than shipped as an
+			// asset, wearing the terminal accent so the founder's theme moves it too. What it did not have was
+			// a way to choose one without the console, which is the same gap the mascot and terminal colours
+			// had, and the founder named it the same way. SYSTEM stays the default and stays offered: a custom
+			// pointer nobody can turn off is a worse default than the machine's own.
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 12.0f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(SBox).WidthOverride(178.0f)
+					[
+						SNew(STextBlock).Text(INVTEXT("POINTER"))
+						.Font(WonderlandUi::Sans(10, true, 160)).ColorAndOpacity(WonderlandUi::MenuGold())
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[MakeCursorRow()]
+			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 			[
 				SNew(SButton).ButtonStyle(&RowStyle).IsFocusable(false)
@@ -458,7 +479,10 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColoursPage()
 						S->bJuliusTerminalAccentChosen = false;
 						S->bCompanionTerminalAccentChosen = false;
 						S->bMenuAccentChosen = false;
+						S->CursorShape = TEXT("system");
+						S->CursorSize = 22.0f;
 					}
+					WonderlandCursor::Forget();
 					WonderlandMascotStyle::SaveAndApply();
 					return FReply::Handled();
 				})
@@ -468,6 +492,76 @@ TSharedRef<SWidget> SWonderlandMenuPanel::MakeColoursPage()
 				]
 			]
 		];
+}
+
+TSharedRef<SWidget> SWonderlandMenuPanel::MakeCursorRow()
+{
+	static const TCHAR* const Shapes[] = {TEXT("system"), TEXT("arrow"), TEXT("mark"), TEXT("ring")};
+	TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
+	for (const TCHAR* Shape : Shapes)
+	{
+		const FString Name = Shape;
+		Row->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f)
+		[
+			SNew(SButton).ButtonStyle(&TabStyle).IsFocusable(false)
+			.OnClicked_Lambda([Name]()
+			{
+				if (UWonderlandMascotStyleSettings* Style = GetMutableDefault<UWonderlandMascotStyleSettings>())
+				{
+					Style->CursorShape = Name;
+				}
+				// THE CACHE HAS TO BE DROPPED or the setting changes and the pointer does not. See
+				// WonderlandCursor::Forget.
+				WonderlandCursor::Forget();
+				WonderlandMascotStyle::SaveAndApply();
+				return FReply::Handled();
+			})
+			[
+				SNew(STextBlock).Text(FText::FromString(Name.ToUpper()))
+				.Font(WonderlandUi::Sans(9, true, 140))
+				.ColorAndOpacity_Lambda([Name]()
+				{
+					const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+					return FSlateColor(Style.CursorShape.Equals(Name, ESearchCase::IgnoreCase)
+						? WonderlandUi::MenuGold() : WonderlandUi::Ivory(0.55f));
+				})
+			]
+		];
+	}
+	// AND ITS SIZE, in three steps rather than a slider: a pointer is either comfortable or it is not, and
+	// three named sizes are quicker to choose between than a continuum.
+	for (const TPair<const TCHAR*, float>& Size : {TPair<const TCHAR*, float>(TEXT("S"), 16.0f),
+												   TPair<const TCHAR*, float>(TEXT("M"), 22.0f),
+												   TPair<const TCHAR*, float>(TEXT("L"), 30.0f)})
+	{
+		const float Edge = Size.Value;
+		const FString Label = Size.Key;
+		Row->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)
+		[
+			SNew(SButton).ButtonStyle(&TabStyle).IsFocusable(false)
+			.OnClicked_Lambda([Edge]()
+			{
+				if (UWonderlandMascotStyleSettings* Style = GetMutableDefault<UWonderlandMascotStyleSettings>())
+				{
+					Style->CursorSize = Edge;
+				}
+				WonderlandCursor::Forget();
+				WonderlandMascotStyle::SaveAndApply();
+				return FReply::Handled();
+			})
+			[
+				SNew(STextBlock).Text(FText::FromString(Label))
+				.Font(WonderlandUi::Sans(9, true, 140))
+				.ColorAndOpacity_Lambda([Edge]()
+				{
+					const UWonderlandMascotStyleSettings& Style = UWonderlandMascotStyleSettings::Get();
+					return FSlateColor(FMath::IsNearlyEqual(Style.CursorSize, Edge, 0.5f)
+						? WonderlandUi::MenuGold() : WonderlandUi::Ivory(0.55f));
+				})
+			]
+		];
+	}
+	return Row;
 }
 
 TSharedRef<SWidget> SWonderlandMenuPanel::MakeTabBar()

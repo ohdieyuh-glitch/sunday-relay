@@ -111,6 +111,8 @@ private:
 	TSharedRef<SWidget> MakeColourRow(const TCHAR* Label, const TCHAR* Note,
 		TFunction<FLinearColor()> Read, TFunction<void(FLinearColor)> Write);
 	TSharedRef<SWidget> MakeTabBar();
+	/** The pointer's shape and size, in the Colors tab. See P1 item 8. */
+	TSharedRef<SWidget> MakeCursorRow();
 
 	FSlateBrush ScrimBrush;
 	FSlateRoundedBoxBrush PanelBrush;

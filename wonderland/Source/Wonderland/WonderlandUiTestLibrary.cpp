@@ -3,6 +3,7 @@
 #include "WonderlandDemoFlow.h"
 #include "WonderlandTerritory.h"
 #include "WonderlandMascotStyle.h"
+#include "WonderlandCursor.h"
 #include "WonderlandUiStyle.h"
 #include "WonderlandSubAgentCubs.h"
 
@@ -655,4 +656,23 @@ bool UWonderlandUiTestLibrary::ReadScreenExtremes(float MinX, float MinY, float 
 		static_cast<float>(SumB / Count), 1.0f);
 	OutSampled = Count;
 	return true;
+}
+
+bool UWonderlandUiTestLibrary::PickCursor(const FString& Shape, float Size)
+{
+	UWonderlandMascotStyleSettings* Style = GetMutableDefault<UWonderlandMascotStyleSettings>();
+	if (Style == nullptr)
+	{
+		return false;
+	}
+	Style->CursorShape = Shape;
+	Style->CursorSize = Size;
+	WonderlandCursor::Forget();
+	WonderlandMascotStyle::SaveAndApply();
+	return true;
+}
+
+FString UWonderlandUiTestLibrary::GetCursorShape()
+{
+	return FString(WonderlandCursor::NameOf(WonderlandCursor::Chosen()));
 }

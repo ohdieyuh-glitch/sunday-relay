@@ -1,6 +1,6 @@
 {
  "name": "zc_snake_follow",
- "started": "2026-09-25 18:28:10",
+ "started": "2026-09-26 08:43:51",
  "status": "measured",
  "tests": [
   {
@@ -18,15 +18,15 @@
    "pass": true,
    "detail": {
     "samples_on_each_side": {
-     "front": 180,
-     "behind": 46,
-     "above": 60,
-     "below": 64
+     "front": 139,
+     "behind": 85,
+     "above": 108,
+     "below": 81
     },
     "of": 240,
     "counted_past_uu": {
-     "x": 29.4,
-     "z": 26.7
+     "x": 30.1,
+     "z": 27.3
     },
     "note": "each axis judged against its OWN reach, so a route that is naturally wider than it is tall is not failed for it"
    }
@@ -36,7 +36,7 @@
    "name": "each segment arrives where the one ahead of it has already been",
    "pass": true,
    "detail": {
-    "median_best_lag_frames": 2,
+    "median_best_lag_frames": 1,
     "segments_trailing": 45,
     "of": 45,
     "note": "the lag at which a segment best matches the one ahead. A rigid body swung on a stick matches at lag 0 and would pass every existing check"
@@ -47,34 +47,34 @@
    "name": "the tail travels its own distance rather than being dragged rigidly",
    "pass": true,
    "detail": {
-    "head_uu": 1857.9,
-    "tail_uu": 1845.7,
+    "head_uu": 2474.6,
+    "tail_uu": 2465.5,
     "note": "a rigid ring's tail travels exactly as far as its head; a real body's does not"
    }
   }
  ],
  "sides": {
-  "front": 180,
-  "behind": 46,
-  "above": 60,
-  "below": 64
+  "front": 139,
+  "behind": 85,
+  "above": 108,
+  "below": 81
  },
  "head_reach_uu": {
-  "x": 196.2,
-  "z": 178.3
+  "x": 200.7,
+  "z": 182.2
  },
  "follow_through": {
   "segments_compared": 45,
-  "median_best_lag_frames": 2,
+  "median_best_lag_frames": 1,
   "segments_trailing": 45,
-  "lag_seconds_at_median": 0.2
+  "lag_seconds_at_median": 0.1
  },
  "travel": {
-  "head_uu": 1857.9,
-  "tail_uu": 1845.7,
-  "ratio": 0.993
+  "head_uu": 2474.6,
+  "tail_uu": 2465.5,
+  "ratio": 0.996
  },
- "finished": "2026-09-25 18:28:56",
- "seconds": 46.04,
- "log": "Y00 PASS the python's body is readable segment by segment {'segments': 46, 'note': 'follow-through is a claim about the body; only the head was exposed before this'}\nY01 PASS the head goes in front, behind, above and below the brain {'samples_on_each_side': {'front': 180, 'behind': 46, 'above': 60, 'below': 64}, 'of': 240, 'counted_past_uu': {'x': 29.4, 'z': 26.7}, 'note': 'each axis judged against its OWN reach, so a route that is naturally wider than it is tall is not failed for it'}\nY02 PASS each segment arrives where the one ahead of it has already been {'median_best_lag_frames': 2, 'segments_trailing': 45, 'of': 45, 'note': 'the lag at which a segment best matches the one ahead. A rigid body swung on a stick matches at lag 0 and would pass every existing check'}\nY03 PASS the tail travels its own distance rather than being dragged rigidly {'head_uu': 1857.9, 'tail_uu': 1845.7, 'note': \"a rigid ring's tail travels exactly as far as its head; a real body's does not\"}\n"
+ "finished": "2026-09-26 08:44:47",
+ "seconds": 55.78,
+ "log": "Y00 PASS the python's body is readable segment by segment {'segments': 46, 'note': 'follow-through is a claim about the body; only the head was exposed before this'}\nY01 PASS the head goes in front, behind, above and below the brain {'samples_on_each_side': {'front': 139, 'behind': 85, 'above': 108, 'below': 81}, 'of': 240, 'counted_past_uu': {'x': 30.1, 'z': 27.3}, 'note': 'each axis judged against its OWN reach, so a route that is naturally wider than it is tall is not failed for it'}\nY02 PASS each segment arrives where the one ahead of it has already been {'median_best_lag_frames': 1, 'segments_trailing': 45, 'of': 45, 'note': 'the lag at which a segment best matches the one ahead. A rigid body swung on a stick matches at lag 0 and would pass every existing check'}\nY03 PASS the tail travels its own distance rather than being dragged rigidly {'head_uu': 2474.6, 'tail_uu': 2465.5, 'note': \"a rigid ring's tail travels exactly as far as its head; a real body's does not\"}\n"
 }

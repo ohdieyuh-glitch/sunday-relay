@@ -198,6 +198,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Test")
 	static FLinearColor GetMenuAccentColour();
 
+	/**
+	 * PICK A POINTER, exactly as the Colors tab picks one: write the setting, drop the cached choice, apply.
+	 * Dropping the cache is the half that matters -- without it the setting moves and the pointer does not.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static bool PickCursor(const FString& Shape, float Size);
+
+	/** The shape the cursor code will actually draw, not the string in the settings. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test")
+	static FString GetCursorShape();
+
 	/** The territory subsystem, so a proof can ask the world where it is and what it knows. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
 	static class UWonderlandTerritorySubsystem* GetTerritories(UObject* WorldContextObject);

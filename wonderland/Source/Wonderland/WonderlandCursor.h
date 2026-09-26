@@ -60,4 +60,13 @@ namespace WonderlandCursor
 	/** The shape currently chosen, for a proof to read back. */
 	WONDERLAND_API EWonderlandCursorShape Chosen();
 	WONDERLAND_API const TCHAR* NameOf(EWonderlandCursorShape InShape);
+
+	/**
+	 * FORGET THE CACHED CHOICE, so the next Apply reads the setting again.
+	 *
+	 * Chosen() caches on first use, which is right for a value the console sets once at startup and wrong the
+	 * moment a player can pick a pointer from the Menu: without this, choosing one changes the saved setting
+	 * and leaves the pointer on screen exactly as it was.
+	 */
+	WONDERLAND_API void Forget();
 }

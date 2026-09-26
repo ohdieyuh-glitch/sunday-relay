@@ -159,6 +159,11 @@ namespace WonderlandCursor
 		return GShape;
 	}
 
+	void Forget()
+	{
+		GShapeLoaded = false;
+	}
+
 	const TCHAR* NameOf(EWonderlandCursorShape InShape)
 	{
 		switch (InShape)
