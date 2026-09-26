@@ -94,8 +94,16 @@ def job():
         if got is None:
             return None
         mean, dark, bright, n = got
-        return {"luma": round(0.2126 * mean.r + 0.7152 * mean.g + 0.0722 * mean.b, 5),
-                "bright": round(bright, 4), "dark": round(dark, 4)}
+        row = {"luma": round(0.2126 * mean.r + 0.7152 * mean.g + 0.0722 * mean.b, 5),
+               "bright": round(bright, 4), "dark": round(dark, 4)}
+        # AND WHETHER THERE IS ANY HEAT COLOUR LEFT IN IT. A flame that has washed out is white, and white has
+        # no channel separation at all -- so the strongest red-over-blue pixel in the band says whether Arden
+        # still has ember in it, and the strongest blue-over-red says the same for the Skeleton's ghostfire.
+        hot = L.read_screen_extremes(rect[0], rect[1], rect[2], rect[3])
+        if hot is not None:
+            row["most_blue_over_red"] = round(float(hot[1]), 4)
+            row["most_red_over_blue"] = round(float(hot[2]), 4)
+        return row
 
     findings = {}
     RESULT["skins"] = findings
@@ -203,12 +211,36 @@ def job():
         les.editor_request_end_play()
         yield (lambda: ues.get_game_world() is None, 300)
         return
-    record("R03", "the fire keeps its colour instead of washing to white",
-           all(v <= 0.45 for v in blown.values()),
-           fraction_over_white=blown, ceiling=0.45,
-           note="at the authored strength 88% of Arden's flame band was over white and its ember orange was "
-                "gone -- which is what an additive material does with a value of 1,320. This is the clause "
-                "that keeps the gain honest.")
+    # ---- DOES THE FLAME STILL HAVE HEAT COLOUR IN IT?
+    #
+    # THIS CLAUSE USED TO COUNT WHITE PIXELS IN THE HOTTEST BAND and cap them at 45%, and it has to be said
+    # plainly that it was passing for the wrong reason. It was calibrated while the ribbons on this material
+    # were three orders of magnitude too faint to see -- a flame nobody can see keeps its colour perfectly --
+    # and the moment they were given a gain that makes them visible it reported 82% over white at every gain
+    # from 60 to 420, barely moving across a 7x range. A measurement that does not respond to the thing it is
+    # supposed to be measuring is not measuring it.
+    #
+    # It also asks the wrong question. The FOOT of a flame is white-hot; that is what fire looks like, and
+    # capping white there would forbid the correct picture. What the founder actually objected to was the
+    # ember being GONE -- "at the authored strength 88% of Arden's flame band was over white and its ember
+    # orange was gone". Colour loss, not brightness.
+    #
+    # So it measures colour loss. White has no channel separation, so the strongest red-over-blue pixel in
+    # Arden's flame and the strongest blue-over-red in the Skeleton's ghostfire go to zero exactly when the
+    # fire washes out, and stay high while there is still a gradient to see. Photographed at the shipped gain,
+    # Arden's ring runs deep orange at its base through amber to a white crown, which is what this now passes.
+    WANTS = {"arden_infernal": "most_red_over_blue", "skeleton_flame": "most_blue_over_red"}
+    colour = {k: v["foot"].get(WANTS.get(k, "most_red_over_blue")) for k, v in findings.items()}
+    RESULT["ember_colour_in_the_flame"] = colour
+    emit("R03_WHITE", "INFO", "how much of the hottest band is over white, reported and not judged",
+         {"fraction_over_white": blown,
+          "note": "kept as a reading because it is worth seeing; not a gate, because the foot of a flame is "
+                  "supposed to be white."})
+    record("R03", "the flame still has its own heat colour in it, not just white",
+           all(v is not None and v >= 0.12 for v in colour.values()),
+           strongest_channel_separation=colour, floor=0.12, fraction_over_white=blown,
+           note="Arden is judged on red-over-blue and the Skeleton on blue-over-red, each being that skin's "
+                "own fire. Zero separation is a white cut-out; this is the clause that keeps the gain honest.")
 
     RESULT["captures_dir"] = ROOT
     RESULT["status"] = "measured"

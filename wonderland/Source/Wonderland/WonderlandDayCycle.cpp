@@ -387,6 +387,48 @@ static float GWonderlandNightGlow = 0.20f;
  * A moon at 5% of noon sounds enormous beside a real one at a quarter of a lux, and would be, in a world
  * whose sun was also real.
  */
+/**
+ * HOW HARD A MASCOT'S EYES BURN AT NOON AND AT MIDNIGHT.
+ *
+ * FOUNDER: "Every mascot skin eyes have to be glowing even when its day time in wonderland."
+ *
+ * The eyes are the one emissive part that must not follow the rules the rest of the glow follows. In daylight
+ * a 70,000 lux sun on ivory stone and an exposure closed nearly a stop flatten an authored emissive into a
+ * painted-on square -- the eye stops reading as a light and starts reading as a colour. So it is driven ABOVE
+ * its authored value exactly when the sky is brightest, on the inverse of the curve everything else uses.
+ *
+ * And at night it is brought down only a little. wl.Look.NightGlow cuts the body's glow five-fold to stop the
+ * flames clipping, which is right for fire and wrong for eyes: they are how a Dog reads as alive and how its
+ * status is shown, and going dark with the scenery is the one thing they must not do.
+ *
+ * THESE ARE LEVELS, NOT MULTIPLIERS. A multiplier was tried and could not serve five skins at once -- see
+ * ApplyColourway.
+ *
+ * AND THEY HAVE TO BE READ AGAINST WHAT THE SKINS ALREADY AUTHOR, which is the mistake the first pass made:
+ * 6.5 looked like a big number and is BELOW every skin in the lineup -- Relay OG authors its eyes at 7.0,
+ * Arden and Apollo at 7.5, Skeleton Flame at 8.0 -- so setting that "level" changed nothing measurable on any
+ * of them and the daylight problem was untouched. 18 is well clear of all five, and past the bloom threshold
+ * by enough that an eye throws a coloured halo instead of merely being a bright square, which is what makes
+ * it read as a lamp beside sunlit stone. Apollo is the skin that needs it: pale gold eyes set in gold
+ * armour, where at the authored strength the eye cleared its own face by 0.03 at noon.
+ *
+ * 5.0 at midnight is still above four of the five authored strengths' effective night value, because the
+ * body's glow around them has been cut five-fold and the eyes deliberately have not.
+ */
+static float GWonderlandEyeDayGlow = 18.0f;
+static FAutoConsoleVariableRef GWonderlandEyeDayGlowRef(
+	TEXT("wl.Look.EyeGlowDay"),
+	GWonderlandEyeDayGlow,
+	TEXT("The emissive level a mascot's eyes are driven to at noon (an absolute, not a multiplier)."),
+	ECVF_Default);
+
+static float GWonderlandEyeNightGlow = 5.0f;
+static FAutoConsoleVariableRef GWonderlandEyeNightGlowRef(
+	TEXT("wl.Look.EyeGlowNight"),
+	GWonderlandEyeNightGlow,
+	TEXT("The emissive level a mascot's eyes are driven to at midnight."),
+	ECVF_Default);
+
 static float GWonderlandMoonGain = 0.050f;
 static FAutoConsoleVariableRef GWonderlandMoonGainRef(
 	TEXT("wl.Sky.MoonGain"),
@@ -632,9 +674,13 @@ void UWonderlandDayCycleSubsystem::ScaleGlowsForNight()
 	// daytime glow and blow out with nothing to correct it. SetNightGlow early-outs unless the value actually
 	// moved, so the steady state costs one iteration and no repaints.
 	const float Keep = FMath::Clamp(FMath::Lerp(1.0f, GWonderlandNightGlow, Nightfall), 0.05f, 1.0f);
+	// THE EYES GO THE OTHER WAY. Brightest when the sky is, which is the opposite of everything else here.
+	const float Eyes = FMath::Clamp(
+		FMath::Lerp(GWonderlandEyeDayGlow, GWonderlandEyeNightGlow, Nightfall), 0.05f, 12.0f);
 	for (TActorIterator<AWonderlandCompanionEmbodiment> It(Here); It; ++It)
 	{
 		It->SetNightGlow(Keep);
+		It->SetEyeGlow(Eyes);
 	}
 }
 

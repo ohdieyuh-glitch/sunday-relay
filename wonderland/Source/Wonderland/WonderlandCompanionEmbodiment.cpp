@@ -129,23 +129,34 @@ namespace
 	 * how the gain was found; guessing either of them costs a build.
 	 */
 	/**
-	 * WHICH SURFACE THE FLAME RIBBONS ARE DRAWN ON -- and it is OFF, which is a retreat and is recorded as one.
+	 * WHICH SURFACE THE FLAME RIBBONS ARE DRAWN ON -- and it is ON, which is the founder's P0 item 4 arriving.
 	 *
-	 * FOUNDER, 2026-09-26: "bring the flames back to the mascot skins."
+	 * FOUNDER: "believable animated Unreal fire, not plastic voxel flames ... flicker, emissive falloff,
+	 * softness/distortion, proper attachment." And then, after the first attempt at it: "bring the flames back
+	 * to the mascot skins."
 	 *
-	 * Moving the ribbons onto M_WL_Fire took the flames off the mascots entirely. Photographed with the gain
-	 * cranked to thirty -- twenty times the tuned value -- Skeleton Flame showed bone, eyes and NO ghostfire
-	 * at all: not dim, absent. The flame surface is there and reports two live sections, so the geometry is
-	 * being built and the material is not drawing it. I do not yet know why, and the founder should not be
-	 * looking at a mascot with no fire on it while I find out.
+	 * THE RETREAT AND WHY IT IS OVER. Moving the ribbons onto M_WL_Fire appeared to take the flames off the
+	 * mascots entirely, and the honest thing at the time was to put them back on the old surface and say so.
+	 * The diagnosis was wrong in an instructive way: I had concluded "the material is not drawing" from a
+	 * capture, and both halves of that were false.
 	 *
-	 * So this ships at 0: the ribbons go back to the figure's own glow material, which is what the founder
-	 * approved and has been looking at. M_WL_Fire stays in the project and stays reachable with
-	 * `wl.Look.FireMaterial 1`, because the shape work behind it is right -- the tongues are tapered, crossed
-	 * and flickering, and they carry UVs a proper fire shader can use the moment this is understood.
+	 * WHAT IT ACTUALLY WAS, read off the section rather than guessed at (DescribeFlames). Nothing structural
+	 * was broken -- two sections, visible, 768 vertices, wearing MID_M_WL_Fire, UVs running 0 to 1 exactly.
+	 * The same ribbon was simply handed Color (264.0, 89.8, 13.2) on the voxel glow and (12.4, 4.2, 0.6) here,
+	 * and the voxel glow then multiplies by a large internal emissive exposure this material has no equivalent
+	 * of, while the shape terms multiply DOWN by about six. The ribbons were always drawing, about three
+	 * orders of magnitude too faint to see -- which is exactly why cranking the gain to thirty read as "still
+	 * nothing" instead of as progress, and why the slab test that would have caught it measured empty air.
+	 *
+	 * THE COMPARISON THAT DECIDED IT, both photographed at 21:00 in one session. On the voxel glow Arden
+	 * Infernal is an opaque yellow-white plume with 63% of the figure clipped to white and no mascot visible
+	 * inside it at all -- the founder's "plastic voxel flames", precisely. On this material at the calibrated
+	 * gain the figure is 26% clipped, the Dog reads through its own fire, and the flame has an orange-to-gold
+	 * gradient, a soft edge, a taper and bands of flicker climbing it. Dimmer by the meter, and far more like
+	 * fire.
 	 */
 	TAutoConsoleVariable<int32> CVarFireMaterial(
-		TEXT("wl.Look.FireMaterial"), 0,
+		TEXT("wl.Look.FireMaterial"), 1,
 		TEXT("1 draws flame ribbons on M_WL_Fire; 0 draws them on the figure's own glow material."));
 
 	TAutoConsoleVariable<int32> CVarFireTongues(
@@ -156,12 +167,22 @@ namespace
 		TEXT("Scale on flame height and width. 1 = as the figure authored it."));
 
 	TAutoConsoleVariable<float> CVarFireGain(
-		// 1.6, SWEPT RATHER THAN CHOSEN. zc_fire_gain_sweep walks 0.12 to 6.0 in one play session -- the CVar
-		// is read at build time and wl.Look.Reglow rebuilds every figure, so no candidate costs a compile and
-		// none of them is measured at a different temperature. Below 0.8 the fire is a smudge; at 3.0 and
-		// above every tongue washes to white and Arden's ember orange is gone. At 1.6 the ribbons keep their
-		// colour, taper softly and read as flame licking off the ring.
-		TEXT("wl.Look.FireGain"), 2.3f,
+		// SWEPT RATHER THAN CHOSEN, TWICE, and the second sweep is the one that counts.
+		//
+		// The first walked 0.12 to 6.0 and concluded 1.6-2.3, which was measuring the wrong thing: at those
+		// values the ribbons are three orders of magnitude below the surface they used to be drawn on, and the
+		// whole range looked identically dark. zc_fire_calibrate walks 2.3 to 420 instead, on both flame
+		// skins, at night, against the ground beside the figure. Arden Infernal: 0.076 luma at 2.3, 0.19 at
+		// 12, 0.36 at 45, 0.49 at 140, 0.61 at 420 -- monotonic the whole way, which is what finally proved
+		// the ribbons had been drawing all along.
+		//
+		// 60, AND THE SECOND OPINION IS WHY IT IS NOT 200. The sweep above judged the whole FIGURE's rectangle,
+		// where a bright flame is averaged against a lot of unlit dog; zc_fire_look judges the FIRE's own
+		// crop, which is the harsher and more honest question -- does the flame keep its colour, or has it
+		// gone white? At 200 it answered 0.87 and 0.91 over white against a 0.45 ceiling: washed out. The two
+		// instruments do not disagree, they are asking about different rectangles, and the tighter one
+		// governs, because a flame that is white in close-up is the plastic look however good the wide shot is.
+		TEXT("wl.Look.FireGain"), 60.0f,
 		TEXT("Brightness of a flame ribbon on M_WL_Fire, against the square root of its authored strength."));
 
 	TAutoConsoleVariable<float> CVarFlameDim(
@@ -344,6 +365,7 @@ void AWonderlandCompanionEmbodiment::ClearBody()
 	PartNames.Reset();
 	MaterialInstances.Reset();
 	FlameMaterialInstances.Reset();
+	FlameRestColours.Reset();
 	BuiltMaterials.Reset();
 	Motions.Reset();
 	// THE FIRE GOES OUT WITH THE BODY THAT WAS BURNING.
@@ -574,11 +596,14 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 				Full->SetVectorParameterValue(TEXT("EmissiveColor"), FullEmissive);
 				Full->SetVectorParameterValue(TEXT("BaseColor"), FullEmissive);
 				Full->SetScalarParameterValue(TEXT("EmissiveStrength"), FlameStrength);
-				ApplyColourway(Index, Full, Def, FullEmissive, FullEmissive);
+				ApplyColourway(Index, Full, Def, FullEmissive, FullEmissive, /*bFlameTwin=*/true);
 				Flame = Full;
 			}
 		}
 		FlameMaterialInstances.Add(Flame);
+		// Grown in step so the index that addresses an instance addresses its rest colour too. The value is
+		// written by ApplyColourway a moment later for anything that actually glows.
+		FlameRestColours.Add(FLinearColor::Black);
 	}
 
 	for (const FWonderlandCompanionPart& Def : Figure.Parts)
@@ -947,6 +972,57 @@ void AWonderlandCompanionEmbodiment::SetGlowScale(float Scale)
 	RepaintColourway();
 }
 
+FString AWonderlandCompanionEmbodiment::DescribeFlames() const
+{
+	if (FlameSurface == nullptr)
+	{
+		return TEXT("no flame surface");
+	}
+	FString Out = FString::Printf(TEXT("sections=%d flameMids=%d sources=%d "),
+		FlameSurface->GetNumSections(), FlameMaterialInstances.Num(), FlameSources.Num());
+	for (int32 Slot = 0; Slot < FlameSurface->GetNumSections(); ++Slot)
+	{
+		const FProcMeshSection* Section = FlameSurface->GetProcMeshSection(Slot);
+		UMaterialInterface* Worn = FlameSurface->GetMaterial(Slot);
+		FLinearColor Colour = FLinearColor::Black;
+		FString WornName = TEXT("none");
+		if (Worn != nullptr)
+		{
+			WornName = Worn->GetName();
+			if (const UMaterialInstanceDynamic* Mid = Cast<UMaterialInstanceDynamic>(Worn))
+			{
+				Mid->GetVectorParameterValue(FMaterialParameterInfo(TEXT("Color")), Colour);
+				if (const UMaterialInterface* Master = Mid->Parent)
+				{
+					WornName += TEXT("<") + Master->GetName() + TEXT(">");
+				}
+			}
+		}
+		Out += FString::Printf(TEXT("| [%d] verts=%d tris=%d visible=%d mat=%s colour=(%.2f,%.2f,%.2f) "),
+			Slot,
+			Section != nullptr ? Section->ProcVertexBuffer.Num() : -1,
+			Section != nullptr ? Section->ProcIndexBuffer.Num() / 3 : -1,
+			Section != nullptr ? (Section->bSectionVisible ? 1 : 0) : -1,
+			*WornName, Colour.R, Colour.G, Colour.B);
+	}
+	return Out;
+}
+
+void AWonderlandCompanionEmbodiment::SetEyeGlow(float Scale)
+{
+	if (!bExposureAware)
+	{
+		return;
+	}
+	const float Wanted = FMath::Clamp(Scale, 0.05f, 12.0f);
+	if (FMath::IsNearlyEqual(EyeGlowScale, Wanted, 0.004f))
+	{
+		return;
+	}
+	EyeGlowScale = Wanted;
+	RepaintColourway();
+}
+
 void AWonderlandCompanionEmbodiment::SetNightGlow(float Scale)
 {
 	if (!bExposureAware)
@@ -963,7 +1039,8 @@ void AWonderlandCompanionEmbodiment::SetNightGlow(float Scale)
 }
 
 void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMaterialInstanceDynamic* Instance,
-	const FWonderlandCompanionMaterial& Def, const FLinearColor& Lit, const FLinearColor& Emissive)
+	const FWonderlandCompanionMaterial& Def, const FLinearColor& Lit, const FLinearColor& Emissive,
+	bool bFlameTwin)
 {
 	if (Instance == nullptr)
 	{
@@ -1001,10 +1078,38 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 	// AND HOW HARD IT BURNS AGAINST THE SKY, which is the clock's business rather than the wardrobe's. The two
 	// factors are multiplied and never assigned over one another: a preview figure at 0.10 stays at 0.10 all
 	// night. See SetNightGlow.
-	FLinearColor Want = bGlows ? Authored * GlowScale * NightGlowScale : Authored;
+	//
+	// THE EYES ARE ON THEIR OWN CURVE AND TAKE NEITHER OF THE OTHER TWO SKY FACTORS. The founder asked for
+	// them to be glowing at every hour, and the night correction -- right for fire and halos -- would cut
+	// them five-fold exactly when the rest of the figure goes dark too. See SetEyeGlow.
+	const EWonderlandColorChannel Channel = WonderlandMascotStyle::ChannelFor(Def.Name.ToString());
+	const bool bIsEye = Channel == EWonderlandColorChannel::Eye;
+	FLinearColor Want = Authored;
+	if (bGlows && !bIsEye)
+	{
+		Want = Authored * GlowScale * NightGlowScale;
+	}
+	else if (bGlows)
+	{
+		// ---- AN EYE IS DRIVEN TO A LEVEL, NOT MULTIPLIED BY ONE, AND THE SWEEP IS WHY.
+		//
+		// A single multiplier was tried first and cannot work here, because the five skins author their eyes
+		// across a huge range. Measured at noon at 3.2x: Relay OG's eyes sat 0.54 above its face and were not
+		// clipped at all, Apollo's cleared its bright gold armour by 0.03, and Arden's and Celestial Light's
+		// were 100% blown to white. Multiplying moves all five and fixes none -- the dim one needs more and
+		// the bright ones need less, from the same knob.
+		//
+		// So the hue is kept and the BRIGHTNESS IS REPLACED. Every skin's eyes then land at the same
+		// deliberately chosen level, which is not merely convenient: the eyes are a status indicator, and a
+		// status light that is twenty times brighter on one costume than another is a worse instrument than
+		// one that reads the same everywhere. The founder's SECONDARY colour still shows, because only the
+		// magnitude is taken -- the direction through the colour cube is the skin's own.
+		const float Peak = FMath::Max3(Authored.R, FMath::Max(Authored.G, Authored.B), KINDA_SMALL_NUMBER);
+		Want = (Authored / Peak) * EyeGlowScale * GlowScale;
+	}
 	if (bChosen)
 	{
-		switch (WonderlandMascotStyle::ChannelFor(Def.Name.ToString()))
+		switch (Channel)
 		{
 		case EWonderlandColorChannel::Body: Want *= Primary;   break;
 		case EWonderlandColorChannel::Eye:  Want *= Secondary; break;
@@ -1033,6 +1138,18 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 
 	// AND THE PULSE REMEMBERS THE NEW REST. The glow animator drives Color from a remembered rest colour; left
 	// alone it would put the old one back on the next frame and the recolour would last exactly one tick.
+	//
+	// EACH INSTANCE REMEMBERS ITS OWN. The two share a material index, so writing both into GlowMaterials::Rest
+	// meant the flame twin's value -- far brighter, because a ribbon is fed the untamed colour -- landed on
+	// the body and the animator then drove the shell at flame brightness. See the bFlameTwin parameter.
+	if (bFlameTwin)
+	{
+		if (FlameRestColours.IsValidIndex(MaterialIndex))
+		{
+			FlameRestColours[MaterialIndex] = Want;
+		}
+		return;
+	}
 	for (FGlowMaterial& Glow : GlowMaterials)
 	{
 		if (Glow.MaterialIndex == MaterialIndex && Glow.Parameter == TEXT("Color"))
@@ -1061,7 +1178,7 @@ void AWonderlandCompanionEmbodiment::RepaintColourway()
 		{
 			const FLinearColor Full = Lit * FMath::Max(Def.Strength, 0.0f)
 				* FMath::Clamp(CVarFlameDim.GetValueOnAnyThread(), 0.05f, 4.0f);
-			ApplyColourway(Index, FlameMaterialInstances[Index], Def, Full, Full);
+			ApplyColourway(Index, FlameMaterialInstances[Index], Def, Full, Full, /*bFlameTwin=*/true);
 		}
 	}
 }
@@ -1992,12 +2109,25 @@ void AWonderlandCompanionEmbodiment::Animate(float TimeSeconds)
 	const float ShallowBeat = 0.62f + 0.38f * Shaped;
 	for (const FGlowMaterial& Glow : GlowMaterials)
 	{
+		const float Amount = bHasHeartbeat
+			? (Glow.bHeartbeat ? DeepBeat : ShallowBeat)
+			: Pulse;
 		if (MaterialInstances.IsValidIndex(Glow.MaterialIndex) && MaterialInstances[Glow.MaterialIndex] != nullptr)
 		{
-			const float Amount = bHasHeartbeat
-				? (Glow.bHeartbeat ? DeepBeat : ShallowBeat)
-				: Pulse;
 			MaterialInstances[Glow.MaterialIndex]->SetVectorParameterValue(Glow.Parameter, Glow.Rest * Amount);
+		}
+		// AND THE RIBBON THAT GROWS OUT OF IT, on the same clock at the same depth. The ribbons are the only
+		// part of Skeleton Flame visible from directly behind -- the chest skull faces forward -- so without
+		// this the Dog has no heartbeat at all from half the angles it can be looked at from. See
+		// FlameRestColours.
+		if (Glow.Parameter == TEXT("Color")
+			&& FlameMaterialInstances.IsValidIndex(Glow.MaterialIndex)
+			&& FlameMaterialInstances[Glow.MaterialIndex] != nullptr
+			&& FlameMaterialInstances[Glow.MaterialIndex] != MaterialInstances[Glow.MaterialIndex]
+			&& FlameRestColours.IsValidIndex(Glow.MaterialIndex))
+		{
+			FlameMaterialInstances[Glow.MaterialIndex]->SetVectorParameterValue(
+				TEXT("Color"), FlameRestColours[Glow.MaterialIndex] * Amount);
 		}
 	}
 }

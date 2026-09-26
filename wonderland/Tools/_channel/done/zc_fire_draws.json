@@ -1,0 +1,68 @@
+{
+ "name": "zc_fire_draws",
+ "started": "2026-09-26 11:25:14",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "D00",
+   "name": "there is a territory checkpoint in the world to dress",
+   "pass": true,
+   "detail": {
+    "label": "WL_Checkpoint_golden_arrival",
+    "metres": 8.8
+   }
+  },
+  {
+   "id": "D01",
+   "name": "the readings came back",
+   "pass": true,
+   "detail": {
+    "before": {
+     "luma": 0.0945,
+     "bright": 0.0
+    },
+    "wearing": {
+     "luma": 0.1598,
+     "bright": 0.0
+    }
+   }
+  },
+  {
+   "id": "D02",
+   "name": "M_WL_Fire draws something on a mesh with ordinary UVs",
+   "pass": false,
+   "detail": {
+    "wearing": {
+     "luma": 0.1598,
+     "bright": 0.0
+    },
+    "before": {
+     "luma": 0.0945,
+     "bright": 0.0
+    },
+    "instances": 3,
+    "note": "additive and unlit: this material can only ever show its emissive. If an engine cube wearing it is black, the emissive is not connected and the ribbons were never the problem."
+   }
+  }
+ ],
+ "dressed": "WL_Checkpoint_golden_arrival",
+ "metres_away": 8.8,
+ "components": [
+  "Stone",
+  "Ivory",
+  "Glow"
+ ],
+ "instances_made": 3,
+ "before": {
+  "luma": 0.0945,
+  "bright": 0.0
+ },
+ "wearing_the_fire": {
+  "luma": 0.1598,
+  "bright": 0.0
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\fire_draws",
+ "finished": "2026-09-26 11:25:47",
+ "seconds": 32.98,
+ "log": "D00 PASS there is a territory checkpoint in the world to dress {'label': 'WL_Checkpoint_golden_arrival', 'metres': 8.8}\nD_READ INFO the pylon before and while wearing M_WL_Fire {'before': {'luma': 0.0945, 'bright': 0.0}, 'wearing': {'luma': 0.1598, 'bright': 0.0}}\nD01 PASS the readings came back {'before': {'luma': 0.0945, 'bright': 0.0}, 'wearing': {'luma': 0.1598, 'bright': 0.0}}\nD02 FAIL M_WL_Fire draws something on a mesh with ordinary UVs {'wearing': {'luma': 0.1598, 'bright': 0.0}, 'before': {'luma': 0.0945, 'bright': 0.0}, 'instances': 3, 'note': 'additive and unlit: this material can only ever show its emissive. If an engine cube wearing it is black, the emissive is not connected and the ribbons were never the problem.'}\n"
+}

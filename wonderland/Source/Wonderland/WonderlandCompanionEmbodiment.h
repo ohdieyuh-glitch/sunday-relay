@@ -128,6 +128,33 @@ public:
 	void SetNightGlow(float Scale);
 
 	/**
+	 * HOW HARD THE EYES BURN, WHICH IS A DIFFERENT QUESTION FROM HOW HARD THE FIRE BURNS.
+	 *
+	 * FOUNDER: "Every mascot skin eyes have to be glowing even when its day time in wonderland."
+	 *
+	 * The eyes are the one part of a mascot that has to read as LIT rather than as coloured, at every hour,
+	 * because they are how a Dog looks alive and how its status is shown. Everything else that glows is
+	 * scenery and can fade into a bright afternoon; the eyes cannot. They are driven on their own curve --
+	 * brighter than authored in full daylight, where a 70,000 lux sun and a closed exposure would otherwise
+	 * flatten them into painted-on squares, and only gently brought down at night rather than taking the same
+	 * five-fold cut the body's glow takes. See SetNightGlow for the correction this one deliberately opts out
+	 * of.
+	 */
+	void SetEyeGlow(float Scale);
+
+	/**
+	 * WHAT THE FLAME SURFACE IS ACTUALLY WEARING, SECTION BY SECTION.
+	 *
+	 * Moving the ribbons onto M_WL_Fire took the flames off the mascots and three explanations have now been
+	 * offered for it without evidence. What is known: the material draws -- an engine cube wearing it lifted
+	 * a checkpoint pylon by 0.065 luma -- and the ribbons do not. Everything between those two facts is the
+	 * section: how many vertices it has, which material landed on it, and what colour that material was
+	 * given. None of it has ever been read.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	FString DescribeFlames() const;
+
+	/**
 	 * Whether the clock is allowed to touch this body's glow at all. False for the wardrobe's preview figure,
 	 * which stands on its own black stage under its own light: a preview that got dimmer after sunset would
 	 * be reporting the weather rather than the skin.
@@ -432,8 +459,18 @@ private:
 	 * comes from BodyRole; which CHANNELS it may touch comes from WonderlandMascotStyle::ChannelFor; and the
 	 * chosen colour is MULTIPLIED over the authored one so a skin keeps its own light and shade.
 	 */
+	/**
+	 * @param bFlameTwin  true when painting a ribbon's own brighter instance rather than the body's.
+	 *
+	 * IT MATTERS BECAUSE OF WHAT THE ANIMATOR REMEMBERS. Painting ends by writing the new colour back into
+	 * FGlowMaterial::Rest, so the pulse beats around the new rest instead of putting the old one back on the
+	 * next tick. Both instances for a material share an index, so painting the flame twin was overwriting the
+	 * BODY's remembered rest with the flame's much brighter value -- and the animator then drove the body's
+	 * glow at flame brightness every frame after a repaint.
+	 */
 	void ApplyColourway(int32 MaterialIndex, class UMaterialInstanceDynamic* Instance,
-		const FWonderlandCompanionMaterial& Def, const FLinearColor& Lit, const FLinearColor& Emissive);
+		const FWonderlandCompanionMaterial& Def, const FLinearColor& Lit, const FLinearColor& Emissive,
+		bool bFlameTwin = false);
 	void ClearBody();
 	FVector DesiredLocation(const APawn* Pawn) const;
 	void Animate(float TimeSeconds);
@@ -476,6 +513,18 @@ private:
 	// access violation at address zero. MaterialInstances directly above has always had it.
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> FlameMaterialInstances;
+
+	/**
+	 * WHAT EACH FLAME TWIN'S COLOUR RESTS AT, so the heartbeat can beat it as well.
+	 *
+	 * The animator only ever drove MaterialInstances, so the ribbons -- which are the part of Skeleton Flame
+	 * you can see from behind -- never actually beat. They appeared to, because the old flat glow material
+	 * was emissive enough to strobe the whole area through Lumen and the measurement picked THAT up: with the
+	 * ribbons on a properly shaped fire material the cyan swing behind the Dog fell from 0.081 to 0.0001 while
+	 * the front stayed put. The comment above the animator has always said the ghostfire pulses with the
+	 * skull. This is what makes that true rather than incidental.
+	 */
+	TArray<FLinearColor> FlameRestColours;
 
 	/** One support pulse, travelling from this companion into the Contract. */
 	struct FSupportPulse
@@ -633,6 +682,9 @@ private:
 
 	/** See SetNightGlow. 1 is noon; the day cycle drives it down towards NightGlowFloor after dark. */
 	float NightGlowScale = 1.0f;
+
+	/** See SetEyeGlow. Above 1 in daylight, mildly below it at night. */
+	float EyeGlowScale = 1.0f;
 
 	/** See SetExposureAware. */
 	bool bExposureAware = true;

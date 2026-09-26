@@ -105,10 +105,34 @@ def job():
         bearing = math.radians(yaw + ANGLE)
         # BACK FAR ENOUGH TO SEE A DOG. At 300 uu and 48 degrees the figure filled the frame and its own
         # emissive bloom washed the photograph white -- readable as numbers, useless as evidence.
-        eye = unreal.Vector(here.x + math.cos(bearing) * 640.0,
-                            here.y + math.sin(bearing) * 640.0,
+        # ---- AND NOT INSIDE A WALL.
+        #
+        # THE BUG THIS FIXES: at the Arrival Gate the 180-degree station lands 6.4 m behind the Dog and
+        # squarely inside the plaza masonry. Photographed, the "back" frames are a flat navy wall with no Dog
+        # in them at all -- so the cyan swing behind the Dog read 0.0002, P02 and P04 failed, and the reading
+        # was of brickwork. P01 said the chest was "in frame" throughout, because projecting a point onto the
+        # screen says nothing about whether anything can be SEEN there.
+        #
+        # So the eye is pulled in to the first thing between it and the Dog. A shorter shot of the right
+        # subject beats a long shot of a wall.
+        aim = unreal.Vector(here.x, here.y, here.z + 25.0)
+        reach = 640.0
+        for candidate in (640.0, 520.0, 420.0, 330.0, 260.0, 200.0):
+            spot = unreal.Vector(here.x + math.cos(bearing) * candidate,
+                                 here.y + math.sin(bearing) * candidate, here.z + 95.0)
+            hit = unreal.SystemLibrary.line_trace_single(
+                world, spot, aim, unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [dog],
+                unreal.DrawDebugTrace.NONE, True, unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
+            if hit is None:
+                reach = candidate
+                break
+        else:
+            reach = 200.0
+        globals()["_REACH"] = reach
+        eye = unreal.Vector(here.x + math.cos(bearing) * reach,
+                            here.y + math.sin(bearing) * reach,
                             here.z + 95.0)
-        L.pose_camera(world, eye, unreal.Vector(here.x, here.y, here.z + 25.0), 36.0)
+        L.pose_camera(world, eye, aim, 36.0)
         yield 1.2
         chest, head, when = [], [], []
         # THE WORLD'S OWN CLOCK, not the sample index: the samples are spaced by a yield, which is spaced by a

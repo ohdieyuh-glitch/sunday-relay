@@ -1,0 +1,29 @@
+{
+ "name": "zc_flame_sections",
+ "started": "2026-09-26 11:30:55",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "S00",
+   "name": "the flame surface reported on both paths",
+   "pass": true,
+   "detail": {
+    "said": {
+     "FireMaterial 0 / arden_infernal": "sections=2 flameMids=12 sources=3 | [0] verts=768 tris=1344 visible=1 mat=MID_M_WL_VoxelGlow_11<M_WL_VoxelGlow> colour=(264.00,89.76,13.20) | [1] verts=768 tris=1344 visible=1 mat=MID_M_WL_VoxelGlow_13<M_WL_VoxelGlow> colour=(440.00,316.80,96.80) ",
+     "FireMaterial 0 / skeleton_flame": "sections=2 flameMids=9 sources=6 | [0] verts=1536 tris=2688 visible=1 mat=MID_M_WL_VoxelGlow_25<M_WL_VoxelGlow> colour=(67.76,215.60,308.00) | [1] verts=1536 tris=2688 visible=1 mat=MID_M_WL_VoxelGlow_27<M_WL_VoxelGlow> colour=(380.16,496.32,528.00) ",
+     "FireMaterial 1 / arden_infernal": "sections=2 flameMids=12 sources=3 | [0] verts=768 tris=1344 visible=1 mat=MID_M_WL_Fire_5<M_WL_Fire> colour=(12.39,4.21,0.62) | [1] verts=768 tris=1344 visible=1 mat=MID_M_WL_Fire_6<M_WL_Fire> colour=(16.00,11.52,3.52) ",
+     "FireMaterial 1 / skeleton_flame": "sections=2 flameMids=9 sources=6 | [0] verts=1536 tris=2688 visible=1 mat=MID_M_WL_Fire_12<M_WL_Fire> colour=(2.95,9.37,13.39) | [1] verts=1536 tris=2688 visible=1 mat=MID_M_WL_Fire_13<M_WL_Fire> colour=(12.62,16.48,17.53) "
+    }
+   }
+  }
+ ],
+ "flames": {
+  "FireMaterial 0 / arden_infernal": "sections=2 flameMids=12 sources=3 | [0] verts=768 tris=1344 visible=1 mat=MID_M_WL_VoxelGlow_11<M_WL_VoxelGlow> colour=(264.00,89.76,13.20) | [1] verts=768 tris=1344 visible=1 mat=MID_M_WL_VoxelGlow_13<M_WL_VoxelGlow> colour=(440.00,316.80,96.80) ",
+  "FireMaterial 0 / skeleton_flame": "sections=2 flameMids=9 sources=6 | [0] verts=1536 tris=2688 visible=1 mat=MID_M_WL_VoxelGlow_25<M_WL_VoxelGlow> colour=(67.76,215.60,308.00) | [1] verts=1536 tris=2688 visible=1 mat=MID_M_WL_VoxelGlow_27<M_WL_VoxelGlow> colour=(380.16,496.32,528.00) ",
+  "FireMaterial 1 / arden_infernal": "sections=2 flameMids=12 sources=3 | [0] verts=768 tris=1344 visible=1 mat=MID_M_WL_Fire_5<M_WL_Fire> colour=(12.39,4.21,0.62) | [1] verts=768 tris=1344 visible=1 mat=MID_M_WL_Fire_6<M_WL_Fire> colour=(16.00,11.52,3.52) ",
+  "FireMaterial 1 / skeleton_flame": "sections=2 flameMids=9 sources=6 | [0] verts=1536 tris=2688 visible=1 mat=MID_M_WL_Fire_12<M_WL_Fire> colour=(2.95,9.37,13.39) | [1] verts=1536 tris=2688 visible=1 mat=MID_M_WL_Fire_13<M_WL_Fire> colour=(12.62,16.48,17.53) "
+ },
+ "finished": "2026-09-26 11:31:55",
+ "seconds": 60.76,
+ "log": "S INFO FireMaterial 0 / arden_infernal {'flames': 'sections=2 flameMids=12 sources=3 | [0] verts=768 tris=1344 visible=1 mat=MID_M_WL_VoxelGlow_11<M_WL_VoxelGlow> colour=(264.00,89.76,13.20) | [1] verts=768 tris=1344 visible=1 mat=MID_M_WL_VoxelGlow_13<M_WL_VoxelGlow> colour=(440.00,316.80,96.80) '}\nS INFO FireMaterial 0 / skeleton_flame {'flames': 'sections=2 flameMids=9 sources=6 | [0] verts=1536 tris=2688 visible=1 mat=MID_M_WL_VoxelGlow_25<M_WL_VoxelGlow> colour=(67.76,215.60,308.00) | [1] verts=1536 tris=2688 visible=1 mat=MID_M_WL_VoxelGlow_27<M_WL_VoxelGlow> colour=(380.16,496.32,528.00) '}\nS INFO FireMaterial 1 / arden_infernal {'flames': 'sections=2 flameMids=12 sources=3 | [0] verts=768 tris=1344 visible=1 mat=MID_M_WL_Fire_5<M_WL_Fire> colour=(12.39,4.21,0.62) | [1] verts=768 tris=1344 visible=1 mat=MID_M_WL_Fire_6<M_WL_Fire> colour=(16.00,11.52,3.52) '}\nS INFO FireMaterial 1 / skeleton_flame {'flames': 'sections=2 flameMids=9 sources=6 | [0] verts=1536 tris=2688 visible=1 mat=MID_M_WL_Fire_12<M_WL_Fire> colour=(2.95,9.37,13.39) | [1] verts=1536 tris=2688 visible=1 mat=MID_M_WL_Fire_13<M_WL_Fire> colour=(12.62,16.48,17.53) '}\nS00 PASS the flame surface reported on both paths {'said': {'FireMaterial 0 / arden_infernal': 'sections=2 flameMids=12 sources=3 | [0] verts=768 tris=1344 visible=1 mat=MID_M_WL_VoxelGlow_11<M_WL_VoxelGlow> colour=(264.00,89.76,13.20) | [1] verts=768 tris=1344 visible=1 mat=MID_M_WL_VoxelGlow_13<M_WL_VoxelGlow> colour=(440.00,316.80,96.80) ', 'FireMaterial 0 / skeleton_flame': 'sections=2 flameMids=9 sources=6 | [0] verts=1536 tris=2688 visible=1 mat=MID_M_WL_VoxelGlow_25<M_WL_VoxelGlow> colour=(67.76,215.60,308.00) | [1] verts=1536 tris=2688 visible=1 mat=MID_M_WL_VoxelGlow_27<M_WL_VoxelGlow> colour=(380.16,496.32,528.00) ', 'FireMaterial 1 / arden_infernal': 'sections=2 flameMids=12 sources=3 | [0] verts=768 tris=1344 visible=1 mat=MID_M_WL_Fire_5<M_WL_Fire> colour=(12.39,4.21,0.62) | [1] verts=768 tris=1344 visible=1 mat=MID_M_WL_Fire_6<M_WL_Fire> colour=(16.00,11.52,3.52) ', 'FireMaterial 1 / skeleton_flame': 'sections=2 flameMids=9 sources=6 | [0] verts=1536 tris=2688 visible=1 mat=MID_M_WL_Fire_12<M_WL_Fire> colour=(2.95,9.37,13.39) | [1] verts=1536 tris=2688 visible=1 mat=MID_M_WL_Fire_13<M_WL_Fire> colour=(12.62,16.48,17.53) '}}\n"
+}

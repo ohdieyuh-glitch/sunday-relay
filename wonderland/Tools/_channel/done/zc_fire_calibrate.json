@@ -1,0 +1,260 @@
+{
+ "name": "zc_fire_calibrate",
+ "started": "2026-09-26 11:34:29",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "C00",
+   "name": "every gain was photographed for both skins",
+   "pass": true,
+   "detail": {
+    "read": 10,
+    "wanted": 10
+   }
+  },
+  {
+   "id": "C01",
+   "name": "the gain reaches the ribbons on the fire material",
+   "pass": true,
+   "detail": {
+    "lowest": {
+     "arden_infernal": 0.076,
+     "skeleton_flame": 0.0479
+    },
+    "highest": {
+     "arden_infernal": 0.6076,
+     "skeleton_flame": 0.5566
+    },
+    "note": "if the top of this sweep does not out-read the bottom, the ribbons are not being fed at all and the fault is not brightness"
+   }
+  },
+  {
+   "id": "C02",
+   "name": "there is a gain where both flame skins read as fire on M_WL_Fire",
+   "pass": false,
+   "detail": {
+    "per_skin": {
+     "arden_infernal": [
+      140.0
+     ],
+     "skeleton_flame": []
+    },
+    "both": [],
+    "table": {
+     "arden_infernal": {
+      "2.3": {
+       "figure": 0.076,
+       "blown": 0.015,
+       "over": -0.0169
+      },
+      "12.0": {
+       "figure": 0.1913,
+       "blown": 0.0496,
+       "over": -0.0029
+      },
+      "45.0": {
+       "figure": 0.3629,
+       "blown": 0.0769,
+       "over": 0.0133
+      },
+      "140.0": {
+       "figure": 0.4924,
+       "blown": 0.2627,
+       "over": 0.0855
+      },
+      "420.0": {
+       "figure": 0.6076,
+       "blown": 0.5154,
+       "over": 0.0893
+      }
+     },
+     "skeleton_flame": {
+      "2.3": {
+       "figure": 0.0479,
+       "blown": 0.0125,
+       "over": -0.0594
+      },
+      "12.0": {
+       "figure": 0.1328,
+       "blown": 0.0125,
+       "over": -0.0318
+      },
+      "45.0": {
+       "figure": 0.3451,
+       "blown": 0.0376,
+       "over": -0.0107
+      },
+      "140.0": {
+       "figure": 0.4328,
+       "blown": 0.0799,
+       "over": 0.0459
+      },
+      "420.0": {
+       "figure": 0.5566,
+       "blown": 0.4914,
+       "over": 0.0423
+      }
+     }
+    },
+    "legacy": {
+     "arden_infernal": {
+      "figure": 0.7415,
+      "blown": 0.6315,
+      "ground": 0.3973
+     },
+     "skeleton_flame": {
+      "figure": 0.4559,
+      "blown": 0.16,
+      "ground": 0.389
+     }
+    },
+    "note": "over-ground above 0.06 means the figure is plainly burning; blown at or under 0.30 means it is fire and not a white cut-out. The legacy row is what the founder has been looking at."
+   }
+  }
+ ],
+ "by_skin": {
+  "arden_infernal": {
+   "2.3": {
+    "figure": 0.076,
+    "blown": 0.015,
+    "ground": 0.0929,
+    "over_ground": -0.0169
+   },
+   "12.0": {
+    "figure": 0.1913,
+    "blown": 0.0496,
+    "ground": 0.1942,
+    "over_ground": -0.0029
+   },
+   "45.0": {
+    "figure": 0.3629,
+    "blown": 0.0769,
+    "ground": 0.3496,
+    "over_ground": 0.0133
+   },
+   "140.0": {
+    "figure": 0.4924,
+    "blown": 0.2627,
+    "ground": 0.4069,
+    "over_ground": 0.0855
+   },
+   "420.0": {
+    "figure": 0.6076,
+    "blown": 0.5154,
+    "ground": 0.5183,
+    "over_ground": 0.0893
+   }
+  },
+  "skeleton_flame": {
+   "2.3": {
+    "figure": 0.0479,
+    "blown": 0.0125,
+    "ground": 0.1073,
+    "over_ground": -0.0594
+   },
+   "12.0": {
+    "figure": 0.1328,
+    "blown": 0.0125,
+    "ground": 0.1646,
+    "over_ground": -0.0318
+   },
+   "45.0": {
+    "figure": 0.3451,
+    "blown": 0.0376,
+    "ground": 0.3558,
+    "over_ground": -0.0107
+   },
+   "140.0": {
+    "figure": 0.4328,
+    "blown": 0.0799,
+    "ground": 0.3869,
+    "over_ground": 0.0459
+   },
+   "420.0": {
+    "figure": 0.5566,
+    "blown": 0.4914,
+    "ground": 0.5143,
+    "over_ground": 0.0423
+   }
+  }
+ },
+ "legacy": {
+  "arden_infernal": {
+   "figure": 0.7415,
+   "blown": 0.6315,
+   "ground": 0.3973
+  },
+  "skeleton_flame": {
+   "figure": 0.4559,
+   "blown": 0.16,
+   "ground": 0.389
+  }
+ },
+ "rungs_reading_as_fire": {
+  "arden_infernal": [
+   140.0
+  ],
+  "skeleton_flame": []
+ },
+ "table": {
+  "arden_infernal": {
+   "2.3": {
+    "figure": 0.076,
+    "blown": 0.015,
+    "over": -0.0169
+   },
+   "12.0": {
+    "figure": 0.1913,
+    "blown": 0.0496,
+    "over": -0.0029
+   },
+   "45.0": {
+    "figure": 0.3629,
+    "blown": 0.0769,
+    "over": 0.0133
+   },
+   "140.0": {
+    "figure": 0.4924,
+    "blown": 0.2627,
+    "over": 0.0855
+   },
+   "420.0": {
+    "figure": 0.6076,
+    "blown": 0.5154,
+    "over": 0.0893
+   }
+  },
+  "skeleton_flame": {
+   "2.3": {
+    "figure": 0.0479,
+    "blown": 0.0125,
+    "over": -0.0594
+   },
+   "12.0": {
+    "figure": 0.1328,
+    "blown": 0.0125,
+    "over": -0.0318
+   },
+   "45.0": {
+    "figure": 0.3451,
+    "blown": 0.0376,
+    "over": -0.0107
+   },
+   "140.0": {
+    "figure": 0.4328,
+    "blown": 0.0799,
+    "over": 0.0459
+   },
+   "420.0": {
+    "figure": 0.5566,
+    "blown": 0.4914,
+    "over": 0.0423
+   }
+  }
+ },
+ "works_for_both_skins": [],
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\fire_calibrate",
+ "finished": "2026-09-26 11:36:56",
+ "seconds": 147.46,
+ "log": "C_LEGACY_arden_infernal INFO arden_infernal on the legacy voxel glow {'figure': 0.7415, 'blown': 0.6315, 'ground': 0.3973}\nC_LEGACY_skeleton_flame INFO skeleton_flame on the legacy voxel glow {'figure': 0.4559, 'blown': 0.16, 'ground': 0.389}\nC_arden_infernal INFO arden_infernal {'2.3': {'figure': 0.076, 'blown': 0.015, 'ground': 0.0929, 'over_ground': -0.0169}, '12.0': {'figure': 0.1913, 'blown': 0.0496, 'ground': 0.1942, 'over_ground': -0.0029}, '45.0': {'figure': 0.3629, 'blown': 0.0769, 'ground': 0.3496, 'over_ground': 0.0133}, '140.0': {'figure': 0.4924, 'blown': 0.2627, 'ground': 0.4069, 'over_ground': 0.0855}, '420.0': {'figure': 0.6076, 'blown': 0.5154, 'ground': 0.5183, 'over_ground': 0.0893}}\nC_skeleton_flame INFO skeleton_flame {'2.3': {'figure': 0.0479, 'blown': 0.0125, 'ground': 0.1073, 'over_ground': -0.0594}, '12.0': {'figure': 0.1328, 'blown': 0.0125, 'ground': 0.1646, 'over_ground': -0.0318}, '45.0': {'figure': 0.3451, 'blown': 0.0376, 'ground': 0.3558, 'over_ground': -0.0107}, '140.0': {'figure': 0.4328, 'blown': 0.0799, 'ground': 0.3869, 'over_ground': 0.0459}, '420.0': {'figure': 0.5566, 'blown': 0.4914, 'ground': 0.5143, 'over_ground': 0.0423}}\nC00 PASS every gain was photographed for both skins {'read': 10, 'wanted': 10}\nC01 PASS the gain reaches the ribbons on the fire material {'lowest': {'arden_infernal': 0.076, 'skeleton_flame': 0.0479}, 'highest': {'arden_infernal': 0.6076, 'skeleton_flame': 0.5566}, 'note': 'if the top of this sweep does not out-read the bottom, the ribbons are not being fed at all and the fault is not brightness'}\nC_TABLE INFO figure / blown / over-ground by gain {'arden_infernal': {'2.3': {'figure': 0.076, 'blown': 0.015, 'over': -0.0169}, '12.0': {'figure': 0.1913, 'blown': 0.0496, 'over': -0.0029}, '45.0': {'figure': 0.3629, 'blown': 0.0769, 'over': 0.0133}, '140.0': {'figure': 0.4924, 'blown': 0.2627, 'over': 0.0855}, '420.0': {'figure': 0.6076, 'blown': 0.5154, 'over': 0.0893}}, 'skeleton_flame': {'2.3': {'figure': 0.0479, 'blown': 0.0125, 'over': -0.0594}, '12.0': {'figure': 0.1328, 'blown': 0.0125, 'over': -0.0318}, '45.0': {'figure': 0.3451, 'blown': 0.0376, 'over': -0.0107}, '140.0': {'figure': 0.4328, 'blown': 0.0799, 'over': 0.0459}, '420.0': {'figure': 0.5566, 'blown': 0.4914, 'over': 0.0423}}}\nC02 FAIL there is a gain where both flame skins read as fire on M_WL_Fire {'per_skin': {'arden_infernal': [140.0], 'skeleton_flame': []}, 'both': [], 'table': {'arden_infernal': {'2.3': {'figure': 0.076, 'blown': 0.015, 'over': -0.0169}, '12.0': {'figure': 0.1913, 'blown': 0.0496, 'over': -0.0029}, '45.0': {'figure': 0.3629, 'blown': 0.0769, 'over': 0.0133}, '140.0': {'figure': 0.4924, 'blown': 0.2627, 'over': 0.0855}, '420.0': {'figure': 0.6076, 'blown': 0.5154, 'over': 0.0893}}, 'skeleton_flame': {'2.3': {'figure': 0.0479, 'blown': 0.0125, 'over': -0.0594}, '12.0': {'figure': 0.1328, 'blown': 0.0125, 'over': -0.0318}, '45.0': {'figure': 0.3451, 'blown': 0.0376, 'over': -0.0107}, '140.0': {'figure': 0.4328, 'blown': 0.0799, 'over': 0.0459}, '420.0': {'figure': 0.5566, 'blown': 0.4914, 'over': 0.0423}}}, 'legacy': {'arden_infernal': {'figure': 0.7415, 'blown': 0.6315, 'ground': 0.3973}, 'skeleton_flame': {'figure': 0.4559, 'blown': 0.16, 'ground': 0.389}}, 'note': 'over-ground above 0.06 means the figure is plainly burning; blown at or under 0.30 means it is fire and not a white cut-out. The legacy row is what the founder has been looking at.'}\n"
+}

@@ -1,0 +1,90 @@
+{
+ "name": "zc_fire_material_probe",
+ "started": "2026-09-26 11:21:01",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "M00",
+   "name": "M_WL_Fire loads and declares a Color parameter",
+   "pass": true,
+   "detail": {
+    "loaded": true,
+    "vectors": [
+     "Color"
+    ],
+    "scalars": [
+     "EdgeSoftness",
+     "TipFalloff",
+     "FlowSpeed",
+     "Bands",
+     "Lean",
+     "FlickerDepth"
+    ],
+    "properties": {
+     "blend_mode": "<BlendMode.BLEND_ADDITIVE: 3>",
+     "shading_model": "<MaterialShadingModel.MSM_UNLIT: 0>",
+     "two_sided": "True"
+    }
+   }
+  },
+  {
+   "id": "M01",
+   "name": "a plain slab wearing M_WL_Fire actually draws",
+   "pass": false,
+   "detail": {
+    "with_slab": 0.973,
+    "without_slab": 0.9694,
+    "bright_fraction": 1.0,
+    "floor": 0.02,
+    "note": "the engine cube brings its own UVs. If this draws and the mascot does not, the material is sound and the fault is in the ribbons -- their UVs, or the material assigned to the section."
+   }
+  },
+  {
+   "id": "M02",
+   "name": "the mascot's flames survive being moved onto M_WL_Fire",
+   "pass": false,
+   "detail": {
+    "legacy_path": 0.927,
+    "fire_material": 0.0962,
+    "tolerance": 0.03,
+    "note": "the founder's regression, stated as a measurement. A large drop means the ribbons go dark on the material even when a slab wearing it does not."
+   }
+  }
+ ],
+ "material_loaded": true,
+ "vector_parameters": [
+  "Color"
+ ],
+ "scalar_parameters": [
+  "EdgeSoftness",
+  "TipFalloff",
+  "FlowSpeed",
+  "Bands",
+  "Lean",
+  "FlickerDepth"
+ ],
+ "properties": {
+  "blend_mode": "<BlendMode.BLEND_ADDITIVE: 3>",
+  "shading_model": "<MaterialShadingModel.MSM_UNLIT: 0>",
+  "two_sided": "True"
+ },
+ "slab_spawned": false,
+ "slab_dressed": false,
+ "slab_luma": 0.973,
+ "slab_bright_fraction": 1.0,
+ "without_slab_luma": 0.9694,
+ "mascot": {
+  "FireMaterial 0": {
+   "luma": 0.927,
+   "bright": 0.9165
+  },
+  "FireMaterial 1": {
+   "luma": 0.0962,
+   "bright": 0.0167
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\fire_material_probe",
+ "finished": "2026-09-26 11:21:56",
+ "seconds": 55.54,
+ "log": "M00 PASS M_WL_Fire loads and declares a Color parameter {'loaded': True, 'vectors': ['Color'], 'scalars': ['EdgeSoftness', 'TipFalloff', 'FlowSpeed', 'Bands', 'Lean', 'FlickerDepth'], 'properties': {'blend_mode': '<BlendMode.BLEND_ADDITIVE: 3>', 'shading_model': '<MaterialShadingModel.MSM_UNLIT: 0>', 'two_sided': 'True'}}\nM01 FAIL a plain slab wearing M_WL_Fire actually draws {'with_slab': 0.973, 'without_slab': 0.9694, 'bright_fraction': 1.0, 'floor': 0.02, 'note': 'the engine cube brings its own UVs. If this draws and the mascot does not, the material is sound and the fault is in the ribbons -- their UVs, or the material assigned to the section.'}\nM_0 INFO arden on FireMaterial 0 {'luma': 0.927, 'bright': 0.9165}\nM_1 INFO arden on FireMaterial 1 {'luma': 0.0962, 'bright': 0.0167}\nM02 FAIL the mascot's flames survive being moved onto M_WL_Fire {'legacy_path': 0.927, 'fire_material': 0.0962, 'tolerance': 0.03, 'note': \"the founder's regression, stated as a measurement. A large drop means the ribbons go dark on the material even when a slab wearing it does not.\"}\n"
+}

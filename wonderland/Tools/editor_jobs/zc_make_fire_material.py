@@ -196,6 +196,39 @@ def job():
            "Color" in names, vector_parameters=names,
            note="the embodiment, the colourway, the heartbeat and the wardrobe's glow scale all dress flames "
                 "through SetVectorParameterValue('Color'). A different name would leave every flame black.")
+    # ---- AND THE ONE THING NOBODY CHECKED: IS THE EMISSIVE ACTUALLY CONNECTED?
+    #
+    # This material is ADDITIVE and UNLIT. Its emissive output is the only thing it can possibly draw, so a
+    # graph with every parameter correctly named and nothing plugged into MP_EMISSIVE_COLOR renders exactly
+    # nothing -- at any brightness, which is why cranking wl.Look.FireGain to 30 changed nothing and why this
+    # was read for a while as a problem with the ribbons. R00 through R03 would all have passed on a material
+    # that could never show a flame, and did.
+    wired = None
+    how = []
+    for attempt in ("emissive_color", "EmissiveColor"):
+        try:
+            got = mat.get_editor_property(attempt)
+            how.append("%s -> %s" % (attempt, type(got).__name__))
+            expr = None
+            for field in ("expression", "Expression"):
+                try:
+                    expr = got.get_editor_property(field)
+                    break
+                except Exception:
+                    continue
+            if expr is not None:
+                wired = True
+                how.append("expression=%s" % type(expr).__name__)
+                break
+            wired = False
+        except Exception as err:                                   # noqa: BLE001
+            how.append("%s failed: %s" % (attempt, str(err)[:70]))
+    RESULT["emissive_input"] = how
+    record("R04", "something is plugged into the material's emissive output",
+           wired is True, probe=how,
+           note="an additive unlit material draws its emissive and nothing else. Disconnected, it is "
+                "invisible however it is fed, and every other check here still passes.")
+
     record("R03", "its shape, flicker and falloff are all tunable without a rebuild",
            all(p in scalars for p in ("TipFalloff", "EdgeSoftness", "FlowSpeed", "Bands", "FlickerDepth")),
            scalar_parameters=scalars)
