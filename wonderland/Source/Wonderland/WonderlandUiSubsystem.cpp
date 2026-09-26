@@ -59,6 +59,7 @@
 #include "WonderlandCursor.h"
 #include "WonderlandMissionOrb.h"
 #include "WonderlandSkinStage.h"
+#include "WonderlandTerritory.h"
 #include "WonderlandTravel.h"
 #include "WonderlandUiStyle.h"
 #include "WonderlandUsageHudWidget.h"
@@ -921,6 +922,8 @@ void UWonderlandUiSubsystem::RefreshMap()
 		Notice = TEXT("No developed place has an arrival point in this world yet.");
 	}
 	WorldMap->Refresh(Stops, Current, PlayerXY, bHasPlayer, Notice);
+	// AND THE TERRITORIES WITH IT, so the strip's distances are from where the player is now.
+	RefreshTerritories();
 }
 
 UWonderlandWonderWebSubsystem* UWonderlandUiSubsystem::WonderWebState() const
@@ -2193,6 +2196,108 @@ float UWonderlandUiSubsystem::GetWardrobeInspectYaw() const
 {
 	const AWonderlandSkinStage* Stage = SkinStageActor.Get();
 	return Stage != nullptr ? Stage->GetInspectYaw() : 0.0f;
+}
+
+namespace
+{
+	UWonderlandTerritorySubsystem* TerritoriesFor(const UWonderlandUiSubsystem* Ui)
+	{
+		const UWorld* World = Ui != nullptr ? Ui->GetWorld() : nullptr;
+		return World != nullptr ? World->GetSubsystem<UWonderlandTerritorySubsystem>() : nullptr;
+	}
+}
+
+FName UWonderlandUiSubsystem::AnnouncedTerritory() const
+{
+	const UWonderlandTerritorySubsystem* Territories = TerritoriesFor(this);
+	return Territories != nullptr ? Territories->GetAnnouncing() : NAME_None;
+}
+
+FString UWonderlandUiSubsystem::AnnouncedName() const
+{
+	const UWonderlandTerritorySubsystem* Territories = TerritoriesFor(this);
+	FWonderlandTerritory Row;
+	if (Territories != nullptr && Territories->FindTerritory(Territories->GetAnnouncing(), Row))
+	{
+		return Row.DisplayName;
+	}
+	return FString();
+}
+
+FString UWonderlandUiSubsystem::AnnouncedSpecialisation() const
+{
+	const UWonderlandTerritorySubsystem* Territories = TerritoriesFor(this);
+	FWonderlandTerritory Row;
+	if (Territories != nullptr && Territories->FindTerritory(Territories->GetAnnouncing(), Row))
+	{
+		// THE CANON, OR THE FACT THAT THERE IS NONE. Never a guess. See FWonderlandTerritory::Specialisation.
+		return Row.bSpecialisationIsCanon && !Row.Specialisation.IsEmpty()
+			? Row.Specialisation : FString(TEXT("NEEDS FOUNDER DEFINITION"));
+	}
+	return FString();
+}
+
+FLinearColor UWonderlandUiSubsystem::AnnouncedAccent() const
+{
+	const UWonderlandTerritorySubsystem* Territories = TerritoriesFor(this);
+	FWonderlandTerritory Row;
+	if (Territories != nullptr && Territories->FindTerritory(Territories->GetAnnouncing(), Row))
+	{
+		return Row.Accent;
+	}
+	return FLinearColor::White;
+}
+
+FName UWonderlandUiSubsystem::GetCurrentTerritory() const
+{
+	const UWonderlandTerritorySubsystem* Territories = TerritoriesFor(this);
+	return Territories != nullptr ? Territories->GetCurrentTerritory() : NAME_None;
+}
+
+void UWonderlandUiSubsystem::RefreshTerritories()
+{
+	// THE MAP IS THE NAVIGATION UI, so the territories go into it rather than into a panel of their own --
+	// the founder's "integrate this into the existing navigation/UI rather than creating a second competing
+	// system". The map widget holds no lore: it is handed rows straight off the canon registry, with the
+	// direction and distance worked out from where the player is standing right now.
+	UWonderlandTerritorySubsystem* Territories = TerritoriesFor(this);
+	if (!WorldMap.IsValid() || Territories == nullptr)
+	{
+		return;
+	}
+	TArray<FWonderlandMapTerritory> Rows;
+	for (const FWonderlandTerritory& Row : Territories->GetTerritories())
+	{
+		FWonderlandMapTerritory Entry;
+		Entry.Row = Row;
+		Entry.bDiscovered = Territories->IsDiscovered(Row.Id);
+		Entry.bHere = Territories->GetCurrentTerritory() == Row.Id;
+		Entry.BearingDeg = Territories->BearingTo(Row.Id);
+		Entry.DistanceM = Territories->DistanceToMetres(Row.Id);
+		Entry.Way = Territories->DescribeWayTo(Row.Id);
+		Rows.Add(Entry);
+	}
+	WorldMap->RefreshTerritories(Rows);
+}
+
+int32 UWonderlandUiSubsystem::GetMapTerritoryCount() const
+{
+	return WorldMap.IsValid() ? WorldMap->GetTerritoryCount() : 0;
+}
+
+FName UWonderlandUiSubsystem::GetSelectedMapTerritory() const
+{
+	return WorldMap.IsValid() ? WorldMap->GetSelectedTerritory() : NAME_None;
+}
+
+bool UWonderlandUiSubsystem::SelectMapTerritory(FName Id)
+{
+	return WorldMap.IsValid() && WorldMap->SelectTerritory(Id);
+}
+
+FString UWonderlandUiSubsystem::DescribeMapTerritory() const
+{
+	return WorldMap.IsValid() ? WorldMap->DescribeTerritoryPanel() : FString();
 }
 
 FString UWonderlandUiSubsystem::GetMenuTabs() const
@@ -4119,7 +4224,74 @@ void UWonderlandUiSubsystem::MountHudFurniture()
 			[
 				NavBar.ToSharedRef()
 			]
+		]
+		+ SConstraintCanvas::Slot()
+		.Anchors(FAnchors(0.5f, 0.0f, 0.5f, 0.0f))
+		.Alignment(FVector2D(0.5, 0.0))
+		.AutoSize(true)
+		.Offset(FMargin(0.0f, 132.0f, 0.0f, 0.0f))
+		[
+			SNew(SBox)
+			.Visibility_Lambda([WeakThis]()
+			{
+				return WeakThis.IsValid() && !WeakThis->AnnouncedTerritory().IsNone()
+					? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+			})
+			[
+				SNew(SBorder)
+				.BorderImage(TerritoryBannerBrush.Get())
+				.Padding(FMargin(30.0f, 14.0f))
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+					[
+						SNew(STextBlock)
+						.Text_Lambda([WeakThis]() { return FText::FromString(WeakThis.IsValid() ? WeakThis->AnnouncedName() : FString()); })
+						.Font(WonderlandUi::Sans(22, true, 240))
+						.ShadowOffset(FVector2D(1.0f, 1.0f)).ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.9f))
+						.ColorAndOpacity_Lambda([WeakThis]()
+						{
+							return FSlateColor(WeakThis.IsValid() ? WeakThis->AnnouncedAccent() : FLinearColor::White);
+						})
+					]
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 6.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock)
+						.Text_Lambda([WeakThis]() { return FText::FromString(WeakThis.IsValid() ? WeakThis->AnnouncedSpecialisation() : FString()); })
+						.Font(WonderlandUi::Sans(11, false, 200))
+						.ShadowOffset(FVector2D(1.0f, 1.0f)).ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.9f))
+						.ColorAndOpacity(WonderlandUi::Cream())
+					]
+					+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 9.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock)
+						.Text(INVTEXT("CHECKPOINT DISCOVERED"))
+						.Font(WonderlandUi::Mono(9))
+						.ShadowOffset(FVector2D(1.0f, 1.0f)).ShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.9f))
+						.ColorAndOpacity(WonderlandUi::Gold())
+					]
+				]
+			]
 		];
+	if (!TerritoryBannerBrush.IsValid())
+	{
+		// DARK ENOUGH TO READ AGAINST IVORY STONE. Photographed at the Icarus checkpoint at 0.86 alpha, the
+		// three lines sat on a pale plaza and the gold one nearly vanished; a discovery the founder has to
+		// squint at is not a discovery treatment.
+		TerritoryBannerBrush = MakeShared<FSlateRoundedBoxBrush>(
+			WonderlandUi::Srgb(5, 7, 13, 0.95f), 10.0f, WonderlandUi::Gold(0.80f), 1.4f);
+	}
+
+	// ---- THE DISCOVERY BANNER, and it is a banner on purpose.
+	//
+	// FOUNDER, 2026-09-25: "Show a brief in-world discovery treatment the first time a player enters a
+	// territory: TERRITORY NAME, SPECIALIZATION, CHECKPOINT DISCOVERED. It should feel like discovering a real
+	// region, not an intrusive full-screen popup."
+	//
+	// So: three lines, high and centred, never hit-testable, gone in seven seconds, and it cannot appear twice
+	// for the same territory because the subsystem only announces on the first entry. Everything it says comes
+	// from the canon registry -- including "NEEDS FOUNDER DEFINITION" where the canon states no specialisation,
+	// which is the honest thing for the game to say rather than a blank line.
 	// Above the usage HUD (10), below the mission strip (18), the companion consoles (20) and every panel.
 	LocalPlayer->ViewportClient->AddViewportWidgetForPlayer(LocalPlayer, HudFurniture.ToSharedRef(), 12);
 }

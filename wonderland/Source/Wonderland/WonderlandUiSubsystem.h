@@ -198,6 +198,46 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	float GetWardrobeInspectYaw() const;
 
+	/**
+	 * THE TERRITORY THE DISCOVERY BANNER IS SHOWING, and the three lines it shows.
+	 *
+	 * Read straight out of UWonderlandTerritorySubsystem and the canon registry behind it, so the banner cannot
+	 * say anything the canon does not. Where the canon states no specialisation -- Dubel Forest -- the second
+	 * line reads NEEDS FOUNDER DEFINITION, which the founder asked for in place of invented lore.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FName AnnouncedTerritory() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString AnnouncedName() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString AnnouncedSpecialisation() const;
+
+	FLinearColor AnnouncedAccent() const;
+
+	/** The territory the player is standing in, for the map and for a proof. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FName GetCurrentTerritory() const;
+
+	/** Everything the map needs about the territories, refreshed when the map opens. */
+	void RefreshTerritories();
+
+	/** The map's territory strip and detail pane, reachable so a proof reads what the player reads. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	int32 GetMapTerritoryCount() const;
+
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FName GetSelectedMapTerritory() const;
+
+	/** Select a territory on the map, exactly as clicking its chip does. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|UI")
+	bool SelectMapTerritory(FName Id);
+
+	/** What the detail pane is showing, "|"-joined: name, specialisation, state, purpose, places, doings, way. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	FString DescribeMapTerritory() const;
+
 	/** The Menu's tab titles, "|"-joined. Empty when the Menu has never been built. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	FString GetMenuTabs() const;
@@ -811,6 +851,8 @@ private:
 	TSharedPtr<SWonderlandCommandStation> CommandStation;
 	TSharedPtr<SWonderlandMissionsPanel> MissionsPanel;
 	TSharedPtr<SWonderlandMenuPanel> MenuPanel;
+	/** The discovery banner's plate: dark, with a gold hairline, never hit-testable. Made when the HUD mounts. */
+	TSharedPtr<FSlateRoundedBoxBrush> TerritoryBannerBrush;
 	/** The windows, kept once made like the other panels, so a half-typed command is still there on reopen. */
 	TSharedPtr<SWonderlandWonderWebPanel> WonderWebPanel;
 	TSharedPtr<SWonderlandJuliusConnectPanel> ConnectPanel;

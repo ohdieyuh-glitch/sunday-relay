@@ -1,0 +1,374 @@
+{
+ "name": "zc_territories",
+ "started": "2026-09-26 01:27:46",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "T00",
+   "name": "the territory subsystem is running",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "T01",
+   "name": "every territory in the registry is loaded",
+   "pass": true,
+   "detail": {
+    "count": 5,
+    "ids": [
+     "golden_arrival",
+     "icarus",
+     "noctis",
+     "tartarus",
+     "dubel"
+    ]
+   }
+  },
+  {
+   "id": "T02",
+   "name": "every specialisation shown is the canon's own word, and the canon's silence is marked",
+   "pass": true,
+   "detail": {
+    "mismatched": [],
+    "silently_invented": [],
+    "note": "read out of WorldDesign/CANON/nations.json in this proof. The founder: 'DO NOT INVENT THE TERRITORY SPECIALIZATIONS ... mark it as NEEDS FOUNDER DEFINITION rather than silently inventing permanent lore.'"
+   }
+  },
+  {
+   "id": "T03",
+   "name": "the territories the canon does not define are named, not guessed at",
+   "pass": true,
+   "detail": {
+    "needing": [
+     "dubel"
+    ],
+    "note": "DUBEL FOREST. nations.json gives it an existence and an exception rule and states no discipline; the panel and the banner both read NEEDS FOUNDER DEFINITION for it."
+   }
+  },
+  {
+   "id": "T10",
+   "name": "a checkpoint marker is standing for every territory",
+   "pass": true,
+   "detail": {
+    "standing": 5,
+    "expected": 5,
+    "found": [
+     "dubel",
+     "golden_arrival",
+     "icarus",
+     "noctis",
+     "tartarus"
+    ]
+   }
+  },
+  {
+   "id": "T11",
+   "name": "the markers are architecture, not floating pins",
+   "pass": true,
+   "detail": {
+    "heights": [
+     600.0,
+     600.0,
+     600.0,
+     600.0,
+     600.0
+    ],
+    "floor": 400.0,
+    "note": "the founder: 'Do NOT use generic floating map pins.' Six metres of standing stone, on the ground, at the scale of a gatepost."
+   }
+  },
+  {
+   "id": "T20",
+   "name": "a player who has been nowhere has discovered nothing",
+   "pass": true,
+   "detail": {
+    "discovered": 0,
+    "standing_in": "None",
+    "note": "taken from a spot outside every territory's radius; standing in one and calling it undiscovered would be measuring the proof rather than the world"
+   }
+  },
+  {
+   "id": "T21",
+   "name": "standing in a territory is recognised, for every territory",
+   "pass": true,
+   "detail": {
+    "current_by_territory": {
+     "golden_arrival": "golden_arrival",
+     "icarus": "icarus",
+     "noctis": "noctis",
+     "tartarus": "tartarus",
+     "dubel": "dubel"
+    }
+   }
+  },
+  {
+   "id": "T22",
+   "name": "every territory is DISCOVERED by walking into it, and none before",
+   "pass": true,
+   "detail": {
+    "per_territory": {
+     "golden_arrival": [
+      false,
+      true
+     ],
+     "icarus": [
+      false,
+      true
+     ],
+     "noctis": [
+      false,
+      true
+     ],
+     "tartarus": [
+      false,
+      true
+     ],
+     "dubel": [
+      false,
+      true
+     ]
+    }
+   }
+  },
+  {
+   "id": "T23",
+   "name": "the first-entry banner names the territory it was raised for",
+   "pass": true,
+   "detail": {
+    "announcing_by_territory": {
+     "golden_arrival": "golden_arrival",
+     "icarus": "icarus",
+     "noctis": "noctis",
+     "tartarus": "tartarus",
+     "dubel": "dubel"
+    }
+   }
+  },
+  {
+   "id": "T24",
+   "name": "the banner's second line is the canon's word, or the fact that there is none",
+   "pass": true,
+   "detail": {
+    "wrong": {},
+    "banner_spec_by_territory": {
+     "golden_arrival": "NEUTRAL GROUND",
+     "icarus": "Video game development",
+     "noctis": "Content creation",
+     "tartarus": "Software and application creation",
+     "dubel": "NEEDS FOUNDER DEFINITION"
+    }
+   }
+  },
+  {
+   "id": "T30",
+   "name": "the world map carries every territory",
+   "pass": true,
+   "detail": {
+    "on_the_map": 5,
+    "expected": 5,
+    "note": "the founder asked for this inside the existing navigation UI rather than beside it"
+   }
+  },
+  {
+   "id": "T31",
+   "name": "selecting a territory shows name, specialisation, state, purpose, places, activities and the way there",
+   "pass": true,
+   "detail": {
+    "fields": {
+     "golden_arrival": 7,
+     "icarus": 7,
+     "noctis": 7,
+     "tartarus": 7,
+     "dubel": 7
+    }
+   }
+  },
+  {
+   "id": "T32",
+   "name": "the map says which way every territory lies and how far",
+   "pass": true,
+   "detail": {
+    "way": {
+     "golden_arrival": "GOLDEN ARRIVAL lies west, 1275 m away.",
+     "icarus": "ICARUS lies west, 735 m away.",
+     "noctis": "NOCTIS lies west, 1589 m away.",
+     "tartarus": "TARTARUS lies west, 1589 m away.",
+     "dubel": "You are standing in DUBEL FOREST."
+    },
+    "note": "the founder: 'Where is ICARUS? Where is NOCTIS? Where is TARTARUS? ... How do I get there?'"
+   }
+  },
+  {
+   "id": "T40",
+   "name": "every territory walked into is still discovered at the end of the walk",
+   "pass": true,
+   "detail": {
+    "discovered": 5,
+    "expected": 5
+   }
+  }
+ ],
+ "territories": [
+  {
+   "id": "golden_arrival",
+   "name": "GOLDEN ARRIVAL",
+   "spec": "NEUTRAL GROUND",
+   "canon": true,
+   "xy": [
+    0.0,
+    -1460.0
+   ],
+   "source": "WorldDesign/CANON/nations.json neutral.role"
+  },
+  {
+   "id": "icarus",
+   "name": "ICARUS",
+   "spec": "Video game development",
+   "canon": true,
+   "xy": [
+    0.0,
+    52500.0
+   ],
+   "source": "WorldDesign/CANON/NATIONS.md + nations.json nations[ICARUS]"
+  },
+  {
+   "id": "noctis",
+   "name": "NOCTIS",
+   "spec": "Content creation",
+   "canon": true,
+   "xy": [
+    -45466.3,
+    -26250.0
+   ],
+   "source": "WorldDesign/CANON/NATIONS.md + nations.json nations[NOCTIS]"
+  },
+  {
+   "id": "tartarus",
+   "name": "TARTARUS",
+   "spec": "Software and application creation",
+   "canon": true,
+   "xy": [
+    45466.3,
+    -26250.0
+   ],
+   "source": "WorldDesign/CANON/NATIONS.md + nations.json nations[TARTARUS]"
+  },
+  {
+   "id": "dubel",
+   "name": "DUBEL FOREST",
+   "spec": "",
+   "canon": false,
+   "xy": [
+    0.0,
+    126000.0
+   ],
+   "source": "WorldDesign/CANON/nations.json exceptions[DUBEL] -- no specialisation stated"
+  }
+ ],
+ "canon_check": {
+  "mismatched": [],
+  "silently_invented": [],
+  "canon_file": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\WorldDesign\\CANON\\nations.json"
+ },
+ "needs_founder_definition": [
+  "dubel"
+ ],
+ "markers": {
+  "golden_arrival": {
+   "at": [
+    0.0,
+    -1460.0,
+    -14.0
+   ],
+   "height": 600.0
+  },
+  "icarus": {
+   "at": [
+    0.0,
+    52500.0,
+    -14.0
+   ],
+   "height": 600.0
+  },
+  "noctis": {
+   "at": [
+    -45466.3,
+    -26250.0,
+    -14.0
+   ],
+   "height": 600.0
+  },
+  "tartarus": {
+   "at": [
+    45466.3,
+    -26250.0,
+    -14.0
+   ],
+   "height": 600.0
+  },
+  "dubel": {
+   "at": [
+    0.0,
+    126000.0,
+    -14.0
+   ],
+   "height": 600.0
+  }
+ },
+ "walk": {
+  "golden_arrival": {
+   "was_discovered": false,
+   "now_discovered": true,
+   "current": "golden_arrival",
+   "announcing": "golden_arrival",
+   "banner_name": "GOLDEN ARRIVAL",
+   "banner_spec": "NEUTRAL GROUND"
+  },
+  "icarus": {
+   "was_discovered": false,
+   "now_discovered": true,
+   "current": "icarus",
+   "announcing": "icarus",
+   "banner_name": "ICARUS",
+   "banner_spec": "Video game development"
+  },
+  "noctis": {
+   "was_discovered": false,
+   "now_discovered": true,
+   "current": "noctis",
+   "announcing": "noctis",
+   "banner_name": "NOCTIS",
+   "banner_spec": "Content creation"
+  },
+  "tartarus": {
+   "was_discovered": false,
+   "now_discovered": true,
+   "current": "tartarus",
+   "announcing": "tartarus",
+   "banner_name": "TARTARUS",
+   "banner_spec": "Software and application creation"
+  },
+  "dubel": {
+   "was_discovered": false,
+   "now_discovered": true,
+   "current": "dubel",
+   "announcing": "dubel",
+   "banner_name": "DUBEL FOREST",
+   "banner_spec": "NEEDS FOUNDER DEFINITION"
+  }
+ },
+ "map_open": true,
+ "map_territory_count": 5,
+ "map_panels": {
+  "golden_arrival": "GOLDEN ARRIVAL|NEUTRAL GROUND|DISCOVERED|universal arrival and crossroads; belongs to no nation and is not rebuilt for this canon|The Arrival Gate,Castle Approach,The Great Spire,The Grand Clock,Royal Gardens,Clock Quarter,Water Gardens,Teapot Court|Travel to any offered destination,Mission Contracts,Project Brain,Wonder Web,Agent terminals|GOLDEN ARRIVAL lies west, 1275 m away.",
+  "icarus": "ICARUS|Video game development|DISCOVERED|Video game development: game creation, Unreal-style development, world building, level design, character creation, gameplay systems, game AI, NPC behaviour, animation, physics, multiplayer, game mechanics, simulation, procedural worlds|The Icarus march,Physics simulation,Multiplayer testing,Combat/gameplay simulation,Level-design evaluation|Physics simulation,Multiplayer testing,Combat/gameplay simulation,Level-design evaluation,NPC behaviour testing,Animation testing,Procedural generation,Performance testing,Game-world validation|ICARUS lies west, 735 m away.",
+  "noctis": "NOCTIS|Content creation|DISCOVERED|Content creation: meaning any creator work: films, short films, YouTube content, livestreams, social content, advertisements, music, podcasts, digital art, animation, documentaries, books and stories, virtual productions, trailers, promotional content -- made for oneself or commissioned by other Wonderland users|The Noctis march,Virtual film stages,Cinematography simulations,Lighting studios,Editing environments|Virtual film stages,Cinematography simulations,Lighting studios,Editing environments,Sound stages,Music environments,Virtual camera systems,Motion capture spaces,Audience/content testing,Storytelling environments,Creator performance spaces|NOCTIS lies west, 1589 m away.",
+  "tartarus": "TARTARUS|Software and application creation|DISCOVERED|Software and application creation: websites, mobile applications, SaaS, AI applications, APIs, developer tools, agentic software, backend systems, frontend systems, databases, internal tools, cloud software, automation, enterprise applications|The Tartarus march,Application testing,API simulation,Architecture validation,Security testing|Application testing,API simulation,Architecture validation,Security testing,Deployment simulation,Infrastructure simulation,Load testing,Database testing,Agent testing,Software reliability evaluation|TARTARUS lies west, 1589 m away.",
+  "dubel": "DUBEL FOREST|NEEDS FOUNDER DEFINITION|DISCOVERED||||You are standing in DUBEL FOREST."
+ },
+ "discovered_at_end": 5,
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\territories",
+ "finished": "2026-09-26 01:28:55",
+ "seconds": 69.11,
+ "log": "T00 PASS the territory subsystem is running {}\nT01 PASS every territory in the registry is loaded {'count': 5, 'ids': ['golden_arrival', 'icarus', 'noctis', 'tartarus', 'dubel']}\nT02 PASS every specialisation shown is the canon's own word, and the canon's silence is marked {'mismatched': [], 'silently_invented': [], 'note': \"read out of WorldDesign/CANON/nations.json in this proof. The founder: 'DO NOT INVENT THE TERRITORY SPECIALIZATIONS ... mark it as NEEDS FOUNDER DEFINITION rather than silently inventing permanent lore.'\"}\nT03 PASS the territories the canon does not define are named, not guessed at {'needing': ['dubel'], 'note': 'DUBEL FOREST. nations.json gives it an existence and an exception rule and states no discipline; the panel and the banner both read NEEDS FOUNDER DEFINITION for it.'}\nT10 PASS a checkpoint marker is standing for every territory {'standing': 5, 'expected': 5, 'found': ['dubel', 'golden_arrival', 'icarus', 'noctis', 'tartarus']}\nT11 PASS the markers are architecture, not floating pins {'heights': [600.0, 600.0, 600.0, 600.0, 600.0], 'floor': 400.0, 'note': \"the founder: 'Do NOT use generic floating map pins.' Six metres of standing stone, on the ground, at the scale of a gatepost.\"}\nT20 PASS a player who has been nowhere has discovered nothing {'discovered': 0, 'standing_in': 'None', 'note': \"taken from a spot outside every territory's radius; standing in one and calling it undiscovered would be measuring the proof rather than the world\"}\nT_golden_arrival INFO arrived at golden_arrival {'was_discovered': False, 'now_discovered': True, 'current': 'golden_arrival', 'announcing': 'golden_arrival', 'banner_name': 'GOLDEN ARRIVAL', 'banner_spec': 'NEUTRAL GROUND'}\nT_icarus INFO arrived at icarus {'was_discovered': False, 'now_discovered': True, 'current': 'icarus', 'announcing': 'icarus', 'banner_name': 'ICARUS', 'banner_spec': 'Video game development'}\nT_noctis INFO arrived at noctis {'was_discovered': False, 'now_discovered': True, 'current': 'noctis', 'announcing': 'noctis', 'banner_name': 'NOCTIS', 'banner_spec': 'Content creation'}\nT_tartarus INFO arrived at tartarus {'was_discovered': False, 'now_discovered': True, 'current': 'tartarus', 'announcing': 'tartarus', 'banner_name': 'TARTARUS', 'banner_spec': 'Software and application creation'}\nT_dubel INFO arrived at dubel {'was_discovered': False, 'now_discovered': True, 'current': 'dubel', 'announcing': 'dubel', 'banner_name': 'DUBEL FOREST', 'banner_spec': 'NEEDS FOUNDER DEFINITION'}\nT21 PASS standing in a territory is recognised, for every territory {'current_by_territory': {'golden_arrival': 'golden_arrival', 'icarus': 'icarus', 'noctis': 'noctis', 'tartarus': 'tartarus', 'dubel': 'dubel'}}\nT22 PASS every territory is DISCOVERED by walking into it, and none before {'per_territory': {'golden_arrival': [False, True], 'icarus': [False, True], 'noctis': [False, True], 'tartarus': [False, True], 'dubel': [False, True]}}\nT23 PASS the first-entry banner names the territory it was raised for {'announcing_by_territory': {'golden_arrival': 'golden_arrival', 'icarus': 'icarus', 'noctis': 'noctis', 'tartarus': 'tartarus', 'dubel': 'dubel'}}\nT24 PASS the banner's second line is the canon's word, or the fact that there is none {'wrong': {}, 'banner_spec_by_territory': {'golden_arrival': 'NEUTRAL GROUND', 'icarus': 'Video game development', 'noctis': 'Content creation', 'tartarus': 'Software and application creation', 'dubel': 'NEEDS FOUNDER DEFINITION'}}\nT30 PASS the world map carries every territory {'on_the_map': 5, 'expected': 5, 'note': 'the founder asked for this inside the existing navigation UI rather than beside it'}\nT31 PASS selecting a territory shows name, specialisation, state, purpose, places, activities and the way there {'fields': {'golden_arrival': 7, 'icarus': 7, 'noctis': 7, 'tartarus': 7, 'dubel': 7}}\nT32 PASS the map says which way every territory lies and how far {'way': {'golden_arrival': 'GOLDEN ARRIVAL lies west, 1275 m away.', 'icarus': 'ICARUS lies west, 735 m away.', 'noctis': 'NOCTIS lies west, 1589 m away.', 'tartarus': 'TARTARUS lies west, 1589 m away.', 'dubel': 'You are standing in DUBEL FOREST.'}, 'note': \"the founder: 'Where is ICARUS? Where is NOCTIS? Where is TARTARUS? ... How do I get there?'\"}\nT40 PASS every territory walked into is still discovered at the end of the walk {'discovered': 5, 'expected': 5}\n"
+}

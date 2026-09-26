@@ -283,7 +283,12 @@ SWonderlandWorldMap::SWonderlandWorldMap()
 	, ButtonHovered(WonderlandUi::Srgb(64, 48, 18, 0.95f), 8.0f, WonderlandUi::Gold(), 2.0f)
 	, ButtonPressed(WonderlandUi::Srgb(92, 68, 22, 0.98f), 8.0f, WonderlandUi::Gold(), 2.0f)
 	, RuleBrush(WonderlandUi::Gold(0.35f), 0.0f, WonderlandUi::Gold(0.0f), 0.0f)
+	, TerritoryChip(WonderlandUi::Srgb(16, 19, 28, 0.90f), 8.0f, WonderlandUi::Ivory(0.20f), 1.0f)
+	, TerritoryChipOn(WonderlandUi::Srgb(40, 34, 14, 0.96f), 8.0f, WonderlandUi::Gold(), 1.5f)
 {
+	TerritoryChipStyle = FButtonStyle()
+		.SetNormal(TerritoryChip).SetHovered(TerritoryChipOn).SetPressed(TerritoryChipOn)
+		.SetNormalPadding(FMargin(12.0f, 7.0f)).SetPressedPadding(FMargin(12.0f, 7.0f));
 }
 
 void SWonderlandWorldMap::Construct(const FArguments& InArgs)
@@ -346,6 +351,12 @@ void SWonderlandWorldMap::Construct(const FArguments& InArgs)
 			[
 				SAssignNew(NoticeText, STextBlock).Font(WonderlandUi::Mono(9)).ColorAndOpacity(WonderlandUi::Dim()).AutoWrapText(true)
 			]
+			// THE SELECTED TERRITORY, in the same column the selected destination uses, because they answer the
+			// same question at two scales: which place, and which country the place is in.
+			+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
+			[
+				SAssignNew(TerritoryDetail, SVerticalBox)
+			]
 		];
 
 	ChildSlot
@@ -393,6 +404,25 @@ void SWonderlandWorldMap::Construct(const FArguments& InArgs)
 						SNew(SBox).HeightOverride(1.0f)
 						[
 							SNew(SBorder).BorderImage(&RuleBrush)
+						]
+					]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 12.0f)
+					[
+						// ---- THE TERRITORIES, ALONG THE TOP OF THE MAP.
+						//
+						// The founder asked for world orientation inside the navigation UI rather than beside
+						// it, and this is where a player already comes to ask where things are. The chip of the
+						// territory being stood in says HERE; every other chip says which way it lies and how
+						// far. Selecting one fills the detail column with what the canon says it is for.
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 7.0f)
+						[
+							SNew(STextBlock).Text(INVTEXT("TERRITORIES"))
+							.Font(WonderlandUi::Mono(9)).ColorAndOpacity(WonderlandUi::Dim())
+						]
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SAssignNew(TerritoryStrip, SHorizontalBox)
 						]
 					]
 					+ SVerticalBox::Slot().FillHeight(1.0f)
@@ -549,4 +579,202 @@ FReply SWonderlandWorldMap::OnKeyDown(const FGeometry& MyGeometry, const FKeyEve
 		return FReply::Handled();
 	}
 	return SCompoundWidget::OnKeyDown(MyGeometry, InKeyEvent);
+}
+
+/* ------------------------------------------------------------------------------------ the territories */
+
+void SWonderlandWorldMap::RefreshTerritories(const TArray<FWonderlandMapTerritory>& InTerritories)
+{
+	Territories = InTerritories;
+	if (SelectedTerritory.IsNone())
+	{
+		// OPEN ON WHERE YOU ARE. "Where am I?" is the founder's first question and it should not need a click.
+		for (const FWonderlandMapTerritory& Entry : Territories)
+		{
+			if (Entry.bHere)
+			{
+				SelectedTerritory = Entry.Row.Id;
+				break;
+			}
+		}
+	}
+	RebuildTerritoryStrip();
+	ShowTerritory(SelectedTerritory);
+}
+
+void SWonderlandWorldMap::RebuildTerritoryStrip()
+{
+	if (!TerritoryStrip.IsValid())
+	{
+		return;
+	}
+	TerritoryStrip->ClearChildren();
+	for (const FWonderlandMapTerritory& Entry : Territories)
+	{
+		const FName Id = Entry.Row.Id;
+		const FLinearColor Accent = Entry.Row.Accent;
+		const bool bHere = Entry.bHere;
+		const bool bFound = Entry.bDiscovered;
+		// UNDISCOVERED TERRITORIES ARE NAMED BUT NOT DESCRIBED. The founder asked for a discovered/undiscovered
+		// state; a chip that hid the name entirely would make the map useless for planning where to go, and one
+		// that gave away the whole entry would make discovery meaningless.
+		const FString Label = Entry.Row.DisplayName;
+		const FString Sub = bHere
+			? FString(TEXT("HERE"))
+			: (Entry.DistanceM >= 0.0f ? FString::Printf(TEXT("%.0f m"), Entry.DistanceM) : FString(TEXT("--")));
+		TerritoryStrip->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f)
+		[
+			SNew(SButton).ButtonStyle(&TerritoryChipStyle).IsFocusable(false)
+			.OnClicked_Lambda([this, Id]() { ShowTerritory(Id); return FReply::Handled(); })
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+				[
+					// A pip in the territory's own canon colour, dim until it has been found.
+					SNew(SBox).WidthOverride(9.0f).HeightOverride(9.0f)
+					[
+						SNew(SImage).Image(&ChipBrush)
+						.ColorAndOpacity(FSlateColor(bFound ? Accent : Accent * 0.35f))
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Text(FText::FromString(Label))
+					.Font(WonderlandUi::Sans(11, true, 120))
+					.ColorAndOpacity(FSlateColor(bFound ? WonderlandUi::Cream() : WonderlandUi::Dim()))
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(9.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Sub))
+					.Font(WonderlandUi::Mono(8))
+					.ColorAndOpacity(FSlateColor(bHere ? WonderlandUi::Gold() : WonderlandUi::Dim()))
+				]
+			]
+		];
+	}
+}
+
+bool SWonderlandWorldMap::SelectTerritory(FName Id)
+{
+	for (const FWonderlandMapTerritory& Entry : Territories)
+	{
+		if (Entry.Row.Id == Id)
+		{
+			ShowTerritory(Id);
+			return true;
+		}
+	}
+	return false;
+}
+
+void SWonderlandWorldMap::ShowTerritory(FName Id)
+{
+	SelectedTerritory = Id;
+	if (!TerritoryDetail.IsValid())
+	{
+		return;
+	}
+	TerritoryDetail->ClearChildren();
+	const FWonderlandMapTerritory* Found = Territories.FindByPredicate(
+		[Id](const FWonderlandMapTerritory& Entry) { return Entry.Row.Id == Id; });
+	if (Found == nullptr)
+	{
+		return;
+	}
+	const FWonderlandTerritory& Row = Found->Row;
+
+	auto Line = [this](const FString& Text, const FSlateFontInfo& Font, const FSlateColor& Colour, float Above)
+	{
+		return SNew(STextBlock).Text(FText::FromString(Text)).Font(Font).ColorAndOpacity(Colour).AutoWrapText(true);
+	};
+
+	TerritoryDetail->AddSlot().AutoHeight()
+	[
+		SNew(SBox).HeightOverride(1.0f)[SNew(SBorder).BorderImage(&RuleBrush)]
+	];
+	TerritoryDetail->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+	[
+		SNew(STextBlock).Text(FText::FromString(Row.DisplayName))
+		.Font(WonderlandUi::Sans(15, true, 120)).ColorAndOpacity(FSlateColor(Row.Accent))
+	];
+	// THE SPECIALISATION, OR THE FACT THAT THE CANON DOES NOT STATE ONE. Never a guess: the founder asked for
+	// exactly this rather than invented lore, and Dubel Forest is the territory it applies to.
+	TerritoryDetail->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+	[
+		SNew(STextBlock)
+		.Text(FText::FromString(Row.bSpecialisationIsCanon && !Row.Specialisation.IsEmpty()
+			? Row.Specialisation : FString(TEXT("NEEDS FOUNDER DEFINITION"))))
+		.Font(WonderlandUi::Mono(9))
+		.ColorAndOpacity(Row.bSpecialisationIsCanon ? WonderlandUi::Sage() : WonderlandUi::Gold())
+		.AutoWrapText(true)
+	];
+	TerritoryDetail->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+	[
+		SNew(STextBlock)
+		.Text(FText::FromString(Found->bDiscovered ? TEXT("DISCOVERED") : TEXT("UNDISCOVERED")))
+		.Font(WonderlandUi::Mono(8))
+		.ColorAndOpacity(Found->bDiscovered ? WonderlandUi::Sage(0.9f) : WonderlandUi::Dim())
+	];
+	if (!Row.Purpose.IsEmpty())
+	{
+		TerritoryDetail->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+		[
+			SNew(STextBlock).Text(FText::FromString(Row.Purpose))
+			.Font(WonderlandUi::Sans(10)).ColorAndOpacity(WonderlandUi::Cream(0.90f)).AutoWrapText(true)
+		];
+	}
+	if (Row.Landmarks.Num() > 0)
+	{
+		TerritoryDetail->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+		[
+			SNew(STextBlock).Text(INVTEXT("IMPORTANT LOCATIONS"))
+			.Font(WonderlandUi::Mono(8)).ColorAndOpacity(WonderlandUi::Dim())
+		];
+		TerritoryDetail->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+		[
+			SNew(STextBlock).Text(FText::FromString(FString::Join(Row.Landmarks, TEXT("  ·  "))))
+			.Font(WonderlandUi::Sans(10)).ColorAndOpacity(WonderlandUi::Cream(0.85f)).AutoWrapText(true)
+		];
+	}
+	if (Row.Activities.Num() > 0)
+	{
+		TerritoryDetail->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+		[
+			SNew(STextBlock).Text(INVTEXT("AVAILABLE ACTIVITIES"))
+			.Font(WonderlandUi::Mono(8)).ColorAndOpacity(WonderlandUi::Dim())
+		];
+		TerritoryDetail->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+		[
+			SNew(STextBlock).Text(FText::FromString(FString::Join(Row.Activities, TEXT("  ·  "))))
+			.Font(WonderlandUi::Sans(10)).ColorAndOpacity(WonderlandUi::Cream(0.85f)).AutoWrapText(true)
+		];
+	}
+	// HOW DO I GET THERE. The last of the founder's six questions, answered in one line.
+	TerritoryDetail->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+	[
+		SNew(STextBlock).Text(FText::FromString(Found->Way))
+		.Font(WonderlandUi::Mono(9)).ColorAndOpacity(WonderlandUi::Gold(0.90f)).AutoWrapText(true)
+	];
+	RebuildTerritoryStrip();
+}
+
+FString SWonderlandWorldMap::DescribeTerritoryPanel() const
+{
+	const FWonderlandMapTerritory* Found = Territories.FindByPredicate(
+		[this](const FWonderlandMapTerritory& Entry) { return Entry.Row.Id == SelectedTerritory; });
+	if (Found == nullptr)
+	{
+		return FString();
+	}
+	const FWonderlandTerritory& Row = Found->Row;
+	TArray<FString> Parts;
+	Parts.Add(Row.DisplayName);
+	Parts.Add(Row.bSpecialisationIsCanon && !Row.Specialisation.IsEmpty()
+		? Row.Specialisation : FString(TEXT("NEEDS FOUNDER DEFINITION")));
+	Parts.Add(Found->bDiscovered ? TEXT("DISCOVERED") : TEXT("UNDISCOVERED"));
+	Parts.Add(Row.Purpose);
+	Parts.Add(FString::Join(Row.Landmarks, TEXT(",")));
+	Parts.Add(FString::Join(Row.Activities, TEXT(",")));
+	Parts.Add(Found->Way);
+	return FString::Join(Parts, TEXT("|"));
 }

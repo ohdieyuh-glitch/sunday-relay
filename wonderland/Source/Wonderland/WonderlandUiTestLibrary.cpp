@@ -1,6 +1,7 @@
 #include "WonderlandUiTestLibrary.h"
 
 #include "WonderlandDemoFlow.h"
+#include "WonderlandTerritory.h"
 #include "WonderlandMascotStyle.h"
 #include "WonderlandSubAgentCubs.h"
 
@@ -534,4 +535,11 @@ bool UWonderlandUiTestLibrary::ResetAllColours()
 	Style->bCompanionChosen = false;
 	WonderlandMascotStyle::SaveAndApply();
 	return true;
+}
+
+UWonderlandTerritorySubsystem* UWonderlandUiTestLibrary::GetTerritories(UObject* WorldContextObject)
+{
+	const UWorld* World = GEngine != nullptr
+		? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+	return World != nullptr ? World->GetSubsystem<UWonderlandTerritorySubsystem>() : nullptr;
 }

@@ -17,6 +17,7 @@
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/SLeafWidget.h"
 #include "WonderlandTravel.h"
+#include "WonderlandTerritory.h"
 
 class STextBlock;
 
@@ -69,6 +70,22 @@ private:
 		FLinearColor(0.70f, 0.37f, 0.05f, 0.30f), 1.0f);
 };
 
+/**
+ * ONE TERRITORY AS THE MAP SEES IT: the canon row, plus where the player is standing in relation to it.
+ *
+ * The widget holds no lore of its own -- everything in Row was copied out of WorldDesign/CANON by
+ * Tools/territory_registry.py and handed here through UWonderlandUiSubsystem::RefreshTerritories.
+ */
+struct WONDERLAND_API FWonderlandMapTerritory
+{
+	FWonderlandTerritory Row;
+	bool bDiscovered = false;
+	bool bHere = false;
+	float BearingDeg = -1.0f;
+	float DistanceM = -1.0f;
+	FString Way;
+};
+
 class WONDERLAND_API SWonderlandWorldMap : public SCompoundWidget
 {
 public:
@@ -89,6 +106,28 @@ public:
 
 	virtual bool SupportsKeyboardFocus() const override { return true; }
 	virtual FReply OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKeyEvent) override;
+
+	/**
+	 * THE TERRITORIES, AND WHY THEY LIVE IN THE MAP.
+	 *
+	 * FOUNDER, 2026-09-25: "Integrate this into the existing navigation/UI rather than creating a second
+	 * competing system ... A player should be able to answer: Where am I? Where is ICARUS? Where is NOCTIS?
+	 * Where is TARTARUS? What is that territory for? How do I get there?"
+	 *
+	 * The world map is where a player already goes to ask every one of those, so this is a strip along the
+	 * bottom of it rather than a panel somewhere else. Selecting a territory answers the last four questions in
+	 * the detail column; the strip itself answers the first, because the one you are standing in says HERE.
+	 */
+	void RefreshTerritories(const TArray<FWonderlandMapTerritory>& InTerritories);
+
+	FName GetSelectedTerritory() const { return SelectedTerritory; }
+	int32 GetTerritoryCount() const { return Territories.Num(); }
+
+	/** Select a territory by id, exactly as clicking its chip does. False for one the registry does not hold. */
+	bool SelectTerritory(FName Id);
+
+	/** What the detail column is showing for the selected territory, "|"-joined, for a proof to read. */
+	FString DescribeTerritoryPanel() const;
 
 	FName GetSelectedId() const;
 	int32 GetStopCount() const { return Stops.Num(); }
@@ -112,6 +151,12 @@ private:
 	TSharedPtr<STextBlock> DescriptionText;
 	TSharedPtr<STextBlock> DistanceText;
 	TSharedPtr<STextBlock> NoticeText;
+	TSharedPtr<class SHorizontalBox> TerritoryStrip;
+	TSharedPtr<class SVerticalBox> TerritoryDetail;
+	TArray<FWonderlandMapTerritory> Territories;
+	FName SelectedTerritory;
+	void RebuildTerritoryStrip();
+	void ShowTerritory(FName Id);
 
 	FSimpleDelegate OnRequestClose;
 	FSimpleDelegate OnRequestTerminal;
@@ -126,4 +171,7 @@ private:
 	FSlateRoundedBoxBrush RuleBrush;
 	FSlateBrush ScrimBrush;
 	FButtonStyle TeleportStyle;
+	FSlateRoundedBoxBrush TerritoryChip;
+	FSlateRoundedBoxBrush TerritoryChipOn;
+	FButtonStyle TerritoryChipStyle;
 };

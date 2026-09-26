@@ -164,4 +164,8 @@ public:
 	/** Put every customisable colour back to the one its art was designed in. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	static bool ResetAllColours();
+
+	/** The territory subsystem, so a proof can ask the world where it is and what it knows. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
+	static class UWonderlandTerritorySubsystem* GetTerritories(UObject* WorldContextObject);
 };
