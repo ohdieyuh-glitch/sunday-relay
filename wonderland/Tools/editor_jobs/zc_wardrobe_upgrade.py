@@ -319,6 +319,10 @@ def job():
     # doing exactly what it was asked to do, not the ghostfire being lost. What must survive is the part of the
     # picture brighter than white, because nothing in the square but the fire and the glow ever is.
     before = got[2] if got else None
+    # AND THE GHOSTFIRE'S OWN COLOUR, which is what actually has to survive. See U32.
+    cold = L.read_screen_extremes(centre.x - size.x * 0.30, centre.y - size.y * 0.30,
+                                  centre.x + size.x * 0.30, centre.y + size.y * 0.30)
+    ghost_before = round(float(cold[1]), 4) if cold else None
     try:
         L.capture_game_viewport(os.path.join(ROOT, "colour_before.png"))
     except Exception:
@@ -330,6 +334,9 @@ def job():
                              centre.x + size.x * 0.30, centre.y + size.y * 0.30)
     painted = [round(got[0].r, 4), round(got[0].g, 4), round(got[0].b, 4)] if got else None
     after = got[2] if got else None
+    cold = L.read_screen_extremes(centre.x - size.x * 0.30, centre.y - size.y * 0.30,
+                                  centre.x + size.x * 0.30, centre.y + size.y * 0.30)
+    ghost_after = round(float(cold[1]), 4) if cold else None
     try:
         L.capture_game_viewport(os.path.join(ROOT, "colour_after_primary.png"))
     except Exception:
@@ -338,25 +345,49 @@ def job():
                         "bright_before": round(before, 4) if before else None,
                         "bright_after": round(after, 4) if after else None}
 
+    # JUDGED AS A RATIO, NOT AS A DIFFERENCE, because the preview's absolute brightness is a tunable and this
+    # clause is not about brightness. It was written as "red-over-blue must rise by 0.03" and then the preview
+    # glow was re-swept from 0.10 to 0.022 for entirely unrelated reasons -- the whole square got dimmer, every
+    # absolute difference in it shrank, and the clause failed on a recolour that had plainly worked: red over
+    # blue went from 0.0072 to 0.0320, four and a half times, and missed a fixed threshold by 0.005.
+    lift = None
+    if plain is not None and painted is not None:
+        before_gap = max(plain[0] - plain[2], 0.0005)
+        lift = round((painted[0] - painted[2]) / before_gap, 2)
     record("U30", "a PRIMARY colour picked in the Wardrobe shows on the preview immediately",
-           plain is not None and painted is not None
-           and (painted[0] - painted[2]) > (plain[0] - plain[2]) + 0.03,
-           plain_mean=plain, crimson_mean=painted,
+           lift is not None and lift >= 2.5,
+           plain_mean=plain, crimson_mean=painted, red_over_blue_multiplied_by=lift, floor=2.5,
            note="Skeleton Flame is bone and blue ghostfire; a crimson shell must push red above blue in the "
-                "square, and the ghostfire must not follow it")
+                "square, and the ghostfire must not follow it. A ratio says that at any stage brightness.")
 
     record("U31", "the canonical state is what the Wardrobe wrote, so the Menu reads the same colour",
            abs(L.get_mascot_colour(True).r - 0.82) < 0.02 and abs(L.get_mascot_colour(True).b - 0.18) < 0.02,
            state=[round(L.get_mascot_colour(True).r, 3), round(L.get_mascot_colour(True).g, 3),
                   round(L.get_mascot_colour(True).b, 3)])
 
-    # THE AUTHORED ART SURVIVES. Skeleton Flame's ghostfire is the brightest thing in the square; recolouring
-    # the shell must not take it with it, and a figure whose flames were flattened would lose its bright pixels.
-    lit_kept = before is not None and after is not None and after >= before * 0.75
+    # ---- THE AUTHORED ART SURVIVES, JUDGED ON THE GHOSTFIRE'S COLOUR RATHER THAN ON WHITE PIXELS.
+    #
+    # The intent has always been right: recolouring the shell crimson must not take Skeleton Flame's blue
+    # ghostfire with it. The measurement has now been wrong twice in the same direction. It first judged total
+    # LIT AREA, which falls by a third when bone at luma 0.87 is multiplied by (0.82, 0.14, 0.18) -- the
+    # colourway doing exactly what it was asked. It then judged pixels BRIGHTER THAN WHITE, which worked only
+    # while the preview's glow was blowing out; re-sweeping that to 0.022 for unrelated reasons took the blown
+    # fraction to zero and this clause failed on a square where the ghostfire is plainly, visibly blue.
+    #
+    # (It also reported that zero as None, because `round(x, 4) if x else None` cannot tell 0.0 from absent.)
+    #
+    # What must survive is the ghostfire's own COLOUR. Blue-over-red is the one thing in this square that
+    # belongs to the flame and to nothing else, a crimson shell can only push it DOWN, and it does not depend
+    # on how brightly the stage happens to be lit.
+    kept = (ghost_before is not None and ghost_after is not None
+            and ghost_after >= max(ghost_before * 0.6, 0.02))
     record("U32", "the skin's own fire and glow survive the recolour",
-           lit_kept, bright_before=round(before, 4) if before else None,
-           bright_after=round(after, 4) if after else None,
-           note="PRIMARY reaches bone and bonedeep only; ghost, ghostpale, ash, void and gold are never touched")
+           kept, ghostfire_blue_before=ghost_before, ghostfire_blue_after=ghost_after,
+           floor="60% of what it was, and at least 0.02",
+           blown_fraction_before=before, blown_fraction_after=after,
+           note="PRIMARY reaches bone and bonedeep only; ghost, ghostpale, ash, void and gold are never "
+                "touched. Judged on the ghostfire's blue rather than on white pixels, because the preview is "
+                "deliberately no longer bright enough to have any.")
 
     L.pick_mascot_colour(False, unreal.LinearColor(0.2, 0.86, 0.6, 1.0))
     yield 4.0

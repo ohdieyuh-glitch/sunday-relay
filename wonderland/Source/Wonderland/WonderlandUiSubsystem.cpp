@@ -1474,18 +1474,27 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 					// larger -- a half-loaded skin, or one whose envelope is honest -- the measured size wins
 					// and nothing is framed small. For a skin with no glow group at all the two agree and
 					// this changes nothing, which is why Relay OG never showed the bug.
-					const float Envelope = Shown->GetFigureHeightUu();
-					EnvelopeTall = Envelope;
+					EnvelopeTall = Shown->GetFigureHeightUu();
 					EnvelopeSeen = Shown->GetFigureWidthUu();
-					if (Envelope > Height)
-					{
-						Height = Envelope;
-					}
-					const float EnvelopeWide = Shown->GetFigureWidthUu();
-					if (EnvelopeWide > FigureWide)
-					{
-						FigureWide = EnvelopeWide;
-					}
+
+					// ---- THE PEAK THE FIGURE HAS ACTUALLY REACHED, bounded by what it is allowed to reach.
+					//
+					// Framing on the envelope alone was the first fix and it over-corrected: Arden Infernal
+					// stopped running past the window and started filling 0.61 of it. The envelope is a
+					// worst case -- Tall * 1.45 on every glow group -- and a flame does not sit at its worst
+					// case, it pulses between 0.58 and 1.20 of nominal every couple of seconds. So the frame
+					// is solved against the largest this figure has genuinely been recently, which is tighter
+					// than the allowance and still safe, because the peak has already been seen.
+					//
+					// The decay is what makes it a PEAK rather than a high-water mark for the session: a few
+					// per cent a second, so changing to a smaller skin re-tightens within a breath instead of
+					// leaving the window framed for the skin before it.
+					Self->WardrobePeakHeight = FMath::Max(Self->WardrobePeakHeight * 0.994f, Height);
+					Self->WardrobePeakWide = FMath::Max(Self->WardrobePeakWide * 0.994f, FigureWide);
+					Height = FMath::Min(Self->WardrobePeakHeight,
+						EnvelopeTall > 60.0f ? EnvelopeTall : Self->WardrobePeakHeight);
+					FigureWide = FMath::Min(Self->WardrobePeakWide,
+						EnvelopeSeen > 1.0f ? EnvelopeSeen : Self->WardrobePeakWide);
 					FigureMiddle = static_cast<float>(Drawn.GetCenter().Z - Shown->GetActorLocation().Z) / Uniform;
 					// AND SIDEWAYS, WHICH WAS BEING THROWN AWAY. The same subtraction, on the two axes the
 					// framing never corrected: see UWonderlandUiSubsystem::WardrobeDrift.
@@ -1812,7 +1821,20 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 			// THE BOX'S CENTRE ON THE RAY, NOT THE ACTOR'S ORIGIN, on all three axes now. The vertical half of
 			// this was already here and was what stopped the Dog's head being cut off; the sideways half is
 			// what stops Arden hanging off the left edge of the window. Both are the same measurement.
-			const FVector2D Drift = Self->WardrobeDrift * PreviewScale;
+			// ---- THE SIDEWAYS DRIFT IS MEASURED AND DELIBERATELY NOT APPLIED.
+			//
+			// It was added to stop Arden Infernal hanging off the left edge of the window, back when I still
+			// believed that was a framing fault. It was not -- the bright shape in the corner was the plaza
+			// showing past a backdrop parked 254 uu too far away -- and with that fixed, centring the drawn
+			// BOX turns out to push the BODY off centre, because a mane or a banner hangs to one side and the
+			// box centre is not the figure's. Measured across the five skins it shifted every one of them
+			// left, by an amount that scaled with how much fire the skin has: Arden by 0.114 of the window
+			// against a 0.1 tolerance, the others by 0.03 to 0.06.
+			//
+			// A wardrobe centres the MASCOT, so the actor's own origin goes on the ray and the fire is allowed
+			// to hang where the artist hung it. The measurement is kept because it is the honest description
+			// of how far off-centre a silhouette is, and the framing note reports it.
+			const FVector2D Drift = FVector2D::ZeroVector;
 			Self->WardrobeFramingNote = FString::Printf(
 				TEXT("height=%.1f wide=%.1f middle=%.1f fitTall=%.0f fitWide=%.0f fit=%.0f dogAway=%.0f ")
 				TEXT("distance=%.0f scale=%.3f drift=(%.1f,%.1f) winSize=(%.3f,%.3f) winCentre=(%.3f,%.3f) ")
