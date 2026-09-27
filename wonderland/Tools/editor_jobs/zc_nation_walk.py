@@ -111,6 +111,22 @@ def job():
             return None
 
     for nation, route in sorted(routes.items()):
+        # A FRESH PIE FOR EACH NATION, because the Dog does not come back.
+        #
+        # The first clean run told this plainly: ICARUS reported the harness could not drive the Dog, and
+        # NOCTIS and TARTARUS then reported "no pawn" -- the Dog had been destroyed during ICARUS and never
+        # respawned, which this project's ledger records as the documented behaviour after a teleport into
+        # a cell that is not loaded. Two of the three nations were therefore not tested at all, and would
+        # have been reported as traversal failures if the actuator gate had not withheld them.
+        if ues.get_game_world() is not None:
+            les.editor_request_end_play()
+            yield (lambda: ues.get_game_world() is None, 600)
+        les.editor_request_begin_play()
+        yield (lambda: ues.get_game_world() is not None, 300)
+        yield (lambda: unreal.GameplayStatics.get_player_pawn(ues.get_game_world(), 0) is not None, 180)
+        yield 4.0
+        unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.DayMinutes 0")
+        unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.Hour 12")
         pts = route["points"][::EVERY]
         if pts[-1] is not route["points"][-1]:
             pts.append(route["points"][-1])
@@ -171,6 +187,27 @@ def job():
         tgt0 = pts[1]
         start_loc = dog.get_actor_location()
         probe_speed = 0.0
+        # WHAT STATE IS THE DOG IN? Recorded before the probe, because "it did not move" has several very
+        # different causes and guessing between them costs an editor window each time: no controller, a
+        # movement mode that ignores input, a paused world, or an overlay holding the body.
+        why = {}
+        try:
+            mv = dog.character_movement
+            why["movement_mode"] = str(mv.movement_mode)
+            why["max_walk_speed"] = round(float(mv.max_walk_speed), 1)
+            why["is_falling"] = bool(mv.is_falling())
+            why["gravity_scale"] = round(float(mv.gravity_scale), 2)
+        except Exception as err:                                      # noqa: BLE001
+            why["movement_component"] = "unreadable: %s" % str(err)[:70]
+        try:
+            why["controller"] = str(dog.get_controller().get_name()) if dog.get_controller() else "NONE"
+        except Exception:                                             # noqa: BLE001
+            why["controller"] = "unreadable"
+        try:
+            why["game_paused"] = bool(unreal.GameplayStatics.is_game_paused(live()))
+        except Exception:                                             # noqa: BLE001
+            why["game_paused"] = "unreadable"
+        row["dog_state"] = why
         for _ in range(60):
             d = pawn()
             if d is None:
@@ -190,10 +227,27 @@ def job():
                            d.get_actor_location().y - start_loc.y) if d is not None else 0.0
         row["probe_moved_uu"] = round(moved, 1)
         row["probe_peak_speed"] = round(probe_speed, 1)
+        # PEAK SPEED IS WHAT TELLS "BLOCKED" FROM "NOT DRIVEN", and displacement alone cannot.
+        #
+        # The run that produced this distinction: ICARUS moved 0.0 uu at a PEAK SPEED OF 230 -- the
+        # character's own max_walk_speed. A Dog at full velocity that does not advance is a Dog walking into
+        # something. NOCTIS moved 227 uu at 230 and walked cleanly. TARTARUS moved 67.7 uu but only ever
+        # reached 11.9, which is a Dog barely able to get going. Three different states that a displacement
+        # threshold on its own reports identically as "the harness failed", which is what the previous
+        # version said about all three -- and it was wrong about at least two of them.
         row["can_be_driven"] = moved > 100.0
+        driving = probe_speed > 0.5 * float(row.get("dog_state", {}).get("max_walk_speed") or 230.0)
+        row["input_reaching_character"] = driving
         if not row["can_be_driven"]:
-            row["error"] = ("the harness could not drive the Dog: %.1f uu in 3 s, peak speed %.1f -- "
-                            "route NOT judged" % (moved, probe_speed))
+            if driving:
+                row["blocked_at_start"] = True
+                row["error"] = ("BLOCKED AT THE START: the Dog reached %.1f uu/s -- its own walk speed -- "
+                                "and advanced %.1f uu. Input is arriving and the capsule cannot move, which "
+                                "is geometry, not the harness." % (probe_speed, moved))
+            else:
+                row["error"] = ("the Dog never got moving: %.1f uu in 3 s at a peak of only %.1f uu/s. "
+                                "Route NOT judged; this is the harness or the character, not the route."
+                                % (moved, probe_speed))
             emit("W_%s" % nation, "WARN", "%s: actuator dead, route withheld" % nation,
                  {"moved_uu": row["probe_moved_uu"], "peak_speed": row["probe_peak_speed"]})
             continue
@@ -264,9 +318,18 @@ def job():
               "stuck": row["stuck_at"], "error": row.get("error")})
 
     walked = {n: r.get("arrived", False) for n, r in nations.items()}
+    # THE HARNESS IS PROVEN BY ANY ONE NATION. If the Dog drove cleanly somewhere, the actuator works, and
+    # a nation where it did not drive is a fact about that place rather than about this job.
+    any_driven = any(r.get("input_reaching_character") for r in nations.values())
+    blocked = [n for n, r in nations.items() if r.get("blocked_at_start")]
     record("W0A", "the harness can actually drive the Dog -- these are walks, not stationary readings",
-           all(r.get("can_be_driven") for r in nations.values()) and len(nations) == 3,
+           any_driven and len(nations) == 3,
+           harness_proven_by=[n for n, r in nations.items() if r.get("input_reaching_character")],
+           blocked_at_start=blocked,
+           note="peak speed separates the cases: full walk speed with no displacement is BLOCKED GEOMETRY "
+                "and is a world finding; a peak near zero is the harness and withholds the route",
            moved_uu={n: r.get("probe_moved_uu") for n, r in nations.items()},
+           dog_state={n: r.get("dog_state") for n, r in nations.items()},
            peak_speed={n: r.get("probe_peak_speed") for n, r in nations.items()},
            note="3 s of AddMovementInput toward the second waypoint before the route is judged; a red here "
                 "means the route results are withheld, not that the world is blocked")

@@ -247,6 +247,22 @@ def job():
 
     # ---- THE GATES
     lumas = [r["luma"] for row in sweep for r in row["places"].values() if r]
+    # ---- DAYLIGHT SANITY. Nothing below means anything if the instrument cannot see a lit world.
+    #
+    # The first run returned NOON luma of 0.0343 at the arrival, 0.0118 at the clock quarter and 0.0300 at
+    # the Noctis architecture -- near-black at midday. The same world read through the VIEWPORT on the same
+    # afternoon gave 0.17 to 0.34 at comparable framings (zc_checkpoints court_luma_noon). Two capture paths,
+    # one plausible and one not, and every night verdict here divides by the implausible one: "still night"
+    # is luma <= 0.38 x noon, which is meaningless when noon is itself black. So this gate runs FIRST and a
+    # red here voids the rest of the job rather than letting it publish ratios against a dark reference.
+    noon_lumas = {k: v["luma"] for k, v in noon.items() if v}
+    bright_enough = [k for k, v in noon_lumas.items() if v >= 0.12]
+    record("N_SANITY", "the capture can see a lit world at noon -- the reference the night ratios divide by",
+           len(bright_enough) >= max(1, len(noon_lumas) - 1), noon_luma=noon_lumas, floor=0.12,
+           too_dark=[k for k in noon_lumas if k not in bright_enough],
+           note="the viewport path reads 0.17-0.34 at noon in this same world; a SceneCapture reading an "
+                "order of magnitude darker is measuring its own configuration, not the world")
+
     record("N00", "the sweep moved the picture -- the instrument is responding",
            lumas and (max(lumas) - min(lumas)) > 0.02, luma_range=[min(lumas), max(lumas)] if lumas else None,
            practicals=practicals)

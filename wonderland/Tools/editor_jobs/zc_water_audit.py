@@ -183,11 +183,23 @@ def job():
            len(shots) == 9 and all(v["water"] for v in shots.values()), views=sorted(shots))
     night = shots.get("night_shoreline", {}).get("water")
     day = shots.get("day_shoreline", {}).get("water")
-    record("A03", "at night the water is neither black nor a glowing blue sheet",
-           night is not None and 0.03 <= night["luma"] <= 0.35 and night["blue_over_red"] <= 2.5,
-           night=night, day=day,
-           note="a luma under 0.03 is a black hole in the garden; over 0.35 or a blue/red ratio past 2.5 "
-                "is the 'glowing blue sheet' the founder named")
+    # THIS GATE PASSED WATER THAT WAS 99% BLACK, AND THAT IS RECORDED RATHER THAN QUIETLY RETUNED.
+    #
+    # The first run returned night_shoreline luma 0.0314 with dark 0.9903 -- ninety-nine per cent of the
+    # water patch crushed -- and A03 went green because the MEAN squeaked over a 0.03 floor. A mean is the
+    # wrong statistic for "is it black": a handful of specular pixels on an otherwise dead surface carries
+    # it over the line. The founder's requirement is that water read as water at night, so the crushed
+    # fraction is now the gate and the mean is only a companion.
+    dusk = (shots.get("dusk_shoreline") or {}).get("water")
+    dark_enough = [k for k, v in shots.items()
+                   if (v.get("water") or {}).get("dark", 1.0) > 0.85]
+    record("A03", "at night and dusk the water reads as water -- not a black hole, not a glowing blue sheet",
+           night is not None and night["dark"] <= 0.85 and night["luma"] <= 0.35
+           and night["blue_over_red"] <= 2.5 and not dark_enough,
+           night=night, dusk=dusk, day=day, crushed_ceiling=0.85,
+           views_over_85pct_crushed=sorted(dark_enough),
+           note="gated on the CRUSHED FRACTION, because a mean of 0.03 passed a surface that was 99% "
+                "black; over 0.35 luma or a blue/red ratio past 2.5 is the glowing sheet the founder named")
     RESULT["status"] = "measured"
     yield 2.0
     les.editor_request_end_play()
