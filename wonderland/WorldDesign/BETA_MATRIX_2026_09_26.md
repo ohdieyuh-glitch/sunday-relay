@@ -150,3 +150,59 @@ measured.
 worse while looking like progress. The founder's stated requirement — daylight — passes with room on every
 skin (Relay OG 0.591 against a face of 0.039). Making Relay OG's warm gold read as a lamp *at night* needs
 that one skin's authored eye raised, which is art and belongs to the founder.
+
+
+## Re-measured end to end, 2026-09-27, on HEAD with both targets built
+
+Every row below was run on the current build in this session, and each result was read together with the
+`WLCHANNEL finished` line that produced it. That last part is not pedantry: one wardrobe result in this pass
+read 5/5 from a file written *before* the change it appeared to confirm, because the run that would have
+replaced it was killed before it was queued. A green can outlive its run.
+
+| Proof | Item | Result |
+|---|---|---|
+| `zc_wardrobe_20` | P0-1 | **5/5** — V03 and V04 are new in-engine gates, occupancy 69.0–93.2% |
+| `zc_wardrobe_regress` | P0-1 | **3/3** — close/reopen ×3, five skins ×2, three colourways, 360°, 11 km teleport, day sweep |
+| `zc_brain_sculpture` | P0-2 | 12/12 |
+| `zc_skin_parity_all` | P0-3 | 4/4 |
+| `zc_fire_look` | P0-4 | 3/3 — re-run after the Skeleton Flame asset grew 47% |
+| `zc_avatar_ladder` | P0-5 | A03 green (0.33 ms per avatar at the top end); **A04 unattributed** |
+| `zc_companion_colours` | P1-6 | 5/5 |
+| `zc_hud_agents` | P1-7 | 5/5 |
+| `zc_menu_colours` | P1-8/9 | 8/8 (M11 flaked once, green on repeat) |
+| `zc_water` | P2-10 | 5/5 |
+| `zc_shadows` | P2-11 | 4/4 |
+| `zc_night_readable` | P2-12 | **8/8** — N03 closed by a night rim |
+| `zc_streaming` | P2-13 | **2/2** — was BLOCKING; residency 12,657 → 1,202 actors |
+| `zc_walk_after_wp` | P2-13 | **6/6** — was 5/6; the missing stand was a harness fault |
+| `zc_beta_perf` | perf | 6/8 stands, 19.2–27.3 ms |
+
+### Four proofs were wrong, not four features
+
+The striking thing about this pass is how much of it was instrumentation. Each of these reported a fault in
+the thing it was pointed at:
+
+* **`zc_streaming`** placed the Dog at a flat 400 uu, killed it inside masonry, and surfaced as
+  `RelayDogCharacter: Internal Error` in a job about World Partition. The row had read BLOCKING since
+  yesterday. The world pages fine.
+* **`zc_walk_after_wp`** traced down and took the first hit — a 25.8 m roof — and held the Dog inside it.
+  One stand had been unmeasured every run.
+* **`zc_wardrobe_regress`** looked for the skin stage before opening the wardrobe that creates it, then
+  compared framing notes as strings and failed on float noise in the staged scale.
+* **`zc_beta_perf`** re-issued `stat unit` on a timer. It is a *toggle*, so the fix moved the failure from
+  noon to midnight before naming itself.
+
+The rule that came out of it: **when a measurement disagrees with a photograph, suspect the measurement
+first.** That sits underneath the founder's rule rather than replacing it — the photograph still wins, but
+the instrument is the more likely thing to be broken.
+
+### Still open, and why
+
+* **P0-5 spawn hitch — unattributed, not fixed.** Scaling is proven. The engine's own log named PSO
+  compilation (`0 of them were precached`) and the project had no precaching configured; enabling it, and
+  verifying the CVars actually reached the engine, moved the five-avatar p95 from 93.27 ms to 93.4 ms.
+  Unchanged. The ladder also runs its rungs `0, 1, 10, 5`, so that 93 ms is the *last* spawn of the session —
+  on a host with 1.89 GB free of 15.7 GB that has been killing processes throughout. Not attributable here.
+* **`zc_beta_perf` reads six stands of eight.** Understood, in the instrument, and the six agree across runs.
+* **Relay OG's night eyes** read lit but dull. The global control makes it *worse* (luma falls 0.153 → 0.078
+  as the level rises, because auto-exposure closes on them). That is this skin's authored eye — art.
