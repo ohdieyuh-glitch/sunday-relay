@@ -1,6 +1,6 @@
 {
  "name": "zc_wardrobe_truth",
- "started": "2026-09-26 20:50:22",
+ "started": "2026-09-26 21:26:09",
  "status": "measured; the verdict is the twenty captures",
  "tests": [
   {
@@ -33,124 +33,124 @@
  "by_skin": {
   "relay_og": {
    "front": {
-    "luma": 0.029,
-    "fraction_nearly_black": 0.9172,
-    "fraction_over_white": 0.0
+    "luma": 0.0954,
+    "fraction_nearly_black": 0.889,
+    "fraction_over_white": 0.0749
    },
    "left": {
-    "luma": 0.0274,
-    "fraction_nearly_black": 0.9285,
-    "fraction_over_white": 0.0
+    "luma": 0.0951,
+    "fraction_nearly_black": 0.8894,
+    "fraction_over_white": 0.0745
    },
    "back": {
-    "luma": 0.0296,
-    "fraction_nearly_black": 0.9321,
-    "fraction_over_white": 0.0
+    "luma": 0.0989,
+    "fraction_nearly_black": 0.882,
+    "fraction_over_white": 0.0766
    },
    "right": {
-    "luma": 0.0304,
-    "fraction_nearly_black": 0.9254,
-    "fraction_over_white": 0.0
+    "luma": 0.098,
+    "fraction_nearly_black": 0.8845,
+    "fraction_over_white": 0.077
    }
   },
   "arden_infernal": {
    "front": {
-    "luma": 0.2868,
-    "fraction_nearly_black": 0.6645,
-    "fraction_over_white": 0.2395
+    "luma": 0.8834,
+    "fraction_nearly_black": 0.0019,
+    "fraction_over_white": 0.8722
    },
    "left": {
-    "luma": 0.2661,
-    "fraction_nearly_black": 0.6758,
-    "fraction_over_white": 0.2312
+    "luma": 0.8841,
+    "fraction_nearly_black": 0.0013,
+    "fraction_over_white": 0.8738
    },
    "back": {
-    "luma": 0.2631,
-    "fraction_nearly_black": 0.6709,
-    "fraction_over_white": 0.2232
+    "luma": 0.8701,
+    "fraction_nearly_black": 0.0028,
+    "fraction_over_white": 0.8461
    },
    "right": {
-    "luma": 0.2782,
-    "fraction_nearly_black": 0.6662,
-    "fraction_over_white": 0.2378
+    "luma": 0.8863,
+    "fraction_nearly_black": 0.0021,
+    "fraction_over_white": 0.8755
    }
   },
   "apollo": {
    "front": {
-    "luma": 0.1888,
-    "fraction_nearly_black": 0.6574,
-    "fraction_over_white": 0.0967
+    "luma": 0.8914,
+    "fraction_nearly_black": 0.0,
+    "fraction_over_white": 0.8896
    },
    "left": {
-    "luma": 0.1989,
-    "fraction_nearly_black": 0.6492,
-    "fraction_over_white": 0.0988
+    "luma": 0.8988,
+    "fraction_nearly_black": 0.0,
+    "fraction_over_white": 0.8973
    },
    "back": {
-    "luma": 0.2084,
-    "fraction_nearly_black": 0.638,
-    "fraction_over_white": 0.111
+    "luma": 0.8878,
+    "fraction_nearly_black": 0.0,
+    "fraction_over_white": 0.8807
    },
    "right": {
-    "luma": 0.2068,
-    "fraction_nearly_black": 0.6384,
-    "fraction_over_white": 0.1107
+    "luma": 0.8991,
+    "fraction_nearly_black": 0.0,
+    "fraction_over_white": 0.9012
    }
   },
   "skeleton_flame": {
    "front": {
-    "luma": 0.148,
-    "fraction_nearly_black": 0.7083,
-    "fraction_over_white": 0.0782
+    "luma": 0.7637,
+    "fraction_nearly_black": 0.0569,
+    "fraction_over_white": 0.7142
    },
    "left": {
-    "luma": 0.1673,
-    "fraction_nearly_black": 0.6836,
-    "fraction_over_white": 0.102
+    "luma": 0.7491,
+    "fraction_nearly_black": 0.0818,
+    "fraction_over_white": 0.7021
    },
    "back": {
-    "luma": 0.1343,
-    "fraction_nearly_black": 0.7264,
-    "fraction_over_white": 0.0743
+    "luma": 0.7724,
+    "fraction_nearly_black": 0.045,
+    "fraction_over_white": 0.7203
    },
    "right": {
-    "luma": 0.1538,
-    "fraction_nearly_black": 0.7097,
-    "fraction_over_white": 0.0942
+    "luma": 0.7972,
+    "fraction_nearly_black": 0.03,
+    "fraction_over_white": 0.7506
    }
   },
   "celestial_light": {
    "front": {
-    "luma": 0.4267,
-    "fraction_nearly_black": 0.4863,
-    "fraction_over_white": 0.3907
+    "luma": 0.9143,
+    "fraction_nearly_black": 0.0006,
+    "fraction_over_white": 0.9042
    },
    "left": {
-    "luma": 0.4159,
-    "fraction_nearly_black": 0.5042,
-    "fraction_over_white": 0.3799
+    "luma": 0.9209,
+    "fraction_nearly_black": 0.0,
+    "fraction_over_white": 0.9236
    },
    "back": {
-    "luma": 0.41,
-    "fraction_nearly_black": 0.5146,
-    "fraction_over_white": 0.3851
+    "luma": 0.9214,
+    "fraction_nearly_black": 0.0,
+    "fraction_over_white": 0.9253
    },
    "right": {
-    "luma": 0.4268,
-    "fraction_nearly_black": 0.4853,
-    "fraction_over_white": 0.3894
+    "luma": 0.9186,
+    "fraction_nearly_black": 0.0,
+    "fraction_over_white": 0.9157
    }
   }
  },
  "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\wardrobe_truth",
  "front_fraction_not_black": {
-  "relay_og": 0.0828,
-  "arden_infernal": 0.3355,
-  "apollo": 0.3426,
-  "skeleton_flame": 0.2917,
-  "celestial_light": 0.5137
+  "relay_og": 0.111,
+  "arden_infernal": 0.9981,
+  "apollo": 1.0,
+  "skeleton_flame": 0.9431,
+  "celestial_light": 0.9994
  },
- "finished": "2026-09-26 20:53:48",
- "seconds": 206.62,
- "log": "T00 PASS the wardrobe is open and reports its window {}\nT_relay_og INFO relay_og {'front': {'luma': 0.029, 'fraction_nearly_black': 0.9172, 'fraction_over_white': 0.0}, 'left': {'luma': 0.0274, 'fraction_nearly_black': 0.9285, 'fraction_over_white': 0.0}, 'back': {'luma': 0.0296, 'fraction_nearly_black': 0.9321, 'fraction_over_white': 0.0}, 'right': {'luma': 0.0304, 'fraction_nearly_black': 0.9254, 'fraction_over_white': 0.0}}\nT_arden_infernal INFO arden_infernal {'front': {'luma': 0.2868, 'fraction_nearly_black': 0.6645, 'fraction_over_white': 0.2395}, 'left': {'luma': 0.2661, 'fraction_nearly_black': 0.6758, 'fraction_over_white': 0.2312}, 'back': {'luma': 0.2631, 'fraction_nearly_black': 0.6709, 'fraction_over_white': 0.2232}, 'right': {'luma': 0.2782, 'fraction_nearly_black': 0.6662, 'fraction_over_white': 0.2378}}\nT_apollo INFO apollo {'front': {'luma': 0.1888, 'fraction_nearly_black': 0.6574, 'fraction_over_white': 0.0967}, 'left': {'luma': 0.1989, 'fraction_nearly_black': 0.6492, 'fraction_over_white': 0.0988}, 'back': {'luma': 0.2084, 'fraction_nearly_black': 0.638, 'fraction_over_white': 0.111}, 'right': {'luma': 0.2068, 'fraction_nearly_black': 0.6384, 'fraction_over_white': 0.1107}}\nT_skeleton_flame INFO skeleton_flame {'front': {'luma': 0.148, 'fraction_nearly_black': 0.7083, 'fraction_over_white': 0.0782}, 'left': {'luma': 0.1673, 'fraction_nearly_black': 0.6836, 'fraction_over_white': 0.102}, 'back': {'luma': 0.1343, 'fraction_nearly_black': 0.7264, 'fraction_over_white': 0.0743}, 'right': {'luma': 0.1538, 'fraction_nearly_black': 0.7097, 'fraction_over_white': 0.0942}}\nT_celestial_light INFO celestial_light {'front': {'luma': 0.4267, 'fraction_nearly_black': 0.4863, 'fraction_over_white': 0.3907}, 'left': {'luma': 0.4159, 'fraction_nearly_black': 0.5042, 'fraction_over_white': 0.3799}, 'back': {'luma': 0.41, 'fraction_nearly_black': 0.5146, 'fraction_over_white': 0.3851}, 'right': {'luma': 0.4268, 'fraction_nearly_black': 0.4853, 'fraction_over_white': 0.3894}}\nT_FILL INFO how much of the square is not nearly-black, front view {'relay_og': 0.0828, 'arden_infernal': 0.3355, 'apollo': 0.3426, 'skeleton_flame': 0.2917, 'celestial_light': 0.5137}\nT01 PASS every skin was photographed from four angles {'captured': 20, 'wanted': 20, 'note': 'the verdict on these is the photographs. This clause only says they exist.'}\n"
+ "finished": "2026-09-26 21:29:34",
+ "seconds": 205.21,
+ "log": "T00 PASS the wardrobe is open and reports its window {}\nT_relay_og INFO relay_og {'front': {'luma': 0.0954, 'fraction_nearly_black': 0.889, 'fraction_over_white': 0.0749}, 'left': {'luma': 0.0951, 'fraction_nearly_black': 0.8894, 'fraction_over_white': 0.0745}, 'back': {'luma': 0.0989, 'fraction_nearly_black': 0.882, 'fraction_over_white': 0.0766}, 'right': {'luma': 0.098, 'fraction_nearly_black': 0.8845, 'fraction_over_white': 0.077}}\nT_arden_infernal INFO arden_infernal {'front': {'luma': 0.8834, 'fraction_nearly_black': 0.0019, 'fraction_over_white': 0.8722}, 'left': {'luma': 0.8841, 'fraction_nearly_black': 0.0013, 'fraction_over_white': 0.8738}, 'back': {'luma': 0.8701, 'fraction_nearly_black': 0.0028, 'fraction_over_white': 0.8461}, 'right': {'luma': 0.8863, 'fraction_nearly_black': 0.0021, 'fraction_over_white': 0.8755}}\nT_apollo INFO apollo {'front': {'luma': 0.8914, 'fraction_nearly_black': 0.0, 'fraction_over_white': 0.8896}, 'left': {'luma': 0.8988, 'fraction_nearly_black': 0.0, 'fraction_over_white': 0.8973}, 'back': {'luma': 0.8878, 'fraction_nearly_black': 0.0, 'fraction_over_white': 0.8807}, 'right': {'luma': 0.8991, 'fraction_nearly_black': 0.0, 'fraction_over_white': 0.9012}}\nT_skeleton_flame INFO skeleton_flame {'front': {'luma': 0.7637, 'fraction_nearly_black': 0.0569, 'fraction_over_white': 0.7142}, 'left': {'luma': 0.7491, 'fraction_nearly_black': 0.0818, 'fraction_over_white': 0.7021}, 'back': {'luma': 0.7724, 'fraction_nearly_black': 0.045, 'fraction_over_white': 0.7203}, 'right': {'luma': 0.7972, 'fraction_nearly_black': 0.03, 'fraction_over_white': 0.7506}}\nT_celestial_light INFO celestial_light {'front': {'luma': 0.9143, 'fraction_nearly_black': 0.0006, 'fraction_over_white': 0.9042}, 'left': {'luma': 0.9209, 'fraction_nearly_black': 0.0, 'fraction_over_white': 0.9236}, 'back': {'luma': 0.9214, 'fraction_nearly_black': 0.0, 'fraction_over_white': 0.9253}, 'right': {'luma': 0.9186, 'fraction_nearly_black': 0.0, 'fraction_over_white': 0.9157}}\nT_FILL INFO how much of the square is not nearly-black, front view {'relay_og': 0.111, 'arden_infernal': 0.9981, 'apollo': 1.0, 'skeleton_flame': 0.9431, 'celestial_light': 0.9994}\nT01 PASS every skin was photographed from four angles {'captured': 20, 'wanted': 20, 'note': 'the verdict on these is the photographs. This clause only says they exist.'}\n"
 }

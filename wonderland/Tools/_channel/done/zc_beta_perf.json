@@ -1,6 +1,6 @@
 {
  "name": "zc_beta_perf",
- "started": "2026-09-26 16:58:48",
+ "started": "2026-09-27 01:15:51",
  "status": "FAIL: stat unit did not report",
  "tests": [
   {
@@ -15,14 +15,14 @@
      "dubel_belt"
     ],
     "frame_ms": {
-     "noon/arrival": 33.7,
-     "noon/icarus_checkpoint": 31.28,
+     "noon/arrival": 22.11,
+     "noon/icarus_checkpoint": 21.36,
      "noon/tartarus_march": null,
      "noon/dubel_belt": null,
-     "midnight/arrival": null,
-     "midnight/icarus_checkpoint": null,
-     "midnight/tartarus_march": null,
-     "midnight/dubel_belt": null
+     "midnight/arrival": 27.28,
+     "midnight/icarus_checkpoint": 24.38,
+     "midnight/tartarus_march": 19.21,
+     "midnight/dubel_belt": 20.01
     },
     "note": "a frame cost of 0.00 is what FStatUnitData reports when the stat unit overlay is not drawing, and it is under every ceiling anyone would set. Asserted here so the two clauses below cannot pass on nothing."
    }
@@ -32,33 +32,61 @@
   "noon": {
    "arrival": {
     "frames": 141,
-    "frame_ms": 33.7,
-    "game_ms": 27.13,
-    "render_ms": 33.69,
-    "gpu_ms": 31.1
+    "frame_ms": 22.11,
+    "game_ms": 22.1,
+    "render_ms": 16.84,
+    "gpu_ms": 19.44
    },
    "icarus_checkpoint": {
     "frames": 141,
-    "frame_ms": 31.28,
-    "game_ms": 31.78,
-    "render_ms": 20.18,
-    "gpu_ms": 19.55
+    "frame_ms": 21.36,
+    "game_ms": 21.38,
+    "render_ms": 17.02,
+    "gpu_ms": 19.5
    },
    "tartarus_march": null,
    "dubel_belt": null
   },
   "midnight": {
-   "arrival": null,
-   "icarus_checkpoint": null,
-   "tartarus_march": null,
-   "dubel_belt": null
+   "arrival": {
+    "frames": 141,
+    "frame_ms": 27.28,
+    "game_ms": 27.45,
+    "render_ms": 16.68,
+    "gpu_ms": 14.27
+   },
+   "icarus_checkpoint": {
+    "frames": 141,
+    "frame_ms": 24.38,
+    "game_ms": 24.49,
+    "render_ms": 14.82,
+    "gpu_ms": 16.09
+   },
+   "tartarus_march": {
+    "frames": 141,
+    "frame_ms": 19.21,
+    "game_ms": 18.82,
+    "render_ms": 18.32,
+    "gpu_ms": 17.18
+   },
+   "dubel_belt": {
+    "frames": 141,
+    "frame_ms": 20.01,
+    "game_ms": 19.95,
+    "render_ms": 15.76,
+    "gpu_ms": 17.06
+   }
   }
  },
  "_windows": [
   141,
+  141,
+  141,
+  141,
+  141,
   141
  ],
- "finished": "2026-09-26 16:59:45",
- "seconds": 57.52,
- "log": "F_noon_arrival INFO arrival at noon {'frames': 141, 'frame_ms': 33.7, 'game_ms': 27.13, 'render_ms': 33.69, 'gpu_ms': 31.1}\nF_noon_icarus_checkpoint INFO icarus_checkpoint at noon {'frames': 141, 'frame_ms': 31.28, 'game_ms': 31.78, 'render_ms': 20.18, 'gpu_ms': 19.55}\nF00 FAIL every stand was measured at noon and at midnight, and the clock was actually running {'stands': ['arrival', 'icarus_checkpoint', 'tartarus_march', 'dubel_belt'], 'frame_ms': {'noon/arrival': 33.7, 'noon/icarus_checkpoint': 31.28, 'noon/tartarus_march': None, 'noon/dubel_belt': None, 'midnight/arrival': None, 'midnight/icarus_checkpoint': None, 'midnight/tartarus_march': None, 'midnight/dubel_belt': None}, 'note': 'a frame cost of 0.00 is what FStatUnitData reports when the stat unit overlay is not drawing, and it is under every ceiling anyone would set. Asserted here so the two clauses below cannot pass on nothing.'}\n"
+ "finished": "2026-09-27 01:17:42",
+ "seconds": 111.02,
+ "log": "F_noon_arrival INFO arrival at noon {'frames': 141, 'frame_ms': 22.11, 'game_ms': 22.1, 'render_ms': 16.84, 'gpu_ms': 19.44}\nF_noon_icarus_checkpoint INFO icarus_checkpoint at noon {'frames': 141, 'frame_ms': 21.36, 'game_ms': 21.38, 'render_ms': 17.02, 'gpu_ms': 19.5}\nF_midnight_arrival INFO arrival at midnight {'frames': 141, 'frame_ms': 27.28, 'game_ms': 27.45, 'render_ms': 16.68, 'gpu_ms': 14.27}\nF_midnight_icarus_checkpoint INFO icarus_checkpoint at midnight {'frames': 141, 'frame_ms': 24.38, 'game_ms': 24.49, 'render_ms': 14.82, 'gpu_ms': 16.09}\nF_midnight_tartarus_march INFO tartarus_march at midnight {'frames': 141, 'frame_ms': 19.21, 'game_ms': 18.82, 'render_ms': 18.32, 'gpu_ms': 17.18}\nF_midnight_dubel_belt INFO dubel_belt at midnight {'frames': 141, 'frame_ms': 20.01, 'game_ms': 19.95, 'render_ms': 15.76, 'gpu_ms': 17.06}\nF00 FAIL every stand was measured at noon and at midnight, and the clock was actually running {'stands': ['arrival', 'icarus_checkpoint', 'tartarus_march', 'dubel_belt'], 'frame_ms': {'noon/arrival': 22.11, 'noon/icarus_checkpoint': 21.36, 'noon/tartarus_march': None, 'noon/dubel_belt': None, 'midnight/arrival': 27.28, 'midnight/icarus_checkpoint': 24.38, 'midnight/tartarus_march': 19.21, 'midnight/dubel_belt': 20.01}, 'note': 'a frame cost of 0.00 is what FStatUnitData reports when the stat unit overlay is not drawing, and it is under every ceiling anyone would set. Asserted here so the two clauses below cannot pass on nothing.'}\n"
 }

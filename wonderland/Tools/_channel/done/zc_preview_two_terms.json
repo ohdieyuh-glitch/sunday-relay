@@ -1,0 +1,31 @@
+{
+ "name": "zc_preview_two_terms",
+ "started": "2026-09-26 23:36:52",
+ "status": "measured; the verdict is the exported targets",
+ "tests": [
+  {
+   "id": "N00",
+   "name": "both terms were swept",
+   "pass": true,
+   "detail": {
+    "lamp_factor": 1.0,
+    "glows": [
+     0.01,
+     0.004,
+     0.0015,
+     0.0006
+    ],
+    "skins": [
+     "skeleton_flame",
+     "arden_infernal",
+     "celestial_light",
+     "apollo"
+    ]
+   }
+  }
+ ],
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\two_terms",
+ "finished": "2026-09-26 23:38:29",
+ "seconds": 97.76,
+ "log": "N_skeleton_flame INFO swept skeleton_flame {'glows': [0.01, 0.004, 0.0015, 0.0006]}\nN_arden_infernal INFO swept arden_infernal {'glows': [0.01, 0.004, 0.0015, 0.0006]}\nN_celestial_light INFO swept celestial_light {'glows': [0.01, 0.004, 0.0015, 0.0006]}\nN_apollo INFO swept apollo {'glows': [0.01, 0.004, 0.0015, 0.0006]}\n"
+}

@@ -1,0 +1,25 @@
+{
+ "name": "zc_preview_exposure",
+ "started": "2026-09-26 21:39:54",
+ "status": "measured; the verdict is the exported targets",
+ "tests": [
+  {
+   "id": "X00",
+   "name": "the sweep exported",
+   "pass": true,
+   "detail": {
+    "stops": [
+     11.0,
+     7.0,
+     4.0,
+     1.0,
+     -2.0
+    ]
+   }
+  }
+ ],
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\preview_exposure",
+ "finished": "2026-09-26 21:41:07",
+ "seconds": 73.24,
+ "log": "X_relay_og INFO swept relay_og {'stops': [11.0, 7.0, 4.0, 1.0, -2.0]}\nX_celestial_light INFO swept celestial_light {'stops': [11.0, 7.0, 4.0, 1.0, -2.0]}\n"
+}

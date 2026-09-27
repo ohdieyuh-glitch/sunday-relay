@@ -1,0 +1,38 @@
+{
+ "name": "zc_pso_state",
+ "started": "2026-09-27 01:44:56",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "P00",
+   "name": "the PSO precache settings reached the engine",
+   "pass": true,
+   "detail": {
+    "values": {
+     "r.PSOPrecaching": 1,
+     "r.PSOPrecache.Components": 1,
+     "r.PSOPrecache.Resources": 1,
+     "r.PSOPrecache.ProxyCreationWhenPSOReady": 1,
+     "r.PSOPrecache.GlobalComputeShaders": 0
+    },
+    "enabled": [
+     "r.PSOPrecaching",
+     "r.PSOPrecache.Components",
+     "r.PSOPrecache.Resources",
+     "r.PSOPrecache.ProxyCreationWhenPSOReady"
+    ],
+    "note": "written into [/Script/Engine.RendererSettings], which maps to URendererSettings properties rather than to console variables. If these read zero the ini keys were ignored and the avatar measurement tested nothing -- the fix has to move to [SystemSettings] before the hypothesis can be judged at all."
+   }
+  }
+ ],
+ "cvars": {
+  "r.PSOPrecaching": 1,
+  "r.PSOPrecache.Components": 1,
+  "r.PSOPrecache.Resources": 1,
+  "r.PSOPrecache.ProxyCreationWhenPSOReady": 1,
+  "r.PSOPrecache.GlobalComputeShaders": 0
+ },
+ "finished": "2026-09-27 01:44:57",
+ "seconds": 0.5,
+ "log": "P_CVARS INFO what the engine actually holds {'r.PSOPrecaching': 1, 'r.PSOPrecache.Components': 1, 'r.PSOPrecache.Resources': 1, 'r.PSOPrecache.ProxyCreationWhenPSOReady': 1, 'r.PSOPrecache.GlobalComputeShaders': 0}\n"
+}
