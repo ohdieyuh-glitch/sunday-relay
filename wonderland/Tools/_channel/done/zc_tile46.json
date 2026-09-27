@@ -1,0 +1,395 @@
+{
+ "name": "zc_tile46",
+ "started": "2026-09-27 02:50:08",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "T00",
+   "name": "every sample point across the tile has a surface under it",
+   "pass": true,
+   "detail": {
+    "no_surface_at": [],
+    "of": 25,
+    "note": "a handful of dead points in a field of good ones is a GAP IN THE FLOOR and a beta defect. All points dead means the cell never arrived and this measured nothing. A consistent floor everywhere means the walk's single centre sample was simply unlucky."
+   }
+  },
+  {
+   "id": "T01",
+   "name": "the tile's floor is at one broad height rather than scattered",
+   "pass": true,
+   "detail": {
+    "span_uu": [
+     -14,
+     12
+    ],
+    "spread_uu": 26,
+    "note": "the walk expected this tile's floor near z=524 from its actors and found only z=-14 at the exact centre. If the floor here really is 500 m up across the tile, the centre is a hole; if it is at -14 everywhere, the actors sit on something the centre does not share."
+   }
+  }
+ ],
+ "grid": [
+  {
+   "offset": [
+    -2,
+    -2
+   ],
+   "at": [
+    -68764,
+    -28764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    -2,
+    -1
+   ],
+   "at": [
+    -68764,
+    -23764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    -2,
+    0
+   ],
+   "at": [
+    -68764,
+    -18764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    -2,
+    1
+   ],
+   "at": [
+    -68764,
+    -13764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    -2,
+    2
+   ],
+   "at": [
+    -68764,
+    -8764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    -1,
+    -2
+   ],
+   "at": [
+    -63764,
+    -28764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    -1,
+    -1
+   ],
+   "at": [
+    -63764,
+    -23764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    -1,
+    0
+   ],
+   "at": [
+    -63764,
+    -18764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    -1,
+    1
+   ],
+   "at": [
+    -63764,
+    -13764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    -1,
+    2
+   ],
+   "at": [
+    -63764,
+    -8764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    0,
+    -2
+   ],
+   "at": [
+    -58764,
+    -28764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    0,
+    -1
+   ],
+   "at": [
+    -58764,
+    -23764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    0,
+    0
+   ],
+   "at": [
+    -58764,
+    -18764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    0,
+    1
+   ],
+   "at": [
+    -58764,
+    -13764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    0,
+    2
+   ],
+   "at": [
+    -58764,
+    -8764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    1,
+    -2
+   ],
+   "at": [
+    -53764,
+    -28764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    1,
+    -1
+   ],
+   "at": [
+    -53764,
+    -23764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    1,
+    0
+   ],
+   "at": [
+    -53764,
+    -18764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    1,
+    1
+   ],
+   "at": [
+    -53764,
+    -13764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    1,
+    2
+   ],
+   "at": [
+    -53764,
+    -8764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    2,
+    -2
+   ],
+   "at": [
+    -48764,
+    -28764
+   ],
+   "surfaces": [
+    12
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    2,
+    -1
+   ],
+   "at": [
+    -48764,
+    -23764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    2,
+    0
+   ],
+   "at": [
+    -48764,
+    -18764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    2,
+    1
+   ],
+   "at": [
+    -48764,
+    -13764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  },
+  {
+   "offset": [
+    2,
+    2
+   ],
+   "at": [
+    -48764,
+    -8764
+   ],
+   "surfaces": [
+    -14
+   ],
+   "count": 1
+  }
+ ],
+ "points_with_no_surface": 0,
+ "points": 25,
+ "distinct_surface_heights": [
+  -14,
+  12
+ ],
+ "highest_surface_span": [
+  -14,
+  12
+ ],
+ "finished": "2026-09-27 02:50:41",
+ "seconds": 32.95,
+ "log": "T_GRID INFO surfaces across the tile {'points': 25, 'with_no_surface': 0, 'heights': [-14, 12]}\nT00 PASS every sample point across the tile has a surface under it {'no_surface_at': [], 'of': 25, 'note': \"a handful of dead points in a field of good ones is a GAP IN THE FLOOR and a beta defect. All points dead means the cell never arrived and this measured nothing. A consistent floor everywhere means the walk's single centre sample was simply unlucky.\"}\nT01 PASS the tile's floor is at one broad height rather than scattered {'span_uu': [-14, 12], 'spread_uu': 26, 'note': \"the walk expected this tile's floor near z=524 from its actors and found only z=-14 at the exact centre. If the floor here really is 500 m up across the tile, the centre is a hole; if it is at -14 everywhere, the actors sit on something the centre does not share.\"}\n"
+}
