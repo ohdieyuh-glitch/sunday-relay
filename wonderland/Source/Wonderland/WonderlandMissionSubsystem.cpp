@@ -1570,6 +1570,16 @@ FString UWonderlandMissionSubsystem::GetFollowedJuliusState() const
 	return Tasks != nullptr ? Tasks->GetFollowedJuliusState() : FString();
 }
 
+FString UWonderlandMissionSubsystem::GetFollowedStateName() const
+{
+	const UWonderlandMissionTaskSubsystem* Tasks = TaskSet();
+	if (Tasks == nullptr || !Tasks->IsFollowingJuliusRun())
+	{
+		return FString();
+	}
+	return WonderlandTaskStateName(Tasks->GetFollowedState());
+}
+
 FString UWonderlandMissionSubsystem::GetProvenanceBanner() const
 {
 	if (IsDevelopmentPreview())

@@ -212,9 +212,14 @@ void SWonderlandMissionsPanel::Construct(const FArguments& InArgs)
 				// default as something Julius asserted.
 				const FString Run = Weak->GetFollowedRunId();
 				const FString Said = Weak->GetFollowedJuliusState();
+				// THE MAPPED STATE, NOT THE WORD QUEUED. I wrote QUEUED as a literal here half an hour after
+				// removing three other literals that had gone stale, and it would have printed "QUEUED through
+				// Julius ... Julius reports READY" -- a sentence contradicting itself in its own second clause.
+				const FString Mapped = Weak->GetFollowedStateName();
 				return FText::FromString(FString::Printf(
-					TEXT("QUEUED through Julius. Run %s. Julius reports %s. No event has reached the contract yet, "
+					TEXT("%s through Julius. Run %s. Julius reports %s. No event has reached the contract yet, "
 						"so the stage ladder below stays unlit until one does."),
+					Mapped.IsEmpty() ? TEXT("Followed") : *Mapped.ToUpper(),
 					Run.IsEmpty() ? TEXT("unnamed") : *Run,
 					Said.IsEmpty() ? TEXT("no state yet") : *Said));
 			})

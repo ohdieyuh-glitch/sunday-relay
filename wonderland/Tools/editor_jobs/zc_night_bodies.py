@@ -77,6 +77,7 @@ def figure_stats(path, box):
     w, h, chan, px = read(path)
     x0, y0, x1, y1 = (int(box[0] * w), int(box[1] * h), int(box[2] * w), int(box[3] * h))
     body = []
+    lit = []
     lights = 0
     blown = 0
     inside = []
@@ -92,6 +93,7 @@ def figure_stats(path, box):
                 blown += 1
             if lum >= LIGHT:
                 lights += 1
+                lit.append(lum)
             else:
                 body.append(lum)
     # ---- TWO GROUND BANDS, BECAUSE THE ONE UNDER THE FEET IS MOSTLY THE FIGURE'S OWN SHADOW.
@@ -153,6 +155,19 @@ def figure_stats(path, box):
             # THE TWO FORMLESS FAILURES, MEASURED SEPARATELY FROM THE LEVEL.
             "blown_fraction": round(blown / float(max(seen, 1)), 4),
             "figure_form": spread(inside),
+            # ---- AND THE FOUNDER'S SENTENCE AS A SINGLE NUMBER.
+            #
+            # "Glowing objects floating in blackness" is not a statement about how bright the eyes are or how
+            # dark the world is. It is a statement about the RATIO, and neither half of this job measured it:
+            # light_fraction counts how many cells are lights, body_mean averages the cells that are not, and
+            # a figure can pass both while its eyes are twenty times the brightness of everything around them.
+            #
+            # The world lane found the case that proves it belongs here. At 18:15 the Dog's eye glow sits at
+            # 21.1 of a 24 maximum -- nearly full daylight value -- while the world around it measures luma
+            # 0.043 with ground at 0.0155. Every absolute reading in this job would call that figure DARK. The
+            # ratio is what calls it a pair of lights in a void, and the ratio is the thing the founder saw.
+            "light_mean": mean(lit),
+            "eye_over_world": (round(mean(lit) / max(mean(beside), 1e-6), 2) if lit and mean(beside) else None),
             "light_fraction": round(lights / float(max(seen, 1)), 4),
             "ground_mean": mean(ground), "ground_dark_fraction": frac_dark(ground),
             # THE SAME STRIP, OUT OF THE FIGURE'S SHADOW. This is the one that answers "does the world light
@@ -397,6 +412,38 @@ def job():
            note="the guard against fixing this by turning night into day. B01 and this one must pass together. "
                 "The two luminous skins are excluded and reported, not silently passed: they are brighter at "
                 "night because they are their own light source, which is a founder question about the skin.")
+
+    # ---- B08: HAS THE FIGURE BECOME A LIGHT SOURCE RELATIVE TO ITS WORLD?
+    #
+    # THE BOUND HERE IS DERIVED RATHER THAN CHOSEN, which is why this clause exists at all. Every other
+    # threshold in this job is a judgement I made; this one falls out of the two curves.
+    #
+    # The eye glow itself DIMS at night: EyeGlowDay 24 to EyeGlowNight 8, a factor of three. The world at the
+    # arrival dims far less -- the world lane measured noon luma 0.2685 against a flat night around 0.197,
+    # about 1.36. So eye-over-world should FALL at night by roughly two, not rise. A figure whose eye-to-world
+    # contrast is HIGHER at night than at noon has become more of a light source than it is in daylight, and
+    # that is the founder's sentence stated as an inequality rather than as a number I picked.
+    #
+    # It also catches what no absolute reading in this job can. At 18:15 the eyes hold 21.1 of 24 while the
+    # world reads 0.043: every absolute measure calls that figure dark, and the ratio calls it a pair of lights
+    # in a void. The second description is the one the founder wrote down.
+    ratio = {}
+    for s in SKINS:
+        n_r = (night[s] or {}).get("eye_over_world")
+        d_r = (noon[s] or {}).get("eye_over_world")
+        ratio[s] = {"night": n_r, "noon": d_r,
+                    "night_over_noon": (round(n_r / d_r, 2) if (n_r and d_r) else None)}
+    RESULT["eye_over_world"] = ratio
+    judged_ratio = {s: v["night_over_noon"] for s, v in ratio.items()
+                    if s not in LUMINOUS and v["night_over_noon"] is not None}
+    record("B08", "no figure is more of a light source at night than it is in daylight",
+           bool(judged_ratio) and all(v <= 1.0 for v in judged_ratio.values()),
+           eye_over_world=ratio, judged=sorted(judged_ratio), ceiling=1.0,
+           luminous_by_design_excluded=sorted(LUMINOUS),
+           derivation="eye glow dims 24 to 8 across the day-night crossover, a factor of three, while the "
+                      "world at the arrival dims about 1.36. So this ratio should fall by roughly two at "
+                      "night. A value above 1.0 means it rose instead, and the bound is the crossover's own "
+                      "arithmetic rather than a threshold chosen here.")
 
     RESULT["captures_dir"] = ROOT
     RESULT["status"] = "measured"

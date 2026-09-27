@@ -137,6 +137,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	FString GetFollowedJuliusState() const;
 
+	/** The state this build mapped the followed run to, by name. Empty when nothing is followed. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString GetFollowedStateName() const;
+
 	/* ------------------------------------------------------------ the deterministic simulation */
 
 	/**
