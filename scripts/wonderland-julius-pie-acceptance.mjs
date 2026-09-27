@@ -3,7 +3,7 @@
  * THE FIRST PIE ACCEPTANCE OF WONDERLAND <-> JULIUS -- the half that runs outside the editor.
  *
  *   node scripts/wonderland-julius-pie-acceptance.mjs                    (dry run: prepares, drops nothing)
- *   node scripts/wonderland-julius-pie-acceptance.mjs --drop --channel <editor channel dir>
+ *   node scripts/wonderland-julius-pie-acceptance.mjs --drop --channel <editor channel dir> [--wait-minutes 45]
  *
  * Needs WONDERLAND_E2E_DATABASE_URL (an isolated, migrated PostgreSQL) and a built bridge
  * (npm run wonderland:julius:e2e:build). The editor it drops into must be running a build that contains
@@ -13,12 +13,18 @@
  *   1. starts the production bridge against the ISOLATED database, every provider credential stripped
  *   2. creates the zero-spend run (the drill's contract, so the same durable run every time) -- READY, undispatched
  *   3. signs a test player in and makes them a member of the project
- *   4. writes generated/pie-acceptance/params.json for the editor job
+ *   4. writes generated/pie-acceptance/params.json for the editor job, with a NONCE naming this attempt
  *   5. with --drop only: drops zc_julius_live_acceptance.py into the channel inbox ATOMICALLY
- *   6. answers the job's two requests for a pairing code, each minted at the moment it is asked for, because a code
- *      lives 120 s and PIE can take longer than that to start
- *   7. after the job, checks from Julius's side what the world cannot see: the run was never dispatched, nothing
- *      drove it, and it is still the one run
+ *   6. answers EVERY request the job makes for a pairing code, each minted at the moment it is asked for. A code lives
+ *      120 s and PIE takes 40-90 s to start, and the job retries a pairing that does not complete (Wonderland Core's
+ *      review), so requests are answered by name for as long as the job runs -- not counted to two. A player session
+ *      that expired while the job waited in the inbox is renewed rather than failing the acceptance.
+ *   7. takes the job's result ONLY if it is this attempt's. The channel keeps earlier results, and an earlier run's
+ *      PASS read as this run's would be a false acceptance.
+ *   8. checks from Julius's side what the world cannot see -- still READY, never dispatched, still the one run -- and
+ *      writes ONE graded artifact, generated/wl_julius_pie_acceptance.json: the job's clauses plus these, its status
+ *      derived from the clauses. A dry run writes generated/pie-acceptance/dry-run.json instead, so a dry run can
+ *      never be mistaken for an acceptance.
  *
  * THE CHANNEL IS WONDERLAND CORE'S. Without --drop this prepares everything and drops nothing, so it can be run to
  * check the bridge side at any time; the job goes into the inbox only on purpose, with the channel named.
@@ -26,7 +32,10 @@
 
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -52,11 +61,19 @@ if (DROP && !CHANNEL) {
   console.error('--drop needs --channel <editor channel dir>. The inbox is never guessed.');
   process.exit(2);
 }
+const waitIndex = argv.indexOf('--wait-minutes');
+const WAIT_MINUTES = waitIndex >= 0 ? Number(argv[waitIndex + 1]) : 45;
+if (!Number.isFinite(WAIT_MINUTES) || WAIT_MINUTES <= 0) {
+  console.error('--wait-minutes needs a positive number.');
+  process.exit(2);
+}
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const HANDSHAKE = join(ROOT, 'generated', 'pie-acceptance');
 const JOB = join(ROOT, 'wonderland', 'Tools', 'editor_jobs', 'zc_julius_live_acceptance.py');
+const ARTIFACT = DROP ? join(ROOT, 'generated', 'wl_julius_pie_acceptance.json') : join(HANDSHAKE, 'dry-run.json');
 const TOKEN = randomBytes(24).toString('hex');
+const NONCE = randomBytes(8).toString('hex');
 const PORT = Number(process.env.WONDERLAND_E2E_PORT ?? 8796);
 const BASE = `http://127.0.0.1:${PORT}`;
 const SITE = 'https://wonderland-e2e.invalid';
@@ -78,6 +95,9 @@ const CONTRACT = {
   workspacePath: '/tmp/wonderland-integration-e2e/ws',
   limits: { spendUsd: 1, repairCycles: 0 },
 };
+// Every clause the editor half declares, its own completeness clause (A12) included. One that never ran is not a pass.
+// Clause ids: A = the editor job's, O = this orchestrator's view of the job, J = Julius's side.
+const JOB_CLAUSES = ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A07', 'A08', 'A09', 'A10', 'A11', 'A12'];
 
 const env = {};
 for (const [k, v] of Object.entries(process.env)) {
@@ -105,6 +125,20 @@ async function call(method, path, { headers = {}, body } = {}) {
   return { status: res.status, json, text: text.slice(0, 400) };
 }
 
+/** A browser session for the test player: what the website holds after they sign in. */
+async function signIn() {
+  const minted = await call('POST', '/relay-api/browser/pair', {
+    headers: operator, body: JSON.stringify({ origin: SITE, scope: 'control', participantId: PLAYER }),
+  });
+  const signedIn = await call('POST', '/relay-api/browser/session', {
+    headers: { Origin: SITE },
+    body: JSON.stringify({ grantId: minted.json?.data?.grantId, grantSecret: minted.json?.data?.grantSecret }),
+  });
+  const token = signedIn.json?.data?.sessionToken;
+  if (!token) throw new Error(`could not sign the test player in: ${signedIn.status} ${signedIn.text}`);
+  return token;
+}
+
 /* ------------------------------------------------------------------- run */
 
 mkdirSync(HANDSHAKE, { recursive: true });
@@ -116,7 +150,58 @@ bridge.stdout.pipe(log);
 bridge.stderr.pipe(log);
 let exited = null;
 bridge.on('exit', (code) => { exited = code; });
-const summary = { started: new Date().toISOString(), dropped: false, pairingCodesServed: 0, job: null, julius: null };
+
+const started = new Date().toISOString();
+const clauses = [];
+const clause = (id, name, pass, detail) => clauses.push({ id, name, pass: Boolean(pass), detail });
+const summary = { dropped: false, nonce: NONCE, pairing: [], job: null, julius: null, error: null };
+
+let playerToken = null;
+
+/** Mint a pairing code as the signed-in player, renewing their session if it expired while the job waited. */
+async function mintCode() {
+  const ask = () => call('POST', '/relay-api/wonderland/native/pair', {
+    headers: { Authorization: `Relay-Session ${playerToken}`, Origin: SITE },
+  });
+  let res = await ask();
+  if (res.status === 401) {
+    playerToken = await signIn();
+    res = await ask();
+  }
+  return res;
+}
+
+/** Answer every request the job has made and not yet had answered. A failed mint is recorded, not fatal: the job asks again. */
+async function serveCodes(served) {
+  for (const name of readdirSync(HANDSHAKE)) {
+    const request = /^ready-(.+)\.flag$/.exec(name);
+    if (!request || served.has(request[1])) continue;
+    served.add(request[1]);
+    const res = await mintCode();
+    if (res.status !== 200 || typeof res.json?.data?.code !== 'string') {
+      summary.pairing.push({ request: request[1], served: false, status: res.status, body: res.text });
+      say(`could NOT mint a code for ${request[1]}: ${res.status}`);
+      continue;
+    }
+    const codePath = join(HANDSHAKE, `code-${request[1]}.txt`);
+    writeFileSync(`${codePath}.tmp`, res.json.data.code);
+    renameSync(`${codePath}.tmp`, codePath);
+    summary.pairing.push({ request: request[1], served: true });
+    say(`served a pairing code for ${request[1]}`);
+  }
+}
+
+/** This attempt's result, or null. An earlier run's result is never this run's evidence. */
+function thisAttemptsResult(path, droppedAt) {
+  if (!existsSync(path)) return null;
+  let result;
+  try { result = JSON.parse(readFileSync(path, 'utf8')); } catch { return null; }
+  if (!result.status || result.status === 'running') return null;
+  if (result.acceptance_nonce === NONCE) return result;
+  // A job that died before it could read params.json carries no nonce; only a result written after THIS drop counts.
+  if (result.acceptance_nonce === undefined && statSync(path).mtimeMs >= droppedAt) return result;
+  return null;
+}
 
 try {
   let healthy = false;
@@ -132,15 +217,7 @@ try {
   if (created.status !== 201 || !runId) throw new Error(`could not create the run: ${created.status} ${created.text}`);
   say(`run ${runId} -- ${created.json.data.state}, dispatched ${created.json.data.dispatched}`);
 
-  const minted = await call('POST', '/relay-api/browser/pair', {
-    headers: operator, body: JSON.stringify({ origin: SITE, scope: 'control', participantId: PLAYER }),
-  });
-  const signedIn = await call('POST', '/relay-api/browser/session', {
-    headers: { Origin: SITE },
-    body: JSON.stringify({ grantId: minted.json?.data?.grantId, grantSecret: minted.json?.data?.grantSecret }),
-  });
-  const playerToken = signedIn.json?.data?.sessionToken;
-  if (!playerToken) throw new Error(`could not sign the test player in: ${signedIn.status} ${signedIn.text}`);
+  playerToken = await signIn();
   const members = new pg.Pool({ connectionString: DB });
   try {
     await members.query('INSERT INTO relay_wonderland.players(player_id) VALUES ($1) ON CONFLICT DO NOTHING', [PLAYER]);
@@ -153,7 +230,7 @@ try {
   say(`player ${PLAYER} signed in and a member of ${CONTRACT.projectId}`);
 
   writeFileSync(join(HANDSHAKE, 'params.json'), JSON.stringify({
-    bridge: BASE, projectId: CONTRACT.projectId, runId, missionId: CONTRACT.missionId,
+    bridge: BASE, projectId: CONTRACT.projectId, runId, missionId: CONTRACT.missionId, nonce: NONCE,
   }, null, 1));
 
   if (!DROP) {
@@ -164,58 +241,68 @@ try {
     const inbox = join(CHANNEL, 'inbox');
     if (!existsSync(inbox)) throw new Error(`no inbox at ${inbox}`);
     const target = join(inbox, 'zc_julius_live_acceptance.py');
+    const droppedAt = Date.now();
     copyFileSync(JOB, `${target}.tmp`);
     renameSync(`${target}.tmp`, target);
     summary.dropped = true;
-    say(`job dropped into ${inbox}`);
-
-    // Serve the two pairing codes the job asks for, each minted when asked.
-    for (const n of [1, 2]) {
-      const flag = join(HANDSHAKE, `ready-${n}.flag`);
-      const deadline = Date.now() + 20 * 60_000;
-      while (!existsSync(flag) && Date.now() < deadline) await sleep(500);
-      if (!existsSync(flag)) throw new Error(`the job never asked for pairing code ${n}`);
-      const paired = await call('POST', '/relay-api/wonderland/native/pair', {
-        headers: { Authorization: `Relay-Session ${playerToken}`, Origin: SITE },
-      });
-      if (paired.status !== 200) throw new Error(`could not mint pairing code ${n}: ${paired.status} ${paired.text}`);
-      const codePath = join(HANDSHAKE, `code-${n}.txt`);
-      writeFileSync(`${codePath}.tmp`, paired.json.data.code);
-      renameSync(`${codePath}.tmp`, codePath);
-      summary.pairingCodesServed = n;
-      say(`served pairing code ${n}`);
-    }
+    say(`job dropped into ${inbox} (attempt ${NONCE}); waiting up to ${WAIT_MINUTES} min`);
 
     const done = join(CHANNEL, 'done', 'zc_julius_live_acceptance.json');
-    const deadline = Date.now() + 20 * 60_000;
-    while (Date.now() < deadline) {
-      if (existsSync(done)) {
-        const result = JSON.parse(readFileSync(done, 'utf8'));
-        if (result.status && result.status !== 'running') { summary.job = result; break; }
-      }
-      await sleep(1000);
+    const served = new Set();
+    const deadline = droppedAt + WAIT_MINUTES * 60_000;
+    while (Date.now() < deadline && exited === null) {
+      await serveCodes(served);
+      summary.job = thisAttemptsResult(done, droppedAt);
+      if (summary.job !== null) break;
+      await sleep(250);
     }
-    if (summary.job === null) throw new Error('the job did not finish within 20 minutes');
-    say(`job: ${summary.job.status}`);
+    const jobTests = summary.job?.tests ?? [];
+    clause('O00', 'the editor half ran, and this is THIS attempt\'s result',
+      summary.job !== null && summary.job.status !== 'error',
+      summary.job === null
+        ? { reason: exited !== null ? `the bridge exited (${exited}) while the job ran` : `no result within ${WAIT_MINUTES} min` }
+        : { status: summary.job.status, error: summary.job.error ?? null, seconds: summary.job.seconds });
+    clauses.push(...jobTests);
+    const ran = new Set(jobTests.map((t) => t.id));
+    const missing = JOB_CLAUSES.filter((id) => !ran.has(id));
+    clause('O01', 'every clause of the editor half ran -- one that never ran is not a pass', missing.length === 0,
+      { missing });
+    say(`job: ${summary.job?.status ?? 'no result'}`);
   }
 
-  // WHAT THE WORLD CANNOT SEE, checked from Julius's side: never dispatched, never driven, still one run.
+  // WHAT THE WORLD CANNOT SEE, checked from Julius's side: still READY, never dispatched, still one run.
   const run = await call('GET', `/relay-api/julius/runs/${runId}/run`, { headers: scoped });
   const slots = await call('GET', `/relay-api/julius/runs/${runId}/slots`, { headers: scoped });
   const again = await call('POST', '/relay-api/julius/missions', { headers: operator, body: JSON.stringify(CONTRACT) });
+  const slotList = Array.isArray(slots.json?.data) ? slots.json.data : null;
   summary.julius = {
     runId,
-    stateAfter: run.json?.data?.state ?? 'absent',
-    slotsAfter: (slots.json?.data ?? []).map((s) => `${s.role}:${s.state}`),
-    neverDispatched: (slots.json?.data ?? []).length === 3 && slots.json.data.every((s) => s.state === 'NEVER_DISPATCHED'),
-    stillTheOneRun: again.json?.data?.runId === runId,
+    stateAfter: run.json?.data?.state ?? null,
+    slotsAfter: slotList?.map((s) => `${s.role}:${s.state}`) ?? null,
+    resubmission: { status: again.status, runId: again.json?.data?.runId ?? null, dispatched: again.json?.data?.dispatched ?? null },
   };
-  say(`julius after: ${summary.julius.stateAfter}; never dispatched ${summary.julius.neverDispatched}; one run ${summary.julius.stillTheOneRun}`);
+  clause('J01', 'Julius still holds the run READY -- nothing the world did advanced it',
+    summary.julius.stateAfter === 'READY', { state: summary.julius.stateAfter, http: run.status });
+  clause('J02', 'no slot was ever dispatched: no worker ran and no provider was called for it',
+    slotList !== null && slotList.length === 3 && slotList.every((s) => s.state === 'NEVER_DISPATCHED'),
+    { slots: summary.julius.slotsAfter, http: slots.status });
+  clause('J03', 'an identical resubmission is the SAME run, still undispatched -- no duplicate execution',
+    summary.julius.resubmission.runId === runId && summary.julius.resubmission.dispatched === false,
+    summary.julius.resubmission);
+  say(`julius after: ${summary.julius.stateAfter}; slots ${JSON.stringify(summary.julius.slotsAfter)}; ` +
+    `resubmission ${summary.julius.resubmission.runId === runId ? 'the same run' : 'NOT the same run'}`);
 } catch (err) {
   summary.error = String(err?.message ?? err);
+  clause('X00', 'the orchestrator completed', false, { error: summary.error });
   console.error(`[acceptance] ${summary.error}`);
-  process.exitCode = 1;
 } finally {
   bridge.kill();
-  writeFileSync(join(ROOT, 'generated', 'wl_julius_pie_acceptance.json'), JSON.stringify(summary, null, 1));
+  const failing = clauses.filter((c) => !c.pass).map((c) => c.id);
+  const status = clauses.length === 0 ? 'no clause ran' : failing.length ? `FAIL: ${failing.join(', ')}` : 'all clauses pass';
+  writeFileSync(ARTIFACT, JSON.stringify({
+    name: DROP ? 'wl_julius_pie_acceptance' : 'wl_julius_pie_acceptance DRY RUN (bridge side only; not an acceptance)',
+    started, status, tests: clauses, ...summary,
+  }, null, 1));
+  say(`${status} -> ${ARTIFACT}`);
+  if (failing.length || clauses.length === 0) process.exitCode = 1;
 }
