@@ -33,14 +33,48 @@ glow scale (0.0015 → 0.10, from `zc_stage_tune`), the flame proofs' plume band
 were reading sky), the eye gate's reference patch (it was the **chest**, figure z 13.6, the skull plate on
 Skeleton Flame — now a cheek beside the eye).
 
-## 2. Eyes
+### 1b. The second factor: the glow material was quadratic
+
+The re-baseline alone turned every glow in gameplay **black** (`zc_eyes_look` after `d92ed651`: Celestial's
+halo ring and brow star, Skeleton's ghostfire, every costume eye — black blocks). `M_WL_VoxelGlow`'s emissive is
+Color × EmissiveStrength × ~0.001, and the embodiment set BOTH from the authored strength: 1,200 × 1,200 was one
+white; 4 × 4 is 0.02. The eyes had only ever read at level 12 because their strength (32,000 → 1,242) supplied the
+other factor. `EmissiveStrength` is now pinned at 1000 on every glow and flame instance, so the material's output
+IS `Color` — the one number the tame curve, the day cycle and the eye drive set. The calibration "1.0 → luma
+0.039, white near 25" was measured on RIM materials, which have no such term.
+
+## 2. Eyes — the gameplay Dog's eyes had never emitted
+
+Founder P0, afternoon: "THE MASCOT EYES ARE STILL NOT GLOWING." Read off the live actor (`zc_eyes_look`): the
+default Dog in gameplay is `BP_RelayDog`'s own meshes. Its eyes are one component, `Mesh_head_eye`, material
+`MI_RelayDog_Eye` (constant instance of `M_V2_Portal`): BaseColor gold, **EmissiveColor (0,0,0)**,
+EmissiveStrength 540. Black × 540 is nothing — two flat orange squares, which is the founder's screenshot
+(`captures/zc/eyes_look`, BEFORE). And the eye-level drive only ever iterated companion embodiments: costumes,
+cubs, the wardrobe figure. Every eye number in the corpus before commit `d92ed651` was measured on an object
+the founder does not look at.
+
+Fix (`d92ed651`): `ARelayDogCharacter::SetEyeGlow` puts the glow material on the eye panes and two additive
+halo panes behind each; the day cycle drives the Dog beside the figures; colourway SECONDARY re-drives core
+and halo together; the 12 clamp that had silently held `EyeGlowDay 18` at 12 is 30; `EyeGlowNight` 8.
+Verified by looking: the AFTER close-ups from `zc_eyes_look` (below), not by a number.
+
+### 2b. Every skin's eye halo
 
 Every skin's `start()` now lays an additive **`eyehalo`** pane just behind and 1.45× wider than each eye, in the
 eye's colour; `ApplyColourway` drives any eye material whose name contains "halo" at 0.35 of the eye's level.
 Core + rim + colour + contrast. The core's level itself is under the World session's sweep (`zzX10_mascot_knee`),
 which also found that `wl.Look.EyeGlowDay = 18` has been clamped to 12 since it was written.
 
-## 3. V1 and V2
+## 3. V1 and V2 — and V2 written from zero
+
+Founder, afternoon: the first V2s were "NOT acceptable approximations of the references ... START BOTH SKINS
+FROM SCRATCH ... missing the most important part of both designs: THE CLOTHING / ARMOR / ORNAMENTATION." So
+each sheet was decomposed into a component inventory first (`SKIN_REBUILD_INVENTORY_2026_09_27.md`, 22 rows
+Arden, 19 Apollo) and the builders rewritten row by row against it (`d1aabf33`): tunic, mantle, chains at
+three depths, studded rune halo with a diamond crown ornament, segmented demonic arm with glowing seams,
+two-layer sigil, nine-panel robe with gold trim, 22-segment tail for Arden; winged pauldrons (cap, cherubs,
+scrolls, feather rows, arm cascade), gorget, crossing stole, layered sun, chains, gemmed tassets, vambraces,
+lamp-orbs, five-panel drapery with gold borders, greaves for Apollo. Skeleton Flame V2 stands as built.
 
 | skin | V1 (previous, kept) | V2 (redone from the sheet) |
 |---|---|---|

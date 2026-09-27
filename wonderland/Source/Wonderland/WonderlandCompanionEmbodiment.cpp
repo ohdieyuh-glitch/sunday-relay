@@ -716,7 +716,14 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 				Instance->SetVectorParameterValue(TEXT("Color"), Emissive);
 				Instance->SetVectorParameterValue(TEXT("EmissiveColor"), Emissive);
 				Instance->SetVectorParameterValue(TEXT("BaseColor"), Emissive);
-				Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), WonderlandTameGlow(Def.Strength));
+				// PINNED AT 1000, NOT THE STRENGTH. M_WL_VoxelGlow's emissive is Color x EmissiveStrength x ~0.001 --
+				// QUADRATIC in the authored strength when both are set from it. At the old 4000x scale that was
+				// 1,200 x 1,200 -> one white; after the generator's re-baseline to 6 it was 4 x 4 -> 0.02 -> BLACK,
+				// and every glow on every figure in the world rendered black: Celestial's halo, Skeleton's
+				// ghostfire, the costume eyes (zc_eyes_look, 2026-09-27 15:47 UTC). The eye had only ever read
+				// because its strength was 1,242. With this term held at 1000 the material's output IS Color, which
+				// is the number the tame curve, the day cycle and the eye drive already choose.
+				Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), 1000.0f);
 				{
 					const bool bBeats = Def.Name.ToString().Contains(TEXT("pulse"), ESearchCase::IgnoreCase);
 					GlowMaterials.Add({Index, TEXT("Color"), Emissive, bBeats});
@@ -768,7 +775,7 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 				Full->SetVectorParameterValue(TEXT("Color"), FullEmissive);
 				Full->SetVectorParameterValue(TEXT("EmissiveColor"), FullEmissive);
 				Full->SetVectorParameterValue(TEXT("BaseColor"), FullEmissive);
-				Full->SetScalarParameterValue(TEXT("EmissiveStrength"), FlameStrength);
+				Full->SetScalarParameterValue(TEXT("EmissiveStrength"), 1000.0f);   // see the body instance above
 				ApplyColourway(Index, Full, Def, FullEmissive, FullEmissive, /*bFlameTwin=*/true);
 				Flame = Full;
 			}

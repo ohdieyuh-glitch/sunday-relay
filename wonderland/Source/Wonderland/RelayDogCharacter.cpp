@@ -1587,12 +1587,15 @@ void ARelayDogCharacter::BuildEyeGlow()
 	{
 		return;
 	}
-	UMaterialInterface* Glow = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Wonderland/Materials/M_WL_VoxelGlow.M_WL_VoxelGlow"));
-	if (Glow == nullptr)
-	{
-		Glow = LoadObject<UMaterialInterface>(nullptr, DogPropGlowParent);
-	}
-	UMaterialInterface* Additive = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Wonderland/Materials/M_WL_VoxelAdditive.M_WL_VoxelAdditive"));
+	// THE ENGINE'S OWN UNLIT MATERIALS, NOT THE FIGURES' -- and this was measured, not assumed. The first build put
+	// M_WL_VoxelGlow on the pane with Color (18, 13, 2.9) and the pane rendered BLACK: no eyes at all, worse than
+	// the flat squares it replaced. The figures' glow materials are built for instanced meshes and take part of
+	// their input from the instance, and on a plain static mesh component that input is nothing. The prop
+	// material the book and the beam glow with is the engine's unlit LevelColoration, which draws Color exactly
+	// as given on any mesh, and the engine's EmissiveMeshMaterial is the additive twin the figures' own additive
+	// was copied from; both are proven on plain components in this file.
+	UMaterialInterface* Glow = LoadObject<UMaterialInterface>(nullptr, DogPropGlowParent);
+	UMaterialInterface* Additive = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineMaterials/EmissiveMeshMaterial.EmissiveMeshMaterial"));
 	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, DogPropCubePath);
 	TInlineComponentArray<UStaticMeshComponent*> Meshes;
 	GetComponents<UStaticMeshComponent>(Meshes);
@@ -1622,6 +1625,10 @@ void ARelayDogCharacter::BuildEyeGlow()
 			continue;
 		}
 		// the pane's own extent in its mesh's units, and its thinnest axis, which is its normal
+		// THE PANE IS NOT AT THE COMPONENT'S ORIGIN. SM_RelayDog_head_eye spans x 10.2..11.7 in its own space: the
+		// pane sits eleven units in front of the origin it is attached at. A halo placed at the origin was inside
+		// the head. The halo goes where the pane is: at the mesh bounds' centre.
+		const FVector PaneCentre = Eye->GetStaticMesh()->GetBounds().Origin;
 		const FVector Size = Eye->GetStaticMesh()->GetBounds().BoxExtent * 2.0;
 		int32 Normal = 0;
 		for (int32 Axis = 1; Axis < 3; ++Axis)
@@ -1640,8 +1647,8 @@ void ARelayDogCharacter::BuildEyeGlow()
 			Halo->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 			Halo->SetCastShadow(false);
 			Halo->SetupAttachment(Eye);
-			FVector Offset = FVector::ZeroVector;
-			Offset[Normal] = Side * Size[Normal] * 0.55;
+			FVector Offset = PaneCentre;
+			Offset[Normal] += Side * Size[Normal] * 0.55;
 			Halo->SetRelativeLocation(Offset);
 			Halo->SetRelativeScale3D(Scale);
 			Halo->RegisterComponent();
