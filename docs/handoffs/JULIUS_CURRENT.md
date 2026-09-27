@@ -236,6 +236,15 @@ executor fake: base, status, diff — no test step — no TEST row, DIFF PASSED,
 COMPLETED, packet and prompt truthful; with the control that a declared check
 still runs and still records.
 
+**6. THE MVP QUALIFICATION SUITE, AS A LEDGER.** `docs/JULIUS_MVP_QUALIFICATION.md`
+maps the founder's four categories to the missions that exist — 8 software, 3
+game, 4 professional-work, 10 failure/recovery, all deterministic, plus the one
+live run — and `scripts/julius-mvp-qualification.test.ts` resolves every row.
+Its gaps section is the load-bearing half: no unfamiliar real repository, no
+tool-heavy Docker mission here (CI-only on Linux), **no Unreal change under
+Julius's contracts at all**, no mission whose result is not a file, no CONTENT
+refusal class, and no live trace of any adversarial shape.
+
 #### Recorded as post-MVP, so nobody re-audits them
 
 - **/MAS** — not implemented; `julius-subagent-runtime` correctly describes a
