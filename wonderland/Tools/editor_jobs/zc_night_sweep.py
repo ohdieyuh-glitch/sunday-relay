@@ -325,6 +325,43 @@ def job():
 
     # ---- NOON, for the "still night" reference at each place.
     cvar("wl.Sky.Hour", 12)
+
+    # ---- THE WORLD WARMS UP, AND NOON IS THE DENOMINATOR OF EVERYTHING HERE.
+    #
+    # The other lane read an UNCHANGED world five times straight after BeginPlay and got 521.22, 123.11,
+    # 63.97, 47.95, 57.12 ms. Not scatter -- a DESCENT. Their rung zero had always been taken immediately
+    # after play began, so the one measurement every other rung is subtracted from was the least settled in
+    # the job.
+    #
+    # Mine has the same shape and I did not look for it until they found theirs. The noon captures below run
+    # straight after BeginPlay on a bare three-second wait each, and every still-night ratio this job has
+    # ever published divides by them. A warming world reads BRIGHT early, so an inflated noon makes night
+    # look darker than it is -- which flatters exactly the gate I have spent the day arguing about.
+    #
+    # AND TWO ADJACENT READS AGREEING IS NOT ENOUGH DURING A SLOW DESCENT: a sequence falling gently can
+    # have neighbours inside 0.004 while still on its way down. This waits for the trend to stop, not just
+    # for one pair to match, and reports how long it took.
+    warm, prev, falling = None, None, 0
+    for attempt in range(24):
+        yield 1.0
+        now = patch(0.5, 0.5, 0.46, 0.44)
+        if now is None:
+            continue
+        if prev is not None:
+            if now["luma"] < prev["luma"] - 0.002:
+                falling += 1                      # still descending; keep waiting
+            elif abs(now["luma"] - prev["luma"]) < 0.004:
+                warm = round(1.0 * (attempt + 1), 1)
+                break
+        prev = now
+    RESULT["warmup_settled_after_s"] = warm
+    RESULT["warmup_falling_samples"] = falling
+    RESULT["warmup_note"] = (
+        "the world descends after BeginPlay -- the other lane measured an unchanged world at 521 ms falling "
+        "to 48 over five reads. Noon is the denominator of every ratio here, so it is taken only once the "
+        "trend has stopped rather than after a fixed wait. A null means it never settled in 24 s and every "
+        "ratio below is suspect")
+
     noon = {}
     drawn = {}
     RESULT["occluded"] = {}
@@ -607,6 +644,15 @@ def job():
                 "catches a camera in foliage, which the trace cannot see at all: mine returned no hit at "
                 "5,000 through 24,000 uu while the picture read 96.9% dark at midday, because foliage "
                 "carries no collision")
+
+    record("N_WARM", "the world had stopped warming up before noon was measured -- noon is what every "
+                     "night ratio divides by",
+           RESULT.get("warmup_settled_after_s") is not None,
+           settled_after_s=RESULT.get("warmup_settled_after_s"),
+           falling_samples=RESULT.get("warmup_falling_samples"),
+           note="a warming world reads BRIGHT early, and an inflated noon makes night look darker than it "
+                "is -- which flatters the still-night gate rather than challenging it. Red here means the "
+                "ratios are unusable even if every other clause is green")
 
     record("N00", "the sweep moved the picture -- the instrument is responding",
            lumas and (max(lumas) - min(lumas)) > 0.02, luma_range=[min(lumas), max(lumas)] if lumas else None,

@@ -82,13 +82,26 @@ def job():
     yield 3.0
 
     def settled():
-        """Wait for the picture to stop moving. A duration is not a quantity when the frame rate is not."""
+        """Wait for the picture to stop FALLING, not merely to stop moving between two reads.
+
+        A duration is not a quantity when the frame rate is not fixed -- and two adjacent reads agreeing is
+        not enough either. The other lane read an unchanged world at 521, 123, 64, 48, 57 ms after
+        BeginPlay: a descent, not scatter. A sequence falling gently can have neighbours inside the
+        tolerance while still on its way down, so a pair-agreement test can return mid-descent and hand
+        back a number from a machine that has not arrived.
+        """
         prev = None
-        for _ in range(20):
+        for _ in range(24):
             yield 1.0
             now = patch(0.5, 0.5, 0.46, 0.44)
-            if now is not None and prev is not None and abs(now["luma"] - prev["luma"]) < 0.004:
-                return
+            if now is None:
+                continue
+            if prev is not None:
+                if now["luma"] < prev["luma"] - 0.002:
+                    prev = now
+                    continue                      # still descending
+                if abs(now["luma"] - prev["luma"]) < 0.004:
+                    return
             prev = now
 
     # ---- DOES THE KNOB EXIST? Read it back before trusting a single rung.
