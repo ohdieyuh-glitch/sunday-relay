@@ -40,6 +40,8 @@ import { cronEnabled, handleCronRoute, isCronRoute, type CronTickPort } from './
 import { betaWaveZeroState, handleBetaRoute, isBetaRoute } from './beta-routes';
 import { handleRepositoryRoute, isRepositoryRoute, type RepositoryCaller } from './repository-routes';
 import { handlePspRoute, isPspRoute } from './psp-routes';
+import { createJuliusStatePorts, handleJuliusStateRoute, isJuliusStateRoute } from './julius-state-routes';
+import { Pool } from 'pg';
 import { handleShipRoute, isShipRoute } from './ship-route';
 import { resolveRepositoryTarget, registrationOwnerAdmits } from '../src/relay/mission/repository-target';
 import { validateMissionConfig } from '../src/relay/mission/mission-config';
@@ -268,6 +270,29 @@ export function createBridgeServer(
   const githubAppIdentity = githubAppConfigFromEnv(process.env);
   /** Saved PSP profiles, participant-owned. Absent without a mounted state root —
    *  the PSP surface then answers `psp_store_unavailable`, like the repo store. */
+/**
+ * THE READ CONNECTION TO JULIUS'S OWN STORE, BUILT ONCE AND ONLY IF CONFIGURED.
+ *
+ * The same `createJuliusPostgresRuntimeStore` the mission job writes through, so
+ * there is one state authority. The subagent and lifecycle repositories had no
+ * composition root at all until this; `approvers` refuses every approval because
+ * nothing here mounts one. Absent `DATABASE_URL`, the ports carry `api: null`
+ * and the family refuses with the variable named.
+ */
+let juliusStateCache: ReturnType<typeof createJuliusStatePorts> | null = null;
+const juliusStatePorts = (): ReturnType<typeof createJuliusStatePorts> => {
+  if (juliusStateCache !== null) return juliusStateCache;
+  const url = process.env.DATABASE_URL;
+  juliusStateCache = createJuliusStatePorts({
+    pool: url ? new Pool({ connectionString: url }) : null,
+    missingConfig: url ? [] : ['DATABASE_URL'],
+  });
+  return juliusStateCache;
+};
+
+const headerValue = (value: string | string[] | undefined): string | undefined =>
+  (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined);
+
   const pspStore = config.stateRoot === null ? null : createPspConfigStore({ root: config.stateRoot });
   return createServer((req, res) => {
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
@@ -696,6 +721,27 @@ export function createBridgeServer(
           }, pspStore);
           if (pspResult !== null) {
             send(res, pspResult.status, pspResult.body, cors);
+            return;
+          }
+        }
+
+        /**
+         * JULIUS'S DURABLE STATE, FOR WONDERLAND. Read-only, operator-only, and
+         * every answer is `JuliusRuntimeApi`'s own — see `julius-state-routes.ts`.
+         * With no `DATABASE_URL` the family answers 503 naming the variable; it
+         * never serves an empty run for a database it does not have.
+         */
+        if (isJuliusStateRoute(path.replace('/relay-api', ''))) {
+          const juliusAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+          const juliusResult = await handleJuliusStateRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            operator: bearerMatches(juliusAuthz, process.env.RELAY_BRIDGE_API_TOKEN),
+            projectId: headerValue(req.headers['x-relay-project']),
+            tenantId: headerValue(req.headers['x-relay-tenant']),
+          }, juliusStatePorts());
+          if (juliusResult !== null) {
+            send(res, juliusResult.status, juliusResult.body, cors);
             return;
           }
         }

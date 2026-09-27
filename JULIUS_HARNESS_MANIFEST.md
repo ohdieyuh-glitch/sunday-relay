@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **183 production files** across 20/20 subsystems (2 roots, 159 traced, 7 not composed by the live root, 15 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **184 production files** across 20/20 subsystems (2 roots, 159 traced, 8 not composed by the live root, 15 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -26,8 +26,10 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | from | to | edges | type |
 | --- | --- | --- | --- |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | connectors (gpt-architect, prompt-architect contracts) | 2 | 0 |
-| bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 6 | 2 |
+| bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 7 | 2 |
+| bridge provider stacks (hosted Claude, Hermes, redaction) | live composition (relay-bridge/julius/) | 1 | 0 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | other | 4 | 0 |
+| bridge provider stacks (hosted Claude, Hermes, redaction) | persistence (src/relay/persistence/) | 2 | 0 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | kernel (src/relay/mission/julius/) | 1 | 0 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 1 | 1 |
 | connectors (gpt-architect, prompt-architect contracts) | other | 2 | 0 |
@@ -57,7 +59,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 
 - **entrypoint (relay-bridge/julius-live-mission.ts)** depends on: bridge provider stacks (hosted Claude, Hermes, redaction); connectors (gpt-architect, prompt-architect contracts); executor + tool substrate (src/relay/workspace/julius-tools/); kernel (src/relay/mission/julius/); live composition (relay-bridge/julius/); other; persistence (src/relay/persistence/); Relay↔Julius port (src/relay/integration/julius/).
 - **live composition (relay-bridge/julius/)** depends on: bridge provider stacks (hosted Claude, Hermes, redaction); connectors (gpt-architect, prompt-architect contracts); executor + tool substrate (src/relay/workspace/julius-tools/); kernel (src/relay/mission/julius/); other; persistence (src/relay/persistence/); Relay↔Julius port (src/relay/integration/julius/).
-- **bridge provider stacks (hosted Claude, Hermes, redaction)** depends on: connectors (gpt-architect, prompt-architect contracts); kernel (src/relay/mission/julius/); other.
+- **bridge provider stacks (hosted Claude, Hermes, redaction)** depends on: connectors (gpt-architect, prompt-architect contracts); kernel (src/relay/mission/julius/); live composition (relay-bridge/julius/); other; persistence (src/relay/persistence/).
 - **kernel (src/relay/mission/julius/)** depends on: other.
 - **persistence (src/relay/persistence/)** depends on: kernel (src/relay/mission/julius/).
 - **Relay↔Julius port (src/relay/integration/julius/)** depends on: C.A.R.D. record (src/relay/integration/compound-agent/, entitlement); kernel (src/relay/mission/julius/); Relay vocabulary (mission/contracts.ts, protocol/enums.ts).
@@ -390,6 +392,7 @@ C.A.R.D. roles resolved to live adapters — fail closed, naming every missing v
 
 | production source | role | reached from |
 | --- | --- | --- |
+| `relay-bridge/julius-state-routes.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-run-loop.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-runtime-api.ts` | traced | `src/relay/mission/julius/julius-peer-runtime.ts` |
 
@@ -440,6 +443,7 @@ Production Julius modules that implement a Julius port but are not reached from 
 | `src/relay/persistence/julius-subagent-postgres.ts` | durable sub-agent grants (JuliusSubagentStore) for julius-subagent-runtime; the live C.A.R.D. policy sets subagents.allowed=false |
 | `src/relay/persistence/julius-repair-postgres.ts` | durable repair-cycle scheduling against julius_tasks and julius_repair_cycles; the live root reaches repair through the store aggregate, not this repository |
 | `src/relay/workspace/julius-tools/registry.ts` | the default tool catalogue (DEFAULT_JULIUS_TOOL_IDS, createDefaultJuliusToolRegistry); the live root routes tool effects through the executor shell port and does not build a registry |
+| `relay-bridge/julius-state-routes.ts` | the bridge’s READ-ONLY mount of JuliusRuntimeApi for Wonderland — /julius/runs/<id>/<run|slots|tasks|evidence|verification|timeline>, operator-only, composed over the SAME createJuliusPostgresRuntimeStore the mission job writes through so there is one state authority. Reached from the HTTP server, which is a Relay surface and not a mission root, and never from a mission; it computes nothing about a run, every answer is the API’s own. Also the first composition root for the subagent and lifecycle repositories |
 | `src/relay/workspace/julius-tools/local-artifact-store.ts` | the durable staged→finalized artifact store (StagedArtifactStorePort); the live root uses an in-process artifact exchange, recorded as debt in docs/JULIUS_BETA_READINESS.md |
 
 ## External packages observed
