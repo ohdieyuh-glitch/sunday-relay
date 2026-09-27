@@ -13,7 +13,11 @@
 # across seventy-odd movable components, and every one of them is a shadow caster in a world with four sun
 # cascades. Shadow quality is a console variable, so the same avatar can be measured with and without inside
 # one session -- no build, no thermal drift between the two readings.
-CONCURRENT = True
+# NOT CONCURRENT. This job begins and ends Play-In-Editor. On 2026-09-27 a stage sweep of mine declared
+# CONCURRENT = True, the channel ran it beside the world session's ten-minute mascot sweep, and its closing
+# editor_request_end_play tore PIE down under that sweep at 15:08 UTC -- which then reported a black viewport
+# as mascot measurements through nine gates. Any job that owns PIE is serialised.
+CONCURRENT = False
 
 import os
 import time

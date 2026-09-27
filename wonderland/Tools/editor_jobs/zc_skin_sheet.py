@@ -14,7 +14,11 @@
 # WHAT IS ASSERTED, because a sheet with a hole in it is not a sheet: every view of every skin exported, every
 # view holding a figure that fills the founder's band, and no view in which the figure is mostly pinned white
 # -- the last being the thing the glow re-baseline of 2026-09-27 exists to fix, measured on the same pixels.
-CONCURRENT = True
+# NOT CONCURRENT. This job begins and ends Play-In-Editor. On 2026-09-27 a stage sweep of mine declared
+# CONCURRENT = True, the channel ran it beside the world session's ten-minute mascot sweep, and its closing
+# editor_request_end_play tore PIE down under that sweep at 15:08 UTC -- which then reported a black viewport
+# as mascot measurements through nine gates. Any job that owns PIE is serialised.
+CONCURRENT = False
 
 import os
 import sys
@@ -23,7 +27,7 @@ import unreal
 L = unreal.WonderlandUiTestLibrary
 
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "skin_sheet")
-SKINS = ("relay_og", "celestial_light", "apollo", "arden_infernal", "skeleton_flame")
+SKINS = ("relay_og", "celestial_light", "apollo_v1", "apollo", "arden_infernal_v1", "arden_infernal", "skeleton_flame_v1", "skeleton_flame")
 VIEWS = (("front", 0.0), ("front34", 45.0), ("left", 90.0), ("back34", 225.0), ("back", 180.0), ("right", 270.0))
 # The founder's opening-view band, from zc_wardrobe_20's V03; rotated views take the wider envelope of V05.
 FRONT_BAND = (76.0, 94.0)

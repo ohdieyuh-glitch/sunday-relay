@@ -11,7 +11,11 @@
 # So the lamps are swept by multiplier at runtime -- no rebuild, one session, same camera -- and the render
 # target exported at each rung. Relay OG because it is plain bone with almost no light of its own, and
 # Celestial Light because it is made of light and will be the first to blow.
-CONCURRENT = True
+# NOT CONCURRENT. This job begins and ends Play-In-Editor. On 2026-09-27 a stage sweep of mine declared
+# CONCURRENT = True, the channel ran it beside the world session's ten-minute mascot sweep, and its closing
+# editor_request_end_play tore PIE down under that sweep at 15:08 UTC -- which then reported a black viewport
+# as mascot measurements through nine gates. Any job that owns PIE is serialised.
+CONCURRENT = False
 
 import os
 import unreal

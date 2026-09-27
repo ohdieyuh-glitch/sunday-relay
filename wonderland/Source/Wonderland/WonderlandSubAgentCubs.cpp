@@ -314,7 +314,15 @@ FString UWonderlandSubAgentCubSubsystem::CubFigurePath(int32 Slot) const
 	{
 		return Plain;
 	}
-	const FString Stem = FPaths::GetBaseFilename(Skin->FigureFile);
+	// V1 and V2 of a skin share one family of cubs: the founder approved the cubs as they are, and the
+	// identity a cub carries -- Arden's ring and chain, Apollo's crown, Skeleton's skull -- is the skin's,
+	// not the version's. So ArdenInfernalV1.wlvox and ArdenInfernalV2.wlvox both dress the flock from
+	// CubGhost_ArdenInfernal_<Eyes>.wlvox.
+	FString Stem = FPaths::GetBaseFilename(Skin->FigureFile);
+	if (Stem.Len() > 2 && (Stem.EndsWith(TEXT("V1")) || Stem.EndsWith(TEXT("V2"))))
+	{
+		Stem.LeftChopInline(2);
+	}
 	const FString Eyes = FPaths::GetBaseFilename(FString(CubFigures[Which])).RightChop(FString(TEXT("CubGhost_")).Len());
 	const FString Dressed = FPaths::ConvertRelativePathToFull(
 		FPaths::ProjectDir() / TEXT("RelayCubs") / FString::Printf(TEXT("CubGhost_%s_%s.wlvox"), *Stem, *Eyes));

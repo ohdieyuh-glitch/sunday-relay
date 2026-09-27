@@ -14,7 +14,7 @@ L = unreal.WonderlandUiTestLibrary
 H = unreal.WonderlandHudTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "card_readable")
 
-SKINS = ("celestial_light", "arden_infernal", "skeleton_flame", "apollo", "relay_og")
+SKINS = ("relay_og", "celestial_light", "apollo_v1", "apollo", "arden_infernal_v1", "arden_infernal", "skeleton_flame_v1", "skeleton_flame")
 
 
 def job():

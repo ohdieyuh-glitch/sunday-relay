@@ -18,7 +18,11 @@
 # brightness, and how much of it has clipped to white. Night opens the exposure by about 1.45 EV, so the same
 # level renders roughly two and a half times brighter than it would at noon -- which is exactly why this was
 # pulled down in the first place, and exactly why the right answer cannot be reasoned to from the day value.
-CONCURRENT = True
+# NOT CONCURRENT. This job begins and ends Play-In-Editor. On 2026-09-27 a stage sweep of mine declared
+# CONCURRENT = True, the channel ran it beside the world session's ten-minute mascot sweep, and its closing
+# editor_request_end_play tore PIE down under that sweep at 15:08 UTC -- which then reported a black viewport
+# as mascot measurements through nine gates. Any job that owns PIE is serialised.
+CONCURRENT = False
 
 import os
 import unreal

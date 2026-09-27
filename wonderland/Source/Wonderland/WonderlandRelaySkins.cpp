@@ -55,17 +55,34 @@ void UWonderlandRelaySkinSubsystem::BuildRegistry()
 		TEXT("The Dog as it is. Bone coat, black visor, warm gold status eyes."),
 		TEXT("RelayOg.wlvox"), Rgb(0xE5, 0xDE, 0xCB), Rgb(0xFF, 0xC7, 0x4D), true);
 
-	Add(TEXT("arden_infernal"), TEXT("ARDEN INFERNAL"), TEXT("INFERNAL"),
-		TEXT("A black and burning mane, gold chains, a ring of fire, and one arm sheathed in char."),
-		TEXT("ArdenInfernal.wlvox"), Rgb(0xFF, 0x4C, 0x1E), Rgb(0xFF, 0x8C, 0x1F), false);
+	// ---- V1 AND V2, BOTH IN THE WORLD.
+	//
+	// FOUNDER, 2026-09-27: "Call the previous one V1 and keep them in the Wonderland world and make the new
+	// ones called V2." The three premium skins were redone from the founder's reference sheets; the designs
+	// that stood before are not retired but worn as V1 beside them. The ids the rest of the project already
+	// uses -- arden_infernal, apollo, skeleton_flame -- stay and now mean the V2 (the redo is the default a
+	// player gets), and each has a _v1 twin pointing at the previous figure. The generator writes both from
+	// one file: V1 verbatim from the pre-redo builders, V2 fresh from the sheets.
+	Add(TEXT("arden_infernal_v1"), TEXT("ARDEN INFERNAL V1"), TEXT("INFERNAL"),
+		TEXT("The previous Arden: a flaming halo, gold chains, a demonic arm and an infernal tail, no robe."),
+		TEXT("ArdenInfernalV1.wlvox"), Rgb(0xFF, 0x4C, 0x1E), Rgb(0xFF, 0x8C, 0x1F), false);
+	Add(TEXT("arden_infernal"), TEXT("ARDEN INFERNAL V2"), TEXT("INFERNAL"),
+		TEXT("From the sheet: a gem-set flaming halo, six chains over a bare chest, a robe of cream, crimson and black to the floor, the demonic arm and the infernal tail."),
+		TEXT("ArdenInfernalV2.wlvox"), Rgb(0xFF, 0x4C, 0x1E), Rgb(0xFF, 0x8C, 0x1F), false);
 
-	Add(TEXT("apollo"), TEXT("APOLLO"), TEXT("CELESTIAL"),
-		TEXT("Gold celestial armour over white drapery, a solar crown, and a plain gold halo."),
-		TEXT("Apollo.wlvox"), Rgb(0xE6, 0xB8, 0x4C), Rgb(0xFF, 0xD6, 0x52), false);
+	Add(TEXT("apollo_v1"), TEXT("APOLLO V1"), TEXT("CELESTIAL"),
+		TEXT("The previous Apollo: a sunburst of rays, baroque winged pauldrons, gold armour, no drapery."),
+		TEXT("ApolloV1.wlvox"), Rgb(0xE6, 0xB8, 0x4C), Rgb(0xFF, 0xD6, 0x52), false);
+	Add(TEXT("apollo"), TEXT("APOLLO V2"), TEXT("CELESTIAL"),
+		TEXT("From the sheet: a plain gold ring enclosing a crown of fire, winged cherub pauldrons, a sun on the chest, lamp-orbs at the hips, white drapery to the floor."),
+		TEXT("ApolloV2.wlvox"), Rgb(0xE6, 0xB8, 0x4C), Rgb(0xFF, 0xD6, 0x52), false);
 
-	Add(TEXT("skeleton_flame"), TEXT("SKELETON FLAME"), TEXT("SPECTRAL"),
-		TEXT("Bone over bone, a ribcage cut into the chest, and blue ghostfire at ears, shoulders and feet."),
-		TEXT("SkeletonFlame.wlvox"), Rgb(0x6E, 0xD8, 0xFF), Rgb(0x73, 0xEA, 0xFF), false);
+	Add(TEXT("skeleton_flame_v1"), TEXT("SKELETON FLAME V1"), TEXT("SPECTRAL"),
+		TEXT("The previous Skeleton Flame: a ribcage cut into the chest, tall ghostfire, jointed bone limbs."),
+		TEXT("SkeletonFlameV1.wlvox"), Rgb(0x6E, 0xD8, 0xFF), Rgb(0x73, 0xEA, 0xFF), false);
+	Add(TEXT("skeleton_flame"), TEXT("SKELETON FLAME V2"), TEXT("SPECTRAL"),
+		TEXT("From the sheet: a broad figure in stepped bone plates, skulls at brow, temples and sternum, ghostfire at ears, elbows and spine, feet of pale blue light."),
+		TEXT("SkeletonFlameV2.wlvox"), Rgb(0x6E, 0xD8, 0xFF), Rgb(0x73, 0xEA, 0xFF), false);
 
 	Add(TEXT("celestial_light"), TEXT("CELESTIAL LIGHT"), TEXT("CELESTIAL"),
 		TEXT("A coat of light, a star at the brow, a marked banner, and a halo standing behind."),

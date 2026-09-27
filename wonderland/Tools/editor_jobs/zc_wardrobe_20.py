@@ -11,7 +11,11 @@
 # cannot see itself -- and it has already caught three: a camera framed on a half-built figure, a body box
 # measured with the figure's own turn still in it, and a clamp that rounded five different figures to one
 # tidy identical number.
-CONCURRENT = True
+# NOT CONCURRENT. This job begins and ends Play-In-Editor. On 2026-09-27 a stage sweep of mine declared
+# CONCURRENT = True, the channel ran it beside the world session's ten-minute mascot sweep, and its closing
+# editor_request_end_play tore PIE down under that sweep at 15:08 UTC -- which then reported a black viewport
+# as mascot measurements through nine gates. Any job that owns PIE is serialised.
+CONCURRENT = False
 
 import os
 import unreal
@@ -19,7 +23,7 @@ import unreal
 L = unreal.WonderlandUiTestLibrary
 
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "wardrobe20")
-SKINS = ("relay_og", "arden_infernal", "apollo", "skeleton_flame", "celestial_light")
+SKINS = ("relay_og", "celestial_light", "apollo_v1", "apollo", "arden_infernal_v1", "arden_infernal", "skeleton_flame_v1", "skeleton_flame")
 ANGLES = (("front", 0.0), ("left", 90.0), ("back", 180.0), ("right", 270.0))
 
 

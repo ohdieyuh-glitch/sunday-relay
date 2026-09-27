@@ -4,7 +4,11 @@
 # night looked like BEFORE the moon was added. Either the moon is not there, or it is there and contributing
 # nothing. This asks the world rather than the source: every directional light in the PIE world, what it is
 # called, how bright it is, where it is pointing, whether it is visible and what mobility it has.
-CONCURRENT = True
+# NOT CONCURRENT. This job begins and ends Play-In-Editor. On 2026-09-27 a stage sweep of mine declared
+# CONCURRENT = True, the channel ran it beside the world session's ten-minute mascot sweep, and its closing
+# editor_request_end_play tore PIE down under that sweep at 15:08 UTC -- which then reported a black viewport
+# as mascot measurements through nine gates. Any job that owns PIE is serialised.
+CONCURRENT = False
 
 import unreal
 

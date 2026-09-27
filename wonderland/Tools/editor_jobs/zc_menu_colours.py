@@ -15,7 +15,11 @@
 # working, so the tab is opened and pressed. "Live" is a claim about PIXELS, so the terminal is photographed
 # before and after. "Do not indiscriminately tint every element" is a claim about what did NOT change, so the
 # body text of the Menu is measured too and required to stay where it was.
-CONCURRENT = True
+# NOT CONCURRENT. This job begins and ends Play-In-Editor. On 2026-09-27 a stage sweep of mine declared
+# CONCURRENT = True, the channel ran it beside the world session's ten-minute mascot sweep, and its closing
+# editor_request_end_play tore PIE down under that sweep at 15:08 UTC -- which then reported a black viewport
+# as mascot measurements through nine gates. Any job that owns PIE is serialised.
+CONCURRENT = False
 
 import os
 import unreal

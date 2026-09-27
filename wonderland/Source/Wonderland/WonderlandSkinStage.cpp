@@ -129,7 +129,14 @@ static FAutoConsoleVariableRef GWonderlandPreviewBloomFloorRef(
 	TEXT("Luminance a pixel must exceed before it blooms in the wardrobe preview."),
 	ECVF_Default);
 
-static float GWonderlandPreviewGlow = 0.0015f;
+// 0.0015 WAS FOR EMISSIVES EIGHT HUNDRED TIMES OVER WHITE. The generator's glow scale went from 4000 to 6 on
+// 2026-09-27, so the same materials arrive at 3-13 and at 0.0015 every glow on the stage rendered black
+// (Apollo's crown of fire absent, every eye a dull square). Swept on the stage (zc_stage_tune): at 0.35
+// Celestial Light's edge (6 x 0.35 = 2.1) already pins 60% of the figure, so the stage's white sits near 2;
+// at 0.10 the brightest body glow (13.2) lands at 1.3, under it. The manual exposure bias, swept 0 to -4.5
+// EV (zc_stage_tune2), changed nothing at all on this capture -- the same dead lever the 13-stop sweep
+// found in the morning -- so the glow scale is the knob. Verified by zc_skin_sheet after the build.
+static float GWonderlandPreviewGlow = 0.10f;
 static FAutoConsoleVariableRef GWonderlandPreviewGlowRef(
 	TEXT("wl.Look.PreviewGlow"),
 	GWonderlandPreviewGlow,

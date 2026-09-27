@@ -14,7 +14,11 @@
 # wrong: the shadow gate, the sub-horizon sun fill, the checkpoint lamps, the checkpoint glow, and the
 # assumption that the reading meant what it said. The only two things that ever moved it were a photograph
 # and an A/B inside a single PIE run. So all three knobs are console variables now and this walks them.
-CONCURRENT = True
+# NOT CONCURRENT. This job begins and ends Play-In-Editor. On 2026-09-27 a stage sweep of mine declared
+# CONCURRENT = True, the channel ran it beside the world session's ten-minute mascot sweep, and its closing
+# editor_request_end_play tore PIE down under that sweep at 15:08 UTC -- which then reported a black viewport
+# as mascot measurements through nine gates. Any job that owns PIE is serialised.
+CONCURRENT = False
 
 import os
 import unreal

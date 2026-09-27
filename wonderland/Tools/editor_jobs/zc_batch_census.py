@@ -9,7 +9,11 @@
 # That is the same shape of finding as the avatars' 123 groups against 25 -- and the same trap, because there
 # the fix bought 5% and the theory turned out to be wrong. So this only COUNTS. What the distribution is
 # worth comes after, from a measurement, not from the census looking suggestive.
-CONCURRENT = True
+# NOT CONCURRENT. This job begins and ends Play-In-Editor. On 2026-09-27 a stage sweep of mine declared
+# CONCURRENT = True, the channel ran it beside the world session's ten-minute mascot sweep, and its closing
+# editor_request_end_play tore PIE down under that sweep at 15:08 UTC -- which then reported a black viewport
+# as mascot measurements through nine gates. Any job that owns PIE is serialised.
+CONCURRENT = False
 
 import collections
 import unreal

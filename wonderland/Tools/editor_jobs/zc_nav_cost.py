@@ -9,7 +9,11 @@
 # So both sides are measured HERE, minutes apart, in one job, at the same thermal state. The only thing that
 # changes between them is the navmesh's runtime_generation: DYNAMIC builds tiles around the invoker, STATIC
 # builds none at all. Whatever separates the two readings is navigation, and whatever does not, is not.
-CONCURRENT = True
+# NOT CONCURRENT. This job begins and ends Play-In-Editor. On 2026-09-27 a stage sweep of mine declared
+# CONCURRENT = True, the channel ran it beside the world session's ten-minute mascot sweep, and its closing
+# editor_request_end_play tore PIE down under that sweep at 15:08 UTC -- which then reported a black viewport
+# as mascot measurements through nine gates. Any job that owns PIE is serialised.
+CONCURRENT = False
 
 import time
 import unreal

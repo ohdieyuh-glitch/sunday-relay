@@ -18,7 +18,11 @@
 # The founder's constraint is the reason this is a sweep and not a division. "Bring the flames back" and
 # "every skin's eyes glow" both mean the answer is not zero. The wanted rung is the BRIGHTEST one at which a
 # body is still legible underneath the light.
-CONCURRENT = True
+# NOT CONCURRENT. This job begins and ends Play-In-Editor. On 2026-09-27 a stage sweep of mine declared
+# CONCURRENT = True, the channel ran it beside the world session's ten-minute mascot sweep, and its closing
+# editor_request_end_play tore PIE down under that sweep at 15:08 UTC -- which then reported a black viewport
+# as mascot measurements through nine gates. Any job that owns PIE is serialised.
+CONCURRENT = False
 
 import os
 import unreal

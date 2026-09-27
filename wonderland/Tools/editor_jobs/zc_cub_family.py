@@ -12,7 +12,11 @@
 # And the grounding the founder already ruled on holds: no cub sinks, no companion moves when the flock arrives.
 #
 # The resemblance itself -- "that is the Apollo Cub" -- is the founder's call, from the pictures.
-CONCURRENT = True
+# NOT CONCURRENT. This job begins and ends Play-In-Editor. On 2026-09-27 a stage sweep of mine declared
+# CONCURRENT = True, the channel ran it beside the world session's ten-minute mascot sweep, and its closing
+# editor_request_end_play tore PIE down under that sweep at 15:08 UTC -- which then reported a black viewport
+# as mascot measurements through nine gates. Any job that owns PIE is serialised.
+CONCURRENT = False
 
 import math
 import os
@@ -21,7 +25,7 @@ import unreal
 L = unreal.WonderlandUiTestLibrary
 
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "cub_family")
-SKINS = ("relay_og", "celestial_light", "apollo", "arden_infernal", "skeleton_flame")
+SKINS = ("relay_og", "celestial_light", "apollo_v1", "apollo", "arden_infernal_v1", "arden_infernal", "skeleton_flame_v1", "skeleton_flame")
 # The plate's plain cubs, as the generator writes them. A dressed cub is heavier than any of these.
 PLAIN_CUB_BOXES = (595, 601, 603)
 FLOCK = 3

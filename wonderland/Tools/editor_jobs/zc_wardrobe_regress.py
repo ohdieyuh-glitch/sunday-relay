@@ -12,7 +12,11 @@
 # The solve reports its own inputs and its predicted occupancy. Drift of any kind shows up as that string
 # changing for a skin whose body has not changed, which is the precise signature of state that should not
 # exist. Captures are taken at the start and the end so the claim is also photographed.
-CONCURRENT = True
+# NOT CONCURRENT. This job begins and ends Play-In-Editor. On 2026-09-27 a stage sweep of mine declared
+# CONCURRENT = True, the channel ran it beside the world session's ten-minute mascot sweep, and its closing
+# editor_request_end_play tore PIE down under that sweep at 15:08 UTC -- which then reported a black viewport
+# as mascot measurements through nine gates. Any job that owns PIE is serialised.
+CONCURRENT = False
 
 import os
 import unreal

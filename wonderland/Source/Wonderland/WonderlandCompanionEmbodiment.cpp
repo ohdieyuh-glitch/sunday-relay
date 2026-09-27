@@ -1346,7 +1346,10 @@ void AWonderlandCompanionEmbodiment::SetExposureAware(bool bAware)
 		// So a figure that ignores the clock is given a fixed showcase level instead of inheriting nothing.
 		// It is deliberately lower than the world's noon value: the preview stage is a dark room a few
 		// centimetres across, and what reads as a lamp against sunlit stone would be a white hole in here.
-		EyeGlowScale = 6.0f;
+		// 14, not 6, since the stage's glow scale came down to 0.10 with the generator's re-baseline: the eye is
+		// driven to 14 x 0.10 = 1.4 against a stage white near 2 -- a bright coloured core, not a white hole and
+		// not a dull square. The world drives the same eye to 12 against a white near 25.
+		EyeGlowScale = 14.0f;
 		RepaintColourway();
 	}
 }

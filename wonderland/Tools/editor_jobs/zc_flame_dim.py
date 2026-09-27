@@ -37,7 +37,11 @@
 # 3.24 uu a unit is 107-126 uu above the feet; at +175 the band was reading SKY above the fire, and the sweep
 # of 2026-09-27 14:28 reported the plume dark (0.17-0.22) at every setting while the head under it was
 # pinned white. The founder video floor of 0.25 is now measured where the fire actually is.
-CONCURRENT = True
+# NOT CONCURRENT. This job begins and ends Play-In-Editor. On 2026-09-27 a stage sweep of mine declared
+# CONCURRENT = True, the channel ran it beside the world session's ten-minute mascot sweep, and its closing
+# editor_request_end_play tore PIE down under that sweep at 15:08 UTC -- which then reported a black viewport
+# as mascot measurements through nine gates. Any job that owns PIE is serialised.
+CONCURRENT = False
 
 import math
 import os

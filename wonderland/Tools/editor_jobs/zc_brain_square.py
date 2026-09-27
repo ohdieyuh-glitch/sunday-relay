@@ -11,7 +11,11 @@
 # The candidates are every actor that could paint a quad in that space: the brain sculpture's own staging, the
 # wardrobe's black backdrop (which lives in the world and could be parked in shot), the skin stage, and any
 # plain static mesh near the brain. Each is reported with its class so the guess is not mine.
-CONCURRENT = True
+# NOT CONCURRENT. This job begins and ends Play-In-Editor. On 2026-09-27 a stage sweep of mine declared
+# CONCURRENT = True, the channel ran it beside the world session's ten-minute mascot sweep, and its closing
+# editor_request_end_play tore PIE down under that sweep at 15:08 UTC -- which then reported a black viewport
+# as mascot measurements through nine gates. Any job that owns PIE is serialised.
+CONCURRENT = False
 
 import os
 import unreal

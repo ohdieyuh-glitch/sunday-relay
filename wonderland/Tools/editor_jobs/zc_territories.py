@@ -13,7 +13,11 @@
 # shows is compared against WorldDesign/CANON/nations.json, read from disk in this proof, and a territory the
 # canon is silent about must show NEEDS FOUNDER DEFINITION and nothing else. A build that had quietly written
 # a purpose for Dubel Forest would fail T02 whatever else it did.
-CONCURRENT = True
+# NOT CONCURRENT. This job begins and ends Play-In-Editor. On 2026-09-27 a stage sweep of mine declared
+# CONCURRENT = True, the channel ran it beside the world session's ten-minute mascot sweep, and its closing
+# editor_request_end_play tore PIE down under that sweep at 15:08 UTC -- which then reported a black viewport
+# as mascot measurements through nine gates. Any job that owns PIE is serialised.
+CONCURRENT = False
 
 import json
 import math

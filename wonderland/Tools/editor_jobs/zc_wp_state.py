@@ -8,7 +8,11 @@
 # DescribeWorldPartition asks UWorld::GetWorldPartition directly. Read in BOTH worlds, because they can
 # disagree: the editor world holds the authored settings, and PIE gets a generated runtime copy, so "the
 # editor says streaming is on and PIE says it is off" is itself a diagnosis.
-CONCURRENT = True
+# NOT CONCURRENT. This job begins and ends Play-In-Editor. On 2026-09-27 a stage sweep of mine declared
+# CONCURRENT = True, the channel ran it beside the world session's ten-minute mascot sweep, and its closing
+# editor_request_end_play tore PIE down under that sweep at 15:08 UTC -- which then reported a black viewport
+# as mascot measurements through nine gates. Any job that owns PIE is serialised.
+CONCURRENT = False
 
 import unreal
 

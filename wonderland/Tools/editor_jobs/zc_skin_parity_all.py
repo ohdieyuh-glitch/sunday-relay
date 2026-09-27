@@ -22,7 +22,7 @@ ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "skin_parity_all
 #
 # EXPECTED is therefore declared separately and asserted against what was actually walked, so dropping a skin
 # from the list becomes a FAILING TEST rather than a smaller green.
-EXPECTED_ACTIVE_SKINS = ["relay_og", "celestial_light", "apollo", "arden_infernal", "skeleton_flame"]
+EXPECTED_ACTIVE_SKINS = ["relay_og", "celestial_light", "apollo_v1", "apollo", "arden_infernal_v1", "arden_infernal", "skeleton_flame_v1", "skeleton_flame"]
 SKINS = list(EXPECTED_ACTIVE_SKINS)
 FIELDS = ("stride_phase", "gait_weight", "speed_uu", "bob_uu", "sway_uu", "lift_uu",
           "body_pitch_deg", "body_yaw_deg", "body_roll_deg",
