@@ -90,18 +90,22 @@ def job():
         tolerance while still on its way down, so a pair-agreement test can return mid-descent and hand
         back a number from a machine that has not arrived.
         """
-        prev = None
+        # THREE IN A ROW, NOT A PAIR. I raised the hole and neither lane closed it: a world that RISES
+        # before falling again can put two adjacent reads inside the tolerance on an upswing, and a pair
+        # test returns there. A run of three consecutive agreements cannot be produced by an oscillation
+        # that is still moving, and costs one extra second.
+        run, prev = 0, None
         for _ in range(24):
             yield 1.0
             now = patch(0.5, 0.5, 0.46, 0.44)
             if now is None:
                 continue
-            if prev is not None:
-                if now["luma"] < prev["luma"] - 0.002:
-                    prev = now
-                    continue                      # still descending
-                if abs(now["luma"] - prev["luma"]) < 0.004:
+            if prev is not None and abs(now["luma"] - prev["luma"]) < 0.004:
+                run += 1
+                if run >= 2:                      # two agreements = three reads in a row
                     return
+            else:
+                run = 0                           # any move, up OR down, restarts the count
             prev = now
 
     # ---- DOES THE KNOB EXIST? Read it back before trusting a single rung.
