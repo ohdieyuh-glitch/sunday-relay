@@ -1417,6 +1417,21 @@ export async function runClaimedTask(
   await ledger.trajectory('DISPATCH', {
     taskId: claim.taskId, workerId: outcome.workerId, contextId,
     policyRevision: request.policy.revision, outcome: 'COMPLETED',
+    /**
+     * THE FOUR MEASUREMENT COLUMNS, FILLED AT LAST. They have been on
+     * `JuliusTrajectoryEvent` since it was written and were null on every
+     * successful dispatch, so every eval derived from the trajectory — cost,
+     * cost completeness, average duration — was structurally empty rather than
+     * merely unreported. Absent stays null: an unreported cost must not become a
+     * zero, and `measured` is undefined only where no provider answered.
+     */
+    ...(outcome.measured === undefined ? {} : {
+      providerId: outcome.measured.providerId,
+      usdMicros: outcome.measured.usdMicros,
+      inputTokens: outcome.measured.inputTokens,
+      outputTokens: outcome.measured.outputTokens,
+      durationMs: outcome.measured.durationMs,
+    }),
     facts: { duplicate: outcome.duplicate, ...bindingFacts(preflight.contractBinding) },
   });
 

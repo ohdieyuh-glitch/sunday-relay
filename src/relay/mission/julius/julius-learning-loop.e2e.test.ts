@@ -406,6 +406,41 @@ describe('the Julius Learning Loop, measured rather than asserted', () => {
     expect(decision.reasonCode).toBe('learning_no_measurable_value');
   });
 
+  /**
+   * THE COUNTERPART TO THE CASE ABOVE, AND THE REASON IT IS NOT VACUOUS.
+   *
+   * "Never promotes on a dimension nobody measured" would have passed even if the
+   * runtime NEVER recorded a cost — and until the trajectory's four measurement
+   * columns were filled, that is exactly what it was doing: `usdMicros`,
+   * `inputTokens`, `outputTokens` and `durationMs` were null on every successful
+   * dispatch, so every cost and token dimension was permanently UNMEASURABLE and
+   * the refusal was free.
+   *
+   * So this asserts the other half: on a PRICED pair the same dimensions are
+   * measured, and the comparison reaches a real verdict about them. One case
+   * proving absence and one proving presence; neither is worth much alone.
+   */
+  it('measures the cost and token dimensions when the provider does report them', async () => {
+    const without = await runMission(false, 'run-a');
+    const withLearning = await runMission(true, 'run-b');
+    const comparison = compareJuliusLearningPair({
+      without: { events: eventsOf(without), pairing: without.pairing },
+      with: { events: eventsOf(withLearning), pairing: withLearning.pairing },
+      dimensions: ['knownUsdMicros', 'knownInputTokens', 'knownOutputTokens'],
+    });
+    expect(comparison.outcome).toBe('COMPARED');
+    if (comparison.outcome !== 'COMPARED') throw new Error('unreachable');
+    for (const delta of comparison.deltas) {
+      expect(delta.verdict, `${delta.dimension} must be measured, not UNMEASURABLE`)
+        .not.toBe('UNMEASURABLE');
+      expect(delta.without, `${delta.dimension} has a figure for mission A`).not.toBeNull();
+      expect(delta.with, `${delta.dimension} has a figure for mission B`).not.toBeNull();
+    }
+    // Mission A paid for a repair round, so it spent more on the same objective.
+    expect(comparison.without.knownUsdMicros).toBeGreaterThan(comparison.with.knownUsdMicros);
+    expect(comparison.without.costComplete, 'and every component reported').toBe(true);
+  });
+
   it('refuses a policy that could not refuse anything', async () => {
     const without = await runMission(false, 'run-a');
     const withLearning = await runMission(true, 'run-b');
