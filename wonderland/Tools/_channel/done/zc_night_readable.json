@@ -1,6 +1,6 @@
 {
  "name": "zc_night_readable",
- "started": "2026-09-27 01:55:47",
+ "started": "2026-09-27 03:42:37",
  "status": "measured",
  "tests": [
   {
@@ -48,9 +48,9 @@
    "pass": true,
    "detail": {
     "darkest_night_hour": "04.0",
-    "fraction_below_luma_0_14": 0.683,
+    "fraction_below_luma_0_14": 0.6655,
     "ceiling": 0.72,
-    "world_luma": 0.13285,
+    "world_luma": 0.13912,
     "note": "dark is correct at night; a frame that is nearly all below 0.14 is not a night, it is a failure to light one"
    }
   },
@@ -60,9 +60,9 @@
    "pass": true,
    "detail": {
     "darkest_night_hour": "04.0",
-    "mascot_luma": 0.07055,
-    "ground_luma": 0.1211,
-    "contrast": 0.0505,
+    "mascot_luma": 0.05126,
+    "ground_luma": 0.15484,
+    "contrast": 0.1036,
     "floor": 0.05
    }
   },
@@ -72,7 +72,7 @@
    "pass": true,
    "detail": {
     "darkest_night_hour": "04.0",
-    "ground_luma": 0.1211,
+    "ground_luma": 0.15484,
     "floor": 0.015
    }
   },
@@ -82,7 +82,7 @@
    "pass": true,
    "detail": {
     "darkest_night_hour": "04.0",
-    "skyline_luma": 0.07632,
+    "skyline_luma": 0.07906,
     "floor": 0.01
    }
   },
@@ -93,9 +93,9 @@
    "detail": {
     "night_hour": "04.0",
     "brightest": "09.5",
-    "night_luma": 0.13285,
-    "day_luma": 0.44692,
-    "ratio": 0.2973,
+    "night_luma": 0.13912,
+    "day_luma": 0.44505,
+    "ratio": 0.3126,
     "ceiling": 0.38,
     "note": "the founder asked for readable, not for a dimmer afternoon"
    }
@@ -106,111 +106,111 @@
    "pass": true,
    "detail": {
     "worst_step": {
-     "from": "19.0",
-     "to": "19.5",
-     "ratio": 1.814
+     "from": "16.5",
+     "to": "17.5",
+     "ratio": 1.741
     },
     "ceiling": 2.6,
     "every_step": [
      {
       "from": "09.5",
       "to": "12.0",
-      "ratio": 1.009
+      "ratio": 1.004
      },
      {
       "from": "12.0",
       "to": "15.0",
-      "ratio": 1.1
+      "ratio": 1.108
      },
      {
       "from": "15.0",
       "to": "16.5",
-      "ratio": 1.25
+      "ratio": 1.237
      },
      {
       "from": "16.5",
       "to": "17.5",
-      "ratio": 1.786
+      "ratio": 1.741
      },
      {
       "from": "17.5",
       "to": "18.0",
-      "ratio": 1.547
+      "ratio": 1.658
      },
      {
       "from": "18.0",
       "to": "18.5",
-      "ratio": 1.415
+      "ratio": 1.401
      },
      {
       "from": "18.5",
       "to": "19.0",
-      "ratio": 1.212
+      "ratio": 1.143
      },
      {
       "from": "19.0",
       "to": "19.5",
-      "ratio": 1.814
+      "ratio": 1.733
      },
      {
       "from": "19.5",
       "to": "20.5",
-      "ratio": 1.152
+      "ratio": 1.177
      },
      {
       "from": "20.5",
       "to": "22.0",
-      "ratio": 1.104
+      "ratio": 1.086
      },
      {
       "from": "22.0",
       "to": "00.0",
-      "ratio": 1.044
+      "ratio": 1.027
      },
      {
       "from": "00.0",
       "to": "02.0",
-      "ratio": 1.044
+      "ratio": 1.041
      },
      {
       "from": "02.0",
       "to": "04.0",
-      "ratio": 1.084
+      "ratio": 1.041
      },
      {
       "from": "04.0",
       "to": "05.0",
-      "ratio": 1.322
+      "ratio": 1.348
      },
      {
       "from": "05.0",
       "to": "05.5",
-      "ratio": 1.261
+      "ratio": 1.272
      },
      {
       "from": "05.5",
       "to": "06.0",
-      "ratio": 1.346
+      "ratio": 1.391
      },
      {
       "from": "06.0",
       "to": "06.5",
-      "ratio": 1.699
+      "ratio": 1.647
      },
      {
       "from": "06.5",
       "to": "07.0",
-      "ratio": 1.281
+      "ratio": 1.241
      },
      {
       "from": "07.0",
       "to": "07.5",
-      "ratio": 1.416
+      "ratio": 1.436
      },
      {
       "from": "07.5",
       "to": "08.5",
-      "ratio": 1.163
+      "ratio": 1.153
      }
     ],
     "note": "sunrise and sunset are real changes; a SWITCH would show here as one step several times the size of its neighbours"
@@ -218,742 +218,742 @@
   }
  ],
  "viewport": [
-  1970.0,
-  994.0
+  1992.0,
+  1016.0
  ],
  "through_the_day": {
   "09.5": {
    "whole": {
-    "luma": 0.44692,
-    "dark": 0.0789,
-    "bright": 0.0403,
-    "samples": 10712
+    "luma": 0.44505,
+    "dark": 0.0811,
+    "bright": 0.0388,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.22006,
-    "dark": 0.0052,
+    "luma": 0.21329,
+    "dark": 0.0049,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.39422,
-    "dark": 0.001,
-    "bright": 0.007,
-    "samples": 7739
+    "luma": 0.38408,
+    "dark": 0.0013,
+    "bright": 0.0042,
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.39943,
-    "dark": 0.0959,
+    "luma": 0.40043,
+    "dark": 0.099,
     "bright": 0.0,
-    "samples": 7070
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h09_5.png"
   },
   "12.0": {
    "whole": {
-    "luma": 0.44301,
-    "dark": 0.0681,
-    "bright": 0.0442,
-    "samples": 10712
+    "luma": 0.44346,
+    "dark": 0.0692,
+    "bright": 0.0455,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.24771,
+    "luma": 0.24986,
     "dark": 0.0,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.40363,
-    "dark": 0.0043,
-    "bright": 0.0136,
-    "samples": 7739
+    "luma": 0.40384,
+    "dark": 0.0025,
+    "bright": 0.0159,
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.43382,
-    "dark": 0.0737,
+    "luma": 0.43563,
+    "dark": 0.0756,
     "bright": 0.0,
-    "samples": 7070
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h12_0.png"
   },
   "15.0": {
    "whole": {
-    "luma": 0.40269,
-    "dark": 0.1094,
-    "bright": 0.0402,
-    "samples": 10712
+    "luma": 0.40021,
+    "dark": 0.1185,
+    "bright": 0.0396,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.23286,
-    "dark": 0.0,
+    "luma": 0.22194,
+    "dark": 0.0025,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.38165,
-    "dark": 0.0041,
+    "luma": 0.37265,
+    "dark": 0.0038,
     "bright": 0.0,
-    "samples": 7739
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.30064,
-    "dark": 0.1564,
+    "luma": 0.30152,
+    "dark": 0.1609,
     "bright": 0.0,
-    "samples": 7070
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h15_0.png"
   },
   "16.5": {
    "whole": {
-    "luma": 0.3222,
-    "dark": 0.3246,
-    "bright": 0.0503,
-    "samples": 10712
+    "luma": 0.32343,
+    "dark": 0.3023,
+    "bright": 0.0513,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.19962,
-    "dark": 0.0014,
+    "luma": 0.20956,
+    "dark": 0.0002,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.31393,
-    "dark": 0.0141,
-    "bright": 0.0,
-    "samples": 7739
+    "luma": 0.31999,
+    "dark": 0.0126,
+    "bright": 0.0052,
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.19117,
-    "dark": 0.5144,
-    "bright": 0.0195,
-    "samples": 7070
+    "luma": 0.19411,
+    "dark": 0.4914,
+    "bright": 0.0189,
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h16_5.png"
   },
   "17.5": {
    "whole": {
-    "luma": 0.18038,
-    "dark": 0.4815,
-    "bright": 0.0326,
-    "samples": 10712
+    "luma": 0.18573,
+    "dark": 0.4695,
+    "bright": 0.0361,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.15563,
-    "dark": 0.0569,
+    "luma": 0.16835,
+    "dark": 0.01,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.18007,
-    "dark": 0.0207,
+    "luma": 0.19289,
+    "dark": 0.0191,
     "bright": 0.0,
-    "samples": 7739
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.11493,
-    "dark": 0.6827,
+    "luma": 0.11916,
+    "dark": 0.649,
     "bright": 0.0,
-    "samples": 7070
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h17_5.png"
   },
   "18.0": {
    "whole": {
-    "luma": 0.1166,
-    "dark": 0.8304,
-    "bright": 0.0424,
-    "samples": 10712
+    "luma": 0.11202,
+    "dark": 0.8427,
+    "bright": 0.0394,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.08737,
-    "dark": 0.9944,
+    "luma": 0.08489,
+    "dark": 0.9965,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.14337,
-    "dark": 0.6264,
-    "bright": 0.0105,
-    "samples": 7739
+    "luma": 0.12306,
+    "dark": 0.6999,
+    "bright": 0.0038,
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.0473,
-    "dark": 0.9877,
+    "luma": 0.04714,
+    "dark": 0.9869,
     "bright": 0.0,
-    "samples": 7070
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h18_0.png"
   },
   "18.5": {
    "whole": {
-    "luma": 0.08241,
-    "dark": 0.8758,
-    "bright": 0.0355,
-    "samples": 10712
+    "luma": 0.07998,
+    "dark": 0.8858,
+    "bright": 0.0358,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.05024,
-    "dark": 1.0,
+    "luma": 0.04853,
+    "dark": 0.9997,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.11026,
-    "dark": 0.7868,
-    "bright": 0.0143,
-    "samples": 7739
+    "luma": 0.07953,
+    "dark": 0.9048,
+    "bright": 0.0,
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.01576,
+    "luma": 0.01622,
     "dark": 1.0,
     "bright": 0.0,
-    "samples": 7070
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h18_5.png"
   },
   "19.0": {
    "whole": {
-    "luma": 0.06801,
-    "dark": 0.9017,
-    "bright": 0.0304,
-    "samples": 10712
+    "luma": 0.06997,
+    "dark": 0.9031,
+    "bright": 0.0308,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.04107,
-    "dark": 0.9995,
-    "bright": 0.0,
-    "samples": 8640
-   },
-   "ground": {
-    "luma": 0.07755,
-    "dark": 0.8735,
-    "bright": 0.0,
-    "samples": 7739
-   },
-   "skyline": {
-    "luma": 0.01108,
+    "luma": 0.03799,
     "dark": 1.0,
     "bright": 0.0,
-    "samples": 7070
+    "samples": 8928
+   },
+   "ground": {
+    "luma": 0.06634,
+    "dark": 0.953,
+    "bright": 0.0,
+    "samples": 7920
+   },
+   "skyline": {
+    "luma": 0.01156,
+    "dark": 1.0,
+    "bright": 0.0,
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h19_0.png"
   },
   "19.5": {
    "whole": {
-    "luma": 0.1234,
-    "dark": 0.757,
-    "bright": 0.0316,
-    "samples": 10712
+    "luma": 0.12123,
+    "dark": 0.7684,
+    "bright": 0.0335,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.04371,
-    "dark": 1.0,
+    "luma": 0.04783,
+    "dark": 0.998,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.10802,
-    "dark": 0.5816,
+    "luma": 0.10343,
+    "dark": 0.651,
     "bright": 0.0,
-    "samples": 7739
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.05662,
-    "dark": 0.9646,
+    "luma": 0.05641,
+    "dark": 0.963,
     "bright": 0.0,
-    "samples": 7070
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h19_5.png"
   },
   "20.5": {
    "whole": {
-    "luma": 0.1421,
-    "dark": 0.7296,
-    "bright": 0.0313,
-    "samples": 10712
+    "luma": 0.14269,
+    "dark": 0.7479,
+    "bright": 0.0341,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.05595,
-    "dark": 0.9731,
+    "luma": 0.04447,
+    "dark": 0.9814,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.13952,
-    "dark": 0.5375,
-    "bright": 0.0071,
-    "samples": 7739
+    "luma": 0.11718,
+    "dark": 0.5557,
+    "bright": 0.0,
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.06706,
-    "dark": 0.9615,
+    "luma": 0.06608,
+    "dark": 0.9632,
     "bright": 0.0,
-    "samples": 7070
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h20_5.png"
   },
   "22.0": {
    "whole": {
-    "luma": 0.15694,
-    "dark": 0.579,
-    "bright": 0.033,
-    "samples": 10712
+    "luma": 0.15489,
+    "dark": 0.5941,
+    "bright": 0.0335,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.05566,
-    "dark": 0.9515,
+    "luma": 0.06094,
+    "dark": 0.9496,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.1203,
-    "dark": 0.6272,
-    "bright": 0.0,
-    "samples": 7739
+    "luma": 0.12744,
+    "dark": 0.626,
+    "bright": 0.0044,
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.09181,
-    "dark": 0.8547,
+    "luma": 0.09115,
+    "dark": 0.8622,
     "bright": 0.0,
-    "samples": 7070
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h22_0.png"
   },
   "00.0": {
    "whole": {
-    "luma": 0.15035,
-    "dark": 0.5487,
-    "bright": 0.0316,
-    "samples": 10712
+    "luma": 0.15088,
+    "dark": 0.55,
+    "bright": 0.0326,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.06697,
-    "dark": 0.948,
+    "luma": 0.05803,
+    "dark": 0.9463,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.12314,
-    "dark": 0.5759,
+    "luma": 0.13436,
+    "dark": 0.5432,
     "bright": 0.0,
-    "samples": 7739
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.09177,
-    "dark": 0.8158,
+    "luma": 0.09156,
+    "dark": 0.8209,
     "bright": 0.0,
-    "samples": 7070
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h00_0.png"
   },
   "02.0": {
    "whole": {
-    "luma": 0.14402,
-    "dark": 0.5855,
-    "bright": 0.0302,
-    "samples": 10712
+    "luma": 0.14488,
+    "dark": 0.5782,
+    "bright": 0.0316,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.0646,
-    "dark": 0.9525,
+    "luma": 0.05904,
+    "dark": 0.9498,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.12146,
-    "dark": 0.575,
+    "luma": 0.12605,
+    "dark": 0.5519,
     "bright": 0.0,
-    "samples": 7739
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.0839,
-    "dark": 0.8949,
+    "luma": 0.08586,
+    "dark": 0.8716,
     "bright": 0.0,
-    "samples": 7070
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h02_0.png"
   },
   "04.0": {
    "whole": {
-    "luma": 0.13285,
-    "dark": 0.683,
-    "bright": 0.0324,
-    "samples": 10712
+    "luma": 0.13912,
+    "dark": 0.6655,
+    "bright": 0.0344,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.07055,
-    "dark": 0.9539,
+    "luma": 0.05126,
+    "dark": 0.9691,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.1211,
-    "dark": 0.6679,
-    "bright": 0.0,
-    "samples": 7739
+    "luma": 0.15484,
+    "dark": 0.5336,
+    "bright": 0.034,
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.07632,
-    "dark": 0.7719,
+    "luma": 0.07906,
+    "dark": 0.7511,
     "bright": 0.0,
-    "samples": 7070
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h04_0.png"
   },
   "05.0": {
    "whole": {
-    "luma": 0.1005,
-    "dark": 0.8583,
-    "bright": 0.0366,
-    "samples": 10712
+    "luma": 0.10321,
+    "dark": 0.8458,
+    "bright": 0.0353,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.04408,
-    "dark": 1.0,
+    "luma": 0.04871,
+    "dark": 0.9981,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.06106,
-    "dark": 0.9906,
-    "bright": 0.0,
-    "samples": 7739
+    "luma": 0.08202,
+    "dark": 0.883,
+    "bright": 0.002,
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.0909,
-    "dark": 0.8052,
-    "bright": 0.0267,
-    "samples": 7070
+    "luma": 0.09223,
+    "dark": 0.8054,
+    "bright": 0.0249,
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h05_0.png"
   },
   "05.5": {
    "whole": {
-    "luma": 0.07972,
-    "dark": 0.8864,
-    "bright": 0.0368,
-    "samples": 10712
+    "luma": 0.08112,
+    "dark": 0.8783,
+    "bright": 0.034,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.0485,
-    "dark": 0.9994,
+    "luma": 0.05299,
+    "dark": 0.9999,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.07262,
-    "dark": 0.9225,
+    "luma": 0.09224,
+    "dark": 0.8191,
     "bright": 0.0,
-    "samples": 7739
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.01394,
-    "dark": 1.0,
+    "luma": 0.0186,
+    "dark": 0.9999,
     "bright": 0.0,
-    "samples": 7070
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h05_5.png"
   },
   "06.0": {
    "whole": {
-    "luma": 0.10732,
-    "dark": 0.851,
-    "bright": 0.0387,
-    "samples": 10712
+    "luma": 0.11281,
+    "dark": 0.839,
+    "bright": 0.0403,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.07586,
-    "dark": 1.0,
+    "luma": 0.08102,
+    "dark": 0.9975,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.10774,
-    "dark": 0.801,
-    "bright": 0.0048,
-    "samples": 7739
+    "luma": 0.11614,
+    "dark": 0.7044,
+    "bright": 0.0,
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.03894,
-    "dark": 0.9999,
+    "luma": 0.04763,
+    "dark": 0.9766,
     "bright": 0.0,
-    "samples": 7070
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h06_0.png"
   },
   "06.5": {
    "whole": {
-    "luma": 0.18238,
-    "dark": 0.4225,
-    "bright": 0.033,
-    "samples": 10712
+    "luma": 0.18575,
+    "dark": 0.4082,
+    "bright": 0.0334,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.15131,
-    "dark": 0.1947,
+    "luma": 0.15309,
+    "dark": 0.1261,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.16761,
-    "dark": 0.1181,
+    "luma": 0.19133,
+    "dark": 0.0184,
     "bright": 0.0,
-    "samples": 7739
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.11391,
-    "dark": 0.6836,
+    "luma": 0.11769,
+    "dark": 0.648,
     "bright": 0.0,
-    "samples": 7070
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h06_5.png"
   },
   "07.0": {
    "whole": {
-    "luma": 0.23371,
-    "dark": 0.4067,
-    "bright": 0.0348,
-    "samples": 10712
+    "luma": 0.23056,
+    "dark": 0.4098,
+    "bright": 0.0315,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.13856,
-    "dark": 0.7953,
+    "luma": 0.13678,
+    "dark": 0.9257,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.18205,
-    "dark": 0.3645,
-    "bright": 0.003,
-    "samples": 7739
+    "luma": 0.18093,
+    "dark": 0.5005,
+    "bright": 0.0,
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.17515,
-    "dark": 0.4614,
-    "bright": 0.0001,
-    "samples": 7070
+    "luma": 0.17496,
+    "dark": 0.4631,
+    "bright": 0.0,
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h07_0.png"
   },
   "07.5": {
    "whole": {
-    "luma": 0.33082,
-    "dark": 0.2385,
-    "bright": 0.0334,
-    "samples": 10712
+    "luma": 0.33112,
+    "dark": 0.235,
+    "bright": 0.0319,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.15659,
-    "dark": 0.3512,
+    "luma": 0.1634,
+    "dark": 0.1046,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.25997,
-    "dark": 0.1464,
+    "luma": 0.26982,
+    "dark": 0.0085,
     "bright": 0.0,
-    "samples": 7739
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.26955,
-    "dark": 0.256,
-    "bright": 0.0004,
-    "samples": 7070
+    "luma": 0.2701,
+    "dark": 0.2545,
+    "bright": 0.0003,
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h07_5.png"
   },
   "08.5": {
    "whole": {
-    "luma": 0.38469,
-    "dark": 0.1431,
-    "bright": 0.0337,
-    "samples": 10712
+    "luma": 0.38194,
+    "dark": 0.15,
+    "bright": 0.033,
+    "samples": 11130
    },
    "mascot": {
-    "luma": 0.21623,
-    "dark": 0.0086,
+    "luma": 0.2061,
+    "dark": 0.0018,
     "bright": 0.0,
-    "samples": 8640
+    "samples": 8928
    },
    "ground": {
-    "luma": 0.3193,
-    "dark": 0.0222,
-    "bright": 0.0,
-    "samples": 7739
+    "luma": 0.30763,
+    "dark": 0.0121,
+    "bright": 0.0018,
+    "samples": 7920
    },
    "skyline": {
-    "luma": 0.23937,
-    "dark": 0.2327,
+    "luma": 0.23676,
+    "dark": 0.2504,
     "bright": 0.0,
-    "samples": 7070
+    "samples": 7344
    },
    "dog_at": [
-    0.4999999690176872,
-    0.5162261410258425
+    0.4999999693598613,
+    0.5162261001707062
    ],
    "ground_at": [
-    0.4999999690176872,
-    0.5007095183405118
+    0.4999999693598613,
+    0.5007095336914062
    ],
    "capture": "h08_5.png"
   }
@@ -961,134 +961,134 @@
  "darkest_hour": "19.0",
  "brightest_hour": "09.5",
  "world_luma_by_hour": {
-  "09.5": 0.44692,
-  "12.0": 0.44301,
-  "15.0": 0.40269,
-  "16.5": 0.3222,
-  "17.5": 0.18038,
-  "18.0": 0.1166,
-  "18.5": 0.08241,
-  "19.0": 0.06801,
-  "19.5": 0.1234,
-  "20.5": 0.1421,
-  "22.0": 0.15694,
-  "00.0": 0.15035,
-  "02.0": 0.14402,
-  "04.0": 0.13285,
-  "05.0": 0.1005,
-  "05.5": 0.07972,
-  "06.0": 0.10732,
-  "06.5": 0.18238,
-  "07.0": 0.23371,
-  "07.5": 0.33082,
-  "08.5": 0.38469
+  "09.5": 0.44505,
+  "12.0": 0.44346,
+  "15.0": 0.40021,
+  "16.5": 0.32343,
+  "17.5": 0.18573,
+  "18.0": 0.11202,
+  "18.5": 0.07998,
+  "19.0": 0.06997,
+  "19.5": 0.12123,
+  "20.5": 0.14269,
+  "22.0": 0.15489,
+  "00.0": 0.15088,
+  "02.0": 0.14488,
+  "04.0": 0.13912,
+  "05.0": 0.10321,
+  "05.5": 0.08112,
+  "06.0": 0.11281,
+  "06.5": 0.18575,
+  "07.0": 0.23056,
+  "07.5": 0.33112,
+  "08.5": 0.38194
  },
  "darkest_night_hour": "04.0",
- "night_over_day": 0.2973,
+ "night_over_day": 0.3126,
  "steps": [
   {
    "from": "09.5",
    "to": "12.0",
-   "ratio": 1.009
+   "ratio": 1.004
   },
   {
    "from": "12.0",
    "to": "15.0",
-   "ratio": 1.1
+   "ratio": 1.108
   },
   {
    "from": "15.0",
    "to": "16.5",
-   "ratio": 1.25
+   "ratio": 1.237
   },
   {
    "from": "16.5",
    "to": "17.5",
-   "ratio": 1.786
+   "ratio": 1.741
   },
   {
    "from": "17.5",
    "to": "18.0",
-   "ratio": 1.547
+   "ratio": 1.658
   },
   {
    "from": "18.0",
    "to": "18.5",
-   "ratio": 1.415
+   "ratio": 1.401
   },
   {
    "from": "18.5",
    "to": "19.0",
-   "ratio": 1.212
+   "ratio": 1.143
   },
   {
    "from": "19.0",
    "to": "19.5",
-   "ratio": 1.814
+   "ratio": 1.733
   },
   {
    "from": "19.5",
    "to": "20.5",
-   "ratio": 1.152
+   "ratio": 1.177
   },
   {
    "from": "20.5",
    "to": "22.0",
-   "ratio": 1.104
+   "ratio": 1.086
   },
   {
    "from": "22.0",
    "to": "00.0",
-   "ratio": 1.044
+   "ratio": 1.027
   },
   {
    "from": "00.0",
    "to": "02.0",
-   "ratio": 1.044
+   "ratio": 1.041
   },
   {
    "from": "02.0",
    "to": "04.0",
-   "ratio": 1.084
+   "ratio": 1.041
   },
   {
    "from": "04.0",
    "to": "05.0",
-   "ratio": 1.322
+   "ratio": 1.348
   },
   {
    "from": "05.0",
    "to": "05.5",
-   "ratio": 1.261
+   "ratio": 1.272
   },
   {
    "from": "05.5",
    "to": "06.0",
-   "ratio": 1.346
+   "ratio": 1.391
   },
   {
    "from": "06.0",
    "to": "06.5",
-   "ratio": 1.699
+   "ratio": 1.647
   },
   {
    "from": "06.5",
    "to": "07.0",
-   "ratio": 1.281
+   "ratio": 1.241
   },
   {
    "from": "07.0",
    "to": "07.5",
-   "ratio": 1.416
+   "ratio": 1.436
   },
   {
    "from": "07.5",
    "to": "08.5",
-   "ratio": 1.163
+   "ratio": 1.153
   }
  ],
  "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\night_readable",
- "finished": "2026-09-27 01:57:32",
- "seconds": 105.05,
- "log": "N_09.5 INFO hour 09.5 {'world': 0.44692, 'mascot': 0.22006, 'ground': 0.39422, 'crushed': 0.0789}\nN_12.0 INFO hour 12.0 {'world': 0.44301, 'mascot': 0.24771, 'ground': 0.40363, 'crushed': 0.0681}\nN_15.0 INFO hour 15.0 {'world': 0.40269, 'mascot': 0.23286, 'ground': 0.38165, 'crushed': 0.1094}\nN_16.5 INFO hour 16.5 {'world': 0.3222, 'mascot': 0.19962, 'ground': 0.31393, 'crushed': 0.3246}\nN_17.5 INFO hour 17.5 {'world': 0.18038, 'mascot': 0.15563, 'ground': 0.18007, 'crushed': 0.4815}\nN_18.0 INFO hour 18.0 {'world': 0.1166, 'mascot': 0.08737, 'ground': 0.14337, 'crushed': 0.8304}\nN_18.5 INFO hour 18.5 {'world': 0.08241, 'mascot': 0.05024, 'ground': 0.11026, 'crushed': 0.8758}\nN_19.0 INFO hour 19.0 {'world': 0.06801, 'mascot': 0.04107, 'ground': 0.07755, 'crushed': 0.9017}\nN_19.5 INFO hour 19.5 {'world': 0.1234, 'mascot': 0.04371, 'ground': 0.10802, 'crushed': 0.757}\nN_20.5 INFO hour 20.5 {'world': 0.1421, 'mascot': 0.05595, 'ground': 0.13952, 'crushed': 0.7296}\nN_22.0 INFO hour 22.0 {'world': 0.15694, 'mascot': 0.05566, 'ground': 0.1203, 'crushed': 0.579}\nN_00.0 INFO hour 00.0 {'world': 0.15035, 'mascot': 0.06697, 'ground': 0.12314, 'crushed': 0.5487}\nN_02.0 INFO hour 02.0 {'world': 0.14402, 'mascot': 0.0646, 'ground': 0.12146, 'crushed': 0.5855}\nN_04.0 INFO hour 04.0 {'world': 0.13285, 'mascot': 0.07055, 'ground': 0.1211, 'crushed': 0.683}\nN_05.0 INFO hour 05.0 {'world': 0.1005, 'mascot': 0.04408, 'ground': 0.06106, 'crushed': 0.8583}\nN_05.5 INFO hour 05.5 {'world': 0.07972, 'mascot': 0.0485, 'ground': 0.07262, 'crushed': 0.8864}\nN_06.0 INFO hour 06.0 {'world': 0.10732, 'mascot': 0.07586, 'ground': 0.10774, 'crushed': 0.851}\nN_06.5 INFO hour 06.5 {'world': 0.18238, 'mascot': 0.15131, 'ground': 0.16761, 'crushed': 0.4225}\nN_07.0 INFO hour 07.0 {'world': 0.23371, 'mascot': 0.13856, 'ground': 0.18205, 'crushed': 0.4067}\nN_07.5 INFO hour 07.5 {'world': 0.33082, 'mascot': 0.15659, 'ground': 0.25997, 'crushed': 0.2385}\nN_08.5 INFO hour 08.5 {'world': 0.38469, 'mascot': 0.21623, 'ground': 0.3193, 'crushed': 0.1431}\nN00 PASS every hour of the day was photographed and the world read {'hours': ['09.5', '12.0', '15.0', '16.5', '17.5', '18.0', '18.5', '19.0', '19.5', '20.5', '22.0', '00.0', '02.0', '04.0', '05.0', '05.5', '06.0', '06.5', '07.0', '07.5', '08.5']}\nN01 PASS the Dog and the ground in front of it were in frame at every hour {'missed': [], 'note': 'projected rather than assumed: the first version of this proof aimed at a wall and reported the world as black'}\nN_SUM INFO the day, end to end {'09.5': 0.44692, '12.0': 0.44301, '15.0': 0.40269, '16.5': 0.3222, '17.5': 0.18038, '18.0': 0.1166, '18.5': 0.08241, '19.0': 0.06801, '19.5': 0.1234, '20.5': 0.1421, '22.0': 0.15694, '00.0': 0.15035, '02.0': 0.14402, '04.0': 0.13285, '05.0': 0.1005, '05.5': 0.07972, '06.0': 0.10732, '06.5': 0.18238, '07.0': 0.23371, '07.5': 0.33082, '08.5': 0.38469}\nN02 PASS at the darkest hour the world is not crushed to black {'darkest_night_hour': '04.0', 'fraction_below_luma_0_14': 0.683, 'ceiling': 0.72, 'world_luma': 0.13285, 'note': 'dark is correct at night; a frame that is nearly all below 0.14 is not a night, it is a failure to light one'}\nN03 PASS the mascot can be told apart from the ground it stands on at the darkest hour {'darkest_night_hour': '04.0', 'mascot_luma': 0.07055, 'ground_luma': 0.1211, 'contrast': 0.0505, 'floor': 0.05}\nN04 PASS the ground and paths around the player read at the darkest hour {'darkest_night_hour': '04.0', 'ground_luma': 0.1211, 'floor': 0.015}\nN05 PASS there is architecture standing against the sky at the darkest hour {'darkest_night_hour': '04.0', 'skyline_luma': 0.07632, 'floor': 0.01}\nN10 PASS night is still unmistakably night beside the brightest hour of the day {'night_hour': '04.0', 'brightest': '09.5', 'night_luma': 0.13285, 'day_luma': 0.44692, 'ratio': 0.2973, 'ceiling': 0.38, 'note': 'the founder asked for readable, not for a dimmer afternoon'}\nN11 PASS the day changes smoothly -- no single step jumps the exposure {'worst_step': {'from': '19.0', 'to': '19.5', 'ratio': 1.814}, 'ceiling': 2.6, 'every_step': [{'from': '09.5', 'to': '12.0', 'ratio': 1.009}, {'from': '12.0', 'to': '15.0', 'ratio': 1.1}, {'from': '15.0', 'to': '16.5', 'ratio': 1.25}, {'from': '16.5', 'to': '17.5', 'ratio': 1.786}, {'from': '17.5', 'to': '18.0', 'ratio': 1.547}, {'from': '18.0', 'to': '18.5', 'ratio': 1.415}, {'from': '18.5', 'to': '19.0', 'ratio': 1.212}, {'from': '19.0', 'to': '19.5', 'ratio': 1.814}, {'from': '19.5', 'to': '20.5', 'ratio': 1.152}, {'from': '20.5', 'to': '22.0', 'ratio': 1.104}, {'from': '22.0', 'to': '00.0', 'ratio': 1.044}, {'from': '00.0', 'to': '02.0', 'ratio': 1.044}, {'from': '02.0', 'to': '04.0', 'ratio': 1.084}, {'from': '04.0', 'to': '05.0', 'ratio': 1.322}, {'from': '05.0', 'to': '05.5', 'ratio': 1.261}, {'from': '05.5', 'to': '06.0', 'ratio': 1.346}, {'from': '06.0', 'to': '06.5', 'ratio': 1.699}, {'from': '06.5', 'to': '07.0', 'ratio': 1.281}, {'from': '07.0', 'to': '07.5', 'ratio': 1.416}, {'from': '07.5', 'to': '08.5', 'ratio': 1.163}], 'note': 'sunrise and sunset are real changes; a SWITCH would show here as one step several times the size of its neighbours'}\n"
+ "finished": "2026-09-27 03:44:19",
+ "seconds": 102.12,
+ "log": "N_09.5 INFO hour 09.5 {'world': 0.44505, 'mascot': 0.21329, 'ground': 0.38408, 'crushed': 0.0811}\nN_12.0 INFO hour 12.0 {'world': 0.44346, 'mascot': 0.24986, 'ground': 0.40384, 'crushed': 0.0692}\nN_15.0 INFO hour 15.0 {'world': 0.40021, 'mascot': 0.22194, 'ground': 0.37265, 'crushed': 0.1185}\nN_16.5 INFO hour 16.5 {'world': 0.32343, 'mascot': 0.20956, 'ground': 0.31999, 'crushed': 0.3023}\nN_17.5 INFO hour 17.5 {'world': 0.18573, 'mascot': 0.16835, 'ground': 0.19289, 'crushed': 0.4695}\nN_18.0 INFO hour 18.0 {'world': 0.11202, 'mascot': 0.08489, 'ground': 0.12306, 'crushed': 0.8427}\nN_18.5 INFO hour 18.5 {'world': 0.07998, 'mascot': 0.04853, 'ground': 0.07953, 'crushed': 0.8858}\nN_19.0 INFO hour 19.0 {'world': 0.06997, 'mascot': 0.03799, 'ground': 0.06634, 'crushed': 0.9031}\nN_19.5 INFO hour 19.5 {'world': 0.12123, 'mascot': 0.04783, 'ground': 0.10343, 'crushed': 0.7684}\nN_20.5 INFO hour 20.5 {'world': 0.14269, 'mascot': 0.04447, 'ground': 0.11718, 'crushed': 0.7479}\nN_22.0 INFO hour 22.0 {'world': 0.15489, 'mascot': 0.06094, 'ground': 0.12744, 'crushed': 0.5941}\nN_00.0 INFO hour 00.0 {'world': 0.15088, 'mascot': 0.05803, 'ground': 0.13436, 'crushed': 0.55}\nN_02.0 INFO hour 02.0 {'world': 0.14488, 'mascot': 0.05904, 'ground': 0.12605, 'crushed': 0.5782}\nN_04.0 INFO hour 04.0 {'world': 0.13912, 'mascot': 0.05126, 'ground': 0.15484, 'crushed': 0.6655}\nN_05.0 INFO hour 05.0 {'world': 0.10321, 'mascot': 0.04871, 'ground': 0.08202, 'crushed': 0.8458}\nN_05.5 INFO hour 05.5 {'world': 0.08112, 'mascot': 0.05299, 'ground': 0.09224, 'crushed': 0.8783}\nN_06.0 INFO hour 06.0 {'world': 0.11281, 'mascot': 0.08102, 'ground': 0.11614, 'crushed': 0.839}\nN_06.5 INFO hour 06.5 {'world': 0.18575, 'mascot': 0.15309, 'ground': 0.19133, 'crushed': 0.4082}\nN_07.0 INFO hour 07.0 {'world': 0.23056, 'mascot': 0.13678, 'ground': 0.18093, 'crushed': 0.4098}\nN_07.5 INFO hour 07.5 {'world': 0.33112, 'mascot': 0.1634, 'ground': 0.26982, 'crushed': 0.235}\nN_08.5 INFO hour 08.5 {'world': 0.38194, 'mascot': 0.2061, 'ground': 0.30763, 'crushed': 0.15}\nN00 PASS every hour of the day was photographed and the world read {'hours': ['09.5', '12.0', '15.0', '16.5', '17.5', '18.0', '18.5', '19.0', '19.5', '20.5', '22.0', '00.0', '02.0', '04.0', '05.0', '05.5', '06.0', '06.5', '07.0', '07.5', '08.5']}\nN01 PASS the Dog and the ground in front of it were in frame at every hour {'missed': [], 'note': 'projected rather than assumed: the first version of this proof aimed at a wall and reported the world as black'}\nN_SUM INFO the day, end to end {'09.5': 0.44505, '12.0': 0.44346, '15.0': 0.40021, '16.5': 0.32343, '17.5': 0.18573, '18.0': 0.11202, '18.5': 0.07998, '19.0': 0.06997, '19.5': 0.12123, '20.5': 0.14269, '22.0': 0.15489, '00.0': 0.15088, '02.0': 0.14488, '04.0': 0.13912, '05.0': 0.10321, '05.5': 0.08112, '06.0': 0.11281, '06.5': 0.18575, '07.0': 0.23056, '07.5': 0.33112, '08.5': 0.38194}\nN02 PASS at the darkest hour the world is not crushed to black {'darkest_night_hour': '04.0', 'fraction_below_luma_0_14': 0.6655, 'ceiling': 0.72, 'world_luma': 0.13912, 'note': 'dark is correct at night; a frame that is nearly all below 0.14 is not a night, it is a failure to light one'}\nN03 PASS the mascot can be told apart from the ground it stands on at the darkest hour {'darkest_night_hour': '04.0', 'mascot_luma': 0.05126, 'ground_luma': 0.15484, 'contrast': 0.1036, 'floor': 0.05}\nN04 PASS the ground and paths around the player read at the darkest hour {'darkest_night_hour': '04.0', 'ground_luma': 0.15484, 'floor': 0.015}\nN05 PASS there is architecture standing against the sky at the darkest hour {'darkest_night_hour': '04.0', 'skyline_luma': 0.07906, 'floor': 0.01}\nN10 PASS night is still unmistakably night beside the brightest hour of the day {'night_hour': '04.0', 'brightest': '09.5', 'night_luma': 0.13912, 'day_luma': 0.44505, 'ratio': 0.3126, 'ceiling': 0.38, 'note': 'the founder asked for readable, not for a dimmer afternoon'}\nN11 PASS the day changes smoothly -- no single step jumps the exposure {'worst_step': {'from': '16.5', 'to': '17.5', 'ratio': 1.741}, 'ceiling': 2.6, 'every_step': [{'from': '09.5', 'to': '12.0', 'ratio': 1.004}, {'from': '12.0', 'to': '15.0', 'ratio': 1.108}, {'from': '15.0', 'to': '16.5', 'ratio': 1.237}, {'from': '16.5', 'to': '17.5', 'ratio': 1.741}, {'from': '17.5', 'to': '18.0', 'ratio': 1.658}, {'from': '18.0', 'to': '18.5', 'ratio': 1.401}, {'from': '18.5', 'to': '19.0', 'ratio': 1.143}, {'from': '19.0', 'to': '19.5', 'ratio': 1.733}, {'from': '19.5', 'to': '20.5', 'ratio': 1.177}, {'from': '20.5', 'to': '22.0', 'ratio': 1.086}, {'from': '22.0', 'to': '00.0', 'ratio': 1.027}, {'from': '00.0', 'to': '02.0', 'ratio': 1.041}, {'from': '02.0', 'to': '04.0', 'ratio': 1.041}, {'from': '04.0', 'to': '05.0', 'ratio': 1.348}, {'from': '05.0', 'to': '05.5', 'ratio': 1.272}, {'from': '05.5', 'to': '06.0', 'ratio': 1.391}, {'from': '06.0', 'to': '06.5', 'ratio': 1.647}, {'from': '06.5', 'to': '07.0', 'ratio': 1.241}, {'from': '07.0', 'to': '07.5', 'ratio': 1.436}, {'from': '07.5', 'to': '08.5', 'ratio': 1.153}], 'note': 'sunrise and sunset are real changes; a SWITCH would show here as one step several times the size of its neighbours'}\n"
 }

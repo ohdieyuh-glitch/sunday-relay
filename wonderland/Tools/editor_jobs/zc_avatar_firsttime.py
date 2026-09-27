@@ -64,6 +64,17 @@ def job():
     unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour 12.0")
     yield 12.0
 
+    # ---- THE DISTANCE FIELD LEVER, SWEPT RATHER THAN ASSUMED.
+    #
+    # The arrival cost is flat at about 22 ms over quiet and comes from registering forty-one components in
+    # one frame. Lumen's global distance field is updated when a primitive registers, so a figure that opts
+    # out of it should pay less. Measured both ways in one session at one temperature, because the alternative
+    # is trusting that it sounds right -- which is how the pre-warm got built and reverted earlier today.
+    mode = JOB_ARG if "JOB_ARG" in globals() else "1"
+    unreal.SystemLibrary.execute_console_command(world, "wl.Figure.DistanceField %s" % mode)
+    RESULT["distance_field"] = str(mode)
+    yield 2.0
+
     files = [os.path.join(AVATARS, n) for n in sorted(os.listdir(AVATARS)) if n.lower().endswith(".wlvox")]
     big = [f for f in files if "Large" in f] or files
     if not big:

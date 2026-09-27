@@ -1,0 +1,75 @@
+{
+ "name": "zc_avatar_df_off",
+ "started": "2026-09-27 03:32:21",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "F00",
+   "name": "there is a Project Avatar to spawn repeatedly",
+   "pass": true,
+   "detail": {
+    "figure": "Cherubim_Large.wlvox"
+   }
+  },
+  {
+   "id": "F01",
+   "name": "every arrival was measured with the clock running",
+   "pass": true,
+   "detail": {
+    "measured": 8,
+    "wanted": 8,
+    "arrivals": [
+     41.15,
+     29.89,
+     36.25,
+     29.58,
+     31.88,
+     37.54,
+     29.55,
+     29.07
+    ]
+   }
+  },
+  {
+   "id": "F02",
+   "name": "the answer is recorded: first-time cost, or every-time cost",
+   "pass": true,
+   "detail": {
+    "first_arrival_ms": 41.15,
+    "later_arrivals_mean_ms": 31.97,
+    "first_over_later_ms": 9.18,
+    "quiet_p95_ms": 23.53,
+    "all_arrivals": [
+     41.15,
+     29.89,
+     36.25,
+     29.58,
+     31.88,
+     37.54,
+     29.55,
+     29.07
+    ],
+    "note": "the SAME figure spawned eight times. A large gap between the first and the rest means the cost belongs to the figure and pre-warming at load removes it from play entirely. A flat series means it belongs to the act of spawning, pre-warming buys nothing, and the build has to be spread across frames instead."
+   }
+  }
+ ],
+ "distance_field": "0",
+ "figure": "Cherubim_Large.wlvox",
+ "quiet_p95_ms": 23.53,
+ "arrivals_p95_ms": [
+  41.15,
+  29.89,
+  36.25,
+  29.58,
+  31.88,
+  37.54,
+  29.55,
+  29.07
+ ],
+ "first_arrival_ms": 41.15,
+ "later_arrivals_mean_ms": 31.97,
+ "first_over_later_ms": 9.18,
+ "finished": "2026-09-27 03:33:24",
+ "seconds": 63.91,
+ "log": "F00 PASS there is a Project Avatar to spawn repeatedly {'figure': 'Cherubim_Large.wlvox'}\nF_0 INFO arrival 1 {'p95_ms': 41.15, 'frames': 105}\nF_1 INFO arrival 2 {'p95_ms': 29.89, 'frames': 104}\nF_2 INFO arrival 3 {'p95_ms': 36.25, 'frames': 106}\nF_3 INFO arrival 4 {'p95_ms': 29.58, 'frames': 108}\nF_4 INFO arrival 5 {'p95_ms': 31.88, 'frames': 103}\nF_5 INFO arrival 6 {'p95_ms': 37.54, 'frames': 110}\nF_6 INFO arrival 7 {'p95_ms': 29.55, 'frames': 116}\nF_7 INFO arrival 8 {'p95_ms': 29.07, 'frames': 111}\nF01 PASS every arrival was measured with the clock running {'measured': 8, 'wanted': 8, 'arrivals': [41.15, 29.89, 36.25, 29.58, 31.88, 37.54, 29.55, 29.07]}\nF02 PASS the answer is recorded: first-time cost, or every-time cost {'first_arrival_ms': 41.15, 'later_arrivals_mean_ms': 31.97, 'first_over_later_ms': 9.18, 'quiet_p95_ms': 23.53, 'all_arrivals': [41.15, 29.89, 36.25, 29.58, 31.88, 37.54, 29.55, 29.07], 'note': 'the SAME figure spawned eight times. A large gap between the first and the rest means the cost belongs to the figure and pre-warming at load removes it from play entirely. A flat series means it belongs to the act of spawning, pre-warming buys nothing, and the build has to be spread across frames instead.'}\n"
+}

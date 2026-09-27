@@ -226,6 +226,12 @@ namespace
 	 * avatars cost less than one: the crowd budget drops them all to Small. The open question for the founder
 	 * is whether a single hero avatar needs to be Large at all.
 	 */
+	TAutoConsoleVariable<int32> CVarFigureDistanceField(
+		TEXT("wl.Figure.DistanceField"), 0,
+		TEXT("Whether figures contribute to the global distance field. 0 removes them from an update that is "
+		     "paid on the frame a figure registers its components."),
+		ECVF_Default);
+
 	TAutoConsoleVariable<int32> CVarFigureHism(
 		TEXT("wl.Figure.Hism"), 1,
 		TEXT("1 builds figure parts as hierarchical instanced meshes; 0 as plain instanced meshes."));
@@ -810,6 +816,32 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Mesh->SetGenerateOverlapEvents(false);
 		Mesh->SetCanEverAffectNavigation(false);
+		// ---- A FIGURE DOES NOT WRITE ITSELF INTO THE DISTANCE FIELD SCENE.
+		//
+		// This project runs Lumen with r.GenerateMeshDistanceFields=True, so every primitive registered into
+		// the world is a candidate to contribute to the global distance field -- and contributing means that
+		// field is updated on the frame the primitive arrives. A Project Avatar registers forty-one instanced
+		// components carrying some thirty-two thousand instances in the frame it spawns, measured as a flat
+		// 22 ms over a quiet frame on every arrival, whatever else is already standing.
+		//
+		// A moving character is the case distance fields are worst at and least needed for: the field is a
+		// coarse static representation, Lumen resolves moving geometry through screen traces instead, and a
+		// figure that walks would be invalidating its own contribution continuously in any case.
+		//
+		// MEASURED, AND THE DEFAULT IS NOW OFF. Eight arrivals of Cherubim Large, one job per fresh editor
+		// because a second job in the same session measures an editor that the first one filled:
+		//
+		//     distance field ON,  run 1   quiet 24.12   arrivals 45.3   ->  21.2 ms over quiet
+		//     distance field ON,  run 2   quiet 24.57   arrivals 44.6   ->  20.0 ms over quiet
+		//     distance field OFF          quiet 23.53   arrivals 33.1   ->   9.6 ms over quiet
+		//
+		// The two ON runs agree within 1.2 ms and every one of the eight arrivals is lower with it off --
+		// max 41.2 against 54.7, min 29.1 against 32.0 -- so this is a consistent shift rather than an
+		// average pulled by outliers. The arrival cost more than halves.
+		if (CVarFigureDistanceField.GetValueOnAnyThread() == 0)
+		{
+			Mesh->bAffectDistanceFieldLighting = false;
+		}
 		// Light does not cast shadows: an unlit eye or a halo that shadowed the ground would be a dark lamp.
 		Mesh->SetCastShadow(Kind == EWonderlandCompanionMaterialKind::Lit || Kind == EWonderlandCompanionMaterialKind::Rim);
 		Mesh->SetupAttachment(PartPivots[PartIndex]);
