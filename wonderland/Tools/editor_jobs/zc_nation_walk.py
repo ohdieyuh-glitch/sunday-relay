@@ -225,6 +225,62 @@ def job():
         d = pawn()
         moved = math.hypot(d.get_actor_location().x - start_loc.x,
                            d.get_actor_location().y - start_loc.y) if d is not None else 0.0
+        def clearance_ring(loc, heading_deg, dog_actor):
+            """Free distance in every direction at the placement point, and the name of what stops it.
+
+            The offline corridor audit can say WHAT is near the start; only a trace can say whether it is
+            close enough to hold a capsule. Reported per direction rather than as a single minimum, because
+            the number that decides whether the Dog can start walking is the clearance along the heading it
+            is about to walk -- a wall behind it is irrelevant and a minimum over a ring hides which is
+            which.
+            """
+            out = {"rays": [], "ahead_uu": None, "min_uu": None, "blocker": None}
+            REACH = 400.0
+            worst = None
+            for step in range(16):
+                deg = step * 22.5
+                h = math.radians(deg)
+                a = unreal.Vector(loc.x, loc.y, loc.z + 40.0)
+                b = unreal.Vector(loc.x + math.cos(h) * REACH,
+                                  loc.y + math.sin(h) * REACH, loc.z + 40.0)
+                dist, what = REACH, None
+                try:
+                    hit = unreal.SystemLibrary.line_trace_single(
+                        live(), a, b, PAWN, False, [dog_actor],
+                        unreal.DrawDebugTrace.NONE, True,
+                        unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
+                    if hit is not None:
+                        t = hit.to_tuple()
+                        # HitResult has no named attributes in this engine's Python -- to_tuple() indices
+                        # only: 3 distance, 9 actor, 10 component.
+                        dist = round(float(t[3]), 1) if len(t) > 3 else REACH
+                        comp = t[10] if len(t) > 10 else None
+                        actor = t[9] if len(t) > 9 else None
+                        # THE COMPONENT, NOT THE ACTOR. This world is instanced, so an actor label names a
+                        # WonderlandInstancedBatch holding thousands of meshes and identifies nothing.
+                        try:
+                            sm = comp.get_editor_property("static_mesh") if comp is not None else None
+                            what = str(sm.get_name()) if sm is not None else None
+                        except Exception:                                  # noqa: BLE001
+                            what = None
+                        if what is None and actor is not None:
+                            try:
+                                what = "actor:" + str(actor.get_actor_label())
+                            except Exception:                              # noqa: BLE001
+                                what = "something"
+                except Exception:                                          # noqa: BLE001
+                    pass
+                out["rays"].append({"deg": deg, "free_uu": dist, "hit": what})
+                if worst is None or dist < worst[0]:
+                    worst = (dist, what, deg)
+            # the ray closest to the way the Dog is about to walk
+            best = min(out["rays"],
+                       key=lambda r: abs(((r["deg"] - heading_deg + 180.0) % 360.0) - 180.0))
+            out["ahead_uu"] = best["free_uu"]
+            out["ahead_hit"] = best["hit"]
+            if worst is not None:
+                out["min_uu"], out["blocker"], out["blocker_deg"] = worst[0], worst[1], worst[2]
+            return out
         row["probe_moved_uu"] = round(moved, 1)
         row["probe_peak_speed"] = round(probe_speed, 1)
         # PEAK SPEED IS WHAT TELLS "BLOCKED" FROM "NOT DRIVEN", and displacement alone cannot.
@@ -241,6 +297,20 @@ def job():
         if not row["can_be_driven"]:
             if driving:
                 row["blocked_at_start"] = True
+                # NAME IT. "Blocked" without the obstacle is a bug report nobody can act on.
+                try:
+                    d_now = unreal.GameplayStatics.get_player_pawn(live(), 0)
+                    if d_now is not None:
+                        row["start_clearance"] = clearance_ring(
+                            d_now.get_actor_location(),
+                            # THE ACTUAL HEADING, from the same two things the probe steered by: the first
+                            # waypoint and where the Dog was placed. A guessed 0.0 would report the clearance
+                            # due east of a Dog walking north-west.
+                            math.degrees(math.atan2(tgt0["y"] - start_loc.y,
+                                                    tgt0["x"] - start_loc.x)),
+                            d_now)
+                except Exception as err:                               # noqa: BLE001
+                    row["start_clearance"] = {"error": str(err)[:120]}
                 row["error"] = ("BLOCKED AT THE START: the Dog reached %.1f uu/s -- its own walk speed -- "
                                 "and advanced %.1f uu. Input is arriving and the capsule cannot move, which "
                                 "is geometry, not the harness." % (probe_speed, moved))
@@ -326,13 +396,15 @@ def job():
            any_driven and len(nations) == 3,
            harness_proven_by=[n for n, r in nations.items() if r.get("input_reaching_character")],
            blocked_at_start=blocked,
-           note="peak speed separates the cases: full walk speed with no displacement is BLOCKED GEOMETRY "
-                "and is a world finding; a peak near zero is the harness and withholds the route",
+           start_clearance={n: r.get("start_clearance") for n, r in nations.items()
+                            if r.get("start_clearance")},
            moved_uu={n: r.get("probe_moved_uu") for n, r in nations.items()},
            dog_state={n: r.get("dog_state") for n, r in nations.items()},
            peak_speed={n: r.get("probe_peak_speed") for n, r in nations.items()},
-           note="3 s of AddMovementInput toward the second waypoint before the route is judged; a red here "
-                "means the route results are withheld, not that the world is blocked")
+           note="3 s of AddMovementInput toward the second waypoint before the route is judged. PEAK SPEED "
+                "separates the cases and displacement alone cannot: full walk speed with no advance is "
+                "BLOCKED GEOMETRY and is a finding about that place, while a peak near zero is the harness "
+                "and withholds the route. The harness counts as proven by any one nation driving.")
     record("W00", "every nation's walk started with the Dog standing at the gate end of its route",
            all("error" not in r or r.get("arrived") for r in nations.values()) and len(nations) == 3,
            starts={n: r.get("start_error_m") for n, r in nations.items()},
