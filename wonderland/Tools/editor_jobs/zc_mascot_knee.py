@@ -151,7 +151,12 @@ EYE_Z_COSTUME = 21.0
 #: the point is to reject peaks that are merely the largest of 49 noisy cells.
 NOISE_MARGIN = 2.0
 
-CLIP_CEILING = 0.06       # fraction of the head shot allowed at 250+; the founder's "no white clipping"
+#: The ceiling on the BRIGHT fraction of the head shot. Named for the founder's "no white clipping", but be
+#: clear what the instrument is: read_screen_rect counts a pixel bright above LUMA 0.72 -- about 183/255, not
+#: 250 -- and it cannot tell a saturated amber eye core from a blown white one. `white` on the eye patch is
+#: what separates those. The ceiling is NOT relaxed on that argument until a run actually shows it failing a
+#: coloured eye; the founder's rule is to fix the rendering, not the gate.
+CLIP_CEILING = 0.06
 CRUSH_CEILING = 0.60      # the guard against winning by making everything dark
 ISOLATION_FLOOR = 0.02    # below this the level is not arriving at the rendered eye
 
@@ -302,7 +307,11 @@ def job():
         mean, dark, bright, sampled = r
         return {"rgb": [round(mean.r, 5), round(mean.g, 5), round(mean.b, 5)],
                 "luma": round(luma((mean.r, mean.g, mean.b)), 5),
-                "dark": round(dark, 4), "bright": round(bright, 4), "samples": int(sampled)}
+                "dark": round(dark, 4), "bright": round(bright, 4), "samples": int(sampled),
+                # NEUTRALITY, so "bright" can be told from "white". 0.0 is fully saturated colour, 1.0 is
+                # neutral. The founder forbids WHITE clipping and asks FOR a bright coloured core; the
+                # bright fraction alone scores those two identically.
+                "white": round(min(mean.r, mean.g, mean.b) / max(max(mean.r, mean.g, mean.b), 1e-6), 4)}
 
     def eye_anchor_z(skin):
         """Height of the eye above the pawn origin, read off the mesh rather than assumed.
@@ -539,6 +548,7 @@ def job():
                        "eye_luma": r["eye"]["luma"], "face_luma": r["face"]["luma"],
                        "over_face": round(r["eye"]["luma"] - r["face"]["luma"], 5),
                        "clipped": r["frame"]["bright"], "crushed": r["frame"]["dark"],
+                       "eye_white": r["eye"]["white"],
                        "eye_rgb": r["eye"]["rgb"]}
                 if base is not None:
                     eg = r["eye"]["luma"] - base["eye"]["luma"]
@@ -583,6 +593,7 @@ def job():
                             "eye_luma": r["eye"]["luma"], "face_luma": r["face"]["luma"],
                             "over_face": round(r["eye"]["luma"] - r["face"]["luma"], 5),
                             "eye_bright": r["eye"]["bright"], "eye_dark": r["eye"]["dark"],
+                            "eye_white": r["eye"]["white"], "frame_white": r["frame"]["white"],
                             "clipped": r["frame"]["bright"], "crushed": r["frame"]["dark"],
                             "eye_rgb": r["eye"]["rgb"], "eye_gain": round(eg, 5),
                             "face_gain": round(fg, 5), "isolation": round(eg - fg, 5),
@@ -631,6 +642,7 @@ def job():
                 continue
             knee_rows.append({"skin": skin, "knee": knee, "frame_luma": r["frame"]["luma"],
                               "clipped": r["frame"]["bright"], "crushed": r["frame"]["dark"],
+                              "eye_white": r["eye"]["white"],
                               "face_luma": r["face"]["luma"] if r["face"] else None,
                               "eye_luma": r["eye"]["luma"] if r["eye"] else None})
             emit("A_%s_%05.0f" % (skin, knee), "INFO", "%s knee=%.0f" % (skin, knee),
@@ -745,6 +757,12 @@ def job():
     worst_crush = max((r["crushed"] for r in measured_rows if r["level"] == 18.0), default=1.0)
     record_eye("M05", "a mascot filling the frame is not blown out at the shipped eye level",
            worst_clip <= CLIP_CEILING, worst_clipped=worst_clip, ceiling=CLIP_CEILING,
+           eye_white={s2: max((r.get("eye_white") for r in rows
+                               if r["skin"] == s2 and r["level"] == 18.0 and r.get("eye_white") is not None),
+                              default=None) for s2 in SKINS},
+           what_bright_means="luma > 0.72, not 250/255; a high bright fraction with a LOW eye_white is a "
+                             "bright COLOURED core, which is what the founder asked for, and a high bright "
+                             "fraction with eye_white near 1.0 is the white clipping they forbade",
            per_skin={s: max((r["clipped"] for r in rows if r["skin"] == s and r["level"] == 18.0), default=None)
                      for s in SKINS})
     record_eye("M06", "and that is not achieved by making the picture dark",
@@ -814,7 +832,10 @@ def job():
     RESULT["summary"] = {"eye_isolation_at_18": reach, "over_face_at_18": contrast,
                          "hue_retention": hues, "colour_separation": seps,
                          "knee_spread": spread, "knee_engages_at": engaged,
-                         "worst_clipped": worst_clip, "worst_crushed": worst_crush}
+                         "worst_clipped": worst_clip, "worst_crushed": worst_crush,
+                         "eye_white": {s2: [r.get("eye_white") for r in measured_rows
+                                            if r["skin"] == s2 and r.get("eye_white") is not None]
+                                       for s2 in SKINS}}
     RESULT["status"] = "measured"
     yield 2.0
     les.editor_request_end_play()
