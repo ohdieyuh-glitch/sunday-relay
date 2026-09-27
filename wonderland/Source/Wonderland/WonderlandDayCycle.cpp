@@ -492,6 +492,32 @@ static FAutoConsoleVariableRef GWonderlandNightFillRef(
 	ECVF_Default);
 
 static float GWonderlandNightSky = 7.0f;
+
+//: THE NIGHT SHADOW LIFT, and the founder's section A in one number.
+//:
+//: Their correction asks to raise the night illumination floor "without flattening contrast: dark sky, bright
+//: practicals, cool moon ambient, deep but readable shadows." LOCAL EXPOSURE IS THE NAMED TOOL FOR EXACTLY
+//: THAT and it was wired to nothing -- along with dynamic GI, reflections, shadow amount and ambient
+//: occlusion, five of the eleven systems the founder listed had no code touching them anywhere in this
+//: project. That is why nine combinations of moon, sky and practicals could not find a readable night: the
+//: sweep was moving three levers out of eleven, and none of the three lifts a surface the moon does not
+//: directly hit.
+//:
+//: Measured cost of that gap, on a character, with the figure's own lights excluded: the default Dog's BODY is
+//: 97.1% crushed at deepest night with a mean of 0.054. A dark grey box with two glowing eyes -- the founder's
+//: "glowing objects floating in blackness", photographed.
+//:
+//: Shadow contrast BELOW 1.0 lifts shadow detail and leaves highlights alone, which is the difference between
+//: a readable night and a flat one. The engine's own guidance is 0.6 to 1.0. This is lerped by Nightfall, so
+//: at Nightfall 0 it is exactly 1.0 -- the engine default, no effect -- and DAY IS PROVABLY UNTOUCHED.
+static float GWonderlandNightShadowLift = 0.65f;
+static FAutoConsoleVariableRef GWonderlandNightShadowLiftRef(
+	TEXT("wl.Look.NightShadowLift"),
+	GWonderlandNightShadowLift,
+	TEXT("Local-exposure shadow contrast at FULL night. 1.0 is the engine default and lifts nothing; lower "
+		 "lifts shadow detail without touching highlights. Engine guidance is 0.6-1.0. Day is unaffected at "
+		 "any value, because this is interpolated by Nightfall."),
+	ECVF_Default);
 static FAutoConsoleVariableRef GWonderlandNightSkyRef(
 	TEXT("wl.Sky.NightSky"),
 	GWonderlandNightSky,
@@ -687,6 +713,26 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 		Volume->Settings.BloomIntensity = 0.34f;
 		Volume->Settings.bOverride_BloomThreshold = true;
 		Volume->Settings.BloomThreshold = 1.0f;
+
+		// ---- THE SHADOW FLOOR, which is the half that neither exposure nor the moon can reach.
+		//
+		// The comment above says exposure cannot make night readable without making it flat, and that is
+		// true of GLOBAL exposure -- it moves the whole frame. Local exposure does not: it lifts shadow
+		// detail and leaves highlights where they are. That is the founder's "deep but readable shadows"
+		// exactly, and it is the tool their correction names.
+		//
+		// AT NIGHTFALL 0 THIS IS 1.0, the engine default and a no-op, so the day this session was told not to
+		// touch is untouched by construction rather than by intention. Highlights are pinned at 1.0 at every
+		// hour on purpose: the practicals and the figures' own glow must stay as bright against the dark as
+		// they are now, because the founder asked for bright practicals and a dark sky, not for both to meet
+		// in the middle.
+		Volume->Settings.bOverride_LocalExposureMethod = true;
+		Volume->Settings.LocalExposureMethod = ELocalExposureMethod::Bilateral;
+		Volume->Settings.bOverride_LocalExposureShadowContrastScale = true;
+		Volume->Settings.LocalExposureShadowContrastScale =
+			FMath::Lerp(1.0f, FMath::Clamp(GWonderlandNightShadowLift, 0.2f, 1.0f), Nightfall);
+		Volume->Settings.bOverride_LocalExposureHighlightContrastScale = true;
+		Volume->Settings.LocalExposureHighlightContrastScale = 1.0f;
 	}
 
 	// ---- AND WHAT THE EXPOSURE DOES TO THINGS THAT MAKE THEIR OWN LIGHT.

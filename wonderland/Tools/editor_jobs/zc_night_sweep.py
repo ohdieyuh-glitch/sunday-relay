@@ -353,6 +353,38 @@ def job():
                 "so a red here is checkable by eye: open the JPEG. The previous version measured a "
                 "SceneCapture actor while saving viewport JPEGs -- two cameras, and only one was ever posed")
 
+    # ---- WHAT THE OTHER LANE IS OWED, AS A RED GATE RATHER THAN MY INTENTION.
+    #
+    # Core's eyes are tuned against EyeGlowDay 24, EyeGlowNight 8 and the pinned EV100 of 14.2, and they asked
+    # that a change to dusk not move any of the three. My own brief says to hold world exposure constant for
+    # the same reason. Both of those are intentions, and an intention is worth less than a test -- so this
+    # reads all three at the END of the run and fails if any moved. wl.Look.NightShadowLift is deliberately
+    # NOT in this list: it is local exposure, it lifts shadows without touching the exposure the eyes are
+    # tuned against, and it is exactly 1.0 (a no-op) by day.
+    held = {}
+    try:
+        for v in unreal.GameplayStatics.get_all_actors_of_class(live(), unreal.PostProcessVolume.static_class()):
+            st = v.get_editor_property("settings")
+            held["ev100_min"] = round(float(st.get_editor_property("auto_exposure_min_brightness")), 3)
+            held["ev100_max"] = round(float(st.get_editor_property("auto_exposure_max_brightness")), 3)
+            break
+    except Exception as err:                                          # noqa: BLE001
+        held["error"] = str(err)[:90]
+    for cv, key in (("wl.Look.EyeGlowDay", "eye_day"), ("wl.Look.EyeGlowNight", "eye_night")):
+        try:
+            held[key] = round(float(unreal.SystemLibrary.get_console_variable_float_value(cv)), 3)
+        except Exception:                                             # noqa: BLE001
+            held[key] = None
+    want = {"ev100_min": 14.2, "ev100_max": 14.2, "eye_day": 24.0, "eye_night": 8.0}
+    drifted = [k for k, v in want.items()
+               if held.get(k) is not None and abs(float(held[k]) - v) > 0.05]
+    RESULT["held"] = held
+    record("N_HOLD", "the pinned exposure and the other lane's eye levels came out of this run unchanged",
+           not drifted and held.get("ev100_min") is not None,
+           found=held, expected=want, drifted=drifted,
+           note="a promise that a change did not move something else is worth less than a test of it. A red "
+                "with ev100_min null is the reporting path rather than the world -- check found for an error")
+
     # ---- THE THOUSAND, CHECKED ON THE WORLD'S OWN EMISSIVE SURFACES.
     #
     # This bug class has now cost this project three separate hunts: the GLOW_SCALE 4000 -> 6 re-baseline that
