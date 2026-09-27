@@ -12,7 +12,8 @@
 > tree as `??`, and `CONTENT_LFS_PLAN.md` describes an intention that was never carried out. So the World
 > Partition conversion done today exists only on disk. Its only rollback is
 > `recovery/_map_checkpoints/2026-09-26-streaming/`, which holds the pre-conversion 46 MB map, its ini, a
-> `RESTORE.md` and the original's sha256. The Content tree is shared between worktrees by junction, so that
+> `RESTORE.md` and the original's sha256. **[Corrected 2026-09-27: that is a rollback to the 2026-09-25 19:31 map — of the conversion itself.
+> The current externalised world has NO checkpoint; see `WORLD_BETA_LEDGER.md`.]** The Content tree is shared between worktrees by junction, so that
 > conversion changed the map for all of them.
 
 
@@ -75,7 +76,8 @@ Performance after the conversion: 33.7 ms and 31.3 ms at noon, against a pre-con
    another nineteen hours. The remedy is to re-run the convert commandlet against the current map — which is
    non-destructive, writing a new map and leaving the source alone — and point the project at the result. A
    checkpoint of the 46 MB map and its ini was taken to `recovery/_map_checkpoints/2026-09-26-streaming/`
-   first. The oversized-actor work is the NEXT question, not this one: once cells exist, `BC01_BaseCourse` at
+   first. [Corrected 2026-09-27: it restores the 2026-09-25 19:31 map and nothing since — not a
+   checkpoint of the current world.] The oversized-actor work is the NEXT question, not this one: once cells exist, `BC01_BaseCourse` at
    1,970 m wide really will sit in all of them.
 2. **Celestial Light's eyes keep 0.031 channel separation against a 0.05 floor** (`zc_eyes_glow` E03). Its
    authored eye is the palest in the lineup, (0.62, 0.88, 1.00), and its head sits inside its own halo. The

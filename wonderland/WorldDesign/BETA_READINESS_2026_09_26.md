@@ -17,10 +17,28 @@
 > material kind so that glowing torsos counted as "not body", and a camera solved against a half-built figure.
 > See `BETA_MATRIX_2026_09_26.md`, section "CORRECTION PASS, 2026-09-27".
 >
-> **Current, measured in-engine off the render target:** Relay OG 80.4–82.9%, Apollo 75.6–83.2%,
-> Arden 68.8–72.4%, Celestial 90.1–92.9%, Skeleton 88.5–93.6%. The gate is now `V03`/`V04` inside
-> `zc_wardrobe_20`, which reads the pixels rather than the camera that drew them, so this class of error
-> cannot return silently.
+> **Current, measured in-engine off the render target** — `zc_wardrobe_20`, run of 2026-09-27 12:53,
+> four angles per skin: Relay OG 80.1–82.4%, Apollo 74.6–85.4%, Arden 66.5–73.6%,
+> Celestial 91.0–93.4%, Skeleton 88.1–94.0%. The gate is now `V03`/`V04`/`V05` inside `zc_wardrobe_20`,
+> which reads the pixels rather than the camera that drew them, so this class of error cannot return
+> silently.
+>
+> ### ⚠ AND THE FIRST VERSION OF THIS BANNER GOT ITS OWN NUMBERS WRONG, 2026-09-27
+>
+> It published Relay OG 80.4–82.9, Apollo 75.6–83.2, **Arden 68.8–72.4**, Celestial 90.1–92.9,
+> Skeleton 88.5–93.6 and cited the run above for them. Every one of those ranges came from an EARLIER
+> run, and the Arden range had a sample dropped out of it as well — the run being cited measured Arden at
+> 66.5–73.6. QA caught it. The correction is the paragraph above, and the lesson is the one this document
+> keeps re-learning in a new place each time: **a number is only as good as the run it is read out of, and
+> a range is only as good as the samples still in it.** Results are now read alongside their own
+> `WLCHANNEL finished` log line.
+>
+> **Two of these are genuinely out of band and are open defects, not measurement error.** Arden Infernal
+> (73.6% front) and Apollo (74.6% front) both fall under the founder's 76–94% opening-view band, and
+> Arden sits 13 points high in frame — centre at 36.8% where 50 ± 12 is allowed. Arden's mane is the
+> cause of both: it is flame rather than boxes, the framing envelope has to include where the ribbons
+> reach, and including it pushes the figure down and shrinks it. `V03` and `V05` are red for that reason
+> and are being left red until the framing accounts for fire separately from geometry.
 >
 > Everything else in this document stands. It is left unedited rather than quietly rewritten, because a
 > readiness report that erases its own wrong answers is worth less than one that shows them.
@@ -205,8 +223,22 @@ quietly filled in.
 | `zc_cub_grounding` | 5 | all pass |
 | `zc_menu_colours` | 6 | all pass |
 | `zc_territories` | 15 | all pass |
-| `zc_beta_perf` | 3 | all pass |
-| **total** | **74** | **74 pass, 0 fail** |
+| `zc_beta_perf` | 3 | ⚠ **F00 fails as of 2026-09-27; F01/F02 not reached** — see below |
+| **total** | **74** | **71 pass, 1 fail, 2 not reached** |
+
+> **⚠ CORRECTED 2026-09-27 — `zc_beta_perf` does not pass any more, and section 5 below publishes
+> numbers from the run that did.**
+>
+> The clock guard added during this run is doing its job and the row above was left saying "all pass"
+> after it started failing. The current run reports `F00` red with **two of eight stands null**:
+> noon/tartarus_march and noon/dubel_belt never produced a live reading. `F01` and `F02` are not reached
+> because `F00` returns early — which is correct behaviour, and is exactly why they must not be counted
+> as passes.
+>
+> The six stands that did report: noon 22.11 / 21.36 (arrival, Icarus), midnight 27.28 / 24.38 / 19.21 /
+> 20.01 (arrival, Icarus, Tartarus, Dubel). **These do not match section 5**, which is the older run and
+> is marked accordingly. The proof needs re-running with all eight stands live before any performance
+> claim in this document is quotable; the editor channel is with the world session and it is queued.
 
 **Instruments built for this run**, because the existing ones could not see what the founder sees:
 `ReadScreenRect` (mean colour and dark/bright fractions of any screen rectangle) and `ReadScreenExtremes`
@@ -223,6 +255,13 @@ quietly filled in.
 ---
 
 ## 5. PERFORMANCE
+
+> **⚠ THIS TABLE IS THE 2026-09-26 RUN AND HAS NOT BEEN RE-MEASURED.** The 2026-09-27 run of
+> `zc_beta_perf` is red at `F00` with two noon stands null, and where it did read it disagrees with this
+> table by up to 7 ms — noon/arrival 22.11 against 27.85, midnight/tartarus 19.21 against 27.28. Neither
+> set is safe to quote yet. Do not carry these figures into a founder report until the re-run is green on
+> all eight stands. The conclusion below about night being inside the noise is the part most likely to
+> survive, because both runs show the same thing, but it is not currently proven.
 
 One session, four stands, median frame cost, `stat unit` drawing.
 
@@ -301,8 +340,16 @@ visually verified · **B** blocked.
    and says so.
 5. **Project Avatar scalability is unproven** — `zc_avatar_scale` X01 still fails; the earlier "avatars scale"
    claim was retracted as an extrapolation from four points.
-6. **`zc_streaming` S01 still fails**: the shipping map is fully resident and does not stream. The partitioned
-   twin does, and adopting it is a founder decision, not a fix.
+6. ~~**`zc_streaming` S01 still fails**: the shipping map is fully resident and does not stream. The
+   partitioned twin does, and adopting it is a founder decision, not a fix.~~ **CLOSED 2026-09-27.**
+   `zc_streaming` S01 passes (run of 2026-09-27 03:06): residency by stop 12,657 → 1,732 → 656
+   actors, instances 155,220 → 13,247. The shipping map was itself converted in place (`4ec9c653`,
+   `745e4c47`, `dff685b5`) and streams; the twin no longer exists. QA had reported it resident from
+   `zc_wp_config`, a Python-side probe that cannot reach World Partition in 5.8 and renders None as "not
+   partitioned"; `zc_wp_state`, the C++ reading of the same question, passes in editor and PIE. QA
+   retracted the finding the same day. `zc_wp_config` is to be retired or rebuilt on the C++ path. What
+   remains open is unchanged: cold-start and memory have never been measured in a PACKAGED build, and PIE
+   residency is not packaged residency.
 7. **DUBEL FOREST has no canonical specialisation.** Marked in the game as NEEDS FOUNDER DEFINITION rather
    than invented. It needs a sentence from the founder.
 8. **Arden Infernal's preview** shows a dog inside a plume that is twice its height. Framed correctly and

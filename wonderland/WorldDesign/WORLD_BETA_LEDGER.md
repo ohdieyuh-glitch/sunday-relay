@@ -127,6 +127,17 @@ which is not what I expected and is why the checkpoint mattered: `WL_V2_GoldenAr
 `wonderland/Content/` is untracked by git and shared between worktrees by junction — so this changed the map
 for every worktree at once.
 
+> **⚠ CORRECTED 2026-09-27 — "the ONLY rollback" is a rollback to 2026-09-25 19:31, not to the
+> current world.** The checkpoint holds the 46,314,202-byte monolithic map exactly as it was BEFORE the
+> conversion (the file is dated 2026-09-25 19:31). Restoring it does what `RESTORE.md` says — and
+> erases every edit made to the externalised actors since, which is the whole of the world lane's
+> 2026-09-26 and 2026-09-27 work (CP01–05 alone is 211 new external actor files). It is a rollback of
+> the CONVERSION and of nothing else. **The current world — a 14 KB stub plus 21,275 files under
+> `__ExternalActors__` — has no checkpoint.** `2026-09-27-checkpoints-cp01-05` covers the five
+> checkpoint passes only. Anyone reaching for this directory to undo a bad world edit would lose a day of
+> work; checkpoint `__ExternalActors__` first.
+
+
 | measurement | before | after |
 |---|---|---|
 | `DescribeWorldPartition`, editor and PIE | `partitioned=0` | `partitioned=1 streaming=1 initialised=1 runtimeHash=WorldPartitionRuntimeHashSet` |

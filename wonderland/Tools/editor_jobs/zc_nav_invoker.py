@@ -197,14 +197,44 @@ def job():
                 "it across a 1,478 m disc")
 
     # ---- AND THE COST, because an invoker is only worth it if it is cheap.
-    try:
-        frame = float(unreal.WonderlandHudTestLibrary.get_frame_cost_ms()[0])
-    except Exception:
-        frame = -1.0
+    #
+    # THIS CLAUSE CERTIFIED PERFORMANCE ON A DEAD CLOCK. It read the frame cost once and passed on
+    # `frame < 0.0 or frame < 400.0`, which is two vacuous passes wearing one condition:
+    #
+    #   the read THREW           -> frame = -1.0 -> -1 < 0 -> PASS
+    #   the overlay was not up   -> frame = 0.00 -> 0 < 400 -> PASS
+    #
+    # and the second is the one that was actually happening, because nothing in this job ever turned the
+    # overlay on. FStatUnitData reports 0.00 when it is not drawing, so V03 has been reporting "the frame
+    # cost stays sane" while measuring nothing at all. A ceiling that a zero satisfies is not a ceiling.
+    #
+    # So: the overlay is enabled, the clock is sampled rather than read once, zeros are discarded, and NO
+    # LIVE READING IS A FAILURE rather than a pass. `stat unit` is a TOGGLE -- it is issued once here and
+    # never on a timer, because re-issuing it turns the overlay back off and this session has already lost
+    # a night-time measurement that way.
+    unreal.SystemLibrary.execute_console_command(world, "stat unit")
+    yield 2.0
+    live = []
+    started = time.time()
+    while time.time() - started < 5.0:
+        try:
+            got = unreal.WonderlandHudTestLibrary.get_frame_cost_ms()
+            if got is not None and float(got[0]) > 0.01:
+                live.append(float(got[0]))
+        except Exception:                                      # noqa: BLE001
+            pass
+        yield 0.0
+    live.sort()
+    frame = live[int(len(live) * 0.95)] if live else 0.0
     RESULT["frame_ms_with_nav"] = round(frame, 2)
+    RESULT["frame_samples"] = len(live)
     record("V03", "the frame cost stays sane with navigation generating",
-           frame < 0.0 or frame < 400.0, frame_ms=round(frame, 2),
-           note="generation is bounded by the invoker's radius, not by the size of the world")
+           len(live) > 0 and frame < 400.0,
+           frame_ms=round(frame, 2), samples=len(live), ceiling_ms=400.0,
+           note="the p95 of a live overlay, not a single read. Zero samples is a FAILING result: it "
+                "means the clock was not running and the cost is unknown, which is exactly what this "
+                "clause used to report as a pass. Generation is bounded by the invoker's radius, not by "
+                "the size of the world.")
 
     RESULT["status"] = "measured"
     les.editor_request_end_play()

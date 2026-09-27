@@ -126,39 +126,79 @@ def job():
             # touch. This job died on exactly that. Held at a stand height with its velocity reset until the
             # cell answers a downward trace, it survives; and if it does not, the stand is skipped rather than
             # taking the whole measurement down with it.
+            # ---- THE WORLD IS RE-ACQUIRED, because a stand can take it down.
+            #
+            # This loop died at the fourth stand with "Cannot nativize 'World' as 'WorldContextObject'"
+            # -- not a dead pawn, a dead WORLD. The Dog had been held at the PREVIOUS stand's height plus
+            # 150 uu, which at the Dubel belt is deep inside its ground; it was destroyed, the hub game
+            # mode's lost-pawn recovery restarted the level underneath the job, and every wrapper the job
+            # held pointed at a world that no longer existed. The run before that had the same two stands
+            # null for the same reason and reported it as a dead clock.
+            world = ues.get_game_world()
+            if world is None:
+                at_hour[name] = None
+                continue
             try:
                 live = unreal.GameplayStatics.get_player_pawn(world, 0)
-                base = live.get_actor_location().z if live is not None else 0.0
-            except Exception:                                      # noqa: BLE001
-                live, base = None, 0.0
+            except Exception:                                  # noqa: BLE001
+                live = None
             if live is None:
                 at_hour[name] = None
                 continue
             dog = live
-            hold = unreal.Vector(x, y, base + 150.0)
-            import time as _t
-            _began = _t.time()
-            while True:
+
+            # ---- THE FLOOR IS FOUND BEFORE THE DOG IS MOVED, from far above, so the hold height comes
+            # from THIS stand's ground rather than the last one's. If the cell has not streamed in yet the
+            # Dog is parked high over the stand as a streaming source, flying, and the column is asked
+            # again until it answers. The highest hit is taken: the top surface is what a player stands
+            # on, and zc_walk_after_wp once held the Dog on a roof by taking the first.
+            def floor_at(px, py):
                 try:
-                    dog.set_actor_location(hold, False, False)
-                    mc = dog.character_movement
-                    if mc is not None:
-                        mc.set_editor_property("velocity", unreal.Vector(0.0, 0.0, 0.0))
-                except Exception:                                  # noqa: BLE001
-                    break
-                try:
-                    under = unreal.SystemLibrary.line_trace_single(
-                        world, hold, unreal.Vector(x, y, hold.z - 5000.0),
+                    column = unreal.SystemLibrary.line_trace_multi(
+                        world, unreal.Vector(px, py, 20000.0), unreal.Vector(px, py, -20000.0),
                         unreal.TraceTypeQuery.TRACE_TYPE_QUERY2, False, [dog],
                         unreal.DrawDebugTrace.NONE, True,
                         unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
-                except Exception:                                  # noqa: BLE001
-                    under = None
-                if under is not None or _t.time() - _began > 10.0:
+                except Exception:                              # noqa: BLE001
+                    column = None
+                tops = []
+                for one in (column or []):
+                    try:
+                        tops.append(float(one.to_tuple()[4].z))
+                    except Exception:                          # noqa: BLE001
+                        pass
+                return max(tops) if tops else None
+
+            import time as _t
+            _began = _t.time()
+            ground = floor_at(x, y)
+            while ground is None and _t.time() - _began < 12.0:
+                try:
+                    dog.set_actor_location(unreal.Vector(x, y, 6000.0), False, False)
+                    mc = dog.character_movement
+                    if mc is not None:
+                        mc.set_movement_mode(unreal.MovementMode.MOVE_FLYING)
+                except Exception:                              # noqa: BLE001
                     break
-                yield 0.25
-            # Let streaming and Lumen settle before the clock is read, not while it is.
-            unreal.SystemLibrary.execute_console_command(world, "stat unit")
+                yield 0.5
+                ground = floor_at(x, y)
+            if ground is None:
+                at_hour[name] = None
+                emit("F_%s_%s" % (hour_label, name), "INFO", "%s: no floor answered the column" % name,
+                     {"at": [x, y]})
+                continue
+            try:
+                mc = dog.character_movement
+                if mc is not None:
+                    mc.set_movement_mode(unreal.MovementMode.MOVE_WALKING)
+                    mc.set_editor_property("velocity", unreal.Vector(0.0, 0.0, 0.0))
+                dog.set_actor_location(unreal.Vector(x, y, ground + 120.0), False, False)
+            except Exception:                                  # noqa: BLE001
+                at_hour[name] = None
+                continue
+            # Let streaming and Lumen settle before the clock is read, not while it is. And NO "stat unit"
+            # here: it is a toggle, it was issued once at the top of the job, and issuing it again per
+            # stand switched the overlay off at every second stand. window() re-arms it if it dies.
             yield 6.0
             yield from window(SECONDS)
             at_hour[name] = summarise(globals().get("_LAST", []))

@@ -69,9 +69,20 @@ def job():
         for view_label, offset in VIEWS:
             here = dog.get_actor_location()
             yaw = dog.get_actor_rotation().yaw + offset
-            eye = unreal.Vector(here.x + math.cos(math.radians(yaw)) * 330.0,
-                                here.y + math.sin(math.radians(yaw)) * 330.0, here.z + 60.0)
-            L.pose_camera(world, eye, unreal.Vector(here.x, here.y, here.z + 55.0), 50.0)
+            # THE CAMERA COULD NOT SEE THE BAND IT WAS READING. It stood 330 uu off looking at +55 with a
+            # 50-degree lens and read the plume at +175. On a 16:9 frame that lens is about 29.5 degrees
+            # tall, so the half-height at 330 uu is 87 uu -- and a point 120 uu above the look-at is off
+            # the top of the picture. project_world_to_screen answered, the guard rejected it, and every
+            # plume reading this job ever made was empty. B00 has been red since 2026-09-26 for that reason
+            # and no other: not a backgrounded editor, which was the first guess and was re-tested with the
+            # window raised, and not a missing fire.
+            #
+            # 480 uu back, looking at +95: half-height 126 uu, so +175 lands at 18% of the frame and the
+            # feet at 88%. The fire and the Dog under it are both in the picture, which is what the
+            # founder's own footage shows.
+            eye = unreal.Vector(here.x + math.cos(math.radians(yaw)) * 480.0,
+                                here.y + math.sin(math.radians(yaw)) * 480.0, here.z + 95.0)
+            L.pose_camera(world, eye, unreal.Vector(here.x, here.y, here.z + 95.0), 50.0)
             yield 2.5
             # THE PLUME BAND: above the shoulders, where the founder's footage shows the fire. If the flames
             # are back this band is bright and blue-white; if they are not it is sky or plaza.

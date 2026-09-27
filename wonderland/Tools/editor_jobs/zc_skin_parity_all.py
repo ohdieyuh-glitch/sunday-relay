@@ -72,8 +72,28 @@ def job():
         return dict((f, round(float(getattr(pose, f)), 4)) for f in FIELDS)
 
     for n, skin_id in enumerate(SKINS):
+        # WAITED FOR, NOT ASSUMED. A fixed 2.2 s was enough on one run and not on the next: Apollo and
+        # Arden came back "not dressed" because their figures were still being built when the probe
+        # looked, and two unmeasured skins turned the gate red for a fault that does not exist. The
+        # costume is waited for by condition, and the PREVIOUS skin's costume does not count as this one.
+        before = costume()
+        try:
+            before_name = before.get_name() if before is not None else None
+        except Exception:                                      # noqa: BLE001
+            before_name = None
         worn = bool(ui.wear_relay_skin(skin_id))
-        yield 2.2
+
+        def dressed_anew():
+            now = costume()
+            try:
+                return now is not None and now.get_name() != before_name
+            except Exception:                                  # noqa: BLE001
+                return False
+        try:
+            yield (dressed_anew, 15)
+        except TimeoutError:
+            pass
+        yield 1.0
         skin = costume()
         # ---- RELAY OG HAS NO COSTUME ACTOR, BECAUSE IT *IS* THE CANONICAL BODY.
         #
@@ -120,6 +140,12 @@ def job():
         yield 1.0
         row["field_mismatches"] = len(mismatches)
         row["first_mismatches"] = mismatches[:5]
+        # SAID OUT LOUD RATHER THAN IMPLIED BY A ZERO. "0 mismatches" and "there is nothing to compare
+        # against" are different facts and a reader cannot tell them apart from the number alone. A
+        # recorded n/a is evidence; a null is an absence every reader has to re-derive, and a zero is a
+        # claim that was never tested.
+        row["costume_parity"] = ("n/a -- this skin IS the canonical body, there is no costume over it"
+                                 if authority else "compared field for field")
 
         # ---- AND DID ANYTHING MOVE AT ALL BETWEEN THE TWO PHASES?
         #
@@ -157,9 +183,22 @@ def job():
 
     ui.wear_relay_skin("relay_og")
     yield 1.5
+    # ---- FAILING AND UNMEASURED ARE KEPT APART.
+    #
+    # S04 named relay_og as failing on the strength of three NULLS. Converting an absent measurement into
+    # a failure is the same error as converting one into a pass; it just points the other way, and it had
+    # planted a false blocker on the default mascot -- the skin the founder sees first every session.
+    #
+    # A skin that produced no reading is listed as UNMEASURED, which is a statement about the proof. A
+    # skin that produced a reading and failed it is listed as FAILING, which is a statement about the
+    # product. The gate is red for either, because an unmeasured skin is not a certified one -- but the
+    # two are never merged into one word again.
     GOOD = ("PASS", "REFERENCE")
-    RESULT["all_pass"] = bool(rows) and all(r.get("verdict") in GOOD for r in rows)
-    RESULT["failing"] = [r["skin"] for r in rows if r.get("verdict") not in GOOD]
+    RESULT["unmeasured"] = [r["skin"] for r in rows
+                            if r.get("field_mismatches") is None or r.get("wears_the_pose") is None]
+    RESULT["failing"] = [r["skin"] for r in rows
+                         if r.get("verdict") not in GOOD and r["skin"] not in RESULT["unmeasured"]]
+    RESULT["all_pass"] = bool(rows) and not RESULT["failing"] and not RESULT["unmeasured"]
 
     # ---- AND SAY SO AS A CHECK. This job worked out a verdict, wrote it into the result as `all_pass`, and
     # recorded no tests -- so it has been reported as "measured" and counted as judged by capture, while the
@@ -176,7 +215,10 @@ def job():
            skins=[r["skin"] for r in rows])
     record("S02", "no skin mismatches the pose it was handed, on any field",
            all(int(r.get("field_mismatches", 1)) == 0 for r in rows),
-           mismatches={r["skin"]: r.get("field_mismatches") for r in rows})
+           mismatches={r["skin"]: ("n/a" if r.get("is_the_authority") else r.get("field_mismatches"))
+                       for r in rows},
+           note="the authority reads n/a, not 0. It has no costume to be compared against, and a zero "
+                "there would be a claim that was never tested.")
     record("S03", "every skin wears the pose AND performs the act",
            bool(rows) and all(r.get("wears_the_pose") and r.get("performs_the_act") for r in rows),
            wears={r["skin"]: r.get("wears_the_pose") for r in rows},
@@ -187,8 +229,11 @@ def job():
            changed={r["skin"]: r.get("fields_that_changed_when_walking") for r in rows},
            note="zero mismatches is satisfied just as well by a skin copying a dead Dog, so the parity "
                 "clauses above mean nothing without this one.")
-    record("S04", "and none of them is failing",
-           RESULT["all_pass"] and not RESULT["failing"], failing=RESULT["failing"])
+    record("S04", "and none of them is failing, and none of them went unmeasured",
+           RESULT["all_pass"], failing=RESULT["failing"], unmeasured=RESULT["unmeasured"],
+           note="two lists, not one. FAILING is a statement about the product; UNMEASURED is a statement "
+                "about this proof. Either turns the gate red, and merging them once planted a false "
+                "blocker on the default mascot.")
 
     # ---- COVERAGE IS ITSELF A CLAUSE. See EXPECTED_ACTIVE_SKINS.
     # Taken from the rows that were actually WALKED. This read RESULT["by_skin"] -- a key this job has
