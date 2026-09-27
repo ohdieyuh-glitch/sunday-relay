@@ -1,0 +1,135 @@
+{
+ "name": "zc_tartarus_night",
+ "started": "2026-09-27 13:46:42",
+ "status": "captured",
+ "tag": "after",
+ "tests": [
+  {
+   "id": "T00",
+   "name": "all six Tartarus night views were captured",
+   "pass": true,
+   "detail": {
+    "taken": 6,
+    "wanted": 6,
+    "tag": "after",
+    "where": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\tartarus_night",
+    "note": "the verdict is the pictures against the founder's screenshots, not this clause and not the luma below."
+   }
+  },
+  {
+   "id": "T01",
+   "name": "no Tartarus view is a black void",
+   "pass": true,
+   "detail": {
+    "worst_dark_fraction": 0.6627,
+    "ceiling": 0.8,
+    "per_place": {
+     "avenue_dip": {
+      "luma": 0.2254,
+      "dark_fraction": 0.1368,
+      "ground_luma": 0.2443,
+      "ground_dark_fraction": 0.1721
+     },
+     "avenue_dip_feet": {
+      "luma": 0.1606,
+      "dark_fraction": 0.5335,
+      "ground_luma": 0.1969,
+      "ground_dark_fraction": 0.2512
+     },
+     "quarter_plaza": {
+      "luma": 0.1444,
+      "dark_fraction": 0.6627,
+      "ground_luma": 0.1225,
+      "ground_dark_fraction": 0.8638
+     },
+     "quarter_plaza_feet": {
+      "luma": 0.1308,
+      "dark_fraction": 0.513,
+      "ground_luma": 0.1407,
+      "ground_dark_fraction": 0.4623
+     },
+     "market": {
+      "luma": 0.1203,
+      "dark_fraction": 0.6102,
+      "ground_luma": 0.1368,
+      "ground_dark_fraction": 0.5596
+     },
+     "market_feet": {
+      "luma": 0.1262,
+      "dark_fraction": 0.5863,
+      "ground_luma": 0.133,
+      "ground_dark_fraction": 0.5807
+     }
+    },
+    "note": "a ceiling, not a target: passing this is not the same as readable, which only the photograph answers."
+   }
+  }
+ ],
+ "practicals": "read WLLIGHT in the editor log for 'N practicals defined, pool of M'; the subsystem loads WorldDesign/Look/practical_lights.json at world start and wl.Look.PracticalReload re-reads it",
+ "readings": {
+  "avenue_dip": {
+   "luma": 0.2254,
+   "dark_fraction": 0.1368,
+   "ground_luma": 0.2443,
+   "ground_dark_fraction": 0.1721
+  },
+  "avenue_dip_feet": {
+   "luma": 0.1606,
+   "dark_fraction": 0.5335,
+   "ground_luma": 0.1969,
+   "ground_dark_fraction": 0.2512
+  },
+  "quarter_plaza": {
+   "luma": 0.1444,
+   "dark_fraction": 0.6627,
+   "ground_luma": 0.1225,
+   "ground_dark_fraction": 0.8638
+  },
+  "quarter_plaza_feet": {
+   "luma": 0.1308,
+   "dark_fraction": 0.513,
+   "ground_luma": 0.1407,
+   "ground_dark_fraction": 0.4623
+  },
+  "market": {
+   "luma": 0.1203,
+   "dark_fraction": 0.6102,
+   "ground_luma": 0.1368,
+   "ground_dark_fraction": 0.5596
+  },
+  "market_feet": {
+   "luma": 0.1262,
+   "dark_fraction": 0.5863,
+   "ground_luma": 0.133,
+   "ground_dark_fraction": 0.5807
+  }
+ },
+ "streaming_seconds": {
+  "avenue_dip": 0.0,
+  "avenue_dip_feet": 0.0,
+  "quarter_plaza": 0.0,
+  "quarter_plaza_feet": 0.0,
+  "market": 0.0,
+  "market_feet": 0.0
+ },
+ "ground_found": {
+  "avenue_dip": true,
+  "avenue_dip_feet": true,
+  "quarter_plaza": true,
+  "quarter_plaza_feet": true,
+  "market": true,
+  "market_feet": true
+ },
+ "capture_returned": {
+  "avenue_dip": "(1900, 924)",
+  "avenue_dip_feet": "(1900, 924)",
+  "quarter_plaza": "(1900, 924)",
+  "quarter_plaza_feet": "(1900, 924)",
+  "market": "(1900, 924)",
+  "market_feet": "(1900, 924)"
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\tartarus_night",
+ "finished": "2026-09-27 13:47:53",
+ "seconds": 70.97,
+ "log": "T_avenue_dip INFO avenue_dip (after) {'luma': 0.2254, 'dark_fraction': 0.1368, 'ground_luma': 0.2443, 'ground_dark_fraction': 0.1721}\nT_avenue_dip_feet INFO avenue_dip_feet (after) {'luma': 0.1606, 'dark_fraction': 0.5335, 'ground_luma': 0.1969, 'ground_dark_fraction': 0.2512}\nT_quarter_plaza INFO quarter_plaza (after) {'luma': 0.1444, 'dark_fraction': 0.6627, 'ground_luma': 0.1225, 'ground_dark_fraction': 0.8638}\nT_quarter_plaza_feet INFO quarter_plaza_feet (after) {'luma': 0.1308, 'dark_fraction': 0.513, 'ground_luma': 0.1407, 'ground_dark_fraction': 0.4623}\nT_market INFO market (after) {'luma': 0.1203, 'dark_fraction': 0.6102, 'ground_luma': 0.1368, 'ground_dark_fraction': 0.5596}\nT_market_feet INFO market_feet (after) {'luma': 0.1262, 'dark_fraction': 0.5863, 'ground_luma': 0.133, 'ground_dark_fraction': 0.5807}\n"
+}

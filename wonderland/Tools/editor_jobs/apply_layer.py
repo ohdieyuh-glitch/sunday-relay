@@ -35,8 +35,24 @@ def _material_path(name):
 
 def job():
     ues = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
+    # ---- WAIT FOR PLAY TO END RATHER THAN DIE ON IT.
+    #
+    # A layer applies to the editor world, so it cannot run under PIE -- that part was right. But raising
+    # immediately makes the outcome depend on which of two sessions queued first: with two lanes sharing
+    # this channel, a layer queued behind a play-owning job loses a whole round trip to an ordering it
+    # cannot see. Happened on 2026-09-27: a TQ05 re-apply queued between one lane's running night sweep
+    # and its queued walk, and died on the sweep's PIE.
+    #
+    # Waiting costs nothing when there is no PIE and turns a race into a queue when there is. The deadline
+    # is long enough for any capture job in this tree and short enough that a stuck PIE still reports
+    # rather than hanging the channel.
+    waited = 0.0
+    while ues.get_game_world() is not None and waited < 1200.0:
+        yield 5.0
+        waited += 5.0
+    RESULT["waited_for_pie_seconds"] = waited
     if ues.get_game_world() is not None:
-        raise RuntimeError("PIE is running; layers apply to the editor world only")
+        raise RuntimeError("PIE was still running after %.0f s; layers apply to the editor world only" % waited)
     with open(SPEC, encoding="utf-8") as f:
         spec = json.load(f)
     dirty_before = [p.get_name() for p in unreal.EditorLoadingAndSavingUtils.get_dirty_map_packages()]

@@ -47,15 +47,17 @@ DARK = 0.14 * 255.0
 # pieces at z +12, the surface a walker stands on, not the terrace tiles at -128). The market is the centroid
 # of the band's largest canopy cluster, 20 roofs.
 PLACES = (
-    # the avenue across its dip: the +12 shelf, down through the -14 crossing, back up to +12
-    ("avenue_dip", (70234.0, -43552.0, 192.0), (76557.0, -44200.0, 26.0)),
-    ("avenue_dip_feet", (73159.0, -44086.0, 136.0), (75864.0, -43800.0, -14.0)),
-    # the quarter's plaza
-    ("quarter_plaza", (70132.0, -38158.0, 300.0), (72132.0, -39958.0, 40.0)),
-    ("quarter_plaza_feet", (71632.0, -39458.0, 160.0), (72432.0, -40158.0, 12.0)),
-    # the band's market
-    ("market", (93981.0, -46889.0, 340.0), (95981.0, -48689.0, 120.0)),
-    ("market_feet", (95181.0, -48089.0, 160.0), (96181.0, -48889.0, 12.0)),
+    # THE CHECKPOINT COURT, the one Tartarus viewpoint another lane has already photographed successfully
+    # (zc_night_sweep's "entrance_tartarus"). Borrowed rather than invented: the two views I derived from the
+    # route polyline put the camera against a crimson wall at the avenue and on open grass at the market, and
+    # a reading of a wall at close range is a bright honest number about the wrong subject.
+    ("checkpoint_court", (44000.0, -21500.0, 260.0), (46177.0, -22619.0, 60.0)),
+    ("checkpoint_court_feet", (45600.0, -22200.0, 150.0), (46177.0, -22619.0, -14.0)),
+    # the road out of the checkpoint, on the -14 shelf the proof points declare
+    ("road_out", (46600.0, -26400.0, 240.0), (48064.0, -27750.0, -14.0)),
+    ("road_in", (44600.0, -25400.0, 240.0), (42868.0, -24750.0, -14.0)),
+    # the tower, the nation's landmark and the one thing meant to carry a light signature after dark
+    ("tower", (45400.0, -23200.0, 400.0), (48255.0, -23818.0, 400.0)),
 )
 
 
