@@ -113,12 +113,16 @@ def job():
         RESULT["post_process_error"] = str(err)[:200]
     emit("E_PP", "INFO", "post process", pp)
 
-    def face_close(distance=300.0, fov=30.0):
+    # THE EYES ARE NOT AT ONE HEIGHT. The default Dog's are at actor_z + 62 (the Blueprint head). A costume is
+    # built to 1.55 m against the Dog's 1.74, so its eyes sit near actor_z + 21 -- forty units lower -- which is
+    # why the first close-ups of the premium skins showed the brow ornament with the visor at the bottom edge.
+    def face_close(skin, distance=340.0, fov=30.0):
         here = dog.get_actor_location()
         yaw = dog.get_actor_rotation().yaw
+        eye_z = 62.0 if skin == "relay_og" else 22.0
         eye = unreal.Vector(here.x + math.cos(math.radians(yaw)) * distance,
-                            here.y + math.sin(math.radians(yaw)) * distance, here.z + 66.0)
-        L.pose_camera(world, eye, unreal.Vector(here.x, here.y, here.z + 62.0), fov)
+                            here.y + math.sin(math.radians(yaw)) * distance, here.z + eye_z + 6.0)
+        L.pose_camera(world, eye, unreal.Vector(here.x, here.y, here.z + eye_z), fov)
 
     shots = []
     RESULT["captures"] = shots
@@ -128,14 +132,19 @@ def job():
         for hour_label, hour in HOURS:
             unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour %.2f" % hour)
             yield 4.0
-            face_close()
+            face_close(skin)
             yield 1.5
+            # PAUSED FOR THE FRAME. The Dog idles, and the World session measured a third of a luma of same-scene
+            # variation between two frames of the same head from the bob alone; a paused capture still renders.
+            unreal.GameplayStatics.set_game_paused(world, True)
+            yield 0.3
             name = "%s_%s_%s.png" % (TAG, skin, hour_label)
             try:
                 L.capture_game_viewport(os.path.join(ROOT, name))
                 shots.append(name)
             except Exception as err:                               # noqa: BLE001
                 RESULT.setdefault("errors", {})[name] = str(err)[:100]
+            unreal.GameplayStatics.set_game_paused(world, False)
             L.release_camera(world)
             yield 0.3
     unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour 12.00")

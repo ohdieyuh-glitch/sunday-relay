@@ -41,7 +41,12 @@ import random
 # head. The knee stops being the compressor and becomes the safety net it was meant to be. Flames go
 # through their own sqrt/FireGain curve and come down by about forty times, into the band the flame sweep
 # was already reaching for.
-GLOW_SCALE = 6.0
+# 15, AGAINST THE MEASURED WHITE. The note above reasoned against a white of 25; the world's white at the noon
+# exposure is near 25,000 scene units and the runtime supplies the thousand (WonderlandSceneUnits). At 6 a body
+# glow of 6 x 1000 was a quarter of white and Celestial Light's halo photographed grey-blue; at 15 the same edge
+# is 15,000 -- luminous, coloured, under white -- and the eyes, driven to 18 x 1000, stay the brightest thing on
+# every head. The chest skull's pulse peaks at 33,000 and clips at the top of its beat, which a pulse should.
+GLOW_SCALE = 15.0
 # One height for every skin, so a switch in the Project Brain changes the dress and never the dog.
 TARGET_METRES = 1.55
 

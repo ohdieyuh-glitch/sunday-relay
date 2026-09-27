@@ -319,7 +319,7 @@ namespace
 		// 20,000: bright, coloured, just under white, with the founder's FlameDim still the knob.
 		return bFireMaster
 			? FMath::Sqrt(Authored) * FMath::Max(CVarFireGain.GetValueOnAnyThread(), 0.001f) * Dim
-			: Authored * Dim * 12.0f;
+			: Authored * Dim * 3.0f;   // x3 at generator scale 15: a ghost ember 10.5 x 0.4 x 3 = 12,600 -- lit, coloured, under white
 	}
 
 	/**

@@ -5,9 +5,9 @@ voxel 4.8861
 material bone rim 0.9650 0.9600 0.9450 1.000
 material bonedeep lit 0.8000 0.8000 0.8000 1.000
 material visor lit 0.0450 0.0420 0.0500 1.000
-material eye glow 1.0000 0.8000 0.3400 48.000
-material eyehalo add 1.0000 0.8000 0.3400 16.800
-material ghost add 0.9800 0.9600 0.9000 9.000
+material eye glow 1.0000 0.8000 0.3400 120.000
+material eyehalo add 1.0000 0.8000 0.3400 42.000
+material ghost add 0.9800 0.9600 0.9000 22.500
 part root - 0.000 0.000 0.000 float
 part head root 0.000 0.000 0.000 head
 part hand_l root 1.191 -5.336 -0.739 trail 1.000 2.000

@@ -1644,9 +1644,20 @@ void ARelayDogCharacter::BuildEyeGlow()
 		{
 			if (Size[Axis] < Size[Normal]) { Normal = Axis; }
 		}
+		// ONE HALO PER EYE. SM_RelayDog_head_eye is a single mesh carrying BOTH panes, 22.8 units wide with the two
+		// eyes at about a quarter of that width either side of centre; a halo sized from the whole mesh was one plate
+		// across the visor (photographed 09:31), not a rim round each eye. The widest axis across the pane is the
+		// eye-to-eye axis; each halo is 1.45x one eye, centred on that eye.
 		const double CubeSide = FMath::Max(Cube->GetBounds().BoxExtent.GetMax() * 2.0, 1.0);
-		FVector Scale = Size * 1.55 / CubeSide;
+		int32 Across = 0;
+		for (int32 Axis = 1; Axis < 3; ++Axis)
+		{
+			if (Size[Axis] > Size[Across]) { Across = Axis; }
+		}
+		FVector Scale = Size * 1.45 / CubeSide;
+		Scale[Across] = Size[Across] * 0.36 * 1.45 / CubeSide;
 		Scale[Normal] = FMath::Max(Size[Normal] * 0.34 / CubeSide, 0.01);
+		for (const double Which : {-1.0, 1.0})
 		for (const double Side : {-1.0, 1.0})
 		{
 			UStaticMeshComponent* Halo = NewObject<UStaticMeshComponent>(this, MakeUniqueObjectName(this, UStaticMeshComponent::StaticClass(), TEXT("EyeHalo")));
@@ -1657,6 +1668,7 @@ void ARelayDogCharacter::BuildEyeGlow()
 			Halo->SetCastShadow(false);
 			Halo->SetupAttachment(Eye);
 			FVector Offset = PaneCentre;
+			Offset[Across] += Which * Size[Across] * 0.25;
 			Offset[Normal] += Side * Size[Normal] * 0.55;
 			Halo->SetRelativeLocation(Offset);
 			Halo->SetRelativeScale3D(Scale);
@@ -1683,7 +1695,7 @@ void ARelayDogCharacter::SetEyeGlow(float Level)
 	// established colour, or the chosen secondary -- and only the magnitude is set, exactly as the figures do.
 	const float Peak = FMath::Max3(EyeColour.R, FMath::Max(EyeColour.G, EyeColour.B), KINDA_SMALL_NUMBER);
 	const FLinearColor Core = (EyeColour / Peak) * Wanted;
-	const FLinearColor Halo = Core * 0.35f;
+	const FLinearColor Halo = Core * 0.22f;   // a rim, not a second eye: measured at 0.35 as a solid plate
 	for (UMaterialInstanceDynamic* Mid : EyeCoreMids)
 	{
 		if (Mid != nullptr)

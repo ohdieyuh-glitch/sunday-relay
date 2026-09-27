@@ -5,15 +5,15 @@ voxel 5.7763
 material bone rim 0.8980 0.8710 0.8000 1.000
 material bonedeep lit 0.6900 0.6600 0.5920 1.000
 material visor lit 0.0450 0.0420 0.0500 1.000
-material eye glow 0.3600 0.9500 1.0000 48.000
-material eyehalo add 0.3600 0.9500 1.0000 16.800
-material ghost glow 0.2200 0.7000 1.0000 4.200
-material ghostpale glow 0.7200 0.9400 1.0000 7.200
+material eye glow 0.3600 0.9500 1.0000 120.000
+material eyehalo add 0.3600 0.9500 1.0000 42.000
+material ghost glow 0.2200 0.7000 1.0000 10.500
+material ghostpale glow 0.7200 0.9400 1.0000 18.000
 material void lit 0.0300 0.0400 0.0600 1.000
 material ash lit 0.6400 0.6100 0.5400 1.000
 material gold rim 0.9050 0.7200 0.2900 1.000
-material soulpulse glow 0.3600 0.9500 1.0000 13.200
-material soulveilpulse glow 0.3600 0.9500 1.0000 3.300
+material soulpulse glow 0.3600 0.9500 1.0000 33.000
+material soulveilpulse glow 0.3600 0.9500 1.0000 8.250
 part root - 0.000 0.000 0.000 spine 0.850 0.000
 part body root 0.000 0.000 11.850 none
 part head body 0.000 0.000 19.700 head
