@@ -86,3 +86,67 @@ Performance after the conversion: 33.7 ms and 31.3 ms at noon, against a pre-con
 4. **Gates B and C are not this lane's to call.** Julius beta-readiness and the end-to-end path through the
    Live Terminal, Wonder Web and the companions were last audited at 35% integration and have not been
    re-measured today.
+
+
+---
+
+# CORRECTION PASS, 2026-09-27 — what the founder's screenshots overturned
+
+> **THE ROWS ABOVE WERE NOT LYING, AND THEY WERE NOT RIGHT EITHER.** Every one of them was a real proof that
+> really passed. The founder then opened the wardrobe and saw a nearly empty square, and both things were true
+> at once. That is the finding worth keeping from this pass: `zc_wardrobe_upgrade` reported 0.79–0.92
+> occupancy while the mascot rendered at 41.5% of frame height, because it measured the framing system that
+> was no longer the one being drawn. **A proof that uses a different entry point than the founder passes while
+> the feature is broken.**
+
+## P0-1 Wardrobe — REOPENED AND RE-FIXED
+
+Three independent causes had stacked, and each alone produces "the preview is broken", which is why four
+rounds of camera-distance tuning never touched it.
+
+| Cause | Evidence |
+|---|---|
+| **Thirteen stops of overexposure.** `AutoExposureBias = 11` (+11 EV = 2048×) multiplied by stage lamps of 90,000/26,000/52,000 cd — sane for a room-sized stage, except the wardrobe shrinks the rig to fit a small panel, putting three lamps ~1 m from a hand-sized figure at ~50,000 lux. | Sweeping exposure from +11 to −2 EV — thirteen stops, ~8000× — changed the picture almost not at all. Sweeping the **lamps** produced a correctly shaded mascot immediately. `wl.Look.PreviewLights`, 0.040. |
+| **Two framing systems, and every fix went into the unused one.** `WonderlandUiSubsystem` solves for the player's 90° camera and the window's share of the *screen* — correct for the old hole-in-the-panel wardrobe. The panel now paints the stage's own 34° capture, which nobody had ever solved: `AimCamera` stood at a literal `Height * 3.15` = exactly 41.5% occupancy. | Measured off exported pixels: 42–43%. Arithmetic and photograph agreeing is what made it certain. |
+| **The body was classified by how it was shaded.** A part counted as body only if its material was `Lit` or `Rim`. Apollo, Skeleton Flame and Celestial Light are built almost entirely from `Glow`/`Additive` — a glowing torso is still a torso — so the box collapsed to a 30 uu fragment on a 200–400 uu figure. | Now classified by part **name** against the skeleton every skin shares (`body`, `head`, `arm_*`, `leg_*`), so all five frame identically and a new ornament is excluded by default. |
+| **And the solve measured a half-built figure.** `AimCamera` ran once at skin-switch, while components were still being registered — and `Bounds` means nothing until a component is registered. | Relay OG's body sums to 53 uu; the solve recorded 30.0 at that moment, and the shortfall tracked how much there was to build (Apollo 21.3, Skeleton Flame 13.1). Re-solved every frame now. |
+
+**Measured, from the exported pixels:** Relay OG 80.4–82.9%, Apollo 75.6–83.2%, Arden 68.8–72.4%,
+Celestial 90.1–92.9%, Skeleton 88.5–93.6%. `zc_wardrobe_20` V00/V01/V02 green.
+`zc_wardrobe_regress` R00/R01/R02 green across close/reopen ×3, five skins twice, three colourways, a full
+360°, an 11 km teleport and a day/night sweep.
+
+## P0-4 Real fire — the asset was stale, not the shader
+
+The generator has carried Skeleton Flame's spectral system all along: `soulpulse` and `soulveilpulse` in the
+eyes' own cyan, `flankfire` down both sides, `backfire` across the back, all named `…pulse` so they join the
+existing heartbeat rather than inventing a second one. **The shipped `SkeletonFlame.wlvox` predated it.**
+Regenerating all seven skins into a scratch directory and diffing proved only that one had drifted —
+1,485 → 2,186 boxes, 9 → 11 materials, 17 → 19 parts — while Relay OG, Arden, Apollo and Celestial Light came
+out byte-identical. `RelaySkins/` was checkpointed first and verified by hash: exactly one file changed.
+
+## P1-6 / P1-7 AI companion colour and HUD — verified visually
+
+`zc_companion_colours` C00–C04 green, built as controlled comparisons rather than five arbitrary pairs:
+SECONDARY alone swings blue-over-red 0.298 → 0.0588 with PRIMARY identical; PRIMARY alone moves mean luma
+0.7512 → 0.5496 with SECONDARY identical; the glow answers SECONDARY **61× more strongly** than PRIMARY.
+The HUD's three rows were confirmed in a live capture: `COMPOUND AGENT Julius · SINGLE AGENT Claude Code
+Fable 5 · LLM COMPANION GPT 6 Astra`.
+
+## OPEN — the night eyes, and the fix that measurement rejected
+
+`zc_eyes_glow` returns 3/3 with 15/15 readings, and the 23:30 capture shows Relay OG's eyes as two flat dull
+gold squares. It passes because they clear a near-black visor by 0.090 against a 0.05 floor — true, and
+useless.
+
+The arithmetic says raise `wl.Look.EyeGlowNight`: it is 5.0, these are absolute emissive levels, and the skins
+author their eyes at 7.0–8.0, so after dark the eyes are driven *dimmer than the art asks for*. Swept at
+midnight across 5 / 9 / 13 / 18, **Relay OG's eye luma falls** — 0.153, 0.095, 0.070, 0.078 — while Arden,
+Apollo and Skeleton Flame sit clipped at 1.000 throughout. That is auto-exposure: the camera is 300 uu from
+the face, the eyes are most of what it sees, and driving them harder closes the iris on the thing being
+measured.
+
+**So the value was left at 5.0.** Shipping the change the arithmetic suggested would have made the picture
+worse while looking like progress. The founder's stated requirement — daylight — passes with room on every
+skin (Relay OG 0.591 against a face of 0.039). Making Relay OG's warm gold read as a lamp *at night* needs
+that one skin's authored eye raised, which is art and belongs to the founder.
