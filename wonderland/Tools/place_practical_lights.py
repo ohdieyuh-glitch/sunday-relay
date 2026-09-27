@@ -87,6 +87,34 @@ TAKE = {
     # 36 lamp posts glowing as emissive meshes and lighting nothing, which is the exact condition this
     # placer exists to end.
     "NQ06": (11.0, 950.0, "path"), "IQ06": (11.0, 950.0, "path"),
+    # ---- THE FAMILIES THE HAND-WRITTEN LIST FELL BEHIND ON (2026-09-27).
+    #
+    # TAKE already held eleven SD01_* tiles and six FD05_*, and MISSED the rest of both families
+    # plus GF entirely. 388 light fixtures on 35 passes were physically in the world, above ground,
+    # spread from x -45,018 to 48,456 -- and throwing nothing, because a pass that is not a key here
+    # contributes zero lights. For scale: 34 passes carrying fixtures WERE in the list, so roughly
+    # half the world's light fixtures were dark.
+    #
+    # 186 OF THEM ARE SM_waymarker_lamp -- the world's actual wayfinding fixtures, unlit. That is
+    # exactly the founder's "from any major path the practicals should show where traversal
+    # continues, without the HUD", already built and switched off. 41 sit within 150 m of the
+    # Golden Arrival, which had four practical definitions in total.
+    #
+    # EVERY FIGURE IS ITS OWN FAMILY'S, not a new judgement: SD01_* takes the path 8.0/700 its
+    # eleven siblings already use, FD05_* the facade 6.0/500 its six already use, and GF the path
+    # figure because it carries nothing but waymarker lamps.
+    "GF01": (8.0, 700.0, "path"), "GF02": (8.0, 700.0, "path"), "GF03": (8.0, 700.0, "path"),
+    "GF04": (8.0, 700.0, "path"), "GF05": (8.0, 700.0, "path"), "SD01_CxCityE": (8.0, 700.0, "path"),
+    "SD01_CxCityNE": (8.0, 700.0, "path"), "SD01_CxCityS": (8.0, 700.0, "path"), "SD01_CxCitySW": (8.0, 700.0, "path"),
+    "SD01_CxCityWE": (8.0, 700.0, "path"), "SD01_CxSSW": (8.0, 700.0, "path"), "SD01_FillEE": (8.0, 700.0, "path"),
+    "SD01_FillEL": (8.0, 700.0, "path"), "SD01_FillEMC": (8.0, 700.0, "path"), "SD01_FillEMN": (8.0, 700.0, "path"),
+    "SD01_FillEMS": (8.0, 700.0, "path"), "SD01_FillSE2": (8.0, 700.0, "path"), "SD01_FillSFE": (8.0, 700.0, "path"),
+    "SD01_FillSFW": (8.0, 700.0, "path"), "SD01_FillWE": (8.0, 700.0, "path"),
+    "FD05_CxCityE": (6.0, 500.0, "facade"), "FD05_CxCityNE": (6.0, 500.0, "facade"), "FD05_CxCityS": (6.0, 500.0, "facade"),
+    "FD05_CxCitySW": (6.0, 500.0, "facade"), "FD05_CxCityWE": (6.0, 500.0, "facade"), "FD05_CxSSW": (6.0, 500.0, "facade"),
+    "FD05_FillEE": (6.0, 500.0, "facade"), "FD05_FillEL": (6.0, 500.0, "facade"), "FD05_FillEMC": (6.0, 500.0, "facade"),
+    "FD05_FillEMN": (6.0, 500.0, "facade"), "FD05_FillEMS": (6.0, 500.0, "facade"), "FD05_FillSE2": (6.0, 500.0, "facade"),
+    "FD05_FillSFE": (6.0, 500.0, "facade"), "FD05_FillSFW": (6.0, 500.0, "facade"), "FD05_FillWE": (6.0, 500.0, "facade"),
     # facade accents: architecture immediately beside traversal, dim
     "NC02": (6.0, 500.0, "facade"), "IC04": (6.0, 500.0, "facade"), "NC04": (6.0, 500.0, "facade"),
     "TQ04": (6.0, 500.0, "facade"), "TQ02": (6.0, 500.0, "facade"), "IC02": (6.0, 500.0, "facade"),
