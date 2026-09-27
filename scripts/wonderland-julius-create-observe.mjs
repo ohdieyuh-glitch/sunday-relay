@@ -367,10 +367,18 @@ try {
     objective: `${CONTRACT.objective} [duplicate-run walk ${walkId}, ${label}]`,
   });
   const edited = (contract, note) => ({ ...contract, objective: `${contract.objective} (${note})` });
-  const create = (contract, rerun) => call('POST', '/relay-api/julius/missions', {
-    headers: rerun === undefined ? operator : { ...operator, 'x-relay-julius-rerun': rerun },
+  // The rerun INTENT and the rerun KEY are separate headers (Julius 52df8e63), each sent only when given, so a clause
+  // can send either without the other.
+  const create = (contract, { rerun, key } = {}) => call('POST', '/relay-api/julius/missions', {
+    headers: {
+      ...operator,
+      ...(rerun === undefined ? {} : { 'x-relay-julius-rerun': rerun }),
+      ...(key === undefined ? {} : { 'x-relay-julius-rerun-key': key }),
+    },
     body: JSON.stringify(contract),
   });
+  const rerunKey = (label) => `rerun-${walkId}-${label}`;
+  const brief = (r) => `${r.status}${r.json?.error?.kind ? ` ${r.json.error.kind}` : ''}${r.json?.data ? ` ${r.json.data.runId} rerun:${r.json.data.rerun}` : ''}`;
   const db = new pg.Pool({ connectionString: DB });
   // Counted in the DATABASE, not inferred from the answers: "exactly one run" is a row count.
   const runsOf = async (missionId) => (await db.query(
@@ -398,25 +406,46 @@ try {
         && afterAccident.length === 1 && afterAccident[0].run_id === runA,
       { status: accidental.status, refusal: accidental.json?.error ?? accidental.text, runsForMission: afterAccident });
 
+    // "Anything but the exact word `explicit` is no intent at all" -- so a near miss is refused EVEN WITH a key, and a
+    // key with no intent header is not an intent either.
     const nearMisses = [];
     for (const word of ['yes', 'true', 'explicitly', 'explicit rerun', '']) {
-      const r = await create(edited(m, 'edited draft'), word);
+      const r = await create(edited(m, 'edited draft'), { rerun: word, key: rerunKey(`near-${word || 'empty'}`) });
       nearMisses.push({ header: word, status: r.status, kind: r.json?.error?.kind ?? null });
     }
+    const keyAlone = await create(edited(m, 'edited draft'), { key: rerunKey('key-alone') });
+    nearMisses.push({ header: '(none: a key alone)', status: keyAlone.status, kind: keyAlone.json?.error?.kind ?? null });
     const afterNearMisses = await runsOf(m.missionId);
-    clause('D03', 'only the exact word is a rerun intent: every near miss is still refused, and still creates nothing',
+    clause('D03', 'only the exact word is a rerun intent: every near miss -- key or no key, or a key alone -- is still refused, and creates nothing',
       nearMisses.every((n) => n.status === 409 && n.kind === 'mission_run_already_active') && afterNearMisses.length === 1,
       { nearMisses, runsForMission: afterNearMisses.length });
 
-    // Case-insensitive, per Julius. (Surrounding spaces cannot be tested over fetch: it trims header values.)
-    const rerun = await create(edited(m, 'edited draft'), 'Explicit');
+    // THE KEY IS REQUIRED. Without it a retried rerun could buy a second execution, so the intent alone is refused.
+    const keyless = await create(edited(m, 'edited draft'), { rerun: 'explicit' });
+    const afterKeyless = await runsOf(m.missionId);
+    clause('D03b', 'an explicit rerun WITHOUT a key is refused 400 rerun_key_required, and creates nothing',
+      keyless.status === 400 && keyless.json?.error?.kind === 'rerun_key_required' && afterKeyless.length === 1,
+      { answer: brief(keyless), refusal: keyless.json?.error ?? keyless.text, runsForMission: afterKeyless.length });
+
+    // Case-insensitive intent, per Julius. (Surrounding spaces cannot be tested over fetch: it trims header values.)
+    const keyB = rerunKey('edited-draft');
+    const rerun = await create(edited(m, 'edited draft'), { rerun: 'Explicit', key: keyB });
     const runB = rerun.json?.data?.runId ?? null;
     const afterRerun = await runsOf(m.missionId);
-    clause('D04', 'an EXPLICIT rerun starts a DISTINCT run, says so (rerun: true), dispatches nothing, and leaves the first run as it was',
+    clause('D04', 'an EXPLICIT rerun with its key starts a DISTINCT run, says so (rerun: true), dispatches nothing, and leaves the first run as it was',
       rerun.status === 201 && typeof runB === 'string' && runB !== runA && rerun.json?.data?.rerun === true
         && rerun.json?.data?.dispatched === false
         && afterRerun.length === 2 && afterRerun.some((r) => r.run_id === runA && r.state === 'READY'),
       { status: rerun.status, runA, runB, rerunFlag: rerun.json?.data?.rerun ?? 'absent', runsForMission: afterRerun });
+
+    // THE SAME RERUN, RETRIED: one key is one rerun however many times it is sent -- and the retry is told the TRUTH,
+    // that it made nothing (rerun reports the outcome).
+    const rerunAgain = await create(edited(m, 'edited draft'), { rerun: 'explicit', key: keyB });
+    const afterRetriedRerun = await runsOf(m.missionId);
+    clause('D04b', 'retrying that rerun with the SAME key returns the SAME run, reports rerun: false, and makes no third run',
+      rerunAgain.status === 201 && rerunAgain.json?.data?.runId === runB && rerunAgain.json?.data?.rerun === false
+        && afterRetriedRerun.length === 2,
+      { answer: brief(rerunAgain), runB, runsForMission: afterRetriedRerun.length });
 
     const replay = await create(m);
     clause('D05', 'the IDENTICAL contract is never refused: it resumes its own run, and is not told it got a rerun',
@@ -436,25 +465,29 @@ try {
       { a: { status: seenA.status, runId: seenA.json?.data?.run?.runId ?? 'absent' },
         b: { status: seenB.status, runId: seenB.json?.data?.run?.runId ?? 'absent' } });
 
-    // AN EXPLICIT RERUN OF THE UNCHANGED CONTRACT, while its run is live. The run's key is its content, so this
-    // resolves to the run it already made. Whatever Julius decides that should DO, the wire must not report a rerun
-    // it did not perform -- Julius's own rule: "a client that did not ask can never be told it got one", and one
-    // that asked must not be told it got one when it did not.
-    const sameAgain = await create(m, 'explicit');
-    clause('D07', 'rerun: true is reported only when a DISTINCT run exists -- never the same run labelled a rerun',
-      !(sameAgain.status === 201 && sameAgain.json?.data?.runId === runA && sameAgain.json?.data?.rerun === true),
-      { status: sameAgain.status, runId: sameAgain.json?.data?.runId ?? 'absent', firstRun: runA,
-        rerunFlag: sameAgain.json?.data?.rerun ?? 'absent', runsForMission: (await runsOf(m.missionId)).length });
+    // AN EXPLICIT RERUN OF THE UNCHANGED CONTRACT, while its run is live -- the case a content-derived identity
+    // could not serve (it resolved to the run already made, and was labelled a rerun). With its own key it is a
+    // distinct run; retried with that key it is the same one, and the retry is told it made nothing.
+    const keyC = rerunKey('unchanged-live');
+    const unchanged = await create(m, { rerun: 'explicit', key: keyC });
+    const runC = unchanged.json?.data?.runId ?? null;
+    const unchangedAgain = await create(m, { rerun: 'explicit', key: keyC });
+    const afterUnchanged = await runsOf(m.missionId);
+    clause('D07', 'rerun: true is reported only when a DISTINCT run was made: the unchanged contract, rerun with a key, is a new run (true), and its retry is that run (false)',
+      unchanged.status === 201 && typeof runC === 'string' && runC !== runA && runC !== runB
+        && unchanged.json?.data?.rerun === true
+        && unchangedAgain.status === 201 && unchangedAgain.json?.data?.runId === runC && unchangedAgain.json?.data?.rerun === false
+        && afterUnchanged.length === 3,
+      { first: brief(unchanged), retry: brief(unchangedAgain), runA, runB, runsForMission: afterUnchanged.length });
 
-    // TERMINALITY RELEASES THE MISSION -- FIXTURE: both runs written CANCELLED in this isolated database.
+    // TERMINALITY RELEASES THE MISSION -- FIXTURE: every run written CANCELLED in this isolated database.
     await endRuns(m.missionId);
-    const afterEnd = await create(edited(m, 'after both runs ended'));
-    const runC = afterEnd.json?.data?.runId ?? null;
+    const afterEnd = await create(edited(m, 'after every run ended'));
+    const runD = afterEnd.json?.data?.runId ?? null;
     clause('D08', 'once every run of the mission has ended, a changed contract needs no rerun intent: a distinct run, rerun: false',
-      afterEnd.status === 201 && typeof runC === 'string' && runC !== runA && runC !== runB
+      afterEnd.status === 201 && typeof runD === 'string' && ![runA, runB, runC].includes(runD)
         && afterEnd.json?.data?.rerun === false,
-      { fixture: 'runs written CANCELLED directly in the isolated database', status: afterEnd.status, runC,
-        rerunFlag: afterEnd.json?.data?.rerun ?? 'absent' });
+      { fixture: 'runs written CANCELLED directly in the isolated database', answer: brief(afterEnd) });
 
     // THE COMMONEST RERUN THERE IS: the same mission, unchanged, after its only run ended -- a retry after a failure.
     // Founder decision 3: "Preserve an EXPLICIT rerun path." FIXTURE: the run written CANCELLED.
@@ -462,16 +495,23 @@ try {
     const onlyRun = (await create(r2)).json?.data?.runId ?? null;
     await endRuns(r2.missionId);
     const retryPlain = await create(r2);
-    const retryExplicit = await create(r2, 'explicit');
+    const plainNext = String(retryPlain.json?.data?.next ?? '');
+    const keyR = rerunKey('after-end');
+    const retryExplicit = await create(r2, { rerun: 'explicit', key: keyR });
+    const newRun = retryExplicit.json?.data?.runId ?? null;
+    const retryExplicitAgain = await create(r2, { rerun: 'explicit', key: keyR });
     const afterRetry = await runsOf(r2.missionId);
-    clause('D09', 'an EXPLICIT rerun of the UNCHANGED contract after its run ended starts a new run (founder: preserve an explicit rerun path)',
-      retryExplicit.status === 201 && typeof retryExplicit.json?.data?.runId === 'string'
-        && retryExplicit.json.data.runId !== onlyRun && afterRetry.length === 2,
+    clause('D09', 'the UNCHANGED contract after its run ended: a plain re-post is the ended run, SAID to be final; an explicit rerun with a key is a new READY run; its retry is that run',
+      retryPlain.status === 201 && retryPlain.json?.data?.runId === onlyRun && retryPlain.json?.data?.rerun === false
+        && /already ended/i.test(plainNext) && !/driven by the Julius mission job/i.test(plainNext)
+        && retryExplicit.status === 201 && typeof newRun === 'string' && newRun !== onlyRun
+        && retryExplicit.json?.data?.rerun === true && retryExplicit.json?.data?.state === 'READY'
+        && retryExplicitAgain.json?.data?.runId === newRun && retryExplicitAgain.json?.data?.rerun === false
+        && afterRetry.length === 2,
       { fixture: 'the run written CANCELLED directly in the isolated database', endedRun: onlyRun,
-        plainRepost: { status: retryPlain.status, runId: retryPlain.json?.data?.runId ?? 'absent', state: retryPlain.json?.data?.state ?? 'absent' },
-        explicitRerun: { status: retryExplicit.status, runId: retryExplicit.json?.data?.runId ?? 'absent',
-          state: retryExplicit.json?.data?.state ?? 'absent', rerunFlag: retryExplicit.json?.data?.rerun ?? 'absent' },
-        runsForMission: afterRetry });
+        plainRepost: { answer: brief(retryPlain), state: retryPlain.json?.data?.state ?? 'absent', next: plainNext },
+        explicitRerun: { answer: brief(retryExplicit), state: retryExplicit.json?.data?.state ?? 'absent' },
+        retriedRerun: brief(retryExplicitAgain), runsForMission: afterRetry });
 
     // RACE 1: identical twins. Julius's guarantee, precisely: EXACTLY ONE run; a loser may be answered 503
     // bootstrap_persistence_failure, and its retry returns the one run. Not "every request gets 201".
@@ -503,6 +543,27 @@ try {
       // so whether these transactions overlapped is not observable from outside. Only a 503 would show it.
       { runsInDatabase: rivalRuns, firstAnswers: clash.map((r) => `${r.status}${r.json?.error?.kind ? ` ${r.json.error.kind}` : ''}`),
         sawRetryable503: clash.some((r) => r.status === 503), settled: settled.map((r) => r.status) });
+
+    // RACE 3: ONE intended rerun sent six times at once -- a double-click, a client retrying on a timeout. This is the
+    // double-bill the key exists to close. One key is one rerun: exactly one new run in the database; every settled
+    // answer is that run; and AT MOST one answer may say it made it. (Not "exactly one": rerun reports what THIS call
+    // did, and the call that inserted the run can still lose a later bootstrap write, answer 503, and have its retry
+    // truthfully report false. Two calls both claiming the rerun would be the defect.)
+    const r3 = fresh('race-rerun');
+    const liveRun = (await create(r3)).json?.data?.runId ?? null;
+    const oneKey = rerunKey('race');
+    const storm = await Promise.all(Array.from({ length: 6 }, () => create(r3, { rerun: 'explicit', key: oneKey })));
+    const calmed = await Promise.all(storm.map((r) => (r.status === 503 ? create(r3, { rerun: 'explicit', key: oneKey }) : r)));
+    const r3Runs = await runsOf(r3.missionId);
+    const rerunRuns = r3Runs.filter((r) => r.run_id !== liveRun);
+    const claims = calmed.filter((r) => r.json?.data?.rerun === true).length;
+    clause('D12', 'one rerun key sent six times at once makes EXACTLY ONE new run; every answer is that run, and no two claim to have made it',
+      typeof liveRun === 'string' && r3Runs.length === 2 && rerunRuns.length === 1
+        && storm.every((r) => r.status === 201 || (r.status === 503 && r.json?.error?.kind === 'bootstrap_persistence_failure'))
+        && calmed.every((r) => r.status === 201 && r.json?.data?.runId === rerunRuns[0]?.run_id)
+        && claims <= 1,
+      { liveRun, runsInDatabase: r3Runs, firstAnswers: storm.map(brief), settled: calmed.map(brief), claimsOfRerun: claims,
+        contended: storm.some((r) => r.status === 503) });
   } finally {
     await db.end();
   }
