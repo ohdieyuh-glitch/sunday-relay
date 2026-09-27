@@ -1,0 +1,355 @@
+{
+ "pass": "CP01",
+ "folder": "Wonderland/Authored/CP01_GoldenArrivalCheckpoint",
+ "tags": [
+  "WL_AUTHORED",
+  "WL_PASS_CP01",
+  "WL_TERRITORY_CHECKPOINT",
+  "WL_CHECKPOINT_ARRIVAL",
+  "WL_NATION_NEUTRAL"
+ ],
+ "actors": [],
+ "batches": [
+  {
+   "id": "CP01_Detail_Pinnacle_Grand_gold",
+   "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Pinnacle_Grand_gold.WL_Detail_Pinnacle_Grand_gold",
+   "material": "MI_V2_Gold",
+   "instances": [
+    [
+     -155.3,
+     -2039.6,
+     12.3,
+     0.0,
+     90.0,
+     0.0,
+     1.25,
+     1.25,
+     1.25
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "CP01_Detail_Pinnacle_Grand_roof",
+   "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Pinnacle_Grand_roof.WL_Detail_Pinnacle_Grand_roof",
+   "material": "MI_V2_RoofRose",
+   "instances": [
+    [
+     -155.3,
+     -2039.6,
+     12.3,
+     0.0,
+     90.0,
+     0.0,
+     1.25,
+     1.25,
+     1.25
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "CP01_Detail_Pinnacle_Grand_stone",
+   "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Pinnacle_Grand.WL_Detail_Pinnacle_Grand",
+   "material": "MI_V2_IvoryStone",
+   "instances": [
+    [
+     -155.3,
+     -2039.6,
+     12.3,
+     0.0,
+     90.0,
+     0.0,
+     1.25,
+     1.25,
+     1.25
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 60000.0
+  },
+  {
+   "id": "CP01_Market_Hanging_Sign_gold",
+   "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Hanging_Sign_gold.WL_Market_Hanging_Sign_gold",
+   "material": "MI_V2_Gold",
+   "instances": [
+    [
+     -155.0,
+     -1809.6,
+     342.3,
+     0.0,
+     89.9,
+     0.0,
+     1.35,
+     1.35,
+     1.35
+    ],
+    [
+     -154.6,
+     -1809.6,
+     342.3,
+     0.0,
+     89.8,
+     0.0,
+     1.35,
+     1.35,
+     1.35
+    ],
+    [
+     -358.1,
+     -2147.9,
+     342.3,
+     0.0,
+     208.1,
+     0.0,
+     1.35,
+     1.35,
+     1.35
+    ],
+    [
+     47.9,
+     -2147.4,
+     342.3,
+     0.0,
+     332.0,
+     0.0,
+     1.35,
+     1.35,
+     1.35
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "CP01_Market_Hanging_Sign_metal",
+   "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Hanging_Sign_metal.WL_Market_Hanging_Sign_metal",
+   "material": "MI_V2_Gold",
+   "instances": [
+    [
+     -155.0,
+     -1809.6,
+     342.3,
+     0.0,
+     89.9,
+     0.0,
+     1.35,
+     1.35,
+     1.35
+    ],
+    [
+     -154.6,
+     -1809.6,
+     342.3,
+     0.0,
+     89.8,
+     0.0,
+     1.35,
+     1.35,
+     1.35
+    ],
+    [
+     -358.1,
+     -2147.9,
+     342.3,
+     0.0,
+     208.1,
+     0.0,
+     1.35,
+     1.35,
+     1.35
+    ],
+    [
+     47.9,
+     -2147.4,
+     342.3,
+     0.0,
+     332.0,
+     0.0,
+     1.35,
+     1.35,
+     1.35
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "CP01_Market_Hanging_Sign_stone",
+   "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Hanging_Sign.WL_Market_Hanging_Sign",
+   "material": "MI_V2_IvoryStone",
+   "instances": [
+    [
+     -155.0,
+     -1809.6,
+     342.3,
+     0.0,
+     89.9,
+     0.0,
+     1.35,
+     1.35,
+     1.35
+    ],
+    [
+     -154.6,
+     -1809.6,
+     342.3,
+     0.0,
+     89.8,
+     0.0,
+     1.35,
+     1.35,
+     1.35
+    ],
+    [
+     -358.1,
+     -2147.9,
+     342.3,
+     0.0,
+     208.1,
+     0.0,
+     1.35,
+     1.35,
+     1.35
+    ],
+    [
+     47.9,
+     -2147.4,
+     342.3,
+     0.0,
+     332.0,
+     0.0,
+     1.35,
+     1.35,
+     1.35
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "CP01_Detail_Lantern_Hanging_glass",
+   "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Lantern_Hanging_glass.WL_Detail_Lantern_Hanging_glass",
+   "material": "MI_V2_GlassTeal",
+   "instances": [
+    [
+     -155.0,
+     -1809.6,
+     572.3,
+     0.0,
+     89.9,
+     0.0,
+     1.2,
+     1.2,
+     1.2
+    ],
+    [
+     -154.6,
+     -1809.6,
+     572.3,
+     0.0,
+     89.8,
+     0.0,
+     1.2,
+     1.2,
+     1.2
+    ],
+    [
+     -358.1,
+     -2147.9,
+     572.3,
+     0.0,
+     208.1,
+     0.0,
+     1.2,
+     1.2,
+     1.2
+    ],
+    [
+     47.9,
+     -2147.4,
+     572.3,
+     0.0,
+     332.0,
+     0.0,
+     1.2,
+     1.2,
+     1.2
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  },
+  {
+   "id": "CP01_Detail_Lantern_Hanging_gold",
+   "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Lantern_Hanging_gold.WL_Detail_Lantern_Hanging_gold",
+   "material": "MI_V2_Gold",
+   "instances": [
+    [
+     -155.0,
+     -1809.6,
+     572.3,
+     0.0,
+     89.9,
+     0.0,
+     1.2,
+     1.2,
+     1.2
+    ],
+    [
+     -154.6,
+     -1809.6,
+     572.3,
+     0.0,
+     89.8,
+     0.0,
+     1.2,
+     1.2,
+     1.2
+    ],
+    [
+     -358.1,
+     -2147.9,
+     572.3,
+     0.0,
+     208.1,
+     0.0,
+     1.2,
+     1.2,
+     1.2
+    ],
+    [
+     47.9,
+     -2147.4,
+     572.3,
+     0.0,
+     332.0,
+     0.0,
+     1.2,
+     1.2,
+     1.2
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false,
+   "cull_distance": 12000.0
+  }
+ ]
+}
