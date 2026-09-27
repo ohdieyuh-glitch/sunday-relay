@@ -197,10 +197,64 @@ public:
 					AllottedGeometry.ToPaintGeometry(FVector2f(W, H), FSlateLayoutTransform(FVector2f(X, Y))),
 					White, ESlateDrawEffect::None, Night(0.94f));
 			};
-			Band(0.0f, 0.0f, Size.X, T);
-			Band(0.0f, B, Size.X, Size.Y - B);
-			Band(0.0f, T, L, B - T);
-			Band(R, T, Size.X - R, B - T);
+			// ---- AND THE EDGE IS FEATHERED, WHICH IS THE WHOLE OF THE FOUNDER'S "REMOVE THE SQUARE".
+			//
+			// FOUNDER, 2026-09-26: "There is a visible rectangular tonal/background boundary around the brain
+			// presentation. REMOVE IT ... Do NOT simply change its color to something closer to white ...
+			// REMOVE the unintended visible boundary so the brain exists naturally in the continuous white
+			// Project Brain space."
+			//
+			// This is that boundary, and it is structural rather than a colour mistake. Inside the hole the eye
+			// sees the WORLD -- the brain chamber -- and outside it sees this wash. Two surfaces that are close
+			// but not identical, meeting along a hard axis-aligned line, read as a drawn rectangle however
+			// carefully the two are matched. Matching them better is chasing the wrong thing: any residual
+			// difference still has a crisp edge to live on.
+			//
+			// So the bands stop short of the hole and the gap between is filled with a ramp -- full wash at the
+			// outside, nothing at all where it meets the world. There is no line for the eye to find, and the
+			// wash still does its real job, which is stopping the garden showing through the rest of the panel.
+			//
+			// Outward only. A feather drawn INTO the hole would veil the brain, which is the thing the hole was
+			// cut for.
+			const float Feather = 54.0f;
+			const float FL = FMath::Max(L - Feather, 0.0f);
+			const float FT = FMath::Max(T - Feather, 0.0f);
+			const float FR = FMath::Min(R + Feather, Size.X);
+			const float FB = FMath::Min(B + Feather, Size.Y);
+
+			Band(0.0f, 0.0f, Size.X, FT);
+			Band(0.0f, FB, Size.X, Size.Y - FB);
+			Band(0.0f, FT, FL, FB - FT);
+			Band(FR, FT, Size.X - FR, FB - FT);
+
+			// The ring between the solid bands and the hole, in steps that fade to nothing at the edge.
+			auto Fade = [&](float X, float Y, float W, float H, float Alpha)
+			{
+				if (W <= 0.5f || H <= 0.5f || Alpha <= 0.002f) { return; }
+				FSlateDrawElement::MakeBox(OutDrawElements, Layer,
+					AllottedGeometry.ToPaintGeometry(FVector2f(W, H), FSlateLayoutTransform(FVector2f(X, Y))),
+					White, ESlateDrawEffect::None, Night(0.94f * Alpha));
+			};
+			const int32 Steps = 18;
+			for (int32 Step = 0; Step < Steps; ++Step)
+			{
+				// 1 at the outside of the ring, 0 where it meets the world.
+				const float Near = static_cast<float>(Step) / static_cast<float>(Steps);
+				const float Far = static_cast<float>(Step + 1) / static_cast<float>(Steps);
+				const float Alpha = 1.0f - Far;
+				const float TopY = FMath::Lerp(FT, T, Near);
+				const float TopH = FMath::Lerp(FT, T, Far) - TopY;
+				const float BotY = FMath::Lerp(FB, B, Far);
+				const float BotH = FMath::Lerp(FB, B, Near) - BotY;
+				const float LeftX = FMath::Lerp(FL, L, Near);
+				const float LeftW = FMath::Lerp(FL, L, Far) - LeftX;
+				const float RightX = FMath::Lerp(FR, R, Far);
+				const float RightW = FMath::Lerp(FR, R, Near) - RightX;
+				Fade(FL, TopY, FR - FL, TopH, Alpha);
+				Fade(FL, BotY, FR - FL, BotH, Alpha);
+				Fade(LeftX, T, LeftW, B - T, Alpha);
+				Fade(RightX, T, RightW, B - T, Alpha);
+			}
 		}
 
 		// THE SNOW GOES ON HERE, straight after the field and before anything else -- so it falls BEHIND the

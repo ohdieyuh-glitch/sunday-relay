@@ -1,0 +1,166 @@
+{
+ "name": "zc_brain_square",
+ "started": "2026-09-26 21:13:21",
+ "status": "measured; the verdict is the toggle captures",
+ "tests": [
+  {
+   "id": "Q00",
+   "name": "Project Brain is open, with the wardrobe shut",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "Q01",
+   "name": "every suspect was hidden and photographed in turn",
+   "pass": true,
+   "detail": {
+    "toggled": [
+     {
+      "label": "WL_ProjectBrainSculpture",
+      "capture": "hidden_WL_ProjectBrainSculpture.png"
+     },
+     {
+      "label": "WL_SkinStage",
+      "capture": "hidden_WL_SkinStage.png"
+     },
+     {
+      "label": "WL_SkinStage_Dog",
+      "capture": "hidden_WL_SkinStage_Dog.png"
+     },
+     {
+      "label": "V2_Cloud_veil_04",
+      "capture": "hidden_V2_Cloud_veil_04.png"
+     },
+     {
+      "label": "V2_Cloud_veil_01",
+      "capture": "hidden_V2_Cloud_veil_01.png"
+     },
+     {
+      "label": "V2_Cloud_veil_02",
+      "capture": "hidden_V2_Cloud_veil_02.png"
+     },
+     {
+      "label": "V2_Cloud_veil_00",
+      "capture": "hidden_V2_Cloud_veil_00.png"
+     },
+     {
+      "label": "V2_Cloud_veil_06",
+      "capture": "hidden_V2_Cloud_veil_06.png"
+     },
+     {
+      "label": "V2_Cloud_veil_03",
+      "capture": "hidden_V2_Cloud_veil_03.png"
+     },
+     {
+      "label": "V2_Cloud_veil_05",
+      "capture": "hidden_V2_Cloud_veil_05.png"
+     }
+    ],
+    "note": "the owner of the rectangle is whichever capture no longer has it. This job does not guess; the next step reads the pictures."
+   }
+  }
+ ],
+ "suspects": [
+  {
+   "label": "WL_ProjectBrainSculpture",
+   "class": "WonderlandBrainSculpture",
+   "metres_from_dog": 2.2
+  },
+  {
+   "label": "WL_SkinStage",
+   "class": "WonderlandSkinStage",
+   "metres_from_dog": 998.9
+  },
+  {
+   "label": "WL_SkinStage_Dog",
+   "class": "WonderlandCompanionEmbodiment",
+   "metres_from_dog": 998.9
+  },
+  {
+   "label": "V2_Cloud_veil_04",
+   "class": "StaticMeshActor",
+   "metres_from_dog": 9606.5
+  },
+  {
+   "label": "V2_Cloud_veil_01",
+   "class": "StaticMeshActor",
+   "metres_from_dog": 10661.8
+  },
+  {
+   "label": "V2_Cloud_veil_02",
+   "class": "StaticMeshActor",
+   "metres_from_dog": 11681.0
+  },
+  {
+   "label": "V2_Cloud_veil_00",
+   "class": "StaticMeshActor",
+   "metres_from_dog": 11817.2
+  },
+  {
+   "label": "V2_Cloud_veil_06",
+   "class": "StaticMeshActor",
+   "metres_from_dog": 11841.2
+  },
+  {
+   "label": "V2_Cloud_veil_03",
+   "class": "StaticMeshActor",
+   "metres_from_dog": 12397.6
+  },
+  {
+   "label": "V2_Cloud_veil_05",
+   "class": "StaticMeshActor",
+   "metres_from_dog": 14507.6
+  },
+  {
+   "label": "V2_Cloud_veil_07",
+   "class": "StaticMeshActor",
+   "metres_from_dog": 17292.1
+  }
+ ],
+ "toggled": [
+  {
+   "label": "WL_ProjectBrainSculpture",
+   "capture": "hidden_WL_ProjectBrainSculpture.png"
+  },
+  {
+   "label": "WL_SkinStage",
+   "capture": "hidden_WL_SkinStage.png"
+  },
+  {
+   "label": "WL_SkinStage_Dog",
+   "capture": "hidden_WL_SkinStage_Dog.png"
+  },
+  {
+   "label": "V2_Cloud_veil_04",
+   "capture": "hidden_V2_Cloud_veil_04.png"
+  },
+  {
+   "label": "V2_Cloud_veil_01",
+   "capture": "hidden_V2_Cloud_veil_01.png"
+  },
+  {
+   "label": "V2_Cloud_veil_02",
+   "capture": "hidden_V2_Cloud_veil_02.png"
+  },
+  {
+   "label": "V2_Cloud_veil_00",
+   "capture": "hidden_V2_Cloud_veil_00.png"
+  },
+  {
+   "label": "V2_Cloud_veil_06",
+   "capture": "hidden_V2_Cloud_veil_06.png"
+  },
+  {
+   "label": "V2_Cloud_veil_03",
+   "capture": "hidden_V2_Cloud_veil_03.png"
+  },
+  {
+   "label": "V2_Cloud_veil_05",
+   "capture": "hidden_V2_Cloud_veil_05.png"
+  }
+ ],
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\brain_square",
+ "finished": "2026-09-26 21:14:37",
+ "seconds": 76.58,
+ "log": "Q00 PASS Project Brain is open, with the wardrobe shut {}\nQ_SUSPECTS INFO actors that could be painting a rectangle {'found': [{'label': 'WL_ProjectBrainSculpture', 'class': 'WonderlandBrainSculpture', 'metres_from_dog': 2.2}, {'label': 'WL_SkinStage', 'class': 'WonderlandSkinStage', 'metres_from_dog': 998.9}, {'label': 'WL_SkinStage_Dog', 'class': 'WonderlandCompanionEmbodiment', 'metres_from_dog': 998.9}, {'label': 'V2_Cloud_veil_04', 'class': 'StaticMeshActor', 'metres_from_dog': 9606.5}, {'label': 'V2_Cloud_veil_01', 'class': 'StaticMeshActor', 'metres_from_dog': 10661.8}, {'label': 'V2_Cloud_veil_02', 'class': 'StaticMeshActor', 'metres_from_dog': 11681.0}, {'label': 'V2_Cloud_veil_00', 'class': 'StaticMeshActor', 'metres_from_dog': 11817.2}, {'label': 'V2_Cloud_veil_06', 'class': 'StaticMeshActor', 'metres_from_dog': 11841.2}, {'label': 'V2_Cloud_veil_03', 'class': 'StaticMeshActor', 'metres_from_dog': 12397.6}, {'label': 'V2_Cloud_veil_05', 'class': 'StaticMeshActor', 'metres_from_dog': 14507.6}, {'label': 'V2_Cloud_veil_07', 'class': 'StaticMeshActor', 'metres_from_dog': 17292.1}]}\nQ01 PASS every suspect was hidden and photographed in turn {'toggled': [{'label': 'WL_ProjectBrainSculpture', 'capture': 'hidden_WL_ProjectBrainSculpture.png'}, {'label': 'WL_SkinStage', 'capture': 'hidden_WL_SkinStage.png'}, {'label': 'WL_SkinStage_Dog', 'capture': 'hidden_WL_SkinStage_Dog.png'}, {'label': 'V2_Cloud_veil_04', 'capture': 'hidden_V2_Cloud_veil_04.png'}, {'label': 'V2_Cloud_veil_01', 'capture': 'hidden_V2_Cloud_veil_01.png'}, {'label': 'V2_Cloud_veil_02', 'capture': 'hidden_V2_Cloud_veil_02.png'}, {'label': 'V2_Cloud_veil_00', 'capture': 'hidden_V2_Cloud_veil_00.png'}, {'label': 'V2_Cloud_veil_06', 'capture': 'hidden_V2_Cloud_veil_06.png'}, {'label': 'V2_Cloud_veil_03', 'capture': 'hidden_V2_Cloud_veil_03.png'}, {'label': 'V2_Cloud_veil_05', 'capture': 'hidden_V2_Cloud_veil_05.png'}], 'note': 'the owner of the rectangle is whichever capture no longer has it. This job does not guess; the next step reads the pictures.'}\n"
+}
