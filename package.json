@@ -23,7 +23,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "relay:build": "esbuild src/relay/cli/main.ts --bundle --platform=node --format=cjs --outfile=dist-relay/cli.cjs --banner:js=\"#!/usr/bin/env node\" --log-level=warning",
-    "relay:bridge:build": "esbuild relay-bridge/server.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/server.cjs --external:@anthropic-ai/claude-agent-sdk --log-level=warning",
+    "relay:bridge:build": "esbuild relay-bridge/server.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/server.cjs --external:@anthropic-ai/claude-agent-sdk --external:pg --log-level=warning",
     "relay:bridge": "npm run relay:bridge:build --silent && node dist-relay-bridge/server.cjs",
     "relay:julius:build": "esbuild relay-bridge/julius-live-mission.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-live-mission.cjs --external:@anthropic-ai/claude-agent-sdk --external:pg --log-level=warning",
     "relay:julius:mission": "npm run relay:julius:build --silent && node dist-relay-bridge/julius-live-mission.cjs",

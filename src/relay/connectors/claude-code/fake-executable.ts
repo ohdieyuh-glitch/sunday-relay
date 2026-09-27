@@ -22,6 +22,8 @@ export type FakeScenario =
   | 'wrong_session_on_resume'
   | 'max_turns'
   | 'execution_error'
+  | 'error_subtype_flag_false'
+  | 'success_terminal_deferred'
   | 'timeout'
   | 'cancellation'
   | 'output_overflow'
@@ -136,6 +138,16 @@ switch (SPEC.scenario) {
   case 'execution_error':
     emit({ type: 'system', subtype: 'init', session_id: sessionId, model: 'fake-model', cwd: process.cwd(), tools: ['Edit'] });
     emit({ type: 'result', subtype: 'error_during_execution', is_error: true, session_id: sessionId, num_turns: 1, duration_ms: 8 });
+    break;
+  // A WELL-FORMED REPORT under a result that is not a success. If either were
+  // read from is_error alone it would be trusted; both must be refused.
+  case 'error_subtype_flag_false':
+    emit({ type: 'system', subtype: 'init', session_id: sessionId, model: 'fake-model', cwd: process.cwd(), tools: ['Edit'] });
+    emit({ type: 'result', subtype: 'error_max_turns', is_error: false, session_id: sessionId, result: reportBlock('completed', [SPEC.editPath]), num_turns: 6, duration_ms: 20 });
+    break;
+  case 'success_terminal_deferred':
+    emit({ type: 'system', subtype: 'init', session_id: sessionId, model: 'fake-model', cwd: process.cwd(), tools: ['Edit'] });
+    emit({ type: 'result', subtype: 'success', is_error: false, terminal_reason: 'tool_deferred', session_id: sessionId, result: reportBlock('completed', [SPEC.editPath]), num_turns: 2, duration_ms: 9 });
     break;
   case 'timeout':
   case 'cancellation':

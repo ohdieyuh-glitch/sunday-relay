@@ -373,6 +373,39 @@ export async function disconnectBrowser(input: {
 /* ---------------------------------------------------- sign in with GitHub */
 
 /**
+ * THE URL, RETURNED TO ITS PUBLIC ADDRESS.
+ *
+ * One `history.replaceState` doing one thing: dropping the fragment. It is the
+ * only cleanup an abandoned or refused sign-in needs, and both things it removes
+ * are things that must go — a one-time claim that would otherwise linger in
+ * history, in a share, and in every subsequent reload; and an in-product route
+ * that would send a reload back past the public landing.
+ *
+ * WHAT IT DOES NOT TOUCH, deliberately: the bridge session, the C.A.R.D., the
+ * connected repository, and every other preference this browser holds. A person
+ * who declined to sign in has not asked to be signed out of anything, and a
+ * cleanup that reaches further than the fault it is clearing is how an
+ * abandoned attempt turns into lost work.
+ */
+export function stripSignInClaim(): void {
+  if (typeof window === 'undefined') return;
+  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+}
+
+/**
+ * The participant started signing in and decided not to finish.
+ *
+ * An attempt is not an authentication, and abandoning one must cost nothing.
+ * This clears exactly the transient state an abandoned attempt leaves behind —
+ * see {@link stripSignInClaim} — and leaves every durable thing alone. The
+ * CALLER owns returning the interface to the public landing; this owns the URL,
+ * so that a reload agrees with what the caller just rendered.
+ */
+export function abandonSignInAttempt(): void {
+  stripSignInClaim();
+}
+
+/**
  * BEGIN SIGN IN WITH GITHUB. Asks the bridge for the authorize URL and sends the
  * browser there. No operator token, no grant carried by hand — a beta user signs
  * in as themselves. The bridge holds the client secret; this only ever sees a
@@ -430,6 +463,14 @@ export async function completeGitHubSignIn(input: {
       cache: 'no-store',
     });
     if (!res.ok) {
+      // THE CLAIM IS SPENT, SO IT LEAVES THE URL. The bridge answered and
+      // refused it: expired, already redeemed, or never valid, and no number of
+      // reloads will change that answer. Leaving it in the fragment made every
+      // subsequent load re-POST the same dead claim and re-raise the same error,
+      // which is a loop a person cannot leave by reloading — the one thing they
+      // will certainly try. A network EXCEPTION is different and is not cleared
+      // below: nothing was decided there, and the claim may still be good.
+      (input.clearClaim ?? stripSignInClaim)();
       return { signedIn: false, message: 'That sign-in link is expired or was already used. Please sign in again.' };
     }
     const payload = await res.json() as {
@@ -445,11 +486,7 @@ export async function completeGitHubSignIn(input: {
       participantId: typeof payload.data?.participantId === 'string' ? payload.data.participantId : null,
     });
     // Strip the claim from the URL so it never lingers in history or a share.
-    (input.clearClaim ?? (() => {
-      if (typeof window !== 'undefined') {
-        window.history.replaceState(null, '', window.location.pathname + window.location.search);
-      }
-    }))();
+    (input.clearClaim ?? stripSignInClaim)();
     return { signedIn: true, message: null };
   } catch {
     return { signedIn: false, message: 'The Relay Bridge could not be reached.' };

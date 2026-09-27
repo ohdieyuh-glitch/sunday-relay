@@ -1,7 +1,9 @@
 import type { JuliusCardPolicy } from './julius-policy';
-import { flattenDiagnostics, JuliusDispatchError, JuliusProviderRouter, safeReviewDiagnostics, type JuliusDispatchAllocation, type JuliusProviderResult } from './julius-router';
+import { flattenDiagnostics, JuliusDispatchError, JuliusProviderRouter, safeReviewDiagnostics, type JuliusDispatchAllocation, type JuliusDispatchWorkspace, type JuliusProviderResult } from './julius-router';
 import type { JuliusEvidence, JuliusTask, JuliusWorker, JuliusWorkerRole } from './julius-runtime';
 import type { JuliusContractReviewCharge } from './julius-task-contract';
+import { isJuliusContentDigest, juliusDurableArtifactRef } from './julius-artifact-reference';
+import { juliusEvidenceAuthority, juliusMintedEvidenceId } from './julius-worker-authority';
 
 /** The cost a provider reported on its own result, or null when it reported none. */
 const reportedUsdMicros=(result:JuliusProviderResult|null):number|null=>{
@@ -49,6 +51,88 @@ const successDiagnostics=(request:JuliusExecutionRequest,result:JuliusProviderRe
   contractBindingDigest:request.contract===undefined?null:request.contract.binding.bindingDigest,
  }));
 };
+/**
+ * THE DECLARED DEADLINE, ENFORCED — by Julius, not by the adapter it describes.
+ *
+ * `JuliusWorker.timeoutMs` was read in exactly one place:
+ * `JuliusWorkerRegistry.register`, which checks it is a positive integer and
+ * never consults it again. Every adapter bounds ITSELF — the OpenAI client's
+ * `timeout`, the hosted runner's abort timer, `runHermesReview`'s window — so
+ * the declared number was a MIRROR of adapter behaviour, true only for as long
+ * as each adapter's own timer kept working. Nothing stood behind it. A worker
+ * whose timer never fires, or whose promise never settles, held the dispatch
+ * open until the lease expired and took the job's wall clock with it.
+ *
+ * This is that missing layer, and only that layer: it does not replace an
+ * adapter's own deadline and must never be reached on a healthy run, because
+ * every adapter is configured to stop first. Reaching it is itself the finding.
+ *
+ * TWO MECHANISMS, BECAUSE ONE IS NOT ENOUGH. The signal is forwarded so a
+ * well-behaved adapter is told to stop and can release what it holds; the race
+ * is what actually returns, because an adapter that ignores the signal is
+ * precisely the case this exists for. The abandoned promise gets a `catch` so
+ * its eventual rejection cannot surface as an unhandled rejection minutes after
+ * the task has already failed.
+ */
+class JuliusWorkerDeadlineExceeded extends Error{
+ constructor(readonly declaredTimeoutMs:number){super('worker_deadline_exceeded');this.name='JuliusWorkerDeadlineExceeded';}
+}
+/**
+ * AN ABORT FROM OUTSIDE ENDS THE DISPATCH, not merely asks the adapter to.
+ *
+ * The external signal used to be forwarded and nothing more, so the race kept
+ * waiting on an adapter that ignored it — and a result that arrived after the
+ * abort was persisted, accepted and settled as if nobody had stopped it. The
+ * cut is now part of the race, settled BEFORE the adapter is told, so the
+ * reason recorded is the one that fired: an outside abort is a cancellation, the
+ * deadline is the deadline. Whatever the signal's owner said about why — a lost
+ * lease — travels as the failure class.
+ */
+class JuliusDispatchCancelled extends Error{
+ constructor(readonly reasonCode:string){super('dispatch_cancelled');this.name='JuliusDispatchCancelled';}
+}
+const cancellationReasonOf=(signal:AbortSignal):string=>{
+ const reason:unknown=signal.reason;
+ return typeof reason==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(reason)?reason:'dispatch_cancelled';
+};
+async function dispatchWithinDeadline<T>(
+ declaredTimeoutMs:number,
+ externalSignal:AbortSignal|undefined,
+ run:(signal:AbortSignal)=>Promise<T>,
+):Promise<T>{
+ const controller=new AbortController();
+ let cut:(error:Error)=>void=()=>undefined;
+ const race=new Promise<never>((_resolve,reject)=>{cut=reject;});
+ // Settle first, then tell the adapter: the reason recorded is the one that fired.
+ // The adapter is told the same reason the record keeps.
+ const forward=():void=>{const reasonCode=cancellationReasonOf(externalSignal!);cut(new JuliusDispatchCancelled(reasonCode));controller.abort(reasonCode);};
+ externalSignal?.addEventListener('abort',forward,{once:true});
+ let timer:ReturnType<typeof setTimeout>|undefined;
+ const running=run(controller.signal);
+ try{
+  timer=setTimeout(()=>{cut(new JuliusWorkerDeadlineExceeded(declaredTimeoutMs));controller.abort('worker_deadline_exceeded');},declaredTimeoutMs);
+  return await Promise.race([running,race]);
+ }finally{
+  if(timer!==undefined)clearTimeout(timer);
+  externalSignal?.removeEventListener('abort',forward);
+  // The race may have abandoned it. Nothing reads the result; this only stops
+  // a later rejection from arriving with no listener.
+  void running.catch(()=>{});
+ }
+}
+/**
+ * THE CARRIED DIAGNOSTICS, OR NOTHING AT ALL.
+ *
+ * Absent and empty are different claims. A boundary that reported no
+ * structural facts is not the same as one that reported an empty set, and an
+ * always-present `{}` would also change the shape of every outcome that has
+ * nothing to say — which is most of them, and none of which this repair is
+ * about. So the key appears only when there is something under it.
+ */
+const carriedDiagnostics=(failure:JuliusDispatchError):{diagnostics?:Record<string,string|number|boolean|null>}=>{
+ const flat=flattenDiagnostics(failure.diagnostics);
+ return Object.keys(flat).length===0?{}:{diagnostics:flat};
+};
 export interface JuliusExecutionClaim { readonly runId:string;readonly projectId:string;readonly taskId:string;readonly leaseOwner:string;readonly leaseGeneration:number;readonly task:JuliusTask;readonly capability:string;readonly contextId:string; }
 export interface JuliusResourceRequest { readonly usdMicros:number;readonly inputTokens:number;readonly outputTokens:number;readonly toolCalls:number;readonly runtimeMs:number; }
 export interface JuliusResourceReservation { readonly reservationId:string;readonly state:'RESERVED'|'DENIED';readonly denialReason:string|null; }
@@ -66,7 +150,15 @@ export interface JuliusExecutionPorts {
   /** `usdMicros` is what the failed attempt billed, when the boundary reported it. Spent money is charged, not released. */
   release(input:{claim:JuliusExecutionClaim;reservationId:string;reason:string;usdMicros?:number|null;spendUnknown?:boolean}):Promise<void>;
   persistEvidence(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;evidence:readonly JuliusEvidence[]}):Promise<void>;
-  acceptResult(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;result:JuliusProviderResult;idempotencyKey:string}):Promise<{duplicate:boolean}>;
+  /**
+   * `evidence` is what this result CITES — the kept evidence, already
+   * persisted by the call before this one. The result row has carried an
+   * `evidence_ids` column since #173 and was given `[]` on every attempt,
+   * including attempts that had just written evidence: a durable row asserting
+   * "this result cited nothing" as a fact. Unknown is not zero, and neither is
+   * an empty list when the answer is known.
+   */
+  acceptResult(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;result:JuliusProviderResult;idempotencyKey:string;evidence:readonly JuliusEvidence[]}):Promise<{duplicate:boolean}>;
   /**
    * `taskId` is the task the event is ABOUT. It was absent, and the events
    * this coordinator writes carried none — so on the failure path that matters
@@ -76,7 +168,7 @@ export interface JuliusExecutionPorts {
    */
   recordEvent(input:{runId:string;projectId:string;taskId:string|null;type:JuliusExecutionEventType;idempotencyKey:string;payload:Record<string,unknown>}):Promise<void>;
 }
-export type JuliusExecutionEventType='worker.selected'|'budget.reserved'|'budget.denied'|'worker.dispatched'|'worker.completed'|'retry.scheduled'|'task.failed';
+export type JuliusExecutionEventType='worker.selected'|'budget.reserved'|'budget.denied'|'worker.dispatched'|'worker.completed'|'retry.scheduled'|'task.failed'|'evidence.refused';
 export interface JuliusExecutionRequest { readonly claim:JuliusExecutionClaim;readonly policy:JuliusCardPolicy;readonly role:JuliusWorkerRole;readonly taskType:string;readonly capability:string;readonly resources:JuliusResourceRequest;readonly operationId:string;readonly signal?:AbortSignal;/** Workers already tried for this task. Additive: omitted behaves exactly as before. */readonly excludedWorkerIds?:readonly string[];/** The execution ceiling Julius reserved for this dispatch, handed to the adapter. Additive. */readonly allocation?:JuliusDispatchAllocation;/** The locked task contract this dispatch runs under, as a review charge. Additive. */readonly contract?:JuliusContractReviewCharge;
  /**
   * WHICH DISPATCH THIS IS — 1, 2 or 3 of the task's attempt ceiling.
@@ -96,18 +188,133 @@ export interface JuliusExecutionRequest { readonly claim:JuliusExecutionClaim;re
   * stack rewrote. Adding it before #238 landed would have manufactured a
   * conflict for no gain. Optional, so a caller that omits it behaves exactly
   * as before. */
- readonly attempt?:number; }
+ readonly attempt?:number;
+ /** The one undo Julius authorises before this dispatch starts. Additive; absent means nothing is undone. */
+ readonly workspace?:JuliusDispatchWorkspace; }
 /**
  * `failureClass` is the connector's safe subclass when one is known, already
  * narrowed to a machine token by {@link safeFailureClass}. It is additive:
  * every existing reader keeps working, and `null` means "not classified",
  * never "fine".
  */
-export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerId:string;readonly duplicate:boolean;/** What the worker proposed for its own task contract, unsanitised. Julius decides. */readonly contractProposal?:unknown}|{readonly status:'RETRY'|'FAILED'|'DENIED';readonly code:string;readonly failureClass?:string|null};
+/**
+ * WHAT AN ATTEMPT OBSERVED ABOUT ITSELF, IN NUMBERS, ON THE PATH THAT SUCCEEDED.
+ *
+ * `JuliusTrajectoryEvent` has carried `providerId`, `usdMicros`, `inputTokens`,
+ * `outputTokens` and `durationMs` since it was written, and on a successful
+ * dispatch every one of them was null — because the pipeline had nothing to put
+ * there. The coordinator saw the provider's usage, committed the budget with it,
+ * and returned `{status, workerId, duplicate}`.
+ *
+ * SO EVERY METRIC DERIVED FROM THE TRAJECTORY WAS STRUCTURALLY EMPTY.
+ * `summariseJuliusEvals` reads cost and duration off DISPATCH rows:
+ * `knownUsdMicros` was always 0, `unknownCostComponents` always equalled the
+ * dispatch count, `costComplete` was always false, and `averageDurationMs` was
+ * always null — for every project, every runtime version and every mission that
+ * has ever run. Not because a provider was silent. Because nobody was asked.
+ *
+ * IT IS NOT A SECOND RECORD OF THE MONEY. `budget.settled` remains the ledger
+ * and the authority; this is the same figure on the row the EVALS read, which is
+ * the row that was designed to hold it. Where the provider reported nothing the
+ * field stays null, so an unreported cost still cannot become a zero.
+ */
+export interface JuliusAttemptMeasurement{
+ /** The provider that actually answered, as the adapter reported itself. */
+ readonly providerId:string;
+ /** What the boundary billed, or null when it reported nothing. Never 0 for unknown. */
+ readonly usdMicros:number|null;
+ readonly inputTokens:number|null;
+ readonly outputTokens:number|null;
+ /** Wall time the runtime observed for the attempt, or null. */
+ readonly durationMs:number|null;
+}
+/**
+ * READ THE NUMBERS OFF THE PROVIDER'S OWN REPORT, and nothing else.
+ *
+ * `usage` is `unknown` by design — it is the provider's shape, not Julius's — so
+ * every field is checked one at a time and a value that is not a finite,
+ * non-negative integer is null. `validateTrajectoryEvent` refuses anything else,
+ * and a NaN reaching the durable row would be a number nobody could act on.
+ */
+function measurementOf(worker:{readonly providerId:string},result:{readonly usage:unknown}):JuliusAttemptMeasurement{
+ const usage=(typeof result.usage==='object'&&result.usage!==null?result.usage:{}) as Record<string,unknown>;
+ const count=(value:unknown):number|null=>
+  typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?value:null;
+ return{
+  providerId:worker.providerId,
+  usdMicros:count(usage.usdMicros),
+  inputTokens:count(usage.inputTokens),
+  outputTokens:count(usage.outputTokens),
+  // `runtimeMs` is what the adapters report; the trajectory column is `durationMs`.
+  durationMs:count(usage.runtimeMs),
+ };
+}
 
-const normalizedEvidence=(claim:JuliusExecutionClaim,worker:JuliusWorker,result:JuliusProviderResult):JuliusEvidence[]=>{
+export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerId:string;readonly duplicate:boolean;/** What this attempt measured. Absent only where no provider answered. */readonly measured?:JuliusAttemptMeasurement;/** What the worker proposed for its own task contract, unsanitised. Julius decides. */readonly contractProposal?:unknown;/** A coder's request for architect guidance, unsanitised. */readonly guidanceRequest?:unknown;/** An architect's guidance packet, unsanitised. */readonly guidance?:unknown;/** What a continuation segment resumes from, unsanitised. Julius rebuilds it. */readonly segmentResume?:unknown;/** What a worker of any slot needs Julius to go and look at, unsanitised. */readonly researchAsks?:unknown;/** A reviewer's canonical verdict, unsanitised. Julius decides what it means. */readonly reviewVerdict?:unknown;/** An architect's rebuttal to a disagreement, unsanitised. */readonly rebuttal?:unknown;/** An architect's structured architecture state, unsanitised. Advisory, never the contract. */readonly architecture?:unknown;/** An architect's final architecture consistency assessment, unsanitised. */readonly consistency?:unknown;/** A Coding Agent's workspace change set and report, unsanitised. */readonly implementation?:unknown;/** A Coding Agent's observations about the design, unsanitised. */readonly architectureObservations?:unknown}|{
+ readonly status:'RETRY'|'FAILED'|'DENIED';
+ readonly code:string;
+ readonly failureClass?:string|null;
+ /**
+  * THE FACTS THE BOUNDARY REPORTED, ALREADY FLATTENED AND SAFE, so the caller
+  * that owns the TASK can put them on the row that ends it.
+  *
+  * This arm used to carry the code and the class and nothing else. The
+  * coordinator flattened the adapter's diagnostics onto its OWN event and then
+  * dropped them, so `julius-task-pipeline`'s terminal `task.failed` — the row
+  * written when a run's autonomy declines a retry, and the row a reader opens
+  * first to ask why a paid mission ended — could not name the served model, the
+  * response id, the tokens, or what the coder had already spent before it timed
+  * out. Not by omission: this type gave the pipeline nothing to write.
+  *
+  * `diag_`-prefixed, so it can be spread beside a facts object without any key
+  * of its own colliding. Absent when the boundary reported none, which is not
+  * the same claim as reporting an empty set.
+  */
+ readonly diagnostics?:Record<string,string|number|boolean|null>;
+ /**
+  * WHAT THE FAILED ATTEMPT CHANGED IN THE WORKSPACE, unsanitised.
+  *
+  * A failed attempt still edited the directory, and those edits used to reach
+  * the record only by turning up inside the NEXT attempt's diff — credited to
+  * an attempt that did not make them. The boundary carries the same shape a
+  * completed dispatch returns; the kernel reads it with its own allowlist and
+  * decides what it means. Absent when nothing was observed, which a cancelled
+  * dispatch must not confuse with an empty one.
+  */
+ readonly implementation?:unknown;
+};
+
+/**
+ * A piece of evidence a worker reported that Julius will not keep, and why.
+ * The position is the item's place in the result, so the refusal names exactly
+ * which claim it was.
+ */
+interface RefusedEvidence{readonly index:number;readonly evidenceType:string;readonly status:string;readonly reasonCode:string}
+/**
+ * WHAT A RESULT'S EVIDENCE MAY BE, AND WHAT IT IS CALLED.
+ *
+ * The SHAPE is still refused whole — a malformed item fails the dispatch, as it
+ * always has. What changed is AUTHORITY: an item of a type the producing role
+ * may not author is set aside and named, rather than kept. And the id is
+ * Julius's, whatever the worker wrote: position under the producing task and
+ * lease, so a replay writes the same rows and no worker can name another
+ * task's.
+ */
+const normalizedEvidence=(claim:JuliusExecutionClaim,worker:JuliusWorker,result:JuliusProviderResult,role:string):{readonly kept:JuliusEvidence[];readonly refused:RefusedEvidence[]}=>{
   if(result.workerId!==worker.workerId||result.providerId!==worker.providerId||!result.safeSummary.trim()||!Array.isArray(result.evidence))throw new JuliusDispatchError('INVALID_REQUEST',false,'Provider returned a malformed or mismatched result.');
-  return result.evidence.map((raw,index)=>{if(raw===null||typeof raw!=='object')throw new JuliusDispatchError('INVALID_REQUEST',false,'Provider returned malformed evidence.');const value=raw as Record<string,unknown>;if(!['PASSED','FAILED','INCONCLUSIVE'].includes(String(value.status))||typeof value.type!=='string'||typeof value.safeSummary!=='string')throw new JuliusDispatchError('INVALID_REQUEST',false,'Provider returned malformed evidence.');return{evidenceId:String(value.evidenceId??`${claim.taskId}:${claim.leaseGeneration}:${index}`),missionId:claim.task.missionId,taskId:claim.taskId,workerId:worker.workerId,type:value.type as JuliusEvidence['type'],status:value.status as JuliusEvidence['status'],safeSummary:value.safeSummary,artifactRef:typeof value.artifactRef==='string'?value.artifactRef:null,integrityHash:typeof value.integrityHash==='string'?value.integrityHash:null,occurredAt:typeof value.occurredAt==='string'?value.occurredAt:new Date().toISOString()};});
+  const refused:RefusedEvidence[]=[];
+  const kept=result.evidence.map((raw,index)=>{if(raw===null||typeof raw!=='object')throw new JuliusDispatchError('INVALID_REQUEST',false,'Provider returned malformed evidence.');const value=raw as Record<string,unknown>;if(!['PASSED','FAILED','INCONCLUSIVE'].includes(String(value.status))||typeof value.type!=='string'||typeof value.safeSummary!=='string')throw new JuliusDispatchError('INVALID_REQUEST',false,'Provider returned malformed evidence.');
+   const authority=juliusEvidenceAuthority(role,value.type);
+   if(!authority.ok){refused.push({index,evidenceType:value.type.slice(0,64),status:String(value.status),reasonCode:authority.reasonCode});return null;}
+   return{evidenceId:juliusMintedEvidenceId(claim.taskId,claim.leaseGeneration,index),missionId:claim.task.missionId,taskId:claim.taskId,workerId:worker.workerId,type:value.type as JuliusEvidence['type'],status:value.status as JuliusEvidence['status'],safeSummary:value.safeSummary,/* WHAT A WORKER MAY PUT IN A DURABLE COLUMN. Both were taken verbatim: any
+      string a provider wrote became the artifact reference of record, and any
+      string became its integrity hash. A reference is kept only when it names
+      something that outlives this process, and a hash only when it IS one — a
+      dangling pointer and a plausible-looking non-digest are each worse than the
+      null that says the runtime does not know. The tool path has enforced this
+      since #208 (`tool_result_artifact_ref_unverified`); the worker path did not. */
+   artifactRef:juliusDurableArtifactRef(value.artifactRef),integrityHash:isJuliusContentDigest(value.integrityHash)?value.integrityHash:null,occurredAt:typeof value.occurredAt==='string'?value.occurredAt:new Date().toISOString()};}).filter((item):item is NonNullable<typeof item>=>item!==null);
+  return{kept,refused};
 };
 
 /** One claimed task execution. Julius—not the adapter—owns policy, budget, evidence, result acceptance, and retry semantics. */
@@ -136,11 +343,20 @@ export class JuliusExecutionCoordinator {
    * ends the task.
    */
   async execute(request:JuliusExecutionRequest):Promise<JuliusExecutionOutcome>{
-    let worker:JuliusWorker;try{worker=this.router.select({role:request.role,taskType:request.taskType,capability:request.capability,policy:request.policy,excludedWorkerIds:request.excludedWorkerIds});}catch(error){const failure=error instanceof JuliusDispatchError?error:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Worker selection failed.');await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:failure.code==='POLICY_DENIED'?'DENIED':'FAILED',code:failure.code,failureClass:failure.failureClass};}
+    let worker:JuliusWorker;try{worker=this.router.select({role:request.role,taskType:request.taskType,capability:request.capability,policy:request.policy,excludedWorkerIds:request.excludedWorkerIds});}catch(error){const failure=error instanceof JuliusDispatchError?error:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Worker selection failed.');await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:failure.code==='POLICY_DENIED'?'DENIED':'FAILED',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure)};}
     await this.event(request,'worker.selected',{workerId:worker.workerId,providerId:worker.providerId});
     const reservation=await this.ports.reserve({claim:request.claim,worker,request:request.resources,idempotencyKey:`${request.operationId}:budget`});
     if(reservation.state==='DENIED'){await this.event(request,'budget.denied',{reason:reservation.denialReason});return{status:'DENIED',code:'BUDGET_DENIED'};}
-    await this.event(request,'budget.reserved',{reservationId:reservation.reservationId});
+    /**
+     * THE ROLE AND THE AMOUNT TRAVEL WITH THE RESERVATION ID.
+     *
+     * Without them the row says only that money moved, and the per-slot ledger
+     * — which is PROJECTED from these rows rather than stored — cannot say
+     * whose it was. Attribution guessed from the task id would be a second
+     * source of truth about money, which is the arrangement the cost-accounting
+     * module exists to end.
+     */
+    await this.event(request,'budget.reserved',{reservationId:reservation.reservationId,role:request.role,usdMicros:request.resources.usdMicros});
     /**
      * WHAT THE PROVIDER REPORTED, HELD WHERE THE CATCH CAN SEE IT.
      *
@@ -153,18 +369,89 @@ export class JuliusExecutionCoordinator {
      * answer still charges what the answer cost.
      */
     let answered:JuliusProviderResult|null=null;
+    /** Set when the dispatch is handed to the router, so a deadline cut can say
+     *  how long the worker actually ran beside the limit it declared. */
+    let dispatchedAtMs=Date.now();
     try{
-      if(request.signal?.aborted)throw new JuliusDispatchError('CANCELLED',false,'Dispatch was cancelled.');
+      if(request.signal?.aborted)throw new JuliusDispatchError('CANCELLED',false,'Dispatch was cancelled.',cancellationReasonOf(request.signal));
       await this.event(request,'worker.dispatched',{workerId:worker.workerId});
-      const result=await this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,taskType:request.taskType,signal:request.signal,...(request.allocation===undefined?{}:{allocation:request.allocation}),...(request.contract===undefined?{}:{contract:request.contract})});
+      dispatchedAtMs=Date.now();
+      // THE WORKER'S OWN DECLARED NUMBER, never a literal here. A second
+      // opinion about how long a worker may take is how declared and operative
+      // deadlines came to differ by 160 s once already.
+      /**
+       * EVERY STEP THAT TOUCHES MISSION STATE IS BELOW THIS AWAIT, and that
+       * ordering is what makes a late result harmless rather than a rule
+       * forbidding one.
+       *
+       * `persistEvidence`, `acceptResult` and `commit` are reached only by
+       * falling through a dispatch that RESOLVED inside the deadline. A promise
+       * that settles afterwards has already lost the race, so nothing reads it:
+       * it cannot create evidence, cannot be accepted as a result, and cannot
+       * settle a reservation the catch below has already released. A guard
+       * asserting the same thing would bind nothing — and would not survive the
+       * one edit that could actually break this, which is moving a line above
+       * the await. `julius-worker-deadline.test.ts` pins the ordering instead.
+       */
+      const result=await dispatchWithinDeadline(worker.timeoutMs,request.signal,(signal)=>this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,taskType:request.taskType,signal,...(request.allocation===undefined?{}:{allocation:request.allocation}),...(request.contract===undefined?{}:{contract:request.contract}),...(request.workspace===undefined?{}:{workspace:request.workspace}),/* WHICH ATTEMPT. The claim already fences it; the adapter needs it to keep one round's body from overwriting the round before it. */attempt:{leaseGeneration:request.claim.leaseGeneration}}));
       answered=result;
-      const evidence=normalizedEvidence(request.claim,worker,result);
+      /**
+       * NOTHING FROM A CANCELLED DISPATCH BECOMES MISSION STATE. An abort that
+       * landed in the same turn the result did is still an abort: what it cost
+       * is charged below, and no evidence, acceptance or settlement follows.
+       */
+      if(request.signal?.aborted===true)throw new JuliusDispatchCancelled(cancellationReasonOf(request.signal));
+      const screened=normalizedEvidence(request.claim,worker,result,request.role);
+      const evidence=screened.kept;
+      for(const refused of screened.refused){
+       await this.event(request,'evidence.refused',{workerId:worker.workerId,role:request.role,taskType:request.taskType,...refused},String(refused.index));
+      }
+      /**
+       * A WORKER THAT SAYS IT FAILED HAS FAILED THIS ATTEMPT.
+       *
+       * The coordinator never read `status`. The store marked the task FAILED,
+       * verification then minted a review of a FAILED task, and the claim query
+       * never offers one — so the run sat in READY with nothing it could claim.
+       * The attempt ran, so what it cost is charged; what it reported is not
+       * kept, because PASSED evidence from an attempt its own worker called
+       * failed would still count toward a mission's criteria.
+       */
+      if(result.status!=='SUCCEEDED'){
+       throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'The worker reported that its attempt failed.','worker_reported_failure',{runtimeStarted:true});
+      }
       await this.ports.persistEvidence({claim:request.claim,worker,evidence});
-      const receipt=await this.ports.acceptResult({claim:request.claim,worker,result,idempotencyKey:`${request.operationId}:result`});
+      const receipt=await this.ports.acceptResult({claim:request.claim,worker,result,idempotencyKey:`${request.operationId}:result`,evidence});
       await this.ports.commit({claim:request.claim,reservationId:reservation.reservationId,result});
       await this.event(request,'worker.completed',{workerId:worker.workerId,duplicate:receipt.duplicate,evidenceCount:evidence.length,...successDiagnostics(request,result)});
-      return{status:'COMPLETED',workerId:worker.workerId,duplicate:receipt.duplicate,...(result.contractProposal===undefined?{}:{contractProposal:result.contractProposal})};
-    }catch(error){const failure=error instanceof JuliusDispatchError?error:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Execution boundary failed.');const reported=reportedUsdMicros(answered);
+      return{status:'COMPLETED',workerId:worker.workerId,duplicate:receipt.duplicate,measured:measurementOf(worker,result),...(result.contractProposal===undefined?{}:{contractProposal:result.contractProposal}),...(result.guidanceRequest===undefined?{}:{guidanceRequest:result.guidanceRequest}),...(result.guidance===undefined?{}:{guidance:result.guidance}),
+      ...(result.segmentResume===undefined?{}:{segmentResume:result.segmentResume}),
+      ...(result.researchAsks===undefined?{}:{researchAsks:result.researchAsks}),
+      ...(result.reviewVerdict===undefined?{}:{reviewVerdict:result.reviewVerdict}),
+      ...(result.rebuttal===undefined?{}:{rebuttal:result.rebuttal}),
+      ...(result.architecture===undefined?{}:{architecture:result.architecture}),
+      ...(result.consistency===undefined?{}:{consistency:result.consistency}),
+      ...(result.implementation===undefined?{}:{implementation:result.implementation}),
+      ...(result.architectureObservations===undefined?{}:{architectureObservations:result.architectureObservations})};
+    }catch(error){
+     /**
+      * A DEADLINE CUT IS RETRYABLE, AND ITS HOLD IS NOT FREED.
+      *
+      * `runtimeStarted: true` is the literal truth and it is load-bearing: the
+      * release below frees the reservation only when nothing can have been
+      * spent, and a dispatch cut mid-flight had already reached a provider.
+      * Reporting it as a clean nothing would hand the mission that money a
+      * second time. The declared deadline travels beside the elapsed time so
+      * the row says WHICH limit was reached rather than merely that one was —
+      * and reaching this limit at all means an adapter outlived its own timer,
+      * which is the finding, not the remedy.
+      */
+     const boundary=error instanceof JuliusWorkerDeadlineExceeded
+      ? new JuliusDispatchError('TIMEOUT',true,'Worker exceeded the deadline it declares.','worker_deadline_exceeded',{timedOut:true,runtimeStarted:true,timeoutMs:error.declaredTimeoutMs,elapsedMs:Date.now()-dispatchedAtMs})
+      /* A CANCELLATION AFTER HANDOFF MAY HAVE BEEN PAID FOR: the hold is kept. */
+      : error instanceof JuliusDispatchCancelled
+       ? new JuliusDispatchError('CANCELLED',false,'Dispatch was cancelled.',error.reasonCode,{runtimeStarted:true,elapsedMs:Date.now()-dispatchedAtMs})
+       : error;
+     const failure=boundary instanceof JuliusDispatchError?boundary:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Execution boundary failed.');const reported=reportedUsdMicros(answered);
      const billed=reported??(typeof failure.diagnostics?.costUsdMicros==='number'?failure.diagnostics.costUsdMicros:null);
      // A provider that ANSWERED ran, whatever the diagnostics say about it.
      await this.ports.release({claim:request.claim,reservationId:reservation.reservationId,reason:failure.code,usdMicros:billed,spendUnknown:billed===null&&(answered!==null||failure.diagnostics?.runtimeStarted===true)});
@@ -172,7 +459,10 @@ export class JuliusExecutionCoordinator {
       * abandoned and a failure taken at once must leave the same diagnosis
       * behind, or the durable record would explain only the failures that
       * happened to be non-retryable. */
-     if(failure.retryable&&request.policy.automaticRetry){await this.event(request,'retry.scheduled',{code:failure.code,errorRetryable:true,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:'RETRY',code:failure.code,failureClass:failure.failureClass};}await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:'FAILED',code:failure.code,failureClass:failure.failureClass};}
+     /* WHAT THE FAILED ATTEMPT CHANGED travels on both endings too: a retry is
+      * exactly where an unrecorded change set becomes the next attempt's. */
+     const carriedImplementation=failure.implementation===undefined?{}:{implementation:failure.implementation};
+     if(failure.retryable&&request.policy.automaticRetry){await this.event(request,'retry.scheduled',{code:failure.code,errorRetryable:true,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:'RETRY',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure),...carriedImplementation};}await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:'FAILED',code:failure.code,failureClass:failure.failureClass,...carriedDiagnostics(failure),...carriedImplementation};}
   }
   /**
    * ON EVERY EVENT, not only the failures. `retry.scheduled` and `task.failed`
@@ -182,5 +472,6 @@ export class JuliusExecutionCoordinator {
    * record. Facts are flat scalars by contract; a number is one. Omitted when
    * the caller did not say, because unknown is not one.
    */
-  private event(request:JuliusExecutionRequest,type:JuliusExecutionEventType,payload:Record<string,unknown>){return this.ports.recordEvent({runId:request.claim.runId,projectId:request.claim.projectId,taskId:request.claim.taskId,type,idempotencyKey:`${request.operationId}:${type}`,payload:typeof request.attempt==='number'?{...payload,attempt:request.attempt}:payload});}
+  /** `suffix` distinguishes several events of one type from one operation — one per refused evidence item. */
+  private event(request:JuliusExecutionRequest,type:JuliusExecutionEventType,payload:Record<string,unknown>,suffix?:string){return this.ports.recordEvent({runId:request.claim.runId,projectId:request.claim.projectId,taskId:request.claim.taskId,type,idempotencyKey:`${request.operationId}:${type}${suffix===undefined?'':`:${suffix}`}`,payload:typeof request.attempt==='number'?{...payload,attempt:request.attempt}:payload});}
 }

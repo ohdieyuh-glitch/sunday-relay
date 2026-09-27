@@ -181,14 +181,46 @@ describe('the fetch is bounded', () => {
     if (outcome.kind === 'observed') expect(outcome.truncated).toBe(false);
   });
 
-  it('refuses a content type Relay does not read', async () => {
+  it('does not read a content type Relay does not read, and says which', async () => {
+    // This was `refused` — the same code an SSRF block returns — so a caller
+    // could not tell "we would not send this request" from "the host answered
+    // with a binary". They are different events with different next moves, and
+    // only one of them cost that host anything.
     const outcome = await liveFetch({
       url: 'https://example.com/binary',
       fetchImpl: (() => Promise.resolve(new Response('MZ', {
         status: 200, headers: { 'content-type': 'application/octet-stream' },
       }))) as unknown as typeof fetch,
     });
-    expect(outcome.kind).toBe('refused');
+    expect(outcome.kind).toBe('unsupported_content');
+    if (outcome.kind !== 'unsupported_content') throw new Error('unreachable');
+    expect(outcome.status).toBe(200);
+    expect(outcome.contentType).toBe('application/octet-stream');
+    // The reference survives so a human can open what the model could not.
+    expect(outcome.finalUrl).toBe('https://example.com/binary');
+  });
+
+  it('says whether a policy refusal had already troubled a host', async () => {
+    const never = await liveFetch({
+      url: 'https://127.0.0.1/x',
+      fetchImpl: (() => { throw new Error('must not be called'); }) as unknown as typeof fetch,
+    });
+    expect(never.kind).toBe('refused');
+    if (never.kind !== 'refused') throw new Error('unreachable');
+    expect(never.reached).toBe(false);
+
+    // A redirect refused at hop two: one host has already answered us, and a
+    // meter that charged this the same as the case above would be wrong about
+    // whose rate limit was spent.
+    const afterAHop = await liveFetch({
+      url: 'https://example.com/start',
+      fetchImpl: (() => Promise.resolve(new Response(null, {
+        status: 302, headers: { location: 'https://169.254.169.254/latest/meta-data' },
+      }))) as unknown as typeof fetch,
+    });
+    expect(afterAHop.kind).toBe('refused');
+    if (afterAHop.kind !== 'refused') throw new Error('unreachable');
+    expect(afterAHop.reached).toBe(true);
   });
 });
 

@@ -21,6 +21,12 @@
  */
 
 
+import {
+  claudeCodeResultRefusalReason,
+  readClaudeCodeErrorFlag,
+  readClaudeCodeTerminalReason,
+} from '../../src/relay/connectors/claude-code/result-classification';
+
 export interface HostedUsage {
   readonly inputTokens: number | null;
   readonly outputTokens: number | null;
@@ -30,6 +36,48 @@ export interface HostedUsage {
 
 export const UNKNOWN_HOSTED_USAGE: HostedUsage = Object.freeze({
   inputTokens: null, outputTokens: null, totalCostUsd: null, source: 'unavailable',
+});
+
+/**
+ * WHAT THE STREAM ITSELF REPORTED, TURN BY TURN — a FLOOR, never a total.
+ *
+ * The runtime reports its usage in the terminal `result` message, and a run
+ * Relay aborts at its own runtime ceiling never gets one. Paid run
+ * `34485676189` attempt 1 is exactly that: cut off at 360 000 ms, twelve tool
+ * calls done, and the record says the cost is UNKNOWN. We paid and could not
+ * say how much.
+ *
+ * But every assistant turn already carried its own usage block, and all of them
+ * were discarded. "The run reported nothing" was a fact about this parser, not
+ * about the runtime.
+ *
+ * IT IS NOT THE SAME NUMBER AS {@link HostedUsage} AND MUST NEVER REPLACE IT.
+ * This is a sum over the assistant turns whose usage was actually seen: a
+ * LOWER BOUND on what the run consumed, with no claim to be complete, and no
+ * cost at all — an assistant message reports tokens and never dollars. The
+ * runtime's own total stays the only thing allowed to be called
+ * `runtime_reported`, and a floor may never settle a budget as if it were one.
+ */
+export interface HostedStreamUsage {
+  /** Assistant turns whose usage block was readable. Zero means none was. */
+  readonly messages: number;
+  /**
+   * Turns the runtime itself marked `aborted` — truncated by an interrupt
+   * before `stop_reason` arrived. Its own word for what Relay's timer did.
+   */
+  readonly abortedMessages: number;
+  /** Summed over `messages`; null while no turn has reported this field. */
+  readonly inputTokens: number | null;
+  readonly outputTokens: number | null;
+  readonly cacheReadInputTokens: number | null;
+  readonly cacheCreationInputTokens: number | null;
+}
+
+/** Nothing observed. Every total null, because zero turns is not zero tokens. */
+export const NO_HOSTED_STREAM_USAGE: HostedStreamUsage = Object.freeze({
+  messages: 0, abortedMessages: 0,
+  inputTokens: null, outputTokens: null,
+  cacheReadInputTokens: null, cacheCreationInputTokens: null,
 });
 
 export interface HostedObservation {
@@ -72,8 +120,21 @@ export interface HostedObservation {
   readonly numTurns: number | null;
   readonly durationMs: number | null;
   readonly usage: HostedUsage;
+  /**
+   * THE FLOOR THE STREAM ITSELF ESTABLISHED, always available — including on
+   * the runs that end with no result at all, which are the only runs that
+   * needed it.
+   */
+  readonly streamUsage: HostedStreamUsage;
   readonly resultSubtype: string | null;
+  /** `is_error` as the runtime sent it. Absent is null, never false. */
   readonly isError: boolean | null;
+  /**
+   * `terminal_reason`, as a member of the SDK's vocabulary, `unrecognised`, or
+   * null when the runtime sent none. It was never read, so a session that ended
+   * `tool_deferred` or `hook_stopped` under a `success` subtype was trusted.
+   */
+  readonly terminalReason: string | null;
   readonly finalText: string | null;
   /** Hidden reasoning is counted and dropped — never stored, never surfaced. */
   readonly thinkingBlocksOmitted: number;
@@ -84,13 +145,56 @@ const EMPTY: HostedObservation = {
   initSeen: false, sessionId: null, actualModel: null, runtimeVersion: null, apiKeySource: null,
   reportedCwd: null, reportedTools: [], toolTargets: [], toolsUsed: [], toolInvocations: 0,
   permissionDenials: 0, numTurns: null, durationMs: null, usage: UNKNOWN_HOSTED_USAGE,
-  resultSubtype: null, isError: null, finalText: null,
+  streamUsage: NO_HOSTED_STREAM_USAGE,
+  resultSubtype: null, isError: null, terminalReason: null, finalText: null,
   thinkingBlocksOmitted: 0, unknownMessageCount: 0,
 };
 
 const PATH_KEYS = ['file_path', 'path', 'notebook_path', 'pattern', 'glob'];
 const num = (v: unknown): number | null =>
   typeof v === 'number' && Number.isFinite(v) ? v : null;
+
+/** Add an observed component to a running floor. Null + null stays null. */
+const addObserved = (running: number | null, seen: number | null): number | null =>
+  seen === null ? running : (running ?? 0) + seen;
+
+/**
+ * Fold ONE assistant turn's reported usage into the floor.
+ *
+ * Each component accumulates independently, so a field no turn ever reported
+ * stays null rather than becoming a sum of nothing. `cache_read_input_tokens`
+ * and `cache_creation_input_tokens` are declared nullable by the API's own
+ * types, and a null there means "not reported for this turn" — not zero.
+ */
+const foldStreamUsage = (
+  state: HostedObservation,
+  message: Record<string, unknown>,
+  inner: Record<string, unknown> | undefined,
+): HostedObservation => {
+  const usage = inner?.usage as Record<string, unknown> | undefined;
+  const aborted = message.aborted === true ? 1 : 0;
+  if (usage === null || usage === undefined || typeof usage !== 'object') {
+    // The turn reported no usage block at all. It still happened, and if it was
+    // aborted that is worth counting, but it contributes nothing to the floor
+    // and does not count toward the turns the floor is built from.
+    return aborted === 0 ? state : {
+      ...state,
+      streamUsage: { ...state.streamUsage, abortedMessages: state.streamUsage.abortedMessages + aborted },
+    };
+  }
+  const previous = state.streamUsage;
+  return {
+    ...state,
+    streamUsage: {
+      messages: previous.messages + 1,
+      abortedMessages: previous.abortedMessages + aborted,
+      inputTokens: addObserved(previous.inputTokens, num(usage.input_tokens)),
+      outputTokens: addObserved(previous.outputTokens, num(usage.output_tokens)),
+      cacheReadInputTokens: addObserved(previous.cacheReadInputTokens, num(usage.cache_read_input_tokens)),
+      cacheCreationInputTokens: addObserved(previous.cacheCreationInputTokens, num(usage.cache_creation_input_tokens)),
+    },
+  };
+};
 
 /**
  * Fold one SDK message into the running observation. Written as a reducer over
@@ -123,9 +227,22 @@ export function foldHostedMessage(
   }
 
   if (m.type === 'assistant' || m.type === 'user') {
-    const content = (m.message as Record<string, unknown> | undefined)?.content;
-    if (!Array.isArray(content)) return state;
-    let next = state;
+    const inner = m.message as Record<string, unknown> | undefined;
+    const content = inner?.content;
+    /**
+     * THE TURN'S OWN USAGE, FOLDED BEFORE ANYTHING ELSE CAN RETURN EARLY.
+     *
+     * Above the `content` guard deliberately: a turn whose content is absent or
+     * unparseable still reported what it consumed, and the old shape returned
+     * `state` unchanged there — which is how a cut-off run's last, most
+     * interesting turn would have been the one dropped.
+     *
+     * ASSISTANT ONLY. A `user` message is the harness replaying a tool result
+     * and carries no usage of its own; counting one would double what the
+     * assistant turn beside it already reported.
+     */
+    let next = m.type === 'assistant' ? foldStreamUsage(state, m, inner) : state;
+    if (!Array.isArray(content)) return next;
     for (const raw of content) {
       if (raw === null || typeof raw !== 'object') continue;
       const block = raw as Record<string, unknown>;
@@ -164,7 +281,8 @@ export function foldHostedMessage(
     return {
       ...state,
       resultSubtype: typeof m.subtype === 'string' ? m.subtype : null,
-      isError: m.is_error === true,
+      isError: readClaudeCodeErrorFlag(m.is_error),
+      terminalReason: readClaudeCodeTerminalReason(m.terminal_reason),
       /**
        * THE REPORT IS READ BY A PARSER, NOT SHOWN TO ANYONE.
        *
@@ -226,8 +344,12 @@ export function hostedStreamIsUsable(
   if (o.resultSubtype === null) {
     return { ok: false, reason: 'the hosted runtime never reported a final result' };
   }
-  if (o.isError === true) {
-    return { ok: false, reason: `the hosted runtime reported ${o.resultSubtype}` };
-  }
+  /**
+   * EVERY FIELD OF THE RESULT MUST SAY SUCCESS, not only `is_error`. An error
+   * subtype beside `is_error: false`, a missing `is_error`, an unknown subtype
+   * or a terminal reason other than `completed` is not a finished session.
+   */
+  const refusal = claudeCodeResultRefusalReason(o);
+  if (refusal !== null) return { ok: false, reason: refusal.replace(/^the runtime/u, 'the hosted runtime') };
   return { ok: true, reason: null };
 }

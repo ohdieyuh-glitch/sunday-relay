@@ -159,7 +159,7 @@ export function createLiveJuliusBootstrapPort(deps: {
           commandId: `bootstrap-task:${buildTaskId(runId)}`, runId, projectId: request.projectId,
           task: {
             taskId: buildTaskId(runId), missionId: request.missionId, parentTaskId: null,
-            dependencyIds: [planTaskId(runId)], requiredEvidenceTypes: ['TEST'], taskType: 'build',
+            dependencyIds: [planTaskId(runId)], requiredEvidenceTypes: [buildEvidenceFor(request)], taskType: 'build',
             role: 'CODING_AGENT', ordinal: 1, state: 'BLOCKED',
           } as JuliusTask,
         });
@@ -189,7 +189,7 @@ export function createLiveJuliusBootstrapPort(deps: {
           repairCycles: request.limits.repairCycles,
           // The build task's own declared evidence, quoted rather than guessed:
           // it is what `verifyTask` actually enforces.
-          requiredEvidence: ['TEST'],
+          requiredEvidence: [buildEvidenceFor(request)],
         });
         if (!seeded.seeded) {
           return refuse('task_contract_not_derivable',
@@ -228,4 +228,18 @@ export function createLiveJuliusBootstrapPort(deps: {
       }
     },
   };
+}
+
+/**
+ * WHAT PROVES THE BUILD, given what the mission can produce.
+ *
+ * A mission with a deterministic check is proven by that check passing: `TEST`.
+ * A mission that declared none — a report, an analysis, a plan — is proven by
+ * the deliverable it produced: the captured `DIFF`, which the live coder records
+ * as PASSED only when the executor observed a real change. Demanding `TEST` of
+ * the second kind parked the run in VERIFYING forever for lacking something the
+ * mission never had. Absent means declared, so every existing caller is unchanged.
+ */
+function buildEvidenceFor(request: JuliusBootstrapRequest): 'TEST' | 'DIFF' {
+  return (request.deterministicCheck?.declared ?? true) ? 'TEST' : 'DIFF';
 }

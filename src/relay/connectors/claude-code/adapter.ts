@@ -17,6 +17,7 @@ import type { ClaudeObservationSink } from './run-observation-adapter';
 import { parseAgentExecutionReport, type AgentExecutionReport } from './report-parser';
 import { streamIsStructurallyValid } from './stream-parser';
 import { createSessionManager, type SessionAssociation } from './session-manager';
+import { claudeCodeResultRefused } from './result-classification';
 
 /**
  * Real Claude Code local adapter (Prompt 8). Implements the provider-neutral
@@ -182,7 +183,10 @@ export function createClaudeCodeAdapter(deps: {
       structurallyValid: structural.ok,
     });
 
-    const report = outcome.parsed.isError || !structural.ok
+    // EVERY FIELD OF THE RESULT MUST SAY SUCCESS: an error subtype beside
+    // `is_error: false`, or a result that never said whether it erred, is not
+    // a report anyone may trust.
+    const report = claudeCodeResultRefused(outcome.parsed) || !structural.ok
       ? fail<AgentExecutionReport>(relayError('invalid-report',
           structural.ok ? `Claude reported ${outcome.parsed.resultSubtype ?? 'error'}.` : `Malformed stream: ${structural.reason}.`))
       : parseAgentExecutionReport(outcome.parsed.finalResult, {

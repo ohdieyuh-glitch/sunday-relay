@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
-import { JULIUS_RUNTIME_VERSION, transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusTask, type JuliusVerificationDecision } from '../mission/julius';
+import { JULIUS_RUNTIME_VERSION, transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusOperationalEvent, type JuliusTask, type JuliusVerificationDecision } from '../mission/julius';
 import { brainKindToStored } from './julius-brain-kinds';
+import { appendJuliusEventWithin } from './julius-event-postgres';
 
 export interface JuliusRunRecord { readonly runId:string;readonly missionId:string;readonly projectId:string;readonly state:JuliusMissionState;readonly cardRevision:string;readonly missionContractRevision:number;readonly projectBrainRevision:number;readonly version:number; }
 export interface ClaimedJuliusTask { readonly taskId:string;readonly runId:string;readonly role:string;readonly taskType:string;readonly leaseGeneration:number;readonly attempt:number; }
@@ -70,7 +71,12 @@ export class JuliusPostgresRepository {
    * where the uncast first version was caught.
    */
   async finishTask(input:{taskId:string;owner:string;leaseGeneration:number;state:'SUCCEEDED'|'FAILED'|'CANCELLED';now:string;nextAttemptAt?:string}):Promise<boolean>{const result=await this.pool.query(`UPDATE relay_wonderland.julius_tasks SET state=CASE WHEN $4::text='FAILED' AND $6::timestamptz IS NOT NULL THEN 'RUNNABLE'::text ELSE $4::text END,lease_owner=NULL,lease_expires_at=NULL,next_attempt_at=COALESCE($6::timestamptz,next_attempt_at),version=version+1,updated_at=$5 WHERE task_id=$1 AND state='ACTIVE' AND lease_owner=$2 AND lease_generation=$3`,[input.taskId,input.owner,input.leaseGeneration,input.state,input.now,input.nextAttemptAt??null]);return result.rowCount===1;}
-  async appendEvidence(input:{runId:string;projectId:string;idempotencyKey:string;evidence:JuliusEvidence}):Promise<boolean>{return this.transaction(async client=>{const result=await client.query(`INSERT INTO relay_wonderland.julius_evidence(evidence_id,run_id,task_id,worker_id,evidence_type,status,safe_summary,artifact_ref,integrity_hash,occurred_at,idempotency_key) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11 WHERE EXISTS(SELECT 1 FROM relay_wonderland.julius_runs WHERE run_id=$2 AND project_id=$12) ON CONFLICT(run_id,idempotency_key) DO NOTHING`,[input.evidence.evidenceId,input.runId,input.evidence.taskId,input.evidence.workerId,input.evidence.type,input.evidence.status,input.evidence.safeSummary,input.evidence.artifactRef,input.evidence.integrityHash,input.evidence.occurredAt,input.idempotencyKey,input.projectId]);if(result.rowCount!==1)return false;await this.event(client,{eventId:`julius:evidence:${input.evidence.evidenceId}`,projectId:input.projectId,streamId:input.runId,type:'julius.evidence.recorded',occurredAt:input.evidence.occurredAt,payload:{evidenceId:input.evidence.evidenceId,taskId:input.evidence.taskId,type:input.evidence.type,status:input.evidence.status,safeSummary:input.evidence.safeSummary}});return true;});}
+  async appendEvidence(input:{runId:string;projectId:string;idempotencyKey:string;evidence:JuliusEvidence}):Promise<boolean>{return this.transaction(async client=>{const result=await client.query(`INSERT INTO relay_wonderland.julius_evidence(evidence_id,run_id,task_id,worker_id,evidence_type,status,safe_summary,artifact_ref,integrity_hash,occurred_at,idempotency_key) SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11 WHERE EXISTS(SELECT 1 FROM relay_wonderland.julius_runs WHERE run_id=$2 AND project_id=$12) ON CONFLICT(run_id,idempotency_key) DO NOTHING`,[input.evidence.evidenceId,input.runId,input.evidence.taskId,input.evidence.workerId,input.evidence.type,input.evidence.status,input.evidence.safeSummary,input.evidence.artifactRef,input.evidence.integrityHash,input.evidence.occurredAt,input.idempotencyKey,input.projectId]);if(result.rowCount!==1)return false;await this.event(client,{eventId:`julius:evidence:${input.evidence.evidenceId}`,projectId:input.projectId,streamId:input.runId,type:'julius.evidence.recorded',occurredAt:input.evidence.occurredAt,/* THE DIGEST TRAVELS WITH THE ANNOUNCEMENT. The event carried the sentence and
+      dropped both machine-readable fields, so the stream was a weaker record than
+      the row it announced — and the stream is what a projection, an eval or
+      Project Brain reads. Null where the row is null: an artifact nobody can
+      identify says so here too. */
+     payload:{evidenceId:input.evidence.evidenceId,taskId:input.evidence.taskId,type:input.evidence.type,status:input.evidence.status,safeSummary:input.evidence.safeSummary,artifactRef:input.evidence.artifactRef,integrityHash:input.evidence.integrityHash}});return true;});}
   /**
    * RUNNABLE ONLY IN THE CLAIM, AND THE RELEASE RIDES WITH THE DECISION.
    *
@@ -83,7 +89,19 @@ export class JuliusPostgresRepository {
    * releases nothing — the transaction that recorded it first already did.
    * Only BLOCKED tasks of this run move; the update is a no-op for any other.
    */
-  async appendDecision(input:{decisionId:string;runId:string;taskId:string;policyRevision:string;idempotencyKey:string;occurredAt:string;decision:JuliusVerificationDecision;releaseTaskIds?:readonly string[]}):Promise<boolean>{return this.transaction(async client=>{const result=await client.query(`INSERT INTO relay_wonderland.julius_verification_decisions(decision_id,run_id,task_id,action,reason_code,safe_summary,evidence_ids,policy_revision,occurred_at,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10) ON CONFLICT(run_id,idempotency_key) DO NOTHING`,[input.decisionId,input.runId,input.taskId,input.decision.action,input.decision.reasonCode,input.decision.safeSummary,json(input.decision.evidenceIds),input.policyRevision,input.occurredAt,input.idempotencyKey]);if(result.rowCount!==1)return false;const releases=[...new Set(input.releaseTaskIds??[])];if(releases.length>0){await client.query(`UPDATE relay_wonderland.julius_tasks SET state='RUNNABLE',version=version+1,updated_at=$3 WHERE run_id=$1 AND task_id=ANY($2::text[]) AND state='BLOCKED'`,[input.runId,releases,input.occurredAt]);}return true;});}
+  /**
+   * THE DECISION, ITS RELEASE AND THE EVENTS THAT EXPLAIN THEM — ONE
+   * TRANSACTION.
+   *
+   * The events used to be appended after this returned, each in a transaction
+   * of its own. A crash in the gap left the decision and the release standing
+   * with nothing in the ledger to explain either, and nothing ever repaired
+   * it: the resume sweep skips a task that already has a decision, so those
+   * events were lost for good. The run's history could not say a verification
+   * was decided, or that a task had become runnable, while the rows saying so
+   * stood beside it.
+   */
+  async appendDecision(input:{decisionId:string;runId:string;taskId:string;policyRevision:string;idempotencyKey:string;occurredAt:string;decision:JuliusVerificationDecision;releaseTaskIds?:readonly string[];events?:readonly JuliusOperationalEvent[]}):Promise<boolean>{return this.transaction(async client=>{const result=await client.query(`INSERT INTO relay_wonderland.julius_verification_decisions(decision_id,run_id,task_id,action,reason_code,safe_summary,evidence_ids,policy_revision,occurred_at,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10) ON CONFLICT(run_id,idempotency_key) DO NOTHING`,[input.decisionId,input.runId,input.taskId,input.decision.action,input.decision.reasonCode,input.decision.safeSummary,json(input.decision.evidenceIds),input.policyRevision,input.occurredAt,input.idempotencyKey]);if(result.rowCount!==1)return false;const releases=[...new Set(input.releaseTaskIds??[])];if(releases.length>0){await client.query(`UPDATE relay_wonderland.julius_tasks SET state='RUNNABLE',version=version+1,updated_at=$3 WHERE run_id=$1 AND task_id=ANY($2::text[]) AND state='BLOCKED'`,[input.runId,releases,input.occurredAt]);}for(const event of input.events??[])await appendJuliusEventWithin(client,event);return true;});}
   /**
    * ONE STATEMENT, AND THE RUN ROW IS THE COUNTER.
    *

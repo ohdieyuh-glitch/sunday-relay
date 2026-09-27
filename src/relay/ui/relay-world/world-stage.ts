@@ -19,6 +19,30 @@ import { clamp01, smoothstep, type Vec3 } from '../landing/choreography';
 
 export type WorldStage = 'aquala' | 'transition' | 'relay';
 
+/**
+ * WHICH STAGE A URL ASKS FOR — the same answer `parsePreviewHash` gives, for the
+ * callers that mount the world directly instead of going through the preview
+ * router.
+ *
+ * WHY IT EXISTS. The live beta gate used to choose the opening stage from the
+ * PERSISTED RECORD alone (`canActivate(loadAgentDraft()) ? 'relay' : 'aquala'`),
+ * so the public URL stopped answering with the public landing the moment a
+ * visitor had built anything. Two code paths decided the same thing from two
+ * different sources, and only one of them was the address bar. The address bar
+ * wins: it is the thing a person types, bookmarks, refreshes and shares.
+ *
+ * `transition` is never a URL's answer. It is a stage a journey passes through,
+ * not a place anyone can be sent to — a deep link into it would strand the
+ * camera between two stages with no passage running to finish it.
+ *
+ * A sign-in return (`#relay_claim=…`) is not `#/relay`, so it resolves to the
+ * landing, which is the correct public answer while the claim is redeemed.
+ */
+export function relayStageFromHash(hash: string): Extract<WorldStage, 'aquala' | 'relay'> {
+  const parts = hash.replace(/^#/, '').split('/').filter(Boolean);
+  return parts[0] === 'relay' ? 'relay' : 'aquala';
+}
+
 /** A camera pose the transition interpolates through. */
 export type CameraPose = { readonly position: Vec3; readonly target: Vec3; readonly fov: number };
 
@@ -141,11 +165,20 @@ export function transitionFrame(
 }
 
 /**
- * The stage machine. Deliberately tiny and total: there is no path from
- * `transition` back to `aquala`, and committing twice is a no-op, so a second
- * click mid-flight cannot restart the passage.
+ * The stage machine. Deliberately tiny and total.
+ *
+ * `commit` and `leave` are the two ways into the passage and both are no-ops from anywhere but their own starting
+ * stage, so a second click mid-flight cannot restart or reverse it. `arrive` and `return` are the two ways out, and
+ * WHICH ONE FIRES IS THE CALLER'S BUSINESS: the machine does not know which direction a passage was flying, because
+ * it does not need to -- the loop that ran the flight does.
+ *
+ * There is still no path from `transition` to anywhere but by finishing. Interrupting a passage half way would put
+ * the camera somewhere neither stage expects, and the founder's requirement is that entering and leaving read as one
+ * continuous move rather than as a screen change that can be caught mid-frame.
  */
-export function nextStage(current: WorldStage, event: 'commit' | 'arrive'): WorldStage {
+export function nextStage(current: WorldStage, event: 'commit' | 'arrive' | 'leave' | 'return'): WorldStage {
   if (event === 'commit') return current === 'aquala' ? 'transition' : current;
+  if (event === 'leave') return current === 'relay' ? 'transition' : current;
+  if (event === 'return') return current === 'transition' ? 'aquala' : current;
   return current === 'transition' ? 'relay' : current;
 }

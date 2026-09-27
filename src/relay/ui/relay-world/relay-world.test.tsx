@@ -98,6 +98,78 @@ describe('the old shell never returns', () => {
   });
 });
 
+describe('the way back', () => {
+  it('offers exactly one Back control once Relay is reached, and none before', () => {
+    render(createElement(RelayWorld, { initialStage: 'aquala' as const }));
+    // ON THE LANDING PAGE THERE IS NOTHING TO GO BACK FROM, so the control does not exist there. A Back that is
+    // present but inert is a control the user learns to distrust.
+    expect(screen.queryAllByRole('button', { name: /back/i })).toHaveLength(0);
+    fireEvent.click(screen.getAllByRole('button', { name: /ENTER RELAY/i })[0]);
+    expect(screen.getAllByRole('button', { name: /back/i })).toHaveLength(1);
+  });
+
+  it('returns to the landing state, and does not answer to the name of the forward control', () => {
+    render(createElement(RelayWorld, { initialStage: 'aquala' as const }));
+    fireEvent.click(screen.getAllByRole('button', { name: /ENTER RELAY/i })[0]);
+    const back = screen.getByRole('button', { name: /back/i });
+    // THE LANDING PAGE KEEPS ITS OWN NAME. relay-landing.test.tsx uses a singular getByRole for ENTER RELAY, so a
+    // Back control that matched that name would break it -- and would be ambiguous to a screen reader besides.
+    expect(back.getAttribute('aria-label') ?? back.textContent ?? '').not.toMatch(/ENTER RELAY/i);
+    fireEvent.click(back);
+    // Without a WebGL context there is no loop to fly a passage, so the return is immediate -- the same rule the
+    // forward journey already follows in static mode.
+    expect(screen.getAllByRole('button', { name: /ENTER RELAY/i }).length).toBeGreaterThan(0);
+  });
+
+  it('returns immediately from a deep link, because there is no journey to retrace', () => {
+    // A user who arrived at #/relay never flew in, so there is no departure pose. Flying them "back" from a place
+    // they were never standing would be an invented journey.
+    render(createElement(RelayWorld, { initialStage: 'relay' as const }));
+    fireEvent.click(screen.getByRole('button', { name: /back/i }));
+    expect(screen.getAllByRole('button', { name: /ENTER RELAY/i }).length).toBeGreaterThan(0);
+  });
+
+  /**
+   * IT IS IN THE BRAND ROW, WHICH IS WHY IT CAN BE SEEN.
+   *
+   * FOUNDER (2026-09-24): "The user asked DAYS AGO for a BACK control on this
+   * experience. It is still not visible in the actual deployed page."
+   *
+   * It WAS deployed, and it was invisible, and both were true at once: the
+   * control was `position: fixed` at top 22px / left 24px, and `.rx-brand` is
+   * `top: var(--rx-pad); left: var(--rx-pad)` — the same corner. Measured on the
+   * production page, `.rw-back` sat at (24, 22) 45x26 with the SUNDAY RELAY
+   * lockup at (24, 24) 143x16, drawn over each other. It answered a hit test and
+   * a screen reader and could not be read by a person.
+   *
+   * A coordinate cannot be asserted in jsdom, which computes no layout — so this
+   * asserts the STRUCTURE that makes the coordinate impossible to get wrong.
+   * Inside the row, the wordmark's own width decides where the control starts,
+   * at every breakpoint, with no offset for anyone to keep in step.
+   */
+  it('lives INSIDE the brand row, so it can never be drawn underneath the wordmark', () => {
+    const { container } = render(createElement(RelayWorld, { initialStage: 'relay' as const }));
+    const back = screen.getByRole('button', { name: /back/i });
+    const brand = container.querySelector('.rx-brand');
+    expect(brand).not.toBeNull();
+    expect(brand?.contains(back)).toBe(true);
+    // And it is a SIBLING of the lockup, not a wrapper around it or a child of
+    // it: the row places the two side by side.
+    expect(back.parentElement).toBe(brand);
+    expect(brand?.querySelector('.rx-wordmark')).not.toBeNull();
+  });
+
+  it('is still exactly one control, and still not styled as a second primary action', () => {
+    const { container } = render(createElement(RelayWorld, { initialStage: 'relay' as const }));
+    expect(container.querySelectorAll('.rw-back')).toHaveLength(1);
+    // `.rl3-cta` is the landing's gold pill and `.rx-cta` the experience's. A
+    // Back wearing either would read as a second thing to do rather than the way
+    // out of the one being asked for.
+    const back = screen.getByRole('button', { name: /back/i });
+    expect(back.className).not.toContain('cta');
+  });
+});
+
 describe('direct entry', () => {
   it('lands straight in Relay when the URL says so, with no passage', () => {
     render(createElement(RelayWorld, { initialStage: 'relay' as const }));

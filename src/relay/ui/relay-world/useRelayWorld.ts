@@ -3,7 +3,7 @@ import {
   AQUALA_PRESENCE, CAMERA_FOV, CAMERA_POSITION, CAMERA_TARGET, clamp01,
   dogBeatAt, sampleTrack, sampleVec3, sceneAt, type ScenePosition, type Vec3,
 } from '../landing/choreography';
-import { DogAnimator, type DogState } from '../landing/three/dog-rig';
+import { SteppedDogAnimator, type DogState } from '../landing/three/dog-rig';
 import { chooseDpr, chooseTier, createLandingEngine, type LandingEngine } from '../landing/three/engine';
 import { snapToBeat } from '../landing/useLandingRuntime';
 import type { OnboardingStepId } from '../relay-experience/onboarding';
@@ -91,6 +91,11 @@ export type RelayWorld = {
   readonly overPortal: boolean;
   /** Commit to entering Relay. Idempotent while the passage is running. */
   readonly enterRelay: () => void;
+  /**
+   * Go back to the landing state. Idempotent while a passage is running, and instant when there is no outward
+   * journey to retrace -- a deep link into Relay, or a device with no WebGL context to fly with.
+   */
+  readonly leaveRelay: () => void;
   /** One-shot acknowledgement from the Dog. */
   readonly pulse: () => void;
 };
@@ -112,7 +117,7 @@ export function useRelayWorld(
   const canvasNode = useRef<HTMLCanvasElement | null>(null);
   const scrollNode = useRef<HTMLDivElement | null>(null);
   const engineRef = useRef<LandingEngine | null>(null);
-  const animator = useMemo(() => new DogAnimator(), []);
+  const animator = useMemo(() => new SteppedDogAnimator(), []);
   const arrived = useRef(onArrive);
   arrived.current = onArrive;
 
@@ -129,6 +134,14 @@ export function useRelayWorld(
     tProgress: 0,
     tStart: 0,
     from: null as CameraPose | null,
+    /** Which way the passage is flying. The frame loop reads it to know where to land. */
+    heading: 'in' as 'in' | 'out',
+    /**
+     * WHERE THE OUTWARD JOURNEY BEGAN, kept so the way back can retrace it exactly. Null until a flight has
+     * actually happened -- a user who arrived by deep link has no departure pose, and inventing one would fly them
+     * home from somewhere they were never standing.
+     */
+    enteredFrom: null as CameraPose | null,
     /** Last camera actually rendered — the passage departs from exactly this. */
     lastPose: CREATE_AGENT_POSE as CameraPose,
   });
@@ -153,6 +166,27 @@ export function useRelayWorld(
       return;
     }
     live.current.from = live.current.lastPose;
+    live.current.enteredFrom = live.current.lastPose;
+    live.current.heading = 'in';
+    live.current.tProgress = 0;
+    live.current.tStart = 0;
+    live.current.stage = 'transition';
+    setStage('transition');
+  }, []);
+
+  const leaveRelay = useCallback(() => {
+    if (live.current.stage !== 'relay') return;
+    // NOTHING TO RETRACE, SO NOTHING IS PRETENDED. Without a context there is no loop to advance a passage, and
+    // without a remembered departure pose there is no journey to reverse: both return at once instead of flying
+    // from a place the user was never at.
+    if (engineRef.current === null || live.current.enteredFrom === null) {
+      live.current.stage = 'aquala';
+      setStage('aquala');
+      setChrome({ veil: 0, aqualaChrome: 1, relayChrome: 0 });
+      return;
+    }
+    live.current.from = live.current.enteredFrom;
+    live.current.heading = 'out';
     live.current.tProgress = 0;
     live.current.tStart = 0;
     live.current.stage = 'transition';
@@ -257,8 +291,12 @@ export function useRelayWorld(
         // authored transition takes the time it was authored to take.
         if (s.tStart === 0) s.tStart = now;
         s.tProgress = Math.min(1, (now - s.tStart) / (transitionDuration(s.reducedMotion) * 1000));
+        // THE WAY BACK IS THE WAY IN, READ BACKWARDS. The same authored frame, sampled from 1 to 0, so the camera
+        // retraces its own path and the veil peaks at the same point of the journey in both directions. A second
+        // choreography for the return would be two descriptions of one move.
+        const along = s.heading === 'out' ? 1 - s.tProgress : s.tProgress;
         const t: TransitionFrame = transitionFrame(
-          s.tProgress, s.from ?? s.lastPose, engineRef.current.aqualaOrigin, s.reducedMotion);
+          along, s.from ?? s.lastPose, engineRef.current.aqualaOrigin, s.reducedMotion);
         pose = t.camera;
         aqualaPresence = t.aqualaPresence;
         aqualaScale = t.aqualaScale;
@@ -266,12 +304,20 @@ export function useRelayWorld(
         dogYaw = 0;
         setChrome({ veil: t.veil, aqualaChrome: t.aqualaChrome, relayChrome: t.relayChrome });
         if (s.tProgress >= 1) {
-          s.stage = 'relay';
-          setStage('relay');
-          setChrome({ veil: 0, aqualaChrome: 0, relayChrome: 1 });
-          // The Dog acknowledges the arrival once, then settles.
-          s.react = 1;
-          arrived.current();
+          if (s.heading === 'out') {
+            s.stage = 'aquala';
+            setStage('aquala');
+            setChrome({ veil: 0, aqualaChrome: 1, relayChrome: 0 });
+            // NO ARRIVAL CALLBACK ON THE WAY HOME. `onArrive` rewrites the hash to #/relay and tells the world the
+            // journey landed; firing it here would announce an arrival at the place the user just left.
+          } else {
+            s.stage = 'relay';
+            setStage('relay');
+            setChrome({ veil: 0, aqualaChrome: 0, relayChrome: 1 });
+            // The Dog acknowledges the arrival once, then settles.
+            s.react = 1;
+            arrived.current();
+          }
         }
       } else {
         const intent = STEP_INTENT[s.step] ?? STEP_INTENT.name;
@@ -368,7 +414,7 @@ export function useRelayWorld(
   return useMemo(() => ({
     canvasRef, scrollRef, stage, position, telemetry, beatAnchors, systemAnchors,
     veil: chrome.veil, aqualaChrome: chrome.aqualaChrome, relayChrome: chrome.relayChrome,
-    overPortal, enterRelay, pulse,
+    overPortal, enterRelay, leaveRelay, pulse,
     tryPortalAt,
-  }), [canvasRef, scrollRef, stage, position, telemetry, beatAnchors, systemAnchors, chrome, overPortal, enterRelay, pulse, tryPortalAt]) as RelayWorld & { tryPortalAt: (x: number, y: number) => boolean };
+  }), [canvasRef, scrollRef, stage, position, telemetry, beatAnchors, systemAnchors, chrome, overPortal, enterRelay, leaveRelay, pulse, tryPortalAt]) as RelayWorld & { tryPortalAt: (x: number, y: number) => boolean };
 }

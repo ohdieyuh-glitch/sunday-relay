@@ -9,15 +9,18 @@
  */
 
 export {
-  BILLING_PATHS, EXECUTION_ENVIRONMENTS, OCCUPANT_KINDS, ROLE_BINDING_REFUSALS, ROLE_SLOTS,
+  BILLING_PATHS, EXECUTION_ENVIRONMENTS, OCCUPANT_KINDS, OCCUPANT_QUALIFICATION_STATUSES,
+  ROLE_BINDING_REFUSALS, ROLE_SLOTS,
 } from './role-slot-contracts';
 export type {
-  BillingPath, ExecutionEnvironment, OccupantKind, RoleBinding, RoleBindingProblem,
+  BillingPath, ExecutionEnvironment, OccupantKind, OccupantQualification,
+  OccupantQualificationStatus, RoleBinding, RoleBindingProblem,
   RoleBindingRefusal, RoleOccupant, RoleSlot, RoleSlotBindingResult,
 } from './role-slot-contracts';
 
 export {
   DEVELOPMENT_DEFAULT_OCCUPANTS, ROLE_OCCUPANTS, findOccupant, occupantsForRole,
+  juliusProviderQualification,
   registryIsComplete,
 } from './role-slot-registry';
 

@@ -27,7 +27,9 @@ const parsed = (over: Partial<ParsedStreamState> = {}): ParsedStreamState => ({
   cwd: '/workspace',
   initSeen: true,
   isError: false,
-  resultSubtype: null,
+  terminalReason: null,
+  // A completed run's result record: every field says success.
+  resultSubtype: 'success',
   finalResult: null,
   toolActivity: [],
   assistantTextChunks: [],

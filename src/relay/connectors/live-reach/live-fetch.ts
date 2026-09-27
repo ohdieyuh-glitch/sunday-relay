@@ -72,7 +72,31 @@ export type LiveFetchOutcome =
     readonly bytes: number;
     readonly truncated: boolean;
   }
-  | { readonly kind: 'refused'; readonly detail: string }
+  /**
+   * RELAY'S OWN POLICY SAID NO.
+   *
+   * `reached` is the field a meter needs and could not previously ask for. A
+   * URL refused before resolution sent nothing and cost nobody anything; a
+   * REDIRECT refused at hop two means a host already answered and its rate
+   * limit already counted us. Charging both the same way is wrong in one
+   * direction or the other, and which one it is depends on this boolean.
+   */
+  | { readonly kind: 'refused'; readonly detail: string; readonly reached: boolean }
+  /**
+   * THE HOST ANSWERED AND RELAY WILL NOT READ WHAT IT SENT.
+   *
+   * Split out of `refused` because it is a different event with a different
+   * next move: nothing about the request was wrong, the document is simply not
+   * something Relay puts in front of a model. The reference survives so a
+   * human can open it; the bytes do not.
+   */
+  | {
+    readonly kind: 'unsupported_content';
+    readonly detail: string;
+    readonly status: number;
+    readonly finalUrl: string;
+    readonly contentType: string | null;
+  }
   | { readonly kind: 'unreachable'; readonly detail: string }
   | { readonly kind: 'throttled'; readonly detail: string; readonly retryAfter: string | null }
   | { readonly kind: 'unauthenticated'; readonly detail: string };
@@ -98,7 +122,7 @@ export async function liveFetch(request: LiveFetchRequest): Promise<LiveFetchOut
 
   const verdict = checkUrlPolicy(request.url, policy);
   if (!verdict.allowed || verdict.url === null) {
-    return { kind: 'refused', detail: verdict.reason ?? 'the URL is not permitted' };
+    return { kind: 'refused', detail: verdict.reason ?? 'the URL is not permitted', reached: false };
   }
 
   let current = verdict.url;
@@ -112,7 +136,7 @@ export async function liveFetch(request: LiveFetchRequest): Promise<LiveFetchOut
     if (literal !== null) return null;
     const resolution = await checkResolvedAddresses(url.hostname, request.resolver, policy);
     if (!resolution.allowed) {
-      return { kind: 'refused', detail: resolution.reason ?? 'the hostname is not permitted' };
+      return { kind: 'refused', detail: resolution.reason ?? 'the hostname is not permitted', reached: false };
     }
     return null;
   };
@@ -150,7 +174,8 @@ export async function liveFetch(request: LiveFetchRequest): Promise<LiveFetchOut
       hop += 1;
       const redirect = checkRedirect(current, location, hop, policy);
       if (!redirect.allowed || redirect.target === null) {
-        return { kind: 'refused', detail: redirect.reason ?? 'the redirect was not permitted' };
+        // A response came back before this refusal, so the host saw us.
+        return { kind: 'refused', detail: redirect.reason ?? 'the redirect was not permitted', reached: true };
       }
       // Nothing to drop: this fetch never sends a credential. Recording the
       // origin change keeps that true if one is ever added.
@@ -194,8 +219,11 @@ export async function liveFetch(request: LiveFetchRequest): Promise<LiveFetchOut
     const contentType = response.headers.get('content-type');
     if (!isInlineableMimeType(contentType)) {
       return {
-        kind: 'refused',
+        kind: 'unsupported_content',
         detail: `the response content type ${contentType ?? 'was absent'} is not one Relay reads`,
+        status: response.status,
+        finalUrl: current.toString(),
+        contentType,
       };
     }
 

@@ -151,7 +151,8 @@ export interface JuliusRunWriter {
     runId: string; projectId: string; idempotencyKey: string; evidence: JuliusEvidence;
   }): Promise<boolean>;
   /**
-   * THE DECISION AND ITS RELEASE ARE ONE WRITE.
+   * THE DECISION, ITS RELEASE, AND THE HISTORY THAT EXPLAINS BOTH ARE ONE
+   * WRITE.
    *
    * `releaseTaskIds` names BLOCKED tasks this decision satisfies (computed by
    * `evaluateJuliusRelease`); they become RUNNABLE in the same durable write
@@ -161,11 +162,30 @@ export interface JuliusRunWriter {
    * recorded it first already did. Only Julius calls this, and the claim query
    * offers RUNNABLE tasks alone, so this is the only path from BLOCKED to
    * claimable.
+   *
+   * `events` ARE PART OF THAT SAME WRITE, for the reason the release is. They
+   * used to be appended after it returned, which left a window a crash could
+   * fall into: the decision stood, the release stood, and the events that
+   * explain them were lost — permanently, because the resume sweep skips a
+   * task that already has a decision, so nothing ever wrote them again. The
+   * run's history then could not say that a verification was decided or that a
+   * task became runnable, while the rows those events describe stood. The
+   * behaviour was right and the record was wrong, which is the failure a
+   * ledger exists to prevent.
+   *
+   * They are written ONLY when this call recorded the decision. A duplicate
+   * wrote them the first time, and writing them again would be a second row
+   * saying what the ledger already says.
+   *
+   * Their ids come from `juliusDecisionEventId`, so a replayed decision names
+   * the same events and the append contract applies to them: idempotent for a
+   * replay, a typed conflict for a rewrite.
    */
   appendDecision(input: {
     decisionId: string; runId: string; taskId: string; policyRevision: string;
     idempotencyKey: string; occurredAt: string; decision: JuliusVerificationDecision;
     releaseTaskIds?: readonly string[];
+    events?: readonly JuliusOperationalEvent[];
   }): Promise<boolean>;
 }
 
@@ -238,6 +258,24 @@ export interface JuliusContextWriter {
  * always says which ledger it means.
  */
 export interface JuliusEventWriter {
+  /**
+   * APPEND ONE EVENT, WITH ONE CONTRACT IN EVERY STORE.
+   *
+   *   a new id                        -> recorded; returns true.
+   *   the same id, the same event     -> idempotent; no duplicate, no error,
+   *                                      returns false. The ledger keeps the
+   *                                      instant of the FIRST write.
+   *   the same id, a different event  -> throws {@link JuliusEventIdConflict};
+   *                                      nothing is written and the recorded
+   *                                      event stands.
+   *
+   * "The same event" is {@link canonicalJuliusEventIdentity}: the subject and
+   * the facts, at any key order and any depth, and NOT `occurredAt` — a replay
+   * after a restart reads a later clock and is still the same event.
+   *
+   * The two stores used to disagree here, in opposite directions, and
+   * `julius-event-append-conformance.ts` now runs one set of cases against both.
+   */
   appendEvent(event: JuliusOperationalEvent): Promise<boolean>;
 }
 
@@ -327,8 +365,6 @@ export interface JuliusRuntimeReader {
   brainEntriesForRun(runId: string, projectId: string): Promise<readonly JuliusBrainEntry[]>;
   /** How many repair rounds this task has already had. Zero, not null. */
   repairRoundsFor(taskId: string, projectId: string): Promise<number>;
-  /** Whether an INDEPENDENT_REVIEWER task for this task has already succeeded. */
-  reviewCompletedFor(taskId: string, projectId: string): Promise<boolean>;
   /**
    * How many of this run's tasks are ACTIVE right now, across every worker.
    *

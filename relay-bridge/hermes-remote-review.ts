@@ -1,4 +1,4 @@
-import { buildReviewPrompt, classifyUnreadableReview, describeUnreadableReview, reviewDiagnostics, validateHermesReview, type HermesOutcome, type HermesReviewShape, type ReviewPacket } from './hermes-reviewer';
+import { HERMES_TRANSIENT_UPSTREAM_STATUSES, buildReviewPrompt, classifyUnreadableReview, describeUnreadableReview, reviewDiagnostics, validateHermesReview, type HermesOutcome, type HermesReviewShape, type ReviewPacket } from './hermes-reviewer';
 import { SERVICE_MAX_TURNS } from '../relay-hermes-service/service';
 
 /**
@@ -266,7 +266,9 @@ export async function runRemoteHermesReview(input: {
     const admissionShape = classifyRemoteReviewFailure({ failureKind: declaredFailureKind(start.body) })
       ?? (start.status === 401 || start.status === 403 ? 'review_authentication_failed'
         : start.status === 400 || start.status === 422 ? 'review_request_rejected'
-          : start.status === 429 || start.status === 503 ? 'review_service_unavailable'
+          // The SAME list the local path reads, so the two transports cannot
+          // come to different answers about one provider condition.
+          : HERMES_TRANSIENT_UPSTREAM_STATUSES.includes(start.status) ? 'review_service_unavailable'
             : 'review_provider_http_error');
     // A refusal the service made is not a launch failure: it answered.
     return {

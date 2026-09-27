@@ -1,3 +1,4 @@
+import { JULIUS_CODING_AGENT_FAILURES } from './julius-coding-agent';
 import type { JuliusContractReviewCharge } from './julius-task-contract';
 import { JULIUS_COST_BASES } from './julius-cost-accounting';
 import type{JuliusWorker,JuliusWorkerRegistry,JuliusWorkerRole}from'./julius-runtime';import{workerAllowedByCard,type JuliusCardPolicy}from'./julius-policy';
@@ -32,6 +33,18 @@ export const JULIUS_ERROR_CODES=['RATE_LIMIT','TIMEOUT','AUTH_CONFIGURATION','PR
  * literal-VALUE scan already exists to catch, `$DB_PASSWORD` being in its
  * needle list. This function is the first layer, not the only one.
  */
+/**
+ * EVERY WAY THE INDEPENDENT EXECUTOR CAN REFUSE A WORKER'S TOOL EFFECT, closed.
+ * The executor answers over HTTP with its own codes; `classifyExecutorRefusal`
+ * (relay-bridge/julius/executor-effects.ts) maps each onto exactly one of these.
+ */
+export const JULIUS_EXECUTOR_REFUSALS=[
+ 'executor_unavailable','executor_request_invalid','executor_identity_invalid','executor_scope_refused',
+ 'executor_authorization_refused','executor_identity_conflict','executor_outcome_unknown','executor_security_failure',
+ 'executor_terminal_failure','executor_response_invalid','executor_claim_missing','executor_invocation_unauthorized',
+ 'executor_dispatch_unclaimed','executor_refused_unclassified',
+] as const;
+export type JuliusExecutorRefusal=typeof JULIUS_EXECUTOR_REFUSALS[number];
 export const safeFailureClass=(value:unknown):string|null=>typeof value==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(value)?value:null;
 /**
  * THE SAME NARROWING FOR REASON CODES, WHICH USE BOTH CONVENTIONS.
@@ -45,6 +58,36 @@ export const safeFailureClass=(value:unknown):string|null=>typeof value==='strin
  * explain a paid failure — so the alphabet is widened here and nowhere else.
  */
 export const safeReasonCode=(value:unknown):string|null=>typeof value==='string'&&/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(value)?value:null;
+/**
+ * WHY A HOSTED CODING AGENT FAILED, AS A CLOSED SET THE DOMAIN OWNS.
+ *
+ * The hosted runtime reports its failure as PROSE — free text from a provider,
+ * which can quote the request, which can quote the credential. `hosted-runner.ts`
+ * therefore emits one fixed sentence and nothing else, deliberately, and that is
+ * not being relaxed. So the adapter CLASSIFIES that text and sends a token; this
+ * is the set of tokens Julius will accept, and `safeEnum` refuses everything
+ * else.
+ *
+ * WHY A SHAPE TEST WOULD NOT DO. `safeReasonCode` and `safeToken` admit any
+ * token-shaped string, and a credential is token-shaped: `sk_ant_api03_...`
+ * satisfies both. Those helpers are right for `incompleteReason` and
+ * `providerStatus`, which are enums the PROVIDER already chose from its own
+ * closed set. Nothing here comes from such an enum, so membership is the only
+ * defensible test — and it means no adapter, however it is written or broken,
+ * can put a provider's characters in this column.
+ *
+ * The adapter declares its own copy (`HOSTED_FAILURE_REASONS`) because it may
+ * not import the mission projection; `hosted-failure-reason.test.ts` fails if
+ * the two ever disagree.
+ */
+export const JULIUS_HOSTED_FAILURE_REASONS=['rate_limited','credit_unavailable','context_length_exceeded','content_filtered','provider_overloaded','provider_auth_rejected','provider_bad_request','provider_server_error','stream_interrupted','execution_error','unclassified','no_message'] as const;
+export type JuliusHostedFailureReason=(typeof JULIUS_HOSTED_FAILURE_REASONS)[number];
+/**
+ * WHAT A CODING AGENT'S RESULT MESSAGE AMOUNTED TO, read from every field of it
+ * — mirrored from `claude-code-result-class.v1` so the domain's allowlist names
+ * a closed set without importing a connector. A test holds the two equal.
+ */
+export const JULIUS_CODING_AGENT_RESULT_CLASSES=['SUCCESS','NO_RESULT','UNKNOWN_SUBTYPE','REPORTED_ERROR','ERROR_FLAG_UNREPORTED','TERMINAL_REASON_NOT_COMPLETED','BUDGET_STOP','MAX_TURNS','EXECUTION_ERROR','STRUCTURED_OUTPUT_RETRIES_EXHAUSTED'] as const;
 /**
  * THE CORROBORATING FACTS, NARROWED THE SAME WAY THE CLASS IS.
  *
@@ -245,16 +288,82 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
    * makes no such attempt.
    */
   reviewAttempts:safeCount(v.reviewAttempts),
+  /**
+   * PROVIDER CALLS THE REVIEW ENGINE REPORTED for its last attempt, from its
+   * own usage file — written on failure too. Null when no report existed.
+   */
+  engineApiCalls:safeCount(v.engineApiCalls),
+  /* --- The independent executor, for a worker whose tool effect it refused. --- */
+  /**
+   * WHICH TOOL EFFECT THE EXECUTOR REFUSED: the base revision read, the diff
+   * capture or the test run. Null when no effect was refused.
+   */
+  executorStep:safeEnum(v.executorStep,['base','diff','test'] as const),
+  /**
+   * WHAT THE EXECUTOR SAID, as a closed class. Paid qualification 34757974058's
+   * second coder repair was refused `INVALID_REQUEST:execution_envelope_invalid:executionIdentity`
+   * and the durable row said only WORKER_EXECUTION_FAILURE with no class, because
+   * the refusal was an untyped Error the coordinator could not name. Null when
+   * no effect was refused.
+   */
+  executorRefusal:safeEnum(v.executorRefusal,JULIUS_EXECUTOR_REFUSALS),
+  /**
+   * THE ENVELOPE OR REQUEST FIELD THE EXECUTOR NAMED, snake-cased, when it named
+   * one (`execution_identity`, `task_id`). A field name from the executor's own
+   * validator, never a value. Null otherwise.
+   */
+  executorRefusalField:safeToken(v.executorRefusalField),
+  /**
+   * WHY THE SECOND REVIEW CALL WAS BOUGHT, as the closed shape token of the
+   * answer that caused it: a correctable shape defect, or the transient
+   * `review_service_unavailable` re-asked once inside the same deadline. A
+   * count of two calls that could not say which kind of second call it was
+   * would leave a paid re-ask indistinguishable from a paid correction. Null
+   * when the dispatch asked once, and for every other role.
+   */
+  reviewReaskShape:safeToken(v.reviewReaskShape),
   /* --- Coding Agent (build stage). Null for the other two roles. --- */
   /** The runtime's own result subtype, e.g. `success` / `error_max_turns`. */
   resultSubtype:safeToken(v.resultSubtype),
   isError:safeNullableBool(v.isError),
+  /** The runtime's `terminal_reason`, a vocabulary member or `unrecognised`; null when none was sent. */
+  terminalReason:safeToken(v.terminalReason),
+  /**
+   * WHAT THE RESULT AMOUNTED TO, from every field of it. `resultSubtype` and
+   * `isError` are the runtime's words; this is the class that decided whether
+   * the session could be trusted, so a row can show an error subtype beside
+   * `isError: false` and say plainly that it was refused.
+   */
+  resultClass:safeEnum(v.resultClass,JULIUS_CODING_AGENT_RESULT_CLASSES),
   numTurns:safeCount(v.numTurns),
   toolUseCount:safeCount(v.toolUseCount),
   /** Denials the runtime itself recorded — evidence the envelope held. */
   permissionDenials:safeCount(v.permissionDenials),
   /** Whether an actionable implementation result existed at all. */
   implementationPresent:safeNullableBool(v.implementationPresent),
+  /**
+   * WHY THE BUILD FAILED, from {@link JULIUS_HOSTED_FAILURE_REASONS}, and null
+   * on every success.
+   *
+   * Paid Mission 5's rerun stopped six turns into a twenty-six turn envelope
+   * with `isError` true, changed nothing, and cost $0.885661. `failureShape`
+   * said `coder_provider_error_after_init` — which names the boundary and not
+   * the cause — and the cause is now unrecoverable, exactly as Mission 4
+   * attempt one's `incompleteReason` was before it had a column. This is the
+   * classified answer; the provider's own words never travel.
+   */
+  failureReason:safeEnum(v.failureReason,JULIUS_HOSTED_FAILURE_REASONS),
+  /**
+   * THE FAILURE JULIUS REASONS ABOUT, from the provider-neutral Coding Agent
+   * taxonomy. `failureReason` above is the hosted runtime's own classification;
+   * this is the class that decided retry versus operator action, and it reads
+   * the same whichever coding provider failed.
+   */
+  codingAgentFailure:safeEnum(v.codingAgentFailure,JULIUS_CODING_AGENT_FAILURES),
+  /** Whether a person has to act before retrying can change the answer — exhausted credit, a rejected key. */
+  operatorActionRequired:safeNullableBool(v.operatorActionRequired),
+  /** Which implementation of the Coding Agent port ran, as a machine token. */
+  codingAgentProvider:safeToken(v.codingAgentProvider),
   /* --- Coding Agent cost, beside a refusal. Paid run 34037313976 was refused
    * for cost and the amount lived only in a message nothing persisted. --- */
   /** The runtime-reported cost in micro-dollars; null when the runtime reported none. */
@@ -265,6 +374,28 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   costSource:safeToken(v.costSource),
   /** Whether the provider runtime launched at all: the difference between spending nothing and spending an unknown amount. */
   runtimeStarted:safeNullableBool(v.runtimeStarted),
+  /* --- WHAT THE STREAM ITSELF REPORTED, TURN BY TURN. A FLOOR. ---
+   *
+   * `costUsdMicros` and `inputTokens`/`outputTokens` above come from the
+   * runtime's terminal result, and a run Relay aborts at its own ceiling never
+   * produces one: paid run 34485676189 attempt 1 was cut off at 360 000 ms and
+   * every one of those columns is null. We paid and could not say how much.
+   *
+   * Every assistant turn had already reported its own usage and all of it was
+   * discarded, so "the runtime reported nothing" was a fact about the parser.
+   * These columns are the sum over the turns actually seen — a LOWER BOUND,
+   * which is why they are named apart from the totals and why no basis is
+   * derived from them. `costBasis` stays UNKNOWN: a floor in tokens is not a
+   * provider's report in dollars, and the ledger must keep holding the
+   * reservation rather than settle against a number nobody billed. --- */
+  /** Assistant turns whose usage block was readable. 0 means the floor is empty, not that nothing ran. */
+  streamUsageMessages:safeCount(v.streamUsageMessages),
+  /** Turns the runtime itself marked aborted — its own word for what Relay's timer did. */
+  streamAbortedMessages:safeCount(v.streamAbortedMessages),
+  streamInputTokens:safeCount(v.streamInputTokens),
+  streamOutputTokens:safeCount(v.streamOutputTokens),
+  streamCacheReadInputTokens:safeCount(v.streamCacheReadInputTokens),
+  streamCacheCreationInputTokens:safeCount(v.streamCacheCreationInputTokens),
   /* ------------------------------------------- the attempt itself ----
    *
    * EVERY FIELD ABOVE DESCRIBES A FAILURE, and until Live Run 3 that was the
@@ -321,6 +452,17 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   estimatedCostUsdMicros:safeCount(v.estimatedCostUsdMicros),
   /** Tokens the boundary reported, which is what a later price table would measure. */
   inputTokens:safeCount(v.inputTokens),
+  /**
+   * CACHED INPUT IS BILLED AT A DIFFERENT RATE, so `inputTokens` alone is a
+   * quantity at one price when part of it was bought at another.
+   *
+   * The connector has always read this (`input_tokens_details.cached_tokens`)
+   * into `GptUsage`, where it reached no diagnostic at all. It could not have:
+   * a field absent from this allowlist is dropped on its way to the durable
+   * record without a word, which is why adding the column upstream is only
+   * half the repair.
+   */
+  cachedInputTokens:safeCount(v.cachedInputTokens),
   outputTokens:safeCount(v.outputTokens),
   /* ------------------------------- why an answer stopped early ----
    *
@@ -340,6 +482,37 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   providerStatus:safeReasonCode(v.providerStatus),
   /** Reported by the boundary; `null` when it reported none. */
   totalTokens:safeCount(v.totalTokens),
+  /* --------------------------- whether the worker asked for anything ----
+   *
+   * The continuous lifecycle could not start on a paid run: no live adapter
+   * carried `guidanceRequest`, `researchAsks` or `segmentResume`, so a Coding
+   * Agent's only way to be stuck was to finish anyway. These four say what the
+   * worker's own final message asked for, and — the half that matters — say
+   * when it asked and could not be understood, which is otherwise
+   * indistinguishable from a worker that asked for nothing. UNKNOWN WHEN
+   * UNKNOWN: a dispatch with no observed result message never gave the worker
+   * a place to ask, so all four read null rather than false. --- */
+  /** Did the final message carry a participation block at all? */
+  participationPresent:safeNullableBool(v.participationPresent),
+  /** Could it be read? `null` when none was present, or when nothing was observed. */
+  participationReadable:safeNullableBool(v.participationReadable),
+  /** Which of the module's closed refusals applied. Never the block's own text. */
+  participationRefusal:safeReasonCode(v.participationRefusal),
+  /**
+   * ONE FLAG PER CHANNEL, rather than one column holding a list.
+   *
+   * A joined list would need a second grammar to defend and would read as text
+   * in a TSV cell; these are the same closed set as
+   * `JULIUS_PARTICIPATION_CHANNELS`, held equal to it by test, so a channel
+   * added without a column fails rather than exporting silently.
+   */
+  participationAskedGuidance:safeNullableBool(v.participationAskedGuidance),
+  participationAskedResearch:safeNullableBool(v.participationAskedResearch),
+  participationAskedResume:safeNullableBool(v.participationAskedResume),
+  /** Whether the coder closed with a report of its own work. Claims, recorded beside what the executor observed. */
+  participationAskedReport:safeNullableBool(v.participationAskedReport),
+  /** Whether the coder reported what the design did under real code. */
+  participationAskedObservations:safeNullableBool(v.participationAskedObservations),
  });
 };
 /**
@@ -367,7 +540,19 @@ export class JuliusDispatchError extends Error{
  readonly failureClass:string|null;
  /** Allowlisted structural facts, or null when the boundary reported none. */
  readonly diagnostics:JuliusSafeDiagnostics|null;
- constructor(readonly code:JuliusErrorCode,readonly retryable:boolean,readonly safeMessage:string,failureClass?:unknown,diagnostics?:unknown){super(code);this.failureClass=safeFailureClass(failureClass);this.diagnostics=diagnostics===undefined?null:safeReviewDiagnostics(diagnostics);}
+ /**
+  * WHAT THE EXECUTOR OBSERVED THE FAILED ATTEMPT CHANGE, unsanitised, for the
+  * domain to read with its own allowlist.
+  *
+  * A failed attempt still edited the workspace, and its edits used to reach the
+  * record only by appearing inside the NEXT attempt's diff. Diagnostics cannot
+  * carry them: they are flat scalars by contract, and a change set is neither
+  * flat nor a scalar. So the boundary carries the same shape a successful
+  * dispatch returns, and the kernel — which decides what a change set means —
+  * reads it the same way. Absent on every failure that observed nothing.
+  */
+ readonly implementation:unknown;
+ constructor(readonly code:JuliusErrorCode,readonly retryable:boolean,readonly safeMessage:string,failureClass?:unknown,diagnostics?:unknown,implementation?:unknown){super(code);this.failureClass=safeFailureClass(failureClass);this.diagnostics=diagnostics===undefined?null:safeReviewDiagnostics(diagnostics);this.implementation=implementation;}
 }
 /**
  * A WORKER MAY PROPOSE A CONTRACT REVISION, and `unknown` is the honest type.
@@ -394,7 +579,77 @@ export interface JuliusProviderResult{readonly workerId:string;readonly provider
  * that reports none behaves exactly as before — and gets no row, rather than
  * a row of nulls.
  */
-readonly diagnostics?:unknown;}
+readonly diagnostics?:unknown;
+/**
+ * WHAT A CODER ASKED THE ARCHITECT FOR, MID-MISSION, and what an architect
+ * answered with. Both `unknown` for the same reason `contractProposal` is: they
+ * come from a provider, and Julius rebuilds each from an allowlist before any
+ * of it is recorded.
+ *
+ * They are the continuous lifecycle's only new adapter surface. The seam is
+ * otherwise untouched — still one promise in and one result out — because the
+ * point was never to interrupt a running worker. It was to give a mission more
+ * moments at which one may be ASKED something.
+ */
+readonly guidanceRequest?:unknown;
+ /**
+  * WHAT A CONTINUATION SEGMENT RESUMES FROM. Present when a coder ended a
+  * segment at a barrier. Julius rebuilds it from an allowlist, and it never
+  * carries a provider session id, a transcript or hidden reasoning: a resume
+  * that depended on provider-side state would make the provider the memory
+  * authority and would not survive the restart it exists to survive.
+  */
+ readonly segmentResume?:unknown;
+ /**
+  * WHAT THIS WORKER NEEDS TO LOOK AT, unsanitised. Available to all three
+  * slots and rebuilt by Julius from a four-field allowlist, so a worker cannot
+  * name a host, a budget, a role or a header here however it phrases it.
+  */
+ readonly researchAsks?:unknown;
+readonly guidance?:unknown;
+ /**
+  * WHAT AN INDEPENDENT REVIEWER CONCLUDED, in the canonical vocabulary —
+  * CONTINUE, WARNING, CHALLENGE, REPAIR_REQUIRED or BLOCK — unsanitised.
+  * Julius rebuilds it from an allowlist, refuses any Julius-only outcome by
+  * name, and decides the consequence itself. Ignored from any other slot.
+  */
+ readonly reviewVerdict?:unknown;
+ /**
+  * THE ARCHITECT'S ONE ANSWER TO A DISAGREEMENT — concede, or maintain with
+  * evidence — unsanitised. Julius rebuilds it from an allowlist and decides what
+  * follows. Read only from a rebuttal task.
+  */
+ readonly rebuttal?:unknown;
+ /**
+  * THE ARCHITECT'S PICTURE OF THE SYSTEM — components, boundaries,
+  * dependencies, decisions, assumptions, questions and risks — unsanitised.
+  * Julius rebuilds it from an allowlist, refuses one that names a mission-owned
+  * term, and keeps it as ADVISORY state: the Mission Contract stays
+  * authoritative. Read only from a Prompt Architect dispatch.
+  */
+ readonly architecture?:unknown;
+ /**
+  * THE ARCHITECT'S ANSWER TO "DOES WHAT WAS BUILT MATCH WHAT WAS DESIGNED?" —
+  * ALIGNED, DRIFT_NON_BLOCKING, DRIFT_REQUIRES_REPAIR or REPLAN_REQUIRED, with
+  * the drift it names and the evidence for it. Unsanitised. An assessment,
+  * never a verdict: it cannot accept a task and cannot complete a mission.
+  */
+ readonly consistency?:unknown;
+ /**
+  * WHAT A CODING AGENT DISPATCH DID TO THE WORKSPACE, AND WHAT THE CODER SAID
+  * ABOUT IT — assembled by the Julius side of the adapter from the independent
+  * executor's change set and the coder's own report, unsanitised. Julius
+  * recomputes scope against the locked contract itself; nothing here is taken
+  * as a verdict. Read only from a Coding Agent dispatch.
+  */
+ readonly implementation?:unknown;
+ /**
+  * WHAT A CODING AGENT SAW THE DESIGN DO UNDER REAL CODE — an invalidated
+  * assumption, a changed dependency, a crossed boundary, an unsatisfiable design
+  * — unsanitised. Julius decides whether it is a reason to consult the
+  * architect; the coder never writes architecture.
+  */
+ readonly architectureObservations?:unknown;}
 /**
  * WHAT JULIUS TELLS AN ADAPTER, and nothing more.
  *
@@ -416,7 +671,28 @@ export interface JuliusDispatchAllocation{readonly usdMicros:number;readonly pol
  * look one up would be choosing what it is graded against. Optional, so an
  * unbound role and the older reviewer harness are unchanged.
  */
-export interface JuliusDispatchInput{readonly taskId:string;readonly contextId:string;readonly taskType?:string;readonly allocation?:JuliusDispatchAllocation;readonly contract?:JuliusContractReviewCharge;readonly signal?:AbortSignal;}
+/**
+ * WHAT THE LAST ATTEMPT LEFT IN THE WORKSPACE, AND WHAT JULIUS DECIDED ABOUT IT.
+ *
+ * A mission has ONE workspace and it is never reset, so an attempt inherits
+ * whatever the last one left. Julius asks for exactly one kind of undo — a
+ * failed attempt whose own changes its locked contract refused — and names two
+ * trees: the one to put the workspace back to, and the one the workspace must
+ * STILL be for the undo to be safe. An adapter that finds anything else refuses
+ * it and says so; nothing here authorises a broad reset.
+ */
+export interface JuliusDispatchWorkspace{readonly restoreToTree:string;readonly expectedTree:string;}
+/**
+ * WHICH ATTEMPT IS BEING RUN.
+ *
+ * `leaseGeneration` is the fencing token the claim already carries, and it is
+ * what separates attempt 1 from attempt 2 of the same task. An adapter needs
+ * it to say which attempt produced a body: without it, every round of a repair
+ * wrote over the round before it, destroying the diff and the test output that
+ * explained why the repair existed.
+ */
+export interface JuliusDispatchAttempt{readonly leaseGeneration:number;}
+export interface JuliusDispatchInput{readonly taskId:string;readonly contextId:string;readonly taskType?:string;readonly allocation?:JuliusDispatchAllocation;readonly contract?:JuliusContractReviewCharge;readonly signal?:AbortSignal;readonly workspace?:JuliusDispatchWorkspace;readonly attempt?:JuliusDispatchAttempt;}
 export interface JuliusProviderAdapter{readonly adapterId:string;dispatch(input:JuliusDispatchInput):Promise<JuliusProviderResult>;}
 export interface JuliusProviderHealth{readonly providerId:string;readonly state:'CLOSED'|'OPEN'|'HALF_OPEN';readonly consecutiveFailures:number;readonly openedAt:string|null;readonly active:number;readonly concurrencyLimit:number;}
 export class JuliusProviderHealthRegistry{private readonly values=new Map<string,JuliusProviderHealth>();set(value:JuliusProviderHealth){this.values.set(value.providerId,structuredClone(value));}available(providerId:string){const value=this.values.get(providerId);return value===undefined||(value.state!=='OPEN'&&value.active<value.concurrencyLimit);}get(providerId:string){const value=this.values.get(providerId);return value?structuredClone(value):null;}}

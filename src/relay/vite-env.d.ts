@@ -12,6 +12,8 @@ interface ImportMetaEnv {
   readonly VITE_RELAY_LIVE?: string;
   /** Explicit Relay bridge base URL. Unset = same-origin `/relay-api`. */
   readonly VITE_RELAY_BRIDGE_URL?: string;
+  /** The i.Wonder company site — a separate deployment. Unset hides the link. */
+  readonly VITE_IWONDER_WEB_URL?: string;
 }
 
 interface ImportMeta {

@@ -40,6 +40,9 @@ import { cronEnabled, handleCronRoute, isCronRoute, type CronTickPort } from './
 import { betaWaveZeroState, handleBetaRoute, isBetaRoute } from './beta-routes';
 import { handleRepositoryRoute, isRepositoryRoute, type RepositoryCaller } from './repository-routes';
 import { handlePspRoute, isPspRoute } from './psp-routes';
+import { createJuliusStatePorts, handleJuliusStateRoute, isJuliusStateRoute } from './julius-state-routes';
+import { composeJuliusMissionBootstrap, handleJuliusMissionRoute, isJuliusMissionRoute, type JuliusMissionRoutePorts } from './julius-mission-routes';
+import { Pool } from 'pg';
 import { handleShipRoute, isShipRoute } from './ship-route';
 import { resolveRepositoryTarget, registrationOwnerAdmits } from '../src/relay/mission/repository-target';
 import { validateMissionConfig } from '../src/relay/mission/mission-config';
@@ -68,6 +71,7 @@ import { githubAppConfigFromEnv } from './repository-credential';
 import {
   authorizeReviewerCall, handleBrowserSessionRoute, isBrowserSessionRoute, sessionTokenFrom,
 } from './browser-session/routes';
+import type { MissionOwnershipScope } from './mission';
 import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-backend';
 import { handleWonderlandRoute, isWonderlandRoute } from './wonderland-routes';
 import {
@@ -82,7 +86,6 @@ import {
   WonderlandJuliusReaderPostgres,
   WonderlandMembershipPostgres,
 } from '../src/relay/persistence';
-import type { Pool } from 'pg';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -126,7 +129,8 @@ function send(res: ServerResponse, status: number, body: unknown, headers: Recor
   res.end(json);
 }
 
-function readBody(req: IncomingMessage): Promise<unknown> {
+/** The body as text — for a route whose body is a document with its own parser. */
+function readRawBody(req: IncomingMessage): Promise<string | undefined> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
@@ -144,11 +148,7 @@ function readBody(req: IncomingMessage): Promise<unknown> {
     req.on('end', () => {
       if (aborted) return;
       if (!chunks.length) return resolve(undefined);
-      try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-      } catch {
-        reject(new Error('invalid JSON body'));
-      }
+      resolve(Buffer.concat(chunks).toString('utf8'));
     });
     req.on('error', () => reject(new Error('request error')));
   });
@@ -195,6 +195,16 @@ export const wonderlandJuliusWorld = (pool: Pool): WonderlandJuliusWorld => ({
   reader: new WonderlandJuliusReaderPostgres(pool),
   membership: new WonderlandMembershipPostgres(pool),
 });
+
+async function readBody(req: IncomingMessage): Promise<unknown> {
+  const raw = await readRawBody(req);
+  if (raw === undefined) return undefined;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error('invalid JSON body');
+  }
+}
 
 export function createBridgeServer(
   config: BridgeConfig,
@@ -357,6 +367,49 @@ export function createBridgeServer(
   const githubAppIdentity = githubAppConfigFromEnv(process.env);
   /** Saved PSP profiles, participant-owned. Absent without a mounted state root —
    *  the PSP surface then answers `psp_store_unavailable`, like the repo store. */
+/**
+ * THE READ CONNECTION TO JULIUS'S OWN STORE, BUILT ONCE AND ONLY IF CONFIGURED.
+ *
+ * The same `createJuliusPostgresRuntimeStore` the mission job writes through, so
+ * there is one state authority. The subagent and lifecycle repositories had no
+ * composition root at all until this; `approvers` refuses every approval because
+ * nothing here mounts one. Absent `DATABASE_URL`, the ports carry `api: null`
+ * and the family refuses with the variable named.
+ */
+let juliusStateCache: ReturnType<typeof createJuliusStatePorts> | null = null;
+const juliusStatePorts = (): ReturnType<typeof createJuliusStatePorts> => {
+  if (juliusStateCache !== null) return juliusStateCache;
+  const url = process.env.DATABASE_URL;
+  juliusStateCache = createJuliusStatePorts({
+    pool: url ? new Pool({ connectionString: url }) : null,
+    missingConfig: url ? [] : ['DATABASE_URL'],
+  });
+  return juliusStateCache;
+};
+
+/**
+ * CREATION'S PORTS, built lazily under the same discipline as the state routes':
+ * no `DATABASE_URL`, no bootstrap, and a 503 that names it. The reviewer
+ * provider is the mission's recorded reviewer identity and is read from the
+ * same variable the live composition reads.
+ */
+let juliusMissionCache: JuliusMissionRoutePorts | null = null;
+const juliusMissionPorts = (): JuliusMissionRoutePorts => {
+  if (juliusMissionCache !== null) return juliusMissionCache;
+  const url = process.env.DATABASE_URL;
+  const reviewer = process.env.RELAY_HERMES_PROVIDER?.trim();
+  juliusMissionCache = {
+    bootstrap: url ? composeJuliusMissionBootstrap(new Pool({ connectionString: url })) : null,
+    missingConfig: url ? [] : ['DATABASE_URL'],
+    reviewerProvider: reviewer ? reviewer : null,
+    cardRevision: process.env.RELAY_JULIUS_CARD_REVISION?.trim() || 'card:julius-live:1',
+  };
+  return juliusMissionCache;
+};
+
+const headerValue = (value: string | string[] | undefined): string | undefined =>
+  (typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined);
+
   const pspStore = config.stateRoot === null ? null : createPspConfigStore({ root: config.stateRoot });
   return createServer((req, res) => {
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
@@ -823,6 +876,48 @@ export function createBridgeServer(
         }
 
         /**
+         * CREATE A JULIUS MISSION. Operator-only, and the bootstrap only: the
+         * same parser, compiler and port the mission job uses, over the same
+         * store, so the run lands durable in READY and the state routes below
+         * can watch it. Nothing here dispatches; driving stays the job's. See
+         * `julius-mission-routes.ts`.
+         */
+        if (isJuliusMissionRoute(path.replace('/relay-api', ''))) {
+          const missionAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+          const missionResult = await handleJuliusMissionRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            operator: bearerMatches(missionAuthz, process.env.RELAY_BRIDGE_API_TOKEN),
+            body: method === 'POST' ? await readRawBody(req) : undefined,
+          }, juliusMissionPorts());
+          if (missionResult !== null) {
+            send(res, missionResult.status, missionResult.body, cors);
+            return;
+          }
+        }
+
+        /**
+         * JULIUS'S DURABLE STATE, FOR WONDERLAND. Read-only, operator-only, and
+         * every answer is `JuliusRuntimeApi`'s own — see `julius-state-routes.ts`.
+         * With no `DATABASE_URL` the family answers 503 naming the variable; it
+         * never serves an empty run for a database it does not have.
+         */
+        if (isJuliusStateRoute(path.replace('/relay-api', ''))) {
+          const juliusAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+          const juliusResult = await handleJuliusStateRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            operator: bearerMatches(juliusAuthz, process.env.RELAY_BRIDGE_API_TOKEN),
+            projectId: headerValue(req.headers['x-relay-project']),
+            tenantId: headerValue(req.headers['x-relay-tenant']),
+          }, juliusStatePorts());
+          if (juliusResult !== null) {
+            send(res, juliusResult.status, juliusResult.body, cors);
+            return;
+          }
+        }
+
+        /**
          * SHIP A VERIFIED MISSION. Operator-only, separately authorized, and
          * only a mission that verified against a real repository with a retained
          * worktree — see `ship-route.ts`. Dispatched before the generic mission
@@ -991,6 +1086,20 @@ export function createBridgeServer(
           missionCaller = decision;
         }
 
+        /**
+         * THE OWNERSHIP SCOPE, derived ONCE from the decision above and from
+         * nothing else.
+         *
+         * `undefined` for the operator credential — unscoped, and every operator
+         * behaviour below is byte-for-byte what it was. For a browser it is the
+         * participant bound into the session at mint, which for a read-only
+         * session is null. It is deliberately NOT read from the request body:
+         * the body is what a caller CLAIMS, and this decides what they may see.
+         */
+        const missionScope: MissionOwnershipScope | undefined = missionCaller?.kind === 'browser'
+          ? { participantId: missionCaller.participantId }
+          : undefined;
+
         if (method === 'POST' && path === '/relay-api/mission/start') {
           const body = (await readBody(req)) as { missionId?: unknown; objective?: unknown } | undefined;
           const missionId = typeof body?.missionId === 'string' ? body.missionId : '';
@@ -1132,7 +1241,18 @@ export function createBridgeServer(
             // WHO started it — the verified session, never the body — so it lands
             // in this participant's history and only theirs. Operator: null.
             startedBy: missionCaller?.kind === 'browser' ? missionCaller.participantId : null,
+            scope: missionScope,
           });
+          if (view === null) {
+            /**
+             * The id is already held by a mission this caller cannot see. Mission
+             * ids are caller-chosen, so this is reachable by guessing — and the
+             * answer must not distinguish "taken by you" from "taken by someone
+             * else", nor name whose it is.
+             */
+            send(res, 409, { error: { kind: 'mission_id_unavailable', message: 'That mission id is not available.' } }, cors);
+            return;
+          }
           send(res, 200, { missionId, view }, cors);
           return;
         }
@@ -1160,12 +1280,12 @@ export function createBridgeServer(
           if (id === null) return send(res, 404, { error: 'mission not found' }, cors);
           const action = missionMatch[2];
           if (method === 'GET' && !action) {
-            const view = registry.get(id);
+            const view = registry.get(id, missionScope);
             if (!view) return send(res, 404, { error: 'mission not found' }, cors);
             return send(res, 200, { missionId: id, view }, cors);
           }
           if (method === 'POST' && action === 'cancel') {
-            const view = registry.cancel(id);
+            const view = registry.cancel(id, missionScope);
             if (!view) return send(res, 404, { error: 'mission not found' }, cors);
             return send(res, 200, { missionId: id, view }, cors);
           }
@@ -1190,7 +1310,7 @@ export function createBridgeServer(
               send(res, retryRefusal.status, retryRefusal.body, cors);
               return;
             }
-            const view = registry.retry(id);
+            const view = registry.retry(id, missionScope);
             if (!view) return send(res, 404, { error: 'mission not found' }, cors);
             return send(res, 200, { missionId: id, view }, cors);
           }

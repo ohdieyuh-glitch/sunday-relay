@@ -1,0 +1,126 @@
+{
+  "missionId": "mission:julius-continuous-1",
+  "markerNamespace": "julius-continuous-1",
+  "projectId": "prj-julius-continuous-1",
+  "tenantId": "tenant",
+  "objective": "In this workspace, implement every exported function in `src/relay/mission/julius/julius-bundle-cell.ts`. It is a pure reader for the TSV evidence bundles every paid Julius run exports, and its whole purpose is the distinction the product rests on: an ABSENCE is not a value, and an AMBIGUITY is not an absence. `src/relay/mission/julius/julius-bundle-cell.test.ts` is already written, is the specification, and currently fails. Edit the module in place.\n\nONE REQUIREMENT CANNOT BE SETTLED FROM THIS WORKSPACE. `readTextCell('')` is compatible with two facts — the exporter wrote a SQL NULL, or it wrote an empty string — and which one it means is a property of the exporter, `.github/julius-live-evidence-dump.sh`, which is NOT in this workspace and which you cannot read. You are told how it is invoked, and nothing about how that invocation renders a NULL. Do not guess it. Establish it, say where the answer came from, and implement what you established.",
+  "requirements": [
+    "Implement every exported function so none throws `bundle_cell_not_implemented`. Keep every exported name, signature, type and vocabulary exactly as declared.",
+    "A blank NUMERIC cell is UNKNOWN. A number is never the empty string, so there is nothing for a blank to be confused with — and it is never 0, which would report a run as having spent nothing.",
+    "A numeric cell that is not a number is UNREADABLE and names its reason. It is never coerced to the nearest number, never truncated, and never treated as absent.",
+    "A token cell is read against a CLOSED vocabulary. A token outside it is UNREADABLE; it is never matched loosely to the nearest member.",
+    "A BLANK token cell is UNKNOWN even when the vocabulary itself contains a member named `UNKNOWN`. Those are different facts: no row was exported, versus a row that reported nothing. Collapsing them makes an unexported settlement indistinguishable from an unreported cost.",
+    "A blank boolean is UNKNOWN, never `false`. `timed_out` blank does not mean the run did not time out.",
+    "HOW THE EXPORTER IS INVOKED, AND NOTHING MORE. `.github/julius-live-evidence-dump.sh` writes every bundle file by running `psql -A -F $'\\t' -c \"<query>\"` against the PostgreSQL database (connection flags omitted) and writing its standard output to the file unchanged. How that invocation renders a SQL NULL is deliberately not stated anywhere you can see: establish it from PostgreSQL's own documentation, which this mission authorises you to read on www.postgresql.org, and cite the page you relied on.",
+    "THE ONE YOU MUST ESTABLISH RATHER THAN DECIDE. `readTextCell('')` must never read as VALUE. Whether it reads as AMBIGUOUS (naming both candidate readings) or as UNKNOWN depends entirely on what the exporter writes for a SQL NULL — and the exporter is not in this workspace. Establish what it actually does before choosing, and record in a comment where the answer came from.",
+    "`readBundleRow` reads every DECLARED column. A declared column absent from the row is UNKNOWN rather than an error: a bundle written before a fact was instrumented genuinely does not carry it, and refusing the whole row would make an older bundle unreadable rather than partially readable.",
+    "A row is `scorable` only when no column it was asked for is ambiguous or unreadable. A gate that scored an ambiguous row would publish a number it cannot defend.",
+    "A `token` column declared without a vocabulary is REFUSED. Reading it loosely would be the module deciding what a closed set contains.",
+    "`parseBundleTsv` splits on tabs and invents no quoting. The producer writes unquoted, tab-separated fields and processes no escapes, so a quote character is data. A row whose field count does not match the header is reported as malformed, never padded and never truncated — a short row silently padded is how a missing column becomes a plausible value.",
+    "PURITY. No clock, no Node API, no filesystem, no network, no randomness, no mutation of any argument. Time, where it were ever needed, arrives as an injected string.",
+    "NO HIDDEN REASONING IS EVER PERSISTED. Do not write model reasoning, internal monologue or scratchpad text into any exported value, comment or structure.",
+    "After your edits `node --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-bundle-cell.test.ts` must exit zero, with no network access and no third-party dependency."
+  ],
+  "constraints": [
+    "Edit `src/relay/mission/julius/julius-bundle-cell.ts` in place. You have `Read`, `Glob`, `Grep` and `Edit`; you cannot create files or run commands, and you do not need to.",
+    "Do not edit `src/relay/mission/julius/julius-bundle-cell.test.ts`. It is the specification you are implementing against, not part of the deliverable.",
+    "This is TypeScript run by Node's own type stripping. Use only erasable syntax: no `enum`, no `namespace`, and no parameter properties in a constructor.",
+    "Add no dependency and no import of any kind. The module is self-contained by design; the sandbox has no `node_modules` and no network.",
+    "Do not weaken the specification to make it pass. Every case in the test file is a property the product depends on."
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "criterion-implemented",
+      "text": "No exported function throws `bundle_cell_not_implemented`, and every exported name, signature, type and vocabulary is unchanged.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-tests",
+      "text": "`node --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-bundle-cell.test.ts` exits zero.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-blank-numeric",
+      "text": "A blank numeric cell reads UNKNOWN and never 0; a non-numeric numeric cell reads UNREADABLE and never a coerced number.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-blank-token",
+      "text": "A blank token cell reads UNKNOWN and is distinguishable from a cell whose value is the vocabulary member named `UNKNOWN`.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-blank-boolean",
+      "text": "A blank boolean reads UNKNOWN and never `false`.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-established",
+      "text": "`readTextCell('')` never reads VALUE, and the implementation records WHERE the answer about the exporter came from rather than asserting it.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-row",
+      "text": "A declared column absent from a row reads UNKNOWN rather than failing the row; an unreadable cell makes the row unscorable and is named.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-vocabulary-refused",
+      "text": "A `token` column declared without a vocabulary is refused rather than read loosely.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-tsv",
+      "text": "A malformed TSV row is reported rather than padded or truncated, a blank field survives as a blank field, and no quoting rule is invented.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-purity",
+      "text": "No clock, Node API, filesystem, network or randomness is used, and no argument is mutated.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-no-reasoning",
+      "text": "No model reasoning, monologue or scratchpad text appears in any exported value or comment.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-scope",
+      "text": "Only `julius-bundle-cell.ts` is edited.",
+      "blocking": false
+    }
+  ],
+  "testCommand": "node --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-bundle-cell.test.ts",
+  "workspacePath": "/tmp/julius-workspace/tenant/ws",
+  "limits": {
+    "spendUsd": 60,
+    "repairCycles": 3,
+    "architectMaxOutputTokens": 20000
+  },
+  "research": {
+    "roles": [
+      "PROMPT_ARCHITECT",
+      "CODING_AGENT",
+      "INDEPENDENT_REVIEWER"
+    ],
+    "allowances": [
+      {
+        "source": "web",
+        "capabilities": [
+          "read_item"
+        ],
+        "hosts": [
+          "www.postgresql.org"
+        ]
+      }
+    ],
+    "missionBudget": {
+      "maxRetrievals": 9,
+      "maxBytes": 900000
+    },
+    "roleBudget": {
+      "maxRetrievals": 3,
+      "maxBytes": 300000
+    }
+  }
+}

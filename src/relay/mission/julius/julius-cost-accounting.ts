@@ -37,9 +37,16 @@
  * exactly what the module forbids.
  * `ESTIMATED` — a harness's own arithmetic. Recorded, reported, never summed
  * into the known total.
- * `UNKNOWN` — nothing was reported. Not zero.
+ * `RESERVED_UNSETTLED` — money is HELD and no settlement has arrived yet. Not
+ * a spend and not an absence: a dispatch that is still running, or one whose
+ * settlement was lost to a crash. It exists so the slot ledger can say "this
+ * mission is holding $3 it has not accounted for" rather than either counting
+ * it as spent or letting it read as free.
+ * `UNKNOWN` — a settlement arrived and reported nothing. Not zero.
  */
-export const JULIUS_COST_BASES = ['PROVIDER_REPORTED', 'MEASURED_FROM_USAGE', 'ESTIMATED', 'UNKNOWN'] as const;
+export const JULIUS_COST_BASES = [
+  'PROVIDER_REPORTED', 'MEASURED_FROM_USAGE', 'ESTIMATED', 'RESERVED_UNSETTLED', 'UNKNOWN',
+] as const;
 export type JuliusCostBasis = (typeof JULIUS_COST_BASES)[number];
 
 /** The two bases that describe money someone was actually charged. */

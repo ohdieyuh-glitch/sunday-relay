@@ -25,12 +25,22 @@ import { providerEnvNames, type HermesProviderId } from './hermes-provider';
  * Every built-in toolset this Hermes exposes. The Reviewer gets NONE of them.
  * A toolset added by a future Hermes is caught by the adapter's own check
  * (`unknownToolsets`), which blocks rather than silently granting it.
+ *
+ * `kanban` IS NOT IN `hermes tools list`, and it was missing here. It is not a
+ * configurable toolset, so the listing never shows it, but with the other 23
+ * disabled the pinned Hermes (2ea39dae) still resolved `kanban` as enabled for
+ * the one-shot path. Its tools stayed out of the request only because their
+ * own check wants HERMES_KANBAN_TASK or `kanban` in a profile's `toolsets`.
+ * Disabling it makes the resolved set empty rather than empty-by-luck.
+ *
+ * The paid reviewer's profile renders this same list from
+ * `scripts/julius-reviewer-isolation.mjs`; its test fails if the two differ.
  */
 export const DISABLED_TOOLSETS: readonly string[] = Object.freeze([
   'web', 'browser', 'terminal', 'file', 'code_execution', 'vision', 'video',
   'image_gen', 'video_gen', 'x_search', 'tts', 'skills', 'todo', 'memory',
   'context_engine', 'session_search', 'clarify', 'delegation', 'cronjob',
-  'homeassistant', 'spotify', 'yuanbao', 'computer_use',
+  'homeassistant', 'spotify', 'yuanbao', 'computer_use', 'kanban',
 ]);
 
 /** Toolsets that would let a Reviewer act rather than read. */

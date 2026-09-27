@@ -439,6 +439,9 @@ describe('reviewer independence at binding time', () => {
     billingPath: 'api',
     requiredConfig: [],
     verificationNotes: [],
+    // A test occupant has been qualified by nobody, which is what UNSUPPORTED
+    // says. There is no default in the type for exactly this reason.
+    qualification: { status: 'UNSUPPORTED', qualifiedServedModels: [], evidence: [], note: 'A test fixture.' },
     ...over,
   });
 

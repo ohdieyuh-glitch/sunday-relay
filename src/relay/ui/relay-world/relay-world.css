@@ -64,3 +64,55 @@
 @media (prefers-reduced-motion: reduce) {
   .rw-veil { transition: none; }
 }
+
+/* ---- BACK -----------------------------------------------------------------
+   The way home from Relay, IN THE BRAND ROW rather than on top of it.
+
+   THE DEFECT THIS REPLACES. This rule used to read `position: fixed; top: 22px;
+   left: 24px` — the same corner `.rx-brand` occupies at `top: var(--rx-pad);
+   left: var(--rx-pad)`. Both were present, both were visible, and they were
+   drawn over each other: measured on the deployed page, `.rw-back` sat at
+   (24, 22) 45x26 and the SUNDAY RELAY lockup at (24, 24) 143x16. The control
+   answered a hit test and a screen reader and could not be read by a person,
+   which is the one failure mode a Back control must not have.
+
+   WHY A ROW AND NOT A NEW COORDINATE. Every free coordinate near the top-left
+   is either occupied or conditionally occupied: directly below the lockup is
+   where `.rx-panel` rises to on a short desktop window (measured: top 72px at
+   1024x600), and the top-right belongs to `.rx-telemetry`, which moves there
+   outright below 860px. A sibling in the brand row cannot collide with the
+   lockup, needs no offset that must be kept in step with the wordmark's width,
+   and needs no second rule per breakpoint — the row reflows with the gutter.
+
+   THE REGISTER IS UNCHANGED: the same low-emphasis type the experience already
+   uses for its subordinate actions (`.rx-ghost`), never a mirror of `.rl3-cta`.
+   A pill-shaped gold control pointing backwards would read as a second primary
+   action. Now that it lives inside `.rx`, `--rx-dim` and `--rx-hairline` reach
+   it by inheritance, so it is the experience's own dim, not a copy of it. */
+.rw-back {
+  margin-left: 14px;
+  padding: 3px 0 3px 14px;
+  background: none;
+  border: 0;
+  border-left: 1px solid var(--rx-hairline, rgba(244, 239, 227, 0.14));
+  color: var(--rx-dim, #8f897b);
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 10px; letter-spacing: 0.16em; line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 240ms ease, transform 240ms ease;
+}
+.rw-back:hover, .rw-back:focus-visible {
+  color: var(--rx-gold, #d8a83c);
+  transform: translateX(-2px);
+}
+/* While a passage is flying, the chrome is inert and so is this: a Back pressed
+   mid-flight is the one click that could leave the camera between two stages.
+   The selector still reaches it — the control moved into `.rx`, and `.rx` has
+   always been a descendant of `.rw`. */
+.rw[data-stage='transition'] .rw-back { pointer-events: none; opacity: 0.35; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rw-back { transition: none; }
+  .rw-back:hover, .rw-back:focus-visible { transform: none; }
+}

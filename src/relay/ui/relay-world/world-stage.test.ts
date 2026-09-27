@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CREATE_AGENT_POSE, HANDOVER, REDUCED_TRANSITION_SECONDS, TRANSITION_SECONDS,
-  lerpPose, nextStage, portalPose, transitionDuration, transitionFrame,
+  lerpPose, nextStage, portalPose, relayStageFromHash, transitionDuration, transitionFrame,
   type CameraPose,
 } from './world-stage';
 import type { Vec3 } from '../landing/choreography';
@@ -15,6 +15,43 @@ const sample = (p: number, reduced = false) => transitionFrame(p, FROM, ORIGIN, 
  * be checked here — which matters, because the thing it must not be is a wait
  * followed by a route change, and that failure looks identical in a screenshot.
  */
+
+/**
+ * THE ADDRESS BAR IS A SOURCE OF TRUTH, and for a while only one of two code
+ * paths agreed. The preview router read the hash; the live beta gate read the
+ * persisted C.A.R.D. instead, so on the live deployment the public URL stopped
+ * answering with the public landing the moment a visitor had built anything.
+ * One function now answers for both.
+ */
+describe('which stage a URL asks for', () => {
+  it('sends `#/relay` to Relay and everything else to the landing', () => {
+    expect(relayStageFromHash('#/relay')).toBe('relay');
+    expect(relayStageFromHash('')).toBe('aquala');
+    expect(relayStageFromHash('#')).toBe('aquala');
+    expect(relayStageFromHash('#/')).toBe('aquala');
+  });
+
+  it('keeps the deeper in-product routes inside Relay', () => {
+    expect(relayStageFromHash('#/relay/console')).toBe('relay');
+    expect(relayStageFromHash('#/relay/project/rly-001')).toBe('relay');
+  });
+
+  it('reads a sign-in return as the landing, not as a route', () => {
+    // The bridge sends the browser back with a one-time claim in the fragment.
+    // It is not an address inside the product, and answering it with Relay would
+    // put a half-finished sign-in on top of the Compound Agent screen.
+    expect(relayStageFromHash('#relay_claim=abc123')).toBe('aquala');
+  });
+
+  it('never answers with `transition`', () => {
+    // A stage a journey passes THROUGH is not a place anyone can be sent to: a
+    // deep link into it would strand the camera between two stages with no
+    // passage running to finish it.
+    for (const hash of ['#/transition', '#/relay', '', '#/anything']) {
+      expect(relayStageFromHash(hash)).not.toBe('transition');
+    }
+  });
+});
 
 describe('the stage machine', () => {
   it('runs aquala → transition → relay, one way only', () => {

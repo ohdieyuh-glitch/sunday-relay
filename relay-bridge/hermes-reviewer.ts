@@ -2,9 +2,20 @@
  * REVIEWER — Hermes (Nous Research Hermes Agent CLI).
  *
  * Hermes is the reviewer RUNTIME; its underlying provider/model is captured
- * separately and reported truthfully. The review is independent and READ-ONLY:
- * the packet is passed inline on the prompt, the process runs in an empty temp
- * cwd (so it has no path into the controlled project), and `--safe-mode` is set.
+ * separately and reported truthfully. The review is independent: the packet is
+ * passed inline on the prompt, the process runs in an empty temp cwd (so it has
+ * no path into the controlled project), and `--safe-mode` is set.
+ *
+ * WHAT MAKES IT READ-ONLY IS THE PROFILE, NOT A FLAG ON THIS COMMAND LINE.
+ * `--safe-mode` keeps plugins, shell hooks and MCP servers out of the review.
+ * It does not take tools away: measured on the pinned Hermes (2ea39dae), the
+ * one-shot path still enables whatever toolsets the profile under HOME allows,
+ * and it auto-approves their use. A profile that names no disabled toolsets
+ * gave this command terminal, file-writing, code-execution and web tools. The
+ * paid path's profile disables every toolset, and `.github/julius-live-hermes.sh`
+ * proves the resulting agent holds no tool before a mission may start
+ * (`scripts/julius-reviewer-isolation.mjs`). A reviewer run against an
+ * operator's own profile is read-only only if that profile makes it so.
  *
  * Invoked exactly once via the installed one-shot flag (`-z/--oneshot`, proven
  * from local --help). Output is strictly validated — unparseable or malformed
@@ -18,6 +29,9 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { safeText } from './redact';
+import { RESEARCH_AUTHORITY_NOT_STATED, juliusResearchAskFieldGuidance } from '../src/relay/mission/julius/julius-research-protocol';
+import { JULIUS_CHALLENGE_CATEGORIES } from '../src/relay/mission/julius/julius-continuous-lifecycle';
+import { juliusReviewEscalationGuidance } from '../src/relay/mission/julius/julius-review-verdict';
 import type { JuliusReviewCharge, JuliusReviewStage } from '../src/relay/mission/julius/julius-review-stage';
 import type { JuliusContractReviewCharge } from '../src/relay/mission/julius/julius-task-contract';
 import { parseUsageFile, type HermesUsage } from './reviewer-harness/hermes/runner';
@@ -33,6 +47,8 @@ export interface HermesFinding {
   explanation: string;
   evidence: string;
   recommendedAction?: string;
+  /** The reviewer's category for the finding, when it named a Julius challenge category. */
+  category?: string;
 }
 
 export interface HermesReviewResult {
@@ -45,6 +61,35 @@ export interface HermesReviewResult {
    * itself is the reviewer's; this records that the bytes were not.
    */
   parseRepaired: boolean;
+  /**
+   * WHAT THE REVIEWER ASKED JULIUS TO GO AND READ, exactly as it wrote it.
+   *
+   * Unsanitised on purpose: the domain's `sanitizeJuliusResearchAsks` decides
+   * what a usable ask is, and a harness that pre-cleaned one would be choosing
+   * what the domain may refuse. Absent when the reviewer asked for nothing,
+   * which is the ordinary case — an empty list never reaches here.
+   */
+  researchAsks?: unknown;
+  /**
+   * WHAT THE REVIEWER SAID ABOUT THE FINDINGS IT WAS CHARGED WITH, by id,
+   * exactly as it wrote it.
+   *
+   * The domain charter told reviewers to answer each prior finding in
+   * `resolutions`, and this output schema had no such field — so on the live
+   * path no finding could ever be resolved, and a re-review's silence was the
+   * only answer it could give. Unsanitised for the reason `researchAsks` is:
+   * `sanitizeJuliusReviewVerdict` decides what a usable resolution is. Absent
+   * when the reviewer answered none.
+   */
+  resolutions?: unknown;
+  /**
+   * WHAT THE REVIEWER ESCALATED TO JULIUS — a challenge or a block — exactly as
+   * it wrote it. Unsanitised for the reason `researchAsks` is: the domain's
+   * `sanitizeJuliusReviewVerdict` decides what a usable escalation is, and
+   * refuses one that names a Julius-only outcome by name. Absent when the
+   * reviewer escalated nothing, which is the ordinary case.
+   */
+  escalation?: unknown;
 }
 
 export type HermesOutcome =
@@ -87,7 +132,20 @@ export type HermesOutcome =
     usage: HermesUsage;
   }
   | { kind: 'launch_failed'; safeMessage: string }
-  | { kind: 'review_incomplete'; safeMessage: string; shape: HermesReviewShape; diagnostics: HermesReviewDiagnostics; startedAt: string; completedAt: string };
+  | {
+    kind: 'review_incomplete'; safeMessage: string; shape: HermesReviewShape; diagnostics: HermesReviewDiagnostics; startedAt: string; completedAt: string;
+    /**
+     * WHAT HERMES WROTE TO ITS USAGE FILE, EVEN THOUGH THE REVIEW FAILED.
+     *
+     * Hermes writes the file "even on failure so callers can always account
+     * for spend" (hermes_cli/oneshot.py), and this path read it only on
+     * success. Paid qualification 34753589938's reviewer failed twice and left
+     * no token count, no call count and no served model, so the record could
+     * not say whether a paid provider was ever asked. Absent when no process
+     * finished and wrote one (a kill, a launch failure).
+     */
+    usage?: HermesUsage;
+  };
 
 /**
  * WHY A REVIEW WAS UNREADABLE, as a machine token.
@@ -138,6 +196,21 @@ export type HermesReviewShape =
   | 'review_summary_missing'
   | 'review_summary_invalid'
   | 'review_json_ambiguous'
+  /**
+   * THE ENGINE GAVE UP AND SAID WHY, in one of its own fixed sentences.
+   *
+   * Hermes answers several failures with an ordinary final response and exit
+   * status 0 (`agent/conversation_loop.py` at the pinned commit), so each used
+   * to classify as `review_json_absent` — a model that "wrote prose" — which
+   * sent the repair toward the reviewer's rubric when the cause was elsewhere.
+   * Paid qualification 34753589938 ended exactly so: 111 bytes, exit 0, no
+   * JSON, no status. See `classifyEngineGiveUp` for the literal each names.
+   */
+  | 'review_engine_invalid_tool_call'
+  | 'review_engine_billing_exhausted'
+  | 'review_engine_output_limit'
+  | 'review_engine_context_exceeded'
+  | 'review_engine_gave_up'
   /**
    * UNREACHABLE UNLESS THE TWO READERS DRIFT APART. The classifier applies the
    * validator's own rules to the validator's own slice, so a review it calls
@@ -503,8 +576,8 @@ export function loadHermesConfig(env: NodeJS.ProcessEnv = process.env): HermesCo
 /**
  * Reviewer availability, proven before a single paid request is made.
  *
- * Three local, read-only probes: `--help` (does this build support the one-shot
- * and read-only flags Relay depends on?), `status` (which provider and model
+ * Three local, read-only probes: `--help` (does this build support the one-shot,
+ * safe-mode and usage-file flags Relay depends on?), `status` (which provider and model
  * does the real Hermes configuration resolve to?), and ONE minimal generation
  * that proves the configured provider actually answers.
  *
@@ -551,6 +624,26 @@ const LIVENESS_TIMEOUT_MS = 60_000;
  * classified and discarded rather than surfaced: it can quote the request, and
  * callers get a category instead of a vendor's prose.
  */
+/**
+ * THE UPSTREAM STATUSES THAT CLEAR ON THEIR OWN.
+ *
+ * ONE LIST, BOTH TRANSPORTS. The remote reviewer has always answered 429 and
+ * 503 with `review_service_unavailable` — retryable, because capacity clears as
+ * runs finish and a drain ends when the deploy lands. The LOCAL path, which is
+ * the one the live Julius composition actually uses, answered every upstream
+ * status with `review_provider_http_error` — final. So the same provider
+ * hiccup was a transient condition down one transport and a dead mission down
+ * the other, and the comment in `live-workers.ts` explaining why a 503 may be
+ * re-asked governed a shape the live path could not produce.
+ *
+ * DELIBERATELY JUST THESE TWO. 500, 502 and 504 stay final: the remote path has
+ * never treated them as transient, nothing observed says they clear by
+ * themselves, and widening the set on a hunch would be spending a paid
+ * dispatch to find out. A status added here is a decision with evidence behind
+ * it, not a default.
+ */
+export const HERMES_TRANSIENT_UPSTREAM_STATUSES: readonly number[] = Object.freeze([429, 503]);
+
 export function classifyHermesUpstreamFailure(
   text: string,
 ): { kind: 'authentication' | 'upstream'; status: number | null } | null {
@@ -594,7 +687,44 @@ export function isEngineReportedTimeout(text: string): boolean {
      against an endpoint that accepted the connection and never answered:
      the first is its request deadline, the second its stale-stream abort. */
   return /(^|\n)\s*API call failed after \d+ retr(?:y|ies)\s*:[^\n]*\btimed? ?out\b/i.test(text)
-    || /(^|\n)\s*Provider has been unresponsive\b[^\n]*\bstale attempts\b/i.test(text);
+    || /(^|\n)\s*Provider has been unresponsive\b[^\n]*\bstale attempts\b/i.test(text)
+    /* THE STREAM WATCHDOGS' OWN SENTENCES, which say neither "timed out" nor
+       "timeout" and so read as prose until now. Paid qualification 34753589938's
+       re-ask died on the first: 111 bytes, exit 0, `review_json_absent`. */
+    || /(^|\n)\s*API call failed after \d+ retr(?:y|ies)\s*:\s*Codex stream produced no (?:SSE events|bytes)\b/i.test(text)
+    || /(^|\n)\s*API call failed after \d+ retr(?:y|ies)\s*:\s*Codex Responses stream did not emit a terminal response\b/i.test(text);
+}
+
+/**
+ * WHICH OF HERMES'S OWN GIVE-UP SENTENCES A NON-REVIEW ANSWER IS, IF ANY.
+ *
+ * Every literal below is copied from the pinned Hermes source
+ * (`agent/conversation_loop.py` at 2ea39daeb1f6), where each is returned as
+ * the run's `final_response` — printed to stdout with exit status 0. Matched
+ * only at the START of the answer, only by its fixed prefix, and only where
+ * the caller has already found no verdict-bearing object, so a reviewer that
+ * quotes one of these lines inside its own review is still read as a review.
+ *
+ * NARROW, AND ORDERED BY WHAT TO DO NEXT. A tool call a tool-less reviewer
+ * attempted is correctable by saying so; exhausted credits need the account;
+ * an output or context ceiling needs the request or the configuration changed;
+ * anything else the engine gave up on is the provider's. Timeouts and HTTP
+ * statuses are classified before this is consulted.
+ */
+export function classifyEngineGiveUp(text: string): HermesReviewShape | null {
+  const answer = text.replace(/^\s+/u, '');
+  if (/^Model generated invalid tool call: /u.test(answer)) return 'review_engine_invalid_tool_call';
+  if (/^Billing or credits exhausted: /u.test(answer)) return 'review_engine_billing_exhausted';
+  if (/^(?:Response truncated due to output length limit|First response truncated due to output length limit|max_tokens exceeds the provider's output cap for this model|\u26a0\ufe0f \*\*Thinking Budget Exhausted\*\*)/u.test(answer)) {
+    return 'review_engine_output_limit';
+  }
+  if (/^(?:Context length exceeded|Request payload too large|Context overflow and auto-compaction is disabled)/u.test(answer)) {
+    return 'review_engine_context_exceeded';
+  }
+  if (/^(?:API call failed after \d+ retr(?:y|ies): |Invalid API response after \d+ retr(?:y|ies): |I apologize, but I encountered repeated errors: |Stream repeatedly dropped mid tool-call)/u.test(answer)) {
+    return 'review_engine_gave_up';
+  }
+  return null;
 }
 
 export interface HermesPreflightResult {
@@ -603,7 +733,16 @@ export interface HermesPreflightResult {
   reason?: string;
   executable: string;
   oneShotSupported: boolean;
-  readOnlySupported: boolean;
+  /**
+   * `--safe-mode` appears in this build's help: plugins, shell hooks and MCP
+   * servers can be kept out of the review.
+   *
+   * This field was `readOnlySupported`, derived from the same help text, and it
+   * claimed more than the flag does. Safe mode does not remove a single tool
+   * from the one-shot path; the profile's disabled toolsets do. No `--help`
+   * probe can see a profile, so nothing here reports read-only at all.
+   */
+  safeModeSupported: boolean;
   /** Resolved from the real Hermes execution configuration. */
   model: string | null;
   provider: string | null;
@@ -682,11 +821,13 @@ export function hermesPreflight(
 
   const help = probe(cfg.executable, ['--help']);
   const oneShotSupported = /(^|\s)-z(\s|,)/.test(help.text) || help.text.includes('-z PROMPT');
-  const readOnlySupported = help.text.includes('--safe-mode');
+  const safeModeSupported = help.text.includes('--safe-mode');
   if (!help.ok && !help.text.trim()) missing.push('hermes executable (not runnable on PATH)');
   else {
     if (!oneShotSupported) missing.push('hermes one-shot mode (-z)');
-    if (!readOnlySupported) missing.push('hermes read-only mode (--safe-mode)');
+    // Named for what the flag does. It was "read-only mode", which the flag is
+    // not: see `safeModeSupported`.
+    if (!safeModeSupported) missing.push('hermes safe mode (--safe-mode), which keeps plugins, shell hooks and MCP servers out of the review');
     /**
      * THE FLAG THE PROBE AND THE MISSION BOTH PASS, checked beside the other
      * two rather than discovered by a probe that produces no output.
@@ -766,7 +907,7 @@ export function hermesPreflight(
     reason: missing.length ? `The Hermes reviewer is not available. Missing: ${missing.join(', ')}.` : undefined,
     executable: cfg.executable,
     oneShotSupported,
-    readOnlySupported,
+    safeModeSupported,
     model,
     provider,
     authenticatedProviders: parsed.authenticatedProviders,
@@ -816,7 +957,24 @@ interface ReviewPacketFields {
   originalRequest: string;
   /** The exact validated Prompt Architect handoff (serialized). */
   handoffJson: string;
+  /**
+   * THE GUIDANCE PACKET UNDER REVIEW, for a `guidance` or `repair:guidance`
+   * stage. Optional because no other stage has one.
+   *
+   * Its absence was a real hole rather than a missing feature: the prompt
+   * branched on PLAN versus everything-else, so a GUIDANCE subject fell into
+   * the implementation rubric and a reviewer was asked to judge an empty diff
+   * while the packet it was supposed to read was never in the prompt at all. A
+   * review of nothing that can still return "approved" is worse than no review.
+   */
+  guidanceJson?: string;
   acceptanceCriteria?: string[];
+  /**
+   * WHAT RESEARCH THIS MISSION AUTHORISES, rendered by Julius from the sealed
+   * policy the mediator decides with (`renderJuliusResearchAuthority`). Absent
+   * when the composition handed the adapter no policy, and the prompt says so.
+   */
+  researchAuthority?: string;
   allowedFiles?: string[];
   prohibitedFiles?: string[];
   baseRevision: string;
@@ -876,11 +1034,33 @@ export function buildReviewPrompt(p: ReviewPacket): string {
   const rubric = charge.judges.map((question, index) => `(${index + 1}) ${question}`).join(' ');
   const findings = p.priorFindings ?? [];
   const priorFindingsBlock = charge.repair || findings.length > 0
-    ? [`PRIOR BLOCKING FINDINGS (${charge.repair ? 'this review must judge whether each is resolved' : 'for context'}):`,
+    ? [`PRIOR BLOCKING FINDINGS (${charge.repair ? 'this review must judge whether each is resolved, and answer each in "resolutions" by the id shown after REVIEW FINDING; a finding you do not answer is not resolved, and Julius will not accept the repair over it' : 'for context'}):`,
       ...(findings.length > 0 ? findings.map((finding) => `- ${finding}`)
         : ['- (none recorded: this repair was admitted by failed evidence rather than by a reviewer finding, so judge the repaired work and its evidence)']), '']
     : [];
-  const head = charge.subject === 'PLAN'
+  /**
+   * THREE SUBJECTS, THREE RUBRICS. This used to be two: `PLAN` and everything
+   * else. `GUIDANCE` is not an implementation, has no diff and no test output
+   * by construction, and judging it against the implementation rubric produces
+   * findings that demand things the stage forbids demanding — the paid run's
+   * own defect in a third place.
+   */
+  const head = charge.subject === 'GUIDANCE'
+    ? [
+      'You are an INDEPENDENT reviewer of GUIDANCE issued to a coding agent',
+      'mid-mission, under a contract that is already LOCKED. Judge the guidance',
+      'itself. You have no write access and must not attempt to modify anything.',
+      '',
+      `THIS IS A ${stage.toUpperCase()} REVIEW. No new implementation exists for it yet, by design.`,
+      `Do NOT demand, and do NOT penalise the absence of: ${charge.mustNotDemand.join(', ')}.`,
+      'The single most important question is whether this guidance stays INSIDE',
+      'the locked contract. Guidance may narrow, clarify and prohibit; it may',
+      'never widen scope, relax a criterion, grant a permission the contract',
+      'withheld, or change what the mission is for. Guidance that does any of',
+      'those is a scope change wearing the word "advice", and saying so is a',
+      'blocking finding.',
+    ]
+    : charge.subject === 'PLAN'
     ? [
       'You are an INDEPENDENT reviewer of a PLAN. Review the plan below strictly',
       'against the founder\'s request, the acceptance criteria and the mission',
@@ -902,7 +1082,20 @@ export function buildReviewPrompt(p: ReviewPacket): string {
       '',
       `THIS IS A ${stage.toUpperCase()} REVIEW of an implementation.`,
     ];
-  const body = charge.subject === 'PLAN'
+  const body = charge.subject === 'GUIDANCE'
+    ? [
+      'THE GUIDANCE UNDER REVIEW (what the Prompt Architect told the coding agent):',
+      p.guidanceJson ?? '(none supplied)',
+      '',
+      'THE PLAN IT SUPPLEMENTS (for contradiction, not for re-review):',
+      p.handoffJson,
+      '',
+      `ACCEPTANCE CRITERIA:\n${(p.acceptanceCriteria ?? []).map((c) => `- ${c}`).join('\n') || '- (none stated)'}`,
+      '',
+      ...priorFindingsBlock,
+      `RELAY VERIFICATION EVIDENCE:\n${p.relayEvidence.map((e) => `- ${e}`).join('\n') || '- (none)'}`,
+    ]
+    : charge.subject === 'PLAN'
     ? [
       'THE PLAN UNDER REVIEW (the validated Prompt Architect handoff):',
       p.handoffJson,
@@ -930,7 +1123,7 @@ export function buildReviewPrompt(p: ReviewPacket): string {
       'RESULTING FILE CONTENT:',
       p.changedFileContents || '(empty)',
       '',
-      `DETERMINISTIC TEST COMMAND: ${p.testCommand}`,
+      `DETERMINISTIC TEST COMMAND: ${p.testCommand.trim() === '' ? '(none declared by the mission contract — judge the deliverable on the diff and the required evidence)' : p.testCommand}`,
       'TEST OUTPUT:',
       p.testOutput || '(none)',
       '',
@@ -969,12 +1162,43 @@ export function buildReviewPrompt(p: ReviewPacket): string {
   return [
     ...head,
     '',
+    /**
+     * THE REVIEWER HAS NO TOOLS, AND IS TOLD SO.
+     *
+     * The paid reviewer's profile disables every toolset — proven on every
+     * dispatch by the bootstrap — so a review can only judge what this packet
+     * carries. A model trained to look things up that is not told this may try
+     * a tool anyway, and the engine answers that by giving up
+     * (`review_engine_invalid_tool_call`). Saying it costs one sentence.
+     */
+    'You have NO tools in this review: no file access, no shell, no code execution and no web. Everything you may judge is in this packet. Do not attempt any tool call; if something you need is missing, say so in a finding or use researchAsks.',
     'Respond with ONE JSON object and nothing else:',
     '{"verdict":"approved"|"changes_required"|"unable_to_review","summary":string,',
     '"findings":[{"findingId":string,"severity":"blocking"|"major"|"minor"|"informational",',
     '"requirement":string,"file":string,"line":number,"explanation":string,"evidence":string,',
     '"recommendedAction":string}],',
-    '"requirementsChecked":[{"requirement":string,"status":"passed"|"failed"|"uncertain","evidence":string}]}',
+    '"requirementsChecked":[{"requirement":string,"status":"passed"|"failed"|"uncertain","evidence":string}],',
+    '"resolutions":[{"findingId":string,"status":"RESOLVED"|"OPEN"|"SUPERSEDED","claim":string}],',
+    '"researchAsks":[{"source":string,"capability":string,"reference":string,"purpose":string}],',
+    '"escalation":null|{"verdict":"challenge"|"block","category":string,"target":"work"|"plan"|"guidance"|"contract","claim":string}}',
+    '',
+    /**
+     * THE REVIEWER GETS THE SAME DOOR AS THE OTHER TWO SLOTS.
+     *
+     * An independent reviewer that cannot check a claim against anything
+     * outside the packet has to either accept it or refuse it on suspicion.
+     * The bounds are the domain's own, so the instruction and the sanitizer
+     * cannot state different rules.
+     */
+    juliusResearchAskFieldGuidance(),
+    p.researchAuthority ?? RESEARCH_AUTHORITY_NOT_STATED,
+    '',
+    /**
+     * THE REVIEWER CAN SAY MORE THAN YES OR NO. A dispute about the plan and
+     * "this must not continue" had no field to be said in, so both arrived as
+     * `changes_required` — a repair order for work that was not the problem.
+     */
+    juliusReviewEscalationGuidance(),
     '',
     `MISSION: ${p.missionId}`,
     `MISSION REVISION: ${p.missionRevision ?? '(unversioned)'}`,
@@ -1211,6 +1435,9 @@ export function validateHermesReview(text: string): HermesReviewResult | null {
           explanation: safeText(g.explanation ?? ''),
           evidence: safeText(g.evidence ?? ''),
           recommendedAction: typeof g.recommendedAction === 'string' ? safeText(g.recommendedAction) : undefined,
+          ...(typeof g.category === 'string' && (JULIUS_CHALLENGE_CATEGORIES as readonly string[]).includes(g.category.trim().toLowerCase())
+            ? { category: g.category.trim().toLowerCase() }
+            : {}),
         }];
       })
     : [];
@@ -1225,14 +1452,70 @@ export function validateHermesReview(text: string): HermesReviewResult | null {
       })
     : [];
 
-  return { verdict, summary: safeText(o.summary), findings, requirementsChecked, parseRepaired };
+  /**
+   * EMPTY IS NOT AN ASK. The instruction says an empty list is the ordinary
+   * answer, so carrying one on would open a checkpoint for a question nobody
+   * posed and record a refusal against a reviewer that did as it was told.
+   */
+  const asks = (o as Record<string, unknown>).researchAsks;
+  const researchAsks = asks === undefined || (Array.isArray(asks) && asks.length === 0)
+    ? {} : { researchAsks: asks };
+  // NULL IS NOT AN ESCALATION, for the same reason an empty ask list is not an ask.
+  const raised = (o as Record<string, unknown>).escalation;
+  const escalation = raised === undefined || raised === null ? {} : { escalation: raised };
+  // EMPTY IS NOT AN ANSWER either: no resolutions is a reviewer that answered none.
+  const answered = (o as Record<string, unknown>).resolutions;
+  const resolutions = answered === undefined || answered === null || (Array.isArray(answered) && answered.length === 0)
+    ? {} : { resolutions: answered };
+  return { verdict, summary: safeText(o.summary), findings, requirementsChecked, parseRepaired, ...researchAsks, ...resolutions, ...escalation };
+}
+
+/**
+ * THE REVIEW IN JULIUS'S VOCABULARY — CONTINUE, WARNING, CHALLENGE,
+ * REPAIR_REQUIRED or BLOCK — for the domain to sanitise and act on.
+ *
+ * An escalation the reviewer wrote is carried as written, so an unusable one is
+ * refused by Julius under its own name rather than silently re-interpreted
+ * here. Otherwise the review's own shape decides: `changes_required` or any
+ * blocking or major finding requires repair (the engine's rule and finding F8's);
+ * minor findings on approved work are WARNINGS, retained rather than dropped;
+ * a clean approval continues. Informational findings are not warnings.
+ */
+export function hermesReviewVerdict(result: HermesReviewResult): Record<string, unknown> {
+  const blocking = result.findings.filter((finding) => finding.severity === 'blocking' || finding.severity === 'major');
+  const warnings = result.findings
+    .filter((finding) => finding.severity === 'minor')
+    .slice(0, 8)
+    .map((finding) => ({
+      category: finding.category ?? null,
+      claim: `${finding.requirement || finding.findingId}: ${finding.explanation}`.slice(0, 240),
+    }));
+  // Carried on every verdict: what the reviewer said about its findings is not
+  // a property of whether it also escalated or asked for a repair.
+  const resolutions = result.resolutions === undefined ? {} : { resolutions: result.resolutions };
+  const raised = result.escalation;
+  if (raised !== null && typeof raised === 'object' && !Array.isArray(raised)) {
+    const escalation = raised as Record<string, unknown>;
+    const word = typeof escalation.verdict === 'string' ? escalation.verdict.trim().toUpperCase() : escalation.verdict;
+    return { verdict: word, category: escalation.category, target: escalation.target, claim: escalation.claim, warnings, ...resolutions };
+  }
+  if (raised !== undefined) return { verdict: raised, claim: result.summary, warnings, ...resolutions };
+  if (result.verdict === 'changes_required' || blocking.length > 0) {
+    return { verdict: 'REPAIR_REQUIRED', category: blocking[0]?.category ?? null, claim: result.summary, warnings, ...resolutions };
+  }
+  if (warnings.length > 0) return { verdict: 'WARNING', claim: result.summary, warnings, ...resolutions };
+  return { verdict: 'CONTINUE', claim: result.summary, warnings: [], ...resolutions };
 }
 
 export function hasBlockingFinding(r: HermesReviewResult): boolean {
   return r.verdict === 'changes_required' || r.findings.some((f) => f.severity === 'blocking');
 }
 
-/** Runs the reviewer exactly once. Read-only: empty temp cwd + --safe-mode. */
+/**
+ * Runs the reviewer exactly once, from an empty temp cwd with `--safe-mode`.
+ * Whether it holds any tool is decided by the profile the executable runs
+ * under, not by these arguments; see the note at the top of this file.
+ */
 export async function runHermesReview(input: {
   packet: ReviewPacket;
   config: HermesConfig;
@@ -1573,13 +1856,28 @@ export async function runHermesReview(input: {
         const engineTimedOut = upstream === null
           && scanReviewJson(out).withVerdict.length === 0
           && isEngineReportedTimeout(out);
+        const engineGaveUp = upstream === null && !engineTimedOut
+          && scanReviewJson(out).withVerdict.length === 0
+          ? classifyEngineGiveUp(out)
+          : null;
+        // READ BEFORE `finish`, which removes the scratch directory the file
+        // lives in. Hermes writes it on failure too; this is what lets a failed
+        // review still prove, or disprove, that a paid provider was asked.
+        const failedUsage = parseUsageFile(usageFilePath);
         const shape: HermesReviewShape =
           upstream?.kind === 'authentication' ? 'review_authentication_failed'
+            // A TRANSIENT STATUS IS NOT A VERDICT. Same two statuses, same
+            // answer, whichever transport carried the review.
+            : upstream !== null && upstream.status !== null
+              && HERMES_TRANSIENT_UPSTREAM_STATUSES.includes(upstream.status) ? 'review_service_unavailable'
             : upstream !== null ? 'review_provider_http_error'
               // THE ENGINE SAID IT TIMED OUT, so this is a timeout that exited
               // rather than one Relay had to kill. Same shape, same retryable
               // verdict; the lifecycle facts below say which clock fired.
               : engineTimedOut ? 'review_timeout'
+                // THE ENGINE'S OWN GIVE-UP SENTENCE, before the exit code: it
+                // names the cause, and Hermes returns 0 for most of them.
+                : engineGaveUp !== null ? engineGaveUp
                 : code !== 0 ? 'review_process_exit'
                   : truncated ? 'review_output_too_large'
                     : classifyUnreadableReview(out);
@@ -1591,6 +1889,7 @@ export async function runHermesReview(input: {
             // stays null and an exit code is present when the engine reported
             // it, so the record still separates the two.
             shape, outcome: 'failed', exitCode: code ?? null, timedOut: engineTimedOut,
+            servedModel: failedUsage.model,
             providerHttpStatus: upstream?.status ?? null,
             // IT EXITED BY ITSELF, so there is nothing left to clean up and no
             // signal was ever sent. That is a different fact from a timeout
@@ -1604,6 +1903,8 @@ export async function runHermesReview(input: {
                 ? `The Hermes reviewer's provider returned HTTP ${String(upstream.status ?? 0)}.`
                 : engineTimedOut
                   ? 'The Hermes reviewer reported that its own provider request timed out.'
+                : engineGaveUp !== null
+                  ? `The Hermes engine gave up (${engineGaveUp}).`
                   : code !== 0
                     ? `The Hermes reviewer exited without a valid review (code ${code ?? 'unknown'}).`
                   : truncated
@@ -1615,6 +1916,7 @@ export async function runHermesReview(input: {
                     : `The Hermes reviewer returned no valid structured review. ${describeUnreadableReview(out)}`,
           startedAt,
           completedAt,
+          usage: failedUsage,
         });
         return;
       }

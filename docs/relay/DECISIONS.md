@@ -164,6 +164,31 @@ Consequences: tasks always trace to an accepted blueprint; no phantom
 architect-phase task is needed; the founder may re-order only by amending
 this ADR.
 
+## ADR-021 — Continuous three-worker lifecycle
+Context: Julius dispatched its three slots in a near-straight line — the
+architect planned once, the reviewer graded once, and the Coding Agent did
+every remaining minute alone. A map of the runtime found the cause was
+structural, not tuning: all 41 event types were boundary transitions, one
+dispatch is a single un-instrumented `await`, the adapter port has no callback
+channel, context is compiled once before dispatch, and the architect has no
+tool use at all. A mission's whole middle was unwritten. Decision: continuous
+participation is expressed in TASKS rather than beside them, so it inherits the
+lease, the attempt, the contract gate, evidence, review, repair and recovery
+instead of re-earning them; the adapter seam is unchanged apart from two
+optional result fields; and one pure-domain module owns the vocabulary —
+checkpoints (ten event-driven triggers, no timer and no polling), guidance
+(bound to the contract revision it was written under and structurally unable to
+carry a contract term) and verdicts (CONTINUE / WARNING / CHALLENGE /
+REPAIR_REQUIRED / BLOCK, mapped partially so no verdict can mint an ACCEPT).
+Routing returns a named intention; Julius performs it. Full record in
+ADR-021-CONTINUOUS-WORKER-LIFECYCLE.md. Consequences: the reviewer sees the
+plan, the guidance and the build within one mission and can force repair or
+halt during execution, through Julius and never around it; the architect is
+callable after LOCK without the contract moving; a failed guidance task or
+review leaves the mission incomplete rather than proceeding as if advised. The
+live provider half is deliberately not armed — no live worker registers
+`guidance` yet, and Julius refuses to mint a task nothing can route.
+
 ## Dependency analysis (Decision requirement — no dependencies added this phase)
 
 | Proposed dependency | Why considered | Existing equivalent | Security/maintenance | Verdict |
