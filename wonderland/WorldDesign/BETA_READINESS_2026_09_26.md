@@ -1,5 +1,30 @@
 # WONDERLAND — BETA READINESS, 2026-09-26
 
+> ## ⚠ CORRECTED 2026-09-27 — THE WARDROBE NUMBERS BELOW WERE MEASURED ON THE WRONG SYSTEM
+>
+> The table in section 1 reports the mascot filling **0.87 / 0.92 / 0.89 / 0.89 / 0.87** of the preview. The
+> founder then opened the wardrobe and saw a mascot the size of a thumbnail, and the founder was right.
+> Measured off the exported pixels the next day, it was rendering at **41.5% of frame height**.
+>
+> Both statements were true at once, which is the part worth keeping. `zc_wardrobe_upgrade` solved and
+> measured the framing in `WonderlandUiSubsystem` — correct for the old wardrobe, which was a hole in the
+> panel showing the live world. The panel had since been changed to paint the stage's own SceneCapture, a
+> different camera with a different lens, and nothing had ever solved that one: `AimCamera` stood at a literal
+> `Height * 3.15`, which works out to exactly 41.5%. **The proof was measuring a system that was no longer
+> the one being drawn.**
+>
+> Three further causes were stacked underneath it — thirteen stops of overexposure, a body box classified by
+> material kind so that glowing torsos counted as "not body", and a camera solved against a half-built figure.
+> See `BETA_MATRIX_2026_09_26.md`, section "CORRECTION PASS, 2026-09-27".
+>
+> **Current, measured in-engine off the render target:** Relay OG 80.4–82.9%, Apollo 75.6–83.2%,
+> Arden 68.8–72.4%, Celestial 90.1–92.9%, Skeleton 88.5–93.6%. The gate is now `V03`/`V04` inside
+> `zc_wardrobe_20`, which reads the pixels rather than the camera that drew them, so this class of error
+> cannot return silently.
+>
+> Everything else in this document stands. It is left unedited rather than quietly rewritten, because a
+> readiness report that erases its own wrong answers is worth less than one that shows them.
+
 Branch `local/wonderland-task3` · HEAD `4753573b` · 5 commits added this run (from `650e5954`)
 Editor target **Succeeded** · Game target **Succeeded** (both rebuilt at HEAD, editor closed for the link)
 
