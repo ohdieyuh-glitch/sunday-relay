@@ -75,6 +75,26 @@ const get = (path: string, over: Partial<Parameters<typeof handleJuliusStateRout
   method: 'GET', path, operator: true, projectId: 'prj-1', tenantId: 'tenant', ...over,
 });
 
+describe('a percent-encoded run id', () => {
+  it('reaches the same run as the raw one — a standards-correct client may encode the colon', async () => {
+    const harness = await ranMission();
+    const raw = await handleJuliusStateRoute(get('/julius/runs/run:abc/run'), portsOver(harness));
+    const encoded = await handleJuliusStateRoute(get('/julius/runs/run%3Aabc/run'), portsOver(harness));
+    expect(raw?.status).toBe(200);
+    expect(encoded?.status).toBe(200);
+    expect(encoded?.body).toEqual(raw?.body);
+    const slots = await handleJuliusStateRoute(get('/julius/runs/run%3Aabc/slots'), portsOver(harness));
+    expect(slots?.status).toBe(200);
+  });
+
+  it('a malformed escape is a run that cannot be named, not a route that does not exist', async () => {
+    const harness = await ranMission();
+    const result = await handleJuliusStateRoute(get('/julius/runs/run%E0%A4%A/run'), portsOver(harness));
+    expect(result?.status).toBe(404);
+    expect((result?.body as { error: { kind: string } }).error.kind).toBe('run_not_found');
+  });
+});
+
 describe('the Julius state routes', () => {
   it('claims exactly the /julius family', () => {
     expect(isJuliusStateRoute('/julius')).toBe(true);
