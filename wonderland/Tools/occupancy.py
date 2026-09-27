@@ -68,7 +68,21 @@ def measure(path, floor=34):
     `floor` is the luma below which a pixel is called backdrop. The stage backdrop is black and the figure is
     lit, so this separates cleanly -- but it is reported alongside the answer so a wrong threshold cannot
     hide inside a number.
+
+    THIRTY-FOUR, AND IT WAS TESTED RATHER THAN INHERITED. Arden Infernal measures 72.8% of frame height where
+    the wardrobe's own solve predicts 80.0, and the obvious suspect was this threshold: Arden is crimson and
+    near-black on a black stage, so a floor that eats its dark half would report it short. Swept on the same
+    capture:
+
+        floor 34   height 72.8%   centre_y 36.3%
+        floor 20   height 72.8%   centre_y 36.3%
+        floor 12   height 100.0%  centre_y 49.9%   <- the whole frame
+
+    34 and 20 agree exactly, so Arden's dark parts are nowhere near the threshold and the floor is not the
+    cause. 12 collapses to the entire frame, because something faint covers all of it. The hypothesis was
+    wrong and the number stays; recorded here so the next person does not spend the same hour on it.
     """
+
     w, h, chan, px = read_png(path)
     min_x, min_y, max_x, max_y, lit = w, h, -1, -1, 0
     for y in range(h):

@@ -1622,19 +1622,32 @@ def apollo():
     figure.ring("halo", lambda a: "golddeep", (hc[0] - 1.3, 0.0, hc[2]), R - 0.5, tile * 1.0, tile * 1.05)
 
     # ================================================================== 4-8. THE PAULDRONS
+    #
+    # ON THEIR OWN PART, AND THE WARDROBE IS WHY. These were parented to "body", and the wardrobe's framing
+    # box is the union of the parts named body, head, arm_ and leg_ -- the founder's rule that framing
+    # "MUST derive from the physical BODY", excluding ornament. Scrolls, cherub faces and a six-feather fan
+    # reaching a hand's width past each shoulder are ornament by any reading, and filed under body they made
+    # Apollo's framing box WIDER THAN IT IS TALL -- 47.2 against 33.0, where every other skin measures 51.7
+    # tall. Width then pushed the camera back and Apollo photographed at 64% of frame height against the
+    # founder's 76-94 band (zc_wardrobe_20, V03), the only skin whose solve predicted its own failure.
+    #
+    # Nothing about the figure changes: same geometry, same place, same materials, parented to the body so it
+    # moves with the shoulders exactly as before. Only the framing box stops counting it, which is what the
+    # rule asked for in the first place.
+    figure.part("pauldrons", "body", (0.0, 0.0, shoulder), "none")
     for side in (-1.0, 1.0):
         by = side * (hw * 0.5 + 1.2)
-        figure.slab("body", "gold", (0.2, by + side * 1.0, shoulder + 1.7), (5.8, 5.0, 3.2), tile=tile)
-        figure.slab("body", "golddeep", (0.0, by + side * 2.4, shoulder - 0.5), (4.8, 3.6, 1.8), tile=tile)
-        figure.cherub_face("body", mats, (2.8, by + side * 1.2, shoulder + 2.5), 4.0, tile, face_dir=1.0)
-        figure.cherub_face("body", mats, (2.3, by + side * 3.7, shoulder - 1.0), 2.8, tile, face_dir=1.0)
-        figure.baroque_scroll("body", mats, (1.0, by + side * 2.6, shoulder + 4.3), (side, 1.0), hh * 1.15, tile, coils=1.9, lobes=5)
-        figure.baroque_scroll("body", mats, (-1.6, by + side * 2.2, shoulder + 3.5), (side, 1.0), hh * 0.9, tile, coils=1.5, lobes=4)
-        figure.baroque_scroll("body", mats, (0.4, by + side * 3.0, shoulder + 0.7), (side, -0.55), hh * 0.7, tile, coils=1.2, lobes=3)
-        feather_fan(figure, "body", mats, (-0.2, by + side * 2.2, shoulder + 2.6), side, 6, tile)
+        figure.slab("pauldrons", "gold", (0.2, by + side * 1.0, shoulder + 1.7), (5.8, 5.0, 3.2), tile=tile)
+        figure.slab("pauldrons", "golddeep", (0.0, by + side * 2.4, shoulder - 0.5), (4.8, 3.6, 1.8), tile=tile)
+        figure.cherub_face("pauldrons", mats, (2.8, by + side * 1.2, shoulder + 2.5), 4.0, tile, face_dir=1.0)
+        figure.cherub_face("pauldrons", mats, (2.3, by + side * 3.7, shoulder - 1.0), 2.8, tile, face_dir=1.0)
+        figure.baroque_scroll("pauldrons", mats, (1.0, by + side * 2.6, shoulder + 4.3), (side, 1.0), hh * 1.15, tile, coils=1.9, lobes=5)
+        figure.baroque_scroll("pauldrons", mats, (-1.6, by + side * 2.2, shoulder + 3.5), (side, 1.0), hh * 0.9, tile, coils=1.5, lobes=4)
+        figure.baroque_scroll("pauldrons", mats, (0.4, by + side * 3.0, shoulder + 0.7), (side, -0.55), hh * 0.7, tile, coils=1.2, lobes=3)
+        feather_fan(figure, "pauldrons", mats, (-0.2, by + side * 2.2, shoulder + 2.6), side, 6, tile)
         for k in range(3):
-            figure.slab("body", "gold", (0.2, by + side * 0.5, shoulder - 2.2 - k * 1.6), (2.9, 3.3, 1.25), tile=tile)
-            figure.box("body", "golddeep", (0.2, by + side * 0.5, shoulder - 2.95 - k * 1.6), (2.7, 3.1, tile * 0.3))
+            figure.slab("pauldrons", "gold", (0.2, by + side * 0.5, shoulder - 2.2 - k * 1.6), (2.9, 3.3, 1.25), tile=tile)
+            figure.box("pauldrons", "golddeep", (0.2, by + side * 0.5, shoulder - 2.95 - k * 1.6), (2.7, 3.1, tile * 0.3))
 
     # ================================================================== 9-10. GORGET AND SASH
     figure.slab("body", "gold", (0.6, 0.0, torso_top + 0.5), (4.2, tw * 1.02, 1.5), tile=tile)
