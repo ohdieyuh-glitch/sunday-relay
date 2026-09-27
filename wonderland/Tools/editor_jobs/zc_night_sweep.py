@@ -46,7 +46,14 @@ PLACES = (
     ("plaza_clock_quarter", (12000.0, 700.0, 260.0),      (13400.0, 1900.0, 40.0)),
     ("entrance_tartarus",   (44000.0, -21500.0, 260.0),   (46177.0, -22619.0, 60.0)),
     ("water_gardens",       (-3300.0, -9600.0, 320.0),    (-4849.0, -11480.0, 480.0)),
-    ("architecture_noctis", (-49500.0, -31000.0, 260.0),  (-52000.0, -32500.0, 400.0)),
+    # THIS VIEW IS INSIDE FOLIAGE and the JPEG says so plainly: dark green leaf geometry filling the frame at
+    # close range, at NOON. It is why this place read 0.0596 luma with 97% of the frame below the darkness
+    # threshold at midday, and it is not a lighting gap. Three inferences of mine from layer files -- empty
+    # ground, architecture 11.5 km away, not drawn at range -- were all wrong, and a trace could never have
+    # settled it because foliage carries no collision. Vegetation is 89% of this world's triangles, so a
+    # viewpoint that lands inside it reads as "the region is black" on every luma gate ever written.
+    # Moved out and up to stand clear of the canopy and look at the district the name promises.
+    ("architecture_noctis", (-59440.0, -32983.0, 900.0),  (-62323.0, -34372.0, 700.0)),
     ("mascot_at_spawn",     (-320.0, -1900.0, 200.0),     (0.0, -1460.0, 90.0)),
 )
 
@@ -360,7 +367,15 @@ def job():
     # the failure mode to catch is a lamp whose product lands near 1 instead of near the scene's white.
     lamps = []
     try:
-        for act in unreal.GameplayStatics.get_all_actors_with_tag(live(), "WL_Batch"):
+        try:
+            batches = unreal.GameplayStatics.get_all_actors_of_class(
+                live(), unreal.WonderlandInstancedBatch.static_class())
+        except Exception:                                             # noqa: BLE001
+            # No tag to fall back on: WonderlandInstancedBatch.cpp sets no ComponentTags and there is no
+            # "WL_Batch" tag anywhere, which is why the first version of this gate read zero lamps and went
+            # red about the world when it was reading nothing at all.
+            batches = unreal.GameplayStatics.get_all_actors_of_class(live(), unreal.Actor.static_class())
+        for act in batches:
             for comp in act.get_components_by_class(unreal.InstancedStaticMeshComponent):
                 nm = str(comp.get_name()).lower()
                 if "lantern" not in nm and "lamp" not in nm:
