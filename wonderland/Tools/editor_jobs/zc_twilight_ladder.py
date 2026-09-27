@@ -105,23 +105,35 @@ def job():
         tolerance while still on its way down, so a pair-agreement test can return mid-descent and hand
         back a number from a machine that has not arrived.
         """
-        # THREE IN A ROW, NOT A PAIR. I raised the hole and neither lane closed it: a world that RISES
-        # before falling again can put two adjacent reads inside the tolerance on an upswing, and a pair
-        # test returns there. A run of three consecutive agreements cannot be produced by an oscillation
-        # that is still moving, and costs one extra second.
-        run, prev = 0, None
+        # THE WINDOW'S SPREAD, NOT ITS STEPS -- AND THIS IS THE FIFTH VERSION OF THIS TEST.
+        #
+        # It read "three in a row, not a pair", and three consecutive STEPS inside a tolerance is not
+        # three reads in agreement, because steps compound: three steps of 0.0039 walk the window 0.0117
+        # downhill while every adjacent pair passes, which is wider than the 0.010 this job calls
+        # agreement. The other lane demonstrated it on [200, 60, 66, 61, 50, 49, 48.5], where a step test
+        # returns on the 60 with a fifth of the fall still to come. That is the pair test's hole, one read
+        # wider, failing on exactly the oscillating case the three-read version was written to catch.
+        #
+        # Timer, pair, last-drop, three-consecutive: each fixed the previous one's SHAPE and kept its
+        # assumption, which was always that arrival is recognisable from the direction of the series. Max
+        # minus min across the last three asks the question actually being asked -- are these three the
+        # same reading -- and has no direction, rate or shape assumption left in it. A window spread is
+        # still a local property, so this is not proof either; it is the first version with nothing about
+        # the approach built into it.
+        window = []
         for _ in range(24):
             yield 1.0
             now = patch(0.5, 0.5, 0.46, 0.44)
             if now is None:
                 continue
-            if prev is not None and abs(now["luma"] - prev["luma"]) < 0.004:
-                run += 1
-                if run >= 2:                      # two agreements = three reads in a row
-                    return
-            else:
-                run = 0                           # any move, up OR down, restarts the count
-            prev = now
+            window.append(now["luma"])
+            if len(window) > 3:
+                window.pop(0)
+            if len(window) == 3 and (max(window) - min(window)) < 0.004:
+                return
+        # Fell through without settling, and says so by NOT trimming anything: the rung's own two-read
+        # spread then carries the damage into T_NOISE, which voids the ladder. A run whose instrument never
+        # arrived should report that rather than produce a tidy number from its tail.
 
     # ---- DOES THE KNOB EXIST? Read it back before trusting a single rung.
     #

@@ -106,19 +106,29 @@ def job():
 
     def settled():
         """Three consecutive reads in agreement; any movement, up or down, restarts the count."""
-        run, prev = 0, None
+        # THE WINDOW'S SPREAD, NOT ITS STEPS. This asked whether three consecutive STEPS were each inside
+        # the tolerance, and steps compound: three steps of 0.0039 walk the window 0.0117 downhill while
+        # every pair passes, which is wider than the 0.010 these jobs call agreement. The other lane
+        # demonstrated it on [200, 60, 66, 61, 50, 49, 48.5], where a step test returns on the 60 with a
+        # fifth of the fall still to come -- the pair test's hole, one read wider, on exactly the
+        # oscillating case the three-read version was written to catch.
+        #
+        # Max minus min across the last three reads asks the question actually being asked -- are these
+        # three the same reading -- and carries no assumption about direction, rate or shape. That is what
+        # killed the previous four versions: each fixed the last one's form and kept its assumption.
+        window = []
         for _ in range(24):
             yield 1.0
             now = patch(0.5, 0.5, 0.46, 0.44)
             if now is None:
                 continue
-            if prev is not None and abs(now["luma"] - prev["luma"]) < 0.004:
-                run += 1
-                if run >= 2:
-                    return
-            else:
-                run = 0
-            prev = now
+            window.append(now["luma"])
+            if len(window) > 3:
+                window.pop(0)
+            if len(window) == 3 and (max(window) - min(window)) < 0.004:
+                return
+        # Fell through without settling. Said by NOT trimming anything: the rung's own two-read spread then
+        # reports the damage and the noise gate voids the run, rather than a tidy number from the tail.
 
     rows = []
     RESULT["night"] = rows
