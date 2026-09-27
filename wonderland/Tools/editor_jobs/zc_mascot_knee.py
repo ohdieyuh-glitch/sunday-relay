@@ -140,6 +140,9 @@ CELL_W, CELL_H = 0.011, 0.009
 #: 0.0000 for eye AND face on the first real run; the premium skins are 2-3x the box count of relay_og and
 #: the 300 uu camera was inside them.
 BLACK_FRAME = 0.01
+#: How far a floor->clamp peak must clear the same-level noise floor to count as a response. 2x is modest;
+#: the point is to reject peaks that are merely the largest of 49 noisy cells.
+NOISE_MARGIN = 2.0
 
 CLIP_CEILING = 0.06       # fraction of the head shot allowed at 250+; the founder's "no white clipping"
 CRUSH_CEILING = 0.60      # the guard against winning by making everything dark
@@ -328,6 +331,21 @@ def job():
                 c = scan_cell(here, gx, gy)
                 if c is not None:
                     lo[(gx, gy)] = c["luma"]
+        # ---- THE CONTROL: the same scan again, with NOTHING changed.
+        #
+        # Taking the max of 49 cells is biased upward -- the largest of many noisy samples is positive even
+        # when nothing moved. The first run showed that signature plainly: the "responding" skins put their
+        # eye cell somewhere different at day than at dusk, and arden_infernal's curve swung 0.13 while the
+        # level only ever rose. So this measures what the renderer does when the answer IS "no change", and
+        # a floor->clamp peak has to beat it.
+        yield 2.0
+        noise = 0.0
+        for gx in range(-SCAN, SCAN + 1):
+            for gy in range(-SCAN, SCAN + 1):
+                c = scan_cell(here, gx, gy)
+                if c is not None and (gx, gy) in lo:
+                    noise = max(noise, abs(c["luma"] - lo[(gx, gy)]))
+        found["noise_floor"] = round(noise, 5)
         cvar("wl.Look.EyeGlowDay", "%.3f" % EYE_CLAMP)
         cvar("wl.Look.EyeGlowNight", "%.3f" % EYE_CLAMP)
         yield 2.0
@@ -343,7 +361,10 @@ def job():
                     best, best_d = (gx, gy), moved
         found["scan"] = deltas
         found["peak_delta"] = round(best_d, 5)
-        found["eye"] = best
+        # A PEAK THAT DOES NOT BEAT THE NOISE IS NOT AN EYE. Recorded either way, so the report can show
+        # how close it came rather than only that it failed.
+        found["beats_noise"] = best_d > found.get("noise_floor", 0.0) * NOISE_MARGIN
+        found["eye"] = best if found["beats_noise"] else None
         if best is not None:
             far, fd = None, -1.0
             for cell in lo:
@@ -406,7 +427,9 @@ def job():
                 yield step
             rows.append({"skin": skin, "hour": hlabel, "level": None, "locator": True,
                          "eye_cell": found.get("eye"), "face_cell": found.get("face"),
-                         "peak_delta": found.get("peak_delta"), "reach_uu": reach,
+                         "peak_delta": found.get("peak_delta"),
+                         "noise_floor": found.get("noise_floor"),
+                         "beats_noise": found.get("beats_noise"), "reach_uu": reach,
                          "frame_luma": shot["luma"]})
             base = None
             for level in EYE_LEVELS:
@@ -547,12 +570,18 @@ def job():
     loc = {r["skin"]: r.get("peak_delta") for r in rows if r.get("locator")}
     blackened = [r["skin"] for r in rows if r.get("unmeasured")]
     record_eye("M11", "the eye was FOUND on every skin -- some cell of the head responds to the eye level",
-               bool(loc) and not blackened and all(v is not None and v > 0.01 for v in loc.values()),
+               bool(loc) and not blackened
+               and all(r.get("beats_noise") for r in rows if r.get("locator")),
                peak_delta_per_skin=loc, black_framed=blackened,
+               noise_floor_per_skin={r["skin"]: r.get("noise_floor") for r in rows if r.get("locator")},
+               beats_noise={r["skin"]: r.get("beats_noise") for r in rows if r.get("locator")},
                eye_cell={r["skin"]: r.get("eye_cell") for r in rows if r.get("locator")},
                reach_uu={r["skin"]: r.get("reach_uu") for r in rows if r.get("locator")},
                note="the head is scanned at the eye floor and at the clamp and the cell that moves most IS "
-                    "the eye; a skin with no responding cell is a real finding, not a lost patch")
+                    "the eye -- but only if it beats a same-level noise baseline by %.0fx, because the max "
+                    "of 49 cells is positive even on pure noise. A skin with no responding cell is a real "
+                    "finding; a skin whose peak does not clear its noise floor is UNRESOLVED, not absent."
+                    % NOISE_MARGIN)
     record("M00", "every skin was sampled at every hour at every eye level",
            len(measured_rows) == want, got=len(measured_rows), wanted=want,
            skins=list(SKINS), hours=[h for _, h in HOURS], levels=list(EYE_LEVELS))
@@ -676,7 +705,10 @@ def job():
     engaged = {}
     for skin in SKINS:
         ctrl = next((r["frame_luma"] for r in knee_rows if r["skin"] == skin and r["knee"] == 700.0), None)
-        for kn in sorted(k for k in KNEES if k != 700.0):
+        # DESCENDING. The first version sorted ASCENDING and so always returned the smallest knee swept,
+        # reporting "first knee that changes the picture: 2.0" for all eight skins whatever the data said.
+        # The question is the HIGHEST knee that still bites, which is where compression begins.
+        for kn in sorted((k for k in KNEES if k != 700.0), reverse=True):
             v = next((r["frame_luma"] for r in knee_rows if r["skin"] == skin and r["knee"] == kn), None)
             if ctrl is not None and v is not None and abs(v - ctrl) > 0.005:
                 engaged[skin] = kn
@@ -684,7 +716,7 @@ def job():
     record("M09", "the knee's live range at this asset scale is measured, not assumed",
            len(knee_rows) == (len(SKINS) * len(KNEES) if AXIS == "knee" else 0),
            frame_luma_spread_across_knees=spread, inert_skins=inert,
-           first_knee_that_changes_the_picture=engaged, knees_swept=list(KNEES),
+           highest_knee_that_changes_the_picture=engaged, knees_swept=list(KNEES),
            note="body glow spans 3.3-13.2 after the 4000->6 re-baseline, so a knee at the shipped 700 "
                 "compresses nothing; this says where it starts to bite and whether it helps")
 
