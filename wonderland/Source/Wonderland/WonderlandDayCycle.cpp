@@ -726,13 +726,36 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 		// hour on purpose: the practicals and the figures' own glow must stay as bright against the dark as
 		// they are now, because the founder asked for bright practicals and a dark sky, not for both to meet
 		// in the middle.
-		Volume->Settings.bOverride_LocalExposureMethod = true;
-		Volume->Settings.LocalExposureMethod = ELocalExposureMethod::Bilateral;
-		Volume->Settings.bOverride_LocalExposureShadowContrastScale = true;
-		Volume->Settings.LocalExposureShadowContrastScale =
-			FMath::Lerp(1.0f, FMath::Clamp(GWonderlandNightShadowLift, 0.2f, 1.0f), Nightfall);
-		Volume->Settings.bOverride_LocalExposureHighlightContrastScale = true;
-		Volume->Settings.LocalExposureHighlightContrastScale = 1.0f;
+		// SWITCHED OFF ENTIRELY BY DAY, not merely set to a neutral value.
+		//
+		// The first version enabled these overrides at EVERY hour and made the day harmless by lerping the
+		// contrast to 1.0 -- numerically a no-op, and I called the day "untouched by construction". It is
+		// not: bOverride_LocalExposureMethod = true ENABLES THE FEATURE, and local exposure is a bilateral
+		// decomposition that runs on the RENDER THREAD whether or not its contrast happens to be neutral.
+		// A no-op value is not a no-op pass.
+		//
+		// WHY THIS IS A SUSPECT AND NOT A CERTAINTY. The other lane's instrumented ladder reads 389.5 ms
+		// with NO avatars at all, 19 ms game and 21 ms GPU -- five per cent of the frame accounted for --
+		// on a world that read 38.71 ms this morning. Foreground is true at every rung, so the editor's
+		// background throttle is ruled out. Game and GPU are small, so the render thread is the only thread
+		// left, and stat unit reports it as 0.0 through that accessor. A render-thread post-process pass
+		// that I switched on today, for the first time in this project, is the candidate that fits: it
+		// appeared today, it is avatar-independent, and it is on the one thread nobody can see.
+		//
+		// It is NOT proven. The machine has 2.48 GB free of 15.7 with three sessions and builds sharing it,
+		// and sustained paging produces the same signature. This is the cheap half of the disjunction to
+		// eliminate, and eliminating it costs nothing at night because Nightfall is 0 by day anyway.
+		const bool bWantLocalExposure = Nightfall > 0.001f;
+		Volume->Settings.bOverride_LocalExposureMethod = bWantLocalExposure;
+		Volume->Settings.bOverride_LocalExposureShadowContrastScale = bWantLocalExposure;
+		Volume->Settings.bOverride_LocalExposureHighlightContrastScale = bWantLocalExposure;
+		if (bWantLocalExposure)
+		{
+			Volume->Settings.LocalExposureMethod = ELocalExposureMethod::Bilateral;
+			Volume->Settings.LocalExposureShadowContrastScale =
+				FMath::Lerp(1.0f, FMath::Clamp(GWonderlandNightShadowLift, 0.2f, 1.0f), Nightfall);
+			Volume->Settings.LocalExposureHighlightContrastScale = 1.0f;
+		}
 	}
 
 	// ---- AND WHAT THE EXPOSURE DOES TO THINGS THAT MAKE THEIR OWN LIGHT.
