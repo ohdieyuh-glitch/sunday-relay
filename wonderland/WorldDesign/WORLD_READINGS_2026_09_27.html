@@ -218,6 +218,49 @@
 <div class="wrap">
 
 <section>
+  <h2>The night correction &middot; What the founder has to decide</h2>
+  <h3>The gate blocking the fix was met by the night they rejected</h3>
+
+  <div class="finding">
+    <span class="gate">N02 &middot; still night</span><span class="chip fault">the threshold, not the world</span>
+  </div>
+
+  <p>Every shadow-lift setting that makes the world readable lands at 0.48 to 0.58 of noon. The
+  <em>still night</em> clause demands 0.38 or less. For several hours that read as a genuine conflict between
+  a measurement and a photograph &mdash; the numbers refusing a night that, looked at, showed a readable grey
+  figure, lit windows and a black sky.</p>
+
+  <p><strong>The resolution was in our own beta matrix, dated the day before the correction.</strong> Scored
+  by the same gate:</p>
+
+  <div class="tw">
+    <table>
+      <caption>26 September, <span class="mono">zc_night_readable</span>, 8 of 8 &mdash; and this is the world
+      whose screenshots prompted the founder's correction.</caption>
+      <thead><tr><th>State</th><th class="n">night &divide; day</th><th class="n">crushed</th><th>verdict</th></tr></thead>
+      <tbody>
+        <tr><td>the night the founder <strong>rejected</strong></td><td class="n">0.3675</td><td class="n alarm">57.6%</td><td class="ok">passes both gates</td></tr>
+        <tr><td class="dim">the ceilings</td><td class="n dim">0.38</td><td class="n dim">0.72</td><td class="dim">&mdash;</td></tr>
+        <tr><td>lift 0.62 &mdash; body readable</td><td class="n">0.511</td><td class="n ok">35.1%</td><td class="alarm">fails the ratio</td></tr>
+        <tr><td>lift 0.65</td><td class="n">0.481</td><td class="n">44.2%</td><td class="alarm">fails the ratio</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>The fix is less crushed than the state that passed</strong> &mdash; 35.1% against 57.6% &mdash;
+  and is refused by a ceiling the rejected state cleared with room on both sides. So 0.38 is not a standard
+  the fix fails to meet. It is a description of the night being corrected: it sat just above what the world
+  happened to measure, and <em>a gate calibrated to the state being fixed will reject the fix.</em> The
+  original job asserts the number with no derivation beyond &ldquo;the founder asked for readable, not for a
+  dimmer afternoon&rdquo; &mdash; an argument for having a ceiling, not for that value.</p>
+
+  <p>The threshold has <strong>not</strong> been moved. Establishing that a gate encodes the rejected
+  baseline is a different act from relaxing one to go green, and the decision is the founder's. What they
+  need is the one question nobody has asked them: <strong>what should night measure, relative to day?</strong>
+  The recommendation alongside it is a lift of 0.62 to 0.65, with the pictures.</p>
+</section>
+
+<section>
   <h2>The night correction &middot; Section B</h2>
   <h3>Half the world&rsquo;s light fixtures were switched off</h3>
 
@@ -282,6 +325,40 @@
   previously in gaps of 25 m or more: <strong>every step a walker has to see was unlit</strong>, on the darkest
   road in Wonderland. Noctis&rsquo;s remaining 43 m straight is genuinely worse than the others and is not
   smoothed over here.</p>
+</section>
+
+<section>
+  <h2>The night correction &middot; Section A</h2>
+  <h3>A no-op value is not a no-op pass</h3>
+
+  <div class="finding">
+    <span class="gate">rung zero</span><span class="chip fault">regression, found and fixed</span>
+  </div>
+
+  <div class="headline-num">
+    <span class="v">389&rarr;31</span>
+    <span class="l">milliseconds on an <strong>empty</strong> world, once a post-process pass I had left
+    running all day was switched off by daylight</span>
+  </div>
+
+  <p>The shadow lift is local exposure, and I enabled its overrides at <em>every</em> hour, making daytime
+  harmless by setting the contrast to a neutral 1.0. I wrote that the day was &ldquo;untouched by
+  construction&rdquo;. The arithmetic was right and the claim was wrong: enabling the feature runs a bilateral
+  decomposition on the <strong>render thread</strong> whether or not its value does anything. I reasoned about
+  whether the day's pixels changed and never about whether the day's work did.</p>
+
+  <p>It was caught by an avatar performance test &mdash; <strong>389.5 ms with no avatars in the world</strong>,
+  5% of the frame accounted for. Switching the overrides off by day: 31.37 ms, 92% accounted. It also gave
+  back a founder item that had looked like an avatar cost and was not: ten avatars now measure 45 ms against
+  an empty 31, carried by the game thread, under the 50 ms ceiling.</p>
+
+  <p><strong>Two consequences worth more than the fix.</strong> Every frame-time number taken before that
+  build is void. And the pass explains a separate bug I had filed as its own: my sweep settled in
+  <em>seconds</em>, so at 389 ms per frame a three-second wait was <strong>7.7 frames</strong> where the code
+  intended 95.6 &mdash; which is exactly why its first three readings were the sky still travelling from noon.
+  Across the job tree there are 1,813 fixed-duration waits against 902 conditional ones: two thirds of every
+  wait adapts to nothing, all of them were wrong this morning, all of them are right now, and no run in
+  either state says which it got.</p>
 </section>
 
 <section>
