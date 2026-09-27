@@ -272,6 +272,39 @@ def job():
                         "mesh": mesh})
         return out
 
+    def blocked_at(eye, at, reach=200.0):
+        """Is something SOLID within two metres of the eye, toward the subject?
+
+        THE OTHER LANE'S GUARD, AND IT CATCHES WHAT MINE MISSES. Their bad viewpoints today: one jammed
+        against a crimson wall reading 0.2254 luma and 13.7% dark, which they nearly published as an
+        improvement. A darkness check cannot see that -- the wall is LIT, so the frame is bright and the
+        numbers look healthy.
+
+        AND IT MISSES WHAT MINE CATCHES, which is why both are here. When my own camera sat inside foliage
+        the trace returned NOTHING at 5,000, 10,000, 16,000 and 24,000 uu, because foliage carries no
+        collision, while the picture read 96.9% dark at NOON against 13.4% once the view was moved out.
+        A trace is blind to a bush; a noon-darkness gate is blind to a wall. Neither alone is the guard.
+        """
+        dx, dy, dz = at[0] - eye[0], at[1] - eye[1], at[2] - eye[2]
+        n = math.sqrt(dx * dx + dy * dy + dz * dz) or 1.0
+        try:
+            hit = unreal.SystemLibrary.line_trace_single(
+                live(), unreal.Vector(*eye),
+                unreal.Vector(eye[0] + dx / n * reach, eye[1] + dy / n * reach, eye[2] + dz / n * reach),
+                unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [],
+                unreal.DrawDebugTrace.NONE, True, unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
+        except Exception:                                             # noqa: BLE001
+            return None
+        if hit is None:
+            return None
+        t = hit.to_tuple()
+        try:
+            comp = t[10] if len(t) > 10 else None
+            sm = comp.get_editor_property("static_mesh") if comp is not None else None
+            return str(sm.get_name()) if sm is not None else "something"
+        except Exception:                                             # noqa: BLE001
+            return "something"
+
     def shoot(name):
         """One frame: the numbers and the picture, from the same camera in the same moment.
 
@@ -294,8 +327,12 @@ def job():
     cvar("wl.Sky.Hour", 12)
     noon = {}
     drawn = {}
+    RESULT["occluded"] = {}
     for label, eye, at in PLACES:
         look(label, eye, at)
+        stuck = blocked_at(eye, at)
+        if stuck:
+            RESULT["occluded"][label] = stuck
         yield 3.0
         noon[label] = shoot("noon__%s" % label)
         # WHAT IS ACTUALLY IN FRONT OF THE CAMERA, at the hour where a dark reading is least explicable.
@@ -559,6 +596,17 @@ def job():
                 "range. Local exposure shrinks the DARK tail and keeps the bright one; NightFill shrinks "
                 "BOTH. Rising luma with falling tails is the wash the founder ruled out, and luma alone "
                 "cannot see it")
+
+    record("N05", "no viewpoint is measuring from inside something -- neither jammed against solid geometry "
+                  "nor buried in foliage",
+           not RESULT.get("occluded") and not dark_at_noon,
+           blocked_within_2m=RESULT.get("occluded"), dark_at_noon=dark_at_noon,
+           note="TWO detectors because each is blind to what the other sees. A 2 m trace catches a camera "
+                "against a wall, which reads BRIGHT and passes any darkness check -- the other lane nearly "
+                "published one at 0.2254 luma and 13.7% dark as an improvement. A noon-darkness check "
+                "catches a camera in foliage, which the trace cannot see at all: mine returned no hit at "
+                "5,000 through 24,000 uu while the picture read 96.9% dark at midday, because foliage "
+                "carries no collision")
 
     record("N00", "the sweep moved the picture -- the instrument is responding",
            lumas and (max(lumas) - min(lumas)) > 0.02, luma_range=[min(lumas), max(lumas)] if lumas else None,
