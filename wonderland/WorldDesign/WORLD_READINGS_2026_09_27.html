@@ -309,6 +309,12 @@
   mascot at spawn is brighter at midnight than at midday. That is a green cell which is not good news, and
   the still-night test correctly rejects it. Across all nine combinations the best result is one place
   readable out of seven.</p>
+
+  <p><strong>And that row is about to get worse.</strong> <code>mascot_at_spawn</code> read 2.69&times; its own
+  noon <em>while every additive surface on the figure was rendering black</em>. The fix restores the &times;1000
+  those surfaces were missing, so the mascot's contribution to that frame increases from roughly nothing. The
+  one place that was already too bright at night is the one place the fix makes brighter, and the night gates
+  need re-reading on the fixed build before any moon or sky value is chosen from this table.</p>
 </section>
 
 <section>
@@ -504,6 +510,34 @@
 
   <p>My own gate had reported "engaged at 64" for seven of these skins. It asked whether frame luma moved
   by 0.005, while the data wobbles by up to 0.05.</p>
+
+  <h3 style="margin-top:34px">Half of this table survives a root cause found after it was measured</h3>
+
+  <div class="finding">
+    <span class="gate">M09</span><span class="chip measured">high knees: arithmetic, holds</span>
+    <span class="chip unproven">knee 8, 4, 2: confounded</span>
+  </div>
+
+  <p>The other lane then found that <code>RestColourFor</code> was not applying the &times;1000 that additive
+  materials must carry in their <code>Color</code>, because those materials have no strength parameter. The
+  per-tick animator overwrote the painter's correct value one frame later, so <strong>every additive surface on
+  every figure has rendered black since the scene scale landed</strong> &mdash; measured on a live costume at
+  <code>Color (19.8, 11.5, 2.0)</code> against a white near 25,000.</p>
+
+  <p><strong>What still holds, and now on firmer ground than measurement.</strong> The knee is applied to the
+  <em>authored</em> strength, before that &times;1000 &mdash; <code>Emissive = Lit &times; TameGlow(Strength)</code>,
+  and <code>RestColourFor</code> multiplies afterwards. Authored body glow spans 3.3 to 13.2, and
+  <code>TameGlow</code> returns its input unchanged below the knee. So knees at 700, 220, 64, 32 and 16 cannot
+  touch anything, as arithmetic, whatever the render scale is. That my sweep measured them as inert is now a
+  cross-check on the instrument rather than the finding itself &mdash; and the arithmetic says the knee first
+  bites at 8, while the sweep independently put <code>celestial_light</code>'s first real response at 4. The two
+  agree.</p>
+
+  <p><strong>What does not hold.</strong> At knees 8, 4 and 2 the knee genuinely compresses &mdash; and those
+  are exactly the rows measured while additive surfaces were invisible. A knee change to a surface rendering at
+  0.08% of white is unmeasurable, so the low end of that table says nothing about the fixed build. Those three
+  columns need re-running, and more skins may respond once their halos are actually visible. The verdict
+  "inert" is safe for the high knees and withdrawn for the low ones.</p>
 </section>
 
 <section>
@@ -587,6 +621,10 @@
     "controlled bloom" is described rather than demonstrated.</li>
     <li><strong>Whether ICARUS's topiary is the blocker.</strong> Named as a candidate with the geometry that
     makes it one, and explicitly not proven.</li>
+    <li><strong>Any reading taken with a figure in frame.</strong> Every additive surface on every figure
+    &mdash; eye halos, Celestial Light's halo edge, cub ghost tails, the Project Avatars' halos &mdash; rendered
+    black until the <code>RestColourFor</code> fix, so their emissive contribution is missing from the night
+    table and from the low-knee rows.</li>
     <li><strong>Why architecture_noctis is dark at midday.</strong> Ruled out: an empty view. Not
     established: whether the district fails to draw at 100&ndash;200&nbsp;m or draws and is unlit. Two
     candidates, opposite fixes, one trace away.</li>
