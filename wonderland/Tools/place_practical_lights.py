@@ -48,6 +48,25 @@ HANGING_MID = 0.5 * KIT["WL_Detail_Lantern_Hanging"]["height"]
 #: standards (the marches and the checkpoints). Every one is an emissive mesh and none of them lights.
 #: (mesh leaf -> lift above its placement z, candela scale, radius scale). The lift puts the light in the
 #: lamp's own head.
+#: A lantern is several co-located parts and exactly ONE of them emits, so the lantern lights once rather
+#: than three times. These are the fallbacks: if the emitting part is absent at a position, the named
+#: secondary emits in its place instead of the lantern going dark.
+SECONDARY = {
+    "WL_Detail_Wall_Lantern_glass": "WL_Detail_Wall_Lantern_gold",
+    "WL_Detail_Lantern_Hanging_glass": "WL_Detail_Lantern_Hanging_gold",
+    "WL_Object_LanternStandard_glass": "WL_Object_LanternStandard",
+    "WL_Object_LanternStandard_gold": "WL_Object_LanternStandard",
+}
+
+
+def FAMILY_OF(leaf):
+    """The lantern family a mesh leaf belongs to, or None if it is not a lantern part."""
+    for fam in ("WL_Detail_Wall_Lantern", "WL_Detail_Lantern_Hanging", "WL_Object_LanternStandard"):
+        if leaf.startswith(fam):
+            return fam
+    return None
+
+
 FIXTURES = {
     "WL_Object_LanternStandard": (0.85 * KIT["WL_Object_LanternStandard"]["height"], 1.0, 1.0),
     "WL_Detail_Lantern_Hanging_gold": (0.5 * KIT["WL_Detail_Lantern_Hanging"]["height"], 0.5, 0.6),
@@ -87,6 +106,11 @@ TAKE = {
     # 36 lamp posts glowing as emissive meshes and lighting nothing, which is the exact condition this
     # placer exists to end.
     "NQ06": (11.0, 950.0, "path"), "IQ06": (11.0, 950.0, "path"),
+    # THE GOLDEN ARRIVAL (GA08). Placed by coverage rather than along a route, because a hub is crossed and
+    # not followed -- 78.3% of its true walking ground sat more than 15 m from any light, the worst figure
+    # in the world, at the place every player begins. Path candelas: these exist to let someone see where
+    # they are standing and which way out they are facing.
+    "GA08": (11.0, 950.0, "path"),
     # ---- THE FAMILIES THE HAND-WRITTEN LIST FELL BEHIND ON (2026-09-27).
     #
     # TAKE already held eleven SD01_* tiles and six FD05_*, and MISSED the rest of both families
@@ -152,26 +176,48 @@ def main():
             continue
         if isinstance(spec, dict) and "batches" in spec and spec.get("pass") in TAKE:
             specs.append(spec)
-    # First pass: the glass colour per (pass, instance position) so the post can look up its own head.
+    # First pass: the glass colour per (pass, instance position) so the post can look up its own head --
+    # and, alongside it, WHICH PARTS OF A LANTERN EXIST AT EACH POSITION.
+    #
+    # WHY THE SECOND INDEX. A lantern is several co-located batches and exactly one part emits, so the
+    # lantern lights once: the bare post for a lantern standard, the gold for a wall or hanging lantern.
+    # That is right until a pass places a part WITHOUT its emitting twin -- XM02 carries 91
+    # WL_Detail_Wall_Lantern_glass and no gold anywhere, so 91 lanterns threw nothing while XM02 sat
+    # correctly in TAKE. Found on 2026-09-27 by audit_light_coverage, and invisible to any check that reads
+    # the allowlist rather than the emitted lights.
+    parts_by_key = {}
     for spec in specs:
         for b in spec["batches"]:
             leaf = (b.get("mesh") or "").split("/")[-1].split(".")[0]
-            if leaf.endswith("_glass"):
-                for inst in b.get("instances") or []:
-                    glass_by_key[(spec["pass"], round(inst[0]), round(inst[1]))] = b.get("material", "")
+            fam = FAMILY_OF(leaf)
+            for inst in b.get("instances") or []:
+                key = (spec["pass"], round(inst[0]), round(inst[1]))
+                if leaf.endswith("_glass"):
+                    glass_by_key[key] = b.get("material", "")
+                if fam:
+                    parts_by_key.setdefault((fam,) + key, set()).add(leaf)
     for spec in specs:
         pid = spec["pass"]
         cd, radius, kind = TAKE[pid]
         for b in spec["batches"]:
             leaf = (b.get("mesh") or "").split("/")[-1].split(".")[0]
-            if leaf not in FIXTURES:
+            primary = SECONDARY.get(leaf)
+            if leaf not in FIXTURES and primary is None:
                 continue
-            lift, scale_cd, scale_r = FIXTURES[leaf]
+            # A SECONDARY PART EMITS ONLY WHERE ITS PRIMARY IS NOT PRESENT. Adding the glass leaf outright
+            # would double-light the 101 wall lanterns that do have both parts; this lights the ones that
+            # do not and leaves the rest exactly as they were.
+            borrow = leaf not in FIXTURES
+            lift, scale_cd, scale_r = FIXTURES[primary if borrow else leaf]
             if lift is None:
                 lift = 0.8 * float(sizes.get(leaf, [0, 0, 300.0])[2])
+            fam = FAMILY_OF(leaf)
             for inst in b.get("instances") or []:
                 if len(inst) < 7 or float(inst[2]) < -1000.0:
                     continue
+                if borrow and primary in parts_by_key.get(
+                        (fam, pid, round(inst[0]), round(inst[1])), set()):
+                    continue                      # the emitting part is here; this one stays an ornament
                 s = float(inst[6])
                 mat = glass_by_key.get((pid, round(inst[0]), round(inst[1])), "")
                 r, g, bb = GLASS_COLOUR.get(mat, WARM)
