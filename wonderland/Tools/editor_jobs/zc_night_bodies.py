@@ -24,6 +24,8 @@
 # NOT CONCURRENT: this job owns PIE.
 CONCURRENT = False
 
+import io
+import json
 import math
 import os
 import sys
@@ -32,10 +34,24 @@ import unreal
 L = unreal.WonderlandUiTestLibrary
 
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "night_bodies")
+# CHANNEL is <repo>/wonderland/Tools/_channel, so the repo's wonderland root is two levels up.
+REPO = os.path.dirname(os.path.dirname(CHANNEL))
 SKINS = ("relay_og", "celestial_light", "apollo", "arden_infernal", "skeleton_flame")
 # Deepest night first, because that is the founder's complaint; noon as each figure's own control, because a
 # body reading is only meaningful against what the same body does in daylight.
-HOURS = (("night", 23.6), ("noon", 12.0))
+# THREE HOURS, NOT TWO, AND THE THIRD IS THE ONE NOBODY LOOKED AT.
+#
+# The world lane laddered twilight and found the world is DARKER AT SIX IN THE EVENING THAN AT FULL NIGHT:
+# 18:00 luma about a third of 19:00's, ground at 0.009, recovering an hour later. At 18:00 the sun's elevation
+# is exactly zero, so the daylight curve has fallen to 0.2 while the nightfall curve is still exactly 0 -- the
+# day rig has left and the night rig has not arrived, which means no moon, no shadow lift, no local exposure
+# and only part of the exposure bias. A two-rung trough between two working configurations.
+#
+# This job sampled 23.6 and 12.0, so its 97-per-cent-crushed reading is NOT confounded by that trough, which
+# was the first thing worth checking. But it also means the instrument cannot see the worst moment of the day
+# for the very thing it measures, and the founder's section G asks for the whole transition verified. Two
+# points of a curve is the same error as one draw from an unchecked distribution.
+HOURS = (("night", 23.6), ("dusk", 18.0), ("noon", 12.0))
 STEP = 2
 # A surface at or under this is crushed: no usable form or material information left in it. 0.14 of full white
 # is the same floor the world lane's night sweep uses, so the two lanes' "dark" mean the same thing.
@@ -143,6 +159,43 @@ def job():
                             here.y + math.sin(math.radians(yaw)) * distance, here.z + height)
         L.pose_camera(world, eye, unreal.Vector(here.x, here.y, here.z + 60.0), fov)
 
+    # ---- WHERE THE FIGURE WAS STANDING, AND HOW FAR THE NEAREST LAMP WAS.
+    #
+    # THIS READING WAS UNATTRIBUTABLE AND I DID NOT NOTICE FOR A WHOLE RUN. The camera is posed relative to
+    # the dog, the dog stands wherever it spawned, and the result recorded neither. So "the body is 97 per
+    # cent black at night" was a true sentence about an unknown place. A figure two metres from a street lamp
+    # and a figure in an unlit field are the same measurement with opposite meanings, and the founder's
+    # requirement -- readable from any major path -- is about the second one.
+    #
+    # The distance to the nearest practical is read from the same manifest the lights subsystem loads, so a
+    # good reading cannot silently be a reading taken under a lamp.
+    def nearest_practical(at):
+        try:
+            spec = json.load(io.open(os.path.join(REPO, "WorldDesign", "Look", "practical_lights.json"),
+                                     encoding="utf-8"))
+        except Exception as err:                                    # noqa: BLE001
+            return {"error": str(err)[:120]}
+        best = None
+        count = 0
+        for row in (spec if isinstance(spec, list) else spec.get("lights", [])):
+            try:
+                x, y, z = float(row["x"]), float(row["y"]), float(row["z"])
+            except Exception:                                       # noqa: BLE001
+                continue
+            count += 1
+            d = math.sqrt((x - at.x) ** 2 + (y - at.y) ** 2 + (z - at.z) ** 2)
+            if best is None or d < best:
+                best = d
+        return {"lights_in_manifest": count,
+                "nearest_uu": round(best, 1) if best is not None else None,
+                "nearest_m": round(best / 100.0, 1) if best is not None else None}
+
+    where = dog.get_actor_location()
+    RESULT["stood_at"] = {"x": round(where.x, 1), "y": round(where.y, 1), "z": round(where.z, 1),
+                          "practicals": nearest_practical(where),
+                          "note": "the reading below describes THIS place. A body that reads well within a "
+                                  "lamp's radius has not shown that the world lights bodies."}
+
     # the figure's share of the frame at that framing, measured once rather than assumed
     BOX = (0.40, 0.22, 0.60, 0.82)
     RESULT["framing"] = {"distance_uu": 520.0, "fov": 45.0, "figure_box_fraction": BOX,
@@ -157,6 +210,11 @@ def job():
         yield 6.0
         for label, hour in HOURS:
             unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour %.2f" % hour)
+            # AND THE PRACTICAL POOL REBUILT, because BuildPool runs only from Reload and OnWorldBeginPlay.
+            # Setting wl.Look.PracticalCount alone leaves the pool at its previous size while the cvar reads
+            # back correctly -- a knob that reports success and does nothing, which is the same trap as a
+            # cvar that is not recognised at all, wearing a readback that passes.
+            unreal.SystemLibrary.execute_console_command(world, "wl.Look.PracticalReload")
             yield 4.0
             # A DEAD WORLD READS AS DATA. Re-acquire and assert rather than trusting the handle from before
             # the hour change; a torn-down PIE returns black frames that pass for a night measurement.

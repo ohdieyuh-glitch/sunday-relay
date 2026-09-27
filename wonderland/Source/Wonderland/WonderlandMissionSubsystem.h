@@ -99,9 +99,43 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	bool DoesBeatAskForAHuman(FName BeatId) const;
 
-	/** True for every beat this build can currently produce. Nothing here is real Julius execution. */
+	/**
+	 * TRUE WHILE NOTHING REAL IS BEING FOLLOWED -- and it is no longer a constant.
+	 *
+	 * `return true` was correct for as long as this class could only be driven by a console command or a
+	 * fixture. It stopped being correct the moment the transport could follow a real Julius run, and it failed
+	 * in the direction that lies on screen: the integration lane photographed the Missions panel while a live
+	 * run was followed and the badge read DEVELOPMENT PREVIEW / SIMULATED JULIUS EXECUTION over a real run,
+	 * beside a panel reading "No mission is running." A hard-coded honesty label is only honest by luck.
+	 *
+	 * SO IT ASKS. A real run is a Julius-sourced task in the workspace carrying a RunId Julius returned, which
+	 * is the one thing a simulation cannot produce. Everything this class generates itself is still preview.
+	 */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
-	bool IsDevelopmentPreview() const { return true; }
+	bool IsDevelopmentPreview() const;
+
+	/** True while the task set is following a run Julius created. The inverse of the line above. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	bool IsFollowingRealRun() const { return !IsDevelopmentPreview(); }
+
+	/**
+	 * THE PROVENANCE BANNER, which says which of the two things is happening rather than always the same one.
+	 *
+	 * "DEVELOPMENT PREVIEW - SIMULATED JULIUS EXECUTION" while nothing real is followed, and the run and the
+	 * state Julius reported while one is. Both HUD surfaces draw this instead of a literal so they can never
+	 * disagree with each other, which they did: the panel badge and the strip carried the same hard-coded
+	 * sentence in two files.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString GetProvenanceBanner() const;
+
+	/** The followed run's id, verbatim, or empty. For a surface that wants the id on its own. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString GetFollowedRunId() const;
+
+	/** What Julius called the followed run's state, or empty when it has not said. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
+	FString GetFollowedJuliusState() const;
 
 	/* ------------------------------------------------------------ the deterministic simulation */
 
@@ -150,9 +184,19 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	FString GetLastEventVerdict() const;
 
-	/** The mission the contract currently belongs to. */
+	/**
+	 * THE MISSION THE CONTRACT BELONGS TO -- the fold's own, or the followed run's when the fold has none.
+	 *
+	 * The fold is fed by events and a real run that has only been ADOPTED has produced no event yet, so the
+	 * fold is empty and the strip printed MISSION none beside a live run. Naming the followed mission is not
+	 * advancing anything -- no beat, no chakra, no state changes here -- it answers "which mission is this
+	 * contract about", and while a real run is followed the answer is that run's mission.
+	 *
+	 * THE FOLD STILL WINS WHEN IT HAS ONE. An event that has actually been interpreted is better evidence
+	 * than an adoption, and a fixture must never be renamed by a run followed beside it.
+	 */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
-	FName GetFoldMissionId() const { return Fold.MissionId; }
+	FName GetFoldMissionId() const;
 
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Mission")
 	int32 GetFoldChakraStep() const { return WonderlandChakraStep(Fold.Chakra); }
@@ -378,6 +422,9 @@ public:
 	AWonderlandMissionOrb* GetOrb() const;
 
 private:
+
+	/** The task set for this local player, or nullptr. Where a followed Julius run actually lives. */
+	const class UWonderlandMissionTaskSubsystem* TaskSet() const;
 	void HandlePlayerControllerChanged(APlayerController* NewController);
 	void Attach(APlayerController* Controller);
 	void Detach();

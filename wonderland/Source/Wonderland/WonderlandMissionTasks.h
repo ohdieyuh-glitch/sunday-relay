@@ -397,6 +397,45 @@ public:
 	const TArray<FWonderlandMissionTask>& GetTasks() const { return Tasks; }
 
 	/**
+	 * THE TASK THAT IS FOLLOWING A REAL JULIUS RUN, or nullptr when none is.
+	 *
+	 * WHY THIS EXISTS: the data path reached this task set and stopped there. The integration lane photographed
+	 * the Missions panel while a live run was followed and it read "No mission is running.", with the strip
+	 * underneath it saying SIMULATED JULIUS EXECUTION and STATE Unobserved. Every acceptance clause passed and
+	 * the screen stated two things that were false, which is the one outcome the founder's no-fake-passes rule
+	 * is about. The surfaces read the mission subsystem, the run lives here, and nothing connected them.
+	 *
+	 * A REAL RUN IS A JULIUS-SOURCED TASK IN THE WORKSPACE WITH A KNOWN RunId. Source alone is not enough: a
+	 * task can be Julius-sourced before anything is dispatched. The RunId is the thing only a real backend
+	 * produces, which is why FollowJuliusRun records it verbatim and never synthesises one.
+	 *
+	 * The FIRST such task, in insertion order, when there are several. A surface that can show one contract
+	 * has to pick, and the oldest followed run is the stable choice: it does not change under the reader when a
+	 * second run is adopted.
+	 */
+	const FWonderlandMissionTask* FindFollowedJuliusTask() const;
+
+	/** True while any task is following a real Julius run. The one question both HUD surfaces need. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
+	bool IsFollowingJuliusRun() const { return FindFollowedJuliusTask() != nullptr; }
+
+	/** The followed mission id, or empty. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
+	FString GetFollowedMissionId() const;
+
+	/** The run id Julius returned, verbatim, or empty. Never synthesised. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
+	FString GetFollowedRunId() const;
+
+	/** What Julius itself called the state, or empty when it has not said. Not the mapped enum. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
+	FString GetFollowedJuliusState() const;
+
+	/** The state this build mapped Julius's to, for a surface that wants the enum rather than the string. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Tasks")
+	EWonderlandTaskState GetFollowedState() const;
+
+	/**
 	 * THE SAME LIST, BY VALUE, so a proof can read it. The reference above is what C++ callers want and is not
 	 * reflected; a UFUNCTION cannot return a reference to an array, so this copies rather than leaving Python with
 	 * no way to see the set it is supposed to be checking.

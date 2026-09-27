@@ -534,8 +534,13 @@ void UWonderlandMissionSubsystem::MountStrip()
 							Mission->GetFixtureProgress(), Mission->GetFixtureEventCount())
 						: FString(TEXT("no fixture"));
 					const FName MissionId = Mission->GetFoldMissionId();
+					// THE BANNER IS ASKED FOR RATHER THAN ASSERTED. This line carried the words DEVELOPMENT PREVIEW
+					// and SIMULATED JULIUS EXECUTION as literals, so it printed them over a real Julius run, next to
+					// MISSION none, while the task set was correctly following that run. Both were true sentences
+					// about a build that could not do this yet and false the moment it could.
 					return FText::FromString(FString::Printf(
-						TEXT("DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION   |   MISSION %s · EVENT %s (%s) · STATE %s · %s %d/%d · DOG %s%s · COMPANIONS %s%s   |   %s"),
+						TEXT("%s   |   MISSION %s · EVENT %s (%s) · STATE %s · %s %d/%d · DOG %s%s · COMPANIONS %s%s   |   %s"),
+						*Mission->GetProvenanceBanner(),
 						MissionId.IsNone() ? TEXT("none") : *MissionId.ToString(),
 						Mission->GetPresentedEventType().IsNone() ? TEXT("-") : *Mission->GetPresentedEventType().ToString(),
 						*Mission->GetLastEventVerdict(),
@@ -1530,4 +1535,71 @@ FString UWonderlandMissionSubsystem::ReplaySummary(FName FixtureId) const
 		return FString();
 	}
 	return WonderlandDescribeFold(Replayed);
+}
+
+// ---------------------------------------------------------------- what is actually being followed
+
+const UWonderlandMissionTaskSubsystem* UWonderlandMissionSubsystem::TaskSet() const
+{
+	// ULocalPlayerSubsystem knows its own player, so this needs no controller and works while the HUD draws.
+	const ULocalPlayer* Player = GetLocalPlayer<ULocalPlayer>();
+	return Player != nullptr ? Player->GetSubsystem<UWonderlandMissionTaskSubsystem>() : nullptr;
+}
+
+bool UWonderlandMissionSubsystem::IsDevelopmentPreview() const
+{
+	// A FIXTURE IS ALWAYS A PREVIEW, even if a real run is followed beside it: while this class is generating
+	// beats itself, what the surfaces are drawing is a simulation and must say so.
+	if (IsFixtureRunning())
+	{
+		return true;
+	}
+	const UWonderlandMissionTaskSubsystem* Tasks = TaskSet();
+	return Tasks == nullptr || !Tasks->IsFollowingJuliusRun();
+}
+
+FString UWonderlandMissionSubsystem::GetFollowedRunId() const
+{
+	const UWonderlandMissionTaskSubsystem* Tasks = TaskSet();
+	return Tasks != nullptr ? Tasks->GetFollowedRunId() : FString();
+}
+
+FString UWonderlandMissionSubsystem::GetFollowedJuliusState() const
+{
+	const UWonderlandMissionTaskSubsystem* Tasks = TaskSet();
+	return Tasks != nullptr ? Tasks->GetFollowedJuliusState() : FString();
+}
+
+FString UWonderlandMissionSubsystem::GetProvenanceBanner() const
+{
+	if (IsDevelopmentPreview())
+	{
+		return TEXT("DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION");
+	}
+	// A REAL RUN, NAMED. The run id is what the founder's acceptance says the contract must follow, so it is on
+	// screen rather than inferred from the mission id. Julius's own word for the state travels with it, and
+	// when Julius has not said anything yet the banner says that instead of borrowing the mapped enum's name.
+	const FString Run = GetFollowedRunId();
+	const FString Said = GetFollowedJuliusState();
+	return FString::Printf(TEXT("JULIUS LIVE · RUN %s · %s"),
+		Run.IsEmpty() ? TEXT("unnamed") : *Run,
+		Said.IsEmpty() ? TEXT("NO STATE REPORTED YET") : *Said.ToUpper());
+}
+
+FName UWonderlandMissionSubsystem::GetFoldMissionId() const
+{
+	if (!Fold.MissionId.IsNone())
+	{
+		return Fold.MissionId;
+	}
+	const UWonderlandMissionTaskSubsystem* Tasks = TaskSet();
+	if (Tasks != nullptr && !IsFixtureRunning())
+	{
+		const FString Followed = Tasks->GetFollowedMissionId();
+		if (!Followed.IsEmpty())
+		{
+			return FName(*Followed);
+		}
+	}
+	return Fold.MissionId;
 }
