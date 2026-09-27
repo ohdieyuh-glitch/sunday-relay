@@ -209,15 +209,48 @@ def job():
     # So reads are discarded until consecutive ones stop falling: the series is settled from the first read
     # whose successor is within a tenth of it, and only the settled tail is used. If it never settles, nothing
     # is discarded and A06 fails on the full spread, which is the honest outcome rather than a trimmed one.
-    # THE TREND HAS TO STOP, NOT ONE PAIR TO MATCH. A gently falling series has neighbours inside any
-    # tolerance while it is still on its way down -- 47.95 then 57.12 would pass a pair test mid-descent. So a
-    # read LOWER than its predecessor resets the wait, and the settled point is the last time that happened.
-    # The world lane hit the same hole in their own settle an hour after fixing the timer version of it.
+    # THREE CONSECUTIVE READS IN AGREEMENT, AND ANY MOVEMENT IN EITHER DIRECTION RESTARTS THE COUNT.
+    #
+    # THREE VERSIONS OF THIS WERE WRONG AND EACH FIXED THE LAST ONE'S SHAPE WITHOUT FIXING ITS ASSUMPTION.
+    # A fixed settle timer guesses when the machine is ready. Discarding until one PAIR agrees still passes
+    # mid-descent, because a gently falling series has neighbours inside any tolerance -- 47.95 then 57.12
+    # would pass it. Taking the last DROP as the settled point assumes the descent is monotone, and there is
+    # no reason it must be: a world that rises before falling again resets nothing and the wait ends early on
+    # an upswing.
+    #
+    # SO THE TEST IS THE WINDOW'S SPREAD, NOT ITS CONSECUTIVE STEPS, and that is the fourth version.
+    #
+    # THREE CONSECUTIVE STEPS INSIDE A TOLERANCE IS NOT THREE READS IN AGREEMENT, because steps COMPOUND. I
+    # wrote the consecutive form, tested it against a made-up oscillating descent, and it returned on the
+    # second read of [200, 60, 66, 61, 50, 49, 48.5] while the series still had a fifth of its fall left: every
+    # pair sits inside ten per cent and the window drops seventeen per cent across three of them. The same hole
+    # as the pair test, one read wider.
+    #
+    # max minus min over min, across a sliding window of three, answers the question actually being asked --
+    # are these three reads the same reading? A window of three that spans less than the tolerance cannot be
+    # mid-descent at the tolerance's own rate, in either direction, and it needs no assumption about the shape
+    # of the approach.
+    #
+    # IF IT NEVER SETTLES, NOTHING IS DISCARDED and A06 fails on the full spread, which is the honest outcome
+    # rather than a trimmed one. The observed warm-up [521, 123, 64, 48, 57] never settles in eight reads, and
+    # that run SHOULD be reported as an instrument that did not arrive.
     series = [r["frame_median"] for r in repeats]
     settled_from = 0
-    for i in range(1, len(series)):
-        if series[i] < series[i - 1] * 0.90:
+    WINDOW, TOL = 3, 0.10
+    for i in range(len(series) - WINDOW + 1):
+        chunk = series[i:i + WINDOW]
+        lo, hi = min(chunk), max(chunk)
+        if lo > 0.0 and (hi - lo) / lo < TOL:
             settled_from = i
+            break
+    else:
+        settled_from = 0
+        RESULT["never_settled"] = {
+            "series": series, "window": WINDOW, "tolerance": TOL,
+            "note": "no three consecutive reads of an unchanged world agreed to within the tolerance, so "
+                    "nothing was discarded and the spread below is the full one. A ladder published from this "
+                    "is a measurement of a machine that had not arrived.",
+        }
     settled = repeats[settled_from:] if len(repeats) - settled_from >= 2 else repeats
     RESULT["rung_zero_warmup_reads"] = settled_from
     repeats = settled
@@ -301,6 +334,9 @@ def job():
     known = [v for v in steady.values() if isinstance(v, (int, float))]
     if len(known) > 1:
         ladder_range = max(known) - min(known)
+    # PUBLISHED, because the verdict below needs it and a value computed in one clause and re-derived in
+    # another is two values that will eventually disagree.
+    RESULT["_ladder_range_ms"] = round(ladder_range, 2)
     record("A06", "the instrument repeats: one setting read five times disagrees LESS than the settings do",
            isinstance(spread.get("spread_ms"), float) and spread["spread_ms"] <= max(ladder_range * 0.5, 5.0),
            rung_zero_spread=spread, ladder_range_ms=round(ladder_range, 2),
@@ -378,6 +414,35 @@ def job():
             body.destroy_actor()
         except Exception:
             pass
+    # ---- WHICH HALF OF THIS LADDER CAN BE READ, SAID PLAINLY.
+    #
+    # A06 VOIDS THE MEDIANS WHEN THE MACHINE SCATTERS MORE THAN THE AVATARS COST, and on this laptop it does:
+    # seven settled reads of an unchanged world spanned 16.97 ms against a ladder range of 14.27. That is not a
+    # failure to measure, it is a measurement -- ten Project Avatars cost less than this machine's own
+    # frame-to-frame scatter, so they cannot be the cause of a hitch anyone can feel. Reporting only "A06
+    # FAILED" would hide a real answer inside a red clause.
+    #
+    # AND THE FOUNDER ASKED ABOUT A HITCH, WHICH IS A TAIL, NOT A MEDIAN. "Cached spawn improved about 509 ms
+    # to 73 ms but still hitches" is a statement about single frames. The medians can be void while the raw
+    # tails are decisive, because they are different statistics from different fields -- and until this build
+    # the tails were read off the filtered curve and could not show a spike at all.
+    spread_ms = (RESULT.get("rung_zero_spread") or {}).get("spread_ms")
+    rng = RESULT.get("_ladder_range_ms")
+    verdict = {}
+    if isinstance(spread_ms, float) and isinstance(rng, float):
+        verdict["medians"] = ("readable: the machine repeats more closely than the avatars cost"
+                             if spread_ms <= max(rng * 0.5, 5.0) else
+                             "VOID as a per-avatar cost, and that is itself the finding: this machine's own "
+                             "scatter of %.2f ms exceeds the %.2f ms the whole ladder spans, so ten avatars "
+                             "cost less than the noise floor and cannot be what the founder felt"
+                             % (spread_ms, rng))
+    verdict["tails"] = ("readable from this build onward: p95 and worst now come from RawFrameTime, where one "
+                        "expensive frame is one row. Every tail this job published before build 16:19 came "
+                        "from a ten-frame exponential average and could not represent a spike.")
+    verdict["what_a_hitch_needs"] = ("the raw tails, not the medians. A median answers 'what does it cost'; "
+                                     "the founder asked 'why does it stutter', which only the tail can answer.")
+    RESULT["verdict"] = verdict
+
     RESULT["captures_dir"] = ROOT
     RESULT["status"] = "measured"
     yield 2.0
