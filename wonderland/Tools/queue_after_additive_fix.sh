@@ -36,7 +36,19 @@ WT="C:/dev/iwonder/wonderland-task3/wonderland"
 CH="$WT/Tools/_channel"
 TMP="C:/Users/Kaisi/AppData/Local/Temp/claude/C--Users-Kaisi/5b20cf79-e51b-4532-902f-47c18f55e76d/scratchpad"
 JOBS="$WT/Tools/editor_jobs"
-ST="$TMP/_stage_pf.py"
+# STAGED INSIDE THE INBOX, UNDER A NON-.py NAME, AND RENAMED IN PLACE.
+#
+# Writing a job straight into the inbox is a RACE, and it fails silently in the worst possible way: the
+# runner polls every 0.25 s and can pick a file up MID-WRITE. A truncated source still compiles, `job` is
+# then defined without ever reaching a yield, so it is a plain function rather than a generator, `_start`
+# finds no __next__ and finishes the job with status "running" and no error. Nothing logs, nothing raises.
+# (Cost the other lane a whole capture run on 2026-09-27.)
+#
+# A rename is atomic; a copy is not. Staging under the scratchpad and moving into the inbox relies on both
+# being the same volume -- true here today, and an assumption nobody would notice breaking. Staging INSIDE
+# the inbox removes it: editor_channel skips any entry that does not end in .py, so a ".staging" file is
+# invisible to the runner until the rename makes it a job, and the rename is same-directory by construction.
+ST="$CH/inbox/._stage_pf.staging"
 mkdir -p "$TMP"
 
 HB="$CH/heartbeat.json"
