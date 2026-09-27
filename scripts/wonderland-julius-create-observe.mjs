@@ -45,6 +45,8 @@ import { createWriteStream, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import pg from 'pg';
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'generated');
 mkdirSync(OUT, { recursive: true });
@@ -73,6 +75,10 @@ const { projectJuliusTaskState } = await import('../generated/wonderland-julius-
 const TOKEN = randomBytes(24).toString('hex');
 const PORT = Number(process.env.WONDERLAND_E2E_PORT ?? 8796);
 const BASE = `http://127.0.0.1:${PORT}`;
+/** The website a test player signs in from. It only has to be an origin this bridge admits. */
+const SITE = 'https://wonderland-e2e.invalid';
+/** The test player, in the shape GitHub sign-in encodes an identity. */
+const PLAYER = 'ghu-e2e-player';
 
 const env = {};
 for (const [k, v] of Object.entries(process.env)) {
@@ -86,6 +92,9 @@ Object.assign(env, {
   RELAY_BRIDGE_PORT: String(PORT),
   RELAY_BRIDGE_HOST: '127.0.0.1',
   RELAY_HERMES_PROVIDER: 'hermes_local',
+  // The website origin the test player signs in from. Not a real site: it only
+  // has to be an origin this bridge admits, so the operator can mint the player.
+  RELAY_ALLOWED_ORIGINS: SITE,
 });
 
 /* ----------------------------------------------------------------- clauses */
@@ -231,6 +240,112 @@ try {
   clause('E11', 'an unknown run is run_not_found, never an empty run and never a routing miss',
     unknownRun.status === 404 && unknownRun.json?.error?.kind === 'run_not_found',
     { status: unknownRun.status, refusal: unknownRun.json?.error?.kind ?? 'none' });
+
+  /* ================================================================
+   * THE NATIVE CLIENT, OVER THE WIRE -- the exact calls the Unreal
+   * transport makes, so the only unknown left for PIE is the C++.
+   * ================================================================ */
+
+  // A signed-in player. GitHub sign-in cannot run here, so the operator mints
+  // a CONTROL session bound to a named player -- the same session shape
+  // GitHub sign-in produces -- and the "website" redeems it from its Origin.
+  const minted = await call('POST', '/relay-api/browser/pair', {
+    headers: operator, body: JSON.stringify({ origin: SITE, scope: 'control', participantId: PLAYER }),
+  });
+  const grant = minted.json?.data ?? {};
+  const signedIn = await call('POST', '/relay-api/browser/session', {
+    headers: { Origin: SITE }, body: JSON.stringify({ grantId: grant.grantId, grantSecret: grant.grantSecret }),
+  });
+  const playerToken = signedIn.json?.data?.sessionToken ?? null;
+  clause('N01', 'a signed-in player exists: a control session bound to the player, from the website',
+    signedIn.status === 200 && typeof playerToken === 'string',
+    { mintStatus: minted.status, sessionStatus: signedIn.status, participantId: signedIn.json?.data?.participantId ?? 'absent' });
+
+  // The player is a MEMBER of the project, which is what lets the world route
+  // answer at all: project scoping is this row.
+  const members = new pg.Pool({ connectionString: DB });
+  try {
+    await members.query('INSERT INTO relay_wonderland.players(player_id) VALUES ($1) ON CONFLICT DO NOTHING', [PLAYER]);
+    await members.query(
+      "INSERT INTO relay_wonderland.project_members(project_id, player_id, role) VALUES ($1, $2, 'OWNER') ON CONFLICT DO NOTHING",
+      [CONTRACT.projectId, PLAYER]);
+  } finally {
+    await members.end();
+  }
+
+  const byOperator = await call('POST', '/relay-api/wonderland/native/pair', { headers: { ...operator, Origin: SITE } });
+  clause('N02', 'the operator credential cannot pair a native client: an operator is not a player',
+    byOperator.status === 403 && byOperator.json?.error?.kind === 'operator_is_not_a_player',
+    { status: byOperator.status, refusal: byOperator.json?.error?.kind ?? 'none' });
+
+  const paired = await call('POST', '/relay-api/wonderland/native/pair', {
+    headers: { Authorization: `Relay-Session ${playerToken}`, Origin: SITE },
+  });
+  const code = paired.json?.data?.code ?? null;
+  clause('N03', 'the signed-in player pairs their own desktop client and gets a single-use code',
+    paired.status === 200 && typeof code === 'string' && paired.json?.data?.participantId === PLAYER,
+    { status: paired.status, participantId: paired.json?.data?.participantId ?? 'absent' });
+
+  // The desktop client redeems it. No Origin header: it is not a web page.
+  const redeemed = await call('POST', '/relay-api/wonderland/native/session', { body: JSON.stringify({ code }) });
+  const nativeToken = redeemed.json?.data?.token ?? null;
+  clause('N04', 'the desktop client redeems the code for its own native session',
+    redeemed.status === 200 && typeof nativeToken === 'string',
+    { status: redeemed.status, audience: redeemed.json?.data?.audience ?? 'absent' });
+
+  const reused = await call('POST', '/relay-api/wonderland/native/session', { body: JSON.stringify({ code }) });
+  clause('N05', 'the same code a second time fails closed', reused.status === 401,
+    { status: reused.status, refusal: reused.json?.error?.kind ?? 'none' });
+
+  const native = { Authorization: `Relay-Session ${nativeToken}` };
+  const worldQuery = `projectId=${encodeURIComponent(CONTRACT.projectId)}&runId=${runId}&cursor=0`;
+
+  // THE WORLD'S OWN HYDRATE, as the native client -- what AdoptHydration will receive.
+  const hydrate = await call('GET', `/relay-api/wonderland/julius/hydrate?${worldQuery}`, { headers: native });
+  const hydrated = hydrate.json?.data ?? null;
+  const worldProjection = projectJuliusTaskState(hydrated?.run?.state ?? null);
+  clause('N06', 'the native client hydrates the SAME run from the world route, READY, shown Queued',
+    hydrate.status === 200 && hydrated?.run?.runId === runId && hydrated?.run?.missionId === CONTRACT.missionId
+      && hydrated?.run?.state === 'READY' && worldProjection?.kind === 'state' && worldProjection.state === 'Queued',
+    { status: hydrate.status, runId: hydrated?.run?.runId ?? 'absent', missionId: hydrated?.run?.missionId ?? 'absent',
+      state: hydrated?.run?.state ?? 'absent', projection: worldProjection ?? 'unknown' });
+
+  // THE WORLD'S OWN EVENTS, one page at a time -- what ApplyEnvelope will receive.
+  const firstPage = await call('GET', `/relay-api/wonderland/julius/events?mode=page&${worldQuery}`, { headers: native });
+  const deliveries = firstPage.json?.data?.deliveries ?? null;
+  const sequences = Array.isArray(deliveries) ? deliveries.map((d) => Number(d?.envelope?.sequence)) : [];
+  clause('N07', 'the native client reads the run\'s envelopes as one page, oldest first by sequence',
+    firstPage.status === 200 && sequences.length > 0 && sequences.every(Number.isFinite)
+      && sequences.every((s, i) => i === 0 || s > sequences[i - 1])
+      && deliveries.every((d) => d?.envelope?.runId === runId),
+    { status: firstPage.status, delivered: sequences.length, sequences: sequences.slice(0, 12),
+      nextCursor: firstPage.json?.data?.nextCursor ?? 'absent' });
+
+  const nextCursor = firstPage.json?.data?.nextCursor ?? 0;
+  const secondPage = await call('GET',
+    `/relay-api/wonderland/julius/events?mode=page&projectId=${encodeURIComponent(CONTRACT.projectId)}&runId=${runId}&cursor=${nextCursor}`,
+    { headers: native });
+  clause('N08', 'reading on from nextCursor sends nothing twice',
+    secondPage.status === 200 && (secondPage.json?.data?.deliveries ?? []).length === 0,
+    { status: secondPage.status, redelivered: (secondPage.json?.data?.deliveries ?? []).length, from: nextCursor });
+
+  // THE COPY GUARD, end to end: the player's BROWSER session carried into a
+  // native client (no Origin) is refused by the very route it would unlock.
+  const copied = await call('GET', `/relay-api/wonderland/julius/hydrate?${worldQuery}`, {
+    headers: { Authorization: `Relay-Session ${playerToken}` },
+  });
+  // THE CONTROL, without which a 401 above proves nothing: the SAME browser
+  // session, from its own website, is admitted. The first draft of this clause
+  // passed while the token it "copied" was null.
+  const fromSite = await call('GET', `/relay-api/wonderland/julius/hydrate?${worldQuery}`, {
+    headers: { Authorization: `Relay-Session ${playerToken}`, Origin: SITE },
+  });
+  clause('N09', 'a browser session copied into a native client is refused, while the same session from its website is admitted',
+    typeof playerToken === 'string' && copied.status === 401 && fromSite.status === 200,
+    { copiedStatus: copied.status, fromItsWebsiteStatus: fromSite.status });
+
+  const unsigned = await call('GET', `/relay-api/wonderland/julius/hydrate?${worldQuery}`);
+  clause('N10', 'no session at all is refused', unsigned.status === 401, { status: unsigned.status });
 } catch (err) {
   clause('EXX', 'the walk completed without an exception', false, { error: String(err?.message ?? err) });
 } finally {

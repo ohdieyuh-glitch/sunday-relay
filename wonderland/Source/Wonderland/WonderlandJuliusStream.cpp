@@ -302,13 +302,20 @@ void UWonderlandJuliusStreamSubsystem::Follow(const FString& InProjectId, const 
 		return;
 	}
 	// A DIFFERENT RUN IS A DIFFERENT WORLD. What was held for another run must not survive into this one, and the
-	// subsystem refuses a hydration for a run other than the one it holds, so switching clears first.
-	if (ProjectId != InProjectId || RunId != InRunId)
-	{
-		Julius->ClearHeldState();
-	}
+	// subsystem refuses a hydration for a run other than the one it holds.
+	//
+	// The subsystem resets itself -- a fresh cursor, its held state cleared -- when its PROJECT changes, and exposes
+	// no public way to switch RUNS within one project (ClearHeldState is private, deliberately). So a switch unbinds
+	// and rebinds, which asks for a fresh world through the public API alone. Both calls run here, synchronously, so
+	// no envelope can land between them. A first-class "follow this run" on the subsystem would say this more
+	// directly; that is its owner's to add.
+	const bool bSwitching = !ProjectId.IsEmpty() && (ProjectId != InProjectId || RunId != InRunId);
 	ProjectId = InProjectId;
 	RunId = InRunId;
+	if (bSwitching)
+	{
+		Julius->BindProject(FString());
+	}
 	Julius->BindProject(ProjectId);
 	Phase = EPhase::Hydrating;
 	Failures = 0;
