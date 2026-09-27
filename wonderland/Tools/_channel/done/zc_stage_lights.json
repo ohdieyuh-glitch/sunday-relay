@@ -1,0 +1,184 @@
+{
+ "name": "zc_stage_lights",
+ "started": "2026-09-26 17:45:07",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "S00",
+   "name": "the wardrobe's stage actor is in the world",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "S01",
+   "name": "all three stage lights were found",
+   "pass": true,
+   "detail": {
+    "found": 3,
+    "lamps": [
+     {
+      "name": "KeyLight",
+      "at": [
+       -538,
+       -755,
+       248
+      ],
+      "metres_from_figure": 1.38,
+      "candelas": "90000.0",
+      "radius_uu": "1400.0",
+      "units": "<LightUnits.UNITLESS: 0>",
+      "visible": true
+     },
+     {
+      "name": "FillLight",
+      "at": [
+       -399,
+       -803,
+       186
+      ],
+      "metres_from_figure": 1.07,
+      "candelas": "26000.0",
+      "radius_uu": "1200.0",
+      "units": "<LightUnits.UNITLESS: 0>",
+      "visible": true
+     },
+     {
+      "name": "RimLight",
+      "at": [
+       -391,
+       -645,
+       258
+      ],
+      "metres_from_figure": 1.36,
+      "candelas": "52000.0",
+      "radius_uu": "1100.0",
+      "units": "<LightUnits.UNITLESS: 0>",
+      "visible": true
+     }
+    ]
+   }
+  },
+  {
+   "id": "S02",
+   "name": "at least one stage light's attenuation radius actually reaches the figure",
+   "pass": true,
+   "detail": {
+    "reaching": 3,
+    "lamps": [
+     {
+      "name": "KeyLight",
+      "at": [
+       -538,
+       -755,
+       248
+      ],
+      "metres_from_figure": 1.38,
+      "candelas": "90000.0",
+      "radius_uu": "1400.0",
+      "units": "<LightUnits.UNITLESS: 0>",
+      "visible": true
+     },
+     {
+      "name": "FillLight",
+      "at": [
+       -399,
+       -803,
+       186
+      ],
+      "metres_from_figure": 1.07,
+      "candelas": "26000.0",
+      "radius_uu": "1200.0",
+      "units": "<LightUnits.UNITLESS: 0>",
+      "visible": true
+     },
+     {
+      "name": "RimLight",
+      "at": [
+       -391,
+       -645,
+       258
+      ],
+      "metres_from_figure": 1.36,
+      "candelas": "52000.0",
+      "radius_uu": "1100.0",
+      "units": "<LightUnits.UNITLESS: 0>",
+      "visible": true
+     }
+    ],
+    "note": "a point light contributes nothing past its attenuation radius, however many candelas it has. The stage is scaled to about a ninth to bring the figure to the window, and component scale scales that radius with it."
+   }
+  },
+  {
+   "id": "S03",
+   "name": "the figure responds to the stage's own lights",
+   "pass": true,
+   "detail": {
+    "before": 0.0384,
+    "after": 0.3694,
+    "factor": 50,
+    "note": "fifty times the light. If the window does not brighten, the stage lights are not lighting the figure at all and their intensity was never the question."
+   }
+  }
+ ],
+ "stage_found": true,
+ "figure_at": [
+  -446,
+  -713,
+  154
+ ],
+ "figure_scale": 0.3408,
+ "stage_hidden": false,
+ "stage_actor_hidden_in_game": "?WonderlandSkinStage: Failed to find property 'acto",
+ "body_hidden": false,
+ "body_actor_hidden_in_game": "?WonderlandCompanionEmbodiment: Failed to find prop",
+ "lamps": [
+  {
+   "name": "KeyLight",
+   "at": [
+    -538,
+    -755,
+    248
+   ],
+   "metres_from_figure": 1.38,
+   "candelas": "90000.0",
+   "radius_uu": "1400.0",
+   "units": "<LightUnits.UNITLESS: 0>",
+   "visible": true
+  },
+  {
+   "name": "FillLight",
+   "at": [
+    -399,
+    -803,
+    186
+   ],
+   "metres_from_figure": 1.07,
+   "candelas": "26000.0",
+   "radius_uu": "1200.0",
+   "units": "<LightUnits.UNITLESS: 0>",
+   "visible": true
+  },
+  {
+   "name": "RimLight",
+   "at": [
+    -391,
+    -645,
+    258
+   ],
+   "metres_from_figure": 1.36,
+   "candelas": "52000.0",
+   "radius_uu": "1100.0",
+   "units": "<LightUnits.UNITLESS: 0>",
+   "visible": true
+  }
+ ],
+ "lights_whose_radius_reaches_the_figure": 3,
+ "cranked": {
+  "before": 0.0384,
+  "after": 0.3694,
+  "factor": 50
+ },
+ "finished": "2026-09-26 17:45:43",
+ "seconds": 35.69,
+ "log": "S00 PASS the wardrobe's stage actor is in the world {}\nS_LAMPS INFO the stage's three lights, live {'figure': [-446, -713, 154], 'lamps': [{'name': 'KeyLight', 'at': [-538, -755, 248], 'metres_from_figure': 1.38, 'candelas': '90000.0', 'radius_uu': '1400.0', 'units': '<LightUnits.UNITLESS: 0>', 'visible': True}, {'name': 'FillLight', 'at': [-399, -803, 186], 'metres_from_figure': 1.07, 'candelas': '26000.0', 'radius_uu': '1200.0', 'units': '<LightUnits.UNITLESS: 0>', 'visible': True}, {'name': 'RimLight', 'at': [-391, -645, 258], 'metres_from_figure': 1.36, 'candelas': '52000.0', 'radius_uu': '1100.0', 'units': '<LightUnits.UNITLESS: 0>', 'visible': True}]}\nS01 PASS all three stage lights were found {'found': 3, 'lamps': [{'name': 'KeyLight', 'at': [-538, -755, 248], 'metres_from_figure': 1.38, 'candelas': '90000.0', 'radius_uu': '1400.0', 'units': '<LightUnits.UNITLESS: 0>', 'visible': True}, {'name': 'FillLight', 'at': [-399, -803, 186], 'metres_from_figure': 1.07, 'candelas': '26000.0', 'radius_uu': '1200.0', 'units': '<LightUnits.UNITLESS: 0>', 'visible': True}, {'name': 'RimLight', 'at': [-391, -645, 258], 'metres_from_figure': 1.36, 'candelas': '52000.0', 'radius_uu': '1100.0', 'units': '<LightUnits.UNITLESS: 0>', 'visible': True}]}\nS02 PASS at least one stage light's attenuation radius actually reaches the figure {'reaching': 3, 'lamps': [{'name': 'KeyLight', 'at': [-538, -755, 248], 'metres_from_figure': 1.38, 'candelas': '90000.0', 'radius_uu': '1400.0', 'units': '<LightUnits.UNITLESS: 0>', 'visible': True}, {'name': 'FillLight', 'at': [-399, -803, 186], 'metres_from_figure': 1.07, 'candelas': '26000.0', 'radius_uu': '1200.0', 'units': '<LightUnits.UNITLESS: 0>', 'visible': True}, {'name': 'RimLight', 'at': [-391, -645, 258], 'metres_from_figure': 1.36, 'candelas': '52000.0', 'radius_uu': '1100.0', 'units': '<LightUnits.UNITLESS: 0>', 'visible': True}], 'note': 'a point light contributes nothing past its attenuation radius, however many candelas it has. The stage is scaled to about a ninth to bring the figure to the window, and component scale scales that radius with it.'}\nS_CRANK INFO the window with the stage lights cranked fifty-fold {'before': 0.0384, 'after': 0.3694, 'factor': 50}\nS03 PASS the figure responds to the stage's own lights {'before': 0.0384, 'after': 0.3694, 'factor': 50, 'note': 'fifty times the light. If the window does not brighten, the stage lights are not lighting the figure at all and their intensity was never the question.'}\n"
+}

@@ -1,6 +1,6 @@
 {
  "name": "zc_preview_hours",
- "started": "2026-09-26 17:22:14",
+ "started": "2026-09-26 18:26:24",
  "status": "measured",
  "tests": [
   {
@@ -16,14 +16,14 @@
    "detail": {
     "luma": {
      "relay_og": {
-      "12.0": 0.0938,
-      "19.0": 0.0197,
-      "00.0": 0.0351
+      "12.0": 0.0799,
+      "19.0": 0.1048,
+      "00.0": 0.118
      },
      "arden_infernal": {
-      "12.0": 0.0821,
-      "19.0": 0.2317,
-      "00.0": 0.1832
+      "12.0": 0.17,
+      "19.0": 0.2563,
+      "00.0": 0.2297
      }
     }
    }
@@ -31,23 +31,23 @@
   {
    "id": "H02",
    "name": "the preview looks the same whatever the world's clock is doing",
-   "pass": false,
+   "pass": true,
    "detail": {
     "brightest_over_dimmest": {
-     "relay_og": 4.76,
-     "arden_infernal": 2.82
+     "relay_og": 1.48,
+     "arden_infernal": 1.51
     },
     "ceiling": 1.6,
     "luma_by_hour": {
      "relay_og": {
-      "12.0": 0.0938,
-      "19.0": 0.0197,
-      "00.0": 0.0351
+      "12.0": 0.0799,
+      "19.0": 0.1048,
+      "00.0": 0.118
      },
      "arden_infernal": {
-      "12.0": 0.0821,
-      "19.0": 0.2317,
-      "00.0": 0.1832
+      "12.0": 0.17,
+      "19.0": 0.2563,
+      "00.0": 0.2297
      }
     },
     "note": "the stage carries its own key, fill and rim lights so the wardrobe is a showcase and not a window. A preview that is much darker at midnight is inheriting the world instead."
@@ -56,22 +56,22 @@
  ],
  "preview_luma_by_hour": {
   "relay_og": {
-   "12.0": 0.0938,
-   "19.0": 0.0197,
-   "00.0": 0.0351
+   "12.0": 0.0799,
+   "19.0": 0.1048,
+   "00.0": 0.118
   },
   "arden_infernal": {
-   "12.0": 0.0821,
-   "19.0": 0.2317,
-   "00.0": 0.1832
+   "12.0": 0.17,
+   "19.0": 0.2563,
+   "00.0": 0.2297
   }
  },
  "brightest_over_dimmest": {
-  "relay_og": 4.76,
-  "arden_infernal": 2.82
+  "relay_og": 1.48,
+  "arden_infernal": 1.51
  },
  "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\preview_hours",
- "finished": "2026-09-26 17:23:22",
- "seconds": 68.18,
- "log": "H00 PASS the preview window reports where it is {}\nH_relay_og INFO relay_og {'12.0': 0.0938, '19.0': 0.0197, '00.0': 0.0351}\nH_arden_infernal INFO arden_infernal {'12.0': 0.0821, '19.0': 0.2317, '00.0': 0.1832}\nH01 PASS every hour was read for every skin {'luma': {'relay_og': {'12.0': 0.0938, '19.0': 0.0197, '00.0': 0.0351}, 'arden_infernal': {'12.0': 0.0821, '19.0': 0.2317, '00.0': 0.1832}}}\nH02 FAIL the preview looks the same whatever the world's clock is doing {'brightest_over_dimmest': {'relay_og': 4.76, 'arden_infernal': 2.82}, 'ceiling': 1.6, 'luma_by_hour': {'relay_og': {'12.0': 0.0938, '19.0': 0.0197, '00.0': 0.0351}, 'arden_infernal': {'12.0': 0.0821, '19.0': 0.2317, '00.0': 0.1832}}, 'note': 'the stage carries its own key, fill and rim lights so the wardrobe is a showcase and not a window. A preview that is much darker at midnight is inheriting the world instead.'}\n"
+ "finished": "2026-09-26 18:27:26",
+ "seconds": 62.38,
+ "log": "H00 PASS the preview window reports where it is {}\nH_relay_og INFO relay_og {'12.0': 0.0799, '19.0': 0.1048, '00.0': 0.118}\nH_arden_infernal INFO arden_infernal {'12.0': 0.17, '19.0': 0.2563, '00.0': 0.2297}\nH01 PASS every hour was read for every skin {'luma': {'relay_og': {'12.0': 0.0799, '19.0': 0.1048, '00.0': 0.118}, 'arden_infernal': {'12.0': 0.17, '19.0': 0.2563, '00.0': 0.2297}}}\nH02 PASS the preview looks the same whatever the world's clock is doing {'brightest_over_dimmest': {'relay_og': 1.48, 'arden_infernal': 1.51}, 'ceiling': 1.6, 'luma_by_hour': {'relay_og': {'12.0': 0.0799, '19.0': 0.1048, '00.0': 0.118}, 'arden_infernal': {'12.0': 0.17, '19.0': 0.2563, '00.0': 0.2297}}, 'note': 'the stage carries its own key, fill and rim lights so the wardrobe is a showcase and not a window. A preview that is much darker at midnight is inheriting the world instead.'}\n"
 }

@@ -161,6 +161,26 @@ public:
 	 */
 	void SetExposureAware(bool bAware);
 
+	/**
+	 * PUT THIS BODY ON THE SHOWCASE LIGHTING CHANNEL, so the world's sun cannot reach it.
+	 *
+	 * The wardrobe preview is a figure standing in the open world behind a hole in the panel, so the sun lights
+	 * it -- and the measurement is unambiguous: Relay OG reads 0.110 luma in the window at noon and 0.036 at
+	 * midnight, while Arden Infernal goes the other way because its fire is emissive. A showcase that changes
+	 * with the weather is not a showcase.
+	 *
+	 * The stage's own key, fill and rim lights were never the problem. Cranked fifty-fold at runtime they took
+	 * the window from 0.038 to 0.369, so they reach the figure perfectly well; they are simply outvoted by a
+	 * 70,000 lux sun. Making them louder would only mean a preview that is brutal at midnight and merely wrong
+	 * at noon.
+	 *
+	 * Lighting channels are the mechanism that actually answers it. The showcase figure and the three stage
+	 * lights move to channel 1; everything else in Wonderland, the sun included, stays on channel 0. The
+	 * preview is then lit by its own rig and by nothing else, at every hour, which is what the founder asked
+	 * for when they said the preview square shows the Dog on black with no Wonderland in it.
+	 */
+	void SetShowcaseLit(bool bShowcase);
+
 	float GetGlowScale() const { return GlowScale; }
 
 	/** Follow whatever pawn this controller is wearing, now and after it changes. */
@@ -688,6 +708,9 @@ private:
 
 	/** See SetExposureAware. */
 	bool bExposureAware = true;
+
+	/** See SetShowcaseLit. */
+	bool bShowcaseLit = false;
 	/**
 	 * THE MATERIALS AS THE FIGURE FILE DECLARED THEM -- name, kind, authored colour and strength -- kept beside
 	 * MaterialInstances and parallel to it.

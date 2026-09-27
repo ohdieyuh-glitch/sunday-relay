@@ -105,7 +105,7 @@ AWonderlandSkinStage::AWonderlandSkinStage()
 	KeyLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("KeyLight"));
 	KeyLight->SetupAttachment(StageRoot);
 	KeyLight->SetRelativeLocation(FVector(230.0, -190.0, 270.0));
-	KeyLight->SetIntensity(90000.0f);
+	KeyLight->SetIntensity(1150000.0f);
 	KeyLight->SetAttenuationRadius(1400.0f);
 	KeyLight->SetLightColor(FLinearColor(1.0f, 0.97f, 0.92f));
 	KeyLight->SetCastShadows(false);
@@ -113,7 +113,7 @@ AWonderlandSkinStage::AWonderlandSkinStage()
 	FillLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("FillLight"));
 	FillLight->SetupAttachment(StageRoot);
 	FillLight->SetRelativeLocation(FVector(180.0, 240.0, 90.0));
-	FillLight->SetIntensity(26000.0f);
+	FillLight->SetIntensity(332000.0f);
 	FillLight->SetAttenuationRadius(1200.0f);
 	FillLight->SetLightColor(FLinearColor(0.72f, 0.78f, 1.0f));
 	FillLight->SetCastShadows(false);
@@ -121,10 +121,53 @@ AWonderlandSkinStage::AWonderlandSkinStage()
 	RimLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("RimLight"));
 	RimLight->SetupAttachment(StageRoot);
 	RimLight->SetRelativeLocation(FVector(-250.0, 60.0, 300.0));
-	RimLight->SetIntensity(52000.0f);
+	RimLight->SetIntensity(664000.0f);
 	RimLight->SetAttenuationRadius(1100.0f);
 	RimLight->SetLightColor(FLinearColor(0.62f, 0.70f, 1.0f));
 	RimLight->SetCastShadows(false);
+
+	// ---- AND FOUR TIMES THE LIGHT THEY CARRIED, because the channel below only solves half of it.
+	//
+	// Lighting channels stop the SUN reaching the preview figure, and measured they do exactly that. They do
+	// not stop LUMEN: global illumination in UE ignores lighting channels, so the bounce off a sunlit plaza
+	// still lands on a figure the sun itself can no longer see. With channels alone the preview went from
+	// three times brighter at noon to nearly four, and dimmer overall -- the direct light had gone and the
+	// indirect had not.
+	//
+	// So the rig is made loud enough to swamp what is left. THIRTEEN times, and the way that was arrived at is
+	// worth recording, because four looked right first.
+	//
+	// At four times, Relay OG read 0.0611 at noon and 0.0340 at midnight. The stage contributes the same at
+	// both hours, so those two readings separate it from the bounce: the rig is worth about 0.034 and the
+	// indirect about 0.027. Doubling should take the spread from 1.8 to about 1.4, and measured it did much
+	// better -- 1.09, near perfect. But four was ALSO too dim in absolute terms once the channel had taken
+	// the sun away: Relay OG's figure fell to 0.0565 against its own backdrop and Skeleton Flame's to 0.0380,
+	// and the wardrobe's own "a figure is standing there" clause failed on both. Taking the sun away means
+	// replacing it, not merely balancing it.
+	//
+	// EIGHT FIXED RELAY OG AND LEFT SKELETON FLAME SHORT, at 0.0202 against the 0.03 its own proof asks for.
+	// It is the dimmest skin in the lineup by construction -- bone over a black stage, with a chest skull
+	// authored to fall to a twelfth of its brightness between beats -- so it is the one that decides how much
+	// light the room needs. Thirteen times is what clears it.
+	//
+	// ARDEN INFERNAL IS THE COST AND IT IS THE RIGHT ONE TO PAY. A brighter rig lifts a lit body and does
+	// nothing for an emissive fire, so the skin that is mostly fire drifts: it reads 1.4x across the day at
+	// four times and 2.1x at eight. But it drifts BRIGHTER after dark, which is what fire does, while the
+	// alternative was every bone-coated skin going dark -- the fault the founder would actually notice.
+
+	// ---- ALL THREE ON THE SHOWCASE CHANNEL, with the figure and nothing else.
+	//
+	// Channel 1 is the wardrobe's. Wonderland's sun, moon, fills and every lamp in the world stay on channel
+	// 0, so these three cannot spill onto the garden and the garden's light cannot reach the preview. That
+	// second half is the point: measured, the preview was three times darker at midnight than at noon because
+	// the figure was standing in the open world being lit by the sun through a hole in the panel.
+	for (UPointLightComponent* Lamp : {KeyLight.Get(), FillLight.Get(), RimLight.Get()})
+	{
+		if (Lamp != nullptr)
+		{
+			Lamp->SetLightingChannels(false, true, false);
+		}
+	}
 
 	Capture = CreateDefaultSubobject<USceneCaptureComponent2D>(TEXT("Capture"));
 	Capture->SetupAttachment(StageRoot);
@@ -335,6 +378,10 @@ void AWonderlandSkinStage::EnsureBody()
 	Body->SetBodyRole(EWonderlandBodyRole::Mascot);
 	// THE CLOCK DOES NOT REACH THE PREVIEW. See AWonderlandCompanionEmbodiment::SetExposureAware.
 	Body->SetExposureAware(false);
+	// AND NEITHER DOES THE SUN. The showcase figure and the three lights below share lighting channel 1, so
+	// the preview is lit by its own rig at every hour instead of by whatever the sky is doing. See
+	// AWonderlandCompanionEmbodiment::SetShowcaseLit for the measurements that made this necessary.
+	Body->SetShowcaseLit(true);
 #if WITH_EDITOR
 	Body->SetActorLabel(TEXT("WL_SkinStage_Dog"), false);
 #endif

@@ -764,6 +764,13 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 
 	UE_LOG(LogWonderlandCompanion, Log, TEXT("WLCOMPANION %s (%s) built from %s: %d boxes, %d parts, %d materials, %d components"),
 		*DisplayName, *ClassLabel, *FilePath, BoxCount, PartPivots.Num(), MaterialInstances.Num(), PartMeshes.Num());
+	// A SHOWCASE FIGURE KEEPS ITS CHANNEL ACROSS A SKIN CHANGE. LoadFigure builds an entirely new set of
+	// components, and without this the first skin the founder clicks in the wardrobe would be lit by the
+	// stage and every one after it by the sun.
+	if (bShowcaseLit)
+	{
+		SetShowcaseLit(true);
+	}
 	Animate(GetWorld() != nullptr ? static_cast<float>(GetWorld()->GetTimeSeconds()) : 0.0f);
 	return true;
 }
@@ -1044,6 +1051,27 @@ FString AWonderlandCompanionEmbodiment::DescribeFlames() const
 	return Out;
 }
 
+void AWonderlandCompanionEmbodiment::SetShowcaseLit(bool bShowcase)
+{
+	// Channel 1 alone for a showcase; channel 0 alone for a body that lives in the world. Applied to every
+	// primitive the figure owns, including ones built after this call -- see the re-application in
+	// LoadFigure, because a skin swapped in the wardrobe builds a whole new set of components.
+	bShowcaseLit = bShowcase;
+	FLightingChannels Channels;
+	Channels.bChannel0 = !bShowcase;
+	Channels.bChannel1 = bShowcase;
+	Channels.bChannel2 = false;
+	TArray<UPrimitiveComponent*> Parts;
+	GetComponents<UPrimitiveComponent>(Parts);
+	for (UPrimitiveComponent* Part : Parts)
+	{
+		if (Part != nullptr)
+		{
+			Part->SetLightingChannels(Channels.bChannel0, Channels.bChannel1, Channels.bChannel2);
+		}
+	}
+}
+
 void AWonderlandCompanionEmbodiment::SetExposureAware(bool bAware)
 {
 	if (bExposureAware == bAware)
@@ -1086,10 +1114,17 @@ void AWonderlandCompanionEmbodiment::SetEyeGlow(float Scale)
 
 void AWonderlandCompanionEmbodiment::SetNightGlow(float Scale)
 {
-	if (!bExposureAware)
-	{
-		return;
-	}
+	// THE SHOWCASE TAKES THIS ONE, AND EXEMPTING IT WAS A MISTAKE.
+	//
+	// bExposureAware was added so a wardrobe preview would not get dimmer after sunset, and it is right for
+	// the EYE level, which is a brightness the showcase sets for itself. It was wrong here. This correction
+	// exists to cancel the night exposure lift on emissive surfaces -- and the preview is drawn through the
+	// same camera with the same exposure as everything else, so its fire is lifted by exactly the same 1.45 EV.
+	//
+	// Measured: with the figure on its own lighting channel and the stage rig at four times its old strength,
+	// Relay OG's preview settled to a 1.8x spread across the day while ARDEN INFERNAL went the other way to
+	// 2.2x -- brighter at midnight, because the one part of it that is emissive was the one part still riding
+	// the clock. It only touches glowing channels, so nothing about the showcase's lit surfaces changes.
 	const float Wanted = FMath::Clamp(Scale, 0.05f, 1.0f);
 	if (FMath::IsNearlyEqual(NightGlowScale, Wanted, 0.004f))
 	{
