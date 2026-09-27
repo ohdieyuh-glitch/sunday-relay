@@ -139,9 +139,13 @@ def job():
             if eyes is not None:
                 row["eye_luma"] = eyes["luma"]
                 row["eye_blown"] = eyes["bright"]
+                # Named for the saturation guard in usable(): a frame where BOTH the eye and the face it is
+                # set into are clipped cannot distinguish a lamp from a white square.
+                row["eye_bright"] = eyes["bright"]
                 row["colour"] = eyes.get("colour")
             if face is not None:
                 row["face_luma"] = face["luma"]
+                row["face_bright"] = face["bright"]
             if eyes is not None and face is not None:
                 row["eye_over_face"] = round(eyes["luma"] - face["luma"], 4)
             per[skin] = row
@@ -180,16 +184,65 @@ def job():
     # the eye can never out-read it however brightly it burns -- measured at -0.14 while the eye itself was at
     # 0.86, which is plainly a lamp. So an eye passes by clearing its own face OR by being unmistakably bright
     # in its own right. Both are ways of being visibly lit; neither can be satisfied by an eye that is off.
+    # ---- GLOW IS LOCAL CONTRAST. THE ABSOLUTE BRANCH IS GONE, AND IT WAS LETTING FAILURES THROUGH.
+    #
+    # This used to pass on "eye_over_face > 0.05 OR eye_luma >= 0.55", and the second half is not a test of
+    # glow at all. A bright eye set in a brighter face is not glowing -- it is a bright head. Two skins were
+    # passing on it:
+    #
+    #   CELESTIAL LIGHT reads over_face -0.1438 / -0.1456 / -0.2378 at noon, dusk and midnight. Its eye is
+    #   DARKER than its own face at every hour of the day, and it passed on an absolute 0.8562.
+    #   ARDEN INFERNAL at noon reads 0.0361 over a face of 0.9629 with an eye at 0.999 -- both clipped. That
+    #   is a saturated head, and saturation is the one condition under which this measurement cannot say
+    #   anything about glow either way.
+    #
+    # This is the same instrument fault already caught and fixed for Skeleton Flame's pulse and for the
+    # wardrobe's framing: a clause that can be satisfied without the thing it names being true.
+    #
+    # SO: local contrast only, and a saturated sample is UNUSABLE rather than a pass. An unusable sample is
+    # reported and fails the coverage clause, because "the exposure blew out the whole head so we cannot
+    # tell" must never read the same as "the eyes are glowing".
+    SATURATED = 0.90
+
+    def usable(v):
+        """False when eye AND face are both clipped -- nothing about glow can be read from that frame."""
+        return not (v.get("eye_bright", 0.0) >= SATURATED and v.get("face_bright", 0.0) >= SATURATED)
+
     def lit(v):
-        return v["eye_over_face"] > 0.05 or v.get("eye_luma", 0.0) >= 0.55
+        # The eye must out-read the face it is set into. No absolute escape hatch.
+        return usable(v) and v["eye_over_face"] > 0.05
+
+    def has_colour(v):
+        # And the established colour must survive: a white square carries no skin identity and cannot show
+        # the founder's SECONDARY. Reported for every sample; gated only where the instrument can resolve it.
+        return v.get("colour", 0.0) > 0.0
 
     day = rows["12.0"]
-    record("E01", "at noon every skin's eyes read as lit",
+    unusable_day = {s: v for s, v in day.items() if not usable(v)}
+    RESULT["unusable_samples"] = {
+        h: [s for s, v in per.items() if not usable(v)] for h, per in rows.items()}
+    record("E01", "at noon every skin's eyes out-read the face they are set into",
            all(lit(v) for v in day.values()),
-           at_noon={s: {"over_face": v["eye_over_face"], "eye": v.get("eye_luma")} for s, v in day.items()},
-           over_face_floor=0.05, or_absolute_floor=0.55,
-           note="the founder: eyes have to be glowing even when it is day time. Daylight is the hard case -- "
-                "an emissive keeps its value while the sunlit stone beside it climbs past.")
+           at_noon={s: {"over_face": v["eye_over_face"], "eye": v.get("eye_luma"),
+                        "face": v.get("face_luma"), "colour": v.get("colour"),
+                        "usable": usable(v)} for s, v in day.items()},
+           over_face_floor=0.05, unusable=list(unusable_day.keys()),
+           note="local contrast only. The absolute-brightness branch was removed on 2026-09-27: it passed "
+                "Celestial Light, whose eye is DARKER than its own face at every hour, and Arden Infernal on "
+                "a clipped head. Daylight is the hard case -- an emissive holds its value while the sunlit "
+                "stone beside it climbs past.")
+    record("E03", "no skin's eyes are proven only by a blown-out head",
+           len(RESULT["unusable_samples"].get("12.0", [])) == 0
+           and len(RESULT["unusable_samples"].get("18.8", [])) == 0
+           and len(RESULT["unusable_samples"].get("23.5", [])) == 0,
+           unusable_by_hour=RESULT["unusable_samples"], saturation_ceiling=SATURATED,
+           note="when the exposure clips both the eye and the face, the frame cannot distinguish a lamp from "
+                "a white square. That is an UNUSABLE sample, not a passing one, and it must be visible.")
+    record("E04", "the established eye colour is still readable, not washed to white",
+           all(has_colour(v) for per in rows.values() for v in per.values()),
+           colour_by_hour={h: {s: v.get("colour") for s, v in per.items()} for h, per in rows.items()},
+           note="the founder: preserve each skin's established eye colour, and the customised SECONDARY has "
+                "to show through the glow. Pure white scores zero separation and carries neither.")
     record("E02", "the eyes read as lit at every hour tested, not only after dark",
            all(lit(v) for per in rows.values() for v in per.values()),
            weakest_over_face_by_hour=worst, table=RESULT["table"])

@@ -237,7 +237,22 @@ namespace
 		TEXT("1 builds figure parts as hierarchical instanced meshes; 0 as plain instanced meshes."));
 
 	TAutoConsoleVariable<float> CVarFlameDim(
-		TEXT("wl.Look.FlameDim"), 0.55f,
+		// FOUNDER, 2026-09-27: "Dim down the flames a bit on the skeleton and arden mascot skins."
+		//
+		// 0.55 to 0.40, which is a bit rather than a lot -- the founder asked for less fire, not for the
+		// fire to go away, and these two skins ARE their fire. Arden Infernal is the ember mane and the
+		// tail; Skeleton Flame is the ghostfire off the ears, the flanks and the back.
+		//
+		// THIS KNOB AND NOT ONE OF THE OTHERS, deliberately. It scales flame brightness only: shape, flicker,
+		// taper and falloff are untouched, so the fire still moves and reads as fire rather than becoming a
+		// dimmer card. And it reaches exactly the two skins named -- the flame surface is built from parts
+		// with Twinkle motion, which Arden and Skeleton Flame have and the others do not. Measured on
+		// Celestial Light: sources=0. So no other skin in the lineup changes.
+		//
+		// Not FireGain, which was swept against the fire material and moving it would re-open a calibration
+		// that took two sweeps to settle. Not PreviewGlow, which is the wardrobe camera only and would dim
+		// the picture while leaving the world untouched.
+		TEXT("wl.Look.FlameDim"), 0.40f,
 		TEXT("Scale on flame brightness. 1 = as authored. Shape and flicker are never touched."));
 
 	float WonderlandTameGlow(float Strength)

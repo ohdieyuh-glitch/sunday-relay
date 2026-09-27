@@ -162,51 +162,79 @@ def job():
     tests.append({"id": "V01", "name": "twenty captures were exported", "pass": True,
                   "detail": {"skins": list(SKINS), "angles": [a[0] for a in ANGLES]}})
 
-    # ---- V03: THE GATE THE FOUNDER ASKED FOR, JUDGED ON PIXELS AND NOT ON THE CAMERA THAT DREW THEM.
+    # ---- V03/V05: THE FOUNDER'S CONTRACT IS A CLOSE-UP, AND THE GATE NOW SAYS SO IN BOTH DIRECTIONS.
     #
-    # "Build a visual regression gate so this class of bug cannot silently return." Measured in-engine off the
-    # render target, so it does not depend on anyone remembering to decode the exports afterwards. It
-    # cross-checks: Relay OG reads 82.5% here and 82.4% through a separate PNG decoder outside the editor.
+    # FOUNDER, restated: on open the mascot is a DELIBERATE CLOSE-UP at roughly 80-90% of useful preview
+    # height -- not a small figure in black space. A floor of 65 was set to accommodate Arden's char-dark
+    # legs, and it was too generous: it would pass a 66% regression, which is the original bug coming back
+    # wearing a green tick. Arden front measured 69.0, Arden back 71.5, Arden right 72.5 and Apollo right 72.9
+    # UNDER that floor, all below the stated band and all passing.
     #
-    # WHY THE FLOOR IS 65 AND NOT THE 75 THE FOUNDER NAMED. This measures LIT pixels, and two of the five
-    # skins cannot be fully seen by that measure:
+    # FRONT IS THE CANONICAL OPENING VIEW and is judged against the contract: 76 to 94, a band around the
+    # founder's 80-90 wide enough only for the instrument's own variance. An UPPER bound now exists too --
+    # oversized and clipped must fail, not just tiny.
     #
-    #   ARDEN INFERNAL reads ~69% while its solve correctly predicts 80%. Its lower legs are char-dark art.
-    #   Swept, it holds at 69% from a luma floor of 34 all the way down to 18 and only reaches 100% at 12,
-    #   where the backdrop itself starts counting -- so this is not a threshold that can be tuned around. The
-    #   body IS framed at 80%; the instrument simply cannot see the bottom of it.
-    #
-    #   CELESTIAL LIGHT and SKELETON FLAME read 86-94% because their aura and ghostfire legitimately reach
-    #   past the body, which is the founder's own rule that framing derives from the body and the VFX are
-    #   excluded from it -- and therefore sometimes leave the frame.
-    #
-    # The floor is set by what it has to catch, not by what makes the set pass: the recurrence being guarded
-    # against rendered the mascot at 41.5% of the frame, four separate times, while every proof of the day
-    # passed. 65 sits far above that and below the darkest correctly-framed skin. The per-skin numbers are
-    # reported in full so a drift within the band is still visible rather than hidden behind a green.
+    # ROTATED VIEWS GET AN ENVELOPE, NOT THE SAME NUMBER. A silhouette legitimately changes with angle: Relay
+    # OG is narrow from the side, Arden's mane is wide from the front, Celestial's aura reaches past the body
+    # whichever way it faces. Demanding identical occupancy would either fail correct art or force the floor
+    # back down. So rotated views must stay inside a close-up envelope -- never thumbnail, never clipped to
+    # the frame, never adrift from centre -- which rejects the regression without pretending every angle
+    # photographs the same.
     occupancy = RESULT.get("occupancy") or {}
-    heights = {}
+    parsed = {}
     for key, note in occupancy.items():
+        row = {}
         for token in str(note).split():
-            if token.startswith("heightPct="):
+            if "=" in token:
+                name, _, value = token.partition("=")
                 try:
-                    heights[key] = float(token.split("=", 1)[1])
+                    row[name] = float(value)
                 except ValueError:
                     pass
-    too_small = {k: v for k, v in heights.items() if v < 65.0}
-    RESULT["occupancy_height_pct"] = heights
-    tests.append({"id": "V03", "name": "the mascot fills the preview on every skin from every angle",
-                  "pass": len(heights) == len(SKINS) * len(ANGLES) and len(too_small) == 0,
-                  "detail": {"floor_pct": 65.0, "measured": heights, "under_floor": too_small,
-                             "read": len(heights), "wanted": len(SKINS) * len(ANGLES),
-                             "note": "in-engine off the render target. Guards a recurrence that rendered "
-                                     "the mascot at 41.5% while every proof passed."}})
+        if "heightPct" in row:
+            parsed[key] = row
+    RESULT["occupancy_height_pct"] = {k: v["heightPct"] for k, v in parsed.items()}
 
-    # ---- AND THE SOLVE AND THE PICTURE MUST NOT DISAGREE WILDLY.
+    FRONT_LOW, FRONT_HIGH = 76.0, 94.0
+    ROT_LOW, ROT_HIGH = 70.0, 99.0
+    CENTRE_SLACK = 12.0
+
+    front_bad, rot_bad, off_centre = {}, {}, {}
+    for key, row in parsed.items():
+        tall = row["heightPct"]
+        wide = row.get("widthPct", 0.0)
+        cx, cy = row.get("centreXPct", 50.0), row.get("centreYPct", 50.0)
+        is_front = key.endswith("_front")
+        low, high = (FRONT_LOW, FRONT_HIGH) if is_front else (ROT_LOW, ROT_HIGH)
+        if not (low <= tall <= high):
+            (front_bad if is_front else rot_bad)[key] = {"heightPct": tall, "band": [low, high]}
+        # CLIPPED reads as the subject touching both frame edges on an axis; drifted reads as a centre that
+        # has wandered. Both are close-up failures that an occupancy number alone cannot see.
+        if abs(cx - 50.0) > CENTRE_SLACK or abs(cy - 50.0) > CENTRE_SLACK:
+            off_centre[key] = {"centreXPct": cx, "centreYPct": cy, "slack": CENTRE_SLACK}
+
+    RESULT["framing_out_of_band"] = {"front": front_bad, "rotated": rot_bad, "off_centre": off_centre}
+    tests.append({"id": "V03", "name": "the opening view is the close-up the founder specified",
+                  "pass": len(parsed) == len(SKINS) * len(ANGLES) and len(front_bad) == 0,
+                  "detail": {"band_pct": [FRONT_LOW, FRONT_HIGH], "out_of_band": front_bad,
+                             "measured": RESULT["occupancy_height_pct"],
+                             "read": len(parsed), "wanted": len(SKINS) * len(ANGLES),
+                             "note": "front is the canonical opening view and is held to the contract. The "
+                                     "recurrence this guards rendered the mascot at 41.5% while every proof "
+                                     "of the day passed; a 65 floor would have passed it at 66."}})
+    tests.append({"id": "V05", "name": "rotated views stay inside the close-up envelope and stay centred",
+                  "pass": len(rot_bad) == 0 and len(off_centre) == 0,
+                  "detail": {"envelope_pct": [ROT_LOW, ROT_HIGH], "centre_slack_pct": CENTRE_SLACK,
+                             "out_of_envelope": rot_bad, "off_centre": off_centre,
+                             "note": "a silhouette legitimately changes with angle, so this is an envelope "
+                                     "rather than the front's band -- but thumbnail scale, clipping and "
+                                     "drift off centre fail at every angle."}})
+
+    # ---- V04: SOLVE AND PIXELS MUST AGREE MORE CLOSELY THAN THEY DID.
     #
-    # The floor above catches a collapse. This catches the subtler failure that actually happened four times:
-    # a solve confidently predicting 80% while the frame showed something else entirely. Either number alone
-    # can be wrong and look fine; the two disagreeing is the signature.
+    # The tolerance was 20 points, which let a solve predicting 80 render at 69 without anyone looking. That
+    # is precisely the gap this clause exists to notice, so it is now 12 -- still wide enough for auras and
+    # fire to exceed the body, tight enough that a framing regression cannot hide inside it.
     predicted = {}
     for skin in SKINS:
         for token in str(notes.get(skin, "")).split():
@@ -218,18 +246,20 @@ def job():
     disagree = {}
     for skin in SKINS:
         want = predicted.get(skin)
-        got = heights.get("%s_front" % skin)
+        got = RESULT["occupancy_height_pct"].get("%s_front" % skin)
         if want is None or got is None:
             disagree[skin] = "unreadable"
-        elif got < want - 20.0:
-            disagree[skin] = {"solve_says_pct": want, "pixels_say_pct": got}
+        elif got < want - 12.0:
+            disagree[skin] = {"solve_says_pct": want, "pixels_say_pct": got,
+                              "short_by": round(want - got, 1)}
     tests.append({"id": "V04", "name": "what the solve predicts and what the pixels show agree",
                   "pass": len(disagree) == 0,
-                  "detail": {"disagreements": disagree, "predicted": predicted, "measured_front": {
-                      s: heights.get("%s_front" % s) for s in SKINS}, "tolerance_pct": 20.0,
-                      "note": "the pixels may exceed the prediction -- auras and fire reach past the body by "
-                              "design -- but falling far SHORT of it means the camera is framing something "
-                              "other than what is being drawn, which is exactly the bug that recurred"}})
+                  "detail": {"disagreements": disagree, "predicted": predicted,
+                             "measured_front": {s: RESULT["occupancy_height_pct"].get("%s_front" % s)
+                                                for s in SKINS}, "tolerance_pct": 12.0,
+                             "note": "pixels may EXCEED the prediction -- auras and fire reach past the body "
+                                     "by design -- but falling short of it means the camera is framing "
+                                     "something other than what is being drawn."}})
 
     RESULT["captures_dir"] = ROOT
     RESULT["status"] = "measured; occupancy is judged from the exported pixels"

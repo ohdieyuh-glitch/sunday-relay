@@ -14,7 +14,16 @@ import os
 L = unreal.WonderlandUiTestLibrary
 H = unreal.WonderlandHudTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "skin_parity_all")
-SKINS = ["celestial_light", "apollo", "arden_infernal", "skeleton_flame"]
+# ---- RELAY OG WAS MISSING, AND IT IS THE SKIN EVERY SESSION STARTS ON.
+#
+# This list held four skins and the lineup is five. Relay OG -- the default mascot, the one the founder sees
+# first every single time -- was never enumerated, so S04's "failing=[]" was vacuous for exactly the skin most
+# likely to be looked at. A proof that silently covers less than it claims is worse than one that fails.
+#
+# EXPECTED is therefore declared separately and asserted against what was actually walked, so dropping a skin
+# from the list becomes a FAILING TEST rather than a smaller green.
+EXPECTED_ACTIVE_SKINS = ["relay_og", "celestial_light", "apollo", "arden_infernal", "skeleton_flame"]
+SKINS = list(EXPECTED_ACTIVE_SKINS)
 FIELDS = ("stride_phase", "gait_weight", "speed_uu", "bob_uu", "sway_uu", "lift_uu",
           "body_pitch_deg", "body_yaw_deg", "body_roll_deg",
           "head_pitch_deg", "head_yaw_deg", "tail_pitch_deg", "tail_yaw_deg",
@@ -138,6 +147,18 @@ def job():
            performs={r["skin"]: r.get("performs_the_act") for r in rows})
     record("S04", "and none of them is failing",
            RESULT["all_pass"] and not RESULT["failing"], failing=RESULT["failing"])
+
+    # ---- COVERAGE IS ITSELF A CLAUSE. See EXPECTED_ACTIVE_SKINS.
+    walked = sorted(set(RESULT.get("by_skin", {}).keys())) if RESULT.get("by_skin") else sorted(set(SKINS))
+    missing = [k for k in EXPECTED_ACTIVE_SKINS if k not in walked]
+    extra = [k for k in walked if k not in EXPECTED_ACTIVE_SKINS]
+    tests.append({"id": "S00", "name": "every active skin was actually tested, none silently dropped",
+                  "pass": len(missing) == 0 and len(extra) == 0,
+                  "detail": {"expected": EXPECTED_ACTIVE_SKINS, "tested": walked,
+                             "missing": missing, "unexpected": extra,
+                             "note": "Relay OG was absent from this list until 2026-09-27, so every clause "
+                                     "reported a clean result for a lineup that did not include the default "
+                                     "mascot. Coverage is asserted here so that cannot recur quietly."}})
 
     RESULT["status"] = "measured"
     les.editor_request_end_play()
