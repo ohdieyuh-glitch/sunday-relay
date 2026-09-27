@@ -27,6 +27,7 @@
 # THE INSTRUMENT IS CHECKED BEFORE IT IS BELIEVED: N00 fails if the sweep does not move the readings, and
 # the practicals subsystem is asked to describe itself so "practicals off" and "practicals absent" cannot be
 # confused.
+import math
 import os
 
 L = unreal.WonderlandUiTestLibrary
@@ -61,7 +62,19 @@ SWEEP = (
     (0.120, 14.0, 1.0),
     (0.080, 14.0, 1.6),
 )
-HOURS = [float(h) for h in range(0, 25)]
+#: THE HOURLY LADDER CANNOT SEE THE SHAPE OF DUSK. Read the source: Daylight = clamp((elev+9)/21)^1.9 is
+#: pinned at EXACTLY 1.0 from 06:38 to 17:22 -- 10.7 hours of a 24-hour day -- and then falls the whole way to
+#: zero between 17:22 and 18:29. The entire transition is 67 minutes long, so sampling on the hour lands three
+#: points on it and cannot say whether it is a smooth ramp or a step.
+#:
+#: AND THE HOURLY LADDER IS CONFOUNDED. Between 15:00 and 17:00 Daylight is 1.0 and the exposure bias is -0.9
+#: at every sample -- nothing about the lighting changes -- yet the same framing read 0.264, 0.182, 0.190. That
+#: 0.082 swing is the sun's BEARING sweeping 72 to 288 degrees across the day and relighting this particular
+#: view, not the cycle getting darker. Any statistic quoted as a fraction "of the day's range" is therefore
+#: part bearing and part brightness, and must not be quoted as though it were all brightness.
+HOURS = ([float(h) for h in range(0, 16)]
+         + [16.0 + i / 6.0 for i in range(1, 25)]      # 16:00-20:00 every ten minutes
+         + [float(h) for h in range(21, 25)])
 
 
 def patch(cx, cy, hw, hh):
@@ -252,8 +265,17 @@ def job():
         cvar("wl.Sky.Hour", hour)
         yield 2.0
         r = shoot("ladder__h%02.0f" % hour)
-        ladder.append({"hour": hour, "luma": r["luma"] if r else None, "dark": r["dark"] if r else None,
-                       "ground_luma": (r.get("ground") or {}).get("luma") if r else None})
+        # THE MODEL BESIDE THE MEASUREMENT. Daylight and the exposure bias are computable from the hour
+        # alone, and recording them next to the reading is what makes a disagreement visible instead of
+        # arguable -- 17:00 to 18:00 is predicted 0.74x on exposure grounds and measured 1.61x, and that gap
+        # is the finding.
+        elev = math.sin(((hour - 6.0) / 12.0) * math.pi) * 72.0
+        dayl = max(0.0, min(1.0, (elev + 9.0) / 21.0)) ** 1.9
+        ladder.append({"hour": round(hour, 3), "luma": r["luma"] if r else None,
+                       "dark": r["dark"] if r else None,
+                       "ground_luma": (r.get("ground") or {}).get("luma") if r else None,
+                       "sun_elevation": round(elev, 2), "daylight": round(dayl, 4),
+                       "exposure_bias": round(1.45 + (-0.9 - 1.45) * dayl, 3)})
     RESULT["ladder"] = ladder
     L.release_camera(live())
     jumps = [(abs(ladder[i]["luma"] - ladder[i - 1]["luma"]), ladder[i]["hour"])

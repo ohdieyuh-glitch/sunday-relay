@@ -305,10 +305,35 @@
   </div>
 
   <div class="headline-num">
-    <span class="v">93%</span>
-    <span class="l">of the entire day's dynamic range is spent in the single step from
-    <span class="mono">18:00</span> to <span class="mono">19:00</span></span>
+    <span class="v">2.35</span>
+    <span class="l">stops of exposure bias, moved in <strong>67 minutes</strong> &mdash; while
+    <code>Daylight</code> sits pinned at exactly 1.0 for the 10.7 hours before it</span>
   </div>
+
+  <p>This one comes from the source rather than the camera, which is why it is the number worth quoting.
+  <code>Daylight</code> is <code>clamp((elevation + 9) / 21)</code> raised to 1.9, and it saturates at any
+  elevation above 12&deg; &mdash; so it reads <strong>exactly 1.0 from 06:38 to 17:22</strong> and then falls
+  the whole way to zero between 17:22 and 18:29. Sun intensity, all three fills, the sky light, the fog colour,
+  the water colour and <code>AutoExposureBias</code> all ride on that one curve. The day is flat-topped and the
+  entire transition is crammed into 67 minutes at each end.</p>
+
+  <p><strong>A correction to my own first reading of this.</strong> I quoted the 18:00&rarr;19:00 drop as 93% of
+  the day's range. That statistic is confounded and I withdraw it. Between 15:00 and 17:00 <code>Daylight</code>
+  is 1.0 and the bias is &minus;0.9 at every sample &mdash; nothing about the lighting changes at all &mdash;
+  yet the same framing reads 0.264, then 0.182, then 0.190. That 0.082 swing is the sun's <em>bearing</em>
+  sweeping from 72&deg; to 288&deg; and relighting this particular view. The denominator I divided by is part
+  bearing and part brightness, so the fraction overstates the case.</p>
+
+  <p><strong>And the 18:00 spike is not explained.</strong> On exposure grounds that hour should read
+  <em>darker</em> than 17:00, not brighter: scene light falls 5.0&times; while the bias opens 1.88 stops for
+  3.68&times; of gain &mdash; a net 0.74&times;. It measured 1.61&times; brighter. Something adds light at exactly
+  sunset that the exposure model does not account for. The fog is the candidate, since the air is thickened at
+  both ends of the day and its inscattering takes the full warm horizon colour <code>(1.00, 0.62, 0.33)</code>
+  at precisely elevation zero. A candidate, not a cause.</p>
+
+  <p>The hourly ladder cannot settle any of it: three samples land on a 67-minute transition. The sweep now
+  reads every ten minutes from 16:00 to 20:00 and records <code>Daylight</code> and the exposure bias beside
+  each measurement, so the model and the camera can be compared point by point.</p>
 </section>
 </div>
 
@@ -360,8 +385,10 @@
     </svg>
     <figcaption>Frame luma at the Golden Arrival, hour by hour, one composited viewport frame per reading.
     The late afternoon does not fall — it goes 0.264, 0.182, 0.190, then <em>up</em> to 0.306 at 18:00, then
-    collapses to 0.122. A single hour consumes 0.1840 of a 0.1970 total range. The anomalous 18:00 peak
-    points at a discontinuity in the dusk end of the sky repaint rather than a curve that is merely too steep.</figcaption>
+    then collapses to 0.122, a drop of 0.1840 in one hour. Read the chart with two caveats: the
+    15:00 to 17:00 movement happens at <em>constant</em> lighting and is the sun's bearing relighting the
+    view, and three samples cannot describe a 67-minute transition. The dusk window is now sampled every
+    ten minutes.</figcaption>
   </figure>
 </div>
 
@@ -546,6 +573,12 @@
     "controlled bloom" is described rather than demonstrated.</li>
     <li><strong>Whether ICARUS's topiary is the blocker.</strong> Named as a candidate with the geometry that
     makes it one, and explicitly not proven.</li>
+    <li><strong>What adds light at 18:00.</strong> The exposure model predicts that hour reads darker than
+    17:00; it reads 1.61&times; brighter. The fog's warm inscattering at elevation zero is a candidate and
+    nothing more.</li>
+    <li><strong>How much of the hourly ladder is brightness and how much is sun bearing.</strong> At constant
+    <code>Daylight</code> the same framing moves 0.082, so any figure quoted as a fraction of "the day's range"
+    is partly bearing &mdash; which is why the 93% statistic is withdrawn above.</li>
     <li><strong>DUBEL FOREST's specialisation.</strong> The canon states none, so the world marks it as
     needing a founder definition rather than inventing one. It is the only territory of five in that state.</li>
   </ul>
