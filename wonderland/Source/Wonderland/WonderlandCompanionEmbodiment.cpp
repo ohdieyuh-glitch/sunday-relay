@@ -155,8 +155,21 @@ namespace
 	 * gradient, a soft edge, a taper and bands of flicker climbing it. Dimmer by the meter, and far more like
 	 * fire.
 	 */
+	// BACK TO 0, AND THE FOUNDER'S OWN FOOTAGE IS WHY.
+	//
+	// 2026-09-26, with a video of the Dog in the plaza and on the lawn: "these are the flames I need back."
+	// What it shows is unambiguous -- tall white-cyan ghostfire plumes rising a head's height above the
+	// shoulders, bright enough to read against a sunlit lawn and against a dark plaza both. That is the
+	// ribbons drawn on the figure's own glow material at full strength, and it is the look that was approved.
+	//
+	// M_WL_Fire is a better-behaved surface -- soft across the ribbon, falling off at the tip, flicker
+	// climbing it -- and I shipped it on the strength of a side-by-side where it clipped less. Less clipping
+	// was not what was being asked for. The approved flame IS a bright plume, and the material's shaping takes
+	// exactly the prominence out of it that the founder is pointing at. It stays in the project, reachable
+	// with `wl.Look.FireMaterial 1`, because the shape work is good and may yet be the right base once it can
+	// reach that brightness without losing its colour.
 	TAutoConsoleVariable<int32> CVarFireMaterial(
-		TEXT("wl.Look.FireMaterial"), 1,
+		TEXT("wl.Look.FireMaterial"), 0,
 		TEXT("1 draws flame ribbons on M_WL_Fire; 0 draws them on the figure's own glow material."));
 
 	TAutoConsoleVariable<int32> CVarFireTongues(
@@ -600,6 +613,18 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		}
 		MaterialInstances.Add(Instance);
 		BuiltMaterials.Add(Def);
+		// ---- THE FLAME'S REST SLOT IS OPENED **BEFORE** THE TWIN IS PAINTED, and getting that order wrong
+		// ---- is what turned the founder's ghostfire black.
+		//
+		// ApplyColourway writes the twin's colour into FlameRestColours so the heartbeat can beat around it.
+		// That write is guarded by IsValidIndex, and the array used to be grown at the BOTTOM of this loop --
+		// after the paint. So the write silently found no slot, the rest stayed at its initialised Black, and
+		// the animator then drove the fire to Black * Amount on every subsequent frame. Photographed: a solid
+		// black spiked plume standing where Skeleton Flame's white-cyan ghostfire belongs.
+		//
+		// A silent IsValidIndex guard around a write is a trap, and this is the second time today an array
+		// grown in the wrong order has produced a confident, wrong picture.
+		FlameRestColours.Add(FLinearColor::Black);
 
 		// ---- AND ITS FLAME TWIN. Only glowing materials need one; everything else reuses the body instance,
 		// so a figure with no fire allocates nothing extra.
@@ -633,9 +658,6 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 			}
 		}
 		FlameMaterialInstances.Add(Flame);
-		// Grown in step so the index that addresses an instance addresses its rest colour too. The value is
-		// written by ApplyColourway a moment later for anything that actually glows.
-		FlameRestColours.Add(FLinearColor::Black);
 	}
 
 	for (const FWonderlandCompanionPart& Def : Figure.Parts)
@@ -1183,7 +1205,14 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 	FLinearColor Want = Authored;
 	if (bGlows && !bIsEye)
 	{
-		Want = Authored * GlowScale * NightGlowScale;
+		// ---- AND A FLAME TWIN DOES NOT TAKE THE NIGHT CORRECTION.
+		//
+		// wl.Look.NightGlow exists to stop emissive surfaces clipping when the night exposure opens 1.45 EV,
+		// and it is right for a body's glow. It is wrong for the FIRE. The founder's reference footage shows
+		// the ghostfire blazing in a dark plaza -- that plume is the skin, not an artefact -- and cutting it
+		// five-fold after dark is precisely the "flames I need back" complaint. The shell around it still
+		// takes the correction, so the Dog does not wash out; only the fire is left alone.
+		Want = Authored * GlowScale * (bFlameTwin ? 1.0f : NightGlowScale);
 	}
 	else if (bGlows)
 	{

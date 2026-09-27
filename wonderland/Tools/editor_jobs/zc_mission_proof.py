@@ -76,6 +76,21 @@ def job():
     yield (lambda: unreal.GameplayStatics.get_player_pawn(ues.get_game_world(), 0) is not None, 120)
     yield 5.0
     world = ues.get_game_world()
+    L.focus_game_viewport()
+
+    # ---- START A MISSION, WHICH THIS PROOF NEVER DID.
+    #
+    # It has been asserting things about the Mission Contract -- that the orb stands where it was told, that
+    # the strip is on screen -- while no mission was running. The HUD said so plainly the whole time: "MISSION
+    # CONTRACT UNOBSERVED, MISSION none". So M00 failed on the strip, and M01 read the orb at the world origin
+    # because there was no orb, only the subsystem's own zero.
+    #
+    # `wl.Mission.Run full_lifecycle` is the founder's own route -- the console command the subsystem exposes
+    # for exactly this -- and it plays a deterministic fixture with no provider called. Starting it here makes
+    # every clause below a statement about a Contract that is actually running.
+    unreal.SystemLibrary.execute_console_command(world, "wl.Mission.Run full_lifecycle")
+    yield 6.0
+
     pawn = unreal.GameplayStatics.get_player_pawn(world, 0)
     controller = unreal.GameplayStatics.get_player_controller(world, 0)
     mission = next((m for m in unreal.ObjectIterator(unreal.WonderlandMissionSubsystem)

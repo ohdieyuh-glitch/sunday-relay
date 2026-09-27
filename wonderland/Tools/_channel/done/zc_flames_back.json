@@ -1,0 +1,41 @@
+{
+ "name": "zc_flames_back",
+ "started": "2026-09-26 20:20:40",
+ "status": "measured; the verdict is the four captures against the founder's video",
+ "tests": [
+  {
+   "id": "B00",
+   "name": "the plume band was read in daylight and at night, front and side",
+   "pass": false,
+   "detail": {
+    "read": 0,
+    "wanted": 4
+   }
+  },
+  {
+   "id": "B01",
+   "name": "there is bright ghostfire above the shoulders at every hour and angle",
+   "pass": false,
+   "detail": {
+    "readings": {
+     "day front": {},
+     "day side": {},
+     "night front": {},
+     "night side": {}
+    },
+    "floor": 0.25,
+    "note": "the founder's footage shows the plume reading clearly against a sunlit lawn AND a dark plaza. A band that is dark in either is not the approved flame."
+   }
+  }
+ ],
+ "readings": {
+  "day front": {},
+  "day side": {},
+  "night front": {},
+  "night side": {}
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\flames_back",
+ "finished": "2026-09-26 20:21:35",
+ "seconds": 55.04,
+ "log": "F_day_front INFO day, front {}\nF_day_side INFO day, side {}\nF_night_front INFO night, front {}\nF_night_side INFO night, side {}\nB00 FAIL the plume band was read in daylight and at night, front and side {'read': 0, 'wanted': 4}\nB01 FAIL there is bright ghostfire above the shoulders at every hour and angle {'readings': {'day front': {}, 'day side': {}, 'night front': {}, 'night side': {}}, 'floor': 0.25, 'note': \"the founder's footage shows the plume reading clearly against a sunlit lawn AND a dark plaza. A band that is dark in either is not the approved flame.\"}\n"
+}

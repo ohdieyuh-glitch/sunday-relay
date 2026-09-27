@@ -1,0 +1,53 @@
+{
+ "name": "zc_preview_target",
+ "started": "2026-09-26 20:04:04",
+ "status": "measured; the verdict is the exported targets",
+ "tests": [
+  {
+   "id": "V00",
+   "name": "the wardrobe's stage actor is in the world",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "V01",
+   "name": "the stage owns a render target",
+   "pass": true,
+   "detail": {
+    "target": "SkinStageTarget"
+   }
+  },
+  {
+   "id": "V02",
+   "name": "the render target exported for every skin",
+   "pass": true,
+   "detail": {
+    "exported": [
+     "relay_og",
+     "skeleton_flame",
+     "arden_infernal",
+     "apollo",
+     "celestial_light"
+    ],
+    "errors": null,
+    "note": "the verdict is the five PNGs. If they hold a clean, well-lit, well-framed mascot then the wardrobe's whole fault is that the panel draws a hole instead of painting this."
+   }
+  }
+ ],
+ "render_target": "SkinStageTarget",
+ "target_size": [
+  640,
+  800
+ ],
+ "exported": [
+  "relay_og",
+  "skeleton_flame",
+  "arden_infernal",
+  "apollo",
+  "celestial_light"
+ ],
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\preview_target",
+ "finished": "2026-09-26 20:05:15",
+ "seconds": 71.09,
+ "log": "V00 PASS the wardrobe's stage actor is in the world {}\nV01 PASS the stage owns a render target {'target': 'SkinStageTarget'}\nV_relay_og INFO exported relay_og {'ok': True}\nV_skeleton_flame INFO exported skeleton_flame {'ok': True}\nV_arden_infernal INFO exported arden_infernal {'ok': True}\nV_apollo INFO exported apollo {'ok': True}\nV_celestial_light INFO exported celestial_light {'ok': True}\nV02 PASS the render target exported for every skin {'exported': ['relay_og', 'skeleton_flame', 'arden_infernal', 'apollo', 'celestial_light'], 'errors': None, 'note': \"the verdict is the five PNGs. If they hold a clean, well-lit, well-framed mascot then the wardrobe's whole fault is that the panel draws a hole instead of painting this.\"}\n"
+}

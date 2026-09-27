@@ -1,213 +1,156 @@
 {
  "name": "zc_wardrobe_truth",
- "started": "2026-09-25 18:53:06",
- "status": "measured",
- "clicks": [
-  {
-   "skin": "relay_og",
-   "worn": true,
-   "view_before": [
-    "BP_RelayDog_C_0",
-    -516.1,
-    -857.9,
-    207.8
-   ],
-   "view_after": [
-    "BP_RelayDog_C_0",
-    -516.1,
-    -857.9,
-    207.8
-   ],
-   "VIEW_MOVED": false,
-   "brain_still_open": true
-  },
-  {
-   "skin": "apollo",
-   "worn": true,
-   "view_before": [
-    "BP_RelayDog_C_0",
-    -516.1,
-    -857.9,
-    207.8
-   ],
-   "view_after": [
-    "BP_RelayDog_C_0",
-    -516.1,
-    -857.9,
-    207.8
-   ],
-   "VIEW_MOVED": false,
-   "brain_still_open": true
-  },
-  {
-   "skin": "arden_infernal",
-   "worn": true,
-   "view_before": [
-    "BP_RelayDog_C_0",
-    -516.1,
-    -857.9,
-    207.8
-   ],
-   "view_after": [
-    "BP_RelayDog_C_0",
-    -516.1,
-    -857.9,
-    207.8
-   ],
-   "VIEW_MOVED": false,
-   "brain_still_open": true
-  },
-  {
-   "skin": "skeleton_flame",
-   "worn": true,
-   "view_before": [
-    "BP_RelayDog_C_0",
-    -516.1,
-    -857.9,
-    207.8
-   ],
-   "view_after": [
-    "BP_RelayDog_C_0",
-    -516.1,
-    -857.9,
-    207.8
-   ],
-   "VIEW_MOVED": false,
-   "brain_still_open": true
-  },
-  {
-   "skin": "celestial_light",
-   "worn": true,
-   "view_before": [
-    "BP_RelayDog_C_0",
-    -516.1,
-    -857.9,
-    207.8
-   ],
-   "view_after": [
-    "BP_RelayDog_C_0",
-    -516.1,
-    -857.9,
-    207.8
-   ],
-   "VIEW_MOVED": false,
-   "brain_still_open": true
-  }
- ],
- "brain_open": true,
- "view_before_wardrobe": [
-  "BP_RelayDog_C_0",
-  -516.1,
-  -857.9,
-  207.8
- ],
- "wardrobe_opened": true,
- "view_after_wardrobe": [
-  "BP_RelayDog_C_0",
-  -516.1,
-  -857.9,
-  207.8
- ],
- "wardrobe_moved_the_view": false,
- "any_click_moved_the_view": false,
- "brain_open_at_end": true,
- "view_at_end": [
-  "BP_RelayDog_C_0",
-  -516.1,
-  -857.9,
-  207.8
- ],
+ "started": "2026-09-26 19:53:40",
+ "status": "measured; the verdict is the twenty captures",
  "tests": [
   {
-   "id": "W01",
-   "name": "all five named skins actually go on from the Wardrobe",
+   "id": "T00",
+   "name": "the wardrobe is open and reports its window",
    "pass": true,
-   "detail": {
-    "wore": [
-     "relay_og",
-     "apollo",
-     "arden_infernal",
-     "skeleton_flame",
-     "celestial_light"
-    ],
-    "asked": [
-     "relay_og",
-     "apollo",
-     "arden_infernal",
-     "skeleton_flame",
-     "celestial_light"
-    ],
-    "note": "Relay OG, Celestial Light, Apollo, Arden Infernal and Skeleton Flame, by name"
-   }
+   "detail": {}
   },
   {
-   "id": "W02",
-   "name": "no skin change teleports the player camera",
+   "id": "T01",
+   "name": "every skin was photographed from four angles",
    "pass": true,
    "detail": {
-    "before": [
-     "BP_RelayDog_C_0",
-     -516.1,
-     -857.9,
-     207.8
-    ],
-    "after": [
-     "BP_RelayDog_C_0",
-     -516.1,
-     -857.9,
-     207.8
-    ],
-    "moved_on_open": false,
-    "moved_on_any_click": false,
-    "note": "the view is the pawn and its location; identical before opening, after every click, and at the end means the camera never went anywhere"
-   }
-  },
-  {
-   "id": "W03",
-   "name": "Project Brain stays open the whole way through",
-   "pass": true,
-   "detail": {
-    "at_start": true,
-    "at_end": true,
-    "after_each_click": [
-     true,
-     true,
-     true,
-     true,
-     true
-    ]
-   }
-  },
-  {
-   "id": "W04",
-   "name": "a backdrop stands behind the previewed Dog, so the world cannot show through",
-   "pass": true,
-   "detail": {
-    "backdrops": [
-     {
-      "label": "WL_WardrobeBackdrop",
-      "at": [
-       -408.4,
-       -634.3,
-       155.2
-      ]
-     }
-    ],
-    "note": "the preview window is a hole into the world; without this the Dog is judged against whatever happens to be behind it"
+    "captured": 20,
+    "wanted": 20,
+    "note": "the verdict on these is the photographs. This clause only says they exist."
    }
   }
  ],
- "backdrops": [
-  {
-   "label": "WL_WardrobeBackdrop",
-   "at": [
-    -408.4,
-    -634.3,
-    155.2
-   ]
+ "window": {
+  "centre": [
+   0.5947,
+   0.4704
+  ],
+  "size": [
+   0.2136,
+   0.4829
+  ]
+ },
+ "by_skin": {
+  "relay_og": {
+   "front": {
+    "luma": 0.0307,
+    "fraction_nearly_black": 0.9151,
+    "fraction_over_white": 0.0
+   },
+   "left": {
+    "luma": 0.0281,
+    "fraction_nearly_black": 0.9343,
+    "fraction_over_white": 0.0
+   },
+   "back": {
+    "luma": 0.0305,
+    "fraction_nearly_black": 0.9366,
+    "fraction_over_white": 0.0
+   },
+   "right": {
+    "luma": 0.0318,
+    "fraction_nearly_black": 0.9223,
+    "fraction_over_white": 0.0
+   }
+  },
+  "arden_infernal": {
+   "front": {
+    "luma": 0.0348,
+    "fraction_nearly_black": 0.9218,
+    "fraction_over_white": 0.0114
+   },
+   "left": {
+    "luma": 0.0306,
+    "fraction_nearly_black": 0.9261,
+    "fraction_over_white": 0.009
+   },
+   "back": {
+    "luma": 0.0325,
+    "fraction_nearly_black": 0.9215,
+    "fraction_over_white": 0.0104
+   },
+   "right": {
+    "luma": 0.0342,
+    "fraction_nearly_black": 0.9226,
+    "fraction_over_white": 0.0121
+   }
+  },
+  "apollo": {
+   "front": {
+    "luma": 0.1232,
+    "fraction_nearly_black": 0.7145,
+    "fraction_over_white": 0.0443
+   },
+   "left": {
+    "luma": 0.1276,
+    "fraction_nearly_black": 0.7063,
+    "fraction_over_white": 0.0491
+   },
+   "back": {
+    "luma": 0.1718,
+    "fraction_nearly_black": 0.6602,
+    "fraction_over_white": 0.0997
+   },
+   "right": {
+    "luma": 0.1448,
+    "fraction_nearly_black": 0.6973,
+    "fraction_over_white": 0.0726
+   }
+  },
+  "skeleton_flame": {
+   "front": {
+    "luma": 0.0188,
+    "fraction_nearly_black": 0.9319,
+    "fraction_over_white": 0.0
+   },
+   "left": {
+    "luma": 0.0183,
+    "fraction_nearly_black": 0.9436,
+    "fraction_over_white": 0.0
+   },
+   "back": {
+    "luma": 0.0176,
+    "fraction_nearly_black": 0.9457,
+    "fraction_over_white": 0.0
+   },
+   "right": {
+    "luma": 0.019,
+    "fraction_nearly_black": 0.9302,
+    "fraction_over_white": 0.0
+   }
+  },
+  "celestial_light": {
+   "front": {
+    "luma": 0.3156,
+    "fraction_nearly_black": 0.615,
+    "fraction_over_white": 0.2792
+   },
+   "left": {
+    "luma": 0.3167,
+    "fraction_nearly_black": 0.6169,
+    "fraction_over_white": 0.283
+   },
+   "back": {
+    "luma": 0.3299,
+    "fraction_nearly_black": 0.6006,
+    "fraction_over_white": 0.2948
+   },
+   "right": {
+    "luma": 0.3262,
+    "fraction_nearly_black": 0.6153,
+    "fraction_over_white": 0.2963
+   }
   }
- ],
- "finished": "2026-09-25 18:53:34",
- "seconds": 27.45,
- "log": "W01 PASS all five named skins actually go on from the Wardrobe {'wore': ['relay_og', 'apollo', 'arden_infernal', 'skeleton_flame', 'celestial_light'], 'asked': ['relay_og', 'apollo', 'arden_infernal', 'skeleton_flame', 'celestial_light'], 'note': 'Relay OG, Celestial Light, Apollo, Arden Infernal and Skeleton Flame, by name'}\nW02 PASS no skin change teleports the player camera {'before': ('BP_RelayDog_C_0', -516.1, -857.9, 207.8), 'after': ('BP_RelayDog_C_0', -516.1, -857.9, 207.8), 'moved_on_open': False, 'moved_on_any_click': False, 'note': 'the view is the pawn and its location; identical before opening, after every click, and at the end means the camera never went anywhere'}\nW03 PASS Project Brain stays open the whole way through {'at_start': True, 'at_end': True, 'after_each_click': [True, True, True, True, True]}\nW04 PASS a backdrop stands behind the previewed Dog, so the world cannot show through {'backdrops': [{'label': 'WL_WardrobeBackdrop', 'at': [-408.4, -634.3, 155.2]}], 'note': 'the preview window is a hole into the world; without this the Dog is judged against whatever happens to be behind it'}\n"
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\wardrobe_truth",
+ "front_fraction_not_black": {
+  "relay_og": 0.0849,
+  "arden_infernal": 0.0782,
+  "apollo": 0.2855,
+  "skeleton_flame": 0.0681,
+  "celestial_light": 0.385
+ },
+ "finished": "2026-09-26 19:56:45",
+ "seconds": 185.4,
+ "log": "T00 PASS the wardrobe is open and reports its window {}\nT_relay_og INFO relay_og {'front': {'luma': 0.0307, 'fraction_nearly_black': 0.9151, 'fraction_over_white': 0.0}, 'left': {'luma': 0.0281, 'fraction_nearly_black': 0.9343, 'fraction_over_white': 0.0}, 'back': {'luma': 0.0305, 'fraction_nearly_black': 0.9366, 'fraction_over_white': 0.0}, 'right': {'luma': 0.0318, 'fraction_nearly_black': 0.9223, 'fraction_over_white': 0.0}}\nT_arden_infernal INFO arden_infernal {'front': {'luma': 0.0348, 'fraction_nearly_black': 0.9218, 'fraction_over_white': 0.0114}, 'left': {'luma': 0.0306, 'fraction_nearly_black': 0.9261, 'fraction_over_white': 0.009}, 'back': {'luma': 0.0325, 'fraction_nearly_black': 0.9215, 'fraction_over_white': 0.0104}, 'right': {'luma': 0.0342, 'fraction_nearly_black': 0.9226, 'fraction_over_white': 0.0121}}\nT_apollo INFO apollo {'front': {'luma': 0.1232, 'fraction_nearly_black': 0.7145, 'fraction_over_white': 0.0443}, 'left': {'luma': 0.1276, 'fraction_nearly_black': 0.7063, 'fraction_over_white': 0.0491}, 'back': {'luma': 0.1718, 'fraction_nearly_black': 0.6602, 'fraction_over_white': 0.0997}, 'right': {'luma': 0.1448, 'fraction_nearly_black': 0.6973, 'fraction_over_white': 0.0726}}\nT_skeleton_flame INFO skeleton_flame {'front': {'luma': 0.0188, 'fraction_nearly_black': 0.9319, 'fraction_over_white': 0.0}, 'left': {'luma': 0.0183, 'fraction_nearly_black': 0.9436, 'fraction_over_white': 0.0}, 'back': {'luma': 0.0176, 'fraction_nearly_black': 0.9457, 'fraction_over_white': 0.0}, 'right': {'luma': 0.019, 'fraction_nearly_black': 0.9302, 'fraction_over_white': 0.0}}\nT_celestial_light INFO celestial_light {'front': {'luma': 0.3156, 'fraction_nearly_black': 0.615, 'fraction_over_white': 0.2792}, 'left': {'luma': 0.3167, 'fraction_nearly_black': 0.6169, 'fraction_over_white': 0.283}, 'back': {'luma': 0.3299, 'fraction_nearly_black': 0.6006, 'fraction_over_white': 0.2948}, 'right': {'luma': 0.3262, 'fraction_nearly_black': 0.6153, 'fraction_over_white': 0.2963}}\nT_FILL INFO how much of the square is not nearly-black, front view {'relay_og': 0.0849, 'arden_infernal': 0.0782, 'apollo': 0.2855, 'skeleton_flame': 0.0681, 'celestial_light': 0.385}\nT01 PASS every skin was photographed from four angles {'captured': 20, 'wanted': 20, 'note': 'the verdict on these is the photographs. This clause only says they exist.'}\n"
 }
