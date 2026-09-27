@@ -90,7 +90,7 @@ EYE_FLOOR = 0.05
 #: RE-RANGED FOR THE BUILD THAT RAISES THE CLAMP 12 -> 30 AND DRIVES THE DOG'S OWN EYE PANES.
 #: 0.05 is the differential baseline. 18 is the shipped EyeGlowDay, reachable for the first time in this
 #: build. 30 is the new clamp. 36 is ABOVE it on purpose and must render identically to 30.
-EYE_LEVELS = (0.05, 9.0, 18.0, 30.0, 36.0)
+EYE_LEVELS = (0.05, 9.0, 18.0, 24.0, 30.0, 36.0)
 #: SetEyeGlow's ceiling in the build under test. Was 12, which is why every "eye level" number in the
 #: corpus before this build is really 12 whatever it says.
 EYE_CLAMP = globals().get("EYE_CLAMP", 30.0)
@@ -104,7 +104,7 @@ EYE_ABOVE_CLAMP = 36.0
 #: shipped configuration is a RATIO -- 18 by day, 8 at night -- so one extra reading per skin per hour is
 #: taken with both left at their shipped values and the day cycle allowed to do its own interpolation.
 #: That row, not any swept level, is the one that answers "does 8 at night clip, or read dim".
-SHIPPED_DAY, SHIPPED_NIGHT = 18.0, 8.0
+SHIPPED_DAY, SHIPPED_NIGHT = 24.0, 8.0
 SHIPPED_LEVEL = -1.0          # the marker this row carries in the `level` column
 
 #: The knee axis, at the scale the assets are actually authored at, with the shipped 700 as the control.
@@ -130,7 +130,7 @@ AUTHORED_EYE = {
 }
 
 #: The shipped defaults this job restores. Named here so the restore cannot drift from the docstring.
-SHIPPED = (("wl.Look.GlowKnee", 700.0), ("wl.Look.EyeGlowDay", 18.0), ("wl.Look.EyeGlowNight", 5.0),
+SHIPPED = (("wl.Look.GlowKnee", 700.0), ("wl.Look.EyeGlowDay", 24.0), ("wl.Look.EyeGlowNight", 8.0),
            ("wl.Look.FlameDim", 0.40), ("wl.Look.NightGlow", 0.20))
 
 #: The head scan: a (2*SCAN+1) square of small cells centred on the projected head point.
@@ -729,7 +729,7 @@ def job():
     reach = {}
     for skin in SKINS:
         best = [r["isolation"] for r in measured_rows
-                if r["skin"] == skin and r.get("isolation") is not None and r["level"] == 18.0]
+                if r["skin"] == skin and r.get("isolation") is not None and r["level"] == SHIPPED_DAY]
         reach[skin] = round(max(best), 5) if best else None
     arriving = [s for s, v in reach.items() if v is not None and v >= ISOLATION_FLOOR]
     record_eye("M03", "on every skin the eye level arrives at the rendered EYE and not merely at the head",
@@ -753,17 +753,17 @@ def job():
                 "resolves to")
 
     # 6. NO WHITE CLIPPING, and 7. NOT WON BY GOING DARK.
-    worst_clip = max((r["clipped"] for r in measured_rows if r["level"] == 18.0), default=1.0)
-    worst_crush = max((r["crushed"] for r in measured_rows if r["level"] == 18.0), default=1.0)
+    worst_clip = max((r["clipped"] for r in measured_rows if r["level"] == SHIPPED_DAY), default=1.0)
+    worst_crush = max((r["crushed"] for r in measured_rows if r["level"] == SHIPPED_DAY), default=1.0)
     record_eye("M05", "a mascot filling the frame is not blown out at the shipped eye level",
            worst_clip <= CLIP_CEILING, worst_clipped=worst_clip, ceiling=CLIP_CEILING,
            eye_white={s2: max((r.get("eye_white") for r in rows
-                               if r["skin"] == s2 and r["level"] == 18.0 and r.get("eye_white") is not None),
+                               if r["skin"] == s2 and r["level"] == SHIPPED_DAY and r.get("eye_white") is not None),
                               default=None) for s2 in SKINS},
            what_bright_means="luma > 0.72, not 250/255; a high bright fraction with a LOW eye_white is a "
                              "bright COLOURED core, which is what the founder asked for, and a high bright "
                              "fraction with eye_white near 1.0 is the white clipping they forbade",
-           per_skin={s: max((r["clipped"] for r in rows if r["skin"] == s and r["level"] == 18.0), default=None)
+           per_skin={s: max((r["clipped"] for r in rows if r["skin"] == s and r["level"] == SHIPPED_DAY), default=None)
                      for s in SKINS})
     record_eye("M06", "and that is not achieved by making the picture dark",
            worst_crush <= CRUSH_CEILING, worst_crushed=worst_crush, ceiling=CRUSH_CEILING)
@@ -773,9 +773,9 @@ def job():
     seps = {}
     for skin in SKINS:
         v = [r["hue_retention"] for r in measured_rows
-             if r["skin"] == skin and r["level"] == 18.0 and r.get("hue_retention") is not None]
+             if r["skin"] == skin and r["level"] == SHIPPED_DAY and r.get("hue_retention") is not None]
         s2 = [r["colour_separation"] for r in measured_rows
-              if r["skin"] == skin and r["level"] == 18.0 and r.get("colour_separation") is not None]
+              if r["skin"] == skin and r["level"] == SHIPPED_DAY and r.get("colour_separation") is not None]
         hues[skin] = round(min(v), 4) if v else None
         seps[skin] = round(min(s2), 4) if s2 else None
     kept = [s for s, v in hues.items() if v is not None and v >= 0.95]
