@@ -20,11 +20,21 @@
 #      that path (it is applied at the body/rim sites only). So "the eyes do not read as glowing" can never be
 #      a knee problem. The eye axis is EyeGlowScale, and it is swept as its own axis here.
 #
-#   3. AND THAT AXIS HAS A CEILING NOBODY HAS BEEN MEASURING. wl.Look.EyeGlowDay ships at 18; SetEyeGlow
-#      clamps to [0.05, 12]. The daytime eye level has silently been 12, not 18, for the whole history of
-#      this cluster -- so every previous "we raised the eye and nothing happened" reading was taken against a
-#      value that could not move. The sweep includes 16 specifically to photograph that: 12 and 16 must come
-#      back identical, or the clamp is not where the code says it is.
+#   3. AND THAT AXIS HAD A CEILING NOBODY WAS MEASURING. wl.Look.EyeGlowDay ships at 18 while SetEyeGlow
+#      clamped to [0.05, 12], so the daytime eye level was silently 12 and every "we raised the eye and
+#      nothing happened" reading in the corpus was taken against a value that could not move. The build
+#      under test raises that clamp to 30, so 18 is real for the first time. The sweep goes to 36 to
+#      photograph the NEW ceiling: 30 and 36 must come back identical.
+#
+#   4. AND THE OBJECT ITSELF WAS WRONG, which is the finding that reframes this whole experiment. The
+#      gameplay Relay Dog's eyes are the Blueprint's Mesh_head_eye wearing MI_RelayDog_Eye (parent
+#      M_V2_Portal) at EmissiveStrength 540 times an EmissiveColor of PURE BLACK -- they have never emitted
+#      anything. EyeGlowScale reached AWonderlandCompanionEmbodiment figures only, never the Dog the founder
+#      actually looks at. So "the eyes do not glow" was never a level, a knee or a curve: it was a black
+#      multiplier on a different mesh. The build under test drives the Dog's own eye panes from the same
+#      day-cycle level. This sweep is now the verification of that fix, and the differential instrument is
+#      the right one for it: isolation > 0 means the level reaches the eye a player SEES, which is exactly
+#      the thing that has never been true.
 #
 # THE INSTRUMENT, AND WHY IT IS NOT THE OLD ONE. zc_eyes_glow reads an eye patch and a face patch and
 # subtracts. That is defeated by exactly the skin it most needs to measure: Celestial Light's head stands
@@ -77,7 +87,14 @@ HOURS = ((HOUR, HOUR_LABEL),)
 #: The eye levels. 0.05 is SetEyeGlow's floor and is the differential baseline -- the eye as good as off.
 #: 16 is ABOVE the clamp on purpose: it must come back identical to 12.
 EYE_FLOOR = 0.05
-EYE_LEVELS = (0.05, 4.0, 8.0, 12.0, 16.0)
+#: RE-RANGED FOR THE BUILD THAT RAISES THE CLAMP 12 -> 30 AND DRIVES THE DOG'S OWN EYE PANES.
+#: 0.05 is the differential baseline. 18 is the shipped EyeGlowDay, reachable for the first time in this
+#: build. 30 is the new clamp. 36 is ABOVE it on purpose and must render identically to 30.
+EYE_LEVELS = (0.05, 9.0, 18.0, 30.0, 36.0)
+#: SetEyeGlow's ceiling in the build under test. Was 12, which is why every "eye level" number in the
+#: corpus before this build is really 12 whatever it says.
+EYE_CLAMP = globals().get("EYE_CLAMP", 30.0)
+EYE_ABOVE_CLAMP = 36.0
 
 #: The knee axis, at the scale the assets are actually authored at, with the shipped 700 as the control.
 #: Body glow spans 3.3 to 13.2 across the five skins, so anything at or above 16 should be indistinguishable.
@@ -409,27 +426,28 @@ def job():
     clamp = {}
     for skin in SKINS:
         for _, hl in HOURS:
-            a = next((r for r in rows if r["skin"] == skin and r["hour"] == hl and r["level"] == 12.0), None)
-            b = next((r for r in rows if r["skin"] == skin and r["hour"] == hl and r["level"] == 16.0), None)
+            a = next((r for r in rows if r["skin"] == skin and r["hour"] == hl and r["level"] == EYE_CLAMP), None)
+            b = next((r for r in rows if r["skin"] == skin and r["hour"] == hl
+                      and r["level"] == EYE_ABOVE_CLAMP), None)
             if a and b:
                 clamp["%s/%s" % (skin, hl)] = round(b["eye_luma"] - a["eye_luma"], 5)
     identical = [k for k, v in clamp.items() if abs(v) <= 0.002]
-    record_eye("M02", "eye level 16 renders identically to 12 -- SetEyeGlow's clamp is real and EyeGlowDay 18 "
-                  "has never been reachable",
-           len(identical) == len(clamp) and len(clamp) > 0, delta_16_minus_12=clamp,
+    record_eye("M02", "the eye level saturates exactly at SetEyeGlow's clamp and not before",
+           len(identical) == len(clamp) and len(clamp) > 0,
+           delta_above_minus_at_clamp=clamp, clamp=EYE_CLAMP, probed_above=EYE_ABOVE_CLAMP,
            identical=len(identical), of=len(clamp),
-           note="wl.Look.EyeGlowDay ships at 18 and SetEyeGlow clamps to 12; if this passes, every 'eye "
-                "level' number in the corpus was taken at 12")
+           note="the clamp moved 12 -> 30 in this build so EyeGlowDay 18 is finally reachable; every 'eye "
+                "level' reading in the corpus from before it is really 12 whatever it was set to")
 
     # 4. IS THE EYE REACHING THE RENDER, per skin? This is the founder's Celestial question, asked of all five.
     reach = {}
     for skin in SKINS:
         best = [r["isolation"] for r in rows
-                if r["skin"] == skin and r.get("isolation") is not None and r["level"] == 12.0]
+                if r["skin"] == skin and r.get("isolation") is not None and r["level"] == 18.0]
         reach[skin] = round(max(best), 5) if best else None
     arriving = [s for s, v in reach.items() if v is not None and v >= ISOLATION_FLOOR]
     record_eye("M03", "on every skin the eye level arrives at the rendered EYE and not merely at the head",
-           len(arriving) == len(SKINS), isolation_at_level_12=reach, floor=ISOLATION_FLOOR,
+           len(arriving) == len(SKINS), isolation_at_level_18=reach, floor=ISOLATION_FLOOR,
            arriving=arriving, not_arriving=[s for s in SKINS if s not in arriving],
            note="isolation = the eye patch's gain minus the cheek's gain, so a head that glows as a whole "
                 "cannot pass this; near zero means the emission is not reaching the eye and no knee will fix it")
@@ -449,11 +467,11 @@ def job():
                 "resolves to")
 
     # 6. NO WHITE CLIPPING, and 7. NOT WON BY GOING DARK.
-    worst_clip = max((r["clipped"] for r in rows if r["level"] == 12.0), default=1.0)
-    worst_crush = max((r["crushed"] for r in rows if r["level"] == 12.0), default=1.0)
+    worst_clip = max((r["clipped"] for r in rows if r["level"] == 18.0), default=1.0)
+    worst_crush = max((r["crushed"] for r in rows if r["level"] == 18.0), default=1.0)
     record_eye("M05", "a mascot filling the frame is not blown out at the shipped eye level",
            worst_clip <= CLIP_CEILING, worst_clipped=worst_clip, ceiling=CLIP_CEILING,
-           per_skin={s: max((r["clipped"] for r in rows if r["skin"] == s and r["level"] == 12.0), default=None)
+           per_skin={s: max((r["clipped"] for r in rows if r["skin"] == s and r["level"] == 18.0), default=None)
                      for s in SKINS})
     record_eye("M06", "and that is not achieved by making the picture dark",
            worst_crush <= CRUSH_CEILING, worst_crushed=worst_crush, ceiling=CRUSH_CEILING)
@@ -463,9 +481,9 @@ def job():
     seps = {}
     for skin in SKINS:
         v = [r["hue_retention"] for r in rows
-             if r["skin"] == skin and r["level"] == 12.0 and r.get("hue_retention") is not None]
+             if r["skin"] == skin and r["level"] == 18.0 and r.get("hue_retention") is not None]
         s2 = [r["colour_separation"] for r in rows
-              if r["skin"] == skin and r["level"] == 12.0 and r.get("colour_separation") is not None]
+              if r["skin"] == skin and r["level"] == 18.0 and r.get("colour_separation") is not None]
         hues[skin] = round(min(v), 4) if v else None
         seps[skin] = round(min(s2), 4) if s2 else None
     kept = [s for s, v in hues.items() if v is not None and v >= 0.95]
@@ -498,7 +516,7 @@ def job():
            note="body glow spans 3.3-13.2 after the 4000->6 re-baseline, so a knee at the shipped 700 "
                 "compresses nothing; this says where it starts to bite and whether it helps")
 
-    RESULT["summary"] = {"eye_isolation_at_12": reach, "over_face_at_12": contrast,
+    RESULT["summary"] = {"eye_isolation_at_18": reach, "over_face_at_18": contrast,
                          "hue_retention": hues, "colour_separation": seps,
                          "knee_spread": spread, "knee_engages_at": engaged,
                          "worst_clipped": worst_clip, "worst_crushed": worst_crush}
