@@ -44,11 +44,17 @@ landmark name and no specialisation of its own. Dubel Forest's canon says its ge
 this world lane", so its checkpoint is built in the NEUTRAL palette and reported as NEEDS FOUNDER DEFINITION
 rather than dressed in a nation's colours.
 
-TWO MEASUREMENTS THE LAYOUT RESTS ON, both taken rather than assumed:
-  * **The walkable surface at the nation checkpoints is z = 12.** `SM_terrace_platform` is 1440 x 740 x 140
-    (mesh_inventory) and the marches place it at z = -128, so its top is at -128 + 140 = 12 -- which is
-    exactly the z at which IC01/NC01/TQ01 place their own kerb runs. Arithmetic and their own placements
-    agree, so this is not a guess. Dubel has no paving; its trees sit at z = 0.
+TWO MEASUREMENTS THE LAYOUT RESTS ON -- and the first one was WRONG in the first cut, which is recorded
+here rather than tidied away:
+  * **The ROAD is at z = 12; the ground beside it is at z = -14.** `SM_terrace_platform` is 1440 x 740 x 140
+    and the marches place it at z = -128, so its top is 12, and that is where IC01/NC01/TQ01 put their kerb
+    runs. The first cut took 12 as "the ground at the checkpoint" and authored the bays on it. The bays sit
+    15-49 m OFF the axis, where there is no platform: four pawn-channel traces at every nation court came
+    back -14, -14, -14, -14 (zc_checkpoints, 2026-09-27), and the apron was floating 26 cm above the lawn --
+    the founder's "floating objects", shipped by me and caught by my own gate. The platform bottom at -128
+    on ground at -14 means the road stands 26 cm proud like a kerb, which is what a march road should do,
+    and the bays now sit on the ground beside it and step down off the road within the Dog's 30 uu.
+  * Dubel's floor is -14 too (the frontier shelf), not the 0 its trees are planted at.
   * **The corridor to keep clear is wider than the road.** Measured in each nation's own (u, v) frame:
     ICARUS carries balustrade and newel urns at v = +/-780 and pinnacles at +/-1140; NOCTIS and TARTARUS
     carry kerb runs at +/-1440 and lantern standards at +/-1630, whose own radius is 314. The bays start
@@ -103,15 +109,15 @@ NEUTRAL_MATS = {"stone": "MI_V2_IvoryStone", "stone_dark": "MI_V2_AshlarMarbleCo
 PLAN = {
     "CP01": dict(site="arrival", module=None, ground=12.3, fingerpost_only=True, bays=False,
                  chain=None, glow="glass", out="cp01_arrival_checkpoint.json"),
-    "CP02": dict(site="ICARUS", module="icarus_district", ground=12.0, bay_in=1500.0, bays=True,
+    "CP02": dict(site="ICARUS", module="icarus_district", ground=-14.0, bay_in=1500.0, bays=True,
                  chain=("WL_Tower_Base_Battered", "WL_Tower_Mid_Ashlar", "WL_Tower_Mid_Arcade",
                         "WL_Tower_Mid_Balconied", "WL_Spire_Needle"),
                  glow="glass", out="cp02_icarus_checkpoint.json"),
-    "CP03": dict(site="NOCTIS", module="noctis_quarter", ground=12.0, bay_in=2100.0, bays=True,
+    "CP03": dict(site="NOCTIS", module="noctis_quarter", ground=-14.0, bay_in=2100.0, bays=True,
                  chain=("WL_Tower_Base_Battered", "WL_Tower_Mid_Ashlar", "WL_Tower_Mid_Arcade",
                         "WL_Tower_Mid_Balconied", "WL_Spire_Needle"),
                  glow="glass", out="cp03_noctis_checkpoint.json"),
-    "CP04": dict(site="TARTARUS", module="tartarus_quarter", ground=12.0, bay_in=2100.0, bays=True,
+    "CP04": dict(site="TARTARUS", module="tartarus_quarter", ground=-14.0, bay_in=2100.0, bays=True,
                  chain=("WL_Tower_Base_Buttressed", "WL_Tower_Mid_Machicolated", "WL_Tower_Mid_Fluted",
                         "WL_Tower_Crown_Cone"),
                  glow="glass", out="cp04_tartarus_checkpoint.json"),
@@ -149,6 +155,7 @@ class Occupancy:
             for part in mod["parts"]:
                 self.sizes.setdefault(part["mesh"].split("/")[-1].split(".")[0], mod["size"])
         self.items = []            # (x, y, radius) of things taller than BLOCK_H
+        self.paving = []           # (x, y, top) of flat ground pieces, so a site's real floor can be read
         self.unknown = Counter()
         #: THIS PASS'S OWN OUTPUT IS NOT AN OBSTACLE, AND LEAVING IT IN MADE THE GENERATOR EAT ITSELF.
         #: The first run placed all three nation towers; the second run loaded the specs the first run had
@@ -172,12 +179,17 @@ class Occupancy:
                 if size is None:
                     self.unknown[leaf] += len(batch.get("instances", ()))
                     continue
-                if float(size[2]) < BLOCK_H:
-                    continue                        # ground: paving, slabs, kerbs, verge, flower runs
                 half = 0.5 * math.hypot(float(size[0]), float(size[1]))
+                flat = float(size[2]) < 40.0 and any(k in leaf.lower() for k in
+                                                     ("plaza_slab", "flagstone", "paving", "medallion"))
                 for inst in batch.get("instances", ()):
                     if len(inst) < 7:
                         continue
+                    if flat:
+                        self.paving.append((float(inst[0]), float(inst[1]),
+                                            float(inst[2]) + float(size[2]) * float(inst[8])))
+                    if float(size[2]) < BLOCK_H:
+                        continue                    # ground: paving, slabs, kerbs, verge, flower runs
                     self.items.append((float(inst[0]), float(inst[1]), half * float(inst[6])))
 
     def clear(self, x, y, radius):
@@ -185,6 +197,19 @@ class Occupancy:
             if (x - ix) ** 2 + (y - iy) ** 2 < (radius + ir) ** 2:
                 return False
         return True
+
+    def one_floor(self, x, y, within=300.0, spread=10.0):
+        """The paved floor under (x, y) if the paving there is ONE surface, else None.
+
+        The first arrival fingerpost was authored at 12.3 and traced [-14, -14, 0.7, 4.5] around its foot:
+        it stood on the seam between a plaza at -13.5 and a flagstone walk at 12.3, so half its base floated
+        and half was buried. A site is only a site if every piece of paving under it agrees.
+        """
+        tops = [t for (px, py, t) in self.paving if (x - px) ** 2 + (y - py) ** 2 <= within * within]
+        if len(tops) < 3 or max(tops) - min(tops) > spread:
+            return None
+        tops.sort()
+        return tops[len(tops) // 2]
 
 
 def palette(cfg):
@@ -323,10 +348,17 @@ def build(pass_id, cfg, occ):
         # obelisk there is the first thing a visitor walks into and it stands between them and the view the
         # arrival was aimed at. The corridor is reserved explicitly.
         def off_the_walk(u, v):
-            return not (-500.0 <= u <= 4000.0 and abs(v) < 1000.0)
+            if -500.0 <= u <= 4000.0 and abs(v) < 1000.0:
+                return False
+            x, y = world(u, v)
+            return occ.one_floor(x, y) is not None
 
         spot = nearest_clear("WL_Detail_Pinnacle_Grand", 0.0, 0.0, 600.0, 3200.0, scale=1.25,
                              allow=off_the_walk)
+        if spot is not None:
+            # THE Z COMES FROM THE PAVING THAT IS THERE, not from a number typed into PLAN.
+            g = occ.one_floor(*world(spot[0], spot[1]))
+            stats["arrival_floor_from_paving"] = int(g)
         if spot is None:
             print("      CP01 NO CLEAR SITE within 32 m of the arrival point -- nothing placed, and that is")
             print("      reported rather than forced. This wants an in-editor clear-site probe first.")
@@ -486,7 +518,7 @@ def build(pass_id, cfg, occ):
     print("%s  %-9s %5d instances / %3d batches / %4d colliding / ~%8d tris  -> %s"
           % (pass_id, cfg["site"], total, len(out["batches"]), coll, tris, cfg["out"]))
     for key in sorted(stats):
-        if key.startswith(("refused_", "tower_top", "tower_site", "arrival_site")):
+        if key.startswith(("refused_", "tower_top", "tower_site", "arrival_")):
             print("      %-36s %s" % (key, stats[key]))
     return total, coll
 

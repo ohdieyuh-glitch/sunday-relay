@@ -1,7 +1,7 @@
 {
  "arrival": {
   "pass": "CP01",
-  "ground_z": 12.3,
+  "ground_z": -0.6950000000000003,
   "bearing": 90.0,
   "centre": [
    0.0,
@@ -28,7 +28,7 @@
  },
  "ICARUS": {
   "pass": "CP02",
-  "ground_z": 12.0,
+  "ground_z": -14.0,
   "bearing": 90.0,
   "centre": [
    0.0,
@@ -42,7 +42,7 @@
    -2900.0,
    53700.0
   ],
-  "tower_top_z": 7452.0,
+  "tower_top_z": 7426.0,
   "road_in": [
    -0.0,
    49500.0
@@ -58,7 +58,7 @@
  },
  "NOCTIS": {
   "pass": "CP03",
-  "ground_z": 12.0,
+  "ground_z": -14.0,
   "bearing": 210.0,
   "centre": [
    -45466.3,
@@ -72,7 +72,7 @@
    -44755.6,
    -29881.1
   ],
-  "tower_top_z": 7452.0,
+  "tower_top_z": 7426.0,
   "road_in": [
    -42868.3,
    -24750.0
@@ -88,7 +88,7 @@
  },
  "TARTARUS": {
   "pass": "CP04",
-  "ground_z": 12.0,
+  "ground_z": -14.0,
   "bearing": 330.0,
   "centre": [
    45466.3,
@@ -102,7 +102,7 @@
    48255.6,
    -23818.9
   ],
-  "tower_top_z": 5272.0,
+  "tower_top_z": 5246.0,
   "road_in": [
    42868.3,
    -24750.0

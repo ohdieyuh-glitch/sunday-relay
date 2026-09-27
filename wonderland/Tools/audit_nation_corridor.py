@@ -237,6 +237,28 @@ def main():
                               for iv in range(nv))
                 print("   %6.0fm %s" % ((FROM_UU + iu * CELL) / 100, row))
         print()
+    # THE ROUTES AS DATA, so the avenue generator lays its road where the search says a walker can go,
+    # rather than re-deriving a layout of its own that would drift from this one.
+    routes = {}
+    for nation, bearing in NATIONS:
+        floor, blocked, nu, nv = build(nation, bearing, boxes)
+        cost, path = search(floor, blocked, nu, nv)
+        if path is None:
+            continue
+        rad = math.radians(bearing)
+        pts = []
+        for iu, iv in path:
+            u = FROM_UU + iu * CELL
+            v = -HALF_V + iv * CELL
+            pts.append({"u": round(u, 1), "v": round(v, 1),
+                        "x": round(math.cos(rad) * u - math.sin(rad) * v, 1),
+                        "y": round(math.sin(rad) * u + math.cos(rad) * v, 1),
+                        "floor": round(floor[iu][iv], 1)})
+        routes[nation] = {"bearing": bearing, "cell_uu": CELL, "from_uu": FROM_UU, "to_uu": TO_UU,
+                          "step_uu": STEP, "points": pts}
+    out = WD / "Nations" / "nation_routes.json"
+    out.write_text(json.dumps(routes, indent=1), encoding="utf-8")
+    print("wrote %s (%s)" % (out.relative_to(ROOT), ", ".join("%s:%d pts" % (k, len(v["points"])) for k, v in routes.items())))
     print("=" * 96)
     for nation, v in verdicts.items():
         print("  %-9s %s" % (nation, v))
