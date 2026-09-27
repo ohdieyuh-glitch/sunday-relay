@@ -1,0 +1,565 @@
+<title>Night, Water and Glow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  /* Light palette complete on bare :root. Neutrals are biased toward the water's own DeepColor
+     (0.02, 0.10, 0.16) rather than a pure grey; the accent is relay_og's authored eye hue
+     (1.00, 0.72, 0.16), pulled down in saturation so it holds on both grounds. */
+  :root {
+    --ground:      #EFF3F3;
+    --surface:     #FFFFFF;
+    --surface-sunk:#E4EBEA;
+    --ink:         #12201F;
+    --ink-soft:    #3D5150;
+    --ink-faint:   #6B7E7E;
+    --rule:        #CBD8D6;
+    --rule-soft:   #DEE7E6;
+    --accent:      #B4720C;
+    --accent-bg:   #FBEFD8;
+    --bad:         #B23A30;
+    --bad-bg:      #FAE6E3;
+    --good:        #2F7157;
+    --good-bg:     #DFEDE6;
+    --warn:        #8A6A14;
+    --warn-bg:     #F6EED9;
+    --plot:        #B4720C;
+    --plot-fill:   rgba(180,114,12,.14);
+    --shadow:      0 1px 2px rgba(18,32,31,.06), 0 8px 24px -16px rgba(18,32,31,.18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0A161C;
+      --surface:     #10222A;
+      --surface-sunk:#0C1A21;
+      --ink:         #DCE8E8;
+      --ink-soft:    #A3B7B8;
+      --ink-faint:   #74898B;
+      --rule:        #1E3742;
+      --rule-soft:   #172C35;
+      --accent:      #E8981F;
+      --accent-bg:   #23190A;
+      --bad:         #E8756A;
+      --bad-bg:      #2A1512;
+      --good:        #59BA90;
+      --good-bg:     #10241B;
+      --warn:        #D9B44A;
+      --warn-bg:     #241E0C;
+      --plot:        #E8981F;
+      --plot-fill:   rgba(232,152,31,.16);
+      --shadow:      0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:      #0A161C;
+    --surface:     #10222A;
+    --surface-sunk:#0C1A21;
+    --ink:         #DCE8E8;
+    --ink-soft:    #A3B7B8;
+    --ink-faint:   #74898B;
+    --rule:        #1E3742;
+    --rule-soft:   #172C35;
+    --accent:      #E8981F;
+    --accent-bg:   #23190A;
+    --bad:         #E8756A;
+    --bad-bg:      #2A1512;
+    --good:        #59BA90;
+    --good-bg:     #10241B;
+    --warn:        #D9B44A;
+    --warn-bg:     #241E0C;
+    --plot:        #E8981F;
+    --plot-fill:   rgba(232,152,31,.16);
+    --shadow:      0 1px 2px rgba(0,0,0,.4), 0 10px 30px -18px rgba(0,0,0,.7);
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.62;
+    padding-inline: 22px;
+    padding-block: 0 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 68ch; margin: 0 auto; }
+  .wide { max-width: 940px; margin: 0 auto; }
+
+  h1, h2, h3, .eyebrow, .chip, th, .mono, .num, .gate {
+    font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+  }
+  .mono, .num, code, .gate, td.n, th.n {
+    font-family: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  header.top { border-bottom: 1px solid var(--rule); padding-block: 54px 30px; margin-bottom: 40px; }
+  .eyebrow {
+    font-size: 11.5px; font-weight: 600; letter-spacing: .15em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 0 0 18px;
+  }
+  h1 {
+    font-size: clamp(34px, 6.4vw, 54px); font-weight: 800; letter-spacing: -.025em;
+    line-height: 1.02; margin: 0 0 22px; text-wrap: balance;
+  }
+  .standfirst { font-size: 20px; line-height: 1.5; color: var(--ink-soft); margin: 0; text-wrap: pretty; }
+  .standfirst strong { color: var(--ink); font-weight: 600; }
+
+  h2 {
+    font-size: 13px; font-weight: 600; letter-spacing: .13em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 6px;
+  }
+  h3 {
+    font-size: clamp(23px, 3.6vw, 30px); font-weight: 600; letter-spacing: -.018em;
+    line-height: 1.16; margin: 0 0 18px; text-wrap: balance;
+  }
+  section { padding-block: 46px 0; }
+  section + section { border-top: 1px solid var(--rule-soft); }
+  p { margin: 0 0 18px; }
+  p:last-child { margin-bottom: 0; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  /* A finding is anchored to a named gate and carries a verdict. Both are structure: separating what is
+     established from what is not is this report's actual job, so the chip is information. */
+  .finding { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 0 0 20px; }
+  .gate {
+    font-size: 12px; font-weight: 600; letter-spacing: .06em;
+    color: var(--ink-faint); border: 1px solid var(--rule); border-radius: 3px;
+    padding: 3px 8px; background: var(--surface-sunk);
+  }
+  .chip {
+    font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    border-radius: 3px; padding: 4px 9px;
+  }
+  .chip.measured { color: var(--good); background: var(--good-bg); }
+  .chip.fault    { color: var(--bad);  background: var(--bad-bg); }
+  .chip.unproven { color: var(--warn); background: var(--warn-bg); }
+  .chip.notrun   { color: var(--ink-faint); background: var(--surface-sunk); }
+
+  .tw { overflow-x: auto; margin: 0 0 24px; border: 1px solid var(--rule); border-radius: 5px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  caption {
+    caption-side: top; text-align: left; padding: 13px 16px 11px;
+    font-family: Archivo, sans-serif; font-size: 12px; font-weight: 500;
+    color: var(--ink-faint); border-bottom: 1px solid var(--rule-soft);
+    letter-spacing: .01em;
+  }
+  th {
+    font-size: 10.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--ink-faint); text-align: left; padding: 11px 14px 9px;
+    border-bottom: 1px solid var(--rule); white-space: nowrap;
+  }
+  th.n, td.n { text-align: right; }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--rule-soft); white-space: nowrap; }
+  td.n { font-size: 13px; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.name { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+  .alarm { color: var(--bad); font-weight: 600; }
+  .ok    { color: var(--good); }
+  .dim   { color: var(--ink-faint); }
+  .seq   { font-size: 12px; letter-spacing: -.01em; }
+
+  figure { margin: 0 0 26px; }
+  figure svg { display: block; width: 100%; height: auto; max-width: 100%; }
+  figcaption { font-size: 13.5px; color: var(--ink-faint); margin-top: 12px; line-height: 1.5; }
+
+  /* Pull-quote for the one number that carries a section. Spent sparingly — three times in the page. */
+  .headline-num {
+    display: flex; gap: 20px; align-items: baseline;
+    border-left: 3px solid var(--accent); padding: 4px 0 4px 20px; margin: 0 0 24px;
+  }
+  .headline-num .v {
+    font-family: Archivo, sans-serif; font-size: clamp(36px, 7vw, 52px); font-weight: 800;
+    letter-spacing: -.03em; line-height: .92; color: var(--ink); font-variant-numeric: tabular-nums;
+  }
+  .headline-num .l { font-size: 15px; color: var(--ink-soft); line-height: 1.4; }
+
+  dl.params { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1px;
+              background: var(--rule-soft); border: 1px solid var(--rule); border-radius: 5px;
+              margin: 0 0 24px; overflow: hidden; }
+  dl.params > div { background: var(--surface); padding: 13px 16px; }
+  dl.params dt { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--ink-faint);
+                 letter-spacing: .02em; margin-bottom: 4px; }
+  dl.params dd { margin: 0; font-family: Archivo, sans-serif; font-weight: 600; font-size: 19px;
+                 font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  dl.params dd .why { display: block; font-family: "Source Serif 4", serif; font-weight: 400;
+                      font-size: 13px; color: var(--ink-soft); letter-spacing: 0; margin-top: 3px; }
+  dl.params dd.flag { color: var(--bad); }
+
+  ul.plain { margin: 0 0 18px; padding-left: 20px; }
+  ul.plain li { margin-bottom: 9px; }
+  ul.plain li::marker { color: var(--ink-faint); }
+
+  footer.end { border-top: 1px solid var(--rule); margin-top: 52px; padding-top: 26px;
+               font-size: 14px; color: var(--ink-faint); }
+  footer.end p { margin-bottom: 10px; }
+
+  @media (max-width: 560px) {
+    body { font-size: 16px; }
+    .standfirst { font-size: 18px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <p class="eyebrow">Wonderland world lane &middot; 27 September 2026</p>
+    <h1>Night, Water and Glow</h1>
+    <p class="standfirst">Three of the founder's priorities, measured. The headline is not any single
+    reading — it is that <strong>four separate instruments were reporting confident numbers about things
+    they were not pointed at</strong>, and the findings only became legible once each was fixed.</p>
+  </div>
+</header>
+
+<div class="wrap">
+
+<section>
+  <h2>Priorities 1 &amp; 2 &middot; Night readability</h2>
+  <h3>The sweep was photographing one camera and measuring another</h3>
+
+  <div class="finding">
+    <span class="gate">N_SANITY</span><span class="chip fault">instrument fault, fixed</span>
+  </div>
+
+  <p>The night sweep saved its evidence from the composited game viewport and took its <em>numbers</em>
+  from a <code>SceneCapture2D</code> actor. The framing routine posed the capture actor. Nothing in the job
+  ever posed the viewport. So every JPEG showed whichever way the parked Dog happened to face, every figure
+  in every gate came from a different camera at a different pose, and the two were never compared.</p>
+
+  <p>That is the whole explanation for the reading I could not account for: <strong>noon at 0.0118</strong>
+  — black at midday — in a world the viewport reads at 0.17 to 0.34. They were never the same picture. On one
+  camera, noon now reads as a lit world and the reference the night ratios divide by is credible for the
+  first time.</p>
+
+  <div class="tw">
+    <table>
+      <caption>Noon reference at the founder's seven places. <span class="mono">dark</span> is the fraction
+      of the patch below luma 0.14 — the threshold at which a path stops being a path you can see.</caption>
+      <thead><tr>
+        <th>Place</th><th class="n">Frame luma</th><th class="n">Frame dark</th>
+        <th class="n">Ground luma</th><th class="n">Ground dark</th>
+      </tr></thead>
+      <tbody>
+        <tr><td class="name">city_arrival</td><td class="n">0.2599</td><td class="n">0.269</td><td class="n">0.4235</td><td class="n">0.0715</td></tr>
+        <tr><td class="name">major_path_march</td><td class="n">0.2574</td><td class="n">0.1199</td><td class="n">0.2964</td><td class="n">0.0188</td></tr>
+        <tr><td class="name">plaza_clock_quarter</td><td class="n">0.1813</td><td class="n alarm">0.6093</td><td class="n">0.1543</td><td class="n alarm">0.4779</td></tr>
+        <tr><td class="name">entrance_tartarus</td><td class="n">0.2672</td><td class="n">0.0687</td><td class="n">0.2864</td><td class="n">0.0192</td></tr>
+        <tr><td class="name">water_gardens</td><td class="n">0.2599</td><td class="n">0.3152</td><td class="n">0.3308</td><td class="n">0.1155</td></tr>
+        <tr><td class="name">architecture_noctis</td><td class="n alarm">0.0596</td><td class="n alarm">0.9691</td><td class="n alarm">0.0410</td><td class="n alarm">0.9904</td></tr>
+        <tr><td class="name">mascot_at_spawn</td><td class="n">0.2677</td><td class="n">0.1347</td><td class="n">0.2841</td><td class="n">0.1090</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>One of the seven places is dark at noon.</strong> <code>architecture_noctis</code> reads
+  luma 0.0596 with 97% of the frame and 99% of its ground below the darkness threshold — at midday. That is
+  not a night-lighting problem and no amount of moon gain will reach it. The complaint registers at night
+  because that is when someone looked, but the gap is in daylight.</p>
+</section>
+
+<section>
+  <h3>No combination satisfies both halves of the requirement</h3>
+
+  <div class="finding">
+    <span class="gate">N02</span><span class="chip measured">measured &middot; red</span>
+  </div>
+
+  <p>Nine moon / sky-light / practical-gain combinations, scored on two conditions the founder set
+  together: <em>readable</em> (enough light to see ground, paths, architecture) and <em>still night</em>
+  (no brighter than 0.38&times; that place's own noon). The knobs trade one against the other and never
+  satisfy both.</p>
+
+  <div class="tw">
+    <table>
+      <caption>Per place at the brightest combination swept — <span class="mono">moon 0.080 / sky 7 / practicals 1.0</span>.</caption>
+      <thead><tr>
+        <th>Place</th><th class="n">Night luma</th><th class="n">&divide; own noon</th>
+        <th class="n">Dark fraction</th><th>Verdict</th>
+      </tr></thead>
+      <tbody>
+        <tr><td class="name">city_arrival</td><td class="n">0.0567</td><td class="n">0.22&times;</td><td class="n alarm">0.9642</td><td class="dim">still night, not readable</td></tr>
+        <tr><td class="name">major_path_march</td><td class="n">0.0528</td><td class="n">0.21&times;</td><td class="n alarm">0.9708</td><td class="dim">still night, not readable</td></tr>
+        <tr><td class="name">plaza_clock_quarter</td><td class="n">0.0540</td><td class="n">0.30&times;</td><td class="n alarm">0.8983</td><td class="dim">still night, not readable</td></tr>
+        <tr><td class="name">entrance_tartarus</td><td class="n">0.0654</td><td class="n">0.24&times;</td><td class="n alarm">0.8700</td><td class="dim">still night, not readable</td></tr>
+        <tr><td class="name">water_gardens</td><td class="n">0.1395</td><td class="n">0.54&times;</td><td class="n">0.7206</td><td class="alarm">neither</td></tr>
+        <tr><td class="name">architecture_noctis</td><td class="n">0.0371</td><td class="n">0.62&times;</td><td class="n alarm">0.9709</td><td class="alarm">neither &mdash; dark at noon too</td></tr>
+        <tr><td class="name">mascot_at_spawn</td><td class="n">0.7203</td><td class="n alarm">2.69&times;</td><td class="n ok">0.0795</td><td class="alarm">readable by being over-lit</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Five of seven sit between 87% and 97% dark. The single place that passes the readable gate is
+  <code>mascot_at_spawn</code>, and it passes <strong>by reading 2.69&times; its own noon</strong> — the
+  mascot at spawn is brighter at midnight than at midday. That is a green cell which is not good news, and
+  the still-night test correctly rejects it. Across all nine combinations the best result is one place
+  readable out of seven.</p>
+</section>
+
+<section>
+  <h3>The cycle has a cliff exactly where the brief said not to have one</h3>
+
+  <div class="finding">
+    <span class="gate">N03</span><span class="chip measured">measured &middot; red</span>
+  </div>
+
+  <div class="headline-num">
+    <span class="v">93%</span>
+    <span class="l">of the entire day's dynamic range is spent in the single step from
+    <span class="mono">18:00</span> to <span class="mono">19:00</span></span>
+  </div>
+</section>
+</div>
+
+<div class="wide">
+  <figure>
+    <svg viewBox="0 0 740 286" role="img" aria-label="Frame luma at the Golden Arrival across 25 hours, showing a sharp drop between 18:00 and 19:00 and an anomalous peak at 18:00.">
+      <!-- grid -->
+      <g stroke="var(--rule-soft)" stroke-width="1">
+        <line x1="62" y1="226.0" x2="694" y2="226.0"></line>
+        <line x1="62" y1="181.5" x2="694" y2="181.5"></line>
+        <line x1="62" y1="136.9" x2="694" y2="136.9"></line>
+        <line x1="62" y1="92.4"  x2="694" y2="92.4"></line>
+        <line x1="62" y1="47.8"  x2="694" y2="47.8"></line>
+      </g>
+      <!-- luma axis labels: every one names a value the chart reaches -->
+      <g fill="var(--ink-faint)" font-family="IBM Plex Mono, monospace" font-size="11" text-anchor="end">
+        <text x="54" y="229.5">0.10</text>
+        <text x="54" y="185.0">0.15</text>
+        <text x="54" y="140.4">0.20</text>
+        <text x="54" y="95.9">0.25</text>
+        <text x="54" y="51.3">0.30</text>
+      </g>
+      <!-- the readability threshold, which is the point of the whole chart -->
+      <line x1="62" y1="190.4" x2="694" y2="190.4" stroke="var(--bad)" stroke-width="1" stroke-dasharray="3 3" opacity=".75"></line>
+      <text x="66" y="203" fill="var(--bad)" font-family="IBM Plex Mono, monospace" font-size="10.5">luma 0.145 &mdash; night floor at this place</text>
+      <!-- area + line -->
+      <polygon fill="var(--plot-fill)" points="62.0,226.0 62.0,195.7 88.3,196.6 114.7,201.1 141.0,208.2 167.3,208.2 193.7,217.1 220.0,210.0 246.3,175.2 272.7,81.7 299.0,62.1 325.3,49.6 351.7,44.3 378.0,41.6 404.3,46.0 430.7,57.6 457.0,79.9 483.3,152.9 509.7,145.8 536.0,42.5 562.3,206.4 588.7,192.1 615.0,190.4 641.3,191.3 667.7,189.5 694.0,191.3 694.0,226.0"></polygon>
+      <polyline fill="none" stroke="var(--plot)" stroke-width="2" stroke-linejoin="round" points="62.0,195.7 88.3,196.6 114.7,201.1 141.0,208.2 167.3,208.2 193.7,217.1 220.0,210.0 246.3,175.2 272.7,81.7 299.0,62.1 325.3,49.6 351.7,44.3 378.0,41.6 404.3,46.0 430.7,57.6 457.0,79.9 483.3,152.9 509.7,145.8 536.0,42.5 562.3,206.4 588.7,192.1 615.0,190.4 641.3,191.3 667.7,189.5 694.0,191.3"></polyline>
+      <!-- the cliff -->
+      <line x1="536.0" y1="42.5" x2="562.3" y2="206.4" stroke="var(--bad)" stroke-width="3" stroke-linecap="round"></line>
+      <circle cx="536.0" cy="42.5" r="4" fill="var(--bad)"></circle>
+      <circle cx="562.3" cy="206.4" r="4" fill="var(--bad)"></circle>
+      <text x="530" y="32" fill="var(--bad)" font-family="Archivo, sans-serif" font-size="12" font-weight="600" text-anchor="end">18:00 &mdash; 0.306, brighter than either neighbour</text>
+      <text x="572" y="222" fill="var(--bad)" font-family="Archivo, sans-serif" font-size="12" font-weight="600">19:00 &mdash; 0.122</text>
+      <!-- day peak and trough, both real values the line reaches -->
+      <circle cx="378.0" cy="41.6" r="3" fill="var(--plot)"></circle>
+      <text x="378" y="32" fill="var(--ink-faint)" font-family="IBM Plex Mono, monospace" font-size="10.5" text-anchor="middle">0.307</text>
+      <circle cx="193.7" cy="217.1" r="3" fill="var(--plot)"></circle>
+      <text x="193.7" y="240" fill="var(--ink-faint)" font-family="IBM Plex Mono, monospace" font-size="10.5" text-anchor="middle">0.110</text>
+      <!-- hour axis -->
+      <g fill="var(--ink-faint)" font-family="IBM Plex Mono, monospace" font-size="11" text-anchor="middle">
+        <text x="62"  y="265">00</text>
+        <text x="220" y="265">06</text>
+        <text x="378" y="265">12</text>
+        <text x="536" y="265">18</text>
+        <text x="694" y="265">24</text>
+      </g>
+      <text x="378" y="281" fill="var(--ink-faint)" font-family="Archivo, sans-serif" font-size="11" text-anchor="middle" letter-spacing="0.09em">HOUR OF THE WONDERLAND DAY</text>
+    </svg>
+    <figcaption>Frame luma at the Golden Arrival, hour by hour, one composited viewport frame per reading.
+    The late afternoon does not fall — it goes 0.264, 0.182, 0.190, then <em>up</em> to 0.306 at 18:00, then
+    collapses to 0.122. A single hour consumes 0.1840 of a 0.1970 total range. The anomalous 18:00 peak
+    points at a discontinuity in the dusk end of the sky repaint rather than a curve that is merely too steep.</figcaption>
+  </figure>
+</div>
+
+<div class="wrap">
+
+<section>
+  <h2>Priority 3 &middot; Water</h2>
+  <h3>Fine by day, a black hole at dusk, and the parameters say exactly why</h3>
+
+  <div class="finding">
+    <span class="gate">A03</span><span class="chip measured">measured &middot; red</span>
+    <span class="gate">A00 A01 A02</span><span class="chip measured">green</span>
+  </div>
+
+  <p>A gate of mine had been passing this water. It went green on a night shoreline mean of 0.0314 against
+  a 0.03 floor — while the same patch reported 99.03% of its pixels crushed to black. A mean is the wrong
+  statistic for <em>is it black</em>: a few specular pixels on a dead surface carry it over the line. The gate
+  now tests the crushed fraction, and six of nine views fail it.</p>
+
+  <div class="tw">
+    <table>
+      <caption>Nine founder views. <span class="mono">blue/red</span> is the water's own hue balance —
+      it rises at dusk, so the colour is present and it is the luminance that has gone.</caption>
+      <thead><tr><th>View</th><th class="n">Luma</th><th class="n">Dark fraction</th><th class="n">Blue / red</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr><td class="name">day_close</td><td class="n">0.3321</td><td class="n ok">0.1909</td><td class="n">0.554</td><td class="ok">reads as water</td></tr>
+        <tr><td class="name">day_shoreline</td><td class="n">0.2433</td><td class="n ok">0.1689</td><td class="n">0.597</td><td class="ok">reads as water</td></tr>
+        <tr><td class="name">day_elevated</td><td class="n">0.2870</td><td class="n ok">0.2766</td><td class="n">0.590</td><td class="ok">reads as water</td></tr>
+        <tr><td class="name">dusk_close</td><td class="n">0.0095</td><td class="n alarm">1.0000</td><td class="n">1.580</td><td class="alarm">wholly black</td></tr>
+        <tr><td class="name">dusk_shoreline</td><td class="n">0.0064</td><td class="n alarm">0.9986</td><td class="n">1.793</td><td class="alarm">wholly black</td></tr>
+        <tr><td class="name">dusk_elevated</td><td class="n">0.0081</td><td class="n alarm">0.9961</td><td class="n">2.187</td><td class="alarm">wholly black</td></tr>
+        <tr><td class="name">night_close</td><td class="n">0.0190</td><td class="n alarm">0.9824</td><td class="n">1.588</td><td class="alarm">near black</td></tr>
+        <tr><td class="name">night_shoreline</td><td class="n">0.0245</td><td class="n alarm">0.9904</td><td class="n">1.559</td><td class="alarm">near black</td></tr>
+        <tr><td class="name">night_elevated</td><td class="n">0.0440</td><td class="n alarm">0.9503</td><td class="n">1.677</td><td class="alarm">near black</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>This is the first inventory of what <code>M_WL_RealWater</code> actually exposes — the list the brief
+  asked to improve against and which did not exist. Four values together are the mechanism:</p>
+
+  <dl class="params">
+    <div><dt>Roughness</dt><dd class="flag">0.035<span class="why">A near-perfect mirror. The brief asks to
+      avoid mirror-like reflection; this is the mirror.</span></dd></div>
+    <div><dt>Refraction</dt><dd class="flag">1.05<span class="why">1.0 is no bend at all, so there is no
+      see-through to a lit bottom either.</span></dd></div>
+    <div><dt>DeepColor</dt><dd class="flag">0.02 0.10 0.16<span class="why">A very dark base, which is what
+      shows when nothing is reflected.</span></dd></div>
+    <div><dt>Opacity</dt><dd>0.82<span class="why">Mostly opaque, so that dark base dominates.</span></dd></div>
+    <div><dt>Specular</dt><dd>1.0<span class="why">Full — amplifies the mirror behaviour.</span></dd></div>
+    <div><dt>ShallowColor</dt><dd>0.16 0.42 0.42<span class="why">The teal that reads correctly in
+      daylight.</span></dd></div>
+    <div><dt>RippleStrength</dt><dd>0.35<span class="why">Motion is present and is not the problem.</span></dd></div>
+    <div><dt>FlowSpeed A / B</dt><dd>0.018 / &minus;0.011<span class="why">Counter-flowing, as
+      intended.</span></dd></div>
+  </dl>
+
+  <p><strong>A mirror with a dark base and no refraction reflects a dark sky and returns black.</strong>
+  Nothing is broken in the shader; the surface is doing precisely what those four numbers ask of it. The
+  rising blue/red ratio confirms it — the water still holds its hue at dusk, at a luminance too low to see.</p>
+</section>
+
+<section>
+  <h2>Mascot handoff &middot; The knee</h2>
+  <h3>The Companion's strategy cannot transfer, and the numbers say so cleanly</h3>
+
+  <div class="finding">
+    <span class="gate">M09</span><span class="chip measured">measured</span>
+  </div>
+
+  <p>The handoff asked whether the response knee proven on the Companion — which selected 220 at a clipped
+  fraction of 1.79% — would work on the mascots, and was explicit that 220 must not simply be copied.
+  It cannot be, and not because 220 is the wrong value. <code>WonderlandTameGlow</code> compresses only
+  <em>above</em> the knee, and after the GLOW_SCALE re-baseline the brightest body glow on any skin is 13.2.
+  A knee at 220, or at the shipped 700, sits above every mascot value and has nothing to act on.</p>
+
+  <div class="tw">
+    <table>
+      <caption>Frame luma as the knee falls 700 &rarr; 2. Each skin's noise floor is its own largest
+      <em>upward</em> step — a compression knee cannot brighten a frame, so every rise is measurement noise the
+      run observed on itself.</caption>
+      <thead><tr><th>Skin</th><th class="n">Own noise</th><th class="n">Spread</th><th>Verdict</th><th class="n">700 &rarr; 64 &rarr; 32 &rarr; 16 &rarr; 8 &rarr; 4 &rarr; 2</th></tr></thead>
+      <tbody>
+        <tr><td class="name">relay_og</td><td class="n">0.0132</td><td class="n">0.0144</td><td class="dim">inert</td><td class="n seq">0.2731 0.2587 0.2719 0.2700 0.2669 0.2650 0.2654</td></tr>
+        <tr><td class="name">celestial_light</td><td class="n">0.0102</td><td class="n">0.1514</td><td class="ok">engages at 4</td><td class="n seq">0.3264 0.3366 0.3215 0.3196 0.3116 0.2424 0.1852</td></tr>
+        <tr><td class="name">apollo</td><td class="n">0.0120</td><td class="n">0.0149</td><td class="dim">inert</td><td class="n seq">0.2839 0.2892 0.2858 0.2836 0.2865 0.2985 0.2844</td></tr>
+        <tr><td class="name">arden_infernal</td><td class="n">0.0472</td><td class="n">0.0529</td><td class="dim">inert</td><td class="n seq">0.2711 0.3183 0.3168 0.2896 0.3048 0.2955 0.3240</td></tr>
+        <tr><td class="name">skeleton_flame</td><td class="n">0.0206</td><td class="n">0.0414</td><td class="dim">inert</td><td class="n seq">0.2358 0.2564 0.2751 0.2607 0.2472 0.2337 0.2503</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Seven of eight skins are inert across the whole range — the three V1 twins behave like their pairs.
+  Only <code>celestial_light</code> responds, monotonically, from knee 16 downward, and it pays
+  <strong>43% of its frame luma</strong> for the privilege. That is not a setting anyone wants. The knee is
+  the wrong instrument for this cluster, and the sequences are printed in full so that reading can be
+  checked rather than taken on trust — <code>relay_og</code>'s spread of 0.0144 against its own noise of
+  0.0132 is a close call and should look like one.</p>
+
+  <p>My own gate had reported "engaged at 64" for seven of these skins. It asked whether frame luma moved
+  by 0.005, while the data wobbles by up to 0.05.</p>
+</section>
+
+<section>
+  <h3>The eye readings are not evidence yet</h3>
+
+  <div class="finding">
+    <span class="gate">M11 M03 M04 M07 M08 M10</span><span class="chip unproven">unproven &middot; instrument fault</span>
+  </div>
+
+  <p>Four sweep runs measured a torso. The eye locator reported it had found the eye on the mesh, and
+  returned <span class="mono">24.7</span> uu above the actor origin — identical to four decimals on eight
+  figures of two different heights, which cannot be eight eyes. It was a component pivot. The tell was in the
+  data all along: face luminance ranged from 0.013 to 0.548 <em>between skins framed identically</em>.</p>
+
+  <p><code>StaticMeshComponent</code> exposes no <code>bounds</code> property in this engine's Python, and a
+  comment in this repository already recorded that, noting it had crashed another job. Two consecutive fixes
+  of mine were built on it anyway. It now reads the mesh asset's bounding box through the component's world
+  transform — which also settles whether figure bounds are in voxels or centimetres without anyone having to
+  reason about it — and walks a ladder of candidate heights, keeping whichever produces a cell that beats its
+  own noise floor.</p>
+
+  <p>Separately, and more usefully than any number I produced: the halo rings render as flat frames around a
+  hard square with no falloff past the pane edge, because the additive material draws a constant colour
+  across a whole cube face. That is a better account of <em>the eyes do not glow</em> than the sweep was going
+  to reach, and a radial-fade replacement is in the next asset round. The eye re-run goes after it, rather
+  than measuring a halo about to be replaced.</p>
+</section>
+
+<section>
+  <h2>QA-8 &middot; Traversal</h2>
+  <h3>Peak speed separates a blocked start from a harness that never drove</h3>
+
+  <div class="finding">
+    <span class="gate">W0A</span><span class="chip notrun">re-run pending</span>
+  </div>
+
+  <p>The previous run reported all three nations as "the harness could not drive the Dog", judging on
+  displacement alone. Displacement alone cannot tell these three states apart:</p>
+
+  <div class="tw">
+    <table>
+      <caption>All three in <span class="mono">MOVE_WALKING</span>, <span class="mono">max_walk_speed 230</span>,
+      not falling, with a <span class="mono">PlayerController</span>.</caption>
+      <thead><tr><th>Nation</th><th class="n">Advanced</th><th class="n">Peak speed</th><th>What that is</th></tr></thead>
+      <tbody>
+        <tr><td class="name">ICARUS</td><td class="n alarm">0.0 uu</td><td class="n">230.0</td><td class="alarm">full walk speed, no advance &mdash; blocked geometry</td></tr>
+        <tr><td class="name">NOCTIS</td><td class="n ok">227.0 uu</td><td class="n">230.0</td><td class="ok">walks cleanly &mdash; proves the harness</td></tr>
+        <tr><td class="name">TARTARUS</td><td class="n">67.7 uu</td><td class="n alarm">11.9</td><td class="alarm">never got moving</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Because NOCTIS drove, the harness is sound, and the other two are facts about those places. An offline
+  pass over every layer file then found that ICARUS is the only nation with anything in the first four metres
+  of its corridor — a topiary cone 191 uu ahead and 119 aside, a slender castle tower at 329 and 152 — while
+  the NOCTIS and TARTARUS corridors hold nothing but ground. The ICARUS route also sits 1000 uu off the
+  corridor centreline for its entire early run, where the other two return to centre immediately.</p>
+
+  <p><strong>That is a correlation and not yet the cause.</strong> 119 uu of side clearance leaves room for a
+  42 uu capsule unless the topiary's own collision radius exceeds about 77, and the repository's mesh bounds
+  file holds seven meshes, none of them these. Congestion also cannot explain TARTARUS, whose corridor is
+  clear. A sixteen-ray clearance probe now reports the free distance in every direction at the placement
+  point, the clearance along the heading the Dog is about to walk, and the name of what each ray stopped on
+  — read from the component's mesh, since this world is instanced and an actor label just names a batch
+  holding thousands.</p>
+
+  <p>This run did not happen. It errored on load with zero gates because I left two <code>note</code>
+  keywords in one call — <code>ast.parse</code> accepts a repeated keyword and the compiler rejects it, so my
+  own check passed it into a commit. It needs one play session after the next asset round.</p>
+</section>
+
+<section>
+  <h3>What this does not establish</h3>
+  <ul class="plain">
+    <li><strong>Any eye luminance, contrast, hue-retention or clipping figure for the mascots.</strong> Four
+    runs measured the wrong height; the knee result is unaffected because it reads frame luma and never
+    touched the eye patch.</li>
+    <li><strong>Every Skeleton Flame requirement except the eyes.</strong> No gate in the sweep reads flame
+    motion, the low-mid-high pulse, the chest skull or the spectral side element. Unmeasured, not passing.</li>
+    <li><strong>Bloom.</strong> Read from the post-process volume and reported, but not swept — so
+    "controlled bloom" is described rather than demonstrated.</li>
+    <li><strong>Whether ICARUS's topiary is the blocker.</strong> Named as a candidate with the geometry that
+    makes it one, and explicitly not proven.</li>
+    <li><strong>DUBEL FOREST's specialisation.</strong> The canon states none, so the world marks it as
+    needing a founder definition rather than inventing one. It is the only territory of five in that state.</li>
+  </ul>
+</section>
+
+<footer class="end">
+  <div>
+    <p>Measured on the round-3 build in a single-editor window. Every reading is one composited viewport
+    frame — the same instrument, saved beside the number it produced, so a red gate can be checked by opening
+    the picture it names.</p>
+    <p>World exposure held throughout: EV100 pinned at 14.2 before and after every run, which matters because
+    Wonderland's rendered white sits near 25,000 scene units and an emissive judged against a white of 25 is
+    wrong by three orders of magnitude.</p>
+  </div>
+</footer>
+
+</div>
