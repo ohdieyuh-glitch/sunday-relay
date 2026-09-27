@@ -45,12 +45,20 @@
  * D02 (refused, nothing created) and D04 (an explicit rerun is a distinct run
  * and the first is untouched).
  *
- * ONE ACTIVE RUN PER MISSION (D01-D11), on a FRESH mission per walk so the
+ * ONE ACTIVE RUN PER MISSION (D01-D12), on a FRESH mission per walk so the
  * guard is measured rather than this database's history: refusal naming the
  * live run, the exact-word rerun intent, the identical replay, the world
- * following each runId as itself, terminal release, and two real races --
- * identical twins, and different contracts for one mission -- each counted in
- * the database, not inferred from the answers.
+ * following each runId as itself, terminal release, and three real races --
+ * identical twins, different contracts for one mission, and one rerun key sent
+ * six times at once -- each counted in the database, not inferred from the
+ * answers.
+ *
+ * THE RERUN KEY (Julius 52df8e63, from this drill's D07/D09): an explicit rerun
+ * is `x-relay-julius-rerun: explicit` PLUS `x-relay-julius-rerun-key`, one
+ * stable token per intended rerun. No key is 400 rerun_key_required (D03b);
+ * the same key is the same run (D04b, D07, D09, D12); `rerun` on the wire is
+ * the OUTCOME, true only for the call that made the run. First run on the key
+ * protocol: 36 of 36, D12 really contended (5 x 503, then one run).
  */
 
 import { spawn } from 'node:child_process';
