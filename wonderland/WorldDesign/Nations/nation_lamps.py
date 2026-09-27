@@ -168,8 +168,16 @@ def main():
                         TQ.DECISION_REACH / 100, len(trans), before_gap, after_gap)),
             "materials": cfg["parts"],
             "why_glass": cfg["why_glass"],
-            # one batch per part, at the same points, exactly as the world's existing lanterns are built
-            "batches": [TQ.batch(TQ.STANDARD[part][0], mat, placed)
+            # ONE BATCH PER PART, at the same points, exactly as the world's existing lanterns are built --
+            # and each with the id and collision flags apply_layer requires. A batch without `id` raises
+            # KeyError there and applies NOTHING, and it also crashes validate_layer_spec's nested_collision
+            # for every spec in the tree, so one malformed file takes the offline gate down with it. Both my
+            # specs shipped in that state.
+            #
+            # ONLY THE STONE POST COLLIDES. A walker should be stopped by a lamp post and not by its glass or
+            # its gold, which is how AV03's own sixteen lanterns are built.
+            "batches": [TQ.batch("%s_Object_LanternStandard_%s" % (cfg["pass"], part),
+                                 TQ.STANDARD[part][0], mat, placed, part == "stone")
                         for part, mat in cfg["parts"].items()],
         }
         (HERE / cfg["out"]).write_text(json.dumps(spec, indent=1) + "\n", encoding="utf-8", newline="\n")
