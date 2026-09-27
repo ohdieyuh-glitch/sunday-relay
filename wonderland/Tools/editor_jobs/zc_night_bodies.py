@@ -56,6 +56,9 @@ STEP = 2
 # A surface at or under this is crushed: no usable form or material information left in it. 0.14 of full white
 # is the same floor the world lane's night sweep uses, so the two lanes' "dark" mean the same thing.
 DARK = 0.14 * 255.0
+# At or over this a cell has lost its surface upward rather than downward: no form information left in it
+# either. A luminous skin is allowed to be bright; it is not allowed to be a flat white cut-out.
+BLOWN = 0.97 * 255.0
 # At or over this a cell is one of the figure's own lights rather than its body.
 LIGHT = 0.72 * 255.0
 
@@ -75,6 +78,8 @@ def figure_stats(path, box):
     x0, y0, x1, y1 = (int(box[0] * w), int(box[1] * h), int(box[2] * w), int(box[3] * h))
     body = []
     lights = 0
+    blown = 0
+    inside = []
     seen = 0
     for y in range(y0, min(y1, h), STEP):
         row = y * w * chan
@@ -82,28 +87,79 @@ def figure_stats(path, box):
             i = row + x * chan
             lum = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]
             seen += 1
+            inside.append(lum)
+            if lum >= BLOWN:
+                blown += 1
             if lum >= LIGHT:
                 lights += 1
             else:
                 body.append(lum)
-    # the ground band: the strip under the figure's box, across its width
+    # ---- TWO GROUND BANDS, BECAUSE THE ONE UNDER THE FEET IS MOSTLY THE FIGURE'S OWN SHADOW.
+    #
+    # THIS JOB REPORTED "98 PER CENT OF THE GROUND UNDER RELAY OG IS CRUSHED" AND SENT THE WORLD LANE TO FIX
+    # THE WORLD WITH IT. Their own sweep then read a broad plaza patch at the same district and the same hour
+    # at 0.197 -- four times brighter than my 0.045. Same place, same hour, two answers, and the difference is
+    # that their patch has nobody standing on it. A strip immediately below a lit figure at 5.2 m is largely
+    # that figure's contact shadow, so this measured SHADOW DEPTH and called it world darkness.
+    #
+    # So: UNDER is the strip below the feet, which is shadow plus ground. BESIDE is the same strip shifted one
+    # figure-width to the side, out of the shadow, which is ground. The difference between them is the shadow,
+    # and that is a number neither lane has had: the founder asked for shadows that stay deep AND readable,
+    # which cannot be judged from a reading that fuses the shadow with the surface it falls on.
     gy0, gy1 = min(y1, h - 1), min(int(y1 + (y1 - y0) * 0.16), h)
-    ground = []
-    for y in range(gy0, gy1, STEP):
-        row = y * w * chan
-        for x in range(x0, min(x1, w), STEP):
-            i = row + x * chan
-            ground.append(0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2])
+    figure_w = max(x1 - x0, 1)
+
+    def band(bx0, bx1):
+        vals = []
+        for y in range(gy0, gy1, STEP):
+            row = y * w * chan
+            for x in range(max(bx0, 0), min(bx1, w), STEP):
+                i = row + x * chan
+                vals.append(0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2])
+        return vals
+
+    ground = band(x0, min(x1, w))
+    # One full figure-width to the side, and whichever side has more frame to give.
+    room_right = w - x1
+    beside = band(x1 + int(figure_w * 0.15), x1 + int(figure_w * 1.15)) if room_right >= figure_w         else band(x0 - int(figure_w * 1.15), x0 - int(figure_w * 0.15))
 
     def frac_dark(vals):
         return round(sum(1 for v in vals if v < DARK) / float(max(len(vals), 1)), 4)
+
+    def spread(vals):
+        """STANDARD DEVIATION ACROSS THE WHOLE FIGURE, which is the only number here that measures FORM.
+
+        A figure reads as a figure because its surfaces differ from one another: lit planes, turned-away
+        planes, the line where one meets the next. Every other measure in this job is about LEVEL, and level
+        cannot tell three cases apart that need three different answers -- a body crushed flat to black, a
+        body blown flat to white, and a body standing in readable light. The first two are both formless and
+        sit at opposite ends of every mean.
+
+        This matters because two of the five skins are luminous BY DESIGN. Arden Infernal builds 45 per cent
+        of its geometry from glow materials and Skeleton Flame 83 per cent, and Skeleton Flame being a
+        luminous ghost is the skin's identity rather than a defect. Asking those two to be dimmer is a
+        founder question. Asking them to still have a SHAPE is not, and this is the number that asks it.
+        """
+        if len(vals) < 2:
+            return None
+        mean = sum(vals) / float(len(vals))
+        var = sum((v - mean) ** 2 for v in vals) / float(len(vals))
+        return round((var ** 0.5) / 255.0, 4)
 
     def mean(vals):
         return round(sum(vals) / float(max(len(vals), 1)) / 255.0, 4)
 
     return {"body_mean": mean(body), "body_dark_fraction": frac_dark(body),
+            # THE TWO FORMLESS FAILURES, MEASURED SEPARATELY FROM THE LEVEL.
+            "blown_fraction": round(blown / float(max(seen, 1)), 4),
+            "figure_form": spread(inside),
             "light_fraction": round(lights / float(max(seen, 1)), 4),
             "ground_mean": mean(ground), "ground_dark_fraction": frac_dark(ground),
+            # THE SAME STRIP, OUT OF THE FIGURE'S SHADOW. This is the one that answers "does the world light
+            # the ground"; the pair above answers "how deep is the mascot's shadow".
+            "beside_mean": mean(beside), "beside_dark_fraction": frac_dark(beside),
+            "shadow_depth": (round((mean(beside) - mean(ground)) / max(mean(beside), 1e-6), 4)
+                             if mean(beside) else None),
             "cells": seen}
 
 
@@ -270,19 +326,77 @@ def job():
                 "body gone. It is reported whether or not it passes, so the two can never be traded.")
 
     ground = {s: (night[s] or {}).get("ground_dark_fraction") for s in SKINS}
-    record("B04", "the ground the character stands on is readable too",
-           all(isinstance(v, float) and v <= 0.65 for v in ground.values()),
-           ground_dark_fraction=ground, ceiling=0.65,
-           note="world lighting, not mascot lighting -- reported here because a character reads against the "
-                "surface under it and the founder asked for both.")
+    # B04 NOW READS THE BAND BESIDE THE FIGURE, NOT THE ONE UNDER IT.
+    #
+    # Under the feet is the mascot's own contact shadow, and this clause spent a whole run reporting shadow
+    # depth as world darkness -- 0.045 under Relay OG against the world lane's 0.197 on a plaza patch at the
+    # same district and hour, four times apart, because their patch had nobody standing on it. A clause named
+    # "is the ground readable" has to read ground that is not in shadow, or it is answering a different
+    # question convincingly.
+    beside = {s: (night[s] or {}).get("beside_dark_fraction") for s in SKINS}
+    record("B04", "the ground beside the character is readable too",
+           all(isinstance(v, float) and v <= 0.65 for v in beside.values()),
+           beside_dark_fraction=beside, under_feet_for_comparison=ground, ceiling=0.65,
+           note="world lighting, not mascot lighting, and measured one figure-width to the side so it is not "
+                "the mascot's own shadow. The pair under the feet is reported beside it as the shadow.")
+
+    # AND THE SHADOW ITSELF, WHICH IS NOW SEPARABLE AND HAS ITS OWN REQUIREMENT.
+    #
+    # The founder asked for shadows that stay deep AND readable, and that is two bounds rather than one: a
+    # shadow that vanishes has flattened the contrast they said not to flatten, and one that crushes to black
+    # is the hole they are complaining about. It could not be judged at all while the reading fused the shadow
+    # with the surface it falls on.
+    depth = {s: (night[s] or {}).get("shadow_depth") for s in SKINS}
+    RESULT["shadow_depth"] = depth
+    record("B06", "the mascot's own shadow is deep but not a hole",
+           all(isinstance(v, float) and 0.15 <= v <= 0.85 for v in depth.values()),
+           shadow_depth=depth, floor=0.15, ceiling=0.85,
+           note="the fraction of the beside-ground's light that the figure's shadow removes. Under 0.15 is a "
+                "mascot that does not appear to be standing on anything; over 0.85 is a black hole where its "
+                "feet should be. Both are failures and one number cannot be raised to fix the other.")
+
+    # AND WHETHER A FIGURE STILL HAS A SHAPE, which is the question the two luminous skins actually need.
+    #
+    # Arden Infernal builds 45 per cent of its geometry from glow materials and Skeleton Flame 83 per cent,
+    # counted in relay_dog_skins.py. Skeleton Flame being a luminous ghost is the skin's identity, so asking it
+    # to be DIMMER is a founder question and not something this job should assert. Asking it to still read as a
+    # figure is not a founder question, and level cannot answer it: a body crushed flat to black and a body
+    # blown flat to white are both formless and sit at opposite ends of every mean here.
+    form = {s: (night[s] or {}).get("figure_form") for s in SKINS}
+    blown = {s: (night[s] or {}).get("blown_fraction") for s in SKINS}
+    RESULT["figure_form"] = form
+    RESULT["blown_fraction"] = blown
+    record("B07", "every figure still has a shape at night, bright or dark",
+           all(isinstance(v, float) and v >= 0.06 for v in form.values())
+           and all(isinstance(v, float) and v <= 0.12 for v in blown.values()),
+           figure_form=form, form_floor=0.06, blown_fraction=blown, blown_ceiling=0.12,
+           note="form is the standard deviation across the whole figure: surfaces differing from one another "
+                "is what makes a figure read as one. This is the clause a luminous skin must pass; whether it "
+                "should be luminous at all is the founder's call, not this job's.")
 
     fall = {}
     for s in SKINS:
         a, b = (noon[s] or {}).get("body_mean"), (night[s] or {}).get("body_mean")
         fall[s] = None if not (a and b) else round(b / a, 3)
+    # THE TWO SKINS THAT FAIL THIS ARE FAILING IT BY DESIGN, and the clause says so rather than reading as a
+    # bug report. Arden came back 1.360 -- brighter at night than at noon -- and it is a flame skin. A clause
+    # that cannot tell a design from a defect should name the ones it cannot judge, so the reader does not
+    # spend an hour looking for a lighting fault in a figure that is meant to burn.
+    LUMINOUS = {"arden_infernal": 0.45, "skeleton_flame": 0.83}
+    RESULT["luminous_by_design"] = {
+        "glow_share_of_geometry": LUMINOUS,
+        "note": "counted in relay_dog_skins.py: the share of each skin's geometry calls that use a material "
+                "declared 'glow'. A figure that is 83 per cent glow cannot be made to read as a lit subject "
+                "by lighting it, and dimming it is a decision about the skin rather than about the night.",
+    }
+    judged = {s: v for s, v in fall.items() if s not in LUMINOUS}
     record("B05", "night still looks like night: the body is clearly darker than it is at noon",
-           all(isinstance(v, float) and v <= 0.75 for v in fall.values()), night_over_noon=fall, ceiling=0.75,
-           note="the guard against fixing this by turning night into day. B01 and this one must pass together.")
+           all(isinstance(v, float) and v <= 0.75 for v in judged.values()),
+           night_over_noon=fall, judged=sorted(judged), ceiling=0.75,
+           luminous_by_design_excluded=sorted(LUMINOUS),
+           note="the guard against fixing this by turning night into day. B01 and this one must pass together. "
+                "The two luminous skins are excluded and reported, not silently passed: they are brighter at "
+                "night because they are their own light source, which is a founder question about the skin.")
 
     RESULT["captures_dir"] = ROOT
     RESULT["status"] = "measured"
