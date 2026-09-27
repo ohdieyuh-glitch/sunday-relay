@@ -26,9 +26,9 @@ import unreal
 L = unreal.WonderlandUiTestLibrary
 
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "two_terms")
-LAMP_FACTOR = 0.040
-GLOWS = (0.320, 0.090, 0.030, 0.010)
-SKINS = ("celestial_light", "arden_infernal", "skeleton_flame", "relay_og")
+LAMP_FACTOR = 1.0   # the lamps are now correct in code; only the glow is being swept
+GLOWS = (0.0100, 0.0040, 0.0015, 0.0006)
+SKINS = ("skeleton_flame", "arden_infernal", "celestial_light", "apollo")
 
 
 def job():
@@ -87,7 +87,7 @@ def job():
             yield 2.5
             try:
                 unreal.RenderingLibrary.export_render_target(
-                    world, target, ROOT, "%s_g%05.3f.png" % (skin, glow))
+                    world, target, ROOT, "%s_g%07.5f.png" % (skin, glow))
             except Exception as err:                               # noqa: BLE001
                 RESULT.setdefault("errors", {})["%s %s" % (skin, glow)] = str(err)[:120]
         emit("N_%s" % skin, "INFO", "swept %s" % skin, {"glows": list(GLOWS)})

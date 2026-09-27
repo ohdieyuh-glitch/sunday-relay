@@ -107,14 +107,29 @@ static FAutoConsoleVariableRef GWonderlandPreviewLightsRef(
  * This is the second of the two terms. The first is the light level above; this one stops the fire that
  * SURVIVES that reduction from smearing across everything the founder is trying to look at.
  */
-static float GWonderlandPreviewBloom = 0.10f;
+static float GWonderlandPreviewBloom = 0.015f;
 static FAutoConsoleVariableRef GWonderlandPreviewBloomRef(
 	TEXT("wl.Look.PreviewBloom"),
 	GWonderlandPreviewBloom,
-	TEXT("Bloom intensity for the wardrobe's capture camera."),
+	TEXT("Bloom intensity for the wardrobe's capture camera, above PreviewBloomFloor."),
 	ECVF_Default);
 
-static float GWonderlandPreviewGlow = 0.010f;
+/**
+ * HOW BRIGHT A PIXEL HAS TO BE BEFORE IT IS ALLOWED TO BLOOM.
+ *
+ * The control that was missing entirely. Without it bloom treats a lit white flank the same as a flame, and
+ * the wardrobe's black backdrop fills in until there is no figure left to look at. One means "only what is
+ * actually brighter than white", which is the fire, the eyes and the halos -- the things whose glow is the
+ * point -- and leaves the bone body to be lit rather than smeared.
+ */
+static float GWonderlandPreviewBloomFloor = 1.0f;
+static FAutoConsoleVariableRef GWonderlandPreviewBloomFloorRef(
+	TEXT("wl.Look.PreviewBloomFloor"),
+	GWonderlandPreviewBloomFloor,
+	TEXT("Luminance a pixel must exceed before it blooms in the wardrobe preview."),
+	ECVF_Default);
+
+static float GWonderlandPreviewGlow = 0.0015f;
 static FAutoConsoleVariableRef GWonderlandPreviewGlowRef(
 	TEXT("wl.Look.PreviewGlow"),
 	GWonderlandPreviewGlow,
@@ -309,8 +324,33 @@ void AWonderlandSkinStage::ApplyPreviewExposure()
 
 	// A LITTLE BLOOM, because the luminous skins -- Celestial Light, Apollo's halo, Skeleton Flame's ghost-fire --
 	// are most of their own identity, and none at all makes them read as flat paint.
+	//
+	// ---- AND A THRESHOLD, WHICH IS THE THING THAT WAS MISSING AND THE REASON THIS WINDOW STAYED WHITE.
+	//
+	// Isolated by taking each candidate to zero in turn with the others held. Killing bloom took Celestial
+	// Light's mean from 237 to 105 and Skeleton Flame's from 245 to 119; killing the LAMPS changed neither of
+	// them by a single count. Meanwhile the flame surface, read back live, was carrying (0.08, 0.24, 0.34) and
+	// (0.43, 0.56, 0.59) -- every channel under white. The fire was innocent and correctly scaled the whole
+	// time, and three rounds of turning the glow down were chasing the wrong term. The giveaway was the same
+	// one that settled the exposure question earlier: a thirty-fold change in glow moved the picture barely at
+	// all, and a term that can move that far without mattering is not the term doing the damage.
+	//
+	// With no threshold set, bloom is applied to EVERYTHING, mid-greys included -- so a lit white dog smears
+	// across its own black backdrop until the corners are as bright as the subject. At 1.0 only pixels that
+	// are genuinely over white bloom, which is exactly the fire, the eyes and the halos and nothing else. The
+	// intensity can therefore go back up: it is now gated by what deserves it rather than applied to all.
+	// AND THE THRESHOLD ONLY EXISTS ON ONE OF THE TWO BLOOM METHODS, which is why setting it alone did
+	// nothing. Convolution bloom -- the modern default -- convolves the whole image with a kernel and has no
+	// threshold to set: the field is simply ignored. Measured, adding the threshold without the method made
+	// the picture WORSE, because the raised intensity that was meant to be gated by it applied to everything
+	// instead: Celestial Light went from 237 to 251. Standard bloom is the one that can be told what deserves
+	// to glow.
+	Post.bOverride_BloomMethod = true;
+	Post.BloomMethod = EBloomMethod::BM_SOG;
 	Post.bOverride_BloomIntensity = true;
 	Post.BloomIntensity = GWonderlandPreviewBloom;
+	Post.bOverride_BloomThreshold = true;
+	Post.BloomThreshold = GWonderlandPreviewBloomFloor;
 	// NEUTRAL, so a white skin and a black skin are both readable. The founder asked for lighting that works
 	// across white, black, gold, infernal and luminous without a pure-white environment swallowing the white ones.
 	Post.bOverride_VignetteIntensity = true;
@@ -544,14 +584,36 @@ void AWonderlandSkinStage::AimCamera()
 	const float Fill = FMath::Clamp(GWonderlandPreviewFill, 0.20f, 0.98f);
 	const float FitTall = Tall / (2.0f * Fill * FMath::Max(TanV, KINDA_SMALL_NUMBER));
 	const float FitWide = Wide / (2.0f * Fill * FMath::Max(TanH, KINDA_SMALL_NUMBER));
-	// WHICHEVER AXIS BINDS, so a wide skin is brought to the frame's edge rather than through it.
-	const float Distance = FMath::Clamp(FMath::Max(FitTall, FitWide), 40.0f, 6000.0f);
+	// ---- HEIGHT IS THE AXIS THE FOUNDER SPECIFIED, AND WIDTH IS ONLY ALLOWED TO PUSH SO FAR.
+	//
+	// Taking whichever axis bound outright looked reasonable and cost Apollo its framing: its solar geometry is
+	// parented to the BODY part rather than to an ornament, so the body box comes out wider than it is tall
+	// (47.2 against 32.9). Width then won, the camera backed off to 96, and Apollo photographed at 52% of frame
+	// height while every other skin sat at 80. A skin should not shrink because one of its parts is filed under
+	// the wrong name.
+	//
+	// The requirement is "75-85% of usable preview HEIGHT", so height binds. Width may still pull the camera
+	// back, but no further than a quarter -- enough that a genuinely broad figure is not sliced down the sides,
+	// not so much that one wide part can halve the subject. Ornaments reaching past the frame edge is expected
+	// and wanted: the founder's instruction is that framing derives from the body and the VFX are excluded
+	// from it, which necessarily means the VFX sometimes leave the picture.
+	const float WidthAllowance = 1.25f;
+	const float Distance = FMath::Clamp(
+		FMath::Min(FMath::Max(FitTall, FitWide), FitTall * WidthAllowance), 40.0f, 6000.0f);
 
 	// A THREE-QUARTER EYE, placed at exactly Distance along its own ray rather than at Distance on X with a
 	// side offset added -- the old form made the true distance longer than the solve, which is its own small
 	// shrink on top of the large one.
+	// ---- AND THE EYE STANDS IN FRONT OF THE FIGURE, NOT AT A FIXED COMPASS BEARING.
+	//
+	// The ray used to be built in WORLD space. The old camera was placed with SetRelativeLocation, so it turned
+	// with the stage for free; moving the solve to world coordinates quietly dropped that, and the camera then
+	// stood wherever world +X happened to be. StepLookAround faces the figure along the STAGE's forward, so the
+	// two no longer agreed and the wardrobe photographed the Dog's back -- the third time this project has
+	// shipped a confident picture of the wrong side of the mascot.
 	const float EyeYaw = FMath::DegreesToRadians(-8.0f);
-	const FVector Ray(FMath::Cos(EyeYaw), FMath::Sin(EyeYaw), 0.0f);
+	const FVector Ray = GetActorRotation().RotateVector(
+		FVector(FMath::Cos(EyeYaw), FMath::Sin(EyeYaw), 0.0f));
 	// Aimed at the body's own middle, so the figure is centred on what is being framed rather than on a
 	// fraction of a declared height that no longer describes it.
 	const FVector Focus(GetActorLocation().X, GetActorLocation().Y, MiddleZ);
@@ -564,11 +626,13 @@ void AWonderlandSkinStage::AimCamera()
 	// and the measured body box disagree: a figure staged at half size is half as tall in world units while
 	// still declaring its full height, and without the scale printed the two numbers look like a bug.
 	const FVector ShownScale = Body != nullptr ? Body->GetActorScale3D() : FVector::OneVector;
+	const float GlowInForce = Body != nullptr ? Body->GetGlowScale() : -1.0f;
 	FramingNote = FString::Printf(
 		TEXT("onBody=%d bodyTall=%.1f bodyWide=%.1f rawTall=%.1f rawWide=%.1f envelope=%.0f scale=%.3f ")
-		TEXT("fill=%.2f fitTall=%.0f fitWide=%.0f distance=%.0f fov=%.1f target=%dx%d predictedHeightPct=%.1f"),
+		TEXT("fill=%.2f glow=%.4f fitTall=%.0f fitWide=%.0f distance=%.0f fov=%.1f target=%dx%d ")
+		TEXT("predictedHeightPct=%.1f"),
 		bOnBody ? 1 : 0, Tall, Wide, MeasuredTall, MeasuredWide, Fallback, ShownScale.Z,
-		Fill, FitTall, FitWide, Distance,
+		Fill, GlowInForce, FitTall, FitWide, Distance,
 		Capture->FOVAngle, TargetWidth, TargetHeight,
 		100.0f * Tall / FMath::Max(2.0f * Distance * TanV, KINDA_SMALL_NUMBER));
 }
@@ -719,6 +783,8 @@ void AWonderlandSkinStage::SetInspectSpin(bool bOn)
 		return;
 	}
 	bSpinning = bOn;
+	// The founder's own control always wins over an angle a proof pinned. See SetInspectionYaw.
+	bHeldYaw = false;
 	if (!bSpinning)
 	{
 		// HOME IS THE FRONT. Wrapped into (-180, 180] first, so a figure stopped at 350 degrees turns the short
@@ -727,6 +793,20 @@ void AWonderlandSkinStage::SetInspectSpin(bool bOn)
 		YawTarget = 0.0f;
 	}
 	UE_LOG(LogTemp, Display, TEXT("WLSKIN 360 inspection %s"), bOn ? TEXT("ON") : TEXT("OFF"));
+}
+
+void AWonderlandSkinStage::SetInspectionYaw(float Degrees)
+{
+	// Pinned rather than spun: bSpinning drives the 24-degrees-a-second inspection, and bHeldYaw stops the
+	// interpolation back to front that would otherwise erase this before the next capture.
+	bSpinning = false;
+	bHeldYaw = true;
+	Yaw = FRotator::ClampAxis(Degrees);
+	YawTarget = Yaw;
+	if (Body != nullptr)
+	{
+		Body->SetActorRotation(FRotator(0.0f, static_cast<float>(GetActorRotation().Yaw) + Yaw, 0.0f));
+	}
 }
 
 void AWonderlandSkinStage::StepLookAround(float DeltaSeconds)
@@ -765,7 +845,7 @@ void AWonderlandSkinStage::StepLookAround(float DeltaSeconds)
 	// player who has just pressed STOP needs the figure to come back to the front rather than stay where it
 	// happened to be. The float and the head motion in the figure's own animator carry on underneath, so this
 	// is a figure standing still, not a statue.
-	if (!FMath::IsNearlyZero(Yaw, 0.05f))
+	if (!bHeldYaw && !FMath::IsNearlyZero(Yaw, 0.05f))
 	{
 		Yaw = FMath::FInterpTo(Yaw, 0.0f, DeltaSeconds, 3.2f);
 	}

@@ -93,6 +93,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Skins")
 	FString DescribeFraming() const { return FramingNote; }
 
+	/**
+	 * HOLD THE FIGURE AT ONE ANGLE, for a proof that needs the same skin photographed from four sides.
+	 *
+	 * The stage owns the figure's rotation and rewrites it every tick, so setting the actor's rotation from
+	 * outside does nothing that survives to the next frame -- two capture runs photographed the front four
+	 * times believing they had four angles. This stops the drift back to front and pins the yaw instead, which
+	 * is the only handle that lasts. It does not touch the framing: the camera solve reads a body box with the
+	 * figure's own turn taken out of it, which is the founder's rule that inspection must not resize the shot.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Skins")
+	void SetInspectionYaw(float Degrees);
+
 	/** Where the stage stands. Far above the world, where nothing can wander into the shot. */
 	static FVector StageOrigin() { return FVector(0.0, 0.0, 100000.0); }
 
@@ -205,6 +217,9 @@ private:
 
 	/** True while the preview body is standing in the world rather than in the viewing room. */
 	bool bInWorldPreview = false;
+
+	/** Set by SetInspectionYaw: hold this angle instead of easing back to the front. */
+	bool bHeldYaw = false;
 	int32 FrameCount = 0;
 
 	/** The look-around: where the head is pointed, where it is going, and how long it waits before choosing again. */

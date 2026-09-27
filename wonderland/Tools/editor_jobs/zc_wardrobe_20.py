@@ -8,7 +8,9 @@
 # script measures what the exported pixels actually show. Every previous framing fix was checked by reading
 # back the distance it had just written, which cannot fail; this can, and the way it fails is the two numbers
 # disagreeing. That disagreement is the only instrument that catches a solve which is wrong somewhere it
-# cannot see itself.
+# cannot see itself -- and it has already caught three: a camera framed on a half-built figure, a body box
+# measured with the figure's own turn still in it, and a clamp that rounded five different figures to one
+# tidy identical number.
 CONCURRENT = True
 
 import os
@@ -75,61 +77,37 @@ def job():
             notes[skin] = "?" + str(err)[:90]
         # AND WHAT THE BOX IS MADE OF. A height alone cannot say whether a part was rejected by the
         # classifier or never built at all, and those have opposite fixes.
-        body_now = None
         for actor in unreal.GameplayStatics.get_all_actors_of_class(
                 world, unreal.WonderlandCompanionEmbodiment):
             try:
                 if "SkinStage" in str(actor.get_actor_label()):
-                    body_now = actor
+                    RESULT.setdefault("parts", {})[skin] = str(actor.describe_framing_parts())[:1200]
                     break
             except Exception:                                      # noqa: BLE001
                 pass
-        if body_now is not None:
-            try:
-                RESULT.setdefault("parts", {})[skin] = str(body_now.describe_framing_parts())[:1200]
-            except Exception as err:                               # noqa: BLE001
-                RESULT.setdefault("parts", {})[skin] = "?" + str(err)[:90]
         emit("V_%s" % skin, "INFO", skin, {"framing": notes[skin]})
 
-        # The figure turns; the camera does not. The solve is a property of the body, and an angle must not
-        # be allowed to change it -- the founder's "360 must not alter permanent framing".
-        body = None
-        for actor in unreal.GameplayStatics.get_all_actors_of_class(
-                world, unreal.WonderlandCompanionEmbodiment):
-            try:
-                if "SkinStage" in str(actor.get_actor_label()):
-                    body = actor
-                    break
-            except Exception:                                      # noqa: BLE001
-                pass
-        # ---- THE ANGLES ARE MEASURED FROM THE STAGE'S OWN FACING, NOT FROM WORLD ZERO.
+        # ---- THE FIGURE IS TURNED THROUGH THE STAGE, BECAUSE THE STAGE OWNS ITS ROTATION.
         #
-        # Forcing yaw 0 and calling it FRONT photographed the Dog's BACK: the stage turns the figure to face
-        # its camera, and world zero is not that direction. This is the same mistake StepLookAround made when
-        # it set world yaw zero while the UI rotated the stage -- the second time this exact assumption has
-        # produced a confident picture of the wrong side of the mascot.
-        base_yaw = 0.0
-        if body is not None:
-            try:
-                base_yaw = float(body.get_actor_rotation().yaw)
-            except Exception:                                      # noqa: BLE001
-                pass
+        # Setting the actor rotation from here does nothing that lasts: StepLookAround rewrites it every tick
+        # from the stage's own yaw, so the value is gone before the next frame is captured. Two runs were spent
+        # photographing the front four times and believing they were four angles -- the measured centre of the
+        # subject came back identical in all four, which is what gave it away. The stage's yaw is the only
+        # handle that survives a tick.
         for name, yaw in ANGLES:
-            if body is not None:
-                try:
-                    body.set_actor_rotation(unreal.Rotator(0.0, base_yaw + yaw, 0.0), False)
-                except Exception:                                  # noqa: BLE001
-                    pass
-            yield 2.0
+            try:
+                stage.set_inspection_yaw(yaw)
+            except Exception as err:                               # noqa: BLE001
+                RESULT.setdefault("errors", {})["yaw " + name] = str(err)[:100]
+            yield 2.5
             try:
                 unreal.RenderingLibrary.export_render_target(world, target, ROOT, "%s_%s.png" % (skin, name))
             except Exception as err:                               # noqa: BLE001
                 RESULT.setdefault("errors", {})["%s %s" % (skin, name)] = str(err)[:120]
-        if body is not None:
-            try:
-                body.set_actor_rotation(unreal.Rotator(0.0, base_yaw, 0.0), False)
-            except Exception:                                      # noqa: BLE001
-                pass
+        try:
+            stage.set_inspection_yaw(0.0)
+        except Exception:                                          # noqa: BLE001
+            pass
 
     # ---- THE SOLVE MUST NOT HAVE MOVED WHILE THE FIGURE TURNED.
     after = {}
@@ -141,11 +119,39 @@ def job():
         except Exception:                                          # noqa: BLE001
             after[skin] = "?"
     RESULT["framing_after_spin"] = after
-    same = [s for s in SKINS if notes.get(s) == after.get(s)]
+
+    # ---- DRIFT IS A CHANGE IN THE CAMERA DISTANCE, NOT A CHANGE IN THE STRING.
+    #
+    # Comparing the whole note character by character failed every run, and for the wrong reason: the staged
+    # figure's scale settles slightly differently each time it is built (0.333 against 0.341), which moves the
+    # measured body by a tenth of a uu and rewrites the text. That is float noise, not the founder's bug. The
+    # thing that must not move is where the camera ends up, so that is what is compared, with a tolerance far
+    # tighter than the defect being guarded against -- the recurrence being tested for moved the mascot by
+    # factors of two and three, not by one part in fifty.
+    def distance_in(note):
+        for token in str(note).split():
+            if token.startswith("distance="):
+                try:
+                    return float(token.split("=", 1)[1])
+                except ValueError:
+                    return None
+        return None
+
+    drift = {}
+    for skin in SKINS:
+        was = distance_in(notes.get(skin))
+        now = distance_in(after.get(skin))
+        if was is None or now is None:
+            drift[skin] = "unreadable"
+        elif was > 0.0 and abs(now - was) / was > 0.02:
+            drift[skin] = {"before": was, "after": now,
+                           "moved_pct": round(100.0 * abs(now - was) / was, 1)}
+    RESULT["framing_drift"] = drift
     tests.append({"id": "V02", "name": "a full turn did not change any skin's framing",
-                  "pass": len(same) == len(SKINS),
-                  "detail": {"unchanged": same, "before": notes, "after": after,
-                             "note": "the founder's rule that 360 inspection must not alter permanent framing"}})
+                  "pass": len(drift) == 0,
+                  "detail": {"drifted": drift, "tolerance_pct": 2.0, "before": notes, "after": after,
+                             "note": "the founder's rule that 360 inspection must not alter permanent "
+                                     "framing"}})
 
     tests.append({"id": "V01", "name": "twenty captures were exported", "pass": True,
                   "detail": {"skins": list(SKINS), "angles": [a[0] for a in ANGLES]}})
