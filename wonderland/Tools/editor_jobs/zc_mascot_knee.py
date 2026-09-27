@@ -720,9 +720,12 @@ def job():
                     "of 49 cells is positive even on pure noise. A skin with no responding cell is a real "
                     "finding; a skin whose peak does not clear its noise floor is UNRESOLVED, not absent."
                     % NOISE_MARGIN)
-    record("M00", "every skin was sampled at every hour at every eye level",
-           len(measured_rows) == want, got=len(measured_rows), wanted=want,
-           skins=list(SKINS), hours=[h for _, h in HOURS], levels=list(EYE_LEVELS))
+    # NOT ON A KNEE RUN. `want` is 0 when AXIS is not "eye", so this compared 0 == 0 and went green having
+    # measured nothing -- a gate passing without checking anything, which is the one shape this project has a
+    # standing rule against, because it occupies the slot where a real proof would have been missed.
+    record_eye("M00", "every skin was sampled at every hour at every eye level",
+               len(measured_rows) == want, got=len(measured_rows), wanted=want,
+               skins=list(SKINS), hours=[h for _, h in HOURS], levels=list(EYE_LEVELS))
 
     # X00 COMPARES AT THE SAME HOUR, because the day cycle DRIVES exposure from the hour --
     # PaintTheSky sets AutoExposureBias = Lerp(1.45, -0.9, Daylight) every repaint. The first version
@@ -845,24 +848,56 @@ def job():
     for skin in SKINS:
         v = [r["frame_luma"] for r in knee_rows if r["skin"] == skin]
         spread[skin] = round(max(v) - min(v), 5) if v else None
-    inert = [s for s, v in spread.items() if v is not None and v <= 0.005]
-    engaged = {}
+    # THE NOISE FLOOR, MEASURED RATHER THAN CHOSEN. A compression knee can only darken the frame or leave it
+    # alone -- it cannot brighten it -- so every UPWARD step as the knee descends is measurement noise,
+    # observed on this skin in this run. The first real knee run wobbled by up to 0.05 between adjacent knees
+    # while the old threshold was 0.005, so it reported a response for seven of eight skins on noise.
+    ladder = sorted(KNEES, reverse=True)
+    wobble, seq = {}, {}
     for skin in SKINS:
-        ctrl = next((r["frame_luma"] for r in knee_rows if r["skin"] == skin and r["knee"] == 700.0), None)
-        # DESCENDING. The first version sorted ASCENDING and so always returned the smallest knee swept,
-        # reporting "first knee that changes the picture: 2.0" for all eight skins whatever the data said.
-        # The question is the HIGHEST knee that still bites, which is where compression begins.
-        for kn in sorted((k for k in KNEES if k != 700.0), reverse=True):
-            v = next((r["frame_luma"] for r in knee_rows if r["skin"] == skin and r["knee"] == kn), None)
-            if ctrl is not None and v is not None and abs(v - ctrl) > 0.005:
-                engaged[skin] = kn
+        v = [next((r["frame_luma"] for r in knee_rows
+                   if r["skin"] == skin and r["knee"] == kn), None) for kn in ladder]
+        seq[skin] = v
+        ups = [v[i] - v[i - 1] for i in range(1, len(v))
+               if v[i] is not None and v[i - 1] is not None and v[i] > v[i - 1]]
+        wobble[skin] = round(max(ups), 5) if ups else 0.0
+
+    engaged, why = {}, {}
+    for skin in SKINS:
+        v = seq[skin]
+        ctrl = v[0]
+        floor = max(3.0 * wobble[skin], 0.01)
+        if ctrl is None:
+            why[skin] = "no control reading at knee 700"
+            continue
+        hit = None
+        # DESCENDING: the question is the HIGHEST knee that still bites, which is where compression begins.
+        # An earlier version sorted ascending and so always returned the smallest knee swept.
+        for i in range(1, len(v)):
+            if v[i] is None:
+                continue
+            # A REAL RESPONSE IS A DARKENING THAT CLEARS THE SKIN'S OWN NOISE AND DOES NOT REVERSE BELOW.
+            if (ctrl - v[i]) > floor and all((ctrl - x) > floor for x in v[i:] if x is not None):
+                hit = ladder[i]
                 break
+        if hit is not None:
+            engaged[skin] = hit
+        else:
+            why[skin] = ("no knee darkens the frame past this skin's own noise floor of %.4f (3x its largest "
+                         "upward step); spread %.4f is wobble, not compression"
+                         % (floor, spread.get(skin) or 0.0))
+    # INERT now means "nothing beat its own noise", not "the spread was under a number I picked".
+    inert = sorted(why)
     record("M09", "the knee's live range at this asset scale is measured, not assumed",
            len(knee_rows) == (len(SKINS) * len(KNEES) if AXIS == "knee" else 0),
            frame_luma_spread_across_knees=spread, inert_skins=inert,
            highest_knee_that_changes_the_picture=engaged, knees_swept=list(KNEES),
+           noise_floor_per_skin=wobble, inert_because=why,
+           frame_luma_by_knee={k: v for k, v in seq.items()}, knee_ladder=ladder,
            note="body glow spans 3.3-13.2 after the 4000->6 re-baseline, so a knee at the shipped 700 "
-                "compresses nothing; this says where it starts to bite and whether it helps")
+                "compresses nothing. A knee counts as engaged only where it DARKENS the frame past this "
+                "skin's own largest upward step x3 and does not reverse below -- because a knee cannot "
+                "brighten, so every rise as the knee falls is noise this run measured itself")
 
     RESULT["summary"] = {"eye_isolation_at_shipped_day": reach, "over_face_at_shipped_day": contrast,
                          "shipped_day": SHIPPED_DAY, "shipped_night": SHIPPED_NIGHT,
