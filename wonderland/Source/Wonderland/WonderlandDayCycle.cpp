@@ -46,10 +46,34 @@ namespace
 		return FMath::Sin(Through * PI) * 72.0f;
 	}
 
-	/** The sun's bearing, swinging through the south across the day so shadows sweep rather than pivot. */
+	/**
+	 * The sun's bearing, swinging through the south across the day so shadows sweep rather than pivot -- AND
+	 * CONTINUING ROUND THROUGH THE NIGHT, which it did not do until this was measured.
+	 *
+	 * The clamped version froze the bearing at 288 deg from 19:00 to midnight and at 72 deg from midnight to
+	 * 05:00, then SNAPPED 216 degrees the instant Hour wrapped through Fmod from 24 to 0 -- taking the moon
+	 * with it, since the moon is laid out at bearing + 180. zzT3 measured the result at the arrival: luma
+	 * 0.1971 to 0.1714 and ground 0.1969 to 0.1573 between 23:30 and midnight, a step eighteen times the
+	 * median step of the rest of the night, on a night that is otherwise flat to within 0.0053.
+	 *
+	 * The docstring directly above this one promises that "nothing jumps at a boundary". The elevation curve
+	 * honours that; this function sat three lines under the same comment and broke it once a night, at the
+	 * same moment, for every player.
+	 *
+	 * So the night now carries the remaining 144 degrees of the circle at a constant rate: 288 deg at 19:00
+	 * swinging to 432 deg (which is 72) at 05:00, where the day arc picks it up exactly. Continuous at both
+	 * joins and across the wrap -- 359.99 and 0.0 are the same direction to a rotator, so nothing jumps.
+	 */
 	float BearingAt(float Hour)
 	{
-		return FMath::Lerp(72.0f, 288.0f, FMath::Clamp((Hour - 5.0f) / 14.0f, 0.0f, 1.0f));
+		if (Hour >= 5.0f && Hour <= 19.0f)
+		{
+			// Day: 72 -> 288 through the south, over fourteen hours. Unchanged.
+			return FMath::Lerp(72.0f, 288.0f, (Hour - 5.0f) / 14.0f);
+		}
+		// Night: ten hours from 19:00 round to 05:00, in the SAME direction, covering the other 144 degrees.
+		const float IntoNight = (Hour > 19.0f) ? (Hour - 19.0f) : (Hour + 5.0f);
+		return FMath::Fmod(288.0f + 144.0f * (IntoNight / 10.0f), 360.0f);
 	}
 
 	/** Warm at the horizon, white overhead. The turn happens in the last few degrees, as it does outdoors. */
