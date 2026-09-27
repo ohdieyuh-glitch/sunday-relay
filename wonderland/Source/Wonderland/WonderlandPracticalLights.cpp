@@ -22,7 +22,13 @@ static FAutoConsoleVariableRef GWonderlandPracticalGainRef(
 static int32 GWonderlandPracticalCount = 48;
 static FAutoConsoleVariableRef GWonderlandPracticalCountRef(
 	TEXT("wl.Look.PracticalCount"), GWonderlandPracticalCount,
-	TEXT("How many practicals may be lit at once -- the nearest to the player. The rest are hidden."), ECVF_Default);
+	// THIS TEXT DESCRIBED THE OLD BEHAVIOUR FOR TWO COMMITS AFTER IT CHANGED, and a teammate reading it
+	// formed a diagnosis from it and was about to rewrite a sort that had already been rewritten. A stale
+	// help string is not a cosmetic defect; it is a false statement the engine hands out on request.
+	TEXT("How many practicals may be lit at once. The pool is spent on the lights that carry the district: "
+	     "one containing the player first, then by significance (candelas x radius), with distance only as "
+	     "a tiebreak -- NOT the nearest N. Takes effect on wl.Look.PracticalReload, which rebuilds the pool; "
+	     "setting this alone changes the number and leaves the pool at its previous size."), ECVF_Default);
 
 static float GWonderlandPracticalRadius = 12000.0f;
 static FAutoConsoleVariableRef GWonderlandPracticalRadiusRef(

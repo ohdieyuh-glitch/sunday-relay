@@ -1,0 +1,244 @@
+{
+ "name": "zzT1_twilight_ladder",
+ "started": "2026-09-27 15:51:01",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "T_CVAR",
+   "name": "wl.Sky.TwilightSpan exists in this build and every value actually took",
+   "pass": true,
+   "detail": {
+    "asked_for": [
+     21.0,
+     30.0,
+     39.0
+    ],
+    "read_back": {
+     "21.0": 21.0,
+     "30.0": 30.0,
+     "39.0": 39.0
+    },
+    "note": "a console command the build does not know logs 'Command not recognized' and carries on. Every span would then be the shipped 21, the ladder would be one setting measured three times, and T00 -- which asks whether noon is unchanged across spans -- would pass on it. Red here voids everything below"
+   }
+  },
+  {
+   "id": "T_NOISE",
+   "name": "each rung agrees with itself -- two reads of the same setting, same hour",
+   "pass": true,
+   "detail": {
+    "worst_spread": 0.0046,
+    "tolerance": 0.01,
+    "note": "the traversal harness measured one route at 230, 0, 35.2 and 86.0 in a single session and every conclusion from it came from one draw. A gate must report its own spread before anyone reads its value"
+   }
+  },
+  {
+   "id": "T00",
+   "name": "noon is unchanged by the span -- the claim that made this safe to sweep at all",
+   "pass": true,
+   "detail": {
+    "noon_by_span": {
+     "21.0": 0.2685,
+     "30.0": 0.268,
+     "39.0": 0.2679
+    },
+    "spread": 0.0005999999999999894,
+    "note": "asserted from the arithmetic (every band saturates at 72 degrees) and now measured. If this is red the knob is not safe to change and nothing else here matters"
+   }
+  },
+  {
+   "id": "T01",
+   "name": "widening the band makes the evening arrive gradually rather than in one step",
+   "pass": false,
+   "detail": {
+    "worst_hour_to_hour_step": {
+     "21.0": 0.0995,
+     "30.0": 0.1353,
+     "39.0": 0.1812
+    },
+    "note": "the shipped 21 spends the whole evening in 67 minutes; 39 spreads it over 127. If the biggest hour-to-hour step does not fall, widening has not bought what it was for"
+   }
+  }
+ ],
+ "camera_eye": [
+  -320.0,
+  -1900.0,
+  200.0
+ ],
+ "camera_at": [
+  0.0,
+  -1460.0,
+  90.0
+ ],
+ "camera_note": "one fixed pose for every rung, so the practical-light pool is identical across spans and hours; a span difference here cannot be a pool difference",
+ "ladder": [
+  {
+   "span": 21.0,
+   "hour": 12.0,
+   "luma": 0.2685,
+   "spread": 0.0002,
+   "tails": 0.3214,
+   "ground_luma": 0.2828,
+   "sun_elevation": 72.0,
+   "daylight_predicted": 1.0,
+   "exposure_bias_predicted": -0.9
+  },
+  {
+   "span": 21.0,
+   "hour": 16.0,
+   "luma": 0.1434,
+   "spread": 0.0046,
+   "tails": 0.6759,
+   "ground_luma": 0.1347,
+   "sun_elevation": 36.0,
+   "daylight_predicted": 1.0,
+   "exposure_bias_predicted": -0.9
+  },
+  {
+   "span": 21.0,
+   "hour": 17.0,
+   "luma": 0.136,
+   "spread": 0.0003,
+   "tails": 0.7687,
+   "ground_luma": 0.1067,
+   "sun_elevation": 18.63,
+   "daylight_predicted": 1.0,
+   "exposure_bias_predicted": -0.9
+  },
+  {
+   "span": 21.0,
+   "hour": 18.0,
+   "luma": 0.0365,
+   "spread": 0.0001,
+   "tails": 0.9746,
+   "ground_luma": 0.0126,
+   "sun_elevation": 0.0,
+   "daylight_predicted": 0.1999,
+   "exposure_bias_predicted": 0.98
+  },
+  {
+   "span": 21.0,
+   "hour": 19.0,
+   "luma": 0.0937,
+   "spread": 0.0,
+   "tails": 0.8993,
+   "ground_luma": 0.0689,
+   "sun_elevation": -18.63,
+   "daylight_predicted": 0.0,
+   "exposure_bias_predicted": 1.45
+  },
+  {
+   "span": 30.0,
+   "hour": 12.0,
+   "luma": 0.268,
+   "spread": 0.0005,
+   "tails": 0.3199,
+   "ground_luma": 0.282,
+   "sun_elevation": 72.0,
+   "daylight_predicted": 1.0,
+   "exposure_bias_predicted": -0.9
+  },
+  {
+   "span": 30.0,
+   "hour": 16.0,
+   "luma": 0.1255,
+   "spread": 0.0,
+   "tails": 0.7268,
+   "ground_luma": 0.1048,
+   "sun_elevation": 36.0,
+   "daylight_predicted": 1.0,
+   "exposure_bias_predicted": -0.9
+  },
+  {
+   "span": 30.0,
+   "hour": 17.0,
+   "luma": 0.1693,
+   "spread": 0.0002,
+   "tails": 0.6035,
+   "ground_luma": 0.1421,
+   "sun_elevation": 18.63,
+   "daylight_predicted": 0.8555,
+   "exposure_bias_predicted": -0.561
+  },
+  {
+   "span": 30.0,
+   "hour": 18.0,
+   "luma": 0.034,
+   "spread": 0.0001,
+   "tails": 0.9744,
+   "ground_luma": 0.0101,
+   "sun_elevation": 0.0,
+   "daylight_predicted": 0.1015,
+   "exposure_bias_predicted": 1.211
+  },
+  {
+   "span": 30.0,
+   "hour": 19.0,
+   "luma": 0.0935,
+   "spread": 0.0001,
+   "tails": 0.8996,
+   "ground_luma": 0.0688,
+   "sun_elevation": -18.63,
+   "daylight_predicted": 0.0,
+   "exposure_bias_predicted": 1.45
+  },
+  {
+   "span": 39.0,
+   "hour": 12.0,
+   "luma": 0.2679,
+   "spread": 0.0005,
+   "tails": 0.3261,
+   "ground_luma": 0.2822,
+   "sun_elevation": 72.0,
+   "daylight_predicted": 1.0,
+   "exposure_bias_predicted": -0.9
+  },
+  {
+   "span": 39.0,
+   "hour": 16.0,
+   "luma": 0.1484,
+   "spread": 0.0,
+   "tails": 0.6666,
+   "ground_luma": 0.1384,
+   "sun_elevation": 36.0,
+   "daylight_predicted": 1.0,
+   "exposure_bias_predicted": -0.9
+  },
+  {
+   "span": 39.0,
+   "hour": 17.0,
+   "luma": 0.2139,
+   "spread": 0.0004,
+   "tails": 0.3993,
+   "ground_luma": 0.19,
+   "sun_elevation": 18.63,
+   "daylight_predicted": 0.5197,
+   "exposure_bias_predicted": 0.229
+  },
+  {
+   "span": 39.0,
+   "hour": 18.0,
+   "luma": 0.0327,
+   "spread": 0.0002,
+   "tails": 0.9744,
+   "ground_luma": 0.0091,
+   "sun_elevation": 0.0,
+   "daylight_predicted": 0.0617,
+   "exposure_bias_predicted": 1.305
+  },
+  {
+   "span": 39.0,
+   "hour": 19.0,
+   "luma": 0.0938,
+   "spread": 0.0001,
+   "tails": 0.8995,
+   "ground_luma": 0.069,
+   "sun_elevation": -18.63,
+   "daylight_predicted": 0.0,
+   "exposure_bias_predicted": 1.45
+  }
+ ],
+ "worst_spread": 0.0046,
+ "finished": "2026-09-27 15:52:47",
+ "seconds": 105.69,
+ "log": "T_CVAR PASS wl.Sky.TwilightSpan exists in this build and every value actually took {'asked_for': [21.0, 30.0, 39.0], 'read_back': {21.0: 21.0, 30.0: 30.0, 39.0: 39.0}, 'note': \"a console command the build does not know logs 'Command not recognized' and carries on. Every span would then be the shipped 21, the ladder would be one setting measured three times, and T00 -- which asks whether noon is unchanged across spans -- would pass on it. Red here voids everything below\"}\nT_NOISE PASS each rung agrees with itself -- two reads of the same setting, same hour {'worst_spread': 0.0046, 'tolerance': 0.01, 'note': 'the traversal harness measured one route at 230, 0, 35.2 and 86.0 in a single session and every conclusion from it came from one draw. A gate must report its own spread before anyone reads its value'}\nT00 PASS noon is unchanged by the span -- the claim that made this safe to sweep at all {'noon_by_span': {21.0: 0.2685, 30.0: 0.268, 39.0: 0.2679}, 'spread': 0.0005999999999999894, 'note': 'asserted from the arithmetic (every band saturates at 72 degrees) and now measured. If this is red the knob is not safe to change and nothing else here matters'}\nT01 FAIL widening the band makes the evening arrive gradually rather than in one step {'worst_hour_to_hour_step': {21.0: 0.0995, 30.0: 0.1353, 39.0: 0.1812}, 'note': 'the shipped 21 spends the whole evening in 67 minutes; 39 spreads it over 127. If the biggest hour-to-hour step does not fall, widening has not bought what it was for'}\n"
+}
