@@ -1,0 +1,261 @@
+{
+ "name": "zc_companion_proof",
+ "started": "2026-09-27 04:15:28",
+ "status": "done",
+ "tests": [
+  {
+   "id": "C01",
+   "name": "two companion embodiments exist and both figures built",
+   "pass": true,
+   "detail": {
+    "count": 2,
+    "embodiments": [
+     {
+      "name": "GPT 6 Astra",
+      "class": "LLM COMPANION",
+      "boxes": 878,
+      "parts": 18,
+      "error": "",
+      "figure": "C:/dev/iwonder/wonderland-companions/wonderland/Companions/GPT6Astra.wlvox"
+     },
+     {
+      "name": "Claude Code Fable 5",
+      "class": "JHINN AI AGENT",
+      "boxes": 1406,
+      "parts": 16,
+      "error": "",
+      "figure": "C:/dev/iwonder/wonderland-companions/wonderland/Companions/ClaudeCodeFable5.wlvox"
+     }
+    ]
+   }
+  },
+  {
+   "id": "C02",
+   "name": "the LLM Companion floats on the Dog's left and the Jhinn AI Agent on its right, both beside it",
+   "pass": true,
+   "detail": {
+    "frames": [
+     [
+      19.999999242882275,
+      -99.99999954383414,
+      -53.0748916189738
+     ],
+     [
+      20.000000923683785,
+      122.00000037840601,
+      -53.0749033736994
+     ]
+    ]
+   }
+  },
+  {
+   "id": "C03",
+   "name": "usage HUD on screen once",
+   "pass": true,
+   "detail": {
+    "creations": 1
+   }
+  },
+  {
+   "id": "C04",
+   "name": "the companion terminals are mounted and hidden until the Julius terminal is up",
+   "pass": true,
+   "detail": {
+    "titles": [
+     "GPT 6 Astra",
+     "Claude Code Fable 5"
+    ],
+    "on_screen": false
+   }
+  },
+  {
+   "id": "C05",
+   "name": "Ctrl+T opens the Julius terminal with the companion terminals still on screen",
+   "pass": true,
+   "detail": {
+    "terminal": true,
+    "companions": true
+   }
+  },
+  {
+   "id": "C06",
+   "name": "a line typed into GPT 6 Astra's terminal is recorded as yours and marked not sent",
+   "pass": true,
+   "detail": {
+    "focused": true,
+    "typed": "hello astra",
+    "lines": 4,
+    "input_cleared": true,
+    "lines_floor": 2
+   }
+  },
+  {
+   "id": "C06b",
+   "name": "closing the Julius terminal takes both companion terminals with it",
+   "pass": true,
+   "detail": {
+    "terminal": false,
+    "companions": false,
+    "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_04b_terminals_gone.png"
+   }
+  },
+  {
+   "id": "C07",
+   "name": "after a walk both companions are still beside the Dog",
+   "pass": true,
+   "detail": {
+    "moved_cm": 453.9,
+    "frames": [
+     [
+      19.230382866165783,
+      -100.0399755464093,
+      -53.05443852495207
+     ],
+     [
+      19.181115829132978,
+      121.96442823211711,
+      -53.05396674515145
+     ]
+    ],
+    "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_05_following_walk.png"
+   }
+  },
+  {
+   "id": "P01",
+   "name": "the two embodiments cost under 10% of the frame (A/B, visible vs hidden)",
+   "pass": true,
+   "detail": {
+    "fps_visible": 29.43,
+    "fps_hidden": 30.55,
+    "ms_visible": 33.98,
+    "ms_hidden": 32.74,
+    "cost_ms": 1.25,
+    "samples": {
+     "visible": [
+      28.739182475964085,
+      30.298817144045433,
+      29.242776985893872
+     ],
+     "hidden": [
+      30.805359711870146,
+      29.585452546918066,
+      31.248354986576654
+     ]
+    },
+    "instanced_components": [
+     47,
+     56
+    ],
+    "boxes": [
+     878,
+     1406
+    ]
+   }
+  }
+ ],
+ "captures": [
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_01_gameplay_behind.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_02_front_portrait.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_02b_front_close.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_02c_front_wide.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_03_all_terminals.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_04_companion_line_not_sent.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_04b_terminals_gone.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_05_following_walk.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_06_after_walk_idle.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_07_offset_current.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_07_offset_ahead.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_07_offset_ahead_wide.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_08_shell_rim.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_08_shell_lit.png"
+ ],
+ "throttle_hook": true,
+ "pawn_class": "BP_RelayDog_C",
+ "embodiments": [
+  {
+   "name": "GPT 6 Astra",
+   "class": "LLM COMPANION",
+   "boxes": 878,
+   "parts": 18,
+   "error": "",
+   "figure": "C:/dev/iwonder/wonderland-companions/wonderland/Companions/GPT6Astra.wlvox"
+  },
+  {
+   "name": "Claude Code Fable 5",
+   "class": "JHINN AI AGENT",
+   "boxes": 1406,
+   "parts": 16,
+   "error": "",
+   "figure": "C:/dev/iwonder/wonderland-companions/wonderland/Companions/ClaudeCodeFable5.wlvox"
+  }
+ ],
+ "frames": [
+  [
+   19.999999242882275,
+   -99.99999954383414,
+   -53.0748916189738
+  ],
+  [
+   20.000000923683785,
+   122.00000037840601,
+   -53.0749033736994
+  ]
+ ],
+ "boom_arm_length": 380.0,
+ "offset_trials": [
+  {
+   "label": "current",
+   "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_07_offset_current.png"
+  },
+  {
+   "label": "ahead",
+   "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_07_offset_ahead.png"
+  },
+  {
+   "label": "ahead_wide",
+   "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_07_offset_ahead_wide.png"
+  }
+ ],
+ "shell_ab": [
+  {
+   "label": "rim",
+   "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_08_shell_rim.png"
+  },
+  {
+   "label": "lit",
+   "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_08_shell_lit.png"
+  }
+ ],
+ "perf": {
+  "fps_visible": 29.43,
+  "fps_hidden": 30.55,
+  "ms_visible": 33.98,
+  "ms_hidden": 32.74,
+  "cost_ms": 1.25,
+  "samples": {
+   "visible": [
+    28.739182475964085,
+    30.298817144045433,
+    29.242776985893872
+   ],
+   "hidden": [
+    30.805359711870146,
+    29.585452546918066,
+    31.248354986576654
+   ]
+  },
+  "instanced_components": [
+   47,
+   56
+  ],
+  "boxes": [
+   878,
+   1406
+  ]
+ },
+ "passed": 9,
+ "failed": [],
+ "finished": "2026-09-27 04:16:51",
+ "seconds": 82.55,
+ "log": "console wl.Companion.FigureDir C:/dev/iwonder/wonderland-companions/wonderland/Companions\nC01 PASS two companion embodiments exist and both figures built {'count': 2, 'embodiments': [{'name': 'GPT 6 Astra', 'class': 'LLM COMPANION', 'boxes': 878, 'parts': 18, 'error': '', 'figure': 'C:/dev/iwonder/wonderland-companions/wonderland/Companions/GPT6Astra.wlvox'}, {'name': 'Claude Code Fable 5', 'class': 'JHINN AI AGENT', 'boxes': 1406, 'parts': 16, 'error': '', 'figure': 'C:/dev/iwonder/wonderland-companions/wonderland/Companions/ClaudeCodeFable5.wlvox'}]}\nC02 PASS the LLM Companion floats on the Dog's left and the Jhinn AI Agent on its right, both beside it {'frames': [(19.999999242882275, -99.99999954383414, -53.0748916189738), (20.000000923683785, 122.00000037840601, -53.0749033736994)]}\nC03 PASS usage HUD on screen once {'creations': 1}\nC04 PASS the companion terminals are mounted and hidden until the Julius terminal is up {'titles': ['GPT 6 Astra', 'Claude Code Fable 5'], 'on_screen': False}\nC05 PASS Ctrl+T opens the Julius terminal with the companion terminals still on screen {'terminal': True, 'companions': True}\nC06 PASS a line typed into GPT 6 Astra's terminal is recorded as yours and marked not sent {'focused': True, 'typed': 'hello astra', 'lines': 4, 'input_cleared': True, 'lines_floor': 2}\nC06b PASS closing the Julius terminal takes both companion terminals with it {'terminal': False, 'companions': False, 'capture': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_04b_terminals_gone.png'}\nC07 PASS after a walk both companions are still beside the Dog {'moved_cm': 453.9, 'frames': [(19.230382866165783, -100.0399755464093, -53.05443852495207), (19.181115829132978, 121.96442823211711, -53.05396674515145)], 'capture': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_05_following_walk.png'}\nP01 PASS the two embodiments cost under 10% of the frame (A/B, visible vs hidden) {'fps_visible': 29.43, 'fps_hidden': 30.55, 'ms_visible': 33.98, 'ms_hidden': 32.74, 'cost_ms': 1.25, 'samples': {'visible': [28.739182475964085, 30.298817144045433, 29.242776985893872], 'hidden': [30.805359711870146, 29.585452546918066, 31.248354986576654]}, 'instanced_components': [47, 56], 'boxes': [878, 1406]}\n"
+}
