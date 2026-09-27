@@ -55,6 +55,7 @@ import {
   JULIUS_VISUAL_STATES,
 } from './wonderland-julius-state';
 import type { JuliusEmbodiment } from './wonderland-julius-state';
+import { WONDERLAND_TASK_SOURCES, WONDERLAND_TASK_STATES } from './wonderland-julius-task-state';
 import {
   WONDERLAND_ANIMATION_PLAN_FIELDS,
   WONDERLAND_ANIMATION_TRANSITIONS,
@@ -590,6 +591,27 @@ export const WONDERLAND_INTEGRATION_CPP_ENUM_PARITY: readonly {
     members: JULIUS_VISUAL_STATES,
     nullable: true,
     zeroMember: 'Unobserved',
+  },
+  // The Mission Contract's task lifecycle. NOT nullable, and its ordinal 0 is a
+  // real state on purpose: a default-constructed task genuinely IS a local Draft
+  // that no backend knows about, so Draft at 0 tells the truth. It stays true
+  // because a Julius-sourced task can never land there -- see
+  // `JULIUS_REACHABLE_TASK_STATES` in wonderland-julius-task-state.ts, which
+  // proves Julius produces neither Draft nor Research.
+  {
+    cppEnum: 'EWonderlandTaskState',
+    source: 'WONDERLAND_TASK_STATES',
+    members: WONDERLAND_TASK_STATES,
+    nullable: false,
+    zeroMember: 'Draft',
+  },
+  // Who said so. Local at ordinal 0, so a default never claims Julius reported it.
+  {
+    cppEnum: 'EWonderlandTaskSource',
+    source: 'WONDERLAND_TASK_SOURCES',
+    members: WONDERLAND_TASK_SOURCES,
+    nullable: false,
+    zeroMember: 'Local',
   },
   {
     cppEnum: 'EWonderlandJuliusStateSource',

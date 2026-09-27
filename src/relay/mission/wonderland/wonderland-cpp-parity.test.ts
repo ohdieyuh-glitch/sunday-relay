@@ -128,6 +128,34 @@ const CPP_ONLY_STRUCTS: Readonly<Record<string, string>> = {
     'one row of the in-world command catalog in DefaultGame.ini: a command the COMMANDS station may offer for a quick slot. Unreal-side presentation authoring for a development preview; no command runs from Wonderland, and Relay neither sends nor reads a catalog row.',
   FWonderlandCommandLayout:
     'one arrangement of the quick slots, kept in a local save slot on the visitor\'s machine. Presentation state for the COMMANDS station; Relay neither sends nor reads a layout.',
+  // Registered 2026-09-27 by the integration lane. These twelve reached the
+  // headers while the struct parser read `struct WONDERLAND_API FName` as a
+  // struct named WONDERLAND_API, so none of them was ever checked. Each reason
+  // below is taken from the type's own header comment. FWonderlandMissionTask is
+  // deliberately NOT here: it is seam surface, and see the note above the enum
+  // table for why it stays unregistered.
+  FWonderlandCubCapacity:
+    'how many Sub-Agent Cubs may exist at once, from the founder progression (entry about 4-5, max target about 12). An engine-side presentation ceiling for the escort; no Julius or Relay record carries it.',
+  FWonderlandCubStation:
+    'how the cub flock holds station, one set of numbers per mode in multiples of the Dog height. Transient locomotion tuning, never part of any world document.',
+  FWonderlandDemoBeat:
+    'what one step of the scripted founder demonstration did, and whether it actually happened. Local demo bookkeeping; Relay neither sends nor reads it.',
+  FWonderlandEquippedSkin:
+    'what replicates of a Relay Dog appearance between Unreal clients: one small value, deliberately not the figure path, materials or colours. Engine replication state; no Relay record carries a skin.',
+  FWonderlandPracticalLight:
+    'one lamp as the practical-light data file describes it. World lighting authoring, which is Unreal\'s own business.',
+  FWonderlandRelaySkin:
+    'one entry in the cosmetic skin registry: what a surface needs to list a skin and the world needs to wear it, including its .wlvox figure file. Relay holds no opinion about skins.',
+  FWonderlandStagingEnvelope:
+    'how much room a mission presentation needs, in uu from the staging point. Part of the clearance probe that decides WHERE to draw a mission, never WHAT the mission is.',
+  FWonderlandStagingCandidate:
+    'one candidate staging point, measured by the clearance probe. Spatial engine-side staging.',
+  FWonderlandStagingResult:
+    'everything the clearance probe decided about where to stage a mission presentation, and why. Spatial engine-side staging.',
+  FWonderlandTerritory:
+    'one territory as WorldDesign/CANON states it, copied from the canon files plus a checkpoint position. World-authoring canon, the same category as EWonderlandTravelKind.',
+  FWonderlandWornPose:
+    'the canonical pose as a costume can wear it, so a skin follows the Dog gait. Animation state, transient and never authored.',
 };
 
 /**
@@ -144,6 +172,32 @@ const CPP_ONLY_ENUMS: Readonly<Record<string, string>> = {
     'which local source feeds the usage HUD in an Unreal build (the Julius usage authority, or the labelled development preview). Engine-side configuration, deliberately not part of the contract.',
   EWonderlandCommandStatus:
     'whether the COMMANDS station may offer a catalog row (Offered, or Withheld until the command is built). World-authoring vocabulary, deliberately not part of the contract.',
+  // Registered 2026-09-27 by the integration lane, reasons from each header.
+  //
+  // WHAT IS NOT HERE, AND WHY IT STAYS RED. EWonderlandTaskState and
+  // EWonderlandTaskSource are MIRRORED, not excused -- they carry Julius state
+  // into the Mission Contract (wonderland-integration-parity.ts). And the struct
+  // that holds them, FWonderlandMissionTask, is deliberately left unregistered
+  // so this suite keeps failing on it: it declares `int32 EvidenceCount = 0`,
+  // which renders an unknown evidence count as "0 evidence" and breaks this
+  // repository's first truthfulness rule, and `int64 TokensUsed = -1`, a sentinel
+  // where the seam convention is a nullable carrier (FWonderlandNumber). Calling
+  // it C++-only would make a seam struct invisible to the check that exists to
+  // guard seam structs. It is registered when its C++ can say Unknown.
+  EWonderlandBodyRole:
+    'which colourway a shared embodiment wears: the mascot, an AI Companion or a cub. Rendering selection for one actor class that does several jobs.',
+  EWonderlandCubCapacitySource:
+    'where a cub capacity figure came from (BuiltIn defaults, a hand-set proof value, or an account authority that nothing implements yet). Engine-side provenance for a presentation ceiling.',
+  EWonderlandCubCountSource:
+    'where the active cub count came from. Engine-side on purpose: the founder ruled that wl.Cubs.Report must not become production truth. When cubs are driven by Julius sub-agent records (inspectSubagents), this becomes seam surface and must move to the mirrored table.',
+  EWonderlandDemoStep:
+    'the scripted founder demonstration, one entry per beat, in order. Local demo flow.',
+  EWonderlandSkinAccess:
+    'whether this account may wear a cosmetic skin, and on whose word. No Relay record grants skins today; if entitlement ever comes from a backend, this becomes seam surface.',
+  EWonderlandStagingFit:
+    'what the clearance probe decided a mission presentation gets. Never a refusal, and spatial engine-side staging only.',
+  EWonderlandSubAgentCubState:
+    'what a cub is doing, for presentation only. Its own header says these are sub-agent presentation states and nothing more, and that they do not map to /MAS clone lifecycle semantics.',
 };
 
 /**
@@ -344,7 +398,13 @@ function parseStructs(source: string): ParsedStruct[] {
     const end = matchingIndex(clean, brace, '{', '}');
     if (end === -1) break;
     const header = clean.slice(keyword + 'struct'.length, brace);
-    const nameMatch = /([A-Za-z_]\w*)/.exec(header);
+    // THE EXPORT MACRO IS NOT THE NAME. `struct WONDERLAND_API FWonderlandWornPose`
+    // is how a USTRUCT is declared once another module needs it, and the first
+    // identifier after `struct` is then `WONDERLAND_API`. Taking it made ten real
+    // structs all parse as one name, which collapsed 67 declarations to 58 and
+    // hid every one of them from the mirror check for as long as this was true.
+    // Skip Unreal's `<MODULE>_API` macro; the next identifier is the struct.
+    const nameMatch = /(?:\b[A-Z0-9_]+_API\s+)?([A-Za-z_]\w*)/.exec(header);
     const body = clean.slice(brace + 1, end);
     if (nameMatch !== null) {
       structs.push({
