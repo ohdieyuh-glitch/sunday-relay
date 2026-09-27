@@ -113,10 +113,17 @@ than complete on a document that claims otherwise. Both halves are rows.
   a `tmpfs` mount, generated keys — and was not run here. Inspecting an
   unfamiliar repository is proven only as far as the fixture repository is
   unfamiliar, which is not far.
-- **B — a real Unreal change.** B1 is the lifecycle carrying a game-tooling
-  deliverable; no row here opens Wonderland's own source under Julius's
-  contracts, reviewer and evidence. That is the founder's stated strongest
-  qualification environment and it is entirely unexercised. **B4 creates, it
+- **B — a real Unreal change, and the screen.** B1 is the lifecycle carrying a
+  game-tooling deliverable; no row here opens Wonderland's own source under
+  Julius's contracts, reviewer and evidence. That is the founder's stated
+  strongest qualification environment and it is entirely unexercised: Julius has
+  never changed Unreal code. Separately, the world CONSUMING Julius is now proved
+  in the engine — a paired player's world adopting the exact run Julius created,
+  surviving a dropped link and a play restart — but by another lane on another
+  branch, so it is quoted in `docs/JULIUS_BETA_LANDING.md` and is deliberately
+  not a row here: this page's rule is that every row resolves to a file and a
+  case in THIS repository. Its own unmet criterion is the visible Missions panel,
+  which still draws the simulated presentation. **B4 creates, it
   does not drive:** the run a client creates lands durable in READY and stays
   there until the mission job drives it — dispatch is not reachable from a
   client, by decision. B6 and B7 hold the same seam against a real PostgreSQL
