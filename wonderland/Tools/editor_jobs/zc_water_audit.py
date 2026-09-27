@@ -54,9 +54,33 @@ def job():
     yield (lambda: ues.get_game_world() is not None, 300)
     yield (lambda: unreal.GameplayStatics.get_player_pawn(ues.get_game_world(), 0) is not None, 180)
     world = ues.get_game_world()
+
+    def live():
+        """The world, re-fetched at every use -- never a reference captured once and held.
+
+        A held reference goes stale across long jobs and the failure is silent for some APIs: pose_camera
+        throws "Cannot nativize 'World' as 'Object'" (which killed this job on 2026-09-27), while
+        get_all_actors_with_tag simply returns an empty list that reads like an empty world.
+        """
+        return ues.get_game_world()
+
+    def alive():
+        """The world AND the pawn, or None. Gate every reading on this.
+
+        When PIE is torn down mid-job the reads do not fail -- they return a constant black frame, which is
+        indistinguishable from a legitimately dark scene. Any job that records a number after this returns
+        None is publishing the dark as data.
+        """
+        w = ues.get_game_world()
+        if w is None:
+            return None
+        try:
+            return w if unreal.GameplayStatics.get_player_pawn(w, 0) is not None else None
+        except Exception:                                              # noqa: BLE001
+            return None
     L.focus_game_viewport()
-    unreal.SystemLibrary.execute_console_command(world, "wl.Sky.DayMinutes 0")
-    dog = unreal.GameplayStatics.get_player_pawn(world, 0)
+    unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.DayMinutes 0")
+    dog = unreal.GameplayStatics.get_player_pawn(live(), 0)
     try:
         dog.set_actor_location(unreal.Vector(WATER[0] + 900.0, WATER[1] + 600.0, WATER[2] + 200.0), False, False)
     except Exception:                                                 # noqa: BLE001
@@ -89,7 +113,7 @@ def job():
 
     live = {}
     dressed = 0
-    for actor in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.StaticMeshActor):
+    for actor in unreal.GameplayStatics.get_all_actors_of_class(live(), unreal.StaticMeshActor):
         comp = actor.static_mesh_component
         if comp is None:
             continue
@@ -130,12 +154,12 @@ def job():
     shots = {}
     RESULT["views"] = shots
     for hour, hlabel in HOURS:
-        unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour %.2f" % hour)
+        unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.Hour %.2f" % hour)
         yield 3.0
         for vlabel, eo, lo in VIEWS:
             eye = unreal.Vector(WATER[0] + eo[0], WATER[1] + eo[1], WATER[2] + eo[2])
             at = unreal.Vector(WATER[0] + lo[0], WATER[1] + lo[1], WATER[2] + lo[2])
-            L.pose_camera(world, eye, at, 60.0)
+            L.pose_camera(live(), eye, at, 60.0)
             yield 3.0
             name = "%s_%s" % (hlabel, vlabel)
             path = os.path.join(ROOT, name + ".png")
@@ -146,7 +170,7 @@ def job():
             # the water fills the lower-middle of these framings
             shots[name] = {"file": os.path.basename(path), "water": patch(0.5, 0.66, 0.22, 0.16),
                            "frame": patch(0.5, 0.5, 0.46, 0.44)}
-    L.release_camera(world)
+    L.release_camera(live())
 
     record("A00", "the master material was read and exposes named parameters",
            isinstance(master.get("parameters"), dict) and any(master["parameters"].values()),

@@ -65,12 +65,12 @@ SWEEP = (
 HOURS = [float(h) for h in range(0, 25)]
 
 
-def read_frame(world, rt):
+def read_frame(rt):
     out = []
     for gy in range(GRID_Y):
         for gx in range(GRID_X):
             c = unreal.RenderingLibrary.read_render_target_pixel(
-                world, rt, int((gx + 0.5) * RT_W / GRID_X), int((gy + 0.5) * RT_H / GRID_Y))
+                live(), rt, int((gx + 0.5) * RT_W / GRID_X), int((gy + 0.5) * RT_H / GRID_Y))
             out.append((int(c.r), int(c.g), int(c.b)))
     return out
 
@@ -106,22 +106,63 @@ def job():
     yield (lambda: ues.get_game_world() is not None, 300)
     yield (lambda: unreal.GameplayStatics.get_player_pawn(ues.get_game_world(), 0) is not None, 180)
     world = ues.get_game_world()
+
+    def live():
+        """The world, re-fetched at every use -- never a reference captured once and held.
+
+        A held reference goes stale across long jobs and the failure is silent for some APIs: pose_camera
+        throws "Cannot nativize 'World' as 'Object'" (which killed this job on 2026-09-27), while
+        get_all_actors_with_tag simply returns an empty list that reads like an empty world.
+        """
+        return ues.get_game_world()
+
+    def alive():
+        """The world AND the pawn, or None. Gate every reading on this.
+
+        When PIE is torn down mid-job the reads do not fail -- they return a constant black frame, which is
+        indistinguishable from a legitimately dark scene. Any job that records a number after this returns
+        None is publishing the dark as data.
+        """
+        w = ues.get_game_world()
+        if w is None:
+            return None
+        try:
+            return w if unreal.GameplayStatics.get_player_pawn(w, 0) is not None else None
+        except Exception:                                              # noqa: BLE001
+            return None
     L.focus_game_viewport()
-    unreal.SystemLibrary.execute_console_command(world, "wl.Sky.DayMinutes 0")
+    unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.DayMinutes 0")
     yield 5.0
-    dog = unreal.GameplayStatics.get_player_pawn(world, 0)
+    dog = unreal.GameplayStatics.get_player_pawn(live(), 0)
 
     # Are the practicals there at all? Asked, not assumed.
-    practicals = None
-    try:
-        sub = world.get_subsystem(unreal.WonderlandPracticalLightsSubsystem)
-        practicals = str(sub.describe_practicals()) if sub is not None else "no subsystem"
-    except Exception as err:                                          # noqa: BLE001
-        practicals = "unreadable: %s" % str(err)[:80]
-    RESULT["practicals"] = practicals
+    # ASK SEVERAL WAYS, AND NEVER REPORT "ABSENT" WHEN WHAT FAILED WAS THE QUESTION.
+    #
+    # The mascot sweep reported practicals as "'World' object has no attribute 'get_subsystem'" and that
+    # string is easy to read as "the subsystem is not running" -- which would have been a false alarm about
+    # this lane's own C++. The editor log settles it independently: WLLIGHT 970 practicals defined, pool of
+    # 48, on every BeginPlay. So an unreadable accessor is reported as a REPORTING failure, in those words,
+    # and the log is named as the authority.
+    practicals, how = None, None
+    for label, fn in (
+            ("world.get_subsystem", lambda: live().get_subsystem(unreal.WonderlandPracticalLightsSubsystem)),
+            ("get_world_subsystem", lambda: unreal.get_world_subsystem(unreal.WonderlandPracticalLightsSubsystem)),
+            ("actor_iter", lambda: next(iter(unreal.GameplayStatics.get_all_actors_of_class(
+                live(), unreal.WonderlandPracticalLightsSubsystem)), None))):
+        try:
+            sub = fn()
+            if sub is not None:
+                practicals, how = str(sub.describe_practicals()), label
+                break
+        except Exception:                                             # noqa: BLE001
+            continue
+    RESULT["practicals"] = practicals or (
+        "UNREADABLE FROM PYTHON -- this is the reporting path, not the subsystem. The editor log is the "
+        "authority: grep WLLIGHT in the live editor log for 'practicals defined, pool of N'.")
+    RESULT["practicals_read_via"] = how
 
-    rt = unreal.RenderingLibrary.create_render_target2d(world, RT_W, RT_H, unreal.TextureRenderTargetFormat.RTF_RGBA8)
-    cap = H.spawn_scene_capture(world, unreal.Vector(0, 0, 500), unreal.Rotator(0, 0, 0), rt)
+    rt = unreal.RenderingLibrary.create_render_target2d(live(), RT_W, RT_H, unreal.TextureRenderTargetFormat.RTF_RGBA8)
+    cap = H.spawn_scene_capture(live(), unreal.Vector(0, 0, 500), unreal.Rotator(0, 0, 0), rt)
     if cap is None:
         RESULT["status"] = "error"
         RESULT["error"] = "no scene capture"
@@ -129,7 +170,7 @@ def job():
     cap.get_editor_property("capture_component2d").set_editor_property("capture_every_frame", True)
 
     def cvar(name, value):
-        unreal.SystemLibrary.execute_console_command(world, "%s %s" % (name, value))
+        unreal.SystemLibrary.execute_console_command(live(), "%s %s" % (name, value))
 
     def look(label, eye, at):
         """Park the player beside the place so its cell streams, then aim the capture at it."""
@@ -148,7 +189,7 @@ def job():
     for label, eye, at in PLACES:
         look(label, eye, at)
         yield 3.0
-        noon[label] = judge(read_frame(world, rt))
+        noon[label] = judge(read_frame(rt))
     RESULT["noon"] = noon
 
     # ---- THE SWEEP, at midnight.
@@ -166,7 +207,7 @@ def job():
         for label, eye, at in PLACES:
             look(label, eye, at)
             yield 2.0
-            r = judge(read_frame(world, rt))
+            r = judge(read_frame(rt))
             row["places"][label] = r
             try:
                 H.capture_viewport_jpeg(os.path.join(ROOT, "%s__%s.jpg" % (key, label)), 1200, 85)
@@ -194,7 +235,7 @@ def job():
     for hour in HOURS:
         cvar("wl.Sky.Hour", hour)
         yield 2.0
-        r = judge(read_frame(world, rt))
+        r = judge(read_frame(rt))
         ladder.append({"hour": hour, "luma": r["luma"] if r else None, "crushed": r["crushed"] if r else None})
     RESULT["ladder"] = ladder
     jumps = [(abs(ladder[i]["luma"] - ladder[i - 1]["luma"]), ladder[i]["hour"])
