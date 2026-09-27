@@ -133,6 +133,14 @@ AUTHORED_EYE = {
 SHIPPED = (("wl.Look.GlowKnee", 700.0), ("wl.Look.EyeGlowDay", 18.0), ("wl.Look.EyeGlowNight", 5.0),
            ("wl.Look.FlameDim", 0.40), ("wl.Look.NightGlow", 0.20))
 
+#: The head scan: a (2*SCAN+1) square of small cells centred on the projected head point.
+SCAN = 3
+CELL_W, CELL_H = 0.011, 0.009
+#: A frame this dark is a camera inside the figure, not a dark world. Six of eight skins returned exactly
+#: 0.0000 for eye AND face on the first real run; the premium skins are 2-3x the box count of relay_og and
+#: the 300 uu camera was inside them.
+BLACK_FRAME = 0.01
+
 CLIP_CEILING = 0.06       # fraction of the head shot allowed at 250+; the founder's "no white clipping"
 CRUSH_CEILING = 0.60      # the guard against winning by making everything dark
 ISOLATION_FLOOR = 0.02    # below this the level is not arriving at the rendered eye
@@ -262,7 +270,7 @@ def job():
         pose(eye, aim, 32.0)
         return here
 
-    def patch(here, z_above, half_w, half_h, dx=0.0):
+    def patch(here, z_above, half_w, half_h, dx=0.0, dy=0.0):
         try:
             got = unreal.GameplayStatics.project_world_to_screen(
                 unreal.GameplayStatics.get_player_controller(live(), 0),
@@ -274,7 +282,7 @@ def job():
         size = unreal.GameplayStatics.get_player_controller(live(), 0).get_viewport_size()
         vw = float(size[0]) if size and size[0] else 1920.0
         vh = float(size[1]) if size and len(size) > 1 and size[1] else 1080.0
-        cx, cy = float(got.x) / vw + dx, float(got.y) / vh
+        cx, cy = float(got.x) / vw + dx, float(got.y) / vh + dy
         if not (0.02 < cx < 0.98 and 0.02 < cy < 0.98):
             return None
         r = L.read_screen_rect(cx - half_w, cy - half_h, cx + half_w, cy + half_h)
@@ -285,10 +293,70 @@ def job():
                 "luma": round(luma((mean.r, mean.g, mean.b)), 5),
                 "dark": round(dark, 4), "bright": round(bright, 4), "samples": int(sampled)}
 
+    #: WHERE THE EYE IS, FOUND RATHER THAN ASSUMED. Filled per skin by locate_eye().
+    found = {"eye": None, "face": None}
+
+    def scan_cell(here, gx, gy):
+        """One cell of the head scan, as a screen-space offset from the projected head point."""
+        return patch(here, 62.0, CELL_W, CELL_H, dx=gx * CELL_W * 2.0, dy=gy * CELL_H * 2.0)
+
+    def locate_eye(here):
+        """Find the eye by asking which part of the head CHANGES when the eye level changes.
+
+        THE FAILURE THIS REPLACES. The patch position was inherited from zc_eyes_glow -- the projected head
+        point at z + 62, with the cheek 4.8% of a viewport to the side -- and was never verified to land on
+        an eye. On relay_og it demonstrably did not: the shipped row read eye 0.5650 against face 0.5629,
+        two patches a twentieth of a screen apart returning the same number, which means both sat on the
+        same surface. The differential trick cannot rescue that, because a patch on the forehead shows zero
+        change whatever the eye does -- and zero change is exactly what "the eye is dark" looks like.
+
+        So the eye is LOCATED before it is measured. The head is scanned as a grid at the eye's floor level
+        and again at its clamp, and the cell whose luma moves most IS the eye -- wherever that skin actually
+        draws it, at whatever size. The cheek reference is then the cell furthest from it that still read,
+        so the two can never be the same surface by construction.
+
+        AND IT SELF-VERIFIES, which a fixed offset cannot. If no cell anywhere on the head moves, the eye
+        genuinely does not respond, and that is a finding the job reports as such rather than quietly
+        returning the luma of whatever sat at a hard-coded position.
+        """
+        cvar("wl.Look.EyeGlowDay", "%.3f" % EYE_FLOOR)
+        cvar("wl.Look.EyeGlowNight", "%.3f" % EYE_FLOOR)
+        yield 2.0
+        lo = {}
+        for gx in range(-SCAN, SCAN + 1):
+            for gy in range(-SCAN, SCAN + 1):
+                c = scan_cell(here, gx, gy)
+                if c is not None:
+                    lo[(gx, gy)] = c["luma"]
+        cvar("wl.Look.EyeGlowDay", "%.3f" % EYE_CLAMP)
+        cvar("wl.Look.EyeGlowNight", "%.3f" % EYE_CLAMP)
+        yield 2.0
+        best, best_d, deltas = None, 0.0, {}
+        for gx in range(-SCAN, SCAN + 1):
+            for gy in range(-SCAN, SCAN + 1):
+                c = scan_cell(here, gx, gy)
+                if c is None or (gx, gy) not in lo:
+                    continue
+                moved = c["luma"] - lo[(gx, gy)]
+                deltas["%d_%d" % (gx, gy)] = round(moved, 5)
+                if moved > best_d:
+                    best, best_d = (gx, gy), moved
+        found["scan"] = deltas
+        found["peak_delta"] = round(best_d, 5)
+        found["eye"] = best
+        if best is not None:
+            far, fd = None, -1.0
+            for cell in lo:
+                dd = (cell[0] - best[0]) ** 2 + (cell[1] - best[1]) ** 2
+                if dd > fd:
+                    far, fd = cell, dd
+            found["face"] = far
+
     def read_all(here):
-        """The eye, the cheek beside it, and the whole head shot -- one settled reading."""
-        return {"eye": patch(here, 62.0, 0.020, 0.012),
-                "face": patch(here, 62.0, 0.020, 0.012, dx=0.048),
+        """The located eye, the cheek furthest from it, and the whole head shot."""
+        e, f = found.get("eye"), found.get("face")
+        return {"eye": (scan_cell(here, e[0], e[1]) if e else patch(here, 62.0, CELL_W, CELL_H)),
+                "face": (scan_cell(here, f[0], f[1]) if f else patch(here, 62.0, CELL_W, CELL_H, dx=0.048)),
                 "frame": patch(here, 62.0, 0.42, 0.40)}
 
     # ---------------------------------------------------------------- AXIS B: the eye level, per skin/hour
@@ -307,7 +375,39 @@ def job():
                 ui.wear_relay_skin(skin)
             yield 2.5
             here = frame_head()
+            if here is None:
+                continue
             yield 1.0
+            # PULL BACK UNTIL THE FRAME IS NOT BLACK. A premium skin is two to three times the box count of
+            # relay_og, and the camera that framed the lean ones sits inside the large ones.
+            reach, shot = 300.0, None
+            for reach in (300.0, 460.0, 650.0, 900.0):
+                d0 = unreal.GameplayStatics.get_player_pawn(live(), 0)
+                if d0 is None:
+                    break
+                hh = d0.get_actor_location()
+                yaw = d0.get_actor_rotation().yaw
+                pose(unreal.Vector(hh.x + math.cos(math.radians(yaw)) * reach,
+                                   hh.y + math.sin(math.radians(yaw)) * reach, hh.z + 70.0),
+                     unreal.Vector(hh.x, hh.y, hh.z + 62.0), 32.0)
+                yield 1.2
+                shot = patch(hh, 62.0, 0.42, 0.40)
+                if shot is not None and shot["luma"] >= BLACK_FRAME:
+                    break
+            if shot is None or shot["luma"] < BLACK_FRAME:
+                rows.append({"skin": skin, "hour": hlabel, "level": None, "unmeasured": True,
+                             "why": "every camera distance photographed black (out to %.0f uu)" % reach,
+                             "frame_luma": None if shot is None else shot["luma"]})
+                emit("B_%s_%s" % (skin, hlabel), "WARN",
+                     "%s %s: black frame at every distance -- UNMEASURED" % (skin, hlabel), {})
+                continue
+            d1 = unreal.GameplayStatics.get_player_pawn(live(), 0)
+            for step in locate_eye(d1.get_actor_location() if d1 is not None else here):
+                yield step
+            rows.append({"skin": skin, "hour": hlabel, "level": None, "locator": True,
+                         "eye_cell": found.get("eye"), "face_cell": found.get("face"),
+                         "peak_delta": found.get("peak_delta"), "reach_uu": reach,
+                         "frame_luma": shot["luma"]})
             base = None
             for level in EYE_LEVELS:
                 if alive() is None:
@@ -440,11 +540,21 @@ def job():
     RESULT["cvars_restored"] = [n for n, _ in SHIPPED]
 
     # ---------------------------------------------------------------- the gates
+    measured_rows = [r for r in rows if r.get("level") is not None]
     want = len(SKINS) * len(HOURS) * (len(EYE_LEVELS) + 1) if AXIS == "eye" else 0
     RESULT["axis"] = AXIS
     RESULT["hour"] = HOUR_LABEL
+    loc = {r["skin"]: r.get("peak_delta") for r in rows if r.get("locator")}
+    blackened = [r["skin"] for r in rows if r.get("unmeasured")]
+    record_eye("M11", "the eye was FOUND on every skin -- some cell of the head responds to the eye level",
+               bool(loc) and not blackened and all(v is not None and v > 0.01 for v in loc.values()),
+               peak_delta_per_skin=loc, black_framed=blackened,
+               eye_cell={r["skin"]: r.get("eye_cell") for r in rows if r.get("locator")},
+               reach_uu={r["skin"]: r.get("reach_uu") for r in rows if r.get("locator")},
+               note="the head is scanned at the eye floor and at the clamp and the cell that moves most IS "
+                    "the eye; a skin with no responding cell is a real finding, not a lost patch")
     record("M00", "every skin was sampled at every hour at every eye level",
-           len(rows) == want, got=len(rows), wanted=want,
+           len(measured_rows) == want, got=len(measured_rows), wanted=want,
            skins=list(SKINS), hours=[h for _, h in HOURS], levels=list(EYE_LEVELS))
 
     # X00 COMPARES AT THE SAME HOUR, because the day cycle DRIVES exposure from the hour --
@@ -486,7 +596,7 @@ def job():
     # 4. IS THE EYE REACHING THE RENDER, per skin? This is the founder's Celestial question, asked of all five.
     reach = {}
     for skin in SKINS:
-        best = [r["isolation"] for r in rows
+        best = [r["isolation"] for r in measured_rows
                 if r["skin"] == skin and r.get("isolation") is not None and r["level"] == 18.0]
         reach[skin] = round(max(best), 5) if best else None
     arriving = [s for s, v in reach.items() if v is not None and v >= ISOLATION_FLOOR]
@@ -500,7 +610,7 @@ def job():
     contrast = {}
     for skin in SKINS:
         for _, hl in HOURS:
-            r = next((x for x in rows if x["skin"] == skin and x["hour"] == hl and x["level"] == 12.0), None)
+            r = next((x for x in measured_rows if x["skin"] == skin and x["hour"] == hl and x["level"] == 12.0), None)
             if r:
                 contrast["%s/%s" % (skin, hl)] = r["over_face"]
     positive = [k for k, v in contrast.items() if v > 0.0]
@@ -511,8 +621,8 @@ def job():
                 "resolves to")
 
     # 6. NO WHITE CLIPPING, and 7. NOT WON BY GOING DARK.
-    worst_clip = max((r["clipped"] for r in rows if r["level"] == 18.0), default=1.0)
-    worst_crush = max((r["crushed"] for r in rows if r["level"] == 18.0), default=1.0)
+    worst_clip = max((r["clipped"] for r in measured_rows if r["level"] == 18.0), default=1.0)
+    worst_crush = max((r["crushed"] for r in measured_rows if r["level"] == 18.0), default=1.0)
     record_eye("M05", "a mascot filling the frame is not blown out at the shipped eye level",
            worst_clip <= CLIP_CEILING, worst_clipped=worst_clip, ceiling=CLIP_CEILING,
            per_skin={s: max((r["clipped"] for r in rows if r["skin"] == s and r["level"] == 18.0), default=None)
@@ -524,9 +634,9 @@ def job():
     hues = {}
     seps = {}
     for skin in SKINS:
-        v = [r["hue_retention"] for r in rows
+        v = [r["hue_retention"] for r in measured_rows
              if r["skin"] == skin and r["level"] == 18.0 and r.get("hue_retention") is not None]
-        s2 = [r["colour_separation"] for r in rows
+        s2 = [r["colour_separation"] for r in measured_rows
               if r["skin"] == skin and r["level"] == 18.0 and r.get("colour_separation") is not None]
         hues[skin] = round(min(v), 4) if v else None
         seps[skin] = round(min(s2), 4) if s2 else None
