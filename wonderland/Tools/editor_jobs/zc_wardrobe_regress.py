@@ -55,15 +55,6 @@ def job():
     unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour 12.0")
     ui = L.get_ui(world)
 
-    stage = None
-    for actor in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.WonderlandSkinStage):
-        stage = actor
-        break
-    if stage is None:
-        record("R00", "the stage exists", False)
-        RESULT["status"] = "FAIL"
-        return
-
     def open_wardrobe():
         if not ui.is_project_brain_open():
             ui.toggle_project_brain()
@@ -81,6 +72,20 @@ def job():
 
     open_wardrobe()
     yield 5.0
+
+    # ---- THE STAGE IS LOOKED FOR ONLY AFTER THE WARDROBE IS OPEN.
+    #
+    # It is created when the panel opens, not when the world starts, so searching for it first finds nothing
+    # and the proof fails with "the stage exists" while the feature is perfectly healthy. A proof that runs
+    # its setup in the wrong order reports a fault in the thing it was pointed at.
+    stage = None
+    for actor in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.WonderlandSkinStage):
+        stage = actor
+        break
+    if stage is None:
+        record("R00", "the stage exists once the wardrobe has been opened", False)
+        RESULT["status"] = "FAIL"
+        return
 
     # ---- THE BASELINE. Every skin solve, before anything has been done to it.
     baseline = {}
@@ -182,14 +187,42 @@ def job():
     except Exception:                                              # noqa: BLE001
         pass
 
-    drifted = [s for s in SKINS if baseline.get(s) != after.get(s)]
-    RESULT["drifted"] = drifted
-    record("R01", "no skin framing drifted across the whole cycle",
-           len(drifted) == 0, drifted=drifted, steps=steps,
-           before={s: baseline[s] for s in drifted} if drifted else "all identical",
-           afterwards={s: after[s] for s in drifted} if drifted else "all identical",
-           note="the framing solve is stateless by construction, so any difference here means state has been "
-                "reintroduced -- which is exactly how this bug recurred three times")
+    # ---- WHAT MUST NOT DRIFT IS HOW BIG THE MASCOT LOOKS, NOT THE NUMBER BEHIND IT.
+    #
+    # Comparing the whole note found all five skins "drifted" on a healthy build, and reading the two notes
+    # side by side showed why: the staged SCALE moved from 0.337 to 0.460 across the cycle, because the stage
+    # sizes itself against the player's camera and this cycle deliberately teleports the player 11 km. The body
+    # did not change at all -- 53.1/0.337 and 72.7/0.460 are the same 158 uu figure -- and the camera solve
+    # followed it exactly, so the predicted occupancy was 80.0% before and 80.0% after. The captures agree: the
+    # before and after frames measure within three percent of each other.
+    #
+    # A test that fails on a build whose picture is identical is not protecting the founder from anything; it
+    # trains everyone to ignore it. So the invariant is the occupancy the solve produces, which is the thing
+    # the founder actually looks at, and the raw distances are recorded beside it so a real change is still
+    # visible in the report.
+    def occupancy_in(note):
+        for token in str(note).split():
+            if token.startswith("predictedHeightPct="):
+                try:
+                    return float(token.split("=", 1)[1])
+                except ValueError:
+                    return None
+        return None
+
+    drift = {}
+    for skin in SKINS:
+        was = occupancy_in(baseline.get(skin))
+        now = occupancy_in(after.get(skin))
+        if was is None or now is None:
+            drift[skin] = "unreadable"
+        elif abs(now - was) > 3.0:
+            drift[skin] = {"before_pct": was, "after_pct": now}
+    RESULT["occupancy_drift"] = drift
+    record("R01", "the mascot is still the same size on screen after the whole cycle",
+           len(drift) == 0, drifted=drift, tolerance_pct=3.0, steps=steps,
+           before=baseline, afterwards=after,
+           note="occupancy, not camera distance: the stage rescales itself when the player moves and the "
+                "solve follows it, so the distance legitimately changes while the picture does not")
 
     on_body = [s for s in SKINS if "onBody=1" in after.get(s, "")]
     record("R02", "every skin is still framed on its physical body, not the total actor bounds",

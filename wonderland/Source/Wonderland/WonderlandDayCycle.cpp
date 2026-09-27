@@ -414,6 +414,30 @@ static float GWonderlandNightGlow = 0.20f;
  *
  * 5.0 at midnight is still above four of the five authored strengths' effective night value, because the
  * body's glow around them has been cut five-fold and the eyes deliberately have not.
+ *
+ * ---- AND RAISING IT MAKES THE NIGHT EYES WORSE, WHICH IS WHY IT HAS NOT BEEN RAISED.
+ *
+ * The note above is wrong on its face and the contradiction is worth leaving visible: it argues that 6.5 "is
+ * BELOW every skin in the lineup ... so setting that level changed nothing measurable", and the night value
+ * beside it is 5.0, lower still. The obvious correction is to raise it. Swept at midnight across 5, 9, 13 and
+ * 18 with the eye patch projected from the figure rather than guessed:
+ *
+ *     Relay OG    0.153 -> 0.095 -> 0.070 -> 0.078      (eye luma, and it FALLS)
+ *     Arden, Apollo, Skeleton Flame   1.000 at every level, fully clipped throughout
+ *     Celestial Light   0.88 / 0.85 / 0.88 / 0.90, flat
+ *
+ * The eyes get DIMMER as they are driven harder. That is auto-exposure doing its job: the measuring camera
+ * stands 300 uu from the face, the eyes are most of what it can see, and a brighter emissive closes the iris
+ * on the very thing being measured. Three of the five skins are already clipped at 1.0 and cannot go up at
+ * all. So this control cannot buy night readability at close range, and the correction that looks obvious
+ * from the arithmetic is measurably the wrong move.
+ *
+ * WHAT IS ACTUALLY TRUE, recorded rather than rounded up: the founder's stated requirement is daylight --
+ * "eyes have to be glowing even when its day time" -- and at noon every skin passes with room (Relay OG
+ * reads 0.591 against a face of 0.039). At night three skins blaze and Relay OG's warm gold reads lit but
+ * dull, out-reading its visor 3.7x. Making that dull gold read as a lamp needs the eye's own authored
+ * strength or its material raised on that one skin, not this global level, and that is art rather than a
+ * constant -- so it is left for the founder rather than guessed at here.
  */
 static float GWonderlandEyeDayGlow = 18.0f;
 static FAutoConsoleVariableRef GWonderlandEyeDayGlowRef(
