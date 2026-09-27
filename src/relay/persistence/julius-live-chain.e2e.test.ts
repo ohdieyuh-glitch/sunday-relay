@@ -11,7 +11,7 @@ import { JuliusPostgresRepository } from './julius-postgres';
 import { JuliusContractPostgresRepository } from './julius-contract-postgres';
 import { createJuliusPostgresRuntimeStore } from '../../../relay-bridge/julius/postgres-store';
 import { createPostgresMissionSeedStore } from '../../../relay-bridge/julius/mission-seed';
-import { assembleLiveJuliusRuntime, driveJuliusRunToTerminal } from '../../../relay-bridge/julius/live-composition';
+import { assembleLiveJuliusRuntime, createContextAndClaimHandoffs, driveJuliusRunToTerminal } from '../../../relay-bridge/julius/live-composition';
 import { scriptedAdapter, seededTaskContract, worker, type ScriptedOutcome } from '../mission/julius';
 import type { JuliusTask } from '../mission/julius';
 import { evaluate } from '../../../scripts/wonderland-beta-gate.mjs';
@@ -68,6 +68,17 @@ const REVIEW_REJECT: ScriptedOutcome = {
   kind: 'succeed',
   evidence: [{ type: 'REVIEW_FINDING', status: 'FAILED', safeSummary: 'The change is untested.' }],
 };
+/**
+ * THE RE-REVIEW ANSWERS THE FINDING IT IS CHARGED WITH. Since #277 a re-review
+ * that accepts a repair without answering the finding that caused it is HALTed
+ * as FINDINGS_UNRESOLVED — "an unanswered finding is not resolved" — and that
+ * is right: a live reviewer is handed the finding in its packet and must say
+ * what became of it. This script read its packet from nowhere and answered
+ * nothing, so the run parked in VERIFYING on main and on every branch since,
+ * and no workflow ran this suite to say so. `answerFindings` reads the finding
+ * ids out of the same compiled packet a live reviewer would see.
+ */
+const REVIEW_ACCEPT_ANSWERING: ScriptedOutcome = { ...REVIEW_ACCEPT, answerFindings: 'RESOLVED' };
 
 const task = (over: Partial<JuliusTask> & { taskId: string }): JuliusTask => ({
   missionId: MISSION, parentTaskId: null, dependencyIds: [], requiredEvidenceTypes: [],
@@ -147,15 +158,24 @@ suite('the Julius evidence chain: a real run, the shipping dump queries, the Bet
       workerId: 'reviewer', role: 'INDEPENDENT_REVIEWER', providerId: 'hermes', adapterId: 'reviewer-adapter',
       capabilities: ['review'], taskTypes: ['review:plan', 'review:build', 'review:repair:build'],
     });
-    const store = createJuliusPostgresRuntimeStore(pool);
+    // THE SAME HANDOFFS THE JOB COMPOSES: the PostgreSQL snapshot table holds a
+    // packet's identity and hashes, not its text, so the live path keeps the
+    // compiled packets beside the store and a reviewer reads its own from there.
+    const handoffs = createContextAndClaimHandoffs(createJuliusPostgresRuntimeStore(pool));
+    const store = handoffs.store;
+    const packetFor = (dispatch: { readonly contextId: string }): string | null => {
+      const snapshot = handoffs.contexts.snapshotFor(dispatch.contextId);
+      return snapshot === null ? null : snapshot.packet.blocks.map((block) => block.text).join('\n');
+    };
     const runtime = assembleLiveJuliusRuntime({
       store,
       entries: [
         { worker: architect, adapter: scriptedAdapter(architect, [PLAN_OK, PLAN_OK]) },
         { worker: coder, adapter: scriptedAdapter(coder, [BUILD_OK, BUILD_OK]) },
         // The build review REJECTS once: that is the case the product exists
-        // for, and it is what puts a repair round in the durable record.
-        { worker: reviewer, adapter: scriptedAdapter(reviewer, [REVIEW_ACCEPT, REVIEW_REJECT, REVIEW_ACCEPT, REVIEW_ACCEPT]) },
+        // for, and it is what puts a repair round in the durable record. The
+        // re-review of the repair then ANSWERS the finding it raised.
+        { worker: reviewer, adapter: scriptedAdapter(reviewer, [REVIEW_ACCEPT, REVIEW_REJECT, REVIEW_ACCEPT_ANSWERING, REVIEW_ACCEPT], { packetFor }) },
       ],
       cardRevision: 'card:live-chain', spendCeilingUsdMicros: 20_000_000, maxRepairRounds: 3,
       owner: 'live-chain-driver',

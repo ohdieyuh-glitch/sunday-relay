@@ -334,6 +334,16 @@ jobs:
         env:
           JULIUS_REAL_POSTGRES: '1'
         run: npx vitest run relay-bridge/julius-bridge-seam.real-postgres.test.ts
+      - name: The whole evidence chain on real PostgreSQL — a repair round, the shipping dump queries, the Beta Gate
+        # This suite ran in NO workflow. Found on 2026-09-27 by running it by hand against a
+        # local container: its scripted re-review never answered the finding it was charged
+        # with, so the charged-findings rule (#277) HALTed the run with FINDINGS_UNRESOLVED on
+        # main and on every branch since — a dead proof nobody was reading. A suite that is
+        # not run is not a proof; this step is what keeps it one.
+        if: ${{ !cancelled() }}
+        env:
+          JULIUS_REAL_POSTGRES: '1'
+        run: npx vitest run src/relay/persistence/julius-live-chain.e2e.test.ts
       - name: Every evidence query holds against the migrated schema
         # Runs whether or not the preflight passed: the preflight applies the migrations
         # before its executor round trip, so the schema is present at today's failure too.

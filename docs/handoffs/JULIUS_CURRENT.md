@@ -266,7 +266,46 @@ task rows. Row 12 of the readiness page: 85 → 90; total still 77%.
 client is not built yet), and nothing about driving — the run created over HTTP
 sits READY, exactly as the contract document says it will.
 
-#### Not done, by decision or by gate
+#### Then: the real-PostgreSQL suites, and a proof that had been dead on main
+
+With the container to hand, the six persistence real-PostgreSQL suites
+(`julius-run-scoped-identity`, `julius-lease-renewal`,
+`julius-attempt-attribution`, `julius-event-append`,
+`julius-decision-history`, `real-infra-julius`) were run against a fresh
+database `julius_persistence_local`: **35 passed, 2 todo** (the Docker halves).
+Then `src/relay/persistence/julius-live-chain.e2e.test.ts` — the whole chain on
+a real database: plan → plan review → build → a REJECTED build review → repair
+→ re-review, then the shipping dump queries, then the Beta Gate — **failed**:
+`VERIFYING` after 7 ticks, `REPAIR(BLOCKING_FINDINGS), HALT(FINDINGS_UNRESOLVED)`.
+
+**Pre-existing, not a regression.** The same suite at `origin/main` `a384b215`,
+run in a probe worktree sharing this tree's `node_modules` (lockfile
+unchanged), fails identically. Cause: #277's charged-findings rule — a
+re-review that accepts a repair without answering the finding that caused it
+is HALTed, "an unanswered finding is not resolved" — is right, and the
+fixture's scripted reviewer answered nothing because it read its packet from
+nowhere. The suite is in NO workflow (`grep live-chain .github/workflows/*` is
+empty), so nothing had run it since. **Fixed in the fixture, not the rule:** the
+test now composes `createContextAndClaimHandoffs` exactly as the job does (the
+PostgreSQL snapshot table holds a packet's identity and hashes, not its text;
+the live path keeps compiled packets beside the store), and the re-review step
+carries `answerFindings: 'RESOLVED'`, reading the finding ids out of the same
+compiled packet a live reviewer is handed. Against a fresh database the run now
+reaches **COMPLETED**; `julius_tasks` holds six SUCCEEDED rows — plan, its
+review, build, its review, `repair:run:live-chain:build:1:task` (`repair:build`)
+and its `review:repair:build`. The dump-and-gate half then fails here with
+`spawn psql ENOENT` — this host has no `psql` binary — so that half is CI's:
+the suite is now a step in `.github/workflows/julius-real-infra.yml` beside
+the seam suite and the other real-postgres steps. Ledger row A9.
+
+**What this says about the loop:** the repair round — the case the product
+exists for — completes on the real store under the charged-findings rule, with
+a reviewer that answers what it raised. What it does not say: anything about a
+real provider answering a real finding; that is the paid run's.
+
+The probe worktree was removed (junction first, then `git worktree remove`);
+this tree's `node_modules` is intact.
+
 
 - Driving a run over HTTP — the deployment decision that spends money; the
   contract document says so.

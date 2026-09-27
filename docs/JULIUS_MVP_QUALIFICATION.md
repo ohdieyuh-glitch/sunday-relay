@@ -32,6 +32,7 @@ afterwards. Volume is not claimed and would not help.
 | A6 | a coder's completion claim held to its evidence | DETERMINISTIC | `src/relay/mission/julius/julius-coding-agent-scope.e2e.test.ts` | `a report that claims completion is refused by name, and the work still stands on its evidence` |
 | A7 | architect revises a rejected plan | DETERMINISTIC | `src/relay/mission/julius/julius-paid-run-34037313976.e2e.test.ts` | `plan → plan review REJECTS → architect revises → re-review ACCEPTS` |
 | A8 | tests run through the independent executor | DETERMINISTIC | `relay-bridge/julius/julius-live-composition.test.ts` | `Tool effects went through the executor port` |
+| A9 | the whole chain on a REAL PostgreSQL: plan → review → build → REJECTED review → repair → re-review answering the finding → COMPLETED, dumped by the shipping queries, read by the Beta Gate (gated on `JULIUS_REAL_POSTGRES=1` + `DATABASE_URL`) | DETERMINISTIC | `src/relay/persistence/julius-live-chain.e2e.test.ts` | `drives a mission with a repair round, dumps it, and the gate reads what the run actually did` |
 
 ## Category B — game development
 
