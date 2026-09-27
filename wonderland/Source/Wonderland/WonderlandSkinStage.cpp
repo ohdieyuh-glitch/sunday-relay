@@ -136,7 +136,13 @@ static FAutoConsoleVariableRef GWonderlandPreviewBloomFloorRef(
 // at 0.10 the brightest body glow (13.2) lands at 1.3, under it. The manual exposure bias, swept 0 to -4.5
 // EV (zc_stage_tune2), changed nothing at all on this capture -- the same dead lever the 13-stop sweep
 // found in the morning -- so the glow scale is the knob. Verified by zc_skin_sheet after the build.
-static float GWonderlandPreviewGlow = 0.10f;
+// 0.001, NOT 0.10. The stage is a dark room at an open exposure whose white sits near 25 scene units -- the
+// "white near 25" of the morning's notes was THIS room, not the world. With the runtime now supplying the
+// thousand (WonderlandSceneUnits), a body glow arrives at 15,000 and an ember at 12,600; at 0.10 that is a
+// white blaze filling the preview (the round-3 wardrobe sheet: Arden a white shape, Apollo and Celestial
+// pinned). At 0.001 the same figures sit at 15 and 12.6 against 25 -- lit, coloured, under white -- and the
+// showcase eye level of 14 lands at 14.
+static float GWonderlandPreviewGlow = 0.001f;
 static FAutoConsoleVariableRef GWonderlandPreviewGlowRef(
 	TEXT("wl.Look.PreviewGlow"),
 	GWonderlandPreviewGlow,

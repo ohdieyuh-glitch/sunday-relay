@@ -132,7 +132,7 @@ def job():
         emit("T_%s" % skin, "INFO", "swept", {k: v for k, v in table.items() if k.startswith(skin)})
 
     # back to the shipped defaults, so nothing downstream reads a sweep setting as a result
-    unreal.SystemLibrary.execute_console_command(world, "wl.Look.PreviewGlow 0.10")   # the shipped default since the re-baseline
+    unreal.SystemLibrary.execute_console_command(world, "wl.Look.PreviewGlow 0.001")   # the shipped default: the stage white is near 25 and the runtime supplies the thousand
     unreal.SystemLibrary.execute_console_command(world, "wl.Look.PreviewLights 0.040")
 
     # ---- WHICH SETTING WORKS FOR EVERY SKIN: nothing pinned, a mid-toned figure, and the glow readable in

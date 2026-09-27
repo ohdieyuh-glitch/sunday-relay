@@ -53,6 +53,13 @@ def job():
         return
 
     # ---- THE EYE PATH ON THE DEFAULT DOG, read off the live actor.
+    # STAMPED WITH WHAT WAS WORN. This dump runs before relay_og is worn, so it samples whatever the previous job
+    # left on -- a costume hides the Dog's own meshes (ShowCanonBody), and 'visible: false' on the eye pane was
+    # read by the World session as the root cause of the cluster. It was the sampling order. Say so in the data.
+    try:
+        RESULT["worn_at_dump"] = str(L.get_ui(world).get_worn_skin_id()) if hasattr(L.get_ui(world), "get_worn_skin_id") else "unknown -- whatever the previous job left on"
+    except Exception:                                          # noqa: BLE001
+        RESULT["worn_at_dump"] = "unknown -- whatever the previous job left on"
     path = []
     RESULT["relay_og_eye_path"] = path
     try:

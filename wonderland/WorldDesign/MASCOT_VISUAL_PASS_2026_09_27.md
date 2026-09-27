@@ -78,6 +78,59 @@ eye's colour; `ApplyColourway` drives any eye material whose name contains "halo
 Core + rim + colour + contrast. The core's level itself is under the World session's sweep (`zzX10_mascot_knee`),
 which also found that `wl.Look.EyeGlowDay = 18` has been clamped to 12 since it was written.
 
+### 2c. Round 4 — the frame that was not a glow
+
+Round 3's own photographs, and the World session's independent close-ups of the same build
+(`captures/zc/mascot_knee/relay_og_day_shipped.png`, `arden_infernal_day_shipped.png`, 10:31–10:42, single
+editor), show what the founder still calls "gone": the core is lit in its colour at the white point, and the
+three additive halo rings round it render as **three flat olive frames**. `M_WL_VoxelAdditive` draws one flat
+Color to the hard edge of its cube face; a step at 0.30, 0.12, 0.05 and nothing between them. Nothing spills off
+the eye and nothing fades, and a light with no fade is a plate. Their eye tables (zzM1/M2) are void — their patch
+was on the torso (`anchor_z 24.7` for every skin) — but their pictures are not.
+
+Round 4 adds one surface, `M_WL_EyeHalo` (`zc_make_eye_halo_material`): additive, unlit, instanced-mesh
+flagged, a radial fade across the cube's face UVs — full over the eye's own footprint (`Inner` 0.45 of the pane),
+falling to nothing at the pane's edge (`Falloff` 1.3). The Dog's halo cubes become two soft discs per eye
+(2.2× and 3.4× the eye, shares 0.75 and 0.30); every costume's `eyehalo` pane grows to 2.4× the eye and takes
+0.75 of the eye's level instead of 0.28; the cubs get the same pane over each eye. Missing asset → the flat
+additive at the flat share, so nothing goes dark. No exposure, bloom, threshold or cvar moved. Judged the same
+way as before: by the close-ups, not the numbers.
+
+### 2d. Round 5 — the animator was overwriting every halo, one frame after it was painted
+
+Round 4 shipped, and the founder's own test answered it plainly: **Relay OG's eyes glow** (`eyes_look`, 11:16 —
+a gold pool spilling across the visor and dying out, unmistakable at night) and **the four costumes did not
+change at all**. The cubs and the AI Companion did not either. One skin out of five, and the one that worked was
+the only one whose eyes are not a figure.
+
+Not diagnosed by argument this time. `zc_eye_halo_probe` read the live costume and asked the four questions that
+produce the same photograph and need opposite fixes — is the pane there, is it soft, is it lit, is it seen:
+
+| skin | halo surfaces | parent material | instances | visible | Color |
+|---|---|---|---|---|---|
+| celestial_light | 2 | M_WL_EyeHalo | 2 | yes | (11.6, 16.5, 18.7) |
+| apollo | 2 | M_WL_EyeHalo | 2 | yes | (19.4, 16.7, 5.1) |
+| arden_infernal | 2 | M_WL_EyeHalo | 2 | yes | (19.8, 11.5, 2.0) |
+| skeleton_flame | 2 | M_WL_EyeHalo | 2 | yes | (4.0, 10.6, 11.2) |
+
+Present, soft, instanced, visible — and **a thousand times too dark**. Against a scene white near 25,000, a Color
+of 19.8 is black.
+
+`AnimateGlow` writes `Rest * Amount` into `Color` on every tick of every figure. `Rest` was stored unscaled.
+`M_WL_VoxelGlow` takes its thousand from `EmissiveStrength`, so glow surfaces survive that; the additive
+materials have no strength parameter at all — their emissive **is** Color — and both paint sites correctly wrote
+`Color × WonderlandSceneUnits`. The animator replaced it on the next frame with the small number. Every painted
+additive colour on every figure lasted exactly one frame, for as long as the scene scale has existed.
+
+It is not only the eyes: **every additive surface on every figure** was dark — Celestial Light's halo edge, the
+cub ghost tails, the Project Avatars' halos. The default Dog was the exception because its halos are plain
+components driven by `ARelayDogCharacter::SetEyeGlow`, which writes its own thousand and is not on this animator.
+
+Fixed by `RestColourFor(Kind, Colour)` at both registration sites, so the remembered rest is the colour the
+material actually needs. The Dog's outer discs were tightened at the same time (2.2/3.4 → 2.0/2.8, outer share
+0.30 → 0.24): at the round-4 sizes the two eyes merged into one bar of light at night, and a Relay Dog has two
+eyes.
+
 ## 3. V1 and V2 — and V2 written from zero
 
 Founder, afternoon: the first V2s were "NOT acceptable approximations of the references ... START BOTH SKINS
@@ -120,13 +173,14 @@ stays a SubAgent body with its own transform and grounding.
 
 | gate | what it proves | state |
 |---|---|---|
-| `zc_skin_sheet` | six wardrobe views per skin; band; not a white shape | intermediate assets 07:53: pinned 0.0 on Relay OG/Celestial/Skeleton (was 68–80% over 140), Apollo 56–64% pinned by *rim* surfaces (stage exposure, §1) — re-run after the V1/V2 build |
-| `zc_eyes_look` | the founder's own test: a close-up of every skin's face, day and night, looked at | **round 2 (`bbb0d2e8`)**: `Tools/captures/zc/comparison/EYES_round2_day_night.png` — every skin's eyes lit in its own colour, day and night, none blown out; ghostfire and crown fire controlled; Celestial's halo luminous. Short of "unmistakable": cores at ~0.7 of white (no bloom), rims are hard plates. Round 3 (day core 24, three-ring halo falloff, wider figure halo, Arden fire half night correction) builds after the World session's window |
+| `zc_skin_sheet` | six wardrobe views per skin; band; not a white shape | round 3: 1/3 — all 48 views exported, but the stage was set to a glow scale of 0.10 under the old regime and now renders every glowing skin as a white blaze (`comparison/*_reference_v1_v2.png` REBUILD columns are unusable for that reason). Cause understood: the stage's white is near 25 where the world's is near 25,000; PreviewGlow 0.10 → 0.001 in round 4, then the six-view sheets are re-exported |
+| `zc_eyes_look` | the founder's own test: a close-up of every skin's face, day and night, looked at | **round 5**: all five skins' eyes read as LIGHTS -- a coloured core with the eye's own colour spilling off it and fading over the visor. Apollo at night: two cream cores, gold spill, clearly two. Arden by day: gold cores in a warm pool. Celestial white-blue, Skeleton cyan, Relay OG gold with a waist between the eyes. Round 4 had only Relay OG (the costumes' halos were dark -- see 2d) |  **round 3 (`9c67d25f`)**: `Tools/captures/zc/comparison/EYES_round3_day_night.png` — Relay OG reads as glowing eyes with a warm falloff, unmistakable at night; Celestial white-blue, Apollo yellow, Arden orange-yellow, Skeleton cyan, all brighter than round 2, none blown out. Open: the costumes' halo pane sat inside the visor slab (no rim on costumes) and Arden's halo fire is a dense orange mass — both fixed in the generator for round 4 (`8d0a9333`), building after the World session's window |
 | `zc_eyes_glow` | eye over cheek, day/dusk/night, eight skins | its +62 patch is the brow on costumes (they are 1.55 m against the Dog's 1.74); re-anchor per figure before it is quoted |
 | `zc_spectral` | Skeleton beat / cyan / not-a-white-shape per angle | pending |
 | `zc_flame_dim` | gentlest flame dim satisfying the founder's list | pending (old assets: no setting could pass; the head was pinned) |
-| `zc_cub_family` | eight flocks, dressed, changing coat in place | pending |
+| `zc_cub_family` | eight flocks, dressed, changing coat in place | **round 5**: the cubs' eyes glow with the same soft spill as the parent (`captures/zc/cub_family/*_day_front.png`), which round 4 did not do |  round 3: 3/4 — every flock stands, every premium flock dressed, five families across eight skins (K03 expected eight; corrected to five, V1/V2 share by design). `captures/zc/cub_family/*` — and the capture exposed the AI Companion as a white blaze: companions and Project Avatars still carried the 4000× scale; re-baselined in `8d0a9333` |
 | `zc_skin_parity_all` | every skin wears the canonical pose and performs the act | pending |
+| `zc_eye_halo_probe` | the four things that make a halo invisible, read off the live costume | **round 5: 6/6.** Present (2 surfaces per skin), soft (`M_WL_EyeHalo`), instanced (2), visible, and lit -- Color 10,854 to 19,089 against a scene white near 25,000, where round 4 measured 4 to 20. This is the gate that found the animator bug and the gate that proves it fixed |
 | comparison sheets | REFERENCE / V1 / V2, six views | `Tools/skin-comparison-sheet.ps1`, after `zc_skin_sheet` |
 
 **Open:** Arden's wardrobe height (63–70% against a 76–94 band) — the demonic arm is body and widens the fit;

@@ -465,6 +465,8 @@ private:
 	TArray<TObjectPtr<UStaticMeshComponent>> EyeHalos;
 	/** Which of the three falloff rings each halo instance is (0 inner .. 2 outer), parallel to EyeHaloMids. */
 	TArray<int32> EyeHaloRing;
+	/** Whether the halos wear M_WL_EyeHalo (a radial fade) or the flat additive fallback; decides their sizes and shares. */
+	bool bSoftEyeHalo = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<class AWonderlandCompanionEmbodiment> Costume = nullptr;

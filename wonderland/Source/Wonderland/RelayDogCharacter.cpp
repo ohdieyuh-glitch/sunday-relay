@@ -1605,6 +1605,17 @@ void ARelayDogCharacter::BuildEyeGlow()
 		Glow = LoadObject<UMaterialInterface>(nullptr, DogPropGlowParent);
 	}
 	UMaterialInterface* Additive = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Wonderland/Materials/M_WL_VoxelAdditive.M_WL_VoxelAdditive"));
+	// THE SOFT ONE, IF THE PROJECT HAS IT. M_WL_EyeHalo fades radially across the cube's face instead of drawing a
+	// flat colour to a hard edge; round 3's three flat rings photographed as three olive frames round a lit square
+	// and the founder called the eyes "still gone". With the soft surface two discs per eye -- one just over twice
+	// the eye, one over three times, the outer at a lower share -- spill the eye's colour off the pane and fade it
+	// to nothing over the visor, which is the thing a glow is. Same surface the costume halos wear.
+	UMaterialInterface* Soft = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Wonderland/Materials/M_WL_EyeHalo.M_WL_EyeHalo"));
+	bSoftEyeHalo = Soft != nullptr;
+	if (bSoftEyeHalo)
+	{
+		Additive = Soft;
+	}
 	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, DogPropCubePath);
 	TInlineComponentArray<UStaticMeshComponent*> Meshes;
 	GetComponents<UStaticMeshComponent>(Meshes);
@@ -1659,8 +1670,15 @@ void ARelayDogCharacter::BuildEyeGlow()
 		Scale[Normal] = FMath::Max(Size[Normal] * 0.34 / CubeSide, 0.01);
 		// THREE RINGS PER EYE, each larger and dimmer than the one inside it, so the light falls off from the pane
 		// instead of stopping at a hard plate edge (round 2 photographed the single 1.45x pane as a gold frame).
-		const double Rings[3] = {1.3, 1.75, 2.3};
-		for (int32 Ring = 0; Ring < 3; ++Ring)
+		const double FlatRings[3] = {1.3, 1.75, 2.3};
+		// TIGHTENED FROM {2.2, 3.4}. Photographed at those sizes (eyes_look, 11:16) the two eyes read as one
+		// wide bar of light at night: the outer disc of the left eye reached the right one and the pair merged.
+		// A Relay Dog has TWO eyes and they have to stay two. The inner disc still covers twice the eye, which is
+		// where the visible spill is; the outer only widens the tail.
+		const double SoftRings[3] = {2.0, 2.8, 2.8};
+		const double* Rings = bSoftEyeHalo ? SoftRings : FlatRings;
+		const int32 RingCount = bSoftEyeHalo ? 2 : 3;
+		for (int32 Ring = 0; Ring < RingCount; ++Ring)
 		for (const double Which : {-1.0, 1.0})
 		for (const double Side : {-1.0, 1.0})
 		{
@@ -1703,7 +1721,10 @@ void ARelayDogCharacter::SetEyeGlow(float Level)
 	const float Peak = FMath::Max3(EyeColour.R, FMath::Max(EyeColour.G, EyeColour.B), KINDA_SMALL_NUMBER);
 	const FLinearColor Core = (EyeColour / Peak) * Wanted;
 	// the three rings' shares: the inner rim bright, the outer barely there -- a falloff drawn in three steps
-	const float Shares[3] = {0.30f, 0.12f, 0.05f};
+	// on the soft surface the share is held only over the eye and fades from there, so it can be far higher
+	const float FlatShares[3] = {0.30f, 0.12f, 0.05f};
+	const float SoftShares[3] = {0.75f, 0.24f, 0.24f};
+	const float* Shares = bSoftEyeHalo ? SoftShares : FlatShares;
 	for (UMaterialInstanceDynamic* Mid : EyeCoreMids)
 	{
 		if (Mid != nullptr)

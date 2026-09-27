@@ -74,6 +74,24 @@ def job():
             return w if unreal.GameplayStatics.get_player_pawn(w, 0) is not None else None
         except Exception:                                              # noqa: BLE001
             return None
+
+    def why_gone():
+        """Which of the two things alive() checks actually went away.
+
+        alive() collapses "the world ended" and "the Dog was destroyed" into one None, and the error message
+        used to blame the world for both. They are opposite findings: a torn-down PIE is the harness and says
+        nothing about the route, while a destroyed pawn part-way along an avenue is most likely a Dog that
+        walked into an unstreamed cell, fell through and was killed by KillZ -- which IS the route.
+        """
+        w = ues.get_game_world()
+        if w is None:
+            return "world", "PIE was torn down -- the harness or a neighbouring job, not the route"
+        try:
+            if unreal.GameplayStatics.get_player_pawn(w, 0) is None:
+                return "pawn", "the world is still up and the DOG is gone -- destroyed, not stuck"
+        except Exception:                                              # noqa: BLE001
+            return "pawn", "the pawn could not be read while the world was still up"
+        return "neither", "both present when re-checked -- a transient miss"
     L.focus_game_viewport()
     unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.DayMinutes 0")
     unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.Hour 12")
@@ -328,7 +346,19 @@ def job():
         prev = dog.get_actor_location()
         while wp < len(pts) and elapsed < MAX_SECONDS:
             if alive() is None:
-                row["error"] = "the world went away mid-walk at waypoint %d -- route NOT judged" % wp
+                kind, reason = why_gone()
+                row["gone"] = kind
+                row["gone_reason"] = reason
+                # THE LAST PLACE THE DOG WAS, which is what separates "it fell" from "it was deleted".
+                # Every route here runs on the +12 shelf, so a last-known z far below that is a fall.
+                row["last_z"] = round(prev.z, 1)
+                row["floor_z"] = float(pts[min(wp, len(pts) - 1)].get("floor", 12.0))
+                row["below_floor_uu"] = round(row["floor_z"] - prev.z, 1)
+                row["fell"] = row["below_floor_uu"] > 200.0
+                row["error"] = ("%s went away at waypoint %d after %.1f m -- %s. Last seen z=%.1f, %.1f uu "
+                                "below this leg's floor of %.1f. Route NOT judged."
+                                % ("the WORLD" if kind == "world" else "the DOG", wp, travelled / 100.0,
+                                   reason, prev.z, row["below_floor_uu"], row["floor_z"]))
                 break
             dog = pawn()
             if dog is None:
@@ -405,6 +435,23 @@ def job():
                 "separates the cases and displacement alone cannot: full walk speed with no advance is "
                 "BLOCKED GEOMETRY and is a finding about that place, while a peak near zero is the harness "
                 "and withholds the route. The harness counts as proven by any one nation driving.")
+    # WAS IT THE WORLD OR THE DOG. Three nations stopping between 4.5 and 19.4 m of a 485 m route is one
+    # finding if PIE died three times and a completely different one if the Dog fell out of the world three
+    # times. This gate refuses to let those share a row.
+    gone = {n: r.get("gone") for n, r in nations.items() if r.get("gone")}
+    fell = [n for n, r in nations.items() if r.get("fell")]
+    record("W0B", "no walk ended because the DOG disappeared -- a pawn destroyed part-way along an avenue is "
+                  "a streaming finding about that avenue, not a harness failure",
+           not any(v == "pawn" for v in gone.values()),
+           gone=gone, fell_out_of_the_world=fell,
+           last_z={n: r.get("last_z") for n, r in nations.items() if r.get("last_z") is not None},
+           below_floor_uu={n: r.get("below_floor_uu") for n, r in nations.items()
+                           if r.get("below_floor_uu") is not None},
+           note="alive() collapses 'the world ended' and 'the Dog was destroyed' into one None, and the "
+                "message used to blame the world for both. A torn-down PIE says nothing about the route; a "
+                "Dog destroyed 5 m into a 485 m avenue is the route. last_z against the leg's own floor is "
+                "the discriminator -- far below means it fell through unstreamed ground")
+
     record("W00", "every nation's walk started with the Dog standing at the gate end of its route",
            all("error" not in r or r.get("arrived") for r in nations.values()) and len(nations) == 3,
            starts={n: r.get("start_error_m") for n, r in nations.items()},

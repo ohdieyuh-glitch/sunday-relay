@@ -578,8 +578,10 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
             # PROUD OF THE VISOR. At hd/2 + 0.16 the pane spanned x 4.11..4.41 and the visor slab's face is at
             # 4.5, so the halo sat inside the visor and no rim ever showed on a costume (round-3 sheet). At
             # +0.45 its face is at 4.60 -- clear of the visor, just behind the eye pane's own face at 4.65.
+            # 2.4x THE EYE, for M_WL_EyeHalo: full over the eye's own footprint (Inner 0.45 of the pane), fading
+            # to nothing at the pane's edge -- so the spill is the eye's own width again on every side.
             figure.box("head", "eyehalo", (hd * 0.5 + 0.45, side * d["eye_gap"], visor_z),
-                       (0.30, exw * 1.8, exh * 1.8))
+                       (0.30, exw * 2.4, exh * 2.4))
 
     # The body and the two legs. Short, plain, and under the dress in every skin but the bare one.
     td, tw, th = d["torso"]
@@ -2416,6 +2418,11 @@ def cub_ghost(eyes="flat", skin="relay_og"):
     ex = hd * 0.5 + 0.22
     for side in (-1.0, 1.0):
         base = (ex, side * hw * 0.19, head_z + hh * 0.06)
+        # THE CUB'S EYES GLOW LIKE THE PARENT'S: the same soft halo pane, proud of the eye, sized to the flat
+        # eye's footprint whichever shape the plate draws. It is named "eyehalo" so the runtime drives it as
+        # an eye at the halo share, and its face (ex + 0.27) stands in front of the eye's own (ex + 0.175).
+        if "eyehalo" in figure.material_names:
+            figure.box("head", "eyehalo", (ex + 0.12, base[1], base[2]), (0.30, hw * 0.20 * 2.4, hh * 0.13 * 2.4))
         if eyes == "flat":
             figure.box("head", "eye", base, (0.35, hw * 0.20, hh * 0.13))
         elif eyes == "arc":
@@ -2536,7 +2543,16 @@ def mirror_to_sibling_worktrees(out_dir):
     ONLY WHERE THE FOLDER ALREADY EXISTS. A worktree without one has deliberately not got one -- the world
     lane's has no RelaySkins at all -- and creating it there would push mascot files into a tree that never
     asked for them.
+
+    AND ONLY WHERE AN EDITOR IS ACTUALLY LAUNCHED FROM. "The folder exists" was too broad a test, and the
+    integration lane found out how: its worktree is branched from THIS branch, so it has RelaySkins, so a
+    regeneration here rewrote 25 TRACKED files in a tree that had not asked for them. Nothing was lost --
+    they commit staged files only -- but in a worktree built from this branch my work-in-progress appears
+    as ordinary modified tracked files, and one `git commit -a` there would land unfinished mascots on
+    someone else's branch under someone else's name. A worktree that never launches an editor never needs
+    a figure; only these do. Add a name here rather than widening the test back to "has the folder".
     """
+    LAUNCHES_AN_EDITOR = ("wonderland-task3", "wonderland-proof")
     here = os.path.abspath(out_dir)
     if not os.path.isdir(here):
         return
@@ -2544,9 +2560,13 @@ def mirror_to_sibling_worktrees(out_dir):
     root = os.path.dirname(os.path.dirname(os.path.dirname(here)))
     if not os.path.isdir(root):
         return
+    skipped = []
     for sibling in sorted(os.listdir(root)):
         target = os.path.join(root, sibling, "wonderland", leaf)
         if not os.path.isdir(target) or os.path.abspath(target) == here:
+            continue
+        if sibling not in LAUNCHES_AN_EDITOR:
+            skipped.append(sibling)
             continue
         copied = 0
         for name in sorted(os.listdir(here)):
@@ -2564,6 +2584,8 @@ def mirror_to_sibling_worktrees(out_dir):
             copied += 1
         if copied:
             print("mirrored %d figure(s) -> %s" % (copied, target))
+    if skipped:
+        print("not mirrored (no editor launches there): %s" % ", ".join(skipped))
 
 
 if __name__ == "__main__":
