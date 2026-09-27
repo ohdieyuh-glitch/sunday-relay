@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 
+import type { JuliusCarriedKnowledge } from '../mission/julius/julius-claim-ledger';
 import { juliusClaimStandingKey } from '../mission/julius/julius-claim-ledger';
 import type { JuliusMemoryClaim } from '../mission/julius/julius-memory-trust';
 import type { JuliusClaimStandingAppend, JuliusClaimStore } from '../mission/julius/julius-runtime-ports';
@@ -63,6 +64,66 @@ export class JuliusClaimPostgresRepository implements JuliusClaimStore {
       [claimId, projectId],
     );
     return result.rows.map(claimOf);
+  }
+
+  /**
+   * WHAT THIS PROJECT HAS VERIFIED, AND MAY THEREFORE REUSE.
+   *
+   * The current standing per claim, kept only where a REVIEWER's evidence (or a
+   * decision) put it at VERIFIED or APPROVED, joined to the brain row that is
+   * the claim's subject so the carry has something to say. Excludes the run
+   * doing the carrying, so a mission never reuses itself, and excludes rows
+   * whose sensitivity or scope the context layer would refuse anyway — the
+   * carry moves no SECRET material because the table cannot hold any: every
+   * stored row reads back INTERNAL (`julius-read-postgres` says so), and the
+   * scope and sensitivity filters at compile time are what govern the entries a
+   * process holds in memory.
+   *
+   * ORDERED NEWEST FIRST AND CAPPED, because a project accumulates knowledge
+   * without bound and a mission's packet does not. This is the whole of
+   * "truthful reuse": no inference, no graph, no ranking beyond recency — the
+   * context integrity layer ranks what arrives.
+   */
+  async verifiedProjectKnowledge(input: {
+    readonly projectId: string;
+    readonly excludeRunId: string;
+    readonly limit: number;
+  }): Promise<readonly JuliusCarriedKnowledge[]> {
+    const result = await this.pool.query<{
+      claim_id: string; entry_id: string; provenance: string; trust: string;
+      asserted_by: string; asserted_at: Date | string; evidence: unknown;
+      entry_kind: string; safe_content: string; evidence_ids: unknown; run_id: string;
+    }>(
+      `WITH current AS (
+         SELECT DISTINCT ON (claim_id) claim_id, entry_id, provenance, trust, asserted_by, asserted_at, evidence, run_id
+           FROM relay_wonderland.julius_claim_standings
+          WHERE project_id = $1 AND run_id <> $2
+          ORDER BY claim_id, standing_revision DESC
+       )
+       SELECT c.claim_id, c.entry_id, c.provenance, c.trust, c.asserted_by, c.asserted_at, c.evidence, c.run_id,
+              b.entry_kind, b.safe_content, b.evidence_ids
+         FROM current c
+         JOIN relay_wonderland.julius_brain_entries b
+           ON b.entry_id = c.entry_id AND b.project_id = $1
+        WHERE c.trust IN ('VERIFIED','APPROVED')
+        ORDER BY b.created_at DESC, c.entry_id
+        LIMIT $3`,
+      [input.projectId, input.excludeRunId, input.limit],
+    );
+    return result.rows.map((row) => ({
+      sourceRunId: row.run_id,
+      claim: claimOf({
+        claim_id: row.claim_id, standing_revision: 0, entry_id: row.entry_id,
+        provenance: row.provenance, trust: row.trust, asserted_by: row.asserted_by,
+        asserted_at: row.asserted_at, evidence: row.evidence, supersedes: null, contradicts: [],
+      }),
+      entry: {
+        entryId: row.entry_id,
+        kind: row.entry_kind as JuliusCarriedKnowledge['entry']['kind'],
+        text: row.safe_content,
+        evidenceIds: Array.isArray(row.evidence_ids) ? (row.evidence_ids as readonly string[]).map(String) : [],
+      },
+    }));
   }
 
   async recordClaimStanding(input: JuliusClaimStandingAppend): Promise<boolean> {

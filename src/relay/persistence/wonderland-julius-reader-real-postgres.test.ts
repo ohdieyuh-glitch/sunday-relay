@@ -10,6 +10,7 @@ import { emptyJuliusActivity } from '../mission/wonderland/wonderland-julius-act
 import { adoptWonderlandSnapshot } from '../mission/wonderland/wonderland-rehydration';
 import { wonderlandHydrationResume, wonderlandHydrationVerdict } from '../mission/wonderland/wonderland-hydration';
 import { authorizeWonderlandProjectCapability } from '../mission/wonderland/wonderland-authorization';
+import { juliusTestDatabaseUrl } from './julius-test-database';
 
 /**
  * THE READER, AGAINST A REAL POSTGRESQL.
@@ -27,12 +28,14 @@ import { authorizeWonderlandProjectCapability } from '../mission/wonderland/wond
  * agreed to be foreign.
  *
  * GATED, like `real-infra-julius.test.ts` beside it, and gated the same way so
- * there is one switch rather than two. Without `JULIUS_REAL_POSTGRES=1` and a
- * `WONDERLAND_TEST_DATABASE_URL` these report as `todo` — VISIBLY not run,
+ * there is one switch rather than two: `JULIUS_TEST_DATABASE_URL`, naming a
+ * throwaway database (never DATABASE_URL, which on the development laptop is the
+ * persistent Julius store). Without it these report as `todo` — VISIBLY not run,
  * rather than passing on nothing.
  */
 
-const enabled = process.env.JULIUS_REAL_POSTGRES === '1' && Boolean(process.env.WONDERLAND_TEST_DATABASE_URL);
+const databaseUrl = juliusTestDatabaseUrl();
+const enabled = databaseUrl !== null;
 const suite = enabled ? describe : describe.todo;
 
 const A = 'project-a';
@@ -85,11 +88,21 @@ async function writeEvent(input: {
 
 suite('the Wonderland reader against a real PostgreSQL', () => {
   beforeAll(async () => {
-    pool = new Pool({ connectionString: process.env.WONDERLAND_TEST_DATABASE_URL });
+    pool = new Pool({ connectionString: databaseUrl as string });
     // THE REAL CHAIN, FROM EMPTY. Not a hand-written subset of the schema —
     // a subset is a second schema, and the one thing this file exists to catch
     // is the production query meeting the production tables.
     await new TransactionalWonderlandDatabase(pool).migrate();
+
+    // FROM EMPTY MEANS EMPTY. The fixture's ids are fixed on purpose (the assertions read them), so a database this
+    // suite already ran against fails on its first INSERT with a bare duplicate-key error that looks like a reader
+    // defect. Say what it is instead: a reused database. Julius's suites tolerate reuse with per-run ids; this one
+    // wants a fresh database per run (CREATE DATABASE before, DROP after), which is what it was built to prove.
+    const reused = await pool.query('SELECT 1 FROM relay_wonderland.players WHERE player_id = ANY($1::text[])', [[PLAYER_A, PLAYER_B]]);
+    if ((reused.rowCount ?? 0) > 0) {
+      throw new Error('this suite needs an EMPTY database -- its fixture players already exist here. '
+        + 'Point JULIUS_TEST_DATABASE_URL at a freshly created database for each run.');
+    }
 
     await pool.query(`
       INSERT INTO relay_wonderland.players(player_id) VALUES ('${PLAYER_A}'), ('${PLAYER_B}');

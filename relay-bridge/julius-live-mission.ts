@@ -39,6 +39,7 @@
 import { readFileSync } from 'node:fs';
 import { createPublicKey, type KeyObject } from 'node:crypto';
 import { Pool } from 'pg';
+import { JULIUS_RUNTIME_DATABASE_ENV_NAMES, juliusRuntimeDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
 import { JuliusContractPostgresRepository } from '../src/relay/persistence/julius-contract-postgres';
@@ -55,6 +56,7 @@ import {
   type LiveMissionResearchClause,
 } from './julius/mission-contract';
 import { createLiveJuliusBootstrapPort } from './julius/bootstrap';
+import { createPostgresMissionKnowledgeStore } from './julius/mission-knowledge';
 import { createPostgresMissionSeedStore } from './julius/mission-seed';
 import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
 import { createExecutorShellPort } from './julius/executor-effects';
@@ -568,7 +570,12 @@ async function main(argv: readonly string[]): Promise<number> {
 
   /* Executor material — resolved before any adapter exists, fail closed. */
   const executorMissing = EXECUTOR_ENV.filter((name) => !env[name]);
-  const databaseMissing = env.DATABASE_URL ? [] : ['DATABASE_URL'];
+  // THE JOB'S OWN LAUNCH ENVIRONMENT names the database: `JULIUS_DATABASE_URL`
+  // first, `DATABASE_URL` after it. Never a test variable — the real-PostgreSQL
+  // suites read `JULIUS_TEST_DATABASE_URL` precisely so that this process and
+  // those suites can never be pointed at the same place by accident.
+  const databaseUrl = juliusRuntimeDatabaseUrl(env);
+  const databaseMissing = databaseUrl === null ? [...JULIUS_RUNTIME_DATABASE_ENV_NAMES] : [];
 
   const artifacts = createLiveArtifactExchange();
   // Preflight resolution runs with a null shell so that a machine with no
@@ -584,13 +591,13 @@ async function main(argv: readonly string[]): Promise<number> {
   out('JULIUS LIVE MISSION — preflight');
   out(`  mission: ${contract.missionId} (project ${contract.projectId})`);
   out(`  requested models: architect=${preflight.requested.architectModel ?? 'MISSING'} coder=${preflight.requested.codingModel ?? 'MISSING'} reviewer=${preflight.requested.reviewerProvider ?? 'MISSING'}/${preflight.requested.reviewerModel ?? 'MISSING'}`);
-  out(presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'XAI_API_KEY', 'DATABASE_URL', ...EXECUTOR_ENV]));
+  out(presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'XAI_API_KEY', ...JULIUS_RUNTIME_DATABASE_ENV_NAMES, ...EXECUTOR_ENV]));
   out('  note: the local Hermes reviewer bills through the hermes profile of this operator account; XAI_API_KEY presence is reported for the record.');
   for (const problem of preflight.problems.filter((entry) => entry.role !== 'CODING_AGENT' || !entry.missing.some((name) => name.startsWith('executor shell')))) {
     out(`  BLOCKED ${problem.role}: ${problem.reason} — ${problem.missing.join(', ')}`);
   }
   if (executorMissing.length > 0) out(`  BLOCKED executor: missing ${executorMissing.join(', ')}`);
-  if (databaseMissing.length > 0) out(`  BLOCKED durable store: missing DATABASE_URL`);
+  if (databaseMissing.length > 0) out(`  BLOCKED durable store: set ${databaseMissing.join(' or ')}`);
 
   /**
    * THE LIVE LEDGER, OR NO PAID RUN.
@@ -607,7 +614,7 @@ async function main(argv: readonly string[]): Promise<number> {
    * No query is made: the check is whether the composed store carries the
    * reader both consumers are gated on, not whether the database is reachable.
    */
-  const ledger = databaseMissing.length > 0 ? 'UNKNOWN' : liveLedgerState(createJuliusPostgresRuntimeStore(new Pool({ connectionString: env.DATABASE_URL })));
+  const ledger = databaseMissing.length > 0 ? 'UNKNOWN' : liveLedgerState(createJuliusPostgresRuntimeStore(new Pool({ connectionString: databaseUrl! })));
   out(`  live_ledger: ${ledger}`);
   if (ledger === 'UNBOUND') out('  BLOCKED allocation: the live store serves no timeline, so every dispatch would be allocated a flat estimate');
 
@@ -625,7 +632,7 @@ async function main(argv: readonly string[]): Promise<number> {
   }
 
   /* ------------------------------------------------- confirmed live path */
-  const pool = new Pool({ connectionString: env.DATABASE_URL });
+  const pool = new Pool({ connectionString: databaseUrl! });
   try {
     /* `migrate()` applies only the versions `schema_migrations` does not
      * already hold, so this is safe against an empty database, a partially
@@ -733,6 +740,8 @@ async function main(argv: readonly string[]): Promise<number> {
         putTaskContract: bootstrapContracts.putTaskContract.bind(bootstrapContracts),
       },
       seeds: createPostgresMissionSeedStore(pool),
+      // The project's verified knowledge, inherited by this mission.
+      knowledge: createPostgresMissionKnowledgeStore(pool),
       tenantId: contract.tenantId,
       executionId,
     });

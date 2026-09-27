@@ -102,11 +102,12 @@ const JOB_CLAUSES = ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A07', 'A08', 'A0
 const env = {};
 for (const [k, v] of Object.entries(process.env)) {
   if (/API_KEY|SECRET|PASSWORD|_TOKEN$|^ANTHROPIC|^OPENAI|^XAI|^GROK|^HERMES_HOME|^CLAUDE_CODE/i.test(k)) continue;
-  if (k === 'DATABASE_URL' || k === 'WONDERLAND_E2E_DATABASE_URL') continue;
+  // EVERY inherited database variable: the runtime reads JULIUS_DATABASE_URL before DATABASE_URL (Julius 6d960b03).
+  if (/DATABASE_URL/i.test(k)) continue;
   env[k] = v;
 }
 Object.assign(env, {
-  DATABASE_URL: DB, RELAY_BRIDGE_API_TOKEN: TOKEN, RELAY_BRIDGE_PORT: String(PORT),
+  DATABASE_URL: DB, JULIUS_DATABASE_URL: DB, RELAY_BRIDGE_API_TOKEN: TOKEN, RELAY_BRIDGE_PORT: String(PORT),
   RELAY_BRIDGE_HOST: '127.0.0.1', RELAY_HERMES_PROVIDER: 'hermes_local', RELAY_ALLOWED_ORIGINS: SITE,
 });
 

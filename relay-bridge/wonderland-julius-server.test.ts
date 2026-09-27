@@ -8,6 +8,7 @@ import type { WonderlandJuliusWorld } from './server';
 import { loadBridgeConfig } from './config';
 import { betaWaveZeroState } from './beta-routes';
 import { createBetaEnrolmentStore } from '../src/relay/persistence';
+import { juliusRuntimeDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 
 /**
  * THE WORLD ROUTES OVER THE REAL BRIDGE, WITH NO DATABASE.
@@ -210,8 +211,27 @@ describe('which deployments can serve a world at all', () => {
     expect(wonderlandJuliusDatabaseUrl({ DATABASE_URL: url })).toBe(url);
   });
 
-  it('reads nothing but DATABASE_URL', () => {
+  it('reads nothing but the two variables the Julius runtime reads', () => {
     expect(wonderlandJuliusDatabaseUrl({ PGHOST: 'host', PGDATABASE: 'db' })).toBeNull();
+  });
+
+  it('reads the runs WHERE JULIUS WRITES THEM, even when the two variables differ', () => {
+    // The split this guards: the runtime reads JULIUS_DATABASE_URL first. A world
+    // reader that read DATABASE_URL alone would follow runs in one database while
+    // Julius created them in another -- every hydrate a run_not_found, or another
+    // database's runs on screen.
+    const julius = 'postgres://julius@host:5432/julius_runtime';
+    const other = 'postgres://someone@host:5432/something_else';
+    expect(wonderlandJuliusDatabaseUrl({ JULIUS_DATABASE_URL: julius, DATABASE_URL: other })).toBe(julius);
+    for (const env of [
+      { JULIUS_DATABASE_URL: julius, DATABASE_URL: other },
+      { JULIUS_DATABASE_URL: '  ', DATABASE_URL: other },
+      { DATABASE_URL: other },
+      { JULIUS_DATABASE_URL: julius },
+      {},
+    ]) {
+      expect(wonderlandJuliusDatabaseUrl(env)).toBe(juliusRuntimeDatabaseUrl(env));
+    }
   });
 });
 

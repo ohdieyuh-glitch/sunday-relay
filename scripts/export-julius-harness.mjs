@@ -407,6 +407,8 @@ const FILE_RULES = [
   ['relay-bridge/julius/mission-contract.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/bootstrap.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/mission-seed.ts', 'MISSION CONTRACT / BOOTSTRAP'],
+  // What one mission verified, inherited by the next: the minimum truthful reuse.
+  ['relay-bridge/julius/mission-knowledge.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['relay-bridge/julius/postgres-store.ts', 'PERSISTENCE'],
   ['relay-bridge/julius/executor-effects.ts', 'TOOLS'],
   ['relay-bridge/julius/sandbox-limits.ts', 'TOOLS'],

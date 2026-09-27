@@ -43,6 +43,7 @@ import { handlePspRoute, isPspRoute } from './psp-routes';
 import { createJuliusStatePorts, handleJuliusStateRoute, isJuliusStateRoute } from './julius-state-routes';
 import { composeJuliusMissionBootstrap, handleJuliusMissionRoute, isJuliusMissionRoute, type JuliusMissionRoutePorts } from './julius-mission-routes';
 import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
+import { JULIUS_RUNTIME_DATABASE_ENV_NAMES, juliusRuntimeDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { Pool } from 'pg';
 import { handleShipRoute, isShipRoute } from './ship-route';
 import { resolveRepositoryTarget, registrationOwnerAdmits } from '../src/relay/mission/repository-target';
@@ -167,11 +168,15 @@ function readRawBody(req: IncomingMessage): Promise<string | undefined> {
  * BLANK IS ABSENT. A deployment that sets the variable and leaves it empty has
  * not configured a database, and building a pool for it would trade the honest
  * "this deployment is not configured" for a connection error on first use.
+ *
+ * IT IS JULIUS'S DECISION, NOT A SECOND ONE: the world reads the runs where the
+ * Julius runtime writes them, so this is `juliusRuntimeDatabaseUrl` itself
+ * (JULIUS_DATABASE_URL, then DATABASE_URL). The routes do not even call this --
+ * they share the runtime's pool -- but it stays exported so the agreement is
+ * tested directly, including the case where the two variables differ.
  */
-export const wonderlandJuliusDatabaseUrl = (env: NodeJS.ProcessEnv): string | null => {
-  const url = env.DATABASE_URL;
-  return typeof url === 'string' && url.trim() !== '' ? url : null;
-};
+export const wonderlandJuliusDatabaseUrl = (env: NodeJS.ProcessEnv): string | null =>
+  juliusRuntimeDatabaseUrl(env);
 
 /** The two reads the world routes need. Both, or the route cannot answer. */
 export interface WonderlandJuliusWorld {
@@ -321,25 +326,26 @@ export function createBridgeServer(
   /**
    * THE JULIUS WORLD ROUTES' TWO DEPENDENCIES, OR NEITHER.
    *
-   * Both come from one pool and both are absent together when `DATABASE_URL` is
-   * not set — which keeps the route's fail-closed 503 exactly as it was for a
-   * deployment with no database, rather than half-wiring it into a state where
-   * membership can be checked and nothing can be read.
+   * Both come from one pool and both are absent together when no Julius
+   * database is configured — which keeps the route's fail-closed 503 exactly as
+   * it was for a deployment with no database, rather than half-wiring it into a
+   * state where membership can be checked and nothing can be read.
    *
-   * The pool is created LAZILY, on the first world request, so a bridge that
-   * never serves one opens no connection. `pg` is imported dynamically for the
-   * same reason: the module is only loaded where it is actually used.
+   * THE SAME POOL AS JULIUS'S OWN ROUTES, not a second one built from a second
+   * reading of the environment. Julius is the authority for the runs the world
+   * shows; the world must read them where Julius wrote them. When the runtime
+   * began reading JULIUS_DATABASE_URL before DATABASE_URL, a world reader that
+   * still read DATABASE_URL alone would have followed runs in one database while
+   * Julius created them in another — every hydrate a run_not_found, or worse,
+   * another database's runs. One pool makes that impossible by construction, and
+   * drops the third pool the merged tree was opening. Still lazy: a bridge that
+   * never serves a world or Julius request opens no connection.
    */
   let juliusWorldDeps: WonderlandJuliusWorld | null | undefined = juliusWorld ?? undefined;
   const resolveJuliusWorld = async () => {
     if (juliusWorldDeps !== undefined) return juliusWorldDeps;
-    const url = wonderlandJuliusDatabaseUrl(process.env);
-    if (url === null) {
-      juliusWorldDeps = null;
-      return juliusWorldDeps;
-    }
-    const { Pool } = await import('pg');
-    juliusWorldDeps = wonderlandJuliusWorld(new Pool({ connectionString: url }));
+    const pool = juliusPool();
+    juliusWorldDeps = pool === null ? null : wonderlandJuliusWorld(pool);
     return juliusWorldDeps;
   };
 
@@ -374,34 +380,55 @@ export function createBridgeServer(
  * The same `createJuliusPostgresRuntimeStore` the mission job writes through, so
  * there is one state authority. The subagent and lifecycle repositories had no
  * composition root at all until this; `approvers` refuses every approval because
- * nothing here mounts one. Absent `DATABASE_URL`, the ports carry `api: null`
- * and the family refuses with the variable named.
+ * nothing here mounts one. Absent a database, the ports carry `api: null` and
+ * the family refuses with the variables named.
  */
+/**
+ * ONE POOL FOR EVERYTHING JULIUS IN THIS PROCESS.
+ *
+ * The read routes and the create route each opened a Pool against the same URL
+ * — twice the connections for one database, beside Wonderland's own third, as
+ * the integration lane observed on the merged tree. Lazy, so a process with no
+ * database opens nothing; null when there is none, so every family refuses by
+ * name rather than serving an empty run.
+ *
+ * `juliusRuntimeDatabaseUrl` is what chooses the URL: `JULIUS_DATABASE_URL`
+ * first, `DATABASE_URL` after it. That is the launcher's decision to make — and
+ * it is deliberately NOT the variable the real-PostgreSQL test suites read.
+ */
+let juliusPoolCache: Pool | null | undefined;
+const juliusPool = (): Pool | null => {
+  if (juliusPoolCache !== undefined) return juliusPoolCache;
+  const url = juliusRuntimeDatabaseUrl();
+  juliusPoolCache = url === null ? null : new Pool({ connectionString: url });
+  return juliusPoolCache;
+};
+
 let juliusStateCache: ReturnType<typeof createJuliusStatePorts> | null = null;
 const juliusStatePorts = (): ReturnType<typeof createJuliusStatePorts> => {
   if (juliusStateCache !== null) return juliusStateCache;
-  const url = process.env.DATABASE_URL;
+  const pool = juliusPool();
   juliusStateCache = createJuliusStatePorts({
-    pool: url ? new Pool({ connectionString: url }) : null,
-    missingConfig: url ? [] : ['DATABASE_URL'],
+    pool,
+    missingConfig: pool === null ? [...JULIUS_RUNTIME_DATABASE_ENV_NAMES] : [],
   });
   return juliusStateCache;
 };
 
 /**
- * CREATION'S PORTS, built lazily under the same discipline as the state routes':
- * no `DATABASE_URL`, no bootstrap, and a 503 that names it. The reviewer
+ * CREATION'S PORTS, built lazily on the same shared pool as the state routes':
+ * no database, no bootstrap, and a 503 that names the variables. The reviewer
  * provider is the mission's recorded reviewer identity and is read from the
  * same variable the live composition reads.
  */
 let juliusMissionCache: JuliusMissionRoutePorts | null = null;
 const juliusMissionPorts = (): JuliusMissionRoutePorts => {
   if (juliusMissionCache !== null) return juliusMissionCache;
-  const url = process.env.DATABASE_URL;
+  const pool = juliusPool();
   const reviewer = process.env.RELAY_HERMES_PROVIDER?.trim();
   juliusMissionCache = {
-    bootstrap: url ? composeJuliusMissionBootstrap(new Pool({ connectionString: url })) : null,
-    missingConfig: url ? [] : ['DATABASE_URL'],
+    bootstrap: pool === null ? null : composeJuliusMissionBootstrap(pool),
+    missingConfig: pool === null ? [...JULIUS_RUNTIME_DATABASE_ENV_NAMES] : [],
     reviewerProvider: reviewer ? reviewer : null,
     cardRevision: process.env.RELAY_JULIUS_CARD_REVISION?.trim() || 'card:julius-live:1',
   };
@@ -909,6 +936,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             operator: bearerMatches(missionAuthz, process.env.RELAY_BRIDGE_API_TOKEN),
             body: method === 'POST' ? await readRawBody(req) : undefined,
             rerun: headerValue(req.headers['x-relay-julius-rerun']),
+            rerunKey: headerValue(req.headers['x-relay-julius-rerun-key']),
           }, juliusMissionPorts());
           if (missionResult !== null) {
             send(res, missionResult.status, missionResult.body, cors);

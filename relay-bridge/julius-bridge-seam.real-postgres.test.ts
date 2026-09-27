@@ -2,6 +2,8 @@ import { randomBytes } from 'node:crypto';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
+import { JuliusClaimPostgresRepository } from '../src/relay/persistence/julius-claim-postgres';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { composeJuliusMissionBootstrap, handleJuliusMissionRoute } from './julius-mission-routes';
 import { composeJuliusStateApi, handleJuliusStateRoute, type JuliusStateRoutePorts } from './julius-state-routes';
@@ -17,15 +19,16 @@ import { composeJuliusStateApi, handleJuliusStateRoute, type JuliusStateRoutePor
  * depends on: what a client creates is what a client then watches, and both are
  * what the database holds. This suite says it against PostgreSQL itself.
  *
- * Runs wherever JULIUS_REAL_POSTGRES=1 (or JULIUS_REAL_INFRA=1) and DATABASE_URL
- * are set — the same gate as the other real-postgres suites — and is `todo`
+ * Runs wherever JULIUS_TEST_DATABASE_URL names a throwaway database — the same
+ * gate as the other real-postgres suites, and deliberately NOT `DATABASE_URL`,
+ * which on a developer machine points at the persistent store — and is `todo`
  * everywhere else, so an absent database is a skipped proof rather than a
  * passing one. Every mission it creates carries a random identity, so it can be
  * re-run against a database that already holds its earlier runs.
  */
 
-const enabled = (process.env.JULIUS_REAL_POSTGRES === '1' || process.env.JULIUS_REAL_INFRA === '1')
-  && Boolean(process.env.DATABASE_URL);
+const databaseUrl = juliusTestDatabaseUrl();
+const enabled = databaseUrl !== null;
 const suite = enabled ? describe : describe.todo;
 
 const nonce = () => randomBytes(4).toString('hex');
@@ -54,18 +57,18 @@ suite('the Wonderland seam over a real PostgreSQL', () => {
   let pool: Pool;
   let statePorts: JuliusStateRoutePorts;
   let create: (body: string) => Promise<{ status: number; body: unknown } | null>;
-  let createRerun: (body: string) => Promise<{ status: number; body: unknown } | null>;
+  let createRerun: (body: string, rerunKey?: string) => Promise<{ status: number; body: unknown } | null>;
 
   beforeAll(async () => {
-    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    pool = new Pool({ connectionString: databaseUrl! });
     await new TransactionalWonderlandDatabase(pool).migrate();
     // THE PRODUCTION COMPOSITIONS, exactly as the server builds them.
     const bootstrap = composeJuliusMissionBootstrap(pool);
     statePorts = { api: composeJuliusStateApi(pool), missingConfig: [] };
     const ports = { bootstrap, missingConfig: [], reviewerProvider: 'xai', cardRevision: 'card:seam:1' };
     create = (body) => handleJuliusMissionRoute({ method: 'POST', path: '/julius/missions', operator: true, body }, ports);
-    createRerun = (body) => handleJuliusMissionRoute(
-      { method: 'POST', path: '/julius/missions', operator: true, body, rerun: 'explicit' }, ports);
+    createRerun = (body, rerunKey) => handleJuliusMissionRoute(
+      { method: 'POST', path: '/julius/missions', operator: true, body, rerun: 'explicit', ...(rerunKey === undefined ? {} : { rerunKey }) }, ports);
   });
   afterAll(async () => pool?.end());
 
@@ -137,11 +140,86 @@ suite('the Wonderland seam over a real PostgreSQL', () => {
     const afterRefusal = await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM relay_wonderland.julius_runs WHERE mission_id = $1', [contract.missionId]);
     expect(afterRefusal.rows[0]!.n).toBe(1);
 
-    const rerun = dataOf<{ runId: string; rerun: boolean }>(await createRerun(edited));
+    const rerun = dataOf<{ runId: string; rerun: boolean }>(await createRerun(edited, 'rerun-edited-1'));
     expect(rerun.runId).not.toBe(first.runId);
     expect(rerun.rerun).toBe(true);
     const afterRerun = await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM relay_wonderland.julius_runs WHERE mission_id = $1', [contract.missionId]);
     expect(afterRerun.rows[0]!.n, 'two runs, because two were asked for').toBe(2);
+  });
+
+  it('an explicit rerun of an UNCHANGED contract runs it again — the case a content-derived identity could not express', async () => {
+    // The integration lane's D09: run identity is the contract's digest, so "do
+    // that again, exactly" named the run that had already finished and the client
+    // was handed a terminal run and told it was created. An explicit rerun now
+    // folds a discriminator into that identity.
+    const contract = contractFor(nonce());
+    const body = JSON.stringify(contract);
+    const first = dataOf<{ runId: string; rerun: boolean }>(await create(body));
+    expect(first.rerun).toBe(false);
+
+    // A plain re-POST still resumes: the same bytes, the same run, and it says so.
+    const resumed = dataOf<{ runId: string; rerun: boolean }>(await create(body));
+    expect(resumed.runId).toBe(first.runId);
+    expect(resumed.rerun, 'no second run was made, so none is reported').toBe(false);
+
+    // The run ends. An explicit rerun of the SAME bytes now makes a new run.
+    await pool.query("UPDATE relay_wonderland.julius_runs SET state = 'CANCELLED' WHERE run_id = $1", [first.runId]);
+    const rerun = dataOf<{ runId: string; rerun: boolean; state: string; next: string }>(await createRerun(body, 'rerun-after-cancel'));
+    expect(rerun.runId, 'a distinct run, from the same contract').not.toBe(first.runId);
+    expect(rerun.rerun).toBe(true);
+    expect(rerun.state).toBe('READY');
+
+    // AND ITS RETRIES ARE SAFE, because the KEY identifies the rerun: the same
+    // request again lands on the same run rather than minting a third.
+    const retried = dataOf<{ runId: string; rerun: boolean }>(await createRerun(body, 'rerun-after-cancel'));
+    expect(retried.runId).toBe(rerun.runId);
+    expect(retried.rerun, 'a retry made nothing, so it reports nothing').toBe(false);
+    const rows = await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM relay_wonderland.julius_runs WHERE mission_id = $1', [contract.missionId]);
+    expect(rows.rows[0]!.n, 'two runs: the original and the one rerun').toBe(2);
+  });
+
+  it('an explicit rerun without a key of its own is refused, rather than served unsafely', async () => {
+    // Nothing derived from durable state can identify a rerun: the rerun changes
+    // that state as it lands, so the retry would compute a different identity and
+    // buy a third execution. The caller holds the only stable value.
+    const contract = contractFor(nonce());
+    const body = JSON.stringify(contract);
+    await create(body);
+    const refused = await createRerun(body);
+    expect(refused?.status).toBe(400);
+    expect((refused?.body as { error: { kind: string; message: string } }).error.kind).toBe('rerun_key_required');
+    expect((refused?.body as { error: { message: string } }).error.message).toContain('one stable token');
+    const rows = await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM relay_wonderland.julius_runs WHERE mission_id = $1', [contract.missionId]);
+    expect(rows.rows[0]!.n, 'and nothing was created').toBe(1);
+  });
+
+  it('a terminal run is never described as being driven', async () => {
+    // A 201 that says "it is driven by the mission job" over a run that has
+    // already ended reads as "created and going".
+    const contract = contractFor(nonce());
+    const body = JSON.stringify(contract);
+    const first = dataOf<{ runId: string }>(await create(body));
+    await pool.query("UPDATE relay_wonderland.julius_runs SET state = 'COMPLETED' WHERE run_id = $1", [first.runId]);
+    const again = dataOf<{ state: string; next: string; rerun: boolean }>(await create(body));
+    expect(again.state).toBe('COMPLETED');
+    expect(again.next).toContain('already ended');
+    expect(again.next).not.toContain('driven by');
+  });
+
+  it('a caller’s own rerun key makes its retries idempotent, and a new key makes a new run', async () => {
+    const contract = contractFor(nonce());
+    const body = JSON.stringify(contract);
+    const first = dataOf<{ runId: string }>(await create(body));
+    const one = dataOf<{ runId: string; rerun: boolean }>(await createRerun(body, 'rerun-token-1'));
+    expect(one.runId).not.toBe(first.runId);
+    expect(one.rerun).toBe(true);
+    // The same token again: the same run, nothing made.
+    expect(dataOf<{ runId: string; rerun: boolean }>(await createRerun(body, 'rerun-token-1')).runId).toBe(one.runId);
+    // A different token: a deliberate third run. (Allowed because an explicit
+    // rerun is exactly the case where the active-run guard steps aside.)
+    const two = dataOf<{ runId: string; rerun: boolean }>(await createRerun(body, 'rerun-token-2'));
+    expect(two.runId).not.toBe(one.runId);
+    expect(two.rerun).toBe(true);
   });
 
   it('a mission whose run reached a TERMINAL state is not locked, and the guard is per mission', async () => {
@@ -193,6 +271,99 @@ suite('the Wonderland seam over a real PostgreSQL', () => {
     // the one run, so a client that lost the race recovers by doing nothing
     // cleverer than trying again.
     expect(dataOf<{ runId: string }>(await create(body)).runId).toBe(runId);
+  });
+
+  it('what mission A VERIFIED is inherited by mission B — and what A only asserted is not', async () => {
+    // The founder's item: verified useful information from mission A must improve
+    // a later relevant mission. This is the durable half — that B's Project Brain
+    // really holds A's verified fact, with A's author and A's standing, and holds
+    // nothing A merely asserted. The packet half (that B's worker is HANDED it,
+    // and that unrelated residue is excluded) is `julius-learning-loop.e2e`.
+    const id = nonce();
+    const missionA = contractFor(id);
+    const runA = dataOf<{ runId: string }>(await create(JSON.stringify(missionA))).runId;
+
+    // MISSION A LEARNS TWO THINGS. One a reviewer verifies; one stays an
+    // assertion. Written the way the runtime writes them: a brain row authored
+    // by a worker, and a claim standing recorded for it.
+    const claims = new JuliusClaimPostgresRepository(pool);
+    const facts = [
+      { entryId: `${runA}:verified`, text: 'The save format must be written little-endian; the loader rejects big-endian.', trust: 'VERIFIED' as const },
+      { entryId: `${runA}:asserted`, text: 'The loader is probably fine with either byte order.', trust: 'UNVERIFIED' as const },
+    ];
+    for (const [index, fact] of facts.entries()) {
+      await pool.query(
+        `INSERT INTO relay_wonderland.julius_brain_entries
+           (entry_id,run_id,project_id,task_id,worker_id,entry_kind,safe_content,evidence_ids,revision,created_at)
+         VALUES($1,$2,$3,NULL,'coder','FINDING',$4,'["evidence:a-1"]',$5,now())`,
+        [fact.entryId, runA, missionA.projectId, fact.text, 50 + index],
+      );
+      await claims.recordClaimStanding({
+        runId: runA, projectId: missionA.projectId,
+        claim: {
+          claimId: `claim:${fact.entryId}`, entryId: fact.entryId, provenance: 'tool_observed',
+          trust: fact.trust, assertedBy: 'coder', assertedAt: '2026-09-27T09:00:00.000Z',
+          evidence: [{ kind: 'REVIEW', id: 'evidence:review-a' }], supersedes: null, contradicts: [],
+        },
+        reason: fact.trust === 'VERIFIED' ? 'REVIEW_ACCEPTED' : 'ADMITTED',
+        occurredAt: '2026-09-27T09:00:00.000Z',
+      });
+    }
+
+    // MISSION B, a different mission in the same project, created the ordinary way.
+    const missionB = { ...contractFor(nonce()), projectId: missionA.projectId, tenantId: missionA.tenantId };
+    const runB = dataOf<{ runId: string }>(await create(JSON.stringify(missionB))).runId;
+
+    const inherited = await pool.query<{ entry_id: string; safe_content: string; worker_id: string }>(
+      'SELECT entry_id, safe_content, worker_id FROM relay_wonderland.julius_brain_entries WHERE run_id = $1 AND entry_id LIKE $2',
+      [runB, 'carried:%']);
+    expect(inherited.rows.map((row) => row.safe_content), 'the verified fact, and only it').toEqual([facts[0]!.text]);
+    // THE COPY KEEPS ITS AUTHOR: attributing it to the bootstrap would both
+    // slander the worker and let B's reviewer "verify" Julius's own words.
+    expect(inherited.rows[0]!.worker_id).toBe('coder');
+    expect(inherited.rows[0]!.entry_id).toBe(`carried:${runA}:${facts[0]!.entryId}`);
+
+    // AND THE STANDING TRAVELLED, so B ranks a verified fact as verified.
+    const carriedClaims = await claims.claimsForRun(runB, missionB.projectId);
+    const carried = carriedClaims.find((claim) => claim.entryId.startsWith('carried:'));
+    expect(carried?.trust).toBe('VERIFIED');
+    expect(carried?.assertedBy, 'A’s asserter, so B’s reviewer cannot self-verify it').toBe('coder');
+    const history = await claims.claimStandingHistory(carried!.claimId, missionB.projectId);
+    expect(history, 'one standing, recorded once').toHaveLength(1);
+
+    // A REPLAY INHERITS NOTHING TWICE.
+    await create(JSON.stringify(missionB));
+    const again = await pool.query<{ n: number }>(
+      'SELECT count(*)::int AS n FROM relay_wonderland.julius_brain_entries WHERE run_id = $1 AND entry_id LIKE $2', [runB, 'carried:%']);
+    expect(again.rows[0]!.n).toBe(1);
+  });
+
+  it('knowledge does not cross projects', async () => {
+    const id = nonce();
+    const missionA = contractFor(id);
+    const runA = dataOf<{ runId: string }>(await create(JSON.stringify(missionA))).runId;
+    const claims = new JuliusClaimPostgresRepository(pool);
+    await pool.query(
+      `INSERT INTO relay_wonderland.julius_brain_entries
+         (entry_id,run_id,project_id,task_id,worker_id,entry_kind,safe_content,evidence_ids,revision,created_at)
+       VALUES($1,$2,$3,NULL,'coder','FINDING','A fact that belongs to one project.','[]',60,now())`,
+      [`${runA}:private`, runA, missionA.projectId]);
+    await claims.recordClaimStanding({
+      runId: runA, projectId: missionA.projectId,
+      claim: {
+        claimId: `claim:${runA}:private`, entryId: `${runA}:private`, provenance: 'tool_observed',
+        trust: 'VERIFIED', assertedBy: 'coder', assertedAt: '2026-09-27T09:00:00.000Z',
+        evidence: [{ kind: 'REVIEW', id: 'evidence:review-a' }], supersedes: null, contradicts: [],
+      },
+      reason: 'REVIEW_ACCEPTED', occurredAt: '2026-09-27T09:00:00.000Z',
+    });
+
+    // A mission in ANOTHER project inherits nothing of it.
+    const elsewhere = contractFor(nonce());
+    const runElsewhere = dataOf<{ runId: string }>(await create(JSON.stringify(elsewhere))).runId;
+    const rows = await pool.query<{ n: number }>(
+      'SELECT count(*)::int AS n FROM relay_wonderland.julius_brain_entries WHERE run_id = $1 AND entry_id LIKE $2', [runElsewhere, 'carried:%']);
+    expect(rows.rows[0]!.n).toBe(0);
   });
 
   it('a created run is invisible under another project, and a no-check mission is held to its DIFF', async () => {

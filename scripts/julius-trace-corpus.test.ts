@@ -90,7 +90,11 @@ describe('the trace corpus ledger', () => {
 
   it('states what it does not cover', () => {
     // The gaps are the half of a coverage document that is load-bearing.
-    for (const gap of ['tool-HEAVY mission', 'CONTENT refusal', 'LIVE trace of any shape',
+    // 'LIVE content refusal' replaced 'CONTENT refusal' when the class stopped
+    // being absent and became deterministic-only: the gap moved rather than
+    // closing, and the phrase has to move with it or this guard passes on a
+    // page that no longer says anything.
+    for (const gap of ['tool-HEAVY mission', 'LIVE content refusal', 'LIVE trace of any shape',
       'paid matched pair']) {
       expect(ledger, `the ledger must still name the ${gap} gap`).toContain(gap);
     }

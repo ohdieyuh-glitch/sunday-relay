@@ -150,6 +150,19 @@ export interface JuliusBootstrapRequest {
    */
   readonly rerunIntent?: 'EXPLICIT';
   /**
+   * THE TOKEN AN EXPLICIT RERUN IS IDENTIFIED BY. Required with `rerunIntent`.
+   *
+   * A run's identity is derived from the contract's content: the same bytes name
+   * the same run, which makes a retry safe and makes an unchanged contract
+   * unable to run twice. An explicit rerun folds this token into that identity,
+   * so one token means one rerun however many times the request is sent. It has
+   * to come from the CALLER: any discriminator derived from durable state (the
+   * latest run, a count of runs) changes the moment the rerun lands, so the
+   * retry would buy a third execution. Absent it, the bootstrap refuses
+   * `rerun_key_required` rather than serving something unsafe.
+   */
+  readonly rerunKey?: string;
+  /**
    * The repository authority this run REQUESTS. Requested, never granted:
    * Relay's repository resolver narrows it against what a human granted on the
    * registration, and Julius narrows it again per worker and per sub-agent.
@@ -195,6 +208,17 @@ export type JuliusBootstrapOutcome =
     readonly runId: string;
     readonly acceptedAt: string;
     readonly state: JuliusMissionState;
+    /**
+     * TRUE WHEN THIS SUBMIT FOUND THE RUN RATHER THAN MAKING IT — a replay, a
+     * duplicate, a client retrying a lost response.
+     *
+     * Absent the distinction, a caller could not tell "your mission started"
+     * from "the mission you already started is still here", and a rerun
+     * affordance would report a second run that does not exist. Optional
+     * because an older port cannot know it; a reader must treat `undefined` as
+     * "not stated" rather than as `false`.
+     */
+    readonly resumed?: boolean;
   }
   | {
     readonly accepted: false;

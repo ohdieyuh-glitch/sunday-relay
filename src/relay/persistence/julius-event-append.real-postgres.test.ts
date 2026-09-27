@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { juliusTestDatabaseUrl } from './julius-test-database';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -17,12 +18,13 @@ import { JuliusEventIdConflict, type JuliusOperationalEvent } from '../mission/j
  * with the one just built refused genuine replays, while the in-memory store
  * compared the id alone and silently dropped a different event under a used id.
  *
- * Runs wherever JULIUS_REAL_POSTGRES=1 (or JULIUS_REAL_INFRA=1) and DATABASE_URL
+ * Runs wherever JULIUS_TEST_DATABASE_URL names a THROWAWAY database (never DATABASE_URL
  * point at a PostgreSQL — the `first-live-topology` job — and is `todo`
  * elsewhere. No provider is involved.
  */
 
-const enabled = process.env.JULIUS_REAL_INFRA === '1' || process.env.JULIUS_REAL_POSTGRES === '1';
+const databaseUrl = juliusTestDatabaseUrl();
+const enabled = databaseUrl !== null;
 const suite = enabled ? describe : describe.todo;
 
 suite('the event append contract on real PostgreSQL', () => {
@@ -63,7 +65,7 @@ suite('the event append contract on real PostgreSQL', () => {
   };
 
   beforeAll(async () => {
-    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    pool = new Pool({ connectionString: databaseUrl! });
     await new TransactionalWonderlandDatabase(pool).migrate();
     events = new JuliusEventPostgresRepository(pool);
     await pool.query('INSERT INTO relay_wonderland.projects(project_id) VALUES($1)', [project]);

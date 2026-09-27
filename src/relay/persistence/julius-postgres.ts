@@ -93,6 +93,11 @@ export class JuliusPostgresRepository {
       await client.query('INSERT INTO relay_wonderland.idempotency(scope,command_id,request_hash,response) VALUES($1,$2,$3,$4::jsonb)',['julius.run.create',input.commandId,hash,json(run)]);return run;
     });
   }
+  /** The mission's most recent run, newest first by creation. */
+  async latestRunForMission(missionId:string,projectId:string):Promise<{readonly runId:string}|null>{
+    const result=await this.pool.query<{run_id:string}>('SELECT run_id FROM relay_wonderland.julius_runs WHERE mission_id=$1 AND project_id=$2 ORDER BY created_at DESC,run_id DESC LIMIT 1',[missionId,projectId]);
+    const row=result.rows[0];return row===undefined?null:{runId:row.run_id};
+  }
   async loadRun(runId:string,projectId:string):Promise<JuliusRunRecord|null>{const result=await this.pool.query<Record<string,unknown>>('SELECT * FROM relay_wonderland.julius_runs WHERE run_id=$1 AND project_id=$2',[runId,projectId]);return result.rows[0]?this.mapRun(result.rows[0]):null;}
   async transition(input:{commandId:string;runId:string;projectId:string;expectedVersion:number;to:JuliusMissionState;reasonCode:string;safeSummary:string;evidenceIds:readonly string[];occurredAt:string}):Promise<JuliusRunRecord>{
     return this.transaction(async client=>{const current=await client.query('SELECT * FROM relay_wonderland.julius_runs WHERE run_id=$1 AND project_id=$2 FOR UPDATE',[input.runId,input.projectId]);if(!current.rows[0])throw new Error('julius_run_not_found');const run=this.mapRun(current.rows[0]);if(run.version!==input.expectedVersion)throw Object.assign(new Error('optimistic_concurrency_conflict'),{code:'40001',retryable:false});

@@ -287,7 +287,7 @@ describe('POST /julius/missions', () => {
     const s = stage();
     const first = dataOf(await handleJuliusMissionRoute(post(JSON.stringify(CONTRACT)), s.ports));
     const edited = { ...CONTRACT, objective: 'Compare only the two formats we actually ship.' };
-    const rerun = await handleJuliusMissionRoute(post(JSON.stringify(edited), { rerun: 'explicit' }), s.ports);
+    const rerun = await handleJuliusMissionRoute(post(JSON.stringify(edited), { rerun: 'explicit', rerunKey: 'token-1' }), s.ports);
     expect(rerun?.status).toBe(201);
     const data = dataOf<{ runId: string; rerun: boolean }>(rerun);
     expect(data.runId).not.toBe(first.runId);
@@ -300,11 +300,20 @@ describe('POST /julius/missions', () => {
     await handleJuliusMissionRoute(post(JSON.stringify(CONTRACT)), s.ports);
     const edited = JSON.stringify({ ...CONTRACT, objective: 'Something else entirely.' });
     for (const value of ['true', '1', 'yes', 'EXPLICIT rerun please', '']) {
-      const result = await handleJuliusMissionRoute(post(edited, { rerun: value }), s.ports);
+      const result = await handleJuliusMissionRoute(post(edited, { rerun: value, rerunKey: 'token-1' }), s.ports);
       expect(result?.status, value).toBe(409);
     }
-    // The exact word, in any case, IS the intent.
-    expect((await handleJuliusMissionRoute(post(edited, { rerun: ' Explicit ' }), s.ports))?.status).toBe(201);
+    // The exact word, in any case, IS the intent — with a key of its own.
+    expect((await handleJuliusMissionRoute(post(edited, { rerun: ' Explicit ', rerunKey: 'token-1' }), s.ports))?.status).toBe(201);
+  });
+
+  it('an explicit rerun with no key of its own is refused by name, and creates nothing', async () => {
+    const s = stage();
+    await handleJuliusMissionRoute(post(JSON.stringify(CONTRACT)), s.ports);
+    const refused = await handleJuliusMissionRoute(post(JSON.stringify(CONTRACT), { rerun: 'explicit' }), s.ports);
+    expect(refused?.status).toBe(400);
+    expect(errorOf(refused).kind).toBe('rerun_key_required');
+    expect(s.runCalls.filter((call) => 'createRun' in call), 'the first create only').toHaveLength(1);
   });
 
   it('a duplicate of the SAME request is not a second run: it resumes the first, and bills nothing twice', async () => {

@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { WonderlandJuliusReaderPostgres } from '../src/relay/persistence/wonderland-julius-reader-postgres';
 import { projectJuliusTaskState } from '../src/relay/mission/wonderland/wonderland-julius-task-state';
+import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { composeJuliusMissionBootstrap, handleJuliusMissionRoute } from './julius-mission-routes';
 
 /**
@@ -27,13 +28,15 @@ import { composeJuliusMissionBootstrap, handleJuliusMissionRoute } from './juliu
  *                            GET /wonderland/julius/hydrate
  *   the Mission Contract     projectJuliusTaskState on what the WORLD read
  *
- * Gated like its siblings: JULIUS_REAL_POSTGRES=1 and WONDERLAND_TEST_DATABASE_URL.
- * It refuses the live `julius` database outright -- on the development laptop the
- * inherited DATABASE_URL points there, and this suite migrates and writes rows.
+ * Gated like every real-PostgreSQL suite in the repository: JULIUS_TEST_DATABASE_URL,
+ * which must name a throwaway database, and nothing else -- never DATABASE_URL,
+ * which on the development laptop points at the persistent Julius store. Without
+ * it the suite is `todo`: a proof not taken, never a pass. As a second guard it
+ * still refuses anything that looks like the live `julius` database outright.
  */
 
-const url = process.env.WONDERLAND_TEST_DATABASE_URL;
-const enabled = process.env.JULIUS_REAL_POSTGRES === '1' && Boolean(url);
+const url = juliusTestDatabaseUrl();
+const enabled = url !== null;
 
 if (enabled) {
   const parsed = new URL(url as string);
@@ -42,7 +45,9 @@ if (enabled) {
   }
 }
 
-describe.runIf(enabled)('a mission Julius creates is visible to the WORLD reader', () => {
+const suite = enabled ? describe : describe.todo;
+
+suite('a mission Julius creates is visible to the WORLD reader', () => {
   let pool: Pool;
   const nonce = randomBytes(6).toString('hex');
   const contract = {
@@ -61,7 +66,7 @@ describe.runIf(enabled)('a mission Julius creates is visible to the WORLD reader
   let runId = '';
 
   beforeAll(async () => {
-    pool = new Pool({ connectionString: url });
+    pool = new Pool({ connectionString: url as string });
     await new TransactionalWonderlandDatabase(pool).migrate();
     const created = await handleJuliusMissionRoute(
       { method: 'POST', path: '/julius/missions', operator: true, body: JSON.stringify(contract) },
