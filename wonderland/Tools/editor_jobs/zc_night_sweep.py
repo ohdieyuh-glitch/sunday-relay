@@ -275,7 +275,22 @@ def job():
 
     # ---- THE SWEEP, at midnight.
     cvar("wl.Sky.Hour", 0)
-    yield 3.0
+    # THE SKY TAKES LONGER TO ARRIVE THAN THE CAMERA DOES, and three seconds is not enough after a jump
+    # from noon. PROVED BY THE RUN ITSELF: the first three places of the first combination read 0.7159,
+    # 0.5485 and 0.5311, and the SAME three places in the very next combination read 0.1308, 0.1157 and
+    # 0.1153 -- while places four to seven were identical across both (0.1328/0.1256, 0.1549/0.1538,
+    # 0.1124/0.1123). The sweep was photographing the tail of the sunset for its first three readings and
+    # calling it midnight.
+    #
+    # Nothing about that is visible in a single combination; it only shows when the same place is compared
+    # across two, in measurement order. A settle long enough to cross the whole 67-minute dusk transition,
+    # then one throwaway framing so the exposure has somewhere to land before anything is recorded.
+    yield 12.0
+    if PLACES:
+        look(*PLACES[0])
+        yield 3.0
+        shoot("settle__discarded")
+    yield 2.0
     sweep = []
     RESULT["sweep"] = sweep
     for moon, sky, gain in SWEEP:
@@ -477,10 +492,17 @@ def job():
            best=best["key"] if best else None, best_readable=best["readable"] if best else None,
            ranked=[(r["key"], r["score"]) for r in sorted(sweep, key=lambda r: -r["score"])[:5]],
            note="a combination that stops any place being night is disqualified whatever else it lights")
+    # A None IN THE LADDER CRASHED THIS. Any rung whose capture failed carries luma None, and
+    # max(l["luma"] for l in ladder) then raises TypeError: '>' not supported between NoneType and float --
+    # which is what ended zzQ1 at line 481 AFTER every measurement had been taken. The gates that had
+    # already run were published; the last one and the tidy-up were not.
+    lad = [l["luma"] for l in ladder if l.get("luma") is not None]
+    span = (max(lad) - min(lad)) if lad else None
     record("N03", "no hour-to-hour step in the cycle exceeds a quarter of the day's range",
-           worst_jump[0] is not None and worst_jump[0] <= 0.25 * (max(l["luma"] for l in ladder) - min(l["luma"] for l in ladder) + 1e-6),
+           worst_jump[0] is not None and span is not None and worst_jump[0] <= 0.25 * (span + 1e-6),
            worst_jump_luma=worst_jump[0], at_hour=worst_jump[1],
-           day_range=[min(l["luma"] for l in ladder), max(l["luma"] for l in ladder)] if ladder else None)
+           day_range=[min(lad), max(lad)] if lad else None,
+           rungs_measured=len(lad), rungs_total=len(ladder))
     RESULT["status"] = "measured"
     yield 2.0
     les.editor_request_end_play()

@@ -440,9 +440,24 @@ def job():
     # times. This gate refuses to let those share a row.
     gone = {n: r.get("gone") for n, r in nations.items() if r.get("gone")}
     fell = [n for n, r in nations.items() if r.get("fell")]
-    record("W0B", "no walk ended because the DOG disappeared -- a pawn destroyed part-way along an avenue is "
-                  "a streaming finding about that avenue, not a harness failure",
-           not any(v == "pawn" for v in gone.values()),
+    # THIS GATE PASSED GREEN WHILE THE THING IT EXISTS TO DETECT HAPPENED, on the first run that could have
+    # exercised it. TARTARUS's Dog "did not survive being moved to the start cell" -- a destroyed pawn, the
+    # exact subject of this gate -- but it died BEFORE the walk loop, so it never reached the alive() check
+    # that fills `gone`, `gone` stayed empty, and "no walk ended because the DOG disappeared" was true only
+    # because no walk started. Written today, vacuous on its first real run.
+    #
+    # A pawn that dies at PLACEMENT is the same finding as one that dies at waypoint three: the Dog could not
+    # survive being where the route says to be. And a gate with nothing to judge must not report success --
+    # it has to say it had nothing to judge.
+    died_placing = [n for n, r in nations.items()
+                    if r.get("error") and "did not survive" in str(r.get("error"))]
+    walked = [n for n, r in nations.items() if r.get("probe_moved_uu") is not None]
+    record("W0B", "no walk ended because the DOG disappeared -- a pawn destroyed part-way along an avenue, or "
+                  "on being placed at its start, is a streaming finding about that avenue not a harness failure",
+           bool(walked) and not died_placing and not any(v == "pawn" for v in gone.values()),
+           died_on_placement=died_placing, nations_that_got_a_pawn=walked,
+           vacuous_if_empty=("NOTHING TO JUDGE: no nation produced a walk, so this gate is not evidence"
+                             if not walked else None),
            gone=gone, fell_out_of_the_world=fell,
            last_z={n: r.get("last_z") for n, r in nations.items() if r.get("last_z") is not None},
            below_floor_uu={n: r.get("below_floor_uu") for n, r in nations.items()
