@@ -9,8 +9,13 @@ $ue = 'C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe
 $project = 'C:\dev\iwonder\wonderland-task3\wonderland\Wonderland.uproject'
 $map = '/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2'
 $channelPy = 'C:\dev\iwonder\wonderland-task3\wonderland\Tools\editor_channel.py'
-$channel = 'C:\Users\Kaisi\.claude\jobs\ec4f540e\tmp\channel'
-$log = 'C:\dev\iwonder\recovery\_manifests\wl-live-editor-103.log'
+# THE CHANNEL THE EDITOR ACTUALLY USES. This pointed at a scratch path under .claude\jobs whose newest
+# entry was written on 2026-09-23; every editor since has run on Tools\_channel, which is where the live
+# heartbeat, inbox and done folders are. Both values below are copied from the running editor's own
+# command line in the log rather than from memory -- a launcher that opens a channel nobody is watching
+# looks exactly like an editor that has decided to ignore its jobs, and costs an hour to tell apart.
+$channel = 'C:\dev\iwonder\wonderland-task3\wonderland\Tools\_channel'
+$log = 'C:\dev\iwonder\recovery\_manifests\wl-live-editor-104.log'
 
 # QUARANTINE ANY AUTOSAVES BEFORE LAUNCHING. On 2026-09-22 the editor came up behind a modal "Restore
 # Packages" dialog that looks exactly like a slow load -- responsive process, flat memory, the log frozen after

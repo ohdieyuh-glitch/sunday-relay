@@ -1,57 +1,65 @@
-# WHAT DOES THE LIGHT BUDGET BUY, AND WHAT DOES IT COST? Measured at the worst-oversubscribed spot there is.
+# THE POOL IS PROBABLY LIMITED BY RADIUS, NOT BY COUNT -- AND THIS READS BOTH BACK INSTEAD OF ASSUMING.
 #
-# The other lane found the pool is heavily oversubscribed and I reproduced it independently from the
-# manifest: 1,464 defined lights, wl.Look.PracticalCount 48, wl.Look.PracticalRadius 12,000 uu. Counting,
-# for every light, how many others lie within one pool radius of it:
+# zzU5 swept wl.Look.PracticalCount at 48 / 96 / 144 / 192 at the densest spot in the world and the pool
+# rebuilt correctly to each size -- 48, 96, 144, 192 spawned actors, counted. The number actually LIT was
+# 31, 30, 30, 32. Flat. Four times the budget bought nothing.
 #
-#     median neighbourhood  110      p90  158      worst  184
-#     lights whose neighbourhood exceeds the pool:  1,079 of 1,464  (74 per cent)
+# WHY, almost certainly: Assign() builds its candidate list by DISTANCE FIRST --
 #
-# At the worst spot 184 designed lamps compete for 48 real ones, so 136 are dark however well they are
-# ranked -- and it is worst exactly where the design is densest, which is the developed districts the
-# founder says collapse into near-black. Ranking by significance, which landed at 88f8015d, decides WHICH
-# 48 win; it cannot make 184 fit into 48. Only the budget can, and line 138 already clamps Want to 256, so
-# there is headroom compiled in that nobody has priced.
+#     if (D2 > Radius2) { continue; }        then rank the survivors, then Lit = Min(Near, Pool)
 #
-# THE SPOT IS CHOSEN BY THE DATA, NOT BY ME: (-65943, -38753), the NC02 facade lamp in Noctis, which has
-# the densest neighbourhood in the world at 184. If raising the count helps anywhere it helps here, and if
-# it does not help here it will not help anywhere.
+# -- so wl.Look.PracticalRadius decides how many lights are even eligible, and the count only decides how
+# many of THOSE get lit. If Near is about 31, no value of the count can light a 32nd lamp.
 #
-# TWO TRAPS THAT WOULD EACH HAVE PRODUCED A CONFIDENT WRONG ANSWER, both gated rather than trusted.
+# And the arithmetic fits uncomfortably well. Counting the manifest against distance from that spot:
 #
-#   THE POOL DOES NOT REBUILD ON THE CVAR. BuildPool() is called only from Reload() and OnWorldBeginPlay,
-#   never from Tick. Setting wl.Look.PracticalCount alone leaves Pool.Num() at its previous size while the
-#   cvar reads back the new value perfectly -- the cvar-readback trap in a new coat, and a readback gate
-#   would have sailed straight through it. Every rung issues wl.Look.PracticalReload and then COUNTS THE
-#   SPAWNED ACTORS, which is the only statement of pool size that cannot lie.
+#     radius   4211 uu  ->   30 candidates      <-- matches the 31 the engine lit
+#     radius  12000 uu  ->  184 candidates          (12000 is the cvar's DEFAULT)
+#     radius  24000 uu  ->  286
 #
-#   THE POOL FOLLOWS THE PAWN, NOT THE CAMERA. Assign() takes its Eye from PC->GetPawn()->GetActorLocation().
-#   Posing the camera at Noctis while the pawn stood at the arrival would have selected the pool twelve
-#   kilometres away, shown a nearly unlit district, and supported either "Noctis has no lamps" or "raising
-#   the count does nothing". So the PAWN is moved and its landed position is recorded and gated.
+# So the running radius looks like roughly 4,200 rather than the 12,000 I assumed from the source default.
 #
-# COST IS READ FROM THE RAW ACCESSOR, deduplicated by engine frame number. GetFrameCostMs returns the
-# filtered half of FStatUnitData and a budget question is a question about the TAIL: forty-eight more
-# lights that cost nothing on average and stall on re-assignment are not affordable. A p95 off the filtered
-# curve would have said they were.
+# I AM NOT REPORTING THAT AS A FINDING, BECAUSE I INFERRED A CVAR'S VALUE FROM A DOWNSTREAM COUNT. That is
+# the same move as reading a docstring for behaviour, a p95 off a smoothed curve, or a mean for a
+# distribution -- a number standing in for the measurement. Every rung now READS BACK count, radius and
+# gain from the engine and records them beside the result, and B_READBACK voids the run if the values the
+# job asked for are not the values the engine is holding.
 #
-# Saves nothing. Restores the count and reloads. Holds exposure, span and the other lane's eye levels.
+# THE SWEEP IS TWO LADDERS SO THE TWO KNOBS CANNOT BE CONFUSED:
+#   rungs 1-3 hold the radius and raise the count   -- if lit stays flat, count is not the constraint
+#   rungs 3-6 hold the count high and raise radius  -- if lit tracks radius, that is the lever
+#
+# AND THE FIRST RUNG NOW WARMS UP. zzU5 voided honestly on B_NOISE at 0.4113 because its first rung read
+# 0.4932 while rungs two to four agreed at 0.2370 / 0.2334 / 0.2346. The settle fell through its 24 reads
+# without ever finding three in agreement -- the world was still arriving after BeginPlay plus a 192-light
+# rebuild -- and, correctly, trimmed nothing and let the gate void the run. A warm-up before the ladder
+# starts costs seconds and stops spending a whole run on it.
+#
+# Cost comes from the RAW accessor deduplicated by engine frame number, with stat unit issued and
+# re-issued, because a budget question is a question about the TAIL. zzU5's first pass reported every cost
+# cell as None: I went hunting a raw tail without turning the counter on. With it on, the same rungs showed
+# 205.87 ms and 168.38 ms worst frames against medians near 23 -- spikes the filtered field cannot show.
+#
+# Saves nothing. Restores count, radius and gain to what it FOUND them at, not to what the source defaults
+# say, and reloads behind the restore.
 import os
 
 L = unreal.WonderlandUiTestLibrary
 H = unreal.WonderlandHudTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "practical_budget")
 
-#: The densest neighbourhood in the manifest -- 184 lights within one pool radius. Chosen by counting.
+#: The densest neighbourhood in the manifest -- 184 lights within 12,000 uu. Chosen by counting, not by eye.
 SPOT = (-65943.0, -38753.0)
-#: 48 is shipped. 256 is the compiled ceiling at line 138, so 192 leaves headroom rather than testing a wall.
-COUNTS = (48, 96, 144, 192)
-#: Deep enough to be unambiguously night, and on the flat part zzT3 measured (0.0053 drift over 4.5 hours).
+#: (count, radius). First three raise the count at a fixed radius; last three raise the radius at a fixed
+#: count. 256 is the compiled ceiling on the pool, so 192 leaves headroom rather than testing a wall.
+RUNGS = ((48, None), (96, None), (192, None),
+         (192, 12000.0), (192, 24000.0), (192, 36000.0))
+#: Deep night, on the flat part zzT3 measured (0.0053 drift across four and a half hours).
 HOUR = 23.0
 SPAN = 21.0
 AGREE = 0.010
-#: How long to watch frames at each rung. Long enough for several pool re-assignments, which run every 0.25 s.
 COST_SECONDS = 6.0
+PAWN_CH = unreal.TraceTypeQuery.TRACE_TYPE_QUERY2
 
 
 def patch(cx, cy, hw, hh):
@@ -60,9 +68,6 @@ def patch(cx, cy, hw, hh):
         return None
     mean, dark, bright, sampled = got
     return {"luma": round(0.2126 * mean.r + 0.7152 * mean.g + 0.0722 * mean.b, 4),
-            # DARK IS KEPT SEPARATELY, not folded into tails. A MEAN passes while most of the frame is
-            # crushed -- a few lamp pixels lift it -- which is the error that once let a 99-per-cent-black
-            # pond through the water audit on its mean, and which I reintroduced in C_GROUND after fixing it.
             "dark": round(dark, 4),
             "tails": round(min(1.0, dark + bright), 4)}
 
@@ -96,38 +101,48 @@ def job():
     def command(text):
         unreal.SystemLibrary.execute_console_command(live(), text)
 
+    def read_f(name):
+        try:
+            return round(float(unreal.SystemLibrary.get_console_variable_float_value(name)), 2)
+        except Exception:                                  # noqa: BLE001
+            return None
+
+    def read_i(name):
+        try:
+            return int(unreal.SystemLibrary.get_console_variable_int_value(name))
+        except Exception:                                  # noqa: BLE001
+            v = read_f(name)
+            return int(v) if v is not None else None
+
+    def knobs():
+        return {"count": read_i("wl.Look.PracticalCount"),
+                "radius": read_f("wl.Look.PracticalRadius"),
+                "gain": read_f("wl.Look.PracticalGain")}
+
+    # ---- WHAT THE ENGINE IS ACTUALLY HOLDING, before anything is changed. zzU5 assumed the source
+    # defaults and its whole reading of the result depended on a radius nobody had read.
+    found = knobs()
+    RESULT["knobs_as_found"] = found
+    RESULT["source_defaults"] = {"count": 48, "radius": 12000.0, "gain": 1.0}
+
     world = live()
     pawn = unreal.GameplayStatics.get_player_pawn(world, 0)
-
-    # ---- FIND THE GROUND UNDER THE DENSEST SPOT, then stand the pawn on it.
-    #
-    # Traced rather than assumed. This project's shelves sit at road +12, ground beside it -14 and frontier
-    # -14, and a declared z has been wrong often enough that the ledger has a note about it.
-    sky = unreal.Vector(SPOT[0], SPOT[1], 20000.0)
-    floor_v = unreal.Vector(SPOT[0], SPOT[1], -5000.0)
     ground_z = None
     try:
-        # TRACE_TYPE_QUERY2 is the pawn channel this tree traces the floor on, and index 4 is where this
-        # engine's Python puts the impact point -- established once in zc_hit_shape and used at eighteen
-        # call sites since. Neither is guessed here.
         hit = unreal.SystemLibrary.line_trace_single(
-            world, sky, floor_v, unreal.TraceTypeQuery.TRACE_TYPE_QUERY2, False,
-            [p for p in (pawn,) if p is not None], unreal.DrawDebugTrace.NONE, True,
+            world, unreal.Vector(SPOT[0], SPOT[1], 20000.0), unreal.Vector(SPOT[0], SPOT[1], -5000.0),
+            PAWN_CH, False, [p for p in (pawn,) if p is not None], unreal.DrawDebugTrace.NONE, True,
             unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
         if hit is not None:
             ground_z = float(hit.to_tuple()[4].z)
     except Exception as bad:                               # noqa: BLE001
         RESULT["ground_trace_error"] = str(bad)[:200]
     RESULT["ground_trace_z"] = ground_z
-    stand_z = (ground_z + 120.0) if ground_z is not None else 200.0
-    pawn.set_actor_location(unreal.Vector(SPOT[0], SPOT[1], stand_z), False, True)
+    pawn.set_actor_location(
+        unreal.Vector(SPOT[0], SPOT[1], (ground_z + 120.0) if ground_z is not None else 200.0), False, True)
     yield 2.0
 
-    # RE-FETCH THE PAWN. A teleport can RESPAWN it -- this tree's traversal job already documents that as
-    # the behaviour -- and the old reference is then a dead actor whose get_actor_location returns
-    # (0, 0, 0). The first run of this job read 10.6 uu from target off a surviving pawn and the second
-    # read the origin, 76 km away, off a destroyed one: same code, different luck. B_WHERE caught it both
-    # times, which is the only reason this was visible at all.
+    # Re-fetched: a teleport can respawn the pawn, and the old reference then reads (0, 0, 0).
     pawn = unreal.GameplayStatics.get_player_pawn(live(), 0)
     if pawn is None:
         RESULT["status"] = "voided: there is no player pawn after the teleport"
@@ -138,13 +153,11 @@ def job():
 
     where = pawn.get_actor_location()
     off = round(((where.x - SPOT[0]) ** 2 + (where.y - SPOT[1]) ** 2) ** 0.5, 1)
-    RESULT["pawn_asked"] = list(SPOT)
     RESULT["pawn_landed"] = [round(where.x, 1), round(where.y, 1), round(where.z, 1)]
     record("B_WHERE", "the pawn is standing at the densest spot, which is what selects the pool",
            off <= 500.0, asked=list(SPOT), landed=RESULT["pawn_landed"], horizontal_offset_uu=off,
            ground_trace_z=ground_z,
-           note="Assign() takes its Eye from the PAWN, not the camera. If the pawn did not arrive, every "
-                "reading below is of a pool selected somewhere else and none of it means anything")
+           note="Assign() takes its Eye from the PAWN. If it did not arrive, the pool was chosen elsewhere")
     if off > 500.0:
         RESULT["status"] = "voided: the pawn did not reach the measurement spot"
         yield 2.0
@@ -156,21 +169,32 @@ def job():
     cvar("wl.Sky.DayMinutes", 0)
     cvar("wl.Sky.TwilightSpan", "%.1f" % SPAN)
     cvar("wl.Sky.Hour", "%.2f" % HOUR)
-    # Eye height on the pawn, looking level along the street rather than down at it.
     eye = unreal.Vector(where.x, where.y, where.z + 60.0)
     at = unreal.Vector(where.x + 3000.0, where.y + 1200.0, where.z + 40.0)
     L.pose_camera(world, eye, at, 70.0)
-    # STAT UNIT, OR THERE IS NO FRAME INSTRUMENT AT ALL. FStatUnitData only advances while the overlay is
-    # actually drawing. The first run of this job read every cost cell as None for exactly this reason: I
-    # went looking for the raw accessor's tail without turning the counter on. It is re-issued per rung
-    # below as well, because left alone it hands back one frozen snapshot over and over.
     command("stat unit")
     RESULT["camera_eye"] = [round(eye.x, 1), round(eye.y, 1), round(eye.z, 1)]
     RESULT["camera_at"] = [round(at.x, 1), round(at.y, 1), round(at.z, 1)]
-    yield 3.0
+
+    def settled(limit=24):
+        window = []
+        for _ in range(limit):
+            yield 1.0
+            now = patch(0.5, 0.5, 0.46, 0.44)
+            if now is None:
+                continue
+            window.append(now["luma"])
+            if len(window) > 3:
+                window.pop(0)
+            if len(window) == 3 and (max(window) - min(window)) < 0.004:
+                return
+
+    # ---- WARM UP BEFORE THE LADDER STARTS. zzU5 spent its whole first rung arriving.
+    for step in settled(60):
+        yield step
+    RESULT["warmed"] = True
 
     def pool_now():
-        """Pool size and how many are actually LIT, by counting actors. The only account that cannot lie."""
         try:
             lights = unreal.GameplayStatics.get_all_actors_of_class(live(), unreal.PointLight)
         except Exception:                                  # noqa: BLE001
@@ -179,13 +203,12 @@ def job():
         for a in lights:
             if a is None:
                 continue
-            name = ""
             try:
                 name = str(a.get_actor_label())
             except Exception:                              # noqa: BLE001
-                pass
+                name = ""
             if name and not name.startswith("WL_Practical"):
-                continue                                   # someone else's light, not the pool
+                continue
             total += 1
             try:
                 comp = a.point_light_component
@@ -196,7 +219,6 @@ def job():
         return total, lit
 
     def raw_frame_ms():
-        """This frame's unfiltered cost, once per rendered frame. None when the frame has not advanced."""
         try:
             now = int(H.get_engine_frame_number())
         except Exception:                                  # noqa: BLE001
@@ -212,49 +234,15 @@ def job():
         globals()["_LAST_FRAME"] = now
         return float(raw[0])
 
-    def settled():
-        # THE WINDOW'S SPREAD, NOT ITS STEPS. This asked whether three consecutive STEPS were each inside
-        # the tolerance, and steps compound: three steps of 0.0039 walk the window 0.0117 downhill while
-        # every pair passes, which is wider than the 0.010 these jobs call agreement. The other lane
-        # demonstrated it on [200, 60, 66, 61, 50, 49, 48.5], where a step test returns on the 60 with a
-        # fifth of the fall still to come -- the pair test's hole, one read wider, on exactly the
-        # oscillating case the three-read version was written to catch.
-        #
-        # Max minus min across the last three reads asks the question actually being asked -- are these
-        # three the same reading -- and carries no assumption about direction, rate or shape. That is what
-        # killed the previous four versions: each fixed the last one's form and kept its assumption.
-        window = []
-        for _ in range(24):
-            yield 1.0
-            now = patch(0.5, 0.5, 0.46, 0.44)
-            if now is None:
-                continue
-            window.append(now["luma"])
-            if len(window) > 3:
-                window.pop(0)
-            if len(window) == 3 and (max(window) - min(window)) < 0.004:
-                return
-        # Fell through without settling. Said by NOT trimming anything: the rung's own two-read spread then
-        # reports the damage and the noise gate voids the run, rather than a tidy number from the tail.
-
     rows = []
     RESULT["budget"] = rows
-    for count in COUNTS:
+    for count, radius in RUNGS:
         cvar("wl.Look.PracticalCount", "%d" % count)
-        command("wl.Look.PracticalReload")                 # WITHOUT THIS THE POOL DOES NOT CHANGE SIZE
+        if radius is not None:
+            cvar("wl.Look.PracticalRadius", "%.0f" % radius)
+        command("wl.Look.PracticalReload")                 # the pool does not resize without this
         yield 2.0
-        # ---- WAIT FOR THE POOL TO STOP MOVING BEFORE LOOKING AT IT.
-        #
-        # Reload() destroys and respawns up to 192 point lights and sets LastNight = -1 to force a
-        # re-assign, and Assign() runs on its own 0.25 s timer. The first run of this job sampled inside
-        # that window and recorded 31 lit out of a pool of 48, then 96 of 96, then 31 of 144, then 184 of
-        # 192 -- an impossible saturation curve, which is what a transient state looks like when it is
-        # read as a result. The luma settle below could not catch it because the picture can be steady
-        # while the assignment underneath it is not.
-        #
-        # So the LIT COUNT has to be the same three reads running before anything is measured. Same test
-        # as the luma settle and for the same reason: a window that is not moving, rather than steps that
-        # happen to be small.
+        # wait for the assignment to stop moving, not just the picture
         seen = []
         for _ in range(40):
             yield 0.5
@@ -264,13 +252,13 @@ def job():
                 seen.pop(0)
             if len(seen) == 3 and len(set(seen)) == 1 and seen[0] is not None:
                 break
-        command("stat unit")                               # re-issued: the counter freezes if left alone
+        command("stat unit")
         for step in settled():
             yield step
+        held = knobs()
         total, lit = pool_now()
         a = patch(0.5, 0.5, 0.46, 0.44)
         g1 = patch(0.5, 0.78, 0.30, 0.16)
-        # ---- frame cost, raw and per-frame, across several pool re-assignments
         frames = []
         spent = 0.0
         while spent < COST_SECONDS:
@@ -283,98 +271,113 @@ def job():
         b = patch(0.5, 0.5, 0.46, 0.44)
         g2 = patch(0.5, 0.78, 0.30, 0.16)
         try:
-            H.capture_viewport_jpeg(os.path.join(ROOT, "count%03d.jpg" % count), 1200, 85)
+            H.capture_viewport_jpeg(
+                os.path.join(ROOT, "c%03d_r%05.0f.jpg" % (count, held.get("radius") or 0)), 1200, 85)
         except Exception:                                  # noqa: BLE001
             pass
         if a is None or b is None:
-            rows.append({"count": count, "unmeasured": True})
+            rows.append({"count": count, "radius_asked": radius, "unmeasured": True})
             continue
         frames.sort()
         rows.append({
-            "count": count,
-            "pool_actors": total, "lit_actors": lit,
-            # The last three lit-counts before measuring. Three equal values means the assignment had
-            # stopped moving; anything else means it had not and the row should be read as suspect.
-            "lit_settled_on": list(seen),
+            "count_asked": count, "radius_asked": radius, "held": held,
+            "pool_actors": total, "lit_actors": lit, "lit_settled_on": list(seen),
             "luma": round((a["luma"] + b["luma"]) / 2.0, 4),
             "spread": round(abs(a["luma"] - b["luma"]), 4),
             "tails": round((a["tails"] + b["tails"]) / 2.0, 4),
             "ground_luma": round(((g1 or {}).get("luma", 0.0) + (g2 or {}).get("luma", 0.0)) / 2.0, 4)
+            if g1 and g2 else None,
+            "ground_dark": round(((g1 or {}).get("dark", 1.0) + (g2 or {}).get("dark", 1.0)) / 2.0, 4)
             if g1 and g2 else None,
             "raw_frames": len(frames),
             "raw_median_ms": round(frames[len(frames) // 2], 2) if frames else None,
             "raw_p95_ms": round(frames[min(len(frames) - 1, int(len(frames) * 0.95))], 2) if frames else None,
             "raw_worst_ms": round(frames[-1], 2) if frames else None})
 
-    cvar("wl.Look.PracticalCount", "48")
+    # ---- RESTORE WHAT WAS FOUND, not what the source defaults say.
+    if found.get("count") is not None:
+        cvar("wl.Look.PracticalCount", "%d" % found["count"])
+    if found.get("radius") is not None:
+        cvar("wl.Look.PracticalRadius", "%.0f" % found["radius"])
     command("wl.Look.PracticalReload")
     cvar("wl.Sky.Hour", 12)
     L.release_camera(live())
 
     good = [r for r in rows if not r.get("unmeasured")]
 
+    # ---- DID THE ENGINE TAKE WHAT IT WAS GIVEN? Everything below reads these two numbers.
+    mismatch = []
+    for r in good:
+        h = r.get("held") or {}
+        if h.get("count") != r["count_asked"]:
+            mismatch.append({"rung": r["count_asked"], "asked_count": r["count_asked"], "held": h})
+        elif r["radius_asked"] is not None and h.get("radius") is not None \
+                and abs(h["radius"] - r["radius_asked"]) > 1.0:
+            mismatch.append({"rung": r["count_asked"], "asked_radius": r["radius_asked"], "held": h})
+    record("B_READBACK", "the engine is holding the count and radius this job asked for, read back per rung",
+           len(mismatch) == 0 and len(good) == len(RUNGS),
+           knobs_as_found=found, source_defaults=RESULT["source_defaults"],
+           held_per_rung=[r.get("held") for r in good], mismatches=mismatch,
+           note="zzU5 assumed the radius was the source default of 12000 and read 31 lights lit where 184 "
+                "are in range. That inference may well be right and it is still an inference: a cvar's "
+                "value is something to read, not to derive from a downstream count")
+    if mismatch or len(good) != len(RUNGS):
+        RESULT["status"] = "voided: the engine is not holding what was asked for"
+        yield 2.0
+        les.editor_request_end_play()
+        yield (lambda: ues.get_game_world() is None, 300)
+        return
+
     worst_spread = max((r["spread"] for r in good), default=None)
     record("B_NOISE", "each rung agrees with itself -- two reads of the same setting",
-           worst_spread is not None and worst_spread <= AGREE and len(good) == len(COUNTS),
-           worst_spread=worst_spread, tolerance=AGREE, measured=len(good), wanted=len(COUNTS))
-    if not good or len(good) != len(COUNTS) or (worst_spread or 1.0) > AGREE:
+           worst_spread is not None and worst_spread <= AGREE,
+           worst_spread=worst_spread, tolerance=AGREE,
+           note="zzU5 failed this at 0.4113 on its first rung alone, while rungs two to four agreed to "
+                "0.0036. A warm-up now runs before the ladder starts")
+    if (worst_spread or 1.0) > AGREE:
         RESULT["status"] = "voided: the rungs do not agree with themselves"
         yield 2.0
         les.editor_request_end_play()
         yield (lambda: ues.get_game_world() is None, 300)
         return
 
-    # ---- DID THE POOL ACTUALLY CHANGE SIZE? Counted, not asked.
-    built = {r["count"]: r["pool_actors"] for r in good}
-    took = [c for c in COUNTS if built.get(c) is not None and abs(built[c] - c) <= 2]
+    built = {r["count_asked"]: r["pool_actors"] for r in good}
     record("B_POOL", "the pool was actually rebuilt to each size asked for, counted from spawned actors",
-           len(took) == len(COUNTS), asked=list(COUNTS), counted=built, matched=took,
-           note="BuildPool runs only from Reload and OnWorldBeginPlay, never from Tick. If these do not "
-                "track, wl.Look.PracticalReload is not doing what this job assumes and every reading below "
-                "is of one pool size measured four times")
-    if len(took) != len(COUNTS):
-        RESULT["status"] = "voided: the pool did not rebuild to the sizes asked for"
-        yield 2.0
-        les.editor_request_end_play()
-        yield (lambda: ues.get_game_world() is None, 300)
-        return
+           all(abs((r["pool_actors"] or -1) - r["count_asked"]) <= 2 for r in good),
+           asked=[r["count_asked"] for r in good], counted=[r["pool_actors"] for r in good],
+           note="BuildPool runs only from Reload and OnWorldBeginPlay, never from Tick")
 
-    # ---- IS THE POOL SATURATED? If every light in the pool is lit at 48, the budget is the binding limit.
-    saturation = {r["count"]: {"pool": r["pool_actors"], "lit": r["lit_actors"]} for r in good}
-    base = next((r for r in good if r["count"] == 48), None)
-    record("B_SATURATED", "at the shipped budget every light in the pool is already lit -- the cap binds here",
-           base is not None and base["lit_actors"] is not None and base["pool_actors"] is not None
-           and base["lit_actors"] >= base["pool_actors"] - 2,
-           at_48=saturation.get(48), all_counts=saturation,
-           manifest_within_radius=184, manifest_total=1464,
-           note="184 defined lights lie within one pool radius of this spot. If 48 of 48 are lit then the "
-                "pool is the constraint and not the placement, which is the question this job exists for")
+    # ---- WHICH KNOB IS THE CONSTRAINT? The whole point of the job.
+    count_leg = [r for r in good if r["radius_asked"] is None]
+    radius_leg = [r for r in good if r["radius_asked"] is not None]
+    lit_by_count = {r["count_asked"]: r["lit_actors"] for r in count_leg}
+    lit_by_radius = {("%.0f" % r["radius_asked"]): r["lit_actors"] for r in radius_leg}
+    count_moved = (max(lit_by_count.values()) - min(lit_by_count.values())) if lit_by_count else None
+    radius_moved = (max(lit_by_radius.values()) - min(lit_by_radius.values())) if lit_by_radius else None
+    record("B_CONSTRAINT", "raising the RADIUS lights more lamps and raising the COUNT alone does not",
+           radius_moved is not None and count_moved is not None
+           and radius_moved > 4 and count_moved <= 4,
+           lit_by_count_at_fixed_radius=lit_by_count, lit_by_radius_at_count_192=lit_by_radius,
+           count_leg_spread=count_moved, radius_leg_spread=radius_moved,
+           note="Assign() filters by distance BEFORE it ranks, so the radius decides how many lamps are "
+                "eligible at all and the count only decides how many of those are lit. Green means the "
+                "budget conversation has been about the wrong knob")
 
-    # ---- WHAT DOES THE EXTRA BUDGET BUY?
-    top = good[-1]
-    gain_luma = (round(top["luma"] - base["luma"], 4) if base else None)
-    gain_ground = (round((top.get("ground_luma") or 0.0) - (base.get("ground_luma") or 0.0), 4)
-                   if base else None)
-    record("B_LIGHT", "raising the budget actually lights more of the district",
-           gain_luma is not None and gain_luma > AGREE,
-           luma_by_count={str(r["count"]): r["luma"] for r in good},
-           ground_by_count={str(r["count"]): r.get("ground_luma") for r in good},
-           gain_luma=gain_luma, gain_ground=gain_ground, tolerance=AGREE,
-           note="if this is red the budget is not what is dark here and adding lights is the wrong fix, "
-                "whatever the saturation count says")
+    record("B_LIGHT", "more lit lamps actually make the district brighter",
+           len(good) > 1 and (good[-1]["luma"] - good[0]["luma"]) > AGREE,
+           luma_by_rung={("c%d_r%s" % (r["count_asked"], r["radius_asked"])): r["luma"] for r in good},
+           ground_dark_by_rung={("c%d_r%s" % (r["count_asked"], r["radius_asked"])): r["ground_dark"]
+                                for r in good},
+           note="lighting more lamps is not the same as lighting the district, and the crushed ground "
+                "fraction is the reading that answers the founder rather than the mean")
 
-    # ---- AND WHAT DOES IT COST, on the tail rather than the average.
-    cost = {str(r["count"]): {"median": r["raw_median_ms"], "p95": r["raw_p95_ms"],
-                              "worst": r["raw_worst_ms"], "frames": r["raw_frames"]} for r in good}
-    readable = all(r["raw_median_ms"] is not None and r["raw_frames"] >= 30 for r in good)
-    p95_rise = (round(top["raw_p95_ms"] - base["raw_p95_ms"], 2)
-                if readable and base and top["raw_p95_ms"] and base["raw_p95_ms"] else None)
-    record("B_COST", "the frame cost of the larger budget is reported from the RAW accessor, per frame",
-           readable, by_count=cost, p95_rise_48_to_top=p95_rise,
-           frames_needed=30,
-           note="INFORMATIONAL: this publishes the curve rather than passing or failing it, because what "
-                "is affordable is a founder call and not mine. Red here means the frames could not be "
-                "read at all, which would make the cost column meaningless rather than expensive")
+    record("B_COST", "the frame cost is reported from the RAW accessor, per frame, with the tail intact",
+           all(r["raw_median_ms"] is not None and r["raw_frames"] >= 30 for r in good),
+           by_rung={("c%d_r%s" % (r["count_asked"], r["radius_asked"])):
+                    {"median": r["raw_median_ms"], "p95": r["raw_p95_ms"], "worst": r["raw_worst_ms"],
+                     "frames": r["raw_frames"]} for r in good},
+           note="INFORMATIONAL: publishes the curve rather than judging it, because affordable is a "
+                "founder call. Red here means the frames could not be read at all")
 
     RESULT["status"] = "measured"
     yield 2.0
