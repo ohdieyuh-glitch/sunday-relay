@@ -140,6 +140,23 @@ def job():
                "seconds_waiting_for_the_cell": round(time.time() - began, 1)}
         if live is None:
             row["unmeasured"] = "the Dog did not survive the stand"
+            # ---- WHICH KIND OF "GONE" IS IT? Destroyed and unpossessed look identical from
+            # ---- get_player_pawn, and they have completely different causes: something calling Destroy, or
+            # ---- the controller letting go of a pawn that still exists. Three runs have died on this without
+            # ---- anyone asking which.
+            try:
+                pc = unreal.GameplayStatics.get_player_controller(world, 0)
+                row["controller_exists"] = pc is not None
+            except Exception:                                      # noqa: BLE001
+                row["controller_exists"] = "threw"
+            try:
+                dogs = unreal.GameplayStatics.get_all_actors_of_class(world, unreal.RelayDogCharacter)
+                row["relay_dogs_in_world"] = len(dogs)
+                if dogs:
+                    at2 = dogs[0].get_actor_location()
+                    row["first_dog_at"] = [round(at2.x), round(at2.y), round(at2.z)]
+            except Exception as err:                               # noqa: BLE001
+                row["relay_dogs_in_world"] = "?" + str(err)[:60]
         else:
             at = live.get_actor_location()
             row["landed_z"] = round(float(at.z))
