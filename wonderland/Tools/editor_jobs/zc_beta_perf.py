@@ -89,7 +89,23 @@ def job():
             got = H.get_frame_cost_ms()
             if got is not None and float(got[0]) > 0.01:
                 frame, game, render, gpu = got
-                frames.append((frame, game, render, gpu))
+                # ---- AND THE RAW COST OF THE SAME FRAME, BECAUSE THE FOUR ABOVE ARE AVERAGES.
+                #
+                # FStatUnitData keeps two parallel sets of fields; the engine's own comment calls the first
+                # "unit frame times filtered with a simple running average" and the second the "raw
+                # equivalents". The filter is FrameTime = 0.9 * FrameTime + 0.1 * RawFrameTime, a ten-frame
+                # exponential average, and the engine's performance snapshot assigns that field to a variable
+                # named AverageFrameTime.
+                #
+                # So the medians below are honest and F01's "worst" was not: a max over smoothed stand
+                # medians is the worst STAND, not the worst FRAME, and it is a softer test than its name
+                # claims because the filter has already removed the peaks it was looking for.
+                try:
+                    raw = H.get_raw_frame_cost_ms()
+                    raw_frame = float(raw[0]) if raw is not None else 0.0
+                except Exception:                                  # noqa: BLE001
+                    raw_frame = 0.0
+                frames.append((frame, game, render, gpu, raw_frame))
                 dead = 0
             else:
                 dead += 1
@@ -108,11 +124,16 @@ def job():
         def median(vals):
             s = sorted(vals)
             return round(s[len(s) // 2], 2)
+        raws = [f[4] for f in frames if len(f) > 4 and f[4] > 0.01]
         return {"frames": len(frames),
                 "frame_ms": median([f[0] for f in frames]),
                 "game_ms": median([f[1] for f in frames]),
                 "render_ms": median([f[2] for f in frames]),
-                "gpu_ms": median([f[3] for f in frames])}
+                "gpu_ms": median([f[3] for f in frames]),
+                # The unfiltered tail of this stand, reported beside the medians rather than instead of them.
+                "raw_p95_ms": (round(sorted(raws)[min(len(raws) - 1, int(len(raws) * 0.95))], 2)
+                               if raws else None),
+                "raw_worst_ms": round(max(raws), 2) if raws else None}
 
     readings = {}
     RESULT["by_hour"] = readings
@@ -225,10 +246,23 @@ def job():
         RESULT["status"] = "FAIL: stat unit did not report"
         return
 
+    # RENAMED TO WHAT IT IS. This is the worst STAND's typical cost, taken from the filtered field where a
+    # median is the right statistic. It was called worst_frame_ms for three runs and is not a frame.
     worst = max(v["frame_ms"] for hour in readings.values() for v in hour.values())
-    RESULT["worst_frame_ms"] = worst
+    RESULT["worst_stand_median_ms"] = worst
+    # AND THE WORST FRAME, from the raw field, reported separately because it answers a different question
+    # and because a single unrelated stall can own it. It sets no gate here: this job asserts the world's
+    # typical cost, and the tail belongs to zc_avatar_hitch where a spike has a cause to attribute it to.
+    raw_tails = [v.get("raw_worst_ms") for hour in readings.values() for v in hour.values()
+                 if v.get("raw_worst_ms")]
+    raw_p95s = [v.get("raw_p95_ms") for hour in readings.values() for v in hour.values()
+                if v.get("raw_p95_ms")]
+    RESULT["worst_raw_frame_ms"] = max(raw_tails) if raw_tails else None
+    RESULT["worst_stand_raw_p95_ms"] = max(raw_p95s) if raw_p95s else None
     record("F01", "the worst stand in the world holds a playable frame",
-           worst <= 50.0, worst_frame_ms=worst, ceiling=50.0,
+           worst <= 50.0, worst_stand_median_ms=worst, ceiling=50.0,
+           worst_raw_frame_ms=RESULT["worst_raw_frame_ms"],
+           worst_stand_raw_p95_ms=RESULT["worst_stand_raw_p95_ms"],
            note="a ceiling, not a target. This is an editor PIE window on a throttling laptop, which is the "
                 "harshest place Wonderland is ever drawn; a packaged build has never been measured and that "
                 "gap is listed as a beta blocker rather than estimated away.")
