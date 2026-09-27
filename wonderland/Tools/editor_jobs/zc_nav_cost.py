@@ -15,6 +15,7 @@
 # as mascot measurements through nine gates. Any job that owns PIE is serialised.
 CONCURRENT = False
 
+import os
 import time
 import unreal
 
@@ -23,6 +24,19 @@ H = unreal.WonderlandHudTestLibrary
 
 #: Seconds of frames to average per side. Long enough that a single hitch cannot decide it.
 SAMPLE_S = 22.0
+
+
+def _editor_foreground():
+    """Whether this editor owns the foreground window. Behind another window the editor throttles PIE, so a
+    frame rate is only a measurement when this is True. Same helper as beta_probe and the avatar ladder."""
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        pid = ctypes.c_ulong(0)
+        user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), ctypes.byref(pid))
+        return pid.value == os.getpid()
+    except Exception:                                              # noqa: BLE001
+        return None
 
 
 def job():
@@ -76,7 +90,11 @@ def job():
         started = time.time()
         while time.time() - started < SAMPLE_S:
             try:
-                samples.append(float(H.get_frame_cost_ms()[0]))
+                # ---- THE WHOLE TUPLE, NOT JUST THE FRAME. A frame time on its own cannot be
+                # ---- contradicted, and this job has been publishing the largest numbers in the
+                # ---- project -- 934.45 and 1030.08 ms -- with nothing beside them.
+                got = H.get_frame_cost_ms()
+                samples.append((float(got[0]), float(got[1]), float(got[2]), float(got[3])))
             except Exception:
                 pass
             if len(samples) % 20 == 0:
@@ -84,14 +102,36 @@ def job():
             yield 0.25
         les.editor_request_end_play()
         yield (lambda: ues.get_game_world() is None, 300)
-        clean = [v for v in samples if v > 0.01]
-        clean.sort()
+        clean = sorted((v for v in samples if v[0] > 0.01), key=lambda v: v[0])
+
+        def at(i, p=0.5):
+            if not clean:
+                return 0.0
+            return round(sorted(v[i] for v in clean)[min(len(clean) - 1, int(len(clean) * p))], 2)
+
         out = {
             "samples": len(clean),
-            "mean_ms": round(sum(clean) / len(clean), 2) if clean else 0.0,
-            "median_ms": round(clean[len(clean) // 2], 2) if clean else 0.0,
-            "worst_ms": round(clean[-1], 2) if clean else 0.0,
+            "mean_ms": round(sum(v[0] for v in clean) / len(clean), 2) if clean else 0.0,
+            "median_ms": at(0),
+            "worst_ms": round(clean[-1][0], 2) if clean else 0.0,
+            "game_median": at(1), "render_median": at(2), "gpu_median": at(3),
         }
+        # ---- IS THIS FRAME DOING WORK, OR WAITING?
+        #
+        # The avatar ladder, measured the same way, turned out to be sitting at a near-constant 400 ms
+        # while game was 27 ms and GPU 23: fifty milliseconds of four hundred accounted for, and a
+        # worst case of 400.6 against a median of 400.12. That is a clamp -- almost certainly the
+        # editor's background throttle, which engages the moment this editor stops owning the
+        # foreground window and which nothing here re-checks after the single focus_game_viewport
+        # above. Seven of the eleven frame-time results in this project carry no companion metric,
+        # and those seven hold every number between 77 and 1030 ms.
+        #
+        # So the accounting ships with every reading. If the busiest thread does not add up to the
+        # frame, the number measures the editor idling rather than navigation.
+        busiest = max(out["game_median"], out["gpu_median"], out["render_median"])
+        out["accounted_fraction"] = round(busiest / max(out["median_ms"], 0.01), 3)
+        out["unaccounted_ms"] = round(out["median_ms"] - busiest, 2)
+        out["foreground"] = _editor_foreground()
         emit(label, "INFO", label, out)
         RESULT[label] = out
         return out
