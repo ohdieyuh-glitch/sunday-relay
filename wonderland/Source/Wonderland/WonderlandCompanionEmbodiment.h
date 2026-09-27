@@ -128,6 +128,14 @@ public:
 	void SetNightGlow(float Scale);
 
 	/**
+	 * HOW HARD THE SHELL'S RIM READS. 1 is daylight; the day cycle drives it up after dark.
+	 *
+	 * Exists because the mascot measured DARKER than the ground at the darkest hour. See the implementation
+	 * for why more moonlight or more fill cannot fix that -- they both light the ground more than the figure.
+	 */
+	void SetRimBoost(float Amount);
+
+	/**
 	 * HOW HARD THE EYES BURN, WHICH IS A DIFFERENT QUESTION FROM HOW HARD THE FIRE BURNS.
 	 *
 	 * FOUNDER: "Every mascot skin eyes have to be glowing even when its day time in wonderland."
@@ -735,6 +743,9 @@ private:
 
 	/** See SetNightGlow. 1 is noon; the day cycle drives it down towards NightGlowFloor after dark. */
 	float NightGlowScale = 1.0f;
+
+	/** See SetRimBoost. 1 is daylight. */
+	float RimBoost = 1.0f;
 
 	/** See SetEyeGlow. Above 1 in daylight, mildly below it at night. */
 	float EyeGlowScale = 1.0f;

@@ -453,6 +453,23 @@ static FAutoConsoleVariableRef GWonderlandEyeNightGlowRef(
 	TEXT("The emissive level a mascot's eyes are driven to at midnight."),
 	ECVF_Default);
 
+/**
+ * HOW HARD A FIGURE'S SHELL CATCHES A RIM AT MIDNIGHT.
+ *
+ * The mascot reads 0.074 luma against ground at 0.121 at 04:00 -- darker than the stone it stands on, with
+ * 0.0476 of separation against a floor of 0.05. Reproduced across two runs, so it is a real reading rather
+ * than noise, and the direction is what matters: a bone-white dog should not be the darker of the two.
+ *
+ * A console variable and not a literal because the right value is a look decision and this file has already
+ * been bitten twice by numbers that were correct when written and stale a week later.
+ */
+static float GWonderlandNightRim = 2.6f;
+static FAutoConsoleVariableRef GWonderlandNightRimRef(
+	TEXT("wl.Look.NightRim"),
+	GWonderlandNightRim,
+	TEXT("How hard a figure's shell catches a rim light at midnight. 1 = the daylight amount."),
+	ECVF_Default);
+
 static float GWonderlandMoonGain = 0.050f;
 static FAutoConsoleVariableRef GWonderlandMoonGainRef(
 	TEXT("wl.Sky.MoonGain"),
@@ -701,10 +718,15 @@ void UWonderlandDayCycleSubsystem::ScaleGlowsForNight()
 	// THE EYES GO THE OTHER WAY. Brightest when the sky is, which is the opposite of everything else here.
 	const float Eyes = FMath::Clamp(
 		FMath::Lerp(GWonderlandEyeDayGlow, GWonderlandEyeNightGlow, Nightfall), 0.05f, 12.0f);
+	// AND THE SHELL GETS AN EDGE AFTER DARK. See AWonderlandCompanionEmbodiment::SetRimBoost: at the darkest
+	// hour the mascot measured DARKER than the ground it stands on, and neither the moon nor the fill can fix
+	// that because both light a horizontal ground more than a standing figure.
+	const float Rim = FMath::Clamp(FMath::Lerp(1.0f, GWonderlandNightRim, Nightfall), 1.0f, 6.0f);
 	for (TActorIterator<AWonderlandCompanionEmbodiment> It(Here); It; ++It)
 	{
 		It->SetNightGlow(Keep);
 		It->SetEyeGlow(Eyes);
+		It->SetRimBoost(Rim);
 	}
 }
 

@@ -1259,6 +1259,54 @@ void AWonderlandCompanionEmbodiment::SetEyeGlow(float Scale)
 	RepaintColourway();
 }
 
+void AWonderlandCompanionEmbodiment::SetRimBoost(float Amount)
+{
+	// ---- AN EDGE ON THE FIGURE AFTER DARK, BECAUSE AT 04:00 IT IS DARKER THAN THE GROUND IT STANDS ON.
+	//
+	// Measured twice, reproducibly: the mascot reads 0.074 luma against ground at 0.121 at the darkest hour,
+	// a separation of 0.0476 against a floor of 0.05. Marginal, but consistent -- and the direction is the
+	// telling part. A bone-white dog should not be DARKER than the stone under it.
+	//
+	// WHY NOT MORE MOONLIGHT OR MORE FILL, which were the obvious levers. Both light the ground MORE than the
+	// figure, because the ground is a large horizontal surface facing a light source that is overhead and a
+	// sky that is everywhere, while a standing figure presents mostly vertical surfaces to both. Raising
+	// either widens the gap it is meant to close, and the night-is-still-night clause (N10, ratio <= 0.38)
+	// caps how far they can go regardless.
+	//
+	// A rim is the answer the problem actually asks for, and it is what any night scene does to keep a
+	// character off its background. RimAmp already exists on every Rim material the figures are built from,
+	// and the shell -- bone, gold, linen, frost -- is exactly what should catch it. Nothing emissive is
+	// touched, so this cannot lift the fire or the eyes and cannot interact with NightGlowScale.
+	// ---- AND THE SHOWCASE DOES NOT TAKE IT, FOR THE SAME REASON IT DOES NOT TAKE THE EYE LEVEL.
+	//
+	// The day cycle drives this across EVERY embodiment in the world, and the wardrobe mannequin is one of
+	// them. Letting it through would make the preview change with the hour -- brighter-edged at midnight than
+	// at noon -- which is precisely the live-world dependency the founder ruled out, and precisely the bug
+	// that had the wardrobe measuring three times darker at midnight before the figure was moved onto its own
+	// lighting channel. The preview is a stage in a box; the clock does not reach into it.
+	if (!bExposureAware)
+	{
+		return;
+	}
+	const float Wanted = FMath::Clamp(Amount, 1.0f, 6.0f);
+	if (FMath::IsNearlyEqual(RimBoost, Wanted, 0.01f))
+	{
+		return;
+	}
+	RimBoost = Wanted;
+	for (int32 Index = 0; Index < BuiltMaterials.Num(); ++Index)
+	{
+		if (BuiltMaterials[Index].Kind != EWonderlandCompanionMaterialKind::Rim)
+		{
+			continue;
+		}
+		if (MaterialInstances.IsValidIndex(Index) && MaterialInstances[Index] != nullptr)
+		{
+			MaterialInstances[Index]->SetScalarParameterValue(TEXT("RimAmp"), RimBoost);
+		}
+	}
+}
+
 void AWonderlandCompanionEmbodiment::SetNightGlow(float Scale)
 {
 	// THE SHOWCASE TAKES THIS ONE, AND EXEMPTING IT WAS A MISTAKE.
