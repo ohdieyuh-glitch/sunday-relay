@@ -1,0 +1,142 @@
+{
+ "name": "zc_night_ladder",
+ "started": "2026-09-27 13:27:27",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "L00",
+   "name": "the build HAS wl.Look.NightShadowLift and each rung took",
+   "pass": true,
+   "detail": {
+    "readback": {
+     "1.00": 1.0,
+     "0.85": 0.8500000238418579,
+     "0.65": 0.6499999761581421,
+     "0.50": 0.5
+    },
+    "note": "an unknown cvar prints 'Command not recognized' and silently leaves the ladder flat"
+   }
+  },
+  {
+   "id": "L01",
+   "name": "THE RANKING ALONE: the avenue at lift 1.0, against the same view before the pool change",
+   "pass": true,
+   "detail": {
+    "at_lift_1": {
+     "luma": 0.0387,
+     "dark_fraction": 0.9738,
+     "ground_luma": 0.0273,
+     "ground_dark_fraction": 0.9908
+    },
+    "previous_build": {
+     "luma": 0.0325,
+     "dark_fraction": 0.966
+    },
+    "note": "lift 1.0 is arithmetically a no-op, so any difference here is the significance ranking. The previous build's reading was taken with TQ05 applied and the old distance-only pool."
+   }
+  },
+  {
+   "id": "L02",
+   "name": "THE LIFT ALONE: the avenue ground across the ladder, ranking held constant",
+   "pass": true,
+   "detail": {
+    "per_lift": {
+     "1.00": 0.9908,
+     "0.85": 0.9902,
+     "0.65": 0.4731,
+     "0.50": 0.0422
+    },
+    "luma": {
+     "1.00": 0.0273,
+     "0.85": 0.0632,
+     "0.65": 0.1438,
+     "0.50": 0.2423
+    }
+   }
+  },
+  {
+   "id": "L03",
+   "name": "and the Dog's BODY across the same ladder",
+   "pass": true,
+   "detail": {
+    "body_dark": {
+     "1.00": 0.9985,
+     "0.85": 0.9653,
+     "0.65": 0.2954,
+     "0.50": 0.0771
+    },
+    "body_mean": {
+     "1.00": 0.0278,
+     "0.85": 0.0607,
+     "0.65": 0.1784,
+     "0.50": 0.326
+    },
+    "light_fraction": {
+     "1.00": 0.0,
+     "0.85": 0.0,
+     "0.65": 0.0655,
+     "0.50": 0.2462
+    },
+    "note": "the figure's own lights are excluded from body_mean; light_fraction is reported beside it so a brighter body can never be a brighter pair of eyes."
+   }
+  }
+ ],
+ "avenue": {
+  "1.00": {
+   "luma": 0.0387,
+   "dark_fraction": 0.9738,
+   "ground_luma": 0.0273,
+   "ground_dark_fraction": 0.9908
+  },
+  "0.85": {
+   "luma": 0.0611,
+   "dark_fraction": 0.9622,
+   "ground_luma": 0.0632,
+   "ground_dark_fraction": 0.9902
+  },
+  "0.65": {
+   "luma": 0.1149,
+   "dark_fraction": 0.6129,
+   "ground_luma": 0.1438,
+   "ground_dark_fraction": 0.4731
+  },
+  "0.50": {
+   "luma": 0.2166,
+   "dark_fraction": 0.3,
+   "ground_luma": 0.2423,
+   "ground_dark_fraction": 0.0422
+  }
+ },
+ "body": {
+  "1.00": {
+   "body_mean": 0.0278,
+   "body_dark_fraction": 0.9985,
+   "light_fraction": 0.0
+  },
+  "0.85": {
+   "body_mean": 0.0607,
+   "body_dark_fraction": 0.9653,
+   "light_fraction": 0.0
+  },
+  "0.65": {
+   "body_mean": 0.1784,
+   "body_dark_fraction": 0.2954,
+   "light_fraction": 0.0655
+  },
+  "0.50": {
+   "body_mean": 0.326,
+   "body_dark_fraction": 0.0771,
+   "light_fraction": 0.2462
+  }
+ },
+ "lift_readback": {
+  "1.00": 1.0,
+  "0.85": 0.8500000238418579,
+  "0.65": 0.6499999761581421,
+  "0.50": 0.5
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\night_ladder",
+ "finished": "2026-09-27 13:29:01",
+ "seconds": 93.95,
+ "log": "L_AV_1.00 INFO avenue at lift 1.00 {'luma': 0.0387, 'dark_fraction': 0.9738, 'ground_luma': 0.0273, 'ground_dark_fraction': 0.9908}\nL_BODY_1.00 INFO relay_og body at lift 1.00 {'body_mean': 0.0278, 'body_dark_fraction': 0.9985, 'light_fraction': 0.0}\nL_AV_0.85 INFO avenue at lift 0.85 {'luma': 0.0611, 'dark_fraction': 0.9622, 'ground_luma': 0.0632, 'ground_dark_fraction': 0.9902}\nL_BODY_0.85 INFO relay_og body at lift 0.85 {'body_mean': 0.0607, 'body_dark_fraction': 0.9653, 'light_fraction': 0.0}\nL_AV_0.65 INFO avenue at lift 0.65 {'luma': 0.1149, 'dark_fraction': 0.6129, 'ground_luma': 0.1438, 'ground_dark_fraction': 0.4731}\nL_BODY_0.65 INFO relay_og body at lift 0.65 {'body_mean': 0.1784, 'body_dark_fraction': 0.2954, 'light_fraction': 0.0655}\nL_AV_0.50 INFO avenue at lift 0.50 {'luma': 0.2166, 'dark_fraction': 0.3, 'ground_luma': 0.2423, 'ground_dark_fraction': 0.0422}\nL_BODY_0.50 INFO relay_og body at lift 0.50 {'body_mean': 0.326, 'body_dark_fraction': 0.0771, 'light_fraction': 0.2462}\nL00 PASS the build HAS wl.Look.NightShadowLift and each rung took {'readback': {'1.00': 1.0, '0.85': 0.8500000238418579, '0.65': 0.6499999761581421, '0.50': 0.5}, 'note': \"an unknown cvar prints 'Command not recognized' and silently leaves the ladder flat\"}\nL01 PASS THE RANKING ALONE: the avenue at lift 1.0, against the same view before the pool change {'at_lift_1': {'luma': 0.0387, 'dark_fraction': 0.9738, 'ground_luma': 0.0273, 'ground_dark_fraction': 0.9908}, 'previous_build': {'luma': 0.0325, 'dark_fraction': 0.966}, 'note': \"lift 1.0 is arithmetically a no-op, so any difference here is the significance ranking. The previous build's reading was taken with TQ05 applied and the old distance-only pool.\"}\nL02 PASS THE LIFT ALONE: the avenue ground across the ladder, ranking held constant {'per_lift': {'1.00': 0.9908, '0.85': 0.9902, '0.65': 0.4731, '0.50': 0.0422}, 'luma': {'1.00': 0.0273, '0.85': 0.0632, '0.65': 0.1438, '0.50': 0.2423}}\nL03 PASS and the Dog's BODY across the same ladder {'body_dark': {'1.00': 0.9985, '0.85': 0.9653, '0.65': 0.2954, '0.50': 0.0771}, 'body_mean': {'1.00': 0.0278, '0.85': 0.0607, '0.65': 0.1784, '0.50': 0.326}, 'light_fraction': {'1.00': 0.0, '0.85': 0.0, '0.65': 0.0655, '0.50': 0.2462}, 'note': \"the figure's own lights are excluded from body_mean; light_fraction is reported beside it so a brighter body can never be a brighter pair of eyes.\"}\n"
+}
