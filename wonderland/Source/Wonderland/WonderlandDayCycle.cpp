@@ -508,6 +508,39 @@ static FAutoConsoleVariableRef GWonderlandMoonGainRef(
 	TEXT("The moon's intensity as a fraction of the noon sun."),
 	ECVF_Default);
 
+// HOW FAR AHEAD OF THE SUN'S OPPOSITE THE MOON RUNS, IN HOURS. Zero ships, and zero is exactly today's
+// behaviour: the moon sits directly opposite the sun and the two cross the horizon in the same instant.
+//
+// That is what leaves the ground black at dusk. At 18:00 the elevation is zero, so sun pitch and moon pitch
+// are both zero, and a directional light at zero elevation delivers cos(90) of itself to level ground --
+// nothing. No value of MoonGain and no change to Nightfall can put light on the paving at that hour,
+// because the light is pointed ALONG it. Measured signature, from readings already taken: ground luma over
+// whole-frame luma runs 0.724 at moon elevation 0, 0.746 at 14 deg, 1.056 at 27.6 and 0.995 at 69.6 -- the
+// ground lags the frame while the moon grazes and catches up as it climbs.
+//
+// A lead of an hour or two puts the moon well clear of the horizon by sunset: at 18:00 it stands at 18.6
+// deg with a lead of 1, 27.6 with 1.5 and 36.0 with 2, taking the ground's share of the moon from exactly
+// zero to 0.32, 0.46 and 0.59 of overhead. Midnight and every daylight hour are untouched, and because the
+// moon runs the same curve at a shifted hour there is no value of this knob that can tip it past vertical.
+//
+// AND IT TRADES DAWN FOR DUSK, WHICH IS THE REASON IT IS A KNOB AND NOT A FIX. Dawn is the mirror of dusk
+// -- the elevation is zero at 06:00 as well -- so the same hole exists there, and a LEAD that lifts the
+// moon at sunset drops it at sunrise: at 05:00 the moon stands at 18.6 deg today and at -9.4 with a lead
+// of 1.5, which is below the horizon. A lag would swap which end is fixed. No single constant serves both,
+// because one body on one 24-hour curve cannot be high at both horizon crossings.
+//
+// So this is deliberately not defaulted to anything. It makes the trade MEASURABLE -- sweep it and read
+// 18:00 and 06:00 in the same table -- and which end of the day Wonderland should favour, or whether the
+// crossover should be carried by the practicals and the sky instead, is a founder question with a
+// photograph attached rather than a number I should pick.
+static float GWonderlandMoonLeadHours = 0.0f;
+static FAutoConsoleVariableRef GWonderlandMoonLeadHoursRef(
+	TEXT("wl.Sky.MoonLeadHours"),
+	GWonderlandMoonLeadHours,
+	TEXT("Hours the moon runs ahead of the point directly opposite the sun. 0 = today's behaviour, the two "
+	     "crossing the horizon together, which is why dusk has no directional light on the ground."),
+	ECVF_Default);
+
 static float GWonderlandNightFill = 0.26f;
 static FAutoConsoleVariableRef GWonderlandNightFillRef(
 	TEXT("wl.Sky.NightFill"),
@@ -677,7 +710,36 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 	{
 		if (UDirectionalLightComponent* MoonComp = SunComponent(MoonLight))
 		{
-			MoonLight->SetActorRotation(FRotator(Elevation, BearingAt(Hour) + 180.0f, 0.0f));
+			// ---- THE MOON IS EXACTLY OPPOSITE THE SUN, AND THAT IS WHY DUSK HAS NO GROUND LIGHT.
+			//
+			// Sun pitch is -Elevation and moon pitch is +Elevation, so the two cross the horizon in the
+			// same instant. At 18:00 the elevation is exactly zero and BOTH are horizontal. A directional
+			// light at zero elevation delivers cos(90) of its intensity to level ground -- nothing -- so
+			// however bright the moon is made, and whatever Nightfall does, the ground at six in the
+			// evening receives no directional light at all from either body.
+			//
+			// THE SIGNATURE IS IN THE MEASUREMENTS ALREADY TAKEN. Ground luma divided by whole-frame luma,
+			// against the moon's elevation: 0.724 at 0 deg (18:00), 0.746 at 14 deg, 1.056 at 27.6 deg,
+			// 0.995 at 69.6 deg. The ground runs a quarter behind the frame while the moon is on the
+			// horizon and catches up as it climbs -- which is what a grazing light looks like and not what
+			// a dim one looks like. It is also why making Nightfall arrive earlier lifted the frame more
+			// than it lifted the ground: the extra moon was pointed along the paving rather than at it.
+			//
+			// THE LEAD IS IN HOURS, NOT DEGREES, and that is not a detail. A constant angular offset was
+			// the obvious form and it is wrong: adding 20 deg to a pitch of -72 at midnight gives -92,
+			// which is past vertical and puts the moon back down the other side of the sky. Running the
+			// moon on the SAME elevation curve at a different hour keeps it physical everywhere -- it
+			// rises earlier, peaks higher and sets later, and there is no value of the knob that can tip
+			// it over the top.
+			//
+			// INERT AT ZERO and ships that way. It exists so the question can be MEASURED rather than
+			// argued: raising the moon at dusk either fixes the crushed ground or it does not, and no
+			// amount of reasoning about cosines settles that. A real full moon does rise at sunset, so
+			// zero is defensible; a gibbous moon stands well clear of the horizon at dusk, so a lead is
+			// equally defensible. Which one Wonderland wants is a founder question about how its nights
+			// should look, and this makes it answerable with two photographs instead of an argument.
+			const float MoonPitch = ElevationAt(Hour + GWonderlandMoonLeadHours);
+			MoonLight->SetActorRotation(FRotator(MoonPitch, BearingAt(Hour) + 180.0f, 0.0f));
 			// A FIFTIETH OF NOON. Bright enough that the founder can see the Dog, the paving under it and the
 			// silhouette of a tower; nowhere near enough to be mistaken for daylight. Tuned against photographs
 			// of the darkest hour rather than chosen, and it is the one number to move if night reads wrong.
