@@ -1,5 +1,21 @@
 # Wonderland — measured beta matrix, 2026-09-26
 
+> **WHERE THE WORK IS, AND WHY IT IS NOT ON GITHUB.** Everything is committed on the local branch
+> `local/wonderland-task3`, and both targets are built from that exact source. It is NOT pushed, and cannot be
+> by this session: `ceremony/push-as-worker.sh` requires every commit above `main` to be authored by
+> `julius-worker[bot]`, and the 692 commits on this branch are authored by `julius-stack-rehearsal` and
+> `Claude` — the ceremony refuses that case by design, before it mints a token. Pushing with the
+> `ohdieyuh-glitch` credential is ruled out by the founder credential boundary, and merging is founder
+> authority in any case. Landing it would mean a squashed worker branch, which is a founder call.
+>
+> **AND THE WORLD IS NOT IN GIT AT ALL.** `wonderland/Content/` is untracked — `git status` reports the whole
+> tree as `??`, and `CONTENT_LFS_PLAN.md` describes an intention that was never carried out. So the World
+> Partition conversion done today exists only on disk. Its only rollback is
+> `recovery/_map_checkpoints/2026-09-26-streaming/`, which holds the pre-conversion 46 MB map, its ini, a
+> `RESTORE.md` and the original's sha256. The Content tree is shared between worktrees by junction, so that
+> conversion changed the map for all of them.
+
+
 Every row is a proof run in PIE **today**, on the current build, through the entry point the founder uses.
 Nothing here is inferred from a screenshot or carried over from an earlier session. Where a row is short of
 green it says so and says why, because a matrix that rounds up is worth nothing.
@@ -8,7 +24,7 @@ green it says so and says why, because a matrix that rounds up is worth nothing.
 
 | # | Item | Proof | Result |
 |---|------|-------|--------|
-| 1 | Project Brain / Wardrobe | `zc_wardrobe_pixels` | **12/12.** Every corner of the preview is the black backdrop for all five skins; the Brain stays open; the player camera is untouched. |
+| 1 | Project Brain / Wardrobe | `zc_wardrobe_pixels`, `zc_preview_hours` | **12/12 and 3/3.** Every corner is the black backdrop for all five skins, the Brain stays open, the player camera is untouched — and the mascot now FACES the viewer, which it had not been doing: `StepLookAround` rotated it to world yaw zero while the UI rotated the stage to face the camera, so the wardrobe was showing the Dog's back and 12/12 passed throughout. The preview is also lit by its own rig now rather than by the sky: Relay OG varied 4.76x across the day and now varies 1.48x. |
 | 1 | Wardrobe upgrade (founder's 8 items) | `zc_wardrobe_upgrade` | **20/20.** 0.79–0.92 frame occupancy on the binding axis, nothing over the edge, centred, 360° icon starts/stops/eases back, PRIMARY and SECONDARY live on the same canonical state the Menu reads. |
 | 2 | Brain + python snake | `zc_brain_sculpture` | **12/12.** Bearing rate not constant, distance to the brain varies, route not confined to one plane — an orbit fails all three. Never enters the brain mass; holds its length. |
 | 3 | Relay OG = animation authority | `zc_skin_parity_all`, `zc_skin_locomotion` | **4/4 and 8/8.** Every active skin wears the Dog's pose field for field through run, stop, turns, fall, landing, body bounce and ground contact. |
