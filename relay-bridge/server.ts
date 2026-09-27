@@ -387,8 +387,11 @@ export function createBridgeServer(
  * ONE POOL FOR EVERYTHING JULIUS IN THIS PROCESS.
  *
  * The read routes and the create route each opened a Pool against the same URL
- * — twice the connections for one database, beside Wonderland's own third, as
- * the integration lane observed on the merged tree. Lazy, so a process with no
+ * — twice the connections for one database, beside a third the world routes
+ * opened, as the integration lane observed on the merged tree. All three now
+ * share this one: the Julius families here, and the world routes
+ * (/wonderland/julius/*) through `resolveJuliusWorld`, so the world reads runs
+ * from exactly the database Julius writes them to. Lazy, so a process with no
  * database opens nothing; null when there is none, so every family refuses by
  * name rather than serving an empty run.
  *
