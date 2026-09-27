@@ -162,7 +162,7 @@ export async function handleJuliusStateRoute(
   const match = RUN_VIEW.exec(decoded);
   if (match === null) {
     return err(404, 'unknown_julius_route',
-      'Julius state serves /julius/runs/<runId>/<run|slots|tasks|evidence|verification|timeline>.');
+      'Julius state serves /julius/runs/<runId>/<run|slots|tasks|evidence|verification|result|timeline>.');
   }
   const [, runId, view] = match as unknown as [string, string, string];
   const identity: JuliusApiIdentity = {
@@ -179,10 +179,16 @@ export async function handleJuliusStateRoute(
     case 'tasks': return answer(await ports.api.inspectTasks(identity, runId));
     case 'evidence': return answer(await ports.api.inspectEvidence(identity, runId));
     case 'verification': return answer(await ports.api.inspectVerification(identity, runId));
+    /**
+     * THE ONE A USER ASKS FOR. `evidence` and `verification` are the raw record;
+     * this is the answer a surface can show without assembling six reads and
+     * risking its own completion rule. See `JuliusMissionResultView`.
+     */
+    case 'result': return answer(await ports.api.inspectResult(identity, runId));
     case 'timeline': return answer(await ports.api.timeline(identity, runId, 0, 200));
     default:
       return err(404, 'unknown_julius_view',
-        `Julius state has no view "${view}". Served: run, slots, tasks, evidence, verification, timeline.`);
+        `Julius state has no view "${view}". Served: run, slots, tasks, evidence, verification, result, timeline.`);
   }
 }
 

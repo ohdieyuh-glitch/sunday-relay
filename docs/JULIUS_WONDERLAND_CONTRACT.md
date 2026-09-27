@@ -56,7 +56,7 @@ argument and refuses before it reads anything.
 ## How it is served
 
 **`GET /relay-api/julius/runs/<runId>/<view>`** on the bridge, where `<view>` is
-one of `run`, `slots`, `tasks`, `evidence`, `verification`, `timeline`.
+one of `run`, `slots`, `tasks`, `evidence`, `verification`, `result`, `timeline`.
 Operator `Bearer` credential; `X-Relay-Tenant` and `X-Relay-Project` headers name
 the scope, never the path. Read-only: any other method answers 405.
 
@@ -113,6 +113,23 @@ earlier run of the same mission is still READY or EXECUTING is a product
 decision not taken here. The `409 mission_already_running` below fires only
 when the same key arrives with a different payload, which a content-derived
 key does not produce in practice.
+
+**`result` is the view to SHOW A USER**, and the one a client should reach for
+before assembling its own answer from `evidence` + `verification` + `run`. It
+carries: `verified` (true only when the run reached `COMPLETED` — the runtime's
+decision, quoted, never recomputed), `terminal`, every acceptance criterion with
+`satisfied`, `basis` and the evidence ids that satisfy it — `basis: 'EVIDENCE'`
+means every required type is present and PASSED, `basis: 'COMPLETION'` means the
+criterion names no evidence (the bootstrap seeds such criteria deliberately) and
+is therefore satisfied only by the mission completing; do not read a
+`COMPLETION`-basis criterion as met before `verified` is true — the `deliverables` (the PASSED
+rows that are a product — a diff, an artifact, a test result — never a reviewer's
+finding, each with `retained: false` when no body was kept rather than reading as
+an empty one), `outstandingFindings` (why it is not verified), `reviewDecisions`
+(so "who verified this" has an answer), `cost` (`knownUsdMicros` beside
+`unknownComponents` and `complete`, never a zero standing in for unknown), and
+`failure` — `null` only when there is none: a FAILED or CANCELLED run always
+names a reason, `UNRECORDED` if the record somehow holds none.
 
 **Where the database comes from.** The bridge reads `JULIUS_DATABASE_URL`
 first and `DATABASE_URL` after it, from its own launch environment; with
@@ -173,7 +190,9 @@ task contract.
 ## What has been exercised against a real database
 
 `relay-bridge/julius-bridge-seam.real-postgres.test.ts` (gated on
-`JULIUS_REAL_POSTGRES=1` + `DATABASE_URL`, `todo` otherwise) drives creation and
+`JULIUS_TEST_DATABASE_URL`, which must name a throwaway database — never
+`DATABASE_URL`, which on a developer machine points at the persistent store —
+and `todo` otherwise) drives creation and
 every read view through the production compositions against a real PostgreSQL:
 what a client creates is what it then watches, and both are what
 `relay_wonderland.julius_runs` / `julius_tasks` / `julius_task_contracts` hold;

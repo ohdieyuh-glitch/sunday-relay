@@ -109,6 +109,23 @@ suite('the Wonderland seam over a real PostgreSQL', () => {
       expect(slot.servedModel, 'no model has answered, so none may be shown').toBeNull();
     }
 
+    // THE RESULT OF A RUN NOBODY HAS DRIVEN, which must not look like a result.
+    // This is the state Wonderland sees between creating a mission and the job
+    // picking it up, and it is exactly where a client could be misled.
+    const result = dataOf<{
+      verified: boolean; terminal: boolean; deliverables: unknown[];
+      criteria: ReadonlyArray<{ satisfied: boolean }>; failure: unknown;
+      cost: { knownUsdMicros: number; unknownComponents: number; complete: boolean };
+    }>(await read(`/julius/runs/${created.runId}/result`, contract));
+    expect(result.verified, 'a READY run is not a verified result').toBe(false);
+    expect(result.terminal, 'and it is not finished either').toBe(false);
+    expect(result.deliverables, 'nothing has been produced yet').toEqual([]);
+    expect(result.criteria.length, 'the mission’s criteria are already known').toBeGreaterThan(0);
+    expect(result.criteria.every((criterion) => !criterion.satisfied), 'and none is satisfied yet').toBe(true);
+    expect(result.failure, 'an undriven run has not failed').toBeNull();
+    expect(result.cost.knownUsdMicros, 'and has cost nothing').toBe(0);
+    expect(result.cost.complete, 'a run with no dispatch has a complete cost of zero, which is true').toBe(true);
+
     const page = dataOf<{ entries: ReadonlyArray<{ sequence: number }>; hasMore: boolean }>(await read(`/julius/runs/${created.runId}/timeline`, contract));
     expect(page.entries.length, 'the bootstrap transitions are on the durable timeline').toBeGreaterThanOrEqual(1);
     // ORDERED BY SEQUENCE, the client rule the contract states — never by time.

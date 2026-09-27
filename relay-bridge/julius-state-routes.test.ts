@@ -75,6 +75,29 @@ const get = (path: string, over: Partial<Parameters<typeof handleJuliusStateRout
   method: 'GET', path, operator: true, projectId: 'prj-1', tenantId: 'tenant', ...over,
 });
 
+describe('the result view', () => {
+  it('serves the API’s own result for a mission that really ran', async () => {
+    // The view a surface shows a user. Served like every other: the route maps,
+    // the API answers, and nothing here computes what "verified" means.
+    const harness = await ranMission();
+    const result = await handleJuliusStateRoute(get('/julius/runs/run:abc/result'), portsOver(harness));
+    expect(result?.status).toBe(200);
+    const view = (result?.body as { data: { runId: string; verified: boolean; criteria: unknown[]; deliverables: unknown[]; cost: { complete: boolean } } }).data;
+    expect(view.runId).toBe('run:abc');
+    expect(typeof view.verified, 'the answer states whether it is verified').toBe('boolean');
+    expect(Array.isArray(view.criteria)).toBe(true);
+    expect(Array.isArray(view.deliverables)).toBe(true);
+    expect(typeof view.cost.complete, 'and whether the cost is complete').toBe('boolean');
+  });
+
+  it('names the result view among the ones it serves, so a client can discover it', async () => {
+    const harness = await ranMission();
+    const unknown = await handleJuliusStateRoute(get('/julius/runs/run:abc/nonsense'), portsOver(harness));
+    expect(unknown?.status).toBe(404);
+    expect((unknown?.body as { error: { message: string } }).error.message).toContain('result');
+  });
+});
+
 describe('a percent-encoded run id', () => {
   it('reaches the same run as the raw one — a standards-correct client may encode the colon', async () => {
     const harness = await ranMission();
