@@ -58,14 +58,41 @@ def job():
     yield 2.0
 
     def window(seconds):
-        """Frame costs over a window, as the engine's own stat unit reports them."""
+        """Frame costs over a window, as the engine's own stat unit reports them.
+
+        THE OVERLAY IS RE-ENABLED ONLY WHEN IT HAS ACTUALLY STOPPED REPORTING, BECAUSE "stat unit" TOGGLES.
+
+        This has now failed in two different ways and the second one named the cause. Originally the command
+        was issued once at the top of the job and two stands came back empty -- both at noon, both the last of
+        that pass. Re-issuing it every 1.5 seconds fixed noon and broke MIDNIGHT instead, losing three stands
+        there. A fix that moves a failure to the other end of the run has not addressed it.
+
+        "stat unit" is a toggle, not a switch-on. Re-asking for it on a timer turns the overlay ON, then OFF,
+        then ON, so whether a sample lands depends on the parity of how many times it has been issued. Both
+        symptoms are the same bug seen at different phases.
+
+        So it is re-issued only in response to evidence that it is off: a run of consecutive dead reads. A
+        working overlay is never touched, and a lapsed one is switched back on once rather than flipped.
+
+        AND A ZERO IS DISCARDED RATHER THAN AVERAGED IN. FStatUnitData reports 0.00 when the overlay is not
+        drawing, so keeping those would not merely add noise -- it would drag a median toward zero and
+        report a stand as FASTER the longer the overlay was off.
+        """
         frames = []
         spent = 0.0
+        dead = 0
         while spent < seconds:
             got = H.get_frame_cost_ms()
-            if got is not None:
+            if got is not None and float(got[0]) > 0.01:
                 frame, game, render, gpu = got
                 frames.append((frame, game, render, gpu))
+                dead = 0
+            else:
+                dead += 1
+                # Twenty dead reads is a second of nothing, which is the overlay being off rather than a
+                # slow frame. Switched back on once, then left alone so it is not flipped off again.
+                if dead == 20:
+                    unreal.SystemLibrary.execute_console_command(world, "stat unit")
             yield 0.05
             spent += 0.05
         RESULT.setdefault("_windows", []).append(len(frames))
