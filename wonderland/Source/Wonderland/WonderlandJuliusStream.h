@@ -121,7 +121,34 @@ public:
 	void SetTokenSource(const TSharedRef<IWonderlandJuliusTokenSource>& InSource) { TokenSource = InSource; }
 
 	/** One line for the console: what this is doing and why. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius")
 	FString Describe() const;
+
+	/*
+	 * READ-ONLY FACTS FOR A PROOF. Each reads the WORLD's state, not this transport's intent: the adopted run comes
+	 * from UWonderlandJuliusSubsystem's own cursor, so a proof that asked to follow run X checks that the world is
+	 * showing run X rather than comparing the request with itself.
+	 */
+
+	/** The run the world ADOPTED -- empty until a hydration for it was accepted. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius")
+	FString GetAdoptedRunId() const;
+
+	/** The run this transport was asked to follow. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius")
+	FString GetFollowedRunId() const { return RunId; }
+
+	/** Julius's own run state as the world holds it, or empty when the world's state did not come from the run row. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius")
+	FString GetJuliusRunState() const;
+
+	/** The Mission Contract state for that run, by the engine's table -- or empty when it is not known. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius")
+	FString GetMissionContractState() const;
+
+	/** Whether this client currently holds a native session. The token itself is never exposed. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius")
+	bool IsPaired() const { return TokenSource.IsValid() && !TokenSource->CurrentToken().IsEmpty(); }
 
 private:
 	enum class EPhase : uint8

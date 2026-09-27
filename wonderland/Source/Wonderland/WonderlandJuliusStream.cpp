@@ -498,6 +498,37 @@ void UWonderlandJuliusStreamSubsystem::Failed(int32 HttpStatus, bool bConnected,
 	UE_LOG(LogWonderlandJuliusStream, Warning, TEXT("JULIUS STREAM: %s"), *Why);
 }
 
+FString UWonderlandJuliusStreamSubsystem::GetAdoptedRunId() const
+{
+	const UWonderlandJuliusSubsystem* Julius = World();
+	if (Julius == nullptr || !Julius->HasState())
+	{
+		return FString();
+	}
+	const FWonderlandText& Adopted = Julius->GetCursor().RunId;
+	return Adopted.bKnown ? Adopted.Value : FString();
+}
+
+FString UWonderlandJuliusStreamSubsystem::GetJuliusRunState() const
+{
+	const UWonderlandJuliusSubsystem* Julius = World();
+	if (Julius == nullptr)
+	{
+		return FString();
+	}
+	const FWonderlandJuliusEmbodiment& Embodiment = Julius->GetEmbodiment();
+	return Embodiment.StateSource == EWonderlandJuliusStateSource::JuliusRunState && Embodiment.SourceState.bKnown
+		? Embodiment.SourceState.Value : FString();
+}
+
+FString UWonderlandJuliusStreamSubsystem::GetMissionContractState() const
+{
+	const FString JuliusState = GetJuliusRunState();
+	EWonderlandTaskState TaskState = EWonderlandTaskState::Draft;
+	return !JuliusState.IsEmpty() && WonderlandJuliusTaskState::TaskStateForJuliusState(JuliusState, TaskState)
+		? FString(WonderlandTaskStateName(TaskState)) : FString();
+}
+
 FString UWonderlandJuliusStreamSubsystem::Describe() const
 {
 	const UWonderlandJuliusSubsystem* Julius = World();
