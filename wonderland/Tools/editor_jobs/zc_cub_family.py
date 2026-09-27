@@ -128,9 +128,12 @@ def job():
            note="box counts: a dressed cub carries its parent's halo, fire, skull or edge and is heavier than "
                 "the plain cub. This proves the RIGHT FILE loaded; whether it reads as that skin's cub is the "
                 "founder's call from the captures.")
+    # V1 and V2 of a skin share one cub family by design (the founder approved the cubs as they are), so eight
+    # skins are five families: relay_og, celestial, apollo, arden, skeleton.
+    families = len({s.replace("_v1", "") for s in SKINS})
     distinct = len({tuple(by_skin[s]["cub_boxes"]) for s in SKINS})
     record("K03", "the same living flock changed its coat with every skin change, without being dismissed",
-           distinct == len(SKINS), distinct_flocks=distinct, of=len(SKINS),
+           distinct == families, distinct_flocks=distinct, of=families,
            note="one summon at the start, five skins, five different flocks: re-dressed in place.")
 
     cubs.summon_sub_agent_cubs(0)

@@ -575,7 +575,10 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
         figure.box("head", eye, (hd * 0.5 + 0.30, side * d["eye_gap"], visor_z), (0.5, exw, exh))
         # the halo pane: behind the core, wider than it, additive, in the eye's colour. See start().
         if "eyehalo" in figure.material_names:
-            figure.box("head", "eyehalo", (hd * 0.5 + 0.16, side * d["eye_gap"], visor_z),
+            # PROUD OF THE VISOR. At hd/2 + 0.16 the pane spanned x 4.11..4.41 and the visor slab's face is at
+            # 4.5, so the halo sat inside the visor and no rim ever showed on a costume (round-3 sheet). At
+            # +0.45 its face is at 4.60 -- clear of the visor, just behind the eye pane's own face at 4.65.
+            figure.box("head", "eyehalo", (hd * 0.5 + 0.45, side * d["eye_gap"], visor_z),
                        (0.30, exw * 1.8, exh * 1.8))
 
     # The body and the two legs. Short, plain, and under the dress in every skin but the bare one.
@@ -1439,12 +1442,15 @@ def arden_infernal():
     figure.box("halo", "gold", (hc[0] + 0.6, 0.0, hc[2] - R + 0.4), (tile * 1.6, tile * 2.2, tile * 1.6))
     figure.box("halo", "ruby", (hc[0] + 1.5, 0.0, hc[2] - R + 0.4), (tile * 0.9, tile * 1.1, tile * 1.1))
     figure.part("halofire", "halo", hc, "twinkle", 0.18)
-    for i in range(19):
-        f = i / 18.0
-        a = math.radians(-22.0 + 224.0 * f)
-        tall = 2.0 + 5.4 * max(0.0, math.sin(a)) ** 1.5
+    # THE FIRE SUPPORTS THE RING RATHER THAN HIDING THE HEAD (founder: "Fire should support the design rather
+    # than hide it"). Nineteen tongues up to 7.4 tall photographed as a dense orange mass over the whole head by
+    # day and a yellow blaze at night; thirteen shorter ones, two tongues each, read as a ring on fire.
+    for i in range(13):
+        f = i / 12.0
+        a = math.radians(-18.0 + 216.0 * f)
+        tall = 1.5 + 3.6 * max(0.0, math.sin(a)) ** 1.5
         figure.flame("halofire", lambda up: "ember" if up < 0.5 else "emberpale",
-                     (hc[0] + 0.3, math.cos(a) * (R + 0.9), hc[2] + math.sin(a) * (R + 0.9)), tall, 2.2, 3, tile * 0.95)
+                     (hc[0] + 0.3, math.cos(a) * (R + 0.8), hc[2] + math.sin(a) * (R + 0.8)), tall, 1.8, 2, tile * 0.95)
     for i in range(7):
         a = math.radians(205.0 + 130.0 * i / 6.0)
         figure.flame("halofire", lambda up: "ember", (hc[0] + 0.2, math.cos(a) * (R + 0.7), hc[2] + math.sin(a) * (R + 0.7)), 1.5, 1.2, 2, tile * 0.8)
