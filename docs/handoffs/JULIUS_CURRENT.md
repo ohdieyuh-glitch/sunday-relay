@@ -4,7 +4,7 @@
 > repository evidence does not. Update it whenever meaningful state changes and
 > before ending a session. Never rely on `/resume` as the sole record.
 
-**Most recent session: 2026-09-26, the BETA QUALIFICATION run. Read §000 first.**
+**Most recent session: 2026-09-27, the PRIVATE-BETA COMPLETION pass. Read §000b, then §000.**
 > The paragraph below it is the record of the session before that.
 
 **Most recent session:** 2026-09-08, the **Claude Code cloud session**. Read
@@ -155,6 +155,106 @@ Full scorecard, weights and both remaining paths in
 `docs/JULIUS_BETA_READINESS.md`. The three highest-value next moves, in order:
 land PR #286 (founder); build the claim store; buy one paid run whose bundle
 records every served model.
+
+---
+
+### 000b. SECOND PASS 2026-09-27 — THE CANONICAL ARCHITECTURE, READ AGAINST THE CODE
+
+**Branch and worktree unchanged.** `origin/main` still `a384b215`; this branch is
+now 11 commits ahead. **Paid API spend: still $0.00.**
+
+The founder's private-beta brief restated the canonical architecture, and three of
+its clauses turned out to be checkable claims about the code rather than
+descriptions of it.
+
+#### "PSP is banned. C.A.R.D. is canonical terminology." — ALREADY GOVERNED, NOTHING TO DO
+
+`src/relay/psp/` is a whole subsystem and it is NOT a name for the lifecycle: PSP
+Agent ID is the entitlement credential that imports a purchased compound agent
+(`docs/relay/PSP_AGENT_ID_AND_ENTITLEMENT.md`). The ban is about the
+CONFIGURATION SURFACE, and three tests already enforce it —
+`ui/landing/choreography.test.ts`, `ui/relay-experience/onboarding.test.ts` and a
+`TERM HYGIENE` case in `RelayBetaEntry.test.tsx` — each asserting the surface is
+called C.A.R.D. and never PSP. **Renaming the entitlement subsystem would have
+been a destructive rename of an unrelated product surface.** Checked before
+touching anything, which is the only reason it was not done.
+
+#### "The Independent Reviewer remains outside the swarm." — A REAL HOLE, NOW CLOSED
+
+`spawnJuliusSubagent` already refused the `repair:` and `review:` task-type
+namespaces, for exactly the right reason. **The ROLE was unguarded.**
+`authorizeSubagent` copies the requested role straight onto the child, so a Coding
+Agent could spawn a child carrying `role: 'INDEPENDENT_REVIEWER'` under an
+ordinary task type; it entered the durable graph and was routed to the reviewer's
+own worker. Reproduced red (`authorized: true`), then guarded.
+
+It could not launder an acceptance — no `review:` type, so verification never
+counts it — and it is still the reviewer inside the swarm, spending the mission's
+budget on the reviewer's provider as a child of the coder's task. The guard is
+exactly ONE role wide and a case pins that, because refusing every role but the
+parent's would forbid the specialisation a swarm exists for.
+
+#### "/MAS clones are FULL compound agents, not thin sub-agents" — NOT IMPLEMENTED, AND THE DISTINCTION IS INTACT
+
+`/MAS` appears in no source file. `julius-subagent-runtime.ts` says in its own
+header that a sub-agent is NOT an alternate runtime — an ordinary `julius_tasks`
+row with a `parent_task_id`, claimed by the same scheduler — which is precisely
+the "regular sub-agent" the founder distinguished from /MAS. So the two are not
+confused, and nothing in this pass built /MAS: it is named under CANONICAL JULIUS
+(preserve the distinction) rather than under the ten items of remaining beta work.
+
+#### THE DEFECT THIS PASS WAS ACTUALLY FOR
+
+Building `julius-evidence-completeness.e2e.test.ts` — one mission, every field the
+brief names read back out of the durable record — failed three cases immediately,
+all the same cause:
+
+**`JuliusTrajectoryEvent`'s `providerId`, `usdMicros`, `inputTokens`,
+`outputTokens` and `durationMs` were null on every successful dispatch.** Not
+because a provider was silent: because the pipeline had nothing to put there. The
+execution coordinator saw the usage, committed the budget with it, and returned
+`{status, workerId, duplicate}`.
+
+`summariseJuliusEvals` and `projectJuliusMetrics` read cost and duration off
+DISPATCH rows. So for every project, every runtime version and every mission ever
+run: `knownUsdMicros` 0, `unknownCostComponents` = dispatch count, `costComplete`
+false, `averageDurationMs` null. **The eval layer was reporting a measurement it
+had never been given** — and it made my own Learning Loop case "never promotes on
+a dimension nobody measured" vacuous, since those dimensions were unmeasurable
+whatever any provider reported.
+
+`JuliusAttemptMeasurement` now carries the provider and the four numbers from the
+coordinator to the row that was built for them. Not a second record of the money —
+`budget.settled` stays the ledger — the same figure on the row the EVALS read.
+Absent stays null, so an unreported cost still cannot become a zero. The Learning
+Loop gained the counterpart case: on a priced pair the dimensions ARE measured and
+mission A's repair round is provably more expensive on the same objective.
+
+#### THE LEARNING LOOP'S OTHER HALF
+
+The brief requires prior findings to improve a later mission **without leaking
+irrelevant task context**, which a matched pair alone cannot show. The inherited
+brain now carries three pieces of real prior-mission residue beside the useful
+finding — scoped to a task this mission does not have, readable only by the
+reviewer, and SECRET — all three mentioning the deploy, so a compiler retrieving
+on relevance would hand every one to the coder. Read from the coder's durable
+snapshot: the relevant finding arrives, all three are excluded and REPORTED as
+excluded, and none of their prose is in the packet either. Two controls: the
+improvement still PROMOTES with the residue present, and the reviewer still
+receives its own rubric — so what the coder met was a scope and not a filter.
+
+#### MEASURED
+
+`src/relay/mission/julius` + `role-slots` + `relay-bridge/julius` at
+`--maxWorkers=2`: **121 files, 2,450 passed, 1 failed** —
+`julius-research-authority`, which fails identically on the unmodified base.
+A whole-suite run is still unobtainable on this host (two killed for memory; an
+Unreal editor session holds the machine).
+
+**JULIUS BETA READINESS: 75%**, from 74%. Four rows rose on real fixes, and one
+point is the honest total: finding a defect that made the eval layer empty lowers
+confidence in what was already claimed about as much as closing it raises it, and
+none of the four blockers that gate the number moved.
 
 ---
 
