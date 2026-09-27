@@ -170,8 +170,21 @@ def job():
            and below > 20.0
            # CLEAR OF THE DOG, which is what stops it reading as carried: further out than the Dog's own
            # body half-width, and not so far it stops being the Dog's object. 60 is half a head width (60)
-           # plus a leg; 260 is about where the companions would be if they drifted.
-           and 60.0 < flat < 260.0,
+           # plus a leg.
+           #
+           # ---- THE CEILING WAS 260 AND THAT NUMBER IS OLDER THAN THE FEATURE IT NOW JUDGES.
+           #
+           # Dated from the history rather than argued about: 260 was written on 2026-09-15, and the staging
+           # it constrains was written on 2026-09-22 in "Live sub-agent reporting, and the pre-mission
+           # clearance bubble" -- founder priority 2 in that commit. ApplyStaging places a FULL-fit contract
+           # at Forward 340, Right 40, which is flat 342.3, already outside the old ceiling before the probe
+           # does anything; and when the probe finds clear space it aims that offset at it with Reach clamped
+           # to 520. The commit says so plainly: "a chosen position is that offset aimed at the clear space".
+           #
+           # So the ceiling now follows the code's own clamp rather than a guess that predates it. The clause
+           # still does its job -- an orb at 600 uu would fail, which is what "stops being the Dog's object"
+           # means -- it just stops failing the intended full-fit staging.
+           and 60.0 < flat < 560.0,
            **RESULT["placement"])
 
     # ---------------------------------------------------------------- every beat has a Julius future
