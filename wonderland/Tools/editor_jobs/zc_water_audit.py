@@ -153,11 +153,38 @@ def job():
                 "dark": round(dark, 4), "bright": round(bright, 4),
                 "blue_over_red": round((mean.b + 1e-4) / (mean.r + 1e-4), 3)}
 
+    def settled(label, tries=20, step=1.0, tol=0.004):
+        """Wait until the picture STOPS MOVING, not for a number of seconds.
+
+        A fixed `yield 3.0` is not a fixed amount of settling: at 389 ms per frame it is 7.7 frames and at
+        31 ms it is 95.6. The whole job tree waited in seconds through a day when a render-thread regression
+        had the frame at 389 ms, so every timed settle delivered about an eighth of the frames it was
+        written for -- and will silently start delivering all of them now, with nothing in either run saying
+        which it got.
+
+        This is the same test at any frame rate: two consecutive readings of the same framing within `tol`.
+        Returns the seconds it took, or None if it never settled, so a run can say so rather than assume it.
+        """
+        prev = None
+        for attempt in range(tries):
+            yield step
+            now = patch(0.5, 0.5, 0.46, 0.44)
+            if now is None:
+                continue
+            if prev is not None and abs(now["luma"] - prev["luma"]) < tol:
+                RESULT.setdefault("settled_s", {})[label] = round(step * (attempt + 1), 1)
+                return
+            prev = now
+        RESULT.setdefault("settled_s", {})[label] = None
+
     shots = {}
     RESULT["views"] = shots
     for hour, hlabel in HOURS:
         unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.Hour %.2f" % hour)
-        yield 3.0
+        # AN HOUR CHANGE DRIVES THE WHOLE SKY, and three seconds was 7.7 frames of it during the
+        # render-thread regression. Wait for the picture instead.
+        for step in settled("hour_%s" % hlabel):
+            yield step
         for vlabel, eo, lo in VIEWS:
             eye = unreal.Vector(WATER[0] + eo[0], WATER[1] + eo[1], WATER[2] + eo[2])
             at = unreal.Vector(WATER[0] + lo[0], WATER[1] + lo[1], WATER[2] + lo[2])
