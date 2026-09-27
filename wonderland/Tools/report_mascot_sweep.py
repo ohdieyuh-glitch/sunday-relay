@@ -17,10 +17,35 @@ Run it after the four results land:  python Tools/report_mascot_sweep.py
 import json
 import os
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DONE = os.path.join(HERE, "_channel", "done")
-RUNS = (("zzM1_eye_day", "DAY"), ("zzM2_eye_dusk", "DUSK"), ("zzM3_eye_night", "NIGHT"), ("zzM4_knee", "KNEE"))
+#: WHICH RESULT FILE IS THE CURRENT ONE IS NOT A CONSTANT, and hardcoding it is how this project has twice
+#: read a stale table as a fresh one. Runs are re-queued under new names precisely so the old evidence stays on
+#: disk -- zzM1 and zzM2 are the pre-anchor-fix eye runs and must NOT be silently reported as current -- so the
+#: report DISCOVERS the newest file for each axis and hour and prints which one it chose and how old it is.
+#: A name pattern, not a name: zz<anything>_<axis>_<hour>.json, plus zz<anything>_knee.json.
+RUN_PATTERNS = (("eye_day", "DAY"), ("eye_dusk", "DUSK"), ("eye_night", "NIGHT"), ("knee", "KNEE"))
+
+
+def newest_for(suffix):
+    """The most recently written result whose name ends in this suffix, with its age in seconds."""
+    best, best_m = None, -1.0
+    if not os.path.isdir(DONE):
+        return None, None
+    for fn in os.listdir(DONE):
+        if not fn.endswith(".json") or not fn[:-5].endswith(suffix):
+            continue
+        m = os.path.getmtime(os.path.join(DONE, fn))
+        if m > best_m:
+            best, best_m = fn[:-5], m
+    if best is None:
+        return None, None
+    return best, int(time.time() - best_m)
+
+
+RUNS = tuple((newest_for(sfx)[0] or ("(no %s run)" % sfx), label) for sfx, label in RUN_PATTERNS)
 
 #: The five the founder named, first and in their order. The V1 twins follow, and they are a control rather
 #: than a sixth and seventh subject: a V1 and its V2 share an eye, verified identical across the eight .wlvox,
@@ -93,11 +118,12 @@ def main():
     w("nothing in it is copied from that run -- including the 220.")
     w("")
 
-    loaded, notes = {}, {}
-    for name, label in RUNS:
+    loaded, notes, ages = {}, {}, {}
+    for (sfx, label), (name, _) in zip(RUN_PATTERNS, RUNS):
         d, problem = load(name)
         loaded[label] = d
         notes[label] = problem
+        ages[label] = newest_for(sfx)[1]
 
     # ---------------------------------------------------------------- run health first, always
     w("## Did the runs actually run")
@@ -106,16 +132,22 @@ def main():
     w("published nine gates of the luma of a black viewport earlier today, two of them PASSING, so this")
     w("comes before the data and not after it.")
     w("")
-    w("| run | hour | status | died_at | gates green | note |")
-    w("|---|---|---|---|---|---|")
+    w("The run column is the file this report actually read, chosen as the NEWEST match for each axis and")
+    w("hour rather than by a name written into the generator. Pre-fix runs stay on disk on purpose; an age of")
+    w("hours on a row means that axis has not been re-run and its numbers are not about the current build.")
+    w("")
+    w("| run (newest match) | age | hour | status | died_at | gates green | note |")
+    w("|---|---|---|---|---|---|---|")
     for name, label in RUNS:
         d = loaded[label]
+        age = ages.get(label)
+        agestr = "--" if age is None else ("%dm" % (age // 60) if age >= 60 else "%ds" % age)
         if d is None:
-            w("| %s | %s | **missing** | -- | -- | %s |" % (name, label, notes[label]))
+            w("| %s | %s | %s | **missing** | -- | -- | %s |" % (name, agestr, label, notes[label]))
             continue
         t = d.get("tests") or []
-        w("| %s | %s | %s | %s | %d/%d | %s |"
-          % (name, label, d.get("status"), d.get("died_at") or "none",
+        w("| %s | %s | %s | %s | %s | %d/%d | %s |"
+          % (name, agestr, label, d.get("status"), d.get("died_at") or "none",
              sum(1 for x in t if x.get("pass")), len(t), notes[label] or ""))
     w("")
 
