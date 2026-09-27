@@ -1,6 +1,6 @@
 {
  "name": "zc_terminals",
- "started": "2026-09-26 19:04:38",
+ "started": "2026-09-27 04:02:34",
  "status": "measured; the verdict on how it LOOKS is the photographs",
  "facts": {
   "ctrl_t_opened_it": false,
@@ -53,7 +53,7 @@
    }
   }
  ],
- "finished": "2026-09-26 19:05:07",
- "seconds": 28.25,
+ "finished": "2026-09-27 04:02:59",
+ "seconds": 24.91,
  "log": "T01 PASS the Live Terminal opens and carries both companions {'open': True, 'titles': ['GPT 6 Astra', 'Claude Code Fable 5']}\nT02 PASS the plus actually makes a tab {'before': 1, 'after': 2}\nT03 PASS a companion takes a question and answers it {'asked': 'What is Wonderland?', 'lines_before': 3, 'lines_after': 5, 'note': 'more transcript lines after asking than before, which a terminal that only looked right would not produce'}\n"
 }

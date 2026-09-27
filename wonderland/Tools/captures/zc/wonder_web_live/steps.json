@@ -1,0 +1,58 @@
+[
+ {
+  "step": "01_real_article",
+  "note": "live=live_pages=1 front=browser browser[url=https://en.wikipedia.org/wiki/Design_system following=0 frames=31 size=1502x727 loading=0 problem=\"\"]",
+  "file": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\wonder_web_live\\00_01_real_article.jpg",
+  "live": "live_pages=1 front=browser browser[url=https://en.wikipedia.org/wiki/Design_system following=0 frames=31 size=1502x727 loading=0 problem=\"\"]",
+  "browse": "loaded=1 tabs=5 tab=social url=instagram.com/wonderland.studio real=1 real_url=https://en.wikipedia.org/wiki/Design_system label=\"LIVE PAGE  \u00b7  EN.WIKIPEDIA.ORG\" caption_len=0 typing=0 posted=0 julius=\"\" problem=\"\""
+ },
+ {
+  "step": "02_clicked_search_box",
+  "note": "clicked=True",
+  "file": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\wonder_web_live\\01_02_clicked_search_box.jpg",
+  "live": "live_pages=1 front=browser browser[url=https://en.wikipedia.org/wiki/Design_system following=0 frames=35 size=1502x727 loading=0 problem=\"\"]",
+  "browse": "loaded=1 tabs=5 tab=social url=instagram.com/wonderland.studio real=1 real_url=https://en.wikipedia.org/wiki/Design_system label=\"LIVE PAGE  \u00b7  EN.WIKIPEDIA.ORG\" caption_len=0 typing=0 posted=0 julius=\"\" problem=\"\""
+ },
+ {
+  "step": "03_typed_into_the_site",
+  "note": "typed into the page's own field",
+  "file": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\wonder_web_live\\02_03_typed_into_the_site.jpg",
+  "live": "live_pages=1 front=browser browser[url=https://en.wikipedia.org/wiki/Design_system following=0 frames=46 size=1502x727 loading=0 problem=\"\"]",
+  "browse": "loaded=1 tabs=5 tab=social url=instagram.com/wonderland.studio real=1 real_url=https://en.wikipedia.org/wiki/Design_system label=\"LIVE PAGE  \u00b7  EN.WIKIPEDIA.ORG\" caption_len=0 typing=0 posted=0 julius=\"\" problem=\"\""
+ },
+ {
+  "step": "04_the_site_answered",
+  "note": "live=live_pages=1 front=browser browser[url=https://en.wikipedia.org/wiki/Wonderland following=0 frames=86 size=1502x727 loading=0 problem=\"\"]",
+  "file": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\wonder_web_live\\03_04_the_site_answered.jpg",
+  "live": "live_pages=1 front=browser browser[url=https://en.wikipedia.org/wiki/Wonderland following=0 frames=86 size=1502x727 loading=0 problem=\"\"]",
+  "browse": "loaded=1 tabs=5 tab=social url=instagram.com/wonderland.studio real=1 real_url=https://en.wikipedia.org/wiki/Design_system label=\"LIVE PAGE  \u00b7  EN.WIKIPEDIA.ORG\" caption_len=0 typing=0 posted=0 julius=\"\" problem=\"\""
+ },
+ {
+  "step": "05_scrolled",
+  "note": "three real wheel events at the page",
+  "file": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\wonder_web_live\\04_05_scrolled.jpg",
+  "live": "live_pages=1 front=browser browser[url=https://en.wikipedia.org/wiki/Wonderland following=0 frames=107 size=1502x727 loading=0 problem=\"\"]",
+  "browse": "loaded=1 tabs=5 tab=social url=instagram.com/wonderland.studio real=1 real_url=https://en.wikipedia.org/wiki/Design_system label=\"LIVE PAGE  \u00b7  EN.WIKIPEDIA.ORG\" caption_len=0 typing=0 posted=0 julius=\"\" problem=\"\""
+ },
+ {
+  "step": "06_host_refused",
+  "note": "still on None",
+  "file": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\wonder_web_live\\05_06_host_refused.jpg",
+  "live": "live_pages=1 front=browser browser[url=https://en.wikipedia.org/wiki/Wonderland following=0 frames=118 size=1502x727 loading=0 problem=\"\"]",
+  "browse": "loaded=1 tabs=5 tab=social url=instagram.com/wonderland.studio real=1 real_url=https://en.wikipedia.org/wiki/Design_system label=\"LIVE PAGE  \u00b7  EN.WIKIPEDIA.ORG\" caption_len=0 typing=0 posted=0 julius=\"\" problem=\"\""
+ },
+ {
+  "step": "07_real_instagram",
+  "note": "live=live_pages=1 front=browser browser[url=https://www.instagram.com/ following=0 frames=163 size=1502x727 loading=0 problem=\"\"]",
+  "file": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\wonder_web_live\\06_07_real_instagram.jpg",
+  "live": "live_pages=1 front=browser browser[url=https://www.instagram.com/ following=0 frames=163 size=1502x727 loading=0 problem=\"\"]",
+  "browse": "loaded=1 tabs=5 tab=social url=instagram.com/wonderland.studio real=1 real_url=https://www.instagram.com/ label=\"LIVE PAGE  \u00b7  WWW.INSTAGRAM.COM\" caption_len=0 typing=0 posted=0 julius=\"\" problem=\"\""
+ },
+ {
+  "step": "08_simulated_again",
+  "note": "label=\"SIMULATED",
+  "file": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\wonder_web_live\\07_08_simulated_again.jpg",
+  "live": "live_pages=1 front=browser browser[url=https://www.instagram.com/ following=0 frames=172 size=1502x727 loading=0 problem=\"\"]",
+  "browse": "loaded=1 tabs=5 tab=social url=instagram.com/wonderland.studio real=0 real_url=https://www.instagram.com/ label=\"SIMULATED PAGE  \u00b7  NO NETWORK\" caption_len=0 typing=0 posted=0 julius=\"\" problem=\"\""
+ }
+]
