@@ -58,16 +58,33 @@ PLACES = (
 )
 
 #: (moon gain, night sky, practical gain). The first row is the world as it stands.
+#: (MoonGain, NightSky, PracticalGain, NightFill).
+#:
+#: NIGHTFILL WAS NEVER SWEPT AND THAT WEAKENS MY OWN HEADLINE. I reported that "no moon/sky/practical
+#: combination makes the founder's seven places readable while keeping them night" -- true, and it swept
+#: THREE levers while holding the fourth constant at its shipped 0.26. NightFill is the floor under the
+#: three fill lights, and it is the knob that most directly lifts a surface no moon is striking, which is
+#: exactly the failure that reading described.
+#:
+#: IT ALSO MATTERS FOR COST, WHICH IS WHY IT IS IN NOW RATHER THAN LATER. The night readability currently
+#: comes from local exposure, and local exposure is a bilateral decomposition on the RENDER THREAD -- a pass
+#: whose price at night nobody has measured. NightFill buys brightness from lights that are already being
+#: rendered, with no extra pass. If the lift turns out expensive, this is the alternative, and it should be
+#: measured before it is needed rather than guessed at under pressure.
 SWEEP = (
-    (0.050, 7.0, 0.0),
-    (0.050, 7.0, 1.0),
-    (0.050, 10.0, 1.0),
-    (0.080, 7.0, 1.0),
-    (0.080, 10.0, 1.0),
-    (0.080, 10.0, 1.6),
-    (0.120, 10.0, 1.0),
-    (0.120, 14.0, 1.0),
-    (0.080, 14.0, 1.6),
+    # the shipped floor, across the moon/sky/practical range as before
+    (0.050, 7.0, 0.0, 0.26),
+    (0.050, 7.0, 1.0, 0.26),
+    (0.080, 7.0, 1.0, 0.26),
+    (0.080, 10.0, 1.0, 0.26),
+    (0.120, 10.0, 1.0, 0.26),
+    (0.120, 14.0, 1.0, 0.26),
+    # then the fill itself, at a fixed and modest moon/sky/practical, which is the comparison that matters
+    (0.050, 7.0, 1.0, 0.45),
+    (0.050, 7.0, 1.0, 0.70),
+    (0.050, 7.0, 1.0, 1.00),
+    (0.080, 10.0, 1.0, 0.45),
+    (0.080, 10.0, 1.0, 0.70),
 )
 #: THE HOURLY LADDER CANNOT SEE THE SHAPE OF DUSK. Read the source: Daylight = clamp((elev+9)/21)^1.9 is
 #: pinned at EXACTLY 1.0 from 06:38 to 17:22 -- 10.7 hours of a 24-hour day -- and then falls the whole way to
@@ -310,13 +327,14 @@ def job():
     yield 2.0
     sweep = []
     RESULT["sweep"] = sweep
-    for moon, sky, gain in SWEEP:
+    for moon, sky, gain, fill in SWEEP:
         cvar("wl.Sky.MoonGain", moon)
         cvar("wl.Sky.NightSky", sky)
         cvar("wl.Look.PracticalGain", gain)
+        cvar("wl.Sky.NightFill", fill)
         yield 2.5
-        key = "moon%.3f_sky%.0f_prac%.1f" % (moon, sky, gain)
-        row = {"key": key, "moon": moon, "sky": sky, "practicals": gain, "places": {}}
+        key = "moon%.3f_sky%.0f_prac%.1f_fill%.2f" % (moon, sky, gain, fill)
+        row = {"key": key, "moon": moon, "sky": sky, "practicals": gain, "fill": fill, "places": {}}
         for label, eye, at in PLACES:
             look(label, eye, at)
             yield 2.0
@@ -340,6 +358,7 @@ def job():
     cvar("wl.Sky.MoonGain", SWEEP[0][0])
     cvar("wl.Sky.NightSky", SWEEP[0][1])
     cvar("wl.Look.PracticalGain", 1.0)
+    cvar("wl.Sky.NightFill", 0.26)          # the shipped floor, restored like every other knob
 
     # ---- THE CYCLE, at the arrival, hour by hour.
     label, eye, at = PLACES[0]
