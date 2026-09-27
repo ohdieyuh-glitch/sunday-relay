@@ -285,11 +285,28 @@ def job():
     # Nothing about that is visible in a single combination; it only shows when the same place is compared
     # across two, in measurement order. A settle long enough to cross the whole 67-minute dusk transition,
     # then one throwaway framing so the exposure has somewhere to land before anything is recorded.
-    yield 12.0
+    # WAIT ON THE THING, NOT ON A DURATION. A longer timer is the weaker fix and picks a number nobody can
+    # defend; the other lane waits on a ground trace for streaming rather than on seconds, and the same
+    # applies to a sky. Read one framing repeatedly and go when it STOPS MOVING, with the timer only as a
+    # backstop. That adapts to a slow machine instead of being wrong on one.
+    settled_after, prev = None, None
     if PLACES:
         look(*PLACES[0])
-        yield 3.0
-        shoot("settle__discarded")
+        for attempt in range(20):
+            yield 1.5
+            now = patch(0.5, 0.5, 0.46, 0.44)
+            if now is None:
+                continue
+            if prev is not None and abs(now["luma"] - prev["luma"]) < 0.004:
+                settled_after = round(1.5 * (attempt + 1), 1)
+                break
+            prev = now
+    RESULT["sky_settled_after_s"] = settled_after
+    RESULT["sky_settle_note"] = (
+        "the sweep's first three readings were the sky still travelling from noon: 0.7159, 0.5485, 0.5311, "
+        "against 0.1308, 0.1157, 0.1153 for the same three places one combination later. This waits for two "
+        "consecutive framings within 0.004 luma before any reading is recorded, and reports how long that "
+        "took. A null here means it never settled inside 30 s and every night number below is suspect.")
     yield 2.0
     sweep = []
     RESULT["sweep"] = sweep
