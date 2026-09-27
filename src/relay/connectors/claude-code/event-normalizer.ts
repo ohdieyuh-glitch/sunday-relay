@@ -3,6 +3,7 @@ import type { EventDraft } from '../../protocol/envelopes';
 import type { ProjectId, RunId, TaskId, WorkspaceRefId } from '../../protocol/ids';
 import type { ParsedStreamState } from './stream-parser';
 import type { ClaudeRunOutcome } from './process-runner';
+import { claudeCodeResultRefused } from './result-classification';
 
 /**
  * Event normalizer (Prompt 8) — PURE. Maps live Claude activity into
@@ -102,7 +103,7 @@ export function normalizeClaudeRun(
       { durationMs: outcome.durationMs }, 'relay-core'));
   } else if (outcome.spawnError) {
     events.push(draft(ctx, 'agent.process_failed', 'Claude process failed to start or run.', {}, 'relay-core'));
-  } else if (parsed.isError) {
+  } else if (claudeCodeResultRefused(parsed)) {
     events.push(draft(ctx, 'agent.process_failed',
       `Claude reported ${parsed.resultSubtype ?? 'an error'}.`, { subtype: parsed.resultSubtype }, 'relay-core'));
   } else {

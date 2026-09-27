@@ -31,9 +31,16 @@
 #include "WonderlandMissionTasks.generated.h"
 
 /**
- * WHERE A TASK IS IN ITS LIFE. The founder's own list, unchanged.
+ * WHERE A TASK IS IN ITS LIFE. The founder's own list.
  *
  * DRAFT is the only state a task can be created in, and the only one that is not a Mission Contract.
+ *
+ * BLOCKED, WAITING AND CANCELLED were added by founder decision on 2026-09-27, because Julius reports all
+ * three and the list had no honest place for any of them: a blocked run is not PAUSED (nobody chose to stop
+ * it), a waiting run is not running (it is waiting on a person), and a cancelled run is not FAILED (it was
+ * stopped on purpose). They are APPENDED so every earlier ordinal is unchanged and Draft stays at 0.
+ * wonderland-julius-task-state.ts maps Julius's states onto this list one-for-one, and
+ * wonderland-cpp-parity.test.ts fails if the two lists ever disagree.
  */
 UENUM(BlueprintType)
 enum class EWonderlandTaskState : uint8
@@ -50,7 +57,13 @@ enum class EWonderlandTaskState : uint8
 	Repair,
 	Completed,
 	Failed,
-	Paused
+	Paused,
+	/** A reviewer or a policy stopped the run. Not a choice, and not a failure. */
+	Blocked,
+	/** The run is waiting on a person -- an approval or a checkpoint. Not running. */
+	Waiting,
+	/** Someone stopped the run on purpose. Not a failure. */
+	Cancelled
 };
 
 WONDERLAND_API const TCHAR* WonderlandTaskStateName(EWonderlandTaskState State);

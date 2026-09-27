@@ -40,9 +40,11 @@
  * system that is not durable.
  */
 
+import type { JuliusMemoryClaim } from './julius-memory-trust';
+import { juliusClaimStandingKey } from './julius-claim-ledger';
 import { MAX_TASK_RECOVERIES, planJuliusRecovery, type JuliusRecoveryAction } from './julius-recovery';
 import { transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
-import type { JuliusOperationalEvent } from './julius-events';
+import { JuliusEventIdConflict, canonicalJuliusEventIdentity, type JuliusOperationalEvent } from './julius-events';
 import type { JuliusTrajectoryEvent } from './julius-trajectory';
 import type { JuliusContextSnapshot } from './julius-context-snapshot';
 import { juliusTaskContractBindingDigest, type JuliusTaskContract } from './julius-task-contract';
@@ -108,6 +110,8 @@ export interface JuliusMemoryStore
   events(): readonly JuliusOperationalEvent[];
   trajectory(): readonly JuliusTrajectoryEvent[];
   contexts(): readonly JuliusContextSnapshot[];
+  /** Every standing a claim has held, oldest first — the history the table keeps. */
+  claimStandingHistory(claimId: string): readonly JuliusMemoryClaim[];
   results(): readonly ResultRow[];
   /** Reclaim expired leases, as the recovery repository does. */
   recoverExpired(now: string, limit?: number, projectId?: string): Promise<readonly JuliusRecoveryAction[]>;
@@ -139,6 +143,8 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
    * that reaches context snapshots and trajectory rows.
    */
   const brainRevisions = new Map<string, number>();
+  /** Every standing a claim has held, in order, with the run it belongs to. */
+  const claimStandings = new Map<string, { readonly runId: string; readonly projectId: string; history: JuliusMemoryClaim[] }>();
   /**
    * TASK CONTRACTS, keyed `<contractId>@<revision>` because a revision is the
    * unit that is stored, locked and superseded. PostgreSQL keys the same rows
@@ -150,6 +156,8 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
   const resultGenerations = new Set<string>();
   const eventLog: JuliusOperationalEvent[] = [];
   const eventIds = new Set<string>();
+  /** The canonical identity of every event recorded, so a repeat can be told from a rewrite. */
+  const identities = new Map<string, string>();
   /**
    * PER-STREAM SEQUENCES, ASSIGNED ON APPEND.
    *
@@ -183,6 +191,30 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
 
   const CLAIMABLE_RUN_STATES: readonly JuliusMissionState[] =
     ['READY', 'EXECUTING', 'WAITING', 'REVIEWING', 'REPAIRING', 'VERIFYING'];
+
+  /**
+   * ONE APPEND, WHOEVER ASKS.
+   *
+   * `appendEvent` is the port; a decision writing the events that explain it
+   * needs the identical rule from inside its own write. Sharing the body is
+   * what makes "the same id may only ever say the same thing" true on both
+   * paths rather than true on the one that happened to be tested.
+   */
+  const recordEvent = (event: JuliusOperationalEvent): boolean => {
+    const recorded = identities.get(event.eventId);
+    const identity = canonicalJuliusEventIdentity(event);
+    if (recorded !== undefined) {
+      if (recorded !== identity) throw new JuliusEventIdConflict(event.eventId);
+      return false;
+    }
+    identities.set(event.eventId, identity);
+    eventIds.add(event.eventId);
+    const next = (eventSequences.get(event.runId) ?? 0) + 1;
+    eventSequences.set(event.runId, next);
+    sequenceOf.set(event.eventId, next);
+    eventLog.push({ ...event });
+    return true;
+  };
 
   return {
     /* ------------------------------------------------------------ seeding */
@@ -478,6 +510,12 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
         task.state = 'RUNNABLE';
         task.version += 1;
       }
+      /* AND SO IS THE HISTORY THAT EXPLAINS IT. Production writes these inside
+         the decision's transaction; this whole call is synchronous, which is
+         the same guarantee — nothing can observe the decision without them.
+         They take the same append rule as any other event, so a replayed
+         decision that names the same events writes no second row. */
+      for (const event of input.events ?? []) recordEvent(event);
       return true;
     },
 
@@ -504,6 +542,19 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
         // entry PUBLIC would be a claim nobody checked.
         allowedRoles: ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'],
         sensitivity: 'INTERNAL',
+        /**
+         * WHO WROTE IT, WHEN, AND WHAT IT CITED. Every one of these arrives on
+         * the append and was being thrown away at the read, so the context
+         * integrity layer had no way to tell a reviewer's cited finding from a
+         * coder's own note. Matching the PostgreSQL read path exactly, because a
+         * model and a database that disagree about provenance is worse than
+         * neither carrying it.
+         */
+        provenance: {
+          workerId: input.workerId,
+          recordedAt: input.occurredAt,
+          evidenceIds: [...input.evidenceIds],
+        },
       }]);
       return true;
     },
@@ -635,13 +686,12 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
 
     /* ------------------------------------------------------------- events */
     async appendEvent(event) {
-      if (eventIds.has(event.eventId)) return false;
-      eventIds.add(event.eventId);
-      const next = (eventSequences.get(event.runId) ?? 0) + 1;
-      eventSequences.set(event.runId, next);
-      sequenceOf.set(event.eventId, next);
-      eventLog.push({ ...event });
-      return true;
+      /**
+       * THE SAME ID MAY ONLY EVER SAY THE SAME THING. This compared the id
+       * alone, so a second event carrying DIFFERENT facts under a used id was
+       * dropped and its facts were lost — silently, and only in this store.
+       */
+      return recordEvent(event);
     },
 
     /**
@@ -716,6 +766,34 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     },
     async brainEntriesForRun(runId, projectId) {
       return inProject(runId, projectId) ? (brain.get(runId) ?? []).map((entry) => ({ ...entry })) : [];
+    },
+
+    /* --------------------------------------------------------- the claim store */
+    async claimsForRun(runId, projectId) {
+      if (!inProject(runId, projectId)) return [];
+      return [...claimStandings.values()]
+        .filter((record) => record.runId === runId && record.projectId === projectId)
+        .map((record) => ({ ...record.history[record.history.length - 1]! }));
+    },
+    async recordClaimStanding(input) {
+      const run = runs.get(input.runId);
+      if (run === undefined || run.projectId !== input.projectId) return false;
+      const record = claimStandings.get(input.claim.claimId);
+      // A REPLAY WRITES NOTHING: the same standing again is not a new standing,
+      // by the same key PostgreSQL compares.
+      const latest = record?.history[record.history.length - 1];
+      if (latest !== undefined && juliusClaimStandingKey(latest) === juliusClaimStandingKey(input.claim)) return false;
+      const copy: JuliusMemoryClaim = {
+        ...input.claim,
+        evidence: input.claim.evidence.map((reference) => ({ ...reference })),
+        contradicts: [...input.claim.contradicts],
+      };
+      if (record === undefined) claimStandings.set(input.claim.claimId, { runId: input.runId, projectId: input.projectId, history: [copy] });
+      else record.history.push(copy);
+      return true;
+    },
+    claimStandingHistory(claimId) {
+      return (claimStandings.get(claimId)?.history ?? []).map((claim) => ({ ...claim }));
     },
     async repairRoundsFor(taskId, projectId) {
       const task = tasks.get(taskId);
@@ -828,16 +906,6 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     async activeTaskCount(runId, projectId) {
       if (!inProject(runId, projectId)) return 0;
       return [...tasks.values()].filter((task) => task.runId === runId && task.state === 'ACTIVE').length;
-    },
-
-    async reviewCompletedFor(taskId, projectId) {
-      const parent = tasks.get(taskId);
-      if (parent === undefined || !inProject(parent.runId, projectId)) return false;
-      // Any INDEPENDENT_REVIEWER child that succeeded, however it was named —
-      // the gauntlet's review phase and the pipeline's `:review` task are both
-      // reviews of the same task and both must count.
-      return [...tasks.values()].some((task) =>
-        task.parentTaskId === taskId && task.role === 'INDEPENDENT_REVIEWER' && task.state === 'SUCCEEDED');
     },
 
     async executedBindingFor(taskId, projectId) {

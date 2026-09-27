@@ -288,3 +288,47 @@ export class DogAnimator {
     return this.pose;
   }
 }
+
+/**
+ * THE DOG'S CLOCK. The animator above is kept exactly as it shipped; this is
+ * only how often it is stepped.
+ *
+ * `DogAnimator` has one frame-rate dependence its springs do not cover: each
+ * spring starts from the COMPOSED pose, so the idle layer is folded back in on
+ * every step and the head's sway grows with the number of steps per second.
+ * Stepped 30 times a second, the head glances and tilts with its face kept
+ * toward the viewer. At 60 the face turns away; on a 165Hz display the head
+ * circles. Stepping it once per display frame made the Dog's character a
+ * property of whatever screen it was opened on.
+ *
+ * So it is CLOCKED rather than retuned: fixed 1/30s steps whatever the display
+ * runs at, drawn as a blend of the last two steps, so a high-refresh screen
+ * gets smooth motion along the same path instead of visible 30Hz stepping.
+ */
+export const DOG_STEP_SECONDS = 1 / 30;
+
+const POSE_KEYS = Object.keys(NEUTRAL_POSE) as (keyof DogPose)[];
+
+export class SteppedDogAnimator {
+  private readonly animator = new DogAnimator();
+  private previous: Readonly<DogPose> = NEUTRAL_POSE;
+  private latest: Readonly<DogPose> = NEUTRAL_POSE;
+  private carry = 0;
+
+  update(dt: number, intent: DogIntent): DogPose {
+    // The animator's own clamp, so a tab restored from the background cannot
+    // queue a burst of catch-up steps.
+    this.carry += Math.min(Math.max(dt, 0), 0.05);
+    while (this.carry >= DOG_STEP_SECONDS) {
+      this.previous = this.latest;
+      this.latest = this.animator.update(DOG_STEP_SECONDS, intent);
+      this.carry -= DOG_STEP_SECONDS;
+    }
+    const t = this.carry / DOG_STEP_SECONDS;
+    const pose = { ...NEUTRAL_POSE };
+    for (const key of POSE_KEYS) {
+      pose[key] = this.previous[key] + (this.latest[key] - this.previous[key]) * t;
+    }
+    return pose;
+  }
+}

@@ -940,16 +940,18 @@ a decode contract proven by a document.
 
 `wonderland-julius-reader-real-postgres.test.ts` runs the PRODUCTION class —
 not a re-spelling of its query — against a cluster built by the real migration
-chain from empty. Thirty tests, gated on `JULIUS_REAL_POSTGRES=1` plus
-`WONDERLAND_TEST_DATABASE_URL`, the same switch `real-infra-julius.test.ts`
-uses. Without them they report as **todo**: visibly not run, rather than
-passing on nothing.
+chain from empty. Thirty tests, gated on `JULIUS_TEST_DATABASE_URL` — since
+2026-09-27 the ONE switch every real-PostgreSQL suite in the repository reads
+(Julius 6d960b03 retired `JULIUS_REAL_POSTGRES` and `DATABASE_URL` as
+switches, because the inherited `DATABASE_URL` on the development laptop is the
+persistent Julius store). Without it they report as **todo**: visibly not run,
+rather than passing on nothing.
 
 To run it here: `initdb` as the `postgres` user (it refuses to run as root),
 start on a spare port, create a database, then
 
 ```
-JULIUS_REAL_POSTGRES=1 WONDERLAND_TEST_DATABASE_URL=postgres://… \
+JULIUS_TEST_DATABASE_URL=postgres://… \
   npx vitest run src/relay/persistence/wonderland-julius-reader-real-postgres.test.ts
 ```
 

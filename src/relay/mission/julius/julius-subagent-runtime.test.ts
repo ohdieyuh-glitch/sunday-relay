@@ -43,6 +43,50 @@ const spawn = (
   clock: ctx.harness.clock, ids: ctx.harness.ids,
 });
 
+/* ------------------------------------------- the reviewer is not a swarm member */
+
+/**
+ * THE INDEPENDENT REVIEWER REMAINS OUTSIDE THE SWARM.
+ *
+ * `spawnJuliusSubagent` already refuses the `review:` and `repair:` task-type
+ * namespaces, so a child cannot impersonate verification machinery. The ROLE was
+ * a separate question and was unconstrained: a Coding Agent could spawn a child
+ * carrying `role: 'INDEPENDENT_REVIEWER'` with an ordinary task type, and that
+ * child entered the durable graph and was routed to the reviewer's own worker.
+ *
+ * WHY THAT IS A BREACH EVEN THOUGH IT CANNOT LAUNDER AN ACCEPTANCE. The reviewer
+ * is the one role whose value is that it is not part of the work it judges. A
+ * child of the coder's task, spending the mission's budget on the reviewer's
+ * provider, is the reviewer INSIDE the swarm — and the next person to read
+ * "independent" would be reading it about a worker the coder had spawned.
+ *
+ * Julius creates review work. A worker asks for help; it does not appoint its
+ * own judge.
+ */
+describe('the Independent Reviewer is never a sub-agent', () => {
+  it('refuses the reviewer role outright, before anything is reserved or recorded', async () => {
+    const ctx = build();
+    const outcome = await spawn(ctx, { role: 'INDEPENDENT_REVIEWER' });
+    expect(outcome.authorized).toBe(false);
+    if (outcome.authorized) return;
+    expect(outcome.reasonCode).toBe('SUBAGENT_ROLE_RESERVED');
+    // Nothing was reserved, recorded or inserted: the refusal precedes all three.
+    expect(ctx.harness.store.taskRow('subagent:req-1')).toBeNull();
+    expect(await ctx.harness.store.loadSubagent('run-1', 'req-1')).toBeNull();
+    expect(ctx.harness.budget.reservations()).toHaveLength(0);
+  });
+
+  it('still allows the two roles a swarm is made of', async () => {
+    // The refusal must be exactly one role wide. A guard that refused every role
+    // but the parent's would forbid the specialisation /MAS exists for.
+    for (const role of ['CODING_AGENT', 'PROMPT_ARCHITECT', 'SPECIALIST:audit'] as const) {
+      const ctx = build();
+      const outcome = await spawn(ctx, { role, requestId: 'req-1' });
+      expect(outcome.authorized, `${role} must still be allowed`).toBe(true);
+    }
+  });
+});
+
 /* ------------------------------------------------ into the one task graph */
 
 describe('a child enters the durable task graph', () => {

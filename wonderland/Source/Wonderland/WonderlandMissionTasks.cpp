@@ -146,7 +146,9 @@ namespace
 			}
 			const FString Want = Args[1].ToUpper();
 			EWonderlandTaskState State = EWonderlandTaskState::Queued;
-			for (int32 Value = 0; Value <= static_cast<int32>(EWonderlandTaskState::Paused); ++Value)
+			// Bounded by the LAST member. This read `<= Paused` until Blocked/Waiting/Cancelled were appended, which
+			// would have parsed "BLOCKED" as the Queued default above.
+			for (int32 Value = 0; Value <= static_cast<int32>(EWonderlandTaskState::Cancelled); ++Value)
 			{
 				if (Want == WonderlandTaskStateName(static_cast<EWonderlandTaskState>(Value)))
 				{
@@ -174,6 +176,9 @@ const TCHAR* WonderlandTaskStateName(EWonderlandTaskState State)
 	case EWonderlandTaskState::Completed:      return TEXT("COMPLETED");
 	case EWonderlandTaskState::Failed:         return TEXT("FAILED");
 	case EWonderlandTaskState::Paused:         return TEXT("PAUSED");
+	case EWonderlandTaskState::Blocked:        return TEXT("BLOCKED");
+	case EWonderlandTaskState::Waiting:        return TEXT("WAITING");
+	case EWonderlandTaskState::Cancelled:      return TEXT("CANCELLED");
 	}
 	return TEXT("UNKNOWN");
 }
@@ -520,7 +525,10 @@ bool UWonderlandMissionTaskSubsystem::ShouldPresentOrb(FGuid LocalId) const
 	{
 		return false;
 	}
-	return Task->State != EWonderlandTaskState::Completed && Task->State != EWonderlandTaskState::Failed;
+	// FINISHED IS COMPLETED, FAILED OR CANCELLED. Blocked and Waiting are alive -- Waiting in particular is a run
+	// that needs a person -- so their orb stays.
+	return Task->State != EWonderlandTaskState::Completed && Task->State != EWonderlandTaskState::Failed
+		&& Task->State != EWonderlandTaskState::Cancelled;
 }
 
 bool UWonderlandMissionTaskSubsystem::SelectTask(FGuid LocalId)
@@ -673,7 +681,8 @@ bool UWonderlandMissionTaskSubsystem::ApplySchedulerState(
 	// A CONTRACT JULIUS IS WORKING IS AN ACTIVE TASK, which is exactly what the orb is a visualisation of. The
 	// founder's rule reads "ACTIVE TASK(S) -> their appropriate orb presentation may remain visible", so a live
 	// report reopens the task if it was closed -- and a finished state is handled by ShouldPresentOrb.
-	if (!Task->bInWorkspace && State != EWonderlandTaskState::Completed && State != EWonderlandTaskState::Failed)
+	if (!Task->bInWorkspace && State != EWonderlandTaskState::Completed && State != EWonderlandTaskState::Failed
+		&& State != EWonderlandTaskState::Cancelled)
 	{
 		Task->bInWorkspace = true;
 		if (!Selected.IsValid()) { Selected = Task->LocalId; }

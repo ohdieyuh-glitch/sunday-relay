@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -32,13 +33,15 @@ import {
  * preflight's rows cannot satisfy this one by accident, concurrent preflights
  * do not collide, and cleanup removes exactly this preflight's rows.
  *
- * They run wherever JULIUS_REAL_POSTGRES=1 (or JULIUS_REAL_INFRA=1) and
+ * They run wherever JULIUS_TEST_DATABASE_URL names a throwaway database, never the
+ * inherited DATABASE_URL, and
  * DATABASE_URL point at a migrated-or-empty PostgreSQL — the sibling
  * infrastructure workflow's `first-live-topology` job — and are `todo`
  * elsewhere, like the other real-infrastructure cases. No provider is involved.
  */
 
-const enabled = process.env.JULIUS_REAL_POSTGRES === '1' || process.env.JULIUS_REAL_INFRA === '1';
+const databaseUrl = juliusTestDatabaseUrl();
+const enabled = databaseUrl !== null;
 const suite = enabled ? describe : describe.todo;
 
 /** The executor's identifier grammar (executor-schema.ts `identifier`). Every fixture id must satisfy it. */
@@ -99,7 +102,7 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
   };
 
   beforeAll(async () => {
-    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    pool = new Pool({ connectionString: databaseUrl! });
     // `migrate()` applies only versions `schema_migrations` does not hold, so calling it
     // after the preflight already migrated is a no-op rather than a 42P07.
     await migrateIfNeeded(pool);

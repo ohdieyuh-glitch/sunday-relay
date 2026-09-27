@@ -14,6 +14,7 @@ import { JuliusLifecyclePostgresRepository } from './julius-lifecycle-postgres';
 import { JuliusTimelinePostgresRepository } from './julius-timeline-postgres';
 import { JuliusVerificationPostgresRepository } from './julius-verification-postgres';
 import { JuliusContractPostgresRepository } from './julius-contract-postgres';
+import { JuliusClaimPostgresRepository } from './julius-claim-postgres';
 import { createJuliusMemoryStore } from '../mission/julius';
 import type {
   JuliusClaimedTask, JuliusContextWriter, JuliusEventWriter, JuliusResultReceiptRow,
@@ -21,6 +22,7 @@ import type {
   JuliusApprovalStore, JuliusBrainWriter, JuliusFindingWriter, JuliusLifecycleStore,
   JuliusRecoveryDriver, JuliusTimelineReader,
   JuliusRuntimeStore, JuliusSubagentStore, JuliusTaskContractStore, JuliusTrajectoryWriter,
+  JuliusClaimStore,
 } from '../mission/julius';
 
 /**
@@ -107,6 +109,8 @@ const findings: JuliusFindingWriter = new JuliusVerificationPostgresRepository(p
  */
 const taskContracts: JuliusTaskContractStore = new JuliusContractPostgresRepository(pool);
 
+const claimStore: JuliusClaimStore = new JuliusClaimPostgresRepository(pool);
+
 /**
  * THE TWO LEDGERS NEED A ONE-LINE ADAPTER, AND THAT IS THE POINT.
  *
@@ -128,6 +132,8 @@ const trajectoryWriter: JuliusTrajectoryWriter = {
 const composed: JuliusRuntimeStore & JuliusSubagentStore
   & JuliusApprovalStore & JuliusLifecycleStore & JuliusRecoveryDriver = {
   loadRun: runWriter.loadRun.bind(runWriter),
+  claimsForRun: claimStore.claimsForRun.bind(claimStore),
+  recordClaimStanding: claimStore.recordClaimStanding.bind(claimStore),
   transition: runWriter.transition.bind(runWriter),
   addTask: runWriter.addTask.bind(runWriter),
   claimRunnable: runWriter.claimRunnable.bind(runWriter),
@@ -148,7 +154,6 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore
   decisionsForRun: reader.decisionsForRun.bind(reader),
   brainEntriesForRun: reader.brainEntriesForRun.bind(reader),
   repairRoundsFor: reader.repairRoundsFor.bind(reader),
-  reviewCompletedFor: reader.reviewCompletedFor.bind(reader),
   activeTaskCount: reader.activeTaskCount.bind(reader),
   executedBindingFor: reader.executedBindingFor.bind(reader),
   recordFinding: findings.recordFinding.bind(findings),
@@ -236,7 +241,9 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
     const required = Object.keys(memory).filter((key) =>
       !['seedRun', 'seedTask', 'seedCriteria', 'seedFinding', 'seedBrain',
         'taskRow', 'events', 'trajectory', 'contexts', 'results', 'restart',
-        'lifecycleOf', 'timeline'].includes(key));
+        // The claim history is an inspection read; production reads the current
+        // standing through `claimsForRun` and the repository keeps the history.
+        'lifecycleOf', 'timeline', 'claimStandingHistory'].includes(key));
     expect(required.length).toBeGreaterThan(15);
     for (const method of required) {
       expect(typeof (composed as unknown as Record<string, unknown>)[method], method).toBe('function');
@@ -247,8 +254,8 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
     // A drift-detector with a number in it: if a future repository stops
     // satisfying its port directly, this count changes and the reason has to be
     // written down rather than absorbed.
-    const direct = [runWriter, resultWriter, contextWriter, reader, subagents, lifecycle, timeline, findings];
-    expect(direct).toHaveLength(8);
+    const direct = [runWriter, resultWriter, contextWriter, reader, subagents, lifecycle, timeline, findings, claimStore];
+    expect(direct).toHaveLength(9);
     expect(typeof eventWriter.appendEvent).toBe('function');
     expect(typeof trajectoryWriter.appendTrajectory).toBe('function');
   });

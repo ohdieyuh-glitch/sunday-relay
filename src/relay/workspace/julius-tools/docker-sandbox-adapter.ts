@@ -1,6 +1,6 @@
 import {spawn} from 'node:child_process';
 import {access,mkdir,realpath,stat,statfs} from 'node:fs/promises';
-import {resolve,relative,join,dirname} from 'node:path';
+import {resolve,relative,join,dirname,isAbsolute} from 'node:path';
 import {createHash} from 'node:crypto';
 import type {JuliusCollectedArtifact,JuliusDurableSandbox,JuliusPhysicalSandbox,JuliusSandboxIdentity,JuliusSandboxInspection,JuliusSandboxLimits,JuliusSandboxPolicy,JuliusSandboxRecord,JuliusSandboxStore,SandboxExecutionPort,ToolInvocationRequest,ToolInvocationResult} from '../../mission/julius';
 import {assertSandboxIdentity,assertSandboxLimits} from '../../mission/julius';
@@ -83,8 +83,20 @@ export async function assertUnrenameableAncestry(workspace:string,root:string):P
   }
 }
 
-/** The root itself is a workspace; anything reached by climbing out of it is not. */
-export const workspaceContained=(root:string,candidate:string)=>{const rel=relative(root,candidate);return rel===''||(!rel.startsWith('/')&&!rel.split(/[\\/]/).includes('..'));};
+/**
+ * The root itself is a workspace; anything reached by climbing out of it is not.
+ *
+ * `isAbsolute(rel)` IS LOAD-BEARING, AND ITS ABSENCE WAS A CONTAINMENT HOLE ON
+ * WINDOWS. `path.relative` cannot express a path on another volume as a relative
+ * one, so it returns the target ABSOLUTE: `relative('C:\ws', 'D:\secret\x')` is
+ * `'D:\secret\x'`, which starts with no slash and holds no `..` — so the old
+ * predicate called another drive, and a UNC share, CONTAINED. It gates
+ * `permittedWorkspace`, so that answer was the difference between a refused
+ * mount and a mount of somebody else's disk. Found by the Wonderland integration
+ * lane measuring the predicate on Windows; every POSIX case passed, which is how
+ * it survived. `node-tool-adapter` already had this clause; this file did not.
+ */
+export const workspaceContained=(root:string,candidate:string)=>{const rel=relative(root,candidate);return rel===''||(!rel.startsWith('/')&&!isAbsolute(rel)&&!rel.split(/[\\/]/).includes('..'));};
 /**
  * Permitted iff the root and the candidate both resolve and the resolved candidate lies inside the resolved
  * root. Comparing an unresolved spelling to a resolved path is not containment in either direction: a symlink

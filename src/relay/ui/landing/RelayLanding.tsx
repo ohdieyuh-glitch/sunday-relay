@@ -1,4 +1,5 @@
 import { LANDING_SCENES, smoothstep, type ScenePosition, BRAND_EYEBROW } from './choreography';
+import { companyWebTarget } from './company-link';
 
 /** Screen-space anchor for a floating chip, projected by the world's engine. */
 export type LandingAnchor = { x: number; y: number; depth: number; visible: boolean };
@@ -36,6 +37,7 @@ export function RelayLanding({
   position, telemetry, anchors, reducedMotion, onEnterRelay, overPortal,
 }: RelayLandingProps): JSX.Element {
   const scene = LANDING_SCENES[position.index];
+  const company = companyWebTarget();
 
   // A beat's copy holds full opacity across its middle and fades only at the
   // handover, so a headline is never half-legible while the camera is between
@@ -70,7 +72,20 @@ export function RelayLanding({
       <header className="rl3-brand">
         <span className="rl3-mark" aria-hidden="true" />
         <span className="rl3-wordmark">RELAY’S WONDERLAND</span>
-        <span className="rl3-label rl3-brand-sub rl3-brandmark">i.Wonder</span>
+        {company.configured ? (
+          // Two separate deployments, one ecosystem: a real link to the
+          // company site, not a route of this application.
+          <a
+            className="rl3-label rl3-brand-sub rl3-brandmark"
+            href={company.url}
+            target="_blank"
+            rel="noopener"
+          >
+            i.Wonder
+          </a>
+        ) : (
+          <span className="rl3-label rl3-brand-sub rl3-brandmark">i.Wonder</span>
+        )}
       </header>
 
       {/* Floating system chips, positioned by projecting world anchors. Depth

@@ -149,6 +149,59 @@ export interface RoleOccupant {
   /** What is NOT proven about this occupant. Written down so a surface cannot
    *  present a registry entry as a capability guarantee. */
   readonly verificationNotes: readonly string[];
+  /**
+   * HOW FAR THIS OCCUPANT HAS ACTUALLY BEEN QUALIFIED. See
+   * `OccupantQualification`. Required on every entry: an occupant with no
+   * qualification field would read as "no opinion", and the only honest default
+   * is UNSUPPORTED, which is a statement and belongs in the entry.
+   */
+  readonly qualification: OccupantQualification;
+}
+
+/**
+ * PROVIDER CONFORMANCE, AS THREE STATES AND NOTHING IN BETWEEN.
+ *
+ *   VERIFIED     Full paid end-to-end qualification evidence exists, AND it
+ *                names the model it was served by. Both halves, always.
+ *   COMPATIBLE   The adapter satisfies the interface and the occupant can be
+ *                driven, but no completed paid qualification pins it to a model.
+ *                Also called EXPERIMENTAL. It is not a lesser VERIFIED; it is a
+ *                different claim.
+ *   UNSUPPORTED  No conformance proof, and none obtainable from this occupant —
+ *                a development engine or a fake is never a provider path.
+ */
+export const OCCUPANT_QUALIFICATION_STATUSES = ['VERIFIED', 'COMPATIBLE', 'UNSUPPORTED'] as const;
+export type OccupantQualificationStatus = (typeof OCCUPANT_QUALIFICATION_STATUSES)[number];
+
+/**
+ * A QUALIFICATION IS ABOUT A MODEL, NEVER ABOUT A VENDOR.
+ *
+ * This is the field the founder's rule lives in: one qualified model does not
+ * qualify every model from the same vendor. `qualifiedServedModels` holds the
+ * EXACT strings the provider reported having served during a completed paid
+ * qualification — not the requested model, which is what an operator asked for
+ * and not what answered. `juliusProviderQualification` will return VERIFIED for
+ * a served model on that list and for no other, however similar its name.
+ *
+ * A LEG THAT RAN BUT WHOSE SERVED MODEL WAS NEVER RECORDED IS NOT VERIFIED, and
+ * that is not pedantry: paid run 34414726976 completed with a real architect
+ * plan and a real implementation, and its bundle carries the served model of the
+ * REVIEWER only — `worker-diagnostics.tsv` had zero rows, because the lifecycle
+ * columns were emitted on the failure path alone. So a run that genuinely
+ * qualified three legs can only pin one of them, and saying otherwise would be
+ * choosing a model name on the provider's behalf.
+ */
+export interface OccupantQualification {
+  readonly status: OccupantQualificationStatus;
+  /** Exact served-model strings a completed paid qualification covered. */
+  readonly qualifiedServedModels: readonly string[];
+  /**
+   * Durable references to the evidence: a CI run id, a committed record. Never
+   * prose. VERIFIED without one is refused by the registry's own test.
+   */
+  readonly evidence: readonly string[];
+  /** Why this status and not the next one up. One sentence, for a human. */
+  readonly note: string;
 }
 
 /**

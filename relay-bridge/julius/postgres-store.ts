@@ -13,7 +13,7 @@
  */
 
 import type { Pool } from 'pg';
-import type { JuliusRecoveryDriver, JuliusRuntimeStore } from '../../src/relay/mission/julius';
+import type { JuliusRecoveryDriver, JuliusRuntimeStore, JuliusTimelineReader } from '../../src/relay/mission/julius';
 import { JuliusPostgresRepository } from '../../src/relay/persistence/julius-postgres';
 import { JuliusRecoveryPostgresRepository } from '../../src/relay/persistence/julius-recovery-postgres';
 import { JuliusContextPostgresRepository } from '../../src/relay/persistence/julius-context-postgres';
@@ -22,8 +22,37 @@ import { JuliusVerificationPostgresRepository } from '../../src/relay/persistenc
 import { JuliusEventPostgresRepository } from '../../src/relay/persistence/julius-event-postgres';
 import { JuliusTrajectoryPostgresRepository } from '../../src/relay/persistence/julius-trajectory-postgres';
 import { JuliusContractPostgresRepository } from '../../src/relay/persistence/julius-contract-postgres';
+import { JuliusTimelinePostgresRepository } from '../../src/relay/persistence/julius-timeline-postgres';
+import { JuliusClaimPostgresRepository } from '../../src/relay/persistence/julius-claim-postgres';
 
-export function createJuliusPostgresRuntimeStore(pool: Pool): JuliusRuntimeStore & JuliusRecoveryDriver {
+/**
+ * THE TIMELINE READER IS IN THE RETURN TYPE, not left to a structural probe.
+ *
+ * WHY IT HAS TO BE. `JuliusTimelineReader` is NOT part of `JuliusRuntimeStore`,
+ * so the conformance test this file's own comment relies on could never have
+ * noticed it missing — a conformance test proves the REQUIRED ports are
+ * implemented and says nothing about an optional capability. And both consumers
+ * of this one are bound behind `typeof store.timeline === 'function'`:
+ *
+ *   - the research meter's `durableLedger`, which rebuilds a slot's retrieval
+ *     spend from the run's own rows. Unbound, the mediator keeps its
+ *     in-process Map, and a bridge restart forgets what every slot has already
+ *     spent — the exact defect the durable projection was built to close, still
+ *     live in production because the store could not serve the read.
+ *   - `deps.timeline` on the pipeline, which projects the per-slot money ledger
+ *     from `budget.reserved` and `budget.settled`. Unbound, allocation falls
+ *     back to counting rounds off the task rows: a lower bound that cannot tell
+ *     an open reservation from one settled for less.
+ *
+ * `JuliusTimelinePostgresRepository` had existed, implemented the reader, and
+ * had NO production caller at all — its only references were its own
+ * declaration and the barrel that exports it. Naming the capability in this
+ * signature is what makes the next one impossible to drop silently: a structural
+ * probe fails quietly, a missing declared method fails at the type.
+ */
+export function createJuliusPostgresRuntimeStore(
+  pool: Pool,
+): JuliusRuntimeStore & JuliusRecoveryDriver & JuliusTimelineReader {
   const runs = new JuliusPostgresRepository(pool);
   const results = new JuliusRecoveryPostgresRepository(pool);
   const contexts = new JuliusContextPostgresRepository(pool);
@@ -32,6 +61,8 @@ export function createJuliusPostgresRuntimeStore(pool: Pool): JuliusRuntimeStore
   const events = new JuliusEventPostgresRepository(pool);
   const trajectories = new JuliusTrajectoryPostgresRepository(pool);
   const contracts = new JuliusContractPostgresRepository(pool);
+  const timeline = new JuliusTimelinePostgresRepository(pool);
+  const claims = new JuliusClaimPostgresRepository(pool);
   return {
     loadRun: runs.loadRun.bind(runs),
     transition: runs.transition.bind(runs),
@@ -57,7 +88,6 @@ export function createJuliusPostgresRuntimeStore(pool: Pool): JuliusRuntimeStore
     decisionsForRun: reader.decisionsForRun.bind(reader),
     brainEntriesForRun: reader.brainEntriesForRun.bind(reader),
     repairRoundsFor: reader.repairRoundsFor.bind(reader),
-    reviewCompletedFor: reader.reviewCompletedFor.bind(reader),
     activeTaskCount: reader.activeTaskCount.bind(reader),
     executedBindingFor: reader.executedBindingFor.bind(reader),
     recordFinding: findings.recordFinding.bind(findings),
@@ -66,5 +96,8 @@ export function createJuliusPostgresRuntimeStore(pool: Pool): JuliusRuntimeStore
     lockTaskContract: contracts.lockTaskContract.bind(contracts),
     loadTaskContract: contracts.loadTaskContract.bind(contracts),
     taskContractRevisions: contracts.taskContractRevisions.bind(contracts),
+    timeline: timeline.timeline.bind(timeline),
+    claimsForRun: claims.claimsForRun.bind(claims),
+    recordClaimStanding: claims.recordClaimStanding.bind(claims),
   };
 }

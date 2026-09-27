@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
@@ -106,6 +106,27 @@ describe('the landing is the front door', () => {
     // onboarding path entirely.
     expect(parsePreviewHash('#/relay')).toEqual({ screen: 'experience' });
     expect(parsePreviewHash('#/relay/console')).toEqual({ screen: 'console' });
+  });
+});
+
+describe('the i.Wonder brandmark — a link to the separate company deployment', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('renders as plain text when no company URL is configured — not a broken link', () => {
+    vi.stubEnv('VITE_IWONDER_WEB_URL', '');
+    const { container } = render(createElement(RelayLanding, chrome()));
+    const brandmark = within(container.querySelector('.rl3-brand')!).getByText('i.Wonder');
+    expect(brandmark.tagName).toBe('SPAN');
+  });
+
+  it('links out to the configured, separate i.Wonder deployment', () => {
+    vi.stubEnv('VITE_IWONDER_WEB_URL', 'https://iwonder.example.com/');
+    const { container } = render(createElement(RelayLanding, chrome()));
+    const brandmark = within(container.querySelector('.rl3-brand')!).getByText('i.Wonder');
+    expect(brandmark.tagName).toBe('A');
+    expect(brandmark.getAttribute('href')).toBe('https://iwonder.example.com/');
+    expect(brandmark.getAttribute('target')).toBe('_blank');
+    expect(brandmark.getAttribute('rel')).toContain('noopener');
   });
 });
 

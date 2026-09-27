@@ -1,5 +1,6 @@
 import type { ClaudeRunOutcome } from './process-runner';
 import { observeRun, type ObservedRun, type RunObservation } from '../../shared/llmops';
+import { claudeCodeResultRefused } from './result-classification';
 
 /**
  * THE CLAUDE CONNECTOR'S OPERATIONAL OBSERVER.
@@ -87,7 +88,7 @@ export function toObservedRun(
     termination: outcome.cancelled ? 'cancelled'
       : outcome.timedOut ? 'timed_out'
         : outcome.spawnError ? 'spawn_failed'
-          : parsed.isError ? 'reported_error' : 'completed',
+          : claudeCodeResultRefused(parsed) ? 'reported_error' : 'completed',
     usage: {
       durationMs: parsed.usage.durationMs,
       apiDurationMs: parsed.usage.apiDurationMs,

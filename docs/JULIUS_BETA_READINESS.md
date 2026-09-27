@@ -1,5 +1,301 @@
 # Julius beta readiness
 
+> **THIS SECTION SUPERSEDES THE 2026-08-30 ASSESSMENT BELOW.** That one is kept
+> because it is the record of what was believed then, and because two of its rows
+> were wrong in a way worth remembering: it scored the context integrity layer and
+> the Project Brain trust core as present, and every exported function in both
+> threw `*_not_implemented`. A capability matrix that reads a declared signature
+> as a capability is the failure mode this document is supposed to catch.
+
+**Assessment date:** 2026-09-26 UTC.
+**Base reviewed:** `origin/main` `a384b21590c664f752682de86f4dcc6fb533849d` (#287),
+plus the three commits on `relay/julius-beta-qualification` described at the end.
+**Julius is not beta-ready.**
+
+## The five things a row may claim, and they are strictly cumulative
+
+| | Means |
+|---|---|
+| **IMPLEMENTED** | The code exists and does the thing. Nothing about whether anything calls it. |
+| **UNIT/INTEGRATION TESTED** | `npm test` holds its behaviour, including through the composition that would call it in production. |
+| **LIVE PROVIDER VERIFIED** | A real provider answered, and the record names which model. |
+| **ADVERSARIALLY VERIFIED** | Something tried to break it: a mutation campaign, a hostile input, or a control case proving the test could have failed. |
+| **RELEASE QUALIFIED** | A representative end-to-end mission exercised it with no founder rescue, and the evidence survives the database. |
+
+A large test count is none of these on its own. Two rows below are
+ADVERSARIALLY VERIFIED and not LIVE PROVIDER VERIFIED, which is exactly the
+shape of this run: the money was not available to spend, and the proofs that did
+not need money were built instead.
+
+## The scorecard
+
+| # | Area | Weight | Complete | Highest claim held | Evidence | Remaining gap |
+|---|---|---|---|---|---|---|
+| 1 | Core runtime | 12 | **88%** | RELEASE QUALIFIED | Paid run 34414726976 completed 4 ticks, VERIFIED, no rescue. 1,830 passing cases under `src/relay/mission/julius`; 161 through the live composition root. **Breadth, on the live path:** a mission that declares no deterministic check (`testCommand: ""`) now parses, constructs the live coder, runs nothing, records no TEST row, is held to the DIFF it produced, and tells its reviewer no check was declared. Before this, the only way to run a report or analysis mission live was to give it a fake test command and record evidence of a check nobody declared. | Nothing mounts `JuliusRuntimeApi`. Bodies still live in an in-process exchange (PR #286 frozen). |
+| 2 | C.A.R.D. lifecycle | 7 | **80%** | UNIT/INTEGRATION TESTED | Policy, autonomy, concurrency, subagent ceiling and approvals are proven in the kernel and through the live composition. | No operator lifecycle channel is composed: `julius-lifecycle-postgres.ts` is declared-not-reached. Pause/resume/cancel exist and nothing serves them. |
+| 3 | Task Contract / governance | 8 | **88%** | LIVE PROVIDER VERIFIED | Proposed → revised → **locked by the independent evaluator** → one binding digest carried by the coder AND its reviewer, read from two independently-produced tables of a paid bundle. | The CHALLENGE leg has never run against a provider, and paid run 34414726976 recorded no disposition for its absence. Silence is not a disposition. |
+| 4 | Project Brain / persistence | 8 | **80%** | ADVERSARIALLY VERIFIED | 26 migrations, journal-as-authority, recovery drills, brain writes authored by the run itself, replay-absorbing appends. The v2 trust core is implemented with its seeded specification committed beside it. **The claim store now exists at its minimum:** `julius_claim_standings` (migration 026), append-only with history, one port (`JuliusClaimStore`) on both stores; every brain write the runtime makes ADMITS a claim at the standing the derivation gives it (one definition); an Independent Reviewer's accepted review PROMOTES the reviewed work's entries to VERIFIED through the trust core — which refuses self-verification by name and the record shows it; the compiler reads the recorded standing in place of the derived one. Proven on the memory store in a real run (`julius-continuous-lifecycle.e2e`: three promotions with history, one refusal by name, a replay that manufactures nothing), on the unit ledger (12 cases), and on real PostgreSQL (gated suite, 2 cases, run locally against the container). | **No asserter of `supersedes` or `contradicts`** — the runtime does not know two entries disagree and nothing infers it from text (deferred by the founder), so the fail-closed clash path is still reachable only through its seam. (A delivered guidance row was attributed to the worker whose tick delivered it; it is now attributed to its AUTHOR, the architect, with the deliverer on the `guidance.delivered` event — so self-verification follows authorship, and the delivered answer is promoted when the continuation's review accepts.) Artifact bodies are durable (PR 11) and unwired (PR #286). |
+| 5 | Context integrity | 8 | **87%** | ADVERSARIALLY VERIFIED | Implemented and **wired to the real dispatch path**. 39 unit cases (the paid mission's own spec, ported, plus 16 more) and 12 e2e cases that read the packet a live Coding Agent was handed out of the durable snapshot. The 120-distractor selector case and a 60-distractor delivery case both hold; a control shows the pre-integrity compiler losing the needed fact at the same budget. Decision durable in migration 025. A second pass added the task-isolation half: prior-mission residue scoped to another task, another role and SECRET is excluded from the learning mission’s packet AND reported as excluded, with a control proving the reviewer still receives its own material — a scope, not a filter. **The standing the compiler ranks on is now the RECORDED one** where a claim exists (`mergeJuliusDurableStanding`): a memory a reviewer verified ranks as VERIFIED in every later packet of the run, not as whatever its kind derives to. | Lineage is still unasserted (see 4), so `conflicts` is `[]` on every live packet and the fail-closed path is driven only through its seam. The `GOVERNANCE` authority rung is reachable by no derived claim, and says so. |
+| 6 | Evidence / provenance | 8 | **88%** | LIVE PROVIDER VERIFIED | Digests recorded, unresolvable references refused (PR 9), decision + history in one write (PR 8), one append contract across both stores (PR 7), attempt-scoped workspace truth (PR 6), and every event dump ordered by `stream_id,sequence` rather than a tying wall clock (#254). `julius-evidence-completeness.e2e` now reads every field the brief names back out of one real mission, and found the defect below while doing it: the trajectory’s four measurement columns were null on every successful dispatch, so the whole eval layer was projecting an empty column. Fixed at the coordinator, which had the numbers all along. | The bundle cannot yet resolve a body: the artifact exchange that would make an `artifact_ref` resolvable is PR #286. |
+| 7 | Reviewer independence | 7 | **88%** | ADVERSARIALLY VERIFIED | Independence is structural — a shared independence group is refused at binding, before spend — and read-only is structural too. **A reviewer now demonstrably catches a real defect:** a content-derived verdict over the coder's actual diff, with a control proving the same judge approves the clean version first, and a no-laundering case where an unrepaired defect is caught again and the run does not complete. And a real hole closed: a sub-agent could carry `role: INDEPENDENT_REVIEWER` under an ordinary task type, putting the reviewer inside the swarm. Reproduced red, guarded, and the guard pinned to exactly one role wide. | The catch is zero-spend. Paid run 34414726976 recorded, as its own gap, that its reviewer never had a defect in front of it. |
+| 8 | Repair / recovery | 7 | **85%** | ADVERSARIALLY VERIFIED | Repair lineage, effective-verification semantics, a crash injected at every transaction boundary, nothing executed twice across a restart, an honest park when a repair round is refused. | The two persistence gates **cannot run on Windows at all**, and now say so in one line instead of failing seven steps that look like recovery defects: they spawn the repository's fake provider executables, which are Node scripts made executable by a POSIX shebang, and `CreateProcess` honours neither. Both exit non-zero rather than reporting a vacuous pass. Their last recorded green is CI. The three Julius drills (`julius:recovery-drill`, `julius:failure-recovery-drill`, `julius:repair-loop-drill`) were not run in this session. |
+| 9 | Learning Loop | 5 | **78%** | ADVERSARIALLY VERIFIED | A measurement and a promotion gate, not a learner. A matched pair driven through the REAL run loop: the mission without the learning takes a repair round because the real context compiler could not carry a fact nobody stored. The gate refuses on regression, on no effect, on an unmatched pair, on an unmeasured dimension and on a policy that could not refuse anything. The cost and token dimensions are now genuinely measurable rather than permanently UNMEASURABLE, and the refusal case gained the counterpart that makes it non-vacuous: on a priced pair the dimensions are measured and mission A’s repair round is provably more expensive. No irrelevant task context leaks into the improved mission. **A promotion now has somewhere to land:** a reviewer-verified memory is a durable VERIFIED standing with its history, which is what the loop's promotion gate was measuring toward with nothing to write to. **AND THE CARRY IS REAL NOW.** The bootstrap inherits the project’s VERIFIED and APPROVED claims into each new mission (`relay-bridge/julius/mission-knowledge.ts`: capped at 12, newest first, never from the run doing the carrying, never across projects), keeping each fact’s author, evidence and standing — so mission B ranks a reviewer-verified fact as verified and still cannot self-verify it. Proven against real PostgreSQL: A’s verified fact is inherited, A’s assertion is not, a replay inherits nothing twice, another project inherits nothing. The matched-pair packet proof now uses the carry’s own entry ids and reads the standing off the record. | The worker's knowledge-dependence is the fixture's PREMISE and is stated as one; a real model's version of it is noisier. Nothing in the runtime calls the loop — it is an evaluation surface read after a mission. No paid matched pair exists. |
+| 10 | Provider conformance | 8 | **55%** | LIVE PROVIDER VERIFIED (one leg) | The registry now carries a qualification per occupant, keyed to the **served model**, with 22 structural cases including the anti-generalisation rule as a function. Requested and served are separate fields everywhere. | **Two of the three legs cannot be pinned to a model.** Paid run 34414726976 ran a real architect and a real coder and its bundle names the served model of the reviewer only, because `worker-diagnostics.tsv` held zero rows on the success path. One leg is VERIFIED: `hermes_local` at `grok-build-0.1`. |
+| 11 | Failure handling | 7 | **88%** | ADVERSARIALLY VERIFIED | Five provider failure codes, a malformed result, a timeout, budget pressure, a reviewer rejection, a repair cycle, a restart, an unresolved evidence reference — and now a **context-authority conflict that fails the task closed instead of aborting the tick**, with both conflicting claim ids on the ledger row. A failed attempt that BILLED now carries its spend on the row the evals read, so a mission that spent and then failed no longer reports a total biased low. **And a provider declining the REQUEST is now its own class:** `CONTENT_REFUSED` on the Coding Agent (the hosted classifier's `content_filtered`, which used to fall through to UNCLASSIFIED), carried as `INVALID_REQUEST`, never retried, never an operator action; the Prompt Architect's `refused` carries the same code. Proof: `julius-continuous-lifecycle.e2e` (one call, FAILED, the class and the code on the record, not AUTH_CONFIGURATION) and the provider taxonomy table. **And a refusal is ROUTED, not merely named:** Julius raises a `PROVIDER_DECLINED_REQUEST` checkpoint itself, the architect restates the ask, the work continues in a continuation segment and the refused task ends SKIPPED — one re-plan per unit, bounded by durable state, and a second refusal fails truthfully. The reviewer has its own class (`review_content_refused`) and is deliberately NOT re-planned, because an unjudged change may not be completed around. | The Independent Reviewer's provider cannot report a content refusal: a Hermes decline arrives as a verdict that does not parse and is filed as malformed. Nothing yet ROUTES a refusal — the task fails and the run does not complete, which is truthful, but re-planning the ask through the architect is not attempted. The full tool-failure path needs the executor's Docker sandbox and was not exercised here. |
+| 12 | Wonderland integration contract | 4 | **92%** | UNIT/INTEGRATION TESTED | `inspectSlots` projects the three peers from the durable ledger: state, provider identity, requested vs served model, a cost FLOOR with `costComplete` beside it, last failure class, findings raised. 11 e2e cases drive it from a real mission. `docs/JULIUS_WONDERLAND_CONTRACT.md` states the four rules a client must implement. **Mounted:** `GET /relay-api/julius/runs/<id>/<view>` on the bridge, operator-only, read-only, composed over the same PostgreSQL store the mission job writes through; with no `DATABASE_URL` it answers 503 naming the variable. 9 route cases over a mission the harness really ran. **Now also CREATION:** `POST /relay-api/julius/missions` takes a contract exactly as the contract file is written, through the contract library's own parser and the same `createLiveJuliusBootstrapPort` over the same two repositories, and lands the run durable in READY for the read routes to watch. It says `dispatched: false` on the wire. 12 route cases over the REAL bootstrap port with a recording store. Found on the way and avoided: importing the parser from the mission job's entry file put the job's `require.main === module` guard inside the server bundle, where it is true — the bundled server printed the job's usage line at startup. The parser and compiler now live in `relay-bridge/julius/mission-contract.ts`, a library with no entry guard, re-exported by the job. | Driving a run is not reachable from a client (a created run stays READY until the mission job drives it — the deployment decision that spends money, deliberately not taken here), and a browser session cannot read it (a product decision about which fields a session may see). **Both routes are now exercised against a real PostgreSQL:** `julius-bridge-seam.real-postgres.test.ts` (3 cases, gated like the other real-postgres suites and added to the real-infra workflow) proves through the production compositions that what a client creates is what it watches and both are what the tables hold; and on 2026-09-27 the built bridge process was driven over HTTP against that database by hand — recorded in the handoff with the run id. What remains unexercised is a client other than curl and the vitest harness: no Unreal-side call has been made. |
+| 13 | Performance / reliability | 5 | **55%** | UNIT/INTEGRATION TESTED | Bounded graphs, a large-graph case, a 5,000-row read ceiling, per-role context budgets, derived lease and deadline windows. | No load evidence, no multi-mission concurrency evidence, and no green full suite on this platform (see below). |
+| 14 | Final release qualification | 6 | **40%** | LIVE PROVIDER VERIFIED | One paid mission has completed end to end with no founder rescue: 34414726976, with four gaps it recorded itself. The MVP qualification suite now exists as a ledger organised by the founder’s four categories (`docs/JULIUS_MVP_QUALIFICATION.md`), every row resolved by a test: 8 software, 3 game, 4 professional-work and 10 failure/recovery missions, all deterministic, plus the one live run. | The representative PAID mission has not been run, and no Unreal change has been made under Julius’s contracts — the founder’s strongest qualification environment is entirely unexercised. The Docker executor proof is CI-only (Linux runner: image builds, a tmpfs mount, generated keys). |
+
+### JULIUS BETA READINESS: 79%
+
+`Σ(weight × complete) / 100`, weights summing to 100.
+
+**FIFTH PASS, 2026-09-27, latest: 78.3 → 79.0.** Row 9 rises 68 → 78 because the
+Learning Loop’s premise became a fact — the bootstrap really carries a prior
+mission’s verified knowledge, and the packet proof reads the carried standing off
+the record instead of off a fixture’s assertion. Row 11 rises 86 → 88: a content
+refusal is a class on all three peers AND is routed into a re-plan instead of
+collapsing the mission. Row 12 rises 90 → 92 for the active-run guard and the
+rerun path, both exercised over the real bridge binary by the integration lane’s
+own drill (31 of 33 clauses, then the two it caught fixed).
+
+**AND A DEFECT IN THIS LANE’S CODE THAT ANOTHER LANE HAD TO FIND.**
+`workspaceContained` in the Docker sandbox adapter never checked
+`isAbsolute(rel)`, so on Windows another drive and a UNC share read as
+CONTAINED — and that predicate gates `permittedWorkspace`, which decides what
+gets mounted. Every POSIX case passed, which is how it survived. Fixed, with
+the four cases that would have caught it. It is recorded here rather than in a
+commit message alone because "the tests pass" was true the whole time.
+
+**FOURTH PASS, 2026-09-27, later still: 77.2 → 78.3.** Row 4 rises 72 → 80, row
+5 85 → 87 and row 9 62 → 68 for the claim store at its minimum — a durable
+standing with history, promotion on an accepted review through the trust core,
+the record winning at compile — which is the +2.5-not-+6 this page estimated
+for it, and no more, because no asserter of lineage exists and none was
+invented. Row 12 also carries the integration lane's graded end-to-end run of
+the create route on the built bridge (12 of 13 clauses at their `39edf442`;
+the one red is a percent-encoded run id, fixed in `842ac5f0` and not yet in
+their tree; the question of intent — a changed contract is a new run — is
+answered in the contract document and now asserted by their drill).
+
+**THIRD PASS, 2026-09-27, later: 78% was an addition error, and the honest figure
+is 77%.** The table's own numbers summed to 76.7 before this pass, not 78; row 12
+rises 80 → 90 for mission creation over the bridge and both routes exercised
+against a real PostgreSQL (in-process and from the built bridge), row 11 rises
+85 → 86 for the content-refusal class, and the sum is now 77.2. The
+number moves DOWN while the system got better, because the previous total was
+wrong and a corrected total is worth more than a flattering one. Nothing else in
+the table changed, and the four blockers that gate this number are where they
+were: PR #286 frozen, no claim store, the final mission unpaid — and the runtime
+API, which is no longer "mounted by nothing", is still unexercised against a real
+PostgreSQL from a running bridge.
+
+**SECOND PASS, 2026-09-27: 74% → 75%, and the single point is the honest answer.**
+Four rows rose because real defects were found and closed — a sub-agent that could
+be the Independent Reviewer, and a trajectory whose four measurement columns were
+null on every successful dispatch, which made every cost and duration the eval
+layer reported an empty projection. Finding a defect of that size lowers
+confidence in what was already claimed about as much as fixing it raises it, and
+none of the four blockers that actually gate this number moved: PR #286 is still
+frozen, there is still no claim store, the runtime API is still mounted by
+nothing, and the final qualification mission still has not been paid for.
+
+**It is lower than the ~88% previously carried, and the drop is a correction
+rather than a regression.** The old figure counted context integrity and the
+trust core as capabilities; both threw on every call. It also counted provider
+conformance without a rule that a qualification belongs to a model, which is the
+rule that reveals two of the three legs to be unpinned.
+
+## What changed in this run
+
+Three commits on `relay/julius-beta-qualification`, off `a384b215`:
+
+1. **`1a0c679b`** — the context integrity layer and the Project Brain v2 trust
+   core, implemented, wired into the real dispatch path, with both paid missions'
+   own specifications committed and passing (10/10 and 21/21 under the mission
+   sandbox's own declared test command). Migration 025 makes the decision durable.
+   Found on the way: a redaction that wrote the literal characters `$1` instead of
+   naming the key it redacted, and two mission slices whose import chains had been
+   broken long enough that provisioning either died before an assertion ran.
+2. **`574d660d`** — the Learning Loop's measurement and gate, with a matched-pair
+   experiment through the real run loop; and a reviewer that catches a real
+   defect, with the control and the no-laundering case that make it a catch
+   rather than a script.
+3. **`2953966c`** — provider qualification keyed to the served model; an
+   authoritative clash that fails a task rather than a tick; and the Wonderland
+   slot view.
+4. **`49b42a3e`** — the runtime API mounted read-only on the bridge over the
+   same PostgreSQL store the job writes through; **`102c302a`** — the MVP
+   qualification suite organised by the founder's four categories.
+5. **`fc8c67c7`** — mission CREATION over the bridge (`POST
+   /relay-api/julius/missions`, bootstrap only, `dispatched: false` on the
+   wire), the contract parser and compiler moved into a library module because
+   importing them from the job's entry file made the server bundle run the
+   job's entry guard, and the readiness addition corrected.
+6. **`81a910c2`** — the Wonderland seam proven against a real PostgreSQL, in
+   process and from the built bridge over HTTP.
+7. **The commit carrying this revision of the page** — the whole-chain suite,
+   dead on main since the charged-findings rule and run by no workflow, revived
+   and put in the real-infra workflow; the persistence real-PostgreSQL suites
+   run locally for the first time.
+
+## The honest state of the suite on this platform
+
+**AND THEY CAN NO LONGER TOUCH THE LIVE STORE.** Every real-PostgreSQL suite
+in the repository now reads `JULIUS_TEST_DATABASE_URL` — a variable no profile
+exports and nothing else sets — and not `DATABASE_URL`, which on this
+workstation is inherited by every shell and points at the persistent Julius
+database holding real mission history. A sweep test (`julius-test-database.test.ts`)
+walks `git ls-files` and fails if any test file reads `DATABASE_URL` again.
+Proven both ways on this machine: with the inherited variable and
+`JULIUS_REAL_POSTGRES=1` the suites are 8 `todo` and the live database still has
+no `relay_wonderland` schema; with a stated throwaway database they are 8
+passed. The runtime keeps its own variables (`JULIUS_DATABASE_URL`, then
+`DATABASE_URL`) because database configuration belongs to whatever launches the
+bridge and the job.
+
+**THE REAL-POSTGRESQL SUITES NOW HAVE A LOCAL RESULT.** A `julius-postgres`
+container (postgres:16) was found running on this machine; against fresh
+databases in it, the six persistence real-PostgreSQL suites pass — 35 cases, 2
+`todo` for the Docker halves — and the new Wonderland seam suite passes 3/3.
+The seventh, `julius-live-chain.e2e.test.ts` — the WHOLE chain on a real
+database with a repair round, dumped by the shipping queries and read by the
+Beta Gate — **was failing on `origin/main` and on this branch identically**
+(proved by running it in a probe worktree at `a384b215`): its scripted
+re-review never answered the finding it was charged with, so the
+charged-findings rule from #277 HALTed the run as `FINDINGS_UNRESOLVED`, and
+no workflow ran the suite to say so. The fixture now reads its packet from the
+same handoffs the job composes and answers the finding; the run reaches
+COMPLETED with six SUCCEEDED tasks including `repair:build` and its re-review,
+read back from PostgreSQL. The dump-and-gate half needs a `psql` binary this
+host does not have, so that half is CI's: the suite is added to the real-infra
+workflow beside the others. A suite that is not run is not a proof.
+
+`npm test` on Windows is **not green, before or after this work**. The baseline at
+`a384b215` was 194 failing cases across 56 files; the failures are dominated by
+platform-specific paths — the MCP stdio proofs (13, fixed on an unlanded branch),
+spawned-process and path handling in `ship-runner`, `repository-target-observer`
+and the Hermes adapter. CI runs on Linux and is the authority on green.
+
+THE SAME CAUSE REACHES A THIRD GATE. `relay:claude:contract-verify` fails here
+with five steps and `exit=5`, because it drives the same POSIX fake executable.
+It is NOT fixed in this change — it is outside the Julius lane — and it is named
+here so the next person to see those five lines has the cause in one grep rather
+than an afternoon. `relay-repository-boundary`, `relay-parity-gate`,
+`relay:surface-parity:check:strict`, `relay:yc-demo:check`,
+`relay:cli:contract-verify`, `relay:workspace:verify`, `git diff --check`, both
+typecheck passes and all six esbuild bundles pass on this host.
+
+**AND A WHOLE-SUITE FIGURE COULD NOT BE OBTAINED ON THIS HOST AT ALL.** Two full
+runs were killed for low memory: 16 GB total with 6.9 GB free, because a
+Wonderland Unreal editor session held the machine throughout. A third completed
+only while the working tree was being edited under it, which makes its numbers
+worthless — several of the gates it runs read `git ls-files` and the working tree.
+So the honest measurement is per directory at constrained concurrency
+(`--maxWorkers=2`), which fits in the available memory and removes the CPU
+contention that was producing most of the intermittent failures:
+
+| Scope | Result |
+|---|---|
+| `src/relay/mission/julius` + `src/relay/mission/role-slots` | **97 files, 1,894 tests, 0 failures** |
+| `relay-bridge/julius` + `src/relay/persistence` + the four affected `scripts/` suites | 63 files, 916 passed, **11 failed — the same five files and the same five counts as the baseline** |
+
+The eleven are `persistence` (4), `lock-reclaim` (2), `beta-enrollment-node` (3),
+`durable-mission-node` (1) and `julius-research-authority` (1); every one of them
+fails identically on the unmodified base, and the first four share the POSIX
+fake-executable cause described above. **Zero new failures across everything this
+session touched** — and `julius-slot-envelope.e2e`, the one case the earlier
+contaminated runs showed failing, passes at constrained concurrency, which
+identifies it as contention rather than a defect.
+
+What this session can honestly claim about its own delta is measured per
+directory, where the signal is clean: `src/relay/mission/julius` was 1 failing
+case at baseline (`julius-slot-envelope.e2e`, which also passes intermittently
+here) and is 1 failing case after, with 1,830 passing and ~120 of them new.
+`relay-bridge/julius/julius-live-composition.test.ts` is 161/161.
+
+## The fastest path to 95%
+
+In order, and each is runnable by an engineering session except where marked:
+
+1. **Land PR #286** (founder-gated: it is frozen for review). It closes the
+   artifact exchange, which is the single dependency shared by rows 1, 4 and 6.
+   Worth roughly +5 points.
+2. ~~**A claim store**~~ — **DONE at the minimum this item described** (rows
+   4, 5, 9: +1.1 in total, inside the +2.5 estimate; the rest of that estimate
+   is the lineage nobody asserts). The estimate below is CORRECTED DOWNWARD from
+   the +6 this document first carried. One table and one port would make standing
+   durable per entry and give the Learning Loop's promotion somewhere to land.
+   It would NOT, on its own, make lineage appear: `supersedes` and `contradicts`
+   need somebody to ASSERT them, and nothing in the runtime detects that two
+   brain entries contradict — that is a semantic judgement, and the realistic
+   asserter is a reviewer. So the fail-closed path stays reachable only through
+   its seam until an asserter exists, and the marginal gain over the derivation
+   already in place (standing from `entry_kind` plus `evidence_ids`) is promotion
+   HISTORY and explicit supersession. Rows 4, 5 and 9. **Roughly +2.5, not +6.**
+3. **One paid run whose bundle records every served model.** The diagnostics that
+   carry it are already populated on the success path; what is missing is that the
+   evidence dump selects on `diag_transport IS NOT NULL`. Fixing the selection is
+   small; the run costs money and is a founder act. It converts two COMPATIBLE
+   legs to VERIFIED — row 10, roughly +3.5 — and closes row 3's challenge
+   disposition if the mission is chosen to exercise it.
+4. ~~Mount `JuliusRuntimeApi`~~ — **DONE.** The founder made the deployment
+   decision (a database-connected bridge is in scope for the MVP), so the bridge
+   now holds a read connection to Julius's store when `DATABASE_URL` is set and
+   refuses by name when it is not — and, since the third pass, CREATES a mission
+   through the same bootstrap the job uses. What remains is exercising both from
+   a running bridge against a real PostgreSQL, which is the paid-run
+   environment, and the separate deployment decision of whether a client may
+   DRIVE a run (where money is spent), which is not taken.
+5. **Run the persistence gates and the three Julius drills on POSIX** (they are
+   unrunnable on the Windows machine this session used, for a reason now printed
+   rather than discovered) and commit the output. Row 8, roughly +1.
+6. ~~**A CONTENT-refusal class**, distinct from `AUTH_CONFIGURATION`~~ —
+   **DONE for the Coding Agent and the Prompt Architect** (`CONTENT_REFUSED` →
+   `INVALID_REQUEST`, never retried; row 11, 85 → 86). What remains is the
+   Independent Reviewer's provider, which cannot report one, and ROUTING a
+   refusal to a re-plan rather than a truthful failure.
+
+That is ≈ 88%, not the 91-92% this document first claimed — the correction is
+the claim store's lower marginal value, and it is recorded rather than quietly
+re-totalled. The remaining distance to 95% is row 13 (a multi-mission concurrency
+proof and one load measurement) plus the second paid run that converts two
+COMPATIBLE provider legs to VERIFIED.
+
+**TWO OF THE SIX ITEMS ARE FOUNDER-GATED**, which is the single most useful
+sentence on this page: PR #286 is frozen for review and the paid run costs money.
+(The third, mounting the runtime API, was founder-gated on a deployment decision
+the founder has since made; it is done, and creation is served beside it.) An
+engineering session can do the claim store, the POSIX gate run and the
+content-refusal class, and those three together are worth about +4.
+
+## The fastest path to 100%, and what 100% would have to mean
+
+100% is **RELEASE QUALIFIED in every row**, which requires, beyond the above:
+
+- **A representative final beta mission, paid, that exercises the whole
+  lifecycle including a reviewer catch and a repair.** This is the one item
+  nothing in this repository can substitute for. Everything else on this page is
+  a proof that the machinery can do it; only the run proves it did.
+- **A paid matched pair for the Learning Loop** — the same mission twice, with
+  and without a prior learning artifact, against real models, where the
+  improvement is measured rather than premised.
+- **A load and multi-mission concurrency measurement**, because "bounded" is a
+  property of the code and "fast enough for a beta" is a property of a machine.
+
+## Why Julius must not be called beta-ready today
+
+Two of the three intelligence legs in the reference trio cannot be pinned to a
+model by any evidence that exists. The memory a mission learns from has no
+durable notion of which claim replaced which. The one surface a client is meant
+to read is served by nothing. And the final qualification mission has not been
+run. Each of those is a sentence a founder would want to have read before a beta,
+and none of them is a sentence about test counts.
+
+---
+
+# The 2026-08-30 assessment (superseded)
+
 **Assessment date:** 2026-08-30 UTC. **Base reviewed:** PR #202 / current main `96451fc0c8da59de792d973113c4e203ddab6f01`. **Working branch:** `codex/julius-beta-hardening`. Julius is **not beta-ready**.
 
 States are strictly cumulative: `ABSENT`, `DOMAIN_ONLY`, `IMPLEMENTED`, `WIRED`, `DURABLE`, `REAL_INFRA_PROVEN`, `BETA_READY`. Tests of an exported class do not make it wired; SQL-text fakes do not make it durable or infrastructure-proven.
@@ -240,7 +536,9 @@ this path writes, so the contract's `repairCycles` ceiling is not durably
 enforced (bounded in practice by idempotent repair task ids and unroutable
 `repair:repair:*` types). F14 — the worst-case adapter chain can exceed the
 600s lease with no heartbeat during dispatch; safe single-process today,
-flagged for the first live run.
+flagged for the first live run. (Closed in PR 5: the live lease is derived from
+the registered workers' deadlines and renewed from admission up to a hold bound;
+see `docs/JULIUS_CODING_AGENT_AUDIT.md` section D.)
 
 ## First live mission rig (2026-09-02)
 

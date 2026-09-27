@@ -143,7 +143,16 @@ export interface WonderlandJuliusRouteDeps {
   readonly response?: ServerResponse;
   readonly request?: IncomingMessage;
   readonly heartbeatMs?: number;
+  /** How often an open stream reads the ledger for rows after its cursor. */
+  readonly pollMs?: number;
 }
+
+/**
+ * How often an open Julius stream reads for new rows. One indexed read per open
+ * stream per interval. See the stream body for why this exists at all, and why
+ * a push from the appender should replace it.
+ */
+export const WONDERLAND_JULIUS_POLL_MS = 1_000;
 
 export type WonderlandJuliusRouteResult = { readonly status: number; readonly body: unknown } | null;
 
@@ -198,10 +207,30 @@ export async function authorizeWonderlandJulius(
   }
 
   const token = sessionTokenFrom(input.authorization);
-  const verified = token === null
-    ? null
-    : deps.sessions.verifySession({ token, origin: input.origin, now: input.now });
-  if (verified === null || !verified.ok || verified.participantId === null) {
+  // TWO KINDS OF CALLER, AND THE ORIGIN HEADER TELLS THEM APART.
+  //
+  // A BROWSER sends an Origin, and its session is checked against it. A NATIVE
+  // Wonderland client sends none -- and `verifySession` skips the origin check
+  // when there is no Origin, so a browser session token copied into a native
+  // client would pass it. That copy is what the founder ruled out, so an
+  // originless caller is verified ONLY by `verifyNativeSession`, which accepts a
+  // `native_world` session and refuses every browser session however valid.
+  // Conversely a native session presented from a web page carries that page's
+  // Origin and fails the audience check inside `verifySession`; it is refused
+  // again here by scope, so neither guard stands alone.
+  let verified: { readonly ok: true; readonly participantId: string; readonly sessionId: string } | null = null;
+  if (token !== null) {
+    if (input.origin === undefined) {
+      const native = deps.sessions.verifyNativeSession({ token, now: input.now });
+      if (native.ok) verified = { ok: true, participantId: native.participantId, sessionId: native.sessionId };
+    } else {
+      const browser = deps.sessions.verifySession({ token, origin: input.origin, now: input.now });
+      if (browser.ok && browser.participantId !== null && browser.scope !== 'native_world') {
+        verified = { ok: true, participantId: browser.participantId, sessionId: browser.sessionId };
+      }
+    }
+  }
+  if (verified === null) {
     return { ok: false, status: 401, error: 'authenticated player identity required' };
   }
 
@@ -354,7 +383,13 @@ export async function handleWonderlandJuliusRoute(
   });
 
   const response = deps.response;
-  if (response === undefined) {
+  // ONE PAGE, ON REQUEST. `mode=page` answers exactly what the stream would send
+  // first, as JSON, and ends. It is how a client that cannot hold an SSE stream
+  // open -- the native Unreal client, whose HTTP module has no first-class SSE --
+  // follows a run: read the page after its cursor, apply it, read again from
+  // `nextCursor`. The deliveries are identical in both modes.
+  const wantsPage = new URL(input.url, 'http://relay.invalid').searchParams.get('mode') === 'page';
+  if (response === undefined || wantsPage) {
     // No stream to write to — used by the suite, and by any caller that wants
     // one page rather than a subscription.
     return { status: 200, body: { data: page } };
@@ -366,19 +401,75 @@ export async function handleWonderlandJuliusRoute(
     connection: 'keep-alive',
     'x-accel-buffering': 'no',
   });
-  for (const delivery of page.deliveries) {
-    const envelope = (delivery as { envelope: { sequence: number } }).envelope;
-    response.write(`id: ${envelope.sequence}\nevent: wonderland.envelope\ndata: ${JSON.stringify(delivery)}\n\n`);
-  }
-  // A transport heartbeat keeps intermediaries from closing a healthy stream.
-  // It reads no state and is not polling, exactly as the battle stream's is.
-  const heartbeat = setInterval(() => {
-    if (!response.writableEnded) response.write(': heartbeat\n\n');
-  }, deps.heartbeatMs ?? 15_000);
+  const writeDeliveries = (deliveries: readonly unknown[]): void => {
+    for (const delivery of deliveries) {
+      const envelope = (delivery as { envelope: { sequence: number } }).envelope;
+      response.write(`id: ${envelope.sequence}\nevent: wonderland.envelope\ndata: ${JSON.stringify(delivery)}\n\n`);
+    }
+  };
+  writeDeliveries(page.deliveries);
+
+  /*
+   * THE STREAM IS LIVE ONLY IF SOMETHING FEEDS IT.
+   *
+   * Until 2026-09-27 this wrote the backlog once and then nothing but
+   * heartbeats. The battle stream is fed by PostgresWonderlandFanout, whose
+   * backend publishes a NOTIFY on every write; Julius's appends publish
+   * nothing, and this route never subscribed to anything. So a world holding
+   * this stream open received the run as it stood at connect time and then
+   * silence -- and the heartbeat made that silence look healthy. A frozen
+   * mission presented as a live one is the exact failure the founder ruled
+   * out. It also served only the FIRST page of a backlog longer than
+   * WONDERLAND_JULIUS_PAGE_LIMIT and never the rest.
+   *
+   * So the stream reads the ledger after its own cursor every `pollMs` and
+   * sends what it finds. The cursor is the ledger position (`nextCursor`), so
+   * nothing is sent twice and nothing is skipped, and a long backlog drains
+   * page by page. One indexed read per open stream per second is cheap at beta
+   * scale; a NOTIFY published by the Julius appender is the better design, and
+   * it can replace this loop without any client noticing.
+   *
+   * A READ THAT FAILS ENDS THE STREAM. Carrying on with heartbeats over a
+   * reader that cannot answer would be the same lie in a different place. An
+   * ended stream is something a client can see: it marks itself stale and
+   * reconnects, and reconnecting starts with a fresh hydrate.
+   */
+  let cursor = page.nextCursor;
+  let closed = false;
+  let reading = false;
+  let poll: ReturnType<typeof setInterval> | undefined;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
   const close = (): void => {
-    clearInterval(heartbeat);
+    if (closed) return;
+    closed = true;
+    if (poll !== undefined) clearInterval(poll);
+    if (heartbeat !== undefined) clearInterval(heartbeat);
     if (!response.writableEnded) response.end();
   };
+  const readOnward = async (): Promise<void> => {
+    if (closed || reading) return;
+    reading = true;
+    try {
+      const next = await serveWonderlandJuliusPage(authorized.grant, cursor, {
+        reader,
+        worldSessionId: authorized.sessionId,
+      });
+      if (closed) return;
+      writeDeliveries(next.deliveries);
+      cursor = next.nextCursor;
+    } catch {
+      close();
+    } finally {
+      reading = false;
+    }
+  };
+  poll = setInterval(() => { void readOnward(); }, deps.pollMs ?? WONDERLAND_JULIUS_POLL_MS);
+  // A transport heartbeat keeps intermediaries from closing a healthy stream.
+  // Now that the stream reads, a heartbeat means what it appears to: alive AND
+  // current to within one poll.
+  heartbeat = setInterval(() => {
+    if (!response.writableEnded) response.write(': heartbeat\n\n');
+  }, deps.heartbeatMs ?? 15_000);
   deps.request?.once('close', close);
   response.once('close', close);
   return null;

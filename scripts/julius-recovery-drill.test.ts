@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { execFile } from 'node:child_process';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -20,8 +21,8 @@ import { evaluate } from './wonderland-beta-gate.mjs';
  * block rather than an early return, which is how a test comes to assert
  * nothing and still pass.
  */
-const enabled = (process.env.JULIUS_REAL_INFRA === '1' || process.env.JULIUS_REAL_POSTGRES === '1')
-  && (process.env.DATABASE_URL ?? '') !== '';
+const databaseUrl = juliusTestDatabaseUrl();
+const enabled = databaseUrl !== null;
 const suite = enabled ? describe : describe.todo;
 const runProcess = promisify(execFile);
 
@@ -29,13 +30,13 @@ suite('the Julius restart/recovery drill, run for real', () => {
   it('crashes a process holding a lease, recovers the run in a fresh one, and the gate believes it', async () => {
     const out = mkdtempSync(join(tmpdir(), 'julius-recovery-drill-'));
     const database = `juliusdrill${Date.now().toString(36)}`;
-    const admin = new Pool({ connectionString: process.env.DATABASE_URL });
+    const admin = new Pool({ connectionString: databaseUrl! });
     try {
       await admin.query(`CREATE DATABASE ${database}`);
     } finally {
       await admin.end();
     }
-    const url = new URL(process.env.DATABASE_URL!);
+    const url = new URL(databaseUrl!);
     url.pathname = `/${database}`;
 
     // THROUGH THE NPM SCRIPT AN OPERATOR RUNS, which builds the bundle first.

@@ -40,7 +40,7 @@ import { createJuliusPostgresRuntimeStore } from '../relay-bridge/julius/postgre
 import { createPostgresMissionSeedStore } from '../relay-bridge/julius/mission-seed';
 import { assembleLiveJuliusRuntime, driveJuliusRunToTerminal } from '../relay-bridge/julius/live-composition';
 import { scriptedAdapter, seededTaskContract, worker } from '../src/relay/mission/julius';
-import type { JuliusTask, ScriptedOutcome } from '../src/relay/mission/julius';
+import type { JuliusProviderAdapter, JuliusTask, ScriptedOutcome } from '../src/relay/mission/julius';
 import { DrillRecord, auditProviders, scalarReader, writeAttestation } from './julius-drill-support';
 
 export const CAPABILITY = 'REPAIR LOOP';
@@ -146,13 +146,35 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
   record.say('THE RUN — the plan is accepted, the build is REJECTED once, and the repair is re-reviewed');
   const store = createJuliusPostgresRuntimeStore(pool);
   const coderAdapter = scriptedAdapter(coder, [BUILD_OK, BUILD_OK, BUILD_OK]);
+  /*
+   * A COMPLIANT REVIEWER ANSWERS WHAT IT RAISED. The re-review of the repair is
+   * shown the run's blocking findings and answers each by id; a silent one would
+   * leave the finding unresolved, and Julius would hold the mission rather than
+   * complete it over the problem. The drill's scripted reviewer reads the ids the
+   * way a real one reads its packet — here, from the findings the run recorded.
+   */
+  const reviewerScript = [REVIEW_ACCEPT, REVIEW_REJECT, REVIEW_ACCEPT, REVIEW_ACCEPT];
+  let reviews = 0;
+  const reviewerAdapter: JuliusProviderAdapter = {
+    adapterId: reviewer.adapterId,
+    async dispatch(input) {
+      const step = reviewerScript[Math.min(reviews, reviewerScript.length - 1)]!;
+      reviews += 1;
+      if (input.taskType?.startsWith('review:repair:') !== true) return scriptedAdapter(reviewer, [step]).dispatch(input);
+      const findings = await pool.query<{ finding_id: string }>(
+        'SELECT finding_id FROM relay_wonderland.julius_reviewer_findings WHERE run_id=$1 AND blocking ORDER BY finding_id', [RUN_ID]);
+      const shown = findings.rows.map((row) => `REVIEW FINDING ${row.finding_id} [HIGH]: shown to the re-review.`).join('\n');
+      const answering: ScriptedOutcome = step.kind === 'succeed' ? { ...step, answerFindings: 'RESOLVED' } : step;
+      return scriptedAdapter(reviewer, [answering], { packetFor: () => shown }).dispatch(input);
+    },
+  };
   const runtime = assembleLiveJuliusRuntime({
     store,
     entries: [
       { worker: architect, adapter: scriptedAdapter(architect, [PLAN_OK, PLAN_OK]) },
       { worker: coder, adapter: coderAdapter },
       // accept the plan, REJECT the build, then accept the repair.
-      { worker: reviewer, adapter: scriptedAdapter(reviewer, [REVIEW_ACCEPT, REVIEW_REJECT, REVIEW_ACCEPT, REVIEW_ACCEPT]) },
+      { worker: reviewer, adapter: reviewerAdapter },
     ],
     cardRevision: 'card:repair-drill', spendCeilingUsdMicros: 20_000_000, maxRepairRounds: 2,
     owner: 'repair-loop-drill',

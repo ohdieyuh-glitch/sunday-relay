@@ -41,11 +41,21 @@ import type { LiveReachSource } from './live-reach-contracts';
  * reports that case as UNENFORCEABLE rather than quietly allowing the request.
  */
 
-/** What the fetch layer observed, in the vocabulary the meter can price. */
+/**
+ * What the fetch layer observed, in the vocabulary the meter can price.
+ *
+ * `answered_unusable` is the fourth member of the "the host saw us" group and
+ * it exists because the alternatives were both lies. A response Relay declines
+ * to read — an unsupported content type, a redirect refused after a hop — still
+ * spent that host's rate limit, so calling it unconfirmed understates it; but
+ * nothing was retrieved, so calling it `observed` would report a retrieval in
+ * the usage summary that produced no evidence.
+ */
 export type MeteredOutcome =
   | 'observed'
   | 'throttled'
   | 'unauthenticated'
+  | 'answered_unusable'
   | 'unreachable'
   | 'not_attempted';
 
@@ -103,6 +113,7 @@ function hostSaw(outcome: MeteredOutcome): boolean | null {
     case 'observed':
     case 'throttled':
     case 'unauthenticated':
+    case 'answered_unusable':
       return true;
     case 'unreachable':
       return null;

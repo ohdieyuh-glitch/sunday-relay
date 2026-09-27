@@ -66,7 +66,7 @@ bare value or `null` and must be widened into the carrier its struct declares.
 | `FWonderlandUsageMeter` | `WonderlandUsageMeter` | `tierId`, `tierLabel`, `unavailableReason`, `unitLabel` |
 | `FWonderlandWorld` | `WonderlandWorld` | `gve` |
 
-## Enum token mapping (42 enums)
+## Enum token mapping (44 enums)
 
 `nullable` means Relay can report nothing for it, so ordinal 0 is reachable
 and means exactly that. A token this table does not list is one Relay does
@@ -544,6 +544,36 @@ From `WONDERLAND_RENDERER_KINDS`. Nullable: **yes**. Zero member: `Unobserved`.
 |---|---|
 | `unreal_pixel_stream` | `UnrealPixelStream` |
 | `embedded_scene` | `EmbeddedScene` |
+
+### `EWonderlandTaskSource`
+
+From `WONDERLAND_TASK_SOURCES`. Nullable: **no**. Zero member: `Local`.
+
+| wire token | C++ member |
+|---|---|
+| `Local` | `Local` |
+| `Julius` | `Julius` |
+
+### `EWonderlandTaskState`
+
+From `WONDERLAND_TASK_STATES`. Nullable: **no**. Zero member: `Draft`.
+
+| wire token | C++ member |
+|---|---|
+| `Draft` | `Draft` |
+| `Queued` | `Queued` |
+| `Preparation` | `Preparation` |
+| `Research` | `Research` |
+| `Implementation` | `Implementation` |
+| `Verification` | `Verification` |
+| `Review` | `Review` |
+| `Repair` | `Repair` |
+| `Completed` | `Completed` |
+| `Failed` | `Failed` |
+| `Paused` | `Paused` |
+| `Blocked` | `Blocked` |
+| `Waiting` | `Waiting` |
+| `Cancelled` | `Cancelled` |
 
 ### `EWonderlandTerminalProvenance`
 

@@ -20,6 +20,40 @@ export type RelayExperienceProps = {
   readonly returning: boolean;
   readonly anchors: Readonly<Record<string, ExperienceAnchor>>;
   readonly webgl: boolean;
+  /**
+   * THE WAY BACK, rendered in this screen's own brand row.
+   *
+   * The control's BEHAVIOUR is not ours — `RelayWorld` owns the return passage and
+   * hands it down. What is ours is WHERE IT SITS, and that is the whole reason it
+   * moved here: as a `position: fixed` child of the world it was pinned to the
+   * same top-left coordinates as `.rx-brand` and drew UNDERNEATH the SUNDAY RELAY
+   * lockup — present in the DOM, hit-testable, and unreadable to the person it
+   * was for. Only this component knows where its own chrome is, so only this
+   * component can place something beside it without a magic offset that has to be
+   * kept in step with the wordmark's width at every breakpoint.
+   *
+   * Optional. Omitted, there is no Back control at all: a screen with nothing to
+   * go back to must not grow an inert one.
+   */
+  readonly onBack?: () => void;
+  /**
+   * THE PARTICIPANT ASKS TO ENTER WONDERLAND, and entering needs a signed-in
+   * session this browser does not have.
+   *
+   * Supplied ONLY by a host that can actually do something about it — the live
+   * beta gate, which answers by showing GitHub sign-in. The demo build supplies
+   * nothing and the control stays disabled beside the reason, because a button
+   * that navigates nowhere is the false claim this screen refuses to make.
+   *
+   * It exists because the alternative was worse. Entering the auth gate used to
+   * be AUTOMATIC: the gate advanced to sign-in the instant the world reported an
+   * activated Agent, including one activated on a previous visit and read back
+   * out of localStorage. A returning visitor was therefore sent to GitHub on
+   * every load, with no control on that screen that went anywhere else — the
+   * public site was unreachable for as long as the record survived. Entry is a
+   * REQUEST now, and a request is something a person makes.
+   */
+  readonly onEnterWonderland?: () => void;
 };
 
 /**
@@ -67,7 +101,7 @@ function optionName(id: string | null): string {
 }
 
 export function RelayExperience({
-  draft, setDraft, replaceDraft, step, setStep, returning, anchors, webgl,
+  draft, setDraft, replaceDraft, step, setStep, returning, anchors, webgl, onBack, onEnterWonderland,
 }: RelayExperienceProps): JSX.Element {
   const update = setDraft;
   const current = ONBOARDING_STEPS.find((s) => s.id === step) ?? ONBOARDING_STEPS[0];
@@ -166,6 +200,18 @@ export function RelayExperience({
       <header className="rx-brand">
         <span className="rx-mark" aria-hidden="true" />
         <span className="rx-wordmark">SUNDAY RELAY</span>
+        {/* BACK sits IN the brand row rather than on top of it. Sharing the row is
+            what makes the collision impossible rather than merely unlikely: the
+            wordmark's own width decides where this starts, so there is no offset
+            to re-tune when the lockup or the gutter changes. Its accessible name
+            deliberately avoids the words ENTER RELAY — relay-landing.test.tsx uses
+            a singular getByRole for that name, and a second element answering to
+            it would be ambiguous to a screen reader besides. */}
+        {onBack !== undefined && (
+          <button type="button" className="rw-back" onClick={onBack} aria-label="Back to the landing page">
+            ← BACK
+          </button>
+        )}
       </header>
 
       {/* System nodes placed around the Dog in 3D and projected to the DOM, so
@@ -264,8 +310,13 @@ export function RelayExperience({
                 <p className="rx-hint">
                   {agentLabel} is online. {wonderland.detail ?? ''}
                 </p>
+                {/* Enabled when the entrance is reachable, OR when a host has offered to
+                    resolve the one thing standing in the way. Nothing else enables it:
+                    with no bridge configured there is no entrance to ask for and the
+                    control stays disabled beside the reason it names. */}
                 <button type="button" className="rx-cta" data-primary="true"
-                  onClick={wonderland.enter} disabled={!wonderland.canEnter}>
+                  onClick={onEnterWonderland ?? wonderland.enter}
+                  disabled={onEnterWonderland === undefined && !wonderland.canEnter}>
                   ENTER WONDERLAND
                 </button>
                 <button type="button" className="rx-ghost" onClick={() => goto('name')}>EDIT C.A.R.D.</button>

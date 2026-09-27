@@ -386,7 +386,84 @@ export interface MissionSummary {
   readonly completedAt: string | null;
 }
 
+/**
+ * WHO IS ASKING, for the purpose of mission ownership.
+ *
+ * ABSENT means UNSCOPED: the operator credential, which sees every mission and
+ * whose behaviour this change leaves byte-for-byte identical. PRESENT means a
+ * browser session, and then `participantId` is the identity bound into that
+ * session AT MINT — never anything a request body claimed.
+ *
+ * These are two different TYPES rather than two values of one nullable field,
+ * and that is the whole point. A session minted `browser_read_only` carries
+ * `participantId: null`, and `startedByParticipant` is ALSO null on an
+ * operator-started mission. A single `string | null` parameter would therefore
+ * make "the operator is asking" and "an anonymous browser is asking" the same
+ * value — and that collapse is precisely the pre-repair vulnerability, in
+ * which the weakest credential the bridge issues silently inherited the
+ * operator's view of every mission. The wrapper makes the collapse
+ * unrepresentable rather than merely unlikely: `undefined` is not a
+ * `participantId` any caller can forge from a request body, and no session the
+ * bridge mints can produce it.
+ */
+export interface MissionOwnershipScope {
+  /** The session's bound participant, or null for a read-only session. */
+  readonly participantId: string | null;
+}
+
+/**
+ * THE ONE OWNERSHIP RULE, in one place so no route can hold a different opinion.
+ *
+ * - No scope (the operator credential): everything. Unchanged.
+ * - A participant (a `browser_control` session, `participantId` non-null):
+ *   exactly the missions that participant started. Never another
+ *   participant's, and never an operator's.
+ * - An anonymous session (a `browser_read_only` session, `participantId`
+ *   null): NOTHING. Not one mission, not even an operator-started one.
+ *
+ * The third clause is the one that deserves an argument, because a pairing
+ * grant is a real credential and a paired watch of an operator mission is a
+ * product feature. It reads NOTHING anyway because a pairing grant cannot
+ * name what it is a grant TO. `StoredGrant` and `StoredSession` in
+ * `browser-session/grants.ts` carry `{origin, expiresAt, scope,
+ * participantId}` and no mission, run or resource field of any kind. So
+ * "the scope explicitly granted to that paired watch" is, today, the empty
+ * set — and a credential whose granted scope is empty must read nothing,
+ * rather than be widened by default into a reader of every operator mission
+ * the bridge holds. Holding a valid grant is not the same as having been
+ * granted a mission.
+ *
+ * Restoring the paired watch therefore means teaching a grant to CARRY a
+ * mission scope (mint `pair-browser` against a mission id, store it on the
+ * grant and the session it is redeemed for, and admit exactly that id here).
+ * That is a deliberate, reviewable authority change, not something this
+ * repair should infer; the residual is stated in the PR body. Until then the
+ * closed door is the honest one.
+ *
+ * Note the direction of failure if the two-type distinction above were ever
+ * collapsed into one `string | null`: the operator would arrive as `null`,
+ * take the anonymous branch, and see NOTHING. A broken operator is loud and
+ * harmless. The pre-repair collapse ran the other way — the anonymous browser
+ * inherited the operator's view — which is silent and is the vulnerability.
+ */
+export function missionVisibleTo(
+  startedByParticipant: string | null,
+  scope: MissionOwnershipScope | undefined,
+): boolean {
+  if (scope === undefined) return true;
+  // Anonymous (read-only) session: no grant can name a mission, so none is granted.
+  if (scope.participantId === null) return false;
+  return startedByParticipant === scope.participantId;
+}
+
 export interface MissionRegistry {
+  /**
+   * NULL in two cases. (1) A READ-ONLY scope, on any id at all: a watch does not
+   * spend, and starting runs the pipeline. (2) The id is already held by a
+   * mission this caller cannot see — the idempotent branch still returns the
+   * caller's OWN in-flight mission, while a collision with someone else's
+   * yields null, which the route answers 409 without saying whose.
+   */
   start(input: {
     missionId: string;
     objective: string;
@@ -432,8 +509,15 @@ export interface MissionRegistry {
      * role selections, mode, review policy, requested permissions and limits.
      */
     config?: RelayMissionConfig;
-  }): LiveMissionUpdate;
-  get(missionId: string): LiveMissionUpdate | null;
+    /** Who is asking. Absent = operator. See `MissionOwnershipScope`. */
+    scope?: MissionOwnershipScope;
+  }): LiveMissionUpdate | null;
+  /**
+   * `null` for a mission that does not exist OR that this caller may not see —
+   * deliberately the same answer, so the route's existing 404 covers both and no
+   * caller can probe for the existence of a mission that is not theirs.
+   */
+  get(missionId: string, scope?: MissionOwnershipScope): LiveMissionUpdate | null;
   /**
    * THIS PARTICIPANT'S MISSIONS, newest first — their history list.
    *
@@ -475,8 +559,13 @@ export interface MissionRegistry {
    */
   beginShip(missionId: string): boolean;
   endShip(missionId: string): void;
-  cancel(missionId: string): LiveMissionUpdate | null;
-  retry(missionId: string): LiveMissionUpdate | null;
+  /**
+   * `null` for a mission that does not exist OR that this caller may not see —
+   * deliberately the same answer, so the route's existing 404 covers both and a
+   * caller cannot probe for the existence of another participant's mission.
+   */
+  cancel(missionId: string, scope?: MissionOwnershipScope): LiveMissionUpdate | null;
+  retry(missionId: string, scope?: MissionOwnershipScope): LiveMissionUpdate | null;
 }
 
 /** Explicit path selection. Live execution is NEVER inferred from a credential
@@ -2447,9 +2536,23 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
   }
 
   return {
-    start({ missionId, objective, evidenceReferences, repositoryTarget, intendedWritePaths, config, startedBy }) {
+    start({ missionId, objective, evidenceReferences, repositoryTarget, intendedWritePaths, config, startedBy, scope }) {
+      // A READ-ONLY SESSION STARTS NOTHING, on any id, taken or free. Starting
+      // runs the real three-role pipeline, so it spends; a pairing grant is a
+      // watch, and a watch that can spend is not read-only. The route table
+      // already withholds POST /mission/start from a read-only session — this
+      // is the second, independent refusal, at the only place that can
+      // actually create a record.
+      if (scope !== undefined && scope.participantId === null) return null;
       const existing = records.get(missionId);
-      if (existing) return toView(existing); // idempotent — one dispatch per mission id
+      if (existing) {
+        // Idempotent for the OWNER — one dispatch per mission id. For anyone
+        // else the id is simply unavailable: mission ids are caller-chosen and
+        // therefore guessable, so returning another participant's view here was
+        // a read of their mission wearing a write's clothes.
+        if (!missionVisibleTo(existing.startedByParticipant, scope)) return null;
+        return toView(existing);
+      }
       const request = safeText(objective) || 'Implement the controlled demo task.';
       const rec: MissionRecord = {
         missionId,
@@ -2506,9 +2609,11 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       return mine.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
     },
 
-    get(missionId) {
+    get(missionId, scope) {
       const rec = records.get(missionId);
-      return rec ? toView(rec) : null;
+      if (!rec) return null;
+      if (!missionVisibleTo(rec.startedByParticipant, scope)) return null;
+      return toView(rec);
     },
 
     shipContext(missionId) {
@@ -2547,9 +2652,12 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       inFlightShips.delete(missionId);
     },
 
-    cancel(missionId) {
+    cancel(missionId, scope) {
       const rec = records.get(missionId);
       if (!rec) return null;
+      // Refused BEFORE any state changes: a caller who may not see the mission
+      // may not stop it either, and must not learn it exists by its stopping.
+      if (!missionVisibleTo(rec.startedByParticipant, scope)) return null;
       if (rec.running) {
         rec.cancelRequested = true;
         try {
@@ -2563,9 +2671,12 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       return toView(rec);
     },
 
-    retry(missionId) {
+    retry(missionId, scope) {
       const rec = records.get(missionId);
       if (!rec) return null;
+      // RETRY RE-DRIVES THE PIPELINE, so this is the vector that SPENDS. Refused
+      // before anything is read off the record, let alone dispatched.
+      if (!missionVisibleTo(rec.startedByParticipant, scope)) return null;
       if (rec.running) return toView(rec);
       if (rec.state !== 'failed') return toView(rec);
       if (rec.error && rec.error.retryable === false) return toView(rec);

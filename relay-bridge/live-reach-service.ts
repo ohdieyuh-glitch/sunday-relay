@@ -88,6 +88,13 @@ export type LiveReachResult =
     readonly ok: true;
     readonly artifact: EvidenceArtifact;
     readonly attempt: LiveReachAttempt;
+    /**
+     * Bytes READ off the wire, before redaction and before truncation was
+     * applied. Returned because the artifact cannot answer it: its `content`
+     * is what survived sanitization, and a caller keeping its own meter would
+     * otherwise have to understate every retrieval that contained a secret.
+     */
+    readonly bytes: number;
     readonly events: readonly LiveReachEvent[];
   }
   | {
@@ -96,6 +103,19 @@ export type LiveReachResult =
     readonly detail: string;
     /** Null when nothing was attempted — a refusal is not a failed attempt. */
     readonly attempt: LiveReachAttempt | null;
+    /**
+     * WHAT THIS SERVICE CHARGED ITS OWN METER, reported rather than left for a
+     * caller to re-derive.
+     *
+     * It cannot be re-derived from `refusal`, and that is the point: a URL
+     * refused before resolution and a REDIRECT refused at hop two both come
+     * back `network_policy_refused`, and only one of them troubled a host. A
+     * caller keeping its own meter — a per-slot one, say — was silently
+     * undercharging the second until this field existed.
+     */
+    readonly charged: MeteredOutcome;
+    /** The host's own retry guidance, when a throttle gave any. */
+    readonly retryAfter: string | null;
     readonly events: readonly LiveReachEvent[];
   };
 
@@ -152,10 +172,54 @@ function defaultAuthority(source: LiveReachSource): EvidenceAuthority {
 function outcomeToProbe(outcome: LiveFetchOutcome): BackendProbe['result'] {
   switch (outcome.kind) {
     case 'observed': return 'observed';
+    // The backend answered. That it sent a PDF says nothing about whether the
+    // source is reachable, which is the only question a probe asks.
+    case 'unsupported_content': return 'observed';
     case 'unauthenticated': return 'unauthenticated';
     case 'throttled': return 'throttled';
     case 'refused': return 'unconfigured';
     default: return 'unreachable';
+  }
+}
+
+/**
+ * How a fetch outcome charges the meter.
+ *
+ * WRITTEN OUT RATHER THAN CAST. This used to be `outcome.kind as MeteredOutcome`,
+ * which typechecked and was wrong for the one kind the two vocabularies do not
+ * share: `refused` is not a `MeteredOutcome`, so it fell through `hostSaw`'s
+ * switch, came back `undefined`, and was charged as an unconfirmed retrieval.
+ * A URL Relay refused before resolving anything sent no packet and must cost
+ * nothing; a redirect refused at hop two means a host already answered.
+ */
+function outcomeToMetered(outcome: LiveFetchOutcome): MeteredOutcome {
+  switch (outcome.kind) {
+    case 'observed': return 'observed';
+    case 'throttled': return 'throttled';
+    case 'unauthenticated': return 'unauthenticated';
+    case 'unsupported_content': return 'answered_unusable';
+    case 'unreachable': return 'unreachable';
+    case 'refused': return outcome.reached ? 'answered_unusable' : 'not_attempted';
+  }
+}
+
+/**
+ * The refusal code that names what actually happened.
+ *
+ * Every failed retrieval used to return `not_ready` with the difference buried
+ * in prose, so a caller could not tell an SSRF refusal from a 401 from a 429
+ * from a PDF without parsing English. They are four different next moves —
+ * fix the reference, use another source, wait, open it yourself — and a caller
+ * that cannot distinguish them cannot make any of them.
+ */
+function outcomeToRefusal(outcome: LiveFetchOutcome): LiveReachRefusal {
+  switch (outcome.kind) {
+    case 'throttled': return 'rate_limited';
+    case 'unauthenticated': return 'no_account_bound';
+    case 'unsupported_content': return 'unsupported_content';
+    case 'refused': return 'network_policy_refused';
+    // `unreachable` — and `observed`, which never reaches here.
+    default: return 'not_ready';
   }
 }
 
@@ -254,7 +318,10 @@ export function createLiveReachService(deps: LiveReachServiceDeps): LiveReachSer
         // NOTHING WAS ATTEMPTED. `attempt: null` says so; a refusal is not a
         // failed request, and reporting one as the other would put a
         // never-sent call in the audit record.
-        return { ok: false, refusal: decision.refusal, detail: decision.detail, attempt: null, events };
+        return {
+          ok: false, refusal: decision.refusal, detail: decision.detail, attempt: null,
+          charged: 'not_attempted', retryAfter: null, events,
+        };
       }
 
       /**
@@ -273,7 +340,10 @@ export function createLiveReachService(deps: LiveReachServiceDeps): LiveReachSer
           push('EVIDENCE_REFUSED', null, verdict.detail);
           // Nothing was attempted, so `attempt` stays null — the same rule the
           // permission refusal above follows.
-          return { ok: false, refusal: verdict.refusal, detail: verdict.detail, attempt: null, events };
+          return {
+            ok: false, refusal: verdict.refusal, detail: verdict.detail, attempt: null,
+            charged: 'not_attempted', retryAfter: null, events,
+          };
         }
       }
 
@@ -286,6 +356,9 @@ export function createLiveReachService(deps: LiveReachServiceDeps): LiveReachSer
       push('EVIDENCE_SOURCE_SELECTED', requestedBackendId, `preferred backend ${requestedBackendId}`);
 
       let lastDetail = 'no backend attempted';
+      let lastRefusal: LiveReachRefusal = 'not_ready';
+      let lastCharged: MeteredOutcome = 'not_attempted';
+      let lastRetryAfter: string | null = null;
       for (const [index, backend] of candidates.entries()) {
         push('EVIDENCE_RETRIEVAL_STARTED', backend.backendId, `attempting ${backend.backendId}`);
         const outcome = await liveFetch({ url: request.reference, ...fetchOptions });
@@ -295,14 +368,17 @@ export function createLiveReachService(deps: LiveReachServiceDeps): LiveReachSer
           // us it saw the request, and its limit counted it; `refused` never
           // reaches here because a policy refusal returns above. `unreachable`
           // is recorded as unconfirmed rather than as spent or free.
+          lastCharged = outcomeToMetered(outcome);
+          lastRetryAfter = outcome.kind === 'throttled' ? outcome.retryAfter : null;
           meter(request.missionId, {
             source,
-            outcome: outcome.kind as MeteredOutcome,
+            outcome: lastCharged,
             bytes: null,
             at: deps.now(),
             ...(outcome.kind === 'throttled' ? { retryAfter: outcome.retryAfter } : {}),
           });
           lastDetail = outcome.detail;
+          lastRefusal = outcomeToRefusal(outcome);
           push('EVIDENCE_RETRIEVAL_FAILED', backend.backendId, outcome.detail);
           push(
             outcome.kind === 'throttled' ? 'CAPABILITY_DEGRADED' : 'CAPABILITY_UNAVAILABLE',
@@ -375,7 +451,7 @@ export function createLiveReachService(deps: LiveReachServiceDeps): LiveReachSer
         push('EVIDENCE_RETRIEVED', backend.backendId,
           `${String(outcome.bytes)} bytes, freshness ${artifact.age.freshness}`);
         push('CAPABILITY_READY', backend.backendId, 'observed answering');
-        return { ok: true, artifact, attempt, events };
+        return { ok: true, artifact, attempt, bytes: outcome.bytes, events };
       }
 
       // Every candidate failed. The attempt is REAL and recorded with no
@@ -391,9 +467,11 @@ export function createLiveReachService(deps: LiveReachServiceDeps): LiveReachSer
       };
       return {
         ok: false,
-        refusal: 'not_ready',
+        refusal: lastRefusal,
         detail: lastDetail,
         attempt,
+        charged: lastCharged,
+        retryAfter: lastRetryAfter,
         events,
       };
     },

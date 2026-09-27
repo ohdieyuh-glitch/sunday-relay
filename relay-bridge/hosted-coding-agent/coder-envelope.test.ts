@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  CODER_EXECUTOR_EFFECT_OVERHEAD_MS, CODER_EXECUTOR_STEP_TIMEOUTS_MS, CODER_POST_SESSION_ALLOWANCE_MS, CODER_PRE_SESSION_ALLOWANCE_MS,
+  coderAttemptDeadlineMs,
   CODER_JOB_SHARE_MS, CODER_TURN_HARD_CEILING, CODER_TURN_HEADROOM_RATIO,
   CODER_RUNTIME_HEADROOM_RATIO, CoderEnvelopeUnsatisfiable, JOB_BUDGET_MS_FOR_SHARES,
   MAX_CODER_ATTEMPTS, RECORDED_CODER_OBSERVATIONS, coderMaxRuntimeMs, coderMaxTurns,
@@ -10,8 +12,8 @@ import {
 import { DEFAULT_HOSTED_LIMITS, compileHostedEnvelope, hostedLimitsForAllocation } from './hosted-envelope';
 import { runHostedCodingAgent, type HostedQueryFn } from './hosted-runner';
 import { REVIEWER_JOB_SHARE_MS } from '../reviewer-deadline';
-import { CODER_WORKER } from '../julius/live-composition';
-import { DEFAULT_TIMEOUT_MS as ARCHITECT_OPERATIVE_TIMEOUT_MS } from '../../src/relay/connectors/gpt-architect/config';
+import { CODER_WORKER, architectWorker, architectWorstCaseSpendMs } from '../julius/live-composition';
+import { architectOperativeTimeoutMs } from '../../src/relay/connectors/gpt-architect/config';
 
 const ROOT = process.cwd();
 const read = (relative: string): string => readFileSync(join(ROOT, relative), 'utf8');
@@ -77,9 +79,27 @@ describe('the turn ceiling the SDK actually receives', () => {
     expect(source).toContain('coderMaxRuntimeMs()');
   });
 
-  it('gives the declared coder worker exactly the runtime that bounds it', () => {
-    expect(CODER_WORKER.timeoutMs).toBe(DEFAULT_HOSTED_LIMITS.maxRuntimeMs);
-    expect(CODER_WORKER.timeoutMs).toBe(coderMaxRuntimeMs());
+  it('gives the declared coder worker the session runtime plus the executor steps around it', () => {
+    // The session stops at its own limit; the attempt the worker declares is
+    // longer by exactly the executor steps, so the evidence always has time.
+    expect(CODER_WORKER.timeoutMs).toBe(DEFAULT_HOSTED_LIMITS.maxRuntimeMs + CODER_PRE_SESSION_ALLOWANCE_MS + CODER_POST_SESSION_ALLOWANCE_MS);
+    expect(CODER_WORKER.timeoutMs).toBe(coderAttemptDeadlineMs());
+    expect(CODER_WORKER.timeoutMs).toBeGreaterThan(coderMaxRuntimeMs());
+  });
+
+  it('reserves every executor step the adapter runs, at the bound the adapter hands the executor', () => {
+    expect(CODER_POST_SESSION_ALLOWANCE_MS).toBe(
+      CODER_EXECUTOR_STEP_TIMEOUTS_MS.status + CODER_EXECUTOR_STEP_TIMEOUTS_MS.diff + CODER_EXECUTOR_STEP_TIMEOUTS_MS.test
+      + 3 * CODER_EXECUTOR_EFFECT_OVERHEAD_MS);
+    expect(CODER_PRE_SESSION_ALLOWANCE_MS).toBe(CODER_EXECUTOR_STEP_TIMEOUTS_MS.base + CODER_EXECUTOR_EFFECT_OVERHEAD_MS);
+    // THE ADAPTER READS THE SAME NUMBERS: no step bound is a literal beside them.
+    const adapter = read('relay-bridge/julius/live-workers.ts');
+    const coder = adapter.slice(adapter.indexOf('export function createJuliusCodingAgentAdapter'));
+    const body = coder.slice(0, coder.indexOf('\nexport function ', 1));
+    expect([...body.matchAll(/timeoutMs:\s*([0-9][0-9_]*)/gu)].map((match) => match[1]), 'a step bound must come from CODER_EXECUTOR_STEP_TIMEOUTS_MS').toEqual([]);
+    for (const step of ['base', 'status', 'diff', 'test'] as const) {
+      expect(body).toContain(`timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.${step}`);
+    }
   });
 });
 
@@ -196,7 +216,8 @@ describe('the derivation is deterministic, bounded and honest about censoring', 
 
   it('learns from a longer observation instead of ignoring it', () => {
     const longer = resolveCoderEnvelope({
-      observations: [{ runId: 'r', taskId: 't', turns: 20, toolCalls: 1, elapsedMs: 400_000, outcome: 'TURNS_EXHAUSTED', costUsdMicros: null }],
+      // A pace that still fits an attempt once its executor steps are reserved beside the session.
+      observations: [{ runId: 'r', taskId: 't', turns: 20, toolCalls: 1, elapsedMs: 380_000, outcome: 'TURNS_EXHAUSTED', costUsdMicros: null }],
     });
     expect(longer.maxTurns).toBeGreaterThan(resolveCoderEnvelope().maxTurns);
   });
@@ -209,7 +230,44 @@ describe('the job budget is shared out, and the shares add up', () => {
    * image builds, PostgreSQL, Hermes and the evidence dump.
    */
   const INFRASTRUCTURE_ALLOWANCE_MS = 15 * 60_000;
-  const ARCHITECT_WORST_CASE_MS = ARCHITECT_OPERATIVE_TIMEOUT_MS * 2;
+
+  /**
+   * THE ARCHITECT'S SHARE IS RESOLVED FROM THE JOB'S OWN ENVIRONMENT, and both
+   * of its factors are read rather than restated.
+   *
+   * This used to be `DEFAULT_TIMEOUT_MS * 2`: the connector's FALLBACK times a
+   * literal for the attempt count. Both were wrong in the same direction.
+   * `RELAY_PROMPT_ARCHITECT_TIMEOUT_MS` moves the deadline the architect is
+   * actually bounded by, so setting it in the workflow would raise the real
+   * worst case while this arithmetic — and therefore this proof that the four
+   * shares fit — stayed exactly where it was, passing. That is the reviewer's
+   * Mission 4 failure in miniature: a model compared against a window, both
+   * agreeing, while the real thing ran past them.
+   *
+   * So the deadline comes from the workflow's own `env:` block (the only
+   * environment the paid job ever runs with) through the same resolver the
+   * adapter uses, and the attempt count comes from the worker's own
+   * `maxRetries`, which is what the run loop actually spends.
+   */
+  const workflowArchitectEnv = (): Record<string, string | undefined> => {
+    const workflow = read('.github/workflows/julius-first-live-mission.yml');
+    // Only an UNCOMMENTED assignment counts; the block carries commented-out
+    // history of retired values that must not be read as configuration.
+    const set = /^[ \t]+RELAY_PROMPT_ARCHITECT_TIMEOUT_MS:[ \t]*'?(\d+)'?[ \t]*$/m.exec(workflow);
+    return set === null ? {} : { RELAY_PROMPT_ARCHITECT_TIMEOUT_MS: set[1] };
+  };
+  const architectEnv = workflowArchitectEnv();
+  const ARCHITECT_ATTEMPTS = architectWorker(architectEnv).maxRetries + 1;
+  const ARCHITECT_WORST_CASE_MS = architectWorstCaseSpendMs(architectEnv);
+
+  it('takes the architect share from the job environment, not the connector fallback', () => {
+    // THE MUTATION THIS KILLS: reverting to `DEFAULT_TIMEOUT_MS * 2`, which is
+    // right only while the workflow happens to leave the variable unset — the
+    // one case in which a broken version and a correct one are identical.
+    expect(architectWorstCaseSpendMs({ RELAY_PROMPT_ARCHITECT_TIMEOUT_MS: '450000' }))
+      .toBe(450_000 * ARCHITECT_ATTEMPTS);
+    expect(ARCHITECT_WORST_CASE_MS).toBe(architectOperativeTimeoutMs(architectEnv) * ARCHITECT_ATTEMPTS);
+  });
 
   it('fits the reviewer, coder, architect and infrastructure inside JOB_BUDGET_MS', () => {
     const claimed = REVIEWER_JOB_SHARE_MS + CODER_JOB_SHARE_MS + ARCHITECT_WORST_CASE_MS + INFRASTRUCTURE_ALLOWANCE_MS;
@@ -217,15 +275,31 @@ describe('the job budget is shared out, and the shares add up', () => {
       .toBeLessThanOrEqual(JOB_BUDGET_MS_FOR_SHARES);
   });
 
-  it('keeps the coder worst case inside its own share', () => {
+  it('keeps the coder worst case — every attempt at its whole deadline — inside its own share', () => {
     const envelope = resolveCoderEnvelope();
-    expect(envelope.worstCaseRuntimeSpendMs).toBe(envelope.maxRuntimeMs * MAX_CODER_ATTEMPTS);
+    expect(envelope.attemptDeadlineMs).toBe(envelope.maxRuntimeMs + envelope.preSessionAllowanceMs + envelope.postSessionAllowanceMs);
+    expect(envelope.worstCaseRuntimeSpendMs).toBe(envelope.attemptDeadlineMs * MAX_CODER_ATTEMPTS);
     expect(envelope.worstCaseRuntimeSpendMs).toBeLessThanOrEqual(CODER_JOB_SHARE_MS);
+  });
+
+  it('refuses a session that fits the share alone but not with its executor steps', () => {
+    const perAttempt = coderRuntimeHardCeilingMs();
+    // A floor whose session limit fits the per-attempt ceiling by a hair, so only the executor allowance breaks it.
+    const elapsedMs = Math.floor((perAttempt - 1) / (1 + CODER_RUNTIME_HEADROOM_RATIO));
+    expect(Math.ceil(elapsedMs * (1 + CODER_RUNTIME_HEADROOM_RATIO))).toBeLessThanOrEqual(perAttempt);
+    expect(() => resolveCoderEnvelope({
+      observations: [{ runId: 'r', taskId: 't', turns: null, toolCalls: 1, elapsedMs, outcome: 'COMPLETED', costUsdMicros: null }],
+    })).toThrow(CoderEnvelopeUnsatisfiable);
   });
 
   it('pins the live mission workflow timeout to JOB_BUDGET_MS', () => {
     const workflow = read('.github/workflows/julius-first-live-mission.yml');
-    const declared = /^\s*timeout-minutes:\s*(\d+)\s*$/m.exec(workflow);
+    // THE PAID JOB'S timeout, not the file's first one: the `paid-slot` admission
+    // job now precedes it with a longer wait bound of its own, and that bound is
+    // not the budget the shares are cut from.
+    const paidJob = workflow.slice(workflow.indexOf('\n  first-live-mission:\n'));
+    expect(paidJob.length, 'the paid job must exist').toBeLessThan(workflow.length);
+    const declared = /^\s*timeout-minutes:\s*(\d+)\s*$/m.exec(paidJob);
     expect(declared).not.toBeNull();
     expect(Number(declared![1]) * 60_000).toBe(JOB_BUDGET_MS_FOR_SHARES);
   });

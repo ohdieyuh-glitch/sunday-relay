@@ -24,9 +24,10 @@
  * bad run cannot spin a worker process.
  */
 
+import { juliusEitherSignal, keepJuliusLease, type JuliusLeaseRenewalPolicy } from './julius-lease-keeper';
 import type { JuliusCardPolicy } from './julius-policy';
 import type { JuliusVerificationPolicy } from './julius-verification-runtime';
-import { missionMayComplete, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
+import { JULIUS_TERMINAL_MISSION_STATES, missionMayComplete, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
 import { canStillBeAccepted } from './julius-release-runtime';
 import { planRunStatePath, transitionIsLegal } from './julius-state-path';
 
@@ -36,7 +37,10 @@ import { planRunStatePath, transitionIsLegal } from './julius-state-path';
  * runtime shares — two runtimes, one walk of one table.
  */
 export { planRunStatePath, transitionIsLegal };
-import { prepareClaimedTask, resumeUnverifiedTasks, runClaimedTask, type JuliusPipelineDependencies, type JuliusTaskOutcome } from './julius-task-pipeline';
+import {
+  juliusArchitectureGateFor, juliusFindingsGateFor, prepareClaimedTask, resumeUnverifiedTasks, runClaimedTask, serveArchitectureTriggers,
+  type JuliusPipelineDependencies, type JuliusTaskOutcome,
+} from './julius-task-pipeline';
 import { continuationConcurrency } from './julius-continuation';
 import type { JuliusClaimedTask, JuliusRecoveryDriver, JuliusRunRow } from './julius-runtime-ports';
 import { validateJuliusEvent } from './julius-events';
@@ -137,6 +141,14 @@ export interface JuliusRunLoopConfig {
    * fairness policy nobody chose is a fairness policy nobody can reason about.
    */
   readonly perRunShare?: number | null;
+  /**
+   * RENEWAL OF WHAT THIS LOOP HOLDS. With it, an admitted task's lease is
+   * renewed from admission until the task is finished, never past the hold
+   * bound its policy derives, and a lease the store says is gone aborts the
+   * dispatch. Without it a lease lasts exactly `leaseMs` from the claim, which
+   * is right for a proof and wrong for any worker slower than its lease.
+   */
+  readonly leaseRenewal?: JuliusLeaseRenewalPolicy;
 }
 
 /* ------------------------------------------------- the run state decision */
@@ -281,6 +293,10 @@ export class JuliusRunLoop {
     }
     if (!Number.isSafeInteger(config.leaseMs) || config.leaseMs < 1) {
       throw new Error('invalid_julius_lease_ms');
+    }
+    const renewal = config.leaseRenewal;
+    if (renewal !== undefined && (!Number.isSafeInteger(renewal.renewEveryMs) || renewal.renewEveryMs < 1 || renewal.renewEveryMs >= config.leaseMs)) {
+      throw new Error('invalid_julius_lease_renewal_interval');
     }
   }
 
@@ -481,19 +497,46 @@ export class JuliusRunLoop {
         lostLeases += 1;
         continue;
       }
+      /**
+       * THE LEASE IS RENEWED FROM ADMISSION, not trusted from the claim. A task
+       * queued behind another in this tick spent its lease waiting; the first
+       * renewal gives it a whole one before any work starts, and a store that
+       * says the lease is already gone means the task is not run at all.
+       */
+      const renewal = this.config.leaseRenewal;
+      const keeper = renewal === undefined ? null : keepJuliusLease({
+        store: this.deps.store, clock: this.deps.clock,
+        ...(renewal.timers === undefined ? {} : { timers: renewal.timers }),
+        taskId: claim.taskId, owner: this.deps.owner, leaseGeneration: claim.leaseGeneration,
+        leaseMs: this.config.leaseMs, renewEveryMs: renewal.renewEveryMs,
+        holdUntilMs: Date.parse(this.deps.clock.now()) + renewal.holdBoundMsFor(claim),
+      });
+      if (keeper !== null && !(await keeper.renewNow())) {
+        await keeper.stop();
+        lostLeases += 1;
+        continue;
+      }
+
       // COUNTED ONLY ONCE THE TASK IS REALLY RUNNING. Counted before the
       // admission, a lease lost between the two would hold a slot in this
       // run's allowance for work nobody is doing, and the next claim in the
       // same tick would be handed back to make room for it.
       inFlight.set(claim.runId, running + 1);
 
-      outcomes.push(await runClaimedTask({
-        // The claim carried the count BEFORE this admission. Everything
-        // downstream — the retry ceiling, the operation id that makes a
-        // repeated dispatch idempotent, the resource estimate — must read the
-        // attempt actually being run.
-        ...request, claim: { ...claim, attempt },
-      }, this.deps, preflight));
+      // A LOST LEASE ENDS THE DISPATCH, whichever signal fires first.
+      const linked = keeper === null ? null : juliusEitherSignal(signal, keeper.signal);
+      try {
+        outcomes.push(await runClaimedTask({
+          // The claim carried the count BEFORE this admission. Everything
+          // downstream — the retry ceiling, the operation id that makes a
+          // repeated dispatch idempotent, the resource estimate — must read the
+          // attempt actually being run.
+          ...request, ...(linked === null ? {} : { signal: linked.signal }), claim: { ...claim, attempt },
+        }, this.deps, preflight));
+      } finally {
+        linked?.detach();
+        await keeper?.stop();
+      }
     }
 
     /**
@@ -721,6 +764,24 @@ export class JuliusRunLoop {
      * BLOCKED task, schedule a repair or complete the run — computing the
      * target from the pre-resume rows would report the stall this just cleared.
      */
+    /**
+     * A TERMINAL RUN IS FINISHED TRUTH, AND THE SWEEP DOES NOT TOUCH IT.
+     *
+     * Without this, advancing a run that had already COMPLETED, FAILED or been
+     * CANCELLED still re-ran the verification sweep. Work whose review FAILED
+     * is SUCCEEDED-and-undecided for good — no review can conclude now — so it
+     * was stranded on every pass, and every pass wrote another `review.started`
+     * saying exactly what the one before it said: eighty of them in the probe
+     * that found this, under eighty different event ids.
+     *
+     * The live driver returns as soon as a run is terminal, which is why
+     * nothing had run into it; that is a property of one caller, not of the
+     * run. Nothing a finished run owes can still be paid, so nothing is owed.
+     */
+    if (JULIUS_TERMINAL_MISSION_STATES.includes(run.state)) {
+      return { runId, from: run.state, to: run.state, changed: false, reasonCode: 'RUN_TERMINAL', resumedVerifications: 0 };
+    }
+
     const resumed = await this.#resumeVerifications(run, tasks, decisions, projectId);
     if (resumed > 0) {
       [tasks, decisions] = await Promise.all([
@@ -729,7 +790,64 @@ export class JuliusRunLoop {
       ]);
     }
 
-    const target = targetRunState(tasks, decisions);
+    let target = targetRunState(tasks, decisions);
+
+    /**
+     * THE ARCHITECT IS A PEER FOR THE WHOLE MISSION, NOT ONLY ITS FIRST
+     * MINUTE.
+     *
+     * Julius goes back to it when the record says the design moved, when
+     * evidence contradicts an assumption it named, when a dependency appeared,
+     * when a repair was required for an architectural reason, when a coder
+     * asked the design a question, when a re-plan was proposed — and before a
+     * run may call itself complete. HERE, beside the resume sweep, because
+     * `advanceRun` is the one place that holds the whole run rather than one
+     * task, and it is called exactly when nothing else moved.
+     */
+    const policy = await this.policies.policyFor(run);
+    if (policy !== null) {
+      const consulted = await serveArchitectureTriggers({
+        deps: this.deps, run, policy: policy.card, tasks,
+        completionReady: target.state === 'COMPLETED',
+        capabilityFor: (task) => this.policies.capabilityFor(task),
+      });
+      if (consulted > 0) {
+        [tasks, decisions] = await Promise.all([
+          this.deps.store.tasksForRun(runId, projectId),
+          this.deps.store.decisionsForRun(runId, projectId),
+        ]);
+        target = targetRunState(tasks, decisions);
+      }
+    }
+
+    /**
+     * A COMPLETION THE ARCHITECT SAYS WOULD BE UNTRUE DOES NOT HAPPEN.
+     *
+     * The gate can only HOLD: it cannot accept a task, cannot mint a verdict
+     * and cannot complete a mission. A run that recorded no architecture is not
+     * held at all, and neither is one whose consultation no worker could serve
+     * — a feature nothing opted into must not be able to strand every mission.
+     */
+    /**
+     * A COMPLETION OVER A FINDING NOBODY RESOLVED DOES NOT HAPPEN EITHER.
+     *
+     * Checked where completion is decided, and wherever a run has stopped for a
+     * generic reason — VERIFYING with every task terminal, BLOCKED because nothing
+     * can progress — so the record names the finding that holds it rather than
+     * the symptom. Like the architecture gate, it can only hold: a run it names
+     * stays in the state it was going to, never COMPLETED.
+     */
+    const generic = (target.state === 'VERIFYING' && target.reasonCode === 'ALL_TASKS_TERMINAL')
+      || (target.state === 'BLOCKED' && target.reasonCode === 'RUN_CANNOT_PROGRESS');
+    if (target.state === 'COMPLETED' || generic) {
+      const findings = await juliusFindingsGateFor(this.deps, run);
+      if (!findings.ok) target = { state: target.state === 'BLOCKED' ? 'BLOCKED' : 'VERIFYING', reasonCode: findings.reasonCode };
+    }
+    if (target.state === 'COMPLETED') {
+      const gate = await juliusArchitectureGateFor(this.deps, run);
+      if (!gate.ok) target = { state: 'VERIFYING', reasonCode: gate.reasonCode };
+    }
+
     // The graph's SHAPE, recorded once per run version so an eval can relate
     // cost and latency to how big the mission actually was. Idempotent by
     // version, so re-advancing writes nothing new.

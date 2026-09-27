@@ -7,6 +7,7 @@ import {
   emptyObservation, foldHostedMessage, hostedStreamIsUsable,
   type HostedObservation,
 } from './hosted-observation';
+import { classifyHostedFailure, type HostedFailureReason } from './hosted-failure-reason';
 import { HOSTED_ADAPTER_ID, HOSTED_SDK_PACKAGE } from './hosted-readiness';
 
 /**
@@ -78,6 +79,17 @@ export type HostedRunOutcome =
       | 'coder_envelope_not_honoured'
       | 'coder_cost_exceeded'
       | 'coder_provider_error_after_init';
+    /**
+     * WHY THE PROVIDER STOPPED, AS A CLASSIFIED TOKEN.
+     *
+     * Set only on `coder_provider_error_after_init`, whose cause lives in a
+     * thrown error this function may not repeat: a provider error can quote the
+     * request, which can quote the credential. `classifyHostedFailure` MATCHES
+     * that text and returns a constant of its own, so the reason travels and
+     * not one character of the message does. Absent on the three refusals whose
+     * cause is already the refusal code.
+     */
+    readonly failureReason?: HostedFailureReason | null;
     readonly observation: HostedObservation;
     readonly envelope: HostedEnvelope;
     readonly startedAt: string;
@@ -86,6 +98,13 @@ export type HostedRunOutcome =
   | {
     readonly kind: 'cancelled' | 'timed_out' | 'launch_failed';
     readonly safeMessage: string;
+    /**
+     * Set on `launch_failed` for the same reason and by the same classifier.
+     * A cancellation and a timeout are Relay's own decisions and carry none:
+     * the thrown abort would classify as a broken stream and say something
+     * false beside `timed_out`.
+     */
+    readonly failureReason?: HostedFailureReason | null;
     readonly observation: HostedObservation;
     readonly startedAt: string;
     readonly completedAt: string;
@@ -165,6 +184,22 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
     }
   } catch (error) {
     const completedAt = input.now();
+    /**
+     * THE ONLY THING THIS FUNCTION EVER DOES WITH A PROVIDER'S ERROR TEXT.
+     *
+     * Paid Mission 5's coder stopped here after six of twenty-six turns, having
+     * changed nothing, for $0.885661 — and the durable record could say only
+     * `coder_provider_error_after_init`, which names the boundary and not the
+     * cause. The cause was in this variable and was dropped on the next line.
+     *
+     * It is still not repeated. `classifyHostedFailure` matches the message
+     * against a pattern table and returns a constant from its own closed
+     * vocabulary; `message` is not captured, not interpolated and not returned,
+     * so the fixed sentences below remain the only text that leaves.
+     */
+    const failureReason = classifyHostedFailure(
+      error instanceof Error ? error.message : typeof error === 'string' ? error : null,
+    );
     if (cancelled) {
       return { kind: 'cancelled', safeMessage: 'The hosted Coding Agent was cancelled.', observation, startedAt, completedAt };
     }
@@ -192,17 +227,44 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
      * so only a fixed sentence leaves this function either way.
      */
     if (observation.initSeen) {
+      /**
+       * THE RUNTIME'S OWN TERMINAL RESULT OUTRANKS THE ERROR THAT FOLLOWED IT.
+       *
+       * Paid run 34739303313: the runtime emitted its result message with
+       * subtype `error_max_budget_usd` — it had stopped itself at the ceiling
+       * Julius handed it — and the SDK then threw. This path used to report
+       * `coder_provider_error_after_init`, classified `execution_error`, so the
+       * durable record blamed the provider for Julius's own spend ceiling and
+       * hid the one fact that mattered: the coder had been granted too little.
+       *
+       * The non-throwing path below already refuses this subtype as
+       * `coder_cost_exceeded`. The same fact must produce the same refusal
+       * whichever way the stream ended, and the observation already holds it.
+       * Only the budget stop is read this way: it is the runtime's statement
+       * about Julius's ceiling, not about the provider, so there is no error
+       * text to classify and nothing a provider wrote reaches the record.
+       */
+      if (observation.resultSubtype === 'error_max_budget_usd') {
+        return {
+          kind: 'refused',
+          refusalCode: 'coder_cost_exceeded',
+          safeMessage: `The hosted runtime stopped at its ${limits.maxCostCents}¢ budget ceiling.`,
+          observation, envelope, startedAt, completedAt,
+        };
+      }
       return {
         kind: 'refused',
         // The runtime started and then failed: its own error, after init.
         refusalCode: 'coder_provider_error_after_init',
         safeMessage: 'The hosted Coding Agent stopped part-way through its run',
+        failureReason,
         observation, envelope, startedAt, completedAt,
       };
     }
     return {
       kind: 'launch_failed',
       safeMessage: 'The hosted Coding Agent could not complete a run.',
+      failureReason,
       observation, startedAt, completedAt,
     };
   } finally {

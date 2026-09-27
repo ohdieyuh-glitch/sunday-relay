@@ -39,6 +39,14 @@ const registry = () => createMissionRegistry({
   now: () => '2026-08-10T12:00:00.000Z',
 });
 
+/** `start` is nullable only for a caller who cannot see the colliding id. These
+ *  fixtures pass no scope, which is the operator — who sees every mission — so a
+ *  null here is a real regression, not a type nuisance to be silenced with `!`. */
+const owned = <T>(view: T | null, which: string): T => {
+  if (view === null) throw new Error(`unscoped start refused ${which}`);
+  return view;
+};
+
 describe('the pack says idempotency is keyed on the mission id', () => {
   const mission = FOUNDER_MISSIONS.find((m) => m.id === 'fm-5-the-same-mission-twice');
 
@@ -63,8 +71,8 @@ describe('the pack says idempotency is keyed on the mission id', () => {
      * this can never pass by comparing two absences again.
      */
     const reg = registry();
-    const first = reg.start({ missionId: 'fm-5-probe', objective: 'Add the guard.' });
-    const second = reg.start({ missionId: 'fm-5-probe', objective: 'Something else entirely.' });
+    const first = owned(reg.start({ missionId: 'fm-5-probe', objective: 'Add the guard.' }), 'first');
+    const second = owned(reg.start({ missionId: 'fm-5-probe', objective: 'Something else entirely.' }), 'second');
 
     expect(first.missionRevision).toBeDefined();
     expect(second.missionRevision).toBeDefined();
@@ -84,8 +92,8 @@ describe('the pack says idempotency is keyed on the mission id', () => {
     // The other direction: idempotency that swallowed distinct missions would
     // be worse than none.
     const reg = registry();
-    const a = reg.start({ missionId: 'fm-5-a', objective: 'Add the guard.' });
-    const b = reg.start({ missionId: 'fm-5-b', objective: 'Add the guard.' });
+    const a = owned(reg.start({ missionId: 'fm-5-a', objective: 'Add the guard.' }), 'a');
+    const b = owned(reg.start({ missionId: 'fm-5-b', objective: 'Add the guard.' }), 'b');
     expect(a.missionRevision).toBeDefined();
     expect(b.missionRevision).toBeDefined();
     // Same objective, different id — so the revision must still differ, which

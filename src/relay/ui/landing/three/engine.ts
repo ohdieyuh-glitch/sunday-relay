@@ -78,7 +78,16 @@ export function chooseDpr(rawDpr: number, tier: QualityTier): number {
 }
 
 const AQUALA_SCALE = 5.2;
-const AQUALA_ORIGIN = new THREE.Vector3(0, 16, 0);
+// Raised well past the Dog's own height (~20 units) rather than around its
+// head: the mark's outer radius is 1 local unit, scaled by AQUALA_SCALE, so
+// its own vertical span is ±5.2 world units from this origin. At 28 its
+// LOWEST point (22.8) clears the Dog's crown with room to spare — it reads as
+// a mark floating above the character, not a collar around it. 28 is as high
+// as this goes without crowding the nav: past ~29 the ring's top edge closes
+// to single-digit pixels of the nav bar at 1440×900. Height only — scale, x
+// and z unchanged, so the portal transition's math (keyed to this same
+// origin) still closes cleanly on the mark.
+const AQUALA_ORIGIN = new THREE.Vector3(0, 28, 0);
 
 /**
  * THE LIGHT RIG, exported so the Dog's reference-comparison renders use the

@@ -282,6 +282,75 @@ jobs:
         env:
           JULIUS_REAL_POSTGRES: '1'
         run: npx vitest run scripts/julius-live-preflight-identity.test.ts
+      - name: Two runs in one real PostgreSQL never share an architecture identity
+        # `julius_tasks.task_id` and `julius_brain_entries.entry_id` are global primary keys;
+        # the architecture check task and the accepted-architecture entry must carry the run.
+        # A Map cannot hold those constraints, so the in-memory proof alone cannot close this.
+        if: ${{ !cancelled() }}
+        env:
+          JULIUS_REAL_POSTGRES: '1'
+        run: npx vitest run src/relay/persistence/julius-run-scoped-identity.real-postgres.test.ts
+      - name: A renewed lease holds and a reclaimed one is fenced, on real PostgreSQL
+        # The heartbeat had no production caller, so a Coding Agent attempt longer than its
+        # lease could be reclaimed mid-session. The renewal's two rules on the real schema:
+        # a legitimate holder keeps its lease ahead of time, a reclaimed holder's renewal is
+        # refused by the generation fence, and no renewal writes past the hold bound.
+        if: ${{ !cancelled() }}
+        env:
+          JULIUS_REAL_POSTGRES: '1'
+        run: npx vitest run src/relay/persistence/julius-lease-renewal.real-postgres.test.ts
+      - name: Attempt attribution cannot collide, leak or be overwritten, on real PostgreSQL
+        # A failed attempt's change set and a retry's are separate rows keyed by their own
+        # attempt: the second cannot overwrite the first, a replay writes nothing twice, and
+        # a read for one task or run never sees another's. That is what makes the undo
+        # decision reconstructable by a process that did not write it.
+        if: ${{ !cancelled() }}
+        env:
+          JULIUS_REAL_POSTGRES: '1'
+        run: npx vitest run src/relay/persistence/julius-attempt-attribution.real-postgres.test.ts
+      - name: One event append contract, on real PostgreSQL as in memory
+        # `jsonb` does not preserve key order, so comparing a stored payload with the one
+        # just built refused genuine replays here while the in-memory store compared the id
+        # alone and dropped a different event silently. The same cases run against both.
+        if: ${{ !cancelled() }}
+        env:
+          JULIUS_REAL_POSTGRES: '1'
+        run: npx vitest run src/relay/persistence/julius-event-append.real-postgres.test.ts
+      - name: A decision and the history that explains it are one transaction
+        # The events announcing a decision — and announcing what it released — used to be
+        # appended after that write returned, so a process dying in between left a decision
+        # no history could account for, and no later sweep ever wrote them: the resume skips
+        # a task that already has a decision. Only a real database shows the rollback.
+        if: ${{ !cancelled() }}
+        env:
+          JULIUS_REAL_POSTGRES: '1'
+        run: npx vitest run src/relay/persistence/julius-decision-history.real-postgres.test.ts
+      - name: The Wonderland seam holds on real PostgreSQL — what a client creates is what it watches
+        # Creation (POST /julius/missions) and observation (GET /julius/runs/<id>/<view>) are
+        # composed from different repositories; the in-memory proofs cannot show they agree
+        # about a run in the real schema. This drives both production compositions against
+        # PostgreSQL and asks the tables directly.
+        if: ${{ !cancelled() }}
+        env:
+          JULIUS_REAL_POSTGRES: '1'
+        run: npx vitest run relay-bridge/julius-bridge-seam.real-postgres.test.ts
+      - name: The whole evidence chain on real PostgreSQL — a repair round, the shipping dump queries, the Beta Gate
+        # This suite ran in NO workflow. Found on 2026-09-27 by running it by hand against a
+        # local container: its scripted re-review never answered the finding it was charged
+        # with, so the charged-findings rule (#277) HALTed the run with FINDINGS_UNRESOLVED on
+        # main and on every branch since — a dead proof nobody was reading. A suite that is
+        # not run is not a proof; this step is what keeps it one.
+        if: ${{ !cancelled() }}
+        env:
+          JULIUS_REAL_POSTGRES: '1'
+        run: npx vitest run src/relay/persistence/julius-live-chain.e2e.test.ts
+      - name: Claim standings on real PostgreSQL — append-only, replay refused, history read back
+        # Migration 026's table, through the repository the runtime binds: an admission,
+        # its replay (writes nothing), a promotion, the current standing and the history.
+        if: ${{ !cancelled() }}
+        env:
+          JULIUS_REAL_POSTGRES: '1'
+        run: npx vitest run src/relay/persistence/julius-claim-standing.real-postgres.test.ts
       - name: Every evidence query holds against the migrated schema
         # Runs whether or not the preflight passed: the preflight applies the migrations
         # before its executor round trip, so the schema is present at today's failure too.

@@ -14,3 +14,15 @@ src/relay/mission/julius/julius-memory-trust.ts
 # doesn't.
 src/relay/mission/julius/julius-runtime.ts
 src/relay/mission/julius/julius-repair-lineage.ts
+src/relay/mission/julius/julius-segment-lineage.ts
+
+# AND THE TWO FILES THE CHAIN GREW AFTER THIS LIST WAS WRITTEN. The comment
+# above got the rule right and the list stopped following it: `julius-runtime`
+# now imports the context integrity layer as a VALUE, and
+# `julius-repair-lineage` imports `julius-segment-lineage` as one. Both hops
+# were missing from every slice manifest here, so provisioning this mission and
+# running its own declared test command died on ERR_MODULE_NOT_FOUND before an
+# assertion ran. `scripts/julius-mission-slice.test.ts` now resolves every
+# relative import of every slice mission transitively, so the next hop that
+# grows fails `npm test` rather than a paid run.
+src/relay/mission/julius/julius-context-integrity.ts

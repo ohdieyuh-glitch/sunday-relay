@@ -1,0 +1,73 @@
+/* ==========================================================================
+   PUBLIC SITES — design tokens.
+
+   The same family as the Wonderland landing (`src/relay/ui/landing/
+   relay-landing.css`, `--rl3-*`): identical void, cream and gold values, the
+   same serif / mono / sans counterpoint, the same two motion tiers. Adapted,
+   not imported — the landing's tokens are scoped to its own surface, and these
+   sites must build and deploy without the product stylesheet.
+
+   COLOUR OWNERSHIP, inherited from the landing and not negotiable:
+   accents live in the RENDER. Chrome is cream on near-black. Gold touches the
+   DOM in exactly one place — the primary CTA's hairline.
+   ========================================================================== */
+
+@font-face {
+  font-family: 'Newsreader';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url('./fonts/newsreader-latin-opsz-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Newsreader';
+  font-style: italic;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url('./fonts/newsreader-latin-opsz-italic.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  /* ---- palette (landing values) ---- */
+  --pw-void: #05060a;
+  --pw-void-raised: #0a0b11;
+  --pw-cream: #f4efe3;
+  /* Dim and faint are LIFTED from the landing's #8f897b / #5c5850. The landing
+     sets its faint tier on telemetry nobody needs to read; these sites set it
+     on real captions, so both tiers clear WCAG AA against the void:
+     dim 8.9:1, faint 4.9:1. */
+  --pw-dim: #b3ab97;
+  --pw-faint: #847d68;
+  --pw-gold: #d8a83c;
+  --pw-hairline: rgba(244, 239, 227, 0.12);
+  --pw-hairline-strong: rgba(244, 239, 227, 0.24);
+  --pw-glass: rgba(244, 239, 227, 0.045);
+  --pw-plate: rgba(12, 13, 19, 0.72);
+
+  /* ---- type ---- */
+  --pw-serif: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --pw-mono: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --pw-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Inter, Roboto, 'Helvetica Neue', sans-serif;
+
+  --pw-display-xl: clamp(3.1rem, 7.4vw, 7.6rem);
+  --pw-display-l: clamp(2.5rem, 5.2vw, 5.4rem);
+  --pw-display-m: clamp(1.85rem, 3.1vw, 3rem);
+  --pw-display-s: clamp(1.35rem, 1.9vw, 1.75rem);
+  --pw-lede: clamp(1.02rem, 1.25vw, 1.2rem);
+
+  /* ---- space: a 4px rhythm, landing reference B ---- */
+  --pw-gutter: clamp(20px, 4.2vw, 64px);
+  --pw-section: clamp(120px, 18vh, 220px);
+  --pw-max: 1440px;
+
+  /* ---- motion: chrome is quick, scene is gravitational ---- */
+  --pw-chrome: 320ms;
+  --pw-ease: ease;
+  --pw-reveal: 1000ms;
+  --pw-reveal-ease: cubic-bezier(0.22, 0.61, 0.24, 1);
+}

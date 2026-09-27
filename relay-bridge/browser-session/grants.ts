@@ -61,8 +61,29 @@ export type GrantFailure =
  * one more fact bound AT MINT TIME: who the browser acts as. The participant
  * travels in the session, never in the browser's request body, so a browser
  * cannot claim to be anyone the operator did not name.
+ *
+ * `native_world` is the NATIVE Wonderland desktop client's scope (founder
+ * decision, 2026-09-27). It exists because the world's Julius stream needs a
+ * PLAYER identity and the only scope that carried one, `browser_control`, can
+ * also start, cancel and retry paid missions -- far more than a client that only
+ * watches the world needs. So `native_world` carries the participant and may do
+ * almost nothing: it is refused by every browser route (`browserSessionMayCall`
+ * answers false for it everywhere), and the only routes that accept it -- the
+ * world stream -- authorise it themselves through `verifyNativeSession`.
+ *
+ * It is minted only by a SIGNED-IN PLAYER pairing their OWN client, bound to
+ * that player at mint, and bound to `NATIVE_WORLD_AUDIENCE` instead of a web
+ * origin, so a browser page can neither redeem one nor present one.
  */
-export type BrowserSessionScope = 'browser_read_only' | 'browser_control';
+export type BrowserSessionScope = 'browser_read_only' | 'browser_control' | 'native_world';
+
+/**
+ * The audience a native grant and session are bound to, in the place a browser
+ * origin would be. It is not an origin any browser can send, which is the
+ * point: a web page can never redeem or present a native credential, and a
+ * native client never has to spoof a web origin to hold one.
+ */
+export const NATIVE_WORLD_AUDIENCE = 'wonderland-native://desktop';
 
 export interface PairingGrantIssue {
   readonly grantId: string;
@@ -160,6 +181,21 @@ export interface BrowserSessionStore {
     token: string; origin: string | undefined; now: number;
   }): { ok: true; sessionId: string; scope: BrowserSessionScope; participantId: string | null }
     | { ok: false; reason: GrantFailure };
+  /**
+   * Verify a NATIVE client's session, and nothing else.
+   *
+   * `verifySession` deliberately skips the origin check when a request carries
+   * no Origin header -- and a native client never sends one. So a BROWSER
+   * session token copied into a native client would pass `verifySession`. That
+   * copy is exactly what the founder ruled out ("no browser cookie copying"), so
+   * an originless caller is verified HERE instead, and this accepts only a
+   * `native_world` session bound to `NATIVE_WORLD_AUDIENCE`. A browser session,
+   * control or read-only, is refused however valid it is.
+   */
+  verifyNativeSession(input: {
+    token: string; now: number;
+  }): { ok: true; sessionId: string; participantId: string }
+    | { ok: false; reason: GrantFailure | 'not_native' };
   revokeSession(input: { token: string; now: number }): boolean;
   /**
    * Drops expired records. Called on the WRITE path only — a read must never
@@ -182,6 +218,17 @@ export function createBrowserSessionStore(): BrowserSessionStore {
   return {
     createGrant({ origin, now, scope = 'browser_read_only', participantId = null }) {
       sweep(now);
+      // A NATIVE grant is the player authorising their own client, so it must
+      // name a real participant and be bound to the native audience. Both are
+      // enforced in the store, not only at the route, for the reason below.
+      if (scope === 'native_world') {
+        if (!isValidParticipantId(participantId)) {
+          throw new Error('A native grant requires the verified participant it acts as.');
+        }
+        if (origin !== NATIVE_WORLD_AUDIENCE) {
+          throw new Error('A native grant is bound to the native audience, never to a web origin.');
+        }
+      }
       // Enforced here as well as at the route, because the store is the last
       // thing standing between "forgot to validate" and a control session
       // that acts as nobody.
@@ -194,7 +241,9 @@ export function createBrowserSessionStore(): BrowserSessionStore {
       grants.set(grantId, {
         grantId, secretHash: sha256(secret), origin, expiresAt,
         scope,
-        participantId: scope === 'browser_control' ? participantId : null,
+        // Only the two scopes that ACT AS someone keep a participant; a
+        // read-only grant never carries one, whatever the caller passed.
+        participantId: scope === 'browser_control' || scope === 'native_world' ? participantId : null,
         consumedAt: null,
       });
       return { grantId, secret, origin, expiresAt, scope };
@@ -238,6 +287,14 @@ export function createBrowserSessionStore(): BrowserSessionStore {
 
     mintIdentitySession({ origin, now, participantId, scope = 'browser_control' }) {
       sweep(now);
+      // A NATIVE session comes into being in exactly one way: a signed-in player
+      // pairs their own client and the client redeems the grant (consumeGrant).
+      // Minting one here would skip the pairing entirely and bind it to a WEB
+      // origin, so this is a programming error, refused the way createGrant
+      // refuses an ownerless control grant.
+      if (scope === 'native_world') {
+        throw new Error('A native session is created only by redeeming a native pairing grant.');
+      }
       // The store is the last thing standing between "forgot to validate" and a
       // session that acts as nobody or as an unbounded string. A control
       // session with no verified participant is exactly what this path exists
@@ -279,6 +336,25 @@ export function createBrowserSessionStore(): BrowserSessionStore {
           scope: session.scope,
           participantId: session.participantId,
         };
+      }
+      return { ok: false, reason: 'not_found' };
+    },
+
+    verifyNativeSession({ token, now }) {
+      for (const session of sessions.values()) {
+        if (!hashMatches(token, session.tokenHash)) continue;
+        if (session.revokedAt !== null) return { ok: false, reason: 'already_consumed' };
+        if (session.expiresAt <= now) return { ok: false, reason: 'expired' };
+        // THE COPY GUARD. Everything else about this token is valid; what it is
+        // not is a native credential. A browser session carried into a native
+        // client -- the cookie copy the founder ruled out -- stops here.
+        if (session.scope !== 'native_world' || session.origin !== NATIVE_WORLD_AUDIENCE) {
+          return { ok: false, reason: 'not_native' };
+        }
+        // A native session with no participant cannot exist (createGrant refuses
+        // to mint its grant), but a type is not a proof, so it is checked.
+        if (!isValidParticipantId(session.participantId)) return { ok: false, reason: 'not_native' };
+        return { ok: true, sessionId: session.sessionId, participantId: session.participantId };
       }
       return { ok: false, reason: 'not_found' };
     },
@@ -346,6 +422,11 @@ export function browserSessionMayCall(
   path: string,
   scope: BrowserSessionScope = 'browser_read_only',
 ): boolean {
+  // A native session is not a browser session and reaches NO browser route --
+  // not even the read-only ones, because it acts as a player and none of those
+  // routes were written expecting one from outside a browser. The world stream,
+  // the only thing it exists for, authorises it separately (verifyNativeSession).
+  if (scope === 'native_world') return false;
   if (method === 'GET') return BROWSER_READABLE.some((pattern) => pattern.test(path));
   if (method === 'POST' && scope === 'browser_control') {
     return BROWSER_CONTROL_WRITABLE.some((pattern) => pattern.test(path));
