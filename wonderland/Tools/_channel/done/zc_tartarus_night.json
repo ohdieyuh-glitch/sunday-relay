@@ -1,17 +1,17 @@
 {
  "name": "zc_tartarus_night",
- "started": "2026-09-27 13:46:42",
+ "started": "2026-09-27 14:02:28",
  "status": "captured",
- "tag": "after",
+ "tag": "after2",
  "tests": [
   {
    "id": "T00",
    "name": "all six Tartarus night views were captured",
    "pass": true,
    "detail": {
-    "taken": 6,
-    "wanted": 6,
-    "tag": "after",
+    "taken": 5,
+    "wanted": 5,
+    "tag": "after2",
     "where": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\tartarus_night",
     "note": "the verdict is the pictures against the founder's screenshots, not this clause and not the luma below."
    }
@@ -19,46 +19,40 @@
   {
    "id": "T01",
    "name": "no Tartarus view is a black void",
-   "pass": true,
+   "pass": false,
    "detail": {
-    "worst_dark_fraction": 0.6627,
+    "worst_dark_fraction": 0.9286,
     "ceiling": 0.8,
     "per_place": {
-     "avenue_dip": {
-      "luma": 0.2254,
-      "dark_fraction": 0.1368,
-      "ground_luma": 0.2443,
-      "ground_dark_fraction": 0.1721
+     "checkpoint_court": {
+      "luma": 0.16,
+      "dark_fraction": 0.5713,
+      "ground_luma": 0.1488,
+      "ground_dark_fraction": 0.4985
      },
-     "avenue_dip_feet": {
-      "luma": 0.1606,
-      "dark_fraction": 0.5335,
-      "ground_luma": 0.1969,
-      "ground_dark_fraction": 0.2512
+     "checkpoint_court_feet": {
+      "luma": 0.1418,
+      "dark_fraction": 0.5059,
+      "ground_luma": 0.1358,
+      "ground_dark_fraction": 0.5369
      },
-     "quarter_plaza": {
-      "luma": 0.1444,
-      "dark_fraction": 0.6627,
-      "ground_luma": 0.1225,
-      "ground_dark_fraction": 0.8638
+     "road_out": {
+      "luma": 0.1069,
+      "dark_fraction": 0.9286,
+      "ground_luma": 0.0802,
+      "ground_dark_fraction": 0.9903
      },
-     "quarter_plaza_feet": {
-      "luma": 0.1308,
-      "dark_fraction": 0.513,
-      "ground_luma": 0.1407,
-      "ground_dark_fraction": 0.4623
+     "road_in": {
+      "luma": 0.0842,
+      "dark_fraction": 0.8169,
+      "ground_luma": 0.0343,
+      "ground_dark_fraction": 0.9434
      },
-     "market": {
-      "luma": 0.1203,
-      "dark_fraction": 0.6102,
-      "ground_luma": 0.1368,
-      "ground_dark_fraction": 0.5596
-     },
-     "market_feet": {
-      "luma": 0.1262,
-      "dark_fraction": 0.5863,
-      "ground_luma": 0.133,
-      "ground_dark_fraction": 0.5807
+     "tower": {
+      "luma": 0.1017,
+      "dark_fraction": 0.6935,
+      "ground_luma": 0.1185,
+      "ground_dark_fraction": 0.5474
      }
     },
     "note": "a ceiling, not a target: passing this is not the same as readable, which only the photograph answers."
@@ -67,69 +61,60 @@
  ],
  "practicals": "read WLLIGHT in the editor log for 'N practicals defined, pool of M'; the subsystem loads WorldDesign/Look/practical_lights.json at world start and wl.Look.PracticalReload re-reads it",
  "readings": {
-  "avenue_dip": {
-   "luma": 0.2254,
-   "dark_fraction": 0.1368,
-   "ground_luma": 0.2443,
-   "ground_dark_fraction": 0.1721
+  "checkpoint_court": {
+   "luma": 0.16,
+   "dark_fraction": 0.5713,
+   "ground_luma": 0.1488,
+   "ground_dark_fraction": 0.4985
   },
-  "avenue_dip_feet": {
-   "luma": 0.1606,
-   "dark_fraction": 0.5335,
-   "ground_luma": 0.1969,
-   "ground_dark_fraction": 0.2512
+  "checkpoint_court_feet": {
+   "luma": 0.1418,
+   "dark_fraction": 0.5059,
+   "ground_luma": 0.1358,
+   "ground_dark_fraction": 0.5369
   },
-  "quarter_plaza": {
-   "luma": 0.1444,
-   "dark_fraction": 0.6627,
-   "ground_luma": 0.1225,
-   "ground_dark_fraction": 0.8638
+  "road_out": {
+   "luma": 0.1069,
+   "dark_fraction": 0.9286,
+   "ground_luma": 0.0802,
+   "ground_dark_fraction": 0.9903
   },
-  "quarter_plaza_feet": {
-   "luma": 0.1308,
-   "dark_fraction": 0.513,
-   "ground_luma": 0.1407,
-   "ground_dark_fraction": 0.4623
+  "road_in": {
+   "luma": 0.0842,
+   "dark_fraction": 0.8169,
+   "ground_luma": 0.0343,
+   "ground_dark_fraction": 0.9434
   },
-  "market": {
-   "luma": 0.1203,
-   "dark_fraction": 0.6102,
-   "ground_luma": 0.1368,
-   "ground_dark_fraction": 0.5596
-  },
-  "market_feet": {
-   "luma": 0.1262,
-   "dark_fraction": 0.5863,
-   "ground_luma": 0.133,
-   "ground_dark_fraction": 0.5807
+  "tower": {
+   "luma": 0.1017,
+   "dark_fraction": 0.6935,
+   "ground_luma": 0.1185,
+   "ground_dark_fraction": 0.5474
   }
  },
  "streaming_seconds": {
-  "avenue_dip": 0.0,
-  "avenue_dip_feet": 0.0,
-  "quarter_plaza": 0.0,
-  "quarter_plaza_feet": 0.0,
-  "market": 0.0,
-  "market_feet": 0.0
+  "checkpoint_court": 0.0,
+  "checkpoint_court_feet": 0.0,
+  "road_out": 0.0,
+  "road_in": 0.0,
+  "tower": 0.0
  },
  "ground_found": {
-  "avenue_dip": true,
-  "avenue_dip_feet": true,
-  "quarter_plaza": true,
-  "quarter_plaza_feet": true,
-  "market": true,
-  "market_feet": true
+  "checkpoint_court": true,
+  "checkpoint_court_feet": true,
+  "road_out": true,
+  "road_in": true,
+  "tower": true
  },
  "capture_returned": {
-  "avenue_dip": "(1900, 924)",
-  "avenue_dip_feet": "(1900, 924)",
-  "quarter_plaza": "(1900, 924)",
-  "quarter_plaza_feet": "(1900, 924)",
-  "market": "(1900, 924)",
-  "market_feet": "(1900, 924)"
+  "checkpoint_court": "(1900, 924)",
+  "checkpoint_court_feet": "(1900, 924)",
+  "road_out": "(1900, 924)",
+  "road_in": "(1900, 924)",
+  "tower": "(1900, 924)"
  },
  "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\tartarus_night",
- "finished": "2026-09-27 13:47:53",
- "seconds": 70.97,
- "log": "T_avenue_dip INFO avenue_dip (after) {'luma': 0.2254, 'dark_fraction': 0.1368, 'ground_luma': 0.2443, 'ground_dark_fraction': 0.1721}\nT_avenue_dip_feet INFO avenue_dip_feet (after) {'luma': 0.1606, 'dark_fraction': 0.5335, 'ground_luma': 0.1969, 'ground_dark_fraction': 0.2512}\nT_quarter_plaza INFO quarter_plaza (after) {'luma': 0.1444, 'dark_fraction': 0.6627, 'ground_luma': 0.1225, 'ground_dark_fraction': 0.8638}\nT_quarter_plaza_feet INFO quarter_plaza_feet (after) {'luma': 0.1308, 'dark_fraction': 0.513, 'ground_luma': 0.1407, 'ground_dark_fraction': 0.4623}\nT_market INFO market (after) {'luma': 0.1203, 'dark_fraction': 0.6102, 'ground_luma': 0.1368, 'ground_dark_fraction': 0.5596}\nT_market_feet INFO market_feet (after) {'luma': 0.1262, 'dark_fraction': 0.5863, 'ground_luma': 0.133, 'ground_dark_fraction': 0.5807}\n"
+ "finished": "2026-09-27 14:03:26",
+ "seconds": 57.84,
+ "log": "T_checkpoint_court INFO checkpoint_court (after2) {'luma': 0.16, 'dark_fraction': 0.5713, 'ground_luma': 0.1488, 'ground_dark_fraction': 0.4985}\nT_checkpoint_court_feet INFO checkpoint_court_feet (after2) {'luma': 0.1418, 'dark_fraction': 0.5059, 'ground_luma': 0.1358, 'ground_dark_fraction': 0.5369}\nT_road_out INFO road_out (after2) {'luma': 0.1069, 'dark_fraction': 0.9286, 'ground_luma': 0.0802, 'ground_dark_fraction': 0.9903}\nT_road_in INFO road_in (after2) {'luma': 0.0842, 'dark_fraction': 0.8169, 'ground_luma': 0.0343, 'ground_dark_fraction': 0.9434}\nT_tower INFO tower (after2) {'luma': 0.1017, 'dark_fraction': 0.6935, 'ground_luma': 0.1185, 'ground_dark_fraction': 0.5474}\n"
 }

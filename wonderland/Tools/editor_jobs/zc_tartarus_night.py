@@ -162,6 +162,35 @@ def job():
         RESULT.setdefault("streaming_seconds", {})[name] = waited
         RESULT.setdefault("ground_found", {})[name] = landed
         yield 1.5
+        # ---- IS THE CAMERA INSIDE SOMETHING?
+        #
+        # Three viewpoints today published honest numbers about the wrong subject: one on open grass a
+        # kilometre short of the road, one jammed against a crimson wall reading 0.2254 luma and 13.7%
+        # dark, and one buried in foliage reading 92.9% dark -- the same failure another lane spent five
+        # corrections on at architecture_noctis. Vegetation is 89% of this world's triangles, so a camera
+        # dropped anywhere outdoors can easily be inside a bush, and every luma gate ever written reads
+        # that as "the region is dark".
+        #
+        # A trace from the eye toward the subject answers it in one call. If the first thing in front of
+        # the camera is closer than two metres, the camera is not looking at the place -- it is looking at
+        # whatever it is standing in -- and the reading is recorded as OCCLUDED rather than published as a
+        # measurement of the place. Refusing to measure is the point: a wrong number that looks plausible
+        # costs more than a missing one.
+        clear = True
+        try:
+            span = unreal.Vector(look[0] - eye[0], look[1] - eye[1], look[2] - eye[2])
+            reach = max(span.length(), 1.0)
+            step = unreal.Vector(eye[0] + span.x / reach * 200.0,
+                                 eye[1] + span.y / reach * 200.0,
+                                 eye[2] + span.z / reach * 200.0)
+            blocked = unreal.SystemLibrary.line_trace_single(
+                live, unreal.Vector(*eye), step,
+                unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [], unreal.DrawDebugTrace.NONE, True)
+            clear = blocked is None
+        except Exception as err:                                # noqa: BLE001
+            RESULT.setdefault("occlusion_probe_errors", {})[name] = str(err)[:90]
+        RESULT.setdefault("camera_clear", {})[name] = clear
+
         L.pose_camera(live, unreal.Vector(*eye), unreal.Vector(*look), 70.0)
         yield 2.0
         unreal.GameplayStatics.set_game_paused(live, True)
@@ -182,7 +211,13 @@ def job():
             if not ok or not os.path.exists(path):
                 raise RuntimeError("capture_game_viewport returned %s" % (got,))
             shots.append(fname)
-            readings[name] = frame_stats(path)
+            stats = frame_stats(path)
+            stats["camera_clear"] = clear
+            if clear:
+                readings[name] = stats
+            else:
+                # kept, and kept OUT of readings: the picture is still worth looking at, the number is not
+                RESULT.setdefault("occluded", {})[name] = stats
             emit("T_%s" % name, "INFO", "%s (%s)" % (name, TAG), readings[name])
         except Exception as err:                                    # noqa: BLE001
             RESULT.setdefault("errors", {})[name] = str(err)[:140]
@@ -196,6 +231,13 @@ def job():
                   "detail": {"taken": len(shots), "wanted": len(PLACES), "tag": TAG, "where": ROOT,
                              "note": "the verdict is the pictures against the founder's screenshots, not "
                                      "this clause and not the luma below."}})
+    tests.append({"id": "T02", "name": "no camera was standing inside geometry",
+                  "pass": not RESULT.get("occluded"),
+                  "detail": {"occluded": sorted(RESULT.get("occluded", {})),
+                             "clear": RESULT.get("camera_clear"),
+                             "note": "a camera inside a bush or against a wall reports the bush or the "
+                                     "wall. Those readings are in RESULT['occluded'] and are excluded "
+                                     "from every clause below."}})
     worst = max((v["dark_fraction"] for v in readings.values()), default=1.0)
     tests.append({"id": "T01", "name": "no Tartarus view is a black void",
                   "pass": worst <= 0.80,
