@@ -70,11 +70,58 @@ def job():
     readings = {}
     RESULT["at_each_stop"] = readings
     rad = math.radians(BEARING_DEG)
+
+    # ---- EVERY TOUCH OF THE PAWN IS GUARDED, BECAUSE A DESTROYED ONE IS NOT None -- IT THROWS.
+    #
+    # This job died outright on "RelayDogCharacter: Internal Error - ObjectInstance is null!" and took the
+    # whole run with it. The cause is the same one zc_walk_after_wp was rewritten for: the Dog is placed at a
+    # FIXED height of 400 uu at each stop, Wonderland is not flat, and a capsule dropped inside masonry gets
+    # ejected or destroyed. The wrapper left behind is not None and raises on first use, so the failure
+    # surfaces as an internal error somewhere unrelated rather than as "the pawn is gone".
+    #
+    # A stop where the Dog did not survive is recorded as UNMEASURED rather than skipped silently or counted
+    # as a reading -- residency measured without a streaming source standing there is not the number this
+    # job exists to report.
+    def living():
+        try:
+            got = unreal.GameplayStatics.get_player_pawn(world, 0)
+            if got is None:
+                return None
+            got.get_actor_location()
+            return got
+        except Exception:                                          # noqa: BLE001
+            return None
+
     for metres in STOPS_M:
-        where = unreal.Vector(math.cos(rad) * metres * 100.0, math.sin(rad) * metres * 100.0, 400.0)
-        dog.set_actor_location(where, False, False)
+        x = math.cos(rad) * metres * 100.0
+        y = math.sin(rad) * metres * 100.0
+        # THE HOLD HEIGHT COMES FROM THE DESTINATION, not from a constant. Traced from far above, so the Dog
+        # is held over whatever is actually there rather than inside it.
+        roof = None
+        try:
+            probe = unreal.SystemLibrary.line_trace_single(
+                world, unreal.Vector(x, y, 8000.0), unreal.Vector(x, y, -3000.0),
+                unreal.TraceTypeQuery.TRACE_TYPE_QUERY2, False, [living()] if living() else [],
+                unreal.DrawDebugTrace.NONE, True,
+                unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
+            if probe is not None:
+                roof = float(probe.to_tuple()[4].z)
+        except Exception:                                          # noqa: BLE001
+            roof = None
+        where = unreal.Vector(x, y, (roof + 250.0) if roof is not None else 400.0)
+        here = living()
+        if here is not None:
+            try:
+                here.set_actor_location(where, False, False)
+            except Exception:                                      # noqa: BLE001
+                pass
         # Long enough for World Partition to act on the new position if it is going to.
         yield 12.0
+        if living() is None:
+            readings["%04.0fm" % metres] = {"unmeasured": "the Dog did not survive the stop"}
+            emit("S_%04.0fm" % metres, "INFO", "unmeasured at %.0f m" % metres,
+                 readings["%04.0fm" % metres])
+            continue
         readings["%04.0fm" % metres] = census()
         emit("S_%04.0fm" % metres, "INFO", "resident at %.0f m" % metres, readings["%04.0fm" % metres])
 
