@@ -474,6 +474,49 @@ def job():
                 "separates the cases and displacement alone cannot: full walk speed with no advance is "
                 "BLOCKED GEOMETRY and is a finding about that place, while a peak near zero is the harness "
                 "and withholds the route. The harness counts as proven by any one nation driving.")
+    # ---- DOES THIS INSTRUMENT REPEAT AT ALL? The question that precedes every other one here.
+    #
+    # Across four runs in one session this job measured ICARUS at 230, 0, 35.2 and 86.0 uu/s on the same
+    # route. Those are not properties of the ground. Every cause proposed from a single run -- blocked at
+    # the start, the world going away, the Dog falling -- was built on one draw of a distribution nobody
+    # had checked was one, and each died to the next run rather than to an argument.
+    #
+    # SO THE JOB REMEMBERS. Each run appends its peak speeds to a small history beside the results and the
+    # gate measures the spread across every run recorded. It is red now and it CAN go green: when repeated
+    # runs agree to within a tolerance, a single reading means something for the first time. A gate that
+    # could never pass would just be noise nobody reads, which is the failure I spent today building
+    # against elsewhere.
+    HIST = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "walk_history.json")
+    try:
+        with open(HIST, "r", encoding="utf-8") as fh:
+            history = json.load(fh)
+    except Exception:                                                 # noqa: BLE001
+        history = []
+    history.append({"run": RESULT.get("name"),
+                    "peaks": {n: r.get("probe_peak_speed") for n, r in nations.items()}})
+    history = history[-12:]
+    try:
+        os.makedirs(os.path.dirname(HIST), exist_ok=True)
+        with open(HIST, "w", encoding="utf-8") as fh:
+            json.dump(history, fh, indent=1)
+    except Exception:                                                 # noqa: BLE001
+        pass
+
+    spreads = {}
+    for n in nations:
+        vals = [h["peaks"].get(n) for h in history if isinstance(h.get("peaks"), dict)]
+        vals = [v for v in vals if isinstance(v, (int, float))]
+        spreads[n] = round(max(vals) - min(vals), 1) if len(vals) > 1 else None
+    known = [v for v in spreads.values() if v is not None]
+    record("W0C", "this harness repeats -- the same route measured across runs gives the same answer",
+           bool(known) and max(known) <= 40.0,
+           peak_spread_across_runs=spreads, runs_recorded=len(history), tolerance=40.0,
+           note="four runs in one session measured ICARUS at 230, 0, 35.2 and 86.0 on the same route -- a "
+                "spread equal to the character's entire walk speed. No route can be called walkable or "
+                "blocked by an instrument that answers differently each time it is asked, so until this is "
+                "green no single reading below is a fact about the ground. One run gives no spread and "
+                "leaves this red rather than passing on an empty set")
+
     # WAS IT THE WORLD OR THE DOG. Three nations stopping between 4.5 and 19.4 m of a 485 m route is one
     # finding if PIE died three times and a completely different one if the Dog fell out of the world three
     # times. This gate refuses to let those share a row.
