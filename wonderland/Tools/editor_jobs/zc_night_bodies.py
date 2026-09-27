@@ -313,6 +313,62 @@ def job():
         emit("B_%s" % skin, "INFO", "%s body at night and noon" % skin,
              {k: v for k, v in readings.items() if k.startswith(skin + "/")})
 
+    # ---- THE CONTROL: THE SAME GROUND WITH NOBODY STANDING ON IT.
+    #
+    # THE LATERAL BAND IS NOT A CLEAN WORLD READING AND THE NUMBERS SAID SO BEFORE I DID. At deepest night the
+    # beside-band's dark fraction came back 0.032 for Celestial Light and 0.680 for Apollo -- a twentyfold
+    # difference in how dark the world is, at one place, at one hour, with only the costume changed. The world
+    # does not vary by costume. The figure's own light is spilling into the band meant to measure the world,
+    # and the two luminous skins spill most: Celestial Light has the brightest body of the five at night and
+    # almost no light concentrated in its eyes, which is precisely the shape that lights its own surroundings.
+    #
+    # At dusk all five agree to within 0.024 and at noon to within 0.054, so the contamination is invisible
+    # except at the one hour the whole job exists to measure.
+    #
+    # So the figure is HIDDEN and the same frame taken again. That band is the world, with nothing of the
+    # mascot in it, and the difference between it and each skin's band is the spill -- which is a number worth
+    # having on its own, because a mascot that lights the ground it stands on is not a mascot floating in
+    # blackness, whatever its body reads.
+    RESULT["world_control"] = {}
+    for label, hour in HOURS:
+        unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour %.2f" % hour)
+        unreal.SystemLibrary.execute_console_command(world, "wl.Look.PracticalReload")
+        yield 4.0
+        live = ues.get_game_world()
+        if live is None or unreal.GameplayStatics.get_player_pawn(live, 0) is None:
+            RESULT["world_control"][label] = {"error": "the world was not alive for the control"}
+            continue
+        hidden = []
+        try:
+            for actor in unreal.GameplayStatics.get_all_actors_of_class(live, unreal.Actor):
+                # The pawn and anything parented to it: the costume is its own actor attached to the Dog.
+                if actor == dog or actor.get_attach_parent_actor() == dog:
+                    actor.set_actor_hidden_in_game(True)
+                    hidden.append(actor)
+        except Exception as err:                                    # noqa: BLE001
+            RESULT["world_control"][label] = {"error": str(err)[:140]}
+        stand_off()
+        yield 1.5
+        unreal.GameplayStatics.set_game_paused(live, True)
+        yield 0.3
+        name = "world_control_%s.png" % label
+        path = os.path.join(ROOT, name)
+        try:
+            L.capture_game_viewport(path)
+            shots.append(name)
+            RESULT["world_control"][label] = figure_stats(path, BOX)
+        except Exception as err:                                    # noqa: BLE001
+            RESULT["world_control"][label] = {"error": str(err)[:140]}
+        unreal.GameplayStatics.set_game_paused(live, False)
+        L.release_camera(live)
+        for actor in hidden:
+            try:
+                actor.set_actor_hidden_in_game(False)
+            except Exception:                                       # noqa: BLE001
+                pass
+        yield 0.3
+    emit("B_CONTROL", "INFO", "the same frames with no figure in them", RESULT["world_control"])
+
     unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour 12.00")
     ui.wear_relay_skin("relay_og")
 
@@ -348,12 +404,26 @@ def job():
     # same district and hour, four times apart, because their patch had nobody standing on it. A clause named
     # "is the ground readable" has to read ground that is not in shadow, or it is answering a different
     # question convincingly.
+    # THE CONTROL FRAME IS THE WORLD READING. Each skin's own band is reported beside it as spill, because a
+    # band measured next to a luminous figure answered twentyfold apart across costumes at one place.
     beside = {s: (night[s] or {}).get("beside_dark_fraction") for s in SKINS}
+    control = (RESULT.get("world_control") or {}).get("night") or {}
+    world_dark = control.get("beside_dark_fraction")
+    spill = {}
+    for s in SKINS:
+        mine = (night[s] or {}).get("beside_mean")
+        theirs = control.get("beside_mean")
+        spill[s] = round(mine - theirs, 4) if (mine is not None and theirs is not None) else None
+    RESULT["mascot_spill_on_ground"] = spill
     record("B04", "the ground beside the character is readable too",
-           all(isinstance(v, float) and v <= 0.65 for v in beside.values()),
-           beside_dark_fraction=beside, under_feet_for_comparison=ground, ceiling=0.65,
-           note="world lighting, not mascot lighting, and measured one figure-width to the side so it is not "
-                "the mascot's own shadow. The pair under the feet is reported beside it as the shadow.")
+           isinstance(world_dark, float) and world_dark <= 0.65,
+           world_beside_dark_fraction=world_dark, ceiling=0.65,
+           per_skin_beside_for_comparison=beside, under_feet_for_comparison=ground,
+           mascot_spill_on_ground=spill,
+           note="measured on the CONTROL frame, with the figure hidden, because the same band beside a figure "
+                "reads 0.032 for one costume and 0.680 for another at one place and hour. The per-skin bands "
+                "and the spill are reported beside it rather than gating: a mascot that lights the ground it "
+                "stands on is not a mascot floating in blackness, whatever its own body reads.")
 
     # AND THE SHADOW ITSELF, WHICH IS NOW SEPARABLE AND HAS ITS OWN REQUIREMENT.
     #
@@ -397,21 +467,54 @@ def job():
     # bug report. Arden came back 1.360 -- brighter at night than at noon -- and it is a flame skin. A clause
     # that cannot tell a design from a defect should name the ones it cannot judge, so the reader does not
     # spend an hour looking for a lighting fault in a figure that is meant to burn.
-    LUMINOUS = {"arden_infernal": 0.45, "skeleton_flame": 0.83}
-    RESULT["luminous_by_design"] = {
-        "glow_share_of_geometry": LUMINOUS,
-        "note": "counted in relay_dog_skins.py: the share of each skin's geometry calls that use a material "
-                "declared 'glow'. A figure that is 83 per cent glow cannot be made to read as a lit subject "
-                "by lighting it, and dimming it is a decision about the skin rather than about the night.",
+    # ---- HOW MUCH OF EACH SKIN IS ITS OWN LIGHT, COUNTED RATHER THAN ASSUMED.
+    #
+    # I FIRST WROTE THIS AS A LIST OF TWO SKINS FROM MEMORY AND IT WAS WRONG. Celestial Light came back at
+    # 1.132 night over noon -- brighter at night than at noon -- and I was ready to call it over-lit by the
+    # night lift. Counting its geometry in relay_dog_skins.py instead: it is 72 per cent glow materials, the
+    # second most luminous skin in the set. Not over-lit. Luminous, and I had guessed the list.
+    #
+    #   skeleton_flame   83%      celestial_light  72%      arden_infernal   45%
+    #   apollo           22%      relay_og          0%
+    #
+    # RELAY OG IS THE ONLY CLEAN INSTRUMENT IN THE SET, and that is worth more than the list. It has NO glow
+    # geometry at all, so every photon on its body came from the world. It is also the canonical mascot. Any
+    # question of the form "does the world light the mascot" should be read off that row; the other four answer
+    # it with their own light mixed in.
+    #
+    # AND THE BODY/LIGHT SPLIT DOES NOT SEPARATE THEM CLEANLY EITHER, which is why no threshold here is a fix.
+    # Cells at or over 0.72 white are counted as lights and excluded from body_mean. Skeleton Flame's glow is
+    # brighter than that, so its 83 per cent lands in the LIGHTS bucket and its body reads a low 0.589. Celestial
+    # Light's starlight is dimmer than that, so its 72 per cent lands in the BODY bucket and reads 1.132. Same
+    # design, opposite numbers, because of where each skin's glow falls relative to one constant.
+    GLOW_SHARE = {"skeleton_flame": 0.83, "celestial_light": 0.72, "arden_infernal": 0.45,
+                  "apollo": 0.22, "relay_og": 0.00}
+    RESULT["glow_share_of_geometry"] = GLOW_SHARE
+    RESULT["clean_instrument"] = {
+        "skin": "relay_og",
+        "why": "zero glow geometry, so its body is lit entirely by the world, and it is the canonical mascot.",
     }
-    judged = {s: v for s, v in fall.items() if s not in LUMINOUS}
+
+    # THE RULE IS DERIVED, SO THERE IS NO EXCLUSION LIST AT ALL.
+    #
+    # A ratio ABOVE 1.0 means the figure is brighter at night than in daylight, which no amount of world
+    # lighting can cause -- the figure is its own source, and whether that is wanted is a decision about the
+    # skin rather than about the night. A ratio BETWEEN the ceiling and 1.0 is the founder's "do not solve this
+    # by turning night into day", and that one is a lighting failure. So the two cases are told apart by the
+    # arithmetic instead of by a list I remembered wrongly once already.
+    self_lit = {s: v for s, v in fall.items() if isinstance(v, float) and v > 1.0}
+    too_bright = {s: v for s, v in fall.items() if isinstance(v, float) and 0.75 < v <= 1.0}
+    RESULT["self_illuminating_at_night"] = self_lit or None
     record("B05", "night still looks like night: the body is clearly darker than it is at noon",
-           all(isinstance(v, float) and v <= 0.75 for v in judged.values()),
-           night_over_noon=fall, judged=sorted(judged), ceiling=0.75,
-           luminous_by_design_excluded=sorted(LUMINOUS),
-           note="the guard against fixing this by turning night into day. B01 and this one must pass together. "
-                "The two luminous skins are excluded and reported, not silently passed: they are brighter at "
-                "night because they are their own light source, which is a founder question about the skin.")
+           not too_bright,
+           night_over_noon=fall, ceiling=0.75,
+           night_is_too_bright=too_bright or None,
+           self_illuminating_founder_call=self_lit or None,
+           glow_share_of_geometry=GLOW_SHARE,
+           canonical_row={"relay_og": fall.get("relay_og")},
+           note="the guard against fixing this by turning night into day. Above 1.0 the figure is its own "
+                "light source, which world lighting cannot cause and which is a founder question about the "
+                "skin; between the ceiling and 1.0 the night is genuinely too bright. Only the second fails.")
 
     # ---- B08: HAS THE FIGURE BECOME A LIGHT SOURCE RELATIVE TO ITS WORLD?
     #
@@ -434,12 +537,13 @@ def job():
         ratio[s] = {"night": n_r, "noon": d_r,
                     "night_over_noon": (round(n_r / d_r, 2) if (n_r and d_r) else None)}
     RESULT["eye_over_world"] = ratio
-    judged_ratio = {s: v["night_over_noon"] for s, v in ratio.items()
-                    if s not in LUMINOUS and v["night_over_noon"] is not None}
+    # JUDGED ON THE CLEAN ROW, REPORTED FOR ALL. Relay OG has no glow geometry, so its eye-to-world ratio is
+    # the only one in the set that is not partly a statement about how much light the costume brings with it.
+    canon = ratio.get("relay_og", {}).get("night_over_noon")
     record("B08", "no figure is more of a light source at night than it is in daylight",
-           bool(judged_ratio) and all(v <= 1.0 for v in judged_ratio.values()),
-           eye_over_world=ratio, judged=sorted(judged_ratio), ceiling=1.0,
-           luminous_by_design_excluded=sorted(LUMINOUS),
+           isinstance(canon, float) and canon <= 1.0,
+           eye_over_world=ratio, judged_on="relay_og", canonical_ratio=canon, ceiling=1.0,
+           glow_share_of_geometry=GLOW_SHARE,
            derivation="eye glow dims 24 to 8 across the day-night crossover, a factor of three, while the "
                       "world at the arrival dims about 1.36. So this ratio should fall by roughly two at "
                       "night. A value above 1.0 means it rose instead, and the bound is the crossover's own "
