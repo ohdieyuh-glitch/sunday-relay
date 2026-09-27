@@ -9,6 +9,7 @@ import {
   type JuliusLearningPairing,
   type JuliusLearningPolicy,
 } from './julius-learning-loop';
+import { juliusCarriedEntryId, juliusClaimIdFor } from './julius-claim-ledger';
 import { promoteJuliusMemoryClaim, admitJuliusMemoryCandidate, type JuliusMemoryClaim } from './julius-memory-trust';
 import {
   cardPolicy, createJuliusHarness, seedTaskContractInto, task, verificationPolicy, worker,
@@ -69,6 +70,9 @@ const OBJECTIVE = 'Add the deploy step to the release script.';
  * coder ships a deploy that runs before the migration and the build fails.
  */
 const LEARNED = 'The migration must run before the deploy, or the deploy fails.';
+
+/** The mission that learned it. Its id is part of every carried entry's own id. */
+const PRIOR_RUN_ID = 'run:prior-mission';
 
 const ALL_ROLES: JuliusBrainEntry['allowedRoles'] = ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'];
 
@@ -192,9 +196,20 @@ async function runMission(learned: boolean, runId: string, priceless = false): P
       taskIds: [], allowedRoles: ALL_ROLES, sensitivity: 'INTERNAL',
       provenance: { workerId: 'founder', recordedAt: '2026-09-10T01:00:00.000Z', evidenceIds: [] },
     },
-    // THE ONLY DIFFERENCE BETWEEN THE TWO MISSIONS.
+    /**
+     * THE ONLY DIFFERENCE BETWEEN THE TWO MISSIONS — written as production writes
+     * it.
+     *
+     * `juliusCarriedEntryId` is the id the BOOTSTRAP gives an inherited fact
+     * (`relay-bridge/julius/mission-knowledge.ts`), and the claim standing below
+     * is the one it records for it. This matters for the honesty of the whole
+     * proof: before the carry existed, this seed was the fixture asserting that a
+     * prior mission's fact would somehow be present, and the readiness page said
+     * so. Now the shape here IS the shape a real mission B inherits, and the
+     * real-PostgreSQL seam suite proves the bootstrap produces it.
+     */
     ...(learned ? [{
-      entryId: `${runId}:learned`, kind: 'FINDING' as const, text: LEARNED,
+      entryId: juliusCarriedEntryId(PRIOR_RUN_ID, 'prior:learned'), kind: 'FINDING' as const, text: LEARNED,
       taskIds: [], allowedRoles: ALL_ROLES, sensitivity: 'INTERNAL' as const,
       provenance: {
         workerId: 'reviewer', recordedAt: '2026-09-10T02:00:00.000Z',
@@ -205,6 +220,25 @@ async function runMission(learned: boolean, runId: string, priceless = false): P
     // finding inherits the brain it was written into.
     ...(learned ? PRIOR_RESIDUE(runId) : []),
   ]);
+  /**
+   * AND THE STANDING THE CARRY RECORDS, so the packet ranks a reviewer-verified
+   * fact as VERIFIED rather than re-deriving it as an assertion. Recorded before
+   * the run ticks, because that is when the bootstrap records it.
+   */
+  if (learned) {
+    await harness.store.recordClaimStanding({
+      runId, projectId: 'prj-1',
+      claim: {
+        claimId: juliusClaimIdFor(juliusCarriedEntryId(PRIOR_RUN_ID, 'prior:learned')),
+        entryId: juliusCarriedEntryId(PRIOR_RUN_ID, 'prior:learned'),
+        provenance: 'reviewer_verified', trust: 'VERIFIED', assertedBy: 'reviewer',
+        assertedAt: '2026-09-10T02:00:00.000Z',
+        evidence: [{ kind: 'REVIEW', id: 'evidence:prior-mission-failure' }],
+        supersedes: null, contradicts: [],
+      },
+      reason: `CARRIED_FROM:${PRIOR_RUN_ID}`, occurredAt: '2026-09-10T02:00:00.000Z',
+    });
+  }
   for (let tick = 0; tick < 24; tick += 1) {
     if ((await harness.loop.tick(scope)).claimed === 0) break;
   }
@@ -486,8 +520,20 @@ describe('prior learning reaches the next mission without leaking the last one',
     const snapshot = coderSnapshot(withLearning);
     const text = snapshot.packet.blocks.map((block) => block.text).join('\n');
 
-    expect(snapshot.sourceEntryIds, 'the finding the task needs arrived').toContain('run-b:learned');
+    // THE INHERITED ENTRY ID IS THE CARRY'S OWN, so this case also pins that the
+    // packet carries what the bootstrap actually writes — `carried:<run>:<entry>`
+    // — rather than an id only this fixture would produce.
+    const inheritedId = juliusCarriedEntryId(PRIOR_RUN_ID, 'prior:learned');
+    expect(snapshot.sourceEntryIds, 'the finding the task needs arrived').toContain(inheritedId);
     expect(text).toContain('migration must run before the deploy');
+
+    // AND IT ARRIVED AS VERIFIED, from the recorded standing the carry wrote —
+    // not re-derived from its kind, which would have ranked a reviewer-verified
+    // fact as an assertion in every later mission.
+    const claim = (await withLearning.harness.store.claimsForRun('run-b', 'prj-1'))
+      .find((row) => row.entryId === inheritedId);
+    expect(claim?.trust, 'the standing travelled with the fact').toBe('VERIFIED');
+    expect(claim?.assertedBy, 'and so did its author, so a reviewer here cannot self-verify it').toBe('reviewer');
 
     for (const leaked of ['run-b:prior-other-task', 'run-b:prior-reviewer-only', 'run-b:prior-secret']) {
       expect(snapshot.sourceEntryIds, `${leaked} leaked into the coder's packet`).not.toContain(leaked);

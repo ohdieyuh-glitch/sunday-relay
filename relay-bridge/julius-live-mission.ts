@@ -56,6 +56,7 @@ import {
   type LiveMissionResearchClause,
 } from './julius/mission-contract';
 import { createLiveJuliusBootstrapPort } from './julius/bootstrap';
+import { createPostgresMissionKnowledgeStore } from './julius/mission-knowledge';
 import { createPostgresMissionSeedStore } from './julius/mission-seed';
 import { createJuliusPostgresRuntimeStore } from './julius/postgres-store';
 import { createExecutorShellPort } from './julius/executor-effects';
@@ -739,6 +740,8 @@ async function main(argv: readonly string[]): Promise<number> {
         putTaskContract: bootstrapContracts.putTaskContract.bind(bootstrapContracts),
       },
       seeds: createPostgresMissionSeedStore(pool),
+      // The project's verified knowledge, inherited by this mission.
+      knowledge: createPostgresMissionKnowledgeStore(pool),
       tenantId: contract.tenantId,
       executionId,
     });

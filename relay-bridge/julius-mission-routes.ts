@@ -6,6 +6,7 @@ import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgr
 import { createLiveJuliusBootstrapPort } from './julius/bootstrap';
 import { CODER_WORKER, architectWorker, reviewerWorker } from './julius/live-composition';
 import { compileBootstrapRequest, parseLiveMissionContract, type LiveMissionContractFile } from './julius/mission-contract';
+import { createPostgresMissionKnowledgeStore } from './julius/mission-knowledge';
 import { createPostgresMissionSeedStore } from './julius/mission-seed';
 
 /**
@@ -55,6 +56,9 @@ const created = (data: unknown): JuliusMissionRouteResult => ({ status: 201, bod
 const err = (status: number, kind: string, message: string): JuliusMissionRouteResult =>
   ({ status, body: { error: { kind, message } } });
 
+/** The states a run cannot leave, so the answer must not promise it will. */
+const TERMINAL_MISSION_STATES: readonly string[] = ['FAILED', 'COMPLETED', 'CANCELLED'];
+
 /** `/julius/missions` — the one path this family serves. */
 export function isJuliusMissionRoute(path: string): boolean {
   return path === '/julius/missions';
@@ -79,6 +83,15 @@ export interface JuliusMissionRouteRequest {
    * exact word is not an intent.
    */
   readonly rerun?: string | undefined;
+  /**
+   * `x-relay-julius-rerun-key` — the caller's own token for THIS rerun, and
+   * REQUIRED with an explicit rerun: one token means one rerun however many
+   * times the request is sent. Nothing derived from durable state can stand in
+   * for it, because a rerun changes that state the moment it lands, so a
+   * derived discriminator would let the retry buy a third execution. Without it
+   * the family answers `400 rerun_key_required`.
+   */
+  readonly rerunKey?: string | undefined;
 }
 
 /**
@@ -119,6 +132,9 @@ const REFUSAL_STATUS: Readonly<Record<string, number>> = {
   blocking_acceptance_criterion_missing: 400,
   invalid_worker_configuration: 400,
   task_contract_not_derivable: 400,
+  // An explicit rerun arrived without a key of its own: the caller's to fix, and
+  // the message says what to send.
+  rerun_key_required: 400,
   // The same identity was already used for a different mission: the run's.
   mission_already_running: 409,
   // The mission is already running something else. 409, and the message names
@@ -157,9 +173,11 @@ export async function handleJuliusMissionRoute(
   const contract: LiveMissionContractFile = parsed.contract;
 
   const rerunIntent = request.rerun?.trim().toLowerCase() === 'explicit';
+  const rerunKey = request.rerunKey?.trim();
   const bootstrapRequest = {
     ...compileBootstrapRequest(contract, missionWorkerRequests(ports.reviewerProvider), ports.cardRevision),
     ...(rerunIntent ? { rerunIntent: 'EXPLICIT' as const } : {}),
+    ...(rerunKey === undefined || rerunKey === '' ? {} : { rerunKey }),
   };
   // The same execution identity the job derives, so a mission created here and
   // then driven by the job is ONE execution rather than two that share a name.
@@ -178,10 +196,23 @@ export async function handleJuliusMissionRoute(
     // — a re-posted contract is answered with the run that already exists, in
     // whatever state it has really reached, never with an asserted READY.
     dispatched: false,
-    // WHETHER THIS WAS A DELIBERATE SECOND RUN, on the wire: a client that did
-    // not ask for one must never be told it got one.
-    rerun: rerunIntent,
-    next: `The run is durable in state ${outcome.state}. It is driven by the Julius mission job, not by this route.`,
+    /**
+     * WHETHER A SECOND RUN WAS ACTUALLY MADE — the OUTCOME, not the request.
+     *
+     * Reporting the intent was wrong and the integration lane's drill caught it
+     * (D07): a client that asked for a rerun and was handed the run it already
+     * had would draw a second mission that does not exist. True only when this
+     * call both asked and made one.
+     */
+    rerun: rerunIntent && outcome.resumed !== true,
+    /**
+     * A TERMINAL RUN IS NOT "GOING". The same sentence for every state read as
+     * "created, and being driven" over a run that had already ended (the drill's
+     * smaller point on the same path).
+     */
+    next: TERMINAL_MISSION_STATES.includes(outcome.state)
+      ? `This run has already ended in ${outcome.state}; its state is final and nothing is driving it.`
+      : `The run is durable in state ${outcome.state}. It is driven by the Julius mission job, not by this route.`,
   });
 }
 
@@ -194,6 +225,8 @@ export function composeJuliusMissionBootstrap(pool: Pool): (executionId: string,
   const runs = new JuliusPostgresRepository(pool);
   const contracts = new JuliusContractPostgresRepository(pool);
   const seeds = createPostgresMissionSeedStore(pool);
+  // What earlier missions of this project verified, for this one to inherit.
+  const knowledge = createPostgresMissionKnowledgeStore(pool);
   return (executionId, tenantId) => createLiveJuliusBootstrapPort({
     runs: {
       loadRun: runs.loadRun.bind(runs),
@@ -202,6 +235,6 @@ export function composeJuliusMissionBootstrap(pool: Pool): (executionId: string,
       transition: runs.transition.bind(runs),
       putTaskContract: contracts.putTaskContract.bind(contracts),
     },
-    seeds, tenantId, executionId,
+    seeds, knowledge, tenantId, executionId,
   });
 }
