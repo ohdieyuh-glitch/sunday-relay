@@ -62,7 +62,12 @@ ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "mascot_knee")
 #: The five active skins and the founder's three hours, spelled as zc_eyes_glow spells them so the numbers
 #: sit beside the existing corpus. Dusk is the hard one: the sun is low and the exposure is still open.
 SKINS = ("relay_og", "celestial_light", "apollo", "arden_infernal", "skeleton_flame")
-HOURS = ((12.0, "day"), (18.8, "dusk"), (23.5, "night"))
+#: ONE HOUR PER RUN. The first attempt swept all three in a single PIE session and PIE was torn down 1m43s
+#: in; the job then "measured" a dead world for two more minutes. Ten-minute PIE sessions on this box are not
+#: reliable, so the hour is a parameter and the sweep is queued three times.
+HOUR = globals().get("HOUR", 12.0)
+HOUR_LABEL = globals().get("HOUR_LABEL", "day")
+HOURS = ((HOUR, HOUR_LABEL),)
 
 #: The eye levels. 0.05 is SetEyeGlow's floor and is the differential baseline -- the eye as good as off.
 #: 16 is ABOVE the clamp on purpose: it must come back identical to 12.
@@ -124,14 +129,53 @@ def job():
     dog = unreal.GameplayStatics.get_player_pawn(world, 0)
     pc = unreal.GameplayStatics.get_player_controller(world, 0)
     ui = L.get_ui(world)
+    RESULT["camera_failures"] = []
+
+    def alive():
+        """The world AND the pawn, or None. Every reading is gated on this.
+
+        THE FAILURE THIS EXISTS FOR. The first run had PIE torn down underneath it at 15:08:02 and kept
+        going until 15:09:56, emitting a constant 0.0187 -- the luma of a black viewport -- into 31 rows and
+        nine gates, where it read as "the eye is dark on every skin". Two gates even passed. A proof that
+        cannot tell "the world is gone" from "the eye is not glowing" is not a proof, and this one published
+        a dead viewport as a mascot measurement. Nothing is recorded now unless both the world and the pawn
+        answer, and the job ABORTS and says where it died rather than filling the table with the dark.
+        """
+        w = ues.get_game_world()
+        if w is None:
+            return None
+        try:
+            return w if unreal.GameplayStatics.get_player_pawn(w, 0) is not None else None
+        except Exception:                                              # noqa: BLE001
+            return None
+
+    def live():
+        """The world, re-fetched every time it is used.
+
+        zc_water_audit died at its first pose_camera with "Cannot nativize 'World' as 'Object'" after holding
+        a world reference across many yields. Whatever staled it, a reference captured once at the top of a
+        job that runs for ten minutes is the thing that failed, so this one is never captured.
+        """
+        return ues.get_game_world()
 
     def cvar(name, value):
-        unreal.SystemLibrary.execute_console_command(world, "%s %s" % (name, value))
+        w = live()
+        if w is not None:
+            unreal.SystemLibrary.execute_console_command(w, "%s %s" % (name, value))
+
+    def pose(eye, aim, fov):
+        """Aim the camera, and survive a failure instead of taking the whole sweep down with it."""
+        try:
+            L.pose_camera(live(), eye, aim, fov)
+            return True
+        except Exception as err:                                       # noqa: BLE001
+            RESULT["camera_failures"].append(str(err)[:140])
+            return False
 
     def exposure_now():
         """The world's own exposure, read so the experiment can prove it never moved."""
         out = []
-        for v in unreal.GameplayStatics.get_all_actors_of_class(world, unreal.PostProcessVolume):
+        for v in unreal.GameplayStatics.get_all_actors_of_class(live(), unreal.PostProcessVolume):
             try:
                 s = v.get_editor_property("settings")
                 out.append((str(v.get_actor_label())[:28],
@@ -142,28 +186,46 @@ def job():
                 pass
         return sorted(out)
 
+    try:
+        sub = live().get_subsystem(unreal.WonderlandPracticalLightsSubsystem)
+        RESULT["practicals"] = str(sub.describe_practicals()) if sub is not None else "no subsystem"
+    except Exception as err:                                           # noqa: BLE001
+        RESULT["practicals"] = "unreadable: %s" % str(err)[:90]
+
+    RESULT["died_at"] = None
+
+    def dead(where):
+        """Record the death and stop. Never returns data."""
+        RESULT["died_at"] = where
+        RESULT["status"] = "aborted"
+        emit("ABORT", "FAIL", "the world went away during the sweep", {"at": where})
+
     exposure_before = exposure_now()
     RESULT["exposure_before"] = exposure_before
 
     def frame_head():
         """Stand the camera off the Dog's head, at zc_eyes_glow's proven reach and lens."""
-        here = dog.get_actor_location()
-        yaw = dog.get_actor_rotation().yaw
+        d = unreal.GameplayStatics.get_player_pawn(live(), 0)
+        if d is None:
+            return None
+        here = d.get_actor_location()
+        yaw = d.get_actor_rotation().yaw
         aim = unreal.Vector(here.x, here.y, here.z + 62.0)
         eye = unreal.Vector(here.x + math.cos(math.radians(yaw)) * 300.0,
                             here.y + math.sin(math.radians(yaw)) * 300.0, here.z + 70.0)
-        L.pose_camera(world, eye, aim, 32.0)
+        pose(eye, aim, 32.0)
         return here
 
     def patch(here, z_above, half_w, half_h, dx=0.0):
         try:
             got = unreal.GameplayStatics.project_world_to_screen(
-                pc, unreal.Vector(here.x, here.y, here.z + z_above), False)
+                unreal.GameplayStatics.get_player_controller(live(), 0),
+                unreal.Vector(here.x, here.y, here.z + z_above), False)
         except Exception:                                              # noqa: BLE001
             return None
         if got is None:
             return None
-        size = pc.get_viewport_size()
+        size = unreal.GameplayStatics.get_player_controller(live(), 0).get_viewport_size()
         vw = float(size[0]) if size and size[0] else 1920.0
         vh = float(size[1]) if size and len(size) > 1 and size[1] else 1080.0
         cx, cy = float(got.x) / vw + dx, float(got.y) / vh
@@ -187,6 +249,9 @@ def job():
     # Run first, because it is the axis the founder's complaint is actually about.
     cvar("wl.Look.GlowKnee", 700.0)                 # the shipped control while the eye axis moves
     for hour, hlabel in HOURS:
+        if alive() is None:
+            dead("before the %s pass began" % hlabel)
+            return
         cvar("wl.Sky.Hour", "%.2f" % hour)
         yield 3.0
         for skin in SKINS:
@@ -197,12 +262,18 @@ def job():
             yield 1.0
             base = None
             for level in EYE_LEVELS:
+                if alive() is None:
+                    dead("%s/%s level %.2f" % (skin, hlabel, level))
+                    return
                 # BOTH ends of the day-cycle lerp are set to the same value, so the level under test is the
                 # level that arrives whatever the hour is -- otherwise dusk would silently read a blend.
                 cvar("wl.Look.EyeGlowDay", "%.3f" % level)
                 cvar("wl.Look.EyeGlowNight", "%.3f" % level)
                 yield 2.0
-                here = dog.get_actor_location()
+                d2 = unreal.GameplayStatics.get_player_pawn(live(), 0)
+                if d2 is None:
+                    continue
+                here = d2.get_actor_location()
                 r = read_all(here)
                 if r["eye"] is None or r["face"] is None:
                     emit("B_%s_%s_%.2f" % (skin, hlabel, level), "WARN", "eye or cheek off screen", {})
@@ -250,12 +321,20 @@ def job():
             ui.wear_relay_skin(skin)
         yield 2.5
         here = frame_head()
+        if here is None:
+            continue
         yield 1.0
         for knee in KNEES:
+            if alive() is None:
+                dead("knee axis, %s at %.0f" % (skin, knee))
+                return
             cvar("wl.Look.GlowKnee", "%.2f" % knee)
-            unreal.SystemLibrary.execute_console_command(world, "wl.Look.Reglow")
+            unreal.SystemLibrary.execute_console_command(live(), "wl.Look.Reglow")
             yield 2.0
-            here = dog.get_actor_location()
+            d2 = unreal.GameplayStatics.get_player_pawn(live(), 0)
+            if d2 is None:
+                continue
+            here = d2.get_actor_location()
             r = read_all(here)
             if r["frame"] is None:
                 continue
@@ -269,22 +348,35 @@ def job():
     # ---------------------------------------------------------------- put the world back
     for name, value in SHIPPED:
         cvar(name, value)
-    unreal.SystemLibrary.execute_console_command(world, "wl.Look.Reglow")
+    unreal.SystemLibrary.execute_console_command(live(), "wl.Look.Reglow")
     yield 2.0
-    L.release_camera(world)
+    try:
+        L.release_camera(live())
+    except Exception:  # noqa: BLE001
+        pass
     exposure_after = exposure_now()
     RESULT["exposure_after"] = exposure_after
     RESULT["cvars_restored"] = [n for n, _ in SHIPPED]
 
     # ---------------------------------------------------------------- the gates
     want = len(SKINS) * len(HOURS) * len(EYE_LEVELS)
+    RESULT["hour"] = HOUR_LABEL
     record("M00", "every skin was sampled at every hour at every eye level",
            len(rows) == want, got=len(rows), wanted=want,
            skins=list(SKINS), hours=[h for _, h in HOURS], levels=list(EYE_LEVELS))
 
-    record("X00", "world exposure is identical before and after -- the experiment is not confounded",
-           exposure_before == exposure_after, before=exposure_before, after=exposure_after,
-           note="the founder required night-world brightness to be justified by the world, not moved here")
+    # X00 COMPARES AT THE SAME HOUR, because the day cycle DRIVES exposure from the hour --
+    # PaintTheSky sets AutoExposureBias = Lerp(1.45, -0.9, Daylight) every repaint. The first version
+    # compared the bias at whatever hour the world happened to be at on entry against the bias at the hour
+    # the sweep finished on, and called the day cycle doing its job a confound. What must not move is the
+    # PINNED range (min/max EV100), which is a world setting; the hour-driven bias is expected.
+    rng_before = [(v[0], v[2], v[3]) for v in exposure_before]
+    rng_after = [(v[0], v[2], v[3]) for v in exposure_after]
+    record("X00", "the world's pinned exposure range is untouched -- the experiment is not confounded",
+           bool(rng_before) and rng_before == rng_after, before=rng_before, after=rng_after,
+           bias_before=[v[1] for v in exposure_before], bias_after=[v[1] for v in exposure_after],
+           note="min/max EV100 is the world setting and must not move; AutoExposureBias is driven by the "
+                "hour by the day cycle and is expected to differ")
 
     # THE INSTRUMENT MUST RESPOND, or every other number below is a photograph of nothing.
     moved = [r for r in rows if r.get("isolation") is not None and abs(r["isolation"]) > 1e-4]
