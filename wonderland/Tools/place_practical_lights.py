@@ -76,6 +76,17 @@ TAKE = {
     # 44 lights over 505 m of avenue, a quarter, a band and a market. The hanging lanterns over the market
     # stalls take half of this automatically -- see FIXTURES -- which is right for a stall.
     "TQ05": (11.0, 950.0, "path"),
+    # NOCTIS AND ICARUS AFTER DARK (NQ06, IQ06), the same correction for the two nations this lane owns.
+    # THE FIGURE IS DERIVED, NOT COPIED: AV01 and AV02 -- the very avenues these lamps infill -- already run
+    # at 11.0 candelas and a 950 uu radius, so a lamp added to Noctis's road throws exactly what Noctis's road
+    # already throws. Same fixture, same job, same number. TQ05 landing on the same pair is agreement rather
+    # than imitation.
+    #
+    # WITHOUT THESE TWO LINES THE FIXTURES ARE ORNAMENTS. TAKE is the whole filter: a pass that is not a key
+    # here contributes ZERO lights however many lanterns it holds, and NQ06 and IQ06 shipped in that state --
+    # 36 lamp posts glowing as emissive meshes and lighting nothing, which is the exact condition this
+    # placer exists to end.
+    "NQ06": (11.0, 950.0, "path"), "IQ06": (11.0, 950.0, "path"),
     # facade accents: architecture immediately beside traversal, dim
     "NC02": (6.0, 500.0, "facade"), "IC04": (6.0, 500.0, "facade"), "NC04": (6.0, 500.0, "facade"),
     "TQ04": (6.0, 500.0, "facade"), "TQ02": (6.0, 500.0, "facade"), "IC02": (6.0, 500.0, "facade"),
