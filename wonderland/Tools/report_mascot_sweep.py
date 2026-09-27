@@ -132,18 +132,46 @@ def main():
     w("the largest of 49 noisy cells rather than a response. Both are reported per skin because both were")
     w("silently wrong in earlier runs of this job.")
     w("")
-    w("| skin | anchor found by | peak delta | noise floor | beats noise |")
-    w("|---|---|---|---|---|")
+    w("An anchor that reads the same to one decimal on figures of two different heights is one component")
+    w("found many times, not eight eyes located. That is what zzM1 did: `mesh`, 24.7, on all eight, from a")
+    w("component pivot. The candidate column is here so that cannot pass again unexamined.")
+    w("")
+    w("| skin | anchor found by | anchor z | peak delta | noise floor | beats noise | candidates |")
+    w("|---|---|---|---|---|---|---|")
     ref = live.get("DAY") or list(live.values())[0]
-    how = ref.get("anchor_how") or {}
-    az = ref.get("anchor_z") or {}
-    pk = ref.get("peak_delta_per_skin") or {}
-    nf = ref.get("noise_floor_per_skin") or {}
-    bn = ref.get("beats_noise") or {}
+
+    def detail_of(d, test_id):
+        for t in (d.get("tests") or []):
+            if t.get("id") == test_id:
+                return t.get("detail") or {}
+        return {}
+
+    def diag(d, key, test_id="M11"):
+        """A locator diagnostic, wherever the job put it.
+
+        These are recorded as DETAIL on the M11 gate, not as top-level result keys. Reading the top level
+        printed "not reported" for all eight skins on a run that had in fact reported every one of them --
+        which reads as evidence of absence and is only evidence of a wrong lookup.
+        """
+        v = d.get(key)
+        if v:
+            return v
+        return detail_of(d, test_id).get(key) or {}
+
+    how = diag(ref, "anchor_how")
+    az = diag(ref, "anchor_z")
+    pk = diag(ref, "peak_delta_per_skin")
+    nf = diag(ref, "noise_floor_per_skin")
+    bn = diag(ref, "beats_noise")
+    cand = diag(ref, "anchor_candidates")
     for skin in FOUNDER_SKINS + TWINS:
-        w("| %s | %s (z=%s) | %s | %s | %s |"
+        cs = cand.get(skin) or []
+        cdesc = "; ".join("%s %s pivot=%s bounds=%s"
+                          % (c.get("component"), c.get("class"), c.get("pivot_z"), c.get("bounds_z"))
+                          for c in cs[:3]) if cs else "none reported"
+        w("| %s | %s | %s | %s | %s | %s | %s |"
           % (skin, how.get(skin, "not reported"), fmt(az.get(skin)), fmt(pk.get(skin)),
-             fmt(nf.get(skin)), "yes" if bn.get(skin) else "**NO -- unresolved, not absent**"))
+             fmt(nf.get(skin)), "yes" if bn.get(skin) else "**NO -- unresolved, not absent**", cdesc))
     w("")
 
     # ---------------------------------------------------------------- the founder's ten, at the shipped pair
@@ -210,10 +238,51 @@ def main():
         w("_The knee run did not complete: %s_" % (notes.get("KNEE") or "missing"))
     else:
         s = kd.get("summary") or {}
-        w("Knees swept: %s, with the shipped 700 as the control." % fmt(s.get("knees_swept")))
+        # DERIVED HERE, FROM THE RAW ROWS, rather than taken from whichever build of the gate happened to run.
+        # zzM4's own M09 detail says "engaged at 64" for seven of eight skins, because the gate that ran asked
+        # whether luma moved by 0.005 while the data wobbles by up to 0.05. The rows themselves are intact, so
+        # the verdict is recomputed and the artefact does not inherit a gate's error.
+        kdet = detail_of(kd, "M09")
+        ladder = kdet.get("knee_ladder") or kdet.get("knees_swept") or []
+        rows = kd.get("knee_axis") or []
+        if not ladder:
+            ladder = sorted({r.get("knee") for r in rows if r.get("knee") is not None}, reverse=True)
+        wob, eng, spr, byknee = {}, {}, {}, {}
+        for skin in FOUNDER_SKINS + TWINS:
+            seq = [next((r.get("frame_luma") for r in rows
+                         if r.get("skin") == skin and r.get("knee") == k), None) for k in ladder]
+            byknee[skin] = seq
+            got = [v for v in seq if v is not None]
+            spr[skin] = round(max(got) - min(got), 5) if got else None
+            ups = [seq[i] - seq[i - 1] for i in range(1, len(seq))
+                   if seq[i] is not None and seq[i - 1] is not None and seq[i] > seq[i - 1]]
+            wob[skin] = round(max(ups), 5) if ups else 0.0
+            ctrl = seq[0] if seq else None
+            floor = max(3.0 * wob[skin], 0.01)
+            if ctrl is None:
+                continue
+            for i in range(1, len(seq)):
+                if seq[i] is None:
+                    continue
+                if (ctrl - seq[i]) > floor and all((ctrl - x) > floor for x in seq[i:] if x is not None):
+                    eng[skin] = ladder[i]
+                    break
+        w("Knees swept: %s, with the shipped 700 as the control." % fmt(ladder))
         w("")
-        w("* frame luma spread across all knees: **%s**" % fmt(s.get("knee_spread")))
-        w("* highest knee that changes the picture at all: **%s**" % fmt(s.get("knee_engages_at")))
+        w("A knee counts as engaged only where it DARKENS the frame past three times that skin's own largest")
+        w("upward step, and does not reverse below. A compression knee cannot brighten a frame, so every rise")
+        w("as the knee falls is noise the run measured on itself -- which is where the floor comes from rather")
+        w("than from a number anyone picked.")
+        w("")
+        w("| skin | spread | own noise | engaged at | frame luma by knee %s |" % (fmt(ladder) if ladder else ""))
+        w("|---|---|---|---|---|")
+        for skin in FOUNDER_SKINS + TWINS:
+            seq = byknee.get(skin) or []
+            w("| %s | %s | %s | %s | %s |"
+              % (skin, fmt(spr.get(skin)), fmt(wob.get(skin)),
+                 ("**%s**" % eng[skin]) if eng.get(skin) else "inert",
+                 " ".join(("%.4f" % v) if v is not None else "--" for v in seq)))
+        w("")
         w("")
         w("WonderlandTameGlow compresses only ABOVE the knee. After the GLOW_SCALE 4000 -> 6 re-baseline the")
         w("brightest body glow on any skin is 13.2, so a knee anywhere near the Companion's 220 -- or the")
