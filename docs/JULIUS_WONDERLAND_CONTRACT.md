@@ -57,13 +57,21 @@ argument and refuses before it reads anything.
 
 **Nothing mounts `JuliusRuntimeApi`.** No bridge route and no CLI action reaches
 it; the only callers today are its own tests. So the contract exists, is proven
-against a real mission (`julius-slot-view.e2e.test.ts`), and is not yet
-reachable over a transport. Mounting it is the remaining step and it is
-deliberately not taken in this change, because it is an authenticated surface
-decision: the bridge already distinguishes an operator `Bearer` credential from a
-browser `Relay-Session`, and which of the two may read a mission's slots — and
-whether a browser session may see `providerId` at all — is a product decision
-rather than a refactor.
+against a real mission (`julius-slot-view.e2e.test.ts`), and is not yet reachable
+over a transport.
+
+**AND THE REASON IS NOT THE CREDENTIAL QUESTION**, which is what this document
+first said. `relay-bridge/server.ts` has **no database**: no pool, no
+`DATABASE_URL`, no import of `pg`. The only process holding durable Julius state
+is the mission job (`julius-live-mission.cjs`). So mounting means giving the
+long-lived HTTP server a PostgreSQL connection — a deployment decision with its
+own failure mode, its own configuration and its own refusal path when unset —
+rather than a route to add beside the others.
+
+The credential question is real and comes AFTER it: the bridge already
+distinguishes an operator `Bearer` from a browser `Relay-Session`, and which may
+read a mission's slots, and whether a browser session may see `providerId` at all,
+is a product decision. But a session cannot read what the process cannot reach.
 
 Two further gaps, both recorded rather than worked around:
 

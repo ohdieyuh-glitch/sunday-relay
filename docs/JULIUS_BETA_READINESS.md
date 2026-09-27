@@ -41,12 +41,12 @@ not need money were built instead.
 | 8 | Repair / recovery | 7 | **85%** | ADVERSARIALLY VERIFIED | Repair lineage, effective-verification semantics, a crash injected at every transaction boundary, nothing executed twice across a restart, an honest park when a repair round is refused. | The two persistence gates **cannot run on Windows at all**, and now say so in one line instead of failing seven steps that look like recovery defects: they spawn the repository's fake provider executables, which are Node scripts made executable by a POSIX shebang, and `CreateProcess` honours neither. Both exit non-zero rather than reporting a vacuous pass. Their last recorded green is CI. The three Julius drills (`julius:recovery-drill`, `julius:failure-recovery-drill`, `julius:repair-loop-drill`) were not run in this session. |
 | 9 | Learning Loop | 5 | **62%** | UNIT/INTEGRATION TESTED | A measurement and a promotion gate, not a learner. A matched pair driven through the REAL run loop: the mission without the learning takes a repair round because the real context compiler could not carry a fact nobody stored. The gate refuses on regression, on no effect, on an unmatched pair, on an unmeasured dimension and on a policy that could not refuse anything. The cost and token dimensions are now genuinely measurable rather than permanently UNMEASURABLE, and the refusal case gained the counterpart that makes it non-vacuous: on a priced pair the dimensions are measured and mission A’s repair round is provably more expensive. No irrelevant task context leaks into the improved mission. | The worker's knowledge-dependence is the fixture's PREMISE and is stated as one; a real model's version of it is noisier. Nothing in the runtime calls the loop — it is an evaluation surface read after a mission. No paid matched pair exists. |
 | 10 | Provider conformance | 8 | **55%** | LIVE PROVIDER VERIFIED (one leg) | The registry now carries a qualification per occupant, keyed to the **served model**, with 22 structural cases including the anti-generalisation rule as a function. Requested and served are separate fields everywhere. | **Two of the three legs cannot be pinned to a model.** Paid run 34414726976 ran a real architect and a real coder and its bundle names the served model of the reviewer only, because `worker-diagnostics.tsv` held zero rows on the success path. One leg is VERIFIED: `hermes_local` at `grok-build-0.1`. |
-| 11 | Failure handling | 7 | **82%** | ADVERSARIALLY VERIFIED | Five provider failure codes, a malformed result, a timeout, budget pressure, a reviewer rejection, a repair cycle, a restart, an unresolved evidence reference — and now a **context-authority conflict that fails the task closed instead of aborting the tick**, with both conflicting claim ids on the ledger row. | A provider refusal is modelled only as `AUTH_CONFIGURATION` — the provider declining to serve the CALLER (`julius-continuous-lifecycle.e2e`, proof 34). A model declining to answer a specific request on CONTENT grounds has no class of its own: it would arrive as `WORKER_EXECUTION_FAILURE` or as a malformed result, so a mission cannot tell “your credential is wrong” from “I will not do this” — and the first is retryable by configuration while the second is not retryable at all. The full tool-failure path needs the executor's Docker sandbox and was not exercised here. |
+| 11 | Failure handling | 7 | **85%** | ADVERSARIALLY VERIFIED | Five provider failure codes, a malformed result, a timeout, budget pressure, a reviewer rejection, a repair cycle, a restart, an unresolved evidence reference — and now a **context-authority conflict that fails the task closed instead of aborting the tick**, with both conflicting claim ids on the ledger row. A failed attempt that BILLED now carries its spend on the row the evals read, so a mission that spent and then failed no longer reports a total biased low. | A provider refusal is modelled only as `AUTH_CONFIGURATION` — the provider declining to serve the CALLER (`julius-continuous-lifecycle.e2e`, proof 34). A model declining to answer a specific request on CONTENT grounds has no class of its own: it would arrive as `WORKER_EXECUTION_FAILURE` or as a malformed result, so a mission cannot tell “your credential is wrong” from “I will not do this” — and the first is retryable by configuration while the second is not retryable at all. The full tool-failure path needs the executor's Docker sandbox and was not exercised here. |
 | 12 | Wonderland integration contract | 4 | **60%** | UNIT/INTEGRATION TESTED | `inspectSlots` projects the three peers from the durable ledger: state, provider identity, requested vs served model, a cost FLOOR with `costComplete` beside it, last failure class, findings raised. 11 e2e cases drive it from a real mission. `docs/JULIUS_WONDERLAND_CONTRACT.md` states the four rules a client must implement. | **Nothing mounts the API.** The contract is proven and unreachable over a transport; which credential may read a slot is a product decision, not a refactor. |
 | 13 | Performance / reliability | 5 | **55%** | UNIT/INTEGRATION TESTED | Bounded graphs, a large-graph case, a 5,000-row read ceiling, per-role context budgets, derived lease and deadline windows. | No load evidence, no multi-mission concurrency evidence, and no green full suite on this platform (see below). |
 | 14 | Final release qualification | 6 | **30%** | LIVE PROVIDER VERIFIED | One paid mission has completed end to end with no founder rescue: 34414726976, with four gaps it recorded itself. | The representative final beta mission of this run was **not dispatched**: no provider credential exists in this environment and spending one is a founder act. Three of the four gaps that run named are closed; the reviewer-catching one is closed only zero-spend. |
 
-### JULIUS BETA READINESS: 75%
+### JULIUS BETA READINESS: 76%
 
 `Σ(weight × complete) / 100`, weights summing to 100.
 
@@ -137,19 +137,30 @@ In order, and each is runnable by an engineering session except where marked:
 1. **Land PR #286** (founder-gated: it is frozen for review). It closes the
    artifact exchange, which is the single dependency shared by rows 1, 4 and 6.
    Worth roughly +5 points.
-2. **A claim store.** One table and one port: claims per entry with their
-   provenance, standing, evidence refs, `supersedes` and `contradicts`. It makes
-   the context layer's lineage resolution and fail-closed path reachable in
-   production instead of only through a seam, and it is what the Learning Loop's
-   promotion writes to. Rows 4, 5 and 9. Roughly +6.
+2. **A claim store** — and the estimate below is CORRECTED DOWNWARD from the
+   +6 this document first carried. One table and one port would make standing
+   durable per entry and give the Learning Loop's promotion somewhere to land.
+   It would NOT, on its own, make lineage appear: `supersedes` and `contradicts`
+   need somebody to ASSERT them, and nothing in the runtime detects that two
+   brain entries contradict — that is a semantic judgement, and the realistic
+   asserter is a reviewer. So the fail-closed path stays reachable only through
+   its seam until an asserter exists, and the marginal gain over the derivation
+   already in place (standing from `entry_kind` plus `evidence_ids`) is promotion
+   HISTORY and explicit supersession. Rows 4, 5 and 9. **Roughly +2.5, not +6.**
 3. **One paid run whose bundle records every served model.** The diagnostics that
    carry it are already populated on the success path; what is missing is that the
    evidence dump selects on `diag_transport IS NOT NULL`. Fixing the selection is
    small; the run costs money and is a founder act. It converts two COMPATIBLE
    legs to VERIFIED — row 10, roughly +3.5 — and closes row 3's challenge
    disposition if the mission is chosen to exercise it.
-4. **Mount `JuliusRuntimeApi`** behind the operator credential, with the slot
-   view as its first route. Row 12, roughly +1.5.
+4. **Mount `JuliusRuntimeApi`** — and the reason it is not mounted is NOT the
+   credential question this document first gave. `relay-bridge/server.ts` has no
+   database at all: no pool, no `DATABASE_URL`, no import of `pg`. The only
+   process that holds durable Julius state is the mission job
+   (`julius-live-mission.cjs`). Mounting the API therefore means giving the
+   long-lived HTTP server a PostgreSQL connection, which is a deployment decision
+   with its own failure mode rather than a route to add. Row 12, roughly +1.5, and
+   **founder-gated like the other three.**
 5. **Run the persistence gates and the three Julius drills on POSIX** (they are
    unrunnable on the Windows machine this session used, for a reason now printed
    rather than discovered) and commit the output. Row 8, roughly +1.
@@ -157,8 +168,17 @@ In order, and each is runnable by an engineering session except where marked:
    model that declines a specific request is indistinguishable from a bad
    credential, and one of those is worth retrying. Row 11, roughly +0.5.
 
-That is ≈ 91–92%. The remaining distance to 95% is row 13: a multi-mission
-concurrency proof and one load measurement.
+That is ≈ 88%, not the 91-92% this document first claimed — the correction is
+the claim store's lower marginal value, and it is recorded rather than quietly
+re-totalled. The remaining distance to 95% is row 13 (a multi-mission concurrency
+proof and one load measurement) plus the second paid run that converts two
+COMPATIBLE provider legs to VERIFIED.
+
+**THREE OF THE SIX ITEMS ARE FOUNDER-GATED**, which is the single most useful
+sentence on this page: PR #286 is frozen for review, the paid run costs money, and
+mounting the runtime API needs a database-connected bridge. An engineering session
+can do the claim store, the POSIX gate run and the content-refusal class, and
+those three together are worth about +4.
 
 ## The fastest path to 100%, and what 100% would have to mean
 
