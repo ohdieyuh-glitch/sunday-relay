@@ -50,7 +50,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 0 |
 | live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 22 | 4 |
 | live composition (relay-bridge/julius/) | other | 5 | 3 |
-| live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 12 | 2 |
+| live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 13 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 2 | 0 |
 | other | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 2 | 2 |
 | persistence (src/relay/persistence/) | kernel (src/relay/mission/julius/) | 20 | 14 |
