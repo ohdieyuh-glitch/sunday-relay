@@ -10,6 +10,7 @@ import {
   WONDERLAND_TASK_SOURCES,
   WONDERLAND_TASK_STATES,
   projectJuliusTaskState,
+  refuseJuliusState,
 } from './wonderland-julius-task-state';
 
 const RUNNING = ['Preparation', 'Research', 'Implementation', 'Verification', 'Review', 'Repair'] as const;
@@ -44,20 +45,34 @@ describe('Julius run state -> Mission Contract task state', () => {
     }
   });
 
-  it('refuses exactly the three states the founder\'s list cannot show', () => {
-    expect([...JULIUS_STATES_WITHOUT_A_TASK_STATE].sort()).toEqual(['BLOCKED', 'CANCELLED', 'WAITING']);
+  it('gives every Julius state an honest member now -- nothing is refused', () => {
+    expect([...JULIUS_STATES_WITHOUT_A_TASK_STATE]).toEqual([]);
   });
 
-  it('never converts a refusal into the nearest wrong member', () => {
-    for (const juliusState of ['BLOCKED', 'WAITING', 'CANCELLED'] as const) {
+  it('maps BLOCKED, WAITING and CANCELLED one-for-one (founder decision 2026-09-27)', () => {
+    expect(JULIUS_TO_WONDERLAND_TASK_STATE.BLOCKED).toEqual({ kind: 'state', state: 'Blocked' });
+    expect(JULIUS_TO_WONDERLAND_TASK_STATE.WAITING).toEqual({ kind: 'state', state: 'Waiting' });
+    expect(JULIUS_TO_WONDERLAND_TASK_STATE.CANCELLED).toEqual({ kind: 'state', state: 'Cancelled' });
+  });
+
+  it('BLOCKED is not PAUSED, WAITING is not running, CANCELLED is not FAILED -- the founder\'s three rules', () => {
+    const shown = (juliusState: 'BLOCKED' | 'WAITING' | 'CANCELLED') => {
       const projection = JULIUS_TO_WONDERLAND_TASK_STATE[juliusState];
-      expect(projection.kind, `${juliusState} must not render as a task state`).toBe('unrepresentable');
-      if (projection.kind === 'unrepresentable') {
-        // It carries Julius's own word, so a caller can say what is true.
-        expect(projection.juliusState).toBe(juliusState);
-        expect(projection.reason.length).toBeGreaterThan(20);
-      }
-    }
+      return projection.kind === 'state' ? projection.state : null;
+    };
+    expect(shown('BLOCKED')).not.toBe('Paused');
+    expect(RUNNING as readonly string[]).not.toContain(shown('WAITING'));
+    expect(shown('WAITING')).not.toBe('Paused');
+    expect(shown('CANCELLED')).not.toBe('Failed');
+    // None of the three is quietly turned into "not started yet" either.
+    for (const juliusState of ['BLOCKED', 'WAITING', 'CANCELLED'] as const) expect(shown(juliusState)).not.toBe('Queued');
+  });
+
+  it('keeps the refusal mechanism working for the NEXT homeless Julius state', () => {
+    // Unused by today's map, so exercised here: a kept mechanism nobody runs is a
+    // mechanism nobody knows still works.
+    const refusal = refuseJuliusState('BLOCKED', 'a reason long enough to be a reason');
+    expect(refusal).toEqual({ kind: 'unrepresentable', juliusState: 'BLOCKED', reason: 'a reason long enough to be a reason' });
   });
 
   it('shows a created or READY mission as Queued, never as running (Julius rule 5: dispatched:false)', () => {
@@ -101,8 +116,9 @@ describe('projectJuliusTaskState: unknown stays unknown', () => {
     expect(projectJuliusTaskState('COMPLETED')).toEqual({ kind: 'state', state: 'Completed' });
   });
 
-  it('passes a refusal through rather than dropping it', () => {
-    expect(projectJuliusTaskState('BLOCKED')?.kind).toBe('unrepresentable');
+  it('projects the three new states by their exact token only', () => {
+    expect(projectJuliusTaskState('BLOCKED')).toEqual({ kind: 'state', state: 'Blocked' });
+    expect(projectJuliusTaskState('blocked')).toBeNull();
   });
 });
 

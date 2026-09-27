@@ -571,6 +571,9 @@ From `WONDERLAND_TASK_STATES`. Nullable: **no**. Zero member: `Draft`.
 | `Completed` | `Completed` |
 | `Failed` | `Failed` |
 | `Paused` | `Paused` |
+| `Blocked` | `Blocked` |
+| `Waiting` | `Waiting` |
+| `Cancelled` | `Cancelled` |
 
 ### `EWonderlandTerminalProvenance`
 

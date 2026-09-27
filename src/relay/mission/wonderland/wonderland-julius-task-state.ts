@@ -3,31 +3,31 @@
  *
  * Two vocabularies describe one mission and nothing connected them. Julius's
  * kernel reports thirteen guarded states (`JULIUS_MISSION_STATES`). The Mission
- * Contract in Unreal renders eleven (`EWonderlandTaskState`, which its header
- * calls "the founder's own list, unchanged"). The seam already maps Julius's
+ * Contract in Unreal renders fourteen (`EWonderlandTaskState`, which its header
+ * calls "the founder's own list"). The seam already maps Julius's
  * states TOTALLY onto the Relay Dog's animation (`wonderland-julius-state.ts`);
  * it never mapped them onto the task a user is actually watching, so a real
  * Julius mission had no truthful way to reach the Mission Contract at all.
  *
- * THE MAP IS TOTAL, AND THREE OF ITS ANSWERS ARE REFUSALS.
+ * THE MAP IS TOTAL, AND EVERY JULIUS STATE NOW HAS AN HONEST MEMBER.
  *
  * `Record<JuliusMissionState, ...>` makes tsc reject a Julius state added
  * upstream until somebody decides what it means here, so a new state cannot
- * fall through to ordinal 0. And three Julius states have no honest member in
- * the founder's list:
+ * fall through to ordinal 0.
  *
- *   BLOCKED    a reviewer or a policy stopped the run. Paused would say someone
- *              chose to stop it and Failed would say it broke. Both are false.
- *   WAITING    the run is waiting on a person -- an approval or a checkpoint.
- *              Paused is a choice, not a wait; Queued means Julius has not
- *              reached the work at all.
- *   CANCELLED  someone stopped it on purpose. Failed says it broke.
+ * Until 2026-09-27 three Julius states had no honest member in the founder's
+ * list and came back as `unrepresentable` rather than the nearest wrong one:
  *
- * Those return `unrepresentable` and carry Julius's own word, so a caller has to
- * render the truth ("JULIUS: BLOCKED") rather than the nearest wrong member.
- * The fix is to add Blocked, Waiting and Cancelled to EWonderlandTaskState, and
- * that is the founder's decision because the list is theirs. Until then the gap
- * is visible instead of papered over -- which is the whole point of the seam.
+ *   BLOCKED    a reviewer or a policy stopped the run. NOT Paused -- nobody
+ *              chose to stop it -- and NOT Failed.
+ *   WAITING    the run is waiting on a person. NOT running, and NOT Paused,
+ *              which is a choice rather than a wait.
+ *   CANCELLED  someone stopped it on purpose. NOT Failed.
+ *
+ * The founder added Blocked, Waiting and Cancelled to EWonderlandTaskState, so
+ * each now maps one-for-one. The `unrepresentable` variant stays: it is how the
+ * NEXT Julius state without a home is handled honestly, and the total Record
+ * forces that decision to be made rather than defaulted.
  *
  * READY IS QUEUED, NEVER RUNNING. Julius's fifth client rule: a mission created
  * over the bridge answers `dispatched: false` in READY, and that means nobody is
@@ -61,6 +61,10 @@ export const WONDERLAND_TASK_STATES = [
   'Completed',
   'Failed',
   'Paused',
+  // Appended by founder decision 2026-09-27, so every earlier ordinal holds.
+  'Blocked',
+  'Waiting',
+  'Cancelled',
 ] as const;
 
 export type WonderlandTaskState = (typeof WONDERLAND_TASK_STATES)[number];
@@ -101,19 +105,15 @@ export const JULIUS_TO_WONDERLAND_TASK_STATE: Readonly<
   PAUSED: state('Paused'),
   FAILED: state('Failed'),
   COMPLETED: state('Completed'),
-  BLOCKED: refuse(
-    'BLOCKED',
-    'EWonderlandTaskState has no Blocked member. Paused would say someone chose to stop the run and Failed would say it broke; a blocked run did neither.',
-  ),
-  WAITING: refuse(
-    'WAITING',
-    'EWonderlandTaskState has no Waiting member. The run is waiting on a person; Paused is a choice and Queued means Julius has not reached the work.',
-  ),
-  CANCELLED: refuse(
-    'CANCELLED',
-    'EWonderlandTaskState has no Cancelled member. A cancelled run was stopped on purpose; Failed would say it broke.',
-  ),
+  BLOCKED: state('Blocked'),
+  WAITING: state('Waiting'),
+  CANCELLED: state('Cancelled'),
 });
+
+// Kept, deliberately unused today: the next Julius state that arrives without a
+// home in the task list must be answered with this, and the total Record above
+// forces somebody to make that choice rather than default it.
+export const refuseJuliusState = refuse;
 
 const JULIUS_STATE_SET: ReadonlySet<string> = new Set<string>(JULIUS_MISSION_STATES);
 
