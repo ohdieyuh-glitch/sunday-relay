@@ -829,7 +829,8 @@ def job():
            note="body glow spans 3.3-13.2 after the 4000->6 re-baseline, so a knee at the shipped 700 "
                 "compresses nothing; this says where it starts to bite and whether it helps")
 
-    RESULT["summary"] = {"eye_isolation_at_18": reach, "over_face_at_18": contrast,
+    RESULT["summary"] = {"eye_isolation_at_shipped_day": reach, "over_face_at_shipped_day": contrast,
+                         "shipped_day": SHIPPED_DAY, "shipped_night": SHIPPED_NIGHT,
                          "hue_retention": hues, "colour_separation": seps,
                          "knee_spread": spread, "knee_engages_at": engaged,
                          "worst_clipped": worst_clip, "worst_crushed": worst_crush,
