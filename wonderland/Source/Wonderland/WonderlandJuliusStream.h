@@ -117,6 +117,14 @@ public:
 	/** Stop following. The world keeps what it last knew and says the link is stale. */
 	void Stop();
 
+	/**
+	 * DIAGNOSTIC (`wl.Julius.ContractFollow`): point this player's Mission Contract task for a mission at a run
+	 * WITHOUT reading the run -- FollowJuliusRun only, no reset and no report -- so what the task keeps across a run
+	 * change is decided by the task set's OWN rule and can be watched holding or failing on its own. The transport
+	 * never shows a run it has not hydrated; the acceptance uses this to prove the rule it would otherwise mask.
+	 */
+	void ContractFollowOnly(const FString& MissionId, const FString& InRunId);
+
 	/** Replace where identity comes from -- the seam a device-code flow will use. */
 	void SetTokenSource(const TSharedRef<IWonderlandJuliusTokenSource>& InSource) { TokenSource = InSource; }
 
@@ -161,6 +169,15 @@ private:
 	bool Tick(float DeltaSeconds);
 	void Hydrate();
 	void ReadPage();
+	/**
+	 * THE MISSION CONTRACT, TOLD WHAT THE WORLD NOW HOLDS -- through the task set's own mutators and nothing else:
+	 * FollowJuliusRun (a Julius-sourced task, by mission id), ResetJuliusCarriers after a hydration (a snapshot is a
+	 * correction), then ApplySchedulerState with Julius's RAW state beside the mapped one. Tokens and evidence go as
+	 * UNKNOWN: no read route serves tokens, and the world does not hold an evidence total.
+	 */
+	void ShowOnMissionContract(bool bAfterHydration);
+	/** This player's task set, or null before there is a local player. */
+	class UWonderlandMissionTaskSubsystem* MissionTasks() const;
 	void Failed(int32 HttpStatus, bool bConnected, const TCHAR* During);
 	void SetLink(EWonderlandLinkState State, const FString& Explanation);
 	UWonderlandJuliusSubsystem* World() const;
@@ -178,6 +195,8 @@ private:
 	bool bInFlight = false;
 	int64 PagesRead = 0;
 	int64 EnvelopesOffered = 0;
+	/** Why the followed run is, or is not, on the Mission Contract -- for Describe(), never a failure of the follow. */
+	FString ContractNote = TEXT("not yet shown");
 	FTSTicker::FDelegateHandle Ticker;
 	TArray<FHttpRequestPtr> InFlight;
 };

@@ -39,7 +39,7 @@ DEAD_BRIDGE = "http://127.0.0.1:1"
 PAIRING_ATTEMPTS = 3
 # Every clause this job declares. A job stopped part-way -- an exception, the editor closing it -- has recorded only
 # passes so far; without this list its status would read "all clauses pass" over clauses that never ran.
-DECLARED = ["A01", "A02", "A03", "A04", "A05", "A06", "A07", "A08", "A09", "A10", "A11"]
+DECLARED = ["A01", "A02", "A03", "A04", "A05", "A06", "A06b", "A06c", "A06d", "A07", "A08", "A09", "A10", "A10b", "A11"]
 
 
 def job():
@@ -91,6 +91,49 @@ def job():
             found = [x for x in unreal.ObjectIterator(cls) if x.get_outer() == game]
             return found[0] if found else None
         return owned(unreal.WonderlandJuliusStreamSubsystem), owned(unreal.WonderlandJuliusSubsystem)
+
+    def text(carrier):
+        # An FWonderlandText as (known, value): unknown must stay distinguishable from empty.
+        return bool(carrier.get_editor_property("bKnown")), carrier.get_editor_property("Value")
+
+    def contract_view(world, mission):
+        """WHAT THE MISSION CONTRACT HOLDS for this mission -- the player's task set, read the way its surface reads
+        it. QUEUED ALONE PROVES NOTHING HERE: FollowJuliusRun creates a task in Queued before Julius has said anything
+        (Wonderland Core, 2026-09-27), so the clause keys on Julius's own state being KNOWN on the task."""
+        tasks = unreal.WonderlandUiTestLibrary.get_mission_tasks(world)
+        rows = [t for t in (tasks.get_task_list() if tasks else []) if t.get_editor_property("ContractId") == mission]
+        view = {"tasks_for_mission": len(rows)}
+        if rows:
+            row = rows[0]
+            view.update({
+                "source": getattr(row.get_editor_property("Source"), "name", str(row.get_editor_property("Source"))),
+                "state": getattr(row.get_editor_property("State"), "name", str(row.get_editor_property("State"))),
+                "run": text(row.get_editor_property("RunId")),
+                "julius_state": text(row.get_editor_property("JuliusState")),
+            })
+        return view
+
+    def shows_the_run(view, run):
+        return (view["tasks_for_mission"] == 1 and view.get("source") == "JULIUS" and view.get("state") == "QUEUED"
+                and view.get("run") == (True, run) and view.get("julius_state") == (True, "READY"))
+
+    def capture_missions(world, name):
+        # The Mission Contract VISIBLY, not only its data: open the Missions view, capture, and put it back as found.
+        # WAITED ON STATE AND FRAMES, NOT SECONDS: the first half-minute of play runs at up to ~500 ms a frame (Core's
+        # warm-up curve, 2026-09-27: 521, 123, 64, 48, 57 ms), so a fixed sleep would budget against the slowest part
+        # of the session and could photograph the view before it has drawn.
+        ui = unreal.WonderlandUiTestLibrary.get_ui(world)
+        was_open = ui.is_missions_open()
+        if not was_open:
+            ui.toggle_missions()
+        shown = yield from wait(lambda: ui.is_missions_open(), 10)
+        first = unreal.SystemLibrary.get_frame_count()
+        drawn = yield from wait(lambda: unreal.SystemLibrary.get_frame_count() >= first + 6, 30)
+        H.capture_viewport_jpeg(os.path.join(ROOT, name), 1900, 94)
+        RESULT.setdefault("captures", {})[name] = {"missions_open": bool(shown), "frames_drawn": bool(drawn)}
+        if not was_open:
+            ui.toggle_missions()
+            yield from wait(lambda: not ui.is_missions_open(), 10)
 
     def start_play():
         if not (yield from wait(lambda: ues.get_game_world() is None, 600)):
@@ -154,6 +197,7 @@ def job():
         # keeps earlier results and an earlier PASS must never be read as this run's.
         RESULT["acceptance_nonce"] = params.get("nonce")
         bridge, project, run, mission = params["bridge"], params["projectId"], params["runId"], params["missionId"]
+        switch_run = params.get("switchRunId") or ""
 
         # ------------------------------------------------------------------ first play
         if not (yield from start_play()):
@@ -188,7 +232,44 @@ def job():
         record("A06", "the link says Live, and nothing claims the run ended",
                link_state(julius) == LIVE and not terminal(julius),
                link=link_name(link_state(julius)), terminal=terminal(julius))
+        view = contract_view(world, mission)
+        record("A06b", "the MISSION CONTRACT holds the run: one Julius-sourced task for the mission, the same run id, "
+               "Julius's own READY known on it, shown QUEUED",
+               shows_the_run(view, run), contract=view, on_contract=stream.describe().split("on-contract=")[-1].split(" |")[0])
         H.capture_viewport_jpeg(os.path.join(ROOT, "01_following_the_real_run.jpg"), 1900, 94)
+        yield from capture_missions(world, "01b_mission_contract_queued.jpg")
+
+        # ------------------------------------------------------------- switch runs
+        # Wonderland Core, 2026-09-27: the automatic clear on a run CHANGE had no gate. Two halves, because the
+        # transport's own path would MASK a broken clear -- it resets the task's Julius carriers on every hydration:
+        #   A06c  END TO END: follow a second run of the same mission -> still ONE task, now carrying the NEW run and
+        #         Julius's READY for it.
+        #   A06d  THE RULE ITSELF: wl.Julius.ContractFollow calls FollowJuliusRun alone (no reset, no report). The same
+        #         run keeps what it knew -- the CONTROL, so "always clears" fails too -- and a different run forgets it.
+        console(world, "wl.Julius.Follow %s %s" % (project, switch_run))
+        switched = yield from wait(lambda: stream.get_adopted_run_id() == switch_run, 60)
+        yield 2.0
+        view = contract_view(world, mission)
+        record("A06c", "a run SWITCH shows on the Mission Contract: still ONE task for the mission, now carrying the "
+               "new run and Julius's READY for it",
+               bool(switch_run) and switched and shows_the_run(view, switch_run),
+               adopted=stream.get_adopted_run_id(), switch_run=switch_run, contract=view)
+        console(world, "wl.Julius.ContractFollow %s %s" % (mission, switch_run))
+        yield 0.5
+        same = contract_view(world, mission)
+        console(world, "wl.Julius.ContractFollow %s %s" % (mission, run))
+        yield 0.5
+        other = contract_view(world, mission)
+        record("A06d", "the task set's OWN rule on a run change, without the transport's reset: re-following the same "
+               "run keeps Julius's READY (control); a different run forgets it and carries only the new run id",
+               same.get("run") == (True, switch_run) and same.get("julius_state") == (True, "READY")
+               and other["tasks_for_mission"] == 1 and other.get("run") == (True, run)
+               and other.get("julius_state", (None, None))[0] is False,
+               same_run=same, different_run=other)
+        # Back to the first run for the rest of the walk; the transport re-reads it, so the task is whole again.
+        console(world, "wl.Julius.Follow %s %s" % (project, run))
+        yield from wait(lambda: stream.get_adopted_run_id() == run, 60)
+        yield 2.0
 
         # ------------------------------------------------------------- lose the link
         set_url(world, DEAD_BRIDGE)
@@ -237,7 +318,12 @@ def job():
                and stream.get_mission_contract_state() == "QUEUED" and not terminal(julius),
                pairing=attempts, adopted=stream.get_adopted_run_id(), julius_state=stream.get_julius_run_state(),
                contract_state=stream.get_mission_contract_state(), terminal=terminal(julius))
+        view = contract_view(world, mission)
+        record("A10b", "after the restart the Mission Contract shows the SAME run once -- no second task, Julius's READY "
+               "known on it, QUEUED",
+               shows_the_run(view, run), contract=view)
         H.capture_viewport_jpeg(os.path.join(ROOT, "02_recovered_after_restart.jpg"), 1900, 94)
+        yield from capture_missions(world, "02b_mission_contract_after_restart.jpg")
         RESULT["describe_after_restart"] = stream.describe()
     finally:
         # RESTORE THE LINK SETTING WHATEVER HAPPENED -- a failing clause, a TimeoutError, an exception, or the editor

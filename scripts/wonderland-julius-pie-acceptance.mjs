@@ -97,7 +97,10 @@ const CONTRACT = {
 };
 // Every clause the editor half declares, its own completeness clause (A12) included. One that never ran is not a pass.
 // Clause ids: A = the editor job's, O = this orchestrator's view of the job, J = Julius's side.
-const JOB_CLAUSES = ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A07', 'A08', 'A09', 'A10', 'A11', 'A12'];
+const JOB_CLAUSES = ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A06b', 'A06c', 'A06d', 'A07', 'A08', 'A09', 'A10', 'A10b', 'A11', 'A12'];
+// The key for the SECOND run the job switches to. Fixed, so every attempt resolves to the same run and no attempt
+// makes a new one (Julius 52df8e63: one key is one rerun).
+const SWITCH_RERUN_KEY = 'pie-acceptance-switch-v1';
 
 const env = {};
 for (const [k, v] of Object.entries(process.env)) {
@@ -218,6 +221,19 @@ try {
   if (created.status !== 201 || !runId) throw new Error(`could not create the run: ${created.status} ${created.text}`);
   say(`run ${runId} -- ${created.json.data.state}, dispatched ${created.json.data.dispatched}`);
 
+  // A SECOND RUN OF THE SAME MISSION, so the job can prove a run SWITCH on the Mission Contract (Wonderland Core:
+  // the automatic clear on a run change had no gate). An explicit rerun of the UNCHANGED contract with a FIXED key:
+  // the same key returns the same run every attempt (Julius 52df8e63), and creation never dispatches it.
+  const switched = await call('POST', '/relay-api/julius/missions', {
+    headers: { ...operator, 'x-relay-julius-rerun': 'explicit', 'x-relay-julius-rerun-key': SWITCH_RERUN_KEY },
+    body: JSON.stringify(CONTRACT),
+  });
+  const switchRunId = switched.json?.data?.runId;
+  if (switched.status !== 201 || !switchRunId || switchRunId === runId) {
+    throw new Error(`could not create the second run to switch to: ${switched.status} ${switched.text}`);
+  }
+  say(`switch run ${switchRunId} -- ${switched.json.data.state}, dispatched ${switched.json.data.dispatched}`);
+
   playerToken = await signIn();
   const members = new pg.Pool({ connectionString: DB });
   try {
@@ -231,7 +247,7 @@ try {
   say(`player ${PLAYER} signed in and a member of ${CONTRACT.projectId}`);
 
   writeFileSync(join(HANDSHAKE, 'params.json'), JSON.stringify({
-    bridge: BASE, projectId: CONTRACT.projectId, runId, missionId: CONTRACT.missionId, nonce: NONCE,
+    bridge: BASE, projectId: CONTRACT.projectId, runId, switchRunId, missionId: CONTRACT.missionId, nonce: NONCE,
   }, null, 1));
 
   if (!DROP) {
@@ -290,6 +306,14 @@ try {
   clause('J03', 'an identical resubmission is the SAME run, still undispatched -- no duplicate execution',
     summary.julius.resubmission.runId === runId && summary.julius.resubmission.dispatched === false,
     summary.julius.resubmission);
+  // The run the job SWITCHED to is held to the same standard: following it did not drive it either.
+  const switchRun = await call('GET', `/relay-api/julius/runs/${switchRunId}/run`, { headers: scoped });
+  const switchSlots = await call('GET', `/relay-api/julius/runs/${switchRunId}/slots`, { headers: scoped });
+  const switchSlotList = Array.isArray(switchSlots.json?.data) ? switchSlots.json.data : null;
+  clause('J04', 'the run the world switched to is still READY and was never dispatched either',
+    switchRun.json?.data?.state === 'READY' && switchSlotList !== null && switchSlotList.length === 3
+      && switchSlotList.every((s) => s.state === 'NEVER_DISPATCHED'),
+    { switchRunId, state: switchRun.json?.data?.state ?? null, slots: switchSlotList?.map((s) => `${s.role}:${s.state}`) ?? null });
   say(`julius after: ${summary.julius.stateAfter}; slots ${JSON.stringify(summary.julius.slotsAfter)}; ` +
     `resubmission ${summary.julius.resubmission.runId === runId ? 'the same run' : 'NOT the same run'}`);
 } catch (err) {

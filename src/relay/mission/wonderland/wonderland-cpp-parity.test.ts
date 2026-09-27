@@ -156,6 +156,12 @@ const CPP_ONLY_STRUCTS: Readonly<Record<string, string>> = {
     'one territory as WorldDesign/CANON states it, copied from the canon files plus a checkpoint position. World-authoring canon, the same category as EWonderlandTravelKind.',
   FWonderlandWornPose:
     'the canonical pose as a costume can wear it, so a skin follows the Dog gait. Animation state, transient and never authored.',
+  FWonderlandTally:
+    'carries a count that may be unknown OR partial: bKnown false is "nobody reported", bComplete false is "at least Value, still climbing". Julius states the same thing on its own wire as a number beside a completeness flag (knownUsdMicros + costComplete); Unreal numerics cannot be null, so absence and partiality each need a flag, in one carrier so they are never read apart.',
+  FWonderlandAcceptanceCriterion:
+    "one row of the Mission Contract's criteria in the engine: the same three things the contract file's acceptanceCriteria carry ({id, text, blocking}), which reach Julius through its creation route. It is never itself a wire document -- no player route sends it yet -- and it holds no met/unmet verdict, because Julius decides verification per task, not per criterion.",
+  FWonderlandMissionTask:
+    "the Mission Contract's engine-side task row, per local player: built from the local scheduler and, for a followed Julius run, by the transport from Julius's hydration and envelopes (FollowJuliusRun, ResetJuliusCarriers, ApplySchedulerState). The documents that cross the seam are the hydration and the envelope; this row is what the engine makes of them.",
 };
 
 /**
@@ -875,6 +881,11 @@ const AUTHORITY_WORDS = /approv|authoriz|decision|granted|allow|permit|consent|c
 const RELAY_OWNED_AUTHORITY_FIELDS: readonly { readonly field: string; readonly reason: string }[] = [
   { field: 'verdict', reason: "the Reviewer's verdict, which Relay owns and Wonderland only displays" },
   { field: 'authority', reason: 'the constant `relay_decides` — it says who decides, which is the opposite of claiming to' },
+  {
+    field: 'acceptanceCriteria',
+    reason:
+      "the criteria a Mission Contract STATES -- {id, text, blocking}, the contract file's own field, sent to Julius as what must be true. A list of requirements, never a statement that anything was accepted: Julius decides verification per task, and no field on either side records a criterion as met",
+  },
   {
     field: 'pendingApprovals',
     reason:

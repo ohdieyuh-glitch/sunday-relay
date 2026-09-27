@@ -15,8 +15,10 @@
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
 #include "UObject/UObjectIterator.h"
+#include "Engine/LocalPlayer.h"
 #include "WonderlandJuliusSubsystem.h"
 #include "WonderlandJuliusTaskState.h"
+#include "WonderlandMissionTasks.h"
 #include "WonderlandWireDecode.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandJuliusStream, Log, All);
@@ -402,6 +404,7 @@ void UWonderlandJuliusStreamSubsystem::Hydrate()
 		Failures = 0;
 		Phase = EPhase::Following;
 		NextAttemptAt = 0.0;
+		ShowOnMissionContract(true);
 		SetLink(EWonderlandLinkState::Live, FString::Printf(TEXT("Following %s from durable state."), *RunId));
 	});
 	Request->ProcessRequest();
@@ -469,6 +472,10 @@ void UWonderlandJuliusStreamSubsystem::ReadPage()
 		const bool bAdvanced = Julius->GetResumeAfterSequence() > Cursor;
 		NextAttemptAt = FPlatformTime::Seconds() + (bAdvanced
 			? 0.0 : static_cast<double>(WonderlandJuliusStreamTuning::CVarPollSeconds.GetValueOnGameThread()));
+		if (bAdvanced)
+		{
+			ShowOnMissionContract(false);
+		}
 		(void)NextCursor; // The ledger position is the server's; the WORLD resumes from its own applied cursor.
 		SetLink(EWonderlandLinkState::Live, FString::Printf(TEXT("Following %s."), *RunId));
 	});
@@ -529,6 +536,93 @@ FString UWonderlandJuliusStreamSubsystem::GetMissionContractState() const
 		? FString(WonderlandTaskStateName(TaskState)) : FString();
 }
 
+UWonderlandMissionTaskSubsystem* UWonderlandJuliusStreamSubsystem::MissionTasks() const
+{
+	// A LocalPlayer subsystem: which contracts are open is a property of the PLAYER, not of the game instance.
+	const UGameInstance* Instance = GetGameInstance();
+	ULocalPlayer* Player = Instance != nullptr ? Instance->GetFirstGamePlayer() : nullptr;
+	return Player != nullptr ? Player->GetSubsystem<UWonderlandMissionTaskSubsystem>() : nullptr;
+}
+
+void UWonderlandJuliusStreamSubsystem::ContractFollowOnly(const FString& MissionId, const FString& InRunId)
+{
+	UWonderlandMissionTaskSubsystem* Tasks = MissionTasks();
+	if (Tasks == nullptr)
+	{
+		UE_LOG(LogWonderlandJuliusStream, Warning, TEXT("JULIUS STREAM: contract-follow -- no local player."));
+		return;
+	}
+	FWonderlandText Run;
+	Run.bKnown = !InRunId.IsEmpty();
+	Run.Value = InRunId;
+	const FGuid Shown = Tasks->FollowJuliusRun(MissionId, Run);
+	UE_LOG(LogWonderlandJuliusStream, Log, TEXT("JULIUS STREAM: contract-follow %s -> %s (%s)."),
+		*MissionId, *InRunId, Shown.IsValid() ? TEXT("shown") : TEXT("not shown"));
+}
+
+void UWonderlandJuliusStreamSubsystem::ShowOnMissionContract(bool bAfterHydration)
+{
+	UWonderlandJuliusSubsystem* Julius = World();
+	if (Julius == nullptr || !Julius->HasState())
+	{
+		return;
+	}
+	// No player yet (the first frames of play) means nowhere to show it; the next page or hydration tries again.
+	UWonderlandMissionTaskSubsystem* Tasks = MissionTasks();
+	if (Tasks == nullptr)
+	{
+		ContractNote = TEXT("no local player to show it to yet");
+		return;
+	}
+	// WHICH MISSION: the one Julius says this run belongs to. Without it there is no contract id to show the run
+	// under -- and inventing one (the run id, say) would file it where a later report of the real mission never
+	// finds it.
+	const FWonderlandText& Mission = Julius->GetEmbodiment().MissionId;
+	if (!Mission.bKnown || Mission.Value.IsEmpty())
+	{
+		ContractNote = TEXT("not shown: Julius has not named this run's mission");
+		return;
+	}
+	const FWonderlandText& Run = Julius->GetCursor().RunId;
+	const FGuid Shown = Tasks->FollowJuliusRun(Mission.Value, Run);
+	if (!Shown.IsValid())
+	{
+		// The founder's workspace cap, not a failure to follow: the world still holds the run, and the link is fine.
+		ContractNote = TEXT("could not be shown: the workspace is full");
+		return;
+	}
+	if (bAfterHydration)
+	{
+		// A SNAPSHOT IS A CORRECTION, not a quieter message: what described the previous picture of this run is
+		// forgotten before the snapshot's own facts land -- a run switch always arrives this way, because Follow()
+		// rebinds and hydrates. The mapped state and the run id are left alone by the task set's design, so the
+		// contract never flashes to Draft while the snapshot arrives.
+		Tasks->ResetJuliusCarriers(Mission.Value);
+	}
+	// JULIUS'S OWN WORD travels beside the mapped state, so a state the table does not know is shown verbatim
+	// instead of becoming Draft -- the enum's zero member and its most misleading value.
+	const FString Raw = GetJuliusRunState();
+	FWonderlandText JuliusState;
+	JuliusState.bKnown = !Raw.IsEmpty();
+	JuliusState.Value = Raw;
+	EWonderlandTaskState Mapped = EWonderlandTaskState::Draft;
+	const bool bMapped = !Raw.IsEmpty() && WonderlandJuliusTaskState::TaskStateForJuliusState(Raw, Mapped);
+	if (!bMapped)
+	{
+		// No mapping: keep what the contract already shows and hand over the raw word, rather than guess a phase.
+		const FWonderlandMissionTask* Existing = Tasks->Find(Shown);
+		Mapped = Existing != nullptr ? Existing->State : EWonderlandTaskState::Queued;
+	}
+	// Tokens and evidence go as UNKNOWN, which leaves any existing assertion alone: no read route serves tokens, and
+	// nothing the world reads carries an evidence total.
+	const FWonderlandTally Unknown;
+	const bool bApplied = Tasks->ApplySchedulerState(Mission.Value, Mapped, Unknown, Unknown, Run, JuliusState);
+	ContractNote = bApplied
+		? FString::Printf(TEXT("shown as %s (julius %s)"), *FString(WonderlandTaskStateName(Mapped)),
+			Raw.IsEmpty() ? TEXT("unknown") : *Raw)
+		: FString(TEXT("the task set refused the report"));
+}
+
 FString UWonderlandJuliusStreamSubsystem::Describe() const
 {
 	const UWonderlandJuliusSubsystem* Julius = World();
@@ -551,10 +645,11 @@ FString UWonderlandJuliusStreamSubsystem::Describe() const
 			}
 		}
 	}
-	return FString::Printf(TEXT("JULIUS STREAM: %s | julius=%s | contract=%s | bridge=%s | project=%s | run=%s | paired=%s | cursor=%lld | pages=%lld | offered=%lld | failures=%d | link=%s"),
+	return FString::Printf(TEXT("JULIUS STREAM: %s | julius=%s | contract=%s | on-contract=%s | bridge=%s | project=%s | run=%s | paired=%s | cursor=%lld | pages=%lld | offered=%lld | failures=%d | link=%s"),
 		PhaseName,
 		*JuliusState,
 		*ContractState,
+		*ContractNote,
 		BridgeUrl().IsEmpty() ? TEXT("(unset)") : *BridgeUrl(),
 		ProjectId.IsEmpty() ? TEXT("-") : *ProjectId,
 		RunId.IsEmpty() ? TEXT("-") : *RunId,
@@ -637,5 +732,18 @@ namespace WonderlandJuliusStreamConsole
 		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>&)
 		{
 			ForEachLive([](UWonderlandJuliusStreamSubsystem& Stream) { Say(Stream.Describe()); });
+		}));
+
+	FAutoConsoleCommand CmdContractFollow(TEXT("wl.Julius.ContractFollow"),
+		TEXT("DIAGNOSTIC: point this player's Mission Contract task for a mission at a run WITHOUT reading the run -- "
+			"FollowJuliusRun only, no reset and no report: `wl.Julius.ContractFollow <missionId> <runId>`."),
+		FConsoleCommandWithArgsDelegate::CreateLambda([](const TArray<FString>& Args)
+		{
+			if (Args.Num() < 2)
+			{
+				Say(TEXT("JULIUS STREAM: usage -- wl.Julius.ContractFollow <missionId> <runId>"));
+				return;
+			}
+			ForEachLive([&Args](UWonderlandJuliusStreamSubsystem& Stream) { Stream.ContractFollowOnly(Args[0], Args[1]); });
 		}));
 }
