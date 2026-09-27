@@ -133,8 +133,14 @@ AUTHORED_EYE = {
 SHIPPED = (("wl.Look.GlowKnee", 700.0), ("wl.Look.EyeGlowDay", 24.0), ("wl.Look.EyeGlowNight", 8.0),
            ("wl.Look.FlameDim", 0.40), ("wl.Look.NightGlow", 0.20))
 
-#: The head scan: a (2*SCAN+1) square of small cells centred on the projected head point.
+#: The head scan, centred on the projected head point: SCAN cells either side horizontally, SCAN_V
+#: vertically. It is NOT square any more. At CELL_H 0.009 a +/-3 window reaches about 2.7% of screen height,
+#: and zzM1's anchor was wrong by tens of uu -- far outside that. An eye outside the window cannot be found
+#: however good the anchor becomes, so the vertical reach is doubled and the horizontal left alone, because
+#: vertical is where the uncertainty is. More cells means more upward bias on the max, which is the specific
+#: thing the same-level noise baseline already exists to control for.
 SCAN = 3
+SCAN_V = 6
 CELL_W, CELL_H = 0.011, 0.009
 #: A frame this dark is a camera inside the figure, not a dark world. Six of eight skins returned exactly
 #: 0.0000 for eye AND face on the first real run; the premium skins are 2-3x the box count of relay_og and
@@ -314,45 +320,71 @@ def job():
                 "white": round(min(mean.r, mean.g, mean.b) / max(max(mean.r, mean.g, mean.b), 1e-6), 4)}
 
     def eye_anchor_z(skin):
-        """Height of the eye above the pawn origin, read off the mesh rather than assumed.
+        """Height of the eye above the pawn origin, read off the mesh BOUNDS and sanity-checked.
 
-        Returns (z_above_actor, how). `how` is "mesh" when a component named like an eye was found and
-        "fallback" when the old +62 constant was used -- recorded per skin so a run can never quietly
-        return to guessing.
+        The previous version returned a component world LOCATION -- its pivot -- while its own docstring
+        claimed it used the bounds centre, because the getter loop broke after the first attempt and the
+        bounds branch never once ran. It reported "mesh" and handed back 24.7 for all eight skins, which
+        is one component found eight times on bodies of two different heights (1.74 m canon, 1.55 m
+        costume), and well under the 62 independently known to be right for the Dog. Every face and eye
+        patch in zzM1 was therefore aimed at a torso.
         """
         d = unreal.GameplayStatics.get_player_pawn(live(), 0)
         if d is None:
             return EYE_Z_FALLBACK, "fallback:no-pawn"
         base = d.get_actor_location().z
-        # BOTH COMPONENT KINDS. The default Dog's eye is a StaticMeshComponent (Mesh_head_eye); a worn
-        # costume is built by the embodiment as INSTANCED components, so a search that knows only one kind
-        # finds the Dog and misses all seven costumes -- which is the population that was mismeasured.
-        best = None
-        for cls in (unreal.StaticMeshComponent, unreal.InstancedStaticMeshComponent):
+
+        # THE FIGURE'S OWN SIZE, so the plausibility test below needs no constant -- no single number can
+        # be right for both a 1.74 m Dog and a 1.55 m costume, which is what the old fallback pair was.
+        top = None
+        try:
+            origin, extent = d.get_actor_bounds(False)
+            top = float(origin.z) + float(extent.z) - base
+        except Exception:                                          # noqa: BLE001
+            top = None
+
+        cands = []
+        for cls, cname in ((unreal.StaticMeshComponent, "static"),
+                           (unreal.InstancedStaticMeshComponent, "instanced")):
             try:
                 comps = d.get_components_by_class(cls)
-            except Exception:                                          # noqa: BLE001
+            except Exception:                                      # noqa: BLE001
                 continue
             for comp in comps:
-                nm = str(comp.get_name()).lower()
-                if "eye" not in nm or "halo" in nm:
+                nm = str(comp.get_name())
+                low = nm.lower()
+                if "eye" not in low or "halo" in low:
                     continue
-                for getter in (lambda c: float(c.get_world_location().z),
-                               lambda c: float(c.bounds.origin.z)):
-                    try:
-                        wz = getter(comp)
-                    except Exception:                                  # noqa: BLE001
-                        continue
-                    if wz and (best is None or wz > best):
-                        best = wz
-                    break
-        if best is None:
-            # PER-FIGURE FALLBACK, not one number for everything. The costume figures are authored to
-            # TARGET_METRES 1.55 while the canon Dog stands 1.74, so a costume's eyes sit about forty uu
-            # lower than the Dog's -- measured by the other lane, 2026-09-27. Sharing one z between them is
-            # what had every costume's "eye" patch reading its brow.
-            return (EYE_Z_FALLBACK if skin == "relay_og" else EYE_Z_COSTUME), "fallback:by-figure"
-        return round(best - base, 1), "mesh"
+                # BOTH READINGS, EVERY TIME, AND NEITHER BREAKS THE LOOP. The pivot is kept because it is
+                # what the last run actually used, so the two can be compared in the result rather than
+                # argued about from memory.
+                pivot = bounds = None
+                try:
+                    pivot = round(float(comp.get_world_location().z) - base, 1)
+                except Exception:                                  # noqa: BLE001
+                    pass
+                try:
+                    bounds = round(float(comp.bounds.origin.z) - base, 1)
+                except Exception:                                  # noqa: BLE001
+                    pass
+                cands.append({"component": nm[:40], "class": cname,
+                              "pivot_z": pivot, "bounds_z": bounds})
+        found["anchor_candidates"] = cands
+
+        # BOUNDS, not pivot -- and only a candidate in the upper half of the figure. An eye is in a head.
+        floor = (top * 0.5) if top else 0.0
+        usable = [c["bounds_z"] for c in cands
+                  if c["bounds_z"] is not None and c["bounds_z"] >= floor]
+        if usable:
+            return max(usable), "mesh:bounds"
+        rejected = [c["bounds_z"] for c in cands if c["bounds_z"] is not None]
+        if rejected:
+            # Candidates were found and every one sits below the figure midline. That is a pivot, and
+            # saying so is more use than returning it.
+            return ((EYE_Z_FALLBACK if skin == "relay_og" else EYE_Z_COSTUME),
+                    "fallback:all-candidates-below-midline(%s of %s)"
+                    % (max(rejected), round(top, 1) if top else "?"))
+        return (EYE_Z_FALLBACK if skin == "relay_og" else EYE_Z_COSTUME), "fallback:no-eye-component"
 
     #: WHERE THE EYE IS, FOUND RATHER THAN ASSUMED. Filled per skin by locate_eye().
     found = {"eye": None, "face": None}
@@ -408,7 +440,7 @@ def job():
         yield 1.0
         lo = {}
         for gx in range(-SCAN, SCAN + 1):
-            for gy in range(-SCAN, SCAN + 1):
+            for gy in range(-SCAN_V, SCAN_V + 1):
                 c = scan_cell(here, gx, gy)
                 if c is not None:
                     lo[(gx, gy)] = c["luma"]
@@ -422,7 +454,7 @@ def job():
         yield 2.0
         noise = 0.0
         for gx in range(-SCAN, SCAN + 1):
-            for gy in range(-SCAN, SCAN + 1):
+            for gy in range(-SCAN_V, SCAN_V + 1):
                 c = scan_cell(here, gx, gy)
                 if c is not None and (gx, gy) in lo:
                     noise = max(noise, abs(c["luma"] - lo[(gx, gy)]))
@@ -432,7 +464,7 @@ def job():
         yield 2.0
         best, best_d, deltas = None, 0.0, {}
         for gx in range(-SCAN, SCAN + 1):
-            for gy in range(-SCAN, SCAN + 1):
+            for gy in range(-SCAN_V, SCAN_V + 1):
                 c = scan_cell(here, gx, gy)
                 if c is None or (gx, gy) not in lo:
                     continue
@@ -516,6 +548,7 @@ def job():
             rows.append({"skin": skin, "hour": hlabel, "level": None, "locator": True,
                          "eye_cell": found.get("eye"), "face_cell": found.get("face"),
                          "anchor_z": found.get("anchor_z"), "anchor_how": found.get("anchor_how"),
+                         "anchor_candidates": found.get("anchor_candidates"),
                          "paused": found.get("paused"),
                          "peak_delta": found.get("peak_delta"),
                          "noise_floor": found.get("noise_floor"),
@@ -675,6 +708,8 @@ def job():
                peak_delta_per_skin=loc, black_framed=blackened,
                anchor_z={r["skin"]: r.get("anchor_z") for r in rows if r.get("locator")},
                anchor_how={r["skin"]: r.get("anchor_how") for r in rows if r.get("locator")},
+               anchor_candidates={r["skin"]: r.get("anchor_candidates")
+                                  for r in rows if r.get("locator")},
                paused_ok={r["skin"]: r.get("paused") for r in rows if r.get("locator")},
                noise_floor_per_skin={r["skin"]: r.get("noise_floor") for r in rows if r.get("locator")},
                beats_noise={r["skin"]: r.get("beats_noise") for r in rows if r.get("locator")},
