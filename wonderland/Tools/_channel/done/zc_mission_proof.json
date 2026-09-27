@@ -1,11 +1,1906 @@
 {
  "name": "zc_mission_proof",
- "started": "2026-09-26 19:10:17",
- "status": "error",
- "tests": [],
- "captures": [],
- "error": "Traceback (most recent call last):\n  File \"C:/dev/iwonder/wonderland-task3/wonderland/Tools/editor_channel.py\", line 121, in _step\n    yielded = job[\"gen\"].throw(thrown) if thrown is not None else next(job[\"gen\"])\n              ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\_channel\\inbox\\zc_mission_proof.py\", line 72, in job\nTimeoutError: waited condition timed out\n",
- "finished": "2026-09-26 19:40:17",
- "seconds": 1800.0,
- "log": ""
+ "started": "2026-09-27 03:53:51",
+ "status": "done",
+ "tests": [
+  {
+   "id": "M00",
+   "name": "the mission subsystem holds the founder's seventeen, and says it is a preview",
+   "pass": true,
+   "detail": {
+    "beats": 18,
+    "preview": true,
+    "strip": true
+   }
+  },
+  {
+   "id": "M01",
+   "name": "the orb stands where it was told, on the ground, clear of the Dog",
+   "pass": false,
+   "detail": {
+    "orb": [
+     -170.3770041581126,
+     -345.7584179903501,
+     149.98899857590482
+    ],
+    "pawn": [
+     -445.0935735062919,
+     -584.492363427958,
+     106.92370764801787
+    ],
+    "offset": [
+     340.0,
+     40.0
+    ],
+    "wanted_uu": 342.3,
+    "flat_uu": 364.0,
+    "below_pawn_uu": -43.1,
+    "fallback_z": 64.92,
+    "used_floor_trace": true,
+    "height_uu": 106.4,
+    "boxes": 293
+   }
+  },
+  {
+   "id": "M02",
+   "name": "every beat resolves to a real Julius phase, and names either its events or the gap",
+   "pass": true,
+   "detail": {
+    "unbound": [],
+    "silent": [],
+    "declared_gaps": [
+     "idle",
+     "handoff",
+     "approval_continue"
+    ],
+    "bound": 18
+   }
+  },
+  {
+   "id": "M03",
+   "name": "the chakra folds: holds through a handoff, falls back through a repair, crowns at the end",
+   "pass": true,
+   "detail": {
+    "wrong": [],
+    "walked": [
+     0,
+     1,
+     2,
+     2,
+     3,
+     4,
+     5,
+     5,
+     5,
+     5,
+     4,
+     4,
+     6,
+     6,
+     7
+    ]
+   }
+  },
+  {
+   "id": "M04",
+   "name": "a new mission start drops the last task's colour back to root",
+   "pass": true,
+   "detail": {
+    "from_crown": 1
+   }
+  },
+  {
+   "id": "M05",
+   "name": "only waiting, block and error ask for a person",
+   "pass": true,
+   "detail": {
+    "asking": [
+     "block",
+     "error",
+     "waiting_checkpoint"
+    ]
+   }
+  },
+  {
+   "id": "M06",
+   "name": "every state was filmed in play, not just photographed",
+   "pass": true,
+   "detail": {
+    "states": 17,
+    "frames_each": 10,
+    "missed": []
+   }
+  },
+  {
+   "id": "M08",
+   "name": "the orb is still readable somewhere else in the world",
+   "pass": false,
+   "detail": {
+    "moved_uu": 167.5,
+    "screen": [
+     1455.0523681640625,
+     356.748779296875
+    ],
+    "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_walk.png"
+   }
+  },
+  {
+   "id": "M07",
+   "name": "the orb costs under 10% of the frame (A/B, visible vs hidden)",
+   "pass": true,
+   "detail": {
+    "fps_visible": 30.86,
+    "fps_hidden": 31.44,
+    "ms_visible": 32.4,
+    "ms_hidden": 31.81,
+    "cost_ms": 0.59,
+    "throttled": false,
+    "samples": {
+     "visible": [
+      29.315750165213885,
+      31.580502395705953,
+      31.69859176972732
+     ],
+     "hidden": [
+      31.312415346998208,
+      31.63944535226311,
+      31.35859189808075
+     ]
+    }
+   }
+  }
+ ],
+ "captures": [
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_00.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_01.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_02.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_03.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_04.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_05.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_06.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_07.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_08.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_09.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_00.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_01.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_02.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_03.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_04.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_05.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_06.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_07.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_08.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_09.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_00.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_01.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_02.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_03.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_04.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_05.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_06.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_07.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_08.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_09.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_00.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_01.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_02.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_03.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_04.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_05.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_06.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_07.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_08.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_09.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_00.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_01.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_02.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_03.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_04.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_05.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_06.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_07.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_08.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_09.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_00.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_01.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_02.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_03.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_04.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_05.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_06.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_07.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_08.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_09.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_00.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_01.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_02.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_03.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_04.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_05.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_06.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_07.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_08.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_09.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_00.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_01.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_02.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_03.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_04.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_05.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_06.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_07.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_08.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_09.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_00.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_01.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_02.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_03.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_04.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_05.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_06.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_07.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_08.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_09.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_00.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_01.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_02.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_03.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_04.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_05.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_06.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_07.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_08.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_09.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_00.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_01.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_02.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_03.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_04.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_05.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_06.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_07.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_08.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_09.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_00.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_01.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_02.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_03.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_04.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_05.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_06.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_07.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_08.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_09.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_00.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_01.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_02.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_03.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_04.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_05.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_06.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_07.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_08.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_09.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_00.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_01.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_02.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_03.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_04.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_05.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_06.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_07.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_08.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_09.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_00.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_01.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_02.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_03.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_04.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_05.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_06.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_07.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_08.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_09.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_00.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_01.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_02.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_03.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_04.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_05.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_06.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_07.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_08.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_09.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_00.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_01.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_02.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_03.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_04.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_05.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_06.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_07.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_08.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_09.png",
+  "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_walk.png"
+ ],
+ "placement": {
+  "orb": [
+   -170.3770041581126,
+   -345.7584179903501,
+   149.98899857590482
+  ],
+  "pawn": [
+   -445.0935735062919,
+   -584.492363427958,
+   106.92370764801787
+  ],
+  "offset": [
+   340.0,
+   40.0
+  ],
+  "wanted_uu": 342.3,
+  "flat_uu": 364.0,
+  "below_pawn_uu": -43.1,
+  "fallback_z": 64.92,
+  "used_floor_trace": true,
+  "height_uu": 106.4,
+  "boxes": 293
+ },
+ "bindings": {
+  "unobserved": {
+   "phase": "Unobserved",
+   "accent": "Unobserved",
+   "events": "",
+   "not_yet_emitted": ""
+  },
+  "idle": {
+   "phase": "Idle",
+   "accent": "Unobserved",
+   "events": "",
+   "not_yet_emitted": "Nothing reports that a finished run has been acknowledged and the world may rest. `run.completed` is the ENDING, which is what COMPLETE shows; going back to idle afterwards is a separate moment."
+  },
+  "mission_start": {
+   "phase": "Attention",
+   "accent": "Unobserved",
+   "events": "run.started, mission.contract.locked",
+   "not_yet_emitted": ""
+  },
+  "researching": {
+   "phase": "Attention",
+   "accent": "Recalling",
+   "events": "research.requested, research.served",
+   "not_yet_emitted": ""
+  },
+  "handoff": {
+   "phase": "Handoff",
+   "accent": "Unobserved",
+   "events": "",
+   "not_yet_emitted": "Nothing reports work CHANGING HANDS. `architect.started`, `coder.started` and `review.started` report a role BEGINNING, which are three other beats; the interval between them is what this shows, and no event marks it."
+  },
+  "prompt_architect": {
+   "phase": "PromptArchitect",
+   "accent": "Unobserved",
+   "events": "architect.started",
+   "not_yet_emitted": ""
+  },
+  "coding_agent": {
+   "phase": "Coding",
+   "accent": "Unobserved",
+   "events": "coder.started",
+   "not_yet_emitted": ""
+  },
+  "independent_reviewer": {
+   "phase": "IndependentReview",
+   "accent": "Unobserved",
+   "events": "review.started",
+   "not_yet_emitted": ""
+  },
+  "waiting_checkpoint": {
+   "phase": "IndependentReview",
+   "accent": "AwaitingInput",
+   "events": "task.paused",
+   "not_yet_emitted": ""
+  },
+  "guidance": {
+   "phase": "PromptArchitect",
+   "accent": "Recalling",
+   "events": "architect.guidance",
+   "not_yet_emitted": ""
+  },
+  "review_challenge": {
+   "phase": "IndependentReview",
+   "accent": "Strained",
+   "events": "review.warning, review.challenge",
+   "not_yet_emitted": ""
+  },
+  "repair_required": {
+   "phase": "IndependentReview",
+   "accent": "Strained",
+   "events": "review.repair_required",
+   "not_yet_emitted": ""
+  },
+  "repairing": {
+   "phase": "Repair",
+   "accent": "Reattempting",
+   "events": "repair.started",
+   "not_yet_emitted": ""
+  },
+  "verifying": {
+   "phase": "Verifying",
+   "accent": "Unobserved",
+   "events": "repair.completed, task.verified",
+   "not_yet_emitted": ""
+  },
+  "approval_continue": {
+   "phase": "Verifying",
+   "accent": "Unobserved",
+   "events": "",
+   "not_yet_emitted": "`task.paused` opens a human gate and nothing in the catalogue reports it being CLEARED. Binding this to `run.verified` was tried and removed: that is the run being verified, a different moment, and it would make the orb say a person approved when the run merely passed."
+  },
+  "block": {
+   "phase": "Blocked",
+   "accent": "Unobserved",
+   "events": "review.block, provider.blocked",
+   "not_yet_emitted": ""
+  },
+  "error": {
+   "phase": "Error",
+   "accent": "Unobserved",
+   "events": "run.failed",
+   "not_yet_emitted": ""
+  },
+  "complete_verified": {
+   "phase": "Complete",
+   "accent": "Unobserved",
+   "events": "run.verified, run.completed",
+   "not_yet_emitted": ""
+  }
+ },
+ "declared_gaps": [
+  "idle",
+  "handoff",
+  "approval_continue"
+ ],
+ "fold": [
+  {
+   "beat": "idle",
+   "step": 0,
+   "expected": 0
+  },
+  {
+   "beat": "mission_start",
+   "step": 1,
+   "expected": 1
+  },
+  {
+   "beat": "researching",
+   "step": 2,
+   "expected": 2
+  },
+  {
+   "beat": "handoff",
+   "step": 2,
+   "expected": 2
+  },
+  {
+   "beat": "prompt_architect",
+   "step": 3,
+   "expected": 3
+  },
+  {
+   "beat": "coding_agent",
+   "step": 4,
+   "expected": 4
+  },
+  {
+   "beat": "independent_reviewer",
+   "step": 5,
+   "expected": 5
+  },
+  {
+   "beat": "waiting_checkpoint",
+   "step": 5,
+   "expected": 5
+  },
+  {
+   "beat": "guidance",
+   "step": 5,
+   "expected": 5
+  },
+  {
+   "beat": "review_challenge",
+   "step": 5,
+   "expected": 5
+  },
+  {
+   "beat": "repair_required",
+   "step": 4,
+   "expected": 4
+  },
+  {
+   "beat": "repairing",
+   "step": 4,
+   "expected": 4
+  },
+  {
+   "beat": "verifying",
+   "step": 6,
+   "expected": 6
+  },
+  {
+   "beat": "approval_continue",
+   "step": 6,
+   "expected": 6
+  },
+  {
+   "beat": "complete_verified",
+   "step": 7,
+   "expected": 7
+  }
+ ],
+ "gallery": [
+  {
+   "beat": "idle",
+   "label": "GUIDANCE",
+   "step": 3,
+   "chakra": "SOLAR PLEXUS",
+   "frames": [
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_00.png",
+     "screen": [
+      617.461181640625,
+      670.9200439453125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_01.png",
+     "screen": [
+      477.3403015136719,
+      1193.8460693359375
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_02.png",
+     "screen": [
+      437.8746337890625,
+      1796.430908203125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_03.png",
+     "screen": [
+      295.13140869140625,
+      2052.969970703125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_04.png",
+     "screen": [
+      205.82212829589844,
+      2139.713623046875
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_05.png",
+     "screen": [
+      161.17477416992188,
+      2183.07861328125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_06.png",
+     "screen": [
+      137.80935668945312,
+      2205.772705078125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_07.png",
+     "screen": [
+      759.9723510742188,
+      1163.840576171875
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_08.png",
+     "screen": [
+      1480.0745849609375,
+      525.4081420898438
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_01_idle_09.png",
+     "screen": [
+      1443.35791015625,
+      341.36505126953125
+     ]
+    }
+   ]
+  },
+  {
+   "beat": "mission_start",
+   "label": "CODING AGENT",
+   "step": 4,
+   "chakra": "HEART",
+   "frames": [
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_00.png",
+     "screen": [
+      1366.9075927734375,
+      299.5013122558594
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_01.png",
+     "screen": [
+      1325.336669921875,
+      320.4970397949219
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_02.png",
+     "screen": [
+      1300.5631103515625,
+      333.2601318359375
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_03.png",
+     "screen": [
+      1292.7652587890625,
+      336.7776184082031
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_04.png",
+     "screen": [
+      1298.8431396484375,
+      332.3970947265625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_05.png",
+     "screen": [
+      1319.9290771484375,
+      319.16107177734375
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_06.png",
+     "screen": [
+      1350.654296875,
+      300.8644104003906
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_07.png",
+     "screen": [
+      1377.1046142578125,
+      285.2986755371094
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_08.png",
+     "screen": [
+      1390.0491943359375,
+      277.74127197265625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_02_mission_start_09.png",
+     "screen": [
+      1395.900390625,
+      274.1771545410156
+     ]
+    }
+   ]
+  },
+  {
+   "beat": "researching",
+   "label": "VERIFYING",
+   "step": 6,
+   "chakra": "BROW",
+   "frames": [
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_00.png",
+     "screen": [
+      1389.1148681640625,
+      269.5781555175781
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_01.png",
+     "screen": [
+      1383.2611083984375,
+      269.0540466308594
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_02.png",
+     "screen": [
+      1377.18798828125,
+      268.6600646972656
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_03.png",
+     "screen": [
+      1371.7108154296875,
+      268.3636169433594
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_04.png",
+     "screen": [
+      1366.840087890625,
+      268.139404296875
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_05.png",
+     "screen": [
+      1363.691162109375,
+      267.98028564453125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_06.png",
+     "screen": [
+      1361.656005859375,
+      267.86968994140625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_07.png",
+     "screen": [
+      1360.341064453125,
+      267.79400634765625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_08.png",
+     "screen": [
+      1359.4918212890625,
+      267.7427062988281
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_03_researching_09.png",
+     "screen": [
+      1332.447509765625,
+      285.1528625488281
+     ]
+    }
+   ]
+  },
+  {
+   "beat": "handoff",
+   "label": "IDLE",
+   "step": 7,
+   "chakra": "CROWN",
+   "frames": [
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_00.png",
+     "screen": [
+      1204.8162841796875,
+      371.9431457519531
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_01.png",
+     "screen": [
+      1199.247802734375,
+      375.83184814453125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_02.png",
+     "screen": [
+      1196.830810546875,
+      377.5465087890625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_03.png",
+     "screen": [
+      1195.756591796875,
+      378.324462890625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_04.png",
+     "screen": [
+      1196.37646484375,
+      377.92657470703125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_05.png",
+     "screen": [
+      1197.189453125,
+      377.3826599121094
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_06.png",
+     "screen": [
+      1269.99267578125,
+      352.4822998046875
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_07.png",
+     "screen": [
+      1439.77294921875,
+      365.58587646484375
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_08.png",
+     "screen": [
+      1755.737548828125,
+      483.231201171875
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_04_handoff_09.png",
+     "screen": [
+      2021.470947265625,
+      616.4210815429688
+     ]
+    }
+   ]
+  },
+  {
+   "beat": "prompt_architect",
+   "label": "PROMPT ARCHITECT",
+   "step": 3,
+   "chakra": "SOLAR PLEXUS",
+   "frames": [
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_00.png",
+     "screen": [
+      1518.667236328125,
+      320.6925048828125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_01.png",
+     "screen": [
+      1402.061279296875,
+      273.4772033691406
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_02.png",
+     "screen": [
+      1387.6929931640625,
+      268.6213073730469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_03.png",
+     "screen": [
+      1386.6707763671875,
+      268.3714294433594
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_04.png",
+     "screen": [
+      1385.81201171875,
+      268.230224609375
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_05.png",
+     "screen": [
+      1385.0826416015625,
+      268.14910888671875
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_06.png",
+     "screen": [
+      1384.458984375,
+      268.1014099121094
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_07.png",
+     "screen": [
+      1383.92333984375,
+      268.07257080078125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_08.png",
+     "screen": [
+      1383.462158203125,
+      268.0543212890625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_05_prompt_architect_09.png",
+     "screen": [
+      1383.0650634765625,
+      268.0422058105469
+     ]
+    }
+   ]
+  },
+  {
+   "beat": "coding_agent",
+   "label": "CODING AGENT",
+   "step": 4,
+   "chakra": "HEART",
+   "frames": [
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_00.png",
+     "screen": [
+      1382.350341796875,
+      268.02569580078125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_01.png",
+     "screen": [
+      1382.1373291015625,
+      268.0218200683594
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_02.png",
+     "screen": [
+      1381.9432373046875,
+      268.01849365234375
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_03.png",
+     "screen": [
+      1381.76953125,
+      268.0157165527344
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_04.png",
+     "screen": [
+      1381.615478515625,
+      268.0132141113281
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_05.png",
+     "screen": [
+      1381.480224609375,
+      268.0109558105469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_06.png",
+     "screen": [
+      1381.3621826171875,
+      268.0091247558594
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_07.png",
+     "screen": [
+      1381.259521484375,
+      268.0075378417969
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_08.png",
+     "screen": [
+      1381.1705322265625,
+      268.006103515625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_06_coding_agent_09.png",
+     "screen": [
+      1381.09375,
+      268.0048828125
+     ]
+    }
+   ]
+  },
+  {
+   "beat": "independent_reviewer",
+   "label": "INDEPENDENT REVIEWER",
+   "step": 5,
+   "chakra": "THROAT",
+   "frames": [
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_00.png",
+     "screen": [
+      1380.9449462890625,
+      268.0024108886719
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_01.png",
+     "screen": [
+      1380.9034423828125,
+      268.0018615722656
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_02.png",
+     "screen": [
+      1380.8695068359375,
+      268.0012512207031
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_03.png",
+     "screen": [
+      1380.83837890625,
+      268.0007019042969
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_04.png",
+     "screen": [
+      1380.8111572265625,
+      268.0003967285156
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_05.png",
+     "screen": [
+      1380.78759765625,
+      267.9999694824219
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_06.png",
+     "screen": [
+      1380.767578125,
+      267.9996337890625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_07.png",
+     "screen": [
+      1380.750732421875,
+      267.99932861328125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_08.png",
+     "screen": [
+      1380.7349853515625,
+      267.99920654296875
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_07_independent_reviewer_09.png",
+     "screen": [
+      1380.721435546875,
+      267.99896240234375
+     ]
+    }
+   ]
+  },
+  {
+   "beat": "waiting_checkpoint",
+   "label": "WAITING / CHECKPOINT",
+   "step": 5,
+   "chakra": "THROAT",
+   "frames": [
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_00.png",
+     "screen": [
+      1380.69384765625,
+      267.99847412109375
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_01.png",
+     "screen": [
+      1380.68994140625,
+      267.9984130859375
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_02.png",
+     "screen": [
+      1380.6876220703125,
+      267.99835205078125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_03.png",
+     "screen": [
+      1380.6861572265625,
+      267.9983215332031
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_04.png",
+     "screen": [
+      1380.68505859375,
+      267.9983215332031
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_05.png",
+     "screen": [
+      1380.684326171875,
+      267.998291015625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_06.png",
+     "screen": [
+      1380.683837890625,
+      267.998291015625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_07.png",
+     "screen": [
+      1380.6834716796875,
+      267.998291015625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_08.png",
+     "screen": [
+      1380.6832275390625,
+      267.998291015625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_08_waiting_checkpoint_09.png",
+     "screen": [
+      1380.6832275390625,
+      267.998291015625
+     ]
+    }
+   ]
+  },
+  {
+   "beat": "guidance",
+   "label": "GUIDANCE",
+   "step": 5,
+   "chakra": "THROAT",
+   "frames": [
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_00.png",
+     "screen": [
+      1380.6829833984375,
+      267.998291015625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_01.png",
+     "screen": [
+      1380.6829833984375,
+      267.998291015625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_02.png",
+     "screen": [
+      1380.6829833984375,
+      267.998291015625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_03.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_04.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_05.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_06.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_07.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_08.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_09_guidance_09.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    }
+   ]
+  },
+  {
+   "beat": "review_challenge",
+   "label": "REVIEW CHALLENGE",
+   "step": 5,
+   "chakra": "THROAT",
+   "frames": [
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_00.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_01.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_02.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_03.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_04.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_05.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_06.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_07.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_08.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_10_review_challenge_09.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    }
+   ]
+  },
+  {
+   "beat": "repair_required",
+   "label": "REPAIR REQUIRED",
+   "step": 4,
+   "chakra": "HEART",
+   "frames": [
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_00.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_01.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_02.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_03.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_04.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_05.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_06.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_07.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_08.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_11_repair_required_09.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    }
+   ]
+  },
+  {
+   "beat": "repairing",
+   "label": "REPAIRING",
+   "step": 4,
+   "chakra": "HEART",
+   "frames": [
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_00.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_01.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_02.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_03.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_04.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_05.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_06.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_07.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_08.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_12_repairing_09.png",
+     "screen": [
+      1380.6827392578125,
+      267.9982604980469
+     ]
+    }
+   ]
+  },
+  {
+   "beat": "verifying",
+   "label": "VERIFYING",
+   "step": 6,
+   "chakra": "BROW",
+   "frames": [
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_00.png",
+     "screen": [
+      1318.647705078125,
+      307.8725280761719
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_01.png",
+     "screen": [
+      1255.3228759765625,
+      348.6761169433594
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_02.png",
+     "screen": [
+      1228.4381103515625,
+      366.11920166015625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_03.png",
+     "screen": [
+      1218.2725830078125,
+      372.8014221191406
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_04.png",
+     "screen": [
+      1213.4791259765625,
+      376.0055236816406
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_05.png",
+     "screen": [
+      1211.1552734375,
+      377.59307861328125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_06.png",
+     "screen": [
+      1210.02099609375,
+      378.3892822265625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_07.png",
+     "screen": [
+      1210.0615234375,
+      378.4190979003906
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_08.png",
+     "screen": [
+      1210.7845458984375,
+      377.99310302734375
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_13_verifying_09.png",
+     "screen": [
+      1211.3458251953125,
+      377.6564025878906
+     ]
+    }
+   ]
+  },
+  {
+   "beat": "approval_continue",
+   "label": "APPROVAL / CONTINUE",
+   "step": 6,
+   "chakra": "BROW",
+   "frames": [
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_00.png",
+     "screen": [
+      1209.476806640625,
+      378.88543701171875
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_01.png",
+     "screen": [
+      1209.0745849609375,
+      379.1515808105469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_02.png",
+     "screen": [
+      1208.9091796875,
+      379.2635192871094
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_03.png",
+     "screen": [
+      1208.83056640625,
+      379.3182067871094
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_04.png",
+     "screen": [
+      1209.0870361328125,
+      379.1573486328125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_05.png",
+     "screen": [
+      1210.070556640625,
+      378.52984619140625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_06.png",
+     "screen": [
+      1211.0093994140625,
+      377.9273986816406
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_07.png",
+     "screen": [
+      1211.2626953125,
+      377.7611389160156
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_08.png",
+     "screen": [
+      1210.6483154296875,
+      378.1502990722656
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_14_approval_continue_09.png",
+     "screen": [
+      1209.7120361328125,
+      378.7484130859375
+     ]
+    }
+   ]
+  },
+  {
+   "beat": "complete_verified",
+   "label": "COMPLETE / VERIFIED",
+   "step": 7,
+   "chakra": "CROWN",
+   "frames": [
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_00.png",
+     "screen": [
+      1208.8470458984375,
+      379.3108215332031
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_01.png",
+     "screen": [
+      1208.7940673828125,
+      379.34716796875
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_02.png",
+     "screen": [
+      1209.788330078125,
+      378.7126770019531
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_03.png",
+     "screen": [
+      1210.81396484375,
+      378.0546875
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_04.png",
+     "screen": [
+      1211.28564453125,
+      377.74871826171875
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_05.png",
+     "screen": [
+      1210.974853515625,
+      377.9430236816406
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_06.png",
+     "screen": [
+      1210.0443115234375,
+      378.53594970703125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_07.png",
+     "screen": [
+      1209.3955078125,
+      378.9523010253906
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_08.png",
+     "screen": [
+      1209.088134765625,
+      379.15167236328125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_15_complete_verified_09.png",
+     "screen": [
+      1208.9296875,
+      379.25579833984375
+     ]
+    }
+   ]
+  },
+  {
+   "beat": "block",
+   "label": "BLOCK",
+   "step": 7,
+   "chakra": "CROWN",
+   "frames": [
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_00.png",
+     "screen": [
+      1209.65234375,
+      378.8004150390625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_01.png",
+     "screen": [
+      1210.915283203125,
+      377.9903564453125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_02.png",
+     "screen": [
+      1211.12109375,
+      377.8532409667969
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_03.png",
+     "screen": [
+      1210.4141845703125,
+      378.3014831542969
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_04.png",
+     "screen": [
+      1209.5655517578125,
+      378.8438720703125
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_05.png",
+     "screen": [
+      1209.1702880859375,
+      379.09881591796875
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_06.png",
+     "screen": [
+      1208.9661865234375,
+      379.232177734375
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_07.png",
+     "screen": [
+      1208.8602294921875,
+      379.3023681640625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_08.png",
+     "screen": [
+      1208.80859375,
+      379.3372497558594
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_16_block_09.png",
+     "screen": [
+      1209.175048828125,
+      379.10455322265625
+     ]
+    }
+   ]
+  },
+  {
+   "beat": "error",
+   "label": "ERROR",
+   "step": 7,
+   "chakra": "CROWN",
+   "frames": [
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_00.png",
+     "screen": [
+      1211.322021484375,
+      377.7229919433594
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_01.png",
+     "screen": [
+      1210.1123046875,
+      378.49261474609375
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_02.png",
+     "screen": [
+      1209.371826171875,
+      378.9676513671875
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_03.png",
+     "screen": [
+      1209.0458984375,
+      379.1793212890625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_04.png",
+     "screen": [
+      1208.8934326171875,
+      379.2799072265625
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_05.png",
+     "screen": [
+      1208.8211669921875,
+      379.3285827636719
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_06.png",
+     "screen": [
+      1208.918701171875,
+      379.2679443359375
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_07.png",
+     "screen": [
+      1209.883056640625,
+      378.6521911621094
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_08.png",
+     "screen": [
+      1210.851806640625,
+      378.0304870605469
+     ]
+    },
+    {
+     "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_17_error_09.png",
+     "screen": [
+      1211.27392578125,
+      377.7561340332031
+     ]
+    }
+   ]
+  }
+ ],
+ "frame_spacing": 0.12,
+ "after_walk": {
+  "moved_uu": 167.5,
+  "screen": [
+   1455.0523681640625,
+   356.748779296875
+  ],
+  "capture": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\zc_mission_walk.png"
+ },
+ "perf": {
+  "fps_visible": 30.86,
+  "fps_hidden": 31.44,
+  "ms_visible": 32.4,
+  "ms_hidden": 31.81,
+  "cost_ms": 0.59,
+  "throttled": false,
+  "samples": {
+   "visible": [
+    29.315750165213885,
+    31.580502395705953,
+    31.69859176972732
+   ],
+   "hidden": [
+    31.312415346998208,
+    31.63944535226311,
+    31.35859189808075
+   ]
+  }
+ },
+ "passed": 7,
+ "failed": [
+  "M01",
+  "M08"
+ ],
+ "finished": "2026-09-27 03:56:36",
+ "seconds": 164.38,
+ "log": "M00 PASS the mission subsystem holds the founder's seventeen, and says it is a preview {'beats': 18, 'preview': True, 'strip': True}\nM01 FAIL the orb stands where it was told, on the ground, clear of the Dog {'orb': [-170.3770041581126, -345.7584179903501, 149.98899857590482], 'pawn': [-445.0935735062919, -584.492363427958, 106.92370764801787], 'offset': [340.0, 40.0], 'wanted_uu': 342.3, 'flat_uu': 364.0, 'below_pawn_uu': -43.1, 'fallback_z': 64.92, 'used_floor_trace': True, 'height_uu': 106.4, 'boxes': 293}\nM02 PASS every beat resolves to a real Julius phase, and names either its events or the gap {'unbound': [], 'silent': [], 'declared_gaps': ['idle', 'handoff', 'approval_continue'], 'bound': 18}\nM03 PASS the chakra folds: holds through a handoff, falls back through a repair, crowns at the end {'wrong': [], 'walked': [0, 1, 2, 2, 3, 4, 5, 5, 5, 5, 4, 4, 6, 6, 7]}\nM04 PASS a new mission start drops the last task's colour back to root {'from_crown': 1}\nM05 PASS only waiting, block and error ask for a person {'asking': ['block', 'error', 'waiting_checkpoint']}\nM06 PASS every state was filmed in play, not just photographed {'states': 17, 'frames_each': 10, 'missed': []}\nM08 FAIL the orb is still readable somewhere else in the world {'moved_uu': 167.5, 'screen': [1455.0523681640625, 356.748779296875], 'capture': 'C:\\\\dev\\\\iwonder\\\\wonderland-task3\\\\wonderland\\\\Tools\\\\captures\\\\zc\\\\zc_mission_walk.png'}\nM07 PASS the orb costs under 10% of the frame (A/B, visible vs hidden) {'fps_visible': 30.86, 'fps_hidden': 31.44, 'ms_visible': 32.4, 'ms_hidden': 31.81, 'cost_ms': 0.59, 'throttled': False, 'samples': {'visible': [29.315750165213885, 31.580502395705953, 31.69859176972732], 'hidden': [31.312415346998208, 31.63944535226311, 31.35859189808075]}}\n"
 }
