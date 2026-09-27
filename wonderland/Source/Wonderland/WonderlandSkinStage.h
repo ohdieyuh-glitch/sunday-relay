@@ -105,6 +105,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Skins")
 	void SetInspectionYaw(float Degrees);
 
+	/**
+	 * HOW MUCH OF THE PREVIEW THE MASCOT ACTUALLY FILLS, read back from the rendered pixels.
+	 *
+	 * The founder's acceptance criterion, made enforceable in-engine: "the founder can open this exact screen
+	 * and visibly see that it works". A proof calling this fails on what the picture shows rather than on a
+	 * camera distance it has just written, which is the tautology four rounds of framing bugs hid behind.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Skins")
+	FString MeasureOccupancy() const;
+
 	/** Where the stage stands. Far above the world, where nothing can wander into the shot. */
 	static FVector StageOrigin() { return FVector(0.0, 0.0, 100000.0); }
 

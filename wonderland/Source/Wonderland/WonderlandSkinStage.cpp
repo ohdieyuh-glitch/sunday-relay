@@ -149,6 +149,7 @@ static FAutoConsoleVariableRef GWonderlandPreviewGlowRef(
 #include "Engine/GameInstance.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "TextureResource.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -526,6 +527,80 @@ void AWonderlandSkinStage::EnsureBody()
 	Capture->ShowOnlyActors.Reset();
 	Capture->ShowOnlyActors.Add(Body);
 	Capture->ShowOnlyActors.Add(this);
+}
+
+FString AWonderlandSkinStage::MeasureOccupancy() const
+{
+	// ---- THE VISUAL REGRESSION GATE, IN THE ENGINE, WHERE IT CANNOT BE FORGOTTEN.
+	//
+	// FOUNDER: "Build a visual regression gate so this class of bug cannot silently return." Until now the
+	// occupancy that proves the wardrobe correct was measured OUTSIDE the editor, by decoding the exported
+	// PNGs in a script I happened to run. That is not a gate. It is a habit, and habits are exactly what
+	// stopped being performed in the four rounds where a passing proof sat beside a broken picture.
+	//
+	// So the render target is read back here and the subject's bounding box measured from the actual pixels
+	// the founder sees. A proof can then FAIL in-engine on the thing that matters -- how much of the frame
+	// the mascot fills -- instead of on a camera distance it just finished writing, which is the tautology
+	// this whole class of bug hid behind.
+	if (RenderTarget == nullptr)
+	{
+		return TEXT("no render target");
+	}
+	FTextureRenderTargetResource* Resource = RenderTarget->GameThread_GetRenderTargetResource();
+	if (Resource == nullptr)
+	{
+		return TEXT("no render target resource");
+	}
+	TArray<FColor> Pixels;
+	if (!Resource->ReadPixels(Pixels) || Pixels.Num() <= 0)
+	{
+		return TEXT("the render target could not be read back");
+	}
+	const int32 W = RenderTarget->SizeX;
+	const int32 H = RenderTarget->SizeY;
+	if (W <= 0 || H <= 0 || Pixels.Num() < W * H)
+	{
+		return FString::Printf(TEXT("unexpected readback: %d pixels for %dx%d"), Pixels.Num(), W, H);
+	}
+
+	// THE BACKDROP IS BLACK AND THE FIGURE IS LIT, so a low luma floor separates them cleanly. It is reported
+	// beside the answer rather than hidden, because a wrong threshold must not be able to sit inside a number.
+	const int32 Floor = 34;
+	int32 MinX = W, MinY = H, MaxX = -1, MaxY = -1;
+	int64 Lit = 0;
+	int64 Total = 0;
+	for (int32 Y = 0; Y < H; ++Y)
+	{
+		for (int32 X = 0; X < W; ++X)
+		{
+			const FColor& C = Pixels[Y * W + X];
+			const int32 Luma = (C.R * 54 + C.G * 183 + C.B * 19) >> 8;
+			Total += Luma;
+			if (Luma >= Floor)
+			{
+				++Lit;
+				MinX = FMath::Min(MinX, X);
+				MaxX = FMath::Max(MaxX, X);
+				MinY = FMath::Min(MinY, Y);
+				MaxY = FMath::Max(MaxY, Y);
+			}
+		}
+	}
+	if (MaxX < 0)
+	{
+		return FString::Printf(TEXT("empty target=%dx%d threshold=%d mean=0.0"), W, H, Floor);
+	}
+	const float HeightPct = 100.0f * static_cast<float>(MaxY - MinY + 1) / static_cast<float>(H);
+	const float WidthPct = 100.0f * static_cast<float>(MaxX - MinX + 1) / static_cast<float>(W);
+	return FString::Printf(
+		TEXT("heightPct=%.1f widthPct=%.1f centreXPct=%.1f centreYPct=%.1f litPct=%.1f mean=%.1f ")
+		TEXT("target=%dx%d threshold=%d"),
+		HeightPct, WidthPct,
+		100.0f * (MinX + MaxX) * 0.5f / static_cast<float>(W),
+		100.0f * (MinY + MaxY) * 0.5f / static_cast<float>(H),
+		100.0f * static_cast<float>(Lit) / static_cast<float>(W * H),
+		static_cast<float>(Total) / static_cast<float>(W * H),
+		W, H, Floor);
 }
 
 void AWonderlandSkinStage::AimCamera()
