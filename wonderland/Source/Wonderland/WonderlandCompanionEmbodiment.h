@@ -576,6 +576,17 @@ private:
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> FlameMaterialInstances;
 
 	/**
+	 * WHETHER THE FLAME TWINS WERE BUILT ON THE FIRE MASTER, because the two surfaces are driven by
+	 * different arithmetic and only the build path knew which one it had used.
+	 *
+	 * RepaintColourway recomputed flame brightness as Strength * Dim -- the FALLBACK card's formula --
+	 * whatever the twins were actually built on. Picking a colourway therefore moved every flame off the
+	 * fire master's sqrt/FireGain curve, and discarded any dim applied through FireGain entirely. One
+	 * helper, WonderlandFlameStrength, now answers for both, and this is the bit of state it needs.
+	 */
+	bool bFlameOnFireMaster = false;
+
+	/**
 	 * WHAT EACH FLAME TWIN'S COLOUR RESTS AT, so the heartbeat can beat it as well.
 	 *
 	 * The animator only ever drove MaterialInstances, so the ribbons -- which are the part of Skeleton Flame

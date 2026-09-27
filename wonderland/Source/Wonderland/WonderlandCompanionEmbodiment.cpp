@@ -88,6 +88,30 @@ namespace
 	 * kills the glowing eyes, which are a feature rather than glare.
 	 */
 	TAutoConsoleVariable<float> CVarGlowKnee(
+		// ---- TRIED AT 30, REVERTED TO 700, AND THE ATTEMPT IS WORTH KEEPING WRITTEN DOWN.
+		//
+		// Celestial Light's eyes read DARKER than its own face at every hour -- over_face -0.2167 / -0.1181 /
+		// -0.1587. Its face materials are authored at edge 20,800 and starlight 17,600, which at a knee of 700
+		// render around 1161 against a white point near 25, so the face was forty-six times past clipping. The
+		// obvious reading was "compress the body glow until the face stops clipping", and it is wrong.
+		//
+		// SWEPT 700 / 120 / 30 / 8 and measured. At 30 Celestial's face does come down, 0.999 to 0.453, and its
+		// over_face turns positive. But re-running the full eye gate showed the cost: RELAY OG, whose body is
+		// not a glow material at all, lost its dusk and night margin entirely -- over +0.054 to -0.022 at dusk,
+		// +0.058 to -0.016 at night. Fixing the skin that was broken broke the skin that worked.
+		//
+		// AND IT WAS NEVER GOING TO FIX CELESTIAL ANYWAY, which the sweep itself said if read carefully: its
+		// "eye" reading tracked the knee, 0.842 to 0.527 to 0.271. A real eye cannot do that. The eye branch
+		// normalises by peak and multiplies by an absolute level, so it is knee-INDEPENDENT -- Relay OG's is.
+		// A reading that moves with the knee is not reading an eye.
+		//
+		// THE ACTUAL CAUSE, from the figure file. On Celestial Light's head: eye n=2 at z 19.1, edge n=45
+		// spanning z 15.6-25.5, starlight n=18 spanning z 19.4-25.6. Two eye boxes inside sixty-three boxes of
+		// head glow at the same height. Relay OG's head carries eye n=2 and NO glow material at all, which is
+		// exactly why it is the only skin whose eyes have never failed. Celestial's eyes are not dim -- they are
+		// surrounded and overlapped by the skin's own luminous head, and no global curve can separate them.
+		//
+		// That is authored art and belongs in the generator, not in this constant. Left at 700.
 		TEXT("wl.Look.GlowKnee"), 700.0f,
 		TEXT("Brightness at which a figure's BODY glow starts being compressed. Flames are never compressed."));
 	TAutoConsoleVariable<float> CVarGlowCurve(
@@ -252,8 +276,46 @@ namespace
 		// Not FireGain, which was swept against the fire material and moving it would re-open a calibration
 		// that took two sweeps to settle. Not PreviewGlow, which is the wardrobe camera only and would dim
 		// the picture while leaving the world untouched.
+		// THE FLOOR WAS 0.05 AND THAT IS NOT LOW ENOUGH TO REACH THE ANSWER.
+		//
+		// FOUNDER, 2026-09-27, second pass: the flames are STILL too intense. The arithmetic says why the
+		// first dim could not have been enough. Skeleton Flame's ghost embers are authored at 2,800 and
+		// 4,800; on the fire master that is sqrt(2800) * FireGain 60 * Dim, so at 0.40 the surface is
+		// driven to about 1,270 and 1,663. In this scene a strength of 1.0 renders at luma 0.039, so white
+		// pins near 25. The flame is fifty to sixty-six times past clipping, and at the old clamp floor of
+		// 0.05 it would still be six times past it. A knob that cannot reach the answer at either end of
+		// its range cannot be swept, and everything the founder reported -- the silhouette swallowed, the
+		// eyes and the chest skull unreadable, bloom eating what is next to the figure -- is what a surface
+		// sixty times over white looks like.
+		//
+		// So the floor comes down to 0.004, which puts the reachable range either side of the white point
+		// instead of entirely above it, and the value itself is chosen by zc_flame_dim from captures rather
+		// than picked here. Fire SHOULD clip in its core -- that is what white-hot looks like -- but a
+		// figure whose every surface clips has no fire in it, only a white shape.
 		TEXT("wl.Look.FlameDim"), 0.40f,
 		TEXT("Scale on flame brightness. 1 = as authored. Shape and flicker are never touched."));
+
+	/**
+	 * HOW BRIGHT A FLAME SURFACE IS, ASKED IN ONE PLACE.
+	 *
+	 * There were two copies of this and they did not agree. The build path used the fire master's curve
+	 * -- sqrt(Strength) * FireGain * Dim -- when the project had the fire material, and the flat card's
+	 * Strength * Dim when it did not. RepaintColourway used the FLAT formula unconditionally, whatever
+	 * the twins had actually been built on.
+	 *
+	 * So picking a colourway silently moved every flame in the game off the curve it was calibrated on,
+	 * and -- the reason this had to be fixed before the dim could be swept at all -- any change to
+	 * FireGain was thrown away the first time a colour was chosen. A sweep whose result a recolour
+	 * quietly reverts is not evidence.
+	 */
+	float WonderlandFlameStrength(float Strength, bool bFireMaster)
+	{
+		const float Dim = FMath::Clamp(CVarFlameDim.GetValueOnAnyThread(), 0.004f, 4.0f);
+		const float Authored = FMath::Max(Strength, 0.0f);
+		return bFireMaster
+			? FMath::Sqrt(Authored) * FMath::Max(CVarFireGain.GetValueOnAnyThread(), 0.001f) * Dim
+			: Authored * Dim;
+	}
 
 	float WonderlandTameGlow(float Strength)
 	{
@@ -696,14 +758,12 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 				FireMaster != nullptr ? FireMaster : ParentFor(Def.Kind), this))
 			{
 				const FLinearColor Untamed(Def.Color.R, Def.Color.G, Def.Color.B, 1.0f);
-				const float Dim = FMath::Clamp(CVarFlameDim.GetValueOnAnyThread(), 0.05f, 4.0f);
 				// ON THE FIRE MATERIAL, the square root of the authored strength; on the old flat card, the
 				// strength itself. See CVarFireGain -- the two surfaces need different numbers to look the
-				// same brightness, and the fallback path must not change just because this one did.
-				const float FlameStrength = FireMaster != nullptr
-					? FMath::Sqrt(FMath::Max(Def.Strength, 0.0f))
-						* FMath::Max(CVarFireGain.GetValueOnAnyThread(), 0.001f) * Dim
-					: FMath::Max(Def.Strength, 0.0f) * Dim;
+				// same brightness, and the fallback path must not change just because this one did. Recorded
+				// on the actor so RepaintColourway can answer the same question the same way.
+				bFlameOnFireMaster = FireMaster != nullptr;
+				const float FlameStrength = WonderlandFlameStrength(Def.Strength, bFlameOnFireMaster);
 				const FLinearColor FullEmissive = Untamed * FlameStrength;
 				Full->SetVectorParameterValue(TEXT("Color"), FullEmissive);
 				Full->SetVectorParameterValue(TEXT("EmissiveColor"), FullEmissive);
@@ -1543,8 +1603,7 @@ void AWonderlandCompanionEmbodiment::RepaintColourway()
 			? FlameMaterialInstances[Index] : nullptr;
 		if (Flame != nullptr && Flame != Body)
 		{
-			const FLinearColor Full = Lit * FMath::Max(Def.Strength, 0.0f)
-				* FMath::Clamp(CVarFlameDim.GetValueOnAnyThread(), 0.05f, 4.0f);
+			const FLinearColor Full = Lit * WonderlandFlameStrength(Def.Strength, bFlameOnFireMaster);
 			ApplyColourway(Index, FlameMaterialInstances[Index], Def, Full, Full, /*bFlameTwin=*/true);
 		}
 	}
