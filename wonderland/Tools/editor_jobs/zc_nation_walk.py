@@ -226,7 +226,22 @@ def job():
         except Exception:                                             # noqa: BLE001
             why["game_paused"] = "unreadable"
         row["dog_state"] = why
-        for _ in range(60):
+        # DRIVE UNTIL IT MOVES, NOT FOR THREE SECONDS, and record how long that took.
+        #
+        # This drove 60 iterations of yield 0.05 -- three seconds of WALL TIME, which is not a fixed amount
+        # of walking. At the 31 ms frame it is 95.6 frames; during the render-thread regression it was 7.7,
+        # and add_movement_input is consumed once per MOVEMENT TICK rather than once per call, so about 52
+        # of the 60 calls were thrown away. zzQ2 finished at 13:44 and the regression was fixed at 13:53:
+        # it ran inside it, and reported peak speed 0.0 on all three nations.
+        #
+        # THAT IS A CANDIDATE AND NOT A CONCLUSION, because zzP1 ran inside the same regression at 11:55 and
+        # drove all three at 230. The other thing that changed between them is 162 lamp instances applied to
+        # the editor world. I cannot separate the two from the data I have, so rather than guess a third
+        # time the probe now reports what would distinguish them: how long until first movement, how many
+        # samples saw a non-zero velocity, and the wall time it actually took.
+        moved_after, nonzero = None, 0
+        t = 0.0
+        while t < 8.0:
             d = pawn()
             if d is None:
                 break
@@ -236,10 +251,22 @@ def job():
             try:
                 d.add_movement_input(unreal.Vector(dx / n, dy / n, 0.0), 1.0, True)
                 v = d.get_velocity()
-                probe_speed = max(probe_speed, math.hypot(v.x, v.y))
+                sp = math.hypot(v.x, v.y)
+                if sp > 1.0:
+                    nonzero += 1
+                    if moved_after is None:
+                        moved_after = round(t, 2)
+                probe_speed = max(probe_speed, sp)
             except Exception:                                         # noqa: BLE001
                 break
             yield 0.05
+            t += 0.05
+            # enough evidence: it is walking and we know when it started
+            if nonzero >= 12:
+                break
+        row["probe_seconds"] = round(t, 2)
+        row["probe_moved_after_s"] = moved_after
+        row["probe_samples_with_speed"] = nonzero
         d = pawn()
         moved = math.hypot(d.get_actor_location().x - start_loc.x,
                            d.get_actor_location().y - start_loc.y) if d is not None else 0.0
