@@ -141,6 +141,33 @@ def job():
         RESULT["lift_readback"]["%.2f" % lift] = var
         yield 2.0
 
+        # ---- WHAT THIS RUNG COSTS, not only what it looks like.
+        #
+        # Local exposure is a bilateral decomposition and it runs on the RENDER THREAD. Enabled unconditionally
+        # it put an empty world at 389.5 ms with five per cent of the frame accounted for; it is now off by day
+        # and ON AT NIGHT, which is exactly where the founder needs it. So the night we are buying has a price
+        # nobody has read, and "sane performance" is in their brief. stat unit has to be re-issued to keep
+        # FStatUnitData advancing, and the whole tuple is taken because a frame time alone cannot be
+        # contradicted -- see zc_nav_cost, which published 1030 ms from element zero of this same call.
+        unreal.SystemLibrary.execute_console_command(world, "stat unit")
+        yield 3.0
+        rows = []
+        for _ in range(40):
+            try:
+                got = unreal.WonderlandHudTestLibrary.get_frame_cost_ms()
+                if got is not None and float(got[0]) > 0.01:
+                    rows.append((float(got[0]), float(got[1]), float(got[2]), float(got[3])))
+            except Exception:                                       # noqa: BLE001
+                pass
+            yield 0.1
+        if rows:
+            rows.sort()
+            mid = lambda i: round(sorted(r[i] for r in rows)[len(rows) // 2], 2)
+            busiest = max(mid(1), mid(2), mid(3))
+            RESULT.setdefault("cost", {})["%.2f" % lift] = {
+                "frame_median": mid(0), "game_median": mid(1), "render_median": mid(2), "gpu_median": mid(3),
+                "accounted_fraction": round(busiest / max(mid(0), 0.01), 3), "samples": len(rows)}
+
         live = ues.get_game_world()
         pawn = unreal.GameplayStatics.get_player_pawn(live, 0) if live is not None else None
         if live is None or pawn is None:
@@ -219,6 +246,11 @@ def job():
            note="the figure's own lights are excluded from body_mean; light_fraction is reported beside it "
                 "so a brighter body can never be a brighter pair of eyes.")
 
+    record("L04", "the night this buys has its render cost recorded, not assumed",
+           len(RESULT.get("cost", {})) == len(LIFTS), cost=RESULT.get("cost"),
+           note="local exposure is a render-thread pass and is ON at night at every one of these rungs. A "
+                "frame here that game and GPU do not account for is the pass, and the founder's night is "
+                "being bought with it.")
     RESULT["captures_dir"] = ROOT
     RESULT["status"] = "measured"
     yield 2.0
