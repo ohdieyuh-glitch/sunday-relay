@@ -624,9 +624,38 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 		(Elevation + 9.0f) / FMath::Max(GWonderlandTwilightSpan, 1.0f), 0.0f, 1.0f);
 	const float Daylight = FMath::Pow(TwilightBand, 1.9f);
 
-	// HOW FAR INTO THE NIGHT WE ARE: 0 while the sun is still up, 1 once it is well down. Smoothstepped, because
-	// this is what crossfades the sun out and the moon in and the founder asked for no jumps in the transition.
-	const float Sinking = FMath::Clamp((-Elevation - 2.0f) / 10.0f, 0.0f, 1.0f);
+	// HOW FAR INTO THE NIGHT WE ARE: 0 while the sun is still up, 1 once it is well down. Smoothstepped,
+	// because this is what crossfades the sun out and the moon in and the founder asked for no jumps.
+	//
+	// IT IS NOW THE COMPLEMENT OF THE BAND ABOVE, AND THAT IS THE WHOLE FIX. It used to be
+	// Clamp((-Elevation - 2)/10) -- a SECOND curve, on the same input, with its own window. Two curves kept
+	// in sync by hand, and they were not in sync: Daylight leaves 1.0 at +12 deg and reaches 0 at -9, while
+	// Nightfall did not start until -2. Between them they left a hole.
+	//
+	// MEASURED AT THE BOTTOM OF IT, 2026-09-27 (zzT2_dusk_hole). At 18:00 the elevation is EXACTLY ZERO:
+	// Daylight had already fallen to 0.1999 while Nightfall was still exactly 0.0000. So at the darkest hour
+	// of the day the moon was invisible (it needs Nightfall > 0.002), NightShadowLift was not applied (it is
+	// lerped by Nightfall), local exposure was off (it needs Nightfall > 0.001), the exposure bias was +0.98
+	// of its eventual +1.45, and EVERY PRACTICAL LIGHT IN WONDERLAND WAS AT ZERO INTENSITY, because their
+	// brightness is Candelas * GetNightAmount() * Gain and GetNightAmount returns this value. The day rig had
+	// left and the night rig had not arrived.
+	//
+	// The world read 0.0365 there against 0.0937 an hour LATER -- darker at six in the evening than at full
+	// night -- with ground at 0.0126 and 97 per cent of pixels in the tails. The photographs are not subtle:
+	// at 18:00 the paving, the gate, the ironwork and the planting are simply absent; at 19:00 they all read.
+	//
+	// AND IT EXPLAINS WHY WIDENING THE BAND MADE THINGS WORSE. zzT1 swept wl.Sky.TwilightSpan at 21/30/39
+	// expecting a gentler evening and got the opposite -- worst hour-to-hour step 0.0995 -> 0.1353 -> 0.1812
+	// -- because a wider band raised the shoulder the world fell FROM without moving the curve that decides
+	// when it lands. Two independent curves cannot be widened by one knob.
+	//
+	// As the complement they are one crossover by construction and cannot separate again at any span. Full
+	// day is untouched: at +12 deg and above the band is 1, so this is exactly 0 and every noon proof stands.
+	// The twilight SHOULDERS do change -- at +9.4 deg, which is 17:50 and symmetrically 06:50, this becomes
+	// 0.042 where it was 0 -- and that is the intended behaviour rather than a side effect: the night should
+	// begin arriving while the sun is visibly going down. The other lane owns the eye glow, rim and mascot
+	// that read this value and signed off on that shoulder after seeing the whole ramp, not just its start.
+	const float Sinking = 1.0f - TwilightBand;
 	Nightfall = Sinking * Sinking * (3.0f - 2.0f * Sinking);
 
 	// THE SUN STOPS SHINING UP THROUGH THE GROUND. Pitch is -Elevation, so a sun 40 degrees below the horizon is
