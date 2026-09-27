@@ -373,10 +373,20 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
   try { parsed = JSON.parse(raw); } catch { return { ok: false, problem: 'The contract file is not valid JSON.' }; }
   if (parsed === null || typeof parsed !== 'object') return { ok: false, problem: 'The contract must be a JSON object.' };
   const value = parsed as Record<string, unknown>;
-  for (const field of ['missionId', 'markerNamespace', 'projectId', 'tenantId', 'objective', 'testCommand', 'workspacePath'] as const) {
+  for (const field of ['missionId', 'markerNamespace', 'projectId', 'tenantId', 'objective', 'workspacePath'] as const) {
     if (typeof value[field] !== 'string' || (value[field] as string).trim() === '') {
       return { ok: false, problem: `The contract field "${field}" must be a non-empty string.` };
     }
+  }
+  /**
+   * `testCommand` MUST BE PRESENT AND MAY BE EMPTY. Present, so that leaving it
+   * out is still a malformed contract rather than a silent decision; empty, so a
+   * mission with no deterministic check — a report, an analysis, a plan — can say
+   * so deliberately. An empty command runs nothing and records no TEST evidence;
+   * the build is then held to the diff it produced. See `compileBootstrapRequest`.
+   */
+  if (typeof value.testCommand !== 'string') {
+    return { ok: false, problem: 'The contract field "testCommand" must be a string — empty when the mission declares no deterministic check.' };
   }
   /**
    * An artifact name, and one this repository can count. Lower-case, starts
@@ -471,6 +481,8 @@ export function compileBootstrapRequest(contract: LiveMissionContractFile, worke
     acceptanceCriteria: contract.acceptanceCriteria,
     scope: { filesInScope: [], filesOutOfScope: [], systemsInScope: [], systemsOutOfScope: [] },
     workers,
+    // Read off the contract, never inferred from the objective's prose.
+    deterministicCheck: { declared: contract.testCommand.trim() !== '' },
     card: { referenceId: 'card:julius-live', revision: cardRevision },
     projectBrain: { referenceId: 'brain:julius-live', revision: '0' },
     requestedPermissions: [],

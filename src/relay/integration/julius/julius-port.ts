@@ -118,6 +118,21 @@ export interface JuliusBootstrapRequest {
   readonly card: PinnedRevisionReference;
   readonly projectBrain: PinnedRevisionReference;
   /**
+   * WHETHER THIS MISSION DECLARES A DETERMINISTIC CHECK AT ALL.
+   *
+   * Julius is not a coding-only agent. A research, analysis, planning or
+   * document mission produces a real change to a real file and has no test
+   * command, and a bootstrap that demanded `TEST` evidence of it would park the
+   * run in VERIFYING forever for lacking something the mission never had.
+   * `declared: false` makes the build's required evidence the captured DIFF —
+   * the deliverable itself — instead of a test run nobody declared.
+   *
+   * OPTIONAL, AND ABSENT MEANS DECLARED. Every existing compiler of this request
+   * describes a code mission with a test command, and keeping their behaviour
+   * unchanged is the point; only a compiler that KNOWS there is no check says so.
+   */
+  readonly deterministicCheck?: { readonly declared: boolean };
+  /**
    * The repository authority this run REQUESTS. Requested, never granted:
    * Relay's repository resolver narrows it against what a human granted on the
    * registration, and Julius narrows it again per worker and per sub-agent.

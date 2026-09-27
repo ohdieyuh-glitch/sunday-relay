@@ -1543,15 +1543,28 @@ export function createJuliusCodingAgentAdapter(input: {
       }));
       if (diff.status === 'SUCCEEDED') input.artifacts.put(diffRef(snapshot.runId), diff.stdout);
       stopIfCancelled('test', outcome.observation);
-      const test = await afterSession(() => input.shell.run({
-        ...shellScope,
-        invocationKey: `${dispatch.taskId}:test`,
-        command: input.testCommand,
-        timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.test,
-      }));
+      /**
+       * NO CHECK DECLARED, NO CHECK RUN, NO TEST ROW. A mission whose contract
+       * carries an empty test command is a report, an analysis, a plan — work
+       * proven by the diff it produced, not by a suite it never had. Running an
+       * empty command would be a shell no-op exiting 0, and recording that as
+       * a PASSED test would be the falsest evidence this path could write. The
+       * reviewer is told, in the packet, that no check was declared.
+       */
+      const checkDeclared = input.testCommand.trim() !== '';
+      const test = checkDeclared
+        ? await afterSession(() => input.shell.run({
+          ...shellScope,
+          invocationKey: `${dispatch.taskId}:test`,
+          command: input.testCommand,
+          timeoutMs: CODER_EXECUTOR_STEP_TIMEOUTS_MS.test,
+        }))
+        : null;
       // The body the TEST evidence is drawn from, named once so the evidence
       // can carry its digest rather than describing it.
-      const testOutputText = `exit=${test.exitCode ?? 'unknown'}\n${test.stdout}\n${test.stderr}`;
+      const testOutputText = test === null
+        ? 'No deterministic check was declared by the mission contract; none was run.'
+        : `exit=${test.exitCode ?? 'unknown'}\n${test.stdout}\n${test.stderr}`;
       input.artifacts.put(testOutputRef(snapshot.runId), testOutputText);
 
       /**
@@ -1588,7 +1601,7 @@ export function createJuliusCodingAgentAdapter(input: {
           attemptOutcome: 'SUCCEEDED',
           ...(readable && 'report' in participation ? { report: participation.report } : {}),
         },
-        safeSummary: `Coding Agent session completed (${input.provider.providerKind}; observed model ${safeClaim(observation.providerModel ?? 'unknown', 80)}, ${observation.turns ?? 'unknown'} turns); tests ${test.status === 'SUCCEEDED' ? 'passed' : 'failed'} under the independent executor.`,
+        safeSummary: `Coding Agent session completed (${input.provider.providerKind}; observed model ${safeClaim(observation.providerModel ?? 'unknown', 80)}, ${observation.turns ?? 'unknown'} turns); tests ${test === null ? 'not declared by the mission' : test.status === 'SUCCEEDED' ? 'passed' : 'failed'} under the independent executor.`,
         evidence: [
           {
             type: 'DIFF',
@@ -1618,7 +1631,7 @@ export function createJuliusCodingAgentAdapter(input: {
             artifactRef: null,
             occurredAt: nowIso(),
           },
-          {
+          ...(test === null ? [] : [{
             type: 'TEST',
             status: test.status === 'SUCCEEDED' ? 'PASSED' : 'FAILED',
             safeSummary: `Deterministic test command exited ${test.exitCode ?? 'unknown'} under executor invocation ${test.invocationId}.`,
@@ -1627,7 +1640,7 @@ export function createJuliusCodingAgentAdapter(input: {
             integrityHash: sha256(testOutputText),
             artifactRef: null,
             occurredAt: nowIso(),
-          },
+          }]),
         ],
         diagnostics: { ...observation.diagnostics, codingAgentProvider: input.provider.providerKind },
         usage: {
@@ -1670,7 +1683,10 @@ export function createLiveHostedCodingAdapter(input: {
   readonly run?: typeof runHostedCodingAgent;
   readonly queryLoader?: () => Promise<HostedQueryFn>;
 }): JuliusProviderAdapter {
-  if (!input.apiKey || !input.requestedModel || !input.workspacePath || !input.testCommand) {
+  // `testCommand` is deliberately NOT in this guard. Empty means the mission
+  // declared no deterministic check, which is a valid mission and not a missing
+  // configuration; the dispatch below runs nothing and records no TEST row.
+  if (!input.apiKey || !input.requestedModel || !input.workspacePath) {
     throw new Error('hosted_coding_adapter_requires_live_config');
   }
   return createJuliusCodingAgentAdapter({
