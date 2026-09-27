@@ -463,6 +463,8 @@ private:
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> EyeHaloMids;
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UStaticMeshComponent>> EyeHalos;
+	/** Which of the three falloff rings each halo instance is (0 inner .. 2 outer), parallel to EyeHaloMids. */
+	TArray<int32> EyeHaloRing;
 
 	UPROPERTY(Transient)
 	TObjectPtr<class AWonderlandCompanionEmbodiment> Costume = nullptr;

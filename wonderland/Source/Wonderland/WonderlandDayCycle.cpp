@@ -440,7 +440,11 @@ static float GWonderlandNightGlow = 0.20f;
  * strength or its material raised on that one skin, not this global level, and that is art rather than a
  * constant -- so it is left for the founder rather than guessed at here.
  */
-static float GWonderlandEyeDayGlow = 18.0f;
+// 24, from the round-2 sheet: at 18 the core sat at ~0.7 of the 25,000 white, lit but flat, and nothing bloomed.
+// 24 puts the core's centre at the white point by day, so the bloom pass (threshold 1.0) catches it and the eye
+// gets the soft light around it that the founder asked for; the halo panes carry the coloured rim. Night stays
+// at 8, which the night exposure opens to ~21,600 -- bright, coloured, under white.
+static float GWonderlandEyeDayGlow = 24.0f;
 static FAutoConsoleVariableRef GWonderlandEyeDayGlowRef(
 	TEXT("wl.Look.EyeGlowDay"),
 	GWonderlandEyeDayGlow,

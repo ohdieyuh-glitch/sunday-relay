@@ -576,7 +576,7 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
         # the halo pane: behind the core, wider than it, additive, in the eye's colour. See start().
         if "eyehalo" in figure.material_names:
             figure.box("head", "eyehalo", (hd * 0.5 + 0.16, side * d["eye_gap"], visor_z),
-                       (0.30, exw * 1.45, exh * 1.45))
+                       (0.30, exw * 1.8, exh * 1.8))
 
     # The body and the two legs. Short, plain, and under the dress in every skin but the bare one.
     td, tw, th = d["torso"]
@@ -1984,8 +1984,8 @@ def celestial_light():
     # to an absolute 12; the face now sits at 6 and 4.8, so the eyes are the brightest thing on it, which is
     # the whole of "visibly glowing eyes" on this skin. The cut lines still carry: 6 is well above the 1.0 of
     # the body it edges.
-    figure.material("edge", "glow", (0.62, 0.82, 1.00), 1.0)
-    figure.material("starlight", "glow", (0.95, 0.98, 1.00), 0.8)
+    figure.material("edge", "glow", (0.62, 0.82, 1.00), 0.7)
+    figure.material("starlight", "glow", (0.95, 0.98, 1.00), 0.6)
     figure.material("bannercloth", "rim", (0.80, 0.90, 1.00), 1.0)
     figure.material("ink", "glow", (0.93, 0.98, 1.00), 0.6)
     figure.material("frost", "rim", (0.86, 0.93, 1.00), 1.0)

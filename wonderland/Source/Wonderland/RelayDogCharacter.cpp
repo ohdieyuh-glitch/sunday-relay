@@ -1657,9 +1657,15 @@ void ARelayDogCharacter::BuildEyeGlow()
 		FVector Scale = Size * 1.45 / CubeSide;
 		Scale[Across] = Size[Across] * 0.36 * 1.45 / CubeSide;
 		Scale[Normal] = FMath::Max(Size[Normal] * 0.34 / CubeSide, 0.01);
+		// THREE RINGS PER EYE, each larger and dimmer than the one inside it, so the light falls off from the pane
+		// instead of stopping at a hard plate edge (round 2 photographed the single 1.45x pane as a gold frame).
+		const double Rings[3] = {1.3, 1.75, 2.3};
+		for (int32 Ring = 0; Ring < 3; ++Ring)
 		for (const double Which : {-1.0, 1.0})
 		for (const double Side : {-1.0, 1.0})
 		{
+			FVector RingScale = Scale * (Rings[Ring] / 1.45);
+			RingScale[Normal] = Scale[Normal];
 			UStaticMeshComponent* Halo = NewObject<UStaticMeshComponent>(this, MakeUniqueObjectName(this, UStaticMeshComponent::StaticClass(), TEXT("EyeHalo")));
 			Halo->ComponentTags.Add(TEXT("WL_EyeHalo"));
 			Halo->SetMobility(EComponentMobility::Movable);
@@ -1669,9 +1675,10 @@ void ARelayDogCharacter::BuildEyeGlow()
 			Halo->SetupAttachment(Eye);
 			FVector Offset = PaneCentre;
 			Offset[Across] += Which * Size[Across] * 0.25;
-			Offset[Normal] += Side * Size[Normal] * 0.55;
+			Offset[Normal] += Side * Size[Normal] * (0.55 + 0.08 * Ring);
 			Halo->SetRelativeLocation(Offset);
-			Halo->SetRelativeScale3D(Scale);
+			Halo->SetRelativeScale3D(RingScale);
+			EyeHaloRing.Add(Ring);
 			Halo->RegisterComponent();
 			UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Additive, this);
 			Halo->SetMaterial(0, Mid);
@@ -1695,7 +1702,8 @@ void ARelayDogCharacter::SetEyeGlow(float Level)
 	// established colour, or the chosen secondary -- and only the magnitude is set, exactly as the figures do.
 	const float Peak = FMath::Max3(EyeColour.R, FMath::Max(EyeColour.G, EyeColour.B), KINDA_SMALL_NUMBER);
 	const FLinearColor Core = (EyeColour / Peak) * Wanted;
-	const FLinearColor Halo = Core * 0.22f;   // a rim, not a second eye: measured at 0.35 as a solid plate
+	// the three rings' shares: the inner rim bright, the outer barely there -- a falloff drawn in three steps
+	const float Shares[3] = {0.30f, 0.12f, 0.05f};
 	for (UMaterialInstanceDynamic* Mid : EyeCoreMids)
 	{
 		if (Mid != nullptr)
@@ -1706,10 +1714,13 @@ void ARelayDogCharacter::SetEyeGlow(float Level)
 			Mid->SetScalarParameterValue(TEXT("EmissiveStrength"), 1000.0f);
 		}
 	}
-	for (UMaterialInstanceDynamic* Mid : EyeHaloMids)
+	for (int32 Index = 0; Index < EyeHaloMids.Num(); ++Index)
 	{
+		UMaterialInstanceDynamic* Mid = EyeHaloMids[Index];
 		if (Mid != nullptr)
 		{
+			const int32 Ring = EyeHaloRing.IsValidIndex(Index) ? FMath::Clamp(EyeHaloRing[Index], 0, 2) : 0;
+			const FLinearColor Halo = Core * Shares[Ring];
 			// the additive material has no strength parameter: its Color carries the thousand
 			Mid->SetVectorParameterValue(TEXT("Color"), Halo * 1000.0f);
 			Mid->SetVectorParameterValue(TEXT("EmissiveColor"), Halo * 1000.0f);

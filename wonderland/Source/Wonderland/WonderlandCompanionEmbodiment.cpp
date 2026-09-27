@@ -1524,7 +1524,10 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 		// the ghostfire blazing in a dark plaza -- that plume is the skin, not an artefact -- and cutting it
 		// five-fold after dark is precisely the "flames I need back" complaint. The shell around it still
 		// takes the correction, so the Dog does not wash out; only the fire is left alone.
-		Want = Authored * GlowScale * (bFlameTwin ? 1.0f : NightGlowScale);
+		// HALF THE NIGHT CORRECTION FOR THE FIRE. Exempt entirely, Arden's halo fire photographed as a yellow blaze
+		// over the whole head at night (round 2): the night exposure opens 1.45 EV and a 12,600 ember clips. Half
+		// way keeps the fire plainly there after dark -- the founder's video -- without it swallowing the figure.
+		Want = Authored * GlowScale * (bFlameTwin ? FMath::Lerp(1.0f, NightGlowScale, 0.5f) : NightGlowScale);
 	}
 	else if (bGlows)
 	{
@@ -1550,7 +1553,7 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 		// the eye's own light and must follow the eye's clock, not the body's night correction -- but at the
 		// eye's full level it would be a second, bigger eye. A rim is a rim because it is dimmer than what it
 		// rims, so a halo takes about a third of the level the core is driven to.
-		const float HaloShare = Def.Name.ToString().Contains(TEXT("halo"), ESearchCase::IgnoreCase) ? 0.35f : 1.0f;
+		const float HaloShare = Def.Name.ToString().Contains(TEXT("halo"), ESearchCase::IgnoreCase) ? 0.28f : 1.0f;
 		Want = (Authored / Peak) * EyeGlowScale * GlowScale * HaloShare;
 	}
 	if (bChosen)
