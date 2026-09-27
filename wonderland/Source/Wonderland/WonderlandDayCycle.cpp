@@ -510,6 +510,37 @@ static float GWonderlandNightSky = 7.0f;
 //: Shadow contrast BELOW 1.0 lifts shadow detail and leaves highlights alone, which is the difference between
 //: a readable night and a flat one. The engine's own guidance is 0.6 to 1.0. This is lerped by Nightfall, so
 //: at Nightfall 0 it is exactly 1.0 -- the engine default, no effect -- and DAY IS PROVABLY UNTOUCHED.
+//: HOW WIDE THE TWILIGHT BAND IS, IN DEGREES OF SUN ELEVATION -- and therefore how long evening lasts.
+//:
+//: THE FOUNDER'S ITEM 12 ASKS FOR "morning to afternoon to evening to night with no sudden jumps". What the
+//: world does instead, read off this curve rather than guessed: Daylight = clamp((elevation + 9) / SPAN)^1.9
+//: saturates at elevation 12, so with SPAN at its shipped 21 it reads EXACTLY 1.0 from 06:38 to 17:22 --
+//: 10.7 hours of identical daylight -- and then falls the entire way to zero between 17:22 and 18:29. The
+//: whole evening is 67 MINUTES. The day has no afternoon; it has a plateau and a cliff.
+//:
+//: Widening the band spreads that fall over more of the sun's arc:
+//:
+//:      span 21 (shipped)   flat 06:38-17:22 (10.7 h)   evening  67 min
+//:      span 39             flat 07:38-16:22 ( 8.7 h)   evening 127 min
+//:      span 49             flat 08:15-15:45 ( 7.5 h)   evening 163 min
+//:
+//: NOON IS UNCHANGED AT ANY VALUE, which is what makes this safe to sweep: at 72 degrees every band
+//: saturates to 1.0, so the noon exposure bias stays at -0.9 and the other lane's eye tuning is untouched.
+//: What moves is the late afternoon -- at 17:00 span 39 gives 0.52 of full daylight where span 21 gives 1.0.
+//:
+//: DEFAULTED TO THE SHIPPED 21 ON PURPOSE. This is a visible change to every afternoon in the world and it
+//: has not been measured or looked at yet. Today has produced enough evidence that a number which looks
+//: right is not a number that has been checked; 39 is the recommendation and the default stays 21 until the
+//: ladder and a photograph agree.
+static float GWonderlandTwilightSpan = 21.0f;
+static FAutoConsoleVariableRef GWonderlandTwilightSpanRef(
+	TEXT("wl.Sky.TwilightSpan"),
+	GWonderlandTwilightSpan,
+	TEXT("Degrees of sun elevation the day-to-night transition is spread over. 21 is shipped and gives a "
+		 "67-minute evening after 10.7 flat hours; 39 gives a 127-minute evening after 8.7. Noon is "
+		 "identical at any value."),
+	ECVF_Default);
+
 static float GWonderlandNightShadowLift = 0.65f;
 static FAutoConsoleVariableRef GWonderlandNightShadowLiftRef(
 	TEXT("wl.Look.NightShadowLift"),
@@ -553,7 +584,8 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 	// after sunset the way it does outdoors. The exponent is what keeps the horizon reading as EVENING rather
 	// than as a dimmer afternoon: at 0 deg it lands near a fifth of noon, not the two fifths a straight line
 	// would give.
-	const float TwilightBand = FMath::Clamp((Elevation + 9.0f) / 21.0f, 0.0f, 1.0f);
+	const float TwilightBand = FMath::Clamp(
+		(Elevation + 9.0f) / FMath::Max(GWonderlandTwilightSpan, 1.0f), 0.0f, 1.0f);
 	const float Daylight = FMath::Pow(TwilightBand, 1.9f);
 
 	// HOW FAR INTO THE NIGHT WE ARE: 0 while the sun is still up, 1 once it is well down. Smoothstepped, because
