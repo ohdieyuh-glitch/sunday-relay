@@ -278,7 +278,9 @@ try {
       summary.job !== null && summary.job.status !== 'error',
       summary.job === null
         ? { reason: exited !== null ? `the bridge exited (${exited}) while the job ran` : `no result within ${WAIT_MINUTES} min` }
-        : { status: summary.job.status, error: summary.job.error ?? null, seconds: summary.job.seconds });
+        // No `error: null` on a job that raised nothing: a null in a PASSING clause is an unreported measurement to
+        // proof-verdict, and the first all-pass run (853f3956f00747b1) graded INCOMPLETE on exactly that.
+        : { status: summary.job.status, seconds: summary.job.seconds, ...(summary.job.error ? { error: summary.job.error } : {}) });
     clauses.push(...jobTests);
     const ran = new Set(jobTests.map((t) => t.id));
     const missing = JOB_CLAUSES.filter((id) => !ran.has(id));
