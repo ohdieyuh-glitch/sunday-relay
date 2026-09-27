@@ -1,0 +1,29 @@
+{
+ "name": "zc_spectral",
+ "started": "2026-09-26 22:39:52",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "S00",
+   "name": "the beat was sampled at every angle",
+   "pass": true,
+   "detail": {
+    "angles": [
+     "front",
+     "side",
+     "back"
+    ],
+    "frames_each": 14,
+    "note": "LOW/MID/HIGH are chosen from these by measured brightness, outside the editor -- a frame cannot be called the peak by the thing that drew it"
+   }
+  }
+ ],
+ "figure": {
+  "flames": "sections=2 flameMids=11 sources=8 | [0] verts=2048 tris=3584 visible=1 mat=MID_M_WL_VoxelGlow_11<M_WL_VoxelGlow> colour=(70.58,224.57,320.81) | [1] verts=2048 tris=3584 visible=1 mat=MID_M_WL_VoxelGlow_13<M_WL_VoxelGlow> colour=(395.97,516.96,549.96) ",
+  "framing": "onBody=1 bodyTall=30.0 bodyWide=15.2 rawTall=29.9 rawWide=15.2 envelope=268 scale=0.329 fill=0.80 fitTall=49 fitWide=31 distance=49 fov=34.0 target=640x800 predictedHeightPct=80.0"
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\spectral",
+ "finished": "2026-09-26 22:41:06",
+ "seconds": 74.57,
+ "log": "S_FIG INFO what Skeleton Flame reports {'flames': 'sections=2 flameMids=11 sources=8 | [0] verts=2048 tris=3584 visible=1 mat=MID_M_WL_VoxelGlow_11<M_WL_VoxelGlow> colour=(70.58,224.57,320.81) | [1] verts=2048 tris=3584 visible=1 mat=MID_M_WL_VoxelGlow_13<M_WL_VoxelGlow> colour=(395.97,516.96,549.96) ', 'framing': 'onBody=1 bodyTall=30.0 bodyWide=15.2 rawTall=29.9 rawWide=15.2 envelope=268 scale=0.329 fill=0.80 fitTall=49 fitWide=31 distance=49 fov=34.0 target=640x800 predictedHeightPct=80.0'}\nS_front INFO captured front across the beat {'frames': 14}\nS_side INFO captured side across the beat {'frames': 14}\nS_back INFO captured back across the beat {'frames': 14}\n"
+}

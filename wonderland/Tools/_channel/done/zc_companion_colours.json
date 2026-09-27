@@ -1,0 +1,217 @@
+{
+ "name": "zc_companion_colours",
+ "started": "2026-09-27 00:42:21",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "C00",
+   "name": "there is an AI companion embodied in the world",
+   "pass": true,
+   "detail": {
+    "label": "WL_Companion_GPT6Astra",
+    "at": [
+     -233,
+     -689,
+     56
+    ]
+   }
+  },
+  {
+   "id": "C01",
+   "name": "every combination was actually read",
+   "pass": true,
+   "detail": {
+    "read": 5,
+    "wanted": 5
+   }
+  },
+  {
+   "id": "C02",
+   "name": "SECONDARY alone changes the picture",
+   "pass": true,
+   "detail": {
+    "white_on_cyan": {
+     "primary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "secondary": [
+      0.1,
+      0.85,
+      1.0
+     ],
+     "most_blue_over_red": 0.298,
+     "most_red_over_blue": 0.749,
+     "most_green_over_red": 0.4745,
+     "mean_luma": 0.788,
+     "sampled": 271700
+    },
+    "white_on_violet": {
+     "primary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "secondary": [
+      0.7,
+      0.2,
+      1.0
+     ],
+     "most_blue_over_red": 0.0588,
+     "most_red_over_blue": 0.8392,
+     "most_green_over_red": 0.0784,
+     "mean_luma": 0.7512,
+     "sampled": 271700
+    },
+    "note": "identical PRIMARY, different SECONDARY. If nothing moves, the secondary channel is not reaching the glow surfaces at all -- which is what a mis-named material parameter looks like, and it looks exactly like a correct one that had no effect"
+   }
+  },
+  {
+   "id": "C03",
+   "name": "PRIMARY alone changes the picture",
+   "pass": true,
+   "detail": {
+    "white_on_violet": {
+     "primary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "secondary": [
+      0.7,
+      0.2,
+      1.0
+     ],
+     "most_blue_over_red": 0.0588,
+     "most_red_over_blue": 0.8392,
+     "most_green_over_red": 0.0784,
+     "mean_luma": 0.7512,
+     "sampled": 271700
+    },
+    "black_on_violet": {
+     "primary": [
+      0.05,
+      0.05,
+      0.06
+     ],
+     "secondary": [
+      0.7,
+      0.2,
+      1.0
+     ],
+     "most_blue_over_red": 0.0627,
+     "most_red_over_blue": 0.8314,
+     "most_green_over_red": 0.0863,
+     "mean_luma": 0.5496,
+     "sampled": 271700
+    },
+    "note": "identical SECONDARY, different PRIMARY. A near-black body against a white one must change the frame's luma; if it does not, the primary channel is not reaching the solid parts"
+   }
+  },
+  {
+   "id": "C04",
+   "name": "the two channels are independent, not one knob driving everything",
+   "pass": true,
+   "detail": {
+    "from_secondary": 0.2392,
+    "from_primary": 0.0039,
+    "note": "the glow's hue must answer to SECONDARY more than to PRIMARY. If the primary swings it just as hard, one colour is driving both channels and the founder's two controls are decorative"
+   }
+  }
+ ],
+ "embodiments_in_world": [
+  "WL_Companion_GPT6Astra"
+ ],
+ "by_combo": {
+  "white_on_cyan": {
+   "primary": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "secondary": [
+    0.1,
+    0.85,
+    1.0
+   ],
+   "most_blue_over_red": 0.298,
+   "most_red_over_blue": 0.749,
+   "most_green_over_red": 0.4745,
+   "mean_luma": 0.788,
+   "sampled": 271700
+  },
+  "white_on_violet": {
+   "primary": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "secondary": [
+    0.7,
+    0.2,
+    1.0
+   ],
+   "most_blue_over_red": 0.0588,
+   "most_red_over_blue": 0.8392,
+   "most_green_over_red": 0.0784,
+   "mean_luma": 0.7512,
+   "sampled": 271700
+  },
+  "black_on_violet": {
+   "primary": [
+    0.05,
+    0.05,
+    0.06
+   ],
+   "secondary": [
+    0.7,
+    0.2,
+    1.0
+   ],
+   "most_blue_over_red": 0.0627,
+   "most_red_over_blue": 0.8314,
+   "most_green_over_red": 0.0863,
+   "mean_luma": 0.5496,
+   "sampled": 271700
+  },
+  "red_on_blue": {
+   "primary": [
+    0.9,
+    0.12,
+    0.1
+   ],
+   "secondary": [
+    0.15,
+    0.3,
+    1.0
+   ],
+   "most_blue_over_red": 0.3176,
+   "most_red_over_blue": 0.9529,
+   "most_green_over_red": 0.1608,
+   "mean_luma": 0.563,
+   "sampled": 271700
+  },
+  "gold_on_white": {
+   "primary": [
+    1.0,
+    0.78,
+    0.2
+   ],
+   "secondary": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "most_blue_over_red": 0.0667,
+   "most_red_over_blue": 1.0,
+   "most_green_over_red": 0.098,
+   "mean_luma": 0.7558,
+   "sampled": 271700
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\companion_colours",
+ "finished": "2026-09-27 00:43:00",
+ "seconds": 38.69,
+ "log": "C00 PASS there is an AI companion embodied in the world {'label': 'WL_Companion_GPT6Astra', 'at': [-233, -689, 56]}\nC_white_on_cyan INFO white_on_cyan {'primary': [1.0, 1.0, 1.0], 'secondary': [0.1, 0.85, 1.0], 'most_blue_over_red': 0.298, 'most_red_over_blue': 0.749, 'most_green_over_red': 0.4745, 'mean_luma': 0.788, 'sampled': 271700}\nC_white_on_violet INFO white_on_violet {'primary': [1.0, 1.0, 1.0], 'secondary': [0.7, 0.2, 1.0], 'most_blue_over_red': 0.0588, 'most_red_over_blue': 0.8392, 'most_green_over_red': 0.0784, 'mean_luma': 0.7512, 'sampled': 271700}\nC_black_on_violet INFO black_on_violet {'primary': [0.05, 0.05, 0.06], 'secondary': [0.7, 0.2, 1.0], 'most_blue_over_red': 0.0627, 'most_red_over_blue': 0.8314, 'most_green_over_red': 0.0863, 'mean_luma': 0.5496, 'sampled': 271700}\nC_red_on_blue INFO red_on_blue {'primary': [0.9, 0.12, 0.1], 'secondary': [0.15, 0.3, 1.0], 'most_blue_over_red': 0.3176, 'most_red_over_blue': 0.9529, 'most_green_over_red': 0.1608, 'mean_luma': 0.563, 'sampled': 271700}\nC_gold_on_white INFO gold_on_white {'primary': [1.0, 0.78, 0.2], 'secondary': [1.0, 1.0, 1.0], 'most_blue_over_red': 0.0667, 'most_red_over_blue': 1.0, 'most_green_over_red': 0.098, 'mean_luma': 0.7558, 'sampled': 271700}\nC01 PASS every combination was actually read {'read': 5, 'wanted': 5}\nC02 PASS SECONDARY alone changes the picture {'white_on_cyan': {'primary': [1.0, 1.0, 1.0], 'secondary': [0.1, 0.85, 1.0], 'most_blue_over_red': 0.298, 'most_red_over_blue': 0.749, 'most_green_over_red': 0.4745, 'mean_luma': 0.788, 'sampled': 271700}, 'white_on_violet': {'primary': [1.0, 1.0, 1.0], 'secondary': [0.7, 0.2, 1.0], 'most_blue_over_red': 0.0588, 'most_red_over_blue': 0.8392, 'most_green_over_red': 0.0784, 'mean_luma': 0.7512, 'sampled': 271700}, 'note': 'identical PRIMARY, different SECONDARY. If nothing moves, the secondary channel is not reaching the glow surfaces at all -- which is what a mis-named material parameter looks like, and it looks exactly like a correct one that had no effect'}\nC03 PASS PRIMARY alone changes the picture {'white_on_violet': {'primary': [1.0, 1.0, 1.0], 'secondary': [0.7, 0.2, 1.0], 'most_blue_over_red': 0.0588, 'most_red_over_blue': 0.8392, 'most_green_over_red': 0.0784, 'mean_luma': 0.7512, 'sampled': 271700}, 'black_on_violet': {'primary': [0.05, 0.05, 0.06], 'secondary': [0.7, 0.2, 1.0], 'most_blue_over_red': 0.0627, 'most_red_over_blue': 0.8314, 'most_green_over_red': 0.0863, 'mean_luma': 0.5496, 'sampled': 271700}, 'note': \"identical SECONDARY, different PRIMARY. A near-black body against a white one must change the frame's luma; if it does not, the primary channel is not reaching the solid parts\"}\nC04 PASS the two channels are independent, not one knob driving everything {'from_secondary': 0.2392, 'from_primary': 0.0039, 'note': \"the glow's hue must answer to SECONDARY more than to PRIMARY. If the primary swings it just as hard, one colour is driving both channels and the founder's two controls are decorative\"}\n"
+}

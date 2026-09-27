@@ -1,0 +1,56 @@
+{
+ "name": "zc_body_parts",
+ "started": "2026-09-26 22:24:05",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "B00",
+   "name": "every skin was taken apart",
+   "pass": true,
+   "detail": {
+    "skins": [
+     "relay_og",
+     "arden_infernal",
+     "apollo",
+     "skeleton_flame",
+     "celestial_light"
+    ]
+   }
+  }
+ ],
+ "by_skin": {
+  "relay_og": {
+   "flames": "no flame surface",
+   "parts": [],
+   "component_count": 0,
+   "declared_height": 155.0
+  },
+  "arden_infernal": {
+   "flames": "sections=2 flameMids=12 sources=3 | [0] verts=768 tris=1344 visible=1 mat=MID_M_WL_VoxelGlow_13<M_WL_VoxelGlow> colour=(383.22,130.29,19.16) | [1] verts=768 tris=1344 visible=1 mat=MID_M_WL_VoxelGlow_15<M_WL_VoxelGlow> colour=(638.70,459.86,140.51) ",
+   "parts": [],
+   "component_count": 0,
+   "declared_height": 398.9
+  },
+  "apollo": {
+   "flames": "sections=2 flameMids=12 sources=1 | [0] verts=256 tris=448 visible=1 mat=MID_M_WL_VoxelGlow_21<M_WL_VoxelGlow> colour=(482.06,173.54,14.46) | [1] verts=256 tris=448 visible=1 mat=MID_M_WL_VoxelGlow_25<M_WL_VoxelGlow> colour=(826.38,644.58,132.22) ",
+   "parts": [],
+   "component_count": 0,
+   "declared_height": 284.4
+  },
+  "skeleton_flame": {
+   "flames": "sections=2 flameMids=9 sources=6 | [0] verts=1536 tris=2688 visible=1 mat=MID_M_WL_VoxelGlow_29<M_WL_VoxelGlow> colour=(119.12,379.03,541.47) | [1] verts=1536 tris=2688 visible=1 mat=MID_M_WL_VoxelGlow_31<M_WL_VoxelGlow> colour=(668.33,872.55,928.24) ",
+   "parts": [],
+   "component_count": 0,
+   "declared_height": 219.9
+  },
+  "celestial_light": {
+   "flames": "sections=0 flameMids=9 sources=0 ",
+   "parts": [],
+   "component_count": 0,
+   "declared_height": 198.9
+  }
+ },
+ "finished": "2026-09-26 22:25:00",
+ "seconds": 55.63,
+ "log": "B_relay_og INFO relay_og {'components': 0, 'all_parts_tall': None, 'declared': 155.0, 'names': []}\nB_arden_infernal INFO arden_infernal {'components': 0, 'all_parts_tall': None, 'declared': 398.9, 'names': []}\nB_apollo INFO apollo {'components': 0, 'all_parts_tall': None, 'declared': 284.4, 'names': []}\nB_skeleton_flame INFO skeleton_flame {'components': 0, 'all_parts_tall': None, 'declared': 219.9, 'names': []}\nB_celestial_light INFO celestial_light {'components': 0, 'all_parts_tall': None, 'declared': 198.9, 'names': []}\n"
+}

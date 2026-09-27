@@ -1,0 +1,100 @@
+{
+ "name": "zc_wardrobe_regress",
+ "started": "2026-09-27 00:25:12",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "R00",
+   "name": "every skin framing was recorded before the cycle",
+   "pass": true,
+   "detail": {
+    "baseline": {
+     "relay_og": "onBody=1 bodyTall=53.1 bodyWide=31.1 rawTall=53.1 rawWide=31.1 envelope=155 scale=0.336 fill=0.80 glow=0.0015 fitTall=87 fitWide=64 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "arden_infernal": "onBody=1 bodyTall=53.2 bodyWide=33.6 rawTall=53.2 rawWide=33.6 envelope=399 scale=0.243 fill=0.80 glow=0.0015 fitTall=87 fitWide=69 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "apollo": "onBody=1 bodyTall=33.2 bodyWide=47.2 rawTall=33.2 rawWide=47.2 envelope=284 scale=0.142 fill=0.80 glow=0.0015 fitTall=54 fitWide=96 distance=68 fov=34.0 target=640x800 predictedHeightPct=64.0",
+     "skeleton_flame": "onBody=1 bodyTall=53.1 bodyWide=36.4 rawTall=53.1 rawWide=36.4 envelope=268 scale=0.334 fill=0.80 glow=0.0015 fitTall=87 fitWide=74 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "celestial_light": "onBody=1 bodyTall=53.2 bodyWide=35.5 rawTall=53.2 rawWide=35.5 envelope=199 scale=0.332 fill=0.80 glow=0.0015 fitTall=87 fitWide=73 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0"
+    }
+   }
+  },
+  {
+   "id": "R01",
+   "name": "the mascot is still the same size on screen after the whole cycle",
+   "pass": true,
+   "detail": {
+    "drifted": {},
+    "tolerance_pct": 3.0,
+    "steps": [
+     "closed and reopened three times",
+     "cycled all five skins twice",
+     "changed primary and secondary through three combinations and restored the defaults",
+     "rotated the figure a full 360 in twelve steps",
+     "teleported the player 11 km and swept the clock through night and back"
+    ],
+    "before": {
+     "relay_og": "onBody=1 bodyTall=53.1 bodyWide=31.1 rawTall=53.1 rawWide=31.1 envelope=155 scale=0.336 fill=0.80 glow=0.0015 fitTall=87 fitWide=64 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "arden_infernal": "onBody=1 bodyTall=53.2 bodyWide=33.6 rawTall=53.2 rawWide=33.6 envelope=399 scale=0.243 fill=0.80 glow=0.0015 fitTall=87 fitWide=69 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "apollo": "onBody=1 bodyTall=33.2 bodyWide=47.2 rawTall=33.2 rawWide=47.2 envelope=284 scale=0.142 fill=0.80 glow=0.0015 fitTall=54 fitWide=96 distance=68 fov=34.0 target=640x800 predictedHeightPct=64.0",
+     "skeleton_flame": "onBody=1 bodyTall=53.1 bodyWide=36.4 rawTall=53.1 rawWide=36.4 envelope=268 scale=0.334 fill=0.80 glow=0.0015 fitTall=87 fitWide=74 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "celestial_light": "onBody=1 bodyTall=53.2 bodyWide=35.5 rawTall=53.2 rawWide=35.5 envelope=199 scale=0.332 fill=0.80 glow=0.0015 fitTall=87 fitWide=73 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0"
+    },
+    "afterwards": {
+     "relay_og": "onBody=1 bodyTall=72.7 bodyWide=44.1 rawTall=72.7 rawWide=44.1 envelope=155 scale=0.460 fill=0.80 glow=0.0015 fitTall=119 fitWide=90 distance=119 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "arden_infernal": "onBody=1 bodyTall=72.4 bodyWide=45.3 rawTall=72.4 rawWide=45.3 envelope=399 scale=0.330 fill=0.80 glow=0.0015 fitTall=118 fitWide=93 distance=118 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "apollo": "onBody=1 bodyTall=45.2 bodyWide=64.5 rawTall=45.2 rawWide=64.5 envelope=284 scale=0.197 fill=0.80 glow=0.0015 fitTall=74 fitWide=132 distance=92 fov=34.0 target=640x800 predictedHeightPct=64.0",
+     "skeleton_flame": "onBody=1 bodyTall=72.7 bodyWide=48.9 rawTall=72.7 rawWide=48.9 envelope=268 scale=0.460 fill=0.80 glow=0.0015 fitTall=119 fitWide=100 distance=119 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "celestial_light": "onBody=1 bodyTall=72.7 bodyWide=48.2 rawTall=72.7 rawWide=48.2 envelope=199 scale=0.459 fill=0.80 glow=0.0015 fitTall=119 fitWide=98 distance=119 fov=34.0 target=640x800 predictedHeightPct=80.0"
+    },
+    "note": "occupancy, not camera distance: the stage rescales itself when the player moves and the solve follows it, so the distance legitimately changes while the picture does not"
+   }
+  },
+  {
+   "id": "R02",
+   "name": "every skin is still framed on its physical body, not the total actor bounds",
+   "pass": true,
+   "detail": {
+    "on_body": [
+     "relay_og",
+     "arden_infernal",
+     "apollo",
+     "skeleton_flame",
+     "celestial_light"
+    ],
+    "notes": {
+     "relay_og": "onBody=1 bodyTall=72.7 bodyWide=44.1 rawTall=72.7 rawWide=44.1 envelope=155 scale=0.460 fill=0.80 glow=0.0015 fitTall=119 fitWide=90 distance=119 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "arden_infernal": "onBody=1 bodyTall=72.4 bodyWide=45.3 rawTall=72.4 rawWide=45.3 envelope=399 scale=0.330 fill=0.80 glow=0.0015 fitTall=118 fitWide=93 distance=118 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "apollo": "onBody=1 bodyTall=45.2 bodyWide=64.5 rawTall=45.2 rawWide=64.5 envelope=284 scale=0.197 fill=0.80 glow=0.0015 fitTall=74 fitWide=132 distance=92 fov=34.0 target=640x800 predictedHeightPct=64.0",
+     "skeleton_flame": "onBody=1 bodyTall=72.7 bodyWide=48.9 rawTall=72.7 rawWide=48.9 envelope=268 scale=0.460 fill=0.80 glow=0.0015 fitTall=119 fitWide=100 distance=119 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "celestial_light": "onBody=1 bodyTall=72.7 bodyWide=48.2 rawTall=72.7 rawWide=48.2 envelope=199 scale=0.459 fill=0.80 glow=0.0015 fitTall=119 fitWide=98 distance=119 fov=34.0 target=640x800 predictedHeightPct=80.0"
+    },
+    "note": "onBody=0 means GetFramingBodyBounds returned nothing and the solve fell back to the declared envelope, which includes halos and flames -- the exact thing the founder ruled out"
+   }
+  }
+ ],
+ "baseline": {
+  "relay_og": "onBody=1 bodyTall=53.1 bodyWide=31.1 rawTall=53.1 rawWide=31.1 envelope=155 scale=0.336 fill=0.80 glow=0.0015 fitTall=87 fitWide=64 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "arden_infernal": "onBody=1 bodyTall=53.2 bodyWide=33.6 rawTall=53.2 rawWide=33.6 envelope=399 scale=0.243 fill=0.80 glow=0.0015 fitTall=87 fitWide=69 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "apollo": "onBody=1 bodyTall=33.2 bodyWide=47.2 rawTall=33.2 rawWide=47.2 envelope=284 scale=0.142 fill=0.80 glow=0.0015 fitTall=54 fitWide=96 distance=68 fov=34.0 target=640x800 predictedHeightPct=64.0",
+  "skeleton_flame": "onBody=1 bodyTall=53.1 bodyWide=36.4 rawTall=53.1 rawWide=36.4 envelope=268 scale=0.334 fill=0.80 glow=0.0015 fitTall=87 fitWide=74 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "celestial_light": "onBody=1 bodyTall=53.2 bodyWide=35.5 rawTall=53.2 rawWide=35.5 envelope=199 scale=0.332 fill=0.80 glow=0.0015 fitTall=87 fitWide=73 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0"
+ },
+ "steps": [
+  "closed and reopened three times",
+  "cycled all five skins twice",
+  "changed primary and secondary through three combinations and restored the defaults",
+  "rotated the figure a full 360 in twelve steps",
+  "teleported the player 11 km and swept the clock through night and back"
+ ],
+ "after": {
+  "relay_og": "onBody=1 bodyTall=72.7 bodyWide=44.1 rawTall=72.7 rawWide=44.1 envelope=155 scale=0.460 fill=0.80 glow=0.0015 fitTall=119 fitWide=90 distance=119 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "arden_infernal": "onBody=1 bodyTall=72.4 bodyWide=45.3 rawTall=72.4 rawWide=45.3 envelope=399 scale=0.330 fill=0.80 glow=0.0015 fitTall=118 fitWide=93 distance=118 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "apollo": "onBody=1 bodyTall=45.2 bodyWide=64.5 rawTall=45.2 rawWide=64.5 envelope=284 scale=0.197 fill=0.80 glow=0.0015 fitTall=74 fitWide=132 distance=92 fov=34.0 target=640x800 predictedHeightPct=64.0",
+  "skeleton_flame": "onBody=1 bodyTall=72.7 bodyWide=48.9 rawTall=72.7 rawWide=48.9 envelope=268 scale=0.460 fill=0.80 glow=0.0015 fitTall=119 fitWide=100 distance=119 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "celestial_light": "onBody=1 bodyTall=72.7 bodyWide=48.2 rawTall=72.7 rawWide=48.2 envelope=199 scale=0.459 fill=0.80 glow=0.0015 fitTall=119 fitWide=98 distance=119 fov=34.0 target=640x800 predictedHeightPct=80.0"
+ },
+ "occupancy_drift": {},
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\wardrobe_regress",
+ "finished": "2026-09-27 00:26:59",
+ "seconds": 106.75,
+ "log": "R00 PASS every skin framing was recorded before the cycle {'baseline': {'relay_og': 'onBody=1 bodyTall=53.1 bodyWide=31.1 rawTall=53.1 rawWide=31.1 envelope=155 scale=0.336 fill=0.80 glow=0.0015 fitTall=87 fitWide=64 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0', 'arden_infernal': 'onBody=1 bodyTall=53.2 bodyWide=33.6 rawTall=53.2 rawWide=33.6 envelope=399 scale=0.243 fill=0.80 glow=0.0015 fitTall=87 fitWide=69 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0', 'apollo': 'onBody=1 bodyTall=33.2 bodyWide=47.2 rawTall=33.2 rawWide=47.2 envelope=284 scale=0.142 fill=0.80 glow=0.0015 fitTall=54 fitWide=96 distance=68 fov=34.0 target=640x800 predictedHeightPct=64.0', 'skeleton_flame': 'onBody=1 bodyTall=53.1 bodyWide=36.4 rawTall=53.1 rawWide=36.4 envelope=268 scale=0.334 fill=0.80 glow=0.0015 fitTall=87 fitWide=74 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0', 'celestial_light': 'onBody=1 bodyTall=53.2 bodyWide=35.5 rawTall=53.2 rawWide=35.5 envelope=199 scale=0.332 fill=0.80 glow=0.0015 fitTall=87 fitWide=73 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0'}}\nR01 PASS the mascot is still the same size on screen after the whole cycle {'drifted': {}, 'tolerance_pct': 3.0, 'steps': ['closed and reopened three times', 'cycled all five skins twice', 'changed primary and secondary through three combinations and restored the defaults', 'rotated the figure a full 360 in twelve steps', 'teleported the player 11 km and swept the clock through night and back'], 'before': {'relay_og': 'onBody=1 bodyTall=53.1 bodyWide=31.1 rawTall=53.1 rawWide=31.1 envelope=155 scale=0.336 fill=0.80 glow=0.0015 fitTall=87 fitWide=64 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0', 'arden_infernal': 'onBody=1 bodyTall=53.2 bodyWide=33.6 rawTall=53.2 rawWide=33.6 envelope=399 scale=0.243 fill=0.80 glow=0.0015 fitTall=87 fitWide=69 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0', 'apollo': 'onBody=1 bodyTall=33.2 bodyWide=47.2 rawTall=33.2 rawWide=47.2 envelope=284 scale=0.142 fill=0.80 glow=0.0015 fitTall=54 fitWide=96 distance=68 fov=34.0 target=640x800 predictedHeightPct=64.0', 'skeleton_flame': 'onBody=1 bodyTall=53.1 bodyWide=36.4 rawTall=53.1 rawWide=36.4 envelope=268 scale=0.334 fill=0.80 glow=0.0015 fitTall=87 fitWide=74 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0', 'celestial_light': 'onBody=1 bodyTall=53.2 bodyWide=35.5 rawTall=53.2 rawWide=35.5 envelope=199 scale=0.332 fill=0.80 glow=0.0015 fitTall=87 fitWide=73 distance=87 fov=34.0 target=640x800 predictedHeightPct=80.0'}, 'afterwards': {'relay_og': 'onBody=1 bodyTall=72.7 bodyWide=44.1 rawTall=72.7 rawWide=44.1 envelope=155 scale=0.460 fill=0.80 glow=0.0015 fitTall=119 fitWide=90 distance=119 fov=34.0 target=640x800 predictedHeightPct=80.0', 'arden_infernal': 'onBody=1 bodyTall=72.4 bodyWide=45.3 rawTall=72.4 rawWide=45.3 envelope=399 scale=0.330 fill=0.80 glow=0.0015 fitTall=118 fitWide=93 distance=118 fov=34.0 target=640x800 predictedHeightPct=80.0', 'apollo': 'onBody=1 bodyTall=45.2 bodyWide=64.5 rawTall=45.2 rawWide=64.5 envelope=284 scale=0.197 fill=0.80 glow=0.0015 fitTall=74 fitWide=132 distance=92 fov=34.0 target=640x800 predictedHeightPct=64.0', 'skeleton_flame': 'onBody=1 bodyTall=72.7 bodyWide=48.9 rawTall=72.7 rawWide=48.9 envelope=268 scale=0.460 fill=0.80 glow=0.0015 fitTall=119 fitWide=100 distance=119 fov=34.0 target=640x800 predictedHeightPct=80.0', 'celestial_light': 'onBody=1 bodyTall=72.7 bodyWide=48.2 rawTall=72.7 rawWide=48.2 envelope=199 scale=0.459 fill=0.80 glow=0.0015 fitTall=119 fitWide=98 distance=119 fov=34.0 target=640x800 predictedHeightPct=80.0'}, 'note': 'occupancy, not camera distance: the stage rescales itself when the player moves and the solve follows it, so the distance legitimately changes while the picture does not'}\nR02 PASS every skin is still framed on its physical body, not the total actor bounds {'on_body': ['relay_og', 'arden_infernal', 'apollo', 'skeleton_flame', 'celestial_light'], 'notes': {'relay_og': 'onBody=1 bodyTall=72.7 bodyWide=44.1 rawTall=72.7 rawWide=44.1 envelope=155 scale=0.460 fill=0.80 glow=0.0015 fitTall=119 fitWide=90 distance=119 fov=34.0 target=640x800 predictedHeightPct=80.0', 'arden_infernal': 'onBody=1 bodyTall=72.4 bodyWide=45.3 rawTall=72.4 rawWide=45.3 envelope=399 scale=0.330 fill=0.80 glow=0.0015 fitTall=118 fitWide=93 distance=118 fov=34.0 target=640x800 predictedHeightPct=80.0', 'apollo': 'onBody=1 bodyTall=45.2 bodyWide=64.5 rawTall=45.2 rawWide=64.5 envelope=284 scale=0.197 fill=0.80 glow=0.0015 fitTall=74 fitWide=132 distance=92 fov=34.0 target=640x800 predictedHeightPct=64.0', 'skeleton_flame': 'onBody=1 bodyTall=72.7 bodyWide=48.9 rawTall=72.7 rawWide=48.9 envelope=268 scale=0.460 fill=0.80 glow=0.0015 fitTall=119 fitWide=100 distance=119 fov=34.0 target=640x800 predictedHeightPct=80.0', 'celestial_light': 'onBody=1 bodyTall=72.7 bodyWide=48.2 rawTall=72.7 rawWide=48.2 envelope=199 scale=0.459 fill=0.80 glow=0.0015 fitTall=119 fitWide=98 distance=119 fov=34.0 target=640x800 predictedHeightPct=80.0'}, 'note': 'onBody=0 means GetFramingBodyBounds returned nothing and the solve fell back to the declared envelope, which includes halos and flames -- the exact thing the founder ruled out'}\n"
+}

@@ -1,0 +1,39 @@
+{
+ "name": "zc_bloom_probe",
+ "started": "2026-09-26 23:27:47",
+ "status": "measured; the corners of the exported frames are the answer",
+ "tests": [
+  {
+   "id": "B00",
+   "name": "each term was taken to zero in turn",
+   "pass": true,
+   "detail": {
+    "cases": [
+     "bloom_0.100",
+     "bloom_0.040",
+     "bloom_0.015",
+     "bloom_0.005",
+     "bloom_0.000"
+    ],
+    "skins": [
+     "skeleton_flame",
+     "celestial_light",
+     "apollo",
+     "arden_infernal",
+     "relay_og"
+    ]
+   }
+  }
+ ],
+ "flames": {
+  "skeleton_flame": "sections=2 flameMids=11 sources=8 | [0] verts=2048 tris=3584 visible=1 mat=MID_M_WL_VoxelGlow_11<M_WL_VoxelGlow> colour=(2.48,7.90,11.28) | [1] verts=2048 tris=3584 visible=1 mat=MID_M_WL_VoxelGlow_13<M_WL_VoxelGlow> colour=(13.92,18.18,19.34) ",
+  "celestial_light": "sections=0 flameMids=9 sources=0 ",
+  "apollo": "sections=2 flameMids=12 sources=1 | [0] verts=256 tris=448 visible=1 mat=MID_M_WL_VoxelGlow_29<M_WL_VoxelGlow> colour=(14.16,5.10,0.42) | [1] verts=256 tris=448 visible=1 mat=MID_M_WL_VoxelGlow_33<M_WL_VoxelGlow> colour=(24.27,18.93,3.88) ",
+  "arden_infernal": "sections=2 flameMids=12 sources=3 | [0] verts=768 tris=1344 visible=1 mat=MID_M_WL_VoxelGlow_37<M_WL_VoxelGlow> colour=(11.89,4.04,0.59) | [1] verts=768 tris=1344 visible=1 mat=MID_M_WL_VoxelGlow_39<M_WL_VoxelGlow> colour=(19.81,14.26,4.36) ",
+  "relay_og": "sections=0 flameMids=4 sources=0 "
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\bloom_probe",
+ "finished": "2026-09-26 23:29:36",
+ "seconds": 109.45,
+ "log": "B_skeleton_flame INFO skeleton_flame {'flames': 'sections=2 flameMids=11 sources=8 | [0] verts=2048 tris=3584 visible=1 mat=MID_M_WL_VoxelGlow_11<M_WL_VoxelGlow> colour=(2.48,7.90,11.28) | [1] verts=2048 tris=3584 visible=1 mat=MID_M_WL_VoxelGlow_13<M_WL_VoxelGlow> colour=(13.92,18.18,19.34) '}\nB_celestial_light INFO celestial_light {'flames': 'sections=0 flameMids=9 sources=0 '}\nB_apollo INFO apollo {'flames': 'sections=2 flameMids=12 sources=1 | [0] verts=256 tris=448 visible=1 mat=MID_M_WL_VoxelGlow_29<M_WL_VoxelGlow> colour=(14.16,5.10,0.42) | [1] verts=256 tris=448 visible=1 mat=MID_M_WL_VoxelGlow_33<M_WL_VoxelGlow> colour=(24.27,18.93,3.88) '}\nB_arden_infernal INFO arden_infernal {'flames': 'sections=2 flameMids=12 sources=3 | [0] verts=768 tris=1344 visible=1 mat=MID_M_WL_VoxelGlow_37<M_WL_VoxelGlow> colour=(11.89,4.04,0.59) | [1] verts=768 tris=1344 visible=1 mat=MID_M_WL_VoxelGlow_39<M_WL_VoxelGlow> colour=(19.81,14.26,4.36) '}\nB_relay_og INFO relay_og {'flames': 'sections=0 flameMids=4 sources=0 '}\n"
+}

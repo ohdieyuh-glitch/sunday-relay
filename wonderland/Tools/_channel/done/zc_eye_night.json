@@ -1,0 +1,382 @@
+{
+ "name": "zc_eye_night",
+ "started": "2026-09-27 00:38:08",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "N00",
+   "name": "every level was read for every skin",
+   "pass": true,
+   "detail": {
+    "read": 20,
+    "wanted": 20
+   }
+  },
+  {
+   "id": "N01",
+   "name": "there is a night level where every skin's eyes read as lit",
+   "pass": false,
+   "detail": {
+    "passing": [],
+    "table": {
+     "5.0": {
+      "relay_og": [
+       0.1528,
+       0.0,
+       0.1118
+      ],
+      "arden_infernal": [
+       1.0,
+       1.0,
+       0.0316
+      ],
+      "apollo": [
+       1.0,
+       1.0,
+       0.1661
+      ],
+      "skeleton_flame": [
+       1.0,
+       1.0,
+       0.2174
+      ],
+      "celestial_light": [
+       0.8842,
+       1.0,
+       -0.1158
+      ]
+     },
+     "9.0": {
+      "relay_og": [
+       0.095,
+       0.0,
+       0.0727
+      ],
+      "arden_infernal": [
+       1.0,
+       1.0,
+       0.0581
+      ],
+      "apollo": [
+       1.0,
+       1.0,
+       0.0989
+      ],
+      "skeleton_flame": [
+       1.0,
+       1.0,
+       0.2771
+      ],
+      "celestial_light": [
+       0.8534,
+       1.0,
+       -0.1466
+      ]
+     },
+     "13.0": {
+      "relay_og": [
+       0.0695,
+       0.0,
+       0.0512
+      ],
+      "arden_infernal": [
+       1.0,
+       1.0,
+       0.045
+      ],
+      "apollo": [
+       1.0,
+       1.0,
+       0.14
+      ],
+      "skeleton_flame": [
+       1.0,
+       1.0,
+       0.1659
+      ],
+      "celestial_light": [
+       0.8766,
+       1.0,
+       -0.1234
+      ]
+     },
+     "18.0": {
+      "relay_og": [
+       0.078,
+       0.0,
+       0.0577
+      ],
+      "arden_infernal": [
+       1.0,
+       1.0,
+       0.0571
+      ],
+      "apollo": [
+       1.0,
+       1.0,
+       0.0997
+      ],
+      "skeleton_flame": [
+       1.0,
+       1.0,
+       0.2802
+      ],
+      "celestial_light": [
+       0.9027,
+       1.0,
+       -0.0973
+      ]
+     }
+    },
+    "luma_floor": 0.35,
+    "blown_ceiling": 0.9,
+    "note": "the floor is what separates a lamp from paint -- Relay OG measured 0.119 at the shipped level of 5.0, which is the picture the founder called switched off. The ceiling is the other failure: an eye entirely clipped to white carries no colour and cannot show the founder's SECONDARY."
+   }
+  }
+ ],
+ "by_level": {
+  "5.0": {
+   "relay_og": {
+    "eye_luma": 0.1528,
+    "blown": 0.0,
+    "face_luma": 0.041,
+    "eye_over_face": 0.1118
+   },
+   "arden_infernal": {
+    "eye_luma": 1.0,
+    "blown": 1.0,
+    "face_luma": 0.9684,
+    "eye_over_face": 0.0316
+   },
+   "apollo": {
+    "eye_luma": 1.0,
+    "blown": 1.0,
+    "face_luma": 0.8339,
+    "eye_over_face": 0.1661
+   },
+   "skeleton_flame": {
+    "eye_luma": 1.0,
+    "blown": 1.0,
+    "face_luma": 0.7826,
+    "eye_over_face": 0.2174
+   },
+   "celestial_light": {
+    "eye_luma": 0.8842,
+    "blown": 1.0,
+    "face_luma": 1.0,
+    "eye_over_face": -0.1158
+   }
+  },
+  "9.0": {
+   "relay_og": {
+    "eye_luma": 0.095,
+    "blown": 0.0,
+    "face_luma": 0.0223,
+    "eye_over_face": 0.0727
+   },
+   "arden_infernal": {
+    "eye_luma": 1.0,
+    "blown": 1.0,
+    "face_luma": 0.9419,
+    "eye_over_face": 0.0581
+   },
+   "apollo": {
+    "eye_luma": 1.0,
+    "blown": 1.0,
+    "face_luma": 0.9011,
+    "eye_over_face": 0.0989
+   },
+   "skeleton_flame": {
+    "eye_luma": 1.0,
+    "blown": 1.0,
+    "face_luma": 0.7229,
+    "eye_over_face": 0.2771
+   },
+   "celestial_light": {
+    "eye_luma": 0.8534,
+    "blown": 1.0,
+    "face_luma": 1.0,
+    "eye_over_face": -0.1466
+   }
+  },
+  "13.0": {
+   "relay_og": {
+    "eye_luma": 0.0695,
+    "blown": 0.0,
+    "face_luma": 0.0183,
+    "eye_over_face": 0.0512
+   },
+   "arden_infernal": {
+    "eye_luma": 1.0,
+    "blown": 1.0,
+    "face_luma": 0.955,
+    "eye_over_face": 0.045
+   },
+   "apollo": {
+    "eye_luma": 1.0,
+    "blown": 1.0,
+    "face_luma": 0.86,
+    "eye_over_face": 0.14
+   },
+   "skeleton_flame": {
+    "eye_luma": 1.0,
+    "blown": 1.0,
+    "face_luma": 0.8341,
+    "eye_over_face": 0.1659
+   },
+   "celestial_light": {
+    "eye_luma": 0.8766,
+    "blown": 1.0,
+    "face_luma": 1.0,
+    "eye_over_face": -0.1234
+   }
+  },
+  "18.0": {
+   "relay_og": {
+    "eye_luma": 0.078,
+    "blown": 0.0,
+    "face_luma": 0.0203,
+    "eye_over_face": 0.0577
+   },
+   "arden_infernal": {
+    "eye_luma": 1.0,
+    "blown": 1.0,
+    "face_luma": 0.9429,
+    "eye_over_face": 0.0571
+   },
+   "apollo": {
+    "eye_luma": 1.0,
+    "blown": 1.0,
+    "face_luma": 0.9003,
+    "eye_over_face": 0.0997
+   },
+   "skeleton_flame": {
+    "eye_luma": 1.0,
+    "blown": 1.0,
+    "face_luma": 0.7198,
+    "eye_over_face": 0.2802
+   },
+   "celestial_light": {
+    "eye_luma": 0.9027,
+    "blown": 1.0,
+    "face_luma": 1.0,
+    "eye_over_face": -0.0973
+   }
+  }
+ },
+ "levels_passing": [],
+ "table": {
+  "5.0": {
+   "relay_og": [
+    0.1528,
+    0.0,
+    0.1118
+   ],
+   "arden_infernal": [
+    1.0,
+    1.0,
+    0.0316
+   ],
+   "apollo": [
+    1.0,
+    1.0,
+    0.1661
+   ],
+   "skeleton_flame": [
+    1.0,
+    1.0,
+    0.2174
+   ],
+   "celestial_light": [
+    0.8842,
+    1.0,
+    -0.1158
+   ]
+  },
+  "9.0": {
+   "relay_og": [
+    0.095,
+    0.0,
+    0.0727
+   ],
+   "arden_infernal": [
+    1.0,
+    1.0,
+    0.0581
+   ],
+   "apollo": [
+    1.0,
+    1.0,
+    0.0989
+   ],
+   "skeleton_flame": [
+    1.0,
+    1.0,
+    0.2771
+   ],
+   "celestial_light": [
+    0.8534,
+    1.0,
+    -0.1466
+   ]
+  },
+  "13.0": {
+   "relay_og": [
+    0.0695,
+    0.0,
+    0.0512
+   ],
+   "arden_infernal": [
+    1.0,
+    1.0,
+    0.045
+   ],
+   "apollo": [
+    1.0,
+    1.0,
+    0.14
+   ],
+   "skeleton_flame": [
+    1.0,
+    1.0,
+    0.1659
+   ],
+   "celestial_light": [
+    0.8766,
+    1.0,
+    -0.1234
+   ]
+  },
+  "18.0": {
+   "relay_og": [
+    0.078,
+    0.0,
+    0.0577
+   ],
+   "arden_infernal": [
+    1.0,
+    1.0,
+    0.0571
+   ],
+   "apollo": [
+    1.0,
+    1.0,
+    0.0997
+   ],
+   "skeleton_flame": [
+    1.0,
+    1.0,
+    0.2802
+   ],
+   "celestial_light": [
+    0.9027,
+    1.0,
+    -0.0973
+   ]
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\eye_night",
+ "finished": "2026-09-27 00:40:21",
+ "seconds": 132.63,
+ "log": "N_5.0 INFO eye level 5.0 {'relay_og': {'eye_luma': 0.1528, 'blown': 0.0, 'face_luma': 0.041, 'eye_over_face': 0.1118}, 'arden_infernal': {'eye_luma': 1.0, 'blown': 1.0, 'face_luma': 0.9684, 'eye_over_face': 0.0316}, 'apollo': {'eye_luma': 1.0, 'blown': 1.0, 'face_luma': 0.8339, 'eye_over_face': 0.1661}, 'skeleton_flame': {'eye_luma': 1.0, 'blown': 1.0, 'face_luma': 0.7826, 'eye_over_face': 0.2174}, 'celestial_light': {'eye_luma': 0.8842, 'blown': 1.0, 'face_luma': 1.0, 'eye_over_face': -0.1158}}\nN_9.0 INFO eye level 9.0 {'relay_og': {'eye_luma': 0.095, 'blown': 0.0, 'face_luma': 0.0223, 'eye_over_face': 0.0727}, 'arden_infernal': {'eye_luma': 1.0, 'blown': 1.0, 'face_luma': 0.9419, 'eye_over_face': 0.0581}, 'apollo': {'eye_luma': 1.0, 'blown': 1.0, 'face_luma': 0.9011, 'eye_over_face': 0.0989}, 'skeleton_flame': {'eye_luma': 1.0, 'blown': 1.0, 'face_luma': 0.7229, 'eye_over_face': 0.2771}, 'celestial_light': {'eye_luma': 0.8534, 'blown': 1.0, 'face_luma': 1.0, 'eye_over_face': -0.1466}}\nN_13.0 INFO eye level 13.0 {'relay_og': {'eye_luma': 0.0695, 'blown': 0.0, 'face_luma': 0.0183, 'eye_over_face': 0.0512}, 'arden_infernal': {'eye_luma': 1.0, 'blown': 1.0, 'face_luma': 0.955, 'eye_over_face': 0.045}, 'apollo': {'eye_luma': 1.0, 'blown': 1.0, 'face_luma': 0.86, 'eye_over_face': 0.14}, 'skeleton_flame': {'eye_luma': 1.0, 'blown': 1.0, 'face_luma': 0.8341, 'eye_over_face': 0.1659}, 'celestial_light': {'eye_luma': 0.8766, 'blown': 1.0, 'face_luma': 1.0, 'eye_over_face': -0.1234}}\nN_18.0 INFO eye level 18.0 {'relay_og': {'eye_luma': 0.078, 'blown': 0.0, 'face_luma': 0.0203, 'eye_over_face': 0.0577}, 'arden_infernal': {'eye_luma': 1.0, 'blown': 1.0, 'face_luma': 0.9429, 'eye_over_face': 0.0571}, 'apollo': {'eye_luma': 1.0, 'blown': 1.0, 'face_luma': 0.9003, 'eye_over_face': 0.0997}, 'skeleton_flame': {'eye_luma': 1.0, 'blown': 1.0, 'face_luma': 0.7198, 'eye_over_face': 0.2802}, 'celestial_light': {'eye_luma': 0.9027, 'blown': 1.0, 'face_luma': 1.0, 'eye_over_face': -0.0973}}\nN00 PASS every level was read for every skin {'read': 20, 'wanted': 20}\nN_TABLE INFO eye luma and blown fraction by level {'5.0': {'relay_og': (0.1528, 0.0, 0.1118), 'arden_infernal': (1.0, 1.0, 0.0316), 'apollo': (1.0, 1.0, 0.1661), 'skeleton_flame': (1.0, 1.0, 0.2174), 'celestial_light': (0.8842, 1.0, -0.1158)}, '9.0': {'relay_og': (0.095, 0.0, 0.0727), 'arden_infernal': (1.0, 1.0, 0.0581), 'apollo': (1.0, 1.0, 0.0989), 'skeleton_flame': (1.0, 1.0, 0.2771), 'celestial_light': (0.8534, 1.0, -0.1466)}, '13.0': {'relay_og': (0.0695, 0.0, 0.0512), 'arden_infernal': (1.0, 1.0, 0.045), 'apollo': (1.0, 1.0, 0.14), 'skeleton_flame': (1.0, 1.0, 0.1659), 'celestial_light': (0.8766, 1.0, -0.1234)}, '18.0': {'relay_og': (0.078, 0.0, 0.0577), 'arden_infernal': (1.0, 1.0, 0.0571), 'apollo': (1.0, 1.0, 0.0997), 'skeleton_flame': (1.0, 1.0, 0.2802), 'celestial_light': (0.9027, 1.0, -0.0973)}}\nN01 FAIL there is a night level where every skin's eyes read as lit {'passing': [], 'table': {'5.0': {'relay_og': (0.1528, 0.0, 0.1118), 'arden_infernal': (1.0, 1.0, 0.0316), 'apollo': (1.0, 1.0, 0.1661), 'skeleton_flame': (1.0, 1.0, 0.2174), 'celestial_light': (0.8842, 1.0, -0.1158)}, '9.0': {'relay_og': (0.095, 0.0, 0.0727), 'arden_infernal': (1.0, 1.0, 0.0581), 'apollo': (1.0, 1.0, 0.0989), 'skeleton_flame': (1.0, 1.0, 0.2771), 'celestial_light': (0.8534, 1.0, -0.1466)}, '13.0': {'relay_og': (0.0695, 0.0, 0.0512), 'arden_infernal': (1.0, 1.0, 0.045), 'apollo': (1.0, 1.0, 0.14), 'skeleton_flame': (1.0, 1.0, 0.1659), 'celestial_light': (0.8766, 1.0, -0.1234)}, '18.0': {'relay_og': (0.078, 0.0, 0.0577), 'arden_infernal': (1.0, 1.0, 0.0571), 'apollo': (1.0, 1.0, 0.0997), 'skeleton_flame': (1.0, 1.0, 0.2802), 'celestial_light': (0.9027, 1.0, -0.0973)}}, 'luma_floor': 0.35, 'blown_ceiling': 0.9, 'note': \"the floor is what separates a lamp from paint -- Relay OG measured 0.119 at the shipped level of 5.0, which is the picture the founder called switched off. The ceiling is the other failure: an eye entirely clipped to white carries no colour and cannot show the founder's SECONDARY.\"}\n"
+}
