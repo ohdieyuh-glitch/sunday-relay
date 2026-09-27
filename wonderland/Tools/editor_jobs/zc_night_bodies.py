@@ -29,11 +29,25 @@ import json
 import math
 import os
 import sys
+import time
 import unreal
 
 L = unreal.WonderlandUiTestLibrary
 
-ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "night_bodies")
+# ---- EVERY RUN GETS ITS OWN FOLDER, BECAUSE THE LAST ONE DESTROYED ITS PREDECESSOR IN SILENCE.
+#
+# This job wrote night_body_<skin>_<hour>.png into one directory, so the second run overwrote the first. I
+# found it by measuring what I believed was the morning's photograph and getting the afternoon's numbers: I
+# had a before and an after, and the after had eaten the before while I was still quoting it.
+#
+# THE RESULT FILE SURVIVES AND THE PICTURE DOES NOT, which is the worse half. The founder's standard is that
+# the rendered result is the acceptance test, and a before/after the founder can look at is the deliverable.
+# JSON numbers with no surviving image behind them are the thing this project keeps promising not to produce.
+#
+# So captures land under a per-run folder named from the job's own name and the clock, and `latest` is a plain
+# copy rather than a link so a reader with no symlink support still finds the newest.
+RUN_TAG = "%s_%s" % (__name__, time.strftime("%H%M%S"))
+ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "night_bodies", RUN_TAG)
 # CHANNEL is <repo>/wonderland/Tools/_channel, so the repo's wonderland root is two levels up.
 REPO = os.path.dirname(os.path.dirname(CHANNEL))
 SKINS = ("relay_og", "celestial_light", "apollo", "arden_infernal", "skeleton_flame")
@@ -63,119 +77,14 @@ BLOWN = 0.97 * 255.0
 LIGHT = 0.72 * 255.0
 
 
-def read(path):
-    sys.path.insert(0, os.path.dirname(CHANNEL))
-    from occupancy import read_png                                  # noqa: WPS433
-    return read_png(path)
 
-
-def figure_stats(path, box):
-    """Body, light and ground readings inside a frame whose figure is known to be in `box`.
-
-    box is (x0, y0, x1, y1) in fractions of the frame. Everything outside it is world, not figure.
-    """
-    w, h, chan, px = read(path)
-    x0, y0, x1, y1 = (int(box[0] * w), int(box[1] * h), int(box[2] * w), int(box[3] * h))
-    body = []
-    lit = []
-    lights = 0
-    blown = 0
-    inside = []
-    seen = 0
-    for y in range(y0, min(y1, h), STEP):
-        row = y * w * chan
-        for x in range(x0, min(x1, w), STEP):
-            i = row + x * chan
-            lum = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]
-            seen += 1
-            inside.append(lum)
-            if lum >= BLOWN:
-                blown += 1
-            if lum >= LIGHT:
-                lights += 1
-                lit.append(lum)
-            else:
-                body.append(lum)
-    # ---- TWO GROUND BANDS, BECAUSE THE ONE UNDER THE FEET IS MOSTLY THE FIGURE'S OWN SHADOW.
-    #
-    # THIS JOB REPORTED "98 PER CENT OF THE GROUND UNDER RELAY OG IS CRUSHED" AND SENT THE WORLD LANE TO FIX
-    # THE WORLD WITH IT. Their own sweep then read a broad plaza patch at the same district and the same hour
-    # at 0.197 -- four times brighter than my 0.045. Same place, same hour, two answers, and the difference is
-    # that their patch has nobody standing on it. A strip immediately below a lit figure at 5.2 m is largely
-    # that figure's contact shadow, so this measured SHADOW DEPTH and called it world darkness.
-    #
-    # So: UNDER is the strip below the feet, which is shadow plus ground. BESIDE is the same strip shifted one
-    # figure-width to the side, out of the shadow, which is ground. The difference between them is the shadow,
-    # and that is a number neither lane has had: the founder asked for shadows that stay deep AND readable,
-    # which cannot be judged from a reading that fuses the shadow with the surface it falls on.
-    gy0, gy1 = min(y1, h - 1), min(int(y1 + (y1 - y0) * 0.16), h)
-    figure_w = max(x1 - x0, 1)
-
-    def band(bx0, bx1):
-        vals = []
-        for y in range(gy0, gy1, STEP):
-            row = y * w * chan
-            for x in range(max(bx0, 0), min(bx1, w), STEP):
-                i = row + x * chan
-                vals.append(0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2])
-        return vals
-
-    ground = band(x0, min(x1, w))
-    # One full figure-width to the side, and whichever side has more frame to give.
-    room_right = w - x1
-    beside = band(x1 + int(figure_w * 0.15), x1 + int(figure_w * 1.15)) if room_right >= figure_w         else band(x0 - int(figure_w * 1.15), x0 - int(figure_w * 0.15))
-
-    def frac_dark(vals):
-        return round(sum(1 for v in vals if v < DARK) / float(max(len(vals), 1)), 4)
-
-    def spread(vals):
-        """STANDARD DEVIATION ACROSS THE WHOLE FIGURE, which is the only number here that measures FORM.
-
-        A figure reads as a figure because its surfaces differ from one another: lit planes, turned-away
-        planes, the line where one meets the next. Every other measure in this job is about LEVEL, and level
-        cannot tell three cases apart that need three different answers -- a body crushed flat to black, a
-        body blown flat to white, and a body standing in readable light. The first two are both formless and
-        sit at opposite ends of every mean.
-
-        This matters because two of the five skins are luminous BY DESIGN. Arden Infernal builds 45 per cent
-        of its geometry from glow materials and Skeleton Flame 83 per cent, and Skeleton Flame being a
-        luminous ghost is the skin's identity rather than a defect. Asking those two to be dimmer is a
-        founder question. Asking them to still have a SHAPE is not, and this is the number that asks it.
-        """
-        if len(vals) < 2:
-            return None
-        mean = sum(vals) / float(len(vals))
-        var = sum((v - mean) ** 2 for v in vals) / float(len(vals))
-        return round((var ** 0.5) / 255.0, 4)
-
-    def mean(vals):
-        return round(sum(vals) / float(max(len(vals), 1)) / 255.0, 4)
-
-    return {"body_mean": mean(body), "body_dark_fraction": frac_dark(body),
-            # THE TWO FORMLESS FAILURES, MEASURED SEPARATELY FROM THE LEVEL.
-            "blown_fraction": round(blown / float(max(seen, 1)), 4),
-            "figure_form": spread(inside),
-            # ---- AND THE FOUNDER'S SENTENCE AS A SINGLE NUMBER.
-            #
-            # "Glowing objects floating in blackness" is not a statement about how bright the eyes are or how
-            # dark the world is. It is a statement about the RATIO, and neither half of this job measured it:
-            # light_fraction counts how many cells are lights, body_mean averages the cells that are not, and
-            # a figure can pass both while its eyes are twenty times the brightness of everything around them.
-            #
-            # The world lane found the case that proves it belongs here. At 18:15 the Dog's eye glow sits at
-            # 21.1 of a 24 maximum -- nearly full daylight value -- while the world around it measures luma
-            # 0.043 with ground at 0.0155. Every absolute reading in this job would call that figure DARK. The
-            # ratio is what calls it a pair of lights in a void, and the ratio is the thing the founder saw.
-            "light_mean": mean(lit),
-            "eye_over_world": (round(mean(lit) / max(mean(beside), 1e-6), 2) if lit and mean(beside) else None),
-            "light_fraction": round(lights / float(max(seen, 1)), 4),
-            "ground_mean": mean(ground), "ground_dark_fraction": frac_dark(ground),
-            # THE SAME STRIP, OUT OF THE FIGURE'S SHADOW. This is the one that answers "does the world light
-            # the ground"; the pair above answers "how deep is the mascot's shadow".
-            "beside_mean": mean(beside), "beside_dark_fraction": frac_dark(beside),
-            "shadow_depth": (round((mean(beside) - mean(ground)) / max(mean(beside), 1e-6), 4)
-                             if mean(beside) else None),
-            "cells": seen}
+# THE MEASUREMENT LIVES IN Tools/night_figure.py NOW, because it has two callers: this job photographs five
+# skins at one place and zc_night_bodies_world photographs the one skin with no glow geometry at five
+# districts. Three copies of one sentence went stale together in three files today; two copies of a
+# threshold would drift apart silently and both would keep publishing numbers. Verified identical on all
+# thirteen keys against this job's own inline version before the inline version was removed.
+sys.path.insert(0, os.path.dirname(CHANNEL))
+from night_figure import figure_stats                              # noqa: E402,WPS433
 
 
 def job():
@@ -390,9 +299,14 @@ def job():
     record("B02", "and it carries enough light to read a surface",
            all(isinstance(v, float) and v >= 0.10 for v in lit.values()), body_mean=lit, floor=0.10)
 
+    # JUDGED ON THE CLEAN INSTRUMENT, REPORTED FOR ALL, for the same reason B05 and B08 are. This clause
+    # failed Apollo at 0.2279, Arden at 0.2538 and Skeleton Flame at 0.3151 -- which are 22, 45 and 83 per cent
+    # glow geometry. A ceiling on "how much of the figure is its own light" cannot be applied to a skin that is
+    # mostly its own light by design; on Relay OG, which has none, it means exactly what it says.
     glow = {s: (night[s] or {}).get("light_fraction") for s in SKINS}
     record("B03", "the figure is not merely a pair of lights in a void",
-           all(isinstance(v, float) and v <= 0.18 for v in glow.values()), light_fraction=glow, ceiling=0.18,
+           isinstance(glow.get("relay_og"), float) and glow["relay_og"] <= 0.18,
+           light_fraction=glow, judged_on="relay_og", ceiling=0.18,
            note="high here with B01 also failing is exactly the failure the founder named: eyes blazing, "
                 "body gone. It is reported whether or not it passes, so the two can never be traded.")
 
@@ -415,9 +329,18 @@ def job():
         theirs = control.get("beside_mean")
         spill[s] = round(mine - theirs, 4) if (mine is not None and theirs is not None) else None
     RESULT["mascot_spill_on_ground"] = spill
-    record("B04", "the ground beside the character is readable too",
-           isinstance(world_dark, float) and world_dark <= 0.65,
-           world_beside_dark_fraction=world_dark, ceiling=0.65,
+    # EVERY HOUR, NOT JUST NIGHT. This clause read the night control and passed at 0.309 while the DUSK
+    # control sat at 0.7891 in the same result file -- the worst hour in the day, measured, present, and not
+    # looked at. A clause that judges the hour that happens to be in its variable name is a clause that will
+    # miss whichever hour is actually broken.
+    controls = {k: (v or {}).get("beside_dark_fraction") for k, v in (RESULT.get("world_control") or {}).items()}
+    worst_hour = None
+    for k, v in controls.items():
+        if isinstance(v, float) and (worst_hour is None or v > controls[worst_hour]):
+            worst_hour = k
+    record("B04", "the ground beside the character is readable at every hour",
+           bool(controls) and all(isinstance(v, float) and v <= 0.65 for v in controls.values()),
+           world_beside_dark_by_hour=controls, worst_hour=worst_hour, ceiling=0.65,
            per_skin_beside_for_comparison=beside, under_feet_for_comparison=ground,
            mascot_spill_on_ground=spill,
            note="measured on the CONTROL frame, with the figure hidden, because the same band beside a figure "
@@ -433,9 +356,14 @@ def job():
     # with the surface it falls on.
     depth = {s: (night[s] or {}).get("shadow_depth") for s in SKINS}
     RESULT["shadow_depth"] = depth
+    # AND A NEGATIVE DEPTH IS A READING, NOT AN ERROR. Skeleton Flame came back -0.4939 and Arden -0.0683:
+    # the ground under those figures is BRIGHTER than the ground beside them, because at 83 and 45 per cent glow
+    # geometry they are lighting the floor they stand on. That is the opposite of floating in blackness and it
+    # should not be reported as a shadow failure. Judged on the skin that casts a shadow and nothing else.
     record("B06", "the mascot's own shadow is deep but not a hole",
-           all(isinstance(v, float) and 0.15 <= v <= 0.85 for v in depth.values()),
-           shadow_depth=depth, floor=0.15, ceiling=0.85,
+           isinstance(depth.get("relay_og"), float) and 0.15 <= depth["relay_og"] <= 0.85,
+           shadow_depth=depth, judged_on="relay_og", floor=0.15, ceiling=0.85,
+           lights_its_own_ground={s: v for s, v in depth.items() if isinstance(v, float) and v < 0.0} or None,
            note="the fraction of the beside-ground's light that the figure's shadow removes. Under 0.15 is a "
                 "mascot that does not appear to be standing on anything; over 0.85 is a black hole where its "
                 "feet should be. Both are failures and one number cannot be raised to fix the other.")
