@@ -346,6 +346,60 @@ def job():
                 "so a red here is checkable by eye: open the JPEG. The previous version measured a "
                 "SceneCapture actor while saving viewport JPEGs -- two cameras, and only one was ever posed")
 
+    # ---- THE THOUSAND, CHECKED ON THE WORLD'S OWN EMISSIVE SURFACES.
+    #
+    # This bug class has now cost this project three separate hunts: the GLOW_SCALE 4000 -> 6 re-baseline that
+    # turned all gameplay glow black, an EmissiveStrength pin that appeared not to take because the material
+    # instance had no such parameter, and RestColourFor writing a figure's additive Color without the x1000 the
+    # material cannot supply itself. All three are the same shape -- an emissive authored against a white of
+    # 1.0 when Wonderland's rendered white is near 25,000 -- and all three were invisible from the numbers,
+    # because 18 is a perfectly reasonable-looking emissive.
+    #
+    # The world's own lanterns are the surface in MY lane that would fail this way, so it is worth one reading
+    # rather than an assumption. World materials take Emissive x EmissiveStrength, which is the safe pattern;
+    # the failure mode to catch is a lamp whose product lands near 1 instead of near the scene's white.
+    lamps = []
+    try:
+        for act in unreal.GameplayStatics.get_all_actors_with_tag(live(), "WL_Batch"):
+            for comp in act.get_components_by_class(unreal.InstancedStaticMeshComponent):
+                nm = str(comp.get_name()).lower()
+                if "lantern" not in nm and "lamp" not in nm:
+                    continue
+                for slot in range(comp.get_num_materials()):
+                    m = comp.get_material(slot)
+                    if m is None:
+                        continue
+                    row = {"component": str(comp.get_name())[:44], "material": str(m.get_name())[:40]}
+                    for pname, key in (("Emissive", "emissive"), ("EmissiveStrength", "strength")):
+                        try:
+                            if key == "strength":
+                                row[key] = round(float(m.get_scalar_parameter_value(pname)), 2)
+                            else:
+                                c = m.get_vector_parameter_value(pname)
+                                row[key] = [round(c.r, 4), round(c.g, 4), round(c.b, 4)]
+                        except Exception:                             # noqa: BLE001
+                            row[key] = None
+                    e, st = row.get("emissive"), row.get("strength")
+                    if isinstance(e, list) and st:
+                        row["rendered_peak"] = round(max(e) * st, 1)
+                    lamps.append(row)
+                    if len(lamps) >= 12:
+                        raise StopIteration
+    except StopIteration:
+        pass
+    except Exception as err:                                          # noqa: BLE001
+        lamps.append({"error": str(err)[:110]})
+    RESULT["lamp_materials"] = lamps
+    peaks = [r["rendered_peak"] for r in lamps if r.get("rendered_peak")]
+    record("N_SCALE", "the world's lit surfaces carry the scene's thousand -- an emissive judged against a "
+                      "white of 1.0 is three orders of magnitude too dark",
+           bool(peaks) and min(peaks) >= 100.0,
+           lamp_rendered_peaks=peaks, floor=100.0, lamps_read=len(lamps),
+           note="Wonderland's white is near 25,000 scene units at the pinned EV100 of 14.2. World materials "
+                "take Emissive x EmissiveStrength and the strength supplies the thousand, so the product is "
+                "what matters and a peak near 1 is the failure. A red here with zero lamps read is the "
+                "reporting path, not the world -- check lamp_materials for the error before believing it")
+
     # A PLACE THAT IS DARK AT NOON IS NOT A NIGHT PROBLEM, and this separates the two reasons it can happen.
     dark_at_noon = [k for k, v in noon.items() if v and v.get("dark", 0) > 0.85]
     record("N_NOON_DARK", "no place is already dark at MIDDAY -- a night gate cannot speak for a place that "
