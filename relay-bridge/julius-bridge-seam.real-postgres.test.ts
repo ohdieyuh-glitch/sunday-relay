@@ -54,6 +54,7 @@ suite('the Wonderland seam over a real PostgreSQL', () => {
   let pool: Pool;
   let statePorts: JuliusStateRoutePorts;
   let create: (body: string) => Promise<{ status: number; body: unknown } | null>;
+  let createRerun: (body: string) => Promise<{ status: number; body: unknown } | null>;
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -61,10 +62,10 @@ suite('the Wonderland seam over a real PostgreSQL', () => {
     // THE PRODUCTION COMPOSITIONS, exactly as the server builds them.
     const bootstrap = composeJuliusMissionBootstrap(pool);
     statePorts = { api: composeJuliusStateApi(pool), missingConfig: [] };
-    create = (body) => handleJuliusMissionRoute(
-      { method: 'POST', path: '/julius/missions', operator: true, body },
-      { bootstrap, missingConfig: [], reviewerProvider: 'xai', cardRevision: 'card:seam:1' },
-    );
+    const ports = { bootstrap, missingConfig: [], reviewerProvider: 'xai', cardRevision: 'card:seam:1' };
+    create = (body) => handleJuliusMissionRoute({ method: 'POST', path: '/julius/missions', operator: true, body }, ports);
+    createRerun = (body) => handleJuliusMissionRoute(
+      { method: 'POST', path: '/julius/missions', operator: true, body, rerun: 'explicit' }, ports);
   });
   afterAll(async () => pool?.end());
 
@@ -119,6 +120,79 @@ suite('the Wonderland seam over a real PostgreSQL', () => {
     expect(second.state, 'the state the store holds, not an asserted READY').toBe('READY');
     const count = await pool.query('SELECT count(*)::int AS n FROM relay_wonderland.julius_runs WHERE mission_id = $1', [contract.missionId]);
     expect(count.rows[0].n).toBe(1);
+  });
+
+  it('refuses a second, DIFFERENT run of a mission that is still in flight — and an explicit rerun is allowed', async () => {
+    // The guard where it actually has to hold: inside the run-creating
+    // transaction, on the real table, with the real terminal-state list.
+    const contract = contractFor(nonce());
+    const first = dataOf<{ runId: string }>(await create(JSON.stringify(contract)));
+    const edited = JSON.stringify({ ...contract, objective: 'Compare only the two formats we ship.' });
+
+    const refused = await create(edited);
+    expect(refused?.status).toBe(409);
+    expect((refused?.body as { error: { kind: string; message: string } }).error.kind).toBe('mission_run_already_active');
+    expect((refused?.body as { error: { message: string } }).error.message).toContain(first.runId);
+    // NOTHING WAS WRITTEN: one run for this mission, still.
+    const afterRefusal = await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM relay_wonderland.julius_runs WHERE mission_id = $1', [contract.missionId]);
+    expect(afterRefusal.rows[0]!.n).toBe(1);
+
+    const rerun = dataOf<{ runId: string; rerun: boolean }>(await createRerun(edited));
+    expect(rerun.runId).not.toBe(first.runId);
+    expect(rerun.rerun).toBe(true);
+    const afterRerun = await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM relay_wonderland.julius_runs WHERE mission_id = $1', [contract.missionId]);
+    expect(afterRerun.rows[0]!.n, 'two runs, because two were asked for').toBe(2);
+  });
+
+  it('a mission whose run reached a TERMINAL state is not locked, and the guard is per mission', async () => {
+    const contract = contractFor(nonce());
+    const first = dataOf<{ runId: string }>(await create(JSON.stringify(contract)));
+    // Another mission is unaffected while this one is live.
+    const other = contractFor(nonce());
+    expect(dataOf<{ runId: string }>(await create(JSON.stringify(other))).runId).not.toBe(first.runId);
+
+    // The first run ends. A new, different run of that mission is then ordinary
+    // work: no rerun intent required, because nothing is in flight.
+    await pool.query("UPDATE relay_wonderland.julius_runs SET state = 'COMPLETED' WHERE run_id = $1", [first.runId]);
+    const next = dataOf<{ runId: string }>(await create(JSON.stringify({ ...contract, objective: 'Now compare the fourth format too.' })));
+    expect(next.runId).not.toBe(first.runId);
+  });
+
+  it('two identical requests racing produce exactly one run — the loser is told to retry, never given a second', async () => {
+    // A duplicate is the SAME bytes, and its idempotency key is those bytes, so
+    // there is one run to be had. What the LOSER of the race is told is the
+    // honest part: a whole bootstrap is many writes (the mission's base rows,
+    // criteria, brain, two tasks, the task contract, two transitions), all of
+    // them SERIALIZABLE, so a concurrent twin loses one of them and is answered
+    // `bootstrap_persistence_failure`, retryable — not a second run, and not a
+    // pretence that it created one. Its retry then finds the run and succeeds.
+    const contract = contractFor(nonce());
+    const body = JSON.stringify(contract);
+    const [a, b] = await Promise.all([create(body), create(body)]);
+
+    const answers = [a, b].map((result) => result?.body as Envelope);
+    const created = answers.filter((answer) => answer.data !== undefined);
+    expect(created.length, 'at least one caller was answered with the run').toBeGreaterThanOrEqual(1);
+    for (const answer of answers) {
+      if (answer.data !== undefined) continue;
+      // The only failure a duplicate may be told, and it must say try again.
+      expect(answer.error?.kind).toBe('bootstrap_persistence_failure');
+    }
+    const runIds = new Set(created.map((answer) => (answer.data as { runId: string }).runId));
+    expect(runIds.size, 'one run id, whichever callers saw it').toBe(1);
+
+    // THE DATABASE IS THE ARBITER: one run, one plan, one build. No second
+    // execution exists to be dispatched, so nothing can be billed twice.
+    const rows = await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM relay_wonderland.julius_runs WHERE mission_id = $1', [contract.missionId]);
+    expect(rows.rows[0]!.n).toBe(1);
+    const runId = [...runIds][0]!;
+    const tasks = await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM relay_wonderland.julius_tasks WHERE run_id = $1', [runId]);
+    expect(tasks.rows[0]!.n).toBe(2);
+
+    // AND THE RETRY PATH WORKS: posting the same bytes again is answered with
+    // the one run, so a client that lost the race recovers by doing nothing
+    // cleverer than trying again.
+    expect(dataOf<{ runId: string }>(await create(body)).runId).toBe(runId);
   });
 
   it('a created run is invisible under another project, and a no-check mission is held to its DIFF', async () => {

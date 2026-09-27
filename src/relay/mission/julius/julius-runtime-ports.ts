@@ -147,7 +147,15 @@ export interface JuliusRunWriter {
   }): Promise<boolean>;
   finishTask(input: {
     taskId: string; owner: string; leaseGeneration: number;
-    state: 'SUCCEEDED' | 'FAILED' | 'CANCELLED'; now: string; nextAttemptAt?: string;
+    /**
+     * `SKIPPED` is how a task ends when its work was SUPERSEDED rather than
+     * done or abandoned — the one producer is a content refusal that Julius
+     * re-planned into a continuation segment. It is the only terminal state
+     * besides SUCCEEDED that `missionMayComplete` accepts, which is exactly
+     * why it may never be reached by any path that has not put the work
+     * somewhere else.
+     */
+    state: 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'SKIPPED'; now: string; nextAttemptAt?: string;
   }): Promise<boolean>;
   appendEvidence(input: {
     runId: string; projectId: string; idempotencyKey: string; evidence: JuliusEvidence;

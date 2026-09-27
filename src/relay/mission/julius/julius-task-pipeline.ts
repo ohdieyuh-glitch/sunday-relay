@@ -93,11 +93,12 @@ import {
 } from './julius-architecture-drift';
 import { juliusResultChannelPermitted } from './julius-worker-authority';
 import {
-  JULIUS_WORKSPACE_LIMITS, juliusScopeViolations, readJuliusCodingAgentImplementation, sanitizeJuliusCodingAgentReport,
+  JULIUS_WORKSPACE_LIMITS, juliusFailureIsContentRefusal, juliusScopeViolations,
+  readJuliusCodingAgentImplementation, sanitizeJuliusCodingAgentReport,
   type JuliusCodingAgentImplementation,
 } from './julius-coding-agent';
 import {
-  JULIUS_CHECKPOINT_LIMITS,
+  JULIUS_CHECKPOINT_LIMITS, JULIUS_COORDINATOR_AUTHOR,
   guidanceSubjectTaskId, isJuliusGuidanceHandoffEntryId, issueJuliusGuidance, juliusCheckpointId,
   JULIUS_GUIDANCE_AUTHORITATIVE_HEADING, JULIUS_GUIDANCE_PROPOSED_HEADING,
   juliusGuidanceHandoffEntryId, juliusGuidanceId, juliusGuidanceProposalEntryId, juliusGuidanceTaskId,
@@ -307,6 +308,16 @@ export type JuliusTaskOutcome =
   | { readonly kind: 'REPAIR_SCHEDULED'; readonly taskId: string; readonly repairTaskId: string; readonly round: number }
   | { readonly kind: 'RETRY'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null }
   | { readonly kind: 'FAILED'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null }
+  /**
+   * THE WORK WAS NOT DONE AND THE TASK DID NOT FAIL: a provider declined the
+   * request itself, and Julius re-planned the work into a continuation the
+   * architect will restate. The task ends SKIPPED, the mission is still alive,
+   * and `code`/`failureClass` still say what was declined.
+   */
+  | {
+    readonly kind: 'SUPERSEDED'; readonly taskId: string; readonly code: string;
+    readonly failureClass: string; readonly guidanceTaskId: string; readonly continuationTaskId: string;
+  }
   | { readonly kind: 'DENIED'; readonly taskId: string; readonly reasonCode: string }
   | { readonly kind: 'APPROVAL_REQUIRED'; readonly taskId: string; readonly operation: string; readonly reasonCode: string }
   | { readonly kind: 'HALTED'; readonly taskId: string; readonly reasonCode: string; readonly safeSummary: string }
@@ -1430,11 +1441,85 @@ export async function runClaimedTask(
      * so the trajectory said RETRY and the outcome said RETRY for a requeue
      * that never happened and belonged to someone else's lease.
      */
+    /**
+     * A DECLINED REQUEST IS RE-PLANNED, NOT COLLAPSED.
+     *
+     * One failed task fails the whole run (`julius-run-loop`: any FAILED task
+     * is a FAILED mission), which is right for a crash and wrong for a refusal:
+     * a provider declining the ASK is the one failure whose cure is a different
+     * ask, and the Prompt Architect is who writes asks. So Julius raises the
+     * guidance itself — `PROVIDER_DECLINED_REQUEST`, origin JULIUS — and the
+     * barrier mints the architect's task plus a continuation segment carrying
+     * the same work. Only then does the refused task end SKIPPED instead of
+     * FAILED: the work is still owed to the continuation, so the mission is not
+     * finished and nothing has been laundered.
+     *
+     * EVERY BOUND IS THE ORDINARY ONE. The reviewer is excluded — a review that
+     * was declined leaves the work UNJUDGED, and re-planning the work would be
+     * answering a question nobody asked; a declined review therefore fails, and
+     * a mission that cannot be reviewed cannot complete. The rest is the
+     * guidance path's own: nothing before the contract is LOCKED (a declining
+     * architect cannot be asked to re-plan its own refusal), one outstanding
+     * guidance task per subject, the segment ceiling, and a route the architect
+     * can actually be reached on. Any of them failing leaves the task FAILED
+     * and the run fails truthfully with the class on the record.
+     */
+    /**
+     * ONE RE-PLAN PER UNIT OF WORK, and no counter to keep: a unit that has
+     * already had a refusal re-planned holds a SKIPPED task, which is durable,
+     * survives a restart, and cannot be double-counted by a replayed tick. If
+     * the architect restated the ask and a provider declines it again, the ask
+     * was not the problem — the run fails truthfully rather than paying for
+     * another round of the same conversation. (The segment ceiling would bound
+     * it eventually; "eventually" is several paid dispatches away.)
+     */
+    const refusalCanReplan = !requeue
+      && juliusFailureIsContentRefusal(outcome.failureClass)
+      && claim.role !== 'INDEPENDENT_REVIEWER'
+      && await (async (): Promise<boolean> => {
+        const rows = await deps.store.tasksForRun(run.runId, run.projectId);
+        const unit = juliusSegmentLineageRootOf(task, rows).taskId;
+        const replayed = rows.some((row) => row.state === 'SKIPPED'
+          && juliusSegmentLineageRootOf(row, rows).taskId === unit);
+        if (replayed) {
+          await ledger.event('checkpoint.verdict', {
+            taskId: claim.taskId, workerId: JULIUS_COORDINATOR_AUTHOR,
+            facts: {
+              checkpointId: null, route: 'CONTINUE', reasonCode: 'REFUSAL_ALREADY_REPLANNED',
+              failureClass: outcome.failureClass ?? null, unitRootTaskId: unit,
+            },
+          });
+        }
+        return !replayed;
+      })();
+    const replanned = refusalCanReplan
+      ? await driveContinuousLifecycle({
+        deps, run, ledger, task, request,
+        // Julius raised this, so Julius is who the record names: the declining
+        // worker is not known here (the coordinator chooses it), and naming the
+        // task's own role would claim a worker asked.
+        workerId: JULIUS_COORDINATOR_AUTHOR,
+        declined: { code: outcome.code, failureClass: outcome.failureClass as string },
+      })
+      : null;
+    const supersededBy = replanned?.continuationTaskId ?? null;
     const finished = await deps.store.finishTask({
       taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration,
-      state: 'FAILED', now: deps.clock.now(),
+      state: supersededBy === null ? 'FAILED' : 'SKIPPED', now: deps.clock.now(),
       ...(requeue ? { nextAttemptAt: deps.clock.now() } : {}),
     });
+    if (supersededBy !== null && finished) {
+      // ANNOUNCE FACTS: the row follows the durable state change, and says both
+      // what was declined and where the work went.
+      await ledger.event('task.superseded', {
+        taskId: claim.taskId, workerId: JULIUS_COORDINATOR_AUTHOR,
+        facts: {
+          reasonCode: 'PROVIDER_DECLINED_REQUEST',
+          code: outcome.code, failureClass: outcome.failureClass ?? null,
+          guidanceTaskId: replanned?.guidanceTaskId ?? null, continuationTaskId: supersededBy,
+        },
+      });
+    }
     const requeued = requeue && finished;
     await ledger.trajectory(requeued ? 'RETRY' : 'DISPATCH', {
       taskId: claim.taskId, contextId, policyRevision: request.policy.revision, outcome: outcome.code,
@@ -1457,6 +1542,13 @@ export async function runClaimedTask(
     });
     if (requeued) return { kind: 'RETRY', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null };
     if (outcome.status === 'DENIED') return { kind: 'DENIED', taskId: claim.taskId, reasonCode: outcome.code };
+    if (supersededBy !== null && finished) {
+      return {
+        kind: 'SUPERSEDED', taskId: claim.taskId, code: outcome.code,
+        failureClass: outcome.failureClass as string,
+        guidanceTaskId: replanned!.guidanceTaskId, continuationTaskId: supersededBy,
+      };
+    }
     return { kind: 'FAILED', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null };
   }
 
@@ -1628,6 +1720,20 @@ export async function runClaimedTask(
  * proposal is: failing a task because its optional guidance was unusable would
  * trade worse advice for no mission.
  */
+/**
+ * WHAT A GUIDANCE BARRIER LEFT BEHIND, for a caller that has to act on it.
+ *
+ * `null` means no guidance was raised at all — no request, a refused
+ * checkpoint, a route that was not guidance, an unroutable architect, a ceiling
+ * reached. The pair means the ask exists; `continuationTaskId` is null when the
+ * route was not a barrier, which is a different fact from a barrier that could
+ * not mint one.
+ */
+interface JuliusGuidanceBarrier {
+  readonly guidanceTaskId: string;
+  readonly continuationTaskId: string | null;
+}
+
 async function driveContinuousLifecycle(input: {
   readonly deps: JuliusPipelineDependencies;
   readonly run: JuliusRunRow;
@@ -1639,7 +1745,14 @@ async function driveContinuousLifecycle(input: {
   readonly guidance?: unknown;
   readonly segmentResume?: unknown;
   readonly researchAsks?: unknown;
-}): Promise<void> {
+  /**
+   * JULIUS RAISED THIS ASK ITSELF, because a provider declined the request.
+   * No worker asked, so nothing here may claim one did: the checkpoint is
+   * `PROVIDER_DECLINED_REQUEST` with origin `JULIUS`, and the ask the architect
+   * reads is Julius's own sentence naming the refusal's class.
+   */
+  readonly declined?: { readonly code: string; readonly failureClass: string };
+}): Promise<JuliusGuidanceBarrier | null> {
   const { deps, run, ledger, task } = input;
 
   if (input.guidance !== undefined) {
@@ -1665,11 +1778,12 @@ async function driveContinuousLifecycle(input: {
           facts: { reasonCode: 'RESEARCH_YIELD_TOOK_THE_SEGMENT' },
         });
       }
-      return;
+      return null;
     }
   }
 
-  if (input.guidanceRequest === undefined) return;
+  // A WORKER ASKED, OR JULIUS DID. Nothing else reaches the guidance path.
+  if (input.guidanceRequest === undefined && input.declined === undefined) return null;
 
   // THE SUBJECT IS THE ASKING TASK ITSELF. A coder asks about its own build;
   // routing a request onto some parent would answer a question nobody posed.
@@ -1685,18 +1799,27 @@ async function driveContinuousLifecycle(input: {
   const binding = contract === null ? null : juliusTaskContractBinding(contract);
 
   const request = sanitizeJuliusGuidanceRequest(input.guidanceRequest);
+  const declined = input.declined;
+  /**
+   * WHO RAISED THIS, AND WHO WROTE THE ASK. A worker's request is the worker's,
+   * recorded under its own role; a refusal is JULIUS's observation, and the ask
+   * Julius writes is authored by Julius — see `JULIUS_COORDINATOR_AUTHOR`.
+   */
+  const askAuthorWorkerId = declined === undefined ? input.workerId : JULIUS_COORDINATOR_AUTHOR;
   const recorded = recordJuliusCheckpoint({
     checkpointId: juliusCheckpointId(subjectTaskId, sequence),
     runId: run.runId,
     taskId: subjectTaskId,
     sequence,
-    trigger: 'GUIDANCE_REQUESTED',
-    origin: originForRole(task.role),
+    trigger: declined === undefined ? 'GUIDANCE_REQUESTED' : 'PROVIDER_DECLINED_REQUEST',
+    origin: declined === undefined ? originForRole(task.role) : 'JULIUS',
     binding,
     evidenceIds: [],
     // The worker's own bounded words about what it is stuck on, or Julius's
     // sentence when the request arrived unusable. Never the provider's body.
-    safeSummary: request?.question ?? 'A worker asked for guidance and its request could not be read.',
+    safeSummary: declined !== undefined
+      ? `A provider declined this request (${declined.failureClass}); the ask itself has to change.`
+      : request?.question ?? 'A worker asked for guidance and its request could not be read.',
     recordedAt: deps.clock.now(),
   });
   if (recorded.outcome === 'REFUSED') {
@@ -1704,7 +1827,7 @@ async function driveContinuousLifecycle(input: {
       taskId: subjectTaskId, workerId: input.workerId,
       facts: { reasonCode: recorded.reasonCode, stage: 'checkpoint' },
     });
-    return;
+    return null;
   }
 
   const checkpoint = recorded.checkpoint;
@@ -1740,7 +1863,7 @@ async function driveContinuousLifecycle(input: {
       taskId: subjectTaskId, workerId: input.workerId,
       facts: { checkpointId: checkpoint.checkpointId, route: routing.route, reasonCode: routing.reasonCode },
     });
-    return;
+    return null;
   }
 
   /**
@@ -1762,7 +1885,9 @@ async function driveContinuousLifecycle(input: {
     anchor: guidanceTaskId,
     sourceRole: juliusPeerPartyForRole(task.role) ?? String(task.role),
     targetRole: 'PROMPT_ARCHITECT',
-    reason: 'A worker paused its unit of work and asked the Prompt Architect for guidance.',
+    reason: declined === undefined
+      ? 'A worker paused its unit of work and asked the Prompt Architect for guidance.'
+      : 'A provider declined this request on content grounds; Julius asked the Prompt Architect to restate the work.',
     subjectTaskId,
     carrierTaskId: guidanceTaskId,
     contextRefs: [`brain:guidance-request:${guidanceTaskId}`],
@@ -1780,7 +1905,7 @@ async function driveContinuousLifecycle(input: {
         wouldHaveRouted: routing.route, peerRefusal: permitted.reasonCode,
       },
     });
-    return;
+    return null;
   }
 
   /**
@@ -1809,7 +1934,7 @@ async function driveContinuousLifecycle(input: {
           reasonCode: 'GUIDANCE_UNROUTABLE', wouldHaveRouted: routing.route,
         },
       });
-      return;
+      return null;
     }
   }
 
@@ -1834,7 +1959,7 @@ async function driveContinuousLifecycle(input: {
           continuationTaskId: null, barrier: true, segment: nextSegment, ceiling,
         },
       });
-      return;
+      return null;
     }
   }
 
@@ -1886,7 +2011,14 @@ async function driveContinuousLifecycle(input: {
    * that it was told nothing.
    */
   if (created) {
-    const askText = request === null
+    const askText = declined !== undefined
+      ? [
+        'JULIUS RAISED THIS ASK. No worker asked for guidance: the provider DECLINED this request itself.',
+        `REFUSAL CLASS: ${declined.failureClass} (carried as ${declined.code})`,
+        'WHAT THIS MEANS: the work as currently specified will not be served — by this provider, and on the same wording probably by another.',
+        'WHAT IS NEEDED: restate this unit of work so that it can be served WITHIN the locked contract. Do not widen the scope, do not weaken an acceptance criterion, and do not propose anything the contract forbids. If the work cannot be restated within those terms, say so plainly: Julius will fail the mission truthfully rather than pretend.',
+      ].join('\n')
+      : request === null
       ? 'A worker asked for guidance and its request could not be read. No question, blocking condition, attempt or path is available.'
       : [
         `QUESTION: ${request.question}`,
@@ -1898,7 +2030,7 @@ async function driveContinuousLifecycle(input: {
       runId: run.runId,
       projectId: run.projectId,
       taskId: guidanceTask.taskId,
-      workerId: input.workerId,
+      workerId: askAuthorWorkerId,
       entryId: `brain:guidance-request:${guidanceTask.taskId}`,
       kind: 'HANDOFF',
       safeText: askText,
@@ -2035,8 +2167,12 @@ async function driveContinuousLifecycle(input: {
       // Null when the route was not a barrier, which is a different fact from
       // a barrier that failed to mint one.
       continuationTaskId, barrier: routeIsBarrier(routing.route),
+      // WHO RAISED IT, on the row that explains what happened next.
+      raisedBy: declined === undefined ? 'WORKER' : 'JULIUS',
+      declinedFailureClass: declined?.failureClass ?? null,
     },
   });
+  return created ? { guidanceTaskId: guidanceTask.taskId, continuationTaskId } : null;
 }
 
 /**
@@ -3260,7 +3396,8 @@ async function carryAcceptedGuidanceForward(input: {
     const revision = /:r([1-9]\d*)$/u.exec(entry.entryId);
     if (revision === null) continue;
     await appendBrainEntryAdmitting(deps, {
-      runId: run.runId, projectId: run.projectId, taskId: input.continuationTaskId, workerId: input.workerId,
+      // A copy keeps its author; the tick that copies it is not the one that wrote it.
+      runId: run.runId, projectId: run.projectId, taskId: input.continuationTaskId, workerId: entry.provenance?.workerId ?? input.workerId,
       entryId: juliusGuidanceHandoffEntryId(input.continuationTaskId, Number(revision[1])),
       kind: 'HANDOFF', safeText: entry.text, evidenceIds: [], occurredAt: deps.clock.now(),
     });
@@ -3325,8 +3462,20 @@ async function deliverAcceptedGuidance(input: {
   const authoritative = `${JULIUS_GUIDANCE_AUTHORITATIVE_HEADING}\n\n${packet}`;
   if (entries.some((entry) => isJuliusGuidanceHandoffEntryId(entry.entryId) && entry.taskIds.includes(waiting.taskId) && entry.text === authoritative)) return;
   const entryId = juliusGuidanceHandoffEntryId(waiting.taskId, revision);
+  /**
+   * AUTHOR AND DELIVERER ARE TWO IDENTITIES. The handoff row is the
+   * architect's words reaching the continuation; the tick that delivers it may
+   * belong to anyone — the reviewer whose acceptance released it, most often.
+   * The row's writer is therefore the AUTHOR (the proposal's own provenance),
+   * so the claim ledger's self-verification rule follows authorship: a reviewer
+   * that merely delivered the packet may still verify it, and the architect
+   * that wrote it may not. The DELIVERER is on the event beside it — which
+   * tick, which task, whose completion — so the record still answers who
+   * carried the packet and when.
+   */
+  const authorWorkerId = proposal.provenance?.workerId ?? input.workerId;
   await appendBrainEntryAdmitting(deps, {
-    runId: run.runId, projectId: run.projectId, taskId: waiting.taskId, workerId: input.workerId,
+    runId: run.runId, projectId: run.projectId, taskId: waiting.taskId, workerId: authorWorkerId,
     entryId, kind: 'HANDOFF',
     safeText: authoritative,
     evidenceIds: [], occurredAt: deps.clock.now(),
@@ -3334,6 +3483,7 @@ async function deliverAcceptedGuidance(input: {
   await ledger.event('guidance.delivered', {
     taskId: input.questionTaskId, workerId: input.workerId,
     facts: {
+      authorWorkerId, deliveredByWorkerId: input.workerId, deliveredAtTaskId: input.questionTaskId,
       guidanceTaskId: input.guidanceTaskId, deliveredTo: waiting.taskId, entryId,
       revision, proposalEntryId: proposal.entryId, deliveredAt: input.deliveredAt ?? 'DECISION',
     },

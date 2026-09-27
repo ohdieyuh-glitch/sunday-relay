@@ -1422,27 +1422,108 @@ describe('13 — a provider hard failure surfaces explicitly and never loops', (
     expect(run!.state).not.toBe('COMPLETED');
   });
 
-  it('a coder whose provider declines the request ITSELF: named CONTENT_REFUSED, never filed as a bad credential, not retried, not completed', async () => {
-    // "I will not do this" is not "your credential is wrong". The first was
-    // indistinguishable from the second until this class existed, and one of
-    // those is worth an operator's attention while the other needs the ASK to
-    // change. The class is on the durable record, the code is the request's
-    // (INVALID_REQUEST), and nobody re-asks the same question.
-    // The class as the live Coding Agent records it: the taxonomy member in the
-    // connector's lower-case alphabet (`coding_agent_content_refused`), which is
-    // the only alphabet `safeFailureClass` lets onto a durable row.
+  it('a coder whose provider declines the request ITSELF: named, re-planned by the architect, and the mission is NOT collapsed', async () => {
+    // "I will not do this" is not "your credential is wrong", and it is not a
+    // crash either. One failed task fails the whole run, which is right for a
+    // crash and wrong for a refusal: the cure for a declined ask is a different
+    // ask, and the Prompt Architect is who writes asks. So the refused task is
+    // SUPERSEDED — SKIPPED, with the refusal on its record — and the work
+    // continues in a continuation segment the architect restates.
     const contentRefused = juliusCodingAgentFailureClass('CONTENT_REFUSED');
-    const harness = build({ coderScript: [{
-      kind: 'fail', code: 'INVALID_REQUEST', failureClass: contentRefused,
-      message: 'The provider declined this request on content grounds.',
-    }] });
+    const harness = build({
+      coderScript: [
+        { kind: 'fail', code: 'INVALID_REQUEST', failureClass: contentRefused, message: 'The provider declined this request on content grounds.' },
+        { kind: 'succeed' },
+      ],
+      architectScript: [
+        { kind: 'succeed', evidence: PLAN_EVIDENCE },
+        { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
+      ],
+    });
     await drain(harness, 60);
-    expect(dispatchesOf(harness, CODER.adapterId, 'build-1'), 'a declined request is never re-asked').toBe(1);
-    expect(harness.store.taskRow('build-1')!.state).toBe('FAILED');
+
+    // THE ASK WAS NOT RE-ASKED, and the refusal is on the record with its class.
+    expect(dispatchesOf(harness, CODER.adapterId, 'build-1'), 'a declined request is never re-asked as it stands').toBe(1);
     const failed = factsOf(harness, 'task.failed');
-    expect(failed.some((facts) => facts.failureClass === contentRefused && facts.code === 'INVALID_REQUEST'),
-      'the class and the code are on the record').toBe(true);
-    expect(failed.some((facts) => facts.code === 'AUTH_CONFIGURATION'), 'and it is not a credential failure').toBe(false);
+    expect(failed.some((facts) => facts.code === 'AUTH_CONFIGURATION'), 'it is not a credential failure').toBe(false);
+
+    // THE TASK IS SUPERSEDED, NOT FAILED — so the run is still alive.
+    expect(harness.store.taskRow('build-1')!.state).toBe('SKIPPED');
+    const superseded = factsOf(harness, 'task.superseded');
+    expect(superseded).toHaveLength(1);
+    expect(superseded[0]).toMatchObject({
+      reasonCode: 'PROVIDER_DECLINED_REQUEST', code: 'INVALID_REQUEST', failureClass: contentRefused,
+    });
+
+    // JULIUS RAISED THE ASK, NOT A WORKER: the checkpoint says so, and the
+    // architect really was dispatched for it.
+    const checkpoints = factsOf(harness, 'checkpoint.recorded');
+    expect(checkpoints.some((facts) => facts.trigger === 'PROVIDER_DECLINED_REQUEST' && facts.origin === 'JULIUS'),
+      'the trigger and the origin are Julius\u2019s own').toBe(true);
+    const guidanceTaskId = String(superseded[0]!.guidanceTaskId);
+    const continuationTaskId = String(superseded[0]!.continuationTaskId);
+    expect(harness.store.taskRow(guidanceTaskId)!.role).toBe('PROMPT_ARCHITECT');
+    expect(dispatchesOf(harness, ARCHITECT.adapterId, guidanceTaskId), 'the architect was asked to restate the work').toBe(1);
+
+    // AND THE ASK THE ARCHITECT READ SAYS WHAT HAPPENED, in Julius's words,
+    // authored by Julius — never attributed to the worker that was declined.
+    const ask = (await harness.store.brainEntriesForRun('run-1', 'prj-1'))
+      .find((entry) => entry.entryId === `brain:guidance-request:${guidanceTaskId}`);
+    expect(ask, 'the architect was handed the refusal as a durable ask').toBeDefined();
+    expect(ask!.text).toContain('JULIUS RAISED THIS ASK');
+    expect(ask!.text).toContain(contentRefused);
+    expect(ask!.text).toContain('Do not widen the scope');
+    expect(ask!.provenance?.workerId).toBe('julius:coordinator');
+
+    // THE WORK CONTINUED, and the mission reached verified completion through it.
+    expect(dispatchesOf(harness, CODER.adapterId, continuationTaskId), 'the restated work was dispatched once').toBe(1);
+    expect(harness.store.taskRow(continuationTaskId)!.state).toBe('SUCCEEDED');
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run!.state, 'a refusal that was re-planned does not collapse the mission').toBe('COMPLETED');
+  });
+
+  it('a SECOND refusal after the re-plan fails truthfully: one re-plan per unit, and no loop', async () => {
+    // If the architect restated the ask and a provider declines it again, the
+    // ask was not the problem. The bound is durable state — a unit that already
+    // holds a SKIPPED task has had its re-plan — so a restart cannot buy a
+    // second round either.
+    const contentRefused = juliusCodingAgentFailureClass('CONTENT_REFUSED');
+    const decline = {
+      kind: 'fail' as const, code: 'INVALID_REQUEST' as const, failureClass: contentRefused,
+      message: 'The provider declined this request on content grounds.',
+    };
+    const harness = build({
+      coderScript: [decline, decline],
+      architectScript: [
+        { kind: 'succeed', evidence: PLAN_EVIDENCE },
+        { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
+      ],
+    });
+    await drain(harness, 60);
+
+    expect(harness.store.taskRow('build-1')!.state, 'the first refusal was re-planned').toBe('SKIPPED');
+    expect(factsOf(harness, 'task.superseded'), 'and only the first').toHaveLength(1);
+    const continuationTaskId = String(factsOf(harness, 'task.superseded')[0]!.continuationTaskId);
+    expect(harness.store.taskRow(continuationTaskId)!.state, 'the second refusal fails, as a refusal that cannot be restated must').toBe('FAILED');
+    expect(factsOf(harness, 'checkpoint.verdict').some((facts) => facts.reasonCode === 'REFUSAL_ALREADY_REPLANNED'),
+      'and the record says why no second re-plan was raised').toBe(true);
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run!.state).not.toBe('COMPLETED');
+  });
+
+  it('a REVIEW that is declined is never re-planned: the work was not judged, so the mission cannot complete', async () => {
+    // Re-planning the WORK would answer a question nobody asked: a reviewer
+    // declining leaves the change unjudged, and an unjudged change may not be
+    // completed around. So the review task fails, nothing is superseded, and
+    // the run does not complete.
+    const harness = build({
+      reviewerScript: [{ kind: 'fail', code: 'INVALID_REQUEST', failureClass: 'review_content_refused', message: 'The reviewer declined.' }],
+    });
+    await drain(harness, 60);
+    expect(factsOf(harness, 'task.superseded'), 'a declined review supersedes nothing').toEqual([]);
+    expect(factsOf(harness, 'checkpoint.recorded').some((facts) => facts.trigger === 'PROVIDER_DECLINED_REQUEST'),
+      'and no re-plan is raised for it').toBe(false);
+    expect(harness.store.taskRow('plan-1:review')!.state).toBe('FAILED');
     const run = await harness.store.loadRun('run-1', 'prj-1');
     expect(run!.state).not.toBe('COMPLETED');
   });
@@ -1674,7 +1755,7 @@ describe('the claim ledger — a memory\u2019s standing is durable, and a review
     for (const claim of claims) expect(entries.some((entry) => entry.entryId === claim.entryId), `${claim.claimId} names a written entry`).toBe(true);
   });
 
-  it('raises the architect’s guidance entries to VERIFIED when their review is accepted, and refuses BY NAME the one the reviewer itself wrote', async () => {
+  it('raises the architect’s guidance entries to VERIFIED when their review is accepted — the delivered answer included, because its author is the architect', async () => {
     const harness = guided();
     await drain(harness, 40);
     const claims = await harness.store.claimsForRun('run-1', 'prj-1');
@@ -1692,19 +1773,19 @@ describe('the claim ledger — a memory\u2019s standing is durable, and a review
     // The continuation's own resume note is promoted by the continuation's review.
     expect(promoted.some((facts) => facts.entryId === 'brain:segment-resume:segment:build-1:2:task')).toBe(true);
 
-    // THE TRUST CORE'S REFUSAL, VISIBLE. The guidance ANSWER reaches the
-    // continuation as a HANDOFF row written on the reviewer's own tick, so the
-    // row's asserter is the reviewer — and a reviewer may not verify what it
-    // asserted. The claim stays UNVERIFIED and the refusal is on the record by
-    // name, rather than a promotion nobody could defend. (Whether a delivered
-    // row should be attributed to its author, the architect, is the open
-    // question this refusal makes visible.)
+    // THE GUIDANCE ANSWER, delivered to the continuation as a HANDOFF row: its
+    // writer is its AUTHOR (the architect, from the proposal's provenance), not
+    // the reviewer whose acceptance delivered it — so the reviewer that accepts
+    // the continuation may verify it, and the record shows who delivered it.
     const handoff = claims.find((claim) => /^brain:guidance-answer:segment:build-1:\d+:task:r1$/u.test(claim.entryId));
     expect(handoff, 'the guidance answer reached the continuation as a memory').toBeDefined();
-    expect(handoff!.trust).toBe('UNVERIFIED');
-    expect(handoff!.assertedBy).toBe(REVIEWER.workerId);
-    expect(factsOf(harness, 'claim.promotion.refused').filter((facts) => facts.claimId === handoff!.claimId))
-      .toEqual([expect.objectContaining({ reasonCode: 'memory_self_verification' })]);
+    expect(handoff!.assertedBy).toBe(ARCHITECT.workerId);
+    expect(handoff!.trust).toBe('VERIFIED');
+    expect(harness.store.claimStandingHistory(handoff!.claimId).map((claim) => claim.trust)).toEqual(['UNVERIFIED', 'VERIFIED']);
+    const delivered = factsOf(harness, 'guidance.delivered');
+    expect(delivered.length).toBeGreaterThan(0);
+    expect(delivered[0]).toMatchObject({ authorWorkerId: ARCHITECT.workerId, deliveredByWorkerId: REVIEWER.workerId });
+    expect(factsOf(harness, 'claim.promotion.refused'), 'nothing is refused once authorship is recorded correctly').toEqual([]);
   });
 
   it('leaves the history exactly as it was when the run is ticked again — a replay manufactures no standing', async () => {

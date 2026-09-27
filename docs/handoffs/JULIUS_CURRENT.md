@@ -382,9 +382,11 @@ Readiness: rows 4, 5, 9 → 80, 87, 68; total 77.2 → 78.3, recorded as 78%.
 #### Then: what the integration lane found by running the create route for real
 
 The Wonderland↔Julius integration lane ran `dist-relay-bridge/server.cjs`
-from their merged tree (`706dab30`, this branch's `fc8c67c7` inside it) over
-real HTTP against their own isolated PostgreSQL with every provider credential
-stripped, graded by clause: **11 of 13 pass** — 201/READY/`dispatched: false`,
+from their merged tree (drill committed at `39edf442`, this branch's `fc8c67c7`
+inside it) over real HTTP against their own isolated PostgreSQL with every
+provider credential stripped, graded by clause: **12 of 13 pass** (11 of 13
+before their E08 was rewritten to assert the intended behaviour; the one red
+is the percent-encoding fix, `842ac5f0`, not yet in their tree) — 201/READY/`dispatched: false`,
 the served state equal to the create-time state, three NEVER_DISPATCHED slots,
 the same `runId` on re-POST, 401 without the operator, 404 under another
 project WITH a control, 404 for an unknown run. The two failures:
@@ -413,6 +415,22 @@ untouched; the hazard stands for the next session, and the structural fix
 founder's to choose. The bridge's two Julius route families now share one
 lazy pool (their other observation).
 
+
+#### Then: author and deliverer are two identities
+
+The claim refusal above was the trust core being right about the wrong fact: the
+guidance answer's HANDOFF row was written with the DELIVERING tick's worker id
+(the reviewer whose acceptance released it), so `assertedBy` said reviewer and
+self-verification refused the reviewer. The founder's rule — do not collapse
+AUTHOR and DELIVERER — is now the code: the handoff row's writer is the author
+read off the proposal's own provenance (the architect), a carried-forward copy
+keeps its original author, and `guidance.delivered` carries `authorWorkerId`,
+`deliveredByWorkerId` and `deliveredAtTaskId` beside the run and task it belongs
+to. The lifecycle proof now shows the delivered answer promoted UNVERIFIED →
+VERIFIED by the continuation's reviewer with nothing refused. Minimal: two
+`workerId` expressions and three event facts.
+
+#### Not done, by decision or by gate
 
 - Driving a run over HTTP — the deployment decision that spends money; the
   contract document says so.

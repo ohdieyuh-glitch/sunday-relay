@@ -91,6 +91,23 @@ export const JULIUS_CHECKPOINT_TRIGGERS = [
    * produce itself, so it schedules no worker — see `SERVE_RESEARCH`.
    */
   'RESEARCH_REQUESTED',
+  /**
+   * A PROVIDER DECLINED THE REQUEST ITSELF — a content refusal, not a crash and
+   * not a rate limit — and Julius, not a worker, observed it.
+   *
+   * It is a GUIDANCE trigger because the ASK is what has to change: no retry on
+   * the same worker, no reroute to another model, and no operator action fixes
+   * a request a model will not serve. The Prompt Architect wrote the ask, so
+   * the architect is who Julius asks to restate it, and the work continues in
+   * the continuation segment the barrier mints. Before this existed a refusal
+   * failed its task, and one failed task fails the whole run — a mission
+   * collapsed for a sentence that could have been rephrased.
+   *
+   * The ordinary guidance rules still bound it: one outstanding guidance task
+   * per subject, nothing before the contract is LOCKED (a declining architect
+   * cannot be asked to re-plan its own refusal), and the segment ceiling.
+   */
+  'PROVIDER_DECLINED_REQUEST',
 ] as const;
 export type JuliusCheckpointTrigger = (typeof JULIUS_CHECKPOINT_TRIGGERS)[number];
 
@@ -103,6 +120,19 @@ export type JuliusCheckpointTrigger = (typeof JULIUS_CHECKPOINT_TRIGGERS)[number
 export const JULIUS_CHECKPOINT_ORIGINS = [
   'PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER', 'JULIUS',
 ] as const;
+
+/**
+ * JULIUS ITSELF, AS THE AUTHOR OF WHAT JULIUS WRITES.
+ *
+ * A Project Brain row Julius authors — the ask it raises when a provider
+ * declines a request, for instance — must not be attributed to whichever
+ * worker's failure prompted it: the claim ledger reads `assertedBy` to refuse
+ * self-verification, and a row attributed to a worker that did not write it
+ * would both slander that worker and stop a reviewer verifying Julius's own
+ * words. Not a worker id: no router, registry or C.A.R.D. rule resolves it,
+ * and nothing may be dispatched to it.
+ */
+export const JULIUS_COORDINATOR_AUTHOR = 'julius:coordinator' as const;
 export type JuliusCheckpointOrigin = (typeof JULIUS_CHECKPOINT_ORIGINS)[number];
 
 /** Bounds. A checkpoint is a signal, not a transcript. */
@@ -803,6 +833,9 @@ export type JuliusCheckpointRouting =
  */
 const GUIDANCE_TRIGGERS: readonly JuliusCheckpointTrigger[] = Object.freeze([
   'GUIDANCE_REQUESTED', 'SUBSYSTEM_DISCOVERED', 'TEST_FAILED',
+  // Julius's own: a provider declined the request, so the request is what the
+  // architect is asked to change. See the trigger's own note.
+  'PROVIDER_DECLINED_REQUEST',
 ]);
 
 /**

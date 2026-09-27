@@ -908,6 +908,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             path: path.replace('/relay-api', ''),
             operator: bearerMatches(missionAuthz, process.env.RELAY_BRIDGE_API_TOKEN),
             body: method === 'POST' ? await readRawBody(req) : undefined,
+            rerun: headerValue(req.headers['x-relay-julius-rerun']),
           }, juliusMissionPorts());
           if (missionResult !== null) {
             send(res, missionResult.status, missionResult.body, cors);

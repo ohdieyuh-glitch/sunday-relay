@@ -68,6 +68,17 @@ export interface JuliusMissionRouteRequest {
   readonly operator: boolean;
   /** The raw request body — a contract file, as JSON text. */
   readonly body: string | undefined;
+  /**
+   * `x-relay-julius-rerun: explicit` — a DELIBERATE second run of a mission
+   * that already has a live one.
+   *
+   * A HEADER, NOT A BODY FIELD, for two reasons: the body is the contract file
+   * and a rerun is not a property of the mission, and the contract parser
+   * ignores keys it does not know — so a `rerun` in the body would be silently
+   * dropped and the client would believe it had asked. Anything other than the
+   * exact word is not an intent.
+   */
+  readonly rerun?: string | undefined;
 }
 
 /**
@@ -110,6 +121,9 @@ const REFUSAL_STATUS: Readonly<Record<string, number>> = {
   task_contract_not_derivable: 400,
   // The same identity was already used for a different mission: the run's.
   mission_already_running: 409,
+  // The mission is already running something else. 409, and the message names
+  // the run that holds it so a client can follow that runId.
+  mission_run_already_active: 409,
   // The store was unreachable or refused: nothing durable exists, try again.
   bootstrap_persistence_failure: 503,
 };
@@ -142,7 +156,11 @@ export async function handleJuliusMissionRoute(
   if (!parsed.ok) return err(400, 'malformed_mission_contract', parsed.problem);
   const contract: LiveMissionContractFile = parsed.contract;
 
-  const bootstrapRequest = compileBootstrapRequest(contract, missionWorkerRequests(ports.reviewerProvider), ports.cardRevision);
+  const rerunIntent = request.rerun?.trim().toLowerCase() === 'explicit';
+  const bootstrapRequest = {
+    ...compileBootstrapRequest(contract, missionWorkerRequests(ports.reviewerProvider), ports.cardRevision),
+    ...(rerunIntent ? { rerunIntent: 'EXPLICIT' as const } : {}),
+  };
   // The same execution identity the job derives, so a mission created here and
   // then driven by the job is ONE execution rather than two that share a name.
   const outcome: JuliusBootstrapOutcome = await ports.bootstrap(`execution:julius-live:${contract.missionId}`, contract.tenantId)
@@ -160,6 +178,9 @@ export async function handleJuliusMissionRoute(
     // — a re-posted contract is answered with the run that already exists, in
     // whatever state it has really reached, never with an asserted READY.
     dispatched: false,
+    // WHETHER THIS WAS A DELIBERATE SECOND RUN, on the wire: a client that did
+    // not ask for one must never be told it got one.
+    rerun: rerunIntent,
     next: `The run is durable in state ${outcome.state}. It is driven by the Julius mission job, not by this route.`,
   });
 }
