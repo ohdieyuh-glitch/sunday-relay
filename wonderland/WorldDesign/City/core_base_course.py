@@ -79,7 +79,23 @@ def main():
 
     used, skipped = 0, Counter()
     for b in CENSUS:
-        if b.get("zmin", 999.0) > GROUND_TOL:
+        # THE GROUND TEST WAS ONE-SIDED, AND A SKIRTING BOARD ENDED UP A KILOMETRE UNDERGROUND.
+        #
+        # "Is this building on the ground" was asked only from above -- zmin > GROUND_TOL. A building a long
+        # way BELOW the ground passes a greater-than test, so this pass laid a base course around two castle
+        # instances that had been SUNK out of the world at z = -100000, and 10 of BC01's 4,132 blocks went
+        # down there with them. Nothing ever saw them; each cost residency and sat in the batch.
+        #
+        # Sinking by SINK_UU = 100,000 uu is how four generators (courtkit.trim_spec, dc01, fl04, vw01)
+        # DELETE a generator instance they need gone -- a layer may not remove generator actors, so it moves
+        # them out of the world and records the exact transform so the trim stays reversible. A sunk row is
+        # therefore not a broken building: it is a building this world has decided is not there, and dressing
+        # it is the bug. Found by Tools/audit_float_bury.py, which reads every placement against the ground.
+        zmin = float(b.get("zmin", 999.0))
+        if zmin < -1000.0:
+            skipped["sunk out of the world by a trim pass"] += 1
+            continue
+        if zmin > GROUND_TOL:
             skipped["not on the ground"] += 1
             continue
         if max(b["hx"], b["hy"]) < MIN_HALF:
