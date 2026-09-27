@@ -3260,7 +3260,8 @@ async function carryAcceptedGuidanceForward(input: {
     const revision = /:r([1-9]\d*)$/u.exec(entry.entryId);
     if (revision === null) continue;
     await appendBrainEntryAdmitting(deps, {
-      runId: run.runId, projectId: run.projectId, taskId: input.continuationTaskId, workerId: input.workerId,
+      // A copy keeps its author; the tick that copies it is not the one that wrote it.
+      runId: run.runId, projectId: run.projectId, taskId: input.continuationTaskId, workerId: entry.provenance?.workerId ?? input.workerId,
       entryId: juliusGuidanceHandoffEntryId(input.continuationTaskId, Number(revision[1])),
       kind: 'HANDOFF', safeText: entry.text, evidenceIds: [], occurredAt: deps.clock.now(),
     });
@@ -3325,8 +3326,20 @@ async function deliverAcceptedGuidance(input: {
   const authoritative = `${JULIUS_GUIDANCE_AUTHORITATIVE_HEADING}\n\n${packet}`;
   if (entries.some((entry) => isJuliusGuidanceHandoffEntryId(entry.entryId) && entry.taskIds.includes(waiting.taskId) && entry.text === authoritative)) return;
   const entryId = juliusGuidanceHandoffEntryId(waiting.taskId, revision);
+  /**
+   * AUTHOR AND DELIVERER ARE TWO IDENTITIES. The handoff row is the
+   * architect's words reaching the continuation; the tick that delivers it may
+   * belong to anyone — the reviewer whose acceptance released it, most often.
+   * The row's writer is therefore the AUTHOR (the proposal's own provenance),
+   * so the claim ledger's self-verification rule follows authorship: a reviewer
+   * that merely delivered the packet may still verify it, and the architect
+   * that wrote it may not. The DELIVERER is on the event beside it — which
+   * tick, which task, whose completion — so the record still answers who
+   * carried the packet and when.
+   */
+  const authorWorkerId = proposal.provenance?.workerId ?? input.workerId;
   await appendBrainEntryAdmitting(deps, {
-    runId: run.runId, projectId: run.projectId, taskId: waiting.taskId, workerId: input.workerId,
+    runId: run.runId, projectId: run.projectId, taskId: waiting.taskId, workerId: authorWorkerId,
     entryId, kind: 'HANDOFF',
     safeText: authoritative,
     evidenceIds: [], occurredAt: deps.clock.now(),
@@ -3334,6 +3347,7 @@ async function deliverAcceptedGuidance(input: {
   await ledger.event('guidance.delivered', {
     taskId: input.questionTaskId, workerId: input.workerId,
     facts: {
+      authorWorkerId, deliveredByWorkerId: input.workerId, deliveredAtTaskId: input.questionTaskId,
       guidanceTaskId: input.guidanceTaskId, deliveredTo: waiting.taskId, entryId,
       revision, proposalEntryId: proposal.entryId, deliveredAt: input.deliveredAt ?? 'DECISION',
     },

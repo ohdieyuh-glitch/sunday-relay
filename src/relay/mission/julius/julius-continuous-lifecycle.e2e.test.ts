@@ -1674,7 +1674,7 @@ describe('the claim ledger — a memory\u2019s standing is durable, and a review
     for (const claim of claims) expect(entries.some((entry) => entry.entryId === claim.entryId), `${claim.claimId} names a written entry`).toBe(true);
   });
 
-  it('raises the architect’s guidance entries to VERIFIED when their review is accepted, and refuses BY NAME the one the reviewer itself wrote', async () => {
+  it('raises the architect’s guidance entries to VERIFIED when their review is accepted — the delivered answer included, because its author is the architect', async () => {
     const harness = guided();
     await drain(harness, 40);
     const claims = await harness.store.claimsForRun('run-1', 'prj-1');
@@ -1692,19 +1692,19 @@ describe('the claim ledger — a memory\u2019s standing is durable, and a review
     // The continuation's own resume note is promoted by the continuation's review.
     expect(promoted.some((facts) => facts.entryId === 'brain:segment-resume:segment:build-1:2:task')).toBe(true);
 
-    // THE TRUST CORE'S REFUSAL, VISIBLE. The guidance ANSWER reaches the
-    // continuation as a HANDOFF row written on the reviewer's own tick, so the
-    // row's asserter is the reviewer — and a reviewer may not verify what it
-    // asserted. The claim stays UNVERIFIED and the refusal is on the record by
-    // name, rather than a promotion nobody could defend. (Whether a delivered
-    // row should be attributed to its author, the architect, is the open
-    // question this refusal makes visible.)
+    // THE GUIDANCE ANSWER, delivered to the continuation as a HANDOFF row: its
+    // writer is its AUTHOR (the architect, from the proposal's provenance), not
+    // the reviewer whose acceptance delivered it — so the reviewer that accepts
+    // the continuation may verify it, and the record shows who delivered it.
     const handoff = claims.find((claim) => /^brain:guidance-answer:segment:build-1:\d+:task:r1$/u.test(claim.entryId));
     expect(handoff, 'the guidance answer reached the continuation as a memory').toBeDefined();
-    expect(handoff!.trust).toBe('UNVERIFIED');
-    expect(handoff!.assertedBy).toBe(REVIEWER.workerId);
-    expect(factsOf(harness, 'claim.promotion.refused').filter((facts) => facts.claimId === handoff!.claimId))
-      .toEqual([expect.objectContaining({ reasonCode: 'memory_self_verification' })]);
+    expect(handoff!.assertedBy).toBe(ARCHITECT.workerId);
+    expect(handoff!.trust).toBe('VERIFIED');
+    expect(harness.store.claimStandingHistory(handoff!.claimId).map((claim) => claim.trust)).toEqual(['UNVERIFIED', 'VERIFIED']);
+    const delivered = factsOf(harness, 'guidance.delivered');
+    expect(delivered.length).toBeGreaterThan(0);
+    expect(delivered[0]).toMatchObject({ authorWorkerId: ARCHITECT.workerId, deliveredByWorkerId: REVIEWER.workerId });
+    expect(factsOf(harness, 'claim.promotion.refused'), 'nothing is refused once authorship is recorded correctly').toEqual([]);
   });
 
   it('leaves the history exactly as it was when the run is ticked again — a replay manufactures no standing', async () => {
