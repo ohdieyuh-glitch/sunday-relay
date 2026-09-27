@@ -19,12 +19,15 @@ const LEDGER = 'docs/JULIUS_MVP_QUALIFICATION.md';
 
 interface Row {
   readonly id: string;
-  readonly category: 'A' | 'B' | 'C' | 'D';
+  readonly category: 'A' | 'B' | 'C' | 'D' | 'E';
   readonly shape: string;
   readonly kind: string;
   readonly file: string;
   readonly reference: string;
 }
+
+/** The founder's mission classes, plus failure/recovery. Closed on purpose. */
+const CATEGORIES = ['A', 'B', 'C', 'D', 'E'] as const;
 
 function rowsOf(markdown: string): readonly Row[] {
   const rows: Row[] = [];
@@ -34,8 +37,17 @@ function rowsOf(markdown: string): readonly Row[] {
     if (cells.length !== 5) continue;
     const [id, shape, kind, file, reference] = cells as [string, string, string, string, string];
     if (id === '#' || id.startsWith('---')) continue;
+    /**
+     * THE CATEGORY LETTERS, AND WHY THIS LIST IS CHECKED RATHER THAN OPEN.
+     *
+     * A row whose letter this parser does not know is SKIPPED — silently, which
+     * is how two Category E rows came to sit in the page unchecked the moment
+     * they were added. So the letters are a closed set, the count of categories
+     * is asserted below, and a new category must be added HERE before its rows
+     * mean anything.
+     */
     const category = id.charAt(0);
-    if (category !== 'A' && category !== 'B' && category !== 'C' && category !== 'D') continue;
+    if (!CATEGORIES.includes(category as Row['category'])) continue;
     rows.push({
       id, category, shape,
       kind: kind.replace(/\*/gu, ''),
@@ -46,13 +58,33 @@ function rowsOf(markdown: string): readonly Row[] {
   return rows;
 }
 
+/**
+ * Every leading letter the page's own table rows use, whatever the parser makes
+ * of them — the raw truth the parser is then held against.
+ */
+function* markdownLetters(markdown: string): Generator<string> {
+  for (const line of markdown.split(/\r?\n/u)) {
+    if (!line.startsWith('|')) continue;
+    const cells = line.split('|').slice(1, -1).map((cell) => cell.trim());
+    if (cells.length !== 5) continue;
+    const id = cells[0]!;
+    if (id === '#' || id.startsWith('---')) continue;
+    if (/^[A-Z]\d/u.test(id)) yield id.charAt(0);
+  }
+}
+
 const ledger = readFileSync(join(REPO, LEDGER), 'utf8');
 const rows = rowsOf(ledger);
 
 describe('the MVP qualification ledger', () => {
-  it('parses, and covers all four categories the founder named', () => {
+  it('parses, and covers every category, including the ones added after this page was written', () => {
     expect(rows.length).toBeGreaterThanOrEqual(20);
-    for (const category of ['A', 'B', 'C', 'D'] as const) {
+    // EVERY LETTER THE PAGE USES IS A LETTER THIS PARSER KNOWS. Without this,
+    // adding a category to the page adds rows nothing resolves — which happened
+    // with E, and is the reason the list is closed and checked.
+    const lettersInPage = [...new Set([...markdownLetters(ledger)])].sort();
+    expect(lettersInPage, 'a row letter the parser does not know is a row nobody checks').toEqual([...CATEGORIES]);
+    for (const category of CATEGORIES) {
       expect(rows.filter((row) => row.category === category).length,
         `category ${category} needs more than one representative mission`).toBeGreaterThan(1);
     }

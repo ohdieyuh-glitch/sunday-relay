@@ -2,8 +2,8 @@
 
 **The question this page answers** is the founder's, not the architecture's:
 *can Julius reliably accomplish useful human objectives?* — across software
-development, game development, professional work, and failure/recovery. It is
-organised by those four categories, and every row is **machine-checked**:
+development, game development, professional work, everyday practical work, and
+failure/recovery. It is organised by those five categories, and every row is **machine-checked**:
 `scripts/julius-mvp-qualification.test.ts` resolves every file and requires
 every case reference to name a case that exists. A reference that cannot be
 resolved is not evidence, and that applies to this page.
@@ -59,6 +59,20 @@ afterwards. Volume is not claimed and would not help.
 | C6 | what mission A VERIFIED is inherited by mission B, and what A only asserted is not (gated on `JULIUS_TEST_DATABASE_URL`) | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `what mission A VERIFIED is inherited by mission B` |
 | C7 | the inherited fact reaches the next mission's packet AS VERIFIED, with none of the residue | DETERMINISTIC | `src/relay/mission/julius/julius-learning-loop.e2e.test.ts` | `hands the coder the relevant finding and none of the residue` |
 
+## Category E — useful everyday / basic-necessity work
+
+The founder's fourth class, and the one with a real boundary in it: Julius's
+tools read and write files through an executor, and nothing in this repository
+can place an order, send a message or move money. So the everyday task Julius
+can do TODAY is the preparation a person then acts on — and a mission whose
+acceptance depends on an action no tool can take must park unverified rather
+than complete on a document that claims otherwise. Both halves are rows.
+
+| # | Shape | Kind | Where | Case |
+|---|---|---|---|---|
+| E1 | a household planning task, no code anywhere in it, reviewed and verified | DETERMINISTIC | `src/relay/mission/julius/julius-mission-breadth.e2e.test.ts` | `completes an everyday practical mission` |
+| E2 | a mission whose acceptance needs an action no tool can take does NOT complete | DETERMINISTIC | `src/relay/mission/julius/julius-mission-breadth.e2e.test.ts` | `refuses to complete an everyday mission whose acceptance needs an action no tool can take` |
+
 ## Category D — failure and recovery
 
 | # | Shape | Kind | Where | Case |
@@ -103,9 +117,12 @@ afterwards. Volume is not claimed and would not help.
   configured — a skipped proof, never a passing one. The built bridge process
   was also driven over HTTP against that database by hand (handoff §000d, with
   the run id); a hand-run is evidence of a moment, not a row here.
-- **C — a mission whose result is not a file.** A message sent, a form
+- **C and E — a mission whose result is not a file.** A message sent, a form
   submitted, a booking made has no diff to show, and an implementation review
-  still requires one. Named in `julius-mission-breadth.e2e` as a limit.
+  still requires one. This is not a gap in the lifecycle but a boundary of the
+  TOOLS: E2 asserts that such a mission does not complete, rather than leaving
+  the limit as prose. Closing it means a tool that can act and a receipt that
+  proves it did — and that is a capability decision, not a test.
 - **D — a CONTENT refusal, now on all three peers, but only ROUTED for two.**
   D2 is a provider refusing the CALLER; D11–D12 are a provider declining the
   REQUEST — a class of its own on all three peers now (`CONTENT_REFUSED` on the
