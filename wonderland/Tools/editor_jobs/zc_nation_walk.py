@@ -349,28 +349,32 @@ def job():
             # full speed, and the ring -- which names what it hits off the component mesh -- is exactly what
             # would say so. Neither got one.
             row["blocked_at_start"] = bool(driving)
-            if True:
-                # NAME IT. "Blocked" without the obstacle is a bug report nobody can act on.
-                try:
-                    d_now = unreal.GameplayStatics.get_player_pawn(live(), 0)
-                    if d_now is not None:
-                        row["start_clearance"] = clearance_ring(
-                            d_now.get_actor_location(),
-                            # THE ACTUAL HEADING, from the same two things the probe steered by: the first
-                            # waypoint and where the Dog was placed. A guessed 0.0 would report the clearance
-                            # due east of a Dog walking north-west.
-                            math.degrees(math.atan2(tgt0["y"] - start_loc.y,
-                                                    tgt0["x"] - start_loc.x)),
-                            d_now)
-                except Exception as err:                               # noqa: BLE001
-                    row["start_clearance"] = {"error": str(err)[:120]}
-                row["error"] = ("BLOCKED AT THE START: the Dog reached %.1f uu/s -- its own walk speed -- "
-                                "and advanced %.1f uu. Input is arriving and the capsule cannot move, which "
-                                "is geometry, not the harness." % (probe_speed, moved))
+            # THE RING RUNS FOR ANY PROBE THAT GOT NOWHERE, at speed or not -- a Dog twitching to 35 uu/s
+            # and covering nothing is as geometric as one straining at full throttle. But the MESSAGE must
+            # still tell those apart, and my first attempt at widening this made "BLOCKED AT THE START:
+            # reached 0.0 uu/s -- its own walk speed" print unconditionally, which is self-contradictory on
+            # its face and told TARTARUS it was blocked at a standstill.
+            try:
+                d_now = unreal.GameplayStatics.get_player_pawn(live(), 0)
+                if d_now is None:
+                    # ABSENCE, NOT EMPTINESS. A null start_clearance read as "nothing in the way"; the pawn
+                    # was simply gone by the time the ring ran, which is a different fact and a louder one.
+                    row["start_clearance"] = {"unavailable": "the pawn was gone before the ring could run"}
+                else:
+                    row["start_clearance"] = clearance_ring(
+                        d_now.get_actor_location(),
+                        math.degrees(math.atan2(tgt0["y"] - start_loc.y, tgt0["x"] - start_loc.x)),
+                        d_now)
+            except Exception as err:                                   # noqa: BLE001
+                row["start_clearance"] = {"error": str(err)[:120]}
+            if driving:
+                row["error"] = ("BLOCKED AT THE START: the Dog reached %.1f uu/s -- most of its own walk "
+                                "speed -- and advanced %.1f uu. Input is arriving and the capsule cannot "
+                                "move, which is geometry, not the harness." % (probe_speed, moved))
             else:
-                row["error"] = ("the Dog never got moving: %.1f uu in 3 s at a peak of only %.1f uu/s. "
-                                "Route NOT judged; this is the harness or the character, not the route."
-                                % (moved, probe_speed))
+                row["error"] = ("the Dog never got going: %.1f uu at a peak of only %.1f uu/s. Route NOT "
+                                "judged. The ring still ran, because a twitch that covers nothing can be "
+                                "geometry too." % (moved, probe_speed))
             emit("W_%s" % nation, "WARN", "%s: actuator dead, route withheld" % nation,
                  {"moved_uu": row["probe_moved_uu"], "peak_speed": row["probe_peak_speed"]})
             continue

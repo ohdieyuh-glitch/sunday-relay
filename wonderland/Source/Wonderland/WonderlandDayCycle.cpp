@@ -541,7 +541,19 @@ static FAutoConsoleVariableRef GWonderlandTwilightSpanRef(
 		 "identical at any value."),
 	ECVF_Default);
 
-static float GWonderlandNightShadowLift = 0.65f;
+//: 0.62 RATHER THAN 0.65, and it is measured rather than chosen. The other lane's ladder on the corrected
+//: build, reading relay_og's BODY with the figure's own lights excluded, at the checkpoint court:
+//:
+//:      lift 0.70   body 67.7% crushed   ground 90.2% dark
+//:      lift 0.65   body 30.0%           ground 62.9%
+//:      lift 0.62   body 22.0%           ground 36.7%      <- here
+//:      lift 0.58   body 19.2%           ground 11.2%
+//:
+//: Against the 57.6% crushed of the night the founder REJECTED, 0.62 does better than halve it. 0.58 buys
+//: almost nothing more on the body and takes the ground to 11.2% dark, which is the wash -- my own tails
+//: measure agrees independently, since a vanished dark tail is exactly what "do not wash the world in flat
+//: brightness" rules out. Two measures, two mechanisms, the same rung.
+static float GWonderlandNightShadowLift = 0.62f;
 static FAutoConsoleVariableRef GWonderlandNightShadowLiftRef(
 	TEXT("wl.Look.NightShadowLift"),
 	GWonderlandNightShadowLift,
