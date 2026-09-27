@@ -91,6 +91,39 @@ def job():
                 return
             prev = now
 
+    # ---- DOES THE KNOB EXIST? Read it back before trusting a single rung.
+    #
+    # wl.Sky.TwilightSpan is new C++ and the running editor may predate it. An unrecognised console command
+    # does not fail -- it logs "Command not recognized" and carries on -- so every span would silently be
+    # the shipped 21 and the ladder would be three identical numbers.
+    #
+    # AND T00 WOULD PASS ON THAT. It asks whether noon is unchanged across spans; if the knob does nothing,
+    # noon is trivially identical and the safety gate goes green on a run that measured one setting three
+    # times. A false green from a gate written to prevent exactly this class of thing, so the readback
+    # comes first and voids the run rather than letting the ladder publish.
+    readback = {}
+    for span in SPANS:
+        cvar("wl.Sky.TwilightSpan", "%.1f" % span)
+        yield 0.5
+        try:
+            readback[span] = round(float(
+                unreal.SystemLibrary.get_console_variable_float_value("wl.Sky.TwilightSpan")), 2)
+        except Exception as err:                                      # noqa: BLE001
+            readback[span] = "unreadable: %s" % str(err)[:60]
+    took = [sp for sp, got in readback.items() if isinstance(got, float) and abs(got - sp) < 0.05]
+    record("T_CVAR", "wl.Sky.TwilightSpan exists in this build and every value actually took",
+           len(took) == len(SPANS), asked_for=list(SPANS), read_back=readback,
+           note="a console command the build does not know logs 'Command not recognized' and carries on. "
+                "Every span would then be the shipped 21, the ladder would be one setting measured three "
+                "times, and T00 -- which asks whether noon is unchanged across spans -- would pass on it. "
+                "Red here voids everything below")
+    if len(took) != len(SPANS):
+        cvar("wl.Sky.TwilightSpan", "21.0")
+        RESULT["status"] = "voided: the span cvar is not in this build"
+        yield 2.0
+        les.editor_request_end_play()
+        return
+
     rows = []
     RESULT["ladder"] = rows
     for span in SPANS:
