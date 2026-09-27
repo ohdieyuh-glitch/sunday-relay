@@ -1375,6 +1375,9 @@ void ARelayDogCharacter::OnWalkReleased() { bWalkHeld = false; }
 void ARelayDogCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	// THE EYES GLOW FROM THE FIRST FRAME. The day cycle re-drives the level every half second and on every
+	// repaint; this is so the Dog never draws a single frame with lit, unlit eyes.
+	SetEyeGlow(12.0f);
 	// THE DEMO IS A LAUNCH FLAG, NOT A BUILD FLAG.
 	//
 	// bAutoDemo used to be baked into the map by the generator from an
@@ -1523,6 +1526,18 @@ void ARelayDogCharacter::PaintCanonBody(bool bEvenIfUnchosen)
 	{
 		if (Body == nullptr || Body->ComponentHasTag(TEXT("WL_Prop"))) { continue; }
 		const bool bEye = WonderlandMascotStyle::NamesAnEye(Body->GetName());
+		// THE EYE PANES THEMSELVES ARE NOT TINTED -- they are DRIVEN. Tint writes the bare secondary into the
+		// glow instance at level 1 and the eyes go dark the moment a colourway is picked. SECONDARY becomes the
+		// eye colour and the level is re-applied, so the core and the halo change together, as the founder
+		// requires. The visor still takes the tint: NamesAnEye includes it, ChannelFor does not.
+		if (WonderlandMascotStyle::ChannelFor(Body->GetName()) == EWonderlandColorChannel::Eye)
+		{
+			EyeColour = Style.Secondary;
+			const float Keep = EyeGlowLevel;
+			EyeGlowLevel = -1.0f;
+			SetEyeGlow(Keep > 0.0f ? Keep : 12.0f);
+			continue;
+		}
 		const FLinearColor Chosen = bEye ? Style.Secondary : Style.Primary;
 		for (int32 Slot = 0; Slot < Body->GetNumMaterials(); ++Slot)
 		{
@@ -1560,6 +1575,116 @@ void ARelayDogCharacter::ShowCanonBody(bool bShow)
 		++Toggled;
 	}
 	UE_LOG(LogTemp, Verbose, TEXT("WLDOG canon body %s (%d meshes)"), bShow ? TEXT("shown") : TEXT("hidden"), Toggled);
+}
+
+void ARelayDogCharacter::BuildEyeGlow()
+{
+	// ---- ONCE. The Blueprint's eye panes get the project's glow material; each pane gets two additive halo
+	// panes, 1.55x its size and a third of its depth, one either side of it, so the rim shows from whichever
+	// side the camera is on and the pane itself hides the halo's centre. The eyes are found the way the
+	// colourway finds them: by name, through ChannelFor, which takes "eye" and "pupil" and not the visor.
+	if (EyeCoreMids.Num() > 0)
+	{
+		return;
+	}
+	UMaterialInterface* Glow = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Wonderland/Materials/M_WL_VoxelGlow.M_WL_VoxelGlow"));
+	if (Glow == nullptr)
+	{
+		Glow = LoadObject<UMaterialInterface>(nullptr, DogPropGlowParent);
+	}
+	UMaterialInterface* Additive = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Wonderland/Materials/M_WL_VoxelAdditive.M_WL_VoxelAdditive"));
+	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, DogPropCubePath);
+	TInlineComponentArray<UStaticMeshComponent*> Meshes;
+	GetComponents<UStaticMeshComponent>(Meshes);
+	int32 Eyes = 0;
+	for (UStaticMeshComponent* Eye : Meshes)
+	{
+		if (Eye == nullptr || Eye->ComponentHasTag(TEXT("WL_Prop")) || Eye->ComponentHasTag(TEXT("WL_EyeHalo")))
+		{
+			continue;
+		}
+		if (WonderlandMascotStyle::ChannelFor(Eye->GetName()) != EWonderlandColorChannel::Eye)
+		{
+			continue;
+		}
+		++Eyes;
+		if (Glow != nullptr)
+		{
+			for (int32 Slot = 0; Slot < Eye->GetNumMaterials(); ++Slot)
+			{
+				UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Glow, this);
+				Eye->SetMaterial(Slot, Mid);
+				EyeCoreMids.Add(Mid);
+			}
+		}
+		if (Additive == nullptr || Cube == nullptr || Eye->GetStaticMesh() == nullptr)
+		{
+			continue;
+		}
+		// the pane's own extent in its mesh's units, and its thinnest axis, which is its normal
+		const FVector Size = Eye->GetStaticMesh()->GetBounds().BoxExtent * 2.0;
+		int32 Normal = 0;
+		for (int32 Axis = 1; Axis < 3; ++Axis)
+		{
+			if (Size[Axis] < Size[Normal]) { Normal = Axis; }
+		}
+		const double CubeSide = FMath::Max(Cube->GetBounds().BoxExtent.GetMax() * 2.0, 1.0);
+		FVector Scale = Size * 1.55 / CubeSide;
+		Scale[Normal] = FMath::Max(Size[Normal] * 0.34 / CubeSide, 0.01);
+		for (const double Side : {-1.0, 1.0})
+		{
+			UStaticMeshComponent* Halo = NewObject<UStaticMeshComponent>(this, MakeUniqueObjectName(this, UStaticMeshComponent::StaticClass(), TEXT("EyeHalo")));
+			Halo->ComponentTags.Add(TEXT("WL_EyeHalo"));
+			Halo->SetMobility(EComponentMobility::Movable);
+			Halo->SetStaticMesh(Cube);
+			Halo->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Halo->SetCastShadow(false);
+			Halo->SetupAttachment(Eye);
+			FVector Offset = FVector::ZeroVector;
+			Offset[Normal] = Side * Size[Normal] * 0.55;
+			Halo->SetRelativeLocation(Offset);
+			Halo->SetRelativeScale3D(Scale);
+			Halo->RegisterComponent();
+			UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Additive, this);
+			Halo->SetMaterial(0, Mid);
+			EyeHaloMids.Add(Mid);
+			EyeHalos.Add(Halo);
+		}
+	}
+	UE_LOG(LogTemp, Display, TEXT("WLDOG eye glow built on %d eye pane(s): %d core, %d halo"), Eyes, EyeCoreMids.Num(), EyeHaloMids.Num());
+}
+
+void ARelayDogCharacter::SetEyeGlow(float Level)
+{
+	BuildEyeGlow();
+	const float Wanted = FMath::Clamp(Level, 0.05f, 30.0f);
+	if (FMath::IsNearlyEqual(EyeGlowLevel, Wanted, 0.004f))
+	{
+		return;
+	}
+	EyeGlowLevel = Wanted;
+	// THE CORE IS DRIVEN TO THE LEVEL; THE HALO TO A THIRD OF IT. Hue is the eye's own -- the founder's
+	// established colour, or the chosen secondary -- and only the magnitude is set, exactly as the figures do.
+	const float Peak = FMath::Max3(EyeColour.R, FMath::Max(EyeColour.G, EyeColour.B), KINDA_SMALL_NUMBER);
+	const FLinearColor Core = (EyeColour / Peak) * Wanted;
+	const FLinearColor Halo = Core * 0.35f;
+	for (UMaterialInstanceDynamic* Mid : EyeCoreMids)
+	{
+		if (Mid != nullptr)
+		{
+			Mid->SetVectorParameterValue(TEXT("Color"), Core);
+			Mid->SetVectorParameterValue(TEXT("EmissiveColor"), Core);
+			Mid->SetScalarParameterValue(TEXT("EmissiveStrength"), 1.0f);
+		}
+	}
+	for (UMaterialInstanceDynamic* Mid : EyeHaloMids)
+	{
+		if (Mid != nullptr)
+		{
+			Mid->SetVectorParameterValue(TEXT("Color"), Halo);
+			Mid->SetVectorParameterValue(TEXT("EmissiveColor"), Halo);
+		}
+	}
 }
 
 float ARelayDogCharacter::GetDressedHeightUu() const

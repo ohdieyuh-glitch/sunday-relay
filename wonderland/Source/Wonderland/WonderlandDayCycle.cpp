@@ -14,6 +14,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "HAL/IConsoleManager.h"
 #include "WonderlandCompanionEmbodiment.h"
+#include "RelayDogCharacter.h"
 
 namespace
 {
@@ -446,7 +447,9 @@ static FAutoConsoleVariableRef GWonderlandEyeDayGlowRef(
 	TEXT("The emissive level a mascot's eyes are driven to at noon (an absolute, not a multiplier)."),
 	ECVF_Default);
 
-static float GWonderlandEyeNightGlow = 5.0f;
+// 8, not 5, now that the day level is really 18 rather than a clamped 12: the night exposure opens about 1.45 EV,
+// so 8 renders near what 22 would by day -- a strong perceptual glow that stays under the white point.
+static float GWonderlandEyeNightGlow = 8.0f;
 static FAutoConsoleVariableRef GWonderlandEyeNightGlowRef(
 	TEXT("wl.Look.EyeGlowNight"),
 	GWonderlandEyeNightGlow,
@@ -716,12 +719,21 @@ void UWonderlandDayCycleSubsystem::ScaleGlowsForNight()
 	// moved, so the steady state costs one iteration and no repaints.
 	const float Keep = FMath::Clamp(FMath::Lerp(1.0f, GWonderlandNightGlow, Nightfall), 0.05f, 1.0f);
 	// THE EYES GO THE OTHER WAY. Brightest when the sky is, which is the opposite of everything else here.
+	// CLAMPED AT 30, NOT 12. wl.Look.EyeGlowDay has defaulted to 18 since it was written and this clamp held it
+	// at 12 the whole time, so every "eye level" ever measured was 12 and every sweep above it read a flat
+	// line. The configured value is now the value.
 	const float Eyes = FMath::Clamp(
-		FMath::Lerp(GWonderlandEyeDayGlow, GWonderlandEyeNightGlow, Nightfall), 0.05f, 12.0f);
+		FMath::Lerp(GWonderlandEyeDayGlow, GWonderlandEyeNightGlow, Nightfall), 0.05f, 30.0f);
 	// AND THE SHELL GETS AN EDGE AFTER DARK. See AWonderlandCompanionEmbodiment::SetRimBoost: at the darkest
 	// hour the mascot measured DARKER than the ground it stands on, and neither the moon nor the fill can fix
 	// that because both light a horizontal ground more than a standing figure.
 	const float Rim = FMath::Clamp(FMath::Lerp(1.0f, GWonderlandNightRim, Nightfall), 1.0f, 6.0f);
+	// AND THE DOG ITSELF. Relay OG in gameplay is the Blueprint's meshes, not a figure; until 2026-09-27 this
+	// loop never reached the eyes the founder actually looks at.
+	for (TActorIterator<ARelayDogCharacter> Dog(Here); Dog; ++Dog)
+	{
+		Dog->SetEyeGlow(Eyes);
+	}
 	for (TActorIterator<AWonderlandCompanionEmbodiment> It(Here); It; ++It)
 	{
 		It->SetNightGlow(Keep);

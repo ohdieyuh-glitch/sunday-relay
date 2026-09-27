@@ -1360,7 +1360,7 @@ void AWonderlandCompanionEmbodiment::SetEyeGlow(float Scale)
 	{
 		return;
 	}
-	const float Wanted = FMath::Clamp(Scale, 0.05f, 12.0f);
+	const float Wanted = FMath::Clamp(Scale, 0.05f, 30.0f);   // was 12: EyeGlowDay 18 was never reachable
 	if (FMath::IsNearlyEqual(EyeGlowScale, Wanted, 0.004f))
 	{
 		return;
