@@ -65,6 +65,12 @@ queue() {   # queue <name> <header> <job>
   printf '%s\n\n' "$2" > "$ST"
   cat "$JOBS/$3" >> "$ST"
   [ "$(grep -c '^def job' "$ST")" = "1" ] || { echo "BAD JOB $1" >&2; return 1; }
+  # PY_COMPILE, NOT AST.PARSE AND NOT NOTHING. ast.parse ACCEPTS a repeated keyword argument where the
+  # compiler rejects it -- exactly how zzN3 reached the editor and errored on load with zero gates after
+  # my own check waved it through. Anything that merely parses, or is not checked at all, is not known to
+  # run; and a job that fails to load looks identical to a job that ran and found nothing.
+  python -c "import py_compile,sys;py_compile.compile(sys.argv[1],doraise=True)" "$ST" \
+    || { echo "STAGED $1 DOES NOT COMPILE -- not queueing it" >&2; return 1; }
   mv "$ST" "$CH/inbox/$1"
   echo "queued $1"
 }
