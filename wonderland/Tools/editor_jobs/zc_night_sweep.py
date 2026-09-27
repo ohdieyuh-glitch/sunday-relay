@@ -27,15 +27,14 @@
 # THE INSTRUMENT IS CHECKED BEFORE IT IS BELIEVED: N00 fails if the sweep does not move the readings, and
 # the practicals subsystem is asked to describe itself so "practicals off" and "practicals absent" cannot be
 # confused.
-import math
 import os
 
 L = unreal.WonderlandUiTestLibrary
 H = unreal.WonderlandHudTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "night_sweep")
 
-RT_W, RT_H = 480, 270
-GRID_X, GRID_Y = 24, 14
+#: Retired with the render-target path. The viewport's own resolution is the sampling grid now, and
+#: read_screen_rect strides it to about 100x100 samples per patch.
 
 #: The founder's seven, as places in this world: (label, eye, look-at). Eyes 2.6 m up, 12-20 m back, the
 #: way a player sees a place rather than a drone. Coordinates from the travel registry's anchors and the
@@ -65,28 +64,28 @@ SWEEP = (
 HOURS = [float(h) for h in range(0, 25)]
 
 
-def read_frame(world, rt):
-    # THE WORLD IS PASSED IN, not fetched. This function is MODULE level; live() is defined inside job(),
-    # so a call to it here is a NameError at runtime that ast.parse cannot see. That is exactly how this
-    # job died: an automated world-hardening pass rewrote the call without checking scope.
-    out = []
-    for gy in range(GRID_Y):
-        for gx in range(GRID_X):
-            c = unreal.RenderingLibrary.read_render_target_pixel(
-                world, rt, int((gx + 0.5) * RT_W / GRID_X), int((gy + 0.5) * RT_H / GRID_Y))
-            out.append((int(c.r), int(c.g), int(c.b)))
-    return out
+def patch(cx, cy, hw, hh):
+    """Measure a rectangle of the COMPOSITED VIEWPORT -- the frame a person is looking at.
 
+    This is deliberately the same instrument the exposure proofs, the checkpoint court reading and the water
+    audit use, because those are the readings whose plausibility has been checked against photographs. The
+    render-target path this replaces was never cross-checked against the JPEGs this job saves.
 
-def judge(frame):
-    if not frame:
+    `dark` is the fraction below luma 0.14 and is NOT the old `crushed` (max channel <= 10/255): it counts
+    more pixels, so the same 0.60 ceiling is stricter. That is intended -- a path at luma 0.10 is not pure
+    black and is still unreadable.
+    """
+    got = L.read_screen_rect(cx - hw, cy - hh, cx + hw, cy + hh)
+    if got is None:
         return None
-    n = float(len(frame))
-    lum = sorted(0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2] for p in frame)
-    return {"luma": round(sum(lum) / n / 255.0, 4),
-            "crushed": round(sum(1 for p in frame if max(p) <= 10) / n, 4),
-            "clipped": round(sum(1 for p in frame if max(p) >= 250) / n, 4),
-            "median": round(lum[len(lum) // 2] / 255.0, 4)}
+    mean, dark, bright, sampled = got
+    return {"luma": round(0.2126 * mean.r + 0.7152 * mean.g + 0.0722 * mean.b, 4),
+            "dark": round(dark, 4), "bright": round(bright, 4), "sampled": int(sampled)}
+
+
+def judge(_unused=None):
+    """Retired. The two-camera split it belonged to is gone; kept only so a stale call fails loudly."""
+    raise RuntimeError("judge() is retired -- measure the posed viewport with patch(), not a second camera")
 
 
 def job():
@@ -164,27 +163,41 @@ def job():
         "authority: grep WLLIGHT in the live editor log for 'practicals defined, pool of N'.")
     RESULT["practicals_read_via"] = how
 
-    rt = unreal.RenderingLibrary.create_render_target2d(live(), RT_W, RT_H, unreal.TextureRenderTargetFormat.RTF_RGBA8)
-    cap = H.spawn_scene_capture(live(), unreal.Vector(0, 0, 500), unreal.Rotator(0, 0, 0), rt)
-    if cap is None:
-        RESULT["status"] = "error"
-        RESULT["error"] = "no scene capture"
-        return
-    cap.get_editor_property("capture_component2d").set_editor_property("capture_every_frame", True)
+    # NO SECOND CAMERA. The viewport is the instrument and the artefact both.
+    L.focus_game_viewport()
 
     def cvar(name, value):
         unreal.SystemLibrary.execute_console_command(live(), "%s %s" % (name, value))
 
     def look(label, eye, at):
-        """Park the player beside the place so its cell streams, then aim the capture at it."""
+        """Park the player beside the place so its cell streams, then aim THE VIEWPORT at it.
+
+        Parking still matters and is not about the camera: an unstreamed cell renders as nothing whichever
+        instrument reads it, and the pawn is what makes the cell load.
+        """
         try:
             dog.set_actor_location(unreal.Vector(eye[0], eye[1], eye[2] + 60.0), False, False)
         except Exception:                                             # noqa: BLE001
             pass
-        yaw = math.degrees(math.atan2(at[1] - eye[1], at[0] - eye[0]))
-        dist = math.hypot(at[0] - eye[0], at[1] - eye[1])
-        pitch = math.degrees(math.atan2(at[2] - eye[2], dist))
-        cap.set_actor_location_and_rotation(unreal.Vector(*eye), unreal.Rotator(pitch, yaw, 0.0), False, False)
+        L.pose_camera(live(), unreal.Vector(*eye), unreal.Vector(*at), 60.0)
+
+    def shoot(name):
+        """One frame: the numbers and the picture, from the same camera in the same moment.
+
+        FRAME is the founder's overall "does this look like night", GROUND is the lower third -- the nearby
+        ground and path underfoot, which is the first thing item 1 of the founder's list asks about and the
+        part a whole-frame mean hides behind sky.
+        """
+        try:
+            H.capture_viewport_jpeg(os.path.join(ROOT, name + ".jpg"), 1200, 85)
+        except Exception:                                             # noqa: BLE001
+            pass
+        f = patch(0.5, 0.5, 0.46, 0.44)
+        g = patch(0.5, 0.78, 0.30, 0.16)
+        if f is None:
+            return None
+        f["ground"] = g
+        return f
 
     # ---- NOON, for the "still night" reference at each place.
     cvar("wl.Sky.Hour", 12)
@@ -192,7 +205,7 @@ def job():
     for label, eye, at in PLACES:
         look(label, eye, at)
         yield 3.0
-        noon[label] = judge(read_frame(live(), rt))
+        noon[label] = shoot("noon__%s" % label)
     RESULT["noon"] = noon
 
     # ---- THE SWEEP, at midnight.
@@ -210,13 +223,13 @@ def job():
         for label, eye, at in PLACES:
             look(label, eye, at)
             yield 2.0
-            r = judge(read_frame(live(), rt))
+            r = shoot("%s__%s" % (key, label))
             row["places"][label] = r
-            try:
-                H.capture_viewport_jpeg(os.path.join(ROOT, "%s__%s.jpg" % (key, label)), 1200, 85)
-            except Exception:                                         # noqa: BLE001
-                pass
-        readable = [p for p, r in row["places"].items() if r and r["crushed"] <= 0.60 and r["luma"] >= 0.06]
+        # READABLE now also requires the GROUND to be readable, not just the frame average. A frame carried
+        # over the line by a bright sky while the path underfoot is black is exactly the complaint.
+        readable = [p for p, r in row["places"].items()
+                    if r and r["dark"] <= 0.60 and r["luma"] >= 0.06
+                    and (r.get("ground") is None or r["ground"]["dark"] <= 0.75)]
         still_night = [p for p, r in row["places"].items()
                        if r and noon.get(p) and r["luma"] <= 0.38 * max(noon[p]["luma"], 1e-6)]
         row["readable"] = readable
@@ -224,7 +237,7 @@ def job():
         row["score"] = len(readable) if len(still_night) == len(PLACES) else -1
         sweep.append(row)
         emit("S_%s" % key, "INFO", key, {"readable": len(readable), "still_night": len(still_night),
-                                         "worst_crushed": max((r["crushed"] for r in row["places"].values() if r), default=None)})
+                                         "worst_dark": max((r["dark"] for r in row["places"].values() if r), default=None)})
 
     # put the world back as it was found
     cvar("wl.Sky.MoonGain", SWEEP[0][0])
@@ -238,9 +251,11 @@ def job():
     for hour in HOURS:
         cvar("wl.Sky.Hour", hour)
         yield 2.0
-        r = judge(read_frame(live(), rt))
-        ladder.append({"hour": hour, "luma": r["luma"] if r else None, "crushed": r["crushed"] if r else None})
+        r = shoot("ladder__h%02.0f" % hour)
+        ladder.append({"hour": hour, "luma": r["luma"] if r else None, "dark": r["dark"] if r else None,
+                       "ground_luma": (r.get("ground") or {}).get("luma") if r else None})
     RESULT["ladder"] = ladder
+    L.release_camera(live())
     jumps = [(abs(ladder[i]["luma"] - ladder[i - 1]["luma"]), ladder[i]["hour"])
              for i in range(1, len(ladder)) if ladder[i]["luma"] is not None and ladder[i - 1]["luma"] is not None]
     worst_jump = max(jumps) if jumps else (None, None)
@@ -260,8 +275,9 @@ def job():
     record("N_SANITY", "the capture can see a lit world at noon -- the reference the night ratios divide by",
            len(bright_enough) >= max(1, len(noon_lumas) - 1), noon_luma=noon_lumas, floor=0.12,
            too_dark=[k for k in noon_lumas if k not in bright_enough],
-           note="the viewport path reads 0.17-0.34 at noon in this same world; a SceneCapture reading an "
-                "order of magnitude darker is measuring its own configuration, not the world")
+           note="this now reads the same composited frame that is saved beside it as noon__<place>.jpg, "
+                "so a red here is checkable by eye: open the JPEG. The previous version measured a "
+                "SceneCapture actor while saving viewport JPEGs -- two cameras, and only one was ever posed")
 
     record("N00", "the sweep moved the picture -- the instrument is responding",
            lumas and (max(lumas) - min(lumas)) > 0.02, luma_range=[min(lumas), max(lumas)] if lumas else None,
@@ -271,7 +287,7 @@ def job():
                   "the complaint reproduces before anything is changed",
            baseline is not None and len(baseline["readable"]) < len(PLACES),
            baseline_readable=baseline["readable"] if baseline else None,
-           baseline_crushed={p: r["crushed"] for p, r in (baseline["places"].items() if baseline else [])},
+           baseline_dark={p: r["dark"] for p, r in (baseline["places"].items() if baseline else [])},
            note="if this is green the sweep is measuring somewhere the founder was not looking")
     best = max((row for row in sweep if row["score"] >= 0), key=lambda r: (r["score"], -r["practicals"]), default=None)
     RESULT["best"] = best["key"] if best else None
