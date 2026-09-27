@@ -181,6 +181,24 @@ public:
 	 */
 	void SetShowcaseLit(bool bShowcase);
 
+	/**
+	 * THE BOX AROUND THE PHYSICAL MASCOT, WITH ITS EFFECTS LEFT OUT. In world space; invalid if nothing is built.
+	 *
+	 * FOUNDER, 2026-09-26, with video of the wardrobe showing a tiny mascot adrift in black: "Wardrobe framing
+	 * MUST derive from the physical mascot BODY, not total actor bounds ... Explicitly exclude from framing
+	 * calculations: halo, flames, particles, glow cards ... Those effects can still render. They simply must
+	 * NOT determine camera distance."
+	 *
+	 * That is exactly the fault. Framing solved on the AGGREGATE bounds, so Celestial Light's halo, Apollo's
+	 * crown and Arden's fire were all voting on how far away the camera stood -- and a flame that animates
+	 * outward votes differently every frame. The camera backed off to fit the biggest thing the figure had
+	 * recently thrown, and what was left in the middle was a small dog.
+	 *
+	 * This is the framing contract: only Lit and Rim meshes, which is the shell and nothing else.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	FBox GetFramingBodyBounds() const;
+
 	float GetGlowScale() const { return GlowScale; }
 
 	/** Follow whatever pawn this controller is wearing, now and after it changes. */
@@ -510,6 +528,14 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> PartMeshes;
+
+	/**
+	 * WHICH OF THOSE MESHES ARE THE FIGURE'S BODY, as opposed to its light. See GetFramingBodyBounds.
+	 *
+	 * Parallel to PartMeshes: true for a mesh built from a Lit or Rim material -- bone, cloth, plate, chain --
+	 * and false for one built from a Glow or Additive material -- a halo, a banner, ghostfire, an ember.
+	 */
+	TArray<bool> PartMeshIsBody;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> MaterialInstances;

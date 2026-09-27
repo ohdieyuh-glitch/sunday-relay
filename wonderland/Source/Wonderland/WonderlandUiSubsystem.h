@@ -999,22 +999,10 @@ private:
 	 */
 	FVector2D WardrobeDrift = FVector2D::ZeroVector;
 
-	/**
-	 * THE LARGEST THE STAGED FIGURE HAS ACTUALLY BEEN LATELY, so an animated flame is framed by its own peak.
-	 *
-	 * Neither available measure is right on its own. The drawn bounds miss a fire displaced by its material
-	 * and let Arden Infernal run past the window; the declared envelope adds a worst-case reach factor to
-	 * every glow group and framed the same skin at 0.61 of the square when the founder asked for 0.80-0.90.
-	 * Both are honest about different instants -- the flame really does pulse between 0.58 and 1.20 of its
-	 * nominal height every couple of seconds.
-	 *
-	 * So the frame is solved against the biggest the figure has been in the last few seconds: tighter than the
-	 * envelope, because it is a reach the flame actually achieved rather than one it is allowed; and safe
-	 * against clipping, because it has already seen the peak. It decays slowly so that changing to a smaller
-	 * skin does not leave the window framed for the previous one.
-	 */
-	float WardrobePeakHeight = 0.0f;
-	float WardrobePeakWide = 0.0f;
+	// The decaying peak that used to live here is deleted, not disabled. It remembered the largest the figure
+	// had recently been so a pulsing flame could not clip, and a framing that remembers is a framing that
+	// drifts: one big frame backed the camera off and it stayed off across skin switches and reopenings.
+	// Framing is stateless now -- see AWonderlandCompanionEmbodiment::GetFramingBodyBounds.
 
 	/**
 	 * THE LAST WARDROBE FRAMING SOLVE, IN WORDS, so a proof can read the arithmetic instead of guessing at it.

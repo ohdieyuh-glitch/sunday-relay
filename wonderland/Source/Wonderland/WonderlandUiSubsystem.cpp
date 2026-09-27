@@ -1444,69 +1444,42 @@ void UWonderlandUiSubsystem::FrameRelayDogInWardrobe(bool bOn)
 				// So the fit reads the rendered bounds and divides out the scale they were rendered at. That is
 				// a fixed point -- the scale cancels -- and it re-solves every 0.08 s, so a skin that has only
 				// half loaded is corrected on the next tick instead of being framed for good.
+				// ---- FRAMED ON THE BODY, WITH THE EFFECTS LEFT OUT OF THE VOTE.
+				//
+				// FOUNDER, with video of a tiny mascot adrift in black: "Wardrobe framing MUST derive from
+				// the physical mascot BODY, not total actor bounds ... Those effects can still render. They
+				// simply must NOT determine camera distance." That names the fault precisely, and the two
+				// mechanisms that produced it were both added here in the course of trying to fix it:
+				//
+				// AGGREGATE BOUNDS. GetComponentsBoundingBox counts every primitive the figure owns, so
+				// Celestial Light's halo, Apollo's crown and Arden's fire were all voting on the camera
+				// distance -- and an animated flame votes differently every frame.
+				//
+				// A DECAYING PEAK. To stop a pulsing flame clipping, the solve tracked the largest the figure
+				// had been recently and decayed it 0.6% per tick. That is a memory: one big frame backed the
+				// camera off and it STAYED off for many seconds, across skin switches and reopenings. A
+				// framing that remembers is a framing that drifts, and drift is exactly the recurrence the
+				// founder has now reported three times. Both are gone.
+				//
+				// GetFramingBodyBounds returns the union of the Lit and Rim meshes only -- the shell, the
+				// plate, the bone, the cloth -- and nothing that glows. It is stateless: the same skin in the
+				// same pose gives the same box every time, whatever the fire happened to be doing.
 				const FVector Applied = Shown->GetActorScale3D();
 				const float Uniform = FMath::Max(FMath::Abs(static_cast<float>(Applied.Z)), 0.001f);
-				const FBox Drawn = Shown->GetComponentsBoundingBox(true);
+				const FBox Drawn = Shown->GetFramingBodyBounds();
 				if (Drawn.IsValid && Drawn.GetExtent().Z > 1.0)
 				{
 					bFramedOnDrawnBounds = true;
 					const FVector Half = Drawn.GetExtent() / Uniform;
 					Height = FMath::Max(static_cast<float>(Half.Z) * 2.0f, 60.0f);
 					FigureWide = FMath::Max(static_cast<float>(Half.X), static_cast<float>(Half.Y)) * 2.0f;
-
-					// ---- AND THE ENVELOPE IS TAKEN AS A FLOOR, NOT DISCARDED.
-					//
-					// Choosing between these two measures was the mistake, and both choices were wrong in the
-					// same way: each is blind to something the other sees. The declared envelope adds a reach
-					// factor to every glow group and OVER-counts a flame, which framed Arden Infernal at 0.59
-					// of a window it had been solved to fill. The drawn bounds UNDER-count one, because the
-					// fire is displaced outward by its material at render time and a component's bounding box
-					// knows nothing about world-position offset -- so Arden was then solved to 0.88 and drew
-					// past every edge, with the window's top-left corner reading 0.98 white.
-					//
-					// Instrumented rather than guessed, which is how this was finally pinned: the solve says
-					// Arden's drawn height is 379.8 against a declared 473, and the arithmetic on the drawn
-					// figure is exactly right -- 0.88 of the window -- for a figure 20% smaller than the one
-					// that actually renders.
-					//
-					// A floor keeps both guarantees at once. Where the envelope is the larger, the flame it
-					// was invented to predict is inside the frame by construction. Where the drawn figure is
-					// larger -- a half-loaded skin, or one whose envelope is honest -- the measured size wins
-					// and nothing is framed small. For a skin with no glow group at all the two agree and
-					// this changes nothing, which is why Relay OG never showed the bug.
+					FigureMiddle = static_cast<float>(Drawn.GetCenter().Z - Shown->GetActorLocation().Z) / Uniform;
 					EnvelopeTall = Shown->GetFigureHeightUu();
 					EnvelopeSeen = Shown->GetFigureWidthUu();
-
-					// ---- THE PEAK THE FIGURE HAS ACTUALLY REACHED, bounded by what it is allowed to reach.
-					//
-					// Framing on the envelope alone was the first fix and it over-corrected: Arden Infernal
-					// stopped running past the window and started filling 0.61 of it. The envelope is a
-					// worst case -- Tall * 1.45 on every glow group -- and a flame does not sit at its worst
-					// case, it pulses between 0.58 and 1.20 of nominal every couple of seconds. So the frame
-					// is solved against the largest this figure has genuinely been recently, which is tighter
-					// than the allowance and still safe, because the peak has already been seen.
-					//
-					// The decay is what makes it a PEAK rather than a high-water mark for the session: a few
-					// per cent a second, so changing to a smaller skin re-tightens within a breath instead of
-					// leaving the window framed for the skin before it.
-					Self->WardrobePeakHeight = FMath::Max(Self->WardrobePeakHeight * 0.994f, Height);
-					Self->WardrobePeakWide = FMath::Max(Self->WardrobePeakWide * 0.994f, FigureWide);
-					Height = FMath::Min(Self->WardrobePeakHeight,
-						EnvelopeTall > 60.0f ? EnvelopeTall : Self->WardrobePeakHeight);
-					FigureWide = FMath::Min(Self->WardrobePeakWide,
-						EnvelopeSeen > 1.0f ? EnvelopeSeen : Self->WardrobePeakWide);
-					FigureMiddle = static_cast<float>(Drawn.GetCenter().Z - Shown->GetActorLocation().Z) / Uniform;
-					// AND SIDEWAYS, WHICH WAS BEING THROWN AWAY. The same subtraction, on the two axes the
-					// framing never corrected: see UWonderlandUiSubsystem::WardrobeDrift.
-					const FVector Sideways = (Drawn.GetCenter() - Shown->GetActorLocation()) / Uniform;
-					Self->WardrobeDrift = FMath::Lerp(
-						Self->WardrobeDrift,
-						FVector2D(static_cast<float>(Sideways.X), static_cast<float>(Sideways.Y)),
-						0.15f);
 				}
 				else
 				{
-					// Nothing drawn yet: the declared envelope, which is at least the right order of size.
+					// Nothing built yet: the declared envelope, which is at least the right order of size.
 					const float Standing = Shown->GetFigureHeightUu();
 					if (Standing > 60.0f)
 					{

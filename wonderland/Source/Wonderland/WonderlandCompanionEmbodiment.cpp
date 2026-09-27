@@ -408,6 +408,7 @@ void AWonderlandCompanionEmbodiment::ClearBody()
 	PartMeshes.Reset();
 	PartPivots.Reset();
 	PartNames.Reset();
+	PartMeshIsBody.Reset();
 	MaterialInstances.Reset();
 	FlameMaterialInstances.Reset();
 	FlameRestColours.Reset();
@@ -781,6 +782,10 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		Mesh->AddInstances(Group.Value, false, false, false);
 		Mesh->RegisterComponent();
 		PartMeshes.Add(Mesh);
+		// THE SHELL AND THE LIGHT ARE RECORDED APART, so the wardrobe can frame on one and not the other.
+		// See GetFramingBodyBounds.
+		PartMeshIsBody.Add(Kind == EWonderlandCompanionMaterialKind::Lit
+			|| Kind == EWonderlandCompanionMaterialKind::Rim);
 		BoxCount += Group.Value.Num();
 	}
 
@@ -1073,6 +1078,25 @@ FString AWonderlandCompanionEmbodiment::DescribeFlames() const
 	return Out;
 }
 
+FBox AWonderlandCompanionEmbodiment::GetFramingBodyBounds() const
+{
+	FBox Body(ForceInit);
+	for (int32 Index = 0; Index < PartMeshes.Num(); ++Index)
+	{
+		if (!PartMeshIsBody.IsValidIndex(Index) || !PartMeshIsBody[Index])
+		{
+			continue;
+		}
+		const UInstancedStaticMeshComponent* Mesh = PartMeshes[Index].Get();
+		if (Mesh == nullptr || Mesh->GetInstanceCount() <= 0)
+		{
+			continue;
+		}
+		Body += Mesh->Bounds.GetBox();
+	}
+	return Body;
+}
+
 void AWonderlandCompanionEmbodiment::SetShowcaseLit(bool bShowcase)
 {
 	// Channel 1 alone for a showcase; channel 0 alone for a body that lives in the world. Applied to every
@@ -1234,11 +1258,33 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 	}
 	if (bChosen)
 	{
-		switch (Channel)
+		if (BodyRole == EWonderlandBodyRole::Companion)
 		{
-		case EWonderlandColorChannel::Body: Want *= Primary;   break;
-		case EWonderlandColorChannel::Eye:  Want *= Secondary; break;
-		case EWonderlandColorChannel::None: default:                     break;
+			// ---- A COMPANION IS ROUTED BY WHAT A SURFACE IS, NOT BY WHAT IT IS CALLED.
+			//
+			// FOUNDER: "PRIMARY controls the AI Companion's SOLID WHITE BODY PARTS ... SECONDARY controls the
+			// AI Companion's GLOW / ENERGY portions ... These channels MUST be genuinely independent."
+			//
+			// The mascot's channels are decided by material NAME, because a Relay Dog skin's authored art has
+			// to be protected piece by piece -- bone and bonedeep may be recoloured, a visor and a banner may
+			// not. A companion is a different object and the founder has asked for a different split: the
+			// shell against the light. That is the material's KIND, which is exactly the distinction already
+			// drawn everywhere else in this function -- Lit and Rim are the body, Glow and Additive are the
+			// energy -- so routing on it is both what was asked for and genuinely independent by construction.
+			//
+			// Neither multiply changes intensity. Primary tints a lit surface and cannot make it emissive;
+			// Secondary tints an emissive one and cannot make the companion brighter. "Colour customization
+			// must change COLOR, not flatten the materials."
+			Want *= bGlows ? Secondary : Primary;
+		}
+		else
+		{
+			switch (Channel)
+			{
+			case EWonderlandColorChannel::Body: Want *= Primary;   break;
+			case EWonderlandColorChannel::Eye:  Want *= Secondary; break;
+			case EWonderlandColorChannel::None: default:                     break;
+			}
 		}
 	}
 
