@@ -579,34 +579,41 @@
 
   <div class="tw">
     <table>
-      <caption>All three in <span class="mono">MOVE_WALKING</span>, <span class="mono">max_walk_speed 230</span>,
-      not falling, with a <span class="mono">PlayerController</span>.</caption>
+      <caption>Probe displacement in 3 s, before and after the rebuild. All three in
+      <span class="mono">MOVE_WALKING</span>, <span class="mono">max_walk_speed 230</span>, with a
+      <span class="mono">PlayerController</span> and a start error of 0.0 m.</caption>
       <thead><tr><th>Nation</th><th class="n">Advanced</th><th class="n">Peak speed</th><th>What that is</th></tr></thead>
       <tbody>
-        <tr><td class="name">ICARUS</td><td class="n alarm">0.0 uu</td><td class="n">230.0</td><td class="alarm">full walk speed, no advance &mdash; blocked geometry</td></tr>
-        <tr><td class="name">NOCTIS</td><td class="n ok">227.0 uu</td><td class="n">230.0</td><td class="ok">walks cleanly &mdash; proves the harness</td></tr>
-        <tr><td class="name">TARTARUS</td><td class="n">67.7 uu</td><td class="n alarm">11.9</td><td class="alarm">never got moving</td></tr>
+        <tr><td class="name">ICARUS</td><td class="n">0.0 &rarr; <strong>643.6</strong></td><td class="n">230.0</td><td class="dim">drives on the rebuilt editor &mdash; <span class="alarm">"blocked" withdrawn</span></td></tr>
+        <tr><td class="name">NOCTIS</td><td class="n">227.0 &rarr; <strong>802.0</strong></td><td class="n">230.0</td><td class="ok">drives</td></tr>
+        <tr><td class="name">TARTARUS</td><td class="n">67.7 &rarr; <strong>570.1</strong></td><td class="n">230.0</td><td class="ok">drives</td></tr>
       </tbody>
     </table>
   </div>
 
-  <p>Because NOCTIS drove, the harness is sound, and the other two are facts about those places. An offline
-  pass over every layer file then found that ICARUS is the only nation with anything in the first four metres
-  of its corridor — a topiary cone 191 uu ahead and 119 aside, a slender castle tower at 329 and 152 — while
-  the NOCTIS and TARTARUS corridors hold nothing but ground. The ICARUS route also sits 1000 uu off the
-  corridor centreline for its entire early run, where the other two return to centre immediately.</p>
+  <p><strong>The blocked-start finding did not reproduce, and I withdraw it.</strong> On the rebuilt editor all
+  three nations drive at full walk speed from a zero start error &mdash; ICARUS 643.6&nbsp;uu where it had
+  advanced 0.0. Whatever stopped it was a property of that build or that play session, not of the ground, so the
+  topiary and the tower named as candidates are off the hook and the corridor audit proved nothing after all. It
+  was still right not to call them the cause.</p>
 
-  <p><strong>That is a correlation and not yet the cause.</strong> 119 uu of side clearance leaves room for a
-  42 uu capsule unless the topiary's own collision radius exceeds about 77, and the repository's mesh bounds
-  file holds seven meshes, none of them these. Congestion also cannot explain TARTARUS, whose corridor is
-  clear. A sixteen-ray clearance probe now reports the free distance in every direction at the placement
-  point, the clearance along the heading the Dog is about to walk, and the name of what each ray stopped on
-  — read from the component's mesh, since this world is instanced and an actor label just names a batch
-  holding thousands.</p>
+  <p><strong>The real blocker is now the only thing left, and it is the same on all three.</strong> Each Dog
+  walks a few metres of a 485&nbsp;m route and then vanishes: ICARUS 4.5&nbsp;m to waypoint 2, TARTARUS
+  16.2&nbsp;m to waypoint 3, NOCTIS 19.4&nbsp;m to waypoint 4. The run reported "the world went away" in all
+  three cases &mdash; and that message is a lie of omission I wrote. The guard returns the same empty answer
+  whether the <em>world</em> ended or the <em>Dog</em> was destroyed, and it blamed the world for both.</p>
 
-  <p>This run did not happen. It errored on load with zero gates because I left two <code>note</code>
-  keywords in one call — <code>ast.parse</code> accepts a repeated keyword and the compiler rejects it, so my
-  own check passed it into a commit. It needs one play session after the next asset round.</p>
+  <p>Those are opposite findings. A torn-down play session is the harness and says nothing about the route. A
+  Dog destroyed five metres into an avenue is most likely a Dog that walked into a cell which had not streamed,
+  dropped through the floor and was killed below the world &mdash; and that is a streaming finding about the
+  avenues, which is exactly what QA-8 has been failing on all along. Three nations stopping at waypoints 2, 3
+  and 4 in one run is far more consistent with falling than with three separate teardowns, but consistency is
+  not evidence.</p>
+
+  <p>So the next run says which, and proves it: it reports whether the world or the pawn went, the Dog's last
+  known height, and how far that sits below its own leg's floor. Every one of these routes runs on the
+  <span class="mono">+12</span> shelf, so a Dog last seen thousands of units under the avenue fell, and a Dog
+  last seen at floor height was removed some other way.</p>
 </section>
 
 <section>
@@ -619,8 +626,12 @@
     motion, the low-mid-high pulse, the chest skull or the spectral side element. Unmeasured, not passing.</li>
     <li><strong>Bloom.</strong> Read from the post-process volume and reported, but not swept — so
     "controlled bloom" is described rather than demonstrated.</li>
-    <li><strong>Whether ICARUS's topiary is the blocker.</strong> Named as a candidate with the geometry that
-    makes it one, and explicitly not proven.</li>
+    <li><strong>Why ICARUS could not move on the earlier build.</strong> It drives now, so the cause left with
+    that build and is not recoverable from the current one. Not a world finding, and the topiary named as a
+    candidate is cleared.</li>
+    <li><strong>Whether the Dog is falling through the avenues.</strong> The most likely reading of three walks
+    ending after a few metres, and unproven until the next run reports the pawn's last height against its
+    leg's floor.</li>
     <li><strong>Any reading taken with a figure in frame.</strong> Every additive surface on every figure
     &mdash; eye halos, Celestial Light's halo edge, cub ghost tails, the Project Avatars' halos &mdash; rendered
     black until the <code>RestColourFor</code> fix, so their emissive contribution is missing from the night
