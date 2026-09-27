@@ -29,6 +29,7 @@
 
 #include "CoreMinimal.h"
 #include "Containers/Ticker.h"
+#include "Engine/DeveloperSettings.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "WonderlandEnvelope.h"
@@ -99,6 +100,25 @@ namespace WonderlandJuliusStreamLogic
 	WONDERLAND_API bool SplitPage(const FString& Body, TArray<FString>& OutDeliveries, int64& OutNextCursor);
 }
 
+/**
+ * WHERE A BUILD WITHOUT A CONSOLE FINDS THE BRIDGE.
+ *
+ * A Shipping build has no console (ALLOW_CONSOLE is ALLOW_CONSOLE_IN_SHIPPING, off by default), so the
+ * `wl.Julius.Bridge.Url` cvar alone would leave a packaged world following nothing. This is the project's setting
+ * -- [/Script/Wonderland.WonderlandJuliusLinkSettings] in DefaultGame.ini -- and the cvar, when set, overrides it.
+ * Empty is honest: the world follows nothing and says so ("No bridge is configured").
+ */
+UCLASS(Config = Game, DefaultConfig, BlueprintType, meta = (DisplayName = "Wonderland Julius Link"))
+class WONDERLAND_API UWonderlandJuliusLinkSettings : public UDeveloperSettings
+{
+	GENERATED_BODY()
+
+public:
+	/** The Relay bridge this world follows Julius runs on, e.g. https://example.invalid. `wl.Julius.Bridge.Url` overrides it. */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Bridge")
+	FString BridgeUrl;
+};
+
 UCLASS()
 class WONDERLAND_API UWonderlandJuliusStreamSubsystem : public UGameInstanceSubsystem
 {
@@ -108,13 +128,21 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
+	/*
+	 * THE CONTROLS, reachable without a console. The `wl.Julius.*` commands are a developer's path; a Shipping build
+	 * has no console, so a HUD entry for the pairing code calls these instead. Same behaviour either way.
+	 */
+
 	/** Redeem a pairing code for this client's native session. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Julius")
 	void Pair(const FString& Code);
 
 	/** Follow exactly this run of this project. Switching runs clears what the world held. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Julius")
 	void Follow(const FString& InProjectId, const FString& InRunId);
 
 	/** Stop following. The world keeps what it last knew and says the link is stale. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Julius")
 	void Stop();
 
 	/** Replace where identity comes from -- the seam a device-code flow will use. */

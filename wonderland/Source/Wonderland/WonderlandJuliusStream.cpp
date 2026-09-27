@@ -24,8 +24,8 @@ DEFINE_LOG_CATEGORY_STATIC(LogWonderlandJuliusStream, Log, All);
 namespace WonderlandJuliusStreamTuning
 {
 	TAutoConsoleVariable<FString> CVarBridgeUrl(TEXT("wl.Julius.Bridge.Url"), TEXT(""),
-		TEXT("Julius stream: the Relay bridge this world follows a run on, e.g. http://127.0.0.1:8796. Empty means the "
-			"world follows nothing and says so."));
+		TEXT("Julius stream: the Relay bridge this world follows a run on, e.g. http://127.0.0.1:8796. Overrides the "
+			"project's Julius Link setting; when both are empty the world follows nothing and says so."));
 	TAutoConsoleVariable<float> CVarPollSeconds(TEXT("wl.Julius.Stream.PollSeconds"), 1.0f,
 		TEXT("Julius stream: seconds between page reads while following a run."));
 	TAutoConsoleVariable<float> CVarUnpairedSeconds(TEXT("wl.Julius.Stream.UnpairedSeconds"), 2.0f,
@@ -191,8 +191,14 @@ UWonderlandJuliusSubsystem* UWonderlandJuliusStreamSubsystem::World() const
 
 FString UWonderlandJuliusStreamSubsystem::BridgeUrl() const
 {
+	// The cvar is a developer's override; a packaged build has no console and reads the project setting.
 	FString Url = WonderlandJuliusStreamTuning::CVarBridgeUrl.GetValueOnGameThread();
 	Url.TrimStartAndEndInline();
+	if (Url.IsEmpty())
+	{
+		Url = GetDefault<UWonderlandJuliusLinkSettings>()->BridgeUrl;
+		Url.TrimStartAndEndInline();
+	}
 	while (Url.EndsWith(TEXT("/")))
 	{
 		Url.LeftChopInline(1);
