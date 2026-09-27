@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { juliusTestDatabaseUrl } from '../src/relay/persistence/julius-test-database';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { composeJuliusMissionBootstrap, handleJuliusMissionRoute } from './julius-mission-routes';
 import { composeJuliusStateApi, handleJuliusStateRoute, type JuliusStateRoutePorts } from './julius-state-routes';
@@ -17,15 +18,16 @@ import { composeJuliusStateApi, handleJuliusStateRoute, type JuliusStateRoutePor
  * depends on: what a client creates is what a client then watches, and both are
  * what the database holds. This suite says it against PostgreSQL itself.
  *
- * Runs wherever JULIUS_REAL_POSTGRES=1 (or JULIUS_REAL_INFRA=1) and DATABASE_URL
- * are set — the same gate as the other real-postgres suites — and is `todo`
+ * Runs wherever JULIUS_TEST_DATABASE_URL names a throwaway database — the same
+ * gate as the other real-postgres suites, and deliberately NOT `DATABASE_URL`,
+ * which on a developer machine points at the persistent store — and is `todo`
  * everywhere else, so an absent database is a skipped proof rather than a
  * passing one. Every mission it creates carries a random identity, so it can be
  * re-run against a database that already holds its earlier runs.
  */
 
-const enabled = (process.env.JULIUS_REAL_POSTGRES === '1' || process.env.JULIUS_REAL_INFRA === '1')
-  && Boolean(process.env.DATABASE_URL);
+const databaseUrl = juliusTestDatabaseUrl();
+const enabled = databaseUrl !== null;
 const suite = enabled ? describe : describe.todo;
 
 const nonce = () => randomBytes(4).toString('hex');
@@ -57,7 +59,7 @@ suite('the Wonderland seam over a real PostgreSQL', () => {
   let createRerun: (body: string) => Promise<{ status: number; body: unknown } | null>;
 
   beforeAll(async () => {
-    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    pool = new Pool({ connectionString: databaseUrl! });
     await new TransactionalWonderlandDatabase(pool).migrate();
     // THE PRODUCTION COMPOSITIONS, exactly as the server builds them.
     const bootstrap = composeJuliusMissionBootstrap(pool);

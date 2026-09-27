@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { juliusTestDatabaseUrl } from './julius-test-database';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -22,12 +23,13 @@ import { createFakeTime } from '../mission/julius/julius-runtime-fixtures';
  * Time is the fake clock's, far in the future, so the database's own clock and
  * defaults cannot make a claim or a sweep pass for the wrong reason.
  *
- * Runs wherever JULIUS_REAL_POSTGRES=1 (or JULIUS_REAL_INFRA=1) and DATABASE_URL
+ * Runs wherever JULIUS_TEST_DATABASE_URL names a THROWAWAY database (never DATABASE_URL
  * point at a PostgreSQL — the `first-live-topology` job — and is `todo`
  * elsewhere. No provider is involved.
  */
 
-const enabled = process.env.JULIUS_REAL_INFRA === '1' || process.env.JULIUS_REAL_POSTGRES === '1';
+const databaseUrl = juliusTestDatabaseUrl();
+const enabled = databaseUrl !== null;
 const suite = enabled ? describe : describe.todo;
 
 suite('Julius lease renewal on real PostgreSQL', () => {
@@ -59,7 +61,7 @@ suite('Julius lease renewal on real PostgreSQL', () => {
   };
 
   beforeAll(async () => {
-    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    pool = new Pool({ connectionString: databaseUrl! });
     await new TransactionalWonderlandDatabase(pool).migrate();
     repo = new JuliusPostgresRepository(pool);
     recovery = new JuliusRecoveryPostgresRepository(pool);

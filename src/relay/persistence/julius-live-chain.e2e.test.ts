@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { juliusTestDatabaseUrl } from './julius-test-database';
 import { promisify } from 'node:util';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -42,7 +43,8 @@ import { evaluate } from '../../../scripts/wonderland-beta-gate.mjs';
  * job does that. The SQL, the row shapes and the gate's reading of them are.
  */
 
-const enabled = process.env.JULIUS_REAL_INFRA === '1' || process.env.JULIUS_REAL_POSTGRES === '1';
+const databaseUrl = juliusTestDatabaseUrl();
+const enabled = databaseUrl !== null;
 const suite = enabled ? describe : describe.todo;
 const run = promisify(execFile);
 
@@ -94,7 +96,7 @@ suite('the Julius evidence chain: a real run, the shipping dump queries, the Bet
     // early `return`, which `ci-test-accounting` rightly refuses because a
     // silent return is how a test comes to assert nothing and still pass.
     if (enabled) {
-      pool = new Pool({ connectionString: process.env.DATABASE_URL });
+      pool = new Pool({ connectionString: databaseUrl! });
       await new TransactionalWonderlandDatabase(pool).migrate();
     }
   });
@@ -194,7 +196,7 @@ suite('the Julius evidence chain: a real run, the shipping dump queries, the Bet
     const bundleRoot = mkdtempSync(join(tmpdir(), 'julius-chain-'));
     const bundle = join(bundleRoot, 'julius-live-evidence');
     mkdirSync(bundle);
-    const url = new URL(process.env.DATABASE_URL!);
+    const url = new URL(databaseUrl!);
     const env = {
       ...process.env,
       PGHOST: url.searchParams.get('host') ?? url.hostname,

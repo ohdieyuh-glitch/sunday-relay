@@ -124,6 +124,19 @@ Three commits on `relay/julius-beta-qualification`, off `a384b215`:
 
 ## The honest state of the suite on this platform
 
+**AND THEY CAN NO LONGER TOUCH THE LIVE STORE.** Every real-PostgreSQL suite
+in the repository now reads `JULIUS_TEST_DATABASE_URL` — a variable no profile
+exports and nothing else sets — and not `DATABASE_URL`, which on this
+workstation is inherited by every shell and points at the persistent Julius
+database holding real mission history. A sweep test (`julius-test-database.test.ts`)
+walks `git ls-files` and fails if any test file reads `DATABASE_URL` again.
+Proven both ways on this machine: with the inherited variable and
+`JULIUS_REAL_POSTGRES=1` the suites are 8 `todo` and the live database still has
+no `relay_wonderland` schema; with a stated throwaway database they are 8
+passed. The runtime keeps its own variables (`JULIUS_DATABASE_URL`, then
+`DATABASE_URL`) because database configuration belongs to whatever launches the
+bridge and the job.
+
 **THE REAL-POSTGRESQL SUITES NOW HAVE A LOCAL RESULT.** A `julius-postgres`
 container (postgres:16) was found running on this machine; against fresh
 databases in it, the six persistence real-PostgreSQL suites pass — 35 cases, 2

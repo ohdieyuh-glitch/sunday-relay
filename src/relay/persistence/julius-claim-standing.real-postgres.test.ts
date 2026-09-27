@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { juliusTestDatabaseUrl } from './julius-test-database';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -10,13 +11,12 @@ import { TransactionalWonderlandDatabase } from './wonderland-postgres';
 /**
  * THE CLAIM STORE ON REAL POSTGRESQL: append-only standings, current-by-highest
  * revision, replay writes nothing, history survives, a stranger project sees
- * nothing. Runs wherever JULIUS_REAL_POSTGRES=1 (or JULIUS_REAL_INFRA=1) and
- * DATABASE_URL are set; `todo` everywhere else, so an absent database is a
+ * nothing. Runs wherever JULIUS_TEST_DATABASE_URL names a throwaway database; `todo` everywhere else, so an absent database is a
  * skipped proof and never a passing one.
  */
 
-const enabled = (process.env.JULIUS_REAL_POSTGRES === '1' || process.env.JULIUS_REAL_INFRA === '1')
-  && Boolean(process.env.DATABASE_URL);
+const databaseUrl = juliusTestDatabaseUrl();
+const enabled = databaseUrl !== null;
 const suite = enabled ? describe : describe.todo;
 
 suite('the claim store on real PostgreSQL', () => {
@@ -27,7 +27,7 @@ suite('the claim store on real PostgreSQL', () => {
   const runId = `run:claims-${id}`;
 
   beforeAll(async () => {
-    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    pool = new Pool({ connectionString: databaseUrl! });
     await new TransactionalWonderlandDatabase(pool).migrate();
     // The run's ancestry, as the bootstrap seeds it: a project and a mission
     // contract, which `julius_runs` references.
