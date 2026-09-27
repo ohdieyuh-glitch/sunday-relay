@@ -1594,8 +1594,17 @@ void ARelayDogCharacter::BuildEyeGlow()
 	// material the book and the beam glow with is the engine's unlit LevelColoration, which draws Color exactly
 	// as given on any mesh, and the engine's EmissiveMeshMaterial is the additive twin the figures' own additive
 	// was copied from; both are proven on plain components in this file.
-	UMaterialInterface* Glow = LoadObject<UMaterialInterface>(nullptr, DogPropGlowParent);
-	UMaterialInterface* Additive = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineMaterials/EmissiveMeshMaterial.EmissiveMeshMaterial"));
+	// THE FIGURES' OWN MATERIALS AFTER ALL, at the figures' scale. The engine unlit pane at Color 18 was black
+	// for the reason zc_material_graphs and the post-process volume settled together: its output IS Color, and
+	// the world's white at the noon exposure (EV100 14.2) is near 25,000, not 25. M_WL_VoxelGlow supplies the
+	// thousand through EmissiveStrength; M_WL_VoxelAdditive's Color must carry it. Same numbers the costume
+	// eyes use, so the default Dog and every skin agree.
+	UMaterialInterface* Glow = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Wonderland/Materials/M_WL_VoxelGlow.M_WL_VoxelGlow"));
+	if (Glow == nullptr)
+	{
+		Glow = LoadObject<UMaterialInterface>(nullptr, DogPropGlowParent);
+	}
+	UMaterialInterface* Additive = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Wonderland/Materials/M_WL_VoxelAdditive.M_WL_VoxelAdditive"));
 	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, DogPropCubePath);
 	TInlineComponentArray<UStaticMeshComponent*> Meshes;
 	GetComponents<UStaticMeshComponent>(Meshes);
@@ -1681,15 +1690,17 @@ void ARelayDogCharacter::SetEyeGlow(float Level)
 		{
 			Mid->SetVectorParameterValue(TEXT("Color"), Core);
 			Mid->SetVectorParameterValue(TEXT("EmissiveColor"), Core);
-			Mid->SetScalarParameterValue(TEXT("EmissiveStrength"), 1.0f);
+			// the thousand: the world's white is near 25,000 scene units at noon; see WonderlandSceneUnits
+			Mid->SetScalarParameterValue(TEXT("EmissiveStrength"), 1000.0f);
 		}
 	}
 	for (UMaterialInstanceDynamic* Mid : EyeHaloMids)
 	{
 		if (Mid != nullptr)
 		{
-			Mid->SetVectorParameterValue(TEXT("Color"), Halo);
-			Mid->SetVectorParameterValue(TEXT("EmissiveColor"), Halo);
+			// the additive material has no strength parameter: its Color carries the thousand
+			Mid->SetVectorParameterValue(TEXT("Color"), Halo * 1000.0f);
+			Mid->SetVectorParameterValue(TEXT("EmissiveColor"), Halo * 1000.0f);
 		}
 	}
 }

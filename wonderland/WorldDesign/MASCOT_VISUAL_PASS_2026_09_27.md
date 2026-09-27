@@ -33,6 +33,19 @@ glow scale (0.0015 → 0.10, from `zc_stage_tune`), the flame proofs' plume band
 were reading sky), the eye gate's reference patch (it was the **chest**, figure z 13.6, the skull plate on
 Skeleton Flame — now a cheek beside the eye).
 
+### 1c. The white point is 25,000, not 25
+
+Pinning the strength did not bring the glow back, and the reason corrects every number above. The post-process
+volume holds noon at EV100 14.2; at that exposure a sunlit ivory wall is ~20,000 scene units, so the world's white
+is near **25,000**. The "25" had been measured on a rim material that carries a ×1000 internally. So an engine
+unlit pane at Color 18 is black in this world; `M_WL_VoxelGlow` needs Color × EmissiveStrength ≈ 15,000–25,000 for
+an eye (level 18 × 1000); `M_WL_VoxelAdditive`'s emissive is its Color and must carry the thousand itself. One
+constant, `WonderlandSceneUnits = 1000`, written once (embodiment, Dog eye panes, fallback flame path ×12). The
+blow-out at the old scale was real (Color 842 × strength 842 = 28× white); the arithmetic that described it was
+off by the material's thousand. Also found in the same hour: two editor instances had been running on one map
+and one channel from 09:05 to 09:24 (a killed relaunch chain plus its replacement); every artifact in that
+window is void, and the launcher now refuses a second instance.
+
 ### 1b. The second factor: the glow material was quadratic
 
 The re-baseline alone turned every glow in gameplay **black** (`zc_eyes_look` after `d92ed651`: Celestial's

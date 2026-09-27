@@ -312,10 +312,29 @@ namespace
 	{
 		const float Dim = FMath::Clamp(CVarFlameDim.GetValueOnAnyThread(), 0.004f, 4.0f);
 		const float Authored = FMath::Max(Strength, 0.0f);
+		// The fallback card (no fire master, which is the shipped state: wl.Look.FireMaterial is 0) used to
+		// be Authored x Dim, calibrated when both that and EmissiveStrength carried the authored strength. With
+		// EmissiveStrength pinned at WonderlandSceneUnits, 4.2 x 0.4 = 1.7 is 1,700 scene units -- a dark teal
+		// against a 25,000 white, which is what the ghostfire photographed as. x12 lands the ember at about
+		// 20,000: bright, coloured, just under white, with the founder's FlameDim still the knob.
 		return bFireMaster
 			? FMath::Sqrt(Authored) * FMath::Max(CVarFireGain.GetValueOnAnyThread(), 0.001f) * Dim
-			: Authored * Dim;
+			: Authored * Dim * 12.0f;
 	}
+
+	/**
+	 * THE WORLD'S WHITE IS NEAR 25,000 EMISSIVE UNITS, NOT 25.
+	 *
+	 * Found the hard way. The post-process volume holds the noon exposure at EV100 14.2, at which a sunlit
+	 * ivory wall sits around 20,000 in scene units, so an emissive of 18 -- the eye level, on an unlit
+	 * material whose output IS its Color -- is a thousand times darker than the stone beside it and
+	 * photographs black. Every number in this file had been reasoned against a white of 25, taken from a
+	 * rim surface whose material carries its own x1000 inside. M_WL_VoxelGlow gets its thousand from the
+	 * EmissiveStrength parameter, which is why the eyes read at level 12 as long as that parameter carried
+	 * 1,242 and went black the moment the glow scale came down; the additive material has no such
+	 * parameter, so its Color must carry the thousand itself. This is that thousand, written once.
+	 */
+	constexpr float WonderlandSceneUnits = 1000.0f;
 
 	float WonderlandTameGlow(float Strength)
 	{
@@ -713,7 +732,10 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 				// through "Color" did nothing at all and every panel stayed the material's own white. The ember
 				// flames were dull brown here for the same reason. Setting all of them is free: the ones that do
 				// not exist are discarded, and the one that does takes.
-				Instance->SetVectorParameterValue(TEXT("Color"), Emissive);
+				// AN ADDITIVE SURFACE CARRIES THE SCENE SCALE IN ITS COLOUR: M_WL_VoxelAdditive's emissive is its
+				// Color and nothing else (zc_material_graphs), so without this an eye halo at 6 is 6 against 25,000.
+				Instance->SetVectorParameterValue(TEXT("Color"),
+					Def.Kind == EWonderlandCompanionMaterialKind::Additive ? Emissive * WonderlandSceneUnits : Emissive);
 				Instance->SetVectorParameterValue(TEXT("EmissiveColor"), Emissive);
 				Instance->SetVectorParameterValue(TEXT("BaseColor"), Emissive);
 				// PINNED AT 1000, NOT THE STRENGTH. M_WL_VoxelGlow's emissive is Color x EmissiveStrength x ~0.001 --
@@ -723,7 +745,7 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 				// ghostfire, the costume eyes (zc_eyes_look, 2026-09-27 15:47 UTC). The eye had only ever read
 				// because its strength was 1,242. With this term held at 1000 the material's output IS Color, which
 				// is the number the tame curve, the day cycle and the eye drive already choose.
-				Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), 1000.0f);
+				Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), WonderlandSceneUnits);
 				{
 					const bool bBeats = Def.Name.ToString().Contains(TEXT("pulse"), ESearchCase::IgnoreCase);
 					GlowMaterials.Add({Index, TEXT("Color"), Emissive, bBeats});
@@ -775,7 +797,7 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 				Full->SetVectorParameterValue(TEXT("Color"), FullEmissive);
 				Full->SetVectorParameterValue(TEXT("EmissiveColor"), FullEmissive);
 				Full->SetVectorParameterValue(TEXT("BaseColor"), FullEmissive);
-				Full->SetScalarParameterValue(TEXT("EmissiveStrength"), 1000.0f);   // see the body instance above
+				Full->SetScalarParameterValue(TEXT("EmissiveStrength"), WonderlandSceneUnits);   // see the body instance above
 				ApplyColourway(Index, Full, Def, FullEmissive, FullEmissive, /*bFlameTwin=*/true);
 				Flame = Full;
 			}
@@ -1575,9 +1597,14 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 		Instance->SetVectorParameterValue(TEXT("RimColor"), Want * WonderlandTameGlow(Def.Strength));
 		break;
 	case EWonderlandCompanionMaterialKind::Glow:
-	case EWonderlandCompanionMaterialKind::Additive:
 		Instance->SetVectorParameterValue(TEXT("Color"), Want);
 		Instance->SetVectorParameterValue(TEXT("EmissiveColor"), Want);
+		Instance->SetVectorParameterValue(TEXT("BaseColor"), Want);
+		break;
+	case EWonderlandCompanionMaterialKind::Additive:
+		// see the build loop: the additive material has no strength parameter, so the scene scale rides in Color
+		Instance->SetVectorParameterValue(TEXT("Color"), Want * WonderlandSceneUnits);
+		Instance->SetVectorParameterValue(TEXT("EmissiveColor"), Want * WonderlandSceneUnits);
 		Instance->SetVectorParameterValue(TEXT("BaseColor"), Want);
 		break;
 	}
