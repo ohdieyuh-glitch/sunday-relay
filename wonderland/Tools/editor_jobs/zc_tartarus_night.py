@@ -37,17 +37,25 @@ TAG = JOB_ARG if "JOB_ARG" in globals() and JOB_ARG else "before"
 STEP = 2
 DARK = 0.14 * 255.0
 
-# (name, eye xyz, look-at xyz) -- world coordinates read off the route and the specs, not eyeballed.
+# (name, eye xyz, look-at xyz) -- EVERY NUMBER DERIVED, not eyeballed.
+#
+# The first pair of these was typed by eye from the route's bounding box and put the camera on grass a
+# kilometre short of the dip, looking at open field: a black frame that was honestly black and was not the
+# place it claimed to be. These come from the data. The avenue pair is the route polyline sampled at 250 m
+# and 330 m -- either side of the four shelf transitions at 285, 301, 318 and 321 m -- at the route's own
+# floor height. The plaza is the centroid of the quarter's largest cluster of KERB PAVING and plinths (70
+# pieces at z +12, the surface a walker stands on, not the terrace tiles at -128). The market is the centroid
+# of the band's largest canopy cluster, 20 roofs.
 PLACES = (
-    # the avenue at the dip: standing on the +12 shelf looking down into the -14 crossing
-    ("avenue_dip", (71600.0, -44900.0, 330.0), (74200.0, -43700.0, 60.0)),
-    ("avenue_dip_feet", (73200.0, -44200.0, 260.0), (74000.0, -43900.0, -14.0)),
+    # the avenue across its dip: the +12 shelf, down through the -14 crossing, back up to +12
+    ("avenue_dip", (70234.0, -43552.0, 192.0), (76557.0, -44200.0, 26.0)),
+    ("avenue_dip_feet", (73159.0, -44086.0, 136.0), (75864.0, -43800.0, -14.0)),
     # the quarter's plaza
-    ("quarter_plaza", (58200.0, -34600.0, 420.0), (61200.0, -36600.0, 60.0)),
-    ("quarter_plaza_feet", (60100.0, -35800.0, 250.0), (60900.0, -36300.0, 12.0)),
+    ("quarter_plaza", (70132.0, -38158.0, 300.0), (72132.0, -39958.0, 40.0)),
+    ("quarter_plaza_feet", (71632.0, -39458.0, 160.0), (72432.0, -40158.0, 12.0)),
     # the band's market
-    ("market", (94000.0, -47200.0, 460.0), (96400.0, -49000.0, 120.0)),
-    ("market_feet", (95700.0, -48400.0, 250.0), (96300.0, -48900.0, 12.0)),
+    ("market", (93981.0, -46889.0, 340.0), (95981.0, -48689.0, 120.0)),
+    ("market_feet", (95181.0, -48089.0, 160.0), (96181.0, -48889.0, 12.0)),
 )
 
 
@@ -111,10 +119,47 @@ def job():
     shots = []
     for name, eye, look in PLACES:
         live = ues.get_game_world()
-        if live is None or unreal.GameplayStatics.get_player_pawn(live, 0) is None:
+        pawn = unreal.GameplayStatics.get_player_pawn(live, 0) if live is not None else None
+        if live is None or pawn is None:
             tests.append({"id": "T_DEAD_%s" % name, "name": "the world was alive for %s" % name,
                           "pass": False, "detail": {}})
             continue
+        # ---- THE WORLD STREAMS AROUND THE PAWN, NOT AROUND THE CAMERA.
+        #
+        # The first run of this job posed a camera at Tartarus and left the Dog at Golden Arrival, 50 km away.
+        # World Partition loads cells around the PLAYER, so the camera was looking at unloaded space -- and by
+        # the sixth view the pawn's own cell had gone too and the world reported dead. Tartarus was never in
+        # the frame at all. The pawn goes first and the camera follows it.
+        #
+        # AND IT GOES TO WHAT THE CAMERA IS LOOKING AT, just above the ground there -- not to the camera's own
+        # eye, which is metres up and metres back. Dropped at the eye position the Dog fell from 340 uu at a
+        # place whose ground had not finished streaming, went through the floor, and was destroyed: the last
+        # two views of the run then reported a dead world, which is true and blames the wrong thing. The
+        # subject of the shot is the thing that must be loaded, so the pawn stands on it.
+        pawn.set_actor_location(unreal.Vector(look[0], look[1], look[2] + 120.0), False, True)
+        # ---- AND THEN WAIT FOR THE GROUND TO EXIST, rather than for four seconds to pass.
+        #
+        # Four seconds was enough for the avenue and not for the market, 25 km further out: that capture came
+        # back as two companions floating in a black void with the minimap showing bare terrain, which is an
+        # honest photograph of a world that had not arrived yet and is indistinguishable from a world that is
+        # too dark. A time is a guess about streaming; a trace is an answer. This waits until a line dropped
+        # from above the subject actually hits something, then gives the cell one more second to finish its
+        # detail, and records how long it took so a slow place can be seen rather than inferred.
+        waited = 0.0
+        landed = False
+        while waited < 30.0:
+            hit = unreal.SystemLibrary.line_trace_single(
+                live, unreal.Vector(look[0], look[1], look[2] + 900.0),
+                unreal.Vector(look[0], look[1], look[2] - 1500.0),
+                unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [], unreal.DrawDebugTrace.NONE, True)
+            if hit is not None:
+                landed = True
+                break
+            yield 1.0
+            waited += 1.0
+        RESULT.setdefault("streaming_seconds", {})[name] = waited
+        RESULT.setdefault("ground_found", {})[name] = landed
+        yield 1.5
         L.pose_camera(live, unreal.Vector(*eye), unreal.Vector(*look), 70.0)
         yield 2.0
         unreal.GameplayStatics.set_game_paused(live, True)
@@ -122,7 +167,18 @@ def job():
         fname = "tartarus_%s_%s.png" % (name, TAG)
         path = os.path.join(ROOT, fname)
         try:
-            L.capture_game_viewport(path)
+            if os.path.exists(path):
+                os.remove(path)
+            # ---- THE CAPTURE RETURNS FALSE, IT DOES NOT THROW, and the second run of this job threw away
+            # ---- that bool and reported "the capture never landed on disk" for all six views -- true, and
+            # ---- silent about why. CaptureGameViewport is synchronous: Slate takes the shot and writes the
+            # ---- PNG before it returns, so a missing file means TakeScreenshot refused, which it does when
+            # ---- the game viewport is not drawable. Record what it said.
+            got = L.capture_game_viewport(path)
+            ok = bool(got[0]) if isinstance(got, (tuple, list)) else bool(got)
+            RESULT.setdefault("capture_returned", {})[name] = str(got)
+            if not ok or not os.path.exists(path):
+                raise RuntimeError("capture_game_viewport returned %s" % (got,))
             shots.append(fname)
             readings[name] = frame_stats(path)
             emit("T_%s" % name, "INFO", "%s (%s)" % (name, TAG), readings[name])

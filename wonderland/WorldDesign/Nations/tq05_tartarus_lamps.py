@@ -87,6 +87,8 @@ TURN_DEGREES = 20.0        # heading change over TURN_BASE that counts as a deci
 #: the length of a few strides rather than the sampling step of the data.
 TURN_BASE = 1500.0         # uu of route either side of a point, over which a heading change is real
 KEEP_CLEAR = 1000.0        # never place within this of a lamp the world already has
+GATE_FLANK = 620.0         # uu either side of a gate's centre line, clear of the arch's own 628 uu span
+LANDMARK_OFFSET = 700.0    # uu off a landmark's medallion, so the lamp lights it rather than stands on it
 CANOPY_H = KIT["WL_Market_Canopy"]["height"]
 
 
@@ -256,10 +258,93 @@ def quarter_plaza_lamps(taken):
     return out
 
 
-def batch(mesh, material, places):
-    return {"mesh": mesh, "material": material,
+def gate_lamps(taken):
+    """A pair of standards flanking every gate and threshold a walker passes through.
+
+    The founder's list names "entrances ... territory gates" twice. Tartarus has three: the nation gate
+    (TQ01's twin-tiered arch), the band gate (TQ03's), and the seam threshold (SF03's). A gate is a place you
+    decide at, and a lamp either side of it is the oldest wayfinding signal there is -- it says "the way is
+    through here" from further off than the arch itself is visible after dark.
+    """
+    gates = []
+    for name, leaf in (("tq01_quarter", "WL_Arch_Twin_Tiered"),
+                       ("tq03_band", "WL_Arch_Twin_Tiered"),
+                       ("sf03_tartarus_seam", "WL_Garden_Gate_Threshold")):
+        path = HERE / ("%s.json" % name)
+        if not path.exists():
+            continue
+        for b in spec_batches(name):
+            if (b.get("mesh") or "").split("/")[-1].split(".")[0] != leaf:
+                continue
+            for i in b.get("instances") or []:
+                if len(i) >= 5 and float(i[2]) > -1000.0:
+                    gates.append((float(i[0]), float(i[1]), float(i[2]), float(i[4])))
+    out = []
+    for gx, gy, gz, yaw in gates:
+        # across the gate's own opening: the arch's yaw is the direction you walk THROUGH it
+        nx, ny = -math.sin(math.radians(yaw)), math.cos(math.radians(yaw))
+        for side in (-1.0, 1.0):
+            x, y = gx + nx * GATE_FLANK * side, gy + ny * GATE_FLANK * side
+            if all(math.hypot(x - ex, y - ey) > KEEP_CLEAR for ex, ey in taken):
+                out.append((x, y, gz, (yaw + 90.0 * side) % 360.0))
+                taken.append((x, y))
+    return out
+
+
+def landmark_lamps(taken):
+    """A standard at each named landmark, set off its centre so it lights the thing rather than stands on it.
+
+    The founder asks that "important destinations should create recognizable nighttime silhouettes/light
+    signatures" and that lighting "reinforce architecture, navigation and territory identity". Tartarus names
+    its own landmarks in the layer specs: the quarter's approach, assembly yards, two proving halls, the
+    Forge, six engine towers and two artisan rows, and the band's six simulation grounds. Reading them from
+    the spec's own actor list rather than typing coordinates means a landmark that moves takes its lamp with
+    it.
+    """
+    out = []
+    for name in ("tq01_quarter", "tq03_band"):
+        path = HERE / ("%s.json" % name)
+        if not path.exists():
+            continue
+        spec = json.loads(path.read_text(encoding="utf-8"))
+        for a in spec.get("actors") or []:
+            tags = [str(t) for t in (a.get("tags") or [])]
+            if not any(t.startswith("WL_GVE_") for t in tags):
+                continue
+            # ---- NOT THE SKY BRIDGES. TQ01 tags four bridge anchors WL_GVE_ELEVATED_PATH at z 3030 to 3712,
+            # ---- and a 1220 uu lamp post planted on an anchor 37 m up either floats or spears the deck --
+            # ---- the anchor is a marker, not a surface, and nothing here knows where the walkway actually
+            # ---- is. The founder's list does name bridge lighting; it needs the bridge modules' own decks
+            # ---- measured, and a hanging lantern rather than a standard. Left undone and said so, rather
+            # ---- than placed blind. See the report.
+            if "WL_GVE_ELEVATED_PATH" in tags:
+                continue
+            loc = a.get("loc") or []
+            if len(loc) < 3 or float(loc[2]) < -1000.0:
+                continue
+            lx, ly, lz = float(loc[0]), float(loc[1]), float(loc[2])
+            # off the medallion, on the side the avenue runs, so the lamp is beside the arrival not on it
+            x, y = lx + LANDMARK_OFFSET * math.cos(math.radians(150.0)), ly + LANDMARK_OFFSET * math.sin(math.radians(150.0))
+            if all(math.hypot(x - ex, y - ey) > KEEP_CLEAR for ex, ey in taken):
+                out.append((x, y, lz, 330.0))
+                taken.append((x, y))
+    return out
+
+
+def batch(bid, mesh, material, places, collides):
+    """One instanced batch, in the shape apply_layer expects.
+
+    EVERY KEY MATTERS AND `id` IS NOT OPTIONAL: apply_layer raises KeyError on a batch without one, because
+    the id is what names the actor (<pass>_<id>) and therefore what a re-apply finds and replaces. The rest
+    are copied from AV03's own lantern batches so the new lamps behave exactly like the sixteen already on
+    this avenue: only the STONE post collides (a walker should not pass through a lamp post, and should not
+    be stopped by its glass or its gold), all three cast shadow, none contributes to the distance field, and
+    all cull at 260 m.
+    """
+    return {"id": bid, "mesh": mesh, "material": material,
             "instances": [[round(x, 1), round(y, 1), round(z, 1), 0.0, round(yaw, 1), 0.0, 1.0, 1.0, 1.0]
-                          for x, y, z, yaw in places]}
+                          for x, y, z, yaw in places],
+            "collides": collides, "cast_shadow": True, "affect_df": False, "cull_distance": 26000.0}
 
 
 def main():
@@ -269,13 +354,17 @@ def main():
     avenue, decisions = avenue_lamps(pts, taken)
     market = market_lanterns()
     plaza = quarter_plaza_lamps(taken)
-    standards = avenue + plaza
+    gates = gate_lamps(taken)
+    landmarks = landmark_lamps(taken)
+    standards = avenue + plaza + gates + landmarks
 
     batches = []
     for part, (mesh, material) in STANDARD.items():
-        batches.append(batch(mesh, material, standards))
+        batches.append(batch("TQ05_Object_LanternStandard_%s" % part, mesh, material, standards,
+                             part == "stone"))
     for part, (mesh, material) in HANGING.items():
-        batches.append(batch(mesh, material, market))
+        # a lantern hanging over a market stall is above head height: nothing should collide with it
+        batches.append(batch("TQ05_Detail_Lantern_Hanging_%s" % part, mesh, material, market, False))
 
     spec = {
         "pass": "TQ05",
@@ -285,17 +374,20 @@ def main():
         "batches": batches,
         "route_source": "nation_routes.json TARTARUS, %d points, %d m" % (len(pts), 505),
         "note": ("the founder's night correction, section B, for TARTARUS only: %d lantern standards along the "
-                 "avenue and the quarter's plaza corners and %d hanging lanterns over the market stalls, "
-                 "added to the %d lamps the nation already had. Spacing is %d m on a straight and %d m within "
-                 "%d m of a decision; decisions are the route's shelf transitions, its turns past %d degrees "
-                 "and its two ends." % (len(standards), len(market), had, STRAIGHT / 100, AT_DECISION / 100,
-                                        DECISION_REACH / 100, TURN_DEGREES)),
+                 "avenue, the quarter's plaza corners, the three gates and the named landmarks, and %d "
+                 "hanging lanterns over the market stalls, added to the %d lamps the nation already had. "
+                 "Spacing is %d m on a straight and %d m within %d m of a decision; decisions are the route's "
+                 "shelf transitions, its turns past %d degrees measured over %d m of road, and its two ends."
+                 % (len(standards), len(market), had, STRAIGHT / 100, AT_DECISION / 100,
+                    DECISION_REACH / 100, TURN_DEGREES, TURN_BASE / 100)),
     }
     out = HERE / "tq05_tartarus_lamps.json"
     out.write_text(json.dumps(spec, indent=1), encoding="utf-8")
     print("wrote %s" % out.name)
     print("  avenue standards   %d" % len(avenue))
     print("  plaza standards    %d" % len(plaza))
+    print("  gate standards     %d" % len(gates))
+    print("  landmark standards %d" % len(landmarks))
     print("  market lanterns    %d" % len(market))
     print("  decisions found    %d (shelf transitions, turns >= %g deg, both ends)" % (len(decisions), TURN_DEGREES))
     print("  lamps already there %d; none placed within %g uu of one" % (had, KEEP_CLEAR))
