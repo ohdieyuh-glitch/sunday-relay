@@ -2,6 +2,7 @@
 #include "Engine/GameInstance.h"
 #include "WonderlandJuliusConnect.h"
 
+#include "CoreGlobals.h"            // GFrameCounter, for turning reads into frames
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
@@ -117,6 +118,35 @@ bool UWonderlandHudTestLibrary::GetFrameCostMs(float& OutFrameMs, float& OutGame
 	OutRenderMs = Unit->RenderThreadTime;
 	OutGpuMs = Unit->GPUFrameTime[0];
 	return true;
+}
+
+bool UWonderlandHudTestLibrary::GetRawFrameCostMs(float& OutFrameMs, float& OutGameMs, float& OutRenderMs,
+	float& OutGpuMs)
+{
+	OutFrameMs = OutGameMs = OutRenderMs = OutGpuMs = 0.0f;
+	if (GEngine == nullptr || GEngine->GameViewport == nullptr)
+	{
+		return false;
+	}
+	FStatUnitData* Unit = GEngine->GameViewport->GetStatUnitData();
+	if (Unit == nullptr)
+	{
+		return false;
+	}
+	// The RAW half of the same struct: what this frame cost, before the 0.9/0.1 average that GetFrameCostMs
+	// reads. Same fields, same units, no filter.
+	OutFrameMs = Unit->RawFrameTime;
+	OutGameMs = Unit->RawGameThreadTime;
+	OutRenderMs = Unit->RawRenderThreadTime;
+	OutGpuMs = Unit->RawGPUFrameTime[0];
+	return true;
+}
+
+int64 UWonderlandHudTestLibrary::GetEngineFrameNumber()
+{
+	// GFrameCounter advances once per engine frame and keeps counting across PIE sessions, which is what a
+	// probe needs: it only ever asks whether the number MOVED since the previous read.
+	return static_cast<int64>(GFrameCounter);
 }
 
 bool UWonderlandHudTestLibrary::GetDrawCallCount(int32& OutDrawCalls, int32& OutPrimitives)

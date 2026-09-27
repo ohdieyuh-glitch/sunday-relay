@@ -74,14 +74,52 @@ def job():
     unreal.SystemLibrary.execute_console_command(world, "stat unit")
     yield 10.0
 
+    def read_frame():
+        """ONE ROW PER FRAME, carrying both the averaged cost and the raw cost of that frame.
+
+        Returns None when the engine frame number has not moved since the last accepted row, so a loop that
+        polls faster than the game renders contributes nothing instead of contributing a duplicate.
+        """
+        try:
+            now = int(H.get_engine_frame_number())
+        except Exception:                                          # noqa: BLE001
+            now = None
+        if now is not None and now == globals().get("_LAST_FRAME"):
+            return None
+        try:
+            avg = H.get_frame_cost_ms()
+            raw = H.get_raw_frame_cost_ms()
+        except Exception:                                          # noqa: BLE001
+            return None
+        if avg is None or raw is None or float(avg[0]) <= 0.01:
+            return None
+        globals()["_LAST_FRAME"] = now
+        return (float(avg[0]), float(avg[1]), float(avg[2]), float(avg[3]),
+                float(raw[0]), float(raw[1]), float(raw[3]))
+
     def stats(rows):
-        clean = sorted(r for r in rows if r[0] > 0.01)
+        clean = [r for r in rows if r[0] > 0.01]
         if not clean:
             return None
         def at(p, i):
-            return round(sorted(v[i] for v in clean)[min(len(clean) - 1, int(len(clean) * p))], 2)
-        out = {"samples": len(clean),
-               "frame_median": at(0.5, 0), "frame_p95": at(0.95, 0), "frame_worst": at(0.999, 0),
+            col = sorted(v[i] for v in clean if len(v) > i)
+            if not col:
+                return None
+            return round(col[min(len(col) - 1, int(len(col) * p))], 2)
+        # ---- MEDIANS FROM THE AVERAGED FIELDS, EXTREMES FROM THE RAW ONES.
+        #
+        # FStatUnitData holds both, and its own comment calls the first block "filtered with a simple running
+        # average": FrameTime = 0.9 * FrameTime + 0.1 * RawFrameTime, and the same for game, render and GPU.
+        # A ten-frame exponential average is a fair estimate of AVERAGE cost and is physically incapable of
+        # showing a single expensive frame -- a 200 ms spike arrives as 15 ms. This job published spawn_p95
+        # and hitch_over_quiet from the filtered field and reported spawning as CHEAPER than standing still at
+        # one and at ten avatars. A negative hitch is not a surprising measurement, it is an impossible one.
+        #
+        # So p95 and worst now come from RawFrameTime, where a hitch is a single row, and the medians stay on
+        # the filtered field where the filter is an advantage. Both are labelled for whoever reads the JSON.
+        out = {"frames": len(clean),
+               "frame_median": at(0.5, 0), "raw_p95": at(0.95, 4), "raw_worst": at(0.999, 4),
+               "raw_median": at(0.5, 4), "raw_game_p95": at(0.95, 5), "raw_gpu_p95": at(0.95, 6),
                "game_median": at(0.5, 1), "render_median": at(0.5, 2), "gpu_median": at(0.5, 3)}
         # ---- HOW MUCH OF THE FRAME IS ACCOUNTED FOR, which is what tells a LOAD from a CLAMP.
         #
@@ -106,18 +144,21 @@ def job():
         seen = []
         started = time.time()
         ticks = 0
+        reads = 0
         while time.time() - started < seconds:
-            try:
-                got = H.get_frame_cost_ms()
-                if got is not None and float(got[0]) > 0.01:
-                    seen.append((float(got[0]), float(got[1]), float(got[2]), float(got[3])))
-            except Exception:
-                pass
+            reads += 1
+            row = read_frame()
+            if row is not None:
+                seen.append(row)
             ticks += 1
             if ticks % 30 == 0:
                 unreal.SystemLibrary.execute_console_command(world, "stat unit")
-            yield 0.0          # every tick: a hitch lives in one frame
+            yield 0.0          # a hitch lives in one frame, so every frame is sampled -- and only once
         globals()["_SEEN"] = seen
+        # THE RATIO IS THE EVIDENCE. 253 reads over 3 frames is what produced a median, a p95 and a worst case
+        # that agreed to the hundredth; publishing it means the next reader can see the duplication rather
+        # than having to deduce it from suspiciously flat percentiles.
+        globals()["_SEEN_READS"] = reads
 
     files = []
     try:
@@ -135,13 +176,63 @@ def job():
     dog = unreal.GameplayStatics.get_player_pawn(world, 0)
     base = dog.get_actor_location() + dog.get_actor_forward_vector() * 1200.0
 
-    # ---- RUNG ZERO: what the world costs with nothing added.
-    yield from watch(STEADY_S)
-    rungs = {"0": {"steady": stats(globals().get("_SEEN", []))}}
+    # ---- RUNG ZERO: what the world costs with nothing added, MEASURED FIVE TIMES.
+    #
+    # THE SPREAD COMES BEFORE THE VALUE. The world lane put four runs of one walk beside each other and got
+    # peak speeds of 230, 0, 35.2 and 86.0 on the same route -- and every cause either of us proposed for that
+    # deliverable had been built on ONE reading of a distribution nobody had checked was one. This job has the
+    # same exposure: it published 106.58 ms at one avatar with 23% accounted, beside 31.37 at zero and 45.05
+    # at ten, and that single number is the only thing left unexplained in the founder's item 5.
+    #
+    # So rung zero is read five times in one session before anything is concluded from any of them. If the
+    # five disagree with each other by as much as the rungs disagree, the ladder is noise and A06 says so at
+    # the top rather than leaving it to be noticed.
+    repeats = []
+    for _ in range(8):
+        yield from watch(STEADY_S)
+        got = stats(globals().get("_SEEN", []))
+        if got:
+            repeats.append(got)
+        yield 1.0
+    RESULT["rung_zero_repeats"] = repeats
+    RESULT["rung_zero_series"] = [r["frame_median"] for r in repeats]
+
+    # ---- AND THE FIRST READS ARE THE WORLD WARMING UP, NOT THE WORLD.
+    #
+    # Five reads of an UNCHANGED world came back 521.22, 123.11, 63.97, 47.95, 57.12: not scatter, a descent.
+    # Shaders, streaming and the render pipeline settle over the first half-minute of play, and rung zero has
+    # always been taken immediately after BeginPlay -- so the one rung every marginal cost is subtracted from
+    # has always been the least settled measurement in the job, and the spread it showed was mostly its own
+    # warm-up. That is the same error as a fixed settle timer, in a different coat: a count of reads is a
+    # guess about when the machine is ready.
+    #
+    # So reads are discarded until consecutive ones stop falling: the series is settled from the first read
+    # whose successor is within a tenth of it, and only the settled tail is used. If it never settles, nothing
+    # is discarded and A06 fails on the full spread, which is the honest outcome rather than a trimmed one.
+    # THE TREND HAS TO STOP, NOT ONE PAIR TO MATCH. A gently falling series has neighbours inside any
+    # tolerance while it is still on its way down -- 47.95 then 57.12 would pass a pair test mid-descent. So a
+    # read LOWER than its predecessor resets the wait, and the settled point is the last time that happened.
+    # The world lane hit the same hole in their own settle an hour after fixing the timer version of it.
+    series = [r["frame_median"] for r in repeats]
+    settled_from = 0
+    for i in range(1, len(series)):
+        if series[i] < series[i - 1] * 0.90:
+            settled_from = i
+    settled = repeats[settled_from:] if len(repeats) - settled_from >= 2 else repeats
+    RESULT["rung_zero_warmup_reads"] = settled_from
+    repeats = settled
+    frames = sorted(r["frame_median"] for r in repeats)
+    rungs = {"0": {"steady": repeats[len(repeats) // 2] if repeats else None}}
     RESULT["rungs"] = rungs
-    emit("A_0", "INFO", "0 avatars", rungs["0"]["steady"])
+    RESULT["rung_zero_spread"] = {
+        "reads": len(frames), "lowest": frames[0] if frames else None, "highest": frames[-1] if frames else None,
+        "spread_ms": round(frames[-1] - frames[0], 2) if frames else None,
+        "note": "the median of these is what the ladder uses; the spread is what says whether it means anything",
+    }
+    emit("A_0", "INFO", "0 avatars, five reads", RESULT["rung_zero_spread"])
 
     standing = []
+    spawn_read_total = 0
     for want in RUNGS:
         during = []
         while len(standing) < want:
@@ -153,20 +244,25 @@ def job():
             # short enough that the window is mostly the spawn.
             started = time.time()
             body = L.spawn_figure_actor(world, spot, path, "WL_LadderAvatar_%d" % i)
+            spawn_reads = 0
             while time.time() - started < 3.0:
-                try:
-                    got = H.get_frame_cost_ms()
-                    if got is not None and float(got[0]) > 0.01:
-                        during.append((float(got[0]), float(got[1]), float(got[2]), float(got[3])))
-                except Exception:
-                    pass
+                spawn_reads += 1
+                row = read_frame()
+                if row is not None:
+                    during.append(row)
                 yield 0.0
+            spawn_read_total += spawn_reads
             if body is not None:
                 standing.append(body)
 
         yield SETTLE_S
         yield from watch(STEADY_S)
         rungs[str(want)] = {"spawning": stats(during), "steady": stats(globals().get("_SEEN", []))}
+        if rungs[str(want)]["spawning"]:
+            rungs[str(want)]["spawning"]["reads"] = spawn_read_total
+        if rungs[str(want)]["steady"]:
+            rungs[str(want)]["steady"]["reads"] = globals().get("_SEEN_READS")
+        spawn_read_total = 0
         shot = os.path.join(ROOT, "avatars_%02d.png" % want)
         try:
             L.capture_game_viewport(shot)
@@ -199,6 +295,19 @@ def job():
         "down": down["1"]["frame_median"] if down.get("1") else None}
 
     read_all = all(v.get("steady") for v in rungs.values())
+    spread = RESULT.get("rung_zero_spread") or {}
+    steady = {k: (v.get("steady") or {}).get("frame_median") for k, v in rungs.items()}
+    ladder_range = 0.0
+    known = [v for v in steady.values() if isinstance(v, (int, float))]
+    if len(known) > 1:
+        ladder_range = max(known) - min(known)
+    record("A06", "the instrument repeats: one setting read five times disagrees LESS than the settings do",
+           isinstance(spread.get("spread_ms"), float) and spread["spread_ms"] <= max(ladder_range * 0.5, 5.0),
+           rung_zero_spread=spread, ladder_range_ms=round(ladder_range, 2),
+           note="five reads of an unchanged world. If they scatter as widely as the rungs, nothing below is a "
+                "measurement of avatars -- it is a measurement of this machine. Every cause proposed for the "
+                "unexplained 106.58 ms at one avatar was, until this ran, a single draw from an unchecked "
+                "distribution.")
     record("A01", "every rung of the ladder was measured with the clock running", read_all,
            rungs=sorted(rungs.keys()),
            steady_frame_median={k: (v["steady"]["frame_median"] if v.get("steady") else None)
@@ -242,15 +351,23 @@ def job():
                 "charges about the same for the tenth as for the second; one that does not charges more.")
 
     # ---- AND THE HITCH, which is what the founder actually reported feeling.
-    hitch = {k: (v["spawning"]["frame_p95"] if v.get("spawning") else None)
+    # RAW, BECAUSE A HITCH IS ONE FRAME. The averaged field cannot carry one, and reading it here is what made
+    # this clause report spawning as cheaper than standing still.
+    hitch = {k: (v["spawning"]["raw_p95"] if v.get("spawning") else None)
              for k, v in rungs.items() if k != "0"}
-    quiet95 = rungs["0"]["steady"]["frame_p95"]
+    quiet95 = rungs["0"]["steady"]["raw_p95"]
     RESULT["spawn_p95_ms"] = hitch
     RESULT["quiet_p95_ms"] = quiet95
     over = {k: (round(v - quiet95, 2) if v is not None else None) for k, v in hitch.items()}
     RESULT["hitch_over_quiet_ms"] = over
+    # A NEGATIVE HITCH VOIDS THE CLAUSE RATHER THAN PASSING IT. Spawning cannot cost less than standing still,
+    # so a negative value means the two windows are not comparable -- different settle states, or an instrument
+    # that is not measuring frames. The old version passed on exactly that, twice.
+    impossible = {k: v for k, v in over.items() if v is not None and v < -2.0}
+    RESULT["impossible_hitches"] = impossible or None
     record("A04", "arriving avatars do not stall the frame",
-           all(v is not None and v <= 45.0 for v in over.values()),
+           not impossible and all(v is not None and v <= 45.0 for v in over.values()),
+           impossible_negative=impossible or None,
            p95_during_spawn=hitch, p95_quiet=quiet95, over_quiet_ms=over, ceiling=45.0,
            note="the 95th percentile, not the max: one unrelated shader compile inside a spawn window would "
                 "otherwise be charged to the avatar, and this project has already read a spawn as SAVING "
