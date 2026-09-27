@@ -363,8 +363,24 @@ def job():
                     pivot = round(float(comp.get_world_location().z) - base, 1)
                 except Exception:                                  # noqa: BLE001
                     pass
+                # THE MESH ASSET'S BOX THROUGH THE COMPONENT'S WORLD TRANSFORM. NOT comp.bounds: a
+                # StaticMeshComponent exposes no 'bounds' property in 5.8 Python -- verify_avatars.py records
+                # that it crashed a job over exactly this -- and my previous two attempts both leaned on it,
+                # which is why every candidate came back with bounds_z null. The transform also carries the
+                # scale, so the voxel-versus-centimetre question does not have to be answered by reasoning.
                 try:
-                    bounds = round(float(comp.bounds.origin.z) - base, 1)
+                    sm = comp.get_editor_property("static_mesh")
+                    if sm is not None:
+                        box = sm.get_bounding_box()
+                        xf = comp.get_world_transform()
+                        zs = []
+                        for cz in (box.min.z, box.max.z):
+                            for cx in (box.min.x, box.max.x):
+                                for cy in (box.min.y, box.max.y):
+                                    zs.append(float(xf.transform_location(
+                                        unreal.Vector(cx, cy, cz)).z))
+                        if zs:
+                            bounds = round((min(zs) + max(zs)) * 0.5 - base, 1)
                 except Exception:                                  # noqa: BLE001
                     pass
                 cands.append({"component": nm[:40], "class": cname,
@@ -384,7 +400,30 @@ def job():
             return ((EYE_Z_FALLBACK if skin == "relay_og" else EYE_Z_COSTUME),
                     "fallback:all-candidates-below-midline(%s of %s)"
                     % (max(rejected), round(top, 1) if top else "?"))
+        # TWO DIFFERENT FAILURES THAT USED TO SHARE ONE LABEL, and they want opposite responses: one sends you
+        # looking for a component that is not there, the other for an API that does not work. zzM5 reported
+        # the first while suffering the second.
+        if cands:
+            return ((EYE_Z_FALLBACK if skin == "relay_og" else EYE_Z_COSTUME),
+                    "fallback:bounds-unreadable-on-%d-candidate(s)" % len(cands))
         return (EYE_Z_FALLBACK if skin == "relay_og" else EYE_Z_COSTUME), "fallback:no-eye-component"
+
+    def anchor_ladder(skin):
+        """Every plausible anchor, best first, because the scan window is narrower than they differ.
+
+        The scan reaches roughly +/-19 uu at this camera distance while the candidates in play differ by more
+        than that, so one anchor being wrong means the eye is outside the window and cannot be found however
+        the numbers are reasoned about. The locator tries these in order and keeps the first that produces a
+        cell beating the noise floor, then records which one won -- a measurement rather than a derivation.
+        """
+        az, how = eye_anchor_z(skin)
+        out = [(az, how)]
+        for z, tag in ((EYE_Z_FALLBACK, "ladder:dog-constant"),
+                       (EYE_Z_COSTUME, "ladder:costume-constant"),
+                       (24.7, "ladder:pivot")):
+            if all(abs(z - a) > 6.0 for a, _ in out):
+                out.append((z, tag))
+        return out
 
     #: WHERE THE EYE IS, FOUND RATHER THAN ASSUMED. Filled per skin by locate_eye().
     found = {"eye": None, "face": None}
@@ -542,13 +581,30 @@ def job():
                 emit("B_%s_%s" % (skin, hlabel), "WARN",
                      "%s %s: black frame at every distance -- UNMEASURED" % (skin, hlabel), {})
                 continue
+            # THE LADDER, NOT ONE ANCHOR. The scan reaches about +/-19 uu and the candidate heights differ
+            # by far more, so a single wrong anchor puts the eye outside the window and nothing inside it can
+            # find it. Try each in turn and keep the first that produces a cell beating the noise floor;
+            # record which one won so the next run inherits a measurement instead of my reasoning.
             d1 = unreal.GameplayStatics.get_player_pawn(live(), 0)
-            for step in locate_eye(d1.get_actor_location() if d1 is not None else here):
-                yield step
+            tried = []
+            for a_z, a_how in anchor_ladder(skin):
+                found["anchor_z"] = a_z
+                found["anchor_how"] = a_how
+                found["eye"] = None
+                found["beats_noise"] = False
+                for step in locate_eye(d1.get_actor_location() if d1 is not None else here):
+                    yield step
+                tried.append({"anchor_z": a_z, "how": a_how,
+                              "peak": found.get("peak_delta"), "noise": found.get("noise_floor"),
+                              "beats": bool(found.get("beats_noise"))})
+                if found.get("beats_noise"):
+                    break
+            found["anchor_tried"] = tried
             rows.append({"skin": skin, "hour": hlabel, "level": None, "locator": True,
                          "eye_cell": found.get("eye"), "face_cell": found.get("face"),
                          "anchor_z": found.get("anchor_z"), "anchor_how": found.get("anchor_how"),
                          "anchor_candidates": found.get("anchor_candidates"),
+                         "anchor_tried": found.get("anchor_tried"),
                          "paused": found.get("paused"),
                          "peak_delta": found.get("peak_delta"),
                          "noise_floor": found.get("noise_floor"),
@@ -710,6 +766,7 @@ def job():
                anchor_how={r["skin"]: r.get("anchor_how") for r in rows if r.get("locator")},
                anchor_candidates={r["skin"]: r.get("anchor_candidates")
                                   for r in rows if r.get("locator")},
+               anchor_tried={r["skin"]: r.get("anchor_tried") for r in rows if r.get("locator")},
                paused_ok={r["skin"]: r.get("paused") for r in rows if r.get("locator")},
                noise_floor_per_skin={r["skin"]: r.get("noise_floor") for r in rows if r.get("locator")},
                beats_noise={r["skin"]: r.get("beats_noise") for r in rows if r.get("locator")},
