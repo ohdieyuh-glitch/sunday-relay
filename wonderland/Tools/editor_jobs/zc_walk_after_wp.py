@@ -89,7 +89,36 @@ def job():
     for bearing, radius in STANDS:
         x = home.x + math.cos(math.radians(bearing)) * radius * 100.0
         y = home.y + math.sin(math.radians(bearing)) * radius * 100.0
-        hold_at = unreal.Vector(x, y, home.z + 700.0)
+        # ---- THE HOLD HEIGHT COMES FROM THE DESTINATION, NOT FROM WHERE THE DOG STARTED.
+        #
+        # THE LAST HYPOTHESIS STANDING for what destroys the Dog part-way through this tour. It has been ruled
+        # out as falling through unloaded ground, as a cell that never arrives, as the pawn being paged with
+        # its cell, as position, and as unpossession -- it is genuinely destroyed, with zero RelayDogCharacter
+        # actors left and the controller still alive. What is left is a capsule PLACED INSIDE SOLID GEOMETRY,
+        # which is the one thing only an instant move can do and which the engine resolves by ejecting.
+        #
+        # This tour was inviting exactly that: every stand held the Dog at the SPAWN's height plus seven
+        # metres, and Wonderland is not flat. At 880 m on the Tartarus axis the ledger records a 20.7 m hall,
+        # so "seven metres above the Arrival Gate" is several metres INSIDE its masonry.
+        #
+        # So the roof is found first, from far above, and the Dog is held a little over whatever is actually
+        # there. If it now survives every stand, the hypothesis is confirmed and the fault was the harness
+        # teleporting into walls rather than anything in the world.
+        ceiling = None
+        try:
+            probe = unreal.SystemLibrary.line_trace_single(
+                world, unreal.Vector(x, y, home.z + 6000.0), unreal.Vector(x, y, home.z - 3000.0),
+                unreal.TraceTypeQuery.TRACE_TYPE_QUERY2, False, [living()] if living() else [],
+                unreal.DrawDebugTrace.NONE, True,
+                unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
+            if probe is not None:
+                ceiling = float(probe.to_tuple()[4].z)
+        except Exception:                                          # noqa: BLE001
+            ceiling = None
+        hold_z = (ceiling + 250.0) if ceiling is not None else (home.z + 700.0)
+        hold_at = unreal.Vector(x, y, hold_z)
+
+        # The clearance sweep that used to live here has moved BELOW the cell wait. See it there.
 
         began = time.time()
         arrived = False
@@ -123,6 +152,40 @@ def job():
                 break
             yield 0.25
 
+        # ---- NOW THAT THE CELL IS HERE, CHECK THE SPOT IS CLEAR -- AND NOT BEFORE.
+        #
+        # This sweep was originally done before the teleport and it moved the failure around instead of fixing
+        # it: one stand died per run, a different one each time. The reason is the whole point of a streaming
+        # world. A capsule sweep asks the geometry whether a spot is occupied, and before the destination cell
+        # has loaded there IS no geometry to ask -- so it answers "clear", the player is placed, and the
+        # building arrives around them.
+        #
+        # That is not a quirk of this harness. It is the rule any fast travel, checkpoint warp or mission
+        # placement in Wonderland will have to obey: make the destination a streaming source, WAIT for it, and
+        # only then decide where the player can stand. Validating first is validating nothing.
+        for nudge in range(6):
+            try:
+                blocked = unreal.SystemLibrary.capsule_trace_single(
+                    world, hold_at, hold_at, 42.0, 96.0,
+                    unreal.TraceTypeQuery.TRACE_TYPE_QUERY2, False, [living()] if living() else [],
+                    unreal.DrawDebugTrace.NONE, True,
+                    unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
+            except Exception:                                      # noqa: BLE001
+                blocked = None
+            if blocked is None:
+                break
+            step = 220.0 * (nudge + 1)
+            hold_at = unreal.Vector(x + math.cos(math.radians(bearing)) * step,
+                                    y + math.sin(math.radians(bearing)) * step, hold_at.z)
+            moved = living()
+            if moved is not None:
+                try:
+                    moved.set_actor_location(hold_at, False, False)
+                except Exception:                                  # noqa: BLE001
+                    pass
+            yield 0.3
+        row_nudged = nudge
+
         # Let it down onto whatever arrived.
         live = living()
         if live is not None:
@@ -137,6 +200,7 @@ def job():
         live = living()
         row = {"bearing_deg": bearing, "radius_metres": radius,
                "cell_arrived": arrived, "traced_floor_z": floor_z,
+               "held_at_z": round(hold_z), "surface_below_z": None if ceiling is None else round(ceiling),
                "seconds_waiting_for_the_cell": round(time.time() - began, 1)}
         if live is None:
             row["unmeasured"] = "the Dog did not survive the stand"

@@ -1,6 +1,6 @@
 {
  "name": "zc_walk_after_wp",
- "started": "2026-09-26 18:43:14",
+ "started": "2026-09-26 18:49:47",
  "status": "measured",
  "tests": [
   {
@@ -33,7 +33,7 @@
     "never_arrived": [],
     "cap_seconds": 14.0,
     "waits": [
-     2.5,
+     2.8,
      2.5,
      2.5,
      2.5,
@@ -55,8 +55,10 @@
       "radius_metres": 120.0,
       "cell_arrived": true,
       "traced_floor_z": 21,
-      "seconds_waiting_for_the_cell": 2.5,
-      "landed_z": 397,
+      "held_at_z": 271,
+      "surface_below_z": 21,
+      "seconds_waiting_for_the_cell": 2.8,
+      "landed_z": 108,
       "fell_through": false
      },
      {
@@ -64,6 +66,8 @@
       "radius_metres": 520.0,
       "cell_arrived": true,
       "traced_floor_z": 12,
+      "held_at_z": 262,
+      "surface_below_z": 12,
       "seconds_waiting_for_the_cell": 2.5,
       "landed_z": 101,
       "fell_through": false
@@ -72,9 +76,11 @@
       "bearing_deg": 90.0,
       "radius_metres": 700.0,
       "cell_arrived": true,
-      "traced_floor_z": 12,
+      "traced_floor_z": 2582,
+      "held_at_z": 2832,
+      "surface_below_z": 2582,
       "seconds_waiting_for_the_cell": 2.5,
-      "landed_z": 75,
+      "landed_z": 2671,
       "fell_through": false
      },
      {
@@ -82,27 +88,33 @@
       "radius_metres": 880.0,
       "cell_arrived": true,
       "traced_floor_z": -14,
+      "held_at_z": 236,
+      "surface_below_z": -14,
       "seconds_waiting_for_the_cell": 2.5,
-      "unmeasured": "the Dog did not survive the stand",
-      "controller_exists": true,
-      "relay_dogs_in_world": 0
+      "landed_z": 75,
+      "fell_through": false
      },
      {
       "bearing_deg": 150.0,
       "radius_metres": 1050.0,
       "cell_arrived": true,
       "traced_floor_z": -14,
+      "held_at_z": 236,
+      "surface_below_z": -14,
       "seconds_waiting_for_the_cell": 2.5,
-      "landed_z": 100,
-      "fell_through": false
+      "unmeasured": "the Dog did not survive the stand",
+      "controller_exists": true,
+      "relay_dogs_in_world": 0
      },
      {
       "bearing_deg": 45.0,
       "radius_metres": 1180.0,
       "cell_arrived": true,
       "traced_floor_z": -14,
+      "held_at_z": 236,
+      "surface_below_z": -14,
       "seconds_waiting_for_the_cell": 2.5,
-      "landed_z": 809,
+      "landed_z": 100,
       "fell_through": false
      }
     ]
@@ -116,8 +128,10 @@
    "radius_metres": 120.0,
    "cell_arrived": true,
    "traced_floor_z": 21,
-   "seconds_waiting_for_the_cell": 2.5,
-   "landed_z": 397,
+   "held_at_z": 271,
+   "surface_below_z": 21,
+   "seconds_waiting_for_the_cell": 2.8,
+   "landed_z": 108,
    "fell_through": false
   },
   {
@@ -125,6 +139,8 @@
    "radius_metres": 520.0,
    "cell_arrived": true,
    "traced_floor_z": 12,
+   "held_at_z": 262,
+   "surface_below_z": 12,
    "seconds_waiting_for_the_cell": 2.5,
    "landed_z": 101,
    "fell_through": false
@@ -133,9 +149,11 @@
    "bearing_deg": 90.0,
    "radius_metres": 700.0,
    "cell_arrived": true,
-   "traced_floor_z": 12,
+   "traced_floor_z": 2582,
+   "held_at_z": 2832,
+   "surface_below_z": 2582,
    "seconds_waiting_for_the_cell": 2.5,
-   "landed_z": 75,
+   "landed_z": 2671,
    "fell_through": false
   },
   {
@@ -143,32 +161,38 @@
    "radius_metres": 880.0,
    "cell_arrived": true,
    "traced_floor_z": -14,
+   "held_at_z": 236,
+   "surface_below_z": -14,
    "seconds_waiting_for_the_cell": 2.5,
-   "unmeasured": "the Dog did not survive the stand",
-   "controller_exists": true,
-   "relay_dogs_in_world": 0
+   "landed_z": 75,
+   "fell_through": false
   },
   {
    "bearing_deg": 150.0,
    "radius_metres": 1050.0,
    "cell_arrived": true,
    "traced_floor_z": -14,
+   "held_at_z": 236,
+   "surface_below_z": -14,
    "seconds_waiting_for_the_cell": 2.5,
-   "landed_z": 100,
-   "fell_through": false
+   "unmeasured": "the Dog did not survive the stand",
+   "controller_exists": true,
+   "relay_dogs_in_world": 0
   },
   {
    "bearing_deg": 45.0,
    "radius_metres": 1180.0,
    "cell_arrived": true,
    "traced_floor_z": -14,
+   "held_at_z": 236,
+   "surface_below_z": -14,
    "seconds_waiting_for_the_cell": 2.5,
-   "landed_z": 809,
+   "landed_z": 100,
    "fell_through": false
   }
  ],
  "cells_that_never_arrived": 0,
- "finished": "2026-09-26 18:43:55",
- "seconds": 40.74,
- "log": "K_WP INFO what the running world says about partition {'partition': 'world=WL_V2_GoldenArrival_WP2 partitioned=1 streaming=1 initialised=1 runtimeHash=WorldPartitionRuntimeHashSet subsystem=1'}\nK00 PASS there is a Dog to walk {'home': [-327, -650, 109]}\nK_0120 INFO 120 m on bearing 0 {'bearing_deg': 0.0, 'radius_metres': 120.0, 'cell_arrived': True, 'traced_floor_z': 21, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 397, 'fell_through': False}\nK_0520 INFO 520 m on bearing -30 {'bearing_deg': -30.0, 'radius_metres': 520.0, 'cell_arrived': True, 'traced_floor_z': 12, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 101, 'fell_through': False}\nK_0700 INFO 700 m on bearing 90 {'bearing_deg': 90.0, 'radius_metres': 700.0, 'cell_arrived': True, 'traced_floor_z': 12, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 75, 'fell_through': False}\nK_0880 INFO 880 m on bearing 210 {'bearing_deg': 210.0, 'radius_metres': 880.0, 'cell_arrived': True, 'traced_floor_z': -14, 'seconds_waiting_for_the_cell': 2.5, 'unmeasured': 'the Dog did not survive the stand', 'controller_exists': True, 'relay_dogs_in_world': 0}\nK_1050 INFO 1050 m on bearing 150 {'bearing_deg': 150.0, 'radius_metres': 1050.0, 'cell_arrived': True, 'traced_floor_z': -14, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 100, 'fell_through': False}\nK_1180 INFO 1180 m on bearing 45 {'bearing_deg': 45.0, 'radius_metres': 1180.0, 'cell_arrived': True, 'traced_floor_z': -14, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 809, 'fell_through': False}\nK01 FAIL every stand was actually measured {'unmeasured': 1, 'of': 6, 'note': 'a stand where the Dog was destroyed proves nothing about whether ground is there, and must not be counted as a pass'}\nK02 PASS every cell streamed in when the player stood in it {'never_arrived': [], 'cap_seconds': 14.0, 'waits': [2.5, 2.5, 2.5, 2.5, 2.5, 2.5], 'note': \"the conversion's own risk: a cell that does not arrive is a hole that exists only at runtime, and would not show in any count of what the map contains\"}\nK03 FAIL the Dog stands on ground at every stand, now that the world pages {'fell_through': [], 'stands': [{'bearing_deg': 0.0, 'radius_metres': 120.0, 'cell_arrived': True, 'traced_floor_z': 21, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 397, 'fell_through': False}, {'bearing_deg': -30.0, 'radius_metres': 520.0, 'cell_arrived': True, 'traced_floor_z': 12, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 101, 'fell_through': False}, {'bearing_deg': 90.0, 'radius_metres': 700.0, 'cell_arrived': True, 'traced_floor_z': 12, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 75, 'fell_through': False}, {'bearing_deg': 210.0, 'radius_metres': 880.0, 'cell_arrived': True, 'traced_floor_z': -14, 'seconds_waiting_for_the_cell': 2.5, 'unmeasured': 'the Dog did not survive the stand', 'controller_exists': True, 'relay_dogs_in_world': 0}, {'bearing_deg': 150.0, 'radius_metres': 1050.0, 'cell_arrived': True, 'traced_floor_z': -14, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 100, 'fell_through': False}, {'bearing_deg': 45.0, 'radius_metres': 1180.0, 'cell_arrived': True, 'traced_floor_z': -14, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 809, 'fell_through': False}]}\n"
+ "finished": "2026-09-26 18:50:23",
+ "seconds": 36.15,
+ "log": "K_WP INFO what the running world says about partition {'partition': 'world=WL_V2_GoldenArrival_WP2 partitioned=1 streaming=1 initialised=1 runtimeHash=WorldPartitionRuntimeHashSet subsystem=1'}\nK00 PASS there is a Dog to walk {'home': [-327, -650, 109]}\nK_0120 INFO 120 m on bearing 0 {'bearing_deg': 0.0, 'radius_metres': 120.0, 'cell_arrived': True, 'traced_floor_z': 21, 'held_at_z': 271, 'surface_below_z': 21, 'seconds_waiting_for_the_cell': 2.8, 'landed_z': 108, 'fell_through': False}\nK_0520 INFO 520 m on bearing -30 {'bearing_deg': -30.0, 'radius_metres': 520.0, 'cell_arrived': True, 'traced_floor_z': 12, 'held_at_z': 262, 'surface_below_z': 12, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 101, 'fell_through': False}\nK_0700 INFO 700 m on bearing 90 {'bearing_deg': 90.0, 'radius_metres': 700.0, 'cell_arrived': True, 'traced_floor_z': 2582, 'held_at_z': 2832, 'surface_below_z': 2582, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 2671, 'fell_through': False}\nK_0880 INFO 880 m on bearing 210 {'bearing_deg': 210.0, 'radius_metres': 880.0, 'cell_arrived': True, 'traced_floor_z': -14, 'held_at_z': 236, 'surface_below_z': -14, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 75, 'fell_through': False}\nK_1050 INFO 1050 m on bearing 150 {'bearing_deg': 150.0, 'radius_metres': 1050.0, 'cell_arrived': True, 'traced_floor_z': -14, 'held_at_z': 236, 'surface_below_z': -14, 'seconds_waiting_for_the_cell': 2.5, 'unmeasured': 'the Dog did not survive the stand', 'controller_exists': True, 'relay_dogs_in_world': 0}\nK_1180 INFO 1180 m on bearing 45 {'bearing_deg': 45.0, 'radius_metres': 1180.0, 'cell_arrived': True, 'traced_floor_z': -14, 'held_at_z': 236, 'surface_below_z': -14, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 100, 'fell_through': False}\nK01 FAIL every stand was actually measured {'unmeasured': 1, 'of': 6, 'note': 'a stand where the Dog was destroyed proves nothing about whether ground is there, and must not be counted as a pass'}\nK02 PASS every cell streamed in when the player stood in it {'never_arrived': [], 'cap_seconds': 14.0, 'waits': [2.8, 2.5, 2.5, 2.5, 2.5, 2.5], 'note': \"the conversion's own risk: a cell that does not arrive is a hole that exists only at runtime, and would not show in any count of what the map contains\"}\nK03 FAIL the Dog stands on ground at every stand, now that the world pages {'fell_through': [], 'stands': [{'bearing_deg': 0.0, 'radius_metres': 120.0, 'cell_arrived': True, 'traced_floor_z': 21, 'held_at_z': 271, 'surface_below_z': 21, 'seconds_waiting_for_the_cell': 2.8, 'landed_z': 108, 'fell_through': False}, {'bearing_deg': -30.0, 'radius_metres': 520.0, 'cell_arrived': True, 'traced_floor_z': 12, 'held_at_z': 262, 'surface_below_z': 12, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 101, 'fell_through': False}, {'bearing_deg': 90.0, 'radius_metres': 700.0, 'cell_arrived': True, 'traced_floor_z': 2582, 'held_at_z': 2832, 'surface_below_z': 2582, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 2671, 'fell_through': False}, {'bearing_deg': 210.0, 'radius_metres': 880.0, 'cell_arrived': True, 'traced_floor_z': -14, 'held_at_z': 236, 'surface_below_z': -14, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 75, 'fell_through': False}, {'bearing_deg': 150.0, 'radius_metres': 1050.0, 'cell_arrived': True, 'traced_floor_z': -14, 'held_at_z': 236, 'surface_below_z': -14, 'seconds_waiting_for_the_cell': 2.5, 'unmeasured': 'the Dog did not survive the stand', 'controller_exists': True, 'relay_dogs_in_world': 0}, {'bearing_deg': 45.0, 'radius_metres': 1180.0, 'cell_arrived': True, 'traced_floor_z': -14, 'held_at_z': 236, 'surface_below_z': -14, 'seconds_waiting_for_the_cell': 2.5, 'landed_z': 100, 'fell_through': False}]}\n"
 }
