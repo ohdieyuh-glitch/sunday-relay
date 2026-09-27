@@ -57,18 +57,35 @@ def job():
     yield (lambda: ues.get_game_world() is not None, 300)
     yield (lambda: unreal.GameplayStatics.get_player_pawn(ues.get_game_world(), 0) is not None, 180)
     world = ues.get_game_world()
+
+    def live():
+        """The world, re-fetched at every use. A reference held across a long job goes stale, and the
+        failure is silent for some calls: get_all_actors_* returns an empty list, pose_camera throws."""
+        return ues.get_game_world()
+
+    def alive():
+        """World AND pawn, or None. A torn-down PIE keeps returning readings -- constant, and
+        indistinguishable from a real measurement. A walk that keeps 'driving' a dead world reports the
+        Dog as stuck when in fact there is no Dog."""
+        w = ues.get_game_world()
+        if w is None:
+            return None
+        try:
+            return w if unreal.GameplayStatics.get_player_pawn(w, 0) is not None else None
+        except Exception:                                              # noqa: BLE001
+            return None
     L.focus_game_viewport()
-    unreal.SystemLibrary.execute_console_command(world, "wl.Sky.DayMinutes 0")
-    unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour 12")
+    unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.DayMinutes 0")
+    unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.Hour 12")
     yield 5.0
 
     def pawn():
-        return unreal.GameplayStatics.get_player_pawn(world, 0)
+        return unreal.GameplayStatics.get_player_pawn(live(), 0)
 
     def floor_at(x, y, top):
         try:
             hit = unreal.SystemLibrary.line_trace_single(
-                world, unreal.Vector(x, y, top), unreal.Vector(x, y, top - 3000.0), PAWN, False,
+                live(), unreal.Vector(x, y, top), unreal.Vector(x, y, top - 3000.0), PAWN, False,
                 [p for p in (pawn(),) if p is not None], unreal.DrawDebugTrace.NONE, True,
                 unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
             return None if hit is None else float(hit.to_tuple()[4].z)
@@ -82,7 +99,7 @@ def job():
             h = math.radians(heading_deg)
             a = unreal.Vector(loc.x, loc.y, loc.z + 40.0)
             b = unreal.Vector(loc.x + math.cos(h) * dist, loc.y + math.sin(h) * dist, loc.z + 40.0)
-            hit = unreal.SystemLibrary.line_trace_single(world, a, b, PAWN, False, [dog],
+            hit = unreal.SystemLibrary.line_trace_single(live(), a, b, PAWN, False, [dog],
                                                          unreal.DrawDebugTrace.NONE, True,
                                                          unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
             if hit is None:
@@ -186,6 +203,9 @@ def job():
         travelled = 0.0
         prev = dog.get_actor_location()
         while wp < len(pts) and elapsed < MAX_SECONDS:
+            if alive() is None:
+                row["error"] = "the world went away mid-walk at waypoint %d -- route NOT judged" % wp
+                break
             dog = pawn()
             if dog is None:
                 row["error"] = "the Dog was destroyed mid-walk"
