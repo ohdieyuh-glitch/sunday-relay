@@ -111,7 +111,9 @@ def job():
         master["error"] = str(err)[:120]
     RESULT["master"] = master
 
-    live = {}
+    # RENAMED from `live`, which collided with the live() world helper the hardening pass introduced --
+    # `live()` then called this dict and raised "'dict' object is not callable".
+    live_values = {}
     dressed = 0
     for actor in unreal.GameplayStatics.get_all_actors_of_class(live(), unreal.StaticMeshActor):
         comp = actor.static_mesh_component
@@ -122,9 +124,9 @@ def job():
             if mat is None or "RealWater" not in mat.get_name():
                 continue
             dressed += 1
-            if not live:
-                live["surface"] = str(actor.get_actor_label())
-                live["material"] = str(mat.get_name())
+            if not live_values:
+                live_values["surface"] = str(actor.get_actor_label())
+                live_values["material"] = str(mat.get_name())
                 vals = {}
                 for pname in (master.get("parameters") or {}).get("scalar", []) if isinstance(master.get("parameters"), dict) else []:
                     try:
@@ -137,9 +139,9 @@ def job():
                         vals[pname] = [round(c.r, 3), round(c.g, 3), round(c.b, 3), round(c.a, 3)]
                     except Exception:                                 # noqa: BLE001
                         pass
-                live["values"] = vals
-    live["surfaces_dressed"] = dressed
-    RESULT["live"] = live
+                live_values["values"] = vals
+    live_values["surfaces_dressed"] = dressed
+    RESULT["live"] = live_values
 
     # ---- THE NINE VIEWS, with the same luma/clip metric the exposure proofs use, on the viewport.
     def patch(cx, cy, hw, hh):
@@ -176,7 +178,7 @@ def job():
            isinstance(master.get("parameters"), dict) and any(master["parameters"].values()),
            master=master)
     record("A01", "the water in the level wears M_WL_RealWater, with live values read off a surface",
-           dressed > 0 and bool(live.get("values")), surfaces=dressed, live=live)
+           dressed > 0 and bool(live_values.get("values")), surfaces=dressed, live=live_values)
     record("A02", "all nine founder views were photographed with the water in frame",
            len(shots) == 9 and all(v["water"] for v in shots.values()), views=sorted(shots))
     night = shots.get("night_shoreline", {}).get("water")

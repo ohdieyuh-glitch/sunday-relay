@@ -65,12 +65,15 @@ SWEEP = (
 HOURS = [float(h) for h in range(0, 25)]
 
 
-def read_frame(rt):
+def read_frame(world, rt):
+    # THE WORLD IS PASSED IN, not fetched. This function is MODULE level; live() is defined inside job(),
+    # so a call to it here is a NameError at runtime that ast.parse cannot see. That is exactly how this
+    # job died: an automated world-hardening pass rewrote the call without checking scope.
     out = []
     for gy in range(GRID_Y):
         for gx in range(GRID_X):
             c = unreal.RenderingLibrary.read_render_target_pixel(
-                live(), rt, int((gx + 0.5) * RT_W / GRID_X), int((gy + 0.5) * RT_H / GRID_Y))
+                world, rt, int((gx + 0.5) * RT_W / GRID_X), int((gy + 0.5) * RT_H / GRID_Y))
             out.append((int(c.r), int(c.g), int(c.b)))
     return out
 
@@ -189,7 +192,7 @@ def job():
     for label, eye, at in PLACES:
         look(label, eye, at)
         yield 3.0
-        noon[label] = judge(read_frame(rt))
+        noon[label] = judge(read_frame(live(), rt))
     RESULT["noon"] = noon
 
     # ---- THE SWEEP, at midnight.
@@ -207,7 +210,7 @@ def job():
         for label, eye, at in PLACES:
             look(label, eye, at)
             yield 2.0
-            r = judge(read_frame(rt))
+            r = judge(read_frame(live(), rt))
             row["places"][label] = r
             try:
                 H.capture_viewport_jpeg(os.path.join(ROOT, "%s__%s.jpg" % (key, label)), 1200, 85)
@@ -235,7 +238,7 @@ def job():
     for hour in HOURS:
         cvar("wl.Sky.Hour", hour)
         yield 2.0
-        r = judge(read_frame(rt))
+        r = judge(read_frame(live(), rt))
         ladder.append({"hour": hour, "luma": r["luma"] if r else None, "crushed": r["crushed"] if r else None})
     RESULT["ladder"] = ladder
     jumps = [(abs(ladder[i]["luma"] - ladder[i - 1]["luma"]), ladder[i]["hour"])

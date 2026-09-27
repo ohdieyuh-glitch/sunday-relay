@@ -49,13 +49,15 @@ PROPS = ("local_exposure_highlight_contrast_scale", "local_exposure_shadow_contr
          "local_exposure_middle_grey_bias", "local_exposure_method")
 
 
-def read_frame(rt):
+def read_frame(world, rt):
+    # THE WORLD IS PASSED IN. This is module level; live() lives inside job(), so calling it here is a
+    # runtime NameError that ast.parse cannot see.
     out = []
     for gy in range(GRID_Y):
         for gx in range(GRID_X):
             x = int((gx + 0.5) * RT_W / GRID_X)
             y = int((gy + 0.5) * RT_H / GRID_Y)
-            c = unreal.RenderingLibrary.read_render_target_pixel(live(), rt, x, y)
+            c = unreal.RenderingLibrary.read_render_target_pixel(world, rt, x, y)
             out.append((int(c.r), int(c.g), int(c.b)))
     return out
 
@@ -191,7 +193,7 @@ def job():
         set_local(hi, sh)
         yield 2.5
         key = "hi%0.1f_sh%0.1f" % (hi, sh)
-        curve[key] = judge(read_frame(rt))
+        curve[key] = judge(read_frame(live(), rt))
         try:
             H.capture_viewport_jpeg(os.path.join(ROOT, "%s.jpg" % key), 1400, 90)
         except Exception:                                             # noqa: BLE001
