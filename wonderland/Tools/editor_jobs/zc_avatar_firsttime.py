@@ -93,16 +93,49 @@ def job():
     dog = unreal.GameplayStatics.get_player_pawn(world, 0)
     base = dog.get_actor_location() + dog.get_actor_forward_vector() * 1100.0
 
+    def raw_frame_ms():
+        """This frame's UNFILTERED cost, once per rendered frame.
+
+        TWO DEFECTS IN ONE READER, AND THIS JOB HAD BOTH.
+
+        First, H.get_frame_cost_ms() returns the FILTERED half of FStatUnitData -- the engine's own comment
+        calls those "unit frame times filtered with a simple running average", FrameTime = 0.9 * FrameTime +
+        0.1 * RawFrameTime. This job exists to price an AVATAR ARRIVING, which is a spike a few frames long,
+        and it was hunting that spike with the one field that removes spikes: a 200 ms spawn frame arrives as
+        roughly 15 ms. Every p95 this job has ever published is a percentile of a curve with its peaks
+        already taken out, and a p95 is exactly the statistic that measures.
+
+        Second, the loops below poll with `yield 0.0` -- far faster than the game renders -- while the
+        counter only advances once per frame. The same value was entering the sample list many times over, so
+        the p95 was a percentile over POLLS, weighted by how many happened to land on each frame, rather than
+        over frames. Returning None on an unchanged engine frame number makes one frame contribute one
+        sample.
+
+        Returns None rather than a zero when the build has no raw accessor, so the lists come back empty and
+        F01 goes red instead of publishing zeros that would read as fast frames.
+        """
+        try:
+            now = int(H.get_engine_frame_number())
+        except Exception:                                          # noqa: BLE001
+            now = None
+        if now is not None and now == globals().get("_LAST_FRAME"):
+            return None
+        try:
+            raw = H.get_raw_frame_cost_ms()
+        except Exception:                                          # noqa: BLE001
+            return None
+        if raw is None or float(raw[0]) <= 0.01:
+            return None
+        globals()["_LAST_FRAME"] = now
+        return float(raw[0])
+
     def quiet():
         seen = []
         started = time.time()
         while time.time() - started < 4.0:
-            try:
-                got = H.get_frame_cost_ms()
-                if got is not None and float(got[0]) > 0.01:
-                    seen.append(float(got[0]))
-            except Exception:                                      # noqa: BLE001
-                pass
+            v = raw_frame_ms()
+            if v is not None:
+                seen.append(v)
             yield 0.0
         globals()["_QUIET"] = seen
 
@@ -133,12 +166,9 @@ def job():
         started = time.time()
         body = L.spawn_figure_actor(world, spot, path, "WL_FirstTime_%d" % i)
         while time.time() - started < WATCH_S:
-            try:
-                got = H.get_frame_cost_ms()
-                if got is not None and float(got[0]) > 0.01:
-                    during.append(float(got[0]))
-            except Exception:                                      # noqa: BLE001
-                pass
+            v = raw_frame_ms()
+            if v is not None:
+                during.append(v)
             yield 0.0
         if body is not None:
             standing.append(body)
