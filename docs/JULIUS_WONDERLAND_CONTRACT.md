@@ -56,7 +56,7 @@ argument and refuses before it reads anything.
 ## How it is served
 
 **`GET /relay-api/julius/runs/<runId>/<view>`** on the bridge, where `<view>` is
-one of `run`, `slots`, `tasks`, `evidence`, `verification`, `timeline`.
+one of `run`, `slots`, `tasks`, `evidence`, `verification`, `result`, `timeline`.
 Operator `Bearer` credential; `X-Relay-Tenant` and `X-Relay-Project` headers name
 the scope, never the path. Read-only: any other method answers 405.
 
@@ -113,6 +113,19 @@ earlier run of the same mission is still READY or EXECUTING is a product
 decision not taken here. The `409 mission_already_running` below fires only
 when the same key arrives with a different payload, which a content-derived
 key does not produce in practice.
+
+**`result` is the view to SHOW A USER**, and the one a client should reach for
+before assembling its own answer from `evidence` + `verification` + `run`. It
+carries: `verified` (true only when the run reached `COMPLETED` — the runtime's
+decision, quoted, never recomputed), `terminal`, every acceptance criterion with
+`satisfied` and the evidence ids that satisfy it, the `deliverables` (the PASSED
+rows that are a product — a diff, an artifact, a test result — never a reviewer's
+finding, each with `retained: false` when no body was kept rather than reading as
+an empty one), `outstandingFindings` (why it is not verified), `reviewDecisions`
+(so "who verified this" has an answer), `cost` (`knownUsdMicros` beside
+`unknownComponents` and `complete`, never a zero standing in for unknown), and
+`failure` — `null` only when there is none: a FAILED or CANCELLED run always
+names a reason, `UNRECORDED` if the record somehow holds none.
 
 **Where the database comes from.** The bridge reads `JULIUS_DATABASE_URL`
 first and `DATABASE_URL` after it, from its own launch environment; with

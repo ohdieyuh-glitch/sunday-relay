@@ -95,6 +95,76 @@ export interface JuliusRunView {
 }
 
 /**
+ * WHAT THE MISSION PRODUCED, AND WHETHER IT MAY BE TRUSTED — the loop's last
+ * step, which had no projection at all.
+ *
+ * THE GAP THIS CLOSES. A surface could read a run's state, its tasks, its
+ * evidence, its decisions, its findings and its timeline, and from those six
+ * reads assemble an answer to the only question a user actually asks: did it
+ * work, what did it make, and can I believe it? Every client would assemble it
+ * differently, and the first one to get it wrong would show a mission as done
+ * because the run said COMPLETED while a criterion had no passing evidence. The
+ * answer is computed once, here, from the record.
+ *
+ * WHAT IT REFUSES TO DO.
+ *   - `verified` is true only when the RUN reached COMPLETED. Completion is the
+ *     runtime's decision under the completion rule; this reports it and never
+ *     re-derives it.
+ *   - A criterion is satisfied by the verification evaluator's own rule — every
+ *     required evidence type present and PASSED — imported rather than re-spelt.
+ *   - An unknown cost is null beside a count of what is unknown, never zero.
+ *   - A deliverable whose body was not retained says `retained: false` rather
+ *     than reading as an empty one.
+ *   - It carries no prose but the safe summaries the record already holds, and
+ *     no reasoning of any kind.
+ */
+export interface JuliusMissionResultView {
+  readonly runId: string;
+  readonly missionId: string;
+  readonly state: JuliusMissionState;
+  /** COMPLETED, and nothing else, is a verified result. */
+  readonly verified: boolean;
+  /** True once the run can no longer change: COMPLETED, FAILED or CANCELLED. */
+  readonly terminal: boolean;
+  readonly criteria: readonly {
+    readonly criterionId: string;
+    readonly description: string;
+    readonly requiredEvidenceTypes: readonly string[];
+    readonly satisfied: boolean;
+    /** The PASSED rows that satisfy it, so a reader can go and look. */
+    readonly evidenceIds: readonly string[];
+  }[];
+  /**
+   * WHAT THE MISSION MADE. Every PASSED evidence row that is a product rather
+   * than a judgement — a diff, an artifact, a test result — with the reference
+   * a body can be fetched by and whether one was retained at all.
+   */
+  readonly deliverables: readonly {
+    readonly evidenceId: string;
+    readonly taskId: string;
+    readonly type: JuliusEvidence['type'];
+    readonly safeSummary: string;
+    readonly artifactRef: string | null;
+    readonly integrityHash: string | null;
+    /** False when no body was retained: a reference nobody can resolve is not one. */
+    readonly retained: boolean;
+    readonly occurredAt: string;
+  }[];
+  /** Blocking findings still open, which is why a run is not verified. */
+  readonly outstandingFindings: readonly { readonly findingId: string; readonly taskId: string; readonly claim: string; readonly severity: string }[];
+  /** The independent review's own acceptances, so "who verified this" has an answer. */
+  readonly reviewDecisions: readonly { readonly taskId: string; readonly action: string; readonly reasonCode: string }[];
+  /** Total spend, and what is unknown about it. Never a zero standing in for unknown. */
+  readonly cost: {
+    readonly knownUsdMicros: number;
+    readonly unknownComponents: number;
+    readonly complete: boolean;
+  };
+  /** Why it is not verified, when it is not: the named reason, never a guess. */
+  readonly failure: { readonly reasonCode: string; readonly failureClass: string | null } | null;
+}
+
+/**
  * WHAT ONE C.A.R.D. SLOT IS DOING, FOR A SURFACE THAT HAS TO DRAW IT.
  *
  * WHY THIS EXISTS. Wonderland has to represent three peers — the Prompt
@@ -250,6 +320,113 @@ export class JuliusRuntimeApi {
   }
 
   /**
+   * THE RESULT, AS A USER WOULD ASK FOR IT. One read, from the record, with the
+   * completion decision quoted rather than recomputed. See
+   * `JuliusMissionResultView` for what it will not say.
+   */
+  async inspectResult(identity: JuliusApiIdentity, runId: string): Promise<JuliusApiResult<JuliusMissionResultView>> {
+    const authorized = await this.#authorizedRun(identity, runId, 'run:read');
+    if (!authorized.ok) return authorized;
+    const run = authorized.value;
+    const [criteria, evidence, findings, decisions, entries] = await Promise.all([
+      this.deps.store.criteriaForRun(runId, identity.projectId),
+      this.deps.store.evidenceForRun(runId, identity.projectId),
+      this.deps.store.findingsForRun(runId, identity.projectId),
+      this.deps.store.decisionsForRun(runId, identity.projectId),
+      // ONE WALK, TWO PROJECTIONS: the slots and the failure both come from the
+      // same entries, so they cannot describe different moments of the run.
+      this.#timelineEntries(runId, identity.projectId),
+    ]);
+    const slots = projectJuliusSlotViews(entries);
+
+    const passed = evidence.filter((item) => item.status === 'PASSED');
+    const satisfies = (criterion: { readonly requiredEvidenceTypes: readonly string[] }) =>
+      // THE EVALUATOR'S OWN RULE, not a second opinion: every required type
+      // present and PASSED. A criterion that requires nothing is satisfied by
+      // the run reaching completion, which is what `verified` reports.
+      criterion.requiredEvidenceTypes.every((type) => passed.some((item) => item.type === type));
+
+    /**
+     * A JUDGEMENT IS NOT A DELIVERABLE. A review finding and a provider receipt
+     * say what somebody thought or what was billed; a diff, an artifact and a
+     * test result are what the mission produced. A surface that showed the
+     * former as the result would be showing the reviewer's opinion as the work.
+     */
+    const PRODUCT_TYPES: readonly JuliusEvidence['type'][] = ['DIFF', 'ARTIFACT', 'TEST', 'BUILD', 'LINT', 'TYPECHECK', 'COMMAND'];
+
+    const cost = slots.reduce(
+      (total, slot) => ({
+        knownUsdMicros: total.knownUsdMicros + slot.knownUsdMicros,
+        unknownComponents: total.unknownComponents + slot.unknownCostComponents,
+        complete: total.complete && slot.costComplete,
+      }),
+      { knownUsdMicros: 0, unknownComponents: 0, complete: true },
+    );
+
+    /**
+     * WHY IT IS NOT VERIFIED — and a FAILED run must always be able to say.
+     *
+     * Three sources, in the order a reader would want them: the last `task.failed`
+     * row (which carries the dispatch's own code and class), then a HALT or
+     * REPAIR decision (the verification's own reason), then — for a run that is
+     * FAILED with neither, which should not happen and therefore must not be
+     * silent — a named `UNRECORDED` rather than null. `null` is reserved for "no
+     * failure", and a failed run answering null would read as a success.
+     */
+    const lastFailed = [...entries].reverse().find((entry) => entry.type === 'task.failed') ?? null;
+    const text = (value: unknown): string | null =>
+      (typeof value === 'string' && value.trim() !== '' ? value : null);
+    const haltOrRepair = [...decisions].reverse()
+      .find((decision) => decision.action === 'HALT' || decision.action === 'REPAIR') ?? null;
+    const failure = run.state === 'COMPLETED'
+      ? null
+      : lastFailed !== null
+        ? {
+          reasonCode: text(lastFailed.facts.reasonCode) ?? text(lastFailed.facts.code) ?? 'TASK_FAILED',
+          failureClass: text(lastFailed.facts.failureClass),
+        }
+        : haltOrRepair !== null
+          ? { reasonCode: haltOrRepair.reasonCode, failureClass: null }
+          : run.state === 'FAILED' || run.state === 'CANCELLED'
+            ? { reasonCode: 'UNRECORDED', failureClass: null }
+            : null;
+
+    return allow({
+      runId: run.runId,
+      missionId: run.missionId,
+      state: run.state,
+      // NEVER DERIVED. The runtime decided this under the completion rule.
+      verified: run.state === 'COMPLETED',
+      terminal: run.state === 'COMPLETED' || run.state === 'FAILED' || run.state === 'CANCELLED',
+      criteria: criteria.map((criterion) => ({
+        criterionId: criterion.criterionId,
+        description: criterion.description,
+        requiredEvidenceTypes: criterion.requiredEvidenceTypes,
+        satisfied: satisfies(criterion),
+        evidenceIds: passed
+          .filter((item) => criterion.requiredEvidenceTypes.includes(item.type))
+          .map((item) => item.evidenceId),
+      })),
+      deliverables: passed
+        .filter((item) => PRODUCT_TYPES.includes(item.type))
+        .map((item) => ({
+          evidenceId: item.evidenceId, taskId: item.taskId, type: item.type,
+          safeSummary: item.safeSummary, artifactRef: item.artifactRef, integrityHash: item.integrityHash,
+          retained: item.artifactRef !== null,
+          occurredAt: item.occurredAt,
+        })),
+      outstandingFindings: findings
+        .filter((finding) => finding.blocking && finding.status === 'OPEN')
+        .map((finding) => ({ findingId: finding.findingId, taskId: finding.taskId, claim: finding.claim, severity: finding.severity })),
+      reviewDecisions: decisions.map((decision) => ({
+        taskId: decision.taskId, action: decision.action, reasonCode: decision.reasonCode,
+      })),
+      cost,
+      failure,
+    });
+  }
+
+  /**
    * THE THREE PEER SLOTS, PROJECTED. One page of the timeline per call at the
    * reader's own limit, walked to the end — the same paging every other
    * projection here uses, so a long mission does not silently report a prefix.
@@ -257,17 +434,25 @@ export class JuliusRuntimeApi {
   async inspectSlots(identity: JuliusApiIdentity, runId: string): Promise<JuliusApiResult<readonly JuliusSlotView[]>> {
     const authorized = await this.#authorizedRun(identity, runId, 'run:read');
     if (!authorized.ok) return authorized;
+    return allow(projectJuliusSlotViews(await this.#timelineEntries(runId, identity.projectId)));
+  }
+
+  /**
+   * THE WHOLE TIMELINE, WALKED TO THE END — one page at a time, so a long
+   * mission is never reported from a prefix. Shared by every projection that
+   * needs the event record, because two walkers would eventually disagree about
+   * where the end was.
+   */
+  async #timelineEntries(runId: string, projectId: string): Promise<readonly JuliusTimelineEntry[]> {
     const entries: JuliusTimelineEntry[] = [];
     let sinceSequence = 0;
     for (;;) {
-      const page = await this.deps.timeline.timeline({
-        runId, projectId: identity.projectId, sinceSequence, limit: 500,
-      });
+      const page = await this.deps.timeline.timeline({ runId, projectId, sinceSequence, limit: 500 });
       entries.push(...page.entries);
       if (page.entries.length === 0 || !page.hasMore) break;
       sinceSequence = Math.max(...page.entries.map((entry: JuliusTimelineEntry) => entry.sequence));
     }
-    return allow(projectJuliusSlotViews(entries));
+    return entries;
   }
 
   async inspectSubagents(identity: JuliusApiIdentity, runId: string): Promise<JuliusApiResult<readonly JuliusSubagentRecord[]>> {
