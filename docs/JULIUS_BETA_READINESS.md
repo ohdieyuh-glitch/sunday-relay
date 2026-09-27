@@ -148,7 +148,7 @@ workstation is inherited by every shell and points at the persistent Julius
 database holding real mission history. A sweep test (`julius-test-database.test.ts`)
 walks `git ls-files` and fails if any test file reads `DATABASE_URL` again.
 Proven both ways on this machine: with the inherited variable and
-`JULIUS_REAL_POSTGRES=1` the suites are 8 `todo` and the live database still has
+`JULIUS_REAL_POSTGRES=1` (which used to be the gate) the suites are 8 `todo` and the live database still has
 no `relay_wonderland` schema; with a stated throwaway database they are 8
 passed. The runtime keeps its own variables (`JULIUS_DATABASE_URL`, then
 `DATABASE_URL`) because database configuration belongs to whatever launches the

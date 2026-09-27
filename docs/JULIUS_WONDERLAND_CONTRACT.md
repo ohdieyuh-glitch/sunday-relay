@@ -173,7 +173,9 @@ task contract.
 ## What has been exercised against a real database
 
 `relay-bridge/julius-bridge-seam.real-postgres.test.ts` (gated on
-`JULIUS_REAL_POSTGRES=1` + `DATABASE_URL`, `todo` otherwise) drives creation and
+`JULIUS_TEST_DATABASE_URL`, which must name a throwaway database — never
+`DATABASE_URL`, which on a developer machine points at the persistent store —
+and `todo` otherwise) drives creation and
 every read view through the production compositions against a real PostgreSQL:
 what a client creates is what it then watches, and both are what
 `relay_wonderland.julius_runs` / `julius_tasks` / `julius_task_contracts` hold;

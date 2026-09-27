@@ -32,7 +32,8 @@ afterwards. Volume is not claimed and would not help.
 | A6 | a coder's completion claim held to its evidence | DETERMINISTIC | `src/relay/mission/julius/julius-coding-agent-scope.e2e.test.ts` | `a report that claims completion is refused by name, and the work still stands on its evidence` |
 | A7 | architect revises a rejected plan | DETERMINISTIC | `src/relay/mission/julius/julius-paid-run-34037313976.e2e.test.ts` | `plan → plan review REJECTS → architect revises → re-review ACCEPTS` |
 | A8 | tests run through the independent executor | DETERMINISTIC | `relay-bridge/julius/julius-live-composition.test.ts` | `Tool effects went through the executor port` |
-| A9 | the whole chain on a REAL PostgreSQL: plan → review → build → REJECTED review → repair → re-review answering the finding → COMPLETED, dumped by the shipping queries, read by the Beta Gate (gated on `JULIUS_REAL_POSTGRES=1` + `DATABASE_URL`) | DETERMINISTIC | `src/relay/persistence/julius-live-chain.e2e.test.ts` | `drives a mission with a repair round, dumps it, and the gate reads what the run actually did` |
+| A10 | Julius names no provider, model or adapter in its kernel — the beta trio is a reference configuration, not a definition | DETERMINISTIC | `src/relay/mission/julius/julius-provider-neutrality.test.ts` | `the Julius kernel names no provider, model or adapter` |
+| A9 | the whole chain on a REAL PostgreSQL: plan → review → build → REJECTED review → repair → re-review answering the finding → COMPLETED, dumped by the shipping queries, read by the Beta Gate (gated on `JULIUS_TEST_DATABASE_URL`) | DETERMINISTIC | `src/relay/persistence/julius-live-chain.e2e.test.ts` | `drives a mission with a repair round, dumps it, and the gate reads what the run actually did` |
 
 ## Category B — game development
 
@@ -43,7 +44,7 @@ afterwards. Volume is not claimed and would not help.
 | B3 | Wonderland reads it over the bridge | DETERMINISTIC | `relay-bridge/julius-state-routes.test.ts` | `serves the API’s own slot view for a mission that really ran` |
 | B4 | Wonderland creates a mission over the bridge, through the real bootstrap | DETERMINISTIC | `relay-bridge/julius-mission-routes.test.ts` | `creates the run through the real bootstrap` |
 | B5 | a created report mission is held to its DIFF, not to a test it never declared | DETERMINISTIC | `relay-bridge/julius-mission-routes.test.ts` | `carries the no-check declaration through` |
-| B6 | the seam against a REAL PostgreSQL: what a client creates is what it watches, and both are what the database holds (gated on `JULIUS_REAL_POSTGRES=1` + `DATABASE_URL`) | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `what a client creates is what a client then watches, and both are what the database holds` |
+| B6 | the seam against a REAL PostgreSQL: what a client creates is what it watches, and both are what the database holds (gated on `JULIUS_TEST_DATABASE_URL`) | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `what a client creates is what a client then watches, and both are what the database holds` |
 | B7 | re-posting a contract resumes the run in the database rather than creating a second | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `re-posting the same contract resumes the same run instead of creating a second one` |
 
 ## Category C — professional work
