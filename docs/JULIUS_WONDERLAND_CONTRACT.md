@@ -110,6 +110,22 @@ rather than guessed); `400` carrying the parser's or the bootstrap's own reason
 for a malformed contract, missing or non-blocking criteria, or an underivable
 task contract.
 
+## What has been exercised against a real database
+
+`relay-bridge/julius-bridge-seam.real-postgres.test.ts` (gated on
+`JULIUS_REAL_POSTGRES=1` + `DATABASE_URL`, `todo` otherwise) drives creation and
+every read view through the production compositions against a real PostgreSQL:
+what a client creates is what it then watches, and both are what
+`relay_wonderland.julius_runs` / `julius_tasks` / `julius_task_contracts` hold;
+a re-posted contract resumes the one run; another project sees 404. On
+2026-09-27 the BUILT bridge process was also driven over HTTP against that
+database — 401 without the operator token, 201 with it, the same `runId` on
+re-post, `run`/`tasks`/`slots`/`timeline` served, 404 under another project,
+and the database rows agreeing (`READY`; plan `RUNNABLE` `["ARTIFACT"]`, build
+`BLOCKED` `["DIFF"]`). A never-dispatched slot reports `knownUsdMicros: 0`,
+`unknownCostComponents: 0`, `costComplete: true` — zero is the truth for a peer
+that has never been asked, not a rounding.
+
 ## What is NOT served yet, and what it would take
 
 **Dispatch is not reachable from a client.** A created run sits in `READY` until

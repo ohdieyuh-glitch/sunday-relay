@@ -228,6 +228,44 @@ machine's load and pass at a 90 s timeout (10/10). `tsc -p relay-bridge` and
 `tsc -p scripts` clean; harness manifest re-exported, check OK; bridge bundle
 builds. Ledger rows B4 and B5 added to `docs/JULIUS_MVP_QUALIFICATION.md`.
 
+#### Then: a real PostgreSQL, and the built bridge over HTTP
+
+`docker ps` on this machine shows a `julius-postgres` (postgres:16-bookworm)
+container up since ~2026-09-25, port 127.0.0.1:5432, user `julius` — the one
+`.github/julius-live-executor.sh` starts, evidently left running by an earlier
+lane. Its default database was unmigrated; the drill databases
+(`julius_lab_*_drill`, `julius_archive`) are someone else's and were not touched.
+A separate database `julius_bridge_seam` was created for this proof.
+
+**`relay-bridge/julius-bridge-seam.real-postgres.test.ts`** — 3 cases, gated on
+`JULIUS_REAL_POSTGRES=1` + `DATABASE_URL` exactly like the persistence
+real-postgres suites and `todo` otherwise, migrates the database and drives the
+PRODUCTION compositions (`composeJuliusMissionBootstrap`, `composeJuliusStateApi`)
+through the two route handlers: the created run's row, its task contract row, the
+`run`/`tasks`/`slots`/`timeline` views and the database agree (READY; plan
+RUNNABLE, build BLOCKED; three NEVER_DISPATCHED slots with no served model; a
+timeline ordered by sequence); a re-posted contract resumes the one run (count =
+1); another project sees 404; a no-check mission's build row holds `["DIFF"]`
+and a checked one `["TEST"]`. 3/3 against the container. Added to
+`.github/workflows/julius-real-infra.yml` beside the other real-postgres steps.
+
+**The built bridge, over HTTP.** `npm run relay:bridge:build`, then
+`dist-relay-bridge/server.cjs` started with `DATABASE_URL` (the seam database),
+a random `RELAY_BRIDGE_API_TOKEN` and `RELAY_HERMES_PROVIDER=xai`; it reported
+`auth: required`. Then with curl: POST without a token → **401**; POST with it →
+**201** `run:5e8f6463c9a2b15381d67162`, `state: READY`, `dispatched: false`;
+the same contract again → the same `runId`; `GET …/run` → READY, taskCounts
+BLOCKED 1 / RUNNABLE 1; `GET …/tasks` → plan RUNNABLE `["ARTIFACT"]`, build
+BLOCKED `["DIFF"]`; `GET …/slots` → three peers, NEVER_DISPATCHED, `servedModel:
+null`, `knownUsdMicros: 0`, `costComplete: true`; `GET …/timeline` →
+`run.created`, `task.created`, … by sequence; `GET` under another project →
+**404**; `psql` on the same database → the same run, READY, and the same two
+task rows. Row 12 of the readiness page: 85 → 90; total still 77%.
+
+**What this does not prove:** any Unreal-side call (the integration lane's
+client is not built yet), and nothing about driving — the run created over HTTP
+sits READY, exactly as the contract document says it will.
+
 #### Not done, by decision or by gate
 
 - Driving a run over HTTP — the deployment decision that spends money; the

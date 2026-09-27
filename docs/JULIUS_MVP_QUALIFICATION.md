@@ -42,6 +42,8 @@ afterwards. Volume is not claimed and would not help.
 | B3 | Wonderland reads it over the bridge | DETERMINISTIC | `relay-bridge/julius-state-routes.test.ts` | `serves the API’s own slot view for a mission that really ran` |
 | B4 | Wonderland creates a mission over the bridge, through the real bootstrap | DETERMINISTIC | `relay-bridge/julius-mission-routes.test.ts` | `creates the run through the real bootstrap` |
 | B5 | a created report mission is held to its DIFF, not to a test it never declared | DETERMINISTIC | `relay-bridge/julius-mission-routes.test.ts` | `carries the no-check declaration through` |
+| B6 | the seam against a REAL PostgreSQL: what a client creates is what it watches, and both are what the database holds (gated on `JULIUS_REAL_POSTGRES=1` + `DATABASE_URL`) | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `what a client creates is what a client then watches, and both are what the database holds` |
+| B7 | re-posting a contract resumes the run in the database rather than creating a second | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `re-posting the same contract resumes the same run instead of creating a second one` |
 
 ## Category C — professional work
 
@@ -82,9 +84,11 @@ afterwards. Volume is not claimed and would not help.
   qualification environment and it is entirely unexercised. **B4 creates, it
   does not drive:** the run a client creates lands durable in READY and stays
   there until the mission job drives it — dispatch is not reachable from a
-  client, by decision — and B4's store is a recording fake of the two
-  repositories, so the bridge has still not created a run in a real PostgreSQL
-  from a running process.
+  client, by decision. B6 and B7 hold the same seam against a real PostgreSQL
+  through the production compositions, and are `todo` wherever no database is
+  configured — a skipped proof, never a passing one. The built bridge process
+  was also driven over HTTP against that database by hand (handoff §000d, with
+  the run id); a hand-run is evidence of a moment, not a row here.
 - **C — a mission whose result is not a file.** A message sent, a form
   submitted, a booking made has no diff to show, and an implementation review
   still requires one. Named in `julius-mission-breadth.e2e` as a limit.
