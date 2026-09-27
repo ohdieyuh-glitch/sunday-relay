@@ -16,6 +16,7 @@
 #include "Serialization/JsonWriter.h"
 #include "UObject/UObjectIterator.h"
 #include "WonderlandJuliusSubsystem.h"
+#include "WonderlandJuliusTaskState.h"
 #include "WonderlandWireDecode.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandJuliusStream, Log, All);
@@ -501,8 +502,28 @@ FString UWonderlandJuliusStreamSubsystem::Describe() const
 {
 	const UWonderlandJuliusSubsystem* Julius = World();
 	const TCHAR* PhaseName = Phase == EPhase::Idle ? TEXT("idle") : Phase == EPhase::Hydrating ? TEXT("hydrating") : TEXT("following");
-	return FString::Printf(TEXT("JULIUS STREAM: %s | bridge=%s | project=%s | run=%s | paired=%s | cursor=%lld | pages=%lld | offered=%lld | failures=%d | link=%s"),
+	// WHAT THE MISSION CONTRACT SHOULD SHOW for this run, by the engine's copy of the Julius -> task-state table. Only
+	// when the world's state really came from Julius's own run row: a relay phase or an event type is a different
+	// vocabulary, and mapping it here would be deriving a conclusion Julius did not reach.
+	FString JuliusState = TEXT("unknown");
+	FString ContractState = TEXT("unknown");
+	if (Julius != nullptr)
+	{
+		const FWonderlandJuliusEmbodiment& Embodiment = Julius->GetEmbodiment();
+		if (Embodiment.StateSource == EWonderlandJuliusStateSource::JuliusRunState && Embodiment.SourceState.bKnown)
+		{
+			JuliusState = Embodiment.SourceState.Value;
+			EWonderlandTaskState TaskState = EWonderlandTaskState::Draft;
+			if (WonderlandJuliusTaskState::TaskStateForJuliusState(JuliusState, TaskState))
+			{
+				ContractState = WonderlandTaskStateName(TaskState);
+			}
+		}
+	}
+	return FString::Printf(TEXT("JULIUS STREAM: %s | julius=%s | contract=%s | bridge=%s | project=%s | run=%s | paired=%s | cursor=%lld | pages=%lld | offered=%lld | failures=%d | link=%s"),
 		PhaseName,
+		*JuliusState,
+		*ContractState,
 		BridgeUrl().IsEmpty() ? TEXT("(unset)") : *BridgeUrl(),
 		ProjectId.IsEmpty() ? TEXT("-") : *ProjectId,
 		RunId.IsEmpty() ? TEXT("-") : *RunId,

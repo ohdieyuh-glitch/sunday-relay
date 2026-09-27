@@ -134,3 +134,41 @@ describe('the TypeScript vocabularies are the C++ enums, in ordinal order', () =
     expect(members[0]).toBe('Local');
   });
 });
+
+describe('the ENGINE\'s map is this map (WonderlandJuliusTaskState.h)', () => {
+  /** The table between its markers, as [juliusState, taskState] pairs, read from the real header. */
+  function cppTable(): Array<[string, string]> {
+    const header = readFileSync(
+      join(resolve(__dirname, '../../../../wonderland/Source/Wonderland'), 'WonderlandJuliusTaskState.h'),
+      'utf8',
+    );
+    const begin = header.indexOf('WONDERLAND_JULIUS_TASK_STATE_TABLE_BEGIN');
+    const end = header.indexOf('WONDERLAND_JULIUS_TASK_STATE_TABLE_END');
+    expect(begin, 'table markers missing from the header').toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(begin);
+    const rows = [...header.slice(begin, end).matchAll(/\{\s*TEXT\("([A-Z_]+)"\)\s*,\s*EWonderlandTaskState::([A-Za-z]+)\s*\}/g)];
+    return rows.map((m) => [m[1], m[2]]);
+  }
+
+  it('the parser found a table at all, so agreement below cannot be two empty lists', () => {
+    expect(cppTable().length).toBeGreaterThan(10);
+  });
+
+  it('every Julius state appears in the C++ table exactly once', () => {
+    const states = cppTable().map(([julius]) => julius);
+    expect([...states].sort()).toEqual([...JULIUS_MISSION_STATES].sort());
+    expect(new Set(states).size).toBe(states.length);
+  });
+
+  it('the C++ table and the TypeScript map agree, entry for entry', () => {
+    for (const [julius, task] of cppTable()) {
+      const projection = JULIUS_TO_WONDERLAND_TASK_STATE[julius as keyof typeof JULIUS_TO_WONDERLAND_TASK_STATE];
+      expect(projection, `${julius} is in the C++ table but not the TypeScript map`).toBeDefined();
+      expect(projection).toEqual({ kind: 'state', state: task });
+    }
+  });
+
+  it('and every task state the C++ table names is a real EWonderlandTaskState member', () => {
+    for (const [, task] of cppTable()) expect(WONDERLAND_TASK_STATES as readonly string[]).toContain(task);
+  });
+});
