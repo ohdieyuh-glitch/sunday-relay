@@ -45,6 +45,34 @@ module used is on THIRD_BAND_PREP's "already proven elsewhere" list. Nine walk p
 at 780/850/920 m, none fell. **Row B's Tartarus stuck point is not a hole and not a height mismatch in the seam: it is a BUILDING.** Walked with position readback (the pawn arrived at every point, off by 0.0 uu), the axis reads z 101 / 101 / **1445** / 94 / 75 at 760/800/844/880/920 m -- and the specs say why: at (73071, -42189) TQ01_PlinthCourse sits at z=12 and TQ02_Cornice at z=2072, so a 20.7 m hall stands on the seam and the Dog was landing on it. SF03's first build had paved straight through that floor plan; the seam passes now read the nations' own recorded footprints and leave them alone -- 86 tiles left for buildings in Tartarus, 14 in Icarus, 6 in Noctis -- which is why Tartarus lands at 1,395 rather than 1,739. The traversal half
 wants a founder's walk before it is called PASS.
 
+**ROW: THE OVERSIZED ACTORS — NOT A BETA BLOCKER, and now that is measured rather than assumed.**
+
+The 753 actors wider than a 200 m cell, holding 44.5% of the world's instances, have been carried since this
+morning as the next thing to fix. `zc_streaming_floor` prices them properly: it stands still and waits for
+residency to STOP MOVING before reading it, and it checks the Dog is actually at the stop.
+
+That second check mattered. The first version reported a beautiful floor of 4,354 actors at both distant
+stops, identical to the instance -- and the guard showed why: at "1,250 m" the Dog was **8.7 m from spawn**.
+It had died on the teleport and the game mode had respawned it at the Arrival Gate, so the reading was the
+always-loaded set wearing a distant stop's label. A vacuous pass, caught by asking where the player was.
+
+From the stops that count:
+
+| | at the Arrival Gate | 600 m out |
+|---|---|---|
+| resident actors | 11,407 | 4,187 |
+| resident instances | 156,850 | **14,961** |
+
+**Nine and a half per cent of the world's instances stay resident.** Actors and instances tell different
+stories and the instance one is the one that matters: a great many of the actors that stay are small --
+lights, markers, volumes, the always-loaded set -- while the heavy instanced content, where every triangle
+and every draw call lives, pages away. `BC01_BaseCourse` really is one actor 1,970 m wide holding 4,132
+instances that can never leave memory, and 4,132 out of 156,850 is 2.6%.
+
+So splitting the world-spanning material batches by tile in the builders is a real improvement and it is NOT
+a beta blocker, and it does not justify a second rewrite of a shared, untracked map. It stays on this ledger
+as work, not as a gate.
+
 **WORLD INTEGRITY AFTER THE CONVERSION — PASS, and one new risk found.**
 
 The conversion's own danger is that a converted map loses collision, or that a cell never arrives and leaves a

@@ -1,0 +1,181 @@
+{
+ "name": "zc_streaming_floor",
+ "started": "2026-09-26 19:01:15",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "R00",
+   "name": "every stop was counted",
+   "pass": true,
+   "detail": {
+    "stops": [
+     {
+      "where": "spawn",
+      "actors": 11407,
+      "instances": 156850,
+      "settled": true,
+      "seconds_waited": 4.4,
+      "dog_alive": true,
+      "dog_metres_from_spawn": 0.0,
+      "asked_for_metres": 0.0
+     },
+     {
+      "where": "600 m north",
+      "actors": 4187,
+      "instances": 14961,
+      "settled": true,
+      "seconds_waited": 7.8,
+      "dog_alive": true,
+      "dog_metres_from_spawn": 600.0,
+      "asked_for_metres": 600.0
+     },
+     {
+      "where": "1,250 m south-west",
+      "actors": 658,
+      "instances": 13247,
+      "settled": true,
+      "seconds_waited": 10.0,
+      "dog_alive": true,
+      "dog_metres_from_spawn": 8.7,
+      "asked_for_metres": 1250.0
+     }
+    ]
+   }
+  },
+  {
+   "id": "R03",
+   "name": "the Dog was actually AT each stop when residency was read",
+   "pass": false,
+   "detail": {
+    "stops": [
+     {
+      "where": "spawn",
+      "dog_alive": true,
+      "dog_metres_from_spawn": 0.0,
+      "asked_for_metres": 0.0
+     },
+     {
+      "where": "600 m north",
+      "dog_alive": true,
+      "dog_metres_from_spawn": 600.0,
+      "asked_for_metres": 600.0
+     },
+     {
+      "where": "1,250 m south-west",
+      "dog_alive": true,
+      "dog_metres_from_spawn": 8.7,
+      "asked_for_metres": 1250.0
+     }
+    ],
+    "note": "residency is measured around the player. A stop where the Dog died and respawned at the Arrival Gate reports the always-loaded set under a distant stop's name, and would read as a beautifully low floor."
+   }
+  },
+  {
+   "id": "R01",
+   "name": "residency was allowed to settle before it was read",
+   "pass": true,
+   "detail": {
+    "stops": [
+     {
+      "where": "spawn",
+      "actors": 11407,
+      "instances": 156850,
+      "settled": true,
+      "seconds_waited": 4.4,
+      "dog_alive": true,
+      "dog_metres_from_spawn": 0.0,
+      "asked_for_metres": 0.0
+     },
+     {
+      "where": "600 m north",
+      "actors": 4187,
+      "instances": 14961,
+      "settled": true,
+      "seconds_waited": 7.8,
+      "dog_alive": true,
+      "dog_metres_from_spawn": 600.0,
+      "asked_for_metres": 600.0
+     },
+     {
+      "where": "1,250 m south-west",
+      "actors": 658,
+      "instances": 13247,
+      "settled": true,
+      "seconds_waited": 10.0,
+      "dog_alive": true,
+      "dog_metres_from_spawn": 8.7,
+      "asked_for_metres": 1250.0
+     }
+    ],
+    "note": "two consecutive counts two seconds apart agreeing within one per cent. Without this a distant stop is read while its cells are still arriving and the world looks emptier than it is -- which is how two different places came back identical to the instance."
+   }
+  },
+  {
+   "id": "R02",
+   "name": "the world does not keep most of itself resident",
+   "pass": true,
+   "detail": {
+    "resident_instances": {
+     "at_spawn": 156850,
+     "away": 14961
+    },
+    "share_of_instances": 0.095,
+    "ceiling": 0.25,
+    "resident_actors": {
+     "at_spawn": 11407,
+     "away": 4187
+    },
+    "counted_only": [
+     "spawn",
+     "600 m north"
+    ],
+    "note": "instances, not actors: the actors that stay resident are mostly small ones, and the heavy instanced content is what a frame actually pays for."
+   }
+  }
+ ],
+ "stops": [
+  {
+   "where": "spawn",
+   "actors": 11407,
+   "instances": 156850,
+   "settled": true,
+   "seconds_waited": 4.4,
+   "dog_alive": true,
+   "dog_metres_from_spawn": 0.0,
+   "asked_for_metres": 0.0
+  },
+  {
+   "where": "600 m north",
+   "actors": 4187,
+   "instances": 14961,
+   "settled": true,
+   "seconds_waited": 7.8,
+   "dog_alive": true,
+   "dog_metres_from_spawn": 600.0,
+   "asked_for_metres": 600.0
+  },
+  {
+   "where": "1,250 m south-west",
+   "actors": 658,
+   "instances": 13247,
+   "settled": true,
+   "seconds_waited": 10.0,
+   "dog_alive": true,
+   "dog_metres_from_spawn": 8.7,
+   "asked_for_metres": 1250.0
+  }
+ ],
+ "stops_that_count": [
+  "spawn",
+  "600 m north"
+ ],
+ "resident_instance_floor": 14961,
+ "resident_instance_peak": 156850,
+ "share_of_instances_always_resident": 0.095,
+ "resident_actor_floor": 4187,
+ "resident_actor_peak": 11407,
+ "share_of_world_always_resident": 0.199,
+ "finished": "2026-09-26 19:01:58",
+ "seconds": 43.09,
+ "log": "R_spawn INFO spawn {'where': 'spawn', 'actors': 11407, 'instances': 156850, 'settled': True, 'seconds_waited': 4.4, 'dog_alive': True, 'dog_metres_from_spawn': 0.0, 'asked_for_metres': 0.0}\nR_600_m_north INFO 600 m north {'where': '600 m north', 'actors': 4187, 'instances': 14961, 'settled': True, 'seconds_waited': 7.8, 'dog_alive': True, 'dog_metres_from_spawn': 600.0, 'asked_for_metres': 600.0}\nR_1,250_m_south-west INFO 1,250 m south-west {'where': '1,250 m south-west', 'actors': 658, 'instances': 13247, 'settled': True, 'seconds_waited': 10.0, 'dog_alive': True, 'dog_metres_from_spawn': 8.7, 'asked_for_metres': 1250.0}\nR00 PASS every stop was counted {'stops': [{'where': 'spawn', 'actors': 11407, 'instances': 156850, 'settled': True, 'seconds_waited': 4.4, 'dog_alive': True, 'dog_metres_from_spawn': 0.0, 'asked_for_metres': 0.0}, {'where': '600 m north', 'actors': 4187, 'instances': 14961, 'settled': True, 'seconds_waited': 7.8, 'dog_alive': True, 'dog_metres_from_spawn': 600.0, 'asked_for_metres': 600.0}, {'where': '1,250 m south-west', 'actors': 658, 'instances': 13247, 'settled': True, 'seconds_waited': 10.0, 'dog_alive': True, 'dog_metres_from_spawn': 8.7, 'asked_for_metres': 1250.0}]}\nR03 FAIL the Dog was actually AT each stop when residency was read {'stops': [{'where': 'spawn', 'dog_alive': True, 'dog_metres_from_spawn': 0.0, 'asked_for_metres': 0.0}, {'where': '600 m north', 'dog_alive': True, 'dog_metres_from_spawn': 600.0, 'asked_for_metres': 600.0}, {'where': '1,250 m south-west', 'dog_alive': True, 'dog_metres_from_spawn': 8.7, 'asked_for_metres': 1250.0}], 'note': \"residency is measured around the player. A stop where the Dog died and respawned at the Arrival Gate reports the always-loaded set under a distant stop's name, and would read as a beautifully low floor.\"}\nR01 PASS residency was allowed to settle before it was read {'stops': [{'where': 'spawn', 'actors': 11407, 'instances': 156850, 'settled': True, 'seconds_waited': 4.4, 'dog_alive': True, 'dog_metres_from_spawn': 0.0, 'asked_for_metres': 0.0}, {'where': '600 m north', 'actors': 4187, 'instances': 14961, 'settled': True, 'seconds_waited': 7.8, 'dog_alive': True, 'dog_metres_from_spawn': 600.0, 'asked_for_metres': 600.0}, {'where': '1,250 m south-west', 'actors': 658, 'instances': 13247, 'settled': True, 'seconds_waited': 10.0, 'dog_alive': True, 'dog_metres_from_spawn': 8.7, 'asked_for_metres': 1250.0}], 'note': 'two consecutive counts two seconds apart agreeing within one per cent. Without this a distant stop is read while its cells are still arriving and the world looks emptier than it is -- which is how two different places came back identical to the instance.'}\nR_FLOOR INFO what never leaves memory {'floor_actors': 4187, 'peak_actors': 11407, 'share_of_21075': 0.199}\nR02 PASS the world does not keep most of itself resident {'resident_instances': {'at_spawn': 156850, 'away': 14961}, 'share_of_instances': 0.095, 'ceiling': 0.25, 'resident_actors': {'at_spawn': 11407, 'away': 4187}, 'counted_only': ['spawn', '600 m north'], 'note': 'instances, not actors: the actors that stay resident are mostly small ones, and the heavy instanced content is what a frame actually pays for.'}\n"
+}
