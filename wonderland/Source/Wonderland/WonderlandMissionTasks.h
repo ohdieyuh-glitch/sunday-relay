@@ -27,6 +27,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/SaveGame.h"
 #include "Subsystems/LocalPlayerSubsystem.h"
+#include "WonderlandTypes.h"        // FWonderlandText, FWonderlandNumber: absence is not emptiness
 #include "WonderlandMissionTasks.generated.h"
 
 /**
@@ -71,6 +72,38 @@ enum class EWonderlandTaskSource : uint8
 };
 
 /**
+ * ONE THING A CONTRACT MUST SATISFY, ADDRESSABLE.
+ *
+ * The acceptance criteria used to be a list of sentences, which is enough to DISPLAY and not enough for
+ * anything else. To create a mission from a contract the backend needs to be handed criteria it can key
+ * results to; to report progress it has to name which one was met. Two criteria with identical words are the
+ * same criterion to a list of strings and different criteria to the people who wrote them.
+ *
+ * `bBlocking` is the field that carries meaning rather than identity. A criterion that must hold before a
+ * contract may complete and one that is merely wanted look the same in a sentence, and a mission that
+ * completes with its blocking criterion unmet is the specific failure worth preventing.
+ *
+ * Never invented in this build: empty until a backend states it, the same rule the list kept.
+ */
+USTRUCT(BlueprintType)
+struct WONDERLAND_API FWonderlandAcceptanceCriterion
+{
+	GENERATED_BODY()
+
+	/** The backend's own identifier for this criterion. Empty only if the backend sent none. */
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Tasks")
+	FString Id;
+
+	/** What it says, in the words the backend used. */
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Tasks")
+	FString Text;
+
+	/** True when the contract may not complete until this holds. */
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Tasks")
+	bool bBlocking = false;
+};
+
+/**
  * ONE TASK, AND EVERYTHING THAT IS ITS OWN.
  *
  * The founder listed what must be isolated per task and each line below is one of them. Nothing here is shared
@@ -99,9 +132,18 @@ struct WONDERLAND_API FWonderlandMissionTask
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Tasks")
 	FString Objective;
 
-	/** What this contract must satisfy to be complete. Empty until a backend states it; never invented here. */
+	/**
+	 * WHAT THIS CONTRACT MUST SATISFY. Empty until a backend states it; never invented here.
+	 *
+	 * A BARE STRING CANNOT BE ANSWERED. The world has to be able to create a mission from these and then
+	 * report which of them a run satisfied, and neither is possible against a list of sentences: there is
+	 * nothing to key a result to, and two criteria with the same words are the same criterion. So each
+	 * carries the backend's own ID, its text, and whether it BLOCKS completion -- a criterion that must
+	 * hold is a different thing from one that is merely desirable, and collapsing them is how a mission
+	 * completes with its real requirement unmet.
+	 */
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Tasks")
-	TArray<FString> AcceptanceCriteria;
+	TArray<FWonderlandAcceptanceCriterion> AcceptanceCriteria;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Tasks")
 	EWonderlandTaskState State = EWonderlandTaskState::Draft;
@@ -113,9 +155,18 @@ struct WONDERLAND_API FWonderlandMissionTask
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Tasks")
 	TArray<FString> Lifecycle;
 
-	/** What this task produced. Counted per task, because evidence belongs to the contract that earned it. */
+	/**
+	 * WHAT THIS TASK PRODUCED, or nothing at all if no backend has said.
+	 *
+	 * FOUNDER: unknown evidence stays UNKNOWN, never "0 evidence". An int32 defaulting to zero cannot
+	 * express that -- a task nobody has reported on and a task that genuinely produced nothing are the
+	 * same value, and the Mission Contract then shows a confident zero beside a run that has not
+	 * answered. The same absence-versus-emptiness distinction FWonderlandText exists for.
+	 *
+	 * Counted per task, because evidence belongs to the contract that earned it.
+	 */
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Tasks")
-	int32 EvidenceCount = 0;
+	FWonderlandTally EvidenceCount;
 
 	/**
 	 * WHICH ARTEFACTS, by the backend's own reference, and empty until a backend names them.
@@ -132,13 +183,46 @@ struct WONDERLAND_API FWonderlandMissionTask
 	TArray<FString> EvidenceIds;
 
 	/**
-	 * TOKENS THIS TASK HAS SPENT, or -1 for "nobody has told us".
+	 * TOKENS THIS TASK HAS SPENT, or nothing if nobody has told us.
 	 *
-	 * NEGATIVE IS NOT ZERO. Zero is a measurement and would be a lie here: no provider telemetry reaches this build,
-	 * so a surface must be able to show "unknown" rather than an invented zero next to a running contract.
+	 * UNKNOWN ON EVERY JULIUS TASK TODAY, and that is a property of the backend rather than a gap here: no
+	 * Julius read route serves tokens. Effort is per-dispatch diagnostics, read after a mission, with nulls
+	 * that stay null. Do not build a surface that needs this to arrive.
+	 *
+	 * NEGATIVE IS NOT ZERO, and -1 WAS THE WRONG WAY TO SAY IT. Zero is a measurement and would be a lie:
+	 * no provider telemetry reaches this build, so a surface must show "unknown" rather than an invented
+	 * zero beside a running contract. A sentinel says that only to code that remembers the convention --
+	 * every reader has to know that -1 is special, and the first one that forgets prints "-1 tokens".
+	 * The carrier says it in the type.
 	 */
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Tasks")
-	int64 TokensUsed = -1;
+	FWonderlandTally TokensUsed;
+
+	/**
+	 * THE JULIUS RUN THIS TASK IS FOLLOWING, exactly as Julius returned it, or nothing before it answers.
+	 *
+	 * The founder's acceptance is that the Mission Contract follows the EXACT runId Julius returned. With
+	 * no field for it there is nothing to key a run's state to a task: a world that hydrates three runs
+	 * cannot say which contract each belongs to, and "the Mission Contract shows QUEUED for this run" has
+	 * no subject. Nullable because a task exists before it is dispatched, and an empty string would be a
+	 * run whose id happens to be blank.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Tasks")
+	FWonderlandText RunId;
+
+	/**
+	 * WHAT JULIUS CALLED IT, verbatim, beside the state this build mapped it to.
+	 *
+	 * EWonderlandTaskState's zero member is Draft. So a Julius state this build does not know does not
+	 * fail and does not blank -- it silently becomes DRAFT, the most misleading value in the enum, on a
+	 * contract that is actually running. A surface showing DRAFT for a run Julius calls READY is worse
+	 * than one showing READY and admitting it has no mapping for it.
+	 *
+	 * So the raw string travels with the mapped enum and unknown stays visibly unknown, which is the same
+	 * rule every carrier in this struct exists for.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Tasks")
+	FWonderlandText JuliusState;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Tasks")
 	FDateTime CreatedAt;
@@ -372,7 +456,54 @@ public:
 	 * contract ids are not -- which is exactly the case the founder's persistence rule is about.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Tasks")
+	/** The integer form kept for existing callers: a negative token or evidence count means UNKNOWN. */
 	bool ApplySchedulerState(const FString& ContractId, EWonderlandTaskState State, int64 TokensUsed, int32 EvidenceCount);
+
+	/**
+	 * The form a transport should use: each number says for itself whether anyone asserted it, and the run
+	 * Julius named travels with the state it belongs to. A carrier that is not known leaves the task's
+	 * existing value alone rather than overwriting it -- silence is not a correction.
+	 */
+	bool ApplySchedulerState(const FString& ContractId, EWonderlandTaskState State,
+		const FWonderlandTally& TokensUsed, const FWonderlandTally& EvidenceCount,
+		const FWonderlandText& RunId, const FWonderlandText& JuliusState);
+
+	/**
+	 * FORGET EVERY JULIUS-SOURCED CARRIER ON THIS TASK: state, evidence count, tokens, all back to unknown.
+	 *
+	 * "A carrier that is not known leaves the existing value alone" is right WITHIN one run -- a report that
+	 * omits tokens is a quieter message, not a correction. It is wrong across a REPLACEMENT, and there are
+	 * exactly two of those.
+	 *
+	 * A RUN CHANGE is handled automatically inside ApplySchedulerState, because a caller can forget it: if a
+	 * report carries a RunId that is not the one the task already holds, everything describing the old run
+	 * is cleared BEFORE the new report is applied. Otherwise a task shows the previous run's READY and its
+	 * evidence count underneath a different runId -- a false statement assembled entirely from true parts.
+	 *
+	 * A HYDRATION is this call, because only the transport knows one happened. A snapshot REPLACES what the
+	 * world held rather than adding to it, so a snapshot that does not carry tokens means tokens are unknown
+	 * again -- not whatever the last stream happened to say before the connection dropped.
+	 */
+	bool ResetJuliusCarriers(const FString& ContractId);
+
+	/**
+	 * THIS WORLD IS NOW FOLLOWING THIS RUN. Finds or creates the contract, and asserts nothing else.
+	 *
+	 * ApplySchedulerState can only UPDATE a task already bound to a contract id, which is right for a
+	 * mission the player authored and wrong for the case the founder's acceptance actually describes: a run
+	 * created by an operator, adopted by a world that has never heard of it. Nothing would appear, and
+	 * "the Mission Contract visibly shows QUEUED" would have no subject. Routing it through SubmitDraft
+	 * instead would present it as a contract the PLAYER wrote, which is a lie about provenance.
+	 *
+	 * SO THIS COMMANDS NOTHING AND INVENTS NOTHING. It sets the contract id, marks the source Julius, opens
+	 * the slot, and records the run. JuliusState and both tallies stay UNKNOWN until a report says
+	 * otherwise, and the objective stays the mission id, because a hydration carries no objective and a
+	 * plausible invented title is worse than an honest identifier. Idempotent on the contract id: following
+	 * the same run twice is following it once.
+	 *
+	 * Returns the task's local id, or an invalid guid if the workspace is full.
+	 */
+	FGuid FollowJuliusRun(const FString& MissionId, const FWonderlandText& RunId);
 
 	/**
 	 * WHAT A CONTRACT PRODUCED, by reference.

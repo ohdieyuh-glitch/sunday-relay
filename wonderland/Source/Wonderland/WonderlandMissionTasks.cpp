@@ -557,7 +557,13 @@ bool UWonderlandMissionTaskSubsystem::ReportEvidence(const FString& ContractId, 
 	Task->EvidenceIds = EvidenceIds;
 	// THE COUNT FOLLOWS THE LIST ONCE THERE IS ONE. A scheduler that has named three artefacts has told us the
 	// count as well, and leaving a stale smaller number beside them would be a contradiction on the same task.
-	Task->EvidenceCount = FMath::Max(Task->EvidenceCount, EvidenceIds.Num());
+	// NAMING ARTEFACTS IS ITSELF AN ASSERTION, so this is one of the two places the count becomes KNOWN: a
+	// backend that lists three has said there are at least three, whether or not it also sent a number.
+	const int64 Named = static_cast<int64>(EvidenceIds.Num());
+	Task->EvidenceCount.Value = Task->EvidenceCount.bKnown ? FMath::Max(Task->EvidenceCount.Value, Named) : Named;
+	Task->EvidenceCount.bKnown = true;
+	// A LIST OF NAMES IS STILL A FLOOR. A backend that sent three references has not said there are only
+	// three, and this call cannot tell a full set from a first instalment.
 	UE_LOG(LogTemp, Display, TEXT("WLTASK %s reported %d evidence reference(s)"), *ContractId, EvidenceIds.Num());
 	SaveContracts();
 	OnTasksChanged.Broadcast();
@@ -582,6 +588,29 @@ bool UWonderlandMissionTaskSubsystem::AdoptContractId(FGuid LocalId, const FStri
 bool UWonderlandMissionTaskSubsystem::ApplySchedulerState(
 	const FString& ContractId, EWonderlandTaskState State, int64 TokensUsed, int32 EvidenceCount)
 {
+	// THE OLD SIGNATURE, KEPT, AND WHAT IT NOW MEANS. Callers that pass plain integers cannot express "I was
+	// not told", so the sentinels they have always used are translated here rather than at every call site:
+	// a negative token count and a negative evidence count mean UNKNOWN, everything else is an assertion.
+	// Anything that genuinely knows should call the overload below and say so in the type.
+	FWonderlandTally Tokens;
+	Tokens.bKnown = TokensUsed >= 0;
+	Tokens.Value = TokensUsed;
+	// AN INTEGER CALLER CANNOT SAY WHETHER ITS TOTAL IS FINAL, so it is recorded as a floor. Claiming
+	// completeness on behalf of a caller that has no way to express it is how a running total becomes a
+	// final one; the overload below is where a transport says so properly.
+	Tokens.bComplete = false;
+	FWonderlandTally Evidence;
+	Evidence.bKnown = EvidenceCount >= 0;
+	Evidence.Value = EvidenceCount;
+	Evidence.bComplete = false;
+	return ApplySchedulerState(ContractId, State, Tokens, Evidence, FWonderlandText(), FWonderlandText());
+}
+
+bool UWonderlandMissionTaskSubsystem::ApplySchedulerState(
+	const FString& ContractId, EWonderlandTaskState State, const FWonderlandTally& TokensUsed,
+	const FWonderlandTally& EvidenceCount, const FWonderlandText& RunId,
+	const FWonderlandText& JuliusState)
+{
 	if (ContractId.IsEmpty())
 	{
 		return false;
@@ -601,9 +630,46 @@ bool UWonderlandMissionTaskSubsystem::ApplySchedulerState(
 		UE_LOG(LogTemp, Warning, TEXT("WLTASK refused: a scheduler may not move a contract back to DRAFT"));
 		return false;
 	}
+	// ---- A DIFFERENT RUN IS A REPLACEMENT, NOT A CONTINUATION.
+	//
+	// Everything below preserves a carrier the report does not mention, which is right while one run is
+	// talking. The moment the runId changes -- an explicit rerun, or the world following a different run --
+	// the state, the evidence count and the tokens all describe the OLD run, and preserving them would
+	// assemble a false statement out of true parts: the previous run's READY and its evidence, shown
+	// under the new runId. So they are forgotten first, and the new report fills in whatever it knows.
+	//
+	// Done here rather than at the call site because it is the case a caller forgets.
+	if (RunId.bKnown && (!Task->RunId.bKnown || Task->RunId.Value != RunId.Value))
+	{
+		Task->JuliusState = FWonderlandText();
+		Task->EvidenceCount = FWonderlandTally();
+		Task->TokensUsed = FWonderlandTally();
+		UE_LOG(LogTemp, Display, TEXT("WLTASK %s follows a new run; its Julius carriers are unknown again"),
+			*ContractId);
+	}
 	Touch(*Task, State, EWonderlandTaskSource::Julius);
-	Task->TokensUsed = TokensUsed;
-	Task->EvidenceCount = EvidenceCount;
+	// ONLY AN ASSERTION OVERWRITES AN ASSERTION. A report that does not carry tokens must not erase the
+	// tokens a previous report did carry -- "unknown" arriving after "1,400" is a quieter message, not a
+	// correction to zero, and the founder's rule is that unknown stays unknown rather than becoming a number.
+	if (TokensUsed.bKnown)
+	{
+		Task->TokensUsed = TokensUsed;
+	}
+	if (EvidenceCount.bKnown)
+	{
+		Task->EvidenceCount = EvidenceCount;
+	}
+	// AND THE RUN IT IS FOLLOWING, once Julius has named one. The founder's acceptance is that the Mission
+	// Contract follows the EXACT runId Julius returned, so it is recorded verbatim and never synthesised.
+	if (RunId.bKnown)
+	{
+		Task->RunId = RunId;
+	}
+	// AND WHAT JULIUS CALLED THE STATE, so an unmapped one shows as itself rather than as Draft.
+	if (JuliusState.bKnown)
+	{
+		Task->JuliusState = JuliusState;
+	}
 	// A CONTRACT JULIUS IS WORKING IS AN ACTIVE TASK, which is exactly what the orb is a visualisation of. The
 	// founder's rule reads "ACTIVE TASK(S) -> their appropriate orb presentation may remain visible", so a live
 	// report reopens the task if it was closed -- and a finished state is handled by ShouldPresentOrb.
@@ -645,14 +711,94 @@ int32 UWonderlandMissionTaskSubsystem::GetRunningCount() const
 	return Running;
 }
 
+FGuid UWonderlandMissionTaskSubsystem::FollowJuliusRun(const FString& MissionId, const FWonderlandText& RunId)
+{
+	if (MissionId.IsEmpty())
+	{
+		return FGuid();
+	}
+	FWonderlandMissionTask* Task = Tasks.FindByPredicate(
+		[&MissionId](const FWonderlandMissionTask& Row) { return Row.ContractId == MissionId; });
+	if (Task == nullptr)
+	{
+		if (!CanAddTask())
+		{
+			// REFUSED, NOT SQUEEZED IN. The workspace cap is the founder's and a run arriving from outside does
+			// not get to exceed it; the transport can report that it could not be shown.
+			UE_LOG(LogTemp, Warning, TEXT("WLTASK cannot follow %s: %d of %d slots already open"),
+				*MissionId, GetWorkspaceCount(), GetTaskCapacity());
+			return FGuid();
+		}
+		FWonderlandMissionTask Fresh;
+		Fresh.LocalId = FGuid::NewGuid();
+		Fresh.CreatedAt = FDateTime::UtcNow();
+		Fresh.ContractId = MissionId;
+		// THE MISSION ID IS THE HONEST TITLE. A hydration carries no objective -- only the id -- and a
+		// plausible invented one would be indistinguishable from something Julius said.
+		Fresh.Objective = MissionId;
+		// QUEUED, NOT DRAFT. Draft is the local idea of a slot nobody has sent anywhere, and this run exists
+		// on a backend already. The real state arrives with the first report; until then the contract says it
+		// is waiting, which is true of every run the world has adopted and not yet heard from.
+		Touch(Fresh, EWonderlandTaskState::Queued, EWonderlandTaskSource::Julius);
+		Tasks.Add(Fresh);
+		Task = &Tasks.Last();
+		UE_LOG(LogTemp, Display, TEXT("WLTASK following Julius mission %s"), *MissionId);
+	}
+	// A DIFFERENT RUN ON THE SAME MISSION IS STILL A REPLACEMENT, and the rule is the one ApplySchedulerState
+	// applies: what described the old run is forgotten before the new one is recorded.
+	if (RunId.bKnown && Task->RunId.bKnown && Task->RunId.Value != RunId.Value)
+	{
+		Task->JuliusState = FWonderlandText();
+		Task->EvidenceCount = FWonderlandTally();
+		Task->TokensUsed = FWonderlandTally();
+	}
+	if (RunId.bKnown)
+	{
+		Task->RunId = RunId;
+	}
+	Task->Source = EWonderlandTaskSource::Julius;
+	Task->bInWorkspace = true;
+	SaveContracts();
+	OnTasksChanged.Broadcast();
+	return Task->LocalId;
+}
+
+bool UWonderlandMissionTaskSubsystem::ResetJuliusCarriers(const FString& ContractId)
+{
+	if (ContractId.IsEmpty())
+	{
+		return false;
+	}
+	FWonderlandMissionTask* Task = Tasks.FindByPredicate(
+		[&ContractId](const FWonderlandMissionTask& Row) { return Row.ContractId == ContractId; });
+	if (Task == nullptr)
+	{
+		return false;
+	}
+	// THE STATE ITSELF IS NOT TOUCHED, and neither is RunId. A hydration is about to state both, and
+	// blanking the mapped state would flip the contract to Draft for however long the snapshot takes to
+	// arrive -- the exact misleading value JuliusState exists to prevent. Only what DESCRIBES the run is
+	// forgotten: what Julius called it, how much evidence, how many tokens.
+	Task->JuliusState = FWonderlandText();
+	Task->EvidenceCount = FWonderlandTally();
+	Task->TokensUsed = FWonderlandTally();
+	UE_LOG(LogTemp, Display, TEXT("WLTASK %s adopted a snapshot; its Julius carriers are unknown again"),
+		*ContractId);
+	SaveContracts();
+	OnTasksChanged.Broadcast();
+	return true;
+}
+
 int64 UWonderlandMissionTaskSubsystem::GetTotalTokens() const
 {
 	int64 Total = -1;
 	for (const FWonderlandMissionTask& Task : Tasks)
 	{
-		if (Task.TokensUsed >= 0)
+		// bKnown, not a sign test: the carrier says whether anyone reported, and a reported zero is a real
+		// measurement that belongs in the total.
+		if (Task.TokensUsed.bKnown)
 		{
-			Total = (Total < 0 ? 0 : Total) + Task.TokensUsed;
+			Total = (Total < 0 ? 0 : Total) + Task.TokensUsed.Value;
 		}
 	}
 	// STILL -1 IF NOBODY REPORTED ANYTHING. A total of zero beside several contracts would read as a measurement.

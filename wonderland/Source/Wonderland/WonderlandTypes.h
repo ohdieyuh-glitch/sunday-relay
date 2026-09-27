@@ -64,6 +64,34 @@ struct FWonderlandNumber
 	double Value = 0.0;
 };
 
+// A RUNNING TOTAL, WHICH MAY STILL BE CLIMBING.
+//
+// FWonderlandNumber says whether anyone asserted a value. It cannot say whether the value is FINAL, and
+// for a total that is a different question with the same answer type. Julius reports its running totals as
+// FLOORS unless the work is complete -- /slots carries knownUsdMicros beside costComplete -- and an
+// evidence count the world assembles from envelopes after a hydration is likewise a floor unless the
+// snapshot carried the whole. "At least 3" and "exactly 3" are the same number, and a floor rendered as a
+// total is a confident wrong answer that nothing downstream can detect.
+//
+// So the flag travels WITH the value rather than beside it: two fields that must be read together are two
+// fields somebody will eventually read apart.
+USTRUCT(BlueprintType)
+struct FWonderlandTally
+{
+	GENERATED_BODY()
+
+	/** False when nobody has reported at all. Zero is a measurement; absence is not. */
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland")
+	bool bKnown = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland")
+	int64 Value = 0;
+
+	/** True when Value is the whole of it. False with bKnown set means AT LEAST Value, and still climbing. */
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland")
+	bool bComplete = false;
+};
+
 // A boolean Relay either asserted or did not. `false` is an answer.
 USTRUCT(BlueprintType)
 struct FWonderlandFlag
