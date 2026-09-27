@@ -1,6 +1,6 @@
 {
  "name": "zc_skin_locomotion",
- "started": "2026-09-26 16:58:02",
+ "started": "2026-09-26 18:54:12",
  "status": "measured",
  "tests": [
   {
@@ -18,8 +18,8 @@
      "speed_uu": 520.0,
      "gait_weight": 1.0,
      "airborne_weight": 0.0,
-     "bob_swing": 4.832,
-     "yaw_swing": 3.979,
+     "bob_swing": 4.83,
+     "yaw_swing": 3.549,
      "lift_uu": 0.0
     },
     "mismatches": [],
@@ -31,7 +31,7 @@
    "name": "body bounce: the Dog's bob reaches the skin, same frame",
    "pass": true,
    "detail": {
-    "dog_bob_swing_uu": 0.1031,
+    "dog_bob_swing_uu": 0.1647,
     "worst_gap_uu": 0.0,
     "samples": 24,
     "interval_s": 0.05,
@@ -72,7 +72,7 @@
    "pass": true,
    "detail": {
     "actor_yaw_travel_deg": 56.0,
-    "body_yaw_travel_deg": 29.83,
+    "body_yaw_travel_deg": 0.0,
     "mismatches": [],
     "note": "body_yaw_deg is a relative lean and stays near zero; the heading is the actor's yaw"
    }
@@ -103,29 +103,29 @@
    "speed_uu": 520.0,
    "gait_weight": 1.0,
    "airborne_weight": 0.0,
-   "bob_swing": 4.832,
-   "yaw_swing": 3.979,
+   "bob_swing": 4.83,
+   "yaw_swing": 3.549,
    "lift_uu": 0.0
   },
   "mismatches": []
  },
  "run_speed_uu": 520.0,
- "bob_swing_fast": 2.4736,
+ "bob_swing_fast": 10.7835,
  "bob_samples": [
-  -2.598,
-  -2.321,
-  -1.825,
-  -0.764,
-  -1.365,
-  -1.423,
-  -1.498,
-  -1.264,
-  -0.252,
-  -1.02,
-  -0.378,
-  -0.49
+  -8.342,
+  -9.835,
+  -10.994,
+  -10.079,
+  -7.087,
+  -8.236,
+  -9.914,
+  -8.965,
+  -6.571,
+  -9.326,
+  -9.139,
+  -7.006
  ],
- "bob_swing_live_uu": 0.1031,
+ "bob_swing_live_uu": 0.1647,
  "bob_worst_gap_uu": 0.0,
  "bob_channel_carries_signal": true,
  "stop": {
@@ -140,18 +140,18 @@
   },
   "mismatches": []
  },
- "turn_body_yaw_travel_deg": 29.83,
+ "turn_body_yaw_travel_deg": 0.0,
  "turn_body_yaw_samples": [
   -0.0,
   -0.0,
-  -0.1,
-  0.8,
-  -0.5,
-  -1.8,
-  1.4,
-  0.4,
-  -2.3,
-  -0.1
+  -0.0,
+  -0.0,
+  -0.0,
+  -0.0,
+  -0.0,
+  -0.0,
+  -0.0,
+  -0.0
  ],
  "turn_actor_yaw_travel_deg": 56.0,
  "fall": {
@@ -162,7 +162,7 @@
   "airborne_floor": 0.0,
   "mismatches": []
  },
- "finished": "2026-09-26 16:58:45",
- "seconds": 42.67,
- "log": "L00 PASS Celestial Light is on, so there is a costume to hold against the Dog {}\nL01 PASS run: the skin wears the Dog's pose field for field {'peak': {'speed_uu': 520.0, 'gait_weight': 1.0, 'airborne_weight': 0.0, 'bob_swing': 4.832, 'yaw_swing': 3.979, 'lift_uu': 0.0}, 'mismatches': [], 'evidence': 'speed_uu peak'}\nL02 PASS body bounce: the Dog's bob reaches the skin, same frame {'dog_bob_swing_uu': 0.1031, 'worst_gap_uu': 0.0, 'samples': 24, 'interval_s': 0.05, 'channel_carries_signal': True, 'note': 'a swing near zero is not a failure here -- stillness damps the bob to nothing by design'}\nL03 PASS stop: the skin wears the Dog's pose field for field {'peak': {'speed_uu': 0.0, 'gait_weight': 0.0, 'airborne_weight': 0.0, 'bob_swing': 0.0, 'yaw_swing': 0.0, 'lift_uu': 0.0}, 'mismatches': [], 'evidence': 'speed_uu fell back toward zero'}\nL04 PASS ground contact: standing still, the Dog is not airborne {'airborne_weight': 0.0, 'lift_uu_observed': 0.0, 'note': 'lift_uu is the act/flight overlay, recorded not gated'}\nL05 PASS turns: the Dog turns, and the skin holds the Dog's pose throughout {'actor_yaw_travel_deg': 56.0, 'body_yaw_travel_deg': 29.83, 'mismatches': [], 'note': \"body_yaw_deg is a relative lean and stays near zero; the heading is the actor's yaw\"}\nL06 PASS fall: the skin is told it is falling, with the Dog's own pose {'airborne_peak': 1.0, 'mismatches': [], 'note': 'dropped from 9 m rather than walked off a ledge, so the state is certain'}\nL07 PASS landing: the skin comes back to the ground with the Dog {'airborne_floor': 0.0, 'mismatches': []}\n"
+ "finished": "2026-09-26 18:54:54",
+ "seconds": 41.85,
+ "log": "L00 PASS Celestial Light is on, so there is a costume to hold against the Dog {}\nL01 PASS run: the skin wears the Dog's pose field for field {'peak': {'speed_uu': 520.0, 'gait_weight': 1.0, 'airborne_weight': 0.0, 'bob_swing': 4.83, 'yaw_swing': 3.549, 'lift_uu': 0.0}, 'mismatches': [], 'evidence': 'speed_uu peak'}\nL02 PASS body bounce: the Dog's bob reaches the skin, same frame {'dog_bob_swing_uu': 0.1647, 'worst_gap_uu': 0.0, 'samples': 24, 'interval_s': 0.05, 'channel_carries_signal': True, 'note': 'a swing near zero is not a failure here -- stillness damps the bob to nothing by design'}\nL03 PASS stop: the skin wears the Dog's pose field for field {'peak': {'speed_uu': 0.0, 'gait_weight': 0.0, 'airborne_weight': 0.0, 'bob_swing': 0.0, 'yaw_swing': 0.0, 'lift_uu': 0.0}, 'mismatches': [], 'evidence': 'speed_uu fell back toward zero'}\nL04 PASS ground contact: standing still, the Dog is not airborne {'airborne_weight': 0.0, 'lift_uu_observed': 0.0, 'note': 'lift_uu is the act/flight overlay, recorded not gated'}\nL05 PASS turns: the Dog turns, and the skin holds the Dog's pose throughout {'actor_yaw_travel_deg': 56.0, 'body_yaw_travel_deg': 0.0, 'mismatches': [], 'note': \"body_yaw_deg is a relative lean and stays near zero; the heading is the actor's yaw\"}\nL06 PASS fall: the skin is told it is falling, with the Dog's own pose {'airborne_peak': 1.0, 'mismatches': [], 'note': 'dropped from 9 m rather than walked off a ledge, so the state is certain'}\nL07 PASS landing: the skin comes back to the ground with the Dog {'airborne_floor': 0.0, 'mismatches': []}\n"
 }

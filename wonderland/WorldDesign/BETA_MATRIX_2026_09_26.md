@@ -49,6 +49,19 @@ green it says so and says why, because a matrix that rounds up is worth nothing.
 | 12 | Continuous time of day | `zc_night_readable` | **8/8.** Night 0.1686 luma, 0.3675 of the brightest hour against a 0.38 ceiling, 0.576 crushed against 0.72 — inside both gates with room on each side. No step jumps the exposure. |
 | 13 | Beta-accessible world | `zc_beta_walk`, `zc_tartarus_walk`, `zc_beta_perf` | **Coverage and traversal PASS, streaming BLOCKING.** 113 tiles from the Arrival Gate to 1.2 km with zero empty. Tartarus axis: five points, arrived off-by-0.0 uu, none fell. Worst stand in the world 38.25 ms. |
 
+## Final sweep, after the World Partition conversion and the wardrobe work
+
+Everything below re-run on the converted map with the shipped build, in this order, nothing carried over:
+
+`zc_wardrobe_pixels` 12/12 · `zc_wardrobe_upgrade` 20/20 · `zc_preview_hours` 3/3 ·
+`zc_brain_sculpture` 12/12 · `zc_hud_agents` 5/5 · `zc_menu_colours` 8/8 ·
+`zc_skin_parity_all` 4/4 · `zc_skin_locomotion` 8/8 · `zc_fire_look` 4/4 · `zc_eyes_glow` 3/3 ·
+`zc_skeleton_pulse` 6/6 · `zc_water` 5/5 · `zc_shadows` 4/4 · `zc_night_readable` 8/8 ·
+`zc_streaming` 2/2 · `zc_wp_state` 4/4 · `zc_floor_after_wp` 3/3 · `zc_beta_walk` W01/W02/W05.
+
+Performance after the conversion: 33.7 ms and 31.3 ms at noon, against a pre-conversion worst stand of
+38.25 ms.
+
 ## What is not green, stated plainly
 
 1. **STREAMING — BLOCKING, and the cause is simpler and worse than the one I first published.** `zc_streaming`
