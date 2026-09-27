@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 
 /**
  * Browser/Node dependency boundary — the structural guard for the collision
@@ -42,6 +42,13 @@ import { dirname, join, relative, resolve } from 'node:path';
 
 const ROOT = resolve(__dirname, '..', '..', '..');
 const relayRoot = join(ROOT, 'src', 'relay');
+
+/**
+ * A root-relative path in the POSIX form every prefix below is written in. `path.relative` answers with the platform
+ * separator, and on Windows `src\relay\cli\render.ts` never starts with `src/relay/cli/` -- so this guard found
+ * NOTHING on Windows: its own fixture cases failed there, and every real-repository scan passed vacuously.
+ */
+const toPosix = (from: string, to: string): string => relative(from, to).split(sep).join('/');
 
 /** Every entry that is loaded by a browser. */
 const BROWSER_ENTRIES = ['src/relay/main.tsx'];
@@ -341,7 +348,7 @@ function walk(options: WalkOptions): WalkResult {
     const chain: string[] = [];
     let cur: string | undefined = file;
     while (cur) {
-      chain.unshift(relative(root, cur));
+      chain.unshift(toPosix(root, cur));
       cur = parent.get(cur);
     }
     return chain;
@@ -371,7 +378,7 @@ function walk(options: WalkOptions): WalkResult {
     const edges: Specifier[] = [...specifiersOf(source)];
     for (const pattern of globPatternsOf(source)) {
       for (const matched of resolveGlob(root, file, pattern)) {
-        edges.push({ spec: `./${relative(dirname(file), matched)}`, form: `import.meta.glob('${pattern}')` });
+        edges.push({ spec: `./${toPosix(dirname(file), matched)}`, form: `import.meta.glob('${pattern}')` });
       }
     }
 
@@ -384,7 +391,7 @@ function walk(options: WalkOptions): WalkResult {
 
       const next = resolveSpecifier(root, file, spec, aliases);
       if (next === null) continue; // an npm package — not our boundary
-      const rel = relative(root, next);
+      const rel = toPosix(root, next);
       const hit = forbiddenFor(rel);
       if (hit) {
         parent.set(next, file);
@@ -520,11 +527,11 @@ describe('browser/Node dependency boundary', () => {
         for (const { spec } of specifiersOf(src)) {
           const target = resolveSpecifier(ROOT, full, spec, aliases);
           if (target === null) continue;
-          const rel = relative(ROOT, target);
+          const rel = toPosix(ROOT, target);
           const hit = FORBIDDEN_DIRS.find(
             (d) => rel.startsWith(d.prefix) && !(d.allow ?? []).includes(rel),
           );
-          if (hit) offenders.push(`${relative(ROOT, full)} → ${spec} (${hit.why})`);
+          if (hit) offenders.push(`${toPosix(ROOT, full)} → ${spec} (${hit.why})`);
         }
       }
     };
@@ -691,7 +698,7 @@ describe('the guard catches every recognised graph form', () => {
     write('src/relay/globbed/bad.ts', "export * from '../cli/render';\n");
     const entry = entryFor('glob', "export const mods = import.meta.glob('../relay/globbed/*.ts');\nexport const x = mods;\n");
     const { modules, violations } = walk({ root, entry });
-    const seen = [...modules].map((m) => relative(root, m));
+    const seen = [...modules].map((m) => toPosix(root, m));
     expect(seen, 'the glob must expand to the files it matches').toContain('src/relay/globbed/one.ts');
     expect(violations.map((v) => v.offender)).toContain('src/relay/cli/render.ts');
   });
