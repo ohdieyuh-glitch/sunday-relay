@@ -189,7 +189,14 @@ def job():
             if len(window) == 3 and (max(window) - min(window)) < 0.004:
                 return
 
-    # ---- WARM UP BEFORE THE LADDER STARTS. zzU5 spent its whole first rung arriving.
+    # ---- WAIT FOR THE WORLD, THEN WARM UP. zzU5 spent its whole first rung arriving.
+    #
+    # The pawn has just crossed most of the map to a district the editor had not loaded, and this map is
+    # partitioned, so cells keep arriving for seconds after the pawn is standing there. A luma settle
+    # cannot see that: a half-streamed district holds perfectly still. FlushLevelStreaming blocks until
+    # the load queue is empty; the settle after it is then measuring a world that is all present.
+    unreal.SystemLibrary.execute_console_command(live(), "FlushLevelStreaming")
+    yield 3.0
     for step in settled(60):
         yield step
     RESULT["warmed"] = True

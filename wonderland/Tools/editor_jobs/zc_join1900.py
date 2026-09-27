@@ -98,10 +98,10 @@ def job():
     cvar("wl.Sky.DayMinutes", 0)
     cvar("wl.Sky.TwilightSpan", "%.1f" % SPAN)
 
-    def settled():
+    def settled(limit=24):
         # Window spread, not steps: three consecutive reads must be the same reading.
         window = []
-        for _ in range(24):
+        for _ in range(limit):
             yield 1.0
             now = patch(0.5, 0.5, 0.46, 0.44)
             if now is None:
@@ -155,7 +155,19 @@ def job():
         eye = unreal.Vector(where.x, where.y, where.z + 60.0)
         at = unreal.Vector(where.x + CAM_AHEAD[0], where.y + CAM_AHEAD[1], where.z + 20.0)
         L.pose_camera(live(), eye, at, 70.0)
-        yield 2.0
+
+        # ---- WAIT FOR THE WORLD TO ARRIVE, NOT JUST FOR THE PICTURE TO HOLD STILL.
+        #
+        # These places are sixty to a hundred and fifty kilometres apart and the map is partitioned, so a
+        # teleport is a streaming event: cells load for seconds after the pawn is already standing there.
+        # A luma settle cannot see that -- a half-loaded district can hold three reads inside 0.004 while
+        # the buildings behind it are still arriving -- which is how zzU6 voided at 0.0763 with all three
+        # pawns correctly placed. FlushLevelStreaming blocks until the load queue is empty, and the settle
+        # after it then measures a world that is all there.
+        unreal.SystemLibrary.execute_console_command(live(), "FlushLevelStreaming")
+        yield 3.0
+        for step in settled(60):
+            yield step
 
         rows = []
         out[name] = rows
