@@ -61,10 +61,15 @@ ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "mascot_knee")
 
 #: The five active skins and the founder's three hours, spelled as zc_eyes_glow spells them so the numbers
 #: sit beside the existing corpus. Dusk is the hard one: the sun is low and the exposure is still open.
-SKINS = ("relay_og", "celestial_light", "apollo", "arden_infernal", "skeleton_flame")
+#: THE EIGHT ACTIVE IDS as of 44d6ec1c. The founder ruled the three redone skins are V2 and the previous
+#: designs stay in the world as V1, so `apollo` is the new design and `apollo_v1` the old one.
+SKINS = globals().get("SKINS", ("relay_og", "celestial_light", "apollo_v1", "apollo",
+                                "arden_infernal_v1", "arden_infernal",
+                                "skeleton_flame_v1", "skeleton_flame"))
 #: ONE HOUR PER RUN. The first attempt swept all three in a single PIE session and PIE was torn down 1m43s
 #: in; the job then "measured" a dead world for two more minutes. Ten-minute PIE sessions on this box are not
 #: reliable, so the hour is a parameter and the sweep is queued three times.
+AXIS = globals().get("AXIS", "eye")          # "eye" or "knee"
 HOUR = globals().get("HOUR", 12.0)
 HOUR_LABEL = globals().get("HOUR_LABEL", "day")
 HOURS = ((HOUR, HOUR_LABEL),)
@@ -81,12 +86,19 @@ KNEES = (700.0, 64.0, 32.0, 16.0, 8.0, 4.0, 2.0)
 #: The authored eye colour of each skin, read out of RelaySkins/*.wlvox at 44625f33. Hue retention is measured
 #: against these rather than against whatever the renderer happens to produce, because "the established eye
 #: hue is preserved" is a claim about the ART, not about the render agreeing with itself.
+#: A V1 AND ITS V2 SHARE AN EYE, read from the eight .wlvox and verified identical: the eye is the Dog's
+#: STATUS INDICATOR and is deliberately the same instrument on every costume, so the V1/V2 split is body art
+#: only. That makes the pairs a free control -- any eye difference between apollo and apollo_v1 is the BODY
+#: around the eye changing what the eye reads against, never the eye itself changing.
 AUTHORED_EYE = {
-    "relay_og":       (1.00, 0.72, 0.16),
-    "celestial_light": (0.62, 0.88, 1.00),
-    "apollo":         (1.00, 0.86, 0.26),
-    "arden_infernal": (1.00, 0.58, 0.10),
-    "skeleton_flame": (0.36, 0.95, 1.00),
+    "relay_og":          (1.00, 0.72, 0.16),
+    "celestial_light":   (0.62, 0.88, 1.00),
+    "apollo":            (1.00, 0.86, 0.26),
+    "apollo_v1":         (1.00, 0.86, 0.26),
+    "arden_infernal":    (1.00, 0.58, 0.10),
+    "arden_infernal_v1": (1.00, 0.58, 0.10),
+    "skeleton_flame":    (0.36, 0.95, 1.00),
+    "skeleton_flame_v1": (0.36, 0.95, 1.00),
 }
 
 #: The shipped defaults this job restores. Named here so the restore cannot drift from the docstring.
@@ -107,6 +119,12 @@ def job():
     tests, rows, knee_rows = [], [], []
     RESULT["tests"], RESULT["eye_axis"], RESULT["knee_axis"] = tests, rows, knee_rows
     os.makedirs(ROOT, exist_ok=True)
+
+    def record_eye(tid, name, ok, **detail):
+        """An eye-axis gate. Skipped entirely on a knee-axis run rather than failing on an empty table."""
+        if AXIS != "eye":
+            return
+        record(tid, name, ok, **detail)
 
     def record(tid, name, ok, **detail):
         tests.append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
@@ -246,9 +264,11 @@ def job():
                 "frame": patch(here, 62.0, 0.42, 0.40)}
 
     # ---------------------------------------------------------------- AXIS B: the eye level, per skin/hour
+    if AXIS != "eye":
+        rows_wanted = 0
     # Run first, because it is the axis the founder's complaint is actually about.
     cvar("wl.Look.GlowKnee", 700.0)                 # the shipped control while the eye axis moves
-    for hour, hlabel in HOURS:
+    for hour, hlabel in (HOURS if AXIS == "eye" else ()):
         if alive() is None:
             dead("before the %s pass began" % hlabel)
             return
@@ -316,7 +336,7 @@ def job():
     cvar("wl.Look.EyeGlowNight", 12.0)
     cvar("wl.Sky.Hour", "12.00")
     yield 3.0
-    for skin in SKINS:
+    for skin in (SKINS if AXIS == "knee" else ()):
         if ui is not None:
             ui.wear_relay_skin(skin)
         yield 2.5
@@ -359,7 +379,8 @@ def job():
     RESULT["cvars_restored"] = [n for n, _ in SHIPPED]
 
     # ---------------------------------------------------------------- the gates
-    want = len(SKINS) * len(HOURS) * len(EYE_LEVELS)
+    want = len(SKINS) * len(HOURS) * len(EYE_LEVELS) if AXIS == "eye" else 0
+    RESULT["axis"] = AXIS
     RESULT["hour"] = HOUR_LABEL
     record("M00", "every skin was sampled at every hour at every eye level",
            len(rows) == want, got=len(rows), wanted=want,
@@ -380,7 +401,7 @@ def job():
 
     # THE INSTRUMENT MUST RESPOND, or every other number below is a photograph of nothing.
     moved = [r for r in rows if r.get("isolation") is not None and abs(r["isolation"]) > 1e-4]
-    record("M01", "driving the eye level actually changes the rendered eye",
+    record_eye("M01", "driving the eye level actually changes the rendered eye",
            len(moved) > 0, readings_that_moved=len(moved), of=len(rows),
            note="a flat response here is a broken capture, not a finding about the eyes")
 
@@ -393,7 +414,7 @@ def job():
             if a and b:
                 clamp["%s/%s" % (skin, hl)] = round(b["eye_luma"] - a["eye_luma"], 5)
     identical = [k for k, v in clamp.items() if abs(v) <= 0.002]
-    record("M02", "eye level 16 renders identically to 12 -- SetEyeGlow's clamp is real and EyeGlowDay 18 "
+    record_eye("M02", "eye level 16 renders identically to 12 -- SetEyeGlow's clamp is real and EyeGlowDay 18 "
                   "has never been reachable",
            len(identical) == len(clamp) and len(clamp) > 0, delta_16_minus_12=clamp,
            identical=len(identical), of=len(clamp),
@@ -407,7 +428,7 @@ def job():
                 if r["skin"] == skin and r.get("isolation") is not None and r["level"] == 12.0]
         reach[skin] = round(max(best), 5) if best else None
     arriving = [s for s, v in reach.items() if v is not None and v >= ISOLATION_FLOOR]
-    record("M03", "on every skin the eye level arrives at the rendered EYE and not merely at the head",
+    record_eye("M03", "on every skin the eye level arrives at the rendered EYE and not merely at the head",
            len(arriving) == len(SKINS), isolation_at_level_12=reach, floor=ISOLATION_FLOOR,
            arriving=arriving, not_arriving=[s for s in SKINS if s not in arriving],
            note="isolation = the eye patch's gain minus the cheek's gain, so a head that glows as a whole "
@@ -421,7 +442,7 @@ def job():
             if r:
                 contrast["%s/%s" % (skin, hl)] = r["over_face"]
     positive = [k for k, v in contrast.items() if v > 0.0]
-    record("M04", "the eye is brighter than the face beside it, on every skin at every hour",
+    record_eye("M04", "the eye is brighter than the face beside it, on every skin at every hour",
            len(positive) == len(contrast) and len(contrast) > 0, over_face=contrast,
            positive=len(positive), of=len(contrast),
            note="measured against a cheek patch, at eye level 12, which is what the shipped 18 actually "
@@ -430,11 +451,11 @@ def job():
     # 6. NO WHITE CLIPPING, and 7. NOT WON BY GOING DARK.
     worst_clip = max((r["clipped"] for r in rows if r["level"] == 12.0), default=1.0)
     worst_crush = max((r["crushed"] for r in rows if r["level"] == 12.0), default=1.0)
-    record("M05", "a mascot filling the frame is not blown out at the shipped eye level",
+    record_eye("M05", "a mascot filling the frame is not blown out at the shipped eye level",
            worst_clip <= CLIP_CEILING, worst_clipped=worst_clip, ceiling=CLIP_CEILING,
            per_skin={s: max((r["clipped"] for r in rows if r["skin"] == s and r["level"] == 12.0), default=None)
                      for s in SKINS})
-    record("M06", "and that is not achieved by making the picture dark",
+    record_eye("M06", "and that is not achieved by making the picture dark",
            worst_crush <= CRUSH_CEILING, worst_crushed=worst_crush, ceiling=CRUSH_CEILING)
 
     # 8. THE EYE KEPT ITS COLOUR.
@@ -448,11 +469,11 @@ def job():
         hues[skin] = round(min(v), 4) if v else None
         seps[skin] = round(min(s2), 4) if s2 else None
     kept = [s for s, v in hues.items() if v is not None and v >= 0.95]
-    record("M07", "the added eye light still points at the skin's authored eye colour",
+    record_eye("M07", "the added eye light still points at the skin's authored eye colour",
            len(kept) == len(SKINS), hue_retention=hues, authored=AUTHORED_EYE, floor=0.95,
            note="cosine of the ADDED light against the authored RGB; measured on the difference so a pale "
                 "face behind the eye cannot launder a grey eye into looking coloured")
-    record("M08", "the eye is a coloured core rather than a white one",
+    record_eye("M08", "the eye is a coloured core rather than a white one",
            all(v is not None and v >= 0.25 for v in seps.values()), colour_separation=seps, floor=0.25,
            note="channel spread of the added light; a white-clipped eye reads near 0")
 
@@ -471,7 +492,7 @@ def job():
                 engaged[skin] = kn
                 break
     record("M09", "the knee's live range at this asset scale is measured, not assumed",
-           len(knee_rows) == len(SKINS) * len(KNEES),
+           len(knee_rows) == (len(SKINS) * len(KNEES) if AXIS == "knee" else 0),
            frame_luma_spread_across_knees=spread, inert_skins=inert,
            first_knee_that_changes_the_picture=engaged, knees_swept=list(KNEES),
            note="body glow spans 3.3-13.2 after the 4000->6 re-baseline, so a knee at the shipped 700 "
