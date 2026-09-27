@@ -43,6 +43,7 @@ padded.
 | 14 | provider refusal (of the REQUEST — content) | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `named CONTENT_REFUSED, never filed as a bad credential, not retried, not completed` |
 | 15 | mission created over the bridge, then observed — one record, on a real PostgreSQL (gated) | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `what a client creates is what a client then watches, and both are what the database holds` |
 | 16 | the whole chain on a real PostgreSQL, repair round included, dumped and gated (gated) | DETERMINISTIC | `src/relay/persistence/julius-live-chain.e2e.test.ts` | `drives a mission with a repair round, dumps it, and the gate reads what the run actually did` |
+| 17 | a memory verified by a reviewer — durable standing with history, and a refusal by name | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `raises the architect` |
 
 ## What the corpus does NOT cover, stated rather than padded
 

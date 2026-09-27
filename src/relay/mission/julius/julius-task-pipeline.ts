@@ -39,6 +39,8 @@ import { juliusCostComponent } from './julius-cost-accounting';
 import { juliusContractDisposition, juliusContractDispositionFacts } from './julius-contract-disposition';
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
 import { deriveJuliusContextQualification } from './julius-context-provenance';
+import type { JuliusBrainAppend } from './julius-runtime-ports';
+import { juliusAdmittedClaimFor, juliusClaimPromotionsOnAccept, mergeJuliusDurableStanding } from './julius-claim-ledger';
 import { JULIUS_DEFAULT_MAX_CODER_SEGMENTS, evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
 import { juliusWorkUnitRootOf, repairLineageRootOf, repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
@@ -927,7 +929,11 @@ export async function runClaimedTask(
      * exists to address — is a failure of the real path only.
      */
     const contextEntries = [...brain, ...priorFindings.map((finding) => findingEntryFor(task, finding))];
-    const qualification = (deps.contextQualification ?? deriveJuliusContextQualification)(contextEntries);
+    const derivedQualification = (deps.contextQualification ?? deriveJuliusContextQualification)(contextEntries);
+    // THE RECORD WINS. A standing the claim ledger recorded — an admission, a
+    // reviewer's promotion — replaces the derived one for the same claim; an
+    // entry with no recorded claim keeps its derivation. `julius-claim-ledger.ts`.
+    const qualification = mergeJuliusDurableStanding(derivedQualification, await deps.store.claimsForRun(run.runId, run.projectId));
     let snapshot;
     try {
       snapshot = createJuliusContextSnapshot({
@@ -1888,7 +1894,7 @@ async function driveContinuousLifecycle(input: {
         `ALREADY ATTEMPTED: ${request.attempted.join(' | ') || '(none stated)'}`,
         `RELEVANT PATHS: ${request.relevantPaths.join(' | ') || '(none stated)'}`,
       ].join('\n');
-    await deps.store.appendBrainEntry({
+    await appendBrainEntryAdmitting(deps, {
       runId: run.runId,
       projectId: run.projectId,
       taskId: guidanceTask.taskId,
@@ -2000,7 +2006,7 @@ async function driveContinuousLifecycle(input: {
         deps, run, ledger, lineage: [segmentRoot, ...segmentChildrenOf(segmentRoot, tasks)],
         continuationTaskId: continuation.taskId, workerId: input.workerId,
       });
-      await deps.store.appendBrainEntry({
+      await appendBrainEntryAdmitting(deps, {
         runId: run.runId,
         projectId: run.projectId,
         taskId: continuation.taskId,
@@ -2326,7 +2332,7 @@ async function driveResearchCheckpoint(input: {
      * guarded by the continuation's own idempotent write, so a replayed tick
      * adds neither the task nor the entry and the brain revision does not drift.
      */
-    await deps.store.appendBrainEntry({
+    await appendBrainEntryAdmitting(deps, {
       runId: run.runId,
       projectId: run.projectId,
       taskId: continuation.taskId,
@@ -2368,7 +2374,7 @@ async function driveResearchCheckpoint(input: {
     });
 
     if (served.length > 0) {
-      await deps.store.appendBrainEntry({
+      await appendBrainEntryAdmitting(deps, {
         runId: run.runId,
         projectId: run.projectId,
         taskId: null,
@@ -2547,7 +2553,7 @@ async function issueGuidanceFromResult(input: {
    * Rejected guidance is NOT erased: this row, the `guidance.issued` row and the
    * review's own decision stay on the record as provenance.
    */
-  await deps.store.appendBrainEntry({
+  await appendBrainEntryAdmitting(deps, {
     runId: run.runId,
     projectId: run.projectId,
     taskId: task.taskId,
@@ -3253,7 +3259,7 @@ async function carryAcceptedGuidanceForward(input: {
     if (!entry.taskIds.some((taskId) => carried.has(taskId))) continue;
     const revision = /:r([1-9]\d*)$/u.exec(entry.entryId);
     if (revision === null) continue;
-    await deps.store.appendBrainEntry({
+    await appendBrainEntryAdmitting(deps, {
       runId: run.runId, projectId: run.projectId, taskId: input.continuationTaskId, workerId: input.workerId,
       entryId: juliusGuidanceHandoffEntryId(input.continuationTaskId, Number(revision[1])),
       kind: 'HANDOFF', safeText: entry.text, evidenceIds: [], occurredAt: deps.clock.now(),
@@ -3319,7 +3325,7 @@ async function deliverAcceptedGuidance(input: {
   const authoritative = `${JULIUS_GUIDANCE_AUTHORITATIVE_HEADING}\n\n${packet}`;
   if (entries.some((entry) => isJuliusGuidanceHandoffEntryId(entry.entryId) && entry.taskIds.includes(waiting.taskId) && entry.text === authoritative)) return;
   const entryId = juliusGuidanceHandoffEntryId(waiting.taskId, revision);
-  await deps.store.appendBrainEntry({
+  await appendBrainEntryAdmitting(deps, {
     runId: run.runId, projectId: run.projectId, taskId: waiting.taskId, workerId: input.workerId,
     entryId, kind: 'HANDOFF',
     safeText: authoritative,
@@ -3764,7 +3770,7 @@ async function recordArchitecture(input: {
      * the reviewer judging this consultation reads it, and no coder builds
      * against a design nobody has accepted.
      */
-    await deps.store.appendBrainEntry({
+    await appendBrainEntryAdmitting(deps, {
       runId: run.runId, projectId: run.projectId, taskId: task.taskId, workerId: input.workerId,
       entryId: juliusArchitectureProposalEntryId(task.taskId), kind: 'DECISION',
       safeText: [
@@ -3779,7 +3785,7 @@ async function recordArchitecture(input: {
      * building against it and the reviewer judging against it see the same
      * revision, and bounded by the same cap the row is.
      */
-    await deps.store.appendBrainEntry({
+    await appendBrainEntryAdmitting(deps, {
       runId: run.runId, projectId: run.projectId, taskId: null, workerId: input.workerId,
       entryId: juliusArchitectureEntryId(run.runId, state.revision), kind: 'DECISION',
       safeText: renderJuliusArchitecture(state), evidenceIds: [], occurredAt: deps.clock.now(),
@@ -3836,7 +3842,7 @@ async function acceptProposedArchitecture(input: {
       taskId: proposedBy, workerId: input.workerId,
       facts: { revision, proposedByTaskId: proposedBy, acceptedByTaskId: input.acceptedTaskId },
     });
-    await deps.store.appendBrainEntry({
+    await appendBrainEntryAdmitting(deps, {
       runId: run.runId, projectId: run.projectId, taskId: null, workerId: input.workerId,
       entryId: juliusArchitectureEntryId(run.runId, revision), kind: 'DECISION',
       safeText: renderJuliusArchitecture(state), evidenceIds: [], occurredAt: deps.clock.now(),
@@ -4362,7 +4368,7 @@ async function openDisagreementFor(input: {
   disagreement = await stepDisagreement({ deps, run, ledger, disagreement, step: { kind: 'REBUTTAL_SCHEDULED', rebuttalTaskId }, workerId: input.workerId });
 
   const entryId = `brain:disagreement-challenge:${rebuttalTaskId}`;
-  await deps.store.appendBrainEntry({
+  await appendBrainEntryAdmitting(deps, {
     runId: run.runId, projectId: run.projectId, taskId: rebuttalTaskId, workerId: input.workerId, entryId, kind: 'HANDOFF',
     safeText: [
       `DISAGREEMENT ${disagreement.disagreementId}`,
@@ -4503,7 +4509,7 @@ async function settleRebuttal(input: Parameters<typeof verifyExecutedTask>[0] & 
       if (created) {
         disagreement = await stepDisagreement({ deps, run, ledger, disagreement, step: { kind: 'RE_REVIEW_SCHEDULED', reReviewTaskId }, workerId: input.workerId });
         const entryId = `brain:disagreement-rebuttal:${reReviewTaskId}`;
-        await deps.store.appendBrainEntry({
+        await appendBrainEntryAdmitting(deps, {
           runId: run.runId, projectId: run.projectId, taskId: reReviewTaskId, workerId: input.workerId, entryId, kind: 'HANDOFF',
           safeText: [
             `DISAGREEMENT ${disagreement.disagreementId} — RE-REVIEW`,
@@ -4747,6 +4753,68 @@ function peerContextFor(deps: JuliusPipelineDependencies, run: JuliusRunRow, led
 }
 
 /* ------------------------------------------------------- the verification */
+
+/**
+ * EVERY BRAIN WRITE ADMITS A CLAIM. The entry goes to the store as it always
+ * did; when it is new, the claim ledger's derivation of that same entry is
+ * recorded as its first standing, so the durable claim and the derived one
+ * agree at birth. A replayed append (false) admits nothing again.
+ */
+async function appendBrainEntryAdmitting(deps: JuliusPipelineDependencies, input: JuliusBrainAppend): Promise<boolean> {
+  const appended = await deps.store.appendBrainEntry(input);
+  if (!appended) return false;
+  await deps.store.recordClaimStanding({
+    runId: input.runId, projectId: input.projectId,
+    claim: juliusAdmittedClaimFor(input), reason: 'ADMITTED', occurredAt: input.occurredAt,
+  });
+  return true;
+}
+
+async function promoteClaimsOnAcceptedReview(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly subject: JuliusTask;
+  readonly reviewTask: JuliusTask;
+  readonly reviewer: string;
+  readonly evidence: ReadonlyArray<{ readonly taskId: string; readonly evidenceId: string }>;
+}): Promise<void> {
+  const { deps, run, ledger, subject, reviewTask } = input;
+  const [claims, entries] = await Promise.all([
+    deps.store.claimsForRun(run.runId, run.projectId),
+    deps.store.brainEntriesForRun(run.runId, run.projectId),
+  ]);
+  const at = deps.clock.now();
+  const outcome = juliusClaimPromotionsOnAccept({
+    claims, entries, subjectTaskId: subject.taskId, by: input.reviewer, at,
+    reviewEvidenceIds: input.evidence.filter((item) => item.taskId === reviewTask.taskId).map((item) => item.evidenceId),
+  });
+  for (const promotion of outcome.promoted) {
+    const recorded = await deps.store.recordClaimStanding({
+      runId: run.runId, projectId: run.projectId, claim: promotion.claim, reason: 'REVIEW_ACCEPTED', occurredAt: at,
+    });
+    // ANNOUNCE FACTS: the event follows the durable write, and only a write.
+    if (recorded) {
+      await ledger.event('claim.promoted', {
+        taskId: subject.taskId, workerId: input.reviewer,
+        facts: {
+          claimId: promotion.claim.claimId, entryId: promotion.claim.entryId,
+          from: promotion.from, to: promotion.claim.trust,
+          reviewTaskId: reviewTask.taskId, evidenceCount: promotion.claim.evidence.length,
+        },
+      });
+    }
+  }
+  // A refusal is a fact about the record too: a reviewer who turns out to be
+  // the asserter, or a review that cites nothing, is why a memory stayed where
+  // it was — and a reader asking "why is this still SUPPORTED" needs it.
+  for (const refusal of outcome.refused) {
+    await ledger.event('claim.promotion.refused', {
+      taskId: subject.taskId, workerId: input.reviewer,
+      facts: { claimId: refusal.claimId, reasonCode: refusal.reasonCode, reviewTaskId: reviewTask.taskId },
+    });
+  }
+}
 
 async function verifyExecutedTask(input: {
   request: JuliusPipelineRequest;
@@ -5113,7 +5181,7 @@ async function verifyExecutedTask(input: {
         evidence: evidence.map((item) => ({ taskId: item.taskId, type: item.type, status: item.status, safeSummary: item.safeSummary })),
         repairSummary: evidence.filter((item) => item.taskId === task.taskId).at(-1)?.safeSummary ?? null,
       });
-      await deps.store.appendBrainEntry({
+      await appendBrainEntryAdmitting(deps, {
         runId: run.runId, projectId: run.projectId, taskId: reviewTaskId, workerId: input.workerId,
         entryId: juliusRepairRoundEntryId(reviewTaskId), kind: 'FINDING',
         safeText: renderJuliusRepairRoundDiff(diff), evidenceIds: [], occurredAt: deps.clock.now(),
@@ -5394,6 +5462,17 @@ async function verifyExecutedTask(input: {
       }, juliusDecisionEventId(decisionKey, 'task.runnable', ordinal))),
     ],
   });
+  /**
+   * A REVIEWER'S ACCEPTANCE IS WHAT PROMOTES A MEMORY. The entries the
+   * reviewed task wrote were admitted at whatever standing their kind and
+   * citations earned; an Independent Reviewer accepting that task is the
+   * evidence that raises them to VERIFIED — through the trust core, which is
+   * what refuses a reviewer who is the asserter. Only on a decision this tick
+   * recorded: a replayed decision promotes nothing twice.
+   */
+  if (decisionRecorded && decision.action === 'ACCEPT' && task.role === 'INDEPENDENT_REVIEWER' && task.taskId !== subject.taskId) {
+    await promoteClaimsOnAcceptedReview({ deps, run, ledger, subject, reviewTask: task, reviewer: input.workerId, evidence });
+  }
   await ledger.trajectory('VERIFICATION', {
     taskId: subject.taskId, workerId: input.workerId,
     policyRevision: input.request.verification.revision, outcome: decision.action,
@@ -5428,7 +5507,7 @@ async function verifyExecutedTask(input: {
    * reviewer prose, diff or provider body reaches this row.
    */
   if (decisionRecorded) {
-    await deps.store.appendBrainEntry({
+    await appendBrainEntryAdmitting(deps, {
       runId: run.runId,
       projectId: run.projectId,
       taskId: subject.taskId,

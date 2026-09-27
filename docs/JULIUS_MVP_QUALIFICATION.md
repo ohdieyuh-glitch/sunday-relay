@@ -54,6 +54,7 @@ afterwards. Volume is not claimed and would not help.
 | C2 | a rejected document becomes repair, not completion | DETERMINISTIC | `src/relay/mission/julius/julius-mission-breadth.e2e.test.ts` | `still repairs a non-code mission when the reviewer rejects it` |
 | C3 | the same, on the LIVE path with no test command | DETERMINISTIC | `relay-bridge/julius/julius-live-composition.test.ts` | `runs nothing, records no TEST row, and still completes on the diff it produced` |
 | C4 | prior learning improves the next mission, leaking nothing | DETERMINISTIC | `src/relay/mission/julius/julius-learning-loop.e2e.test.ts` | `hands the coder the relevant finding and none of the residue` |
+| C5 | a memory's standing is durable, and a reviewer raises it — with self-verification refused by name | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `raises the architect` |
 
 ## Category D — failure and recovery
 
@@ -71,6 +72,8 @@ afterwards. Volume is not claimed and would not help.
 | D10 | context-authority clash fails closed | DETERMINISTIC | `src/relay/mission/julius/julius-context-delivery.e2e.test.ts` | `fails the task with a named failure class instead of throwing out of the tick` |
 | D11 | a provider declining the request itself is named, not filed as a bad credential | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `named CONTENT_REFUSED, never filed as a bad credential, not retried, not completed` |
 | D12 | the hosted coder's "content filter" reaches the taxonomy as CONTENT_REFUSED | DETERMINISTIC | `relay-bridge/julius/coding-agent-port.test.ts` | `the response was blocked by the content filter` |
+| D13 | a replayed tick manufactures no claim standing; the history is what happened | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `a replay manufactures no standing` |
+| D14 | claim standings on a REAL PostgreSQL: append-only, replay refused, history read back (gated) | DETERMINISTIC | `src/relay/persistence/julius-claim-standing.real-postgres.test.ts` | `records an admission, refuses its replay, records a promotion` |
 
 ## What is NOT qualified, by category
 
