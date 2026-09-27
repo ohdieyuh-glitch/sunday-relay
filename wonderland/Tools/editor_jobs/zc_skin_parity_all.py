@@ -75,37 +75,68 @@ def job():
         worn = bool(ui.wear_relay_skin(skin_id))
         yield 2.2
         skin = costume()
+        # ---- RELAY OG HAS NO COSTUME ACTOR, BECAUSE IT *IS* THE CANONICAL BODY.
+        #
+        # costume() looks for the showcase figure labelled "RELAY DOG SKIN". That actor is built only for
+        # a skin worn OVER the Dog; the default skin IS the Dog, so it does not exist and never will.
+        # Adding relay_og to the lineup therefore turned a vacuous 4/4 into a misleading 1/5, with three
+        # clauses reporting None for it and S04 naming the healthiest skin in the game as failing.
+        #
+        # Asking whether the authority "matches the pose it was handed" is asking whether it agrees with
+        # itself, so that half is not asserted for it. What CAN be asserted honestly is that the authority
+        # is present and that it MOVES: the canonical pose has to be readable, standing and walking have
+        # to differ, and a Mission Contract act has to reach it. That is a real clause, not an exemption --
+        # if the default body goes rigid then every skin worn over it goes rigid too, and this is the only
+        # place in the suite that would catch it.
+        authority = skin is None and skin_id == "relay_og"
         row = {"skin": skin_id, "worn": worn, "dressed": skin is not None,
+               "is_the_authority": authority,
                "boxes": int(skin.get_box_count()) if skin is not None else 0}
-        if skin is None:
+        if skin is None and not authority:
             row["verdict"] = "FAIL: the figure did not load -- this is not an animation fault"
             rows.append(row)
             emit(skin_id, "FAIL", "figure did not load", row)
             continue
 
+        def worn_pose(_skin=skin):
+            return read(_skin.get_worn_pose()) if _skin is not None else read(dog.get_canonical_worn_pose())
+
         # ---- field for field, standing and then walking, so both halves of the pose are covered
         mismatches = []
+        phase_pose = {}
         for phase, held in (("standing", False), ("walking", True)):
             L.set_key_held("W", held)
             yield 1.4
             for _ in range(6):
                 yield 0.25
                 a = read(dog.get_canonical_worn_pose())
-                b = read(skin.get_worn_pose())
-                for f in FIELDS:
-                    if abs(a[f] - b[f]) > 0.001:
-                        mismatches.append({"phase": phase, "field": f, "dog": a[f], "skin": b[f]})
+                b = worn_pose()
+                phase_pose[phase] = b
+                if not authority:
+                    for f in FIELDS:
+                        if abs(a[f] - b[f]) > 0.001:
+                            mismatches.append({"phase": phase, "field": f, "dog": a[f], "skin": b[f]})
         L.set_key_held("W", False)
         yield 1.0
         row["field_mismatches"] = len(mismatches)
         row["first_mismatches"] = mismatches[:5]
+
+        # ---- AND DID ANYTHING MOVE AT ALL BETWEEN THE TWO PHASES?
+        #
+        # Zero mismatches is satisfied just as well by a skin faithfully copying a FROZEN Dog, so parity
+        # on its own cannot tell a working rig from a dead one. Recorded per skin and asserted for all.
+        moved = sorted(f for f in FIELDS
+                       if "standing" in phase_pose and "walking" in phase_pose
+                       and abs(phase_pose["standing"][f] - phase_pose["walking"][f]) > 0.001)
+        row["fields_that_changed_when_walking"] = moved[:8]
+        row["moves_when_walking"] = len(moved) > 0
 
         # ---- and a real act must reach it
         lift, still = 0.0, 0.0
         unreal.SystemLibrary.execute_console_command(world, "wl.Dog.Act prepare")
         for _ in range(20):
             yield 0.3
-            p = read(skin.get_worn_pose())
+            p = worn_pose()
             lift = max(lift, p["lift_uu"])
             still = max(still, p["stillness"])
         H.capture_viewport_jpeg(os.path.join(ROOT, "%02d_%s.jpg" % (n + 1, skin_id)), 1700, 92)
@@ -116,14 +147,19 @@ def job():
         row["act_stillness"] = round(still, 3)
         row["wears_the_pose"] = len(mismatches) == 0
         row["performs_the_act"] = lift > 5.0
-        row["verdict"] = "PASS" if (row["wears_the_pose"] and row["performs_the_act"]) else "FAIL"
+        ok = row["wears_the_pose"] and row["performs_the_act"] and row["moves_when_walking"]
+        # REFERENCE rather than PASS: the authority is held to presence, motion and the act, and is not
+        # scored on a parity comparison it cannot meaningfully fail. Spelt differently so no reader can
+        # mistake it for a skin that was checked field for field.
+        row["verdict"] = ("REFERENCE" if authority else "PASS") if ok else "FAIL"
         rows.append(row)
         emit(skin_id, row["verdict"], "wears the canonical pose and performs the act", row)
 
     ui.wear_relay_skin("relay_og")
     yield 1.5
-    RESULT["all_pass"] = all(r.get("verdict") == "PASS" for r in rows)
-    RESULT["failing"] = [r["skin"] for r in rows if r.get("verdict") != "PASS"]
+    GOOD = ("PASS", "REFERENCE")
+    RESULT["all_pass"] = bool(rows) and all(r.get("verdict") in GOOD for r in rows)
+    RESULT["failing"] = [r["skin"] for r in rows if r.get("verdict") not in GOOD]
 
     # ---- AND SAY SO AS A CHECK. This job worked out a verdict, wrote it into the result as `all_pass`, and
     # recorded no tests -- so it has been reported as "measured" and counted as judged by capture, while the
@@ -142,14 +178,24 @@ def job():
            all(int(r.get("field_mismatches", 1)) == 0 for r in rows),
            mismatches={r["skin"]: r.get("field_mismatches") for r in rows})
     record("S03", "every skin wears the pose AND performs the act",
-           all(r.get("wears_the_pose") and r.get("performs_the_act") for r in rows),
+           bool(rows) and all(r.get("wears_the_pose") and r.get("performs_the_act") for r in rows),
            wears={r["skin"]: r.get("wears_the_pose") for r in rows},
            performs={r["skin"]: r.get("performs_the_act") for r in rows})
+    record("S05", "the rig is moving, so parity is not agreement between two frozen figures",
+           bool(rows) and all(r.get("moves_when_walking") for r in rows),
+           moves={r["skin"]: r.get("moves_when_walking") for r in rows},
+           changed={r["skin"]: r.get("fields_that_changed_when_walking") for r in rows},
+           note="zero mismatches is satisfied just as well by a skin copying a dead Dog, so the parity "
+                "clauses above mean nothing without this one.")
     record("S04", "and none of them is failing",
            RESULT["all_pass"] and not RESULT["failing"], failing=RESULT["failing"])
 
     # ---- COVERAGE IS ITSELF A CLAUSE. See EXPECTED_ACTIVE_SKINS.
-    walked = sorted(set(RESULT.get("by_skin", {}).keys())) if RESULT.get("by_skin") else sorted(set(SKINS))
+    # Taken from the rows that were actually WALKED. This read RESULT["by_skin"] -- a key this job has
+    # never written -- and fell back to the SKINS constant, so the coverage clause compared the list
+    # against itself and could not fail. A coverage assertion that cannot fail is the thing it exists to
+    # prevent.
+    walked = sorted({r["skin"] for r in rows})
     missing = [k for k in EXPECTED_ACTIVE_SKINS if k not in walked]
     extra = [k for k in walked if k not in EXPECTED_ACTIVE_SKINS]
     tests.append({"id": "S00", "name": "every active skin was actually tested, none silently dropped",
