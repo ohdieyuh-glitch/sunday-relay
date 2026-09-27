@@ -203,6 +203,9 @@ public:
 	/** Which of the flock this is, and how many there are. Re-solved whenever the flock changes size. */
 	void SetSlot(int32 InSlot, int32 InCount);
 
+	/** Change coat without changing character: reload the body's figure in place. */
+	void Redress(const FString& FigurePath);
+
 	/** Where to hold station: the Dog, its height in uu, and whether the Dog is moving. */
 	void SetLeader(const AActor* InLeader, float LeaderHeightUU, bool bLeaderMoving);
 
@@ -373,7 +376,13 @@ private:
 	UFUNCTION()
 	void HandleJuliusChanged();
 	void StepAscension(float DeltaSeconds);
+	/** The figure file for a slot, dressed for the skin the Dog is wearing. See the definition. */
 	FString CubFigurePath(int32 Slot) const;
+	FName EquippedSkinId() const;
+	/** Re-dress every living cub when the Dog changes skin. Compared by value on the tick. */
+	void RedressForSkin();
+	/** Which skin the flock is currently dressed for. NAME_None until the first tick. */
+	FName DressedForSkin;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AWonderlandSubAgentCub>> Cubs;

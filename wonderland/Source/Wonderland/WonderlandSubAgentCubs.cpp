@@ -7,6 +7,9 @@
 #include "Kismet/GameplayStatics.h"
 #include "WonderlandCompanionEmbodiment.h"
 #include "WonderlandJuliusSubsystem.h"
+#include "WonderlandRelaySkins.h"
+#include "Engine/GameInstance.h"
+#include "Misc/FileHelper.h"
 
 namespace
 {
@@ -145,6 +148,14 @@ void AWonderlandSubAgentCub::Prepare(const FString& FigurePath, int32 InSlot, in
 	}
 }
 
+void AWonderlandSubAgentCub::Redress(const FString& FigurePath)
+{
+	if (Body != nullptr && !FigurePath.IsEmpty())
+	{
+		Body->LoadFigure(FigurePath);
+	}
+}
+
 void AWonderlandSubAgentCub::SetSlot(int32 InSlot, int32 InCount)
 {
 	Slot = InSlot;
@@ -270,10 +281,67 @@ void UWonderlandSubAgentCubSubsystem::SetPrimaryRelayDog(AActor* Dog, float DogH
 	bHasDogSpot = false;
 }
 
+FName UWonderlandSubAgentCubSubsystem::EquippedSkinId() const
+{
+	const UWorld* World = GetWorld();
+	const UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+	const UWonderlandRelaySkinSubsystem* Skins = GameInstance != nullptr
+		? GameInstance->GetSubsystem<UWonderlandRelaySkinSubsystem>() : nullptr;
+	return Skins != nullptr ? Skins->GetEquipped().SkinId : FName(TEXT("relay_og"));
+}
+
 FString UWonderlandSubAgentCubSubsystem::CubFigurePath(int32 Slot) const
 {
+	// ---- A CUB WEARS ITS PARENT'S SKIN.
+	//
+	// FOUNDER, 2026-09-27: "The selected mascot skin should determine the default Cub appearance. If the
+	// player uses Skeleton Flame: spawned Cubs should use Skeleton Flame Cub." The generator writes one cub
+	// per skin per expression: the plate's own CubGhost_<Eyes>.wlvox for Relay OG, and
+	// CubGhost_<Skin>_<Eyes>.wlvox for a premium skin, where <Skin> is the skin's figure file stem
+	// (ArdenInfernal.wlvox -> CubGhost_ArdenInfernal_Flat.wlvox). A skin without cubs on disk falls back
+	// to the plate's, so a new skin is never a flock of nothing.
+	//
+	// THIS IS THE WHOLE OF THE RELATIONSHIP. The cub stays a SubAgent body with its own transform, its own
+	// grounding and no colourway; only the figure file it loads follows the Dog.
 	const int32 Which = FMath::Abs(Slot) % UE_ARRAY_COUNT(CubFigures);
-	return FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("RelayCubs") / CubFigures[Which]);
+	const FString Plain = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir() / TEXT("RelayCubs") / CubFigures[Which]);
+	const UWorld* World = GetWorld();
+	const UGameInstance* GameInstance = World != nullptr ? World->GetGameInstance() : nullptr;
+	const UWonderlandRelaySkinSubsystem* Skins = GameInstance != nullptr
+		? GameInstance->GetSubsystem<UWonderlandRelaySkinSubsystem>() : nullptr;
+	const FWonderlandRelaySkin* Skin = Skins != nullptr ? Skins->Find(Skins->GetEquipped().SkinId) : nullptr;
+	if (Skin == nullptr || Skin->FigureFile.IsEmpty() || Skin->SkinId == FName(TEXT("relay_og")))
+	{
+		return Plain;
+	}
+	const FString Stem = FPaths::GetBaseFilename(Skin->FigureFile);
+	const FString Eyes = FPaths::GetBaseFilename(FString(CubFigures[Which])).RightChop(FString(TEXT("CubGhost_")).Len());
+	const FString Dressed = FPaths::ConvertRelativePathToFull(
+		FPaths::ProjectDir() / TEXT("RelayCubs") / FString::Printf(TEXT("CubGhost_%s_%s.wlvox"), *Stem, *Eyes));
+	return FPaths::FileExists(Dressed) ? Dressed : Plain;
+}
+
+void UWonderlandSubAgentCubSubsystem::RedressForSkin()
+{
+	// ---- WHEN THE DOG CHANGES ITS SKIN, THE FLOCK CHANGES WITH IT, in place.
+	//
+	// Watched by value on the tick rather than bound to the registry's delegate, because a world subsystem
+	// outlives and predates the game-instance one it would bind to, and a compare of one FName is nothing.
+	// Redressing is LoadFigure on the existing body: same actor, same slot, same place in the ring, same
+	// jitter -- a cub that keeps its character and changes its coat, which is what a skin is.
+	const FName Wanted = EquippedSkinId();
+	if (Wanted == DressedForSkin)
+	{
+		return;
+	}
+	DressedForSkin = Wanted;
+	for (int32 Index = 0; Index < Cubs.Num(); ++Index)
+	{
+		if (Cubs[Index] != nullptr)
+		{
+			Cubs[Index]->Redress(CubFigurePath(Index));
+		}
+	}
 }
 
 void UWonderlandSubAgentCubSubsystem::ReportActiveSubAgentsForDevelopment(int32 ActiveSubAgentCubCount)
@@ -538,6 +606,7 @@ void UWonderlandSubAgentCubSubsystem::Tick(float DeltaTime)
 	{
 		return;
 	}
+	RedressForSkin();
 
 	// IS THE DOG MOVING? Measured from its own travel and smoothed, because the choice between the two modes must
 	// not flicker while it shuffles.

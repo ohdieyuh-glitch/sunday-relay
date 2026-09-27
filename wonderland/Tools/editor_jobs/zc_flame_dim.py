@@ -33,6 +33,10 @@
 # THE C.A.R.D IS NOT PROBED HERE, deliberately. Its readability is a ceiling on flame bloom and this job only
 # ever moves bloom DOWN, so a probe built on a guessed screen rectangle would add a number without adding an
 # answer. zc_card_readable already photographs the card with the bright skins beside it and is re-run after.
+# THE PLUME IS READ AT +100 uu, NOT +175. The ear fire on Skeleton Flame tops out at figure z 33-39, which at
+# 3.24 uu a unit is 107-126 uu above the feet; at +175 the band was reading SKY above the fire, and the sweep
+# of 2026-09-27 14:28 reported the plume dark (0.17-0.22) at every setting while the head under it was
+# pinned white. The founder video floor of 0.25 is now measured where the fire actually is.
 CONCURRENT = True
 
 import math
@@ -182,7 +186,7 @@ def job():
         }
 
     def measure_wide(colour_axis):
-        return {"plume": patch(175.0, 0.055, 0.075, colour_axis=colour_axis)}
+        return {"plume": patch(100.0, 0.055, 0.075, colour_axis=colour_axis)}
 
     def row_from(m):
         row = {}

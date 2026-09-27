@@ -1,5 +1,5 @@
-#include "HAL/PlatformMemory.h"
 #include "WonderlandUiTestLibrary.h"
+#include "HAL/PlatformMemory.h"
 #include "WorldPartition/WorldPartitionSubsystem.h"
 #include "WorldPartition/WorldPartitionRuntimeHash.h"
 #include "WorldPartition/WorldPartition.h"

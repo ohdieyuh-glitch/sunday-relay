@@ -137,7 +137,9 @@ struct WONDERLAND_API FWonderlandCompanionFigure
 	 */
 	static constexpr int32 MaxBoxes = 40000;
 	static constexpr int32 MaxParts = 48;
-	static constexpr int32 MaxMaterials = 12;
+	// 14, not 12: every mascot skin now carries its eye halo as its own additive material, and Arden Infernal,
+	// Apollo and Hagoromo were already at the old cap. The generator asserts the same number.
+	static constexpr int32 MaxMaterials = 14;
 
 	/**
 	 * Parse a whole figure. On failure returns false, leaves OutFigure empty and names the line in

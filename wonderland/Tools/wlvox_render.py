@@ -57,7 +57,7 @@ def shade(rgb, kind, depth01, top01):
             int(max(0.0, min(1.0, b)) ** (1 / 2.2) * 255))
 
 
-def render(materials, boxes, axes, depth_axis, depth_sign, width, height, bounds, bg=(16, 17, 22)):
+def render(materials, boxes, axes, depth_axis, depth_sign, width, height, bounds, bg=(16, 17, 22), mirror=False):
     across, up = axes
     lo, hi = bounds
     span_a = max(hi[across] - lo[across], 1e-6)
@@ -90,6 +90,13 @@ def render(materials, boxes, axes, depth_axis, depth_sign, width, height, bounds
 
         a0 = (centre[across] - size[across] * 0.5 - lo[across]) * scale + off_a
         a1 = (centre[across] + size[across] * 0.5 - lo[across]) * scale + off_a
+        # ENGINE-HANDED. Unreal is left-handed: a camera standing in front of a figure (at +X, facing -X)
+        # has its right vector along -Y, so the figure's +Y side appears on the viewer's LEFT -- like a
+        # person facing you. This renderer laid +Y to the right, which is a MIRROR of what the wardrobe and
+        # the founder's sheets show, and Arden Infernal's demonic arm was authored on the wrong side against
+        # it for a whole round without anyone noticing, because the offline picture agreed with the plate.
+        if mirror:
+            a0, a1 = width - a0, width - a1
         u0 = (centre[up] - size[up] * 0.5 - lo[up]) * scale + off_u
         u1 = (centre[up] + size[up] * 0.5 - lo[up]) * scale + off_u
         x0, x1 = int(max(0, min(a0, a1))), int(min(width - 1, max(a0, a1)))
@@ -158,17 +165,19 @@ def main():
     h = int(args.size * 1.25)
     # front: look along -X, so across=Y and up=Z, nearest box has the LARGEST x
     # side:  look along -Y, so across=X and up=Z, nearest box has the LARGEST y
-    views = (("front", (1, 2), 0, +1), ("side", (0, 2), 1, +1))
+    # front is MIRRORED (see render): +Y on the viewer's left, as the engine camera has it. back looks along
+    # +X from behind, nearest box has the SMALLEST x, and there +Y is on the viewer's right.
+    views = (("front", (1, 2), 0, +1, True), ("side", (0, 2), 1, +1, False), ("back", (1, 2), 0, -1, False))
     sheet_w = w * len(names)
     sheet_h = h * len(views)
     sheet = bytearray()
     for _ in range(sheet_w * sheet_h):
         sheet.extend((16, 17, 22))
 
-    for row, (vname, axes, daxis, dsign) in enumerate(views):
+    for row, (vname, axes, daxis, dsign, mirror) in enumerate(views):
         for col, name in enumerate(names):
             materials, boxes = figures[name]
-            tile = render(materials, boxes, axes, daxis, dsign, w, h, (lo, hi))
+            tile = render(materials, boxes, axes, daxis, dsign, w, h, (lo, hi), mirror=mirror)
             single = os.path.join(out, "%s_%s.png" % (name, vname))
             write_png(single, w, h, tile)
             for y in range(h):

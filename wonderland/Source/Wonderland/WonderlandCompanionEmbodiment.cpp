@@ -1510,7 +1510,16 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 		// one that reads the same everywhere. The founder's SECONDARY colour still shows, because only the
 		// magnitude is taken -- the direction through the colour cube is the skin's own.
 		const float Peak = FMath::Max3(Authored.R, FMath::Max(Authored.G, Authored.B), KINDA_SMALL_NUMBER);
-		Want = (Authored / Peak) * EyeGlowScale * GlowScale;
+		// ---- AND THE HALO AROUND THE EYE TAKES A FRACTION OF THE EYE'S LEVEL.
+		//
+		// FOUNDER, 2026-09-27: "COLORED EYE CORE + EMISSIVE LIGHT + CONTROLLED BLOOM/HALO + CLEAR CONTRAST
+		// AGAINST THE FACE." The generator lays an additive pane, named "eyehalo", just behind and a little
+		// wider than each eye. It is routed here as an eye -- the name contains "eye", which is right: it is
+		// the eye's own light and must follow the eye's clock, not the body's night correction -- but at the
+		// eye's full level it would be a second, bigger eye. A rim is a rim because it is dimmer than what it
+		// rims, so a halo takes about a third of the level the core is driven to.
+		const float HaloShare = Def.Name.ToString().Contains(TEXT("halo"), ESearchCase::IgnoreCase) ? 0.35f : 1.0f;
+		Want = (Authored / Peak) * EyeGlowScale * GlowScale * HaloShare;
 	}
 	if (bChosen)
 	{

@@ -11,6 +11,10 @@
 # So this photographs the same skin, front and side, in daylight and at night, close enough to see the plumes
 # the way the founder's own camera did. It asserts one thing only: that the fire is plainly there. The rest is
 # for the founder's eye, and the captures are the report.
+# THE PLUME IS READ AT +100 uu, NOT +175. The ear fire on Skeleton Flame tops out at figure z 33-39, which at
+# 3.24 uu a unit is 107-126 uu above the feet; at +175 the band was reading SKY above the fire, and the sweep
+# of 2026-09-27 14:28 reported the plume dark (0.17-0.22) at every setting while the head under it was
+# pinned white. The founder video floor of 0.25 is now measured where the fire actually is.
 CONCURRENT = True
 
 import math
@@ -90,7 +94,7 @@ def job():
             band = None
             if size and size[0] > 0:
                 top = unreal.GameplayStatics.project_world_to_screen(
-                    pc, unreal.Vector(here.x, here.y, here.z + 175.0), False)
+                    pc, unreal.Vector(here.x, here.y, here.z + 100.0), False)
                 if top is not None:
                     cx, cy = float(top.x) / size[0], float(top.y) / size[1]
                     if 0.05 < cx < 0.95 and 0.05 < cy < 0.95:
@@ -103,7 +107,7 @@ def job():
             if band is not None:
                 try:
                     top = unreal.GameplayStatics.project_world_to_screen(
-                        pc, unreal.Vector(here.x, here.y, here.z + 175.0), False)
+                        pc, unreal.Vector(here.x, here.y, here.z + 100.0), False)
                     cx, cy = float(top.x) / size[0], float(top.y) / size[1]
                     hot = L.read_screen_extremes(cx - 0.055, cy - 0.075, cx + 0.055, cy + 0.075)
                 except Exception:                                  # noqa: BLE001

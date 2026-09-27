@@ -1,3 +1,14 @@
+# SUPERSEDED BY zc_wp_state, 2026-09-27 -- KEPT ONLY SO THE RETIREMENT IS VISIBLE.
+#
+# This probe reads World Partition through Python, which in UE 5.8 cannot reach it: every name comes back
+# None, and the job rendered None as "not partitioned" and "streaming not enabled". zc_wp_state asks the
+# same question through a C++ UFUNCTION that actually reads the world, and passes in editor and PIE
+# (partitioned=1 streaming=1 runtimeHash=WorldPartitionRuntimeHashSet). Two gates answering one question in
+# opposite directions is how QA came to report the shipping map as fully resident twelve minutes after it
+# had been measured streaming, and the founder has since ruled that this artifact must never lower readiness
+# again. So it no longer asserts anything: it records that it is superseded and by what, and exits.
+#
+# (Original header follows, for the record.)
 # HOW IS WORLD PARTITION ACTUALLY CONFIGURED ON THIS MAP?
 #
 # Before splitting a single actor, the cheaper question: is the runtime grid set up at all? The map was
@@ -20,6 +31,14 @@ def job():
     RESULT["status"] = "running"
     tests = []
     RESULT["tests"] = tests
+    RESULT["superseded_by"] = "zc_wp_state"
+    tests.append({"id": "C00", "name": "SUPERSEDED: this probe cannot observe World Partition from Python; "
+                                        "zc_wp_state is the authoritative reading", "pass": True,
+                  "detail": {"superseded_by": "zc_wp_state", "failed_question": "measurement mechanism actually capable? NO",
+                             "decided": "founder, 2026-09-27"}})
+    RESULT["status"] = "SUPERSEDED by zc_wp_state"
+    yield 0.2
+    return
 
     def record(tid, name, ok, **detail):
         tests.append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
