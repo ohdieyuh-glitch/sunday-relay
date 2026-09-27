@@ -71,6 +71,11 @@ TAKE = {
     "SD01_FillW": (8.0, 700.0, "path"), "SD01_FillE": (8.0, 700.0, "path"), "SD01_North": (8.0, 700.0, "path"),
     "SD01_NE": (8.0, 700.0, "path"), "SD01_E": (8.0, 700.0, "path"), "SD01_W": (8.0, 700.0, "path"),
     "SD01_SE": (8.0, 700.0, "path"), "SD01_NW": (8.0, 700.0, "path"),
+    # TARTARUS AFTER DARK (TQ05), the founder's night correction section B for one nation. Path candelas, not
+    # facade: these lamps exist to say "the road continues this way" on a nation whose entire path lighting was
+    # 44 lights over 505 m of avenue, a quarter, a band and a market. The hanging lanterns over the market
+    # stalls take half of this automatically -- see FIXTURES -- which is right for a stall.
+    "TQ05": (11.0, 950.0, "path"),
     # facade accents: architecture immediately beside traversal, dim
     "NC02": (6.0, 500.0, "facade"), "IC04": (6.0, 500.0, "facade"), "NC04": (6.0, 500.0, "facade"),
     "TQ04": (6.0, 500.0, "facade"), "TQ02": (6.0, 500.0, "facade"), "IC02": (6.0, 500.0, "facade"),
