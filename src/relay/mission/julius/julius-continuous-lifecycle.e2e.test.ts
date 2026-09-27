@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+
+import { juliusCodingAgentFailureClass } from './julius-coding-agent';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -1416,6 +1418,31 @@ describe('13 — a provider hard failure surfaces explicitly and never loops', (
     expect(dispatchesOf(harness, CODER.adapterId, 'build-1'), 'a refused credential is never re-asked').toBe(1);
     expect(harness.store.taskRow('build-1')!.state).toBe('FAILED');
     expect(factsOf(harness, 'task.failed').some((facts) => facts.code === 'AUTH_CONFIGURATION'), 'the class is on the record').toBe(true);
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run!.state).not.toBe('COMPLETED');
+  });
+
+  it('a coder whose provider declines the request ITSELF: named CONTENT_REFUSED, never filed as a bad credential, not retried, not completed', async () => {
+    // "I will not do this" is not "your credential is wrong". The first was
+    // indistinguishable from the second until this class existed, and one of
+    // those is worth an operator's attention while the other needs the ASK to
+    // change. The class is on the durable record, the code is the request's
+    // (INVALID_REQUEST), and nobody re-asks the same question.
+    // The class as the live Coding Agent records it: the taxonomy member in the
+    // connector's lower-case alphabet (`coding_agent_content_refused`), which is
+    // the only alphabet `safeFailureClass` lets onto a durable row.
+    const contentRefused = juliusCodingAgentFailureClass('CONTENT_REFUSED');
+    const harness = build({ coderScript: [{
+      kind: 'fail', code: 'INVALID_REQUEST', failureClass: contentRefused,
+      message: 'The provider declined this request on content grounds.',
+    }] });
+    await drain(harness, 60);
+    expect(dispatchesOf(harness, CODER.adapterId, 'build-1'), 'a declined request is never re-asked').toBe(1);
+    expect(harness.store.taskRow('build-1')!.state).toBe('FAILED');
+    const failed = factsOf(harness, 'task.failed');
+    expect(failed.some((facts) => facts.failureClass === contentRefused && facts.code === 'INVALID_REQUEST'),
+      'the class and the code are on the record').toBe(true);
+    expect(failed.some((facts) => facts.code === 'AUTH_CONFIGURATION'), 'and it is not a credential failure').toBe(false);
     const run = await harness.store.loadRun('run-1', 'prj-1');
     expect(run!.state).not.toBe('COMPLETED');
   });

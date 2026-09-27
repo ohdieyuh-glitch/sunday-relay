@@ -1003,6 +1003,11 @@ export function createLiveArchitectAdapter(input: {
             throw new JuliusDispatchError('TIMEOUT', true, 'Prompt Architect provider timed out.', outcome.failureClass, failed);
           case 'model_unavailable':
             throw new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, 'Prompt Architect model is unavailable.', outcome.failureClass, failed);
+          case 'refused':
+            // The provider declined the REQUEST, not the caller: INVALID_REQUEST,
+            // the code the Coding Agent's CONTENT_REFUSED carries, so one
+            // phenomenon has one code whichever peer meets it. Never retryable.
+            throw new JuliusDispatchError('INVALID_REQUEST', false, 'The Prompt Architect provider declined this request.', outcome.failureClass, failed);
           default:
             throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Prompt Architect failed: ${outcome.failureClass}.`, outcome.failureClass, failed);
         }

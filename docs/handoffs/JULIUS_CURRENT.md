@@ -307,6 +307,38 @@ The probe worktree was removed (junction first, then `git worktree remove`);
 this tree's `node_modules` is intact.
 
 
+#### Then: "I will not do this" is not "your credential is wrong"
+
+The readiness page's row 11 named the gap: a model declining a specific request
+had no class of its own and arrived as UNCLASSIFIED / WORKER_EXECUTION_FAILURE,
+indistinguishable from a broken key — and one of those is worth an operator's
+attention while the other needs the ASK to change. The hosted coder's failure
+classifier (`hosted-failure-reason.ts`) already recognised a content filter or a
+safety refusal as `content_filtered`; `codingAgentFailureFromHostedReason` then
+threw that recognition away by mapping it to UNCLASSIFIED. Now:
+`CONTENT_REFUSED` is in `JULIUS_CODING_AGENT_FAILURES`, disposed as
+`INVALID_REQUEST` (like CONTEXT_OVERFLOW: the request as posed cannot be
+served), never retryable, never an operator action; the classifier's word maps
+to it; and the Prompt Architect's `refused` (which `gpt-runner.ts` already
+detected as a refusal output item) carries the same code instead of sharing
+WORKER_EXECUTION_FAILURE with a 500 and a malformed answer. The scripted fixture
+can now name a failure class on a `fail` step. Proofs: the provider taxonomy
+table (`coding-agent-port.test.ts` C3/C4: CONTENT_REFUSED → INVALID_REQUEST,
+"blocked by the content filter" → CONTENT_REFUSED), the architect class table
+(`julius-live-composition.test.ts`: `refused` → INVALID_REQUEST), and the
+lifecycle (`julius-continuous-lifecycle.e2e`: one call, FAILED, class and code
+on the `task.failed` record — `coding_agent_content_refused` / `INVALID_REQUEST`,
+the connector's lower-case alphabet being the only one `safeFailureClass` admits —
+not AUTH_CONFIGURATION, not completed). Ledger D11,
+D12; row 11: 85 → 86; total 77%.
+
+**Not done:** the Independent Reviewer's provider cannot report a content
+refusal (a Hermes decline is a verdict that does not parse — filed as
+malformed), and nothing routes a refusal to a re-plan; the task fails and the
+run does not complete, which is truthful and is where this stops.
+
+#### Not done, by decision or by gate
+
 - Driving a run over HTTP — the deployment decision that spends money; the
   contract document says so.
 - Either route against a real PostgreSQL from a running bridge (the paid-run

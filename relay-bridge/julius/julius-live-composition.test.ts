@@ -1953,7 +1953,10 @@ describe('the first paid attempt, reproduced: a failing Prompt Architect', () =>
     ['timeout', 'TIMEOUT', true],
     ['network_disconnected', 'TIMEOUT', true],
     ['model_unavailable', 'PROVIDER_UNAVAILABLE', false],
-    ['refused', 'WORKER_EXECUTION_FAILURE', false],
+    // A refusal is the REQUEST being declined, the same phenomenon the Coding
+    // Agent files as CONTENT_REFUSED → INVALID_REQUEST; it no longer shares a
+    // code with a 500 or a malformed answer.
+    ['refused', 'INVALID_REQUEST', false],
     ['incomplete_response', 'WORKER_EXECUTION_FAILURE', false],
     ['malformed_output', 'WORKER_EXECUTION_FAILURE', false],
     ['provider_error', 'WORKER_EXECUTION_FAILURE', false],
