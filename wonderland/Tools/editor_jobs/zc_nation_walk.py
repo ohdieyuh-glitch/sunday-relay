@@ -105,8 +105,25 @@ def job():
             row["error"] = "no pawn"
             continue
         # STOOD AT THE GATE END, on the floor the search measured, and given a moment to settle.
-        z0 = floor_at(start["x"], start["y"], start["floor"] + 600.0)
+        # STREAM THE START IN BEFORE STANDING ON IT. ICARUS came back 614.7 m from its own start point --
+        # the Dog was placed into a cell that had not loaded, which the ledger records as fatal. The Dog is
+        # moved close first to BE the streaming source, then the floor is polled until it answers, and only
+        # then is it stood precisely.
+        try:
+            dog.set_actor_location(unreal.Vector(start["x"], start["y"], start["floor"] + 900.0), False, True)
+        except Exception:                                             # noqa: BLE001
+            pass
+        z0, waited = None, 0.0
+        while z0 is None and waited < 20.0:
+            yield 1.0
+            waited += 1.0
+            z0 = floor_at(start["x"], start["y"], start["floor"] + 600.0)
+        row["start_stream_wait_s"] = waited
         z0 = start["floor"] if z0 is None else z0
+        dog = pawn()
+        if dog is None:
+            row["error"] = "the Dog did not survive being moved to the start cell"
+            continue
         try:
             dog.set_actor_location(unreal.Vector(start["x"], start["y"], z0 + 100.0), False, True)
         except Exception:                                             # noqa: BLE001
@@ -125,16 +142,60 @@ def job():
 
         total = sum(math.hypot(pts[i]["x"] - pts[i - 1]["x"], pts[i]["y"] - pts[i - 1]["y"]) for i in range(1, len(pts)))
         row["route_m"] = round(total / 100.0, 1)
+
+        # ---- CAN THE HARNESS DRIVE THIS DOG AT ALL? Asked before the route is judged.
+        #
+        # The first run reported NOCTIS and TARTARUS "stuck at waypoint 1" with nothing in front of the Dog --
+        # and a Dog that is stuck with a clear path ahead is not a blocked route, it is a Dog that never
+        # moved. Those two readings were published as a traversal result and they were a harness result. So
+        # the walk now proves its own actuator first: three seconds of input toward the second waypoint, with
+        # displacement AND peak speed recorded. If the Dog does not move here, every route number below is
+        # withheld rather than reported as a world fault.
+        tgt0 = pts[1]
+        start_loc = dog.get_actor_location()
+        probe_speed = 0.0
+        for _ in range(60):
+            d = pawn()
+            if d is None:
+                break
+            loc = d.get_actor_location()
+            dx, dy = tgt0["x"] - loc.x, tgt0["y"] - loc.y
+            n = math.hypot(dx, dy) or 1.0
+            try:
+                d.add_movement_input(unreal.Vector(dx / n, dy / n, 0.0), 1.0, True)
+                v = d.get_velocity()
+                probe_speed = max(probe_speed, math.hypot(v.x, v.y))
+            except Exception:                                         # noqa: BLE001
+                break
+            yield 0.05
+        d = pawn()
+        moved = math.hypot(d.get_actor_location().x - start_loc.x,
+                           d.get_actor_location().y - start_loc.y) if d is not None else 0.0
+        row["probe_moved_uu"] = round(moved, 1)
+        row["probe_peak_speed"] = round(probe_speed, 1)
+        row["can_be_driven"] = moved > 100.0
+        if not row["can_be_driven"]:
+            row["error"] = ("the harness could not drive the Dog: %.1f uu in 3 s, peak speed %.1f -- "
+                            "route NOT judged" % (moved, probe_speed))
+            emit("W_%s" % nation, "WARN", "%s: actuator dead, route withheld" % nation,
+                 {"moved_uu": row["probe_moved_uu"], "peak_speed": row["probe_peak_speed"]})
+            continue
+
         elapsed, wp = 0.0, 1
         best_d, since_gain = float("inf"), 0.0
-        reached = 0.0
+        travelled = 0.0
+        prev = dog.get_actor_location()
         while wp < len(pts) and elapsed < MAX_SECONDS:
             dog = pawn()
             if dog is None:
                 row["error"] = "the Dog was destroyed mid-walk"
                 break
             loc = dog.get_actor_location()
-            reached = max(reached, math.hypot(loc.x, loc.y))
+            # DISTANCE TRAVELLED ALONG THE ROUTE. The first version recorded hypot(loc.x, loc.y) -- the
+            # radius from the world origin -- so a Dog standing still at a start point 600 m out reported
+            # "reached 600.0 m" and looked like progress. It was the start radius, restated.
+            travelled += math.hypot(loc.x - prev.x, loc.y - prev.y)
+            prev = loc
             tgt = pts[wp]
             dx, dy = tgt["x"] - loc.x, tgt["y"] - loc.y
             d = math.hypot(dx, dy)
@@ -168,7 +229,9 @@ def job():
                 break
             yield TICK
             elapsed += TICK
-        row["reached_m"] = round(reached / 100.0, 1)
+        row["travelled_m"] = round(travelled / 100.0, 1)
+        row["waypoints_reached"] = wp
+        row["fraction_of_route"] = round(wp / float(len(pts)), 3)
         row["seconds"] = round(elapsed, 1)
         row["arrived"] = wp >= len(pts)
         try:
@@ -176,17 +239,25 @@ def job():
         except Exception:                                             # noqa: BLE001
             pass
         emit("W_%s" % nation, "PASS" if row["arrived"] else "FAIL", nation,
-             {"reached_m": row["reached_m"], "route_m": row["route_m"], "seconds": row["seconds"],
+             {"travelled_m": row.get("travelled_m"), "route_m": row["route_m"],
+              "waypoints": "%s/%s" % (row.get("waypoints_reached"), len(pts)), "seconds": row["seconds"],
               "stuck": row["stuck_at"], "error": row.get("error")})
 
     walked = {n: r.get("arrived", False) for n, r in nations.items()}
+    record("W0A", "the harness can actually drive the Dog -- these are walks, not stationary readings",
+           all(r.get("can_be_driven") for r in nations.values()) and len(nations) == 3,
+           moved_uu={n: r.get("probe_moved_uu") for n, r in nations.items()},
+           peak_speed={n: r.get("probe_peak_speed") for n, r in nations.items()},
+           note="3 s of AddMovementInput toward the second waypoint before the route is judged; a red here "
+                "means the route results are withheld, not that the world is blocked")
     record("W00", "every nation's walk started with the Dog standing at the gate end of its route",
            all("error" not in r or r.get("arrived") for r in nations.values()) and len(nations) == 3,
            starts={n: r.get("start_error_m") for n, r in nations.items()},
            errors={n: r.get("error") for n, r in nations.items() if r.get("error")})
     record("W01", "the Dog walked gate to band in every nation under its own locomotion",
            all(walked.values()) and len(walked) == 3, arrived=walked,
-           reached_m={n: r.get("reached_m") for n, r in nations.items()},
+           travelled_m={n: r.get("travelled_m") for n, r in nations.items()},
+           waypoints={n: "%s" % r.get("waypoints_reached") for n, r in nations.items()},
            route_m={n: r.get("route_m") for n, r in nations.items()},
            stuck={n: r.get("stuck_at") for n, r in nations.items() if r.get("stuck_at")},
            note="AddMovementInput every tick with bForce, no teleports after the start, no navmesh; a stuck "

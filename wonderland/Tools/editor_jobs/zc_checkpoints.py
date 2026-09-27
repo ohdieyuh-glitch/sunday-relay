@@ -89,6 +89,22 @@ def job():
             state["dog"] = unreal.GameplayStatics.get_player_pawn(world, 0)
             return state["dog"]
 
+    def trace_z(x, y, top, channel, depth=20000.0):
+        """The first hit under (x, y) on a named channel, or None."""
+        try:
+            hit = unreal.SystemLibrary.line_trace_single(
+                world, unreal.Vector(x, y, top), unreal.Vector(x, y, top - depth),
+                channel, False, [d for d in (dog(),) if d is not None], unreal.DrawDebugTrace.NONE, True,
+                unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
+        except Exception:                                             # noqa: BLE001
+            return None
+        if hit is None:
+            return None
+        try:
+            return round(float(hit.to_tuple()[4].z), 1)
+        except Exception:                                             # noqa: BLE001
+            return None
+
     def floor_at(x, y, top, depth=20000.0):
         try:
             hit = unreal.SystemLibrary.line_trace_single(
@@ -226,9 +242,19 @@ def job():
         if spec.get("tower"):
             tx, ty = spec["tower"]
             # NO PARK. The tower is 24-30 m from where the Dog already stands, in the same cell.
-            top = floor_at(tx, ty, g + 12000.0)
-            row["tower_top_z"] = top
-            row["tower_rise"] = None if top is None else round(top - g, 1)
+            #
+            # TRACED ON VISIBILITY, NOT ON THE PAWN CHANNEL, and the first version had that wrong. A
+            # checkpoint tower is a SILHOUETTE -- the question is "can you see it from the next ring", not
+            # "can you stand on it" -- and the top of these chains is a needle spire that nothing collides
+            # with, correctly. The pawn trace therefore stopped ~2.3 m below the real top and reported
+            # ICARUS/NOCTIS at 5096 against a built 7426, with TARTARUS missing the landmark floor by twelve
+            # centimetres on that artefact alone. Both channels are read now: VIS is the gate, PAWN is kept
+            # beside it because a tower you can see and walk through is worth knowing about separately.
+            vis = trace_z(tx, ty, g + 12000.0, unreal.TraceTypeQuery.TRACE_TYPE_QUERY1)
+            pawn = trace_z(tx, ty, g + 12000.0, PAWN)
+            row["tower_top_z"] = vis
+            row["tower_rise"] = None if vis is None else round(vis - g, 1)
+            row["tower_rise_collidable"] = None if pawn is None else round(pawn - g, 1)
             row["tower_expected_rise"] = spec.get("tower_top_z")
 
         emit("C_%s" % name, "INFO", name,
@@ -305,7 +331,10 @@ def job():
     risen = {n: sites[n].get("tower_rise") for n in towered}
     record("K05", "every checkpoint that was given a landmark actually has one standing",
            len(towered) == 4 and all(v is not None and v >= LANDMARK_MIN for v in risen.values()),
-           rise_uu=risen, floor_uu=LANDMARK_MIN, expected={n: plan[n]["tower_top_z"] for n in towered})
+           rise_uu=risen, floor_uu=LANDMARK_MIN, expected={n: plan[n]["tower_top_z"] for n in towered},
+           rise_collidable={n: sites[n].get("tower_rise_collidable") for n in towered},
+           note="traced on VISIBILITY: a spire is a silhouette, not a surface, and the pawn channel stops "
+                "below the uncollidable top")
 
     night = {n: (shots.get(n, {}).get("midnight") or {}).get("court") for n in want}
     lit = {n: (v or {}).get("luma") for n, v in night.items()}
