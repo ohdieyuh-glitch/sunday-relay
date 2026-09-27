@@ -1,6 +1,6 @@
 {
  "name": "zc_wardrobe_20",
- "started": "2026-09-27 05:51:11",
+ "started": "2026-09-27 14:15:22",
  "status": "measured; occupancy is judged from the exported pixels",
  "tests": [
   {
@@ -19,18 +19,24 @@
     "drifted": {},
     "tolerance_pct": 2.0,
     "before": {
-     "relay_og": "onBody=1 bodyTall=51.7 bodyWide=30.5 rawTall=51.7 rawWide=30.5 envelope=155 scale=0.329 fill=0.80 glow=0.0015 fitTall=85 fitWide=62 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
-     "arden_infernal": "onBody=1 bodyTall=51.7 bodyWide=35.3 rawTall=51.7 rawWide=35.3 envelope=399 scale=0.242 fill=0.80 glow=0.0015 fitTall=85 fitWide=72 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
-     "apollo": "onBody=1 bodyTall=33.0 bodyWide=47.2 rawTall=33.0 rawWide=47.2 envelope=284 scale=0.145 fill=0.80 glow=0.0015 fitTall=54 fitWide=97 distance=67 fov=34.0 target=640x800 predictedHeightPct=64.0",
-     "skeleton_flame": "onBody=1 bodyTall=51.8 bodyWide=35.7 rawTall=51.8 rawWide=35.7 envelope=268 scale=0.331 fill=0.80 glow=0.0015 fitTall=85 fitWide=73 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
-     "celestial_light": "onBody=1 bodyTall=51.7 bodyWide=34.1 rawTall=51.7 rawWide=34.1 envelope=199 scale=0.325 fill=0.80 glow=0.0015 fitTall=85 fitWide=70 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0"
+     "relay_og": "onBody=1 bodyTall=51.9 bodyWide=30.6 rawTall=51.9 rawWide=30.6 envelope=155 scale=0.331 fill=0.80 glow=0.0010 fitTall=85 fitWide=63 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "celestial_light": "onBody=1 bodyTall=51.9 bodyWide=34.4 rawTall=51.9 rawWide=34.4 envelope=199 scale=0.327 fill=0.80 glow=0.0010 fitTall=85 fitWide=70 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "apollo_v1": "onBody=1 bodyTall=32.8 bodyWide=47.1 rawTall=32.8 rawWide=47.1 envelope=284 scale=0.145 fill=0.80 glow=0.0010 fitTall=54 fitWide=96 distance=67 fov=34.0 target=640x800 predictedHeightPct=64.0",
+     "apollo": "onBody=1 bodyTall=51.9 bodyWide=31.4 rawTall=51.9 rawWide=31.4 envelope=246 scale=0.333 fill=0.80 glow=0.0010 fitTall=85 fitWide=64 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "arden_infernal_v1": "onBody=1 bodyTall=51.9 bodyWide=31.6 rawTall=51.9 rawWide=31.6 envelope=399 scale=0.236 fill=0.80 glow=0.0010 fitTall=85 fitWide=65 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "arden_infernal": "onBody=1 bodyTall=51.9 bodyWide=41.2 rawTall=51.9 rawWide=41.2 envelope=365 scale=0.248 fill=0.80 glow=0.0010 fitTall=85 fitWide=84 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "skeleton_flame_v1": "onBody=1 bodyTall=51.9 bodyWide=35.4 rawTall=51.9 rawWide=35.4 envelope=268 scale=0.332 fill=0.80 glow=0.0010 fitTall=85 fitWide=72 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "skeleton_flame": "onBody=1 bodyTall=51.9 bodyWide=39.7 rawTall=51.9 rawWide=39.7 envelope=226 scale=0.332 fill=0.80 glow=0.0010 fitTall=85 fitWide=81 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0"
     },
     "after": {
-     "relay_og": "onBody=1 bodyTall=51.7 bodyWide=31.3 rawTall=51.7 rawWide=31.3 envelope=155 scale=0.325 fill=0.80 glow=0.0015 fitTall=85 fitWide=64 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
-     "arden_infernal": "onBody=1 bodyTall=51.7 bodyWide=32.3 rawTall=51.7 rawWide=32.3 envelope=399 scale=0.235 fill=0.80 glow=0.0015 fitTall=85 fitWide=66 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
-     "apollo": "onBody=1 bodyTall=33.1 bodyWide=47.3 rawTall=33.1 rawWide=47.3 envelope=284 scale=0.145 fill=0.80 glow=0.0015 fitTall=54 fitWide=97 distance=68 fov=34.0 target=640x800 predictedHeightPct=64.0",
-     "skeleton_flame": "onBody=1 bodyTall=51.8 bodyWide=35.6 rawTall=51.8 rawWide=35.6 envelope=268 scale=0.330 fill=0.80 glow=0.0015 fitTall=85 fitWide=73 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
-     "celestial_light": "onBody=1 bodyTall=51.7 bodyWide=33.9 rawTall=51.7 rawWide=33.9 envelope=199 scale=0.322 fill=0.80 glow=0.0015 fitTall=85 fitWide=69 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0"
+     "relay_og": "onBody=1 bodyTall=51.9 bodyWide=30.4 rawTall=51.9 rawWide=30.4 envelope=155 scale=0.329 fill=0.80 glow=0.0010 fitTall=85 fitWide=62 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "celestial_light": "onBody=1 bodyTall=51.9 bodyWide=34.4 rawTall=51.9 rawWide=34.4 envelope=199 scale=0.327 fill=0.80 glow=0.0010 fitTall=85 fitWide=70 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "apollo_v1": "onBody=1 bodyTall=32.6 bodyWide=47.2 rawTall=32.6 rawWide=47.2 envelope=284 scale=0.143 fill=0.80 glow=0.0010 fitTall=53 fitWide=97 distance=67 fov=34.0 target=640x800 predictedHeightPct=64.0",
+     "apollo": "onBody=1 bodyTall=51.9 bodyWide=31.1 rawTall=51.9 rawWide=31.1 envelope=246 scale=0.330 fill=0.80 glow=0.0010 fitTall=85 fitWide=63 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "arden_infernal_v1": "onBody=1 bodyTall=51.9 bodyWide=36.8 rawTall=51.9 rawWide=36.8 envelope=399 scale=0.244 fill=0.80 glow=0.0010 fitTall=85 fitWide=75 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "arden_infernal": "onBody=1 bodyTall=51.9 bodyWide=35.7 rawTall=51.9 rawWide=35.7 envelope=365 scale=0.245 fill=0.80 glow=0.0010 fitTall=85 fitWide=73 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "skeleton_flame_v1": "onBody=1 bodyTall=51.9 bodyWide=35.7 rawTall=51.9 rawWide=35.7 envelope=268 scale=0.330 fill=0.80 glow=0.0010 fitTall=85 fitWide=73 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+     "skeleton_flame": "onBody=1 bodyTall=51.9 bodyWide=39.0 rawTall=51.9 rawWide=39.0 envelope=226 scale=0.330 fill=0.80 glow=0.0010 fitTall=85 fitWide=80 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0"
     },
     "note": "the founder's rule that 360 inspection must not alter permanent framing"
    }
@@ -42,10 +48,13 @@
    "detail": {
     "skins": [
      "relay_og",
-     "arden_infernal",
+     "celestial_light",
+     "apollo_v1",
      "apollo",
-     "skeleton_flame",
-     "celestial_light"
+     "arden_infernal_v1",
+     "arden_infernal",
+     "skeleton_flame_v1",
+     "skeleton_flame"
     ],
     "angles": [
      "front",
@@ -65,15 +74,22 @@
      94.0
     ],
     "out_of_band": {
-     "arden_infernal_front": {
-      "heightPct": 73.6,
+     "apollo_v1_front": {
+      "heightPct": 73.1,
       "band": [
        76.0,
        94.0
       ]
      },
      "apollo_front": {
-      "heightPct": 74.6,
+      "heightPct": 94.6,
+      "band": [
+       76.0,
+       94.0
+      ]
+     },
+     "arden_infernal_front": {
+      "heightPct": 71.0,
       "band": [
        76.0,
        94.0
@@ -82,28 +98,40 @@
     },
     "measured": {
      "relay_og_front": 82.4,
-     "relay_og_left": 80.1,
-     "relay_og_back": 82.0,
+     "relay_og_left": 80.9,
+     "relay_og_back": 83.9,
      "relay_og_right": 82.2,
-     "arden_infernal_front": 73.6,
-     "arden_infernal_left": 66.5,
-     "arden_infernal_back": 70.9,
-     "arden_infernal_right": 73.5,
-     "apollo_front": 74.6,
-     "apollo_left": 81.9,
-     "apollo_back": 83.2,
-     "apollo_right": 85.4,
-     "skeleton_flame_front": 92.2,
-     "skeleton_flame_left": 88.1,
-     "skeleton_flame_back": 90.1,
-     "skeleton_flame_right": 94.0,
-     "celestial_light_front": 91.4,
-     "celestial_light_left": 92.2,
-     "celestial_light_back": 93.4,
-     "celestial_light_right": 91.0
+     "celestial_light_front": 90.0,
+     "celestial_light_left": 89.1,
+     "celestial_light_back": 91.8,
+     "celestial_light_right": 90.1,
+     "apollo_v1_front": 73.1,
+     "apollo_v1_left": 71.9,
+     "apollo_v1_back": 80.9,
+     "apollo_v1_right": 77.5,
+     "apollo_front": 94.6,
+     "apollo_left": 89.0,
+     "apollo_back": 95.5,
+     "apollo_right": 92.0,
+     "arden_infernal_v1_front": 93.1,
+     "arden_infernal_v1_left": 92.1,
+     "arden_infernal_v1_back": 69.5,
+     "arden_infernal_v1_right": 70.1,
+     "arden_infernal_front": 71.0,
+     "arden_infernal_left": 71.6,
+     "arden_infernal_back": 73.0,
+     "arden_infernal_right": 69.6,
+     "skeleton_flame_v1_front": 89.4,
+     "skeleton_flame_v1_left": 91.1,
+     "skeleton_flame_v1_back": 93.0,
+     "skeleton_flame_v1_right": 88.4,
+     "skeleton_flame_front": 90.1,
+     "skeleton_flame_left": 89.0,
+     "skeleton_flame_back": 93.1,
+     "skeleton_flame_right": 88.6
     },
-    "read": 20,
-    "wanted": 20,
+    "read": 32,
+    "wanted": 32,
     "note": "front is the canonical opening view and is held to the contract. The recurrence this guards rendered the mascot at 41.5% while every proof of the day passed; a 65 floor would have passed it at 66."
    }
   },
@@ -118,8 +146,15 @@
     ],
     "centre_slack_pct": 12.0,
     "out_of_envelope": {
-     "arden_infernal_left": {
-      "heightPct": 66.5,
+     "arden_infernal_v1_back": {
+      "heightPct": 69.5,
+      "band": [
+       70.0,
+       99.0
+      ]
+     },
+     "arden_infernal_right": {
+      "heightPct": 69.6,
       "band": [
        70.0,
        99.0
@@ -127,24 +162,34 @@
      }
     },
     "off_centre": {
+     "arden_infernal_v1_back": {
+      "centreXPct": 50.5,
+      "centreYPct": 34.7,
+      "slack": 12.0
+     },
+     "arden_infernal_v1_right": {
+      "centreXPct": 53.2,
+      "centreYPct": 35.0,
+      "slack": 12.0
+     },
      "arden_infernal_front": {
-      "centreXPct": 51.7,
-      "centreYPct": 36.8,
-      "slack": 12.0
-     },
-     "arden_infernal_left": {
-      "centreXPct": 53.9,
-      "centreYPct": 33.2,
-      "slack": 12.0
-     },
-     "arden_infernal_back": {
-      "centreXPct": 48.9,
+      "centreXPct": 49.3,
       "centreYPct": 35.4,
       "slack": 12.0
      },
+     "arden_infernal_left": {
+      "centreXPct": 47.7,
+      "centreYPct": 35.8,
+      "slack": 12.0
+     },
+     "arden_infernal_back": {
+      "centreXPct": 47.0,
+      "centreYPct": 36.4,
+      "slack": 12.0
+     },
      "arden_infernal_right": {
-      "centreXPct": 48.6,
-      "centreYPct": 36.7,
+      "centreXPct": 49.7,
+      "centreYPct": 34.8,
       "slack": 12.0
      }
     },
@@ -159,17 +204,23 @@
     "disagreements": {},
     "predicted": {
      "relay_og": 80.0,
+     "celestial_light": 80.0,
+     "apollo_v1": 64.0,
+     "apollo": 80.0,
+     "arden_infernal_v1": 80.0,
      "arden_infernal": 80.0,
-     "apollo": 64.0,
-     "skeleton_flame": 80.0,
-     "celestial_light": 80.0
+     "skeleton_flame_v1": 80.0,
+     "skeleton_flame": 80.0
     },
     "measured_front": {
      "relay_og": 82.4,
-     "arden_infernal": 73.6,
-     "apollo": 74.6,
-     "skeleton_flame": 92.2,
-     "celestial_light": 91.4
+     "celestial_light": 90.0,
+     "apollo_v1": 73.1,
+     "apollo": 94.6,
+     "arden_infernal_v1": 93.1,
+     "arden_infernal": 71.0,
+     "skeleton_flame_v1": 89.4,
+     "skeleton_flame": 90.1
     },
     "tolerance_pct": 12.0,
     "note": "pixels may EXCEED the prediction -- auras and fire reach past the body by design -- but falling short of it means the camera is framing something other than what is being drawn."
@@ -177,82 +228,122 @@
   }
  ],
  "framing_notes": {
-  "relay_og": "onBody=1 bodyTall=51.7 bodyWide=30.5 rawTall=51.7 rawWide=30.5 envelope=155 scale=0.329 fill=0.80 glow=0.0015 fitTall=85 fitWide=62 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
-  "arden_infernal": "onBody=1 bodyTall=51.7 bodyWide=35.3 rawTall=51.7 rawWide=35.3 envelope=399 scale=0.242 fill=0.80 glow=0.0015 fitTall=85 fitWide=72 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
-  "apollo": "onBody=1 bodyTall=33.0 bodyWide=47.2 rawTall=33.0 rawWide=47.2 envelope=284 scale=0.145 fill=0.80 glow=0.0015 fitTall=54 fitWide=97 distance=67 fov=34.0 target=640x800 predictedHeightPct=64.0",
-  "skeleton_flame": "onBody=1 bodyTall=51.8 bodyWide=35.7 rawTall=51.8 rawWide=35.7 envelope=268 scale=0.331 fill=0.80 glow=0.0015 fitTall=85 fitWide=73 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
-  "celestial_light": "onBody=1 bodyTall=51.7 bodyWide=34.1 rawTall=51.7 rawWide=34.1 envelope=199 scale=0.325 fill=0.80 glow=0.0015 fitTall=85 fitWide=70 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0"
+  "relay_og": "onBody=1 bodyTall=51.9 bodyWide=30.6 rawTall=51.9 rawWide=30.6 envelope=155 scale=0.331 fill=0.80 glow=0.0010 fitTall=85 fitWide=63 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "celestial_light": "onBody=1 bodyTall=51.9 bodyWide=34.4 rawTall=51.9 rawWide=34.4 envelope=199 scale=0.327 fill=0.80 glow=0.0010 fitTall=85 fitWide=70 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "apollo_v1": "onBody=1 bodyTall=32.8 bodyWide=47.1 rawTall=32.8 rawWide=47.1 envelope=284 scale=0.145 fill=0.80 glow=0.0010 fitTall=54 fitWide=96 distance=67 fov=34.0 target=640x800 predictedHeightPct=64.0",
+  "apollo": "onBody=1 bodyTall=51.9 bodyWide=31.4 rawTall=51.9 rawWide=31.4 envelope=246 scale=0.333 fill=0.80 glow=0.0010 fitTall=85 fitWide=64 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "arden_infernal_v1": "onBody=1 bodyTall=51.9 bodyWide=31.6 rawTall=51.9 rawWide=31.6 envelope=399 scale=0.236 fill=0.80 glow=0.0010 fitTall=85 fitWide=65 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "arden_infernal": "onBody=1 bodyTall=51.9 bodyWide=41.2 rawTall=51.9 rawWide=41.2 envelope=365 scale=0.248 fill=0.80 glow=0.0010 fitTall=85 fitWide=84 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "skeleton_flame_v1": "onBody=1 bodyTall=51.9 bodyWide=35.4 rawTall=51.9 rawWide=35.4 envelope=268 scale=0.332 fill=0.80 glow=0.0010 fitTall=85 fitWide=72 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "skeleton_flame": "onBody=1 bodyTall=51.9 bodyWide=39.7 rawTall=51.9 rawWide=39.7 envelope=226 scale=0.332 fill=0.80 glow=0.0010 fitTall=85 fitWide=81 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0"
  },
  "parts": {
-  "relay_og": "BODY: head[n=340 z29..51] head[n=80 z34..39] head[n=2 z35..38] body[n=124 z15..30] arm_l[n=16 z19..28] arm_l_fore[n=16 z11..19] arm_l_fore[n=4 z9..12] arm_r[n=16 z19..28] arm_r_fore[n=16 z11..19] arm_r_fore[n=4 z9..12] leg_l[n=24 z7..15] leg_l_shin[n=36 z-0..8] leg_l_shin[n=12 z-0..0] leg_r[n=24 z7..15] leg_r_shin[n=36 z-0..8] leg_r_shin[n=12 z-0..1] || EXCLUDED: ",
-  "arden_infernal": "BODY: head[n=340 z22..38] head[n=80 z25..29] head[n=2 z26..28] body[n=124 z11..22] arm_l[n=16 z14..21] arm_l_fore[n=16 z8..14] arm_l_fore[n=4 z7..9] arm_r[n=16 z14..21] arm_r_fore[n=16 z8..14] arm_r_fore[n=4 z7..9] leg_l[n=24 z5..11] leg_l_shin[n=36 z0..6] leg_l_shin[n=12 z0..0] leg_r[n=24 z5..12] leg_r_shin[n=36 z-0..6] leg_r_shin[n=12 z-0..1] body[n=156 z9..26] body[n=10 z6..21] body[n=19 z11..20] arm_l[n=224 z-12..30] arm_l[n=371 z-7..24] arm_l[n=16 z-14..-4] || EXCLUDED: halo[n=246 z15..56] halo[n=74 z18..52] halo[n=12 z15..58] sigil[n=40 z4..13] sigil[n=30 z2..15] sigil[n=1 z7..10] tail[n=6 z16..40] tail[n=10 z16..41] ",
-  "apollo": "BODY: head[n=340 z13..23] head[n=80 z15..17] head[n=2 z15..17] body[n=124 z7..13] arm_l[n=16 z9..12] arm_l_fore[n=16 z5..8] arm_l_fore[n=4 z4..5] arm_r[n=16 z9..12] arm_r_fore[n=16 z5..8] arm_r_fore[n=4 z4..5] leg_l[n=24 z3..7] leg_l_shin[n=36 z0..4] leg_l_shin[n=12 z0..1] leg_r[n=24 z3..7] leg_r_shin[n=36 z0..4] leg_r_shin[n=12 z0..0] body[n=755 z6..33] body[n=213 z8..31] body[n=8 z12..16] leg_l_shin[n=18 z0..3] leg_l_shin[n=1 z1..2] leg_r_shin[n=18 z0..2] leg_r_shin[n=1 z1..2] body[n=19 z6..19] leg_l[n=26 z4..7] leg_l[n=18 z2..4] leg_r[n=26 z4..6] leg_r[n=18 z2..4] || EXCLUDED: halo[n=265 z3..40] halo[n=122 z5..39] halo[n=247 z4..40] robe[n=230 z0..13] robe[n=28 z4..8] robe[n=8 z4..6] lamps[n=12 z4..8] lamps[n=104 z1..7] ",
-  "skeleton_flame": "BODY: head[n=370 z30..52] head[n=80 z34..40] head[n=2 z36..38] body[n=302 z9..35] arm_l[n=16 z20..29] arm_l_fore[n=16 z12..20] arm_l_fore[n=4 z10..13] arm_r[n=16 z20..29] arm_r_fore[n=16 z11..20] arm_r_fore[n=4 z9..13] leg_l[n=24 z8..16] leg_l_shin[n=36 z1..9] leg_l_shin[n=12 z1..1] leg_r[n=24 z8..16] leg_r_shin[n=36 z1..9] leg_r_shin[n=12 z0..1] head[n=7 z41..47] body[n=48 z23..33] body[n=17 z16..32] body[n=110 z14..34] body[n=8 z21..25] body[n=3 z17..22] arm_l[n=1 z25..27] arm_l[n=2 z24..28] arm_r[n=1 z25..26] arm_r[n=2 z23..28] leg_l[n=1 z8..9] leg_l[n=1 z9..10] leg_l_shin[n=1 z7..8] leg_r[n=1 z8..9] leg_r[n=1 z9..10] leg_r_shin[n=1 z7..8] || EXCLUDED: ",
-  "celestial_light": "BODY: head[n=340 z30..52] head[n=80 z34..40] head[n=2 z36..38] body[n=124 z16..31] arm_l[n=16 z20..29] arm_l_fore[n=16 z12..20] arm_l_fore[n=4 z10..13] arm_r[n=16 z20..28] arm_r_fore[n=16 z11..19] arm_r_fore[n=4 z10..12] leg_l[n=24 z8..16] leg_l_shin[n=36 z1..9] leg_l_shin[n=12 z1..2] leg_r[n=24 z8..16] leg_r_shin[n=36 z1..9] leg_r_shin[n=12 z1..2] head[n=45 z29..50] body[n=40 z15..34] arm_l[n=12 z15..35] arm_r[n=12 z15..35] leg_l[n=12 z8..17] leg_l_shin[n=13 z-0..9] leg_r[n=12 z8..16] leg_r_shin[n=13 z-0..9] body[n=192 z14..36] leg_l_shin[n=36 z-0..10] leg_r_shin[n=36 z-0..10] body[n=9 z31..38] head[n=18 z36..50] || EXCLUDED: halo[n=149 z19..66] halo[n=104 z21..64] banner[n=63 z14..31] banner[n=54 z17..29] banner[n=4 z13..31] aura[n=44 z3..47] "
+  "relay_og": "BODY: head[n=340 z31..53] head[n=80 z35..41] head[n=2 z37..39] head[n=2 z35..41] body[n=124 z16..31] arm_l[n=16 z20..29] arm_l_fore[n=16 z12..20] arm_l_fore[n=4 z10..13] arm_r[n=16 z20..29] arm_r_fore[n=16 z12..20] arm_r_fore[n=4 z10..13] leg_l[n=24 z8..17] leg_l_shin[n=36 z1..9] leg_l_shin[n=12 z1..1] leg_r[n=24 z8..17] leg_r_shin[n=36 z1..9] leg_r_shin[n=12 z1..2] || EXCLUDED: ",
+  "celestial_light": "BODY: head[n=340 z31..52] head[n=80 z35..40] head[n=2 z36..38] head[n=2 z34..40] body[n=124 z16..31] arm_l[n=16 z20..29] arm_l_fore[n=16 z12..20] arm_l_fore[n=4 z10..12] arm_r[n=16 z20..29] arm_r_fore[n=16 z12..20] arm_r_fore[n=4 z10..13] leg_l[n=24 z8..17] leg_l_shin[n=36 z1..9] leg_l_shin[n=12 z1..2] leg_r[n=24 z8..17] leg_r_shin[n=36 z1..9] leg_r_shin[n=12 z1..2] head[n=45 z29..50] body[n=40 z15..34] arm_l[n=12 z15..35] arm_r[n=12 z16..35] leg_l[n=12 z8..17] leg_l_shin[n=13 z0..9] leg_r[n=12 z8..17] leg_r_shin[n=13 z0..9] body[n=192 z15..37] leg_l_shin[n=36 z0..10] leg_r_shin[n=36 z0..10] body[n=9 z32..38] head[n=18 z37..50] || EXCLUDED: halo[n=149 z20..66] halo[n=104 z22..64] banner[n=63 z14..32] banner[n=54 z17..29] banner[n=4 z14..32] aura[n=44 z5..47] ",
+  "apollo_v1": "BODY: head[n=340 z14..23] head[n=80 z15..18] head[n=2 z16..17] head[n=2 z15..18] body[n=124 z7..14] arm_l[n=16 z9..13] arm_l_fore[n=16 z5..9] arm_l_fore[n=4 z4..6] arm_r[n=16 z9..13] arm_r_fore[n=16 z5..9] arm_r_fore[n=4 z4..6] leg_l[n=24 z4..7] leg_l_shin[n=36 z1..4] leg_l_shin[n=12 z1..1] leg_r[n=24 z4..7] leg_r_shin[n=36 z1..4] leg_r_shin[n=12 z1..1] body[n=755 z7..33] body[n=213 z9..32] body[n=8 z13..16] leg_l_shin[n=18 z1..3] leg_l_shin[n=1 z2..2] leg_r_shin[n=18 z1..3] leg_r_shin[n=1 z1..2] body[n=19 z6..19] leg_l[n=26 z4..7] leg_l[n=18 z3..4] leg_r[n=26 z4..7] leg_r[n=18 z3..4] || EXCLUDED: halo[n=265 z4..40] halo[n=122 z6..39] halo[n=247 z5..40] robe[n=230 z1..13] robe[n=28 z4..9] robe[n=8 z5..6] lamps[n=12 z5..9] lamps[n=104 z1..8] ",
+  "apollo": "BODY: head[n=340 z32..53] head[n=80 z36..41] head[n=2 z37..40] head[n=2 z36..41] body[n=124 z17..32] arm_l[n=16 z21..30] arm_l_fore[n=16 z13..21] arm_l_fore[n=4 z11..14] arm_r[n=16 z21..30] arm_r_fore[n=16 z13..21] arm_r_fore[n=4 z11..14] leg_l[n=24 z9..17] leg_l_shin[n=36 z2..10] leg_l_shin[n=12 z2..2] leg_r[n=24 z9..17] leg_r_shin[n=36 z2..10] leg_r_shin[n=12 z1..2] body[n=246 z9..35] body[n=71 z16..34] body[n=18 z18..33] body[n=18 z18..33] body[n=11 z6..29] arm_l_fore[n=26 z10..22] arm_l_fore[n=9 z14..16] arm_l_fore[n=1 z18..20] arm_r_fore[n=26 z10..22] arm_r_fore[n=9 z14..16] arm_r_fore[n=1 z18..20] leg_l_shin[n=52 z2..9] leg_l_shin[n=1 z7..9] leg_l_shin[n=16 z2..4] leg_r_shin[n=52 z2..9] leg_r_shin[n=1 z7..9] leg_r_shin[n=16 z2..4] || EXCLUDED: halo[n=158 z30..83] halo[n=79 z31..82] pauldrons[n=474 z20..65] pauldrons[n=178 z19..63] pauldrons[n=8 z29..37] robe[n=176 z3..17] robe[n=30 z0..18] robe[n=8 z11..14] lamps[n=12 z10..19] lamps[n=104 z2..17] robe[n=121 z0..34] robe[n=287 z2..34] ",
+  "arden_infernal_v1": "BODY: head[n=340 z23..38] head[n=80 z25..29] head[n=2 z26..28] head[n=2 z25..29] body[n=124 z12..23] arm_l[n=16 z15..21] arm_l_fore[n=16 z9..15] arm_l_fore[n=4 z8..10] arm_r[n=16 z15..21] arm_r_fore[n=16 z9..15] arm_r_fore[n=4 z8..10] leg_l[n=24 z6..13] leg_l_shin[n=36 z1..7] leg_l_shin[n=12 z1..2] leg_r[n=24 z6..12] leg_r_shin[n=36 z1..7] leg_r_shin[n=12 z1..2] body[n=156 z10..26] body[n=10 z7..21] body[n=19 z12..21] arm_l[n=224 z-11..29] arm_l[n=371 z-6..23] arm_l[n=16 z-14..-5] || EXCLUDED: halo[n=246 z17..56] halo[n=74 z20..52] halo[n=12 z16..57] sigil[n=40 z4..14] sigil[n=30 z3..15] sigil[n=1 z8..10] tail[n=6 z17..41] tail[n=10 z17..41] ",
+  "arden_infernal": "BODY: head[n=340 z23..40] head[n=80 z26..31] head[n=2 z27..29] head[n=2 z26..30] body[n=124 z13..24] arm_l[n=16 z16..23] arm_l_fore[n=16 z10..16] arm_l_fore[n=4 z8..10] arm_r[n=16 z16..23] arm_r_fore[n=16 z10..16] arm_r_fore[n=4 z8..10] leg_l[n=24 z7..13] leg_l_shin[n=36 z1..7] leg_l_shin[n=12 z1..2] leg_r[n=24 z7..13] leg_r_shin[n=36 z1..7] leg_r_shin[n=12 z1..2] body[n=174 z13..26] body[n=42 z12..23] body[n=240 z10..27] body[n=35 z12..25] body[n=15 z6..23] arm_l[n=30 z16..25] arm_l[n=20 z16..24] arm_l_fore[n=9 z12..17] arm_l_fore[n=6 z9..13] arm_l[n=5 z16..25] arm_r[n=184 z10..33] arm_r[n=222 z13..26] arm_r[n=2 z15..20] arm_r_fore[n=124 z-6..13] arm_r_fore[n=14 z-12..11] arm_r_fore[n=42 z-9..13] arm_l_fore[n=18 z10..13] arm_l_fore[n=1 z10..12] || EXCLUDED: halo[n=173 z21..61] halo[n=80 z22..54] halo[n=8 z21..57] sigil[n=30 z-1..15] sigil[n=30 z-0..14] sigil[n=58 z-0..14] sigil[n=1 z5..8] robe[n=105 z2..27] robe[n=263 z0..26] robe[n=101 z2..26] robe[n=11 z12..14] tail[n=8 z12..45] tail[n=14 z13..45] tail[n=6 z16..45] ",
+  "skeleton_flame_v1": "BODY: head[n=370 z32..53] head[n=80 z36..41] head[n=2 z37..40] head[n=2 z36..41] body[n=302 z11..36] arm_l[n=16 z21..30] arm_l_fore[n=16 z13..21] arm_l_fore[n=4 z11..13] arm_r[n=16 z21..30] arm_r_fore[n=16 z13..21] arm_r_fore[n=4 z11..14] leg_l[n=24 z9..17] leg_l_shin[n=36 z2..10] leg_l_shin[n=12 z2..3] leg_r[n=24 z9..18] leg_r_shin[n=36 z2..10] leg_r_shin[n=12 z2..2] head[n=7 z42..49] body[n=48 z25..34] body[n=17 z18..33] body[n=110 z15..35] body[n=8 z22..26] body[n=3 z18..23] arm_l[n=1 z26..27] arm_l[n=2 z25..28] arm_r[n=1 z26..27] arm_r[n=2 z25..29] leg_l[n=1 z9..10] leg_l[n=1 z10..11] leg_l_shin[n=1 z8..9] leg_r[n=1 z9..10] leg_r[n=1 z10..11] leg_r_shin[n=1 z8..9] || EXCLUDED: ",
+  "skeleton_flame": "BODY: head[n=390 z32..54] head[n=80 z36..41] head[n=2 z38..40] head[n=2 z36..42] body[n=300 z12..36] arm_l[n=43 z21..36] arm_l_fore[n=52 z12..23] arm_l_fore[n=4 z11..14] arm_r[n=43 z21..36] arm_r_fore[n=52 z12..23] arm_r_fore[n=4 z11..14] leg_l[n=80 z9..18] leg_l_shin[n=60 z2..10] leg_l_shin[n=12 z2..2] leg_r[n=80 z9..18] leg_r_shin[n=60 z2..10] leg_r_shin[n=12 z2..3] head[n=21 z38..49] body[n=62 z24..34] body[n=17 z18..33] body[n=8 z19..23] body[n=3 z15..21] body[n=8 z12..35] arm_l[n=2 z28..33] arm_l[n=1 z25..27] arm_l_fore[n=1 z17..19] arm_l_fore[n=2 z15..22] arm_l_fore[n=4 z18..21] arm_r[n=2 z29..33] arm_r[n=1 z25..27] arm_r_fore[n=1 z17..19] arm_r_fore[n=2 z15..22] arm_r_fore[n=4 z18..21] leg_l[n=1 z13..14] leg_l[n=1 z10..11] leg_l_shin[n=1 z6..6] leg_l_shin[n=12 z2..4] leg_l_shin[n=16 z2..3] leg_r[n=1 z13..14] leg_r[n=1 z10..11] leg_r_shin[n=1 z6..6] leg_r_shin[n=12 z2..4] leg_r_shin[n=16 z2..3] || EXCLUDED: "
  },
  "occupancy": {
-  "relay_og_front": "heightPct=82.4 widthPct=40.3 centreXPct=45.7 centreYPct=50.9 litPct=24.9 mean=55.7 target=640x800 threshold=34",
-  "relay_og_left": "heightPct=80.1 widthPct=40.5 centreXPct=51.9 centreYPct=49.4 litPct=24.6 mean=55.1 target=640x800 threshold=34",
-  "relay_og_back": "heightPct=82.0 widthPct=43.0 centreXPct=50.0 centreYPct=50.3 litPct=25.8 mean=57.5 target=640x800 threshold=34",
-  "relay_og_right": "heightPct=82.2 widthPct=45.3 centreXPct=48.2 centreYPct=48.6 litPct=25.4 mean=56.9 target=640x800 threshold=34",
-  "arden_infernal_front": "heightPct=73.6 widthPct=81.4 centreXPct=51.7 centreYPct=36.8 litPct=42.6 mean=95.2 target=640x800 threshold=34",
-  "arden_infernal_left": "heightPct=66.5 widthPct=81.4 centreXPct=53.9 centreYPct=33.2 litPct=38.2 mean=84.6 target=640x800 threshold=34",
-  "arden_infernal_back": "heightPct=70.9 widthPct=81.4 centreXPct=48.9 centreYPct=35.4 litPct=41.6 mean=93.1 target=640x800 threshold=34",
-  "arden_infernal_right": "heightPct=73.5 widthPct=77.7 centreXPct=48.6 centreYPct=36.7 litPct=40.3 mean=91.2 target=640x800 threshold=34",
-  "apollo_front": "heightPct=74.6 widthPct=100.0 centreXPct=49.9 centreYPct=46.5 litPct=44.0 mean=98.5 target=640x800 threshold=34",
-  "apollo_left": "heightPct=81.9 widthPct=96.1 centreXPct=51.9 centreYPct=43.4 litPct=46.8 mean=102.4 target=640x800 threshold=34",
-  "apollo_back": "heightPct=83.2 widthPct=100.0 centreXPct=49.9 centreYPct=41.6 litPct=49.3 mean=108.2 target=640x800 threshold=34",
-  "apollo_right": "heightPct=85.4 widthPct=100.0 centreXPct=49.9 centreYPct=42.6 litPct=46.5 mean=102.9 target=640x800 threshold=34",
-  "skeleton_flame_front": "heightPct=92.2 widthPct=100.0 centreXPct=49.9 centreYPct=46.1 litPct=69.2 mean=137.8 target=640x800 threshold=34",
-  "skeleton_flame_left": "heightPct=88.1 widthPct=100.0 centreXPct=49.9 centreYPct=44.0 litPct=72.9 mean=143.8 target=640x800 threshold=34",
-  "skeleton_flame_back": "heightPct=90.1 widthPct=100.0 centreXPct=49.9 centreYPct=45.0 litPct=74.2 mean=148.5 target=640x800 threshold=34",
-  "skeleton_flame_right": "heightPct=94.0 widthPct=100.0 centreXPct=49.9 centreYPct=46.9 litPct=76.8 mean=150.9 target=640x800 threshold=34",
-  "celestial_light_front": "heightPct=91.4 widthPct=100.0 centreXPct=49.9 centreYPct=45.6 litPct=68.0 mean=133.7 target=640x800 threshold=34",
-  "celestial_light_left": "heightPct=92.2 widthPct=94.2 centreXPct=52.8 centreYPct=46.1 litPct=66.2 mean=134.2 target=640x800 threshold=34",
-  "celestial_light_back": "heightPct=93.4 widthPct=100.0 centreXPct=49.9 centreYPct=46.6 litPct=72.3 mean=141.7 target=640x800 threshold=34",
-  "celestial_light_right": "heightPct=91.0 widthPct=100.0 centreXPct=49.9 centreYPct=45.4 litPct=70.2 mean=138.6 target=640x800 threshold=34"
+  "relay_og_front": "heightPct=82.4 widthPct=41.2 centreXPct=44.9 centreYPct=50.4 litPct=24.3 mean=56.5 target=640x800 threshold=34",
+  "relay_og_left": "heightPct=80.9 widthPct=40.0 centreXPct=51.5 centreYPct=47.8 litPct=24.3 mean=56.4 target=640x800 threshold=34",
+  "relay_og_back": "heightPct=83.9 widthPct=39.4 centreXPct=49.5 centreYPct=52.8 litPct=26.0 mean=60.3 target=640x800 threshold=34",
+  "relay_og_right": "heightPct=82.2 widthPct=41.1 centreXPct=45.3 centreYPct=48.1 litPct=24.7 mean=57.4 target=640x800 threshold=34",
+  "celestial_light_front": "heightPct=90.0 widthPct=83.1 centreXPct=50.1 centreYPct=44.9 litPct=43.4 mean=105.1 target=640x800 threshold=34",
+  "celestial_light_left": "heightPct=89.1 widthPct=88.0 centreXPct=55.2 centreYPct=44.5 litPct=42.9 mean=103.4 target=640x800 threshold=34",
+  "celestial_light_back": "heightPct=91.8 widthPct=87.7 centreXPct=53.1 centreYPct=45.8 litPct=44.4 mean=107.4 target=640x800 threshold=34",
+  "celestial_light_right": "heightPct=90.1 widthPct=84.8 centreXPct=49.2 centreYPct=45.0 litPct=43.7 mean=105.4 target=640x800 threshold=34",
+  "apollo_v1_front": "heightPct=73.1 widthPct=99.5 centreXPct=49.7 centreYPct=45.1 litPct=36.2 mean=87.9 target=640x800 threshold=34",
+  "apollo_v1_left": "heightPct=71.9 widthPct=96.1 centreXPct=51.9 centreYPct=43.8 litPct=37.1 mean=90.3 target=640x800 threshold=34",
+  "apollo_v1_back": "heightPct=80.9 widthPct=100.0 centreXPct=49.9 centreYPct=40.4 litPct=41.0 mean=99.8 target=640x800 threshold=34",
+  "apollo_v1_right": "heightPct=77.5 widthPct=99.7 centreXPct=49.8 centreYPct=41.4 litPct=37.6 mean=91.5 target=640x800 threshold=34",
+  "apollo_front": "heightPct=94.6 widthPct=100.0 centreXPct=49.9 centreYPct=47.2 litPct=73.3 mean=162.0 target=640x800 threshold=34",
+  "apollo_left": "heightPct=89.0 widthPct=100.0 centreXPct=49.9 centreYPct=44.4 litPct=70.1 mean=154.6 target=640x800 threshold=34",
+  "apollo_back": "heightPct=95.5 widthPct=100.0 centreXPct=49.9 centreYPct=47.7 litPct=76.9 mean=169.0 target=640x800 threshold=34",
+  "apollo_right": "heightPct=92.0 widthPct=100.0 centreXPct=49.9 centreYPct=45.9 litPct=73.2 mean=162.2 target=640x800 threshold=34",
+  "arden_infernal_v1_front": "heightPct=93.1 widthPct=68.6 centreXPct=48.6 centreYPct=46.5 litPct=34.1 mean=79.2 target=640x800 threshold=34",
+  "arden_infernal_v1_left": "heightPct=92.1 widthPct=68.9 centreXPct=55.3 centreYPct=46.0 litPct=34.4 mean=78.8 target=640x800 threshold=34",
+  "arden_infernal_v1_back": "heightPct=69.5 widthPct=71.2 centreXPct=50.5 centreYPct=34.7 litPct=36.2 mean=82.3 target=640x800 threshold=34",
+  "arden_infernal_v1_right": "heightPct=70.1 widthPct=73.8 centreXPct=53.2 centreYPct=35.0 litPct=36.1 mean=80.7 target=640x800 threshold=34",
+  "arden_infernal_front": "heightPct=71.0 widthPct=88.8 centreXPct=49.3 centreYPct=35.4 litPct=42.8 mean=90.3 target=640x800 threshold=34",
+  "arden_infernal_left": "heightPct=71.6 widthPct=86.2 centreXPct=47.7 centreYPct=35.8 litPct=44.2 mean=92.3 target=640x800 threshold=34",
+  "arden_infernal_back": "heightPct=73.0 widthPct=89.2 centreXPct=47.0 centreYPct=36.4 litPct=45.2 mean=95.2 target=640x800 threshold=34",
+  "arden_infernal_right": "heightPct=69.6 widthPct=91.7 centreXPct=49.7 centreYPct=34.8 litPct=43.3 mean=90.3 target=640x800 threshold=34",
+  "skeleton_flame_v1_front": "heightPct=89.4 widthPct=83.0 centreXPct=48.0 centreYPct=44.6 litPct=49.3 mean=117.1 target=640x800 threshold=34",
+  "skeleton_flame_v1_left": "heightPct=91.1 widthPct=81.1 centreXPct=51.7 centreYPct=45.5 litPct=50.9 mean=121.2 target=640x800 threshold=34",
+  "skeleton_flame_v1_back": "heightPct=93.0 widthPct=85.3 centreXPct=51.6 centreYPct=46.4 litPct=49.2 mean=116.4 target=640x800 threshold=34",
+  "skeleton_flame_v1_right": "heightPct=88.4 widthPct=81.7 centreXPct=51.1 centreYPct=44.1 litPct=48.0 mean=115.1 target=640x800 threshold=34",
+  "skeleton_flame_front": "heightPct=90.1 widthPct=70.0 centreXPct=51.5 centreYPct=45.0 litPct=38.1 mean=91.4 target=640x800 threshold=34",
+  "skeleton_flame_left": "heightPct=89.0 widthPct=69.8 centreXPct=52.5 centreYPct=44.4 litPct=38.8 mean=91.0 target=640x800 threshold=34",
+  "skeleton_flame_back": "heightPct=93.1 widthPct=70.8 centreXPct=51.2 centreYPct=46.5 litPct=39.7 mean=95.0 target=640x800 threshold=34",
+  "skeleton_flame_right": "heightPct=88.6 widthPct=68.9 centreXPct=50.9 centreYPct=44.2 litPct=39.2 mean=92.3 target=640x800 threshold=34"
  },
  "framing_after_spin": {
-  "relay_og": "onBody=1 bodyTall=51.7 bodyWide=31.3 rawTall=51.7 rawWide=31.3 envelope=155 scale=0.325 fill=0.80 glow=0.0015 fitTall=85 fitWide=64 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
-  "arden_infernal": "onBody=1 bodyTall=51.7 bodyWide=32.3 rawTall=51.7 rawWide=32.3 envelope=399 scale=0.235 fill=0.80 glow=0.0015 fitTall=85 fitWide=66 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
-  "apollo": "onBody=1 bodyTall=33.1 bodyWide=47.3 rawTall=33.1 rawWide=47.3 envelope=284 scale=0.145 fill=0.80 glow=0.0015 fitTall=54 fitWide=97 distance=68 fov=34.0 target=640x800 predictedHeightPct=64.0",
-  "skeleton_flame": "onBody=1 bodyTall=51.8 bodyWide=35.6 rawTall=51.8 rawWide=35.6 envelope=268 scale=0.330 fill=0.80 glow=0.0015 fitTall=85 fitWide=73 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
-  "celestial_light": "onBody=1 bodyTall=51.7 bodyWide=33.9 rawTall=51.7 rawWide=33.9 envelope=199 scale=0.322 fill=0.80 glow=0.0015 fitTall=85 fitWide=69 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0"
+  "relay_og": "onBody=1 bodyTall=51.9 bodyWide=30.4 rawTall=51.9 rawWide=30.4 envelope=155 scale=0.329 fill=0.80 glow=0.0010 fitTall=85 fitWide=62 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "celestial_light": "onBody=1 bodyTall=51.9 bodyWide=34.4 rawTall=51.9 rawWide=34.4 envelope=199 scale=0.327 fill=0.80 glow=0.0010 fitTall=85 fitWide=70 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "apollo_v1": "onBody=1 bodyTall=32.6 bodyWide=47.2 rawTall=32.6 rawWide=47.2 envelope=284 scale=0.143 fill=0.80 glow=0.0010 fitTall=53 fitWide=97 distance=67 fov=34.0 target=640x800 predictedHeightPct=64.0",
+  "apollo": "onBody=1 bodyTall=51.9 bodyWide=31.1 rawTall=51.9 rawWide=31.1 envelope=246 scale=0.330 fill=0.80 glow=0.0010 fitTall=85 fitWide=63 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "arden_infernal_v1": "onBody=1 bodyTall=51.9 bodyWide=36.8 rawTall=51.9 rawWide=36.8 envelope=399 scale=0.244 fill=0.80 glow=0.0010 fitTall=85 fitWide=75 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "arden_infernal": "onBody=1 bodyTall=51.9 bodyWide=35.7 rawTall=51.9 rawWide=35.7 envelope=365 scale=0.245 fill=0.80 glow=0.0010 fitTall=85 fitWide=73 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "skeleton_flame_v1": "onBody=1 bodyTall=51.9 bodyWide=35.7 rawTall=51.9 rawWide=35.7 envelope=268 scale=0.330 fill=0.80 glow=0.0010 fitTall=85 fitWide=73 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "skeleton_flame": "onBody=1 bodyTall=51.9 bodyWide=39.0 rawTall=51.9 rawWide=39.0 envelope=226 scale=0.330 fill=0.80 glow=0.0010 fitTall=85 fitWide=80 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0"
  },
  "framing_drift": {},
  "occupancy_height_pct": {
   "relay_og_front": 82.4,
-  "relay_og_left": 80.1,
-  "relay_og_back": 82.0,
+  "relay_og_left": 80.9,
+  "relay_og_back": 83.9,
   "relay_og_right": 82.2,
-  "arden_infernal_front": 73.6,
-  "arden_infernal_left": 66.5,
-  "arden_infernal_back": 70.9,
-  "arden_infernal_right": 73.5,
-  "apollo_front": 74.6,
-  "apollo_left": 81.9,
-  "apollo_back": 83.2,
-  "apollo_right": 85.4,
-  "skeleton_flame_front": 92.2,
-  "skeleton_flame_left": 88.1,
-  "skeleton_flame_back": 90.1,
-  "skeleton_flame_right": 94.0,
-  "celestial_light_front": 91.4,
-  "celestial_light_left": 92.2,
-  "celestial_light_back": 93.4,
-  "celestial_light_right": 91.0
+  "celestial_light_front": 90.0,
+  "celestial_light_left": 89.1,
+  "celestial_light_back": 91.8,
+  "celestial_light_right": 90.1,
+  "apollo_v1_front": 73.1,
+  "apollo_v1_left": 71.9,
+  "apollo_v1_back": 80.9,
+  "apollo_v1_right": 77.5,
+  "apollo_front": 94.6,
+  "apollo_left": 89.0,
+  "apollo_back": 95.5,
+  "apollo_right": 92.0,
+  "arden_infernal_v1_front": 93.1,
+  "arden_infernal_v1_left": 92.1,
+  "arden_infernal_v1_back": 69.5,
+  "arden_infernal_v1_right": 70.1,
+  "arden_infernal_front": 71.0,
+  "arden_infernal_left": 71.6,
+  "arden_infernal_back": 73.0,
+  "arden_infernal_right": 69.6,
+  "skeleton_flame_v1_front": 89.4,
+  "skeleton_flame_v1_left": 91.1,
+  "skeleton_flame_v1_back": 93.0,
+  "skeleton_flame_v1_right": 88.4,
+  "skeleton_flame_front": 90.1,
+  "skeleton_flame_left": 89.0,
+  "skeleton_flame_back": 93.1,
+  "skeleton_flame_right": 88.6
  },
  "framing_out_of_band": {
   "front": {
-   "arden_infernal_front": {
-    "heightPct": 73.6,
+   "apollo_v1_front": {
+    "heightPct": 73.1,
     "band": [
      76.0,
      94.0
     ]
    },
    "apollo_front": {
-    "heightPct": 74.6,
+    "heightPct": 94.6,
+    "band": [
+     76.0,
+     94.0
+    ]
+   },
+   "arden_infernal_front": {
+    "heightPct": 71.0,
     "band": [
      76.0,
      94.0
@@ -260,8 +351,15 @@
    }
   },
   "rotated": {
-   "arden_infernal_left": {
-    "heightPct": 66.5,
+   "arden_infernal_v1_back": {
+    "heightPct": 69.5,
+    "band": [
+     70.0,
+     99.0
+    ]
+   },
+   "arden_infernal_right": {
+    "heightPct": 69.6,
     "band": [
      70.0,
      99.0
@@ -269,30 +367,40 @@
    }
   },
   "off_centre": {
+   "arden_infernal_v1_back": {
+    "centreXPct": 50.5,
+    "centreYPct": 34.7,
+    "slack": 12.0
+   },
+   "arden_infernal_v1_right": {
+    "centreXPct": 53.2,
+    "centreYPct": 35.0,
+    "slack": 12.0
+   },
    "arden_infernal_front": {
-    "centreXPct": 51.7,
-    "centreYPct": 36.8,
-    "slack": 12.0
-   },
-   "arden_infernal_left": {
-    "centreXPct": 53.9,
-    "centreYPct": 33.2,
-    "slack": 12.0
-   },
-   "arden_infernal_back": {
-    "centreXPct": 48.9,
+    "centreXPct": 49.3,
     "centreYPct": 35.4,
     "slack": 12.0
    },
+   "arden_infernal_left": {
+    "centreXPct": 47.7,
+    "centreYPct": 35.8,
+    "slack": 12.0
+   },
+   "arden_infernal_back": {
+    "centreXPct": 47.0,
+    "centreYPct": 36.4,
+    "slack": 12.0
+   },
    "arden_infernal_right": {
-    "centreXPct": 48.6,
-    "centreYPct": 36.7,
+    "centreXPct": 49.7,
+    "centreYPct": 34.8,
     "slack": 12.0
    }
   }
  },
  "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\wardrobe20",
- "finished": "2026-09-27 05:53:16",
- "seconds": 125.77,
- "log": "V_relay_og INFO relay_og {'framing': 'onBody=1 bodyTall=51.7 bodyWide=30.5 rawTall=51.7 rawWide=30.5 envelope=155 scale=0.329 fill=0.80 glow=0.0015 fitTall=85 fitWide=62 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0'}\nV_arden_infernal INFO arden_infernal {'framing': 'onBody=1 bodyTall=51.7 bodyWide=35.3 rawTall=51.7 rawWide=35.3 envelope=399 scale=0.242 fill=0.80 glow=0.0015 fitTall=85 fitWide=72 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0'}\nV_apollo INFO apollo {'framing': 'onBody=1 bodyTall=33.0 bodyWide=47.2 rawTall=33.0 rawWide=47.2 envelope=284 scale=0.145 fill=0.80 glow=0.0015 fitTall=54 fitWide=97 distance=67 fov=34.0 target=640x800 predictedHeightPct=64.0'}\nV_skeleton_flame INFO skeleton_flame {'framing': 'onBody=1 bodyTall=51.8 bodyWide=35.7 rawTall=51.8 rawWide=35.7 envelope=268 scale=0.331 fill=0.80 glow=0.0015 fitTall=85 fitWide=73 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0'}\nV_celestial_light INFO celestial_light {'framing': 'onBody=1 bodyTall=51.7 bodyWide=34.1 rawTall=51.7 rawWide=34.1 envelope=199 scale=0.325 fill=0.80 glow=0.0015 fitTall=85 fitWide=70 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0'}\n"
+ "finished": "2026-09-27 14:18:11",
+ "seconds": 168.77,
+ "log": "V_relay_og INFO relay_og {'framing': 'onBody=1 bodyTall=51.9 bodyWide=30.6 rawTall=51.9 rawWide=30.6 envelope=155 scale=0.331 fill=0.80 glow=0.0010 fitTall=85 fitWide=63 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0'}\nV_celestial_light INFO celestial_light {'framing': 'onBody=1 bodyTall=51.9 bodyWide=34.4 rawTall=51.9 rawWide=34.4 envelope=199 scale=0.327 fill=0.80 glow=0.0010 fitTall=85 fitWide=70 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0'}\nV_apollo_v1 INFO apollo_v1 {'framing': 'onBody=1 bodyTall=32.8 bodyWide=47.1 rawTall=32.8 rawWide=47.1 envelope=284 scale=0.145 fill=0.80 glow=0.0010 fitTall=54 fitWide=96 distance=67 fov=34.0 target=640x800 predictedHeightPct=64.0'}\nV_apollo INFO apollo {'framing': 'onBody=1 bodyTall=51.9 bodyWide=31.4 rawTall=51.9 rawWide=31.4 envelope=246 scale=0.333 fill=0.80 glow=0.0010 fitTall=85 fitWide=64 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0'}\nV_arden_infernal_v1 INFO arden_infernal_v1 {'framing': 'onBody=1 bodyTall=51.9 bodyWide=31.6 rawTall=51.9 rawWide=31.6 envelope=399 scale=0.236 fill=0.80 glow=0.0010 fitTall=85 fitWide=65 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0'}\nV_arden_infernal INFO arden_infernal {'framing': 'onBody=1 bodyTall=51.9 bodyWide=41.2 rawTall=51.9 rawWide=41.2 envelope=365 scale=0.248 fill=0.80 glow=0.0010 fitTall=85 fitWide=84 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0'}\nV_skeleton_flame_v1 INFO skeleton_flame_v1 {'framing': 'onBody=1 bodyTall=51.9 bodyWide=35.4 rawTall=51.9 rawWide=35.4 envelope=268 scale=0.332 fill=0.80 glow=0.0010 fitTall=85 fitWide=72 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0'}\nV_skeleton_flame INFO skeleton_flame {'framing': 'onBody=1 bodyTall=51.9 bodyWide=39.7 rawTall=51.9 rawWide=39.7 envelope=226 scale=0.332 fill=0.80 glow=0.0010 fitTall=85 fitWide=81 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0'}\n"
 }

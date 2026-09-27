@@ -195,19 +195,67 @@ void UWonderlandPracticalLightsSubsystem::Assign()
 			PC->GetPlayerViewPoint(Eye, Unused);
 		}
 	}
-	// The nearest N within the radius. A partial sort of a few hundred entries four times a second is nothing.
+	// DISTANCE IS THE CUTOFF. SIGNIFICANCE IS THE RANKING. The founder's correction asks for
+	// "distance/significance activation" and this used distance for both, which spends the pool on the
+	// lights least able to be seen.
+	//
+	// MEASURED AT THE TARTARUS AVENUE DIP, 2026-09-27, after the light set went from 970 to 1355: 119
+	// definitions sat inside the 120 m radius, the pool of 48 reached only 53 m, and THIRTY OF THE FORTY-EIGHT
+	// were 1.8-2.0 candela facade dabs with a 250 uu attenuation radius -- lights that illuminate two and a
+	// half metres of wall. Ten of twenty-eight road lamps in range made the pool. At the market, twenty-eight
+	// of forty-eight were facade. The before/after of a whole new lamp layer was 0.0323 to 0.0325: unchanged
+	// to four decimals, because the lamps that would have shown were ranked out by dabs behind the player.
+	//
+	// This got urgent because of a fix of mine: 388 fixtures that had been silently throwing nothing are now
+	// lit, and most of them are low-candela wall lanterns. The pool had never been under this pressure.
+	//
+	// TWO RULES, BOTH ANSWERING A THING THE FOUNDER ASKED FOR.
+	//
+	// 1. A LIGHT WHOSE OWN RADIUS CONTAINS THE PLAYER IS NEVER DROPPED. A 2.5 m dab is worthless five metres
+	//    away and is the only thing lighting the ground when you are standing under it -- which is the
+	//    founder's "cannot see where to put your foot". Pure significance ordering would drop exactly those.
+	// 2. OTHERWISE, RANK BY REACH x STRENGTH (candelas times attenuation radius), nearest first on a tie. An
+	//    11 candela road lamp forty metres ahead lights the road being walked towards; a dab behind the
+	//    player does not, however close it is.
+	//
+	// The cvars keep their meaning: PracticalRadius is still the hard cutoff, PracticalCount still the pool.
 	const float Radius2 = GWonderlandPracticalRadius * GWonderlandPracticalRadius;
-	TArray<TPair<float, int32>> Near;
+	struct FCandidate
+	{
+		float DistSq = 0.0f;
+		float Significance = 0.0f;
+		bool bContainsPlayer = false;
+		int32 Index = INDEX_NONE;
+	};
+	TArray<FCandidate> Near;
 	Near.Reserve(Defined.Num());
 	for (int32 Index = 0; Index < Defined.Num(); ++Index)
 	{
-		const float D2 = static_cast<float>(FVector::DistSquared2D(Defined[Index].Location, Eye));
-		if (D2 <= Radius2)
+		const FWonderlandPracticalLight& Def = Defined[Index];
+		const float D2 = static_cast<float>(FVector::DistSquared2D(Def.Location, Eye));
+		if (D2 > Radius2)
 		{
-			Near.Emplace(D2, Index);
+			continue;
 		}
+		FCandidate C;
+		C.DistSq = D2;
+		C.Significance = FMath::Max(Def.Candelas, 0.0f) * FMath::Max(Def.RadiusUU, 0.0f);
+		C.bContainsPlayer = D2 <= Def.RadiusUU * Def.RadiusUU;
+		C.Index = Index;
+		Near.Emplace(MoveTemp(C));
 	}
-	Near.Sort([](const TPair<float, int32>& A, const TPair<float, int32>& B) { return A.Key < B.Key; });
+	Near.Sort([](const FCandidate& A, const FCandidate& B)
+	{
+		if (A.bContainsPlayer != B.bContainsPlayer)
+		{
+			return A.bContainsPlayer;          // standing inside it beats everything
+		}
+		if (!FMath::IsNearlyEqual(A.Significance, B.Significance))
+		{
+			return A.Significance > B.Significance;
+		}
+		return A.DistSq < B.DistSq;
+	});
 	const int32 Lit = FMath::Min(Near.Num(), Pool.Num());
 	ActiveCount = Lit;
 	for (int32 Slot = 0; Slot < Pool.Num(); ++Slot)
@@ -230,7 +278,7 @@ void UWonderlandPracticalLightsSubsystem::Assign()
 			}
 			continue;
 		}
-		const int32 Index = Near[Slot].Value;
+		const int32 Index = Near[Slot].Index;
 		if (Assigned[Slot] != Index)
 		{
 			Assigned[Slot] = Index;

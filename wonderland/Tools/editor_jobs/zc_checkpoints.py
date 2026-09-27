@@ -77,8 +77,26 @@ def job():
     unreal.SystemLibrary.execute_console_command(world, "wl.Sky.DayMinutes 0")
     yield 6.0
 
+    def live():
+        """The world, re-fetched at every use -- NEVER the reference captured above.
+
+        THE BUG THIS EXISTS FOR, and it cost a whole night verdict. v2 held `world` from the top of the job
+        and used it for ten minutes. In the sites phase get_all_actors_with_tag returned 108 actors; in the
+        capture phase, minutes later, the identical call on the identical tag returned 0 -- at every site, at
+        both hours -- so every night number was read off a world the job could no longer see, and K06 failed
+        on captures that may have contained no checkpoints at all.
+
+        It is the same fault that killed zc_water_audit in the same window, which is what identified it: a
+        long-held world reference goes stale, and the two APIs disagree about how to say so. pose_camera
+        THROWS ("Cannot nativize 'World' as 'Object'"); get_all_actors_with_tag returns an EMPTY LIST. The
+        throw is survivable because it is loud. The empty list is the dangerous one: it reads exactly like a
+        world that legitimately contains nothing, so a gate consuming it reports a content failure and is
+        believed. Any job in this channel that spans many yields must re-fetch.
+        """
+        return ues.get_game_world()
+
     RESULT["partition"] = str(L.describe_world_partition(world))
-    state = {"dog": unreal.GameplayStatics.get_player_pawn(world, 0), "lost": []}
+    state = {"dog": unreal.GameplayStatics.get_player_pawn(live(), 0), "lost": []}
 
     def dog():
         d = state["dog"]
@@ -86,14 +104,14 @@ def job():
             d.get_actor_location()
             return d
         except Exception:                                             # noqa: BLE001
-            state["dog"] = unreal.GameplayStatics.get_player_pawn(world, 0)
+            state["dog"] = unreal.GameplayStatics.get_player_pawn(live(), 0)
             return state["dog"]
 
     def trace_z(x, y, top, channel, depth=20000.0):
         """The first hit under (x, y) on a named channel, or None."""
         try:
             hit = unreal.SystemLibrary.line_trace_single(
-                world, unreal.Vector(x, y, top), unreal.Vector(x, y, top - depth),
+                live(), unreal.Vector(x, y, top), unreal.Vector(x, y, top - depth),
                 channel, False, [d for d in (dog(),) if d is not None], unreal.DrawDebugTrace.NONE, True,
                 unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
         except Exception:                                             # noqa: BLE001
@@ -108,7 +126,7 @@ def job():
     def floor_at(x, y, top, depth=20000.0):
         try:
             hit = unreal.SystemLibrary.line_trace_single(
-                world, unreal.Vector(x, y, top), unreal.Vector(x, y, top - depth),
+                live(), unreal.Vector(x, y, top), unreal.Vector(x, y, top - depth),
                 PAWN, False, [d for d in (dog(),) if d is not None], unreal.DrawDebugTrace.NONE, True,
                 unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
         except Exception:                                             # noqa: BLE001
@@ -124,7 +142,7 @@ def job():
         """The capsule is lifted a full step, so what it hits is what the Dog cannot step over."""
         try:
             hit = unreal.SystemLibrary.capsule_trace_single(
-                world, unreal.Vector(a[0], a[1], z + STEP + CAP_H),
+                live(), unreal.Vector(a[0], a[1], z + STEP + CAP_H),
                 unreal.Vector(b[0], b[1], z + STEP + CAP_H),
                 CAP_R, CAP_H, PAWN, False, [d for d in (dog(),) if d is not None],
                 unreal.DrawDebugTrace.NONE, True, unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
@@ -147,7 +165,7 @@ def job():
 
     def actors_of(pass_id):
         try:
-            return len(unreal.GameplayStatics.get_all_actors_with_tag(world, unreal.Name("WL_PASS_" + pass_id)))
+            return len(unreal.GameplayStatics.get_all_actors_with_tag(live(), unreal.Name("WL_PASS_" + pass_id)))
         except Exception:                                             # noqa: BLE001
             return -1
 
@@ -211,9 +229,11 @@ def job():
         row["pass_actors_expected"] = EXPECTED_ACTORS.get(pid)
         row["stream_wait_s"] = waited
         row["dog_distance_from_stand_m"] = (where_is_dog(px, py) or 0.0) / 100.0 if where_is_dog(px, py) is not None else None
-        alive = row["dog_distance_from_stand_m"] is not None and row["dog_distance_from_stand_m"] < 8.0
-        row["dog_alive_and_placed"] = alive
-        if not alive:
+        # NOT NAMED `alive`: that is the world/pawn helper, and shadowing it here would make every later
+        # liveness check in this job call a boolean.
+        placed_ok = row["dog_distance_from_stand_m"] is not None and row["dog_distance_from_stand_m"] < 8.0
+        row["dog_alive_and_placed"] = placed_ok
+        if not placed_ok:
             emit("C_%s" % name, "WARN", "the Dog is not where it was stood; readings here are UNMEASURED",
                  {"distance_m": row["dog_distance_from_stand_m"]})
             row["unmeasured"] = True
@@ -266,7 +286,7 @@ def job():
     shots = {}
     RESULT["captures"] = shots
     for hour, label in ((12.0, "noon"), (0.0, "midnight")):
-        unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour %.2f" % hour)
+        unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.Hour %.2f" % hour)
         for name in sorted(plan):
             spec = plan[name]
             cx, cy = spec["court"]
@@ -278,7 +298,7 @@ def job():
                 yield 1.0
                 waited += 1.0
             eye = unreal.Vector(cx - math.cos(b) * 2600.0, cy - math.sin(b) * 2600.0, g + 900.0)
-            L.pose_camera(world, eye, unreal.Vector(cx, cy, g + 300.0), 70.0)
+            L.pose_camera(live(), eye, unreal.Vector(cx, cy, g + 300.0), 70.0)
             yield 4.0
             shot = os.path.join(ROOT, "%s_%s.png" % (name.lower(), label))
             try:
@@ -288,7 +308,7 @@ def job():
             shots.setdefault(name, {})[label] = {
                 "file": os.path.basename(shot), "actors_loaded": actors_of(spec["pass"]),
                 "frame": patch(0.5, 0.5, 0.46, 0.44), "court": patch(0.5, 0.62, 0.16, 0.14)}
-        L.release_camera(world)
+        L.release_camera(live())
 
     # ---------------------------------------------------------------- the gates
     want = ("arrival", "ICARUS", "NOCTIS", "TARTARUS", "DUBEL")
@@ -300,6 +320,12 @@ def job():
 
     loaded = {n: (sites[n].get("pass_actors_loaded"), sites[n].get("pass_actors_expected"),
                   sites[n].get("stream_wait_s")) for n in want if n in sites}
+    stale = [n for n in want
+             if (shots.get(n, {}).get("noon") or {}).get("actors_loaded") in (0, None)]
+    record("K08", "the world was still readable during the capture phase -- no stale-reference blackout",
+           not stale, sites_reading_zero_actors_at_noon=stale,
+           note="a held world reference returns an EMPTY actor list rather than throwing, so a blackout here "
+                "reads exactly like a world with no content in it; v2 failed K06 on precisely that")
     record("K07", "every checkpoint pass's actors were resident before it was measured",
            all(v[0] is not None and v[1] is not None and v[0] >= v[1] for v in loaded.values()),
            loaded_expected_waits=loaded, wait_limit_s=STREAM_WAIT,

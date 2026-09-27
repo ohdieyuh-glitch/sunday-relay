@@ -1375,6 +1375,9 @@ void ARelayDogCharacter::OnWalkReleased() { bWalkHeld = false; }
 void ARelayDogCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	// THE EYES GLOW FROM THE FIRST FRAME. The day cycle re-drives the level every half second and on every
+	// repaint; this is so the Dog never draws a single frame with lit, unlit eyes.
+	SetEyeGlow(12.0f);
 	// THE DEMO IS A LAUNCH FLAG, NOT A BUILD FLAG.
 	//
 	// bAutoDemo used to be baked into the map by the generator from an
@@ -1523,6 +1526,18 @@ void ARelayDogCharacter::PaintCanonBody(bool bEvenIfUnchosen)
 	{
 		if (Body == nullptr || Body->ComponentHasTag(TEXT("WL_Prop"))) { continue; }
 		const bool bEye = WonderlandMascotStyle::NamesAnEye(Body->GetName());
+		// THE EYE PANES THEMSELVES ARE NOT TINTED -- they are DRIVEN. Tint writes the bare secondary into the
+		// glow instance at level 1 and the eyes go dark the moment a colourway is picked. SECONDARY becomes the
+		// eye colour and the level is re-applied, so the core and the halo change together, as the founder
+		// requires. The visor still takes the tint: NamesAnEye includes it, ChannelFor does not.
+		if (WonderlandMascotStyle::ChannelFor(Body->GetName()) == EWonderlandColorChannel::Eye)
+		{
+			EyeColour = Style.Secondary;
+			const float Keep = EyeGlowLevel;
+			EyeGlowLevel = -1.0f;
+			SetEyeGlow(Keep > 0.0f ? Keep : 12.0f);
+			continue;
+		}
 		const FLinearColor Chosen = bEye ? Style.Secondary : Style.Primary;
 		for (int32 Slot = 0; Slot < Body->GetNumMaterials(); ++Slot)
 		{
@@ -1560,6 +1575,178 @@ void ARelayDogCharacter::ShowCanonBody(bool bShow)
 		++Toggled;
 	}
 	UE_LOG(LogTemp, Verbose, TEXT("WLDOG canon body %s (%d meshes)"), bShow ? TEXT("shown") : TEXT("hidden"), Toggled);
+}
+
+void ARelayDogCharacter::BuildEyeGlow()
+{
+	// ---- ONCE. The Blueprint's eye panes get the project's glow material; each pane gets two additive halo
+	// panes, 1.55x its size and a third of its depth, one either side of it, so the rim shows from whichever
+	// side the camera is on and the pane itself hides the halo's centre. The eyes are found the way the
+	// colourway finds them: by name, through ChannelFor, which takes "eye" and "pupil" and not the visor.
+	if (EyeCoreMids.Num() > 0)
+	{
+		return;
+	}
+	// THE ENGINE'S OWN UNLIT MATERIALS, NOT THE FIGURES' -- and this was measured, not assumed. The first build put
+	// M_WL_VoxelGlow on the pane with Color (18, 13, 2.9) and the pane rendered BLACK: no eyes at all, worse than
+	// the flat squares it replaced. The figures' glow materials are built for instanced meshes and take part of
+	// their input from the instance, and on a plain static mesh component that input is nothing. The prop
+	// material the book and the beam glow with is the engine's unlit LevelColoration, which draws Color exactly
+	// as given on any mesh, and the engine's EmissiveMeshMaterial is the additive twin the figures' own additive
+	// was copied from; both are proven on plain components in this file.
+	// THE FIGURES' OWN MATERIALS AFTER ALL, at the figures' scale. The engine unlit pane at Color 18 was black
+	// for the reason zc_material_graphs and the post-process volume settled together: its output IS Color, and
+	// the world's white at the noon exposure (EV100 14.2) is near 25,000, not 25. M_WL_VoxelGlow supplies the
+	// thousand through EmissiveStrength; M_WL_VoxelAdditive's Color must carry it. Same numbers the costume
+	// eyes use, so the default Dog and every skin agree.
+	UMaterialInterface* Glow = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Wonderland/Materials/M_WL_VoxelGlow.M_WL_VoxelGlow"));
+	if (Glow == nullptr)
+	{
+		Glow = LoadObject<UMaterialInterface>(nullptr, DogPropGlowParent);
+	}
+	UMaterialInterface* Additive = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Wonderland/Materials/M_WL_VoxelAdditive.M_WL_VoxelAdditive"));
+	// THE SOFT ONE, IF THE PROJECT HAS IT. M_WL_EyeHalo fades radially across the cube's face instead of drawing a
+	// flat colour to a hard edge; round 3's three flat rings photographed as three olive frames round a lit square
+	// and the founder called the eyes "still gone". With the soft surface two discs per eye -- one just over twice
+	// the eye, one over three times, the outer at a lower share -- spill the eye's colour off the pane and fade it
+	// to nothing over the visor, which is the thing a glow is. Same surface the costume halos wear.
+	UMaterialInterface* Soft = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Wonderland/Materials/M_WL_EyeHalo.M_WL_EyeHalo"));
+	bSoftEyeHalo = Soft != nullptr;
+	if (bSoftEyeHalo)
+	{
+		Additive = Soft;
+	}
+	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, DogPropCubePath);
+	TInlineComponentArray<UStaticMeshComponent*> Meshes;
+	GetComponents<UStaticMeshComponent>(Meshes);
+	int32 Eyes = 0;
+	for (UStaticMeshComponent* Eye : Meshes)
+	{
+		if (Eye == nullptr || Eye->ComponentHasTag(TEXT("WL_Prop")) || Eye->ComponentHasTag(TEXT("WL_EyeHalo")))
+		{
+			continue;
+		}
+		if (WonderlandMascotStyle::ChannelFor(Eye->GetName()) != EWonderlandColorChannel::Eye)
+		{
+			continue;
+		}
+		++Eyes;
+		if (Glow != nullptr)
+		{
+			for (int32 Slot = 0; Slot < Eye->GetNumMaterials(); ++Slot)
+			{
+				UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Glow, this);
+				Eye->SetMaterial(Slot, Mid);
+				EyeCoreMids.Add(Mid);
+			}
+		}
+		if (Additive == nullptr || Cube == nullptr || Eye->GetStaticMesh() == nullptr)
+		{
+			continue;
+		}
+		// the pane's own extent in its mesh's units, and its thinnest axis, which is its normal
+		// THE PANE IS NOT AT THE COMPONENT'S ORIGIN. SM_RelayDog_head_eye spans x 10.2..11.7 in its own space: the
+		// pane sits eleven units in front of the origin it is attached at. A halo placed at the origin was inside
+		// the head. The halo goes where the pane is: at the mesh bounds' centre.
+		const FVector PaneCentre = Eye->GetStaticMesh()->GetBounds().Origin;
+		const FVector Size = Eye->GetStaticMesh()->GetBounds().BoxExtent * 2.0;
+		int32 Normal = 0;
+		for (int32 Axis = 1; Axis < 3; ++Axis)
+		{
+			if (Size[Axis] < Size[Normal]) { Normal = Axis; }
+		}
+		// ONE HALO PER EYE. SM_RelayDog_head_eye is a single mesh carrying BOTH panes, 22.8 units wide with the two
+		// eyes at about a quarter of that width either side of centre; a halo sized from the whole mesh was one plate
+		// across the visor (photographed 09:31), not a rim round each eye. The widest axis across the pane is the
+		// eye-to-eye axis; each halo is 1.45x one eye, centred on that eye.
+		const double CubeSide = FMath::Max(Cube->GetBounds().BoxExtent.GetMax() * 2.0, 1.0);
+		int32 Across = 0;
+		for (int32 Axis = 1; Axis < 3; ++Axis)
+		{
+			if (Size[Axis] > Size[Across]) { Across = Axis; }
+		}
+		FVector Scale = Size * 1.45 / CubeSide;
+		Scale[Across] = Size[Across] * 0.36 * 1.45 / CubeSide;
+		Scale[Normal] = FMath::Max(Size[Normal] * 0.34 / CubeSide, 0.01);
+		// THREE RINGS PER EYE, each larger and dimmer than the one inside it, so the light falls off from the pane
+		// instead of stopping at a hard plate edge (round 2 photographed the single 1.45x pane as a gold frame).
+		const double FlatRings[3] = {1.3, 1.75, 2.3};
+		// TIGHTENED FROM {2.2, 3.4}. Photographed at those sizes (eyes_look, 11:16) the two eyes read as one
+		// wide bar of light at night: the outer disc of the left eye reached the right one and the pair merged.
+		// A Relay Dog has TWO eyes and they have to stay two. The inner disc still covers twice the eye, which is
+		// where the visible spill is; the outer only widens the tail.
+		const double SoftRings[3] = {2.0, 2.8, 2.8};
+		const double* Rings = bSoftEyeHalo ? SoftRings : FlatRings;
+		const int32 RingCount = bSoftEyeHalo ? 2 : 3;
+		for (int32 Ring = 0; Ring < RingCount; ++Ring)
+		for (const double Which : {-1.0, 1.0})
+		for (const double Side : {-1.0, 1.0})
+		{
+			FVector RingScale = Scale * (Rings[Ring] / 1.45);
+			RingScale[Normal] = Scale[Normal];
+			UStaticMeshComponent* Halo = NewObject<UStaticMeshComponent>(this, MakeUniqueObjectName(this, UStaticMeshComponent::StaticClass(), TEXT("EyeHalo")));
+			Halo->ComponentTags.Add(TEXT("WL_EyeHalo"));
+			Halo->SetMobility(EComponentMobility::Movable);
+			Halo->SetStaticMesh(Cube);
+			Halo->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Halo->SetCastShadow(false);
+			Halo->SetupAttachment(Eye);
+			FVector Offset = PaneCentre;
+			Offset[Across] += Which * Size[Across] * 0.25;
+			Offset[Normal] += Side * Size[Normal] * (0.55 + 0.08 * Ring);
+			Halo->SetRelativeLocation(Offset);
+			Halo->SetRelativeScale3D(RingScale);
+			EyeHaloRing.Add(Ring);
+			Halo->RegisterComponent();
+			UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Additive, this);
+			Halo->SetMaterial(0, Mid);
+			EyeHaloMids.Add(Mid);
+			EyeHalos.Add(Halo);
+		}
+	}
+	UE_LOG(LogTemp, Display, TEXT("WLDOG eye glow built on %d eye pane(s): %d core, %d halo"), Eyes, EyeCoreMids.Num(), EyeHaloMids.Num());
+}
+
+void ARelayDogCharacter::SetEyeGlow(float Level)
+{
+	BuildEyeGlow();
+	const float Wanted = FMath::Clamp(Level, 0.05f, 30.0f);
+	if (FMath::IsNearlyEqual(EyeGlowLevel, Wanted, 0.004f))
+	{
+		return;
+	}
+	EyeGlowLevel = Wanted;
+	// THE CORE IS DRIVEN TO THE LEVEL; THE HALO TO A THIRD OF IT. Hue is the eye's own -- the founder's
+	// established colour, or the chosen secondary -- and only the magnitude is set, exactly as the figures do.
+	const float Peak = FMath::Max3(EyeColour.R, FMath::Max(EyeColour.G, EyeColour.B), KINDA_SMALL_NUMBER);
+	const FLinearColor Core = (EyeColour / Peak) * Wanted;
+	// the three rings' shares: the inner rim bright, the outer barely there -- a falloff drawn in three steps
+	// on the soft surface the share is held only over the eye and fades from there, so it can be far higher
+	const float FlatShares[3] = {0.30f, 0.12f, 0.05f};
+	const float SoftShares[3] = {0.75f, 0.24f, 0.24f};
+	const float* Shares = bSoftEyeHalo ? SoftShares : FlatShares;
+	for (UMaterialInstanceDynamic* Mid : EyeCoreMids)
+	{
+		if (Mid != nullptr)
+		{
+			Mid->SetVectorParameterValue(TEXT("Color"), Core);
+			Mid->SetVectorParameterValue(TEXT("EmissiveColor"), Core);
+			// the thousand: the world's white is near 25,000 scene units at noon; see WonderlandSceneUnits
+			Mid->SetScalarParameterValue(TEXT("EmissiveStrength"), 1000.0f);
+		}
+	}
+	for (int32 Index = 0; Index < EyeHaloMids.Num(); ++Index)
+	{
+		UMaterialInstanceDynamic* Mid = EyeHaloMids[Index];
+		if (Mid != nullptr)
+		{
+			const int32 Ring = EyeHaloRing.IsValidIndex(Index) ? FMath::Clamp(EyeHaloRing[Index], 0, 2) : 0;
+			const FLinearColor Halo = Core * Shares[Ring];
+			// the additive material has no strength parameter: its Color carries the thousand
+			Mid->SetVectorParameterValue(TEXT("Color"), Halo * 1000.0f);
+			Mid->SetVectorParameterValue(TEXT("EmissiveColor"), Halo * 1000.0f);
+		}
+	}
 }
 
 float ARelayDogCharacter::GetDressedHeightUu() const

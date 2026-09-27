@@ -329,6 +329,86 @@ opens, which is exactly the kind of shared-resource decision this session does n
 moves from BLOCKING to **READY** rather than to PASS.
 
 
+## 2026-09-27, later -- window 2 applied, and four red gates of which three were my own instruments
+
+**HEAD `4b94f8e5`.** The editor is shared with Internal Development by message; both lanes serialise.
+
+**WHAT IS NOW IN THE WORLD AND SAVED.** CP01-05 re-applied on the corrected ground (23 / 872 / 872 / 874 /
+382 = 3,023 instances) and AV01-03, the gate-to-band avenues, applied for the first time (1,096 / 968 /
+1,012 = 3,076). Every count matched the offline build exactly.
+
+**THE GROUND FIX HELD -- the one unambiguous win.** `zc_checkpoints` 4/7 -> 6/8. K02, the gate that passed a
+26 cm float last run because its tolerance was 40 uu, now reads court floor **-14.0 against a declared
+-14.0 at all four nation courts, offset 0.0**, at a 10 uu tolerance; K03 reads step 0.0 against the real
+ground beside the bay. The founder's "floating objects" defect that this lane shipped is gone, and the two
+gates added to catch it both worked on the way back.
+
+**AND THEN THREE OF THE FOUR REMAINING REDS WERE THIS LANE'S MEASUREMENT, NOT THE WORLD.**
+
+*K05, the landmark gate, traced the wrong channel.* The towers stand -- 5096 / 5096 / 3988 / 5070 uu -- but
+they are built to 7426 / 7426 / 5246 / 7426, and the shortfall is not missing geometry: the top of each
+chain is a needle spire, which correctly collides with nothing, and a PAWN trace stops below it. **Tartarus
+missed the landmark floor by twelve centimetres on that artefact alone** and would have been published as a
+world fault. It traces VISIBILITY now -- a checkpoint tower is a silhouette, and the question is whether it
+can be seen from the next ring, not whether it can be stood on.
+
+*The walk proof could not tell "blocked" from "never driven", and published the wrong one.* 0/2, with
+NOCTIS and TARTARUS "stuck at waypoint 1" and `ahead: null` -- stuck with a clear path is a Dog that never
+moved. Three defects, all this lane's: no actuator check (there is a 3 s drive probe now, and a red there
+WITHHOLDS the route result instead of reporting a traversal failure); progress measured as `hypot(x, y)`,
+the radius from the world origin, so a stationary Dog at a start point 600 m out reported "reached 600.0 m";
+and ICARUS placed into an unloaded cell, 614.7 m from its own start. **QA-8 therefore remains UNPROVEN and
+is not claimed.** The corridor search says a path exists and the avenues make it visible; neither is the
+actual movement the ruling demands.
+
+*K06's night verdict is UNSAFE and is withdrawn.* `night_actors_loaded` came back 0 at every site at both
+hours while the identical call returned 108 seconds earlier in the same job.
+
+**THE CAUSE OF THAT, AND IT IS THE MOST REUSABLE FINDING OF THE DAY: A DEAD OR STALE WORLD READS AS DATA.**
+A world reference held across many yields goes stale, and the APIs disagree about how to say so --
+`pose_camera` THROWS (`Cannot nativize 'World' as 'Object'`, which is what killed `zc_water_audit` in the
+same window), while `get_all_actors_with_tag` returns an **empty list**, which reads exactly like a world
+that legitimately contains nothing. Worse, when PIE is torn down entirely the readings keep coming and they
+are CONSTANT: `zc_mascot_knee` had PIE ended under it at 1m43s by another lane's `CONCURRENT = True` job
+calling `editor_request_end_play`, kept "measuring" for two more minutes, and returned `eye_luma = 0.0187`
+-- the luma of a black viewport -- for every skin at every setting, through nine gates, **two of which
+passed**. The whole run is void. Every channel job now re-fetches the world at each use and asserts world +
+pawn before EVERY reading, aborting with `died_at`; no job that drives PIE may declare `CONCURRENT` (the
+channel is now audited clean); and PIE sessions are kept to ~4 minutes on a box running at 87% memory.
+
+**THE MASCOT CLUSTER: THE EYES WERE NEVER A LEVEL, A KNEE OR A CURVE.** Internal Development read the live
+actor: the gameplay Relay Dog's eyes are the Blueprint's `Mesh_head_eye` wearing `MI_RelayDog_Eye` (parent
+`M_V2_Portal`) at EmissiveStrength 540 multiplied by an **EmissiveColor of pure black**. They have never
+emitted, and `wl.Look.EyeGlowDay` reached companion figures only, never the Dog the founder looks at. This
+lane's sweep was aimed at the wrong object -- and the evidence was already in hand and misread: relay_og at
+noon read eye 0.5556 against face 0.5517, an over_face of **0.0039**, written up as a weak eye when a
+near-zero contrast on the brightest-eyed skin in the lineup meant there was no eye there at all.
+
+Two further facts the assets settled before any sweep ran, both of which would have made the literal
+220/400/700/1100/1800 range measure nothing: after the GLOW_SCALE 4000 -> 6 re-baseline **the brightest
+emissive on any skin is 48 and the brightest body glow 13.2**, so a knee of 700 compresses nothing; and the
+knee cannot reach the eyes at all by construction, since the eye branch normalises by peak and
+`WonderlandTameGlow` is applied only at the body and rim sites. **`SetEyeGlow` also clamped to 12 while
+`EyeGlowDay` shipped at 18**, so every "eye level" number in the corpus before today is really 12. That
+clamp moves to 30 in the build now going up, with the night level 5 -> 8.
+
+`zc_mascot_knee` is re-ranged for it (0.05 / 9 / 18 / 30 / 36 across eight skin ids, four short runs) and
+now also samples the SHIPPED pair -- 18 by day, 8 by night, with the day cycle interpolating -- because
+pinning both ends of the lerp to isolate the level meant the sweep visited 18/18 and 8/8 and never 18/8,
+which is the only configuration the founder actually sees. Gate M10 judges that row alone.
+
+**NIGHT, unresolved and now measurably darker.** The practical-light subsystem is confirmed running --
+`WLLIGHT 970 practicals defined, pool of 48` on every BeginPlay -- so the mechanism is wired. But the
+mascots have stopped lighting the world by accident (they were emitting at hundreds of times white), and
+the world's own night lighting is now carrying a load it was never carrying before. The arrival plaza reads
+0.093 luma with 91% crushed at midnight. Those figures came from the run with the stale-world bug and want
+a clean re-measure before any conclusion; `zc_night_sweep` is written, held, and deliberately NOT run in the
+same session as the mascot work, because the founder ruled that mixing world exposure into the mascot
+experiment confounds it.
+
+**PERFORMANCE.** 40.79 -> 50.65 ms across the window with 6,099 new instances, reported as measured and NOT
+attributed: this file's own drift warning applies and a fresh-process A/B has not been run.
+
 | | category | verdict | evidence |
 |---|---|---|---|
 | A | WORLD COVERAGE | **PARTIAL - nothing empty inside 1,000 m of a 1,480.7 m disc (171,292 placed, corrected 2026-09-25); the gap is the 1,200-1,600 m edge** | 107,546 placed instances over 270 layer specs. Golden Arrival 86,967 inside the 500 m neutral core. Nation civilization: ICARUS 6,953, NOCTIS 7,530, TARTARUS 6,096. Built frontier ~1,155 m in all three once the second band lands. Beyond it: DF01 Dubel Forest at 1,230–1,480 m. **Golden Arrival is uneven by SECTOR, measured 2026-09-23 in 100 m × 30° cells:** the 200–300 m ring holds 7,298 instances at bearing 300° but **28** at bearing 180°; the 300–400 m ring holds 5,321 at 270° but **22** at 120° and **79** at 90°. So the arrival city is not thin at its edge — it is thin on one *side*. **Closed 2026-09-23 by GF01/GF02**, which plant by SECTOR rather than by camera: 300–400 m at b=120 went **22 → 670**, 200–300 m at b=180 went **28 → 991**, and cells holding under 200 instances fell **13 → 8** — every survivor now in the 400–500 m outer ring, which is the city's genuine edge and where AP01's approach roads cross. The cause was in the generator: `lawn_planting.py` plants within 35 m of the 60 gameplay cameras, so the world was planted where the cameras look, and the 90–150° sector holds none. |

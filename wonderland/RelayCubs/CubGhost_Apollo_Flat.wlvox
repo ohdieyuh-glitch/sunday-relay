@@ -5,13 +5,13 @@ voxel 4.8861
 material bone rim 0.8980 0.8710 0.8000 1.000
 material bonedeep lit 0.6900 0.6600 0.5920 1.000
 material visor lit 0.0450 0.0420 0.0500 1.000
-material eye glow 1.0000 0.8600 0.2600 48.000
-material eyehalo add 1.0000 0.8600 0.2600 16.800
-material ghost add 1.0000 0.8000 0.3000 9.000
+material eye glow 1.0000 0.8600 0.2600 120.000
+material eyehalo add 1.0000 0.8600 0.2600 42.000
+material ghost add 1.0000 0.8000 0.3000 22.500
 material gold rim 0.9150 0.7350 0.3000 1.000
 material golddeep lit 0.5200 0.3750 0.1150 1.000
-material solar glow 1.0000 0.3600 0.0300 4.200
-material solarpale glow 1.0000 0.7800 0.1600 7.200
+material solar glow 1.0000 0.3600 0.0300 10.500
+material solarpale glow 1.0000 0.7800 0.1600 18.000
 part root - 0.000 0.000 0.000 float
 part head root 0.000 0.000 0.000 head
 part hand_l root 1.191 -5.336 -0.739 trail 1.000 2.000
@@ -436,7 +436,9 @@ box head visor 2.731 2.077 -0.436 0.550 0.461 0.502
 box head visor 2.731 2.077 0.066 0.550 0.461 0.502
 box head visor 2.731 2.077 0.568 0.550 0.461 0.502
 box head visor 2.731 2.077 1.069 0.550 0.461 0.502
+box head eyehalo 3.046 -1.154 0.317 0.300 2.915 1.647
 box head eye 2.926 -1.154 0.317 0.350 1.214 0.686
+box head eyehalo 3.046 1.154 0.317 0.300 2.915 1.647
 box head eye 2.926 1.154 0.317 0.350 1.214 0.686
 box hand_l bone 0.091 -5.886 -1.289 0.580 0.580 0.580
 box hand_l bone 0.091 -5.886 -0.739 0.580 0.580 0.580

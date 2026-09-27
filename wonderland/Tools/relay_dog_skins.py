@@ -41,7 +41,12 @@ import random
 # head. The knee stops being the compressor and becomes the safety net it was meant to be. Flames go
 # through their own sqrt/FireGain curve and come down by about forty times, into the band the flame sweep
 # was already reaching for.
-GLOW_SCALE = 6.0
+# 15, AGAINST THE MEASURED WHITE. The note above reasoned against a white of 25; the world's white at the noon
+# exposure is near 25,000 scene units and the runtime supplies the thousand (WonderlandSceneUnits). At 6 a body
+# glow of 6 x 1000 was a quarter of white and Celestial Light's halo photographed grey-blue; at 15 the same edge
+# is 15,000 -- luminous, coloured, under white -- and the eyes, driven to 18 x 1000, stay the brightest thing on
+# every head. The chest skull's pulse peaks at 33,000 and clips at the top of its beat, which a pulse should.
+GLOW_SCALE = 15.0
 # One height for every skin, so a switch in the Project Brain changes the dress and never the dog.
 TARGET_METRES = 1.55
 
@@ -570,8 +575,13 @@ def base_dog(figure, coat="bone", coat_deep="bonedeep", eye="eye", tile=None):
         figure.box("head", eye, (hd * 0.5 + 0.30, side * d["eye_gap"], visor_z), (0.5, exw, exh))
         # the halo pane: behind the core, wider than it, additive, in the eye's colour. See start().
         if "eyehalo" in figure.material_names:
-            figure.box("head", "eyehalo", (hd * 0.5 + 0.16, side * d["eye_gap"], visor_z),
-                       (0.30, exw * 1.45, exh * 1.45))
+            # PROUD OF THE VISOR. At hd/2 + 0.16 the pane spanned x 4.11..4.41 and the visor slab's face is at
+            # 4.5, so the halo sat inside the visor and no rim ever showed on a costume (round-3 sheet). At
+            # +0.45 its face is at 4.60 -- clear of the visor, just behind the eye pane's own face at 4.65.
+            # 2.4x THE EYE, for M_WL_EyeHalo: full over the eye's own footprint (Inner 0.45 of the pane), fading
+            # to nothing at the pane's edge -- so the spill is the eye's own width again on every side.
+            figure.box("head", "eyehalo", (hd * 0.5 + 0.45, side * d["eye_gap"], visor_z),
+                       (0.30, exw * 2.4, exh * 2.4))
 
     # The body and the two legs. Short, plain, and under the dress in every skin but the bare one.
     td, tw, th = d["torso"]
@@ -1304,11 +1314,100 @@ def skeleton_flame_v1():
 #                   blocks of pale blue light in a pool of fire.
 
 
+def cloth_panel(figure, part, mat, centre, size, tile):
+    """ONE PANEL OF CLOTH: a slab broken into tiles so it reads as sewn cloth rather than a plastic sheet."""
+    figure.slab(part, mat, centre, size, tile=tile)
+
+
+def studded_ring(figure, part, ring_mat, stud_mat, centre, radius, thickness, tile, studs=18, proud=0.6):
+    """A RING WITH A RUNE BAND: the ring itself, and studs standing proud of it every few degrees, so the band
+    carries an engraved pattern the way the ARDEN sheet's halo does rather than reading as a plain hoop."""
+    figure.ring(part, lambda a: ring_mat, centre, radius, thickness, tile)
+    for i in range(studs):
+        a = 2.0 * math.pi * i / studs
+        figure.box(part, stud_mat if i % 2 == 0 else ring_mat,
+                   (centre[0] + proud, centre[1] + math.cos(a) * radius, centre[2] + math.sin(a) * radius),
+                   (tile * 0.7, tile * 1.15, tile * 1.15))
+
+
+def diamond_frame(figure, part, mats, centre, width, height, tile):
+    """THE CROWN ORNAMENT ON ARDEN'S HALO: a gold diamond frame with a red gem in it and a point above."""
+    cx, cy, cz = centre
+    steps = 6
+    for k in range(steps):
+        f = (k + 0.5) / steps
+        # four bars of the rhombus, from the side points to the top and bottom points
+        for sy, sz in ((1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0)):
+            y = cy + sy * (width * 0.5) * (1.0 - f)
+            z = cz + sz * (height * 0.5) * f
+            figure.box(part, mats["gold"], (cx, y, z), (tile * 0.9, tile * 0.75, tile * 0.75))
+    figure.box(part, mats["gem"], (cx + 0.4, cy, cz), (tile * 0.9, width * 0.42, height * 0.42))
+    figure.box(part, mats["gold"], (cx, cy, cz + height * 0.5 + tile * 0.8), (tile * 0.7, tile * 0.7, tile * 1.6))
+    figure.box(part, mats["gold"], (cx, cy, cz - height * 0.5 - tile * 0.4), (tile * 1.4, tile * 2.2, tile * 0.8))
+
+
+def segmented_limb(figure, part, mats, top, bottom, width, segments, tile, lean=0.0):
+    """A SEGMENTED DEMONIC LIMB: dark flesh segments with a glowing seam between each pair, stepping outward as
+    it descends, as the DEMONIC ARM inset shows -- not one slab of black."""
+    dark, seam = mats
+    for k in range(segments):
+        f0 = k / segments
+        f1 = (k + 1) / segments
+        zc = top[2] + (bottom[2] - top[2]) * (f0 + f1) * 0.5
+        yc = top[1] + (bottom[1] - top[1]) * (f0 + f1) * 0.5 + lean * (f0 + f1) * 0.5
+        xc = top[0] + (bottom[0] - top[0]) * (f0 + f1) * 0.5
+        h = abs(bottom[2] - top[2]) / segments
+        figure.slab(part, dark, (xc, yc, zc), (width * (1.0 + 0.05 * k), width * (1.0 + 0.05 * k), h * 0.78), tile=tile)
+        if k < segments - 1:
+            figure.box(part, seam, (xc, yc, zc - h * 0.5), (width * 0.92, width * 0.92, h * 0.16))
+
+
+def robe_panel(figure, part, material_for, top, width, length, tile, ragged=0.16, flare=1.25, trim=None):
+    """A HANGING PANEL OF ROBE, several strands wide, flaring a little as it falls, with an optional gold trim
+    along its top edge. The founder's sheets build their robes from these: cream, crimson and black side by
+    side, not one cloth."""
+    strands = max(3, int(round(width / (tile * 1.35))))
+    for k in range(strands):
+        t = (k + 0.5) / strands
+        rest = (t - 0.5) * width
+        drop = length * (0.90 + 0.10 * math.sin(math.pi * t)) * (1.0 - figure.rng.uniform(0.0, ragged))
+        steps = max(3, int(round(drop / tile)))
+        for st in range(steps):
+            down = st / max(steps - 1, 1)
+            spread = 1.0 + (flare - 1.0) * down
+            figure.box(part, material_for(down, t),
+                       (top[0] + math.sin(down * 2.1 + k) * tile * 0.18, top[1] + rest * spread, top[2] - tile * (st + 0.5)),
+                       (tile * 1.1, width / strands * spread * 1.02, tile * 1.04))
+    if trim is not None:
+        for k in range(max(3, int(round(width / tile)))):
+            t = (k + 0.5) / max(3, int(round(width / tile)))
+            figure.box(part, trim, (top[0] + tile * 0.4, top[1] + (t - 0.5) * width, top[2] + tile * 0.1),
+                       (tile * 0.6, tile * 1.02, tile * 0.7))
+
+
+def feather_fan(figure, part, mats, root, side, rows, tile):
+    """ROWS OF GOLD FEATHERS fanning outward and upward from a pauldron, each shorter than the one below, the
+    wing-like shoulder architecture of the APOLLO sheet."""
+    for r in range(rows):
+        f = r / max(rows - 1, 1)
+        length = 6.6 - 3.4 * f
+        rise = 0.35 + 0.30 * f
+        steps = max(3, int(round(length / (tile * 1.05))))
+        for st in range(steps):
+            u = (st + 0.5) / steps
+            figure.box(part, mats["gold"] if (st + r) % 2 == 0 else mats["golddeep"],
+                       (root[0] - r * 0.55, root[1] + side * (0.6 + u * length), root[2] + r * 1.05 + u * length * rise),
+                       (tile * 1.15, tile * 1.15, tile * (1.9 - 0.9 * u)))
+
+
 def arden_infernal():
-    """ARDEN INFERNAL V2 -- SCION OF FLAME. BOUND BY DESTINY. Written from the sheet."""
+    """ARDEN INFERNAL V2 -- SCION OF FLAME. BOUND BY DESTINY. Built from the sheet's component inventory
+    (WorldDesign/SKIN_REBUILD_INVENTORY_2026_09_27.md), row by row: halo, tunic, mantle, chains, demonic arm,
+    cuff, robe, tail. The base dog underneath is never touched."""
     figure = start("RELAY DOG SKIN -- ARDEN INFERNAL V2", 7202, (1.00, 0.58, 0.10), 7.5)
     figure.material("gold", "rim", (0.905, 0.720, 0.290), 1.0)
     figure.material("golddeep", "lit", (0.500, 0.360, 0.110), 1.0)
+    figure.material("cream", "lit", (0.960, 0.930, 0.860), 1.0)
     figure.material("ember", "glow", (1.00, 0.34, 0.05), 0.6)
     figure.material("emberpale", "glow", (1.00, 0.72, 0.22), 1.0)
     figure.material("crimson", "lit", (0.520, 0.075, 0.065), 1.0)
@@ -1322,125 +1421,159 @@ def arden_infernal():
     hd, hw, hh = d["head"]
     ad, aw, ah = d["arm"]
     shoulder = d["torso_z"] + th * 0.48
+    torso_top = d["torso_z"] + th * 0.5
     hip = d["torso_z"] - th * 0.5
     head_top = d["head_z"] + hh * 0.5
     mats = {"gold": "gold", "golddeep": "golddeep", "gem": "ruby", "dark": "char"}
-    S = 1.0            # the demonic side: the figure's right, the viewer's left, as on the sheet
+    S = 1.0                       # the demonic side: the figure's right, the viewer's left, as on the sheet
 
-    # ---- THE HALO. 2.3 heads across, its centre level with the ear tips, standing a third of a head behind
-    # the face. A thick ornate band: two gold rings and a deep-gold inner rule, gem mounts at the four points
-    # with the top one largest, and fire along the whole upper arc that stands tallest at the crown.
-    r = hw * 1.15
-    halo_c = (-hd * 0.40, 0.0, head_top + eh_of(d) * 0.4)
-    figure.part("halo", "head", halo_c, "none")
-    figure.ring("halo", lambda a: "gold", halo_c, r, tile * 1.5, tile * 1.05)
-    figure.ring("halo", lambda a: "gold", halo_c, r - 0.9, tile * 1.5, tile * 1.05)
-    figure.ring("halo", lambda a: "golddeep", (halo_c[0] - 1.2, 0.0, halo_c[2]), r - 0.45, tile * 1.0, tile * 1.05)
-    for deg, big in ((90.0, 1.7), (0.0, 1.05), (180.0, 1.05), (270.0, 0.9)):
-        a = math.radians(deg)
-        gy, gz = math.cos(a) * (r - 0.45), halo_c[2] + math.sin(a) * (r - 0.45)
-        figure.box("halo", "gold", (halo_c[0] + 0.7, gy, gz), (tile * 1.8, tile * 2.7 * big, tile * 2.7 * big))
-        for dz, sz in ((0.0, 1.9), (1.5 * big, 1.0), (-1.5 * big, 1.0)):
-            figure.box("halo", "ruby", (halo_c[0] + 1.7, gy, gz + dz * tile),
-                       (tile * 1.0, tile * 1.15 * big * (1.0 if dz == 0.0 else 0.85), tile * sz * big))
-    figure.part("halofire", "halo", halo_c, "twinkle", 0.18)
-    for i in range(17):
-        f = i / 16.0
-        a = math.radians(-25.0 + 230.0 * f)
-        by, bz = math.cos(a) * (r + 0.8), halo_c[2] + math.sin(a) * (r + 0.8)
-        tall = 2.4 + 6.0 * max(0.0, math.sin(a)) ** 1.5
-        figure.flame("halofire", lambda up: "ember" if up < 0.5 else "emberpale", (halo_c[0] + 0.3, by, bz), tall, 2.3, 3, tile * 0.95)
-
-    # ---- SACRED ORNAMENTS. A gold collar on the shoulders; six chains looped across the bare chest at three
-    # depths, each sagging, the deepest carrying ruby drops; the wheel medallion at the sternum with a ruby at
-    # its hub; small wheel charms on both shoulders.
-    figure.slab("body", "gold", (0.4, 0.0, shoulder + 1.9), (td * 1.08, tw * 1.12, 1.4), tile=tile)
-    cx = td * 0.5 + 1.6
-    for k, (sag, drop, out) in enumerate(((1.3, 0.7, 0.0), (2.0, 0.2, 0.55), (2.9, -0.3, 0.15),
-                                          (3.8, -0.9, 0.75), (4.7, -1.5, 0.35), (5.6, -2.2, 0.9))):
-        span = tw * 0.5 + 0.7 - 0.08 * k
-        figure.chain_run("body", "gold", (cx + out, -span, shoulder + drop), (cx + out, span, shoulder + drop), tile, sag=sag)
-        if k % 2 == 1:
-            figure.pendant("body", mats, (cx + out + 0.5, (k - 3) * 1.1, shoulder + drop - sag + 0.2), tile, drop=1.1 + 0.35 * k)
-    med = (cx + 0.9, 0.0, shoulder - 4.6)
-    figure.spoked_wheel("body", "gold", med, 2.7, 8, tile)
-    figure.ring("body", lambda a: "golddeep", med, 2.7, tile * 0.7, tile * 0.9)
-    figure.box("body", "ruby", (med[0] + 0.6, 0.0, med[2]), (tile * 0.9, tile * 1.6, tile * 1.6))
+    # ================================================================== 2-6. THE HALO
+    R = hw * 1.20
+    hc = (-hd * 0.44, 0.0, head_top + 1.3)
+    figure.part("halo", "head", hc, "none")
+    figure.ring("halo", lambda a: "gold", hc, R, tile * 1.6, tile * 1.05)
+    figure.ring("halo", lambda a: "gold", hc, R - 1.1, tile * 1.6, tile * 1.05)
+    studded_ring(figure, "halo", "golddeep", "gold", (hc[0] + 0.7, 0.0, hc[2]), R - 0.55, tile * 0.9, tile, studs=22, proud=0.5)
+    diamond_frame(figure, "halo", mats, (hc[0] + 0.5, 0.0, hc[2] + R + 1.7), 2.8, 3.8, tile)
     for side in (-1.0, 1.0):
-        figure.spoked_wheel("body", "gold", (td * 0.30, side * (tw * 0.5 + 1.0), shoulder + 0.6), 1.4, 6, tile)
+        gy = side * (R - 0.5)
+        figure.box("halo", "gold", (hc[0] + 0.7, gy, hc[2]), (tile * 1.8, tile * 2.4, tile * 2.6))
+        figure.box("halo", "ruby", (hc[0] + 1.7, gy, hc[2]), (tile * 1.0, tile * 1.3, tile * 1.7))
+        for dz in (1.6, -1.6):
+            figure.box("halo", "ruby", (hc[0] + 1.6, gy, hc[2] + dz), (tile * 0.8, tile * 0.9, tile * 0.9))
+    figure.box("halo", "gold", (hc[0] + 0.6, 0.0, hc[2] - R + 0.4), (tile * 1.6, tile * 2.2, tile * 1.6))
+    figure.box("halo", "ruby", (hc[0] + 1.5, 0.0, hc[2] - R + 0.4), (tile * 0.9, tile * 1.1, tile * 1.1))
+    figure.part("halofire", "halo", hc, "twinkle", 0.18)
+    # THE FIRE SUPPORTS THE RING RATHER THAN HIDING THE HEAD (founder: "Fire should support the design rather
+    # than hide it"). Nineteen tongues up to 7.4 tall photographed as a dense orange mass over the whole head by
+    # day and a yellow blaze at night; thirteen shorter ones, two tongues each, read as a ring on fire.
+    for i in range(13):
+        f = i / 12.0
+        a = math.radians(-18.0 + 216.0 * f)
+        tall = 1.5 + 3.6 * max(0.0, math.sin(a)) ** 1.5
+        figure.flame("halofire", lambda up: "ember" if up < 0.5 else "emberpale",
+                     (hc[0] + 0.3, math.cos(a) * (R + 0.8), hc[2] + math.sin(a) * (R + 0.8)), tall, 1.8, 2, tile * 0.95)
+    for i in range(7):
+        a = math.radians(205.0 + 130.0 * i / 6.0)
+        figure.flame("halofire", lambda up: "ember", (hc[0] + 0.2, math.cos(a) * (R + 0.7), hc[2] + math.sin(a) * (R + 0.7)), 1.5, 1.2, 2, tile * 0.8)
 
-    # ---- THE ROBE. From the shoulders to the floor: a mantle behind, two front falls either side of the open
-    # chest, and a centre fall under the medallion. Stepped strands that flare as they drop, cream at the centre,
-    # crimson outward, black at the edges -- 2.6 heads wide at the hem on the sheet.
+    # ================================================================== 7-8. THE TUNIC, COLLAR AND WAIST
+    tz = d["torso_z"] + 0.1
+    cloth_panel(figure, "body", "cream", (-td * 0.5 - 0.7, 0.0, tz), (1.2, tw * 1.14, th * 0.94), tile)             # back
+    for side in (-1.0, 1.0):
+        cloth_panel(figure, "body", "cream", (0.0, side * (tw * 0.5 + 0.65), tz), (td * 1.1, 1.2, th * 0.90), tile)   # sides
+        cloth_panel(figure, "body", "cream", (td * 0.5 + 0.7, side * 1.75, tz), (1.2, 2.0, th * 0.92), tile)          # front, either side of the V
+    cloth_panel(figure, "body", "crimson", (td * 0.5 + 0.25, 0.0, tz - 0.4), (0.9, 2.3, th * 0.84), tile)               # the V's red inside
+    cloth_panel(figure, "body", "crimson", (0.0, 0.0, hip + 0.35), (td * 1.32, tw * 1.30, 1.2), tile)                   # the red hem
+    figure.slab("body", "gold", (0.3, 0.0, torso_top + 0.35), (td * 1.28, tw * 1.24, 1.1), tile=tile)                  # collar
+    for k in range(8):
+        a = math.pi * (-0.5 + k / 7.0)
+        figure.box("body", "golddeep", (td * 0.64 + math.cos(a) * 0.4, math.sin(a) * tw * 0.64, torso_top + 0.35), (tile * 0.5, tile * 0.6, tile * 0.6))
+    figure.slab("body", "gold", (0.0, 0.0, hip + 0.9), (td * 1.38, tw * 1.36, 1.3), tile=tile)                         # waist band
+    for k in range(6):
+        a = math.pi * (-0.42 + 0.84 * k / 5.0)
+        figure.box("body", "golddeep", (td * 0.70 + math.cos(a) * 0.3, math.sin(a) * tw * 0.70, hip + 0.9), (tile * 0.5, tile * 0.7, tile * 0.8))
+    figure.box("body", "ruby", (td * 0.72 + 0.4, 0.0, hip + 0.9), (tile * 0.7, tile * 1.2, tile * 1.0))
+
+    # ================================================================== 9. THE SHOULDER MANTLE, cream side
+    my = -S * (tw * 0.5 + 0.55 + aw * 0.5)
+    figure.slab("body", "cream", (0.2, my + (-S) * 0.4, shoulder + 0.9), (ad * 2.9, aw * 1.9, 1.5), tile=tile)     # over the shoulder
+    figure.slab("arm_l", "cream", (0.2, my + (-S) * 1.25, shoulder - 2.2), (ad * 2.7, 1.2, 5.6), tile=tile)          # the panel down the outer arm
+    figure.slab("arm_l", "crimson", (0.0, my + (-S) * 0.55, shoulder - 2.8), (ad * 2.3, 0.8, 5.0), tile=tile)       # its red underlayer
+    figure.drape("arm_l_fore", lambda f: "crimson" if f > 0.55 else "cream",
+                 (0.3, my + (-S) * 1.2, shoulder - 5.0), 3.8, 6.8, 0, tile, ragged=0.20)
+    for k in range(5):
+        figure.box("arm_l", "gold", (ad * 1.55, my + (-S) * 1.25, shoulder + 0.2 - k * 1.2), (tile * 0.6, tile * 0.7, tile * 1.02))
+
+    # ================================================================== 10-12. SACRED ORNAMENTS
+    cx = td * 0.5 + 1.9
+    for k, (sag, drop, out) in enumerate(((1.2, 0.3, 0.0), (1.9, -0.2, 0.55), (2.7, -0.7, 0.15),
+                                          (3.6, -1.3, 0.75), (4.4, -1.9, 0.35), (5.3, -2.6, 0.9))):
+        span_y = tw * 0.5 + 0.9 - 0.08 * k
+        figure.chain_run("body", "gold", (cx + out, -span_y, torso_top + drop), (cx + out, span_y, torso_top + drop), tile, sag=sag)
+        if k % 2 == 1:
+            figure.pendant("body", mats, (cx + out + 0.5, (k - 3) * 1.1, torso_top + drop - sag + 0.2), tile, drop=1.0 + 0.3 * k)
+    figure.pendant("body", mats, (cx + 0.6, 0.0, torso_top - 0.4), tile, drop=0.8)
+    med = (cx + 1.1, 0.0, d["torso_z"] - 0.6)
+    figure.spoked_wheel("body", "gold", med, 2.9, 8, tile)
+    figure.ring("body", lambda a: "golddeep", med, 2.9, tile * 0.7, tile * 0.9)
+    figure.box("body", "ruby", (med[0] + 0.6, 0.0, med[2]), (tile * 0.9, tile * 1.7, tile * 1.7))
+    sun = (cx + 0.9, 0.0, d["torso_z"] + 2.9)
+    figure.spoked_wheel("body", "gold", sun, 1.5, 6, tile)
+    figure.box("body", "ruby", (sun[0] + 0.5, 0.0, sun[2]), (tile * 0.7, tile * 1.0, tile * 1.0))
+    for side in (-1.0, 1.0):
+        figure.spoked_wheel("body", "gold", (td * 0.30, side * (tw * 0.5 + 1.1), shoulder + 0.7), 1.3, 6, tile)
+
+    # ================================================================== 13-16. THE DEMONIC ARM
+    ARM = "arm_r"
+    ay = S * (tw * 0.5 + 0.55 + aw * 0.5)
+    az = d["torso_z"] + th * 0.34
+    figure.slab(ARM, "char", (0.3, ay + S * 1.6, az + 2.4), (6.4, 7.0, 3.8), tile=tile)                            # the spiked shoulder
+    figure.slab(ARM, "demon", (0.1, ay + S * 2.2, az + 0.6), (5.6, 6.2, 1.6), tile=tile)
+    for k in range(6):
+        figure.box(ARM, "char", (1.5 - k * 0.8, ay + S * (3.6 + k * 0.2), az + 4.0 + k * 0.3), (tile * 1.1, tile * 1.4, tile * (3.4 - 0.4 * k)))
+    segmented_limb(figure, ARM, ("demon", "ember"), (0.0, ay + S * 2.6, az - 0.2), (0.4, ay + S * 3.6, az - 6.6), 4.8, 3, tile)
+    figure.slab(ARM, "char", (0.9, ay + S * 3.9, az - 7.2), (4.6, 5.0, 1.6), tile=tile)                              # elbow knot
+    segmented_limb(figure, ARM + "_fore", ("demon", "ember"), (0.6, ay + S * 4.2, az - 7.9), (1.4, ay + S * 5.6, az - 13.6), 5.4, 3, tile)
+    for k in range(5):
+        figure.box(ARM + "_fore", "char", (4.0, ay + S * 4.9 + (k - 2) * 1.3, az - 10.6), (tile * 0.7, tile * 0.8, tile * 5.0))
+    for k in range(4):
+        figure.box(ARM + "_fore", "char", (0.5, ay + S * 8.0, az - 8.4 - k * 1.7), (tile * 0.9, tile * 2.0, tile * 1.0))
+    figure.claw_hand(ARM + "_fore", ("char", "ember"), (1.6, ay + S * 5.8, az - 13.8), 9.4, tile, S)
+    figure.claw_hand(ARM + "_fore", ("demon", "ember"), (0.6, ay + S * 7.0, az - 13.2), 7.2, tile, S)
+    sig = (5.4, ay + S * 5.4, az - 11.2)
+    figure.part("sigil", ARM + "_fore", sig, "orbit", -7.0)
+    figure.ring("sigil", lambda a: "golddeep", (sig[0] - 0.4, sig[1], sig[2]), 4.3, tile * 0.7, tile * 0.95)
+    figure.ring("sigil", lambda a: "ember", sig, 3.9, tile * 0.6, tile * 0.85)
+    figure.spoked_wheel("sigil", "ruby", (sig[0] + 0.3, sig[1], sig[2]), 3.2, 8, tile)
+    figure.box("sigil", "emberpale", (sig[0] + 0.7, sig[1], sig[2]), (tile * 0.9, tile * 1.7, tile * 1.7))
+    for k in range(8):
+        a = 2.0 * math.pi * k / 8.0 + math.pi / 8.0
+        figure.box("sigil", "ruby", (sig[0] + 0.2, sig[1] + math.cos(a) * 4.3, sig[2] + math.sin(a) * 4.3), (tile * 0.8, tile * 0.8, tile * 0.8))
+    figure.part("armfire", ARM, (0.0, ay + S * 1.8, az + 3.6), "twinkle", 0.4)
+    figure.flame("armfire", lambda up: "ember" if up < 0.55 else "emberpale", (0.0, ay + S * 2.4, az + 4.0), 7.5, 4.6, 7, tile * 1.0)
+    figure.flame("armfire", lambda up: "ember" if up < 0.55 else "emberpale", (0.6, ay + S * 5.0, az - 2.0), 4.6, 3.0, 4, tile * 0.95)
+    figure.flame("armfire", lambda up: "ember" if up < 0.55 else "emberpale", (1.0, ay + S * 7.4, az - 9.0), 4.0, 2.6, 4, tile * 0.9)
+
+    # ================================================================== 17. THE CUFF on the cream wrist
+    wrist = az - ah * 0.86
+    figure.slab("arm_l_fore", "gold", (0.0, my, wrist + 0.4), (ad * 1.32, aw * 1.32, 1.5), tile=tile)
+    figure.box("arm_l_fore", "ruby", (ad * 0.72, my, wrist + 0.4), (tile * 0.6, tile * 1.0, tile * 1.0))
+
+    # ================================================================== 18-19. THE ROBE
     def robe_cloth(down, across):
         edge = abs(across - 0.5) * 2.0
-        if edge > 0.78:
+        if edge > 0.80:
             return "char"
-        if edge > 0.44 or down > 0.84:
+        if edge > 0.46 or down > 0.86:
             return "crimson"
-        return "bone"
-    figure.part("robe", "body", (0.0, 0.0, shoulder - 1.0), "trail", 0.5)
-    figure.cloak("robe", robe_cloth, (-td * 0.5 - 0.5, 0.0, shoulder + 1.2), hw * 1.05, shoulder + 1.0, tile,
-                 flare=2.35, back=-2.6, ragged=0.15)
-    figure.cloak("robe", lambda dn, ac: "char" if abs(ac - 0.5) > 0.30 else "crimson",
-                 (-td * 0.5 - 1.7, 0.0, shoulder + 0.4), hw * 1.25, shoulder, tile,
-                 flare=2.6, back=-2.2, ragged=0.20)
+        return "cream"
+    figure.part("robe", "body", (0.0, 0.0, hip + 0.4), "trail", 0.5)
+    figure.cloak("robe", robe_cloth, (-td * 0.5 - 0.6, 0.0, shoulder + 0.4), hw * 1.10, shoulder + 0.2, tile, flare=2.4, back=-2.8, ragged=0.14)
+    figure.cloak("robe", lambda dn, ac: "char" if abs(ac - 0.5) > 0.32 else "crimson",
+                 (-td * 0.5 - 1.8, 0.0, shoulder - 0.4), hw * 1.30, shoulder - 0.6, tile, flare=2.7, back=-2.2, ragged=0.20)
+    robe_panel(figure, "robe", lambda dn, t: "crimson" if abs(t - 0.5) < 0.16 else "cream", (td * 0.5 + 0.9, 0.0, hip + 0.2), tw * 0.96, hip + 0.1, tile, trim="gold")
     for side in (-1.0, 1.0):
-        figure.drape("robe", lambda f: "crimson" if f > 0.52 else "bone",
-                     (td * 0.42, side * (tw * 0.5 + 2.2), d["torso_z"] - th * 0.08), 5.8, d["torso_z"] - th * 0.08, 0, tile, ragged=0.20)
-        figure.drape("robe", lambda f: "char" if f > 0.35 else "crimson",
-                     (td * 0.05, side * (tw * 0.5 + 4.8), d["torso_z"] - th * 0.18), 3.8, d["torso_z"] - th * 0.18 - 0.5, 0, tile, ragged=0.26)
-    figure.drape("robe", lambda f: "crimson" if f > 0.48 else "bone",
-                 (td * 0.5 + 0.6, 0.0, med[2] - 2.4), tw * 0.95, med[2] - 2.6, 0, tile, ragged=0.16)
+        robe_panel(figure, "robe", lambda dn, t: "crimson", (td * 0.5 + 0.4, side * (tw * 0.5 + 1.2), hip + 0.15), 3.2, hip, tile, flare=1.35, trim="gold")
+        robe_panel(figure, "robe", lambda dn, t: "char" if dn > 0.3 else "crimson", (td * 0.1, side * (tw * 0.5 + 3.4), hip + 0.1), 3.0, hip - 0.4, tile, flare=1.5)
+        robe_panel(figure, "robe", lambda dn, t: "cream" if dn < 0.7 else "crimson", (-td * 0.3, side * (tw * 0.5 + 2.2), hip + 0.15), 2.6, hip - 0.2, tile, flare=1.4)
 
-    # ---- THE DEMONIC ARM, on the figure's right. A spiked shoulder mass wider than the shoulder it sits on, a
-    # thick upper arm, a heavier forearm stepping outward as it descends, four claws spread to the floor, the
-    # burning wheel sigil on the back of the forearm, fire off the pauldron and down the outside of the limb.
-    ARM = "arm_r"
-    ay = S * (tw * 0.5 + aw * 0.36)
-    az = d["torso_z"] + 1.0
-    figure.slab(ARM, "char", (0.3, ay + S * 1.7, az + 3.7), (6.2, 6.8, 3.6), tile=tile)
-    figure.slab(ARM, "demon", (0.1, ay + S * 2.3, az + 1.9), (5.4, 6.0, 1.8), tile=tile)
-    for k in range(6):
-        figure.box(ARM, "char", (1.5 - k * 0.8, ay + S * (3.5 + k * 0.2), az + 5.3 + k * 0.3),
-                   (tile * 1.1, tile * 1.4, tile * (3.4 - 0.4 * k)))
-    figure.slab(ARM, "demon", (0.0, ay + S * 2.7, az - 0.5), (5.0, 5.6, 6.8), tile=tile)
-    figure.slab(ARM, "char", (0.9, ay + S * 3.6, az - 4.6), (4.4, 4.8, 2.0), tile=tile)
-    figure.slab(ARM, "demon", (1.1, ay + S * 4.7, az - 8.0), (5.8, 6.0, 6.6), tile=tile)
-    for k in range(5):
-        figure.box(ARM, "char", (3.7, ay + S * 4.7 + (k - 2) * 1.3, az - 8.0), (tile * 0.7, tile * 0.8, tile * 5.4))
-    for k in range(4):
-        figure.box(ARM, "char", (0.4, ay + S * 7.2, az - 5.6 - k * 2.0), (tile * 0.9, tile * 2.2, tile * 1.0))
-    figure.claw_hand(ARM, ("char", "ember"), (1.4, ay + S * 5.3, az - 12.0), 12.4, tile, S)
-    figure.claw_hand(ARM, ("demon", "ember"), (0.4, ay + S * 6.6, az - 11.2), 9.4, tile, S)
-    sigil = (4.3, ay + S * 4.7, az - 7.6)
-    figure.part("sigil", ARM, sigil, "orbit", -7.0)
-    figure.spoked_wheel("sigil", "ruby", sigil, 3.0, 8, tile)
-    figure.ring("sigil", lambda a: "ember", sigil, 3.9, tile * 0.55, tile * 0.85)
-    figure.box("sigil", "emberpale", sigil, (tile * 0.8, tile * 1.5, tile * 1.5))
-    figure.part("armfire", ARM, (0.0, ay + S * 1.7, az + 4.7), "twinkle", 0.4)
-    figure.flame("armfire", lambda up: "ember" if up < 0.55 else "emberpale", (0.0, ay + S * 2.3, az + 5.1), 8.0, 4.6, 7, tile * 1.0)
-    figure.flame("armfire", lambda up: "ember" if up < 0.55 else "emberpale", (0.6, ay + S * 4.9, az - 1.0), 5.0, 3.0, 4, tile * 0.95)
-    figure.flame("armfire", lambda up: "ember" if up < 0.55 else "emberpale", (1.0, ay + S * 6.8, az - 6.8), 4.4, 2.6, 4, tile * 0.9)
-
-    # ---- THE OTHER ARM stays cream and wears a gold cuff with a ruby at the wrist, as the sheet's does.
-    oy = -S * (tw * 0.5 + 0.55 + aw * 0.5)
-    figure.slab("arm_l_fore", "gold", (0.0, oy, d["torso_z"] + th * 0.34 - ah * 0.86), (ad * 1.3, aw * 1.3, 1.5), tile=tile)
-    figure.box("arm_l_fore", "ruby", (ad * 0.7, oy, d["torso_z"] + th * 0.34 - ah * 0.86), (tile * 0.6, tile * 1.0, tile * 1.0))
-
-    # ---- THE INFERNAL TAIL, curling up behind the left hip, char and demon flesh, burning at the tip.
-    root = (-td * 0.5, -S * tw * 0.42, d["torso_z"] + 0.5)
+    # ================================================================== 20-21. THE INFERNAL TAIL
+    root = (-td * 0.5 - 0.4, -S * (tw * 0.5 + 1.6), hip + 0.6)   # outboard of the hip, so it rises beside the body as the sheet has it
     figure.part("tail", "body", root, "tail", 7.0, 10.0)
-    for k in range(16):
-        t = k / 15.0
-        a = t * math.pi * 1.05
-        figure.box("tail", "char" if k % 3 else "demon",
-                   (root[0] - 7.4 * math.sin(a) - 1.2 * t, root[1] - S * 2.6 * t, root[2] + 8.0 * (1.0 - math.cos(a))),
-                   (tile * (2.2 - 1.1 * t),) * 3)
-    tip = (root[0] - 8.6, root[1] - S * 2.6, root[2] + 15.4)
+    for k in range(22):
+        t = k / 21.0
+        a = t * math.pi * 1.15
+        p = (root[0] - 7.4 * math.sin(a) - 1.2 * t, root[1] - S * 3.4 * t, root[2] + 10.2 * (1.0 - math.cos(a)))
+        size = tile * (2.3 - 1.2 * t)
+        figure.box("tail", "char" if k % 3 else "demon", p, (size, size, size))
+        if k % 3 == 2 and k < 20:
+            figure.box("tail", "ember", (p[0] + 0.1, p[1], p[2] + size * 0.55), (size * 0.8, size * 0.8, tile * 0.3))
+    tip = (root[0] - 8.6, root[1] - S * 3.4, root[2] + 20.2)
     figure.part("tailfire", "tail", tip, "twinkle", 0.5)
-    figure.flame("tailfire", lambda up: "ember" if up < 0.5 else "emberpale", tip, 6.2, 3.0, 4, tile * 0.95)
-    figure.flame("tailfire", lambda up: "ember", (root[0] - 4.0, root[1] - S * 1.3, root[2] + 6.2), 3.0, 2.0, 2, tile * 0.8)
+    figure.flame("tailfire", lambda up: "ember" if up < 0.5 else "emberpale", tip, 6.0, 3.0, 4, tile * 0.95)
+    figure.flame("tailfire", lambda up: "ember", (root[0] - 6.4, root[1] - S * 2.0, root[2] + 13.0), 3.2, 2.0, 3, tile * 0.85)
+    figure.flame("tailfire", lambda up: "ember", (root[0] - 3.2, root[1] - S * 1.0, root[2] + 5.4), 2.6, 1.8, 2, tile * 0.8)
     return figure
 
 
@@ -1449,7 +1582,9 @@ def eh_of(d):
 
 
 def apollo():
-    """APOLLO V2 -- GOD OF THE SUN. LIGHT. HARMONY. PERFECTION. Written from the sheet."""
+    """APOLLO V2 -- GOD OF THE SUN. LIGHT. HARMONY. PERFECTION. Built from the sheet's component inventory
+    (WorldDesign/SKIN_REBUILD_INVENTORY_2026_09_27.md): crown, ring, pauldrons with cherubs, scrolls and
+    feathers, gorget, sash, sun, chains, belt and tassets, vambraces, lamps, drapery, greaves."""
     figure = start("RELAY DOG SKIN -- APOLLO V2", 7203, (1.00, 0.86, 0.26), 7.5)
     figure.material("gold", "rim", (0.915, 0.735, 0.300), 1.0)
     figure.material("golddeep", "lit", (0.520, 0.375, 0.115), 1.0)
@@ -1465,95 +1600,123 @@ def apollo():
     td, tw, th = d["torso"]
     hd, hw, hh = d["head"]
     ad, aw, ah = d["arm"]
+    ld, lw, lh = d["leg"]
     shoulder = d["torso_z"] + th * 0.48
+    torso_top = d["torso_z"] + th * 0.5
     hip = d["torso_z"] - th * 0.5
     head_top = d["head_z"] + hh * 0.5
     mats = {"gold": "gold", "golddeep": "golddeep", "dark": "dark", "gem": "solarpale"}
 
-    # ---- SOLAR FLAME. A crown of fire the head's width and 1.3 heads tall, a VOLUME of tongues in three
-    # passes front to back, brightest at the tips, standing straight up off the crown.
+    # ================================================================== 2. THE SOLAR CROWN
     figure.part("crown", "head", (0.0, 0.0, head_top), "twinkle", 0.1)
     for fx, tall, wide, tongues in ((1.6, hh * 1.1, hw * 0.95, 10), (-0.5, hh * 1.3, hw * 1.05, 12), (-2.6, hh * 0.95, hw * 0.85, 9)):
         figure.flame("crown", lambda up: "solar" if up < 0.38 else ("solarmid" if up < 0.74 else "solarpale"),
                      (fx, 0.0, head_top - 0.4), tall, wide, tongues, tile * 1.15)
 
-    # ---- THE HALO. One plain flat band of gold, 2.7 heads across, standing behind the head and enclosing the
-    # crown fire so its top arc shows clear above the flames. Nothing set into it, nothing radiating from it.
-    r = hw * 1.35
-    halo_c = (-hd * 0.42, 0.0, head_top + hh * 0.75)
-    figure.part("halo", "head", halo_c, "none")
-    figure.ring("halo", lambda a: "gold", halo_c, r, tile * 1.7, tile * 1.05)
-    figure.ring("halo", lambda a: "gold", halo_c, r - 1.0, tile * 1.7, tile * 1.05)
-    figure.ring("halo", lambda a: "golddeep", (halo_c[0] - 1.2, 0.0, halo_c[2]), r - 0.5, tile * 1.0, tile * 1.05)
+    # ================================================================== 3. THE RING
+    R = hw * 1.42
+    hc = (-hd * 0.5, 0.0, head_top + hh * 0.6)
+    figure.part("halo", "head", hc, "none")
+    figure.ring("halo", lambda a: "gold", hc, R, tile * 1.8, tile * 1.05)
+    figure.ring("halo", lambda a: "gold", hc, R - 1.05, tile * 1.8, tile * 1.05)
+    figure.ring("halo", lambda a: "golddeep", (hc[0] - 1.3, 0.0, hc[2]), R - 0.5, tile * 1.0, tile * 1.05)
 
-    # ---- CELESTIAL ARMOR. The gorget; winged cherub pauldrons flanking the head outside its width and rising
-    # to ear height; a sun of twelve rays on a layered breastplate; gold vambraces and gold hands.
-    figure.slab("body", "gold", (0.6, 0.0, shoulder + 2.1), (4.0, tw * 0.96, 1.5), tile=tile)
+    # ================================================================== 4-8. THE PAULDRONS
+    #
+    # ON THEIR OWN PART, AND THE WARDROBE IS WHY. These were parented to "body", and the wardrobe's framing
+    # box is the union of the parts named body, head, arm_ and leg_ -- the founder's rule that framing
+    # "MUST derive from the physical BODY", excluding ornament. Scrolls, cherub faces and a six-feather fan
+    # reaching a hand's width past each shoulder are ornament by any reading, and filed under body they made
+    # Apollo's framing box WIDER THAN IT IS TALL -- 47.2 against 33.0, where every other skin measures 51.7
+    # tall. Width then pushed the camera back and Apollo photographed at 64% of frame height against the
+    # founder's 76-94 band (zc_wardrobe_20, V03), the only skin whose solve predicted its own failure.
+    #
+    # Nothing about the figure changes: same geometry, same place, same materials, parented to the body so it
+    # moves with the shoulders exactly as before. Only the framing box stops counting it, which is what the
+    # rule asked for in the first place.
+    figure.part("pauldrons", "body", (0.0, 0.0, shoulder), "none")
     for side in (-1.0, 1.0):
-        base_y = side * (hw * 0.5 + 1.3)
-        figure.slab("body", "gold", (0.2, base_y + side * 1.0, shoulder + 1.6), (5.6, 4.8, 4.2), tile=tile)
-        figure.slab("body", "golddeep", (0.0, base_y + side * 2.4, shoulder - 0.6), (4.6, 3.4, 1.8), tile=tile)
-        figure.baroque_scroll("body", mats, (1.0, base_y + side * 2.6, shoulder + 4.2), (side, 1.0), hh * 1.1, tile, coils=1.9, lobes=5)
-        figure.baroque_scroll("body", mats, (-1.6, base_y + side * 2.2, shoulder + 3.4), (side, 1.0), hh * 0.85, tile, coils=1.5, lobes=4)
-        figure.baroque_scroll("body", mats, (0.4, base_y + side * 3.0, shoulder + 0.6), (side, -0.55), hh * 0.65, tile, coils=1.2, lobes=3)
-        figure.cherub_face("body", mats, (2.6, base_y + side * 1.2, shoulder + 2.4), 4.0, tile, face_dir=1.0)
-        for w, (span, rise, back) in enumerate(((7.0, 5.2, 0.8), (5.6, 3.2, 2.6), (4.2, 1.6, 4.0))):
-            for f in range(5):
-                figure.box("body", "gold" if f % 2 == 0 else "golddeep",
-                           (2.0 - back, base_y + side * (2.0 + span * 0.16 * f), shoulder + 3.4 + rise * 0.22 * f - w * 0.5),
-                           (tile * 1.1, tile * 1.25, tile * (3.0 - 0.34 * f)))
-        figure.cherub_face("body", mats, (2.2, base_y + side * 3.6, shoulder - 1.0), 2.8, tile, face_dir=1.0)
-        for leaf in range(4):
-            lf = leaf / 3.0
-            figure.box("body", "gold", (1.0 - lf * 1.2, base_y + side * (1.0 + lf * 2.4), shoulder - 2.6 - lf * 0.7),
-                       (tile * 1.3, tile * 1.5, tile * (2.4 - 0.7 * lf)))
-    plate_x = td * 0.5 + 1.3
-    figure.slab("body", "gold", (plate_x, 0.0, shoulder - 2.2), (1.5, 5.4, 5.0), tile=tile)
-    figure.slab("body", "golddeep", (plate_x + 0.5, 0.0, shoulder - 2.2), (0.9, 4.0, 3.6), tile=tile)
-    figure.star_burst("body", {"gold": "gold", "gem": "solarpale"}, (plate_x + 1.1, 0.0, shoulder - 2.2), 4.4, 12, tile, key="gold", core="gem")
-    figure.ring("body", lambda a: "golddeep", (plate_x + 1.0, 0.0, shoulder - 2.2), 3.0, tile * 0.8, tile * 0.9)
-    for k, (drop, rad) in enumerate(((1.4, tw * 0.52), (2.9, tw * 0.60))):
-        figure.chain_run("body", "gold", (td * 0.34, -rad, shoulder + 1.2 - drop), (td * 0.34, rad, shoulder + 1.2 - drop), tile, sag=0.9 + 0.35 * k)
+        by = side * (hw * 0.5 + 1.2)
+        figure.slab("pauldrons", "gold", (0.2, by + side * 1.0, shoulder + 1.7), (5.8, 5.0, 3.2), tile=tile)
+        figure.slab("pauldrons", "golddeep", (0.0, by + side * 2.4, shoulder - 0.5), (4.8, 3.6, 1.8), tile=tile)
+        figure.cherub_face("pauldrons", mats, (2.8, by + side * 1.2, shoulder + 2.5), 4.0, tile, face_dir=1.0)
+        figure.cherub_face("pauldrons", mats, (2.3, by + side * 3.7, shoulder - 1.0), 2.8, tile, face_dir=1.0)
+        figure.baroque_scroll("pauldrons", mats, (1.0, by + side * 2.6, shoulder + 4.3), (side, 1.0), hh * 1.15, tile, coils=1.9, lobes=5)
+        figure.baroque_scroll("pauldrons", mats, (-1.6, by + side * 2.2, shoulder + 3.5), (side, 1.0), hh * 0.9, tile, coils=1.5, lobes=4)
+        figure.baroque_scroll("pauldrons", mats, (0.4, by + side * 3.0, shoulder + 0.7), (side, -0.55), hh * 0.7, tile, coils=1.2, lobes=3)
+        feather_fan(figure, "pauldrons", mats, (-0.2, by + side * 2.2, shoulder + 2.6), side, 6, tile)
+        for k in range(3):
+            figure.slab("pauldrons", "gold", (0.2, by + side * 0.5, shoulder - 2.2 - k * 1.6), (2.9, 3.3, 1.25), tile=tile)
+            figure.box("pauldrons", "golddeep", (0.2, by + side * 0.5, shoulder - 2.95 - k * 1.6), (2.7, 3.1, tile * 0.3))
+
+    # ================================================================== 9-10. GORGET AND SASH
+    figure.slab("body", "gold", (0.6, 0.0, torso_top + 0.5), (4.2, tw * 1.02, 1.5), tile=tile)
+    figure.box("body", "golddeep", (td * 0.5 + 0.9, 0.0, torso_top + 0.5), (tile * 0.5, tw * 0.9, tile * 0.5))
+    for side in (-1.0, 1.0):
+        steps = 9
+        for k in range(steps):
+            t = k / (steps - 1.0)
+            figure.box("body", "linen", (td * 0.5 + 0.9, side * (2.5 - 4.2 * t), torso_top - 0.3 - 6.2 * t), (tile * 0.9, tile * 1.5, tile * 1.5))
+            figure.box("body", "linenshade", (td * 0.5 + 0.55, side * (2.5 - 4.2 * t) + side * 0.9, torso_top - 0.3 - 6.2 * t), (tile * 0.6, tile * 0.9, tile * 1.5))
+
+    # ================================================================== 11-12. THE SUN AND THE CHAINS
+    px = td * 0.5 + 1.5
+    ez = d["torso_z"] + 1.4
+    figure.slab("body", "gold", (px, 0.0, ez), (1.5, 5.8, 5.4), tile=tile)
+    figure.slab("body", "golddeep", (px + 0.5, 0.0, ez), (0.9, 4.2, 3.8), tile=tile)
+    figure.star_burst("body", {"gold": "gold", "gem": "solarpale"}, (px + 1.1, 0.0, ez), 4.8, 12, tile, plane="yz", key="gold", core="gem")
+    figure.ring("body", lambda a: "golddeep", (px + 1.0, 0.0, ez), 3.2, tile * 0.8, tile * 0.9)
+    figure.box("body", "solarpale", (px + 1.6, 0.0, ez), (tile * 0.8, tile * 1.8, tile * 1.8))
+    for k, (drop, rad) in enumerate(((3.6, tw * 0.56), (4.9, tw * 0.62), (6.1, tw * 0.66))):
+        figure.chain_run("body", "gold", (td * 0.5 + 0.8, -rad, ez - drop), (td * 0.5 + 0.8, rad, ez - drop), tile, sag=0.8 + 0.3 * k)
+        figure.pendant("body", mats, (td * 0.5 + 1.1, 0.0, ez - drop - 0.7 - 0.3 * k), tile, drop=0.9 + 0.3 * k, gem="gem")
+
+    # ================================================================== 13. BELT AND TASSETS
+    figure.slab("body", "gold", (0.0, 0.0, hip + 0.9), (td * 1.36, tw * 1.32, 1.5), tile=tile)
+    figure.slab("body", "golddeep", (0.0, 0.0, hip - 0.1), (td * 1.28, tw * 1.24, 0.8), tile=tile)
+    figure.part("robe", "body", (0.0, 0.0, hip + 0.4), "trail", 0.5)
+    for plate in range(8):
+        a = math.radians(-118.0 + 236.0 * (plate / 7.0))
+        pxx, pyy = math.cos(a) * td * 0.92, math.sin(a) * tw * 0.92
+        drop = 4.4 if plate in (0, 7) else (6.4 if plate in (3, 4) else 5.5)
+        figure.slab("robe", "gold", (pxx, pyy, hip - 0.4 - drop * 0.5), (1.5, 2.1, drop), tile=tile)
+        figure.box("robe", "golddeep", (pxx + 0.75, pyy, hip - 0.4 - drop * 0.35), (tile * 0.6, tile * 1.2, tile * 1.2))
+        figure.box("robe", "solarpale", (pxx + 1.1, pyy, hip - 0.4 - drop * 0.35), (tile * 0.5, tile * 0.7, tile * 0.7))
+
+    # ================================================================== 14-15. VAMBRACES, HANDS, LAMPS
+    wrist = d["torso_z"] + th * 0.34 - ah * 0.86
     for side, name in ((-1.0, "arm_l"), (1.0, "arm_r")):
         arm_y = side * (tw * 0.5 + 0.55 + aw * 0.5)
         fore = "%s_fore" % name
-        wrist = d["torso_z"] + th * 0.34 - ah * 0.86
-        figure.slab(fore, "gold", (0.2, arm_y, wrist + 2.2), (ad * 1.28, aw * 1.32, 3.0), tile=tile)
-        figure.slab(fore, "golddeep", (0.3, arm_y, wrist + 0.4), (ad * 1.32, aw * 1.36, 0.9), tile=tile)
-        figure.slab(fore, "gold", (0.1, arm_y, wrist - 0.9), (ad * 1.12, aw * 1.14, 1.4), tile=tile)      # the hand
-
-    # ---- PURE LIGHT. A lamp-orb on a gold rod at each hip, held beside the hands.
-    figure.part("lamps", "body", (0.0, 0.0, shoulder - 4.0), "float", 0.35)
+        figure.slab(fore, "gold", (0.2, arm_y, wrist + 2.6), (ad * 1.30, aw * 1.34, 3.2), tile=tile)
+        figure.slab(fore, "golddeep", (0.3, arm_y, wrist + 0.7), (ad * 1.36, aw * 1.40, 0.8), tile=tile)
+        figure.slab(fore, "gold", (0.1, arm_y, wrist - 0.9), (ad * 1.14, aw * 1.16, 1.5), tile=tile)
+        figure.box(fore, "solarpale", (ad * 0.72, arm_y, wrist + 2.6), (tile * 0.5, tile * 0.9, tile * 0.9))
+    figure.part("lamps", "body", (0.0, 0.0, hip + 2.0), "float", 0.35)
     for side in (-1.0, 1.0):
         figure.orb_on_rod("lamps", {"gold": "gold", "orb": "solarpale", "orbglow": "solarpale"},
-                          (td * 0.34, side * (tw * 0.5 + aw + 1.6), shoulder - 5.4), (side * 0.30, -1.0), 5.0, 2.2, tile, halo=True)
+                          (td * 0.4, side * (tw * 0.5 + aw + 2.4), hip + 1.2), (side * 0.25, -1.0), 5.2, 2.2, tile, halo=True)
 
-    # ---- DIVINE DRAPERY. White, from the shoulders to the floor, 2.2 heads wide at the hem: a mantle behind
-    # and falls in front, with the gold belt and tassets worn over it.
-    figure.part("robe", "body", (0.0, 0.0, shoulder - 2.0), "trail", 0.5)
+    # ================================================================== 16-17. THE DIVINE DRAPERY
     figure.cloak("robe", lambda dn, ac: "linenshade" if abs(ac - 0.5) > 0.42 or dn > 0.90 else "linen",
-                 (-td * 0.5 - 0.4, 0.0, shoulder + 0.8), hw * 0.95, shoulder + 0.6, tile, flare=2.2, back=-2.4, ragged=0.12)
+                 (-td * 0.5 - 0.5, 0.0, shoulder + 0.6), hw * 1.05, shoulder + 0.4, tile, flare=2.3, back=-2.6, ragged=0.12)
     figure.cloak("robe", lambda dn, ac: "linenshade" if abs(ac - 0.5) > 0.36 else "linen",
-                 (-td * 0.5 - 1.5, 0.0, shoulder + 0.2), hw * 1.10, shoulder - 0.2, tile, flare=2.45, back=-2.0, ragged=0.16)
+                 (-td * 0.5 - 1.6, 0.0, shoulder), hw * 1.22, shoulder - 0.2, tile, flare=2.6, back=-2.1, ragged=0.16)
+    robe_panel(figure, "robe", lambda dn, t: "linenshade" if dn > 0.9 else "linen", (td * 0.5 + 0.7, 0.0, hip - 0.2), tw * 0.9, hip - 0.4, tile, trim="golddeep")
     for side in (-1.0, 1.0):
-        figure.drape("robe", lambda f: "linenshade" if f > 0.86 else "linen",
-                     (td * 0.40, side * (tw * 0.5 + 2.0), d["torso_z"] - th * 0.16), 5.6, d["torso_z"] - th * 0.16, 0, tile, ragged=0.14)
-    figure.drape("robe", lambda f: "linenshade" if f > 0.88 else "linen",
-                 (td * 0.5 + 0.5, 0.0, shoulder - 7.4), tw * 1.05, shoulder - 7.6, 0, tile, ragged=0.12)
-    figure.slab("robe", "gold", (0.0, 0.0, shoulder - 5.4), (td * 1.12, tw * 1.12, 1.6), tile=tile)
-    figure.slab("robe", "golddeep", (0.0, 0.0, shoulder - 6.6), (td * 1.06, tw * 1.06, 0.9), tile=tile)
-    for plate in range(8):
-        a = math.radians(-118.0 + 236.0 * (plate / 7.0))
-        px, py = math.cos(a) * td * 0.86, math.sin(a) * tw * 0.86
-        drop = 4.4 if plate in (0, 7) else (6.2 if plate in (3, 4) else 5.4)
-        figure.slab("robe", "gold", (px, py, shoulder - 7.4 - drop * 0.5), (1.5, 2.1, drop), tile=tile)
-        figure.box("robe", "solarpale", (px + 1.1, py, shoulder - 7.4 - drop * 0.42), (tile * 0.5, tile * 0.6, tile * 0.6))
+        robe_panel(figure, "robe", lambda dn, t: "linen" if abs(t - 0.5) < 0.36 else "linenshade", (td * 0.5 + 0.3, side * (tw * 0.5 + 1.3), hip - 0.1), 3.4, hip - 0.3, tile, flare=1.35, trim="golddeep")
+        robe_panel(figure, "robe", lambda dn, t: "linenshade" if dn > 0.4 else "linen", (td * 0.05, side * (tw * 0.5 + 3.6), hip - 0.2), 2.8, hip - 0.6, tile, flare=1.5)
+        for k in range(6):
+            figure.box("robe", "golddeep", (td * 0.5 + 1.1, side * (tw * 0.5 + 2.9), hip - 1.0 - k * 1.4), (tile * 0.5, tile * 0.6, tile * 1.0))
 
-    # ---- GOLD BOOTS.
+    # ================================================================== 18. GREAVES AND BOOTS
     for side, name in ((-1.0, "leg_l"), (1.0, "leg_r")):
         shin = "%s_shin" % name
-        figure.slab(shin, "gold", (0.2, side * d["leg_gap"], hip - 6.0), (d["leg"][0] * 1.18, d["leg"][1] * 1.24, 2.8), tile=tile)
-        figure.slab(shin, "golddeep", (0.4, side * d["leg_gap"], hip - 7.6), (d["leg"][0] * 1.22, d["leg"][1] * 1.28, 0.9), tile=tile)
+        y = side * d["leg_gap"]
+        figure.slab(shin, "gold", (0.3, y, hip - lh * 0.66), (ld * 1.30, lw * 1.36, 2.6), tile=tile)
+        figure.box(shin, "solarpale", (ld * 0.78, y, hip - lh * 0.56), (tile * 0.6, tile * 1.0, tile * 1.0))
+        figure.slab(shin, "gold", (0.2, y, hip - lh * 0.86), (ld * 1.20, lw * 1.26, 1.6), tile=tile)
+        figure.slab(shin, "golddeep", (0.4, y, hip - lh + 0.55), (ld * 1.42, lw * 1.30, 0.9), tile=tile)
     return figure
 
 
@@ -1842,8 +2005,8 @@ def celestial_light():
     # to an absolute 12; the face now sits at 6 and 4.8, so the eyes are the brightest thing on it, which is
     # the whole of "visibly glowing eyes" on this skin. The cut lines still carry: 6 is well above the 1.0 of
     # the body it edges.
-    figure.material("edge", "glow", (0.62, 0.82, 1.00), 1.0)
-    figure.material("starlight", "glow", (0.95, 0.98, 1.00), 0.8)
+    figure.material("edge", "glow", (0.62, 0.82, 1.00), 0.7)
+    figure.material("starlight", "glow", (0.95, 0.98, 1.00), 0.6)
     figure.material("bannercloth", "rim", (0.80, 0.90, 1.00), 1.0)
     figure.material("ink", "glow", (0.93, 0.98, 1.00), 0.6)
     figure.material("frost", "rim", (0.86, 0.93, 1.00), 1.0)
@@ -2268,6 +2431,11 @@ def cub_ghost(eyes="flat", skin="relay_og"):
     ex = hd * 0.5 + 0.22
     for side in (-1.0, 1.0):
         base = (ex, side * hw * 0.19, head_z + hh * 0.06)
+        # THE CUB'S EYES GLOW LIKE THE PARENT'S: the same soft halo pane, proud of the eye, sized to the flat
+        # eye's footprint whichever shape the plate draws. It is named "eyehalo" so the runtime drives it as
+        # an eye at the halo share, and its face (ex + 0.27) stands in front of the eye's own (ex + 0.175).
+        if "eyehalo" in figure.material_names:
+            figure.box("head", "eyehalo", (ex + 0.12, base[1], base[2]), (0.30, hw * 0.20 * 2.4, hh * 0.13 * 2.4))
         if eyes == "flat":
             figure.box("head", "eye", base, (0.35, hw * 0.20, hh * 0.13))
         elif eyes == "arc":
@@ -2388,7 +2556,16 @@ def mirror_to_sibling_worktrees(out_dir):
     ONLY WHERE THE FOLDER ALREADY EXISTS. A worktree without one has deliberately not got one -- the world
     lane's has no RelaySkins at all -- and creating it there would push mascot files into a tree that never
     asked for them.
+
+    AND ONLY WHERE AN EDITOR IS ACTUALLY LAUNCHED FROM. "The folder exists" was too broad a test, and the
+    integration lane found out how: its worktree is branched from THIS branch, so it has RelaySkins, so a
+    regeneration here rewrote 25 TRACKED files in a tree that had not asked for them. Nothing was lost --
+    they commit staged files only -- but in a worktree built from this branch my work-in-progress appears
+    as ordinary modified tracked files, and one `git commit -a` there would land unfinished mascots on
+    someone else's branch under someone else's name. A worktree that never launches an editor never needs
+    a figure; only these do. Add a name here rather than widening the test back to "has the folder".
     """
+    LAUNCHES_AN_EDITOR = ("wonderland-task3", "wonderland-proof")
     here = os.path.abspath(out_dir)
     if not os.path.isdir(here):
         return
@@ -2396,9 +2573,13 @@ def mirror_to_sibling_worktrees(out_dir):
     root = os.path.dirname(os.path.dirname(os.path.dirname(here)))
     if not os.path.isdir(root):
         return
+    skipped = []
     for sibling in sorted(os.listdir(root)):
         target = os.path.join(root, sibling, "wonderland", leaf)
         if not os.path.isdir(target) or os.path.abspath(target) == here:
+            continue
+        if sibling not in LAUNCHES_AN_EDITOR:
+            skipped.append(sibling)
             continue
         copied = 0
         for name in sorted(os.listdir(here)):
@@ -2416,6 +2597,8 @@ def mirror_to_sibling_worktrees(out_dir):
             copied += 1
         if copied:
             print("mirrored %d figure(s) -> %s" % (copied, target))
+    if skipped:
+        print("not mirrored (no editor launches there): %s" % ", ".join(skipped))
 
 
 if __name__ == "__main__":

@@ -50,6 +50,8 @@ PROPS = ("local_exposure_highlight_contrast_scale", "local_exposure_shadow_contr
 
 
 def read_frame(world, rt):
+    # THE WORLD IS PASSED IN. This is module level; live() lives inside job(), so calling it here is a
+    # runtime NameError that ast.parse cannot see.
     out = []
     for gy in range(GRID_Y):
         for gx in range(GRID_X):
@@ -95,13 +97,37 @@ def job():
     yield (lambda: ues.get_game_world() is not None, 300)
     yield (lambda: unreal.GameplayStatics.get_player_pawn(ues.get_game_world(), 0) is not None, 180)
     world = ues.get_game_world()
+
+    def live():
+        """The world, re-fetched at every use -- never a reference captured once and held.
+
+        A held reference goes stale across long jobs and the failure is silent for some APIs: pose_camera
+        throws "Cannot nativize 'World' as 'Object'" (which killed this job on 2026-09-27), while
+        get_all_actors_with_tag simply returns an empty list that reads like an empty world.
+        """
+        return ues.get_game_world()
+
+    def alive():
+        """The world AND the pawn, or None. Gate every reading on this.
+
+        When PIE is torn down mid-job the reads do not fail -- they return a constant black frame, which is
+        indistinguishable from a legitimately dark scene. Any job that records a number after this returns
+        None is publishing the dark as data.
+        """
+        w = ues.get_game_world()
+        if w is None:
+            return None
+        try:
+            return w if unreal.GameplayStatics.get_player_pawn(w, 0) is not None else None
+        except Exception:                                              # noqa: BLE001
+            return None
     L.focus_game_viewport()
-    unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour 12")
-    unreal.SystemLibrary.execute_console_command(world, "wl.Sky.DayMinutes 0")
+    unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.Hour 12")
+    unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.DayMinutes 0")
     yield 5.0
 
     # ---- WHICH PROPERTIES ACTUALLY EXIST, read off the object rather than remembered.
-    volumes = unreal.GameplayStatics.get_all_actors_of_class(world, unreal.PostProcessVolume)
+    volumes = unreal.GameplayStatics.get_all_actors_of_class(live(), unreal.PostProcessVolume)
     ppv = None
     for v in volumes:
         if v.get_editor_property("unbound"):
@@ -139,12 +165,12 @@ def job():
 
     # ---- THE CAPTURE INHERITS THE WORLD'S GRADE. An override would measure the override.
     rt = unreal.RenderingLibrary.create_render_target2d(
-        world, RT_W, RT_H, unreal.TextureRenderTargetFormat.RTF_RGBA8)
-    mgr = unreal.GameplayStatics.get_player_camera_manager(world, 0)
+        live(), RT_W, RT_H, unreal.TextureRenderTargetFormat.RTF_RGBA8)
+    mgr = unreal.GameplayStatics.get_player_camera_manager(live(), 0)
     eye, aim = mgr.get_camera_location(), mgr.get_camera_rotation()
     RESULT["player_eye"] = [round(float(eye.x)), round(float(eye.y)), round(float(eye.z)),
                             round(float(aim.pitch), 1), round(float(aim.yaw), 1)]
-    cap = H.spawn_scene_capture(world, eye, aim, rt)
+    cap = H.spawn_scene_capture(live(), eye, aim, rt)
     if cap is None:
         RESULT["status"] = "error"
         RESULT["error"] = "no scene capture could be spawned"
@@ -167,7 +193,7 @@ def job():
         set_local(hi, sh)
         yield 2.5
         key = "hi%0.1f_sh%0.1f" % (hi, sh)
-        curve[key] = judge(read_frame(world, rt))
+        curve[key] = judge(read_frame(live(), rt))
         try:
             H.capture_viewport_jpeg(os.path.join(ROOT, "%s.jpg" % key), 1400, 90)
         except Exception:                                             # noqa: BLE001

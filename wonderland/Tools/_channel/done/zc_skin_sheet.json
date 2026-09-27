@@ -1,0 +1,386 @@
+{
+ "name": "zc_skin_sheet",
+ "started": "2026-09-27 14:25:30",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "W00",
+   "name": "six views of every skin were exported",
+   "pass": true,
+   "detail": {
+    "exported": 48,
+    "wanted": 48
+   }
+  },
+  {
+   "id": "W01",
+   "name": "every view holds a figure filling the founder's band",
+   "pass": false,
+   "detail": {
+    "out_of_band": {
+     "apollo_v1 front": 73.1,
+     "arden_infernal_v1 front": 71.2,
+     "arden_infernal front": 75.4
+    },
+    "front_band": [
+     76.0,
+     94.0
+    ],
+    "rotated_band": [
+     66.0,
+     99.0
+    ]
+   }
+  },
+  {
+   "id": "W02",
+   "name": "no view is a white shape: the figure is mostly NOT pinned at white",
+   "pass": false,
+   "detail": {
+    "pinned": {
+     "celestial_light front": 0.612,
+     "celestial_light front34": 0.602,
+     "celestial_light left": 0.589,
+     "celestial_light back34": 0.596,
+     "celestial_light back": 0.606,
+     "celestial_light right": 0.633,
+     "apollo_v1 front": 0.843,
+     "apollo_v1 front34": 0.84,
+     "apollo_v1 left": 0.83,
+     "apollo_v1 back34": 0.845,
+     "apollo_v1 back": 0.851,
+     "apollo_v1 right": 0.839,
+     "arden_infernal_v1 front": 0.563,
+     "arden_infernal_v1 front34": 0.638,
+     "arden_infernal_v1 left": 0.536,
+     "arden_infernal_v1 back34": 0.573,
+     "arden_infernal_v1 back": 0.554,
+     "arden_infernal_v1 right": 0.57,
+     "arden_infernal front": 0.481,
+     "arden_infernal front34": 0.484,
+     "arden_infernal left": 0.474,
+     "arden_infernal back34": 0.444,
+     "arden_infernal back": 0.454,
+     "arden_infernal right": 0.508,
+     "skeleton_flame_v1 front": 0.553,
+     "skeleton_flame_v1 front34": 0.631,
+     "skeleton_flame_v1 left": 0.576,
+     "skeleton_flame_v1 back34": 0.586,
+     "skeleton_flame_v1 back": 0.582,
+     "skeleton_flame_v1 right": 0.56,
+     "skeleton_flame front34": 0.432,
+     "skeleton_flame back34": 0.414,
+     "skeleton_flame back": 0.432
+    },
+    "ceiling": 0.35,
+    "note": "the wardrobe's own picture of the glow re-baseline. Before it, Skeleton Flame's HIGH frames measured 68-80% of the figure over luma 140 from this same stage."
+   }
+  }
+ ],
+ "views": {
+  "relay_og front": "relay_og__front.png",
+  "relay_og front34": "relay_og__front34.png",
+  "relay_og left": "relay_og__left.png",
+  "relay_og back34": "relay_og__back34.png",
+  "relay_og back": "relay_og__back.png",
+  "relay_og right": "relay_og__right.png",
+  "celestial_light front": "celestial_light__front.png",
+  "celestial_light front34": "celestial_light__front34.png",
+  "celestial_light left": "celestial_light__left.png",
+  "celestial_light back34": "celestial_light__back34.png",
+  "celestial_light back": "celestial_light__back.png",
+  "celestial_light right": "celestial_light__right.png",
+  "apollo_v1 front": "apollo_v1__front.png",
+  "apollo_v1 front34": "apollo_v1__front34.png",
+  "apollo_v1 left": "apollo_v1__left.png",
+  "apollo_v1 back34": "apollo_v1__back34.png",
+  "apollo_v1 back": "apollo_v1__back.png",
+  "apollo_v1 right": "apollo_v1__right.png",
+  "apollo front": "apollo__front.png",
+  "apollo front34": "apollo__front34.png",
+  "apollo left": "apollo__left.png",
+  "apollo back34": "apollo__back34.png",
+  "apollo back": "apollo__back.png",
+  "apollo right": "apollo__right.png",
+  "arden_infernal_v1 front": "arden_infernal_v1__front.png",
+  "arden_infernal_v1 front34": "arden_infernal_v1__front34.png",
+  "arden_infernal_v1 left": "arden_infernal_v1__left.png",
+  "arden_infernal_v1 back34": "arden_infernal_v1__back34.png",
+  "arden_infernal_v1 back": "arden_infernal_v1__back.png",
+  "arden_infernal_v1 right": "arden_infernal_v1__right.png",
+  "arden_infernal front": "arden_infernal__front.png",
+  "arden_infernal front34": "arden_infernal__front34.png",
+  "arden_infernal left": "arden_infernal__left.png",
+  "arden_infernal back34": "arden_infernal__back34.png",
+  "arden_infernal back": "arden_infernal__back.png",
+  "arden_infernal right": "arden_infernal__right.png",
+  "skeleton_flame_v1 front": "skeleton_flame_v1__front.png",
+  "skeleton_flame_v1 front34": "skeleton_flame_v1__front34.png",
+  "skeleton_flame_v1 left": "skeleton_flame_v1__left.png",
+  "skeleton_flame_v1 back34": "skeleton_flame_v1__back34.png",
+  "skeleton_flame_v1 back": "skeleton_flame_v1__back.png",
+  "skeleton_flame_v1 right": "skeleton_flame_v1__right.png",
+  "skeleton_flame front": "skeleton_flame__front.png",
+  "skeleton_flame front34": "skeleton_flame__front34.png",
+  "skeleton_flame left": "skeleton_flame__left.png",
+  "skeleton_flame back34": "skeleton_flame__back34.png",
+  "skeleton_flame back": "skeleton_flame__back.png",
+  "skeleton_flame right": "skeleton_flame__right.png"
+ },
+ "framing": {
+  "relay_og": "onBody=1 bodyTall=51.9 bodyWide=30.7 rawTall=51.9 rawWide=30.7 envelope=155 scale=0.327 fill=0.80 glow=0.0010 fitTall=85 fitWide=63 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "celestial_light": "onBody=1 bodyTall=51.9 bodyWide=34.5 rawTall=51.9 rawWide=34.5 envelope=199 scale=0.322 fill=0.80 glow=0.0010 fitTall=85 fitWide=71 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "apollo_v1": "onBody=1 bodyTall=33.0 bodyWide=47.3 rawTall=33.0 rawWide=47.3 envelope=284 scale=0.146 fill=0.80 glow=0.0010 fitTall=54 fitWide=97 distance=67 fov=34.0 target=640x800 predictedHeightPct=64.0",
+  "apollo": "onBody=1 bodyTall=51.8 bodyWide=31.3 rawTall=51.8 rawWide=31.3 envelope=246 scale=0.333 fill=0.80 glow=0.0010 fitTall=85 fitWide=64 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "arden_infernal_v1": "onBody=1 bodyTall=51.9 bodyWide=32.7 rawTall=51.9 rawWide=32.7 envelope=399 scale=0.237 fill=0.80 glow=0.0010 fitTall=85 fitWide=67 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "arden_infernal": "onBody=1 bodyTall=51.9 bodyWide=33.6 rawTall=51.9 rawWide=33.6 envelope=365 scale=0.239 fill=0.80 glow=0.0010 fitTall=85 fitWide=69 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "skeleton_flame_v1": "onBody=1 bodyTall=51.8 bodyWide=35.6 rawTall=51.8 rawWide=35.6 envelope=268 scale=0.327 fill=0.80 glow=0.0010 fitTall=85 fitWide=73 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0",
+  "skeleton_flame": "onBody=1 bodyTall=51.9 bodyWide=39.7 rawTall=51.9 rawWide=39.7 envelope=226 scale=0.327 fill=0.80 glow=0.0010 fitTall=85 fitWide=81 distance=85 fov=34.0 target=640x800 predictedHeightPct=80.0"
+ },
+ "measured": {
+  "relay_og front": {
+   "height_pct": 82.1,
+   "pinned_fraction": 0.041,
+   "subject_px": 14191
+  },
+  "relay_og front34": {
+   "height_pct": 81.8,
+   "pinned_fraction": 0.042,
+   "subject_px": 14117
+  },
+  "relay_og left": {
+   "height_pct": 80.2,
+   "pinned_fraction": 0.042,
+   "subject_px": 14135
+  },
+  "relay_og back34": {
+   "height_pct": 84.4,
+   "pinned_fraction": 0.044,
+   "subject_px": 14498
+  },
+  "relay_og back": {
+   "height_pct": 81.0,
+   "pinned_fraction": 0.039,
+   "subject_px": 14390
+  },
+  "relay_og right": {
+   "height_pct": 82.1,
+   "pinned_fraction": 0.044,
+   "subject_px": 13819
+  },
+  "celestial_light front": {
+   "height_pct": 91.5,
+   "pinned_fraction": 0.612,
+   "subject_px": 24859
+  },
+  "celestial_light front34": {
+   "height_pct": 92.6,
+   "pinned_fraction": 0.602,
+   "subject_px": 24543
+  },
+  "celestial_light left": {
+   "height_pct": 91.5,
+   "pinned_fraction": 0.589,
+   "subject_px": 24939
+  },
+  "celestial_light back34": {
+   "height_pct": 91.1,
+   "pinned_fraction": 0.596,
+   "subject_px": 24044
+  },
+  "celestial_light back": {
+   "height_pct": 93.4,
+   "pinned_fraction": 0.606,
+   "subject_px": 25083
+  },
+  "celestial_light right": {
+   "height_pct": 87.8,
+   "pinned_fraction": 0.633,
+   "subject_px": 23870
+  },
+  "apollo_v1 front": {
+   "height_pct": 73.1,
+   "pinned_fraction": 0.843,
+   "subject_px": 21153
+  },
+  "apollo_v1 front34": {
+   "height_pct": 81.4,
+   "pinned_fraction": 0.84,
+   "subject_px": 22013
+  },
+  "apollo_v1 left": {
+   "height_pct": 82.9,
+   "pinned_fraction": 0.83,
+   "subject_px": 21702
+  },
+  "apollo_v1 back34": {
+   "height_pct": 78.0,
+   "pinned_fraction": 0.845,
+   "subject_px": 21745
+  },
+  "apollo_v1 back": {
+   "height_pct": 76.5,
+   "pinned_fraction": 0.851,
+   "subject_px": 22283
+  },
+  "apollo_v1 right": {
+   "height_pct": 71.2,
+   "pinned_fraction": 0.839,
+   "subject_px": 20593
+  },
+  "apollo front": {
+   "height_pct": 90.8,
+   "pinned_fraction": 0.183,
+   "subject_px": 41708
+  },
+  "apollo front34": {
+   "height_pct": 92.2,
+   "pinned_fraction": 0.174,
+   "subject_px": 40901
+  },
+  "apollo left": {
+   "height_pct": 94.9,
+   "pinned_fraction": 0.184,
+   "subject_px": 42499
+  },
+  "apollo back34": {
+   "height_pct": 88.1,
+   "pinned_fraction": 0.18,
+   "subject_px": 39293
+  },
+  "apollo back": {
+   "height_pct": 94.9,
+   "pinned_fraction": 0.181,
+   "subject_px": 42990
+  },
+  "apollo right": {
+   "height_pct": 92.2,
+   "pinned_fraction": 0.181,
+   "subject_px": 41470
+  },
+  "arden_infernal_v1 front": {
+   "height_pct": 71.2,
+   "pinned_fraction": 0.563,
+   "subject_px": 21763
+  },
+  "arden_infernal_v1 front34": {
+   "height_pct": 94.9,
+   "pinned_fraction": 0.638,
+   "subject_px": 19912
+  },
+  "arden_infernal_v1 left": {
+   "height_pct": 72.0,
+   "pinned_fraction": 0.536,
+   "subject_px": 20855
+  },
+  "arden_infernal_v1 back34": {
+   "height_pct": 91.5,
+   "pinned_fraction": 0.573,
+   "subject_px": 19292
+  },
+  "arden_infernal_v1 back": {
+   "height_pct": 92.6,
+   "pinned_fraction": 0.554,
+   "subject_px": 19536
+  },
+  "arden_infernal_v1 right": {
+   "height_pct": 71.6,
+   "pinned_fraction": 0.57,
+   "subject_px": 22241
+  },
+  "arden_infernal front": {
+   "height_pct": 75.4,
+   "pinned_fraction": 0.481,
+   "subject_px": 26757
+  },
+  "arden_infernal front34": {
+   "height_pct": 91.1,
+   "pinned_fraction": 0.484,
+   "subject_px": 22595
+  },
+  "arden_infernal left": {
+   "height_pct": 72.4,
+   "pinned_fraction": 0.474,
+   "subject_px": 24419
+  },
+  "arden_infernal back34": {
+   "height_pct": 73.9,
+   "pinned_fraction": 0.444,
+   "subject_px": 25117
+  },
+  "arden_infernal back": {
+   "height_pct": 68.2,
+   "pinned_fraction": 0.454,
+   "subject_px": 23932
+  },
+  "arden_infernal right": {
+   "height_pct": 74.2,
+   "pinned_fraction": 0.508,
+   "subject_px": 26183
+  },
+  "skeleton_flame_v1 front": {
+   "height_pct": 93.0,
+   "pinned_fraction": 0.553,
+   "subject_px": 28879
+  },
+  "skeleton_flame_v1 front34": {
+   "height_pct": 92.6,
+   "pinned_fraction": 0.631,
+   "subject_px": 29250
+  },
+  "skeleton_flame_v1 left": {
+   "height_pct": 89.6,
+   "pinned_fraction": 0.576,
+   "subject_px": 27944
+  },
+  "skeleton_flame_v1 back34": {
+   "height_pct": 95.2,
+   "pinned_fraction": 0.586,
+   "subject_px": 28601
+  },
+  "skeleton_flame_v1 back": {
+   "height_pct": 90.4,
+   "pinned_fraction": 0.582,
+   "subject_px": 27347
+  },
+  "skeleton_flame_v1 right": {
+   "height_pct": 90.4,
+   "pinned_fraction": 0.56,
+   "subject_px": 28389
+  },
+  "skeleton_flame front": {
+   "height_pct": 92.2,
+   "pinned_fraction": 0.32,
+   "subject_px": 22935
+  },
+  "skeleton_flame front34": {
+   "height_pct": 93.4,
+   "pinned_fraction": 0.432,
+   "subject_px": 22937
+  },
+  "skeleton_flame left": {
+   "height_pct": 89.2,
+   "pinned_fraction": 0.334,
+   "subject_px": 21269
+  },
+  "skeleton_flame back34": {
+   "height_pct": 91.1,
+   "pinned_fraction": 0.414,
+   "subject_px": 22465
+  },
+  "skeleton_flame back": {
+   "height_pct": 92.2,
+   "pinned_fraction": 0.432,
+   "subject_px": 22080
+  },
+  "skeleton_flame right": {
+   "height_pct": 90.0,
+   "pinned_fraction": 0.306,
+   "subject_px": 22378
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\skin_sheet",
+ "finished": "2026-09-27 14:28:19",
+ "seconds": 168.7,
+ "log": "W_relay_og INFO six views exported {'skin': 'relay_og'}\nW_celestial_light INFO six views exported {'skin': 'celestial_light'}\nW_apollo_v1 INFO six views exported {'skin': 'apollo_v1'}\nW_apollo INFO six views exported {'skin': 'apollo'}\nW_arden_infernal_v1 INFO six views exported {'skin': 'arden_infernal_v1'}\nW_arden_infernal INFO six views exported {'skin': 'arden_infernal'}\nW_skeleton_flame_v1 INFO six views exported {'skin': 'skeleton_flame_v1'}\nW_skeleton_flame INFO six views exported {'skin': 'skeleton_flame'}\nW00 PASS six views of every skin were exported {'exported': 48, 'wanted': 48}\nW01 FAIL every view holds a figure filling the founder's band {'out_of_band': {'apollo_v1 front': 73.1, 'arden_infernal_v1 front': 71.2, 'arden_infernal front': 75.4}, 'front_band': (76.0, 94.0), 'rotated_band': (66.0, 99.0)}\nW02 FAIL no view is a white shape: the figure is mostly NOT pinned at white {'pinned': {'celestial_light front': 0.612, 'celestial_light front34': 0.602, 'celestial_light left': 0.589, 'celestial_light back34': 0.596, 'celestial_light back': 0.606, 'celestial_light right': 0.633, 'apollo_v1 front': 0.843, 'apollo_v1 front34': 0.84, 'apollo_v1 left': 0.83, 'apollo_v1 back34': 0.845, 'apollo_v1 back': 0.851, 'apollo_v1 right': 0.839, 'arden_infernal_v1 front': 0.563, 'arden_infernal_v1 front34': 0.638, 'arden_infernal_v1 left': 0.536, 'arden_infernal_v1 back34': 0.573, 'arden_infernal_v1 back': 0.554, 'arden_infernal_v1 right': 0.57, 'arden_infernal front': 0.481, 'arden_infernal front34': 0.484, 'arden_infernal left': 0.474, 'arden_infernal back34': 0.444, 'arden_infernal back': 0.454, 'arden_infernal right': 0.508, 'skeleton_flame_v1 front': 0.553, 'skeleton_flame_v1 front34': 0.631, 'skeleton_flame_v1 left': 0.576, 'skeleton_flame_v1 back34': 0.586, 'skeleton_flame_v1 back': 0.582, 'skeleton_flame_v1 right': 0.56, 'skeleton_flame front34': 0.432, 'skeleton_flame back34': 0.414, 'skeleton_flame back': 0.432}, 'ceiling': 0.35, 'note': \"the wardrobe's own picture of the glow re-baseline. Before it, Skeleton Flame's HIGH frames measured 68-80% of the figure over luma 140 from this same stage.\"}\n"
+}

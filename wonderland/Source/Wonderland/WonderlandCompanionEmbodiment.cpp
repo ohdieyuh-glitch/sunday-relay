@@ -312,10 +312,29 @@ namespace
 	{
 		const float Dim = FMath::Clamp(CVarFlameDim.GetValueOnAnyThread(), 0.004f, 4.0f);
 		const float Authored = FMath::Max(Strength, 0.0f);
+		// The fallback card (no fire master, which is the shipped state: wl.Look.FireMaterial is 0) used to
+		// be Authored x Dim, calibrated when both that and EmissiveStrength carried the authored strength. With
+		// EmissiveStrength pinned at WonderlandSceneUnits, 4.2 x 0.4 = 1.7 is 1,700 scene units -- a dark teal
+		// against a 25,000 white, which is what the ghostfire photographed as. x12 lands the ember at about
+		// 20,000: bright, coloured, just under white, with the founder's FlameDim still the knob.
 		return bFireMaster
 			? FMath::Sqrt(Authored) * FMath::Max(CVarFireGain.GetValueOnAnyThread(), 0.001f) * Dim
-			: Authored * Dim;
+			: Authored * Dim * 3.0f;   // x3 at generator scale 15: a ghost ember 10.5 x 0.4 x 3 = 12,600 -- lit, coloured, under white
 	}
+
+	/**
+	 * THE WORLD'S WHITE IS NEAR 25,000 EMISSIVE UNITS, NOT 25.
+	 *
+	 * Found the hard way. The post-process volume holds the noon exposure at EV100 14.2, at which a sunlit
+	 * ivory wall sits around 20,000 in scene units, so an emissive of 18 -- the eye level, on an unlit
+	 * material whose output IS its Color -- is a thousand times darker than the stone beside it and
+	 * photographs black. Every number in this file had been reasoned against a white of 25, taken from a
+	 * rim surface whose material carries its own x1000 inside. M_WL_VoxelGlow gets its thousand from the
+	 * EmissiveStrength parameter, which is why the eyes read at level 12 as long as that parameter carried
+	 * 1,242 and went black the moment the glow scale came down; the additive material has no such
+	 * parameter, so its Color must carry the thousand itself. This is that thousand, written once.
+	 */
+	constexpr float WonderlandSceneUnits = 1000.0f;
 
 	float WonderlandTameGlow(float Strength)
 	{
@@ -364,6 +383,46 @@ namespace
 	const TCHAR* const FireParentPath = TEXT("/Game/Wonderland/Materials/M_WL_Fire.M_WL_Fire");
 
 	const TCHAR* const AdditiveParentPath = TEXT("/Game/Wonderland/Materials/M_WL_VoxelAdditive.M_WL_VoxelAdditive");
+	/** THE EYE'S SPILL. M_WL_EyeHalo (Tools/editor_jobs/zc_make_eye_halo_material.py) is additive and unlit like
+	 *  M_WL_VoxelAdditive, but instead of a flat Color across the whole face it fades radially from the centre of
+	 *  the pane to nothing at its edge. Round 3 drew the "eyehalo" panes flat and photographed them as olive
+	 *  frames round a lit square -- a plate, not a light. A light is its colour spilling off it and dying away,
+	 *  and this is the surface that does that. Missing (a tree before the asset job), the halo falls back to
+	 *  the flat additive at the flat additive's share, and still draws. */
+	const TCHAR* const EyeHaloParentPath = TEXT("/Game/Wonderland/Materials/M_WL_EyeHalo.M_WL_EyeHalo");
+
+	/** THE COLOUR A GLOW ANIMATOR MUST REMEMBER, which is not always the colour the painter chose.
+	 *
+	 *  M_WL_VoxelGlow multiplies its Color by EmissiveStrength, which is pinned at WonderlandSceneUnits, so
+	 *  a glow surface is painted with the small number and the material supplies the thousand.
+	 *  M_WL_VoxelAdditive and M_WL_EyeHalo have no strength at all -- their emissive IS Color -- so an
+	 *  additive surface must be painted with the number already multiplied. Both paint sites did that
+	 *  correctly. The REST colour did not, and the rest colour is what actually reaches the material:
+	 *  AnimateGlow writes Rest * Amount into Color on every tick of every figure, so whatever the painter
+	 *  wrote survived exactly one frame and was then replaced by a number a thousand times too small.
+	 *
+	 *  Measured on the live costume (zc_eye_halo_probe, 2026-09-27 11:38): every skin's eye halo carried
+	 *  M_WL_EyeHalo, two instances, visible, Inner and Falloff correct -- and Color (19.8, 11.5, 2.0)
+	 *  against a scene white near 25,000. Black. That is why the default Dog's eyes glowed and no costume's
+	 *  did: the Dog's halos are plain components driven by ARelayDogCharacter::SetEyeGlow, which writes the
+	 *  thousand itself and is not on this animator at all.
+	 *
+	 *  This is not only the eyes. Every additive surface on every figure goes through here -- Celestial
+	 *  Light's halo edge, a cub's ghost tail, the Project Avatars' halos -- and all of them have been dark
+	 *  since the scene scale was introduced. */
+	FLinearColor RestColourFor(EWonderlandCompanionMaterialKind Kind, const FLinearColor& Colour)
+	{
+		return Kind == EWonderlandCompanionMaterialKind::Additive ? Colour * WonderlandSceneUnits : Colour;
+	}
+
+	/** True when a material definition is an eye's halo pane rather than a body surface or a fire. */
+	bool IsEyeHaloName(const FName& Name)
+	{
+		const FString Text = Name.ToString();
+		return Text.Contains(TEXT("halo"), ESearchCase::IgnoreCase)
+			&& Text.Contains(TEXT("eye"), ESearchCase::IgnoreCase)
+			&& !Text.Contains(TEXT("fire"), ESearchCase::IgnoreCase);
+	}
 	const TCHAR* const AdditiveFallbackPath = TEXT("/Engine/EngineMaterials/EmissiveMeshMaterial.EmissiveMeshMaterial");
 	const TCHAR* const CubePath = TEXT("/Engine/BasicShapes/Cube.Cube");
 	// THE FIGURES' OWN CUBE, AND WHY IT EXISTS. Every .wlvox body is instances of a cube, and on 2026-09-24
@@ -682,7 +741,16 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 	for (int32 Index = 0; Index < Figure.Materials.Num(); ++Index)
 	{
 		const FWonderlandCompanionMaterial& Def = Figure.Materials[Index];
-		UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(ParentFor(Def.Kind), this);
+		UMaterialInterface* Parent = ParentFor(Def.Kind);
+		// AN EYE HALO IS A SOFT LIGHT, NOT A PLATE: the radial material if the project has it. See EyeHaloParentPath.
+		if (Def.Kind == EWonderlandCompanionMaterialKind::Additive && IsEyeHaloName(Def.Name))
+		{
+			if (UMaterialInterface* Soft = LoadObject<UMaterialInterface>(nullptr, EyeHaloParentPath))
+			{
+				Parent = Soft;
+			}
+		}
+		UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(Parent, this);
 		if (Instance != nullptr)
 		{
 			const FLinearColor Lit(Def.Color.R, Def.Color.G, Def.Color.B, 1.0f);
@@ -713,13 +781,23 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 				// through "Color" did nothing at all and every panel stayed the material's own white. The ember
 				// flames were dull brown here for the same reason. Setting all of them is free: the ones that do
 				// not exist are discarded, and the one that does takes.
-				Instance->SetVectorParameterValue(TEXT("Color"), Emissive);
+				// AN ADDITIVE SURFACE CARRIES THE SCENE SCALE IN ITS COLOUR: M_WL_VoxelAdditive's emissive is its
+				// Color and nothing else (zc_material_graphs), so without this an eye halo at 6 is 6 against 25,000.
+				Instance->SetVectorParameterValue(TEXT("Color"),
+					Def.Kind == EWonderlandCompanionMaterialKind::Additive ? Emissive * WonderlandSceneUnits : Emissive);
 				Instance->SetVectorParameterValue(TEXT("EmissiveColor"), Emissive);
 				Instance->SetVectorParameterValue(TEXT("BaseColor"), Emissive);
-				Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), WonderlandTameGlow(Def.Strength));
+				// PINNED AT 1000, NOT THE STRENGTH. M_WL_VoxelGlow's emissive is Color x EmissiveStrength x ~0.001 --
+				// QUADRATIC in the authored strength when both are set from it. At the old 4000x scale that was
+				// 1,200 x 1,200 -> one white; after the generator's re-baseline to 6 it was 4 x 4 -> 0.02 -> BLACK,
+				// and every glow on every figure in the world rendered black: Celestial's halo, Skeleton's
+				// ghostfire, the costume eyes (zc_eyes_look, 2026-09-27 15:47 UTC). The eye had only ever read
+				// because its strength was 1,242. With this term held at 1000 the material's output IS Color, which
+				// is the number the tame curve, the day cycle and the eye drive already choose.
+				Instance->SetScalarParameterValue(TEXT("EmissiveStrength"), WonderlandSceneUnits);
 				{
 					const bool bBeats = Def.Name.ToString().Contains(TEXT("pulse"), ESearchCase::IgnoreCase);
-					GlowMaterials.Add({Index, TEXT("Color"), Emissive, bBeats});
+					GlowMaterials.Add({Index, TEXT("Color"), RestColourFor(Def.Kind, Emissive), bBeats});
 					bHasHeartbeat |= bBeats;
 				}
 				break;
@@ -768,7 +846,7 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 				Full->SetVectorParameterValue(TEXT("Color"), FullEmissive);
 				Full->SetVectorParameterValue(TEXT("EmissiveColor"), FullEmissive);
 				Full->SetVectorParameterValue(TEXT("BaseColor"), FullEmissive);
-				Full->SetScalarParameterValue(TEXT("EmissiveStrength"), FlameStrength);
+				Full->SetScalarParameterValue(TEXT("EmissiveStrength"), WonderlandSceneUnits);   // see the body instance above
 				ApplyColourway(Index, Full, Def, FullEmissive, FullEmissive, /*bFlameTwin=*/true);
 				Flame = Full;
 			}
@@ -1360,7 +1438,7 @@ void AWonderlandCompanionEmbodiment::SetEyeGlow(float Scale)
 	{
 		return;
 	}
-	const float Wanted = FMath::Clamp(Scale, 0.05f, 12.0f);
+	const float Wanted = FMath::Clamp(Scale, 0.05f, 30.0f);   // was 12: EyeGlowDay 18 was never reachable
 	if (FMath::IsNearlyEqual(EyeGlowScale, Wanted, 0.004f))
 	{
 		return;
@@ -1495,7 +1573,10 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 		// the ghostfire blazing in a dark plaza -- that plume is the skin, not an artefact -- and cutting it
 		// five-fold after dark is precisely the "flames I need back" complaint. The shell around it still
 		// takes the correction, so the Dog does not wash out; only the fire is left alone.
-		Want = Authored * GlowScale * (bFlameTwin ? 1.0f : NightGlowScale);
+		// HALF THE NIGHT CORRECTION FOR THE FIRE. Exempt entirely, Arden's halo fire photographed as a yellow blaze
+		// over the whole head at night (round 2): the night exposure opens 1.45 EV and a 12,600 ember clips. Half
+		// way keeps the fire plainly there after dark -- the founder's video -- without it swallowing the figure.
+		Want = Authored * GlowScale * (bFlameTwin ? FMath::Lerp(1.0f, NightGlowScale, 0.5f) : NightGlowScale);
 	}
 	else if (bGlows)
 	{
@@ -1521,7 +1602,15 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 		// the eye's own light and must follow the eye's clock, not the body's night correction -- but at the
 		// eye's full level it would be a second, bigger eye. A rim is a rim because it is dimmer than what it
 		// rims, so a halo takes about a third of the level the core is driven to.
-		const float HaloShare = Def.Name.ToString().Contains(TEXT("halo"), ESearchCase::IgnoreCase) ? 0.35f : 1.0f;
+		// ON THE SOFT MATERIAL THE SHARE IS THREE-QUARTERS, NOT A THIRD. The flat additive at 0.28 was the most a hard
+		// pane could carry before it read as a second eye; the radial surface holds that level only over the eye
+		// itself (hidden behind the core) and fades from there, so the spill next to the core starts bright and
+		// is gone by the pane's edge. That fade is what reads as glow. Round 3's 0.28 on the flat pane read as a
+		// frame (EYES_round3_day_night.png), and the founder's word for it was "gone".
+		const bool bHalo = Def.Name.ToString().Contains(TEXT("halo"), ESearchCase::IgnoreCase);
+		const bool bSoftHalo = bHalo && Instance != nullptr && Instance->Parent != nullptr
+			&& Instance->Parent->GetFName() == FName(TEXT("M_WL_EyeHalo"));
+		const float HaloShare = bSoftHalo ? 0.75f : (bHalo ? 0.28f : 1.0f);
 		Want = (Authored / Peak) * EyeGlowScale * GlowScale * HaloShare;
 	}
 	if (bChosen)
@@ -1568,9 +1657,14 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 		Instance->SetVectorParameterValue(TEXT("RimColor"), Want * WonderlandTameGlow(Def.Strength));
 		break;
 	case EWonderlandCompanionMaterialKind::Glow:
-	case EWonderlandCompanionMaterialKind::Additive:
 		Instance->SetVectorParameterValue(TEXT("Color"), Want);
 		Instance->SetVectorParameterValue(TEXT("EmissiveColor"), Want);
+		Instance->SetVectorParameterValue(TEXT("BaseColor"), Want);
+		break;
+	case EWonderlandCompanionMaterialKind::Additive:
+		// see the build loop: the additive material has no strength parameter, so the scene scale rides in Color
+		Instance->SetVectorParameterValue(TEXT("Color"), Want * WonderlandSceneUnits);
+		Instance->SetVectorParameterValue(TEXT("EmissiveColor"), Want * WonderlandSceneUnits);
 		Instance->SetVectorParameterValue(TEXT("BaseColor"), Want);
 		break;
 	}
@@ -1593,7 +1687,8 @@ void AWonderlandCompanionEmbodiment::ApplyColourway(int32 MaterialIndex, UMateri
 	{
 		if (Glow.MaterialIndex == MaterialIndex && Glow.Parameter == TEXT("Color"))
 		{
-			Glow.Rest = Want;
+			// the same scale the switch above just wrote: the animator replaces Color every tick from this
+			Glow.Rest = RestColourFor(Def.Kind, Want);
 		}
 	}
 }

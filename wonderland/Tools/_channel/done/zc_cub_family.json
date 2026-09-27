@@ -1,0 +1,231 @@
+{
+ "name": "zc_cub_family",
+ "started": "2026-09-27 11:45:42",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "K00",
+   "name": "the Sub-Agent Cub subsystem is running",
+   "pass": true,
+   "detail": {}
+  },
+  {
+   "id": "K01",
+   "name": "a flock of three stands beside the Dog under every skin",
+   "pass": true,
+   "detail": {
+    "counts": {
+     "relay_og": [
+      597,
+      603,
+      605
+     ],
+     "celestial_light": [
+      668,
+      674,
+      676
+     ],
+     "apollo_v1": [
+      740,
+      746,
+      748
+     ],
+     "apollo": [
+      740,
+      746,
+      748
+     ],
+     "arden_infernal_v1": [
+      661,
+      667,
+      669
+     ],
+     "arden_infernal": [
+      661,
+      667,
+      669
+     ],
+     "skeleton_flame_v1": [
+      630,
+      636,
+      638
+     ],
+     "skeleton_flame": [
+      630,
+      636,
+      638
+     ]
+    }
+   }
+  },
+  {
+   "id": "K02",
+   "name": "under Relay OG the flock is the plate's own cubs, and under every premium skin it is dressed",
+   "pass": false,
+   "detail": {
+    "plain_under_relay_og": [
+     603
+    ],
+    "dressed": {
+     "celestial_light": [
+      668,
+      674,
+      676
+     ],
+     "apollo_v1": [
+      740,
+      746,
+      748
+     ],
+     "apollo": [
+      740,
+      746,
+      748
+     ],
+     "arden_infernal_v1": [
+      661,
+      667,
+      669
+     ],
+     "arden_infernal": [
+      661,
+      667,
+      669
+     ],
+     "skeleton_flame_v1": [
+      630,
+      636,
+      638
+     ],
+     "skeleton_flame": [
+      630,
+      636,
+      638
+     ]
+    },
+    "note": "box counts: a dressed cub carries its parent's halo, fire, skull or edge and is heavier than the plain cub. This proves the RIGHT FILE loaded; whether it reads as that skin's cub is the founder's call from the captures."
+   }
+  },
+  {
+   "id": "K03",
+   "name": "the same living flock changed its coat with every skin change, without being dismissed",
+   "pass": true,
+   "detail": {
+    "distinct_flocks": 5,
+    "of": 5,
+    "note": "one summon at the start, five skins, five different flocks: re-dressed in place."
+   }
+  }
+ ],
+ "by_skin": {
+  "relay_og": {
+   "cub_boxes": [
+    597,
+    603,
+    605
+   ],
+   "dressed": [
+    597,
+    605
+   ],
+   "plain": [
+    603
+   ]
+  },
+  "celestial_light": {
+   "cub_boxes": [
+    668,
+    674,
+    676
+   ],
+   "dressed": [
+    668,
+    674,
+    676
+   ],
+   "plain": []
+  },
+  "apollo_v1": {
+   "cub_boxes": [
+    740,
+    746,
+    748
+   ],
+   "dressed": [
+    740,
+    746,
+    748
+   ],
+   "plain": []
+  },
+  "apollo": {
+   "cub_boxes": [
+    740,
+    746,
+    748
+   ],
+   "dressed": [
+    740,
+    746,
+    748
+   ],
+   "plain": []
+  },
+  "arden_infernal_v1": {
+   "cub_boxes": [
+    661,
+    667,
+    669
+   ],
+   "dressed": [
+    661,
+    667,
+    669
+   ],
+   "plain": []
+  },
+  "arden_infernal": {
+   "cub_boxes": [
+    661,
+    667,
+    669
+   ],
+   "dressed": [
+    661,
+    667,
+    669
+   ],
+   "plain": []
+  },
+  "skeleton_flame_v1": {
+   "cub_boxes": [
+    630,
+    636,
+    638
+   ],
+   "dressed": [
+    630,
+    636,
+    638
+   ],
+   "plain": []
+  },
+  "skeleton_flame": {
+   "cub_boxes": [
+    630,
+    636,
+    638
+   ],
+   "dressed": [
+    630,
+    636,
+    638
+   ],
+   "plain": []
+  }
+ },
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\cub_family",
+ "finished": "2026-09-27 11:49:06",
+ "seconds": 203.95,
+ "log": "K00 PASS the Sub-Agent Cub subsystem is running {}\nK_relay_og INFO flock under relay_og {'cub_boxes': [597, 603, 605], 'dressed': [597, 605], 'plain': [603]}\nK_celestial_light INFO flock under celestial_light {'cub_boxes': [668, 674, 676], 'dressed': [668, 674, 676], 'plain': []}\nK_apollo_v1 INFO flock under apollo_v1 {'cub_boxes': [740, 746, 748], 'dressed': [740, 746, 748], 'plain': []}\nK_apollo INFO flock under apollo {'cub_boxes': [740, 746, 748], 'dressed': [740, 746, 748], 'plain': []}\nK_arden_infernal_v1 INFO flock under arden_infernal_v1 {'cub_boxes': [661, 667, 669], 'dressed': [661, 667, 669], 'plain': []}\nK_arden_infernal INFO flock under arden_infernal {'cub_boxes': [661, 667, 669], 'dressed': [661, 667, 669], 'plain': []}\nK_skeleton_flame_v1 INFO flock under skeleton_flame_v1 {'cub_boxes': [630, 636, 638], 'dressed': [630, 636, 638], 'plain': []}\nK_skeleton_flame INFO flock under skeleton_flame {'cub_boxes': [630, 636, 638], 'dressed': [630, 636, 638], 'plain': []}\nK01 PASS a flock of three stands beside the Dog under every skin {'counts': {'relay_og': [597, 603, 605], 'celestial_light': [668, 674, 676], 'apollo_v1': [740, 746, 748], 'apollo': [740, 746, 748], 'arden_infernal_v1': [661, 667, 669], 'arden_infernal': [661, 667, 669], 'skeleton_flame_v1': [630, 636, 638], 'skeleton_flame': [630, 636, 638]}}\nK02 FAIL under Relay OG the flock is the plate's own cubs, and under every premium skin it is dressed {'plain_under_relay_og': [603], 'dressed': {'celestial_light': [668, 674, 676], 'apollo_v1': [740, 746, 748], 'apollo': [740, 746, 748], 'arden_infernal_v1': [661, 667, 669], 'arden_infernal': [661, 667, 669], 'skeleton_flame_v1': [630, 636, 638], 'skeleton_flame': [630, 636, 638]}, 'note': \"box counts: a dressed cub carries its parent's halo, fire, skull or edge and is heavier than the plain cub. This proves the RIGHT FILE loaded; whether it reads as that skin's cub is the founder's call from the captures.\"}\nK03 PASS the same living flock changed its coat with every skin change, without being dismissed {'distinct_flocks': 5, 'of': 5, 'note': 'one summon at the start, five skins, five different flocks: re-dressed in place.'}\n"
+}

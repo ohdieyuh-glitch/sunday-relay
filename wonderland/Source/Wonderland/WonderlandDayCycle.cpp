@@ -14,6 +14,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "HAL/IConsoleManager.h"
 #include "WonderlandCompanionEmbodiment.h"
+#include "RelayDogCharacter.h"
 
 namespace
 {
@@ -439,14 +440,20 @@ static float GWonderlandNightGlow = 0.20f;
  * strength or its material raised on that one skin, not this global level, and that is art rather than a
  * constant -- so it is left for the founder rather than guessed at here.
  */
-static float GWonderlandEyeDayGlow = 18.0f;
+// 24, from the round-2 sheet: at 18 the core sat at ~0.7 of the 25,000 white, lit but flat, and nothing bloomed.
+// 24 puts the core's centre at the white point by day, so the bloom pass (threshold 1.0) catches it and the eye
+// gets the soft light around it that the founder asked for; the halo panes carry the coloured rim. Night stays
+// at 8, which the night exposure opens to ~21,600 -- bright, coloured, under white.
+static float GWonderlandEyeDayGlow = 24.0f;
 static FAutoConsoleVariableRef GWonderlandEyeDayGlowRef(
 	TEXT("wl.Look.EyeGlowDay"),
 	GWonderlandEyeDayGlow,
 	TEXT("The emissive level a mascot's eyes are driven to at noon (an absolute, not a multiplier)."),
 	ECVF_Default);
 
-static float GWonderlandEyeNightGlow = 5.0f;
+// 8, not 5, now that the day level is really 18 rather than a clamped 12: the night exposure opens about 1.45 EV,
+// so 8 renders near what 22 would by day -- a strong perceptual glow that stays under the white point.
+static float GWonderlandEyeNightGlow = 8.0f;
 static FAutoConsoleVariableRef GWonderlandEyeNightGlowRef(
 	TEXT("wl.Look.EyeGlowNight"),
 	GWonderlandEyeNightGlow,
@@ -485,6 +492,75 @@ static FAutoConsoleVariableRef GWonderlandNightFillRef(
 	ECVF_Default);
 
 static float GWonderlandNightSky = 7.0f;
+
+//: THE NIGHT SHADOW LIFT, and the founder's section A in one number.
+//:
+//: Their correction asks to raise the night illumination floor "without flattening contrast: dark sky, bright
+//: practicals, cool moon ambient, deep but readable shadows." LOCAL EXPOSURE IS THE NAMED TOOL FOR EXACTLY
+//: THAT and it was wired to nothing -- along with dynamic GI, reflections, shadow amount and ambient
+//: occlusion, five of the eleven systems the founder listed had no code touching them anywhere in this
+//: project. That is why nine combinations of moon, sky and practicals could not find a readable night: the
+//: sweep was moving three levers out of eleven, and none of the three lifts a surface the moon does not
+//: directly hit.
+//:
+//: Measured cost of that gap, on a character, with the figure's own lights excluded: the default Dog's BODY is
+//: 97.1% crushed at deepest night with a mean of 0.054. A dark grey box with two glowing eyes -- the founder's
+//: "glowing objects floating in blackness", photographed.
+//:
+//: Shadow contrast BELOW 1.0 lifts shadow detail and leaves highlights alone, which is the difference between
+//: a readable night and a flat one. The engine's own guidance is 0.6 to 1.0. This is lerped by Nightfall, so
+//: at Nightfall 0 it is exactly 1.0 -- the engine default, no effect -- and DAY IS PROVABLY UNTOUCHED.
+//: HOW WIDE THE TWILIGHT BAND IS, IN DEGREES OF SUN ELEVATION -- and therefore how long evening lasts.
+//:
+//: THE FOUNDER'S ITEM 12 ASKS FOR "morning to afternoon to evening to night with no sudden jumps". What the
+//: world does instead, read off this curve rather than guessed: Daylight = clamp((elevation + 9) / SPAN)^1.9
+//: saturates at elevation 12, so with SPAN at its shipped 21 it reads EXACTLY 1.0 from 06:38 to 17:22 --
+//: 10.7 hours of identical daylight -- and then falls the entire way to zero between 17:22 and 18:29. The
+//: whole evening is 67 MINUTES. The day has no afternoon; it has a plateau and a cliff.
+//:
+//: Widening the band spreads that fall over more of the sun's arc:
+//:
+//:      span 21 (shipped)   flat 06:38-17:22 (10.7 h)   evening  67 min
+//:      span 39             flat 07:38-16:22 ( 8.7 h)   evening 127 min
+//:      span 49             flat 08:15-15:45 ( 7.5 h)   evening 163 min
+//:
+//: NOON IS UNCHANGED AT ANY VALUE, which is what makes this safe to sweep: at 72 degrees every band
+//: saturates to 1.0, so the noon exposure bias stays at -0.9 and the other lane's eye tuning is untouched.
+//: What moves is the late afternoon -- at 17:00 span 39 gives 0.52 of full daylight where span 21 gives 1.0.
+//:
+//: DEFAULTED TO THE SHIPPED 21 ON PURPOSE. This is a visible change to every afternoon in the world and it
+//: has not been measured or looked at yet. Today has produced enough evidence that a number which looks
+//: right is not a number that has been checked; 39 is the recommendation and the default stays 21 until the
+//: ladder and a photograph agree.
+static float GWonderlandTwilightSpan = 21.0f;
+static FAutoConsoleVariableRef GWonderlandTwilightSpanRef(
+	TEXT("wl.Sky.TwilightSpan"),
+	GWonderlandTwilightSpan,
+	TEXT("Degrees of sun elevation the day-to-night transition is spread over. 21 is shipped and gives a "
+		 "67-minute evening after 10.7 flat hours; 39 gives a 127-minute evening after 8.7. Noon is "
+		 "identical at any value."),
+	ECVF_Default);
+
+//: 0.62 RATHER THAN 0.65, and it is measured rather than chosen. The other lane's ladder on the corrected
+//: build, reading relay_og's BODY with the figure's own lights excluded, at the checkpoint court:
+//:
+//:      lift 0.70   body 67.7% crushed   ground 90.2% dark
+//:      lift 0.65   body 30.0%           ground 62.9%
+//:      lift 0.62   body 22.0%           ground 36.7%      <- here
+//:      lift 0.58   body 19.2%           ground 11.2%
+//:
+//: Against the 57.6% crushed of the night the founder REJECTED, 0.62 does better than halve it. 0.58 buys
+//: almost nothing more on the body and takes the ground to 11.2% dark, which is the wash -- my own tails
+//: measure agrees independently, since a vanished dark tail is exactly what "do not wash the world in flat
+//: brightness" rules out. Two measures, two mechanisms, the same rung.
+static float GWonderlandNightShadowLift = 0.62f;
+static FAutoConsoleVariableRef GWonderlandNightShadowLiftRef(
+	TEXT("wl.Look.NightShadowLift"),
+	GWonderlandNightShadowLift,
+	TEXT("Local-exposure shadow contrast at FULL night. 1.0 is the engine default and lifts nothing; lower "
+		 "lifts shadow detail without touching highlights. Engine guidance is 0.6-1.0. Day is unaffected at "
+		 "any value, because this is interpolated by Nightfall."),
+	ECVF_Default);
 static FAutoConsoleVariableRef GWonderlandNightSkyRef(
 	TEXT("wl.Sky.NightSky"),
 	GWonderlandNightSky,
@@ -520,7 +596,8 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 	// after sunset the way it does outdoors. The exponent is what keeps the horizon reading as EVENING rather
 	// than as a dimmer afternoon: at 0 deg it lands near a fifth of noon, not the two fifths a straight line
 	// would give.
-	const float TwilightBand = FMath::Clamp((Elevation + 9.0f) / 21.0f, 0.0f, 1.0f);
+	const float TwilightBand = FMath::Clamp(
+		(Elevation + 9.0f) / FMath::Max(GWonderlandTwilightSpan, 1.0f), 0.0f, 1.0f);
 	const float Daylight = FMath::Pow(TwilightBand, 1.9f);
 
 	// HOW FAR INTO THE NIGHT WE ARE: 0 while the sun is still up, 1 once it is well down. Smoothstepped, because
@@ -680,6 +757,49 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 		Volume->Settings.BloomIntensity = 0.34f;
 		Volume->Settings.bOverride_BloomThreshold = true;
 		Volume->Settings.BloomThreshold = 1.0f;
+
+		// ---- THE SHADOW FLOOR, which is the half that neither exposure nor the moon can reach.
+		//
+		// The comment above says exposure cannot make night readable without making it flat, and that is
+		// true of GLOBAL exposure -- it moves the whole frame. Local exposure does not: it lifts shadow
+		// detail and leaves highlights where they are. That is the founder's "deep but readable shadows"
+		// exactly, and it is the tool their correction names.
+		//
+		// AT NIGHTFALL 0 THIS IS 1.0, the engine default and a no-op, so the day this session was told not to
+		// touch is untouched by construction rather than by intention. Highlights are pinned at 1.0 at every
+		// hour on purpose: the practicals and the figures' own glow must stay as bright against the dark as
+		// they are now, because the founder asked for bright practicals and a dark sky, not for both to meet
+		// in the middle.
+		// SWITCHED OFF ENTIRELY BY DAY, not merely set to a neutral value.
+		//
+		// The first version enabled these overrides at EVERY hour and made the day harmless by lerping the
+		// contrast to 1.0 -- numerically a no-op, and I called the day "untouched by construction". It is
+		// not: bOverride_LocalExposureMethod = true ENABLES THE FEATURE, and local exposure is a bilateral
+		// decomposition that runs on the RENDER THREAD whether or not its contrast happens to be neutral.
+		// A no-op value is not a no-op pass.
+		//
+		// WHY THIS IS A SUSPECT AND NOT A CERTAINTY. The other lane's instrumented ladder reads 389.5 ms
+		// with NO avatars at all, 19 ms game and 21 ms GPU -- five per cent of the frame accounted for --
+		// on a world that read 38.71 ms this morning. Foreground is true at every rung, so the editor's
+		// background throttle is ruled out. Game and GPU are small, so the render thread is the only thread
+		// left, and stat unit reports it as 0.0 through that accessor. A render-thread post-process pass
+		// that I switched on today, for the first time in this project, is the candidate that fits: it
+		// appeared today, it is avatar-independent, and it is on the one thread nobody can see.
+		//
+		// It is NOT proven. The machine has 2.48 GB free of 15.7 with three sessions and builds sharing it,
+		// and sustained paging produces the same signature. This is the cheap half of the disjunction to
+		// eliminate, and eliminating it costs nothing at night because Nightfall is 0 by day anyway.
+		const bool bWantLocalExposure = Nightfall > 0.001f;
+		Volume->Settings.bOverride_LocalExposureMethod = bWantLocalExposure;
+		Volume->Settings.bOverride_LocalExposureShadowContrastScale = bWantLocalExposure;
+		Volume->Settings.bOverride_LocalExposureHighlightContrastScale = bWantLocalExposure;
+		if (bWantLocalExposure)
+		{
+			Volume->Settings.LocalExposureMethod = ELocalExposureMethod::Bilateral;
+			Volume->Settings.LocalExposureShadowContrastScale =
+				FMath::Lerp(1.0f, FMath::Clamp(GWonderlandNightShadowLift, 0.2f, 1.0f), Nightfall);
+			Volume->Settings.LocalExposureHighlightContrastScale = 1.0f;
+		}
 	}
 
 	// ---- AND WHAT THE EXPOSURE DOES TO THINGS THAT MAKE THEIR OWN LIGHT.
@@ -716,12 +836,21 @@ void UWonderlandDayCycleSubsystem::ScaleGlowsForNight()
 	// moved, so the steady state costs one iteration and no repaints.
 	const float Keep = FMath::Clamp(FMath::Lerp(1.0f, GWonderlandNightGlow, Nightfall), 0.05f, 1.0f);
 	// THE EYES GO THE OTHER WAY. Brightest when the sky is, which is the opposite of everything else here.
+	// CLAMPED AT 30, NOT 12. wl.Look.EyeGlowDay has defaulted to 18 since it was written and this clamp held it
+	// at 12 the whole time, so every "eye level" ever measured was 12 and every sweep above it read a flat
+	// line. The configured value is now the value.
 	const float Eyes = FMath::Clamp(
-		FMath::Lerp(GWonderlandEyeDayGlow, GWonderlandEyeNightGlow, Nightfall), 0.05f, 12.0f);
+		FMath::Lerp(GWonderlandEyeDayGlow, GWonderlandEyeNightGlow, Nightfall), 0.05f, 30.0f);
 	// AND THE SHELL GETS AN EDGE AFTER DARK. See AWonderlandCompanionEmbodiment::SetRimBoost: at the darkest
 	// hour the mascot measured DARKER than the ground it stands on, and neither the moon nor the fill can fix
 	// that because both light a horizontal ground more than a standing figure.
 	const float Rim = FMath::Clamp(FMath::Lerp(1.0f, GWonderlandNightRim, Nightfall), 1.0f, 6.0f);
+	// AND THE DOG ITSELF. Relay OG in gameplay is the Blueprint's meshes, not a figure; until 2026-09-27 this
+	// loop never reached the eyes the founder actually looks at.
+	for (TActorIterator<ARelayDogCharacter> Dog(Here); Dog; ++Dog)
+	{
+		Dog->SetEyeGlow(Eyes);
+	}
 	for (TActorIterator<AWonderlandCompanionEmbodiment> It(Here); It; ++It)
 	{
 		It->SetNightGlow(Keep);

@@ -418,6 +418,8 @@ public:
 	/** The costume standing on this Dog, or null while it wears its own body. For a proof to photograph. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
 	class AWonderlandCompanionEmbodiment* GetCostume() const { return Costume; }
+	/** Drive the gameplay Dog's own eye panes to an emissive level; the day cycle calls this. See BuildEyeGlow. */
+	void SetEyeGlow(float Level);
 
 	/** True while the canon body is hidden under a costume. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
@@ -443,6 +445,28 @@ public:
 
 private:
 	void ShowCanonBody(bool bShow);
+
+	/**
+	 * THE GAMEPLAY EYES, DRIVEN. Relay OG is the Blueprint's own meshes, not a figure file, so the eye level
+	 * the day cycle applies to every companion figure never reached the Dog the founder actually looks at:
+	 * its eye panes drew in whatever the Blueprint authored, lit, with a colour tint at most. This puts a
+	 * glow material on the eye panes and an additive halo pane behind each, and takes the same level the
+	 * figures take. See BuildEyeGlow.
+	 */
+	void BuildEyeGlow();
+	float EyeGlowLevel = -1.0f;
+	/** The status eyes' colour: RELAY OG's warm gold, or the colourway's SECONDARY once one is chosen. */
+	FLinearColor EyeColour = FLinearColor(1.0f, 0.72f, 0.16f);
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> EyeCoreMids;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> EyeHaloMids;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UStaticMeshComponent>> EyeHalos;
+	/** Which of the three falloff rings each halo instance is (0 inner .. 2 outer), parallel to EyeHaloMids. */
+	TArray<int32> EyeHaloRing;
+	/** Whether the halos wear M_WL_EyeHalo (a radial fade) or the flat additive fallback; decides their sizes and shares. */
+	bool bSoftEyeHalo = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<class AWonderlandCompanionEmbodiment> Costume = nullptr;

@@ -32,6 +32,21 @@ SETTLE_S = 6.0
 STEADY_S = 6.0
 
 
+def _editor_foreground():
+    """Whether this editor owns the foreground window. Behind another window the editor throttles PIE
+    (EditorPerformanceSettings.bThrottleCPUWhenNotForeground is neither Python-visible nor settable with
+    `set` in the editor), so a frame rate is only a measurement when this is True. Copied from beta_probe,
+    where it has been right since it was written -- this job simply never asked."""
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        pid = ctypes.c_ulong(0)
+        user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), ctypes.byref(pid))
+        return pid.value == os.getpid()
+    except Exception:                                              # noqa: BLE001
+        return None
+
+
 def job():
     os.makedirs(ROOT, exist_ok=True)
     for old in os.listdir(ROOT):
@@ -65,9 +80,27 @@ def job():
             return None
         def at(p, i):
             return round(sorted(v[i] for v in clean)[min(len(clean) - 1, int(len(clean) * p))], 2)
-        return {"samples": len(clean),
-                "frame_median": at(0.5, 0), "frame_p95": at(0.95, 0), "frame_worst": at(0.999, 0),
-                "game_median": at(0.5, 1), "render_median": at(0.5, 2), "gpu_median": at(0.5, 3)}
+        out = {"samples": len(clean),
+               "frame_median": at(0.5, 0), "frame_p95": at(0.95, 0), "frame_worst": at(0.999, 0),
+               "game_median": at(0.5, 1), "render_median": at(0.5, 2), "gpu_median": at(0.5, 3)}
+        # ---- HOW MUCH OF THE FRAME IS ACCOUNTED FOR, which is what tells a LOAD from a CLAMP.
+        #
+        # The 2026-09-27 run of this job reported 38.71 ms at zero avatars and then 375.72, 400.10 and 399.94
+        # at one, five and ten -- and 400.12 coming back DOWN to one. A cost identical at one and at ten, and
+        # identical again descending, does not come from avatars. In the same rows game was 27 ms and GPU 23:
+        # fifty milliseconds of four hundred accounted for, and a worst case of 400.6 against a median of
+        # 400.12. That is a frame waiting on a clamp, not a frame doing work, and the editor's background
+        # throttle is the clamp -- it engages when this editor stops owning the foreground window, which
+        # nothing in the run re-checked after the first call to focus_game_viewport.
+        #
+        # So every rung now carries the ratio. It needs no Windows API and it catches any clamp, not just
+        # this one: vsync, a frame-rate cap, a stalled render thread. A reading where the work does not add
+        # up to the frame is not a measurement of the thing being measured.
+        busiest = max(out["game_median"], out["gpu_median"], out["render_median"])
+        out["accounted_fraction"] = round(busiest / max(out["frame_median"], 0.01), 3)
+        out["unaccounted_ms"] = round(out["frame_median"] - busiest, 2)
+        out["foreground"] = _editor_foreground()
+        return out
 
     def watch(seconds):
         seen = []

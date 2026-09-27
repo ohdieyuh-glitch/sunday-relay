@@ -220,7 +220,18 @@ def main():
         print("(no Materials/Instances folder -- material names unchecked)")
     args = sys.argv[1:]
     if not args:
-        args = sorted(str(p) for p in (ROOT / "WorldDesign" / "Nations").glob("*.json"))
+        # ALL OF WorldDesign, NOT JUST Nations.
+        #
+        # This gate is called validate_layer_spec and a bare run checked 26 of 298 layer specs -- nine per
+        # cent -- because the default globbed one folder of eight. 203 specs in City, 47 in Districts, 17 in
+        # GoldenArrival and 5 in Skyline had never been mesh- or material-checked by anyone who ran it
+        # without arguments, which is how everyone runs it. GA08 was written, committed and nearly APPLIED
+        # without this gate ever seeing it, and I only noticed because I went looking for why it was absent
+        # from the output.
+        #
+        # Same shape as the TAKE allowlist that left 388 fixtures dark: a default that silently covers a
+        # fraction of its subject, where the cost of the gap is silence rather than an error.
+        args = sorted(str(q) for q in (ROOT / "WorldDesign").rglob("*.json"))
     nested = nested_collision(mesh_records())
     bad_nested = []
     if nested is None:

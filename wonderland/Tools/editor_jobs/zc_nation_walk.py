@@ -57,18 +57,53 @@ def job():
     yield (lambda: ues.get_game_world() is not None, 300)
     yield (lambda: unreal.GameplayStatics.get_player_pawn(ues.get_game_world(), 0) is not None, 180)
     world = ues.get_game_world()
+
+    def live():
+        """The world, re-fetched at every use. A reference held across a long job goes stale, and the
+        failure is silent for some calls: get_all_actors_* returns an empty list, pose_camera throws."""
+        return ues.get_game_world()
+
+    def alive():
+        """World AND pawn, or None. A torn-down PIE keeps returning readings -- constant, and
+        indistinguishable from a real measurement. A walk that keeps 'driving' a dead world reports the
+        Dog as stuck when in fact there is no Dog."""
+        w = ues.get_game_world()
+        if w is None:
+            return None
+        try:
+            return w if unreal.GameplayStatics.get_player_pawn(w, 0) is not None else None
+        except Exception:                                              # noqa: BLE001
+            return None
+
+    def why_gone():
+        """Which of the two things alive() checks actually went away.
+
+        alive() collapses "the world ended" and "the Dog was destroyed" into one None, and the error message
+        used to blame the world for both. They are opposite findings: a torn-down PIE is the harness and says
+        nothing about the route, while a destroyed pawn part-way along an avenue is most likely a Dog that
+        walked into an unstreamed cell, fell through and was killed by KillZ -- which IS the route.
+        """
+        w = ues.get_game_world()
+        if w is None:
+            return "world", "PIE was torn down -- the harness or a neighbouring job, not the route"
+        try:
+            if unreal.GameplayStatics.get_player_pawn(w, 0) is None:
+                return "pawn", "the world is still up and the DOG is gone -- destroyed, not stuck"
+        except Exception:                                              # noqa: BLE001
+            return "pawn", "the pawn could not be read while the world was still up"
+        return "neither", "both present when re-checked -- a transient miss"
     L.focus_game_viewport()
-    unreal.SystemLibrary.execute_console_command(world, "wl.Sky.DayMinutes 0")
-    unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour 12")
+    unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.DayMinutes 0")
+    unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.Hour 12")
     yield 5.0
 
     def pawn():
-        return unreal.GameplayStatics.get_player_pawn(world, 0)
+        return unreal.GameplayStatics.get_player_pawn(live(), 0)
 
     def floor_at(x, y, top):
         try:
             hit = unreal.SystemLibrary.line_trace_single(
-                world, unreal.Vector(x, y, top), unreal.Vector(x, y, top - 3000.0), PAWN, False,
+                live(), unreal.Vector(x, y, top), unreal.Vector(x, y, top - 3000.0), PAWN, False,
                 [p for p in (pawn(),) if p is not None], unreal.DrawDebugTrace.NONE, True,
                 unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
             return None if hit is None else float(hit.to_tuple()[4].z)
@@ -82,7 +117,7 @@ def job():
             h = math.radians(heading_deg)
             a = unreal.Vector(loc.x, loc.y, loc.z + 40.0)
             b = unreal.Vector(loc.x + math.cos(h) * dist, loc.y + math.sin(h) * dist, loc.z + 40.0)
-            hit = unreal.SystemLibrary.line_trace_single(world, a, b, PAWN, False, [dog],
+            hit = unreal.SystemLibrary.line_trace_single(live(), a, b, PAWN, False, [dog],
                                                          unreal.DrawDebugTrace.NONE, True,
                                                          unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
             if hit is None:
@@ -94,6 +129,22 @@ def job():
             return None
 
     for nation, route in sorted(routes.items()):
+        # A FRESH PIE FOR EACH NATION, because the Dog does not come back.
+        #
+        # The first clean run told this plainly: ICARUS reported the harness could not drive the Dog, and
+        # NOCTIS and TARTARUS then reported "no pawn" -- the Dog had been destroyed during ICARUS and never
+        # respawned, which this project's ledger records as the documented behaviour after a teleport into
+        # a cell that is not loaded. Two of the three nations were therefore not tested at all, and would
+        # have been reported as traversal failures if the actuator gate had not withheld them.
+        if ues.get_game_world() is not None:
+            les.editor_request_end_play()
+            yield (lambda: ues.get_game_world() is None, 600)
+        les.editor_request_begin_play()
+        yield (lambda: ues.get_game_world() is not None, 300)
+        yield (lambda: unreal.GameplayStatics.get_player_pawn(ues.get_game_world(), 0) is not None, 180)
+        yield 4.0
+        unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.DayMinutes 0")
+        unreal.SystemLibrary.execute_console_command(live(), "wl.Sky.Hour 12")
         pts = route["points"][::EVERY]
         if pts[-1] is not route["points"][-1]:
             pts.append(route["points"][-1])
@@ -154,7 +205,43 @@ def job():
         tgt0 = pts[1]
         start_loc = dog.get_actor_location()
         probe_speed = 0.0
-        for _ in range(60):
+        # WHAT STATE IS THE DOG IN? Recorded before the probe, because "it did not move" has several very
+        # different causes and guessing between them costs an editor window each time: no controller, a
+        # movement mode that ignores input, a paused world, or an overlay holding the body.
+        why = {}
+        try:
+            mv = dog.character_movement
+            why["movement_mode"] = str(mv.movement_mode)
+            why["max_walk_speed"] = round(float(mv.max_walk_speed), 1)
+            why["is_falling"] = bool(mv.is_falling())
+            why["gravity_scale"] = round(float(mv.gravity_scale), 2)
+        except Exception as err:                                      # noqa: BLE001
+            why["movement_component"] = "unreadable: %s" % str(err)[:70]
+        try:
+            why["controller"] = str(dog.get_controller().get_name()) if dog.get_controller() else "NONE"
+        except Exception:                                             # noqa: BLE001
+            why["controller"] = "unreadable"
+        try:
+            why["game_paused"] = bool(unreal.GameplayStatics.is_game_paused(live()))
+        except Exception:                                             # noqa: BLE001
+            why["game_paused"] = "unreadable"
+        row["dog_state"] = why
+        # DRIVE UNTIL IT MOVES, NOT FOR THREE SECONDS, and record how long that took.
+        #
+        # This drove 60 iterations of yield 0.05 -- three seconds of WALL TIME, which is not a fixed amount
+        # of walking. At the 31 ms frame it is 95.6 frames; during the render-thread regression it was 7.7,
+        # and add_movement_input is consumed once per MOVEMENT TICK rather than once per call, so about 52
+        # of the 60 calls were thrown away. zzQ2 finished at 13:44 and the regression was fixed at 13:53:
+        # it ran inside it, and reported peak speed 0.0 on all three nations.
+        #
+        # THAT IS A CANDIDATE AND NOT A CONCLUSION, because zzP1 ran inside the same regression at 11:55 and
+        # drove all three at 230. The other thing that changed between them is 162 lamp instances applied to
+        # the editor world. I cannot separate the two from the data I have, so rather than guess a third
+        # time the probe now reports what would distinguish them: how long until first movement, how many
+        # samples saw a non-zero velocity, and the wall time it actually took.
+        moved_after, nonzero = None, 0
+        t = 0.0
+        while t < 8.0:
             d = pawn()
             if d is None:
                 break
@@ -164,19 +251,130 @@ def job():
             try:
                 d.add_movement_input(unreal.Vector(dx / n, dy / n, 0.0), 1.0, True)
                 v = d.get_velocity()
-                probe_speed = max(probe_speed, math.hypot(v.x, v.y))
+                sp = math.hypot(v.x, v.y)
+                if sp > 1.0:
+                    nonzero += 1
+                    if moved_after is None:
+                        moved_after = round(t, 2)
+                probe_speed = max(probe_speed, sp)
             except Exception:                                         # noqa: BLE001
                 break
             yield 0.05
+            t += 0.05
+            # enough evidence: it is walking and we know when it started
+            if nonzero >= 12:
+                break
+        row["probe_seconds"] = round(t, 2)
+        row["probe_moved_after_s"] = moved_after
+        row["probe_samples_with_speed"] = nonzero
         d = pawn()
         moved = math.hypot(d.get_actor_location().x - start_loc.x,
                            d.get_actor_location().y - start_loc.y) if d is not None else 0.0
+        def clearance_ring(loc, heading_deg, dog_actor):
+            """Free distance in every direction at the placement point, and the name of what stops it.
+
+            The offline corridor audit can say WHAT is near the start; only a trace can say whether it is
+            close enough to hold a capsule. Reported per direction rather than as a single minimum, because
+            the number that decides whether the Dog can start walking is the clearance along the heading it
+            is about to walk -- a wall behind it is irrelevant and a minimum over a ring hides which is
+            which.
+            """
+            out = {"rays": [], "ahead_uu": None, "min_uu": None, "blocker": None}
+            REACH = 400.0
+            worst = None
+            for step in range(16):
+                deg = step * 22.5
+                h = math.radians(deg)
+                a = unreal.Vector(loc.x, loc.y, loc.z + 40.0)
+                b = unreal.Vector(loc.x + math.cos(h) * REACH,
+                                  loc.y + math.sin(h) * REACH, loc.z + 40.0)
+                dist, what = REACH, None
+                try:
+                    hit = unreal.SystemLibrary.line_trace_single(
+                        live(), a, b, PAWN, False, [dog_actor],
+                        unreal.DrawDebugTrace.NONE, True,
+                        unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
+                    if hit is not None:
+                        t = hit.to_tuple()
+                        # HitResult has no named attributes in this engine's Python -- to_tuple() indices
+                        # only: 3 distance, 9 actor, 10 component.
+                        dist = round(float(t[3]), 1) if len(t) > 3 else REACH
+                        comp = t[10] if len(t) > 10 else None
+                        actor = t[9] if len(t) > 9 else None
+                        # THE COMPONENT, NOT THE ACTOR. This world is instanced, so an actor label names a
+                        # WonderlandInstancedBatch holding thousands of meshes and identifies nothing.
+                        try:
+                            sm = comp.get_editor_property("static_mesh") if comp is not None else None
+                            what = str(sm.get_name()) if sm is not None else None
+                        except Exception:                                  # noqa: BLE001
+                            what = None
+                        if what is None and actor is not None:
+                            try:
+                                what = "actor:" + str(actor.get_actor_label())
+                            except Exception:                              # noqa: BLE001
+                                what = "something"
+                except Exception:                                          # noqa: BLE001
+                    pass
+                out["rays"].append({"deg": deg, "free_uu": dist, "hit": what})
+                if worst is None or dist < worst[0]:
+                    worst = (dist, what, deg)
+            # the ray closest to the way the Dog is about to walk
+            best = min(out["rays"],
+                       key=lambda r: abs(((r["deg"] - heading_deg + 180.0) % 360.0) - 180.0))
+            out["ahead_uu"] = best["free_uu"]
+            out["ahead_hit"] = best["hit"]
+            if worst is not None:
+                out["min_uu"], out["blocker"], out["blocker_deg"] = worst[0], worst[1], worst[2]
+            return out
         row["probe_moved_uu"] = round(moved, 1)
         row["probe_peak_speed"] = round(probe_speed, 1)
+        # PEAK SPEED IS WHAT TELLS "BLOCKED" FROM "NOT DRIVEN", and displacement alone cannot.
+        #
+        # The run that produced this distinction: ICARUS moved 0.0 uu at a PEAK SPEED OF 230 -- the
+        # character's own max_walk_speed. A Dog at full velocity that does not advance is a Dog walking into
+        # something. NOCTIS moved 227 uu at 230 and walked cleanly. TARTARUS moved 67.7 uu but only ever
+        # reached 11.9, which is a Dog barely able to get going. Three different states that a displacement
+        # threshold on its own reports identically as "the harness failed", which is what the previous
+        # version said about all three -- and it was wrong about at least two of them.
         row["can_be_driven"] = moved > 100.0
+        driving = probe_speed > 0.5 * float(row.get("dog_state", {}).get("max_walk_speed") or 230.0)
+        row["input_reaching_character"] = driving
         if not row["can_be_driven"]:
-            row["error"] = ("the harness could not drive the Dog: %.1f uu in 3 s, peak speed %.1f -- "
-                            "route NOT judged" % (moved, probe_speed))
+            # THE RING FIRES FOR ANY PROBE THAT GOES NOWHERE, not only for one at full speed.
+            #
+            # It used to require `driving` -- peak above half max_walk_speed -- which is the "pressed
+            # against a wall at full throttle" case. The run that exposed the gap: ICARUS peaked at 35.2 and
+            # TARTARUS at 29.2, both with NET DISPLACEMENT 0.0 and only three or four samples showing any
+            # speed at all. A Dog that twitches and gets nowhere is as geometric as one that strains at
+            # full speed, and the ring -- which names what it hits off the component mesh -- is exactly what
+            # would say so. Neither got one.
+            row["blocked_at_start"] = bool(driving)
+            # THE RING RUNS FOR ANY PROBE THAT GOT NOWHERE, at speed or not -- a Dog twitching to 35 uu/s
+            # and covering nothing is as geometric as one straining at full throttle. But the MESSAGE must
+            # still tell those apart, and my first attempt at widening this made "BLOCKED AT THE START:
+            # reached 0.0 uu/s -- its own walk speed" print unconditionally, which is self-contradictory on
+            # its face and told TARTARUS it was blocked at a standstill.
+            try:
+                d_now = unreal.GameplayStatics.get_player_pawn(live(), 0)
+                if d_now is None:
+                    # ABSENCE, NOT EMPTINESS. A null start_clearance read as "nothing in the way"; the pawn
+                    # was simply gone by the time the ring ran, which is a different fact and a louder one.
+                    row["start_clearance"] = {"unavailable": "the pawn was gone before the ring could run"}
+                else:
+                    row["start_clearance"] = clearance_ring(
+                        d_now.get_actor_location(),
+                        math.degrees(math.atan2(tgt0["y"] - start_loc.y, tgt0["x"] - start_loc.x)),
+                        d_now)
+            except Exception as err:                                   # noqa: BLE001
+                row["start_clearance"] = {"error": str(err)[:120]}
+            if driving:
+                row["error"] = ("BLOCKED AT THE START: the Dog reached %.1f uu/s -- most of its own walk "
+                                "speed -- and advanced %.1f uu. Input is arriving and the capsule cannot "
+                                "move, which is geometry, not the harness." % (probe_speed, moved))
+            else:
+                row["error"] = ("the Dog never got going: %.1f uu at a peak of only %.1f uu/s. Route NOT "
+                                "judged. The ring still ran, because a twitch that covers nothing can be "
+                                "geometry too." % (moved, probe_speed))
             emit("W_%s" % nation, "WARN", "%s: actuator dead, route withheld" % nation,
                  {"moved_uu": row["probe_moved_uu"], "peak_speed": row["probe_peak_speed"]})
             continue
@@ -186,6 +384,21 @@ def job():
         travelled = 0.0
         prev = dog.get_actor_location()
         while wp < len(pts) and elapsed < MAX_SECONDS:
+            if alive() is None:
+                kind, reason = why_gone()
+                row["gone"] = kind
+                row["gone_reason"] = reason
+                # THE LAST PLACE THE DOG WAS, which is what separates "it fell" from "it was deleted".
+                # Every route here runs on the +12 shelf, so a last-known z far below that is a fall.
+                row["last_z"] = round(prev.z, 1)
+                row["floor_z"] = float(pts[min(wp, len(pts) - 1)].get("floor", 12.0))
+                row["below_floor_uu"] = round(row["floor_z"] - prev.z, 1)
+                row["fell"] = row["below_floor_uu"] > 200.0
+                row["error"] = ("%s went away at waypoint %d after %.1f m -- %s. Last seen z=%.1f, %.1f uu "
+                                "below this leg's floor of %.1f. Route NOT judged."
+                                % ("the WORLD" if kind == "world" else "the DOG", wp, travelled / 100.0,
+                                   reason, prev.z, row["below_floor_uu"], row["floor_z"]))
+                break
             dog = pawn()
             if dog is None:
                 row["error"] = "the Dog was destroyed mid-walk"
@@ -244,12 +457,98 @@ def job():
               "stuck": row["stuck_at"], "error": row.get("error")})
 
     walked = {n: r.get("arrived", False) for n, r in nations.items()}
+    # THE HARNESS IS PROVEN BY ANY ONE NATION. If the Dog drove cleanly somewhere, the actuator works, and
+    # a nation where it did not drive is a fact about that place rather than about this job.
+    any_driven = any(r.get("input_reaching_character") for r in nations.values())
+    blocked = [n for n, r in nations.items() if r.get("blocked_at_start")]
     record("W0A", "the harness can actually drive the Dog -- these are walks, not stationary readings",
-           all(r.get("can_be_driven") for r in nations.values()) and len(nations) == 3,
+           any_driven and len(nations) == 3,
+           harness_proven_by=[n for n, r in nations.items() if r.get("input_reaching_character")],
+           blocked_at_start=blocked,
+           start_clearance={n: r.get("start_clearance") for n, r in nations.items()
+                            if r.get("start_clearance")},
            moved_uu={n: r.get("probe_moved_uu") for n, r in nations.items()},
+           dog_state={n: r.get("dog_state") for n, r in nations.items()},
            peak_speed={n: r.get("probe_peak_speed") for n, r in nations.items()},
-           note="3 s of AddMovementInput toward the second waypoint before the route is judged; a red here "
-                "means the route results are withheld, not that the world is blocked")
+           note="3 s of AddMovementInput toward the second waypoint before the route is judged. PEAK SPEED "
+                "separates the cases and displacement alone cannot: full walk speed with no advance is "
+                "BLOCKED GEOMETRY and is a finding about that place, while a peak near zero is the harness "
+                "and withholds the route. The harness counts as proven by any one nation driving.")
+    # ---- DOES THIS INSTRUMENT REPEAT AT ALL? The question that precedes every other one here.
+    #
+    # Across four runs in one session this job measured ICARUS at 230, 0, 35.2 and 86.0 uu/s on the same
+    # route. Those are not properties of the ground. Every cause proposed from a single run -- blocked at
+    # the start, the world going away, the Dog falling -- was built on one draw of a distribution nobody
+    # had checked was one, and each died to the next run rather than to an argument.
+    #
+    # SO THE JOB REMEMBERS. Each run appends its peak speeds to a small history beside the results and the
+    # gate measures the spread across every run recorded. It is red now and it CAN go green: when repeated
+    # runs agree to within a tolerance, a single reading means something for the first time. A gate that
+    # could never pass would just be noise nobody reads, which is the failure I spent today building
+    # against elsewhere.
+    HIST = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "walk_history.json")
+    try:
+        with open(HIST, "r", encoding="utf-8") as fh:
+            history = json.load(fh)
+    except Exception:                                                 # noqa: BLE001
+        history = []
+    history.append({"run": RESULT.get("name"),
+                    "peaks": {n: r.get("probe_peak_speed") for n, r in nations.items()}})
+    history = history[-12:]
+    try:
+        os.makedirs(os.path.dirname(HIST), exist_ok=True)
+        with open(HIST, "w", encoding="utf-8") as fh:
+            json.dump(history, fh, indent=1)
+    except Exception:                                                 # noqa: BLE001
+        pass
+
+    spreads = {}
+    for n in nations:
+        vals = [h["peaks"].get(n) for h in history if isinstance(h.get("peaks"), dict)]
+        vals = [v for v in vals if isinstance(v, (int, float))]
+        spreads[n] = round(max(vals) - min(vals), 1) if len(vals) > 1 else None
+    known = [v for v in spreads.values() if v is not None]
+    record("W0C", "this harness repeats -- the same route measured across runs gives the same answer",
+           bool(known) and max(known) <= 40.0,
+           peak_spread_across_runs=spreads, runs_recorded=len(history), tolerance=40.0,
+           note="four runs in one session measured ICARUS at 230, 0, 35.2 and 86.0 on the same route -- a "
+                "spread equal to the character's entire walk speed. No route can be called walkable or "
+                "blocked by an instrument that answers differently each time it is asked, so until this is "
+                "green no single reading below is a fact about the ground. One run gives no spread and "
+                "leaves this red rather than passing on an empty set")
+
+    # WAS IT THE WORLD OR THE DOG. Three nations stopping between 4.5 and 19.4 m of a 485 m route is one
+    # finding if PIE died three times and a completely different one if the Dog fell out of the world three
+    # times. This gate refuses to let those share a row.
+    gone = {n: r.get("gone") for n, r in nations.items() if r.get("gone")}
+    fell = [n for n, r in nations.items() if r.get("fell")]
+    # THIS GATE PASSED GREEN WHILE THE THING IT EXISTS TO DETECT HAPPENED, on the first run that could have
+    # exercised it. TARTARUS's Dog "did not survive being moved to the start cell" -- a destroyed pawn, the
+    # exact subject of this gate -- but it died BEFORE the walk loop, so it never reached the alive() check
+    # that fills `gone`, `gone` stayed empty, and "no walk ended because the DOG disappeared" was true only
+    # because no walk started. Written today, vacuous on its first real run.
+    #
+    # A pawn that dies at PLACEMENT is the same finding as one that dies at waypoint three: the Dog could not
+    # survive being where the route says to be. And a gate with nothing to judge must not report success --
+    # it has to say it had nothing to judge.
+    died_placing = [n for n, r in nations.items()
+                    if r.get("error") and "did not survive" in str(r.get("error"))]
+    walked = [n for n, r in nations.items() if r.get("probe_moved_uu") is not None]
+    record("W0B", "no walk ended because the DOG disappeared -- a pawn destroyed part-way along an avenue, or "
+                  "on being placed at its start, is a streaming finding about that avenue not a harness failure",
+           bool(walked) and not died_placing and not any(v == "pawn" for v in gone.values()),
+           died_on_placement=died_placing, nations_that_got_a_pawn=walked,
+           vacuous_if_empty=("NOTHING TO JUDGE: no nation produced a walk, so this gate is not evidence"
+                             if not walked else None),
+           gone=gone, fell_out_of_the_world=fell,
+           last_z={n: r.get("last_z") for n, r in nations.items() if r.get("last_z") is not None},
+           below_floor_uu={n: r.get("below_floor_uu") for n, r in nations.items()
+                           if r.get("below_floor_uu") is not None},
+           note="alive() collapses 'the world ended' and 'the Dog was destroyed' into one None, and the "
+                "message used to blame the world for both. A torn-down PIE says nothing about the route; a "
+                "Dog destroyed 5 m into a 485 m avenue is the route. last_z against the leg's own floor is "
+                "the discriminator -- far below means it fell through unstreamed ground")
+
     record("W00", "every nation's walk started with the Dog standing at the gate end of its route",
            all("error" not in r or r.get("arrived") for r in nations.values()) and len(nations) == 3,
            starts={n: r.get("start_error_m") for n, r in nations.items()},

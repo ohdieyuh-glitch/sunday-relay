@@ -5,16 +5,16 @@ voxel 5.7763
 material bone rim 0.8980 0.8710 0.8000 1.000
 material bonedeep lit 0.6900 0.6600 0.5920 1.000
 material visor lit 0.0450 0.0420 0.0500 1.000
-material eye glow 1.0000 0.8600 0.2600 45.000
-material eyehalo add 1.0000 0.8600 0.2600 15.750
+material eye glow 1.0000 0.8600 0.2600 112.500
+material eyehalo add 1.0000 0.8600 0.2600 39.375
 material gold rim 0.9150 0.7350 0.3000 1.000
 material golddeep lit 0.5200 0.3750 0.1150 1.000
 material linen rim 0.9680 0.9580 0.9300 1.000
 material linenshade lit 0.7600 0.7400 0.7000 1.000
 material dark lit 0.0550 0.0500 0.0450 1.000
-material solar glow 1.0000 0.3600 0.0300 4.200
-material solarmid glow 1.0000 0.5600 0.0600 5.400
-material solarpale glow 1.0000 0.7800 0.1600 7.200
+material solar glow 1.0000 0.3600 0.0300 10.500
+material solarmid glow 1.0000 0.5600 0.0600 13.500
+material solarpale glow 1.0000 0.7800 0.1600 18.000
 part root - 0.000 0.000 0.000 spine 0.850 0.000
 part body root 0.000 0.000 11.850 none
 part head body 0.000 0.000 19.700 head
@@ -451,9 +451,9 @@ box head visor 4.125 2.700 18.802 0.750 0.600 0.675
 box head visor 4.125 2.700 19.477 0.750 0.600 0.675
 box head visor 4.125 2.700 20.152 0.750 0.600 0.675
 box head eye 4.400 -1.050 19.140 0.500 1.200 1.200
-box head eyehalo 4.260 -1.050 19.140 0.300 1.740 1.740
+box head eyehalo 4.550 -1.050 19.140 0.300 2.880 2.880
 box head eye 4.400 1.050 19.140 0.500 1.200 1.200
-box head eyehalo 4.260 1.050 19.140 0.300 1.740 1.740
+box head eyehalo 4.550 1.050 19.140 0.300 2.880 2.880
 box body bone -1.500 -2.000 8.481 1.000 1.000 0.963
 box body bone -1.500 -2.000 9.444 1.000 1.000 0.963
 box body bone -1.500 -2.000 10.406 1.000 1.000 0.963

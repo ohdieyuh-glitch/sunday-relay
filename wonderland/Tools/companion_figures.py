@@ -38,7 +38,13 @@ VOXEL_UU = 2.5
 # glow part rendered black; a probe at x1/x30/x300/x3000 read correctly from x3000). Strengths below are authored
 # on a 0..10 artistic scale and multiplied by
 # this at write time; `--glow-scale` overrides it for exposure probes.
-GLOW_SCALE = 4000.0
+# 15, NOT 4000 -- the same re-baseline the Relay skins took on 2026-09-27. The runtime now supplies the scene
+# scale itself (WonderlandSceneUnits, x1000 on every glow instance), so 4000 here made a companion's 5,200
+# authored glow into 5.2 million against a world white near 25,000: the AI Companion photographed as a white
+# blaze beside the Dog (captures/zc/cub_family, round 3). At 15 the same glow is 15 x 1000 = 15,000 -- lit,
+# coloured, under white. Geometry is untouched; only this number moves. Previous figures are checkpointed at
+# recovery/_map_checkpoints/2026-09-27-companions-avatars-prescale.
+GLOW_SCALE = 15.0
 
 # THE SHELL'S MATERIAL KIND. "lit" is the engine's plain lit shape material; "rim" is the V1 master
 # (/Game/Wonderland/Materials/M_WLMaster, instanced-mesh capable) with a fresnel rim -- ivory reads more like

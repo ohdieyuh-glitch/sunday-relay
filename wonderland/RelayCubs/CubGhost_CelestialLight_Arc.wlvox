@@ -5,11 +5,11 @@ voxel 4.8861
 material bone rim 0.9300 0.9600 1.0000 1.000
 material bonedeep lit 0.7200 0.8200 1.0000 1.000
 material visor lit 0.0450 0.0420 0.0500 1.000
-material eye glow 0.6200 0.8800 1.0000 48.000
-material eyehalo add 0.6200 0.8800 1.0000 16.800
-material ghost add 0.8000 0.9200 1.0000 9.000
-material edge glow 0.6200 0.8200 1.0000 6.000
-material starlight glow 0.9500 0.9800 1.0000 4.800
+material eye glow 0.6200 0.8800 1.0000 120.000
+material eyehalo add 0.6200 0.8800 1.0000 42.000
+material ghost add 0.8000 0.9200 1.0000 22.500
+material edge glow 0.6200 0.8200 1.0000 15.000
+material starlight glow 0.9500 0.9800 1.0000 12.000
 part root - 0.000 0.000 0.000 float
 part head root 0.000 0.000 0.000 head
 part hand_l root 1.191 -5.336 -0.739 trail 1.000 2.000
@@ -433,11 +433,13 @@ box head visor 2.731 2.077 -0.436 0.550 0.461 0.502
 box head visor 2.731 2.077 0.066 0.550 0.461 0.502
 box head visor 2.731 2.077 0.568 0.550 0.461 0.502
 box head visor 2.731 2.077 1.069 0.550 0.461 0.502
+box head eyehalo 3.046 -1.154 0.317 0.300 2.915 1.647
 box head eye 2.926 -0.641 0.356 0.350 0.334 0.290
 box head eye 2.926 -0.861 0.482 0.350 0.334 0.290
 box head eye 2.926 -1.154 0.528 0.350 0.334 0.290
 box head eye 2.926 -1.446 0.482 0.350 0.334 0.290
 box head eye 2.926 -1.666 0.356 0.350 0.334 0.290
+box head eyehalo 3.046 1.154 0.317 0.300 2.915 1.647
 box head eye 2.926 1.666 0.356 0.350 0.334 0.290
 box head eye 2.926 1.446 0.482 0.350 0.334 0.290
 box head eye 2.926 1.154 0.528 0.350 0.334 0.290

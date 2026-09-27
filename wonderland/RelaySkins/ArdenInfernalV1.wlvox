@@ -5,16 +5,16 @@ voxel 5.7763
 material bone rim 0.8980 0.8710 0.8000 1.000
 material bonedeep lit 0.6900 0.6600 0.5920 1.000
 material visor lit 0.0450 0.0420 0.0500 1.000
-material eye glow 1.0000 0.5800 0.1000 45.000
-material eyehalo add 1.0000 0.5800 0.1000 15.750
+material eye glow 1.0000 0.5800 0.1000 112.500
+material eyehalo add 1.0000 0.5800 0.1000 39.375
 material gold rim 0.9050 0.7200 0.2900 1.000
 material golddeep lit 0.5000 0.3600 0.1100 1.000
-material ember glow 1.0000 0.3400 0.0500 3.600
-material emberpale glow 1.0000 0.7200 0.2200 6.000
+material ember glow 1.0000 0.3400 0.0500 9.000
+material emberpale glow 1.0000 0.7200 0.2200 15.000
 material crimson lit 0.5200 0.0750 0.0650 1.000
 material char lit 0.2150 0.1150 0.1050 1.000
 material demon lit 0.3600 0.0600 0.0600 1.000
-material ruby glow 1.0000 0.0900 0.1200 7.200
+material ruby glow 1.0000 0.0900 0.1200 18.000
 part root - 0.000 0.000 0.000 spine 0.850 0.000
 part body root 0.000 0.000 11.850 none
 part head body 0.000 0.000 19.700 head
@@ -453,9 +453,9 @@ box head visor 4.125 2.700 18.802 0.750 0.600 0.675
 box head visor 4.125 2.700 19.477 0.750 0.600 0.675
 box head visor 4.125 2.700 20.152 0.750 0.600 0.675
 box head eye 4.400 -1.050 19.140 0.500 1.200 1.200
-box head eyehalo 4.260 -1.050 19.140 0.300 1.740 1.740
+box head eyehalo 4.550 -1.050 19.140 0.300 2.880 2.880
 box head eye 4.400 1.050 19.140 0.500 1.200 1.200
-box head eyehalo 4.260 1.050 19.140 0.300 1.740 1.740
+box head eyehalo 4.550 1.050 19.140 0.300 2.880 2.880
 box body bone -1.500 -2.000 8.481 1.000 1.000 0.963
 box body bone -1.500 -2.000 9.444 1.000 1.000 0.963
 box body bone -1.500 -2.000 10.406 1.000 1.000 0.963
