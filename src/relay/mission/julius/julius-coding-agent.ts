@@ -71,6 +71,15 @@ export const JULIUS_CODING_AGENT_FAILURES = [
   'COST_CEILING_REACHED',
   /** The runtime did not honour the envelope it was launched under. */
   'ENVELOPE_NOT_HONOURED',
+  /**
+   * THE PROVIDER DECLINED THE REQUEST ITSELF — a content policy, a safety
+   * refusal — not the caller, not the key, not the account. Retrying the same
+   * request reaches the same answer, and no operator action changes it: the
+   * ASK has to change. Before this class existed a refusal arrived as
+   * UNCLASSIFIED and a mission could not tell "your credential is wrong" from
+   * "I will not do this".
+   */
+  'CONTENT_REFUSED',
   /** It failed and said nothing a classifier recognises. Unknown is not transient. */
   'UNCLASSIFIED',
 ] as const;
@@ -102,6 +111,10 @@ const DISPOSITIONS: Readonly<Record<JuliusCodingAgentFailure, JuliusCodingAgentF
   PARTIAL_RESPONSE: { code: 'WORKER_EXECUTION_FAILURE', retryable: false, operatorAction: false },
   TOOL_CRASH: { code: 'WORKER_EXECUTION_FAILURE', retryable: false, operatorAction: false },
   CONTEXT_OVERFLOW: { code: 'INVALID_REQUEST', retryable: false, operatorAction: false },
+  // INVALID_REQUEST like CONTEXT_OVERFLOW: the request AS POSED cannot be served
+  // by this provider. Not AUTH_CONFIGURATION (the key is fine), not
+  // WORKER_EXECUTION_FAILURE (nothing crashed), and never retryable.
+  CONTENT_REFUSED: { code: 'INVALID_REQUEST', retryable: false, operatorAction: false },
   CONTINUATION_UNAVAILABLE: { code: 'WORKER_EXECUTION_FAILURE', retryable: false, operatorAction: true },
   COST_CEILING_REACHED: { code: 'WORKER_EXECUTION_FAILURE', retryable: false, operatorAction: false },
   ENVELOPE_NOT_HONOURED: { code: 'WORKER_EXECUTION_FAILURE', retryable: false, operatorAction: false },

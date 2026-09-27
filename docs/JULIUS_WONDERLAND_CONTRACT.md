@@ -98,9 +98,26 @@ the same store — and the read routes above can watch it from that moment. The
 response says what was not done: `dispatched: false`. Nothing composes a
 provider, spends money or ticks the loop; **driving the run is the job's**, and a
 client that rendered "created" as "running" would draw a mission nobody is
-driving. Re-posting the same contract resumes the same run rather than creating
-a second one: the execution identity is derived from `missionId`, exactly as the
-job derives it.
+driving.
+
+**A run's identity is its `runId`; `missionId` is the mission's name.** The
+bootstrap's idempotency key is a digest of the contract's CONTENT — the mission
+job's own rule, so that re-running the same file resumes the same durable run
+rather than paying for a second mission. Re-posting the same bytes therefore
+answers with the same `runId` and the run's real state; a contract that differs
+in any field is a new run, and the earlier run stays exactly where it was. A
+client correlates by `runId` only, never by `missionId`; a user who edits a
+draft and resubmits has created a second run, and the client must follow the
+`runId` it was given. Whether Julius should refuse a second run while an
+earlier run of the same mission is still READY or EXECUTING is a product
+decision not taken here. The `409 mission_already_running` below fires only
+when the same key arrives with a different payload, which a content-derived
+key does not produce in practice.
+
+**Run ids on the wire.** A run id carries a colon (`run:…`). The read routes
+accept it raw or percent-encoded (`run%3A…`) — a standards-correct client may
+encode it — and a segment that is not a valid percent-encoding is
+`404 run_not_found`, never `unknown_julius_route`.
 
 **Refusals:** `401 operator_required`; `503 julius_state_unavailable` (no
 database — no run was created); `503 reviewer_provider_unknown`
@@ -109,6 +126,22 @@ the mission's recorded identity, and a mission that cannot name it is refused
 rather than guessed); `400` carrying the parser's or the bootstrap's own reason
 for a malformed contract, missing or non-blocking criteria, or an underivable
 task contract.
+
+## What has been exercised against a real database
+
+`relay-bridge/julius-bridge-seam.real-postgres.test.ts` (gated on
+`JULIUS_REAL_POSTGRES=1` + `DATABASE_URL`, `todo` otherwise) drives creation and
+every read view through the production compositions against a real PostgreSQL:
+what a client creates is what it then watches, and both are what
+`relay_wonderland.julius_runs` / `julius_tasks` / `julius_task_contracts` hold;
+a re-posted contract resumes the one run; another project sees 404. On
+2026-09-27 the BUILT bridge process was also driven over HTTP against that
+database — 401 without the operator token, 201 with it, the same `runId` on
+re-post, `run`/`tasks`/`slots`/`timeline` served, 404 under another project,
+and the database rows agreeing (`READY`; plan `RUNNABLE` `["ARTIFACT"]`, build
+`BLOCKED` `["DIFF"]`). A never-dispatched slot reports `knownUsdMicros: 0`,
+`unknownCostComponents: 0`, `costComplete: true` — zero is the truth for a peer
+that has never been asked, not a rounding.
 
 ## What is NOT served yet, and what it would take
 

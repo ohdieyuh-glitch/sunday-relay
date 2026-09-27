@@ -40,6 +40,10 @@ padded.
 | 11b | context clash, failed closed | DETERMINISTIC | `src/relay/mission/julius/julius-context-delivery.e2e.test.ts` | `fails the task with a named failure class instead of throwing out of the tick` |
 | 12 | prior-learning case | DETERMINISTIC | `src/relay/mission/julius/julius-learning-loop.e2e.test.ts` | `promotes the artifact, and reports the WEAKEST improvement as its value` |
 | 13 | tool effects in a mission | DETERMINISTIC | `relay-bridge/julius/julius-live-composition.test.ts` | `Tool effects went through the executor port` |
+| 14 | provider refusal (of the REQUEST — content) | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `named CONTENT_REFUSED, never filed as a bad credential, not retried, not completed` |
+| 15 | mission created over the bridge, then observed — one record, on a real PostgreSQL (gated) | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `what a client creates is what a client then watches, and both are what the database holds` |
+| 16 | the whole chain on a real PostgreSQL, repair round included, dumped and gated (gated) | DETERMINISTIC | `src/relay/persistence/julius-live-chain.e2e.test.ts` | `drives a mission with a repair round, dumps it, and the gate reads what the run actually did` |
+| 17 | a memory verified by a reviewer — durable standing with history, and a refusal by name | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `raises the architect` |
 
 ## What the corpus does NOT cover, stated rather than padded
 
@@ -48,10 +52,14 @@ padded.
   mission with dozens of effects against the real Docker sandbox is the executor's
   own sibling proof (`scripts/julius-sibling-e2e.ts`), which needs Docker, a
   signing key and PostgreSQL, and was not run here.
-- **A CONTENT refusal.** Row 8 is a provider declining to serve the caller — a
-  credential or configuration refusal. A model declining a specific request on
-  content grounds has no failure class of its own, so no trace can distinguish
-  it. Named in `docs/JULIUS_BETA_READINESS.md`, row 11.
+- **A CONTENT refusal on the Independent Reviewer's peer, and a refusal
+  ROUTED.** Row 8 is a provider declining the CALLER; row 14 is a provider
+  declining the REQUEST, now a class of its own on the Coding Agent
+  (`CONTENT_REFUSED` → `INVALID_REQUEST`), with the Prompt Architect's `refused`
+  carrying the same code. The reviewer's provider still cannot report one — a
+  Hermes decline is a verdict that does not parse, filed as malformed — and no
+  trace shows a refusal re-planned rather than failed. Named in
+  `docs/JULIUS_BETA_READINESS.md`, row 11.
 - **A LIVE trace of any shape except clean success.** One paid run exists. Every
   adversarial shape in this corpus is deterministic, which means the corpus proves
   Julius handles these shapes and does not prove a real model produces them.

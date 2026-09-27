@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+
+import { juliusCodingAgentFailureClass } from './julius-coding-agent';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -1420,6 +1422,31 @@ describe('13 — a provider hard failure surfaces explicitly and never loops', (
     expect(run!.state).not.toBe('COMPLETED');
   });
 
+  it('a coder whose provider declines the request ITSELF: named CONTENT_REFUSED, never filed as a bad credential, not retried, not completed', async () => {
+    // "I will not do this" is not "your credential is wrong". The first was
+    // indistinguishable from the second until this class existed, and one of
+    // those is worth an operator's attention while the other needs the ASK to
+    // change. The class is on the durable record, the code is the request's
+    // (INVALID_REQUEST), and nobody re-asks the same question.
+    // The class as the live Coding Agent records it: the taxonomy member in the
+    // connector's lower-case alphabet (`coding_agent_content_refused`), which is
+    // the only alphabet `safeFailureClass` lets onto a durable row.
+    const contentRefused = juliusCodingAgentFailureClass('CONTENT_REFUSED');
+    const harness = build({ coderScript: [{
+      kind: 'fail', code: 'INVALID_REQUEST', failureClass: contentRefused,
+      message: 'The provider declined this request on content grounds.',
+    }] });
+    await drain(harness, 60);
+    expect(dispatchesOf(harness, CODER.adapterId, 'build-1'), 'a declined request is never re-asked').toBe(1);
+    expect(harness.store.taskRow('build-1')!.state).toBe('FAILED');
+    const failed = factsOf(harness, 'task.failed');
+    expect(failed.some((facts) => facts.failureClass === contentRefused && facts.code === 'INVALID_REQUEST'),
+      'the class and the code are on the record').toBe(true);
+    expect(failed.some((facts) => facts.code === 'AUTH_CONFIGURATION'), 'and it is not a credential failure').toBe(false);
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run!.state).not.toBe('COMPLETED');
+  });
+
   it('a coder whose provider is rate limited FOREVER: retried to the attempt ceiling and no further', async () => {
     const harness = build({ coderScript: [{ kind: 'fail', code: 'RATE_LIMIT' }] });
     await drain(harness, 60);
@@ -1612,5 +1639,81 @@ describe('36 — the repair bound binds the unit of work, however often it pause
       .map((row) => row.taskId.slice(0, -':review'.length))
       .filter((subject) => ['build-1', 'repair:segment:build-1:2:task:1:task', 'repair:segment:repair:segment:build-1:2:task:1:task:2:task:2:task'].includes(subject));
     expect(reviewedYields, 'and no dispatch that paused was reviewed').toEqual([]);
+  });
+});
+
+/**
+ * THE CLAIM LEDGER, IN A REAL RUN.
+ *
+ * The guidance flow is the one place a plain mission writes a promotable
+ * memory: the architect's answer reaches the continuation as a HANDOFF entry
+ * (UNVERIFIED — it cites nothing), and the continuation's review is the
+ * Independent Reviewer accepting the task that entry belongs to. So this is
+ * where a standing should rise, durably, with its history — and where a
+ * replayed tick must leave that history exactly as it was.
+ */
+describe('the claim ledger — a memory\u2019s standing is durable, and a reviewer raises it', () => {
+  const guided = () => build({
+    coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
+    architectScript: [
+      { kind: 'succeed', evidence: PLAN_EVIDENCE },
+      { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
+    ],
+  });
+
+  it('admits a claim for every brain entry the run writes, at the standing the derivation gives it', async () => {
+    const harness = guided();
+    await drain(harness, 40);
+    const entries = (await harness.store.brainEntriesForRun('run-1', 'prj-1')).filter((entry) => entry.provenance !== undefined);
+    const claims = await harness.store.claimsForRun('run-1', 'prj-1');
+    expect(entries.length, 'the run wrote memories').toBeGreaterThan(0);
+    for (const entry of entries) {
+      expect(claims.some((claim) => claim.entryId === entry.entryId), `${entry.entryId} has a claim`).toBe(true);
+    }
+    // Nothing is claimed that was not written.
+    for (const claim of claims) expect(entries.some((entry) => entry.entryId === claim.entryId), `${claim.claimId} names a written entry`).toBe(true);
+  });
+
+  it('raises the architect’s guidance entries to VERIFIED when their review is accepted, and refuses BY NAME the one the reviewer itself wrote', async () => {
+    const harness = guided();
+    await drain(harness, 40);
+    const claims = await harness.store.claimsForRun('run-1', 'prj-1');
+
+    // THE ARCHITECT'S GUIDANCE, reviewed by the Independent Reviewer: promoted
+    // on the review's own evidence, with the admission still in the history.
+    const request = claims.find((claim) => claim.entryId === 'brain:guidance-request:guidance:build-1:1:task');
+    expect(request, 'the guidance request is a memory').toBeDefined();
+    expect(request!.trust).toBe('VERIFIED');
+    expect(request!.evidence.some((reference) => reference.kind === 'REVIEW'), 'promoted on the review’s own evidence').toBe(true);
+    expect(request!.assertedBy).not.toBe(REVIEWER.workerId);
+    expect(harness.store.claimStandingHistory(request!.claimId).map((claim) => claim.trust)).toEqual(['UNVERIFIED', 'VERIFIED']);
+    const promoted = factsOf(harness, 'claim.promoted');
+    expect(promoted.find((facts) => facts.claimId === request!.claimId)).toMatchObject({ from: 'UNVERIFIED', to: 'VERIFIED', reviewTaskId: 'guidance:build-1:1:task:review' });
+    // The continuation's own resume note is promoted by the continuation's review.
+    expect(promoted.some((facts) => facts.entryId === 'brain:segment-resume:segment:build-1:2:task')).toBe(true);
+
+    // THE TRUST CORE'S REFUSAL, VISIBLE. The guidance ANSWER reaches the
+    // continuation as a HANDOFF row written on the reviewer's own tick, so the
+    // row's asserter is the reviewer — and a reviewer may not verify what it
+    // asserted. The claim stays UNVERIFIED and the refusal is on the record by
+    // name, rather than a promotion nobody could defend. (Whether a delivered
+    // row should be attributed to its author, the architect, is the open
+    // question this refusal makes visible.)
+    const handoff = claims.find((claim) => /^brain:guidance-answer:segment:build-1:\d+:task:r1$/u.test(claim.entryId));
+    expect(handoff, 'the guidance answer reached the continuation as a memory').toBeDefined();
+    expect(handoff!.trust).toBe('UNVERIFIED');
+    expect(handoff!.assertedBy).toBe(REVIEWER.workerId);
+    expect(factsOf(harness, 'claim.promotion.refused').filter((facts) => facts.claimId === handoff!.claimId))
+      .toEqual([expect.objectContaining({ reasonCode: 'memory_self_verification' })]);
+  });
+
+  it('leaves the history exactly as it was when the run is ticked again — a replay manufactures no standing', async () => {
+    const harness = guided();
+    await drain(harness, 40);
+    const before = (await harness.store.claimsForRun('run-1', 'prj-1')).map((claim) => [claim.claimId, harness.store.claimStandingHistory(claim.claimId).length] as const);
+    await drain(harness, 10);
+    const after = (await harness.store.claimsForRun('run-1', 'prj-1')).map((claim) => [claim.claimId, harness.store.claimStandingHistory(claim.claimId).length] as const);
+    expect(after).toEqual(before);
+    expect(factsOf(harness, 'claim.promoted').length, 'one promotion event per promotion, ever').toBe(before.filter(([, n]) => n > 1).length);
   });
 });

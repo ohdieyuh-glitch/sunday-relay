@@ -248,7 +248,9 @@ export type ScriptedOutcome =
   /** `costUsdMicros` is what the boundary billed before it failed, as its diagnostics would carry. */
   | {
     readonly kind: 'fail';
-    readonly code: 'RATE_LIMIT' | 'TIMEOUT' | 'AUTH_CONFIGURATION' | 'PROVIDER_UNAVAILABLE' | 'WORKER_EXECUTION_FAILURE';
+    readonly code: 'RATE_LIMIT' | 'TIMEOUT' | 'AUTH_CONFIGURATION' | 'PROVIDER_UNAVAILABLE' | 'WORKER_EXECUTION_FAILURE' | 'INVALID_REQUEST';
+    /** The boundary's finer class beside the code — `CONTENT_REFUSED`, `authentication_failed` — as a live adapter carries it. */
+    readonly failureClass?: string;
     readonly costUsdMicros?: number;
     /** Whether the provider runtime launched — the difference between spending nothing and spending an unknown amount. */
     readonly runtimeStarted?: boolean;
@@ -321,7 +323,7 @@ export function scriptedAdapter(
         : scripted;
       if (step.kind === 'fail') {
         throw new JuliusDispatchError(
-          step.code, step.code === 'RATE_LIMIT' || step.code === 'TIMEOUT', step.message ?? 'Scripted provider failure.', undefined,
+          step.code, step.code === 'RATE_LIMIT' || step.code === 'TIMEOUT', step.message ?? 'Scripted provider failure.', step.failureClass,
           step.costUsdMicros === undefined && step.runtimeStarted === undefined
             ? undefined
             : {

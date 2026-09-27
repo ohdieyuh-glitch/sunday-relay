@@ -40,6 +40,8 @@
  * system that is not durable.
  */
 
+import type { JuliusMemoryClaim } from './julius-memory-trust';
+import { juliusClaimStandingKey } from './julius-claim-ledger';
 import { MAX_TASK_RECOVERIES, planJuliusRecovery, type JuliusRecoveryAction } from './julius-recovery';
 import { transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
 import { JuliusEventIdConflict, canonicalJuliusEventIdentity, type JuliusOperationalEvent } from './julius-events';
@@ -108,6 +110,8 @@ export interface JuliusMemoryStore
   events(): readonly JuliusOperationalEvent[];
   trajectory(): readonly JuliusTrajectoryEvent[];
   contexts(): readonly JuliusContextSnapshot[];
+  /** Every standing a claim has held, oldest first — the history the table keeps. */
+  claimStandingHistory(claimId: string): readonly JuliusMemoryClaim[];
   results(): readonly ResultRow[];
   /** Reclaim expired leases, as the recovery repository does. */
   recoverExpired(now: string, limit?: number, projectId?: string): Promise<readonly JuliusRecoveryAction[]>;
@@ -139,6 +143,8 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
    * that reaches context snapshots and trajectory rows.
    */
   const brainRevisions = new Map<string, number>();
+  /** Every standing a claim has held, in order, with the run it belongs to. */
+  const claimStandings = new Map<string, { readonly runId: string; readonly projectId: string; history: JuliusMemoryClaim[] }>();
   /**
    * TASK CONTRACTS, keyed `<contractId>@<revision>` because a revision is the
    * unit that is stored, locked and superseded. PostgreSQL keys the same rows
@@ -760,6 +766,34 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     },
     async brainEntriesForRun(runId, projectId) {
       return inProject(runId, projectId) ? (brain.get(runId) ?? []).map((entry) => ({ ...entry })) : [];
+    },
+
+    /* --------------------------------------------------------- the claim store */
+    async claimsForRun(runId, projectId) {
+      if (!inProject(runId, projectId)) return [];
+      return [...claimStandings.values()]
+        .filter((record) => record.runId === runId && record.projectId === projectId)
+        .map((record) => ({ ...record.history[record.history.length - 1]! }));
+    },
+    async recordClaimStanding(input) {
+      const run = runs.get(input.runId);
+      if (run === undefined || run.projectId !== input.projectId) return false;
+      const record = claimStandings.get(input.claim.claimId);
+      // A REPLAY WRITES NOTHING: the same standing again is not a new standing,
+      // by the same key PostgreSQL compares.
+      const latest = record?.history[record.history.length - 1];
+      if (latest !== undefined && juliusClaimStandingKey(latest) === juliusClaimStandingKey(input.claim)) return false;
+      const copy: JuliusMemoryClaim = {
+        ...input.claim,
+        evidence: input.claim.evidence.map((reference) => ({ ...reference })),
+        contradicts: [...input.claim.contradicts],
+      };
+      if (record === undefined) claimStandings.set(input.claim.claimId, { runId: input.runId, projectId: input.projectId, history: [copy] });
+      else record.history.push(copy);
+      return true;
+    },
+    claimStandingHistory(claimId) {
+      return (claimStandings.get(claimId)?.history ?? []).map((claim) => ({ ...claim }));
     },
     async repairRoundsFor(taskId, projectId) {
       const task = tasks.get(taskId);

@@ -228,7 +228,191 @@ machine's load and pass at a 90 s timeout (10/10). `tsc -p relay-bridge` and
 `tsc -p scripts` clean; harness manifest re-exported, check OK; bridge bundle
 builds. Ledger rows B4 and B5 added to `docs/JULIUS_MVP_QUALIFICATION.md`.
 
-#### Not done, by decision or by gate
+#### Then: a real PostgreSQL, and the built bridge over HTTP
+
+`docker ps` on this machine shows a `julius-postgres` (postgres:16-bookworm)
+container up since ~2026-09-25, port 127.0.0.1:5432, user `julius` — the one
+`.github/julius-live-executor.sh` starts, evidently left running by an earlier
+lane. Its default database was unmigrated; the drill databases
+(`julius_lab_*_drill`, `julius_archive`) are someone else's and were not touched.
+A separate database `julius_bridge_seam` was created for this proof.
+
+**`relay-bridge/julius-bridge-seam.real-postgres.test.ts`** — 3 cases, gated on
+`JULIUS_REAL_POSTGRES=1` + `DATABASE_URL` exactly like the persistence
+real-postgres suites and `todo` otherwise, migrates the database and drives the
+PRODUCTION compositions (`composeJuliusMissionBootstrap`, `composeJuliusStateApi`)
+through the two route handlers: the created run's row, its task contract row, the
+`run`/`tasks`/`slots`/`timeline` views and the database agree (READY; plan
+RUNNABLE, build BLOCKED; three NEVER_DISPATCHED slots with no served model; a
+timeline ordered by sequence); a re-posted contract resumes the one run (count =
+1); another project sees 404; a no-check mission's build row holds `["DIFF"]`
+and a checked one `["TEST"]`. 3/3 against the container. Added to
+`.github/workflows/julius-real-infra.yml` beside the other real-postgres steps.
+
+**The built bridge, over HTTP.** `npm run relay:bridge:build`, then
+`dist-relay-bridge/server.cjs` started with `DATABASE_URL` (the seam database),
+a random `RELAY_BRIDGE_API_TOKEN` and `RELAY_HERMES_PROVIDER=xai`; it reported
+`auth: required`. Then with curl: POST without a token → **401**; POST with it →
+**201** `run:5e8f6463c9a2b15381d67162`, `state: READY`, `dispatched: false`;
+the same contract again → the same `runId`; `GET …/run` → READY, taskCounts
+BLOCKED 1 / RUNNABLE 1; `GET …/tasks` → plan RUNNABLE `["ARTIFACT"]`, build
+BLOCKED `["DIFF"]`; `GET …/slots` → three peers, NEVER_DISPATCHED, `servedModel:
+null`, `knownUsdMicros: 0`, `costComplete: true`; `GET …/timeline` →
+`run.created`, `task.created`, … by sequence; `GET` under another project →
+**404**; `psql` on the same database → the same run, READY, and the same two
+task rows. Row 12 of the readiness page: 85 → 90; total still 77%.
+
+**What this does not prove:** any Unreal-side call (the integration lane's
+client is not built yet), and nothing about driving — the run created over HTTP
+sits READY, exactly as the contract document says it will.
+
+#### Then: the real-PostgreSQL suites, and a proof that had been dead on main
+
+With the container to hand, the six persistence real-PostgreSQL suites
+(`julius-run-scoped-identity`, `julius-lease-renewal`,
+`julius-attempt-attribution`, `julius-event-append`,
+`julius-decision-history`, `real-infra-julius`) were run against a fresh
+database `julius_persistence_local`: **35 passed, 2 todo** (the Docker halves).
+Then `src/relay/persistence/julius-live-chain.e2e.test.ts` — the whole chain on
+a real database: plan → plan review → build → a REJECTED build review → repair
+→ re-review, then the shipping dump queries, then the Beta Gate — **failed**:
+`VERIFYING` after 7 ticks, `REPAIR(BLOCKING_FINDINGS), HALT(FINDINGS_UNRESOLVED)`.
+
+**Pre-existing, not a regression.** The same suite at `origin/main` `a384b215`,
+run in a probe worktree sharing this tree's `node_modules` (lockfile
+unchanged), fails identically. Cause: #277's charged-findings rule — a
+re-review that accepts a repair without answering the finding that caused it
+is HALTed, "an unanswered finding is not resolved" — is right, and the
+fixture's scripted reviewer answered nothing because it read its packet from
+nowhere. The suite is in NO workflow (`grep live-chain .github/workflows/*` is
+empty), so nothing had run it since. **Fixed in the fixture, not the rule:** the
+test now composes `createContextAndClaimHandoffs` exactly as the job does (the
+PostgreSQL snapshot table holds a packet's identity and hashes, not its text;
+the live path keeps compiled packets beside the store), and the re-review step
+carries `answerFindings: 'RESOLVED'`, reading the finding ids out of the same
+compiled packet a live reviewer is handed. Against a fresh database the run now
+reaches **COMPLETED**; `julius_tasks` holds six SUCCEEDED rows — plan, its
+review, build, its review, `repair:run:live-chain:build:1:task` (`repair:build`)
+and its `review:repair:build`. The dump-and-gate half then fails here with
+`spawn psql ENOENT` — this host has no `psql` binary — so that half is CI's:
+the suite is now a step in `.github/workflows/julius-real-infra.yml` beside
+the seam suite and the other real-postgres steps. Ledger row A9.
+
+**What this says about the loop:** the repair round — the case the product
+exists for — completes on the real store under the charged-findings rule, with
+a reviewer that answers what it raised. What it does not say: anything about a
+real provider answering a real finding; that is the paid run's.
+
+The probe worktree was removed (junction first, then `git worktree remove`);
+this tree's `node_modules` is intact.
+
+
+#### Then: "I will not do this" is not "your credential is wrong"
+
+The readiness page's row 11 named the gap: a model declining a specific request
+had no class of its own and arrived as UNCLASSIFIED / WORKER_EXECUTION_FAILURE,
+indistinguishable from a broken key — and one of those is worth an operator's
+attention while the other needs the ASK to change. The hosted coder's failure
+classifier (`hosted-failure-reason.ts`) already recognised a content filter or a
+safety refusal as `content_filtered`; `codingAgentFailureFromHostedReason` then
+threw that recognition away by mapping it to UNCLASSIFIED. Now:
+`CONTENT_REFUSED` is in `JULIUS_CODING_AGENT_FAILURES`, disposed as
+`INVALID_REQUEST` (like CONTEXT_OVERFLOW: the request as posed cannot be
+served), never retryable, never an operator action; the classifier's word maps
+to it; and the Prompt Architect's `refused` (which `gpt-runner.ts` already
+detected as a refusal output item) carries the same code instead of sharing
+WORKER_EXECUTION_FAILURE with a 500 and a malformed answer. The scripted fixture
+can now name a failure class on a `fail` step. Proofs: the provider taxonomy
+table (`coding-agent-port.test.ts` C3/C4: CONTENT_REFUSED → INVALID_REQUEST,
+"blocked by the content filter" → CONTENT_REFUSED), the architect class table
+(`julius-live-composition.test.ts`: `refused` → INVALID_REQUEST), and the
+lifecycle (`julius-continuous-lifecycle.e2e`: one call, FAILED, class and code
+on the `task.failed` record — `coding_agent_content_refused` / `INVALID_REQUEST`,
+the connector's lower-case alphabet being the only one `safeFailureClass` admits —
+not AUTH_CONFIGURATION, not completed). Ledger D11,
+D12; row 11: 85 → 86; total 77%.
+
+**Not done:** the Independent Reviewer's provider cannot report a content
+refusal (a Hermes decline is a verdict that does not parse — filed as
+malformed), and nothing routes a refusal to a re-plan; the task fails and the
+run does not complete, which is truthful and is where this stops.
+
+#### Then: the claim store, at its minimum
+
+The readiness page's own estimate: "one table and one port would make standing
+durable per entry and give the Learning Loop's promotion somewhere to land …
+roughly +2.5, not +6", because nothing asserts lineage. Built exactly that:
+
+- **Migration 026** `julius_claim_standings` — append-only; a claim's current
+  standing is its highest revision and the rows beneath are the history.
+- **`JuliusClaimStore`** on `JuliusRuntimeStore` — `claimsForRun`,
+  `recordClaimStanding` — implemented by the memory store (with a
+  `claimStandingHistory` read for tests) and `JuliusClaimPostgresRepository`,
+  bound in `postgres-store.ts`; the conformance suite names it.
+- **`julius-claim-ledger.ts`** (kernel, pure): `juliusAdmittedClaimFor` (the
+  derivation applied to the entry — one definition of a standing),
+  `juliusClaimPromotionsOnAccept` (the reviewed work's entries, promoted to
+  VERIFIED on the review's evidence through `promoteJuliusMemoryClaim`, with
+  every refusal returned by name), `mergeJuliusDurableStanding` (the record
+  wins at compile), `juliusClaimStandingKey` (what makes two standings the
+  same, shared by both stores so replay is refused identically).
+- **The pipeline:** all 14 brain writes go through `appendBrainEntryAdmitting`;
+  the compile site merges recorded standings; `verifyExecutedTask` promotes on
+  an ACCEPT that a reviewer's task produced, only when the decision was
+  recorded this tick; `claim.promoted` / `claim.promotion.refused` are on the
+  event vocabulary and the timeline.
+
+**What the real run showed.** In the guidance flow (the one place a plain
+mission writes a promotable memory) three claims rose UNVERIFIED → VERIFIED
+with history — the architect's guidance request and proposal at the guidance
+task's review, the continuation's resume note at the continuation's review —
+and one was REFUSED by name: the guidance ANSWER reaches the continuation as a
+HANDOFF row written on the reviewer's own tick, so its asserter is the reviewer
+and `memory_self_verification` stops the reviewer verifying it. The refusal is
+the trust core doing its job; what it exposes is an attribution question — a
+delivered row is attributed to whoever's completion delivered it, not to its
+author — left open and named rather than papered over. A second drain adds no
+standing and no event.
+
+Tests: `julius-claim-ledger.test.ts` (12), three cases in
+`julius-continuous-lifecycle.e2e` (the suite: 77/77), the real-PostgreSQL suite
+(2/2 against the container, in the workflow), the kernel directory green.
+Readiness: rows 4, 5, 9 → 80, 87, 68; total 77.2 → 78.3, recorded as 78%.
+
+#### Then: what the integration lane found by running the create route for real
+
+The Wonderland↔Julius integration lane ran `dist-relay-bridge/server.cjs`
+from their merged tree (`706dab30`, this branch's `fc8c67c7` inside it) over
+real HTTP against their own isolated PostgreSQL with every provider credential
+stripped, graded by clause: **11 of 13 pass** — 201/READY/`dispatched: false`,
+the served state equal to the create-time state, three NEVER_DISPATCHED slots,
+the same `runId` on re-POST, 401 without the operator, 404 under another
+project WITH a control, 404 for an unknown run. The two failures:
+1. **A percent-encoded run id was `unknown_julius_route`** — a real bug: the
+   state routes matched the raw path, and a standards-correct client (Unreal's
+   `UrlEncode`) encodes the colon. Fixed in `842ac5f0`: each segment decoded
+   before matching, a segment that does not decode is `run_not_found`. Two
+   route cases.
+2. **The same `missionId` with a changed objective made a second run.**
+   Intended: the key is a digest of the contract's content (the job's own
+   rule), so `missionId` is the mission's name and a run's identity is its
+   `runId`. The contract document now says so, and says a client correlates by
+   `runId` only; whether Julius should refuse a second run while an earlier
+   run of the same mission is still open is put to the founder as a product
+   decision.
+
+They also reported that **every shell on this laptop inherits a `DATABASE_URL`
+pointing at the `julius-postgres` container's default database** (from the
+user profile), so a session that set `JULIUS_REAL_POSTGRES=1` and trusted the
+inherited value would write test rows into the live store. Every real-database
+run in this lane set `DATABASE_URL` explicitly to a throwaway database
+(`julius_bridge_seam`, `julius_persistence_local`, `julius_live_chain_local`,
+`julius_claims_local`) and the default `julius` database is unmigrated and
+untouched; the hazard stands for the next session, and the structural fix
+(move the variable into whatever launches the job and the bridge) is the
+founder's to choose. The bridge's two Julius route families now share one
+lazy pool (their other observation).
+
 
 - Driving a run over HTTP — the deployment decision that spends money; the
   contract document says so.

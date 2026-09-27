@@ -23,6 +23,7 @@ import { JuliusEventPostgresRepository } from '../../src/relay/persistence/juliu
 import { JuliusTrajectoryPostgresRepository } from '../../src/relay/persistence/julius-trajectory-postgres';
 import { JuliusContractPostgresRepository } from '../../src/relay/persistence/julius-contract-postgres';
 import { JuliusTimelinePostgresRepository } from '../../src/relay/persistence/julius-timeline-postgres';
+import { JuliusClaimPostgresRepository } from '../../src/relay/persistence/julius-claim-postgres';
 
 /**
  * THE TIMELINE READER IS IN THE RETURN TYPE, not left to a structural probe.
@@ -61,6 +62,7 @@ export function createJuliusPostgresRuntimeStore(
   const trajectories = new JuliusTrajectoryPostgresRepository(pool);
   const contracts = new JuliusContractPostgresRepository(pool);
   const timeline = new JuliusTimelinePostgresRepository(pool);
+  const claims = new JuliusClaimPostgresRepository(pool);
   return {
     loadRun: runs.loadRun.bind(runs),
     transition: runs.transition.bind(runs),
@@ -95,5 +97,7 @@ export function createJuliusPostgresRuntimeStore(
     loadTaskContract: contracts.loadTaskContract.bind(contracts),
     taskContractRevisions: contracts.taskContractRevisions.bind(contracts),
     timeline: timeline.timeline.bind(timeline),
+    claimsForRun: claims.claimsForRun.bind(claims),
+    recordClaimStanding: claims.recordClaimStanding.bind(claims),
   };
 }

@@ -113,6 +113,15 @@ export interface JuliusStateRoutePorts {
 /** `/julius/runs/<runId>/<view>` — the only shape this family serves. */
 const RUN_VIEW = /^\/julius\/runs\/([A-Za-z0-9:_-]{1,128})\/([a-z]+)$/u;
 
+/** Every segment decoded, or null when one is not a valid percent-encoding. */
+const decodePathSegments = (path: string): string | null => {
+  try {
+    return path.split('/').map((segment) => decodeURIComponent(segment)).join('/');
+  } catch {
+    return null;
+  }
+};
+
 export async function handleJuliusStateRoute(
   request: JuliusStateRouteRequest,
   ports: JuliusStateRoutePorts,
@@ -136,7 +145,21 @@ export async function handleJuliusStateRoute(
     return err(400, 'project_required', 'A Julius state read names its tenant and project.');
   }
 
-  const match = RUN_VIEW.exec(request.path);
+  /**
+   * A CLIENT MAY PERCENT-ENCODE THE COLON. Run ids carry one (`run:abc…`);
+   * RFC 3986 allows it raw in a path segment, and a standards-correct client —
+   * Unreal's UrlEncode among them — encodes it anyway. Matching the raw path
+   * turned that client's read into `unknown_julius_route`, which named the
+   * wrong failure: the shape was fine, the id was encoded. So each segment is
+   * decoded first, and a segment that does not decode is a run that cannot be
+   * named — `run_not_found` — never a route that does not exist. Found by the
+   * Wonderland integration lane's first end-to-end run against the built bridge.
+   */
+  const decoded = decodePathSegments(request.path);
+  if (decoded === null) {
+    return err(404, 'run_not_found', 'The run id in the path is not a valid percent-encoding.');
+  }
+  const match = RUN_VIEW.exec(decoded);
   if (match === null) {
     return err(404, 'unknown_julius_route',
       'Julius state serves /julius/runs/<runId>/<run|slots|tasks|evidence|verification|timeline>.');
