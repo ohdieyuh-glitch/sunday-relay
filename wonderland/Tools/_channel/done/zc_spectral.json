@@ -1,6 +1,6 @@
 {
  "name": "zc_spectral",
- "started": "2026-09-26 22:39:52",
+ "started": "2026-09-27 05:37:40",
  "status": "measured",
  "tests": [
   {
@@ -19,11 +19,11 @@
   }
  ],
  "figure": {
-  "flames": "sections=2 flameMids=11 sources=8 | [0] verts=2048 tris=3584 visible=1 mat=MID_M_WL_VoxelGlow_11<M_WL_VoxelGlow> colour=(70.58,224.57,320.81) | [1] verts=2048 tris=3584 visible=1 mat=MID_M_WL_VoxelGlow_13<M_WL_VoxelGlow> colour=(395.97,516.96,549.96) ",
-  "framing": "onBody=1 bodyTall=30.0 bodyWide=15.2 rawTall=29.9 rawWide=15.2 envelope=268 scale=0.329 fill=0.80 fitTall=49 fitWide=31 distance=49 fov=34.0 target=640x800 predictedHeightPct=80.0"
+  "flames": "sections=2 flameMids=11 sources=8 | [0] verts=2048 tris=3584 visible=1 mat=MID_M_WL_VoxelGlow_5<M_WL_VoxelGlow> colour=(0.40,1.27,1.82) | [1] verts=2048 tris=3584 visible=1 mat=MID_M_WL_VoxelGlow_7<M_WL_VoxelGlow> colour=(2.24,2.93,3.11) ",
+  "framing": "onBody=1 bodyTall=55.3 bodyWide=37.6 rawTall=55.3 rawWide=37.6 envelope=268 scale=0.350 fill=0.80 glow=0.0015 fitTall=90 fitWide=77 distance=90 fov=34.0 target=640x800 predictedHeightPct=80.0"
  },
  "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\spectral",
- "finished": "2026-09-26 22:41:06",
- "seconds": 74.57,
- "log": "S_FIG INFO what Skeleton Flame reports {'flames': 'sections=2 flameMids=11 sources=8 | [0] verts=2048 tris=3584 visible=1 mat=MID_M_WL_VoxelGlow_11<M_WL_VoxelGlow> colour=(70.58,224.57,320.81) | [1] verts=2048 tris=3584 visible=1 mat=MID_M_WL_VoxelGlow_13<M_WL_VoxelGlow> colour=(395.97,516.96,549.96) ', 'framing': 'onBody=1 bodyTall=30.0 bodyWide=15.2 rawTall=29.9 rawWide=15.2 envelope=268 scale=0.329 fill=0.80 fitTall=49 fitWide=31 distance=49 fov=34.0 target=640x800 predictedHeightPct=80.0'}\nS_front INFO captured front across the beat {'frames': 14}\nS_side INFO captured side across the beat {'frames': 14}\nS_back INFO captured back across the beat {'frames': 14}\n"
+ "finished": "2026-09-27 05:38:28",
+ "seconds": 48.38,
+ "log": "S_FIG INFO what Skeleton Flame reports {'flames': 'sections=2 flameMids=11 sources=8 | [0] verts=2048 tris=3584 visible=1 mat=MID_M_WL_VoxelGlow_5<M_WL_VoxelGlow> colour=(0.40,1.27,1.82) | [1] verts=2048 tris=3584 visible=1 mat=MID_M_WL_VoxelGlow_7<M_WL_VoxelGlow> colour=(2.24,2.93,3.11) ', 'framing': 'onBody=1 bodyTall=55.3 bodyWide=37.6 rawTall=55.3 rawWide=37.6 envelope=268 scale=0.350 fill=0.80 glow=0.0015 fitTall=90 fitWide=77 distance=90 fov=34.0 target=640x800 predictedHeightPct=80.0'}\nS_front INFO captured front across the beat {'frames': 14}\nS_side INFO captured side across the beat {'frames': 14}\nS_back INFO captured back across the beat {'frames': 14}\n"
 }

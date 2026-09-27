@@ -1,6 +1,6 @@
 {
  "name": "zc_cub_grounding",
- "started": "2026-09-26 01:39:51",
+ "started": "2026-09-27 05:35:38",
  "status": "measured",
  "tests": [
   {
@@ -121,7 +121,7 @@
  },
  "cub_bodies": 5,
  "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\cub_grounding",
- "finished": "2026-09-26 01:40:54",
- "seconds": 63.86,
+ "finished": "2026-09-27 05:36:42",
+ "seconds": 63.52,
  "log": "C00 PASS the Sub-Agent Cub subsystem is running {}\nC01 PASS both AI Companions are in the world {'companions': ['WL_Companion_ClaudeCodeFable5', 'WL_Companion_GPT6Astra']}\nC_00_no_cubs INFO 00_no_cubs {'WL_Companion_ClaudeCodeFable5': 43.72, 'WL_Companion_GPT6Astra': 41.94}\nC_01_summoned INFO 01_summoned {'WL_Companion_ClaudeCodeFable5': 43.72, 'WL_Companion_GPT6Astra': 41.94}\nC_02_moving INFO 02_moving {'WL_Companion_ClaudeCodeFable5': 42.13, 'WL_Companion_GPT6Astra': 40.02}\nC_03_stopped INFO 03_stopped {'WL_Companion_ClaudeCodeFable5': 41.78, 'WL_Companion_GPT6Astra': 39.67}\nC_04_turned INFO 04_turned {'WL_Companion_ClaudeCodeFable5': 36.05, 'WL_Companion_GPT6Astra': 66.18}\nC_05_uneven INFO 05_uneven {'WL_Companion_ClaudeCodeFable5': 41.7, 'WL_Companion_GPT6Astra': 39.67}\nC_06_idle INFO 06_idle {'WL_Companion_ClaudeCodeFable5': 41.7, 'WL_Companion_GPT6Astra': 39.67}\nC_07_dismissed INFO 07_dismissed {'WL_Companion_ClaudeCodeFable5': 41.7, 'WL_Companion_GPT6Astra': 39.67}\nC_08_resummoned INFO 08_resummoned {'WL_Companion_ClaudeCodeFable5': 41.7, 'WL_Companion_GPT6Astra': 39.67}\nC10 PASS no AI Companion is ever inside the floor, at any point in the founder's sequence {'worst_clearance_uu': 36.05, 'floor': -2.0, 'worst_at': 'WL_Companion_ClaudeCodeFable5 @ 04_turned', 'note': 'the feet, measured against the ground traced directly beneath them. Negative is the sinking the founder filmed.'}\nC11 PASS summoning Cubs does not shove the AI Companions {'change_in_clearance_uu': {'WL_Companion_ClaudeCodeFable5': 0.0, 'WL_Companion_GPT6Astra': 0.0}, 'tolerance': 40.0, 'note': 'before and after the summon, standing still. The old keep-apart steering pushed a companion by up to 345 uu per cub.'}\nC12 PASS Companions and Cubs are separate actors with their own transforms {'cub_bodies': 5, 'companions': 2, 'note': \"each cub carries its own body, attached to the cub; neither owns the other's transform\"}\n"
 }
