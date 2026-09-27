@@ -37,6 +37,20 @@
  *         clarified that this is INTENDED -- a changed contract is a new run and
  *         missionId is not a run identity -- so the clause now proves the
  *         intended behaviour instead: a distinct run, the original untouched.
+ *
+ * E08 RETIRED, 2026-09-27. The founder's decision 3 (an accidental duplicate
+ * must not start another paid execution; an explicit rerun must stay possible)
+ * superseded it, and Julius 80b91478 implements it: a changed contract for a
+ * mission whose run is still active is now REFUSED. Its intent lives on in
+ * D02 (refused, nothing created) and D04 (an explicit rerun is a distinct run
+ * and the first is untouched).
+ *
+ * ONE ACTIVE RUN PER MISSION (D01-D11), on a FRESH mission per walk so the
+ * guard is measured rather than this database's history: refusal naming the
+ * live run, the exact-word rerun intent, the identical replay, the world
+ * following each runId as itself, terminal release, and two real races --
+ * identical twins, and different contracts for one mission -- each counted in
+ * the database, not inferred from the answers.
  */
 
 import { spawn } from 'node:child_process';
@@ -202,24 +216,8 @@ try {
     again.status === 201 && again.json?.data?.runId === runId,
     { status: again.status, resumedRunId: again.json?.data?.runId ?? 'absent', original: runId });
 
-  const changed = await call('POST', '/relay-api/julius/missions', {
-    headers: operator, body: JSON.stringify({ ...CONTRACT, objective: CONTRACT.objective + ' (changed)' }),
-  });
-  // INTENDED, per Julius (2026-09-27): the idempotency key is a digest of the
-  // contract CONTENT, so a changed contract IS a new run and missionId names a
-  // mission, not a run. The world therefore correlates by runId ONLY. What must
-  // hold is that the new run is distinct AND the original is left untouched --
-  // a tab following the first runId must not have its mission change under it.
-  const secondRunId = changed.json?.data?.runId ?? 'absent';
-  const original = await call('GET', `/relay-api/julius/runs/${runId}/run`, { headers: scoped });
-  const originalView = original.json?.data ?? original.json;
-  clause('E08', 'a changed contract under the same missionId is a DISTINCT run, and the original run is untouched',
-    changed.status === 201 && secondRunId !== 'absent' && secondRunId !== runId &&
-      original.status === 200 && originalView?.state === readState &&
-      originalView?.missionContractRevision === (run.json?.data ?? run.json)?.missionContractRevision,
-    { status: changed.status, firstRunId: runId, secondRunId,
-      originalAfter: { status: original.status, state: originalView?.state ?? 'absent',
-        missionContractRevision: originalView?.missionContractRevision ?? 'absent' } });
+  // E08 RETIRED -- superseded by founder decision 3 and Julius 80b91478; see the
+  // header. What it protected is proven below on a fresh mission (D02, D04).
 
   const anon = await call('GET', `/relay-api/julius/runs/${runId}/run`, {
     headers: { 'X-Relay-Tenant': CONTRACT.tenantId, 'X-Relay-Project': CONTRACT.projectId },
@@ -346,6 +344,164 @@ try {
 
   const unsigned = await call('GET', `/relay-api/wonderland/julius/hydrate?${worldQuery}`);
   clause('N10', 'no session at all is refused', unsigned.status === 401, { status: unsigned.status });
+
+  /* ================================================================
+   * ONE ACTIVE RUN PER MISSION -- founder decision 3, Julius 80b91478.
+   * An accidental duplicate must not start a second paid execution; an
+   * EXPLICIT rerun must stay possible; runId is the run and missionId the
+   * broader mission; the world follows exactly the runId it is given.
+   *
+   * A FRESH mission per walk, so what is measured is the guard and not this
+   * database's history: the E-walk's contract is the same every time on
+   * purpose, and a run the retired E08 made before the guard existed is still
+   * here. Nothing is dispatched: creation never dispatches (E02).
+   * ================================================================ */
+  const walkId = randomBytes(6).toString('hex');
+  const fresh = (label) => ({
+    ...CONTRACT,
+    missionId: `mission:wonderland-dup-${walkId}-${label}`,
+    objective: `${CONTRACT.objective} [duplicate-run walk ${walkId}, ${label}]`,
+  });
+  const edited = (contract, note) => ({ ...contract, objective: `${contract.objective} (${note})` });
+  const create = (contract, rerun) => call('POST', '/relay-api/julius/missions', {
+    headers: rerun === undefined ? operator : { ...operator, 'x-relay-julius-rerun': rerun },
+    body: JSON.stringify(contract),
+  });
+  const db = new pg.Pool({ connectionString: DB });
+  // Counted in the DATABASE, not inferred from the answers: "exactly one run" is a row count.
+  const runsOf = async (missionId) => (await db.query(
+    'SELECT run_id, state FROM relay_wonderland.julius_runs WHERE mission_id = $1 AND project_id = $2 ORDER BY created_at',
+    [missionId, CONTRACT.projectId])).rows;
+  // FIXTURE, stated wherever it is used: a run is ended by writing its state in THIS isolated database. The guard
+  // reads julius_runs.state, and driving a real run to an end would need a worker -- which this drill never starts.
+  const endRuns = (missionId) => db.query(
+    "UPDATE relay_wonderland.julius_runs SET state = 'CANCELLED' WHERE mission_id = $1 AND project_id = $2",
+    [missionId, CONTRACT.projectId]);
+  try {
+    const m = fresh('guard');
+    const first = await create(m);
+    const runA = first.json?.data?.runId ?? null;
+    clause('D01', 'a fresh mission gets its run: 201, READY, not dispatched -- an ACTIVE run',
+      first.status === 201 && typeof runA === 'string' && first.json?.data?.state === 'READY'
+        && first.json?.data?.dispatched === false,
+      { status: first.status, runId: runA, state: first.json?.data?.state ?? 'absent' });
+
+    const accidental = await create(edited(m, 'edited draft'));
+    const afterAccident = await runsOf(m.missionId);
+    clause('D02', 'an accidental changed resubmission is refused 409 mission_run_already_active, NAMING the live run, and creates nothing',
+      accidental.status === 409 && accidental.json?.error?.kind === 'mission_run_already_active'
+        && typeof runA === 'string' && String(accidental.json?.error?.message ?? '').includes(runA)
+        && afterAccident.length === 1 && afterAccident[0].run_id === runA,
+      { status: accidental.status, refusal: accidental.json?.error ?? accidental.text, runsForMission: afterAccident });
+
+    const nearMisses = [];
+    for (const word of ['yes', 'true', 'explicitly', 'explicit rerun', '']) {
+      const r = await create(edited(m, 'edited draft'), word);
+      nearMisses.push({ header: word, status: r.status, kind: r.json?.error?.kind ?? null });
+    }
+    const afterNearMisses = await runsOf(m.missionId);
+    clause('D03', 'only the exact word is a rerun intent: every near miss is still refused, and still creates nothing',
+      nearMisses.every((n) => n.status === 409 && n.kind === 'mission_run_already_active') && afterNearMisses.length === 1,
+      { nearMisses, runsForMission: afterNearMisses.length });
+
+    // Case-insensitive, per Julius. (Surrounding spaces cannot be tested over fetch: it trims header values.)
+    const rerun = await create(edited(m, 'edited draft'), 'Explicit');
+    const runB = rerun.json?.data?.runId ?? null;
+    const afterRerun = await runsOf(m.missionId);
+    clause('D04', 'an EXPLICIT rerun starts a DISTINCT run, says so (rerun: true), dispatches nothing, and leaves the first run as it was',
+      rerun.status === 201 && typeof runB === 'string' && runB !== runA && rerun.json?.data?.rerun === true
+        && rerun.json?.data?.dispatched === false
+        && afterRerun.length === 2 && afterRerun.some((r) => r.run_id === runA && r.state === 'READY'),
+      { status: rerun.status, runA, runB, rerunFlag: rerun.json?.data?.rerun ?? 'absent', runsForMission: afterRerun });
+
+    const replay = await create(m);
+    clause('D05', 'the IDENTICAL contract is never refused: it resumes its own run, and is not told it got a rerun',
+      replay.status === 201 && replay.json?.data?.runId === runA && replay.json?.data?.rerun === false,
+      { status: replay.status, runId: replay.json?.data?.runId ?? 'absent', rerunFlag: replay.json?.data?.rerun ?? 'absent' });
+
+    // THE WORLD FOLLOWS THE EXACT runId: one mission, two live runs, each hydrated by its own id, as the native client.
+    const hydrateRun = (id) => call('GET',
+      `/relay-api/wonderland/julius/hydrate?projectId=${encodeURIComponent(CONTRACT.projectId)}&runId=${id}&cursor=0`,
+      { headers: native });
+    const seenA = await hydrateRun(runA);
+    const seenB = await hydrateRun(runB);
+    clause('D06', 'the world follows the exact runId it is given: each of one mission\'s two runs hydrates as itself, never as the other',
+      seenA.status === 200 && seenB.status === 200
+        && seenA.json?.data?.run?.runId === runA && seenB.json?.data?.run?.runId === runB
+        && seenA.json?.data?.run?.missionId === m.missionId && seenB.json?.data?.run?.missionId === m.missionId,
+      { a: { status: seenA.status, runId: seenA.json?.data?.run?.runId ?? 'absent' },
+        b: { status: seenB.status, runId: seenB.json?.data?.run?.runId ?? 'absent' } });
+
+    // AN EXPLICIT RERUN OF THE UNCHANGED CONTRACT, while its run is live. The run's key is its content, so this
+    // resolves to the run it already made. Whatever Julius decides that should DO, the wire must not report a rerun
+    // it did not perform -- Julius's own rule: "a client that did not ask can never be told it got one", and one
+    // that asked must not be told it got one when it did not.
+    const sameAgain = await create(m, 'explicit');
+    clause('D07', 'rerun: true is reported only when a DISTINCT run exists -- never the same run labelled a rerun',
+      !(sameAgain.status === 201 && sameAgain.json?.data?.runId === runA && sameAgain.json?.data?.rerun === true),
+      { status: sameAgain.status, runId: sameAgain.json?.data?.runId ?? 'absent', firstRun: runA,
+        rerunFlag: sameAgain.json?.data?.rerun ?? 'absent', runsForMission: (await runsOf(m.missionId)).length });
+
+    // TERMINALITY RELEASES THE MISSION -- FIXTURE: both runs written CANCELLED in this isolated database.
+    await endRuns(m.missionId);
+    const afterEnd = await create(edited(m, 'after both runs ended'));
+    const runC = afterEnd.json?.data?.runId ?? null;
+    clause('D08', 'once every run of the mission has ended, a changed contract needs no rerun intent: a distinct run, rerun: false',
+      afterEnd.status === 201 && typeof runC === 'string' && runC !== runA && runC !== runB
+        && afterEnd.json?.data?.rerun === false,
+      { fixture: 'runs written CANCELLED directly in the isolated database', status: afterEnd.status, runC,
+        rerunFlag: afterEnd.json?.data?.rerun ?? 'absent' });
+
+    // THE COMMONEST RERUN THERE IS: the same mission, unchanged, after its only run ended -- a retry after a failure.
+    // Founder decision 3: "Preserve an EXPLICIT rerun path." FIXTURE: the run written CANCELLED.
+    const r2 = fresh('retry');
+    const onlyRun = (await create(r2)).json?.data?.runId ?? null;
+    await endRuns(r2.missionId);
+    const retryPlain = await create(r2);
+    const retryExplicit = await create(r2, 'explicit');
+    const afterRetry = await runsOf(r2.missionId);
+    clause('D09', 'an EXPLICIT rerun of the UNCHANGED contract after its run ended starts a new run (founder: preserve an explicit rerun path)',
+      retryExplicit.status === 201 && typeof retryExplicit.json?.data?.runId === 'string'
+        && retryExplicit.json.data.runId !== onlyRun && afterRetry.length === 2,
+      { fixture: 'the run written CANCELLED directly in the isolated database', endedRun: onlyRun,
+        plainRepost: { status: retryPlain.status, runId: retryPlain.json?.data?.runId ?? 'absent', state: retryPlain.json?.data?.state ?? 'absent' },
+        explicitRerun: { status: retryExplicit.status, runId: retryExplicit.json?.data?.runId ?? 'absent',
+          state: retryExplicit.json?.data?.state ?? 'absent', rerunFlag: retryExplicit.json?.data?.rerun ?? 'absent' },
+        runsForMission: afterRetry });
+
+    // RACE 1: identical twins. Julius's guarantee, precisely: EXACTLY ONE run; a loser may be answered 503
+    // bootstrap_persistence_failure, and its retry returns the one run. Not "every request gets 201".
+    const twins = fresh('race-identical');
+    const burst = await Promise.all(Array.from({ length: 8 }, () => create(twins)));
+    const retried = await Promise.all(burst.map((r) => (r.status === 201 ? r : create(twins))));
+    const twinRuns = await runsOf(twins.missionId);
+    const twinIds = new Set(retried.map((r) => r.json?.data?.runId ?? null));
+    clause('D10', 'eight identical creates at once make EXACTLY ONE run; every non-201 is a 503 bootstrap_persistence_failure whose retry returns that run',
+      twinRuns.length === 1 && burst.every((r) => r.status === 201
+        || (r.status === 503 && r.json?.error?.kind === 'bootstrap_persistence_failure'))
+        && retried.every((r) => r.status === 201) && twinIds.size === 1 && twinIds.has(twinRuns[0]?.run_id),
+      { runsInDatabase: twinRuns, firstAnswers: burst.map((r) => `${r.status}${r.json?.error?.kind ? ` ${r.json.error.kind}` : ''}`),
+        contended: burst.some((r) => r.status !== 201), afterRetry: retried.map((r) => r.status) });
+
+    // RACE 2: different contracts for ONE mission, at once, no rerun intent: two creates cannot both find it free.
+    const rivals = fresh('race-different');
+    const variants = Array.from({ length: 6 }, (_, i) => edited(rivals, `variant ${i}`));
+    const clash = await Promise.all(variants.map((v) => create(v)));
+    const settled = await Promise.all(clash.map((r, i) => (r.status === 503 ? create(variants[i]) : r)));
+    const rivalRuns = await runsOf(rivals.missionId);
+    const winners = settled.filter((r) => r.status === 201);
+    clause('D11', 'six DIFFERENT contracts for one mission at once make EXACTLY ONE run; every other answer is mission_run_already_active naming it',
+      rivalRuns.length === 1 && winners.length === 1 && winners[0].json?.data?.runId === rivalRuns[0].run_id
+        && settled.filter((r) => r.status !== 201).every((r) => r.status === 409
+          && r.json?.error?.kind === 'mission_run_already_active'
+          && String(r.json?.error?.message ?? '').includes(rivalRuns[0].run_id)),
+      // NOT "contended": createRun retries a serialization failure once, which turns a LOST race into a plain 409,
+      // so whether these transactions overlapped is not observable from outside. Only a 503 would show it.
+      { runsInDatabase: rivalRuns, firstAnswers: clash.map((r) => `${r.status}${r.json?.error?.kind ? ` ${r.json.error.kind}` : ''}`),
+        sawRetryable503: clash.some((r) => r.status === 503), settled: settled.map((r) => r.status) });
+  } finally {
+    await db.end();
+  }
 } catch (err) {
   clause('EXX', 'the walk completed without an exception', false, { error: String(err?.message ?? err) });
 } finally {
