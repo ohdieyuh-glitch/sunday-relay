@@ -297,6 +297,61 @@ describe('the durable record carries every field the beta brief names', () => {
     }
   });
 
+  /**
+   * A FAILED ATTEMPT THAT BILLED IS STILL SPEND, ON THE ROW THE EVALS READ.
+   *
+   * The boundary's diagnostics already reached `task.failed`, so the money was
+   * durable under a different name in a different place — and
+   * `summariseJuliusEvals` reads `usdMicros` off trajectory rows, so a mission
+   * that spent on an attempt and then failed reported only its SUCCESSFUL spend.
+   * A total that looks complete and is biased low is worse than one that says it
+   * is a floor.
+   */
+  it('carries the spend of an attempt that billed and then failed', async () => {
+    const harness = createJuliusHarness({
+      workers: [
+        { worker: ARCHITECT, script: [{ ...PLAN_OK, ...UNPRICED }] },
+        // A boundary that billed 250,000 micros before it timed out, reported it,
+        // and is retried to the task ceiling.
+        { worker: CODER, script: [{
+          kind: 'fail', code: 'TIMEOUT', costUsdMicros: 250_000, runtimeStarted: true,
+        } as never] },
+        { worker: REVIEWER, script: [{ ...REVIEW_ACCEPT, ...UNPRICED }] },
+      ],
+      card: cardPolicy({
+        allowedProviders: ['openai', 'anthropic', 'hermes'],
+        capabilities: ['plan', 'implement', 'review'], concurrency: 1,
+      }),
+      verification: verificationPolicy({ reviewerRequired: true, maxRepairRounds: 0 }),
+      capabilityFor,
+    });
+    harness.store.seedRun(RUN);
+    seedTaskContractInto(harness.store, { runId: 'run-1', projectId: 'prj-1', taskId: 'build-1' });
+    harness.store.seedTask('run-1', task({
+      taskId: 'plan-1', ordinal: 0, role: 'PROMPT_ARCHITECT', taskType: 'plan',
+      requiredEvidenceTypes: ['ARTIFACT'],
+    }));
+    harness.store.seedTask('run-1', task({
+      taskId: 'build-1', ordinal: 1, role: 'CODING_AGENT', taskType: 'build',
+      state: 'BLOCKED', dependencyIds: ['plan-1'], requiredEvidenceTypes: ['TEST'],
+    }));
+    await drain(harness.loop);
+
+    const failed = harness.store.trajectory().filter((event) =>
+      (event.kind === 'DISPATCH' || event.kind === 'RETRY') && event.outcome === 'TIMEOUT');
+    expect(failed.length, 'the timeout is on the trajectory').toBeGreaterThan(0);
+    expect(failed.some((event) => event.usdMicros === 250_000),
+      'and so is what it billed before failing').toBe(true);
+    for (const event of failed) {
+      // Still the UNKNOWN rule: what the boundary did not report stays null.
+      for (const value of [event.inputTokens, event.outputTokens, event.durationMs]) {
+        expect(value === null || (typeof value === 'number' && value >= 0)).toBe(true);
+      }
+    }
+    // And the task really did end failed, so this is not a success in disguise.
+    expect(harness.store.taskRow('build-1')!.state).toBe('FAILED');
+  });
+
   it('gives every durable row a position the record can be replayed from', async () => {
     const harness = build();
     await drain(harness.loop);

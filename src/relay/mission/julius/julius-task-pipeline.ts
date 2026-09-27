@@ -683,6 +683,38 @@ export async function prepareClaimedTask(
  * task row are each read once and the policy is evaluated in exactly one place.
  */
 /** The three closed values that name an agreement on a trajectory row; null when the role is unbound. */
+/**
+ * THE MEASUREMENT COLUMNS OF A FAILED ATTEMPT, read out of the boundary's own
+ * flattened diagnostics.
+ *
+ * `flattenDiagnostics` prefixes every key with `diag_` so it cannot collide with
+ * `code`, `failureClass` or `reasonCode`, and it has already sanitised each
+ * value. This reads the five the trajectory row has columns for and refuses
+ * anything that is not a finite non-negative integer — `validateTrajectoryEvent`
+ * would refuse it anyway, and a NaN on a durable row is a number nobody can act
+ * on.
+ *
+ * `diag_elapsedMs` is the reviewer transport's own word for wall time and the
+ * trajectory column is `durationMs`; `diag_provider` is what answered, which on
+ * a failure is the only place the provider identity survives at all.
+ */
+function diagnosedMeasurement(diagnostics: Readonly<Record<string, string | number | boolean | null>> | undefined): {
+  providerId?: string; usdMicros?: number | null;
+  inputTokens?: number | null; outputTokens?: number | null; durationMs?: number | null;
+} {
+  if (diagnostics === undefined) return {};
+  const count = (value: unknown): number | null =>
+    (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null);
+  const provider = diagnostics.diag_provider;
+  return {
+    ...(typeof provider === 'string' && provider.trim() !== '' ? { providerId: provider } : {}),
+    usdMicros: count(diagnostics.diag_costUsdMicros),
+    inputTokens: count(diagnostics.diag_inputTokens),
+    outputTokens: count(diagnostics.diag_outputTokens),
+    durationMs: count(diagnostics.diag_elapsedMs),
+  };
+}
+
 function bindingFacts(binding: JuliusTaskContractBinding | null): Record<string, string | number | null> {
   return {
     contractTaskId: binding?.taskId ?? null,
@@ -1400,6 +1432,21 @@ export async function runClaimedTask(
     const requeued = requeue && finished;
     await ledger.trajectory(requeued ? 'RETRY' : 'DISPATCH', {
       taskId: claim.taskId, contextId, policyRevision: request.policy.revision, outcome: outcome.code,
+      /**
+       * A FAILED ATTEMPT THAT BILLED IS STILL SPEND, AND THE EVAL LAYER READS
+       * THIS ROW.
+       *
+       * The boundary's own diagnostics already reach `task.failed` — flattened
+       * and `diag_`-prefixed — so the money was durable but in a different place
+       * under a different name. `summariseJuliusEvals` reads `usdMicros` off
+       * trajectory rows, so a mission that spent on an attempt and then failed
+       * reported only its SUCCESSFUL spend: a total that looks complete and is
+       * biased low, which is worse than one that says it is a floor.
+       *
+       * Absent stays null. A boundary that reported nothing is unknown, and a
+       * dispatch refused before any provider was reached has nothing to report.
+       */
+      ...diagnosedMeasurement(outcome.diagnostics),
       facts: { failureClass: outcome.failureClass ?? null, ...bindingFacts(preflight.contractBinding) },
     });
     if (requeued) return { kind: 'RETRY', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null };
