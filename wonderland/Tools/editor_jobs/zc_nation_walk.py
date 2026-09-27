@@ -340,8 +340,16 @@ def job():
         driving = probe_speed > 0.5 * float(row.get("dog_state", {}).get("max_walk_speed") or 230.0)
         row["input_reaching_character"] = driving
         if not row["can_be_driven"]:
-            if driving:
-                row["blocked_at_start"] = True
+            # THE RING FIRES FOR ANY PROBE THAT GOES NOWHERE, not only for one at full speed.
+            #
+            # It used to require `driving` -- peak above half max_walk_speed -- which is the "pressed
+            # against a wall at full throttle" case. The run that exposed the gap: ICARUS peaked at 35.2 and
+            # TARTARUS at 29.2, both with NET DISPLACEMENT 0.0 and only three or four samples showing any
+            # speed at all. A Dog that twitches and gets nowhere is as geometric as one that strains at
+            # full speed, and the ring -- which names what it hits off the component mesh -- is exactly what
+            # would say so. Neither got one.
+            row["blocked_at_start"] = bool(driving)
+            if True:
                 # NAME IT. "Blocked" without the obstacle is a bug report nobody can act on.
                 try:
                     d_now = unreal.GameplayStatics.get_player_pawn(live(), 0)
