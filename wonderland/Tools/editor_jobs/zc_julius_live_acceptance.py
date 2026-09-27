@@ -39,7 +39,7 @@ DEAD_BRIDGE = "http://127.0.0.1:1"
 PAIRING_ATTEMPTS = 3
 # Every clause this job declares. A job stopped part-way -- an exception, the editor closing it -- has recorded only
 # passes so far; without this list its status would read "all clauses pass" over clauses that never ran.
-DECLARED = ["A01", "A02", "A03", "A04", "A05", "A06", "A06b", "A06c", "A06d", "A07", "A08", "A09", "A10", "A10b", "A11"]
+DECLARED = ["A01", "A02", "A03", "A04", "A05", "A06", "A06b", "A06e", "A06c", "A06d", "A07", "A08", "A09", "A10", "A10b", "A11"]
 
 
 def job():
@@ -233,11 +233,24 @@ def job():
                link_state(julius) == LIVE and not terminal(julius),
                link=link_name(link_state(julius)), terminal=terminal(julius))
         view = contract_view(world, mission)
-        record("A06b", "the MISSION CONTRACT holds the run: one Julius-sourced task for the mission, the same run id, "
-               "Julius's own READY known on it, shown QUEUED",
+        # A06b is the DATA layer: the player's task set. It passed on 2026-09-27 (attempt 07119e8af5b416dd) while the
+        # captures showed the Missions panel saying "No mission is running" and the strip "UNOBSERVED" -- the visible
+        # surfaces read UWonderlandMissionSubsystem, not the task set. So the clause names what it proves, and A06e
+        # holds the VISIBLE surface to the founder's criterion.
+        record("A06b", "the Mission Contract TASK SET holds the run: one Julius-sourced task for the mission, the same "
+               "run id, Julius's own READY known on it, QUEUED (the data the surfaces should show)",
                shows_the_run(view, run), contract=view, on_contract=stream.describe().split("on-contract=")[-1].split(" |")[0])
         H.capture_viewport_jpeg(os.path.join(ROOT, "01_following_the_real_run.jpg"), 1900, 94)
         yield from capture_missions(world, "01b_mission_contract_queued.jpg")
+        # THE FOUNDER'S CRITERION IS VISIBLE: "the Mission Contract visibly shows QUEUED". The Missions panel shows a
+        # mission exactly when the mission subsystem it reads holds a fold for one (SWonderlandMissionsPanel::
+        # IsShowingMission -> IsOrbInWorld; its rows read GetFoldMissionId). This reads THAT, not the task set.
+        missions = unreal.WonderlandUiTestLibrary.get_mission(world)
+        fold = str(missions.get_fold_mission_id()) if missions else ""
+        record("A06e", "the VISIBLE Missions panel shows this run's mission -- the surface the founder looks at reads "
+               "the mission subsystem's fold, so the fold must be this mission",
+               fold == mission, fold_mission=fold or "(none)", mission=mission,
+               fixture_running=bool(missions.is_fixture_running()) if missions else None)
 
         # ------------------------------------------------------------- switch runs
         # Wonderland Core, 2026-09-27: the automatic clear on a run CHANGE had no gate. Two halves, because the
