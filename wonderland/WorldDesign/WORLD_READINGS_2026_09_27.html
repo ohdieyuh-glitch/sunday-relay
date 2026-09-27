@@ -207,13 +207,119 @@
   <div class="wrap">
     <p class="eyebrow">Wonderland world lane &middot; 27 September 2026</p>
     <h1>Night, Water and Glow</h1>
-    <p class="standfirst">Three of the founder's priorities, measured. The headline is not any single
-    reading — it is that <strong>four separate instruments were reporting confident numbers about things
-    they were not pointed at</strong>, and the findings only became legible once each was fixed.</p>
+    <p class="standfirst">The founder's night correction, and the three priorities measured underneath
+    it. Two things run through all of it: <strong>388 light fixtures were standing in the world
+    throwing nothing</strong>, and several instruments were reporting confident numbers about things
+    they were not pointed at. Neither failed, logged, nor went red. Both were found by chasing
+    something else.</p>
   </div>
 </header>
 
 <div class="wrap">
+
+<section>
+  <h2>The night correction &middot; Section B</h2>
+  <h3>Half the world&rsquo;s light fixtures were switched off</h3>
+
+  <div class="finding">
+    <span class="gate">audit_light_coverage</span><span class="chip fault">found and fixed</span>
+  </div>
+
+  <div class="headline-num">
+    <span class="v">388</span>
+    <span class="l">light fixtures standing in the world, throwing nothing &mdash; against 34 passes'
+    worth that were working</span>
+  </div>
+
+  <p>They were physically there: above ground, z 12 to 211, spread from x &minus;45,018 to 48,456.
+  <code>place_practical_lights.TAKE</code> is a hand-maintained allowlist keyed by pass name, and a pass that
+  is not a key contributes zero lights however many fixtures it holds. It listed eleven <code>SD01_*</code>
+  tiles and six <code>FD05_*</code> and had fallen behind as more were authored &mdash; the whole
+  <code>Cx</code> family, nine other <code>Fill</code> variants, and <code>GF</code> entirely.</p>
+
+  <p><strong>186 of the 388 are waymarker lamps.</strong> The world&rsquo;s wayfinding fixtures, unlit. The
+  correction asks that the practicals show where traversal continues without the HUD, and the fixtures built
+  for precisely that were the largest dark group.</p>
+
+  <div class="tw">
+    <table>
+      <caption>The Golden Arrival, where every player begins, was the worst of it.</caption>
+      <thead><tr><th>At the arrival, within 120 m</th><th class="n">before</th><th class="n">after</th></tr></thead>
+      <tbody>
+        <tr><td>practical light definitions</td><td class="n alarm">4</td><td class="n ok">17</td></tr>
+        <tr><td>walkable surface instances</td><td class="n">762</td><td class="n">762</td></tr>
+        <tr><td>light fixtures standing there</td><td class="n">41 unlit</td><td class="n ok">lit</td></tr>
+        <tr><td>world-wide light definitions</td><td class="n">1,068</td><td class="n ok">1,355</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The failure mode is worth more than the fix: <strong>a hand-maintained allowlist where the cost of an
+  omission is silence.</strong> Nothing failed, nothing logged, no gate went red, and the fixtures looked
+  entirely correct in daylight &mdash; they are ordinary meshes and they render. There is now a gate for it,
+  and it reads the <em>output</em>: it counts fixtures in every layer spec against lights actually present in
+  the light file. Its first run in that form found <strong>91 more</strong> &mdash; a pass correctly listed in
+  <code>TAKE</code> that still emits nothing, because its wall lanterns are glass-only and only the gold part
+  emits. A membership check would have called that correct forever.</p>
+
+  <h3 style="margin-top:34px">Lamp networks for the two nations, and the one that was worst</h3>
+
+  <div class="tw">
+    <table>
+      <caption>Worst gap between consecutive lamps <em>projected onto the route</em>. A radius test around
+      each route point is not this measure and reports every road as lit.</caption>
+      <thead><tr><th>Route</th><th class="n">lamps before</th><th class="n">worst gap before</th><th class="n">after</th><th class="n">worst gap after</th></tr></thead>
+      <tbody>
+        <tr><td class="name">NOCTIS avenue</td><td class="n">17</td><td class="n alarm">115 m</td><td class="n">30</td><td class="n">43 m</td></tr>
+        <tr><td class="name">ICARUS avenue</td><td class="n">16</td><td class="n alarm">65 m</td><td class="n">36</td><td class="n ok">30 m</td></tr>
+        <tr><td class="name">TARTARUS avenue</td><td class="n">44</td><td class="n">&mdash;</td><td class="n">110</td><td class="n ok">29 m</td></tr>
+        <tr><td class="name">SF01 / SF02 / SF03 seams</td><td class="n">8 / 7 / 7</td><td class="n ok">18 / 24 / 30 m</td><td class="n dim">no pass needed</td><td class="n ok">unchanged</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>All eight shelf transitions across the two nations now have a lamp within 12 m. On Noctis all four were
+  previously in gaps of 25 m or more: <strong>every step a walker has to see was unlit</strong>, on the darkest
+  road in Wonderland. Noctis&rsquo;s remaining 43 m straight is genuinely worse than the others and is not
+  smoothed over here.</p>
+</section>
+
+<section>
+  <h2>The night correction &middot; Section A</h2>
+  <h3>The ground is not dark because of what it is made of</h3>
+
+  <div class="finding">
+    <span class="gate">N_NOON_DARK</span><span class="chip measured">measured</span>
+  </div>
+
+  <p>The ground reads <strong>99.4% below the darkness threshold at deepest night, in six views across three
+  different places</strong> &mdash; identical enough to be a property of the world rather than of any location.
+  The same patches at noon:</p>
+
+  <div class="tw">
+    <table>
+      <caption>Ground band only, same cameras, same framings.</caption>
+      <thead><tr><th>Place</th><th class="n">ground luma at noon</th><th class="n">ground dark at noon</th></tr></thead>
+      <tbody>
+        <tr><td class="name">city_arrival</td><td class="n">0.4223</td><td class="n ok">7.2%</td></tr>
+        <tr><td class="name">major_path_march</td><td class="n">0.2958</td><td class="n ok">1.9%</td></tr>
+        <tr><td class="name">entrance_tartarus</td><td class="n">0.2864</td><td class="n ok">1.9%</td></tr>
+        <tr><td class="name">water_gardens</td><td class="n">0.3301</td><td class="n ok">11.7%</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The paving has ample albedo. <strong>It is not a dark material &mdash; a dark material would be dark at
+  noon too.</strong> That rules out &ldquo;darkest-material response&rdquo; from the correction&rsquo;s list of
+  eleven systems by name, and narrows the cause to the ones that deliver light to a surface no lamp points at:
+  indirect, local exposure and ambient. Which is exactly the group with no code touching it.</p>
+
+  <p><strong>It also bounds what lamp placement can achieve, including my own.</strong> A lamp lights a pool
+  around itself; 99.4% dark across three places is the space <em>between</em> the pools. The three nation
+  networks will move the readings near the lamps and will not move that number. The floor has to come from
+  section A, and the first piece of it &mdash; local exposure on the night shadow contrast &mdash; is written
+  and not yet built.</p>
+</section>
 
 <section>
   <h2>Priorities 1 &amp; 2 &middot; Night readability</h2>
