@@ -198,10 +198,30 @@ export async function authorizeWonderlandJulius(
   }
 
   const token = sessionTokenFrom(input.authorization);
-  const verified = token === null
-    ? null
-    : deps.sessions.verifySession({ token, origin: input.origin, now: input.now });
-  if (verified === null || !verified.ok || verified.participantId === null) {
+  // TWO KINDS OF CALLER, AND THE ORIGIN HEADER TELLS THEM APART.
+  //
+  // A BROWSER sends an Origin, and its session is checked against it. A NATIVE
+  // Wonderland client sends none -- and `verifySession` skips the origin check
+  // when there is no Origin, so a browser session token copied into a native
+  // client would pass it. That copy is what the founder ruled out, so an
+  // originless caller is verified ONLY by `verifyNativeSession`, which accepts a
+  // `native_world` session and refuses every browser session however valid.
+  // Conversely a native session presented from a web page carries that page's
+  // Origin and fails the audience check inside `verifySession`; it is refused
+  // again here by scope, so neither guard stands alone.
+  let verified: { readonly ok: true; readonly participantId: string; readonly sessionId: string } | null = null;
+  if (token !== null) {
+    if (input.origin === undefined) {
+      const native = deps.sessions.verifyNativeSession({ token, now: input.now });
+      if (native.ok) verified = { ok: true, participantId: native.participantId, sessionId: native.sessionId };
+    } else {
+      const browser = deps.sessions.verifySession({ token, origin: input.origin, now: input.now });
+      if (browser.ok && browser.participantId !== null && browser.scope !== 'native_world') {
+        verified = { ok: true, participantId: browser.participantId, sessionId: browser.sessionId };
+      }
+    }
+  }
+  if (verified === null) {
     return { ok: false, status: 401, error: 'authenticated player identity required' };
   }
 

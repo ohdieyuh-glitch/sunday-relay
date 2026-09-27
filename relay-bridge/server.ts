@@ -42,6 +42,7 @@ import { handleRepositoryRoute, isRepositoryRoute, type RepositoryCaller } from 
 import { handlePspRoute, isPspRoute } from './psp-routes';
 import { createJuliusStatePorts, handleJuliusStateRoute, isJuliusStateRoute } from './julius-state-routes';
 import { composeJuliusMissionBootstrap, handleJuliusMissionRoute, isJuliusMissionRoute, type JuliusMissionRoutePorts } from './julius-mission-routes';
+import { handleNativePairingRoute, isNativePairingRoute } from './wonderland-native-pairing-routes';
 import { Pool } from 'pg';
 import { handleShipRoute, isShipRoute } from './ship-route';
 import { resolveRepositoryTarget, registrationOwnerAdmits } from '../src/relay/mission/repository-target';
@@ -645,6 +646,24 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             send(res, githubAuthResult.status, githubAuthResult.body, cors);
             return;
           }
+        }
+
+        // NATIVE CLIENT PAIRING, in front of every other `/wonderland/` route for
+        // the same reason the Julius world routes are: `isWonderlandRoute` claims
+        // the whole prefix. A signed-in player pairs their own desktop client
+        // here; see wonderland-native-pairing-routes.ts.
+        if (isNativePairingRoute(path.replace('/relay-api', ''))) {
+          const nativeResult = handleNativePairingRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
+            origin,
+            body: method === 'POST' ? await readBody(req) : undefined,
+            now: Date.now(),
+            operatorToken: process.env.RELAY_BRIDGE_API_TOKEN,
+          }, browserSessions);
+          if (nativeResult !== null) send(res, nativeResult.status, nativeResult.body, cors);
+          return;
         }
 
         // THE JULIUS WORLD ROUTES SIT IN FRONT OF THE BATTLE ONES, because
