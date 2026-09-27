@@ -63,6 +63,10 @@ def patch(cx, cy, hw, hh):
         return None
     mean, dark, bright, sampled = got
     return {"luma": round(0.2126 * mean.r + 0.7152 * mean.g + 0.0722 * mean.b, 4),
+            # DARK IS KEPT SEPARATELY, not folded into tails. A MEAN passes while most of the frame is
+            # crushed -- a few lamp pixels lift it -- which is the error that once let a 99-per-cent-black
+            # pond through the water audit on its mean, and which I reintroduced in C_GROUND after fixing it.
+            "dark": round(dark, 4),
             "tails": round(min(1.0, dark + bright), 4)}
 
 

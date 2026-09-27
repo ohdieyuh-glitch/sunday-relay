@@ -24,7 +24,11 @@
 #             reading at this pose to check it against.
 #   C_CLOSED  there is no interior minimum any more -- the evening falls into night instead of dipping
 #             below it and climbing back out. This is the defect, stated as the shape rather than a level.
-#   C_GROUND  the ground clears the same 0.030 floor zzT2's D_GROUND failed at 0.0126.
+#   C_GROUND  no hour of the evening leaves the ground more CRUSHED than the night does. This asked for a
+#             mean above 0.030 and passed at 0.0673 while the other lane, measuring the same ground with
+#             the figure hidden, found 78.9 per cent of it crushed. Both true; only one answers the
+#             question. It now reads the dark FRACTION and compares dusk against a 23:00 rung in the same
+#             run -- the founder's own sentence, and no threshold anybody invented.
 #
 # AND C_NOREG catches the thing a fix like this could plausibly break: no rung may come back DARKER than
 # zzT2 measured it. Lifting the trough at the cost of the hours either side would be a trade nobody asked
@@ -37,8 +41,10 @@ L = unreal.WonderlandUiTestLibrary
 H = unreal.WonderlandHudTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "dusk_closed")
 
-#: zzT2's rungs exactly, plus noon as the day-untouched control.
-HOURS = (12.0, 17.5, 17.75, 18.0, 18.25, 18.5, 18.75, 19.0, 19.25, 19.5)
+#: Noon as the day-untouched control, the evening zzT2 mapped, and 23:00 as the NIGHT the evening is
+#: judged against -- the founder's sentence is that dusk must not be darker than midnight, so the
+#: comparison has to be inside one run rather than against a threshold anybody picked.
+HOURS = (12.0, 17.5, 17.75, 18.0, 18.25, 18.5, 18.75, 19.0, 19.25, 19.5, 23.0)
 #: What zzT2 and zzT1 measured at this pose. hour -> (luma, ground)
 BEFORE = {12.00: (0.2685, 0.2828), 17.50: (0.0955, 0.0702), 17.75: (0.0835, 0.0587),
           18.00: (0.0365, 0.0126), 18.25: (0.0430, 0.0155), 18.50: (0.0712, 0.0444),
@@ -50,7 +56,9 @@ SPAN = 21.0
 EYE = (-320.0, -1900.0, 200.0)
 AT = (0.0, -1460.0, 90.0)
 AGREE = 0.010
-GROUND_FLOOR = 0.030
+#: Kept only to record what the OLD gate used, which passed at 0.0673 while 78.9 per cent of the
+#: same ground was crushed. Not used as a threshold any more.
+OLD_MEAN_FLOOR = 0.030
 
 
 def patch(cx, cy, hw, hh):
@@ -59,6 +67,10 @@ def patch(cx, cy, hw, hh):
         return None
     mean, dark, bright, sampled = got
     return {"luma": round(0.2126 * mean.r + 0.7152 * mean.g + 0.0722 * mean.b, 4),
+            # DARK IS KEPT SEPARATELY, not folded into tails. A MEAN passes while most of the frame is
+            # crushed -- a few lamp pixels lift it -- which is the error that once let a 99-per-cent-black
+            # pond through the water audit on its mean, and which I reintroduced in C_GROUND after fixing it.
+            "dark": round(dark, 4),
             "tails": round(min(1.0, dark + bright), 4)}
 
 
@@ -177,6 +189,11 @@ def job():
             "tails": round((a["tails"] + b["tails"]) / 2.0, 4),
             "ground_luma": round(((g1 or {}).get("luma", 0.0) + (g2 or {}).get("luma", 0.0)) / 2.0, 4)
             if g1 and g2 else None,
+            # THE FRACTION OF THE GROUND THAT IS CRUSHED, which is the reading that answers the founder's
+            # sentence. The mean above does not: a handful of lamp pixels lift it while the ground a walker
+            # actually looks at stays black.
+            "ground_dark": round(((g1 or {}).get("dark", 1.0) + (g2 or {}).get("dark", 1.0)) / 2.0, 4)
+            if g1 and g2 else None,
             "nightfall_read": (round(nf, 4) if nf is not None else None),
             "was_luma": was[0], "was_ground": was[1]})
 
@@ -248,15 +265,32 @@ def job():
            deltas={("%.2f" % r["hour"]): (round(r["luma"] - r["was_luma"], 4)
                                           if r["was_luma"] is not None else None) for r in good})
 
-    # ---- AND THE FOUNDER'S SENTENCE.
-    with_ground = [r for r in good if r.get("ground_luma") is not None and r["hour"] >= 17.5]
-    darkest = min(with_ground, key=lambda r: r["ground_luma"]) if with_ground else None
-    record("C_GROUND", "the ground is readable at every hour of the crossover",
-           darkest is not None and darkest["ground_luma"] >= GROUND_FLOOR,
-           darkest_hour=(darkest or {}).get("hour"), darkest_ground=(darkest or {}).get("ground_luma"),
-           floor=GROUND_FLOOR, was_darkest=BEFORE[18.00][1],
-           ground_by_hour={("%.2f" % r["hour"]): r.get("ground_luma") for r in good},
-           note="zzT2 failed this at 0.0126. The same floor and the same patch, so the two are comparable")
+    # ---- AND THE FOUNDER'S SENTENCE, ON THE RIGHT STATISTIC THIS TIME.
+    #
+    # The first version of this gate asked whether the MEAN ground luma cleared 0.030 and passed at 0.0673.
+    # The other lane then measured the same ground at the same place with the figure hidden and found 78.9
+    # PER CENT OF IT CRUSHED. Both readings are correct and only one of them answers the question: a mean
+    # is lifted by a few lamp pixels while the ground a walker looks at stays black. That is precisely the
+    # error that once let a 99-per-cent-black pond through the water audit, which I fixed there and then
+    # rebuilt here -- and my own table already said tails 0.8032 at 18:00, so the evidence was in the
+    # result while the gate looked away from it.
+    #
+    # AND THE THRESHOLD IS NOW INTERNAL. 0.030 was a number I chose. This compares dusk against NIGHT in
+    # the same run, which is the founder's own sentence: the evening must not be darker than the night it
+    # leads into. No invented figure, and the comparison survives any later change to the night.
+    night = next((r for r in good if abs(r["hour"] - 23.0) < 0.01), None)
+    evening = [r for r in good if r.get("ground_dark") is not None and 17.5 <= r["hour"] <= 19.5]
+    worst = max(evening, key=lambda r: r["ground_dark"]) if evening else None
+    record("C_GROUND", "no hour of the evening leaves the ground more crushed than the night does",
+           worst is not None and night is not None and night.get("ground_dark") is not None
+           and worst["ground_dark"] <= night["ground_dark"] + AGREE,
+           worst_hour=(worst or {}).get("hour"), worst_ground_dark=(worst or {}).get("ground_dark"),
+           night_ground_dark=(night or {}).get("ground_dark"), tolerance=AGREE,
+           ground_dark_by_hour={("%.2f" % r["hour"]): r.get("ground_dark") for r in good},
+           ground_mean_by_hour={("%.2f" % r["hour"]): r.get("ground_luma") for r in good},
+           note="the founder's complaint was that six in the evening is darker than midnight. This is that "
+                "sentence as a gate, measured on the crushed FRACTION rather than on a mean that a few lamp "
+                "pixels can carry")
 
     RESULT["status"] = ("measured" if checked else
                         "measured (EVIDENCE ONLY: the running curve could not be read back)")

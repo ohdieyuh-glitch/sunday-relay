@@ -60,6 +60,10 @@ def patch(cx, cy, hw, hh):
         return None
     mean, dark, bright, sampled = got
     return {"luma": round(0.2126 * mean.r + 0.7152 * mean.g + 0.0722 * mean.b, 4),
+            # DARK IS KEPT SEPARATELY, not folded into tails. A MEAN passes while most of the frame is
+            # crushed -- a few lamp pixels lift it -- which is the error that once let a 99-per-cent-black
+            # pond through the water audit on its mean, and which I reintroduced in C_GROUND after fixing it.
+            "dark": round(dark, 4),
             "tails": round(min(1.0, dark + bright), 4)}
 
 
@@ -119,6 +123,19 @@ def job():
     pawn.set_actor_location(unreal.Vector(SPOT[0], SPOT[1], stand_z), False, True)
     yield 2.0
 
+    # RE-FETCH THE PAWN. A teleport can RESPAWN it -- this tree's traversal job already documents that as
+    # the behaviour -- and the old reference is then a dead actor whose get_actor_location returns
+    # (0, 0, 0). The first run of this job read 10.6 uu from target off a surviving pawn and the second
+    # read the origin, 76 km away, off a destroyed one: same code, different luck. B_WHERE caught it both
+    # times, which is the only reason this was visible at all.
+    pawn = unreal.GameplayStatics.get_player_pawn(live(), 0)
+    if pawn is None:
+        RESULT["status"] = "voided: there is no player pawn after the teleport"
+        yield 2.0
+        les.editor_request_end_play()
+        yield (lambda: ues.get_game_world() is None, 300)
+        return
+
     where = pawn.get_actor_location()
     off = round(((where.x - SPOT[0]) ** 2 + (where.y - SPOT[1]) ** 2) ** 0.5, 1)
     RESULT["pawn_asked"] = list(SPOT)
@@ -143,6 +160,11 @@ def job():
     eye = unreal.Vector(where.x, where.y, where.z + 60.0)
     at = unreal.Vector(where.x + 3000.0, where.y + 1200.0, where.z + 40.0)
     L.pose_camera(world, eye, at, 70.0)
+    # STAT UNIT, OR THERE IS NO FRAME INSTRUMENT AT ALL. FStatUnitData only advances while the overlay is
+    # actually drawing. The first run of this job read every cost cell as None for exactly this reason: I
+    # went looking for the raw accessor's tail without turning the counter on. It is re-issued per rung
+    # below as well, because left alone it hands back one frozen snapshot over and over.
+    command("stat unit")
     RESULT["camera_eye"] = [round(eye.x, 1), round(eye.y, 1), round(eye.z, 1)]
     RESULT["camera_at"] = [round(at.x, 1), round(at.y, 1), round(at.z, 1)]
     yield 3.0
@@ -221,6 +243,28 @@ def job():
         cvar("wl.Look.PracticalCount", "%d" % count)
         command("wl.Look.PracticalReload")                 # WITHOUT THIS THE POOL DOES NOT CHANGE SIZE
         yield 2.0
+        # ---- WAIT FOR THE POOL TO STOP MOVING BEFORE LOOKING AT IT.
+        #
+        # Reload() destroys and respawns up to 192 point lights and sets LastNight = -1 to force a
+        # re-assign, and Assign() runs on its own 0.25 s timer. The first run of this job sampled inside
+        # that window and recorded 31 lit out of a pool of 48, then 96 of 96, then 31 of 144, then 184 of
+        # 192 -- an impossible saturation curve, which is what a transient state looks like when it is
+        # read as a result. The luma settle below could not catch it because the picture can be steady
+        # while the assignment underneath it is not.
+        #
+        # So the LIT COUNT has to be the same three reads running before anything is measured. Same test
+        # as the luma settle and for the same reason: a window that is not moving, rather than steps that
+        # happen to be small.
+        seen = []
+        for _ in range(40):
+            yield 0.5
+            _t, _l = pool_now()
+            seen.append(_l)
+            if len(seen) > 3:
+                seen.pop(0)
+            if len(seen) == 3 and len(set(seen)) == 1 and seen[0] is not None:
+                break
+        command("stat unit")                               # re-issued: the counter freezes if left alone
         for step in settled():
             yield step
         total, lit = pool_now()
@@ -249,6 +293,9 @@ def job():
         rows.append({
             "count": count,
             "pool_actors": total, "lit_actors": lit,
+            # The last three lit-counts before measuring. Three equal values means the assignment had
+            # stopped moving; anything else means it had not and the row should be read as suspect.
+            "lit_settled_on": list(seen),
             "luma": round((a["luma"] + b["luma"]) / 2.0, 4),
             "spread": round(abs(a["luma"] - b["luma"]), 4),
             "tails": round((a["tails"] + b["tails"]) / 2.0, 4),
