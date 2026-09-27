@@ -118,7 +118,11 @@ key does not produce in practice.
 before assembling its own answer from `evidence` + `verification` + `run`. It
 carries: `verified` (true only when the run reached `COMPLETED` — the runtime's
 decision, quoted, never recomputed), `terminal`, every acceptance criterion with
-`satisfied` and the evidence ids that satisfy it, the `deliverables` (the PASSED
+`satisfied`, `basis` and the evidence ids that satisfy it — `basis: 'EVIDENCE'`
+means every required type is present and PASSED, `basis: 'COMPLETION'` means the
+criterion names no evidence (the bootstrap seeds such criteria deliberately) and
+is therefore satisfied only by the mission completing; do not read a
+`COMPLETION`-basis criterion as met before `verified` is true — the `deliverables` (the PASSED
 rows that are a product — a diff, an artifact, a test result — never a reviewer's
 finding, each with `retained: false` when no body was kept rather than reading as
 an empty one), `outstandingFindings` (why it is not verified), `reviewDecisions`

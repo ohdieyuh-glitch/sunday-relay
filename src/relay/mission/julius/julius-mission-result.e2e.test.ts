@@ -144,6 +144,36 @@ describe('the result a user asks for', () => {
     expect(result.failure, 'and no failure').toBeNull();
   });
 
+  it('will not call a criterion that requires nothing "satisfied" until the mission completes', async () => {
+    // THE DEFECT A REAL-DATABASE CASE CAUGHT BEFORE ANY CLIENT DID. `every()`
+    // over an empty list is true, so a criterion naming no evidence read as
+    // satisfied on a run that had not started — and the bootstrap seeds exactly
+    // those. Such a criterion is satisfied by COMPLETION or not at all, and the
+    // answer says which basis it used so a surface need not guess.
+    const harness = build({ criterionEvidence: [] });
+    const api = new JuliusRuntimeApi({
+      store: harness.store as never, timeline: harness.store as never,
+      approvers: { mayApprove: async () => false }, clock: harness.clock,
+    });
+
+    // BEFORE ANY TICK: nothing has happened, and nothing is claimed.
+    const before = await api.inspectResult(IDENTITY, 'run-1');
+    expect(before.ok).toBe(true);
+    if (!before.ok) return;
+    expect(before.value.criteria[0]!.basis).toBe('COMPLETION');
+    expect(before.value.criteria[0]!.satisfied, 'an untouched run satisfies nothing').toBe(false);
+    expect(before.value.verified).toBe(false);
+
+    // AFTER THE RUN COMPLETES: the same criterion is satisfied, on the same basis.
+    const after = await resultOf(harness);
+    expect(after.verified).toBe(true);
+    expect(after.criteria[0]!.basis).toBe('COMPLETION');
+    expect(after.criteria[0]!.satisfied).toBe(true);
+    // And a criterion that DOES name evidence reports the other basis.
+    const byEvidence = await resultOf(build());
+    expect(byEvidence.criteria[0]!.basis).toBe('EVIDENCE');
+  });
+
   it('reports the spend it knows and the components it does not, never a zero for unknown', async () => {
     const priced = await resultOf(build({ usdMicros: 512_000 }));
     expect(priced.cost.knownUsdMicros, 'the coder’s billed attempt is on the total').toBeGreaterThan(0);

@@ -131,6 +131,22 @@ export interface JuliusMissionResultView {
     readonly description: string;
     readonly requiredEvidenceTypes: readonly string[];
     readonly satisfied: boolean;
+    /**
+     * WHAT MAKES IT SATISFIED, because the two are not the same claim.
+     *
+     * `EVIDENCE` — every required type is present and PASSED, the verification
+     * evaluator's own rule. `COMPLETION` — the criterion names NO required
+     * evidence, so no row can satisfy it and the only thing that can is the
+     * mission reaching verified completion under the completion rule.
+     *
+     * THIS FIELD EXISTS BECAUSE THE FIRST VERSION WAS WRONG. `every()` over an
+     * empty list is `true`, so a criterion requiring nothing read as satisfied on
+     * a run that had not started — and the bootstrap seeds exactly such criteria
+     * (deliberately: a TEST-typed criterion checked against every task would park
+     * a plan task in VERIFYING forever). A client would have shown "1 of 1 met"
+     * over a mission that had done nothing at all.
+     */
+    readonly basis: 'EVIDENCE' | 'COMPLETION';
     /** The PASSED rows that satisfy it, so a reader can go and look. */
     readonly evidenceIds: readonly string[];
   }[];
@@ -340,11 +356,20 @@ export class JuliusRuntimeApi {
     const slots = projectJuliusSlotViews(entries);
 
     const passed = evidence.filter((item) => item.status === 'PASSED');
+    /**
+     * A CRITERION THAT REQUIRES NOTHING IS NOT SATISFIED BY NOTHING.
+     *
+     * For a criterion that names evidence types, the rule is the verification
+     * evaluator's own: every type present and PASSED. For one that names none —
+     * which the bootstrap seeds on purpose — there is no row that could satisfy
+     * it, so the only thing that can is the mission reaching verified
+     * completion. `every()` over an empty list is `true`, and reporting that as
+     * satisfaction told a client "met" about a run that had not started.
+     */
     const satisfies = (criterion: { readonly requiredEvidenceTypes: readonly string[] }) =>
-      // THE EVALUATOR'S OWN RULE, not a second opinion: every required type
-      // present and PASSED. A criterion that requires nothing is satisfied by
-      // the run reaching completion, which is what `verified` reports.
-      criterion.requiredEvidenceTypes.every((type) => passed.some((item) => item.type === type));
+      (criterion.requiredEvidenceTypes.length === 0
+        ? run.state === 'COMPLETED'
+        : criterion.requiredEvidenceTypes.every((type) => passed.some((item) => item.type === type)));
 
     /**
      * A JUDGEMENT IS NOT A DELIVERABLE. A review finding and a provider receipt
@@ -403,6 +428,7 @@ export class JuliusRuntimeApi {
         description: criterion.description,
         requiredEvidenceTypes: criterion.requiredEvidenceTypes,
         satisfied: satisfies(criterion),
+        basis: criterion.requiredEvidenceTypes.length === 0 ? 'COMPLETION' as const : 'EVIDENCE' as const,
         evidenceIds: passed
           .filter((item) => criterion.requiredEvidenceTypes.includes(item.type))
           .map((item) => item.evidenceId),
