@@ -86,7 +86,7 @@ def job():
         L.pose_camera(world, eye, aim, 32.0)
         return reach
 
-    def patch(z_above, half_w, half_h):
+    def patch(z_above, half_w, half_h, dx=0.0):
         size = pc.get_viewport_size()
         if not size or size[0] <= 0:
             return None
@@ -95,7 +95,7 @@ def job():
             pc, unreal.Vector(here.x, here.y, here.z + z_above), False)
         if got is None:
             return None
-        cx, cy = float(got.x) / size[0], float(got.y) / size[1]
+        cx, cy = float(got.x) / size[0] + dx, float(got.y) / size[1]
         if not (0.08 < cx < 0.92 and 0.08 < cy < 0.92):
             return None
         got = L.read_screen_rect(cx - half_w, cy - half_h, cx + half_w, cy + half_h)
@@ -132,9 +132,17 @@ def job():
             yield 5.0
             reach = face_the_dog()
             yield 2.0
-            # THE EYES, and the face just below them, in the same frame at the same instant.
+            # THE EYES, AND THE CHEEK BESIDE THEM, in the same frame at the same instant.
+            #
+            # THE OLD REFERENCE WAS THE CHEST. +44 uu is figure z 13.6 at 3.24 uu a unit -- the middle of the
+            # torso, which on Skeleton Flame is the 8,800-strength skull plate and on Arden the chains and the
+            # medallion. So eye_over_face was eye-over-chest-skull, and the one skin whose eyes could never
+            # fail this was the one with nothing glowing on its chest. The reference is now bone BESIDE the eye
+            # at the eye's own height, one patch-width outboard on screen -- the face the eye is actually set
+            # into, which is what the clause has claimed to measure since it was written. Stricter, not looser:
+            # a head that is lit as a whole cannot pass this by having a dark chest.
             eyes = patch(62.0, 0.020, 0.012)
-            face = patch(44.0, 0.020, 0.012)
+            face = patch(62.0, 0.020, 0.012, dx=0.048)
             row = {"camera_uu": reach}
             if eyes is not None:
                 row["eye_luma"] = eyes["luma"]
