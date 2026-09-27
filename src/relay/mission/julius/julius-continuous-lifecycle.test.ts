@@ -88,6 +88,9 @@ describe('the vocabularies are closed, complete and ordered', () => {
       'IMPLEMENTATION_MILESTONE', 'SUBSYSTEM_DISCOVERED', 'TEST_FAILED',
       'MATERIAL_EVIDENCE', 'SECURITY_SENSITIVE_CHANGE', 'REPAIR_ROUND_ENTERED',
       'PRE_COMPLETION_VERIFICATION', 'RESEARCH_REQUESTED',
+      // Julius's own, added when a declined request stopped collapsing the run:
+      // the ask is what changes, so the architect is asked to restate it.
+      'PROVIDER_DECLINED_REQUEST',
     ]);
   });
 

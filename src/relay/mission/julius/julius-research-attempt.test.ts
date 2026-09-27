@@ -344,11 +344,20 @@ describe('B — the loss is not a double charge, and the record must not imply o
     // replayed result would drive the checkpoint again and a second retrieval
     // WOULD be bought — and this case is what says so.
     const pipeline = readFileSync(resolve(import.meta.dirname, 'julius-task-pipeline.ts'), 'utf8');
-    const call = pipeline.slice(
-      pipeline.indexOf('3b. the continuous three-worker lifecycle'),
-      pipeline.indexOf('await driveContinuousLifecycle({'),
-    );
+    const marker = pipeline.indexOf('3b. the continuous three-worker lifecycle');
+    expect(marker, 'the result call site must still be findable').toBeGreaterThan(0);
+    // FROM THE MARKER, because the lifecycle is also driven from the FAILURE
+    // path now (a declined request, re-planned) and that call appears earlier in
+    // the file. Searching from the marker keeps this about the RESULT call.
+    const call = pipeline.slice(marker, pipeline.indexOf('await driveContinuousLifecycle({', marker));
     expect(call).toContain('!outcome.duplicate');
+    // AND THE OTHER CALL SITE CANNOT BUY A RETRIEVAL: the refusal re-plan passes
+    // no research asks at all, so the premise this case protects — one research
+    // checkpoint per result — is unaffected by it.
+    const refusal = pipeline.slice(0, marker);
+    const declined = refusal.lastIndexOf('await driveContinuousLifecycle({');
+    expect(declined, 'the refusal call site must still be findable').toBeGreaterThan(0);
+    expect(refusal.slice(declined, declined + 600)).not.toContain('researchAsks');
   });
 });
 

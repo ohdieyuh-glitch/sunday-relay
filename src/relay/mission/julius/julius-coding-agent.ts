@@ -128,6 +128,30 @@ export const juliusCodingAgentFailureDisposition = (failure: JuliusCodingAgentFa
 export const juliusCodingAgentFailureClass = (failure: JuliusCodingAgentFailure): string =>
   `coding_agent_${failure.toLowerCase()}`;
 
+/**
+ * THE PROVIDER DECLINED THE REQUEST ITSELF — one definition, for three peers.
+ *
+ * Each connector names a content refusal in its own vocabulary: the Coding
+ * Agent's taxonomy member (`coding_agent_content_refused`), the OpenAI
+ * architect's refusal output item (`refused`), the Hermes reviewer's shape
+ * (`review_content_refused`). They mean the same thing — the ASK has to change,
+ * no retry and no operator action will help — and Julius has to be able to ask
+ * that question of a failure without knowing which peer answered. So the set
+ * lives here, beside the taxonomy, rather than being re-spelled at each reader.
+ *
+ * `INVALID_REQUEST` alone is NOT enough to decide it: a context overflow and a
+ * malformed repair context are also the request's fault and are not refusals.
+ * The class is what distinguishes them, so the class is what this reads.
+ */
+export const JULIUS_CONTENT_REFUSAL_CLASSES: readonly string[] = Object.freeze([
+  juliusCodingAgentFailureClass('CONTENT_REFUSED'),
+  'refused',
+  'review_content_refused',
+]);
+
+export const juliusFailureIsContentRefusal = (failureClass: string | null | undefined): boolean =>
+  typeof failureClass === 'string' && JULIUS_CONTENT_REFUSAL_CLASSES.includes(failureClass);
+
 /* ------------------------------------------------------- the provider port */
 
 /**
