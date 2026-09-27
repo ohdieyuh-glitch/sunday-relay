@@ -104,17 +104,46 @@ def job():
         # So the roof is found first, from far above, and the Dog is held a little over whatever is actually
         # there. If it now survives every stand, the hypothesis is confirmed and the fault was the harness
         # teleporting into walls rather than anything in the world.
+        # ---- THE LOWEST SURFACE, NOT THE FIRST ONE FROM ABOVE.
+        #
+        # A single downward trace returns the ROOF, and at 700 m on bearing 90 that roof is 25.8 m up. The
+        # Dog was then held a quarter of a metre above a rooftop, inside whatever stands on it, and destroyed
+        # -- so the one stand that has come back UNMEASURED every run was the harness dropping the player onto
+        # a building, not a hole in the world. This is a walk test: the question is whether there is ground to
+        # stand on, and the ground is the LOWEST thing under the sky, not the first thing the trace meets.
+        #
+        # Multi-hit, and the lowest hit wins. Falls back to the single trace if the multi returns nothing, so
+        # a stand is never skipped merely because the sweep found no geometry at all -- that case is itself a
+        # finding and must reach the report rather than being silently dropped.
         ceiling = None
         try:
-            probe = unreal.SystemLibrary.line_trace_single(
+            hits = unreal.SystemLibrary.line_trace_multi(
                 world, unreal.Vector(x, y, home.z + 6000.0), unreal.Vector(x, y, home.z - 3000.0),
                 unreal.TraceTypeQuery.TRACE_TYPE_QUERY2, False, [living()] if living() else [],
                 unreal.DrawDebugTrace.NONE, True,
                 unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
-            if probe is not None:
-                ceiling = float(probe.to_tuple()[4].z)
+            if hits:
+                downs = []
+                for hit in hits:
+                    try:
+                        downs.append(float(hit.to_tuple()[4].z))
+                    except Exception:                              # noqa: BLE001
+                        pass
+                if downs:
+                    ceiling = min(downs)
         except Exception:                                          # noqa: BLE001
             ceiling = None
+        if ceiling is None:
+            try:
+                probe = unreal.SystemLibrary.line_trace_single(
+                    world, unreal.Vector(x, y, home.z + 6000.0), unreal.Vector(x, y, home.z - 3000.0),
+                    unreal.TraceTypeQuery.TRACE_TYPE_QUERY2, False, [living()] if living() else [],
+                    unreal.DrawDebugTrace.NONE, True,
+                    unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
+                if probe is not None:
+                    ceiling = float(probe.to_tuple()[4].z)
+            except Exception:                                      # noqa: BLE001
+                ceiling = None
         hold_z = (ceiling + 250.0) if ceiling is not None else (home.z + 700.0)
         hold_at = unreal.Vector(x, y, hold_z)
 
