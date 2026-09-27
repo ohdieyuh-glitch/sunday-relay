@@ -1,6 +1,6 @@
 {
  "name": "zc_skin_parity_all",
- "started": "2026-09-27 00:53:11",
+ "started": "2026-09-27 02:59:11",
  "status": "measured",
  "skins": [
   {
@@ -10,7 +10,7 @@
    "boxes": 1630,
    "field_mismatches": 0,
    "first_mismatches": [],
-   "act_lift_uu": 78.0,
+   "act_lift_uu": 77.92,
    "act_stillness": 1.0,
    "wears_the_pose": true,
    "performs_the_act": true,
@@ -23,7 +23,7 @@
    "boxes": 2899,
    "field_mismatches": 0,
    "first_mismatches": [],
-   "act_lift_uu": 77.95,
+   "act_lift_uu": 77.94,
    "act_stillness": 1.0,
    "wears_the_pose": true,
    "performs_the_act": true,
@@ -36,7 +36,7 @@
    "boxes": 1977,
    "field_mismatches": 0,
    "first_mismatches": [],
-   "act_lift_uu": 77.91,
+   "act_lift_uu": 78.0,
    "act_stillness": 1.0,
    "wears_the_pose": true,
    "performs_the_act": true,
@@ -49,7 +49,7 @@
    "boxes": 1175,
    "field_mismatches": 0,
    "first_mismatches": [],
-   "act_lift_uu": 77.99,
+   "act_lift_uu": 77.85,
    "act_stillness": 1.0,
    "wears_the_pose": true,
    "performs_the_act": true,
@@ -113,7 +113,7 @@
    }
   }
  ],
- "finished": "2026-09-27 00:54:33",
- "seconds": 82.26,
- "log": "celestial_light PASS wears the canonical pose and performs the act {'skin': 'celestial_light', 'worn': True, 'dressed': True, 'boxes': 1630, 'field_mismatches': 0, 'first_mismatches': [], 'act_lift_uu': 78.0, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'PASS'}\napollo PASS wears the canonical pose and performs the act {'skin': 'apollo', 'worn': True, 'dressed': True, 'boxes': 2899, 'field_mismatches': 0, 'first_mismatches': [], 'act_lift_uu': 77.95, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'PASS'}\narden_infernal PASS wears the canonical pose and performs the act {'skin': 'arden_infernal', 'worn': True, 'dressed': True, 'boxes': 1977, 'field_mismatches': 0, 'first_mismatches': [], 'act_lift_uu': 77.91, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'PASS'}\nskeleton_flame PASS wears the canonical pose and performs the act {'skin': 'skeleton_flame', 'worn': True, 'dressed': True, 'boxes': 1175, 'field_mismatches': 0, 'first_mismatches': [], 'act_lift_uu': 77.99, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'PASS'}\nS01 PASS every active skin goes on and is dressed {'skins': ['celestial_light', 'apollo', 'arden_infernal', 'skeleton_flame']}\nS02 PASS no skin mismatches the pose it was handed, on any field {'mismatches': {'celestial_light': 0, 'apollo': 0, 'arden_infernal': 0, 'skeleton_flame': 0}}\nS03 PASS every skin wears the pose AND performs the act {'wears': {'celestial_light': True, 'apollo': True, 'arden_infernal': True, 'skeleton_flame': True}, 'performs': {'celestial_light': True, 'apollo': True, 'arden_infernal': True, 'skeleton_flame': True}}\nS04 PASS and none of them is failing {'failing': []}\n"
+ "finished": "2026-09-27 03:00:32",
+ "seconds": 81.44,
+ "log": "celestial_light PASS wears the canonical pose and performs the act {'skin': 'celestial_light', 'worn': True, 'dressed': True, 'boxes': 1630, 'field_mismatches': 0, 'first_mismatches': [], 'act_lift_uu': 77.92, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'PASS'}\napollo PASS wears the canonical pose and performs the act {'skin': 'apollo', 'worn': True, 'dressed': True, 'boxes': 2899, 'field_mismatches': 0, 'first_mismatches': [], 'act_lift_uu': 77.94, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'PASS'}\narden_infernal PASS wears the canonical pose and performs the act {'skin': 'arden_infernal', 'worn': True, 'dressed': True, 'boxes': 1977, 'field_mismatches': 0, 'first_mismatches': [], 'act_lift_uu': 78.0, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'PASS'}\nskeleton_flame PASS wears the canonical pose and performs the act {'skin': 'skeleton_flame', 'worn': True, 'dressed': True, 'boxes': 1175, 'field_mismatches': 0, 'first_mismatches': [], 'act_lift_uu': 77.85, 'act_stillness': 1.0, 'wears_the_pose': True, 'performs_the_act': True, 'verdict': 'PASS'}\nS01 PASS every active skin goes on and is dressed {'skins': ['celestial_light', 'apollo', 'arden_infernal', 'skeleton_flame']}\nS02 PASS no skin mismatches the pose it was handed, on any field {'mismatches': {'celestial_light': 0, 'apollo': 0, 'arden_infernal': 0, 'skeleton_flame': 0}}\nS03 PASS every skin wears the pose AND performs the act {'wears': {'celestial_light': True, 'apollo': True, 'arden_infernal': True, 'skeleton_flame': True}, 'performs': {'celestial_light': True, 'apollo': True, 'arden_infernal': True, 'skeleton_flame': True}}\nS04 PASS and none of them is failing {'failing': []}\n"
 }

@@ -1,6 +1,6 @@
 {
  "name": "zc_menu_colours",
- "started": "2026-09-27 00:56:12",
+ "started": "2026-09-27 03:04:08",
  "status": "measured",
  "tests": [
   {
@@ -31,30 +31,30 @@
    "pass": true,
    "detail": {
     "gold": {
-     "most_green_over_red": 0.3686,
-     "most_blue_over_red": 0.2471,
-     "most_red_over_blue": 0.4471,
+     "most_green_over_red": 0.3765,
+     "most_blue_over_red": 0.2157,
+     "most_red_over_blue": 0.4431,
      "mean": [
-      0.1918,
-      0.1878,
-      0.1782
+      0.1944,
+      0.189,
+      0.1779
      ],
-     "mean_warm": 0.0135,
-     "pixels": 196862
+     "mean_warm": 0.0164,
+     "pixels": 202526
     },
     "green": {
      "most_green_over_red": 0.5176,
      "most_blue_over_red": 0.2667,
-     "most_red_over_blue": 0.451,
+     "most_red_over_blue": 0.4431,
      "mean": [
-      0.1856,
-      0.1875,
-      0.1789
+      0.1918,
+      0.1913,
+      0.181
      ],
-     "mean_warm": 0.0067,
-     "pixels": 196862
+     "mean_warm": 0.0107,
+     "pixels": 202526
     },
-    "rise_in_green_over_red": 0.149,
+    "rise_in_green_over_red": 0.1411,
     "floor": 0.1,
     "note": "green minus red, over the Julius terminal's own rectangle. Wonderland's gold scores -0.15 on this and the green it was set to scores +0.74, so brightness cannot fake it."
    }
@@ -82,28 +82,28 @@
    "pass": true,
    "detail": {
     "heading_gold": {
-     "most_green_over_red": 0.0549,
+     "most_green_over_red": 0.0588,
      "most_blue_over_red": 0.1255,
      "most_red_over_blue": 0.3922,
      "mean": [
-      0.1154,
-      0.1145,
-      0.1328
+      0.1078,
+      0.1072,
+      0.1257
      ],
-     "mean_warm": -0.0175,
-     "pixels": 196350
+     "mean_warm": -0.0179,
+     "pixels": 201344
     },
     "heading_blue": {
      "most_green_over_red": 0.1412,
      "most_blue_over_red": 0.3725,
-     "most_red_over_blue": 0.251,
+     "most_red_over_blue": 0.2118,
      "mean": [
-      0.1052,
-      0.1059,
-      0.1262
+      0.1094,
+      0.1099,
+      0.1313
      ],
-     "mean_warm": -0.021,
-     "pixels": 196350
+     "mean_warm": -0.0219,
+     "pixels": 201344
     },
     "rise_in_blue_over_red": 0.247,
     "floor": 0.1
@@ -119,26 +119,26 @@
      "most_blue_over_red": 0.0471,
      "most_red_over_blue": 0.3294,
      "mean": [
-      0.1028,
-      0.1058,
-      0.1315
+      0.0999,
+      0.104,
+      0.1302
      ],
-     "mean_warm": -0.0287,
-     "pixels": 141547
+     "mean_warm": -0.0304,
+     "pixels": 145512
     },
     "body_blue": {
      "most_green_over_red": 0.1216,
-     "most_blue_over_red": 0.3255,
-     "most_red_over_blue": 0.1333,
+     "most_blue_over_red": 0.3216,
+     "most_red_over_blue": 0.1451,
      "mean": [
-      0.0996,
-      0.1047,
-      0.1338
+      0.0981,
+      0.1035,
+      0.133
      ],
-     "mean_warm": -0.0341,
-     "pixels": 141547
+     "mean_warm": -0.0348,
+     "pixels": 145512
     },
-    "drift": 0.0054,
+    "drift": 0.0044,
     "note": "the founder: 'Update the intentional accent surfaces WITHOUT making text unreadable. Do not indiscriminately tint every element.' This is the clause a blanket tint fails."
    }
   },
@@ -156,28 +156,28 @@
  "terminal_open": true,
  "julius_terminal": {
   "gold": {
-   "most_green_over_red": 0.3686,
-   "most_blue_over_red": 0.2471,
-   "most_red_over_blue": 0.4471,
+   "most_green_over_red": 0.3765,
+   "most_blue_over_red": 0.2157,
+   "most_red_over_blue": 0.4431,
    "mean": [
-    0.1918,
-    0.1878,
-    0.1782
+    0.1944,
+    0.189,
+    0.1779
    ],
-   "mean_warm": 0.0135,
-   "pixels": 196862
+   "mean_warm": 0.0164,
+   "pixels": 202526
   },
   "green": {
    "most_green_over_red": 0.5176,
    "most_blue_over_red": 0.2667,
-   "most_red_over_blue": 0.451,
+   "most_red_over_blue": 0.4431,
    "mean": [
-    0.1856,
-    0.1875,
-    0.1789
+    0.1918,
+    0.1913,
+    0.181
    ],
-   "mean_warm": 0.0067,
-   "pixels": 196862
+   "mean_warm": 0.0107,
+   "pixels": 202526
   }
  },
  "accents": {
@@ -195,28 +195,28 @@
  "menu": {
   "heading": {
    "gold": {
-    "most_green_over_red": 0.0549,
+    "most_green_over_red": 0.0588,
     "most_blue_over_red": 0.1255,
     "most_red_over_blue": 0.3922,
     "mean": [
-     0.1154,
-     0.1145,
-     0.1328
+     0.1078,
+     0.1072,
+     0.1257
     ],
-    "mean_warm": -0.0175,
-    "pixels": 196350
+    "mean_warm": -0.0179,
+    "pixels": 201344
    },
    "blue": {
     "most_green_over_red": 0.1412,
     "most_blue_over_red": 0.3725,
-    "most_red_over_blue": 0.251,
+    "most_red_over_blue": 0.2118,
     "mean": [
-     0.1052,
-     0.1059,
-     0.1262
+     0.1094,
+     0.1099,
+     0.1313
     ],
-    "mean_warm": -0.021,
-    "pixels": 196350
+    "mean_warm": -0.0219,
+    "pixels": 201344
    }
   },
   "body": {
@@ -225,24 +225,24 @@
     "most_blue_over_red": 0.0471,
     "most_red_over_blue": 0.3294,
     "mean": [
-     0.1028,
-     0.1058,
-     0.1315
+     0.0999,
+     0.104,
+     0.1302
     ],
-    "mean_warm": -0.0287,
-    "pixels": 141547
+    "mean_warm": -0.0304,
+    "pixels": 145512
    },
    "blue": {
     "most_green_over_red": 0.1216,
-    "most_blue_over_red": 0.3255,
-    "most_red_over_blue": 0.1333,
+    "most_blue_over_red": 0.3216,
+    "most_red_over_blue": 0.1451,
     "mean": [
-     0.0996,
-     0.1047,
-     0.1338
+     0.0981,
+     0.1035,
+     0.133
     ],
-    "mean_warm": -0.0341,
-    "pixels": 141547
+    "mean_warm": -0.0348,
+    "pixels": 145512
    }
   }
  },
@@ -251,7 +251,7 @@
   "after": "ring"
  },
  "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\menu_colours",
- "finished": "2026-09-27 00:57:02",
- "seconds": 49.94,
- "log": "M00 PASS the Menu has a tab called \"Colors\" {'tabs': 'MENU|COLORS'}\nM01 PASS the Colors tab opens from the Menu {'open_tab': 'COLORS'}\nM10 PASS the Julius Live Terminal is on screen {}\nM11 PASS choosing a Julius Terminal accent changes what is on the screen {'gold': {'most_green_over_red': 0.3686, 'most_blue_over_red': 0.2471, 'most_red_over_blue': 0.4471, 'mean': [0.1918, 0.1878, 0.1782], 'mean_warm': 0.0135, 'pixels': 196862}, 'green': {'most_green_over_red': 0.5176, 'most_blue_over_red': 0.2667, 'most_red_over_blue': 0.451, 'mean': [0.1856, 0.1875, 0.1789], 'mean_warm': 0.0067, 'pixels': 196862}, 'rise_in_green_over_red': 0.149, 'floor': 0.1, 'note': \"green minus red, over the Julius terminal's own rectangle. Wonderland's gold scores -0.15 on this and the green it was set to scores +0.74, so brightness cannot fake it.\"}\nM12 PASS the Julius terminal and the AI Companion terminals hold separate accents {'julius': [0.16, 0.9, 0.45], 'companion': [0.85, 0.7, 0.25]}\nM20 PASS a Menu theme moves the Menu's accent surfaces {'heading_gold': {'most_green_over_red': 0.0549, 'most_blue_over_red': 0.1255, 'most_red_over_blue': 0.3922, 'mean': [0.1154, 0.1145, 0.1328], 'mean_warm': -0.0175, 'pixels': 196350}, 'heading_blue': {'most_green_over_red': 0.1412, 'most_blue_over_red': 0.3725, 'most_red_over_blue': 0.251, 'mean': [0.1052, 0.1059, 0.1262], 'mean_warm': -0.021, 'pixels': 196350}, 'rise_in_blue_over_red': 0.247, 'floor': 0.1}\nM21 PASS and leaves the body text where it was -- it does not tint every element {'body_gold': {'most_green_over_red': 0.0118, 'most_blue_over_red': 0.0471, 'most_red_over_blue': 0.3294, 'mean': [0.1028, 0.1058, 0.1315], 'mean_warm': -0.0287, 'pixels': 141547}, 'body_blue': {'most_green_over_red': 0.1216, 'most_blue_over_red': 0.3255, 'most_red_over_blue': 0.1333, 'mean': [0.0996, 0.1047, 0.1338], 'mean_warm': -0.0341, 'pixels': 141547}, 'drift': 0.0054, 'note': \"the founder: 'Update the intentional accent surfaces WITHOUT making text unreadable. Do not indiscriminately tint every element.' This is the clause a blanket tint fails.\"}\nM30 PASS the pointer can be chosen from the Colors tab, not only from the console {'before': 'system', 'after': 'ring', 'note': 'the shape is read back from WonderlandCursor::Chosen, which is what Apply draws from -- so this fails if the setting moved and the cached choice did not.'}\n"
+ "finished": "2026-09-27 03:04:59",
+ "seconds": 50.31,
+ "log": "M00 PASS the Menu has a tab called \"Colors\" {'tabs': 'MENU|COLORS'}\nM01 PASS the Colors tab opens from the Menu {'open_tab': 'COLORS'}\nM10 PASS the Julius Live Terminal is on screen {}\nM11 PASS choosing a Julius Terminal accent changes what is on the screen {'gold': {'most_green_over_red': 0.3765, 'most_blue_over_red': 0.2157, 'most_red_over_blue': 0.4431, 'mean': [0.1944, 0.189, 0.1779], 'mean_warm': 0.0164, 'pixels': 202526}, 'green': {'most_green_over_red': 0.5176, 'most_blue_over_red': 0.2667, 'most_red_over_blue': 0.4431, 'mean': [0.1918, 0.1913, 0.181], 'mean_warm': 0.0107, 'pixels': 202526}, 'rise_in_green_over_red': 0.1411, 'floor': 0.1, 'note': \"green minus red, over the Julius terminal's own rectangle. Wonderland's gold scores -0.15 on this and the green it was set to scores +0.74, so brightness cannot fake it.\"}\nM12 PASS the Julius terminal and the AI Companion terminals hold separate accents {'julius': [0.16, 0.9, 0.45], 'companion': [0.85, 0.7, 0.25]}\nM20 PASS a Menu theme moves the Menu's accent surfaces {'heading_gold': {'most_green_over_red': 0.0588, 'most_blue_over_red': 0.1255, 'most_red_over_blue': 0.3922, 'mean': [0.1078, 0.1072, 0.1257], 'mean_warm': -0.0179, 'pixels': 201344}, 'heading_blue': {'most_green_over_red': 0.1412, 'most_blue_over_red': 0.3725, 'most_red_over_blue': 0.2118, 'mean': [0.1094, 0.1099, 0.1313], 'mean_warm': -0.0219, 'pixels': 201344}, 'rise_in_blue_over_red': 0.247, 'floor': 0.1}\nM21 PASS and leaves the body text where it was -- it does not tint every element {'body_gold': {'most_green_over_red': 0.0118, 'most_blue_over_red': 0.0471, 'most_red_over_blue': 0.3294, 'mean': [0.0999, 0.104, 0.1302], 'mean_warm': -0.0304, 'pixels': 145512}, 'body_blue': {'most_green_over_red': 0.1216, 'most_blue_over_red': 0.3216, 'most_red_over_blue': 0.1451, 'mean': [0.0981, 0.1035, 0.133], 'mean_warm': -0.0348, 'pixels': 145512}, 'drift': 0.0044, 'note': \"the founder: 'Update the intentional accent surfaces WITHOUT making text unreadable. Do not indiscriminately tint every element.' This is the clause a blanket tint fails.\"}\nM30 PASS the pointer can be chosen from the Colors tab, not only from the console {'before': 'system', 'after': 'ring', 'note': 'the shape is read back from WonderlandCursor::Chosen, which is what Apply draws from -- so this fails if the setting moved and the cached choice did not.'}\n"
 }

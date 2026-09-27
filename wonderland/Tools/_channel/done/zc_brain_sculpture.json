@@ -1,6 +1,6 @@
 {
  "name": "zc_brain_sculpture",
- "started": "2026-09-27 00:51:22",
+ "started": "2026-09-27 03:02:40",
  "status": "measured; the verdict on how it LOOKS is the photographs",
  "tests": [
   {
@@ -25,7 +25,7 @@
    "name": "the python's head actually travels",
    "pass": true,
    "detail": {
-    "travel_uu": 317.3,
+    "travel_uu": 304.0,
     "need_uu": 60.0
    }
   },
@@ -34,7 +34,7 @@
    "name": "the bearing rate is not constant, so the route is not a circular orbit",
    "pass": true,
    "detail": {
-    "spread_deg_per_s": 43.21,
+    "spread_deg_per_s": 16.66,
     "a_circular_orbit_would_be": "~0",
     "worst_simulated": 10.2
    }
@@ -44,7 +44,7 @@
    "name": "the head's distance from the brain changes, which an orbit's never does",
    "pass": true,
    "detail": {
-    "swing_uu": 23.7,
+    "swing_uu": 23.4,
     "need_uu": 7.2
    }
   },
@@ -53,7 +53,7 @@
    "name": "the route is not confined to one plane",
    "pass": true,
    "detail": {
-    "swing_uu": 317.3,
+    "swing_uu": 304.0,
     "need_uu": 12.0
    }
   },
@@ -62,7 +62,7 @@
    "name": "no segment ever entered the brain mass",
    "pass": true,
    "detail": {
-    "closest_uu": 195.7,
+    "closest_uu": 196.0,
     "floor_uu": 180.0,
     "expected_uu": 182.4
    }
@@ -72,8 +72,8 @@
    "name": "the brain breathes rather than sitting still",
    "pass": true,
    "detail": {
-    "breath_min": 0.091,
-    "breath_max": 0.973
+    "breath_min": 0.089,
+    "breath_max": 0.988
    }
   },
   {
@@ -81,9 +81,9 @@
    "name": "the python holds its length instead of inflating and collapsing",
    "pass": true,
    "detail": {
-    "min_uu": 643.4,
-    "max_uu": 647.9,
-    "swing_ratio": 1.007,
+    "min_uu": 634.4,
+    "max_uu": 647.8,
+    "swing_ratio": 1.021,
     "simulated_steady": "1.04"
    }
   },
@@ -92,8 +92,8 @@
    "name": "the python is full length immediately, not growing into it",
    "pass": true,
    "detail": {
-    "first_uu": 647.9,
-    "min_uu": 643.4,
+    "first_uu": 647.8,
+    "min_uu": 634.4,
     "built_for_uu": 648.0,
     "spacing_uu": 14.399999618530273,
     "segments": 46
@@ -131,168 +131,168 @@
  "brain_radius_uu": 120.0,
  "head_samples": [
   [
-   211.22467552492859,
-   58.10115902860673,
-   -1.382669685374632
+   205.3047243430932,
+   74.20431287839735,
+   -17.55730867006336
   ],
   [
-   191.42215891250768,
-   106.2010891550193,
-   -14.487931376030842
+   165.40939420416862,
+   138.81306690654839,
+   -38.617208792517964
   ],
   [
-   164.89996216680308,
-   139.51640498255895,
-   -38.20184582514536
+   117.92648802633985,
+   175.39304326552144,
+   -58.790040171182966
   ],
   [
-   137.15771048860879,
-   156.48044326412204,
-   -68.28259682502802
+   87.062050373655,
+   186.2739884267822,
+   -75.60004159990996
   ],
   [
-   109.43277801104301,
-   160.88228156787105,
-   -99.2349115975059
+   71.61681150285159,
+   185.31862725496094,
+   -91.05142374142167
   ],
   [
-   83.47334512125086,
-   157.86586497090823,
-   -124.64348725057984
+   64.52666628605844,
+   179.70354965914368,
+   -104.96006349890675
   ],
   [
-   55.06193189258059,
-   149.98027346028397,
-   -146.89667061158798
+   59.16477475658513,
+   173.72845035013748,
+   -116.18632554856241
   ],
   [
-   28.73822823118785,
-   139.30897482933847,
-   -162.9782551281876
+   51.80567675299715,
+   168.29696701422995,
+   -125.94441573290972
   ],
   [
-   6.5516042062710875,
-   127.62993665992366,
-   -173.7085929763436
+   43.51166407007997,
+   164.2406315331049,
+   -133.08533024916125
   ],
   [
-   -16.322555101818825,
-   122.69131177077674,
-   -175.77752937408889
+   50.40299336960543,
+   143.3790088449784,
+   -152.28800393060928
   ],
   [
-   -26.973656844651828,
-   126.47373046186553,
-   -170.8467604187805
+   66.38768152670842,
+   106.04488784169703,
+   -174.22052885758006
   ],
   [
-   -18.414076963050427,
-   134.21554120399293,
-   -165.07038231648426
+   75.75855315891907,
+   74.8696616750672,
+   -185.36913180586427
   ],
   [
-   1.555548704981337,
-   140.76126373532333,
-   -159.6388675828678
+   76.97233352463265,
+   64.22480866338002,
+   -188.03183919169496
   ],
   [
-   29.851001204537383,
-   144.68145975691363,
-   -152.05944771648132
+   73.82081332618527,
+   71.03305574163608,
+   -185.95744694645558
   ],
   [
-   57.36889617848965,
-   144.7242830787808,
-   -142.6559878884125
+   69.26960517999387,
+   87.63302669657806,
+   -179.58070256719418
   ],
   [
-   85.48068202682869,
-   141.30138589276928,
-   -129.99172236509628
+   64.80452964422372,
+   107.96098925192949,
+   -168.77829534470473
   ],
   [
-   111.02884184516417,
-   134.70955533785352,
-   -115.14534690871817
+   61.13678391781666,
+   127.36067555975998,
+   -154.8453394424237
   ],
   [
-   135.08329882176085,
-   124.45935993084996,
-   -97.55482739950246
+   67.68307863995554,
+   144.68919366742296,
+   -134.0340265616208
   ],
   [
-   156.0809373261652,
-   110.84575595482038,
-   -78.19798774788391
+   97.42495704503024,
+   153.3143050669541,
+   -100.07259152459847
   ],
   [
-   173.29366864162577,
-   94.4172911117997,
-   -57.62058456823321
+   120.80275326248032,
+   154.91192955368592,
+   -62.78712535108361
   ],
   [
-   186.58615843143556,
-   75.31084778185338,
-   -35.505588952089305
+   128.2062691062892,
+   157.18004039252108,
+   -29.6000454613482
   ],
   [
-   195.09844754232577,
-   54.716324837143496,
-   -12.591291251963488
+   121.43372022573298,
+   163.53661776490813,
+   -5.627875461622949
   ],
   [
-   198.54659725997135,
-   34.01870177841226,
-   10.285065571251964
+   105.71333566672398,
+   172.11052908691076,
+   14.434128962128929
   ],
   [
-   197.40316870418073,
-   15.220791356141916,
-   31.397893554500268
+   87.24432580988399,
+   178.5006673394151,
+   32.258761129610136
   ],
   [
-   192.87790149687248,
-   -1.1917391414045875,
-   50.27221171303753
+   70.03415943116586,
+   180.8473424625361,
+   49.46995462337368
   ],
   [
-   183.3506195981415,
-   -0.4698711009910066,
-   75.443653717051
+   54.9326422384691,
+   179.08907316419013,
+   67.25326632988595
   ],
   [
-   141.89118482611258,
-   61.31041922189914,
-   122.71343379838007
+   43.79657279777115,
+   174.37659012205873,
+   83.10303711720381
   ],
   [
-   47.25395703886509,
-   128.09532670367435,
-   141.4845832223663
+   35.49683759406984,
+   167.91743509091322,
+   97.13648264886231
   ],
   [
-   -42.87582224655091,
-   151.19395600404388,
-   117.23645494680848
+   30.079627426544487,
+   161.40963903355092,
+   107.98137605284599
   ],
   [
-   -85.61111223925853,
-   151.01827989385217,
-   90.26824101709583
+   27.002782525661697,
+   155.6336706294736,
+   115.96572250451746
   ]
  ],
- "head_radius_min": 195.663330078125,
- "head_radius_max": 219.3878173828125,
- "head_z_min": -175.77752937408889,
- "head_z_max": 141.4845832223663,
- "closest_segment_uu": 195.663330078125,
- "breath_min": 0.09078148007392883,
- "breath_max": 0.972565770149231,
- "bearing_rate_spread_deg": 43.207313537597656,
- "body_length_min": 643.3543701171875,
- "body_length_max": 647.8551025390625,
- "body_length_swing_ratio": 1.0069957283744808,
- "head_travel_uu": 317.26211259645515,
+ "head_radius_min": 195.95672607421875,
+ "head_radius_max": 219.37557983398438,
+ "head_z_min": -188.03183919169496,
+ "head_z_max": 115.96572250451746,
+ "closest_segment_uu": 195.95672607421875,
+ "breath_min": 0.08949688076972961,
+ "breath_max": 0.9875839948654175,
+ "bearing_rate_spread_deg": 16.660953521728516,
+ "body_length_min": 634.3587646484375,
+ "body_length_max": 647.8392944335938,
+ "body_length_swing_ratio": 1.0212506400737242,
+ "head_travel_uu": 303.9975616962124,
  "built_for_uu": 647.9999828338623,
  "sculptures_after_close": 0,
  "seconds_to_restage": 0.25,
@@ -334,7 +334,7 @@
    "note": "reopened; one brain, not two"
   }
  ],
- "finished": "2026-09-27 00:51:50",
- "seconds": 27.7,
- "log": "S00 PASS no brain sculpture exists before the panel is opened {'count': 0}\nS01 PASS opening Project Brain makes exactly one living brain {'count': 1, 'seconds_to_stage': 0.25}\nS02 PASS the python's head actually travels {'travel_uu': 317.3, 'need_uu': 60.0}\nS03 PASS the bearing rate is not constant, so the route is not a circular orbit {'spread_deg_per_s': 43.21, 'a_circular_orbit_would_be': '~0', 'worst_simulated': 10.2}\nS04 PASS the head's distance from the brain changes, which an orbit's never does {'swing_uu': 23.7, 'need_uu': 7.2}\nS05 PASS the route is not confined to one plane {'swing_uu': 317.3, 'need_uu': 12.0}\nS06 PASS no segment ever entered the brain mass {'closest_uu': 195.7, 'floor_uu': 180.0, 'expected_uu': 182.4}\nS07 PASS the brain breathes rather than sitting still {'breath_min': 0.091, 'breath_max': 0.973}\nS08 PASS the python holds its length instead of inflating and collapsing {'min_uu': 643.4, 'max_uu': 647.9, 'swing_ratio': 1.007, 'simulated_steady': '1.04'}\nS08b PASS the python is full length immediately, not growing into it {'first_uu': 647.9, 'min_uu': 643.4, 'built_for_uu': 648.0, 'spacing_uu': 14.399999618530273, 'segments': 46}\nS09 PASS closing the panel takes the brain away with it {'count': 0}\nS10 PASS reopening stages exactly one brain again, not a second one {'count': 1}\n"
+ "finished": "2026-09-27 03:03:07",
+ "seconds": 27.17,
+ "log": "S00 PASS no brain sculpture exists before the panel is opened {'count': 0}\nS01 PASS opening Project Brain makes exactly one living brain {'count': 1, 'seconds_to_stage': 0.25}\nS02 PASS the python's head actually travels {'travel_uu': 304.0, 'need_uu': 60.0}\nS03 PASS the bearing rate is not constant, so the route is not a circular orbit {'spread_deg_per_s': 16.66, 'a_circular_orbit_would_be': '~0', 'worst_simulated': 10.2}\nS04 PASS the head's distance from the brain changes, which an orbit's never does {'swing_uu': 23.4, 'need_uu': 7.2}\nS05 PASS the route is not confined to one plane {'swing_uu': 304.0, 'need_uu': 12.0}\nS06 PASS no segment ever entered the brain mass {'closest_uu': 196.0, 'floor_uu': 180.0, 'expected_uu': 182.4}\nS07 PASS the brain breathes rather than sitting still {'breath_min': 0.089, 'breath_max': 0.988}\nS08 PASS the python holds its length instead of inflating and collapsing {'min_uu': 634.4, 'max_uu': 647.8, 'swing_ratio': 1.021, 'simulated_steady': '1.04'}\nS08b PASS the python is full length immediately, not growing into it {'first_uu': 647.8, 'min_uu': 634.4, 'built_for_uu': 648.0, 'spacing_uu': 14.399999618530273, 'segments': 46}\nS09 PASS closing the panel takes the brain away with it {'count': 0}\nS10 PASS reopening stages exactly one brain again, not a second one {'count': 1}\n"
 }

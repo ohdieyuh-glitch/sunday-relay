@@ -1,6 +1,6 @@
 {
  "name": "zc_streaming",
- "started": "2026-09-27 01:07:28",
+ "started": "2026-09-27 03:06:26",
  "status": "measured",
  "tests": [
   {
@@ -15,14 +15,14 @@
       "instances": 155220
      },
      "0600m": {
-      "actors": 3529,
-      "instanced_components": 338,
-      "instances": 13331
+      "actors": 1732,
+      "instanced_components": 325,
+      "instances": 13247
      },
      "1250m": {
-      "actors": 1202,
-      "instanced_components": 338,
-      "instances": 13331
+      "actors": 656,
+      "instanced_components": 325,
+      "instances": 13247
      }
     }
    }
@@ -34,16 +34,16 @@
    "detail": {
     "actors_by_stop": [
      12657,
-     3529,
-     1202
+     1732,
+     656
     ],
     "instances_by_stop": [
      155220,
-     13331,
-     13331
+     13247,
+     13247
     ],
-    "actor_spread": 11455,
-    "instance_spread": 141889,
+    "actor_spread": 12001,
+    "instance_spread": 141973,
     "note": "if these are flat, the level is fully resident: every actor loaded at open and none unloaded 1,250 m away. That is a real answer to P2 item 13's streaming clause and it is the number behind whether the partitioned twin is worth adopting"
    }
   }
@@ -55,19 +55,19 @@
    "instances": 155220
   },
   "0600m": {
-   "actors": 3529,
-   "instanced_components": 338,
-   "instances": 13331
+   "actors": 1732,
+   "instanced_components": 325,
+   "instances": 13247
   },
   "1250m": {
-   "actors": 1202,
-   "instanced_components": 338,
-   "instances": 13331
+   "actors": 656,
+   "instanced_components": 325,
+   "instances": 13247
   }
  },
- "actor_spread": 11455,
- "instance_spread": 141889,
- "finished": "2026-09-27 01:08:18",
- "seconds": 50.61,
- "log": "S_0000m INFO resident at 0 m {'actors': 12657, 'instanced_components': 3919, 'instances': 155220}\nS_0600m INFO resident at 600 m {'actors': 3529, 'instanced_components': 338, 'instances': 13331}\nS_1250m INFO resident at 1250 m {'actors': 1202, 'instanced_components': 338, 'instances': 13331}\nS00 PASS the world was actually sampled at every stop {'stops': {'0000m': {'actors': 12657, 'instanced_components': 3919, 'instances': 155220}, '0600m': {'actors': 3529, 'instanced_components': 338, 'instances': 13331}, '1250m': {'actors': 1202, 'instanced_components': 338, 'instances': 13331}}}\nS01 PASS the world's residency CHANGES as the player crosses it {'actors_by_stop': [12657, 3529, 1202], 'instances_by_stop': [155220, 13331, 13331], 'actor_spread': 11455, 'instance_spread': 141889, 'note': \"if these are flat, the level is fully resident: every actor loaded at open and none unloaded 1,250 m away. That is a real answer to P2 item 13's streaming clause and it is the number behind whether the partitioned twin is worth adopting\"}\n"
+ "actor_spread": 12001,
+ "instance_spread": 141973,
+ "finished": "2026-09-27 03:07:16",
+ "seconds": 49.86,
+ "log": "S_0000m INFO resident at 0 m {'actors': 12657, 'instanced_components': 3919, 'instances': 155220}\nS_0600m INFO resident at 600 m {'actors': 1732, 'instanced_components': 325, 'instances': 13247}\nS_1250m INFO resident at 1250 m {'actors': 656, 'instanced_components': 325, 'instances': 13247}\nS00 PASS the world was actually sampled at every stop {'stops': {'0000m': {'actors': 12657, 'instanced_components': 3919, 'instances': 155220}, '0600m': {'actors': 1732, 'instanced_components': 325, 'instances': 13247}, '1250m': {'actors': 656, 'instanced_components': 325, 'instances': 13247}}}\nS01 PASS the world's residency CHANGES as the player crosses it {'actors_by_stop': [12657, 1732, 656], 'instances_by_stop': [155220, 13247, 13247], 'actor_spread': 12001, 'instance_spread': 141973, 'note': \"if these are flat, the level is fully resident: every actor loaded at open and none unloaded 1,250 m away. That is a real answer to P2 item 13's streaming clause and it is the number behind whether the partitioned twin is worth adopting\"}\n"
 }
