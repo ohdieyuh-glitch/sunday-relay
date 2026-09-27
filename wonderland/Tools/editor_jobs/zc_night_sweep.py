@@ -116,8 +116,21 @@ def patch(cx, cy, hw, hh):
     if got is None:
         return None
     mean, dark, bright, sampled = got
+    # MID IS THE FLATNESS MEASURE AND IT IS FREE. dark is the fraction below luma 0.14, bright the fraction
+    # above 0.72, so mid is everything between -- and a scene that has been FLATTENED has collapsed into it.
+    #
+    # This exists because luma alone cannot choose between the two ways of making night readable, and they
+    # are not equivalent. Local exposure raises shadows and leaves highlights, so the dark tail shrinks and
+    # the bright tail stays: detail opens in the dark. NightFill raises everything its lights reach, lifting
+    # floor and midtones together, so BOTH tails shrink: the scene gets brighter and flatter at once. Equal
+    # luma from the two will not look equal, and the founder ruled out exactly one of them -- "do not simply
+    # wash the world in flat brightness".
+    #
+    # tails = dark + bright is what survives of the range. Falling tails at rising luma is flattening.
     return {"luma": round(0.2126 * mean.r + 0.7152 * mean.g + 0.0722 * mean.b, 4),
-            "dark": round(dark, 4), "bright": round(bright, 4), "sampled": int(sampled)}
+            "dark": round(dark, 4), "bright": round(bright, 4),
+            "mid": round(max(0.0, 1.0 - dark - bright), 4),
+            "tails": round(min(1.0, dark + bright), 4), "sampled": int(sampled)}
 
 
 def judge(_unused=None):
@@ -351,7 +364,13 @@ def job():
         row["still_night"] = still_night
         row["score"] = len(readable) if len(still_night) == len(PLACES) else -1
         sweep.append(row)
+        # PER COMBINATION: how much range is left, so the two families can be told apart at equal luma.
+        got = [v for v in row["places"].values() if v]
+        row["mean_luma"] = round(sum(v["luma"] for v in got) / len(got), 4) if got else None
+        row["mean_tails"] = round(sum(v.get("tails", 0.0) for v in got) / len(got), 4) if got else None
+        row["mean_mid"] = round(sum(v.get("mid", 0.0) for v in got) / len(got), 4) if got else None
         emit("S_%s" % key, "INFO", key, {"readable": len(readable), "still_night": len(still_night),
+                                         "mean_luma": row["mean_luma"], "mean_tails": row["mean_tails"],
                                          "worst_dark": max((r["dark"] for r in row["places"].values() if r), default=None)})
 
     # put the world back as it was found
@@ -524,6 +543,22 @@ def job():
                 "there' is ruled out and the cause is NOT established. surfaces_in_front is the "
                 "discriminator: a trace that finds nothing means the district is not being drawn at that "
                 "range, and a trace that finds it means it is drawn and dark")
+
+    # FLATTENING IS A SEPARATE FAILURE FROM DARKNESS AND THE FOUNDER NAMED IT SEPARATELY. A combination can
+    # reach readable luma by opening the shadows or by washing the scene, and only the first is wanted. This
+    # ranks what each combination did to the RANGE rather than to the brightness, so the choice between the
+    # lift and the fill is made on the axis that distinguishes them.
+    flat = sorted(((r.get("mean_tails"), r.get("mean_luma"), r["key"]) for r in sweep
+                   if r.get("mean_tails") is not None))
+    record("N04", "brightness was not bought by flattening -- the combinations that read brightest still "
+                  "keep a dark tail and a bright tail, rather than collapsing into the middle",
+           bool(flat) and flat[0][0] is not None and flat[0][0] >= 0.20,
+           flattest=[{"key": k, "tails": t, "luma": l} for t, l, k in flat[:3]],
+           widest=[{"key": k, "tails": t, "luma": l} for t, l, k in flat[-3:]],
+           note="tails = fraction below luma 0.14 plus fraction above 0.72, so it is what survives of the "
+                "range. Local exposure shrinks the DARK tail and keeps the bright one; NightFill shrinks "
+                "BOTH. Rising luma with falling tails is the wash the founder ruled out, and luma alone "
+                "cannot see it")
 
     record("N00", "the sweep moved the picture -- the instrument is responding",
            lumas and (max(lumas) - min(lumas)) > 0.02, luma_range=[min(lumas), max(lumas)] if lumas else None,
