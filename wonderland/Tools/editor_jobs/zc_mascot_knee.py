@@ -96,6 +96,17 @@ EYE_LEVELS = (0.05, 9.0, 18.0, 30.0, 36.0)
 EYE_CLAMP = globals().get("EYE_CLAMP", 30.0)
 EYE_ABOVE_CLAMP = 36.0
 
+#: THE SHIPPED PAIR, sampled in addition to the swept levels and NOT the same measurement.
+#:
+#: The sweep pins EyeGlowDay and EyeGlowNight to the same value at every level, deliberately: that is what
+#: isolates the level from the hour, because otherwise the day cycle lerps between the two by Nightfall and
+#: dusk silently reads a blend. But it also means the sweep never tests what the founder actually gets. The
+#: shipped configuration is a RATIO -- 18 by day, 8 at night -- so one extra reading per skin per hour is
+#: taken with both left at their shipped values and the day cycle allowed to do its own interpolation.
+#: That row, not any swept level, is the one that answers "does 8 at night clip, or read dim".
+SHIPPED_DAY, SHIPPED_NIGHT = 18.0, 8.0
+SHIPPED_LEVEL = -1.0          # the marker this row carries in the `level` column
+
 #: The knee axis, at the scale the assets are actually authored at, with the shipped 700 as the control.
 #: Body glow spans 3.3 to 13.2 across the five skins, so anything at or above 16 should be indistinguishable.
 KNEES = (700.0, 64.0, 32.0, 16.0, 8.0, 4.0, 2.0)
@@ -341,8 +352,41 @@ def job():
                 rows.append(row)
                 emit("B_%s_%s_%04.1f" % (skin, hlabel, level), "INFO", "%s %s eye=%.2f" % (skin, hlabel, level),
                      {k: row.get(k) for k in ("eye_luma", "over_face", "isolation", "clipped", "hue_retention")})
+            # ---- AND THE SHIPPED PAIR, with the day cycle interpolating it as it does in the game.
+            if base is not None and alive() is not None:
+                cvar("wl.Look.EyeGlowDay", "%.3f" % SHIPPED_DAY)
+                cvar("wl.Look.EyeGlowNight", "%.3f" % SHIPPED_NIGHT)
+                yield 2.5
+                d3 = unreal.GameplayStatics.get_player_pawn(live(), 0)
+                if d3 is not None:
+                    r = read_all(d3.get_actor_location())
+                    if r["eye"] is not None and r["face"] is not None:
+                        eg = r["eye"]["luma"] - base["eye"]["luma"]
+                        fg = r["face"]["luma"] - base["face"]["luma"]
+                        add = [max(r["eye"]["rgb"][i] - base["eye"]["rgb"][i], 0.0) for i in range(3)]
+                        mag = math.sqrt(sum(v * v for v in add))
+                        want = AUTHORED_EYE.get(skin, (1.0, 1.0, 1.0))
+                        wmag = math.sqrt(sum(v * v for v in want))
+                        rows.append({
+                            "skin": skin, "hour": hlabel, "level": SHIPPED_LEVEL, "shipped": True,
+                            "shipped_day": SHIPPED_DAY, "shipped_night": SHIPPED_NIGHT,
+                            "eye_luma": r["eye"]["luma"], "face_luma": r["face"]["luma"],
+                            "over_face": round(r["eye"]["luma"] - r["face"]["luma"], 5),
+                            "eye_bright": r["eye"]["bright"], "eye_dark": r["eye"]["dark"],
+                            "clipped": r["frame"]["bright"], "crushed": r["frame"]["dark"],
+                            "eye_rgb": r["eye"]["rgb"], "eye_gain": round(eg, 5),
+                            "face_gain": round(fg, 5), "isolation": round(eg - fg, 5),
+                            "eye_added_rgb": [round(v, 5) for v in add],
+                            "hue_retention": (round(sum(add[i] * want[i] for i in range(3)) / (mag * wmag), 4)
+                                              if mag > 1e-5 else None),
+                            "colour_separation": (round((max(add) - min(add)) / max(add), 4)
+                                                  if max(add) > 1e-5 else 0.0)})
+                        emit("B_%s_%s_SHIPPED" % (skin, hlabel), "INFO",
+                             "%s %s shipped %.0f/%.0f" % (skin, hlabel, SHIPPED_DAY, SHIPPED_NIGHT),
+                             {k: rows[-1][k] for k in ("eye_luma", "over_face", "isolation",
+                                                       "eye_bright", "clipped")})
             try:
-                L.capture_game_viewport(os.path.join(ROOT, "%s_%s_eye12.png" % (skin, hlabel)))
+                L.capture_game_viewport(os.path.join(ROOT, "%s_%s_shipped.png" % (skin, hlabel)))
             except Exception:                                          # noqa: BLE001
                 pass
 
@@ -396,7 +440,7 @@ def job():
     RESULT["cvars_restored"] = [n for n, _ in SHIPPED]
 
     # ---------------------------------------------------------------- the gates
-    want = len(SKINS) * len(HOURS) * len(EYE_LEVELS) if AXIS == "eye" else 0
+    want = len(SKINS) * len(HOURS) * (len(EYE_LEVELS) + 1) if AXIS == "eye" else 0
     RESULT["axis"] = AXIS
     RESULT["hour"] = HOUR_LABEL
     record("M00", "every skin was sampled at every hour at every eye level",
@@ -494,6 +538,24 @@ def job():
     record_eye("M08", "the eye is a coloured core rather than a white one",
            all(v is not None and v >= 0.25 for v in seps.values()), colour_separation=seps, floor=0.25,
            note="channel spread of the added light; a white-clipped eye reads near 0")
+
+    # THE SHIPPED CONFIGURATION, which is the only row that describes what the founder actually gets.
+    ship = {}
+    for r in rows:
+        if r.get("shipped"):
+            ship["%s/%s" % (r["skin"], r["hour"])] = {
+                "eye": r["eye_luma"], "over_face": r["over_face"], "isolation": r["isolation"],
+                "eye_clipped": r["eye_bright"], "frame_clipped": r["clipped"]}
+    dim = [k for k, v in ship.items() if v["isolation"] < ISOLATION_FLOOR or v["over_face"] <= 0.0]
+    blown = [k for k, v in ship.items() if v["eye_clipped"] > 0.50]
+    record_eye("M10", "at the SHIPPED eye levels the eye reads as a bright core on every skin at every hour "
+                      "-- neither dim nor blown",
+               bool(ship) and not dim and not blown, shipped_day=SHIPPED_DAY, shipped_night=SHIPPED_NIGHT,
+               reading_dim=dim, reading_blown=blown, per_skin_hour=ship,
+               note="the swept levels pin both ends of the lerp to isolate the level; this row leaves the "
+                    "shipped ratio alone and lets the day cycle interpolate, so it is the only one that "
+                    "says what the game does. Dim = isolation under the floor or the eye no brighter than "
+                    "the cheek; blown = over half the eye patch at 250+")
 
     # 9. THE KNEE AXIS: does it do anything at this asset scale?
     spread = {}
