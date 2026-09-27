@@ -194,6 +194,47 @@ def job():
             pass
         L.pose_camera(live(), unreal.Vector(*eye), unreal.Vector(*at), 60.0)
 
+    def what_is_drawn(eye, at):
+        """Trace along the view and report the surfaces actually there, with their distances.
+
+        WHY THIS EXISTS. architecture_noctis reads 97% of its frame below luma 0.14 AT NOON, and I have twice
+        now guessed wrong about why from the layer files alone -- first that the view was aimed at empty
+        ground, then that the architecture was 11.5 km away. Neither is true: an offline cone count puts 2,700
+        architecture instances in that view with the nearest at 53 m and the bulk between 100 and 200 m. So
+        the district is there and at an ordinary viewing distance, and the question of whether it is DRAWN is
+        not answerable from a JSON file. A trace can answer it, and until it does the cause is unestablished.
+        """
+        out = []
+        dx, dy, dz = at[0] - eye[0], at[1] - eye[1], at[2] - eye[2]
+        n = math.sqrt(dx * dx + dy * dy + dz * dz) or 1.0
+        for reach in (5000.0, 10000.0, 16000.0, 24000.0):
+            a = unreal.Vector(*eye)
+            b = unreal.Vector(eye[0] + dx / n * reach, eye[1] + dy / n * reach, eye[2] + dz / n * reach)
+            try:
+                hit = unreal.SystemLibrary.line_trace_single(
+                    live(), a, b, unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [],
+                    unreal.DrawDebugTrace.NONE, True,
+                    unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
+            except Exception as err:                                  # noqa: BLE001
+                out.append({"reach_uu": reach, "error": str(err)[:80]})
+                continue
+            if hit is None:
+                out.append({"reach_uu": reach, "hit": None})
+                continue
+            # HitResult has no named attributes in this engine's Python: to_tuple indices only.
+            t = hit.to_tuple()
+            mesh = None
+            try:
+                comp = t[10] if len(t) > 10 else None
+                sm = comp.get_editor_property("static_mesh") if comp is not None else None
+                mesh = str(sm.get_name()) if sm is not None else None
+            except Exception:                                         # noqa: BLE001
+                pass
+            out.append({"reach_uu": reach,
+                        "distance_uu": round(float(t[3]), 1) if len(t) > 3 else None,
+                        "mesh": mesh})
+        return out
+
     def shoot(name):
         """One frame: the numbers and the picture, from the same camera in the same moment.
 
@@ -215,11 +256,15 @@ def job():
     # ---- NOON, for the "still night" reference at each place.
     cvar("wl.Sky.Hour", 12)
     noon = {}
+    drawn = {}
     for label, eye, at in PLACES:
         look(label, eye, at)
         yield 3.0
         noon[label] = shoot("noon__%s" % label)
+        # WHAT IS ACTUALLY IN FRONT OF THE CAMERA, at the hour where a dark reading is least explicable.
+        drawn[label] = what_is_drawn(eye, at)
     RESULT["noon"] = noon
+    RESULT["noon_surfaces"] = drawn
 
     # ---- THE SWEEP, at midnight.
     cvar("wl.Sky.Hour", 0)
@@ -300,6 +345,19 @@ def job():
            note="this now reads the same composited frame that is saved beside it as noon__<place>.jpg, "
                 "so a red here is checkable by eye: open the JPEG. The previous version measured a "
                 "SceneCapture actor while saving viewport JPEGs -- two cameras, and only one was ever posed")
+
+    # A PLACE THAT IS DARK AT NOON IS NOT A NIGHT PROBLEM, and this separates the two reasons it can happen.
+    dark_at_noon = [k for k, v in noon.items() if v and v.get("dark", 0) > 0.85]
+    record("N_NOON_DARK", "no place is already dark at MIDDAY -- a night gate cannot speak for a place that "
+                          "is unlit in daylight",
+           not dark_at_noon, dark_at_noon=dark_at_noon,
+           noon_dark={k: (v or {}).get("dark") for k, v in noon.items()},
+           surfaces_in_front={k: drawn.get(k) for k in dark_at_noon},
+           note="architecture_noctis read 0.9691 dark at noon. An offline cone count puts 2,700 architecture "
+                "instances in that view, nearest at 53 m and the bulk between 100 and 200 m, so 'nothing "
+                "there' is ruled out and the cause is NOT established. surfaces_in_front is the "
+                "discriminator: a trace that finds nothing means the district is not being drawn at that "
+                "range, and a trace that finds it means it is drawn and dark")
 
     record("N00", "the sweep moved the picture -- the instrument is responding",
            lumas and (max(lumas) - min(lumas)) > 0.02, luma_range=[min(lumas), max(lumas)] if lumas else None,

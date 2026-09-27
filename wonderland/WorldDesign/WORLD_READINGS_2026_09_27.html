@@ -257,6 +257,20 @@
   luma 0.0596 with 97% of the frame and 99% of its ground below the darkness threshold — at midday. That is
   not a night-lighting problem and no amount of moon gain will reach it. The complaint registers at night
   because that is when someone looked, but the gap is in daylight.</p>
+
+  <p><strong>What that place is not, and what I do not yet know.</strong> I guessed twice at the cause from the
+  layer files and was wrong both times &mdash; first that the view was aimed at empty ground, then that the
+  nearest architecture was 11.5&nbsp;km off. A cone count over every instance in the world settles it: the view
+  holds <strong>2,700 architecture instances</strong>, the nearest at 53&nbsp;m and the bulk between 100 and
+  200&nbsp;m. The first 50&nbsp;m is bare paving, and beyond that there is a district at an entirely ordinary
+  viewing distance. So &ldquo;nothing there to light&rdquo; is ruled out and <em>the cause is not
+  established.</em></p>
+
+  <p>The two candidates need opposite fixes, which is why guessing was the wrong move: either that district is
+  not being <em>drawn</em> at 100&ndash;200&nbsp;m, which is a cull-distance or streaming question, or it is
+  drawn and genuinely unlit, which is a lighting question. A trace down the view answers it in one reading, and
+  the sweep now takes that trace at noon for every place and reports the surfaces it finds. Until it runs, this
+  row says only what it measured.</p>
 </section>
 
 <section>
@@ -573,6 +587,9 @@
     "controlled bloom" is described rather than demonstrated.</li>
     <li><strong>Whether ICARUS's topiary is the blocker.</strong> Named as a candidate with the geometry that
     makes it one, and explicitly not proven.</li>
+    <li><strong>Why architecture_noctis is dark at midday.</strong> Ruled out: an empty view. Not
+    established: whether the district fails to draw at 100&ndash;200&nbsp;m or draws and is unlit. Two
+    candidates, opposite fixes, one trace away.</li>
     <li><strong>What adds light at 18:00.</strong> The exposure model predicts that hour reads darker than
     17:00; it reads 1.61&times; brighter. The fog's warm inscattering at elevation zero is a candidate and
     nothing more.</li>
