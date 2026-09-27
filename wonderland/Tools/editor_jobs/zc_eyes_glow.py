@@ -24,7 +24,8 @@ L = unreal.WonderlandUiTestLibrary
 
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "eyes_glow")
 SKINS = ("relay_og", "arden_infernal", "apollo", "skeleton_flame", "celestial_light")
-HOURS = (12.0, 16.0, 22.0)
+HOURS = (12.0, 18.8, 23.5)   # FOUNDER: DAY, DUSK, NIGHT. Dusk is the hard one -- the sun is low and
+                             # warm and the exposure is still open, so an eye that only wins at midnight loses here.
 
 
 def luma(c):

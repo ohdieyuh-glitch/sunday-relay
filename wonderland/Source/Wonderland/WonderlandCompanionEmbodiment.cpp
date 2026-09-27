@@ -389,6 +389,39 @@ UMaterialInterface* AWonderlandCompanionEmbodiment::ParentFor(EWonderlandCompani
 	return Parent;
 }
 
+namespace
+{
+	/**
+	 * IS THIS PART THE DOG, OR SOMETHING THE DOG IS WEARING?
+	 *
+	 * FOUNDER: framing "MUST derive from the physical BODY", excluding halos, flames, particles, glow cards
+	 * and props. This is the one place that decides it, and it decides on the part's NAME.
+	 *
+	 * WHY NOT ON THE MATERIAL, WHICH IS WHAT IT USED TO DO. A part counted as body only if it was shaded Lit
+	 * or Rim. Three of the five skins are built almost entirely from Glow and Additive materials -- a glowing
+	 * torso is still a torso -- so for Apollo, Skeleton Flame and Celestial Light nearly the whole figure was
+	 * classified as not-body and the framing box collapsed onto whatever small solid fragment was left. It
+	 * measured 30 uu of body on figures 200 to 400 uu tall. "Emits light" and "is an ornament" are simply not
+	 * the same question, and answering the second with the first is what made the mascot render wrong.
+	 *
+	 * AND WHY AN ALLOWLIST RATHER THAN A DENYLIST. Every skin file in the lineup says the same thing in its
+	 * own header -- "the dog underneath is identical in every one" -- and they are: all five declare exactly
+	 * root, body, head, arm_l, arm_l_fore, arm_r, arm_r_fore, leg_l, leg_l_shin, leg_r, leg_r_shin, and then
+	 * hang their own halo, crown, robe, lamps, banner, aura, sigil, tail and fires off that skeleton. Framing
+	 * on the shared skeleton therefore gives all five skins the SAME framing, which is the deterministic
+	 * close-up the founder asked for, and a skin that invents a new ornament tomorrow is excluded by default
+	 * rather than quietly resizing the shot.
+	 */
+	bool WonderlandPartIsFramingBody(FName PartName)
+	{
+		const FString Name = PartName.ToString().ToLower();
+		return Name == TEXT("body")
+			|| Name == TEXT("head")
+			|| Name.StartsWith(TEXT("arm_"))
+			|| Name.StartsWith(TEXT("leg_"));
+	}
+}
+
 void AWonderlandCompanionEmbodiment::ClearBody()
 {
 	for (UInstancedStaticMeshComponent* Mesh : PartMeshes)
@@ -409,6 +442,7 @@ void AWonderlandCompanionEmbodiment::ClearBody()
 	PartPivots.Reset();
 	PartNames.Reset();
 	PartMeshIsBody.Reset();
+	PartMeshNames.Reset();
 	MaterialInstances.Reset();
 	FlameMaterialInstances.Reset();
 	FlameRestColours.Reset();
@@ -782,10 +816,9 @@ bool AWonderlandCompanionEmbodiment::LoadFigure(const FString& FilePath)
 		Mesh->AddInstances(Group.Value, false, false, false);
 		Mesh->RegisterComponent();
 		PartMeshes.Add(Mesh);
-		// THE SHELL AND THE LIGHT ARE RECORDED APART, so the wardrobe can frame on one and not the other.
-		// See GetFramingBodyBounds.
-		PartMeshIsBody.Add(Kind == EWonderlandCompanionMaterialKind::Lit
-			|| Kind == EWonderlandCompanionMaterialKind::Rim);
+		PartMeshNames.Add(Figure.Parts[PartIndex].Name);
+		// WHICH PARTS THE WARDROBE IS ALLOWED TO FRAME ON. See WonderlandPartIsFramingBody.
+		PartMeshIsBody.Add(WonderlandPartIsFramingBody(Figure.Parts[PartIndex].Name));
 		BoxCount += Group.Value.Num();
 	}
 
@@ -1078,9 +1111,73 @@ FString AWonderlandCompanionEmbodiment::DescribeFlames() const
 	return Out;
 }
 
+FString AWonderlandCompanionEmbodiment::DescribeFramingParts() const
+{
+	// WHICH PARTS THE FRAMING BOX IS ACTUALLY MADE OF, and where each one sits.
+	//
+	// Written because the box measured 91 uu of body on a 155 uu figure and no amount of reasoning about the
+	// classifier settled why. Python cannot enumerate these components -- get_components_by_class returns
+	// nothing for them -- so the only way to see inside the union is to have the actor say it. Excluded parts
+	// are listed too: a part missing from BOTH lists is a part that was never built, which is a different
+	// fault from a part that was built and rejected.
+	const FTransform Actor = GetActorTransform();
+	FString In;
+	FString Out;
+	for (int32 Index = 0; Index < PartMeshes.Num(); ++Index)
+	{
+		const UInstancedStaticMeshComponent* Mesh = PartMeshes[Index].Get();
+		const FString Name = PartMeshNames.IsValidIndex(Index)
+			? PartMeshNames[Index].ToString() : FString(TEXT("?"));
+		if (Mesh == nullptr)
+		{
+			Out += FString::Printf(TEXT("%s(null) "), *Name);
+			continue;
+		}
+		const FBox Box = Mesh->Bounds.GetBox();
+		const float Low = static_cast<float>(Box.Min.Z - Actor.GetLocation().Z);
+		const float High = static_cast<float>(Box.Max.Z - Actor.GetLocation().Z);
+		const FString Cell = FString::Printf(TEXT("%s[n=%d z%.0f..%.0f] "),
+			*Name, Mesh->GetInstanceCount(), Low, High);
+		if (PartMeshIsBody.IsValidIndex(Index) && PartMeshIsBody[Index])
+		{
+			In += Cell;
+		}
+		else
+		{
+			Out += Cell;
+		}
+	}
+	return FString::Printf(TEXT("BODY: %s|| EXCLUDED: %s"), *In, *Out);
+}
+
 FBox AWonderlandCompanionEmbodiment::GetFramingBodyBounds() const
 {
-	FBox Body(ForceInit);
+	// ---- THE FIGURE'S OWN TURN IS TAKEN OUT BEFORE THE BOX IS MEASURED.
+	//
+	// WHY, AND IT IS A BUG THE REGRESSION PROOF CAUGHT RATHER THAN A PRECAUTION. A component's Bounds is a
+	// world-space axis-aligned box. A dog is deeper than it is wide, so turning it ninety degrees swaps those
+	// two and the box genuinely changes shape -- and the wardrobe camera, which takes whichever axis binds,
+	// then solves a different distance for the same skin. Photographed as the 360 inspection quietly resizing
+	// the mascot, which is precisely what the founder ruled out: "360 must not alter permanent framing."
+	//
+	// So every part is brought back into the actor's own frame, unioned there, and the result is returned in
+	// world units at the actor's position with the rotation left off. The box is then a property of the skin
+	// and nothing else: the same figure gives the same box at every angle it can be looked at from.
+	// ONLY THE YAW IS REMOVED, AND NOTHING ELSE IS TOUCHED.
+	//
+	// The first attempt at this took each part back through the actor's full inverse transform and then put it
+	// forward again through a rotation-free one. That round trip is not identity: it divided the box by the
+	// actor's scale and multiplied it back by the same scale in a different order, and the measured body came
+	// out at a third of its real size on every skin -- small enough that a Max(..., 30.0f) floor caught it and
+	// reported a tidy 30.0 uu for all five, which is how a broken measurement gets to look like a working one.
+	//
+	// So the box is never taken out of world units. It is shifted to the actor's origin, turned by the actor's
+	// yaw alone, and shifted back. Scale is left exactly where it was, because a figure staged at a third size
+	// really is a third as tall and the camera has to come in for it.
+	const FTransform Actor = GetActorTransform();
+	const FTransform UnYaw(FRotator(0.0f, -Actor.Rotator().Yaw, 0.0f).Quaternion());
+	const FVector Origin = Actor.GetLocation();
+	FBox Local(ForceInit);
 	for (int32 Index = 0; Index < PartMeshes.Num(); ++Index)
 	{
 		if (!PartMeshIsBody.IsValidIndex(Index) || !PartMeshIsBody[Index])
@@ -1092,9 +1189,13 @@ FBox AWonderlandCompanionEmbodiment::GetFramingBodyBounds() const
 		{
 			continue;
 		}
-		Body += Mesh->Bounds.GetBox();
+		Local += Mesh->Bounds.GetBox().ShiftBy(-Origin).TransformBy(UnYaw);
 	}
-	return Body;
+	if (!Local.IsValid)
+	{
+		return Local;
+	}
+	return Local.ShiftBy(Origin);
 }
 
 void AWonderlandCompanionEmbodiment::SetShowcaseLit(bool bShowcase)

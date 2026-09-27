@@ -199,6 +199,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	FBox GetFramingBodyBounds() const;
 
+	/** Which parts the framing box is made of, and where each sits. See the implementation. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Companion")
+	FString DescribeFramingParts() const;
+
 	float GetGlowScale() const { return GlowScale; }
 
 	/** Follow whatever pawn this controller is wearing, now and after it changes. */
@@ -536,6 +540,9 @@ private:
 	 * and false for one built from a Glow or Additive material -- a halo, a banner, ghostfire, an ember.
 	 */
 	TArray<bool> PartMeshIsBody;
+
+	/** The figure part each entry of PartMeshes was built from. See DescribeFramingParts. */
+	TArray<FName> PartMeshNames;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> MaterialInstances;

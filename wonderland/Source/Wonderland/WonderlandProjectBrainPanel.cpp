@@ -1608,7 +1608,30 @@ TSharedRef<SWidget> SWonderlandProjectBrainPanel::MakeSkinsView()
 								SNew(SVerticalBox)
 								+ SVerticalBox::Slot().FillHeight(1.0f)
 								[
-									SNew(SSpacer)
+									// ---- THE MASCOT, PAINTED FROM THE STAGE'S OWN CAMERA.
+									//
+									// FOUNDER, twice: "It must render a dedicated mascot preview presentation that
+									// cannot accidentally become: the Project Brain sculpture, the live Wonderland
+									// world, an empty camera, an incorrectly scaled mascot" and "Use a dedicated
+									// deterministic preview representation/capture rig."
+									//
+									// This brush is the stage's render target and the panel has been building it all
+									// along without ever drawing it -- the window was left as a bare hole with a
+									// caption, showing whatever the player's camera happened to be pointing at. That
+									// is why this square has shown, across successive sessions, the brain chamber,
+									// the garden, a staircase, the Dog's back, and a nearly black frame.
+									//
+									// The capture cannot do any of that. It renders PRM_UseShowOnlyList with only the
+									// body and the stage in the list, through its own 34 degree lens, with atmosphere
+									// and fog off and exposure pinned manually -- so the world is not merely unlikely
+									// to appear, it is structurally unable to.
+									SNew(SImage)
+									.Image(SkinPreviewBrush)
+									.Visibility_Lambda([this]()
+									{
+										return SkinPreviewBrush != nullptr ? EVisibility::HitTestInvisible
+																		   : EVisibility::Collapsed;
+									})
 								]
 								+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 0.0f, 0.0f, 6.0f)
 								[

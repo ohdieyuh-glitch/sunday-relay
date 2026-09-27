@@ -81,6 +81,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Skins")
 	FString GetLastError() const { return LastError; }
 
+	/**
+	 * WHAT THE CAMERA SOLVE ACTUALLY DID, in its own words.
+	 *
+	 * FOUNDER: log the body bounds, the aggregate bounds, the framing bounds and the camera distance, and "DO
+	 * NOT validate this solely from camera coordinates". This is the first half of that -- the solve stating
+	 * its inputs and what occupancy it PREDICTS -- and it exists so the prediction can be put next to the
+	 * occupancy measured off the exported pixels. When those two disagree, the solve is wrong somewhere it
+	 * cannot see, and that disagreement is the only thing that catches this class of bug.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Skins")
+	FString DescribeFraming() const { return FramingNote; }
+
 	/** Where the stage stands. Far above the world, where nothing can wander into the shot. */
 	static FVector StageOrigin() { return FVector(0.0, 0.0, 100000.0); }
 
@@ -182,6 +194,9 @@ private:
 
 	FName ShownSkinId;
 	FString LastError;
+
+	/** See DescribeFraming. Rewritten every time the camera is aimed. */
+	FString FramingNote;
 
 	/** Seconds since a surface last asked for a frame. */
 	float SinceWanted = 1000.0f;

@@ -35,11 +35,95 @@
  * interpolation-between-two-gate-runs got the night lighting: bright enough that Arden is a figure rather
  * than a black square, dim enough that Celestial Light is a mascot on a stage rather than a lit window.
  */
-static float GWonderlandPreviewGlow = 0.32f;
+/**
+ * HOW MANY STOPS THE WARDROBE'S OWN CAMERA OPENS.
+ *
+ * THE REASON THE CAPTURE PATH WAS ABANDONED, and it is one number. The stage's SceneCapture2D was carrying
+ * AutoExposureBias = 11, which is a 2048x boost -- so every skin it photographed came back a featureless
+ * white silhouette, the path was written off as "wrote pure white in this build under ten configurations",
+ * and the wardrobe was rebuilt as a hole in the panel showing the live world. That hole is the reason this
+ * square has since shown the brain chamber, the garden, a staircase, the Dog's back and a nearly black frame:
+ * anything in Wonderland is a candidate to appear in a window onto Wonderland.
+ *
+ * The +11 was not absurd when it was written -- the capture was photographing a dark room. Then the sky was
+ * switched off in the show flags and three lights were pointed at the figure, and nobody came back to it.
+ *
+ * A console variable rather than a literal, because this is exactly the kind of number that goes stale when
+ * something near it changes, and this file has now been bitten by that twice.
+ */
+static float GWonderlandPreviewExposure = 0.0f;
+static FAutoConsoleVariableRef GWonderlandPreviewExposureRef(
+	TEXT("wl.Look.PreviewExposure"),
+	GWonderlandPreviewExposure,
+	TEXT("Exposure bias, in stops, for the wardrobe's own capture camera."),
+	ECVF_Default);
+
+/**
+ * HOW BRIGHT THE STAGE LAMPS ARE, AS A FRACTION OF WHAT THEY WERE AUTHORED AT.
+ *
+ * THE ACTUAL REASON THIS WINDOW HAS BEEN WHITE. The three lamps below are written at 90,000, 26,000 and
+ * 52,000 candelas, which are sane numbers for a stage the size of a room. The wardrobe does not use a stage
+ * the size of a room -- it shrinks the whole rig down to bring the figure to a small panel, and the lamps
+ * came along at full strength. Three of them end up roughly a metre from a figure the size of a hand, which
+ * is on the order of fifty thousand lux: direct summer daylight, indoors, pointed at a white dog.
+ *
+ * That is why thirteen stops of exposure bias changed almost nothing. Exposure was never the saturating
+ * term. Measured across a sweep, a twenty-fifth of the authored intensity is where Relay OG stops being a
+ * white silhouette and becomes a bone-white figure with shading, feet, ears and gold eyes on black.
+ *
+ * Kept as a multiplier of the authored values rather than as new literals, so the lighting RATIO the stage
+ * was designed with -- key, fill, rim -- survives untouched and only the overall level moves.
+ */
+/**
+ * HOW MUCH OF THE PREVIEW FRAME THE MASCOT'S BODY FILLS.
+ *
+ * FOUNDER: "75-85% of usable preview height." A control and not a literal because the literal it replaces --
+ * a camera distance of Height * 3.15, which works out to 41.5% -- is exactly the kind of number that is
+ * written once, is never checked against a photograph, and survives four rounds of "the mascot is tiny".
+ */
+static float GWonderlandPreviewFill = 0.80f;
+static FAutoConsoleVariableRef GWonderlandPreviewFillRef(
+	TEXT("wl.Look.PreviewFill"),
+	GWonderlandPreviewFill,
+	TEXT("Fraction of the wardrobe preview frame the mascot's BODY fills on whichever axis binds."),
+	ECVF_Default);
+
+static float GWonderlandPreviewLights = 0.040f;
+static FAutoConsoleVariableRef GWonderlandPreviewLightsRef(
+	TEXT("wl.Look.PreviewLights"),
+	GWonderlandPreviewLights,
+	TEXT("Stage lamp intensity in the wardrobe, as a fraction of the authored values. 1 = untouched."),
+	ECVF_Default);
+
+/**
+ * HOW FAR THE LUMINOUS SKINS ARE ALLOWED TO BLEED.
+ *
+ * Bloom scales with how far over white a pixel is, so a figure whose fire is authored for a plaza in daylight
+ * and then photographed from a metre away does not merely clip -- it throws a halo wide enough to fill the
+ * frame. That halo is what has been read as "the preview is empty and white": Arden Infernal at the authored
+ * settings is a gold cloud with no dog in it, and the dog is in there, in the middle, about a sixth of the
+ * frame wide.
+ *
+ * This is the second of the two terms. The first is the light level above; this one stops the fire that
+ * SURVIVES that reduction from smearing across everything the founder is trying to look at.
+ */
+static float GWonderlandPreviewBloom = 0.10f;
+static FAutoConsoleVariableRef GWonderlandPreviewBloomRef(
+	TEXT("wl.Look.PreviewBloom"),
+	GWonderlandPreviewBloom,
+	TEXT("Bloom intensity for the wardrobe's capture camera."),
+	ECVF_Default);
+
+static float GWonderlandPreviewGlow = 0.010f;
 static FAutoConsoleVariableRef GWonderlandPreviewGlowRef(
 	TEXT("wl.Look.PreviewGlow"),
 	GWonderlandPreviewGlow,
-	TEXT("How much of its authored fire a figure keeps in the wardrobe preview window. 1 = untouched."),
+	TEXT("How much of its authored fire a figure keeps in the wardrobe preview window. 1 = untouched. "
+	     "0.32 was measured against the OLD wardrobe, which was a hole in the panel showing the figure at "
+	     "plaza distance under the world's own exposure. The panel now paints a capture taken from a metre "
+	     "away in a black box, and at that range Skeleton Flame's ghostfire measures 70 to 550 in linear -- "
+	     "hundreds of times over white -- so it clips and blooms until the frame is a white rectangle. Swept "
+	     "against the fixed lamp level, a hundredth is where a body becomes legible underneath its own fire."),
 	ECVF_Default);
 
 #include "Components/PointLightComponent.h"
@@ -105,7 +189,7 @@ AWonderlandSkinStage::AWonderlandSkinStage()
 	KeyLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("KeyLight"));
 	KeyLight->SetupAttachment(StageRoot);
 	KeyLight->SetRelativeLocation(FVector(230.0, -190.0, 270.0));
-	KeyLight->SetIntensity(1150000.0f);
+	KeyLight->SetIntensity(90000.0f);
 	KeyLight->SetAttenuationRadius(1400.0f);
 	KeyLight->SetLightColor(FLinearColor(1.0f, 0.97f, 0.92f));
 	KeyLight->SetCastShadows(false);
@@ -113,7 +197,7 @@ AWonderlandSkinStage::AWonderlandSkinStage()
 	FillLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("FillLight"));
 	FillLight->SetupAttachment(StageRoot);
 	FillLight->SetRelativeLocation(FVector(180.0, 240.0, 90.0));
-	FillLight->SetIntensity(332000.0f);
+	FillLight->SetIntensity(26000.0f);
 	FillLight->SetAttenuationRadius(1200.0f);
 	FillLight->SetLightColor(FLinearColor(0.72f, 0.78f, 1.0f));
 	FillLight->SetCastShadows(false);
@@ -121,7 +205,7 @@ AWonderlandSkinStage::AWonderlandSkinStage()
 	RimLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("RimLight"));
 	RimLight->SetupAttachment(StageRoot);
 	RimLight->SetRelativeLocation(FVector(-250.0, 60.0, 300.0));
-	RimLight->SetIntensity(664000.0f);
+	RimLight->SetIntensity(52000.0f);
 	RimLight->SetAttenuationRadius(1100.0f);
 	RimLight->SetLightColor(FLinearColor(0.62f, 0.70f, 1.0f));
 	RimLight->SetCastShadows(false);
@@ -134,26 +218,13 @@ AWonderlandSkinStage::AWonderlandSkinStage()
 	// three times brighter at noon to nearly four, and dimmer overall -- the direct light had gone and the
 	// indirect had not.
 	//
-	// So the rig is made loud enough to swamp what is left. THIRTEEN times, and the way that was arrived at is
-	// worth recording, because four looked right first.
+	// AND BACK TO THE VALUES A DARK ROOM NEEDS, because the rig is being photographed by its OWN camera again.
 	//
-	// At four times, Relay OG read 0.0611 at noon and 0.0340 at midnight. The stage contributes the same at
-	// both hours, so those two readings separate it from the bounce: the rig is worth about 0.034 and the
-	// indirect about 0.027. Doubling should take the spread from 1.8 to about 1.4, and measured it did much
-	// better -- 1.09, near perfect. But four was ALSO too dim in absolute terms once the channel had taken
-	// the sun away: Relay OG's figure fell to 0.0565 against its own backdrop and Skeleton Flame's to 0.0380,
-	// and the wardrobe's own "a figure is standing there" clause failed on both. Taking the sun away means
-	// replacing it, not merely balancing it.
-	//
-	// EIGHT FIXED RELAY OG AND LEFT SKELETON FLAME SHORT, at 0.0202 against the 0.03 its own proof asks for.
-	// It is the dimmest skin in the lineup by construction -- bone over a black stage, with a chest skull
-	// authored to fall to a twelfth of its brightness between beats -- so it is the one that decides how much
-	// light the room needs. Thirteen times is what clears it.
-	//
-	// ARDEN INFERNAL IS THE COST AND IT IS THE RIGHT ONE TO PAY. A brighter rig lifts a lit body and does
-	// nothing for an emissive fire, so the skin that is mostly fire drifts: it reads 1.4x across the day at
-	// four times and 2.1x at eight. But it drifts BRIGHTER after dark, which is what fire does, while the
-	// alternative was every bone-coated skin going dark -- the fault the founder would actually notice.
+	// These were driven up to thirteen times their authored strength for a preview that was a HOLE in the
+	// panel -- the mascot standing in the open world, competing with a 70,000 lux sun. That approach is gone: the
+	// wardrobe paints the stage's own SceneCapture2D again, which sees only the body and the stage and is
+	// lit by nothing but these three. Exported at thirteen times, every skin came back a featureless white
+	// silhouette. A room needs room lighting.
 
 	// ---- ALL THREE ON THE SHOWCASE CHANNEL, with the figure and nothing else.
 	//
@@ -202,6 +273,26 @@ void AWonderlandSkinStage::ApplyPreviewExposure()
 	// The world's own post volumes have no business dressing a wardrobe mirror.
 	Capture->bOverride_CustomNearClippingPlane = false;
 
+	// ---- THE LAMPS COME DOWN TO THE SIZE OF THE STAGE THEY ARE ACTUALLY LIGHTING.
+	//
+	// Done here, next to the exposure, because these two and the glow are one decision about how bright this
+	// little room is, and splitting them across the constructor and the tick is how the stale +11 survived.
+	// The authored values are the ratio; the multiplier is the level.
+	for (UPointLightComponent* Lamp : {KeyLight.Get(), FillLight.Get(), RimLight.Get()})
+	{
+		if (Lamp == nullptr)
+		{
+			continue;
+		}
+		const float Authored =
+			(Lamp == KeyLight.Get()) ? 90000.0f : ((Lamp == FillLight.Get()) ? 26000.0f : 52000.0f);
+		const float Wanted = Authored * FMath::Max(GWonderlandPreviewLights, 0.0f);
+		if (!FMath::IsNearlyEqual(Lamp->Intensity, Wanted, 0.5f))
+		{
+			Lamp->SetIntensity(Wanted);
+		}
+	}
+
 	Capture->PostProcessBlendWeight = 1.0f;
 	FPostProcessSettings& Post = Capture->PostProcessSettings;
 
@@ -214,12 +305,12 @@ void AWonderlandSkinStage::ApplyPreviewExposure()
 	Post.bOverride_AutoExposureMaxBrightness = true;
 	Post.AutoExposureMaxBrightness = 1.0f;
 	Post.bOverride_AutoExposureBias = true;
-	Post.AutoExposureBias = PreviewExposureEv;
+	Post.AutoExposureBias = GWonderlandPreviewExposure;
 
 	// A LITTLE BLOOM, because the luminous skins -- Celestial Light, Apollo's halo, Skeleton Flame's ghost-fire --
 	// are most of their own identity, and none at all makes them read as flat paint.
 	Post.bOverride_BloomIntensity = true;
-	Post.BloomIntensity = 0.22f;
+	Post.BloomIntensity = GWonderlandPreviewBloom;
 	// NEUTRAL, so a white skin and a black skin are both readable. The founder asked for lighting that works
 	// across white, black, gold, infernal and luminous without a pure-white environment swallowing the white ones.
 	Post.bOverride_VignetteIntensity = true;
@@ -399,13 +490,87 @@ void AWonderlandSkinStage::EnsureBody()
 
 void AWonderlandSkinStage::AimCamera()
 {
-	// EYE HEIGHT, AND FRAMED TO THE FIGURE THIS SKIN ACTUALLY BUILT. Skins are all one height by construction, but a
-	// halo or a crown sticks out above it, so the camera reads the body's measured height rather than a constant and
-	// the tallest headpiece in the set still fits in the frame.
-	const float Height = Body != nullptr ? FMath::Max(Body->GetFigureHeightUu(), 60.0f) : 160.0f;
-	const FVector Eye = FVector(Height * 3.15, -Height * 0.24, Height * 0.62);
-	Capture->SetRelativeLocation(Eye);
-	Capture->SetRelativeRotation((FVector(0.0, 0.0, Height * 0.50) - Eye).Rotation());
+	// ---- THE CAMERA IS SOLVED AGAINST THE BODY, AND THIS IS THE FIX FOR "THE MASCOT RENDERS TINY".
+	//
+	// WHAT WAS HERE, AND WHY IT COULD NEVER BE RIGHT. The eye stood at a hard literal -- Height * 3.15 -- with
+	// a 34 degree lens on a 640x800 target. Work it through: the visible height at that distance is
+	// 2 * 3.15H * tan(17deg) / 0.8, which is 2.41H, so a figure of height H covers 41.5% of the frame. Measured
+	// off the exported pixels rather than off the camera, the figure covered 42-43%. The arithmetic and the
+	// photograph agree, and 41.5% is a long way from the 75-85% the founder asked for.
+	//
+	// WHY EVERY PREVIOUS FRAMING FIX MISSED IT. They were all made in the UI subsystem, which solves a distance
+	// for the PLAYER's 90 degree camera and the window's fraction of the SCREEN. That solve was correct for the
+	// old wardrobe, which was a hole in the panel showing the live world. The panel now paints THIS capture
+	// instead -- a different camera, a different lens, a different target -- and nothing ever solved it. Two
+	// framing systems, one of them unused, and the founder was looking at the one nobody was fixing.
+	//
+	// AND IT READ THE WRONG HEIGHT. GetFigureHeightUu is the declared envelope: it includes Apollo's crown,
+	// Celestial Light's banner and whatever Arden's fire is doing this frame. Framing on it makes the BODY
+	// smaller the more ornamented the skin is, and makes an animated flame move the camera every frame. The
+	// founder's instruction was explicit -- framing must derive from the physical body, not the total actor
+	// bounds -- so this reads GetFramingBodyBounds, which is the lit and rim meshes only and is stateless.
+	const float Fallback = Body != nullptr ? FMath::Max(Body->GetFigureHeightUu(), 60.0f) : 160.0f;
+	float Tall = Fallback;
+	float Wide = Fallback * 0.5f;
+	float MeasuredTall = -1.0f;
+	float MeasuredWide = -1.0f;
+	float MiddleZ = GetActorLocation().Z + Fallback * 0.5f;
+	bool bOnBody = false;
+	if (Body != nullptr)
+	{
+		const FBox Drawn = Body->GetFramingBodyBounds();
+		if (Drawn.IsValid && Drawn.GetExtent().Z > 1.0)
+		{
+			const FVector Half = Drawn.GetExtent();
+			// THE RAW READING IS KEPT, and it is kept because a floor under it has already lied once. A broken
+			// bounds calculation measured every skin at a few uu, the Max below rounded all five up to exactly
+			// 30.0, and the framing note then reported a clean identical number for five figures of visibly
+			// different sizes. A clamp that cannot be seen is indistinguishable from a measurement.
+			MeasuredTall = static_cast<float>(Half.Z) * 2.0f;
+			MeasuredWide = FMath::Max(static_cast<float>(Half.X), static_cast<float>(Half.Y)) * 2.0f;
+			Tall = FMath::Max(MeasuredTall, 30.0f);
+			Wide = FMath::Max(MeasuredWide, 15.0f);
+			MiddleZ = static_cast<float>(Drawn.GetCenter().Z);
+			bOnBody = true;
+		}
+	}
+
+	// ---- BOTH AXES, AT THE SAME FILL, AGAINST THIS CAPTURE'S OWN LENS AND ITS OWN TARGET SHAPE.
+	// FOVAngle on a scene capture is the HORIZONTAL angle; the vertical follows from the target's aspect.
+	const float TanH = FMath::Tan(FMath::DegreesToRadians(FMath::Max(Capture->FOVAngle, 1.0f) * 0.5f));
+	const float AspectW = static_cast<float>(FMath::Max(TargetWidth, 1));
+	const float AspectH = static_cast<float>(FMath::Max(TargetHeight, 1));
+	const float TanV = TanH * (AspectH / AspectW);
+	const float Fill = FMath::Clamp(GWonderlandPreviewFill, 0.20f, 0.98f);
+	const float FitTall = Tall / (2.0f * Fill * FMath::Max(TanV, KINDA_SMALL_NUMBER));
+	const float FitWide = Wide / (2.0f * Fill * FMath::Max(TanH, KINDA_SMALL_NUMBER));
+	// WHICHEVER AXIS BINDS, so a wide skin is brought to the frame's edge rather than through it.
+	const float Distance = FMath::Clamp(FMath::Max(FitTall, FitWide), 40.0f, 6000.0f);
+
+	// A THREE-QUARTER EYE, placed at exactly Distance along its own ray rather than at Distance on X with a
+	// side offset added -- the old form made the true distance longer than the solve, which is its own small
+	// shrink on top of the large one.
+	const float EyeYaw = FMath::DegreesToRadians(-8.0f);
+	const FVector Ray(FMath::Cos(EyeYaw), FMath::Sin(EyeYaw), 0.0f);
+	// Aimed at the body's own middle, so the figure is centred on what is being framed rather than on a
+	// fraction of a declared height that no longer describes it.
+	const FVector Focus(GetActorLocation().X, GetActorLocation().Y, MiddleZ);
+	const FVector Eye = Focus + Ray * Distance;
+	Capture->SetWorldLocation(Eye);
+	Capture->SetWorldRotation((Focus - Eye).Rotation());
+
+	// EVERYTHING THE SOLVE USED, so the prediction can be put beside the occupancy measured off the exported
+	// pixels. The actor SCALE is in here because it is the one term that silently makes the declared envelope
+	// and the measured body box disagree: a figure staged at half size is half as tall in world units while
+	// still declaring its full height, and without the scale printed the two numbers look like a bug.
+	const FVector ShownScale = Body != nullptr ? Body->GetActorScale3D() : FVector::OneVector;
+	FramingNote = FString::Printf(
+		TEXT("onBody=%d bodyTall=%.1f bodyWide=%.1f rawTall=%.1f rawWide=%.1f envelope=%.0f scale=%.3f ")
+		TEXT("fill=%.2f fitTall=%.0f fitWide=%.0f distance=%.0f fov=%.1f target=%dx%d predictedHeightPct=%.1f"),
+		bOnBody ? 1 : 0, Tall, Wide, MeasuredTall, MeasuredWide, Fallback, ShownScale.Z,
+		Fill, FitTall, FitWide, Distance,
+		Capture->FOVAngle, TargetWidth, TargetHeight,
+		100.0f * Tall / FMath::Max(2.0f * Distance * TanV, KINDA_SMALL_NUMBER));
 }
 
 bool AWonderlandSkinStage::ShowSkin(FName SkinId)
@@ -497,10 +662,41 @@ void AWonderlandSkinStage::Tick(float DeltaSeconds)
 	// hour they are measured at; what does not yet hold is that the preview should look the same at 04:00 as
 	// at noon.
 
+	// The exposure is re-applied for the same reason the glow is: so it can be swept in one session.
+	ApplyPreviewExposure();
+
+	// ---- AND THE CAMERA IS RE-SOLVED, WHICH IS THE FIX FOR A MASCOT FRAMED OFF A HALF-BUILT FIGURE.
+	//
+	// AimCamera used to run once, at the moment a skin was shown. At that moment the figure is still being
+	// assembled: components are created, attached and registered in a loop, and a component's Bounds is only
+	// meaningful once it has been registered. So the solve measured whatever existed when it happened to look.
+	//
+	// THE EVIDENCE THAT THIS IS THE CAUSE RATHER THAN A THEORY. Summing Relay OG's body parts from the figure
+	// itself gives a 53 uu body; the solve recorded 30.0 at the same moment. And the shortfall tracks how much
+	// there is to build -- Relay OG and Celestial Light read ~30, Apollo 21.3, Skeleton Flame, the heaviest
+	// figure in the set, only 13.1. A measurement that gets worse the more there is to measure is a
+	// measurement taken too early, not a bad classifier and not bad geometry.
+	//
+	// Re-solving every frame the wardrobe is open cannot drift, because the solve is a pure function of a
+	// stateless body box: the same skin gives the same distance every time it is asked. It simply stops being
+	// able to ask before the answer exists. The cost is a bounds union over a couple of dozen components on
+	// one actor, in the one state where a wardrobe is on screen.
+	AimCamera();
+
 	// THE PREVIEW GLOW IS RE-APPLIED RATHER THAN SET ONCE, so wl.Look.PreviewGlow is live. SetGlowScale
 	// early-outs unless the value actually moved, so this costs a float compare per frame in the one state
 	// where the wardrobe is open.
-	if (Body != nullptr && bInWorldPreview)
+	//
+	// AND IT APPLIES WHENEVER THIS STAGE IS BEING LOOKED AT, NOT ONLY IN THE OLD IN-WORLD MODE. The condition
+	// here used to be bInWorldPreview, which is the wardrobe-as-a-hole-in-the-panel path. The panel now paints
+	// this stage's CAPTURE instead, and on that path bInWorldPreview is false -- so the glow reduction never
+	// ran, GlowScale stayed at 1.0, and Skeleton Flame and Celestial Light photographed as white rectangles no
+	// matter what wl.Look.PreviewGlow was set to. Lowering the default changed nothing at all, which is the
+	// tell: a setting that does not move the picture is a setting that is not being read.
+	//
+	// Reaching this line already means the stage is wanted -- the early-out above returns otherwise -- so the
+	// reduction now follows the thing it was written for: a figure being photographed a metre away in a box.
+	if (Body != nullptr)
 	{
 		Body->SetGlowScale(GWonderlandPreviewGlow);
 	}
