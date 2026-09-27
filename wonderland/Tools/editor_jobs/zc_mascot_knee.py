@@ -140,6 +140,13 @@ CELL_W, CELL_H = 0.011, 0.009
 #: 0.0000 for eye AND face on the first real run; the premium skins are 2-3x the box count of relay_og and
 #: the 300 uu camera was inside them.
 BLACK_FRAME = 0.01
+#: ONLY A FALLBACK NOW. This was the anchor for every patch in the job, inherited from zc_eyes_glow and
+#: never verified; the eye mesh appears to sit far above it. Used only when no eye component can be found,
+#: and the run records that it happened.
+EYE_Z_FALLBACK = 62.0
+#: And a costume is not the Dog. Costume figures are built to TARGET_METRES 1.55 against the canon Dog's
+#: 1.74, putting their eyes roughly forty uu lower.
+EYE_Z_COSTUME = 21.0
 #: How far a floor->clamp peak must clear the same-level noise floor to count as a response. 2x is modest;
 #: the point is to reject peaks that are merely the largest of 49 noisy cells.
 NOISE_MARGIN = 2.0
@@ -267,9 +274,10 @@ def job():
             return None
         here = d.get_actor_location()
         yaw = d.get_actor_rotation().yaw
-        aim = unreal.Vector(here.x, here.y, here.z + 62.0)
+        az = found.get("anchor_z", EYE_Z_FALLBACK)
+        aim = unreal.Vector(here.x, here.y, here.z + az)
         eye = unreal.Vector(here.x + math.cos(math.radians(yaw)) * 300.0,
-                            here.y + math.sin(math.radians(yaw)) * 300.0, here.z + 70.0)
+                            here.y + math.sin(math.radians(yaw)) * 300.0, here.z + az + 8.0)
         pose(eye, aim, 32.0)
         return here
 
@@ -296,12 +304,74 @@ def job():
                 "luma": round(luma((mean.r, mean.g, mean.b)), 5),
                 "dark": round(dark, 4), "bright": round(bright, 4), "samples": int(sampled)}
 
+    def eye_anchor_z(skin):
+        """Height of the eye above the pawn origin, read off the mesh rather than assumed.
+
+        Returns (z_above_actor, how). `how` is "mesh" when a component named like an eye was found and
+        "fallback" when the old +62 constant was used -- recorded per skin so a run can never quietly
+        return to guessing.
+        """
+        d = unreal.GameplayStatics.get_player_pawn(live(), 0)
+        if d is None:
+            return EYE_Z_FALLBACK, "fallback:no-pawn"
+        base = d.get_actor_location().z
+        # BOTH COMPONENT KINDS. The default Dog's eye is a StaticMeshComponent (Mesh_head_eye); a worn
+        # costume is built by the embodiment as INSTANCED components, so a search that knows only one kind
+        # finds the Dog and misses all seven costumes -- which is the population that was mismeasured.
+        best = None
+        for cls in (unreal.StaticMeshComponent, unreal.InstancedStaticMeshComponent):
+            try:
+                comps = d.get_components_by_class(cls)
+            except Exception:                                          # noqa: BLE001
+                continue
+            for comp in comps:
+                nm = str(comp.get_name()).lower()
+                if "eye" not in nm or "halo" in nm:
+                    continue
+                for getter in (lambda c: float(c.get_world_location().z),
+                               lambda c: float(c.bounds.origin.z)):
+                    try:
+                        wz = getter(comp)
+                    except Exception:                                  # noqa: BLE001
+                        continue
+                    if wz and (best is None or wz > best):
+                        best = wz
+                    break
+        if best is None:
+            # PER-FIGURE FALLBACK, not one number for everything. The costume figures are authored to
+            # TARGET_METRES 1.55 while the canon Dog stands 1.74, so a costume's eyes sit about forty uu
+            # lower than the Dog's -- measured by the other lane, 2026-09-27. Sharing one z between them is
+            # what had every costume's "eye" patch reading its brow.
+            return (EYE_Z_FALLBACK if skin == "relay_og" else EYE_Z_COSTUME), "fallback:by-figure"
+        return round(best - base, 1), "mesh"
+
     #: WHERE THE EYE IS, FOUND RATHER THAN ASSUMED. Filled per skin by locate_eye().
     found = {"eye": None, "face": None}
 
+    def paused(on):
+        """Freeze or unfreeze the game world.
+
+        WHY THE SCAN NEEDS THIS, and the noise baseline is what proved it. Capturing the same head TWICE
+        with nothing changed produced cell-to-cell differences up to 0.34 luma on the costume skins -- as
+        large as the floor-to-clamp deltas the scan was trying to detect, which is why nothing could clear
+        2x noise. That is not sensor jitter; that is the SUBJECT MOVING. The Dog idles, and a 7x7 grid of
+        cells each about one percent of the viewport cannot measure a head that bobs between frames: the
+        cell simply contains a different piece of the figure.
+
+        So the world is paused for the duration of a scan. zc_water established that captures keep
+        rendering while paused, which is what makes this safe -- and its control for exactly that is why
+        the technique is trusted here rather than tried fresh.
+        """
+        try:
+            unreal.GameplayStatics.set_game_paused(live(), bool(on))
+            return True
+        except Exception:                                              # noqa: BLE001
+            return False
+
     def scan_cell(here, gx, gy):
         """One cell of the head scan, as a screen-space offset from the projected head point."""
-        return patch(here, 62.0, CELL_W, CELL_H, dx=gx * CELL_W * 2.0, dy=gy * CELL_H * 2.0)
+        return patch(here, found.get("anchor_z", EYE_Z_FALLBACK), CELL_W, CELL_H,
+                     dx=gx * CELL_W * 2.0, dy=gy * CELL_H * 2.0)
 
     def locate_eye(here):
         """Find the eye by asking which part of the head CHANGES when the eye level changes.
@@ -325,6 +395,8 @@ def job():
         cvar("wl.Look.EyeGlowDay", "%.3f" % EYE_FLOOR)
         cvar("wl.Look.EyeGlowNight", "%.3f" % EYE_FLOOR)
         yield 2.0
+        found["paused"] = paused(True)
+        yield 1.0
         lo = {}
         for gx in range(-SCAN, SCAN + 1):
             for gy in range(-SCAN, SCAN + 1):
@@ -359,6 +431,7 @@ def job():
                 deltas["%d_%d" % (gx, gy)] = round(moved, 5)
                 if moved > best_d:
                     best, best_d = (gx, gy), moved
+        paused(False)
         found["scan"] = deltas
         found["peak_delta"] = round(best_d, 5)
         # A PEAK THAT DOES NOT BEAT THE NOISE IS NOT AN EYE. Recorded either way, so the report can show
@@ -376,9 +449,10 @@ def job():
     def read_all(here):
         """The located eye, the cheek furthest from it, and the whole head shot."""
         e, f = found.get("eye"), found.get("face")
-        return {"eye": (scan_cell(here, e[0], e[1]) if e else patch(here, 62.0, CELL_W, CELL_H)),
-                "face": (scan_cell(here, f[0], f[1]) if f else patch(here, 62.0, CELL_W, CELL_H, dx=0.048)),
-                "frame": patch(here, 62.0, 0.42, 0.40)}
+        a = found.get("anchor_z", EYE_Z_FALLBACK)
+        return {"eye": (scan_cell(here, e[0], e[1]) if e else patch(here, a, CELL_W, CELL_H)),
+                "face": (scan_cell(here, f[0], f[1]) if f else patch(here, a, CELL_W, CELL_H, dx=0.048)),
+                "frame": patch(here, found.get("anchor_z", EYE_Z_FALLBACK), 0.42, 0.40)}
 
     # ---------------------------------------------------------------- AXIS B: the eye level, per skin/hour
     if AXIS != "eye":
@@ -395,6 +469,11 @@ def job():
             if ui is not None:
                 ui.wear_relay_skin(skin)
             yield 2.5
+            # THE ANCHOR IS RESOLVED FIRST, from this skin's own mesh, because a costume can put the eye
+            # somewhere the last costume did not.
+            az, how = eye_anchor_z(skin)
+            found["anchor_z"] = az
+            found["anchor_how"] = how
             here = frame_head()
             if here is None:
                 continue
@@ -410,9 +489,9 @@ def job():
                 yaw = d0.get_actor_rotation().yaw
                 pose(unreal.Vector(hh.x + math.cos(math.radians(yaw)) * reach,
                                    hh.y + math.sin(math.radians(yaw)) * reach, hh.z + 70.0),
-                     unreal.Vector(hh.x, hh.y, hh.z + 62.0), 32.0)
+                     unreal.Vector(hh.x, hh.y, hh.z + found.get("anchor_z", EYE_Z_FALLBACK)), 32.0)
                 yield 1.2
-                shot = patch(hh, 62.0, 0.42, 0.40)
+                shot = patch(hh, found.get("anchor_z", EYE_Z_FALLBACK), 0.42, 0.40)
                 if shot is not None and shot["luma"] >= BLACK_FRAME:
                     break
             if shot is None or shot["luma"] < BLACK_FRAME:
@@ -427,6 +506,8 @@ def job():
                 yield step
             rows.append({"skin": skin, "hour": hlabel, "level": None, "locator": True,
                          "eye_cell": found.get("eye"), "face_cell": found.get("face"),
+                         "anchor_z": found.get("anchor_z"), "anchor_how": found.get("anchor_how"),
+                         "paused": found.get("paused"),
                          "peak_delta": found.get("peak_delta"),
                          "noise_floor": found.get("noise_floor"),
                          "beats_noise": found.get("beats_noise"), "reach_uu": reach,
@@ -438,9 +519,12 @@ def job():
                     return
                 # BOTH ends of the day-cycle lerp are set to the same value, so the level under test is the
                 # level that arrives whatever the hour is -- otherwise dusk would silently read a blend.
+                paused(False)
                 cvar("wl.Look.EyeGlowDay", "%.3f" % level)
                 cvar("wl.Look.EyeGlowNight", "%.3f" % level)
                 yield 2.0
+                paused(True)
+                yield 0.6
                 d2 = unreal.GameplayStatics.get_player_pawn(live(), 0)
                 if d2 is None:
                     continue
@@ -477,9 +561,12 @@ def job():
                      {k: row.get(k) for k in ("eye_luma", "over_face", "isolation", "clipped", "hue_retention")})
             # ---- AND THE SHIPPED PAIR, with the day cycle interpolating it as it does in the game.
             if base is not None and alive() is not None:
+                paused(False)
                 cvar("wl.Look.EyeGlowDay", "%.3f" % SHIPPED_DAY)
                 cvar("wl.Look.EyeGlowNight", "%.3f" % SHIPPED_NIGHT)
                 yield 2.5
+                paused(True)
+                yield 0.6
                 d3 = unreal.GameplayStatics.get_player_pawn(live(), 0)
                 if d3 is not None:
                     r = read_all(d3.get_actor_location())
@@ -550,6 +637,7 @@ def job():
                  {"frame_luma": r["frame"]["luma"], "clipped": r["frame"]["bright"]})
 
     # ---------------------------------------------------------------- put the world back
+    paused(False)
     for name, value in SHIPPED:
         cvar(name, value)
     unreal.SystemLibrary.execute_console_command(live(), "wl.Look.Reglow")
@@ -573,6 +661,9 @@ def job():
                bool(loc) and not blackened
                and all(r.get("beats_noise") for r in rows if r.get("locator")),
                peak_delta_per_skin=loc, black_framed=blackened,
+               anchor_z={r["skin"]: r.get("anchor_z") for r in rows if r.get("locator")},
+               anchor_how={r["skin"]: r.get("anchor_how") for r in rows if r.get("locator")},
+               paused_ok={r["skin"]: r.get("paused") for r in rows if r.get("locator")},
                noise_floor_per_skin={r["skin"]: r.get("noise_floor") for r in rows if r.get("locator")},
                beats_noise={r["skin"]: r.get("beats_noise") for r in rows if r.get("locator")},
                eye_cell={r["skin"]: r.get("eye_cell") for r in rows if r.get("locator")},
