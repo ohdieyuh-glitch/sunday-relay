@@ -1,0 +1,108 @@
+{
+ "name": "zc_avatar_memory",
+ "started": "2026-09-27 03:21:15",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "M00",
+   "name": "the engine reports its own memory",
+   "pass": true,
+   "detail": {
+    "free_mb": -6642
+   }
+  },
+  {
+   "id": "M01",
+   "name": "every mode was measured",
+   "pass": true,
+   "detail": {
+    "per_avatar_mb": {
+     "hierarchical_first": 20.0,
+     "plain_first": 9.7,
+     "plain_second": 19.7,
+     "hierarchical_second": 13.7
+    }
+   }
+  },
+  {
+   "id": "M02",
+   "name": "the two passes of each mode agree well enough to compare the modes",
+   "pass": true,
+   "detail": {
+    "hierarchical": [
+     20.0,
+     13.7
+    ],
+    "plain": [
+     9.7,
+     19.7
+    ],
+    "disagreement_mb": 10.0,
+    "note": "the same setting measured early and late. If these disagree by more than the gap between SETTINGS, this measured the machine rather than the quadtree."
+   }
+  },
+  {
+   "id": "M03",
+   "name": "the quadtree is or is not most of an avatar's footprint",
+   "pass": true,
+   "detail": {
+    "hierarchical_mb": [
+     20.0,
+     13.7
+    ],
+    "plain_mb": [
+     9.7,
+     19.7
+    ],
+    "hierarchical_minus_plain_mb": 2.2,
+    "note": "reported either way. A large positive gap means a crowd gets dramatically cheaper for one console variable and P0 item 5 stops being art-bound; a small one means the footprint is the instances themselves and only the art can move it."
+   }
+  }
+ ],
+ "figure": "Cherubim_Large.wlvox",
+ "by_mode": {
+  "hierarchical_first": {
+   "free_before_mb": -6644,
+   "free_after_mb": -6704,
+   "free_recovered_mb": -6695,
+   "spawned": 3,
+   "components_each": 41,
+   "mb_per_avatar": 20.0
+  },
+  "plain_first": {
+   "free_before_mb": -6695,
+   "free_after_mb": -6724,
+   "free_recovered_mb": -6678,
+   "spawned": 3,
+   "components_each": 41,
+   "mb_per_avatar": 9.7
+  },
+  "plain_second": {
+   "free_before_mb": -6670,
+   "free_after_mb": -6729,
+   "free_recovered_mb": -6698,
+   "spawned": 3,
+   "components_each": 41,
+   "mb_per_avatar": 19.7
+  },
+  "hierarchical_second": {
+   "free_before_mb": -6698,
+   "free_after_mb": -6739,
+   "free_recovered_mb": -6700,
+   "spawned": 3,
+   "components_each": 41,
+   "mb_per_avatar": 13.7
+  }
+ },
+ "mb_per_avatar": {
+  "hierarchical_first": 20.0,
+  "plain_first": 9.7,
+  "plain_second": 19.7,
+  "hierarchical_second": 13.7
+ },
+ "hierarchical_minus_plain_mb": 2.2,
+ "repeat_disagreement_mb": 10.0,
+ "finished": "2026-09-27 03:23:27",
+ "seconds": 131.63,
+ "log": "M00 PASS the engine reports its own memory {'free_mb': -6642}\nM_hierarchical_first INFO hierarchical_first {'free_before_mb': -6644, 'free_after_mb': -6704, 'free_recovered_mb': -6695, 'spawned': 3, 'components_each': 41, 'mb_per_avatar': 20.0}\nM_plain_first INFO plain_first {'free_before_mb': -6695, 'free_after_mb': -6724, 'free_recovered_mb': -6678, 'spawned': 3, 'components_each': 41, 'mb_per_avatar': 9.7}\nM_plain_second INFO plain_second {'free_before_mb': -6670, 'free_after_mb': -6729, 'free_recovered_mb': -6698, 'spawned': 3, 'components_each': 41, 'mb_per_avatar': 19.7}\nM_hierarchical_second INFO hierarchical_second {'free_before_mb': -6698, 'free_after_mb': -6739, 'free_recovered_mb': -6700, 'spawned': 3, 'components_each': 41, 'mb_per_avatar': 13.7}\nM01 PASS every mode was measured {'per_avatar_mb': {'hierarchical_first': 20.0, 'plain_first': 9.7, 'plain_second': 19.7, 'hierarchical_second': 13.7}}\nM02 PASS the two passes of each mode agree well enough to compare the modes {'hierarchical': [20.0, 13.7], 'plain': [9.7, 19.7], 'disagreement_mb': 10.0, 'note': 'the same setting measured early and late. If these disagree by more than the gap between SETTINGS, this measured the machine rather than the quadtree.'}\nM03 PASS the quadtree is or is not most of an avatar's footprint {'hierarchical_mb': [20.0, 13.7], 'plain_mb': [9.7, 19.7], 'hierarchical_minus_plain_mb': 2.2, 'note': 'reported either way. A large positive gap means a crowd gets dramatically cheaper for one console variable and P0 item 5 stops being art-bound; a small one means the footprint is the instances themselves and only the art can move it.'}\n"
+}

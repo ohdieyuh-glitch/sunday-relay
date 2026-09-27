@@ -150,6 +150,21 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	static FString DescribeWorldPartition(UWorld* World);
 
+	/**
+	 * WHAT THIS PROCESS IS USING, AND WHAT THE MACHINE HAS LEFT, IN MEGABYTES.
+	 *
+	 * Added because Python is offered no memory reading at all here -- SystemLibrary has nothing with
+	 * "memory" in its name -- and the question that needs one is worth answering: a Cherubim Large Project
+	 * Avatar costs about 840 MB, which is roughly 23 KB for each of its 36,025 boxes. An instance is a
+	 * transform, on the order of sixty-four bytes, so three orders of magnitude of that is overhead rather
+	 * than art, and overhead has levers.
+	 *
+	 * USED rather than only available, because free physical memory moves with every other process on the
+	 * machine. Attributing a figure's cost needs a reading from inside the process that built it.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static FString DescribeMemory();
+
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	static bool ReadScreenRect(float MinX, float MinY, float MaxX, float MaxY,
 		FLinearColor& OutMean, float& OutDarkFraction, float& OutBrightFraction, int32& OutSampled);

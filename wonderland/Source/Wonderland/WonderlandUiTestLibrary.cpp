@@ -1,3 +1,4 @@
+#include "HAL/PlatformMemory.h"
 #include "WonderlandUiTestLibrary.h"
 #include "WorldPartition/WorldPartitionSubsystem.h"
 #include "WorldPartition/WorldPartitionRuntimeHash.h"
@@ -708,4 +709,16 @@ bool UWonderlandUiTestLibrary::PickCursor(const FString& Shape, float Size)
 FString UWonderlandUiTestLibrary::GetCursorShape()
 {
 	return FString(WonderlandCursor::NameOf(WonderlandCursor::Chosen()));
+}
+
+FString UWonderlandUiTestLibrary::DescribeMemory()
+{
+	const FPlatformMemoryStats Stats = FPlatformMemory::GetStats();
+	const double Mb = 1024.0 * 1024.0;
+	return FString::Printf(
+		TEXT("usedPhysicalMb=%.0f availablePhysicalMb=%.0f peakUsedPhysicalMb=%.0f usedVirtualMb=%.0f"),
+		static_cast<double>(Stats.UsedPhysical) / Mb,
+		static_cast<double>(Stats.AvailablePhysical) / Mb,
+		static_cast<double>(Stats.PeakUsedPhysical) / Mb,
+		static_cast<double>(Stats.UsedVirtual) / Mb);
 }

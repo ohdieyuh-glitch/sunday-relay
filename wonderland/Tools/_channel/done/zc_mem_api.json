@@ -1,0 +1,27 @@
+{
+ "name": "zc_mem_api",
+ "started": "2026-09-27 03:18:53",
+ "status": "measured",
+ "candidates": {},
+ "tried": {
+  "SystemLibrary.get_platform_memory_stats": "?type object 'SystemLibrary' has no attribute 'get_platform_memory_stats'",
+  "SystemLibrary.get_memory_stats": "?type object 'SystemLibrary' has no attribute 'get_memory_stats'"
+ },
+ "tests": [
+  {
+   "id": "A00",
+   "name": "the engine offers Python a memory reading",
+   "pass": false,
+   "detail": {
+    "candidates": {},
+    "tried": {
+     "SystemLibrary.get_platform_memory_stats": "?type object 'SystemLibrary' has no attribute 'get_platform_memory_stats'",
+     "SystemLibrary.get_memory_stats": "?type object 'SystemLibrary' has no attribute 'get_memory_stats'"
+    }
+   }
+  }
+ ],
+ "finished": "2026-09-27 03:18:54",
+ "seconds": 0.51,
+ "log": "A_MEM INFO memory readings available to Python {'found': {}, 'tried': {'SystemLibrary.get_platform_memory_stats': \"?type object 'SystemLibrary' has no attribute 'get_platform_memory_stats'\", 'SystemLibrary.get_memory_stats': \"?type object 'SystemLibrary' has no attribute 'get_memory_stats'\"}}\n"
+}
