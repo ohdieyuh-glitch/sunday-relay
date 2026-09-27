@@ -167,16 +167,62 @@ void SWonderlandMissionsPanel::Construct(const FArguments& InArgs)
 			]
 		];
 
+	// ---- WHAT THE PANEL SAYS WHEN THE FOLD HAS NO BEAT YET.
+	//
+	// BOTH LINES WERE FIXED TEXT AND ONE OF THEM WAS FALSE. Photographed while the world was following a live
+	// Julius run, this panel read "No mission is running." A run had been adopted, the task set held it, and the
+	// only surface the founder can see denied it. The fold was empty because an adopted run has produced no
+	// event yet -- which is a statement about beats, not about whether a mission exists.
+	//
+	// SAME SLOTS, SAME SIZES, SAME ORDER: the founder's rule is that a content change is not a layout change,
+	// so nothing moves. The two text blocks answer from the subsystem instead of from a literal.
 	TSharedRef<SWidget> Idle =
 		SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()
 		[
-			SNew(STextBlock).Text(FText::FromString(TEXT("No mission is running."))).Font(WonderlandUi::Sans(20, true)).ColorAndOpacity(WonderlandUi::Ivory())
+			SNew(STextBlock)
+			.Text_Lambda([Weak]()
+			{
+				if (!Weak.IsValid())
+				{
+					return FText::FromString(TEXT("No mission is running."));
+				}
+				const FName Followed = Weak->GetFoldMissionId();
+				if (Weak->IsFollowingRealRun() && !Followed.IsNone())
+				{
+					return FText::FromString(Followed.ToString());
+				}
+				return FText::FromString(TEXT("No mission is running."));
+			})
+			.Font(WonderlandUi::Sans(20, true)).ColorAndOpacity(WonderlandUi::Ivory())
 		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
 		[
 			SNew(STextBlock)
-			.Text(FText::FromString(TEXT("A Mission Contract appears only while a task runs through Julius, a Jhinn or an LLM Companion, and this panel follows it from red to violet.")))
+			.Text_Lambda([Weak]()
+			{
+				static const FString Waiting = TEXT("A Mission Contract appears only while a task runs through "
+					"Julius, a Jhinn or an LLM Companion, and this panel follows it from red to violet.");
+				if (!Weak.IsValid() || !Weak->IsFollowingRealRun())
+				{
+					return FText::FromString(Waiting);
+				}
+				// WHAT JULIUS SAID, AND WHETHER IT HAS SAID ANYTHING. An adopted run whose state has not been
+				// reported shows QUEUED and says the state is unreported, rather than presenting the enum's
+				// default as something Julius asserted.
+				const FString Run = Weak->GetFollowedRunId();
+				const FString Said = Weak->GetFollowedJuliusState();
+				// THE MAPPED STATE, NOT THE WORD QUEUED. I wrote QUEUED as a literal here half an hour after
+				// removing three other literals that had gone stale, and it would have printed "QUEUED through
+				// Julius ... Julius reports READY" -- a sentence contradicting itself in its own second clause.
+				const FString Mapped = Weak->GetFollowedStateName();
+				return FText::FromString(FString::Printf(
+					TEXT("%s through Julius. Run %s. Julius reports %s. No event has reached the contract yet, "
+						"so the stage ladder below stays unlit until one does."),
+					Mapped.IsEmpty() ? TEXT("Followed") : *Mapped.ToUpper(),
+					Run.IsEmpty() ? TEXT("unnamed") : *Run,
+					Said.IsEmpty() ? TEXT("no state yet") : *Said));
+			})
 			.Font(WonderlandUi::Sans(11)).ColorAndOpacity(WonderlandUi::Dim()).AutoWrapText(true)
 		];
 
@@ -199,8 +245,22 @@ void SWonderlandMissionsPanel::Construct(const FArguments& InArgs)
 							[
 								SNew(SBorder).BorderImage(&PreviewBrush).Padding(FMargin(10.0f, 4.0f))
 								[
-									SNew(STextBlock).Text(FText::FromString(TEXT("DEVELOPMENT PREVIEW · SIMULATED JULIUS EXECUTION")))
-									.Font(WonderlandUi::Sans(8, true, 120)).ColorAndOpacity(WonderlandUi::Coral())
+									// THE SAME BANNER THE STRIP DRAWS, from the same accessor, so the two can never
+									// disagree. They did: this sentence was a literal here and a literal again in
+									// WonderlandMissionSubsystem.cpp, and both claimed a simulation over a live run.
+									SNew(STextBlock)
+									.Text_Lambda([Weak]()
+									{
+										return Weak.IsValid() ? FText::FromString(Weak->GetProvenanceBanner()) : FText::GetEmpty();
+									})
+									.Font(WonderlandUi::Sans(8, true, 120))
+									.ColorAndOpacity_Lambda([Weak]()
+									{
+										// Coral for a preview, gold for a real run: the colour carries the same claim as
+										// the words, so a glance is not misled by a badge that is always the warning one.
+										return (Weak.IsValid() && Weak->IsFollowingRealRun())
+											? WonderlandUi::MenuGold() : WonderlandUi::Coral();
+									})
 								]
 							]
 							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)

@@ -1,0 +1,181 @@
+{
+ "name": "zzT2_dusk_hole",
+ "started": "2026-09-27 15:57:48",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "D_NOISE",
+   "name": "each rung agrees with itself -- two reads of the same hour",
+   "pass": true,
+   "detail": {
+    "worst_spread": 0.0003,
+    "tolerance": 0.01,
+    "measured": 9,
+    "wanted": 9,
+    "note": "red here voids everything below, because every gate under it compares rungs to each other"
+   }
+  },
+  {
+   "id": "D_HOLE",
+   "name": "the evening dips BELOW full night and climbs back out, rather than simply falling",
+   "pass": true,
+   "detail": {
+    "bottom_hour": 18.0,
+    "bottom_luma": 0.0365,
+    "bottom_ground": 0.0126,
+    "first_hour_luma": 0.0955,
+    "last_hour_luma": 0.176,
+    "margin_below_both_ends": 0.059,
+    "is_interior": true,
+    "note": "a monotone fall into night is correct behaviour and needs no fix. A dip means the world goes darker than night and then comes back, which is a defect at one hour"
+   }
+  },
+  {
+   "id": "D_PREDICT",
+   "name": "the bottom sits in the gap between the two curves, where the explanation puts it",
+   "pass": true,
+   "detail": {
+    "bottom_elevation": 0.0,
+    "predicted_window": "elevation +1 to -10 deg",
+    "daylight_at_bottom": 0.1999,
+    "nightfall_at_bottom": 0.0,
+    "note": "Daylight reaches zero at -9 deg and Nightfall does not start until -2. A minimum anywhere else means the crossover gap is not the cause"
+   }
+  },
+  {
+   "id": "D_GROUND",
+   "name": "the ground stays readable through the whole crossover",
+   "pass": false,
+   "detail": {
+    "darkest_ground_hour": 18.0,
+    "darkest_ground_luma": 0.0126,
+    "floor": 0.03,
+    "ground_by_hour": {
+     "17.50": 0.0702,
+     "17.75": 0.0587,
+     "18.00": 0.0126,
+     "18.25": 0.0155,
+     "18.50": 0.0444,
+     "18.75": 0.0817,
+     "19.00": 0.0686,
+     "19.25": 0.1619,
+     "19.50": 0.1832
+    },
+    "note": "the founder's complaint is that the ground is unreadable and paths disappear. This measures that sentence rather than the whole frame"
+   }
+  }
+ ],
+ "camera_eye": [
+  -320.0,
+  -1900.0,
+  200.0
+ ],
+ "camera_at": [
+  0.0,
+  -1460.0,
+  90.0
+ ],
+ "span": 21.0,
+ "dusk": [
+  {
+   "hour": 17.5,
+   "luma": 0.0955,
+   "spread": 0.0003,
+   "tails": 0.8574,
+   "ground_luma": 0.0702,
+   "sun_elevation": 9.4,
+   "daylight": 0.7778,
+   "nightfall": 0.0
+  },
+  {
+   "hour": 17.75,
+   "luma": 0.0835,
+   "spread": 0.0001,
+   "tails": 0.9384,
+   "ground_luma": 0.0587,
+   "sun_elevation": 4.71,
+   "daylight": 0.4447,
+   "nightfall": 0.0
+  },
+  {
+   "hour": 18.0,
+   "luma": 0.0365,
+   "spread": 0.0001,
+   "tails": 0.9745,
+   "ground_luma": 0.0126,
+   "sun_elevation": 0.0,
+   "daylight": 0.1999,
+   "nightfall": 0.0
+  },
+  {
+   "hour": 18.25,
+   "luma": 0.043,
+   "spread": 0.0002,
+   "tails": 0.9708,
+   "ground_luma": 0.0155,
+   "sun_elevation": -4.71,
+   "daylight": 0.0489,
+   "nightfall": 0.1804
+  },
+  {
+   "hour": 18.5,
+   "luma": 0.0712,
+   "spread": 0.0002,
+   "tails": 0.9658,
+   "ground_luma": 0.0444,
+   "sun_elevation": -9.4,
+   "daylight": 0.0,
+   "nightfall": 0.8321
+  },
+  {
+   "hour": 18.75,
+   "luma": 0.1102,
+   "spread": 0.0002,
+   "tails": 0.85,
+   "ground_luma": 0.0817,
+   "sun_elevation": -14.05,
+   "daylight": 0.0,
+   "nightfall": 1.0
+  },
+  {
+   "hour": 19.0,
+   "luma": 0.0935,
+   "spread": 0.0001,
+   "tails": 0.8996,
+   "ground_luma": 0.0686,
+   "sun_elevation": -18.63,
+   "daylight": 0.0,
+   "nightfall": 1.0
+  },
+  {
+   "hour": 19.25,
+   "luma": 0.1408,
+   "spread": 0.0,
+   "tails": 0.6888,
+   "ground_luma": 0.1619,
+   "sun_elevation": -23.14,
+   "daylight": 0.0,
+   "nightfall": 1.0
+  },
+  {
+   "hour": 19.5,
+   "luma": 0.176,
+   "spread": 0.0002,
+   "tails": 0.4793,
+   "ground_luma": 0.1832,
+   "sun_elevation": -27.55,
+   "daylight": 0.0,
+   "nightfall": 1.0
+  }
+ ],
+ "bottom": {
+  "hour": 18.0,
+  "luma": 0.0365,
+  "elevation": 0.0,
+  "daylight": 0.1999,
+  "nightfall": 0.0
+ },
+ "finished": "2026-09-27 15:58:44",
+ "seconds": 56.74,
+ "log": "D_NOISE PASS each rung agrees with itself -- two reads of the same hour {'worst_spread': 0.0003, 'tolerance': 0.01, 'measured': 9, 'wanted': 9, 'note': 'red here voids everything below, because every gate under it compares rungs to each other'}\nD_HOLE PASS the evening dips BELOW full night and climbs back out, rather than simply falling {'bottom_hour': 18.0, 'bottom_luma': 0.0365, 'bottom_ground': 0.0126, 'first_hour_luma': 0.0955, 'last_hour_luma': 0.176, 'margin_below_both_ends': 0.059, 'is_interior': True, 'note': 'a monotone fall into night is correct behaviour and needs no fix. A dip means the world goes darker than night and then comes back, which is a defect at one hour'}\nD_PREDICT PASS the bottom sits in the gap between the two curves, where the explanation puts it {'bottom_elevation': 0.0, 'predicted_window': 'elevation +1 to -10 deg', 'daylight_at_bottom': 0.1999, 'nightfall_at_bottom': 0.0, 'note': 'Daylight reaches zero at -9 deg and Nightfall does not start until -2. A minimum anywhere else means the crossover gap is not the cause'}\nD_GROUND FAIL the ground stays readable through the whole crossover {'darkest_ground_hour': 18.0, 'darkest_ground_luma': 0.0126, 'floor': 0.03, 'ground_by_hour': {'17.50': 0.0702, '17.75': 0.0587, '18.00': 0.0126, '18.25': 0.0155, '18.50': 0.0444, '18.75': 0.0817, '19.00': 0.0686, '19.25': 0.1619, '19.50': 0.1832}, 'note': \"the founder's complaint is that the ground is unreadable and paths disappear. This measures that sentence rather than the whole frame\"}\n"
+}

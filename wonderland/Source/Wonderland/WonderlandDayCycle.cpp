@@ -46,10 +46,34 @@ namespace
 		return FMath::Sin(Through * PI) * 72.0f;
 	}
 
-	/** The sun's bearing, swinging through the south across the day so shadows sweep rather than pivot. */
+	/**
+	 * The sun's bearing, swinging through the south across the day so shadows sweep rather than pivot -- AND
+	 * CONTINUING ROUND THROUGH THE NIGHT, which it did not do until this was measured.
+	 *
+	 * The clamped version froze the bearing at 288 deg from 19:00 to midnight and at 72 deg from midnight to
+	 * 05:00, then SNAPPED 216 degrees the instant Hour wrapped through Fmod from 24 to 0 -- taking the moon
+	 * with it, since the moon is laid out at bearing + 180. zzT3 measured the result at the arrival: luma
+	 * 0.1971 to 0.1714 and ground 0.1969 to 0.1573 between 23:30 and midnight, a step eighteen times the
+	 * median step of the rest of the night, on a night that is otherwise flat to within 0.0053.
+	 *
+	 * The docstring directly above this one promises that "nothing jumps at a boundary". The elevation curve
+	 * honours that; this function sat three lines under the same comment and broke it once a night, at the
+	 * same moment, for every player.
+	 *
+	 * So the night now carries the remaining 144 degrees of the circle at a constant rate: 288 deg at 19:00
+	 * swinging to 432 deg (which is 72) at 05:00, where the day arc picks it up exactly. Continuous at both
+	 * joins and across the wrap -- 359.99 and 0.0 are the same direction to a rotator, so nothing jumps.
+	 */
 	float BearingAt(float Hour)
 	{
-		return FMath::Lerp(72.0f, 288.0f, FMath::Clamp((Hour - 5.0f) / 14.0f, 0.0f, 1.0f));
+		if (Hour >= 5.0f && Hour <= 19.0f)
+		{
+			// Day: 72 -> 288 through the south, over fourteen hours. Unchanged.
+			return FMath::Lerp(72.0f, 288.0f, (Hour - 5.0f) / 14.0f);
+		}
+		// Night: ten hours from 19:00 round to 05:00, in the SAME direction, covering the other 144 degrees.
+		const float IntoNight = (Hour > 19.0f) ? (Hour - 19.0f) : (Hour + 5.0f);
+		return FMath::Fmod(288.0f + 144.0f * (IntoNight / 10.0f), 360.0f);
 	}
 
 	/** Warm at the horizon, white overhead. The turn happens in the last few degrees, as it does outdoors. */
@@ -484,6 +508,39 @@ static FAutoConsoleVariableRef GWonderlandMoonGainRef(
 	TEXT("The moon's intensity as a fraction of the noon sun."),
 	ECVF_Default);
 
+// HOW FAR AHEAD OF THE SUN'S OPPOSITE THE MOON RUNS, IN HOURS. Zero ships, and zero is exactly today's
+// behaviour: the moon sits directly opposite the sun and the two cross the horizon in the same instant.
+//
+// That is what leaves the ground black at dusk. At 18:00 the elevation is zero, so sun pitch and moon pitch
+// are both zero, and a directional light at zero elevation delivers cos(90) of itself to level ground --
+// nothing. No value of MoonGain and no change to Nightfall can put light on the paving at that hour,
+// because the light is pointed ALONG it. Measured signature, from readings already taken: ground luma over
+// whole-frame luma runs 0.724 at moon elevation 0, 0.746 at 14 deg, 1.056 at 27.6 and 0.995 at 69.6 -- the
+// ground lags the frame while the moon grazes and catches up as it climbs.
+//
+// A lead of an hour or two puts the moon well clear of the horizon by sunset: at 18:00 it stands at 18.6
+// deg with a lead of 1, 27.6 with 1.5 and 36.0 with 2, taking the ground's share of the moon from exactly
+// zero to 0.32, 0.46 and 0.59 of overhead. Midnight and every daylight hour are untouched, and because the
+// moon runs the same curve at a shifted hour there is no value of this knob that can tip it past vertical.
+//
+// AND IT TRADES DAWN FOR DUSK, WHICH IS THE REASON IT IS A KNOB AND NOT A FIX. Dawn is the mirror of dusk
+// -- the elevation is zero at 06:00 as well -- so the same hole exists there, and a LEAD that lifts the
+// moon at sunset drops it at sunrise: at 05:00 the moon stands at 18.6 deg today and at -9.4 with a lead
+// of 1.5, which is below the horizon. A lag would swap which end is fixed. No single constant serves both,
+// because one body on one 24-hour curve cannot be high at both horizon crossings.
+//
+// So this is deliberately not defaulted to anything. It makes the trade MEASURABLE -- sweep it and read
+// 18:00 and 06:00 in the same table -- and which end of the day Wonderland should favour, or whether the
+// crossover should be carried by the practicals and the sky instead, is a founder question with a
+// photograph attached rather than a number I should pick.
+static float GWonderlandMoonLeadHours = 0.0f;
+static FAutoConsoleVariableRef GWonderlandMoonLeadHoursRef(
+	TEXT("wl.Sky.MoonLeadHours"),
+	GWonderlandMoonLeadHours,
+	TEXT("Hours the moon runs ahead of the point directly opposite the sun. 0 = today's behaviour, the two "
+	     "crossing the horizon together, which is why dusk has no directional light on the ground."),
+	ECVF_Default);
+
 static float GWonderlandNightFill = 0.26f;
 static FAutoConsoleVariableRef GWonderlandNightFillRef(
 	TEXT("wl.Sky.NightFill"),
@@ -600,9 +657,38 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 		(Elevation + 9.0f) / FMath::Max(GWonderlandTwilightSpan, 1.0f), 0.0f, 1.0f);
 	const float Daylight = FMath::Pow(TwilightBand, 1.9f);
 
-	// HOW FAR INTO THE NIGHT WE ARE: 0 while the sun is still up, 1 once it is well down. Smoothstepped, because
-	// this is what crossfades the sun out and the moon in and the founder asked for no jumps in the transition.
-	const float Sinking = FMath::Clamp((-Elevation - 2.0f) / 10.0f, 0.0f, 1.0f);
+	// HOW FAR INTO THE NIGHT WE ARE: 0 while the sun is still up, 1 once it is well down. Smoothstepped,
+	// because this is what crossfades the sun out and the moon in and the founder asked for no jumps.
+	//
+	// IT IS NOW THE COMPLEMENT OF THE BAND ABOVE, AND THAT IS THE WHOLE FIX. It used to be
+	// Clamp((-Elevation - 2)/10) -- a SECOND curve, on the same input, with its own window. Two curves kept
+	// in sync by hand, and they were not in sync: Daylight leaves 1.0 at +12 deg and reaches 0 at -9, while
+	// Nightfall did not start until -2. Between them they left a hole.
+	//
+	// MEASURED AT THE BOTTOM OF IT, 2026-09-27 (zzT2_dusk_hole). At 18:00 the elevation is EXACTLY ZERO:
+	// Daylight had already fallen to 0.1999 while Nightfall was still exactly 0.0000. So at the darkest hour
+	// of the day the moon was invisible (it needs Nightfall > 0.002), NightShadowLift was not applied (it is
+	// lerped by Nightfall), local exposure was off (it needs Nightfall > 0.001), the exposure bias was +0.98
+	// of its eventual +1.45, and EVERY PRACTICAL LIGHT IN WONDERLAND WAS AT ZERO INTENSITY, because their
+	// brightness is Candelas * GetNightAmount() * Gain and GetNightAmount returns this value. The day rig had
+	// left and the night rig had not arrived.
+	//
+	// The world read 0.0365 there against 0.0937 an hour LATER -- darker at six in the evening than at full
+	// night -- with ground at 0.0126 and 97 per cent of pixels in the tails. The photographs are not subtle:
+	// at 18:00 the paving, the gate, the ironwork and the planting are simply absent; at 19:00 they all read.
+	//
+	// AND IT EXPLAINS WHY WIDENING THE BAND MADE THINGS WORSE. zzT1 swept wl.Sky.TwilightSpan at 21/30/39
+	// expecting a gentler evening and got the opposite -- worst hour-to-hour step 0.0995 -> 0.1353 -> 0.1812
+	// -- because a wider band raised the shoulder the world fell FROM without moving the curve that decides
+	// when it lands. Two independent curves cannot be widened by one knob.
+	//
+	// As the complement they are one crossover by construction and cannot separate again at any span. Full
+	// day is untouched: at +12 deg and above the band is 1, so this is exactly 0 and every noon proof stands.
+	// The twilight SHOULDERS do change -- at +9.4 deg, which is 17:50 and symmetrically 06:50, this becomes
+	// 0.042 where it was 0 -- and that is the intended behaviour rather than a side effect: the night should
+	// begin arriving while the sun is visibly going down. The other lane owns the eye glow, rim and mascot
+	// that read this value and signed off on that shoulder after seeing the whole ramp, not just its start.
+	const float Sinking = 1.0f - TwilightBand;
 	Nightfall = Sinking * Sinking * (3.0f - 2.0f * Sinking);
 
 	// THE SUN STOPS SHINING UP THROUGH THE GROUND. Pitch is -Elevation, so a sun 40 degrees below the horizon is
@@ -624,7 +710,36 @@ void UWonderlandDayCycleSubsystem::PaintTheSky()
 	{
 		if (UDirectionalLightComponent* MoonComp = SunComponent(MoonLight))
 		{
-			MoonLight->SetActorRotation(FRotator(Elevation, BearingAt(Hour) + 180.0f, 0.0f));
+			// ---- THE MOON IS EXACTLY OPPOSITE THE SUN, AND THAT IS WHY DUSK HAS NO GROUND LIGHT.
+			//
+			// Sun pitch is -Elevation and moon pitch is +Elevation, so the two cross the horizon in the
+			// same instant. At 18:00 the elevation is exactly zero and BOTH are horizontal. A directional
+			// light at zero elevation delivers cos(90) of its intensity to level ground -- nothing -- so
+			// however bright the moon is made, and whatever Nightfall does, the ground at six in the
+			// evening receives no directional light at all from either body.
+			//
+			// THE SIGNATURE IS IN THE MEASUREMENTS ALREADY TAKEN. Ground luma divided by whole-frame luma,
+			// against the moon's elevation: 0.724 at 0 deg (18:00), 0.746 at 14 deg, 1.056 at 27.6 deg,
+			// 0.995 at 69.6 deg. The ground runs a quarter behind the frame while the moon is on the
+			// horizon and catches up as it climbs -- which is what a grazing light looks like and not what
+			// a dim one looks like. It is also why making Nightfall arrive earlier lifted the frame more
+			// than it lifted the ground: the extra moon was pointed along the paving rather than at it.
+			//
+			// THE LEAD IS IN HOURS, NOT DEGREES, and that is not a detail. A constant angular offset was
+			// the obvious form and it is wrong: adding 20 deg to a pitch of -72 at midnight gives -92,
+			// which is past vertical and puts the moon back down the other side of the sky. Running the
+			// moon on the SAME elevation curve at a different hour keeps it physical everywhere -- it
+			// rises earlier, peaks higher and sets later, and there is no value of the knob that can tip
+			// it over the top.
+			//
+			// INERT AT ZERO and ships that way. It exists so the question can be MEASURED rather than
+			// argued: raising the moon at dusk either fixes the crushed ground or it does not, and no
+			// amount of reasoning about cosines settles that. A real full moon does rise at sunset, so
+			// zero is defensible; a gibbous moon stands well clear of the horizon at dusk, so a lead is
+			// equally defensible. Which one Wonderland wants is a founder question about how its nights
+			// should look, and this makes it answerable with two photographs instead of an argument.
+			const float MoonPitch = ElevationAt(Hour + GWonderlandMoonLeadHours);
+			MoonLight->SetActorRotation(FRotator(MoonPitch, BearingAt(Hour) + 180.0f, 0.0f));
 			// A FIFTIETH OF NOON. Bright enough that the founder can see the Dog, the paving under it and the
 			// silhouette of a tower; nowhere near enough to be mistaken for daylight. Tuned against photographs
 			// of the darkest hour rather than chosen, and it is the one number to move if night reads wrong.

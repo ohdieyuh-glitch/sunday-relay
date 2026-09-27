@@ -81,15 +81,92 @@ def job():
     L.pose_camera(live(), unreal.Vector(*EYE), unreal.Vector(*AT), 60.0)
     yield 3.0
 
+    # ---- WHERE THIS WAS READ FROM, RECORDED RATHER THAN ASSUMED.
+    #
+    # The practical-light pool is selected around the viewer and is budgeted: wl.Look.PracticalCount is 48
+    # against a manifest of 1,464, and in the densest districts far more lamps compete for that budget than
+    # can win it. So a reading taken at two different places can differ by how much of the pool was spent
+    # there, and a ladder that moved between rungs would be partly measuring the pool rather than the span.
+    #
+    # This job pins one EYE and AT for all fifteen rungs, so the pool is the same set throughout and a span
+    # difference cannot be a pool difference. That was luck rather than design. A constant should be VISIBLE
+    # as a constant instead of trusted, so it goes in the result where a reader can check it.
+    RESULT["camera_eye"] = list(EYE)
+    RESULT["camera_at"] = list(AT)
+    RESULT["camera_note"] = ("one fixed pose for every rung, so the practical-light pool is identical across "
+                             "spans and hours; a span difference here cannot be a pool difference")
+
     def settled():
-        """Wait for the picture to stop moving. A duration is not a quantity when the frame rate is not."""
-        prev = None
-        for _ in range(20):
+        """Wait for the picture to stop FALLING, not merely to stop moving between two reads.
+
+        A duration is not a quantity when the frame rate is not fixed -- and two adjacent reads agreeing is
+        not enough either. The other lane read an unchanged world at 521, 123, 64, 48, 57 ms after
+        BeginPlay: a descent, not scatter. A sequence falling gently can have neighbours inside the
+        tolerance while still on its way down, so a pair-agreement test can return mid-descent and hand
+        back a number from a machine that has not arrived.
+        """
+        # THE WINDOW'S SPREAD, NOT ITS STEPS -- AND THIS IS THE FIFTH VERSION OF THIS TEST.
+        #
+        # It read "three in a row, not a pair", and three consecutive STEPS inside a tolerance is not
+        # three reads in agreement, because steps compound: three steps of 0.0039 walk the window 0.0117
+        # downhill while every adjacent pair passes, which is wider than the 0.010 this job calls
+        # agreement. The other lane demonstrated it on [200, 60, 66, 61, 50, 49, 48.5], where a step test
+        # returns on the 60 with a fifth of the fall still to come. That is the pair test's hole, one read
+        # wider, failing on exactly the oscillating case the three-read version was written to catch.
+        #
+        # Timer, pair, last-drop, three-consecutive: each fixed the previous one's SHAPE and kept its
+        # assumption, which was always that arrival is recognisable from the direction of the series. Max
+        # minus min across the last three asks the question actually being asked -- are these three the
+        # same reading -- and has no direction, rate or shape assumption left in it. A window spread is
+        # still a local property, so this is not proof either; it is the first version with nothing about
+        # the approach built into it.
+        window = []
+        for _ in range(24):
             yield 1.0
             now = patch(0.5, 0.5, 0.46, 0.44)
-            if now is not None and prev is not None and abs(now["luma"] - prev["luma"]) < 0.004:
+            if now is None:
+                continue
+            window.append(now["luma"])
+            if len(window) > 3:
+                window.pop(0)
+            if len(window) == 3 and (max(window) - min(window)) < 0.004:
                 return
-            prev = now
+        # Fell through without settling, and says so by NOT trimming anything: the rung's own two-read
+        # spread then carries the damage into T_NOISE, which voids the ladder. A run whose instrument never
+        # arrived should report that rather than produce a tidy number from its tail.
+
+    # ---- DOES THE KNOB EXIST? Read it back before trusting a single rung.
+    #
+    # wl.Sky.TwilightSpan is new C++ and the running editor may predate it. An unrecognised console command
+    # does not fail -- it logs "Command not recognized" and carries on -- so every span would silently be
+    # the shipped 21 and the ladder would be three identical numbers.
+    #
+    # AND T00 WOULD PASS ON THAT. It asks whether noon is unchanged across spans; if the knob does nothing,
+    # noon is trivially identical and the safety gate goes green on a run that measured one setting three
+    # times. A false green from a gate written to prevent exactly this class of thing, so the readback
+    # comes first and voids the run rather than letting the ladder publish.
+    readback = {}
+    for span in SPANS:
+        cvar("wl.Sky.TwilightSpan", "%.1f" % span)
+        yield 0.5
+        try:
+            readback[span] = round(float(
+                unreal.SystemLibrary.get_console_variable_float_value("wl.Sky.TwilightSpan")), 2)
+        except Exception as err:                                      # noqa: BLE001
+            readback[span] = "unreadable: %s" % str(err)[:60]
+    took = [sp for sp, got in readback.items() if isinstance(got, float) and abs(got - sp) < 0.05]
+    record("T_CVAR", "wl.Sky.TwilightSpan exists in this build and every value actually took",
+           len(took) == len(SPANS), asked_for=list(SPANS), read_back=readback,
+           note="a console command the build does not know logs 'Command not recognized' and carries on. "
+                "Every span would then be the shipped 21, the ladder would be one setting measured three "
+                "times, and T00 -- which asks whether noon is unchanged across spans -- would pass on it. "
+                "Red here voids everything below")
+    if len(took) != len(SPANS):
+        cvar("wl.Sky.TwilightSpan", "21.0")
+        RESULT["status"] = "voided: the span cvar is not in this build"
+        yield 2.0
+        les.editor_request_end_play()
+        return
 
     rows = []
     RESULT["ladder"] = rows

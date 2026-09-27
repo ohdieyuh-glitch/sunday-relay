@@ -70,8 +70,22 @@ def job():
         except Exception as bad:
             RESULT["sample_error"] = str(bad)[:200]
             return {"ok": False}
+        # ---- AND THE UNFILTERED COST OF THE SAME FRAME.
+        #
+        # The four above come from the FILTERED half of FStatUnitData, whose engine comment calls them "unit
+        # frame times filtered with a simple running average": FrameTime = 0.9 * FrameTime + 0.1 *
+        # RawFrameTime. A MEAN survives that -- an exponential average is unbiased in the mean once settled --
+        # but a MAXIMUM does not, and frame_ms_worst below is a maximum. The filter under-reports single
+        # frames and over-confirms long ones, so a worst case read from it is a worst case with its peaks
+        # already removed.
+        try:
+            rawv = H.get_raw_frame_cost_ms()
+            raw_frame = float(rawv[0]) if rawv is not None else 0.0
+        except Exception:                                          # noqa: BLE001
+            raw_frame = 0.0
         return {"ok": bool(ok), "frame_ms": float(t[0]), "game_ms": float(t[1]),
                 "render_ms": float(t[2]), "gpu_ms": float(t[3]),
+                "raw_frame_ms": raw_frame,
                 "draw_calls": int(c[0]) if calls_ok else -1,
                 "primitives": int(c[1]) if calls_ok else -1}
 
@@ -99,6 +113,10 @@ def job():
             "samples": len(got),
             "frame_ms_mean": round(sum(g["frame_ms"] for g in got) / n, 2),
             "frame_ms_worst": round(max(g["frame_ms"] for g in got), 2),
+            # The worst RAW frame in the window, which is what "worst" was always meant to mean. None rather
+            # than 0.0 when the build has no raw accessor, so an absent reading can never pass for a fast one.
+            "raw_frame_ms_worst": (round(max(g.get("raw_frame_ms", 0.0) for g in got), 2)
+                                   if any(g.get("raw_frame_ms", 0.0) > 0.01 for g in got) else None),
             "game_ms_mean": round(sum(g["game_ms"] for g in got) / n, 2),
             "render_ms_mean": round(sum(g["render_ms"] for g in got) / n, 2),
             "gpu_ms_mean": round(sum(g["gpu_ms"] for g in got) / n, 2),
@@ -148,7 +166,18 @@ def job():
     # where an increase cannot show up because the number cannot go higher. A baseline that is merely SLOW
     # is still a baseline -- the editor's own overhead inflates every absolute here, but it inflates the
     # before and the after equally, so the DELTA is the honest part and is reported as such.
-    trustworthy = 0.01 < base["frame_ms_mean"] and base["frame_ms_worst"] < CLAMP_MS * 0.9
+    #
+    # AND THE CLAMP TEST RUNS ON THE RAW WORST, NOT THE SMOOTHED ONE. This gate exists to refuse a baseline
+    # whose frames are sitting ON UE's 400 ms delta clamp, where an added avatar cannot show up because the
+    # number cannot go higher. Read off the FILTERED curve it catches only the TOTAL case: an exponential
+    # average reaches 400 only if the raw cost stayed there for many frames, which is why it once fired at
+    # exactly 400.00. INTERMITTENT clamping -- raw frames touching the ceiling one sample in ten, which is
+    # what a throttling editor actually does -- smooths to well under the 360 threshold and passes. The gate
+    # was strictly weaker than its own description, and weaker in the direction that lets a bad baseline
+    # through rather than the one that rejects a good one.
+    worst_for_clamp = base.get("raw_frame_ms_worst") or base["frame_ms_worst"]
+    RESULT["clamp_read_from"] = "raw" if base.get("raw_frame_ms_worst") else "filtered (no raw accessor)"
+    trustworthy = 0.01 < base["frame_ms_mean"] and worst_for_clamp < CLAMP_MS * 0.9
     RESULT["baseline_is_trustworthy"] = trustworthy
     RESULT["clamp_ms"] = CLAMP_MS
     if not trustworthy:
@@ -158,9 +187,10 @@ def job():
                                 "not accumulating -- no timing was taken at all, and zero must never be read "
                                 "as cheap")
         else:
-            RESULT["status"] = ("VOID: the empty baseline is already at %.1f ms worst, near UE's %.0f ms delta "
-                                "clamp, so any increase measured from here would be the editor throttling "
-                                "rather than the cost of an avatar" % (base["frame_ms_worst"], CLAMP_MS))
+            RESULT["status"] = ("VOID: the empty baseline is already at %.1f ms worst (%s), near UE's %.0f ms "
+                                "delta clamp, so any increase measured from here would be the editor "
+                                "throttling rather than the cost of an avatar"
+                                % (worst_for_clamp, RESULT["clamp_read_from"], CLAMP_MS))
         les.editor_request_end_play()
         yield (lambda: ues.get_game_world() is None, 300)
         return

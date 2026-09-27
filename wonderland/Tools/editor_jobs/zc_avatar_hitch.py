@@ -58,13 +58,49 @@ def job():
     unreal.SystemLibrary.execute_console_command(world, "stat unit")
     yield 10.0
 
+    def raw_frame_ms():
+        """THIS FRAME'S COST, ONCE.
+
+        Returns None when the engine frame number has not moved since the last accepted read, so a loop that
+        polls faster than the game renders contributes nothing rather than a duplicate.
+
+        AND IT READS THE RAW FIELD, WHICH IS THE WHOLE POINT OF THIS JOB. FStatUnitData keeps two parallel
+        sets of fields and the engine's own comment calls the first "unit frame times filtered with a simple
+        running average": FrameTime = 0.9 * FrameTime + 0.1 * RawFrameTime. Every number this job has ever
+        published came from the filtered one. A job that exists to find a spike was reading a field that
+        removes spikes: a single 200 ms frame arrives as 15 ms, and a p95 or a max of a ten-frame average is
+        a percentile of a curve with its peaks already gone.
+
+        The worst QUIET frame of 551.98 ms in the comment below is the one reading that survives this, and it
+        survives BACKWARDS: an exponential average only reaches 551 if the raw cost stayed there for many
+        frames, so that was a sustained stall and not a spike. The filter under-reports single frames and
+        over-confirms long ones.
+        """
+        try:
+            now = int(H.get_engine_frame_number())
+        except Exception:                                          # noqa: BLE001
+            now = None
+        if now is not None and now == globals().get("_LAST_FRAME"):
+            return None
+        try:
+            raw = H.get_raw_frame_cost_ms()
+        except Exception:                                          # noqa: BLE001
+            return None
+        if raw is None or float(raw[0]) <= 0.01:
+            return None
+        globals()["_LAST_FRAME"] = now
+        return float(raw[0])
+
     def stats(values):
-        """Median, p95 and max. See why the max alone is not enough, below."""
+        """Median, p95 and max over FRAMES -- one row each, unsmoothed."""
         clean = sorted(v for v in values if v > 0.01)
         if not clean:
-            return {"samples": 0, "median_ms": 0.0, "p95_ms": 0.0, "worst_ms": 0.0}
+            return {"frames": 0, "median_ms": None, "p95_ms": None, "worst_ms": None}
         return {
-            "samples": len(clean),
+            # FRAMES, NOT READS. The avatar ladder reported 253 "samples" whose median, p95 and worst agreed
+            # to the hundredth: 253 reads of a value that changed a handful of times, with the distribution
+            # weighted by how often Python happened to run inside a frame.
+            "frames": len(clean),
             "median_ms": round(clean[len(clean) // 2], 2),
             "p95_ms": round(clean[min(len(clean) - 1, int(len(clean) * 0.95))], 2),
             "worst_ms": round(clean[-1], 2),
@@ -80,15 +116,12 @@ def job():
         seen = []
         started = time.time()
         while time.time() - started < seconds:
-            try:
-                v = float(H.get_frame_cost_ms()[0])
-                if v > 0.01:
-                    seen.append(v)
-            except Exception:
-                pass
+            v = raw_frame_ms()
+            if v is not None:
+                seen.append(v)
             if len(seen) % 20 == 0:
                 unreal.SystemLibrary.execute_console_command(world, "stat unit")
-            yield 0.0          # every tick, because a hitch lives in one frame
+            yield 0.0          # every tick, because a hitch lives in one frame -- and each frame once
         RESULT[label] = stats(seen)
         emit(label, "INFO", label, RESULT[label])
 
@@ -119,12 +152,9 @@ def job():
                 except Exception as err:                           # noqa: BLE001
                     RESULT["spawn_error"] = str(err)[:160]
                 spawned_at = time.time()
-            try:
-                v = float(H.get_frame_cost_ms()[0])
-                if v > 0.01:
-                    seen.append(v)
-            except Exception:
-                pass
+            v = raw_frame_ms()
+            if v is not None:
+                seen.append(v)
             if len(seen) % 20 == 0:
                 unreal.SystemLibrary.execute_console_command(world, "stat unit")
             yield 0.0
@@ -149,7 +179,7 @@ def job():
     RESULT["quiet_tail"] = {k: RESULT.get("quiet_before", {}).get(k) for k in ("p95_ms", "worst_ms")}
 
     record("H00", "both sides were actually sampled",
-           RESULT.get("quiet_before", {}).get("samples", 0) > 50 and all(x["samples"] > 20 for x in spikes),
+           RESULT.get("quiet_before", {}).get("frames", 0) > 50 and all(x["frames"] > 20 for x in spikes),
            quiet=RESULT.get("quiet_before"), spawns=spikes,
            note="a hitch is one frame; sampled every tick rather than on an interval, or the frame that "
                 "stutters is the one the sampler slept through")

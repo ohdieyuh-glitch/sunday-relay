@@ -772,6 +772,46 @@ FGuid UWonderlandMissionTaskSubsystem::FollowJuliusRun(const FString& MissionId,
 	return Task->LocalId;
 }
 
+const FWonderlandMissionTask* UWonderlandMissionTaskSubsystem::FindFollowedJuliusTask() const
+{
+	for (const FWonderlandMissionTask& Row : Tasks)
+	{
+		// bInWorkspace, because a task the player has put away is not what a panel should present as running.
+		if (Row.Source == EWonderlandTaskSource::Julius && Row.bInWorkspace && Row.RunId.bKnown
+			&& !Row.RunId.Value.IsEmpty())
+		{
+			return &Row;
+		}
+	}
+	return nullptr;
+}
+
+FString UWonderlandMissionTaskSubsystem::GetFollowedMissionId() const
+{
+	const FWonderlandMissionTask* Task = FindFollowedJuliusTask();
+	return Task != nullptr ? Task->ContractId : FString();
+}
+
+FString UWonderlandMissionTaskSubsystem::GetFollowedRunId() const
+{
+	const FWonderlandMissionTask* Task = FindFollowedJuliusTask();
+	return Task != nullptr ? Task->RunId.Value : FString();
+}
+
+FString UWonderlandMissionTaskSubsystem::GetFollowedJuliusState() const
+{
+	const FWonderlandMissionTask* Task = FindFollowedJuliusTask();
+	// EMPTY WHEN UNKNOWN, NOT THE MAPPED ENUM'S NAME. A caller asking what Julius called it must be able to
+	// tell "Julius said READY" from "this build guessed READY", which is the whole reason JuliusState exists.
+	return (Task != nullptr && Task->JuliusState.bKnown) ? Task->JuliusState.Value : FString();
+}
+
+EWonderlandTaskState UWonderlandMissionTaskSubsystem::GetFollowedState() const
+{
+	const FWonderlandMissionTask* Task = FindFollowedJuliusTask();
+	return Task != nullptr ? Task->State : EWonderlandTaskState::Draft;
+}
+
 bool UWonderlandMissionTaskSubsystem::ResetJuliusCarriers(const FString& ContractId)
 {
 	if (ContractId.IsEmpty())

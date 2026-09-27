@@ -1,0 +1,253 @@
+{
+ "name": "zzT3_night_shape",
+ "started": "2026-09-27 16:02:37",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "S_NOISE",
+   "name": "each rung agrees with itself -- two reads of the same hour",
+   "pass": true,
+   "detail": {
+    "worst_spread": 0.0006,
+    "tolerance": 0.01,
+    "measured": 10,
+    "wanted": 10,
+    "note": "red here voids everything below"
+   }
+  },
+  {
+   "id": "S_JOIN",
+   "name": "19:30 reads the same in this run as it did in zzT2, so the two tables concatenate",
+   "pass": true,
+   "detail": {
+    "this_run": 0.1767,
+    "zzT2": 0.176,
+    "gap": 0.0007,
+    "tolerance": 0.01,
+    "this_run_ground": 0.1839,
+    "zzT2_ground": 0.1832,
+    "note": "the same camera, patch and settle in a different PIE session. A gap here means either the world does not reproduce between sessions or one of the two runs is not what it claims"
+   }
+  },
+  {
+   "id": "S_FALL",
+   "name": "the night keeps darkening after the night rig is fully on",
+   "pass": false,
+   "detail": {
+    "first_pinned_hour": 19.5,
+    "last_pinned_hour": 24.0,
+    "luma_fall_across_pinned_night": 0.0053,
+    "rungs_at_nightfall_1": 10,
+    "note": "INFORMATIONAL DIRECTION, not a pass/fail of the world: this being green confirms that Nightfall is not what drives the late night, so a fix to Nightfall cannot address it"
+   }
+  },
+  {
+   "id": "S_SMOOTH",
+   "name": "the decline has no step in it -- consistent with occlusion, not with a switch",
+   "pass": false,
+   "detail": {
+    "worst_step": 0.0257,
+    "median_step": 0.0014,
+    "steps": [
+     {
+      "from": 19.5,
+      "to": 20.0,
+      "d_luma": 0.0027
+     },
+     {
+      "from": 20.0,
+      "to": 20.5,
+      "d_luma": -0.0002
+     },
+     {
+      "from": 20.5,
+      "to": 21.0,
+      "d_luma": 0.0178
+     },
+     {
+      "from": 21.0,
+      "to": 21.5,
+      "d_luma": -0.0002
+     },
+     {
+      "from": 21.5,
+      "to": 22.0,
+      "d_luma": -0.0017
+     },
+     {
+      "from": 22.0,
+      "to": 22.5,
+      "d_luma": 0.0014
+     },
+     {
+      "from": 22.5,
+      "to": 23.0,
+      "d_luma": 0.0008
+     },
+     {
+      "from": 23.0,
+      "to": 23.5,
+      "d_luma": -0.0002
+     },
+     {
+      "from": 23.5,
+      "to": 24.0,
+      "d_luma": -0.0257
+     }
+    ],
+    "note": "a pitch-driven occlusion grows smoothly. A single step much larger than the others means something turns on or off at that hour and the occlusion story is wrong"
+   }
+  },
+  {
+   "id": "S_GROUND",
+   "name": "the ground stays readable across the whole night",
+   "pass": true,
+   "detail": {
+    "darkest_hour": 20.5,
+    "darkest_ground": 0.1361,
+    "floor": 0.03,
+    "ground_by_hour": {
+     "19.50": 0.1839,
+     "20.00": 0.186,
+     "20.50": 0.1361,
+     "21.00": 0.1931,
+     "21.50": 0.2064,
+     "22.00": 0.2058,
+     "22.50": 0.2035,
+     "23.00": 0.2,
+     "23.50": 0.1969,
+     "24.00": 0.1573
+    },
+    "note": "the same floor zzT2 used, so the evening and the night are judged on one scale"
+   }
+  }
+ ],
+ "camera_eye": [
+  -320.0,
+  -1900.0,
+  200.0
+ ],
+ "camera_at": [
+  0.0,
+  -1460.0,
+  90.0
+ ],
+ "span": 21.0,
+ "joins": {
+  "job": "zzT2_dusk_hole",
+  "hour": 19.5,
+  "its_luma": 0.176,
+  "its_ground": 0.1832
+ },
+ "night": [
+  {
+   "hour": 19.5,
+   "luma": 0.1767,
+   "spread": 0.0006,
+   "tails": 0.4758,
+   "ground_luma": 0.1839,
+   "sun_elevation": -27.55,
+   "daylight": 0.0,
+   "nightfall": 1.0
+  },
+  {
+   "hour": 20.0,
+   "luma": 0.1794,
+   "spread": 0.0,
+   "tails": 0.4587,
+   "ground_luma": 0.186,
+   "sun_elevation": -36.0,
+   "daylight": 0.0,
+   "nightfall": 1.0
+  },
+  {
+   "hour": 20.5,
+   "luma": 0.1792,
+   "spread": 0.0001,
+   "tails": 0.4663,
+   "ground_luma": 0.1361,
+   "sun_elevation": -43.83,
+   "daylight": 0.0,
+   "nightfall": 1.0
+  },
+  {
+   "hour": 21.0,
+   "luma": 0.197,
+   "spread": 0.0001,
+   "tails": 0.3692,
+   "ground_luma": 0.1931,
+   "sun_elevation": -50.91,
+   "daylight": 0.0,
+   "nightfall": 1.0
+  },
+  {
+   "hour": 21.5,
+   "luma": 0.1968,
+   "spread": 0.0,
+   "tails": 0.3674,
+   "ground_luma": 0.2064,
+   "sun_elevation": -57.12,
+   "daylight": 0.0,
+   "nightfall": 1.0
+  },
+  {
+   "hour": 22.0,
+   "luma": 0.1951,
+   "spread": 0.0001,
+   "tails": 0.3688,
+   "ground_luma": 0.2058,
+   "sun_elevation": -62.35,
+   "daylight": 0.0,
+   "nightfall": 1.0
+  },
+  {
+   "hour": 22.5,
+   "luma": 0.1965,
+   "spread": 0.0002,
+   "tails": 0.3493,
+   "ground_luma": 0.2035,
+   "sun_elevation": -66.52,
+   "daylight": 0.0,
+   "nightfall": 1.0
+  },
+  {
+   "hour": 23.0,
+   "luma": 0.1973,
+   "spread": 0.0001,
+   "tails": 0.3392,
+   "ground_luma": 0.2,
+   "sun_elevation": -69.55,
+   "daylight": 0.0,
+   "nightfall": 1.0
+  },
+  {
+   "hour": 23.5,
+   "luma": 0.1971,
+   "spread": 0.0001,
+   "tails": 0.3368,
+   "ground_luma": 0.1969,
+   "sun_elevation": -71.38,
+   "daylight": 0.0,
+   "nightfall": 1.0
+  },
+  {
+   "hour": 24.0,
+   "luma": 0.1714,
+   "spread": 0.0001,
+   "tails": 0.4994,
+   "ground_luma": 0.1573,
+   "sun_elevation": -72.0,
+   "daylight": 0.0,
+   "nightfall": 1.0
+  }
+ ],
+ "darkest": {
+  "hour": 20.5,
+  "ground": 0.1361,
+  "luma": 0.1792,
+  "elevation": -43.83
+ },
+ "finished": "2026-09-27 16:03:48",
+ "seconds": 71.2,
+ "log": "S_NOISE PASS each rung agrees with itself -- two reads of the same hour {'worst_spread': 0.0006, 'tolerance': 0.01, 'measured': 10, 'wanted': 10, 'note': 'red here voids everything below'}\nS_JOIN PASS 19:30 reads the same in this run as it did in zzT2, so the two tables concatenate {'this_run': 0.1767, 'zzT2': 0.176, 'gap': 0.0007, 'tolerance': 0.01, 'this_run_ground': 0.1839, 'zzT2_ground': 0.1832, 'note': 'the same camera, patch and settle in a different PIE session. A gap here means either the world does not reproduce between sessions or one of the two runs is not what it claims'}\nS_FALL FAIL the night keeps darkening after the night rig is fully on {'first_pinned_hour': 19.5, 'last_pinned_hour': 24.0, 'luma_fall_across_pinned_night': 0.0053, 'rungs_at_nightfall_1': 10, 'note': 'INFORMATIONAL DIRECTION, not a pass/fail of the world: this being green confirms that Nightfall is not what drives the late night, so a fix to Nightfall cannot address it'}\nS_SMOOTH FAIL the decline has no step in it -- consistent with occlusion, not with a switch {'worst_step': 0.0257, 'median_step': 0.0014, 'steps': [{'from': 19.5, 'to': 20.0, 'd_luma': 0.0027}, {'from': 20.0, 'to': 20.5, 'd_luma': -0.0002}, {'from': 20.5, 'to': 21.0, 'd_luma': 0.0178}, {'from': 21.0, 'to': 21.5, 'd_luma': -0.0002}, {'from': 21.5, 'to': 22.0, 'd_luma': -0.0017}, {'from': 22.0, 'to': 22.5, 'd_luma': 0.0014}, {'from': 22.5, 'to': 23.0, 'd_luma': 0.0008}, {'from': 23.0, 'to': 23.5, 'd_luma': -0.0002}, {'from': 23.5, 'to': 24.0, 'd_luma': -0.0257}], 'note': 'a pitch-driven occlusion grows smoothly. A single step much larger than the others means something turns on or off at that hour and the occlusion story is wrong'}\nS_GROUND PASS the ground stays readable across the whole night {'darkest_hour': 20.5, 'darkest_ground': 0.1361, 'floor': 0.03, 'ground_by_hour': {'19.50': 0.1839, '20.00': 0.186, '20.50': 0.1361, '21.00': 0.1931, '21.50': 0.2064, '22.00': 0.2058, '22.50': 0.2035, '23.00': 0.2, '23.50': 0.1969, '24.00': 0.1573}, 'note': 'the same floor zzT2 used, so the evening and the night are judged on one scale'}\n"
+}

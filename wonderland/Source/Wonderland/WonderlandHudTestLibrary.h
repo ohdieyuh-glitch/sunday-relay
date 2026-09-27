@@ -43,6 +43,46 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	static bool GetFrameCostMs(float& OutFrameMs, float& OutGameMs, float& OutRenderMs, float& OutGpuMs);
 
+	/**
+	 * WHAT ONE FRAME COST, unsmoothed -- the only form in which a HITCH exists.
+	 *
+	 * GetFrameCostMs ABOVE CANNOT SEE A HITCH, and nothing said so for the length of three measurement passes.
+	 * FStatUnitData keeps two parallel sets of fields, and its own comments name them: the block holding
+	 * FrameTime is "unit frame times filtered with a simple running average", and the block below it is the
+	 * "raw equivalents". The filter is
+	 *
+	 *     FrameTime = 0.9 * FrameTime + 0.1 * RawFrameTime;
+	 *
+	 * applied identically to game, render and GPU -- an exponential average with a ten-frame memory. The
+	 * engine's own performance snapshot assigns that field to a variable called AverageFrameTime.
+	 *
+	 * SO A ONE-FRAME SPIKE OF 200 ms ARRIVES AS 15 ms, and a p95 or a worst case taken from the filtered
+	 * field is a percentile of a curve that has already had its peaks removed. The avatar ladder published
+	 * "spawn p95" and "hitch over quiet" from it and got a NEGATIVE hitch at one and ten avatars -- spawning
+	 * cheaper than standing still -- which is not a surprising result but an impossible one, and was the
+	 * evidence that the instrument could not see what it was named after.
+	 *
+	 * The MEDIAN of the filtered field is still a fair estimate of average cost, so GetFrameCostMs keeps its
+	 * callers. Use THIS for anything about extremes: p95, worst frame, spawn cost, stutter.
+	 *
+	 * Returns false when no viewport is running, so a missing reading is never mistaken for a cheap one.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static bool GetRawFrameCostMs(float& OutFrameMs, float& OutGameMs, float& OutRenderMs, float& OutGpuMs);
+
+	/**
+	 * THE ENGINE'S FRAME NUMBER, so a count of READS can be turned into a count of FRAMES.
+	 *
+	 * A Python probe polling a stat in a tight loop gets several reads inside one frame and none inside the
+	 * next. The avatar ladder reported 253 samples whose median, p95 and worst case were the same number to
+	 * the hundredth -- 253 reads of a value that changed a handful of times. Percentiles over that are
+	 * weighted by how often the loop happened to run, which is a property of the harness.
+	 *
+	 * Compare this between reads and keep the ones where it moved.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static int64 GetEngineFrameNumber();
+
 	/** Draw calls and primitives the renderer issued for the last frame. Zero for both means it was not counted. */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
 	static bool GetDrawCallCount(int32& OutDrawCalls, int32& OutPrimitives);
