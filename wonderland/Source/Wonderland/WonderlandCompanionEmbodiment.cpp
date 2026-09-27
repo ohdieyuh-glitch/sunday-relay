@@ -1044,6 +1044,31 @@ FString AWonderlandCompanionEmbodiment::DescribeFlames() const
 	return Out;
 }
 
+void AWonderlandCompanionEmbodiment::SetExposureAware(bool bAware)
+{
+	if (bExposureAware == bAware)
+	{
+		return;
+	}
+	bExposureAware = bAware;
+	if (!bAware)
+	{
+		// ---- A FIGURE OFF THE CLOCK STILL NEEDS ITS EYES LIT, and forgetting that was a regression I put in.
+		//
+		// The wardrobe's preview body opts out of the day cycle so that a showcase does not get dimmer after
+		// sunset. But the eyes are driven by that same cycle now, and opting out left them at the default of
+		// 1 -- which, multiplied by the wardrobe's own glow scale, is a fraction of what they were before the
+		// eye work went in. Photographed at noon: Relay OG in the preview square with its warm gold status
+		// eyes simply not lit, on the very feature whose requirement was "eyes have to be glowing".
+		//
+		// So a figure that ignores the clock is given a fixed showcase level instead of inheriting nothing.
+		// It is deliberately lower than the world's noon value: the preview stage is a dark room a few
+		// centimetres across, and what reads as a lamp against sunlit stone would be a white hole in here.
+		EyeGlowScale = 6.0f;
+		RepaintColourway();
+	}
+}
+
 void AWonderlandCompanionEmbodiment::SetEyeGlow(float Scale)
 {
 	if (!bExposureAware)

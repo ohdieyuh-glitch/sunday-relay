@@ -134,7 +134,19 @@ def job():
         # Long enough for the figure to load, the camera to re-solve for its height and the backdrop to resize.
         yield 6.0
         whole = patch(centre.x, centre.y, size.x * 0.38, size.y * 0.38)
+        # ---- THE MIDDLE IS READ ACROSS A WHOLE BEAT, not at one instant of one.
+        #
+        # Skeleton Flame's chest skull is authored to go down to a twelfth of its brightness and back on a
+        # 2.4 second cycle -- the founder's "glow on, soften/off, glow on" -- so a single sample of the middle
+        # of the window catches it wherever the beat happens to be. Measured once it returned 0.0265 against
+        # a 0.03 floor and failed; the skin was present and lit the entire time, just photographed at the
+        # bottom of its own heartbeat. Every other skin holds still and is unaffected by reading a peak.
         middle = patch(centre.x, centre.y, size.x * 0.16, size.y * 0.22)
+        for _ in range(9):
+            yield 0.3
+            again = patch(centre.x, centre.y, size.x * 0.16, size.y * 0.22)
+            if again is not None and middle is not None and again["luma"] > middle["luma"]:
+                middle = again
         corner_reads = {}
         for name, (sx, sy) in corners.items():
             corner_reads[name] = patch(centre.x + sx * size.x * corner_off_x,

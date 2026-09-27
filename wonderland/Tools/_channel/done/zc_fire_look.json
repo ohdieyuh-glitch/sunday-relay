@@ -1,6 +1,6 @@
 {
  "name": "zc_fire_look",
- "started": "2026-09-26 12:03:20",
+ "started": "2026-09-26 16:27:52",
  "status": "measured",
  "tests": [
   {
@@ -20,8 +20,8 @@
    "pass": true,
    "detail": {
     "luma_in_the_flame_band": {
-     "arden_infernal": 0.73437,
-     "skeleton_flame": 0.75733
+     "arden_infernal": 0.52156,
+     "skeleton_flame": 0.55954
     },
     "floor": 0.05,
     "note": "at wl.Look.FireGain 0.12 this read 0.010 and the fire was invisible in the photograph; the gain was swept to 1.6 in one session by zc_fire_gain_sweep."
@@ -33,12 +33,12 @@
    "pass": true,
    "detail": {
     "swing_over_four_seconds": {
-     "arden_infernal": 0.03516,
-     "skeleton_flame": 0.01797
+     "arden_infernal": 0.03064,
+     "skeleton_flame": 0.03174
     },
     "mean": {
-     "arden_infernal": 0.74731,
-     "skeleton_flame": 0.72445
+     "arden_infernal": 0.59503,
+     "skeleton_flame": 0.58342
     },
     "floor": 0.004
    }
@@ -49,13 +49,13 @@
    "pass": true,
    "detail": {
     "strongest_channel_separation": {
-     "arden_infernal": 0.5373,
-     "skeleton_flame": 0.2314
+     "arden_infernal": 0.2,
+     "skeleton_flame": 0.1843
     },
     "floor": 0.12,
     "fraction_over_white": {
-     "arden_infernal": 0.8208,
-     "skeleton_flame": 0.844
+     "arden_infernal": 0.0,
+     "skeleton_flame": 0.0
     },
     "note": "Arden is judged on red-over-blue and the Skeleton on blue-over-red, each being that skin's own fire. Zero separation is a white cut-out; this is the clause that keeps the gain honest."
    }
@@ -65,43 +65,43 @@
  "skins": {
   "arden_infernal": {
    "foot": {
-    "luma": 0.73437,
-    "bright": 0.8208,
-    "dark": 0.0,
-    "most_blue_over_red": 0.0078,
-    "most_red_over_blue": 0.5373
+    "luma": 0.52156,
+    "bright": 0.0,
+    "dark": 0.0942,
+    "most_blue_over_red": 0.1255,
+    "most_red_over_blue": 0.2
    },
    "tip": {
-    "luma": 0.55159,
-    "bright": 0.2187,
-    "dark": 0.2095,
-    "most_blue_over_red": 0.1137,
-    "most_red_over_blue": 0.949
+    "luma": 0.45623,
+    "bright": 0.1854,
+    "dark": 0.245,
+    "most_blue_over_red": 0.1725,
+    "most_red_over_blue": 0.9765
    },
    "series": [
-    0.75064,
-    0.76076,
-    0.75876,
-    0.74299,
-    0.75503,
-    0.74337,
-    0.74593,
-    0.75165,
-    0.72862,
-    0.74328,
-    0.7256,
-    0.74757,
-    0.74884,
-    0.75334,
-    0.75944,
-    0.75132,
-    0.75509,
-    0.72908,
-    0.7492,
-    0.74563
+    0.60026,
+    0.60463,
+    0.60914,
+    0.60399,
+    0.59791,
+    0.5958,
+    0.59512,
+    0.59534,
+    0.5972,
+    0.5966,
+    0.59479,
+    0.59407,
+    0.59551,
+    0.599,
+    0.60106,
+    0.59546,
+    0.58441,
+    0.58283,
+    0.57893,
+    0.5785
    ],
-   "swing": 0.03516,
-   "mean": 0.74731,
+   "swing": 0.03064,
+   "mean": 0.59503,
    "captures": [
     "arden_infernal_0.png",
     "arden_infernal_1.png",
@@ -111,43 +111,43 @@
   },
   "skeleton_flame": {
    "foot": {
-    "luma": 0.75733,
-    "bright": 0.844,
+    "luma": 0.55954,
+    "bright": 0.0,
     "dark": 0.0,
-    "most_blue_over_red": 0.2314,
-    "most_red_over_blue": 0.1176
+    "most_blue_over_red": 0.1843,
+    "most_red_over_blue": 0.1294
    },
    "tip": {
-    "luma": 0.43099,
-    "bright": 0.0146,
-    "dark": 0.2827,
+    "luma": 0.33286,
+    "bright": 0.0,
+    "dark": 0.2856,
     "most_blue_over_red": 0.1451,
     "most_red_over_blue": 0.0
    },
    "series": [
-    0.72731,
-    0.72734,
-    0.72652,
-    0.72232,
-    0.72388,
-    0.72637,
-    0.72453,
-    0.72315,
-    0.7253,
-    0.72579,
-    0.72884,
-    0.73168,
-    0.72993,
-    0.72572,
-    0.72114,
-    0.72472,
-    0.72442,
-    0.72022,
-    0.71619,
-    0.71371
+    0.56937,
+    0.57025,
+    0.57633,
+    0.57957,
+    0.58332,
+    0.58884,
+    0.5971,
+    0.59814,
+    0.59723,
+    0.59333,
+    0.59061,
+    0.58506,
+    0.57303,
+    0.5664,
+    0.56688,
+    0.57601,
+    0.58178,
+    0.58719,
+    0.59118,
+    0.59685
    ],
-   "swing": 0.01797,
-   "mean": 0.72445,
+   "swing": 0.03174,
+   "mean": 0.58342,
    "captures": [
     "skeleton_flame_0.png",
     "skeleton_flame_1.png",
@@ -157,11 +157,11 @@
   }
  },
  "ember_colour_in_the_flame": {
-  "arden_infernal": 0.5373,
-  "skeleton_flame": 0.2314
+  "arden_infernal": 0.2,
+  "skeleton_flame": 0.1843
  },
  "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\fire_look",
- "finished": "2026-09-26 12:04:03",
- "seconds": 43.48,
- "log": "R_PATH INFO flame ribbons are drawn on {'fire_material': True}\nR_arden_infernal INFO arden_infernal {'foot': {'luma': 0.73437, 'bright': 0.8208, 'dark': 0.0, 'most_blue_over_red': 0.0078, 'most_red_over_blue': 0.5373}, 'tip': {'luma': 0.55159, 'bright': 0.2187, 'dark': 0.2095, 'most_blue_over_red': 0.1137, 'most_red_over_blue': 0.949}, 'swing': 0.03516, 'mean': 0.74731, 'captures': ['arden_infernal_0.png', 'arden_infernal_1.png', 'arden_infernal_2.png', 'arden_infernal_3.png']}\nR_skeleton_flame INFO skeleton_flame {'foot': {'luma': 0.75733, 'bright': 0.844, 'dark': 0.0, 'most_blue_over_red': 0.2314, 'most_red_over_blue': 0.1176}, 'tip': {'luma': 0.43099, 'bright': 0.0146, 'dark': 0.2827, 'most_blue_over_red': 0.1451, 'most_red_over_blue': 0.0}, 'swing': 0.01797, 'mean': 0.72445, 'captures': ['skeleton_flame_0.png', 'skeleton_flame_1.png', 'skeleton_flame_2.png', 'skeleton_flame_3.png']}\nR00 PASS both fire skins were in frame and readable {'skins': ['arden_infernal', 'skeleton_flame']}\nR01 PASS there is fire on both fire skins, and it is lit {'luma_in_the_flame_band': {'arden_infernal': 0.73437, 'skeleton_flame': 0.75733}, 'floor': 0.05, 'note': 'at wl.Look.FireGain 0.12 this read 0.010 and the fire was invisible in the photograph; the gain was swept to 1.6 in one session by zc_fire_gain_sweep.'}\nR02 PASS the fire is never the same twice -- it flickers {'swing_over_four_seconds': {'arden_infernal': 0.03516, 'skeleton_flame': 0.01797}, 'mean': {'arden_infernal': 0.74731, 'skeleton_flame': 0.72445}, 'floor': 0.004}\nR03_WHITE INFO how much of the hottest band is over white, reported and not judged {'fraction_over_white': {'arden_infernal': 0.8208, 'skeleton_flame': 0.844}, 'note': 'kept as a reading because it is worth seeing; not a gate, because the foot of a flame is supposed to be white.'}\nR03 PASS the flame still has its own heat colour in it, not just white {'strongest_channel_separation': {'arden_infernal': 0.5373, 'skeleton_flame': 0.2314}, 'floor': 0.12, 'fraction_over_white': {'arden_infernal': 0.8208, 'skeleton_flame': 0.844}, 'note': \"Arden is judged on red-over-blue and the Skeleton on blue-over-red, each being that skin's own fire. Zero separation is a white cut-out; this is the clause that keeps the gain honest.\"}\n"
+ "finished": "2026-09-26 16:28:37",
+ "seconds": 45.29,
+ "log": "R_PATH INFO flame ribbons are drawn on {'fire_material': True}\nR_arden_infernal INFO arden_infernal {'foot': {'luma': 0.52156, 'bright': 0.0, 'dark': 0.0942, 'most_blue_over_red': 0.1255, 'most_red_over_blue': 0.2}, 'tip': {'luma': 0.45623, 'bright': 0.1854, 'dark': 0.245, 'most_blue_over_red': 0.1725, 'most_red_over_blue': 0.9765}, 'swing': 0.03064, 'mean': 0.59503, 'captures': ['arden_infernal_0.png', 'arden_infernal_1.png', 'arden_infernal_2.png', 'arden_infernal_3.png']}\nR_skeleton_flame INFO skeleton_flame {'foot': {'luma': 0.55954, 'bright': 0.0, 'dark': 0.0, 'most_blue_over_red': 0.1843, 'most_red_over_blue': 0.1294}, 'tip': {'luma': 0.33286, 'bright': 0.0, 'dark': 0.2856, 'most_blue_over_red': 0.1451, 'most_red_over_blue': 0.0}, 'swing': 0.03174, 'mean': 0.58342, 'captures': ['skeleton_flame_0.png', 'skeleton_flame_1.png', 'skeleton_flame_2.png', 'skeleton_flame_3.png']}\nR00 PASS both fire skins were in frame and readable {'skins': ['arden_infernal', 'skeleton_flame']}\nR01 PASS there is fire on both fire skins, and it is lit {'luma_in_the_flame_band': {'arden_infernal': 0.52156, 'skeleton_flame': 0.55954}, 'floor': 0.05, 'note': 'at wl.Look.FireGain 0.12 this read 0.010 and the fire was invisible in the photograph; the gain was swept to 1.6 in one session by zc_fire_gain_sweep.'}\nR02 PASS the fire is never the same twice -- it flickers {'swing_over_four_seconds': {'arden_infernal': 0.03064, 'skeleton_flame': 0.03174}, 'mean': {'arden_infernal': 0.59503, 'skeleton_flame': 0.58342}, 'floor': 0.004}\nR03_WHITE INFO how much of the hottest band is over white, reported and not judged {'fraction_over_white': {'arden_infernal': 0.0, 'skeleton_flame': 0.0}, 'note': 'kept as a reading because it is worth seeing; not a gate, because the foot of a flame is supposed to be white.'}\nR03 PASS the flame still has its own heat colour in it, not just white {'strongest_channel_separation': {'arden_infernal': 0.2, 'skeleton_flame': 0.1843}, 'floor': 0.12, 'fraction_over_white': {'arden_infernal': 0.0, 'skeleton_flame': 0.0}, 'note': \"Arden is judged on red-over-blue and the Skeleton on blue-over-red, each being that skin's own fire. Zero separation is a white cut-out; this is the clause that keeps the gain honest.\"}\n"
 }

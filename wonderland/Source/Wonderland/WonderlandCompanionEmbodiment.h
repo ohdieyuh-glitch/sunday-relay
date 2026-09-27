@@ -159,7 +159,7 @@ public:
 	 * which stands on its own black stage under its own light: a preview that got dimmer after sunset would
 	 * be reporting the weather rather than the skin.
 	 */
-	void SetExposureAware(bool bAware) { bExposureAware = bAware; }
+	void SetExposureAware(bool bAware);
 
 	float GetGlowScale() const { return GlowScale; }
 

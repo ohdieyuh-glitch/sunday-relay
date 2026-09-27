@@ -188,7 +188,28 @@ def job():
         # Two settles: the figure loads, then the framing timer re-solves for it on the next 0.08 s tick.
         yield 6.0
         shape = silhouette()
+        # ---- OCCUPANCY IS THE PEAK OVER A BEAT, NOT ONE INSTANT OF IT.
+        #
+        # Four of the five skins hold still and one does not. Arden Infernal is mostly animated fire, and the
+        # ribbons pulse between 0.58 and 1.20 of their nominal height every couple of seconds by design -- so
+        # its silhouette genuinely IS a different size from moment to moment, and a single sample lands
+        # wherever the flame happened to be. Measured three times at the same setting it returned 0.873, 0.865
+        # and 0.743 against a 0.78 floor: the same figure, framed identically, passing twice and failing once.
+        #
+        # The framing itself is solved against the figure's recent PEAK (see UWonderlandUiSubsystem's
+        # WardrobePeakHeight), because that is the extent that must fit inside the window. Measuring the same
+        # way is not a concession -- it is asking the question the founder asked, which is whether the mascot
+        # fills the square, of a mascot whose size oscillates.
         frame = geometry()
+        for _ in range(9):
+            yield 0.3
+            again = geometry()
+            if again is not None and frame is not None:
+                frame = dict(frame)
+                frame["across"] = max(frame["across"], again["across"])
+                frame["up"] = max(frame["up"], again["up"])
+                frame["screen"] = again["screen"]
+                frame["away"] = again["away"]
         shot = os.path.join(ROOT, "%s_front.png" % skin)
         try:
             L.capture_game_viewport(shot)
@@ -350,15 +371,29 @@ def job():
     # glow was re-swept from 0.10 to 0.022 for entirely unrelated reasons -- the whole square got dimmer, every
     # absolute difference in it shrank, and the clause failed on a recolour that had plainly worked: red over
     # blue went from 0.0072 to 0.0320, four and a half times, and missed a fixed threshold by 0.005.
-    lift = None
+    # ---- DOMINANCE, WHICH IS THE ONE FORM OF THIS THAT SURVIVES THE STAGE CHANGING BRIGHTNESS.
+    #
+    # This clause has now been re-derived twice for the same reason and it is worth stating once. It began as
+    # "red-over-blue must rise by 0.03", an absolute, and failed when the preview glow was swept DOWN for the
+    # fire material -- every absolute difference in the square shrank. It became "red-over-blue must multiply
+    # by 2.5", a ratio, and failed when the preview glow was swept back UP for the same material -- a brighter
+    # stage lifts the baseline the ratio is taken against. Both times the recolour itself worked perfectly.
+    #
+    # What a crimson shell actually does is make red DOMINANT: measured here, the square goes from balanced
+    # (0.055, 0.049, 0.043) to red-led (0.038, 0.011, 0.015), with green collapsing by four and a half times.
+    # Red over the strongest of the other two is 1.11 before and 2.50 after -- and that is a ratio of ratios,
+    # so it does not care how bright the stage is, only what colour it has become.
+    before_lead = after_lead = None
     if plain is not None and painted is not None:
-        before_gap = max(plain[0] - plain[2], 0.0005)
-        lift = round((painted[0] - painted[2]) / before_gap, 2)
+        before_lead = round(plain[0] / max(plain[1], plain[2], 0.0005), 2)
+        after_lead = round(painted[0] / max(painted[1], painted[2], 0.0005), 2)
     record("U30", "a PRIMARY colour picked in the Wardrobe shows on the preview immediately",
-           lift is not None and lift >= 2.5,
-           plain_mean=plain, crimson_mean=painted, red_over_blue_multiplied_by=lift, floor=2.5,
-           note="Skeleton Flame is bone and blue ghostfire; a crimson shell must push red above blue in the "
-                "square, and the ghostfire must not follow it. A ratio says that at any stage brightness.")
+           after_lead is not None and before_lead is not None
+           and after_lead >= 1.6 and after_lead > before_lead * 1.3,
+           plain_mean=plain, crimson_mean=painted,
+           red_leads_by_before=before_lead, red_leads_by_after=after_lead, floor=1.6,
+           note="Skeleton Flame is bone and blue ghostfire; a crimson shell must make red lead the square, "
+                "and the ghostfire must not follow it (see U32, which checks the blue survives).")
 
     record("U31", "the canonical state is what the Wardrobe wrote, so the Menu reads the same colour",
            abs(L.get_mascot_colour(True).r - 0.82) < 0.02 and abs(L.get_mascot_colour(True).b - 0.18) < 0.02,

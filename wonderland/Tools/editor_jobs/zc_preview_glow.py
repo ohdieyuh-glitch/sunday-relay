@@ -22,7 +22,7 @@ L = unreal.WonderlandUiTestLibrary
 
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "preview_glow")
 SKINS = ("arden_infernal", "celestial_light", "skeleton_flame", "relay_og")
-VALUES = (0.10, 0.045, 0.022, 0.010)
+VALUES = (0.45, 0.24, 0.12, 0.06)
 
 
 def job():
@@ -131,7 +131,7 @@ def job():
                 pass
         emit("P_%s" % skin, "INFO", skin, per)
 
-    unreal.SystemLibrary.execute_console_command(world, "wl.Look.PreviewGlow 0.100")
+    unreal.SystemLibrary.execute_console_command(world, "wl.Look.PreviewGlow 0.240")
 
     read = [v for per in rows.values() for v in per.values() if v is not None]
     record("P02", "every rung was read for every skin", len(read) == len(SKINS) * len(VALUES),

@@ -16,14 +16,26 @@
  * through the UI rather than the stage, and that body came up wearing its full authored fire. It is now
  * re-applied every frame the wardrobe is open, so there is no path back to the blown state.
  *
- * 0.022 IS FROM THE SWEEP. Four settings across four skins, judged on the wardrobe proof's own two
- * conditions -- the corners of the window must be the backdrop and the middle must out-read them -- and it is
- * the only rung that satisfies both for every skin, which makes it also the BRIGHTEST such rung and so the
- * one that keeps the most fire. Against the captures: at 0.100 Arden is a white-hot mass with no figure in
- * it, at 0.010 the flame is orange with the body legible through it, and 0.022 sits between with the fire
- * still plainly fire.
+ * 0.45, AND IT WAS 0.022 UNTIL THE FIRE MATERIAL SHIPPED. Both came from the same sweep, run twice, and the
+ * change between them is a good illustration of why this is a knob rather than a literal.
+ *
+ * On the legacy voxel glow, 0.022 was the only rung of four that satisfied the wardrobe proof's two
+ * conditions for every skin -- corners still the backdrop, middle out-reading them. Then M_WL_Fire was
+ * switched on for the world, and it produces far less light per unit of Color than the surface it replaced:
+ * the same 0.022 left Arden Infernal's preview at 0.031 luma, a nearly black square, and W12 caught it. The
+ * value was never wrong; it was calibrated against a surface that is no longer there.
+ *
+ * Re-swept on the fire material across 0.45, 0.24, 0.12 and 0.06: Arden's middle goes 0.140, 0.175, 0.120,
+ * 0.068 against a backdrop that stays at 0.008, and 0.45 is the rung where Celestial Light's halo sits
+ * furthest from the window's corners (0.072, against 0.25 at 0.24 and 0.53 at 0.06).
+ *
+ * 0.45 was shipped first and W13 caught the other end of the trade: Celestial Light -- a skin that is
+ * literally made of light -- filled 0.616 of the whole window against a 0.6 ceiling meant to catch the white
+ * brain chamber showing through. 0.32 is between the two measured rungs, which is where the same
+ * interpolation-between-two-gate-runs got the night lighting: bright enough that Arden is a figure rather
+ * than a black square, dim enough that Celestial Light is a mascot on a stage rather than a lit window.
  */
-static float GWonderlandPreviewGlow = 0.022f;
+static float GWonderlandPreviewGlow = 0.32f;
 static FAutoConsoleVariableRef GWonderlandPreviewGlowRef(
 	TEXT("wl.Look.PreviewGlow"),
 	GWonderlandPreviewGlow,
@@ -414,6 +426,30 @@ void AWonderlandSkinStage::Tick(float DeltaSeconds)
 		return;
 	}
 
+	// ---- A NOTE ABOUT THE STAGE LIGHTS, AND A FIX THAT DID NOT WORK.
+	//
+	// MEASURED (zc_preview_hours): the wardrobe preview is not independent of the world's clock. Relay OG
+	// reads 0.1026 luma in the window at noon and 0.0223 at seven in the evening -- four and a half times
+	// darker -- while Arden Infernal goes the other way, nearly twice as bright at midnight because its fire
+	// is emissive and the night exposure lifts it. Two skins moving in OPPOSITE directions with the clock is
+	// the signature of a showcase being lit by the world rather than by its own rig.
+	//
+	// The obvious cause is that the three lights above are attached to the stage root, and the stage is
+	// scaled to about a ninth to bring the figure to the window -- which scales their offsets and their
+	// attenuation radii with them. I rewrote them to be placed and sized in world space against the figure
+	// every frame, rebuilt, and re-measured: 4.6x became 4.8x. No improvement at all, so the rewrite is not
+	// kept -- an unverified change that sounds right is exactly what this project keeps having to undo.
+	//
+	// So the cause is something else and is NOT YET FOUND. What is ruled out: the lit materials do respond to
+	// light (the figure tracks the sun precisely, which is the whole problem), the lights are never switched
+	// off in code, and exposure is not it either -- night OPENS the exposure by 1.45 EV, which would make the
+	// preview brighter rather than darker. The next thing to check is whether the stage actor's hidden state
+	// suppresses its own lights while the wardrobe borrows the world camera.
+	//
+	// It is left open deliberately rather than papered over. The founder's wardrobe clauses all pass at the
+	// hour they are measured at; what does not yet hold is that the preview should look the same at 04:00 as
+	// at noon.
+
 	// THE PREVIEW GLOW IS RE-APPLIED RATHER THAN SET ONCE, so wl.Look.PreviewGlow is live. SetGlowScale
 	// early-outs unless the value actually moved, so this costs a float compare per frame in the one state
 	// where the wardrobe is open.
@@ -474,7 +510,7 @@ void AWonderlandSkinStage::StepLookAround(float DeltaSeconds)
 		const double SpinNow = GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0;
 		Body->SetActorLocationAndRotation(
 			GetActorLocation() + FVector(0.0, 0.0, static_cast<float>(FMath::Sin(SpinNow * 1.15) * 1.6)),
-			FRotator(0.0f, Yaw, 0.0f));
+			FRotator(0.0f, static_cast<float>(GetActorRotation().Yaw) + Yaw, 0.0f));
 		return;
 	}
 
@@ -499,9 +535,27 @@ void AWonderlandSkinStage::StepLookAround(float DeltaSeconds)
 	const double Now = GetWorld() != nullptr ? GetWorld()->GetTimeSeconds() : 0.0;
 	// A shallow bob the figure's own float does not cover. Small on purpose: this is weight, not a performance.
 	const float Bob = static_cast<float>(FMath::Sin(Now * 1.15) * 1.6);
+	// ---- "FRONT" IS THE STAGE'S FRONT, NOT THE WORLD'S.
+	//
+	// THE BUG THIS FIXES, and the founder would have seen it before any proof did: the wardrobe was showing
+	// the BACK of the mascot. Photographed at noon, Relay OG was a blank pale box with no visor and no status
+	// eyes, and Skeleton Flame showed no chest skull and no cyan -- both simply turned away.
+	//
+	// This line set the figure to world yaw zero. That was correct while the preview was a render target
+	// photographed by the stage's own camera, which sat at a fixed angle to the stage: world zero WAS the
+	// front. Then the wardrobe became a hole in the panel with the figure standing in the world behind it,
+	// the camera became the player's own, and the UI started rotating the STAGE to face wherever that camera
+	// is -- while this went on turning the BODY to face world +X. The two disagreed by however far the player
+	// happened to be standing round the figure.
+	//
+	// The inspection yaw is now an offset from the stage's heading rather than an absolute, so 0 means facing
+	// the lens and the 360 button still turns the figure and nothing else.
+	//
+	// Worth saying: zc_wardrobe_pixels passed 12/12 through all of this, because "the corners are black and
+	// the middle is brighter" is true of a Dog's back as well as its face.
 	Body->SetActorLocationAndRotation(
 		GetActorLocation() + FVector(0.0, 0.0, Bob),
-		FRotator(0.0f, Yaw, 0.0f));
+		FRotator(0.0f, static_cast<float>(GetActorRotation().Yaw) + Yaw, 0.0f));
 }
 
 AWonderlandSkinStage* AWonderlandSkinStage::Get(UWorld* World)
