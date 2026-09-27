@@ -359,10 +359,17 @@ def job():
     # one plausible and one not, and every night verdict here divides by the implausible one: "still night"
     # is luma <= 0.38 x noon, which is meaningless when noon is itself black. So this gate runs FIRST and a
     # red here voids the rest of the job rather than letting it publish ratios against a dark reference.
-    noon_lumas = {k: v["luma"] for k, v in noon.items() if v}
+    # THE DENOMINATOR MUST INCLUDE THE FAILURES. This filtered the Nones out and then measured against what
+    # was left, so on the run that exposed it FOUR OF SEVEN noon captures returned nothing, three survived
+    # the filter, and the gate passed on 3 >= max(1, 3-1). It passed by excluding its own failures from the
+    # count. A capture that returned nothing is not a place that was bright.
+    missing = sorted(k for k, v in noon.items() if not v or v.get("luma") is None)
+    noon_lumas = {k: v["luma"] for k, v in noon.items() if v and v.get("luma") is not None}
     bright_enough = [k for k, v in noon_lumas.items() if v >= 0.12]
     record("N_SANITY", "the capture can see a lit world at noon -- the reference the night ratios divide by",
-           len(bright_enough) >= max(1, len(noon_lumas) - 1), noon_luma=noon_lumas, floor=0.12,
+           len(bright_enough) >= max(1, len(PLACES) - 1) and not missing,
+           noon_luma=noon_lumas, floor=0.12, captures_returned_nothing=missing,
+           measured=len(noon_lumas), of_places=len(PLACES),
            too_dark=[k for k in noon_lumas if k not in bright_enough],
            note="this now reads the same composited frame that is saved beside it as noon__<place>.jpg, "
                 "so a red here is checkable by eye: open the JPEG. The previous version measured a "
@@ -463,10 +470,17 @@ def job():
                 "reporting path, not the world -- check lamp_materials for the error before believing it")
 
     # A PLACE THAT IS DARK AT NOON IS NOT A NIGHT PROBLEM, and this separates the two reasons it can happen.
+    # AND THIS ONE WENT GREEN REPORTING noon_luma: null -- no data at all, and a pass. A gate that measured
+    # nothing has not found nothing; it has found out nothing.
     dark_at_noon = [k for k, v in noon.items() if v and v.get("dark", 0) > 0.85]
+    noon_complete = not missing
     record("N_NOON_DARK", "no place is already dark at MIDDAY -- a night gate cannot speak for a place that "
                           "is unlit in daylight",
-           not dark_at_noon, dark_at_noon=dark_at_noon,
+           not dark_at_noon and noon_complete, dark_at_noon=dark_at_noon,
+           captures_returned_nothing=missing,
+           nothing_to_judge=(None if noon_complete else
+                             "%d of %d noon captures returned nothing; this gate is not evidence"
+                             % (len(missing), len(PLACES))),
            noon_dark={k: (v or {}).get("dark") for k, v in noon.items()},
            surfaces_in_front={k: drawn.get(k) for k in dark_at_noon},
            note="architecture_noctis read 0.9691 dark at noon. An offline cone count puts 2,700 architecture "
