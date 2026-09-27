@@ -1,0 +1,81 @@
+{
+ "name": "zc_make_eye_halo_material",
+ "started": "2026-09-27 11:07:53",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "H00",
+   "name": "the project has its own eye halo material",
+   "pass": true,
+   "detail": {
+    "path": "/Game/Wonderland/Materials/M_WL_EyeHalo",
+    "created": false
+   }
+  },
+  {
+   "id": "H01",
+   "name": "it is additive, unlit and usable on instanced meshes",
+   "pass": true,
+   "detail": {
+    "properties": {
+     "blend_mode": true,
+     "shading_model": true,
+     "two_sided": true,
+     "used_with_instanced_static_meshes": true,
+     "used_with_static_lighting": true
+    }
+   }
+  },
+  {
+   "id": "H02",
+   "name": "it exposes the \"Color\" parameter the eye drive writes",
+   "pass": true,
+   "detail": {
+    "vector_parameters": [
+     "Color"
+    ]
+   }
+  },
+  {
+   "id": "H03",
+   "name": "something is plugged into the material's emissive output",
+   "pass": false,
+   "detail": {
+    "probe": [
+     "emissive_color failed: Material: Failed to find property 'emissive_color' for attribute 'emis",
+     "EmissiveColor failed: Material: Property 'EmissiveColor' for attribute 'EmissiveColor' on 'M"
+    ]
+   }
+  },
+  {
+   "id": "H04",
+   "name": "the plateau and the fade are tunable without a rebuild",
+   "pass": true,
+   "detail": {
+    "scalar_parameters": [
+     "Inner",
+     "Falloff"
+    ]
+   }
+  }
+ ],
+ "waited_for_pie_seconds": 0.0,
+ "created": false,
+ "properties": {
+  "blend_mode": true,
+  "shading_model": true,
+  "two_sided": true,
+  "used_with_instanced_static_meshes": true,
+  "used_with_static_lighting": true
+ },
+ "vector_parameters": [
+  "Color"
+ ],
+ "scalar_parameters": [
+  "Inner",
+  "Falloff"
+ ],
+ "finished": "2026-09-27 11:07:57",
+ "seconds": 4.04,
+ "log": "H00 PASS the project has its own eye halo material {'path': '/Game/Wonderland/Materials/M_WL_EyeHalo', 'created': False}\nH01 PASS it is additive, unlit and usable on instanced meshes {'properties': {'blend_mode': True, 'shading_model': True, 'two_sided': True, 'used_with_instanced_static_meshes': True, 'used_with_static_lighting': True}}\nH02 PASS it exposes the \"Color\" parameter the eye drive writes {'vector_parameters': ['Color']}\nH03 FAIL something is plugged into the material's emissive output {'probe': [\"emissive_color failed: Material: Failed to find property 'emissive_color' for attribute 'emis\", \"EmissiveColor failed: Material: Property 'EmissiveColor' for attribute 'EmissiveColor' on 'M\"]}\nH04 PASS the plateau and the fade are tunable without a rebuild {'scalar_parameters': ['Inner', 'Falloff']}\n"
+}

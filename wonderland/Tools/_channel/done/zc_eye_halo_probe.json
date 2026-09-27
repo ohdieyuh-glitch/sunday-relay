@@ -1,0 +1,954 @@
+{
+ "name": "zc_eye_halo_probe",
+ "started": "2026-09-27 11:49:06",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "P00",
+   "name": "the Dog's halos wear the soft material (the control, photographed glowing)",
+   "pass": true,
+   "detail": {
+    "components": 9
+   }
+  },
+  {
+   "id": "P01",
+   "name": "1. the eyehalo pane EXISTS as a drawn surface on every costume",
+   "pass": true,
+   "detail": {
+    "halo_surfaces_per_skin": {
+     "celestial_light": 2,
+     "apollo": 2,
+     "arden_infernal": 2,
+     "skeleton_flame": 2
+    },
+    "note": "zero means the generator's pane never became geometry, or its material was merged away"
+   }
+  },
+  {
+   "id": "P02",
+   "name": "3. it wears M_WL_EyeHalo rather than the flat additive",
+   "pass": true,
+   "detail": {
+    "parent_per_skin": {
+     "celestial_light": "M_WL_EyeHalo",
+     "apollo": "M_WL_EyeHalo",
+     "arden_infernal": "M_WL_EyeHalo",
+     "skeleton_flame": "M_WL_EyeHalo"
+    },
+    "note": "the flat additive draws one colour to the cube's hard edge -- the olive frame of round 3"
+   }
+  },
+  {
+   "id": "P03",
+   "name": "2. it is driven to a real level, not black",
+   "pass": true,
+   "detail": {
+    "colour_per_skin": {
+     "celestial_light": [
+      10854.276,
+      15406.068,
+      17506.896
+     ],
+     "apollo": [
+      18349.525,
+      15780.593,
+      4770.877
+     ],
+     "arden_infernal": [
+      19088.83,
+      11071.523,
+      1908.883
+     ],
+     "skeleton_flame": [
+      4240.423,
+      11190.002,
+      11778.951
+     ]
+    },
+    "note": "an additive surface carries the scene's thousand in its Color; under ~100 it is invisible against a white point of 25,000"
+   }
+  },
+  {
+   "id": "P04",
+   "name": "4. its component is visible",
+   "pass": true,
+   "detail": {
+    "visible_per_skin": {
+     "celestial_light": true,
+     "apollo": true,
+     "arden_infernal": true,
+     "skeleton_flame": true
+    }
+   }
+  },
+  {
+   "id": "P05",
+   "name": "5. it actually has instances in it",
+   "pass": true,
+   "detail": {
+    "instances_per_skin": {
+     "celestial_light": 2,
+     "apollo": 2,
+     "arden_infernal": 2,
+     "skeleton_flame": 2
+    }
+   }
+  }
+ ],
+ "relay_og_halos": [
+  {
+   "component": "Mesh_head_eye",
+   "class": "StaticMeshComponent",
+   "instances": 1,
+   "visible": true,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_0",
+     "parent": "M_WL_VoxelGlow",
+     "Color": [
+      24.0,
+      17.28,
+      3.84
+     ],
+     "EmissiveColor": [
+      24.0,
+      17.28,
+      3.84
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.0,
+     "Falloff": 0.0
+    }
+   ],
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7F350) {x: 10.200000, y: -11.400001, z: 17.850000}>",
+    "<Struct 'Vector' (0x000002C605D7F3A0) {x: 11.700000, y: 11.400001, z: 25.950001}>"
+   ]
+  },
+  {
+   "component": "EyeHalo_0",
+   "class": "StaticMeshComponent",
+   "instances": 1,
+   "visible": true,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_0",
+     "parent": "M_WL_EyeHalo",
+     "Color": [
+      18000.0,
+      12960.001,
+      2880.0
+     ],
+     "EmissiveColor": [
+      18000.0,
+      12960.001,
+      2880.0
+     ],
+     "EmissiveStrength": 0.0,
+     "Inner": 0.45,
+     "Falloff": 1.3
+    }
+   ],
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7FC10) {x: -50.000000, y: -50.000000, z: -50.000000}>",
+    "<Struct 'Vector' (0x000002C605D7FC60) {x: 50.000000, y: 50.000000, z: 50.000000}>"
+   ]
+  },
+  {
+   "component": "EyeHalo_1",
+   "class": "StaticMeshComponent",
+   "instances": 1,
+   "visible": true,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_1",
+     "parent": "M_WL_EyeHalo",
+     "Color": [
+      18000.0,
+      12960.001,
+      2880.0
+     ],
+     "EmissiveColor": [
+      18000.0,
+      12960.001,
+      2880.0
+     ],
+     "EmissiveStrength": 0.0,
+     "Inner": 0.45,
+     "Falloff": 1.3
+    }
+   ],
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7FCB0) {x: -50.000000, y: -50.000000, z: -50.000000}>",
+    "<Struct 'Vector' (0x000002C605D7FD00) {x: 50.000000, y: 50.000000, z: 50.000000}>"
+   ]
+  },
+  {
+   "component": "EyeHalo_2",
+   "class": "StaticMeshComponent",
+   "instances": 1,
+   "visible": true,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_2",
+     "parent": "M_WL_EyeHalo",
+     "Color": [
+      18000.0,
+      12960.001,
+      2880.0
+     ],
+     "EmissiveColor": [
+      18000.0,
+      12960.001,
+      2880.0
+     ],
+     "EmissiveStrength": 0.0,
+     "Inner": 0.45,
+     "Falloff": 1.3
+    }
+   ],
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7FD50) {x: -50.000000, y: -50.000000, z: -50.000000}>",
+    "<Struct 'Vector' (0x000002C605D7FDA0) {x: 50.000000, y: 50.000000, z: 50.000000}>"
+   ]
+  },
+  {
+   "component": "EyeHalo_3",
+   "class": "StaticMeshComponent",
+   "instances": 1,
+   "visible": true,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_3",
+     "parent": "M_WL_EyeHalo",
+     "Color": [
+      18000.0,
+      12960.001,
+      2880.0
+     ],
+     "EmissiveColor": [
+      18000.0,
+      12960.001,
+      2880.0
+     ],
+     "EmissiveStrength": 0.0,
+     "Inner": 0.45,
+     "Falloff": 1.3
+    }
+   ],
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7FDF0) {x: -50.000000, y: -50.000000, z: -50.000000}>",
+    "<Struct 'Vector' (0x000002C605D7FE40) {x: 50.000000, y: 50.000000, z: 50.000000}>"
+   ]
+  },
+  {
+   "component": "EyeHalo_4",
+   "class": "StaticMeshComponent",
+   "instances": 1,
+   "visible": true,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_4",
+     "parent": "M_WL_EyeHalo",
+     "Color": [
+      5760.0,
+      4147.2,
+      921.6
+     ],
+     "EmissiveColor": [
+      5760.0,
+      4147.2,
+      921.6
+     ],
+     "EmissiveStrength": 0.0,
+     "Inner": 0.45,
+     "Falloff": 1.3
+    }
+   ],
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7FE90) {x: -50.000000, y: -50.000000, z: -50.000000}>",
+    "<Struct 'Vector' (0x000002C605D7FEE0) {x: 50.000000, y: 50.000000, z: 50.000000}>"
+   ]
+  },
+  {
+   "component": "EyeHalo_5",
+   "class": "StaticMeshComponent",
+   "instances": 1,
+   "visible": true,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_5",
+     "parent": "M_WL_EyeHalo",
+     "Color": [
+      5760.0,
+      4147.2,
+      921.6
+     ],
+     "EmissiveColor": [
+      5760.0,
+      4147.2,
+      921.6
+     ],
+     "EmissiveStrength": 0.0,
+     "Inner": 0.45,
+     "Falloff": 1.3
+    }
+   ],
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7FF30) {x: -50.000000, y: -50.000000, z: -50.000000}>",
+    "<Struct 'Vector' (0x000002C605D7FF80) {x: 50.000000, y: 50.000000, z: 50.000000}>"
+   ]
+  },
+  {
+   "component": "EyeHalo_6",
+   "class": "StaticMeshComponent",
+   "instances": 1,
+   "visible": true,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_6",
+     "parent": "M_WL_EyeHalo",
+     "Color": [
+      5760.0,
+      4147.2,
+      921.6
+     ],
+     "EmissiveColor": [
+      5760.0,
+      4147.2,
+      921.6
+     ],
+     "EmissiveStrength": 0.0,
+     "Inner": 0.45,
+     "Falloff": 1.3
+    }
+   ],
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7FFD0) {x: -50.000000, y: -50.000000, z: -50.000000}>",
+    "<Struct 'Vector' (0x000002C5D61F8060) {x: 50.000000, y: 50.000000, z: 50.000000}>"
+   ]
+  },
+  {
+   "component": "EyeHalo_7",
+   "class": "StaticMeshComponent",
+   "instances": 1,
+   "visible": true,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_7",
+     "parent": "M_WL_EyeHalo",
+     "Color": [
+      5760.0,
+      4147.2,
+      921.6
+     ],
+     "EmissiveColor": [
+      5760.0,
+      4147.2,
+      921.6
+     ],
+     "EmissiveStrength": 0.0,
+     "Inner": 0.45,
+     "Falloff": 1.3
+    }
+   ],
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C5D61F80B0) {x: -50.000000, y: -50.000000, z: -50.000000}>",
+    "<Struct 'Vector' (0x000002C5D61F8100) {x: 50.000000, y: 50.000000, z: 50.000000}>"
+   ]
+  }
+ ],
+ "costumes": {
+  "celestial_light": {
+   "embodiments_in_world": 3,
+   "worn_actor": "WonderlandCompanionEmbodiment_1",
+   "worn_attached_to": "BP_RelayDog_C_0",
+   "worn_surface_count": 72,
+   "worn_parents": {
+    "M_WLMaster": 28,
+    "BasicShapeMaterial": 10,
+    "M_WL_VoxelGlow": 32,
+    "M_WL_EyeHalo": 2
+   },
+   "halo": [
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_3",
+     "instances": 2,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_0",
+     "parent": "M_WL_EyeHalo",
+     "Color": [
+      10854.276,
+      15406.068,
+      17506.896
+     ],
+     "EmissiveColor": [
+      11160.0,
+      15839.999,
+      18000.0
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.45,
+     "Falloff": 1.3
+    },
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_3",
+     "instances": 2,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_0",
+     "parent": "M_WL_EyeHalo",
+     "Color": [
+      10854.276,
+      15406.068,
+      17506.896
+     ],
+     "EmissiveColor": [
+      11160.0,
+      15839.999,
+      18000.0
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.45,
+     "Falloff": 1.3
+    }
+   ],
+   "core": [
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_2",
+     "instances": 2,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_0",
+     "parent": "M_WL_VoxelGlow",
+     "Color": [
+      14.472,
+      20.541,
+      23.343
+     ],
+     "EmissiveColor": [
+      14.88,
+      21.12,
+      24.0
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.0,
+     "Falloff": 0.0
+    },
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_17",
+     "instances": 45,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_2",
+     "parent": "M_WL_VoxelGlow",
+     "Color": [
+      6.332,
+      8.374,
+      10.212
+     ],
+     "EmissiveColor": [
+      6.51,
+      8.61,
+      10.5
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.0,
+     "Falloff": 0.0
+    },
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_18",
+     "instances": 40,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_2",
+     "parent": "M_WL_VoxelGlow",
+     "Color": [
+      6.332,
+      8.374,
+      10.212
+     ],
+     "EmissiveColor": [
+      6.51,
+      8.61,
+      10.5
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.0,
+     "Falloff": 0.0
+    },
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_19",
+     "instances": 12,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_2",
+     "parent": "M_WL_VoxelGlow",
+     "Color": [
+      6.332,
+      8.374,
+      10.212
+     ],
+     "EmissiveColor": [
+      6.51,
+      8.61,
+      10.5
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.0,
+     "Falloff": 0.0
+    }
+   ],
+   "additive_surfaces": 2
+  },
+  "apollo": {
+   "embodiments_in_world": 3,
+   "worn_actor": "WonderlandCompanionEmbodiment_1",
+   "worn_attached_to": "BP_RelayDog_C_0",
+   "worn_surface_count": 88,
+   "worn_parents": {
+    "M_WL_VoxelGlow": 16,
+    "BasicShapeMaterial": 30,
+    "M_WLMaster": 40,
+    "M_WL_EyeHalo": 2
+   },
+   "halo": [
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_39",
+     "instances": 2,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_1",
+     "parent": "M_WL_EyeHalo",
+     "Color": [
+      18349.525,
+      15780.593,
+      4770.877
+     ],
+     "EmissiveColor": [
+      18000.0,
+      15480.0,
+      4680.0
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.45,
+     "Falloff": 1.3
+    },
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_39",
+     "instances": 2,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_1",
+     "parent": "M_WL_EyeHalo",
+     "Color": [
+      18349.525,
+      15780.593,
+      4770.877
+     ],
+     "EmissiveColor": [
+      18000.0,
+      15480.0,
+      4680.0
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.45,
+     "Falloff": 1.3
+    }
+   ],
+   "core": [
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_69",
+     "instances": 1,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_14",
+     "parent": "M_WL_VoxelGlow",
+     "Color": [
+      18.35,
+      14.313,
+      2.936
+     ],
+     "EmissiveColor": [
+      18.0,
+      14.04,
+      2.88
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.0,
+     "Falloff": 0.0
+    },
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_66",
+     "instances": 1,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_14",
+     "parent": "M_WL_VoxelGlow",
+     "Color": [
+      18.35,
+      14.313,
+      2.936
+     ],
+     "EmissiveColor": [
+      18.0,
+      14.04,
+      2.88
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.0,
+     "Falloff": 0.0
+    },
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_63",
+     "instances": 8,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_14",
+     "parent": "M_WL_VoxelGlow",
+     "Color": [
+      18.35,
+      14.313,
+      2.936
+     ],
+     "EmissiveColor": [
+      18.0,
+      14.04,
+      2.88
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.0,
+     "Falloff": 0.0
+    },
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_60",
+     "instances": 11,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_14",
+     "parent": "M_WL_VoxelGlow",
+     "Color": [
+      18.35,
+      14.313,
+      2.936
+     ],
+     "EmissiveColor": [
+      18.0,
+      14.04,
+      2.88
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.0,
+     "Falloff": 0.0
+    }
+   ],
+   "additive_surfaces": 2
+  },
+  "arden_infernal": {
+   "embodiments_in_world": 3,
+   "worn_actor": "WonderlandCompanionEmbodiment_1",
+   "worn_attached_to": "BP_RelayDog_C_0",
+   "worn_surface_count": 98,
+   "worn_parents": {
+    "BasicShapeMaterial": 46,
+    "M_WLMaster": 30,
+    "M_WL_VoxelGlow": 20,
+    "M_WL_EyeHalo": 2
+   },
+   "halo": [
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_83",
+     "instances": 2,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_2",
+     "parent": "M_WL_EyeHalo",
+     "Color": [
+      19088.83,
+      11071.523,
+      1908.883
+     ],
+     "EmissiveColor": [
+      18000.0,
+      10440.001,
+      1800.0
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.45,
+     "Falloff": 1.3
+    },
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_83",
+     "instances": 2,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_2",
+     "parent": "M_WL_EyeHalo",
+     "Color": [
+      19088.83,
+      11071.523,
+      1908.883
+     ],
+     "EmissiveColor": [
+      18000.0,
+      10440.001,
+      1800.0
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.45,
+     "Falloff": 1.3
+    }
+   ],
+   "core": [
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_99",
+     "instances": 8,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_22",
+     "parent": "M_WL_VoxelGlow",
+     "Color": [
+      19.089,
+      1.718,
+      2.291
+     ],
+     "EmissiveColor": [
+      18.0,
+      1.62,
+      2.16
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.0,
+     "Falloff": 0.0
+    },
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_104",
+     "instances": 15,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_22",
+     "parent": "M_WL_VoxelGlow",
+     "Color": [
+      19.089,
+      1.718,
+      2.291
+     ],
+     "EmissiveColor": [
+      18.0,
+      1.62,
+      2.16
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.0,
+     "Falloff": 0.0
+    },
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_112",
+     "instances": 2,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_18",
+     "parent": "M_WL_VoxelGlow",
+     "Color": [
+      9.544,
+      3.245,
+      0.477
+     ],
+     "EmissiveColor": [
+      9.0,
+      3.06,
+      0.45
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.0,
+     "Falloff": 0.0
+    },
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_114",
+     "instances": 14,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_18",
+     "parent": "M_WL_VoxelGlow",
+     "Color": [
+      9.544,
+      3.245,
+      0.477
+     ],
+     "EmissiveColor": [
+      9.0,
+      3.06,
+      0.45
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.0,
+     "Falloff": 0.0
+    }
+   ],
+   "additive_surfaces": 2
+  },
+  "skeleton_flame": {
+   "embodiments_in_world": 3,
+   "worn_actor": "WonderlandCompanionEmbodiment_1",
+   "worn_attached_to": "BP_RelayDog_C_0",
+   "worn_surface_count": 86,
+   "worn_parents": {
+    "BasicShapeMaterial": 38,
+    "M_WL_VoxelGlow": 24,
+    "M_WLMaster": 22,
+    "M_WL_EyeHalo": 2
+   },
+   "halo": [
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_132",
+     "instances": 2,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_3",
+     "parent": "M_WL_EyeHalo",
+     "Color": [
+      4240.423,
+      11190.002,
+      11778.951
+     ],
+     "EmissiveColor": [
+      6480.0,
+      17099.998,
+      18000.0
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.45,
+     "Falloff": 1.3
+    },
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_132",
+     "instances": 2,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_3",
+     "parent": "M_WL_EyeHalo",
+     "Color": [
+      4240.423,
+      11190.002,
+      11778.951
+     ],
+     "EmissiveColor": [
+      6480.0,
+      17099.998,
+      18000.0
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.45,
+     "Falloff": 1.3
+    }
+   ],
+   "core": [
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_166",
+     "instances": 16,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_26",
+     "parent": "M_WL_VoxelGlow",
+     "Color": [
+      1.512,
+      4.81,
+      6.871
+     ],
+     "EmissiveColor": [
+      2.31,
+      7.35,
+      10.5
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.0,
+     "Falloff": 0.0
+    },
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_165",
+     "instances": 12,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_28",
+     "parent": "M_WL_VoxelGlow",
+     "Color": [
+      8.481,
+      11.072,
+      11.779
+     ],
+     "EmissiveColor": [
+      12.96,
+      16.92,
+      18.0
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.0,
+     "Falloff": 0.0
+    },
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_161",
+     "instances": 4,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_28",
+     "parent": "M_WL_VoxelGlow",
+     "Color": [
+      8.481,
+      11.072,
+      11.779
+     ],
+     "EmissiveColor": [
+      12.96,
+      16.92,
+      18.0
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.0,
+     "Falloff": 0.0
+    },
+    {
+     "component": "HierarchicalInstancedStaticMeshComponent_160",
+     "instances": 2,
+     "visible": true,
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_32",
+     "parent": "M_WL_VoxelGlow",
+     "Color": [
+      0.485,
+      1.279,
+      1.347
+     ],
+     "EmissiveColor": [
+      2.97,
+      7.838,
+      8.25
+     ],
+     "EmissiveStrength": 1000.0,
+     "Inner": 0.0,
+     "Falloff": 0.0
+    }
+   ],
+   "additive_surfaces": 2
+  }
+ },
+ "halo_local_bounds": {
+  "celestial_light": null,
+  "apollo": null,
+  "arden_infernal": null,
+  "skeleton_flame": null
+ },
+ "finished": "2026-09-27 11:50:03",
+ "seconds": 56.72,
+ "log": "P_DOG INFO the default Dog's eye and halo components [{'component': 'Mesh_head_eye', 'class': 'StaticMeshComponent', 'instances': 1, 'visible': True, 'materials': [{'slot': 0, 'material': 'MID_M_WL_VoxelGlow_0', 'parent': 'M_WL_VoxelGlow', 'Color': [24.0, 17.28, 3.84], 'EmissiveColor': [24.0, 17.28, 3.84], 'EmissiveStrength': 1000.0, 'Inner': 0.0, 'Falloff': 0.0}], 'local_bounds': [\"<Struct 'Vector' (0x000002C605D7F350) {x: 10.200000, y: -11.400001, z: 17.850000}>\", \"<Struct 'Vector' (0x000002C605D7F3A0) {x: 11.700000, y: 11.400001, z: 25.950001}>\"]}, {'component': 'EyeHalo_0', 'class': 'StaticMeshComponent', 'instances': 1, 'visible': True, 'materials': [{'slot': 0, 'material': 'MID_M_WL_EyeHalo_0', 'parent': 'M_WL_EyeHalo', 'Color': [18000.0, 12960.001, 2880.0], 'EmissiveColor': [18000.0, 12960.001, 2880.0], 'EmissiveStrength': 0.0, 'Inner': 0.45, 'Falloff': 1.3}], 'local_bounds': [\"<Struct 'Vector' (0x000002C605D7FC10) {x: -50.000000, y: -50.000000, z: -50.000000}>\", \"<Struct 'Vector' (0x000002C605D7FC60) {x: 50.000000, y: 50.000000, z: 50.000000}>\"]}, {'component': 'EyeHalo_1', 'class': 'StaticMeshComponent', 'instances': 1, 'visible': True, 'materials': [{'slot': 0, 'material': 'MID_M_WL_EyeHalo_1', 'parent': 'M_WL_EyeHalo', 'Color': [18000.0, 12960.001, 2880.0], 'EmissiveColor': [18000.0, 12960.001, 2880.0], 'EmissiveStrength': 0.0, 'Inner': 0.45, 'Falloff': 1.3}], 'local_bounds': [\"<Struct 'Vector' (0x000002C605D7FCB0) {x: -50.000000, y: -50.000000, z: -50.000000}>\", \"<Struct 'Vector' (0x000002C605D7FD00) {x: 50.000000, y: 50.000000, z: 50.000000}>\"]}, {'component': 'EyeHalo_2', 'class': 'StaticMeshComponent', 'instances': 1, 'visible': True, 'materials': [{'slot': 0, 'material': 'MID_M_WL_EyeHalo_2', 'parent': 'M_WL_EyeHalo', 'Color': [18000.0, 12960.001, 2880.0], 'EmissiveColor': [18000.0, 12960.001, 2880.0], 'EmissiveStrength': 0.0, 'Inner': 0.45, 'Falloff': 1.3}], 'local_bounds': [\"<Struct 'Vector' (0x000002C605D7FD50) {x: -50.000000, y: -50.000000, z: -50.000000}>\", \"<Struct 'Vector' (0x000002C605D7FDA0) {x: 50.000000, y: 50.000000, z: 50.000000}>\"]}, {'component': 'EyeHalo_3', 'class': 'StaticMeshComponent', 'instances': 1, 'visible': True, 'materials': [{'slot': 0, 'material': 'MID_M_WL_EyeHalo_3', 'parent': 'M_WL_EyeHalo', 'Color': [18000.0, 12960.001, 2880.0], 'EmissiveColor': [18000.0, 12960.001, 2880.0], 'EmissiveStrength': 0.0, 'Inner': 0.45, 'Falloff': 1.3}], 'local_bounds': [\"<Struct 'Vector' (0x000002C605D7FDF0) {x: -50.000000, y: -50.000000, z: -50.000000}>\", \"<Struct 'Vector' (0x000002C605D7FE40) {x: 50.000000, y: 50.000000, z: 50.000000}>\"]}, {'component': 'EyeHalo_4', 'class': 'StaticMeshComponent', 'instances': 1, 'visible': True, 'materials': [{'slot': 0, 'material': 'MID_M_WL_EyeHalo_4', 'parent': 'M_WL_EyeHalo', 'Color': [5760.0, 4147.2, 921.6], 'EmissiveColor': [5760.0, 4147.2, 921.6], 'EmissiveStrength': 0.0, 'Inner': 0.45, 'Falloff': 1.3}], 'local_bounds': [\"<Struct 'Vector' (0x000002C605D7FE90) {x: -50.000000, y: -50.000000, z: -50.000000}>\", \"<Struct 'Vector' (0x000002C605D7FEE0) {x: 50.000000, y: 50.000000, z: 50.000000}>\"]}]\nP00 PASS the Dog's halos wear the soft material (the control, photographed glowing) {'components': 9}\nP_WHO_celestial_light INFO celestial_light: every embodiment in the world [{'actor': 'WonderlandCompanionEmbodiment_0', 'attached_to': None, 'owned_by': None, 'metres_from_dog': 1.15, 'surface_count': 94, 'parents': {'BasicShapeMaterial': 14, 'M_WL_VoxelGlow': 80}}, {'actor': 'WonderlandCompanionEmbodiment_1', 'attached_to': None, 'owned_by': None, 'metres_from_dog': 1.35, 'surface_count': 112, 'parents': {'BasicShapeMaterial': 16, 'M_WL_VoxelGlow': 96}}, {'actor': 'WonderlandCompanionEmbodiment_1', 'attached_to': 'BP_RelayDog_C_0', 'owned_by': 'BP_RelayDog_C_0', 'metres_from_dog': 0.87, 'surface_count': 72, 'parents': {'M_WLMaster': 28, 'BasicShapeMaterial': 10, 'M_WL_VoxelGlow': 32, 'M_WL_EyeHalo': 2}}]\nP_celestial_light INFO celestial_light: halo rows 2, core rows 32 {'halo': [{'component': 'HierarchicalInstancedStaticMeshComponent_3', 'instances': 2, 'visible': True, 'slot': 0, 'material': 'MID_M_WL_EyeHalo_0', 'parent': 'M_WL_EyeHalo', 'Color': [10854.276, 15406.068, 17506.896], 'EmissiveColor': [11160.0, 15839.999, 18000.0], 'EmissiveStrength': 1000.0, 'Inner': 0.45, 'Falloff': 1.3}, {'component': 'HierarchicalInstancedStaticMeshComponent_3', 'instances': 2, 'visible': True, 'slot': 0, 'material': 'MID_M_WL_EyeHalo_0', 'parent': 'M_WL_EyeHalo', 'Color': [10854.276, 15406.068, 17506.896], 'EmissiveColor': [11160.0, 15839.999, 18000.0], 'EmissiveStrength': 1000.0, 'Inner': 0.45, 'Falloff': 1.3}], 'core': [{'component': 'HierarchicalInstancedStaticMeshComponent_2', 'instances': 2, 'visible': True, 'slot': 0, 'material': 'MID_M_WL_VoxelGlow_0', 'parent': 'M_WL_VoxelGlow', 'Color': [14.472, 20.541, 23.343], 'EmissiveColor': [14.88, 21.12, 24.0], 'EmissiveStrength': 1000.0, 'Inner': 0.0, 'Falloff': 0.0}, {'component': 'HierarchicalInstancedStaticMeshComponent_17', 'instances': 45, 'visible': True, 'slot': 0, 'material': 'MID_M_WL_VoxelGlow_2', 'parent': 'M_WL_VoxelGlow', 'Color': [6.332, 8.374, 10.212], 'EmissiveColor': [6.51, 8.61, 10.5], 'EmissiveStrength': 1000.0, 'Inner': 0.0, 'Falloff': 0.0}], 'parents': {'M_WLMaster': 28, 'BasicShapeMaterial': 10, 'M_WL_VoxelGlow': 32, 'M_WL_EyeHalo': 2}}\nP_WHO_apollo INFO apollo: every embodiment in the world [{'actor': 'WonderlandCompanionEmbodiment_0', 'attached_to': None, 'owned_by': None, 'metres_from_dog': 1.15, 'surface_count': 94, 'parents': {'BasicShapeMaterial': 14, 'M_WL_VoxelGlow': 80}}, {'actor': 'WonderlandCompanionEmbodiment_1', 'attached_to': None, 'owned_by': None, 'metres_from_dog': 1.35, 'surface_count': 112, 'parents': {'BasicShapeMaterial': 16, 'M_WL_VoxelGlow': 96}}, {'actor': 'WonderlandCompanionEmbodiment_1', 'attached_to': 'BP_RelayDog_C_0', 'owned_by': 'BP_RelayDog_C_0', 'metres_from_dog': 0.87, 'surface_count': 88, 'parents': {'M_WL_VoxelGlow': 16, 'BasicShapeMaterial': 30, 'M_WLMaster': 40, 'M_WL_EyeHalo': 2}}]\nP_apollo INFO apollo: halo rows 2, core rows 16 {'halo': [{'component': 'HierarchicalInstancedStaticMeshComponent_39', 'instances': 2, 'visible': True, 'slot': 0, 'material': 'MID_M_WL_EyeHalo_1', 'parent': 'M_WL_EyeHalo', 'Color': [18349.525, 15780.593, 4770.877], 'EmissiveColor': [18000.0, 15480.0, 4680.0], 'EmissiveStrength': 1000.0, 'Inner': 0.45, 'Falloff': 1.3}, {'component': 'HierarchicalInstancedStaticMeshComponent_39', 'instances': 2, 'visible': True, 'slot': 0, 'material': 'MID_M_WL_EyeHalo_1', 'parent': 'M_WL_EyeHalo', 'Color': [18349.525, 15780.593, 4770.877], 'EmissiveColor': [18000.0, 15480.0, 4680.0], 'EmissiveStrength': 1000.0, 'Inner': 0.45, 'Falloff': 1.3}], 'core': [{'component': 'HierarchicalInstancedStaticMeshComponent_69', 'instances': 1, 'visible': True, 'slot': 0, 'material': 'MID_M_WL_VoxelGlow_14', 'parent': 'M_WL_VoxelGlow', 'Color': [18.35, 14.313, 2.936], 'EmissiveColor': [18.0, 14.04, 2.88], 'EmissiveStrength': 1000.0, 'Inner': 0.0, 'Falloff': 0.0}, {'component': 'HierarchicalInstancedStaticMeshComponent_66', 'instances': 1, 'visible': True, 'slot': 0, 'material': 'MID_M_WL_VoxelGlow_14', 'parent': 'M_WL_VoxelGlow', 'Color': [18.35, 14.313, 2.936], 'EmissiveColor': [18.0, 14.04, 2.88], 'EmissiveStrength': 1000.0, 'Inner': 0.0, 'Falloff': 0.0}], 'parents': {'M_WL_VoxelGlow': 16, 'BasicShapeMaterial': 30, 'M_WLMaster': 40, 'M_WL_EyeHalo': 2}}\nP_WHO_arden_infernal INFO arden_infernal: every embodiment in the world [{'actor': 'WonderlandCompanionEmbodiment_0', 'attached_to': None, 'owned_by': None, 'metres_from_dog': 1.15, 'surface_count': 94, 'parents': {'BasicShapeMaterial': 14, 'M_WL_VoxelGlow': 80}}, {'actor': 'WonderlandCompanionEmbodiment_1', 'attached_to': None, 'owned_by': None, 'metres_from_dog': 1.35, 'surface_count': 112, 'parents': {'BasicShapeMaterial': 16, 'M_WL_VoxelGlow': 96}}, {'actor': 'WonderlandCompanionEmbodiment_1', 'attached_to': 'BP_RelayDog_C_0', 'owned_by': 'BP_RelayDog_C_0', 'metres_from_dog': 0.87, 'surface_count': 98, 'parents': {'BasicShapeMaterial': 46, 'M_WLMaster': 30, 'M_WL_VoxelGlow': 20, 'M_WL_EyeHalo': 2}}]\nP_arden_infernal INFO arden_infernal: halo rows 2, core rows 20 {'halo': [{'component': 'HierarchicalInstancedStaticMeshComponent_83', 'instances': 2, 'visible': True, 'slot': 0, 'material': 'MID_M_WL_EyeHalo_2', 'parent': 'M_WL_EyeHalo', 'Color': [19088.83, 11071.523, 1908.883], 'EmissiveColor': [18000.0, 10440.001, 1800.0], 'EmissiveStrength': 1000.0, 'Inner': 0.45, 'Falloff': 1.3}, {'component': 'HierarchicalInstancedStaticMeshComponent_83', 'instances': 2, 'visible': True, 'slot': 0, 'material': 'MID_M_WL_EyeHalo_2', 'parent': 'M_WL_EyeHalo', 'Color': [19088.83, 11071.523, 1908.883], 'EmissiveColor': [18000.0, 10440.001, 1800.0], 'EmissiveStrength': 1000.0, 'Inner': 0.45, 'Falloff': 1.3}], 'core': [{'component': 'HierarchicalInstancedStaticMeshComponent_99', 'instances': 8, 'visible': True, 'slot': 0, 'material': 'MID_M_WL_VoxelGlow_22', 'parent': 'M_WL_VoxelGlow', 'Color': [19.089, 1.718, 2.291], 'EmissiveColor': [18.0, 1.62, 2.16], 'EmissiveStrength': 1000.0, 'Inner': 0.0, 'Falloff': 0.0}, {'component': 'HierarchicalInstancedStaticMeshComponent_104', 'instances': 15, 'visible': True, 'slot': 0, 'material': 'MID_M_WL_VoxelGlow_22', 'parent': 'M_WL_VoxelGlow', 'Color': [19.089, 1.718, 2.291], 'EmissiveColor': [18.0, 1.62, 2.16], 'EmissiveStrength': 1000.0, 'Inner': 0.0, 'Falloff': 0.0}], 'parents': {'BasicShapeMaterial': 46, 'M_WLMaster': 30, 'M_WL_VoxelGlow': 20, 'M_WL_EyeHalo': 2}}\nP_WHO_skeleton_flame INFO skeleton_flame: every embodiment in the world [{'actor': 'WonderlandCompanionEmbodiment_0', 'attached_to': None, 'owned_by': None, 'metres_from_dog': 1.15, 'surface_count': 94, 'parents': {'BasicShapeMaterial': 14, 'M_WL_VoxelGlow': 80}}, {'actor': 'WonderlandCompanionEmbodiment_1', 'attached_to': None, 'owned_by': None, 'metres_from_dog': 1.35, 'surface_count': 112, 'parents': {'BasicShapeMaterial': 16, 'M_WL_VoxelGlow': 96}}, {'actor': 'WonderlandCompanionEmbodiment_1', 'attached_to': 'BP_RelayDog_C_0', 'owned_by': 'BP_RelayDog_C_0', 'metres_from_dog': 0.87, 'surface_count': 86, 'parents': {'BasicShapeMaterial': 38, 'M_WL_VoxelGlow': 24, 'M_WLMaster': 22, 'M_WL_EyeHalo': 2}}]\nP_skeleton_flame INFO skeleton_flame: halo rows 2, core rows 24 {'halo': [{'component': 'HierarchicalInstancedStaticMeshComponent_132', 'instances': 2, 'visible': True, 'slot': 0, 'material': 'MID_M_WL_EyeHalo_3', 'parent': 'M_WL_EyeHalo', 'Color': [4240.423, 11190.002, 11778.951], 'EmissiveColor': [6480.0, 17099.998, 18000.0], 'EmissiveStrength': 1000.0, 'Inner': 0.45, 'Falloff': 1.3}, {'component': 'HierarchicalInstancedStaticMeshComponent_132', 'instances': 2, 'visible': True, 'slot': 0, 'material': 'MID_M_WL_EyeHalo_3', 'parent': 'M_WL_EyeHalo', 'Color': [4240.423, 11190.002, 11778.951], 'EmissiveColor': [6480.0, 17099.998, 18000.0], 'EmissiveStrength': 1000.0, 'Inner': 0.45, 'Falloff': 1.3}], 'core': [{'component': 'HierarchicalInstancedStaticMeshComponent_166', 'instances': 16, 'visible': True, 'slot': 0, 'material': 'MID_M_WL_VoxelGlow_26', 'parent': 'M_WL_VoxelGlow', 'Color': [1.512, 4.81, 6.871], 'EmissiveColor': [2.31, 7.35, 10.5], 'EmissiveStrength': 1000.0, 'Inner': 0.0, 'Falloff': 0.0}, {'component': 'HierarchicalInstancedStaticMeshComponent_165', 'instances': 12, 'visible': True, 'slot': 0, 'material': 'MID_M_WL_VoxelGlow_28', 'parent': 'M_WL_VoxelGlow', 'Color': [8.481, 11.072, 11.779], 'EmissiveColor': [12.96, 16.92, 18.0], 'EmissiveStrength': 1000.0, 'Inner': 0.0, 'Falloff': 0.0}], 'parents': {'BasicShapeMaterial': 38, 'M_WL_VoxelGlow': 24, 'M_WLMaster': 22, 'M_WL_EyeHalo': 2}}\nP01 PASS 1. the eyehalo pane EXISTS as a drawn surface on every costume {'halo_surfaces_per_skin': {'celestial_light': 2, 'apollo': 2, 'arden_infernal': 2, 'skeleton_flame': 2}, 'note': \"zero means the generator's pane never became geometry, or its material was merged away\"}\nP02 PASS 3. it wears M_WL_EyeHalo rather than the flat additive {'parent_per_skin': {'celestial_light': 'M_WL_EyeHalo', 'apollo': 'M_WL_EyeHalo', 'arden_infernal': 'M_WL_EyeHalo', 'skeleton_flame': 'M_WL_EyeHalo'}, 'note': \"the flat additive draws one colour to the cube's hard edge -- the olive frame of round 3\"}\nP03 PASS 2. it is driven to a real level, not black {'colour_per_skin': {'celestial_light': [10854.276, 15406.068, 17506.896], 'apollo': [18349.525, 15780.593, 4770.877], 'arden_infernal': [19088.83, 11071.523, 1908.883], 'skeleton_flame': [4240.423, 11190.002, 11778.951]}, 'note': \"an additive surface carries the scene's thousand in its Color; under ~100 it is invisible against a white point of 25,000\"}\nP04 PASS 4. its component is visible {'visible_per_skin': {'celestial_light': True, 'apollo': True, 'arden_infernal': True, 'skeleton_flame': True}}\nP05 PASS 5. it actually has instances in it {'instances_per_skin': {'celestial_light': 2, 'apollo': 2, 'arden_infernal': 2, 'skeleton_flame': 2}}\n"
+}

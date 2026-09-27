@@ -1,0 +1,291 @@
+{
+ "name": "zc_eyes_look",
+ "started": "2026-09-27 11:50:03",
+ "status": "captured",
+ "tests": [
+  {
+   "id": "L00",
+   "name": "a close-up of every skin's face exists at day and at night",
+   "pass": true,
+   "detail": {
+    "taken": 10,
+    "where": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\eyes_look",
+    "tag": "look",
+    "note": "the verdict is the pictures, looked at, not this clause."
+   }
+  }
+ ],
+ "worn_at_dump": "unknown -- whatever the previous job left on",
+ "relay_og_eye_path": [
+  {
+   "component": "Mesh_head_visor",
+   "visible": false,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MI_RelayDog_Visor",
+     "class": "MaterialInstanceConstant",
+     "parent": "M_V2_Surface",
+     "Color": "<Struct 'LinearColor' (0x000002C605D728A0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "EmissiveColor": "<Struct 'LinearColor' (0x000002C605D728A0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "BaseColor": "<Struct 'LinearColor' (0x000002C605D728A0) {r: 0.001518, g: 0.001518, b: 0.001518, a: 1.000000}>",
+     "RimColor": "<Struct 'LinearColor' (0x000002C605D728A0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "EmissiveStrength": 0.0,
+     "Emissive": 0.0,
+     "Glow": 0.0
+    }
+   ],
+   "mesh": "SM_RelayDog_head_visor",
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7D690) {x: 8.550000, y: -19.500000, z: 15.000000}>",
+    "<Struct 'Vector' (0x000002C605D7EB30) {x: 10.050000, y: 19.500000, z: 33.000000}>"
+   ]
+  },
+  {
+   "component": "Mesh_head_eye",
+   "visible": false,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_VoxelGlow_0",
+     "class": "MaterialInstanceDynamic",
+     "parent": "M_WL_VoxelGlow",
+     "Color": "<Struct 'LinearColor' (0x000002C605D72660) {r: 24.000000, g: 17.280001, b: 3.840000, a: 24.000000}>",
+     "EmissiveColor": "<Struct 'LinearColor' (0x000002C605D72660) {r: 24.000000, g: 17.280001, b: 3.840000, a: 24.000000}>",
+     "BaseColor": "<Struct 'LinearColor' (0x000002C605D72660) {r: 1.000000, g: 0.780000, b: 0.160000, a: 1.000000}>",
+     "RimColor": "<Struct 'LinearColor' (0x000002C605D72660) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "EmissiveStrength": 1000.0,
+     "Emissive": 0.0,
+     "Glow": 0.0
+    }
+   ],
+   "mesh": "SM_RelayDog_head_eye",
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7EC70) {x: 10.200000, y: -11.400001, z: 17.850000}>",
+    "<Struct 'Vector' (0x000002C605D7ED10) {x: 11.700000, y: 11.400001, z: 25.950001}>"
+   ]
+  },
+  {
+   "component": "EyeHalo_0",
+   "visible": false,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_0",
+     "class": "MaterialInstanceDynamic",
+     "parent": "M_WL_EyeHalo",
+     "Color": "<Struct 'LinearColor' (0x000002C605D72460) {r: 18000.000000, g: 12960.000977, b: 2879.999756, a: 18000.000000}>",
+     "EmissiveColor": "<Struct 'LinearColor' (0x000002C605D72460) {r: 18000.000000, g: 12960.000977, b: 2879.999756, a: 18000.000000}>",
+     "BaseColor": "<Struct 'LinearColor' (0x000002C605D72460) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "RimColor": "<Struct 'LinearColor' (0x000002C605D72460) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "EmissiveStrength": 0.0,
+     "Emissive": 0.0,
+     "Glow": 0.0
+    }
+   ],
+   "mesh": "Cube",
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7EDB0) {x: -50.000000, y: -50.000000, z: -50.000000}>",
+    "<Struct 'Vector' (0x000002C605D7ECC0) {x: 50.000000, y: 50.000000, z: 50.000000}>"
+   ]
+  },
+  {
+   "component": "EyeHalo_1",
+   "visible": false,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_1",
+     "class": "MaterialInstanceDynamic",
+     "parent": "M_WL_EyeHalo",
+     "Color": "<Struct 'LinearColor' (0x000002C605D709A0) {r: 18000.000000, g: 12960.000977, b: 2879.999756, a: 18000.000000}>",
+     "EmissiveColor": "<Struct 'LinearColor' (0x000002C605D709A0) {r: 18000.000000, g: 12960.000977, b: 2879.999756, a: 18000.000000}>",
+     "BaseColor": "<Struct 'LinearColor' (0x000002C605D709A0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "RimColor": "<Struct 'LinearColor' (0x000002C605D709A0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "EmissiveStrength": 0.0,
+     "Emissive": 0.0,
+     "Glow": 0.0
+    }
+   ],
+   "mesh": "Cube",
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7EE00) {x: -50.000000, y: -50.000000, z: -50.000000}>",
+    "<Struct 'Vector' (0x000002C605D7EE50) {x: 50.000000, y: 50.000000, z: 50.000000}>"
+   ]
+  },
+  {
+   "component": "EyeHalo_2",
+   "visible": false,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_2",
+     "class": "MaterialInstanceDynamic",
+     "parent": "M_WL_EyeHalo",
+     "Color": "<Struct 'LinearColor' (0x000002C605D71AA0) {r: 18000.000000, g: 12960.000977, b: 2879.999756, a: 18000.000000}>",
+     "EmissiveColor": "<Struct 'LinearColor' (0x000002C605D71AA0) {r: 18000.000000, g: 12960.000977, b: 2879.999756, a: 18000.000000}>",
+     "BaseColor": "<Struct 'LinearColor' (0x000002C605D71AA0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "RimColor": "<Struct 'LinearColor' (0x000002C605D71AA0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "EmissiveStrength": 0.0,
+     "Emissive": 0.0,
+     "Glow": 0.0
+    }
+   ],
+   "mesh": "Cube",
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7EEA0) {x: -50.000000, y: -50.000000, z: -50.000000}>",
+    "<Struct 'Vector' (0x000002C605D7D3C0) {x: 50.000000, y: 50.000000, z: 50.000000}>"
+   ]
+  },
+  {
+   "component": "EyeHalo_3",
+   "visible": false,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_3",
+     "class": "MaterialInstanceDynamic",
+     "parent": "M_WL_EyeHalo",
+     "Color": "<Struct 'LinearColor' (0x000002C605D72020) {r: 18000.000000, g: 12960.000977, b: 2879.999756, a: 18000.000000}>",
+     "EmissiveColor": "<Struct 'LinearColor' (0x000002C605D72020) {r: 18000.000000, g: 12960.000977, b: 2879.999756, a: 18000.000000}>",
+     "BaseColor": "<Struct 'LinearColor' (0x000002C605D72020) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "RimColor": "<Struct 'LinearColor' (0x000002C605D72020) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "EmissiveStrength": 0.0,
+     "Emissive": 0.0,
+     "Glow": 0.0
+    }
+   ],
+   "mesh": "Cube",
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7EF40) {x: -50.000000, y: -50.000000, z: -50.000000}>",
+    "<Struct 'Vector' (0x000002C605D7EEF0) {x: 50.000000, y: 50.000000, z: 50.000000}>"
+   ]
+  },
+  {
+   "component": "EyeHalo_4",
+   "visible": false,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_4",
+     "class": "MaterialInstanceDynamic",
+     "parent": "M_WL_EyeHalo",
+     "Color": "<Struct 'LinearColor' (0x000002C605D72B20) {r: 5759.999512, g: 4147.200195, b: 921.599976, a: 5759.999512}>",
+     "EmissiveColor": "<Struct 'LinearColor' (0x000002C605D72B20) {r: 5759.999512, g: 4147.200195, b: 921.599976, a: 5759.999512}>",
+     "BaseColor": "<Struct 'LinearColor' (0x000002C605D72B20) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "RimColor": "<Struct 'LinearColor' (0x000002C605D72B20) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "EmissiveStrength": 0.0,
+     "Emissive": 0.0,
+     "Glow": 0.0
+    }
+   ],
+   "mesh": "Cube",
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7DFF0) {x: -50.000000, y: -50.000000, z: -50.000000}>",
+    "<Struct 'Vector' (0x000002C605D7EF90) {x: 50.000000, y: 50.000000, z: 50.000000}>"
+   ]
+  },
+  {
+   "component": "EyeHalo_5",
+   "visible": false,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_5",
+     "class": "MaterialInstanceDynamic",
+     "parent": "M_WL_EyeHalo",
+     "Color": "<Struct 'LinearColor' (0x000002C605D71660) {r: 5759.999512, g: 4147.200195, b: 921.599976, a: 5759.999512}>",
+     "EmissiveColor": "<Struct 'LinearColor' (0x000002C605D71660) {r: 5759.999512, g: 4147.200195, b: 921.599976, a: 5759.999512}>",
+     "BaseColor": "<Struct 'LinearColor' (0x000002C605D71660) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "RimColor": "<Struct 'LinearColor' (0x000002C605D71660) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "EmissiveStrength": 0.0,
+     "Emissive": 0.0,
+     "Glow": 0.0
+    }
+   ],
+   "mesh": "Cube",
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7EFE0) {x: -50.000000, y: -50.000000, z: -50.000000}>",
+    "<Struct 'Vector' (0x000002C605D7E180) {x: 50.000000, y: 50.000000, z: 50.000000}>"
+   ]
+  },
+  {
+   "component": "EyeHalo_6",
+   "visible": false,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_6",
+     "class": "MaterialInstanceDynamic",
+     "parent": "M_WL_EyeHalo",
+     "Color": "<Struct 'LinearColor' (0x000002C605D73BA0) {r: 5759.999512, g: 4147.200195, b: 921.599976, a: 5759.999512}>",
+     "EmissiveColor": "<Struct 'LinearColor' (0x000002C605D73BA0) {r: 5759.999512, g: 4147.200195, b: 921.599976, a: 5759.999512}>",
+     "BaseColor": "<Struct 'LinearColor' (0x000002C605D73BA0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "RimColor": "<Struct 'LinearColor' (0x000002C605D73BA0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "EmissiveStrength": 0.0,
+     "Emissive": 0.0,
+     "Glow": 0.0
+    }
+   ],
+   "mesh": "Cube",
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7F030) {x: -50.000000, y: -50.000000, z: -50.000000}>",
+    "<Struct 'Vector' (0x000002C605D7E1D0) {x: 50.000000, y: 50.000000, z: 50.000000}>"
+   ]
+  },
+  {
+   "component": "EyeHalo_7",
+   "visible": false,
+   "materials": [
+    {
+     "slot": 0,
+     "material": "MID_M_WL_EyeHalo_7",
+     "class": "MaterialInstanceDynamic",
+     "parent": "M_WL_EyeHalo",
+     "Color": "<Struct 'LinearColor' (0x000002C605D70A20) {r: 5759.999512, g: 4147.200195, b: 921.599976, a: 5759.999512}>",
+     "EmissiveColor": "<Struct 'LinearColor' (0x000002C605D70A20) {r: 5759.999512, g: 4147.200195, b: 921.599976, a: 5759.999512}>",
+     "BaseColor": "<Struct 'LinearColor' (0x000002C605D70A20) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "RimColor": "<Struct 'LinearColor' (0x000002C605D70A20) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>",
+     "EmissiveStrength": 0.0,
+     "Emissive": 0.0,
+     "Glow": 0.0
+    }
+   ],
+   "mesh": "Cube",
+   "local_bounds": [
+    "<Struct 'Vector' (0x000002C605D7F080) {x: -50.000000, y: -50.000000, z: -50.000000}>",
+    "<Struct 'Vector' (0x000002C605D7DB90) {x: 50.000000, y: 50.000000, z: 50.000000}>"
+   ]
+  }
+ ],
+ "post_process": [
+  {
+   "volume": "V2_PostProcess",
+   "bloom_method": "<BloomMethod.BM_SOG: 0>",
+   "bloom_intensity": 0.3400000035762787,
+   "bloom_threshold": 1.0,
+   "override_intensity": true,
+   "override_threshold": true,
+   "exposure_method": "<AutoExposureMethod.AEM_HISTOGRAM: 0>",
+   "exposure_min": 14.199999809265137,
+   "exposure_max": 14.199999809265137,
+   "exposure_bias": -0.8999998569488525
+  }
+ ],
+ "captures": [
+  "look_relay_og_day.png",
+  "look_relay_og_night.png",
+  "look_celestial_light_day.png",
+  "look_celestial_light_night.png",
+  "look_apollo_day.png",
+  "look_apollo_night.png",
+  "look_arden_infernal_day.png",
+  "look_arden_infernal_night.png",
+  "look_skeleton_flame_day.png",
+  "look_skeleton_flame_night.png"
+ ],
+ "captures_dir": "C:\\dev\\iwonder\\wonderland-task3\\wonderland\\Tools\\captures\\zc\\eyes_look",
+ "finished": "2026-09-27 11:52:05",
+ "seconds": 122.34,
+ "log": "E_PATH INFO what draws the default Dog's eyes [{'component': 'Mesh_head_visor', 'visible': False, 'materials': [{'slot': 0, 'material': 'MI_RelayDog_Visor', 'class': 'MaterialInstanceConstant', 'parent': 'M_V2_Surface', 'Color': \"<Struct 'LinearColor' (0x000002C605D728A0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'EmissiveColor': \"<Struct 'LinearColor' (0x000002C605D728A0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'BaseColor': \"<Struct 'LinearColor' (0x000002C605D728A0) {r: 0.001518, g: 0.001518, b: 0.001518, a: 1.000000}>\", 'RimColor': \"<Struct 'LinearColor' (0x000002C605D728A0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'EmissiveStrength': 0.0, 'Emissive': 0.0, 'Glow': 0.0}], 'mesh': 'SM_RelayDog_head_visor', 'local_bounds': [\"<Struct 'Vector' (0x000002C605D7D690) {x: 8.550000, y: -19.500000, z: 15.000000}>\", \"<Struct 'Vector' (0x000002C605D7EB30) {x: 10.050000, y: 19.500000, z: 33.000000}>\"]}, {'component': 'Mesh_head_eye', 'visible': False, 'materials': [{'slot': 0, 'material': 'MID_M_WL_VoxelGlow_0', 'class': 'MaterialInstanceDynamic', 'parent': 'M_WL_VoxelGlow', 'Color': \"<Struct 'LinearColor' (0x000002C605D72660) {r: 24.000000, g: 17.280001, b: 3.840000, a: 24.000000}>\", 'EmissiveColor': \"<Struct 'LinearColor' (0x000002C605D72660) {r: 24.000000, g: 17.280001, b: 3.840000, a: 24.000000}>\", 'BaseColor': \"<Struct 'LinearColor' (0x000002C605D72660) {r: 1.000000, g: 0.780000, b: 0.160000, a: 1.000000}>\", 'RimColor': \"<Struct 'LinearColor' (0x000002C605D72660) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'EmissiveStrength': 1000.0, 'Emissive': 0.0, 'Glow': 0.0}], 'mesh': 'SM_RelayDog_head_eye', 'local_bounds': [\"<Struct 'Vector' (0x000002C605D7EC70) {x: 10.200000, y: -11.400001, z: 17.850000}>\", \"<Struct 'Vector' (0x000002C605D7ED10) {x: 11.700000, y: 11.400001, z: 25.950001}>\"]}, {'component': 'EyeHalo_0', 'visible': False, 'materials': [{'slot': 0, 'material': 'MID_M_WL_EyeHalo_0', 'class': 'MaterialInstanceDynamic', 'parent': 'M_WL_EyeHalo', 'Color': \"<Struct 'LinearColor' (0x000002C605D72460) {r: 18000.000000, g: 12960.000977, b: 2879.999756, a: 18000.000000}>\", 'EmissiveColor': \"<Struct 'LinearColor' (0x000002C605D72460) {r: 18000.000000, g: 12960.000977, b: 2879.999756, a: 18000.000000}>\", 'BaseColor': \"<Struct 'LinearColor' (0x000002C605D72460) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'RimColor': \"<Struct 'LinearColor' (0x000002C605D72460) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'EmissiveStrength': 0.0, 'Emissive': 0.0, 'Glow': 0.0}], 'mesh': 'Cube', 'local_bounds': [\"<Struct 'Vector' (0x000002C605D7EDB0) {x: -50.000000, y: -50.000000, z: -50.000000}>\", \"<Struct 'Vector' (0x000002C605D7ECC0) {x: 50.000000, y: 50.000000, z: 50.000000}>\"]}, {'component': 'EyeHalo_1', 'visible': False, 'materials': [{'slot': 0, 'material': 'MID_M_WL_EyeHalo_1', 'class': 'MaterialInstanceDynamic', 'parent': 'M_WL_EyeHalo', 'Color': \"<Struct 'LinearColor' (0x000002C605D709A0) {r: 18000.000000, g: 12960.000977, b: 2879.999756, a: 18000.000000}>\", 'EmissiveColor': \"<Struct 'LinearColor' (0x000002C605D709A0) {r: 18000.000000, g: 12960.000977, b: 2879.999756, a: 18000.000000}>\", 'BaseColor': \"<Struct 'LinearColor' (0x000002C605D709A0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'RimColor': \"<Struct 'LinearColor' (0x000002C605D709A0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'EmissiveStrength': 0.0, 'Emissive': 0.0, 'Glow': 0.0}], 'mesh': 'Cube', 'local_bounds': [\"<Struct 'Vector' (0x000002C605D7EE00) {x: -50.000000, y: -50.000000, z: -50.000000}>\", \"<Struct 'Vector' (0x000002C605D7EE50) {x: 50.000000, y: 50.000000, z: 50.000000}>\"]}, {'component': 'EyeHalo_2', 'visible': False, 'materials': [{'slot': 0, 'material': 'MID_M_WL_EyeHalo_2', 'class': 'MaterialInstanceDynamic', 'parent': 'M_WL_EyeHalo', 'Color': \"<Struct 'LinearColor' (0x000002C605D71AA0) {r: 18000.000000, g: 12960.000977, b: 2879.999756, a: 18000.000000}>\", 'EmissiveColor': \"<Struct 'LinearColor' (0x000002C605D71AA0) {r: 18000.000000, g: 12960.000977, b: 2879.999756, a: 18000.000000}>\", 'BaseColor': \"<Struct 'LinearColor' (0x000002C605D71AA0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'RimColor': \"<Struct 'LinearColor' (0x000002C605D71AA0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'EmissiveStrength': 0.0, 'Emissive': 0.0, 'Glow': 0.0}], 'mesh': 'Cube', 'local_bounds': [\"<Struct 'Vector' (0x000002C605D7EEA0) {x: -50.000000, y: -50.000000, z: -50.000000}>\", \"<Struct 'Vector' (0x000002C605D7D3C0) {x: 50.000000, y: 50.000000, z: 50.000000}>\"]}, {'component': 'EyeHalo_3', 'visible': False, 'materials': [{'slot': 0, 'material': 'MID_M_WL_EyeHalo_3', 'class': 'MaterialInstanceDynamic', 'parent': 'M_WL_EyeHalo', 'Color': \"<Struct 'LinearColor' (0x000002C605D72020) {r: 18000.000000, g: 12960.000977, b: 2879.999756, a: 18000.000000}>\", 'EmissiveColor': \"<Struct 'LinearColor' (0x000002C605D72020) {r: 18000.000000, g: 12960.000977, b: 2879.999756, a: 18000.000000}>\", 'BaseColor': \"<Struct 'LinearColor' (0x000002C605D72020) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'RimColor': \"<Struct 'LinearColor' (0x000002C605D72020) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'EmissiveStrength': 0.0, 'Emissive': 0.0, 'Glow': 0.0}], 'mesh': 'Cube', 'local_bounds': [\"<Struct 'Vector' (0x000002C605D7EF40) {x: -50.000000, y: -50.000000, z: -50.000000}>\", \"<Struct 'Vector' (0x000002C605D7EEF0) {x: 50.000000, y: 50.000000, z: 50.000000}>\"]}, {'component': 'EyeHalo_4', 'visible': False, 'materials': [{'slot': 0, 'material': 'MID_M_WL_EyeHalo_4', 'class': 'MaterialInstanceDynamic', 'parent': 'M_WL_EyeHalo', 'Color': \"<Struct 'LinearColor' (0x000002C605D72B20) {r: 5759.999512, g: 4147.200195, b: 921.599976, a: 5759.999512}>\", 'EmissiveColor': \"<Struct 'LinearColor' (0x000002C605D72B20) {r: 5759.999512, g: 4147.200195, b: 921.599976, a: 5759.999512}>\", 'BaseColor': \"<Struct 'LinearColor' (0x000002C605D72B20) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'RimColor': \"<Struct 'LinearColor' (0x000002C605D72B20) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'EmissiveStrength': 0.0, 'Emissive': 0.0, 'Glow': 0.0}], 'mesh': 'Cube', 'local_bounds': [\"<Struct 'Vector' (0x000002C605D7DFF0) {x: -50.000000, y: -50.000000, z: -50.000000}>\", \"<Struct 'Vector' (0x000002C605D7EF90) {x: 50.000000, y: 50.000000, z: 50.000000}>\"]}, {'component': 'EyeHalo_5', 'visible': False, 'materials': [{'slot': 0, 'material': 'MID_M_WL_EyeHalo_5', 'class': 'MaterialInstanceDynamic', 'parent': 'M_WL_EyeHalo', 'Color': \"<Struct 'LinearColor' (0x000002C605D71660) {r: 5759.999512, g: 4147.200195, b: 921.599976, a: 5759.999512}>\", 'EmissiveColor': \"<Struct 'LinearColor' (0x000002C605D71660) {r: 5759.999512, g: 4147.200195, b: 921.599976, a: 5759.999512}>\", 'BaseColor': \"<Struct 'LinearColor' (0x000002C605D71660) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'RimColor': \"<Struct 'LinearColor' (0x000002C605D71660) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'EmissiveStrength': 0.0, 'Emissive': 0.0, 'Glow': 0.0}], 'mesh': 'Cube', 'local_bounds': [\"<Struct 'Vector' (0x000002C605D7EFE0) {x: -50.000000, y: -50.000000, z: -50.000000}>\", \"<Struct 'Vector' (0x000002C605D7E180) {x: 50.000000, y: 50.000000, z: 50.000000}>\"]}, {'component': 'EyeHalo_6', 'visible': False, 'materials': [{'slot': 0, 'material': 'MID_M_WL_EyeHalo_6', 'class': 'MaterialInstanceDynamic', 'parent': 'M_WL_EyeHalo', 'Color': \"<Struct 'LinearColor' (0x000002C605D73BA0) {r: 5759.999512, g: 4147.200195, b: 921.599976, a: 5759.999512}>\", 'EmissiveColor': \"<Struct 'LinearColor' (0x000002C605D73BA0) {r: 5759.999512, g: 4147.200195, b: 921.599976, a: 5759.999512}>\", 'BaseColor': \"<Struct 'LinearColor' (0x000002C605D73BA0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'RimColor': \"<Struct 'LinearColor' (0x000002C605D73BA0) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'EmissiveStrength': 0.0, 'Emissive': 0.0, 'Glow': 0.0}], 'mesh': 'Cube', 'local_bounds': [\"<Struct 'Vector' (0x000002C605D7F030) {x: -50.000000, y: -50.000000, z: -50.000000}>\", \"<Struct 'Vector' (0x000002C605D7E1D0) {x: 50.000000, y: 50.000000, z: 50.000000}>\"]}, {'component': 'EyeHalo_7', 'visible': False, 'materials': [{'slot': 0, 'material': 'MID_M_WL_EyeHalo_7', 'class': 'MaterialInstanceDynamic', 'parent': 'M_WL_EyeHalo', 'Color': \"<Struct 'LinearColor' (0x000002C605D70A20) {r: 5759.999512, g: 4147.200195, b: 921.599976, a: 5759.999512}>\", 'EmissiveColor': \"<Struct 'LinearColor' (0x000002C605D70A20) {r: 5759.999512, g: 4147.200195, b: 921.599976, a: 5759.999512}>\", 'BaseColor': \"<Struct 'LinearColor' (0x000002C605D70A20) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'RimColor': \"<Struct 'LinearColor' (0x000002C605D70A20) {r: 0.000000, g: 0.000000, b: 0.000000, a: 1.000000}>\", 'EmissiveStrength': 0.0, 'Emissive': 0.0, 'Glow': 0.0}], 'mesh': 'Cube', 'local_bounds': [\"<Struct 'Vector' (0x000002C605D7F080) {x: -50.000000, y: -50.000000, z: -50.000000}>\", \"<Struct 'Vector' (0x000002C605D7DB90) {x: 50.000000, y: 50.000000, z: 50.000000}>\"]}]\nE_PP INFO post process [{'volume': 'V2_PostProcess', 'bloom_method': '<BloomMethod.BM_SOG: 0>', 'bloom_intensity': 0.3400000035762787, 'bloom_threshold': 1.0, 'override_intensity': True, 'override_threshold': True, 'exposure_method': '<AutoExposureMethod.AEM_HISTOGRAM: 0>', 'exposure_min': 14.199999809265137, 'exposure_max': 14.199999809265137, 'exposure_bias': -0.8999998569488525}]\n"
+}
