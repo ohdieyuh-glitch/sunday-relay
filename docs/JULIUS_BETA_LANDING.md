@@ -12,7 +12,7 @@ the founder's credential and never merges its own work — see
 |---|---|
 | Branch | `relay/julius-beta-qualification` |
 | Base | `origin/main` `a384b215` (#287), unmoved at the time of writing |
-| Commits ahead | 32 |
+| Commits ahead | 36 |
 | Commits behind | 0 — merges with no conflict (`git merge-tree`: none) |
 | Worktree | clean; `git diff --check` clean |
 
@@ -104,6 +104,26 @@ repairs, and returns a verified result with evidence.
 - The Docker executor's sibling proof needs a Linux runner and did not run here.
 - `npm test` whole-suite has no number from this workstation (memory), so CI is
   the authority.
+
+**Independent evidence from the integration lane** (quoted verbatim, at their
+request, and attributed to the tree the drill ran on):
+
+> Integration lane: the Wonderland↔Julius drill
+> (`scripts/wonderland-julius-create-observe.mjs`,
+> `relay/wonderland-julius-integration` @ `6191dc11`, which contains Julius
+> `00fa52ad`) passes 36 of 36 clauses at zero spend. It ran against the
+> production bridge binary and an isolated PostgreSQL, and covers: mission
+> creation and read-back; the Mission Contract projection (READY shown as
+> Queued); the native Unreal client's single-use pairing and world stream; and
+> one active run per mission, including the keyed explicit rerun under a real
+> six-way race (exactly one new run, no two answers claiming it). This is
+> wire-level evidence only: the in-engine (PIE) acceptance has not run yet.
+
+The diff from `00fa52ad` to this branch's head is documents and test files only
+— no runtime code — so that verdict covers the runtime as it stands. It was
+written by the lane that found three real defects in this one's code (the
+Windows containment hole, and both rerun defects), which is the kind of
+witness worth quoting.
 
 **Where the detail lives**: `docs/handoffs/JULIUS_CURRENT.md` §000d (read that
 first), `docs/JULIUS_BETA_READINESS.md` (the scorecard and its arithmetic),
