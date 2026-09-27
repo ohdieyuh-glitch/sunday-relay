@@ -41,6 +41,7 @@ import { betaWaveZeroState, handleBetaRoute, isBetaRoute } from './beta-routes';
 import { handleRepositoryRoute, isRepositoryRoute, type RepositoryCaller } from './repository-routes';
 import { handlePspRoute, isPspRoute } from './psp-routes';
 import { createJuliusStatePorts, handleJuliusStateRoute, isJuliusStateRoute } from './julius-state-routes';
+import { composeJuliusMissionBootstrap, handleJuliusMissionRoute, isJuliusMissionRoute, type JuliusMissionRoutePorts } from './julius-mission-routes';
 import { Pool } from 'pg';
 import { handleShipRoute, isShipRoute } from './ship-route';
 import { resolveRepositoryTarget, registrationOwnerAdmits } from '../src/relay/mission/repository-target';
@@ -116,7 +117,8 @@ function send(res: ServerResponse, status: number, body: unknown, headers: Recor
   res.end(json);
 }
 
-function readBody(req: IncomingMessage): Promise<unknown> {
+/** The body as text — for a route whose body is a document with its own parser. */
+function readRawBody(req: IncomingMessage): Promise<string | undefined> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
@@ -134,14 +136,20 @@ function readBody(req: IncomingMessage): Promise<unknown> {
     req.on('end', () => {
       if (aborted) return;
       if (!chunks.length) return resolve(undefined);
-      try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
-      } catch {
-        reject(new Error('invalid JSON body'));
-      }
+      resolve(Buffer.concat(chunks).toString('utf8'));
     });
     req.on('error', () => reject(new Error('request error')));
   });
+}
+
+async function readBody(req: IncomingMessage): Promise<unknown> {
+  const raw = await readRawBody(req);
+  if (raw === undefined) return undefined;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error('invalid JSON body');
+  }
 }
 
 export function createBridgeServer(
@@ -288,6 +296,26 @@ const juliusStatePorts = (): ReturnType<typeof createJuliusStatePorts> => {
     missingConfig: url ? [] : ['DATABASE_URL'],
   });
   return juliusStateCache;
+};
+
+/**
+ * CREATION'S PORTS, built lazily under the same discipline as the state routes':
+ * no `DATABASE_URL`, no bootstrap, and a 503 that names it. The reviewer
+ * provider is the mission's recorded reviewer identity and is read from the
+ * same variable the live composition reads.
+ */
+let juliusMissionCache: JuliusMissionRoutePorts | null = null;
+const juliusMissionPorts = (): JuliusMissionRoutePorts => {
+  if (juliusMissionCache !== null) return juliusMissionCache;
+  const url = process.env.DATABASE_URL;
+  const reviewer = process.env.RELAY_HERMES_PROVIDER?.trim();
+  juliusMissionCache = {
+    bootstrap: url ? composeJuliusMissionBootstrap(new Pool({ connectionString: url })) : null,
+    missingConfig: url ? [] : ['DATABASE_URL'],
+    reviewerProvider: reviewer ? reviewer : null,
+    cardRevision: process.env.RELAY_JULIUS_CARD_REVISION?.trim() || 'card:julius-live:1',
+  };
+  return juliusMissionCache;
 };
 
 const headerValue = (value: string | string[] | undefined): string | undefined =>
@@ -721,6 +749,27 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
           }, pspStore);
           if (pspResult !== null) {
             send(res, pspResult.status, pspResult.body, cors);
+            return;
+          }
+        }
+
+        /**
+         * CREATE A JULIUS MISSION. Operator-only, and the bootstrap only: the
+         * same parser, compiler and port the mission job uses, over the same
+         * store, so the run lands durable in READY and the state routes below
+         * can watch it. Nothing here dispatches; driving stays the job's. See
+         * `julius-mission-routes.ts`.
+         */
+        if (isJuliusMissionRoute(path.replace('/relay-api', ''))) {
+          const missionAuthz = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+          const missionResult = await handleJuliusMissionRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            operator: bearerMatches(missionAuthz, process.env.RELAY_BRIDGE_API_TOKEN),
+            body: method === 'POST' ? await readRawBody(req) : undefined,
+          }, juliusMissionPorts());
+          if (missionResult !== null) {
+            send(res, missionResult.status, missionResult.body, cors);
             return;
           }
         }

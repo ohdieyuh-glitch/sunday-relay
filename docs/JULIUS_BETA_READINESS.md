@@ -42,13 +42,23 @@ not need money were built instead.
 | 9 | Learning Loop | 5 | **62%** | UNIT/INTEGRATION TESTED | A measurement and a promotion gate, not a learner. A matched pair driven through the REAL run loop: the mission without the learning takes a repair round because the real context compiler could not carry a fact nobody stored. The gate refuses on regression, on no effect, on an unmatched pair, on an unmeasured dimension and on a policy that could not refuse anything. The cost and token dimensions are now genuinely measurable rather than permanently UNMEASURABLE, and the refusal case gained the counterpart that makes it non-vacuous: on a priced pair the dimensions are measured and mission A’s repair round is provably more expensive. No irrelevant task context leaks into the improved mission. | The worker's knowledge-dependence is the fixture's PREMISE and is stated as one; a real model's version of it is noisier. Nothing in the runtime calls the loop — it is an evaluation surface read after a mission. No paid matched pair exists. |
 | 10 | Provider conformance | 8 | **55%** | LIVE PROVIDER VERIFIED (one leg) | The registry now carries a qualification per occupant, keyed to the **served model**, with 22 structural cases including the anti-generalisation rule as a function. Requested and served are separate fields everywhere. | **Two of the three legs cannot be pinned to a model.** Paid run 34414726976 ran a real architect and a real coder and its bundle names the served model of the reviewer only, because `worker-diagnostics.tsv` held zero rows on the success path. One leg is VERIFIED: `hermes_local` at `grok-build-0.1`. |
 | 11 | Failure handling | 7 | **85%** | ADVERSARIALLY VERIFIED | Five provider failure codes, a malformed result, a timeout, budget pressure, a reviewer rejection, a repair cycle, a restart, an unresolved evidence reference — and now a **context-authority conflict that fails the task closed instead of aborting the tick**, with both conflicting claim ids on the ledger row. A failed attempt that BILLED now carries its spend on the row the evals read, so a mission that spent and then failed no longer reports a total biased low. | A provider refusal is modelled only as `AUTH_CONFIGURATION` — the provider declining to serve the CALLER (`julius-continuous-lifecycle.e2e`, proof 34). A model declining to answer a specific request on CONTENT grounds has no class of its own: it would arrive as `WORKER_EXECUTION_FAILURE` or as a malformed result, so a mission cannot tell “your credential is wrong” from “I will not do this” — and the first is retryable by configuration while the second is not retryable at all. The full tool-failure path needs the executor's Docker sandbox and was not exercised here. |
-| 12 | Wonderland integration contract | 4 | **80%** | UNIT/INTEGRATION TESTED | `inspectSlots` projects the three peers from the durable ledger: state, provider identity, requested vs served model, a cost FLOOR with `costComplete` beside it, last failure class, findings raised. 11 e2e cases drive it from a real mission. `docs/JULIUS_WONDERLAND_CONTRACT.md` states the four rules a client must implement. **Now mounted:** `GET /relay-api/julius/runs/<id>/<view>` on the bridge, operator-only, read-only, composed over the same PostgreSQL store the mission job writes through. With no `DATABASE_URL` it answers 503 naming the variable rather than an empty run. 9 route cases over a mission the harness really ran. | A browser session cannot read it yet (a product decision about which fields a session may see), control is deliberately unmounted, and the mount has not been exercised against a real PostgreSQL from a running bridge — its composition is type-proven and its behaviour is proven over the in-memory API. |
+| 12 | Wonderland integration contract | 4 | **85%** | UNIT/INTEGRATION TESTED | `inspectSlots` projects the three peers from the durable ledger: state, provider identity, requested vs served model, a cost FLOOR with `costComplete` beside it, last failure class, findings raised. 11 e2e cases drive it from a real mission. `docs/JULIUS_WONDERLAND_CONTRACT.md` states the four rules a client must implement. **Mounted:** `GET /relay-api/julius/runs/<id>/<view>` on the bridge, operator-only, read-only, composed over the same PostgreSQL store the mission job writes through; with no `DATABASE_URL` it answers 503 naming the variable. 9 route cases over a mission the harness really ran. **Now also CREATION:** `POST /relay-api/julius/missions` takes a contract exactly as the contract file is written, through the contract library's own parser and the same `createLiveJuliusBootstrapPort` over the same two repositories, and lands the run durable in READY for the read routes to watch. It says `dispatched: false` on the wire. 12 route cases over the REAL bootstrap port with a recording store. Found on the way and avoided: importing the parser from the mission job's entry file put the job's `require.main === module` guard inside the server bundle, where it is true — the bundled server printed the job's usage line at startup. The parser and compiler now live in `relay-bridge/julius/mission-contract.ts`, a library with no entry guard, re-exported by the job. | Driving a run is not reachable from a client (a created run stays READY until the mission job drives it — the deployment decision that spends money, deliberately not taken here); a browser session cannot read it (a product decision about which fields a session may see); and neither route has been exercised against a real PostgreSQL from a running bridge — their composition is type-proven and their behaviour proven over the in-memory API and a recording store. |
 | 13 | Performance / reliability | 5 | **55%** | UNIT/INTEGRATION TESTED | Bounded graphs, a large-graph case, a 5,000-row read ceiling, per-role context budgets, derived lease and deadline windows. | No load evidence, no multi-mission concurrency evidence, and no green full suite on this platform (see below). |
 | 14 | Final release qualification | 6 | **40%** | LIVE PROVIDER VERIFIED | One paid mission has completed end to end with no founder rescue: 34414726976, with four gaps it recorded itself. The MVP qualification suite now exists as a ledger organised by the founder’s four categories (`docs/JULIUS_MVP_QUALIFICATION.md`), every row resolved by a test: 8 software, 3 game, 4 professional-work and 10 failure/recovery missions, all deterministic, plus the one live run. | The representative PAID mission has not been run, and no Unreal change has been made under Julius’s contracts — the founder’s strongest qualification environment is entirely unexercised. The Docker executor proof is CI-only (Linux runner: image builds, a tmpfs mount, generated keys). |
 
-### JULIUS BETA READINESS: 78%
+### JULIUS BETA READINESS: 77%
 
 `Σ(weight × complete) / 100`, weights summing to 100.
+
+**THIRD PASS, 2026-09-27, later: 78% was an addition error, and the honest figure
+is 77%.** The table's own numbers summed to 76.7 before this pass, not 78; row 12
+rises 80 → 85 for mission creation over the bridge, and the sum is now 76.9. The
+number moves DOWN while the system got better, because the previous total was
+wrong and a corrected total is worth more than a flattering one. Nothing else in
+the table changed, and the four blockers that gate this number are where they
+were: PR #286 frozen, no claim store, the final mission unpaid — and the runtime
+API, which is no longer "mounted by nothing", is still unexercised against a real
+PostgreSQL from a running bridge.
 
 **SECOND PASS, 2026-09-27: 74% → 75%, and the single point is the honest answer.**
 Four rows rose because real defects were found and closed — a sub-agent that could
@@ -84,6 +94,14 @@ Three commits on `relay/julius-beta-qualification`, off `a384b215`:
 3. **`2953966c`** — provider qualification keyed to the served model; an
    authoritative clash that fails a task rather than a tick; and the Wonderland
    slot view.
+4. **`49b42a3e`** — the runtime API mounted read-only on the bridge over the
+   same PostgreSQL store the job writes through; **`102c302a`** — the MVP
+   qualification suite organised by the founder's four categories.
+5. **The commit carrying this revision of the page** — mission CREATION over
+   the bridge (`POST /relay-api/julius/missions`, bootstrap only, `dispatched:
+   false` on the wire), the contract parser and compiler moved into a library
+   module because importing them from the job's entry file made the server
+   bundle run the job's entry guard, and the readiness addition corrected.
 
 ## The honest state of the suite on this platform
 
@@ -156,8 +174,11 @@ In order, and each is runnable by an engineering session except where marked:
 4. ~~Mount `JuliusRuntimeApi`~~ — **DONE.** The founder made the deployment
    decision (a database-connected bridge is in scope for the MVP), so the bridge
    now holds a read connection to Julius's store when `DATABASE_URL` is set and
-   refuses by name when it is not. What remains is exercising it from a running
-   bridge against a real PostgreSQL, which is the paid-run environment.
+   refuses by name when it is not — and, since the third pass, CREATES a mission
+   through the same bootstrap the job uses. What remains is exercising both from
+   a running bridge against a real PostgreSQL, which is the paid-run
+   environment, and the separate deployment decision of whether a client may
+   DRIVE a run (where money is spent), which is not taken.
 5. **Run the persistence gates and the three Julius drills on POSIX** (they are
    unrunnable on the Windows machine this session used, for a reason now printed
    rather than discovered) and commit the output. Row 8, roughly +1.
@@ -171,11 +192,12 @@ re-totalled. The remaining distance to 95% is row 13 (a multi-mission concurrenc
 proof and one load measurement) plus the second paid run that converts two
 COMPATIBLE provider legs to VERIFIED.
 
-**THREE OF THE SIX ITEMS ARE FOUNDER-GATED**, which is the single most useful
-sentence on this page: PR #286 is frozen for review, the paid run costs money, and
-mounting the runtime API needs a database-connected bridge. An engineering session
-can do the claim store, the POSIX gate run and the content-refusal class, and
-those three together are worth about +4.
+**TWO OF THE SIX ITEMS ARE FOUNDER-GATED**, which is the single most useful
+sentence on this page: PR #286 is frozen for review and the paid run costs money.
+(The third, mounting the runtime API, was founder-gated on a deployment decision
+the founder has since made; it is done, and creation is served beside it.) An
+engineering session can do the claim store, the POSIX gate run and the
+content-refusal class, and those three together are worth about +4.
 
 ## The fastest path to 100%, and what 100% would have to mean
 

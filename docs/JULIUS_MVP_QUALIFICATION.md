@@ -40,6 +40,8 @@ afterwards. Volume is not claimed and would not help.
 | B1 | gameplay/tooling change with a data-file deliverable | DETERMINISTIC | `src/relay/mission/julius/julius-mission-breadth.e2e.test.ts` | `completes a game-development mission through the same lifecycle, unchanged` |
 | B2 | Wonderland reads real mission state | DETERMINISTIC | `src/relay/mission/julius/julius-slot-view.e2e.test.ts` | `answers for all three roles, always, in a fixed order` |
 | B3 | Wonderland reads it over the bridge | DETERMINISTIC | `relay-bridge/julius-state-routes.test.ts` | `serves the API’s own slot view for a mission that really ran` |
+| B4 | Wonderland creates a mission over the bridge, through the real bootstrap | DETERMINISTIC | `relay-bridge/julius-mission-routes.test.ts` | `creates the run through the real bootstrap` |
+| B5 | a created report mission is held to its DIFF, not to a test it never declared | DETERMINISTIC | `relay-bridge/julius-mission-routes.test.ts` | `carries the no-check declaration through` |
 
 ## Category C — professional work
 
@@ -77,7 +79,12 @@ afterwards. Volume is not claimed and would not help.
 - **B — a real Unreal change.** B1 is the lifecycle carrying a game-tooling
   deliverable; no row here opens Wonderland's own source under Julius's
   contracts, reviewer and evidence. That is the founder's stated strongest
-  qualification environment and it is entirely unexercised.
+  qualification environment and it is entirely unexercised. **B4 creates, it
+  does not drive:** the run a client creates lands durable in READY and stays
+  there until the mission job drives it — dispatch is not reachable from a
+  client, by decision — and B4's store is a recording fake of the two
+  repositories, so the bridge has still not created a run in a real PostgreSQL
+  from a running process.
 - **C — a mission whose result is not a file.** A message sent, a form
   submitted, a booking made has no diff to show, and an implementation review
   still requires one. Named in `julius-mission-breadth.e2e` as a limit.

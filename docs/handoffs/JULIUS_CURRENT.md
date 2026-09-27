@@ -4,7 +4,7 @@
 > repository evidence does not. Update it whenever meaningful state changes and
 > before ending a session. Never rely on `/resume` as the sole record.
 
-**Most recent session: 2026-09-27, the MVP REPRIORITISATION pass. Read §000c, then §000b, then §000.**
+**Most recent session: 2026-09-27, the MVP LOOP pass (creation over the bridge). Read §000d, then §000c, then §000b, then §000.**
 > The paragraph below it is the record of the session before that.
 
 **Most recent session:** 2026-09-08, the **Claude Code cloud session**. Read
@@ -157,6 +157,87 @@ land PR #286 (founder); build the claim store; buy one paid run whose bundle
 records every served model.
 
 ---
+
+### 000d. MVP LOOP, CONTINUED 2026-09-27 — WONDERLAND CAN NOW START WHAT IT COULD ONLY WATCH
+
+**Branch** `relay/julius-beta-qualification`, worktree `C:\dev\iwonder\julius-beta`,
+local only, not pushed, no PR. Paid usage this pass: **$0.00** — nothing here
+composes a provider.
+
+#### What was built
+
+**Mission creation over the bridge.** `POST /relay-api/julius/missions`
+(`relay-bridge/julius-mission-routes.ts`), operator-only, body = a mission
+contract exactly as the contract file is written. It is the BOOTSTRAP and nothing
+more: the contract library's own parser, the same `compileBootstrapRequest`, the
+same `createLiveJuliusBootstrapPort` over the same `JuliusPostgresRepository` +
+`JuliusContractPostgresRepository` + `createPostgresMissionSeedStore` the mission
+job composes — one state authority, no second way to create a run. The run lands
+durable in READY with plan/build tasks, task contract rev 1, criteria and seed
+brain, and the read routes see it at once. The response carries `dispatched:
+false` and the port's OWN state (a re-posted identical contract resumes the
+existing run — the idempotency key is a digest of the contract — and reports
+whatever state it has really reached, never an asserted READY). Refusals: 401
+`operator_required`; 405; 503 `julius_state_unavailable` naming `DATABASE_URL`;
+503 `reviewer_provider_unknown` naming `RELAY_HERMES_PROVIDER` (the reviewer's
+independence group is part of the mission's recorded identity — refused rather
+than guessed); 400 in the parser's or the port's own words; 409
+`mission_already_running`; 503 `bootstrap_persistence_failure`. Mounted in
+`relay-bridge/server.ts` beside the state routes, under the same lazy
+`DATABASE_URL` discipline. `docs/JULIUS_WONDERLAND_CONTRACT.md` gained "How a
+mission is created" and states plainly that DRIVING is not reachable from a
+client — a created run stays READY until the job drives it, and a client that
+rendered "created" as "running" would draw a mission nobody is driving.
+
+**A real hazard found before it shipped.** The first version imported the parser
+from `relay-bridge/julius-live-mission.ts`, the mission job's entry file, whose
+guard is `require.main === module`. Inside the bridge's esbuild CJS bundle that
+guard is TRUE for the bundle, and the built server printed `Usage:
+julius-live-mission run --contract …` at startup — the job's `main` running
+inside the HTTP server. Typecheck and vitest cannot see this; only the built
+bundle can. The contract file's shape, parser, research-clause sealing and
+bootstrap compiler now live in `relay-bridge/julius/mission-contract.ts`, a
+library with no entry guard; the job imports and re-exports them so every
+existing importer keeps its path. Verified: the job file is absent from
+`dist-relay-bridge/server.cjs` (grep count 0) and the bundle's startup output
+carries only the bridge's own lines.
+
+**The readiness addition was wrong.** 78% did not follow from the table's own
+numbers (they summed to 76.7). Row 12 rises 80 → 85 for creation; the corrected
+total is **77%**, recorded as a correction rather than re-totalled quietly.
+
+#### Tested
+
+`relay-bridge/julius-mission-routes.test.ts` — 12 cases over the REAL bootstrap
+port with a recording store: one path only; every method but POST refused; a
+non-operator creates nothing; 503 naming the variable with no database; refusal
+without a reviewer provider; body required; the parser's refusals in its own
+words with nothing reaching the store; the port's own refusal
+(`blocking_acceptance_criterion_missing`) mapped to 400; the full bootstrap
+(run, criteria, 4 brain entries, plan→build tasks, task contract, PLANNING →
+READY) under the job's execution identity `execution:julius-live:<missionId>`
+and the contract's tenant; a no-check mission held to DIFF and a checked one to
+TEST; `dispatched: false` and a replay reporting COMPLETED rather than READY; the
+three worker requests from the live composition's own definitions with the
+reviewer in the configured group. `julius-research-authority.test.ts` case 21
+now reads the clause from the library. Across the seven touched files: 427
+passed, 4 failed — all environmental on this Windows host: research-authority 22
+spawns `npx` without a shell (`spawnSync npx ENOENT`), and three F6 MUTATION
+cases in `julius-first-live-mission.test.ts` time out at 5 s under this
+machine's load and pass at a 90 s timeout (10/10). `tsc -p relay-bridge` and
+`tsc -p scripts` clean; harness manifest re-exported, check OK; bridge bundle
+builds. Ledger rows B4 and B5 added to `docs/JULIUS_MVP_QUALIFICATION.md`.
+
+#### Not done, by decision or by gate
+
+- Driving a run over HTTP — the deployment decision that spends money; the
+  contract document says so.
+- Either route against a real PostgreSQL from a running bridge (the paid-run
+  environment).
+- The landing ceremony: the branch is local. The Wonderland↔Julius integration
+  lane (another session, Unreal-side client) was told the wire shape, told
+  creation is bootstrap-only, told the 74% they were citing is now 77%, and told
+  to build in their own merged worktree rather than wait for a push.
 
 ### 000c. MVP REPRIORITISATION 2026-09-27 — THE LOOP IS THE PRODUCT
 
