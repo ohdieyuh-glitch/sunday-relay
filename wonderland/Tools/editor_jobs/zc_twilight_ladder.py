@@ -81,6 +81,21 @@ def job():
     L.pose_camera(live(), unreal.Vector(*EYE), unreal.Vector(*AT), 60.0)
     yield 3.0
 
+    # ---- WHERE THIS WAS READ FROM, RECORDED RATHER THAN ASSUMED.
+    #
+    # The practical-light pool is selected around the viewer and is budgeted: wl.Look.PracticalCount is 48
+    # against a manifest of 1,464, and in the densest districts far more lamps compete for that budget than
+    # can win it. So a reading taken at two different places can differ by how much of the pool was spent
+    # there, and a ladder that moved between rungs would be partly measuring the pool rather than the span.
+    #
+    # This job pins one EYE and AT for all fifteen rungs, so the pool is the same set throughout and a span
+    # difference cannot be a pool difference. That was luck rather than design. A constant should be VISIBLE
+    # as a constant instead of trusted, so it goes in the result where a reader can check it.
+    RESULT["camera_eye"] = list(EYE)
+    RESULT["camera_at"] = list(AT)
+    RESULT["camera_note"] = ("one fixed pose for every rung, so the practical-light pool is identical across "
+                             "spans and hours; a span difference here cannot be a pool difference")
+
     def settled():
         """Wait for the picture to stop FALLING, not merely to stop moving between two reads.
 
