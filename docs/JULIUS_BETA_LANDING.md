@@ -1,7 +1,7 @@
 # Landing `relay/julius-beta-qualification`
 
 **This page is the ceremony's input, not a narrative.** It holds the PR body, the
-facts a reviewer needs before reading 32 commits, and the things this branch
+facts a reviewer needs before reading 36 commits, and the things this branch
 does NOT claim. The landing itself is a founder act: this lane never pushes with
 the founder's credential and never merges its own work — see
 `ceremony/push-as-worker.sh` and the worker-App notes.
@@ -94,6 +94,16 @@ repairs, and returns a verified result with evidence.
   file reads `DATABASE_URL` again.
 - **Provider qualification keyed to the served model**, and a Learning Loop that
   measures and gates without writing.
+- **Many missions, one loop**: three missions interleaved to verified
+  completion, cross-mission isolation asserted over the packets each worker was
+  handed (not just the rows), a failing mission that does not take its
+  neighbours down, and twelve missions measured.
+- **The founder's fourth mission class has rows**: an everyday planning mission
+  completes through the same lifecycle, and a mission whose acceptance needs an
+  action no tool can take does NOT complete.
+- **Provider neutrality is structural**: a sweep fails if any kernel file names
+  a vendor, a model or one of the trio's adapter ids in code; two exemptions,
+  each with its argument.
 
 **What this branch does not claim**
 
@@ -135,7 +145,7 @@ refuses), `docs/JULIUS_TRACE_CORPUS.md`.
 
 ## What the reviewer should be sceptical about
 
-1. **The readiness number.** 79%, computed from the table's own weights; the
+1. **The readiness number.** 80%, computed from the table's own weights; the
    arithmetic has been wrong twice on this page and was corrected both times.
    Recompute it rather than trusting the headline.
 2. **Every "proven" claim is a named case.** `docs/JULIUS_MVP_QUALIFICATION.md`
