@@ -416,6 +416,22 @@ founder's to choose. The bridge's two Julius route families now share one
 lazy pool (their other observation).
 
 
+#### Then: author and deliverer are two identities
+
+The claim refusal above was the trust core being right about the wrong fact: the
+guidance answer's HANDOFF row was written with the DELIVERING tick's worker id
+(the reviewer whose acceptance released it), so `assertedBy` said reviewer and
+self-verification refused the reviewer. The founder's rule — do not collapse
+AUTHOR and DELIVERER — is now the code: the handoff row's writer is the author
+read off the proposal's own provenance (the architect), a carried-forward copy
+keeps its original author, and `guidance.delivered` carries `authorWorkerId`,
+`deliveredByWorkerId` and `deliveredAtTaskId` beside the run and task it belongs
+to. The lifecycle proof now shows the delivered answer promoted UNVERIFIED →
+VERIFIED by the continuation's reviewer with nothing refused. Minimal: two
+`workerId` expressions and three event facts.
+
+#### Not done, by decision or by gate
+
 - Driving a run over HTTP — the deployment decision that spends money; the
   contract document says so.
 - Either route against a real PostgreSQL from a running bridge (the paid-run
