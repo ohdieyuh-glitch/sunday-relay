@@ -415,19 +415,37 @@ def job():
     clear = reach is not None and reach >= CLEAR_FRACTION
     green = (look_g["green_ratio"] if look_g else None)
     not_foliage = green is not None and green <= GREEN_MAX
-    sky_ok = bool(look_s and look_g and look_s["luma"] > look_g["luma"])
+    # IS THE GROUND I AM MEASURING OPEN TO THE SKY? Traced upward FROM THE GROUND PATCH, not judged
+    # from a screen region and not asked about the camera.
+    #
+    # The first version compared the luma of a sky band against the ground band, and failed this
+    # viewpoint at reach 1.000 with no occluder anywhere. It deserved to fail: the camera looks DOWN
+    # at traversal ground, so the top of the frame is distant plaza and trees rather than sky, and the
+    # test was demanding a composition this shot is never going to have. It was also asking the wrong
+    # question. What matters for a skylight experiment is not whether the LENS has sky above it but
+    # whether the GROUND BEING MEASURED does -- a patch under a canopy cannot receive sky light however
+    # open the camera is, and that would quietly decide the experiment before it ran.
+    overhead = None
+    if gpatch is not None:
+        overhead = trace(unreal.Vector(gx, gy, gpatch["z"] + 20.0),
+                         unreal.Vector(gx, gy, gpatch["z"] + 8000.0), pawn, VIS_CH)
+    sky_ok = overhead is None
+    RESULT["vantage"]["overhead_hit"] = overhead
+    RESULT["vantage"]["ground_open_to_sky"] = sky_ok
     ok_vantage = bool(off <= 500.0 and down is not None and gpatch is not None
                       and clear and not_foliage and sky_ok)
     record("D_VALID", "the camera can actually SEE the ground it is about to measure",
            ok_vantage, vantage=RESULT["vantage"], pawn_offset_uu=off,
            view_reach=(round(reach, 3) if reach is not None else None),
            clear_line_of_sight=clear, ground_not_foliage=not_foliage, green_ratio=green,
-           sky_above=sky_ok,
+           ground_open_to_sky=sky_ok, overhead_hit=overhead,
            thresholds={"view_reach_at_least": CLEAR_FRACTION, "green_ratio_at_most": GREEN_MAX},
            note="THREE INDEPENDENT TESTS, because the previous single test passed on a camera buried "
                 "in a bush for 32 readings. A VISIBILITY trace to the real ground point catches an "
-                "occluder the colour misses; green dominance catches one the trace misses; and a sky "
-                "band darker than the ground means the viewpoint is under something. A frame is also "
+                "occluder the colour misses; green dominance catches one the trace misses; and an "
+                "upward trace FROM THE GROUND PATCH proves the ground being measured is open to the "
+                "sky, which is the only form of that question a skylight experiment cares about. A "
+                "frame is also "
                 "captured before any reading, because the only thing that would have caught the last "
                 "run in five seconds was opening one")
     if not ok_vantage:
