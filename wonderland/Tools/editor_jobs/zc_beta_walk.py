@@ -36,6 +36,25 @@ def pct(values, p):
 
 
 def job():
+    # THE JOB GIVES BACK WHAT IT CHANGES, on every exit: a pass, a FAIL, an exception, or a timeout the
+    # channel throws in. wl.Sky.DayMinutes is a process-wide console variable, and this walk used to leave
+    # it at 0 -- which froze the sky for every later PIE session in the same editor, other lanes' captures
+    # included. wl.Sky.Hour is a console COMMAND acting on the PIE world's day cycle and dies with PIE, so
+    # there is nothing of it to give back. The background-throttle flag has a setter and no getter, every
+    # PIE job sets it for itself, and suspending it changes how fast another job runs but not what it
+    # measures -- so it is left suspended rather than "restored" to a value nobody read.
+    found = unreal.SystemLibrary.get_console_variable_float_value("wl.Sky.DayMinutes")
+    RESULT["day_minutes_found"] = found
+    try:
+        yield from _walk()
+    finally:
+        editor_world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+        unreal.SystemLibrary.execute_console_command(editor_world, "wl.Sky.DayMinutes %s" % found)
+        RESULT["day_minutes_restored"] = unreal.SystemLibrary.get_console_variable_float_value(
+            "wl.Sky.DayMinutes")
+
+
+def _walk():
     os.makedirs(ROOT, exist_ok=True)
     for old in os.listdir(ROOT):
         if old.endswith(".jpg"):
@@ -325,6 +344,18 @@ def job():
         # which does not advance while the world is paused -- so the escape hatch could never fire, the loop
         # span until the channel's own thirty-minute cap killed the job, and the proof reported nothing at all
         # after half an hour. A timeout that depends on the thing it is timing out is not a timeout.
+        #
+        # THE TRACE LOOKS DOWN FROM FAR ABOVE THE TILE, NOT FROM THE HOLD POINT. `gz` is the mean height of
+        # everything placed in the tile, and where a tile has deep content that mean sits BELOW the floor a
+        # player walks on. At [7,7], 31 m from the arrival, it was -1308 against a plaza near +12, so the Dog
+        # was held at -408 -- under the plaza -- the 4,000 uu trace beneath it found nothing for twelve
+        # seconds, and the Dog was released onto whatever lies below (-861 on one run, -1045 on the next).
+        # That stand never tested the Golden Arrival floor, and W03 counted it as standing. So the trace now
+        # starts 200 m above the tile's content, and the Dog is dropped 900 uu above the topmost thing it
+        # finds: the surface a player would actually be standing on.
+        top_from = unreal.Vector(r["centre"][0], r["centre"][1], gz + 20000.0)
+        top_to = unreal.Vector(r["centre"][0], r["centre"][1], gz - 20000.0)
+        surface_z = None
         began = time.time()
         arrived = False
         while True:
@@ -344,7 +375,7 @@ def job():
                     pass
             try:
                 down = unreal.SystemLibrary.line_trace_single(
-                    world, hold_at, unreal.Vector(hold_at.x, hold_at.y, hold_at.z - 4000.0),
+                    world, top_from, top_to,
                     unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, False, [live] if live else [],
                     unreal.DrawDebugTrace.NONE, True,
                     unreal.LinearColor.RED, unreal.LinearColor.GREEN, 0.0)
@@ -352,12 +383,25 @@ def job():
                 down = None
             if down is not None:
                 arrived = True
+                try:
+                    surface_z = float(down.to_tuple()[4].z)
+                except Exception:                 # noqa: BLE001
+                    surface_z = None
                 break
             if time.time() - began > 12.0:
                 break
             yield 0.25
         r["cell_streamed_in"] = arrived
+        drop_z = (surface_z if surface_z is not None else gz) + 900.0
         live = living()
+        if live is not None:
+            try:
+                live.set_actor_location(unreal.Vector(r["centre"][0], r["centre"][1], drop_z), False, False)
+                moving = mover(live)
+                if moving is not None:
+                    moving.set_editor_property("velocity", unreal.Vector(0.0, 0.0, 0.0))
+            except Exception:                     # noqa: BLE001
+                pass
         mc = mover(live) if live else None
         if mc is not None:
             try:
@@ -366,7 +410,34 @@ def job():
                 pass
         if live is not None:
             pawn = live
-        yield 2.0
+        # ---- THE STAND IS READ WHEN THE DOG HAS LANDED, not two seconds after it was let go.
+        #
+        # A fixed wait is a guess about frame rate, and when the guess is wrong the Dog is read in mid-air --
+        # which W03 counts as "did not fall through", because it only fails a Dog 50 m below the tile. zzT6
+        # read [7,6] at z 941 and [8,7] at 394; zzV1, the same stands an hour later, read the ground at 108
+        # and 101. Landed means WALKING movement and a height that held still across a wait -- two reads with
+        # time between them, because two reads of the same moment agree about anything. A Dog that has not
+        # landed ten seconds after release is an unmeasured stand, not a pass.
+        landed = False
+        mode = None
+        last_z = None
+        settle_began = time.time()
+        while time.time() - settle_began < 10.0:
+            yield 0.25
+            live = living()
+            if live is None:
+                break
+            try:
+                z_now = float(live.get_actor_location().z)
+                mode = str(live.character_movement.get_editor_property("movement_mode"))
+            except Exception:                     # noqa: BLE001
+                break
+            walking = "WALKING" in mode.upper()
+            if walking and last_z is not None and abs(z_now - last_z) < 2.0:
+                landed = True
+                break
+            last_z = z_now if walking else None
+        settle_s = round(time.time() - settle_began, 2)
         # THE STAND IS READ FROM A PAWN THAT IS STILL THERE, or it is recorded as unmeasured. A destroyed
         # Dog's wrapper is not None -- it throws on the first touch -- and three runs of this proof died on
         # that rather than reporting anything at all. An unmeasured stand is a result; a traceback is not.
@@ -381,10 +452,28 @@ def job():
             continue
         pawn = live
         at = pawn.get_actor_location()
-        fell = float(at.z) < gz - 5000.0
+        # FELL THROUGH means it never came to rest AND dropped 50 m past the point it was let go from. A Dog
+        # that LANDED is standing on something, whatever the tile's content averages. The first live run of
+        # this version (zzV4) still compared against `gz` and flagged [13,11]: the Dog had landed on real
+        # ground at 75 (floor -14), but `gz` was borrowed from 99 m mountain neighbours (9942). The older job
+        # passed that stand only because it read the Dog two seconds into its fall, at 8878.
+        fell = (not landed) and float(at.z) < drop_z - 5000.0
+        surface = round(surface_z) if surface_z is not None else None
+        if not landed and not fell:
+            visits.append({"tile": r["tile"], "radius_metres": r["radius_metres"],
+                           "mesh_actors": r["mesh_actors"], "landed_z": None,
+                           "expected_near_z": round(gz), "surface_z": surface, "fell_through": None,
+                           "unmeasured": "the Dog had not landed 10 s after release",
+                           "airborne_z": round(float(at.z)), "movement_mode": mode,
+                           "cell_streamed_in": r.get("cell_streamed_in"),
+                           "was_empty": r["mesh_actors"] == 0})
+            H.capture_viewport_jpeg(os.path.join(ROOT, "%02d_r%04dm_airborne.jpg" % (n + 1, r["radius_metres"])),
+                                    1600, 90)
+            continue
         visits.append({"tile": r["tile"], "radius_metres": r["radius_metres"],
                        "mesh_actors": r["mesh_actors"], "landed_z": round(float(at.z)),
-                       "expected_near_z": round(gz), "fell_through": bool(fell),
+                       "expected_near_z": round(gz), "surface_z": surface, "fell_through": bool(fell),
+                       "landed": landed, "settle_s": settle_s,
                        "cell_streamed_in": r.get("cell_streamed_in"),
                        "was_empty": r["mesh_actors"] == 0})
         H.capture_viewport_jpeg(os.path.join(ROOT, "%02d_r%04dm.jpg" % (n + 1, r["radius_metres"])), 1600, 90)
@@ -394,8 +483,8 @@ def job():
     record("W06", "every stand was actually measured",
            len(unmeasured) == 0, unmeasured=len(unmeasured), of=len(visits),
            which=[v["tile"] for v in unmeasured],
-           note="a stand where the Dog was destroyed proves nothing about whether there is ground there, and "
-                "must not be counted as a pass")
+           note="a stand where the Dog was destroyed, or had not come to rest, proves nothing about whether "
+                "there is ground there, and must not be counted as a pass")
     fell_through = sum(1 for v in visits if v["fell_through"])
     RESULT["visits_that_fell_through"] = fell_through
     empties = [v for v in visits if v["was_empty"]]

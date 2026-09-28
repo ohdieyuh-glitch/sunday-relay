@@ -1,0 +1,24 @@
+{
+ "name": "zzV2_knob_sentinel",
+ "started": "2026-09-28 10:41:47",
+ "status": "read",
+ "pie_running": false,
+ "before": {
+  "wl.Sky.MoonCastAlways": 0.0,
+  "wl.Sky.MoonCastAltitude": 0.0,
+  "wl.Sky.TwilightSpan": 21.0,
+  "wl.Look.DuskSkyBoost": 0.0
+ },
+ "sentinel_readback": 0.25,
+ "after_restore": {
+  "wl.Sky.MoonCastAlways": 0.0,
+  "wl.Sky.MoonCastAltitude": 0.0,
+  "wl.Sky.TwilightSpan": 21.0,
+  "wl.Look.DuskSkyBoost": 0.0
+ },
+ "probe_exists": true,
+ "restored": true,
+ "finished": "2026-09-28 10:41:47",
+ "seconds": 0.4,
+ "log": ""
+}

@@ -329,6 +329,98 @@ opens, which is exactly the kind of shared-resource decision this session does n
 moves from BLOCKING to **READY** rather than to PASS.
 
 
+## 2026-09-28 -- the player survives being placed anywhere; dusk understood and held for the founder
+
+**Player placement: FIXED.** This was the one beta-critical world defect found on 2026-09-28. The Dog was
+level-placed and spatially loaded, so World Partition destroyed it about half a second after any teleport
+that left its home cell. At 606.7 m it landed at 0.95 s, stood on valid ground, and was destroyed at 1.25 s.
+At 15 m it survived. The pawn is the streaming source, so leaving its home cell unloaded that cell and took
+the Dog with it. Measurement ruled out destination geometry, KillZ and the ground-catch rescue.
+
+It was fixed in code, not in the map: `bIsSpatiallyLoaded = false` in `ARelayDogCharacter`'s constructor
+(3a54247e), guarded by `WITH_EDITORONLY_DATA` (90d52e90) because the unguarded line broke the game target.
+For the game target, UBT reported `Target is up to date` / `Succeeded` at 08:18, on source unchanged since
+06:59:54. Re-verified at 10:37 on a fresh editor: zc_beta_walk 6/6, with 0 of 23 stands unmeasured. That
+includes [8,13] at 1,242 m, the stand where the Dog died before the fix (zzT5, W06 red).
+
+**The beta walk's floor gates could not fail; the harness is fixed.** Three defects:
+
+- W03/W04 read each stand two seconds after releasing the Dog from 9 m up, and failed a stand only if it
+  was 50 m below the tile. In two seconds a body falls about 20 m, so a tile with NO floor read as a pass.
+  W04, "even the empty frontier tiles have a floor", could never go red.
+- The drop height came from the mean height of the tile's content. At the Golden Arrival centre that mean
+  sits under the plaza, so the stand landed in the basement (-861) and never tested the plaza.
+- The walk left `wl.Sky.DayMinutes` at 0 for the rest of the editor session.
+
+The job now:
+
+- drops the Dog above the topmost traced surface;
+- reads the stand only once the Dog has landed (WALKING, and still across a wait);
+- counts a Dog that never comes to rest as unmeasured;
+- restores DayMinutes on every exit.
+
+An offline dry run against a simulated world exercised a floorless tile, a plaza over a basement, slow
+frames, a stuck release, a crash and a timeout. The old job passed all three blind spots and leaked
+DayMinutes on every exit path; the new one caught all three and restored it every time. The real world had
+floor at every frontier stand (they landed at 75), so this changes the gate rather than the verdict so far.
+
+**Live result.** zzV4 ran at 11:57 on Core's 11:02 binary:
+
+- all 23 stands landed, settling in 1.6-2.3 s;
+- the Dog survived every stand (W06);
+- DayMinutes was found at 24 and restored to 24;
+- the Golden Arrival centre stand read the plaza (87, surface -3), not the basement.
+
+The same run exposed a flaw in the fix itself. It still judged "fell" against the tile's borrowed height,
+so it flagged [13,11], where the Dog stood on real ground at 75 under a borrowed 9942. The older job had
+passed that stand only by reading the Dog two seconds into its fall, at 8878. "Fell" now means the Dog never
+came to rest and dropped 50 m past its release point. Under that rule, zzV4's own 23 recorded stands score
+6/6, and the simulator reproduces both the false alarm and its fix. A live run of the final version is still
+owed at the next free PIE slot.
+
+**Dusk cliff: REAL, mechanism known, fix proven, held for the founder.** From an open-plaza vantage proven
+on the visibility channel, ground luma falls from 0.11638 to 0.06604 between h18.25 and h18.26. That is 43%
+in 36 game-seconds, or 0.6 s of real play at the shipped 24-minute day. At that moment the moon becomes a
+shadow caster at 4.9 degrees altitude, and the plaza's own columns and trees block the light it had been
+delivering without shadows. Two alternatives were measured and rejected:
+
+- Skylight cannot replace it: 4.2x the sky bought 7% of the loss.
+- Delaying the handover makes the step 50-56% worse.
+
+`wl.Sky.MoonCastAlways` (inert, default 0, confirmed present in the running binary by sentinel) makes the
+moon cast from first visibility. It cuts the handover's own cost 16.9x (0.04308 to 0.00255), with noon and
+23:00 unchanged inside drift. The price is a dimmer dusk from about 18:05 to 18:15 (clock time). **This is
+the founder's decision, not made here.** The evidence sheet compares shipped with MoonCastAlways at 12:00,
+18:00-19:00 and 23:00, from `captures/zc/dusk_handover`. The MoonCastAlways frames come from the run that
+measured 16.9x. The shipped frames come from its re-run, which voided on missing readings; that re-run's
+vantage and noise gates were green.
+
+**Hours in the lighting jobs are DECIMAL.** `h18.25` is 18:15:00 and `h18.26` is 18:15:36, and several
+write-ups print them like clock times ("18:25 -> 18:26"). Convert before quoting a time to anyone.
+
+**Two directional shadow casters all night: DOCUMENTED, NOT FIXED.** V2_Sun and WL_Moon both cast through
+the night. The sun's second shadow measured a dark fraction of 0.00327, against a same-state repeat spread
+of 0.00278. That is noise-sized because the sun sits at 0.0012 against the moon's 0.05. This is a property
+of today's numbers, not an invariant: raising the sun's night floor, or lowering the moon, would make it
+visible with no code change. zc_shadows S01 samples daytime only and has never observed night.
+
+**Day curve: a real shape problem, held for the founder.** Daylight = clamp((elevation + 9) / 21)^1.9 is
+exactly 1.0 from 06:38 to 17:22, which is 10.7 real minutes of identical light. It then falls to 0 by 18:29,
+an evening of 67 real seconds. Widening TwilightSpan is not the lever. It raises 17:00 (0.136 to 0.214 at
+span 39) and leaves 18:00 and 19:00 where they are, so the drop into dusk grows (worst step 0.0995 to
+0.1812). The shape comes from the clamp at elevation SPAN-9 and the 1.9 exponent. Changing either changes how
+every afternoon looks, and that is on the founder's preserved list.
+
+**Walk distance: NOT MEASURABLE here yet.** Route distance does not repeat on this machine: peak speeds on
+one route were 173.5, 230.0 and 163.3. Three hypotheses were tested and died. No route-completion distance is
+quoted as a world fact until the actuator repeats. This is separate from the destruction fix above.
+
+**Void corpus quarantined (bfc090e1).** zc_dusk_spike, zc_dusk_cause and zc_dusk_regions measured the inside
+of a bush: SPOT (-64, -5042), camera 900 uu up, obstructed at all 8 yaws on the visibility channel. Their nine
+results and three capture folders are marked VOID, and the jobs refuse to run. The pale ring by the fountain
+was a persisted mascot skin state, not lighting, and is not this lane's.
+
+
 ## 2026-09-27, later -- window 2 applied, and four red gates of which three were my own instruments
 
 **HEAD `4b94f8e5`.** The editor is shared with Internal Development by message; both lanes serialise.
