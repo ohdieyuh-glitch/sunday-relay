@@ -340,16 +340,32 @@ def job():
     summary = {}
     for n in complete:
         seq = sorted([r for r in good[n] if r["hour"] <= 20.0], key=lambda r: r["hour"])
+        # STEPS ARE DETECTED ON GROUND LUMA, NOT ON THE READABLE FRACTION, and that is not a preference.
+        #
+        # readable is a THRESHOLD statistic. Where a region's ground sits near luma 0.14 a thousandth of
+        # luma moves several per cent of the fraction; where it sits far from the threshold the same
+        # thousandth moves nothing. Comparing step SIZES between regions in that statistic compares
+        # amplifier gain rather than the world -- the arrival hovers around 0.09 to 0.12 while Noctis
+        # ranges 0.016 to 0.18, so their fractions respond differently to the same physical change by
+        # construction, and "which region has the biggest step" would be answered by where each one
+        # happens to sit relative to the threshold.
+        #
+        # So the comparable quantity detects the step and the fraction is reported beside it. ACCEPTANCE
+        # is a different question and D_READABLE keeps the fraction, because "can a walker see the
+        # ground" is exactly a threshold question.
         steps = [{"to": seq[i]["hour"],
+                  "d_ground_luma": round(seq[i]["ground_luma"] - seq[i - 1]["ground_luma"], 4),
                   "d_readable": round(seq[i]["ground_readable"] - seq[i - 1]["ground_readable"], 4)}
                  for i in range(1, len(seq))]
-        mags = sorted(abs(s["d_readable"]) for s in steps)
-        worst = max(steps, key=lambda s: abs(s["d_readable"])) if steps else None
+        mags = sorted(abs(s["d_ground_luma"]) for s in steps)
+        worst = max(steps, key=lambda s: abs(s["d_ground_luma"])) if steps else None
         night = next((r for r in good[n] if abs(r["hour"] - NIGHT_REF) < 0.01), None)
         summary[n] = {
-            "worst_step_readable": (worst["d_readable"] if worst else None),
+            "worst_step_ground_luma": (worst["d_ground_luma"] if worst else None),
+            "worst_step_readable_there": (worst["d_readable"] if worst else None),
             "worst_step_at_hour": (worst["to"] if worst else None),
-            "median_step_readable": (mags[len(mags) // 2] if mags else None),
+            "median_step_ground_luma": (mags[len(mags) // 2] if mags else None),
+            "ground_luma_by_hour": {("%.2f" % r["hour"]): r["ground_luma"] for r in good[n]},
             "readable_by_hour": {("%.2f" % r["hour"]): r["ground_readable"] for r in good[n]},
             "crushed_by_hour": {("%.2f" % r["hour"]): r["ground_crushed"] for r in good[n]},
             "luma_by_hour": {("%.2f" % r["hour"]): r["luma"] for r in good[n]},
@@ -359,17 +375,21 @@ def job():
     RESULT["summary"] = summary
 
     def stepped(n):
+        """A jump in the ground's actual brightness that stands out from that region's own ordinary
+        quarter-hour movement. An absolute floor AND a multiple of the local median, so a region that
+        moves a lot everywhere does not qualify on size alone and a flat region with one lurch does."""
         s = summary[n]
-        if s["worst_step_readable"] is None or s["median_step_readable"] is None:
+        if s["worst_step_ground_luma"] is None or s["median_step_ground_luma"] is None:
             return False
-        return abs(s["worst_step_readable"]) > 0.25 and \
-            abs(s["worst_step_readable"]) > max(3.0 * s["median_step_readable"], 0.10)
+        return abs(s["worst_step_ground_luma"]) > 0.030 and \
+            abs(s["worst_step_ground_luma"]) > max(3.0 * s["median_step_ground_luma"], 0.015)
 
     with_step = [n for n in complete if stepped(n)]
     record("D_GLOBAL", "the evening step reproduces in more than one region, so it is the world's",
            len(with_step) >= 2, regions_with_a_step=with_step, regions_measured=complete,
            per_region={n: {k: summary[n][k] for k in
-                           ("worst_step_readable", "worst_step_at_hour", "median_step_readable")}
+                           ("worst_step_ground_luma", "worst_step_readable_there",
+                            "worst_step_at_hour", "median_step_ground_luma")}
                        for n in complete},
            note="RED means it is local geometry at whichever place shows it and the caveat belongs on "
                 "that vantage rather than on the world. Green means a real world-wide transition. One "

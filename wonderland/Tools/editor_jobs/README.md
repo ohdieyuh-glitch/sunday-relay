@@ -317,3 +317,38 @@ whose chroma is uniform, and peaks that do not straddle the head's centre. Each 
 
 **And validate a new method against captures already on disk before spending a run on it.** It is free, and it
 is what finally broke a cycle of six unvalidated versions of one profile.
+
+## A ratio is only a measurement if its numerator and denominator measure different things
+
+The other lane's eye-gap clause reported trough-over-peak. On a FLAT profile both are the same number
+wearing two names, so 0.979 read as "the eyes are one mass" while the photograph showed two eyes with a
+clear black gap. Skeleton Flame's whole head is covered in cyan ghostfire, so the eyes are not separable
+from their SURROUNDINGS by colour while being obviously separable from EACH OTHER — the ratio was
+describing the flatness of the profile, not the eyes.
+
+Same family as a derivation applied to a clipped quantity: something that cannot move, dressed as a
+variable. When a ratio can go to 1 for a reason that has nothing to do with the thing being measured, it
+needs a companion clause that detects that reason and returns **UNMEASURABLE** rather than a number.
+
+Their three companions: a chroma floor, an absolute peak-to-trough CONTRAST floor, and a
+peaks-straddle-the-centre check (Apollo's two "eyes" sat hard against one edge of the window, on its gold
+crown — a pair of eyes straddles the head's centre, so two peaks bunched at one edge are some other
+bright thing and the ratio between them means nothing).
+
+## A threshold statistic is not comparable across regimes
+
+`readable` — the share of ground above luma 0.14 — is the right ACCEPTANCE reading, because "can a walker
+see the ground" is exactly a threshold question. It is the wrong reading for comparing step SIZES between
+places. Near the threshold a thousandth of luma moves several per cent of the fraction; far from it the
+same thousandth moves nothing, so "which region has the biggest step" gets answered by where each region
+happens to sit relative to 0.14 rather than by the world.
+
+Gate acceptance on the fraction. Detect and compare changes on the continuous quantity, and report the
+fraction beside it so the amplification is visible. The same rule voided a run: a frame-luma spread of
+0.0010 with a readable-fraction spread of 0.0107 is one instrument behaving well, not two disagreeing.
+
+## Zero is a value, `or` cannot tell it from absence
+
+`(offset or 9e9) > 500` reported a pawn that landed at offset **exactly 0.0** — a perfect placement — as
+more than 5 m away, and voided a run in which all three vantages were valid. Write `x is None or x > 500`.
+Distinguish three states explicitly: dead subject, empty sample, and a valid zero result.
