@@ -792,6 +792,12 @@ FGuid UWonderlandMissionTaskSubsystem::FollowJuliusRun(const FString& MissionId,
 	}
 	Task->Source = EWonderlandTaskSource::Julius;
 	Task->bInWorkspace = true;
+	// ---- AND THIS IS NOW THE FOLLOWED CONTRACT, on every call, including one that found an existing task.
+	//
+	// Without this line the readers pick the first Julius row in insertion order, and because this function
+	// APPENDS, a mission created from inside the world lands behind whatever was already there. The transport
+	// then follows the new run while every surface names the old one.
+	FollowedContractId = MissionId;
 	SaveContracts();
 	OnTasksChanged.Broadcast();
 	return Task->LocalId;
@@ -799,11 +805,36 @@ FGuid UWonderlandMissionTaskSubsystem::FollowJuliusRun(const FString& MissionId,
 
 const FWonderlandMissionTask* UWonderlandMissionTaskSubsystem::FindFollowedJuliusTask() const
 {
+	// THE SAME TEST IN BOTH PLACES, WRITTEN ONCE. Two copies of this predicate would be free to drift, and a
+	// preferred lookup that accepted a row the fallback would reject is a defect that only appears once a
+	// second mission is adopted -- which is the exact case this function already got wrong once.
+	//
+	// bInWorkspace, because a task the player has put away is not what a panel should present as running.
+	// RunId known and non-empty, because the run id is the thing only a real backend produces: Source alone is
+	// satisfied by a Julius task before anything has been dispatched.
+	const auto IsLiveJuliusRow = [](const FWonderlandMissionTask& Row)
+	{
+		return Row.Source == EWonderlandTaskSource::Julius && Row.bInWorkspace && Row.RunId.bKnown
+			&& !Row.RunId.Value.IsEmpty();
+	};
+
+	// ---- WHAT THIS SESSION WAS LAST ASKED TO FOLLOW, if it is still a live row.
+	if (!FollowedContractId.IsEmpty())
+	{
+		for (const FWonderlandMissionTask& Row : Tasks)
+		{
+			if (Row.ContractId == FollowedContractId && IsLiveJuliusRow(Row))
+			{
+				return &Row;
+			}
+		}
+	}
+
+	// ---- OTHERWISE THE FIRST LIVE ROW. This is the restored-contract case, before the transport has adopted
+	// anything: the panel still has to name something rather than report that nothing is running.
 	for (const FWonderlandMissionTask& Row : Tasks)
 	{
-		// bInWorkspace, because a task the player has put away is not what a panel should present as running.
-		if (Row.Source == EWonderlandTaskSource::Julius && Row.bInWorkspace && Row.RunId.bKnown
-			&& !Row.RunId.Value.IsEmpty())
+		if (IsLiveJuliusRow(Row))
 		{
 			return &Row;
 		}

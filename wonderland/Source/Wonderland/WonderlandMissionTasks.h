@@ -418,9 +418,24 @@ public:
 	 * task can be Julius-sourced before anything is dispatched. The RunId is the thing only a real backend
 	 * produces, which is why FollowJuliusRun records it verbatim and never synthesises one.
 	 *
-	 * The FIRST such task, in insertion order, when there are several. A surface that can show one contract
-	 * has to pick, and the oldest followed run is the stable choice: it does not change under the reader when a
-	 * second run is adopted.
+	 * THE MISSION THIS SESSION WAS LAST ASKED TO FOLLOW, when there are several -- not the first in insertion
+	 * order, which is what this used to return and what acceptance #5 caught.
+	 *
+	 * The old rule was chosen for stability: "the oldest followed run does not change under the reader when a
+	 * second run is adopted." That is true, and it is the wrong goal. FollowJuliusRun APPENDS, so when a
+	 * mission was created from inside the world the earlier task -- including contracts restored at startup --
+	 * stayed ahead of it, and every consumer kept naming the old one while the transport followed the new one.
+	 * The strip read "RUN run:b0f61d6d82c0161ae5169dc8 · READY" for a mission that had been replaced, and
+	 * JULIUS 3.3 said it was following mission:wonderland-integration-e2e-1. A stale mission masqueraded as
+	 * the followed one, which is exactly what the no-fake-passes rule exists to prevent: the screen stated
+	 * something false while the clauses underneath it passed.
+	 *
+	 * Stability is not worth a lie about which mission is live. A06c and A06d never caught it because they
+	 * switch runs within the SAME mission, so the task stays first either way.
+	 *
+	 * Falls back to the first live row when nothing has been followed yet this session, which is the restored-
+	 * contract case: the world has adopted nothing, and a panel still has to name something rather than claim
+	 * that nothing is running.
 	 */
 	const FWonderlandMissionTask* FindFollowedJuliusTask() const;
 
@@ -662,5 +677,14 @@ private:
 	 * order IS the vertical order and nothing has to reconcile two.
 	 */
 	TArray<FWonderlandMissionTask> Tasks;
+
+	/**
+	 * THE CONTRACT THIS SESSION WAS LAST ASKED TO FOLLOW. Deliberately NOT saved with the contracts.
+	 *
+	 * It means "what the transport has adopted since this process started", not "what was open last time".
+	 * Persisting it would make a restored contract claim to be followed before anything had adopted it, which
+	 * is the same class of false statement in the other direction.
+	 */
+	FString FollowedContractId;
 	FGuid Selected;
 };
