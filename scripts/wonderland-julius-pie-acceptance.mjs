@@ -486,9 +486,15 @@ try {
     const counts = new pg.Pool({ connectionString: DB });
     let runs = -1;
     let records = -1;
+    let runCriteria = null;
     try {
       runs = Number((await counts.query('SELECT count(*) AS n FROM relay_wonderland.julius_runs WHERE mission_id=$1', [createdMission])).rows[0].n);
       records = Number((await counts.query('SELECT count(*) AS n FROM relay_wonderland.player_mission_contracts WHERE project_id=$1', [createProjectId])).rows[0].n);
+      if (createdRunId !== '') {
+        runCriteria = (await counts.query(
+          'SELECT criterion_id FROM relay_wonderland.julius_acceptance_criteria WHERE run_id=$1 ORDER BY ordinal', [createdRunId],
+        )).rows.map((row) => String(row.criterion_id));
+      }
     } finally {
       await counts.end();
     }
@@ -496,6 +502,15 @@ try {
       + 'the mission exactly ONE Julius run',
       createdMission !== '' && runs === 1 && records === 1,
       { juliusRunsForMission: runs, creationRecordsInProject: records });
+
+    // THE PLAYER'S CRITERIA REACHED THE RUN. Attempt 4bf3ad6bc25da3de: the created run held NONE while its trusted
+    // contract held one, because julius_acceptance_criteria was keyed on criterion_id alone and insertCriteria swallowed
+    // the conflict with an earlier run's row. The world printed it faithfully -- "0 of 0 criteria met".
+    const contractCriteria = Array.isArray(contract.acceptanceCriteria) ? contract.acceptanceCriteria.map((c) => String(c.id)) : [];
+    clause('J08', 'THE PLAYER\'S ACCEPTANCE CRITERIA REACHED THE RUN: the created run holds exactly the criteria its trusted '
+      + 'contract names -- the same ids, the same count, none swallowed by another run\'s row',
+      createdRunId !== '' && contractCriteria.length > 0 && JSON.stringify(runCriteria) === JSON.stringify(contractCriteria),
+      { contractCriteria, runCriteria: runCriteria ?? 'not read' });
   }
 } catch (err) {
   summary.error = String(err?.message ?? err);
