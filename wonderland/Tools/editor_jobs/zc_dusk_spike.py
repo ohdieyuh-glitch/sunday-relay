@@ -43,7 +43,15 @@ ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "dusk_spike")
 
 #: The data-chosen arrival standing spot: 36 m off the monument, open paved ground, proven before use.
 SPOT = (-64.0, -5042.0)
-HOURS = (18.00, 18.25, 18.50, 18.75)
+#: STRADDLING THE CASTER FLIP, which computes to hour 18.2598 -- thirty-six seconds after the 18:25
+#: sample the coarse run took. That run showed the moon's ground share collapsing 54x between 18:25 and
+#: 18:50, but INFERRED it across a 25-minute gap containing the flip, so it cannot tell a step at the
+#: flip from a ramp across the quarter hour. The other lane asked for the difference and it matters:
+#: if part of the flood is already gone before the flip, "move the handover earlier" costs less than
+#: the coarse table makes it look.
+#:
+#: Two rungs before the flip, four after, plus 18:00 for continuity with the coarse run.
+HOURS = (18.00, 18.22, 18.25, 18.27, 18.32, 18.40, 18.50)
 SPAN = 21.0
 AGREE = 0.010
 CAM_UP, CAM_AHEAD, CAM_DROP, CAM_FOV = 900.0, (1400.0, -1400.0), -100.0, 70.0
@@ -54,6 +62,11 @@ PAWN_CH = unreal.TraceTypeQuery.TRACE_TYPE_QUERY2
 
 def elevation_at(hour):
     return math.sin(((hour - 6.0) / 12.0) * math.pi) * 72.0
+
+
+def nightfall_at(elev):
+    x = 1.0 - max(0.0, min(1.0, (elev + 9.0) / SPAN))
+    return x * x * (3.0 - 2.0 * x)
 
 
 def daylight_at(elev):
@@ -223,7 +236,15 @@ def job():
                 "ground_crushed": round((g1["crushed"] + g2["crushed"]) / 2.0, 4),
                 "frame_luma": round((f1["luma"] + f2["luma"]) / 2.0, 4),
                 "frame_luma_spread": round(abs(f1["luma"] - f2["luma"]), 4),
-                "sun_elevation": round(elev, 2), "daylight": round(daylight_at(elev), 4)}
+                "sun_elevation": round(elev, 2), "daylight": round(daylight_at(elev), 4),
+                "moon_lux_pred": round(0.050 * nightfall_at(elev), 4),
+                "sun_int_pred": round(max(daylight_at(elev),
+                                          0.004 * (1 - nightfall_at(elev))
+                                          + 0.0012 * nightfall_at(elev)), 4),
+                "moon_casts_pred": bool(0.050 * nightfall_at(elev)
+                                        > max(daylight_at(elev),
+                                              0.004 * (1 - nightfall_at(elev))
+                                              + 0.0012 * nightfall_at(elev)))}
 
     cvar("wl.Sky.MoonGain", "%.4f" % (found["MoonGain"] or 0.05))
     cvar("wl.Sky.Hour", 12)
@@ -281,6 +302,31 @@ def job():
            note="GREEN means the crossover curve I wrote is the cause and the fix is mine to make in "
                 "it. RED means the peak survives with the moon switched off, so it is the sun or the "
                 "sky at a grazing angle and my curve only revealed what was always going to be there")
+
+    # ---- STEP OR RAMP? The question the coarse run could not answer and the one that prices a branch.
+    seq = sorted(h for h in HOURS if h >= 18.20)
+    shares = [(h, share["%.2f" % h]["moon_share"]) for h in seq]
+    before = [x for x in shares if not good["h%05.2f_base" % x[0]]["moon_casts_pred"]]
+    after = [x for x in shares if good["h%05.2f_base" % x[0]]["moon_casts_pred"]]
+    total_drop = (before[-1][1] - after[-1][1]) if (before and after) else None
+    flip_drop = (before[-1][1] - after[0][1]) if (before and after) else None
+    frac = (round(flip_drop / total_drop, 3)
+            if (total_drop not in (None, 0) and flip_drop is not None) else None)
+    RESULT["collapse_shape"] = {"moon_share_by_hour": dict(shares),
+                                "last_before_flip": before[-1] if before else None,
+                                "first_after_flip": after[0] if after else None,
+                                "drop_across_the_flip": flip_drop, "total_drop": total_drop,
+                                "fraction_at_the_flip": frac}
+    record("K_SHAPE", "the collapse is a STEP at the caster flip, not a ramp across the quarter hour",
+           frac is not None and frac >= 0.70,
+           fraction_of_the_drop_at_the_flip=frac, drop_across_the_flip=flip_drop,
+           total_drop=total_drop, moon_share_by_hour=dict(shares),
+           flip_between=[before[-1][0] if before else None, after[0][0] if after else None],
+           note="GREEN: nearly all the flood disappears in the one quarter-minute the caster flips, so "
+                "moving the handover earlier buys the whole spike and costs the whole S01 clause. RED: "
+                "the flood is already draining before the flip, so an earlier handover buys less than "
+                "the coarse table suggested and the branch is cheaper than it looked. Either answer "
+                "changes the price of a branch the founder is being asked to choose between")
 
     RESULT["status"] = "measured"
     yield 2.0
