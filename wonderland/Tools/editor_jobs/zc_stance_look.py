@@ -36,9 +36,14 @@ L = unreal.WonderlandUiTestLibrary
 ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "stance_look")
 SKINS = ("relay_og", "celestial_light", "apollo", "arden_infernal", "skeleton_flame")
 DISTANCE = 520.0
-# Aimed at the ankles so the feet sit near frame centre, clear of the HUD strip along the bottom.
-LOOK_AT_Z = 15.0
-EYE_Z = 95.0
+# ---- MEASURED FROM THE RIG, NOT GUESSED. The first run aimed at stood_at.z + 15 "at the ankles" and
+# photographed five heads: the pawn's origin is the CAPSULE CENTRE, and zc_stance_ground already measured the
+# costume root sitting 87.07 uu below it -- that is where the feet are. So the look-at is 87 below the origin
+# plus a little, and the eye barely above it, which puts the legs and feet across the middle of the frame and
+# well clear of the HUD strip along the bottom.
+FEET_BELOW_ORIGIN = 87.07
+LOOK_AT_Z = -FEET_BELOW_ORIGIN + 26.0
+EYE_Z = -FEET_BELOW_ORIGIN + 62.0
 FOV = 38.0
 
 

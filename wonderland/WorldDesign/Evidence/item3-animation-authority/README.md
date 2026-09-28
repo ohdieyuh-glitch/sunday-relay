@@ -127,3 +127,35 @@ narrowing and it is also an admission that I do not yet have the cause.
 `RelaySkins/` holds orphan `.wlvox` files that nothing loads and that differ from current art —
 `Apollo.wlvox` is one. Any analysis that picks a file by guessing its name from a skin id can land on one and
 produce a confident measurement of nothing. **Read the id→file table in `WonderlandRelaySkins.cpp`.**
+
+### Observed: standing, five skins, one camera, one spot
+
+`zc_stance_look`, Dog drift **0.0 uu**, companions hidden, camera aimed at the feet using the measured
+87.07 uu from origin to costume root (a first attempt aimed at `stood_at.z + 15` "at the ankles" and
+photographed five heads — the pawn origin is the capsule centre).
+
+**All five meet the paving at the same height.** Nothing floats, nothing sinks. That agrees with all three
+measurements: identical pose, identical root offset, identical foot plane.
+
+**But two of them have no visible legs at all.** Apollo's tassets and Arden Infernal's robe reach the ground
+and cover the legs completely; Relay OG, Celestial Light and Skeleton Flame all show two separated feet on
+the paving.
+
+That is a candidate for "walks weird" that no geometry measurement could have produced: **if floor-length
+drapery does not move with the gait, the figure reads as gliding rather than walking**, however exactly its
+hidden legs are following Relay OG's stride. The pose being copied field for field is precisely what makes
+this possible — the legs are correct and invisible.
+
+### Where item 3 stands
+
+| | |
+|---|---|
+| pose copied field for field | **measured, identical** |
+| costume root offset | **measured, identical (spread 0.0)** |
+| authored foot plane | **measured, identical (3.720)** |
+| ground contact, standing, observed | **consistent across all five** |
+| **the walk** | **untested** |
+| **whether drapery follows the gait** | **untested, and the live hypothesis** |
+
+The founder said "stand **and** walk". Standing is now observed to be consistent. Walking is the half nobody
+has looked at, and the drapery question is where I would look first.
