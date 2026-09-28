@@ -218,6 +218,8 @@ def job():
         L.pose_camera(world, eye, unreal.Vector(here.x, here.y, mid_z), 42.0)
 
     readings = {}
+
+    control = {}
     RESULT["readings"] = readings
     shots = []
     for hour_label, hour in HOURS:
@@ -254,6 +256,49 @@ def job():
                 unreal.GameplayStatics.set_game_paused(live, False)
                 L.release_camera(live)
                 yield 0.3
+        # ---- AND THE SAME HOUR ON A MATTE SUBJECT, WHICH IS WHAT THE CONTROL SHOULD ALWAYS HAVE BEEN.
+        #
+        # THE LAST RUN VOIDED ITSELF for reading night BRIGHTER than noon -- 0.448 against 0.3288, a ratio of
+        # 1.362 -- with the day clock demonstrably stopped and all eighteen captures distinct. So it was not
+        # the running-clock fault this control was written for. The world lane did the arithmetic:
+        #
+        #   AutoExposureBias is Lerp(1.45, -0.9, Daylight), so 2.35 EV between noon and midnight, a factor of
+        #   5.10. ANY surface that keeps more than 19.6 PER CENT of its noon luminance therefore reads
+        #   BRIGHTER at night. An emissive surface does not dim when the sun goes down -- it keeps 100 per
+        #   cent -- so it clears that bar five times over.
+        #
+        # Skeleton Flame is mostly emissive. Using it as its own lighting control asks an emissive subject to
+        # prove the sun went down, which it cannot do at any hour, in any build, however correct the clock is.
+        # "Night is darker than day" was never safe for this subject and the control was wrong from the day it
+        # was written -- it only started failing because the glow got bright enough to show it.
+        #
+        # RELAY OG IS THE CONTROL: the one skin in the lineup with no fire of its own, measured at the SAME
+        # hour, in the SAME run, at the SAME spot, in the same camera pose. Same-run is the point -- comparing
+        # across jobs is what produced the world lane's phantom night decline this afternoon.
+        try:
+            ui.wear_relay_skin("relay_og")
+            yield 4.0
+            unreal.SystemLibrary.execute_console_command(world, "wl.Sky.Hour %.2f" % hour)
+            look(VIEWS[0][1], FACES[0][1])
+            yield 1.2
+            live = ues.get_game_world()
+            if live is not None:
+                unreal.GameplayStatics.set_game_paused(live, True)
+                yield 0.3
+                cname = "control_relay_og_%s.png" % hour_label
+                cpath = os.path.join(ROOT, cname)
+                if L.capture_game_viewport(cpath):
+                    shots.append(cname)
+                    RESULT.setdefault("capture_hashes", {})[cname] = fingerprint(cpath)
+                    control[hour_label] = region_stats(cpath, REGIONS["torso"])
+                unreal.GameplayStatics.set_game_paused(live, False)
+                L.release_camera(live)
+                yield 0.3
+            ui.wear_relay_skin("skeleton_flame")
+            yield 4.0
+        except Exception as err:                                    # noqa: BLE001
+            RESULT.setdefault("errors", {})["control/%s" % hour_label] = str(err)[:160]
+
         emit("S_%s" % hour_label, "INFO", "skeleton flame at %s" % hour_label,
              {k: v for k, v in readings.items() if k.startswith(hour_label + "/")})
 
@@ -282,6 +327,12 @@ def job():
     #
     # The world lane's rule: an instrument that has not been shown to register a KNOWN positive cannot be
     # trusted for a null. Here the known positive is that noon is brighter than midnight.
+    # THE RATIO THAT DECIDES IT IS RELAY OG'S, not Skeleton Flame's. See the control block in the hour loop.
+    c_day = (control.get("day") or {}).get("luma")
+    c_night = (control.get("night") or {}).get("luma")
+    RESULT["matte_control"] = {"relay_og_day_torso": c_day, "relay_og_night_torso": c_night,
+                               "ratio": round(c_night / c_day, 3) if (c_day and c_night) else None}
+
     day_mean = [v.get("luma") for k, r in readings.items() if k.startswith("day/")
                 for kk, v in (r or {}).items() if kk == "torso" and v]
     night_mean = [v.get("luma") for k, r in readings.items() if k.startswith("night/")
@@ -291,11 +342,15 @@ def job():
     RESULT["day_vs_night"] = {"day_torso_mean": round(d_avg, 4) if d_avg else None,
                               "night_torso_mean": round(n_avg, 4) if n_avg else None,
                               "ratio": round(n_avg / d_avg, 3) if (d_avg and n_avg) else None}
-    lit_apart = bool(d_avg and n_avg and n_avg < d_avg * 0.85)
-    record("S_HOURS", "noon and midnight are actually different lighting conditions",
-           lit_apart, **RESULT["day_vs_night"],
-           note="if they are not, every clause below compares one condition with itself. This job once read "
-                "night BRIGHTER than day, at 0.2583 against 0.2250, because the day clock was running.")
+    lit_apart = bool(c_day and c_night and c_night < c_day * 0.85)
+    record("S_HOURS", "noon and midnight are different lighting conditions, judged on a MATTE subject",
+           lit_apart, matte_control=RESULT["matte_control"],
+           skeleton_flame_for_comparison=RESULT["day_vs_night"],
+           note="RELAY OG decides this, not Skeleton Flame. The exposure opens 2.35 EV between noon and "
+                "midnight -- a factor of 5.10 -- so any surface keeping more than 19.6% of its noon "
+                "luminance reads BRIGHTER at night, and an emissive surface keeps all of it. Asking Skeleton "
+                "Flame to prove the sun went down is asking the wrong subject: it read 1.362 with the clock "
+                "stopped and every capture distinct, which is the physics, not a fault.")
     if not lit_apart:
         RESULT["status"] = "VOID: day and night did not differ, so nothing below is a day-night comparison"
         return
