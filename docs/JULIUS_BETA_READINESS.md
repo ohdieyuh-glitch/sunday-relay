@@ -99,13 +99,36 @@ Three commits on `relay/julius-beta-qualification`, off `a384b215`:
 4. **`49b42a3e`** — the runtime API mounted read-only on the bridge over the
    same PostgreSQL store the job writes through; **`102c302a`** — the MVP
    qualification suite organised by the founder's four categories.
-5. **The commit carrying this revision of the page** — mission CREATION over
-   the bridge (`POST /relay-api/julius/missions`, bootstrap only, `dispatched:
-   false` on the wire), the contract parser and compiler moved into a library
-   module because importing them from the job's entry file made the server
-   bundle run the job's entry guard, and the readiness addition corrected.
+5. **`fc8c67c7`** — mission CREATION over the bridge (`POST
+   /relay-api/julius/missions`, bootstrap only, `dispatched: false` on the
+   wire), the contract parser and compiler moved into a library module because
+   importing them from the job's entry file made the server bundle run the
+   job's entry guard, and the readiness addition corrected.
+6. **`81a910c2`** — the Wonderland seam proven against a real PostgreSQL, in
+   process and from the built bridge over HTTP.
+7. **The commit carrying this revision of the page** — the whole-chain suite,
+   dead on main since the charged-findings rule and run by no workflow, revived
+   and put in the real-infra workflow; the persistence real-PostgreSQL suites
+   run locally for the first time.
 
 ## The honest state of the suite on this platform
+
+**THE REAL-POSTGRESQL SUITES NOW HAVE A LOCAL RESULT.** A `julius-postgres`
+container (postgres:16) was found running on this machine; against fresh
+databases in it, the six persistence real-PostgreSQL suites pass — 35 cases, 2
+`todo` for the Docker halves — and the new Wonderland seam suite passes 3/3.
+The seventh, `julius-live-chain.e2e.test.ts` — the WHOLE chain on a real
+database with a repair round, dumped by the shipping queries and read by the
+Beta Gate — **was failing on `origin/main` and on this branch identically**
+(proved by running it in a probe worktree at `a384b215`): its scripted
+re-review never answered the finding it was charged with, so the
+charged-findings rule from #277 HALTed the run as `FINDINGS_UNRESOLVED`, and
+no workflow ran the suite to say so. The fixture now reads its packet from the
+same handoffs the job composes and answers the finding; the run reaches
+COMPLETED with six SUCCEEDED tasks including `repair:build` and its re-review,
+read back from PostgreSQL. The dump-and-gate half needs a `psql` binary this
+host does not have, so that half is CI's: the suite is added to the real-infra
+workflow beside the others. A suite that is not run is not a proof.
 
 `npm test` on Windows is **not green, before or after this work**. The baseline at
 `a384b215` was 194 failing cases across 56 files; the failures are dominated by
