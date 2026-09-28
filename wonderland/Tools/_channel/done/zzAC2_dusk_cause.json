@@ -1,0 +1,400 @@
+{
+ "name": "zzAC2_dusk_cause",
+ "started": "2026-09-27 18:07:04",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "X_LEADKNOB",
+   "name": "wl.Sky.MoonLeadHours exists in this build and takes a value",
+   "pass": true,
+   "detail": {
+    "asked": 1.5,
+    "read_back": 1.5,
+    "as_found": 0.0,
+    "note": "a build without it accepts the command, logs 'not recognized' and carries on, and the moon_up rung would be an identical copy of the baseline reported as 'raising the moon does nothing' -- the exact false negative that would confirm the atmosphere story"
+   }
+  },
+  {
+   "id": "X_VALID",
+   "name": "the observation point is a real standing position with ground under the patch",
+   "pass": true,
+   "detail": {
+    "vantage": {
+     "asked": [
+      -64.0,
+      -5042.0
+     ],
+     "landed": [
+      -64.0,
+      -5042.0,
+      94.3
+     ],
+     "offset_uu": 0.0,
+     "ground_trace_z": 0.7,
+     "forward_hit": null,
+     "down_hit": {
+      "dist": 993.6,
+      "z": 0.7
+     },
+     "ground_patch_hit": {
+      "dist": 997.1,
+      "z": -2.9
+     },
+     "ground_rect_screen": [
+      0.5,
+      0.78,
+      0.3,
+      0.16
+     ]
+    },
+    "note": "the same five checks the region ladder uses: arrived, not embedded in geometry, floor beneath the camera, and something solid under the rectangle being measured"
+   }
+  },
+  {
+   "id": "X_MEASURED",
+   "name": "every condition produced a reading",
+   "pass": true,
+   "detail": {
+    "measured": [
+     "dusk_base",
+     "dusk_fog_off",
+     "dusk_moon_4x",
+     "dusk_moon_off",
+     "dusk_moon_up",
+     "night_base",
+     "night_fog_off",
+     "night_moon_4x",
+     "night_moon_off"
+    ],
+    "wanted": [
+     "dusk_base",
+     "dusk_moon_off",
+     "dusk_moon_4x",
+     "dusk_fog_off",
+     "dusk_moon_up",
+     "night_base",
+     "night_moon_off",
+     "night_moon_4x",
+     "night_fog_off"
+    ]
+   }
+  },
+  {
+   "id": "X_NOISE",
+   "name": "every condition agrees with itself on the LUMA it actually measures",
+   "pass": true,
+   "detail": {
+    "worst_luma_spread": 0.0011,
+    "tolerance": 0.01,
+    "worst_readable_fraction_spread": 0.0092,
+    "note": "the fraction is a threshold statistic and is amplified near the crush point: the first run held every frame-luma spread under 0.0010 while one readable fraction moved 0.0107, and voided on that. Luma is what the instrument reads and what is gated here; the fraction spread is reported beside it so the amplification is visible rather than hidden"
+   }
+  },
+  {
+   "id": "X_CONTROL",
+   "name": "turning the moon off at 23:00 clearly darkens the ground -- the test can detect it",
+   "pass": true,
+   "detail": {
+    "night_base_readable": 0.4866,
+    "night_moon_off_readable": 0.1166,
+    "effect": 0.37,
+    "needs": 0.1,
+    "note": "at 23:00 the moon stands near 70 degrees and certainly lights the ground. If removing it changes nothing HERE, this instrument cannot see the moon's contribution anywhere, the dusk readings below are meaningless, and no conclusion may be drawn from them"
+   }
+  },
+  {
+   "id": "X_COSINE",
+   "name": "the moon's BRIGHTNESS does not reach the dusk ground -- my explanation, stated so that a FAIL kills it",
+   "pass": false,
+   "detail": {
+    "dusk_readable_moon_off": 0.0074,
+    "dusk_readable_moon_4x": 0.7851,
+    "dusk_span": 0.7777,
+    "night_span_for_scale": 0.6926,
+    "threshold": 0.1,
+    "note": "at 18:00 the moon sits at zero elevation and delivers cos(90) to level ground, so on my account making it four times brighter must do almost nothing. RED here means the moon does reach the dusk ground, the cosine explanation is WRONG, and I should stop repeating it"
+   }
+  },
+  {
+   "id": "X_FOG",
+   "name": "turning the fog off at dusk changes the readable ground",
+   "pass": false,
+   "detail": {
+    "dusk_base_readable": 0.0568,
+    "dusk_fog_off_readable": 0.0622,
+    "effect": 0.0054,
+    "night_fog_effect": 0.0036,
+    "threshold": 0.1,
+    "note": "the atmosphere account. The fog density term peaks at exactly elevation zero, which is 18:00, so if the air is what is eating the ground this is where it shows. GREEN here supports atmosphere; it does not by itself refute geometry, since both can be true"
+   }
+  },
+  {
+   "id": "X_LEAD",
+   "name": "raising the moon at dusk changes the readable ground",
+   "pass": false,
+   "detail": {
+    "dusk_base_readable": 0.0568,
+    "dusk_moon_up_readable": 0.0577,
+    "effect": 0.0009,
+    "lead_hours": 1.5,
+    "threshold": 0.1,
+    "note": "the geometry account's positive prediction: the same moon at the same brightness, 18.6 degrees higher, should light ground it could not reach flat on the horizon"
+   }
+  }
+ ],
+ "knobs_as_found": {
+  "MoonGain": 0.05,
+  "MoonLeadHours": 0.0,
+  "Fog": 1.0,
+  "PracticalRadius": 12000.0,
+  "PracticalCount": 48.0
+ },
+ "vantage": {
+  "asked": [
+   -64.0,
+   -5042.0
+  ],
+  "landed": [
+   -64.0,
+   -5042.0,
+   94.3
+  ],
+  "offset_uu": 0.0,
+  "ground_trace_z": 0.7,
+  "forward_hit": null,
+  "down_hit": {
+   "dist": 993.6,
+   "z": 0.7
+  },
+  "ground_patch_hit": {
+   "dist": 997.1,
+   "z": -2.9
+  },
+  "ground_rect_screen": [
+   0.5,
+   0.78,
+   0.3,
+   0.16
+  ]
+ },
+ "conditions": {
+  "dusk_base": {
+   "hour": 18.0,
+   "held": {
+    "MoonGain": 0.05,
+    "MoonLeadHours": 0.0,
+    "Fog": 1.0
+   },
+   "asked": {
+    "MoonGain": null,
+    "MoonLeadHours": 0.0,
+    "Fog": 1
+   },
+   "luma": 0.1144,
+   "spread": 0.0002,
+   "ground_luma": 0.0902,
+   "ground_crushed": 0.9427,
+   "ground_readable": 0.0568,
+   "ground_luma_spread": 0.0003,
+   "ground_readable_spread": 0.0005
+  },
+  "dusk_moon_off": {
+   "hour": 18.0,
+   "held": {
+    "MoonGain": 0.0,
+    "MoonLeadHours": 0.0,
+    "Fog": 1.0
+   },
+   "asked": {
+    "MoonGain": 0.0,
+    "MoonLeadHours": 0.0,
+    "Fog": 1
+   },
+   "luma": 0.072,
+   "spread": 0.0002,
+   "ground_luma": 0.0523,
+   "ground_crushed": 0.9921,
+   "ground_readable": 0.0074,
+   "ground_luma_spread": 0.0002,
+   "ground_readable_spread": 0.0
+  },
+  "dusk_moon_4x": {
+   "hour": 18.0,
+   "held": {
+    "MoonGain": 0.2,
+    "MoonLeadHours": 0.0,
+    "Fog": 1.0
+   },
+   "asked": {
+    "MoonGain": 0.2,
+    "MoonLeadHours": 0.0,
+    "Fog": 1
+   },
+   "luma": 0.1993,
+   "spread": 0.0002,
+   "ground_luma": 0.1703,
+   "ground_crushed": 0.2145,
+   "ground_readable": 0.7851,
+   "ground_luma_spread": 0.0004,
+   "ground_readable_spread": 0.0007
+  },
+  "dusk_fog_off": {
+   "hour": 18.0,
+   "held": {
+    "MoonGain": 0.05,
+    "MoonLeadHours": 0.0,
+    "Fog": 0.0
+   },
+   "asked": {
+    "MoonGain": null,
+    "MoonLeadHours": 0.0,
+    "Fog": 0
+   },
+   "luma": 0.1164,
+   "spread": 0.0,
+   "ground_luma": 0.0922,
+   "ground_crushed": 0.9373,
+   "ground_readable": 0.0622,
+   "ground_luma_spread": 0.0,
+   "ground_readable_spread": 0.0012
+  },
+  "dusk_moon_up": {
+   "hour": 18.0,
+   "held": {
+    "MoonGain": 0.05,
+    "MoonLeadHours": 1.5,
+    "Fog": 1.0
+   },
+   "asked": {
+    "MoonGain": null,
+    "MoonLeadHours": 1.5,
+    "Fog": 1
+   },
+   "luma": 0.1075,
+   "spread": 0.0003,
+   "ground_luma": 0.0905,
+   "ground_crushed": 0.9418,
+   "ground_readable": 0.0577,
+   "ground_luma_spread": 0.0003,
+   "ground_readable_spread": 0.0011
+  },
+  "night_base": {
+   "hour": 23.0,
+   "held": {
+    "MoonGain": 0.05,
+    "MoonLeadHours": 0.0,
+    "Fog": 1.0
+   },
+   "asked": {
+    "MoonGain": null,
+    "MoonLeadHours": 0.0,
+    "Fog": 1
+   },
+   "luma": 0.1709,
+   "spread": 0.0002,
+   "ground_luma": 0.1467,
+   "ground_crushed": 0.5129,
+   "ground_readable": 0.4866,
+   "ground_luma_spread": 0.0001,
+   "ground_readable_spread": 0.0008
+  },
+  "night_moon_off": {
+   "hour": 23.0,
+   "held": {
+    "MoonGain": 0.0,
+    "MoonLeadHours": 0.0,
+    "Fog": 1.0
+   },
+   "asked": {
+    "MoonGain": 0.0,
+    "MoonLeadHours": 0.0,
+    "Fog": 1
+   },
+   "luma": 0.1111,
+   "spread": 0.0002,
+   "ground_luma": 0.0979,
+   "ground_crushed": 0.8829,
+   "ground_readable": 0.1166,
+   "ground_luma_spread": 0.0002,
+   "ground_readable_spread": 0.0011
+  },
+  "night_moon_4x": {
+   "hour": 23.0,
+   "held": {
+    "MoonGain": 0.2,
+    "MoonLeadHours": 0.0,
+    "Fog": 1.0
+   },
+   "asked": {
+    "MoonGain": 0.2,
+    "MoonLeadHours": 0.0,
+    "Fog": 1
+   },
+   "luma": 0.266,
+   "spread": 0.0002,
+   "ground_luma": 0.2307,
+   "ground_crushed": 0.1903,
+   "ground_readable": 0.8092,
+   "ground_luma_spread": 0.0003,
+   "ground_readable_spread": 0.001
+  },
+  "night_fog_off": {
+   "hour": 23.0,
+   "held": {
+    "MoonGain": 0.05,
+    "MoonLeadHours": 0.0,
+    "Fog": 0.0
+   },
+   "asked": {
+    "MoonGain": null,
+    "MoonLeadHours": 0.0,
+    "Fog": 0
+   },
+   "luma": 0.1711,
+   "spread": 0.0011,
+   "ground_luma": 0.1469,
+   "ground_crushed": 0.5093,
+   "ground_readable": 0.4902,
+   "ground_luma_spread": 0.001,
+   "ground_readable_spread": 0.0092
+  }
+ },
+ "verdict": {
+  "moon_brightness_reaches_dusk_ground": true,
+  "fog_removal_changes_dusk_ground": false,
+  "raising_the_moon_changes_dusk_ground": false,
+  "moon_brightness_reaches_night_ground": true,
+  "effects": {
+   "dusk_moon_span": 0.7777,
+   "dusk_fog_off": 0.0054,
+   "dusk_moon_up": 0.0009,
+   "night_moon_span": 0.6926,
+   "night_moon_off_control": 0.37
+  },
+  "readable": {
+   "dusk_base": 0.0568,
+   "dusk_fog_off": 0.0622,
+   "dusk_moon_4x": 0.7851,
+   "dusk_moon_off": 0.0074,
+   "dusk_moon_up": 0.0577,
+   "night_base": 0.4866,
+   "night_fog_off": 0.4902,
+   "night_moon_4x": 0.8092,
+   "night_moon_off": 0.1166
+  },
+  "crushed": {
+   "dusk_base": 0.9427,
+   "dusk_fog_off": 0.9373,
+   "dusk_moon_4x": 0.2145,
+   "dusk_moon_off": 0.9921,
+   "dusk_moon_up": 0.9418,
+   "night_base": 0.5129,
+   "night_fog_off": 0.5093,
+   "night_moon_4x": 0.1903,
+   "night_moon_off": 0.8829
+  }
+ },
+ "finished": "2026-09-27 18:08:19",
+ "seconds": 74.69,
+ "log": "X_LEADKNOB PASS wl.Sky.MoonLeadHours exists in this build and takes a value {'asked': 1.5, 'read_back': 1.5, 'as_found': 0.0, 'note': \"a build without it accepts the command, logs 'not recognized' and carries on, and the moon_up rung would be an identical copy of the baseline reported as 'raising the moon does nothing' -- the exact false negative that would confirm the atmosphere story\"}\nX_VALID PASS the observation point is a real standing position with ground under the patch {'vantage': {'asked': [-64.0, -5042.0], 'landed': [-64.0, -5042.0, 94.3], 'offset_uu': 0.0, 'ground_trace_z': 0.7, 'forward_hit': None, 'down_hit': {'dist': 993.6, 'z': 0.7}, 'ground_patch_hit': {'dist': 997.1, 'z': -2.9}, 'ground_rect_screen': [0.5, 0.78, 0.3, 0.16]}, 'note': 'the same five checks the region ladder uses: arrived, not embedded in geometry, floor beneath the camera, and something solid under the rectangle being measured'}\nX_MEASURED PASS every condition produced a reading {'measured': ['dusk_base', 'dusk_fog_off', 'dusk_moon_4x', 'dusk_moon_off', 'dusk_moon_up', 'night_base', 'night_fog_off', 'night_moon_4x', 'night_moon_off'], 'wanted': ['dusk_base', 'dusk_moon_off', 'dusk_moon_4x', 'dusk_fog_off', 'dusk_moon_up', 'night_base', 'night_moon_off', 'night_moon_4x', 'night_fog_off']}\nX_NOISE PASS every condition agrees with itself on the LUMA it actually measures {'worst_luma_spread': 0.0011, 'tolerance': 0.01, 'worst_readable_fraction_spread': 0.0092, 'note': 'the fraction is a threshold statistic and is amplified near the crush point: the first run held every frame-luma spread under 0.0010 while one readable fraction moved 0.0107, and voided on that. Luma is what the instrument reads and what is gated here; the fraction spread is reported beside it so the amplification is visible rather than hidden'}\nX_CONTROL PASS turning the moon off at 23:00 clearly darkens the ground -- the test can detect it {'night_base_readable': 0.4866, 'night_moon_off_readable': 0.1166, 'effect': 0.37, 'needs': 0.1, 'note': \"at 23:00 the moon stands near 70 degrees and certainly lights the ground. If removing it changes nothing HERE, this instrument cannot see the moon's contribution anywhere, the dusk readings below are meaningless, and no conclusion may be drawn from them\"}\nX_COSINE FAIL the moon's BRIGHTNESS does not reach the dusk ground -- my explanation, stated so that a FAIL kills it {'dusk_readable_moon_off': 0.0074, 'dusk_readable_moon_4x': 0.7851, 'dusk_span': 0.7777, 'night_span_for_scale': 0.6926, 'threshold': 0.1, 'note': 'at 18:00 the moon sits at zero elevation and delivers cos(90) to level ground, so on my account making it four times brighter must do almost nothing. RED here means the moon does reach the dusk ground, the cosine explanation is WRONG, and I should stop repeating it'}\nX_FOG FAIL turning the fog off at dusk changes the readable ground {'dusk_base_readable': 0.0568, 'dusk_fog_off_readable': 0.0622, 'effect': 0.0054, 'night_fog_effect': 0.0036, 'threshold': 0.1, 'note': 'the atmosphere account. The fog density term peaks at exactly elevation zero, which is 18:00, so if the air is what is eating the ground this is where it shows. GREEN here supports atmosphere; it does not by itself refute geometry, since both can be true'}\nX_LEAD FAIL raising the moon at dusk changes the readable ground {'dusk_base_readable': 0.0568, 'dusk_moon_up_readable': 0.0577, 'effect': 0.0009, 'lead_hours': 1.5, 'threshold': 0.1, 'note': \"the geometry account's positive prediction: the same moon at the same brightness, 18.6 degrees higher, should light ground it could not reach flat on the horizon\"}\n"
+}

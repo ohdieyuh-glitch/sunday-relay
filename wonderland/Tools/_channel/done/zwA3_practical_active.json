@@ -1,0 +1,420 @@
+{
+ "name": "zwA3_practical_active",
+ "started": "2026-09-27 19:28:04",
+ "status": "measured",
+ "tests": [
+  {
+   "id": "P_READ",
+   "name": "the engine's own practical report is readable, so active count is not inferred",
+   "pass": true,
+   "detail": {
+    "describe_practicals": {
+     "defined": 1464.0,
+     "active": 31.0,
+     "pool": 96.0,
+     "night": 0.0,
+     "gain": 1.0,
+     "count": 96.0,
+     "radius": 12000.0,
+     "file": "../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json",
+     "problem": ""
+    },
+    "note": "reads H.describe_practical_lights, added at 71114aab, because UE 5.8 Python has no world-subsystem getter at all -- enumerated, after BlueprintType was diagnosed as the cause and was not. Red here means the build predates that accessor, and the run voids rather than falling back to counting actors and inferring a radius again"
+   }
+  },
+  {
+   "id": "P_WHERE",
+   "name": "the pawn is at the densest spot, which is what selects the candidate set",
+   "pass": true,
+   "detail": {
+    "asked": [
+     -65943.0,
+     -38753.0
+    ],
+    "landed": [
+     -65953.5,
+     -38751.5,
+     131.0
+    ],
+    "offset_uu": 10.6,
+    "note": "Assign() takes its Eye from the PAWN. Measured anywhere else this is a different question"
+   }
+  },
+  {
+   "id": "P_RUNGS",
+   "name": "every rung produced an authoritative active count",
+   "pass": true,
+   "detail": {
+    "measured": 5,
+    "wanted": 5
+   }
+  },
+  {
+   "id": "P_STILL",
+   "name": "the pawn is at the measurement spot at EVERY rung, not just when it was placed",
+   "pass": false,
+   "detail": {
+    "drifted_rungs": [
+     {
+      "count": 96,
+      "radius": null,
+      "pawn": [
+       0.0,
+       -1460.0,
+       100.0
+      ],
+      "drift_uu": 75757.8
+     },
+     {
+      "count": 192,
+      "radius": 6000.0,
+      "pawn": [
+       0.0,
+       -1460.0,
+       100.0
+      ],
+      "drift_uu": 75757.8
+     }
+    ],
+    "pawn_by_rung": {
+     "c48_rNone": [
+      -65953.5,
+      -38751.5,
+      75.2
+     ],
+     "c96_rNone": [
+      0.0,
+      -1460.0,
+      100.0
+     ],
+     "c192_rNone": [
+      -65960.2,
+      -38755.2,
+      75.2
+     ],
+     "c192_r6000.0": [
+      0.0,
+      -1460.0,
+      100.0
+     ],
+     "c192_r24000.0": [
+      -65943.0,
+      -38753.0,
+      132.0
+     ]
+    },
+    "in_radius_where_it_is": {
+     "c48_rNone": 184,
+     "c96_rNone": 31,
+     "c192_rNone": 184,
+     "c192_r6000.0": 8,
+     "c192_r24000.0": 286
+    },
+    "note": "placed once before the loop and never checked again. Active read 31 at count 48 and at count 192 with 184 candidates in radius, where Lit = Min(Near, Pool) wants 48 and 184 -- and the only input to Assign other than the two knobs is the Eye, which is this"
+   }
+  },
+  {
+   "id": "P_CONVERGED",
+   "name": "the active count is unchanged across an independent wait at every rung",
+   "pass": true,
+   "detail": {
+    "still_moving": [],
+    "actives": {
+     "c48_rNone": 48,
+     "c96_rNone": 31,
+     "c192_rNone": 184,
+     "c192_r6000.0": 8,
+     "c192_r24000.0": 192
+    },
+    "note": "five equal reads is a plateau test and a plateau passes it: the previous run held 127 three times and then reported 192. Only a wait that does nothing else separates a pause from an arrival, and a rung that has not arrived cannot be compared with a budget"
+   }
+  },
+  {
+   "id": "P_AGREE",
+   "name": "counting the actors agrees with the engine's own active count",
+   "pass": false,
+   "detail": {
+    "disagreements": [
+     {
+      "count": 192,
+      "engine_active": 8,
+      "actors_visible": 111
+     }
+    ],
+    "note": "INFORMATIONAL about the OLD instrument. Red means actor counting was never a reliable stand-in for ActiveCount, which would explain the 31s that started the radius theory. The numbers reported by this job are the engine's either way"
+   }
+  },
+  {
+   "id": "P_CLIPS",
+   "name": "the pool clips at the shipped budget -- the cap, not the radius, is what limits it",
+   "pass": true,
+   "detail": {
+    "per_rung": [
+     {
+      "count_asked": 48,
+      "radius_held": 12000.0,
+      "pool": 48,
+      "active": 48,
+      "in_radius": 184,
+      "cap_is_binding": true,
+      "more_were_available": true,
+      "clips": true
+     },
+     {
+      "count_asked": 96,
+      "radius_held": 12000.0,
+      "pool": 96,
+      "active": 31,
+      "in_radius": 184,
+      "cap_is_binding": false,
+      "more_were_available": true,
+      "clips": false
+     },
+     {
+      "count_asked": 192,
+      "radius_held": 12000.0,
+      "pool": 192,
+      "active": 184,
+      "in_radius": 184,
+      "cap_is_binding": false,
+      "more_were_available": false,
+      "clips": false
+     },
+     {
+      "count_asked": 192,
+      "radius_held": 6000.0,
+      "pool": 192,
+      "active": 8,
+      "in_radius": 81,
+      "cap_is_binding": false,
+      "more_were_available": false,
+      "clips": false
+     },
+     {
+      "count_asked": 192,
+      "radius_held": 24000.0,
+      "pool": 192,
+      "active": 192,
+      "in_radius": 286,
+      "cap_is_binding": true,
+      "more_were_available": true,
+      "clips": true
+     }
+    ],
+    "clipping_rungs": [
+     48,
+     192
+    ],
+    "note": "clips means active == pool AND more manifest lights lie inside the radius the engine reports. Active BELOW pool means the radius ran out of candidates first and the budget is not the constraint. This gate is the claim itself: green proves clipping at 48, red disproves it, and either way it is measured rather than argued"
+   }
+  }
+ ],
+ "knobs_as_found": {
+  "count": 96.0,
+  "radius": 12000.0,
+  "gain": 1.0
+ },
+ "defined_in_manifest": 1464.0,
+ "pawn_landed": [
+  -65953.5,
+  -38751.5,
+  131.0
+ ],
+ "rungs": [
+  {
+   "count_asked": 48,
+   "radius_asked": null,
+   "held": {
+    "count": 48.0,
+    "radius": 12000.0,
+    "gain": 1.0
+   },
+   "active_first": 48,
+   "active_after_wait": 48,
+   "converged": true,
+   "pool": 48.0,
+   "defined": 1464.0,
+   "actors_total": 48,
+   "actors_lit": 48,
+   "manifest_in_radius": 184,
+   "pawn_at_rung": [
+    -65953.5,
+    -38751.5,
+    75.2
+   ],
+   "pawn_drift_uu": 10.6,
+   "manifest_in_radius_where_pawn_is": 184,
+   "luma": 0.1711,
+   "spread": 0.0006,
+   "ground_readable": 0.7817,
+   "ground_crushed": 0.1718
+  },
+  {
+   "count_asked": 96,
+   "radius_asked": null,
+   "held": {
+    "count": 96.0,
+    "radius": 12000.0,
+    "gain": 1.0
+   },
+   "active_first": 31,
+   "active_after_wait": 31,
+   "converged": true,
+   "pool": 96.0,
+   "defined": 1464.0,
+   "actors_total": 96,
+   "actors_lit": 31,
+   "manifest_in_radius": 184,
+   "pawn_at_rung": [
+    0.0,
+    -1460.0,
+    100.0
+   ],
+   "pawn_drift_uu": 75757.8,
+   "manifest_in_radius_where_pawn_is": 31,
+   "luma": 0.1471,
+   "spread": 0.0476,
+   "ground_readable": 0.7473,
+   "ground_crushed": 0.2415
+  },
+  {
+   "count_asked": 192,
+   "radius_asked": null,
+   "held": {
+    "count": 192.0,
+    "radius": 12000.0,
+    "gain": 1.0
+   },
+   "active_first": 184,
+   "active_after_wait": 184,
+   "converged": true,
+   "pool": 192.0,
+   "defined": 1464.0,
+   "actors_total": 192,
+   "actors_lit": 184,
+   "manifest_in_radius": 184,
+   "pawn_at_rung": [
+    -65960.2,
+    -38755.2,
+    75.2
+   ],
+   "pawn_drift_uu": 17.3,
+   "manifest_in_radius_where_pawn_is": 184,
+   "luma": 0.1719,
+   "spread": 0.0015,
+   "ground_readable": 0.7883,
+   "ground_crushed": 0.1677
+  },
+  {
+   "count_asked": 192,
+   "radius_asked": 6000.0,
+   "held": {
+    "count": 192.0,
+    "radius": 6000.0,
+    "gain": 1.0
+   },
+   "active_first": 8,
+   "active_after_wait": 8,
+   "converged": true,
+   "pool": 192.0,
+   "defined": 1464.0,
+   "actors_total": 192,
+   "actors_lit": 111,
+   "manifest_in_radius": 81,
+   "pawn_at_rung": [
+    0.0,
+    -1460.0,
+    100.0
+   ],
+   "pawn_drift_uu": 75757.8,
+   "manifest_in_radius_where_pawn_is": 8,
+   "luma": 0.1568,
+   "spread": 0.0009,
+   "ground_readable": 0.7367,
+   "ground_crushed": 0.2628
+  },
+  {
+   "count_asked": 192,
+   "radius_asked": 24000.0,
+   "held": {
+    "count": 192.0,
+    "radius": 24000.0,
+    "gain": 1.0
+   },
+   "active_first": 192,
+   "active_after_wait": 192,
+   "converged": true,
+   "pool": 192.0,
+   "defined": 1464.0,
+   "actors_total": 192,
+   "actors_lit": 192,
+   "manifest_in_radius": 286,
+   "pawn_at_rung": [
+    -65943.0,
+    -38753.0,
+    132.0
+   ],
+   "pawn_drift_uu": 0.0,
+   "manifest_in_radius_where_pawn_is": 286,
+   "luma": 0.1375,
+   "spread": 0.0011,
+   "ground_readable": 0.9022,
+   "ground_crushed": 0.0972
+  }
+ ],
+ "clipping": [
+  {
+   "count_asked": 48,
+   "radius_held": 12000.0,
+   "pool": 48,
+   "active": 48,
+   "in_radius": 184,
+   "cap_is_binding": true,
+   "more_were_available": true,
+   "clips": true
+  },
+  {
+   "count_asked": 96,
+   "radius_held": 12000.0,
+   "pool": 96,
+   "active": 31,
+   "in_radius": 184,
+   "cap_is_binding": false,
+   "more_were_available": true,
+   "clips": false
+  },
+  {
+   "count_asked": 192,
+   "radius_held": 12000.0,
+   "pool": 192,
+   "active": 184,
+   "in_radius": 184,
+   "cap_is_binding": false,
+   "more_were_available": false,
+   "clips": false
+  },
+  {
+   "count_asked": 192,
+   "radius_held": 6000.0,
+   "pool": 192,
+   "active": 8,
+   "in_radius": 81,
+   "cap_is_binding": false,
+   "more_were_available": false,
+   "clips": false
+  },
+  {
+   "count_asked": 192,
+   "radius_held": 24000.0,
+   "pool": 192,
+   "active": 192,
+   "in_radius": 286,
+   "cap_is_binding": true,
+   "more_were_available": true,
+   "clips": true
+  }
+ ],
+ "finished": "2026-09-27 19:29:28",
+ "seconds": 84.11,
+ "log": "P_READ PASS the engine's own practical report is readable, so active count is not inferred {'describe_practicals': {'defined': 1464.0, 'active': 31.0, 'pool': 96.0, 'night': 0.0, 'gain': 1.0, 'count': 96.0, 'radius': 12000.0, 'file': '../../../../../../dev/iwonder/wonderland-task3/wonderland/WorldDesign/Look/practical_lights.json', 'problem': ''}, 'note': 'reads H.describe_practical_lights, added at 71114aab, because UE 5.8 Python has no world-subsystem getter at all -- enumerated, after BlueprintType was diagnosed as the cause and was not. Red here means the build predates that accessor, and the run voids rather than falling back to counting actors and inferring a radius again'}\nP_WHERE PASS the pawn is at the densest spot, which is what selects the candidate set {'asked': [-65943.0, -38753.0], 'landed': [-65953.5, -38751.5, 131.0], 'offset_uu': 10.6, 'note': 'Assign() takes its Eye from the PAWN. Measured anywhere else this is a different question'}\nP_RUNGS PASS every rung produced an authoritative active count {'measured': 5, 'wanted': 5}\nP_STILL FAIL the pawn is at the measurement spot at EVERY rung, not just when it was placed {'drifted_rungs': [{'count': 96, 'radius': None, 'pawn': [0.0, -1460.0, 100.0], 'drift_uu': 75757.8}, {'count': 192, 'radius': 6000.0, 'pawn': [0.0, -1460.0, 100.0], 'drift_uu': 75757.8}], 'pawn_by_rung': {'c48_rNone': [-65953.5, -38751.5, 75.2], 'c96_rNone': [0.0, -1460.0, 100.0], 'c192_rNone': [-65960.2, -38755.2, 75.2], 'c192_r6000.0': [0.0, -1460.0, 100.0], 'c192_r24000.0': [-65943.0, -38753.0, 132.0]}, 'in_radius_where_it_is': {'c48_rNone': 184, 'c96_rNone': 31, 'c192_rNone': 184, 'c192_r6000.0': 8, 'c192_r24000.0': 286}, 'note': 'placed once before the loop and never checked again. Active read 31 at count 48 and at count 192 with 184 candidates in radius, where Lit = Min(Near, Pool) wants 48 and 184 -- and the only input to Assign other than the two knobs is the Eye, which is this'}\nP_CONVERGED PASS the active count is unchanged across an independent wait at every rung {'still_moving': [], 'actives': {'c48_rNone': 48, 'c96_rNone': 31, 'c192_rNone': 184, 'c192_r6000.0': 8, 'c192_r24000.0': 192}, 'note': 'five equal reads is a plateau test and a plateau passes it: the previous run held 127 three times and then reported 192. Only a wait that does nothing else separates a pause from an arrival, and a rung that has not arrived cannot be compared with a budget'}\nP_AGREE FAIL counting the actors agrees with the engine's own active count {'disagreements': [{'count': 192, 'engine_active': 8, 'actors_visible': 111}], 'note': \"INFORMATIONAL about the OLD instrument. Red means actor counting was never a reliable stand-in for ActiveCount, which would explain the 31s that started the radius theory. The numbers reported by this job are the engine's either way\"}\nP_CLIPS PASS the pool clips at the shipped budget -- the cap, not the radius, is what limits it {'per_rung': [{'count_asked': 48, 'radius_held': 12000.0, 'pool': 48, 'active': 48, 'in_radius': 184, 'cap_is_binding': True, 'more_were_available': True, 'clips': True}, {'count_asked': 96, 'radius_held': 12000.0, 'pool': 96, 'active': 31, 'in_radius': 184, 'cap_is_binding': False, 'more_were_available': True, 'clips': False}, {'count_asked': 192, 'radius_held': 12000.0, 'pool': 192, 'active': 184, 'in_radius': 184, 'cap_is_binding': False, 'more_were_available': False, 'clips': False}, {'count_asked': 192, 'radius_held': 6000.0, 'pool': 192, 'active': 8, 'in_radius': 81, 'cap_is_binding': False, 'more_were_available': False, 'clips': False}, {'count_asked': 192, 'radius_held': 24000.0, 'pool': 192, 'active': 192, 'in_radius': 286, 'cap_is_binding': True, 'more_were_available': True, 'clips': True}], 'clipping_rungs': [48, 192], 'note': 'clips means active == pool AND more manifest lights lie inside the radius the engine reports. Active BELOW pool means the radius ran out of candidates first and the budget is not the constraint. This gate is the claim itself: green proves clipping at 48, red disproves it, and either way it is measured rather than argued'}\n"
+}
