@@ -164,8 +164,10 @@ let playerToken = null;
 
 /** Mint a pairing code as the signed-in player, renewing their session if it expired while the job waited. */
 async function mintCode() {
+  // A code is bound to one project (founder decision 2): the one the job follows.
   const ask = () => call('POST', '/relay-api/wonderland/native/pair', {
     headers: { Authorization: `Relay-Session ${playerToken}`, Origin: SITE },
+    body: JSON.stringify({ projectId: CONTRACT.projectId }),
   });
   let res = await ask();
   if (res.status === 401) {

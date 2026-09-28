@@ -20,6 +20,22 @@ continue from here alone.
 
 ---
 
+## 2026-09-27 — the founder's five Wonderland ↔ Julius decisions, as built
+
+The header table above is the 2026-09-10 cloud session. This section is the
+laptop session that followed it: branch `relay/wonderland-julius-integration`
+in worktree `C:\dev\iwonder\wonderland-julius-integration`, local only.
+
+| decision | state |
+|---|---|
+| 1. Packaged Development build; the bridge address is configuration, never hard-coded localhost | **not built.** The parked `relay/wonderland-julius-packaged` (63aeac79, `UWonderlandJuliusLinkSettings` with `BridgeUrl` in `DefaultGame.ini`) must be moved onto the current tip and compiled. |
+| 2. Pairing code 5 min, single use, bound to player + project; native session 8 h, renewable by re-pairing, revocable, project-scoped | **built and proven over the wire.** `browser-session/grants.ts` (`NATIVE_PAIRING_TTL_MS`, `NATIVE_SESSION_TTL_MS`, `projectId` on grant and session), `wonderland-native-pairing-routes.ts` (`/pair` needs a `projectId` the player is a MEMBER of: 400 `project_required`, 403 `not_a_project_member`, 503 with no membership source), `wonderland-julius-routes.ts` (a native session is refused for any other project, before membership). Drill clauses N03, N03b, N04, N11, N12; unit suite `wonderland-native-pairing-routes.test.ts`; `mission-ownership.test.ts` proof 33b shows the one credential carrying a project reaches no mission route. Browser lifetimes are unchanged (2 min grant, 30 min session). |
+| 3. Friendly state AND Julius's raw state; BLOCKED ≠ Paused, WAITING ≠ Running, CANCELLED ≠ Failed; no UNOBSERVED headline over a followed run | **committed, not yet compiled** (c54e1205): `WonderlandTaskStateDisplayLabel`, `GetHeadlineLabel`/`GetHeadlineState`; acceptance clause A06f. |
+| 4. Only OWNER / authorised ADMIN causes paid execution; an operator-controlled Project Execution Profile holds every execution-sensitive value | **not built.** |
+| 5. The world shows a USER RESULT — never reasoning, secrets, credentials or needless host paths; cost to OWNER/ADMIN only; UNKNOWN tokens stay UNKNOWN | **not built.** |
+
+---
+
 ## The three development lines, as they actually stand
 
 | line | branch | relationship to this work |

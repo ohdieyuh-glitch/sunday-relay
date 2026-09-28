@@ -683,7 +683,7 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
         // the whole prefix. A signed-in player pairs their own desktop client
         // here; see wonderland-native-pairing-routes.ts.
         if (isNativePairingRoute(path.replace('/relay-api', ''))) {
-          const nativeResult = handleNativePairingRoute({
+          const nativeResult = await handleNativePairingRoute({
             method,
             path: path.replace('/relay-api', ''),
             authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
@@ -691,7 +691,11 @@ const headerValue = (value: string | string[] | undefined): string | undefined =
             body: method === 'POST' ? await readBody(req) : undefined,
             now: Date.now(),
             operatorToken: process.env.RELAY_BRIDGE_API_TOKEN,
-          }, browserSessions);
+          }, {
+            store: browserSessions,
+            // The world routes' OWN membership source: a code is minted only for a project its player belongs to.
+            membership: (await resolveJuliusWorld())?.membership ?? null,
+          });
           if (nativeResult !== null) send(res, nativeResult.status, nativeResult.body, cors);
           return;
         }
