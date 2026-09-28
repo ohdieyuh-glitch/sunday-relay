@@ -3901,8 +3901,49 @@ namespace WonderlandLiveJuliusDetail
 	}
 }
 
+void UWonderlandUiSubsystem::ShowCreationAnswer()
+{
+	const ULocalPlayer* CreatorPlayer = GetLocalPlayer<ULocalPlayer>();
+	const UGameInstance* CreatorInstance = CreatorPlayer != nullptr ? CreatorPlayer->GetGameInstance() : nullptr;
+	const UWonderlandJuliusStreamSubsystem* Stream = CreatorInstance != nullptr
+		? CreatorInstance->GetSubsystem<UWonderlandJuliusStreamSubsystem>() : nullptr;
+	if (Stream == nullptr || Stream->GetCreationGeneration() == LiveJuliusCreationShown)
+	{
+		return;
+	}
+	const FString CreatedRun = Stream->GetLastCreatedRunId();
+	if (!CreatedRun.IsEmpty())
+	{
+		// A CREATED MISSION is told once the terminal FOLLOWS it: the takeover for a new run clears what the terminal
+		// held, so a row written before it would be wiped. Until then it waits -- and if the world never follows the
+		// run, no "Created" row claims it did.
+		if (!bLiveJuliusShown || LiveJuliusRun != CreatedRun || !Terminal.IsValid())
+		{
+			return;
+		}
+		Terminal->AddJuliusRow(TEXT("Create"), FString::Printf(TEXT("Created %s from this world"), *Stream->GetLastCreatedMissionId()),
+			FString::Printf(TEXT("run %s · READY in Julius and not dispatched"), *CreatedRun));
+	}
+	else
+	{
+		// A REFUSAL is told at once, whatever is being followed -- and it is only a row: no task, no run, no QUEUED.
+		// The world goes on showing what it was showing.
+		EnsureLiveTerminal();
+		if (!Terminal.IsValid())
+		{
+			return;
+		}
+		const FString Kind = Stream->GetLastCreationRefusal();
+		Terminal->AddJuliusRow(TEXT("Create"), FString::Printf(TEXT("Not created · %s"), *Kind),
+			WonderlandJuliusStreamLogic::CreationRefusalSentence(Kind));
+	}
+	LiveJuliusCreationShown = Stream->GetCreationGeneration();
+}
+
 bool UWonderlandUiSubsystem::TickLiveJulius(float DeltaSeconds)
 {
+	// A creation answer is shown whether or not a run is followed -- a refusal must never leave the world silent.
+	ShowCreationAnswer();
 	const UWonderlandMissionSubsystem* Mission = Missions();
 	// NOTHING REAL IS FOLLOWED, or a fixture is playing -- IsFollowingRealRun is false for both, since a fixture is a
 	// simulation and the terminal is its to narrate. The live line comes down either way, so the banner can never name
@@ -4015,6 +4056,8 @@ bool UWonderlandUiSubsystem::TickLiveJulius(float DeltaSeconds)
 	}
 	// The same sentence the strip and the Missions panel print, so the three surfaces cannot disagree.
 	Terminal->SetLiveProvenance(Mission->GetProvenanceBanner());
+	// A mission this world created is told here, after the takeover that follows it.
+	ShowCreationAnswer();
 	return true;
 }
 
@@ -5292,6 +5335,11 @@ FString UWonderlandUiSubsystem::GetJuliusLatestHeadline() const
 FString UWonderlandUiSubsystem::GetJuliusTerminalBanner() const
 {
 	return Terminal.IsValid() ? Terminal->GetBannerText() : FString();
+}
+
+float UWonderlandUiSubsystem::GetJuliusTerminalExtension() const
+{
+	return Terminal.IsValid() ? Terminal->GetExtension() : 0.0f;
 }
 
 FString UWonderlandUiSubsystem::GetCompanionTerminalStatus(int32 Index) const

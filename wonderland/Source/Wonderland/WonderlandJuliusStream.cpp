@@ -26,8 +26,8 @@ DEFINE_LOG_CATEGORY_STATIC(LogWonderlandJuliusStream, Log, All);
 namespace WonderlandJuliusStreamTuning
 {
 	TAutoConsoleVariable<FString> CVarBridgeUrl(TEXT("wl.Julius.Bridge.Url"), TEXT(""),
-		TEXT("Julius stream: the Relay bridge this world follows a run on, e.g. http://127.0.0.1:8796. Empty means the "
-			"world follows nothing and says so."));
+		TEXT("Julius stream: the Relay bridge this world follows a run on, e.g. http://127.0.0.1:8796. Overrides the "
+			"project's Wonderland Julius Link setting; when both are empty the world follows nothing and says so."));
 	TAutoConsoleVariable<float> CVarPollSeconds(TEXT("wl.Julius.Stream.PollSeconds"), 1.0f,
 		TEXT("Julius stream: seconds between page reads while following a run."));
 	TAutoConsoleVariable<float> CVarUnpairedSeconds(TEXT("wl.Julius.Stream.UnpairedSeconds"), 2.0f,
@@ -113,6 +113,60 @@ namespace WonderlandJuliusStreamLogic
 			}
 			return *Data;
 		}
+	}
+
+	FString ResolveBridgeUrl(const FString& CvarValue, const FString& SettingValue, FString& OutProblem)
+	{
+		OutProblem.Reset();
+		// The cvar is a developer's override; a packaged build has no console and reads the project setting.
+		FString Url = CvarValue.TrimStartAndEnd();
+		if (Url.IsEmpty())
+		{
+			Url = SettingValue.TrimStartAndEnd();
+		}
+		while (Url.EndsWith(TEXT("/")))
+		{
+			Url.LeftChopInline(1);
+		}
+		if (Url.IsEmpty())
+		{
+			return FString();
+		}
+		if (Url.StartsWith(TEXT("https://"), ESearchCase::IgnoreCase) && Url.Len() > 8)
+		{
+			return Url;
+		}
+		if (Url.StartsWith(TEXT("http://"), ESearchCase::IgnoreCase))
+		{
+			// THE HOST, up to a port or a path. "[::1]" keeps its brackets.
+			const FString Rest = Url.Mid(7);
+			FString Host = Rest;
+			int32 Cut = INDEX_NONE;
+			if (Rest.StartsWith(TEXT("[")))
+			{
+				Cut = Rest.Find(TEXT("]"));
+				Host = Cut == INDEX_NONE ? Rest : Rest.Left(Cut + 1);
+			}
+			else
+			{
+				for (int32 Index = 0; Index < Rest.Len(); ++Index)
+				{
+					if (Rest[Index] == TEXT(':') || Rest[Index] == TEXT('/'))
+					{
+						Host = Rest.Left(Index);
+						break;
+					}
+				}
+			}
+			if (Host.Equals(TEXT("127.0.0.1")) || Host.Equals(TEXT("localhost"), ESearchCase::IgnoreCase) || Host.Equals(TEXT("[::1]")))
+			{
+				return Url;
+			}
+			OutProblem = FString::Printf(TEXT("Refusing %s: plain http to a bridge off this machine would send this client's session in the clear. Use https."), *Url);
+			return FString();
+		}
+		OutProblem = FString::Printf(TEXT("Refusing %s: a bridge is an http(s) URL."), *Url);
+		return FString();
 	}
 
 	bool UnwrapData(const FString& Body, FString& OutData)
@@ -236,6 +290,57 @@ namespace WonderlandJuliusStreamLogic
 		return true;
 	}
 
+	FString CreationRefusalSentence(const FString& Kind)
+	{
+		// The bridge's own kinds first, then the client's (refused before anything was sent).
+		if (Kind == TEXT("execution_not_configured"))
+		{
+			return TEXT("This project has no execution profile yet: an operator must set where its missions may run.");
+		}
+		if (Kind == TEXT("execution_disabled"))
+		{
+			return TEXT("An operator has switched off mission creation for this project.");
+		}
+		if (Kind == TEXT("not_authorized"))
+		{
+			return TEXT("Only the project's owner can create a mission.");
+		}
+		if (Kind == TEXT("session_invalid") || Kind == TEXT("not_paired"))
+		{
+			return TEXT("This desktop client is not paired, or its session has ended: pair again from the website.");
+		}
+		if (Kind == TEXT("not_paired_for_a_project"))
+		{
+			return TEXT("This desktop client's pairing names no project: pair it again for the project.");
+		}
+		if (Kind == TEXT("forbidden_field"))
+		{
+			return TEXT("The request carried a field only an operator may set.");
+		}
+		if (Kind == TEXT("malformed_mission") || Kind == TEXT("criteria_mismatch"))
+		{
+			return TEXT("The mission is incomplete: it needs an objective and at least one acceptance criterion.");
+		}
+		if (Kind == TEXT("idempotency_key_required"))
+		{
+			return TEXT("The request had no key of its own, so a retry could not be told from a second mission.");
+		}
+		if (Kind == TEXT("no_bridge"))
+		{
+			return TEXT("No bridge is configured for this build.");
+		}
+		if (Kind == TEXT("no_connection") || Kind == TEXT("unavailable") || Kind.StartsWith(TEXT("execution_profile_store"))
+			|| Kind.StartsWith(TEXT("mission_contract_store")) || Kind == TEXT("julius_state_unavailable"))
+		{
+			return TEXT("The bridge could not answer; nothing was created. Try again.");
+		}
+		if (Kind == TEXT("mission_run_already_active"))
+		{
+			return TEXT("That key already names a different mission that is still running.");
+		}
+		return FString::Printf(TEXT("The bridge refused it (%s)."), *Kind);
+	}
+
 	FString ResultHeadline(const FWonderlandJuliusResultReading& Result)
 	{
 		if (!Result.bKnown)
@@ -329,13 +434,17 @@ UWonderlandJuliusSubsystem* UWonderlandJuliusStreamSubsystem::World() const
 
 FString UWonderlandJuliusStreamSubsystem::BridgeUrl() const
 {
-	FString Url = WonderlandJuliusStreamTuning::CVarBridgeUrl.GetValueOnGameThread();
-	Url.TrimStartAndEndInline();
-	while (Url.EndsWith(TEXT("/")))
-	{
-		Url.LeftChopInline(1);
-	}
-	return Url;
+	FString Problem;
+	return WonderlandJuliusStreamLogic::ResolveBridgeUrl(WonderlandJuliusStreamTuning::CVarBridgeUrl.GetValueOnGameThread(),
+		GetDefault<UWonderlandJuliusLinkSettings>()->BridgeUrl, Problem);
+}
+
+FString UWonderlandJuliusStreamSubsystem::BridgeProblem() const
+{
+	FString Problem;
+	WonderlandJuliusStreamLogic::ResolveBridgeUrl(WonderlandJuliusStreamTuning::CVarBridgeUrl.GetValueOnGameThread(),
+		GetDefault<UWonderlandJuliusLinkSettings>()->BridgeUrl, Problem);
+	return Problem;
 }
 
 FString UWonderlandJuliusStreamSubsystem::RunQuery(int64 Cursor) const
@@ -386,7 +495,9 @@ void UWonderlandJuliusStreamSubsystem::Pair(const FString& Code)
 	const FString Base = BridgeUrl();
 	if (Base.IsEmpty())
 	{
-		UE_LOG(LogWonderlandJuliusStream, Warning, TEXT("JULIUS STREAM: set wl.Julius.Bridge.Url before pairing."));
+		const FString Problem = BridgeProblem();
+		UE_LOG(LogWonderlandJuliusStream, Warning, TEXT("JULIUS STREAM: no usable bridge -- %s"), Problem.IsEmpty()
+			? TEXT("set Project Settings > Wonderland Julius Link, or wl.Julius.Bridge.Url, before pairing.") : *Problem);
 		return;
 	}
 	const TSharedPtr<FJsonObject> Body = MakeShared<FJsonObject>();
@@ -421,7 +532,12 @@ void UWonderlandJuliusStreamSubsystem::Pair(const FString& Code)
 		TokenSource = Paired;
 		FString Participant;
 		Parsed->TryGetStringField(TEXT("participantId"), Participant);
-		UE_LOG(LogWonderlandJuliusStream, Display, TEXT("JULIUS STREAM: paired as %s."), *Participant);
+		// THE PROJECT THIS SESSION IS BOUND TO, as the bridge states it (founder decision 2). A mission is created in
+		// this project and no other; a session that names none cannot create at all.
+		PairedProjectId.Reset();
+		Parsed->TryGetStringField(TEXT("projectId"), PairedProjectId);
+		UE_LOG(LogWonderlandJuliusStream, Display, TEXT("JULIUS STREAM: paired as %s for %s."), *Participant,
+			PairedProjectId.IsEmpty() ? TEXT("no project") : *PairedProjectId);
 		// A new identity reads the run again from durable state rather than trusting what an old one saw.
 		if (Phase != EPhase::Idle)
 		{
@@ -486,7 +602,11 @@ bool UWonderlandJuliusStreamSubsystem::Tick(float DeltaSeconds)
 	}
 	if (BridgeUrl().IsEmpty())
 	{
-		SetLink(EWonderlandLinkState::NeverConnected, TEXT("No bridge is configured (wl.Julius.Bridge.Url)."));
+		// NOT CONFIGURED and CONFIGURED-BUT-REFUSED are different facts, and the link says which.
+		const FString Problem = BridgeProblem();
+		SetLink(EWonderlandLinkState::NeverConnected, Problem.IsEmpty()
+			? FString(TEXT("No bridge is configured (Project Settings > Wonderland Julius Link, or wl.Julius.Bridge.Url)."))
+			: Problem);
 		NextAttemptAt = FPlatformTime::Seconds() + WonderlandJuliusStreamTuning::CVarUnpairedSeconds.GetValueOnGameThread();
 		return true;
 	}
@@ -681,6 +801,135 @@ void UWonderlandJuliusStreamSubsystem::RequestResult(const FString& ReadFor)
 		ResultReadFor = ReadFor;
 		UE_LOG(LogWonderlandJuliusStream, Log, TEXT("JULIUS STREAM: result for %s -- %s"), *AskedRun,
 			*WonderlandJuliusStreamLogic::ResultHeadline(Result));
+	});
+	Request->ProcessRequest();
+}
+
+void UWonderlandJuliusStreamSubsystem::CreateMission(const FString& IdempotencyKey,
+	const FString& Objective, const TArray<FString>& Requirements, const TArray<FString>& Constraints,
+	const TArray<FString>& CriterionIds, const TArray<FString>& CriterionTexts, const TArray<bool>& CriterionBlocking)
+{
+	LastCreatedRunId.Reset();
+	LastCreatedMissionId.Reset();
+	LastCreationRefusal.Reset();
+	LastCreationStatus = 0;
+	// REFUSED HERE, BEFORE ANYTHING IS SENT, each for its own reason -- never collapsed into one "failed". A refusal
+	// here, like one from the bridge, creates nothing, follows nothing, and leaves the world on what it was showing.
+	const auto RefuseLocally = [this](const TCHAR* Kind)
+	{
+		LastCreationRefusal = Kind;
+		++CreationGeneration;
+		UE_LOG(LogWonderlandJuliusStream, Warning, TEXT("JULIUS STREAM: mission not created (%s; nothing was sent)."), Kind);
+	};
+	const FString Base = BridgeUrl();
+	if (Base.IsEmpty())
+	{
+		RefuseLocally(TEXT("no_bridge"));
+		return;
+	}
+	if (!IsPaired())
+	{
+		RefuseLocally(TEXT("not_paired"));
+		return;
+	}
+	// THE PROJECT COMES FROM PAIRING: the session is bound to it, and a client never names another.
+	if (PairedProjectId.IsEmpty())
+	{
+		RefuseLocally(TEXT("not_paired_for_a_project"));
+		return;
+	}
+	if (CriterionIds.Num() != CriterionTexts.Num() || CriterionIds.Num() != CriterionBlocking.Num())
+	{
+		RefuseLocally(TEXT("criteria_mismatch"));
+		return;
+	}
+
+	// THE PLAYER'S FOUR FIELDS AND NOTHING ELSE. The bridge refuses any other key by name; this never sends one.
+	const auto Lines = [](const TArray<FString>& In)
+	{
+		TArray<TSharedPtr<FJsonValue>> Out;
+		for (const FString& Line : In)
+		{
+			Out.Add(MakeShared<FJsonValueString>(Line));
+		}
+		return Out;
+	};
+	const TSharedPtr<FJsonObject> Body = MakeShared<FJsonObject>();
+	Body->SetStringField(TEXT("objective"), Objective);
+	Body->SetArrayField(TEXT("requirements"), Lines(Requirements));
+	Body->SetArrayField(TEXT("constraints"), Lines(Constraints));
+	TArray<TSharedPtr<FJsonValue>> Criteria;
+	for (int32 Index = 0; Index < CriterionIds.Num(); ++Index)
+	{
+		const TSharedPtr<FJsonObject> Criterion = MakeShared<FJsonObject>();
+		Criterion->SetStringField(TEXT("id"), CriterionIds[Index]);
+		Criterion->SetStringField(TEXT("text"), CriterionTexts[Index]);
+		Criterion->SetBoolField(TEXT("blocking"), CriterionBlocking[Index]);
+		Criteria.Add(MakeShared<FJsonValueObject>(Criterion));
+	}
+	Body->SetArrayField(TEXT("acceptanceCriteria"), Criteria);
+	FString Payload;
+	WonderlandJuliusStreamLogic::Json::Serialize(Body, Payload);
+
+	const FString Project = PairedProjectId;
+	const TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = NewRequest(TEXT("POST"),
+		Base + TEXT("/relay-api/wonderland/julius/missions?projectId=") + FGenericPlatformHttp::UrlEncode(Project));
+	Request->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
+	// THE CLIENT'S OWN KEY FOR THIS MISSION: sending it again is the same mission, never a second one.
+	Request->SetHeader(TEXT("x-relay-idempotency-key"), IdempotencyKey);
+	Request->SetContentAsString(Payload);
+	LastCreationStatus = -1;
+	InFlight.Add(Request);
+	Request->OnProcessRequestComplete().BindWeakLambda(this, [this, Project](FHttpRequestPtr Done, FHttpResponsePtr Response, bool bConnected)
+	{
+		InFlight.Remove(Done);
+		const int32 Status = (bConnected && Response.IsValid()) ? Response->GetResponseCode() : 0;
+		LastCreationStatus = Status;
+		++CreationGeneration;
+		const FString Content = Response.IsValid() ? Response->GetContentAsString() : FString();
+		if (Status == 201)
+		{
+			const TSharedPtr<FJsonObject> Data = WonderlandJuliusStreamLogic::Json::DataOf(Content);
+			FString Run;
+			FString Mission;
+			if (Data.IsValid() && Data->TryGetStringField(TEXT("runId"), Run) && !Run.IsEmpty()
+				&& Data->TryGetStringField(TEXT("missionId"), Mission) && !Mission.IsEmpty())
+			{
+				LastCreatedRunId = Run;
+				LastCreatedMissionId = Mission;
+				UE_LOG(LogWonderlandJuliusStream, Display, TEXT("JULIUS STREAM: created %s as %s -- following it."), *Mission, *Run);
+				// THE WORLD FOLLOWS WHAT ITS PLAYER JUST CREATED -- the run the BRIDGE named, never one derived from the
+				// mission id. A retry with the same key is answered with the same run, and following it again is
+				// following it once.
+				Follow(Project, Run);
+				return;
+			}
+			// A 201 this client cannot read is not a mission it may show.
+			LastCreationRefusal = TEXT("unreadable_answer");
+			return;
+		}
+		if (Status == 401 && TokenSource.IsValid())
+		{
+			// The bridge no longer knows this session (it expired, was revoked, or the bridge restarted). Forget it, as
+			// the stream does, so the link says "pair again" instead of retrying a session that cannot work.
+			TokenSource->Invalidate();
+			SetLink(EWonderlandLinkState::SessionExpired, TEXT("The bridge no longer accepts this client's session. Pair again from the website."));
+		}
+		// The bridge's own word for the refusal, verbatim; a status with no word is named by its number.
+		TSharedPtr<FJsonObject> Root;
+		const TSharedRef<TJsonReader<TCHAR>> Reader = TJsonReaderFactory<TCHAR>::Create(Content);
+		const TSharedPtr<FJsonObject>* Error = nullptr;
+		FString Kind;
+		if (FJsonSerializer::Deserialize(Reader, Root) && Root.IsValid() && Root->TryGetObjectField(TEXT("error"), Error)
+			&& Error != nullptr && Error->IsValid() && (*Error)->TryGetStringField(TEXT("kind"), Kind) && !Kind.IsEmpty())
+		{
+			LastCreationRefusal = Kind;
+		}
+		else
+		{
+			LastCreationRefusal = bConnected ? FString::Printf(TEXT("http_%d"), Status) : FString(TEXT("no_connection"));
+		}
+		UE_LOG(LogWonderlandJuliusStream, Warning, TEXT("JULIUS STREAM: mission not created (%s, HTTP %d)."), *LastCreationRefusal, Status);
 	});
 	Request->ProcessRequest();
 }

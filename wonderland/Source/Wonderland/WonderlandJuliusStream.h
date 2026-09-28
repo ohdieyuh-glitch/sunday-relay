@@ -29,6 +29,7 @@
 
 #include "CoreMinimal.h"
 #include "Containers/Ticker.h"
+#include "Engine/DeveloperSettings.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "WonderlandEnvelope.h"
@@ -37,6 +38,34 @@
 #include "WonderlandJuliusStream.generated.h"
 
 class UWonderlandJuliusSubsystem;
+
+/**
+ * WHERE A BUILD FINDS THE BRIDGE -- founder decision 1 (2026-09-27): a PACKAGED Development build, whose Julius
+ * bridge address is CONFIGURATION, never hard-coded localhost, so one build switches endpoints through approved
+ * configuration rather than C++ changes.
+ *
+ *   [/Script/Wonderland.WonderlandJuliusLinkSettings]   in DefaultGame.ini (what the build ships), overridable per
+ *   BridgeUrl=https://relay.example.invalid              deployment by the packaged build's Game.ini or by
+ *                                                        -ini:Game:[/Script/Wonderland.WonderlandJuliusLinkSettings]:BridgeUrl=...
+ *
+ * `wl.Julius.Bridge.Url` still overrides it: a developer's switch, and a Shipping build has no console to use it.
+ * Empty everywhere is honest -- the world follows nothing and says so.
+ *
+ * THE SESSION TRAVELS ONLY WHERE IT CANNOT BE READ ON THE WAY: https anywhere, plain http only to this machine
+ * (127.0.0.1, localhost, [::1] -- the local dev bridge). A plain-http bridge elsewhere is refused and the link says
+ * why, because the native session token would otherwise cross the network in the clear. The transport reads pages
+ * over HTTP(S) (mode=page), so a hosted bridge needs HTTPS and nothing else -- no socket, no WSS.
+ */
+UCLASS(Config = Game, DefaultConfig, BlueprintType, meta = (DisplayName = "Wonderland Julius Link"))
+class WONDERLAND_API UWonderlandJuliusLinkSettings : public UDeveloperSettings
+{
+	GENERATED_BODY()
+
+public:
+	/** The Relay bridge this world follows Julius runs on, e.g. https://relay.example.invalid. `wl.Julius.Bridge.Url` overrides it. */
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Bridge")
+	FString BridgeUrl;
+};
 
 /**
  * Where the transport gets the player's identity. Pairing today; a device-code flow can implement this later and the
@@ -119,11 +148,24 @@ namespace WonderlandJuliusStreamLogic
 	 */
 	WONDERLAND_API bool ParseResult(const FString& Body, FWonderlandJuliusResultReading& Out);
 
+	/**
+	 * THE BRIDGE THIS BUILD MAY TALK TO, from the cvar (a developer's override) or the project setting, trimmed and
+	 * without a trailing slash -- or empty. Empty with OutProblem empty means nothing is configured; empty with a
+	 * problem means something was configured and refused (a plain-http bridge off this machine, or not a URL).
+	 */
+	WONDERLAND_API FString ResolveBridgeUrl(const FString& CvarValue, const FString& SettingValue, FString& OutProblem);
+
 	/** One line a player can read, e.g. "not final · 0 of 1 criteria met". Empty when unknown. */
 	WONDERLAND_API FString ResultHeadline(const FWonderlandJuliusResultReading& Result);
 
 	/** The line under it: what was made, what is open, the review, tokens, and the cost only when visible. */
 	WONDERLAND_API FString ResultDetail(const FWonderlandJuliusResultReading& Result);
+
+	/**
+	 * A creation refusal in words a PLAYER can act on, from the bridge's own kind (or the client's, for a refusal
+	 * made before anything was sent). An unknown kind is shown as itself rather than guessed at.
+	 */
+	WONDERLAND_API FString CreationRefusalSentence(const FString& Kind);
 
 	/**
 	 * The embodiment for one envelope, by the SAME recipe UWonderlandJuliusSubsystem::AdoptHydration uses for a
@@ -164,14 +206,26 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
+	/*
+	 * THE CONTROLS, reachable without a console. The `wl.Julius.*` commands are a developer's path; a Shipping build
+	 * has no console, so a HUD entry for the pairing code calls these instead. Same behaviour either way.
+	 */
+
 	/** Redeem a pairing code for this client's native session. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Julius")
 	void Pair(const FString& Code);
 
 	/** Follow exactly this run of this project. Switching runs clears what the world held. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Julius")
 	void Follow(const FString& InProjectId, const FString& InRunId);
 
 	/** Stop following. The world keeps what it last knew and says the link is stale. */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Julius")
 	void Stop();
+
+	/** The bridge this build would talk to right now, or empty -- with why, when something configured was refused. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius")
+	FString GetBridgeUrl() const { return BridgeUrl(); }
 
 	/**
 	 * DIAGNOSTIC (`wl.Julius.ContractFollow`): point this player's Mission Contract task for a mission at a run
@@ -270,6 +324,54 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Result")
 	FString DescribeResult() const;
 
+	/*
+	 * CREATE A MISSION FROM INSIDE WONDERLAND (founder priority 9). POST /relay-api/wonderland/julius/missions as
+	 * THIS client's native session, in the project that session was PAIRED for (never a project the caller names) --
+	 * the player's four fields and nothing else; the bridge composes the rest from the project's operator-written
+	 * execution profile and creates the run through Julius's own path. Asynchronous. A refusal, from the bridge or
+	 * from this client before anything is sent, creates nothing, follows nothing, and leaves the world as it was.
+	 * On 201 the world FOLLOWS the run Julius created, so the Mission Contract, the strip and the terminal show the
+	 * mission the player just made. Nothing is dispatched: the run lands READY.
+	 *
+	 * The criteria arrive as three parallel arrays (id, text, blocking) because a script can build those, and a
+	 * criterion's fields are read-only outside C++. Mismatched lengths are refused before anything is sent.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Julius|Create")
+	void CreateMission(const FString& IdempotencyKey, const FString& Objective,
+		const TArray<FString>& Requirements, const TArray<FString>& Constraints,
+		const TArray<FString>& CriterionIds, const TArray<FString>& CriterionTexts, const TArray<bool>& CriterionBlocking);
+
+	/**
+	 * THE PROJECT THIS CLIENT WAS PAIRED FOR, as the bridge stated it when the session was redeemed -- or empty. A
+	 * mission is created in this project and no other: the scope comes from pairing, never from a parameter.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius")
+	FString GetPairedProjectId() const { return IsPaired() ? PairedProjectId : FString(); }
+
+	/** How many creation answers (accepted or refused) this client has had. A surface shows each one once. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Create")
+	int32 GetCreationGeneration() const { return CreationGeneration; }
+
+	/** Why a configured bridge was refused (a plain-http bridge off this machine, or not a URL), or empty. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius")
+	FString GetBridgeProblem() const { return BridgeProblem(); }
+
+	/** The last creation's HTTP status: 0 before any (or no connection), -1 while one is in flight. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Create")
+	int32 GetLastCreationStatus() const { return LastCreationStatus; }
+
+	/** The run Julius created, or empty. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Create")
+	FString GetLastCreatedRunId() const { return LastCreatedRunId; }
+
+	/** The mission id the bridge derived, or empty. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Create")
+	FString GetLastCreatedMissionId() const { return LastCreatedMissionId; }
+
+	/** Why the last creation was refused, in the bridge's own word (execution_not_configured, forbidden_field ...), or empty. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius|Create")
+	FString GetLastCreationRefusal() const { return LastCreationRefusal; }
+
 private:
 	enum class EPhase : uint8
 	{
@@ -301,6 +403,8 @@ private:
 	void SetLink(EWonderlandLinkState State, const FString& Explanation);
 	UWonderlandJuliusSubsystem* World() const;
 	FString BridgeUrl() const;
+	/** Why a configured bridge was refused, or empty. */
+	FString BridgeProblem() const;
 	FString RunQuery(int64 Cursor) const;
 	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> NewRequest(const FString& Verb, const FString& Url) const;
 
@@ -322,6 +426,14 @@ private:
 	bool bResultInFlight = false;
 	double NextResultAt = 0.0;
 	int32 ResultFailures = 0;
+	/** The last creation, as the bridge answered it. */
+	int32 LastCreationStatus = 0;
+	FString LastCreatedRunId;
+	FString LastCreatedMissionId;
+	FString LastCreationRefusal;
+	int32 CreationGeneration = 0;
+	/** The project the bridge bound this client's session to when it was redeemed. */
+	FString PairedProjectId;
 	FTSTicker::FDelegateHandle Ticker;
 	TArray<FHttpRequestPtr> InFlight;
 };

@@ -629,6 +629,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	FString GetJuliusTerminalBanner() const;
 
+	/**
+	 * How far the terminal has extended above its approved height right now, in slate units. It ANIMATES toward what
+	 * its rows need, so a capture taken when the section state is right can still catch it mid-growth with its newest
+	 * sub-line clipped (acceptance attempt b4e24b8d29fc3433, photo 01c). Proofs wait for this to hold still.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
+	float GetJuliusTerminalExtension() const;
+
 	/** The event the Julius terminal last narrated. */
 	UFUNCTION(BlueprintPure, Category = "Wonderland|UI")
 	FName GetJuliusNarratedEvent() const { return JuliusNarratedEvent; }
@@ -870,6 +878,10 @@ private:
 	int32 LiveJuliusLink = -1;
 	/** The result's two lines as last shown, so a row is written when it changes and never for a re-read. */
 	FString LiveJuliusResult;
+	/** The transport's creation answer last shown on the terminal, by its generation. */
+	int32 LiveJuliusCreationShown = 0;
+	/** A mission this world asked Julius for: a refusal at once, a creation once the terminal follows its run. */
+	void ShowCreationAnswer();
 	/**
 	 * A pointer click on one widget: hit tested in that widget's own window, routed down the path found there, and
 	 * only when the widget is really on that path. False when it is not under its own centre. The OS cursor never moves.
