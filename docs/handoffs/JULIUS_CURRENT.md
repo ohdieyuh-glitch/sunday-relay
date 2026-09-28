@@ -4,7 +4,7 @@
 > repository evidence does not. Update it whenever meaningful state changes and
 > before ending a session. Never rely on `/resume` as the sole record.
 
-**Most recent session: 2026-09-27, the LANDING pass. Read §000e, then §000d, then §000c, then §000b, then §000.**
+**Most recent session: 2026-09-27, the LANDING pass. Read §000f (the generality audit and PR #288), then §000e, then §000d, then §000c, then §000b, then §000.**
 > The paragraph below it is the record of the session before that.
 
 **Most recent session:** 2026-09-08, the **Claude Code cloud session**. Read
@@ -16,6 +16,156 @@ lifecycle, and the concurrent-proposal fix a real PostgreSQL race found.
 Everything from §0a onward is the earlier local record.
 
 ---
+
+## 000f. PR #288 IS OPEN, AND THE GENERALITY AUDIT FOUND WHERE JULIUS IS NARROW
+
+### The pull request
+
+| | |
+|---|---|
+| PR | [#288](https://github.com/ohdieyuh-glitch/sunday-relay/pull/288) |
+| author | `julius-worker[bot]` (App `4838349`, installation `159218171`), `is_bot=true` |
+| head | `15cf04d725bef8ea69ae54fe0554e9981580298c` |
+| base | `main` `a384b215`, integrated (the candidate already contains it) |
+| shape | 57 commits, one identity line, App as author AND committer on every one |
+| gates | all nine green ON THAT EXACT TREE, not inherited from the reference |
+| withheld | `.github/workflows/julius-real-infra.yml`, reverted at the tip |
+
+`julius-review-currency.mjs` on #288, quoted rather than paraphrased:
+
+```
+review_currency=stale base_integration=integrated merge_eligible=false
+approved_by=none reason=not eligible: review=stale (no approval exists for
+this pull request); base=integrated
+```
+
+**The only missing thing is the founder's approval at that head.** That is Step 3
+and it cannot be anything else: the provenance gate requires an approver whose
+login differs from the App's.
+
+**THE WITHHELD FILE NEEDS A DECISION.** GitHub refused the App's push for
+touching a workflow without `workflows` permission. Rather than widen a bot's
+authority to get a branch pushed, the tip commit reverts that one file, and one
+`git revert` restores it. What is withheld is 26 additive lines that RUN three
+real-PostgreSQL suites in CI, one of them the whole-evidence-chain proof that had
+been failing on `main` unnoticed. Merged and forgotten, the revived proof runs
+nowhere. Either apply those lines as the founder (recommended, a CI change needs
+no worker provenance) or grant the App `workflows` and re-push.
+
+### `main` IS UNPROVENANCED TODAY, and this predates this session
+
+`julius-main-provenance.mjs` against `main`:
+
+```
+provenance=unprovenanced main=a384b215 pr=287 approved_by=none
+reason=the landed candidate is not approved: no approval exists for this pull request
+```
+
+PR #287 landed with no approval on record. The same rule gates paid execution, so
+this is not a cosmetic state: **until a properly approved pull request lands, the
+provenance route stays red however clean any branch is.** Whoever authorises the
+paid mission should know this before dispatch rather than at it.
+
+### The generality audit (founder brief section 6)
+
+The brief scoped this to IDENTIFICATION of genuine architectural blockers, so
+nothing below was changed. The headline is worth stating plainly: **the kernel is
+genuinely general and the specialisation is all downstream.** A sweep of
+`src/relay/mission/julius/*.ts` for vendors, models, mission ids, paths and
+ecosystem tokens found every single hit inside a COMMENT. No kernel line binds a
+vendor or an ecosystem.
+
+**GENUINE BLOCKERS, worst first.**
+
+1. **THE NON-CODE MISSION CLASS IS REFUSED BY ITS OWN PREFLIGHT, and two files
+   contradict each other in one line.** `relay-bridge/julius/mission-contract.ts`
+   documents at length that `testCommand` MUST BE PRESENT AND MAY BE EMPTY, "so a
+   mission with no deterministic check — a report, an analysis, a plan — can say
+   so deliberately". `scripts/julius-live-contract-check.mjs:300` then puts
+   `testCommand` in the same non-empty-string loop as `missionId` and `objective`
+   and refuses it. The gate runs as a hard preflight in the only workflow that
+   spends money (lines 195 and 712). So a research, planning or document mission
+   is refused BEFORE ANY PROVIDER IS CONTACTED, with a message that reads like a
+   malformed contract rather than an unsupported mission class — and every
+   downstream generality the stack already has (the declared-no-check path, the
+   de-test-ified review rubric) is unreachable through the live path. **Verified
+   by hand in this session, not taken from the sweep.** One line, and it unblocks
+   two of the founder's four mission classes.
+2. **A contract cannot state what evidence proves it.**
+   `bootstrap.ts:330` is the only production chooser and returns `'TEST' | 'DIFF'`.
+   The kernel declares twelve evidence types and the breadth proof drives
+   non-code missions on `requiredEvidenceTypes: ['ARTIFACT']` under the comment
+   "THE MISSION DECIDES WHAT PROVES IT" — but `LiveMissionContractFile` has no
+   `requiredEvidence` field, so no real mission can say `ARTIFACT`. Fixing item 1
+   alone only buys a DIFF-proven mission, and a DIFF is granted only when git
+   observes a changed tracked path.
+3. **One frozen sandbox envelope for every mission.** `sandbox-limits.ts` is
+   module-scope `Object.freeze`, fed by no contract field: 4 MiB workspace
+   (the mount is REFUSED if the backing store is larger), `network: 'DENY'`,
+   `allowedTools: ['shell.bash']`, five-minute wall clock. Any real repository,
+   data set or game asset is refused outright, and `npm install` can never run.
+4. **The sandbox image is Node-only and CI enforces it.**
+   `node:22-bookworm-slim` plus git and util-linux; no Python, Rust, Go, Java, no
+   compiler, and no network to install one. `julius-first-live-mission.test.ts`
+   asserts `toBe('node')` and `/^node --test /` over every mission directory, so
+   a Unity, Godot or Python mission does not merely fail, it turns CI red.
+5. **The Coding Agent cannot create a file or run a command.**
+   `HOSTED_ALLOWED_TOOLS` is Read/Glob/Grep/Edit; Write and Bash are denied. Every
+   deliverable must be pre-seeded as a committed failing stub by a human, and CI
+   asserts the contract never says "Create". Julius structures and executes; it
+   cannot bring its own deliverable into existence.
+6. **No action capability at all, only mediated read.** The research policy
+   correctly refuses action verbs in a research allowlist, but there is no other
+   door. This bounds the founder's fourth category to PREPARATION ONLY, which the
+   breadth proof already asserts honestly (an "order the groceries" mission parks
+   unverified rather than completing on a document claiming the order was placed).
+   A product-positioning fact, not a bug.
+7. **Every mission is exactly one plan task and one build task.** No call site
+   mints a second work task, so the architect's plan cannot decompose a mission.
+   Segmentation bounds mission SIZE, not decomposition.
+8. **Research authority is a table in checked-in source with ONE row**
+   (`julius-continuous-1`, `read_item` on `www.postgresql.org`). The shape is
+   right — a contract must not grant itself the internet — but a research mission
+   cannot research without a merge.
+
+**CONFIGURATION, NOT ARCHITECTURE.** `MISSION_LIMITS` enumerates five namespaces
+and `MISSION_LANES` six; an UNREGISTERED namespace still runs, on
+`DEFAULT_LIMITS` of $5 and one repair cycle in lane `lab`, which is the stated
+and correct intent ("bounded until someone says otherwise, rather than unbounded
+until someone notices"). Mission 6 is deliberately inside that default. Also
+configuration: `MAX_ACCEPTANCE_CRITERIA = 12`; one shared card and brain
+reference id for every mission; the fixed provider trio, which belongs in the
+composition layer, with the residual point that a mission cannot request a
+different worker set. `JULIUS_PROJECT_ID` in the workflow is read by nothing.
+
+**THE NEUTRALITY SWEEP GUARDS THE ONE AXIS THAT IS ALREADY CLEAN.** Five holes in
+`julius-provider-neutrality.test.ts`, the last being structural:
+
+- its comment stripper cuts each line at the first `//` WITHOUT being
+  string-aware, so `'https://api.openai.com/v1'` is truncated before the vendor
+  match runs. A provider base URL is the likeliest way a vendor binding enters a
+  kernel file, and it is invisible to the sweep;
+- the forbidden list is a vendor generation out of date: no `gemini`, `google`,
+  `vertex`, `bedrock`, `azure`, `mistral`, `llama`, `deepseek`, `qwen`, `cohere`,
+  `ollama`, `codex`, `devin`, `copilot`, `o1`/`o3`, and notably not a bare
+  `hermes` — the qualification trio's own reviewer;
+- its scope is narrower than the kernel's import graph: `live-reach`,
+  `integration/julius` and `persistence/julius-*` are never swept;
+- `julius-runtime-fixtures.ts` is exempted as a fixture and re-exported from the
+  kernel's index, so an exempted file is part of the public surface;
+- **every genuine specialisation above is a mission id, a path, a test command,
+  an image tag, a byte ceiling or a tool allowlist, and nothing sweeps for any of
+  those.** Provider neutrality is the single dimension Julius is already clean in.
+
+**VERIFIED GENERAL, stated so it is not re-audited.** Both neutrality exemptions
+are justified on inspection (`xai` is a redaction prefix whose removal would leak
+a secret; `transport` is a write-only diagnostics label nothing reads).
+`taskType` is an open string and `SPECIALIST:${string}` is an admissible role.
+The 21-tool registry runs mission-supplied commands through bash and encodes no
+ecosystem. `markerNamespace` is declared and read from the contract, not mapped
+from a mission name. The knowledge carry keys on project and excluded run only.
+The review rubric asks for "the evidence the contract requires", not for tests.
+
 
 ## 000e. THE LANDING, AND THE FOUR DEFECTS FOUND WHILE PREPARING IT
 
