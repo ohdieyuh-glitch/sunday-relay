@@ -1150,3 +1150,48 @@ samples of standing still and all 23 fields agree perfectly. The first run asked
 The fix was to read airborne from the canonical pose's own `airborne_weight` — the field the costume is
 supposed to be copying anyway, and one that needs no accessor which might not be exposed. **When a control
 needs a fact, prefer the channel the subject already publishes over a second API that can be absent.**
+
+## A surface built in a constructor and never rebuilt follows nothing, and every state check still passes
+
+The founder said the terminal colour change was not apparent enough. That sounds like a matter of degree — turn
+it up — and it was not. `SWonderlandLiveTerminal` had **no `FollowTheme` at all**. Its four chrome brushes were
+built once in the constructor and never rebuilt, and they were built from `GoldDim()`, which resolves to the
+GENERAL theme accent rather than `JuliusAccent()`. So the Julius terminal's own colour never reached its own
+frame, sections, input box or command slots **even in principle**; only text calling `JuliusGold()` during
+paint ever moved.
+
+Every settings-level check passes in that state. The setting is written, the canonical state reads back
+correctly, `GetTerminalAccent` returns the new colour, and a proof that asks the subsystem what colour the
+terminal is will be told the truth and still be describing pixels that do not exist.
+
+**Ask which code path rebuilds the thing you changed, and when.** A colour that reaches a widget's constructor
+reaches the screen once, at construction. Two questions catch this: is there a follower, and does it rebuild
+*this* brush? A sibling widget having one is not evidence — the Companion terminal has had a `FollowTheme`
+since it was written, which is exactly why the Julius window's absence went unnoticed for so long.
+
+## When an instrument built for the surface can barely see the change, the person looking at it is right
+
+`ReadScreenExtremes` exists in this project because **a grid of 96 mean readings over the Julius terminal moved
+by 0.008** when the accent went from gold to a green the photograph shows unmistakably. That was recorded as a
+lesson about instruments — averaging hides a hairline — and it is also a lesson about the product: if a
+purpose-built reader can hardly detect a change, a person cannot either.
+
+After moving the accent onto the largest surface each terminal has, the same channel moves **0.51**. The
+founder's "make it more apparent" was a measurement waiting to be taken, not a preference.
+
+## Normalise a tint by the accent's peak channel, or dark choices look like no choice
+
+Tinting a plate by `Plate + Accent * Weight` makes a bright gold obvious and a deep blue invisible, because the
+blue's channels are small before the weight is applied. Dividing the accent by its own peak channel first means
+every hue tints at the same strength, and the founder picking a dark colour sees a change rather than nothing —
+which was the original complaint in the first place.
+
+## The thing you are measuring can be its own isolator
+
+The i.Wonder emblem's gold is hard-coded, because the founder requires it to be yellow; the terminal chrome
+follows the accent. That difference is usable: drive the accent to blue and **the emblem is the only yellow
+thing left in the panel**. One reading then isolates the subject and proves the accent reached pixels at the
+same time, with no masking, no differencing against a hidden-figure control, and no guessed sub-rectangle.
+
+Look for a property that separates the subject from its background *in the direction you can drive*, before
+reaching for a more elaborate instrument.
