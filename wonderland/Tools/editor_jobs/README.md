@@ -609,3 +609,64 @@ grep -c '"stat unit"' zc_*.py | grep -v ':1$'
 **OPEN BACKLOG** — still toggling, none in the current loop: `zc_beta_perf` (5), `zc_avatar_cost` (3),
 `zc_nav_cost` (2), and `zc_avatar_ladder`, `zc_nav_invoker`, `zc_night_ladder` (one each, **in a loop**).
 Fixed: `zc_practical_budget`.
+
+## The panel is not the world — photograph the asset where the founder judges it before changing it
+
+Skeleton Flame looked white in the Wardrobe. The founder's own correction says the spectral blue/cyan
+sections are approved and must be preserved, so "it is white" pointed straight at the skin, and the
+generator was one edit away from being changed.
+
+The same costume, the same build, measured two ways on 2026-09-27:
+
+| | blue-dominant | fully blown | zero-chroma |
+|---|---|---|---|
+| in-world (differenced against a figure-hidden control) | 0.837 | **0.000** | 0.117 |
+| wardrobe preview | 0.074 | **0.355** | 0.871 |
+
+The skin is blue. The **stage** turns it white — and the same over-exposure was simultaneously failing two
+item 1 clauses on Apollo (corner 0.5758 against a 0.25 ceiling, window 0.7418 against 0.6) and is the live
+suspect for item 6's C07 reading 0.0 magenta on eyes that are a handful of pixels wide.
+
+One defect, four symptoms, in three different lanes' clauses. **Before editing an approved asset because it
+looks wrong somewhere, measure it somewhere else.** If the two disagree, the renderer between them is the
+subject, not the asset.
+
+## A window shorter than the subject's slowest period is a coin toss, not a measurement
+
+`zc_snake_follow` Y01 read front 227, behind 1 of 240 and looked like a flat product defect. The yaw walk's
+slowest term has a period of **54.8 seconds** and the window was **24**. Simulating the shipped steering
+maths over forty separate 24-second looks puts the median "behind" at 0.288 and finds one look in forty with
+none at all: the same code answers differently depending only on when you started watching.
+
+Worse, `Elapsed` is not wall time — `Tick` clamps `DeltaSeconds` to 0.25 and spends it in 1/120 substeps, so
+a loaded PIE session runs the animal in slow motion, and a capture run is exactly when the machine is loaded.
+
+Two rules fall out, and the second is the one that generalises:
+
+- Find the subject's slowest driver and make the window several multiples of it.
+- **Add a progression control**: the subject must demonstrably travel before coverage is read. Y00 now
+  requires the head to turn twice around the brain and VOIDs below that, because "does not go behind" and
+  "was watched in slow motion" look identical from the front and want opposite fixes.
+
+## `app_active` is a precondition for every pointer click — a run without focus reads as a product defect
+
+`zc_nav_click_cause` first reported all five nav tiles failing **and** its own wallet control failing: on its
+face, "pointer clicks are broken". The subsystem's own diagnosis said why:
+
+```
+pointing 0
+app_active 0
+```
+
+Slate does not route pointer events into an inactive application. The editor had lost OS focus — this session
+runs shell commands on the same machine between steps — so the run measured the focus state, not the click
+path, and every clause under it was void rather than failing.
+
+The earlier `zzAP1_hud_proof` had `app_active 1`, `pointing 1`, and there the wallet completed while every
+tile failed. That is the real question, and a focus-less run cannot answer it.
+
+So: **take focus before every click, read `app_active` back, and VOID when it is 0.** A wall of failures is
+the most convincing possible disguise for an instrument that was not plugged in. Note also what this does NOT
+excuse — the wiring clause passed in the same void run (all five tiles increment and their surfaces open via
+`SimulateNavTileClick`), and a passing clause in a run whose control failed is worth keeping only because it
+never depended on the pointer at all.
