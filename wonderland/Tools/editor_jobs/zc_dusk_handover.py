@@ -100,8 +100,26 @@ def job():
         tests.append({"id": tid, "name": name, "pass": bool(ok), "detail": detail})
         emit(tid, "PASS" if ok else "FAIL", name, detail)
 
+    #: filled once the as-found CVar values are known; bail() puts these back.
+    restore_to = {}
+
     def bail(why):
+        """VOID THE RUN AND PUT THE WORLD BACK.
+
+        The restore used to live only on the success path, so any of the five bails above it left my
+        CVar values resident in the running editor -- and then every capture anyone else took was of a
+        world I had modified without saying so. Another lane spent time attributing a visual artifact
+        to a commit of mine on the strength of frames from an editor that may not have been in its
+        shipped state, which is a cost I caused by not cleaning up after a failure.
+
+        A job that fails still owns what it changed."""
+        try:
+            for _k, _v in list(restore_to.items()):
+                command("%s %.5f" % (_k, _v if _v is not None else 0.0))
+        except Exception:                                              # noqa: BLE001
+            pass
         RESULT["status"] = "voided: " + why
+        RESULT["knobs_restored_on_void"] = dict(restore_to)
         emit("VOID", "FAIL", why, {})
 
     les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
@@ -210,6 +228,7 @@ def job():
     except Exception:                                                  # noqa: BLE001
         built = "unreadable"
     found = {k: read_f(k) for k in KNOBS}
+    restore_to.update(found)
     for k in KNOBS:
         command("%s 37.25" % k)
     yield 0.5
