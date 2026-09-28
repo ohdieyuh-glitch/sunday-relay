@@ -488,15 +488,61 @@ def job():
                              "note": "largest shipped-arm step that is NOT the handover: the moon's "
                                      "bearing sweeping shadows across the plaza, which every arm has"}
 
+    # ---- THE HANDOVER'S OWN COST, which is the quantity the founder's complaint is about.
+    #
+    # COMPARING LARGEST-STEP TO LARGEST-STEP DOES NOT ASK THAT QUESTION, and once the ladder was
+    # extended back to 17:20 it stopped asking anything: the largest step in EVERY arm became the
+    # ordinary sunset falloff at 17.20->17.30 -- 0.13388 shipped, 0.13266 delay18, 0.13360 always --
+    # so the ratio is 1.0 for everyone and C1 cannot pass however good or bad the handover is. The
+    # gate was measuring sunset.
+    #
+    # An arm's handover costs the step over its own handover interval MINUS what the arms that are
+    # NOT handing over there show across the same interval. Those arms are the same world at the same
+    # hours with no caster change, so their step is the ordinary sunset-and-sweep, measured in this
+    # run rather than assumed. The remainder is the handover.
+    def own_cost(arm):
+        iv = (handover[arm] or {}).get("between")
+        if iv is None:
+            return None, None, None
+        controls = [o for o in LABELS
+                    if o != arm and (handover[o] or {}).get("between") != iv
+                    and iv in prof[o]["steps"]]
+        if not controls:
+            return None, None, None
+        ordinary = min(prof[o]["steps"][iv] for o in controls)
+        total = prof[arm]["steps"][iv]
+        return round(total - ordinary, 5), round(total, 5), round(ordinary, 5)
+
+    costs = {}
+    for arm in LABELS:
+        c, tot, ordi = own_cost(arm)
+        costs[arm] = {"interval": (handover[arm] or {}).get("between"),
+                      "total_step": tot, "ordinary_over_that_interval": ordi,
+                      "handover_own_cost": c,
+                      "controls": [o for o in LABELS if o != arm
+                                   and (handover[o] or {}).get("between")
+                                   != (handover[arm] or {}).get("between")]}
+    RESULT["handover_cost"] = costs
+    ship_cost = costs["shipped"]["handover_own_cost"]
+    record("H_COST_BASE", "the shipped handover's own cost is measurable above noise, so there is a "
+                          "cliff to compare candidates against",
+           ship_cost is not None and ship_cost > noise,
+           shipped_cost=ship_cost, noise=noise, by_arm=costs)
+
     best, verdicts = None, {}
     for arm in LABELS:
         if arm == "shipped":
             continue
         p = prof[arm]
-        shrunk = (base_big / p["largest_step"]) if p["largest_step"] > 1e-6 else None
-        c1 = p["largest_step"] <= noise or (shrunk is not None and shrunk >= CLIFF_FACTOR)
+        cost = costs[arm]["handover_own_cost"]
+        shrunk = ((ship_cost / cost) if (cost is not None and cost > 1e-6 and ship_cost) else None)
+        c1 = (cost is not None and ship_cost is not None
+              and (cost <= noise or (shrunk is not None and shrunk >= CLIFF_FACTOR)))
         c6 = (sweep_floor is not None and p["largest_step"] <= sweep_floor * 1.15)
         verdicts[arm] = {"largest_step": p["largest_step"], "at": p["largest_at"],
+                              "handover_interval": costs[arm]["interval"],
+                              "handover_own_cost": cost,
+                              "shipped_handover_own_cost": ship_cost,
                               "shrink_vs_baseline": (round(shrunk, 1) if shrunk else None),
                               "over_median": p["largest_over_median"],
                               "vs_sweep_floor": (round(p["largest_step"] / sweep_floor, 2)
@@ -507,7 +553,8 @@ def job():
             best = arm
     RESULT["verdicts"] = verdicts
     RESULT["chosen"] = best
-    record("H1_CLIFF", "at least one candidate shrinks the cliff by %.0fx or to noise" % CLIFF_FACTOR,
+    record("H1_CLIFF", "at least one candidate shrinks the HANDOVER'S OWN COST by %.0fx or to noise"
+                      % CLIFF_FACTOR,
            len(verdicts) > 0 and any(v["C1_cliff_removed"] for v in verdicts.values()),
            population=len(verdicts), by_arm=verdicts, baseline_largest=base_big)
     record("H6_NO_SECOND", "and does it without leaving any dominating step anywhere in the evening",
