@@ -1,27 +1,33 @@
-# DOES DELAYING THE MOON'S SHADOW HANDOVER REMOVE THE CLIFF, OR ONLY MOVE IT?
+# WHICH MOON-CASTER HANDOVER IS CHEAPEST? Shipped, delayed, and casting from first visibility.
 #
 # THE FAULT, measured at plaza_e in the shipped world (zc_dusk_truth):
 #     18:25  ground 0.11638  casters [V2_Sun]
 #     18:26  ground 0.06604  casters [V2_Sun, WL_Moon]
-# 43 per cent in a minute, 6.89x the median evening step, 45x noise, and obvious by eye.
+# 43 per cent in a minute, 6.89x the median evening step, 45x noise, obvious by eye.
 #
-# THE CAUSE: the moon's altitude is 4.9 degrees at 18:26. A light that low grazes, so the instant it
-# becomes a caster the plaza's own columns, trees and walls shadow nearly all of it and it delivers
-# almost nothing -- while the shadowless moon had been delivering its full 0.050 to every surface
-# regardless of occlusion. Once casting, ground tracks sin(altitude): 0.066 at 4.9 deg, 0.082 at 7.5,
-# 0.111 at 18.6, 0.108 at 69.6.
+# THE STEP IS A DIFFERENCE OF TWO CURVES: what the shadowless moon was giving, minus what the casting
+# moon gives, at the instant of handover. Both rise through the evening and the shadowless one rises
+# faster, so the step only grows -- measured 0.047 at 18:16, 0.065 at 18:24, 0.087 at 18:30, 0.089 at
+# 18:48. The cheapest handover is therefore the EARLIEST.
 #
-# THE CANDIDATE: wl.Sky.MoonCastAltitude delays the handover until the moon is high enough that its
-# light survives the geometry. 0 is today. 15 moves it to 18.80, 18 to 18.97.
+# DELAY WAS TRIED FIRST AND MEASURED WORSE (first run of this job):
+#     MoonCastAltitude  0  ->  18.25->18.26, step 0.0487   shipped
+#     MoonCastAltitude 15  ->  18.80->18.90, step 0.0736   50 per cent worse
+#     MoonCastAltitude 18  ->  18.95->19.00, step 0.0762   56 per cent worse
+# because a shadowless moon lights every surface regardless of occlusion, so postponing only lets more
+# accumulate. The delayed arm reads 0.183 at 18:48 against the approved midnight's 0.108 -- dusk
+# brighter than midnight, which is the anomaly rather than the thing to protect. delay18 is kept as
+# one arm to hold that result in view, not to compete.
 #
-# THE TRAP THIS JOB IS BUILT AROUND. A delayed handover can produce a step at 18:58 instead of 18:26
-# rather than a smaller one -- a relocation passing as a fix. Worse, a candidate whose cliff lands
-# just past the end of the sampled range looks perfect. So the ladder runs to 19:40, well past the
-# 18.97 crossover the largest threshold produces, and H6 tests the WHOLE evening for any dominating
-# step rather than only the old location.
+# THE CANDIDATE IS NOW wl.Sky.MoonCastAlways: the moon casts from the moment it is visible, so it
+# never accumulates a flood to lose and obeys the world's geometry throughout.
 #
-# H_MOVED is the live control: if the knob does not actually move the caster handover, every "no
-# cliff" below is a dead switch rather than a result.
+# THE TRAP THIS JOB IS BUILT AROUND, AT BOTH ENDS. A handover outside the sampled range produces a
+# perfectly flat evening and looks like a fix. A delayed candidate can fall off the back; cast_always
+# hands over near 17:50 and would fall off the front. So the ladder runs 17.70 to 19.40, and H_MOVED
+# fails any arm already casting at the first rung as well as any arm that did not move at all.
+#
+# H6 tests the WHOLE evening for a dominating step, so a relocation cannot pass as a removal.
 #
 # Restores every knob to what it FOUND. Saves nothing.
 import math
@@ -36,8 +42,6 @@ ROOT = os.path.join(os.path.dirname(CHANNEL), "captures", "zc", "dusk_handover")
 SPOT = (-64.0, -5700.0)
 CAM_YAW = 90.0
 SPAN = 21.0
-#: Past 19:00 on purpose -- the 18-degree threshold hands over at 18.97 and a cliff just outside the
-#: sampled range is indistinguishable from no cliff.
 #: STARTS BEFORE THE MOON IS VISIBLE. cast_always hands over as soon as Nightfall clears 0.002,
 #: which is around 17:50, so the ladder has to begin earlier than the shipped crossover or the new
 #: handover falls off the front of the range -- the same way a delayed one could fall off the back.
