@@ -69,6 +69,8 @@ afterwards. Volume is not claimed and would not help.
 | D8 | budget pressure stops the run rather than looping | DETERMINISTIC | `src/relay/mission/julius/julius-chaos.test.ts` | `stops rather than looping when the budget is exhausted mid-run` |
 | D9 | a failed attempt that billed still counts | DETERMINISTIC | `src/relay/mission/julius/julius-evidence-completeness.e2e.test.ts` | `carries the spend of an attempt that billed and then failed` |
 | D10 | context-authority clash fails closed | DETERMINISTIC | `src/relay/mission/julius/julius-context-delivery.e2e.test.ts` | `fails the task with a named failure class instead of throwing out of the tick` |
+| D11 | a provider declining the request itself is named, not filed as a bad credential | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `named CONTENT_REFUSED, never filed as a bad credential, not retried, not completed` |
+| D12 | the hosted coder's "content filter" reaches the taxonomy as CONTENT_REFUSED | DETERMINISTIC | `relay-bridge/julius/coding-agent-port.test.ts` | `the response was blocked by the content filter` |
 
 ## What is NOT qualified, by category
 
@@ -93,9 +95,12 @@ afterwards. Volume is not claimed and would not help.
 - **C — a mission whose result is not a file.** A message sent, a form
   submitted, a booking made has no diff to show, and an implementation review
   still requires one. Named in `julius-mission-breadth.e2e` as a limit.
-- **D — a CONTENT refusal.** D2 is a provider refusing the CALLER. A model
-  declining a specific request has no failure class of its own and is
-  indistinguishable from a bad credential.
+- **D — a CONTENT refusal, on two of three peers.** D2 is a provider refusing
+  the CALLER; D11 and D12 are a provider declining the REQUEST, now a class of
+  its own (`CONTENT_REFUSED` → `INVALID_REQUEST`, never retried) on the Coding
+  Agent, and the Prompt Architect's `refused` now carries the same code. The
+  Independent Reviewer's provider still cannot report one: a Hermes decline
+  arrives as a verdict that does not parse, and is filed as malformed.
 - **Every category — LIVE.** One paid run, one shape. No adversarial shape has a
   live trace, and the improvement in C4 is measured over real runs of the real
   loop but rests on the fixture's stated premise that a worker without the fact
