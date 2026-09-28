@@ -4360,9 +4360,27 @@ bool UWonderlandUiSubsystem::RouteClickToWidget(const TSharedPtr<SWidget>& Targe
 		bUp = App.RoutePointerUpEvent(Path, FPointerEvent(User, FSlateApplicationBase::CursorPointerIndex, Centre, Centre, None, EKeys::LeftMouseButton, 0.0f, FModifierKeysState())).IsEventHandled();
 	}
 
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI pointer click on %s at (%.0f, %.0f): under the point %d, down %d, up %d | after the down the captor is %s (is it the target: %d)"),
+	// ---- AND THE ONE CONDITION SButton CHECKS ON THE WAY OUT.
+	//
+	// The captor probe above closed off the first half: the press DOES reach the tile and the tile DOES take
+	// the mouse, for all five tiles and for the wallet alike. So the press is not being stolen, and what is
+	// left is the release. SButton::OnMouseButtonUp returns Handled either way, but only calls the OnClicked
+	// delegate when the release point lies inside the geometry it was handed -- which is why "up 1" has
+	// looked like a completed click through three runs of diagnosis and is not one.
+	//
+	// The click point is taken from GetLayoutBoundingRect on the cached geometry. Layout space and the
+	// absolute space IsUnderLocation tests in are the same thing only while nothing between the widget and
+	// the window carries a render transform or a differing DPI scale. This reports whether the point this
+	// code chose is actually inside the widget it chose it from, which is an assumption three runs have
+	// rested on without once measuring it.
+	const FGeometry& Cached = Target->GetCachedGeometry();
+	const bool bPointInsideTarget = Cached.IsUnderLocation(Centre);
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI pointer click on %s at (%.0f, %.0f): under the point %d, down %d, up %d | after the down the captor is %s (is it the target: %d) | the point is inside the target's own geometry: %d (abs pos %.1f,%.1f size %.1f,%.1f)"),
 		*What, Centre.X, Centre.Y,
-		bTileUnderPoint ? 1 : 0, bDown ? 1 : 0, bUp ? 1 : 0, *TookTheDown, bTargetHasCapture ? 1 : 0);
+		bTileUnderPoint ? 1 : 0, bDown ? 1 : 0, bUp ? 1 : 0, *TookTheDown, bTargetHasCapture ? 1 : 0,
+		bPointInsideTarget ? 1 : 0,
+		Cached.GetAbsolutePosition().X, Cached.GetAbsolutePosition().Y,
+		Cached.GetAbsoluteSize().X, Cached.GetAbsoluteSize().Y);
 	return bTileUnderPoint;
 }
 

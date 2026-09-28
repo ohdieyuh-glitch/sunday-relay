@@ -325,6 +325,30 @@ void AWonderlandSkinStage::ApplyPreviewExposure()
 	Capture->PostProcessBlendWeight = 1.0f;
 	FPostProcessSettings& Post = Capture->PostProcessSettings;
 
+	// ---- THE CAPTURE HAS TO BE TOLD TO APPLY EXPOSURE AT ALL, AND IT NEVER WAS.
+	//
+	// A USceneCaptureComponent2D ships with the EyeAdaptation show flag OFF. With it off the capture renders
+	// at a FIXED exposure and every setting below this line is inert -- AutoExposureBias included. So
+	// wl.Look.PreviewExposure has never done anything, in any build, at any value.
+	//
+	// THAT IS THE "DEAD LEVER" THIS FILE HAS RECORDED TWICE and both times attributed to something else: a
+	// thirteen-stop sweep in the morning that "changed almost nothing", and a bias sweep from 0 to -4.5 EV
+	// that "changed nothing at all on this capture". Measured again tonight across EIGHT STOPS -- a 256x
+	// change -- with the glow term finally honest: luma 0.5014 / 0.4837 / 0.5074 / 0.4831 / 0.5129. It
+	// wanders by three hundredths with no trend, which is noise, not a lever.
+	//
+	// WHY IT MATTERS RATHER THAN BEING A TIDY-UP. With no exposure the stage's white point is fixed and sits
+	// far below the emissives it is photographing, so the spectral sections have nowhere to land: at glow
+	// 0.000 the preview blows nothing and shows no colour, and at 0.003 it blows 0.360 of the figure. There
+	// is no value in between because the room has no room. Skeleton Flame measures blue-dominant 0.837 with
+	// blown 0.000 IN THE WORLD, where the white point is near 25,000 -- the colour is perfectly renderable,
+	// and this capture could not reach it.
+	//
+	// The metering below stays pinned: adaptation is still removed by min == max, so the picture cannot
+	// drift brighter because the room is empty and two skins photographed a minute apart stay comparable.
+	// Turning this flag on does not reintroduce drift; it makes the pinned value and its bias take effect.
+	Capture->ShowFlags.SetEyeAdaptation(true);
+
 	// MANUAL EXPOSURE, PINNED. Min and max equal removes the adaptation entirely, so the picture cannot drift
 	// brighter because the room is empty, and two skins photographed a minute apart are actually comparable.
 	Post.bOverride_AutoExposureMethod = true;
