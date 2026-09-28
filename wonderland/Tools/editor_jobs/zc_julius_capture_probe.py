@@ -24,6 +24,7 @@ def job():
     RESULT["probe_id"] = PROBE_ID
     RESULT["dir"] = DIR
     RESULT["status"] = "running"
+    OWN = {"play": False}  # whether the play now running is this probe's
 
     def wait(predicate, timeout):
         try:
@@ -41,9 +42,16 @@ def job():
         RESULT["dir_writable"] = os.path.isfile(marker)
         os.remove(marker)
 
-        # PIE, exactly as the acceptance starts it.
-        RESULT["idle_before"] = bool((yield from wait(lambda: ues.get_game_world() is None, 600)))
+        # PIE, exactly as the acceptance starts it -- but only OUR play. A world still running after the wait belongs to
+        # another session: photographing it records someone else's camera, and ending it tears down work this probe does
+        # not own (2026-09-28 05:22: kaisi-1f's session, idle between their runs, was photographed and ended). Neither.
+        idle = yield from wait(lambda: ues.get_game_world() is None, 600)
+        RESULT["idle_before"] = bool(idle)
+        if not idle:
+            RESULT["status"] = "PIE BUSY: another session's play is running; nothing captured, nothing ended"
+            return
         L.set_background_throttle_suspended(True)
+        OWN["play"] = True
         les.editor_request_begin_play()
         world_up = yield from wait(lambda: ues.get_game_world() is not None, 240)
         pawn = world_up and (yield from wait(
@@ -72,5 +80,5 @@ def job():
         RESULT["status"] = "error"
         RESULT["error"] = repr(err)
     finally:
-        if ues.get_game_world() is not None:
+        if OWN["play"] and ues.get_game_world() is not None:
             les.editor_request_end_play()

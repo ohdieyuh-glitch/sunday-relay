@@ -56,6 +56,7 @@ def job():
     les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
     ues = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem)
     tests = []
+    OWN = {"play": False}  # whether the play now running is this job's, so it never ends another session's
     RESULT["tests"] = tests
     RESULT["status"] = "running"
     LIVE = unreal.WonderlandLinkState.LIVE
@@ -205,6 +206,7 @@ def job():
         if not (yield from wait(lambda: ues.get_game_world() is None, 600)):
             return False
         L.set_background_throttle_suspended(True)
+        OWN["play"] = True
         les.editor_request_begin_play()
         if not (yield from wait(lambda: ues.get_game_world() is not None, 240)):
             return False
@@ -260,8 +262,12 @@ def job():
 
     def end_play_now():
         # Non-yielding on purpose: this also runs from `finally` while the generator may be closing.
-        if ues.get_game_world() is not None:
+        # ONLY PLAY THIS JOB STARTED. A world already running when the job arrived belongs to another session, and a job
+        # that could not start its own play must not tear that one down on the way out (2026-09-28 05:22: a capture probe
+        # built the same way photographed and ended kaisi-1f's session between their runs).
+        if OWN["play"] and ues.get_game_world() is not None:
             les.editor_request_end_play()
+        OWN["play"] = False
 
     # ------------------------------------------------------------------ entry repair
     original_url = read_url_cvar()
