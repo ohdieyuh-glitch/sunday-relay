@@ -283,31 +283,69 @@ try {
     await members.end();
   }
 
-  const byOperator = await call('POST', '/relay-api/wonderland/native/pair', { headers: { ...operator, Origin: SITE } });
+  // The body names the project, so the refusal below is the operator and nothing else.
+  const pairFor = { projectId: CONTRACT.projectId };
+  const byOperator = await call('POST', '/relay-api/wonderland/native/pair', {
+    headers: { ...operator, Origin: SITE }, body: JSON.stringify(pairFor),
+  });
   clause('N02', 'the operator credential cannot pair a native client: an operator is not a player',
     byOperator.status === 403 && byOperator.json?.error?.kind === 'operator_is_not_a_player',
     { status: byOperator.status, refusal: byOperator.json?.error?.kind ?? 'none' });
 
+  // FOUNDER DECISION 2: a code lives FIVE MINUTES and is bound to the player AND
+  // the project. The bridge's clock is this machine's clock, so the lifetime it
+  // stamped is bracketed by the moments either side of the call: the expiry is
+  // the stored one consumeGrant enforces, not a figure printed beside it.
+  const TTL_SLACK_MS = 50;
+  const lifetimeOf = (iso, before, after) => {
+    const at = Date.parse(iso ?? '');
+    return Number.isFinite(at) ? { atMost: at - before, atLeast: at - after } : null;
+  };
+  const lives = (span, ms) => span !== null && span.atLeast - TTL_SLACK_MS <= ms && ms <= span.atMost + TTL_SLACK_MS;
+
+  const pairedBefore = Date.now();
   const paired = await call('POST', '/relay-api/wonderland/native/pair', {
+    headers: { Authorization: `Relay-Session ${playerToken}`, Origin: SITE }, body: JSON.stringify(pairFor),
+  });
+  const codeLife = lifetimeOf(paired.json?.data?.expiresAt, pairedBefore, Date.now());
+  const code = paired.json?.data?.code ?? null;
+  clause('N03', 'the signed-in player pairs their own desktop client for ONE project and gets a single-use code that lives five minutes',
+    paired.status === 200 && typeof code === 'string' && paired.json?.data?.participantId === PLAYER
+      && paired.json?.data?.projectId === CONTRACT.projectId && lives(codeLife, 5 * 60_000),
+    { status: paired.status, participantId: paired.json?.data?.participantId ?? 'absent',
+      projectId: paired.json?.data?.projectId ?? 'absent', codeLifetimeMs: codeLife ?? 'unreadable' });
+
+  // A pairing names its project, and only a MEMBER may pair for one. N03 is the
+  // control for both: the same player, the same session, the right project.
+  const noProject = await call('POST', '/relay-api/wonderland/native/pair', {
     headers: { Authorization: `Relay-Session ${playerToken}`, Origin: SITE },
   });
-  const code = paired.json?.data?.code ?? null;
-  clause('N03', 'the signed-in player pairs their own desktop client and gets a single-use code',
-    paired.status === 200 && typeof code === 'string' && paired.json?.data?.participantId === PLAYER,
-    { status: paired.status, participantId: paired.json?.data?.participantId ?? 'absent' });
+  const notMine = await call('POST', '/relay-api/wonderland/native/pair', {
+    headers: { Authorization: `Relay-Session ${playerToken}`, Origin: SITE },
+    body: JSON.stringify({ projectId: `prj-wonderland-not-a-member-${randomBytes(4).toString('hex')}` }),
+  });
+  clause('N03b', 'a pairing that names no project is refused, and so is one for a project the player does not belong to',
+    noProject.status === 400 && noProject.json?.error?.kind === 'project_required'
+      && notMine.status === 403 && notMine.json?.error?.kind === 'not_a_project_member',
+    { noProject: `${noProject.status} ${noProject.json?.error?.kind ?? 'none'}`,
+      notAMember: `${notMine.status} ${notMine.json?.error?.kind ?? 'none'}` });
 
   // The desktop client redeems it. No Origin header: it is not a web page.
+  const redeemedBefore = Date.now();
   const redeemed = await call('POST', '/relay-api/wonderland/native/session', { body: JSON.stringify({ code }) });
+  const sessionLife = lifetimeOf(redeemed.json?.data?.expiresAt, redeemedBefore, Date.now());
   const nativeToken = redeemed.json?.data?.token ?? null;
-  clause('N04', 'the desktop client redeems the code for its own native session',
-    redeemed.status === 200 && typeof nativeToken === 'string',
-    { status: redeemed.status, audience: redeemed.json?.data?.audience ?? 'absent' });
+  clause('N04', 'the desktop client redeems the code for its own native session: this player, this project, eight hours',
+    redeemed.status === 200 && typeof nativeToken === 'string' && redeemed.json?.data?.participantId === PLAYER
+      && redeemed.json?.data?.projectId === CONTRACT.projectId && lives(sessionLife, 8 * 60 * 60_000),
+    { status: redeemed.status, audience: redeemed.json?.data?.audience ?? 'absent',
+      projectId: redeemed.json?.data?.projectId ?? 'absent', sessionLifetimeMs: sessionLife ?? 'unreadable' });
 
   const reused = await call('POST', '/relay-api/wonderland/native/session', { body: JSON.stringify({ code }) });
   clause('N05', 'the same code a second time fails closed', reused.status === 401,
     { status: reused.status, refusal: reused.json?.error?.kind ?? 'none' });
 
-  const native = { Authorization: `Relay-Session ${nativeToken}` };
+  let native = { Authorization: `Relay-Session ${nativeToken}` };
   const worldQuery = `projectId=${encodeURIComponent(CONTRACT.projectId)}&runId=${runId}&cursor=0`;
 
   // THE WORLD'S OWN HYDRATE, as the native client -- what AdoptHydration will receive.
@@ -356,6 +394,51 @@ try {
 
   const unsigned = await call('GET', `/relay-api/wonderland/julius/hydrate?${worldQuery}`);
   clause('N10', 'no session at all is refused', unsigned.status === 401, { status: unsigned.status });
+
+  // BOUND TO ITS PROJECT. The player is made a member of a SECOND project, so
+  // membership would admit them there; the refusal can only be the session's
+  // own binding, and its words say so. The control is the same token, the same
+  // call, its own project.
+  const elsewhere = `${CONTRACT.projectId}-elsewhere`;
+  const second = new pg.Pool({ connectionString: DB });
+  try {
+    await second.query('INSERT INTO relay_wonderland.projects(project_id) VALUES ($1) ON CONFLICT DO NOTHING', [elsewhere]);
+    await second.query(
+      "INSERT INTO relay_wonderland.project_members(project_id, player_id, role) VALUES ($1, $2, 'OWNER') ON CONFLICT DO NOTHING",
+      [elsewhere, PLAYER]);
+  } finally {
+    await second.end();
+  }
+  const otherProject = await call('GET',
+    `/relay-api/wonderland/julius/hydrate?projectId=${encodeURIComponent(elsewhere)}&runId=${runId}&cursor=0`, { headers: native });
+  const ownProject = await call('GET', `/relay-api/wonderland/julius/hydrate?${worldQuery}`, { headers: native });
+  clause('N11', 'the native session is refused for another project its player DOES belong to, and admitted for its own',
+    otherProject.status === 403 && otherProject.json?.error === 'this desktop session was paired for another project'
+      && ownProject.status === 200,
+    { otherProject: otherProject.status, refusal: otherProject.json?.error ?? 'none', ownProject: ownProject.status });
+
+  // RENEWABLE THROUGH AN AUTHENTICATED RE-PAIR, AND REVOCABLE. The player pairs
+  // again from the website and the client gets a fresh session; then the client
+  // revokes the first one, which stops working while the new one does not.
+  const repaired = await call('POST', '/relay-api/wonderland/native/pair', {
+    headers: { Authorization: `Relay-Session ${playerToken}`, Origin: SITE }, body: JSON.stringify(pairFor),
+  });
+  const renewed = await call('POST', '/relay-api/wonderland/native/session', {
+    body: JSON.stringify({ code: repaired.json?.data?.code ?? null }),
+  });
+  const renewedToken = renewed.json?.data?.token ?? null;
+  const revoked = await call('POST', '/relay-api/wonderland/native/revoke', { headers: native });
+  const afterRevoke = await call('GET', `/relay-api/wonderland/julius/hydrate?${worldQuery}`, { headers: native });
+  const renewedReads = await call('GET', `/relay-api/wonderland/julius/hydrate?${worldQuery}`, {
+    headers: { Authorization: `Relay-Session ${renewedToken}` },
+  });
+  clause('N12', 're-pairing renews the client with a fresh session; revoking the old one ends it, and only it',
+    repaired.status === 200 && renewed.status === 200 && typeof renewedToken === 'string' && renewedToken !== nativeToken
+      && revoked.status === 200 && afterRevoke.status === 401 && renewedReads.status === 200,
+    { repair: repaired.status, renew: renewed.status, revoke: revoked.status,
+      oldSessionAfterRevoke: afterRevoke.status, renewedSession: renewedReads.status });
+  // The first session is gone; the client carries on with the renewed one.
+  native = { Authorization: `Relay-Session ${renewedToken}` };
 
   /* ================================================================
    * ONE ACTIVE RUN PER MISSION -- founder decision 3, Julius 80b91478.

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createMissionRegistry, missionVisibleTo } from './mission';
 import type { MissionOwnershipScope } from './mission';
 import { authorizeReviewerCall } from './browser-session/routes';
-import { browserSessionMayCall, createBrowserSessionStore } from './browser-session/grants';
+import { browserSessionMayCall, createBrowserSessionStore, NATIVE_WORLD_AUDIENCE } from './browser-session/grants';
 
 /**
  * A MISSION BELONGS TO WHOEVER STARTED IT, AND TO NOBODY ELSE.
@@ -393,18 +393,57 @@ describe('G · 29–37 · the pairing credential’s actual reach', () => {
     // teaching a grant to carry a mission scope cannot happen quietly: it breaks
     // here first, and whoever adds the field must then decide, deliberately,
     // what `missionVisibleTo` should do with it.
+    //
+    // DECIDED, 2026-09-27: `projectId` was added for founder decision 2, which
+    // binds a NATIVE Wonderland client to the one project it was paired for. It
+    // is a world scope, not a mission scope, and `missionVisibleTo` does not
+    // consult it: it is null on every browser grant (pinned below), and the only
+    // credential that carries one -- `native_world` -- reaches no mission route
+    // at all (proof 33b). A browser grant that ever carried a project would break
+    // the null pin here first.
     const { grant } = pairedReadOnlySession();
     expect(Object.keys(grant).sort())
-      .toEqual(['expiresAt', 'grantId', 'origin', 'scope', 'secret']);
+      .toEqual(['expiresAt', 'grantId', 'origin', 'projectId', 'scope', 'secret']);
+    expect(grant.projectId).toBeNull();
   });
 
   it('33 · and neither does the session it is redeemed for', () => {
     const { session } = pairedReadOnlySession();
     expect(Object.keys(session).sort())
-      .toEqual(['expiresAt', 'origin', 'participantId', 'scope', 'sessionId', 'token']);
+      .toEqual(['expiresAt', 'origin', 'participantId', 'projectId', 'scope', 'sessionId', 'token']);
     // Read-only is bound at mint, and read-only means acting as nobody.
     expect(session.scope).toBe('browser_read_only');
     expect(session.participantId).toBeNull();
+    expect(session.projectId).toBeNull();
+  });
+
+  it('33b · the one credential that DOES carry a project is refused by the mission gate, from every origin', () => {
+    // A native Wonderland session names a player and a project. If it could
+    // reach /mission/:id, the null pins above would be guarding the wrong door.
+    const grant = store.createGrant({
+      origin: NATIVE_WORLD_AUDIENCE, now: NOW, scope: 'native_world', participantId: OWNER, projectId: 'project-alpha',
+    });
+    const redeemed = store.consumeGrant({ grantId: grant.grantId, secret: grant.secret, origin: NATIVE_WORLD_AUDIENCE, now: NOW });
+    if (!redeemed.ok) throw new Error(`fixture could not redeem a native grant: ${redeemed.reason}`);
+    expect(redeemed.session.projectId).toBe('project-alpha');
+    // No Origin (the desktop client), a web Origin (a copied token), and its own
+    // audience string sent as an Origin (a forged header): refused every time.
+    for (const origin of [undefined, ORIGIN, NATIVE_WORLD_AUDIENCE]) {
+      for (const [method, path] of [['GET', '/mission/m-operator'], ['GET', '/missions'], ['POST', '/mission/m-operator/retry']] as const) {
+        const decision = authorizeReviewerCall({
+          method, path, authorization: `Relay-Session ${redeemed.session.token}`,
+          origin, env: envWithOperatorToken, now: NOW, store,
+        });
+        expect(decision.kind, `${method} ${path} from ${origin ?? 'no origin'}`).toBe('rejected');
+      }
+    }
+    // Control: the gate admits a read-only browser session to the same read,
+    // so the refusals above are the native scope and not the path.
+    const { session } = pairedReadOnlySession();
+    expect(authorizeReviewerCall({
+      method: 'GET', path: '/mission/m-operator', authorization: `Relay-Session ${session.token}`,
+      origin: ORIGIN, env: envWithOperatorToken, now: NOW, store,
+    }).kind).toBe('browser');
   });
 
   it('34 · a valid, correctly-redeemed grant is ADMITTED at the route and still reads nothing', () => {

@@ -2,8 +2,8 @@
 
 **The question this page answers** is the founder's, not the architecture's:
 *can Julius reliably accomplish useful human objectives?* — across software
-development, game development, professional work, and failure/recovery. It is
-organised by those four categories, and every row is **machine-checked**:
+development, game development, professional work, everyday practical work, and
+failure/recovery. It is organised by those five categories, and every row is **machine-checked**:
 `scripts/julius-mvp-qualification.test.ts` resolves every file and requires
 every case reference to name a case that exists. A reference that cannot be
 resolved is not evidence, and that applies to this page.
@@ -32,7 +32,12 @@ afterwards. Volume is not claimed and would not help.
 | A6 | a coder's completion claim held to its evidence | DETERMINISTIC | `src/relay/mission/julius/julius-coding-agent-scope.e2e.test.ts` | `a report that claims completion is refused by name, and the work still stands on its evidence` |
 | A7 | architect revises a rejected plan | DETERMINISTIC | `src/relay/mission/julius/julius-paid-run-34037313976.e2e.test.ts` | `plan → plan review REJECTS → architect revises → re-review ACCEPTS` |
 | A8 | tests run through the independent executor | DETERMINISTIC | `relay-bridge/julius/julius-live-composition.test.ts` | `Tool effects went through the executor port` |
-| A9 | the whole chain on a REAL PostgreSQL: plan → review → build → REJECTED review → repair → re-review answering the finding → COMPLETED, dumped by the shipping queries, read by the Beta Gate (gated on `JULIUS_REAL_POSTGRES=1` + `DATABASE_URL`) | DETERMINISTIC | `src/relay/persistence/julius-live-chain.e2e.test.ts` | `drives a mission with a repair round, dumps it, and the gate reads what the run actually did` |
+| A11 | three missions through ONE run loop: interleaved, all verified, none starved | DETERMINISTIC | `src/relay/mission/julius/julius-multi-mission.e2e.test.ts` | `all three reach verified completion, interleaved, with no run starved` |
+| A12 | cross-mission isolation: evidence, findings, decisions, brain and the packets each worker read | DETERMINISTIC | `src/relay/mission/julius/julius-multi-mission.e2e.test.ts` | `keeps every mission` |
+| A13 | one mission failing does not take the others with it | DETERMINISTIC | `src/relay/mission/julius/julius-multi-mission.e2e.test.ts` | `one mission failing does not take the others with it` |
+| A14 | twelve missions, 48 dispatches, measured rather than asserted | DETERMINISTIC | `src/relay/mission/julius/julius-multi-mission.e2e.test.ts` | `measures the tick under load, and the numbers are the record` |
+| A10 | Julius names no provider, model or adapter in its kernel — the beta trio is a reference configuration, not a definition | DETERMINISTIC | `src/relay/mission/julius/julius-provider-neutrality.test.ts` | `the Julius kernel names no provider, model or adapter` |
+| A9 | the whole chain on a REAL PostgreSQL: plan → review → build → REJECTED review → repair → re-review answering the finding → COMPLETED, dumped by the shipping queries, read by the Beta Gate (gated on `JULIUS_TEST_DATABASE_URL`) | DETERMINISTIC | `src/relay/persistence/julius-live-chain.e2e.test.ts` | `drives a mission with a repair round, dumps it, and the gate reads what the run actually did` |
 
 ## Category B — game development
 
@@ -41,9 +46,12 @@ afterwards. Volume is not claimed and would not help.
 | B1 | gameplay/tooling change with a data-file deliverable | DETERMINISTIC | `src/relay/mission/julius/julius-mission-breadth.e2e.test.ts` | `completes a game-development mission through the same lifecycle, unchanged` |
 | B2 | Wonderland reads real mission state | DETERMINISTIC | `src/relay/mission/julius/julius-slot-view.e2e.test.ts` | `answers for all three roles, always, in a fixed order` |
 | B3 | Wonderland reads it over the bridge | DETERMINISTIC | `relay-bridge/julius-state-routes.test.ts` | `serves the API’s own slot view for a mission that really ran` |
+| B3b | the RESULT a user is shown: verified, criteria, deliverables, cost, failure | DETERMINISTIC | `src/relay/mission/julius/julius-mission-result.e2e.test.ts` | `says what the mission made, that it was verified, and what satisfied each criterion` |
+| B3c | the result view refuses to call a run verified when a criterion lacks passing evidence | DETERMINISTIC | `src/relay/mission/julius/julius-mission-result.e2e.test.ts` | `does NOT call a run verified when a criterion has no passing evidence` |
+| B3d | the result is served over the bridge, and the route names it among its views | DETERMINISTIC | `relay-bridge/julius-state-routes.test.ts` | `serves the API` |
 | B4 | Wonderland creates a mission over the bridge, through the real bootstrap | DETERMINISTIC | `relay-bridge/julius-mission-routes.test.ts` | `creates the run through the real bootstrap` |
 | B5 | a created report mission is held to its DIFF, not to a test it never declared | DETERMINISTIC | `relay-bridge/julius-mission-routes.test.ts` | `carries the no-check declaration through` |
-| B6 | the seam against a REAL PostgreSQL: what a client creates is what it watches, and both are what the database holds (gated on `JULIUS_REAL_POSTGRES=1` + `DATABASE_URL`) | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `what a client creates is what a client then watches, and both are what the database holds` |
+| B6 | the seam against a REAL PostgreSQL: what a client creates is what it watches, and both are what the database holds (gated on `JULIUS_TEST_DATABASE_URL`) | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `what a client creates is what a client then watches, and both are what the database holds` |
 | B7 | re-posting a contract resumes the run in the database rather than creating a second | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `re-posting the same contract resumes the same run instead of creating a second one` |
 
 ## Category C — professional work
@@ -57,6 +65,20 @@ afterwards. Volume is not claimed and would not help.
 | C5 | a memory's standing is durable, and a reviewer raises it | DETERMINISTIC | `src/relay/mission/julius/julius-continuous-lifecycle.e2e.test.ts` | `raises the architect` |
 | C6 | what mission A VERIFIED is inherited by mission B, and what A only asserted is not (gated on `JULIUS_TEST_DATABASE_URL`) | DETERMINISTIC | `relay-bridge/julius-bridge-seam.real-postgres.test.ts` | `what mission A VERIFIED is inherited by mission B` |
 | C7 | the inherited fact reaches the next mission's packet AS VERIFIED, with none of the residue | DETERMINISTIC | `src/relay/mission/julius/julius-learning-loop.e2e.test.ts` | `hands the coder the relevant finding and none of the residue` |
+
+## Category E — useful everyday / basic-necessity work
+
+The founder's fourth class, and the one with a real boundary in it: Julius's
+tools read and write files through an executor, and nothing in this repository
+can place an order, send a message or move money. So the everyday task Julius
+can do TODAY is the preparation a person then acts on — and a mission whose
+acceptance depends on an action no tool can take must park unverified rather
+than complete on a document that claims otherwise. Both halves are rows.
+
+| # | Shape | Kind | Where | Case |
+|---|---|---|---|---|
+| E1 | a household planning task, no code anywhere in it, reviewed and verified | DETERMINISTIC | `src/relay/mission/julius/julius-mission-breadth.e2e.test.ts` | `completes an everyday practical mission` |
+| E2 | a mission whose acceptance needs an action no tool can take does NOT complete | DETERMINISTIC | `src/relay/mission/julius/julius-mission-breadth.e2e.test.ts` | `refuses to complete an everyday mission whose acceptance needs an action no tool can take` |
 
 ## Category D — failure and recovery
 
@@ -91,10 +113,17 @@ afterwards. Volume is not claimed and would not help.
   a `tmpfs` mount, generated keys — and was not run here. Inspecting an
   unfamiliar repository is proven only as far as the fixture repository is
   unfamiliar, which is not far.
-- **B — a real Unreal change.** B1 is the lifecycle carrying a game-tooling
-  deliverable; no row here opens Wonderland's own source under Julius's
-  contracts, reviewer and evidence. That is the founder's stated strongest
-  qualification environment and it is entirely unexercised. **B4 creates, it
+- **B — a real Unreal change, and the screen.** B1 is the lifecycle carrying a
+  game-tooling deliverable; no row here opens Wonderland's own source under
+  Julius's contracts, reviewer and evidence. That is the founder's stated
+  strongest qualification environment and it is entirely unexercised: Julius has
+  never changed Unreal code. Separately, the world CONSUMING Julius is now proved
+  in the engine — a paired player's world adopting the exact run Julius created,
+  surviving a dropped link and a play restart — but by another lane on another
+  branch, so it is quoted in `docs/JULIUS_BETA_LANDING.md` and is deliberately
+  not a row here: this page's rule is that every row resolves to a file and a
+  case in THIS repository. Its own unmet criterion is the visible Missions panel,
+  which still draws the simulated presentation. **B4 creates, it
   does not drive:** the run a client creates lands durable in READY and stays
   there until the mission job drives it — dispatch is not reachable from a
   client, by decision. B6 and B7 hold the same seam against a real PostgreSQL
@@ -102,9 +131,12 @@ afterwards. Volume is not claimed and would not help.
   configured — a skipped proof, never a passing one. The built bridge process
   was also driven over HTTP against that database by hand (handoff §000d, with
   the run id); a hand-run is evidence of a moment, not a row here.
-- **C — a mission whose result is not a file.** A message sent, a form
+- **C and E — a mission whose result is not a file.** A message sent, a form
   submitted, a booking made has no diff to show, and an implementation review
-  still requires one. Named in `julius-mission-breadth.e2e` as a limit.
+  still requires one. This is not a gap in the lifecycle but a boundary of the
+  TOOLS: E2 asserts that such a mission does not complete, rather than leaving
+  the limit as prose. Closing it means a tool that can act and a receipt that
+  proves it did — and that is a capability decision, not a test.
 - **D — a CONTENT refusal, now on all three peers, but only ROUTED for two.**
   D2 is a provider refusing the CALLER; D11–D12 are a provider declining the
   REQUEST — a class of its own on all three peers now (`CONTENT_REFUSED` on the

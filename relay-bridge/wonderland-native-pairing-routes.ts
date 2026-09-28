@@ -1,10 +1,12 @@
 import { bearerMatches } from './reviewer-routes';
 import {
   isValidParticipantId,
+  isValidProjectId,
   NATIVE_WORLD_AUDIENCE,
   type BrowserSessionStore,
 } from './browser-session/grants';
 import { sessionTokenFrom } from './browser-session/routes';
+import type { WonderlandProjectMembershipSource } from './wonderland-julius-routes';
 
 /**
  * NATIVE WONDERLAND CLIENT PAIRING.
@@ -33,21 +35,26 @@ import { sessionTokenFrom } from './browser-session/routes';
  * WHAT IS REUSED, AND WHY NOTHING NEW WAS NEEDED FOR THE HARD PARTS. The code is
  * a pairing grant from the existing store: 256-bit secret, stored only as a
  * SHA-256 hash, compared in constant time, single-use and burnt before anything
- * else happens, 120 seconds to live. The session is the store's session: hashed
- * at rest, 30 minutes, revocable, in memory so a bridge restart revokes every
- * one of them. What IS new is only the scope (`native_world`) and the audience,
- * which is why the founder's "no second identity system" holds.
+ * else happens. The session is the store's session: hashed at rest, revocable,
+ * in memory so a bridge restart revokes every one of them. What IS new is only
+ * the scope (`native_world`), the audience and the project binding, which is why
+ * the founder's "no second identity system" holds.
+ *
+ * LIFETIMES AND SCOPE (founder decision 2, 2026-09-27). The CODE lives 5 minutes
+ * and dies on redemption; the SESSION lives 8 hours and is renewed by pairing
+ * again. Both are bound to the player AND to one project: the website names the
+ * project it is pairing for, the player must be a member of it, and the session
+ * is refused for any other project -- on top of the membership check the world
+ * routes make on every request.
  *
  * WHAT A NATIVE SESSION CAN DO. Read the Julius world stream --
- * /wonderland/julius/hydrate and /events -- for projects its player is a MEMBER
- * of; membership is checked on every request there, which is the project
- * scoping. Nothing else: every browser route refuses it, the battle and
- * presence routes refuse it, and it can mint no grant and no session.
+ * /wonderland/julius/hydrate and /events -- for the ONE project it was paired for.
+ * Nothing else: every browser route refuses it, the battle and presence routes
+ * refuse it, and it can mint no grant and no session.
  *
- * WHAT IS DELIBERATELY NOT HERE. A refresh path: a native session lives 30
- * minutes and a bridge restart ends it, after which the client pairs again. A
- * device-code flow can replace this later without touching the transport,
- * which only ever sees a token source.
+ * WHAT IS DELIBERATELY NOT HERE. A silent refresh: after 8 hours, or a bridge
+ * restart, the client pairs again. A device-code flow can replace this later
+ * without touching the transport, which only ever sees a token source.
  */
 
 export const NATIVE_PAIRING_PREFIX = '/wonderland/native/';
@@ -90,11 +97,18 @@ function parseCode(body: unknown): { grantId: string; secret: string } | null {
   return match === null ? null : { grantId: match[1], secret: match[2] };
 }
 
-export function handleNativePairingRoute(
+export interface NativePairingDeps {
+  readonly store: BrowserSessionStore;
+  /** Who belongs to which project -- the world routes' own source. Null when this bridge has no world database. */
+  readonly membership: WonderlandProjectMembershipSource | null;
+}
+
+export async function handleNativePairingRoute(
   request: NativePairingRequest,
-  store: BrowserSessionStore,
-): NativePairingResult | null {
+  deps: NativePairingDeps,
+): Promise<NativePairingResult | null> {
   if (!isNativePairingRoute(request.path)) return null;
+  const { store } = deps;
   const { method, path, now } = request;
 
   /* -------------------------------------------------- a player pairs */
@@ -121,6 +135,27 @@ export function handleNativePairingRoute(
     if (!verified.ok || verified.scope !== 'browser_control' || !isValidParticipantId(verified.participantId)) {
       return err(401, 'sign_in_required', 'This session cannot pair a desktop client. Sign in to Wonderland first.');
     }
+    // WHICH PROJECT. The body names it -- it is a request to be authorised,
+    // never an authorisation: the player must be a MEMBER of it, and the code,
+    // and the session it becomes, are bound to it and to nothing else.
+    const projectId = request.body !== null && typeof request.body === 'object'
+      ? (request.body as Record<string, unknown>).projectId : undefined;
+    if (!isValidProjectId(projectId)) {
+      return err(400, 'project_required', 'Pair for a project: send the projectId of the world this client will follow.');
+    }
+    // FAIL CLOSED: a bridge that cannot say who belongs to a project pairs no one.
+    if (deps.membership === null) {
+      return err(503, 'membership_unavailable', 'This bridge cannot check project membership, so it cannot pair a desktop client.');
+    }
+    let member: unknown = null;
+    try {
+      member = await deps.membership.lookup({ playerId: verified.participantId, projectId });
+    } catch {
+      return err(503, 'membership_unavailable', 'Project membership could not be checked; nothing was paired.');
+    }
+    if (member === null) {
+      return err(403, 'not_a_project_member', 'You can pair a desktop client only for a project you belong to.');
+    }
     // The participant comes from the SESSION. The request body is not read for
     // identity at all, so no one can pair a client as somebody else.
     const grant = store.createGrant({
@@ -128,12 +163,14 @@ export function handleNativePairingRoute(
       now,
       scope: 'native_world',
       participantId: verified.participantId,
+      projectId,
     });
     return ok({
       code: `${grant.grantId}.${grant.secret}`,
       expiresAt: new Date(grant.expiresAt).toISOString(),
       audience: NATIVE_WORLD_AUDIENCE,
       participantId: verified.participantId,
+      projectId,
     });
   }
 
@@ -153,7 +190,8 @@ export function handleNativePairingRoute(
     // The grant was burnt by consumeGrant. If it somehow was not a native grant
     // (a browser grant can only be bound to a web origin, so this cannot happen
     // through any route), do not hand out whatever it produced.
-    if (result.session.scope !== 'native_world' || !isValidParticipantId(result.session.participantId)) {
+    if (result.session.scope !== 'native_world' || !isValidParticipantId(result.session.participantId)
+      || !isValidProjectId(result.session.projectId)) {
       store.revokeSession({ token: result.session.token, now });
       return PAIRING_FAILED();
     }
@@ -161,6 +199,7 @@ export function handleNativePairingRoute(
       token: result.session.token,
       expiresAt: new Date(result.session.expiresAt).toISOString(),
       participantId: result.session.participantId,
+      projectId: result.session.projectId,
       audience: NATIVE_WORLD_AUDIENCE,
     });
   }

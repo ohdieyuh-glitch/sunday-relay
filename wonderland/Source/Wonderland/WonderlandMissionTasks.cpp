@@ -183,6 +183,31 @@ const TCHAR* WonderlandTaskStateName(EWonderlandTaskState State)
 	return TEXT("UNKNOWN");
 }
 
+const TCHAR* WonderlandTaskStateDisplayLabel(EWonderlandTaskState State)
+{
+	// The founder's words where he gave them (QUEUED, WORKING, WAITING, BLOCKED, REVIEWING, REPAIRING, CANCELLED,
+	// COMPLETE, FAILED), and the same register for the rest. A switch with no default, so a state added later is a
+	// compile warning here rather than a silently mislabelled row.
+	switch (State)
+	{
+	case EWonderlandTaskState::Draft:          return TEXT("DRAFT");
+	case EWonderlandTaskState::Queued:         return TEXT("QUEUED");
+	case EWonderlandTaskState::Preparation:    return TEXT("PLANNING");
+	case EWonderlandTaskState::Research:       return TEXT("RESEARCHING");
+	case EWonderlandTaskState::Implementation: return TEXT("WORKING");
+	case EWonderlandTaskState::Verification:   return TEXT("VERIFYING");
+	case EWonderlandTaskState::Review:         return TEXT("REVIEWING");
+	case EWonderlandTaskState::Repair:         return TEXT("REPAIRING");
+	case EWonderlandTaskState::Completed:      return TEXT("COMPLETE");
+	case EWonderlandTaskState::Failed:         return TEXT("FAILED");
+	case EWonderlandTaskState::Paused:         return TEXT("PAUSED");
+	case EWonderlandTaskState::Blocked:        return TEXT("BLOCKED");
+	case EWonderlandTaskState::Waiting:        return TEXT("WAITING");
+	case EWonderlandTaskState::Cancelled:      return TEXT("CANCELLED");
+	}
+	return TEXT("UNKNOWN");
+}
+
 bool WonderlandTaskIsContract(EWonderlandTaskState State)
 {
 	// EVERYTHING BUT DRAFT. Written as a negation on purpose: a state added later is a contract unless somebody

@@ -222,6 +222,12 @@ export async function authorizeWonderlandJulius(
   if (token !== null) {
     if (input.origin === undefined) {
       const native = deps.sessions.verifyNativeSession({ token, now: input.now });
+      // A NATIVE SESSION IS BOUND TO THE PROJECT IT WAS PAIRED FOR (founder decision 2). Asking for another
+      // project is refused here, before membership is even consulted -- membership still applies below, so
+      // neither guard stands alone.
+      if (native.ok && native.projectId !== query.projectId) {
+        return { ok: false, status: 403, error: 'this desktop session was paired for another project' };
+      }
       if (native.ok) verified = { ok: true, participantId: native.participantId, sessionId: native.sessionId };
     } else {
       const browser = deps.sessions.verifySession({ token, origin: input.origin, now: input.now });

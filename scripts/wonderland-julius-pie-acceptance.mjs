@@ -97,7 +97,7 @@ const CONTRACT = {
 };
 // Every clause the editor half declares, its own completeness clause (A12) included. One that never ran is not a pass.
 // Clause ids: A = the editor job's, O = this orchestrator's view of the job, J = Julius's side.
-const JOB_CLAUSES = ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A06b', 'A06c', 'A06d', 'A07', 'A08', 'A09', 'A10', 'A10b', 'A11', 'A12'];
+const JOB_CLAUSES = ['A01', 'A02', 'A03', 'A04', 'A05', 'A06', 'A06b', 'A06e', 'A06f', 'A06c', 'A06d', 'A07', 'A08', 'A09', 'A10', 'A10b', 'A11', 'A12'];
 // The key for the SECOND run the job switches to. Fixed, so every attempt resolves to the same run and no attempt
 // makes a new one (Julius 52df8e63: one key is one rerun).
 const SWITCH_RERUN_KEY = 'pie-acceptance-switch-v1';
@@ -164,8 +164,10 @@ let playerToken = null;
 
 /** Mint a pairing code as the signed-in player, renewing their session if it expired while the job waited. */
 async function mintCode() {
+  // A code is bound to one project (founder decision 2): the one the job follows.
   const ask = () => call('POST', '/relay-api/wonderland/native/pair', {
     headers: { Authorization: `Relay-Session ${playerToken}`, Origin: SITE },
+    body: JSON.stringify({ projectId: CONTRACT.projectId }),
   });
   let res = await ask();
   if (res.status === 401) {
@@ -278,7 +280,9 @@ try {
       summary.job !== null && summary.job.status !== 'error',
       summary.job === null
         ? { reason: exited !== null ? `the bridge exited (${exited}) while the job ran` : `no result within ${WAIT_MINUTES} min` }
-        : { status: summary.job.status, error: summary.job.error ?? null, seconds: summary.job.seconds });
+        // No `error: null` on a job that raised nothing: a null in a PASSING clause is an unreported measurement to
+        // proof-verdict, and the first all-pass run (853f3956f00747b1) graded INCOMPLETE on exactly that.
+        : { status: summary.job.status, seconds: summary.job.seconds, ...(summary.job.error ? { error: summary.job.error } : {}) });
     clauses.push(...jobTests);
     const ran = new Set(jobTests.map((t) => t.id));
     const missing = JOB_CLAUSES.filter((id) => !ran.has(id));
