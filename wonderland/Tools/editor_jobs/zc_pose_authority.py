@@ -133,15 +133,52 @@ def job():
                 entry["gait_driven_externally"] = None
                 entry["gait_flag_error"] = str(err)[:120]
 
-        # ---- SAMPLED OVER FRAMES, PAIRED. Each sample reads the Dog and the costume in the same tick, so a
-        # difference cannot be the two being read at different moments of a moving gait.
-        pairs = []
-        for _ in range(SAMPLES):
-            dog_pose, dog_err = read_pose(dog, "get_canonical_worn_pose")
-            worn_pose, worn_err = (read_pose(worn, "get_worn_pose") if worn is not None else (None, "no costume"))
-            pairs.append({"dog": dog_pose, "worn": worn_pose, "dog_error": dog_err, "worn_error": worn_err})
-            yield 0.2
+        # ---- SAMPLED WHILE THE DOG IS WALKING, because a standing Dog has a frozen gait.
+        #
+        # THE FIRST RUN PASSED W04 FOR ALL FOUR COSTUMES AND W02 CAUGHT IT. Stride phase moved 0.0000 across
+        # six samples for every skin, so "the costume wears the pose the Dog published" was a comparison of two
+        # structs that never changed -- and two frozen structs agree perfectly. The positive control existed
+        # precisely because that failure would otherwise read as the strongest possible pass.
+        #
+        # The Dog was idle. Its gait pose is a GAIT, so at rest the stride phase is a constant and there is
+        # nothing for a costume to follow. The founder's item 3 is about walk and run as much as idle, so the
+        # pose is now sampled twice: standing still, and under movement input driven every tick.
+        #
+        # Movement input has to be applied EVERY FRAME. A single call decays the same tick, which would have
+        # produced a walking phase indistinguishable from the idle one and sent me looking at the costume.
+        def take(pairs, walking):
+            for _ in range(SAMPLES):
+                if walking:
+                    try:
+                        facing = dog.get_actor_rotation()
+                        forward = unreal.MathLibrary.get_forward_vector(
+                            unreal.Rotator(0.0, facing.yaw, 0.0))
+                        dog.add_movement_input(forward, 1.0, False)
+                    except Exception as err:                        # noqa: BLE001
+                        RESULT.setdefault("errors", {})["movement"] = str(err)[:140]
+                dog_pose, dog_err = read_pose(dog, "get_canonical_worn_pose")
+                worn_pose, worn_err = (read_pose(worn, "get_worn_pose")
+                                       if worn is not None else (None, "no costume"))
+                pairs.append({"dog": dog_pose, "worn": worn_pose, "walking": walking,
+                              "dog_error": dog_err, "worn_error": worn_err})
+                yield 0.12
+
+        idle_pairs, walk_pairs = [], []
+        yield from take(idle_pairs, False)
+        # a moment of input before sampling, so the gait has started rather than being caught at zero
+        for _ in range(8):
+            try:
+                facing = dog.get_actor_rotation()
+                dog.add_movement_input(
+                    unreal.MathLibrary.get_forward_vector(unreal.Rotator(0.0, facing.yaw, 0.0)), 1.0, False)
+            except Exception:                                       # noqa: BLE001
+                pass
+            yield 0.1
+        yield from take(walk_pairs, True)
+        pairs = idle_pairs + walk_pairs
         entry["samples"] = pairs
+        entry["idle_samples"] = len(idle_pairs)
+        entry["walk_samples"] = len(walk_pairs)
         readings[skin] = entry
         emit("W_%s" % skin, "INFO", skin,
              {"has_costume": entry["has_costume"],
@@ -165,17 +202,24 @@ def job():
                 "class and a class match picks one of them.")
 
     # ---- THE DOG'S OWN POSE MUST MOVE, or every comparison below is between two frozen structs.
-    moved = {}
+    moved, speeds = {}, {}
     for skin in SKINS:
-        seq = [(p.get("dog") or {}).get("stride_phase") for p in (readings.get(skin) or {}).get("samples", [])]
+        walk = [p for p in (readings.get(skin) or {}).get("samples", []) if p.get("walking")]
+        seq = [(p.get("dog") or {}).get("stride_phase") for p in walk]
         seq = [v for v in seq if isinstance(v, float)]
         moved[skin] = round(max(seq) - min(seq), 4) if len(seq) > 1 else None
-    RESULT["dog_stride_movement"] = moved
+        sp = [(p.get("dog") or {}).get("speed_uu") for p in walk]
+        sp = [v for v in sp if isinstance(v, float)]
+        speeds[skin] = round(max(sp), 2) if sp else None
+    RESULT["dog_stride_movement_while_walking"] = moved
+    RESULT["dog_top_speed_while_walking"] = speeds
     any_move = any(isinstance(v, float) and v > 0.0 for v in moved.values())
-    record("W02", "the Dog's own pose changes between samples",
-           any_move, stride_phase_spread=moved,
-           note="a pose that never moves compares equal to anything, so this is the positive control: if the "
-                "canonical stack is not running, every clause below would pass on two frozen structs.")
+    record("W02", "the Dog's gait actually advances while it is walking",
+           any_move, stride_phase_spread=moved, top_speed_uu=speeds,
+           note="THE POSITIVE CONTROL, and it earned its place on the first run. A pose that never moves "
+                "compares equal to anything, so W04 passed for all four costumes on six samples in which the "
+                "stride phase moved 0.0000 -- the Dog was standing still and its gait was a constant. Without "
+                "this clause that would have read as the strongest possible pass.")
 
     # ---- AND THE COMPARISON. Field by field, in the same tick.
     diffs = {}

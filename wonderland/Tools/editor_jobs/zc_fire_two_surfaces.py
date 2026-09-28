@@ -225,6 +225,36 @@ def job():
                 "A pass here refutes the first account and a fail refutes the second, and the fix for each is "
                 "a different piece of work.")
 
+
+    # ---- PUT RELAY OG BACK, AND CHECK THAT IT WENT BACK.
+    #
+    # A COSTUME LEFT ON THE DOG REACHED ANOTHER LANE'S PHOTOGRAPHS. zc_stance_preview wore five skins and
+    # restored none, so Celestial Light was standing in the world when the integration lane took its
+    # acceptance captures nine minutes later -- a large teal crystal form in every frame of their attempt,
+    # which they had to ask me about.
+    #
+    # It invalidated nothing of theirs, because their clauses read widget state. It would have reached the
+    # founder in a screenshot as an unexplained object, which is worse than a wrong number.
+    #
+    # This is the rule every render-setting knob in this tree already follows -- a job that leaves a knob
+    # changed makes every later measurement a reading of that job -- and the SKIN is the most visible piece of
+    # state in the world, so it was the one place the rule was not applied. Verified with
+    # dog.get_worn_skin_id(), because a restore that silently failed is the same as no restore.
+    try:
+        ui.wear_relay_skin("relay_og")
+    except Exception as err:                                        # noqa: BLE001
+        RESULT.setdefault("errors", {})["restore"] = str(err)[:140]
+    yield 3.0
+    worn_back = None
+    try:
+        worn_back = str(dog.get_worn_skin_id())
+    except Exception:                                               # noqa: BLE001
+        worn_back = None
+    RESULT["worn_after_restore"] = worn_back
+    record("F_SKIN", "Relay OG was put back on the Dog, and it went back",
+           worn_back is not None and "relay_og" in worn_back.lower(),
+           worn_after_restore=worn_back,
+           note="a costume left on the Dog appears in every other lane's captures until someone notices.")
     RESULT["captures_dir"] = ROOT
     RESULT["status"] = "measured"
     yield 2.0
