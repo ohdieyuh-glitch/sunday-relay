@@ -35,6 +35,8 @@ qualification needs. The first four are cherry-picked with `-x`, so each names i
 | `bf799dbb` | the accounting fix (below) | new |
 | `5138ae02` | the runtime child-environment proof (below) | new |
 | `4d46722a` | the local launch path (below) | new |
+| `297088ef` | the test-accounting gate refused two of the new tests (a `skipIf`, a bare `return`); both fixed | new |
+| `d6fde812` | the architect and the reviewer state their billing path (below) | new |
 
 Left on `relay/julius-task-generality`, **not landed here**: the requiredEvidence consistency rule
 (`b982396d`, `18dd26a3`, `900c0ac4`), the Coding Agent's conditional Write grant (`b48f4f0f` and
@@ -84,6 +86,18 @@ basis. The per-dispatch ceilings (`maxBudgetUsd`, `withinCostCeiling`) are uncha
 `billingPath` (API_BILLED / SUBSCRIPTION / NOT_APPLICABLE / UNKNOWN) is decided from the
 credential, never from an amount. It is validated against the basis, and a contradiction is never
 written. The integration lane's owner-only billing field reads it (their commit `a3e00594`).
+All three roles now state it, which is the founder's requirement that accounting distinguish them
+(`d6fde812`):
+
+- **Coding Agent:** SUBSCRIPTION or API_BILLED, from the resolved auth mode.
+- **OpenAI architect:** API_BILLED by construction, since the adapter cannot exist without the key.
+  The amount is still unreported, because Chat Completions states no price.
+- **Hermes reviewer:** the operator's `RELAY_HERMES_BILLING_MODE`, parsed exactly as
+  `declaredBillingPath`. The local launcher declares `api_billed`, which is true because it writes
+  the xAI API key. The hosted workflow declares nothing, so its reviewer rows stay UNKNOWN.
+
+The real OpenAI and xAI AMOUNTS will still not be in the ledger. After a paid run they have to be
+reconciled from the provider consoles.
 
 **Also closed:**
 
@@ -147,6 +161,20 @@ installed nothing in WSL.
 **The in-WSL bring-up has NEVER been executed.** Everything above is proven repository-side only:
 the drift test, the boundary gate, and the gate list below. A passwordless runner account was
 proposed and dropped after the permission classifier flagged it as unauthorised persistence.
+
+**Measured on this Windows workstation.** The lane's gate list passes: typecheck (four steps),
+boundary, parity, both surface-parity checks, yc-demo, CLI contract, all four builds, harness
+verify, and `git diff --check`. Among the suites:
+
+- Julius kernel: all pass.
+- Hosted Coding Agent: all pass.
+- Bridge Julius: all pass except `julius-research-authority` case 22, the Windows-only
+  `spawnSync npx ENOENT`.
+- `scripts/`: all pass except the six `julius-main-provenance` "against a stubbed GitHub" cases.
+  Their stub is not picked up on Windows, so the real `gh` answers 404.
+
+Both failures reproduce identically on the untouched `julius-beta` worktree at `b618201c`.
+**CI on Linux is the authority on green.**
 
 ### Landing order (the founder's)
 
