@@ -414,12 +414,29 @@ if (Array.isArray(criteria)) {
    * standard". The Independent Reviewer is not the answer to this on its own: it
    * is structural and unconditional already, and a reviewer asked to judge a
    * criterion with nothing named as its evidence is being asked for an opinion.
+   *
+   * BE HONEST ABOUT WHAT THIS RULE IS, because it is weaker than the one above
+   * and pretending otherwise would be the vacuity this repository keeps finding.
+   * The TEETH are the evasion guard above and the runtime: `buildEvidenceFor`
+   * requires DIFF of a no-check build and `verifyTask` HALTs without it, and the
+   * Independent Reviewer must still accept. Those hold whether or not this rule
+   * exists. What this rule adds is that the contract SAYS SO, which matters
+   * because the consequence is easy to miss: with no command, the deliverable
+   * must be a real change to a tracked path, and a mission whose product is
+   * advice in a response body will park rather than complete.
+   *
+   * SO THE REFUSAL NAMES THE ANSWER. With an empty command `TEST` is already
+   * refused above, which leaves exactly ONE legal value. A rule with one legal
+   * answer that makes the caller guess it is a bad rule, and the first caller to
+   * hit this — the integration lane's profile probe — hit it for a synthetic
+   * contract where the right value was never in doubt.
    */
   if (typeof contract.testCommand === 'string' && !deterministicDeclared) {
+    const onlyLegal = BUILD_EVIDENCE.filter((type) => type !== 'TEST');
     for (const criterion of criteria.filter((entry) => entry && entry.blocking === true)) {
       const id = typeof criterion.id === 'string' ? criterion.id : 'an unnamed criterion';
       if (criterion.requiredEvidence === undefined) {
-        refuse(`testCommand is empty, so blocking criterion "${id}" must declare requiredEvidence; a mission with no deterministic check must still say what proves it`);
+        refuse(`testCommand is empty, so blocking criterion "${id}" must declare requiredEvidence: ${JSON.stringify(onlyLegal)} — the only value a build with no deterministic check can satisfy, and the mission's deliverable must therefore be a real change to a tracked path`);
       }
     }
   }

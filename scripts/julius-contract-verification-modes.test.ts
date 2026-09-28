@@ -160,6 +160,36 @@ describe('a contract declares how it is verified, and the gate holds it to that'
     expect(result.output).toContain('AC-NAMED');
   });
 
+  /**
+   * THE REFUSAL MUST NAME THE ONE LEGAL ANSWER.
+   *
+   * With an empty command, `TEST` is already refused by the evasion rule, which
+   * leaves exactly one value this criterion can legally declare. A rule with one
+   * legal answer that makes the caller guess it is a bad rule.
+   *
+   * The first caller to hit this was the integration lane's execution-profile
+   * probe: a synthetic one-criterion contract composed through this parser to
+   * validate an operator profile, where the right value was never in doubt. The
+   * message now says DIFF, and says why it follows — the deliverable has to be a
+   * real change to a tracked path, which is the consequence a profile author is
+   * most likely to miss.
+   */
+  it('the refusal names DIFF, and says what that implies about the deliverable', () => {
+    const probe = check(base({
+      acceptanceCriteria: [{ id: 'probe', text: 'The profile composes a usable mission.', blocking: true }],
+      testCommand: '',
+    }));
+    expect(probe.code, probe.output).not.toBe(0);
+    expect(probe.output, 'a caller must not have to guess the only legal value').toContain('["DIFF"]');
+    expect(probe.output).toContain('real change to a tracked path');
+    // And taking the advice the message gives must actually work.
+    const fixed = check(base({
+      acceptanceCriteria: [{ id: 'probe', text: 'The profile composes a usable mission.', blocking: true, requiredEvidence: ['DIFF'] }],
+      testCommand: '',
+    }));
+    expect(fixed.output, fixed.output).toContain('CONTRACT OK');
+  });
+
   /** ABSENT is still malformed: an omission is not a declaration. */
   it('a MISSING testCommand is still refused, because leaving it out decides nothing', () => {
     const { testCommand: _dropped, ...withoutField } = base();
